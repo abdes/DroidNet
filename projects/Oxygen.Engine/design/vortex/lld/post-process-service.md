@@ -1,347 +1,285 @@
 # PostProcessService LLD
 
-**Phase:** 4B — Migration-Critical Services
-**Deliverable:** D.10
-**Status:** `ready`
+Status: `in_progress` — exposure contract checkpoint; implementation follows the
+[ten-slice delivery plan](../plan/exposure-and-lightbench-correction.md).
+Historical VTX-M03 closure remains at its original fixed/auto baseline scope.
 
-## V0.1 Production Extension
+## Ownership and public boundary
 
-[Editor V0.1 rendering](../plan/editor-v01-rendering-contract.md#9-exposure-grading-and-output)
-defines complete authored exposure, bloom, grading, output and content-rectangle
-behavior. Its linked domain equations/defaults are authoritative. The minimal
-Phase-4B sketches below are implementation baselines, not permission to omit
-Auto exposure, bloom, Saturation/Contrast/Vignette or active DisplayGamma fields.
-None means SDR clipping without a tone curve, not disabling the other stages.
-Historical milestone evidence is preserved at its original scope.
+PostProcessService owns exposure settings resolution, persistent GPU state keyed
+by producer-owned `ViewStateHandle`, early frame-exposure resolve, Stage-22
+exposure/bloom/tonemapping, and bounded completed status. Renderer Core owns
+view registration, relationship validation and transient transition routing.
+SceneRenderer supplies the exact scene signal/SRV, depth/SRV and post target;
+post-process passes cannot invent another input or output routing path.
 
-## Mandatory Vortex Rule
+ViewId is a frame-publication identity, never a temporal-history key. Native
+applications and DemoShell submit the same public typed events and canonical
+per-view exposure overrides. An override replaces exposure settings for that
+view without mutating the scene. The native canonical authored settings type
+lives in Scene/ExposureSettings.h; enums and scalar math stay in
+Core/Types/PostProcess.h. This keeps Data::AssetKey out of Core's dependency
+boundary while Scene, Vortex and adapters consume one settings vocabulary.
+Resource references use the existing resource-descriptor/AssetKey mechanism.
 
-- For Vortex planning and implementation, `Oxygen.Renderer` is legacy dead
-  code. It is not production, not a reference implementation, not a fallback,
-  and not a simplification path for any Vortex task.
-- Every Vortex task must be designed and implemented as a new Vortex-native
-  system that targets maximum parity with UE5.7, grounded in
-  `F:\Epic Games\UE_5.7\Engine\Source\Runtime` and
-  `F:\Epic Games\UE_5.7\Engine\Shaders`.
-- No Vortex task may be marked complete until its parity gate is closed with
-  explicit evidence against the relevant UE5.7 source and shader references.
-- If maximum parity cannot yet be achieved, the task remains incomplete until
-  explicit human approval records the accepted gap and the reason the parity
-  gate cannot close.
+No local exposure, new temporal upscaler, second meter, legacy Renderer path,
+or independent exposure/precision framework belongs to this delivery.
+Equations and tolerances are owned by the
+[PBR specification](../../renderer-core/physically-based-rendering.md).
 
-## 1. Scope and Context
+## Settings resolution
 
-### 1.1 What This Covers
+Resolve scene defaults, physical camera parameters for ManualCamera, and explicit
+per-view override at a frame boundary. Validate all fields as one revision:
+finite values, recognized enums, positive key/camera parameters/D, nonnegative
+speeds/target, ordered EV range, `0<=low<high<=1`, positive histogram span,
+black influence [0,1], radius nonnegative, and <=64 finite sorted curve keys.
+Validate coupled resulting gain across the complete meter/curve interval and
+initial/seed solutions against the operational domain. Never silently replace
+zero target or valid small gains with a positive floor.
 
-`PostProcessService` - the Stage-22 owner responsible for the per-view
-post-processing family:
+Mask and curve uploads are immutable for each settings revision. A pending mask
+keeps the previous valid settings and resource; failure reports an error and
+keeps that revision. Missing mask means unit weight only when no mask was
+authored. Publish scalar settings and their mask/curve resources atomically.
+Requested values and active revision are separately observable.
 
-- temporal AA / TSR-facing post work
-- exposure ownership (global eye adaptation plus future local exposure)
-- bloom
-- HDR -> display tonemapping
-- related per-view post histories
+## GPU record layouts
 
-The service writes into a SceneRenderer-supplied post target. It does **not**
-own presentation, extraction, or handoff policy; those remain with
-SceneRenderer stage 21 / stage 23 and Renderer Core composition ownership.
+All GPU scalar fields are 32-bit. C++ records are standard-layout, aligned to
+16 bytes, with size and every field offset asserted against the HLSL contract.
+64-bit counters use two uint32 words, low then high, avoiding shader-model
+requirements beyond the existing SM6.6 baseline. Compare the full counter; no
+truncated generation or ViewStateHandle comparison is permitted.
 
-That post target is delivered through the same scene-renderer-owned runtime
-surfaces as other scene products: it is resolved from the current
-`RenderContext` / `SceneTextures` publication state by SceneRenderer before
-Stage 22 executes rather than invented privately inside the service.
+### FrameExposureData: 16 bytes
 
-### 1.2 Stage Position
+| Offset | Type | Field |
+| --- | --- | --- |
+| 0 | float | pre_exposure |
+| 4 | float | one_over_pre_exposure |
+| 8 | uint | global_exposure_state_slot |
+| 12 | uint | flags |
 
-| Position | Stage | Notes |
-| -------- | ----- | ----- |
-| Predecessor | Stage 21 (ResolveSceneColor) | |
-| **This** | **Stage 22 — PostProcess** | Tonemap, bloom, exposure, AA |
-| Successor | Stage 23 (PostRenderCleanup) — extraction/handoff | |
+Use the existing ViewFrameBindings.view_color_frame_slot (byte 12) for this
+record, renamed frame_exposure_slot with its C++/HLSL consumers in the same
+migration. ViewFrameBindings stays 64 bytes; other slots retain offsets.
+Remove ViewColorData.exposure and GetExposure after migration. Flags: bit 0
+bootstrap/recovery FP32, bit 1 borrowed prior state, bit 2 transient diagnostic
+unit gain, bit 3 source-initialization fallback. Reserved bits are zero.
 
-### 1.3 Architectural Authority
+### ExposureStateData: 80 bytes
 
-- [ARCHITECTURE.md §8](../ARCHITECTURE.md) — subsystem service contracts
-- [ARCHITECTURE.md §6.2](../ARCHITECTURE.md) — stage 22
+| Offset | Type | Field / meaning |
+| --- | --- | --- |
+| 0 | float | displayed_scale S (zero allowed) |
+| 4 | float | target_scale (zero allowed) |
+| 8 | float | latent_scale (strictly positive) |
+| 12 | float | latent_target_scale (strictly positive) |
+| 16 | float | raw_metered_luminance |
+| 20 | float | raw_metered_ev |
+| 24 | uint | flags |
+| 28 | uint | fallback_reason |
+| 32 | uint2 | settings_revision |
+| 40 | uint2 | requested_generation |
+| 48 | uint2 | applied_generation |
+| 56 | uint2 | frame_sequence |
+| 64 | float | fp16_candidate_pre_exposure |
+| 68 | uint | fp16_eligible_streak |
+| 72 | uint2 | product_layout_revision |
 
-## 2. Interface Contracts
+State flags: history valid, initialized, meter luminance valid, meter EV valid,
+synthetic dark solve, range failure, displayed-zero target, borrowed continuity,
+and FP16 eligible occupy bits 0..8 respectively. Remaining bits are zero.
+Fallback reason enum: None=0, MissingHistory=1, InvalidMeter=2,
+SourceUninitialized=3, SourceDestroyed=4, RangeFailure=5. A dark solve marks EV
+valid but does not claim exact measured luminance. Last valid metered fields
+remain stored on invalid input; current validity describes the current frame.
 
-### 2.1 File Placement
+### ExposureCompletedStatus: 80 bytes
 
-```text
-src/Oxygen/Vortex/
-└── Services/
-    └── PostProcess/
-        ├── PostProcessService.h
-        ├── PostProcessService.cpp
-        ├── Internal/
-        │   ├── ExposureCalculator.h/.cpp
-        │   └── BloomChain.h/.cpp
-        ├── Passes/
-        │   ├── TonemapPass.h/.cpp
-        │   ├── BloomPass.h/.cpp
-        │   └── ExposurePass.h/.cpp
-        └── Types/
-            └── PostProcessConfig.h
+| Offset | Type | Field / meaning |
+| --- | --- | --- |
+| 0 | uint2 | view_state_identity |
+| 8 | uint2 | frame_sequence |
+| 16 | uint2 | settings_revision |
+| 24 | uint2 | requested_generation |
+| 32 | uint2 | applied_generation |
+| 40 | uint2 | product_layout_revision |
+| 48 | uint | flags (valid state, range failure, FP16 eligible) |
+| 52 | uint | first_failure_product (zero means none) |
+| 56 | uint | first_failure_kind |
+| 60 | uint | fp16_eligible_streak |
+| 64 | uint2 | candidate_state_generation |
+| 72 | uint2 | reserved, zero |
+
+Status contains identity/eligibility, not a CPU numerical-gain authority. The
+candidate_state_generation references a retained GPU state record. Pin that
+record until acknowledgment is consumed or discarded and all GPU readers
+retire. Each in-flight frame has a distinct status allocation. Atomic first
+failure wins using a compare-exchange on product ID; status completion requires
+all producer writes before copying to the existing asynchronous readback ring.
+Product IDs are assigned in SceneTextures' domain inventory.
+
+A source curve key is two float32 values, eight bytes: EV at 0, compensation at 4.
+Resolve its compensation, calibration/target logarithms and bounded-EV
+subtraction together using compensated CPU arithmetic. Compile the resulting
+piecewise-linear log-gain target at the union of authored knots, two EV clamp
+edges and two histogram-window endpoints (at most 68 runtime keys). This is the
+same target function evaluated at raw metered EV, with every GPU ordinate in
+[-32,32]; large cancelling authored values never require a linear intermediate.
+Seed/dark/initial solves use the same exact combination before float conversion.
+
+`ExposureTargetData` is a 560-byte structured record: uint key_count at 0,
+uint flags at 4 (locked=1, zero-target=2), float initial_log_gain at 8,
+float dark_log_gain at 12, then 68 float2 `(raw_ev, log_gain)` entries at 16.
+Unused entries are zero. Publish it through the existing per-view transient
+structured publisher and frame slot retirement. The authored/packed limit stays
+64 keys; these additional points represent clamp/window boundaries, not new
+authored controls. This normalization avoids both intermediate exp2 overflow
+and loss of small key bias during large compensation cancellation.
+
+The histogram allocation has 256 uint bins followed by counters for finite,
+weighted, exact-black, positive-below-window and rejected samples (20 bytes),
+plus 12 zero padding bytes: 1056 bytes total. Counts and mass are distinct.
+Reuse existing upload/descriptor allocators and fence retirement.
+
+## Frame sequencing and GPU lifetime
+
+```mermaid
+sequenceDiagram
+    participant Game
+    participant Views as ViewLifecycleService
+    participant Post as PostProcessService
+    participant GPU
+    Game->>Views: handle + settings + transition generation
+    Views->>Post: validated owner/root and frame snapshot
+    Post->>GPU: resolve immutable FrameExposureData from prior state
+    GPU->>GPU: UAV to SRV ordering before first HDR producer
+    GPU->>GPU: scene writes P*C_scene; record range/eligibility
+    Post->>GPU: Stage 22 histogram and owner-only current state solve
+    GPU->>GPU: current state UAV to SRV ordering
+    GPU->>GPU: bloom and tonemap consume S/P
+    GPU->>GPU: copy completed status after all producers
+    GPU-->>Post: fence-completed asynchronous status
+    Post->>Post: matching format eligibility only; retire leased generations
 ```
 
-### 2.2 Public API
+Freeze source/prior generations for the entire logical frame before executing
+any view. Allocate a distinct current generation rather than overwriting a
+buffer still read by another view or frame. Publish only successfully submitted
+work. Failed recording/submission leaves requests pending. An owner updates at
+most once per logical frame, even if multiple products use its view. All resource
+and descriptor releases wait for the last consuming fence, including readbacks
+and source-destruction copies. Frame allocation count follows actual frames in
+flight, not a hard-coded two-buffer assumption.
 
-```cpp
-namespace oxygen::vortex {
+## Lifecycle and precedence
 
-struct PostProcessConfig {
-  bool enable_bloom{true};
-  bool enable_auto_exposure{true};
-  float fixed_exposure{1.0f};       // Used when auto-exposure disabled
-  float bloom_intensity{0.5f};
-  float bloom_threshold{1.0f};
-};
+Resolve settings changes, mode and event in one frame snapshot. Highest request
+generation wins; resubmission of identical contents is idempotent. Conflicting
+contents at the same generation are invalid. Explicit policy wins over implicit
+first-use/cut policy. Remeter/Seed in Manual or disabled mode is rejected with a
+diagnostic, never saved for a later mode. A borrower cannot reset its root.
 
-class PostProcessService : public ISubsystemService {
- public:
-  explicit PostProcessService(Renderer& renderer);
-  ~PostProcessService() override;
+For an independent ordinary view, solve in this order:
 
-  void Initialize(graphics::IGraphics& gfx,
-                  const RendererConfig& config) override;
-  void OnFrameStart(const FrameContext& frame) override;
-  void Shutdown() override;
+1. Authored disabled -> S=1; Manual/ManualCamera -> authored gain immediately.
+2. Explicit Auto Seed -> current target/bias/curve evaluated at requested EV;
+   do not clamp seed EV to meter bounds. Publish for this event frame; consume
+   generation even without a valid histogram. Zero target still displays zero.
+3. Locked Auto range -> fixed solve without histogram; consume pending remeter.
+4. Zero-target entry -> displayed zero immediately; continue positive latent solve.
+5. Positive-target restoration -> current meter, else last valid EV, else normal
+   initialization. Never invert former displayed zero.
+6. Pending remeter/new Auto -> first valid current measurement applies directly;
+   retain pending generation during invalid metering.
+7. Manual-to-Auto or destroyed-source continuity -> retain transferred gain for
+   one transition frame, then adapt independently. Zero/locked rules win.
+8. Ordinary initialized Auto -> exact hybrid adaptation; invalid meter retains
+   gain/last valid measurements and marks current input invalid.
 
-  /// Stage 22: full post-process chain. Per-view execution.
-  void Execute(RenderContext& ctx,
-               const SceneTextures& scene_textures);
+Missing history with invalid meter uses the source/owner Auto EV0 fallback,
+clamped to its EV bounds and evaluated with its target, key, bias and curve;
+never use the inactive Manual EV. Initialization remains pending. Explicit seeds
+outside meter range are legal when the resulting gain is numerically supported.
 
-  void SetConfig(const PostProcessConfig& config);
+A new view, camera cut, replaced world or device recovery remeters by default.
+Preserve and Seed are explicit alternatives. Walking, streaming, light changes,
+compatible resize and format changes preserve exposure. Stateless Auto uses
+transient state, FP32 metering and no temporal adaptation on every invocation.
 
- private:
-  Renderer& renderer_;
-  PostProcessConfig config_;
-  std::unique_ptr<TonemapPass> tonemap_pass_;
-  std::unique_ptr<BloomPass> bloom_pass_;
-  std::unique_ptr<ExposurePass> exposure_pass_;
-};
+A temporary diagnostic unit-gain override creates transient frame output while
+preserving authored mode, history and pending events. It is distinct from
+authored disabled exposure. On leaving it, apply any pending cut/reset; otherwise
+resume retained history. Camera/color history invalidation remains with its owner.
 
-}  // namespace oxygen::vortex
+```mermaid
+stateDiagram-v2
+    [*] --> Pending: new Auto or remeter
+    Pending --> Ready: valid meter or locked solve or explicit seed
+    Pending --> Pending: invalid meter / failed submission
+    Ready --> Ready: ordinary adaptation / pause / resize
+    Ready --> Pending: cut or remeter request
+    Ready --> Ready: retained FP32 (no exposure reset)
+    Ready --> Retiring: destroy handle
+    Pending --> Retiring: destroy handle
+    Retiring --> [*]: last reader fence completed
 ```
 
-### 2.3 Exposure Ownership Boundary
+## Source-owned sharing
 
-Exposure has two different ownership concerns:
+Resolve chains to one registered root; reject cycles/unknown handles atomically.
+Only the root meters/writes its state. Borrowers use pinned published prior
+source state for both displayed gain and numerical P, independent of render
+order, with one frame of result latency. Local borrower exposure settings do
+not modify borrowed gain. If root is inactive, retain its last publication.
+With no publication use the root's disabled/manual/seed/EV0 initialization gain;
+never initialize from a consumer image. Bootstrap suitability remains per view.
 
-1. **view-to-view source resolution** for the current frame remains part of the
-   current-view / view-lifecycle contract owned outside post processing
-2. **post-owned exposure work** begins once Stage 22 executes:
-   - eye adaptation
-   - local exposure when activated
-   - exposure histories and post-owned adaptation intermediates
+A borrowing-view cut resets its camera/color histories and bootstrap, not root
+exposure. Explicit detachment remeters by default; Preserve/Seed are opt-in and
+do not revive dormant independent history.
 
-`PostProcessService` therefore owns exposure processing and histories, but it
-does not take over the broader view-lifecycle problem of selecting or
-materializing the current view.
+On root destruction detach all affected chains at the next boundary. Copy last
+borrowed displayed and positive latent gain into each consumer-owned state
+before retiring root resources. Auto retains that gain for one frame, then
+meters independently; Manual applies its setting and disabled uses one. Consumer
+zero target wins. If borrowed displayed gain was zero but local target positive,
+retain zero only for the continuity frame, then use the positive latent gain
+while awaiting a valid meter. Missing publication uses captured root fallback.
 
-### 2.4 Stage-22 Input Ownership Contract
+## Bootstrap, recovery and format eligibility
 
-`SceneRenderer` is the sole owner of the Stage-22 runtime input bundle.
-Before `PostProcessService::Execute(...)` is called, `SceneRenderer` must
-resolve one coherent bundle for the active view:
+Use the two modes and suitability rules in
+[SceneTextures](scene-textures.md#exposure-hdr-domain-and-format-inventory).
+New unseeded Auto, remeter, device recovery and stateless Auto use FP32 and P=1.
+A borrower with only root fallback also starts FP32. Keep metering/adapting while
+FP32 is retained because required products cannot fit FP16; format retention is
+not a transition event.
 
-- `scene_signal` texture pointer
-- `scene_signal_srv` for that exact texture
-- `scene_depth` texture pointer
-- `scene_depth_srv` for that exact texture
-- the SceneRenderer-supplied post target consumed by composition / handoff
+A valid history acknowledgment is necessary but insufficient for return. Require
+matching view lifetime, settings, applied/requested generation, product layout,
+two consecutive eligible completed frames, half-error margin and two stops of
+overflow margin. The first FP16 frame pins the qualified candidate GPU P record;
+CPU does not read or compute P. Stale or delayed status cannot demote a view.
 
-`PostProcessService`, `TonemapPass`, and `ExposurePass` are consumers of that
-bundle. They must not invent an alternate routing model or silently choose a
-different source texture / SRV pair.
+Normal-path pre-store overflow/nonfinite or required-signal underflow invalidates
+metering and retains history. Schedule FP32 recovery after completed status,
+without blocking. FP32 out-of-domain input reports a content/range error and
+retains valid history. Use bounded status and no full-resolution telemetry target.
 
-## 3. Post-Process Chain
+## Post chain and qualification
 
-### 3.1 Execution Order
+Stage 21 optionally resolves scene color. Stage 22 performs owner exposure solve,
+bloom extraction/filtering when present, and tonemapping; Stage 23 extracts and
+hands off the SceneRenderer-owned output. Apply final S/P once, including disabled
+S=1. UI/background composition remains independent. Bloom thresholds are scene
+referred. TAA/TSR slots remain future work, not implied implementation.
 
-```text
-PostProcessService::Execute(ctx, scene_textures)
-  │
-  ├─ 0. Optional temporal upscaler / TAA slot
-  │     └─ Consume resolved SceneColor + SceneVelocity + histories
-  │     └─ Write updated temporal history when enabled
-  │
-  ├─ 1. Exposure work
-  │     └─ Compute luminance histogram or use fixed-exposure fallback
-  │     └─ Update EyeAdaptation state for the current view
-  │     └─ Build local-exposure intermediates when that path is active
-  │
-  ├─ 2. Bloom (if enabled)
-  │     └─ Downsample bright scene signal
-  │     └─ Gaussian blur chain (4-6 levels)
-  │     └─ Upsample and composite
-  │     └─ Output: filtered bloom texture at service-chosen resolution
-  │
-  └─ 3. Tonemap (always)
-        └─ Read post-temporal scene signal + bloom + exposure state
-        └─ Apply V0.1 exposure/grading/curve/vignette/gamma ordering and background composition
-        └─ Output: LDR result to the SceneRenderer-supplied post target
-```
-
-### 3.2 Historical Phase 4B Minimum
-
-The initial Phase-4B slice started from tonemap and fixed exposure. That limited
-entry point does not define V0.1 completion: all fields and the exact chain in the
-production extension are required. Temporal/history ownership remains here;
-unrelated future local-exposure or temporal-upscaler scope is not implied.
-
-## 4. Data Flow and Dependencies
-
-### 4.1 Inputs
-
-| Source | Data | Purpose |
-| ------ | ---- | ------- |
-| SceneTextures | SceneColor (SRV) | HDR resolved scene signal |
-| SceneTextures | SceneDepth (SRV) | Depth-aware effects (DOF in future) |
-| SceneTextures | Velocity (SRV) | TAA / TSR motion vectors when enabled |
-| Current-view publication | exposure source / current-view context | view-lifecycle-owned input into Stage 22 exposure work |
-| Previous frame | EyeAdaptation / temporal histories | Post-owned history state |
-
-### 4.2 Outputs
-
-| Product | Target | Notes |
-| ------- | ------ | ----- |
-| Tonemapped LDR output | SceneRenderer-supplied post target | Consumed by composition / offscreen handoff |
-| EyeAdaptation state | Persistent per-view history | For next frame's adaptation |
-| Local-exposure intermediates | Per-frame post-owned internal products | Optional inputs to bloom / tonemap when enabled |
-| TemporalAA / TSR histories | Persistent per-view history | Updated only when temporal path is active |
-
-## 5. Shader Contracts
-
-### 5.1 Tonemap Pass
-
-```hlsl
-// Services/PostProcess/Tonemap.hlsl
-
-#include "../../Shared/FullscreenTriangle.hlsli"
-
-Texture2D SceneColor : register(t0);
-Texture2D BloomTexture : register(t1);
-SamplerState LinearClamp : register(s0);
-
-cbuffer TonemapConstants : register(b0) {
-  float Exposure;
-  float BloomIntensity;
-};
-
-// ACES Filmic Tone Mapping
-float3 ACESFilm(float3 x) {
-  float a = 2.51;
-  float b = 0.03;
-  float c = 2.43;
-  float d = 0.59;
-  float e = 0.14;
-  return saturate((x * (a * x + b)) / (x * (c * x + d) + e));
-}
-
-FullscreenVSOutput TonemapVS(uint vid : SV_VertexID) {
-  return FullscreenTriangleVS(vid);
-}
-
-float4 TonemapPS(FullscreenVSOutput input) : SV_Target {
-  float3 hdr = SceneColor.Sample(LinearClamp, input.uv).rgb;
-  float3 bloom = BloomTexture.Sample(LinearClamp, input.uv).rgb;
-
-  float3 color = hdr + bloom * BloomIntensity;
-  color *= Exposure;
-  color = ACESFilm(color);
-
-  // Linear to sRGB (if output is sRGB)
-  return float4(color, 1.0);
-}
-```
-
-### 5.2 Bloom Downsample/Upsample
-
-```hlsl
-// Services/PostProcess/BloomDownsample.hlsl
-// 13-tap box filter downsample (avoids aliasing)
-
-// Services/PostProcess/BloomUpsample.hlsl
-// Tent filter upsample + accumulation
-```
-
-### 5.3 Exposure Histogram
-
-```hlsl
-// Services/PostProcess/ExposureHistogram.hlsl (compute)
-// Builds luminance histogram from SceneColor
-// Dispatch: ceil(width/16) × ceil(height/16)
-```
-
-### 5.4 Catalog Registration
-
-| Entrypoint | Profile | Notes |
-| ---------- | ------- | ----- |
-| `VortexTonemapVS` | vs_6_0 | Fullscreen triangle |
-| `VortexTonemapPS` | ps_6_0 | ACES tonemap |
-| `VortexBloomDownsamplePS` | ps_6_0 | Bright pass + downsample |
-| `VortexBloomUpsamplePS` | ps_6_0 | Tent filter upsample |
-| `VortexExposureHistogramCS` | cs_6_0 | Luminance histogram (compute) |
-
-## 6. Resource Management
-
-| Resource | Lifetime | Notes |
-| -------- | -------- | ----- |
-| Bloom mip chain (4-6 levels) | Per frame | Service-chosen filtered resolutions |
-| Exposure histogram buffer | Per frame | 256-bin histogram |
-| EyeAdaptation buffer | Persistent per view | Temporal adaptation state |
-| Local-exposure intermediates | Per frame / persistent per view as required | Post-owned once the local-exposure path activates |
-| TemporalAA history | Persistent per view | Reserved in Phase 4B, active when temporal path lands |
-| TSR history | Persistent per view | Future post-owned history family |
-| Tonemap PSO | Persistent | Cached |
-| Bloom PSOs (down/up) | Persistent | Cached |
-
-## 7. Stage Integration
-
-### 7.1 Dispatch Contract
-
-`post_process_->Execute(ctx, scene_textures)` at stage 22.
-
-Stage 21 remains a thin optional resolve owned by SceneRenderer. Stage 22 must
-therefore accept either the resolved scene signal or the original scene color
-when no separate resolve work was needed.
-
-The post target supplied to Stage 22 is the composition-facing per-view output
-surface selected by `SceneRenderer`, not an ad hoc pass-local target.
-
-### 7.2 Null-Safe Behavior
-
-When null: SceneRenderer routes the resolved scene signal directly to its
-composition / offscreen target with no post-family work. Presentation and
-handoff ownership still remain outside the service.
-
-### 7.3 Capability Gate
-
-Requires `kFinalOutputComposition`. Always active when SceneRenderer
-produces output.
-
-## 8. Testability Approach
-
-1. **Tonemap validation:** Render constant-color scene (HDR value 2.0) →
-   verify tonemap output in the post target matches the expected ACES curve
-   value.
-2. **Exposure adaptation:** Render scene across frames with changing
-   brightness → verify EyeAdaptation state adapts over time.
-3. **Bloom validation:** Place bright emissive object → verify bloom glow
-   around object in the post target.
-4. **RenderDoc:** Frame 10, inspect post-process pass inputs (SceneColor)
-   and output (LDR post target).
-
-5. **Handoff integrity:** prove that the sampled Stage-22 output in the
-   SceneRenderer-supplied post target is non-black before composition. Final
-   present or overlay output must not stand in for Stage-22 success.
-
-## 9. Open Questions
-
-1. **Tonemap operator selection:** ACES vs Filmic vs AgX. Phase 4B uses
-   ACES; selection can be config-driven later.
-2. **Initial temporal path:** TAA vs TSR for the first active temporal
-   implementation. The stage-22 ownership and history contract are fixed now;
-   only the first active algorithm choice is deferred.
+Owning tests: PostProcessService, ViewLifecycleService, SceneTextures,
+SceneRendererDeferredCore and ShaderBakeCatalog. Use controlled float inputs
+before scene integration, independent arithmetic oracles, both sharing orders,
+frames in flight, failed submission, source loss and stale acknowledgments.
+Captures must prove bound resources, barriers, state identities and actual final
+consumption. Native game fixtures must exercise the public API without DemoShell.

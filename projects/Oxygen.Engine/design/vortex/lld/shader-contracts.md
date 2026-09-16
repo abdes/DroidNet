@@ -19,6 +19,34 @@
   explicit human approval records the accepted gap and the reason the parity
   gate cannot close.
 
+## Exposure ABI extension
+
+The exact [GPU record layouts](post-process-service.md#gpu-record-layouts) own
+FrameExposureData (16 bytes), ExposureStateData (80 bytes), completed status
+(80 bytes), curve keys (8 bytes) and histogram/counters (1056 bytes).
+Replace the old ViewColorData scalar via byte 12 of ViewFrameBindings; keep the
+64-byte top-level layout and all unrelated slots stable. Update C++/HLSL mirrors,
+reflection/catalog expectations and all readers in the corresponding slice.
+Require size/alignment/offset assertions; do not infer buffer layout from names.
+
+Common view helpers expose positive P and its reciprocal. Early UAV resolve
+must precede HDR reads; Stage-22 state UAV writes precede final S/P consumption.
+Shared consumers reference an immutable prior source generation. No shader may
+confuse displayed zero gain with numerical P or an invertible latent gain.
+Exposure arithmetic uses full float32, with no dependence on subnormals.
+
+ShaderBake currently uses SM6.6, HLSL 2021, `-Ges -enable-16bit-types`, Debug
+`-Od -Zi`, Release `-O3`, no explicit denormal mode. The
+[compiler audit](../plan/exposure-contract-checkpoint.md) records actual compiled
+DXIL. Any compiler-flag change must also update CompileProfile's action-key
+schema. Qualify both profiles and explicit invalid/nonfinite inputs.
+
+HDR UAV/RTV/SRV descriptors, reflected resource types, render-target blend/PSO
+keys, resolve formats and pooled leases must all agree on the selected
+RGBA16F/RGBA32F mode. The [product inventory](scene-textures.md#exposure-hdr-domain-and-format-inventory)
+identifies each writer/reader and pre-store range check. Remove the old
+GetExposure compensation/cancellation paths after migration.
+
 ## 1. Scope and Context
 
 ### 1.1 What This Covers

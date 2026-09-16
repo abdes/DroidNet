@@ -1,6 +1,6 @@
 # Exposure management and LightBench implementation plan
 
-Status: `planned`
+Status: `in_progress` — slice 1 contract checkpoint complete; slice 2 next.
 
 Date: 2026-09-16
 
@@ -68,8 +68,11 @@ by the features above.
 
 ### Working through the plan
 
-Slice 1 is the rendering lead's contract checkpoint: approve exact GPU/asset
-layouts, the tested numerical domain and the HDR product-format inventory.
+Slice 1 is the rendering lead's contract checkpoint: freeze exact GPU/asset
+layouts, the numerical domain and the HDR product-format inventory, distinguishing
+specified limits from hardware-tested limits. The
+[checkpoint report](exposure-contract-checkpoint.md) records source and compiler
+evidence, decisions and the remaining gate.
 The implementation slices then consume those written contracts.
 
 | Work | First patch | Review focus |
@@ -422,15 +425,39 @@ history. A tiny fixed P can erase dark pixels; P=1 can overflow bright pixels.
 
 Use transient FP32 scene color and required high-range view-dependent
 intermediates for first unseeded metering, remeter cuts and device recovery.
-Use P=1, meter and tonemap that frame, then switch to the normal pre-exposed
-FP16 path after valid gain is available. The CPU starts this format on the known
-event and retains it until a nonblocking completed-status acknowledgment for the
-matching view and settings confirms valid GPU state with applied generation equal
-to the requested generation. Older valid history with a pending reset cannot
-authorize the format switch. Delayed acknowledgment means additional FP32
-frames, not a wait. The acknowledgment selects
-resource format only; it does not supply the exposure multiplier. Keep exposure
-history across this format transition and add both formats to affected PSOs/resolves.
+Use P=1, meter and tonemap that frame. Exposure validity and FP16 suitability
+are separate conditions. The CPU starts this format on the known event and
+retains it until nonblocking completed status for the matching view, settings
+revision and requested/applied transition generation confirms both valid GPU
+history and FP16 eligibility for that view's required HDR products. Older valid
+history with a pending reset cannot authorize the switch. Delayed acknowledgment
+means additional FP32 frames, not a wait. The acknowledgment selects resource
+format only; numerical P and S remain GPU-owned. Keep exposure history through
+format changes and add both formats to affected PSOs/resolves.
+
+Define required signals by the metering and image-error budgets in the
+[PBR specification](../../renderer-core/physically-based-rendering.md) and the
+per-product narrowing checks in [SceneTextures](../lld/scene-textures.md).
+Arbitrarily tiny RGB components do not force FP32 when their loss fits those
+budgets and does not change required metering classification. A uniform P cannot
+reduce the bright/dark ratio; valid metering does not prove FP16 representability.
+
+If required products cannot meet the FP16 budget, retain the same FP32 recovery
+mode and continue ordinary metering/adaptation. Retention itself is not a cut,
+remeter event or generation increment. Return requires two consecutive eligible
+completed frames with half the allowed error and two stops of overflow headroom.
+Pin the GPU-owned candidate-P record qualified by that status for the first
+FP16 frame; an acknowledgment for another candidate, superseded settings/event,
+destroyed/recreated view or incompatible product layout cannot authorize return.
+Subsequent unexpected range failures follow the recovery rule below. The
+status path remains bounded; there is no third format or precision service.
+
+Suitability belongs to each view, including borrowers: shared gain validity does
+not certify the consumer's image. Qualify stable excessive-range retention,
+reduced-range return, insignificant below-budget values, delayed/stale status
+and contrasting shared consumers. Account for actual products, concurrent views,
+leases and histories: RGBA32F costs eight additional bytes per texel over
+RGBA16F (15.82 MiB at 1920x1080; 63.28 MiB at 3840x2160 per allocation).
 
 Stateless Auto uses this FP32 metering route on every invocation. A shared view
 using a source's initial fallback also uses FP32 until that source has published
@@ -742,27 +769,35 @@ helpers under LightBench for renderer-owned behavior.
 
 ### Slice 1 - Freeze contracts and update owning designs
 
-- [ ] Update [PBR specification](../../renderer-core/physically-based-rendering.md)
+- [x] Update [PBR specification](../../renderer-core/physically-based-rendering.md)
   with equations, units, examples, numeric domain and the complete target behavior.
-- [ ] Reconcile [physical-lighting roadmap](../../renderer-core/physical-lighting-roadmap.md),
+- [x] Reconcile [physical-lighting roadmap](../../renderer-core/physical-lighting-roadmap.md),
   [panel design](../../renderer-core/post-process-panel-design.md), and repository-root
   [environment authoring](../../../../../design/editor/lld/environment-authoring.md).
-- [ ] Expand [PostProcessService LLD](../lld/post-process-service.md) with the state
+- [x] Expand [PostProcessService LLD](../lld/post-process-service.md) with the state
   layout, hybrid solve, lifecycle policies, masks/curve, numerical bootstrap and
   failure behavior in this plan. Include state and frame-sequence diagrams.
-- [ ] Update [multiview](../lld/multi-view-composition.md),
+- [x] Update [multiview](../lld/multi-view-composition.md),
   [InitViews](../lld/init-views.md), [shader contracts](../lld/shader-contracts.md),
   [scene textures](../lld/scene-textures.md), and environment/lighting LLDs for
   frame-pinned P, sharing and bootstrap format support.
-- [ ] Fix the supported radiance envelope, operational FP32 bounds and validation
+- [x] Fix the supported radiance envelope, operational FP32 bounds and validation
   error budgets against the compiler/format audit. Approve the GPU/asset layouts
   and exact list of dual-format HDR products. Document section 6's regularization
   and unit equations in the owning lighting LLD.
-- [ ] Register this delivery order in PLAN/status. Create `design/renderer-core/lightbench.md`
+- [x] Register this delivery order in PLAN/status. Create `design/renderer-core/lightbench.md`
   for experiments and instrument requirements.
 
 **Gate:** public behavior is specified by sections 3-7, GPU/asset layouts have
 owners, and every active HDR path appears in the domain migration checklist.
+
+Checkpoint evidence (2026-09-16): owning contracts and layouts reconciled;
+source-to-consumer HDR inventory recorded; independent arithmetic audit
+10/10; existing exposure shader compiled and DXIL inspected under bundled
+Debug/Release profiles; owned-document file links and `git diff --check`
+passed. Numerical limits are specified, not yet native-qualified. Runtime
+qualification begins in slice 2 and remains required. See the
+[checkpoint report](exposure-contract-checkpoint.md).
 
 ### Slice 2 - Implement normalized settings and fixed exposure
 
@@ -833,6 +868,10 @@ path consumes the old overloaded scalar.
 
 ### Slice 6 - Finish authoring, serialization and configuration isolation
 
+- [ ] Include native aperture/shutter/ISO source/cook/load persistence, as
+  approved on 2026-09-16. Scene-v6 perspective/orthographic records are 32/40
+  bytes; v5 20/28-byte records hydrate 11/125/100 defaults. Existing editor
+  adapters preserve the fields; physical-camera editor controls stay deferred.
 - [ ] Update source JSON schemas, scene component/config types, versioned packed
   records, cooker, loader, scripting and existing editor/native adapters.
 - [ ] Round-trip mask resource references, curve keys, black influence, D and
@@ -964,6 +1003,12 @@ Existing multiview regression:
 
 ```powershell
 ./tools/vortex/Run-VortexMultiViewValidation.ps1 -Output out/build-ninja/analysis/vortex/exposure-lightbench/multiview -Frame 5 -RunFrames 65 -Fps 30 -BuildJobs 4
+```
+
+Slice 1 arithmetic/format audit (does not execute GPU acceptance):
+
+```powershell
+python tools/vortex/audit_exposure_contract.py --output out/build-ninja/analysis/vortex/exposure-lightbench/contract-audit
 ```
 
 Slice 10 implements the acceptance runner interface:

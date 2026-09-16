@@ -19,6 +19,103 @@
   explicit human approval records the accepted gap and the reason the parity
   gate cannot close.
 
+## Exposure HDR domain and format inventory
+
+The exposure delivery uses normal RGBA16F and bootstrap/recovery RGBA32F through
+existing texture descriptors, lease keys and PSO format keys. This section is
+the source-to-consumer migration checklist, audited at `7c44dffa8`.
+Paths below are relative to `src/Oxygen`; shader paths begin under
+`Graphics/Direct3D12/Shaders/Vortex/`. Entries describe required migration,
+not completed implementation.
+
+| Product ID / product | Producer and current storage | Consumers / required domain | Format action |
+| --- | --- | --- | --- |
+| 1 SceneColor: base emissive | `Materials/GBufferMaterialOutput.hlsli`, `Vortex/SceneRenderer/SceneTextures.cpp`, RGBA16F | Deferred/forward lighting, fog, resolve, meter, tonemap; write P times scene RGB, preserve coverage | Dual RGBA16F/RGBA32F |
+| 2 SceneColor: deferred direct | `Services/Lighting/DeferredLight*.hlsl` and `DeferredLightingCommon.hlsli` | Add P-scaled BRDF radiance to product 1; no exposure in photometric light packets | Same SceneColor lease and blend-compatible PSOs |
+| 3 SceneColor: indirect | `Services/Lighting/DeferredShadingCommon.hlsli`, `DeferredLightDirectional.hlsl`, forward environment SH/IBL consumers | Canonical scene-referred IBL converted to P at destination | Same SceneColor; SH remains float buffers |
+| 4 Forward lit/unlit/opaque/masked/translucent | `Stages/Translucency/ForwardMesh_PS.hlsl`, `ForwardDirectLighting.hlsli`, material evaluation | One P on scene radiance; remove old GetExposure division/sRGB branch on HDR path; alpha/coverage unscaled | Same SceneColor and forward PSO formats |
+| 5 Sky view LUT | `Vortex/Environment/Passes/AtmosphereSkyViewLutPass.cpp`, RGBA16F; `Services/Environment/AtmosphereSkyViewLut.hlsl` | `Sky.hlsl`; per-view P plus generation, remove exposure cancellation | Dual texture, SRV/UAV descriptors and allocation keys |
+| 6 Camera aerial perspective | `AtmosphereCameraAerialPerspectivePass.cpp`, RGBA16F 3D; matching shader | `AerialPerspective.hlsli` / scene shading; RGB pre-exposed, transmittance unchanged | Dual 3D texture and binding formats |
+| 7 Sky/background radiance | `Services/Environment/Sky.hlsl`, sky sphere/cubemap sampling | SceneColor, including sun disks; atmosphere/source radiance converted exactly once to destination P | Same SceneColor; display background excluded |
+| 8 Height fog | `Services/Environment/Fog.hlsl` | SceneColor; scale added inscattering by P, retain attenuation | Same SceneColor |
+| 9 Local fog compose | `Services/Environment/LocalFogVolumeCompose.hlsl` | SceneColor; same radiance/attenuation separation | Same SceneColor |
+| 10 Volumetric fog/history | `Vortex/Environment/Passes/VolumetricFogPass.cpp`, RGBA16F 3D; `VolumetricFog.hlsl` | Fog compose and temporal reprojection; RGB carries stored P, alpha is transmittance | Dual current/history 3D textures; convert prior RGB by P_current/P_stored before interpolation |
+| 11 Resolved / composition HDR | `Vortex/Internal/CompositionViewImpl.cpp`, RGBA16F; SceneRenderer Stage 21 resolve and lease/extraction | Stage 22, auxiliary/offscreen handoff; preserve P, generation and format until consumer fence | Dual HDR allocation, matching resolve/copy formats; post-tonemap output stays display format |
+| 12 Bloom products | `Vortex/PostProcess/Internal/BloomChain.cpp` currently only forwards an externally supplied SRV; `BloomDownsample.hlsl` / `BloomUpsample.hlsl` exist | Tonemap; threshold scene-referred, RGB in source P, final S/P once | Any allocated radiance chain must inherit source HDR mode; no existing owned chain allocation found in this audit |
+| 13 Static processed sky cubemap | `StaticSkyLightProcessor.cpp`, `IblProcessor.cpp`, normalized RGBA16F plus source_radiance_scale | Sky/IBL consumers restore resource scale; independent of view P/S | Preserve existing normalization; qualify narrowing and select RGBA32F if required source signal cannot fit; upload packing and descriptor must agree |
+| 14 Canonical atmosphere transmittance | `AtmosphereLutCache.cpp`, RGBA16F | All atmosphere integrators; dimensionless | Unchanged; never P-scaled |
+| 15 Canonical multiple scattering | `AtmosphereLutCache.cpp`, RGBA16F; `AtmosphereMultiScatteringLut.hlsl` | Sky-view/AP integrators; unit-illuminance transfer, not exposed radiance | Unchanged transfer domain; audit integrator before multiplying physical illuminance |
+| 16 Distant sky / diffuse SH | `AtmosphereLutCache.cpp` float4 buffer; static sky float SH buffer | Environment/lighting; scene-referred with explicit resource normalization where present | FP32 buffers retained, no view-dependent scaling |
+| 17 Diagnostic colors | `BasePassWireframe.hlsl`, `ForwardWireframe_PS.hlsl`, `ForwardDebug_PS.hlsl`, base/debug visualization | Temporary unit-gain output; preserve persistent exposure and pending events | Remove inverse-old-exposure workaround; HDR diagnostic writes use current P, display overlays bypass scene metering |
+
+Read every wildcard family entry against the ShaderBake catalog when migrating;
+cataloged shaders and their CPU dispatches must agree. Static sky processing
+already normalizes by its source maximum (`source_radiance_scale`); do not
+mistake that canonical resource scale for a view exposure or remove it blindly.
+Dynamic captured-scene/specular sky and TAA/TSR have no active producer in this
+audited checkout; their ED-M08/future contracts must carry domain metadata when
+activated, but this inventory does not claim their implementation or validation.
+
+The exact dual-format allocation set is SceneColor, composition HDR/optional
+resolved HDR, sky-view LUT, camera AP volume, volumetric-fog current/history,
+any active bloom radiance allocation, and the canonical processed cubemap when
+its own normalization fails qualification. Other entries write into these
+allocations or remain dimensionless/FP32. Do not promote depth, normals,
+GBuffers, velocity, shadow maps, transmittance or display targets.
+
+### Per-view FP16 suitability
+
+Exposure validity does not imply FP16 eligibility. At audited radiance write
+boundaries, test finite FP32 values before narrowing, including cumulative
+additive lighting and blending. Detect accumulation overflow as well as
+individual-fragment overflow; an already clipped texture cannot prove pre-store
+safety. FP32 reference frames evaluate candidate-P narrowing with the same
+coverage/content/sample conventions as metering.
+
+Required metering signals are samples with nonzero quantized mask/profile/
+coverage weight which affect the ordinary or synthetic-dark solve. Candidate
+narrowing must preserve finite/dark/zero classification when it affects that
+solve, and positive retained luminance within 1/512 EV per sample. Samples
+excluded from the solve need no exact RGB preservation. Still count rejected
+nonfinite signals separately. For image preservation, compare recovered scene
+RGB and S-scaled foreground contributions against the PBR error budgets;
+below-budget values alone do not pin FP32. Quantization of individual terms
+must be budgeted across the complete composition, not allowed the entire final
+image budget at every additive pass. The final image/probe is the acceptance
+authority.
+
+Eligibility requires every required product to pass, with half its error budget
+and max absolute stored RGB <=16376 (65504/4, two stops of overflow margin),
+for two consecutive successfully submitted and completed frames. Track the
+streak on GPU, reset it on failure/settings/event/layout changes, and report it
+through the existing bounded completed status. Absence of a required product
+or incomplete producer checks is ineligible, never a successful empty check.
+
+Retain FP32 while ineligible and continue normal exposure/adaptation; do not
+generate repeated remeter events. Pin the qualified GPU candidate P generation
+for the first FP16 frame. Its lease remains alive until status consumption and
+all readers finish. Ignore stale identities/revisions/layouts. Sharing uses the
+owner's gain but evaluates each consumer's required products independently.
+An unforeseen normal-frame range failure retains valid history and schedules
+FP32 recovery after status completion. Explicit scene out-of-domain failure in
+FP32 is reported; it is not an endless format/reinitialization loop.
+
+### Lifetime and memory accounting
+
+Product metadata carries stored P and exposure-record generation through
+SceneTextures publication, extraction and reuse. Rescale only RGB on a reused
+pre-exposed history. Compatible resize/format changes recreate dependent
+textures without erasing exposure. Old leases, descriptors and histories retire
+at their last GPU fence; do not free them on a CPU acknowledgment alone.
+
+RGBA32F adds eight bytes/texel over RGBA16F. One 1920x1080 allocation adds
+15.8203125 MiB; 3840x2160 adds 63.28125 MiB. Sum the actual SceneColor,
+resolve/composition allocations, each LUT/volume dimension, bloom mip texels,
+simultaneously live views and retained lease/history generations. Do not multiply
+by a guessed fixed frame count or count aliased SceneColor consumers as separate
+textures. Bandwidth increases for each actual read/write of a promoted product;
+record those passes and target-device timings in slice-5/10 reports.
+
 ## 1. Scope and Context
 
 ### 1.1 What This System Is

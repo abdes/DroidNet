@@ -1,7 +1,27 @@
 # Physical Lighting Roadmap (Oxygen)
 
 **Date:** 2026-02-10
-**Status:** Design / Roadmap
+**Status:** Historical roadmap with current exposure delivery below.
+
+## Current exposure and light calibration delivery
+
+The [exposure / LightBench / MultiView plan](../vortex/plan/exposure-and-lightbench-correction.md)
+owns the ten-slice execution order and gates. The [PBR specification](physically-based-rendering.md)
+owns calibration, exact hybrid EV/s adaptation, light-unit equations and error
+budgets. The [panel design](post-process-panel-design.md) owns current UI and
+configuration isolation. Prior checked tasks below describe the former renderer
+baseline and are not evidence of the new Vortex exposure/light-unit acceptance.
+
+Deliver canonical atomic settings, one GPU-owned exposure history, owner-only
+previous-frame sharing, frame-pinned P and final S/P, retained FP32 when required
+signals cannot fit FP16, complete authoring round-trip, and independent numerical
+and native visual qualification. Calibrate existing directional/point/spot
+models only; candela authoring, new area lights and general editor changes are
+outside this package. Auto speeds are EV/s and convergence is measured by
+elapsed time, not EV/frame. No current behavior routes through Oxygen.Renderer,
+ForwardPipeline or EnvironmentDynamicData.exposure.
+
+## Historical roadmap
 
 > [!IMPORTANT]
 > **Status correction (2026-04-23)**

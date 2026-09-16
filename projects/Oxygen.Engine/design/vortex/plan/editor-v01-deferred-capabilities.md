@@ -128,8 +128,11 @@ Source owners: [node flags](../../../src/Oxygen/Scene/Types/Flags.h),
 
 **Physical-camera authoring, persistence and qualification.** Native physical
 exposure already exists: aperture, shutter rate and ISO produce camera EV, and
-view initialization can consume it. The deferred work is editor controls and the
-complete canonical saved/cooked/load path. Do not add a TODO claiming native
+view initialization can consume it. Native source/cook/load persistence is now
+included in slice 6 of the [exposure package](exposure-and-lightbench-correction.md),
+by the user's 2026-09-16 scope decision. Physical-camera editor controls remain
+deferred; preserve these native fields through existing adapters without adding
+new editor controls. Do not add a TODO claiming native
 physical exposure is absent. Aperture does not by itself prove depth-of-field,
 and shutter input does not prove motion blur.
 

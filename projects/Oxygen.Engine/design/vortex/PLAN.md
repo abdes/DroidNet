@@ -72,6 +72,23 @@ Important baseline facts:
 
 ## 4. Next implementation package
 
+### Global exposure, LightBench and MultiView
+
+The active [exposure package](plan/exposure-and-lightbench-correction.md) follows
+its ten ordered slices: contract/compiler/layout audit; canonical settings and
+fixed gain; histogram/curve/hybrid adaptation; GPU lifecycle/sharing; all-path
+HDR migration and native MultiView; persistence/configuration; physical lights;
+independent instruments; interactive demos; automated/native acceptance.
+
+Status: slice-1 specification checkpoint complete; slice 2 is the next
+implementation step. The [checkpoint](plan/exposure-contract-checkpoint.md)
+records the 10/10 independent arithmetic audit, compiler inspection and owned
+numerical/GPU/asset/HDR contracts. Runtime implementation and native acceptance
+remain open.
+Implementation must pass each slice gate before the next. FP16 eligibility is
+per-view and separate from exposure validity; retained FP32 does not reset
+adaptation. Prior VTX-M03/M06 closure is not this package's acceptance evidence.
+
 ### ED-M08 — V0.1 canonical authoring and rendering
 
 **Status:** `planned`; design package ready for implementation.

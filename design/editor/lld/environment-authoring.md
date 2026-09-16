@@ -131,20 +131,20 @@ names; no enum renumbering or cosmetic aliases are introduced.
 | --- | --- | --- | --- |
 | ExposureEnabled | true; bool | Boolean | Primary; Off uses unit exposure without erasing settings |
 | ExposureMode | Auto | Manual / Auto | Primary; selects fixed EV or metered exposure |
-| ManualExposureEv | 9.7 EV100 | Clamp [-24,24] | Enabled + Manual; fixed exposure |
+| ManualExposureEv | 9.7 EV100 | Finite; validate resulting gain with key/compensation | Enabled + Manual; fixed exposure; [-24,24] is a typical control range, not a conversion clamp |
 | ExposureCompensationEv | 0 EV | Finite and representable conversion | Enabled; +1 doubles exposure, -1 halves it; no light-only [-10,10] restriction |
-| ExposureKey | 10; dimensionless calibration scale | Clamp >=0.001 | Advanced, Enabled; same bias scale for Manual and Auto |
+| ExposureKey | 10; dimensionless calibration scale | Finite >0; validate coupled gain | Advanced, Enabled; same bias scale for Manual and Auto |
 | AutoExposureMinEv | -6 EV100 | Finite, Min <= Max | Auto; minimum metered EV |
 | AutoExposureMaxEv | 16 EV100 | Finite, Max >= Min | Auto; maximum metered EV |
-| AutoExposureSpeedUp | 3 EV/s | Clamp >=0 | Auto; adaptation toward brighter luminance |
-| AutoExposureSpeedDown | 1 EV/s | Clamp >=0 | Auto; adaptation toward darker luminance |
+| AutoExposureSpeedUp | 3 EV/s | Finite >=0 | Auto; adaptation toward brighter luminance |
+| AutoExposureSpeedDown | 1 EV/s | Finite >=0 | Auto; adaptation toward darker luminance |
 | AutoExposureMeteringMode | Average | Average / CenterWeighted / Spot | Auto; image weighting; native ordinals 0/1/2 |
 | AutoExposureLowPercentile | 0.1 | [0,1], Low < High | Advanced Auto; lower histogram percentile |
 | AutoExposureHighPercentile | 0.9 | [0,1], High > Low | Advanced Auto; upper histogram percentile |
-| AutoExposureMinLogLuminance | -12; log2 luminance | Finite | Advanced Auto; histogram lower range |
-| AutoExposureLogLuminanceRange | 25; log2 span | Clamp >=0.001 | Advanced Auto; histogram span |
-| AutoExposureTargetLuminance | 0.18; linear target | Clamp >=0 | Advanced Auto; exposure target |
-| AutoExposureSpotMeterRadius | 0.2; normalized image radius | Clamp >=0 | Advanced Auto + Spot; active metering radius |
+| AutoExposureMinLogLuminance | -12; log2 luminance | Finite, window within [-24,32] | Advanced Auto; histogram lower range |
+| AutoExposureLogLuminanceRange | 25; log2 span | Finite >0, upper window endpoint <=32 | Advanced Auto; histogram span |
+| AutoExposureTargetLuminance | 0.18; linear target | Finite >=0; validate coupled gain | Advanced Auto; exposure target |
+| AutoExposureSpotMeterRadius | 0.2; normalized image radius | Finite >=0 | Advanced Auto + Spot; active metering radius |
 
 Validate coupled ranges atomically. Exposure Min/Max can be ordered together on
 commit; invalid histogram intervals reject without partial mutation. Numeric
@@ -155,6 +155,73 @@ Using Core/Types/PostProcess.h, bias = 2^Compensation * (ExposureKey/12.5);
 Manual exposure = bias / 2^EV100. Auto applies the same bias to its target.
 Do not duplicate this authority with a second editor exposure implementation.
 Expected conversion examples are independently authored for qualification.
+
+### Exposure extension and persistence layout
+
+The [exposure implementation package](../../../projects/Oxygen.Engine/design/vortex/plan/exposure-and-lightbench-correction.md)
+extends the existing adapters; it does not introduce another editor exposure
+model. Native ManualCamera remains available to games; the existing editor
+Manual/Auto presentation remains unchanged. Use one canonical native validator
+for coupled settings and propagate structured failures without partially
+publishing converted fields. Previous valid settings remain active on error.
+
+| Field | Default | Validation / behavior |
+| --- | --- | --- |
+| AutoExposureBlackInfluence | 0 | Finite [0,1]; dark-bin weight |
+| AutoExposureTransitionDistance | 1.5 stops | Finite positive; advanced Auto control |
+| AutoExposureMeteringMask | Absent | Existing resource descriptor reference; linear R, bilinear clamp; multiply selected analytic profile |
+| AutoExposureCompensationCurve | Empty | At most 64 finite EV/compensation pairs with strictly increasing EV |
+
+All active existing fields and these additions round-trip source, schema,
+cooker, native record, loader hydration, scripting, Interop and editor save.
+Keep enum ordinals: Manual=0, ManualCamera=1, Auto=2 and Average=0,
+CenterWeighted=1, Spot=2. New-scene defaults remain the table above. Legacy
+records receive absent mask, empty curve, black influence 0 and D=1.5.
+Pending mask residency retains the complete old settings/resource revision;
+failed authored resource loading reports failure, never substitutes no mask.
+Transient transitions, GPU state and adaptation history are never serialized.
+
+The existing `PostProcessVolumeEnvironmentRecord` is exactly 104 packed bytes,
+including its eight-byte type/record-size header. Preserve this legacy prefix
+byte-for-byte. The new scene asset version is 6; readers accept version 5 with
+the legacy record and version 6 with the extended record below. Do not reinterpret
+old bytes as an extended struct. Update `SceneAsset` exact-size validation,
+`PakFormatSerioLoaders`, cooker and serializer together.
+
+| Byte offset | Type | Extended record field |
+| --- | --- | --- |
+| 0..103 | Existing packed fields | Legacy prefix; header record_size reflects full new length |
+| 104 | uint32 | exposure_extension_version=1 |
+| 108 | float32 | black_influence |
+| 112 | float32 | transition_distance_ev |
+| 116 | AssetKey, 16 bytes | mask resource descriptor key; all-zero means absent |
+| 132 | uint32 | curve_key_count, 0..64 |
+| 136 | uint32 | reserved=0 |
+| 140 | uint32 | reserved=0 |
+| 144 | count pairs of float32 | EV100, compensation EV, eight bytes per key |
+
+Total record_size is exactly `144+8*curve_key_count`, at most 656 bytes.
+Check count/size/available bytes before reading; reject unsupported extension
+version, malformed keys and nonzero reserved fields. Resolve the mask through
+the existing resource-descriptor dependency/key mechanism used for environment
+textures, not a runtime descriptor index. There are no native pointers or GPU
+descriptor slots in saved records. New readers deliberately distinguish the
+104-byte legacy representation from the explicitly versioned extension.
+
+Native physical camera persistence is included by the 2026-09-16 scope decision.
+Scene-v6 perspective camera records append aperture_f/shutter_rate/iso at
+20/24/28 (32 bytes total); orthographic records append them at 28/32/36
+(40 bytes total). Version-5 20/28-byte records keep projection bytes unchanged
+and hydrate 11/125/100. Source schemas, cooker, loader, scripting and existing
+editor adapters preserve these fields. This does not add physical-camera editor
+controls, a new editor exposure mode, depth of field or motion blur.
+
+The engine mathematical authority is now the
+[PBR specification](../../../projects/Oxygen.Engine/design/renderer-core/physically-based-rendering.md);
+Core provides its runtime implementation. The 12.5 normalization and creation
+key 10 remain distinct. Target zero is legal and displays black while retaining
+positive latent adaptation. Speeds retain their saved numeric values and now
+implement maximum EV/s, not exponential rate constants.
 
 ## 6. Tone mapping, bloom and grading
 

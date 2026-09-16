@@ -19,6 +19,17 @@
   explicit human approval records the accepted gap and the reason the parity
   gate cannot close.
 
+## Exposure-package integration
+
+Use the [LightingService physical contract](lighting-service.md#exposure-package-light-calibration)
+for directional/point/spot units and regularization. The historical shader
+sketches below are not authorization for the old `1/(d*d+1)` attenuation or
+passing lumens through as candela. Add P-scaled radiance to the existing
+pre-exposed emissive SceneColor, preserving coverage. HDR target/PSO formats and
+cumulative range checks follow the [SceneTextures inventory](scene-textures.md#exposure-hdr-domain-and-format-inventory).
+Do not infer safety from each individual light contribution when the accumulated
+target can overflow. Exposure history remains owned by PostProcessService.
+
 ## 1. Scope and Context
 
 ### 1.1 What This Covers
