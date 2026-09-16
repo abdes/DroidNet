@@ -79,7 +79,62 @@ class EdgeCaseErrorTest : public ModuleManagerErrorTestBase { };
 //! Test fixture for single module error reporting scenarios
 class SingleModuleErrorTest : public ModuleManagerErrorTestBase { };
 
+//! Reports an attributed content failure through the production module helper.
+class ContentErrorReportingModule final : public ErrorReportingModule {
+  OXYGEN_TYPED(ContentErrorReportingModule)
+
+public:
+  using ErrorReportingModule::ErrorReportingModule;
+
+  auto OnFrameStart(observer_ptr<FrameContext> context) -> void override
+  {
+    calls.emplace_back("OnFrameStart");
+    ReportContentError(context, "Test content failure in OnFrameStart");
+  }
+
+  auto OnInput(observer_ptr<FrameContext> context) -> Co<> override
+  {
+    calls.emplace_back("OnInput");
+    ReportContentError(context, "Test content failure in OnInput");
+    co_return;
+  }
+};
+
 //=== Synchronous Phase Error Tests ===---------------------------------------//
+
+NOLINT_TEST_F(
+  SyncModuleErrorTest, NonCriticalContentFailureRetainsModuleAndError)
+{
+  auto module = std::make_unique<ContentErrorReportingModule>("content_owner",
+    ModulePriority { 100 }, MakeModuleMask<PhaseId::kFrameStart>());
+  auto* module_ptr = module.get();
+  const auto type_id = module->GetTypeId();
+  mgr_.RegisterModule(std::move(module));
+
+  oxygen::co::Run(loop_, [&]() -> Co<> {
+    co_await mgr_.ExecutePhase(PhaseId::kFrameStart, observer_ptr { &ctx_ });
+  });
+
+  ASSERT_TRUE(IsModuleRegistered("content_owner"));
+  EXPECT_EQ(GetModuleCount(), 1U);
+  EXPECT_FALSE(module_ptr->IsCritical());
+  ASSERT_EQ(module_ptr->calls.size(), 1U);
+  const auto errors = ctx_.GetErrors();
+  ASSERT_EQ(errors.size(), 1U);
+  EXPECT_EQ(errors.front().kind, FrameErrorKind::kContentFailure);
+  EXPECT_EQ(errors.front().source_type_id, type_id);
+  ASSERT_TRUE(errors.front().source_key.has_value());
+  EXPECT_EQ(errors.front().source_key.value(), "content_owner");
+  EXPECT_EQ(errors.front().message, "Test content failure in OnFrameStart");
+
+  // A retained diagnostic must not remove the owner on the next execution.
+  oxygen::co::Run(loop_, [&]() -> Co<> {
+    co_await mgr_.ExecutePhase(PhaseId::kFrameStart, observer_ptr { &ctx_ });
+  });
+  ASSERT_TRUE(IsModuleRegistered("content_owner"));
+  EXPECT_EQ(module_ptr->calls.size(), 2U);
+  EXPECT_EQ(GetErrorCount(), 2U);
+}
 
 //! Non-critical sync module throws and gets removed
 NOLINT_TEST_F(SyncModuleErrorTest, NonCriticalSyncRemoved)
@@ -167,6 +222,34 @@ NOLINT_TEST_F(SyncModuleErrorTest, CriticalSyncKept)
 
 //=== Concurrent Phase Error Tests ===----------------------------------------//
 
+NOLINT_TEST_F(
+  AsyncModuleErrorTest, NonCriticalContentFailureRetainsModuleAndError)
+{
+  auto module
+    = std::make_unique<ContentErrorReportingModule>("async_content_owner",
+      ModulePriority { 100 }, MakeModuleMask<PhaseId::kInput>());
+  auto* module_ptr = module.get();
+  const auto type_id = module->GetTypeId();
+  mgr_.RegisterModule(std::move(module));
+
+  oxygen::co::Run(loop_, [&]() -> Co<> {
+    co_await mgr_.ExecutePhase(PhaseId::kInput, observer_ptr { &ctx_ });
+  });
+
+  ASSERT_TRUE(IsModuleRegistered("async_content_owner"));
+  EXPECT_EQ(GetModuleCount(), 1U);
+  EXPECT_FALSE(module_ptr->IsCritical());
+  ASSERT_EQ(module_ptr->calls.size(), 1U);
+  EXPECT_EQ(module_ptr->calls.front(), "OnInput");
+  const auto errors = ctx_.GetErrors();
+  ASSERT_EQ(errors.size(), 1U);
+  EXPECT_EQ(errors.front().kind, FrameErrorKind::kContentFailure);
+  EXPECT_EQ(errors.front().source_type_id, type_id);
+  ASSERT_TRUE(errors.front().source_key.has_value());
+  EXPECT_EQ(errors.front().source_key.value(), "async_content_owner");
+  EXPECT_EQ(errors.front().message, "Test content failure in OnInput");
+}
+
 //! Non-critical async module throws and gets removed
 NOLINT_TEST_F(AsyncModuleErrorTest, NonCriticalAsyncRemoved)
 {
@@ -250,6 +333,31 @@ NOLINT_TEST_F(AsyncModuleErrorTest, CriticalAsyncKept)
 }
 
 //=== Multiple Module Error Tests ===-----------------------------------------//
+
+NOLINT_TEST_F(
+  MultiModuleErrorTest, ModuleFailureRemovalPreservesOtherContentError)
+{
+  mgr_.RegisterModule(
+    std::make_unique<ContentErrorReportingModule>("content_owner",
+      ModulePriority { 100 }, MakeModuleMask<PhaseId::kFrameStart>()));
+  mgr_.RegisterModule(std::make_unique<ErrorReportingModule>("failed_module",
+    ModulePriority { 200 }, MakeModuleMask<PhaseId::kFrameStart>()));
+  ASSERT_EQ(GetModuleCount(), 2U);
+
+  oxygen::co::Run(loop_, [&]() -> Co<> {
+    co_await mgr_.ExecutePhase(PhaseId::kFrameStart, observer_ptr { &ctx_ });
+  });
+
+  EXPECT_FALSE(IsModuleRegistered("failed_module"));
+  EXPECT_TRUE(IsModuleRegistered("content_owner"));
+  EXPECT_EQ(GetModuleCount(), 1U);
+  const auto errors = ctx_.GetErrors();
+  ASSERT_EQ(errors.size(), 1U);
+  EXPECT_EQ(errors.front().kind, FrameErrorKind::kContentFailure);
+  ASSERT_TRUE(errors.front().source_key.has_value());
+  EXPECT_EQ(errors.front().source_key.value(), "content_owner");
+  EXPECT_EQ(errors.front().message, "Test content failure in OnFrameStart");
+}
 
 //! Critical module that throws exception is preserved in manager
 NOLINT_TEST_F(MultiModuleErrorTest, CriticalModuleThrows_RemainsRegistered)
@@ -636,6 +744,7 @@ NOLINT_TEST_F(SingleModuleErrorTest, ProperErrorReporting)
   const auto& error = errors[0];
   EXPECT_TRUE(error.source_key.has_value());
   EXPECT_EQ(error.source_key.value(), "proper_reporting");
+  EXPECT_EQ(error.kind, FrameErrorKind::kModuleFailure);
   EXPECT_TRUE(
     error.message.find("Test error from OnFrameStart using helper method")
     != std::string::npos);

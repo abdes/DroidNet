@@ -20,6 +20,7 @@
 #include <vector>
 
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Composition/Component.h>
 #include <Oxygen/Core/Scripting/ScriptExecutable.h>
 #include <Oxygen/Data/ScriptAsset.h>
@@ -286,7 +287,7 @@ public:
   //! Default constructor.
   OXGN_SCN_API ScriptingComponent() = default;
   OXGN_SCN_API explicit ScriptingComponent(const NodeHandle& owner_node,
-    observer_ptr<internal::IMutationCollector> collector) noexcept
+    observer_ptr<internal::IMutationCollector> collector)
     : owner_node_(owner_node)
     , mutation_collector_(collector)
   {
@@ -297,6 +298,13 @@ public:
 
   OXYGEN_DEFAULT_COPYABLE(ScriptingComponent)
   OXYGEN_DEFAULT_MOVABLE(ScriptingComponent)
+
+  //! Runtime-only identity for this component incarnation; never serialized.
+  //! Construction/copy/clone creates a new identity; storage moves preserve it.
+  [[nodiscard]] auto IncarnationId() const noexcept -> Uuid
+  {
+    return incarnation_.value;
+  }
 
   //! Adds a new script slot to this component.
   //! Invalidates previously obtained slot references and spans.
@@ -360,6 +368,32 @@ public:
   OXGN_SCN_NDAPI auto Clone() const -> std::unique_ptr<Component> override;
 
 private:
+  struct RuntimeIncarnation {
+    Uuid value { Uuid::Generate() };
+
+    RuntimeIncarnation() = default;
+    ~RuntimeIncarnation() = default;
+    RuntimeIncarnation(const RuntimeIncarnation&) { }
+    auto operator=(const RuntimeIncarnation& other) -> RuntimeIncarnation&
+    {
+      if (this != &other) {
+        value = Uuid::Generate();
+      }
+      return *this;
+    }
+    RuntimeIncarnation(RuntimeIncarnation&& other) noexcept
+      : value(std::exchange(other.value, Uuid {}))
+    {
+    }
+    auto operator=(RuntimeIncarnation&& other) noexcept -> RuntimeIncarnation&
+    {
+      if (this != &other) {
+        value = std::exchange(other.value, Uuid {});
+      }
+      return *this;
+    }
+  };
+
   [[nodiscard]] auto FindSlotById(uint64_t slot_id) noexcept
     -> std::vector<Slot>::iterator;
   [[nodiscard]] auto FindSlotById(uint64_t slot_id) const noexcept
@@ -369,6 +403,7 @@ private:
   uint64_t next_slot_id_ { 1 };
   NodeHandle owner_node_ {};
   observer_ptr<internal::IMutationCollector> mutation_collector_ {};
+  RuntimeIncarnation incarnation_;
 };
 
 } // namespace oxygen::scene

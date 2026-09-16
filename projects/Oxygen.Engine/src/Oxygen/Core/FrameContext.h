@@ -161,11 +161,17 @@ struct ModuleTimingData {
 
 //=== Error Reporting System ===----------------------------------------------//
 
-//! Frame error information for module error reporting.
+//! Whether a failure affects the module itself or content it was processing.
+enum class FrameErrorKind : uint8_t {
+  kModuleFailure,
+  kContentFailure,
+};
+
+//! Frame error information for module and content error reporting.
 /*!
- Simple error structure containing source module type information and
- human-readable message. Used for basic error propagation from modules to the
- engine frame loop without exceptions.
+ Error information containing source module identity, failure kind and a
+ human-readable message. Module failures participate in module removal policy;
+ content failures remain available for diagnostics without removing the module.
  ### Usage Examples
 
  ```cpp
@@ -182,6 +188,8 @@ struct FrameError {
   std::string message; //!< Human-readable error message
   //!< Optional unique identifier for error source
   std::optional<std::string> source_key;
+  //! Content failures remain diagnostic; they do not unload their owner module.
+  FrameErrorKind kind { FrameErrorKind::kModuleFailure };
 };
 
 // Unique identifier for a surface
@@ -867,7 +875,8 @@ public:
 
   //! Report an error using a TypeId directly.
   OXGN_CORE_API auto ReportError(TypeId source_type_id, std::string message,
-    std::optional<std::string> source_key = std::nullopt) noexcept -> void;
+    std::optional<std::string> source_key = std::nullopt,
+    FrameErrorKind kind = FrameErrorKind::kModuleFailure) noexcept -> void;
 
   //! Check if any errors have been reported this frame.
   OXGN_CORE_NDAPI auto HasErrors() const noexcept -> bool;

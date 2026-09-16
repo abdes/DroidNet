@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <utility>
 
 #include <Oxygen/Testing/GTest.h>
 
@@ -112,6 +113,54 @@ NOLINT_TEST_F(ScriptingComponentTest, MarkSlotReady_RejectsNullExecutable)
   EXPECT_FALSE(component_.MarkSlotReady(component_.Slots().front(), nullptr));
   EXPECT_EQ(component_.Slots().front().State(),
     ScriptingComponent::Slot::CompileState::kPendingCompilation);
+}
+
+NOLINT_TEST_F(
+  ScriptingComponentTest, CopiesAndClonesHaveFreshRuntimeIncarnations)
+{
+  component_.AddSlot(MakeScriptAsset());
+  const auto original = component_.IncarnationId();
+  EXPECT_TRUE(original.IsValidV7());
+  ScriptingComponent copied(component_);
+  EXPECT_NE(copied.IncarnationId(), original);
+  EXPECT_TRUE(copied.IncarnationId().IsValidV7());
+  EXPECT_EQ(copied.Slots().size(), component_.Slots().size());
+
+  ScriptingComponent assigned;
+  const auto previous = assigned.IncarnationId();
+  assigned = component_;
+  EXPECT_NE(assigned.IncarnationId(), previous);
+  EXPECT_NE(assigned.IncarnationId(), original);
+  EXPECT_EQ(assigned.Slots().size(), component_.Slots().size());
+
+  const auto clone = component_.Clone();
+  ASSERT_NE(clone, nullptr);
+  ASSERT_EQ(clone->GetTypeId(), ScriptingComponent::ClassTypeId());
+  // C++ RTTI is disabled; the engine's type ID was checked immediately above.
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
+  const auto& cloned = static_cast<const ScriptingComponent&>(*clone);
+  EXPECT_NE(cloned.IncarnationId(), original);
+  EXPECT_NE(cloned.IncarnationId(), copied.IncarnationId());
+  EXPECT_TRUE(cloned.IncarnationId().IsValidV7());
+  EXPECT_EQ(cloned.Slots().size(), component_.Slots().size());
+}
+
+NOLINT_TEST_F(ScriptingComponentTest, StorageMovesPreserveRuntimeIncarnation)
+{
+  component_.AddSlot(MakeScriptAsset());
+  const auto original = component_.IncarnationId();
+  ScriptingComponent moved(std::move(component_));
+  EXPECT_EQ(moved.IncarnationId(), original);
+  EXPECT_TRUE(component_.IncarnationId().IsNil());
+  ASSERT_EQ(moved.Slots().size(), 1U);
+
+  ScriptingComponent assigned;
+  assigned = std::move(moved);
+  EXPECT_EQ(assigned.IncarnationId(), original);
+  // The runtime identity move contract explicitly leaves the source ID nil.
+  // NOLINTNEXTLINE(bugprone-use-after-move)
+  EXPECT_TRUE(moved.IncarnationId().IsNil());
+  EXPECT_EQ(assigned.Slots().size(), 1U);
 }
 
 } // namespace

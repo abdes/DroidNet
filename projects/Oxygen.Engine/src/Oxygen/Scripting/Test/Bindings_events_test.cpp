@@ -344,6 +344,7 @@ end
   ASSERT_FALSE(errors.empty());
   EXPECT_NE(
     errors.front().message.find("first listener failure"), std::string::npos);
+  EXPECT_EQ(errors.front().kind, engine::FrameErrorKind::kModuleFailure);
 
   const auto validate_result = module.ExecuteScript(ScriptExecutionRequest {
     .source_text = ScriptSourceText { R"lua(
@@ -553,16 +554,23 @@ NOLINT_TEST_F(EventsBindingsTest, EventsBindingNestedEmitDefersToNextPhaseTick)
   const auto setup_result = module.ExecuteScript(ScriptExecutionRequest {
     .source_text = ScriptSourceText { R"lua(
 events_nested_hits = 0
+local initial_event_queued = false
 
-oxygen.events.on("demo.nested", function()
+oxygen.events.on("demo.nested", function(payload)
   events_nested_hits = events_nested_hits + 1
+  assert(payload and payload.generation == events_nested_hits, "nested payload was lost or replaced")
   if events_nested_hits == 1 then
-    oxygen.events.emit("demo.nested")
+    oxygen.events.emit("demo.nested", { generation = 2, marker = "retained" })
+  else
+    assert(payload.marker == "retained", "deferred payload reference was released")
   end
 end, { phase = "frame_start", priority = 1 })
 
 function on_frame_start()
-  oxygen.events.emit("demo.nested")
+  if not initial_event_queued then
+    initial_event_queued = true
+    oxygen.events.emit("demo.nested", { generation = 1 })
+  end
 end
 )lua" },
     .chunk_name = ScriptChunkName { "events_nested_emit_setup" },

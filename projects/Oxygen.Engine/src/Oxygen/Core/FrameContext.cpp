@@ -131,8 +131,7 @@ auto FrameContext::RemoveView(ViewId id) noexcept -> void
 }
 
 auto FrameContext::SetViewRenderTarget(
-  ViewId id, observer_ptr<graphics::Framebuffer> render_target) noexcept
-  -> void
+  ViewId id, observer_ptr<graphics::Framebuffer> render_target) noexcept -> void
 {
   // Output setting is allowed during rendering phases (FrameGraph,
   // CommandRecord) and Compositing. CHECK_F(engine_state_.current_phase >=
@@ -363,13 +362,15 @@ auto FrameContext::ClearPresentableFlags(EngineTag) noexcept -> void
 }
 
 auto FrameContext::ReportError(TypeId source_type_id, std::string message,
-  std::optional<std::string> source_key) noexcept -> void
+  std::optional<std::string> source_key, const FrameErrorKind kind) noexcept
+  -> void
 {
   std::unique_lock lock { error_mutex_ };
   frame_errors_.emplace_back(FrameError {
     .source_type_id = source_type_id,
     .message = std::move(message),
     .source_key = std::move(source_key),
+    .kind = kind,
   });
 }
 

@@ -500,34 +500,33 @@ auto ModuleManager::HandleModuleErrors(
 
   // Normalize module errors: find modules by key or type_id and set proper
   // source_key
-  auto normalized_errors = errors
-    | std::views::transform([this](auto error) { // Copy error to modify it
-        EngineModule* module;
+  auto normalized_errors = errors | std::views::filter([](const auto& error) {
+    return error.kind == FrameErrorKind::kModuleFailure;
+  }) | std::views::transform([this](auto error) { // Copy error to modify it
+    EngineModule* module;
 
-        if (error.source_key.has_value()) {
-          // Has key - find module by name
-          auto module_opt = GetModule(error.source_key.value());
-          module = module_opt.has_value()
-            ? const_cast<EngineModule*>(&module_opt.value().get())
-            : nullptr;
-        } else {
-          // No key - try to find by type_id and normalize as bad module
-          module = FindModuleByTypeId(error.source_type_id);
-          if (module) {
-            // Normalize bad module with special key
-            error.source_key = "__bad_module__";
-            error.message = fmt::format("CRITICAL: Module '{}' reported error "
-                                        "without proper attribution: {}",
-              module->GetName(), error.message);
-          }
-        }
+    if (error.source_key.has_value()) {
+      // Has key - find module by name
+      auto module_opt = GetModule(error.source_key.value());
+      module = module_opt.has_value()
+        ? const_cast<EngineModule*>(&module_opt.value().get())
+        : nullptr;
+    } else {
+      // No key - try to find by type_id and normalize as bad module
+      module = FindModuleByTypeId(error.source_type_id);
+      if (module) {
+        // Normalize bad module with special key
+        error.source_key = "__bad_module__";
+        error.message = fmt::format("CRITICAL: Module '{}' reported error "
+                                    "without proper attribution: {}",
+          module->GetName(), error.message);
+      }
+    }
 
-        return std::make_pair(error, module);
-      })
-    | std::views::filter([](const auto& pair) {
-        return pair.second != nullptr; // Only process module errors
-      })
-    | std::ranges::to<std::vector>();
+    return std::make_pair(error, module);
+  }) | std::views::filter([](const auto& pair) {
+    return pair.second != nullptr; // Only process module errors
+  }) | std::ranges::to<std::vector>();
 
   // Handle bad module errors: clear original and report as critical
   std::ranges::for_each(normalized_errors, [this, ctx](const auto& pair) {
