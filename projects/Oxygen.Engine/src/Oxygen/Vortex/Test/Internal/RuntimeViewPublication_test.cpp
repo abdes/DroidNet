@@ -704,4 +704,27 @@ NOLINT_TEST_F(
   EXPECT_EQ(ExposureOwner(frame, other), Handle { 11U });
 }
 
+NOLINT_TEST_F(RuntimeViewPublicationTest,
+  RemovingNeverRenderedViewRetiresItsQueuedExposureLifetime)
+{
+  using Handle = oxygen::vortex::CompositionView::ViewStateHandle;
+  auto frame = FrameContext {};
+  PrepareFrameContext(frame, 1U);
+  ASSERT_NE(PublishExposureView(frame, ViewId { 1U }, Handle { 11U }),
+    oxygen::kInvalidViewId);
+  const auto old = renderer_->QueueExposureTransition(
+    Handle { 11U }, oxygen::vortex::ExposureTransitionPolicy::kRemeter);
+  ASSERT_TRUE(old.has_value());
+  renderer_->RemovePublishedRuntimeView(frame, ViewId { 1U });
+  EXPECT_FALSE(
+    renderer_->InspectExposureTransition(Handle { 11U }).has_value());
+  EXPECT_FALSE(renderer_->RetryExposureTransition(*old).has_value());
+  ASSERT_NE(PublishExposureView(frame, ViewId { 1U }, Handle { 11U }),
+    oxygen::kInvalidViewId);
+  const auto next = renderer_->QueueExposureTransition(
+    Handle { 11U }, oxygen::vortex::ExposureTransitionPolicy::kRemeter);
+  ASSERT_TRUE(next.has_value());
+  EXPECT_NE(next->lifetime, old->lifetime);
+}
+
 } // namespace

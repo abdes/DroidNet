@@ -34,6 +34,9 @@ namespace oxygen::vortex {
 struct RenderContext;
 class Renderer;
 class SceneTextures;
+namespace testing {
+  struct RendererPublicationProbe;
+}
 
 namespace internal {
 template <typename Payload> class PerViewStructuredPublisher;
@@ -141,6 +144,7 @@ public:
   }
 
 private:
+  friend struct testing::RendererPublicationProbe;
   struct CapturedExposureSettings {
     CompositionView::ViewStateHandle handle;
     ExposureSettingsState settings;
@@ -166,8 +170,13 @@ private:
   std::unordered_map<CompositionView::ViewStateHandle,
     std::deque<PendingExposureStatus>>
     pending_exposure_status_;
+  std::unordered_map<CompositionView::ViewStateHandle, PendingExposureStatus>
+    deferred_exposure_status_;
+  auto IsExposureStatusNeeded(const PendingExposureStatus& job) const -> bool;
+  auto DeferExposureStatus(PendingExposureStatus job) -> void;
+  auto TryEnqueueExposureStatus(PendingExposureStatus job) -> bool;
   auto PollExposureStatus() -> void;
-  auto EnqueueExposureStatus(const ExposureTransitionToken& token,
+  OXGN_VRTX_API auto EnqueueExposureStatus(const ExposureTransitionToken& token,
     postprocess::ExposurePass::StateLease state, const RenderContext& ctx,
     std::uint64_t settings_revision) -> void;
 

@@ -710,6 +710,7 @@ private:
   struct ExposureTransitionEntry {
     std::uint64_t lifetime { 0U };
     std::uint64_t generation { 0U };
+    std::uint64_t submitted_generation { 0U };
     std::optional<ExposureTransitionStatus> status;
     std::optional<frame::SequenceNumber> captured_frame;
     std::optional<ExposureTransitionToken> captured_request;
@@ -722,6 +723,10 @@ private:
   auto CompleteExposureTransition(const ExposureTransitionToken& token,
     std::uint64_t applied_generation,
     std::optional<ExposureTransitionError> rejection) -> void;
+  auto MarkExposureTransitionSubmitted(const ExposureTransitionToken& token)
+    -> void;
+  auto NeedsExposureAcknowledgement(const ExposureTransitionToken& token) const
+    -> bool;
   auto RetireExposureTransitions(CompositionView::ViewStateHandle target)
     -> void;
   struct ExposureSourceIntent {

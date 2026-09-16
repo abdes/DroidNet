@@ -1040,9 +1040,18 @@ seed/bounds/zero-target fallback, explicit detach/remeter, inactive-source seed
 ownership and failure-safe fallback. Debug and Release each pass 62/62 native,
 20/20 service and 19/19 publication tests. Six sharing CDB cases have no blocking
 graphics messages. Evidence is `lifecycle/prior-sharing-manifest.json`.
-Automatic detachment, destruction continuity, inactive-owner request validation,
-readback-backpressure acknowledgement and implicit lifecycle events remain open;
-slice 4 is not qualified. Early GPU P selection, S/P integration and scene-integrated validation remain
+Readback backpressure now retains one coalesced latest submitted status alongside
+the three pending copies. Frame-start retry completes acknowledgements without
+another owner render; old completions cannot consume newer intent. Submission
+observation remains distinct from GPU application, and runtime removal retires
+queued lifetimes even before renderer/GPU state exists. The native suite passes
+64/64 in Debug and Release, service/publication suites pass 20/20 each in both,
+and four focused debugger cases have no blocking graphics messages. The final
+submission-observation guard also passes the four affected Debug cases. Evidence
+is `lifecycle/status-retry-manifest.json`.
+Automatic detachment, destruction continuity, inactive-owner request validation
+and implicit lifecycle events remain open; slice 4 is not qualified.
+Early GPU P selection, S/P integration and scene-integrated validation remain
 slice 5 work.
 
 - [x] Update the same GPU state in Manual, ManualCamera, Auto and disabled modes.
@@ -1052,9 +1061,9 @@ slice 5 work.
   behavior and manual-to-auto continuity by retaining gain.
   Remaining lifecycle coverage must include default detach/remeter, destroyed
   source continuity (including borrowed zero and never-rendered source fallback),
-  rejecting inactive-owner requests that are invalid for captured settings/mode,
-  and eventually acknowledging submitted requests when the bounded readback
-  queue was full and the owner subsequently becomes inactive.
+  and rejecting inactive-owner requests that are invalid for captured
+  settings/mode. Acknowledgement after readback backpressure and owner inactivity
+  is covered by the status-retry checkpoint above.
 - [ ] Implement source-owned updates, pinned prior generations, root-source
   resolution, cycle rejection, inactive-source retention and bootstrap fallback.
 - [ ] Implement stateless transient state, recovery events, frame-safe uploads,
