@@ -952,10 +952,16 @@ readers. Primary/Secondary names remain unchanged.
       Canonical primitive/catalog/Lua cutover, managed catalog consumers and
       native example rendering are recorded in the
       [primitive increment record](validation/ED-M08-M08.1-primitives.md).
-      Flag modes, slot identities/provenance, camera aspect, atmospheric roles,
-      float32 emission and capture-toggle removal remain open with their native
-      producer/loader/migration work. Supplemental example captures do not close
-      the M08.3 qualification gate.
+      Scene v5 flag modes, producers, native hydration/Inspector metadata and
+      protected source migration are recorded in the
+      [flag increment record](validation/ED-M08-M08.1-flags.md).
+      [Native scene validation](validation/ED-M08-native-scene-validation.md)
+      records 20/20 RenderScene loads, scoped image review and the SDK/Interop
+      refresh; [loading corrections](validation/ED-M08-runtime-loading.md)
+      record script-cache, instance-lifetime and load-drain regression evidence.
+      Slot identities/provenance/overrides, camera aspect, atmospheric roles,
+      float32 emission and capture-toggle removal remain open. Rendered flag
+      behavior remains M08.2 work; supplemental captures do not close M08.3.
 - [ ] M08.2 native rendering and view behavior.
 - [ ] M08.3 development harness and native visual gate outside the editor.
 - [ ] M08.4 editor canonical authoring and live delivery.
@@ -1045,7 +1051,7 @@ recorded in section 5.
 | [ED-M07-content-pipeline-and-cooking.md](plan/ED-M07-content-pipeline-and-cooking.md) | `ED-M07` | `validated` | Recorded validation is retained. Section 11 closes UI scope decisions; new publication/mapping guarantees execute in ED-M07B. |
 | [ED-M07A-authoring-integrity-and-runtime-convergence.md](plan/ED-M07A-authoring-integrity-and-runtime-convergence.md) | `ED-M07A` | `validated` | All automated and user-confirmed viewport gates pass. |
 | [ED-M07B-safe-content-publication-and-compatibility.md](plan/ED-M07B-safe-content-publication-and-compatibility.md) | `ED-M07B` | `validated` | Complete workflow audit, native publication/import, browser/picker/status, recovery and compact inspector evidence recorded. |
-| [ED-M08-runtime-parity-and-standalone-validation.md](plan/ED-M08-runtime-parity-and-standalone-validation.md) | `ED-M08` | `in_progress` | M08.1 native primitive/catalog cutover has automated and supplemental native-rendered evidence. Canonical formats, remaining native contracts, full rendered qualification, editor integration and development-only parity remain open. M02 evidence and normal-build exclusion gate closeout. |
+| [ED-M08-runtime-parity-and-standalone-validation.md](plan/ED-M08-runtime-parity-and-standalone-validation.md) | `ED-M08` | `in_progress` | M08.1 primitives and scene-v5 flag producers/hydration have scoped automated evidence; the final native RenderScene sweep loads all 20 scenes, with explicit image-review limits. Material-slot and other canonical data contracts, rendered semantics, editor integration and development-only parity remain open. M02 evidence and normal-build exclusion gate closeout. |
 | [ED-M09-viewport-authoring-tools.md](plan/ED-M09-viewport-authoring-tools.md) | `ED-M09` | `planned` | Execute the decided navigation/picking/tool contract after M08. |
 | [ED-M10-v01-release-qualification.md](plan/ED-M10-v01-release-qualification.md) | `ED-M10` | `planned` | Qualify the matched build and selected small-project workload. |
 | DynamicTree rename commit hook | `post-ED-M03` | `deferred` | Replace ED-M03's loaded-adapter label-change bridge with a first-class DynamicTree rename commit hook/override; this must not block ED-M03 closure. |
