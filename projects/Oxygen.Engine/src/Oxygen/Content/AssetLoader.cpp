@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <array>
 #include <cstring>
+#include <exception>
 #include <limits>
 #include <mutex>
 #include <optional>
@@ -68,6 +69,7 @@
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/Engine/Scripting/ScriptBytecodeBlob.h>
+#include <Oxygen/OxCo/ParkingLot.h>
 #include <Oxygen/Serio/Reader.h>
 
 using oxygen::content::AssetLoader;
@@ -121,6 +123,11 @@ auto AssetLoader::PackResourceKey(uint16_t pak_index,
 
 struct AssetLoader::Impl final {
   internal::ContentSourceRegistry source_registry {};
+
+  // These lifetimes span direct awaits, queued callbacks and their delivery,
+  // independently of the shared I/O table that Stop clears for cancellation.
+  size_t accepted_loads = 0;
+  co::ParkingLot accepted_loads_idle;
 
 #if !defined(NDEBUG)
   std::mutex hash_collision_mutex;
@@ -768,7 +775,8 @@ void AssetLoader::Stop()
   }
 
   // Prevent new joiners from attaching to canceled shared operations.
-  // Per-operation erase guards tolerate missing entries.
+  // Per-operation erase guards tolerate missing entries. Accepted-load tickets
+  // remain alive until canceled and externally awaited reads finish.
   in_flight_ops_->Clear();
 
   {
@@ -979,10 +987,38 @@ auto AssetLoader::AddLooseCookedRoot(const std::filesystem::path& path) -> void
   AssertSourceKeyConsistency("AddLooseCookedRoot.mount");
 }
 
+auto AssetLoader::BeginAcceptedLoad() -> void
+{
+  AssertOwningThread();
+  ++impl_->accepted_loads;
+}
+
+auto AssetLoader::EndAcceptedLoad() noexcept -> void
+{
+  if (impl_->accepted_loads == 0U) {
+    std::terminate(); // A duplicate ticket release violates loader lifetime.
+  }
+  --impl_->accepted_loads;
+  if (impl_->accepted_loads == 0U) {
+    try {
+      impl_->accepted_loads_idle.UnParkAll();
+    } catch (...) {
+      // Ticket finalization cannot propagate a parking-lot invariant failure.
+      std::terminate();
+    }
+  }
+}
+
 auto AssetLoader::WaitForPendingLoadsAsync() -> co::Co<>
 {
   AssertOwningThread();
-  co_await in_flight_ops_->WaitUntilEmpty();
+  for (;;) {
+    co_await in_flight_ops_->WaitUntilEmpty();
+    if (impl_->accepted_loads == 0U) {
+      co_return;
+    }
+    co_await impl_->accepted_loads_idle.Park();
+  }
 }
 
 auto AssetLoader::ClearMounts() -> void
@@ -1543,6 +1579,8 @@ auto AssetLoader::LoadResourceAsyncFromCookedErased(const TypeId type_id,
   const ResourceKey key, std::span<const uint8_t> bytes, LoadRequest request)
   -> co::Co<std::shared_ptr<void>>
 {
+  BeginAcceptedLoad();
+  const auto completion = Finally([this]() noexcept { EndAcceptedLoad(); });
   DLOG_SCOPE_F(2, "AssetLoader LoadResourceAsync (cooked)");
   DLOG_F(2, "type_id : {}", type_id);
   DLOG_F(2, "key     : {}", key);
@@ -3563,6 +3601,8 @@ template <PakResource T>
 auto AssetLoader::LoadResourceAsync(const oxygen::content::ResourceKey key,
   LoadRequest request) -> co::Co<std::shared_ptr<T>>
 {
+  BeginAcceptedLoad();
+  const auto completion = Finally([this]() noexcept { EndAcceptedLoad(); });
   static_assert(std::same_as<T, data::TextureResource>
       || std::same_as<T, data::BufferResource>
       || std::same_as<T, data::ScriptResource>

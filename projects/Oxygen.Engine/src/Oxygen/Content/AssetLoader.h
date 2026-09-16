@@ -21,6 +21,7 @@
 #include <vector>
 
 #include <Oxygen/Base/EnumIndexedArray.h>
+#include <Oxygen/Base/Finally.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Config/PathFinder.h>
@@ -291,6 +292,8 @@ public:
 
   //! Clear all mounted roots and pak files.
   OXGN_CNTT_API auto ClearMounts() -> void override;
+  //! Drain started awaitable loads and accepted callback loads through
+  //! publication and callback completion, including callback-enqueued work.
   OXGN_CNTT_API auto WaitForPendingLoadsAsync() -> co::Co<> override;
   //! Clear cached assets/resources without unmounting sources.
   OXGN_CNTT_API auto TrimCache() -> void override;
@@ -377,6 +380,8 @@ public:
   auto LoadAssetAsync(const data::AssetKey& key, LoadRequest request)
     -> co::Co<std::shared_ptr<T>>
   {
+    BeginAcceptedLoad();
+    const auto completion = Finally([this]() noexcept { EndAcceptedLoad(); });
     request = NormalizeLoadRequest(request);
     if constexpr (std::is_same_v<T, data::MaterialAsset>) {
       co_return co_await LoadMaterialAssetAsyncImpl(key, std::nullopt, request);
@@ -433,16 +438,19 @@ public:
         "AssetLoader requires a thread pool for StartLoadAsset");
     }
 
+    BeginAcceptedLoad();
+    auto completion = Finally([this]() noexcept { EndAcceptedLoad(); });
     nursery_->Start(
-      [this, key, request,
+      [this, key, request, completion = std::move(completion),
         on_complete = std::move(on_complete)]() mutable -> co::Co<> {
+        static_cast<void>(completion);
+        std::shared_ptr<T> result;
         try {
-          auto res = co_await LoadAssetAsync<T>(key, request);
-          on_complete(std::move(res));
+          result = co_await LoadAssetAsync<T>(key, request);
         } catch (const std::exception& e) {
           LOG_F(ERROR, "StartLoadAsset failed: {}", e.what());
-          on_complete(nullptr);
         }
+        on_complete(std::move(result));
         co_return;
       });
   }
@@ -790,16 +798,19 @@ public:
         "AssetLoader requires a thread pool for StartLoadResource");
     }
 
+    BeginAcceptedLoad();
+    auto completion = Finally([this]() noexcept { EndAcceptedLoad(); });
     nursery_->Start(
-      [this, key, request,
+      [this, key, request, completion = std::move(completion),
         on_complete = std::move(on_complete)]() mutable -> co::Co<> {
+        static_cast<void>(completion);
+        std::shared_ptr<T> result;
         try {
-          auto res = co_await LoadResourceAsync<T>(key, request);
-          on_complete(std::move(res));
+          result = co_await LoadResourceAsync<T>(key, request);
         } catch (const std::exception& e) {
           LOG_F(ERROR, "StartLoadResource failed: {}", e.what());
-          on_complete(nullptr);
         }
+        on_complete(std::move(result));
         co_return;
       });
   }
@@ -836,23 +847,27 @@ public:
         "AssetLoader requires a thread pool for StartLoadResource (cooked)");
     }
 
+    BeginAcceptedLoad();
+    auto completion = Finally([this]() noexcept { EndAcceptedLoad(); });
     nursery_->Start(
       [this, key = cooked.key,
         bytes = std::vector<uint8_t>(cooked.bytes.begin(), cooked.bytes.end()),
-        request, on_complete = std::move(on_complete)]() mutable -> co::Co<> {
+        request, completion = std::move(completion),
+        on_complete = std::move(on_complete)]() mutable -> co::Co<> {
+        static_cast<void>(completion);
+        std::shared_ptr<T> result;
         try {
           std::span<const uint8_t> span(bytes.data(), bytes.size());
-          auto res = co_await LoadResourceAsync<T>(
+          result = co_await LoadResourceAsync<T>(
             {
               .key = key,
               .bytes = span,
             },
             request);
-          on_complete(std::move(res));
         } catch (const std::exception& e) {
           LOG_F(ERROR, "StartLoadResource (cooked) failed: {}", e.what());
-          on_complete(nullptr);
         }
+        on_complete(std::move(result));
         co_return;
       });
   }
@@ -1315,6 +1330,8 @@ private:
     TypeId type_id, std::string_view type_name, LoadFnErased&& loader) -> void;
 
   // Thread ownership for single-thread phase 1 policy.
+  OXGN_CNTT_API auto BeginAcceptedLoad() -> void;
+  OXGN_CNTT_API auto EndAcceptedLoad() noexcept -> void;
   std::thread::id owning_thread_id_;
   void AssertOwningThread() const
   {
