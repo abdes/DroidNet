@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <limits>
@@ -567,6 +568,116 @@ namespace {
 
 } // namespace
 
+namespace {
+  std::atomic<std::uint64_t> next_exposure_lifetime { 1U };
+
+  auto AllocateExposureLifetime() -> std::optional<std::uint64_t>
+  {
+    auto value = next_exposure_lifetime.load(std::memory_order_relaxed);
+    while (value != (std::numeric_limits<std::uint64_t>::max)()) {
+      if (next_exposure_lifetime.compare_exchange_weak(
+            value, value + 1U, std::memory_order_relaxed)) {
+        return value;
+      }
+    }
+    return std::nullopt;
+  }
+
+  auto ValidateTransitionSyntax(CompositionView::ViewStateHandle target,
+    ExposureTransitionPolicy policy, std::optional<float> seed)
+    -> std::optional<ExposureTransitionError>
+  {
+    if (target == CompositionView::kInvalidViewStateHandle) {
+      return ExposureTransitionError::kInvalidTarget;
+    }
+    if (policy != ExposureTransitionPolicy::kPreserve
+      && policy != ExposureTransitionPolicy::kRemeter
+      && policy != ExposureTransitionPolicy::kSeedFromEv100) {
+      return ExposureTransitionError::kInvalidPolicy;
+    }
+    if ((policy == ExposureTransitionPolicy::kSeedFromEv100) != seed.has_value()
+      || (seed && !std::isfinite(*seed))) {
+      return ExposureTransitionError::kInvalidSeed;
+    }
+    return std::nullopt;
+  }
+} // namespace
+
+auto Renderer::QueueExposureTransition(
+  const CompositionView::ViewStateHandle target,
+  const ExposureTransitionPolicy policy, const std::optional<float> seed_ev)
+  -> std::expected<ExposureTransitionToken, ExposureTransitionError>
+{
+  if (const auto error = ValidateTransitionSyntax(target, policy, seed_ev)) {
+    return std::unexpected(*error);
+  }
+  std::unique_lock lock(view_state_mutex_);
+  if (shutdown_called_) {
+    return std::unexpected(ExposureTransitionError::kRendererUnavailable);
+  }
+  auto [it, inserted] = exposure_transitions_.try_emplace(target);
+  auto& entry = it->second;
+  if (inserted) {
+    const auto lifetime = AllocateExposureLifetime();
+    if (!lifetime) {
+      exposure_transitions_.erase(it);
+      return std::unexpected(ExposureTransitionError::kGenerationExhausted);
+    }
+    entry.lifetime = *lifetime;
+  }
+  if (entry.generation == (std::numeric_limits<std::uint64_t>::max)()) {
+    return std::unexpected(ExposureTransitionError::kGenerationExhausted);
+  }
+  const auto token = ExposureTransitionToken {
+    .target = target,
+    .lifetime = entry.lifetime,
+    .generation = ++entry.generation,
+    .policy = policy,
+    .seed_ev = seed_ev,
+  };
+  const auto applied = entry.status ? entry.status->applied_generation : 0U;
+  entry.status = ExposureTransitionStatus { .request = token,
+    .applied_generation = applied };
+  return token;
+}
+
+auto Renderer::RetryExposureTransition(const ExposureTransitionToken& token)
+  -> std::expected<ExposureTransitionPhase, ExposureTransitionError>
+{
+  if (const auto error
+    = ValidateTransitionSyntax(token.target, token.policy, token.seed_ev)) {
+    return std::unexpected(*error);
+  }
+  std::shared_lock lock(view_state_mutex_);
+  if (shutdown_called_) {
+    return std::unexpected(ExposureTransitionError::kRendererUnavailable);
+  }
+  const auto found = exposure_transitions_.find(token.target);
+  if (found == exposure_transitions_.end() || !found->second.status
+    || token.lifetime != found->second.lifetime || token.generation == 0U
+    || token.generation > found->second.generation) {
+    return std::unexpected(ExposureTransitionError::kUnknownToken);
+  }
+  const auto& status = *found->second.status;
+  if (token.generation < status.request.generation) {
+    return ExposureTransitionPhase::kSuperseded;
+  }
+  if (status.request != token) {
+    return std::unexpected(ExposureTransitionError::kConflictingToken);
+  }
+  return status.phase;
+}
+
+auto Renderer::InspectExposureTransition(
+  const CompositionView::ViewStateHandle target) const
+  -> std::optional<ExposureTransitionStatus>
+{
+  std::shared_lock lock(view_state_mutex_);
+  const auto found = exposure_transitions_.find(target);
+  return found == exposure_transitions_.end() ? std::nullopt
+                                              : found->second.status;
+}
+
 Renderer::Renderer(std::weak_ptr<Graphics> graphics, RendererConfig config,
   const CapabilitySet capability_families)
   : gfx_weak_(std::move(graphics))
@@ -875,10 +986,14 @@ auto Renderer::ApplyConsoleCVars(
 
 auto Renderer::OnShutdown() noexcept -> void
 {
-  if (shutdown_called_) {
-    return;
+  {
+    std::unique_lock lock(view_state_mutex_);
+    if (shutdown_called_) {
+      return;
+    }
+    shutdown_called_ = true;
+    exposure_transitions_.clear();
   }
-  shutdown_called_ = true;
 
   auto published_intent_ids = std::vector<ViewId> {};
   {

@@ -77,6 +77,7 @@ enum class ExposureSettingsError : std::uint8_t {
   kInvalidCurve,
   kMissingCameraEv,
   kUnsupportedGain,
+  kSeedRequiresAuto,
 };
 
 //! Validated authored settings and constants, with no numerical Auto history.
@@ -91,13 +92,25 @@ struct ResolvedExposureSettings {
 //! Validate without clamping or partially applying a settings revision.
 /*!
  Camera EV is required only for enabled ManualCamera mode. Automatic gain bounds
- are checked at every piecewise-linear extremum, including histogram endpoints,
- EV bounds, curve keys, dark solve and initial fallback. Mask residency is an
- asynchronous resource-owner concern after numerical validation succeeds.
+ are checked at every piecewise-linear extremum, including supported radiance
+ endpoints, EV bounds, curve keys, dark solve and initial fallback. Mask
+ residency is an asynchronous resource-owner concern after numerical validation
+ succeeds.
 */
 [[nodiscard]] OXGN_SCN_API auto ResolveExposureSettings(
   const ExposureSettings& settings, std::optional<float> camera_ev = {})
   -> std::expected<ResolvedExposureSettings, ExposureSettingsError>;
+
+//! Resolve the positive latent log gain of an explicit EV100 seed.
+/*!
+ Uses validated active Auto settings, their target/key/bias and curve at the
+ requested EV. Metering EV bounds do not clamp an explicit seed. Target zero
+ uses nominal middle grey for the positive latent state; displayed zero is a
+ separate runtime policy. No synthetic measured luminance is produced.
+*/
+[[nodiscard]] OXGN_SCN_API auto ResolveExposureSeedLogGain(
+  const ResolvedExposureSettings& settings, float seed_ev)
+  -> std::expected<float, ExposureSettingsError>;
 
 [[nodiscard]] OXGN_SCN_API auto to_string(ExposureSettingsError error) noexcept
   -> std::string_view;

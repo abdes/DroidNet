@@ -32,7 +32,7 @@ gap.
 ## 3. Current next step
 
 **Active work:** [Global exposure / LightBench / MultiView](plan/exposure-and-lightbench-correction.md),
-`in_progress`, with slices 1-3 qualified and slice 4 next. Canonical settings and
+`in_progress`, with slices 1-3 qualified and slice 4 active. Canonical settings and
 public override create/update/clear isolation are implemented; cancellation-safe
 normalized targets, fixed/camera gain propagation and frame-retired uploads
 pass 95 focused CTest entries. Twelve native arithmetic captures, floating-point
@@ -75,7 +75,9 @@ Curve, opposite-direction response, controlled sampling error and asset-backed
 mask loading/residency/failure cases are qualified. The percentile capability and exact Spot-centre corrections are qualified.
 The subnormal-curve and public pause corrections are qualified. The latter
 passes 36 focused tests in each configuration and a separate native GPU/debugger
-case. Slice 3 is closed; unified GPU mode history and lifecycle are next.
+case. Slice 3 is closed. The slice-4 control foundation passes 56 focused checks;
+unified GPU mode history, transition application/acknowledgement and sharing
+remain in progress.
 Mask identity now follows the approved existing resource-index model.
 
 ## 4. Milestone Ledger

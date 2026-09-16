@@ -202,8 +202,8 @@ auto ResolveExposureSettings(
     }
   }
   // Normalize the complete target function before float32 GPU consumption.
-  // Its breakpoints are the authored knots, clamp edges and supported radiance endpoints.
-  // Last-valid metering survives changes to the histogram window.
+  // Its breakpoints are the authored knots, clamp edges and supported radiance
+  // endpoints. Last-valid metering survives changes to the histogram window.
   auto positions = std::vector<float> { static_cast<float>(raw_min),
     static_cast<float>(raw_max) };
   for (const float ev : { settings.min_ev, settings.max_ev }) {
@@ -227,6 +227,30 @@ auto ResolveExposureSettings(
     result.auto_log_targets.push_back({ ev, static_cast<float>(gain) });
   }
   return result;
+}
+
+auto ResolveExposureSeedLogGain(const ResolvedExposureSettings& resolved,
+  const float seed_ev) -> std::expected<float, ExposureSettingsError>
+{
+  const auto& settings = resolved.authored;
+  if (!settings.enabled || settings.mode != engine::ExposureMode::kAuto) {
+    return std::unexpected(ExposureSettingsError::kSeedRequiresAuto);
+  }
+  if (!std::isfinite(seed_ev)) {
+    return std::unexpected(ExposureSettingsError::kNonFinite);
+  }
+  // Explicit seeds are not metered targets: do not clamp their EV or form
+  // 0.18*exp2(EV). Opposing authored terms must cancel before float upload.
+  const double log_gain = AccurateSum({ settings.compensation_ev,
+    CurveValue(settings, seed_ev), -static_cast<double>(seed_ev),
+    std::log2(static_cast<double>(settings.key) / 12.5),
+    settings.target_luminance > 0.0F
+      ? std::log2(static_cast<double>(settings.target_luminance) / kMiddleGrey)
+      : 0.0 });
+  if (!SupportedGain(log_gain)) {
+    return std::unexpected(ExposureSettingsError::kUnsupportedGain);
+  }
+  return static_cast<float>(log_gain);
 }
 
 auto to_string(const ExposureSettingsError error) noexcept -> std::string_view
@@ -256,6 +280,8 @@ auto to_string(const ExposureSettingsError error) noexcept -> std::string_view
     return "ManualCamera requires camera EV100";
   case ExposureSettingsError::kUnsupportedGain:
     return "exposure gain outside supported numerical domain";
+  case ExposureSettingsError::kSeedRequiresAuto:
+    return "exposure seeds require enabled Auto mode";
   }
   return "unknown exposure validation error";
 }

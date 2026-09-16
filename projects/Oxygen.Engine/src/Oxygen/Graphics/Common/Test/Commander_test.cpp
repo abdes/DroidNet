@@ -1244,4 +1244,83 @@ NOLINT_TEST_F(ConcurrencyTest, ConcurrentSubmission_ThreadSafe)
   real_reclaimer->ProcessAllDeferredReleases();
 }
 
+auto MakeStatefulRecorder(CommandListPtr list, MockCommandQueue& queue)
+  -> std::unique_ptr<NiceMock<MockCommandRecorder>>
+{
+  auto recorder = std::make_unique<NiceMock<MockCommandRecorder>>(
+    std::move(list), oxygen::observer_ptr<CommandQueue> { &queue });
+  auto* raw = recorder.get();
+  ON_CALL(*recorder, Begin()).WillByDefault([raw] {
+    raw->oxygen::graphics::CommandRecorder::Begin();
+  });
+  ON_CALL(*recorder, End()).WillByDefault([raw] {
+    return raw->oxygen::graphics::CommandRecorder::End();
+  });
+  return recorder;
+}
+
+NOLINT_TEST_F(
+  CommanderTestBase, RecordingInspectionDistinguishesSubmissionFailure)
+{
+  for (bool failure : { false, true }) {
+    auto list = std::make_shared<CommandList>("inspection", Role::kGraphics);
+    auto recorder = commander->PrepareCommandRecorder(
+      MakeStatefulRecorder(list, *primary_q), list, true);
+    const auto observed = recorder->GetCommandListForInspection();
+    ASSERT_NE(observed, nullptr);
+    EXPECT_TRUE(observed->IsRecording());
+    if (failure) {
+      EXPECT_CALL(*primary_q, Submit(testing::A<CommandListPtr>()))
+        .WillOnce(Throw(std::runtime_error("injected submission failure")));
+    } else {
+      EXPECT_CALL(*primary_q, Submit(testing::A<CommandListPtr>())).Times(1);
+    }
+    recorder.reset();
+    EXPECT_EQ(observed->IsSubmitted(), !failure);
+    EXPECT_EQ(observed->IsClosed(), failure);
+    SimulateFrameCompletion();
+  }
+}
+
+class FailingCloseCommandList final : public CommandList {
+public:
+  FailingCloseCommandList()
+    : CommandList("failing-close", Role::kGraphics)
+  {
+  }
+  auto OnEndRecording() -> void override
+  {
+    throw std::runtime_error("injected recording failure");
+  }
+};
+
+NOLINT_TEST_F(CommanderTestBase, RecordingInspectionRejectsFailedClose)
+{
+  auto list = std::make_shared<FailingCloseCommandList>();
+  auto recorder = commander->PrepareCommandRecorder(
+    MakeStatefulRecorder(list, *primary_q), list, true);
+  const auto observed = recorder->GetCommandListForInspection();
+  EXPECT_CALL(*primary_q, Submit(testing::A<CommandListPtr>())).Times(0);
+  recorder.reset();
+  EXPECT_FALSE(observed->IsSubmitted());
+  EXPECT_TRUE(observed->IsFree());
+}
+
+NOLINT_TEST_F(
+  CommanderTestBase, DeferredRecordingIsNotSubmittedUntilQueueSubmission)
+{
+  auto list
+    = std::make_shared<CommandList>("deferred-inspection", Role::kGraphics);
+  auto recorder = commander->PrepareCommandRecorder(
+    MakeStatefulRecorder(list, *primary_q), list, false);
+  const auto observed = recorder->GetCommandListForInspection();
+  recorder.reset();
+  EXPECT_FALSE(observed->IsSubmitted());
+  EXPECT_TRUE(observed->IsClosed());
+  EXPECT_CALL(*primary_q, Submit(testing::A<CommandListSpan>())).Times(1);
+  commander->SubmitDeferredCommandLists();
+  EXPECT_TRUE(observed->IsSubmitted());
+  SimulateFrameCompletion();
+}
+
 } // namespace

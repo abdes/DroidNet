@@ -143,6 +143,18 @@ public:
 
   [[nodiscard]] auto GetTargetQueue() const { return target_queue_; }
 
+  //! Retain this recording's command list for immediate submission inspection.
+  /*!
+   Capture before End(), then inspect IsSubmitted() after releasing an immediate
+   recorder. This does not wait for GPU completion. Command-list state is
+   recycled at frame retirement; this is not a durable completion receipt.
+  */
+  [[nodiscard]] auto GetCommandListForInspection() const noexcept
+    -> std::shared_ptr<const CommandList>
+  {
+    return command_list_;
+  }
+
   //=== Command List Control ===--------------------------------------------//
 
   OXGN_GFX_API virtual auto Begin() -> void;

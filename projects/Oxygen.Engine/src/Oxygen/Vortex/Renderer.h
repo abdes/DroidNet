@@ -37,6 +37,7 @@
 #include <Oxygen/Vortex/SceneRenderer/SceneRenderer.h>
 #include <Oxygen/Vortex/ShaderDebugMode.h>
 #include <Oxygen/Vortex/Types/CompositingTask.h>
+#include <Oxygen/Vortex/Types/ExposureTransition.h>
 #include <Oxygen/Vortex/Types/GroundGridConfig.h>
 #include <Oxygen/Vortex/Types/ViewConstants.h>
 #include <Oxygen/Vortex/Types/ViewHistoryFrameBindings.h>
@@ -538,6 +539,21 @@ public:
   OXGN_VRTX_API auto OnFrameEnd(observer_ptr<engine::FrameContext> context)
     -> void override;
 
+  //! Queue runtime exposure intent. The renderer allocates the generation.
+  //! A producer may queue before first rendering its persistent state handle.
+  //! Mode, settings and source ownership are validated at the frame boundary.
+  [[nodiscard]] OXGN_VRTX_API auto QueueExposureTransition(
+    CompositionView::ViewStateHandle target, ExposureTransitionPolicy policy,
+    std::optional<float> seed_ev = {})
+    -> std::expected<ExposureTransitionToken, ExposureTransitionError>;
+  //! Resubmit an issued identity without resetting its generation or outcome.
+  [[nodiscard]] OXGN_VRTX_API auto RetryExposureTransition(
+    const ExposureTransitionToken& token)
+    -> std::expected<ExposureTransitionPhase, ExposureTransitionError>;
+  [[nodiscard]] OXGN_VRTX_API auto InspectExposureTransition(
+    CompositionView::ViewStateHandle target) const
+    -> std::optional<ExposureTransitionStatus>;
+
   OXGN_VRTX_API auto RegisterViewRenderGraph(
     ViewId view_id, RenderGraphFactory factory, ResolvedView view) -> void;
   OXGN_VRTX_API auto RegisterResolvedView(ViewId view_id, ResolvedView view)
@@ -687,6 +703,14 @@ public:
 private:
   friend class SceneRenderer;
   friend struct testing::RendererPublicationProbe;
+
+  struct ExposureTransitionEntry {
+    std::uint64_t lifetime { 0U };
+    std::uint64_t generation { 0U };
+    std::optional<ExposureTransitionStatus> status;
+  };
+  std::unordered_map<CompositionView::ViewStateHandle, ExposureTransitionEntry>
+    exposure_transitions_;
 
   struct PublishedRuntimeViewState {
     ViewId published_view_id { kInvalidViewId };
