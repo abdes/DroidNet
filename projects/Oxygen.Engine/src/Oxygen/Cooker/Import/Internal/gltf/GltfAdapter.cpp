@@ -2530,9 +2530,44 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
   SceneBuild build;
   build.nodes.reserve(pruned_nodes.size());
   build.strings.push_back(std::byte { 0 });
+  std::vector<NodeRecord> component_attachments;
 
   const auto virtual_path
     = request.loose_cooked_layout.SceneVirtualPath(scene_name);
+
+  // Register generated names only after every source name, and append these
+  // nodes after all source nodes to preserve authored identities and indices.
+  const auto append_attachment
+    = [&](const NodeInput& owner, const uint32_t owner_index,
+        const std::string_view role, const glm::quat& rotation) -> uint32_t {
+    const auto index = static_cast<uint32_t>(
+      pruned_nodes.size() + component_attachments.size());
+    const NamingContext context {
+      .kind = ImportNameKind::kSceneNode,
+      .ordinal = index,
+      .parent_name = owner.base_name,
+      .source_id = input.source_id,
+      .scene_namespace = scene_name,
+    };
+    const auto name = input.naming_service->MakeUniqueName(
+      owner.base_name + "_" + std::string(role), context);
+    NodeRecord attachment {};
+    attachment.node_id = MakeNodeKey(std::string(virtual_path) + "/" + name);
+    attachment.scene_name_offset = AppendString(build.strings, name);
+    attachment.parent_index = owner_index;
+    // Later visibility/shadow edits on the source owner must still govern its
+    // attached component, including when that source itself inherits a flag.
+    attachment.inherited_flags = data::pak::world::kSceneNodeFlags_Inheritable;
+    attachment.rotation[0] = rotation.x;
+    attachment.rotation[1] = rotation.y;
+    attachment.rotation[2] = rotation.z;
+    attachment.rotation[3] = rotation.w;
+    attachment.scale[0] = 1.0F;
+    attachment.scale[1] = 1.0F;
+    attachment.scale[2] = 1.0F;
+    component_attachments.push_back(attachment);
+    return index;
+  };
 
   for (uint32_t i = 0; i < pruned_nodes.size(); ++i) {
     auto& node = pruned_nodes[i];
@@ -2596,6 +2631,15 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
 
     if (gltf_node != nullptr && gltf_node->camera != nullptr) {
       const auto& cam = *gltf_node->camera;
+      uint32_t camera_node_index = i;
+      if (cam.type == cgltf_camera_type_perspective
+        || cam.type == cgltf_camera_type_orthographic) {
+        // General nodes use C * M * inverse(C), but cameras retain their
+        // local -Z forward/+Y up basis. A camera-only child with local C
+        // produces C * M without rotating the owner's mesh, light or children.
+        camera_node_index = append_attachment(
+          node, i, "Camera", glm::quat_cast(GltfToOxygenBasis()));
+      }
       const auto unit_scale = ComputeUnitScale(request.options.coordinate);
       if (cam.type == cgltf_camera_type_perspective) {
         const auto& perspective = cam.data.perspective;
@@ -2609,7 +2653,7 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
           : near_plane + 1000.0F * unit_scale;
 
         build.perspective_cameras.push_back(PerspectiveCameraRecord {
-          .node_index = i,
+          .node_index = camera_node_index,
           .fov_y = fov_y,
           .aspect_ratio = aspect_ratio,
           .near_plane = near_plane,
@@ -2623,7 +2667,7 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
         const float far_plane = ortho.zfar * unit_scale;
 
         build.orthographic_cameras.push_back(OrthographicCameraRecord {
-          .node_index = i,
+          .node_index = camera_node_index,
           .left = -half_w,
           .right = half_w,
           .bottom = -half_h,
@@ -2646,10 +2690,20 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
         node_light_semantics, light_semantics,
         /*default_affects_world=*/true,
         /*default_casts_shadows=*/true);
+      auto light_node_index = i;
+      if (light.type == cgltf_light_type_directional
+        || light.type == cgltf_light_type_spot) {
+        // glTF emits along local -Z, which C maps to +Y. Native lights emit
+        // along -Y. Rotate the light attachment 180 degrees about Oxygen +Z
+        // to align emission and preserve local up. Directional and circular
+        // spot lights have no roll-dependent shape; point lights need no basis.
+        light_node_index
+          = append_attachment(node, i, "Light", glm::quat(0, 0, 0, 1));
+      }
       switch (light.type) {
       case cgltf_light_type_directional: {
         DirectionalLightRecord rec_light {};
-        rec_light.node_index = i;
+        rec_light.node_index = light_node_index;
         rec_light.common = imported_common;
         rec_light.common.color_rgb[0] = (std::max)(0.0F, light.color[0]);
         rec_light.common.color_rgb[1] = (std::max)(0.0F, light.color[1]);
@@ -2672,7 +2726,7 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
       }
       case cgltf_light_type_spot: {
         SpotLightRecord rec_light {};
-        rec_light.node_index = i;
+        rec_light.node_index = light_node_index;
         rec_light.common = imported_common;
         rec_light.common.color_rgb[0] = (std::max)(0.0F, light.color[0]);
         rec_light.common.color_rgb[1] = (std::max)(0.0F, light.color[1]);
@@ -2696,6 +2750,8 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
     }
   }
 
+  build.nodes.insert(build.nodes.end(), component_attachments.begin(),
+    component_attachments.end());
   result.build = std::move(build);
   result.success = true;
   return result;

@@ -6,16 +6,23 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
+#include <memory>
+#include <numbers>
 #include <optional>
 #include <span>
 #include <string>
 #include <string_view>
 #include <vector>
 
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/quaternion.hpp>
+
 #include <Oxygen/Testing/GTest.h>
 
+#include <Oxygen/Content/Loaders/SceneLoader.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Naming.h>
@@ -23,6 +30,7 @@
 #include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/PakFormat_world.h>
+#include <Oxygen/Data/SceneAsset.h>
 
 #include "AsyncImporterFullTestBase.h"
 
@@ -35,7 +43,344 @@ using oxygen::content::import::NormalizeNamingStrategy;
 using oxygen::content::import::test::AsyncImporterFullTestBase;
 namespace world = oxygen::data::pak::world;
 
-class AsyncGltfImporterFullTest : public AsyncImporterFullTestBase { };
+class AsyncGltfImporterFullTest : public AsyncImporterFullTestBase {
+protected:
+  static auto LoadCameraScene(
+    const oxygen::content::import::ImportReport& report)
+    -> std::unique_ptr<oxygen::data::SceneAsset>
+  {
+    const auto inspection = LoadInspection(report.cooked_root);
+    const auto entry
+      = FindAssetOfType(inspection, oxygen::data::AssetType::kScene);
+    EXPECT_TRUE(entry.has_value());
+    if (!entry) {
+      return {};
+    }
+    oxygen::serio::FileStream<> stream(
+      report.cooked_root / entry->descriptor_relpath, std::ios::in);
+    oxygen::serio::Reader reader(stream);
+    const oxygen::content::LoaderContext context {
+      .current_asset_key = entry->key,
+      .desc_reader = &reader,
+      .work_offline = true,
+      .parse_only = true,
+    };
+    return oxygen::content::loaders::LoadSceneAsset(context);
+  }
+};
+
+auto CameraNodeTransform(const world::NodeRecord& node) -> glm::mat4
+{
+  return glm::translate(glm::mat4(1.0F),
+           glm::vec3(
+             node.translation[0], node.translation[1], node.translation[2]))
+    * glm::mat4_cast(glm::quat(
+      node.rotation[3], node.rotation[0], node.rotation[1], node.rotation[2]))
+    * glm::scale(
+      glm::mat4(1.0F), glm::vec3(node.scale[0], node.scale[1], node.scale[2]));
+}
+
+auto CameraWorldTransform(const oxygen::data::SceneAsset& scene, uint32_t index)
+  -> glm::mat4
+{
+  auto result = glm::mat4(1.0F);
+  for (size_t depth = 0; depth < scene.GetNodes().size(); ++depth) {
+    const auto& node = scene.GetNode(index);
+    result = CameraNodeTransform(node) * result;
+    if (node.parent_index == index) {
+      return result;
+    }
+    index = node.parent_index;
+  }
+  ADD_FAILURE() << "Camera attachment hierarchy contains a cycle";
+  return result;
+}
+
+auto ExpectCameraVector(const glm::vec3 actual, const glm::vec3 expected)
+  -> void
+{
+  EXPECT_NEAR(actual.x, expected.x, 0.0001F);
+  EXPECT_NEAR(actual.y, expected.y, 0.0001F);
+  EXPECT_NEAR(actual.z, expected.z, 0.0001F);
+}
+
+NOLINT_TEST_F(AsyncGltfImporterFullTest,
+  CameraAndLightAttachmentsPreserveSourceHierarchyAndBasis)
+{
+  using oxygen::content::import::NodePruningPolicy;
+  using oxygen::data::AssetKey;
+  for (const auto pruning :
+    { NodePruningPolicy::kKeepAll, NodePruningPolicy::kDropEmptyNodes }) {
+    const bool keep_empty = pruning == NodePruningPolicy::kKeepAll;
+    SCOPED_TRACE(keep_empty);
+    const auto root = MakeTempDir(
+      keep_empty ? "gltf_camera_keep_all" : "gltf_camera_drop_empty");
+    const auto source_path = root / "camera_attachments.gltf";
+    {
+      std::ofstream source(source_path);
+      ASSERT_TRUE(source.is_open());
+      source << R"({
+        "asset": {"version": "2.0"},
+        "extensionsUsed": ["KHR_lights_punctual"],
+        "extensions": {"KHR_lights_punctual": {"lights": [
+          {"type": "directional", "intensity": 5000,
+           "color": [0.8, 0.6, 0.4]},
+          {"type": "point", "intensity": 20},
+          {"type": "spot", "intensity": 100, "color": [0.2, 0.4, 0.6],
+           "spot": {"innerConeAngle": 0.2, "outerConeAngle": 0.5}}
+        ]}},
+        "buffers": [{
+          "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAA",
+          "byteLength": 36
+        }],
+        "bufferViews": [{"buffer": 0, "byteOffset": 0, "byteLength": 36}],
+        "accessors": [{
+          "bufferView": 0, "componentType": 5126, "count": 3,
+          "type": "VEC3", "min": [0, 0, 0], "max": [1, 1, 0]
+        }],
+        "materials": [{"name": "Surface"}],
+        "meshes": [{"name": "Triangle", "primitives": [
+          {"attributes": {"POSITION": 0}, "material": 0}
+        ]}],
+        "cameras": [
+          {"type": "perspective", "perspective": {
+            "yfov": 1.0, "aspectRatio": 1.5, "znear": 0.2, "zfar": 250}},
+          {"type": "orthographic", "orthographic": {
+            "xmag": 2, "ymag": 1, "znear": 0.3, "zfar": 40}},
+          {"type": "perspective", "perspective": {
+            "yfov": 0.7, "znear": 0.1, "zfar": 100}}
+        ],
+        "nodes": [
+          {"name": "Parent", "translation": [4, 5, 6],
+           "rotation": [0, 0, 0.7071067811865476, 0.7071067811865476],
+           "extensions": {"KHR_lights_punctual": {"light": 1}},
+           "children": [1, 4, 5, 7, 6]},
+          {"name": "Mixed", "mesh": 0, "camera": 0,
+           "translation": [1, 2, 3],
+           "rotation": [0, 0.7071067811865476, 0, 0.7071067811865476],
+           "extensions": {"KHR_lights_punctual": {"light": 0}},
+           "children": [2]},
+          {"name": "Child", "mesh": 0, "translation": [2, 0, 0]},
+          {"name": "Identity", "camera": 2,
+           "extensions": {"KHR_lights_punctual": {"light": 0}}},
+          {"name": "Ortho", "camera": 1, "translation": [0, 4, 0],
+           "rotation": [0.7071067811865476, 0, 0, 0.7071067811865476],
+           "extensions": {"KHR_lights_punctual": {"light": 2}}},
+          {"name": "Mixed_Camera", "mesh": 0},
+          {"name": "Empty"},
+          {"name": "Mixed_Light", "mesh": 0},
+          {"name": "IdentitySpot",
+           "extensions": {"KHR_lights_punctual": {"light": 2}}}
+        ],
+        "scenes": [{"nodes": [0, 8, 3]}],
+        "scene": 0
+      })";
+      source.close();
+      ASSERT_TRUE(source.good());
+    }
+
+    // Independent imports must retain the same source and attachment
+    // identities.
+    std::vector<AssetKey> first_ids;
+    for (const auto pass : { 0, 1 }) {
+      SCOPED_TRACE(pass);
+      ImportRequest request {};
+      request.source_path = source_path;
+      request.cooked_root = root / ("cooked_" + std::to_string(pass));
+      request.options.naming_strategy
+        = std::make_shared<NormalizeNamingStrategy>();
+      request.options.coordinate.bake_transforms_into_meshes = false;
+      request.options.node_pruning = pruning;
+      const auto scene_path
+        = request.loose_cooked_layout.SceneVirtualPath(request.GetSceneName());
+      const auto imported = RunImport(std::move(request));
+      ASSERT_TRUE(imported.report.success);
+      const auto scene = LoadCameraScene(imported.report);
+      ASSERT_TRUE(scene);
+
+      std::vector<std::string_view> names { "Parent", "Mixed", "Child", "Ortho",
+        "Mixed_Camera", "Mixed_Light" };
+      if (keep_empty) {
+        names.push_back("Empty");
+      }
+      names.push_back("IdentitySpot");
+      names.push_back("Identity");
+      const auto source_count = static_cast<uint32_t>(names.size());
+      names.insert(names.end(),
+        { "Mixed_Camera_1", "Mixed_Light_1", "Ortho_Camera", "Ortho_Light",
+          "IdentitySpot_Light", "Identity_Camera", "Identity_Light" });
+      ASSERT_EQ(scene->GetNodes().size(), names.size());
+      std::vector<AssetKey> ids;
+      for (uint32_t index = 0; index < names.size(); ++index) {
+        const auto& node = scene->GetNode(index);
+        EXPECT_EQ(scene->GetNodeName(node), names[index]);
+        EXPECT_EQ(node.node_id,
+          AssetKey::FromVirtualPath(
+            std::string(scene_path) + "/" + std::string(names[index])));
+        EXPECT_TRUE(world::HasCanonicalNodeFlags(node));
+        if (index >= source_count) {
+          EXPECT_EQ(node.node_flags, 0U);
+          EXPECT_EQ(node.inherited_flags, world::kSceneNodeFlags_Inheritable);
+        } else {
+          EXPECT_EQ(node.inherited_flags, 0U);
+          const bool is_mesh
+            = index == 1 || index == 2 || index == 4 || index == 5;
+          const auto expected_flags = world::kSceneNodeFlag_Visible
+            | (names[index] == "Empty" ? 0U
+                                       : world::kSceneNodeFlag_CastsShadows)
+            | (is_mesh ? world::kSceneNodeFlag_ReceivesShadows : 0U);
+          EXPECT_EQ(node.node_flags, expected_flags);
+        }
+        ids.push_back(node.node_id);
+      }
+      if (pass == 0) {
+        first_ids = ids;
+      } else {
+        EXPECT_EQ(ids, first_ids);
+      }
+
+      // Original local transforms and hierarchy are independent of attachments.
+      const auto half_sqrt_two = std::sqrt(0.5F);
+      const std::array positions { glm::vec3(4, -6, 5), glm::vec3(1, -3, 2),
+        glm::vec3(2, 0, 0), glm::vec3(0, 0, 4) };
+      const std::array rotations { glm::quat(
+                                     half_sqrt_two, 0, -half_sqrt_two, 0),
+        glm::quat(half_sqrt_two, 0, 0, half_sqrt_two), glm::quat(1, 0, 0, 0),
+        glm::quat(half_sqrt_two, half_sqrt_two, 0, 0) };
+      for (uint32_t index = 0; index < source_count; ++index) {
+        const auto& node = scene->GetNode(index);
+        const auto expected_parent = index >= source_count - 2 ? index
+          : index == 2                                         ? 1U
+                                                               : 0U;
+        EXPECT_EQ(node.parent_index, expected_parent);
+        const auto position
+          = index < positions.size() ? positions.at(index) : glm::vec3(0);
+        const auto rotation = index < rotations.size() ? rotations.at(index)
+                                                       : glm::quat(1, 0, 0, 0);
+        const auto expected
+          = glm::translate(glm::mat4(1), position) * glm::mat4_cast(rotation);
+        const auto actual = CameraNodeTransform(node);
+        for (glm::length_t column = 0; column < 4; ++column) {
+          ExpectCameraVector(
+            glm::vec3(actual[column]), glm::vec3(expected[column]));
+        }
+      }
+
+      const auto perspective
+        = scene->GetComponents<world::PerspectiveCameraRecord>();
+      const auto ortho
+        = scene->GetComponents<world::OrthographicCameraRecord>();
+      ASSERT_EQ(perspective.size(), 2U);
+      ASSERT_EQ(ortho.size(), 1U);
+      EXPECT_EQ(perspective[0].node_index, source_count);
+      EXPECT_EQ(ortho[0].node_index, source_count + 2);
+      EXPECT_EQ(perspective[1].node_index, source_count + 5);
+      EXPECT_FLOAT_EQ(perspective[0].fov_y, 1.0F);
+      EXPECT_FLOAT_EQ(perspective[0].aspect_ratio, 1.5F);
+      EXPECT_FLOAT_EQ(perspective[0].near_plane, 0.2F);
+      EXPECT_FLOAT_EQ(perspective[0].far_plane, 250.0F);
+      EXPECT_FLOAT_EQ(ortho[0].near_plane, 0.3F);
+      EXPECT_FLOAT_EQ(ortho[0].far_plane, 40.0F);
+
+      const std::array camera_parents { 1U, 3U, source_count - 1 };
+      const std::array camera_positions { glm::vec3(2, -9, 6),
+        glm::vec3(0, -6, 5), glm::vec3(0) };
+      const std::array camera_forwards { glm::vec3(0, 0, -1),
+        glm::vec3(-1, 0, 0), glm::vec3(0, 1, 0) };
+      const std::array camera_ups { glm::vec3(-1, 0, 0), glm::vec3(0, -1, 0),
+        glm::vec3(0, 0, 1) };
+      const std::array camera_offsets { 0U, 2U, 5U };
+      for (uint32_t ordinal = 0; ordinal < camera_parents.size(); ++ordinal) {
+        const auto index = source_count + camera_offsets[ordinal];
+        SCOPED_TRACE(names[index]);
+        const auto& node = scene->GetNode(index);
+        EXPECT_EQ(node.parent_index, camera_parents[ordinal]);
+        const auto transform = CameraWorldTransform(*scene, index);
+        ExpectCameraVector(glm::vec3(transform[3]), camera_positions[ordinal]);
+        ExpectCameraVector(
+          glm::normalize(-glm::vec3(transform[2])), camera_forwards[ordinal]);
+        ExpectCameraVector(
+          glm::normalize(glm::vec3(transform[1])), camera_ups[ordinal]);
+        EXPECT_NEAR(glm::determinant(glm::mat3(transform)), 1.0F, 0.0001F);
+      }
+
+      const auto renderables = scene->GetComponents<world::RenderableRecord>();
+      ASSERT_EQ(renderables.size(), 4U);
+      EXPECT_EQ(renderables[0].node_index, 1U);
+      EXPECT_EQ(renderables[1].node_index, 2U);
+      EXPECT_EQ(renderables[2].node_index, 4U);
+      EXPECT_EQ(renderables[3].node_index, 5U);
+      EXPECT_EQ(renderables[0].geometry_key, renderables[1].geometry_key);
+      EXPECT_EQ(renderables[0].geometry_key, renderables[2].geometry_key);
+      EXPECT_EQ(renderables[0].geometry_key, renderables[3].geometry_key);
+      const auto lights = scene->GetComponents<world::DirectionalLightRecord>();
+      ASSERT_EQ(lights.size(), 2U);
+      EXPECT_EQ(lights[0].node_index, source_count + 1);
+      EXPECT_EQ(lights[1].node_index, source_count + 6);
+      for (const auto& light : lights) {
+        EXPECT_FLOAT_EQ(light.intensity_lux, 5000.0F);
+        ExpectCameraVector(
+          { light.common.color_rgb[0], light.common.color_rgb[1],
+            light.common.color_rgb[2] },
+          { 0.8F, 0.6F, 0.4F });
+      }
+      const auto spots = scene->GetComponents<world::SpotLightRecord>();
+      ASSERT_EQ(spots.size(), 2U);
+      EXPECT_EQ(spots[0].node_index, source_count + 3);
+      EXPECT_EQ(spots[1].node_index, source_count + 4);
+      EXPECT_EQ(
+        scene->GetNode(spots[1].node_index).parent_index, source_count - 2);
+      const auto identity_spot
+        = CameraWorldTransform(*scene, spots[1].node_index);
+      ExpectCameraVector(glm::vec3(identity_spot[3]), { 0, 0, 0 });
+      ExpectCameraVector(
+        glm::normalize(glm::vec3(identity_spot * glm::vec4(0, -1, 0, 0))),
+        { 0, 1, 0 });
+      ExpectCameraVector(
+        glm::normalize(glm::vec3(identity_spot[2])), { 0, 0, 1 });
+      EXPECT_NEAR(glm::determinant(glm::mat3(identity_spot)), 1.0F, 0.0001F);
+      EXPECT_FLOAT_EQ(spots[0].inner_cone_angle_radians, 0.2F);
+      EXPECT_FLOAT_EQ(spots[0].outer_cone_angle_radians, 0.5F);
+      EXPECT_NEAR(spots[0].luminous_flux_lm,
+        200.0F * std::numbers::pi_v<float> * (1.0F - std::cos(0.5F)), 0.0001F);
+      ExpectCameraVector(
+        { spots[0].common.color_rgb[0], spots[0].common.color_rgb[1],
+          spots[0].common.color_rgb[2] },
+        { 0.2F, 0.4F, 0.6F });
+      for (uint32_t ordinal = 0; ordinal < camera_parents.size(); ++ordinal) {
+        const auto index = source_count + camera_offsets[ordinal] + 1;
+        SCOPED_TRACE(names[index]);
+        const auto& node = scene->GetNode(index);
+        EXPECT_EQ(node.parent_index, camera_parents[ordinal]);
+        EXPECT_NE(
+          node.inherited_flags & world::kSceneNodeFlag_CastsShadows, 0U);
+        const auto transform = CameraWorldTransform(*scene, index);
+        ExpectCameraVector(glm::vec3(transform[3]), camera_positions[ordinal]);
+        // glTF cameras and oriented lights share local -Z. Oxygen uses -Z
+        // for cameras and -Y for lights; their world rays must agree.
+        ExpectCameraVector(
+          glm::normalize(glm::vec3(transform * glm::vec4(0, -1, 0, 0))),
+          camera_forwards[ordinal]);
+        ExpectCameraVector(
+          glm::normalize(glm::vec3(transform[2])), camera_ups[ordinal]);
+        EXPECT_NEAR(glm::determinant(glm::mat3(transform)), 1.0F, 0.0001F);
+      }
+      const auto points = scene->GetComponents<world::PointLightRecord>();
+      ASSERT_EQ(points.size(), 1U);
+      EXPECT_EQ(points[0].node_index, 0U);
+      EXPECT_NEAR(
+        points[0].luminous_flux_lm, 80.0F * std::numbers::pi_v<float>, 0.0001F);
+      // Check the original owner's unchanged basis. Under C * Rz * Ry * C^-1,
+      // its local -Y maps to +Z; the camera child has a different local basis.
+      ExpectCameraVector(
+        glm::normalize(
+          glm::vec3(CameraWorldTransform(*scene, 1) * glm::vec4(0, -1, 0, 0))),
+        { 0, 0, 1 });
+      ExpectCameraVector(
+        glm::vec3(CameraWorldTransform(*scene, 2)[3]), { 2, -7, 6 });
+    }
+  }
+}
 
 NOLINT_TEST_F(AsyncGltfImporterFullTest,
   CaseOnlyMaterialNamesKeepDistinctDescriptorsAndMeshBindings)
