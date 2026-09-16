@@ -225,8 +225,9 @@ protected:
     ctx_.delta_time = dt;
     ctx_.render_mode = diagnostic ? RenderMode::kWireframe : RenderMode::kSolid;
     service.OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
-    const auto& accepted = service.CaptureViewExposureSettings(
-      ctx_.current_view.view_id, ctx_.current_view.view_state_handle, settings);
+    const auto& accepted
+      = service.CaptureViewExposureSettings(ctx_.current_view.view_id,
+        ctx_.current_view.view_state_handle, settings, {}, diagnostic);
     auto config = PostProcessConfig {};
     config.resolved_exposure = accepted.resolved;
     config.exposure_settings_revision = accepted.revision;
@@ -318,14 +319,15 @@ protected:
   }
   auto RecordShared(const Signal& signal, const PostProcessConfig& config,
     const postprocess::ExposurePass::Source* source = nullptr,
-    std::optional<ExposureTransitionToken> token = {})
-    -> postprocess::ExposurePass::Result
+    std::optional<ExposureTransitionToken> token = {},
+    std::uint64_t lifetime = 0U) -> postprocess::ExposurePass::Result
   {
     return pass_->Execute(ctx_, config,
       { .scene_signal = signal.texture.get(),
         .scene_signal_srv = signal.srv,
         .transition = token,
-        .source = source });
+        .source = source,
+        .lifetime = lifetime });
   }
   auto ReadState(const postprocess::ExposurePass::Result& result)
     -> ExposureStateData
@@ -334,7 +336,37 @@ protected:
     return Read<ExposureStateData>(
       *result.exposure_buffer, ResourceStates::kShaderResource);
   }
+  auto StartSharedServiceView(PostProcessService& service,
+    engine::FrameContext& frame, scene::ExposureSettings consumer_settings = {})
+    -> ViewId
+  {
+    auto source_settings = scene::ExposureSettings {};
+    source_settings.key = 12.5F;
+    source_settings.mode = engine::ExposureMode::kManual;
+    source_settings.manual_ev = 4.0F;
+    const auto root = PublishExposureOwner(frame, ViewId { 50U },
+      CompositionView::ViewStateHandle { 50U }, source_settings);
+    ctx_.current_view.view_id = root;
+    ctx_.current_view.view_state_handle
+      = CompositionView::ViewStateHandle { 50U };
+    ctx_.current_view.exposure_view_state_handle
+      = CompositionView::kInvalidViewStateHandle;
+    ServicePixel(service, Uniform(.25F, 4U, 4U), source_settings);
+    consumer_settings.key = 12.5F;
+    const auto consumer = PublishExposureOwner(frame, ViewId { 60U },
+      CompositionView::ViewStateHandle { 60U }, consumer_settings,
+      ViewId { 50U });
+    ctx_.current_view.view_id = consumer;
+    ctx_.current_view.view_state_handle
+      = CompositionView::ViewStateHandle { 60U };
+    ctx_.current_view.exposure_view_id = root;
+    ctx_.current_view.exposure_view_state_handle
+      = CompositionView::ViewStateHandle { 50U };
+    ServicePixel(service, Uniform(8.0F, 4U, 4U), consumer_settings);
+    return consumer;
+  }
   std::unique_ptr<Renderer> renderer_;
+  std::unique_ptr<vortex::testing::FakeAssetLoader> owned_asset_loader_;
   std::vector<std::shared_ptr<Framebuffer>> registered_targets_;
   std::unique_ptr<postprocess::ExposurePass> pass_;
   RenderContext ctx_;
@@ -1893,7 +1925,283 @@ NOLINT_TEST_F(
   EXPECT_NEAR(
     ServicePixel(service, Uniform(.25F, 4U, 4U), settings), .18F, 2e-5F);
   EXPECT_EQ(renderer_->RetryExposureTransition(*token),
-    ExposureTransitionPhase::kRejected);
+    ExposureTransitionPhase::kSuperseded);
+}
+
+NOLINT_TEST_F(
+  ExposureGpuTest, AutoDetachRemetersAtZeroDeltaWithOneImplicitGeneration)
+{
+  auto service = PostProcessService(*renderer_);
+  auto frame = engine::FrameContext {};
+  const auto consumer = StartSharedServiceView(service, frame);
+  auto settings = scene::ExposureSettings {};
+  settings.key = 12.5F;
+  PublishExposureOwner(
+    frame, ViewId { 60U }, ctx_.current_view.view_state_handle, settings);
+  ctx_.current_view.exposure_view_id = consumer;
+  ctx_.current_view.exposure_view_state_handle
+    = ctx_.current_view.view_state_handle;
+  EXPECT_NEAR(ServicePixel(service, Uniform(8.0F, 4U, 4U)), .18F, 2e-5F);
+  const auto event
+    = renderer_->InspectExposureTransition(ctx_.current_view.view_state_handle);
+  ASSERT_TRUE(event.has_value());
+  EXPECT_EQ(event->request.policy, ExposureTransitionPolicy::kRemeter);
+  EXPECT_GT(event->request.generation, 0U);
+  EXPECT_NEAR(
+    ServicePixel(service, Uniform(.25F, 4U, 4U)), .25F * .0225F, 2e-5F);
+  const auto after
+    = renderer_->InspectExposureTransition(event->request.target);
+  EXPECT_EQ(after->request, event->request);
+  EXPECT_EQ(after->phase, ExposureTransitionPhase::kApplied);
+}
+
+NOLINT_TEST_F(ExposureGpuTest, ExplicitDetachPolicyOverridesDefaultRemeter)
+{
+  auto service = PostProcessService(*renderer_);
+  auto frame = engine::FrameContext {};
+  for (const auto policy : { ExposureTransitionPolicy::kPreserve,
+         ExposureTransitionPolicy::kSeedFromEv100 }) {
+    const auto consumer = StartSharedServiceView(service, frame);
+    const auto token = renderer_->QueueExposureTransition(
+      ctx_.current_view.view_state_handle, policy,
+      policy == ExposureTransitionPolicy::kSeedFromEv100
+        ? std::optional { 8.0F }
+        : std::nullopt);
+    ASSERT_TRUE(token.has_value());
+    auto settings = scene::ExposureSettings {};
+    settings.key = 12.5F;
+    PublishExposureOwner(frame, ViewId { 60U }, token->target, settings);
+    ctx_.current_view.exposure_view_id = consumer;
+    ctx_.current_view.exposure_view_state_handle = token->target;
+    EXPECT_NEAR(ServicePixel(service, Uniform(8.0F, 4U, 4U)),
+      policy == ExposureTransitionPolicy::kPreserve ? .5F : 8.0F / 256.0F,
+      2e-5F);
+    EXPECT_EQ(
+      renderer_->InspectExposureTransition(token->target)->request, *token);
+  }
+}
+
+NOLINT_TEST_F(
+  ExposureGpuTest, FixedModeDetachAppliesAuthoredGainWithoutAnAutoRejection)
+{
+  auto service = PostProcessService(*renderer_);
+  auto frame = engine::FrameContext {};
+  for (const bool enabled : { true, false }) {
+    auto settings = scene::ExposureSettings {};
+    settings.key = 12.5F;
+    settings.mode = engine::ExposureMode::kManual;
+    settings.manual_ev = 8.0F;
+    settings.enabled = enabled;
+    const auto consumer = StartSharedServiceView(service, frame, settings);
+    PublishExposureOwner(
+      frame, ViewId { 60U }, ctx_.current_view.view_state_handle, settings);
+    ctx_.current_view.exposure_view_id = consumer;
+    ctx_.current_view.exposure_view_state_handle
+      = ctx_.current_view.view_state_handle;
+    EXPECT_NEAR(ServicePixel(service, Uniform(.25F, 4U, 4U), settings),
+      enabled ? .25F / 256.0F : .25F, 2e-5F);
+    service.OnFrameStart(
+      frame::SequenceNumber { ++sequence_ }, ctx_.frame_slot);
+    const auto status = renderer_->InspectExposureTransition(
+      ctx_.current_view.view_state_handle);
+    ASSERT_TRUE(status.has_value());
+    EXPECT_EQ(status->phase, ExposureTransitionPhase::kApplied);
+    EXPECT_EQ(status->request.policy, ExposureTransitionPolicy::kPreserve);
+  }
+}
+
+NOLINT_TEST_F(
+  ExposureGpuTest, DiagnosticDetachDefersTheImplicitEventUntilNormalRendering)
+{
+  auto service = PostProcessService(*renderer_);
+  auto frame = engine::FrameContext {};
+  const auto consumer = StartSharedServiceView(service, frame);
+  auto settings = scene::ExposureSettings {};
+  settings.key = 12.5F;
+  PublishExposureOwner(
+    frame, ViewId { 60U }, ctx_.current_view.view_state_handle, settings);
+  ctx_.current_view.exposure_view_id = consumer;
+  ctx_.current_view.exposure_view_state_handle
+    = ctx_.current_view.view_state_handle;
+  EXPECT_NEAR(
+    ServicePixel(service, Uniform(.25F, 4U, 4U), settings, true), .25F, 2e-5F);
+  EXPECT_FALSE(
+    renderer_->InspectExposureTransition(ctx_.current_view.view_state_handle)
+      .has_value());
+  EXPECT_NEAR(
+    ServicePixel(service, Uniform(8.0F, 4U, 4U), settings), .18F, 2e-5F);
+  EXPECT_EQ(
+    renderer_->InspectExposureTransition(ctx_.current_view.view_state_handle)
+      ->request.policy,
+    ExposureTransitionPolicy::kRemeter);
+}
+
+NOLINT_TEST_F(
+  ExposureGpuTest, ReusedLifetimeCannotConsumeOldOwnOrSharedPriorState)
+{
+  auto settings = scene::ExposureSettings {};
+  settings.mode = engine::ExposureMode::kManual;
+  settings.manual_ev = 4.0F;
+  const auto signal = Uniform(.25F);
+  ctx_.frame_sequence = frame::SequenceNumber { ++sequence_ };
+  const auto old
+    = RecordShared(signal, SharedConfig(settings), nullptr, {}, 100U);
+  EXPECT_EQ(ReadState(old).displayed_scale, 0x1p-4F);
+  ctx_.frame_sequence = frame::SequenceNumber { ++sequence_ };
+  pass_->OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
+  const auto config = SharedConfig();
+  const auto new_owner = RecordShared(signal, config, nullptr, {}, 101U);
+  EXPECT_NEAR(ReadState(new_owner).displayed_scale, .72F, 2e-5F);
+  const auto source = postprocess::ExposurePass::Source { .handle
+    = CompositionView::ViewStateHandle { 1U },
+    .config = config,
+    .lifetime = 101U };
+  ctx_.current_view.view_id = ViewId { 2U };
+  ctx_.current_view.view_state_handle = CompositionView::ViewStateHandle { 2U };
+  const auto consumer = RecordShared(signal, config, &source, {}, 200U);
+  EXPECT_EQ(ReadState(consumer).displayed_scale, 1.0F);
+  EXPECT_EQ(consumer.state->owner_lifetime, 200U);
+}
+
+NOLINT_TEST_F(ExposureGpuTest, CanceledDetachDoesNotIssueAnImplicitGeneration)
+{
+  auto service = PostProcessService(*renderer_);
+  auto frame = engine::FrameContext {};
+  StartSharedServiceView(service, frame);
+  auto settings = scene::ExposureSettings {};
+  settings.key = 12.5F;
+  const auto handle = ctx_.current_view.view_state_handle;
+  PublishExposureOwner(frame, ViewId { 60U }, handle, settings);
+  PublishExposureOwner(frame, ViewId { 60U }, handle, settings, ViewId { 50U });
+  EXPECT_NEAR(ServicePixel(service, Uniform(8.0F, 4U, 4U)), .5F, 2e-5F);
+  EXPECT_FALSE(renderer_->InspectExposureTransition(handle).has_value());
+}
+
+NOLINT_TEST_F(ExposureGpuTest,
+  PublicHandleReplacementRetiresHistoryRequestsAndMaskOwnership)
+{
+  auto frame = engine::FrameContext {};
+  owned_asset_loader_ = std::make_unique<vortex::testing::FakeAssetLoader>();
+  auto output = CreateRegisteredTexture(TextureDesc { .width = 4U,
+    .height = 4U,
+    .format = Format::kRGBA32Float,
+    .is_render_target = true,
+    .initial_state = ResourceStates::kCommon });
+  auto framebuffer = Backend().CreateFramebuffer(
+    FramebufferDesc {}.AddColorAttachment(output));
+  auto params = ResolvedView::Params {};
+  params.view_config.viewport = { .width = 4.0F, .height = 4.0F };
+  auto session
+    = renderer_->ForSinglePassHarness()
+        .SetFrameSession({ .frame_slot = frame::Slot { 0U },
+          .frame_sequence = frame::SequenceNumber { 1U },
+          .delta_time_seconds = 0.0F })
+        .SetResolvedView(
+          { .view_id = ViewId { 1000U }, .value = ResolvedView { params } })
+        .SetOutputTarget({ .framebuffer = observer_ptr { framebuffer.get() } })
+        .Finalize();
+  ASSERT_TRUE(session.has_value());
+  auto* scene_renderer
+    = vortex::testing::RendererPublicationProbe::GetSceneRenderer(*renderer_);
+  ASSERT_NE(scene_renderer, nullptr);
+  auto* service
+    = vortex::testing::RendererPublicationProbe::GetPostProcessService(
+      *scene_renderer);
+  ASSERT_NE(service, nullptr);
+  vortex::testing::RendererPublicationProbe::SetExposureAssetLoader(
+    *service, observer_ptr { owned_asset_loader_.get() });
+  auto settings = scene::ExposureSettings {};
+  settings.key = 12.5F;
+  const auto payload = vortex::testing::MakeCookedTexture1x1Rgba8Payload();
+  settings.metering_mask
+    = owned_asset_loader_->PreloadCookedTexture(std::span(payload));
+  const auto h1 = CompositionView::ViewStateHandle { 50U };
+  const auto h2 = CompositionView::ViewStateHandle { 51U };
+  const auto first_view
+    = PublishExposureOwner(frame, ViewId { 50U }, h1, settings);
+  std::weak_ptr<const resources::TextureBinder::ReadyTexture> old_mask;
+  for (unsigned i = 0U; i < 8U; ++i) {
+    WaitForQueueIdle();
+    ctx_.frame_slot = frame::Slot { i % 3U };
+    renderer_->GetUploadCoordinator().OnFrameStart(
+      internal::RendererTagFactory::Get(), ctx_.frame_slot);
+    service->OnFrameStart(
+      frame::SequenceNumber { ++sequence_ }, ctx_.frame_slot);
+    const auto& ready = service->ResolveViewExposureSettings(h1, settings);
+    if (ready.mask) {
+      old_mask = ready.mask;
+      break;
+    }
+  }
+  ASSERT_FALSE(old_mask.expired());
+  const auto mask_slot = ctx_.frame_slot;
+  ctx_.current_view.view_id = first_view;
+  ctx_.current_view.view_state_handle = h1;
+  const auto applied = renderer_->QueueExposureTransition(
+    h1, ExposureTransitionPolicy::kSeedFromEv100, 4.0F);
+  ASSERT_TRUE(applied.has_value());
+  EXPECT_NEAR(ServicePixel(*service, Uniform(.25F, 4U, 4U), settings),
+    .25F / 16.0F, 2e-5F);
+  const auto old_state
+    = vortex::testing::RendererPublicationProbe::ExposureStateForView(
+      *service, h1);
+  ASSERT_NE(old_state, nullptr);
+  const auto pending = renderer_->QueueExposureTransition(
+    h1, ExposureTransitionPolicy::kRemeter);
+  ASSERT_TRUE(pending.has_value());
+  const auto old_mask_key = settings.metering_mask;
+  settings.metering_mask = {};
+  settings.mode = engine::ExposureMode::kManual;
+  settings.manual_ev = 8.0F;
+  ASSERT_EQ(
+    PublishExposureOwner(frame, ViewId { 50U }, h2, settings), first_view);
+  EXPECT_FALSE(renderer_->RetryExposureTransition(*pending).has_value());
+  EXPECT_FALSE(renderer_->RetryExposureTransition(*applied).has_value());
+  EXPECT_EQ(vortex::testing::RendererPublicationProbe::ExposureStateForView(
+              *service, h1),
+    nullptr);
+  EXPECT_EQ(vortex::testing::RendererPublicationProbe::ExposureStatusCounts(
+              *service, h1),
+    (std::pair<std::size_t, std::size_t> { 0U, 0U }));
+  owned_asset_loader_->EmitTextureEviction(
+    old_mask_key, content::EvictionReason::kRefCountZero);
+  EXPECT_FALSE(old_mask.expired());
+  const auto next_view
+    = PublishExposureOwner(frame, ViewId { 70U }, h1, settings);
+  const auto next = renderer_->QueueExposureTransition(
+    h1, ExposureTransitionPolicy::kPreserve);
+  ASSERT_TRUE(next.has_value());
+  EXPECT_NE(next->lifetime, applied->lifetime);
+  ctx_.current_view.view_id = next_view;
+  ctx_.current_view.view_state_handle = h1;
+  ctx_.frame_slot = frame::Slot { (mask_slot.get() + 1U) % 3U };
+  EXPECT_NEAR(ServicePixel(*service, Uniform(.25F, 4U, 4U), settings),
+    .25F / 256.0F, 2e-5F);
+  EXPECT_EQ(
+    Read<ExposureStateData>(*old_state->buffer, ResourceStates::kShaderResource)
+      .displayed_scale,
+    0x1p-4F);
+  EXPECT_FALSE(old_mask.expired());
+  WaitForQueueIdle();
+  service->OnFrameStart(frame::SequenceNumber { ++sequence_ }, mask_slot);
+  EXPECT_TRUE(old_mask.expired());
+  const auto next_state
+    = vortex::testing::RendererPublicationProbe::ExposureStateForView(
+      *service, h1);
+  ASSERT_NE(next_state, nullptr);
+  const auto last = renderer_->QueueExposureTransition(
+    h1, ExposureTransitionPolicy::kPreserve);
+  ASSERT_TRUE(last.has_value());
+  PublishExposureOwner(
+    frame, ViewId { 70U }, CompositionView::kInvalidViewStateHandle, settings);
+  EXPECT_FALSE(renderer_->RetryExposureTransition(*last).has_value());
+  EXPECT_EQ(vortex::testing::RendererPublicationProbe::ExposureStateForView(
+              *service, h1),
+    nullptr);
+  EXPECT_EQ(Read<ExposureStateData>(
+              *next_state->buffer, ResourceStates::kShaderResource)
+              .displayed_scale,
+    0x1p-8F);
 }
 
 } // namespace

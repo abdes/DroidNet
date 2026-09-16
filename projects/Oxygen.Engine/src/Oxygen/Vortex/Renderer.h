@@ -711,6 +711,7 @@ private:
     std::uint64_t lifetime { 0U };
     std::uint64_t generation { 0U };
     std::uint64_t submitted_generation { 0U };
+    bool implicit_request { false };
     std::optional<ExposureTransitionStatus> status;
     std::optional<frame::SequenceNumber> captured_frame;
     std::optional<ExposureTransitionToken> captured_request;
@@ -721,6 +722,14 @@ private:
 
   auto CaptureExposureTransition(CompositionView::ViewStateHandle target,
     frame::SequenceNumber frame) -> std::optional<ExposureTransitionToken>;
+  auto IssueExposureTransitionLocked(CompositionView::ViewStateHandle target,
+    ExposureTransitionPolicy policy, std::optional<float> seed_ev,
+    bool implicit)
+    -> std::expected<ExposureTransitionToken, ExposureTransitionError>;
+  auto PrepareExposureDetach(CompositionView::ViewStateHandle target,
+    ExposureTransitionPolicy policy) -> void;
+  auto EnsureExposureLifetime(CompositionView::ViewStateHandle target)
+    -> std::uint64_t;
   auto CapturedExposureRejection(
     CompositionView::ViewStateHandle target, frame::SequenceNumber frame) const
     -> std::optional<ExposureTransitionError>;
@@ -766,6 +775,7 @@ private:
     std::string debug_name {};
     std::optional<scene::ExposureSettings> exposure_override;
     ViewId exposure_source_view_id { kInvalidViewId };
+    bool pending_exposure_detach { false };
   };
 
   //! Caller holds view_state_mutex_; null means unknown, cyclic or forbidden.

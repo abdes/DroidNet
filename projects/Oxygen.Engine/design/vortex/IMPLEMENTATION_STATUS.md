@@ -102,8 +102,13 @@ Inactive-owner validation now retains rejected dispositions across later mode
 or ownership changes while deferring diagnostics and submitted GPU work. It
 passes 68 native, 20 service, 20 publication and 39 renderer regression cases in
 each configuration, plus four focused debugger cases; evidence is
-`lifecycle/inactive-control-manifest.json`. Automatic detach, source-destruction
-continuity and implicit lifecycle events remain open; slice 4 is still in progress.
+`lifecycle/inactive-control-manifest.json`. Automatic detach and lifetime-safe
+history/handle replacement now pass 75 native, 21 service, 21 publication and
+39 renderer regression tests per configuration, plus nine debugger cases.
+Public handle-handoff coverage includes queued/applied history, mask retirement,
+stateless replacement and retained readers; evidence is
+`lifecycle/detach-lifetime-manifest.json`. Source-destruction continuity and
+remaining implicit lifecycle events remain open; slice 4 is still in progress.
 Mask identity now follows the approved existing resource-index model.
 
 ## 4. Milestone Ledger

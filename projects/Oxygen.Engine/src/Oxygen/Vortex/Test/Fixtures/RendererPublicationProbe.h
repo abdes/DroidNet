@@ -17,6 +17,13 @@
 namespace oxygen::vortex::testing {
 
 struct RendererPublicationProbe {
+  static auto SetExposureAssetLoader(PostProcessService& service,
+    observer_ptr<content::IAssetLoader> loader) -> void
+  {
+    CHECK_F(
+      !service.mask_binder_, "Set the test loader before mask binding starts");
+    service.asset_loader_ = loader;
+  }
   static auto ExposureStateForView(
     const PostProcessService& service, CompositionView::ViewStateHandle handle)
     -> postprocess::ExposurePass::StateLease

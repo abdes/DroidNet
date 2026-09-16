@@ -47,6 +47,7 @@ public:
   //! Frame-retained resources; the pass owns their registry/descriptor
   //! lifetime.
   struct StateResources {
+    std::uint64_t owner_lifetime { 0U };
     std::shared_ptr<graphics::Buffer> buffer;
     std::shared_ptr<graphics::Buffer> histogram_buffer;
     std::shared_ptr<graphics::Buffer> status_buffer;
@@ -62,6 +63,7 @@ public:
     PostProcessConfig config;
     std::optional<ExposureTransitionToken> transition;
     std::optional<ExposureTransitionError> rejection;
+    std::uint64_t lifetime { 0U };
   };
 
   struct Inputs {
@@ -75,6 +77,7 @@ public:
     std::optional<ExposureTransitionToken> transition;
     const Source* source { nullptr };
     std::optional<ExposureTransitionError> rejection;
+    std::uint64_t lifetime { 0U };
   };
 
   struct Result {

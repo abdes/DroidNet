@@ -1057,7 +1057,17 @@ carried into later GPU records without application. Debug and Release each pass
 68/68 native tests, 20/20 service tests, 20/20 publication tests and 39/39 renderer
 regressions. Four inactive-owner CDB cases have no blocking graphics messages.
 Evidence is `lifecycle/inactive-control-manifest.json`.
-Automatic detachment, destruction continuity and implicit lifecycle events
+Automatic detachment now issues a renderer generation, remeters Auto at zero
+delta, applies fixed modes, honors an unsubmitted explicit policy and defers
+diagnostics. Reattachment before capture cancels the pending event. Settings,
+mask leases and GPU records carry view lifetime identity; handle replacement
+retires the old owner after validation and outside the registry lock. The public
+H1-to-H2-to-new-owner-H1 regression covers queued/applied history, mask ownership,
+stateless replacement and retained GPU readers. Debug and Release each pass
+75/75 native, 21/21 service, 21/21 publication and 39/39 renderer regression tests.
+Nine focused debugger cases have no blocking graphics messages. Evidence is
+`lifecycle/detach-lifetime-manifest.json`.
+Source-destruction continuity and the remaining implicit lifecycle events
 remain open; slice 4 is not qualified.
 Early GPU P selection, S/P integration and scene-integrated validation remain
 slice 5 work.
@@ -1067,11 +1077,10 @@ slice 5 work.
   recording/submission failure, invalid metering and idempotent retries.
 - [ ] Implement the policies in section 4.1, including exact seed event-frame
   behavior and manual-to-auto continuity by retaining gain.
-  Remaining lifecycle coverage must include default detach/remeter, destroyed
-  source continuity (including borrowed zero and never-rendered source fallback),
-  and lifetime-safe shared prior-state selection when a handle is reused.
-  Inactive-owner validation and acknowledgement after readback backpressure are
-  covered by the checkpoints above.
+  Remaining lifecycle coverage must include destroyed-source continuity,
+  including borrowed zero and never-rendered source fallback. Default detach,
+  lifetime-safe history selection, inactive-owner validation and acknowledgement
+  after readback backpressure are covered by the checkpoints above.
 - [ ] Implement source-owned updates, pinned prior generations, root-source
   resolution, cycle rejection, inactive-source retention and bootstrap fallback.
 - [ ] Implement stateless transient state, recovery events, frame-safe uploads,
