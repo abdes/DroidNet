@@ -2066,6 +2066,21 @@ auto Renderer::ResolvePublishedExposureRootLocked(ViewId published_view_id,
   return nullptr;
 }
 
+auto Renderer::GetExposureSourceIntent(const ViewId source_view_id) const
+  -> std::optional<ExposureSourceIntent>
+{
+  std::shared_lock registration_lock(view_registration_mutex_);
+  std::shared_lock state_lock(view_state_mutex_);
+  const auto* root = ResolvePublishedExposureRootLocked(source_view_id);
+  if (!root || root->published_view_id != source_view_id)
+    return std::nullopt;
+  const auto view = resolved_views_.find(source_view_id);
+  return ExposureSourceIntent { .handle = root->view_state_handle,
+    .settings = root->exposure_override,
+    .camera_ev = view != resolved_views_.end() ? view->second.CameraEv()
+                                               : std::optional<float> {} };
+}
+
 auto Renderer::DetachPublishedRuntimeViewState(const ViewId intent_view_id)
   -> DetachedPublishedRuntimeViewState
 {

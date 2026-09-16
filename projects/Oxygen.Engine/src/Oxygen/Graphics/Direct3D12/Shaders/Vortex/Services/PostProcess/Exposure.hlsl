@@ -71,7 +71,7 @@ struct AutoExposureAverageConstants {
     uint transition_policy;
     float seed_log_gain;
     uint status_uav;
-    uint reserved;
+    uint borrowed_state_srv;
     uint2 view_lifetime;
 };
 
@@ -486,6 +486,25 @@ void VortexExposureAverageCS(uint3 dispatch_thread_id : SV_DispatchThreadID)
     next.frame_sequence = pass.frame_sequence;
     next.flags &= ~(EXPOSURE_LUMINANCE_VALID | EXPOSURE_METER_EV_VALID | EXPOSURE_ZERO_TARGET | EXPOSURE_MODE_MASK);
     next.flags |= pass.exposure_mode << EXPOSURE_MODE_SHIFT;
+    if ((pass.control_flags & 2u) != 0u) {
+        // Source-defined initialization is a read-only fallback, not a source
+        // update or acknowledgement of its pending transition.
+        const bool automatic = pass.exposure_mode == 2u;
+        const bool seeded = automatic && pass.transition_policy == 3u
+            && (pass.control_flags & 1u) == 0u;
+        const float latent = automatic
+            ? exp2(seeded ? pass.seed_log_gain : targets.initial_log_gain)
+            : pass.fixed_scale;
+        const bool zero = automatic && (targets.flags & 2u) != 0u;
+        next.displayed_scale = next.target_scale = zero ? 0.0 : latent;
+        next.latent_scale = next.latent_target_scale = latent;
+        next.flags |= EXPOSURE_HISTORY_VALID | EXPOSURE_INITIALIZED
+            | (zero ? EXPOSURE_ZERO_TARGET : 0u);
+        next.fallback_reason = 3u;
+        StoreSolved(output, next, pass);
+        return;
+    }
+    const bool borrowing = pass.borrowed_state_srv != K_INVALID_BINDLESS_INDEX;
     const bool new_identity = GenerationGreater(pass.requested_generation, previous.requested_generation);
     const bool already_rejected = all(pass.requested_generation == previous.requested_generation)
         && (previous.flags & EXPOSURE_REQUEST_REJECTED) != 0u;
@@ -496,13 +515,30 @@ void VortexExposureAverageCS(uint3 dispatch_thread_id : SV_DispatchThreadID)
     if (pass.transition_policy != 0u && !GenerationGreater(previous.requested_generation, pass.requested_generation)) {
         next.requested_generation = pass.requested_generation;
     }
-    if (new_request && ((pass.exposure_mode != 2u && pass.transition_policy != 1u)
+    if (new_request && (borrowing || (pass.exposure_mode != 2u && pass.transition_policy != 1u)
         || (pass.transition_policy == 3u && (pass.control_flags & 1u) != 0u))) {
-        const uint reason = pass.exposure_mode != 2u ? 1u : 2u;
+        const uint reason = borrowing ? 3u : pass.exposure_mode != 2u ? 1u : 2u;
         next.flags = (next.flags & ~EXPOSURE_REJECTION_MASK) | EXPOSURE_REQUEST_REJECTED
             | (reason << EXPOSURE_REJECTION_SHIFT);
         new_request = false;
     }
+    if (borrowing) {
+        const ExposureStateData source = LoadPrevious(pass.borrowed_state_srv, targets);
+        next.displayed_scale = source.displayed_scale;
+        next.target_scale = source.target_scale;
+        next.latent_scale = source.latent_scale;
+        next.latent_target_scale = source.latent_target_scale;
+        // Local image metering and dormant independent meter history cannot be
+        // inferred from a borrowed gain.
+        next.raw_metered_luminance = next.raw_metered_ev = 0.0;
+        next.flags = (next.flags & ~(EXPOSURE_HAS_METER_HISTORY | EXPOSURE_SYNTHETIC_DARK))
+            | EXPOSURE_HISTORY_VALID | EXPOSURE_INITIALIZED | EXPOSURE_BORROWED
+            | (source.displayed_scale == 0.0 ? EXPOSURE_ZERO_TARGET : 0u);
+        next.fallback_reason = source.fallback_reason;
+        StoreSolved(output, next, pass);
+        return;
+    }
+    next.flags &= ~EXPOSURE_BORROWED;
     if (pass.exposure_mode != 2u) {
         // Manual, physical camera and disabled all update the same GPU history.
         next.displayed_scale = pass.fixed_scale;

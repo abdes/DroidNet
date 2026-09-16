@@ -40,6 +40,7 @@ static const uint EXPOSURE_LUMINANCE_VALID = 4u;
 static const uint EXPOSURE_METER_EV_VALID = 8u;
 static const uint EXPOSURE_SYNTHETIC_DARK = 16u;
 static const uint EXPOSURE_ZERO_TARGET = 64u;
+static const uint EXPOSURE_BORROWED = 128u;
 static const uint EXPOSURE_HAS_METER_HISTORY = 512u;
 static const uint EXPOSURE_MODE_SHIFT = 10u;
 static const uint EXPOSURE_MODE_MASK = 3u << EXPOSURE_MODE_SHIFT;
