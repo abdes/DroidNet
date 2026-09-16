@@ -1088,27 +1088,37 @@ Debug and Release pass 88/88 native, 21/21 service and 22/22 publication tests,
 plus 117/117 rebuilt renderer/facade/environment/history regression entries.
 Seven native discontinuity debugger cases have no blocking graphics messages.
 Evidence is `lifecycle/discontinuity-manifest.json`.
-DemoShell reset wiring and the remaining slice-4 integration/capture gates remain
-open; slice 4 is not qualified. Actual backend resource restoration and the
+DemoShell resets now enumerate registered root owners and queue public seed
+transitions. Three reset tests and nine EnvironmentVm tests pass in Debug and
+Release. Three simultaneous in-flight frames retain distinct records and upload
+values; the full Release native suite passes 89/89 and publication passes 22/22.
+The controlled sharing RenderDoc capture verifies source initialization,
+gain-only consumer copying without histogram dispatch, rejected borrower
+requests, distinct immutable records and final tonemap consumption. Evidence is
+`lifecycle/demoshell-reset-manifest.json` and `lifecycle/sharing-copy-analysis.txt`.
+The offscreen facade still routes requested sharing to the consumer's own
+exposure handle; source resolution and its integration tests remain open, so
+slice 4 is not qualified. Actual backend resource restoration and the
 scene-integrated numerical bootstrap use the slice-5 recovery route.
 Early GPU P selection, S/P integration and scene-integrated validation remain
 slice 5 work.
 
 - [x] Update the same GPU state in Manual, ManualCamera, Auto and disabled modes.
-- [ ] Add public per-view transitions and request generation handling, including
+- [x] Add public per-view transitions and request generation handling, including
   recording/submission failure, invalid metering and idempotent retries.
-- [ ] Implement the policies in section 4.1, including exact seed event-frame
+- [x] Implement the policies in section 4.1, including exact seed event-frame
   behavior and manual-to-auto continuity by retaining gain.
   The controlled-input lifecycle cases, including discontinuity notification,
   source destruction, default detach, lifetime-safe selection, inactive-owner
   validation and acknowledgement backpressure, are covered by the checkpoints
-  above. Complete the remaining native integration/capture gate and DemoShell
-  reset wiring before closing the slice.
+  above. The controlled-input capture and DemoShell reset integration are also
+  qualified; offscreen source routing remains required before closing the slice.
 - [ ] Implement source-owned updates, pinned prior generations, root-source
   resolution, cycle rejection, inactive-source retention and bootstrap fallback.
-- [ ] Implement stateless transient state, recovery events, frame-safe uploads,
+  Registered composition views are qualified; complete offscreen facade routing.
+- [x] Implement stateless transient state, recovery events, frame-safe uploads,
   synchronization and fence retirement using controlled float-input fixtures.
-- [ ] Exercise native game-facing producers without DemoShell. Wire DemoShell's
+- [x] Exercise native game-facing producers without DemoShell. Wire DemoShell's
   reset to the same public API.
 
 **Gate:** state-machine, request, ownership and publication tests pass against

@@ -16,6 +16,9 @@
 #include <Oxygen/Core/Types/PostProcess.h>
 
 namespace oxygen {
+namespace vortex {
+  class Renderer;
+}
 namespace scene {
   class Scene;
 }
@@ -43,6 +46,8 @@ namespace ui {
 
     //! Binds the active scene for post-process system updates.
     virtual auto BindScene(observer_ptr<scene::Scene> scene) -> void;
+    virtual auto BindVortexRenderer(observer_ptr<vortex::Renderer> renderer)
+      -> void;
 
     //! Applies the exposure fields owned by an environment preset.
     //!
@@ -131,7 +136,8 @@ namespace ui {
     //! Resets only auto-exposure settings to their default values.
     virtual auto ResetAutoExposureDefaults() -> void;
 
-    //! Resets the auto-exposure history for all views to the given EV.
+    //! Submits an EV seed to currently registered exposure owners. Borrowing
+    //! consumers follow their source; the renderer validates each view's mode.
     //!
     //! The EV value is referenced to ISO 100 (i.e. EV100).
     virtual auto ResetAutoExposure(float initial_ev) -> void;
@@ -181,6 +187,7 @@ namespace ui {
 
     observer_ptr<CameraSettingsService> camera_settings_;
     observer_ptr<scene::Scene> scene_;
+    observer_ptr<vortex::Renderer> vortex_renderer_;
     std::optional<engine::ExposureMode> transient_exposure_mode_;
     std::optional<float> transient_manual_exposure_ev_;
     std::optional<bool> transient_exposure_enabled_;

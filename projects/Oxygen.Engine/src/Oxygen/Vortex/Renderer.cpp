@@ -808,6 +808,20 @@ auto Renderer::InspectExposureTransition(
                                               : found->second.status;
 }
 
+auto Renderer::GetExposureOwners() const
+  -> std::vector<CompositionView::ViewStateHandle>
+{
+  std::shared_lock lock(view_state_mutex_);
+  auto owners = std::vector<CompositionView::ViewStateHandle> {};
+  for (const auto& [_, view] : published_runtime_views_by_intent_) {
+    if (view.view_state_handle != CompositionView::kInvalidViewStateHandle
+      && view.exposure_source_view_id == kInvalidViewId)
+      owners.push_back(view.view_state_handle);
+  }
+  std::ranges::sort(owners);
+  return owners;
+}
+
 auto Renderer::CaptureExposureTransition(
   CompositionView::ViewStateHandle target, frame::SequenceNumber frame)
   -> std::optional<ExposureTransitionToken>
