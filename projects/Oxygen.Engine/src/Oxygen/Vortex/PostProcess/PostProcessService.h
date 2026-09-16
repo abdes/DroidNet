@@ -105,6 +105,12 @@ public:
     CompositionView::ViewStateHandle handle,
     const scene::ExposureSettings& requested,
     std::optional<float> camera_ev = {}) -> const ExposureSettingsState&;
+  //! Freeze the complete accepted revision and mask for this logical
+  //! view/frame.
+  [[nodiscard]] OXGN_VRTX_API auto CaptureViewExposureSettings(ViewId view_id,
+    CompositionView::ViewStateHandle handle,
+    const scene::ExposureSettings& requested,
+    std::optional<float> camera_ev = {}) -> const ExposureSettingsState&;
   [[nodiscard]] OXGN_VRTX_API auto BuildBindings(
     const Inputs& inputs) const -> PostProcessFrameBindings;
   OXGN_VRTX_API auto PublishBindings(
@@ -132,6 +138,14 @@ public:
   }
 
 private:
+  struct CapturedExposureSettings {
+    CompositionView::ViewStateHandle handle;
+    ExposureSettingsState settings;
+  };
+  std::unordered_map<ViewId, CapturedExposureSettings>
+    captured_exposure_settings_;
+  auto BuildBindings(const Inputs& inputs,
+    const PostProcessConfig& config) const -> PostProcessFrameBindings;
   struct PublishedView {
     ShaderVisibleIndex slot { kInvalidShaderVisibleIndex };
     PostProcessFrameBindings bindings {};
@@ -149,8 +163,8 @@ private:
     pending_exposure_status_;
   auto PollExposureStatus() -> void;
   auto EnqueueExposureStatus(const ExposureTransitionToken& token,
-    postprocess::ExposurePass::StateLease state, const RenderContext& ctx)
-    -> void;
+    postprocess::ExposurePass::StateLease state, const RenderContext& ctx,
+    std::uint64_t settings_revision) -> void;
 
   auto EnsurePublishResources() -> bool;
   auto EnsureMaskBinder() -> resources::TextureBinder*;

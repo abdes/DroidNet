@@ -27,6 +27,30 @@
 
 namespace oxygen::vortex {
 
+namespace {
+  auto ApplyExposureRevision(PostProcessConfig& config,
+    const PostProcessService::ExposureSettingsState& state) -> void
+  {
+    const auto& exposure = state.resolved.authored;
+    config.resolved_exposure = state.resolved;
+    config.exposure_settings_revision = state.revision;
+    config.enable_auto_exposure
+      = exposure.enabled && exposure.mode == engine::ExposureMode::kAuto;
+    config.fixed_exposure = state.resolved.fixed_scale;
+    config.metering_mode = exposure.metering_mode;
+    config.auto_exposure_speed_up = exposure.speed_up;
+    config.auto_exposure_speed_down = exposure.speed_down;
+    config.auto_exposure_low_percentile = exposure.low_percentile;
+    config.auto_exposure_high_percentile = exposure.high_percentile;
+    config.auto_exposure_min_ev = exposure.min_ev;
+    config.auto_exposure_max_ev = exposure.max_ev;
+    config.auto_exposure_min_log_luminance = exposure.min_log_luminance;
+    config.auto_exposure_log_luminance_range = exposure.log_luminance_range;
+    config.auto_exposure_target_luminance = exposure.target_luminance;
+    config.auto_exposure_spot_meter_radius = exposure.spot_meter_radius;
+  }
+} // namespace
+
 PostProcessService::PostProcessService(
   Renderer& renderer, observer_ptr<content::IAssetLoader> asset_loader)
   : renderer_(renderer)
@@ -41,6 +65,7 @@ PostProcessService::PostProcessService(
 PostProcessService::~PostProcessService()
 {
   pending_exposure_status_.clear();
+  captured_exposure_settings_.clear();
   // Binder owns descriptor retirement; release all its leases first.
   exposure_settings_.clear();
   transient_exposure_settings_ = {};
@@ -90,7 +115,10 @@ auto PostProcessService::EnsurePublishResources() -> bool
 auto PostProcessService::OnFrameStart(
   const frame::SequenceNumber sequence, const frame::Slot slot) -> void
 {
+  if (current_sequence_ == sequence && current_slot_ == slot)
+    return;
   PollExposureStatus();
+  captured_exposure_settings_.clear();
   current_sequence_ = sequence;
   current_slot_ = slot;
   exposure_pass_->OnFrameStart(sequence, slot);
@@ -245,8 +273,31 @@ auto PostProcessService::ResolveViewExposureSettings(
   return *state;
 }
 
+auto PostProcessService::CaptureViewExposureSettings(const ViewId view_id,
+  const CompositionView::ViewStateHandle handle,
+  const scene::ExposureSettings& requested,
+  const std::optional<float> camera_ev) -> const ExposureSettingsState&
+{
+  if (const auto found = captured_exposure_settings_.find(view_id);
+    found != captured_exposure_settings_.end()) {
+    CHECK_F(found->second.handle == handle,
+      "A captured view cannot change its exposure lifetime within a frame");
+    return found->second.settings;
+  }
+  auto settings = ResolveViewExposureSettings(handle, requested, camera_ev);
+  return captured_exposure_settings_
+    .emplace(view_id, CapturedExposureSettings { handle, std::move(settings) })
+    .first->second.settings;
+}
+
 auto PostProcessService::BuildBindings(const Inputs& inputs) const
   -> PostProcessFrameBindings
+{
+  return BuildBindings(inputs, config_);
+}
+
+auto PostProcessService::BuildBindings(const Inputs& inputs,
+  const PostProcessConfig& config) const -> PostProcessFrameBindings
 {
   return {
     .resolved_scene_color_srv = inputs.scene_signal_srv,
@@ -256,25 +307,25 @@ auto PostProcessService::BuildBindings(const Inputs& inputs) const
     .eye_adaptation_srv = inputs.eye_adaptation_srv,
     .eye_adaptation_uav = inputs.eye_adaptation_uav,
     .post_history_srv = inputs.post_history_srv,
-    .tone_mapper = config_.tone_mapper,
-    .metering_mode = config_.metering_mode,
-    .enable_bloom = config_.enable_bloom ? 1U : 0U,
-    .enable_auto_exposure = config_.enable_auto_exposure ? 1U : 0U,
-    .fixed_exposure = config_.fixed_exposure,
-    .gamma = config_.gamma,
-    .bloom_intensity = config_.bloom_intensity,
-    .bloom_threshold = config_.bloom_threshold,
-    .auto_exposure_speed_up = config_.auto_exposure_speed_up,
-    .auto_exposure_speed_down = config_.auto_exposure_speed_down,
-    .auto_exposure_low_percentile = config_.auto_exposure_low_percentile,
-    .auto_exposure_high_percentile = config_.auto_exposure_high_percentile,
-    .auto_exposure_min_ev = config_.auto_exposure_min_ev,
-    .auto_exposure_max_ev = config_.auto_exposure_max_ev,
-    .auto_exposure_min_log_luminance = config_.auto_exposure_min_log_luminance,
+    .tone_mapper = config.tone_mapper,
+    .metering_mode = config.metering_mode,
+    .enable_bloom = config.enable_bloom ? 1U : 0U,
+    .enable_auto_exposure = config.enable_auto_exposure ? 1U : 0U,
+    .fixed_exposure = config.fixed_exposure,
+    .gamma = config.gamma,
+    .bloom_intensity = config.bloom_intensity,
+    .bloom_threshold = config.bloom_threshold,
+    .auto_exposure_speed_up = config.auto_exposure_speed_up,
+    .auto_exposure_speed_down = config.auto_exposure_speed_down,
+    .auto_exposure_low_percentile = config.auto_exposure_low_percentile,
+    .auto_exposure_high_percentile = config.auto_exposure_high_percentile,
+    .auto_exposure_min_ev = config.auto_exposure_min_ev,
+    .auto_exposure_max_ev = config.auto_exposure_max_ev,
+    .auto_exposure_min_log_luminance = config.auto_exposure_min_log_luminance,
     .auto_exposure_log_luminance_range
-    = config_.auto_exposure_log_luminance_range,
-    .auto_exposure_target_luminance = config_.auto_exposure_target_luminance,
-    .auto_exposure_spot_meter_radius = config_.auto_exposure_spot_meter_radius,
+    = config.auto_exposure_log_luminance_range,
+    .auto_exposure_target_luminance = config.auto_exposure_target_luminance,
+    .auto_exposure_spot_meter_radius = config.auto_exposure_spot_meter_radius,
   };
 }
 
@@ -294,24 +345,47 @@ auto PostProcessService::PublishBindings(const ViewId view_id,
 auto PostProcessService::Execute(const ViewId view_id, RenderContext& ctx,
   const SceneTextures& scene_textures, const Inputs& inputs) -> void
 {
-  const auto found
-    = exposure_settings_.find(ctx.current_view.view_state_handle);
-  const auto* settings = found != exposure_settings_.end() ? &found->second
-    : ctx.current_view.view_state_handle
-      == CompositionView::kInvalidViewStateHandle
-    ? &transient_exposure_settings_
-    : nullptr;
+  auto captured = captured_exposure_settings_.find(view_id);
+  if (captured == captured_exposure_settings_.end()) {
+    CHECK_F(config_.resolved_exposure.has_value());
+    auto settings = ExposureSettingsState {
+      .resolved = *config_.resolved_exposure,
+      .revision = config_.exposure_settings_revision,
+    };
+    const auto accepted
+      = exposure_settings_.find(ctx.current_view.view_state_handle);
+    const auto* source = accepted != exposure_settings_.end()
+      ? &accepted->second
+      : ctx.current_view.view_state_handle
+        == CompositionView::kInvalidViewStateHandle
+      ? &transient_exposure_settings_
+      : nullptr;
+    if (source && source->revision == settings.revision
+      && source->resolved.authored == settings.resolved.authored
+      && source->resolved.fixed_scale == settings.resolved.fixed_scale)
+      settings = *source;
+    captured = captured_exposure_settings_
+                 .emplace(view_id,
+                   CapturedExposureSettings {
+                     ctx.current_view.view_state_handle, std::move(settings) })
+                 .first;
+  }
+  CHECK_F(captured->second.handle == ctx.current_view.view_state_handle,
+    "A captured view cannot change its exposure lifetime within a frame");
+  const auto* settings = &captured->second.settings;
+  auto effective_config = config_;
+  ApplyExposureRevision(effective_config, *settings);
   auto mask = settings ? settings->mask : nullptr;
   const bool initial_mask_unavailable = settings && settings->revision == 0U
     && (settings->mask_status == ExposureMaskStatus::kPending
       || settings->mask_status == ExposureMaskStatus::kFailed);
-  const bool requested_mask_missing = config_.resolved_exposure
-    && config_.resolved_exposure->authored.metering_mask.get() != 0U && !mask;
+  const bool requested_mask_missing = effective_config.resolved_exposure
+    && effective_config.resolved_exposure->authored.metering_mask.get() != 0U
+    && !mask;
   if (mask) {
     CHECK_LT_F(current_slot_.get(), frame_masks_.size());
     frame_masks_[current_slot_.get()].push_back(mask);
   }
-  auto effective_config = config_;
   effective_config.temporary_unit_exposure = config_.temporary_unit_exposure
     || ctx.shader_debug_mode != ShaderDebugMode::kDisabled
     || ctx.render_mode == RenderMode::kWireframe;
@@ -330,9 +404,9 @@ auto PostProcessService::Execute(const ViewId view_id, RenderContext& ctx,
     });
   if (transition && exposure.executed && exposure.state
     && !effective_config.temporary_unit_exposure) {
-    EnqueueExposureStatus(*transition, exposure.state, ctx);
+    EnqueueExposureStatus(*transition, exposure.state, ctx, settings->revision);
   }
-  auto bindings = BuildBindings(inputs);
+  auto bindings = BuildBindings(inputs, effective_config);
   if (effective_config.temporary_unit_exposure) {
     bindings.enable_auto_exposure = 0U;
     bindings.fixed_exposure = 1.0F;
@@ -340,7 +414,7 @@ auto PostProcessService::Execute(const ViewId view_id, RenderContext& ctx,
   bindings.eye_adaptation_srv = exposure.exposure_buffer_srv;
   bindings.eye_adaptation_uav = exposure.exposure_buffer_uav;
   const auto slot = PublishBindings(view_id, bindings);
-  const auto bloom = bloom_pass_->Execute(config_, bindings);
+  const auto bloom = bloom_pass_->Execute(effective_config, bindings);
   const auto tonemap = tonemap_pass_->Record(ctx, scene_textures,
     postprocess::TonemapPass::Inputs {
       .scene_signal = inputs.scene_signal,
@@ -349,10 +423,10 @@ auto PostProcessService::Execute(const ViewId view_id, RenderContext& ctx,
       .bloom_texture_srv = bloom.bloom_texture_srv,
       .exposure_buffer_srv = exposure.exposure_buffer_srv,
       .post_target = inputs.post_target,
-      .tone_mapper = config_.tone_mapper,
+      .tone_mapper = effective_config.tone_mapper,
       .exposure_value = exposure.exposure_value,
-      .gamma = config_.gamma,
-      .bloom_intensity = config_.bloom_intensity,
+      .gamma = effective_config.gamma,
+      .bloom_intensity = effective_config.bloom_intensity,
       .background_color = environment::ResolveSceneBackground(ctx),
     });
 
@@ -363,9 +437,9 @@ auto PostProcessService::Execute(const ViewId view_id, RenderContext& ctx,
     .wrote_visible_output = tonemap.wrote_visible_output,
     .bloom_requested = bloom.requested,
     .bloom_executed = bloom.executed,
-    .auto_exposure_requested = config_.enable_auto_exposure
+    .auto_exposure_requested = effective_config.enable_auto_exposure
       && !effective_config.temporary_unit_exposure && exposure.requested,
-    .auto_exposure_executed = config_.enable_auto_exposure
+    .auto_exposure_executed = effective_config.enable_auto_exposure
       && !effective_config.temporary_unit_exposure && exposure.executed,
     .used_fixed_exposure = exposure.used_fixed_exposure,
     .view_id = view_id,
@@ -378,6 +452,7 @@ auto PostProcessService::RemoveViewState(const ViewId view_id,
   const CompositionView::ViewStateHandle view_state_handle) -> void
 {
   published_views_.erase(view_id);
+  captured_exposure_settings_.erase(view_id);
   exposure_settings_.erase(view_state_handle);
   pending_exposure_status_.erase(view_state_handle);
   renderer_.RetireExposureTransitions(view_state_handle);
@@ -386,7 +461,8 @@ auto PostProcessService::RemoveViewState(const ViewId view_id,
 
 auto PostProcessService::EnqueueExposureStatus(
   const ExposureTransitionToken& token,
-  postprocess::ExposurePass::StateLease state, const RenderContext& ctx) -> void
+  postprocess::ExposurePass::StateLease state, const RenderContext& ctx,
+  const std::uint64_t settings_revision) -> void
 {
   auto& pending = pending_exposure_status_[token.target];
   if (pending.size() >= frame::kFramesInFlight.get())
@@ -418,7 +494,7 @@ auto PostProcessService::EnqueueExposureStatus(
     return;
   }
   pending.push_back({ std::move(state), std::move(readback), token,
-    ctx.frame_sequence.get(), config_.exposure_settings_revision });
+    ctx.frame_sequence.get(), settings_revision });
 }
 
 auto PostProcessService::PollExposureStatus() -> void

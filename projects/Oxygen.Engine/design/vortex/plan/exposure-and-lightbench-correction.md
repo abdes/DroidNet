@@ -1021,9 +1021,17 @@ retains inactive source chains referenced by active consumers, and detaches all
 affected relationships on removal. Its 18 publication tests pass in Debug and
 Release, including six new ownership cases; evidence is
 `lifecycle/ownership-registry-manifest.json`. This qualifies CPU routing only.
-GPU borrowing/bootstrap/destruction continuity, implicit lifecycle events and
-complete frame-boundary settings integration remain open; slice 4 is not
-qualified.
+
+Rendered-view frame capture now pins accepted settings, mode, mask lease and
+transition semantics before scene rendering. Family priming also covers views
+without resolved cameras; late scene/settings/mask changes become eligible on
+the next frame. Stateless captures remain isolated by logical view and retain
+no prior-frame settings. The expanded native suite passes 56/56 in Debug and
+Release; service tests pass 19/19 and renderer regressions pass 40/40 entries in
+each configuration. Four focused CDB cases have no blocking graphics messages.
+Evidence is `lifecycle/frame-capture-manifest.json`. GPU source borrowing,
+source-defined bootstrap, destruction continuity and implicit lifecycle events
+remain open; slice 4 is not qualified.
 
 - [x] Update the same GPU state in Manual, ManualCamera, Auto and disabled modes.
 - [ ] Add public per-view transitions and request generation handling, including
