@@ -1430,7 +1430,7 @@ namespace {
       captured_view ? captured_view->view_id : ctx.current_view.view_id,
       captured_view ? captured_view->view_state_handle
                     : ctx.current_view.view_state_handle,
-      requested, camera_ev, diagnostic);
+      requested, camera_ev, diagnostic, ctx.GetScene());
     const auto& exposure = active.resolved.authored;
     config.enable_auto_exposure
       = exposure.enabled && exposure.mode == engine::ExposureMode::kAuto;
@@ -1826,6 +1826,10 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
   }
   if (post_process_ && wants_scene_lighting)
     static_cast<void>(ResolveAuthoredPostProcessConfig(ctx, *post_process_));
+  ctx.current_view.history_discontinuity
+    = renderer_.CapturedViewDiscontinuities(
+        ctx.current_view.view_state_handle, ctx.frame_sequence)
+    != 0U;
   RecordDiagnosticsPass(renderer_,
     DiagnosticsPassRecord {
       .name = "Vortex.Stage2.InitViews",

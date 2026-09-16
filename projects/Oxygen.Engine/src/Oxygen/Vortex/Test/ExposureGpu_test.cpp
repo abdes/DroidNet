@@ -17,6 +17,7 @@
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Direct3D12/Test/Fixtures/ReadbackTestFixture.h>
+#include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Environment/Background.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Scene.h>
@@ -249,9 +250,9 @@ protected:
     ctx_.delta_time = dt;
     ctx_.render_mode = diagnostic ? RenderMode::kWireframe : RenderMode::kSolid;
     service.OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
-    const auto& accepted
-      = service.CaptureViewExposureSettings(ctx_.current_view.view_id,
-        ctx_.current_view.view_state_handle, settings, {}, diagnostic);
+    const auto& accepted = service.CaptureViewExposureSettings(
+      ctx_.current_view.view_id, ctx_.current_view.view_state_handle, settings,
+      {}, diagnostic, ctx_.GetScene());
     auto config = PostProcessConfig {};
     config.resolved_exposure = accepted.resolved;
     config.exposure_settings_revision = accepted.revision;
@@ -2535,6 +2536,173 @@ NOLINT_TEST_F(ExposureGpuTest,
     0x1p-8F);
   EXPECT_NEAR(
     ServicePixel(service, signal, {}, false, 1.0F), .25F / 128.0F, 2e-5F);
+}
+
+NOLINT_TEST_F(
+  ExposureGpuTest, CameraCutRemetersOnceAndInvalidatesOnlyItsCameraHistory)
+{
+  auto service = PostProcessService(*renderer_);
+  const auto handle = ctx_.current_view.view_state_handle;
+  EXPECT_NEAR(ServicePixel(service, Uniform(.25F, 4U, 4U)), .18F, 2e-5F);
+  auto& history
+    = vortex::testing::RendererPublicationProbe::PreviousViewHistory(
+      *renderer_);
+  auto state = internal::PreviousViewHistoryCache::CurrentState {};
+  state.viewport = { .width = 4.0F, .height = 4.0F };
+  history.BeginFrame(1U, {});
+  history.TouchCurrent(handle, state);
+  history.TouchCurrent(CompositionView::ViewStateHandle { 99U }, state);
+  history.EndFrame();
+  history.BeginFrame(2U, {});
+  ASSERT_TRUE(
+    renderer_->NotifyViewDiscontinuity(handle, ViewDiscontinuity::kCameraCut)
+      .has_value());
+  EXPECT_NEAR(ServicePixel(service, Uniform(8.0F, 4U, 4U)), .18F, 2e-5F);
+  EXPECT_FALSE(history.TouchCurrent(handle, state).previous_valid);
+  EXPECT_TRUE(
+    history.TouchCurrent(CompositionView::ViewStateHandle { 99U }, state)
+      .previous_valid);
+  const auto event = renderer_->InspectExposureTransition(handle);
+  ASSERT_TRUE(event.has_value());
+  EXPECT_EQ(event->request.policy, ExposureTransitionPolicy::kRemeter);
+  EXPECT_NEAR(
+    ServicePixel(service, Uniform(.25F, 4U, 4U)), .25F * .0225F, 2e-5F);
+  EXPECT_EQ(
+    renderer_->InspectExposureTransition(handle)->request, event->request);
+}
+
+NOLINT_TEST_F(ExposureGpuTest, ExplicitSeedOverridesCameraCutDefaultPolicy)
+{
+  auto service = PostProcessService(*renderer_);
+  ServicePixel(service, Uniform(.25F, 4U, 4U));
+  const auto handle = ctx_.current_view.view_state_handle;
+  ASSERT_TRUE(
+    renderer_->NotifyViewDiscontinuity(handle, ViewDiscontinuity::kCameraCut)
+      .has_value());
+  const auto seed = renderer_->QueueExposureTransition(
+    handle, ExposureTransitionPolicy::kSeedFromEv100, 8.0F);
+  ASSERT_TRUE(seed.has_value());
+  EXPECT_NEAR(
+    ServicePixel(service, Uniform(.25F, 4U, 4U)), .25F / 256.0F, 2e-5F);
+  EXPECT_EQ(renderer_->InspectExposureTransition(handle)->request, *seed);
+}
+
+NOLINT_TEST_F(ExposureGpuTest,
+  BorrowingCameraCutPreservesRootExposureWithoutRequestingReset)
+{
+  auto& service = OwnedExposureService();
+  auto frame = engine::FrameContext {};
+  StartSharedServiceView(service, frame);
+  const auto consumer = ctx_.current_view.view_state_handle;
+  const auto root_before
+    = vortex::testing::RendererPublicationProbe::ExposureStateForView(
+      service, CompositionView::ViewStateHandle { 50U });
+  ASSERT_TRUE(
+    renderer_->NotifyViewDiscontinuity(consumer, ViewDiscontinuity::kCameraCut)
+      .has_value());
+  EXPECT_NEAR(ServicePixel(service, Uniform(8.0F, 4U, 4U)), .5F, 2e-5F);
+  EXPECT_FALSE(renderer_->InspectExposureTransition(consumer).has_value());
+  EXPECT_EQ(vortex::testing::RendererPublicationProbe::ExposureStateForView(
+              service, CompositionView::ViewStateHandle { 50U }),
+    root_before);
+}
+
+NOLINT_TEST_F(
+  ExposureGpuTest, WorldReplacementRemetersButOrdinaryImageChangesAdapt)
+{
+  auto service = PostProcessService(*renderer_);
+  auto first = std::make_shared<scene::Scene>("FirstExposureWorld", 4U);
+  auto second = std::make_shared<scene::Scene>("SecondExposureWorld", 4U);
+  ctx_.scene = observer_ptr { first.get() };
+  EXPECT_NEAR(ServicePixel(service, Uniform(.25F, 4U, 4U)), .18F, 2e-5F);
+  EXPECT_NEAR(ServicePixel(service, Uniform(8.0F, 4U, 4U)), 1.0F, 2e-5F);
+  ctx_.scene = observer_ptr { second.get() };
+  EXPECT_NEAR(ServicePixel(service, Uniform(8.0F, 4U, 4U)), .18F, 2e-5F);
+  EXPECT_EQ(
+    renderer_->InspectExposureTransition(ctx_.current_view.view_state_handle)
+      ->request.policy,
+    ExposureTransitionPolicy::kRemeter);
+}
+
+NOLINT_TEST_F(
+  ExposureGpuTest, DiagnosticFramesDeferCameraCutUntilNormalExposureResumes)
+{
+  auto service = PostProcessService(*renderer_);
+  ServicePixel(service, Uniform(.25F, 4U, 4U));
+  const auto handle = ctx_.current_view.view_state_handle;
+  ASSERT_TRUE(
+    renderer_->NotifyViewDiscontinuity(handle, ViewDiscontinuity::kCameraCut)
+      .has_value());
+  EXPECT_NEAR(
+    ServicePixel(service, Uniform(.25F, 4U, 4U), {}, true), .25F, 2e-5F);
+  EXPECT_FALSE(renderer_->InspectExposureTransition(handle).has_value());
+  EXPECT_NEAR(ServicePixel(service, Uniform(8.0F, 4U, 4U)), .18F, 2e-5F);
+}
+
+NOLINT_TEST_F(
+  ExposureGpuTest, LateCameraCutWaitsForNextCaptureAndRecoveryRemeters)
+{
+  auto service = PostProcessService(*renderer_);
+  ServicePixel(service, Uniform(.25F, 4U, 4U));
+  const auto handle = ctx_.current_view.view_state_handle;
+  EXPECT_NEAR(
+    ServicePixel(service, Uniform(8.0F, 4U, 4U), {}, false, 0.0F,
+      [&] {
+        EXPECT_TRUE(renderer_
+            ->NotifyViewDiscontinuity(handle, ViewDiscontinuity::kCameraCut)
+            .has_value());
+      }),
+    1.0F, 2e-5F);
+  EXPECT_NEAR(ServicePixel(service, Uniform(8.0F, 4U, 4U)), .18F, 2e-5F);
+  const auto cut
+    = renderer_->InspectExposureTransition(handle)->request.generation;
+  ASSERT_TRUE(renderer_
+      ->NotifyViewDiscontinuity(handle, ViewDiscontinuity::kDeviceRecovery)
+      .has_value());
+  EXPECT_NEAR(ServicePixel(service, Uniform(.25F, 4U, 4U)), .18F, 2e-5F);
+  EXPECT_GT(
+    renderer_->InspectExposureTransition(handle)->request.generation, cut);
+}
+
+NOLINT_TEST_F(
+  ExposureGpuTest, PublishingADifferentCameraTriggersTheDefaultCutPolicy)
+{
+  auto service = PostProcessService(*renderer_);
+  auto frame = engine::FrameContext {};
+  auto scene = std::make_shared<scene::Scene>("CameraSelection", 8U);
+  auto first = scene->CreateNode("First");
+  auto second = scene->CreateNode("Second");
+  ASSERT_TRUE(first.AttachCamera(std::make_unique<scene::PerspectiveCamera>()));
+  ASSERT_TRUE(
+    second.AttachCamera(std::make_unique<scene::PerspectiveCamera>()));
+  auto texture = CreateRegisteredTexture(TextureDesc { .width = 4U,
+    .height = 4U,
+    .format = Format::kRGBA32Float,
+    .is_render_target = true,
+    .initial_state = ResourceStates::kCommon });
+  auto target = Backend().CreateFramebuffer(
+    FramebufferDesc {}.AddColorAttachment(texture));
+  auto view = CompositionView {};
+  view.id = ViewId { 50U };
+  view.view_state_handle = CompositionView::ViewStateHandle { 50U };
+  view.view.viewport = { .width = 4.0F, .height = 4.0F };
+  view.camera = first;
+  const auto publish = [&] {
+    return renderer_->PublishRuntimeCompositionView(frame,
+      { .composition_view = view,
+        .render_target = observer_ptr { target.get() } });
+  };
+  const auto id = publish();
+  ctx_.scene = observer_ptr { scene.get() };
+  ctx_.current_view.view_id = id;
+  ctx_.current_view.view_state_handle = view.view_state_handle;
+  EXPECT_NEAR(ServicePixel(service, Uniform(.25F, 4U, 4U)), .18F, 2e-5F);
+  view.camera = second;
+  ASSERT_EQ(publish(), id);
+  EXPECT_NEAR(ServicePixel(service, Uniform(8.0F, 4U, 4U)), .18F, 2e-5F);
+  EXPECT_EQ(renderer_->InspectExposureTransition(view.view_state_handle)
+              ->request.policy,
+    ExposureTransitionPolicy::kRemeter);
 }
 
 } // namespace

@@ -114,7 +114,8 @@ public:
   [[nodiscard]] OXGN_VRTX_API auto CaptureViewExposureSettings(ViewId view_id,
     CompositionView::ViewStateHandle handle,
     const scene::ExposureSettings& requested,
-    std::optional<float> camera_ev = {}, bool suppress_transitions = false)
+    std::optional<float> camera_ev = {}, bool suppress_transitions = false,
+    observer_ptr<const scene::Scene> world = {})
     -> const ExposureSettingsState&;
   OXGN_VRTX_API auto CaptureSharedExposureSource(const RenderContext& ctx,
     ViewId source_view_id, CompositionView::ViewStateHandle source_handle)

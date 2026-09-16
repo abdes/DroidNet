@@ -34,6 +34,24 @@ the same per-view counter. Queueing does not acknowledge GPU application;
 completed status identifies the applied generation. Validate mode/settings
 and source ownership together at the frame boundary.
 
+Games report camera cuts or completed backend recovery with
+`NotifyViewDiscontinuity(handle, ViewDiscontinuity)`. The reasons are CameraCut,
+WorldReplacement and DeviceRecovery. Notifications coalesce until an eligible
+frame capture and use the existing exposure generation allocator when the view
+owns exposure: Auto remeters and fixed modes publish their authored gain.
+An unsubmitted explicit exposure request takes precedence; diagnostics defer
+pending discontinuities, and a notification after capture waits until the next
+frame. A borrowing view invalidates its own camera/fog/HZB histories without
+issuing an exposure-reset request for its source.
+
+The renderer detects selected-camera changes on accepted publication and world
+changes through each view's scene ownership identity. Ordinary image/light
+changes do not request resets. DeviceRecovery is a notification after the
+backend's resource restoration; it does not recreate a graphics device.
+The captured per-view discontinuity also invalidates previous camera matrices
+and temporal fog/HZB reuse. Numerical FP32/P bootstrap consumes this boundary
+during the slice-5 HDR migration.
+
 The public control surface uses `ExposureTransitionToken` (target, runtime
 lifetime, renderer-issued generation, policy and optional EV seed) and
 `ExposureTransitionStatus`. Syntax errors allocate no generation. A producer

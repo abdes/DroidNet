@@ -469,7 +469,8 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
     constants.temporal_history1.frame_jitter_offsets[sample_index][3] = jitter.w;
   }
   auto& history_entry = history_by_view_[ctx.current_view.view_id];
-  const auto history_matches = temporal_reprojection_enabled && history_entry.valid
+  const auto history_matches = temporal_reprojection_enabled
+    && !ctx.current_view.history_discontinuity && history_entry.valid
     && history_entry.texture != nullptr && history_entry.srv.IsValid()
     && history_entry.width == width && history_entry.height == height
     && history_entry.depth == depth

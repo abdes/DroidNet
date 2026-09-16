@@ -145,6 +145,8 @@ struct RenderContext {
   graphics::Color wireframe_color { 1.0F, 1.0F, 1.0F, 1.0F };
 
   struct ViewSpecific {
+    //! Captured camera/world/device discontinuity for this view's history.
+    bool history_discontinuity { false };
     oxygen::ViewId view_id { kInvalidViewId };
     oxygen::ViewId exposure_view_id { kInvalidViewId };
     CompositionView::ViewStateHandle view_state_handle {

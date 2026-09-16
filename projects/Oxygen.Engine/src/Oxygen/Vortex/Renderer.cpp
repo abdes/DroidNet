@@ -653,34 +653,101 @@ auto Renderer::IssueExposureTransitionLocked(
   return token;
 }
 
-auto Renderer::PrepareExposureDetach(CompositionView::ViewStateHandle target,
-  ExposureTransitionPolicy policy) -> void
+auto Renderer::NotifyViewDiscontinuity(
+  CompositionView::ViewStateHandle target, const ViewDiscontinuity reason)
+  -> std::expected<void, ExposureTransitionError>
 {
+  if (target == CompositionView::kInvalidViewStateHandle)
+    return std::unexpected(ExposureTransitionError::kInvalidTarget);
+  if (static_cast<unsigned>(reason)
+    > static_cast<unsigned>(ViewDiscontinuity::kDeviceRecovery))
+    return std::unexpected(ExposureTransitionError::kInvalidDiscontinuity);
   std::unique_lock lock(view_state_mutex_);
+  if (shutdown_called_)
+    return std::unexpected(ExposureTransitionError::kRendererUnavailable);
+  EnsureExposureLifetimeLocked(target);
+  exposure_transitions_.at(target).pending_discontinuities |= 1U
+    << static_cast<unsigned>(reason);
+  return {};
+}
+
+auto Renderer::ObserveExposureWorld(
+  CompositionView::ViewStateHandle target, const scene::Scene* world) -> void
+{
+  if (target == CompositionView::kInvalidViewStateHandle)
+    return;
+  const auto identity
+    = world ? world->weak_from_this() : std::weak_ptr<const scene::Scene> {};
+  std::unique_lock lock(view_state_mutex_);
+  EnsureExposureLifetimeLocked(target);
+  auto& entry = exposure_transitions_.at(target);
+  const bool changed = entry.world_pointer != world
+    || entry.world.owner_before(identity) || identity.owner_before(entry.world);
+  if (entry.world_observed && changed)
+    entry.pending_discontinuities |= 1U
+      << static_cast<unsigned>(ViewDiscontinuity::kWorldReplacement);
+  entry.world_observed = true;
+  entry.world = identity;
+  entry.world_pointer = world;
+}
+
+auto Renderer::CapturedViewDiscontinuities(
+  CompositionView::ViewStateHandle target, frame::SequenceNumber frame) const
+  -> std::uint32_t
+{
+  std::shared_lock lock(view_state_mutex_);
+  const auto found = exposure_transitions_.find(target);
+  return found != exposure_transitions_.end()
+      && found->second.captured_frame == frame
+    ? found->second.captured_discontinuities
+    : 0U;
+}
+
+auto Renderer::PrepareExposureTransition(
+  CompositionView::ViewStateHandle target, ExposureTransitionPolicy policy,
+  frame::SequenceNumber frame, const bool suppressed) -> void
+{
+  if (target == CompositionView::kInvalidViewStateHandle)
+    return;
+  std::unique_lock lock(view_state_mutex_);
+  EnsureExposureLifetimeLocked(target);
+  auto& entry = exposure_transitions_.at(target);
+  if (entry.captured_frame == frame)
+    return;
+  entry.captured_discontinuities = 0U;
+  if (suppressed)
+    return;
   const auto view = std::ranges::find_if(
     published_runtime_views_by_intent_, [target](const auto& item) {
       return item.second.view_state_handle == target;
     });
-  if (view == published_runtime_views_by_intent_.end()
-    || (!view->second.pending_exposure_detach
-      && !view->second.pending_source_loss))
-    return;
-  const auto pending = exposure_transitions_.find(target);
-  const bool explicit_override = pending != exposure_transitions_.end()
-    && pending->second.status && !pending->second.implicit_request
-    && pending->second.status->phase == ExposureTransitionPhase::kQueued
-    && pending->second.status->request.generation
-      > pending->second.submitted_generation;
-  if (!explicit_override) {
+  const bool registered = view != published_runtime_views_by_intent_.end();
+  const bool borrowing
+    = registered && view->second.exposure_source_view_id != kInvalidViewId;
+  const bool source_loss
+    = registered && static_cast<bool>(view->second.pending_source_loss);
+  const bool detach = registered && view->second.pending_exposure_detach;
+  const auto discontinuities = entry.pending_discontinuities;
+  const bool needs_exposure
+    = !borrowing && (discontinuities != 0U || detach || source_loss);
+  const bool explicit_override = entry.status && !entry.implicit_request
+    && entry.status->phase == ExposureTransitionPhase::kQueued
+    && entry.status->request.generation > entry.submitted_generation;
+  if (needs_exposure && !explicit_override) {
     const auto issued = IssueExposureTransitionLocked(target,
-      view->second.pending_source_loss ? ExposureTransitionPolicy::kPreserve
-                                       : policy,
-      {}, true);
-    CHECK_F(
-      issued.has_value(), "Exposure detach generation could not be allocated");
+      source_loss ? ExposureTransitionPolicy::kPreserve : policy, {}, true);
+    CHECK_F(issued.has_value(),
+      "Exposure lifecycle generation could not be allocated");
   }
-  view->second.pending_exposure_detach = false;
-  view->second.pending_source_loss.reset();
+  if (registered) {
+    view->second.pending_exposure_detach = false;
+    view->second.pending_source_loss.reset();
+  }
+  entry.pending_discontinuities = 0U;
+  entry.captured_discontinuities = discontinuities;
+  lock.unlock();
+  if (discontinuities != 0U)
+    previous_view_history_cache_->Invalidate(target);
 }
 
 auto Renderer::EnsureExposureLifetime(CompositionView::ViewStateHandle target)
@@ -2051,6 +2118,24 @@ auto Renderer::PublishRuntimeCompositionView(
   if (published_view_id == kInvalidViewId)
     return kInvalidViewId;
 
+  const auto camera_identity = composition_view.camera
+    ? std::optional { composition_view.camera->GetHandle() }
+    : std::nullopt;
+  bool camera_changed = false;
+  {
+    std::unique_lock state_lock(view_state_mutex_);
+    auto& state = published_runtime_views_by_intent_.at(composition_view.id);
+    camera_changed
+      = state.camera_observed && state.camera_identity != camera_identity;
+    state.camera_observed = true;
+    state.camera_identity = camera_identity;
+  }
+  if (camera_changed
+    && composition_view.view_state_handle
+      != CompositionView::kInvalidViewStateHandle)
+    static_cast<void>(NotifyViewDiscontinuity(
+      composition_view.view_state_handle, ViewDiscontinuity::kCameraCut));
+
   if (composition_view.camera.has_value()) {
     auto camera_node = composition_view.camera.value();
     auto resolver = SceneCameraViewResolver {
@@ -2147,6 +2232,10 @@ auto Renderer::UpsertPublishedRuntimeView(engine::FrameContext& frame_context,
     it->second.inherited_exposure = inherited_exposure;
     if (old_handle != view_state_handle || source != kInvalidViewId)
       it->second.pending_source_loss.reset();
+    if (old_handle != view_state_handle) {
+      it->second.camera_observed = false;
+      it->second.camera_identity.reset();
+    }
     it->second.pending_exposure_detach = old_handle == view_state_handle
       && source == kInvalidViewId
       && (it->second.pending_exposure_detach
