@@ -309,8 +309,8 @@ NOLINT_TEST_F(SceneNodeGeometryTest, GetActiveMesh_TwoLods_DefaultsToLod0)
   EXPECT_EQ(active_opt->mesh, geometry->MeshAt(0));
 }
 
-NOLINT_TEST_F(
-  SceneNodeGeometryTest, WorldBoundingSphere_FallsBackToAssetBoundsWhenMeshSphereIsZero)
+NOLINT_TEST_F(SceneNodeGeometryTest,
+  WorldBoundingSphere_FallsBackToAssetBoundsWhenMeshSphereIsZero)
 {
   using oxygen::data::AssetKey;
   using oxygen::data::GeometryAsset;
@@ -334,8 +334,13 @@ NOLINT_TEST_F(
   };
   std::vector<std::uint32_t> indices { 0, 1, 2, 2, 3, 0 };
 
+  // A standard descriptor with zero authored mesh bounds exercises the
+  // asset-bound fallback. Descriptor-free meshes derive bounds from vertices.
+  oxygen::data::pak::geometry::MeshDesc mesh_desc {};
+  mesh_desc.mesh_type = static_cast<uint8_t>(oxygen::data::MeshType::kStandard);
   MeshBuilder builder;
-  builder.WithVertices(vertices)
+  builder.WithDescriptor(mesh_desc)
+    .WithVertices(vertices)
     .WithIndices(indices)
     .BeginSubMesh("Cube", MaterialAsset::CreateDefault())
     .WithMeshView({ .first_index = 0,

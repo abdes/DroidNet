@@ -1,5 +1,6 @@
 # Texture resources only for testing resource loading
 version: 7
+source_identity: "01a0a763-72eb-70bb-9950-1db7099d377d"
 content_version: 1
 
 # Define default empty buffer (index 0) - required in all PAK files

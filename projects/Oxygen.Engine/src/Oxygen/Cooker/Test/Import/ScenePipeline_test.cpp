@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -164,6 +165,41 @@ protected:
 };
 
 //! Verify a minimal scene produces a single node and empty environment.
+NOLINT_TEST_F(ScenePipelineTest, RejectsUnsupportedNodeFlagSourceModes)
+{
+  auto adapter = std::make_shared<FakeSceneAdapter>();
+  adapter->build = MakeMinimalSceneBuild("Root");
+  adapter->build.nodes.front().inherited_flags
+    = data::pak::world::kSceneNodeFlag_Static;
+  ScenePipeline::WorkResult result;
+  ThreadPool pool(loop_, 1);
+  co::Run(loop_, [&]() -> Co<> {
+    ScenePipeline pipeline(pool);
+    NamingService naming_service(NamingService::Config {
+      .strategy = std::make_shared<NoOpNamingStrategy>(),
+      .enable_namespacing = false,
+      .enforce_uniqueness = false,
+    });
+    auto item = ScenePipeline::WorkItem::MakeWorkItem(std::move(adapter),
+      "Scene", {}, {}, ImportRequest { .source_path = "Flags.scene" },
+      oxygen::observer_ptr { &naming_service }, {});
+    OXCO_WITH_NURSERY(n)
+    {
+      pipeline.Start(n);
+      co_await pipeline.Submit(std::move(item));
+      pipeline.Close();
+      result = co_await pipeline.Collect();
+      co_return kJoin;
+    };
+  });
+  EXPECT_FALSE(result.success);
+  EXPECT_FALSE(result.cooked.has_value());
+  EXPECT_TRUE(std::ranges::any_of(
+    result.diagnostics, [](const ImportDiagnostic& diagnostic) {
+      return diagnostic.code == "scene.node.flags_invalid";
+    }));
+}
+
 NOLINT_TEST_F(ScenePipelineTest, CollectMinimalSceneBuildsDescriptor)
 {
   // Arrange

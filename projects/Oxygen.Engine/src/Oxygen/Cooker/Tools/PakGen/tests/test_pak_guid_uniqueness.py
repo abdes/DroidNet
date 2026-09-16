@@ -2,18 +2,23 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from uuid import UUID
 
 from pakgen.api import BuildOptions, build_pak
 
 
 def _read_pak_guid(path: Path) -> bytes:
     data = path.read_bytes()
-    # PakHeader layout: <8sHH16s36s> so GUID is at byte offset 12.
+    # PakHeader layout: <8sHH16s228s>; source_identity starts at byte 12.
     return data[12:28]
 
 
-def _write_minimal_spec(path: Path, buffer_name: str) -> None:
+def _write_minimal_spec(
+    path: Path, buffer_name: str,
+    source_identity: str = "01a0a760-4992-76a2-810f-c6dd906bd296",
+) -> None:
     spec = {
+        "source_identity": source_identity,
         "version": 6,
         "content_version": 1,
         "buffers": [
@@ -35,11 +40,13 @@ def _write_minimal_spec(path: Path, buffer_name: str) -> None:
 def test_deterministic_pak_guid_unique_and_nonzero(
     tmp_path: Path,
 ):  # noqa: N802
-    # Two different specs must not end up with the same PakHeader GUID.
+    # Distinct authored sources retain their distinct UUIDv7 identities.
     spec_a = tmp_path / "a.json"
     spec_b = tmp_path / "b.json"
-    _write_minimal_spec(spec_a, "buf_a")
-    _write_minimal_spec(spec_b, "buf_b")
+    identity_a = "01a0a760-4992-76a2-810f-c6de046ca64b"
+    identity_b = "01a0a760-4992-76a2-810f-c6df10904989"
+    _write_minimal_spec(spec_a, "buf_a", identity_a)
+    _write_minimal_spec(spec_b, "buf_b", identity_b)
 
     out_a = tmp_path / "a.pak"
     out_b = tmp_path / "b.pak"
@@ -67,6 +74,8 @@ def test_deterministic_pak_guid_unique_and_nonzero(
     assert guid_a != b"\x00" * 16
     assert guid_b != b"\x00" * 16
     assert guid_a != guid_b
+    assert guid_a == UUID(identity_a).bytes
+    assert guid_b == UUID(identity_b).bytes
 
 
 def test_deterministic_pak_guid_reproducible_for_repeated_runs(
@@ -106,6 +115,7 @@ def test_deterministic_pak_guid_is_stable_for_normalized_equivalent_specs(
     spec_b = tmp_path / "equiv_b.json"
 
     spec_a_dict = {
+        "source_identity": "01a0a760-4992-76a2-810f-c6de046ca64b",
         "assets": [],
         "audios": [],
         "textures": [],
@@ -122,6 +132,7 @@ def test_deterministic_pak_guid_is_stable_for_normalized_equivalent_specs(
         "version": 6,
     }
     spec_b_dict = {
+        "source_identity": "01a0a760-4992-76a2-810f-c6de046ca64b",
         "version": 6,
         "content_version": 1,
         "buffers": [

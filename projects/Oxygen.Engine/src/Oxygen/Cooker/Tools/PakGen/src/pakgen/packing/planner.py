@@ -9,10 +9,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Tuple, Optional
 import hashlib
-import json
 import struct
 import time
-import uuid
 
 from ..logging import get_logger, section, step
 from ..reporting import get_reporter
@@ -23,6 +21,7 @@ from .constants import (
     MAX_RESOURCE_SIZES,
 )
 from ..utils.io import read_data_from_spec
+from .source_identity import source_identity_bytes
 
 
 def _align_up(value: int, alignment: int) -> int:
@@ -1062,24 +1061,9 @@ def compute_pak_plan(
     def _is_zero_guid(key_bytes: bytes) -> bool:
         return key_bytes == b"\x00" * 16
 
-    # Determine Pak GUID early so generated AssetKeys can be derived from it.
-    if deterministic:
-        spec_for_fingerprint = dict(build_plan.spec)
-        spec_for_fingerprint.pop("name", None)
-        spec_fingerprint = hashlib.sha256(
-            json.dumps(
-                spec_for_fingerprint,
-                sort_keys=True,
-                separators=(",", ":"),
-                ensure_ascii=False,
-            ).encode("utf-8")
-        ).hexdigest()
-        pak_guid = uuid.uuid5(
-            uuid.NAMESPACE_DNS,
-            f"pak:{spec_fingerprint}",
-        ).bytes
-    else:
-        pak_guid = uuid.uuid4().bytes
+    # Source identity belongs to the authored source, independent of content
+    # changes, output paths and deterministic layout selection.
+    pak_guid = source_identity_bytes(build_plan.spec.get("source_identity"))
 
     # Enforce uniqueness of AssetKey within a PAK.
     seen_keys: dict[bytes, list[str]] = {}

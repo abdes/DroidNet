@@ -9,146 +9,15 @@
 #include <bit>
 #include <cstdint>
 #include <cstdlib>
-#include <cstring>
 #include <filesystem>
-#include <fstream>
 #include <functional>
 #include <initializer_list>
-#include <span>
 #include <stdexcept>
 #include <string>
-#include <vector>
-
-#include <Oxygen/Base/Sha256.h>
-#include <Oxygen/Data/PakFormat_core.h>
 
 #include "./AssetLoader_test.h"
 
 using oxygen::content::testing::AssetLoaderLoadingTest;
-
-namespace {
-
-constexpr auto kCrcInitialState = uint32_t { 0xFFFFFFFFU };
-constexpr auto kCrcFinalXor = uint32_t { 0xFFFFFFFFU };
-constexpr auto kCrcReflectedPolynomial = uint32_t { 0xEDB88320U };
-constexpr auto kByteBitCount = uint32_t { 8U };
-
-auto UpdateCrc32Ieee(
-  const uint32_t state, const std::span<const std::byte> bytes) -> uint32_t
-{
-  auto crc = state;
-  for (const auto byte : bytes) {
-    crc ^= static_cast<uint32_t>(std::to_integer<uint8_t>(byte));
-    for (auto bit = uint32_t { 0U }; bit < kByteBitCount; ++bit) {
-      const auto lsb = (crc & 1U) != 0U;
-      crc >>= 1U;
-      if (lsb) {
-        crc ^= kCrcReflectedPolynomial;
-      }
-    }
-  }
-  return crc;
-}
-
-auto ComputeFileCrc32SkippingRange(const std::span<const std::byte> bytes,
-  const size_t skip_offset, const size_t skip_size) -> uint32_t
-{
-  auto state = kCrcInitialState;
-  if (skip_offset > bytes.size()) {
-    throw std::runtime_error("PAK CRC skip offset exceeds file size");
-  }
-
-  state = UpdateCrc32Ieee(state, bytes.first(skip_offset));
-
-  auto resume_offset = skip_offset;
-  if (skip_size <= (bytes.size() - skip_offset)) {
-    resume_offset += skip_size;
-  } else {
-    resume_offset = bytes.size();
-  }
-  state = UpdateCrc32Ieee(
-    state, bytes.subspan(resume_offset, bytes.size() - resume_offset));
-  return state ^ kCrcFinalXor;
-}
-
-auto MakeDeterministicSourceIdentity(std::string_view seed)
-  -> std::array<uint8_t, 16>
-{
-  const auto seed_bytes = std::as_bytes(std::span(seed.data(), seed.size()));
-  const auto digest = oxygen::base::ComputeSha256(seed_bytes);
-
-  auto bytes = std::array<uint8_t, 16> {};
-  std::ranges::copy_n(digest.begin(), bytes.size(), bytes.begin());
-  bytes[6] = static_cast<uint8_t>((bytes[6] & 0x0FU) | 0x70U);
-  bytes[8] = static_cast<uint8_t>((bytes[8] & 0x3FU) | 0x80U);
-
-  if (std::ranges::all_of(
-        bytes, [](const uint8_t value) noexcept { return value == 0U; })) {
-    bytes.back() = 1U;
-    bytes[6] = static_cast<uint8_t>((bytes[6] & 0x0FU) | 0x70U);
-    bytes[8] = static_cast<uint8_t>((bytes[8] & 0x3FU) | 0x80U);
-  }
-
-  return bytes;
-}
-
-auto NormalizePakSourceIdentity(
-  const std::filesystem::path& pak_path, std::string_view seed) -> void
-{
-  using PakFooter = oxygen::data::pak::core::PakFooter;
-  using PakHeader = oxygen::data::pak::core::PakHeader;
-
-  std::ifstream in(pak_path, std::ios::binary);
-  if (!in) {
-    throw std::runtime_error(
-      "Failed to open generated PAK for reading: " + pak_path.string());
-  }
-
-  const auto file_size = std::filesystem::file_size(pak_path);
-  if (file_size < (sizeof(PakHeader) + sizeof(PakFooter))) {
-    throw std::runtime_error(
-      "Generated PAK is too small to normalize source identity: "
-      + pak_path.string());
-  }
-
-  auto bytes = std::vector<std::byte>(static_cast<size_t>(file_size));
-  in.read(reinterpret_cast<char*>(bytes.data()),
-    static_cast<std::streamsize>(bytes.size()));
-  if (!in) {
-    throw std::runtime_error(
-      "Failed to read generated PAK bytes: " + pak_path.string());
-  }
-
-  auto header = PakHeader {};
-  std::memcpy(&header, bytes.data(), sizeof(header));
-  header.source_identity = MakeDeterministicSourceIdentity(seed);
-  std::memcpy(bytes.data(), &header, sizeof(header));
-
-  const auto footer_offset = bytes.size() - sizeof(PakFooter);
-  auto footer = PakFooter {};
-  std::memcpy(&footer, bytes.data() + footer_offset, sizeof(footer));
-  if (footer.pak_crc32 != 0U) {
-    const auto crc_offset = footer_offset + offsetof(PakFooter, pak_crc32);
-    footer.pak_crc32 = ComputeFileCrc32SkippingRange(
-      bytes, crc_offset, sizeof(footer.pak_crc32));
-    std::memcpy(bytes.data() + footer_offset, &footer, sizeof(footer));
-  }
-
-  std::ofstream out(pak_path, std::ios::binary | std::ios::trunc);
-  if (!out) {
-    throw std::runtime_error(
-      "Failed to open generated PAK for writing: " + pak_path.string());
-  }
-
-  out.write(reinterpret_cast<const char*>(bytes.data()),
-    static_cast<std::streamsize>(bytes.size()));
-  if (!out) {
-    throw std::runtime_error(
-      "Failed to rewrite generated PAK bytes: " + pak_path.string());
-  }
-}
-
-} // namespace
 
 auto AssetLoaderLoadingTest::GetTestDataDir() -> std::filesystem::path
 {
@@ -169,27 +38,28 @@ auto AssetLoaderLoadingTest::GeneratePakFile(const std::string& spec_name)
     throw std::runtime_error("Test spec not found: " + spec_path.string());
   }
 
-  // Generate a deterministic PAK file from the YAML spec.
-  std::string command;
-  {
-    command = "pakgen build \"" + spec_path.string() + "\" \""
-      + output_path.string() + "\" --deterministic";
+  const auto python_path
+    = std::filesystem::path(OXYGEN_CONTENT_TEST_PYTHON_EXECUTABLE);
+  if (!std::filesystem::is_regular_file(python_path)) {
+    throw std::runtime_error("Configured PakGen Python interpreter is missing: "
+      + python_path.string());
   }
 
-  auto run_command
-    = [&](const std::string& cmd) -> int { return std::system(cmd.c_str()); };
+  // Use the interpreter that owns pakgen_editable_install, including when the
+  // test executable is launched directly instead of through CTest.
+  auto command = "\"" + python_path.string() + "\" -m pakgen.cli build \""
+    + spec_path.string() + "\" \"" + output_path.string()
+    + "\" --deterministic";
+#if defined(_WIN32)
+  // cmd.exe requires outer quotes when the command starts with a quoted path.
+  command = "\"" + command + "\"";
+#endif
+  const auto result = std::system(command.c_str());
 
-  int result = run_command(command);
   if (result != 0) {
-    const std::string module_cmd = "python -m pakgen.cli build \""
-      + spec_path.string() + "\" \"" + output_path.string()
-      + "\" --deterministic";
-    result = run_command(module_cmd);
-  }
-
-  if (result != 0) {
-    throw std::runtime_error(
-      "Failed to generate PAK file for spec: " + spec_name);
+    throw std::runtime_error("PakGen failed with configured interpreter '"
+      + python_path.string() + "' for spec '" + spec_name + "' (exit "
+      + std::to_string(result) + ")");
   }
 
   if (!std::filesystem::exists(output_path)) {
@@ -197,7 +67,6 @@ auto AssetLoaderLoadingTest::GeneratePakFile(const std::string& spec_name)
       "PAK file was not created: " + output_path.string());
   }
 
-  NormalizePakSourceIdentity(output_path, spec_name);
   generated_paks_.push_back(output_path);
 
   return output_path;

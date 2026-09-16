@@ -9,6 +9,8 @@
 # ------------------------------------------------------------------------------
 
 find_package(GTest REQUIRED CONFIG)
+# Reuse the configured interpreter used by PakGen's editable installation.
+find_package(Python3 COMPONENTS Interpreter REQUIRED)
 
 # ==============================================================================
 # Build instructions
@@ -53,7 +55,20 @@ m_gtest_program(
     "Fixtures/LooseCookedTestLayout.h"
     "Utils/PakUtils.h"
 )
-target_link_libraries("${META_MODULE_NAME}.AssetLoader.Tests" PRIVATE oxygen::input)
+target_link_libraries(
+  "${META_MODULE_NAME}.AssetLoader.Tests"
+  PRIVATE
+    oxygen::input
+)
+target_compile_definitions(
+  "${META_MODULE_NAME}.AssetLoader.Tests"
+  PRIVATE
+    OXYGEN_CONTENT_TEST_PYTHON_EXECUTABLE="${Python3_EXECUTABLE}"
+)
+add_dependencies(
+  "${META_MODULE_NAME}.AssetLoader.Tests"
+  pakgen_editable_install
+)
 
 m_gtest_program(
   LooseCooked

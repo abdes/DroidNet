@@ -1,22 +1,24 @@
 {
-    "version": 4,
+    "version": 5,
     "name": "physics_domains_vsm_benchmark",
     "nodes": [
         {
             "name": "Root",
             "flags": {
-                "visible": true,
-                "static": true
+                "visible": "shown",
+                "static": true,
+                "casts_shadows": "on",
+                "receives_shadows": "on"
             }
         },
         {
             "name": "Floor",
             "parent": 0,
             "flags": {
-                "visible": true,
+                "visible": "shown",
                 "static": true,
-                "casts_shadows": false,
-                "receives_shadows": true
+                "casts_shadows": "off",
+                "receives_shadows": "on"
             },
             "transform": {
                 "translation": [
@@ -41,10 +43,10 @@
             "name": "Ramp",
             "parent": 0,
             "flags": {
-                "visible": true,
+                "visible": "shown",
                 "static": true,
-                "casts_shadows": true,
-                "receives_shadows": true
+                "casts_shadows": "on",
+                "receives_shadows": "on"
             },
             "transform": {
                 "translation": [
@@ -69,9 +71,9 @@
             "name": "BouncySphere",
             "parent": 0,
             "flags": {
-                "visible": true,
-                "casts_shadows": true,
-                "receives_shadows": true
+                "visible": "shown",
+                "casts_shadows": "on",
+                "receives_shadows": "on"
             },
             "transform": {
                 "translation": [
@@ -85,7 +87,9 @@
             "name": "AggregateAnchor",
             "parent": 0,
             "flags": {
-                "visible": false
+                "visible": "hidden",
+                "casts_shadows": "on",
+                "receives_shadows": "on"
             },
             "transform": {
                 "translation": [
@@ -99,9 +103,9 @@
             "name": "HingedCubeA",
             "parent": 4,
             "flags": {
-                "visible": true,
-                "casts_shadows": true,
-                "receives_shadows": true
+                "visible": "shown",
+                "casts_shadows": "on",
+                "receives_shadows": "on"
             },
             "transform": {
                 "translation": [
@@ -115,9 +119,9 @@
             "name": "HingedCubeB",
             "parent": 4,
             "flags": {
-                "visible": true,
-                "casts_shadows": true,
-                "receives_shadows": true
+                "visible": "shown",
+                "casts_shadows": "on",
+                "receives_shadows": "on"
             },
             "transform": {
                 "translation": [
@@ -131,9 +135,9 @@
             "name": "StackCube0",
             "parent": 0,
             "flags": {
-                "visible": true,
-                "casts_shadows": true,
-                "receives_shadows": true
+                "visible": "shown",
+                "casts_shadows": "on",
+                "receives_shadows": "on"
             },
             "transform": {
                 "translation": [
@@ -152,9 +156,9 @@
             "name": "StackCube1",
             "parent": 0,
             "flags": {
-                "visible": true,
-                "casts_shadows": true,
-                "receives_shadows": true
+                "visible": "shown",
+                "casts_shadows": "on",
+                "receives_shadows": "on"
             },
             "transform": {
                 "translation": [
@@ -173,9 +177,9 @@
             "name": "StackCube2",
             "parent": 0,
             "flags": {
-                "visible": true,
-                "casts_shadows": true,
-                "receives_shadows": true
+                "visible": "shown",
+                "casts_shadows": "on",
+                "receives_shadows": "on"
             },
             "transform": {
                 "translation": [
@@ -194,9 +198,9 @@
             "name": "StackCube3",
             "parent": 0,
             "flags": {
-                "visible": true,
-                "casts_shadows": true,
-                "receives_shadows": true
+                "visible": "shown",
+                "casts_shadows": "on",
+                "receives_shadows": "on"
             },
             "transform": {
                 "translation": [
@@ -215,9 +219,9 @@
             "name": "Character",
             "parent": 0,
             "flags": {
-                "visible": true,
-                "casts_shadows": true,
-                "receives_shadows": true
+                "visible": "shown",
+                "casts_shadows": "on",
+                "receives_shadows": "on"
             },
             "transform": {
                 "translation": [
@@ -231,7 +235,9 @@
             "name": "Vehicle",
             "parent": 0,
             "flags": {
-                "visible": false
+                "visible": "hidden",
+                "casts_shadows": "on",
+                "receives_shadows": "on"
             },
             "transform": {
                 "translation": [
@@ -245,9 +251,9 @@
             "name": "ChassisVisual",
             "parent": 12,
             "flags": {
-                "visible": true,
-                "casts_shadows": true,
-                "receives_shadows": true
+                "visible": "shown",
+                "casts_shadows": "on",
+                "receives_shadows": "on"
             },
             "transform": {
                 "scale": [
@@ -261,9 +267,9 @@
             "name": "VehicleWheelFL",
             "parent": 12,
             "flags": {
-                "visible": true,
-                "casts_shadows": true,
-                "receives_shadows": true
+                "visible": "shown",
+                "casts_shadows": "on",
+                "receives_shadows": "on"
             },
             "transform": {
                 "translation": [
@@ -283,9 +289,9 @@
             "name": "VehicleWheelFR",
             "parent": 12,
             "flags": {
-                "visible": true,
-                "casts_shadows": true,
-                "receives_shadows": true
+                "visible": "shown",
+                "casts_shadows": "on",
+                "receives_shadows": "on"
             },
             "transform": {
                 "translation": [
@@ -305,9 +311,9 @@
             "name": "VehicleWheelRL",
             "parent": 12,
             "flags": {
-                "visible": true,
-                "casts_shadows": true,
-                "receives_shadows": true
+                "visible": "shown",
+                "casts_shadows": "on",
+                "receives_shadows": "on"
             },
             "transform": {
                 "translation": [
@@ -327,9 +333,9 @@
             "name": "VehicleWheelRR",
             "parent": 12,
             "flags": {
-                "visible": true,
-                "casts_shadows": true,
-                "receives_shadows": true
+                "visible": "shown",
+                "casts_shadows": "on",
+                "receives_shadows": "on"
             },
             "transform": {
                 "translation": [
@@ -349,7 +355,9 @@
             "name": "TriggerZone",
             "parent": 0,
             "flags": {
-                "visible": false
+                "visible": "hidden",
+                "casts_shadows": "on",
+                "receives_shadows": "on"
             },
             "transform": {
                 "translation": [
@@ -363,9 +371,9 @@
             "name": "SoftBody",
             "parent": 0,
             "flags": {
-                "visible": true,
-                "casts_shadows": true,
-                "receives_shadows": true
+                "visible": "shown",
+                "casts_shadows": "on",
+                "receives_shadows": "on"
             },
             "transform": {
                 "translation": [
@@ -379,8 +387,9 @@
             "name": "sun_light_node",
             "parent": 0,
             "flags": {
-                "visible": true,
-                "casts_shadows": true
+                "visible": "shown",
+                "casts_shadows": "on",
+                "receives_shadows": "on"
             },
             "transform": {
                 "translation": [
@@ -405,7 +414,9 @@
             "name": "camera_node",
             "parent": 0,
             "flags": {
-                "visible": true
+                "visible": "shown",
+                "casts_shadows": "on",
+                "receives_shadows": "on"
             },
             "transform": {
                 "translation": [
@@ -430,9 +441,9 @@
             "name": "SoftBodyCube",
             "parent": 0,
             "flags": {
-                "visible": true,
-                "casts_shadows": true,
-                "receives_shadows": true
+                "visible": "shown",
+                "casts_shadows": "on",
+                "receives_shadows": "on"
             },
             "transform": {
                 "translation": [

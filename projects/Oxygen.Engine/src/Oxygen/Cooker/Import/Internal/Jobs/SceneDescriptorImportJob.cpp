@@ -804,13 +804,15 @@ namespace {
     }
   }
 
-  auto BuildNodeFlags(const json& node_doc) -> uint32_t
+  auto BuildNodeFlags(const json& node_doc, const bool is_root,
+    data::pak::world::NodeRecord& node) -> void
   {
-    auto flags = uint32_t { data::pak::world::kSceneNodeFlag_Visible
-      | data::pak::world::kSceneNodeFlag_CastsShadows
-      | data::pak::world::kSceneNodeFlag_ReceivesShadows };
+    node.node_flags
+      = is_root ? data::pak::world::kSceneNodeFlags_Inheritable : 0U;
+    node.inherited_flags
+      = is_root ? 0U : data::pak::world::kSceneNodeFlags_Inheritable;
     if (!node_doc.contains("flags")) {
-      return flags;
+      return;
     }
 
     const auto& flags_doc = node_doc.at("flags");
@@ -820,22 +822,36 @@ namespace {
       }
       const auto enabled = flags_doc.at(key).get<bool>();
       if (enabled) {
-        flags |= mask;
+        node.node_flags |= mask;
       } else {
-        flags &= ~mask;
+        node.node_flags &= ~mask;
       }
     };
 
-    apply_flag("visible", data::pak::world::kSceneNodeFlag_Visible);
+    const auto apply_source = [&](const char* key, const uint32_t mask) {
+      if (!flags_doc.contains(key)) {
+        return;
+      }
+      const auto& source = flags_doc.at(key).get_ref<const std::string&>();
+      node.node_flags &= ~mask;
+      node.inherited_flags &= ~mask;
+      if (source == "inherit") {
+        node.inherited_flags |= mask;
+      } else if (source == "shown" || source == "on") {
+        node.node_flags |= mask;
+      }
+    };
+
+    apply_source("visible", data::pak::world::kSceneNodeFlag_Visible);
     apply_flag("static", data::pak::world::kSceneNodeFlag_Static);
-    apply_flag("casts_shadows", data::pak::world::kSceneNodeFlag_CastsShadows);
-    apply_flag(
+    apply_source(
+      "casts_shadows", data::pak::world::kSceneNodeFlag_CastsShadows);
+    apply_source(
       "receives_shadows", data::pak::world::kSceneNodeFlag_ReceivesShadows);
     apply_flag("ray_cast_selectable",
       data::pak::world::kSceneNodeFlag_RayCastingSelectable);
     apply_flag("ignore_parent_transform",
       data::pak::world::kSceneNodeFlag_IgnoreParentTransform);
-    return flags;
   }
 
   auto PrepareSceneDescriptor(SceneDescriptorExecutionContext& context,
@@ -881,7 +897,8 @@ namespace {
         node_record.parent_index = parent_index;
       }
 
-      node_record.node_flags = BuildNodeFlags(node_doc);
+      BuildNodeFlags(node_doc,
+        node_record.parent_index == static_cast<uint32_t>(node_i), node_record);
 
       if (node_doc.contains("transform")) {
         const auto& transform = node_doc.at("transform");

@@ -27,7 +27,7 @@
       "key": "22222222222222222222222222222222",
       "name": "ScriptScene",
       "type": "scene",
-      "variable_extra_size": 1104,
+      "variable_extra_size": 1112,
       "warnings": []
     }
   ],
@@ -43,7 +43,7 @@
   "directory": {
     "asset_count": 3,
     "offset": 2496,
-    "padding_before": 15,
+    "padding_before": 7,
     "size": 192
   },
   "file_size": 3068,
@@ -54,10 +54,10 @@
   "padding": {
     "by_section": {
       "assets_region": 4,
-      "directory": 15,
+      "directory": 7,
       "table_script_slot": 11
     },
-    "total": 30
+    "total": 22
   },
   "regions": [
     {
@@ -109,7 +109,7 @@
       "scripts": 2,
       "total": 3
     },
-    "variable_extra_total": 1104
+    "variable_extra_total": 1112
   },
   "tables": [
     {

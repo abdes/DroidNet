@@ -27,6 +27,7 @@ from .constants import (
     MESH_VIEW_DESC_SIZE,
     SHADER_REF_DESC_SIZE,
     SCENE_ASSET_VERSION_CURRENT,
+    SCENE_NODE_RECORD_SIZE,
     PHYSICS_RESOURCE_DESC_SIZE,
     PHYSICS_MATERIAL_ASSET_DESC_SIZE,
     COLLISION_SHAPE_ASSET_DESC_SIZE,
@@ -41,6 +42,8 @@ from .constants import (
     SCRIPT_SLOT_RECORD_SIZE,
 )
 from .errors import PakError
+from .scene_flags import node_flag_masks
+from .source_identity import validate_source_identity_bytes
 from ..utils.io import DataError, read_data_from_spec
 
 __all__ = [
@@ -1085,7 +1088,7 @@ def _pack_node_record(
         if not isinstance(parent, int) or parent < 0 or parent >= node_count:
             raise PakError("E_REF", f"Invalid node parent index: {parent}")
         parent_index = parent
-    node_flags = int(node.get("flags", 0) or 0)
+    node_flags, inherited_flags = node_flag_masks(node)
     t = node.get("translation", [0.0, 0.0, 0.0])
     r = node.get("rotation", [0.0, 0.0, 0.0, 1.0])
     s = node.get("scale", [1.0, 1.0, 1.0])
@@ -1103,17 +1106,19 @@ def _pack_node_record(
     s3 = _vec(s, 3, [1.0, 1.0, 1.0])
 
     # NodeRecord (PakFormat.h): AssetKey(16) + name_offset(u32) + parent(u32)
-    # + flags(u32) + translation(3f) + rotation(4f) + scale(3f) = 68 bytes.
+    # + flags(u32) + inherited_flags(u32) + translation(3f) + rotation(4f)
+    # + scale(3f) = 72 bytes.
     out = (
         node_id
         + struct.pack("<I", int(name_offset))
         + struct.pack("<I", int(parent_index))
         + struct.pack("<I", int(node_flags))
+        + struct.pack("<I", inherited_flags)
         + struct.pack("<3f", *t3)
         + struct.pack("<4f", *r4)
         + struct.pack("<3f", *s3)
     )
-    if len(out) != 68:
+    if len(out) != SCENE_NODE_RECORD_SIZE:
         raise PakError("E_SIZE", f"NodeRecord size mismatch: {len(out)}")
     return out
 
@@ -1262,7 +1267,10 @@ def pack_scene_asset_descriptor_and_payload(
         raise PakError("E_COUNT", "scene must have at least one node")
 
     scene_version = scene.get("version")
-    if scene_version is not None and int(scene_version) != SCENE_ASSET_VERSION_CURRENT:
+    if "version" in scene and (
+        type(scene_version) is not int
+        or scene_version != SCENE_ASSET_VERSION_CURRENT
+    ):
         raise PakError(
             "E_VERSION",
             f"Scene asset version {SCENE_ASSET_VERSION_CURRENT} is required; re-cook authored scene content",
@@ -1524,7 +1532,9 @@ def pack_scene_asset_descriptor_and_payload(
     # Scene descriptor version. Mirrors pak::kSceneAssetVersion.
     scene.setdefault("version", SCENE_ASSET_VERSION_CURRENT)
     header = header_builder(scene)
-    nodes_table = struct.pack("<QII", nodes_offset, node_count, 68)
+    nodes_table = struct.pack(
+        "<QII", nodes_offset, node_count, SCENE_NODE_RECORD_SIZE
+    )
     scene_strings = struct.pack("<II", strings_offset, strings_size)
     dir_off = struct.pack("<Q", int(component_table_directory_offset))
     dir_count = struct.pack("<I", int(component_table_count))
@@ -1571,10 +1581,7 @@ def pack_scene_asset_descriptor_and_payload(
 
 
 def pack_header(version: int, content_version: int, guid: bytes) -> bytes:
-    if len(guid) != 16:
-        raise PakError("E_SIZE", f"GUID size mismatch: {len(guid)}")
-    if guid == b"\x00" * 16:
-        raise PakError("E_GUID", "PAK header GUID must be non-zero")
+    validate_source_identity_bytes(guid)
     reserved = b"\x00" * 228
     data = struct.pack(
         "<8sHH16s228s", MAGIC, version, content_version, guid, reserved

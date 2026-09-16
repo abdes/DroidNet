@@ -1,5 +1,6 @@
 # Test file with invalid shader configuration
 version: 7
+source_identity: "01a0a763-72ea-7618-8c50-3869a688f8d8"
 content_version: 1
 
 # Define default empty buffer (index 0) - required in all PAK files

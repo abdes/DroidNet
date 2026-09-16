@@ -129,8 +129,8 @@ public sealed class SceneDescriptorGenerator(IProceduralGeometryDescriptorServic
                 Point: pointLights.Count == 0 ? null : pointLights,
                 Spot: spotLights.Count == 0 ? null : spotLights);
         var descriptor = new NativeSceneDescriptor(
-            Schema: "oxygen.scene-descriptor.v4",
-            Version: 4,
+            Schema: "oxygen.scene-descriptor.v5",
+            Version: 5,
             Name: ContentPipelinePaths.NormalizeSceneDescriptorName(Path.GetFileName(sceneInput.SourceRelativePath)),
             Nodes: nodes,
             Renderables: renderables.Count == 0 ? null : renderables,
@@ -161,14 +161,16 @@ public sealed class SceneDescriptorGenerator(IProceduralGeometryDescriptorServic
         {
             var nodeIndex = nodes.Count;
             var transform = node.Components.OfType<TransformComponent>().First();
+
+            // Boolean authoring fields are explicit local choices, including on children.
             nodes.Add(new NativeSceneNode(
                 node.Name,
                 parentIndex,
                 new NativeNodeFlags(
-                    node.IsVisible,
+                    node.IsVisible ? "shown" : "hidden",
                     node.IsStatic,
-                    node.CastsShadows,
-                    node.ReceivesShadows,
+                    node.CastsShadows ? "on" : "off",
+                    node.ReceivesShadows ? "on" : "off",
                     node.IsRayCastingSelectable,
                     node.IgnoreParentTransform),
                 new NativeNodeTransform(

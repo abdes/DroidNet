@@ -283,6 +283,7 @@ inline auto Load(AnyReader& reader, data::pak::world::NodeRecord& record)
   CHECK_RESULT(reader.ReadInto(record.scene_name_offset));
   CHECK_RESULT(reader.ReadInto(record.parent_index));
   CHECK_RESULT(reader.ReadInto(record.node_flags));
+  CHECK_RESULT(reader.ReadInto(record.inherited_flags));
 
   for (auto& v : record.translation) {
     CHECK_RESULT(reader.ReadInto(v));

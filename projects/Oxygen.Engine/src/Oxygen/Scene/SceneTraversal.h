@@ -518,7 +518,16 @@ auto SceneTraversal<SceneT>::PrepareDirtyFlagsAndSubtreeCounts(
         auto& flags = node_impl.GetFlags();
         const auto previously_ignored_parent
           = flags.GetEffectiveValue(SceneNodeFlags::kIgnoreParentTransform);
-        if (!node_impl.AsGraphNode().IsRoot()) {
+        if (node_impl.AsGraphNode().IsRoot()) {
+          for (const auto flag :
+            { SceneNodeFlags::kVisible, SceneNodeFlags::kCastsShadows,
+              SceneNodeFlags::kReceivesShadows }) {
+            if (flags.IsInherited(flag)) {
+              flags.UpdateValueFromParent(
+                flag, SceneNodeImpl::kDefaultRootFlags);
+            }
+          }
+        } else {
           const auto& parent_flags
             = GetScene()
                 .GetNodeImplRef(node_impl.AsGraphNode().GetParent())

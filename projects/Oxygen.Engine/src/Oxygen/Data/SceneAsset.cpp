@@ -160,6 +160,25 @@ auto SceneAsset::ParseAndValidate() -> void
       throw std::runtime_error("SceneAsset node record size mismatch");
     }
 
+    for (uint32_t index = 0; index < desc_.nodes.count; ++index) {
+      const auto record = ReadPackedRecord<pak::world::NodeRecord>(
+        data_.subspan(desc_.nodes.offset
+            + static_cast<size_t>(index) * sizeof(pak::world::NodeRecord),
+          sizeof(pak::world::NodeRecord)),
+        "SceneAsset node record");
+      if (!pak::world::HasCanonicalNodeFlags(record)) {
+        throw std::runtime_error(
+          "SceneAsset node flag source state is invalid");
+      }
+      if (record.parent_index >= desc_.nodes.count) {
+        throw std::runtime_error("SceneAsset parent_index out of range");
+      }
+      if (record.scene_name_offset != 0
+        && record.scene_name_offset >= desc_.scene_strings.size) {
+        throw std::runtime_error("SceneAsset node name offset out of range");
+      }
+    }
+
     payload_end = (std::max)(payload_end, desc_.nodes.offset + nodes_bytes);
   }
 

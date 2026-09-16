@@ -183,6 +183,36 @@ The current schema version is **7**. Use `version: 7` in your spec files for
 full v7 output, including physics-region/footer fields and physics asset types.
 Legacy specs are still accepted, but output is normalized to current v7 layout.
 
+Every spec must supply `source_identity` as a non-nil canonical lowercase RFC
+9562 UUIDv7 string, for example `0194a6d0-1a20-7b42-8ab3-fc384e6d5179`.
+Author it once for a content source and retain it across content edits and output
+paths. Assign a distinct identity to a distinct source. Both ordinary and
+deterministic builds preserve these exact bytes; PakGen never generates or
+repairs source identities. Missing, malformed and non-v7 identities fail before
+output writes. Deterministic mode still produces identical output for the same
+authored spec and identity.
+
+### Scene node flags
+
+Scene assets use descriptor version **5** and 72-byte node records. Node
+`flags` stores explicit local values; `inherited_flags` stores source modes.
+Both are unsigned integer masks and default to zero, preserving explicit local
+fixture behavior. This low-level tool does not apply editor creation defaults.
+
+| Bit | Flag | Inheritance supported |
+| --- | --- | --- |
+| 0 | Visible | Yes |
+| 1 | Static | No |
+| 2 | CastsShadows | Yes |
+| 3 | ReceivesShadows | Yes |
+| 4 | RayCastingSelectable | No |
+| 5 | IgnoreParentTransform | No |
+
+Unknown bits, inheritance for unsupported flags, and overlapping local/inherited
+bits are rejected. An inherited flag must have its local value bit cleared.
+Generated nodes preserve both masks from their template. Older scene descriptor
+versions must be recooked; PakGen emits only the current scene layout.
+
 ### v7 Physics Authoring Notes
 
 - Physics binary resources are authored under top-level `physics:`.
@@ -206,7 +236,8 @@ and scattered objects.
 ### Basic Usage
 
 ```yaml
-version: 4
+version: 7
+source_identity: "0194a6d0-1a20-7b42-8ab3-fc384e6d5179"
 
 assets:
   - type: scene

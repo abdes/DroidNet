@@ -201,6 +201,7 @@ class InputMappingContextAsset:
 class PakSpec:
     version: int = YAML_SCHEMA_VERSION_CURRENT
     content_version: int = 0
+    source_identity: str | None = None
     buffers: List[BufferResource] = field(default_factory=list)
     textures: List[TextureResource] = field(default_factory=list)
     audios: List[AudioResource] = field(default_factory=list)

@@ -34,6 +34,10 @@ add_executable(
   "DependencyReport.h"
   "AssetKeyMap.cpp"
   "AssetKeyMap.h"
+  "RootValidation.cpp"
+  "RootValidation.h"
+  "SceneMetadata.cpp"
+  "SceneMetadata.h"
 )
 
 oxygen_embed_json_schemas(
@@ -79,6 +83,15 @@ target_link_libraries(
 # ------------------------------------------------------------------------------
 # Deployment instructions
 # ------------------------------------------------------------------------------
+
+if(${META_PROJECT_ID}_INSTALL)
+  install(
+    FILES
+      "${CMAKE_CURRENT_SOURCE_DIR}/Schemas/oxygen.cooked-scenes.schema.json"
+    DESTINATION "${OXYGEN_INSTALL_SCHEMAS}"
+    COMPONENT ${META_PROJECT_NAME}_data
+  )
+endif()
 
 oxygen_module_install(
   EXPORT ${META_MODULE_NAMESPACE}

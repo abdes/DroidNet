@@ -36,11 +36,18 @@ namespace oxygen::data::pak::world {
 [[maybe_unused]] constexpr uint32_t kSceneNodeFlag_IgnoreParentTransform
   = (1U << 5);
 
+//! Flags with authored Local/Inherit source modes.
+inline constexpr uint32_t kSceneNodeFlags_Inheritable = kSceneNodeFlag_Visible
+  | kSceneNodeFlag_CastsShadows | kSceneNodeFlag_ReceivesShadows;
+inline constexpr uint32_t kSceneNodeFlags_Known = kSceneNodeFlags_Inheritable
+  | kSceneNodeFlag_Static | kSceneNodeFlag_RayCastingSelectable
+  | kSceneNodeFlag_IgnoreParentTransform;
+
 //! Scene asset descriptor version for current PAK schema.
 //!
 //! @note Scene descriptors include a trailing SceneEnvironment block (empty
 //! allowed).
-[[maybe_unused]] constexpr uint8_t kSceneAssetVersion = 4;
+[[maybe_unused]] constexpr uint8_t kSceneAssetVersion = 5;
 
 //! Index type for scene node tables.
 using SceneNodeIndexT = uint32_t;
@@ -168,8 +175,13 @@ struct NodeRecord {
 
   SceneNodeIndexT parent_index = 0; // Index of parent node (or self if root)
 
-  //! Bitfield of `kSceneNodeFlag_*` constants
+  //! Local values from `kSceneNodeFlag_*`. Inherited value bits are zero.
   uint32_t node_flags = 0;
+
+  //! Source modes: set bits inherit; clear bits use node_flags locally.
+  //! Only kSceneNodeFlags_Inheritable bits are valid. Resolved values are
+  //! runtime state and are never stored in this record.
+  uint32_t inherited_flags = 0;
 
   // Local Transform (TRS)
   float translation[3] = { 0.0F, 0.0F, 0.0F };
@@ -177,7 +189,17 @@ struct NodeRecord {
   float scale[3] = { 1.0F, 1.0F, 1.0F };
 };
 #pragma pack(pop)
-static_assert(sizeof(NodeRecord) == 68);
+static_assert(sizeof(NodeRecord) == 72);
+
+//! Rejects unknown flags, unsupported inheritance and ambiguous inherited
+//! values.
+[[nodiscard]] constexpr auto HasCanonicalNodeFlags(
+  const NodeRecord& node) noexcept -> bool
+{
+  return (node.node_flags & ~kSceneNodeFlags_Known) == 0U
+    && (node.inherited_flags & ~kSceneNodeFlags_Inheritable) == 0U
+    && (node.node_flags & node.inherited_flags) == 0U;
+}
 
 #pragma pack(push, 1)
 

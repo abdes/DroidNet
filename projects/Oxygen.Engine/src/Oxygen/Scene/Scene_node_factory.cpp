@@ -88,12 +88,12 @@ auto Scene::CreateNodeImpl(Args&&... args) noexcept -> SceneNode
  @return A SceneNode wrapper around the handle of the newly created node. May be
  used to obtain the underlying node implementation object.
 
- @see SceneNodeImpl::kDefaultFlags for default flags assigned to the new node.
+ @see SceneNodeImpl::kDefaultRootFlags for authored root defaults.
 */
 auto Scene::CreateNode(const std::string& name //<! name to give to the new node
   ) -> SceneNode
 {
-  return CreateNodeImpl(name);
+  return CreateNodeImpl(name, SceneNodeImpl::kDefaultRootFlags);
 }
 
 /*!
@@ -193,12 +193,12 @@ auto Scene::CreateChildNodeImpl(SceneNode& parent, Args&&... args) noexcept
  @return An optional SceneNode wrapper around the handle of the newly created
  node when successful; std::nullopt otherwise.
 
- @see SceneNodeImpl::kDefaultFlags for default flags assigned to the new node.
+ @see SceneNodeImpl::kDefaultChildFlags for authored child defaults.
 */
 auto Scene::CreateChildNode(SceneNode& parent, const std::string& name) noexcept
   -> std::optional<SceneNode>
 {
-  return CreateChildNodeImpl(parent, name);
+  return CreateChildNodeImpl(parent, name, SceneNodeImpl::kDefaultChildFlags);
 }
 
 /*!

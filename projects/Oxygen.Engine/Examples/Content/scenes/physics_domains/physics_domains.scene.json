@@ -1,22 +1,24 @@
 {
-    "version": 4,
+    "version": 5,
     "name": "physics_domains",
     "nodes": [
         {
             "name": "Root",
             "flags": {
-                "visible": true,
-                "static": true
+                "visible": "shown",
+                "static": true,
+                "casts_shadows": "on",
+                "receives_shadows": "on"
             }
         },
         {
             "name": "Floor",
             "parent": 0,
             "flags": {
-                "visible": true,
+                "visible": "shown",
                 "static": true,
-                "casts_shadows": false,
-                "receives_shadows": true
+                "casts_shadows": "off",
+                "receives_shadows": "on"
             },
             "transform": {
                 "translation": [
@@ -41,10 +43,10 @@
             "name": "Ramp",
             "parent": 0,
             "flags": {
-                "visible": true,
+                "visible": "shown",
                 "static": true,
-                "casts_shadows": true,
-                "receives_shadows": true
+                "casts_shadows": "on",
+                "receives_shadows": "on"
             },
             "transform": {
                 "translation": [
@@ -69,9 +71,9 @@
             "name": "BouncySphere",
             "parent": 0,
             "flags": {
-                "visible": true,
-                "casts_shadows": true,
-                "receives_shadows": true
+                "visible": "shown",
+                "casts_shadows": "on",
+                "receives_shadows": "on"
             },
             "transform": {
                 "translation": [
@@ -85,7 +87,9 @@
             "name": "AggregateAnchor",
             "parent": 0,
             "flags": {
-                "visible": false
+                "visible": "hidden",
+                "casts_shadows": "on",
+                "receives_shadows": "on"
             },
             "transform": {
                 "translation": [
@@ -99,9 +103,9 @@
             "name": "HingedCubeA",
             "parent": 4,
             "flags": {
-                "visible": true,
-                "casts_shadows": true,
-                "receives_shadows": true
+                "visible": "shown",
+                "casts_shadows": "on",
+                "receives_shadows": "on"
             },
             "transform": {
                 "translation": [
@@ -115,9 +119,9 @@
             "name": "HingedCubeB",
             "parent": 4,
             "flags": {
-                "visible": true,
-                "casts_shadows": true,
-                "receives_shadows": true
+                "visible": "shown",
+                "casts_shadows": "on",
+                "receives_shadows": "on"
             },
             "transform": {
                 "translation": [
@@ -131,9 +135,9 @@
             "name": "StackCube0",
             "parent": 0,
             "flags": {
-                "visible": true,
-                "casts_shadows": true,
-                "receives_shadows": true
+                "visible": "shown",
+                "casts_shadows": "on",
+                "receives_shadows": "on"
             },
             "transform": {
                 "translation": [
@@ -152,9 +156,9 @@
             "name": "StackCube1",
             "parent": 0,
             "flags": {
-                "visible": true,
-                "casts_shadows": true,
-                "receives_shadows": true
+                "visible": "shown",
+                "casts_shadows": "on",
+                "receives_shadows": "on"
             },
             "transform": {
                 "translation": [
@@ -173,9 +177,9 @@
             "name": "StackCube2",
             "parent": 0,
             "flags": {
-                "visible": true,
-                "casts_shadows": true,
-                "receives_shadows": true
+                "visible": "shown",
+                "casts_shadows": "on",
+                "receives_shadows": "on"
             },
             "transform": {
                 "translation": [
@@ -194,9 +198,9 @@
             "name": "StackCube3",
             "parent": 0,
             "flags": {
-                "visible": true,
-                "casts_shadows": true,
-                "receives_shadows": true
+                "visible": "shown",
+                "casts_shadows": "on",
+                "receives_shadows": "on"
             },
             "transform": {
                 "translation": [
@@ -215,9 +219,9 @@
             "name": "Character",
             "parent": 0,
             "flags": {
-                "visible": true,
-                "casts_shadows": true,
-                "receives_shadows": true
+                "visible": "shown",
+                "casts_shadows": "on",
+                "receives_shadows": "on"
             },
             "transform": {
                 "translation": [
@@ -231,7 +235,9 @@
             "name": "Vehicle",
             "parent": 0,
             "flags": {
-                "visible": false
+                "visible": "hidden",
+                "casts_shadows": "on",
+                "receives_shadows": "on"
             },
             "transform": {
                 "translation": [
@@ -245,9 +251,9 @@
             "name": "ChassisVisual",
             "parent": 12,
             "flags": {
-                "visible": true,
-                "casts_shadows": true,
-                "receives_shadows": true
+                "visible": "shown",
+                "casts_shadows": "on",
+                "receives_shadows": "on"
             },
             "transform": {
                 "scale": [
@@ -261,9 +267,9 @@
             "name": "VehicleWheelFL",
             "parent": 12,
             "flags": {
-                "visible": true,
-                "casts_shadows": true,
-                "receives_shadows": true
+                "visible": "shown",
+                "casts_shadows": "on",
+                "receives_shadows": "on"
             },
             "transform": {
                 "translation": [
@@ -283,9 +289,9 @@
             "name": "VehicleWheelFR",
             "parent": 12,
             "flags": {
-                "visible": true,
-                "casts_shadows": true,
-                "receives_shadows": true
+                "visible": "shown",
+                "casts_shadows": "on",
+                "receives_shadows": "on"
             },
             "transform": {
                 "translation": [
@@ -305,9 +311,9 @@
             "name": "VehicleWheelRL",
             "parent": 12,
             "flags": {
-                "visible": true,
-                "casts_shadows": true,
-                "receives_shadows": true
+                "visible": "shown",
+                "casts_shadows": "on",
+                "receives_shadows": "on"
             },
             "transform": {
                 "translation": [
@@ -327,9 +333,9 @@
             "name": "VehicleWheelRR",
             "parent": 12,
             "flags": {
-                "visible": true,
-                "casts_shadows": true,
-                "receives_shadows": true
+                "visible": "shown",
+                "casts_shadows": "on",
+                "receives_shadows": "on"
             },
             "transform": {
                 "translation": [
@@ -349,7 +355,9 @@
             "name": "TriggerZone",
             "parent": 0,
             "flags": {
-                "visible": false
+                "visible": "hidden",
+                "casts_shadows": "on",
+                "receives_shadows": "on"
             },
             "transform": {
                 "translation": [
@@ -363,9 +371,9 @@
             "name": "SoftBody",
             "parent": 0,
             "flags": {
-                "visible": true,
-                "casts_shadows": true,
-                "receives_shadows": true
+                "visible": "shown",
+                "casts_shadows": "on",
+                "receives_shadows": "on"
             },
             "transform": {
                 "translation": [
@@ -379,8 +387,9 @@
             "name": "sun_light_node",
             "parent": 0,
             "flags": {
-                "visible": true,
-                "casts_shadows": true
+                "visible": "shown",
+                "casts_shadows": "on",
+                "receives_shadows": "on"
             },
             "transform": {
                 "translation": [
@@ -405,7 +414,9 @@
             "name": "camera_node",
             "parent": 0,
             "flags": {
-                "visible": true
+                "visible": "shown",
+                "casts_shadows": "on",
+                "receives_shadows": "on"
             },
             "transform": {
                 "translation": [
@@ -430,9 +441,9 @@
             "name": "SoftBodyCube",
             "parent": 0,
             "flags": {
-                "visible": true,
-                "casts_shadows": true,
-                "receives_shadows": true
+                "visible": "shown",
+                "casts_shadows": "on",
+                "receives_shadows": "on"
             },
             "transform": {
                 "translation": [
@@ -569,18 +580,50 @@
             "enabled": true,
             "planet_radius_m": 6360000.0,
             "atmosphere_height_m": 100000.0,
-            "ground_albedo_rgb": [0.1, 0.1, 0.1],
-            "rayleigh_scattering_rgb": [5.802e-06, 1.3558e-05, 3.31e-05],
+            "ground_albedo_rgb": [
+                0.1,
+                0.1,
+                0.1
+            ],
+            "rayleigh_scattering_rgb": [
+                5.802e-06,
+                1.3558e-05,
+                3.31e-05
+            ],
             "rayleigh_scale_height_m": 8000.0,
-            "mie_scattering_rgb": [3.996e-06, 3.996e-06, 3.996e-06],
-            "mie_absorption_rgb": [4.4e-06, 4.4e-06, 4.4e-06],
+            "mie_scattering_rgb": [
+                3.996e-06,
+                3.996e-06,
+                3.996e-06
+            ],
+            "mie_absorption_rgb": [
+                4.4e-06,
+                4.4e-06,
+                4.4e-06
+            ],
             "mie_scale_height_m": 1200.0,
             "mie_anisotropy": 0.8,
-            "ozone_absorption_rgb": [6.5e-07, 1.881e-06, 8.5e-08],
-            "ozone_density_profile": [25000.0, 0.0, 0.0],
+            "ozone_absorption_rgb": [
+                6.5e-07,
+                1.881e-06,
+                8.5e-08
+            ],
+            "ozone_density_profile": [
+                25000.0,
+                0.0,
+                0.0
+            ],
             "multi_scattering_factor": 1.0,
-            "sky_luminance_factor_rgb": [1.0, 1.0, 1.0],
-            "sky_and_aerial_perspective_luminance_factor_rgb": [1.0, 1.0, 1.0],
+            "sky_luminance_factor_rgb": [
+                1.0,
+                1.0,
+                1.0
+            ],
+            "sky_and_aerial_perspective_luminance_factor_rgb": [
+                1.0,
+                1.0,
+                1.0
+            ],
             "aerial_perspective_distance_scale": 1.0,
             "aerial_scattering_strength": 1.0,
             "aerial_perspective_start_depth_m": 100.0,
@@ -599,27 +642,55 @@
             "height_offset_m": 0.0,
             "start_distance_m": 0.0,
             "max_opacity": 1.0,
-            "single_scattering_albedo_rgb": [1.0, 1.0, 1.0],
+            "single_scattering_albedo_rgb": [
+                1.0,
+                1.0,
+                1.0
+            ],
             "anisotropy_g": 0.2,
             "enable_height_fog": true,
             "enable_volumetric_fog": false,
             "second_fog_density": 0.0,
             "second_fog_height_falloff": 0.2,
             "second_fog_height_offset": 0.0,
-            "fog_inscattering_luminance": [1.0, 1.0, 1.0],
-            "sky_atmosphere_ambient_contribution_color_scale": [1.0, 1.0, 1.0],
+            "fog_inscattering_luminance": [
+                1.0,
+                1.0,
+                1.0
+            ],
+            "sky_atmosphere_ambient_contribution_color_scale": [
+                1.0,
+                1.0,
+                1.0
+            ],
             "inscattering_color_cubemap_angle": 0.0,
-            "inscattering_texture_tint": [1.0, 1.0, 1.0],
+            "inscattering_texture_tint": [
+                1.0,
+                1.0,
+                1.0
+            ],
             "fully_directional_inscattering_color_distance": 1000.0,
             "non_directional_inscattering_color_distance": 500.0,
-            "directional_inscattering_luminance": [0.25, 0.25, 0.25],
+            "directional_inscattering_luminance": [
+                0.25,
+                0.25,
+                0.25
+            ],
             "directional_inscattering_exponent": 4.0,
             "directional_inscattering_start_distance": 50.0,
             "end_distance_m": 5000.0,
             "fog_cutoff_distance_m": 6000.0,
             "volumetric_fog_scattering_distribution": 0.2,
-            "volumetric_fog_albedo": [0.8, 0.8, 0.8],
-            "volumetric_fog_emissive": [0.0, 0.0, 0.0],
+            "volumetric_fog_albedo": [
+                0.8,
+                0.8,
+                0.8
+            ],
+            "volumetric_fog_emissive": [
+                0.0,
+                0.0,
+                0.0
+            ],
             "volumetric_fog_extinction_scale": 1.0,
             "volumetric_fog_distance": 1000.0,
             "volumetric_fog_start_distance": 0.0,
@@ -635,11 +706,19 @@
             "enabled": true,
             "source": 0,
             "intensity": 1.0,
-            "tint_rgb": [1.0, 1.0, 1.0],
+            "tint_rgb": [
+                1.0,
+                1.0,
+                1.0
+            ],
             "diffuse_intensity": 1.0,
             "specular_intensity": 1.0,
             "real_time_capture_enabled": true,
-            "lower_hemisphere_color": [0.0, 0.0, 0.0],
+            "lower_hemisphere_color": [
+                0.0,
+                0.0,
+                0.0
+            ],
             "volumetric_scattering_intensity": 1.0,
             "affect_reflections": true
         }

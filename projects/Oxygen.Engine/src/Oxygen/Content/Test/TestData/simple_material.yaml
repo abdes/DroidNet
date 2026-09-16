@@ -1,5 +1,6 @@
 # Simple material asset test specification
 version: 7
+source_identity: "01a0a763-72e9-76f6-8ab4-1ab72c6eaa55"
 content_version: 1
 
 # Define default empty buffer (index 0) - required in all PAK files

@@ -76,7 +76,12 @@ SCENE_ASSET_VERSION_V2: Final = 1
 SCENE_ASSET_VERSION_V3: Final = 2
 SCENE_ASSET_VERSION_V4: Final = 2
 SCENE_ASSET_VERSION_V5: Final = 3
-SCENE_ASSET_VERSION_CURRENT: Final = 4
+SCENE_ASSET_VERSION_CURRENT: Final = 5
+
+# NodeRecord v5, matching Oxygen/Data/PakFormat_world.h.
+SCENE_NODE_RECORD_SIZE: Final = 72
+SCENE_NODE_FLAGS_KNOWN: Final = (1 << 6) - 1
+SCENE_NODE_FLAGS_INHERITABLE: Final = (1 << 0) | (1 << 2) | (1 << 3)
 
 # YAML Schema version constants (for PakGen tool compatibility).
 # These govern the YAML specification format, not the binary PAK format.
@@ -173,6 +178,9 @@ __all__ = [
     "SCENE_ASSET_VERSION_V2",
     "SCENE_ASSET_VERSION_V3",
     "SCENE_ASSET_VERSION_CURRENT",
+    "SCENE_NODE_RECORD_SIZE",
+    "SCENE_NODE_FLAGS_KNOWN",
+    "SCENE_NODE_FLAGS_INHERITABLE",
     "YAML_SCHEMA_VERSION_V6",
     "YAML_SCHEMA_VERSION_CURRENT",
     "YAML_SCHEMA_VERSION_MIN",

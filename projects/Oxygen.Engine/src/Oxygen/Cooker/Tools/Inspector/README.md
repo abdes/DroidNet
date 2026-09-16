@@ -43,7 +43,7 @@ out/build/bin/Debug/Oxygen.Cooker.Inspector.exe --help
 ### Validate a cooked root
 
 ```powershell
-Oxygen.Cooker.Inspector.exe validate-root <cooked_root>
+Oxygen.Cooker.Inspector.exe validate <cooked_root>
 ```
 
 Options:
@@ -53,13 +53,13 @@ Options:
 Example:
 
 ```powershell
-Oxygen.Cooker.Inspector.exe validate-root F:/path/to/loose_cooked_root
+Oxygen.Cooker.Inspector.exe validate F:/path/to/loose_cooked_root
 ```
 
 ### Dump the index
 
 ```powershell
-Oxygen.Cooker.Inspector.exe dump-index <cooked_root> [--assets] [--files] [--digests]
+Oxygen.Cooker.Inspector.exe index <cooked_root> [--assets true] [--files true] [--digests true]
 ```
 
 Notes:
@@ -73,11 +73,37 @@ Examples:
 
 ```powershell
 # Dump everything (assets + file records)
-Oxygen.Cooker.Inspector.exe dump-index F:/path/to/loose_cooked_root
+Oxygen.Cooker.Inspector.exe index F:/path/to/loose_cooked_root
 
 # Dump only asset entries including descriptor digests
-Oxygen.Cooker.Inspector.exe dump-index F:/path/to/loose_cooked_root --assets --digests
+Oxygen.Cooker.Inspector.exe index F:/path/to/loose_cooked_root --assets true --digests true
 ```
+
+### Scene metadata and current-format validation
+
+`validate` checks scene descriptors through the native parse-only loader in
+addition to index, type and file-size checks. Retired scene versions, malformed
+node records and invalid flag sources fail validation; content must be recooked.
+
+```powershell
+Oxygen.Cooker.Inspector.exe scenes <cooked_root> --output <scenes.json>
+```
+
+Writes `oxygen.cooked-scenes.v1` metadata with source identity, scene asset keys,
+virtual paths, descriptor versions, and node identities/names/parent indices.
+The three node flags report authored source choices: visibility is
+`inherit|shown|hidden`; Cast/Receive Shadows are `inherit|on|off`. Root parents
+refer to their own index. These are stored source modes, not runtime-effective
+visibility, lighting eligibility, or rendered results.
+
+Every scene is parsed with the native loader, without resource loading or renderer
+startup. A malformed or incomplete scene adds a diagnostic scoped to its key/path,
+marks the row and report `complete=false`, and returns exit code 2. Other valid
+scene rows remain available in that report. A descriptor version is `null` when
+native parsing fails before a valid scene is available. Missing/invalid roots or
+output failures also return 2. An empty scene list is valid for a scene-free root.
+The output schema is `Schemas/oxygen.cooked-scenes.schema.json`, installed with
+Inspector tooling. This command contains no qualification hooks or payloads.
 
 ### Dependency metadata
 

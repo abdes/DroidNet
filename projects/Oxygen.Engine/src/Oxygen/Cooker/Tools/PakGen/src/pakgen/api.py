@@ -5,7 +5,7 @@ Concrete implementations will be added during migration.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Optional
 
@@ -79,6 +79,7 @@ def build_pak(options: BuildOptions) -> BuildResult:  # implemented stub
         # YAML spec schema version (not PAK container version).
         "version": YAML_SCHEMA_VERSION_CURRENT,
         "content_version": getattr(spec_model, "content_version", 0),
+        "source_identity": spec_model.source_identity,
         "buffers": spec_model.buffers,
         "textures": spec_model.textures,
         "audios": spec_model.audios,
@@ -225,6 +226,7 @@ def plan_dry_run(
         # YAML spec schema version (not PAK container version).
         "version": YAML_SCHEMA_VERSION_CURRENT,
         "content_version": getattr(spec_model, "content_version", 0),
+        "source_identity": spec_model.source_identity,
         "buffers": spec_model.buffers,
         "textures": spec_model.textures,
         "audios": spec_model.audios,
@@ -252,10 +254,16 @@ def inspect_pak(path: str | Path) -> dict:  # implemented
     return _inspect_pak_impl(str(path))
 
 
-def validate_spec(path: str | Path) -> None:  # placeholder minimal
+def validate_spec(path: str | Path) -> None:
     logger = get_logger()
     spec = load_models(path)
-    logger.info("Loaded spec version %s", spec.version)
+    errors = run_validation_pipeline(asdict(spec))
+    if errors:
+        raise ValueError(
+            "Spec validation failed: "
+            + "; ".join(f"{e.code}:{e.path}:{e.message}" for e in errors)
+        )
+    logger.info("Validated spec version %s", spec.version)
 
 
 def validate_pak(path: str | Path) -> list[str]:

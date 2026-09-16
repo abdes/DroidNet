@@ -1,5 +1,6 @@
 # Geometry with buffer dependencies - simplified for testing
 version: 7
+source_identity: "01a0a763-72de-74fc-9e0e-e399e22c7360"
 content_version: 1
 
 # Define default empty buffer (index 0) - required in all PAK files

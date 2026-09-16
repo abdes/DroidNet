@@ -45,6 +45,8 @@
 
 #include "AssetKeyMap.h"
 #include "DependencyReport.h"
+#include "RootValidation.h"
+#include "SceneMetadata.h"
 
 namespace oxygen::engine::internal {
 struct EngineTagFactory {
@@ -283,110 +285,12 @@ auto DumpAssets(
   }
 }
 
-auto ValidateRootOrThrow(const std::filesystem::path& cooked_root) -> void
-{
-  using oxygen::data::AssetType;
-  using oxygen::data::pak::core::AssetHeader;
-  using oxygen::data::pak::geometry::GeometryAssetDesc;
-  using oxygen::data::pak::input::InputMappingContextAssetDesc;
-  using oxygen::data::pak::render::MaterialAssetDesc;
-  using oxygen::data::pak::scripting::ScriptAssetDesc;
-  using oxygen::data::pak::world::SceneAssetDesc;
-  using oxygen::serio::FileStream;
-  using oxygen::serio::Reader;
-
-  oxygen::content::lc::Inspection inspection;
-  inspection.LoadFromRoot(cooked_root);
-
-  for (const auto& asset : inspection.Assets()) {
-    if (asset.descriptor_relpath.empty()) {
-      throw std::runtime_error("asset descriptor path is missing");
-    }
-
-    const auto descriptor_path = cooked_root / asset.descriptor_relpath;
-    if (!std::filesystem::exists(descriptor_path)) {
-      throw std::runtime_error(
-        "descriptor file does not exist: " + descriptor_path.generic_string());
-    }
-
-    FileStream<> stream(descriptor_path, std::ios::in);
-    const auto descriptor_size_result = stream.Size();
-    if (!descriptor_size_result) {
-      throw std::runtime_error("failed to query descriptor file size");
-    }
-    const auto descriptor_size = descriptor_size_result.value();
-    if (descriptor_size != asset.descriptor_size) {
-      throw std::runtime_error(
-        "descriptor size mismatch for " + descriptor_path.generic_string());
-    }
-
-    if (descriptor_size < sizeof(AssetHeader)) {
-      throw std::runtime_error("descriptor is smaller than AssetHeader: "
-        + descriptor_path.generic_string());
-    }
-
-    Reader<FileStream<>> reader(stream);
-    auto pack = reader.ScopedAlignment(1);
-    auto blob = reader.ReadBlob(sizeof(AssetHeader));
-    if (!blob) {
-      throw std::runtime_error("failed to read descriptor header");
-    }
-
-    AssetHeader header {};
-    std::memcpy(&header, blob->data(), sizeof(header));
-
-    if (header.asset_type != asset.asset_type) {
-      throw std::runtime_error("descriptor header asset_type mismatch for "
-        + descriptor_path.generic_string());
-    }
-
-    const auto asset_type = static_cast<AssetType>(asset.asset_type);
-    size_t min_size = sizeof(AssetHeader);
-    switch (asset_type) {
-    case AssetType::kMaterial:
-      min_size = sizeof(MaterialAssetDesc);
-      break;
-    case AssetType::kGeometry:
-      min_size = sizeof(GeometryAssetDesc);
-      break;
-    case AssetType::kScene:
-      min_size = sizeof(SceneAssetDesc);
-      break;
-    case AssetType::kScript:
-      min_size = sizeof(ScriptAssetDesc);
-      break;
-    case AssetType::kInputAction:
-      min_size = sizeof(oxygen::data::pak::input::InputActionAssetDesc);
-      break;
-    case AssetType::kInputMappingContext:
-      min_size = sizeof(InputMappingContextAssetDesc);
-      break;
-    case AssetType::kPhysicsMaterial:
-      min_size = sizeof(oxygen::data::pak::physics::PhysicsMaterialAssetDesc);
-      break;
-    case AssetType::kCollisionShape:
-      min_size = sizeof(oxygen::data::pak::physics::CollisionShapeAssetDesc);
-      break;
-    case AssetType::kPhysicsScene:
-      min_size = sizeof(oxygen::data::pak::physics::PhysicsSceneAssetDesc);
-      break;
-    default:
-      break;
-    }
-
-    if (descriptor_size < min_size) {
-      throw std::runtime_error("descriptor smaller than minimum expected size: "
-        + descriptor_path.generic_string());
-    }
-  }
-}
-
 auto RunValidate(const ValidateOptions& opts) -> int
 {
   const std::filesystem::path cooked_root(opts.cooked_root);
 
   try {
-    ValidateRootOrThrow(cooked_root);
+    oxygen::content::inspection::ValidateRootOrThrow(cooked_root);
     if (!opts.quiet) {
       std::cout << "OK: valid loose cooked root: " << cooked_root.string()
                 << "\n";
@@ -1193,7 +1097,8 @@ auto BuildCli(ValidateOptions& validate_opts, DumpOptions& dump_opts,
   DumpInputOptions& input_mappings_opts,
   DumpPhysicsAssetsOptions& physics_assets_opts,
   oxygen::content::inspection::DependencyReportOptions& dependency_opts,
-  oxygen::content::inspection::AssetKeyMapOptions& key_map_opts)
+  oxygen::content::inspection::AssetKeyMapOptions& key_map_opts,
+  oxygen::content::inspection::SceneMetadataOptions& scene_metadata_opts)
   -> std::unique_ptr<Cli>
 {
   auto validate_root = Option::Positional("cooked_root")
@@ -1371,6 +1276,8 @@ auto BuildCli(ValidateOptions& validate_opts, DumpOptions& dump_opts,
       oxygen::content::inspection::BuildDependencyCommand(dependency_opts))
     .WithCommand(
       oxygen::content::inspection::BuildAssetKeyMapCommand(key_map_opts))
+    .WithCommand(oxygen::content::inspection::BuildSceneMetadataCommand(
+      scene_metadata_opts))
     .Build();
 }
 
@@ -1404,11 +1311,12 @@ auto main(int argc, char** argv) -> int
     DumpPhysicsAssetsOptions physics_assets_opts;
     oxygen::content::inspection::DependencyReportOptions dependency_opts;
     oxygen::content::inspection::AssetKeyMapOptions key_map_opts;
+    oxygen::content::inspection::SceneMetadataOptions scene_metadata_opts;
 
     const auto cli = BuildCli(validate_opts, dump_opts, buffers_opts,
       textures_opts, physics_opts, script_slots_opts, script_params_opts,
       input_actions_opts, input_mappings_opts, physics_assets_opts,
-      dependency_opts, key_map_opts);
+      dependency_opts, key_map_opts, scene_metadata_opts);
     const auto context = cli->Parse(argc, const_cast<const char**>(argv));
 
     const auto command_path = context.active_command->PathAsString();
@@ -1442,6 +1350,9 @@ auto main(int argc, char** argv) -> int
     } else if (command_path == "dependencies") {
       exit_code
         = oxygen::content::inspection::RunDependencyReport(dependency_opts);
+    } else if (command_path == "scenes") {
+      exit_code = oxygen::content::inspection::RunSceneMetadataReport(
+        scene_metadata_opts);
     } else {
       std::cerr << "ERROR: Unknown command\n";
       exit_code = 1;

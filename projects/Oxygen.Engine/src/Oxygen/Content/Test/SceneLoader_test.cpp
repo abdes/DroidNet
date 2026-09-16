@@ -9,6 +9,8 @@
 #include <cstdint>
 #include <cstring>
 #include <span>
+#include <stdexcept>
+#include <utility>
 #include <vector>
 
 #include <Oxygen/Content/DescriptorDependencies.h>
@@ -18,6 +20,7 @@
 #include <Oxygen/Content/SourceToken.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
 #include <Oxygen/Serio/Writer.h>
 #include <Oxygen/Testing/GTest.h>
@@ -27,6 +30,111 @@
 using oxygen::content::loaders::LoadSceneAsset;
 
 namespace {
+
+auto MakeSceneWithFlagRecord(const uint32_t values, const uint32_t inherited,
+  const uint8_t version = oxygen::data::pak::world::kSceneAssetVersion)
+  -> std::vector<std::byte>
+{
+  namespace world = oxygen::data::pak::world;
+  auto descriptor = world::SceneAssetDesc {};
+  descriptor.header.asset_type
+    = static_cast<uint8_t>(oxygen::data::AssetType::kScene);
+  descriptor.header.version = version;
+  descriptor.nodes.offset = sizeof(descriptor);
+  descriptor.nodes.count = 1U;
+  descriptor.nodes.entry_size = sizeof(world::NodeRecord);
+  auto node = world::NodeRecord {};
+  node.node_flags = values;
+  node.inherited_flags = inherited;
+  node.translation[0] = 3.5F;
+  node.scale[2] = 2.0F;
+  auto environment = world::SceneEnvironmentBlockHeader {};
+  environment.byte_size = sizeof(environment);
+  auto bytes = std::vector<std::byte>(
+    sizeof(descriptor) + sizeof(node) + sizeof(environment));
+  std::memcpy(bytes.data(), &descriptor, sizeof(descriptor));
+  std::memcpy(bytes.data() + sizeof(descriptor), &node, sizeof(node));
+  std::memcpy(bytes.data() + sizeof(descriptor) + sizeof(node), &environment,
+    sizeof(environment));
+  return bytes;
+}
+
+NOLINT_TEST(SceneFlagRecordTest, LoaderPreservesFlagModesAndFollowingTransform)
+{
+  namespace world = oxygen::data::pak::world;
+  auto bytes = MakeSceneWithFlagRecord(world::kSceneNodeFlag_Visible,
+    world::kSceneNodeFlag_CastsShadows | world::kSceneNodeFlag_ReceivesShadows);
+  auto stream = oxygen::serio::MemoryStream(std::span<std::byte>(bytes));
+  auto reader = oxygen::serio::Reader(stream);
+  auto context = oxygen::content::LoaderContext {};
+  context.desc_reader = &reader;
+  context.parse_only = true;
+  const auto scene = LoadSceneAsset(context);
+  ASSERT_NE(scene, nullptr);
+  const auto nodes = scene->GetNodes();
+  ASSERT_EQ(nodes.size(), 1U);
+  EXPECT_EQ(nodes.front().node_flags, world::kSceneNodeFlag_Visible);
+  EXPECT_EQ(nodes.front().inherited_flags,
+    world::kSceneNodeFlag_CastsShadows | world::kSceneNodeFlag_ReceivesShadows);
+  EXPECT_FLOAT_EQ(nodes.front().translation[0], 3.5F);
+  EXPECT_FLOAT_EQ(nodes.front().scale[2], 2.0F);
+}
+
+NOLINT_TEST(
+  SceneFlagRecordTest, RejectsUnknownAndAmbiguousFlagsWithoutStringTable)
+{
+  namespace world = oxygen::data::pak::world;
+  for (const auto [values, inherited] :
+    std::array { std::pair { uint32_t { 1U << 31U }, uint32_t { 0 } },
+      std::pair { uint32_t { 0 }, world::kSceneNodeFlag_Static },
+      std::pair {
+        world::kSceneNodeFlag_Visible, world::kSceneNodeFlag_Visible } }) {
+    auto bytes = MakeSceneWithFlagRecord(values, inherited);
+    EXPECT_THROW((oxygen::data::SceneAsset(oxygen::data::AssetKey {}, bytes)),
+      std::runtime_error);
+    auto stream = oxygen::serio::MemoryStream(std::span<std::byte>(bytes));
+    auto reader = oxygen::serio::Reader(stream);
+    auto context = oxygen::content::LoaderContext {};
+    context.desc_reader = &reader;
+    context.parse_only = true;
+    EXPECT_THROW(LoadSceneAsset(context), std::runtime_error);
+  }
+}
+
+NOLINT_TEST(SceneFlagRecordTest, RejectsInvalidNodeReferencesWithoutStringTable)
+{
+  namespace world = oxygen::data::pak::world;
+  for (const auto [parent, name] :
+    std::array { std::pair { 1U, 0U }, std::pair { 0U, 1U } }) {
+    auto bytes = MakeSceneWithFlagRecord(0U, 0U);
+    auto node = world::NodeRecord {};
+    node.parent_index = parent;
+    node.scene_name_offset = name;
+    std::memcpy(bytes.data() + sizeof(world::SceneAssetDesc), &node,
+      sizeof(node));
+    EXPECT_THROW((oxygen::data::SceneAsset(oxygen::data::AssetKey {}, bytes)),
+      std::runtime_error);
+    auto stream = oxygen::serio::MemoryStream(std::span<std::byte>(bytes));
+    auto reader = oxygen::serio::Reader(stream);
+    auto context = oxygen::content::LoaderContext {};
+    context.desc_reader = &reader;
+    context.parse_only = true;
+    EXPECT_THROW(LoadSceneAsset(context), std::runtime_error);
+  }
+}
+
+NOLINT_TEST(SceneFlagRecordTest, RejectsRetiredSceneVersionFour)
+{
+  auto bytes = MakeSceneWithFlagRecord(0U, 0U, 4U);
+  EXPECT_THROW((oxygen::data::SceneAsset(oxygen::data::AssetKey {}, bytes)),
+    std::runtime_error);
+  auto stream = oxygen::serio::MemoryStream(std::span<std::byte>(bytes));
+  auto reader = oxygen::serio::Reader(stream);
+  auto context = oxygen::content::LoaderContext {};
+  context.desc_reader = &reader;
+  context.parse_only = true;
+  EXPECT_THROW(LoadSceneAsset(context), std::runtime_error);
+}
 
 class SceneLoaderTest : public testing::Test {
 protected:

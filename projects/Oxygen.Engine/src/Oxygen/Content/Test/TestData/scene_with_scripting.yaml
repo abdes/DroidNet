@@ -1,5 +1,6 @@
 # Scene + scripting fixture used by AssetLoader characterization tests.
 version: 7
+source_identity: "01a0a763-72e7-72f9-bac1-36c359a48701"
 content_version: 1
 
 scripts:

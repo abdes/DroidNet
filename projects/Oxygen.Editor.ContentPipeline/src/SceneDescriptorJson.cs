@@ -37,10 +37,10 @@ internal sealed record NativeSceneNode(
     [property: JsonPropertyName("transform")] NativeNodeTransform Transform);
 
 internal sealed record NativeNodeFlags(
-    [property: JsonPropertyName("visible")] bool Visible,
+    [property: JsonPropertyName("visible")] string Visible,
     [property: JsonPropertyName("static")] bool Static,
-    [property: JsonPropertyName("casts_shadows")] bool CastsShadows,
-    [property: JsonPropertyName("receives_shadows")] bool ReceivesShadows,
+    [property: JsonPropertyName("casts_shadows")] string CastsShadows,
+    [property: JsonPropertyName("receives_shadows")] string ReceivesShadows,
     [property: JsonPropertyName("ray_cast_selectable")] bool RayCastSelectable,
     [property: JsonPropertyName("ignore_parent_transform")] bool IgnoreParentTransform);
 

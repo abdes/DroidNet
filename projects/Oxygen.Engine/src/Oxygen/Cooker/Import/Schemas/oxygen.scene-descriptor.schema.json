@@ -9,7 +9,7 @@
         },
         "version": {
             "type": "integer",
-            "const": 4
+            "const": 5
         },
         "name": {
             "$ref": "#/definitions/identifier"
@@ -131,16 +131,22 @@
             "additionalProperties": false,
             "properties": {
                 "visible": {
-                    "type": "boolean"
+                    "type": "string",
+                    "enum": ["inherit", "shown", "hidden"],
+                    "description": "Local scene visibility or inheritance. Omitted: shown for roots, inherit for children."
                 },
                 "static": {
                     "type": "boolean"
                 },
                 "casts_shadows": {
-                    "type": "boolean"
+                    "type": "string",
+                    "enum": ["inherit", "on", "off"],
+                    "description": "Local geometry casting or inheritance. Omitted: on for roots, inherit for children."
                 },
                 "receives_shadows": {
-                    "type": "boolean"
+                    "type": "string",
+                    "enum": ["inherit", "on", "off"],
+                    "description": "Local geometry receiving or inheritance. Omitted: on for roots, inherit for children."
                 },
                 "ray_cast_selectable": {
                     "type": "boolean"

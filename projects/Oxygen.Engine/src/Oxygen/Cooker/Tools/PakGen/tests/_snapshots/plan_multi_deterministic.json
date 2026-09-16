@@ -3,7 +3,7 @@
     {
       "alignment": 16,
       "descriptor_offset": 5632,
-      "descriptor_size": 333,
+      "descriptor_size": 357,
       "key": "00000000000000000000000000000000",
       "name": "mat_a",
       "type": "material",
@@ -12,8 +12,8 @@
     },
     {
       "alignment": 16,
-      "descriptor_offset": 5968,
-      "descriptor_size": 333,
+      "descriptor_offset": 6000,
+      "descriptor_size": 357,
       "key": "00000000000000000000000000000000",
       "name": "mat_b",
       "type": "material",
@@ -22,8 +22,8 @@
     },
     {
       "alignment": 1,
-      "descriptor_offset": 6301,
-      "descriptor_size": 107,
+      "descriptor_offset": 6357,
+      "descriptor_size": 131,
       "key": "00000000000000000000000000000000",
       "name": "geo_a",
       "type": "geometry",
@@ -32,8 +32,8 @@
     },
     {
       "alignment": 1,
-      "descriptor_offset": 6677,
-      "descriptor_size": 107,
+      "descriptor_offset": 6757,
+      "descriptor_size": 131,
       "key": "00000000000000000000000000000000",
       "name": "geo_b",
       "type": "geometry",
@@ -43,7 +43,7 @@
   ],
   "browse_index": {
     "entry_count": 4,
-    "offset": 7312,
+    "offset": 7424,
     "padding_before": 0,
     "size": 140,
     "string_table_size": 24
@@ -52,23 +52,23 @@
   "deterministic": true,
   "directory": {
     "asset_count": 4,
-    "offset": 7056,
-    "padding_before": 3,
+    "offset": 7168,
+    "padding_before": 11,
     "size": 256
   },
-  "file_size": 7708,
+  "file_size": 7820,
   "footer": {
-    "offset": 7452,
+    "offset": 7564,
     "size": 256
   },
   "padding": {
     "by_section": {
-      "asset_material": 3,
+      "asset_material": 11,
       "assets_region": 25,
-      "directory": 3,
+      "directory": 11,
       "table_buffer": 11
     },
-    "total": 42
+    "total": 58
   },
   "regions": [
     {

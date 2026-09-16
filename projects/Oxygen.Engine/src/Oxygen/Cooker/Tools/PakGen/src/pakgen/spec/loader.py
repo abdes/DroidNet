@@ -35,6 +35,7 @@ def _parse_spec_dict(data: dict[str, Any]) -> PakSpec:
     spec = PakSpec(
         version=int(data.get("version", 4)),
         content_version=int(data.get("content_version", 0)),
+        source_identity=data.get("source_identity"),
     )
     # Transitional: direct shallow assignment of raw dict lists so planning can proceed.
     # Proper model instantiation will replace this.

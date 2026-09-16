@@ -9,6 +9,7 @@ from snapshot_helper import assert_matches_snapshot
 
 def _spec_multi() -> dict:
     return {
+        "source_identity": "01a0a760-49a0-7406-9b55-26d1995330ca",
         "version": 6,
         "content_version": 2,
         "textures": [

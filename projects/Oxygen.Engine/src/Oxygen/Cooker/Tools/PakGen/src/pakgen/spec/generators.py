@@ -385,7 +385,12 @@ def expand_node(
         params = {}
 
     func = _LAYOUT_FUNCTIONS[layout]
-    return func(template, params, base_index, path)
+    nodes = func(template, params, base_index, path)
+    for node in nodes:
+        for field in ("flags", "inherited_flags"):
+            if field in template:
+                node[field] = template[field]
+    return nodes
 
 
 def expand_scene_nodes(

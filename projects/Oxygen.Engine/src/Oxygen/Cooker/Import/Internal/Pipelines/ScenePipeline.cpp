@@ -153,6 +153,16 @@ namespace {
   {
     BuildOutcome outcome;
 
+    for (size_t index = 0; index < build.nodes.size(); ++index) {
+      if (!data::pak::world::HasCanonicalNodeFlags(build.nodes[index])) {
+        diagnostics.push_back(MakeErrorDiagnostic("scene.node.flags_invalid",
+          "Scene node flags contain unsupported source modes or inherited "
+          "values",
+          source_id, "nodes[" + std::to_string(index) + "].flags"));
+        return outcome;
+      }
+    }
+
     serio::MemoryStream stream;
     serio::Writer writer(stream);
     const auto packed = writer.ScopedAlignment(1);

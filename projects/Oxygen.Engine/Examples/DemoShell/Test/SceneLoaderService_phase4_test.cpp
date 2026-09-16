@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -152,6 +153,34 @@ namespace {
     std::memcpy(cursor, &table_desc, sizeof(table_desc));
     cursor += sizeof(table_desc);
     std::memcpy(cursor, &local_fog, sizeof(local_fog));
+    return bytes;
+  }
+
+  auto BuildSceneDescriptorBytesWithFlagModes() -> std::vector<std::byte>
+  {
+    auto descriptor = pakw::SceneAssetDesc {};
+    descriptor.header.asset_type
+      = static_cast<uint8_t>(data::AssetType::kScene);
+    descriptor.header.version = pakw::kSceneAssetVersion;
+    descriptor.nodes.offset = sizeof(descriptor);
+    descriptor.nodes.count = 3U;
+    descriptor.nodes.entry_size = sizeof(pakw::NodeRecord);
+    auto nodes = std::array<pakw::NodeRecord, 3> {};
+    nodes[0].scene_name_offset = 1U;
+    nodes[1].scene_name_offset = 6U;
+    nodes[1].inherited_flags = pakw::kSceneNodeFlags_Inheritable;
+    nodes[2].scene_name_offset = 16U;
+    nodes[2].node_flags = pakw::kSceneNodeFlag_Visible;
+    nodes[2].inherited_flags = pakw::kSceneNodeFlag_ReceivesShadows;
+    const auto strings = std::string("\0Root\0Inherited\0Local\0", 22);
+    descriptor.scene_strings.offset = sizeof(descriptor) + sizeof(nodes);
+    descriptor.scene_strings.size = static_cast<uint32_t>(strings.size());
+    auto bytes = std::vector<std::byte>(
+      sizeof(descriptor) + sizeof(nodes) + strings.size());
+    std::memcpy(bytes.data(), &descriptor, sizeof(descriptor));
+    std::memcpy(bytes.data() + sizeof(descriptor), nodes.data(), sizeof(nodes));
+    std::memcpy(bytes.data() + sizeof(descriptor) + sizeof(nodes),
+      strings.data(), strings.size());
     return bytes;
   }
 
@@ -935,6 +964,61 @@ NOLINT_TEST(SceneLoaderServicePhase4Test,
   EXPECT_EQ(result.scene_key, scene_key);
   EXPECT_THAT(result.asset, ::testing::NotNull());
   EXPECT_THAT(result.physics_asset, ::testing::NotNull());
+}
+
+NOLINT_TEST(SceneLoaderServicePhase4Test,
+  BuildSceneAsyncHydratesIndependentNodeFlagSourceModes)
+{
+  auto loader = SceneLoaderTestAssetLoader {};
+  const auto key = data::AssetKey::FromVirtualPath("/Game/Tests/flags.oscene");
+  const auto asset = std::make_shared<data::SceneAsset>(
+    key, BuildSceneDescriptorBytesWithFlagModes());
+  loader.PutScene(key, asset);
+  auto path_finder = PathFinder(std::make_shared<const PathFinderConfig>(),
+    std::filesystem::current_path());
+  auto service = std::make_shared<SceneLoaderService>(loader,
+    Extent<uint32_t> { 1280U, 720U }, std::filesystem::path {}, nullptr,
+    nullptr, nullptr, std::move(path_finder));
+  auto runtime_scene = std::make_shared<scene::Scene>("FlagsHydration", 64U);
+  oxygen::co::testing::TestEventLoop loop;
+  oxygen::co::Run(loop, [&]() -> oxygen::co::Co<> {
+    co_await service->BuildSceneAsync(*runtime_scene, *asset);
+  });
+  runtime_scene->Update();
+  auto root = FindNodeByName(*runtime_scene, "Root");
+  auto inherited = FindNodeByName(*runtime_scene, "Inherited");
+  auto local = FindNodeByName(*runtime_scene, "Local");
+  ASSERT_TRUE(root.has_value());
+  ASSERT_TRUE(inherited.has_value());
+  ASSERT_TRUE(local.has_value());
+  const auto root_flags = root->GetFlags();
+  const auto inherited_flags = inherited->GetFlags();
+  const auto local_flags = local->GetFlags();
+  ASSERT_TRUE(root_flags.has_value());
+  ASSERT_TRUE(inherited_flags.has_value());
+  ASSERT_TRUE(local_flags.has_value());
+  using scene::SceneNodeFlags;
+  for (const auto flag : { SceneNodeFlags::kVisible,
+         SceneNodeFlags::kCastsShadows, SceneNodeFlags::kReceivesShadows }) {
+    EXPECT_TRUE(inherited_flags->get().IsInherited(flag));
+    EXPECT_FALSE(inherited_flags->get().GetEffectiveValue(flag));
+    root_flags->get().SetLocalValue(flag, true);
+  }
+  EXPECT_FALSE(local_flags->get().IsInherited(SceneNodeFlags::kVisible));
+  EXPECT_TRUE(local_flags->get().GetEffectiveValue(SceneNodeFlags::kVisible));
+  EXPECT_FALSE(local_flags->get().IsInherited(SceneNodeFlags::kCastsShadows));
+  EXPECT_FALSE(
+    local_flags->get().GetEffectiveValue(SceneNodeFlags::kCastsShadows));
+  EXPECT_TRUE(local_flags->get().IsInherited(SceneNodeFlags::kReceivesShadows));
+  runtime_scene->Update();
+  for (const auto flag : { SceneNodeFlags::kVisible,
+         SceneNodeFlags::kCastsShadows, SceneNodeFlags::kReceivesShadows }) {
+    EXPECT_TRUE(inherited_flags->get().GetEffectiveValue(flag));
+  }
+  EXPECT_FALSE(
+    local_flags->get().GetEffectiveValue(SceneNodeFlags::kCastsShadows));
+  EXPECT_TRUE(
+    local_flags->get().GetEffectiveValue(SceneNodeFlags::kReceivesShadows));
 }
 
 NOLINT_TEST(SceneLoaderServicePhase4Test,

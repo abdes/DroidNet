@@ -179,12 +179,14 @@ def test_physics_scene_with_all_bindings_roundtrip(tmp_path: Path):
         text=True,
         check=False,
     )
-    if "Unsupported PAK format version" in proc.stderr:
-        pytest.skip("PakDump build does not yet support v7")
-    if proc.returncode != 0:
-        pytest.skip(
-            "PakDump executable is incompatible or unstable for current fixtures"
-        )
+    assert proc.returncode == 0, "\n".join(
+        [
+            f"PakDump exited with code {proc.returncode}.",
+            "Rebuild Oxygen.Cooker.PakDump and rerun tests.",
+            f"stdout:\n{proc.stdout}",
+            f"stderr:\n{proc.stderr}",
+        ]
+    )
     out = proc.stdout
     assert "__NotSupported__" not in out
     assert "PhysicsScene" in out

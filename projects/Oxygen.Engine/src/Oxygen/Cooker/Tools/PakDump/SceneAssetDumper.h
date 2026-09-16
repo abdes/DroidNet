@@ -109,6 +109,8 @@ public:
           PrintUtils::Field("Node ID", oxygen::data::to_string(node_id), 10);
           PrintUtils::Field(
             "Flags", asset_dump_helpers::ToHexString(nodes[i].node_flags), 10);
+          PrintUtils::Field("Inherited Flags",
+            asset_dump_helpers::ToHexString(nodes[i].inherited_flags), 10);
           PrintUtils::Field(
             "T", asset_dump_helpers::FormatVec3(nodes[i].translation), 10);
           PrintUtils::Field(
