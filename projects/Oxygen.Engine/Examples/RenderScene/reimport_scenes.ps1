@@ -1,13 +1,13 @@
 #requires -Version 7.4
 <#
 .SYNOPSIS
-Reimports original RenderScene models, validates a fresh generation, then publishes it.
+Reimports original RenderScene models into the standard cooked root with recovery.
 .DESCRIPTION
 Uses the native ImportTool and Inspector from one build. Validates the source-list
 schema and files, generates a persistent native manifest, runs native --dry-run,
-cooks into a sibling staging root, checks reports/descriptors/texture policy, then
-renames the previous live root to a backup and publishes staging. No old generation
-is deleted. Failed staging and evidence remain available for diagnosis.
+preserves the previous root under the build tree, cooks directly into CookedRoot,
+and checks reports/descriptors/texture policy. On failure the previous root is
+restored; failed output and evidence remain under the build tree for diagnosis.
 
 Close RenderScene and any other consumer of CookedRoot first. Relative source
 paths resolve against SourceList. Other relative parameters resolve against the
@@ -41,8 +41,8 @@ with a minimum of 4. Other pipelines have one worker and jobs remain sequential.
 ./reimport_scenes.ps1 -SourceList ./reimport-sources.local.json -WhatIf
 .NOTES
 Requires PowerShell 7.4+. Exits nonzero on preflight, native-tool, validation, or
-publication failure. Logs and result.json are under the target parent's
-.reimport-runs/<unique-run>. -WhatIf performs read-only preflight and describes
+publication failure. Backups, logs and result.json are under
+out/build-ninja/renderscene-reimport/<unique-run>. -WhatIf performs read-only preflight and describes
 the operation; it does not run native tools or create files. This script does
 not validate rendered appearance or modify demo settings.
 #>
@@ -119,6 +119,8 @@ function Get-CheckedChild([string]$Root, [string]$RelativePath) {
 
 $runDirectory = $null
 $publicationLock = $null
+$oldMoved = $false
+$generationStarted = $false
 $result = [ordered]@{ status = 'preflight'; published = $false }
 try {
     if (($MipPolicy -eq 'Max') -ne $PSBoundParameters.ContainsKey('MaxMipLevels')) {
@@ -183,25 +185,24 @@ try {
         }
     }
     $runId = [DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss') + '-' + [Guid]::NewGuid().ToString('N').Substring(0, 8)
-    $leaf = [IO.Path]::GetFileName($CookedRoot)
-    $staging = Join-Path $parent "$leaf.stage-$runId"
-    $backup = Join-Path $parent "$leaf.backup-$runId"
-    foreach ($candidate in @($staging, $backup)) {
-        Assert-Sibling $candidate $parent
-        if (Test-Path -LiteralPath $candidate) { throw "Destination already exists: $candidate" }
+    $recoveryRoot = Join-Path $engineRoot 'out/build-ninja/renderscene-reimport'
+    $pendingRunDirectory = Join-Path $recoveryRoot $runId
+    $backup = Join-Path $pendingRunDirectory 'previous-cooked'
+    Assert-NoReparseAncestor $pendingRunDirectory
+    if (-not [IO.Path]::GetPathRoot($CookedRoot).Equals([IO.Path]::GetPathRoot($backup), [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'CookedRoot and the build-tree recovery directory must be on the same volume.'
     }
     if (-not $PSCmdlet.ShouldProcess($CookedRoot, "Reimport $($sources.Count) original(s), validate, preserve old generation at $backup, and publish")) {
         return
     }
-    $pendingRunDirectory = Join-Path $parent ".reimport-runs/$runId"
-    Assert-NoReparseAncestor $pendingRunDirectory
-    $lockPath = Join-Path $parent "$leaf.reimport.lock"
-    Assert-Sibling $lockPath $parent
+    $null = New-Item -ItemType Directory -Path $recoveryRoot -Force
+    $rootHash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($CookedRoot.ToUpperInvariant())))
+    $lockPath = Join-Path $recoveryRoot ($rootHash + '.lock')
+    Assert-Sibling $lockPath $recoveryRoot
     $publicationLock = [IO.File]::Open($lockPath, [IO.FileMode]::OpenOrCreate, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)
     $null = New-Item -ItemType Directory -Path $pendingRunDirectory
     $runDirectory = $pendingRunDirectory
     $result.cooked_root = $CookedRoot
-    $result.staging_root = $staging
     $result.backup_root = $backup
     $result.run_directory = $runDirectory
     $result.compression = $Compression
@@ -224,7 +225,7 @@ try {
     }
     if ($MipPolicy -eq 'Max') { $texture.max_mips = $MaxMipLevels }
     $manifest = @{
-        version = 1; output = $staging; thread_pool_size = $ThreadPoolSize; max_in_flight_jobs = 1
+        version = 1; output = $CookedRoot; thread_pool_size = $ThreadPoolSize; max_in_flight_jobs = 1
         layout = @{ virtual_mount_root = '/.cooked' }
         defaults = @{ texture = $texture }
         concurrency = @{
@@ -241,6 +242,15 @@ try {
     $reportPath = Join-Path $runDirectory 'import-report.json'
     Write-JsonFile $manifest $manifestPath
     Invoke-NativeLogged $ToolPath @('--no-tui', 'batch', '--manifest', $manifestPath, '--dry-run', 'true') (Join-Path $runDirectory 'preflight.log')
+    Assert-Sibling $CookedRoot $parent
+    Assert-Sibling $backup $runDirectory
+    if (Test-Path -LiteralPath $backup) { throw "Backup destination already exists: $backup" }
+    if (Get-Process -Name 'Oxygen.Examples.RenderScene' -ErrorAction SilentlyContinue) { throw 'RenderScene started during preflight; close it before recooking.' }
+    if (Test-Path -LiteralPath $CookedRoot) {
+        [IO.Directory]::Move($CookedRoot, $backup)
+        $oldMoved = $true
+    }
+    $generationStarted = $true
     $result.status = 'cooking'
     Invoke-NativeLogged $ToolPath @('--no-tui', 'batch', '--manifest', $manifestPath, '--report', $reportPath) (Join-Path $runDirectory 'import.log')
     $report = Get-Content -LiteralPath $reportPath -Raw | ConvertFrom-Json -AsHashtable
@@ -256,9 +266,9 @@ try {
         }
     }
     $result.status = 'validating'
-    Invoke-NativeLogged $InspectorPath @('validate', $staging) (Join-Path $runDirectory 'validate.log')
+    Invoke-NativeLogged $InspectorPath @('validate', $CookedRoot) (Join-Path $runDirectory 'validate.log')
     $indexLog = Join-Path $runDirectory 'index.log'
-    Invoke-NativeLogged $InspectorPath @('index', $staging, '--assets', 'true', '--digests', 'true') $indexLog
+    Invoke-NativeLogged $InspectorPath @('index', $CookedRoot, '--assets', 'true', '--digests', 'true') $indexLog
     $indexedScenes = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
     $assetCount = 0
     $declaredAssets = -1
@@ -269,7 +279,7 @@ try {
             throw "Inspector asset row is unsupported or lacks a descriptor digest: $line"
         }
         $asset = $Matches.Clone()
-        $descriptor = Get-CheckedChild $staging $asset.path
+        $descriptor = Get-CheckedChild $CookedRoot $asset.path
         if ($asset.virtual -cne ('/.cooked/' + $asset.path.Replace('\', '/')) -or
             (Get-Item -LiteralPath $descriptor).Length -ne [long]$asset.size -or
             (Get-FileHash -LiteralPath $descriptor -Algorithm SHA256).Hash -ne $asset.hash) {
@@ -282,9 +292,9 @@ try {
         throw 'Inspector index does not match the requested scene outputs.'
     }
     $textureCount = 0
-    if (Test-Path -LiteralPath (Join-Path $staging 'Resources/textures.table')) {
+    if (Test-Path -LiteralPath (Join-Path $CookedRoot 'Resources/textures.table')) {
         $textureLog = Join-Path $runDirectory 'textures.log'
-        Invoke-NativeLogged $InspectorPath @('textures', $staging) $textureLog
+        Invoke-NativeLogged $InspectorPath @('textures', $CookedRoot) $textureLog
         $declaredTextures = -1
         $textureRows = 0
         foreach ($line in Get-Content -LiteralPath $textureLog) {
@@ -319,35 +329,13 @@ try {
         }
         if ($textureRows -ne $declaredTextures) { throw 'Could not account for every Inspector texture row.' }
     }
-    Write-JsonFile @((Get-ChildItem -LiteralPath $staging -Recurse -File -Force) | ForEach-Object {
-        @{ path = [IO.Path]::GetRelativePath($staging, $_.FullName).Replace('\', '/'); size_bytes = $_.Length; sha256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash }
+    Write-JsonFile @((Get-ChildItem -LiteralPath $CookedRoot -Recurse -File -Force) | ForEach-Object {
+        @{ path = [IO.Path]::GetRelativePath($CookedRoot, $_.FullName).Replace('\', '/'); size_bytes = $_.Length; sha256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash }
     }) (Join-Path $runDirectory 'published-files.json')
     $result.assets = $assetCount
     $result.scenes = @($indexedScenes)
     $result.textures = $textureCount
 
-    # Recheck all resolved boundaries immediately before the only directory moves.
-    foreach ($candidate in @($CookedRoot, $staging, $backup)) { Assert-Sibling $candidate $parent }
-    if (Test-Path -LiteralPath $backup) { throw "Backup destination already exists: $backup" }
-    if (Get-Process -Name 'Oxygen.Examples.RenderScene' -ErrorAction SilentlyContinue) { throw 'RenderScene started during the cook; close it before publication.' }
-    $oldMoved = $false
-    try {
-        if (Test-Path -LiteralPath $CookedRoot) {
-            [IO.Directory]::Move($CookedRoot, $backup)
-            $oldMoved = $true
-        }
-        [IO.Directory]::Move($staging, $CookedRoot)
-    } catch {
-        $publicationError = $_
-        if ($oldMoved -and -not (Test-Path -LiteralPath $CookedRoot)) {
-            Assert-Sibling $backup $parent
-            Assert-Sibling $CookedRoot $parent
-            try { [IO.Directory]::Move($backup, $CookedRoot) } catch {
-                throw "Publication failed: $($publicationError.Exception.Message). Restore also failed: $($_.Exception.Message). Previous generation remains at $backup; staging: $staging"
-            }
-        }
-        throw $publicationError
-    }
     $result.status = 'published'
     $result.published = $true
     Write-Host "Published $($sources.Count) scenes to $CookedRoot"
@@ -357,9 +345,25 @@ try {
     $result.status = 'failed'
     $result.error = $_.Exception.Message
     Write-Error -Message $_.Exception.Message -ErrorAction Continue
-    if ($runDirectory) { Write-Host "Preserved evidence and any staging output: $runDirectory" }
+    if ($runDirectory) { Write-Host "Preserved evidence: $runDirectory" }
     exit 1
 } finally {
+    if ($generationStarted -and -not $result.published) {
+        try {
+            Assert-Sibling $CookedRoot $parent
+            Assert-Sibling $backup $runDirectory
+            $failedRoot = Join-Path $runDirectory 'failed-cooked'
+            Assert-Sibling $failedRoot $runDirectory
+            if (Test-Path -LiteralPath $failedRoot) { throw "Recovery destination already exists: $failedRoot" }
+            if (Test-Path -LiteralPath $CookedRoot) { [IO.Directory]::Move($CookedRoot, $failedRoot) }
+            if ($oldMoved) { [IO.Directory]::Move($backup, $CookedRoot) }
+            $result.status = 'failed_restored'
+        } catch {
+            $result.status = 'recovery_required'
+            $result.recovery_error = $_.Exception.Message
+            Write-Error -Message "Recovery failed; previous content remains at ${backup}: $($_.Exception.Message)" -ErrorAction Continue
+        }
+    }
     if ($publicationLock) { $publicationLock.Dispose() }
     if ($runDirectory) { Write-JsonFile $result (Join-Path $runDirectory 'result.json') }
 }

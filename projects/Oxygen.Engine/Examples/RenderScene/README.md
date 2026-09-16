@@ -109,23 +109,23 @@ resolve against the working directory. Use PowerShell 7.4 or newer.
 ```
 
 The script validates source-list structure and original file existence, then uses
-native manifest/schema preflight. It cooks into a fresh sibling staging directory
-with explicit virtual root `/.cooked`. Before publication it requires successful
+native manifest/schema preflight. It preserves the previous directory under the
+build tree and cooks directly into `.cooked` with explicit virtual root
+`/.cooked`. Successful completion requires successful
 jobs, Inspector validation, expected scene outputs, descriptor sizes/SHA256, and
 the requested texture formats/mip counts. The reserved fallback texture keeps
 its native 1×1 RGBA8 format and is checked separately from imported textures.
 Missing external model dependencies
 are diagnosed by the native importer; any failure prevents publication.
 
-On success, the old live directory becomes a uniquely named sibling backup and
-the validated staging directory replaces it. The script never deletes old or
-failed generations. It rejects unsafe publication paths and simultaneous runs
-against the same target. Close all consumers first. If the final rename fails,
-it restores the old root when possible and reports any failure.
+The script never deletes old or failed generations. It rejects unsafe paths and
+simultaneous runs against the same target. Close all consumers first. A failed
+cook or validation moves failed output into the build-tree run and restores the
+previous root. The output and build-tree backup must be on the same volume.
 
 Each run retains its exact manifest, native report/logs, source/tool hashes,
-output hashes, and `result.json` under the target parent's `.reimport-runs/`.
-Failures exit nonzero and preserve evidence/staging. Inspect reported warnings
+output hashes, and `result.json` under `out/build-ninja/renderscene-reimport/`.
+Failures exit nonzero and preserve evidence and failed output. Inspect reported warnings
 and then perform native visual validation; successful cooking does not prove
 rendered appearance. Run `Get-Help ./Examples/RenderScene/reimport_scenes.ps1 -Full`
 for all parameters and error behavior.
