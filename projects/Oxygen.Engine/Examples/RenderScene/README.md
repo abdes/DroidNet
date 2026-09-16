@@ -183,9 +183,10 @@ CLI-selected and UI-selected runs.
 | `--cvars-archive <path>` | Use a separate persisted CVar archive. |
 | `--directional-shadows conventional\|vsm` | Directional shadow policy; default is conventional. |
 | `--hot-reload=false` | Disable disk script hot reload for a controlled run. |
-| `--preview-sun=true\|false` | Add a preview sun when a loaded scene contains no directional light. Overrides the persisted preview setting for this process. |
+| `--environment-profile <key>` | Select `scene`, `custom`, `outdoor-sunny`, `outdoor-cloudy`, `foggy-daylight`, `outdoor-dawn`, or `outdoor-dusk` for this run. |
+| `--preview-sun=true\|false` | Independently opt in to preview sunlight for any profile. Reuse a scene directional light, or create one, only when no authored sun designation exists. |
 | `--fps <rate>`, `--vsync=true\|false` | Frame pacing and synchronization. |
-| `--startup-skybox <image>` | Equip a skybox; layout/output still come from demo settings. |
+| `--startup-skybox <image>` | Equip a skybox through Custom; layout/output come from demo settings. Conflicts with an explicit non-Custom profile. |
 | `--debug-layer=true`, `--aftermath=true` | Diagnostic tooling; mutually exclusive. |
 
 ## UI workflows
@@ -194,37 +195,65 @@ Labels/actions below are verified against current source. **Live verification of
 this refreshed-content workflow is pending.** Retain run evidence separately
 from these operating instructions.
 
-### Lighting imported models
+### Choose lighting and preview sunlight
 
-RenderScene enables **preview sunlight by default**. After a scene finishes
-building, it adds one `Preview Sun` if no directional-light component exists
-anywhere in the hierarchy. This includes scenes loaded from the Library, restored
-at startup, selected with `--scene`, or automatically loaded after an import.
-The camera-only startup placeholder receives no sun.
+Open **Environment**. **Profile** selects the environment; **Preview sun** directly
+below it is an independent opt-in available to every profile. Changing the
+checkbox leaves the selected profile unchanged. A new settings file starts in
+**Use Scene**, with preview off.
 
-The preview uses the demo's default directional light: 100,000 lux, a 0.53-degree
-source angle, warm white color, shadows enabled, directed downward toward the
-origin. It adds no atmosphere, sky light, fog, or exposure override. The light
-belongs to that runtime scene; cooked files are unchanged. Existing directional
-lights suppress creation even if hidden, disabled, or not tagged as a sun.
-Activation preserves their authored values and shadow settings.
+| Profile | What it uses |
+| --- | --- |
+| **Use Scene** | The loaded scene's authored environment and sun values. Returning here restores them after profile edits. Preview sunlight is the only opt-in environment addition. |
+| **Outdoor Sunny**, **Outdoor Cloudy**, **Foggy Daylight**, **Outdoor Dawn**, **Outdoor Dusk** | Premade sun, atmosphere, sky-light, fog, and exposure settings. A premade does not opt in to preview sunlight. |
+| **Custom** | Your saved environment edits. Selecting another profile retains these values; selecting Custom restores them. Without a saved Custom, it starts from the current environment. |
 
-For intentionally dark, emissive, local-light-only, or authored-lighting checks,
-disable the preview for that run:
+Editing an environment property switches to **Custom** and saves that edit.
+Selecting a profile in the UI saves the selection for subsequent launches.
+Preview has its own saved preference, `render_scene.preview_sun.enabled`.
+
+The help below **Preview sun** explains the decision for the loaded scene:
+
+| State | Meaning and effect |
+| --- | --- |
+| Unavailable | The named scene light already has `IsSunLight` or an explicit **Primary**/**Secondary** atmosphere role. Hidden or switched-off authored suns still reserve that assignment. RenderScene does not replace it. The control is also unavailable until a scene is ready. |
+| Available, unchecked; named candidate | Checking borrows that scene directional light as the preview sun. Its intensity, color, direction, visibility, and shadow settings remain authored in Use Scene. Visible directionals are preferred when choosing a candidate. |
+| Available, unchecked; no directional light | Checking creates a temporary node named `Preview Sun`. |
+| Checked | The help names the actual light and whether it was borrowed or created. Unchecking restores a borrowed light's previous sun-role and world-lighting flags, or removes the temporary node. An off or zero-intensity light is identified in the help. |
+
+Borrowing sets the light's world-lighting, sun, and environment contribution flags
+and assigns **Primary** for the preview. It does not silently brighten a
+zero-intensity light or unhide a node. With a premade or Custom selected, that
+profile supplies the active sun settings. If the scene already designates a sun,
+the profile uses it without creating a preview light.
+
+A newly created preview starts at 100,000 lux, warm white, a 0.53-degree source
+angle, and shadows with bias 0.03. It follows Oxygen's Z-up basis and points
+downward toward the scene origin. The preview checkbox itself adds no atmosphere,
+sky light, fog, cubemap, or exposure override. To enable an atmosphere yourself,
+select **Custom**, expand **Sky Atmosphere**, and enable it; opt in to preview
+sunlight separately if the scene has no designated sun.
+
+These changes affect the running scene only. Source models and cooked files stay
+unchanged. Loading another scene reevaluates its own sun/candidate; the
+camera-only startup placeholder receives no preview. **Sun** controls edit the
+currently selected light. When no sun is selected, the panel explains how to
+enable one instead of presenting ineffective controls. Expand **Runtime details**
+when inspecting renderer state.
+
+Both options are in the public **Environment** group of `--help`. CLI selections
+apply to the current process without saving a different profile, preview
+preference, environment, or exposure. Subsequent explicit UI edits are saved.
+Profile keys are exact; display labels and aliases are not accepted.
 
 ```powershell
-.\out\build-ninja\bin\Debug\Oxygen.Examples.RenderScene.exe --scene EmissiveScene --preview-sun=false
+.\out\build-ninja\bin\Debug\Oxygen.Examples.RenderScene.exe --scene EmissiveScene --environment-profile scene --preview-sun=false
+.\out\build-ninja\bin\Debug\Oxygen.Examples.RenderScene.exe --scene rgb_cubes --environment-profile outdoor-sunny --preview-sun=true
 ```
 
-To change the default, set `render_scene.preview_sun.enabled` to `false` in
-`demo_settings.json` while the app is closed. An explicit `--preview-sun` wins
-over that setting without saving the command-line override. The setting takes
-effect at the next launch. Normal **Environment → Sun** controls edit the light
-in the active scene; a fresh scene load starts with its own authored or preview
-light. A disabled preview setting does not disable an authored light.
-
-The load log states `Preview sun added`, `skipped: directional light exists`, or
-`disabled`, with the scene key. Check this before diagnosing a black surface.
+The log records the resolved startup choices and the preview decision, including
+whether a requested preview became active and which source was used. Check the
+panel's named light and this decision before diagnosing a dark surface.
 
 ### Load a loose index or PAK
 
@@ -288,8 +317,9 @@ preserve the source radiance range.
 
 Counts describe authored descriptors, before runtime script/physics changes.
 Smoke-load all scenes in the refreshed library and use their expected outcomes
-to choose representative captures. Use `--preview-sun=false` for this authored
-lighting matrix, especially the emissive and point/spot-light scenes.
+to choose representative captures. Use `--environment-profile scene` and
+`--preview-sun=false` for this authored lighting matrix, especially the emissive
+and point/spot-light scenes.
 
 | Scene | Nodes / renderables | Expected coverage |
 | --- | ---: | --- |
@@ -412,13 +442,18 @@ The native console (grave-accent key) exposes `gfx.capture.status`,
 palette. Native screenshots prove visible appearance; GPU captures support
 pass/resource inspection. Retain loader/hydration diagnostics alongside both.
 
-Native preview-sun verification on 2026-09-15 passed with original-source
+Historical preview-sun verification on 2026-09-15 passed with original-source
 `rgb_cubes` on/off images at identical camera/exposure, authored-light preservation
 in `CubeScene`, and persisted opt-out in `EmissiveScene`. RGB's Debug/hash-verified
 dependency load took about 57 seconds; capture after the loaded-scene publication,
 not merely after startup. See the
-[validation record](../../design/vortex/plan/renderscene-preview-sun.md) for scope
-and remaining example-refresh checks.
+[validation record](../../design/vortex/plan/renderscene-preview-sun.md) for scope.
+Those captures cover the earlier default-on, missing-directional policy; they do
+not qualify the current opt-in/profile UI. The current workflow is validated
+separately: Debug/Release builds, 97 focused tests, 18 native scenario checks,
+and user-confirmed visual/UI and Sponza sun/profile validation on 2026-09-16.
+Sponza's non-sun lighting/rendering defects remain open. Exposure quality is outside
+this workflow's acceptance; see the validation record for exact evidence and limits.
 
 ## Troubleshooting
 
@@ -426,7 +461,9 @@ and remaining example-refresh checks.
 | --- | --- |
 | Missing/wrong scene | Index exists; exact token; logged source path; persisted mounts/duplicate generations. |
 | Successful exit before content appears | Frame budget expired during loading. Increase it and verify publication before capture. |
-| Black, tiny, or offscreen scene | Camera, near/far planes, exposure, solid/debug mode, and the preview-sun decision in the load log. An existing disabled/hidden directional light intentionally prevents injection. |
+| Black, tiny, or offscreen scene | Camera, near/far planes, exposure, solid/debug mode, selected profile, and the named preview decision. Hidden/off authored sun designations block preview; an untagged directional may instead be borrowed without changing its visibility or authored intensity in Use Scene. |
+| Preview sun is unavailable | Read the reason beneath the checkbox. A named authored sun or Primary/Secondary assignment reserves the role even when hidden or off. Wait for a scene load if no scene is ready. |
+| A premade has no sunlight | A profile does not enable preview. Check Preview sun if offered; otherwise inspect the named authored sun and its visibility. |
 | `No physics sidecar found ... (scene-only load)` | Expected for scenes without physics; not a load failure. |
 | `has no resolved sun directional light` | Expected for the startup placeholder, preview-disabled scenes without a sun, or directional lights without a sun/environment role. Inspect the loaded scene's preview decision. |
 | Script scene summary has zero renderables | Check script attachment, compilation, and runtime creation. |
@@ -447,7 +484,8 @@ Use live sources before changing the workflow:
 | Settings location/lifecycle | [SettingsService.cpp](../DemoShell/Services/SettingsService.cpp), [DemoShell.cpp](../DemoShell/DemoShell.cpp) |
 | Camera persistence/reset | [CameraSettingsService.cpp](../DemoShell/Services/CameraSettingsService.cpp) |
 | Environment UI and cubemap binding | [EnvironmentDebugPanel.cpp](../DemoShell/UI/EnvironmentDebugPanel.cpp), [SkyboxService.cpp](../DemoShell/Services/SkyboxService.cpp) |
-| Preview sun creation and authored sun binding | [DefaultSceneLighting.cpp](../DemoShell/Services/DefaultSceneLighting.cpp), [EnvironmentSettingsService.cpp](../DemoShell/Services/EnvironmentSettingsService.cpp) |
+| Preview eligibility, reuse, creation, and restoration | [PreviewSunController.cpp](../DemoShell/Services/PreviewSunController.cpp), [DefaultSceneLighting.cpp](../DemoShell/Services/DefaultSceneLighting.cpp) |
+| Profiles, Custom persistence, and Use Scene restoration | [EnvironmentVm.cpp](../DemoShell/UI/EnvironmentVm.cpp), [EnvironmentSettingsService.cpp](../DemoShell/Services/EnvironmentSettingsService.cpp), [EnvironmentSceneSnapshot.cpp](../DemoShell/Services/EnvironmentSceneSnapshot.cpp) |
 | Capture options | [FrameCaptureCliOptions.h](../Common/FrameCaptureCliOptions.h) |
 | Content recipes | [Content README](../Content/README.md), [scene manifests](../Content/scenes) |
 

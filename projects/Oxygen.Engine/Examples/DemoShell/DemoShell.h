@@ -91,6 +91,11 @@ struct DemoShellConfig {
   bool enable_camera_rig { true };
   bool enable_renderer_bound_panels { true };
   bool force_environment_override { true };
+  bool restore_environment_profile { false };
+  std::optional<int> initial_environment_profile;
+  std::string startup_skybox_path;
+  std::optional<bool> initial_preview_sun_enabled;
+  std::function<bool()> preview_scene_ready;
 
   ContentRootConfig content_roots {};
   DemoShellPanelConfig panel_config {};

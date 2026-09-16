@@ -16,6 +16,7 @@
 #include <glm/geometric.hpp>
 #include <glm/gtc/quaternion.hpp>
 
+#include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Data/PakFormat.h>
@@ -732,11 +733,6 @@ namespace {
     common.affects_world = affects_world;
     common.casts_shadows = casts_shadows;
 
-    if (auto flags = node.GetFlags()) {
-      flags->get().SetFlag(scene::SceneNodeFlags::kCastsShadows,
-        scene::SceneFlag {}.SetEffectiveValueBit(casts_shadows));
-    }
-
     return true;
   }
 
@@ -825,6 +821,11 @@ auto EnvironmentSettingsService::HydrateEnvironment(
   }
 }
 
+EnvironmentSettingsService::~EnvironmentSettingsService()
+{
+  BindPreviewObserver(nullptr);
+}
+
 auto EnvironmentSettingsService::SetRuntimeConfig(
   const EnvironmentRuntimeConfig& config) -> void
 {
@@ -833,13 +834,40 @@ auto EnvironmentSettingsService::SetRuntimeConfig(
   config_ = config;
   force_scene_rebind_ = false;
 
+  if (!preview_setting_initialized_ && config_.initial_preview_sun_enabled) {
+    preview_sun_enabled_ = *config_.initial_preview_sun_enabled;
+    preview_setting_initialized_ = true;
+  }
+
   if (!settings_loaded_) {
     LoadSettings();
+    if (config_.initial_environment_profile.has_value()) {
+      preset_index_ = *config_.initial_environment_profile;
+      if (preset_index_ == kPresetCustom) {
+        LoadSettings(true);
+      }
+      transient_profile_ = true;
+      settings_persist_dirty_ = false;
+    }
+    if (!config_.startup_skybox_path.empty()) {
+      skybox_path_ = config_.startup_skybox_path;
+      sky_atmo_enabled_ = false;
+      sky_sphere_enabled_ = true;
+      sky_sphere_source_ = 0;
+      sky_light_enabled_ = true;
+      sky_light_source_ = 1;
+      skybox_dirty_ = true;
+    }
   }
 
   NormalizeSkySystems();
 
   if (scene_changed) {
+    BindPreviewObserver(SupportsPreviewSun() ? config_.scene.get() : nullptr);
+    preview_sun_.Reset();
+    scene_snapshot_.Reset();
+    restore_scene_pending_ = false;
+    preview_reconcile_pending_ = true;
     if (!config_.scene) {
       PersistSettingsIfDirty();
       pending_changes_ = false;
@@ -849,7 +877,10 @@ auto EnvironmentSettingsService::SetRuntimeConfig(
       return;
     }
 
-    if (config_.force_environment_override) {
+    if (config_.restore_environment_profile) {
+      scene_snapshot_.Capture(*config_.scene);
+    }
+    if (ShouldApplyEnvironmentProfile()) {
       pending_changes_ = true;
       dirty_domains_ = ToMask(DirtyDomain::kAll);
       batched_dirty_domains_ = ToMask(DirtyDomain::kNone);
@@ -887,7 +918,10 @@ auto EnvironmentSettingsService::OnFrameStart(
 auto EnvironmentSettingsService::OnSceneActivated(scene::Scene& scene) -> void
 {
   PersistSettingsIfDirty();
+  BindPreviewObserver(nullptr);
   config_.scene = observer_ptr { &scene };
+  preview_sun_.Reset();
+  scene_snapshot_.Reset();
   // Ensure the next runtime config update runs scene-transition logic even
   // though config_.scene is pre-bound here for immediate HasScene()
   // correctness.
@@ -950,7 +984,12 @@ auto EnvironmentSettingsService::SetPresetIndex(int index) -> void
   if (preset_index_ == index) {
     return;
   }
+  if (config_.skybox_service) {
+    config_.skybox_service->CancelPendingLoads();
+  }
+  PersistSettingsIfDirty();
   preset_index_ = index;
+  restore_scene_pending_ = false;
   settings_persist_dirty_ = true;
   settings_revision_++;
   DLOG_F(1, "preset index changed to {} (revision={})", preset_index_,
@@ -959,6 +998,18 @@ auto EnvironmentSettingsService::SetPresetIndex(int index) -> void
 
 auto EnvironmentSettingsService::ActivateUseSceneMode() -> void
 {
+  if (config_.skybox_service) {
+    config_.skybox_service->CancelPendingLoads();
+  }
+  SetPresetIndex(kPresetUseScene);
+  if (config_.restore_environment_profile) {
+    restore_scene_pending_ = true;
+    pending_changes_ = false;
+    dirty_domains_ = ToMask(DirtyDomain::kNone);
+    batched_dirty_domains_ = ToMask(DirtyDomain::kNone);
+    needs_sync_ = false;
+    return;
+  }
   if (config_.force_environment_override) {
     pending_changes_ = true;
     dirty_domains_ = ToMask(DirtyDomain::kAll);
@@ -977,13 +1028,217 @@ auto EnvironmentSettingsService::ActivateUseSceneMode() -> void
 
 auto EnvironmentSettingsService::ActivateCustomMode() -> void
 {
-  preset_index_ = kPresetCustom;
-  settings_persist_dirty_ = true;
+  restore_scene_pending_ = false;
+  SetPresetIndex(kPresetCustom);
   needs_sync_ = false;
+}
+
+auto EnvironmentSettingsService::RestoreCustomMode() -> void
+{
+  if (config_.skybox_service) {
+    config_.skybox_service->CancelPendingLoads();
+  }
+  restore_scene_pending_ = false;
+  SetPresetIndex(kPresetCustom);
+  const auto settings = SettingsService::ForDemoApp();
+  if (settings
+    && settings->GetBool(kEnvironmentCustomStatePresentKey).value_or(false)) {
+    LoadSettings(true);
+    settings_persist_dirty_ = true;
+  } else {
+    ActivateCustomMode();
+  }
+}
+
+auto EnvironmentSettingsService::SetProfilePersistenceEnabled(
+  const bool enabled) -> void
+{
+  transient_profile_ = !enabled;
+}
+
+auto EnvironmentSettingsService::ShouldApplyEnvironmentProfile() const -> bool
+{
+  return config_.force_environment_override
+    || (config_.restore_environment_profile
+      && preset_index_ != kPresetUseScene);
+}
+
+auto EnvironmentSettingsService::SupportsPreviewSun() const -> bool
+{
+  return config_.initial_preview_sun_enabled.has_value();
+}
+
+auto EnvironmentSettingsService::IsPreviewSunActive() const -> bool
+{
+  return preview_sun_.GetSun().IsAlive();
+}
+
+auto EnvironmentSettingsService::GetPreviewSunEnabled() const -> bool
+{
+  return preview_sun_enabled_;
+}
+
+auto EnvironmentSettingsService::CanEnablePreviewSun() const -> bool
+{
+  return SupportsPreviewSun() && config_.scene && config_.preview_scene_ready
+    && preview_sun_.CanEnable(*config_.scene);
+}
+
+auto EnvironmentSettingsService::GetSunSourceDescription() const -> std::string
+{
+  if (const auto preview = preview_sun_.GetSun(); preview.IsAlive()) {
+    return std::string("Preview sun: ") + std::string(preview.GetName())
+      + (preview_sun_.IsInjected() ? " (created)" : " (scene directional)");
+  }
+  if (const auto sun = FindSunLightCandidate()) {
+    return std::string("Scene sun: ") + std::string(sun->GetName());
+  }
+  return "No sun selected";
+}
+
+auto EnvironmentSettingsService::GetPreviewSunHelpText() const -> std::string
+{
+  if (!config_.scene || !config_.preview_scene_ready) {
+    return "Load a scene to use preview sunlight.";
+  }
+  const auto sources = preview_sun_.InspectSources(*config_.scene);
+  if (sources.authored_sun.IsAlive()) {
+    return "Preview is unavailable: '"
+      + std::string(sources.authored_sun.GetName())
+      + "' is already designated as a scene sun. RenderScene leaves that "
+        "assignment in place.";
+  }
+  if (auto preview = preview_sun_.GetSun(); preview.IsAlive()) {
+    std::string text = preview_sun_.IsInjected()
+      ? "RenderScene created a temporary '" + std::string(preview.GetName())
+        + "'. Uncheck to remove this light."
+      : "Using scene light '" + std::string(preview.GetName())
+        + "' as the preview sun. "
+        + (preset_index_ == kPresetUseScene
+            ? "Its authored direction and brightness are used. "
+            : "The selected profile sets its direction and brightness. ")
+        + "Uncheck to restore its previous sun role.";
+    if (const auto light = preview.GetLightAs<scene::DirectionalLight>()) {
+      if (!light->get().Common().affects_world) {
+        text += " Sun is currently switched off in this profile.";
+      } else if (light->get().GetIntensityLux() <= 0.0F) {
+        text += " Its illuminance is zero; increase it in Sun settings to "
+                "light the scene.";
+      }
+    }
+    return text;
+  }
+  if (sources.candidate.IsAlive()) {
+    return "Candidate: '" + std::string(sources.candidate.GetName())
+      + "'. Check to use this scene light as the preview sun. Unchecking "
+        "restores its previous sun role.";
+  }
+  return "This scene has no directional light. Check to create a temporary "
+         "'Preview Sun'. Unchecking removes it.";
+}
+
+auto EnvironmentSettingsService::SetPreviewSunEnabled(const bool enabled)
+  -> void
+{
+  if (!SupportsPreviewSun()) {
+    return;
+  }
+  preview_sun_enabled_ = enabled;
+  preview_reconcile_pending_ = true;
+  if (const auto settings = SettingsService::ForDemoApp()) {
+    settings->SetBool("render_scene.preview_sun.enabled", enabled);
+  }
+}
+
+auto EnvironmentSettingsService::BindPreviewObserver(scene::Scene* scene)
+  -> void
+{
+  const auto previous = preview_observed_scene_.lock();
+  if (previous.get() == scene) {
+    return;
+  }
+  if (previous) {
+    CHECK_F(previous->UnregisterObserver(
+              observer_ptr<scene::ISceneObserver> { this }),
+      "failed to detach preview-sun scene observer");
+  }
+  preview_observed_scene_.reset();
+  if (scene) {
+    preview_observed_scene_ = scene->weak_from_this();
+    CHECK_F(!preview_observed_scene_.expired(),
+      "preview-sun observation requires a shared-owned scene");
+    CHECK_F(
+      scene->RegisterObserver(observer_ptr<scene::ISceneObserver> { this },
+        scene::SceneMutationMask::kLightChanged
+          | scene::SceneMutationMask::kNodeDestroyed),
+      "failed to attach preview-sun scene observer");
+  }
+}
+
+auto EnvironmentSettingsService::OnLightChanged(
+  const scene::NodeHandle& node_handle) noexcept -> void
+{
+  if (preview_reconciling_ || !preview_sun_enabled_) {
+    return;
+  }
+  const auto scene = preview_observed_scene_.lock();
+  if (!scene || scene.get() != config_.scene.get()) {
+    return;
+  }
+  preview_reconcile_pending_ = true;
+  if (auto node = scene->GetNode(node_handle)) {
+    if (const auto light = node->GetLightAs<scene::DirectionalLight>(); light
+      && (light->get().IsSunLight()
+        || light->get().GetAtmosphereLightSlot()
+          != scene::AtmosphereLightSlot::kNone)) {
+      // Scalar role restoration is safe during mutation dispatch. Creation,
+      // removal, and observer sync wait for the normal apply phase.
+      preview_sun_.YieldToAuthoredSun(*scene);
+    }
+  }
+}
+
+auto EnvironmentSettingsService::OnNodeDestroyed(
+  const scene::NodeHandle& /*node_handle*/) noexcept -> void
+{
+  if (!preview_reconciling_ && preview_sun_enabled_) {
+    preview_reconcile_pending_ = true;
+  }
+}
+
+auto EnvironmentSettingsService::ReconcilePreviewSun() -> void
+{
+  if (!config_.scene || !preview_reconcile_pending_) {
+    return;
+  }
+  preview_reconcile_pending_ = false;
+  if (!SupportsPreviewSun()) {
+    return;
+  }
+  preview_reconciling_ = true;
+  const ScopeGuard finish_reconcile(
+    [this]() noexcept { preview_reconciling_ = false; });
+  preview_sun_.Update(*config_.scene,
+    SupportsPreviewSun() && config_.preview_scene_ready
+      && preview_sun_enabled_);
+  UpdateSunLightCandidate();
+  if (preset_index_ == kPresetUseScene) {
+    BindSceneSun(true);
+  } else if (IsPreviewSunActive()) {
+    pending_changes_ = true;
+    dirty_domains_ |= kSunDirtyMask;
+  }
+  LOG_F(INFO, "Environment: preview sun requested={} active={}; {}",
+    preview_sun_enabled_, IsPreviewSunActive(), GetPreviewSunHelpText());
 }
 
 auto EnvironmentSettingsService::SyncFromSceneIfNeeded() -> void
 {
+  // Scene publication precedes the runtime-config update. Preserve the
+  // requested profile until that update captures the untouched authored scene.
+  if (force_scene_rebind_ && config_.restore_environment_profile) {
+    return;
+  }
   if (config_.force_environment_override) {
     needs_sync_ = false;
     return;
@@ -2700,7 +2955,9 @@ auto EnvironmentSettingsService::SetSunSourceAngleDeg(float value) -> void
 
 auto EnvironmentSettingsService::GetSunAtmosphereLightSlot() const -> int
 {
-  return sun_atmosphere_light_slot_;
+  return IsPreviewSunActive()
+    ? static_cast<int>(scene::AtmosphereLightSlot::kPrimary)
+    : sun_atmosphere_light_slot_;
 }
 
 auto EnvironmentSettingsService::SetSunAtmosphereLightSlot(int value) -> void
@@ -2953,7 +3210,7 @@ auto EnvironmentSettingsService::ApplySunShadowSettingsToLight(
   light.SetAngularSizeRadians(
     std::max(sun_source_angle_deg_ * kDegToRad, 0.0F));
   light.SetAtmosphereLightSlot(static_cast<scene::AtmosphereLightSlot>(
-    std::clamp(sun_atmosphere_light_slot_,
+    std::clamp(GetSunAtmosphereLightSlot(),
       static_cast<int>(scene::AtmosphereLightSlot::kNone),
       static_cast<int>(scene::AtmosphereLightSlot::kSecondary))));
   light.SetUsePerPixelAtmosphereTransmittance(
@@ -2983,6 +3240,26 @@ auto EnvironmentSettingsService::ApplySunShadowSettingsToLight(
 
 auto EnvironmentSettingsService::ApplyPendingChanges() -> void
 {
+  if (force_scene_rebind_ && config_.restore_environment_profile) {
+    return;
+  }
+  if (SupportsPreviewSun() && !config_.preview_scene_ready) {
+    return;
+  }
+  if (restore_scene_pending_ && config_.scene) {
+    {
+      preview_reconciling_ = true;
+      const ScopeGuard finish_restore(
+        [this]() noexcept { preview_reconciling_ = false; });
+      preview_sun_.Update(*config_.scene, false);
+      scene_snapshot_.Restore(*config_.scene);
+    }
+    restore_scene_pending_ = false;
+    preview_reconcile_pending_ = true;
+    needs_sync_ = true;
+    SyncFromSceneIfNeeded();
+  }
+  ReconcilePreviewSun();
   if (!pending_changes_ || !config_.scene) {
     return;
   }
@@ -3072,6 +3349,10 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
     }
   }
 
+  if (apply_sun && sun_light_available_) {
+    config_.scene->GetDirectionalLightResolver().OnLightChanged(
+      sun_light_node_.GetHandle());
+  }
   auto atmo = env->TryGetSystem<scene::environment::SkyAtmosphere>();
   if (apply_atmosphere && sky_atmo_enabled_ && !atmo) {
     atmo
@@ -3807,7 +4088,7 @@ auto EnvironmentSettingsService::PersistSettingsIfDirty() -> void
   settings_persist_dirty_ = false;
 }
 
-auto EnvironmentSettingsService::LoadSettings() -> void
+auto EnvironmentSettingsService::LoadSettings(const bool custom_only) -> void
 {
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
@@ -3882,7 +4163,15 @@ auto EnvironmentSettingsService::LoadSettings() -> void
   };
 
   bool any_loaded = false;
-  any_loaded |= load_int(kEnvironmentPresetKey, preset_index_);
+  if (custom_only) {
+    preset_index_ = kPresetCustom;
+  } else {
+    const bool preset_loaded = load_int(kEnvironmentPresetKey, preset_index_);
+    any_loaded |= preset_loaded;
+    if (!preset_loaded && config_.restore_environment_profile) {
+      preset_index_ = kPresetUseScene;
+    }
+  }
   const bool load_custom_state = preset_index_ == kPresetCustom;
   bool custom_state_loaded = false;
   if (load_custom_state) {
@@ -4093,7 +4382,8 @@ auto EnvironmentSettingsService::LoadSettings() -> void
   settings_loaded_ = true;
   has_persisted_settings_ = custom_state_loaded;
   if (any_loaded) {
-    if (!config_.force_environment_override) {
+    if (!config_.force_environment_override
+      && !config_.restore_environment_profile && !custom_only) {
       needs_sync_ = true;
       pending_changes_ = false;
       dirty_domains_ = ToMask(DirtyDomain::kNone);
@@ -4138,6 +4428,9 @@ auto EnvironmentSettingsService::LoadSettings() -> void
 
 auto EnvironmentSettingsService::SaveSettings() const -> void
 {
+  if (transient_profile_) {
+    return;
+  }
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
 
@@ -4177,7 +4470,9 @@ auto EnvironmentSettingsService::SaveSettings() const -> void
 
   save_float(
     kEnvironmentSettingsSchemaVersionKey, kCurrentSettingsSchemaVersion);
-  save_bool(kEnvironmentCustomStatePresentKey, preset_index_ == kPresetCustom);
+  if (preset_index_ == kPresetCustom) {
+    save_bool(kEnvironmentCustomStatePresentKey, true);
+  }
   save_int(kEnvironmentPresetKey, preset_index_);
   (void)settings->Remove(kLegacySunSourceKey);
 
@@ -4323,6 +4618,16 @@ auto EnvironmentSettingsService::MarkDirty(uint32_t dirty_domains) -> void
 {
   ValidateAndClampState();
   uint32_t effective_domains = dirty_domains;
+  const auto sky_source_domains = ToMask(DirtyDomain::kSkybox)
+    | ToMask(DirtyDomain::kSkySphere) | ToMask(DirtyDomain::kSkyLight)
+    | ToMask(DirtyDomain::kAtmosphereModel);
+  if ((dirty_domains & sky_source_domains) != 0U) {
+    if (config_.skybox_service) {
+      config_.skybox_service->CancelPendingLoads();
+    }
+    skybox_dirty_ = true;
+    effective_domains |= ToMask(DirtyDomain::kSkybox);
+  }
   if ((dirty_domains & ToMask(DirtyDomain::kSun)) != 0U && sky_atmo_enabled_) {
     effective_domains |= ToMask(DirtyDomain::kAtmosphereLights);
   }
@@ -4372,7 +4677,8 @@ auto EnvironmentSettingsService::ResetSunUiToDefaults() -> void
   sun_shadow_distance_fadeout_fraction_ = default_csm.distance_fadeout_fraction;
 }
 
-auto EnvironmentSettingsService::BindSceneSun() -> void
+auto EnvironmentSettingsService::BindSceneSun(const bool adopt_scene_values)
+  -> void
 {
   if (!config_.scene) {
     return;
@@ -4381,12 +4687,14 @@ auto EnvironmentSettingsService::BindSceneSun() -> void
   UpdateSunLightCandidate();
   // Forced-override demos retain their persisted/current UI values for the
   // next apply. Binding the new scene must not replace that requested state.
-  if (!config_.force_environment_override) {
+  const bool preserve_profile
+    = ShouldApplyEnvironmentProfile() && !adopt_scene_values;
+  if (!preserve_profile) {
     sun_enabled_ = false;
   }
   if (sun_light_available_) {
     if (auto light = sun_light_node_.GetLightAs<scene::DirectionalLight>();
-      light.has_value() && !config_.force_environment_override) {
+      light.has_value() && !preserve_profile) {
       sun_enabled_ = light->get().Common().affects_world;
       sun_color_rgb_ = light->get().Common().color_rgb;
       sun_illuminance_lx_ = light->get().GetIntensityLux();
@@ -4431,6 +4739,9 @@ auto EnvironmentSettingsService::FindSunLightCandidate() const
 {
   if (!config_.scene) {
     return std::nullopt;
+  }
+  if (const auto preview = preview_sun_.GetSun(); preview.IsAlive()) {
+    return preview;
   }
 
   const auto& resolver = config_.scene->GetDirectionalLightResolver();

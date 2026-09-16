@@ -33,6 +33,8 @@ m_gtest_program(
     "EnvironmentSettingsService_test.cpp"
 )
 
+m_gtest_program(EnvironmentVm SOURCES "EnvironmentVm_test.cpp")
+
 m_gtest_program(
   RenderingSettingsService
   SOURCES
