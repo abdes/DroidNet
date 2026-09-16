@@ -37,12 +37,7 @@ set(CMAKE_DEBUG_POSTFIX "-d")
 # Get git revision
 include(GetGitRevisionDescription)
 get_git_head_revision(GIT_REFSPEC GIT_SHA1)
-string(
-  SUBSTRING "${GIT_SHA1}"
-  0
-  12
-  GIT_REV
-)
+string(SUBSTRING "${GIT_SHA1}" 0 12 GIT_REV)
 if(NOT GIT_SHA1)
   set(GIT_REV "0")
 endif()
@@ -106,6 +101,10 @@ project(
     C
     CXX
 )
+
+# Oxygen uses textual headers, not C++ modules. Keep ordinary compiler header
+# dependencies without introducing an unused module-scanning/dyndep graph.
+set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 
 # Work around an MSBuild parallel project-reference failure mode observed with
 # /m>1 (returns exit code 1 with no compiler/linker errors). Keep top-level
@@ -474,7 +473,8 @@ endif()
 if(MSVC)
   # Enable C++ latest features
   list(
-    APPEND OXYGEN_COMMON_CXX_FLAGS
+    APPEND
+    OXYGEN_COMMON_CXX_FLAGS
     "/Zc:__cplusplus"
     "/Zc:preprocessor"
   )
@@ -489,7 +489,8 @@ else()
   list(APPEND OXYGEN_COMMON_CXX_FLAGS "-fPIC")
   # Enable all warnings and treat them as errors
   list(
-    APPEND OXYGEN_COMMON_CXX_FLAGS
+    APPEND
+    OXYGEN_COMMON_CXX_FLAGS
     "-Wall"
     "-Wextra"
     "-Werror"

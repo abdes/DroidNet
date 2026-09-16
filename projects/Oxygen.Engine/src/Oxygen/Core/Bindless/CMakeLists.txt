@@ -26,8 +26,14 @@ set(_bindless_schema_file "${_bindless_meta_dir}/Bindless.schema.json")
 
 # Temp-generated meta file paths (in the build tree)
 set(_gen_all_json "${_gen_temp_dir}/${_gen_prefix}All.json")
-set(_gen_d3d12_strategy_json "${_gen_temp_dir}/${_gen_prefix}Strategy.D3D12.json")
-set(_gen_vulkan_strategy_json "${_gen_temp_dir}/${_gen_prefix}Strategy.Vulkan.json")
+set(
+  _gen_d3d12_strategy_json
+  "${_gen_temp_dir}/${_gen_prefix}Strategy.D3D12.json"
+)
+set(
+  _gen_vulkan_strategy_json
+  "${_gen_temp_dir}/${_gen_prefix}Strategy.Vulkan.json"
+)
 
 # Make generation sensitive to tool script changes
 set(_gentool_dir "${CMAKE_SOURCE_DIR}/src/Oxygen/Core/Tools/BindlessCodeGen")
@@ -95,8 +101,7 @@ add_custom_command(
   # Remove the meta JSON files from the temporary output so they are not
   # included when we copy the remaining generated files into the source tree.
   COMMAND
-    ${CMAKE_COMMAND} -E remove -f
-    "${_gen_temp_dir}Generated.All.json"
+    ${CMAKE_COMMAND} -E remove -f "${_gen_temp_dir}Generated.All.json"
     "${_gen_temp_dir}Generated.Strategy.D3D12.json"
     "${_gen_temp_dir}Generated.Strategy.Vulkan.json"
   # Delete obsolete generated artifact names from the source tree so the checked-in
@@ -126,14 +131,13 @@ add_custom_command(
   VERBATIM
 )
 
-# Run the compile-check after generation. This will fail the generation step if
-# the compile-check fails, enforcing that generated headers remain compilable.
-add_custom_target(oxygen-core_bindless_gen DEPENDS ${_gen_stamp})
-add_custom_command(
-  TARGET oxygen-core_bindless_gen
-  POST_BUILD
-  COMMAND
-    ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target
-    BindlessCodeGen_CompileCheck --config $<CONFIG>
-  COMMENT "Running BindlessCodeGen compile-check"
-)
+# Keep generation and its compile-check in the same build graph. A recursive
+# build of this tree would share Ninja's dependency and build logs with its
+# parent and bypass the parent's scheduling of the compile-check.
+add_custom_target(oxygen-core_bindless_outputs DEPENDS ${_gen_stamp})
+add_dependencies(BindlessCodeGen_CompileCheck oxygen-core_bindless_outputs)
+
+# Core depends on this umbrella, so generated headers must pass the compile
+# check before Core compilation can proceed.
+add_custom_target(oxygen-core_bindless_gen)
+add_dependencies(oxygen-core_bindless_gen BindlessCodeGen_CompileCheck)

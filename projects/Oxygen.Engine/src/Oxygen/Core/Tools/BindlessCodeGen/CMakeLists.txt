@@ -69,19 +69,18 @@ add_library(
   tests/compile_check/compile_check.cpp
 )
 
-# Do not build the compile-check target as part of the default 'ALL'. It will
-# be built explicitly via ctest and from the bindless generation POST_BUILD
-# hook under Core/Bindless.
+# Do not build the compile-check target independently as part of 'ALL'. Core's
+# bindless generation umbrella depends on it, and CTest can request it directly.
 set_target_properties(
   BindlessCodeGen_CompileCheck
   PROPERTIES
-    EXCLUDE_FROM_ALL TRUE
+    EXCLUDE_FROM_ALL
+      TRUE
 )
 
-# Ensure the editable install runs before trying to compile the check (so
-# generation and local imports are available when running tests that depend
-# on generator outputs).
-add_dependencies(BindlessCodeGen_CompileCheck bindless_codegen_editable_install)
+# Core/Bindless wires this target to the generated-output target after defining
+# it. That dependency includes the editable install and generation stamp, so
+# direct compile-check builds also wait for current generated headers.
 
 # Add include path to the Bindless output directory so the generated headers
 # can be found when this TU is compiled. The generator writes headers into
@@ -100,11 +99,7 @@ if(TARGET fmt::fmt-header-only)
       fmt::fmt-header-only
   )
 elseif(TARGET fmt::fmt)
-  target_link_libraries(
-    BindlessCodeGen_CompileCheck
-    PRIVATE
-      fmt::fmt
-  )
+  target_link_libraries(BindlessCodeGen_CompileCheck PRIVATE fmt::fmt)
 endif()
 
 # Add CTest integration for running the Python unit tests
