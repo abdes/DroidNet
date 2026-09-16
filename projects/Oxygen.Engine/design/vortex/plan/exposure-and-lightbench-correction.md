@@ -910,12 +910,23 @@ with zero errors/blocking warnings and three accepted factory shutdown warnings.
 Evidence is `contract-audit/slice3-mask-final-*`, the service/binder Release logs,
 and `metering/masks-debug-layer.json`; the manifest preserves earlier increments.
 
-Slice 3 remains in progress for one compiler portability correction: the
-percentile implementation currently requests optional 64-bit integer shader
-operations. Replace that arithmetic with two 32-bit words and requalify the
-same numerical cases. `contract-audit/slice3-average-before-portable.ll` records
-the current capability requirement. Full GPU P routing and upstream range
-qualification remain slice 5; cooked mask persistence belongs to slice 6.
+The percentile portability correction passes 30 native tests in Debug and
+Release, including narrow fractional CDF boundaries on both sides of the
+32-bit word shift. Four 16-bit partial products replace native 64-bit ALU.
+Both compiled solve disassemblies now require descriptor-heap indexing without
+Int64ShaderOps. A four-case debugger run passes with no errors/blocking warnings;
+the refreshed `portable-meter` capture passes histogram and final-consumption
+checks. Its PNG is byte-identical to the inspected locked-meter image.
+Evidence: `contract-audit/slice3-portable-*`, the before/after solve disassemblies,
+and `metering/portable-*`.
+
+One subsequently added edge regression remains to fix before the slice-3 gate:
+a very small positive Spot radius loses the exact centre sample because the
+current floating-point UV calculation shifts it slightly off centre. The failed
+native case is `contract-audit/slice3-small-spot-before.log`. Derive analytic
+profile distance from integer cell-centre offsets, then requalify this case.
+Full GPU P routing/upstream range qualification remain slice 5; cooked mask
+persistence belongs to slice 6.
 
 The user approved correcting the mask identity contract on 2026-09-16: reuse
 cooked source-local texture indices, PAK remapping and runtime ResourceKey.

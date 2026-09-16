@@ -218,11 +218,27 @@ void VortexExposureHistogramCS(
     }
 }
 
+// Full unsigned product using four 16-bit partial products. Each intermediate
+// fits uint32, including the carry terms; no optional Int64ShaderOps is needed.
+static uint2 MultiplyWide(uint left, uint right)
+{
+    const uint low_product = (left & 0xffffu) * (right & 0xffffu);
+    const uint cross = (left >> 16u) * (right & 0xffffu) + (low_product >> 16u);
+    const uint middle = (left & 0xffffu) * (right >> 16u) + (cross & 0xffffu);
+    return uint2((middle << 16u) | (low_product & 0xffffu),
+        (left >> 16u) * (right >> 16u) + (cross >> 16u) + (middle >> 16u));
+}
+
+static float WideToFloat(uint2 words)
+{
+    return float(words.y) * 4294967296.0 + float(words.x);
+}
+
 // Exact integer part of float32-percentile * uint mass, plus a rational
-// remainder. No float64 device requirement and no large float CDF subtraction.
+// remainder. Neither large float CDF subtraction nor float64 is required.
 struct PercentileBoundary {
     uint whole;
-    uint64_t remainder;
+    uint2 remainder; // low, high
     uint shift;
 };
 
@@ -231,12 +247,23 @@ static PercentileBoundary MakeBoundary(float percentile, uint mass)
     const uint bits = asuint(percentile);
     const uint exponent = (bits >> 23u) & 255u;
     const uint mantissa = (bits & 0x7fffffu) | (exponent != 0u ? 0x800000u : 0u);
+    // Valid percentiles [0,1] give shifts in [23,149].
     const uint shift = exponent != 0u ? 150u - exponent : 149u;
-    const uint64_t product = uint64_t(mantissa) * uint64_t(mass);
+    const uint2 product = MultiplyWide(mantissa, mass);
     PercentileBoundary result;
     result.shift = shift;
-    result.whole = shift < 64u ? uint(product >> shift) : 0u;
-    result.remainder = shift < 64u ? product & ((uint64_t(1) << shift) - 1) : product;
+    result.whole = 0u;
+    result.remainder = product;
+    if (shift < 32u) {
+        result.whole = (product.x >> shift) | (product.y << (32u - shift));
+        result.remainder = uint2(product.x & ((1u << shift) - 1u), 0u);
+    } else if (shift == 32u) {
+        result.whole = product.y;
+        result.remainder = uint2(product.x, 0u);
+    } else if (shift < 64u) {
+        result.whole = product.y >> (shift - 32u);
+        result.remainder.y &= (1u << (shift - 32u)) - 1u;
+    }
     return result;
 }
 
@@ -245,7 +272,7 @@ static float BoundaryFraction(PercentileBoundary boundary)
     // Tiny intervals wholly within the first mass unit are handled exactly by
     // the containing-bin branch. This underflow cannot affect a boundary split.
     return boundary.shift > 120u ? 0.0
-        : float(boundary.remainder) * exp2(-float(boundary.shift));
+        : WideToFloat(boundary.remainder) * exp2(-float(boundary.shift));
 }
 
 static float BoundaryTail(PercentileBoundary boundary)
@@ -253,8 +280,15 @@ static float BoundaryTail(PercentileBoundary boundary)
     if (boundary.shift >= 64u) {
         return 1.0 - BoundaryFraction(boundary);
     }
-    return float((uint64_t(1) << boundary.shift) - boundary.remainder)
-        * exp2(-float(boundary.shift));
+    uint2 unit = uint2(0u, 0u);
+    if (boundary.shift < 32u) {
+        unit.x = 1u << boundary.shift;
+    } else {
+        unit.y = 1u << (boundary.shift - 32u);
+    }
+    const uint2 remaining = uint2(unit.x - boundary.remainder.x,
+        unit.y - boundary.remainder.y - (unit.x < boundary.remainder.x ? 1u : 0u));
+    return WideToFloat(remaining) * exp2(-float(boundary.shift));
 }
 
 static bool MeterHistogram(RWByteAddressBuffer histogram,
@@ -280,13 +314,13 @@ static bool MeterHistogram(RWByteAddressBuffer histogram,
             log_luminance = value;
             return true;
         }
-        const uint integer_start = max(cursor, low.whole + (low.remainder != 0 ? 1u : 0u));
+        const uint integer_start = max(cursor, low.whole + (any(low.remainder != 0u) ? 1u : 0u));
         const uint integer_end = min(end, high.whole);
         float overlap = float(integer_end > integer_start ? integer_end - integer_start : 0u);
-        if (low.remainder != 0 && cursor <= low.whole && low.whole < end) {
+        if (any(low.remainder != 0u) && cursor <= low.whole && low.whole < end) {
             overlap += BoundaryTail(low);
         }
-        if (high.remainder != 0 && cursor <= high.whole && high.whole < end) {
+        if (any(high.remainder != 0u) && cursor <= high.whole && high.whole < end) {
             overlap += BoundaryFraction(high);
         }
         weight += overlap;
