@@ -84,6 +84,7 @@ reviewed.
 | -------- | ----------- | ------ |
 | [lighting-service.md](lighting-service.md) | D.9 | Light grid build, published forward-light package, deferred-lighting ownership transfer, per-view publication |
 | [post-process-service.md](post-process-service.md) | D.10 | Branched post family: tonemap, exposure, bloom, temporal AA/TSR slot, post-owned histories |
+| [exposure-improvement-plan.md](exposure-improvement-plan.md) | Exposure references | UE5.7 source map and Oxygen design choices; execution belongs to the linked exposure and LightBench plan |
 | [shadow-service.md](shadow-service.md) | D.11 | Conventional shadow map rendering, shadow data product, shadow-to-lighting wire, VSM slot reservation |
 | [environment-service.md](environment-service.md) | D.12 | Sky/atmosphere/fog composition, Stage 14 local/volumetric fog ownership, environment-probe / IBL publication |
 | [migration-playbook.md](migration-playbook.md) | D.13 | Examples/Async analysis, runtime seam mapping, behavior parity checklist, visual baseline capture |
