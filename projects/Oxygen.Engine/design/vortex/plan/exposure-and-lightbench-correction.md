@@ -494,10 +494,11 @@ rectangle, not the window or output bars.
 
 Each sample uses the chosen analytic metering weight multiplied by the optional
 scalar mask sampled in normalized content UV. Quantize the combined weight to
-Q in [0,4095]. Split between neighboring bins:
+Q in [0,4095] using half-up rounding (`floor(weight*4095+0.5)`). Split
+between neighboring bins with the same tie rule:
 
 ```text
-q_upper = round(Q * fractional_bin_position)
+q_upper = floor(Q * fractional_bin_position + 0.5)
 q_lower = Q - q_upper
 ```
 
@@ -858,6 +859,42 @@ the GPU correctly. Invalid settings retain the previous valid revision.
 
 ### Slice 3 - Implement robust metering and hybrid adaptation
 
+Validated metering/adaptation core (2026-09-16): bounded cell-centre sampling,
+264-word histogram with conserved half-up two-bin weights, integer/fractional
+percentile boundaries, profiles and bilinear R masks, content rectangle and
+coverage, synthetic dark and invalid-input separation, zero-target restoration,
+and exact hybrid response with overflow-safe logarithmic rate/time inputs.
+Normalized targets cover the supported radiance domain so a changed histogram
+window does not truncate last-valid-meter restoration.
+
+Evidence: 20 native production-pass tests pass in both Debug and Release,
+including a 7680x4320 source, maximum mass, narrow percentiles, partial coverage,
+mask clamping, content bars, nonfinite samples, 30/60/120 Hz, irregular/long
+steps, zero speed/delta, huge rate/distance and tiny-rate/huge-delta arithmetic.
+The independent rational/Decimal reference passes 14 checks. The refreshed
+foundation suites pass 96/96. The debugger-backed native suite has zero
+D3D12/DXGI errors or blocking warnings and 20 accepted live-factory shutdown
+warnings (one backend per case). The inspected locked scene capture qualifies
+the actual 64-byte pass binding, 1056-byte histogram, 262144 samples,
+1073479680 mass at bin 102 and final tonemap consumption.
+Reports and capture are under
+`out/build-ninja/analysis/vortex/exposure-lightbench/metering/`; build/test logs
+are in the adjacent `contract-audit/` directory. `metering/evidence-manifest.json`
+records artifact/source hashes and the qualification boundaries.
+
+Slice 3 remains in progress. Immediate acceptance work includes ordinary Auto
+curve interpolation/endpoints and raw-meter-versus-adapted input, opposite
+adaptation direction, moving-edge/small-feature sampling, and asset-backed
+mask request/residency/failure handling. Full GPU P routing and upstream range
+qualification remain slice 5; mask persistence belongs to slice 6.
+
+The user approved correcting the mask identity contract on 2026-09-16: reuse
+cooked source-local texture indices, PAK remapping and runtime ResourceKey.
+Offset 116 stores the uint32 texture index and 120..131 are zero-reserved;
+the fixed record prefix remains 144 bytes. The canonical runtime mask field
+will migrate from the initial descriptor UUID to ResourceKey with the loading
+integration. No UUID lookup layer or new texture asset type is introduced.
+
 - [ ] Implement bounded stratified sampling, conserved two-bin weights, percentiles,
   finite/black/coverage rules and overflow-safe counts.
 - [ ] Implement mask sampling and exact piecewise-linear compensation curves.
@@ -1053,6 +1090,21 @@ Slice 1 arithmetic/format audit (does not execute GPU acceptance):
 
 ```powershell
 python tools/vortex/audit_exposure_contract.py --output out/build-ninja/analysis/vortex/exposure-lightbench/contract-audit
+```
+
+Slice 3 production-pass numerical qualification (the offscreen fixture uses
+RGBA32 inputs, existing upload/readback infrastructure and the real exposure
+pass; it does not qualify full scene/HDR migration):
+
+```powershell
+python tools/vortex/exposure_reference.py
+cmake --build out/build-ninja --config Debug --target Oxygen.Vortex.ExposureGpu.Tests oxygen-graphics-direct3d12 --parallel 4
+./out/build-ninja/bin/Debug/Oxygen.Vortex.ExposureGpu.Tests.exe
+cmake --build out/build-ninja --config Release --target Oxygen.Vortex.ExposureGpu.Tests oxygen-graphics-direct3d12 --parallel 4
+./out/build-ninja/bin/Release/Oxygen.Vortex.ExposureGpu.Tests.exe
+ctest --preset test-debug -R 'ExposureSettings|PostProcessService|SceneRendererDeferredCore|RuntimeViewPublication|ShaderBakeCatalog' --output-on-failure
+./out/build-ninja/bin/Debug/Oxygen.Examples.VortexBasic.exe --validation-scene exposure-locked --validation-exposure-ev=160 --frames 20 --fps 10 --vsync false --debug-layer true --capture-provider renderdoc --capture-load search --capture-from-frame 10 --capture-frame-count 1 --capture-output out/build-ninja/analysis/vortex/exposure-lightbench/metering/locked-meter -v=-1
+./tools/shadows/Invoke-RenderDocUiAnalysis.ps1 -CapturePath out/build-ninja/analysis/vortex/exposure-lightbench/metering/locked-meter_capture.rdc -UiScriptPath tools/vortex/AnalyzeRenderDocExposureMeter.py -PassName Auto160 -ReportPath out/build-ninja/analysis/vortex/exposure-lightbench/metering/locked-meter-analysis.txt -AnalysisTimeoutSeconds 60
 ```
 
 Slice 10 implements the acceptance runner interface:

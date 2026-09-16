@@ -181,8 +181,8 @@ auto ResolveExposureSettings(
       { settings.min_ev, result.dark_log_gain });
     return result;
   }
-  const double raw_min = window_min - std::log2(kMiddleGrey);
-  const double raw_max = window_max - std::log2(kMiddleGrey);
+  const double raw_min = -24.0 - std::log2(kMiddleGrey);
+  const double raw_max = 32.0 - std::log2(kMiddleGrey);
   // Extrema of curve(raw_ev)-clamp(raw_ev) occur only at these breakpoints.
   if (!valid_target(raw_min) || !valid_target(raw_max)
     || !valid_target(settings.min_ev)
@@ -202,7 +202,8 @@ auto ResolveExposureSettings(
     }
   }
   // Normalize the complete target function before float32 GPU consumption.
-  // Its breakpoints are the authored knots, clamp edges and window endpoints.
+  // Its breakpoints are the authored knots, clamp edges and supported radiance endpoints.
+  // Last-valid metering survives changes to the histogram window.
   auto positions = std::vector<float> { static_cast<float>(raw_min),
     static_cast<float>(raw_max) };
   for (const float ev : { settings.min_ev, settings.max_ev }) {

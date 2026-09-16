@@ -14,8 +14,8 @@
 
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/View.h>
-#include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
+#include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/PostProcess/Types/PostProcessConfig.h>
 #include <Oxygen/Vortex/api_export.h>
 
@@ -41,6 +41,10 @@ public:
   struct Inputs {
     const graphics::Texture* scene_signal { nullptr };
     ShaderVisibleIndex scene_signal_srv { kInvalidShaderVisibleIndex };
+    const graphics::Texture* metering_mask { nullptr };
+    ShaderVisibleIndex metering_mask_srv { kInvalidShaderVisibleIndex };
+    //! Scale of the supplied signal; scene-referred fixtures use one.
+    float one_over_pre_exposure { 1.0F };
   };
 
   struct Result {
@@ -49,6 +53,7 @@ public:
     bool used_fixed_exposure { false };
     float exposure_value { 1.0F };
     const graphics::Buffer* exposure_buffer { nullptr };
+    const graphics::Buffer* histogram_buffer { nullptr };
     ShaderVisibleIndex exposure_buffer_srv { kInvalidShaderVisibleIndex };
     ShaderVisibleIndex exposure_buffer_uav { kInvalidShaderVisibleIndex };
   };
@@ -61,9 +66,8 @@ public:
   ExposurePass(ExposurePass&&) = delete;
   auto operator=(ExposurePass&&) -> ExposurePass& = delete;
 
-  [[nodiscard]] OXGN_VRTX_API auto Execute(
-    RenderContext& ctx, const PostProcessConfig& config, const Inputs& inputs)
-    -> Result;
+  [[nodiscard]] OXGN_VRTX_API auto Execute(RenderContext& ctx,
+    const PostProcessConfig& config, const Inputs& inputs) -> Result;
   OXGN_VRTX_API auto RemoveViewState(
     CompositionView::ViewStateHandle view_state_handle) -> void;
 
@@ -79,29 +83,30 @@ private:
 
   auto EnsurePipelines() -> void;
   auto EnsureHistogramBuffer(PerViewExposureState& state) -> void;
-  auto EnsureExposureInitUploadBuffer(
-    graphics::CommandRecorder& recorder, const PostProcessConfig& config)
-    -> void;
-  auto EnsureExposureStateForView(
-    RenderContext& ctx, graphics::CommandRecorder& recorder,
+  auto EnsureExposureInitUploadBuffer(graphics::CommandRecorder& recorder,
+    const PostProcessConfig& config) -> void;
+  auto EnsureExposureStateForView(RenderContext& ctx,
+    graphics::CommandRecorder& recorder,
     CompositionView::ViewStateHandle view_state_handle,
     const PostProcessConfig& config) -> PerViewExposureState&;
   auto UpdateHistogramConstants(RenderContext& ctx,
     graphics::CommandRecorder& recorder, const Inputs& inputs,
-    const PostProcessConfig& config, const PerViewExposureState& state) -> void;
+    const PostProcessConfig& config, const PerViewExposureState& state)
+    -> void;
   auto UpdateAverageConstants(RenderContext& ctx,
     graphics::CommandRecorder& recorder, const PostProcessConfig& config,
-    const PerViewExposureState& state, ShaderVisibleIndex targets_srv) -> void;
+    const PerViewExposureState& state, ShaderVisibleIndex targets_srv)
+    -> void;
   auto ReleaseExposureState(PerViewExposureState& state) -> void;
   auto ReleaseExposureResources() -> void;
 
   Renderer& renderer_;
-  std::unique_ptr<
-    ::oxygen::vortex::internal::PerViewStructuredPublisher<ExposureTargetData>>
+  std::unique_ptr<::oxygen::vortex::internal::PerViewStructuredPublisher<
+    ExposureTargetData>>
     target_publisher_;
   std::optional<frame::SequenceNumber> target_frame_;
   std::unique_ptr<::oxygen::vortex::internal::PerViewStructuredPublisher<
-    std::array<std::uint32_t, 12U>>>
+    std::array<std::uint32_t, 16U>>>
     constants_publisher_;
   std::unique_ptr<::oxygen::vortex::internal::PerViewStructuredPublisher<
     std::array<std::uint32_t, 16U>>>

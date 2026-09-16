@@ -194,7 +194,8 @@ old bytes as an extended struct. Update `SceneAsset` exact-size validation,
 | 104 | uint32 | exposure_extension_version=1 |
 | 108 | float32 | black_influence |
 | 112 | float32 | transition_distance_ev |
-| 116 | AssetKey, 16 bytes | mask resource descriptor key; all-zero means absent |
+| 116 | uint32 ResourceIndexT | source-local mask texture index; zero means absent |
+| 120..131 | 3 uint32 | reserved=0 |
 | 132 | uint32 | curve_key_count, 0..64 |
 | 136 | uint32 | reserved=0 |
 | 140 | uint32 | reserved=0 |
@@ -202,9 +203,14 @@ old bytes as an extended struct. Update `SceneAsset` exact-size validation,
 
 Total record_size is exactly `144+8*curve_key_count`, at most 656 bytes.
 Check count/size/available bytes before reading; reject unsupported extension
-version, malformed keys and nonzero reserved fields. Resolve the mask through
-the existing resource-descriptor dependency/key mechanism used for environment
-textures, not a runtime descriptor index. There are no native pointers or GPU
+version, malformed keys and nonzero reserved fields. Author the mask using a
+texture descriptor path; the cooker resolves its source-local texture index,
+and PAK packing remaps that dependency into the output texture table. Content
+hydrates the scene-relative index into a runtime ResourceKey, following the
+existing texture-resource model. The 2026-09-16 user-approved correction
+replaces the initially proposed descriptor UUID: no runtime UUID lookup exists
+for those cooker-only names. This preserves the 144-byte prefix and curve
+offsets without introducing a new asset type. There are no native pointers or GPU
 descriptor slots in saved records. New readers deliberately distinguish the
 104-byte legacy representation from the explicitly versioned extension.
 

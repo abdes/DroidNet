@@ -26,7 +26,9 @@
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
+#include <Oxygen/Vortex/Environment/SceneBackground.h>
 #include <Oxygen/Vortex/Internal/PerViewStructuredPublisher.h>
+#include <Oxygen/Vortex/Internal/ViewportClamp.h>
 #include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
@@ -39,9 +41,8 @@ namespace {
 
   namespace bindless_d3d12 = oxygen::bindless::generated::d3d12;
 
-  constexpr float kMinLogLuminanceRange = 1.0e-4F;
-  constexpr float kMinSpotMeterRadius = 0.01F;
-  constexpr std::uint32_t kHistogramBinCount = 256U;
+  constexpr std::uint32_t kHistogramWordCount = 264U;
+  constexpr std::uint32_t kHistogramGridLimit = 512U;
   constexpr std::uint32_t kHistogramDispatchGroupSize = 16U;
   constexpr std::uint32_t kExposureStateBufferSizeBytes
     = sizeof(ExposureStateData);
@@ -104,11 +105,15 @@ namespace {
     std::uint32_t metering_height;
     std::uint32_t metering_mode;
     float spot_meter_radius;
+    std::uint32_t mask_texture_index;
+    std::uint32_t background_enabled;
+    float one_over_pre_exposure;
+    float black_influence;
     std::uint32_t _pad0;
     std::uint32_t _pad1;
   };
 
-  static_assert(sizeof(AutoExposureHistogramConstants) == 48U);
+  static_assert(sizeof(AutoExposureHistogramConstants) == 64U);
 
   struct alignas(packing::kShaderDataFieldAlignment)
     AutoExposureAverageConstants {
@@ -119,10 +124,10 @@ namespace {
     float low_percentile;
     float high_percentile;
     float min_ev;
-    float max_ev;
-    float adaptation_speed_up;
-    float adaptation_speed_down;
-    float delta_time;
+    float log2_transition_distance;
+    float log2_speed_up;
+    float log2_speed_down;
+    float log2_delta_time;
     std::uint32_t targets_srv;
     std::array<std::uint32_t, 2> settings_revision;
     std::array<std::uint32_t, 2> frame_sequence;
@@ -226,6 +231,12 @@ auto ExposurePass::Execute(RenderContext& ctx, const PostProcessConfig& config,
     return result;
   }
 
+  CHECK_F(std::isfinite(inputs.one_over_pre_exposure)
+      && inputs.one_over_pre_exposure > 0.0F,
+    "ExposurePass: scene signal requires a finite positive inverse scale");
+  CHECK_F(
+    (inputs.metering_mask != nullptr) == inputs.metering_mask_srv.IsValid(),
+    "ExposurePass: a metering mask requires both resource and descriptor");
   EnsurePipelines();
 
   CHECK_F(config.resolved_exposure.has_value(),
@@ -241,7 +252,7 @@ auto ExposurePass::Execute(RenderContext& ctx, const PostProcessConfig& config,
   if (!constants_publisher_) {
     constants_publisher_
       = std::make_unique<::oxygen::vortex::internal::PerViewStructuredPublisher<
-        std::array<std::uint32_t, 12U>>>(observer_ptr { gfx.get() },
+        std::array<std::uint32_t, 16U>>>(observer_ptr { gfx.get() },
         renderer_.GetStagingProvider(),
         observer_ptr { &renderer_.GetInlineTransfersCoordinator() },
         "Vortex.PostProcess.Exposure.Constants");
@@ -291,6 +302,12 @@ auto ExposurePass::Execute(RenderContext& ctx, const PostProcessConfig& config,
   recorder->RequireResourceState(
     *inputs.scene_signal, graphics::ResourceStates::kShaderResource);
 
+  if (inputs.metering_mask != nullptr) {
+    TrackTextureFromKnownOrInitial(*recorder, *inputs.metering_mask);
+    recorder->RequireResourceState(
+      *inputs.metering_mask, graphics::ResourceStates::kShaderResource);
+  }
+
   auto& state = EnsureExposureStateForView(
     ctx, *recorder, exposure_view_state_handle, config);
   DCHECK_NOTNULL_F(state.buffer.get());
@@ -322,9 +339,11 @@ auto ExposurePass::Execute(RenderContext& ctx, const PostProcessConfig& config,
   recorder->SetPipelineState(*histogram_pipeline_);
   UpdateHistogramConstants(ctx, *recorder, inputs, config, state);
   const auto& tex_desc = inputs.scene_signal->GetDescriptor();
-  recorder->Dispatch((tex_desc.width + (kHistogramDispatchGroupSize - 1U))
+  recorder->Dispatch((std::min(tex_desc.width, kHistogramGridLimit)
+                       + (kHistogramDispatchGroupSize - 1U))
       / kHistogramDispatchGroupSize,
-    (tex_desc.height + (kHistogramDispatchGroupSize - 1U))
+    (std::min(tex_desc.height, kHistogramGridLimit)
+      + (kHistogramDispatchGroupSize - 1U))
       / kHistogramDispatchGroupSize,
     1U);
 
@@ -346,6 +365,7 @@ auto ExposurePass::Execute(RenderContext& ctx, const PostProcessConfig& config,
   result.executed = true;
   result.used_fixed_exposure = false;
   result.exposure_buffer = state.buffer.get();
+  result.histogram_buffer = state.histogram_buffer.get();
   result.exposure_buffer_srv = state.srv_index;
   result.exposure_buffer_uav = state.uav_index;
   return result;
@@ -392,7 +412,7 @@ auto ExposurePass::EnsureHistogramBuffer(PerViewExposureState& state) -> void
   auto gfx = renderer_.GetGraphics();
   CHECK_NOTNULL_F(gfx.get());
   state.histogram_buffer = gfx->CreateBuffer({
-    .size_bytes = kHistogramBinCount * sizeof(std::uint32_t),
+    .size_bytes = kHistogramWordCount * sizeof(std::uint32_t),
     .usage = graphics::BufferUsage::kStorage,
     .memory = graphics::BufferMemory::kDeviceLocal,
     .debug_name = "Vortex.PostProcess.Exposure.Histogram",
@@ -412,12 +432,11 @@ auto ExposurePass::EnsureHistogramBuffer(PerViewExposureState& state) -> void
   const auto view_desc = graphics::BufferViewDescription {
     .view_type = graphics::ResourceViewType::kRawBuffer_UAV,
     .visibility = graphics::DescriptorVisibility::kShaderVisible,
-    .range = { 0U, kHistogramBinCount * sizeof(std::uint32_t) },
+    .range = { 0U, kHistogramWordCount * sizeof(std::uint32_t) },
     .stride = 0U,
   };
-  const auto view
-    = registry.RegisterView(
-      *state.histogram_buffer, std::move(handle), view_desc);
+  const auto view = registry.RegisterView(
+    *state.histogram_buffer, std::move(handle), view_desc);
   CHECK_F(
     view->IsValid(), "ExposurePass: failed to register histogram UAV view");
 }
@@ -554,26 +573,54 @@ auto ExposurePass::UpdateHistogramConstants(RenderContext& ctx,
   DCHECK_NOTNULL_F(constants_publisher_.get());
   DCHECK_F(inputs.scene_signal != nullptr);
   const auto& desc = inputs.scene_signal->GetDescriptor();
+  auto rectangle = Scissors {
+    .left = 0,
+    .top = 0,
+    .right = static_cast<std::int32_t>(desc.width),
+    .bottom = static_cast<std::int32_t>(desc.height),
+  };
+  if (ctx.current_view.resolved_view != nullptr) {
+    const auto clamped
+      = ::oxygen::vortex::internal::ResolveClampedViewportState(
+        ctx.current_view.resolved_view->Viewport(),
+        ctx.current_view.resolved_view->Scissor(), desc.width, desc.height);
+    const auto& viewport = clamped.viewport;
+    // Include exactly the pixel centres covered by the raster viewport.
+    rectangle.left = std::max(clamped.scissors.left,
+      static_cast<std::int32_t>(std::ceil(viewport.top_left_x - 0.5F)));
+    rectangle.top = std::max(clamped.scissors.top,
+      static_cast<std::int32_t>(std::ceil(viewport.top_left_y - 0.5F)));
+    rectangle.right = std::min(clamped.scissors.right,
+      static_cast<std::int32_t>(
+        std::ceil(viewport.top_left_x + viewport.width - 0.5F)));
+    rectangle.bottom = std::min(clamped.scissors.bottom,
+      static_cast<std::int32_t>(
+        std::ceil(viewport.top_left_y + viewport.height - 0.5F)));
+  }
   const auto constants = AutoExposureHistogramConstants {
     .source_texture_index = inputs.scene_signal_srv.get(),
     .histogram_buffer_index = state.histogram_uav_index.get(),
     .min_log_luminance = config.auto_exposure_min_log_luminance,
-    .inv_log_luminance_range = 1.0F
-      / std::max(
-        config.auto_exposure_log_luminance_range, kMinLogLuminanceRange),
-    .metering_left = 0U,
-    .metering_top = 0U,
-    .metering_width = desc.width,
-    .metering_height = desc.height,
+    .inv_log_luminance_range = 1.0F / config.auto_exposure_log_luminance_range,
+    .metering_left = static_cast<std::uint32_t>(rectangle.left),
+    .metering_top = static_cast<std::uint32_t>(rectangle.top),
+    .metering_width
+    = static_cast<std::uint32_t>(std::max(0, rectangle.right - rectangle.left)),
+    .metering_height
+    = static_cast<std::uint32_t>(std::max(0, rectangle.bottom - rectangle.top)),
     .metering_mode = static_cast<std::uint32_t>(config.metering_mode),
-    .spot_meter_radius = std::clamp(
-      config.auto_exposure_spot_meter_radius, kMinSpotMeterRadius, 1.0F),
+    .spot_meter_radius = config.auto_exposure_spot_meter_radius,
+    .mask_texture_index = inputs.metering_mask_srv.get(),
+    .background_enabled
+    = environment::ResolveSceneBackground(ctx).has_value() ? 1U : 0U,
+    .one_over_pre_exposure = inputs.one_over_pre_exposure,
+    .black_influence = config.resolved_exposure->authored.black_influence,
     ._pad0 = 0U,
     ._pad1 = 0U,
   };
 
   const auto slot = constants_publisher_->Publish(ctx.current_view.view_id,
-    std::bit_cast<std::array<std::uint32_t, 12U>>(constants));
+    std::bit_cast<std::array<std::uint32_t, 16U>>(constants));
   CHECK_F(slot.IsValid(), "Exposure constants publication failed");
 
   recorder.SetComputeRoot32BitConstant(
@@ -590,21 +637,27 @@ auto ExposurePass::UpdateAverageConstants(RenderContext& ctx,
   -> void
 {
   DCHECK_NOTNULL_F(average_constants_publisher_.get());
+  const auto log_rate = [](const float value) {
+    // -256 is outside log2 of every positive finite binary32 input.
+    return std::isfinite(value) && value > 0.0F
+      ? static_cast<float>(std::log2(static_cast<double>(value)))
+      : -256.0F;
+  };
   const auto constants = AutoExposureAverageConstants {
     .histogram_buffer_index = state.histogram_uav_index.get(),
     .exposure_buffer_index = state.uav_index.get(),
     .min_log_luminance = config.auto_exposure_min_log_luminance,
-    .log_luminance_range
-    = std::max(config.auto_exposure_log_luminance_range, kMinLogLuminanceRange),
+    .log_luminance_range = config.auto_exposure_log_luminance_range,
     .low_percentile
     = std::clamp(config.auto_exposure_low_percentile, 0.0F, 1.0F),
     .high_percentile
     = std::clamp(config.auto_exposure_high_percentile, 0.0F, 1.0F),
     .min_ev = config.auto_exposure_min_ev,
-    .max_ev = config.auto_exposure_max_ev,
-    .adaptation_speed_up = std::max(config.auto_exposure_speed_up, 0.0F),
-    .adaptation_speed_down = std::max(config.auto_exposure_speed_down, 0.0F),
-    .delta_time = std::max(ctx.delta_time, 0.0F),
+    .log2_transition_distance
+    = log_rate(config.resolved_exposure->authored.transition_distance),
+    .log2_speed_up = log_rate(config.auto_exposure_speed_up),
+    .log2_speed_down = log_rate(config.auto_exposure_speed_down),
+    .log2_delta_time = log_rate(ctx.delta_time),
     .targets_srv = targets_srv.get(),
     .settings_revision
     = { static_cast<std::uint32_t>(config.exposure_settings_revision),
