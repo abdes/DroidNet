@@ -323,7 +323,8 @@ auto ExposurePass::Execute(RenderContext& ctx, const PostProcessConfig& config,
     } else {
       borrowed = RecordState(ctx, inputs.source->config,
         Inputs { .metering_available = false,
-          .transition = inputs.source->transition },
+          .transition = inputs.source->transition,
+          .rejection = inputs.source->rejection },
         {}, {}, true);
       if (borrowed)
         bootstrap_states_.emplace(inputs.source->handle, borrowed);
@@ -334,7 +335,7 @@ auto ExposurePass::Execute(RenderContext& ctx, const PostProcessConfig& config,
       const bool source_auto = initial.authored.enabled
         && initial.authored.mode == engine::ExposureMode::kAuto;
       auto log_gain = initial.initial_log_gain;
-      if (source_auto && inputs.source->transition
+      if (source_auto && !inputs.source->rejection && inputs.source->transition
         && inputs.source->transition->seed_ev
         && inputs.source->transition->policy
           == ExposureTransitionPolicy::kSeedFromEv100) {
@@ -690,6 +691,22 @@ auto ExposurePass::UpdateAverageConstants(RenderContext& ctx,
   const auto generation = inputs.transition && !config.temporary_unit_exposure
     ? inputs.transition->generation
     : 0U;
+  std::uint32_t rejection = 0U;
+  if (inputs.rejection && !config.temporary_unit_exposure) {
+    switch (*inputs.rejection) {
+    case ExposureTransitionError::kNotAuto:
+      rejection = 1U;
+      break;
+    case ExposureTransitionError::kUnsupportedSeed:
+      rejection = 2U;
+      break;
+    case ExposureTransitionError::kSharedConsumer:
+      rejection = 3U;
+      break;
+    default:
+      CHECK_F(false, "Unexpected captured exposure rejection");
+    }
+  }
   const auto constants = AutoExposureAverageConstants {
     .histogram_buffer_index = metering ? state.histogram_uav_index.get()
                                        : kInvalidShaderVisibleIndex.get(),
@@ -718,7 +735,8 @@ auto ExposurePass::UpdateAverageConstants(RenderContext& ctx,
     = !config.temporary_unit_exposure && resolved.authored.enabled
       ? static_cast<std::uint32_t>(resolved.authored.mode)
       : 3U,
-    .control_flags = (seed.has_value() ? 0U : 1U) | (bootstrap ? 2U : 0U),
+    .control_flags
+    = (seed.has_value() ? 0U : 1U) | (bootstrap ? 2U : 0U) | (rejection << 2U),
     .requested_generation = { static_cast<std::uint32_t>(generation),
       static_cast<std::uint32_t>(generation >> 32U) },
     .transition_policy = inputs.transition && !config.temporary_unit_exposure

@@ -117,6 +117,8 @@ public:
   OXGN_VRTX_API auto CaptureSharedExposureSource(const RenderContext& ctx,
     ViewId source_view_id, CompositionView::ViewStateHandle source_handle)
     -> const postprocess::ExposurePass::Source&;
+  OXGN_VRTX_API auto CaptureRegisteredExposureControls(const RenderContext& ctx)
+    -> void;
   [[nodiscard]] OXGN_VRTX_API auto BuildBindings(
     const Inputs& inputs) const -> PostProcessFrameBindings;
   OXGN_VRTX_API auto PublishBindings(
@@ -153,6 +155,7 @@ private:
     captured_exposure_settings_;
   std::unordered_map<ViewId, postprocess::ExposurePass::Source>
     captured_exposure_sources_;
+  std::optional<frame::SequenceNumber> captured_control_frame_;
   auto BuildBindings(const Inputs& inputs,
     const PostProcessConfig& config) const -> PostProcessFrameBindings;
   struct PublishedView {

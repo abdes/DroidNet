@@ -1600,6 +1600,7 @@ void SceneRenderer::OnPreRender(const engine::FrameContext& /*frame*/) { }
 void SceneRenderer::PrimePreparedViews(RenderContext& ctx)
 {
   if (post_process_) {
+    post_process_->CaptureRegisteredExposureControls(ctx);
     // Capture every view before callbacks or draws can mutate scene intent.
     if (ctx.frame_views.empty() && ctx.current_view.view_id != kInvalidViewId)
       static_cast<void>(ResolveAuthoredPostProcessConfig(ctx, *post_process_));

@@ -486,12 +486,20 @@ void VortexExposureAverageCS(uint3 dispatch_thread_id : SV_DispatchThreadID)
     next.frame_sequence = pass.frame_sequence;
     next.flags &= ~(EXPOSURE_LUMINANCE_VALID | EXPOSURE_METER_EV_VALID | EXPOSURE_ZERO_TARGET | EXPOSURE_MODE_MASK);
     next.flags |= pass.exposure_mode << EXPOSURE_MODE_SHIFT;
+    const uint captured_rejection = (pass.control_flags >> 2u) & 15u;
+    if (captured_rejection != 0u && pass.transition_policy != 0u
+        && GenerationGreater(pass.requested_generation, previous.applied_generation)
+        && !GenerationGreater(previous.requested_generation, pass.requested_generation)) {
+        next.requested_generation = pass.requested_generation;
+        next.flags = (next.flags & ~EXPOSURE_REJECTION_MASK) | EXPOSURE_REQUEST_REJECTED
+            | (captured_rejection << EXPOSURE_REJECTION_SHIFT);
+    }
     if ((pass.control_flags & 2u) != 0u) {
         // Source-defined initialization is a read-only fallback, not a source
         // update or acknowledgement of its pending transition.
         const bool automatic = pass.exposure_mode == 2u;
         const bool seeded = automatic && pass.transition_policy == 3u
-            && (pass.control_flags & 1u) == 0u;
+            && (pass.control_flags & 1u) == 0u && captured_rejection == 0u;
         const float latent = automatic
             ? exp2(seeded ? pass.seed_log_gain : targets.initial_log_gain)
             : pass.fixed_scale;
@@ -509,9 +517,10 @@ void VortexExposureAverageCS(uint3 dispatch_thread_id : SV_DispatchThreadID)
     const bool already_rejected = all(pass.requested_generation == previous.requested_generation)
         && (previous.flags & EXPOSURE_REQUEST_REJECTED) != 0u;
     bool new_request = pass.transition_policy != 0u
+        && captured_rejection == 0u
         && GenerationGreater(pass.requested_generation, previous.applied_generation)
         && !GenerationGreater(previous.requested_generation, pass.requested_generation) && !already_rejected;
-    if (new_identity) next.flags &= ~(EXPOSURE_REQUEST_REJECTED | EXPOSURE_REJECTION_MASK);
+    if (new_identity && captured_rejection == 0u) next.flags &= ~(EXPOSURE_REQUEST_REJECTED | EXPOSURE_REJECTION_MASK);
     if (pass.transition_policy != 0u && !GenerationGreater(previous.requested_generation, pass.requested_generation)) {
         next.requested_generation = pass.requested_generation;
     }
