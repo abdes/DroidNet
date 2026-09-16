@@ -17,6 +17,7 @@ m_gtest_program(ConsoleDefaults SOURCES "DemoShellConsoleDefaults_test.cpp")
 m_gtest_program(DemoShellPanelConfig SOURCES "DemoShellPanelConfig_test.cpp")
 
 m_gtest_program(DefaultSceneLighting SOURCES "DefaultSceneLighting_test.cpp")
+m_gtest_program(PreviewSunController SOURCES "PreviewSunController_test.cpp")
 m_gtest_program(SkyboxService SOURCES "SkyboxService_test.cpp")
 
 m_gtest_program(OrbitCameraController SOURCES "OrbitCameraController_test.cpp")

@@ -136,6 +136,12 @@ auto EnsureDefaultSceneLighting(
   return CreateSceneSun(scene, desc);
 }
 
+auto CreatePreviewSun(scene::Scene& scene, const DefaultSceneLightingDesc& desc)
+  -> scene::SceneNode
+{
+  return CreateSceneSun(scene, desc);
+}
+
 auto AddPreviewSunIfMissing(
   scene::Scene& scene, const DefaultSceneLightingDesc& desc) -> scene::SceneNode
 {
