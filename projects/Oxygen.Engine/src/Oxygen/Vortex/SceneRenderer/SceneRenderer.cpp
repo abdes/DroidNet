@@ -1609,6 +1609,14 @@ void SceneRenderer::PrimePreparedViews(RenderContext& ctx)
       static_cast<void>(ResolveAuthoredPostProcessConfig(
         ctx, *post_process_, &ctx.frame_views[i]));
     }
+    for (const auto& view : ctx.frame_views) {
+      if (view.is_scene_view
+        && view.exposure_view_state_handle
+          != CompositionView::kInvalidViewStateHandle
+        && view.exposure_view_state_handle != view.view_state_handle)
+        static_cast<void>(post_process_->CaptureSharedExposureSource(
+          ctx, view.exposure_view_id, view.exposure_view_state_handle));
+    }
   }
   if (init_views_ != nullptr) {
     init_views_->Execute(ctx, scene_textures_);

@@ -54,6 +54,12 @@ public:
   };
   using StateLease = std::shared_ptr<const StateResources>;
 
+  struct Source {
+    CompositionView::ViewStateHandle handle;
+    PostProcessConfig config;
+    std::optional<ExposureTransitionToken> transition;
+  };
+
   struct Inputs {
     const graphics::Texture* scene_signal { nullptr };
     ShaderVisibleIndex scene_signal_srv { kInvalidShaderVisibleIndex };
@@ -63,6 +69,7 @@ public:
     float one_over_pre_exposure { 1.0F };
     bool metering_available { true };
     std::optional<ExposureTransitionToken> transition;
+    const Source* source { nullptr };
   };
 
   struct Result {
@@ -70,6 +77,7 @@ public:
     bool requested { false };
     bool executed { false };
     bool used_fixed_exposure { false };
+    bool borrowed_exposure { false };
     float exposure_value { 1.0F };
     const graphics::Buffer* exposure_buffer { nullptr };
     const graphics::Buffer* histogram_buffer { nullptr };
@@ -99,6 +107,9 @@ private:
   };
 
   auto EnsurePipelines() -> void;
+  auto RecordState(RenderContext& ctx, const PostProcessConfig& config,
+    const Inputs& inputs, StateLease previous, StateLease borrowed,
+    bool bootstrap = false) -> StateLease;
   auto AcquireState() -> std::shared_ptr<StateResources>;
   auto EnsureHistogramBuffer(StateResources& state) -> void;
   auto UpdateHistogramConstants(RenderContext& ctx,
@@ -107,7 +118,8 @@ private:
   auto UpdateAverageConstants(RenderContext& ctx,
     graphics::CommandRecorder& recorder, const PostProcessConfig& config,
     const StateResources& state, ShaderVisibleIndex targets_srv,
-    ShaderVisibleIndex previous_srv, const Inputs& inputs) -> void;
+    ShaderVisibleIndex previous_srv, const Inputs& inputs,
+    ShaderVisibleIndex borrowed_srv, bool bootstrap, bool metering) -> void;
   auto ReleaseExposureResources() -> void;
 
   Renderer& renderer_;
@@ -129,6 +141,8 @@ private:
     frame_states_;
   std::unordered_map<CompositionView::ViewStateHandle, StateLease>
     prior_states_;
+  std::unordered_map<CompositionView::ViewStateHandle, StateLease>
+    bootstrap_states_;
   std::unordered_map<CompositionView::ViewStateHandle, PerViewExposureState>
     exposure_states_ {};
 };

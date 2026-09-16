@@ -137,7 +137,7 @@ namespace {
     std::uint32_t transition_policy;
     float seed_log_gain;
     std::uint32_t status_uav;
-    std::uint32_t reserved;
+    std::uint32_t borrowed_state_srv;
     std::array<std::uint32_t, 2> view_lifetime;
   };
 
@@ -148,6 +148,8 @@ namespace {
     offsetof(AutoExposureAverageConstants, requested_generation) == 80U);
   static_assert(offsetof(AutoExposureAverageConstants, seed_log_gain) == 92U);
   static_assert(offsetof(AutoExposureAverageConstants, status_uav) == 96U);
+  static_assert(
+    offsetof(AutoExposureAverageConstants, borrowed_state_srv) == 100U);
   static_assert(offsetof(AutoExposureAverageConstants, view_lifetime) == 104U);
 
   auto BuildExposurePipeline(std::string_view entry_point,
@@ -221,6 +223,7 @@ auto ExposurePass::OnFrameStart(
   CHECK_LT_F(slot.get(), frame_states_.size());
   frame_states_[slot.get()].clear();
   prior_states_.clear();
+  bootstrap_states_.clear();
   for (const auto& [handle, view] : exposure_states_) {
     if (view.latest) {
       prior_states_.emplace(handle, view.latest);
@@ -241,11 +244,13 @@ auto ExposurePass::Execute(RenderContext& ctx, const PostProcessConfig& config,
   CHECK_F(config.resolved_exposure.has_value(),
     "Exposure requires resolved settings");
   const auto& resolved = *config.resolved_exposure;
-  const bool automatic = !config.temporary_unit_exposure
+  const bool sharing = inputs.source && !config.temporary_unit_exposure;
+  const bool automatic = !sharing && !config.temporary_unit_exposure
     && resolved.authored.enabled
     && resolved.authored.mode == engine::ExposureMode::kAuto;
   auto result = Result { .requested = true,
-    .used_fixed_exposure = !automatic,
+    .used_fixed_exposure = !automatic && !sharing,
+    .borrowed_exposure = sharing,
     .exposure_value = config.temporary_unit_exposure ? 1.0F
       : automatic ? (resolved.authored.target_luminance == 0.0F
                         ? 0.0F
@@ -301,6 +306,74 @@ auto ExposurePass::Execute(RenderContext& ctx, const PostProcessConfig& config,
     return result;
   }
   const auto previous = view ? view->latest : StateLease {};
+  StateLease borrowed;
+  if (sharing) {
+    CHECK_F(inputs.source->config.resolved_exposure.has_value(),
+      "A shared source requires captured canonical settings");
+    CHECK_F(inputs.source->handle != handle
+        && inputs.source->handle != CompositionView::kInvalidViewStateHandle,
+      "A shared exposure source must be a distinct persistent root");
+    if (const auto prior = prior_states_.find(inputs.source->handle);
+      prior != prior_states_.end()) {
+      borrowed = prior->second;
+    } else if (const auto initial
+      = bootstrap_states_.find(inputs.source->handle);
+      initial != bootstrap_states_.end()) {
+      borrowed = initial->second;
+    } else {
+      borrowed = RecordState(ctx, inputs.source->config,
+        Inputs { .metering_available = false,
+          .transition = inputs.source->transition },
+        {}, {}, true);
+      if (borrowed)
+        bootstrap_states_.emplace(inputs.source->handle, borrowed);
+    }
+    if (!borrowed) {
+      // Submission failure cannot substitute the consumer's own history.
+      const auto& initial = *inputs.source->config.resolved_exposure;
+      const bool source_auto = initial.authored.enabled
+        && initial.authored.mode == engine::ExposureMode::kAuto;
+      auto log_gain = initial.initial_log_gain;
+      if (source_auto && inputs.source->transition
+        && inputs.source->transition->seed_ev
+        && inputs.source->transition->policy
+          == ExposureTransitionPolicy::kSeedFromEv100) {
+        const auto seed = scene::ResolveExposureSeedLogGain(
+          initial, *inputs.source->transition->seed_ev);
+        if (seed)
+          log_gain = *seed;
+      }
+      result.exposure_value = source_auto
+        ? (initial.authored.target_luminance == 0.0F ? 0.0F
+                                                     : std::exp2(log_gain))
+        : initial.fixed_scale;
+      return result;
+    }
+    frame_states_[ctx.frame_slot.get()].push_back(borrowed);
+  }
+  auto state = RecordState(ctx, config, inputs, previous, borrowed);
+  if (!state) {
+    publish_result(sharing ? borrowed : previous, false);
+    return result;
+  }
+  if (view) {
+    view->latest = state;
+    view->submitted_frame = ctx.frame_sequence;
+  }
+  publish_result(state, true);
+  return result;
+}
+
+auto ExposurePass::RecordState(RenderContext& ctx,
+  const PostProcessConfig& config, const Inputs& inputs, StateLease previous,
+  StateLease borrowed, const bool bootstrap) -> StateLease
+{
+  const auto& resolved = *config.resolved_exposure;
+  const bool automatic = !borrowed && !bootstrap
+    && !config.temporary_unit_exposure && resolved.authored.enabled
+    && resolved.authored.mode == engine::ExposureMode::kAuto;
+  auto gfx = renderer_.GetGraphics();
+  CHECK_NOTNULL_F(gfx.get());
   auto state = AcquireState();
   // Even an unpublished/failed attempt can contain submitted work. Retain its
   // resources through this frame slot before allowing pool reuse.
@@ -323,14 +396,12 @@ auto ExposurePass::Execute(RenderContext& ctx, const PostProcessConfig& config,
   const auto targets_srv
     = target_publisher_->Publish(ctx.current_view.view_id, targets);
   if (!targets_srv.IsValid()) {
-    publish_result(previous, false);
-    return result;
+    return {};
   }
   auto recorder = gfx->AcquireCommandRecorder(
     gfx->QueueKeyFor(graphics::QueueRole::kGraphics), "Vortex Exposure");
   if (!recorder) {
-    publish_result(previous, false);
-    return result;
+    return {};
   }
   const auto recording = recorder->GetCommandListForInspection();
   const auto track_buffer = [&](const graphics::Buffer& buffer) {
@@ -350,6 +421,11 @@ auto ExposurePass::Execute(RenderContext& ctx, const PostProcessConfig& config,
     track_buffer(*previous->buffer);
     recorder->RequireResourceState(
       *previous->buffer, graphics::ResourceStates::kShaderResource);
+  }
+  if (borrowed) {
+    track_buffer(*borrowed->buffer);
+    recorder->RequireResourceState(
+      *borrowed->buffer, graphics::ResourceStates::kShaderResource);
   }
   if (automatic) {
     track_buffer(*state->histogram_buffer);
@@ -389,7 +465,9 @@ auto ExposurePass::Execute(RenderContext& ctx, const PostProcessConfig& config,
   recorder->FlushBarriers();
   recorder->SetPipelineState(*average_pipeline_);
   UpdateAverageConstants(ctx, *recorder, config, *state, targets_srv,
-    previous ? previous->srv_index : kInvalidShaderVisibleIndex, inputs);
+    previous ? previous->srv_index : kInvalidShaderVisibleIndex, inputs,
+    borrowed ? borrowed->srv_index : kInvalidShaderVisibleIndex, bootstrap,
+    automatic);
   recorder->Dispatch(1U, 1U, 1U);
   recorder->RequireResourceStateFinal(
     *state->buffer, graphics::ResourceStates::kShaderResource);
@@ -400,15 +478,9 @@ auto ExposurePass::Execute(RenderContext& ctx, const PostProcessConfig& config,
       *state->histogram_buffer, graphics::ResourceStates::kCommon);
   recorder.reset();
   if (!recording || !recording->IsSubmitted()) {
-    publish_result(previous, false);
-    return result;
+    return {};
   }
-  if (view) {
-    view->latest = state;
-    view->submitted_frame = ctx.frame_sequence;
-  }
-  publish_result(state, true);
-  return result;
+  return state;
 }
 
 auto ExposurePass::RemoveViewState(CompositionView::ViewStateHandle handle)
@@ -598,7 +670,9 @@ auto ExposurePass::UpdateHistogramConstants(RenderContext& ctx,
 auto ExposurePass::UpdateAverageConstants(RenderContext& ctx,
   graphics::CommandRecorder& recorder, const PostProcessConfig& config,
   const StateResources& state, const ShaderVisibleIndex targets_srv,
-  const ShaderVisibleIndex previous_srv, const Inputs& inputs) -> void
+  const ShaderVisibleIndex previous_srv, const Inputs& inputs,
+  ShaderVisibleIndex borrowed_srv, const bool bootstrap, const bool metering)
+  -> void
 {
   DCHECK_NOTNULL_F(average_constants_publisher_.get());
   const auto log_rate = [](const float value) {
@@ -617,7 +691,8 @@ auto ExposurePass::UpdateAverageConstants(RenderContext& ctx,
     ? inputs.transition->generation
     : 0U;
   const auto constants = AutoExposureAverageConstants {
-    .histogram_buffer_index = state.histogram_uav_index.get(),
+    .histogram_buffer_index = metering ? state.histogram_uav_index.get()
+                                       : kInvalidShaderVisibleIndex.get(),
     .exposure_buffer_index = state.uav_index.get(),
     .min_log_luminance = config.auto_exposure_min_log_luminance,
     .log_luminance_range = config.auto_exposure_log_luminance_range,
@@ -643,7 +718,7 @@ auto ExposurePass::UpdateAverageConstants(RenderContext& ctx,
     = !config.temporary_unit_exposure && resolved.authored.enabled
       ? static_cast<std::uint32_t>(resolved.authored.mode)
       : 3U,
-    .control_flags = seed.has_value() ? 0U : 1U,
+    .control_flags = (seed.has_value() ? 0U : 1U) | (bootstrap ? 2U : 0U),
     .requested_generation = { static_cast<std::uint32_t>(generation),
       static_cast<std::uint32_t>(generation >> 32U) },
     .transition_policy = inputs.transition && !config.temporary_unit_exposure
@@ -651,7 +726,7 @@ auto ExposurePass::UpdateAverageConstants(RenderContext& ctx,
       : 0U,
     .seed_log_gain = seed.value_or(0.0F),
     .status_uav = state.status_uav_index.get(),
-    .reserved = 0U,
+    .borrowed_state_srv = borrowed_srv.get(),
     .view_lifetime = { inputs.transition
         ? static_cast<std::uint32_t>(inputs.transition->lifetime)
         : 0U,
@@ -677,6 +752,7 @@ auto ExposurePass::ReleaseExposureResources() -> void
 {
   exposure_states_.clear();
   prior_states_.clear();
+  bootstrap_states_.clear();
   for (auto& states : frame_states_)
     states.clear();
   if (auto gfx = renderer_.GetGraphics()) {

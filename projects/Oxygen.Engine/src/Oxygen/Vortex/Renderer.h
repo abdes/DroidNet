@@ -724,6 +724,13 @@ private:
     std::optional<ExposureTransitionError> rejection) -> void;
   auto RetireExposureTransitions(CompositionView::ViewStateHandle target)
     -> void;
+  struct ExposureSourceIntent {
+    CompositionView::ViewStateHandle handle;
+    std::optional<scene::ExposureSettings> settings;
+    std::optional<float> camera_ev;
+  };
+  auto GetExposureSourceIntent(ViewId source_view_id) const
+    -> std::optional<ExposureSourceIntent>;
 
   struct PublishedRuntimeViewState {
     ViewId published_view_id { kInvalidViewId };

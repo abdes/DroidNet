@@ -1029,15 +1029,32 @@ the next frame. Stateless captures remain isolated by logical view and retain
 no prior-frame settings. The expanded native suite passes 56/56 in Debug and
 Release; service tests pass 19/19 and renderer regressions pass 40/40 entries in
 each configuration. Four focused CDB cases have no blocking graphics messages.
-Evidence is `lifecycle/frame-capture-manifest.json`. GPU source borrowing,
-source-defined bootstrap, destruction continuity and implicit lifecycle events
-remain open; slice 4 is not qualified.
+Evidence is `lifecycle/frame-capture-manifest.json`.
+
+The prior-frame sharing core is implemented with source-owned updates, immutable
+prior snapshots, source-defined initialization fallback and inactive-source
+settings capture. Borrowers copy gain without adopting another image's metered
+EV, and reject consumer transitions through completed GPU status. Controlled
+native tests cover both render orders, one-frame reset latency, all source modes,
+seed/bounds/zero-target fallback, explicit detach/remeter, inactive-source seed
+ownership and failure-safe fallback. Debug and Release each pass 62/62 native,
+20/20 service and 19/19 publication tests. Six sharing CDB cases have no blocking
+graphics messages. Evidence is `lifecycle/prior-sharing-manifest.json`.
+Automatic detachment, destruction continuity, inactive-owner request validation,
+readback-backpressure acknowledgement and implicit lifecycle events remain open;
+slice 4 is not qualified. Early GPU P selection, S/P integration and scene-integrated validation remain
+slice 5 work.
 
 - [x] Update the same GPU state in Manual, ManualCamera, Auto and disabled modes.
 - [ ] Add public per-view transitions and request generation handling, including
   recording/submission failure, invalid metering and idempotent retries.
 - [ ] Implement the policies in section 4.1, including exact seed event-frame
   behavior and manual-to-auto continuity by retaining gain.
+  Remaining lifecycle coverage must include default detach/remeter, destroyed
+  source continuity (including borrowed zero and never-rendered source fallback),
+  rejecting inactive-owner requests that are invalid for captured settings/mode,
+  and eventually acknowledging submitted requests when the bounded readback
+  queue was full and the owner subsequently becomes inactive.
 - [ ] Implement source-owned updates, pinned prior generations, root-source
   resolution, cycle rejection, inactive-source retention and bootstrap fallback.
 - [ ] Implement stateless transient state, recovery events, frame-safe uploads,

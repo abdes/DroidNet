@@ -797,4 +797,54 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
   EXPECT_EQ(next.resolved.authored.mode, oxygen::engine::ExposureMode::kAuto);
 }
 
+NOLINT_TEST_F(PostProcessServiceBehaviorTest,
+  FailedSharedBootstrapNeverPublishesDormantConsumerHistory)
+{
+  using Handle = oxygen::vortex::CompositionView::ViewStateHandle;
+  using Policy = oxygen::vortex::ExposureTransitionPolicy;
+  auto pass = oxygen::vortex::postprocess::ExposurePass(*renderer_);
+  auto settings = oxygen::scene::ExposureSettings {};
+  settings.key = 12.5F;
+  settings.mode = oxygen::engine::ExposureMode::kManual;
+  settings.manual_ev = 4.0F;
+  auto config = PostProcessConfig {};
+  config.resolved_exposure = *oxygen::scene::ResolveExposureSettings(settings);
+  auto context = RenderContext {};
+  context.current_view.view_id = ViewId { 2U };
+  context.current_view.view_state_handle = Handle { 2U };
+  context.frame_slot = oxygen::frame::Slot { 0U };
+  context.frame_sequence = oxygen::frame::SequenceNumber { 1U };
+  const auto independent = pass.Execute(context, config, {});
+  ASSERT_TRUE(independent.executed);
+  settings.mode = oxygen::engine::ExposureMode::kAuto;
+  auto source_config = PostProcessConfig {};
+  source_config.resolved_exposure
+    = *oxygen::scene::ResolveExposureSettings(settings);
+  const auto seed = renderer_->QueueExposureTransition(
+    Handle { 1U }, Policy::kSeedFromEv100, 8.0F);
+  ASSERT_TRUE(seed.has_value());
+  const auto source
+    = oxygen::vortex::postprocess::ExposurePass::Source { Handle { 1U },
+        source_config, *seed };
+  for (const bool recording : { false, true }) {
+    context.frame_sequence
+      = oxygen::frame::SequenceNumber { context.frame_sequence.get() + 1U };
+    graphics_->SetFailRecording(recording);
+    graphics_->SetFailSubmission(!recording);
+    const auto failed = pass.Execute(context, config, { .source = &source });
+    EXPECT_FALSE(failed.executed);
+    EXPECT_EQ(failed.state, nullptr);
+    EXPECT_EQ(failed.exposure_buffer, nullptr);
+    EXPECT_EQ(failed.exposure_value, 0x1p-8F);
+    graphics_->SetFailRecording(false);
+    graphics_->SetFailSubmission(false);
+    const auto retry = pass.Execute(context, config, { .source = &source });
+    EXPECT_TRUE(retry.executed);
+    EXPECT_TRUE(retry.borrowed_exposure);
+    EXPECT_NE(retry.state, independent.state);
+    EXPECT_EQ(renderer_->InspectExposureTransition(seed->target)->phase,
+      oxygen::vortex::ExposureTransitionPhase::kQueued);
+  }
+}
+
 } // namespace

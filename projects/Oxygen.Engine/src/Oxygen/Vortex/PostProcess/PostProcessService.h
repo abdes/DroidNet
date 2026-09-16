@@ -111,6 +111,9 @@ public:
     CompositionView::ViewStateHandle handle,
     const scene::ExposureSettings& requested,
     std::optional<float> camera_ev = {}) -> const ExposureSettingsState&;
+  OXGN_VRTX_API auto CaptureSharedExposureSource(const RenderContext& ctx,
+    ViewId source_view_id, CompositionView::ViewStateHandle source_handle)
+    -> const postprocess::ExposurePass::Source&;
   [[nodiscard]] OXGN_VRTX_API auto BuildBindings(
     const Inputs& inputs) const -> PostProcessFrameBindings;
   OXGN_VRTX_API auto PublishBindings(
@@ -144,6 +147,8 @@ private:
   };
   std::unordered_map<ViewId, CapturedExposureSettings>
     captured_exposure_settings_;
+  std::unordered_map<ViewId, postprocess::ExposurePass::Source>
+    captured_exposure_sources_;
   auto BuildBindings(const Inputs& inputs,
     const PostProcessConfig& config) const -> PostProcessFrameBindings;
   struct PublishedView {

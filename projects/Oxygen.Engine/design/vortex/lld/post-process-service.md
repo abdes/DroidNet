@@ -397,11 +397,14 @@ No separate mask loader, texture cache or upload allocator is introduced.
 The solve record is 112 bytes. Its original 64-byte metering/rate/revision prefix
 is followed by previous-state SRV at 64, exact fixed scale at 68, mode at 72
 (Manual=0, ManualCamera=1, Auto=2, disabled=3), control flags at 76 (invalid seed
-bit 0), request generation uint2 at 80, policy at 88 (none=0, Preserve=1,
-Remeter=2, Seed=3), seed log gain at 92, status UAV at 96, reserved zero at 100,
+bit 0, source initialization fallback bit 1), request generation uint2 at 80,
+policy at 88 (none=0, Preserve=1, Remeter=2, Seed=3), seed log gain at 92,
+status UAV at 96, borrowed prior-state SRV at 100 (invalid for owner solves),
 and view lifetime uint2 at 104. State flags add mode in bits 10..11,
 request rejection in bit 12 and its reason in bits 16..19 (1=not Auto,
-2=unsupported seed). The 80-byte exposure state remains unchanged in size.
+2=unsupported seed, 3=sharing consumer). The 80-byte exposure state remains
+unchanged in size. Borrowed records set bit 7 and do not claim a local metered
+EV or preserve dormant independent meter history.
 
 Each solve reads a prior immutable state and writes a different pooled record.
 Frame-slot leases prevent recycling while GPU readers are active; additional
@@ -417,3 +420,13 @@ are required before acknowledging an application. An older completion may
 advance the observed applied generation but cannot consume newer queued intent.
 Destroyed views cancel their pending jobs; reused handles receive new lifetimes.
 Diagnostic records do not enqueue authored-transition acknowledgements.
+
+At frame start the pass pins each owner's latest successfully submitted record.
+Consumers copy its gain fields into their own immutable record, retaining the
+source resource through their frame slot. A source update in the current frame
+cannot change this snapshot. Without a prior record, a per-frame source fallback
+uses captured source settings and seed; this performs no histogram dispatch,
+does not install owner history, and does not consume the owner's transition.
+Source settings for registered inactive views come from the runtime registry and
+the source's camera/override, using the same canonical capture path. Consumer
+images and settings cannot determine this fallback.

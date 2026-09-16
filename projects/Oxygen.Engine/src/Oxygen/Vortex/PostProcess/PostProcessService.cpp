@@ -13,6 +13,9 @@
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/ReadbackManager.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Scene/Environment/PostProcessVolume.h>
+#include <Oxygen/Scene/Environment/SceneEnvironment.h>
+#include <Oxygen/Scene/Scene.h>
 
 #include <Oxygen/Vortex/Environment/SceneBackground.h>
 #include <Oxygen/Vortex/Internal/PerViewStructuredPublisher.h>
@@ -66,6 +69,7 @@ PostProcessService::~PostProcessService()
 {
   pending_exposure_status_.clear();
   captured_exposure_settings_.clear();
+  captured_exposure_sources_.clear();
   // Binder owns descriptor retirement; release all its leases first.
   exposure_settings_.clear();
   transient_exposure_settings_ = {};
@@ -119,6 +123,7 @@ auto PostProcessService::OnFrameStart(
     return;
   PollExposureStatus();
   captured_exposure_settings_.clear();
+  captured_exposure_sources_.clear();
   current_sequence_ = sequence;
   current_slot_ = slot;
   exposure_pass_->OnFrameStart(sequence, slot);
@@ -290,6 +295,43 @@ auto PostProcessService::CaptureViewExposureSettings(const ViewId view_id,
     .first->second.settings;
 }
 
+auto PostProcessService::CaptureSharedExposureSource(const RenderContext& ctx,
+  const ViewId source_view_id,
+  const CompositionView::ViewStateHandle source_handle)
+  -> const postprocess::ExposurePass::Source&
+{
+  if (const auto found = captured_exposure_sources_.find(source_view_id);
+    found != captured_exposure_sources_.end()) {
+    CHECK_F(found->second.handle == source_handle);
+    return found->second;
+  }
+  if (!captured_exposure_settings_.contains(source_view_id)) {
+    const auto intent = renderer_.GetExposureSourceIntent(source_view_id);
+    CHECK_F(intent && intent->handle == source_handle,
+      "A shared source must identify its registered persistent root");
+    auto requested = scene::ExposureSettings {};
+    if (intent->settings) {
+      requested = *intent->settings;
+    } else if (const auto scene = ctx.GetScene();
+      scene && scene->GetEnvironment()) {
+      if (const auto post = scene->GetEnvironment()
+            ->TryGetSystem<scene::environment::PostProcessVolume>())
+        requested = post->GetExposureSettings();
+    }
+    static_cast<void>(CaptureViewExposureSettings(
+      source_view_id, source_handle, requested, intent->camera_ev));
+  }
+  const auto& captured = captured_exposure_settings_.at(source_view_id);
+  CHECK_F(captured.handle == source_handle);
+  auto config = PostProcessConfig {};
+  ApplyExposureRevision(config, captured.settings);
+  return captured_exposure_sources_
+    .emplace(source_view_id,
+      postprocess::ExposurePass::Source { source_handle, std::move(config),
+        renderer_.CaptureExposureTransition(source_handle, current_sequence_) })
+    .first->second;
+}
+
 auto PostProcessService::BuildBindings(const Inputs& inputs) const
   -> PostProcessFrameBindings
 {
@@ -391,6 +433,13 @@ auto PostProcessService::Execute(const ViewId view_id, RenderContext& ctx,
     || ctx.render_mode == RenderMode::kWireframe;
   const auto transition = renderer_.CaptureExposureTransition(
     ctx.current_view.view_state_handle, ctx.frame_sequence);
+  const auto source_handle = ctx.current_view.exposure_view_state_handle;
+  const auto* source = !effective_config.temporary_unit_exposure
+      && source_handle != CompositionView::kInvalidViewStateHandle
+      && source_handle != ctx.current_view.view_state_handle
+    ? &CaptureSharedExposureSource(
+        ctx, ctx.current_view.exposure_view_id, source_handle)
+    : nullptr;
   const auto exposure = exposure_pass_->Execute(ctx, effective_config,
     postprocess::ExposurePass::Inputs {
       .scene_signal = inputs.scene_signal,
@@ -401,6 +450,7 @@ auto PostProcessService::Execute(const ViewId view_id, RenderContext& ctx,
       = !initial_mask_unavailable && !requested_mask_missing,
       .transition
       = !effective_config.temporary_unit_exposure ? transition : std::nullopt,
+      .source = source,
     });
   if (transition && exposure.executed && exposure.state
     && !effective_config.temporary_unit_exposure) {
@@ -438,9 +488,11 @@ auto PostProcessService::Execute(const ViewId view_id, RenderContext& ctx,
     .bloom_requested = bloom.requested,
     .bloom_executed = bloom.executed,
     .auto_exposure_requested = effective_config.enable_auto_exposure
-      && !effective_config.temporary_unit_exposure && exposure.requested,
+      && !effective_config.temporary_unit_exposure
+      && !exposure.borrowed_exposure && exposure.requested,
     .auto_exposure_executed = effective_config.enable_auto_exposure
-      && !effective_config.temporary_unit_exposure && exposure.executed,
+      && !effective_config.temporary_unit_exposure
+      && !exposure.borrowed_exposure && exposure.executed,
     .used_fixed_exposure = exposure.used_fixed_exposure,
     .view_id = view_id,
     .post_process_frame_slot = slot,
@@ -528,6 +580,8 @@ auto PostProcessService::PollExposureStatus() -> void
           if ((status.flags & 8U) != 0U) {
             rejection = status.transition_rejection_reason == 1U
               ? ExposureTransitionError::kNotAuto
+              : status.transition_rejection_reason == 3U
+              ? ExposureTransitionError::kSharedConsumer
               : ExposureTransitionError::kUnsupportedSeed;
           }
           renderer_.CompleteExposureTransition(

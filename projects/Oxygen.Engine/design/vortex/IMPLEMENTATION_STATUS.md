@@ -88,9 +88,14 @@ mode and mask capture now remains stable from family priming through tonemap,
 including late mutations and stateless isolation. The expanded suite passes
 56 native cases, 19 service tests and 40 renderer regression entries in each
 configuration, with four focused debugger cases; evidence is
-`lifecycle/frame-capture-manifest.json`. GPU source borrowing/bootstrap and
-destruction continuity, plus implicit lifecycle events, remain open; slice 4
-is still in progress.
+`lifecycle/frame-capture-manifest.json`. The prior-frame sharing core now passes
+62 native, 20 service and 19 publication tests in Debug and Release, plus six
+sharing debugger cases with no blocking messages. Both render orders,
+source-defined fallback, inactive-source retention, consumer-request rejection
+and explicit detach/remeter have controlled-input evidence in
+`lifecycle/prior-sharing-manifest.json`. Automatic detach, source-destruction
+continuity, inactive-owner request validation, readback-backpressure completion
+and implicit lifecycle events remain open; slice 4 is still in progress.
 Mask identity now follows the approved existing resource-index model.
 
 ## 4. Milestone Ledger
