@@ -23,7 +23,7 @@
 
 #include "Core/Bindless/Generated.BindlessAbi.hlsl"
 #include "Vortex/Contracts/Environment/EnvironmentStaticData.hlsli"
-#include "Vortex/Contracts/View/ViewColorHelpers.hlsli"
+#include "Vortex/Contracts/View/FrameExposureHelpers.hlsli"
 #include "Vortex/Services/Environment/AtmosphereMedium.hlsli"
 #include "Vortex/Shared/Math.hlsli"
 #include "Vortex/Shared/Geometry.hlsli"

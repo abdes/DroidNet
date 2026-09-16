@@ -13,9 +13,9 @@
 #include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/Time/SimulationClock.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
-#include <Oxygen/Core/Time/SimulationClock.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Queues.h>
@@ -37,8 +37,10 @@
 #include <Oxygen/Vortex/SceneRenderer/ShadingMode.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/Hzb/ScreenHzbModule.h>
 #include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
+#include <Oxygen/Vortex/Types/ExposureStateData.h>
 #include <Oxygen/Vortex/Types/ScreenHzbFrameBindings.h>
 #include <Oxygen/Vortex/Types/ViewFrameBindings.h>
+#include <Oxygen/Vortex/ViewExtension.h>
 
 #include "Fakes/Graphics.h"
 
@@ -328,7 +330,7 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
     oxygen::kInvalidShaderVisibleIndex);
   EXPECT_EQ(published_bindings.draw_frame_slot, oxygen::kInvalidShaderVisibleIndex);
   EXPECT_NE(
-    published_bindings.view_color_frame_slot, oxygen::kInvalidShaderVisibleIndex);
+    published_bindings.frame_exposure_slot, oxygen::kInvalidShaderVisibleIndex);
   EXPECT_NE(RendererPublicationProbe::GetViewConstantsManager(*renderer_), nullptr);
   EXPECT_NE(scene_renderer->GetPublishedViewId(), oxygen::kInvalidViewId);
   EXPECT_EQ(scene_texture_bindings.scene_color_srv,
@@ -347,6 +349,52 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
     SceneTextureBindings::kInvalidIndex);
   EXPECT_EQ(scene_texture_bindings.gbuffer_srvs[5],
     SceneTextureBindings::kInvalidIndex);
+}
+
+NOLINT_TEST_F(SceneRendererPublicationTest,
+  PostScenePublicationRetainsThePreSceneExposureRecord)
+{
+  class ExposureObserver final : public oxygen::vortex::IViewExtension {
+  public:
+    explicit ExposureObserver(Renderer& renderer)
+      : renderer_(renderer)
+    {
+    }
+    auto OnPreRenderViewGpu(const oxygen::vortex::ViewRenderGpuContext&)
+      -> void override
+    {
+      const auto* scene = RendererPublicationProbe::GetSceneRenderer(renderer_);
+      ASSERT_NE(scene, nullptr);
+      before = scene->GetPublishedViewFrameBindings().frame_exposure_slot;
+    }
+    auto OnPostRenderViewGpu(const oxygen::vortex::ViewRenderGpuContext&)
+      -> void override
+    {
+      const auto* scene = RendererPublicationProbe::GetSceneRenderer(renderer_);
+      ASSERT_NE(scene, nullptr);
+      after = scene->GetPublishedViewFrameBindings().frame_exposure_slot;
+    }
+    oxygen::ShaderVisibleIndex before { oxygen::kInvalidShaderVisibleIndex };
+    oxygen::ShaderVisibleIndex after { oxygen::kInvalidShaderVisibleIndex };
+
+  private:
+    Renderer& renderer_;
+  };
+  auto observer = std::make_shared<ExposureObserver>(*renderer_);
+  renderer_->RegisterViewExtension(observer);
+  auto frame = FrameContext {};
+  PrepareFrameContext(
+    frame, oxygen::frame::SequenceNumber { 1U }, oxygen::frame::Slot { 0U });
+  auto scene = std::make_shared<Scene>("PinnedExposure", 8U);
+  frame.SetScene(oxygen::observer_ptr { scene.get() });
+  auto framebuffer = MakeFramebuffer("PinnedExposure.Color");
+  static_cast<void>(frame.RegisterView(
+    MakeView(oxygen::observer_ptr { framebuffer.get() }, 64.0F, 64.0F, true)));
+  RunRendererFrame(frame);
+  ASSERT_NE(observer->before, oxygen::kInvalidShaderVisibleIndex);
+  EXPECT_EQ(observer->after, observer->before);
+  EXPECT_EQ(sizeof(oxygen::vortex::FrameExposureData), 16U);
+  EXPECT_EQ(offsetof(ViewFrameBindings, frame_exposure_slot), 12U);
 }
 
 NOLINT_TEST_F(SceneRendererPublicationTest,
@@ -1340,15 +1388,14 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
           = pipeline_name == "Vortex.Environment.Fog"
           ? oxygen::graphics::BlendFactor::kOne
           : oxygen::graphics::BlendFactor::kSrcAlpha;
-        const auto expected_dest_blend
-          = pipeline_name == "Vortex.Environment.Fog"
-          ? oxygen::graphics::BlendFactor::kSrcAlpha
-          : oxygen::graphics::BlendFactor::kInvSrcAlpha;
+        // Fog exports opacity (1 - transmittance), with premultiplied RGB.
+        // Both passes therefore retain destination * (1 - output alpha).
         return !blend_state.empty()
           && std::ranges::all_of(blend_state, [&](const auto& target) {
                return target.blend_enable
                  && target.src_blend == expected_src_blend
-                 && target.dest_blend == expected_dest_blend;
+                 && target.dest_blend
+                 == oxygen::graphics::BlendFactor::kInvSrcAlpha;
              });
       }
     }

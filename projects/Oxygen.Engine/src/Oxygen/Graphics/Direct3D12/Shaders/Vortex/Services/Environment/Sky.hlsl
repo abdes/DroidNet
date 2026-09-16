@@ -6,7 +6,7 @@
 
 #include "Vortex/Contracts/Environment/EnvironmentHelpers.hlsli"
 #include "Vortex/Contracts/Environment/EnvironmentViewHelpers.hlsli"
-#include "Vortex/Contracts/View/ViewColorHelpers.hlsli"
+#include "Vortex/Contracts/View/FrameExposureHelpers.hlsli"
 #include "Vortex/Contracts/View/ViewConstants.hlsli"
 
 #include "Vortex/Contracts/Scene/SceneTextures.hlsli"
@@ -263,7 +263,7 @@ float4 VortexSkyPassPS(VortexFullscreenTriangleOutput input) : SV_Target0
     // atmosphere pipeline.
     SamplerState linear_sampler
         = SamplerDescriptorHeap[kAtmosphereLinearClampSampler];
-    const float view_pre_exposure = max(GetExposure(), 1.0e-6f);
+    const float view_pre_exposure = max(GetPreExposure(), 1.0e-6f);
     const float view_one_over_pre_exposure = rcp(view_pre_exposure);
     const float4 sky_sample = sky_view_lut.SampleLevel(linear_sampler, uv, 0.0f);
     float3 sky_color = max(

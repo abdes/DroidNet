@@ -55,8 +55,8 @@
 #include <Oxygen/Vortex/SceneRenderer/SceneRenderBuilder.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneRenderer.h>
 #include <Oxygen/Vortex/Types/DrawFrameBindings.h>
+#include <Oxygen/Vortex/Types/ExposureStateData.h>
 #include <Oxygen/Vortex/Types/ScreenHzbFrameBindings.h>
-#include <Oxygen/Vortex/Types/ViewColorData.h>
 #include <Oxygen/Vortex/Types/ViewFrameBindings.h>
 #include <Oxygen/Vortex/Upload/InlineTransfersCoordinator.h>
 #include <Oxygen/Vortex/Upload/RingBufferStaging.h>
@@ -82,8 +82,8 @@ struct RendererPublicationState {
     view_history_frame_bindings_publisher;
   std::unique_ptr<internal::PerViewStructuredPublisher<SceneTextureBindings>>
     scene_texture_bindings_publisher;
-  std::unique_ptr<internal::PerViewStructuredPublisher<ViewColorData>>
-    view_color_data_publisher;
+  std::unique_ptr<internal::PerViewStructuredPublisher<FrameExposureData>>
+    frame_exposure_publisher;
   std::unique_ptr<internal::PerViewStructuredPublisher<ScreenHzbFrameBindings>>
     screen_hzb_bindings_publisher;
   std::unique_ptr<internal::PerViewStructuredPublisher<ViewFrameBindings>>
@@ -176,16 +176,18 @@ namespace {
     return std::nullopt;
   }
 
-  auto BuildViewColorData(const RenderContext& render_context) -> ViewColorData
+  auto BuildFrameExposureData(const RenderContext& render_context)
+    -> FrameExposureData
   {
-    auto data = ViewColorData {};
+    auto data = FrameExposureData {};
     if (render_context.current_view.prepared_frame != nullptr) {
-      data.exposure = std::max(
+      data.pre_exposure = std::max(
         render_context.current_view.prepared_frame->exposure, 1.0e-6F);
     }
     if (render_context.render_mode == RenderMode::kWireframe) {
-      data.exposure = 1.0F;
+      data.pre_exposure = 1.0F;
     }
+    data.one_over_pre_exposure = 1.0F / data.pre_exposure;
     return data;
   }
 
@@ -943,11 +945,11 @@ auto Renderer::EnsurePublicationState(Graphics& gfx)
       "ScreenHzbFrameBindings");
   }
 
-  if (!state.view_color_data_publisher) {
-    state.view_color_data_publisher
-      = std::make_unique<internal::PerViewStructuredPublisher<ViewColorData>>(
-        observer_ptr { &gfx }, GetStagingProvider(),
-        observer_ptr { &GetInlineTransfersCoordinator() }, "ViewColorData");
+  if (!state.frame_exposure_publisher) {
+    state.frame_exposure_publisher = std::make_unique<
+      internal::PerViewStructuredPublisher<FrameExposureData>>(
+      observer_ptr { &gfx }, GetStagingProvider(),
+      observer_ptr { &GetInlineTransfersCoordinator() }, "FrameExposureData");
   }
   if (!state.view_history_frame_bindings_publisher) {
     state.view_history_frame_bindings_publisher = std::make_unique<
@@ -977,7 +979,7 @@ auto Renderer::BeginPublicationFrame(Graphics& gfx,
   state.scene_texture_bindings_publisher->OnFrameStart(sequence, slot);
   state.draw_frame_bindings_publisher->OnFrameStart(sequence, slot);
   state.screen_hzb_bindings_publisher->OnFrameStart(sequence, slot);
-  state.view_color_data_publisher->OnFrameStart(sequence, slot);
+  state.frame_exposure_publisher->OnFrameStart(sequence, slot);
   state.view_history_frame_bindings_publisher->OnFrameStart(sequence, slot);
   state.view_frame_bindings_publisher->OnFrameStart(sequence, slot);
   state.prepared_frame_sequence = sequence;
@@ -1125,9 +1127,10 @@ auto Renderer::PublishCurrentViewPreSceneFrameBindings(
       = publication_state.draw_frame_bindings_publisher->Publish(
         render_context.current_view.view_id, draw_bindings);
   }
-  view_bindings.view_color_frame_slot
-    = publication_state.view_color_data_publisher->Publish(
-      render_context.current_view.view_id, BuildViewColorData(render_context));
+  view_bindings.frame_exposure_slot
+    = publication_state.frame_exposure_publisher->Publish(
+      render_context.current_view.view_id,
+      BuildFrameExposureData(render_context));
   view_bindings.history_frame_slot
     = PublishCurrentViewHistoryFrameBindings(render_context, publication_state);
 
@@ -1139,7 +1142,7 @@ auto Renderer::PublishCurrentViewPreSceneFrameBindings(
     "history_slot={} frame_slot={}",
     render_context.current_view.view_id.get(),
     view_bindings.draw_frame_slot.get(),
-    view_bindings.view_color_frame_slot.get(),
+    view_bindings.frame_exposure_slot.get(),
     view_bindings.history_frame_slot.get(), view_frame_bindings_slot.get());
   scene_renderer.PublishViewFrameBindings(render_context.current_view.view_id,
     view_bindings, view_frame_bindings_slot);
@@ -1171,13 +1174,11 @@ auto Renderer::PublishCurrentViewPostSceneFrameBindings(
       render_context.current_view.view_id,
       scene_renderer.GetSceneTextureBindings());
   view_bindings.scene_texture_frame_slot = scene_texture_frame_slot;
-  const auto view_color_data = BuildViewColorData(render_context);
-  view_bindings.view_color_frame_slot
-    = publication_state.view_color_data_publisher->Publish(
-      render_context.current_view.view_id, view_color_data);
-  LOG_F(INFO, "view_color_cpu_post_scene view={} exposure={} slot={}",
-    render_context.current_view.view_id.get(), view_color_data.exposure,
-    view_bindings.view_color_frame_slot.get());
+  // Keep the exact pre-scene record and descriptor pinned for this frame.
+  // Post-scene texture publication must not recompute numerical exposure.
+  LOG_F(INFO, "frame_exposure_post_scene view={} pinned_slot={}",
+    render_context.current_view.view_id.get(),
+    view_bindings.frame_exposure_slot.get());
   view_bindings.screen_hzb_frame_slot
     = publication_state.screen_hzb_bindings_publisher->Publish(
       render_context.current_view.view_id,
@@ -1196,7 +1197,7 @@ auto Renderer::PublishCurrentViewPostSceneFrameBindings(
     view_bindings.lighting_frame_slot.get(),
     view_bindings.environment_frame_slot.get(),
     view_bindings.scene_texture_frame_slot.get(),
-    view_bindings.view_color_frame_slot.get(),
+    view_bindings.frame_exposure_slot.get(),
     view_bindings.screen_hzb_frame_slot.get(),
     view_bindings.history_frame_slot.get(), view_frame_bindings_slot.get());
   scene_renderer.PublishViewFrameBindings(render_context.current_view.view_id,

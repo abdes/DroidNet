@@ -175,7 +175,6 @@ set(
   "Types/ShadowFrameBindings.h"
   "Types/SyntheticSunData.h"
   "Types/VelocityPublications.h"
-  "Types/ViewColorData.h"
   "Types/ExposureTargetData.h"
   "Types/ExposureStateData.h"
   "Types/ViewConstants.h"

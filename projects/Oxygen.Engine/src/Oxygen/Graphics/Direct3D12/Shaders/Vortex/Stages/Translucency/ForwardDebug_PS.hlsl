@@ -17,7 +17,7 @@
 #include "Vortex/Contracts/Draw/MaterialShadingConstants.hlsli"
 #include "Vortex/Services/Shadows/ShadowSurfaceNormal.hlsli"
 #include "Vortex/Contracts/Draw/Vertex.hlsli"
-#include "Vortex/Contracts/View/ViewColorHelpers.hlsli"
+#include "Vortex/Contracts/View/FrameExposureHelpers.hlsli"
 #include "Vortex/Contracts/View/ViewConstants.hlsli"
 #include "Vortex/Contracts/Shadows/VsmFrameBindings.hlsli"
 
@@ -370,7 +370,7 @@ static inline float3 MakeDepthMismatchHeatmap(float depth_error)
   }
 
 #if defined(DEBUG_IBL_RAW_SKY)
-  debug_out *= GetExposure();
+  debug_out *= GetPreExposure();
 #endif
 
 #ifdef OXYGEN_HDR_OUTPUT
