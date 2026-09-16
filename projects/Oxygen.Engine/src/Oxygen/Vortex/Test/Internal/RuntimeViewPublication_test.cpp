@@ -528,6 +528,58 @@ NOLINT_TEST_F(
   EXPECT_FALSE(renderer_->InspectExposureTransition(Handle { 1U }).has_value());
 }
 
+NOLINT_TEST_F(RuntimeViewPublicationTest,
+  PreparedViewFamilyPinsExposureThroughLateSceneMutation)
+{
+  using namespace oxygen::vortex;
+  auto frame = FrameContext {};
+  PrepareFrameContext(frame, 1U);
+  auto scene = std::make_shared<oxygen::scene::Scene>("PinnedExposure", 8U);
+  scene->SetEnvironment(std::make_unique<oxygen::scene::SceneEnvironment>());
+  auto& post = scene->GetEnvironment()
+                 ->AddSystem<oxygen::scene::environment::PostProcessVolume>();
+  post.SetExposureMode(oxygen::engine::ExposureMode::kManual);
+  post.SetExposureKey(12.5F);
+  post.SetManualExposureEv(4.0F);
+  const auto first = PublishExposureView(
+    frame, ViewId { 1U }, CompositionView::ViewStateHandle { 11U });
+  const auto second = PublishExposureView(
+    frame, ViewId { 2U }, CompositionView::ViewStateHandle { 22U });
+  auto scene_renderer = SceneRenderer(*renderer_, *graphics_,
+    SceneTexturesConfig { .extent = { 64U, 64U } }, ShadingMode::kDeferred);
+  auto context = RenderContext {};
+  context.scene = oxygen::observer_ptr { scene.get() };
+  context.frame_sequence = oxygen::frame::SequenceNumber { 1U };
+  context.frame_slot = oxygen::frame::Slot { 0U };
+  context.view_constants = MaterializeViewConstantsBuffer(first);
+  RendererPublicationProbe::PopulateRenderContextViewState(
+    *renderer_, context, frame, false);
+  const auto render = [&](const float expected) {
+    for (std::size_t i = 0; i < context.frame_views.size(); ++i) {
+      internal::PerViewScope scope(context, i);
+      scene_renderer.OnRender(context);
+    }
+    const auto* service
+      = RendererPublicationProbe::GetPostProcessService(scene_renderer);
+    ASSERT_NE(service, nullptr);
+    for (const auto view : { first, second }) {
+      const auto* bindings = service->InspectBindings(view);
+      ASSERT_NE(bindings, nullptr);
+      EXPECT_EQ(bindings->fixed_exposure, expected);
+    }
+  };
+  scene_renderer.OnStandaloneFrameStart(
+    context.frame_sequence, context.frame_slot, glm::uvec2 { 64U, 64U });
+  scene_renderer.PrimePreparedViews(context);
+  post.SetManualExposureEv(8.0F);
+  render(0x1p-4F);
+  context.frame_sequence = oxygen::frame::SequenceNumber { 2U };
+  context.frame_slot = oxygen::frame::Slot { 1U };
+  scene_renderer.OnStandaloneFrameStart(
+    context.frame_sequence, context.frame_slot, glm::uvec2 { 64U, 64U });
+  render(0x1p-8F);
+}
+
 NOLINT_TEST_F(RuntimeViewPublicationTest, ExposureChainsResolveTheCurrentRoot)
 {
   using Handle = oxygen::vortex::CompositionView::ViewStateHandle;

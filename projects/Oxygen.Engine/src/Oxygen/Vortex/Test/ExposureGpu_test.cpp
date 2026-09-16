@@ -222,8 +222,8 @@ protected:
     ctx_.delta_time = dt;
     ctx_.render_mode = diagnostic ? RenderMode::kWireframe : RenderMode::kSolid;
     service.OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
-    const auto& accepted = service.ResolveViewExposureSettings(
-      ctx_.current_view.view_state_handle, settings);
+    const auto& accepted = service.CaptureViewExposureSettings(
+      ctx_.current_view.view_id, ctx_.current_view.view_state_handle, settings);
     auto config = PostProcessConfig {};
     config.resolved_exposure = accepted.resolved;
     config.exposure_settings_revision = accepted.revision;
@@ -785,7 +785,7 @@ NOLINT_TEST_F(
     for (bool failure : { false, true }) {
       const auto handle = CompositionView::ViewStateHandle { id++ };
       ctx_.current_view.view_state_handle = handle;
-      ctx_.frame_sequence = frame::SequenceNumber { id };
+      ctx_.frame_sequence = frame::SequenceNumber { ++sequence_ };
       service.OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
       auto requested = scene::ExposureSettings {};
       requested.key = 12.5F;
@@ -798,6 +798,7 @@ NOLINT_TEST_F(
         service.ResolveViewExposureSettings(handle, requested).mask_status,
         PostProcessService::ExposureMaskStatus::kPending);
       if (failure) {
+        ctx_.frame_sequence = frame::SequenceNumber { ++sequence_ };
         service.OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
         EXPECT_EQ(
           service.ResolveViewExposureSettings(handle, requested).mask_status,
@@ -1340,6 +1341,61 @@ NOLINT_TEST_F(
   EXPECT_EQ(status->phase, ExposureTransitionPhase::kRejected);
   EXPECT_EQ(status->error, ExposureTransitionError::kUnsupportedSeed);
   EXPECT_EQ(status->applied_generation, 0U);
+}
+
+NOLINT_TEST_F(
+  ExposureGpuTest, LateModeChangeCannotAlterCapturedTransitionSemantics)
+{
+  auto service = PostProcessService(*renderer_);
+  const auto signal = Uniform(.25F, 4U, 4U);
+  auto settings = scene::ExposureSettings {};
+  settings.mode = engine::ExposureMode::kManual;
+  settings.manual_ev = 4.0F;
+  const auto token
+    = renderer_->QueueExposureTransition(ctx_.current_view.view_state_handle,
+      ExposureTransitionPolicy::kSeedFromEv100, 8.0F);
+  ASSERT_TRUE(token.has_value());
+  const auto pixel = ServicePixel(service, signal, settings, false, 0.0F, [&] {
+    settings.key = 12.5F;
+    settings.mode = engine::ExposureMode::kAuto;
+    const auto& late = service.ResolveViewExposureSettings(
+      ctx_.current_view.view_state_handle, settings);
+    auto config = service.GetConfig();
+    config.resolved_exposure = late.resolved;
+    config.exposure_settings_revision = late.revision;
+    config.enable_auto_exposure = true;
+    service.SetConfig(config);
+  });
+  EXPECT_NEAR(pixel, .25F / 16.0F, 2e-5F);
+  service.OnFrameStart(frame::SequenceNumber { ++sequence_ }, ctx_.frame_slot);
+  const auto status = renderer_->InspectExposureTransition(token->target);
+  ASSERT_TRUE(status.has_value());
+  EXPECT_EQ(status->phase, ExposureTransitionPhase::kRejected);
+  EXPECT_EQ(status->error, ExposureTransitionError::kNotAuto);
+  EXPECT_NEAR(
+    ServicePixel(service, signal, settings, false, 1.0F), .25F / 16.0F, 2e-5F);
+}
+
+NOLINT_TEST_F(
+  ExposureGpuTest, LateMaskRemovalCannotEnableMeteringForCapturedFrame)
+{
+  auto service = PostProcessService(*renderer_);
+  const auto signal = Uniform(.25F, 4U, 4U);
+  auto settings = scene::ExposureSettings {};
+  settings.metering_mask = content::ResourceKey { 123U };
+  const auto pixel = ServicePixel(service, signal, settings, false, 0.0F, [&] {
+    settings.key = 12.5F;
+    settings.metering_mask = {};
+    const auto& late = service.ResolveViewExposureSettings(
+      ctx_.current_view.view_state_handle, settings);
+    auto config = service.GetConfig();
+    config.resolved_exposure = late.resolved;
+    config.exposure_settings_revision = late.revision;
+    service.SetConfig(config);
+  });
+  // The initial invalid-mask fallback uses the canonical key 10 at EV0.
+  EXPECT_NEAR(pixel, .25F * .8F, 2e-5F);
+  EXPECT_NEAR(ServicePixel(service, signal, settings), .18F, 2e-5F);
 }
 
 } // namespace

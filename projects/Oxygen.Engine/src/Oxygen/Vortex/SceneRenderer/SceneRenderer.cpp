@@ -1384,8 +1384,10 @@ namespace {
     };
   }
 
-  auto ResolveAuthoredPostProcessConfig(
-    const RenderContext& ctx, PostProcessService& service) -> PostProcessConfig
+  auto ResolveAuthoredPostProcessConfig(const RenderContext& ctx,
+    PostProcessService& service,
+    const RenderContext::ViewExecutionEntry* captured_view = nullptr)
+    -> PostProcessConfig
   {
     auto config = PostProcessConfig {};
     auto requested = scene::ExposureSettings {};
@@ -1405,17 +1407,25 @@ namespace {
         }
       }
     }
-    if (ctx.current_view.exposure_override.has_value()) {
-      requested = *ctx.current_view.exposure_override;
-    } else if (const auto view = ctx.current_view.composition_view;
-      view != nullptr && view->render_settings.exposure.has_value()) {
+    const auto& override_settings = captured_view
+      ? captured_view->exposure_override
+      : ctx.current_view.exposure_override;
+    const auto view = captured_view ? captured_view->composition_view
+                                    : ctx.current_view.composition_view;
+    const auto resolved_view = captured_view ? captured_view->resolved_view
+                                             : ctx.current_view.resolved_view;
+    if (override_settings.has_value()) {
+      requested = *override_settings;
+    } else if (view != nullptr && view->render_settings.exposure.has_value()) {
       requested = *view->render_settings.exposure;
     }
-    const auto camera_ev = ctx.current_view.resolved_view != nullptr
-      ? ctx.current_view.resolved_view->CameraEv()
-      : std::optional<float> {};
-    const auto& active = service.ResolveViewExposureSettings(
-      ctx.current_view.view_state_handle, requested, camera_ev);
+    const auto camera_ev = resolved_view != nullptr ? resolved_view->CameraEv()
+                                                    : std::optional<float> {};
+    const auto& active = service.CaptureViewExposureSettings(
+      captured_view ? captured_view->view_id : ctx.current_view.view_id,
+      captured_view ? captured_view->view_state_handle
+                    : ctx.current_view.view_state_handle,
+      requested, camera_ev);
     const auto& exposure = active.resolved.authored;
     config.enable_auto_exposure
       = exposure.enabled && exposure.mode == engine::ExposureMode::kAuto;
@@ -1589,6 +1599,17 @@ void SceneRenderer::OnPreRender(const engine::FrameContext& /*frame*/) { }
 
 void SceneRenderer::PrimePreparedViews(RenderContext& ctx)
 {
+  if (post_process_) {
+    // Capture every view before callbacks or draws can mutate scene intent.
+    if (ctx.frame_views.empty() && ctx.current_view.view_id != kInvalidViewId)
+      static_cast<void>(ResolveAuthoredPostProcessConfig(ctx, *post_process_));
+    for (std::size_t i = 0U; i < ctx.frame_views.size(); ++i) {
+      if (!ctx.frame_views[i].is_scene_view)
+        continue;
+      static_cast<void>(ResolveAuthoredPostProcessConfig(
+        ctx, *post_process_, &ctx.frame_views[i]));
+    }
+  }
   if (init_views_ != nullptr) {
     init_views_->Execute(ctx, scene_textures_);
   }
@@ -1789,6 +1810,8 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
   if (ctx.current_view.prepared_frame == nullptr) {
     PrimePreparedView(ctx);
   }
+  if (post_process_ && wants_scene_lighting)
+    static_cast<void>(ResolveAuthoredPostProcessConfig(ctx, *post_process_));
   RecordDiagnosticsPass(renderer_,
     DiagnosticsPassRecord {
       .name = "Vortex.Stage2.InitViews",

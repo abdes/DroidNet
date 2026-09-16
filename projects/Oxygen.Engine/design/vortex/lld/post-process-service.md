@@ -59,6 +59,20 @@ state must not be treated as a durable receipt across frame retirement.
 
 ## Settings resolution
 
+`CaptureViewExposureSettings` pins one complete accepted settings revision and
+its resident mask lease for a logical view and frame. `InitViews` captures the
+view family before scene rendering; family and single-view entry points also
+capture when no prepared scene is available. The same revision supplies the
+early exposure binding, solve constants, final post-process bindings and
+transition-status identity. A later settings change, mask completion or mode
+change becomes eligible at the next frame boundary. Repeated frame-start
+notifications do not release a capture.
+
+Stateless captures are keyed by logical `ViewId`, so multiple stateless views
+remain independent; their captures are discarded at the next frame boundary.
+Persistent accepted settings remain keyed by `ViewStateHandle`. The resolver
+can validate pending intent without mutating an existing frame capture.
+
 Resolve scene defaults, physical camera parameters for ManualCamera, and explicit
 per-view override at a frame boundary. Validate all fields as one revision:
 finite values, recognized enums, positive key/camera parameters/D, nonnegative

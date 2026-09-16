@@ -83,9 +83,14 @@ Inspected Auto160 and Manual EV32 captures pass binding and final-consumption
 checks. Evidence: `lifecycle/unified-state-manifest.json`. The runtime ownership
 registry additionally passes 18 publication tests in Debug and Release for
 atomic edge validation, root resolution, inactive-source retention and removal;
-evidence is `lifecycle/ownership-registry-manifest.json`. GPU borrowing and
-destruction continuity, implicit lifecycle events and full frame-boundary
-settings integration remain open; slice 4 is still in progress.
+evidence is `lifecycle/ownership-registry-manifest.json`. Rendered-view settings,
+mode and mask capture now remains stable from family priming through tonemap,
+including late mutations and stateless isolation. The expanded suite passes
+56 native cases, 19 service tests and 40 renderer regression entries in each
+configuration, with four focused debugger cases; evidence is
+`lifecycle/frame-capture-manifest.json`. GPU source borrowing/bootstrap and
+destruction continuity, plus implicit lifecycle events, remain open; slice 4
+is still in progress.
 Mask identity now follows the approved existing resource-index model.
 
 ## 4. Milestone Ledger
