@@ -4,8 +4,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <limits>
 #include <memory>
 
+#include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Graphics/Common/Framebuffer.h>
@@ -224,6 +226,45 @@ NOLINT_TEST_F(SinglePassHarnessFacadeTest,
   EXPECT_NE(render_context.current_view.resolved_view.get(), nullptr);
   EXPECT_NE(render_context.current_view.prepared_frame.get(), nullptr);
   EXPECT_NE(render_context.view_constants.get(), nullptr);
+}
+
+NOLINT_TEST_F(SinglePassHarnessFacadeTest, PausedFrameSessionPreservesZeroDelta)
+{
+  auto facade = renderer_->ForSinglePassHarness();
+  facade.SetFrameSession(Renderer::FrameSessionInput {
+    .frame_slot = oxygen::frame::Slot { 0U },
+    .delta_time_seconds = 0.0F,
+  });
+  facade.SetOutputTarget(MakeOutputTarget());
+  facade.SetResolvedView(MakeResolvedViewInput());
+  const auto result = facade.Finalize();
+  ASSERT_TRUE(result.has_value());
+  EXPECT_EQ(result->GetRenderContext().delta_time, 0.0F);
+}
+
+NOLINT_TEST_F(
+  SinglePassHarnessFacadeTest, NegativeAndNonfiniteDeltaRemainInvalid)
+{
+  for (const float delta : { -1.0F, std::numeric_limits<float>::infinity(),
+         std::numeric_limits<float>::quiet_NaN() }) {
+    auto facade = renderer_->ForSinglePassHarness();
+    facade.SetFrameSession(Renderer::FrameSessionInput {
+      .frame_slot = oxygen::frame::Slot { 0U },
+      .delta_time_seconds = delta,
+    });
+    facade.SetOutputTarget(MakeOutputTarget());
+    facade.SetResolvedView(MakeResolvedViewInput());
+    EXPECT_FALSE(facade.Validate().Ok());
+  }
+}
+
+NOLINT_TEST_F(
+  SinglePassHarnessFacadeTest, RuntimeFrameStartAcceptsPausedGameClock)
+{
+  auto context = oxygen::engine::FrameContext {};
+  ASSERT_EQ(context.GetModuleTimingData().game_delta_time.get().count(), 0);
+  EXPECT_NO_FATAL_FAILURE(
+    renderer_->OnFrameStart(oxygen::observer_ptr { &context }));
 }
 
 } // namespace

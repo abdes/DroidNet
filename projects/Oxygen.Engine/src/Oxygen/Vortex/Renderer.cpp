@@ -1298,7 +1298,8 @@ auto Renderer::OnFrameStart(observer_ptr<engine::FrameContext> context) -> void
   const auto dt_seconds
     = std::chrono::duration_cast<std::chrono::duration<float>>(dt.get())
         .count();
-  CHECK_GT_F(dt_seconds, 0.0F, "Frame delta time must be positive");
+  CHECK_F(std::isfinite(dt_seconds) && dt_seconds >= 0.0F,
+    "Frame delta time must be finite and nonnegative");
   last_frame_dt_seconds_ = dt_seconds;
   if (gpu_timeline_profiler_) {
     gpu_timeline_profiler_->OnFrameStart(context->GetFrameSequenceNumber());
@@ -2589,7 +2590,9 @@ auto Renderer::WireContext(RenderContext& context,
 auto Renderer::BeginStandaloneFrameExecution(const FrameSessionInput& session)
   -> void
 {
-  CHECK_GT_F(session.delta_time_seconds, 0.0F, "Delta time must be positive");
+  CHECK_F(std::isfinite(session.delta_time_seconds)
+      && session.delta_time_seconds >= 0.0F,
+    "Delta time must be finite and nonnegative");
   frame_slot_ = session.frame_slot;
   frame_seq_num_ = session.frame_sequence.get();
   last_frame_dt_seconds_ = session.delta_time_seconds;
@@ -3358,10 +3361,10 @@ auto Renderer::OffscreenSceneFacade::Validate() const -> ValidationReport
       .message = "Offscreen scene requires a valid frame slot",
     });
   } else if (!std::isfinite(frame_session_->delta_time_seconds)
-    || frame_session_->delta_time_seconds <= 0.0F) {
+    || frame_session_->delta_time_seconds < 0.0F) {
     report.issues.push_back(ValidationIssue {
       .code = "frame_session.invalid_delta_time",
-      .message = "Offscreen scene requires a finite positive delta time",
+      .message = "Offscreen scene requires a finite nonnegative delta time",
     });
   }
 

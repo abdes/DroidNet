@@ -363,4 +363,19 @@ NOLINT_TEST_F(OffscreenSceneFacadeTest, ExecuteAcceptsForwardPipeline)
   EXPECT_FALSE(graphics_->draw_log_.draws.empty());
 }
 
+NOLINT_TEST_F(OffscreenSceneFacadeTest, PausedFrameSessionCanFinalize)
+{
+  auto frame = MakeFrameSession();
+  frame.delta_time_seconds = 0.0F;
+  auto facade = renderer_->ForOffscreenScene();
+  facade.SetFrameSession(frame);
+  facade.SetSceneSource(Renderer::SceneSourceInput {
+    .scene = oxygen::observer_ptr<Scene> { scene_.get() } });
+  facade.SetViewIntent(Renderer::OffscreenSceneViewInput::FromCamera(
+    "PausedOffscreen", ViewId { 51U }, MakeView(), camera_));
+  facade.SetOutputTarget(MakeOutputTarget());
+  EXPECT_TRUE(facade.Validate().Ok());
+  EXPECT_TRUE(facade.Finalize().has_value());
+}
+
 } // namespace

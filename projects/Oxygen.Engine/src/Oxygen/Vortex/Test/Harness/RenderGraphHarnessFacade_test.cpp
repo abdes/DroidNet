@@ -312,4 +312,24 @@ NOLINT_TEST_F(RenderGraphHarnessFacadeTest,
   EXPECT_TRUE(executed);
 }
 
+NOLINT_TEST_F(
+  RenderGraphHarnessFacadeTest, PausedFrameSessionPreservesZeroDelta)
+{
+  auto facade = renderer_->ForRenderGraphHarness();
+  facade.SetFrameSession(Renderer::FrameSessionInput {
+    .frame_slot = oxygen::frame::Slot { 0U },
+    .delta_time_seconds = 0.0F,
+  });
+  facade.SetOutputTarget(MakeOutputTarget());
+  facade.SetResolvedView(MakeResolvedViewInput());
+  facade.SetRenderGraph(
+    [](ViewId, const RenderContext&,
+      oxygen::graphics::CommandRecorder&) -> oxygen::co::Co<void> {
+      co_return;
+    });
+  const auto result = facade.Finalize();
+  ASSERT_TRUE(result.has_value());
+  EXPECT_EQ(result->GetRenderContext().delta_time, 0.0F);
+}
+
 } // namespace

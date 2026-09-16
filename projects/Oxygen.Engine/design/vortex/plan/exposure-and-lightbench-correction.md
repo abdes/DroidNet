@@ -940,10 +940,21 @@ audit has zero errors/blocking warnings and five accepted factory warnings.
 Evidence: `contract-audit/slice3-curve-subnormal-*` and
 `metering/curve-debug-layer.json`.
 
-Slice 3 remains in progress for the renderer's pause admission checks: the
-shader accepts zero game delta, but Renderer frame/session validation still
-requires positive delta. Make public runtime/harness/offscreen entry points
-accept finite nonnegative delta and qualify propagation of an exact pause.
+The public pause route is now qualified: normal frame start, standalone frame
+execution, single-pass/render-graph materialization and offscreen validation
+accept finite nonnegative game delta. Negative/NaN/Inf remain invalid. Both
+paused facade tests failed before correction; all 36 focused facade/materializer
+CTest entries now pass in Debug and Release. A separate native public-frame
+session case passes in both configurations and under the debugger: target gain
+changes while latent gain remains exactly unchanged at dt0. Its audit has zero
+errors/blocking warnings and one accepted factory shutdown warning. Evidence:
+`contract-audit/slice3-pause-*` and `metering/pause-debug-layer.json`.
+
+This closes the slice-3 metering/adaptation gate: the 35-case numerical matrix,
+the separate native public-pause case, resource/setting tests, compiler audits
+and inspected scene captures have passed their specified scopes. Lifecycle,
+sharing and unified mode history remain slice 4 work; this does not qualify
+scene-integrated HDR migration or later package acceptance.
 Full GPU P routing/upstream range qualification remain slice 5; cooked mask
 persistence belongs to slice 6.
 
@@ -953,18 +964,25 @@ Offset 116 stores the uint32 texture index and 120..131 are zero-reserved;
 the fixed record prefix remains 144 bytes. The canonical runtime mask field
 now uses ResourceKey with the loading integration. No UUID lookup layer or new texture asset type is introduced.
 
-- [ ] Implement bounded stratified sampling, conserved two-bin weights, percentiles,
+- [x] Implement bounded stratified sampling, conserved two-bin weights, percentiles,
   finite/black/coverage rules and overflow-safe counts.
-- [ ] Implement mask sampling and exact piecewise-linear compensation curves.
-- [ ] Implement the analytic hybrid log-gain update, clamped targets, zero speeds,
+- [x] Implement mask sampling and exact piecewise-linear compensation curves.
+- [x] Implement the analytic hybrid log-gain update, clamped targets, zero speeds,
   equal EV bounds, zero target and positive-target restoration.
-- [ ] Add independent histogram and adaptation reference tests plus native GPU
+- [x] Add independent histogram and adaptation reference tests plus native GPU
   captures using existing fixtures; vary frame schedules at equal elapsed time.
 
 **Gate:** weighted distributions, targets and adaptation trajectories match
 independent expectations; 8K output cannot overflow histogram accumulation.
 
 ### Slice 4 - Implement one exposure history and complete lifecycle
+
+Generation allocation was decided by the user on 2026-09-16: Renderer issues
+64-bit generations. `QueueExposureTransition(handle, policy, seed)` returns a
+request token; `RetryExposureTransition(token)` resubmits the same identity
+without allocating another generation. Implicit resets share that counter.
+Submission and GPU application remain separate, and settings/mode/ownership
+validation happens at the frame boundary as specified in section 4.1.
 
 - [ ] Update the same GPU state in Manual, ManualCamera, Auto and disabled modes.
 - [ ] Add public per-view transitions and request generation handling, including

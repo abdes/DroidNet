@@ -18,14 +18,21 @@ applications and DemoShell submit the same public typed events and canonical
 per-view exposure overrides. An override replaces exposure settings for that
 view without mutating the scene. The native canonical authored settings type
 lives in Scene/ExposureSettings.h; enums and scalar math stay in
-Core/Types/PostProcess.h. This keeps Data::AssetKey out of Core's dependency
-boundary while Scene, Vortex and adapters consume one settings vocabulary.
-Resource references use the existing resource-descriptor/AssetKey mechanism.
+Core/Types/PostProcess.h. This keeps resource handles out of Core's dependency boundary while Scene,
+Vortex and adapters consume one settings vocabulary. Runtime mask references
+use Content::ResourceKey; cooked records use source-local texture indices.
 
 No local exposure, new temporal upscaler, second meter, legacy Renderer path,
 or independent exposure/precision framework belongs to this delivery.
 Equations and tolerances are owned by the
 [PBR specification](../../renderer-core/physically-based-rendering.md).
+
+Renderer-issued transition generations are the approved public contract:
+`QueueExposureTransition(handle, policy, seed)` returns a request token, and
+`RetryExposureTransition(token)` retains its generation. Implicit resets use
+the same per-view counter. Queueing does not acknowledge GPU application;
+completed status identifies the applied generation. Validate mode/settings
+and source ownership together at the frame boundary.
 
 ## Settings resolution
 
