@@ -858,4 +858,28 @@ NOLINT_TEST_F(ExposureGpuTest, LockedCurveUsesBoundInsteadOfRawMeteredEv)
     1.0F, 2e-6);
 }
 
+NOLINT_TEST_F(
+  ExposureGpuTest, SubnormalCurveCoordinatesInterpolateAtExactZeroMeterEv)
+{
+  for (const float coordinate :
+    { 1.0e-40F, std::numeric_limits<float>::denorm_min() }) {
+    ResetHistory();
+    auto settings = scene::ExposureSettings {};
+    settings.min_log_luminance = std::log2(.18F);
+    settings.log_luminance_range = 25.0F;
+    settings.low_percentile = 0.0F;
+    settings.high_percentile = 0x1p-16F;
+    settings.compensation_curve
+      = { { -coordinate, -1.0F }, { coordinate, 1.0F } };
+    // Brighter than the dark threshold, but entirely quantized to bin zero.
+    // The exact bin position gives EV zero and midpoint compensation zero.
+    const auto result = Run(Uniform(.1800001F), settings);
+    ASSERT_EQ(result.histogram[261], 0U);
+    ASSERT_EQ(result.histogram[0], 4095U);
+    ASSERT_EQ(result.state.raw_metered_ev, 0.0F);
+    EXPECT_NEAR(result.state.target_scale, 1.0F, 2e-5F);
+    EXPECT_NEAR(result.state.displayed_scale, 1.0F, 2e-5F);
+  }
+}
+
 } // namespace
