@@ -14,14 +14,27 @@
 #include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
+#include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Direct3D12/Test/Fixtures/ReadbackTestFixture.h>
 #include <Oxygen/Scene/Environment/Background.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
+#include <Oxygen/Vortex/PostProcess/PostProcessService.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
+#include <Oxygen/Vortex/RendererTag.h>
+#include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
+#include <Oxygen/Vortex/Test/Fakes/AssetLoader.h>
 #include <Oxygen/Vortex/Types/ExposureStateData.h>
+#include <Oxygen/Vortex/Upload/UploadCoordinator.h>
+
+namespace oxygen::vortex::internal {
+auto RendererTagFactory::Get() noexcept -> RendererTag
+{
+  return RendererTag {};
+}
+} // namespace oxygen::vortex::internal
 
 namespace {
 using namespace oxygen;
@@ -32,7 +45,7 @@ using Pixel = std::array<float, 4>;
 class ExposureGpuTest : public graphics::d3d12::testing::ReadbackTestFixture {
 protected:
   struct Signal {
-    std::shared_ptr<Texture> texture;
+    std::shared_ptr<const Texture> texture;
     ShaderVisibleIndex srv;
   };
   struct Snapshot {
@@ -153,8 +166,8 @@ protected:
     return result;
   }
   auto Run(const Signal& signal, scene::ExposureSettings settings = {},
-    float dt = 0.0F, const Signal* mask = nullptr, float inverse_p = 1.0F)
-    -> Snapshot
+    float dt = 0.0F, const Signal* mask = nullptr, float inverse_p = 1.0F,
+    bool metering_available = true) -> Snapshot
   {
     settings.key = 12.5F;
     const auto resolved = scene::ResolveExposureSettings(settings);
@@ -181,6 +194,7 @@ protected:
         .metering_mask = mask ? mask->texture.get() : nullptr,
         .metering_mask_srv = mask ? mask->srv : kInvalidShaderVisibleIndex,
         .one_over_pre_exposure = inverse_p,
+        .metering_available = metering_available,
       });
     CHECK_F(result.executed);
     return { Read<ExposureStateData>(
@@ -601,4 +615,156 @@ NOLINT_TEST_F(
       5.0 / 1024.0 + 2e-4);
   }
 }
+NOLINT_TEST_F(
+  ExposureGpuTest, UnavailableMaskPreventsMeterInitializationButNotLockedSolve)
+{
+  const auto signal = Uniform(.25F);
+  const auto pending = Run(signal, {}, 1.0F, nullptr, 1.0F, false);
+  EXPECT_EQ(pending.histogram[257], 0U);
+  EXPECT_EQ(pending.state.flags & 15U, 0U);
+  EXPECT_EQ(pending.state.displayed_scale, 1.0F);
+  const auto ready = Run(signal);
+  const auto invalid = Run(signal, {}, 1.0F, nullptr, 1.0F, false);
+  EXPECT_EQ(invalid.state.displayed_scale, ready.state.displayed_scale);
+  EXPECT_EQ(invalid.state.flags & 12U, 0U);
+  auto locked = scene::ExposureSettings {};
+  locked.min_ev = locked.max_ev = 2.0F;
+  EXPECT_EQ(
+    Run(signal, locked, 0.0F, nullptr, 1.0F, false).state.displayed_scale,
+    .25F);
+}
+
+NOLINT_TEST_F(
+  ExposureGpuTest, CookedMaskUploadAndResidentLeaseReachProductionHistogram)
+{
+  auto loader = vortex::testing::FakeAssetLoader {};
+  auto service = PostProcessService(*renderer_, observer_ptr { &loader });
+  auto payload = vortex::testing::MakeCookedTexture1x1Rgba8Payload();
+  data::pak::render::TexturePayloadHeader header {};
+  std::memcpy(&header,
+    payload.data() + sizeof(data::pak::core::TextureResourceDesc),
+    sizeof(header));
+  payload[sizeof(data::pak::core::TextureResourceDesc)
+    + header.data_offset_bytes] = 128U;
+  auto settings = scene::ExposureSettings {};
+  settings.metering_mask = loader.PreloadCookedTexture(std::span(payload));
+  const auto tag = internal::RendererTagFactory::Get();
+  renderer_->GetUploadCoordinator().OnFrameStart(tag, frame::Slot { 0U });
+  service.OnFrameStart(frame::SequenceNumber { 1U }, frame::Slot { 0U });
+  EXPECT_EQ(service
+              .ResolveViewExposureSettings(
+                ctx_.current_view.view_state_handle, settings)
+              .mask_status,
+    PostProcessService::ExposureMaskStatus::kPending);
+  // Each step flushes submitted upload work and observes its completed ticket.
+  // This is resource-readiness synchronization, not exposure-settling warmup.
+  for (unsigned i = 0U; i < 8U; ++i) {
+    WaitForQueueIdle();
+    const auto slot = frame::Slot { (i + 1U) % 3U };
+    renderer_->GetUploadCoordinator().OnFrameStart(tag, slot);
+    service.OnFrameStart(frame::SequenceNumber { i + 2U }, slot);
+    if (service
+          .ResolveViewExposureSettings(
+            ctx_.current_view.view_state_handle, settings)
+          .mask_status
+      == PostProcessService::ExposureMaskStatus::kReady) {
+      break;
+    }
+  }
+  const auto& accepted = service.ResolveViewExposureSettings(
+    ctx_.current_view.view_state_handle, settings);
+  ASSERT_EQ(
+    accepted.mask_status, PostProcessService::ExposureMaskStatus::kReady);
+  ASSERT_NE(accepted.mask, nullptr);
+  const auto mask = Signal { accepted.mask->texture, accepted.mask->srv };
+  const auto result = Run(Uniform(.25F), settings, 0.0F, &mask);
+  EXPECT_EQ(result.histogram[102], 2056U); // round-half-up(4095*128/255).
+  EXPECT_EQ(result.histogram[257], 1U);
+  EXPECT_NEAR(result.state.raw_metered_ev, std::log2(.25 / .18), 2e-4);
+  WaitForQueueIdle();
+}
+
+NOLINT_TEST_F(
+  ExposureGpuTest, LockedServiceGainReachesTonemapDespitePendingOrFailedMask)
+{
+  auto loader = vortex::testing::FakeAssetLoader {};
+  auto service = PostProcessService(*renderer_, observer_ptr { &loader });
+  const auto signal = Uniform(1.0F, 4U, 4U);
+  auto output_desc = TextureDesc {};
+  output_desc.width = output_desc.height = 4U;
+  output_desc.format = Format::kRGBA32Float;
+  output_desc.is_render_target = true;
+  output_desc.initial_state = ResourceStates::kCommon;
+  const auto output = CreateRegisteredTexture(output_desc);
+  auto framebuffer = Backend().CreateFramebuffer(
+    FramebufferDesc {}.AddColorAttachment(output));
+  auto textures
+    = SceneTextures(Backend(), SceneTexturesConfig { .extent = { 4U, 4U } });
+  unsigned id = 1U;
+  for (bool previous : { false, true }) {
+    for (bool failure : { false, true }) {
+      const auto handle = CompositionView::ViewStateHandle { id++ };
+      ctx_.current_view.view_state_handle = handle;
+      ctx_.frame_sequence = frame::SequenceNumber { id };
+      service.OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
+      auto requested = scene::ExposureSettings {};
+      requested.key = 12.5F;
+      if (previous) {
+        static_cast<void>(
+          service.ResolveViewExposureSettings(handle, requested));
+      }
+      requested.metering_mask = loader.MintSyntheticTextureKey();
+      EXPECT_EQ(
+        service.ResolveViewExposureSettings(handle, requested).mask_status,
+        PostProcessService::ExposureMaskStatus::kPending);
+      if (failure) {
+        service.OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
+        EXPECT_EQ(
+          service.ResolveViewExposureSettings(handle, requested).mask_status,
+          PostProcessService::ExposureMaskStatus::kFailed);
+      }
+      requested.min_ev = requested.max_ev = 2.0F;
+      const auto& accepted
+        = service.ResolveViewExposureSettings(handle, requested);
+      ASSERT_EQ(accepted.resolved.authored.min_ev, 2.0F);
+      auto config = PostProcessConfig {};
+      config.resolved_exposure = accepted.resolved;
+      config.auto_exposure_min_ev = config.auto_exposure_max_ev = 2.0F;
+      config.enable_bloom = false;
+      config.bloom_intensity = 0.0F;
+      config.tone_mapper = engine::ToneMapper::kNone;
+      config.gamma = 1.0F;
+      service.SetConfig(config);
+      ctx_.delta_time = 0.0F;
+      service.Execute(ctx_.current_view.view_id, ctx_, textures,
+        {
+          .scene_signal = signal.texture.get(),
+          .post_target = observer_ptr<const Framebuffer> { framebuffer.get() },
+          .scene_signal_srv = signal.srv,
+        });
+      EXPECT_TRUE(service.GetLastExecutionState().tonemap_executed);
+      auto readback
+        = GetReadbackManager()->CreateTextureReadback("Locked service result");
+      {
+        auto recorder = AcquireRecorder("Read locked service tonemap");
+        ASSERT_TRUE(recorder->AdoptKnownResourceState(*output));
+        const auto ticket = readback->EnqueueCopy(*recorder, *output,
+          {
+            .src_slice
+            = { .x = 1U, .y = 0U, .width = 1U, .height = 1U, .depth = 1U },
+          });
+        ASSERT_TRUE(ticket.has_value());
+      }
+      const auto mapped = readback->MapNow();
+      ASSERT_TRUE(mapped.has_value());
+      Pixel pixel {};
+      std::memcpy(pixel.data(), mapped->Data(), sizeof(pixel));
+      for (unsigned channel = 0U; channel < 3U; ++channel) {
+        EXPECT_NEAR(pixel[channel], .25F, 2e-5F) << previous << failure;
+      }
+    }
+  }
+  WaitForQueueIdle();
+}
+
 } // namespace

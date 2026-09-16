@@ -45,6 +45,7 @@ public:
     ShaderVisibleIndex metering_mask_srv { kInvalidShaderVisibleIndex };
     //! Scale of the supplied signal; scene-referred fixtures use one.
     float one_over_pre_exposure { 1.0F };
+    bool metering_available { true };
   };
 
   struct Result {

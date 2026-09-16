@@ -339,13 +339,15 @@ auto ExposurePass::Execute(RenderContext& ctx, const PostProcessConfig& config,
   recorder->SetPipelineState(*histogram_pipeline_);
   UpdateHistogramConstants(ctx, *recorder, inputs, config, state);
   const auto& tex_desc = inputs.scene_signal->GetDescriptor();
-  recorder->Dispatch((std::min(tex_desc.width, kHistogramGridLimit)
-                       + (kHistogramDispatchGroupSize - 1U))
-      / kHistogramDispatchGroupSize,
-    (std::min(tex_desc.height, kHistogramGridLimit)
-      + (kHistogramDispatchGroupSize - 1U))
-      / kHistogramDispatchGroupSize,
-    1U);
+  if (inputs.metering_available) {
+    recorder->Dispatch((std::min(tex_desc.width, kHistogramGridLimit)
+                         + (kHistogramDispatchGroupSize - 1U))
+        / kHistogramDispatchGroupSize,
+      (std::min(tex_desc.height, kHistogramGridLimit)
+        + (kHistogramDispatchGroupSize - 1U))
+        / kHistogramDispatchGroupSize,
+      1U);
+  }
 
   recorder->RequireResourceState(
     *state.histogram_buffer, graphics::ResourceStates::kUnorderedAccess);

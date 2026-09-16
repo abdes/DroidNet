@@ -7,6 +7,9 @@
 #include <cmath>
 #include <memory>
 
+#include <Oxygen/Core/Detail/FormatUtils.h>
+#include <Oxygen/Graphics/Common/Texture.h>
+
 #include <Oxygen/Vortex/Internal/PerViewStructuredPublisher.h>
 #include <Oxygen/Vortex/PostProcess/Passes/BloomPass.h>
 #include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
@@ -19,8 +22,10 @@
 
 namespace oxygen::vortex {
 
-PostProcessService::PostProcessService(Renderer& renderer)
+PostProcessService::PostProcessService(
+  Renderer& renderer, observer_ptr<content::IAssetLoader> asset_loader)
   : renderer_(renderer)
+  , asset_loader_(asset_loader)
   , exposure_pass_(std::make_unique<postprocess::ExposurePass>(renderer))
   , bloom_pass_(std::make_unique<postprocess::BloomPass>(renderer))
   , tonemap_pass_(std::make_unique<postprocess::TonemapPass>(renderer))
@@ -28,7 +33,34 @@ PostProcessService::PostProcessService(Renderer& renderer)
   SetConfig(config_);
 }
 
-PostProcessService::~PostProcessService() = default;
+PostProcessService::~PostProcessService()
+{
+  // Binder owns descriptor retirement; release all its leases first.
+  exposure_settings_.clear();
+  transient_exposure_settings_ = {};
+  for (auto& masks : frame_masks_) {
+    masks.clear();
+  }
+  mask_binder_.reset();
+}
+
+auto PostProcessService::EnsureMaskBinder() -> resources::TextureBinder*
+{
+  if (mask_binder_) {
+    return mask_binder_.get();
+  }
+  auto gfx = renderer_.GetGraphics();
+  auto loader = asset_loader_ ? asset_loader_ : renderer_.GetAssetLoader();
+  if (!gfx || !loader) {
+    return nullptr;
+  }
+  mask_binder_
+    = std::make_unique<resources::TextureBinder>(observer_ptr { gfx.get() },
+      observer_ptr { &renderer_.GetStagingProvider() },
+      observer_ptr { &renderer_.GetUploadCoordinator() }, loader);
+  mask_binder_->OnFrameStart();
+  return mask_binder_.get();
+}
 
 auto PostProcessService::EnsurePublishResources() -> bool
 {
@@ -54,6 +86,11 @@ auto PostProcessService::OnFrameStart(
 {
   current_sequence_ = sequence;
   current_slot_ = slot;
+  CHECK_LT_F(slot.get(), frame_masks_.size());
+  frame_masks_[slot.get()].clear();
+  if (mask_binder_) {
+    mask_binder_->OnFrameStart();
+  }
   published_views_.clear();
   last_execution_state_ = {};
   if (EnsurePublishResources()) {
@@ -108,7 +145,16 @@ auto PostProcessService::ResolveViewExposureSettings(
 {
   auto* state = &transient_exposure_settings_;
   if (handle == CompositionView::kInvalidViewStateHandle) {
+    // Stateless views retain no settings/history. Keep only the last rejected
+    // request identity for bounded diagnostics across identical invocations.
+    auto previous_error = transient_exposure_settings_.last_error;
+    auto previous_mask = transient_exposure_settings_.requested_mask;
+    auto previous_mask_error
+      = std::move(transient_exposure_settings_.mask_error);
     transient_exposure_settings_ = {};
+    transient_exposure_settings_.last_error = previous_error;
+    transient_exposure_settings_.requested_mask = previous_mask;
+    transient_exposure_settings_.mask_error = std::move(previous_mask_error);
   } else {
     state = &exposure_settings_[handle];
   }
@@ -126,6 +172,60 @@ auto PostProcessService::ResolveViewExposureSettings(
     state->last_error = candidate.error();
     return *state;
   }
+  const bool uses_mask = requested.enabled
+    && requested.mode == engine::ExposureMode::kAuto
+    && requested.min_ev != requested.max_ev
+    && requested.metering_mask.get() != 0U;
+  std::shared_ptr<const resources::TextureBinder::ReadyTexture> mask;
+  if (uses_mask) {
+    auto* binder = EnsureMaskBinder();
+    std::string failure;
+    if (binder) {
+      [[maybe_unused]] const auto slot
+        = binder->GetOrAllocate(requested.metering_mask);
+      mask = binder->AcquireReadyTexture(requested.metering_mask);
+      if (binder->HasResourceFailed(requested.metering_mask)) {
+        failure = "texture load or upload failed";
+      } else if (mask) {
+        const auto& desc = mask->texture->GetDescriptor();
+        const auto& format = graphics::detail::GetFormatInfo(desc.format);
+        if (desc.texture_type != TextureType::kTexture2D
+          || desc.array_size != 1U || desc.sample_count != 1U || format.is_srgb
+          || format.has_depth || format.has_stencil
+          || format.kind == graphics::detail::FormatKind::kInteger
+          || !format.has_red) {
+          failure = "mask requires a linear, single-sample 2D color texture";
+          mask.reset();
+        }
+      }
+    } else {
+      failure = "texture loader is unavailable";
+    }
+    if (!mask) {
+      if (!failure.empty()
+        && (state->requested_mask != requested.metering_mask
+          || state->mask_error != failure)) {
+        LOG_F(ERROR, "Exposure mask {} for view state {} rejected: {}",
+          requested.metering_mask.get(), handle.get(), failure);
+      }
+      state->requested_mask = requested.metering_mask;
+      state->mask_error = std::move(failure);
+      state->mask_status = state->mask_error.empty()
+        ? ExposureMaskStatus::kPending
+        : ExposureMaskStatus::kFailed;
+      if (state->revision == 0U) {
+        state->resolved
+          = *scene::ResolveExposureSettings(scene::ExposureSettings {});
+      }
+      state->last_error.reset();
+      return *state;
+    }
+  }
+  state->mask = std::move(mask);
+  state->mask_status
+    = uses_mask ? ExposureMaskStatus::kReady : ExposureMaskStatus::kAbsent;
+  state->requested_mask = requested.metering_mask;
+  state->mask_error.clear();
   if (state->revision == 0U || state->resolved.authored != requested
     || state->resolved.fixed_scale != candidate->fixed_scale) {
     state->resolved = *candidate;
@@ -184,10 +284,31 @@ auto PostProcessService::PublishBindings(const ViewId view_id,
 auto PostProcessService::Execute(const ViewId view_id, RenderContext& ctx,
   const SceneTextures& scene_textures, const Inputs& inputs) -> void
 {
+  const auto found
+    = exposure_settings_.find(ctx.current_view.view_state_handle);
+  const auto* settings = found != exposure_settings_.end() ? &found->second
+    : ctx.current_view.view_state_handle
+      == CompositionView::kInvalidViewStateHandle
+    ? &transient_exposure_settings_
+    : nullptr;
+  auto mask = settings ? settings->mask : nullptr;
+  const bool initial_mask_unavailable = settings && settings->revision == 0U
+    && (settings->mask_status == ExposureMaskStatus::kPending
+      || settings->mask_status == ExposureMaskStatus::kFailed);
+  const bool requested_mask_missing = config_.resolved_exposure
+    && config_.resolved_exposure->authored.metering_mask.get() != 0U && !mask;
+  if (mask) {
+    CHECK_LT_F(current_slot_.get(), frame_masks_.size());
+    frame_masks_[current_slot_.get()].push_back(mask);
+  }
   const auto exposure = exposure_pass_->Execute(ctx, config_,
     postprocess::ExposurePass::Inputs {
       .scene_signal = inputs.scene_signal,
       .scene_signal_srv = inputs.scene_signal_srv,
+      .metering_mask = mask ? mask->texture.get() : nullptr,
+      .metering_mask_srv = mask ? mask->srv : kInvalidShaderVisibleIndex,
+      .metering_available
+      = !initial_mask_unavailable && !requested_mask_missing,
     });
   auto bindings = BuildBindings(inputs);
   bindings.eye_adaptation_srv = exposure.exposure_buffer_srv;

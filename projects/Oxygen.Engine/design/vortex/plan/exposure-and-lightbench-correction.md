@@ -889,19 +889,39 @@ moving edges and single-pixel features. The controlled 1024x1 five-stop feature
 cases bound sampling error by 5/1024 EV plus the frozen 2e-4 EV histogram
 allowance. This measures deterministic aliasing; it is not a universal error
 bound for arbitrary scenes. Logs are `contract-audit/slice3-matrix-*-tests.log`.
-The expanded debugger-backed run is still pending. Only the original 20-case
-debugger-backed audit is qualified; its evidence remains unchanged.
+The expanded debugger-backed run subsequently completed and passed 26/26.
+`metering/matrix-debug-layer.json` records zero errors/blocking warnings and
+26 accepted live-factory shutdown warnings. The original 20-case audit is
+retained separately.
 
-Slice 3 remains in progress for asset-backed mask request/residency/failure
-handling. Full GPU P routing and upstream range qualification remain slice 5;
-mask persistence belongs to slice 6.
+The mask-residency increment implements ResourceKey requests, atomic accepted
+settings/mask revisions, pending/failed diagnostics, rejection of nonlinear or
+incompatible textures, and exact texture/SRV leases retained through frame-slot
+retirement. Manual, disabled and locked-range Auto bypass inactive-mask
+residency. Pending initial masks suppress metering; replacement failures keep
+the prior accepted revision. Native tests prove cooked-mask upload and exact
+quantized mass, as well as locked S=.25 through the service and tonemap at dt0
+for pending/failed masks with/without previous settings.
+
+Qualification passes 29 native cases in both Debug and Release, 134 focused
+Debug CTest entries, and the Release PostProcessService (16) and TextureBinder
+(27) suites. The three added native mask cases pass a separate debugger audit,
+with zero errors/blocking warnings and three accepted factory shutdown warnings.
+Evidence is `contract-audit/slice3-mask-final-*`, the service/binder Release logs,
+and `metering/masks-debug-layer.json`; the manifest preserves earlier increments.
+
+Slice 3 remains in progress for one compiler portability correction: the
+percentile implementation currently requests optional 64-bit integer shader
+operations. Replace that arithmetic with two 32-bit words and requalify the
+same numerical cases. `contract-audit/slice3-average-before-portable.ll` records
+the current capability requirement. Full GPU P routing and upstream range
+qualification remain slice 5; cooked mask persistence belongs to slice 6.
 
 The user approved correcting the mask identity contract on 2026-09-16: reuse
 cooked source-local texture indices, PAK remapping and runtime ResourceKey.
 Offset 116 stores the uint32 texture index and 120..131 are zero-reserved;
 the fixed record prefix remains 144 bytes. The canonical runtime mask field
-will migrate from the initial descriptor UUID to ResourceKey with the loading
-integration. No UUID lookup layer or new texture asset type is introduced.
+now uses ResourceKey with the loading integration. No UUID lookup layer or new texture asset type is introduced.
 
 - [ ] Implement bounded stratified sampling, conserved two-bin weights, percentiles,
   finite/black/coverage rules and overflow-safe counts.

@@ -546,6 +546,10 @@ public:
     -> std::optional<std::uint32_t>;
   [[nodiscard]] auto IsResourceReady(
     const content::ResourceKey& resource_key) const noexcept -> bool;
+  auto AcquireReadyTexture(const content::ResourceKey& key)
+    -> std::shared_ptr<const ReadyTexture>;
+  [[nodiscard]] auto HasResourceFailed(
+    const content::ResourceKey& key) const noexcept -> bool;
   [[nodiscard]] auto GetErrorTextureIndex() const -> ShaderVisibleIndex;
   auto DumpEstimatedTextureMemory(std::size_t top_n) const -> void;
   [[nodiscard]] auto GetPendingUploadCount() const noexcept -> std::size_t;
@@ -563,6 +567,7 @@ private:
     bool is_placeholder { true };
     bool load_failed { false };
     bool evicted { false };
+    std::weak_ptr<const ReadyTexture> resident_lease {};
 
     std::optional<vortex::upload::UploadTicket> pending_ticket;
     std::optional<graphics::TextureViewDescription> pending_view_desc;
@@ -711,6 +716,18 @@ auto TextureBinder::IsResourceReady(
   return impl_->IsResourceReady(key);
 }
 
+auto TextureBinder::AcquireReadyTexture(const content::ResourceKey& key)
+  -> std::shared_ptr<const ReadyTexture>
+{
+  return impl_->AcquireReadyTexture(key);
+}
+
+auto TextureBinder::HasResourceFailed(
+  const content::ResourceKey& key) const noexcept -> bool
+{
+  return impl_->HasResourceFailed(key);
+}
+
 auto TextureBinder::TryGetMipLevels(
   const content::ResourceKey& key) const noexcept
   -> std::optional<std::uint32_t>
@@ -785,6 +802,31 @@ auto TextureBinder::Impl::IsResourceReady(
     return false;
   }
   return !entry.is_placeholder;
+}
+
+auto TextureBinder::Impl::HasResourceFailed(
+  const content::ResourceKey& key) const noexcept -> bool
+{
+  const auto it = texture_map_.find(key);
+  return it != texture_map_.end() && it->second.load_failed;
+}
+
+auto TextureBinder::Impl::AcquireReadyTexture(const content::ResourceKey& key)
+  -> std::shared_ptr<const ReadyTexture>
+{
+  if (!IsResourceReady(key)) {
+    return {};
+  }
+  auto& entry = texture_map_.at(key);
+  if (auto lease = entry.resident_lease.lock()) {
+    return lease;
+  }
+  auto lease = std::make_shared<const ReadyTexture>(ReadyTexture {
+    .texture = entry.texture,
+    .srv = entry.srv_index,
+  });
+  entry.resident_lease = lease;
+  return lease;
 }
 
 auto TextureBinder::Impl::TryGetMipLevels(
@@ -1190,6 +1232,8 @@ auto TextureBinder::Impl::OnFrameStart() -> void
         LOG_F(ERROR,
           "Failed to update SRV view after upload completion (ticket={})",
           ticket.id);
+        entry.load_failed = true;
+        entry.is_placeholder = true;
         entry.pending_ticket.reset();
         entry.pending_view_desc.reset();
         continue;
@@ -1776,6 +1820,13 @@ auto TextureBinder::Impl::ProcessEvictions() -> void
 
     auto& entry = it->second;
     if (entry.evicted) {
+      continue;
+    }
+    if (!entry.resident_lease.expired()) {
+      // Keep this accepted revision's descriptor stable until all readers
+      // retire.
+      std::scoped_lock lock(eviction_mutex_);
+      pending_evictions_.push_back(eviction);
       continue;
     }
 

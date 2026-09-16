@@ -154,6 +154,23 @@ public:
 
   OXGN_VRTX_API ~TextureBinder() override;
 
+  //! Immutable resident texture/descriptor retained by a rendering consumer.
+  //! The binder must outlive leases; keep frame leases until readers retire.
+  struct ReadyTexture {
+    std::shared_ptr<const graphics::Texture> texture;
+    ShaderVisibleIndex srv { kInvalidShaderVisibleIndex };
+  };
+
+  //! Returns only the intended uploaded texture, never an error/placeholder.
+  //! While a lease is held, eviction cannot repoint its descriptor. Releasing
+  //! the last lease allows queued eviction on the next OnFrameStart().
+  [[nodiscard]] OXGN_VRTX_API auto AcquireReadyTexture(
+    const content::ResourceKey& key) -> std::shared_ptr<const ReadyTexture>;
+
+  //! Distinguishes a completed load/upload failure from pending residency.
+  [[nodiscard]] OXGN_VRTX_API auto HasResourceFailed(
+    const content::ResourceKey& key) const noexcept -> bool;
+
   //! Must be called once per frame before any GetOrAllocate() calls.
   OXGN_VRTX_API auto OnFrameStart() -> void;
 

@@ -239,4 +239,43 @@ NOLINT_TEST_F(TextureBinderEvictionTest, EvictionIsIdempotent)
     CountSrvViewCreationsForIndex(Gfx(), u_srv_index), creations_after_first);
 }
 
+NOLINT_TEST_F(
+  TextureBinderEvictionTest, ResidentLeasePinsDescriptorUntilAllReadersRetire)
+{
+  const auto payload = MakeCookedTexture1x1Rgba8Payload();
+  const auto key = Loader().PreloadCookedTexture(std::span(payload));
+  Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
+    oxygen::frame::Slot { 1 });
+  const auto srv = TexBinder().GetOrAllocate(key);
+  EXPECT_EQ(TexBinder().AcquireReadyTexture(key), nullptr);
+  auto queue
+    = GfxPtr()->GetCommandQueue(oxygen::graphics::SingleQueueStrategy().KeyFor(
+      oxygen::graphics::QueueRole::kTransfer));
+  ASSERT_NE(queue, nullptr);
+  queue->Signal((std::numeric_limits<std::uint64_t>::max)());
+  TexBinder().OnFrameStart();
+  Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
+    oxygen::frame::Slot { 2 });
+  TexBinder().OnFrameStart();
+  auto accepted = TexBinder().AcquireReadyTexture(key);
+  ASSERT_NE(accepted, nullptr);
+  EXPECT_EQ(accepted->srv, srv);
+  EXPECT_FALSE(TexBinder().HasResourceFailed(key));
+  auto in_flight = accepted;
+  const auto* texture = accepted->texture.get();
+  Loader().EmitTextureEviction(key, EvictionReason::kRefCountZero);
+  TexBinder().OnFrameStart();
+  EXPECT_EQ(LastSrvViewTextureForIndex(Gfx(), srv.get()), texture);
+  accepted.reset();
+  TexBinder().OnFrameStart();
+  EXPECT_TRUE(TexBinder().IsResourceReady(key));
+  EXPECT_EQ(LastSrvViewTextureForIndex(Gfx(), srv.get()), texture);
+  in_flight.reset();
+  TexBinder().OnFrameStart();
+  EXPECT_FALSE(TexBinder().IsResourceReady(key));
+  EXPECT_EQ(TexBinder().AcquireReadyTexture(key), nullptr);
+  EXPECT_EQ(GetTextureDebugName(LastSrvViewTextureForIndex(Gfx(), srv.get())),
+    "FallbackTexture");
+}
+
 } // namespace

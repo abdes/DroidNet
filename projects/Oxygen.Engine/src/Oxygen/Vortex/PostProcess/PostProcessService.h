@@ -6,8 +6,11 @@
 
 #pragma once
 
+#include <array>
 #include <memory>
+#include <string>
 #include <unordered_map>
+#include <vector>
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Types/Frame.h>
@@ -15,6 +18,7 @@
 #include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/PostProcess/Types/PostProcessConfig.h>
 #include <Oxygen/Vortex/PostProcess/Types/PostProcessFrameBindings.h>
+#include <Oxygen/Vortex/Resources/TextureBinder.h>
 #include <Oxygen/Vortex/api_export.h>
 
 namespace oxygen::graphics {
@@ -69,13 +73,20 @@ public:
     float exposure_value { 1.0F };
   };
 
+  enum class ExposureMaskStatus { kAbsent, kPending, kReady, kFailed };
+
   struct ExposureSettingsState {
     scene::ResolvedExposureSettings resolved;
     std::uint64_t revision { 0U };
     std::optional<scene::ExposureSettingsError> last_error;
+    ExposureMaskStatus mask_status { ExposureMaskStatus::kAbsent };
+    content::ResourceKey requested_mask {};
+    std::string mask_error;
+    std::shared_ptr<const resources::TextureBinder::ReadyTexture> mask;
   };
 
-  OXGN_VRTX_API explicit PostProcessService(Renderer& renderer);
+  OXGN_VRTX_API explicit PostProcessService(
+    Renderer& renderer, observer_ptr<content::IAssetLoader> asset_loader = {});
   OXGN_VRTX_API ~PostProcessService();
 
   PostProcessService(const PostProcessService&) = delete;
@@ -124,8 +135,16 @@ private:
   };
 
   auto EnsurePublishResources() -> bool;
+  auto EnsureMaskBinder() -> resources::TextureBinder*;
 
   Renderer& renderer_;
+  observer_ptr<content::IAssetLoader> asset_loader_;
+  std::unique_ptr<resources::TextureBinder> mask_binder_;
+  std::array<
+    std::vector<std::shared_ptr<const resources::TextureBinder::ReadyTexture>>,
+    frame::kFramesInFlight.get()>
+    frame_masks_;
+
   PostProcessConfig config_ {};
   std::unordered_map<CompositionView::ViewStateHandle, ExposureSettingsState>
     exposure_settings_;
