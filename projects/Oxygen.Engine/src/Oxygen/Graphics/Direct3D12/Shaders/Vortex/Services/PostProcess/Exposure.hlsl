@@ -480,7 +480,20 @@ void VortexExposureAverageCS(uint3 dispatch_thread_id : SV_DispatchThreadID)
     RWByteAddressBuffer output = ResourceDescriptorHeap[pass.exposure_buffer_index];
     StructuredBuffer<ExposureTargetData> target_buffer = ResourceDescriptorHeap[pass.targets_srv];
     const ExposureTargetData targets = target_buffer[0];
-    const ExposureStateData previous = LoadPrevious(pass.previous_state_srv, targets);
+    ExposureStateData previous = LoadPrevious(pass.previous_state_srv, targets);
+    const bool source_loss = (pass.control_flags & 64u) != 0u
+        && pass.borrowed_state_srv != K_INVALID_BINDLESS_INDEX;
+    if (source_loss) {
+        const ExposureStateData source = LoadPrevious(pass.borrowed_state_srv, targets);
+        previous.displayed_scale = source.displayed_scale;
+        previous.target_scale = source.target_scale;
+        previous.latent_scale = source.latent_scale;
+        previous.latent_target_scale = source.latent_target_scale;
+        previous.raw_metered_luminance = previous.raw_metered_ev = 0.0;
+        previous.flags = (previous.flags & ~(EXPOSURE_LUMINANCE_VALID | EXPOSURE_METER_EV_VALID
+            | EXPOSURE_HAS_METER_HISTORY | EXPOSURE_SYNTHETIC_DARK | EXPOSURE_ZERO_TARGET))
+            | EXPOSURE_HISTORY_VALID | EXPOSURE_INITIALIZED;
+    }
     ExposureStateData next = previous;
     next.settings_revision = pass.settings_revision;
     next.frame_sequence = pass.frame_sequence;
@@ -512,7 +525,7 @@ void VortexExposureAverageCS(uint3 dispatch_thread_id : SV_DispatchThreadID)
         StoreSolved(output, next, pass);
         return;
     }
-    const bool borrowing = pass.borrowed_state_srv != K_INVALID_BINDLESS_INDEX;
+    const bool borrowing = pass.borrowed_state_srv != K_INVALID_BINDLESS_INDEX && !source_loss;
     const bool new_identity = GenerationGreater(pass.requested_generation, previous.requested_generation);
     const bool already_rejected = all(pass.requested_generation == previous.requested_generation)
         && (previous.flags & EXPOSURE_REQUEST_REJECTED) != 0u;
@@ -589,10 +602,12 @@ void VortexExposureAverageCS(uint3 dispatch_thread_id : SV_DispatchThreadID)
     const bool seed = new_request && pass.transition_policy == 3u;
     const bool remeter = new_request && pass.transition_policy == 2u;
     const bool preserve = new_request && pass.transition_policy == 1u;
+    const bool preserve_loss = source_loss && previous_valid && !seed && !remeter && !locked;
     const bool mode_entry = previous_valid && ((previous.flags & EXPOSURE_MODE_MASK) >> EXPOSURE_MODE_SHIFT) != 2u;
     const bool solve = valid_meter || locked || restoring;
     float gain = previous_gain;
     if (seed) gain = exp2(pass.seed_log_gain);
+    else if (preserve_loss) gain = previous_gain;
     else if (locked || restoring || (remeter && valid_meter)) gain = exp2(target_log);
     else if (!previous_valid || (previous.flags & EXPOSURE_INITIALIZED) == 0u) {
         if (valid_meter) gain = exp2(target_log);
@@ -603,7 +618,7 @@ void VortexExposureAverageCS(uint3 dispatch_thread_id : SV_DispatchThreadID)
         }
     }
     const float target = solve ? exp2(target_log) : seed ? gain : previous.latent_target_scale;
-    next.displayed_scale = zero ? 0.0 : gain;
+    next.displayed_scale = zero ? 0.0 : preserve_loss ? previous.displayed_scale : gain;
     next.target_scale = zero ? 0.0 : target;
     next.latent_scale = gain;
     next.latent_target_scale = target;
@@ -616,7 +631,8 @@ void VortexExposureAverageCS(uint3 dispatch_thread_id : SV_DispatchThreadID)
     if (valid_meter || locked || seed) next.flags |= EXPOSURE_HISTORY_VALID | EXPOSURE_INITIALIZED;
     if (restoring && !valid_meter && !has_meter_history && !seed && !locked) next.flags &= ~EXPOSURE_INITIALIZED;
     if (zero) next.flags |= EXPOSURE_ZERO_TARGET;
-    next.fallback_reason = valid_meter || locked || seed ? 0u : 2u;
+    if (preserve_loss) next.flags |= EXPOSURE_BORROWED;
+    next.fallback_reason = preserve_loss ? 4u : valid_meter || locked || seed ? 0u : 2u;
     if (new_request && (seed || preserve || (remeter && (valid_meter || locked)))) {
         next.applied_generation = pass.requested_generation;
     }

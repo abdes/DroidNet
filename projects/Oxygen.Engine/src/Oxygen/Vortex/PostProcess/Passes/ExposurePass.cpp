@@ -91,6 +91,26 @@ namespace {
     recorder.BeginTrackingResourceState(texture, initial);
   }
 
+  auto SourceFallbackScale(const ExposurePass::Source& source) -> float
+  {
+    const auto& initial = *source.config.resolved_exposure;
+    const bool automatic = initial.authored.enabled
+      && initial.authored.mode == engine::ExposureMode::kAuto;
+    auto log_gain = initial.initial_log_gain;
+    if (automatic && !source.rejection && source.transition
+      && source.transition->seed_ev
+      && source.transition->policy
+        == ExposureTransitionPolicy::kSeedFromEv100) {
+      const auto seed = scene::ResolveExposureSeedLogGain(
+        initial, *source.transition->seed_ev);
+      if (seed)
+        log_gain = *seed;
+    }
+    return automatic
+      ? (initial.authored.target_luminance == 0.0F ? 0.0F : std::exp2(log_gain))
+      : initial.fixed_scale;
+  }
+
   struct alignas(packing::kShaderDataFieldAlignment)
     AutoExposureHistogramConstants {
     std::uint32_t source_texture_index;
@@ -293,9 +313,16 @@ auto ExposurePass::Execute(RenderContext& ctx, const PostProcessConfig& config,
     view->latest.reset();
     view->submitted_frame.reset();
   }
+  if (view && view->selected_borrow
+    && view->selected_borrow->consumer_lifetime != inputs.lifetime)
+    view->selected_borrow.reset();
   const auto publish_result = [&](StateLease state, bool executed) {
     result.state = std::move(state);
     result.executed = executed;
+    if (view && sharing)
+      view->selected_borrow
+        = PerViewExposureState::BorrowSelection { result.state, *inputs.source,
+            inputs.lifetime };
     if (result.state) {
       result.exposure_buffer = result.state->buffer.get();
       result.histogram_buffer
@@ -310,6 +337,11 @@ auto ExposurePass::Execute(RenderContext& ctx, const PostProcessConfig& config,
     return result;
   }
   const auto previous = view ? view->latest : StateLease {};
+  if (view
+    && (sharing
+      || (view->source_loss
+        && view->source_loss->consumer_lifetime != inputs.lifetime)))
+    view->source_loss.reset();
   StateLease borrowed;
   if (sharing) {
     CHECK_F(inputs.source->config.resolved_exposure.has_value(),
@@ -338,35 +370,69 @@ auto ExposurePass::Execute(RenderContext& ctx, const PostProcessConfig& config,
     }
     if (!borrowed) {
       // Submission failure cannot substitute the consumer's own history.
-      const auto& initial = *inputs.source->config.resolved_exposure;
-      const bool source_auto = initial.authored.enabled
-        && initial.authored.mode == engine::ExposureMode::kAuto;
-      auto log_gain = initial.initial_log_gain;
-      if (source_auto && !inputs.source->rejection && inputs.source->transition
-        && inputs.source->transition->seed_ev
-        && inputs.source->transition->policy
-          == ExposureTransitionPolicy::kSeedFromEv100) {
-        const auto seed = scene::ResolveExposureSeedLogGain(
-          initial, *inputs.source->transition->seed_ev);
-        if (seed)
-          log_gain = *seed;
-      }
-      result.exposure_value = source_auto
-        ? (initial.authored.target_luminance == 0.0F ? 0.0F
-                                                     : std::exp2(log_gain))
-        : initial.fixed_scale;
+      result.exposure_value = SourceFallbackScale(*inputs.source);
+      if (view)
+        view->selected_borrow = PerViewExposureState::BorrowSelection { {},
+          *inputs.source, inputs.lifetime };
       return result;
     }
     frame_states_[ctx.frame_slot.get()].push_back(borrowed);
   }
-  auto state = RecordState(ctx, config, inputs, previous, borrowed);
+  StateLease continuity;
+  if (view && view->source_loss) {
+    auto& loss = *view->source_loss;
+    const auto* selected = view->selected_borrow
+        && view->selected_borrow->source.handle == loss.source.handle
+        && view->selected_borrow->source.lifetime == loss.source.lifetime
+      ? &*view->selected_borrow
+      : nullptr;
+    if (selected) {
+      continuity = selected->state;
+      if (!continuity) {
+        continuity = RecordState(ctx, selected->source.config,
+          Inputs { .metering_available = false,
+            .transition = selected->source.transition,
+            .rejection = selected->source.rejection,
+            .lifetime = selected->source.lifetime },
+          {}, {}, true);
+        loss.source = selected->source;
+        loss.fallback = continuity;
+      }
+    } else if (previous && previous->borrowed_from == loss.source.handle
+      && previous->borrowed_lifetime == loss.source.lifetime) {
+      continuity = previous;
+    } else if (loss.fallback) {
+      continuity = loss.fallback;
+    } else {
+      continuity = RecordState(ctx, loss.source.config,
+        Inputs { .metering_available = false,
+          .transition = loss.source.transition,
+          .rejection = loss.source.rejection,
+          .lifetime = loss.source.lifetime },
+        {}, {}, true);
+      loss.fallback = continuity;
+    }
+    if (!continuity) {
+      result.exposure_value = SourceFallbackScale(loss.source);
+      return result;
+    }
+    frame_states_[ctx.frame_slot.get()].push_back(continuity);
+  }
+  auto state = RecordState(ctx, config, inputs, previous,
+    continuity ? continuity : borrowed, false, static_cast<bool>(continuity));
   if (!state) {
-    publish_result(sharing ? borrowed : previous, false);
+    publish_result(continuity ? continuity
+        : sharing             ? borrowed
+                              : previous,
+      false);
     return result;
   }
   if (view) {
     view->latest = state;
     view->submitted_frame = ctx.frame_sequence;
+    view->source_loss.reset();
+    if (!sharing)
+      view->selected_borrow.reset();
   }
   publish_result(state, true);
   return result;
@@ -374,16 +440,22 @@ auto ExposurePass::Execute(RenderContext& ctx, const PostProcessConfig& config,
 
 auto ExposurePass::RecordState(RenderContext& ctx,
   const PostProcessConfig& config, const Inputs& inputs, StateLease previous,
-  StateLease borrowed, const bool bootstrap) -> StateLease
+  StateLease borrowed, const bool bootstrap, const bool source_loss)
+  -> StateLease
 {
   const auto& resolved = *config.resolved_exposure;
-  const bool automatic = !borrowed && !bootstrap
+  const bool automatic = (!borrowed || source_loss) && !bootstrap
     && !config.temporary_unit_exposure && resolved.authored.enabled
     && resolved.authored.mode == engine::ExposureMode::kAuto;
   auto gfx = renderer_.GetGraphics();
   CHECK_NOTNULL_F(gfx.get());
   auto state = AcquireState();
   state->owner_lifetime = inputs.lifetime;
+  state->borrowed_from = borrowed && !source_loss && inputs.source
+    ? inputs.source->handle
+    : CompositionView::kInvalidViewStateHandle;
+  state->borrowed_lifetime
+    = borrowed && !source_loss && inputs.source ? inputs.source->lifetime : 0U;
   // Even an unpublished/failed attempt can contain submitted work. Retain its
   // resources through this frame slot before allowing pool reuse.
   frame_states_[ctx.frame_slot.get()].push_back(state);
@@ -476,7 +548,7 @@ auto ExposurePass::RecordState(RenderContext& ctx,
   UpdateAverageConstants(ctx, *recorder, config, *state, targets_srv,
     previous ? previous->srv_index : kInvalidShaderVisibleIndex, inputs,
     borrowed ? borrowed->srv_index : kInvalidShaderVisibleIndex, bootstrap,
-    automatic);
+    automatic, source_loss);
   recorder->Dispatch(1U, 1U, 1U);
   recorder->RequireResourceStateFinal(
     *state->buffer, graphics::ResourceStates::kShaderResource);
@@ -490,6 +562,27 @@ auto ExposurePass::RecordState(RenderContext& ctx,
     return {};
   }
   return state;
+}
+
+auto ExposurePass::PreserveRemovedSource(
+  std::shared_ptr<const ExposureSourceLoss> loss, const Source& source,
+  CompositionView::ViewStateHandle only_consumer) -> void
+{
+  StateLease fallback;
+  if (const auto root = exposure_states_.find(source.handle);
+    root != exposure_states_.end() && root->second.latest
+    && root->second.latest->owner_lifetime == source.lifetime)
+    fallback = root->second.latest;
+  for (const auto& consumer : loss->consumers) {
+    if (only_consumer != CompositionView::kInvalidViewStateHandle
+      && consumer.handle != only_consumer)
+      continue;
+    auto& view = exposure_states_[consumer.handle];
+    if (view.source_loss && view.source_loss->event == loss)
+      continue;
+    view.source_loss = PerViewExposureState::PendingSourceLoss { loss, source,
+      fallback, consumer.lifetime };
+  }
 }
 
 auto ExposurePass::RemoveViewState(CompositionView::ViewStateHandle handle)
@@ -680,8 +773,8 @@ auto ExposurePass::UpdateAverageConstants(RenderContext& ctx,
   graphics::CommandRecorder& recorder, const PostProcessConfig& config,
   const StateResources& state, const ShaderVisibleIndex targets_srv,
   const ShaderVisibleIndex previous_srv, const Inputs& inputs,
-  ShaderVisibleIndex borrowed_srv, const bool bootstrap, const bool metering)
-  -> void
+  ShaderVisibleIndex borrowed_srv, const bool bootstrap, const bool metering,
+  const bool source_loss) -> void
 {
   DCHECK_NOTNULL_F(average_constants_publisher_.get());
   const auto log_rate = [](const float value) {
@@ -743,8 +836,8 @@ auto ExposurePass::UpdateAverageConstants(RenderContext& ctx,
     = !config.temporary_unit_exposure && resolved.authored.enabled
       ? static_cast<std::uint32_t>(resolved.authored.mode)
       : 3U,
-    .control_flags
-    = (seed.has_value() ? 0U : 1U) | (bootstrap ? 2U : 0U) | (rejection << 2U),
+    .control_flags = (seed.has_value() ? 0U : 1U) | (bootstrap ? 2U : 0U)
+      | (rejection << 2U) | (source_loss ? 64U : 0U),
     .requested_generation = { static_cast<std::uint32_t>(generation),
       static_cast<std::uint32_t>(generation >> 32U) },
     .transition_policy = inputs.transition && !config.temporary_unit_exposure

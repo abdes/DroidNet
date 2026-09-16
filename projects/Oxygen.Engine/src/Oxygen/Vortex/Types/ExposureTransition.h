@@ -8,6 +8,7 @@
 
 #include <cstdint>
 #include <optional>
+#include <vector>
 
 #include <Oxygen/Vortex/CompositionView.h>
 
@@ -58,6 +59,25 @@ struct ExposureTransitionStatus {
   ExposureTransitionPhase phase { ExposureTransitionPhase::kQueued };
   std::uint64_t applied_generation { 0U };
   std::optional<ExposureTransitionError> error;
+};
+
+//! Captured source definition and affected lifetimes for deferred source loss.
+//! Numerical continuity stays in GPU records retained by PostProcessService.
+struct ExposureSourceLoss {
+  struct Consumer {
+    CompositionView::ViewStateHandle handle;
+    std::uint64_t lifetime;
+  };
+  ViewId source_view_id { kInvalidViewId };
+  CompositionView::ViewStateHandle source_handle {
+    CompositionView::kInvalidViewStateHandle
+  };
+  std::uint64_t source_lifetime { 0U };
+  scene::ExposureSettings settings;
+  std::optional<float> camera_ev;
+  std::optional<ExposureTransitionToken> transition;
+  std::optional<ExposureTransitionError> rejection;
+  std::vector<Consumer> consumers;
 };
 
 } // namespace oxygen::vortex

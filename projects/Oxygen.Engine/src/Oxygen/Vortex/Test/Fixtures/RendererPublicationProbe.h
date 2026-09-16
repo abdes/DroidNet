@@ -17,6 +17,21 @@
 namespace oxygen::vortex::testing {
 
 struct RendererPublicationProbe {
+  static auto SelectedBorrowForView(
+    const PostProcessService& service, CompositionView::ViewStateHandle handle)
+    -> postprocess::ExposurePass::StateLease
+  {
+    const auto found = service.exposure_pass_->exposure_states_.find(handle);
+    return found != service.exposure_pass_->exposure_states_.end()
+        && found->second.selected_borrow
+      ? found->second.selected_borrow->state
+      : nullptr;
+  }
+  static auto HasExposureViewState(const PostProcessService& service,
+    CompositionView::ViewStateHandle handle) -> bool
+  {
+    return service.exposure_pass_->exposure_states_.contains(handle);
+  }
   static auto SetExposureAssetLoader(PostProcessService& service,
     observer_ptr<content::IAssetLoader> loader) -> void
   {

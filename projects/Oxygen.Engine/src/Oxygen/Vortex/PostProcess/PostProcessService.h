@@ -131,6 +131,10 @@ public:
   OXGN_VRTX_API auto RemoveViewState(ViewId view_id,
     CompositionView::ViewStateHandle view_state_handle
     = CompositionView::kInvalidViewStateHandle) -> void;
+  OXGN_VRTX_API auto PreserveRemovedExposureSource(
+    std::shared_ptr<const ExposureSourceLoss> loss,
+    CompositionView::ViewStateHandle only_consumer
+    = CompositionView::kInvalidViewStateHandle) -> void;
 
   [[nodiscard]] OXGN_VRTX_API auto InspectBindings(ViewId view_id) const
     -> const PostProcessFrameBindings*;

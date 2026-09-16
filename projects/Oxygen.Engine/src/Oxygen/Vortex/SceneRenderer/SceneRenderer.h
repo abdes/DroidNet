@@ -54,6 +54,7 @@ class BasePassModule;
 class LightingService;
 class ShadowService;
 class PostProcessService;
+struct ExposureSourceLoss;
 class GroundGridPass;
 class EnvironmentLightingService;
 class ScreenHzbModule;
@@ -205,6 +206,8 @@ public:
   OXGN_VRTX_API void RemoveViewState(ViewId view_id,
     CompositionView::ViewStateHandle view_state_handle
     = CompositionView::kInvalidViewStateHandle);
+  OXGN_VRTX_API void PreserveRemovedExposureSource(
+    std::shared_ptr<const ExposureSourceLoss> loss);
 
   OXGN_VRTX_API void PublishDepthPrepassProducts();
   OXGN_VRTX_API void PublishScreenHzbProducts(RenderContext& ctx);

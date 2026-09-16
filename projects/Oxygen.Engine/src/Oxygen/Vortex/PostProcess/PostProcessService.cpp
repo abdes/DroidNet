@@ -295,8 +295,10 @@ auto PostProcessService::CaptureViewExposureSettings(const ViewId view_id,
     return found->second.settings;
   }
   auto settings = ResolveViewExposureSettings(handle, requested, camera_ev);
+  const auto owner = renderer_.GetExposureSourceIntent(view_id);
+  if (owner && owner->handle == handle && owner->source_loss)
+    PreserveRemovedExposureSource(owner->source_loss, handle);
   if (!suppress_transitions) {
-    const auto owner = renderer_.GetExposureSourceIntent(view_id);
     if (owner && owner->handle == handle && !owner->diagnostic)
       renderer_.PrepareExposureDetach(handle,
         settings.resolved.authored.enabled
@@ -367,6 +369,8 @@ auto PostProcessService::CaptureRegisteredExposureControls(
       inherited = post->GetExposureSettings();
   }
   for (const auto& intent : renderer_.GetRegisteredExposureIntents()) {
+    if (intent.source_loss)
+      PreserveRemovedExposureSource(intent.source_loss, intent.handle);
     const bool suppressed = intent.diagnostic
       || ctx.shader_debug_mode != ShaderDebugMode::kDisabled
       || (intent.handle == ctx.current_view.view_state_handle
@@ -574,6 +578,42 @@ auto PostProcessService::Execute(const ViewId view_id, RenderContext& ctx,
     .post_process_frame_slot = slot,
     .exposure_value = exposure.exposure_value,
   };
+}
+
+auto PostProcessService::PreserveRemovedExposureSource(
+  std::shared_ptr<const ExposureSourceLoss> loss,
+  CompositionView::ViewStateHandle only_consumer) -> void
+{
+  CHECK_NOTNULL_F(loss.get());
+  auto source
+    = postprocess::ExposurePass::Source { .handle = loss->source_handle,
+        .transition = loss->transition,
+        .rejection = loss->rejection,
+        .lifetime = loss->source_lifetime };
+  if (const auto captured
+    = captured_exposure_sources_.find(loss->source_view_id);
+    captured != captured_exposure_sources_.end()
+    && captured->second.lifetime == loss->source_lifetime) {
+    source = captured->second;
+  } else if (const auto accepted = exposure_settings_.find(loss->source_handle);
+    accepted != exposure_settings_.end()
+    && accepted->second.lifetime == loss->source_lifetime) {
+    ApplyExposureRevision(source.config, accepted->second);
+  } else {
+    auto requested = loss->settings;
+    // No accepted mask revision exists for a never-prepared source.
+    if (requested.enabled && requested.mode == engine::ExposureMode::kAuto
+      && requested.min_ev != requested.max_ev
+      && requested.metering_mask.get() != 0U)
+      requested = scene::ExposureSettings {};
+    auto resolved = scene::ResolveExposureSettings(requested, loss->camera_ev);
+    if (!resolved)
+      resolved = scene::ResolveExposureSettings(scene::ExposureSettings {});
+    ApplyExposureRevision(source.config,
+      ExposureSettingsState {
+        .resolved = *resolved, .lifetime = loss->source_lifetime });
+  }
+  exposure_pass_->PreserveRemovedSource(std::move(loss), source, only_consumer);
 }
 
 auto PostProcessService::RemoveViewState(const ViewId view_id,

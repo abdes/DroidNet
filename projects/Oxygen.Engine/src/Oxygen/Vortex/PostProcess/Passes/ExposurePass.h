@@ -48,6 +48,10 @@ public:
   //! lifetime.
   struct StateResources {
     std::uint64_t owner_lifetime { 0U };
+    CompositionView::ViewStateHandle borrowed_from {
+      CompositionView::kInvalidViewStateHandle
+    };
+    std::uint64_t borrowed_lifetime { 0U };
     std::shared_ptr<graphics::Buffer> buffer;
     std::shared_ptr<graphics::Buffer> histogram_buffer;
     std::shared_ptr<graphics::Buffer> status_buffer;
@@ -107,18 +111,35 @@ public:
     frame::SequenceNumber sequence, frame::Slot slot) -> void;
   OXGN_VRTX_API auto RemoveViewState(
     CompositionView::ViewStateHandle view_state_handle) -> void;
+  OXGN_VRTX_API auto PreserveRemovedSource(
+    std::shared_ptr<const ExposureSourceLoss> loss, const Source& source,
+    CompositionView::ViewStateHandle only_consumer
+    = CompositionView::kInvalidViewStateHandle) -> void;
 
 private:
   friend struct ::oxygen::vortex::testing::RendererPublicationProbe;
   struct PerViewExposureState {
     StateLease latest;
     std::optional<frame::SequenceNumber> submitted_frame;
+    struct BorrowSelection {
+      StateLease state;
+      Source source;
+      std::uint64_t consumer_lifetime;
+    };
+    std::optional<BorrowSelection> selected_borrow;
+    struct PendingSourceLoss {
+      std::shared_ptr<const ExposureSourceLoss> event;
+      Source source;
+      StateLease fallback;
+      std::uint64_t consumer_lifetime;
+    };
+    std::optional<PendingSourceLoss> source_loss;
   };
 
   auto EnsurePipelines() -> void;
   auto RecordState(RenderContext& ctx, const PostProcessConfig& config,
     const Inputs& inputs, StateLease previous, StateLease borrowed,
-    bool bootstrap = false) -> StateLease;
+    bool bootstrap = false, bool source_loss = false) -> StateLease;
   auto AcquireState() -> std::shared_ptr<StateResources>;
   auto EnsureHistogramBuffer(StateResources& state) -> void;
   auto UpdateHistogramConstants(RenderContext& ctx,
@@ -128,7 +149,8 @@ private:
     graphics::CommandRecorder& recorder, const PostProcessConfig& config,
     const StateResources& state, ShaderVisibleIndex targets_srv,
     ShaderVisibleIndex previous_srv, const Inputs& inputs,
-    ShaderVisibleIndex borrowed_srv, bool bootstrap, bool metering) -> void;
+    ShaderVisibleIndex borrowed_srv, bool bootstrap, bool metering,
+    bool source_loss) -> void;
   auto ReleaseExposureResources() -> void;
 
   Renderer& renderer_;
