@@ -72,6 +72,7 @@ set(
   "Services/CameraSettingsService.h"
   "Services/ContentSettingsService.h"
   "Services/DefaultSceneLighting.h"
+  "Services/PreviewSunController.h"
   "Services/DomainService.h"
   "Services/EnvironmentSettingsService.h"
   "Services/FileBrowserService.h"
@@ -127,6 +128,7 @@ set(
   "Services/CameraSettingsService.cpp"
   "Services/ContentSettingsService.cpp"
   "Services/DefaultSceneLighting.cpp"
+  "Services/PreviewSunController.cpp"
   "Services/EnvironmentSettingsService.cpp"
   "Services/FileBrowserService.cpp"
   "Services/GridSettingsService.cpp"
@@ -175,10 +177,8 @@ target_sources(
     ${OXYGEN_DEMOSHELL_HEADERS}
   PUBLIC
     FILE_SET HEADERS
-      BASE_DIRS
-        ${OXYGEN_EXAMPLES_SOURCE_DIR}
-      FILES
-        ${OXYGEN_DEMOSHELL_HEADERS}
+    BASE_DIRS ${OXYGEN_EXAMPLES_SOURCE_DIR}
+    FILES ${OXYGEN_DEMOSHELL_HEADERS}
 )
 
 arrange_target_files_for_ide(${META_MODULE_TARGET})

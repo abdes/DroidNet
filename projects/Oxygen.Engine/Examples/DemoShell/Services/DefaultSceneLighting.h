@@ -36,6 +36,12 @@ struct DefaultSceneLightingDesc {
 auto EnsureDefaultSceneLighting(scene::Scene& scene,
   const DefaultSceneLightingDesc& desc = {}) -> scene::SceneNode;
 
+//! Creates a caller-owned preview sun without modifying the environment.
+//!
+//! The caller must resolve any existing directional-light roles first.
+auto CreatePreviewSun(scene::Scene& scene,
+  const DefaultSceneLightingDesc& desc = {}) -> scene::SceneNode;
+
 //! Adds a preview sun only if no directional component exists in the scene.
 /*!
  Disabled and invisible directional lights also suppress creation. Existing
