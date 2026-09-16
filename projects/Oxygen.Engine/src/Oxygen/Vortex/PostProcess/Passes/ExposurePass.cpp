@@ -172,6 +172,25 @@ namespace {
     offsetof(AutoExposureAverageConstants, borrowed_state_srv) == 100U);
   static_assert(offsetof(AutoExposureAverageConstants, view_lifetime) == 104U);
 
+  struct alignas(packing::kShaderDataFieldAlignment) ExposureFrameConstants {
+    std::uint32_t output_uav;
+    std::uint32_t current_state_uav;
+    std::uint32_t history_srv;
+    std::uint32_t candidate_srv;
+    float fixed_scale;
+    float initial_log_gain;
+    float seed_log_gain;
+    std::uint32_t mode;
+    std::uint32_t flags;
+    std::uint32_t controls;
+    std::uint32_t current_state_srv;
+    std::uint32_t reserved;
+  };
+  static_assert(sizeof(ExposureFrameConstants) == 48U);
+  static_assert(offsetof(ExposureFrameConstants, fixed_scale) == 16U);
+  static_assert(offsetof(ExposureFrameConstants, flags) == 32U);
+  static_assert(offsetof(ExposureFrameConstants, current_state_srv) == 40U);
+
   auto BuildExposurePipeline(std::string_view entry_point,
     std::string_view debug_name) -> graphics::ComputePipelineDesc
   {
@@ -242,6 +261,8 @@ auto ExposurePass::OnFrameStart(
   }
   CHECK_LT_F(slot.get(), frame_states_.size());
   frame_states_[slot.get()].clear();
+  frame_bindings_[slot.get()].clear();
+  resolved_frames_.clear();
   prior_states_.clear();
   bootstrap_states_.clear();
   for (const auto& [handle, view] : exposure_states_) {
@@ -256,6 +277,227 @@ auto ExposurePass::OnFrameStart(
     constants_publisher_->OnFrameStart(sequence, slot);
   if (average_constants_publisher_)
     average_constants_publisher_->OnFrameStart(sequence, slot);
+  if (frame_constants_publisher_)
+    frame_constants_publisher_->OnFrameStart(sequence, slot);
+}
+
+auto ExposurePass::PreparePublishers(RenderContext& ctx) -> void
+{
+  auto gfx = renderer_.GetGraphics();
+  if (!target_publisher_) {
+    target_publisher_
+      = std::make_unique<::oxygen::vortex::internal::PerViewStructuredPublisher<
+        ExposureTargetData>>(observer_ptr { gfx.get() },
+        renderer_.GetStagingProvider(),
+        observer_ptr { &renderer_.GetInlineTransfersCoordinator() },
+        "Vortex.PostProcess.Exposure.Targets");
+    constants_publisher_
+      = std::make_unique<::oxygen::vortex::internal::PerViewStructuredPublisher<
+        std::array<std::uint32_t, 16U>>>(observer_ptr { gfx.get() },
+        renderer_.GetStagingProvider(),
+        observer_ptr { &renderer_.GetInlineTransfersCoordinator() },
+        "Vortex.PostProcess.Exposure.Constants");
+    average_constants_publisher_
+      = std::make_unique<::oxygen::vortex::internal::PerViewStructuredPublisher<
+        std::array<std::uint32_t, 28U>>>(observer_ptr { gfx.get() },
+        renderer_.GetStagingProvider(),
+        observer_ptr { &renderer_.GetInlineTransfersCoordinator() },
+        "Vortex.PostProcess.Exposure.SolveConstants");
+    frame_constants_publisher_
+      = std::make_unique<::oxygen::vortex::internal::PerViewStructuredPublisher<
+        std::array<std::uint32_t, 12U>>>(observer_ptr { gfx.get() },
+        renderer_.GetStagingProvider(),
+        observer_ptr { &renderer_.GetInlineTransfersCoordinator() },
+        "Vortex.PostProcess.Exposure.FrameConstants");
+    target_frame_.reset();
+  }
+  OnFrameStart(ctx.frame_sequence, ctx.frame_slot);
+}
+
+auto ExposurePass::AcquireFrame() -> std::shared_ptr<FrameResources>
+{
+  for (const auto& frame : frame_pool_) {
+    if (frame.use_count() == 1) {
+      frame->current_state.reset();
+      frame->selected_history.reset();
+      frame->qualified_candidate.reset();
+      return frame;
+    }
+  }
+  auto gfx = renderer_.GetGraphics();
+  CHECK_NOTNULL_F(gfx.get());
+  auto frame = std::make_shared<FrameResources>();
+  frame->buffer = gfx->CreateBuffer({ .size_bytes = sizeof(FrameExposureData),
+    .usage = graphics::BufferUsage::kStorage,
+    .memory = graphics::BufferMemory::kDeviceLocal,
+    .debug_name = "Vortex.PostProcess.Exposure.Frame" });
+  CHECK_NOTNULL_F(frame->buffer.get());
+  RegisterResourceIfNeeded(*gfx, frame->buffer);
+  auto& registry = gfx->GetResourceRegistry();
+  auto& allocator = gfx->GetDescriptorAllocator();
+  for (const auto type : { graphics::ResourceViewType::kStructuredBuffer_SRV,
+         graphics::ResourceViewType::kStructuredBuffer_UAV }) {
+    auto handle = allocator.AllocateRaw(
+      type, graphics::DescriptorVisibility::kShaderVisible);
+    CHECK_F(handle.IsValid());
+    const auto index = allocator.GetShaderVisibleIndex(handle);
+    const auto view = registry.RegisterView(*frame->buffer, std::move(handle),
+      graphics::BufferViewDescription { .view_type = type,
+        .visibility = graphics::DescriptorVisibility::kShaderVisible,
+        .range = { 0U, sizeof(FrameExposureData) },
+        .stride = sizeof(FrameExposureData) });
+    CHECK_F(view->IsValid());
+    if (type == graphics::ResourceViewType::kStructuredBuffer_SRV)
+      frame->srv_index = index;
+    else
+      frame->uav_index = index;
+  }
+  frame_pool_.push_back(frame);
+  return frame;
+}
+
+auto ExposurePass::ResolveFrame(RenderContext& ctx,
+  const PostProcessConfig& config, const FrameInputs& inputs) -> FrameLease
+{
+  CHECK_F(config.resolved_exposure.has_value());
+  CHECK_F(!inputs.transition
+    || inputs.transition->target == ctx.current_view.view_state_handle);
+  auto gfx = renderer_.GetGraphics();
+  if (!gfx)
+    return {};
+  EnsurePipelines();
+  PreparePublishers(ctx);
+  const auto key = std::pair { ctx.current_view.view_id,
+    ctx.current_view.view_state_handle };
+  if (const auto found = resolved_frames_.find(key);
+    found != resolved_frames_.end())
+    return found->second;
+  const bool sharing = inputs.source && !config.temporary_unit_exposure;
+  const auto owner
+    = sharing ? inputs.source->handle : ctx.current_view.view_state_handle;
+  const auto lifetime = sharing ? inputs.source->lifetime : inputs.lifetime;
+  CHECK_F(!sharing
+    || (owner != CompositionView::kInvalidViewStateHandle
+      && owner != ctx.current_view.view_state_handle));
+  auto frame = AcquireFrame();
+  frame->current_state = AcquireState();
+  frame->current_state->owner_lifetime = inputs.lifetime;
+  frame->current_state->borrowed_from
+    = sharing ? owner : CompositionView::kInvalidViewStateHandle;
+  frame->current_state->borrowed_lifetime = sharing ? lifetime : 0U;
+  if (!config.temporary_unit_exposure) {
+    if (const auto prior = prior_states_.find(owner);
+      prior != prior_states_.end() && prior->second->owner_lifetime == lifetime)
+      frame->selected_history = prior->second;
+  }
+  bool source_fallback = false;
+  if (sharing && !frame->selected_history) {
+    source_fallback = true;
+    if (const auto prior = bootstrap_states_.find(owner);
+      prior != bootstrap_states_.end()
+      && prior->second->owner_lifetime == lifetime)
+      frame->selected_history = prior->second;
+    else {
+      frame->selected_history = RecordState(ctx, inputs.source->config,
+        Inputs { .metering_available = false,
+          .transition = inputs.source->transition,
+          .rejection = inputs.source->rejection,
+          .lifetime = lifetime },
+        {}, {}, true);
+      if (frame->selected_history)
+        bootstrap_states_.insert_or_assign(owner, frame->selected_history);
+    }
+    if (!frame->selected_history)
+      return {};
+  }
+  if (inputs.qualified_candidate) {
+    CHECK_F(inputs.qualified_candidate->owner_lifetime == inputs.lifetime);
+    frame->qualified_candidate = inputs.qualified_candidate;
+  }
+  frame_bindings_[ctx.frame_slot.get()].push_back(frame);
+  auto recorder = gfx->AcquireCommandRecorder(
+    gfx->QueueKeyFor(graphics::QueueRole::kGraphics), "Vortex Exposure Frame");
+  if (!recorder)
+    return {};
+  const auto recording = recorder->GetCommandListForInspection();
+  const auto track
+    = [&](const graphics::Buffer& buffer, graphics::ResourceStates state) {
+        if (!recorder->IsResourceTracked(buffer)
+          && !recorder->AdoptKnownResourceState(buffer))
+          recorder->BeginTrackingResourceState(
+            buffer, graphics::ResourceStates::kCommon, false);
+        recorder->RequireResourceState(buffer, state);
+      };
+  track(*frame->buffer, graphics::ResourceStates::kUnorderedAccess);
+  track(
+    *frame->current_state->buffer, graphics::ResourceStates::kUnorderedAccess);
+  if (frame->selected_history)
+    track(*frame->selected_history->buffer,
+      graphics::ResourceStates::kShaderResource);
+  if (frame->qualified_candidate)
+    track(*frame->qualified_candidate->buffer,
+      graphics::ResourceStates::kShaderResource);
+  const auto& resolved = *config.resolved_exposure;
+  auto seed = std::optional<float> {};
+  if (!sharing && !inputs.rejection && inputs.transition
+    && inputs.transition->seed_ev
+    && inputs.transition->policy == ExposureTransitionPolicy::kSeedFromEv100
+    && resolved.authored.enabled
+    && resolved.authored.mode == engine::ExposureMode::kAuto) {
+    const auto resolved_seed = scene::ResolveExposureSeedLogGain(
+      resolved, *inputs.transition->seed_ev);
+    if (resolved_seed)
+      seed = *resolved_seed;
+  }
+  const auto flags = (inputs.use_fp32 ? 1U : 0U) | (sharing ? 2U : 0U)
+    | (config.temporary_unit_exposure ? 4U : 0U) | (source_fallback ? 8U : 0U);
+  const auto constants = ExposureFrameConstants {
+    .output_uav = frame->uav_index.get(),
+    .current_state_uav = frame->current_state->uav_index.get(),
+    .history_srv = frame->selected_history
+      ? frame->selected_history->srv_index.get()
+      : kInvalidShaderVisibleIndex.get(),
+    .candidate_srv = frame->qualified_candidate
+      ? frame->qualified_candidate->srv_index.get()
+      : kInvalidShaderVisibleIndex.get(),
+    .fixed_scale = resolved.fixed_scale,
+    .initial_log_gain = resolved.initial_log_gain,
+    .seed_log_gain = seed.value_or(0.0F),
+    .mode = resolved.authored.enabled
+      ? static_cast<std::uint32_t>(resolved.authored.mode)
+      : 3U,
+    .flags = flags,
+    .controls = (seed.has_value() ? 1U : 0U)
+      | (resolved.authored.enabled
+            && resolved.authored.mode == engine::ExposureMode::kAuto
+            && resolved.authored.target_luminance == 0.0F
+          ? 2U
+          : 0U),
+    .current_state_srv = frame->current_state->srv_index.get(),
+    .reserved = 0U,
+  };
+  const auto slot
+    = frame_constants_publisher_->Publish(ctx.current_view.view_id,
+      std::bit_cast<std::array<std::uint32_t, 12U>>(constants));
+  CHECK_F(slot.IsValid());
+  recorder->FlushBarriers();
+  recorder->SetPipelineState(*frame_pipeline_);
+  recorder->SetComputeRoot32BitConstant(
+    static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants), 0U,
+    0U);
+  recorder->SetComputeRoot32BitConstant(
+    static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants),
+    slot.get(), 1U);
+  recorder->Dispatch(1U, 1U, 1U);
+  recorder->RequireResourceStateFinal(
+    *frame->buffer, graphics::ResourceStates::kShaderResource);
+  recorder->RequireResourceStateFinal(
+    *frame->current_state->buffer, graphics::ResourceStates::kShaderResource);
+  recorder.reset();
+  if (!recording || !recording->IsSubmitted())
+    return {};
+  resolved_frames_.emplace(key, frame);
+  return frame;
 }
 
 auto ExposurePass::Execute(RenderContext& ctx, const PostProcessConfig& config,
@@ -280,28 +522,7 @@ auto ExposurePass::Execute(RenderContext& ctx, const PostProcessConfig& config,
   if (!gfx)
     return result;
   EnsurePipelines();
-  if (!target_publisher_) {
-    target_publisher_
-      = std::make_unique<::oxygen::vortex::internal::PerViewStructuredPublisher<
-        ExposureTargetData>>(observer_ptr { gfx.get() },
-        renderer_.GetStagingProvider(),
-        observer_ptr { &renderer_.GetInlineTransfersCoordinator() },
-        "Vortex.PostProcess.Exposure.Targets");
-    constants_publisher_
-      = std::make_unique<::oxygen::vortex::internal::PerViewStructuredPublisher<
-        std::array<std::uint32_t, 16U>>>(observer_ptr { gfx.get() },
-        renderer_.GetStagingProvider(),
-        observer_ptr { &renderer_.GetInlineTransfersCoordinator() },
-        "Vortex.PostProcess.Exposure.Constants");
-    average_constants_publisher_
-      = std::make_unique<::oxygen::vortex::internal::PerViewStructuredPublisher<
-        std::array<std::uint32_t, 28U>>>(observer_ptr { gfx.get() },
-        renderer_.GetStagingProvider(),
-        observer_ptr { &renderer_.GetInlineTransfersCoordinator() },
-        "Vortex.PostProcess.Exposure.SolveConstants");
-    target_frame_.reset();
-  }
-  OnFrameStart(ctx.frame_sequence, ctx.frame_slot);
+  PreparePublishers(ctx);
   const auto handle = ctx.current_view.view_state_handle;
   CHECK_F(!inputs.transition || inputs.transition->target == handle,
     "Exposure transition targets a different view state");
@@ -594,6 +815,10 @@ auto ExposurePass::RemoveViewState(CompositionView::ViewStateHandle handle)
 
 auto ExposurePass::EnsurePipelines() -> void
 {
+  if (!frame_pipeline_) {
+    frame_pipeline_ = BuildExposurePipeline(
+      "VortexExposureFrameCS", "Vortex.PostProcess.Exposure.Frame");
+  }
   if (!clear_pipeline_.has_value()) {
     clear_pipeline_ = BuildExposurePipeline(
       "ClearHistogram", "Vortex.PostProcess.Exposure.Clear");
@@ -872,13 +1097,27 @@ auto ExposurePass::UpdateAverageConstants(RenderContext& ctx,
 
 auto ExposurePass::ReleaseExposureResources() -> void
 {
+  resolved_frames_.clear();
   exposure_states_.clear();
   prior_states_.clear();
   bootstrap_states_.clear();
   for (auto& states : frame_states_)
     states.clear();
+  for (auto& frames : frame_bindings_)
+    frames.clear();
+  for (auto& frame : frame_pool_) {
+    frame->current_state.reset();
+    frame->selected_history.reset();
+    frame->qualified_candidate.reset();
+  }
   if (auto gfx = renderer_.GetGraphics()) {
     auto& registry = gfx->GetResourceRegistry();
+    for (auto& frame : frame_pool_) {
+      gfx->ForgetKnownResourceState(*frame->buffer);
+      if (registry.Contains(*frame->buffer))
+        registry.UnRegisterResource(*frame->buffer);
+      gfx->RegisterDeferredRelease(std::move(frame->buffer));
+    }
     for (auto& state : state_pool_) {
       for (auto* resource :
         { &state->buffer, &state->histogram_buffer, &state->status_buffer }) {
@@ -892,6 +1131,7 @@ auto ExposurePass::ReleaseExposureResources() -> void
     }
   }
   state_pool_.clear();
+  frame_pool_.clear();
 }
 
 } // namespace oxygen::vortex::postprocess

@@ -1137,6 +1137,23 @@ views and recovery.
 
 ### Slice 5 - Complete pre-exposure migration and numerical recovery
 
+The GPU pre-scene resolve is implemented in the existing ExposurePass and
+qualified independently of production HDR routing. It writes immutable P/1P,
+retains prior/candidate leases, reserves the current exposure record, preserves
+zero displayed gain with positive latent gain, and does not acknowledge a
+transition. Source fallback and recovery resolve P=1; accepted candidate P is
+read from the retained GPU record. Recording failure does not publish a binding.
+Debug and Release pass 97/97 native, 22/22 service and 22/22 publication tests.
+Six focused debugger cases have no blocking graphics messages. ShaderBake
+qualifies the added entry in both profiles, and RenderDoc verifies the 48-byte
+constants ABI, distinct frame/current-state allocations, exact P/1P and retention
+of the first record after a later resolve. Evidence is
+`lifecycle/frame-resolve-manifest.json` and `lifecycle/frame-resolve-analysis.txt`.
+Renderer publication and Stage 22 do not yet consume this resolve/reserved state;
+the existing CPU-prepared frame binding remains active. The atomic HDR domain
+migration, status-qualified format selection and scene-integrated gates below
+remain open. This checkpoint does not qualify slice 5.
+
 - [ ] Add the early GPU P resolve and bind a frame-invariant P/1P to every HDR pass.
 - [ ] Migrate the entire section 4.4 checklist, including atmosphere producer/
   consumer pairs, fog/color histories, bloom and offscreen/capture domains.

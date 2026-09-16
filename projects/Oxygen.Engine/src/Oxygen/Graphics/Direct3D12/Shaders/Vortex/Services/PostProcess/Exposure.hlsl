@@ -638,3 +638,91 @@ void VortexExposureAverageCS(uint3 dispatch_thread_id : SV_DispatchThreadID)
     }
     StoreSolved(output, next, pass);
 }
+
+// Pre-scene constants: three uint4 blocks, mirrored by ResolveFrame.
+struct ExposureFrameConstants {
+    uint output_uav;
+    uint current_state_uav;
+    uint history_srv;
+    uint candidate_srv;
+    float fixed_scale;
+    float initial_log_gain;
+    float seed_log_gain;
+    uint mode;
+    uint flags;
+    uint controls;
+    uint current_state_srv;
+    uint reserved;
+};
+
+[numthreads(1, 1, 1)]
+void VortexExposureFrameCS(uint3 dispatch_id : SV_DispatchThreadID)
+{
+    StructuredBuffer<ExposureFrameConstants> constants = ResourceDescriptorHeap[g_PassConstantsIndex];
+    const ExposureFrameConstants pass = constants[0];
+    ExposureTargetData initial = (ExposureTargetData)0;
+    initial.initial_log_gain = pass.initial_log_gain;
+    ExposureStateData state = LoadPrevious(pass.history_srv, initial);
+    const bool history_valid = pass.history_srv != K_INVALID_BINDLESS_INDEX
+        && (state.flags & EXPOSURE_HISTORY_VALID) != 0u;
+    const bool borrowed = (pass.flags & 2u) != 0u;
+    const bool diagnostic = (pass.flags & 4u) != 0u;
+    uint flags = pass.flags;
+    if (borrowed) {
+        // Borrow only numerical gain; no producer request or meter identity.
+        state = (ExposureStateData)0;
+        ExposureStateData source = LoadPrevious(pass.history_srv, initial);
+        state.displayed_scale = source.displayed_scale;
+        state.target_scale = source.target_scale;
+        state.latent_scale = source.latent_scale;
+        state.latent_target_scale = source.latent_target_scale;
+        state.flags = EXPOSURE_HISTORY_VALID | EXPOSURE_INITIALIZED | EXPOSURE_BORROWED;
+    } else if (diagnostic || pass.mode != 2u) {
+        const float fixed_gain = diagnostic || pass.mode == 3u ? 1.0 : pass.fixed_scale;
+        state.displayed_scale = fixed_gain;
+        state.target_scale = fixed_gain;
+        state.latent_scale = fixed_gain;
+        state.latent_target_scale = fixed_gain;
+        state.flags = EXPOSURE_HISTORY_VALID | EXPOSURE_INITIALIZED | (pass.mode << EXPOSURE_MODE_SHIFT);
+    } else if ((pass.controls & 1u) != 0u) {
+        const float seeded_gain = exp2(pass.seed_log_gain);
+        state.displayed_scale = seeded_gain;
+        state.target_scale = seeded_gain;
+        state.latent_scale = seeded_gain;
+        state.latent_target_scale = seeded_gain;
+    } else if (!history_valid) {
+        flags |= 1u;
+    }
+    if (!borrowed && !diagnostic && (pass.controls & 2u) != 0u) {
+        state.displayed_scale = 0.0;
+        state.target_scale = 0.0;
+        state.flags |= EXPOSURE_ZERO_TARGET;
+    }
+    float p = state.displayed_scale > 0.0 ? state.displayed_scale : state.latent_scale;
+    if (pass.candidate_srv != K_INVALID_BINDLESS_INDEX) {
+        const ExposureStateData candidate = LoadPrevious(pass.candidate_srv, initial);
+        if ((candidate.flags & 256u) != 0u && candidate.fp16_eligible_streak >= 2u
+            && isfinite(candidate.fp16_candidate_pre_exposure)
+            && candidate.fp16_candidate_pre_exposure >= exp2(-32.0)
+            && candidate.fp16_candidate_pre_exposure <= exp2(32.0))
+            p = candidate.fp16_candidate_pre_exposure;
+        else
+            flags |= 1u;
+    }
+    if (!isfinite(p) || p <= 0.0) {
+        flags |= 1u;
+        p = 1.0;
+    }
+    p = clamp(p, exp2(-32.0), exp2(32.0));
+    if ((flags & (1u | 4u | 8u)) != 0u) p = 1.0;
+    if ((flags & 8u) != 0u) flags |= 1u;
+    RWByteAddressBuffer current = ResourceDescriptorHeap[pass.current_state_uav];
+    StoreState(current, state);
+    FrameExposureData frame;
+    frame.pre_exposure = p;
+    frame.one_over_pre_exposure = rcp(p);
+    frame.global_exposure_state_slot = borrowed ? pass.history_srv : pass.current_state_srv;
+    frame.flags = flags;
+    RWStructuredBuffer<FrameExposureData> output = ResourceDescriptorHeap[pass.output_uav];
+    output[0] = frame;
+}

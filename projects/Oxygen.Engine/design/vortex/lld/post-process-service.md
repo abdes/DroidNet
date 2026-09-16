@@ -139,6 +139,24 @@ publication. The old ViewColorData/GetExposure vocabulary is removed. Flags: bit
 bootstrap/recovery FP32, bit 1 borrowed prior state, bit 2 transient diagnostic
 unit gain, bit 3 source-initialization fallback. Reserved bits are zero.
 
+The pre-scene compute resolve owns a frame-retained structured SRV/UAV record
+and reserves the current 80-byte state for the later exposure solve. It retains
+the prior source and qualified candidate leases through the frame fence. A
+repeated resolve of the same view/state pair returns the pinned record; failed
+recording/submission does not publish it. Resolving P neither consumes a request
+nor publishes new adaptation history. Zero displayed gain selects positive
+latent gain for numerical P. Recovery and diagnostic frames use P=1; a missing
+root history also forces the source-initialization fallback flag and FP32.
+
+`VortexExposureFrameCS` uses a 48-byte structured constants record: output UAV,
+reserved-current-state UAV, prior-state SRV and candidate-state SRV at offsets
+0/4/8/12; fixed gain, initial log gain and seed log gain at 16/20/24; exposure
+mode at 28; frame flags, controls and current-state SRV at 32/36/40;
+reserved zero at 44. Controls bit 0 means valid seed and bit 1 means zero target.
+Candidate selection requires GPU eligibility and a streak
+of at least two; the CPU integration must additionally validate completed
+status identity, settings, event and layout before supplying that candidate.
+
 ### ExposureStateData: 80 bytes
 
 | Offset | Type | Field / meaning |

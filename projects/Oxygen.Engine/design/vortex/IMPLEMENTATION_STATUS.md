@@ -32,7 +32,7 @@ gap.
 ## 3. Current next step
 
 **Active work:** [Global exposure / LightBench / MultiView](plan/exposure-and-lightbench-correction.md),
-`in_progress`, with slices 1-4 qualified and slice 5 next. Canonical settings and
+`in_progress`, with slices 1-4 qualified and slice 5 active. Canonical settings and
 public override create/update/clear isolation are implemented; cancellation-safe
 normalized targets, fixed/camera gain propagation and frame-retired uploads
 pass 95 focused CTest entries. Twelve native arithmetic captures, floating-point
@@ -132,6 +132,12 @@ execution. Evidence is `lifecycle/offscreen-sharing-manifest.json`; slice 4's
 controlled-input gate is qualified. Physical backend restoration, numerical
 bootstrap, full HDR migration and scene-integrated visual validation remain
 part of slice 5.
+The slice-5 GPU pre-scene resolve foundation now passes 97 native, 22 service
+and 22 publication tests in Debug and Release, six debugger cases and a
+RenderDoc ABI/immutable-record audit. Evidence is
+`lifecycle/frame-resolve-manifest.json`. It is not yet wired to renderer
+publication or the Stage-22 reserved state; active HDR domains, precision
+eligibility/status integration and scene/MultiView validation remain open.
 Mask identity now follows the approved existing resource-index model.
 
 ## 4. Milestone Ledger

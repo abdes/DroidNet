@@ -486,7 +486,8 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
     .entries=std::array {
       EntryPoint { .type=kCompute, .name="ClearHistogram" },
       EntryPoint { .type=kCompute, .name="VortexExposureHistogramCS" },
-      EntryPoint { .type=kCompute, .name="VortexExposureAverageCS" } }
+      EntryPoint { .type=kCompute, .name="VortexExposureAverageCS" },
+      EntryPoint { .type=kCompute, .name="VortexExposureFrameCS" } }
   },
   // Light culling compute shader (final clustered analytic path)
   ShaderFileSpec {

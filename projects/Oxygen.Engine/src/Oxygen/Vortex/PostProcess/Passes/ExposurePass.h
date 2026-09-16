@@ -8,6 +8,7 @@
 
 #include <array>
 #include <cstddef>
+#include <map>
 #include <memory>
 #include <optional>
 #include <unordered_map>
@@ -62,6 +63,16 @@ public:
   };
   using StateLease = std::shared_ptr<const StateResources>;
 
+  struct FrameResources {
+    std::shared_ptr<graphics::Buffer> buffer;
+    ShaderVisibleIndex srv_index { kInvalidShaderVisibleIndex };
+    ShaderVisibleIndex uav_index { kInvalidShaderVisibleIndex };
+    std::shared_ptr<StateResources> current_state;
+    StateLease selected_history;
+    StateLease qualified_candidate;
+  };
+  using FrameLease = std::shared_ptr<const FrameResources>;
+
   struct Source {
     CompositionView::ViewStateHandle handle;
     PostProcessConfig config;
@@ -97,6 +108,15 @@ public:
     ShaderVisibleIndex exposure_buffer_uav { kInvalidShaderVisibleIndex };
   };
 
+  struct FrameInputs {
+    bool use_fp32 { false };
+    StateLease qualified_candidate;
+    const Source* source { nullptr };
+    std::optional<ExposureTransitionToken> transition;
+    std::optional<ExposureTransitionError> rejection;
+    std::uint64_t lifetime { 0U };
+  };
+
   OXGN_VRTX_API explicit ExposurePass(Renderer& renderer);
   OXGN_VRTX_API ~ExposurePass();
 
@@ -107,6 +127,9 @@ public:
 
   [[nodiscard]] OXGN_VRTX_API auto Execute(RenderContext& ctx,
     const PostProcessConfig& config, const Inputs& inputs) -> Result;
+  //! GPU-only numerical resolve; publication must precede dependent HDR work.
+  [[nodiscard]] OXGN_VRTX_API auto ResolveFrame(RenderContext& ctx,
+    const PostProcessConfig& config, const FrameInputs& inputs) -> FrameLease;
   OXGN_VRTX_API auto OnFrameStart(
     frame::SequenceNumber sequence, frame::Slot slot) -> void;
   OXGN_VRTX_API auto RemoveViewState(
@@ -137,6 +160,8 @@ private:
   };
 
   auto EnsurePipelines() -> void;
+  auto PreparePublishers(RenderContext& ctx) -> void;
+  auto AcquireFrame() -> std::shared_ptr<FrameResources>;
   auto RecordState(RenderContext& ctx, const PostProcessConfig& config,
     const Inputs& inputs, StateLease previous, StateLease borrowed,
     bool bootstrap = false, bool source_loss = false) -> StateLease;
@@ -167,6 +192,15 @@ private:
   std::optional<graphics::ComputePipelineDesc> clear_pipeline_ {};
   std::optional<graphics::ComputePipelineDesc> histogram_pipeline_ {};
   std::optional<graphics::ComputePipelineDesc> average_pipeline_ {};
+  std::optional<graphics::ComputePipelineDesc> frame_pipeline_ {};
+  std::unique_ptr<::oxygen::vortex::internal::PerViewStructuredPublisher<
+    std::array<std::uint32_t, 12U>>>
+    frame_constants_publisher_;
+  std::vector<std::shared_ptr<FrameResources>> frame_pool_;
+  std::map<std::pair<ViewId, CompositionView::ViewStateHandle>, FrameLease>
+    resolved_frames_;
+  std::array<std::vector<FrameLease>, frame::kFramesInFlight.get()>
+    frame_bindings_;
   std::vector<std::shared_ptr<StateResources>> state_pool_;
   std::array<std::vector<StateLease>, frame::kFramesInFlight.get()>
     frame_states_;
