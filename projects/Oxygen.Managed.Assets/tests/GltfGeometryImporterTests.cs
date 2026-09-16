@@ -22,7 +22,7 @@ public sealed class GltfGeometryImporterTests
     public TestContext TestContext { get; set; }
 
     [TestMethod]
-    public async Task ImportAsync_ShouldExtractMaterials_AndCookOmat()
+    public async Task ImportAsync_ShouldRetainSourcesAndRequireNativeSceneCooking()
     {
         const string sourcePath = "Content/Geometry/BoxWithMat.glb";
 
@@ -44,7 +44,8 @@ public sealed class GltfGeometryImporterTests
 
         var result = await import.ImportAsync(request, CancellationToken.None).ConfigureAwait(false);
 
-        _ = result.Succeeded.Should().BeTrue();
+        _ = result.Succeeded.Should().BeFalse();
+        _ = result.Diagnostics.Should().ContainSingle(d => d.Code == "OXYIMPORT_NATIVE_SCENE_COOK_REQUIRED");
         _ = result.Imported.Should().HaveCount(3);
 
         AssertDependencyKinds(result.Imported, sourcePath);
@@ -65,18 +66,11 @@ public sealed class GltfGeometryImporterTests
         // Check intermediate files (Binary)
         _ = files.TryGet(".imported/Content/Geometry/BoxWithMat__mesh__0000.glb", out _).Should().BeTrue();
 
-        // Check cooked file existence
-        _ = files.TryGet(".cooked" + matAsset.VirtualPath, out var cookedBytes).Should().BeTrue();
-        _ = cookedBytes.Length.Should().BePositive();
-
-        // Check index
-        _ = files.TryGet(".cooked/Content/container.index.bin", out var indexBytes).Should().BeTrue();
-        var doc = ReadIndex(indexBytes);
-        _ = doc.Assets.Should().Contain(static a => a.AssetType == 1); // 1 = Material
+        _ = files.Keys.Should().NotContain(static path => path.StartsWith(".cooked/", StringComparison.Ordinal));
     }
 
     [TestMethod]
-    public async Task ImportAsync_ShouldWriteCookedOgeoAndBuffersAndIndex_ForGlb()
+    public async Task ImportAsync_ShouldRejectManagedGlbSceneCookingBeforeOutputWrites()
     {
         const string sourcePath = "Content/Geometry/Tri.glb";
 
@@ -97,7 +91,8 @@ public sealed class GltfGeometryImporterTests
             Options: new ImportOptions(FailFast: true));
 
         var result = await import.ImportAsync(request, CancellationToken.None).ConfigureAwait(false);
-        _ = result.Succeeded.Should().BeTrue();
+        _ = result.Succeeded.Should().BeFalse();
+        _ = result.Diagnostics.Should().ContainSingle(d => d.Code == "OXYIMPORT_NATIVE_SCENE_COOK_REQUIRED");
         _ = result.Imported.Should().HaveCount(3);
 
         AssertDependencyKinds(result.Imported, sourcePath);
@@ -110,14 +105,11 @@ public sealed class GltfGeometryImporterTests
         // Check intermediate files (Binary)
         _ = files.TryGet(".imported/Content/Geometry/Tri__mesh__0000.glb", out _).Should().BeTrue();
 
-        _ = files.TryGet(".cooked/Content/container.index.bin", out var indexBytes).Should().BeTrue();
-        var doc = ReadIndex(indexBytes);
-
-        AssertCookedOutputs(files, doc);
+        _ = files.Keys.Should().NotContain(static path => path.StartsWith(".cooked/", StringComparison.Ordinal));
     }
 
     [TestMethod]
-    public async Task ImportAsync_ShouldWriteCookedOgeoAndBuffersAndIndex_ForGltf()
+    public async Task ImportAsync_ShouldRejectManagedGltfSceneCookingBeforeOutputWrites()
     {
         const string sourcePath = "Content/Geometry/Tri.gltf";
         const string bufferPath = "Content/Geometry/buffer0.bin";
@@ -142,15 +134,13 @@ public sealed class GltfGeometryImporterTests
         try
         {
             var result = await import.ImportAsync(request, CancellationToken.None).ConfigureAwait(false);
-            _ = result.Succeeded.Should().BeTrue();
+            _ = result.Succeeded.Should().BeFalse();
+            _ = result.Diagnostics.Should().ContainSingle(d => d.Code == "OXYIMPORT_NATIVE_SCENE_COOK_REQUIRED");
             _ = result.Imported.Should().HaveCount(3);
 
             AssertDependencyKinds(result.Imported, sourcePath, expectedReferencedResources: [bufferPath]);
 
-            _ = files.TryGet(".cooked/Content/container.index.bin", out var indexBytes).Should().BeTrue();
-            var doc = ReadIndex(indexBytes);
-
-            AssertCookedOutputs(files, doc);
+            _ = files.Keys.Should().NotContain(static path => path.StartsWith(".cooked/", StringComparison.Ordinal));
         }
         catch (Exception ex) when (ex is FileNotFoundException or IOException or UnauthorizedAccessException)
         {
@@ -160,7 +150,7 @@ public sealed class GltfGeometryImporterTests
     }
 
     [TestMethod]
-    public async Task ImportAsync_ShouldGenerateMaterialSources_WhenEnabled()
+    public async Task ImportAsync_ShouldPreserveRequestedMaterialSourcesWhenSceneCookingIsRejected()
     {
         const string sourcePath = "Content/Geometry/Box.glb";
         var files = new InMemoryImportFileAccess(this.TestContext);
@@ -189,7 +179,9 @@ public sealed class GltfGeometryImporterTests
             Options: new ImportOptions(FailFast: true));
 
         var result = await import.ImportAsync(request, CancellationToken.None).ConfigureAwait(false);
-        _ = result.Succeeded.Should().BeTrue();
+        _ = result.Succeeded.Should().BeFalse();
+        _ = result.Diagnostics.Should().ContainSingle(d => d.Code == "OXYIMPORT_NATIVE_SCENE_COOK_REQUIRED");
+        _ = files.Keys.Should().NotContain(static path => path.StartsWith(".cooked/", StringComparison.Ordinal));
 
         // Check if .omat.json was written to the custom destination
         // Name is Box__material__0000.omat.json because we use index-based naming
@@ -207,12 +199,6 @@ public sealed class GltfGeometryImporterTests
         var sidecarJson = System.Text.Encoding.UTF8.GetString(sidecarBytes);
         _ = sidecarJson.Should().Contain("\"GenerateMaterialSources\": \"true\"");
         _ = sidecarJson.Should().Contain("\"MaterialDestination\": \"Content/Materials\"");
-    }
-
-    private static Document ReadIndex(byte[] indexBytes)
-    {
-        using var ms = new MemoryStream(indexBytes);
-        return LooseCookedIndex.Read(ms);
     }
 
     private static void AssertDependencyKinds(
@@ -242,23 +228,6 @@ public sealed class GltfGeometryImporterTests
                     new ImportedDependency(resource, ImportedDependencyKind.ReferencedResource));
             }
         }
-    }
-
-    private static void AssertCookedOutputs(InMemoryImportFileAccess files, Document doc)
-    {
-        _ = doc.Assets.Should().HaveCount(3);
-        var entry = doc.Assets.Single(static a => a.AssetType == 2); // 2 = Geometry
-
-        _ = entry.VirtualPath.Should().Be("/Content/Geometry/Tri__mesh__0000.ogeo");
-        _ = entry.AssetType.Should().Be(2);
-
-        _ = files.TryGet(".cooked/Content/resources/buffers.table", out _).Should().BeTrue();
-        _ = files.TryGet(".cooked/Content/resources/buffers.data", out _).Should().BeTrue();
-
-        _ = files.TryGet(".cooked/Content/Geometry/Tri__mesh__0000.ogeo", out var ogeoBytes).Should().BeTrue();
-        _ = entry.DescriptorSize.Should().Be((ulong)ogeoBytes.Length);
-        _ = entry.DescriptorSize.Should().BeGreaterThan(256);
-        _ = entry.DescriptorSha256.Span.ToArray().Should().Equal(LooseCookedIndex.ComputeSha256(ogeoBytes));
     }
 
     private static byte[] CreateBoxWithMaterialGlb()

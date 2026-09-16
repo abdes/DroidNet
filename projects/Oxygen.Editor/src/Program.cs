@@ -43,7 +43,6 @@ using Oxygen.Editor.Services;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Workspace;
 using Oxygen.Managed.Assets.Import;
-using Oxygen.Managed.Assets.Import.Gltf;
 using Oxygen.Managed.Assets.Import.Materials;
 using Oxygen.Managed.Assets.Import.Textures;
 using Oxygen.Managed.Core.Diagnostics;
@@ -396,12 +395,9 @@ public static partial class Program
         container.Register<ImportPluginRegistration>(Reuse.Transient);
 
         // Register Importers
-        container.Register<IAssetImporter, GltfImporter>(Reuse.Singleton);
         container.Register<IAssetImporter, MaterialSourceImporter>(Reuse.Singleton);
         container.Register<IAssetImporter, ImageTextureImporter>(Reuse.Singleton);
 
-        // Register ImportService
-        container.Register<IImportService, ImportService>(Reuse.Singleton);
         container.Register<IProceduralGeometryDescriptorService, ProceduralGeometryDescriptorService>(Reuse.Singleton);
         container.Register<ISceneDescriptorGenerator, SceneDescriptorGenerator>(Reuse.Singleton);
         container.Register<IContentImportManifestBuilder, ContentImportManifestBuilder>(Reuse.Singleton);

@@ -21,9 +21,12 @@ using SixLabors.ImageSharp;
 namespace Oxygen.Managed.Assets.Import.Gltf;
 
 /// <summary>
-/// Imports glTF 2.0 sources (<c>.gltf</c>/<c>.glb</c>) and emits one or more cooked geometry assets (<c>.ogeo</c>)
-/// as canonical imported geometry payloads.
+/// Extracts glTF 2.0 sources (<c>.gltf</c>/<c>.glb</c>) into managed source records and intermediate payloads.
 /// </summary>
+/// <remarks>
+/// Extracted scenes require native cooking. This importer does not produce runtime scene binaries;
+/// <see cref="ImportService"/> rejects scene-containing batches before its managed build step.
+/// </remarks>
 public sealed class GltfImporter : IAssetImporter
 {
     private const string ImporterName = "Oxygen.Import.GltfGeometry";

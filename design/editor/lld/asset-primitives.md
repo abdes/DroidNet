@@ -65,9 +65,9 @@ The repo already contains the ED-M05 material slice primitives:
 - `ImportService.ImportAsync` executes importer dispatch and build; callers
   must not call `LooseCookedBuildService` a second time for the same import
   result.
-- managed `CookedSceneWriter` exists but is a limited brownfield scene writer.
-  Full ED-M07 scene cook targets the native `oxygen.scene` descriptor importer
-  unless equivalent managed coverage is deliberately added.
+- Managed scene source data remains reusable; scene-containing managed cook
+  batches are rejected before output mutation. Runtime scenes use the native
+  descriptor/import producers, including unchanged-input import requests.
 - engine-side `Oxygen.Cooker` provides native schemas, manifest batch import,
   scene descriptor import, loose cooked inspection, and loose cooked validation
   APIs. Editor workflow code may reach these only through ContentPipeline or a
