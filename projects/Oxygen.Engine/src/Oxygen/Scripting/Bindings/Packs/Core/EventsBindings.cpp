@@ -7,7 +7,9 @@
 #include <algorithm>
 #include <array>
 #include <cstdint>
+#include <limits>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -42,6 +44,7 @@ namespace {
   struct EventListener {
     std::uint64_t id { 0 };
     std::uint64_t sequence { 0 };
+    EventOwnerId owner { 0 };
     // Event/Phase are implicitly handled by the bucket
     int priority { 0 };
     int callback_ref { kLuaNoRef };
@@ -73,6 +76,9 @@ namespace {
   struct EventRuntime {
     std::uint64_t next_listener_id { 1 };
     std::uint64_t next_sequence { 1 };
+    EventOwnerId next_owner_id { 1 };
+    EventOwnerId active_owner { 0 };
+    std::unordered_map<EventOwnerId, std::function<bool()>> live_owners;
     std::string current_phase { kDefaultPhaseName };
 
     // Primary Storage: EventName -> PhaseName -> Bucket (Sorted Listeners)
@@ -195,6 +201,23 @@ namespace {
       return nullptr;
     }
     return runtime;
+  }
+
+  auto IsEventOwnerLive(lua_State* state, const EventRuntime& runtime,
+    const EventOwnerId owner) -> bool
+  {
+    if (owner == 0) {
+      return true;
+    }
+    const auto found = runtime.live_owners.find(owner);
+    if (found == runtime.live_owners.end()) {
+      return false;
+    }
+    if (!found->second()) {
+      RetireEventListenerOwner(state, owner);
+      return false;
+    }
+    return true;
   }
 
   auto ParsePhaseName(lua_State* state, const int opts_index,
@@ -385,6 +408,12 @@ namespace {
         "oxygen.events.on expects options table as arg #3 when provided");
       return 0;
     }
+    if (!IsEventOwnerLive(state, *runtime, runtime->active_owner)) {
+      luaL_error(state,
+        "oxygen.events.on cannot register a listener for a retired script "
+        "instance");
+      return 0;
+    }
     const std::string phase_name
       = ParsePhaseName(state, kLuaArg3, runtime->current_phase);
     const int priority = ParsePriority(state, kLuaArg3);
@@ -398,6 +427,7 @@ namespace {
     EventListener listener {
       .id = listener_id,
       .sequence = seq,
+      .owner = runtime->active_owner,
       .priority = priority,
       .callback_ref = callback_ref,
       .once = once,
@@ -547,6 +577,7 @@ namespace {
     const int payload_ref, std::string& out_error) -> bool
   {
     const ScopedLuaStackTop stack_guard(state);
+    const ScopedEventListenerOwner owner_scope(state, listener.owner);
     lua_getref(state, listener.callback_ref);
     if (!lua_isfunction(state, -1)) {
       out_error = "event callback is not callable";
@@ -577,6 +608,72 @@ namespace {
     return true;
   }
 } // namespace
+
+auto CreateEventListenerOwner(lua_State* state, std::function<bool()> is_live)
+  -> EventOwnerId
+{
+  auto* runtime = EnsureRuntime(state);
+  if (runtime == nullptr) {
+    throw std::runtime_error(
+      "Cannot allocate an event owner without a Lua runtime.");
+  }
+  if (runtime->next_owner_id == std::numeric_limits<EventOwnerId>::max()) {
+    throw std::overflow_error(
+      "Script event owner identity space is exhausted.");
+  }
+  if (!is_live) {
+    throw std::invalid_argument(
+      "An event owner requires a liveness predicate.");
+  }
+  const auto owner = runtime->next_owner_id;
+  runtime->live_owners.emplace(owner, std::move(is_live));
+  ++runtime->next_owner_id;
+  return owner;
+}
+
+ScopedEventListenerOwner::ScopedEventListenerOwner(
+  lua_State* state, const EventOwnerId owner)
+  : state_(state)
+{
+  if (auto* runtime = EnsureRuntime(state_); runtime != nullptr) {
+    previous_ = runtime->active_owner;
+    runtime->active_owner = owner;
+  }
+}
+
+ScopedEventListenerOwner::~ScopedEventListenerOwner()
+{
+  if (auto* runtime = FindRuntime(state_); runtime != nullptr) {
+    runtime->active_owner = previous_;
+  }
+}
+
+auto RetireEventListenerOwner(lua_State* state, const EventOwnerId owner)
+  -> void
+{
+  if (owner == 0) {
+    return;
+  }
+  auto* runtime = FindRuntime(state);
+  if (runtime == nullptr) {
+    return;
+  }
+  runtime->live_owners.erase(owner);
+  // Reuse identity-based disconnection. Dispatch snapshots contain IDs rather
+  // than element references, so even callback-time cleanup can compact safely.
+  for (auto& [event_name, phases] : runtime->buckets) {
+    static_cast<void>(event_name);
+    for (auto& [phase_name, bucket] : phases) {
+      static_cast<void>(phase_name);
+      for (const auto& listener : bucket.listeners) {
+        if (listener.owner == owner && listener.connected) {
+          UnbindListenerById(state, *runtime, listener.id);
+        }
+      }
+      CompactBucket(bucket);
+    }
+  }
+}
 
 auto RegisterEventsBindings(lua_State* state, const int oxygen_table_index)
   -> void
@@ -671,29 +768,39 @@ auto DispatchEventsForPhase(lua_State* state, const std::string_view phase_name)
 
   runtime->current_phase = std::string(phase_name);
 
-  // Extract dispatch list locally
-  const size_t initial_queue_size = runtime->queue.size();
-  std::vector<size_t> dispatch_indices;
-  dispatch_indices.reserve(initial_queue_size);
-
-  for (size_t i = 0; i < initial_queue_size; ++i) {
-    if (runtime->queue[i].phase_name == phase_name) {
-      dispatch_indices.push_back(i);
-    }
+  // Remove only this initial phase batch before invoking callbacks. Newly
+  // emitted events stay queued, with their payload refs, for the next dispatch.
+  std::vector<QueuedEvent> dispatch;
+  std::vector<QueuedEvent> retained;
+  dispatch.reserve(runtime->queue.size());
+  retained.reserve(runtime->queue.size());
+  for (auto& event : runtime->queue) {
+    auto& destination = event.phase_name == phase_name ? dispatch : retained;
+    destination.push_back(std::move(event));
   }
+  runtime->queue.swap(retained);
 
   EventDispatchStatus status {};
-  for (const size_t queue_index : dispatch_indices) {
-    auto& queued = runtime->queue[queue_index];
+  for (const auto& queued : dispatch) {
     auto& stats = runtime->stats_by_event[queued.event_name];
 
     auto& phase_map = runtime->buckets[queued.event_name];
     auto& bucket = phase_map[std::string(phase_name)];
 
-    size_t count = bucket.listeners.size();
-    for (size_t i = 0; i < count; ++i) {
-      auto& listener = bucket.listeners[i];
-      if (!listener.connected) {
+    std::vector<std::uint64_t> listener_ids;
+    listener_ids.reserve(bucket.listeners.size());
+    for (const auto& listener : bucket.listeners) {
+      listener_ids.push_back(listener.id);
+    }
+    for (const auto listener_id : listener_ids) {
+      const auto found
+        = std::ranges::find(bucket.listeners, listener_id, &EventListener::id);
+      if (found == bucket.listeners.end() || !found->connected) {
+        continue;
+      }
+      // Registration can reorder/reallocate this bucket inside the callback.
+      const auto listener = *found;
+      if (!IsEventOwnerLive(state, *runtime, listener.owner)) {
         continue;
       }
 
@@ -701,14 +808,22 @@ auto DispatchEventsForPhase(lua_State* state, const std::string_view phase_name)
       if (!InvokeListener(
             state, listener, queued.payload_ref, callback_error)) {
         ++stats.errors;
+        const auto message = std::string("event '")
+                               .append(queued.event_name)
+                               .append("' listener #")
+                               .append(std::to_string(listener.id))
+                               .append(" failed: ")
+                               .append(callback_error);
+        status.failures.push_back(
+          { .owner = listener.owner, .message = message });
         if (status.ok) {
           status.ok = false;
-          status.message = std::string("event '")
-                             .append(queued.event_name)
-                             .append("' listener #")
-                             .append(std::to_string(listener.id))
-                             .append(" failed: ")
-                             .append(callback_error);
+          status.message = message;
+        }
+        if (listener.owner != 0) {
+          // Stop this owner's remaining listeners in this batch and later
+          // phases.
+          RetireEventListenerOwner(state, listener.owner);
         }
       } else {
         ++stats.fired;
@@ -721,15 +836,10 @@ auto DispatchEventsForPhase(lua_State* state, const std::string_view phase_name)
 
     if (IsValidLuaRef(queued.payload_ref)) {
       lua_unref(state, queued.payload_ref);
-      queued.payload_ref = kLuaNoRef;
     }
 
     CompactBucket(bucket);
   }
-
-  std::erase_if(runtime->queue, [phase_name](const QueuedEvent& event) {
-    return event.phase_name == phase_name;
-  });
 
   return status;
 }

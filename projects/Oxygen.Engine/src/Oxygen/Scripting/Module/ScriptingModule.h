@@ -11,6 +11,7 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -20,6 +21,7 @@
 #include <Oxygen/Base/Hash.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/NamedType.h>
+#include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/Core/Scripting/ScriptExecutable.h>
@@ -39,6 +41,10 @@ class IAsyncEngine;
 }
 
 namespace oxygen::scripting {
+
+namespace bindings {
+  struct EventDispatchStatus;
+}
 
 struct ScriptExecutionResult {
   bool ok { false };
@@ -191,6 +197,9 @@ private:
   (Slot) has its own private
     global table, preventing side-effects between
   different game objects.
+    Slot initialization and execution failures are content errors. A faulted
+    slot stops executing until its executable changes; healthy slots and the
+    compiler remain available.
   - **Priority Contract**: Must run before
   `SceneObserverSyncModule` so
     gameplay registration is complete before
@@ -296,13 +305,13 @@ private:
   struct ActiveScriptSlot {
     SlotRuntimeKey key;
     std::shared_ptr<const ScriptExecutable> executable;
-    uint64_t executable_hash { 0 };
+    uint64_t executable_fingerprint { 0 };
   };
 
   struct SlotRuntimeState {
     std::shared_ptr<const ScriptExecutable> executable;
     data::AssetKey asset_key;
-    uint64_t last_known_hash { 0 };
+    uint64_t last_known_fingerprint { 0 };
     int module_ref { -1 };
     int on_gameplay_ref { -1 };
     int on_scene_mutation_ref { -1 };
@@ -310,6 +319,10 @@ private:
     bool failed_initialization { false };
     bool reported_initialization_error { false };
     std::string initialization_error;
+    bool failed_execution { false };
+    uint64_t event_owner_id { 0 };
+    Uuid component_incarnation;
+    std::optional<scene::ScriptingComponent::Slot> slot_identity;
   };
 
   auto InitializeSandbox() -> ScriptExecutionResult;
@@ -333,6 +346,8 @@ private:
   auto RebuildSlotRuntime(const SlotRuntimeKey& key, SlotRuntimeState& state,
     const scene::ScriptingComponent::Slot& slot) -> ScriptExecutionResult;
   auto DestroySlotRuntime(SlotRuntimeState& state) -> void;
+  [[nodiscard]] auto IsCurrentSlotRuntime(
+    const SlotRuntimeKey& key, const SlotRuntimeState& state) const -> bool;
   auto EnsureSceneObservation(observer_ptr<engine::FrameContext> context)
     -> void;
   auto ActivateSlot(const SlotRuntimeKey& key,
@@ -344,6 +359,9 @@ private:
   auto RegisterDefaultBindingPacks() -> bool;
   auto ReportHookError(observer_ptr<engine::FrameContext> context,
     std::string_view hook_name, const ScriptExecutionResult& result) const
+    -> void;
+  auto ReportEventDispatchErrors(observer_ptr<engine::FrameContext> context,
+    std::string_view phase, const bindings::EventDispatchStatus& status)
     -> void;
 
   lua_State* lua_state_ { nullptr };

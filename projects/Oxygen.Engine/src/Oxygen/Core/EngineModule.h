@@ -91,8 +91,7 @@ public:
   [[nodiscard]] virtual auto GetName() const noexcept -> std::string_view = 0;
   [[nodiscard]] virtual auto GetPriority() const noexcept -> ModulePriority = 0;
   [[nodiscard]] virtual auto GetSupportedPhases() const noexcept
-    -> ModulePhaseMask
-    = 0;
+    -> ModulePhaseMask = 0;
   [[nodiscard]] virtual auto IsCritical() const noexcept -> bool
   {
     return false;
@@ -254,6 +253,14 @@ protected:
   {
     context->ReportError(
       GetTypeId(), std::string { message }, std::string { GetName() });
+  }
+
+  //! Report a content failure without requesting removal of this module.
+  auto ReportContentError(
+    observer_ptr<FrameContext> context, std::string_view message) const -> void
+  {
+    context->ReportError(GetTypeId(), std::string { message },
+      std::string { GetName() }, FrameErrorKind::kContentFailure);
   }
 };
 
