@@ -14,6 +14,7 @@
 #include <sstream>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 
 #include <fmt/format.h>
@@ -1878,10 +1879,13 @@ auto Renderer::PublishRuntimeCompositionView(
     && composition_view.exposure_source_view_id != composition_view.id) {
     resolved_exposure_view_id
       = ResolvePublishedRuntimeViewId(composition_view.exposure_source_view_id);
-    CHECK_F(resolved_exposure_view_id != kInvalidViewId,
-      "Renderer::PublishRuntimeCompositionView exposure source intent view {} "
-      "is not published",
-      composition_view.exposure_source_view_id);
+    if (resolved_exposure_view_id == kInvalidViewId) {
+      LOG_F(ERROR,
+        "Exposure source intent view {} is not registered; view {} "
+        "publication rejected",
+        composition_view.exposure_source_view_id, composition_view.id);
+      return kInvalidViewId;
+    }
   }
 
   engine::ViewContext view_context {};
@@ -1915,6 +1919,9 @@ auto Renderer::PublishRuntimeCompositionView(
     composition_view.consumed_aux_outputs, std::string(composition_view.name),
     composition_view.render_settings.exposure);
 
+  if (published_view_id == kInvalidViewId)
+    return kInvalidViewId;
+
   if (composition_view.camera.has_value()) {
     auto camera_node = composition_view.camera.value();
     auto resolver = SceneCameraViewResolver {
@@ -1944,6 +1951,47 @@ auto Renderer::UpsertPublishedRuntimeView(engine::FrameContext& frame_context,
     "Renderer::UpsertPublishedRuntimeView requires a valid intent view id");
 
   std::unique_lock state_lock(view_state_mutex_);
+  const auto existing = published_runtime_views_by_intent_.find(intent_view_id);
+  const auto existing_id = existing != published_runtime_views_by_intent_.end()
+    ? existing->second.published_view_id
+    : kInvalidViewId;
+  const auto source = view.metadata.exposure_view_id != existing_id
+    ? view.metadata.exposure_view_id
+    : kInvalidViewId;
+  if (source != kInvalidViewId) {
+    const auto* root = ResolvePublishedExposureRootLocked(source, existing_id);
+    if (!root || view_state_handle == CompositionView::kInvalidViewStateHandle
+      || root->view_state_handle == CompositionView::kInvalidViewStateHandle) {
+      LOG_F(ERROR,
+        "Invalid exposure source {} for intent view {}: unknown "
+        "source, cycle or stateless participant; publication rejected",
+        source, intent_view_id);
+      return kInvalidViewId;
+    }
+  }
+  if (view_state_handle != CompositionView::kInvalidViewStateHandle) {
+    for (const auto& [other_intent, other] :
+      published_runtime_views_by_intent_) {
+      if (other_intent != intent_view_id
+        && other.view_state_handle == view_state_handle) {
+        LOG_F(ERROR,
+          "View state {} already belongs to intent view {}; "
+          "publication of {} rejected",
+          view_state_handle, other_intent, intent_view_id);
+        return kInvalidViewId;
+      }
+    }
+  } else if (existing_id != kInvalidViewId
+    && std::ranges::any_of(
+      published_runtime_views_by_intent_, [existing_id](const auto& item) {
+        return item.second.exposure_source_view_id == existing_id;
+      })) {
+    LOG_F(ERROR,
+      "Exposure source intent view {} cannot become stateless "
+      "while registered consumers depend on it",
+      intent_view_id);
+    return kInvalidViewId;
+  }
   if (const auto it = published_runtime_views_by_intent_.find(intent_view_id);
     it != published_runtime_views_by_intent_.end()) {
     frame_context.UpdateView(it->second.published_view_id, std::move(view));
@@ -1958,6 +2006,7 @@ auto Renderer::UpsertPublishedRuntimeView(engine::FrameContext& frame_context,
     it->second.consumed_aux_outputs = std::move(consumed_aux_outputs);
     it->second.debug_name = std::move(debug_name);
     it->second.exposure_override = std::move(exposure_override);
+    it->second.exposure_source_view_id = source;
     return it->second.published_view_id;
   }
 
@@ -1976,6 +2025,7 @@ auto Renderer::UpsertPublishedRuntimeView(engine::FrameContext& frame_context,
         .consumed_aux_outputs = std::move(consumed_aux_outputs),
         .debug_name = std::move(debug_name),
         .exposure_override = std::move(exposure_override),
+        .exposure_source_view_id = source,
       };
   return published_view_id;
 }
@@ -1995,6 +2045,27 @@ auto Renderer::ResolvePublishedRuntimeViewId(
   return kInvalidViewId;
 }
 
+auto Renderer::ResolvePublishedExposureRootLocked(ViewId published_view_id,
+  const ViewId forbidden) const -> const PublishedRuntimeViewState*
+{
+  for (std::size_t remaining = published_runtime_views_by_intent_.size();
+    remaining > 0U; --remaining) {
+    if (published_view_id == forbidden)
+      return nullptr;
+    const auto found = std::ranges::find_if(published_runtime_views_by_intent_,
+      [published_view_id](const auto& item) {
+        return item.second.published_view_id == published_view_id;
+      });
+    if (found == published_runtime_views_by_intent_.end())
+      return nullptr;
+    const auto& state = found->second;
+    if (state.exposure_source_view_id == kInvalidViewId)
+      return &state;
+    published_view_id = state.exposure_source_view_id;
+  }
+  return nullptr;
+}
+
 auto Renderer::DetachPublishedRuntimeViewState(const ViewId intent_view_id)
   -> DetachedPublishedRuntimeViewState
 {
@@ -2009,6 +2080,22 @@ auto Renderer::DetachPublishedRuntimeViewState(const ViewId intent_view_id)
       .published_view_id = it->second.published_view_id,
       .view_state_handle = it->second.view_state_handle,
     };
+    // Resolve all affected chains before changing any edge.
+    auto consumers = std::vector<ViewId> {};
+    for (const auto& [intent, state] : published_runtime_views_by_intent_) {
+      if (intent != intent_view_id
+        && !ResolvePublishedExposureRootLocked(
+          state.published_view_id, detached.published_view_id))
+        consumers.push_back(intent);
+    }
+    for (const auto consumer : consumers) {
+      published_runtime_views_by_intent_.at(consumer).exposure_source_view_id
+        = kInvalidViewId;
+      LOG_F(WARNING,
+        "Exposure source for intent view {} was removed; "
+        "detaching to independent exposure",
+        consumer);
+    }
     published_runtime_views_by_intent_.erase(it);
     return detached;
   }
@@ -2064,10 +2151,28 @@ auto Renderer::PruneStalePublishedRuntimeViews(
 
   {
     std::unique_lock state_lock(view_state_mutex_);
+    auto retained_sources = std::unordered_set<ViewId> {};
+    for (const auto& [_, state] : published_runtime_views_by_intent_) {
+      if (current_frame - state.last_seen_frame
+        > kPublishedRuntimeViewMaxIdleFrames)
+        continue;
+      auto source = state.exposure_source_view_id;
+      while (
+        source != kInvalidViewId && retained_sources.insert(source).second) {
+        const auto found = std::ranges::find_if(
+          published_runtime_views_by_intent_, [source](const auto& item) {
+            return item.second.published_view_id == source;
+          });
+        CHECK_F(found != published_runtime_views_by_intent_.end(),
+          "Registered exposure source must remain resolvable");
+        source = found->second.exposure_source_view_id;
+      }
+    }
     for (auto it = published_runtime_views_by_intent_.begin();
       it != published_runtime_views_by_intent_.end();) {
       if (current_frame - it->second.last_seen_frame
-        > kPublishedRuntimeViewMaxIdleFrames) {
+          > kPublishedRuntimeViewMaxIdleFrames
+        && !retained_sources.contains(it->second.published_view_id)) {
         stale_intent_ids.push_back(it->first);
         stale_published_states.push_back(DetachedPublishedRuntimeViewState {
           .published_view_id = it->second.published_view_id,
@@ -2548,6 +2653,9 @@ auto Renderer::PopulateRenderContextViewState(RenderContext& render_context,
         entry.produced_aux_outputs = state.produced_aux_outputs;
         entry.consumed_aux_outputs = state.consumed_aux_outputs;
         entry.exposure_override = state.exposure_override;
+        const auto* root = ResolvePublishedExposureRootLocked(view.id);
+        CHECK_NOTNULL_F(root, "Registered exposure ownership must be acyclic");
+        entry.exposure_view_id = root->published_view_id;
         break;
       }
     }

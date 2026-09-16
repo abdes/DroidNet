@@ -1013,8 +1013,17 @@ configurations. Inspected Auto160 and Manual EV32 captures prove distinct
 prior/output state resources, the 112-byte solve ABI and final GPU-state
 consumption; the Auto histogram mass is exactly 1,073,479,680. Evidence and
 commands are in `lifecycle/unified-state-manifest.json` under the package's
-analysis directory. Source ownership, implicit lifecycle events and complete
-frame-boundary settings integration remain open; slice 4 is not qualified.
+analysis directory.
+
+The runtime registry now validates source edges atomically, resolves chains to
+one root, rejects duplicate persistent-handle ownership and stateless sharing,
+retains inactive source chains referenced by active consumers, and detaches all
+affected relationships on removal. Its 18 publication tests pass in Debug and
+Release, including six new ownership cases; evidence is
+`lifecycle/ownership-registry-manifest.json`. This qualifies CPU routing only.
+GPU borrowing/bootstrap/destruction continuity, implicit lifecycle events and
+complete frame-boundary settings integration remain open; slice 4 is not
+qualified.
 
 - [x] Update the same GPU state in Manual, ManualCamera, Auto and disabled modes.
 - [ ] Add public per-view transitions and request generation handling, including

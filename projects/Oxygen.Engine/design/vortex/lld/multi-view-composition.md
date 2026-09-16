@@ -384,7 +384,7 @@ inherit the earlier M06 structural closure.
 | --- | --- |
 | View intent API and runtime publication | Renderer Core |
 | View persistent-state handle lifetime | View producer |
-| View lifecycle, sorted active views, exposure-source handle validation | Renderer Core / `ViewLifecycleService` |
+| View lifecycle, sorted active views, exposure-source handle validation | Renderer Core runtime view registry |
 | View-family/render-batch construction | Renderer Core |
 | Per-view view constants and `ViewFrameBindings` publication | Renderer Core |
 | Scene stage ordering and scene-texture usage policy | `SceneRenderer` |
@@ -664,7 +664,7 @@ History invalidation matrix:
 
 | State | Invalidate when |
 | --- | --- |
-| exposure | handle changes, owner requests reset, exposure config changes incompatibly, source handle inactive without explicit stale-use opt-in |
+| exposure | handle lifetime changes or an owner transition applies; registered inactive sources retain their published gain, and source removal follows section 11.2 continuity |
 | previous view matrices | handle changes, scene changes, projection/viewport descriptor changes beyond jitter, owner reset |
 | previous HZB / occlusion | handle changes, extent/depth format/sample count changes, occlusion mode changes |
 | TAA/post-process history | handle changes, render resolution scale changes, tone-map/history format changes, debug mode bypasses history |
@@ -754,17 +754,26 @@ step rather than surface composition.
 
 ### 11.2 Exposure Sharing
 
-Exposure sharing follows UE's view-state model, not the current Oxygen
-source-before-consumer ordering:
+The [exposure execution plan](../plan/exposure-and-lightbench-correction.md#42-shared-exposure-one-writer-and-deterministic-readers)
+owns the complete source, fallback and destruction contract:
 
 - each history-capable view owns exposure state through `ViewStateHandle`
 - a view that specifies an exposure source reads the source handle's
   previous-frame exposure product at frame start
 - the source view's current frame may update its own exposure state for the
   next frame, but consumers do not wait for it in the same frame
-- if the source handle is missing or inactive in the current frame, the
-  consumer uses its own previous exposure if valid, otherwise fixed exposure,
-  and diagnostics must record the fallback
+- chains resolve to one registered root; cycles, unknown sources, stateless
+  participants and duplicate ownership of a persistent handle are rejected
+  before changing the registered view. Publication returns `kInvalidViewId`
+  with a diagnostic and preserves the previous valid registration
+- a registered inactive source retains its last published gain. Without prior
+  history, consumers use the root's resolved initialization gain, including its
+  mode, seed, target and bias; a consumer's image never bootstraps the source
+- active consumers keep their source chain registered through idle pruning
+- removing a source detaches every affected chain at the next frame boundary.
+  Each consumer carries its last borrowed displayed and positive latent gain
+  into independent history; Auto preserves the continuity frame before adapting,
+  while Manual/disabled and zero-target rules retain their defined precedence
 - current-frame exposure dependencies are out of M06A scope and require a
   follow-up design with explicit dependency edges
 
@@ -1192,10 +1201,11 @@ analysis report must be key/value shaped and gated with
 1. Four active scene views produce four `FrameViewPacket`s with independent
    render/debug modes.
 2. `FramePlanBuilder` does not leak wireframe/debug mode between views.
-3. `ViewLifecycleService` resolves exposure sharing through previous-frame
+3. Renderer Core resolves exposure sharing through previous-frame
    `ViewStateHandle` state and does not impose current-frame render order.
-4. Exposure source view disabled/inactive in the current frame uses the
-   documented fallback and records a diagnostic, not a stale hidden binding.
+4. A registered inactive source retains its last publication, or its resolved
+   initialization fallback if no history exists. Source destruction detaches
+   chains with the documented gain continuity and an ownership diagnostic.
 5. History is not reused after a producer drops a `ViewStateHandle` and
    recreates a view with the same `ViewId`.
 6. Descriptor-key changes for resize, format, sample count, or
