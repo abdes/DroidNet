@@ -18,6 +18,8 @@ struct PostProcessConfig {
   engine::MeteringMode metering_mode { engine::MeteringMode::kAverage };
   bool enable_bloom { true };
   bool enable_auto_exposure { true };
+  //! Per-frame diagnostic output; never changes authored/persistent exposure.
+  bool temporary_unit_exposure { false };
   float fixed_exposure { 1.0F };
   float gamma { 2.2F };
   float bloom_intensity { 0.5F };

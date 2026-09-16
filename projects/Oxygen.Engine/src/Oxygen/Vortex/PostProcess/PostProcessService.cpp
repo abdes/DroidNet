@@ -5,20 +5,25 @@
 //===----------------------------------------------------------------------===//
 
 #include <cmath>
+#include <cstring>
 #include <memory>
 
 #include <Oxygen/Core/Detail/FormatUtils.h>
+#include <Oxygen/Graphics/Common/CommandList.h>
+#include <Oxygen/Graphics/Common/CommandRecorder.h>
+#include <Oxygen/Graphics/Common/ReadbackManager.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 
+#include <Oxygen/Vortex/Environment/SceneBackground.h>
 #include <Oxygen/Vortex/Internal/PerViewStructuredPublisher.h>
 #include <Oxygen/Vortex/PostProcess/Passes/BloomPass.h>
 #include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
 #include <Oxygen/Vortex/PostProcess/Passes/TonemapPass.h>
 #include <Oxygen/Vortex/PostProcess/PostProcessService.h>
-#include <Oxygen/Vortex/Environment/SceneBackground.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
+#include <Oxygen/Vortex/Types/ExposureStateData.h>
 
 namespace oxygen::vortex {
 
@@ -35,6 +40,7 @@ PostProcessService::PostProcessService(
 
 PostProcessService::~PostProcessService()
 {
+  pending_exposure_status_.clear();
   // Binder owns descriptor retirement; release all its leases first.
   exposure_settings_.clear();
   transient_exposure_settings_ = {};
@@ -84,8 +90,10 @@ auto PostProcessService::EnsurePublishResources() -> bool
 auto PostProcessService::OnFrameStart(
   const frame::SequenceNumber sequence, const frame::Slot slot) -> void
 {
+  PollExposureStatus();
   current_sequence_ = sequence;
   current_slot_ = slot;
+  exposure_pass_->OnFrameStart(sequence, slot);
   CHECK_LT_F(slot.get(), frame_masks_.size());
   frame_masks_[slot.get()].clear();
   if (mask_binder_) {
@@ -143,6 +151,8 @@ auto PostProcessService::ResolveViewExposureSettings(
   const scene::ExposureSettings& requested,
   const std::optional<float> camera_ev) -> const ExposureSettingsState&
 {
+  static_cast<void>(
+    renderer_.CaptureExposureTransition(handle, current_sequence_));
   auto* state = &transient_exposure_settings_;
   if (handle == CompositionView::kInvalidViewStateHandle) {
     // Stateless views retain no settings/history. Keep only the last rejected
@@ -301,7 +311,13 @@ auto PostProcessService::Execute(const ViewId view_id, RenderContext& ctx,
     CHECK_LT_F(current_slot_.get(), frame_masks_.size());
     frame_masks_[current_slot_.get()].push_back(mask);
   }
-  const auto exposure = exposure_pass_->Execute(ctx, config_,
+  auto effective_config = config_;
+  effective_config.temporary_unit_exposure = config_.temporary_unit_exposure
+    || ctx.shader_debug_mode != ShaderDebugMode::kDisabled
+    || ctx.render_mode == RenderMode::kWireframe;
+  const auto transition = renderer_.CaptureExposureTransition(
+    ctx.current_view.view_state_handle, ctx.frame_sequence);
+  const auto exposure = exposure_pass_->Execute(ctx, effective_config,
     postprocess::ExposurePass::Inputs {
       .scene_signal = inputs.scene_signal,
       .scene_signal_srv = inputs.scene_signal_srv,
@@ -309,8 +325,18 @@ auto PostProcessService::Execute(const ViewId view_id, RenderContext& ctx,
       .metering_mask_srv = mask ? mask->srv : kInvalidShaderVisibleIndex,
       .metering_available
       = !initial_mask_unavailable && !requested_mask_missing,
+      .transition
+      = !effective_config.temporary_unit_exposure ? transition : std::nullopt,
     });
+  if (transition && exposure.executed && exposure.state
+    && !effective_config.temporary_unit_exposure) {
+    EnqueueExposureStatus(*transition, exposure.state, ctx);
+  }
   auto bindings = BuildBindings(inputs);
+  if (effective_config.temporary_unit_exposure) {
+    bindings.enable_auto_exposure = 0U;
+    bindings.fixed_exposure = 1.0F;
+  }
   bindings.eye_adaptation_srv = exposure.exposure_buffer_srv;
   bindings.eye_adaptation_uav = exposure.exposure_buffer_uav;
   const auto slot = PublishBindings(view_id, bindings);
@@ -337,8 +363,10 @@ auto PostProcessService::Execute(const ViewId view_id, RenderContext& ctx,
     .wrote_visible_output = tonemap.wrote_visible_output,
     .bloom_requested = bloom.requested,
     .bloom_executed = bloom.executed,
-    .auto_exposure_requested = exposure.requested,
-    .auto_exposure_executed = exposure.executed,
+    .auto_exposure_requested = config_.enable_auto_exposure
+      && !effective_config.temporary_unit_exposure && exposure.requested,
+    .auto_exposure_executed = config_.enable_auto_exposure
+      && !effective_config.temporary_unit_exposure && exposure.executed,
     .used_fixed_exposure = exposure.used_fixed_exposure,
     .view_id = view_id,
     .post_process_frame_slot = slot,
@@ -351,7 +379,88 @@ auto PostProcessService::RemoveViewState(const ViewId view_id,
 {
   published_views_.erase(view_id);
   exposure_settings_.erase(view_state_handle);
+  pending_exposure_status_.erase(view_state_handle);
+  renderer_.RetireExposureTransitions(view_state_handle);
   exposure_pass_->RemoveViewState(view_state_handle);
+}
+
+auto PostProcessService::EnqueueExposureStatus(
+  const ExposureTransitionToken& token,
+  postprocess::ExposurePass::StateLease state, const RenderContext& ctx) -> void
+{
+  auto& pending = pending_exposure_status_[token.target];
+  if (pending.size() >= frame::kFramesInFlight.get())
+    return;
+  auto gfx = renderer_.GetGraphics();
+  if (!gfx)
+    return;
+  auto manager = gfx->GetReadbackManager();
+  if (!manager)
+    return;
+  auto readback = manager->CreateBufferReadback("Exposure completed status");
+  if (!readback)
+    return;
+  auto recorder = gfx->AcquireCommandRecorder(
+    gfx->QueueKeyFor(graphics::QueueRole::kGraphics),
+    "Exposure status readback");
+  if (!recorder)
+    return;
+  const auto recording = recorder->GetCommandListForInspection();
+  if (!recorder->AdoptKnownResourceState(*state->status_buffer)) {
+    recorder->BeginTrackingResourceState(
+      *state->status_buffer, graphics::ResourceStates::kCopySource, false);
+  }
+  const auto ticket = readback->EnqueueCopy(
+    *recorder, *state->status_buffer, { 0U, sizeof(ExposureCompletedStatus) });
+  recorder.reset();
+  if (!ticket || !recording || !recording->IsSubmitted()) {
+    static_cast<void>(readback->Cancel());
+    return;
+  }
+  pending.push_back({ std::move(state), std::move(readback), token,
+    ctx.frame_sequence.get(), config_.exposure_settings_revision });
+}
+
+auto PostProcessService::PollExposureStatus() -> void
+{
+  const auto integer = [](const std::array<std::uint32_t, 2>& words) {
+    return std::uint64_t { words[0] } | (std::uint64_t { words[1] } << 32U);
+  };
+  for (auto& [handle, pending] : pending_exposure_status_) {
+    while (!pending.empty()) {
+      auto& job = pending.front();
+      const auto ready = job.readback->IsReady();
+      if (ready && !*ready)
+        break;
+      if (!ready) {
+        pending.pop_front();
+        continue;
+      }
+      const auto mapped = job.readback->TryMap();
+      if (!mapped) {
+        pending.pop_front();
+        continue;
+      }
+      ExposureCompletedStatus status {};
+      if (mapped->Bytes().size() >= sizeof(status)) {
+        std::memcpy(&status, mapped->Bytes().data(), sizeof(status));
+        if (integer(status.view_state_identity) == job.token.lifetime
+          && integer(status.frame_sequence) == job.frame_sequence
+          && integer(status.settings_revision) == job.settings_revision
+          && integer(status.requested_generation) == job.token.generation) {
+          std::optional<ExposureTransitionError> rejection;
+          if ((status.flags & 8U) != 0U) {
+            rejection = status.transition_rejection_reason == 1U
+              ? ExposureTransitionError::kNotAuto
+              : ExposureTransitionError::kUnsupportedSeed;
+          }
+          renderer_.CompleteExposureTransition(
+            job.token, integer(status.applied_generation), rejection);
+        }
+      }
+      pending.pop_front();
+    }
+  }
 }
 
 auto PostProcessService::InspectBindings(const ViewId view_id) const

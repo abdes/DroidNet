@@ -7,6 +7,7 @@
 #pragma once
 
 #include <array>
+#include <deque>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -16,6 +17,7 @@
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Vortex/CompositionView.h>
+#include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
 #include <Oxygen/Vortex/PostProcess/Types/PostProcessConfig.h>
 #include <Oxygen/Vortex/PostProcess/Types/PostProcessFrameBindings.h>
 #include <Oxygen/Vortex/Resources/TextureBinder.h>
@@ -24,6 +26,7 @@
 namespace oxygen::graphics {
 class Framebuffer;
 class Texture;
+class GpuBufferReadback;
 } // namespace oxygen::graphics
 
 namespace oxygen::vortex {
@@ -133,6 +136,21 @@ private:
     ShaderVisibleIndex slot { kInvalidShaderVisibleIndex };
     PostProcessFrameBindings bindings {};
   };
+
+  struct PendingExposureStatus {
+    postprocess::ExposurePass::StateLease state;
+    std::shared_ptr<graphics::GpuBufferReadback> readback;
+    ExposureTransitionToken token;
+    std::uint64_t frame_sequence;
+    std::uint64_t settings_revision;
+  };
+  std::unordered_map<CompositionView::ViewStateHandle,
+    std::deque<PendingExposureStatus>>
+    pending_exposure_status_;
+  auto PollExposureStatus() -> void;
+  auto EnqueueExposureStatus(const ExposureTransitionToken& token,
+    postprocess::ExposurePass::StateLease state, const RenderContext& ctx)
+    -> void;
 
   auto EnsurePublishResources() -> bool;
   auto EnsureMaskBinder() -> resources::TextureBinder*;

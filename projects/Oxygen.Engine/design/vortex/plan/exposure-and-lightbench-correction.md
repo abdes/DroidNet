@@ -995,11 +995,28 @@ and `slice4-control-rebuilt-tests.log`. An earlier broad filter selected a stale
 PostProcessService test executable after Renderer layout changed; rebuilding
 that dependent target removed the teardown failure.
 
-The API currently queues/inspects intent; frame-boundary semantic validation,
-GPU application/acknowledgement, implicit events and source ownership are not
-yet connected. All slice-4 exit items below remain open.
+Unified GPU mode history and explicit transition application are implemented.
+Each solve reads an immutable prior record, publishes a new pooled record only
+after submission, and retains its resources through frame-slot retirement.
+Manual, ManualCamera, Auto and disabled use the same GPU record at tonemap.
+Stateless views and temporary diagnostics use transient records. Generation
+retries, pending remeter, seed/Preserve event frames, mode changes, submission
+failure and bounded asynchronous acknowledgements have controlled-input tests.
+Frame-captured requests exclude later submissions until the next frame; stale
+completions cannot consume newer intent or reused view lifetimes.
 
-- [ ] Update the same GPU state in Manual, ManualCamera, Auto and disabled modes.
+The expanded native suite passes 54/54 in Debug and Release, plus 54/54 under
+CDB with no D3D12 errors or blocking warnings. Rebuilt CPU regressions pass
+41/41 in each configuration (Debug combines 39 entries and two suite entries).
+The diagnostics-ledger fixture explicitly enables its asserted feature in both
+configurations. Inspected Auto160 and Manual EV32 captures prove distinct
+prior/output state resources, the 112-byte solve ABI and final GPU-state
+consumption; the Auto histogram mass is exactly 1,073,479,680. Evidence and
+commands are in `lifecycle/unified-state-manifest.json` under the package's
+analysis directory. Source ownership, implicit lifecycle events and complete
+frame-boundary settings integration remain open; slice 4 is not qualified.
+
+- [x] Update the same GPU state in Manual, ManualCamera, Auto and disabled modes.
 - [ ] Add public per-view transitions and request generation handling, including
   recording/submission failure, invalid metering and idempotent retries.
 - [ ] Implement the policies in section 4.1, including exact seed event-frame

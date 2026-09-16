@@ -76,6 +76,7 @@ protected:
   auto TearDown() -> void override
   {
     FlushBackend();
+    last_state_.reset();
     pass_.reset();
     if (renderer_) {
       renderer_->OnShutdown();
@@ -167,13 +168,17 @@ protected:
   }
   auto Run(const Signal& signal, scene::ExposureSettings settings = {},
     float dt = 0.0F, const Signal* mask = nullptr, float inverse_p = 1.0F,
-    bool metering_available = true) -> Snapshot
+    bool metering_available = true,
+    std::optional<ExposureTransitionToken> transition = {},
+    std::optional<float> camera_ev = {}, bool temporary_unit = false)
+    -> Snapshot
   {
     settings.key = 12.5F;
-    const auto resolved = scene::ResolveExposureSettings(settings);
+    const auto resolved = scene::ResolveExposureSettings(settings, camera_ev);
     CHECK_F(resolved.has_value());
     auto config = PostProcessConfig {};
     config.resolved_exposure = *resolved;
+    config.temporary_unit_exposure = temporary_unit;
     config.exposure_settings_revision = ++sequence_;
     config.metering_mode = settings.metering_mode;
     config.auto_exposure_min_log_luminance = settings.min_log_luminance;
@@ -195,13 +200,81 @@ protected:
         .metering_mask_srv = mask ? mask->srv : kInvalidShaderVisibleIndex,
         .one_over_pre_exposure = inverse_p,
         .metering_available = metering_available,
+        .transition = transition,
       });
     CHECK_F(result.executed);
-    return { Read<ExposureStateData>(
-               *result.exposure_buffer, ResourceStates::kShaderResource),
-      Read<std::array<std::uint32_t, 264>>(
-        *result.histogram_buffer, ResourceStates::kCommon) };
+    last_state_ = result.state;
+    auto snapshot
+      = Snapshot { .state = Read<ExposureStateData>(*result.exposure_buffer,
+                     ResourceStates::kShaderResource) };
+    if (result.histogram_buffer) {
+      snapshot.histogram = Read<std::array<std::uint32_t, 264>>(
+        *result.histogram_buffer, ResourceStates::kCommon);
+    }
+    return snapshot;
   }
+  auto ServicePixel(PostProcessService& service, const Signal& signal,
+    scene::ExposureSettings settings = {}, bool diagnostic = false,
+    float dt = 0.0F, std::function<void()> before_execute = {}) -> float
+  {
+    settings.key = 12.5F;
+    ctx_.frame_sequence = frame::SequenceNumber { ++sequence_ };
+    ctx_.delta_time = dt;
+    ctx_.render_mode = diagnostic ? RenderMode::kWireframe : RenderMode::kSolid;
+    service.OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
+    const auto& accepted = service.ResolveViewExposureSettings(
+      ctx_.current_view.view_state_handle, settings);
+    auto config = PostProcessConfig {};
+    config.resolved_exposure = accepted.resolved;
+    config.exposure_settings_revision = accepted.revision;
+    config.auto_exposure_min_ev = settings.min_ev;
+    config.auto_exposure_max_ev = settings.max_ev;
+    config.auto_exposure_speed_up = settings.speed_up;
+    config.auto_exposure_speed_down = settings.speed_down;
+    config.enable_auto_exposure
+      = settings.enabled && settings.mode == engine::ExposureMode::kAuto;
+    config.enable_bloom = false;
+    config.bloom_intensity = 0.0F;
+    config.tone_mapper = engine::ToneMapper::kNone;
+    config.gamma = 1.0F;
+    service.SetConfig(config);
+    if (before_execute)
+      before_execute();
+    auto output_desc = TextureDesc {};
+    output_desc.width = output_desc.height = 4U;
+    output_desc.format = Format::kRGBA32Float;
+    output_desc.is_render_target = output_desc.is_shader_resource = true;
+    output_desc.initial_state = ResourceStates::kCommon;
+    auto output = CreateRegisteredTexture(output_desc);
+    auto framebuffer = Backend().CreateFramebuffer(
+      FramebufferDesc {}.AddColorAttachment(output));
+    auto textures
+      = SceneTextures(Backend(), SceneTexturesConfig { .extent = { 4U, 4U } });
+    service.Execute(ctx_.current_view.view_id, ctx_, textures,
+      {
+        .scene_signal = signal.texture.get(),
+        .post_target = observer_ptr<const Framebuffer> { framebuffer.get() },
+        .scene_signal_srv = signal.srv,
+      });
+    auto readback
+      = GetReadbackManager()->CreateTextureReadback("Exposure service pixel");
+    {
+      auto recorder = AcquireRecorder("Exposure service pixel readback");
+      CHECK_F(recorder->AdoptKnownResourceState(*output));
+      const auto ticket = readback->EnqueueCopy(*recorder, *output,
+        {
+          .src_slice
+          = { .x = 1U, .y = 0U, .width = 1U, .height = 1U, .depth = 1U },
+        });
+      CHECK_F(ticket.has_value());
+    }
+    const auto mapped = readback->MapNow();
+    CHECK_F(mapped.has_value());
+    Pixel pixel {};
+    std::memcpy(pixel.data(), mapped->Data(), sizeof(pixel));
+    return pixel[0];
+  }
+
   auto ResetHistory() -> void
   {
     pass_->RemoveViewState(ctx_.current_view.view_state_handle);
@@ -210,6 +283,7 @@ protected:
   std::unique_ptr<postprocess::ExposurePass> pass_;
   RenderContext ctx_;
   std::uint64_t sequence_ { 0U };
+  postprocess::ExposurePass::StateLease last_state_;
 };
 
 NOLINT_TEST_F(ExposureGpuTest, ConservedTwoBinMassAndIndependentMeter)
@@ -912,6 +986,360 @@ NOLINT_TEST_F(ExposureGpuTest, PublicPausedFrameSessionFreezesGpuAdaptation)
     = Run(Uniform(8.0F), {}, paused->GetRenderContext().delta_time);
   EXPECT_EQ(after.state.latent_scale, before.state.latent_scale);
   EXPECT_NE(after.state.latent_target_scale, before.state.latent_target_scale);
+}
+
+NOLINT_TEST_F(ExposureGpuTest, ManualCameraAndDisabledWriteUnifiedGpuState)
+{
+  auto settings = scene::ExposureSettings {};
+  settings.mode = engine::ExposureMode::kManual;
+  settings.manual_ev = 14.0F;
+  const auto manual = Run(Signal {}, settings);
+  EXPECT_EQ(manual.state.displayed_scale, 0x1p-14F);
+  EXPECT_EQ(manual.state.latent_scale, 0x1p-14F);
+  EXPECT_EQ(manual.state.flags & 12U, 0U);
+  settings.mode = engine::ExposureMode::kManualCamera;
+  const auto camera = Run(Signal {}, settings, 0.0F, nullptr, 1.0F, true, {},
+    static_cast<float>(std::log2(15125.0)));
+  EXPECT_NEAR(camera.state.displayed_scale, 1.0 / 15125.0, 2e-5 / 15125.0);
+  EXPECT_EQ((camera.state.flags >> 10U) & 3U, 1U);
+  settings.enabled = false;
+  const auto disabled = Run(Signal {}, settings);
+  EXPECT_EQ(disabled.state.displayed_scale, 1.0F);
+  EXPECT_EQ(disabled.state.latent_scale, 1.0F);
+  EXPECT_EQ((disabled.state.flags >> 10U) & 3U, 3U);
+}
+
+NOLINT_TEST_F(
+  ExposureGpuTest, ManualToAutoPreservesGainForTransitionFrameThenAdapts)
+{
+  auto settings = scene::ExposureSettings {};
+  settings.mode = engine::ExposureMode::kManual;
+  settings.manual_ev = 4.0F;
+  const auto manual = Run(Uniform(.25F), settings);
+  settings.mode = engine::ExposureMode::kAuto;
+  const auto transition = Run(Uniform(.25F), settings, 1.0F);
+  EXPECT_EQ(transition.state.displayed_scale, manual.state.displayed_scale);
+  EXPECT_NEAR(transition.state.target_scale, .72F, 2e-5);
+  const auto next = Run(Uniform(.25F), settings, 1.0F);
+  EXPECT_NEAR(next.state.displayed_scale, .125F, 2e-5);
+}
+
+NOLINT_TEST_F(
+  ExposureGpuTest, SeedUsesRequestedEvAndDuplicateGenerationDoesNotReapply)
+{
+  const auto token
+    = renderer_->QueueExposureTransition(ctx_.current_view.view_state_handle,
+      ExposureTransitionPolicy::kSeedFromEv100, 8.0F);
+  ASSERT_TRUE(token.has_value());
+  const auto event = Run(Uniform(.25F), {}, 1.0F, nullptr, 1.0F, true, *token);
+  EXPECT_EQ(event.state.displayed_scale, 0x1p-8F);
+  EXPECT_EQ(event.state.applied_generation[0], token->generation);
+  const auto next = Run(Uniform(.25F), {}, 1.0F, nullptr, 1.0F, true, *token);
+  EXPECT_NEAR(next.state.displayed_scale, 0x1p-7F, 2e-5);
+  EXPECT_EQ(next.state.applied_generation, event.state.applied_generation);
+}
+
+NOLINT_TEST_F(
+  ExposureGpuTest, RemeterRemainsPendingWithoutInputAndAppliesAtZeroDelta)
+{
+  const auto token = renderer_->QueueExposureTransition(
+    ctx_.current_view.view_state_handle, ExposureTransitionPolicy::kRemeter);
+  ASSERT_TRUE(token.has_value());
+  const auto invalid = Run(Signal {}, {}, 0.0F, nullptr, 1.0F, false, *token);
+  EXPECT_EQ(invalid.state.applied_generation[0], 0U);
+  EXPECT_EQ(invalid.state.requested_generation[0], token->generation);
+  const auto applied
+    = Run(Uniform(.25F), {}, 0.0F, nullptr, 1.0F, true, *token);
+  EXPECT_NEAR(applied.state.displayed_scale, .72F, 2e-5);
+  EXPECT_EQ(applied.state.applied_generation[0], token->generation);
+  const auto retry = Run(Uniform(8.0F), {}, 0.0F, nullptr, 1.0F, true, *token);
+  EXPECT_EQ(retry.state.displayed_scale, applied.state.displayed_scale);
+}
+
+NOLINT_TEST_F(
+  ExposureGpuTest, RejectedManualSeedDoesNotReactivateOnLaterAutoEntry)
+{
+  const auto token
+    = renderer_->QueueExposureTransition(ctx_.current_view.view_state_handle,
+      ExposureTransitionPolicy::kSeedFromEv100, 8.0F);
+  ASSERT_TRUE(token.has_value());
+  auto settings = scene::ExposureSettings {};
+  settings.mode = engine::ExposureMode::kManual;
+  settings.manual_ev = 4.0F;
+  const auto rejected
+    = Run(Signal {}, settings, 0.0F, nullptr, 1.0F, false, *token);
+  EXPECT_EQ(rejected.state.applied_generation[0], 0U);
+  EXPECT_NE(rejected.state.flags & (1U << 12U), 0U);
+  settings.mode = engine::ExposureMode::kAuto;
+  const auto next
+    = Run(Uniform(.25F), settings, 1.0F, nullptr, 1.0F, true, *token);
+  EXPECT_EQ(next.state.displayed_scale, 0x1p-4F);
+  EXPECT_EQ(next.state.applied_generation[0], 0U);
+}
+
+NOLINT_TEST_F(
+  ExposureGpuTest, StatelessAutoSolvesEachInvocationWithoutAdaptation)
+{
+  ctx_.current_view.view_state_handle
+    = CompositionView::kInvalidViewStateHandle;
+  const auto first = Run(Uniform(.25F), {}, 0.0F);
+  const auto next = Run(Uniform(8.0F), {}, 0.0F);
+  EXPECT_NEAR(first.state.displayed_scale, .72F, 2e-5);
+  EXPECT_NEAR(next.state.displayed_scale, .0225F, 2e-5);
+}
+
+NOLINT_TEST_F(ExposureGpuTest, PriorStateLeaseRemainsImmutableAcrossLaterSolves)
+{
+  const auto first = Run(Uniform(.25F));
+  const auto retained = last_state_;
+  const auto second = Run(Uniform(8.0F), {}, 10.0F);
+  EXPECT_NE(second.state.displayed_scale, first.state.displayed_scale);
+  EXPECT_NE(retained->buffer, last_state_->buffer);
+  const auto reread = Read<ExposureStateData>(
+    *retained->buffer, ResourceStates::kShaderResource);
+  EXPECT_EQ(reread.displayed_scale, first.state.displayed_scale);
+  EXPECT_EQ(reread.frame_sequence, first.state.frame_sequence);
+}
+
+NOLINT_TEST_F(ExposureGpuTest,
+  TwoViewsInitializeIndependentlyWithoutWaitingBetweenSubmissions)
+{
+  auto settings = scene::ExposureSettings {};
+  settings.mode = engine::ExposureMode::kManual;
+  settings.key = 12.5F;
+  settings.manual_ev = 4.0F;
+  auto config = PostProcessConfig {};
+  config.resolved_exposure = *scene::ResolveExposureSettings(settings);
+  ctx_.frame_sequence = frame::SequenceNumber { 1U };
+  const auto first = pass_->Execute(ctx_, config, {});
+  ASSERT_TRUE(first.executed);
+  ctx_.current_view.view_state_handle = CompositionView::ViewStateHandle { 2U };
+  ctx_.current_view.view_id = ViewId { 2U };
+  settings.manual_ev = 8.0F;
+  config.resolved_exposure = *scene::ResolveExposureSettings(settings);
+  const auto second = pass_->Execute(ctx_, config, {});
+  ASSERT_TRUE(second.executed);
+  EXPECT_NE(first.exposure_buffer, second.exposure_buffer);
+  EXPECT_EQ(Read<ExposureStateData>(
+              *first.exposure_buffer, ResourceStates::kShaderResource)
+              .displayed_scale,
+    0x1p-4F);
+  EXPECT_EQ(Read<ExposureStateData>(
+              *second.exposure_buffer, ResourceStates::kShaderResource)
+              .displayed_scale,
+    0x1p-8F);
+  const auto duplicate = pass_->Execute(ctx_, config, {});
+  EXPECT_FALSE(duplicate.executed);
+  EXPECT_EQ(duplicate.state, second.state);
+}
+
+NOLINT_TEST_F(
+  ExposureGpuTest, DiagnosticUnitStatePreservesAutoHistoryAndPendingSeed)
+{
+  const auto before = Run(Uniform(.25F));
+  const auto persistent = last_state_;
+  const auto token
+    = renderer_->QueueExposureTransition(ctx_.current_view.view_state_handle,
+      ExposureTransitionPolicy::kSeedFromEv100, 8.0F);
+  ASSERT_TRUE(token.has_value());
+  for (unsigned i = 0U; i < 3U; ++i) {
+    const auto diagnostic
+      = Run(Uniform(8.0F), {}, 5.0F, nullptr, 1.0F, true, *token, {}, true);
+    EXPECT_EQ(diagnostic.state.displayed_scale, 1.0F);
+    EXPECT_EQ(diagnostic.state.applied_generation[0], 0U);
+    const auto retained = Read<ExposureStateData>(
+      *persistent->buffer, ResourceStates::kShaderResource);
+    EXPECT_EQ(retained.displayed_scale, before.state.displayed_scale);
+    EXPECT_EQ(retained.applied_generation, before.state.applied_generation);
+  }
+  const auto resumed
+    = Run(Uniform(8.0F), {}, 1.0F, nullptr, 1.0F, true, *token);
+  EXPECT_EQ(resumed.state.displayed_scale, 0x1p-8F);
+  const auto next = Run(Uniform(8.0F), {}, 1.0F, nullptr, 1.0F, true, *token);
+  EXPECT_NEAR(next.state.displayed_scale, 0x1p-7F, 2e-5);
+}
+
+NOLINT_TEST_F(ExposureGpuTest, DiagnosticUnitStateDoesNotOverwriteManualHistory)
+{
+  auto settings = scene::ExposureSettings {};
+  settings.mode = engine::ExposureMode::kManual;
+  settings.manual_ev = 4.0F;
+  const auto before = Run(Signal {}, settings);
+  const auto persistent = last_state_;
+  const auto diagnostic
+    = Run(Signal {}, settings, 5.0F, nullptr, 1.0F, true, {}, {}, true);
+  EXPECT_EQ(diagnostic.state.displayed_scale, 1.0F);
+  EXPECT_EQ(Read<ExposureStateData>(
+              *persistent->buffer, ResourceStates::kShaderResource)
+              .displayed_scale,
+    before.state.displayed_scale);
+  EXPECT_EQ(Run(Signal {}, settings).state.displayed_scale, 0x1p-4F);
+}
+
+NOLINT_TEST_F(
+  ExposureGpuTest, ServiceDiagnosticFramesDoNotAcknowledgePendingTransition)
+{
+  auto service = PostProcessService(*renderer_);
+  const auto signal = Uniform(.25F, 4U, 4U);
+  EXPECT_NEAR(ServicePixel(service, signal), .18F, 2e-5);
+  const auto token
+    = renderer_->QueueExposureTransition(ctx_.current_view.view_state_handle,
+      ExposureTransitionPolicy::kSeedFromEv100, 8.0F);
+  ASSERT_TRUE(token.has_value());
+  for (unsigned i = 0U; i < 3U; ++i) {
+    EXPECT_NEAR(ServicePixel(service, signal, {}, true, 3.0F), .25F, 2e-5);
+    EXPECT_FALSE(service.GetLastExecutionState().auto_exposure_requested);
+    EXPECT_FALSE(service.GetLastExecutionState().auto_exposure_executed);
+    ASSERT_NE(service.InspectBindings(ctx_.current_view.view_id), nullptr);
+    EXPECT_EQ(
+      service.InspectBindings(ctx_.current_view.view_id)->enable_auto_exposure,
+      0U);
+    EXPECT_EQ(renderer_->InspectExposureTransition(token->target)->phase,
+      ExposureTransitionPhase::kQueued);
+  }
+  EXPECT_NEAR(
+    ServicePixel(service, signal, {}, false, 1.0F), .25F / 256.0F, 2e-5);
+  EXPECT_EQ(renderer_->InspectExposureTransition(token->target)->phase,
+    ExposureTransitionPhase::kQueued);
+  service.OnFrameStart(frame::SequenceNumber { ++sequence_ }, ctx_.frame_slot);
+  const auto status = renderer_->InspectExposureTransition(token->target);
+  ASSERT_TRUE(status.has_value());
+  EXPECT_EQ(status->phase, ExposureTransitionPhase::kApplied);
+  EXPECT_EQ(status->applied_generation, token->generation);
+}
+
+NOLINT_TEST_F(
+  ExposureGpuTest, CompletedOldGenerationCannotConsumeNewerQueuedTransition)
+{
+  auto service = PostProcessService(*renderer_);
+  const auto signal = Uniform(.25F, 4U, 4U);
+  const auto first
+    = renderer_->QueueExposureTransition(ctx_.current_view.view_state_handle,
+      ExposureTransitionPolicy::kSeedFromEv100, 8.0F);
+  ASSERT_TRUE(first.has_value());
+  EXPECT_NEAR(ServicePixel(service, signal), .25F / 256.0F, 2e-5);
+  const auto second = renderer_->QueueExposureTransition(
+    first->target, ExposureTransitionPolicy::kRemeter);
+  ASSERT_TRUE(second.has_value());
+  service.OnFrameStart(frame::SequenceNumber { ++sequence_ }, ctx_.frame_slot);
+  const auto intermediate = renderer_->InspectExposureTransition(first->target);
+  ASSERT_TRUE(intermediate.has_value());
+  EXPECT_EQ(intermediate->request.generation, second->generation);
+  EXPECT_EQ(intermediate->phase, ExposureTransitionPhase::kQueued);
+  EXPECT_EQ(intermediate->applied_generation, first->generation);
+  EXPECT_NEAR(ServicePixel(service, signal), .18F, 2e-5);
+  service.OnFrameStart(frame::SequenceNumber { ++sequence_ }, ctx_.frame_slot);
+  EXPECT_EQ(
+    renderer_->InspectExposureTransition(first->target)->applied_generation,
+    second->generation);
+}
+
+NOLINT_TEST_F(
+  ExposureGpuTest, TransitionQueuedAfterFrameCaptureWaitsForNextFrame)
+{
+  auto service = PostProcessService(*renderer_);
+  const auto signal = Uniform(.25F, 4U, 4U);
+  std::optional<ExposureTransitionToken> token;
+  const auto current = ServicePixel(service, signal, {}, false, 0.0F, [&] {
+    const auto issued
+      = renderer_->QueueExposureTransition(ctx_.current_view.view_state_handle,
+        ExposureTransitionPolicy::kSeedFromEv100, 8.0F);
+    CHECK_F(issued.has_value());
+    token = *issued;
+  });
+  EXPECT_NEAR(current, .18F, 2e-5);
+  ASSERT_TRUE(token.has_value());
+  EXPECT_EQ(renderer_->InspectExposureTransition(token->target)->phase,
+    ExposureTransitionPhase::kQueued);
+  EXPECT_NEAR(ServicePixel(service, signal), .25F / 256.0F, 2e-5);
+}
+
+NOLINT_TEST_F(
+  ExposureGpuTest, RetiredViewAcknowledgementCannotApplyToReusedHandle)
+{
+  auto service = PostProcessService(*renderer_);
+  const auto signal = Uniform(.25F, 4U, 4U);
+  const auto first
+    = renderer_->QueueExposureTransition(ctx_.current_view.view_state_handle,
+      ExposureTransitionPolicy::kSeedFromEv100, 8.0F);
+  ASSERT_TRUE(first.has_value());
+  ServicePixel(service, signal);
+  service.RemoveViewState(
+    ctx_.current_view.view_id, ctx_.current_view.view_state_handle);
+  const auto next = renderer_->QueueExposureTransition(
+    first->target, ExposureTransitionPolicy::kRemeter);
+  ASSERT_TRUE(next.has_value());
+  EXPECT_NE(next->lifetime, first->lifetime);
+  service.OnFrameStart(frame::SequenceNumber { ++sequence_ }, ctx_.frame_slot);
+  const auto status = renderer_->InspectExposureTransition(next->target);
+  ASSERT_TRUE(status.has_value());
+  EXPECT_EQ(status->phase, ExposureTransitionPhase::kQueued);
+  EXPECT_EQ(status->applied_generation, 0U);
+  EXPECT_FALSE(renderer_->RetryExposureTransition(*first).has_value());
+}
+
+NOLINT_TEST_F(ExposureGpuTest, PreserveHoldsOnlyItsEventFrame)
+{
+  const auto before = Run(Uniform(.25F));
+  const auto token = renderer_->QueueExposureTransition(
+    ctx_.current_view.view_state_handle, ExposureTransitionPolicy::kPreserve);
+  ASSERT_TRUE(token.has_value());
+  const auto event = Run(Uniform(8.0F), {}, 1.0F, nullptr, 1.0F, true, *token);
+  EXPECT_EQ(event.state.displayed_scale, before.state.displayed_scale);
+  EXPECT_EQ(event.state.applied_generation[0], token->generation);
+  const auto next = Run(Uniform(8.0F), {}, 1.0F, nullptr, 1.0F, true, *token);
+  EXPECT_NEAR(
+    next.state.displayed_scale, before.state.displayed_scale / 8.0F, 2e-5F);
+}
+
+NOLINT_TEST_F(ExposureGpuTest, SeedOutsideLockedRangeOwnsOnlyItsEventFrame)
+{
+  auto settings = scene::ExposureSettings {};
+  settings.min_ev = settings.max_ev = 4.0F;
+  const auto token
+    = renderer_->QueueExposureTransition(ctx_.current_view.view_state_handle,
+      ExposureTransitionPolicy::kSeedFromEv100, 12.0F);
+  ASSERT_TRUE(token.has_value());
+  const auto event
+    = Run(Signal {}, settings, 0.0F, nullptr, 1.0F, false, *token);
+  EXPECT_EQ(event.state.displayed_scale, 0x1p-12F);
+  EXPECT_EQ(event.state.applied_generation[0], token->generation);
+  const auto next
+    = Run(Signal {}, settings, 0.0F, nullptr, 1.0F, false, *token);
+  EXPECT_EQ(next.state.displayed_scale, 0x1p-4F);
+}
+
+NOLINT_TEST_F(ExposureGpuTest, ServiceManualConsumesExactGpuGain)
+{
+  auto service = PostProcessService(*renderer_);
+  const auto signal = Uniform(4096.0F, 4U, 4U);
+  auto settings = scene::ExposureSettings {};
+  settings.mode = engine::ExposureMode::kManual;
+  for (const auto ev : { 14.0F, 16.0F, 32.0F }) {
+    settings.manual_ev = ev;
+    const auto expected = std::exp2(12.0F - ev);
+    EXPECT_NEAR(
+      ServicePixel(service, signal, settings), expected, expected * 2e-5F);
+  }
+}
+
+NOLINT_TEST_F(
+  ExposureGpuTest, CompletedUnsupportedSeedRejectsWithoutChangingGain)
+{
+  auto service = PostProcessService(*renderer_);
+  const auto signal = Uniform(.25F, 4U, 4U);
+  const auto before = ServicePixel(service, signal);
+  const auto token
+    = renderer_->QueueExposureTransition(ctx_.current_view.view_state_handle,
+      ExposureTransitionPolicy::kSeedFromEv100, 1000.0F);
+  ASSERT_TRUE(token.has_value());
+  EXPECT_EQ(ServicePixel(service, signal), before);
+  service.OnFrameStart(frame::SequenceNumber { ++sequence_ }, ctx_.frame_slot);
+  const auto status = renderer_->InspectExposureTransition(token->target);
+  ASSERT_TRUE(status.has_value());
+  EXPECT_EQ(status->phase, ExposureTransitionPhase::kRejected);
+  EXPECT_EQ(status->error, ExposureTransitionError::kUnsupportedSeed);
+  EXPECT_EQ(status->applied_generation, 0U);
 }
 
 } // namespace

@@ -43,6 +43,40 @@ struct alignas(16) ExposureStateData {
   std::array<std::uint32_t, 2> product_layout_revision {};
 };
 
+//! Non-numerical asynchronous application/range status (low/high words).
+struct alignas(16) ExposureCompletedStatus {
+  std::array<std::uint32_t, 2> view_state_identity {};
+  std::array<std::uint32_t, 2> frame_sequence {};
+  std::array<std::uint32_t, 2> settings_revision {};
+  std::array<std::uint32_t, 2> requested_generation {};
+  std::array<std::uint32_t, 2> applied_generation {};
+  std::array<std::uint32_t, 2> product_layout_revision {};
+  std::uint32_t flags { 0U };
+  std::uint32_t first_failure_product { 0U };
+  std::uint32_t first_failure_kind { 0U };
+  std::uint32_t fp16_eligible_streak { 0U };
+  std::array<std::uint32_t, 2> candidate_state_generation {};
+  std::uint32_t transition_rejection_reason { 0U };
+  std::uint32_t reserved { 0U };
+};
+static_assert(sizeof(ExposureCompletedStatus) == 80U);
+static_assert(offsetof(ExposureCompletedStatus, view_state_identity) == 0U);
+static_assert(offsetof(ExposureCompletedStatus, frame_sequence) == 8U);
+static_assert(offsetof(ExposureCompletedStatus, settings_revision) == 16U);
+static_assert(offsetof(ExposureCompletedStatus, requested_generation) == 24U);
+static_assert(offsetof(ExposureCompletedStatus, applied_generation) == 32U);
+static_assert(
+  offsetof(ExposureCompletedStatus, product_layout_revision) == 40U);
+static_assert(offsetof(ExposureCompletedStatus, flags) == 48U);
+static_assert(offsetof(ExposureCompletedStatus, first_failure_product) == 52U);
+static_assert(offsetof(ExposureCompletedStatus, first_failure_kind) == 56U);
+static_assert(offsetof(ExposureCompletedStatus, fp16_eligible_streak) == 60U);
+static_assert(
+  offsetof(ExposureCompletedStatus, candidate_state_generation) == 64U);
+static_assert(
+  offsetof(ExposureCompletedStatus, transition_rejection_reason) == 72U);
+static_assert(offsetof(ExposureCompletedStatus, reserved) == 76U);
+
 static_assert(std::is_standard_layout_v<FrameExposureData>);
 static_assert(sizeof(FrameExposureData) == 16U);
 static_assert(offsetof(FrameExposureData, pre_exposure) == 0U);

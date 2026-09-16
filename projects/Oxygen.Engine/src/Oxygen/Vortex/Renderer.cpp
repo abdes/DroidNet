@@ -678,6 +678,60 @@ auto Renderer::InspectExposureTransition(
                                               : found->second.status;
 }
 
+auto Renderer::CaptureExposureTransition(
+  CompositionView::ViewStateHandle target, frame::SequenceNumber frame)
+  -> std::optional<ExposureTransitionToken>
+{
+  if (target == CompositionView::kInvalidViewStateHandle)
+    return std::nullopt;
+  std::unique_lock lock(view_state_mutex_);
+  auto [it, inserted] = exposure_transitions_.try_emplace(target);
+  auto& entry = it->second;
+  if (inserted) {
+    const auto lifetime = AllocateExposureLifetime();
+    CHECK_F(lifetime.has_value(), "Exposure identity space exhausted");
+    entry.lifetime = *lifetime;
+  }
+  if (entry.captured_frame != frame) {
+    entry.captured_frame = frame;
+    entry.captured_request
+      = entry.status && entry.status->phase == ExposureTransitionPhase::kQueued
+      ? std::optional { entry.status->request }
+      : std::nullopt;
+  }
+  return entry.captured_request;
+}
+
+auto Renderer::CompleteExposureTransition(const ExposureTransitionToken& token,
+  std::uint64_t applied_generation,
+  std::optional<ExposureTransitionError> rejection) -> void
+{
+  std::unique_lock lock(view_state_mutex_);
+  const auto found = exposure_transitions_.find(token.target);
+  if (found == exposure_transitions_.end()
+    || found->second.lifetime != token.lifetime || !found->second.status)
+    return;
+  auto& status = *found->second.status;
+  status.applied_generation
+    = std::max(status.applied_generation, applied_generation);
+  if (status.request.generation != token.generation)
+    return;
+  if (applied_generation >= token.generation) {
+    status.phase = ExposureTransitionPhase::kApplied;
+    status.error.reset();
+  } else if (rejection) {
+    status.phase = ExposureTransitionPhase::kRejected;
+    status.error = rejection;
+  }
+}
+
+auto Renderer::RetireExposureTransitions(
+  CompositionView::ViewStateHandle target) -> void
+{
+  std::unique_lock lock(view_state_mutex_);
+  exposure_transitions_.erase(target);
+}
+
 Renderer::Renderer(std::weak_ptr<Graphics> graphics, RendererConfig config,
   const CapabilitySet capability_families)
   : gfx_weak_(std::move(graphics))

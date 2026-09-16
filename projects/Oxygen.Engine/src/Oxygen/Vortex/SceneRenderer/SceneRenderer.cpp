@@ -1436,6 +1436,7 @@ namespace {
 
     if (ctx.shader_debug_mode != ShaderDebugMode::kDisabled
       || ctx.render_mode == RenderMode::kWireframe) {
+      config.temporary_unit_exposure = true;
       config.enable_auto_exposure = false;
       config.fixed_exposure = 1.0F;
       config.tone_mapper = engine::ToneMapper::kNone;
