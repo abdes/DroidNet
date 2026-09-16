@@ -931,9 +931,19 @@ zero errors/blocking warnings and six accepted factory shutdown warnings.
 Evidence: `contract-audit/slice3-small-spot-before.log`,
 `contract-audit/slice3-spot-final-*` and `metering/edge-debug-layer.json`.
 
-Slice 3 remains in progress during the final subnormal-curve-input audit.
-The supported authoring contract permits finite curve coordinates, including
-subnormals; interpolation must not depend on hardware subnormal arithmetic.
+The subnormal-curve audit reproduced a one-stop error: at exact measured EV0,
+keys +/-1e-40 with values +/-1 yielded gain .5 rather than 1. Interpolation now
+uses coordinates scaled by 2^64, reconstructing subnormal mantissas from bits
+before scaling. The regression includes the smallest positive binary32 key.
+All 35 native cases pass in Debug and Release; the five-case curve debugger
+audit has zero errors/blocking warnings and five accepted factory warnings.
+Evidence: `contract-audit/slice3-curve-subnormal-*` and
+`metering/curve-debug-layer.json`.
+
+Slice 3 remains in progress for the renderer's pause admission checks: the
+shader accepts zero game delta, but Renderer frame/session validation still
+requires positive delta. Make public runtime/harness/offscreen entry points
+accept finite nonnegative delta and qualify propagation of an exact pause.
 Full GPU P routing/upstream range qualification remain slice 5; cooked mask
 persistence belongs to slice 6.
 

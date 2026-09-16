@@ -74,17 +74,34 @@ struct ExposureTargetData {
     float2 keys[68];
 };
 
+// All unlocked target abscissas are within the supported metered-EV domain.
+// Scaling them by 2^64 keeps every possible binary32 spacing normal, without
+// overflowing the domain endpoints. Reconstruct subnormals by bits first:
+// multiplying a subnormal float directly could flush it before scaling.
+static float ScaledMeterEv(float ev)
+{
+    const uint bits = asuint(ev);
+    if ((bits & 0x7f800000u) == 0u) {
+        const float magnitude = float(bits & 0x7fffffu) * 2.5849394142282115e-26f; // 2^-85
+        return (bits & 0x80000000u) != 0u ? -magnitude : magnitude;
+    }
+    return ev * 18446744073709551616.0f; // 2^64
+}
+
 static float ResolveLogTarget(ExposureTargetData targets, float raw_ev)
 {
-    if (raw_ev <= targets.keys[0].x) {
+    const float coordinate = ScaledMeterEv(raw_ev);
+    if (coordinate <= ScaledMeterEv(targets.keys[0].x)) {
         return targets.keys[0].y;
     }
     [loop]
     for (uint i = 1u; i < targets.key_count; ++i) {
-        if (raw_ev <= targets.keys[i].x) {
-            float2 left = targets.keys[i - 1u];
-            float2 right = targets.keys[i];
-            return lerp(left.y, right.y, (raw_ev - left.x) / (right.x - left.x));
+        const float right_ev = ScaledMeterEv(targets.keys[i].x);
+        if (coordinate <= right_ev) {
+            const float2 left = targets.keys[i - 1u];
+            const float left_ev = ScaledMeterEv(left.x);
+            return lerp(left.y, targets.keys[i].y,
+                (coordinate - left_ev) / (right_ev - left_ev));
         }
     }
     return targets.keys[targets.key_count - 1u].y;

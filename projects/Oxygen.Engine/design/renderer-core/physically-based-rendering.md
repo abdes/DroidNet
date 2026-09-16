@@ -70,7 +70,11 @@ event frame before the locked solve.
 The runtime may compile this piecewise-linear log-target function into bounded
 knots at authored curve coordinates and clamp/supported-domain boundaries. Combine all
 opposing compensation/EV terms with compensated arithmetic before exponentiation
-or float32 upload. GPU interpolation remains a function of raw metered EV.
+or float32 upload. GPU interpolation remains a function of raw metered EV. Compare/interpolate
+coordinates after scaling by 2^64; reconstruct subnormal coordinates from their
+sign and mantissa bits before that scaling. Every possible coordinate spacing
+then remains a normal float within the supported EV domain, including keys
+straddling exact EV zero. This changes no curve values or gain calibration.
 Do not first reconstruct a linear biased target or luminance bound: e.g. Auto
 compensation=min_ev=max_ev=160 at key 12.5 has valid unit gain despite `2^160`
 overflowing float32. A key of 25 must retain its additional one stop even when
