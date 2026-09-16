@@ -172,7 +172,7 @@ integer histogram mass. Retain integer and rational remainder separately.
 Integrate complete integer mass plus each boundary's fractional tail; when
 both boundaries lie inside one mass unit, return its containing bin directly.
 Never subtract float32 cumulative counts near the maximum mass: that can erase
-valid narrow intervals. Use two uint32 words and extended unsigned multiplication for the rational
+valid narrow intervals. Use two uint32 words and four 16-bit partial products for the rational
 product; do not require optional float64 or 64-bit integer shader support.
 Shader Model 6.6 does not imply
 [Int64ShaderOps support](https://learn.microsoft.com/en-us/windows/win32/api/d3d12/ns-d3d12-d3d12_feature_data_d3d12_options1).

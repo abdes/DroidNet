@@ -767,4 +767,26 @@ NOLINT_TEST_F(
   WaitForQueueIdle();
 }
 
+NOLINT_TEST_F(
+  ExposureGpuTest, NarrowCdfBoundariesRetainIntegerAndFractionalProductBits)
+{
+  // Power-of-two CDF boundaries exercise both sides of the 32-bit word shift
+  // and narrow fractional tails. Below each exact boundary binary32 spacing
+  // is half the spacing above it, giving retained mass ratio 1:2.
+  for (unsigned low_pixels : { 1U, 512U, 32768U, 131072U }) {
+    std::vector<Pixel> pixels(262144U, Pixel { .25F, .25F, .25F, 1 });
+    std::fill_n(pixels.begin(), low_pixels,
+      Pixel { 1.0F / 128.0F, 1.0F / 128.0F, 1.0F / 128.0F, 1 });
+    auto settings = scene::ExposureSettings {};
+    const float boundary = static_cast<float>(low_pixels) / 262144.0F;
+    settings.low_percentile = std::nextafter(boundary, 0.0F);
+    settings.high_percentile = std::nextafter(boundary, 1.0F);
+    const auto result = Run(MakeSignal(512U, 512U, pixels), settings);
+    EXPECT_EQ(result.histogram[51], low_pixels * 4095U);
+    EXPECT_EQ(result.histogram[102], (262144U - low_pixels) * 4095U);
+    EXPECT_NEAR(result.state.raw_metered_ev, -11.0 / 3.0 - std::log2(.18), 2e-4)
+      << low_pixels;
+  }
+}
+
 } // namespace
