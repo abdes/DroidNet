@@ -882,11 +882,20 @@ Reports and capture are under
 are in the adjacent `contract-audit/` directory. `metering/evidence-manifest.json`
 records artifact/source hashes and the qualification boundaries.
 
-Slice 3 remains in progress. Immediate acceptance work includes ordinary Auto
-curve interpolation/endpoints and raw-meter-versus-adapted input, opposite
-adaptation direction, moving-edge/small-feature sampling, and asset-backed
-mask request/residency/failure handling. Full GPU P routing and upstream range
-qualification remain slice 5; mask persistence belongs to slice 6.
+The subsequent curve/sampling acceptance increment passes 26/26 in Debug and
+Release: ordinary Auto curve interpolation, both endpoint clamps, raw-meter EV
+independent of EV clamps/adapted history, SpeedDown brightening at 30/60/120 Hz,
+moving edges and single-pixel features. The controlled 1024x1 five-stop feature
+cases bound sampling error by 5/1024 EV plus the frozen 2e-4 EV histogram
+allowance. This measures deterministic aliasing; it is not a universal error
+bound for arbitrary scenes. Logs are `contract-audit/slice3-matrix-*-tests.log`.
+A separate debugger-backed 26-case run also passes, with no errors or blocking
+warnings; `metering/matrix-debug-layer.json` records its 26 accepted factory
+shutdown warnings. Original 20-case evidence remains unchanged.
+
+Slice 3 remains in progress for asset-backed mask request/residency/failure
+handling. Full GPU P routing and upstream range qualification remain slice 5;
+mask persistence belongs to slice 6.
 
 The user approved correcting the mask identity contract on 2026-09-16: reuse
 cooked source-local texture indices, PAK remapping and runtime ResourceKey.

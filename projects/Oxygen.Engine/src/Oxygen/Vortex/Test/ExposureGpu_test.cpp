@@ -505,4 +505,100 @@ NOLINT_TEST_F(ExposureGpuTest, EightKOutputStillUsesAtMost512SquaredSamples)
   EXPECT_EQ(result.histogram[256], 262144U);
   EXPECT_EQ(result.histogram[102], 1073479680U);
 }
+NOLINT_TEST_F(ExposureGpuTest, OrdinaryAutoCurveInterpolatesAtRawMeterEv)
+{
+  auto settings = scene::ExposureSettings {};
+  settings.compensation_curve = { { 0.0F, -2.0F }, { 2.0F, 2.0F } };
+  const auto result = Run(Uniform(.25F), settings);
+  const double raw_ev = std::log2(.25 / .18);
+  // Curve contributes 2*EV-2; the denominator contributes -EV.
+  EXPECT_NEAR(std::log2(result.state.target_scale), raw_ev - 2.0, 2e-4);
+  EXPECT_NEAR(std::log2(result.state.displayed_scale), raw_ev - 2.0, 2e-4);
+}
+
+NOLINT_TEST_F(ExposureGpuTest, OrdinaryAutoCurveClampsBothAuthoredEndpoints)
+{
+  auto settings = scene::ExposureSettings {};
+  settings.compensation_curve = { { 1.0F, 2.0F }, { 2.0F, 4.0F } };
+  const auto below = Run(Uniform(.25F), settings);
+  EXPECT_NEAR(
+    std::log2(below.state.target_scale), 2.0 - std::log2(.25 / .18), 2e-4);
+  const auto above = Run(Uniform(8.0F), settings);
+  EXPECT_NEAR(
+    std::log2(above.state.target_scale), 4.0 - std::log2(8.0 / .18), 2e-4);
+}
+
+NOLINT_TEST_F(ExposureGpuTest, CurveInputIgnoresEvClampAndAdaptedHistory)
+{
+  auto settings = scene::ExposureSettings {};
+  const auto signal = Uniform(.25F);
+  const auto initial = Run(signal, settings);
+  settings.min_ev = 0.0F;
+  settings.max_ev = .1F;
+  settings.compensation_curve = { { 0.0F, -2.0F }, { 2.0F, 2.0F } };
+  settings.speed_up = settings.speed_down = 0.0F;
+  const auto result = Run(signal, settings, 1.0F);
+  const double expected = 2.0 * std::log2(.25 / .18) - 2.0 - .1;
+  EXPECT_NEAR(std::log2(result.state.target_scale), expected, 2e-4);
+  EXPECT_EQ(result.state.latent_scale, initial.state.latent_scale);
+}
+
+NOLINT_TEST_F(ExposureGpuTest, BrighteningUsesSpeedDownAcrossFrameSchedules)
+{
+  const auto signal = Uniform(.25F);
+  const double expected = std::log2(.72) + 8.0 - 1.5 * std::exp(-1.0);
+  for (const unsigned frequency : { 30U, 60U, 120U }) {
+    ResetHistory();
+    auto settings = scene::ExposureSettings {};
+    Run(signal, settings);
+    settings.compensation_ev = 8.0F;
+    settings.speed_up = 7.0F;
+    settings.speed_down = 1.0F;
+    Snapshot result {};
+    for (unsigned frame = 0; frame < 8U * frequency; ++frame) {
+      result = Run(signal, settings, 1.0F / frequency);
+    }
+    EXPECT_NEAR(std::log2(result.state.latent_scale), expected, 5e-4)
+      << frequency;
+  }
+}
+
+NOLINT_TEST_F(ExposureGpuTest, MovingEdgeHasBoundedGridSamplingError)
+{
+  auto settings = scene::ExposureSettings {};
+  settings.low_percentile = 0.0F;
+  settings.high_percentile = 1.0F;
+  // A 1024x1 content rectangle has 512 cell-centre samples at odd pixels.
+  // Moving a sharp five-stop edge by one pixel changes at most one grid cell:
+  // geometric-mean error against all pixels is bounded by 5/1024 EV.
+  for (const unsigned edge : { 1U, 2U, 3U, 255U, 256U, 257U, 511U, 512U }) {
+    std::vector<Pixel> pixels(1024U, Pixel { .25F, .25F, .25F, 1 });
+    std::fill_n(pixels.begin(), edge, Pixel { 8, 8, 8, 1 });
+    const auto result = Run(MakeSignal(1024U, 1U, pixels), settings);
+    EXPECT_EQ(result.histogram[153], (edge / 2U) * 4095U);
+    const double exact_sample_ev
+      = -2.0 + 5.0 * (edge / 2U) / 512.0 - std::log2(.18);
+    const double full_image_ev = -2.0 + 5.0 * edge / 1024.0 - std::log2(.18);
+    EXPECT_NEAR(result.state.raw_metered_ev, exact_sample_ev, 2e-4);
+    EXPECT_LE(std::abs(result.state.raw_metered_ev - full_image_ev),
+      5.0 / 1024.0 + 2e-4);
+  }
+}
+
+NOLINT_TEST_F(
+  ExposureGpuTest, SingleBrightPixelRecordsSamplingAliasingWithoutAreaAveraging)
+{
+  auto settings = scene::ExposureSettings {};
+  settings.low_percentile = 0.0F;
+  settings.high_percentile = 1.0F;
+  for (const unsigned x : { 0U, 1U, 2U, 3U, 510U, 511U, 1022U, 1023U }) {
+    std::vector<Pixel> pixels(1024U, Pixel { .25F, .25F, .25F, 1 });
+    pixels[x] = Pixel { 8, 8, 8, 1 };
+    const auto result = Run(MakeSignal(1024U, 1U, pixels), settings);
+    EXPECT_EQ(result.histogram[153], (x % 2U) * 4095U);
+    EXPECT_LE(std::abs(result.state.raw_metered_ev
+                - (-2.0 + 5.0 / 1024.0 - std::log2(.18))),
+      5.0 / 1024.0 + 2e-4);
+  }
+}
 } // namespace
