@@ -16,6 +16,7 @@
 #include <glm/geometric.hpp>
 #include <glm/vec4.hpp>
 
+#include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
@@ -309,6 +310,18 @@ VolumetricFogPass::~VolumetricFogPass()
   history_by_view_.clear();
 }
 
+auto VolumetricFogPass::RemoveViewState(const ViewId view_id) -> void
+{
+  const auto found = history_by_view_.find(view_id);
+  if (found == history_by_view_.end())
+    return;
+  if (auto gfx = renderer_.GetGraphics()) {
+    internal::RetireEnvironmentResource(*gfx, found->second.texture);
+    gfx->RegisterDeferredRelease(std::move(found->second.frame_exposure));
+  }
+  history_by_view_.erase(found);
+}
+
 auto VolumetricFogPass::OnFrameStart(
   const frame::SequenceNumber sequence, const frame::Slot slot) -> void
 {
@@ -340,15 +353,7 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
   };
   if (!state.requested
     || !renderer_.HasCapability(RendererCapabilityFamily::kEnvironmentLighting)) {
-    if (ctx.current_view.view_id != kInvalidViewId) {
-      if (auto it = history_by_view_.find(ctx.current_view.view_id);
-        it != history_by_view_.end()) {
-        if (it->second.texture != nullptr) {
-          live_textures_.push_back(it->second.texture);
-        }
-        history_by_view_.erase(it);
-      }
-    }
+    RemoveViewState(ctx.current_view.view_id);
     return state;
   }
 
@@ -394,6 +399,11 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
   if (!registry.Contains(*texture)) {
     registry.Register(texture);
   }
+  bool texture_committed = false;
+  auto retire_unpublished = ScopeGuard([&]() noexcept {
+    if (!texture_committed)
+      internal::RetireEnvironmentResource(*gfx, texture);
+  });
 
   auto& allocator = gfx->GetDescriptorAllocator();
   auto srv_handle = allocator.AllocateBindless(
@@ -454,7 +464,9 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
   const auto grid_z_params = CalculateUeGridZParams(start_distance,
     resolved_view.NearPlane(), end_distance, depth);
   const auto temporal_reprojection_enabled
-    = renderer_.GetVolumetricFogTemporalReprojectionEnabled();
+    = renderer_.GetVolumetricFogTemporalReprojectionEnabled()
+    && ctx.current_view.view_state_handle
+      != CompositionView::kInvalidViewStateHandle;
   const auto temporal_jitter_enabled
     = temporal_reprojection_enabled && renderer_.GetVolumetricFogJitterEnabled();
   const auto history_miss_supersample_count
@@ -472,7 +484,12 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
     constants.temporal_history1.frame_jitter_offsets[sample_index][2] = jitter.z;
     constants.temporal_history1.frame_jitter_offsets[sample_index][3] = jitter.w;
   }
-  auto& history_entry = history_by_view_[ctx.current_view.view_id];
+  HistoryEntry transient_history;
+  if (!temporal_reprojection_enabled)
+    RemoveViewState(ctx.current_view.view_id);
+  auto& history_entry = temporal_reprojection_enabled
+    ? history_by_view_[ctx.current_view.view_id]
+    : transient_history;
   const auto history_matches = temporal_reprojection_enabled
     && !ctx.current_view.history_discontinuity && history_entry.valid
     && history_entry.texture != nullptr && history_entry.srv.IsValid()
@@ -681,11 +698,12 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
     history_entry.grid_z_params[2] = grid_z_params.z;
     history_entry.valid = true;
   } else {
-    if (history_entry.texture != nullptr) {
-      live_textures_.push_back(history_entry.texture);
-    }
-    history_entry = HistoryEntry {};
+    live_textures_.push_back(texture);
   }
+  texture_committed = true;
+  if (ctx.current_view.frame_exposure)
+    exposure_readers_[ctx.frame_slot.get()].push_back(
+      ctx.current_view.frame_exposure);
   return state;
 }
 

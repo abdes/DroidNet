@@ -51,8 +51,18 @@ The module can produce up to two independent mip-chain pyramids per view:
 - **Furthest** — conservative minimum depth per texel neighbourhood under
   reversed-Z semantics
 
-Both pyramids are persistent per-view products and support previous-frame
-handoff through the module's double-buffered history.
+Persistent views retain both pyramids and support previous-frame handoff through
+double-buffered history. Actual view retirement erases the HZB cache entry and
+fence-retires all history/scratch textures with their descriptor registrations.
+Inactive persistent views retain history. Stateless invocations retain only
+their current outputs through consumers and GPU retirement; they do not leave
+ViewId-owned history entries. Retired/current output references are cleared at
+their publication boundary so later views cannot observe stale indices.
+
+Each dispatch uses an immutable 48-byte structured constants record from the
+existing frame-retained publisher, with matching C++/HLSL layout. Repeated
+same-frame resets do not rewind its allocation cursor. Slot reuse occurs only
+through the existing frame-retirement contract; no GPU wait is introduced.
 
 ### 1.3 Stage Position
 

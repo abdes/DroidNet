@@ -45,8 +45,9 @@ void VortexScreenHzbBuildCS(uint3 dispatch_thread_id : SV_DispatchThreadID)
         return;
     }
 
-    ConstantBuffer<ScreenHzbBuildPassConstants> pass_constants
+    StructuredBuffer<ScreenHzbBuildPassConstants> constants
         = ResourceDescriptorHeap[g_PassConstantsIndex];
+    const ScreenHzbBuildPassConstants pass_constants = constants[0];
     if (dispatch_thread_id.x >= pass_constants.destination_width
         || dispatch_thread_id.y >= pass_constants.destination_height)
     {

@@ -253,6 +253,7 @@ public:
 
   OXGN_VRTX_API auto OnFrameStart(
     frame::SequenceNumber sequence, frame::Slot slot) -> void;
+  OXGN_VRTX_API auto RemoveViewState(ViewId view_id) -> void;
   OXGN_VRTX_API auto RefreshPersistentProbeState(
     bool environment_source_changed) -> void;
   [[nodiscard]] OXGN_VRTX_API auto BuildBindings(

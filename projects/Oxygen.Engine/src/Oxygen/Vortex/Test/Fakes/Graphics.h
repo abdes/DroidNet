@@ -62,7 +62,7 @@ struct BufferCommandLog {
   };
   std::vector<CopyEvent> copies;
 };
-struct BufferSrvCreationLog {
+struct BufferViewCreationLog {
   struct Event {
     ShaderVisibleIndex slot;
     const std::byte* data;
@@ -868,7 +868,7 @@ public:
     public:
       FakeBuffer(const std::string_view name, const uint64_t size,
         const BufferUsage usage, const BufferMemory memory,
-        const bool map_should_fail, BufferSrvCreationLog* srv_log)
+        const bool map_should_fail, BufferViewCreationLog* srv_log)
         : Buffer(name)
         , map_should_fail_(map_should_fail)
         , srv_log_(srv_log)
@@ -934,10 +934,18 @@ public:
       }
 
       [[nodiscard]] auto CreateConstantBufferView(
-        const graphics::DescriptorAllocationHandle& /*view_handle*/,
-        const graphics::BufferRange& /*range*/) const
+        const graphics::DescriptorAllocationHandle& view_handle,
+        const graphics::BufferRange& range) const
         -> graphics::NativeView override
       {
+        if (srv_log_ && mapped_ && range.offset_bytes <= storage_.size()
+          && range.size_bytes <= storage_.size() - range.offset_bytes) {
+          srv_log_->events.push_back({ .slot
+            = view_handle.GetAllocator()->GetShaderVisibleIndex(view_handle),
+            .data = storage_.data() + range.offset_bytes,
+            .size = static_cast<std::size_t>(range.size_bytes),
+            .stride = 0U });
+        }
         return { this, Buffer::ClassTypeId() };
       }
       [[nodiscard]] auto CreateShaderResourceView(
@@ -969,11 +977,11 @@ public:
       BufferDesc desc_ {};
       bool mapped_ { false };
       bool map_should_fail_ { false };
-      BufferSrvCreationLog* srv_log_ { nullptr };
+      BufferViewCreationLog* srv_log_ { nullptr };
       std::vector<std::byte> storage_;
     };
     return std::make_shared<FakeBuffer>("Staging", desc.size_bytes, desc.usage,
-      desc.memory, fail_map_, &buffer_srv_log_);
+      desc.memory, fail_map_, &buffer_view_log_);
   }
   auto CreateCommandQueues(const graphics::QueuesStrategy& queue_strategy)
     -> void override
@@ -1054,7 +1062,7 @@ public:
   }
 
   BufferCommandLog buffer_log_ {};
-  mutable BufferSrvCreationLog buffer_srv_log_ {};
+  mutable BufferViewCreationLog buffer_view_log_ {};
   TextureCommandLog texture_log_ {};
   GraphicsPipelineCommandLog graphics_pipeline_log_ {};
   ComputePipelineCommandLog compute_pipeline_log_ {};
