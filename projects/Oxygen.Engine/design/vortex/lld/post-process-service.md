@@ -740,9 +740,13 @@ choose P=1, so these examples use a realizable candidate scale:
   source permits scattering strength `1e6`; its contribution near `0.01` is then
   lost. Checking the independently narrowed final FP32 scene also misses the
   missing upstream contribution.
-- Transmittance rounding moves a composed sample across the `2^-12` dark-bin
-  boundary, although the independent final-scene rounding remains below that
-  boundary and within the local EV tolerance.
+- Two independently rounded attenuation factors (AP then fog) move the composed
+  half result to `0.00024437904357910156`, strictly above the `2^-12` cutoff
+  (`0.000244140625`). Reference and independently narrowed scene remain dark.
+  Oxygen's predicate is **luminance <= cutoff**: equality is dark. A single-factor
+  boundary control lands exactly at the cutoff and remains dark; the checker
+  rejects it as a counterexample. Both local
+  transmittance checks and the independent scene image/EV checks still pass.
 - With the production fog history weight near `0.9`, a 64-frame sequence keeps
   every local store within its quarter-share allowance but accumulates about
   `0.004875` error near unit radiance, exceeding the approximately `0.002500`

@@ -122,23 +122,53 @@ def amplification_counterexample():
             "local_checks_pass": True, "composed_image_pass": False}
 
 
+def is_dark(luminance, cutoff):
+    # Independent implementation of the contract: equality belongs to dark.
+    return luminance <= cutoff
+
+
 def classification_counterexample():
     cutoff = F(1, 4096)
     transmittance = F(1, 2) + F(1, 4096) + F(1, 2**22)
-    background = cutoff * (1 - F(35, 100000)) / transmittance
-    reference = background * transmittance
+    require(is_dark(cutoff, cutoff), "equality must remain dark")
+    require(not is_dark(half(cutoff + F(1, 2**22)), cutoff), "next half value must be non-dark")
+
+    # Negative control: the original one-factor construction ends exactly at
+    # the cutoff, so it must never be reported as a classification change.
+    old_background = cutoff * (1 - F(35, 100000)) / transmittance
+    old_reference = old_background * transmittance
+    old_composed = half(old_background * half(transmittance))
+    require(old_composed == cutoff, "one-factor boundary control")
+    require(all(is_dark(x, cutoff) for x in
+                (old_reference, half(old_reference), old_composed)), "one-factor case is entirely dark")
+
+    # Two independently stored attenuation factors correspond to AP followed
+    # by fog. Their accumulated upward error crosses strictly above the cutoff.
+    background = cutoff * (1 - F(35, 100000)) / (transmittance * transmittance)
+    reference = background * transmittance * transmittance
     independent = half(reference)
-    actual = half(background * half(transmittance))
-    require(abs(half(transmittance) - transmittance) <= image_budget(transmittance, F(1, 4)), "local transmittance check")
-    require(reference < cutoff and independent < cutoff <= actual, "dark classification must flip only after composition")
+    actual = half(background * half(transmittance) * half(transmittance))
+    for label in ("AP", "fog"):
+        require(abs(half(transmittance) - transmittance) <= image_budget(transmittance, F(1, 4)),
+                f"local {label} transmittance check")
+    require(abs(independent - reference) <= image_budget(reference, F(1, 4)), "independent scene image check")
+    require(is_dark(reference, cutoff) == is_dark(independent, cutoff), "independent scene must preserve classification")
+    require(is_dark(reference, cutoff) != is_dark(actual, cutoff), "composition must change classification")
     local_ev = abs(math.log2(float(independent / reference)))
     require(local_ev < 1 / 1024, "independent scene meter check should pass")
     trans_error = Bound(absolute=abs(half(transmittance) - transmittance))
-    error = Bound().attenuate(trans_error, background).error(reference)
+    composed_bound = Bound().attenuate(trans_error, background).attenuate(
+        trans_error, background * transmittance)
+    error = composed_bound.error(reference)
     lo, hi = half(max(F(0), reference - error)), half(reference + error)
-    require(lo < cutoff <= hi, "propagated interval must expose ambiguous classification")
-    return {"dark_cutoff": float(cutoff), "reference": float(reference),
+    require(lo <= cutoff < hi, "interval must include dark and strictly non-dark values")
+    return {"predicate": "luminance <= dark_cutoff", "attenuation_factors": 2,
+            "dark_cutoff": float(cutoff), "reference": float(reference),
             "independent_scene_half": float(independent), "composed_half": float(actual),
+            "dark_classifications": {"reference": is_dark(reference, cutoff),
+                                     "independent": is_dark(independent, cutoff),
+                                     "composed": is_dark(actual, cutoff)},
+            "one_factor_negative_control_all_dark": True,
             "independent_meter_error_ev": local_ev, "local_checks_pass": True,
             "composed_classification_pass": False}
 
