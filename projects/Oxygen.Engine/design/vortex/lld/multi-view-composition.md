@@ -374,6 +374,13 @@ source was removed or ownership became invalid. Frame-captured
 settings distinguish the logical view ID and state handle, since an offscreen
 intent ID can numerically equal a registered source's published ID.
 
+Validated offscreen execution returns a success boolean for both synchronous
+entry points and the coroutine entry point. A failed pre-scene exposure resolve
+skips dependent HDR rendering and output publication, leaves the caller's
+existing output untouched, and does not consume a queued transition. The view
+family likewise skips the failed view and consumers of its required auxiliary
+products; the next eligible invocation retries normally.
+
 Format suitability remains per view even with shared exposure. One source's
 valid gain cannot authorize a consumer's FP32-to-FP16 switch. Pin numerical P
 with every HDR product and history. Auxiliary/offscreen consumers must know

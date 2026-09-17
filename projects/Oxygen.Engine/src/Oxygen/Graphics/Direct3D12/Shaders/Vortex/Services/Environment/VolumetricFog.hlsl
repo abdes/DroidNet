@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include "Vortex/Contracts/View/FrameExposureHelpers.hlsli"
 #include "Core/Bindless/Generated.BindlessAbi.hlsl"
 
 #include "Vortex/Contracts/View/ViewConstants.hlsli"
@@ -140,6 +141,8 @@ struct VolumetricFogPassConstants
     float4 light0_illuminance_rgb;
     float4 light1_direction_enabled;
     float4 light1_illuminance_rgb;
+    uint previous_frame_exposure_srv;
+    uint3 exposure_padding;
 };
 
 struct VolumetricLocalFogMedia
@@ -260,7 +263,7 @@ static bool TrySampleTemporalHistory(
     if (pass.temporal_history0.enabled == 0u
         || pass.temporal_history0.previous_integrated_light_scattering_srv
             == K_INVALID_BINDLESS_INDEX
-        || !BX_IN_GLOBAL_SRV(
+        || !BX_IN_TEXTURES(
             pass.temporal_history0.previous_integrated_light_scattering_srv))
     {
         return false;
@@ -506,7 +509,7 @@ static float4 EvaluateVolumetricFogSample(
     const float3 integrated_luminance =
         (scattering + local_fog_media.emissive) * opacity;
 
-    return float4(max(integrated_luminance, 0.0f.xxx), saturate(transmittance));
+    return float4(max(integrated_luminance, 0.0f.xxx) * GetPreExposure(), saturate(transmittance));
 }
 
 [shader("compute")]
@@ -539,6 +542,12 @@ void VortexVolumetricFogCS(uint3 dispatch_id : SV_DispatchThreadID)
     float4 history_value = output_value;
     if (TrySampleTemporalHistory(pass, world_position, history_value))
     {
+        float inverse_previous_p = 1.0f;
+        if (pass.previous_frame_exposure_srv != K_INVALID_BINDLESS_INDEX) {
+            StructuredBuffer<FrameExposureData> previous_frame = ResourceDescriptorHeap[pass.previous_frame_exposure_srv];
+            inverse_previous_p = previous_frame[0].one_over_pre_exposure;
+        }
+        history_value.rgb *= GetPreExposure() * inverse_previous_p;
         output_value = lerp(
             output_value,
             max(history_value, 0.0f.xxxx),

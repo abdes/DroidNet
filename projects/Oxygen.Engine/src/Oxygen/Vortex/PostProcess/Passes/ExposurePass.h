@@ -43,11 +43,7 @@ namespace internal {
 
 namespace postprocess {
 
-class ExposurePass {
-public:
-  //! Frame-retained resources; the pass owns their registry/descriptor
-  //! lifetime.
-  struct StateResources {
+  struct ExposureStateResources {
     std::uint64_t owner_lifetime { 0U };
     CompositionView::ViewStateHandle borrowed_from {
       CompositionView::kInvalidViewStateHandle
@@ -61,16 +57,19 @@ public:
     ShaderVisibleIndex uav_index { kInvalidShaderVisibleIndex };
     ShaderVisibleIndex histogram_uav_index { kInvalidShaderVisibleIndex };
   };
-  using StateLease = std::shared_ptr<const StateResources>;
-
-  struct FrameResources {
+  struct FrameExposureResources {
     std::shared_ptr<graphics::Buffer> buffer;
     ShaderVisibleIndex srv_index { kInvalidShaderVisibleIndex };
     ShaderVisibleIndex uav_index { kInvalidShaderVisibleIndex };
-    std::shared_ptr<StateResources> current_state;
-    StateLease selected_history;
-    StateLease qualified_candidate;
+    std::shared_ptr<ExposureStateResources> current_state;
+    std::shared_ptr<const ExposureStateResources> selected_history;
+    std::shared_ptr<const ExposureStateResources> qualified_candidate;
   };
+class ExposurePass {
+public:
+  using StateResources = ExposureStateResources;
+  using StateLease = std::shared_ptr<const StateResources>;
+  using FrameResources = FrameExposureResources;
   using FrameLease = std::shared_ptr<const FrameResources>;
 
   struct Source {
@@ -164,8 +163,9 @@ private:
   auto EnsurePipelines() -> void;
   auto PreparePublishers(RenderContext& ctx) -> void;
   auto AcquireFrame() -> std::shared_ptr<FrameResources>;
-  auto RestoreFrameFallback(RenderContext& ctx, const PostProcessConfig& config,
-    const FrameResources& frame, StateLease fallback) -> bool;
+  auto RestoreFrameFallback(RenderContext& ctx,
+    const PostProcessConfig& config, const FrameResources& frame,
+    StateLease fallback) -> bool;
   auto RecordState(RenderContext& ctx, const PostProcessConfig& config,
     const Inputs& inputs, StateLease previous, StateLease borrowed,
     bool bootstrap = false, bool source_loss = false,

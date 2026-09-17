@@ -4,8 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Vortex/SceneRenderer/SceneRenderer.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
+#include <Oxygen/Vortex/RenderContext.h>
+#include <Oxygen/Vortex/SceneRenderer/SceneRenderer.h>
 
 namespace oxygen::vortex {
 
@@ -55,7 +56,7 @@ auto CopyTextureIntoArtifact(graphics::CommandRecorder& recorder,
 // Stage 21 owner: ResolveSceneColor is the only retained seam allowed to
 // snapshot the ResolvedSceneColor/ResolvedSceneDepth artifacts for Stage 22
 // consumption and the downstream Stage 23 handoff.
-void SceneRenderer::ResolveSceneColor(RenderContext& /*ctx*/)
+void SceneRenderer::ResolveSceneColor(RenderContext& ctx)
 {
   auto& scene_textures = ActiveSceneTextures();
   const auto scene_color_ready
@@ -68,6 +69,7 @@ void SceneRenderer::ResolveSceneColor(RenderContext& /*ctx*/)
           "ResolvedSceneColor", scene_textures.GetSceneColor())
       : nullptr,
     .valid = scene_color_ready,
+    .exposure = scene_color_ready ? ctx.current_view.frame_exposure : nullptr,
   };
 
   const auto scene_depth_ready

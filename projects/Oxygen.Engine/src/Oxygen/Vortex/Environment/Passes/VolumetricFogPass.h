@@ -6,8 +6,10 @@
 
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <unordered_map>
 #include <vector>
 
@@ -21,6 +23,12 @@ class Texture;
 }
 
 namespace oxygen::vortex {
+namespace testing {
+  struct RendererPublicationProbe;
+}
+namespace postprocess {
+  struct FrameExposureResources;
+}
 
 struct RenderContext;
 class Renderer;
@@ -83,6 +91,7 @@ namespace environment {
       = nullptr) -> RecordState;
 
   private:
+    friend struct ::oxygen::vortex::testing::RendererPublicationProbe;
     struct alignas(16) OutputHeader {
       std::uint32_t output_texture_uav { 0U };
       std::uint32_t output_width { 0U };
@@ -193,6 +202,10 @@ namespace environment {
       float light0_illuminance_rgb[4] { 0.0F, 0.0F, 0.0F, 0.0F };
       float light1_direction_enabled[4] { 0.0F, 0.0F, 1.0F, 0.0F };
       float light1_illuminance_rgb[4] { 0.0F, 0.0F, 0.0F, 0.0F };
+      std::uint32_t previous_frame_exposure_srv {
+        kInvalidShaderVisibleIndex.get()
+      };
+      std::uint32_t exposure_padding[3] {};
     };
 
     Renderer& renderer_;
@@ -201,6 +214,7 @@ namespace environment {
 
     struct HistoryEntry {
       std::shared_ptr<graphics::Texture> texture {};
+      std::shared_ptr<const postprocess::FrameExposureResources> frame_exposure;
       ShaderVisibleIndex srv { kInvalidShaderVisibleIndex };
       std::uint32_t width { 0U };
       std::uint32_t height { 0U };
@@ -211,6 +225,11 @@ namespace environment {
       bool valid { false };
     };
     std::unordered_map<ViewId, HistoryEntry> history_by_view_ {};
+    std::optional<frame::SequenceNumber> exposure_frame_;
+    std::array<
+      std::vector<std::shared_ptr<const postprocess::FrameExposureResources>>,
+      frame::kFramesInFlight.get()>
+      exposure_readers_;
   };
 
 } // namespace environment

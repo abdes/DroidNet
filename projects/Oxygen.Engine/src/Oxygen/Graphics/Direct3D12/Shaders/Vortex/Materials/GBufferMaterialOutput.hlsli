@@ -7,6 +7,7 @@
 #ifndef OXYGEN_D3D12_SHADERS_VORTEX_MATERIALS_GBUFFERMATERIALOUTPUT_HLSLI
 #define OXYGEN_D3D12_SHADERS_VORTEX_MATERIALS_GBUFFERMATERIALOUTPUT_HLSLI
 
+#include "Vortex/Contracts/View/FrameExposureHelpers.hlsli"
 #include "Vortex/Shared/MaskedAlphaTest.hlsli"
 #include "Vortex/Materials/ForwardMaterialEval.hlsli"
 
@@ -45,7 +46,7 @@ static inline GBufferOutput PackGBufferOutput(
     }
 #endif
     // Surviving opaque/masked fragments have full foreground coverage.
-    output.emissive_scene_color = float4(surface.emissive, 1.0f);
+    output.emissive_scene_color = float4(surface.emissive * GetPreExposure(), 1.0f);
 #if defined(HAS_VELOCITY)
     output.velocity = float2(0.0f, 0.0f);
 #endif

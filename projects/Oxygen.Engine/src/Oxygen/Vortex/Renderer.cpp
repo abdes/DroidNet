@@ -53,6 +53,7 @@
 #include <Oxygen/Vortex/Internal/RenderContextPool.h>
 #include <Oxygen/Vortex/Internal/RigidTransformHistoryCache.h>
 #include <Oxygen/Vortex/Internal/ViewConstantsManager.h>
+#include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererTag.h>
 #include <Oxygen/Vortex/SceneCameraViewResolver.h>
@@ -178,21 +179,6 @@ namespace {
       return glm::uvec2 { texture_desc.width, texture_desc.height };
     }
     return std::nullopt;
-  }
-
-  auto BuildFrameExposureData(const RenderContext& render_context)
-    -> FrameExposureData
-  {
-    auto data = FrameExposureData {};
-    if (render_context.current_view.prepared_frame != nullptr) {
-      data.pre_exposure = std::max(
-        render_context.current_view.prepared_frame->exposure, 1.0e-6F);
-    }
-    if (render_context.render_mode == RenderMode::kWireframe) {
-      data.pre_exposure = 1.0F;
-    }
-    data.one_over_pre_exposure = 1.0F / data.pre_exposure;
-    return data;
   }
 
   auto ResolveViewOutputTexture(const engine::FrameContext& context,
@@ -1442,14 +1428,14 @@ auto Renderer::RefreshCurrentViewFrameBindings(
 }
 
 auto Renderer::PublishCurrentViewPreSceneFrameBindings(
-  RenderContext& render_context, SceneRenderer& scene_renderer) -> void
+  RenderContext& render_context, SceneRenderer& scene_renderer) -> bool
 {
   if (render_context.current_view.view_id == kInvalidViewId) {
-    return;
+    return false;
   }
   auto gfx = GetGraphics();
   if (gfx == nullptr) {
-    return;
+    return false;
   }
 
   BeginPublicationFrame(
@@ -1507,10 +1493,12 @@ auto Renderer::PublishCurrentViewPreSceneFrameBindings(
       = publication_state.draw_frame_bindings_publisher->Publish(
         render_context.current_view.view_id, draw_bindings);
   }
-  view_bindings.frame_exposure_slot
-    = publication_state.frame_exposure_publisher->Publish(
-      render_context.current_view.view_id,
-      BuildFrameExposureData(render_context));
+  if (!scene_renderer.PrepareExposureDomain(render_context))
+    return false;
+  view_bindings.frame_exposure_slot = render_context.current_view.frame_exposure
+    ? render_context.current_view.frame_exposure->srv_index
+    : publication_state.frame_exposure_publisher->Publish(
+        render_context.current_view.view_id, FrameExposureData {});
   view_bindings.history_frame_slot
     = PublishCurrentViewHistoryFrameBindings(render_context, publication_state);
 
@@ -1528,6 +1516,7 @@ auto Renderer::PublishCurrentViewPreSceneFrameBindings(
     view_bindings, view_frame_bindings_slot);
 
   WriteCurrentViewConstants(render_context, *gfx, view_frame_bindings_slot);
+  return true;
 }
 
 auto Renderer::PublishCurrentViewPostSceneFrameBindings(
@@ -3792,7 +3781,7 @@ Renderer::ValidatedOffscreenSceneSession::ValidatedOffscreenSceneSession(
 {
 }
 
-auto Renderer::ValidatedOffscreenSceneSession::ExecuteNow() -> void
+auto Renderer::ValidatedOffscreenSceneSession::ExecuteNow() -> bool
 {
   CHECK_NOTNULL_F(
     renderer_.get(), "ValidatedOffscreenSceneSession requires a live renderer");
@@ -3817,7 +3806,7 @@ auto Renderer::ValidatedOffscreenSceneSession::ExecuteNow() -> void
   if (!exposure_source) {
     LOG_F(ERROR,
       "Offscreen exposure source is no longer available; execution rejected");
-    return;
+    return false;
   }
 
   auto frame_session = frame_session_;
@@ -3873,12 +3862,14 @@ auto Renderer::ValidatedOffscreenSceneSession::ExecuteNow() -> void
     .primary_target = output_target_.framebuffer,
   });
 
-  scene_renderer.OnRender(render_context);
+  if (!scene_renderer.OnRender(render_context))
+    return false;
   FinalizeOffscreenOutputProduct(*renderer_, *output_target_.framebuffer);
+  return true;
 }
 
 auto Renderer::ValidatedOffscreenSceneSession::ExecuteInsideFrame(
-  engine::FrameContext& frame_context) -> void
+  engine::FrameContext& frame_context) -> bool
 {
   CHECK_NOTNULL_F(
     renderer_.get(), "ValidatedOffscreenSceneSession requires a live renderer");
@@ -3903,7 +3894,7 @@ auto Renderer::ValidatedOffscreenSceneSession::ExecuteInsideFrame(
   if (!exposure_source) {
     LOG_F(ERROR,
       "Offscreen exposure source is no longer available; execution rejected");
-    return;
+    return false;
   }
 
   auto& scene = *scene_source_.scene;
@@ -3954,18 +3945,19 @@ auto Renderer::ValidatedOffscreenSceneSession::ExecuteInsideFrame(
     .primary_target = output_target_.framebuffer,
   });
 
-  scene_renderer.OnRender(render_context);
+  if (!scene_renderer.OnRender(render_context))
+    return false;
   FinalizeOffscreenOutputProduct(*renderer_, *output_target_.framebuffer);
 
   scene_renderer.OnFrameStart(frame_context);
   renderer_->scene_renderer_started_frame_
     = frame_context.GetFrameSequenceNumber();
+  return true;
 }
 
-auto Renderer::ValidatedOffscreenSceneSession::Execute() -> co::Co<void>
+auto Renderer::ValidatedOffscreenSceneSession::Execute() -> co::Co<bool>
 {
-  ExecuteNow();
-  co_return;
+  co_return ExecuteNow();
 }
 
 Renderer::OffscreenSceneFacade::OffscreenSceneFacade(

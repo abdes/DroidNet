@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include "Vortex/Contracts/View/FrameExposureHelpers.hlsli"
 #include "Core/Bindless/Generated.BindlessAbi.hlsl"
 #include "Vortex/Contracts/View/ViewConstants.hlsli"
 
@@ -124,5 +125,5 @@ float4 VortexLocalFogVolumeComposePS(LocalFogTileVertexOutput input) : SV_Target
     const float4 fog = GetLocalFogVolumeContribution(
         instances, tile_data_texture, pass, tile_coord, linear_sampler,
         camera_position, translated_world_position);
-    return float4(fog.rgb, 1.0f - fog.a);
+    return float4(fog.rgb * GetPreExposure(), 1.0f - fog.a);
 }

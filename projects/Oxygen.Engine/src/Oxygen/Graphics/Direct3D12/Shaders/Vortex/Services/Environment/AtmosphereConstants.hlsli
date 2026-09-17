@@ -37,12 +37,6 @@ static const float AP_KM_PER_SLICE_INV = 1.0f / AP_KM_PER_SLICE;
 // Safety Limits
 // =============================================================================
 
-//! Maximum value for FP16 textures (~65504, use 65000 for safety margin).
-static const float kFP16SafeMax = 65000.0;
-
-//! Maximum sun radiance to prevent FP16 overflow in sky capture.
-static const float kSunRadianceSafeMax = 64000.0;
-
 //! "Infinite" optical depth for sun blocked by planet.
 static const float kInfiniteOpticalDepth = 1e6;
 

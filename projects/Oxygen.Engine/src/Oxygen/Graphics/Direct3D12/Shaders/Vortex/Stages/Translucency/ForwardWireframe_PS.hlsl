@@ -47,7 +47,7 @@ struct VSOutput {
 
 struct WireframePassConstants {
   float4 wire_color;
-  float apply_exposure_compensation;
+  float write_pre_exposed;
   float3 padding;
 };
 
@@ -61,18 +61,18 @@ struct WireframePassConstants {
 #endif // ALPHA_TEST
 
   float4 color = float4(1.0f, 1.0f, 1.0f, 1.0f);
-  float apply_exposure_compensation = 1.0f;
+  float write_pre_exposed = 1.0f;
   if (BX_IsValidSlot(g_PassConstantsIndex)) {
     ConstantBuffer<WireframePassConstants> pc
       = ResourceDescriptorHeap[g_PassConstantsIndex];
     color = pc.wire_color;
-    apply_exposure_compensation = pc.apply_exposure_compensation;
+    write_pre_exposed = pc.write_pre_exposed;
   }
 
   // PHYSICAL BYPASS: Divide by exposure when requested.
   // This keeps unlit debug lines stable in HDR paths.
-  if (apply_exposure_compensation > 0.5f) {
-    color.rgb /= max(GetPreExposure(), 1e-6f);
+  if (write_pre_exposed > 0.5f) {
+    color.rgb *= GetPreExposure();
   }
 
   return color;

@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include "Vortex/Contracts/View/FrameExposureHelpers.hlsli"
 #include "Vortex/Services/Lighting/DeferredLightingCommon.hlsli"
 #include "Vortex/Services/Shadows/DirectionalShadowCommon.hlsli"
 
@@ -74,5 +75,5 @@ float4 DeferredLightPointPS(DeferredLightVolumeVSOutput input) : SV_Target0
         attenuation * shadow_visibility,
         camera_position,
         bindings);
-    return float4(lighting, 0.0f);
+    return float4(lighting * GetPreExposure(), 0.0f);
 }

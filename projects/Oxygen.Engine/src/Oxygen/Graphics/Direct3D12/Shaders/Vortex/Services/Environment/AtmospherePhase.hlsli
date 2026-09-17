@@ -63,7 +63,7 @@ float HenyeyGreensteinPhase(float cos_theta, float g)
 //!
 //! @param cos_theta Cosine of scattering angle.
 //! @param g Asymmetry parameter [-1, 1].
-//! @return Phase function value (sr^-1), clamped for FP16 safety.
+//! @return Phase function value (sr^-1).
 float CornetteShanksMiePhase(float cos_theta, float g)
 {
     // Normalization factor: k = (3 / 8π) * (1 - g²) / (2 + g²)
@@ -73,8 +73,7 @@ float CornetteShanksMiePhase(float cos_theta, float g)
     // Cornette-Shanks: k * (1 + cos²θ) / (1 + g² - 2g*cosθ)^1.5
     float result = k * (1.0 + cos_theta * cos_theta) / pow(denom, 1.5);
 
-    // Clamp to prevent FP16 overflow in LUT storage
-    return min(result, kFP16SafeMax);
+    return result;
 }
 
 #endif // OXYGEN_GRAPHICS_SHADERS_ATMOSPHERE_PHASE_HLSLI

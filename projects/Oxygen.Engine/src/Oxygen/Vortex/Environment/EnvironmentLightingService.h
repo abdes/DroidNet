@@ -27,6 +27,9 @@ class Scene;
 }
 
 namespace oxygen::vortex {
+namespace testing {
+  struct RendererPublicationProbe;
+}
 
 struct RenderContext;
 class Renderer;
@@ -313,6 +316,7 @@ public:
     -> const environment::internal::ResolvedAtmosphereLightState&;
 
 private:
+  friend struct testing::RendererPublicationProbe;
   struct PublishedView {
     ShaderVisibleIndex slot { kInvalidShaderVisibleIndex };
     EnvironmentFrameBindings bindings {};

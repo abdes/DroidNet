@@ -13,15 +13,22 @@
 #include <span>
 
 #include <Oxygen/Config/RendererConfig.h>
+#include <Oxygen/Console/Console.h>
+#include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
-#include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/FrameCaptureController.h>
+#include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Direct3D12/Test/Fixtures/ReadbackTestFixture.h>
+#include <Oxygen/OxCo/Run.h>
+#include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Environment/Background.h>
+#include <Oxygen/Scene/Environment/Fog.h>
+#include <Oxygen/Scene/Environment/PostProcessVolume.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
+#include <Oxygen/Scene/Environment/SkySphere.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
 #include <Oxygen/Vortex/PostProcess/PostProcessService.h>
@@ -33,6 +40,13 @@
 #include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
 #include <Oxygen/Vortex/Types/ExposureStateData.h>
 #include <Oxygen/Vortex/Upload/UploadCoordinator.h>
+#include <Oxygen/Vortex/ViewExtension.h>
+
+namespace oxygen::engine::internal {
+struct EngineTagFactory {
+  static auto Get() noexcept -> EngineTag { return EngineTag {}; }
+};
+}
 
 namespace oxygen::vortex::internal {
 auto RendererTagFactory::Get() noexcept -> RendererTag
@@ -50,6 +64,7 @@ using Pixel = std::array<float, 4>;
 class ExposureFailureGraphics final : public graphics::d3d12::Graphics {
 public:
   using graphics::d3d12::Graphics::Graphics;
+  std::vector<std::string> recorder_names;
   bool fail_next_exposure_recorder { false };
   bool fail_next_frame_recorder { false };
   bool fail_next_fallback_recorder { false };
@@ -58,6 +73,7 @@ public:
     -> std::unique_ptr<graphics::CommandRecorder,
       std::function<void(graphics::CommandRecorder*)>> override
   {
+    recorder_names.emplace_back(name);
     if (fail_next_fallback_recorder && name == "Vortex Exposure Fallback") {
       fail_next_fallback_recorder = false;
       return { nullptr, [](graphics::CommandRecorder*) { } };
@@ -78,6 +94,7 @@ public:
 class ExposureGpuTest : public graphics::d3d12::testing::ReadbackTestFixture {
 protected:
   auto CheckOffscreenSharing(bool inside_frame) -> void;
+  auto CheckSceneExposureRetry(bool inside_frame) -> void;
   auto CreateBackend(const SerializedBackendConfig& config,
     const SerializedPathFinderConfig& paths)
     -> std::shared_ptr<graphics::d3d12::Graphics> override
@@ -3463,6 +3480,439 @@ NOLINT_TEST_F(
   Pixel actual {};
   std::memcpy(actual.data(), mapped->Data(), sizeof(actual));
   EXPECT_EQ(actual, expected);
+  FlushBackend();
+}
+
+auto ExposureGpuTest::CheckSceneExposureRetry(const bool inside_frame) -> void
+{
+  pass_.reset();
+  renderer_->OnShutdown();
+  auto config = RendererConfig {};
+  config.upload_queue_key = QueueKeyFor().get();
+  renderer_ = std::make_unique<Renderer>(GetGraphicsShared(), config,
+    RendererCapabilityFamily::kScenePreparation
+      | RendererCapabilityFamily::kDeferredShading
+      | RendererCapabilityFamily::kLightingData
+      | RendererCapabilityFamily::kFinalOutputComposition);
+  auto scene = std::make_shared<scene::Scene>("ExposureRetryScene", 4U);
+  scene->SetEnvironment(std::make_unique<scene::SceneEnvironment>());
+  auto& post = scene->GetEnvironment()
+                 ->AddSystem<scene::environment::PostProcessVolume>();
+  auto settings = scene::ExposureSettings {};
+  settings.key = 12.5F;
+  post.SetExposureSettings(settings);
+  post.SetToneMapper(engine::ToneMapper::kNone);
+  post.SetDisplayGamma(1.0F);
+  post.SetBloomIntensity(0.0F);
+  auto camera = scene->CreateNode("Camera");
+  auto lens = std::make_unique<scene::PerspectiveCamera>();
+  auto view = View {};
+  view.viewport = { .width = 4.0F, .height = 4.0F };
+  lens->SetViewport(view.viewport);
+  ASSERT_TRUE(camera.AttachCamera(std::move(lens)));
+  scene->Update();
+  auto output = CreateRegisteredTexture({ .width = 4U,
+    .height = 4U,
+    .format = Format::kRGBA32Float,
+    .is_shader_resource = true,
+    .is_render_target = true,
+    .initial_state = ResourceStates::kCommon });
+  auto framebuffer = Backend().CreateFramebuffer(
+    FramebufferDesc {}.AddColorAttachment(output));
+  const Pixel sentinel { .125F, .25F, .5F, 1.0F };
+  std::array<std::byte, 1024U> bytes {};
+  for (unsigned y = 0U; y < 4U; ++y)
+    for (unsigned x = 0U; x < 4U; ++x)
+      std::memcpy(bytes.data() + y * 256U + x * sizeof(Pixel), sentinel.data(),
+        sizeof(Pixel));
+  auto upload = CreateUploadBuffer(SizeBytes { bytes.size() });
+  upload->Update(bytes.data(), bytes.size(), 0U);
+  {
+    auto recorder = AcquireRecorder("Prior offscreen output");
+    EnsureTracked(*recorder, upload, ResourceStates::kGenericRead);
+    EnsureTracked(*recorder, output, ResourceStates::kCommon);
+    recorder->RequireResourceState(*output, ResourceStates::kCopyDest);
+    recorder->FlushBarriers();
+    recorder->CopyBufferToTexture(*upload,
+      { .buffer_offset = 0U,
+        .buffer_row_pitch = 256U,
+        .buffer_slice_pitch = 1024U,
+        .dst_slice = { .width = 4U, .height = 4U, .depth = 1U } },
+      *output);
+    recorder->RequireResourceStateFinal(
+      *output, ResourceStates::kShaderResource);
+  }
+  const auto read_pixel = [&]() {
+    auto readback
+      = GetReadbackManager()->CreateTextureReadback("Offscreen retry pixel");
+    {
+      auto recorder = AcquireRecorder("Offscreen retry readback");
+      CHECK_F(recorder->AdoptKnownResourceState(*output));
+      CHECK_F(readback
+          ->EnqueueCopy(*recorder, *output,
+            { .src_slice
+              = { .x = 1U, .y = 0U, .width = 1U, .height = 1U, .depth = 1U } })
+          .has_value());
+    }
+    const auto mapped = readback->MapNow();
+    CHECK_F(mapped.has_value());
+    Pixel pixel {};
+    std::memcpy(pixel.data(), mapped->Data(), sizeof(pixel));
+    return pixel;
+  };
+  const auto handle = CompositionView::ViewStateHandle { 7000U };
+  const auto seed = renderer_->QueueExposureTransition(
+    handle, ExposureTransitionPolicy::kSeedFromEv100, 8.0F);
+  ASSERT_TRUE(seed.has_value());
+  auto input = Renderer::OffscreenSceneViewInput::FromCamera(
+    "Retry", ViewId { 7000U }, view, camera);
+  input.SetViewStateHandle(handle);
+  auto frame = engine::FrameContext {};
+  frame.SetScene(observer_ptr { scene.get() });
+  auto invoke = [&](const unsigned sequence) {
+    auto facade = renderer_->ForOffscreenScene();
+    facade.SetFrameSession({ .frame_slot = frame::Slot { sequence - 1U },
+      .frame_sequence = frame::SequenceNumber { sequence },
+      .delta_time_seconds = 0.0F });
+    facade.SetSceneSource({ .scene = observer_ptr { scene.get() } });
+    facade.SetViewIntent(input);
+    facade.SetOutputTarget(
+      { .framebuffer = observer_ptr { framebuffer.get() } });
+    auto session = facade.Finalize();
+    CHECK_F(session.has_value());
+    if (!inside_frame)
+      return session->ExecuteNow();
+    frame.SetFrameSequenceNumber(frame::SequenceNumber { sequence },
+      engine::internal::EngineTagFactory::Get());
+    frame.SetFrameSlot(
+      frame::Slot { sequence - 1U }, engine::internal::EngineTagFactory::Get());
+    renderer_->OnFrameStart(observer_ptr { &frame });
+    const auto result = session->ExecuteInsideFrame(frame);
+    renderer_->OnFrameEnd(observer_ptr { &frame });
+    return result;
+  };
+  auto& backend = static_cast<ExposureFailureGraphics&>(Backend());
+  backend.recorder_names.clear();
+  backend.fail_next_frame_recorder = true;
+  EXPECT_FALSE(invoke(1U));
+  for (const auto& name : backend.recorder_names) {
+    EXPECT_EQ(name.find("BasePass"), std::string::npos);
+    EXPECT_EQ(name.find("Tonemap"), std::string::npos);
+    EXPECT_EQ(name.find("DeferredLight"), std::string::npos);
+  }
+  EXPECT_EQ(read_pixel(), sentinel);
+  EXPECT_EQ(renderer_->InspectExposureTransition(handle)->phase,
+    ExposureTransitionPhase::kQueued);
+  auto* scene_renderer
+    = vortex::testing::RendererPublicationProbe::GetSceneRenderer(*renderer_);
+  ASSERT_NE(scene_renderer, nullptr);
+  EXPECT_FALSE(
+    scene_renderer->GetSceneTextureExtracts().resolved_scene_color.valid);
+  auto* service
+    = vortex::testing::RendererPublicationProbe::GetPostProcessService(
+      *scene_renderer);
+  ASSERT_NE(service, nullptr);
+  EXPECT_FALSE(service->GetLastExecutionState().wrote_visible_output);
+  EXPECT_TRUE(invoke(2U));
+  EXPECT_EQ(read_pixel()[0], 0.0F);
+  const auto state
+    = vortex::testing::RendererPublicationProbe::ExposureStateForView(
+      *service, handle);
+  ASSERT_NE(state, nullptr);
+  const auto solved
+    = Read<ExposureStateData>(*state->buffer, ResourceStates::kShaderResource);
+  EXPECT_EQ(solved.applied_generation[0], seed->generation);
+  EXPECT_EQ(solved.displayed_scale, 0x1p-8F);
+  FlushBackend();
+}
+
+NOLINT_TEST_F(ExposureGpuTest,
+  SceneExposurePreparationFailurePreservesOutputAndRetriesStandalone)
+{
+  CheckSceneExposureRetry(false);
+}
+
+NOLINT_TEST_F(ExposureGpuTest,
+  SceneExposurePreparationFailurePreservesOutputAndRetriesInsideFrame)
+{
+  CheckSceneExposureRetry(true);
+}
+
+NOLINT_TEST_F(ExposureGpuTest,
+  SceneSkyRadianceIsInvariantToNumericalDomainAndPreservesHighRange)
+{
+  pass_.reset();
+  renderer_->OnShutdown();
+  auto config = RendererConfig {};
+  config.upload_queue_key = QueueKeyFor().get();
+  renderer_ = std::make_unique<Renderer>(GetGraphicsShared(), config,
+    RendererCapabilityFamily::kScenePreparation
+      | RendererCapabilityFamily::kDeferredShading
+      | RendererCapabilityFamily::kLightingData
+      | RendererCapabilityFamily::kEnvironmentLighting
+      | RendererCapabilityFamily::kFinalOutputComposition);
+  auto scene = std::make_shared<scene::Scene>("SceneDomainFixture", 4U);
+  scene->SetEnvironment(std::make_unique<scene::SceneEnvironment>());
+  auto& sky
+    = scene->GetEnvironment()->AddSystem<scene::environment::SkySphere>();
+  sky.SetEnabled(true);
+  sky.SetSource(scene::environment::SkySphereSource::kSolidColor);
+  auto& post = scene->GetEnvironment()
+                 ->AddSystem<scene::environment::PostProcessVolume>();
+  auto settings = scene::ExposureSettings {};
+  settings.key = 12.5F;
+  settings.mode = engine::ExposureMode::kManual;
+  post.SetToneMapper(engine::ToneMapper::kNone);
+  post.SetDisplayGamma(1.0F);
+  post.SetBloomIntensity(0.0F);
+  auto camera = scene->CreateNode("Camera");
+  auto lens = std::make_unique<scene::PerspectiveCamera>();
+  auto view = View {};
+  view.viewport = { .width = 4.0F, .height = 4.0F };
+  lens->SetViewport(view.viewport);
+  ASSERT_TRUE(camera.AttachCamera(std::move(lens)));
+  auto output = CreateRegisteredTexture({ .width = 4U,
+    .height = 4U,
+    .format = Format::kRGBA32Float,
+    .is_shader_resource = true,
+    .is_render_target = true,
+    .initial_state = ResourceStates::kCommon });
+  auto framebuffer = Backend().CreateFramebuffer(
+    FramebufferDesc {}.AddColorAttachment(output));
+  struct ExposureOverride final : IViewExtension {
+    std::function<void(RenderContext&)> before;
+    auto OnViewSetup(const ViewSetupContext& context) -> void override
+    {
+      before(context.render_context);
+    }
+  };
+  bool force_nonunit = false;
+  auto extension = std::make_shared<ExposureOverride>();
+  extension->before = [&](RenderContext& ctx) {
+    if (!force_nonunit)
+      return;
+    auto* owner
+      = vortex::testing::RendererPublicationProbe::GetSceneRenderer(*renderer_);
+    auto* service
+      = vortex::testing::RendererPublicationProbe::GetPostProcessService(
+        *owner);
+    service->SetConfig(SharedConfig(settings));
+    ASSERT_NE(service->PrepareFrameExposure(ctx, false), nullptr);
+  };
+  renderer_->RegisterViewExtension(extension);
+  unsigned sequence = 0U;
+  for (const bool high_range : { false, true }) {
+    settings.manual_ev = high_range ? 30.0F : 4.0F;
+    post.SetExposureSettings(settings);
+    sky.SetSolidColorRgb({ .25F, .5F, .75F });
+    sky.SetIntensity(high_range ? 0x1p30F : 1.0F);
+    scene->Update();
+    const float expected_scale = high_range ? 1.0F : 1.0F / 16.0F;
+    for (const bool nonunit : { false, true }) {
+      force_nonunit = nonunit;
+      ++sequence;
+      auto input = Renderer::OffscreenSceneViewInput::FromCamera(
+        "SkyDomain", ViewId { 8100U }, view, camera);
+      input.SetViewStateHandle(CompositionView::ViewStateHandle { 8100U });
+      input.SetWithAtmosphere(true);
+      auto facade = renderer_->ForOffscreenScene();
+      facade.SetFrameSession(
+        { .frame_slot = frame::Slot { (sequence - 1U) % 3U },
+          .frame_sequence = frame::SequenceNumber { sequence },
+          .delta_time_seconds = 0.0F });
+      facade.SetSceneSource({ .scene = observer_ptr { scene.get() } });
+      facade.SetOutputTarget(
+        { .framebuffer = observer_ptr { framebuffer.get() } });
+      facade.SetViewIntent(input);
+      auto session = facade.Finalize();
+      ASSERT_TRUE(session.has_value());
+      ASSERT_TRUE(session->ExecuteNow());
+      auto readback
+        = GetReadbackManager()->CreateTextureReadback("Scene sky domain pixel");
+      {
+        auto recorder = AcquireRecorder("Scene sky domain readback");
+        ASSERT_TRUE(recorder->AdoptKnownResourceState(*output));
+        ASSERT_TRUE(readback
+            ->EnqueueCopy(*recorder, *output,
+              { .src_slice = { .x = 1U,
+                  .y = 0U,
+                  .width = 1U,
+                  .height = 1U,
+                  .depth = 1U } })
+            .has_value());
+      }
+      const auto mapped = readback->MapNow();
+      ASSERT_TRUE(mapped.has_value());
+      Pixel pixel {};
+      std::memcpy(pixel.data(), mapped->Data(), sizeof(pixel));
+      EXPECT_NEAR(pixel[0], .25F * expected_scale, 2e-5F);
+      EXPECT_NEAR(pixel[1], .5F * expected_scale, 2e-5F);
+      EXPECT_NEAR(pixel[2], .75F * expected_scale, 2e-5F);
+      auto* owner = vortex::testing::RendererPublicationProbe::GetSceneRenderer(
+        *renderer_);
+      const auto& product
+        = owner->GetSceneTextureExtracts().resolved_scene_color;
+      ASSERT_TRUE(product.valid);
+      ASSERT_NE(product.exposure, nullptr);
+      EXPECT_EQ(product.texture->GetDescriptor().format, Format::kRGBA32Float);
+      const auto domain = Read<FrameExposureData>(
+        *product.exposure->buffer, ResourceStates::kShaderResource);
+      EXPECT_EQ(
+        domain.pre_exposure, nonunit ? std::exp2(-settings.manual_ev) : 1.0F);
+    }
+  }
+  extension->before = [](RenderContext&) { };
+  FlushBackend();
+}
+
+NOLINT_TEST_F(
+  ExposureGpuTest, SceneFogHistoryRescalesRgbWithoutScalingTransmittance)
+{
+  pass_.reset();
+  renderer_->OnShutdown();
+  auto config = RendererConfig {};
+  config.upload_queue_key = QueueKeyFor().get();
+  renderer_ = std::make_unique<Renderer>(GetGraphicsShared(), config,
+    RendererCapabilityFamily::kScenePreparation
+      | RendererCapabilityFamily::kDeferredShading
+      | RendererCapabilityFamily::kLightingData
+      | RendererCapabilityFamily::kEnvironmentLighting
+      | RendererCapabilityFamily::kFinalOutputComposition);
+  console::Console console;
+  renderer_->RegisterConsoleBindings(observer_ptr { &console });
+  ASSERT_EQ(console.Execute("vtx.volumetric_fog.jitter false").status,
+    console::ExecutionStatus::kOk);
+  auto scene = std::make_shared<scene::Scene>("FogDomainFixture", 4U);
+  scene->SetEnvironment(std::make_unique<scene::SceneEnvironment>());
+  auto& fog = scene->GetEnvironment()->AddSystem<scene::environment::Fog>();
+  fog.SetEnabled(true);
+  fog.SetEnableHeightFog(true);
+  fog.SetEnableVolumetricFog(true);
+  fog.SetExtinctionSigmaTPerMeter(.01F);
+  fog.SetHeightFalloffPerMeter(0.0F);
+  fog.SetVolumetricFogDistance(1000.0F);
+  auto camera = scene->CreateNode("Camera");
+  auto lens = std::make_unique<scene::PerspectiveCamera>();
+  auto view = View {};
+  view.viewport = { .width = 4.0F, .height = 4.0F };
+  lens->SetViewport(view.viewport);
+  ASSERT_TRUE(camera.AttachCamera(std::move(lens)));
+  struct DomainOverride final : IViewExtension {
+    Renderer& renderer;
+    explicit DomainOverride(Renderer& value)
+      : renderer(value)
+    {
+    }
+    auto OnViewSetup(const ViewSetupContext& hook) -> void override
+    {
+      auto* owner
+        = vortex::testing::RendererPublicationProbe::GetSceneRenderer(renderer);
+      auto* service
+        = vortex::testing::RendererPublicationProbe::GetPostProcessService(
+          *owner);
+      auto cfg = PostProcessConfig {};
+      cfg.resolved_exposure = *scene::ResolveExposureSettings(
+        *hook.render_context.current_view.exposure_override);
+      service->SetConfig(cfg);
+      ASSERT_NE(
+        service->PrepareFrameExposure(hook.render_context, false), nullptr);
+    }
+  };
+  renderer_->RegisterViewExtension(
+    std::make_shared<DomainOverride>(*renderer_));
+  auto frame = engine::FrameContext {};
+  frame.SetScene(observer_ptr { scene.get() });
+  std::array<std::shared_ptr<Framebuffer>, 2> outputs;
+  for (auto& output : outputs) {
+    auto texture = CreateRegisteredTexture({ .width = 4U,
+      .height = 4U,
+      .format = Format::kRGBA32Float,
+      .is_shader_resource = true,
+      .is_render_target = true,
+      .initial_state = ResourceStates::kCommon });
+    output = Backend().CreateFramebuffer(
+      FramebufferDesc {}.AddColorAttachment(texture));
+  }
+  Pixel initial {};
+  for (unsigned sequence = 1U; sequence <= 2U; ++sequence) {
+    fog.SetVolumetricFogEmissive(
+      sequence == 1U ? Vec3 { .1F, .2F, .3F } : Vec3 { 1.0F, 2.0F, 3.0F });
+    scene->Update();
+    frame.SetFrameSequenceNumber(frame::SequenceNumber { sequence },
+      engine::internal::EngineTagFactory::Get());
+    frame.SetFrameSlot(
+      frame::Slot { sequence - 1U }, engine::internal::EngineTagFactory::Get());
+    renderer_->OnFrameStart(observer_ptr { &frame });
+    std::array<ViewId, 2> published;
+    for (unsigned index = 0U; index < 2U; ++index) {
+      auto input
+        = CompositionView::ForScene(ViewId { 9100U + index }, view, camera);
+      input.view_state_handle
+        = CompositionView::ViewStateHandle { 9100U + index };
+      input.with_height_fog = true;
+      auto settings = scene::ExposureSettings {};
+      settings.key = 12.5F;
+      settings.mode = engine::ExposureMode::kManual;
+      settings.manual_ev = sequence == 2U && index == 1U ? 8.0F : 4.0F;
+      input.render_settings.exposure = settings;
+      published[index] = renderer_->PublishRuntimeCompositionView(frame,
+        { .composition_view = input,
+          .render_target = observer_ptr { outputs[index].get() } });
+      ASSERT_NE(published[index], kInvalidViewId);
+    }
+    auto loop = co::testing::TestEventLoop {};
+    co::Run(loop, [&]() -> co::Co<void> {
+      co_await renderer_->OnPreRender(observer_ptr { &frame });
+      co_await renderer_->OnRender(observer_ptr { &frame });
+    });
+    renderer_->OnFrameEnd(observer_ptr { &frame });
+    auto* owner
+      = vortex::testing::RendererPublicationProbe::GetSceneRenderer(*renderer_);
+    ASSERT_NE(owner, nullptr);
+    std::array<Pixel, 2> samples;
+    for (unsigned index = 0U; index < 2U; ++index) {
+      const auto [texture, exposure]
+        = vortex::testing::RendererPublicationProbe::FogHistory(
+          *owner, published[index]);
+      ASSERT_NE(texture, nullptr);
+      ASSERT_NE(exposure, nullptr);
+      const auto domain = Read<FrameExposureData>(
+        *exposure->buffer, ResourceStates::kShaderResource);
+      EXPECT_EQ(domain.pre_exposure,
+        sequence == 2U && index == 1U ? 1.0F / 256.0F : 1.0F / 16.0F);
+      auto readback
+        = GetReadbackManager()->CreateTextureReadback("Fog domain voxel");
+      {
+        auto recorder = AcquireRecorder("Fog domain voxel readback");
+        ASSERT_TRUE(recorder->AdoptKnownResourceState(*texture));
+        ASSERT_TRUE(readback
+            ->EnqueueCopy(*recorder, *texture,
+              { .src_slice = { .x = 0U,
+                  .y = 0U,
+                  .z = 16U,
+                  .width = 1U,
+                  .height = 1U,
+                  .depth = 1U } })
+            .has_value());
+      }
+      const auto mapped = readback->MapNow();
+      ASSERT_TRUE(mapped.has_value());
+      std::memcpy(samples[index].data(), mapped->Data(), sizeof(Pixel));
+    }
+    ASSERT_GT(samples[0][0], 1e-8F);
+    const float ratio = sequence == 2U ? 1.0F / 16.0F : 1.0F;
+    for (unsigned channel = 0U; channel < 3U; ++channel)
+      EXPECT_NEAR(samples[1][channel], samples[0][channel] * ratio,
+        std::max(1e-7F, samples[0][channel] * ratio * 2e-4F));
+    EXPECT_NEAR(samples[1][3], samples[0][3], 2e-6F);
+    if (sequence == 1U)
+      initial = samples[0];
+    else {
+      EXPECT_GT(samples[0][0], initial[0] * 1.1F);
+      EXPECT_LT(samples[0][0], initial[0] * 5.0F);
+    }
+  }
+  renderer_->RegisterConsoleBindings({});
   FlushBackend();
 }
 

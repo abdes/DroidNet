@@ -44,7 +44,7 @@ namespace {
 
   struct alignas(packing::kShaderDataFieldAlignment) WireframePassConstants {
     float wire_color[4] { 1.0F, 1.0F, 1.0F, 1.0F };
-    float apply_exposure_compensation { 0.0F };
+    float write_pre_exposed { 0.0F };
     float padding[3] { 0.0F, 0.0F, 0.0F };
   };
   static_assert(
@@ -313,12 +313,15 @@ namespace {
   }
 
   auto BuildWireframeFramebuffer(SceneTextures& scene_textures,
-    const bool depth_read_only) -> graphics::FramebufferDesc
+    const bool depth_read_only, std::shared_ptr<graphics::Texture> color = {})
+    -> graphics::FramebufferDesc
   {
     auto desc = graphics::FramebufferDesc {};
+    if (!color)
+      color = scene_textures.GetSceneColorResource();
     desc.AddColorAttachment({
-      .texture = scene_textures.GetSceneColorResource(),
-      .format = scene_textures.GetSceneColor().GetDescriptor().format,
+      .texture = color,
+      .format = color->GetDescriptor().format,
     });
     desc.SetDepthAttachment({
       .texture = scene_textures.GetSceneDepthResource(),
@@ -558,8 +561,11 @@ namespace {
 
   auto BuildWireframePipelineDesc(const SceneTextures& scene_textures,
     const bool alpha_test, const bool reverse_z, const bool depth_write,
-    const bool overlay) -> graphics::GraphicsPipelineDesc
+    const bool overlay, const graphics::Texture* color = nullptr)
+    -> graphics::GraphicsPipelineDesc
   {
+    if (!color)
+      color = &scene_textures.GetSceneColor();
     auto root_bindings = BuildVortexRootBindings();
     auto defines = std::vector<graphics::ShaderDefine> {};
     AddBooleanDefine(alpha_test, "ALPHA_TEST", defines);
@@ -590,14 +596,12 @@ namespace {
       .SetDepthStencilState(depth_state)
       .SetBlendState({ MakeWireframeBlendTarget(overlay) })
       .SetFramebufferLayout(graphics::FramebufferLayoutDesc {
-        .color_target_formats = std::vector<
-          Format> { scene_textures.GetSceneColor().GetDescriptor().format },
+        .color_target_formats
+        = std::vector<Format> { color->GetDescriptor().format },
         .depth_stencil_format
         = scene_textures.GetSceneDepth().GetDescriptor().format,
-        .sample_count
-        = scene_textures.GetSceneColor().GetDescriptor().sample_count,
-        .sample_quality
-        = scene_textures.GetSceneColor().GetDescriptor().sample_quality,
+        .sample_count = color->GetDescriptor().sample_count,
+        .sample_quality = color->GetDescriptor().sample_quality,
       })
       .SetRootBindings(std::span<const graphics::RootBindingItem>(
         root_bindings.data(), root_bindings.size()))
@@ -1057,9 +1061,8 @@ auto BasePassModule::EnsureWireframeConstantsBuffer(Graphics& gfx) -> void
   }
 }
 
-auto BasePassModule::WriteWireframeConstants(
-  Graphics& gfx, const RenderContext& ctx, const bool compensate_exposure)
-  -> ShaderVisibleIndex
+auto BasePassModule::WriteWireframeConstants(Graphics& gfx,
+  const RenderContext& ctx, const bool write_pre_exposed) -> ShaderVisibleIndex
 {
   EnsureWireframeConstantsBuffer(gfx);
   CHECK_NOTNULL_F(wireframe_constants_mapped_ptr_);
@@ -1067,7 +1070,7 @@ auto BasePassModule::WriteWireframeConstants(
   const auto constants = WireframePassConstants {
     .wire_color = { ctx.wireframe_color.r, ctx.wireframe_color.g,
       ctx.wireframe_color.b, ctx.wireframe_color.a },
-    .apply_exposure_compensation = compensate_exposure ? 1.0F : 0.0F,
+    .write_pre_exposed = write_pre_exposed ? 1.0F : 0.0F,
   };
   const auto slot = wireframe_constants_slot_ % kWireframePassConstantsSlots;
   ++wireframe_constants_slot_;
@@ -1194,7 +1197,7 @@ auto BasePassModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
     recorder->BindFrameBuffer(*wireframe_framebuffer_);
     SetViewportAndScissor(*recorder, ctx, scene_textures);
     const auto wireframe_constants_index
-      = WriteWireframeConstants(*gfx, ctx, false);
+      = WriteWireframeConstants(*gfx, ctx, true);
     auto current_raster_state = std::optional<internal::MeshRasterState> {};
     for (const auto& draw_command : mesh_processor_->GetDrawCommands()) {
       const auto raster_state
@@ -1468,8 +1471,9 @@ auto BasePassModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
   return last_execution_result_;
 }
 
-auto BasePassModule::ExecuteWireframeOverlay(
-  RenderContext& ctx, SceneTextures& scene_textures) -> std::uint32_t
+auto BasePassModule::ExecuteWireframeOverlay(RenderContext& ctx,
+  SceneTextures& scene_textures, const graphics::Framebuffer* display_target)
+  -> std::uint32_t
 {
   if (config_.shading_mode != ShadingMode::kDeferred) {
     return 0U;
@@ -1508,16 +1512,21 @@ auto BasePassModule::ExecuteWireframeOverlay(
     profiling::ProfileCategory::kPass);
 
   constexpr auto depth_read_only = true;
-  if (NeedsWireframeFramebufferRebuild(
-        wireframe_framebuffer_, scene_textures, depth_read_only)) {
+  auto color = display_target
+    ? display_target->GetDescriptor().color_attachments.front().texture
+    : scene_textures.GetSceneColorResource();
+  const auto& old_target = wireframe_framebuffer_;
+  if (!old_target
+    || old_target->GetDescriptor().color_attachments.front().texture != color
+    || old_target->GetDescriptor().depth_attachment.texture
+      != scene_textures.GetSceneDepthResource()) {
     wireframe_framebuffer_ = gfx->CreateFramebuffer(
-      BuildWireframeFramebuffer(scene_textures, depth_read_only));
+      BuildWireframeFramebuffer(scene_textures, depth_read_only, color));
   }
-
-  BeginPersistentWriteTarget(*recorder, scene_textures.GetSceneColor());
+  BeginPersistentWriteTarget(*recorder, *color);
   BeginPersistentWriteTarget(*recorder, scene_textures.GetSceneDepth());
   recorder->RequireResourceState(
-    scene_textures.GetSceneColor(), graphics::ResourceStates::kRenderTarget);
+    *color, graphics::ResourceStates::kRenderTarget);
   recorder->RequireResourceState(
     scene_textures.GetSceneDepth(), graphics::ResourceStates::kDepthRead);
   recorder->FlushBarriers();
@@ -1527,7 +1536,7 @@ auto BasePassModule::ExecuteWireframeOverlay(
   const auto reverse_z = ctx.current_view.resolved_view == nullptr
     || ctx.current_view.resolved_view->ReverseZ();
   const auto wireframe_constants_index
-    = WriteWireframeConstants(*gfx, ctx, true);
+    = WriteWireframeConstants(*gfx, ctx, display_target == nullptr);
   const auto root_constants_param
     = static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants);
   const auto view_constants_param
@@ -1537,8 +1546,8 @@ auto BasePassModule::ExecuteWireframeOverlay(
     const auto raster_state = ResolveRasterState(prepared_frame, draw_command);
     if (!current_raster_state.has_value()
       || current_raster_state.value() != raster_state) {
-      recorder->SetPipelineState(BuildWireframePipelineDesc(
-        scene_textures, raster_state.alpha_test, reverse_z, false, true));
+      recorder->SetPipelineState(BuildWireframePipelineDesc(scene_textures,
+        raster_state.alpha_test, reverse_z, false, true, color.get()));
       recorder->SetGraphicsRootConstantBufferView(
         view_constants_param, ctx.view_constants->GetGPUVirtualAddress());
       current_raster_state = raster_state;
@@ -1554,7 +1563,7 @@ auto BasePassModule::ExecuteWireframeOverlay(
   }
 
   recorder->RequireResourceStateFinal(
-    scene_textures.GetSceneColor(), graphics::ResourceStates::kRenderTarget);
+    *color, graphics::ResourceStates::kRenderTarget);
   recorder->RequireResourceStateFinal(
     scene_textures.GetSceneDepth(), graphics::ResourceStates::kDepthRead);
   return draw_count;

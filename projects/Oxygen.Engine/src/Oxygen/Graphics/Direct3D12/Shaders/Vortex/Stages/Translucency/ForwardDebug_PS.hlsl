@@ -369,9 +369,7 @@ static inline float3 MakeDepthMismatchHeatmap(float depth_error)
     }
   }
 
-#if defined(DEBUG_IBL_RAW_SKY)
   debug_out *= GetPreExposure();
-#endif
 
 #ifdef OXYGEN_HDR_OUTPUT
   return float4(debug_out, 1.0f);

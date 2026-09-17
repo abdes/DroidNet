@@ -63,8 +63,9 @@ public:
 
   OXGN_VRTX_API auto Execute(RenderContext& ctx, SceneTextures& scene_textures)
     -> BasePassExecutionResult;
-  OXGN_VRTX_API auto ExecuteWireframeOverlay(
-    RenderContext& ctx, SceneTextures& scene_textures) -> std::uint32_t;
+  OXGN_VRTX_API auto ExecuteWireframeOverlay(RenderContext& ctx,
+    SceneTextures& scene_textures,
+    const graphics::Framebuffer* display_target = nullptr) -> std::uint32_t;
   OXGN_VRTX_API void SetConfig(const BasePassConfig& config);
   [[nodiscard]] OXGN_VRTX_API auto HasPublishedBasePassProducts() const -> bool;
   [[nodiscard]] OXGN_VRTX_API auto
@@ -77,7 +78,7 @@ private:
 
   auto EnsureWireframeConstantsBuffer(Graphics& gfx) -> void;
   auto WriteWireframeConstants(Graphics& gfx, const RenderContext& ctx,
-    bool compensate_exposure) -> ShaderVisibleIndex;
+    bool write_pre_exposed) -> ShaderVisibleIndex;
   auto ReleaseWireframeConstantsBuffer() -> void;
 
   Renderer& renderer_;

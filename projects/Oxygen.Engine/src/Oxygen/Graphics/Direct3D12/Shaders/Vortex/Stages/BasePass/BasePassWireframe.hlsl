@@ -10,25 +10,25 @@
 struct WireframePassConstants
 {
     float4 wire_color;
-    float apply_exposure_compensation;
+    float write_pre_exposed;
     float3 padding;
 };
 
 static inline float4 LoadWireframeColor()
 {
     float4 color = float4(1.0f, 1.0f, 1.0f, 1.0f);
-    float apply_exposure_compensation = 0.0f;
+    float write_pre_exposed = 0.0f;
     if (BX_IsValidSlot(g_PassConstantsIndex))
     {
         ConstantBuffer<WireframePassConstants> pc =
             ResourceDescriptorHeap[g_PassConstantsIndex];
         color = pc.wire_color;
-        apply_exposure_compensation = pc.apply_exposure_compensation;
+        write_pre_exposed = pc.write_pre_exposed;
     }
 
-    if (apply_exposure_compensation > 0.5f)
+    if (write_pre_exposed > 0.5f)
     {
-        color.rgb /= max(GetPreExposure(), 1.0e-6f);
+        color.rgb *= GetPreExposure();
     }
 
     return color;
