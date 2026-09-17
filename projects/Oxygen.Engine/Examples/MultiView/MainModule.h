@@ -53,6 +53,7 @@ enum class ExposureProofScenario : uint8_t {
   kSourceLoss,
   kViewport,
   kLifetime,
+  kWindowResize,
 };
 
 struct MainModuleConfig {
@@ -201,6 +202,7 @@ private:
   bool viewport_proof_resized_ { false };
   bool viewport_proof_scissored_ { false };
   bool retain_inactive_pip_ { false };
+  platform::window::ExtentT window_proof_initial_extent_ { 0U, 0U };
   platform::window::ExtentT last_viewport_ { 0, 0 };
 };
 

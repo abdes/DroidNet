@@ -244,6 +244,12 @@ PiP history across hiding, and initialize recreated PiP from its new target
 without inheriting the old transition. The debugger run passes and inspected
 images agree (`multiview/lifetime-manifest.json`). This does not close long-idle
 expiration, all lifecycle modes or automatic precision admission/recovery.
+The native whole-window resize proof now passes in Debug/Release: six captures
+verify actual swapchain/view extents, retained exposure histories and exact
+restored view images. The debugger run passes and incompatible headless/
+fullscreen requests are rejected (`multiview/window-resize-manifest.json`).
+Remaining lifecycle/layout combinations and precision admission/recovery remain
+open.
 
 ## 4. Milestone Ledger
 

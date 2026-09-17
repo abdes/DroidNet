@@ -1321,6 +1321,15 @@ were inspected. `multiview/lifetime-manifest.json` records this scope; long-idle
 expiration, other mode/lifecycle combinations and precision admission/recovery
 remain open.
 
+Whole-window resize is now qualified with the public window API: the swapchain
+changes to 1280x800 and then returns to its original extent while both view
+handles, gains and transition generations persist. Debug/Release builds and six
+capture audits pass; both complete view images restore exactly. The debugger
+run has no blocking graphics messages, and headless/fullscreen misuse is rejected.
+Evidence is `multiview/window-resize-manifest.json`. Remaining lifecycle/mode
+combinations, the complete layout matrix and automatic precision admission/
+recovery still keep slice 5 open.
+
 - [x] Add the early GPU P resolve and bind a frame-invariant P/1P to every HDR pass.
 - [ ] Migrate the entire section 4.4 checklist, including atmosphere producer/
   consumer pairs, fog/color histories, bloom and offscreen/capture domains.
