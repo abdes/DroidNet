@@ -249,7 +249,7 @@ private:
   friend struct testing::RendererPublicationProbe;
 
   struct ExposureProductLayout {
-    std::array<std::array<std::uint32_t, 5U>, 4U> products {};
+    std::array<std::array<std::uint32_t, 6U>, 4U> products {};
     std::uint64_t revision { 0U };
   };
   std::unordered_map<CompositionView::ViewStateHandle, ExposureProductLayout>
