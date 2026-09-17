@@ -35,7 +35,8 @@ auto ResolveDefaultScissor(const ViewPort& viewport) -> Scissors
 } // namespace
 
 auto FromNodeLookup::ResolveForNode(scene::SceneNode& camera_node,
-  std::optional<oxygen::ViewPort> viewport_override) -> ResolvedView
+  std::optional<oxygen::ViewPort> viewport_override,
+  std::optional<oxygen::Scissors> scissor_override) -> ResolvedView
 {
   if (!camera_node.IsAlive() || !camera_node.HasCamera()) {
     ResolvedView::Params params;
@@ -103,6 +104,9 @@ auto FromNodeLookup::ResolveForNode(scene::SceneNode& camera_node,
   }
   if (viewport_override.has_value() && viewport_override->IsValid()) {
     cfg.viewport = *viewport_override;
+  }
+  if (scissor_override) {
+    cfg.scissor = *scissor_override;
   }
   if (cfg.scissor.right <= cfg.scissor.left
     || cfg.scissor.bottom <= cfg.scissor.top) {

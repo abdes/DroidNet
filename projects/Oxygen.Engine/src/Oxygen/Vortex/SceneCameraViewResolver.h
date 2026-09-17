@@ -26,7 +26,8 @@ class FromNodeLookup {
 protected:
   OXGN_VRTX_NDAPI static auto ResolveForNode(
     oxygen::scene::SceneNode& camera_node,
-    std::optional<oxygen::ViewPort> viewport_override = std::nullopt)
+    std::optional<oxygen::ViewPort> viewport_override = std::nullopt,
+    std::optional<oxygen::Scissors> scissor_override = std::nullopt)
     -> oxygen::ResolvedView;
 };
 
@@ -37,21 +38,24 @@ public:
     const oxygen::ViewId&>);
 
   explicit SceneCameraViewResolver(NodeLookup lookup,
-    std::optional<oxygen::ViewPort> viewport_override = std::nullopt)
+    std::optional<oxygen::ViewPort> viewport_override = std::nullopt,
+    std::optional<oxygen::Scissors> scissor_override = std::nullopt)
     : node_lookup_(std::move(lookup))
     , viewport_override_(viewport_override)
+    , scissor_override_(scissor_override)
   {
   }
 
   auto operator()(const oxygen::ViewId& id) const -> oxygen::ResolvedView
   {
     auto camera_node = node_lookup_(id);
-    return ResolveForNode(camera_node, viewport_override_);
+    return ResolveForNode(camera_node, viewport_override_, scissor_override_);
   }
 
 private:
   NodeLookup node_lookup_;
   std::optional<oxygen::ViewPort> viewport_override_;
+  std::optional<oxygen::Scissors> scissor_override_;
 };
 
 } // namespace oxygen::vortex

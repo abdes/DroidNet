@@ -54,6 +54,9 @@ def build_report(controller, report, capture_path, report_path):
     for index, draw in enumerate(tones):
         controller.SetFrameEvent(draw.event_id, True)
         pipeline = controller.GetPipelineState()
+        raster_scissor = pipeline.GetScissor(0)
+        write_rect = [raster_scissor.x, raster_scissor.y,
+                      raster_scissor.width, raster_scissor.height]
         reads = [x.descriptor for x in pipeline.GetReadOnlyResources(rd.ShaderStage.Pixel, True)]
         constants = [x for x in reads if x.byteSize == 48 and x.elementByteSize == 48]
         frames = [x for x in reads if names.get(str(x.resource)) == "Vortex.PostProcess.Exposure.Frame"]
@@ -73,6 +76,7 @@ def build_report(controller, report, capture_path, report_path):
         gain, target_gain = struct.unpack_from("<2f", state)
         raw_luminance, raw_ev, state_flags, fallback = struct.unpack_from("<2f2I", state, 16)
         requested, applied, sequence = struct.unpack_from("<3Q", state, 40)
+        settings_revision = struct.unpack_from("<Q", state, 32)[0]
         if not all(math.isfinite(x) for x in (p, inverse_p, gain)) or p <= 0 or abs(p * inverse_p - 1) > 1e-6:
             raise RuntimeError(f"Invalid exposure domain at event {draw.event_id}")
         frame_key = (str(frames[0].resource), frames[0].byteOffset)
@@ -92,6 +96,9 @@ def build_report(controller, report, capture_path, report_path):
         for gy in range(1, 10):
             for gx in range(1, 10):
                 x, y = texture.width * gx // 10, texture.height * gy // 10
+                if not (write_rect[0] <= x < write_rect[0] + write_rect[2]
+                        and write_rect[1] <= y < write_rect[1] + write_rect[3]):
+                    continue
                 pixel = list(controller.PickPixel(source.resource, x, y, sub, rd.CompType.Float).floatValue)
                 if not all(math.isfinite(c) for c in pixel):
                     raise RuntimeError(f"Nonfinite source at event {draw.event_id}, pixel {x},{y}")
@@ -122,7 +129,9 @@ def build_report(controller, report, capture_path, report_path):
         view_results.append({
             "index": index, "event": draw.event_id,
             "width": texture.width, "height": texture.height,
+            "write_rectangle": write_rect,
             "frame": sequence, "gain": gain, "target_gain": target_gain,
+            "settings_revision": settings_revision,
             "pre_exposure": p, "raw_luminance": raw_luminance, "raw_ev": raw_ev,
             "state_flags": state_flags, "frame_flags": flags,
             "fallback_reason": fallback,

@@ -66,6 +66,34 @@ TEST(SceneCameraViewResolverTest, UsesViewportOverrideWhenProvided)
   EXPECT_FLOAT_EQ(resolved.Viewport().width, override_viewport.width);
   EXPECT_FLOAT_EQ(resolved.Viewport().height, override_viewport.height);
   EXPECT_GT(resolved.FocalLengthPixels(), 0.0F);
+  EXPECT_EQ(resolved.Scissor().left, 0);
+  EXPECT_EQ(resolved.Scissor().right, 1920);
+  EXPECT_EQ(resolved.Scissor().bottom, 1080);
+}
+
+TEST(SceneCameraViewResolverTest, PreservesScissorWithNonzeroViewportOrigin)
+{
+  auto scene = std::make_shared<Scene>("resolver-inset", 4U);
+  auto camera = scene->CreateNode("camera");
+  ASSERT_TRUE(camera.AttachCamera(std::make_unique<PerspectiveCamera>()));
+  const auto viewport = ViewPort {
+    .top_left_x = 120.0F, .top_left_y = 80.0F, .width = 640.0F, .height = 360.0F
+  };
+  const auto inset
+    = oxygen::Scissors { .left = 136, .top = 104, .right = 728, .bottom = 400 };
+  const auto lookup = [camera](const ViewId&) { return camera; };
+  const auto resolved
+    = SceneCameraViewResolver(lookup, viewport, inset)(ViewId { 3U });
+  EXPECT_EQ(resolved.Scissor().left, 136);
+  EXPECT_EQ(resolved.Scissor().top, 104);
+  EXPECT_EQ(resolved.Scissor().right, 728);
+  EXPECT_EQ(resolved.Scissor().bottom, 400);
+  const auto defaulted
+    = SceneCameraViewResolver(lookup, viewport)(ViewId { 3U });
+  EXPECT_EQ(defaulted.Scissor().left, 120);
+  EXPECT_EQ(defaulted.Scissor().top, 80);
+  EXPECT_EQ(defaulted.Scissor().right, 760);
+  EXPECT_EQ(defaulted.Scissor().bottom, 440);
 }
 
 TEST(SceneCameraViewResolverTest, RootCameraCanResolveWithoutSceneUpdate)

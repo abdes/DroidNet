@@ -51,6 +51,7 @@ enum class ExposureProofScenario : uint8_t {
   kPipOnly,
   kReordered,
   kSourceLoss,
+  kViewport,
 };
 
 struct MainModuleConfig {
@@ -195,6 +196,8 @@ private:
 
   observer_ptr<examples::ui::CameraRigController> last_camera_rig_ { nullptr };
   MainModuleConfig config_ {};
+  bool viewport_proof_resized_ { false };
+  bool viewport_proof_scissored_ { false };
   platform::window::ExtentT last_viewport_ { 0, 0 };
 };
 

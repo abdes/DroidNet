@@ -1298,6 +1298,18 @@ Evidence is `multiview/overlay-source-loss-manifest.json`. Other source-loss
 mode/zero-gain combinations, resize/scissor, hide/recreate and precision
 admission/recovery remain open.
 
+Camera resolution now retains authored scissors for registered views, both
+offscreen entry paths and composition-view resolution. The public-route
+regression fails before the fix. Debug/Release pass 21 scene-publication,
+3 resolver, 12 offscreen, 22 runtime-publication and 121 native tests. Eight
+captures verify the PiP-only extent/aspect change, a 96-pixel scissor inset,
+and restoration: raster and histogram rectangles agree, gains/settings/applied
+generations persist, main's meter/image stays exact, and restored PiP matches
+exactly. Pixels outside the scissor remain untouched; the oracle checks S/P
+only where the draw writes. The debugger run has no blocking graphics messages.
+Evidence is `multiview/viewport-manifest.json`. Whole-window resize,
+hide/recreate and the remaining lifecycle/precision gates remain open.
+
 - [x] Add the early GPU P resolve and bind a frame-invariant P/1P to every HDR pass.
 - [ ] Migrate the entire section 4.4 checklist, including atmosphere producer/
   consumer pairs, fog/color histories, bloom and offscreen/capture domains.

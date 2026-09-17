@@ -230,6 +230,14 @@ on removal, then resumes independent adaptation within 8e-7 EV of the closed-for
 oracle. Eight source-loss captures, two overlay captures and two debugger cases
 pass (`multiview/overlay-source-loss-manifest.json`). Broader lifecycle variants
 and automatic precision admission/recovery remain open.
+Authored scissors now survive camera resolution in registered, offscreen and
+composition-view paths. The regression fails before the fix; Debug/Release pass
+21 scene-publication, 3 resolver, 12 offscreen, 22 runtime-publication and 121
+native tests. Eight PiP resize/scissor/restore captures preserve history and main
+output exactly, with matching raster/meter rectangles and unchanged pixels
+outside the scissor. The focused debugger run passes
+(`multiview/viewport-manifest.json`). Whole-window resize and remaining lifecycle
+and precision gates remain open.
 
 ## 4. Milestone Ledger
 

@@ -103,10 +103,11 @@ namespace {
     float offset_y { 0.0F };
   };
 
-  auto ComputePipLayout(const platform::window::ExtentT& extent) -> PipLayout
+  auto ComputePipLayout(const platform::window::ExtentT& extent,
+    const bool resized = false) -> PipLayout
   {
-    constexpr float kPipWidthRatio = 0.45F;
-    constexpr float kPipHeightRatio = 0.45F;
+    const float kPipWidthRatio = resized ? 0.30F : 0.45F;
+    const float kPipHeightRatio = resized ? 0.60F : 0.45F;
     constexpr float kPipMargin = 24.0F;
 
     const float sw = static_cast<float>(extent.width);
@@ -337,7 +338,7 @@ auto MainModule::UpdateCameras(const platform::window::ExtentT& extent) -> void
       pip_camera_node_.GetTransform().SetLocalRotation(pip_rot);
 
       // PiP aspect ratio from its intended viewport
-      const auto pip_layout = ComputePipLayout(extent);
+      const auto pip_layout = ComputePipLayout(extent, viewport_proof_resized_);
       constexpr float kPipCamFov = 45.0F;
       constexpr float kPipCamNear = 0.05F;
       constexpr float kPipCamFar = 100.0F;
@@ -864,6 +865,11 @@ auto MainModule::DrawFeatureVariantProofOverlay() -> void
 auto MainModule::UpdateComposition(oxygen::engine::FrameContext& context,
   std::vector<vortex::CompositionView>& views) -> void
 {
+  const auto sequence = context.GetFrameSequenceNumber().get();
+  viewport_proof_resized_
+    = config_.exposure_proof == ExposureProofScenario::kViewport
+    && sequence >= 44U && sequence < 52U;
+  viewport_proof_scissored_ = viewport_proof_resized_ && sequence >= 48U;
   BuildComposition(context, views);
   for (auto& view : views) {
     if (view.camera.has_value()) {
@@ -1298,7 +1304,7 @@ auto MainModule::BuildComposition(oxygen::engine::FrameContext& context,
 
   // 2. PiP View
   if (pip_camera_node_.IsAlive()) {
-    const auto pip_layout = ComputePipLayout(extent);
+    const auto pip_layout = ComputePipLayout(extent, viewport_proof_resized_);
 
     View pip_view {};
     pip_view.viewport = ViewPort {
@@ -1316,8 +1322,10 @@ auto MainModule::BuildComposition(oxygen::engine::FrameContext& context,
       .bottom = static_cast<int32_t>(pip_layout.offset_y + pip_layout.height),
     };
 
-    if (config_.pip_scissor_inset_px > 0U) {
-      const auto inset = static_cast<int32_t>(config_.pip_scissor_inset_px);
+    const auto scissor_inset
+      = viewport_proof_scissored_ ? 96U : config_.pip_scissor_inset_px;
+    if (scissor_inset > 0U) {
+      const auto inset = static_cast<int32_t>(scissor_inset);
       pip_view.scissor.left
         = (std::min)(pip_view.scissor.left + inset, pip_view.scissor.right);
       pip_view.scissor.top
@@ -1329,7 +1337,7 @@ auto MainModule::BuildComposition(oxygen::engine::FrameContext& context,
       CHECK_F(pip_view.scissor.left < pip_view.scissor.right
           && pip_view.scissor.top < pip_view.scissor.bottom,
         "PiP scissor inset {} collapses the PiP depth rect (viewport={}x{})",
-        config_.pip_scissor_inset_px, pip_layout.width, pip_layout.height);
+        scissor_inset, pip_layout.width, pip_layout.height);
     }
 
     auto pip_comp = vortex::CompositionView::ForPip(pip_view_id_,

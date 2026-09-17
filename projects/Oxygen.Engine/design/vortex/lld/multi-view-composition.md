@@ -790,6 +790,16 @@ continue independent Auto adaptation. Runtime game deltas are recorded for an
 independent closed-form trajectory comparison; no numerical gain is read back
 into runtime control.
 
+The `viewport` proof changes only PiP: frame 44 changes its extent/aspect,
+frame 48 insets its local scissor, and frame 52 restores both. Game time remains
+paused after the frame-32 remeter. Gain and applied generation must survive
+these compatible changes; main's complete image and meter must remain unchanged.
+The histogram rectangle must match PiP's local content rectangle, excluding bars.
+Camera resolution carries the authored scissor alongside the viewport for
+runtime publication, offscreen sessions and composition views. An unspecified
+or invalid scissor keeps the existing full-viewport default; valid rectangles
+reach the shared raster/metering clamp without being replaced by camera defaults.
+
 The [exposure execution plan](../plan/exposure-and-lightbench-correction.md#42-shared-exposure-one-writer-and-deterministic-readers)
 owns the complete source, fallback and destruction contract:
 

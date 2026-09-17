@@ -10,6 +10,7 @@
 #include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Config/RendererConfig.h>
+#include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Queues.h>
@@ -22,7 +23,14 @@
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererCapability.h>
 #include <Oxygen/Vortex/Test/Fakes/Graphics.h>
+#include <Oxygen/Vortex/ViewExtension.h>
 #include <Oxygen/Vortex/ViewFeatureProfile.h>
+
+namespace oxygen::engine::internal {
+struct EngineTagFactory {
+  static auto Get() noexcept -> EngineTag { return EngineTag {}; }
+};
+}
 
 namespace {
 
@@ -149,6 +157,48 @@ protected:
   oxygen::scene::SceneNode camera_ {};
   std::shared_ptr<Renderer> renderer_ {};
 };
+
+NOLINT_TEST_F(OffscreenSceneFacadeTest, BothExecutionPathsPreserveLocalScissor)
+{
+  struct Capture final : oxygen::vortex::IViewExtension {
+    std::vector<oxygen::Scissors> scissors;
+    auto OnViewSetup(const oxygen::vortex::ViewSetupContext& context)
+      -> void override
+    {
+      scissors.push_back(
+        context.render_context.current_view.resolved_view->Scissor());
+    }
+  };
+  auto capture = std::make_shared<Capture>();
+  renderer_->RegisterViewExtension(capture);
+  auto view = MakeView();
+  view.scissor = { .left = 8, .top = 12, .right = 48, .bottom = 52 };
+  auto facade = renderer_->ForOffscreenScene();
+  facade.SetFrameSession(MakeFrameSession());
+  facade.SetSceneSource({ .scene = oxygen::observer_ptr { scene_.get() } });
+  facade.SetOutputTarget(MakeOutputTarget());
+  facade.SetViewIntent(Renderer::OffscreenSceneViewInput::FromCamera(
+    "Inset", ViewId { 42U }, view, camera_));
+  auto session = facade.Finalize();
+  ASSERT_TRUE(session.has_value());
+  ASSERT_TRUE(session->ExecuteNow());
+  auto frame = oxygen::engine::FrameContext {};
+  frame.SetScene(oxygen::observer_ptr { scene_.get() });
+  frame.SetFrameSequenceNumber(oxygen::frame::SequenceNumber { 18U },
+    oxygen::engine::internal::EngineTagFactory::Get());
+  frame.SetFrameSlot(oxygen::frame::Slot { 2U },
+    oxygen::engine::internal::EngineTagFactory::Get());
+  renderer_->OnFrameStart(oxygen::observer_ptr { &frame });
+  ASSERT_TRUE(session->ExecuteInsideFrame(frame));
+  renderer_->OnFrameEnd(oxygen::observer_ptr { &frame });
+  ASSERT_EQ(capture->scissors.size(), 2U);
+  for (const auto& scissor : capture->scissors) {
+    EXPECT_EQ(scissor.left, 8);
+    EXPECT_EQ(scissor.top, 12);
+    EXPECT_EQ(scissor.right, 48);
+    EXPECT_EQ(scissor.bottom, 52);
+  }
+}
 
 NOLINT_TEST_F(OffscreenSceneFacadeTest, ValidateRejectsInvalidViewId)
 {
