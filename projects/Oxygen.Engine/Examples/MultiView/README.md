@@ -99,6 +99,8 @@ with `--family`, `--main`, `--pip`, `--reordered` pointing to those JSON files
 and `--output` pointing to the comparison report. It compares scene probes,
 gain/meter values and full per-view images; the reordered-composite comparison
 excludes the left toolbar/gizmo and top capture FPS label.
+The two isolated reports must cover both distinct family views; duplicate inputs
+are rejected before comparison.
 For shared mode, pass the frame-42/43/44 JSON records to
 `tools/vortex/Assert-MultiViewSharedExposure.py` as `--before`, `--step`, and
 `--after`, plus `--output`. It verifies owner generations, borrowed-state flags,
