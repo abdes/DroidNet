@@ -10,7 +10,7 @@ import struct
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from AnalyzeRenderDocSceneExposure import map_color
+from AnalyzeRenderDocSceneExposure import map_color, select_scene_source
 from renderdoc_ui_analysis import (
     collect_action_records, renderdoc_module, resource_id_to_name, run_ui_script,
 )
@@ -58,13 +58,13 @@ def build_report(controller, report, capture_path, report_path):
         write_rect = [raster_scissor.x, raster_scissor.y,
                       raster_scissor.width, raster_scissor.height]
         reads = [x.descriptor for x in pipeline.GetReadOnlyResources(rd.ShaderStage.Pixel, True)]
-        constants = [x for x in reads if x.byteSize == 48 and x.elementByteSize == 48]
+        constants = [x for x in reads if x.byteSize == 64 and x.elementByteSize == 64]
         frames = [x for x in reads if names.get(str(x.resource)) == "Vortex.PostProcess.Exposure.Frame"]
         states = [x for x in reads if names.get(str(x.resource)) == "Vortex.PostProcess.Exposure.State"]
-        sources = [x for x in reads if str(x.resource) in textures]
-        if any(len(items) != 1 for items in (constants, frames, states, sources)):
+        if any(len(items) != 1 for items in (constants, frames, states)):
             raise RuntimeError(f"Ambiguous/missing tonemap inputs at event {draw.event_id}")
-        pc = bytes(controller.GetBufferData(constants[0].resource, constants[0].byteOffset, 48))
+        pc = bytes(controller.GetBufferData(constants[0].resource, constants[0].byteOffset, 64))
+        source = select_scene_source(controller, reads, textures, names, pc)
         mapper = struct.unpack_from("<I", pc, 12)[0]
         gamma, bloom = struct.unpack_from("<2f", pc, 20)
         background_enabled = struct.unpack_from("<I", pc, 44)[0]
@@ -84,7 +84,6 @@ def build_report(controller, report, capture_path, report_path):
         if frame_key in frame_resources:
             raise RuntimeError("Different mapped views alias one frame exposure record")
         frame_resources.add(frame_key)
-        source = sources[0]
         texture = textures[str(source.resource)]
         target = pipeline.GetOutputTargets()[0].resource
         target_desc = textures[str(target)]

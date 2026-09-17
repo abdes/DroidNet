@@ -111,6 +111,8 @@ NOLINT_TEST(PostProcessServiceSurfaceTest,
   EXPECT_EQ(bindings.eye_adaptation_srv, kInvalidShaderVisibleIndex);
   EXPECT_EQ(bindings.eye_adaptation_uav, kInvalidShaderVisibleIndex);
   EXPECT_EQ(bindings.post_history_srv, kInvalidShaderVisibleIndex);
+  EXPECT_EQ(bindings.scene_fallback_srv, kInvalidShaderVisibleIndex);
+  EXPECT_EQ(bindings.conversion_report_srv, kInvalidShaderVisibleIndex);
   EXPECT_FLOAT_EQ(bindings.fixed_exposure, 1.0F);
   EXPECT_EQ(bindings.enable_bloom, 1U);
   EXPECT_EQ(bindings.enable_auto_exposure, 1U);

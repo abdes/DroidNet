@@ -51,12 +51,12 @@ def build_report(controller, report, capture_path, report_path):
     state = controller.GetPipelineState()
     names = resource_id_to_name(controller)
     constants = [u.descriptor for u in state.GetReadOnlyResources(rd.ShaderStage.Pixel, True)
-                 if u.descriptor.byteSize == 48 and u.descriptor.elementByteSize == 48]
+                 if u.descriptor.byteSize == 64 and u.descriptor.elementByteSize == 64]
     if len(constants) != 1:
         raise RuntimeError("Bound tonemap constants not identified uniquely")
     constant = constants[0]
     data = bytes(controller.GetBufferData(constant.resource,
-                                         constant.byteOffset, 48))
+                                         constant.byteOffset, 64))
     source_slot, exposure_slot, bloom_slot, curve = struct.unpack_from("<4I", data)
     gain, gamma, bloom, _ = struct.unpack_from("<4f", data, 16)
     report.append("bound_constant_offset={}".format(constant.byteOffset))

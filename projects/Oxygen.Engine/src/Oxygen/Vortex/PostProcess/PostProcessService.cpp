@@ -436,6 +436,10 @@ auto PostProcessService::BuildBindings(const Inputs& inputs,
     = config.auto_exposure_log_luminance_range,
     .auto_exposure_target_luminance = config.auto_exposure_target_luminance,
     .auto_exposure_spot_meter_radius = config.auto_exposure_spot_meter_radius,
+    .scene_fallback_srv = inputs.scene_fallback_srv,
+    .conversion_report_srv = inputs.checked_resolution
+      ? inputs.checked_resolution->suitability_srv
+      : kInvalidShaderVisibleIndex,
   };
 }
 
@@ -594,6 +598,46 @@ auto PostProcessService::PrepareSceneExposure(const ViewId view_id,
     ctx.frame_sequence };
 }
 
+auto PostProcessService::ValidatePreparedExposure(const ViewId view_id,
+  const RenderContext& ctx, const PreparedExposure& prepared) const -> void
+{
+  CHECK_F(prepared.owner == this && prepared.view_id == view_id
+      && prepared.handle == ctx.current_view.view_state_handle
+      && prepared.lifetime
+        == renderer_.EnsureExposureLifetime(ctx.current_view.view_state_handle)
+      && prepared.sequence == ctx.frame_sequence,
+    "Prepared exposure belongs to another service, view lifetime or frame");
+}
+
+auto PostProcessService::ConvertSceneColor(RenderContext& ctx,
+  const PreparedExposure& prepared, const Inputs& inputs,
+  graphics::Texture& destination, const ShaderVisibleIndex destination_uav)
+  -> bool
+{
+  ValidatePreparedExposure(ctx.current_view.view_id, ctx, prepared);
+  CHECK_NOTNULL_F(prepared.exposure.frame.get());
+  const auto& settings
+    = captured_exposure_settings_.at({ prepared.view_id, prepared.handle })
+        .settings;
+  const auto& mask = settings.mask;
+  const auto& authored = settings.resolved.authored;
+  const bool needs_mask = authored.enabled
+    && authored.mode == engine::ExposureMode::kAuto
+    && authored.min_ev != authored.max_ev && authored.metering_mask.get() != 0U;
+  const bool initial_mask_unavailable = settings.revision == 0U
+    && (settings.mask_status == ExposureMaskStatus::kPending
+      || settings.mask_status == ExposureMaskStatus::kFailed);
+  if (initial_mask_unavailable || (needs_mask && !mask))
+    return false;
+  return exposure_pass_->ConvertCheckedSceneColor(ctx, prepared.exposure.frame,
+    prepared.config,
+    { .scene_signal = inputs.scene_signal,
+      .scene_signal_srv = inputs.scene_signal_srv,
+      .metering_mask = mask ? mask->texture.get() : nullptr,
+      .metering_mask_srv = mask ? mask->srv : kInvalidShaderVisibleIndex },
+    destination, destination_uav);
+}
+
 auto PostProcessService::Execute(const ViewId view_id, RenderContext& ctx,
   const SceneTextures& scene_textures, const Inputs& inputs,
   const PreparedExposure* prepared_exposure) -> void
@@ -607,15 +651,12 @@ auto PostProcessService::Execute(const ViewId view_id, RenderContext& ctx,
     }
     prepared_exposure = &*local_exposure;
   }
-  CHECK_F(prepared_exposure->owner == this
-      && prepared_exposure->view_id == view_id
-      && prepared_exposure->handle == ctx.current_view.view_state_handle
-      && prepared_exposure->lifetime
-        == renderer_.EnsureExposureLifetime(ctx.current_view.view_state_handle)
-      && prepared_exposure->sequence == ctx.frame_sequence,
-    "Prepared exposure belongs to another service, view lifetime or frame");
+  ValidatePreparedExposure(view_id, ctx, *prepared_exposure);
   const auto& exposure = prepared_exposure->exposure;
   const auto& effective_config = prepared_exposure->config;
+  CHECK_F(
+    !inputs.checked_resolution || inputs.checked_resolution == exposure.frame,
+    "Checked color report must belong to the prepared exposure frame");
   auto bindings = BuildBindings(inputs, effective_config);
   if (effective_config.temporary_unit_exposure) {
     bindings.enable_auto_exposure = 0U;
@@ -642,6 +683,14 @@ auto PostProcessService::Execute(const ViewId view_id, RenderContext& ctx,
       .gamma = effective_config.gamma,
       .bloom_intensity = effective_config.bloom_intensity,
       .background_color = environment::ResolveSceneBackground(ctx),
+      .scene_fallback = inputs.scene_fallback,
+      .scene_fallback_srv = inputs.scene_fallback_srv,
+      .conversion_report = inputs.checked_resolution
+        ? inputs.checked_resolution->suitability_buffer.get()
+        : nullptr,
+      .conversion_report_srv = inputs.checked_resolution
+        ? inputs.checked_resolution->suitability_srv
+        : kInvalidShaderVisibleIndex,
     });
 
   last_execution_state_ = {

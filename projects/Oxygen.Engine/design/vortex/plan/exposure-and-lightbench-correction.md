@@ -1248,6 +1248,21 @@ debugger cases have no blocking graphics messages. Evidence is
 `lifecycle/prepared-manifest.json`; this makes final S available for checked
 conversion but does not enable FP16 admission or close the remaining slice-5 gates.
 
+The service conversion/tonemap handoff now carries the checked FP16 source,
+original FP32 source and GPU report. Tonemapping selects FP32 on rejection in
+the same frame, with unchanged exposure state; accepted conversion uses FP16.
+Both consumers share the acceptance predicate. Tonemap constants are 64 bytes;
+the post-process binding record remains 112 bytes and publishes conditional
+source metadata. Initial pending/failed mask policies refuse conversion before
+recording GPU work. Debug/Release pass 129 native, 22 service and 23 publication
+tests; both shader profiles contain 203 entries. Native cases cover accepted
+half, overflow/dark-loss fallback, nonunit P and unresolved masks. RenderDoc
+verifies rejected-half selection and final FP32 pixels. Two ordinary MultiView
+captures retain exact baseline gains, meters and full view images; two debugger
+cases have no blocking graphics messages. Evidence is
+`lifecycle/selection-manifest.json`. SceneRenderer allocation/lease integration,
+required-product aggregation and automatic admission/recovery remain open.
+
 Canonical static-sky cubemap processing now qualifies all generated mips before
 choosing half or float storage. Texture/upload/SRV formats agree, source
 normalization is preserved, and invalid radiance fails processing. The cached

@@ -781,8 +781,7 @@ void ConvertQualifiedSceneColor(uint3 pixel : SV_DispatchThreadID)
     ByteAddressBuffer report = ResourceDescriptorHeap[pass.report_srv];
     // The preceding whole-image check must complete before any narrowing store.
     // A failed product leaves the existing destination untouched.
-    if (report.Load(12u) != 0u || report.Load(8u) != (1u << 10u)
-        || report.Load(40u) != (1u << 10u)) return;
+    if (!IsCheckedSceneColorAccepted(report)) return;
     Texture2D<float4> source = ResourceDescriptorHeap[pass.source_srv];
     RWTexture2D<float4> destination = ResourceDescriptorHeap[pass.destination_uav];
     const float4 sample = source.Load(int3(pixel.xy, 0));

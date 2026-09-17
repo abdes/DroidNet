@@ -28,6 +28,23 @@ def map_color(color, mapper, gamma):
     return [max(0, x) ** (1 / gamma) for x in color]
 
 
+def select_scene_source(controller, reads, textures, names, constants):
+    sources = [x for x in reads if str(x.resource) in textures]
+    report_slot = struct.unpack_from("<I", constants, 52)[0]
+    if report_slot != 0xffffffff:
+        reports = [x for x in reads if names.get(str(x.resource)) == "Vortex.Exposure.Suitability"]
+        if len(reports) != 1:
+            raise RuntimeError("Checked tonemap requires its GPU conversion report")
+        raw = bytes(controller.GetBufferData(reports[0].resource, reports[0].byteOffset, 48))
+        checked, failed = struct.unpack_from("<2I", raw, 8)
+        expected = struct.unpack_from("<I", raw, 40)[0]
+        byte_width = 2 if failed == 0 and checked == expected == 1024 else 4
+        sources = [x for x in sources if textures[str(x.resource)].format.compByteWidth == byte_width]
+    if len(sources) != 1:
+        raise RuntimeError("Missing/ambiguous selected tonemap scene source")
+    return sources[0]
+
+
 def build_report(controller, report, capture_path, report_path):
     rd = renderdoc_module()
     names = resource_id_to_name(controller)
@@ -39,13 +56,13 @@ def build_report(controller, report, capture_path, report_path):
     controller.SetFrameEvent(tone[0].event_id, True)
     pipeline = controller.GetPipelineState()
     reads = [x.descriptor for x in pipeline.GetReadOnlyResources(rd.ShaderStage.Pixel, True)]
-    constants = [x for x in reads if x.byteSize == 48 and x.elementByteSize == 48]
+    constants = [x for x in reads if x.byteSize == 64 and x.elementByteSize == 64]
     frames = [x for x in reads if names.get(str(x.resource)) == "Vortex.PostProcess.Exposure.Frame"]
     states = [x for x in reads if names.get(str(x.resource)) == "Vortex.PostProcess.Exposure.State"]
-    sources = [x for x in reads if str(x.resource) in textures]
-    if len(constants) != 1 or len(frames) != 1 or len(states) != 1 or len(sources) != 1:
+    if len(constants) != 1 or len(frames) != 1 or len(states) != 1:
         raise RuntimeError("Missing/ambiguous scene, frame, state or pass constants")
-    pc = bytes(controller.GetBufferData(constants[0].resource, constants[0].byteOffset, 48))
+    pc = bytes(controller.GetBufferData(constants[0].resource, constants[0].byteOffset, 64))
+    source = select_scene_source(controller, reads, textures, names, pc)
     mapper = struct.unpack_from("<I", pc, 12)[0]
     gamma = struct.unpack_from("<f", pc, 20)[0]
     bloom = struct.unpack_from("<f", pc, 24)[0]
@@ -56,7 +73,6 @@ def build_report(controller, report, capture_path, report_path):
     gain = struct.unpack("<f", bytes(controller.GetBufferData(states[0].resource, states[0].byteOffset, 4)))[0]
     if p != 1 or inverse_p != 1 or flags & 1 == 0:
         raise RuntimeError("Unqualified scene did not stay in the FP32 bootstrap domain")
-    source = sources[0]
     texture = textures[str(source.resource)]
     if texture.format.compCount != 4 or texture.format.compByteWidth != 4:
         raise RuntimeError("SceneColor was narrowed before metering/tonemapping")

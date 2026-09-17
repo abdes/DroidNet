@@ -51,6 +51,10 @@ public:
     float gamma { 2.2F };
     float bloom_intensity { 0.0F };
     std::optional<Vec3> background_color;
+    const graphics::Texture* scene_fallback { nullptr };
+    ShaderVisibleIndex scene_fallback_srv { kInvalidShaderVisibleIndex };
+    const graphics::Buffer* conversion_report { nullptr };
+    ShaderVisibleIndex conversion_report_srv { kInvalidShaderVisibleIndex };
   };
 
   struct ExecutionState {
@@ -77,7 +81,7 @@ private:
 
   Renderer& renderer_;
   std::unique_ptr<::oxygen::vortex::internal::PerViewStructuredPublisher<
-    std::array<std::uint32_t, 12U>>>
+    std::array<std::uint32_t, 16U>>>
     constants_publisher_;
   std::optional<frame::SequenceNumber> constants_frame_;
 };

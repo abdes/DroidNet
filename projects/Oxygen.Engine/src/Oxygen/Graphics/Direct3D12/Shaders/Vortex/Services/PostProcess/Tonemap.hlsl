@@ -27,6 +27,9 @@ struct TonemapPassConstants
     uint frame_exposure_srv;
     float3 background_color;
     uint background_enabled;
+    uint fallback_texture_index;
+    uint conversion_report_index;
+    uint2 reserved;
 };
 
 static float3 ACESFitted(float3 color)
@@ -126,7 +129,12 @@ float4 VortexTonemapPS(VortexFullscreenTriangleOutput input) : SV_Target0
         return float4(0.0f, 0.0f, 0.0f, 1.0f);
     }
 
-    Texture2D<float4> scene_signal = ResourceDescriptorHeap[pass.source_texture_index];
+    uint source_index = pass.source_texture_index;
+    if (pass.conversion_report_index != K_INVALID_BINDLESS_INDEX) {
+        ByteAddressBuffer report = ResourceDescriptorHeap[pass.conversion_report_index];
+        if (!IsCheckedSceneColorAccepted(report)) source_index = pass.fallback_texture_index;
+    }
+    Texture2D<float4> scene_signal = ResourceDescriptorHeap[source_index];
     uint width = 0u;
     uint height = 0u;
     scene_signal.GetDimensions(width, height);
