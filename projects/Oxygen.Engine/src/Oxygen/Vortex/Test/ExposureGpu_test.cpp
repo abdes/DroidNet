@@ -41,6 +41,7 @@
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererTag.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
+#include <Oxygen/Vortex/SceneRenderer/Stages/Hzb/ScreenHzbModule.h>
 #include <Oxygen/Vortex/Test/Fakes/AssetLoader.h>
 #include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
 #include <Oxygen/Vortex/Test/Fixtures/TextureBinderPayloads.h>
@@ -71,12 +72,25 @@ class ExposureFailureGraphics final : public graphics::d3d12::Graphics {
 public:
   using graphics::d3d12::Graphics::Graphics;
   mutable std::weak_ptr<graphics::Texture> processed_sky;
+  bool track_resources { false };
+  mutable std::vector<std::weak_ptr<graphics::Texture>> tracked_textures;
+  mutable std::vector<std::weak_ptr<graphics::Buffer>> tracked_buffers;
+  auto CreateBuffer(const BufferDesc& desc) const
+    -> std::shared_ptr<graphics::Buffer> override
+  {
+    auto buffer = graphics::d3d12::Graphics::CreateBuffer(desc);
+    if (track_resources)
+      tracked_buffers.push_back(buffer);
+    return buffer;
+  }
   auto CreateTexture(const TextureDesc& desc) const
     -> std::shared_ptr<graphics::Texture> override
   {
     auto texture = graphics::d3d12::Graphics::CreateTexture(desc);
     if (desc.debug_name == "Vortex.StaticSkyLight.ProcessedCubemap")
       processed_sky = texture;
+    if (track_resources)
+      tracked_textures.push_back(texture);
     return texture;
   }
   std::vector<std::string> recorder_names;
@@ -111,6 +125,7 @@ protected:
   auto CheckOffscreenSharing(bool inside_frame) -> void;
   auto CheckSceneExposureRetry(bool inside_frame, bool late_failure = false)
     -> void;
+  auto CheckFogViewRetirement(bool persistent, bool temporal) -> void;
   auto CreateBackend(const SerializedBackendConfig& config,
     const SerializedPathFinderConfig& paths)
     -> std::shared_ptr<graphics::d3d12::Graphics> override
@@ -3985,6 +4000,335 @@ NOLINT_TEST_F(ExposureGpuTest,
   }
   extension->before = [](RenderContext&) { };
   FlushBackend();
+}
+
+auto ExposureGpuTest::CheckFogViewRetirement(
+  const bool persistent, const bool temporal) -> void
+{
+  auto& tracked = static_cast<ExposureFailureGraphics&>(Backend());
+  tracked.track_resources = true;
+  pass_.reset();
+  renderer_->OnShutdown();
+  auto config = RendererConfig {};
+  config.upload_queue_key = QueueKeyFor().get();
+  renderer_ = std::make_unique<Renderer>(GetGraphicsShared(), config,
+    RendererCapabilityFamily::kScenePreparation
+      | RendererCapabilityFamily::kDeferredShading
+      | RendererCapabilityFamily::kLightingData
+      | RendererCapabilityFamily::kEnvironmentLighting
+      | RendererCapabilityFamily::kFinalOutputComposition);
+  console::Console console;
+  renderer_->RegisterConsoleBindings(observer_ptr { &console });
+  ASSERT_EQ(
+    console
+      .Execute(temporal ? "vtx.volumetric_fog.temporal_reprojection true"
+                        : "vtx.volumetric_fog.temporal_reprojection false")
+      .status,
+    console::ExecutionStatus::kOk);
+  auto scene = std::make_shared<scene::Scene>("Fog retirement", 4U);
+  scene->SetEnvironment(std::make_unique<scene::SceneEnvironment>());
+  auto& fog = scene->GetEnvironment()->AddSystem<scene::environment::Fog>();
+  fog.SetEnabled(true);
+  fog.SetEnableHeightFog(true);
+  fog.SetEnableVolumetricFog(true);
+  fog.SetExtinctionSigmaTPerMeter(.01F);
+  fog.SetHeightFalloffPerMeter(0.0F);
+  fog.SetVolumetricFogDistance(1000.0F);
+  fog.SetVolumetricFogEmissive({ .1F, .2F, .3F });
+  auto camera = scene->CreateNode("Camera");
+  auto lens = std::make_unique<scene::PerspectiveCamera>();
+  auto view = View {};
+  view.viewport = { .width = 4.0F, .height = 4.0F };
+  lens->SetViewport(view.viewport);
+  ASSERT_TRUE(camera.AttachCamera(std::move(lens)));
+  scene->Update();
+  auto color = CreateRegisteredTexture({ .width = 4U,
+    .height = 4U,
+    .format = Format::kRGBA32Float,
+    .is_shader_resource = true,
+    .is_render_target = true,
+    .initial_state = ResourceStates::kCommon });
+  auto target
+    = Backend().CreateFramebuffer(FramebufferDesc {}.AddColorAttachment(color));
+  struct Capture final : IViewExtension {
+    Renderer& renderer;
+    std::vector<std::shared_ptr<Texture>> textures;
+    explicit Capture(Renderer& value)
+      : renderer(value)
+    {
+    }
+    auto OnViewSetup(const ViewSetupContext& hook) -> void override
+    {
+      hook.render_context.current_view.with_height_fog = true;
+    }
+    auto OnPostRenderViewGpu(const ViewRenderGpuContext& hook) -> void override
+    {
+      auto* owner
+        = vortex::testing::RendererPublicationProbe::GetSceneRenderer(renderer);
+      textures = vortex::testing::RendererPublicationProbe::EnvironmentTextures(
+        *owner, hook.render_context.current_view.view_id);
+    }
+  };
+  auto capture = std::make_shared<Capture>(*renderer_);
+  renderer_->RegisterViewExtension(capture);
+  auto frame = engine::FrameContext {};
+  frame.SetScene(observer_ptr { scene.get() });
+  std::optional<std::size_t> baseline_resources;
+  std::uint64_t sequence = 0U;
+  auto& registry = Backend().GetResourceRegistry();
+  auto& reclaimer = Backend().GetDeferredReclaimer();
+  for (unsigned iteration = 0U; iteration < 8U; ++iteration) {
+    SCOPED_TRACE(iteration);
+    const auto slot = frame::Slot { 0U };
+    reclaimer.OnBeginFrame(slot);
+    frame.SetFrameSequenceNumber(frame::SequenceNumber { ++sequence },
+      engine::internal::EngineTagFactory::Get());
+    frame.SetFrameSlot(slot, engine::internal::EngineTagFactory::Get());
+    renderer_->OnFrameStart(observer_ptr { &frame });
+    const auto intent = ViewId { 12000U + iteration };
+    ViewId published = intent;
+    if (persistent) {
+      auto input = CompositionView::ForScene(intent, view, camera);
+      input.view_state_handle
+        = CompositionView::ViewStateHandle { intent.get() };
+      input.with_height_fog = true;
+      published = renderer_->PublishRuntimeCompositionView(frame,
+        { .composition_view = input,
+          .render_target = observer_ptr { target.get() } });
+      ASSERT_NE(published, kInvalidViewId);
+      auto loop = co::testing::TestEventLoop {};
+      co::Run(loop, [&]() -> co::Co<void> {
+        co_await renderer_->OnPreRender(observer_ptr { &frame });
+        co_await renderer_->OnRender(observer_ptr { &frame });
+      });
+    } else {
+      auto input = Renderer::OffscreenSceneViewInput::FromCamera(
+        "Stateless fog", intent, view, camera);
+      auto facade = renderer_->ForOffscreenScene();
+      facade.SetFrameSession({ .frame_slot = slot,
+        .frame_sequence = frame::SequenceNumber { sequence },
+        .delta_time_seconds = 0.0F });
+      facade.SetSceneSource({ .scene = observer_ptr { scene.get() } });
+      facade.SetViewIntent(input);
+      facade.SetOutputTarget({ .framebuffer = observer_ptr { target.get() } });
+      auto session = facade.Finalize();
+      ASSERT_TRUE(session.has_value());
+      ASSERT_TRUE(session->ExecuteInsideFrame(frame));
+    }
+    auto* owner
+      = vortex::testing::RendererPublicationProbe::GetSceneRenderer(*renderer_);
+    ASSERT_NE(owner, nullptr);
+    EXPECT_EQ(
+      vortex::testing::RendererPublicationProbe::FogHistoryCount(*owner),
+      persistent && temporal ? 1U : 0U);
+    ASSERT_EQ(capture->textures.size(), 1U);
+    auto texture = capture->textures.front();
+    ASSERT_TRUE(registry.Contains(*texture));
+    if (persistent) {
+      owner->OnFrameStart(frame);
+      EXPECT_EQ(
+        vortex::testing::RendererPublicationProbe::FogHistoryCount(*owner),
+        temporal ? 1U : 0U);
+      renderer_->RemovePublishedRuntimeView(frame, intent);
+      EXPECT_EQ(
+        vortex::testing::RendererPublicationProbe::FogHistoryCount(*owner), 0U);
+    }
+    auto readback
+      = GetReadbackManager()->CreateTextureReadback("Retiring fog voxel");
+    {
+      auto recorder = AcquireRecorder("Retiring fog output readback");
+      ASSERT_TRUE(recorder->AdoptKnownResourceState(*texture));
+      ASSERT_TRUE(readback
+          ->EnqueueCopy(*recorder, *texture,
+            { .src_slice
+              = { .z = 16U, .width = 1U, .height = 1U, .depth = 1U } })
+          .has_value());
+    }
+    const auto mapped = readback->MapNow();
+    ASSERT_TRUE(mapped.has_value());
+    Pixel voxel {};
+    std::memcpy(voxel.data(), mapped->Data(), sizeof(voxel));
+    EXPECT_GT(voxel[0], 0.0F);
+    EXPECT_TRUE(std::isfinite(voxel[0]));
+    renderer_->OnFrameEnd(observer_ptr { &frame });
+    capture->textures.clear();
+    WaitForQueueIdle();
+    for (unsigned retire = 0U; retire < frame::kFramesInFlight.get();
+      ++retire) {
+      const auto retired_slot = frame::Slot { retire };
+      owner->OnStandaloneFrameStart(
+        frame::SequenceNumber { ++sequence }, retired_slot, std::nullopt);
+      reclaimer.OnBeginFrame(retired_slot);
+    }
+    EXPECT_FALSE(registry.Contains(*texture));
+    auto* service
+      = vortex::testing::RendererPublicationProbe::GetPostProcessService(
+        *owner);
+    EXPECT_EQ(
+      vortex::testing::RendererPublicationProbe::RetainedExposureFrameCount(
+        *service),
+      0U);
+    const auto resources = registry.GetRegisteredResourceCount();
+    if (iteration == 2U)
+      baseline_resources = resources;
+    if (baseline_resources)
+      EXPECT_EQ(resources, *baseline_resources);
+    if (baseline_resources && resources != *baseline_resources
+      && iteration == 3U) {
+      std::map<std::string, unsigned> names;
+      for (auto weak : tracked.tracked_buffers)
+        if (auto resource = weak.lock();
+          resource && registry.Contains(*resource))
+          ++names[std::string(resource->GetName())];
+      for (auto weak : tracked.tracked_textures)
+        if (auto resource = weak.lock();
+          resource && registry.Contains(*resource))
+          ++names[std::string(resource->GetName())];
+      for (const auto& [name, count] : names)
+        LOG_F(ERROR, "retained {} {}", count, name);
+    }
+  }
+}
+
+NOLINT_TEST_F(ExposureGpuTest, QueuedHzbBuildsKeepTheirOwnDepthPyramids)
+{
+  auto module = ScreenHzbModule(*renderer_, SceneTexturesConfig {});
+  const std::array extents { glm::uvec2 { 8U, 8U }, glm::uvec2 { 16U, 8U },
+    glm::uvec2 { 8U, 16U } };
+  std::vector<std::unique_ptr<SceneTextures>> textures;
+  std::vector<std::vector<float>> sources;
+  std::vector<ScreenHzbModule::Output> outputs;
+  for (unsigned view = 0U; view < extents.size(); ++view) {
+    const auto extent = extents[view];
+    textures.push_back(std::make_unique<SceneTextures>(
+      Backend(), SceneTexturesConfig { .extent = extent }));
+    auto depth = textures.back()->GetSceneDepthResource();
+    sources.emplace_back(extent.x * extent.y);
+    auto& registry = Backend().GetResourceRegistry();
+    if (!registry.Contains(*depth))
+      registry.Register(depth);
+    const auto dsv_desc
+      = TextureViewDescription { .view_type = ResourceViewType::kTexture_DSV,
+          .visibility = DescriptorVisibility::kCpuOnly,
+          .format = depth->GetDescriptor().format,
+          .dimension = TextureType::kTexture2D };
+    auto dsv = registry.Find(*depth, dsv_desc);
+    if (!dsv->IsValid()) {
+      auto allocation
+        = renderer_->GetGraphics()->GetDescriptorAllocator().AllocateRaw(
+          ResourceViewType::kTexture_DSV, DescriptorVisibility::kCpuOnly);
+      dsv = registry.RegisterView(*depth, std::move(allocation), dsv_desc);
+    }
+    CHECK_F(dsv->IsValid());
+    auto recorder = AcquireRecorder("HZB depth fixture pattern");
+    EnsureTracked(*recorder, depth, depth->GetDescriptor().initial_state);
+    recorder->RequireResourceState(*depth, ResourceStates::kDepthWrite);
+    recorder->FlushBarriers();
+    for (unsigned y = 0U; y < extent.y; ++y)
+      for (unsigned x = 0U; x < extent.x; ++x) {
+        const float value
+          = static_cast<float>((x * 3U + y * 5U + view * 17U) % 63U + 1U)
+          / 64.0F;
+        sources.back()[y * extent.x + x] = value;
+        const std::array rects { Scissors { .left = static_cast<int>(x),
+          .top = static_cast<int>(y),
+          .right = static_cast<int>(x + 1U),
+          .bottom = static_cast<int>(y + 1U) } };
+        recorder->ClearDepthStencilView(
+          *depth, dsv, ClearFlags::kDepth, value, 0U, rects);
+      }
+    recorder->RequireResourceStateFinal(
+      *depth, ResourceStates::kShaderResource);
+  }
+  WaitForQueueIdle();
+  ctx_.frame_sequence = frame::SequenceNumber { 1U };
+  ctx_.frame_slot = frame::Slot { 0U };
+  ctx_.current_view.screen_hzb_request
+    = { .current_furthest = true, .current_closest = true };
+  const auto capture = BeginOptionalCapture();
+  for (unsigned view = 0U; view < extents.size(); ++view) {
+    module.OnFrameStart();
+    ctx_.current_view.view_id = ViewId { 14000U + view };
+    ctx_.current_view.view_state_handle
+      = CompositionView::ViewStateHandle { 14000U + view };
+    module.Execute(ctx_, *textures[view]);
+    outputs.push_back(module.GetCurrentOutput());
+    ASSERT_TRUE(outputs.back().available);
+  }
+  if (capture)
+    EXPECT_TRUE(capture->EndCapture());
+  for (unsigned view = 0U; view < extents.size(); ++view) {
+    for (const bool closest : { true, false }) {
+      SCOPED_TRACE(view);
+      SCOPED_TRACE(closest);
+      auto reference = sources[view];
+      auto extent = extents[view];
+      const auto& texture = closest ? outputs[view].closest_texture
+                                    : outputs[view].furthest_texture;
+      ASSERT_NE(texture, nullptr);
+      for (unsigned mip = 0U; mip < texture->GetDescriptor().mip_levels;
+        ++mip) {
+        const glm::uvec2 reduced_extent { std::max(1U, extent.x / 2U),
+          std::max(1U, extent.y / 2U) };
+        std::vector<float> reduced(reduced_extent.x * reduced_extent.y);
+        for (unsigned y = 0U; y < reduced_extent.y; ++y)
+          for (unsigned x = 0U; x < reduced_extent.x; ++x) {
+            float value = closest ? 0.0F : 1.0F;
+            for (unsigned dy = 0U; dy < 2U; ++dy)
+              for (unsigned dx = 0U; dx < 2U; ++dx) {
+                const float sample
+                  = reference[std::min(y * 2U + dy, extent.y - 1U) * extent.x
+                    + std::min(x * 2U + dx, extent.x - 1U)];
+                value
+                  = closest ? std::max(value, sample) : std::min(value, sample);
+              }
+            reduced[y * reduced_extent.x + x] = value;
+          }
+        auto readback = GetReadbackManager()->CreateTextureReadback(
+          "HZB independent oracle");
+        {
+          auto recorder = AcquireRecorder("HZB pyramid readback");
+          ASSERT_TRUE(recorder->AdoptKnownResourceState(*texture));
+          ASSERT_TRUE(readback
+              ->EnqueueCopy(*recorder, *texture,
+                { .src_slice = { .width = reduced_extent.x,
+                    .height = reduced_extent.y,
+                    .depth = 1U,
+                    .mip_level = mip } })
+              .has_value());
+        }
+        const auto mapped = readback->MapNow();
+        ASSERT_TRUE(mapped.has_value());
+        for (unsigned y = 0U; y < reduced_extent.y; ++y)
+          for (unsigned x = 0U; x < reduced_extent.x; ++x) {
+            float actual;
+            std::memcpy(&actual,
+              mapped->Data() + y * mapped->Layout().row_pitch.get()
+                + x * sizeof(float),
+              sizeof(float));
+            EXPECT_EQ(actual, reduced[y * reduced_extent.x + x]);
+          }
+        reference = std::move(reduced);
+        extent = reduced_extent;
+      }
+    }
+  }
+}
+
+NOLINT_TEST_F(ExposureGpuTest, RemovedViewsRetireFogHistoryAndExposureLeases)
+{
+  CheckFogViewRetirement(true, true);
+}
+
+NOLINT_TEST_F(ExposureGpuTest, StatelessFogViewsRetainNoPersistentHistory)
+{
+  CheckFogViewRetirement(false, true);
+}
+
+NOLINT_TEST_F(
+  ExposureGpuTest, NonTemporalFogOutputsRetireWithoutPersistentHistory)
+{
+  CheckFogViewRetirement(true, false);
 }
 
 NOLINT_TEST_F(

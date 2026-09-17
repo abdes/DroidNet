@@ -2637,6 +2637,10 @@ void SceneRenderer::RemoveViewState(const ViewId view_id,
   const CompositionView::ViewStateHandle view_state_handle)
 {
   InvalidatePublishedViewFrameBindings();
+  if (environment_)
+    environment_->RemoveViewState(view_id);
+  if (screen_hzb_)
+    screen_hzb_->RemoveViewState(view_id);
   if (post_process_ != nullptr) {
     post_process_->RemoveViewState(view_id, view_state_handle);
   }

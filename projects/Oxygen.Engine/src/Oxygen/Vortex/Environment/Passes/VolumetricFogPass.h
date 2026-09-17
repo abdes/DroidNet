@@ -84,6 +84,7 @@ namespace environment {
 
     OXGN_VRTX_API auto OnFrameStart(
       frame::SequenceNumber sequence, frame::Slot slot) -> void;
+    OXGN_VRTX_API auto RemoveViewState(ViewId view_id) -> void;
     [[nodiscard]] OXGN_VRTX_API auto Record(RenderContext& ctx,
       const internal::StableAtmosphereState& stable_state,
       ShaderVisibleIndex distant_sky_light_lut_srv,

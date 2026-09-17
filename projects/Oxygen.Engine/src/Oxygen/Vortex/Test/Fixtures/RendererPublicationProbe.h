@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include <algorithm>
+
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Vortex/Environment/EnvironmentLightingService.h>
 #include <Oxygen/Vortex/Environment/Passes/AtmosphereCameraAerialPerspectivePass.h>
@@ -86,6 +88,19 @@ struct RendererPublicationProbe {
     return found == histories.end()
       ? decltype(FogHistory(renderer, view)) {}
       : std::pair { found->second.texture, found->second.frame_exposure };
+  }
+  static auto FogHistoryCount(const SceneRenderer& renderer) -> std::size_t
+  {
+    return renderer.environment_ && renderer.environment_->volumetric_fog_pass_
+      ? renderer.environment_->volumetric_fog_pass_->history_by_view_.size()
+      : 0U;
+  }
+  static auto RetainedExposureFrameCount(const PostProcessService& service)
+    -> std::size_t
+  {
+    return static_cast<std::size_t>(
+      std::ranges::count_if(service.exposure_pass_->frame_pool_,
+        [](const auto& frame) { return frame.use_count() > 1; }));
   }
   static auto FrameExposureStates(const PostProcessService& service,
     frame::Slot slot) -> std::vector<postprocess::ExposurePass::StateLease>

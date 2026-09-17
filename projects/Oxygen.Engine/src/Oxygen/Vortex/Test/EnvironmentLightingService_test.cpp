@@ -259,6 +259,7 @@ auto MakeRenderContext(const ViewId view_id, const ResolvedView& resolved_view,
   ctx.active_view_index = std::size_t { 0U };
   ctx.frame_views.push_back({
     .view_id = view_id,
+    .view_state_handle = oxygen::vortex::CompositionView::ViewStateHandle { view_id.get() },
     .is_scene_view = true,
     .composition_view
     = oxygen::observer_ptr<const oxygen::vortex::CompositionView> {
@@ -269,6 +270,8 @@ auto MakeRenderContext(const ViewId view_id, const ResolvedView& resolved_view,
     .primary_target = {},
   });
   ctx.current_view.view_id = view_id;
+  ctx.current_view.view_state_handle
+    = oxygen::vortex::CompositionView::ViewStateHandle { view_id.get() };
   ctx.current_view.exposure_view_id = view_id;
   ctx.current_view.composition_view
     = oxygen::observer_ptr<const oxygen::vortex::CompositionView> {

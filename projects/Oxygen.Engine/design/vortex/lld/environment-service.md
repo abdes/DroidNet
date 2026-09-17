@@ -91,6 +91,13 @@ while earlier views are queued; it must not return sky-view, AP, fog, cached
 atmosphere/IBL or local-fog descriptor indices to the allocator immediately.
 No queue-idle wait is added to environment cleanup. Ordinary engine-frame
 queue flushing does not make these same-frame replacement paths safe.
+Actual view retirement reaches the fog owner through SceneRenderer and
+EnvironmentLightingService. It erases that view's fog-history entry and retires
+the volume, descriptors and stored exposure lease through the existing fence
+path. Registered inactive views retain history until actual retirement.
+Stateless views and views with temporal reprojection disabled keep no persistent
+history entry; their current volumes and exposure readers remain frame-retained
+until GPU consumers finish. Unpublished fog allocations also retire on failure.
 
 ## Current Implementation Status
 

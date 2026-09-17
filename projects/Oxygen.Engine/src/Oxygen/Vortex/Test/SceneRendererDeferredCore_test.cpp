@@ -76,6 +76,7 @@ using oxygen::scene::PointLight;
 using oxygen::scene::Scene;
 using oxygen::scene::SpotLight;
 using oxygen::vortex::CapabilitySet;
+using oxygen::vortex::CompositionView;
 using oxygen::vortex::RenderContext;
 using oxygen::vortex::Renderer;
 using oxygen::vortex::RendererCapabilityFamily;
@@ -1858,7 +1859,7 @@ NOLINT_TEST_F(
         ASSERT_TRUE(descriptor.IsValid());
         if (frame < 3U)
           EXPECT_TRUE(indices.insert(descriptor.get()).second);
-        const auto& events = graphics_->buffer_srv_log_.events;
+        const auto& events = graphics_->buffer_view_log_.events;
         const auto found = std::find_if(events.rbegin(), events.rend(),
           [descriptor](const auto& event) { return event.slot == descriptor; });
         ASSERT_NE(found, events.rend());
@@ -2840,6 +2841,8 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   auto textures = oxygen::vortex::SceneTextures(*graphics_, config);
   auto context = RenderContext {};
   context.current_view.view_id = first_view_id_;
+  context.current_view.view_state_handle
+    = CompositionView::ViewStateHandle { first_view_id_.get() };
   context.current_view.screen_hzb_request
     = { .current_furthest = true, .publish_previous_furthest = true };
   context.frame_slot = oxygen::frame::Slot { 0U };
@@ -2860,6 +2863,108 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   context.current_view.history_discontinuity = false;
   module.Execute(context, textures);
   EXPECT_TRUE(module.GetPreviousOutput().available);
+}
+
+NOLINT_TEST_F(SceneRendererDeferredCoreTest,
+  HzbConstantsSurviveSameFrameResetsAndOutstandingSlots)
+{
+  auto context = RenderForView(first_view_id_, first_resolved_view_);
+  auto module
+    = oxygen::vortex::ScreenHzbModule(*renderer_, SceneTexturesConfig {});
+  auto first = oxygen::vortex::SceneTextures(
+    *graphics_, SceneTexturesConfig { .extent = { 64U, 64U } });
+  auto second = oxygen::vortex::SceneTextures(
+    *graphics_, SceneTexturesConfig { .extent = { 32U, 16U } });
+  struct Snapshot {
+    unsigned slot;
+    const std::byte* data;
+    std::array<std::byte, 48U> bytes;
+  };
+  std::vector<Snapshot> snapshots;
+  for (unsigned frame = 0U; frame < 4U; ++frame) {
+    context.frame_sequence = oxygen::frame::SequenceNumber { 100U + frame };
+    context.frame_slot = oxygen::frame::Slot { frame % 3U };
+    context.current_view.resolved_view = {};
+    context.current_view.view_state_handle = {};
+    context.current_view.screen_hzb_request
+      = { .current_furthest = true, .current_closest = true };
+    graphics_->buffer_view_log_.events.clear();
+    module.OnFrameStart();
+    context.current_view.view_id = ViewId { 800U + frame * 2U };
+    module.Execute(context, first);
+    ASSERT_FALSE(graphics_->buffer_view_log_.events.empty());
+    if (frame < 3U) {
+      for (const auto& event : graphics_->buffer_view_log_.events) {
+        ASSERT_GE(event.size, 48U);
+        Snapshot snapshot { frame, event.data, {} };
+        std::memcpy(snapshot.bytes.data(), event.data, snapshot.bytes.size());
+        snapshots.push_back(snapshot);
+      }
+    }
+    module.OnFrameStart();
+    context.current_view.view_id = ViewId { 801U + frame * 2U };
+    module.Execute(context, second);
+    for (const auto& snapshot : snapshots) {
+      if (frame == 3U && snapshot.slot == 0U)
+        continue;
+      EXPECT_EQ(std::memcmp(
+                  snapshot.bytes.data(), snapshot.data, snapshot.bytes.size()),
+        0)
+        << "A later HZB build overwrote queued constants";
+    }
+  }
+}
+
+NOLINT_TEST_F(SceneRendererDeferredCoreTest,
+  HzbViewRetirementKeepsCurrentOutputsUntilTheGpuSlotRetires)
+{
+  for (const bool persistent : { true, false }) {
+    SCOPED_TRACE(persistent);
+    auto& reclaimer = graphics_->GetDeferredReclaimer();
+    reclaimer.OnBeginFrame(oxygen::frame::Slot { 1U });
+    const auto config = SceneTexturesConfig { .extent = { 64U, 64U } };
+    auto module = oxygen::vortex::ScreenHzbModule(*renderer_, config);
+    auto textures = oxygen::vortex::SceneTextures(*graphics_, config);
+    auto context = RenderContext {};
+    context.current_view.view_id = first_view_id_;
+    context.current_view.view_state_handle = persistent
+      ? CompositionView::ViewStateHandle { first_view_id_.get() }
+      : CompositionView::kInvalidViewStateHandle;
+    context.current_view.screen_hzb_request = { .current_furthest = true,
+      .current_closest = true,
+      .publish_previous_furthest = true };
+    context.frame_slot = oxygen::frame::Slot { 1U };
+    context.frame_sequence = oxygen::frame::SequenceNumber { 1U };
+    module.Execute(context, textures);
+    const auto output = module.GetCurrentOutput();
+    ASSERT_TRUE(output.available);
+    ASSERT_NE(output.closest_texture, nullptr);
+    ASSERT_NE(output.furthest_texture, nullptr);
+    auto& registry = graphics_->GetResourceRegistry();
+    const auto before_retirement = registry.GetRegisteredResourceCount();
+    if (persistent) {
+      module.OnFrameStart();
+      context.frame_sequence = oxygen::frame::SequenceNumber { 2U };
+      module.Execute(context, textures);
+      EXPECT_TRUE(module.GetPreviousOutput().available);
+      module.RemoveViewState(first_view_id_);
+      EXPECT_FALSE(module.GetCurrentOutput().available);
+      EXPECT_FALSE(module.GetPreviousOutput().available);
+    } else {
+      EXPECT_FALSE(module.GetPreviousOutput().available);
+    }
+    EXPECT_TRUE(registry.Contains(*output.closest_texture));
+    EXPECT_TRUE(registry.Contains(*output.furthest_texture));
+    reclaimer.OnBeginFrame(oxygen::frame::Slot { 2U });
+    EXPECT_TRUE(registry.Contains(*output.closest_texture));
+    reclaimer.OnBeginFrame(oxygen::frame::Slot { 1U });
+    EXPECT_FALSE(registry.Contains(*output.closest_texture));
+    EXPECT_FALSE(registry.Contains(*output.furthest_texture));
+    EXPECT_EQ(registry.GetRegisteredResourceCount(), before_retirement - 8U);
+    module.OnFrameStart();
+    EXPECT_FALSE(module.GetCurrentOutput().available);
+    EXPECT_FALSE(module.GetPreviousOutput().available);
+  }
 }
 
 NOLINT_TEST_F(SceneRendererDeferredCoreTest,

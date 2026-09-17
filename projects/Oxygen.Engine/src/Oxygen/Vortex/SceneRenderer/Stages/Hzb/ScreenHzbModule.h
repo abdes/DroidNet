@@ -9,6 +9,8 @@
 #include <cstdint>
 #include <memory>
 
+#include <Oxygen/Core/Types/View.h>
+
 #include <Oxygen/Vortex/Types/ScreenHzbFrameBindings.h>
 #include <Oxygen/Vortex/api_export.h>
 
@@ -43,6 +45,7 @@ public:
 
   OXGN_VRTX_API void Execute(RenderContext& ctx, SceneTextures& scene_textures);
   OXGN_VRTX_API void OnFrameStart();
+  OXGN_VRTX_API void RemoveViewState(ViewId view_id);
   [[nodiscard]] OXGN_VRTX_API auto GetCurrentOutput() const -> const Output&;
   [[nodiscard]] OXGN_VRTX_API auto GetPreviousOutput() const -> const Output&;
 
@@ -51,6 +54,7 @@ private:
   std::unique_ptr<Impl> impl_;
   Output current_output_ {};
   Output previous_output_ {};
+  ViewId output_view_id_ { kInvalidViewId };
 };
 
 } // namespace oxygen::vortex
