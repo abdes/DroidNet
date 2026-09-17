@@ -13,8 +13,9 @@ from renderdoc_ui_analysis import collect_action_records, renderdoc_module, reso
 
 def build_report(controller, report, capture_path, report_path):
     case = os.environ.get("OXYGEN_RENDERDOC_PASS_NAME")
-    if case not in ("ApDeferred", "ApForward", "ApMixed"):
-        raise RuntimeError("PassName must be ApDeferred, ApForward or ApMixed")
+    if case not in ("ApDeferred", "ApForward", "ApMixed", "ApOpaqueReference", "ApOpaqueForward"):
+        raise RuntimeError("Unknown AP proof phase")
+    expected_strength = 8.0 if case.startswith("ApOpaque") else .01
     rd = renderdoc_module()
     actions = collect_action_records(controller)
     names = resource_id_to_name(controller)
@@ -26,9 +27,13 @@ def build_report(controller, report, capture_path, report_path):
         draws = [a for a in actions if previous_tone < a.event_id < tone.event_id
                  and a.flags & rd.ActionFlags.Drawcall]
         ap = [a for a in draws if "Vortex.Stage15.Atmosphere" in a.path]
-        forward = [a for a in draws if "Vortex.Stage18.Translucency" in a.path]
-        if len(ap) != 1 or bool(forward) != (case != "ApDeferred"):
-            raise RuntimeError(f"Incorrect consumer draws: AP={len(ap)} forward={len(forward)}")
+        translucent = [a for a in draws if "Vortex.Stage18.Translucency" in a.path]
+        opaque_forward = [a for a in draws if "Vortex.Stage9.BasePass.Forward" in a.path]
+        forward = translucent + opaque_forward
+        if (len(ap) != 1 or bool(translucent) != (case in ("ApForward", "ApMixed"))
+                or bool(opaque_forward) != (case == "ApOpaqueForward")):
+            raise RuntimeError(f"Incorrect consumer draws: AP={len(ap)} translucent={len(translucent)} opaque-forward={len(opaque_forward)}")
+        inline_opaque_ap = 0
         ap_before = max(a.event_id for a in draws if a.event_id < ap[0].event_id)
         controller.SetFrameEvent(ap[0].event_id, True)
         ap_target = controller.GetPipelineState().GetOutputTargets()[0].resource
@@ -42,17 +47,23 @@ def build_report(controller, report, capture_path, report_path):
             reads = [x.descriptor for x in controller.GetPipelineState().GetReadOnlyResources(rd.ShaderStage.Pixel, True)]
             volumes = [x for x in reads if "AtmosphereCameraAerialPerspective" in names.get(str(x.resource), "")]
             view_data = [x for x in reads if x.elementByteSize == 272]
-            if len(volumes) != 1 or len(view_data) != 1:
+            if draw in opaque_forward:
+                inline_opaque_ap += len(volumes)
+            if draw not in opaque_forward and (len(volumes) != 1 or len(view_data) != 1):
                 raise RuntimeError(f"AP not consumed at event {draw.event_id}")
-            data = view_data[0]
-            strength = struct.unpack("<f", bytes(controller.GetBufferData(data.resource, data.byteOffset + 28, 4)))[0]
-            if strength != struct.unpack("<f", struct.pack("<f", .01))[0]:
-                raise RuntimeError(f"Unexpected AP strength: {strength}")
-            raw = bytes(controller.GetTextureData(volumes[0].resource, rd.Subresource()))
-            values = memoryview(raw).cast("f")
-            maximum_rgb = max(max(values[i:i+3]) for i in range(0, len(values), 4))
-            if maximum_rgb <= 0:
-                raise RuntimeError("AP volume has no scattering signal")
+            if volumes:
+                if len(volumes) != 1 or len(view_data) != 1:
+                    raise RuntimeError("Ambiguous AP consumer bindings")
+                data = view_data[0]
+                strength = struct.unpack("<f", bytes(controller.GetBufferData(data.resource, data.byteOffset + 28, 4)))[0]
+                if strength != struct.unpack("<f", struct.pack("<f", expected_strength))[0]:
+                    raise RuntimeError(f"Unexpected AP strength: {strength}")
+                raw = bytes(controller.GetTextureData(volumes[0].resource, rd.Subresource()))
+                values = memoryview(raw).cast("f")
+                maximum_rgb = max(max(values[i:i+3]) for i in range(0, len(values), 4))
+                if maximum_rgb <= 0:
+                    raise RuntimeError("AP volume has no scattering signal")
+                report.append(f"consumer={draw.event_id} path={draw.path} strength={strength} max_ap_rgb={maximum_rgb}")
             if draw in forward:
                 lighting = [x for x in reads if x.elementByteSize == 208]
                 environment = [x for x in reads if x.elementByteSize == 672]
@@ -96,7 +107,6 @@ def build_report(controller, report, capture_path, report_path):
                 if any(struct.unpack_from("<3f",data,i+12) != (0,-1,0) for i in range(0,len(data),72)):
                     raise RuntimeError("Card normals must face away from the sun")
                 report.append(f"isolation_event={draw.event_id} local_lights=0 ibl=0 card_normal=(0,-1,0) sun_direction={sun_direction}")
-            report.append(f"consumer={draw.event_id} path={draw.path} strength={strength} max_ap_rgb={maximum_rgb}")
         controller.SetFrameEvent(tone.event_id, True)
         reads = [x.descriptor for x in controller.GetPipelineState().GetReadOnlyResources(rd.ShaderStage.Pixel, True)]
         constants = [x for x in reads if x.byteSize == x.elementByteSize == 64]
@@ -119,6 +129,7 @@ def build_report(controller, report, capture_path, report_path):
         output.write_bytes(bytes(controller.GetTextureData(source.resource, rd.Subresource())))
         views.append({"width":texture.width,"height":texture.height,"radiance":str(output),
                       "gain":gain,"pre_exposure":p,"ap_draws":len(ap),"forward_draws":len(forward),
+                      "opaque_forward_draws":len(opaque_forward),"inline_opaque_ap_draws":inline_opaque_ap,
                       "before_ap":str(before_path),"after_ap":str(after_path)})
         previous_tone = tone.event_id
     if len(views) != 2:

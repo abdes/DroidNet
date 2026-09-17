@@ -135,6 +135,11 @@ auto SceneBootstrapper::GetScene() const -> observer_ptr<scene::Scene>
 auto SceneBootstrapper::ApplyAtmosphereProof(const std::uint64_t frame) -> void
 {
   CHECK_NOTNULL_F(scene_.get());
+  const std::uint32_t phase = frame < 44U ? 0U
+    : frame < 48U                         ? 1U
+    : frame < 52U                         ? 2U
+    : frame < 56U                         ? 3U
+                                          : 4U;
   if (!scene_->GetEnvironment())
     scene_->SetEnvironment(std::make_unique<scene::SceneEnvironment>());
   auto* atmosphere = scene_->GetEnvironment()
@@ -145,7 +150,7 @@ auto SceneBootstrapper::ApplyAtmosphereProof(const std::uint64_t frame) -> void
                     ->AddSystem<scene::environment::SkyAtmosphere>();
   atmosphere->SetEnabled(true);
   atmosphere->SetAerialPerspectiveStartDepthMeters(0.0F);
-  atmosphere->SetAerialScatteringStrength(0.01F);
+  atmosphere->SetAerialScatteringStrength(phase >= 3U ? 8.0F : 0.01F);
   if (!proof_sun_node_.IsAlive()) {
     proof_sun_node_ = scene_->CreateNode("AtmosphereProofSun");
     auto sun = std::make_unique<scene::DirectionalLight>();
@@ -160,7 +165,6 @@ auto SceneBootstrapper::ApplyAtmosphereProof(const std::uint64_t frame) -> void
       glm::angleAxis(std::acos(glm::dot(space::move::Forward, direction)),
         glm::normalize(glm::cross(space::move::Forward, direction))));
   }
-  const std::uint32_t phase = frame < 44U ? 0U : frame < 48U ? 1U : 2U;
   if (phase == atmosphere_proof_phase_)
     return;
   const std::array nodes { sphere_node_, cube_node_, cylinder_node_, cone_node_,
@@ -222,7 +226,7 @@ auto SceneBootstrapper::ApplyAtmosphereProof(const std::uint64_t frame) -> void
   atmosphere_proof_phase_ = phase;
   LOG_F(INFO,
     "Vortex.MultiView.AtmosphereProof frame={} phase={} (0=deferred, "
-    "1=forward, 2=mixed)",
+    "1=translucent-forward, 2=mixed, 3=opaque-reference, 4=opaque-forward)",
     frame, phase);
 }
 

@@ -962,6 +962,8 @@ auto MainModule::UpdateComposition(oxygen::engine::FrameContext& context,
       exposure.compensation_ev = 0.0F;
       view.with_atmosphere = true;
       view.with_height_fog = false;
+      view.shading_mode = frame >= 56U ? vortex::ShadingMode::kForward
+                                       : vortex::ShadingMode::kDeferred;
     }
     view.force_wireframe = false;
     if (proof == ExposureProofScenario::kModes && view.id == pip_view_id_) {

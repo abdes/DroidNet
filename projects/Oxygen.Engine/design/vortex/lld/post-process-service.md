@@ -803,7 +803,7 @@ error. These remain required before GPU admission can use the transfer rules.
 | Consumer | Transfer before subsequent stages |
 | --- | --- |
 | AP near fade (`AerialPerspective.hlsli`) | `I = weight*sample.rgb`, `T = 1-weight*(1-sample.a)`; strength scales `I` only |
-| Lit forward AP (`ForwardMesh_PS.hlsl`) | `C = background*T + I`; material coverage is returned separately |
+| Lit translucent forward AP (`ForwardMesh_PS.hlsl`) | `C = background*T + I`; material coverage is returned separately; runs after Stage 15 |
 | Deferred AP (`AtmosphereCompose.hlsl`, `AtmosphereComposePass.cpp`) | Output `(I, saturate(1-T))`; `One/InvSrcAlpha` RGB blending gives `C = I + background*T`, including at zero opacity |
 | Fog (`Fog.hlsl`, `FogPass.cpp`) | `C = volume.rgb + height.rgb*volume.T + background*height.T*volume.T`; RGB blending uses `One/InvSrcAlpha` |
 | Environment destination coverage | `A_out = 1-T + A_in*T`, with the combined height/volume `T` for fog |
@@ -811,6 +811,10 @@ error. These remain required before GPU admission can use the transfer rules.
 Deferred and forward AP use the same radiance transfer. No opacity division or
 threshold is needed. Alpha blending remains `One/InvSrcAlpha`, so the correction
 does not change the destination coverage equation.
+Opaque/masked forward base passes do not apply AP inline: like deferred opaque
+geometry, they receive the fullscreen Stage-15 transfer exactly once. The later
+translucent pass retains inline AP. Per-view shading overrides must survive demo
+publication so qualification actually executes the requested rendering family.
 
 The native `DeferredApPreservesInscatterAtLowAndZeroOpacity` fixture exercises
 the actual deferred shader and blend with FP32/FP16 LUT inputs, zero opacity,

@@ -229,7 +229,9 @@ static ForwardLightingTerms ComputeForwardLightingTerms(VSOutput input,
 
   final_color *= GetPreExposure();
 
-#  if !defined(DEBUG_DIRECT_LIGHTING_ONLY)                                     \
+  // Opaque/masked base passes receive AP once in Stage 15. Translucency runs
+  // afterward and composes AP here instead.
+#  if !defined(OXYGEN_OPAQUE_OUTPUT) && !defined(DEBUG_DIRECT_LIGHTING_ONLY)   \
     && !defined(DEBUG_DIRECT_LIGHTING_FULL)                                    \
     && !defined(DEBUG_DIRECT_LIGHT_GATES) && !defined(DEBUG_DIRECT_BRDF_CORE)  \
     && !defined(DEBUG_IBL_ONLY) && !defined(DEBUG_DIRECT_PLUS_IBL)
