@@ -33,7 +33,7 @@ def build_report(controller, report, capture_path, report_path):
             raise RuntimeError("Eligibility overwrote its previous precision record")
         c = constants[0]
         words = struct.unpack("<16I", bytes(controller.GetBufferData(c.resource, c.byteOffset, 64)))
-        if words[4:8] != (7, 0, 1024, 1) or words[9:12] != (2, 0, 0) or words[14:] != (0, 0):
+        if words[4:8] != (7, 0, 1024, 1) or words[9:12] != (2, 0, 0xffffffff) or words[14:] != (0, 0):
             raise RuntimeError("Finalizer constants ABI/layout/sequence mismatch")
         old = bytes(controller.GetBufferData(previous[0].resource, 0, 80))
         new = bytes(controller.GetBufferData(current[0].resource, 0, 80))

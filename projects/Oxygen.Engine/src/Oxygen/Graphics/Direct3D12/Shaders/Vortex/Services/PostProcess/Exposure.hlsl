@@ -783,7 +783,7 @@ struct SceneColorConversionConstants {
 struct EligibilityConstants {
     uint state_uav; uint previous_srv; uint status_uav; uint report_srv;
     uint2 layout; uint expected_products; uint controls;
-    uint frame_srv; uint2 sequence; uint reserved0;
+    uint frame_srv; uint2 sequence; uint conversion_report_srv;
     uint2 lifetime; uint2 reserved1;
 };
 
@@ -805,6 +805,19 @@ void FinalizeFp16Suitability(uint3 pixel : SV_DispatchThreadID)
     uint flags = state.Load(24u) & ~(EXPOSURE_FP16_ELIGIBLE | EXPOSURE_RANGE_FAILURE);
     uint failure = report.Load(12u);
     uint first_failure = report.Load(16u);
+    if ((frame[0].flags & 1u) == 0u) {
+        if (pass.conversion_report_srv == K_INVALID_BINDLESS_INDEX) {
+            failure |= 16u;
+            if (first_failure == 0u) first_failure = 11u;
+        } else {
+            ByteAddressBuffer conversion = ResourceDescriptorHeap[pass.conversion_report_srv];
+            if (!IsCheckedSceneColorAccepted(conversion)) {
+                const uint conversion_failure = conversion.Load(12u);
+                failure |= conversion_failure != 0u ? conversion_failure : 16u;
+                if (first_failure == 0u) first_failure = 11u;
+            }
+        }
+    }
     const uint mismatch = (pass.expected_products ^ report.Load(8u))
         | (pass.expected_products ^ report.Load(40u));
     if (mismatch != 0u || report.Load(36u) == 0u) {

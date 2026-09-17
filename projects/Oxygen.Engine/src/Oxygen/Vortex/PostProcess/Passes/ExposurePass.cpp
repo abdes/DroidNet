@@ -295,6 +295,7 @@ auto ExposurePass::OnFrameStart(
   frame_bindings_[slot.get()].clear();
   resolved_frames_.clear();
   submitted_suitability_.clear();
+  submitted_conversion_.clear();
   prior_states_.clear();
   bootstrap_states_.clear();
   for (const auto& [handle, view] : exposure_states_) {
@@ -404,31 +405,37 @@ auto ExposurePass::AcquireFrame() -> std::shared_ptr<FrameResources>
     else
       frame->uav_index = index;
   }
-  frame->suitability_buffer
-    = gfx->CreateBuffer({ .size_bytes = sizeof(HdrSuitabilityData),
-      .usage = graphics::BufferUsage::kStorage,
-      .memory = graphics::BufferMemory::kDeviceLocal,
-      .debug_name = "Vortex.Exposure.Suitability" });
-  CHECK_NOTNULL_F(frame->suitability_buffer.get());
-  RegisterResourceIfNeeded(*gfx, frame->suitability_buffer);
-  for (const auto type : { graphics::ResourceViewType::kRawBuffer_SRV,
-         graphics::ResourceViewType::kRawBuffer_UAV }) {
-    auto handle = allocator.AllocateRaw(
-      type, graphics::DescriptorVisibility::kShaderVisible);
-    CHECK_F(handle.IsValid());
-    const auto index = allocator.GetShaderVisibleIndex(handle);
-    const auto view
-      = registry.RegisterView(*frame->suitability_buffer, std::move(handle),
-        graphics::BufferViewDescription { .view_type = type,
-          .visibility = graphics::DescriptorVisibility::kShaderVisible,
-          .range = { 0U, sizeof(HdrSuitabilityData) },
-          .stride = 0U });
-    CHECK_F(view->IsValid());
-    if (type == graphics::ResourceViewType::kRawBuffer_SRV)
-      frame->suitability_srv = index;
-    else
-      frame->suitability_uav = index;
-  }
+  const auto create_report
+    = [&](std::shared_ptr<graphics::Buffer>& buffer, ShaderVisibleIndex& srv,
+        ShaderVisibleIndex& uav, std::string_view name) {
+        buffer = gfx->CreateBuffer({ .size_bytes = sizeof(HdrSuitabilityData),
+          .usage = graphics::BufferUsage::kStorage,
+          .memory = graphics::BufferMemory::kDeviceLocal,
+          .debug_name = std::string(name) });
+        CHECK_NOTNULL_F(buffer.get());
+        RegisterResourceIfNeeded(*gfx, buffer);
+        for (const auto type : { graphics::ResourceViewType::kRawBuffer_SRV,
+               graphics::ResourceViewType::kRawBuffer_UAV }) {
+          auto handle = allocator.AllocateRaw(
+            type, graphics::DescriptorVisibility::kShaderVisible);
+          CHECK_F(handle.IsValid());
+          const auto index = allocator.GetShaderVisibleIndex(handle);
+          const auto view = registry.RegisterView(*buffer, std::move(handle),
+            graphics::BufferViewDescription { .view_type = type,
+              .visibility = graphics::DescriptorVisibility::kShaderVisible,
+              .range = { 0U, sizeof(HdrSuitabilityData) },
+              .stride = 0U });
+          CHECK_F(view->IsValid());
+          if (type == graphics::ResourceViewType::kRawBuffer_SRV)
+            srv = index;
+          else
+            uav = index;
+        }
+      };
+  create_report(frame->suitability_buffer, frame->suitability_srv,
+    frame->suitability_uav, "Vortex.Exposure.Suitability");
+  create_report(frame->conversion_buffer, frame->conversion_srv,
+    frame->conversion_uav, "Vortex.Exposure.Conversion");
   frame_pool_.push_back(frame);
   return frame;
 }
@@ -654,7 +661,15 @@ auto ExposurePass::EvaluateFp16Products(RenderContext& ctx,
     return false;
   PreparePublishers(ctx);
   EnsurePipelines();
-  submitted_suitability_.erase(frame.get());
+  const bool current_scale = scale == SuitabilityScale::kCurrentFrame;
+  const auto& report_buffer
+    = current_scale ? frame->conversion_buffer : frame->suitability_buffer;
+  const auto report_uav
+    = current_scale ? frame->conversion_uav : frame->suitability_uav;
+  if (current_scale)
+    submitted_conversion_.erase(frame.get());
+  else
+    submitted_suitability_.erase(frame.get());
   std::uint32_t expected_mask = 0U;
   std::uint64_t texels = 0U;
   for (const auto& product : products) {
@@ -692,7 +707,7 @@ auto ExposurePass::EvaluateFp16Products(RenderContext& ctx,
   track(*frame->buffer, graphics::ResourceStates::kShaderResource);
   track(
     *frame->current_state->buffer, graphics::ResourceStates::kShaderResource);
-  track(*frame->suitability_buffer, graphics::ResourceStates::kUnorderedAccess);
+  track(*report_buffer, graphics::ResourceStates::kUnorderedAccess);
   if (metering.metering_mask) {
     TrackTextureFromKnownOrInitial(*recorder, *metering.metering_mask);
     recorder->RequireResourceState(
@@ -710,8 +725,7 @@ auto ExposurePass::EvaluateFp16Products(RenderContext& ctx,
         | (product->coverage ? 2U : 0U) | (product->transmittance ? 4U : 0U)
         | (desc.texture_type == TextureType::kTexture3D ? 8U : 0U)
                                : 0U;
-    const auto constants = std::array<std::uint32_t, 20U> {
-      frame->suitability_uav.get(),
+    const auto constants = std::array<std::uint32_t, 20U> { report_uav.get(),
       product ? product->srv.get() : kInvalidShaderVisibleIndex.get(),
       frame->srv_index.get(), frame->current_state->srv_index.get(), desc.width,
       desc.height, desc.depth,
@@ -729,13 +743,13 @@ auto ExposurePass::EvaluateFp16Products(RenderContext& ctx,
         product ? product->error_budget_share : 1.0F),
       std::bit_cast<std::uint32_t>(
         config.Exposure().authored.min_log_luminance),
-      std::bit_cast<std::uint32_t>(config.Exposure().authored.black_influence)
-    };
+      std::bit_cast<std::uint32_t>(
+        config.Exposure().authored.black_influence) };
     const auto slot = suitability_constants_publisher_->Publish(
       ctx.current_view.view_id, constants);
     CHECK_F(slot.IsValid());
     recorder->RequireResourceState(
-      *frame->suitability_buffer, graphics::ResourceStates::kUnorderedAccess);
+      *report_buffer, graphics::ResourceStates::kUnorderedAccess);
     recorder->FlushBarriers();
     recorder->SetPipelineState(*suitability_pipelines_[pipeline]);
     recorder->SetComputeRoot32BitConstant(
@@ -763,11 +777,12 @@ auto ExposurePass::EvaluateFp16Products(RenderContext& ctx,
     if (product.texture && product.srv.IsValid())
       dispatch(3U, &product);
   recorder->RequireResourceStateFinal(
-    *frame->suitability_buffer, graphics::ResourceStates::kShaderResource);
+    *report_buffer, graphics::ResourceStates::kShaderResource);
   recorder.reset();
   if (!recording || !recording->IsSubmitted())
     return false;
-  submitted_suitability_.insert(frame.get());
+  if (!current_scale)
+    submitted_suitability_.insert(frame.get());
   return true;
 }
 
@@ -801,6 +816,9 @@ auto ExposurePass::FinalizeFp16Suitability(RenderContext& ctx,
       };
   track(*frame->buffer, graphics::ResourceStates::kShaderResource);
   track(*frame->suitability_buffer, graphics::ResourceStates::kShaderResource);
+  const bool converted = submitted_conversion_.contains(frame.get());
+  if (converted)
+    track(*frame->conversion_buffer, graphics::ResourceStates::kShaderResource);
   track(
     *frame->current_state->buffer, graphics::ResourceStates::kUnorderedAccess);
   track(*frame->current_state->status_buffer,
@@ -826,8 +844,9 @@ auto ExposurePass::FinalizeFp16Suitability(RenderContext& ctx,
         ? 1U
         : 0U)
       | (inputs.invalidate_previous ? 2U : 0U),
-    frame->srv_index.get(), sequence[0], sequence[1], 0U, lifetime[0],
-    lifetime[1], 0U, 0U
+    frame->srv_index.get(), sequence[0], sequence[1],
+    converted ? frame->conversion_srv.get() : kInvalidShaderVisibleIndex.get(),
+    lifetime[0], lifetime[1], 0U, 0U
   };
   const auto slot
     = constants_publisher_->Publish(ctx.current_view.view_id, constants);
@@ -885,15 +904,15 @@ auto ExposurePass::ConvertCheckedSceneColor(RenderContext& ctx,
   const auto recording = recorder->GetCommandListForInspection();
   TrackTextureFromKnownOrInitial(*recorder, *inputs.scene_signal);
   TrackTextureFromKnownOrInitial(*recorder, destination);
-  CHECK_F(recorder->AdoptKnownResourceState(*frame->suitability_buffer));
+  CHECK_F(recorder->AdoptKnownResourceState(*frame->conversion_buffer));
   recorder->RequireResourceState(
     *inputs.scene_signal, graphics::ResourceStates::kShaderResource);
   recorder->RequireResourceState(
-    *frame->suitability_buffer, graphics::ResourceStates::kShaderResource);
+    *frame->conversion_buffer, graphics::ResourceStates::kShaderResource);
   recorder->RequireResourceState(
     destination, graphics::ResourceStates::kUnorderedAccess);
   const std::array<std::uint32_t, 8U> constants { inputs.scene_signal_srv.get(),
-    destination_uav.get(), frame->suitability_srv.get(), source_desc.width,
+    destination_uav.get(), frame->conversion_srv.get(), source_desc.width,
     source_desc.height, 0U, 0U, 0U };
   const auto slot = conversion_constants_publisher_->Publish(
     ctx.current_view.view_id, constants);
@@ -911,7 +930,10 @@ auto ExposurePass::ConvertCheckedSceneColor(RenderContext& ctx,
   recorder->RequireResourceStateFinal(
     destination, graphics::ResourceStates::kShaderResource);
   recorder.reset();
-  return recording && recording->IsSubmitted();
+  if (!recording || !recording->IsSubmitted())
+    return false;
+  submitted_conversion_.insert(frame.get());
+  return true;
 }
 
 auto ExposurePass::Execute(RenderContext& ctx,
@@ -1556,6 +1578,10 @@ auto ExposurePass::ReleaseExposureResources() -> void
       if (registry.Contains(*frame->suitability_buffer))
         registry.UnRegisterResource(*frame->suitability_buffer);
       gfx->RegisterDeferredRelease(std::move(frame->suitability_buffer));
+      gfx->ForgetKnownResourceState(*frame->conversion_buffer);
+      if (registry.Contains(*frame->conversion_buffer))
+        registry.UnRegisterResource(*frame->conversion_buffer);
+      gfx->RegisterDeferredRelease(std::move(frame->conversion_buffer));
     }
     for (auto& state : state_pool_) {
       for (auto* resource :

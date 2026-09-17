@@ -6,6 +6,7 @@
 
 #include <cmath>
 #include <cstring>
+#include <limits>
 #include <memory>
 
 #include <Oxygen/Core/Detail/FormatUtils.h>
@@ -419,7 +420,7 @@ auto PostProcessService::BuildBindings(const Inputs& inputs,
     = config.Exposure().authored.spot_meter_radius,
     .scene_fallback_srv = inputs.scene_fallback_srv,
     .conversion_report_srv = inputs.checked_resolution
-      ? inputs.checked_resolution->suitability_srv
+      ? inputs.checked_resolution->conversion_srv
       : kInvalidShaderVisibleIndex,
   };
 }
@@ -532,13 +533,26 @@ auto PostProcessService::PrepareSceneExposure(const ViewId view_id,
     last_execution_state_ = { .tonemap_requested = true, .view_id = view_id };
     return std::nullopt;
   }
+  auto status_transition = std::optional<ExposureTransitionToken> {};
+  const auto precision
+    = precision_states_.find(ctx.current_view.view_state_handle);
+  const auto precision_epoch = precision != precision_states_.end()
+      && precision->second.configured_frame == ctx.frame_sequence
+    ? std::optional { precision->second.epoch }
+    : std::nullopt;
   if (transition && exposure.executed && exposure.state
     && !effective_config.Settings().temporary_unit_exposure) {
-    EnqueueExposureStatus(*transition, exposure.state, ctx, settings->revision);
+    if (precision_epoch) {
+      renderer_.MarkExposureTransitionSubmitted(*transition);
+      status_transition = transition;
+    } else {
+      EnqueueExposureStatus(
+        *transition, exposure.state, ctx, settings->revision);
+    }
   }
   return PreparedExposure { this, exposure, std::move(effective_config),
     view_id, ctx.current_view.view_state_handle, settings->lifetime,
-    ctx.frame_sequence };
+    ctx.frame_sequence, status_transition, precision_epoch };
 }
 
 auto PostProcessService::ValidatePreparedExposure(const ViewId view_id,
@@ -559,6 +573,12 @@ auto PostProcessService::ConvertSceneColor(RenderContext& ctx,
 {
   ValidatePreparedExposure(ctx.current_view.view_id, ctx, prepared);
   CHECK_NOTNULL_F(prepared.exposure.frame.get());
+  CHECK_F(!published_views_.contains(prepared.view_id),
+    "Checked conversion must precede post-process publication");
+  const auto precision = precision_states_.find(prepared.handle);
+  CHECK_F(precision == precision_states_.end()
+      || precision->second.finalized_frame != ctx.frame_sequence,
+    "Checked conversion must precede precision finalization");
   const auto& settings
     = captured_exposure_settings_.at({ prepared.view_id, prepared.handle })
         .settings;
@@ -579,6 +599,124 @@ auto PostProcessService::ConvertSceneColor(RenderContext& ctx,
       .metering_mask = mask ? mask->texture.get() : nullptr,
       .metering_mask_srv = mask ? mask->srv : kInvalidShaderVisibleIndex },
     destination, destination_uav);
+}
+
+auto PostProcessService::CurrentExposureGeneration(
+  const CompositionView::ViewStateHandle handle,
+  const std::uint64_t lifetime) const -> std::uint64_t
+{
+  const auto status = renderer_.InspectExposureTransition(handle);
+  return status && status->request.lifetime == lifetime
+    ? status->request.generation
+    : 0U;
+}
+
+auto PostProcessService::SelectPrecisionCandidate(RenderContext& ctx,
+  const postprocess::ExposurePass::EligibilityInputs& requirements)
+  -> postprocess::ExposurePass::StateLease
+{
+  CHECK_F(requirements.product_layout_revision != 0U
+    && requirements.expected_products != 0U);
+  const auto handle = ctx.current_view.view_state_handle;
+  if (handle == CompositionView::kInvalidViewStateHandle)
+    return {};
+  const auto& settings
+    = CaptureConfiguredExposure(ctx.current_view.view_id, ctx);
+  const auto generation = CurrentExposureGeneration(handle, settings.lifetime);
+  const bool diagnostic = GetConfig().temporary_unit_exposure
+    || ctx.shader_debug_mode != ShaderDebugMode::kDisabled
+    || ctx.render_mode == RenderMode::kWireframe;
+  auto& precision = precision_states_[handle];
+  const bool changed = precision.lifetime != settings.lifetime
+    || precision.settings_revision != settings.revision
+    || precision.layout_revision != requirements.product_layout_revision
+    || precision.expected_products != requirements.expected_products
+    || precision.transition_generation != generation
+    || precision.diagnostic != diagnostic;
+  if (changed
+    || (requirements.invalidate_previous
+      && (!precision.restart_streak
+        || precision.configured_frame != ctx.frame_sequence))) {
+    CHECK_NE_F(precision.epoch, (std::numeric_limits<std::uint64_t>::max)());
+    ++precision.epoch;
+    precision.lifetime = settings.lifetime;
+    precision.settings_revision = settings.revision;
+    precision.layout_revision = requirements.product_layout_revision;
+    precision.expected_products = requirements.expected_products;
+    precision.transition_generation = generation;
+    precision.diagnostic = diagnostic;
+    precision.restart_streak = true;
+    precision.last_completed_frame = 0U;
+    precision.candidate.reset();
+  }
+  precision.configured_frame = ctx.frame_sequence;
+  if (diagnostic)
+    return {};
+  const auto transition = renderer_.InspectExposureTransition(handle);
+  if (transition && transition->phase == ExposureTransitionPhase::kQueued
+    && transition->applied_generation < transition->request.generation)
+    return {};
+  return precision.candidate;
+}
+
+auto PostProcessService::FinalizeScenePrecision(RenderContext& ctx,
+  const PreparedExposure& prepared,
+  const std::span<const postprocess::ExposurePass::HdrProduct> products) -> bool
+{
+  ValidatePreparedExposure(ctx.current_view.view_id, ctx, prepared);
+  const auto found = precision_states_.find(prepared.handle);
+  if (found == precision_states_.end() || !prepared.precision_epoch
+    || *prepared.precision_epoch != found->second.epoch
+    || found->second.configured_frame != ctx.frame_sequence)
+    return false;
+  auto& precision = found->second;
+  if (precision.finalized_frame == ctx.frame_sequence)
+    return precision.finalized_epoch == precision.epoch;
+  CHECK_F(!published_views_.contains(prepared.view_id),
+    "Precision finalization must precede post-process publication");
+  const auto reject = [&] {
+    // An earlier deferred/completed result cannot authorize a later failed
+    // frame. Preserve exposure events while invalidating only qualification.
+    CHECK_NE_F(precision.epoch, (std::numeric_limits<std::uint64_t>::max)());
+    ++precision.epoch;
+    precision.candidate.reset();
+    precision.restart_streak = true;
+    return false;
+  };
+  if (precision.diagnostic || !prepared.exposure.frame
+    || !prepared.exposure.state
+    || CurrentExposureGeneration(prepared.handle, prepared.lifetime)
+      != precision.transition_generation)
+    return reject();
+  const auto& settings
+    = captured_exposure_settings_.at({ prepared.view_id, prepared.handle })
+        .settings;
+  const auto& mask = settings.mask;
+  if (settings.revision == 0U
+    && (settings.mask_status == ExposureMaskStatus::kPending
+      || settings.mask_status == ExposureMaskStatus::kFailed))
+    return reject();
+  if (!exposure_pass_->EvaluateFp16Products(ctx, prepared.exposure.frame,
+        prepared.config, products,
+        { .metering_mask = mask ? mask->texture.get() : nullptr,
+          .metering_mask_srv = mask ? mask->srv : kInvalidShaderVisibleIndex })
+    || !exposure_pass_->FinalizeFp16Suitability(ctx, prepared.exposure.frame,
+      { .product_layout_revision = precision.layout_revision,
+        .expected_products = precision.expected_products,
+        .invalidate_previous = precision.restart_streak }))
+    return reject();
+  precision.restart_streak = false;
+  precision.finalized_frame = ctx.frame_sequence;
+  precision.finalized_epoch = precision.epoch;
+  QueueExposureStatus(PendingExposureStatus { .state = prepared.exposure.state,
+    .token = prepared.status_transition,
+    .handle = prepared.handle,
+    .lifetime = prepared.lifetime,
+    .frame_sequence = ctx.frame_sequence.get(),
+    .settings_revision = prepared.config.Revision(),
+    .precision = PrecisionTicket { precision.layout_revision, precision.epoch,
+      precision.transition_generation } });
+  return true;
 }
 
 auto PostProcessService::Execute(const ViewId view_id, RenderContext& ctx,
@@ -629,12 +767,17 @@ auto PostProcessService::Execute(const ViewId view_id, RenderContext& ctx,
       .scene_fallback = inputs.scene_fallback,
       .scene_fallback_srv = inputs.scene_fallback_srv,
       .conversion_report = inputs.checked_resolution
-        ? inputs.checked_resolution->suitability_buffer.get()
+        ? inputs.checked_resolution->conversion_buffer.get()
         : nullptr,
       .conversion_report_srv = inputs.checked_resolution
-        ? inputs.checked_resolution->suitability_srv
+        ? inputs.checked_resolution->conversion_srv
         : kInvalidShaderVisibleIndex,
     });
+
+  if (prepared_exposure->status_transition) {
+    EnqueueExposureStatus(*prepared_exposure->status_transition, exposure.state,
+      ctx, effective_config.Revision());
+  }
 
   last_execution_state_ = {
     .published_bindings = slot != kInvalidShaderVisibleIndex,
@@ -703,6 +846,7 @@ auto PostProcessService::RemoveViewState(const ViewId view_id,
   published_views_.erase(view_id);
   captured_exposure_settings_.erase({ view_id, view_state_handle });
   exposure_settings_.erase(view_state_handle);
+  precision_states_.erase(view_state_handle);
   pending_exposure_status_.erase(view_state_handle);
   deferred_exposure_status_.erase(view_state_handle);
   renderer_.RetireExposureTransitions(view_state_handle);
@@ -715,13 +859,42 @@ auto PostProcessService::EnqueueExposureStatus(
   const std::uint64_t settings_revision) -> void
 {
   renderer_.MarkExposureTransitionSubmitted(token);
-  auto job = PendingExposureStatus { std::move(state), {}, token,
-    ctx.frame_sequence.get(), settings_revision };
+  QueueExposureStatus(PendingExposureStatus { .state = std::move(state),
+    .token = token,
+    .handle = token.target,
+    .lifetime = token.lifetime,
+    .frame_sequence = ctx.frame_sequence.get(),
+    .settings_revision = settings_revision });
+}
+
+auto PostProcessService::QueueExposureStatus(PendingExposureStatus job) -> void
+{
   if (!IsExposureStatusNeeded(job))
     return;
+  const auto same_frame = [&](const PendingExposureStatus& existing) {
+    return existing.lifetime == job.lifetime
+      && existing.frame_sequence == job.frame_sequence
+      && existing.settings_revision == job.settings_revision;
+  };
+  if (const auto pending = pending_exposure_status_.find(job.handle);
+    pending != pending_exposure_status_.end()) {
+    for (const auto& existing : pending->second) {
+      if (same_frame(existing)) {
+        CHECK_F(!job.precision || existing.precision,
+          "A precision status cannot follow an earlier copy of the same frame");
+        return;
+      }
+    }
+  }
+  if (const auto deferred = deferred_exposure_status_.find(job.handle);
+    deferred != deferred_exposure_status_.end()
+    && same_frame(deferred->second)) {
+    if (!job.precision || deferred->second.precision)
+      return;
+  }
   if (!TryEnqueueExposureStatus(job)) {
     DeferExposureStatus(std::move(job));
-  } else if (const auto older = deferred_exposure_status_.find(token.target);
+  } else if (const auto older = deferred_exposure_status_.find(job.handle);
     older != deferred_exposure_status_.end()
     && older->second.frame_sequence <= job.frame_sequence) {
     deferred_exposure_status_.erase(older);
@@ -731,7 +904,32 @@ auto PostProcessService::EnqueueExposureStatus(
 auto PostProcessService::IsExposureStatusNeeded(
   const PendingExposureStatus& job) const -> bool
 {
-  return renderer_.NeedsExposureAcknowledgement(job.token);
+  return (job.token && renderer_.NeedsExposureAcknowledgement(*job.token))
+    || IsPrecisionStatusNeeded(job);
+}
+
+auto PostProcessService::IsPrecisionStatusNeeded(
+  const PendingExposureStatus& job) const -> bool
+{
+  if (!job.precision)
+    return false;
+  const auto found = precision_states_.find(job.handle);
+  if (found == precision_states_.end())
+    return false;
+  const auto& current = found->second;
+  if (const auto settings = exposure_settings_.find(job.handle);
+    settings != exposure_settings_.end()
+    && (settings->second.lifetime != job.lifetime
+      || settings->second.revision != job.settings_revision))
+    return false;
+  return current.lifetime == job.lifetime
+    && renderer_.EnsureExposureLifetime(job.handle) == job.lifetime
+    && current.settings_revision == job.settings_revision
+    && current.layout_revision == job.precision->layout_revision
+    && current.epoch == job.precision->epoch && !current.diagnostic
+    && current.last_completed_frame < job.frame_sequence
+    && CurrentExposureGeneration(job.handle, job.lifetime)
+    == job.precision->transition_generation;
 }
 
 auto PostProcessService::DeferExposureStatus(PendingExposureStatus job) -> void
@@ -739,18 +937,17 @@ auto PostProcessService::DeferExposureStatus(PendingExposureStatus job) -> void
   if (!IsExposureStatusNeeded(job))
     return;
   job.readback.reset();
-  const auto found = deferred_exposure_status_.find(job.token.target);
+  const auto found = deferred_exposure_status_.find(job.handle);
   if (found == deferred_exposure_status_.end()
-    || found->second.token.lifetime != job.token.lifetime
+    || found->second.lifetime != job.lifetime
     || found->second.frame_sequence <= job.frame_sequence)
-    deferred_exposure_status_.insert_or_assign(
-      job.token.target, std::move(job));
+    deferred_exposure_status_.insert_or_assign(job.handle, std::move(job));
 }
 
 auto PostProcessService::TryEnqueueExposureStatus(PendingExposureStatus job)
   -> bool
 {
-  auto& pending = pending_exposure_status_[job.token.target];
+  auto& pending = pending_exposure_status_[job.handle];
   if (pending.size() >= frame::kFramesInFlight.get())
     return false;
   auto gfx = renderer_.GetGraphics();
@@ -803,11 +1000,19 @@ auto PostProcessService::PollExposureStatus() -> void
           return false;
         ExposureCompletedStatus status {};
         std::memcpy(&status, mapped->Bytes().data(), sizeof(status));
-        if (integer(status.view_state_identity) != job.token.lifetime
+        const auto requested_generation = job.precision
+          ? job.precision->transition_generation
+          : job.token ? job.token->generation
+                      : 0U;
+        if (integer(status.view_state_identity) != job.lifetime
           || integer(status.frame_sequence) != job.frame_sequence
           || integer(status.settings_revision) != job.settings_revision
-          || integer(status.requested_generation) != job.token.generation)
-          return false;
+          || integer(status.requested_generation) != requested_generation
+          || (job.precision
+            && integer(status.product_layout_revision)
+              != job.precision->layout_revision))
+          return true; // A complete stale packet cannot become valid by
+                       // retrying.
         std::optional<ExposureTransitionError> rejection;
         if ((status.flags & 8U) != 0U) {
           rejection = status.transition_rejection_reason == 1U
@@ -816,8 +1021,17 @@ auto PostProcessService::PollExposureStatus() -> void
             ? ExposureTransitionError::kSharedConsumer
             : ExposureTransitionError::kUnsupportedSeed;
         }
-        renderer_.CompleteExposureTransition(
-          job.token, integer(status.applied_generation), rejection);
+        if (job.token)
+          renderer_.CompleteExposureTransition(
+            *job.token, integer(status.applied_generation), rejection);
+        if (IsPrecisionStatusNeeded(job)) {
+          auto& precision = precision_states_.at(job.handle);
+          precision.last_completed_frame = job.frame_sequence;
+          const bool eligible = (status.flags & 7U) == 5U
+            && status.fp16_eligible_streak == 2U
+            && integer(status.candidate_state_generation) == job.frame_sequence;
+          precision.candidate = eligible ? job.state : nullptr;
+        }
         return true;
       };
       if (!complete())

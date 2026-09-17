@@ -32,7 +32,7 @@ def select_scene_source(controller, reads, textures, names, constants):
     sources = [x for x in reads if str(x.resource) in textures]
     report_slot = struct.unpack_from("<I", constants, 52)[0]
     if report_slot != 0xffffffff:
-        reports = [x for x in reads if names.get(str(x.resource)) == "Vortex.Exposure.Suitability"]
+        reports = [x for x in reads if names.get(str(x.resource)) == "Vortex.Exposure.Conversion"]
         if len(reports) != 1:
             raise RuntimeError("Checked tonemap requires its GPU conversion report")
         raw = bytes(controller.GetBufferData(reports[0].resource, reports[0].byteOffset, 48))

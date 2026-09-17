@@ -36,7 +36,7 @@ def build_report(controller, report, capture_path, report_path):
         words = struct.unpack("<8I", bytes(controller.GetBufferData(c.resource, c.byteOffset, 32)))
         if words[3:] != (9, 3, 0, 0, 0):
             raise RuntimeError("Conversion constants extent/reserved ABI mismatch")
-        reports = [r for r in reads if names.get(str(r.resource)) == "Vortex.Exposure.Suitability"]
+        reports = [r for r in reads if names.get(str(r.resource)) == "Vortex.Exposure.Conversion"]
         destinations = [r for r in writes if names.get(str(r.resource)) == "CheckedSceneColorDestination"]
         if len(reports) != 1 or len(destinations) != 1:
             raise RuntimeError("Missing or ambiguous conversion resources")

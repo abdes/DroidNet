@@ -70,6 +70,9 @@ namespace postprocess {
     std::shared_ptr<graphics::Buffer> suitability_buffer;
     ShaderVisibleIndex suitability_srv { kInvalidShaderVisibleIndex };
     ShaderVisibleIndex suitability_uav { kInvalidShaderVisibleIndex };
+    std::shared_ptr<graphics::Buffer> conversion_buffer;
+    ShaderVisibleIndex conversion_srv { kInvalidShaderVisibleIndex };
+    ShaderVisibleIndex conversion_uav { kInvalidShaderVisibleIndex };
   };
 class ExposurePass {
 public:
@@ -259,6 +262,7 @@ private:
   std::map<std::pair<ViewId, CompositionView::ViewStateHandle>, FrameLease>
     resolved_frames_;
   std::unordered_set<const FrameResources*> submitted_suitability_;
+  std::unordered_set<const FrameResources*> submitted_conversion_;
   std::array<std::vector<FrameLease>, frame::kFramesInFlight.get()>
     frame_bindings_;
   std::vector<std::shared_ptr<StateResources>> state_pool_;

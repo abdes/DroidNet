@@ -97,12 +97,21 @@ public:
   bool fail_next_exposure_recorder { false };
   bool fail_next_frame_recorder { false };
   bool fail_next_fallback_recorder { false };
+  bool fail_status_recorder { false };
+  bool fail_next_suitability_recorder { false };
   auto AcquireCommandRecorder(const graphics::QueueKey& queue,
     std::string_view name, bool immediate = true)
     -> std::unique_ptr<graphics::CommandRecorder,
       std::function<void(graphics::CommandRecorder*)>> override
   {
     recorder_names.emplace_back(name);
+    if (fail_status_recorder && name == "Exposure status readback")
+      return { nullptr, [](graphics::CommandRecorder*) { } };
+    if (fail_next_suitability_recorder
+      && name == "Vortex Exposure Suitability") {
+      fail_next_suitability_recorder = false;
+      return { nullptr, [](graphics::CommandRecorder*) { } };
+    }
     if (fail_next_fallback_recorder && name == "Vortex Exposure Fallback") {
       fail_next_fallback_recorder = false;
       return { nullptr, [](graphics::CommandRecorder*) { } };
@@ -5112,7 +5121,7 @@ NOLINT_TEST_F(ExposureGpuTest,
     if (capture)
       EXPECT_TRUE(capture->EndCapture());
     const auto result = Read<HdrSuitabilityData>(
-      *frame->suitability_buffer, ResourceStates::kShaderResource);
+      *frame->conversion_buffer, ResourceStates::kShaderResource);
     EXPECT_EQ(result.candidate_pre_exposure, test_case.fp32 ? 1.0F : 4.0F);
     EXPECT_EQ(result.expected_products, 1U << 10U);
     EXPECT_EQ(result.checked_products, result.expected_products);
@@ -5216,6 +5225,8 @@ NOLINT_TEST_F(ExposureGpuTest,
     Case { "accepted half", 1.0F / 3.0F, 0, true, false, .333251953125F },
     Case { "overflow fallback", 1.0F / 3.0F, 0, true, true, 1.0F / 3.0F },
     Case { "dark loss fallback", 0x1p-30F, -30, true, false, 1.0F },
+    Case { "future candidate cannot approve current conversion", 0x1p20F, 20,
+      true, false, 1.0F },
     Case { "nonunit P", 1.0F / 3.0F, -2, false, false, .333251953125F },
   };
   for (const auto& test_case : cases) {
@@ -5236,6 +5247,8 @@ NOLINT_TEST_F(ExposureGpuTest,
     config.bloom_intensity = 0.0F;
     service.SetResolvedConfig(service.BuildPassConfig(
       config, ctx_.current_view.view_id, ctx_.current_view.view_state_handle));
+    static_cast<void>(service.SelectPrecisionCandidate(
+      ctx_, { .product_layout_revision = 1U, .expected_products = 1024U }));
     const auto frame = service.PrepareFrameExposure(ctx_, test_case.fp32);
     ASSERT_NE(frame, nullptr);
     std::array<Pixel, 16U> pixels;
@@ -5306,6 +5319,19 @@ NOLINT_TEST_F(ExposureGpuTest,
       { .scene_signal = accumulation.texture.get(),
         .scene_signal_srv = accumulation.srv },
       *destination, uav));
+    const auto converted_state = Read<ExposureStateData>(
+      *prepared->exposure.state->buffer, ResourceStates::kShaderResource);
+    EXPECT_EQ(std::memcmp(&before, &converted_state, sizeof(before)), 0);
+    const auto conversion_before = Read<HdrSuitabilityData>(
+      *frame->conversion_buffer, ResourceStates::kShaderResource);
+    const std::array products { postprocess::ExposurePass::HdrProduct {
+      .texture = accumulation.texture.get(),
+      .srv = accumulation.srv,
+      .id = 11U,
+      .metering = true } };
+    ASSERT_TRUE(service.FinalizeScenePrecision(ctx_, *prepared, products));
+    const auto finalized = Read<ExposureStateData>(
+      *prepared->exposure.state->buffer, ResourceStates::kShaderResource);
     EXPECT_NEAR(
       ServicePixel(service, resolved, settings, false, 0.0F, {},
         engine::ToneMapper::kNone, false, &*prepared, &accumulation, frame),
@@ -5313,16 +5339,22 @@ NOLINT_TEST_F(ExposureGpuTest,
     if (capture)
       EXPECT_TRUE(capture->EndCapture());
     const auto report = Read<HdrSuitabilityData>(
-      *frame->suitability_buffer, ResourceStates::kShaderResource);
-    const bool rejected = test_case.overflow || test_case.value == 0x1p-30F;
+      *frame->conversion_buffer, ResourceStates::kShaderResource);
+    EXPECT_EQ(std::memcmp(&conversion_before, &report, sizeof(report)), 0);
+    const bool rejected = test_case.overflow || test_case.value == 0x1p-30F
+      || test_case.value == 0x1p20F;
     EXPECT_EQ(report.failure_flags != 0U, rejected);
+    if (!test_case.fp32 && rejected)
+      EXPECT_EQ(finalized.fp16_eligible_streak, 0U);
+    if (test_case.fp32 && test_case.overflow)
+      EXPECT_EQ(finalized.fp16_eligible_streak, 1U);
     const auto after = Read<ExposureStateData>(
       *prepared->exposure.state->buffer, ResourceStates::kShaderResource);
-    EXPECT_EQ(std::memcmp(&before, &after, sizeof(before)), 0);
+    EXPECT_EQ(std::memcmp(&finalized, &after, sizeof(finalized)), 0);
     const auto* bindings = service.InspectBindings(ctx_.current_view.view_id);
     ASSERT_NE(bindings, nullptr);
     EXPECT_EQ(bindings->scene_fallback_srv, accumulation.srv);
-    EXPECT_EQ(bindings->conversion_report_srv, frame->suitability_srv);
+    EXPECT_EQ(bindings->conversion_report_srv, frame->conversion_srv);
   }
 }
 
@@ -5746,6 +5778,186 @@ NOLINT_TEST_F(ExposureGpuTest,
     static_cast<ExposureFailureGraphics&>(Backend()).processed_sky.lock(),
     full);
   FlushBackend();
+}
+
+NOLINT_TEST_F(ExposureGpuTest,
+  CompletedPrecisionAdmissionTracksViewSettingsLayoutAndDiagnostics)
+{
+  auto service = PostProcessService(*renderer_);
+  auto config = PostProcessConfig {};
+  config.exposure.mode = engine::ExposureMode::kManual;
+  config.exposure.manual_ev = 0.0F;
+  config.exposure.key = 12.5F;
+  service.SetConfig(config);
+  const auto ordinary = Uniform(1.0F, 4U, 4U);
+  const auto invalid = Uniform(std::numeric_limits<float>::infinity(), 4U, 4U);
+  auto layout = std::uint64_t { 7U };
+  const auto step = [&](bool expected_candidate, std::uint32_t expected_streak,
+                      const Signal& signal, bool diagnostic = false) {
+    WaitForQueueIdle();
+    ctx_.frame_sequence = frame::SequenceNumber { ++sequence_ };
+    ctx_.frame_slot = frame::Slot { static_cast<unsigned>(sequence_ % 3U) };
+    ctx_.render_mode = diagnostic ? RenderMode::kWireframe : RenderMode::kSolid;
+    service.OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
+    const auto requirements = postprocess::ExposurePass::EligibilityInputs {
+      .product_layout_revision = layout, .expected_products = 1024U
+    };
+    const auto candidate = service.SelectPrecisionCandidate(ctx_, requirements);
+    EXPECT_EQ(candidate != nullptr, expected_candidate) << sequence_;
+    EXPECT_EQ(service.SelectPrecisionCandidate(ctx_, requirements), candidate);
+    EXPECT_NE(service.PrepareFrameExposure(ctx_, true), nullptr);
+    const auto prepared = service.PrepareSceneExposure(
+      ctx_.current_view.view_id, ctx_,
+      { .scene_signal = signal.texture.get(), .scene_signal_srv = signal.srv });
+    CHECK_F(prepared.has_value());
+    const std::array products { postprocess::ExposurePass::HdrProduct {
+      .texture = signal.texture.get(),
+      .srv = signal.srv,
+      .id = 11U,
+      .metering = true } };
+    EXPECT_EQ(
+      service.FinalizeScenePrecision(ctx_, *prepared, products), !diagnostic);
+    if (!diagnostic) {
+      EXPECT_TRUE(service.FinalizeScenePrecision(ctx_, *prepared, products));
+      EXPECT_EQ(
+        ReadState(prepared->exposure).fp16_eligible_streak, expected_streak);
+    }
+    const auto counts
+      = vortex::testing::RendererPublicationProbe::ExposureStatusCounts(
+        service, ctx_.current_view.view_state_handle);
+    EXPECT_LE(counts.first, 1U);
+    EXPECT_EQ(counts.second, 0U);
+    return candidate;
+  };
+  EXPECT_EQ(step(false, 1U, ordinary), nullptr);
+  EXPECT_EQ(step(false, 2U, ordinary), nullptr);
+  const auto first = step(true, 2U, ordinary);
+  ASSERT_NE(first, nullptr);
+  EXPECT_EQ(
+    Read<ExposureStateData>(*first->buffer, ResourceStates::kShaderResource)
+      .frame_sequence[0],
+    2U);
+  layout = 8U;
+  step(false, 1U, ordinary);
+  step(false, 2U, ordinary);
+  step(true, 2U, ordinary);
+  config.exposure.manual_ev = 1.0F;
+  service.SetConfig(config);
+  step(false, 1U, ordinary);
+  step(false, 2U, ordinary);
+  step(true, 2U, ordinary);
+  step(false, 0U, ordinary, true);
+  step(false, 1U, ordinary);
+  step(false, 2U, ordinary);
+  step(true, 2U, ordinary);
+  step(true, 0U, invalid);
+  step(false, 1U, ordinary);
+  step(false, 2U, ordinary);
+  step(true, 2U, ordinary);
+  service.RemoveViewState(
+    ctx_.current_view.view_id, ctx_.current_view.view_state_handle);
+  step(false, 1U, ordinary);
+  WaitForQueueIdle();
+}
+
+NOLINT_TEST_F(
+  ExposureGpuTest, PrecisionStatusRetriesTransportWithoutEarlyAdmission)
+{
+  auto service = PostProcessService(*renderer_);
+  auto config = PostProcessConfig {};
+  config.exposure.mode = engine::ExposureMode::kManual;
+  config.exposure.manual_ev = 0.0F;
+  config.exposure.key = 12.5F;
+  service.SetConfig(config);
+  auto& backend = static_cast<ExposureFailureGraphics&>(Backend());
+  backend.fail_status_recorder = true;
+  const auto signal = Uniform(1.0F, 4U, 4U);
+  const auto requirements = postprocess::ExposurePass::EligibilityInputs {
+    .product_layout_revision = 7U, .expected_products = 1024U
+  };
+  const auto begin = [&] {
+    WaitForQueueIdle();
+    ctx_.frame_sequence = frame::SequenceNumber { ++sequence_ };
+    ctx_.frame_slot = frame::Slot { static_cast<unsigned>(sequence_ % 3U) };
+    service.OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
+    return service.SelectPrecisionCandidate(ctx_, requirements);
+  };
+  for (unsigned i = 0U; i < 6U; ++i) {
+    EXPECT_EQ(begin(), nullptr);
+    ASSERT_NE(service.PrepareFrameExposure(ctx_, true), nullptr);
+    const auto prepared = service.PrepareSceneExposure(
+      ctx_.current_view.view_id, ctx_,
+      { .scene_signal = signal.texture.get(), .scene_signal_srv = signal.srv });
+    ASSERT_TRUE(prepared.has_value());
+    const std::array products { postprocess::ExposurePass::HdrProduct {
+      .texture = signal.texture.get(),
+      .srv = signal.srv,
+      .id = 11U,
+      .metering = true } };
+    ASSERT_TRUE(service.FinalizeScenePrecision(ctx_, *prepared, products));
+    const auto counts
+      = vortex::testing::RendererPublicationProbe::ExposureStatusCounts(
+        service, ctx_.current_view.view_state_handle);
+    EXPECT_EQ(counts.first, 0U);
+    EXPECT_EQ(counts.second, 1U);
+  }
+  backend.fail_status_recorder = false;
+  EXPECT_EQ(
+    begin(), nullptr); // Retry records a copy; it is not an acknowledgement.
+  const auto candidate = begin();
+  ASSERT_NE(candidate, nullptr);
+  EXPECT_EQ(
+    Read<ExposureStateData>(*candidate->buffer, ResourceStates::kShaderResource)
+      .frame_sequence[0],
+    6U);
+  const auto token = renderer_->QueueExposureTransition(
+    ctx_.current_view.view_state_handle, ExposureTransitionPolicy::kPreserve);
+  ASSERT_TRUE(token.has_value());
+  EXPECT_EQ(service.SelectPrecisionCandidate(ctx_, requirements), nullptr);
+  WaitForQueueIdle();
+}
+
+NOLINT_TEST_F(ExposureGpuTest,
+  FailedPrecisionRecordingCannotAdmitAnOlderDeferredCertificate)
+{
+  auto service = PostProcessService(*renderer_);
+  auto config = PostProcessConfig {};
+  config.exposure.mode = engine::ExposureMode::kManual;
+  config.exposure.manual_ev = 0.0F;
+  service.SetConfig(config);
+  auto& backend = static_cast<ExposureFailureGraphics&>(Backend());
+  backend.fail_status_recorder = true;
+  const auto signal = Uniform(1.0F, 4U, 4U);
+  const auto requirements = postprocess::ExposurePass::EligibilityInputs {
+    .product_layout_revision = 7U, .expected_products = 1024U
+  };
+  const auto begin = [&] {
+    WaitForQueueIdle();
+    ctx_.frame_sequence = frame::SequenceNumber { ++sequence_ };
+    ctx_.frame_slot = frame::Slot { static_cast<unsigned>(sequence_ % 3U) };
+    service.OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
+    return service.SelectPrecisionCandidate(ctx_, requirements);
+  };
+  for (unsigned i = 0U; i < 3U; ++i) {
+    EXPECT_EQ(begin(), nullptr);
+    ASSERT_NE(service.PrepareFrameExposure(ctx_, true), nullptr);
+    const auto prepared = service.PrepareSceneExposure(
+      ctx_.current_view.view_id, ctx_,
+      { .scene_signal = signal.texture.get(), .scene_signal_srv = signal.srv });
+    ASSERT_TRUE(prepared.has_value());
+    const std::array products { postprocess::ExposurePass::HdrProduct {
+      .texture = signal.texture.get(),
+      .srv = signal.srv,
+      .id = 11U,
+      .metering = true } };
+    backend.fail_next_suitability_recorder = i == 2U;
+    EXPECT_EQ(
+      service.FinalizeScenePrecision(ctx_, *prepared, products), i != 2U);
+  }
+  backend.fail_status_recorder = false;
+  EXPECT_EQ(begin(), nullptr);
+  EXPECT_EQ(begin(), nullptr);
+  WaitForQueueIdle();
 }
 
 } // namespace
