@@ -133,9 +133,21 @@ public:
   };
 
   //! Evaluate FP32 reference products without granting normal-mode admission.
+  enum class SuitabilityScale { kCandidate, kCurrentFrame };
   [[nodiscard]] OXGN_VRTX_API auto EvaluateFp16Products(RenderContext& ctx,
     const FrameLease& frame, const PostProcessConfig& config,
-    std::span<const HdrProduct> products, const Inputs& metering) -> bool;
+    std::span<const HdrProduct> products, const Inputs& metering,
+    SuitabilityScale scale = SuitabilityScale::kCandidate) -> bool;
+
+  //! Check the current frame's FP32 SceneColor before writing its FP16 resolve.
+  //! Call after the exposure solve. True means submitted, not suitable: the GPU
+  //! suitability report gates all destination writes. A rejected destination
+  //! remains untouched and must not be published as valid or sampled
+  //! downstream.
+  [[nodiscard]] OXGN_VRTX_API auto ConvertCheckedSceneColor(RenderContext& ctx,
+    const FrameLease& frame, const PostProcessConfig& config,
+    const Inputs& inputs, graphics::Texture& destination,
+    ShaderVisibleIndex destination_uav) -> bool;
 
   OXGN_VRTX_API explicit ExposurePass(Renderer& renderer);
   OXGN_VRTX_API ~ExposurePass();
@@ -218,11 +230,15 @@ private:
   std::optional<graphics::ComputePipelineDesc> average_pipeline_ {};
   std::optional<graphics::ComputePipelineDesc> frame_pipeline_ {};
   std::optional<graphics::ComputePipelineDesc> fallback_pipeline_ {};
+  std::optional<graphics::ComputePipelineDesc> convert_pipeline_ {};
   std::array<std::optional<graphics::ComputePipelineDesc>, 4>
     suitability_pipelines_;
   std::unique_ptr<::oxygen::vortex::internal::PerViewStructuredPublisher<
     std::array<std::uint32_t, 20U>>>
     suitability_constants_publisher_;
+  std::unique_ptr<::oxygen::vortex::internal::PerViewStructuredPublisher<
+    std::array<std::uint32_t, 8U>>>
+    conversion_constants_publisher_;
   std::unique_ptr<::oxygen::vortex::internal::PerViewStructuredPublisher<
     std::array<std::uint32_t, 12U>>>
     frame_constants_publisher_;

@@ -1217,6 +1217,23 @@ modes and checks conversion into the existing resolved-color allocation;
 SceneTextures owns the allocation and memory contract. Cumulative error
 aggregation, stability and status-qualified switching remain open.
 
+The checked SceneColor conversion primitive now evaluates the current frame's
+pinned P and final S, then gates every RGBA16F destination store on the complete
+GPU report. It reuses the existing report and frame-retained constants; a failed
+check leaves all destination texels untouched. Coverage follows production
+metering's resolved SceneBackground policy. Debug/Release pass 123 native,
+22 service and 23 publication tests; both shader profiles contain 203 entries.
+The nine-case conversion fixture covers exact half output, nonunit P, overflow,
+nonfinite input, displayed dark loss and background on/off with zero/partial
+coverage. The zero-alpha coverage regression fails before the policy fix.
+RenderDoc verifies four checks precede conversion and all 27 output texels match
+independent half bit patterns. Evidence is `lifecycle/conversion-manifest.json`.
+The focused debugger run has no blocking graphics messages.
+This primitive is not yet wired into SceneRenderer's resolve; final-S ordering,
+rejection consumption, required-product aggregation and status-qualified
+admission/recovery remain open. CPU submission success never authorizes use of
+a rejected resolve texture.
+
 Canonical static-sky cubemap processing now qualifies all generated mips before
 choosing half or float storage. Texture/upload/SRV formats agree, source
 normalization is preserved, and invalid radiance fails processing. The cached

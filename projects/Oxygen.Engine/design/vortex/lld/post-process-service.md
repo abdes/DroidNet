@@ -468,6 +468,27 @@ luminance, but weighted/dark classification still preserves the aggregate
 synthetic-dark fallback. A contributing positive sample retains the stated EV
 bound. The 80-byte evaluator constants end with radius, error-budget share,
 minimum log luminance and accepted black influence at offsets 64/68/72/76.
+Flag bit 4 selects the frame's pinned P instead of a newly selected candidate;
+this mode qualifies a current-frame conversion, not a future admission scale.
+
+The checked SceneColor conversion runs after the exposure solve so the image
+check uses the final displayed S. It checks the entire FP32 source, including
+coverage and actual meter contribution, before any RGBA16F destination write.
+Coverage follows the resolved SceneBackground policy used by production
+metering: without background compositing, alpha does not suppress meter weight
+or unpremultiply RGB. With it, quantized coverage and unpremultiplication apply.
+All writes are gated on the completed GPU report. Failure leaves the destination
+untouched; submission success is not permission to publish or sample it. The
+SceneRenderer integration must retain/use FP32 on rejection and must not infer
+success from the CPU recording result. This operation alone does not enable
+automatic format admission.
+
+`ConvertQualifiedSceneColor` uses 32-byte structured constants: source SRV,
+destination UAV, report SRV, width and height at offsets 0/4/8/12/16, followed
+by three zero words. It preserves the frame's stored RGB domain and narrows
+saturated coverage consistently with the qualifier. Existing frame-retained
+publishers and the 48-byte report provide lifetime and synchronization; no
+additional full-resolution texture or exposure history is allocated.
 Cumulative blend/error aggregation, stability and completed-status admission
 remain separate required integration gates.
 

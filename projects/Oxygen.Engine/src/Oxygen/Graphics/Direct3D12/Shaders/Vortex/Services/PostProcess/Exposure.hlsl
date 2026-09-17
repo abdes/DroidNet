@@ -767,6 +767,28 @@ struct SuitabilityConstants {
     float radius; float budget_share; float min_log_luminance; float black_influence;
 };
 
+struct SceneColorConversionConstants {
+    uint source_srv; uint destination_uav; uint report_srv; uint width;
+    uint height; uint reserved0; uint reserved1; uint reserved2;
+};
+
+[numthreads(8, 8, 1)]
+void ConvertQualifiedSceneColor(uint3 pixel : SV_DispatchThreadID)
+{
+    StructuredBuffer<SceneColorConversionConstants> constants = ResourceDescriptorHeap[g_PassConstantsIndex];
+    const SceneColorConversionConstants pass = constants[0];
+    if (pixel.x >= pass.width || pixel.y >= pass.height) return;
+    ByteAddressBuffer report = ResourceDescriptorHeap[pass.report_srv];
+    // The preceding whole-image check must complete before any narrowing store.
+    // A failed product leaves the existing destination untouched.
+    if (report.Load(12u) != 0u || report.Load(8u) != (1u << 10u)
+        || report.Load(40u) != (1u << 10u)) return;
+    Texture2D<float4> source = ResourceDescriptorHeap[pass.source_srv];
+    RWTexture2D<float4> destination = ResourceDescriptorHeap[pass.destination_uav];
+    const float4 sample = source.Load(int3(pixel.xy, 0));
+    destination[pixel.xy] = float4(sample.rgb, saturate(sample.a));
+}
+
 static void SuitabilityFailure(RWByteAddressBuffer report, uint product, uint flags, uint counter)
 {
     uint unused;
@@ -825,6 +847,10 @@ void SelectSuitabilityCandidate(uint3 pixel : SV_DispatchThreadID)
     const float maximum = asfloat(report.Load(4u));
     float p = maximum > 0.0 ? exp2(clamp(floor(log2(16376.0) - log2(maximum)), -32.0, 32.0)) : 1.0;
     if (maximum * p > 16376.0 && p > exp2(-32.0)) p *= 0.5;
+    if ((pass.flags & 16u) != 0u) {
+        StructuredBuffer<FrameExposureData> frame = ResourceDescriptorHeap[pass.frame_srv];
+        p = frame[0].pre_exposure;
+    }
     report.Store(0u, asuint(p));
     const uint missing = pass.expected_mask & ~report.Load(8u);
     if (pass.expected_mask == 0u || missing != 0u) {

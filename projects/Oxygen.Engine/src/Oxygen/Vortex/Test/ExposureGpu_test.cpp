@@ -4256,6 +4256,154 @@ NOLINT_TEST_F(
 }
 
 NOLINT_TEST_F(ExposureGpuTest,
+  CheckedSceneColorConversionUsesCurrentScaleAndRejectsTheWholeImage)
+{
+  constexpr std::uint32_t width = 9U;
+  constexpr std::uint32_t height = 3U;
+  using PackedPixel = std::array<std::uint16_t, 4U>;
+  constexpr PackedPixel sentinel { 0x3400U, 0x3800U, 0x3a00U, 0x3c00U };
+  constexpr PackedPixel expected { 0x3000U, 0x3555U, 0x3800U, 0x3800U };
+  const Pixel ordinary { .125F, 1.0F / 3.0F, .5F, .5F };
+  const float sensitive = 256.4375F * 0x1p-24F;
+  struct Case {
+    const char* name;
+    Pixel pixel;
+    float ev;
+    bool fp32;
+    bool background;
+    std::uint32_t failure;
+    PackedPixel last_pixel;
+    bool automatic { false };
+  };
+  const std::array cases {
+    Case { "ordinary", ordinary, 0, true, false, 0U, expected },
+    Case { "overflow", { 0x1p20F, 0x1p20F, 0x1p20F, 1 }, 0, true, false, 2U,
+      sentinel },
+    Case { "nonfinite", { std::numeric_limits<float>::quiet_NaN(), 0, 0, 1 }, 0,
+      true, false, 1U, sentinel },
+    Case { "displayed dark loss", { 0x1p-30F, 0x1p-30F, 0x1p-30F, 1 }, -30,
+      true, false, 4U, sentinel },
+    Case { "nonunit P", ordinary, -2, false, false, 0U, expected },
+    Case { "opaque zero alpha", { sensitive, sensitive, sensitive, 0 }, 0, true,
+      false, 8U, sentinel, true },
+    Case { "background zero alpha", { sensitive, sensitive, sensitive, 0 }, 0,
+      true, true, 0U, { 0x0100U, 0x0100U, 0x0100U, 0U }, true },
+    Case { "opaque partial alpha", { sensitive, sensitive, sensitive, .5F }, 0,
+      true, false, 8U, sentinel, true },
+    Case { "background partial alpha", { sensitive, sensitive, sensitive, .5F },
+      0, true, true, 8U, sentinel, true },
+  };
+  for (const auto& test_case : cases) {
+    SCOPED_TRACE(test_case.name);
+    auto scene = scene::Scene("CheckedResolveCoverage", 1U);
+    scene.SetEnvironment(std::make_unique<scene::SceneEnvironment>());
+    scene.GetEnvironment()
+      ->AddSystem<scene::environment::Background>()
+      .SetEnabled(test_case.background);
+    ctx_.scene = observer_ptr { &scene };
+    auto settings = scene::ExposureSettings {};
+    settings.mode = test_case.automatic ? engine::ExposureMode::kAuto
+                                        : engine::ExposureMode::kManual;
+    settings.manual_ev = test_case.ev;
+    settings.min_log_luminance = -24.0F;
+    auto config = SharedConfig(settings);
+    config.auto_exposure_min_log_luminance = settings.min_log_luminance;
+    std::vector<Pixel> pixels(width * height, ordinary);
+    pixels.back() = test_case.pixel;
+    const auto signal = MakeSignal(width, height, pixels);
+    auto destination = CreateRegisteredTexture(TextureDesc { .width = width,
+      .height = height,
+      .format = Format::kRGBA16Float,
+      .texture_type = TextureType::kTexture2D,
+      .debug_name = "CheckedSceneColorDestination",
+      .is_shader_resource = true,
+      .is_uav = true,
+      .initial_state = ResourceStates::kCommon });
+    std::array<std::byte, height * 256U> initial {};
+    for (unsigned y = 0U; y < height; ++y)
+      for (unsigned x = 0U; x < width; ++x)
+        std::memcpy(initial.data() + y * 256U + x * sizeof(PackedPixel),
+          sentinel.data(), sizeof(PackedPixel));
+    auto upload = CreateUploadBuffer(SizeBytes { initial.size() });
+    upload->Update(initial.data(), initial.size(), 0U);
+    {
+      auto recorder = AcquireRecorder("Initialize checked resolve sentinel");
+      EnsureTracked(*recorder, upload, ResourceStates::kGenericRead);
+      EnsureTracked(*recorder, destination, ResourceStates::kCommon);
+      recorder->RequireResourceState(*destination, ResourceStates::kCopyDest);
+      recorder->FlushBarriers();
+      recorder->CopyBufferToTexture(*upload,
+        { .buffer_offset = 0U,
+          .buffer_row_pitch = 256U,
+          .buffer_slice_pitch = height * 256U,
+          .dst_slice = { .width = width, .height = height, .depth = 1U } },
+        *destination);
+      recorder->RequireResourceStateFinal(
+        *destination, ResourceStates::kShaderResource);
+    }
+    auto& allocator = renderer_->GetGraphics()->GetDescriptorAllocator();
+    auto handle = allocator.AllocateRaw(
+      ResourceViewType::kTexture_UAV, DescriptorVisibility::kShaderVisible);
+    const auto uav = allocator.GetShaderVisibleIndex(handle);
+    ASSERT_TRUE(Backend()
+        .GetResourceRegistry()
+        .RegisterView(*destination, std::move(handle),
+          TextureViewDescription { .view_type = ResourceViewType::kTexture_UAV,
+            .format = Format::kRGBA16Float,
+            .dimension = TextureType::kTexture2D })
+        ->IsValid());
+    ctx_.frame_sequence = frame::SequenceNumber { ++sequence_ };
+    const auto frame
+      = pass_->ResolveFrame(ctx_, config, { .use_fp32 = test_case.fp32 });
+    ASSERT_NE(frame, nullptr);
+    ASSERT_TRUE(RecordShared(signal, config).executed);
+    const auto capture = &test_case == &cases.front()
+      ? BeginOptionalCapture()
+      : observer_ptr<FrameCaptureController> {};
+    ASSERT_TRUE(pass_->ConvertCheckedSceneColor(ctx_, frame, config,
+      { .scene_signal = signal.texture.get(), .scene_signal_srv = signal.srv },
+      *destination, uav));
+    if (capture)
+      EXPECT_TRUE(capture->EndCapture());
+    const auto result = Read<HdrSuitabilityData>(
+      *frame->suitability_buffer, ResourceStates::kShaderResource);
+    EXPECT_EQ(result.candidate_pre_exposure, test_case.fp32 ? 1.0F : 4.0F);
+    EXPECT_EQ(result.expected_products, 1U << 10U);
+    EXPECT_EQ(result.checked_products, result.expected_products);
+    const bool accepted = test_case.failure == 0U;
+    if (accepted)
+      EXPECT_EQ(result.failure_flags, 0U);
+    else {
+      EXPECT_NE(result.failure_flags & test_case.failure, 0U);
+      EXPECT_EQ(result.first_failure_product, 11U);
+    }
+    auto readback
+      = GetReadbackManager()->CreateTextureReadback("Checked resolve result");
+    {
+      auto recorder = AcquireRecorder("Read checked resolve result");
+      ASSERT_TRUE(recorder->AdoptKnownResourceState(*destination));
+      ASSERT_TRUE(
+        readback->EnqueueCopy(*recorder, *destination, {}).has_value());
+    }
+    const auto mapped = readback->MapNow();
+    ASSERT_TRUE(mapped.has_value());
+    for (unsigned y = 0U; y < height; ++y)
+      for (unsigned x = 0U; x < width; ++x) {
+        PackedPixel actual {};
+        std::memcpy(actual.data(),
+          mapped->Data() + y * mapped->Layout().row_pitch.get()
+            + x * sizeof(PackedPixel),
+          sizeof(PackedPixel));
+        EXPECT_EQ(actual,
+          !accepted                               ? sentinel
+            : y == height - 1U && x == width - 1U ? test_case.last_pixel
+                                                  : expected);
+      }
+    ctx_.scene = {};
+  }
+}
+
+NOLINT_TEST_F(ExposureGpuTest,
   StaticSkyUploadKeepsHalfAndFloatStorageCoherentAcrossFacesAndMips)
 {
   for (const bool wide : { false, true }) {

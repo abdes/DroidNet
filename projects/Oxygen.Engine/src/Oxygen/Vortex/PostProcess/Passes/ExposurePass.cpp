@@ -312,6 +312,8 @@ auto ExposurePass::OnFrameStart(
     frame_constants_publisher_->OnFrameStart(sequence, slot);
   if (suitability_constants_publisher_)
     suitability_constants_publisher_->OnFrameStart(sequence, slot);
+  if (conversion_constants_publisher_)
+    conversion_constants_publisher_->OnFrameStart(sequence, slot);
 }
 
 auto ExposurePass::PreparePublishers(RenderContext& ctx) -> void
@@ -348,6 +350,12 @@ auto ExposurePass::PreparePublishers(RenderContext& ctx) -> void
         renderer_.GetStagingProvider(),
         observer_ptr { &renderer_.GetInlineTransfersCoordinator() },
         "Vortex.Exposure.Suitability.Constants");
+    conversion_constants_publisher_
+      = std::make_unique<::oxygen::vortex::internal::PerViewStructuredPublisher<
+        std::array<std::uint32_t, 8U>>>(observer_ptr { gfx.get() },
+        renderer_.GetStagingProvider(),
+        observer_ptr { &renderer_.GetInlineTransfersCoordinator() },
+        "Vortex.Exposure.Conversion.Constants");
     target_frame_.reset();
   }
   OnFrameStart(ctx.frame_sequence, ctx.frame_slot);
@@ -624,7 +632,8 @@ auto ExposurePass::RestoreFrameFallback(RenderContext& ctx,
 
 auto ExposurePass::EvaluateFp16Products(RenderContext& ctx,
   const FrameLease& frame, const PostProcessConfig& config,
-  const std::span<const HdrProduct> products, const Inputs& metering) -> bool
+  const std::span<const HdrProduct> products, const Inputs& metering,
+  const SuitabilityScale scale) -> bool
 {
   CHECK_F(frame && config.resolved_exposure);
   auto gfx = renderer_.GetGraphics();
@@ -691,7 +700,9 @@ auto ExposurePass::EvaluateFp16Products(RenderContext& ctx,
       frame->suitability_uav.get(),
       product ? product->srv.get() : kInvalidShaderVisibleIndex.get(),
       frame->srv_index.get(), frame->current_state->srv_index.get(), desc.width,
-      desc.height, desc.depth, flags, product ? product->id : 0U, expected_mask,
+      desc.height, desc.depth,
+      flags | (scale == SuitabilityScale::kCurrentFrame ? 16U : 0U),
+      product ? product->id : 0U, expected_mask,
       metering.metering_mask_srv.get(),
       static_cast<std::uint32_t>(
         config.resolved_exposure->authored.metering_mode),
@@ -741,6 +752,71 @@ auto ExposurePass::EvaluateFp16Products(RenderContext& ctx,
       dispatch(3U, &product);
   recorder->RequireResourceStateFinal(
     *frame->suitability_buffer, graphics::ResourceStates::kShaderResource);
+  recorder.reset();
+  return recording && recording->IsSubmitted();
+}
+
+auto ExposurePass::ConvertCheckedSceneColor(RenderContext& ctx,
+  const FrameLease& frame, const PostProcessConfig& config,
+  const Inputs& inputs, graphics::Texture& destination,
+  const ShaderVisibleIndex destination_uav) -> bool
+{
+  CHECK_NOTNULL_F(inputs.scene_signal);
+  CHECK_F(inputs.scene_signal_srv.IsValid() && destination_uav.IsValid());
+  const auto& source_desc = inputs.scene_signal->GetDescriptor();
+  const auto& target_desc = destination.GetDescriptor();
+  CHECK_F(source_desc.format == Format::kRGBA32Float
+    && target_desc.format == Format::kRGBA16Float
+    && source_desc.texture_type == TextureType::kTexture2D
+    && target_desc.texture_type == TextureType::kTexture2D
+    && source_desc.sample_count == 1U && target_desc.sample_count == 1U
+    && source_desc.array_size == 1U && target_desc.array_size == 1U
+    && source_desc.mip_levels == 1U && target_desc.mip_levels == 1U
+    && source_desc.depth == 1U && target_desc.depth == 1U
+    && source_desc.width == target_desc.width
+    && source_desc.height == target_desc.height && target_desc.is_uav);
+  const std::array products { HdrProduct { .texture = inputs.scene_signal,
+    .srv = inputs.scene_signal_srv,
+    .id = 11U,
+    .metering = true,
+    .coverage = environment::ResolveSceneBackground(ctx).has_value() } };
+  if (!EvaluateFp16Products(
+        ctx, frame, config, products, inputs, SuitabilityScale::kCurrentFrame))
+    return false;
+  const auto gfx = renderer_.GetGraphics();
+  auto recorder = gfx->AcquireCommandRecorder(
+    gfx->QueueKeyFor(graphics::QueueRole::kGraphics),
+    "Vortex Checked SceneColor Conversion");
+  if (!recorder)
+    return false;
+  const auto recording = recorder->GetCommandListForInspection();
+  TrackTextureFromKnownOrInitial(*recorder, *inputs.scene_signal);
+  TrackTextureFromKnownOrInitial(*recorder, destination);
+  CHECK_F(recorder->AdoptKnownResourceState(*frame->suitability_buffer));
+  recorder->RequireResourceState(
+    *inputs.scene_signal, graphics::ResourceStates::kShaderResource);
+  recorder->RequireResourceState(
+    *frame->suitability_buffer, graphics::ResourceStates::kShaderResource);
+  recorder->RequireResourceState(
+    destination, graphics::ResourceStates::kUnorderedAccess);
+  const std::array<std::uint32_t, 8U> constants { inputs.scene_signal_srv.get(),
+    destination_uav.get(), frame->suitability_srv.get(), source_desc.width,
+    source_desc.height, 0U, 0U, 0U };
+  const auto slot = conversion_constants_publisher_->Publish(
+    ctx.current_view.view_id, constants);
+  CHECK_F(slot.IsValid());
+  recorder->FlushBarriers();
+  recorder->SetPipelineState(*convert_pipeline_);
+  recorder->SetComputeRoot32BitConstant(
+    static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants), 0U,
+    0U);
+  recorder->SetComputeRoot32BitConstant(
+    static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants),
+    slot.get(), 1U);
+  recorder->Dispatch(
+    (source_desc.width + 7U) / 8U, (source_desc.height + 7U) / 8U, 1U);
+  recorder->RequireResourceStateFinal(
+    destination, graphics::ResourceStates::kShaderResource);
   recorder.reset();
   return recording && recording->IsSubmitted();
 }
@@ -1083,6 +1159,9 @@ auto ExposurePass::RemoveViewState(CompositionView::ViewStateHandle handle)
 
 auto ExposurePass::EnsurePipelines() -> void
 {
+  if (!convert_pipeline_)
+    convert_pipeline_ = BuildExposurePipeline(
+      "ConvertQualifiedSceneColor", "Vortex.Exposure.CheckedSceneColor");
   constexpr std::array names { "ClearSuitability", "GatherSuitabilityMaximum",
     "SelectSuitabilityCandidate", "CheckSuitabilityProduct" };
   for (std::size_t index = 0; index < names.size(); ++index)
