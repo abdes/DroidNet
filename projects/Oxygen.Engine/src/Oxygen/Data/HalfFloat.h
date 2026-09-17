@@ -113,7 +113,8 @@ static_assert(std::is_trivially_copyable_v<HalfFloat>);
       mant_out += 1u;
     }
 
-    return static_cast<uint16_t>(sign_out | (mant_out & 0x3FFu));
+    // Rounding can carry from 0x03ff to the minimum normal encoding 0x0400.
+    return static_cast<uint16_t>(sign_out | mant_out);
   }
 
   // Normalized half.
@@ -163,7 +164,8 @@ static_assert(std::is_trivially_copyable_v<HalfFloat>);
     }
     mant &= 0x3FFu;
 
-    out_exp = static_cast<uint32_t>(127 - 15 - (e - 1));
+    // Subnormals start at exponent 1-bias (-14), before normalization shifts.
+    out_exp = static_cast<uint32_t>(127 - 14 - (e - 1));
     out_mant = mant << 13;
 
     const uint32_t out_bits = out_sign | (out_exp << 23) | out_mant;

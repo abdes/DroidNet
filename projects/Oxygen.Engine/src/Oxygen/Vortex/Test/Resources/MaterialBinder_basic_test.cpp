@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
+#include <array>
 #include <cstdint>
 #include <memory>
 
@@ -13,6 +15,7 @@
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Vortex/RendererTag.h>
 #include <Oxygen/Vortex/ScenePrep/MaterialRef.h>
+#include <Oxygen/Vortex/Types/MaterialShadingConstants.h>
 #include <Oxygen/Vortex/Upload/UploadCoordinator.h>
 
 #include <Oxygen/Vortex/Test/Fixtures/MaterialBinderTest.h>
@@ -104,6 +107,53 @@ NOLINT_TEST_F(MaterialBinderBasicTest, DifferentMaterialsReturnDifferentHandle)
   EXPECT_TRUE(MatBinder().IsHandleValid(handle0));
   EXPECT_TRUE(MatBinder().IsHandleValid(handle1));
   EXPECT_NE(handle0, handle1);
+}
+
+//! Distinct emitted radiance must survive content-based material deduplication.
+NOLINT_TEST_F(
+  MaterialBinderBasicTest, EmissiveIdentityPreservesAllChannelsAndHalfEndpoints)
+{
+  using oxygen::data::HalfFloat;
+  using oxygen::data::MaterialAsset;
+  using oxygen::vortex::sceneprep::MaterialRef;
+  Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
+    oxygen::frame::Slot { 1 });
+  MatBinder().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
+    oxygen::frame::Slot { 1 });
+  const std::array colors { std::array { 0.0F, 0.0F, 0.0F },
+    std::array { 0x1p-24F, 0.0F, 0.0F }, std::array { 0.0F, 0x1p-24F, 0.0F },
+    std::array { 0.0F, 0.0F, 0x1p-24F }, std::array { 0x1p-23F, 0.0F, 0.0F },
+    std::array { 1.0F, 2.0F, 4.0F },
+    std::array { 65504.0F, 65504.0F, 65504.0F } };
+  std::vector<oxygen::vortex::sceneprep::MaterialHandle> handles;
+  const auto make_ref = [&](const auto& rgb) {
+    oxygen::data::pak::render::MaterialAssetDesc desc {};
+    desc.material_domain
+      = static_cast<std::uint8_t>(oxygen::data::MaterialDomain::kOpaque);
+    desc.flags = oxygen::data::pak::render::kMaterialFlag_NoTextureSampling;
+    for (unsigned c = 0; c < 3; ++c)
+      desc.emissive_factor[c] = HalfFloat { rgb[c] };
+    return MaterialRef { .resolved_asset
+      = std::make_shared<const MaterialAsset>(oxygen::data::AssetKey {}, desc,
+        std::vector<oxygen::data::ShaderReference> {}) };
+  };
+  for (const auto& rgb : colors) {
+    const auto handle = MatBinder().GetOrAllocate(make_ref(rgb));
+    ASSERT_TRUE(MatBinder().IsHandleValid(handle));
+    for (const auto previous : handles)
+      EXPECT_NE(handle, previous);
+    handles.push_back(handle);
+  }
+  ASSERT_EQ(MatBinder().GetMaterialShadingConstants().size(), colors.size());
+  for (std::size_t i = 0; i < colors.size(); ++i) {
+    // Equal emission still deduplicates, including tiny positive values.
+    EXPECT_EQ(MatBinder().GetOrAllocate(make_ref(colors[i])), handles[i]);
+    const auto constants = MatBinder().GetMaterialShadingConstants();
+    EXPECT_TRUE(std::ranges::any_of(constants, [&](const auto& value) {
+      return value.emissive_factor
+        == glm::vec3 { colors[i][0], colors[i][1], colors[i][2] };
+    }));
+  }
 }
 
 //! Requesting with a null material must return an invalid handle.

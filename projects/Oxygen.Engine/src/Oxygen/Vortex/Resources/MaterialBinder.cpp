@@ -248,6 +248,12 @@ auto MakeMaterialKey(
   std::size_t seed = 0U;
 
   HashQuantizedFloatVector(seed, asset.GetBaseColor());
+  // Emission is radiance: the dimensionless scalar quantization below would
+  // collapse small positive half values to black before exposure can use them.
+  const auto emissive = asset.GetEmissiveFactor();
+  oxygen::HashCombine(seed, emissive[0]);
+  oxygen::HashCombine(seed, emissive[1]);
+  oxygen::HashCombine(seed, emissive[2]);
   oxygen::HashCombine(seed, QuantizeMaterialScalar(asset.GetMetalness()));
   oxygen::HashCombine(seed, QuantizeMaterialScalar(asset.GetRoughness()));
   oxygen::HashCombine(seed, QuantizeMaterialScalar(asset.GetNormalScale()));

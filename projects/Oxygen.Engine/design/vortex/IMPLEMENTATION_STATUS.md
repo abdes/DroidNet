@@ -59,44 +59,37 @@ qualification remains required; the package is not complete.
 
 ### 3.1 Current work
 
-- **Active implementation item: EX05-15 — cumulative quantization/error bounds.**
-  **Current substep: AP-enabled mixed-scene/forward-raster qualification before
-  final consumer-bound integration.** R036's additive AP shader/blend correction
-  is implemented and its controlled native regression passes. Real mixed-scene
-  forward/deferred image acceptance remains open.
-  Producer-bound storage and fog-history propagation now have a qualified native
-  substep: 74 frames cover repeated half storage, inherited error during FP32
-  recovery, invalid history and same-frame reuse. **Final consumer composition,
-  coverage and meter-admission propagation are not yet connected.**
-  The corrected consumer oracle covers additive AP, fog blending and coverage
-  normalization: 26,006 exact checks and the removed branch-loss regression
-  pass. GPU error-bound integration remains unfinished.
-  [Consumer oracle](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/review-r036-consumer-oracle.json),
-  [GPU transport evidence](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/error-transport-manifest.json),
-  [rules](lld/post-process-service.md#quantization-error-propagation),
-  [corrected CPU oracle](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/error-bounds-oracle.json).
-- **Next concrete action:** exercise AP-enabled mixed scenes and actual forward
-  raster output, then propagate the retained bounds through actual consumer
-  amplification/attenuation and coverage into final image/meter admission, with
-  independent numerical and native checks. Then close EX05-16–19 before enabling
-  production format switching.
-- **Last completed renderer work:** R036 removes deferred AP's opacity
-  division/threshold and uses One/InvSrcAlpha RGB blending. Positive inscatter
-  survives zero opacity; destination coverage is preserved. No new allocation.
-- **Latest code validation:** Debug and Release each passed 146 native exposure
-  and 62 environment tests (**208 per configuration**). The old shader/blend
-  fails the new regression. The corrected path passes 72 FP32/FP16 cases;
-  RenderDoc checks all 1,152 RGBA pixels with maximum error `5.96e-8` against
-  the independent transfer equation (tolerance `3e-7`). The debugger reports only
-  the accepted live-factory shutdown warning. Four refreshed MultiView view
-  comparisons are exact; Release composite inspected. These baseline images do
-  not close AP-enabled mixed-scene or actual forward-raster acceptance.
-  [R036 evidence](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/review-r036-manifest.json).
-- **Latest oracle validation:** 48,000 affine checks, 26,006 consumer checks,
-  three cumulative-error counterexamples and the removed-AP-branch regression
-  pass. Full consumer-bound/meter propagation remains unimplemented.
-- **Renderer work in progress outside the qualified checkpoint:** none. No build,
-  test or capture process is running in the background.
+- **Active item: EX05-05 — AP-enabled scene and forward-raster qualification.**
+  The existing MultiView proof CLI has an uncommitted `atmosphere` scenario:
+  fixed exposure/poses, deferred cards, alpha-one forward cards, then mixed
+  opaque/translucent content. Point/spot lights are disabled, visible card normals
+  face away from the sun, and the existing scene-authored environment mode owns
+  the sun inputs. These final fixture settings still need capture qualification.
+- **Current acceptance state: not passed.** Initial strength-128 captures washed
+  meshes white and failed the raw-HDR comparison; the supposed emission-only
+  setup also retained surface lighting. The corrected backlit-card fixture exposed
+  emissive cache aliasing. Its subsequent capture shows distinct colors, but the
+  binding audit rejected DemoShell's replacement sun values. Preserve the failed
+  `multiview/atmosphere-Debug-*`, `atmosphere-cards-Debug-*` and
+  `atmosphere-fixed-Debug-*` artifacts. Do not treat them as closure evidence.
+- **Last qualified correction: EX05-04 source values.** Material identity now
+  includes exact emissive RGB; half subnormals decode with the correct exponent;
+  subnormal rounding preserves the carry into the minimum normal half (R038).
+  All three defects have failing-before regressions. Debug and Release each pass
+  147 Data, 34 MaterialBinder and 146 native exposure tests (**327 each**).
+  Coverage includes all 65,536 half patterns, 63,488 exactly representable finite
+  encode inputs, eight signed rounding-boundary cases and seven emissive
+  identities. The focused D3D12 debugger case passes with only the accepted
+  live-factory warning. [Evidence](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/source-values-manifest.json).
+- **Next concrete action:** rebuild/capture the final scene-owned fixture; audit
+  actual lighting/material/AP bindings, compare every deferred/forward HDR pixel
+  at the unchanged 0.5% relative plus `1e-5` absolute budget, reject saturated
+  geometry, and inspect all three phases in both views. Then resume EX05-15's
+  cumulative consumer/error-bound integration.
+- **EX05-15 remaining:** producer/history transport and independent mathematical
+  oracles have evidence, but final consumer amplification/attenuation, coverage
+  and meter-admission propagation are not connected. Automatic FP16 switching
+  remains disabled; EX05-16–19 are not closed.
 - **Delivery order:** finish Slice 5's gate before starting Slice 6 integration.
   Slices 6–10 remain required; their detailed items are below.
 
@@ -117,7 +110,7 @@ current status, including decisions that supersede older manifest limitations.
 | EX05-01 | Early GPU P resolve and immutable frame P/1P binding | validated | GPU-owned P, pinned frame/state leases, submission failure and repeated-resolve behavior are implemented. | [Frame resolve](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/frame-resolve-manifest.json), [domain](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/domain-manifest.json) |
 | EX05-02 | FP32 SceneColor accumulation and HDR format plumbing | validated | Approved FP32 accumulation contract and format-aware resource/PSO plumbing exist. This is not automatic mode switching. | [Formats](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/formats-manifest.json), [allocation contract](lld/scene-textures.md#per-view-fp16-suitability) |
 | EX05-03 | Meter with 1/P; consume S/P in all exposure modes | validated | Unified gain consumption covers Manual, ManualCamera, Auto, disabled and zero-target behavior in the qualified fixtures. | [Domain](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/domain-manifest.json), [mode fixtures](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/modes-manifest.json) |
-| EX05-04 | Deferred emissive/direct/indirect and forward lit/unlit/masked/translucent P domains | in_progress | Source migration exists. Complete mixed-content, upstream endpoint and per-family image-error acceptance remains; do not infer it from the scene-level smoke proof. | [Scene migration scope](../../out/build-ninja/analysis/vortex/exposure-lightbench/scene/scene-migration-manifest.json), [producer inventory](lld/scene-textures.md#exposure-hdr-domain-and-format-inventory) |
+| EX05-04 | Deferred emissive/direct/indirect and forward lit/unlit/masked/translucent P domains | in_progress | **Active correction:** emissive RGB was omitted from material-cache identity; shared half decoding halved subnormals and encoding dropped the carry into minimum normal (R038). All three source-value regressions are corrected; Debug/Release each pass 327 affected tests. This closes the named corrections only. Complete mixed-content, upstream endpoint and per-family image-error acceptance remains. | [Source-value evidence](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/source-values-manifest.json), [source regressions](../../src/Oxygen/Data/Test/HalfFloat_test.cpp), [material regression](../../src/Oxygen/Vortex/Test/Resources/MaterialBinder_basic_test.cpp), [scene migration scope](../../out/build-ninja/analysis/vortex/exposure-lightbench/scene/scene-migration-manifest.json), [producer inventory](lld/scene-textures.md#exposure-hdr-domain-and-format-inventory) |
 | EX05-05 | Sky/background and sky-view/AP producer-consumer P plumbing | in_progress | Existing P-domain and binding proofs remain. R036 low/zero-opacity loss is corrected and qualified by 72 controlled native cases and 1,152 captured pixels; refreshed MultiView baseline is exact. AP-enabled mixed-scene visuals and actual forward/deferred raster comparison remain. Quantization/mode-switch closure is EX05-15–19. | [Scene migration](../../out/build-ninja/analysis/vortex/exposure-lightbench/scene/scene-migration-manifest.json), [real products](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/required-products-manifest.json), [AP correction](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/review-r036-manifest.json) |
 | EX05-06 | Height/volumetric fog and RGB history rebasing | validated | Current/stored P conversion and unchanged transmittance are implemented and exercised. Cumulative temporal quantization is not covered by this item. | [Scene migration](../../out/build-ninja/analysis/vortex/exposure-lightbench/scene/scene-migration-manifest.json), [history/resource lifetime](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/review-lifetime-manifest.json) |
 | EX05-07 | Diagnostic colors, wireframe and display overlays | validated | Per-view unit-gain diagnostics, persistent exposure preservation and frame-retained overlay constants are qualified. Full feature-layout acceptance remains EX05-29. | [Diagnostics](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/diagnostic-manifest.json) |
