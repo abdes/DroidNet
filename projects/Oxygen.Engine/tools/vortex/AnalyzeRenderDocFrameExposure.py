@@ -36,6 +36,9 @@ def build_report(controller, report, capture_path, report_path):
         states = [x for x in writes if names.get(str(x.resource)) == "Vortex.PostProcess.Exposure.State"]
         if len(frames) != 1 or len(states) != 1:
             raise RuntimeError("Frame and current-state UAVs are not uniquely bound")
+        statuses = [x for x in writes if names.get(str(x.resource)) == "Vortex.PostProcess.Exposure.Status"]
+        if len(statuses) != 1 or bytes(controller.GetBufferData(statuses[0].resource, 0, 80)) != bytes(80):
+            raise RuntimeError("Frame preparation must clear the current producer status")
         frame = frames[0]
         values = struct.unpack("<2f2I", bytes(controller.GetBufferData(frame.resource, frame.byteOffset, 16)))
         gain = struct.unpack("<f", bytes(controller.GetBufferData(states[0].resource, states[0].byteOffset, 4)))[0]
@@ -44,8 +47,8 @@ def build_report(controller, report, capture_path, report_path):
         expected = (2**-14, 2**-4)[len(records)]
         if values != (expected, 1 / expected, fields[10], 0) or gain != expected:
             raise RuntimeError(f"Frame ABI/gain mismatch: {values}, current={gain}")
-        if fields[2:4] != (0xFFFFFFFF, 0xFFFFFFFF) or fields[7:10] != (0, 0, 0) or fields[11] != 0:
-            raise RuntimeError("Unexpected history, candidate, mode, controls or reserved bits")
+        if fields[2:4] != (0xFFFFFFFF, 0xFFFFFFFF) or fields[7:10] != (0, 0, 0) or fields[11] == 0xFFFFFFFF:
+            raise RuntimeError("Unexpected history, candidate, mode, controls or missing status UAV")
         report.append(f"resolve={action.event_id} frame={frame.resource} current={states[0].resource} values={values} current_gain={gain}")
         records.append((frame.resource, states[0].resource, frame.byteOffset, values))
     if len(records) != 2 or records[0][0] == records[1][0] or records[0][1] == records[1][1]:

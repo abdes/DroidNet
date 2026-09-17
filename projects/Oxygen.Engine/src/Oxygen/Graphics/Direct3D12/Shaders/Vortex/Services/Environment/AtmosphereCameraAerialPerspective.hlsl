@@ -13,6 +13,7 @@
 #include "Vortex/Contracts/Environment/EnvironmentViewData.hlsli"
 #include "Vortex/Contracts/Environment/EnvironmentFrameBindings.hlsli"
 #include "Vortex/Contracts/View/FrameExposureHelpers.hlsli"
+#include "Vortex/Contracts/View/HdrStoreChecks.hlsli"
 #include "Vortex/Contracts/View/ViewFrameBindings.hlsli"
 
 cbuffer RootConstants : register(b2, space0)
@@ -65,7 +66,7 @@ struct CameraAerialAtmosphereScales0
 {
     float atmosphere_height_km;
     float aerial_perspective_distance_scale;
-    float _pad0;
+    uint exposure_status_uav;
     float rayleigh_scale_height_km;
 };
 
@@ -74,7 +75,7 @@ struct CameraAerialAtmosphereScales1
     float mie_scale_height_km;
     float multi_scattering_factor;
     float mie_anisotropy;
-    float _pad0;
+    uint exposure_fp16_store;
 };
 
 struct AtmosphereCameraAerialPerspectivePassConstants
@@ -409,6 +410,8 @@ void VortexAtmosphereCameraAerialPerspectiveCS(uint3 dispatch_id : SV_DispatchTh
     }
     const float3 throughput = scattering.Transmittance;
     const float transmittance = dot(throughput, float3(1.0f / 3.0f, 1.0f / 3.0f, 1.0f / 3.0f));
+    CheckHdrStoreRange(float4(luminance, transmittance), 6u,
+        pass.atmosphere_scales0.exposure_status_uav, pass.atmosphere_scales1.exposure_fp16_store);
     output_texture[dispatch_id] = float4(
         max(luminance, 0.0f.xxx),
         saturate(transmittance));

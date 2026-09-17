@@ -117,7 +117,7 @@ namespace environment {
     struct alignas(16) AtmosphereScales0 {
       float atmosphere_height_km { 100.0F };
       float aerial_perspective_distance_scale { 1.0F };
-      float _pad0 { 0.0F };
+      std::uint32_t exposure_status_uav { kInvalidShaderVisibleIndex.get() };
       float rayleigh_scale_height_km { 8.0F };
     };
 
@@ -125,7 +125,7 @@ namespace environment {
       float mie_scale_height_km { 1.2F };
       float multi_scattering_factor { 1.0F };
       float mie_anisotropy { 0.8F };
-      float _pad0 { 0.0F };
+      std::uint32_t exposure_fp16_store { 0U };
     };
 
     struct alignas(16) PassConstants {

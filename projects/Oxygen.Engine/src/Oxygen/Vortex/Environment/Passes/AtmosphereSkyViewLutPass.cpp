@@ -7,6 +7,7 @@
 #include <Oxygen/Vortex/Environment/Passes/AtmosphereSkyViewLutPass.h>
 
 #include <algorithm>
+#include <cstddef>
 #include <limits>
 #include <stdexcept>
 #include <vector>
@@ -29,6 +30,7 @@
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereLutCache.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereState.h>
 #include <Oxygen/Vortex/Environment/Internal/ResourceRetirement.h>
+#include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererCapability.h>
@@ -311,7 +313,19 @@ auto AtmosphereSkyViewLutPass::Record(RenderContext& ctx,
       texture->GetDescriptor().format));
 
   const auto& atmosphere = stable_state.view_products.atmosphere;
+  static_assert(offsetof(PassConstants, dispatch_header)
+      + offsetof(DispatchHeader, exposure_status_uav)
+    == 40U);
+  static_assert(offsetof(PassConstants, dispatch_header)
+      + offsetof(DispatchHeader, exposure_fp16_store)
+    == 44U);
   auto constants = PassConstants {};
+  constants.dispatch_header.exposure_status_uav
+    = ctx.current_view.frame_exposure
+    ? ctx.current_view.frame_exposure->current_state->status_uav_index.get()
+    : kInvalidShaderVisibleIndex.get();
+  constants.dispatch_header.exposure_fp16_store
+    = texture->GetDescriptor().format == Format::kRGBA16Float ? 1U : 0U;
   constants.output_header.output_texture_uav = sky_view_uav.get();
   constants.output_header.output_width = width;
   constants.output_header.output_height = height;
@@ -426,6 +440,15 @@ auto AtmosphereSkyViewLutPass::Record(RenderContext& ctx,
     return state;
   }
 
+  if (ctx.current_view.frame_exposure) {
+    const auto& status
+      = *ctx.current_view.frame_exposure->current_state->status_buffer;
+    if (!recorder->AdoptKnownResourceState(status))
+      recorder->BeginTrackingResourceState(
+        status, graphics::ResourceStates::kCommon, false);
+    recorder->RequireResourceState(
+      status, graphics::ResourceStates::kUnorderedAccess);
+  }
   TrackTextureFromKnownOrInitial(*recorder, *texture);
   recorder->RequireResourceState(
     *texture, graphics::ResourceStates::kUnorderedAccess);

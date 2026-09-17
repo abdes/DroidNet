@@ -86,8 +86,8 @@ namespace environment {
     struct alignas(16) DispatchHeader {
       std::uint32_t multi_scattering_height { 0U };
       std::uint32_t active_light_count { 0U };
-      std::uint32_t _pad0 { 0U };
-      std::uint32_t _pad1 { 0U };
+      std::uint32_t exposure_status_uav { kInvalidShaderVisibleIndex.get() };
+      std::uint32_t exposure_fp16_store { 0U };
     };
 
     struct alignas(16) SamplingAtmosphere0 {

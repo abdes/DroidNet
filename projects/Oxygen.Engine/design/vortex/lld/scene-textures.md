@@ -131,6 +131,15 @@ An unforeseen normal-frame range failure retains valid history and schedules
 FP32 recovery after status completion. Explicit scene out-of-domain failure in
 FP32 is reported; it is not an endless format/reinitialization loop.
 
+The sky-view, camera AP and volumetric-fog producers now report finite/range
+failures before their stores through the existing per-view completed status.
+Their checks use the actual destination format. A finite source that clips to
+65504 in a typed FP16 store remains distinguishable from a nonfinite source;
+post-store finiteness alone cannot make that distinction. The solve invalidates
+the affected meter and retains ordinary Auto history. Quantization/image-error
+checks, complete temporal propagation and normal-mode switching remain separate
+open requirements.
+
 ### Scene reference-product collection
 
 SceneRenderer collects the actual FP32 reference allocations after HDR rendering:

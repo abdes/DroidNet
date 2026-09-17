@@ -470,8 +470,18 @@ static void StoreState(RWByteAddressBuffer destination, ExposureStateData state)
     destination.Store2(72u, state.product_layout_revision);
 }
 
+static uint2 LoadProducerFailure(AutoExposureAverageConstants pass)
+{
+    if ((pass.control_flags & 128u) == 0u || pass.status_uav == K_INVALID_BINDLESS_INDEX)
+        return 0u.xx;
+    RWByteAddressBuffer status = ResourceDescriptorHeap[pass.status_uav];
+    return (status.Load(48u) & 16u) != 0u ? status.Load2(52u) : 0u.xx;
+}
+
 static void StoreSolved(RWByteAddressBuffer destination, ExposureStateData state, AutoExposureAverageConstants pass)
 {
+    const uint2 producer_failure = LoadProducerFailure(pass);
+    if (producer_failure.y != 0u) state.flags |= EXPOSURE_RANGE_FAILURE;
     StoreState(destination,state);
     if (pass.status_uav == K_INVALID_BINDLESS_INDEX) return;
     RWByteAddressBuffer status = ResourceDescriptorHeap[pass.status_uav];
@@ -479,8 +489,9 @@ static void StoreSolved(RWByteAddressBuffer destination, ExposureStateData state
     status.Store4(16u,uint4(pass.settings_revision,state.requested_generation));
     status.Store4(32u,uint4(state.applied_generation,state.product_layout_revision));
     const uint flags = ((state.flags & EXPOSURE_HISTORY_VALID) != 0u ? 1u : 0u)
-        | ((state.flags & EXPOSURE_REQUEST_REJECTED) != 0u ? 8u : 0u);
-    status.Store4(48u,uint4(flags,0u,0u,state.fp16_eligible_streak));
+        | ((state.flags & EXPOSURE_REQUEST_REJECTED) != 0u ? 8u : 0u)
+        | (producer_failure.y != 0u ? 18u : 0u);
+    status.Store4(48u,uint4(flags,producer_failure,state.fp16_eligible_streak));
     status.Store4(64u,uint4(pass.frame_sequence,(state.flags & EXPOSURE_REJECTION_MASK)>>EXPOSURE_REJECTION_SHIFT,0u));
 }
 
@@ -599,7 +610,7 @@ void VortexExposureAverageCS(uint3 dispatch_thread_id : SV_DispatchThreadID)
     bool dark = false;
     bool valid_meter = false;
     float log_luminance = 0.0;
-    if (pass.histogram_buffer_index != K_INVALID_BINDLESS_INDEX) {
+    if (pass.histogram_buffer_index != K_INVALID_BINDLESS_INDEX && LoadProducerFailure(pass).y == 0u) {
         RWByteAddressBuffer histogram = ResourceDescriptorHeap[pass.histogram_buffer_index];
         const uint weighted = histogram.Load(METER_WEIGHTED * 4u);
         dark = weighted > 0u && weighted == histogram.Load(METER_DARK * 4u);
@@ -670,7 +681,7 @@ struct ExposureFrameConstants {
     uint flags;
     uint controls;
     uint current_state_srv;
-    uint reserved;
+    uint status_uav;
 };
 
 [numthreads(1, 1, 1)]
@@ -678,6 +689,12 @@ void VortexExposureFrameCS(uint3 dispatch_id : SV_DispatchThreadID)
 {
     StructuredBuffer<ExposureFrameConstants> constants = ResourceDescriptorHeap[g_PassConstantsIndex];
     const ExposureFrameConstants pass = constants[0];
+    RWByteAddressBuffer status = ResourceDescriptorHeap[pass.status_uav];
+    status.Store4(0u, 0u.xxxx);
+    status.Store4(16u, 0u.xxxx);
+    status.Store4(32u, 0u.xxxx);
+    status.Store4(48u, 0u.xxxx);
+    status.Store4(64u, 0u.xxxx);
     ExposureTargetData initial = (ExposureTargetData)0;
     initial.initial_log_gain = pass.initial_log_gain;
     ExposureStateData state = LoadPrevious(pass.history_srv, initial);
@@ -805,6 +822,11 @@ void FinalizeFp16Suitability(uint3 pixel : SV_DispatchThreadID)
     uint flags = state.Load(24u) & ~(EXPOSURE_FP16_ELIGIBLE | EXPOSURE_RANGE_FAILURE);
     uint failure = report.Load(12u);
     uint first_failure = report.Load(16u);
+    const uint producer_flags = status.Load(48u) & 16u;
+    if (producer_flags != 0u) {
+        failure |= status.Load(56u);
+        first_failure = status.Load(52u);
+    }
     if ((frame[0].flags & 1u) == 0u) {
         if (pass.conversion_report_srv == K_INVALID_BINDLESS_INDEX) {
             failure |= 16u;
@@ -852,7 +874,7 @@ void FinalizeFp16Suitability(uint3 pixel : SV_DispatchThreadID)
     state.Store(24u, flags);
     state.Store4(64u, uint4(asuint(valid_candidate ? candidate : 1.0), streak, pass.layout));
     const uint status_flags = (valid ? 1u : 0u) | (failure != 0u ? 2u : 0u)
-        | (streak >= 2u ? 4u : 0u) | ((flags & EXPOSURE_REQUEST_REJECTED) != 0u ? 8u : 0u);
+        | (streak >= 2u ? 4u : 0u) | ((flags & EXPOSURE_REQUEST_REJECTED) != 0u ? 8u : 0u) | producer_flags;
     status.Store4(0u, uint4(pass.lifetime, pass.sequence));
     status.Store4(16u, uint4(settings, requested));
     status.Store4(32u, uint4(applied, pass.layout));
