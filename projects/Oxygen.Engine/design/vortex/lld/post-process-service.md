@@ -97,6 +97,32 @@ state must not be treated as a durable receipt across frame retirement.
 
 ## Settings resolution
 
+`PostProcessConfig::exposure` is the sole writable exposure input and uses the
+canonical `scene::ExposureSettings` defaults, including 3 EV/s upward and
+1 EV/s downward adaptation. `SetConfig` validates the complete request before
+activation; rejection retains the previous exposure and presentation settings.
+`GetConfig` returns authored settings, so read-modify-apply never carries an
+outdated resolved gain. ManualCamera resolution accepts camera EV as separate
+context; subsequent edits in that mode retain the accepted camera EV when no
+replacement is supplied. Rejected requests cannot change that context.
+
+Passes consume `ResolvedPostProcessConfig`, an immutable validated snapshot.
+Direct pass clients use its checked `Resolve` factory. Scene rendering uses
+`BuildPassConfig` after capturing the view, combining presentation settings
+with the captured accepted exposure, camera context and revision. No public
+setter can modify the derived gain or individual resolved settings.
+`PostProcessFrameBindings` retains its existing 112-byte GPU/capture layout;
+its scalar exposure fields are derived together from that snapshot.
+
+For a direct service view without a scene capture, the first frame preparation
+routes the authored request through `CaptureViewExposureSettings`, including
+mask loading and residency. Callers need only `SetConfig` and normal frame/render
+calls. Accepted revisions belong to the view; callers do not synchronize a
+service-global counter with mask preparation. Pending or failed replacements
+retain the prior accepted exposure and mask together. The first unavailable
+mask uses the documented initialization fallback and skips metering. An existing
+scene capture is reused unchanged for the rest of its frame.
+
 `CaptureViewExposureSettings` pins one complete accepted settings revision and
 its resident mask lease for a logical view and frame. `InitViews` captures the
 view family before scene rendering; family and single-view entry points also

@@ -88,6 +88,7 @@ public:
 
   struct ExposureSettingsState {
     scene::ResolvedExposureSettings resolved;
+    std::optional<float> camera_ev;
     std::uint64_t revision { 0U };
     std::uint64_t lifetime { 0U };
     std::optional<scene::ExposureSettingsError> last_error;
@@ -108,7 +109,19 @@ public:
 
   OXGN_VRTX_API auto OnFrameStart(
     frame::SequenceNumber sequence, frame::Slot slot) -> void;
-  OXGN_VRTX_API auto SetConfig(const PostProcessConfig& config) -> void;
+  //! Validate and atomically apply authored settings. Missing camera context
+  //! reuses the accepted camera EV only when remaining in ManualCamera mode.
+  OXGN_VRTX_API auto SetConfig(const PostProcessConfig& config,
+    std::optional<float> camera_ev = {}) -> void;
+  //! Apply an immutable validated snapshot from a captured view or pass client.
+  OXGN_VRTX_API auto SetResolvedConfig(const ResolvedPostProcessConfig& config)
+    -> void;
+  //! Combine presentation settings with this frame's captured exposure.
+  //! CaptureViewExposureSettings must have captured the view before this call.
+  //! The supplied config.exposure is superseded by the accepted capture.
+  [[nodiscard]] OXGN_VRTX_API auto BuildPassConfig(
+    const PostProcessConfig& config, ViewId view_id,
+    CompositionView::ViewStateHandle handle) const -> ResolvedPostProcessConfig;
   //! Resolve one complete request, retaining this view's prior valid revision.
   [[nodiscard]] OXGN_VRTX_API auto ResolveViewExposureSettings(
     CompositionView::ViewStateHandle handle,
@@ -139,7 +152,7 @@ public:
   struct PreparedExposure {
     const PostProcessService* owner;
     postprocess::ExposurePass::Result exposure;
-    PostProcessConfig config;
+    ResolvedPostProcessConfig config;
     ViewId view_id;
     CompositionView::ViewStateHandle handle;
     std::uint64_t lifetime;
@@ -174,7 +187,7 @@ public:
   [[nodiscard]] OXGN_VRTX_NDAPI auto GetConfig() const noexcept
     -> const PostProcessConfig&
   {
-    return config_;
+    return resolved_config_.Settings();
   }
   [[nodiscard]] OXGN_VRTX_NDAPI auto GetLastExecutionState() const noexcept
     -> const ExecutionState&
@@ -200,7 +213,7 @@ private:
     captured_exposure_sources_;
   std::optional<frame::SequenceNumber> captured_control_frame_;
   auto BuildBindings(const Inputs& inputs,
-    const PostProcessConfig& config) const -> PostProcessFrameBindings;
+    const ResolvedPostProcessConfig& config) const -> PostProcessFrameBindings;
   struct PublishedView {
     ShaderVisibleIndex slot { kInvalidShaderVisibleIndex };
     PostProcessFrameBindings bindings {};
@@ -237,7 +250,7 @@ private:
     frame::kFramesInFlight.get()>
     frame_masks_;
 
-  PostProcessConfig config_ {};
+  ResolvedPostProcessConfig resolved_config_;
   std::unordered_map<CompositionView::ViewStateHandle, ExposureSettingsState>
     exposure_settings_;
   ExposureSettingsState transient_exposure_settings_ {};

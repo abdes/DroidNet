@@ -13,7 +13,7 @@ namespace oxygen::vortex::postprocess::internal {
 class ExposureCalculator {
 public:
   [[nodiscard]] auto ResolveExposure(
-    const PostProcessConfig& config) const noexcept -> float;
+    const ResolvedPostProcessConfig& config) const noexcept -> float;
 };
 
 } // namespace oxygen::vortex::postprocess::internal

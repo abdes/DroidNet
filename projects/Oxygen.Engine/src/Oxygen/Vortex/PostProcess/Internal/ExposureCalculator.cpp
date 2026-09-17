@@ -11,9 +11,9 @@
 namespace oxygen::vortex::postprocess::internal {
 
 auto ExposureCalculator::ResolveExposure(
-  const PostProcessConfig& config) const noexcept -> float
+  const ResolvedPostProcessConfig& config) const noexcept -> float
 {
-  return (std::max)(config.fixed_exposure, 0.0001F);
+  return config.Exposure().fixed_scale;
 }
 
 } // namespace oxygen::vortex::postprocess::internal
