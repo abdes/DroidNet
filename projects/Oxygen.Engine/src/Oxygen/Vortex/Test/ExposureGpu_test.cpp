@@ -409,6 +409,82 @@ protected:
       *frame->suitability_buffer, ResourceStates::kShaderResource);
   }
 
+  auto EligibilityStep(const Signal& signal, const PostProcessConfig& config,
+    std::uint64_t sequence, std::uint64_t layout = 7U,
+    std::uint32_t expected = 1024U, bool invalidate_previous = false,
+    const postprocess::ExposurePass::Source* source = nullptr,
+    std::optional<ExposureTransitionToken> transition = {},
+    bool metering_available = true, bool capture_eligibility = false)
+    -> std::pair<ExposureStateData, ExposureCompletedStatus>
+  {
+    ctx_.frame_sequence = frame::SequenceNumber { sequence };
+    const auto lifetime = transition ? transition->lifetime : 0U;
+    const auto frame = pass_->ResolveFrame(ctx_, config,
+      { .use_fp32 = true,
+        .source = source,
+        .transition = transition,
+        .lifetime = lifetime });
+    CHECK_NOTNULL_F(frame.get());
+    const auto solved = pass_->Execute(ctx_, config,
+      { .scene_signal = signal.texture.get(),
+        .scene_signal_srv = signal.srv,
+        .metering_available = metering_available,
+        .transition = transition,
+        .source = source,
+        .lifetime = lifetime });
+    CHECK_F(solved.executed);
+    const auto before = ReadState(solved);
+    EXPECT_EQ(before.flags & 256U, 0U);
+    EXPECT_EQ(before.fp16_eligible_streak, 0U);
+    EXPECT_FALSE(pass_->FinalizeFp16Suitability(ctx_, frame,
+      { .product_layout_revision = layout, .expected_products = expected }));
+    const std::array products { postprocess::ExposurePass::HdrProduct {
+      .texture = signal.texture.get(),
+      .srv = signal.srv,
+      .id = 11U,
+      .metering = true } };
+    const auto capture = capture_eligibility
+      ? BeginOptionalCapture()
+      : observer_ptr<FrameCaptureController> {};
+    CHECK_F(pass_->EvaluateFp16Products(ctx_, frame, config, products, {}));
+    CHECK_F(pass_->FinalizeFp16Suitability(ctx_, frame,
+      { .product_layout_revision = layout,
+        .expected_products = expected,
+        .invalidate_previous = invalidate_previous }));
+    if (capture)
+      EXPECT_TRUE(capture->EndCapture());
+    const auto state = ReadState(solved);
+    const auto status = Read<ExposureCompletedStatus>(
+      *solved.state->status_buffer, ResourceStates::kCopySource);
+    EXPECT_EQ(std::memcmp(&before, &state, 24U), 0);
+    EXPECT_EQ(before.settings_revision, state.settings_revision);
+    EXPECT_EQ(before.fallback_reason, state.fallback_reason);
+    EXPECT_EQ(before.requested_generation, state.requested_generation);
+    EXPECT_EQ(before.applied_generation, state.applied_generation);
+    EXPECT_EQ(before.frame_sequence, state.frame_sequence);
+    EXPECT_EQ((before.flags ^ state.flags) & ~(32U | 256U), 0U);
+    EXPECT_EQ(status.fp16_eligible_streak, state.fp16_eligible_streak);
+    EXPECT_EQ(status.product_layout_revision, state.product_layout_revision);
+    EXPECT_EQ(status.candidate_state_generation, state.frame_sequence);
+    EXPECT_EQ(status.frame_sequence, state.frame_sequence);
+    EXPECT_EQ(status.settings_revision, state.settings_revision);
+    EXPECT_EQ(status.requested_generation, state.requested_generation);
+    EXPECT_EQ(status.applied_generation, state.applied_generation);
+    EXPECT_EQ(
+      status.view_state_identity[0], static_cast<std::uint32_t>(lifetime));
+    EXPECT_EQ(status.view_state_identity[1],
+      static_cast<std::uint32_t>(lifetime >> 32U));
+    EXPECT_EQ(status.reserved, 0U);
+    EXPECT_EQ(status.flags & 4U, state.fp16_eligible_streak >= 2U ? 4U : 0U);
+    CHECK_F(pass_->FinalizeFp16Suitability(ctx_, frame,
+      { .product_layout_revision = layout,
+        .expected_products = expected,
+        .invalidate_previous = invalidate_previous }));
+    const auto duplicate = ReadState(solved);
+    EXPECT_EQ(std::memcmp(&state, &duplicate, sizeof(state)), 0);
+    return { state, status };
+  }
+
   auto ResetHistory() -> void
   {
     pass_->RemoveViewState(ctx_.current_view.view_state_handle);
@@ -4709,6 +4785,144 @@ NOLINT_TEST_F(ExposureGpuTest,
   EXPECT_FALSE(prepared.has_value());
   EXPECT_FALSE(service.GetLastExecutionState().wrote_visible_output);
   EXPECT_EQ(service.GetLastExecutionState().view_id, ctx_.current_view.view_id);
+}
+
+NOLINT_TEST_F(ExposureGpuTest,
+  Fp16EligibilityRequiresStableCompleteFramesAndPreservesExposure)
+{
+  auto settings = scene::ExposureSettings {};
+  settings.mode = engine::ExposureMode::kManual;
+  settings.manual_ev = 0.0F;
+  auto config = SharedConfig(settings);
+  const auto ordinary = Uniform(1.0F, 4U, 4U);
+  const auto brighter = Uniform(2.0F, 4U, 4U);
+  const auto invalid = Uniform(std::numeric_limits<float>::infinity(), 4U, 4U);
+  auto token = renderer_->QueueExposureTransition(
+    ctx_.current_view.view_state_handle, ExposureTransitionPolicy::kPreserve);
+  ASSERT_TRUE(token.has_value());
+  const auto step
+    = [&](std::uint64_t sequence, std::uint64_t layout, std::uint64_t revision,
+        const Signal& signal, std::uint32_t expected = 1024U,
+        bool invalidate = false, bool metering_available = true) {
+        config.exposure_settings_revision = revision;
+        return EligibilityStep(signal, config, sequence, layout, expected,
+          invalidate, nullptr, *token, metering_available, sequence == 2U);
+      };
+  EXPECT_EQ(step(1U, 7U, 1U, ordinary).first.fp16_eligible_streak, 1U);
+  const auto eligible = step(2U, 7U, 1U, ordinary);
+  EXPECT_EQ(eligible.first.fp16_eligible_streak, 2U);
+  EXPECT_EQ(eligible.first.flags & 256U, 256U);
+  EXPECT_EQ(eligible.first.fp16_candidate_pre_exposure, 8192.0F);
+  const auto failure = step(3U, 7U, 1U, invalid);
+  EXPECT_EQ(failure.first.fp16_eligible_streak, 0U);
+  EXPECT_NE(failure.second.flags & 2U, 0U);
+  EXPECT_EQ(failure.second.first_failure_product, 11U);
+  EXPECT_NE(failure.second.first_failure_kind & 1U, 0U);
+  EXPECT_EQ(step(4U, 7U, 1U, ordinary).first.fp16_eligible_streak, 1U);
+  EXPECT_EQ(step(5U, 7U, 1U, ordinary).first.fp16_eligible_streak, 2U);
+  EXPECT_EQ(step(6U, 7U, 2U, ordinary).first.fp16_eligible_streak, 1U);
+  EXPECT_EQ(step(7U, 7U, 2U, ordinary).first.fp16_eligible_streak, 2U);
+  EXPECT_EQ(step(8U, 8U, 2U, ordinary).first.fp16_eligible_streak, 1U);
+  EXPECT_EQ(step(9U, 8U, 2U, ordinary).first.fp16_eligible_streak, 2U);
+  EXPECT_EQ(step(10U, 8U, 2U, brighter).first.fp16_eligible_streak, 1U);
+  EXPECT_EQ(step(12U, 8U, 2U, brighter).first.fp16_eligible_streak, 2U);
+  EXPECT_EQ(
+    step(13U, 8U, 2U, brighter, 1024U, true).first.fp16_eligible_streak, 1U);
+  const auto missing = step(14U, 8U, 2U, brighter, 1025U);
+  EXPECT_EQ(missing.first.fp16_eligible_streak, 0U);
+  EXPECT_EQ(missing.second.first_failure_product, 1U);
+  EXPECT_NE(missing.second.first_failure_kind & 16U, 0U);
+  EXPECT_EQ(
+    step(0xffffffffULL, 8U, 2U, brighter).first.fp16_eligible_streak, 1U);
+  EXPECT_EQ(
+    step(0x100000000ULL, 8U, 2U, brighter).first.fp16_eligible_streak, 2U);
+  settings.mode = engine::ExposureMode::kAuto;
+  config = SharedConfig(settings);
+  token = renderer_->QueueExposureTransition(
+    ctx_.current_view.view_state_handle, ExposureTransitionPolicy::kRemeter);
+  ASSERT_TRUE(token.has_value());
+  const auto pending
+    = step(0x100000001ULL, 8U, 3U, ordinary, 1024U, false, false);
+  EXPECT_EQ(pending.first.fp16_eligible_streak, 0U);
+  EXPECT_NE(
+    pending.first.requested_generation, pending.first.applied_generation);
+  EXPECT_EQ(
+    step(0x100000002ULL, 8U, 3U, ordinary).first.fp16_eligible_streak, 1U);
+  EXPECT_EQ(
+    step(0x100000003ULL, 8U, 3U, ordinary).first.fp16_eligible_streak, 2U);
+}
+
+NOLINT_TEST_F(ExposureGpuTest, Fp16EligibilityBelongsToEachBorrowingImage)
+{
+  auto settings = scene::ExposureSettings {};
+  settings.mode = engine::ExposureMode::kManual;
+  settings.manual_ev = 0.0F;
+  const auto config = SharedConfig(settings);
+  const auto root = CompositionView::ViewStateHandle { 10U };
+  const auto borrower = CompositionView::ViewStateHandle { 20U };
+  const auto ordinary = Uniform(1.0F, 4U, 4U);
+  const std::array wide_pixels { Pixel { 0x1p30F, 0x1p30F, 0x1p30F, 1 },
+    Pixel { 0x1p-16F, 0x1p-16F, 0x1p-16F, 1 } };
+  const auto wide = MakeSignal(2U, 1U, wide_pixels);
+  const auto source
+    = postprocess::ExposurePass::Source { .handle = root, .config = config };
+  const auto step
+    = [&](std::uint64_t sequence, bool sharing, const Signal& signal) {
+        ctx_.current_view.view_state_handle = sharing ? borrower : root;
+        ctx_.current_view.view_id = ViewId { sharing ? 20U : 10U };
+        return EligibilityStep(signal, config, sequence, 1U, 1024U, false,
+          sharing ? &source : nullptr)
+          .first;
+      };
+  EXPECT_EQ(step(1U, false, ordinary).fp16_eligible_streak, 1U);
+  EXPECT_EQ(step(1U, true, ordinary).fp16_eligible_streak, 0U);
+  EXPECT_EQ(step(2U, false, ordinary).fp16_eligible_streak, 2U);
+  EXPECT_EQ(step(2U, true, ordinary).fp16_eligible_streak, 1U);
+  EXPECT_EQ(step(3U, false, ordinary).fp16_eligible_streak, 2U);
+  const auto rejected = step(3U, true, wide);
+  EXPECT_EQ(rejected.fp16_eligible_streak, 0U);
+  EXPECT_EQ(rejected.displayed_scale, 1.0F);
+  EXPECT_EQ(step(4U, true, ordinary).fp16_eligible_streak, 1U);
+  EXPECT_EQ(step(5U, true, ordinary).fp16_eligible_streak, 2U);
+}
+
+NOLINT_TEST_F(
+  ExposureGpuTest, Fp16EligibilityExcludesStatelessAndDiagnosticFrames)
+{
+  auto settings = scene::ExposureSettings {};
+  settings.mode = engine::ExposureMode::kManual;
+  settings.manual_ev = 0.0F;
+  auto config = SharedConfig(settings);
+  const auto signal = Uniform(1.0F, 4U, 4U);
+  ctx_.current_view.view_state_handle
+    = CompositionView::kInvalidViewStateHandle;
+  EXPECT_EQ(EligibilityStep(signal, config, 1U).first.fp16_eligible_streak, 0U);
+  EXPECT_EQ(EligibilityStep(signal, config, 2U).first.fp16_eligible_streak, 0U);
+  ctx_.current_view.view_state_handle
+    = CompositionView::ViewStateHandle { 30U };
+  config.temporary_unit_exposure = true;
+  EXPECT_EQ(EligibilityStep(signal, config, 3U).first.fp16_eligible_streak, 0U);
+  EXPECT_EQ(EligibilityStep(signal, config, 4U).first.fp16_eligible_streak, 0U);
+  config.temporary_unit_exposure = false;
+  EXPECT_EQ(EligibilityStep(signal, config, 5U).first.fp16_eligible_streak, 1U);
+  EXPECT_EQ(EligibilityStep(signal, config, 6U).first.fp16_eligible_streak, 2U);
+  ctx_.frame_sequence = frame::SequenceNumber { 7U };
+  ASSERT_TRUE(RecordShared(signal, config).executed);
+  EXPECT_EQ(EligibilityStep(signal, config, 8U).first.fp16_eligible_streak, 1U);
+  EXPECT_EQ(EligibilityStep(signal, config, 9U).first.fp16_eligible_streak, 2U);
+  ctx_.frame_sequence = frame::SequenceNumber { 10U };
+  const auto unsolved = pass_->ResolveFrame(ctx_, config, { .use_fp32 = true });
+  ASSERT_NE(unsolved, nullptr);
+  const std::array products { postprocess::ExposurePass::HdrProduct {
+    .texture = signal.texture.get(), .srv = signal.srv, .id = 11U } };
+  ASSERT_TRUE(
+    pass_->EvaluateFp16Products(ctx_, unsolved, config, products, {}));
+  ASSERT_TRUE(pass_->FinalizeFp16Suitability(ctx_, unsolved,
+    { .product_layout_revision = 7U, .expected_products = 1024U }));
+  const auto status = Read<ExposureCompletedStatus>(
+    *unsolved->current_state->status_buffer, ResourceStates::kCopySource);
+  EXPECT_EQ(status.flags & (1U | 4U), 0U);
+  EXPECT_EQ(status.fp16_eligible_streak, 0U);
 }
 
 NOLINT_TEST_F(ExposureGpuTest,

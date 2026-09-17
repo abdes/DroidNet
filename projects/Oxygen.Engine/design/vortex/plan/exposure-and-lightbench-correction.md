@@ -1263,6 +1263,21 @@ cases have no blocking graphics messages. Evidence is
 `lifecycle/selection-manifest.json`. SceneRenderer allocation/lease integration,
 required-product aggregation and automatic admission/recovery remain open.
 
+GPU eligibility finalization now retains each view's own precision history,
+including borrowers, and publishes its candidate/streak/layout in the existing
+state and completed-status records. Two consecutive qualifying rendered results
+with matching settings, events, layout and scale are required; inactive engine
+frames do not count as failures. Missing checks, intervening unqualified solves,
+pending remeters, stateless/diagnostic frames and source bootstrap cannot qualify.
+Finalization preserves numerical exposure and event state; duplicate calls do
+not advance the streak. Debug/Release pass 132 native, 22 service and 23 publication
+tests, with 204 shaders in each profile. Native cases include 64-bit frame-counter
+carry and contrasting borrower images. RenderDoc verifies separate prior/current
+records and exact matching completed status; three debugger cases have no blocking
+graphics messages. Evidence is `lifecycle/eligibility-manifest.json`. This does
+not yet connect finalization to production status readback or resource admission;
+required-product, allocation/lease and remaining scene gates stay open.
+
 Canonical static-sky cubemap processing now qualifies all generated mips before
 choosing half or float storage. Texture/upload/SRV formats agree, source
 normalization is preserved, and invalid radiance fails processing. The cached
