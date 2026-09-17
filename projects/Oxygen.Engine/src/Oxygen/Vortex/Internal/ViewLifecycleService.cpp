@@ -41,7 +41,8 @@ namespace {
   }
 
   auto ResolveViewForCameraNode(scene::SceneNode& camera_node,
-    std::optional<oxygen::ViewPort> viewport_override) -> ResolvedView
+    std::optional<oxygen::ViewPort> viewport_override,
+    std::optional<oxygen::Scissors> scissor_override) -> ResolvedView
   {
     if (!camera_node.IsAlive() || !camera_node.HasCamera()) {
       ResolvedView::Params params;
@@ -102,6 +103,9 @@ namespace {
     }
     if (viewport_override.has_value() && viewport_override->IsValid()) {
       cfg.viewport = *viewport_override;
+    }
+    if (scissor_override) {
+      cfg.scissor = *scissor_override;
     }
     if (cfg.scissor.right <= cfg.scissor.left
       || cfg.scissor.bottom <= cfg.scissor.top) {
@@ -224,7 +228,8 @@ void ViewLifecycleService::RegisterViewRenderGraph(CompositionViewImpl& view)
     view.GetDescriptor().name);
   auto camera = view.GetDescriptor().camera.value_or(scene::SceneNode {});
   register_view_graph_(published_view_id, render_view_coroutine_,
-    ResolveViewForCameraNode(camera, view.GetDescriptor().view.viewport));
+    ResolveViewForCameraNode(camera, view.GetDescriptor().view.viewport,
+      view.GetDescriptor().view.scissor));
 }
 
 void ViewLifecycleService::PublishViews(engine::FrameContext& context)

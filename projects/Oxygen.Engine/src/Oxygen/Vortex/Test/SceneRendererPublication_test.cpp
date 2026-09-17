@@ -24,6 +24,7 @@
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
+#include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Environment/Fog.h>
 #include <Oxygen/Scene/Environment/LocalFogVolume.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
@@ -911,6 +912,38 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
   EXPECT_TRUE(render_context.frame_views[1].is_scene_view);
   EXPECT_EQ(render_context.pass_target.get(),
     render_context.frame_views.front().primary_target.get());
+}
+
+NOLINT_TEST_F(SceneRendererPublicationTest,
+  RuntimeCameraPublicationPreservesAuthoredScissor)
+{
+  auto frame = FrameContext {};
+  PrepareFrameContext(
+    frame, oxygen::frame::SequenceNumber { 1U }, oxygen::frame::Slot { 0U });
+  auto scene = std::make_shared<oxygen::scene::Scene>("ScissorPublication", 4U);
+  auto camera = scene->CreateNode("Camera");
+  ASSERT_TRUE(
+    camera.AttachCamera(std::make_unique<oxygen::scene::PerspectiveCamera>()));
+  frame.SetScene(oxygen::observer_ptr { scene.get() });
+  auto config = oxygen::View {};
+  config.viewport = ViewPort { .width = 64.0F, .height = 64.0F };
+  config.scissor = { .left = 7, .top = 9, .right = 51, .bottom = 55 };
+  auto intent = CompositionView::ForScene(ViewId { 821U }, config, camera);
+  auto target = MakeFramebuffer("ScissorPublication");
+  ASSERT_NE(renderer_->PublishRuntimeCompositionView(frame,
+              { .composition_view = intent,
+                .render_target = oxygen::observer_ptr { target.get() } }),
+    oxygen::kInvalidViewId);
+  auto context = RenderContext {};
+  RendererPublicationProbe::PopulateRenderContextViewState(
+    *renderer_, context, frame, false);
+  ASSERT_EQ(context.frame_views.size(), 1U);
+  ASSERT_NE(context.frame_views[0].resolved_view, nullptr);
+  const auto scissor = context.frame_views[0].resolved_view->Scissor();
+  EXPECT_EQ(scissor.left, 7);
+  EXPECT_EQ(scissor.top, 9);
+  EXPECT_EQ(scissor.right, 51);
+  EXPECT_EQ(scissor.bottom, 55);
 }
 
 NOLINT_TEST_F(SceneRendererPublicationTest,

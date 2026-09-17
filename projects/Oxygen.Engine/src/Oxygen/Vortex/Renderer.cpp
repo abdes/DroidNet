@@ -2144,6 +2144,7 @@ auto Renderer::PublishRuntimeCompositionView(
     auto resolver = SceneCameraViewResolver {
       [camera_node](const ViewId& /*view_id*/) { return camera_node; },
       composition_view.view.viewport,
+      composition_view.view.scissor,
     };
     RegisterResolvedView(published_view_id, resolver(published_view_id));
   }
@@ -3822,6 +3823,7 @@ auto Renderer::ValidatedOffscreenSceneSession::ExecuteNow() -> bool
   auto resolver = SceneCameraViewResolver {
     [camera_node](const ViewId& /*view_id*/) { return camera_node; },
     view_intent.view.viewport,
+    view_intent.view.scissor,
   };
   auto resolved_view = resolver(view_intent.id);
 
@@ -3904,6 +3906,7 @@ auto Renderer::ValidatedOffscreenSceneSession::ExecuteInsideFrame(
   auto resolver = SceneCameraViewResolver {
     [camera_node](const ViewId& /*view_id*/) { return camera_node; },
     view_intent.view.viewport,
+    view_intent.view.scissor,
   };
   auto resolved_view = resolver(view_intent.id);
 

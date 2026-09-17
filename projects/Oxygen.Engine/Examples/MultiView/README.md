@@ -34,7 +34,7 @@ Common validation-oriented options:
 - `--point-light <true|false>` and `--spot-light <true|false>`: enable each
   existing scene light independently for forward/deferred contribution checks.
   Both default to enabled.
-- `--exposure-proof <none|independent|shared|main-only|pip-only|reordered|source-loss>`:
+- `--exposure-proof <none|independent|shared|main-only|pip-only|reordered|source-loss|viewport>`:
   run a paused, static main/PiP exposure comparison with explicit Auto settings
   and a public remeter at frame 32. PiP has two stops of compensation unless it
   shares main's gain. Shared mode steps main by one stop at frame 44; capture
@@ -120,6 +120,17 @@ the independent high-precision adaptation trajectory using recorded game time.
 actual ViewConstants and wireframe colors/domain flags against the four-view
 overlay fixture. Use `-PassName OverlayFamily` for that fixture, or
 `OverlaySourceLoss` for the grid-only lifecycle captures.
+
+`viewport` keeps game time paused while resizing only PiP at GPU frame 44,
+insetting its scissor by 96 pixels at frame 48, and restoring its original
+rectangle at frame 52. Capture frames 42, 43, 47 and 51. Analyze each with
+`AnalyzeRenderDocMultiViewExposure.py` and `AnalyzeRenderDocMeterRectangles.py`.
+Name the reports `<prefix>-<capture-frame>.exposure.txt` and `.meter.txt`, then
+run `Assert-MultiViewViewport.py --directory <reports> --prefix <prefix>
+--output <result.json>` with Pillow available. It checks retained gain/generations,
+main-view isolation, matching raster/meter rectangles, untouched pixels outside
+the scissor, and exact restoration of PiP. The tonemap oracle checks only pixels
+inside the actual draw scissor; this case preserves prior pixels outside it.
 
 For the offscreen forward light-binding regression, capture the existing
 `--offscreen-proof-layout true --pip-wireframe false` layout with both lights,
