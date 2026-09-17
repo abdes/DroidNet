@@ -1,6 +1,7 @@
 # Exposure management and LightBench implementation plan
 
-Status: `in_progress` — slices 1-4 qualified; slice 5 active.
+Status: `in_progress` — current slice state and evidence are maintained in the
+[implementation status table](../IMPLEMENTATION_STATUS.md#3-exposure-delivery-status).
 
 Date: 2026-09-16
 
@@ -274,6 +275,11 @@ Add a typed transient request to the public view lifecycle: target
 `ViewStateHandle`, request generation, policy, and optional EV100 seed.
 Requests are runtime events, not scene-asset properties. Game code and DemoShell
 use the same interface.
+
+Renderer allocates 64-bit transition generations. `QueueExposureTransition(handle,
+policy, seed)` returns a request token; `RetryExposureTransition(token)` reuses
+that identity. Implicit resets share the counter. Submission and GPU application
+remain separate, with settings/mode/ownership validation at the frame boundary.
 
 | Event | Required behavior |
 | --- | --- |
@@ -575,6 +581,11 @@ Version packed layouts and use record-size/version handling rather than
 reinterpreting older bytes. Runtime transition generations and GPU history are
 not serialized.
 
+Masks use an authored texture path, cooked source-local texture indices, PAK
+remapping and runtime ResourceKey. The 144-byte exposure prefix stores the uint32
+texture index at offset 116; bytes 120..131 remain zero-reserved. No UUID lookup
+layer or new texture asset type is introduced.
+
 ## 6. Calibrated light and material reference
 
 Finish the physical unit chain needed by the shipped neutral, point and spot
@@ -772,206 +783,49 @@ helpers under LightBench for renderer-owned behavior.
 
 ### Slice 1 - Freeze contracts and update owning designs
 
-- [x] Update [PBR specification](../../renderer-core/physically-based-rendering.md)
+- Update [PBR specification](../../renderer-core/physically-based-rendering.md)
   with equations, units, examples, numeric domain and the complete target behavior.
-- [x] Reconcile [physical-lighting roadmap](../../renderer-core/physical-lighting-roadmap.md),
+- Reconcile [physical-lighting roadmap](../../renderer-core/physical-lighting-roadmap.md),
   [panel design](../../renderer-core/post-process-panel-design.md), and repository-root
   [environment authoring](../../../../../design/editor/lld/environment-authoring.md).
-- [x] Expand [PostProcessService LLD](../lld/post-process-service.md) with the state
+- Expand [PostProcessService LLD](../lld/post-process-service.md) with the state
   layout, hybrid solve, lifecycle policies, masks/curve, numerical bootstrap and
   failure behavior in this plan. Include state and frame-sequence diagrams.
-- [x] Update [multiview](../lld/multi-view-composition.md),
+- Update [multiview](../lld/multi-view-composition.md),
   [InitViews](../lld/init-views.md), [shader contracts](../lld/shader-contracts.md),
   [scene textures](../lld/scene-textures.md), and environment/lighting LLDs for
   frame-pinned P, sharing and bootstrap format support.
-- [x] Fix the supported radiance envelope, operational FP32 bounds and validation
+- Fix the supported radiance envelope, operational FP32 bounds and validation
   error budgets against the compiler/format audit. Approve the GPU/asset layouts
   and exact list of dual-format HDR products. Document section 6's regularization
   and unit equations in the owning lighting LLD.
-- [x] Register this delivery order in PLAN/status. Create `design/renderer-core/lightbench.md`
+- Register this delivery order in PLAN/status. Create `design/renderer-core/lightbench.md`
   for experiments and instrument requirements.
 
 **Gate:** public behavior is specified by sections 3-7, GPU/asset layouts have
 owners, and every active HDR path appears in the domain migration checklist.
 
-Checkpoint evidence (2026-09-16): owning contracts and layouts reconciled;
-source-to-consumer HDR inventory recorded; independent arithmetic audit
-10/10; existing exposure shader compiled and DXIL inspected under bundled
-Debug/Release profiles; owned-document file links and `git diff --check`
-passed. Numerical limits are specified, not yet native-qualified. Runtime
-qualification begins in slice 2 and remains required. See the
-[checkpoint report](exposure-contract-checkpoint.md).
-
 ### Slice 2 - Implement normalized settings and fixed exposure
 
-Validated foundation (2026-09-16): canonical settings and atomic per-view
-revision retention; cancellation-safe log-target compilation; fixed/camera gain
-math; public composition and runtime-publication overrides including update/clear;
-frame-retired Exposure/Tonemap inputs; common C++/HLSL state/target layouts.
-The 80-byte Auto state carries settings revision and frame sequence. The
-FrameExposureData ABI is defined; live pre-exposure publication/consumption and
-full mode/lifecycle ownership remain in the following integration work.
-
-Focused build/tests pass 95 CTest entries across Scene exposure settings,
-PostProcessService, deferred core, runtime publication and ShaderBakeCatalog.
-The independent fixed-gain regression failed before removing the `1e-4` floor.
-Twelve native cases pass: EV14/15/16, EV+/-32 supported gain limits, compensation
-plus key, physical camera, disabled exposure, invalid revision retention,
-locked Auto +/-160 cancellation, and locked large-curve cancellation retaining
-a twofold key bias. PixelHistory checks the actual floating-point shader output
-before UNorm8 storage (including EV32), alongside uploaded/consumed gain,
-80-byte state identity, normalized target records and all Bayer phases.
-Separate CDB audits pass all twelve with zero D3D12/DXGI errors or blocking
-warnings; only the existing accepted live-factory shutdown warning remains.
-
-Evidence: `out/build-ninja/analysis/vortex/exposure-lightbench/fixed-gain/`
-(`evidence-manifest.json`, twelve captures, numeric reports, PNGs and debug
-reports), with `contract-audit/slice2-foundation-tests.log` beside it.
-The earlier ordinary Auto capture under `autocurve-unsettled*` is retained as
-failed settling evidence, excluded from these twelve arithmetic cases. Robust
-metering and temporal qualification remain slice 3 work. Reproduction is in the
-[VortexBasic README](../../../Examples/VortexBasic/README.md#fixed-exposure-fixture).
-
-The binding/publication increment completes the slice-2 interface gate:
-`FrameExposureData` replaces the overloaded ViewColorData record at byte 12 of
-the unchanged 64-byte view ABI. All existing readers use the explicit
-pre-exposure helper. Post-scene publication retains the pre-scene descriptor.
-The publication/runtime/ShaderBake checks pass 45/45; the affected shader bake
-packs 196 modules. A native default-scene probe verifies the sky shader reads
-the 16-byte record with P=2^-13 and 1/P=8192; its separate CDB audit passes.
-Evidence is under `frame-binding/` and
-`contract-audit/slice2-frame-binding-tests.log`. The fog publication assertion
-was corrected to match the existing opacity output and InvSrcAlpha blend;
-production fog blending was not changed.
-
-This does not qualify GPU-owned prior-history P selection, global-state slot
-association, S/P integration, unified mode history or full HDR migration. Those
-remain in slices 4-5; metering/adaptation and the remaining package gates stay open.
-
-- [x] Implement shared validation/resolution for native settings and view overrides,
+- Implement shared validation/resolution for native settings and view overrides,
   including zero target, coupled ranges and representable gain.
-- [x] Remove the fixed-exposure floor and propagate the exact resolved multiplier
+- Remove the fixed-exposure floor and propagate the exact resolved multiplier
   through constants. Add scalar, upload and native GPU regressions.
-- [x] Introduce explicit frame exposure bindings and common state definitions,
+- Introduce explicit frame exposure bindings and common state definitions,
   with compile-time CPU/HLSL size/layout checks and ShaderBake validation.
-- [x] Define native mask/curve/new-setting types for the following runtime slices.
+- Define native mask/curve/new-setting types for the following runtime slices.
 
 **Gate:** EV14/15/16, boundaries, compensation, keys and disabled exposure reach
 the GPU correctly. Invalid settings retain the previous valid revision.
 
 ### Slice 3 - Implement robust metering and hybrid adaptation
 
-Validated metering/adaptation core (2026-09-16): bounded cell-centre sampling,
-264-word histogram with conserved half-up two-bin weights, integer/fractional
-percentile boundaries, profiles and bilinear R masks, content rectangle and
-coverage, synthetic dark and invalid-input separation, zero-target restoration,
-and exact hybrid response with overflow-safe logarithmic rate/time inputs.
-Normalized targets cover the supported radiance domain so a changed histogram
-window does not truncate last-valid-meter restoration.
-
-Evidence: 20 native production-pass tests pass in both Debug and Release,
-including a 7680x4320 source, maximum mass, narrow percentiles, partial coverage,
-mask clamping, content bars, nonfinite samples, 30/60/120 Hz, irregular/long
-steps, zero speed/delta, huge rate/distance and tiny-rate/huge-delta arithmetic.
-The independent rational/Decimal reference passes 14 checks. The refreshed
-foundation suites pass 96/96. The debugger-backed native suite has zero
-D3D12/DXGI errors or blocking warnings and 20 accepted live-factory shutdown
-warnings (one backend per case). The inspected locked scene capture qualifies
-the actual 64-byte pass binding, 1056-byte histogram, 262144 samples,
-1073479680 mass at bin 102 and final tonemap consumption.
-Reports and capture are under
-`out/build-ninja/analysis/vortex/exposure-lightbench/metering/`; build/test logs
-are in the adjacent `contract-audit/` directory. `metering/evidence-manifest.json`
-records artifact/source hashes and the qualification boundaries.
-
-The subsequent curve/sampling acceptance increment passes 26/26 in Debug and
-Release: ordinary Auto curve interpolation, both endpoint clamps, raw-meter EV
-independent of EV clamps/adapted history, SpeedDown brightening at 30/60/120 Hz,
-moving edges and single-pixel features. The controlled 1024x1 five-stop feature
-cases bound sampling error by 5/1024 EV plus the frozen 2e-4 EV histogram
-allowance. This measures deterministic aliasing; it is not a universal error
-bound for arbitrary scenes. Logs are `contract-audit/slice3-matrix-*-tests.log`.
-The expanded debugger-backed run subsequently completed and passed 26/26.
-`metering/matrix-debug-layer.json` records zero errors/blocking warnings and
-26 accepted live-factory shutdown warnings. The original 20-case audit is
-retained separately.
-
-The mask-residency increment implements ResourceKey requests, atomic accepted
-settings/mask revisions, pending/failed diagnostics, rejection of nonlinear or
-incompatible textures, and exact texture/SRV leases retained through frame-slot
-retirement. Manual, disabled and locked-range Auto bypass inactive-mask
-residency. Pending initial masks suppress metering; replacement failures keep
-the prior accepted revision. Native tests prove cooked-mask upload and exact
-quantized mass, as well as locked S=.25 through the service and tonemap at dt0
-for pending/failed masks with/without previous settings.
-
-Qualification passes 29 native cases in both Debug and Release, 134 focused
-Debug CTest entries, and the Release PostProcessService (16) and TextureBinder
-(27) suites. The three added native mask cases pass a separate debugger audit,
-with zero errors/blocking warnings and three accepted factory shutdown warnings.
-Evidence is `contract-audit/slice3-mask-final-*`, the service/binder Release logs,
-and `metering/masks-debug-layer.json`; the manifest preserves earlier increments.
-
-The percentile portability correction passes 30 native tests in Debug and
-Release, including narrow fractional CDF boundaries on both sides of the
-32-bit word shift. Four 16-bit partial products replace native 64-bit ALU.
-Both compiled solve disassemblies now require descriptor-heap indexing without
-Int64ShaderOps. A four-case debugger run passes with no errors/blocking warnings;
-the refreshed `portable-meter` capture passes histogram and final-consumption
-checks. Its PNG is byte-identical to the inspected locked-meter image.
-Evidence: `contract-audit/slice3-portable-*`, the before/after solve disassemblies,
-and `metering/portable-*`.
-
-The exact Spot centre correction passes 34 native cases in Debug and Release.
-Analytic profile distance is computed from integer cell-centre offsets, keeping
-the true centre at zero for tiny positive radii as well as radius zero. The
-new radius=1e-20 case failed with zero mass before correction and now retains
-4095. Additional cases qualify dark subcategories, all-nonfinite EV0 fallback,
-continued positive latent adaptation under displayed zero, fixed curve input
-for locked Auto, and zero SpeedDown. The six-case debugger audit passes with
-zero errors/blocking warnings and six accepted factory shutdown warnings.
-Evidence: `contract-audit/slice3-small-spot-before.log`,
-`contract-audit/slice3-spot-final-*` and `metering/edge-debug-layer.json`.
-
-The subnormal-curve audit reproduced a one-stop error: at exact measured EV0,
-keys +/-1e-40 with values +/-1 yielded gain .5 rather than 1. Interpolation now
-uses coordinates scaled by 2^64, reconstructing subnormal mantissas from bits
-before scaling. The regression includes the smallest positive binary32 key.
-All 35 native cases pass in Debug and Release; the five-case curve debugger
-audit has zero errors/blocking warnings and five accepted factory warnings.
-Evidence: `contract-audit/slice3-curve-subnormal-*` and
-`metering/curve-debug-layer.json`.
-
-The public pause route is now qualified: normal frame start, standalone frame
-execution, single-pass/render-graph materialization and offscreen validation
-accept finite nonnegative game delta. Negative/NaN/Inf remain invalid. Both
-paused facade tests failed before correction; all 36 focused facade/materializer
-CTest entries now pass in Debug and Release. A separate native public-frame
-session case passes in both configurations and under the debugger: target gain
-changes while latent gain remains exactly unchanged at dt0. Its audit has zero
-errors/blocking warnings and one accepted factory shutdown warning. Evidence:
-`contract-audit/slice3-pause-*` and `metering/pause-debug-layer.json`.
-
-This closes the slice-3 metering/adaptation gate: the 35-case numerical matrix,
-the separate native public-pause case, resource/setting tests, compiler audits
-and inspected scene captures have passed their specified scopes. Lifecycle,
-sharing and unified mode history remain slice 4 work; this does not qualify
-scene-integrated HDR migration or later package acceptance.
-Full GPU P routing/upstream range qualification remain slice 5; cooked mask
-persistence belongs to slice 6.
-
-The user approved correcting the mask identity contract on 2026-09-16: reuse
-cooked source-local texture indices, PAK remapping and runtime ResourceKey.
-Offset 116 stores the uint32 texture index and 120..131 are zero-reserved;
-the fixed record prefix remains 144 bytes. The canonical runtime mask field
-now uses ResourceKey with the loading integration. No UUID lookup layer or new texture asset type is introduced.
-
-- [x] Implement bounded stratified sampling, conserved two-bin weights, percentiles,
+- Implement bounded stratified sampling, conserved two-bin weights, percentiles,
   finite/black/coverage rules and overflow-safe counts.
-- [x] Implement mask sampling and exact piecewise-linear compensation curves.
-- [x] Implement the analytic hybrid log-gain update, clamped targets, zero speeds,
+- Implement mask sampling and exact piecewise-linear compensation curves.
+- Implement the analytic hybrid log-gain update, clamped targets, zero speeds,
   equal EV bounds, zero target and positive-target restoration.
-- [x] Add independent histogram and adaptation reference tests plus native GPU
+- Add independent histogram and adaptation reference tests plus native GPU
   captures using existing fixtures; vary frame schedules at equal elapsed time.
 
 **Gate:** weighted distributions, targets and adaptation trajectories match
@@ -979,156 +833,21 @@ independent expectations; 8K output cannot overflow histogram accumulation.
 
 ### Slice 4 - Implement one exposure history and complete lifecycle
 
-Generation allocation was decided by the user on 2026-09-16: Renderer issues
-64-bit generations. `QueueExposureTransition(handle, policy, seed)` returns a
-request token; `RetryExposureTransition(token)` resubmits the same identity
-without allocating another generation. Implicit resets share that counter.
-Submission and GPU application remain separate, and settings/mode/ownership
-validation happens at the frame boundary as specified in section 4.1.
-
-The control foundation is implemented and CPU-qualified: renderer-issued
-queue/retry/status tokens with lifetime separation, syntax/conflict validation,
-idempotence and shutdown rejection; explicit seed log-gain resolution outside
-metering bounds; and recorder submission inspection using the existing command
-list. Scene exposure tests pass 19/19 and Commander tests 37/37. The rebuilt
-focused control/regression run passes 56/56. Evidence is
-`contract-audit/slice4-seed-tests.log`, `slice4-submission-inspection-tests.log`
-and `slice4-control-rebuilt-tests.log`. An earlier broad filter selected a stale
-PostProcessService test executable after Renderer layout changed; rebuilding
-that dependent target removed the teardown failure.
-
-Unified GPU mode history and explicit transition application are implemented.
-Each solve reads an immutable prior record, publishes a new pooled record only
-after submission, and retains its resources through frame-slot retirement.
-Manual, ManualCamera, Auto and disabled use the same GPU record at tonemap.
-Stateless views and temporary diagnostics use transient records. Generation
-retries, pending remeter, seed/Preserve event frames, mode changes, submission
-failure and bounded asynchronous acknowledgements have controlled-input tests.
-Frame-captured requests exclude later submissions until the next frame; stale
-completions cannot consume newer intent or reused view lifetimes.
-
-The expanded native suite passes 54/54 in Debug and Release, plus 54/54 under
-CDB with no D3D12 errors or blocking warnings. Rebuilt CPU regressions pass
-41/41 in each configuration (Debug combines 39 entries and two suite entries).
-The diagnostics-ledger fixture explicitly enables its asserted feature in both
-configurations. Inspected Auto160 and Manual EV32 captures prove distinct
-prior/output state resources, the 112-byte solve ABI and final GPU-state
-consumption; the Auto histogram mass is exactly 1,073,479,680. Evidence and
-commands are in `lifecycle/unified-state-manifest.json` under the package's
-analysis directory.
-
-The runtime registry now validates source edges atomically, resolves chains to
-one root, rejects duplicate persistent-handle ownership and stateless sharing,
-retains inactive source chains referenced by active consumers, and detaches all
-affected relationships on removal. Its 18 publication tests pass in Debug and
-Release, including six new ownership cases; evidence is
-`lifecycle/ownership-registry-manifest.json`. This qualifies CPU routing only.
-
-Rendered-view frame capture now pins accepted settings, mode, mask lease and
-transition semantics before scene rendering. Family priming also covers views
-without resolved cameras; late scene/settings/mask changes become eligible on
-the next frame. Stateless captures remain isolated by logical view and retain
-no prior-frame settings. The expanded native suite passes 56/56 in Debug and
-Release; service tests pass 19/19 and renderer regressions pass 40/40 entries in
-each configuration. Four focused CDB cases have no blocking graphics messages.
-Evidence is `lifecycle/frame-capture-manifest.json`.
-
-The prior-frame sharing core is implemented with source-owned updates, immutable
-prior snapshots, source-defined initialization fallback and inactive-source
-settings capture. Borrowers copy gain without adopting another image's metered
-EV, and reject consumer transitions through completed GPU status. Controlled
-native tests cover both render orders, one-frame reset latency, all source modes,
-seed/bounds/zero-target fallback, explicit detach/remeter, inactive-source seed
-ownership and failure-safe fallback. Debug and Release each pass 62/62 native,
-20/20 service and 19/19 publication tests. Six sharing CDB cases have no blocking
-graphics messages. Evidence is `lifecycle/prior-sharing-manifest.json`.
-Readback backpressure now retains one coalesced latest submitted status alongside
-the three pending copies. Frame-start retry completes acknowledgements without
-another owner render; old completions cannot consume newer intent. Submission
-observation remains distinct from GPU application, and runtime removal retires
-queued lifetimes even before renderer/GPU state exists. The native suite passes
-64/64 in Debug and Release, service/publication suites pass 20/20 each in both,
-and four focused debugger cases have no blocking graphics messages. The final
-submission-observation guard also passes the four affected Debug cases. Evidence
-is `lifecycle/status-retry-manifest.json`.
-Registered inactive owners now validate captured settings/mode and ownership at
-the pre-render boundary. Never-submitted invalid requests stay rejected across
-later settings or ownership changes; already-submitted requests await GPU
-completion, and diagnostics defer pending intent. Rejected dispositions are
-carried into later GPU records without application. Debug and Release each pass
-68/68 native tests, 20/20 service tests, 20/20 publication tests and 39/39 renderer
-regressions. Four inactive-owner CDB cases have no blocking graphics messages.
-Evidence is `lifecycle/inactive-control-manifest.json`.
-Automatic detachment now issues a renderer generation, remeters Auto at zero
-delta, applies fixed modes, honors an unsubmitted explicit policy and defers
-diagnostics. Reattachment before capture cancels the pending event. Settings,
-mask leases and GPU records carry view lifetime identity; handle replacement
-retires the old owner after validation and outside the registry lock. The public
-H1-to-H2-to-new-owner-H1 regression covers queued/applied history, mask ownership,
-stateless replacement and retained GPU readers. Debug and Release each pass
-75/75 native, 21/21 service, 21/21 publication and 39/39 renderer regression tests.
-Nine focused debugger cases have no blocking graphics messages. Evidence is
-`lifecycle/detach-lifetime-manifest.json`.
-Source-destruction continuity is implemented with captured source definitions,
-retained GPU publications and per-consumer delivery. Auto preserves one displayed
-and positive latent-gain frame, including borrowed zero; subsequent invalid
-metering uses positive latent gain. Fixed/zero-target/explicit policies retain
-their precedence. Never-rendered source fallback, chain detachment, diagnostic
-siblings and retired consumers have native coverage. The exact borrowed state
-selected after a failed consumer copy is retained separately from successful
-solve history, without importing source request identity or acknowledging failed
-work. Debug and Release pass 81/81 native, 21/21 service, 21/21 publication and
-39/39 renderer regressions. Six focused debugger cases have no blocking graphics
-messages. Evidence is `lifecycle/source-loss-manifest.json`.
-The typed discontinuity boundary is implemented: accepted camera selection
-changes and per-view world ownership changes request default transitions; games
-can notify camera cuts or completed backend recovery. Auto remeters, explicit
-requests take precedence, diagnostics defer events, late notifications wait for
-the next capture, and borrowers invalidate local histories without resetting
-their source. Camera matrices and temporal fog/HZB reuse are invalidated.
-Debug and Release pass 88/88 native, 21/21 service and 22/22 publication tests,
-plus 117/117 rebuilt renderer/facade/environment/history regression entries.
-Seven native discontinuity debugger cases have no blocking graphics messages.
-Evidence is `lifecycle/discontinuity-manifest.json`.
-DemoShell resets now enumerate registered root owners and queue public seed
-transitions. Three reset tests and nine EnvironmentVm tests pass in Debug and
-Release. Three simultaneous in-flight frames retain distinct records and upload
-values; the full Release native suite passes 89/89 and publication passes 22/22.
-The controlled sharing RenderDoc capture verifies source initialization,
-gain-only consumer copying without histogram dispatch, rejected borrower
-requests, distinct immutable records and final tonemap consumption. Evidence is
-`lifecycle/demoshell-reset-manifest.json` and `lifecycle/sharing-copy-analysis.txt`.
-The offscreen facade now resolves source intent IDs through registered chains
-to the persistent root in both standalone and in-frame execution. Validation
-and execution reject missing sources, stateless sharing and aliased owners.
-Distinct view/state capture keys prevent offscreen/published ID collisions.
-Debug and Release each pass 91/91 native, 22/22 service, 22/22 publication and
-11/11 offscreen facade tests. Native cases verify copied gains, absent consumer
-histograms, final tonemap execution and unchanged source GPU history/queued
-requests after rejected aliases or ownership changes. Two debugger cases pass
-with no blocking graphics messages. Evidence is
-`lifecycle/offscreen-sharing-manifest.json`. Slice 4 is qualified against its
-controlled-input gate. Actual backend resource restoration and the
-scene-integrated numerical bootstrap use the slice-5 recovery route.
-Early GPU P selection, S/P integration and scene-integrated validation remain
-slice 5 work.
-
-- [x] Update the same GPU state in Manual, ManualCamera, Auto and disabled modes.
-- [x] Add public per-view transitions and request generation handling, including
+- Update the same GPU state in Manual, ManualCamera, Auto and disabled modes.
+- Add public per-view transitions and request generation handling, including
   recording/submission failure, invalid metering and idempotent retries.
-- [x] Implement the policies in section 4.1, including exact seed event-frame
+- Implement the policies in section 4.1, including exact seed event-frame
   behavior and manual-to-auto continuity by retaining gain.
-  The controlled-input lifecycle cases, including discontinuity notification,
-  source destruction, default detach, lifetime-safe selection, inactive-owner
-  validation and acknowledgement backpressure, are covered by the checkpoints
-  above. The controlled-input capture and DemoShell reset integration are also
-  qualified, including both offscreen execution paths.
-- [x] Implement source-owned updates, pinned prior generations, root-source
+  Exercise controlled-input discontinuity notification, source destruction,
+  default detach, lifetime-safe selection, inactive-owner validation and
+  acknowledgement backpressure. Include captured controls, DemoShell reset,
+  and both offscreen execution paths.
+- Implement source-owned updates, pinned prior generations, root-source
   resolution, cycle rejection, inactive-source retention and bootstrap fallback.
-  Registered composition views and offscreen facade routing are qualified.
-- [x] Implement stateless transient state, recovery events, frame-safe uploads,
+  Cover registered composition views and offscreen facade routing.
+- Implement stateless transient state, recovery events, frame-safe uploads,
   synchronization and fence retirement using controlled float-input fixtures.
-- [x] Exercise native game-facing producers without DemoShell. Wire DemoShell's
+- Exercise native game-facing producers without DemoShell. Wire DemoShell's
   reset to the same public API.
 
 **Gate:** state-machine, request, ownership and publication tests pass against
@@ -1139,297 +858,18 @@ views and recovery.
 
 ### Slice 5 - Complete pre-exposure migration and numerical recovery
 
-The GPU pre-scene resolve is implemented in the existing ExposurePass and
-qualified independently of production HDR routing. It writes immutable P/1P,
-retains prior/candidate leases, reserves the current exposure record, preserves
-zero displayed gain with positive latent gain, and does not acknowledge a
-transition. Source fallback and recovery resolve P=1; accepted candidate P is
-read from the retained GPU record. Recording failure does not publish a binding.
-Debug and Release pass 97/97 native, 22/22 service and 22/22 publication tests.
-Six focused debugger cases have no blocking graphics messages. ShaderBake
-qualifies the added entry in both profiles, and RenderDoc verifies the 48-byte
-constants ABI, distinct frame/current-state allocations, exact P/1P and retention
-of the first record after a later resolve. Evidence is
-`lifecycle/frame-resolve-manifest.json` and `lifecycle/frame-resolve-analysis.txt`.
-The post-process service now prepares this domain and Stage 22 writes the
-reserved current state. Metering reads GPU 1/P and tonemapping applies S/P to
-foreground and bloom. Seed P selection preserves prior displayed gain until
-the solve submits; failed solves restore the correct gain into the reserved
-state without acknowledging requests or advancing history. This includes
-zero target and source loss after a failed consumer copy. An unavailable
-fallback skips tonemapping. ACES/Filmic retain their ordinary response and
-remain finite at scene-times-gain 2^64. Debug and Release each pass 106/106
-native, 22/22 service and 22/22 publication tests. Fifteen debugger cases have
-no blocking graphics messages. RenderDoc verifies the reserved-state writes,
-unchanged frame records and final S/P pixels. Evidence is
-`lifecycle/domain-manifest.json` and `lifecycle/domain-analysis.txt`.
-These service-level results are extended by the scene cutover below; they do
-not independently qualify slice 5.
-
-The allocation path now carries RGBA16F/RGBA32F through SceneTexturesConfig,
-the existing pool key, per-view environment allocation and matching SRV/UAV
-descriptors. Format-specific families remain distinct; depth, GBuffers, velocity
-and canonical transfer LUTs retain their formats. Compatible fog history can
-be read across the format change. SceneRenderer tests verify matching FP32
-pipeline/output artifacts, and a native storage fixture preserves RGB from
-2^-24 through 2^30 plus coverage exactly. Debug and Release pass 107 native,
-7 texture, 6 pool, 56 environment, 22 service and 22 publication tests, plus
-78 rebuilt renderer/context/facade regressions. The corrected storage fixture
-passes its debugger run without blocking graphics messages. Evidence is
-`lifecycle/formats-manifest.json` records this allocation checkpoint.
-
-Scene rendering now publishes the GPU frame record before HDR work and retains
-it in resolved-color products and fog history. Emissive, deferred/forward
-lighting, sky/AP and fog writes use the P domain; tonemapping removes P once.
-Wireframe overlays run on mapped output. The old sky radiance caps and exposure
-cancellation are removed. Fog history rebases RGB without scaling transmittance;
-its texture-domain checks and final fog sampling use the actual texture domain.
-Preparation failure skips the view and required auxiliary dependants, preserves
-the caller's existing output and queued request, and returns failure from both
-offscreen entry paths. The current scene path conservatively retains FP32 until
-all required products can supply completed suitability proof. Automatic FP16
-admission, range-triggered recovery and the complete scene/MultiView matrix
-remain open. Canonical cubemap narrowing is qualified separately below.
-
-This conservative-FP32 scene increment passes 111 native tests, 7 texture,
-6 pool, 56 environment, 22 service and 22 publication tests in Debug and
-Release, plus 78 rebuilt renderer/context/facade regressions. Four native scene
-debugger cases pass without blocking graphics messages. The refreshed
-VortexBasic runtime/debugger/capture proof passes with fog/AP consumption
-verified from actually used bindless resources; an independent final-pixel
-oracle checks S/P within one output code value. The mapped image was inspected.
-Paired-view native tests separately prove nonunit-P sky invariance, high-radiance
-preservation, actual fog history blending/RGB rebasing, unchanged transmittance,
-and recoverable pre-scene failure. Evidence is
-`scene/scene-migration-manifest.json`. These results do not certify FP16
-eligibility, range-triggered recovery or the remaining MultiView gates.
-
-The independent GPU product evaluator now selects a power-of-two candidate P
-from FP32 reference products and checks overflow margin, scene/displayed RGB
-error, transmittance, and the actual meter contribution. Meter dark suppression
-shares production helpers, including zero-mass coverage changes and synthetic-
-dark fallback. Required 46-stop signals fail while below-budget components can
-pass. Debug/Release pass 119 native tests and 22 service/22 publication tests;
-eight focused debugger cases and the qualifier RenderDoc audit pass. Evidence
-is `lifecycle/suitability-manifest.json`. These local checks do not grant format
-admission. The approved accumulation boundary retains FP32 SceneColor in both
-modes and checks conversion into the existing resolved-color allocation;
-SceneTextures owns the allocation and memory contract. Cumulative error
-aggregation, stability and status-qualified switching remain open.
-
-The checked SceneColor conversion primitive now evaluates the current frame's
-pinned P and final S, then gates every RGBA16F destination store on the complete
-GPU report. It reuses the existing report and frame-retained constants; a failed
-check leaves all destination texels untouched. Coverage follows production
-metering's resolved SceneBackground policy. Debug/Release pass 123 native,
-22 service and 23 publication tests; both shader profiles contain 203 entries.
-The nine-case conversion fixture covers exact half output, nonunit P, overflow,
-nonfinite input, displayed dark loss and background on/off with zero/partial
-coverage. The zero-alpha coverage regression fails before the policy fix.
-RenderDoc verifies four checks precede conversion and all 27 output texels match
-independent half bit patterns. Evidence is `lifecycle/conversion-manifest.json`.
-The focused debugger run has no blocking graphics messages.
-This primitive is not yet wired into SceneRenderer's resolve; rejection
-consumption, required-product aggregation and status-qualified
-admission/recovery remain open. CPU submission success never authorizes use of
-a rejected resolve texture.
-
-SceneRenderer now solves exposure from FP32 accumulation before Stage 21 and
-passes the prepared result/configuration into Stage 22 without a second meter.
-Service/view/handle/lifetime/frame checks reject mismatched prepared records.
-Native fixtures verify persistent/stateless result reuse and failed preparation
-after a successful sibling: both offscreen paths preserve output and pending
-seed, skip resolve/tonemap, and apply the seed on the next-frame retry.
-Debug/Release pass 127 native, 22 service, 23 publication, 61 renderer-core and
-12 offscreen tests. Two MultiView captures prove meter/solve/resolve/tonemap
-ordering and immutable final-state consumption. Gains, meter values, complete
-mapped and pre-composition images match the qualified baseline exactly. Five
-debugger cases have no blocking graphics messages. Evidence is
-`lifecycle/prepared-manifest.json`; this makes final S available for checked
-conversion but does not enable FP16 admission or close the remaining slice-5 gates.
-
-The service conversion/tonemap handoff now carries the checked FP16 source,
-original FP32 source and GPU report. Tonemapping selects FP32 on rejection in
-the same frame, with unchanged exposure state; accepted conversion uses FP16.
-Both consumers share the acceptance predicate. Tonemap constants are 64 bytes;
-the post-process binding record remains 112 bytes and publishes conditional
-source metadata. Initial pending/failed mask policies refuse conversion before
-recording GPU work. Debug/Release pass 129 native, 22 service and 23 publication
-tests; both shader profiles contain 203 entries. Native cases cover accepted
-half, overflow/dark-loss fallback, nonunit P and unresolved masks. RenderDoc
-verifies rejected-half selection and final FP32 pixels. Two ordinary MultiView
-captures retain exact baseline gains, meters and full view images; two debugger
-cases have no blocking graphics messages. Evidence is
-`lifecycle/selection-manifest.json`. SceneRenderer allocation/lease integration,
-required-product aggregation and automatic admission/recovery remain open.
-
-GPU eligibility finalization now retains each view's own precision history,
-including borrowers, and publishes its candidate/streak/layout in the existing
-state and completed-status records. Two consecutive qualifying rendered results
-with matching settings, events, layout and scale are required; inactive engine
-frames do not count as failures. Missing checks, intervening unqualified solves,
-pending remeters, stateless/diagnostic frames and source bootstrap cannot qualify.
-Finalization preserves numerical exposure and event state; duplicate calls do
-not advance the streak. Debug/Release pass 132 native, 22 service and 23 publication
-tests, with 204 shaders in each profile. Native cases include 64-bit frame-counter
-carry and contrasting borrower images. RenderDoc verifies separate prior/current
-records and exact matching completed status; three debugger cases have no blocking
-graphics messages. Evidence is `lifecycle/eligibility-manifest.json`. This does
-not yet connect finalization to production status readback or resource admission;
-required-product, allocation/lease and remaining scene gates stay open.
-
-Canonical static-sky cubemap processing now qualifies all generated mips before
-choosing half or float storage. Texture/upload/SRV formats agree, source
-normalization is preserved, and invalid radiance fails processing. The cached
-half product carries an authored-intensity bound: harmless edits reuse it;
-crossing the bound regenerates from the original source into FP32 before
-publication, and subsequent dimming retains the promoted allocation. Native
-readback verifies all faces/mips in both formats and reconstructs unit radiance
-from a 2^-50 source amplified by the actual published 2^50 scale. Debug/Release
-each pass 121 native and 61 environment tests; two focused debugger cases have
-no blocking graphics messages. Evidence is `lifecycle/cubemap-manifest.json`.
-This canonical-resource checkpoint does not grant per-view FP16 admission.
-
-MultiView's scene and offscreen producers now supply persistent view-state
-handles instead of rebuilding stateless Auto exposure every frame. Early and
-settled native captures are distinct qualification cases. The ordinary lit
-main/PiP reaches independent steady gains. The formerly black offscreen forward
-pane now reads the canonical 96-byte local-light record, published count and
-grid indices instead of the unpublished legacy positional-light slot. Point,
-spot, both and disabled-light controls support separate contribution checks;
-active lights now produce an ordinary meter result. Full light-unit calibration
-remains slice 7. Per-view S/P arithmetic alone does not certify a correctly lit
-image; framing and the complete scene/MultiView lifecycle matrix remain open.
-
-The canonical forward-light binding correction passes 121 native exposure and
-4 lighting-service tests in each of Debug and Release; both shader profiles pack
-202 modules. Four focused debugger runs have no blocking graphics messages.
-Eight captures (point, spot, both, neither in each configuration) verify the
-actual 96-byte record, count, kind/flags and grid/index consumption while the
-legacy slot remains invalid. Enabled lights produce nonzero forward SceneColor
-and ordinary metering; neither produces zero radiance and synthetic-dark state.
-Mapped S/P probes pass within one output code value, and the repaired native
-forward pane was inspected. `multiview/forward-binding-manifest.json` records
-this bounded correction. Physical-unit and shadow parity remain separate gates.
-
-The lit PiP and both offscreen cameras now aim at the objects' shared center
-with wider framing instead of targeting the floor below them. A rebuilt Debug
-capture retains all four objects in each isolated image and in the native
-presentation; all four S/P probe sets pass. The focused debugger run has no
-blocking graphics messages. Evidence is `multiview/framing-manifest.json`.
-Other proof-layout framing and the scripted exposure/lifecycle matrix remain
-open; this is a camera-pose correction, not full visual acceptance.
-
-Extracted texture replacement now defers registry/view removal together with
-the texture through GPU-frame retirement. The direct descriptor regression
-fails before this fix and passes in the 59-test renderer-core suite in both
-Debug and Release. Fresh native captures preserve earlier submitted views;
-isolated/family and reordered comparisons report zero gain, meter and image
-differences, including the compared composition region. Evidence is
-`multiview/retirement-manifest.json`. The bounded MultiView proof controls are
-qualified separately; the complete slice-5 lifecycle gate remains open.
-
-The bounded MultiView exposure proof now qualifies independent main/PiP,
-standalone equivalents, reordered submission and one-frame source sharing in
-Debug and Release. The proof uses public pause/remeter controls and fixed
-camera/settings inputs. Isolated and reordered gain, meter, full mapped and
-pre-composition images match exactly; the compared final-composite region also
-matches exactly. Composition now follows z-order independently of submission.
-At GPU frame 44 a shared owner's one-stop remeter changes only its current gain;
-the consumer adopts it at frame 45. All five latency errors are zero.
-Fourteen capture audits and five focused debugger cases pass. Both configurations
-pass 121 native, 59 renderer-core, 22 post-process and 22 publication tests.
-Evidence is `multiview/static-matrix-manifest.json`. These static/paused cases do
-not close active adaptation, resize/scissor, hide/recreate, source destruction,
-remaining proof layouts, or automatic precision admission/recovery.
-
-Ground-grid and wireframe constants now use the existing frame-retained
-structured publisher (208/32-byte paired CPU/HLSL records). The old eight-slot
-ring fails the queued-view regression. Current tests preserve submitted bytes
-across all three in-flight slots and safe slot reuse; velocity intermediates
-also retain their descriptors until retirement on base-pass teardown. Debug and
-Release pass 61 core, 121 native, 22 post-process and 22 publication tests, and
-both shader packs contain 202 modules. Four-view native overlay captures verify
-three grid matrices and four frame-varying wireframe payloads/domain flags.
-
-The nonzero Auto source-loss case now runs through real MultiView rendering:
-main disappears at GPU frame 44, PiP retains its last borrowed gain and its
-complete image exactly, and independent adaptation resumes with game time after
-frame 46. Eight refreshed captures pass; the closed-form temporal oracle differs
-by less than 8e-7 EV, including the exponential branch. Two focused debugger
-cases have no blocking graphics messages, and final images were inspected.
-Evidence is `multiview/overlay-source-loss-manifest.json`. Other source-loss
-mode/zero-gain combinations, resize/scissor, hide/recreate and precision
-admission/recovery remain open.
-
-Camera resolution now retains authored scissors for registered views, both
-offscreen entry paths and composition-view resolution. The public-route
-regression fails before the fix. Debug/Release pass 21 scene-publication,
-3 resolver, 12 offscreen, 22 runtime-publication and 121 native tests. Eight
-captures verify the PiP-only extent/aspect change, a 96-pixel scissor inset,
-and restoration: raster and histogram rectangles agree, gains/settings/applied
-generations persist, main's meter/image stays exact, and restored PiP matches
-exactly. Pixels outside the scissor remain untouched; the oracle checks S/P
-only where the draw writes. The debugger run has no blocking graphics messages.
-Evidence is `multiview/viewport-manifest.json`. Whole-window resize,
-hide/recreate and the remaining lifecycle/precision gates remain open.
-
-The bounded short-inactivity proof retains a hidden PiP registration with no
-targets on frames 44–47, reopens its handle at frame 48, and creates a fresh
-logical view/handle at frame 52. Debug/Release builds and eight capture audits
-pass: main's image/gain remains exact, the retained PiP preserves its gain/full
-image despite a new target, and recreation initializes independently without
-the old applied generation. Initialization agrees with the independent target
-within 1e-6 EV. The debugger run has no blocking graphics messages and images
-were inspected. `multiview/lifetime-manifest.json` records this scope; long-idle
-expiration, other mode/lifecycle combinations and precision admission/recovery
-remain open.
-
-Whole-window resize is now qualified with the public window API: the swapchain
-changes to 1280x800 and then returns to its original extent while both view
-handles, gains and transition generations persist. Debug/Release builds and six
-capture audits pass; both complete view images restore exactly. The debugger
-run has no blocking graphics messages, and headless/fullscreen misuse is rejected.
-Evidence is `multiview/window-resize-manifest.json`. Remaining lifecycle/mode
-combinations, the complete layout matrix and automatic precision admission/
-recovery still keep slice 5 open.
-
-The paused native mode-cycle proof is qualified in Debug/Release: temporary
-wireframe and restoration, immediate Manual/disabled/ManualCamera entry, zero
-target with positive latent history, positive-target restoration, EV6 seed and
-camera cut. Twenty event-frame captures pass the independent gain and S/P
-checks; main remains byte-identical and diagnostic restoration is exact. The
-physical-camera gain differs from its independent arithmetic by under 2e-7 EV;
-all other expected gains match exactly. The debugger run has no blocking
-graphics messages. Evidence is `multiview/modes-manifest.json`. The complete
-layout matrix and automatic precision admission/recovery remain open.
-
-Per-view shader-debug overrides now survive publication, updates and execution
-scope, including explicit Disabled overrides of a global diagnostic mode.
-Registered exposure controls use that resolved mode: a normal view's camera cut
-remeters on its event frame while a diagnostic sibling defers its cut until
-normal rendering resumes. The native regression fails before the control-capture
-fix and passes afterward. Debug/Release each pass 122 native, 22 post-process,
-23 runtime-publication, 12 offscreen and 61 renderer-core tests. Four standard/
-auxiliary captures verify the actual normals/shadow-diagnostic draws, transient
-unit gain and per-view S/P; images were inspected. Three debugger cases have no
-blocking graphics messages. Evidence is `multiview/diagnostic-manifest.json`.
-The shadow pane currently displays the shader's blue unavailable-shadow
-diagnostic; this proves routing, not rendered directional-shadow coverage or
-the full layout matrix. Those gates and precision admission/recovery remain open.
-
-- [x] Add the early GPU P resolve and bind a frame-invariant P/1P to every HDR pass.
-- [ ] Migrate the entire section 4.4 checklist, including atmosphere producer/
+- Add the early GPU P resolve and bind a frame-invariant P/1P to every HDR pass.
+- Migrate the entire section 4.4 checklist, including atmosphere producer/
   consumer pairs, fog/color histories, bloom and offscreen/capture domains.
-- [x] Meter with 1/P and tonemap with S/P in every mode, including disabled and
+- Meter with 1/P and tonemap with S/P in every mode, including disabled and
   zero-target cases. Remove obsolete manual-exposure cancellation paths.
-- [ ] Add transient FP32 bootstrap/remeter products and matching PSO/resolve
+- Add transient FP32 bootstrap/remeter products and matching PSO/resolve
   format keys. Keep exposure history through FP32-to-FP16 transition.
-- [ ] Add saturation detection and the FP32 recovery event. Verify the supported
+- Add saturation detection and the FP32 recovery event. Verify the supported
   scene-radiance envelope at upstream intermediates as well as SceneColor.
-- [ ] Run the complete lifecycle matrix through real scene rendering, including
+- Run the complete lifecycle matrix through real scene rendering, including
   startup, cuts, stateless views, source loss, delayed acknowledgment and recovery.
-- [ ] Run the MultiView main/lit-PiP, independent and shared-exposure cases from
+- Run the MultiView main/lit-PiP, independent and shared-exposure cases from
   section 7.5 before integrating further bench work.
 
 **Gate:** varying numerical P leaves scene-referred measurements and final
@@ -1439,18 +879,18 @@ path consumes the old overloaded scalar.
 
 ### Slice 6 - Finish authoring, serialization and configuration isolation
 
-- [ ] Include native aperture/shutter/ISO source/cook/load persistence, as
+- Include native aperture/shutter/ISO source/cook/load persistence, as
   approved on 2026-09-16. Scene-v6 perspective/orthographic records are 32/40
   bytes; v5 20/28-byte records hydrate 11/125/100 defaults. Existing editor
   adapters preserve the fields; physical-camera editor controls stay deferred.
-- [ ] Update source JSON schemas, scene component/config types, versioned packed
+- Update source JSON schemas, scene component/config types, versioned packed
   records, cooker, loader, scripting and existing editor/native adapters.
-- [ ] Round-trip mask resource references, curve keys, black influence, D and
+- Round-trip mask resource references, curve keys, black influence, D and
   every existing exposure field; preserve enum ordinals and old-record defaults.
-- [ ] Add async mask residency/error behavior and atomic settings revision changes.
-- [ ] Update DemoShell controls and labels; expose requested/effective exposure
+- Add async mask residency/error behavior and atomic settings revision changes.
+- Update DemoShell controls and labels; expose requested/effective exposure
   separately and show resource/metering failures.
-- [ ] Add the LightBench experiment-owned activation policy so saved settings
+- Add the LightBench experiment-owned activation policy so saved settings
   cannot override its camera, scene or post-process recipe.
 
 **Gate:** source -> cook -> load -> runtime and save/reload retain identical
@@ -1459,12 +899,12 @@ personal settings.
 
 ### Slice 7 - Complete the reference lighting unit chain
 
-- [ ] Correct common point/spot flux-to-intensity conversion and inverse-square
+- Correct common point/spot flux-to-intensity conversion and inverse-square
   distance behavior, including smooth-cone normalization and finite near field.
-- [ ] Apply the shared physical contract to active forward/deferred consumers.
-- [ ] Verify neutral directional, point and spot units against an independent
+- Apply the shared physical contract to active forward/deferred consumers.
+- Verify neutral directional, point and spot units against an independent
   integration/reference calculation; include range fade and cone boundaries.
-- [ ] Establish the production material and color-space mapping used by every
+- Establish the production material and color-space mapping used by every
   bench oracle, including packed specular, normal and albedo values.
 
 **Gate:** all three required light experiments have numerical expectations
@@ -1473,31 +913,31 @@ for a separate workstream.
 
 ### Slice 8 - Implement and qualify measurement instrumentation
 
-- [ ] Implement the diagnostics contracts in section 7.3 using existing extraction
+- Implement the diagnostics contracts in section 7.3 using existing extraction
   and asynchronous readback facilities.
-- [ ] Validate known GPU signals, pre-exposure conversion, actual consumed gain,
+- Validate known GPU signals, pre-exposure conversion, actual consumed gain,
   zero samples, partial coverage and invalid/nonfinite data.
-- [ ] Verify frame/view/experiment association under delayed readbacks and changes.
-- [ ] Verify zero disabled-path GPU work and bounded enabled-path resources.
+- Verify frame/view/experiment association under delayed readbacks and changes.
+- Verify zero disabled-path GPU work and bounded enabled-path resources.
 
 **Gate:** instrumentation matches independent known inputs before it reports
 bench verdicts.
 
 ### Slice 9 - Finish LightBench and MultiView visual behavior
 
-- [ ] Implement schema-validated experiments from section 7.1 through one controller.
-- [ ] Stage/reset complete configurations and temporal state; supply a clear,
+- Implement schema-validated experiments from section 7.1 through one controller.
+- Stage/reset complete configurations and temporal state; supply a clear,
   consistently framed Neutral Reference at startup.
-- [ ] Implement focused controls, useful overlays, measurements and explicit verdicts.
-- [ ] Repair LightBench's visual scene composition and exercise every experiment
+- Implement focused controls, useful overlays, measurements and explicit verdicts.
+- Repair LightBench's visual scene composition and exercise every experiment
   interactively against section 7.4, including its exposure-transition sequences.
-- [ ] Convert the indoor preset and provide explicit saved-experiment loading.
-- [ ] Extend MultiView's existing controls/fixtures for independent and shared
+- Convert the indoor preset and provide explicit saved-experiment loading.
+- Extend MultiView's existing controls/fixtures for independent and shared
   exposure, per-view overrides, and lifecycle sequences. Fix affected demo
   framing, composition and exposure behavior until section 7.5 passes visually.
-- [ ] Create `Examples/LightBench/README.md` with actual launch/run/reset/save
+- Create `Examples/LightBench/README.md` with actual launch/run/reset/save
   instructions, supported tests and interpretation.
-- [ ] Update `Examples/MultiView/README.md` with the exposure scenarios, expected
+- Update `Examples/MultiView/README.md` with the exposure scenarios, expected
   shared latency, intentional black cells and repeatable visual-check commands.
 
 **Gate:** LightBench works as a readable, interactive exposure benchmark with
@@ -1506,19 +946,19 @@ exposure-isolation scenarios. Capture both applications' native presented output
 
 ### Slice 10 - Automate the same experiments and close the package
 
-- [ ] Add deterministic experiment selection and batch execution using the
+- Add deterministic experiment selection and batch execution using the
   interactive controller/definitions and existing capture CLI.
-- [ ] Implement `tools/vortex/Run-LightBenchValidation.ps1` and a schema-validated
+- Implement `tools/vortex/Run-LightBenchValidation.ps1` and a schema-validated
   result report; include native game-facing and multiview lifecycle cases.
-- [ ] Extend the existing MultiView proof tools with per-view exposure/image
+- Extend the existing MultiView proof tools with per-view exposure/image
   comparisons and scripted interactions from section 7.5. Include their result
   manifests in the package's acceptance report.
   Extend `Run-VortexMultiViewValidation.ps1`, its existing analyzer/assertions
   and result schema; structural stage-count checks remain alongside the new
   visual and exposure checks.
-- [ ] Record resolved parameters, experiment/version/revision, build/shader identity,
+- Record resolved parameters, experiment/version/revision, build/shader identity,
   device/backend, actual dt, frames, validity, tolerances, measurements and captures.
-- [ ] Run the entire acceptance matrix and update the owning docs and status.
+- Run the entire acceptance matrix and update the owning docs and status.
 
 **Gate:** every required feature and experiment passes. Failed or unsupported
 required cases block package completion.
