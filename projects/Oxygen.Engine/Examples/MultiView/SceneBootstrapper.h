@@ -46,8 +46,12 @@ public:
   //! Deterministic deferred/forward/mixed AP fixture for the exposure proof
   //! CLI.
   auto ApplyAtmosphereProof(std::uint64_t frame) -> void;
+  //! Sunlit original meshes/materials with ordinary point and spot lights.
+  auto ApplyLitAtmosphereProof() -> void;
 
 private:
+  auto EnsureProofAtmosphere(
+    float sun_lux, float scattering_strength, bool backlit = true) -> void;
   auto EnsureSphere(scene::Scene& scene) -> void;
   auto EnsureCube(scene::Scene& scene) -> void;
   auto EnsureCylinder(scene::Scene& scene) -> void;

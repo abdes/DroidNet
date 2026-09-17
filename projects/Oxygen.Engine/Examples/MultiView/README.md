@@ -34,12 +34,13 @@ Common validation-oriented options:
 - `--point-light <true|false>` and `--spot-light <true|false>`: enable each
   existing scene light independently for forward/deferred contribution checks.
   Both default to enabled.
-- `--exposure-proof <none|independent|shared|main-only|pip-only|reordered|source-loss|viewport|lifetime|window-resize|modes>`:
+- `--exposure-proof <none|independent|shared|main-only|pip-only|reordered|source-loss|viewport|lifetime|window-resize|modes|atmosphere|atmosphere-lit>`:
   run a paused, static main/PiP exposure comparison with explicit Auto settings
   and a public remeter at frame 32. PiP has two stops of compensation unless it
   shares main's gain. Shared mode steps main by one stop at frame 44; capture
   frames 42, 43 and 44 to inspect GPU frame sequences 43, 44 and 45.
   These cases use fixed camera inputs and cannot be combined with proof layouts.
+  The two atmosphere cases use their own recipes described below.
 - `--proof-wireframe-overlay true`: add overlays to the four-view proof layout
   and cycle their color each frame to check immutable in-flight draw constants.
   Requires `--proof-layout true` or `--aux-proof-layout true`.
@@ -165,6 +166,32 @@ canonical light count/kinds/flags, consumed grid ranges/indices, and nonzero
 forward SceneColor. The disabled case requires zero scene radiance. These are
 binding/contribution checks; calibrated forward/deferred brightness and shadow
 parity require their own acceptance cases.
+
+`atmosphere-lit` retains the original sphere, cube, cylinder, cone, ground and
+their non-emissive materials. It adds an authored 110,000-lux sun and atmosphere
+to the ordinary point/spot setup, with independent Auto exposure (key 12.5,
+zero compensation) in main and lit PiP. Poses are paused and the existing
+frame-32 remeter event initializes the bright scene without elapsed simulation
+time. Capture frame 42 for Average metering. At GPU frame 48, both views switch
+to the existing Spot profile (radius 0.2) and explicitly remeter; capture frame
+54 for that result. Geometry, materials, lights, cameras and display mapping
+remain identical. Average includes the dark background and is retained as the
+washout diagnostic, not a readability pass. This is the lit-material case;
+the separate emissive-card fixture below does not qualify it.
+Use `AnalyzeRenderDocLitReadability.py` with `-PassName LitReadability`, then,
+with NumPy installed, run
+`Assert-MultiViewLitReadability.py --inputs <spot-report.json> --average
+<average-report.json> --output <result.json>`.
+For each view, the checker requires the original green, blue and red G-buffer
+materials on at least 100 pixels each, no base-pass emission, the authored sun
+and agreement with the measured Auto target within 0.1%. Each material must have
+less than 1% near-white output (all RGB codes >=250) and more than 5% colored
+output (channel spread >8). Synthetic white outputs must fail. Inspect the
+presented composite as well; these checks do not qualify physical-light units
+or the complete MultiView layout matrix.
+The paired check also requires identical HDR inputs, exact current/target gain
+agreement after each remeter, and an actual readability failure in the Average
+main view. This separates the chosen meter target from adaptation time.
 
 `atmosphere` fixes both views at Manual EV2, key 12.5, compensation zero,
 with paused poses and emissive cards on the lit shader path. AP starts at

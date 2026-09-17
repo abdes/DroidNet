@@ -132,14 +132,10 @@ auto SceneBootstrapper::GetScene() const -> observer_ptr<scene::Scene>
   return scene_;
 }
 
-auto SceneBootstrapper::ApplyAtmosphereProof(const std::uint64_t frame) -> void
+auto SceneBootstrapper::EnsureProofAtmosphere(const float sun_lux,
+  const float scattering_strength, const bool backlit) -> void
 {
   CHECK_NOTNULL_F(scene_.get());
-  const std::uint32_t phase = frame < 44U ? 0U
-    : frame < 48U                         ? 1U
-    : frame < 52U                         ? 2U
-    : frame < 56U                         ? 3U
-                                          : 4U;
   if (!scene_->GetEnvironment())
     scene_->SetEnvironment(std::make_unique<scene::SceneEnvironment>());
   auto* atmosphere = scene_->GetEnvironment()
@@ -150,21 +146,39 @@ auto SceneBootstrapper::ApplyAtmosphereProof(const std::uint64_t frame) -> void
                     ->AddSystem<scene::environment::SkyAtmosphere>();
   atmosphere->SetEnabled(true);
   atmosphere->SetAerialPerspectiveStartDepthMeters(0.0F);
-  atmosphere->SetAerialScatteringStrength(phase >= 3U ? 8.0F : 0.01F);
+  atmosphere->SetAerialScatteringStrength(scattering_strength);
   if (!proof_sun_node_.IsAlive()) {
     proof_sun_node_ = scene_->CreateNode("AtmosphereProofSun");
     auto sun = std::make_unique<scene::DirectionalLight>();
-    sun->SetIntensityLux(1000.0F);
+    sun->SetIntensityLux(sun_lux);
     sun->SetEnvironmentContribution(true);
     sun->SetIsSunLight(true);
     sun->SetAtmosphereLightSlot(scene::AtmosphereLightSlot::kPrimary);
     sun->Common().casts_shadows = false;
     CHECK_F(proof_sun_node_.AttachLight(std::move(sun)));
-    const auto direction = glm::normalize(glm::vec3 { 0.0F, -.5F, -1.0F });
+    const auto direction
+      = glm::normalize(glm::vec3 { 0.0F, backlit ? -.5F : .5F, -1.0F });
     proof_sun_node_.GetTransform().SetLocalRotation(
       glm::angleAxis(std::acos(glm::dot(space::move::Forward, direction)),
         glm::normalize(glm::cross(space::move::Forward, direction))));
   }
+}
+
+auto SceneBootstrapper::ApplyLitAtmosphereProof() -> void
+{
+  // The cards isolate emission by backlighting. The lit-material fixture must
+  // light the visible faces of the original meshes instead.
+  EnsureProofAtmosphere(110000.0F, 1.0F, false);
+}
+
+auto SceneBootstrapper::ApplyAtmosphereProof(const std::uint64_t frame) -> void
+{
+  const std::uint32_t phase = frame < 44U ? 0U
+    : frame < 48U                         ? 1U
+    : frame < 52U                         ? 2U
+    : frame < 56U                         ? 3U
+                                          : 4U;
+  EnsureProofAtmosphere(1000.0F, phase >= 3U ? 8.0F : 0.01F);
   if (phase == atmosphere_proof_phase_)
     return;
   const std::array nodes { sphere_node_, cube_node_, cylinder_node_, cone_node_,
