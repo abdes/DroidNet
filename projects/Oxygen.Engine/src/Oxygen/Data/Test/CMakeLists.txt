@@ -44,6 +44,7 @@ m_gtest_program(
     "CanonicalPrimitives_test.cpp"
     "Capsule_test.cpp"
     "GeometryAsset_test.cpp"
+    "HalfFloat_test.cpp"
     "IndexBufferView_test.cpp"
     "MaterialSlotId_test.cpp"
     "MaterialSlotInventory_test.cpp"

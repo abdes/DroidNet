@@ -720,6 +720,13 @@ intervals through the same denominator floor used by the production operation.
 Transmittance is a separate attenuation coefficient and is never P-scaled.
 Image checks must cover both scene-referred and final-S-scaled error.
 
+Material identity must preserve authored emissive radiance before this pipeline
+evaluates it. The material binder includes all three decoded emissive components
+in its content key without dimensionless scalar quantization. Otherwise materials
+that differ only in emission alias one GPU record, including tiny positive values
+that a later exposure gain can make significant. This source-identity requirement
+is separate from FP16 texture admission.
+
 For temporal reuse with weight `w`, a scalar absolute-error envelope obeys
 
 ```text
