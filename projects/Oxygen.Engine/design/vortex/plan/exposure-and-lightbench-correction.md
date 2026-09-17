@@ -1,7 +1,10 @@
 # Exposure management and LightBench implementation plan
 
 Status: `in_progress` — current slice state and evidence are maintained in the
-[implementation status table](../IMPLEMENTATION_STATUS.md#3-exposure-delivery-status).
+[implementation tracker](../IMPLEMENTATION_STATUS.md#3-exposure-delivery-status).
+[Current work](../IMPLEMENTATION_STATUS.md#31-current-work) and
+[item-level Slice 5–10 completion](../IMPLEMENTATION_STATUS.md#32-slice-5-work-items)
+are updated there; this plan owns the requirements and gates.
 
 Date: 2026-09-16
 
