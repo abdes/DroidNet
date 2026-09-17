@@ -938,6 +938,25 @@ auto MainModule::UpdateComposition(oxygen::engine::FrameContext& context,
     auto exposure = scene::ExposureSettings {};
     exposure.key = 12.5F;
     exposure.compensation_ev = view.id == pip_view_id_ ? 2.0F : 0.0F;
+    view.force_wireframe = false;
+    if (proof == ExposureProofScenario::kModes && view.id == pip_view_id_) {
+      if (frame >= 44U && frame < 48U) {
+        view.force_wireframe = true;
+      } else if (frame >= 52U && frame < 56U) {
+        exposure.mode = engine::ExposureMode::kManual;
+        exposure.manual_ev = 4.0F;
+      } else if (frame >= 56U && frame < 60U) {
+        exposure.enabled = false;
+      } else if (frame >= 60U && frame < 64U) {
+        exposure.mode = engine::ExposureMode::kManualCamera;
+        auto camera = pip_camera_node_.GetCameraAs<scene::PerspectiveCamera>();
+        CHECK_F(camera.has_value());
+        camera->get().SetExposure(
+          { .aperture_f = 11.0F, .shutter_rate = 125.0F, .iso = 100.0F });
+      } else if (frame >= 64U && frame < 68U) {
+        exposure.target_luminance = 0.0F;
+      }
+    }
     if (proof == ExposureProofScenario::kLifetime && frame >= 48U
       && view.id == pip_view_id_) {
       exposure.compensation_ev = 3.0F;
@@ -951,7 +970,6 @@ auto MainModule::UpdateComposition(oxygen::engine::FrameContext& context,
       }
     }
     view.render_settings.exposure = std::move(exposure);
-    view.force_wireframe = false;
   }
   std::erase_if(views, [&](const auto& view) {
     return view.camera.has_value()
@@ -973,6 +991,18 @@ auto MainModule::UpdateComposition(oxygen::engine::FrameContext& context,
       CHECK_F(request.has_value(), "MultiView proof remeter request failed");
       LOG_F(INFO, "Vortex.MultiView.ExposureProof frame={} remeter_view={}",
         frame, view.id.get());
+    }
+    if (proof == ExposureProofScenario::kModes && view.id == pip_view_id_) {
+      if (frame == 72U) {
+        const auto request
+          = renderer->QueueExposureTransition(view.view_state_handle,
+            vortex::ExposureTransitionPolicy::kSeedFromEv100, 6.0F);
+        CHECK_F(request.has_value());
+      } else if (frame == 76U) {
+        const auto request = renderer->NotifyViewDiscontinuity(
+          view.view_state_handle, vortex::ViewDiscontinuity::kCameraCut);
+        CHECK_F(request.has_value());
+      }
     }
   }
   if (proof == ExposureProofScenario::kReordered) {

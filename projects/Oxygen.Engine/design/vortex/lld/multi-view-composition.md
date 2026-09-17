@@ -814,6 +814,13 @@ frame 52. Both view handles and paused exposure histories remain unchanged.
 Captures after event/surface processing verify the new extents and exact image
 restoration; this mode requires a windowed presentation surface.
 
+The paused `modes` proof changes only PiP: temporary wireframe on frames 44–47,
+Auto restoration at 48, Manual EV4 at 52, disabled exposure at 56, explicit
+f/11–125/s–ISO100 ManualCamera at 60, zero Auto target at 64, positive target at
+68, a public EV6 seed at 72, and a public camera-cut notification at 76. Main
+must remain unaffected; each event is checked on its GPU frame rather than after
+settling.
+
 The [exposure execution plan](../plan/exposure-and-lightbench-correction.md#42-shared-exposure-one-writer-and-deterministic-readers)
 owns the complete source, fallback and destruction contract:
 
