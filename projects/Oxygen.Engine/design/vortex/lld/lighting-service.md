@@ -221,6 +221,15 @@ struct ForwardLocalLightRecord {
 };
 ```
 
+The C++ and HLSL storage ABI is six consecutive float4 values (96 bytes).
+Forward raster consumers use `local_light_buffer_srv`, `local_light_count` and
+the published grid ranges/indices. The legacy `positional_lights_slot` is not
+populated and must not be used as an alternate upload route. `rect_data_and_linkage`
+stores numeric light kind, canonical selection flags and range in xyz; selection
+has already filtered lights that do not affect the world. Its flags are not the
+old positional-light flag layout. Point and spot consumers decode this same
+record; physical-unit calibration remains owned by the exposure plan's slice 7.
+
 ### 2.5 Published Forward-Light Package
 
 `ForwardLightFrameBindings` is the stable per-view consumer-facing lighting

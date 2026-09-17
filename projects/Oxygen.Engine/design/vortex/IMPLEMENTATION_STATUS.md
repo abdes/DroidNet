@@ -184,11 +184,21 @@ MultiView now provides persistent producer-owned exposure handles for scene and
 offscreen views. Debug/Release builds pass; six Debug layout smoke runs pass the
 debug-layer audit. Ordinary main/lit-PiP reaches distinct stable gains, with
 captured S/P probes within one output code value. Early/settled images and native
-thumbnails were inspected. This is not MultiView acceptance: the forward
-offscreen pane remains black because its shader reads an unpublished legacy
-light slot; startup adaptation, scripted lifecycle/sharing and standalone/family
-equivalence still need qualification. Evidence is
+thumbnails were inspected. This is not MultiView acceptance: startup adaptation,
+framing, scripted lifecycle/sharing and standalone/family equivalence still need
+qualification. The forward offscreen consumer now reads canonical local-light
+records and grid indices; its point and spot contributions are qualified below.
+Evidence for the handle increment is
 `multiview/persistent-handles-manifest.json` under the exposure evidence root.
+
+The forward consumer correction passes 121 native exposure and 4 lighting tests
+per configuration, 202-module Debug/Release shader packs, four clean focused
+debugger runs, and eight point/spot/both/neither capture audits. The real shader
+reads the canonical 96-byte light records and grid indices; enabled lights yield
+nonzero SceneColor and ordinary metering, while neither yields zero radiance and
+synthetic dark. The native repaired pane and isolated mapped images were
+inspected. Evidence is `multiview/forward-binding-manifest.json`; light-unit,
+shadow and remaining MultiView parity are not claimed by this checkpoint.
 
 ## 4. Milestone Ledger
 

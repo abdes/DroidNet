@@ -1,7 +1,7 @@
 #ifndef OXYGEN_VORTEX_SERVICES_LIGHTING_FORWARDDIRECTLIGHTING_HLSLI
 #define OXYGEN_VORTEX_SERVICES_LIGHTING_FORWARDDIRECTLIGHTING_HLSLI
 
-#include "Vortex/Contracts/Lighting/PositionalLightData.hlsli"
+#include "Vortex/Contracts/Lighting/ForwardLocalLightRecord.hlsli"
 #include "Vortex/Stages/Translucency/ForwardPbr.hlsli"
 #include "Vortex/Contracts/Lighting/LightingHelpers.hlsli"
 #include "Vortex/Services/Shadows/DirectionalShadowCommon.hlsli"
@@ -9,10 +9,6 @@
 #include "Vortex/Shared/Lighting.hlsli"
 #include "Vortex/Shared/Geometry.hlsli"
 #include "Vortex/Services/Lighting/AtmosphereDirectionalLightShared.hlsli"
-
-#ifndef MAX_POSITIONAL_LIGHTS
-#define MAX_POSITIONAL_LIGHTS 1024
-#endif
 
 static const uint kDirectionalLightFlagAffectsWorld = 1u << 0u;
 
@@ -235,8 +231,10 @@ float3 AccumulateDirectionalLights(
         F0, base_rgb, metalness, roughness);
 }
 
-float3 AccumulatePositionalLights(
+float3 AccumulateLocalLightsClustered(
     float3 world_pos,
+    float2 screen_position_xy,
+    float linear_depth,
     float3 N,
     float3 V,
     float  NdotV,
@@ -249,26 +247,42 @@ float3 AccumulatePositionalLights(
 
     const LightingFrameBindings lighting = LoadResolvedLightingFrameBindings();
 
-    if (lighting.positional_lights_slot != K_INVALID_BINDLESS_INDEX
-        && BX_IN_GLOBAL_SRV(lighting.positional_lights_slot)) {
-        StructuredBuffer<PositionalLightData> pos_lights =
-            ResourceDescriptorHeap[lighting.positional_lights_slot];
+    if (BX_IN_GLOBAL_SRV(lighting.local_light_buffer_srv)
+        && BX_IN_GLOBAL_SRV(lighting.grid_indirection_srv)
+        && BX_IN_GLOBAL_SRV(lighting.light_view_data_srv)
+        && lighting.local_light_count > 0u && all(lighting.grid_size > 0)) {
+        StructuredBuffer<ForwardLocalLightRecord> local_lights =
+            ResourceDescriptorHeap[lighting.local_light_buffer_srv];
+        StructuredBuffer<uint> indices =
+            ResourceDescriptorHeap[lighting.light_view_data_srv];
 
-        uint pos_count = 0;
-        uint pos_stride = 0;
-        pos_lights.GetDimensions(pos_count, pos_stride);
+        uint record_count = 0u, record_stride = 0u;
+        local_lights.GetDimensions(record_count, record_stride);
+        uint index_count = 0u, index_stride = 0u;
+        indices.GetDimensions(index_count, index_stride);
+        const uint record_limit = min(record_count, lighting.local_light_count);
+        const uint cluster = ComputeClusterIndex(screen_position_xy, linear_depth,
+            uint3(lighting.grid_size), 6u, lighting.grid_z_params);
+        const ClusterLightInfo range = GetClusterLightInfo(
+            lighting.grid_indirection_srv, cluster);
+        const uint list_start = min(range.light_list_offset, index_count);
+        const uint list_count = min(range.light_count, index_count - list_start);
 
-        const uint pos_limit = min(pos_count, MAX_POSITIONAL_LIGHTS);
-        for (uint i = 0; i < pos_limit; ++i) {
-            const PositionalLightData pl = pos_lights[i];
-            if ((pl.flags & POSITIONAL_LIGHT_FLAG_AFFECTS_WORLD) == 0u) {
+        for (uint i = 0; i < list_count; ++i) {
+            const uint light_index = indices[list_start + i];
+            if (light_index >= record_limit) {
+                continue;
+            }
+            const ForwardLocalLightRecord light = local_lights[light_index];
+            const uint kind = (uint)light.rect_data_and_linkage.x;
+            if (kind != FORWARD_LOCAL_LIGHT_POINT && kind != FORWARD_LOCAL_LIGHT_SPOT) {
                 continue;
             }
 
-            const float3 to_light = pl.position_ws - world_pos;
+            const float3 to_light = light.position_and_inv_radius.xyz - world_pos;
             const float dist_sq = dot(to_light, to_light);
-            const float range = max(pl.range, 1e-6);
-            if (dist_sq >= range * range) {
+            const float radius = max(light.rect_data_and_linkage.z, 1e-6);
+            if (dist_sq >= radius * radius) {
                 continue;
             }
 
@@ -279,8 +293,16 @@ float3 AccumulatePositionalLights(
                 continue;
             }
 
-            float atten = saturate(1.0 - (dist / range));
+            float atten = saturate(1.0 - (dist / radius));
             atten *= atten;
+            if (kind == FORWARD_LOCAL_LIGHT_SPOT) {
+                const float inner_cosine = light.spot_angles_and_source_radius.x;
+                const float outer_cosine = light.spot_angles_and_source_radius.y;
+                const float cosine = dot(-L, SafeNormalize(light.direction_and_extra_data.xyz));
+                const float cone = saturate((cosine - outer_cosine)
+                    / max(inner_cosine - outer_cosine, 1e-6));
+                atten *= cone * cone;
+            }
 
             const float3 H_unorm = V + L;
             const float H_len_sq = dot(H_unorm, H_unorm);
@@ -298,29 +320,12 @@ float3 AccumulatePositionalLights(
             const float3 kS = F;
             const float3 kD = (1.0 - kS) * (1.0 - metalness);
             const float3 diffuse = kD * base_rgb;
-            direct += (diffuse + specular) * pl.color_rgb * pl.luminous_flux_lm * atten * NdotL;
+            direct += (diffuse + specular) * light.color_id_falloff_and_ray_bias.rgb
+                * light.color_id_falloff_and_ray_bias.w * atten * NdotL;
         }
     }
 
     return direct;
-}
-
-float3 AccumulatePositionalLightsClustered(
-    float3 world_pos,
-    float2 screen_position_xy,
-    float linear_depth,
-    float3 N,
-    float3 V,
-    float  NdotV,
-    float3 F0,
-    float3 base_rgb,
-    float  metalness,
-    float  roughness)
-{
-    (void)screen_position_xy;
-    (void)linear_depth;
-    return AccumulatePositionalLights(
-        world_pos, N, V, NdotV, F0, base_rgb, metalness, roughness);
 }
 
 #endif

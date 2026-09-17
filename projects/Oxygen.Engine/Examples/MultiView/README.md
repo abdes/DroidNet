@@ -31,6 +31,9 @@ Common validation-oriented options:
 - `--pip-wireframe <true|false>`: force the PiP view to wireframe or run the
   full scene-linear path.
 - `--pip-scissor-inset <pixels>`: inset the PiP scene scissor before rendering.
+- `--point-light <true|false>` and `--spot-light <true|false>`: enable each
+  existing scene light independently for forward/deferred contribution checks.
+  Both default to enabled.
 - `--proof-layout <true|false>`: run the VTX-M06A multi-view proof layout.
 - `--aux-proof-layout <true|false>`: run the VTX-M06A auxiliary
   producer/consumer proof layout.
@@ -79,3 +82,15 @@ verdict is separate from lighting, temporal and visual acceptance; inspect every
 pane and the reported nonzero scene probes. The analyzer exports the full-frame
 composite before seeking backward through bindless draws, and the capture's
 native thumbnail provides a separate presentation reference.
+
+For the offscreen forward light-binding regression, capture the existing
+`--offscreen-proof-layout true --pip-wireframe false` layout with both lights,
+then with each light individually, and finally with both disabled. Use the
+point/spot switches above. Analyze each capture with
+`tools/vortex/AnalyzeRenderDocForwardLocalLights.py`, using the existing runner's
+`-PassName ForwardLocalBoth`, `ForwardLocalPoint`, `ForwardLocalSpot`, or
+`ForwardLocalNone` respectively. The audit checks the six-float4 payload,
+canonical light count/kinds/flags, consumed grid ranges/indices, and nonzero
+forward SceneColor. The disabled case requires zero scene radiance. These are
+binding/contribution checks; calibrated forward/deferred brightness and shadow
+parity require their own acceptance cases.

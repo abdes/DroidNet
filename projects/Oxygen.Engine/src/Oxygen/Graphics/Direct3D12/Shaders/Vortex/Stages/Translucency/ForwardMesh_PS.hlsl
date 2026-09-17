@@ -14,7 +14,6 @@
 #include "Vortex/Contracts/Lighting/LightingHelpers.hlsli"
 #include "Vortex/Shared/MaskedAlphaTest.hlsli"
 #include "Vortex/Contracts/Draw/MaterialShadingConstants.hlsli"
-#include "Vortex/Contracts/Lighting/PositionalLightData.hlsli"
 #include "Vortex/Contracts/Draw/Vertex.hlsli"
 #include "Vortex/Contracts/View/FrameExposureHelpers.hlsli"
 #include "Vortex/Contracts/View/ViewConstants.hlsli"
@@ -160,7 +159,7 @@ static ForwardLightingTerms ComputeForwardLightingTerms(VSOutput input,
       env_state.atmosphere,
       shadow_normal, N, V, NdotV, F0, base_rgb, surf.metalness, surf.roughness);
   terms.positional_direct
-    = AccumulatePositionalLightsClustered(input.world_pos, input.position.xy,
+    = AccumulateLocalLightsClustered(input.world_pos, input.position.xy,
       max(-mul(view_matrix, float4(input.world_pos, 1.0)).z, 0.0), N, V, NdotV,
       F0, base_rgb, surf.metalness, surf.roughness);
   terms.direct_gates = AccumulateDirectionalLightGatesDebug(input.world_pos,

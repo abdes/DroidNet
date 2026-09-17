@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include <cstddef>
+
 #include <glm/vec4.hpp>
 
 #include <Oxygen/Core/Constants.h>
@@ -25,7 +27,8 @@ struct alignas(packing::kShaderDataFieldAlignment) ForwardLocalLightRecord {
     const FrameLocalLightSelection& selection) noexcept
     -> ForwardLocalLightRecord
   {
-    const auto inv_radius = selection.range > 0.0F ? 1.0F / selection.range : 0.0F;
+    const auto inv_radius
+      = selection.range > 0.0F ? 1.0F / selection.range : 0.0F;
     return {
       .position_and_inv_radius = glm::vec4(selection.position, inv_radius),
       .color_id_falloff_and_ray_bias
@@ -35,16 +38,24 @@ struct alignas(packing::kShaderDataFieldAlignment) ForwardLocalLightRecord {
       .spot_angles_and_source_radius = glm::vec4(selection.inner_cone_cos,
         selection.outer_cone_cos, 0.0F, selection.source_radius),
       .tangent_ies_and_specular_scale = glm::vec4(0.0F, 0.0F, 0.0F, 1.0F),
-      .rect_data_and_linkage = glm::vec4(
-        static_cast<float>(selection.kind), static_cast<float>(selection.flags),
-        selection.range, 0.0F),
+      .rect_data_and_linkage = glm::vec4(static_cast<float>(selection.kind),
+        static_cast<float>(selection.flags), selection.range, 0.0F),
     };
   }
 };
 
 static_assert(
   alignof(ForwardLocalLightRecord) == packing::kShaderDataFieldAlignment);
+static_assert(sizeof(ForwardLocalLightRecord) == 96U);
+static_assert(offsetof(ForwardLocalLightRecord, position_and_inv_radius) == 0U);
 static_assert(
-  sizeof(ForwardLocalLightRecord) % packing::kShaderDataFieldAlignment == 0);
+  offsetof(ForwardLocalLightRecord, color_id_falloff_and_ray_bias) == 16U);
+static_assert(
+  offsetof(ForwardLocalLightRecord, direction_and_extra_data) == 32U);
+static_assert(
+  offsetof(ForwardLocalLightRecord, spot_angles_and_source_radius) == 48U);
+static_assert(
+  offsetof(ForwardLocalLightRecord, tangent_ies_and_specular_scale) == 64U);
+static_assert(offsetof(ForwardLocalLightRecord, rect_data_and_linkage) == 80U);
 
 } // namespace oxygen::vortex
