@@ -177,6 +177,11 @@ auto MainModule::OnAttachedImpl(
   -> std::unique_ptr<DemoShell>
 {
   CHECK_F(static_cast<bool>(engine), "MultiView requires a valid engine");
+  const bool exposure_proof
+    = config_.exposure_proof != ExposureProofScenario::kNone;
+  if (exposure_proof) {
+    app_.engine->GetSimulationClock().SetPaused(true);
+  }
 
   // Initialize DemoShell with camera controls enabled outside proof layouts.
   auto shell = std::make_unique<DemoShell>();
@@ -184,12 +189,12 @@ auto MainModule::OnAttachedImpl(
   shell_config.engine = engine;
   shell_config.panel_config = DemoShellPanelConfig {
     .content_loader = false,
-    .camera_controls = !config_.feature_variant_proof_layout,
+    .camera_controls = !config_.feature_variant_proof_layout && !exposure_proof,
     .environment = false,
     .lighting = false,
-    .post_process = !config_.feature_variant_proof_layout,
+    .post_process = !config_.feature_variant_proof_layout && !exposure_proof,
   };
-  shell_config.enable_camera_rig = true;
+  shell_config.enable_camera_rig = !exposure_proof;
   shell_config.enable_renderer_bound_panels = false;
 
   CHECK_F(shell->Initialize(shell_config),
@@ -288,6 +293,14 @@ auto MainModule::UpdateCameras(const platform::window::ExtentT& extent) -> void
       constexpr float kMainCamFar = 100.0F;
 
       main_camera_node_.GetTransform().SetLocalPosition(kMainCamPos);
+      if (config_.exposure_proof != ExposureProofScenario::kNone) {
+        const glm::vec3 position { 4.0F, -6.0F, 4.0F };
+        const auto view_matrix = glm::lookAt(
+          position, glm::vec3(-0.75F, 0.0F, 0.0F), space::move::Up);
+        main_camera_node_.GetTransform().SetLocalPosition(position);
+        main_camera_node_.GetTransform().SetLocalRotation(
+          glm::quat_cast(glm::inverse(view_matrix)));
+      }
       cam.SetFieldOfView(glm::radians(kMainCamFov));
       cam.SetAspectRatio(extent.height > 0
           ? (static_cast<float>(extent.width)
@@ -859,6 +872,62 @@ auto MainModule::UpdateComposition(oxygen::engine::FrameContext& context,
         = vortex::CompositionView::ViewStateHandle { view.id.get() };
     }
   }
+  const auto proof = config_.exposure_proof;
+  if (proof == ExposureProofScenario::kNone) {
+    return;
+  }
+  // Proof inputs own the poses after DemoShell activates the selected camera.
+  UpdateCameras(ResolveRenderExtent());
+  const auto frame = context.GetFrameSequenceNumber().get();
+  auto renderer = ResolveVortexRenderer();
+  CHECK_NOTNULL_F(renderer.get());
+  for (auto& view : views) {
+    if (!view.camera.has_value()) {
+      continue;
+    }
+    auto exposure = scene::ExposureSettings {};
+    exposure.key = 12.5F;
+    exposure.compensation_ev = view.id == pip_view_id_ ? 2.0F : 0.0F;
+    if (proof == ExposureProofScenario::kShared) {
+      if (view.id == pip_view_id_) {
+        view.exposure_source_view_id = main_view_id_;
+      } else if (frame >= 44U) {
+        exposure.compensation_ev = 1.0F;
+      }
+    }
+    view.render_settings.exposure = std::move(exposure);
+    view.force_wireframe = false;
+  }
+  std::erase_if(views, [&](const auto& view) {
+    return view.camera.has_value()
+      && ((proof == ExposureProofScenario::kMainOnly
+            && view.id != main_view_id_)
+        || (proof == ExposureProofScenario::kPipOnly
+          && view.id != pip_view_id_));
+  });
+  for (const auto& view : views) {
+    if (!view.camera.has_value()
+      || view.exposure_source_view_id != kInvalidViewId) {
+      continue;
+    }
+    if (frame == 32U
+      || (proof == ExposureProofScenario::kShared && frame == 44U)) {
+      const auto request = renderer->QueueExposureTransition(
+        view.view_state_handle, vortex::ExposureTransitionPolicy::kRemeter);
+      CHECK_F(request.has_value(), "MultiView proof remeter request failed");
+      LOG_F(INFO, "Vortex.MultiView.ExposureProof frame={} remeter_view={}",
+        frame, view.id.get());
+    }
+  }
+  if (proof == ExposureProofScenario::kReordered) {
+    const auto main
+      = std::ranges::find(views, main_view_id_, &vortex::CompositionView::id);
+    const auto pip
+      = std::ranges::find(views, pip_view_id_, &vortex::CompositionView::id);
+    if (main != views.end() && pip != views.end()) {
+      std::iter_swap(main, pip);
+    }
+  }
 }
 
 auto MainModule::BuildComposition(oxygen::engine::FrameContext& context,
@@ -1188,7 +1257,9 @@ auto MainModule::BuildComposition(oxygen::engine::FrameContext& context,
   auto main_comp = vortex::CompositionView::ForScene(
     main_view_id_, main_view, main_camera_node_);
   main_comp.with_atmosphere = true;
-  shell.OnMainViewReady(context, main_comp);
+  if (config_.exposure_proof != ExposureProofScenario::kPipOnly) {
+    shell.OnMainViewReady(context, main_comp);
+  }
   const graphics::Color kMainClearColor { 0.1F, 0.2F, 0.38F, 1.0F };
   main_comp.clear_color = kMainClearColor;
   views.push_back(std::move(main_comp));
@@ -1238,6 +1309,9 @@ auto MainModule::BuildComposition(oxygen::engine::FrameContext& context,
     pip_comp.clear_color = kPipClearColor;
     pip_comp.opacity = 1.0F;
     pip_comp.force_wireframe = config_.pip_force_wireframe;
+    if (config_.exposure_proof == ExposureProofScenario::kPipOnly) {
+      shell.OnMainViewReady(context, pip_comp);
+    }
 
     views.push_back(std::move(pip_comp));
   }

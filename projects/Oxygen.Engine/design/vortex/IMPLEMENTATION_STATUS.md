@@ -211,6 +211,14 @@ comparisons show zero isolated/family or reordered gain, meter, mapped-image,
 pre-composition-image and compared-composite differences. Evidence is
 `multiview/retirement-manifest.json`; the proof controls and remaining lifecycle
 matrix are a separate qualification increment.
+The bounded static/paused MultiView suite is now qualified in Debug and Release:
+isolated/family and reordered gain, meter and complete per-view images match
+exactly, with unchanged compared composition. Public source sharing follows the
+owner's one-stop remeter after exactly one frame. Fourteen capture audits and
+five debugger cases pass; both configurations pass 121 native, 59 renderer-core,
+22 post-process and 22 publication tests. `multiview/static-matrix-manifest.json`
+records this scope. Active adaptation, resize/scissor, hide/recreate, source loss,
+remaining layouts and automatic precision admission/recovery remain open.
 
 ## 4. Milestone Ledger
 

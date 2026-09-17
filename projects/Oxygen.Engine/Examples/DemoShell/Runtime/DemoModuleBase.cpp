@@ -436,11 +436,18 @@ auto DemoModuleBase::OnCompositing(observer_ptr<engine::FrameContext> context)
   input.target_surface = std::move(surface);
   input.layers.reserve(active_views_.size());
 
-  for (const auto& view_intent : active_views_) {
-    if (!IsSceneView(view_intent)) {
-      continue;
+  auto layers = std::vector<const vortex::CompositionView*> {};
+  for (const auto& view : active_views_) {
+    if (IsSceneView(view)) {
+      layers.push_back(&view);
     }
-
+  }
+  std::stable_sort(
+    layers.begin(), layers.end(), [](const auto* left, const auto* right) {
+      return left->z_order < right->z_order;
+    });
+  for (const auto* layer : layers) {
+    const auto& view_intent = *layer;
     const auto viewport = ResolveViewport(view_intent, app_window_);
     input.layers.push_back(vortex::Renderer::RuntimeCompositionLayer {
       .intent_view_id = view_intent.id,
