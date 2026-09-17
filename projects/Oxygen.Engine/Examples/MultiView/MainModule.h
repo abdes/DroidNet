@@ -51,6 +51,8 @@ struct MainModuleConfig {
   bool aux_proof_layout { false };
   bool offscreen_proof_layout { false };
   bool feature_variant_proof_layout { false };
+  bool point_light_enabled { true };
+  bool spot_light_enabled { true };
 };
 
 //! Multi-view rendering example demonstrating Phase 2 features.

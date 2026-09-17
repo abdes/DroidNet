@@ -467,7 +467,7 @@ auto SceneBootstrapper::EnsureLighting(scene::Scene& scene) -> void
     key_light_node_ = scene.CreateNode("KeyLight");
 
     auto spot_light = std::make_unique<scene::SpotLight>();
-    spot_light->Common().affects_world = true;
+    spot_light->Common().affects_world = spot_light_enabled_;
     spot_light->Common().casts_shadows = true;
     spot_light->Common().color_rgb
       = glm::vec3(1.0F, 0.98F, 0.95F); // Warm white
@@ -507,7 +507,7 @@ auto SceneBootstrapper::EnsureLighting(scene::Scene& scene) -> void
     fill_light_node_ = scene.CreateNode("FillLight");
 
     auto point_light = std::make_unique<scene::PointLight>();
-    point_light->Common().affects_world = true;
+    point_light->Common().affects_world = point_light_enabled_;
     point_light->Common().casts_shadows = true;
     point_light->Common().color_rgb
       = glm::vec3(0.7F, 0.85F, 1.0F); // Cool blue tint

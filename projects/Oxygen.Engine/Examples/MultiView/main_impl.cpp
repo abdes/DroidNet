@@ -194,6 +194,8 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
   bool aux_proof_layout = false;
   bool offscreen_proof_layout = false;
   bool feature_variant_proof_layout = false;
+  bool point_light_enabled = true;
+  bool spot_light_enabled = true;
   oxygen::examples::cli::GraphicsToolingCliState graphics_tooling_cli {};
   oxygen::examples::cli::FrameCaptureCliState capture_cli {};
   oxygen::examples::DemoAppContext app {};
@@ -223,6 +225,22 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
               .UserFriendlyName("mode")
               .StoreTo(&compositing_mode_value)
               .Build())
+          .WithOption(Option::WithKey("point-light")
+              .About(
+                "Enable the point fill light; disable to isolate the spotlight")
+              .Long("point-light")
+              .WithValue<bool>()
+              .DefaultValue(true)
+              .StoreTo(&point_light_enabled)
+              .Build())
+          .WithOption(Option::WithKey("spot-light")
+              .About(
+                "Enable the key spotlight; disable to isolate the point light")
+              .Long("spot-light")
+              .WithValue<bool>()
+              .DefaultValue(true)
+              .StoreTo(&spot_light_enabled)
+              .Build())
           .WithOption(Option::WithKey("pip-wireframe")
               .About("Render the PiP scene view in wireframe mode")
               .Long("pip-wireframe")
@@ -248,7 +266,8 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
               .StoreTo(&proof_layout)
               .Build())
           .WithOption(Option::WithKey("aux-proof-layout")
-              .About("Use the M06A auxiliary producer/consumer validation layout")
+              .About(
+                "Use the M06A auxiliary producer/consumer validation layout")
               .Long("aux-proof-layout")
               .WithValue<bool>()
               .DefaultValue(false)
@@ -307,6 +326,8 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
       .aux_proof_layout = aux_proof_layout,
       .offscreen_proof_layout = offscreen_proof_layout,
       .feature_variant_proof_layout = feature_variant_proof_layout,
+      .point_light_enabled = point_light_enabled,
+      .spot_light_enabled = spot_light_enabled,
     };
     auto mode_lower = compositing_mode_value;
     std::ranges::transform(mode_lower, mode_lower.begin(),

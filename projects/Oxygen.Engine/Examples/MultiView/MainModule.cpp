@@ -141,6 +141,7 @@ MainModule::MainModule(
   const DemoAppContext& app, MainModuleConfig config) noexcept
   : Base(app)
   , app_(app)
+  , scene_bootstrapper_(config.point_light_enabled, config.spot_light_enabled)
   , config_(std::move(config))
 {
 

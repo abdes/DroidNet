@@ -1229,11 +1229,24 @@ This canonical-resource checkpoint does not grant per-view FP16 admission.
 MultiView's scene and offscreen producers now supply persistent view-state
 handles instead of rebuilding stateless Auto exposure every frame. Early and
 settled native captures are distinct qualification cases. The ordinary lit
-main/PiP reaches independent steady gains; the offscreen forward pane remains
-black because its shader reads the unpublished legacy positional-light slot
-instead of the canonical local-light buffer. Correcting that active consumer is
-required by this slice's HDR/MultiView gate. Full light-unit calibration remains
-slice 7. Per-view S/P arithmetic alone does not certify a correctly lit image.
+main/PiP reaches independent steady gains. The formerly black offscreen forward
+pane now reads the canonical 96-byte local-light record, published count and
+grid indices instead of the unpublished legacy positional-light slot. Point,
+spot, both and disabled-light controls support separate contribution checks;
+active lights now produce an ordinary meter result. Full light-unit calibration
+remains slice 7. Per-view S/P arithmetic alone does not certify a correctly lit
+image; framing and the complete scene/MultiView lifecycle matrix remain open.
+
+The canonical forward-light binding correction passes 121 native exposure and
+4 lighting-service tests in each of Debug and Release; both shader profiles pack
+202 modules. Four focused debugger runs have no blocking graphics messages.
+Eight captures (point, spot, both, neither in each configuration) verify the
+actual 96-byte record, count, kind/flags and grid/index consumption while the
+legacy slot remains invalid. Enabled lights produce nonzero forward SceneColor
+and ordinary metering; neither produces zero radiance and synthetic-dark state.
+Mapped S/P probes pass within one output code value, and the repaired native
+forward pane was inspected. `multiview/forward-binding-manifest.json` records
+this bounded correction. Physical-unit and shadow parity remain separate gates.
 
 - [x] Add the early GPU P resolve and bind a frame-invariant P/1P to every HDR pass.
 - [ ] Migrate the entire section 4.4 checklist, including atmosphere producer/

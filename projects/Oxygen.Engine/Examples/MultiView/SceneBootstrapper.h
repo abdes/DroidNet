@@ -22,7 +22,12 @@ namespace oxygen::examples::multiview {
 */
 class SceneBootstrapper {
 public:
-  SceneBootstrapper() = default;
+  explicit SceneBootstrapper(
+    bool point_light_enabled = true, bool spot_light_enabled = true)
+    : point_light_enabled_(point_light_enabled)
+    , spot_light_enabled_(spot_light_enabled)
+  {
+  }
   SceneBootstrapper(const SceneBootstrapper&) = delete;
   SceneBootstrapper(SceneBootstrapper&&) = delete;
   auto operator=(const SceneBootstrapper&) -> SceneBootstrapper& = delete;
@@ -54,6 +59,8 @@ private:
   scene::SceneNode ground_plane_node_;
 
   // Lighting nodes
+  bool point_light_enabled_ { true };
+  bool spot_light_enabled_ { true };
   scene::SceneNode key_light_node_;
   scene::SceneNode fill_light_node_;
 };
