@@ -219,6 +219,17 @@ five debugger cases pass; both configurations pass 121 native, 59 renderer-core,
 22 post-process and 22 publication tests. `multiview/static-matrix-manifest.json`
 records this scope. Active adaptation, resize/scissor, hide/recreate, source loss,
 remaining layouts and automatic precision admission/recovery remain open.
+Grid/wireframe draw constants now remain immutable through their frame slots,
+using the existing structured publisher and matching 208/32-byte shader records.
+The queued-view regression fails on the old ring; current tests cover three live
+slots, safe reuse and velocity-intermediate teardown. Debug/Release pass 61 core,
+121 native, 22 post-process and 22 publication tests with 202-module shader packs.
+Four-view captures verify actual grid matrices and frame-varying overlay colors.
+The real nonzero Auto source-loss case preserves PiP's gain and full image exactly
+on removal, then resumes independent adaptation within 8e-7 EV of the closed-form
+oracle. Eight source-loss captures, two overlay captures and two debugger cases
+pass (`multiview/overlay-source-loss-manifest.json`). Broader lifecycle variants
+and automatic precision admission/recovery remain open.
 
 ## 4. Milestone Ledger
 

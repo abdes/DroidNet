@@ -62,6 +62,15 @@ struct BufferCommandLog {
   };
   std::vector<CopyEvent> copies;
 };
+struct BufferSrvCreationLog {
+  struct Event {
+    ShaderVisibleIndex slot;
+    const std::byte* data;
+    std::size_t size;
+    std::uint32_t stride;
+  };
+  std::vector<Event> events;
+};
 //! Logs buffer->texture copy regions captured by the fake command recorder.
 struct TextureCommandLog {
   bool copy_called { false };
@@ -859,9 +868,10 @@ public:
     public:
       FakeBuffer(const std::string_view name, const uint64_t size,
         const BufferUsage usage, const BufferMemory memory,
-        const bool map_should_fail)
+        const bool map_should_fail, BufferSrvCreationLog* srv_log)
         : Buffer(name)
         , map_should_fail_(map_should_fail)
+        , srv_log_(srv_log)
       {
         desc_.size_bytes = size;
         desc_.usage = usage;
@@ -931,10 +941,20 @@ public:
         return { this, Buffer::ClassTypeId() };
       }
       [[nodiscard]] auto CreateShaderResourceView(
-        const graphics::DescriptorAllocationHandle& /*view_handle*/,
-        Format /*format*/, graphics::BufferRange /*range*/,
-        uint32_t /*stride*/) const -> graphics::NativeView override
+        const graphics::DescriptorAllocationHandle& view_handle,
+        Format /*format*/, graphics::BufferRange range, uint32_t stride) const
+        -> graphics::NativeView override
       {
+        if (srv_log_ && mapped_ && range.offset_bytes <= storage_.size()
+          && range.size_bytes <= storage_.size() - range.offset_bytes) {
+          srv_log_->events.push_back({
+            .slot
+            = view_handle.GetAllocator()->GetShaderVisibleIndex(view_handle),
+            .data = storage_.data() + range.offset_bytes,
+            .size = static_cast<std::size_t>(range.size_bytes),
+            .stride = stride,
+          });
+        }
         return { this, Buffer::ClassTypeId() };
       }
       [[nodiscard]] auto CreateUnorderedAccessView(
@@ -949,10 +969,11 @@ public:
       BufferDesc desc_ {};
       bool mapped_ { false };
       bool map_should_fail_ { false };
+      BufferSrvCreationLog* srv_log_ { nullptr };
       std::vector<std::byte> storage_;
     };
-    return std::make_shared<FakeBuffer>(
-      "Staging", desc.size_bytes, desc.usage, desc.memory, fail_map_);
+    return std::make_shared<FakeBuffer>("Staging", desc.size_bytes, desc.usage,
+      desc.memory, fail_map_, &buffer_srv_log_);
   }
   auto CreateCommandQueues(const graphics::QueuesStrategy& queue_strategy)
     -> void override
@@ -1033,6 +1054,7 @@ public:
   }
 
   BufferCommandLog buffer_log_ {};
+  mutable BufferSrvCreationLog buffer_srv_log_ {};
   TextureCommandLog texture_log_ {};
   GraphicsPipelineCommandLog graphics_pipeline_log_ {};
   ComputePipelineCommandLog compute_pipeline_log_ {};

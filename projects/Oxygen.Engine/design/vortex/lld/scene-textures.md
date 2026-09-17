@@ -73,6 +73,10 @@ together through the existing GPU-frame reclaimer. Switching views, resizing,
 or replacing an artifact retains its registry entries until that frame slot is
 safe to reclaim. Earlier views' submitted shader indices remain stable through
 later view preparation and rendering.
+Ground-grid and wireframe draw constants use the existing frame-retained
+per-view structured publisher. Each submitted payload is immutable through its
+frame slot's retirement, including repeated views and families larger than a
+fixed ring. Their HLSL consumers use the matching structured-buffer descriptors.
 
 The cumulative-blend check requires an accumulation-boundary decision before
 normal-mode admission is enabled. Fixed-function output-merger blending does

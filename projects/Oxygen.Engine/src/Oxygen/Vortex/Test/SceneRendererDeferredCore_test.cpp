@@ -7,9 +7,12 @@
 #include <Oxygen/Testing/GTest.h>
 
 #include <array>
+#include <cmath>
+#include <cstring>
 #include <limits>
 #include <memory>
 #include <ranges>
+#include <set>
 #include <span>
 #include <string>
 
@@ -1014,7 +1017,7 @@ NOLINT_TEST_F(
 }
 
 NOLINT_TEST_F(SceneRendererDeferredCoreTest,
-  BasePassRunsMotionVectorWorldOffsetAuxiliaryChainWithoutDepthClear)
+  BasePassVelocityAuxiliaryChainPreservesDepthAndRetiresIntermediates)
 {
   auto scene_config = SceneTexturesConfig {
     .extent = { 64U, 64U },
@@ -1023,7 +1026,9 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
     .gbuffer_count = 4U,
     .msaa_sample_count = 1U,
   };
-  auto base_pass = oxygen::vortex::BasePassModule(*renderer_, scene_config);
+  auto base_pass = std::make_unique<oxygen::vortex::BasePassModule>(
+    *renderer_, scene_config);
+  graphics_->GetDeferredReclaimer().OnBeginFrame(oxygen::frame::Slot { 1U });
   auto scene_textures = oxygen::vortex::SceneTextures(*graphics_, scene_config);
 
   auto render_items
@@ -1101,13 +1106,13 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   graphics_->dispatch_log_.dispatches.clear();
   graphics_->clear_framebuffer_log_.clears.clear();
 
-  base_pass.SetConfig(oxygen::vortex::BasePassConfig {
+  base_pass->SetConfig(oxygen::vortex::BasePassConfig {
     .write_velocity = true,
     .early_z_pass_done = true,
     .shading_mode = ShadingMode::kDeferred,
   });
 
-  const auto result = base_pass.Execute(context, scene_textures);
+  const auto result = base_pass->Execute(context, scene_textures);
 
   EXPECT_TRUE(result.published_base_pass_products);
   EXPECT_TRUE(result.completed_velocity_for_dynamic_geometry);
@@ -1133,6 +1138,34 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
     graphics_->clear_framebuffer_log_.clears, [](const auto& clear) -> bool {
       return clear.color_attachment_count == 1U && clear.has_depth_attachment;
     }));
+  const auto intermediates
+    = RendererPublicationProbe::VelocityIntermediates(*base_pass);
+  auto& registry = graphics_->GetResourceRegistry();
+  std::array<oxygen::graphics::TextureViewDescription, 2> descriptions;
+  std::array<std::optional<oxygen::ShaderVisibleIndex>, 2> descriptors;
+  for (std::size_t i = 0; i < intermediates.size(); ++i) {
+    ASSERT_NE(intermediates[i], nullptr);
+    descriptions[i] = {
+      .view_type = oxygen::graphics::ResourceViewType::kTexture_SRV,
+      .visibility = oxygen::graphics::DescriptorVisibility::kShaderVisible,
+      .format = intermediates[i]->GetDescriptor().format,
+      .dimension = intermediates[i]->GetDescriptor().texture_type,
+      .sub_resources = oxygen::graphics::TextureSubResourceSet::EntireTexture(),
+    };
+    descriptors[i]
+      = registry.FindShaderVisibleIndex(*intermediates[i], descriptions[i]);
+    ASSERT_TRUE(descriptors[i].has_value());
+  }
+  base_pass.reset();
+  graphics_->GetDeferredReclaimer().OnBeginFrame(oxygen::frame::Slot { 2U });
+  for (std::size_t i = 0; i < intermediates.size(); ++i) {
+    EXPECT_EQ(
+      registry.FindShaderVisibleIndex(*intermediates[i], descriptions[i]),
+      descriptors[i]);
+  }
+  graphics_->GetDeferredReclaimer().OnBeginFrame(oxygen::frame::Slot { 1U });
+  for (const auto& texture : intermediates)
+    EXPECT_FALSE(registry.Contains(*texture));
 }
 
 NOLINT_TEST_F(SceneRendererDeferredCoreTest,
@@ -1785,6 +1818,74 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
     1);
 }
 
+NOLINT_TEST_F(
+  SceneRendererDeferredCoreTest, OverlayConstantsKeepPayloadsAcrossFrameSlots)
+{
+  auto context = RenderForView(first_view_id_, first_resolved_view_);
+  auto grid = oxygen::vortex::GroundGridPass(*renderer_);
+  auto wireframe
+    = oxygen::vortex::BasePassModule(*renderer_, SceneTexturesConfig {});
+  struct Snapshot {
+    unsigned slot;
+    const std::byte* data;
+    std::vector<std::byte> expected;
+  };
+  std::vector<Snapshot> snapshots;
+  std::set<std::uint32_t> indices;
+  for (unsigned frame = 0U; frame < 4U; ++frame) {
+    context.frame_sequence = oxygen::frame::SequenceNumber { 100U + frame };
+    context.frame_slot = oxygen::frame::Slot { frame % 3U };
+    for (unsigned local_view = 0U; local_view < 4U; ++local_view) {
+      const auto index = frame * 4U + local_view;
+      auto params = ResolvedView::Params {};
+      params.view_config.viewport
+        = ViewPort { .width = 64.0F, .height = 64.0F };
+      params.view_matrix = glm::rotate(glm::mat4 { 1.0F },
+        static_cast<float>(index) * .1F, glm::vec3 { 0.0F, 0.0F, 1.0F });
+      params.proj_matrix = glm::mat4 { 1.0F };
+      const auto view = ResolvedView(params);
+      context.current_view.view_id = ViewId { 900U + local_view };
+      context.current_view.resolved_view = oxygen::observer_ptr { &view };
+      context.wireframe_color
+        = { static_cast<float>(index) / 16.0F, .25F, .5F, 1.0F };
+      const std::array published {
+        RendererPublicationProbe::PublishGroundGridConstants(grid, context),
+        RendererPublicationProbe::PublishWireframeConstants(
+          wireframe, *graphics_, context, index % 2U != 0U),
+      };
+      for (unsigned kind = 0U; kind < published.size(); ++kind) {
+        const auto descriptor = published[kind];
+        ASSERT_TRUE(descriptor.IsValid());
+        if (frame < 3U)
+          EXPECT_TRUE(indices.insert(descriptor.get()).second);
+        const auto& events = graphics_->buffer_srv_log_.events;
+        const auto found = std::find_if(events.rbegin(), events.rend(),
+          [descriptor](const auto& event) { return event.slot == descriptor; });
+        ASSERT_NE(found, events.rend());
+        EXPECT_EQ(found->stride, kind == 0U ? 208U : 32U);
+        float first_value = 0;
+        std::memcpy(&first_value, found->data, sizeof(first_value));
+        EXPECT_NEAR(first_value,
+          kind == 0U ? std::cos(static_cast<float>(index) * .1F)
+                     : static_cast<float>(index) / 16.0F,
+          1e-6F);
+        if (local_view == 0U && frame < 3U) {
+          snapshots.push_back({ frame, found->data,
+            std::vector<std::byte>(found->data, found->data + found->size) });
+        }
+      }
+    }
+    for (const auto& snapshot : snapshots) {
+      // Frame-slot zero has retired when the fourth frame starts. Slots one
+      // and two must still retain their exact submitted bytes after reuse.
+      if (frame == 3U && snapshot.slot == 0U)
+        continue;
+      EXPECT_TRUE(std::equal(
+        snapshot.expected.begin(), snapshot.expected.end(), snapshot.data));
+    }
+  }
+}
+
 NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
   PointLightProxySphereUsesConsistentOutwardWinding)
 {
@@ -1853,6 +1954,29 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
       return bind.desc.GetName() == "Vortex.Stage20.GroundGrid";
     }));
   EXPECT_EQ(graphics_->draw_log_.draws.size(), 0U);
+}
+
+NOLINT_TEST_F(SceneRendererDeferredCoreTest,
+  GroundGridConstantsRemainDistinctBeyondEightQueuedViews)
+{
+  auto context = RenderForView(first_view_id_, first_resolved_view_);
+  auto grid = oxygen::vortex::GroundGridPass(*renderer_);
+  std::set<std::uint32_t> slots;
+  for (unsigned index = 0U; index < 12U; ++index) {
+    auto params = ResolvedView::Params {};
+    params.view_config.viewport = ViewPort { .width = 64.0F, .height = 64.0F };
+    params.view_matrix = glm::rotate(glm::mat4 { 1.0F },
+      static_cast<float>(index) * .1F, glm::vec3 { 0.0F, 0.0F, 1.0F });
+    params.proj_matrix = glm::mat4 { 1.0F };
+    const auto view = ResolvedView(std::move(params));
+    context.current_view.view_id = ViewId { 800U + index };
+    context.current_view.resolved_view = oxygen::observer_ptr { &view };
+    const auto slot
+      = RendererPublicationProbe::PublishGroundGridConstants(grid, context);
+    ASSERT_TRUE(slot.IsValid());
+    EXPECT_TRUE(slots.insert(slot.get()).second)
+      << "A later view overwrote a queued view's grid constants";
+  }
 }
 
 NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,

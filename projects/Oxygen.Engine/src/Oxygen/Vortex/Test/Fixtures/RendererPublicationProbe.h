@@ -10,15 +10,33 @@
 #include <Oxygen/Vortex/Environment/EnvironmentLightingService.h>
 #include <Oxygen/Vortex/Internal/PreviousViewHistoryCache.h>
 #include <Oxygen/Vortex/Lighting/LightingService.h>
+#include <Oxygen/Vortex/Passes/GroundGridPass.h>
 #include <Oxygen/Vortex/PostProcess/PostProcessService.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
+#include <Oxygen/Vortex/SceneRenderer/Stages/BasePass/BasePassModule.h>
 #include <Oxygen/Vortex/Shadows/ShadowService.h>
 #include <Oxygen/Vortex/Types/FrameLightSelection.h>
 
 namespace oxygen::vortex::testing {
 
 struct RendererPublicationProbe {
+  static auto PublishGroundGridConstants(
+    GroundGridPass& pass, const RenderContext& ctx) -> ShaderVisibleIndex
+  {
+    return pass.UpdatePassConstants(ctx);
+  }
+  static auto PublishWireframeConstants(BasePassModule& pass, Graphics& gfx,
+    const RenderContext& ctx, bool pre_exposed) -> ShaderVisibleIndex
+  {
+    return pass.WriteWireframeConstants(gfx, ctx, pre_exposed);
+  }
+  static auto VelocityIntermediates(const BasePassModule& pass)
+    -> std::array<std::shared_ptr<graphics::Texture>, 2>
+  {
+    return { pass.velocity_base_copy_,
+      pass.velocity_motion_vector_world_offset_ };
+  }
   static auto BuildStaticSkyPublication(EnvironmentLightingService& service,
     const RenderContext& ctx, const EnvironmentProbeState& state,
     const environment::SkyLightEnvironmentModel& model) -> EnvironmentStaticData

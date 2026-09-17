@@ -6,9 +6,8 @@
 
 #pragma once
 
-#include <array>
-#include <cstddef>
 #include <memory>
+#include <optional>
 #include <unordered_map>
 
 #include <glm/mat4x4.hpp>
@@ -17,6 +16,7 @@
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Vortex/api_export.h>
 
@@ -30,6 +30,12 @@ namespace oxygen::vortex {
 struct RenderContext;
 class Renderer;
 class SceneTextures;
+namespace testing {
+  struct RendererPublicationProbe;
+}
+namespace internal {
+  template <typename Payload> class PerViewStructuredPublisher;
+}
 
 class GroundGridPass {
 public:
@@ -55,6 +61,7 @@ public:
     -> RecordState;
 
 private:
+  friend struct testing::RendererPublicationProbe;
   struct PassConstants;
   struct SmoothState {
     glm::dvec2 grid_offset { 0.0, 0.0 };
@@ -62,9 +69,8 @@ private:
     bool first_frame { true };
   };
 
-  auto EnsurePassConstantsBuffer() -> void;
-  auto ReleasePassConstantsBuffer() -> void;
-  auto UpdatePassConstants(const RenderContext& ctx) -> ShaderVisibleIndex;
+  OXGN_VRTX_API auto UpdatePassConstants(const RenderContext& ctx)
+    -> ShaderVisibleIndex;
   [[nodiscard]] auto ComputeInvViewProj(const RenderContext& ctx) const
     -> glm::mat4;
   auto ComputeGridOffset(PassConstants& constants, const RenderContext& ctx)
@@ -72,10 +78,9 @@ private:
   auto FillConstants(PassConstants& constants) const -> void;
 
   Renderer& renderer_;
-  std::shared_ptr<graphics::Buffer> pass_constants_buffer_ {};
-  std::byte* pass_constants_mapped_ptr_ { nullptr };
-  std::array<ShaderVisibleIndex, 8U> pass_constants_indices_ {};
-  std::size_t pass_constants_slot_ { 0U };
+  std::unique_ptr<internal::PerViewStructuredPublisher<PassConstants>>
+    constants_publisher_;
+  std::optional<frame::SequenceNumber> constants_frame_;
   std::unordered_map<ViewId, SmoothState> smooth_states_by_view_;
 };
 

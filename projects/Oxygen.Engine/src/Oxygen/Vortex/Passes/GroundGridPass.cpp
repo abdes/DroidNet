@@ -28,6 +28,7 @@
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
+#include <Oxygen/Vortex/Internal/PerViewStructuredPublisher.h>
 #include <Oxygen/Vortex/Internal/ViewportClamp.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
@@ -40,8 +41,6 @@ namespace {
 
   namespace bindless_d3d12 = oxygen::bindless::generated::d3d12;
 
-  constexpr auto kPassConstantsStride = 256U;
-  constexpr auto kPassConstantsSlots = 8U;
   constexpr double kMinSpacing = 1e-4;
   constexpr double kMinSmoothTime = 0.001;
   constexpr double kTeleportThreshold = 1000.0;
@@ -73,7 +72,7 @@ namespace {
     glm::vec4 origin_color { 1.0F, 1.0F, 1.0F, 1.0F };
   };
 
-  static_assert(sizeof(GroundGridPassConstants) <= kPassConstantsStride);
+  static_assert(sizeof(GroundGridPassConstants) == 208U);
 
   auto RangeTypeToViewType(const bindless_d3d12::RangeType type)
     -> graphics::ResourceViewType
@@ -268,10 +267,9 @@ struct GroundGridPass::PassConstants : GroundGridPassConstants { };
 GroundGridPass::GroundGridPass(Renderer& renderer)
   : renderer_(renderer)
 {
-  pass_constants_indices_.fill(kInvalidShaderVisibleIndex);
 }
 
-GroundGridPass::~GroundGridPass() { ReleasePassConstantsBuffer(); }
+GroundGridPass::~GroundGridPass() = default;
 
 auto GroundGridPass::Record(
   RenderContext& ctx, const SceneTextures& scene_textures,
@@ -346,99 +344,30 @@ auto GroundGridPass::Record(
   return state;
 }
 
-auto GroundGridPass::EnsurePassConstantsBuffer() -> void
-{
-  if (pass_constants_buffer_ != nullptr
-    && pass_constants_indices_[0].IsValid()) {
-    return;
-  }
-
-  auto gfx = renderer_.GetGraphics();
-  CHECK_NOTNULL_F(gfx.get());
-
-  auto& registry = gfx->GetResourceRegistry();
-  auto& allocator = gfx->GetDescriptorAllocator();
-  const auto desc = graphics::BufferDesc {
-    .size_bytes = kPassConstantsStride * kPassConstantsSlots,
-    .usage = graphics::BufferUsage::kConstant,
-    .memory = graphics::BufferMemory::kUpload,
-    .debug_name = "Vortex.Stage20.GroundGrid.PassConstants",
-  };
-
-  pass_constants_buffer_ = gfx->CreateBuffer(desc);
-  CHECK_NOTNULL_F(pass_constants_buffer_.get(),
-    "GroundGridPass: failed to create pass constants buffer");
-  pass_constants_buffer_->SetName(desc.debug_name);
-  pass_constants_mapped_ptr_
-    = static_cast<std::byte*>(pass_constants_buffer_->Map(0, desc.size_bytes));
-  CHECK_NOTNULL_F(pass_constants_mapped_ptr_,
-    "GroundGridPass: failed to map pass constants buffer");
-
-  pass_constants_indices_.fill(kInvalidShaderVisibleIndex);
-  registry.Register(pass_constants_buffer_);
-  for (std::size_t slot = 0; slot < kPassConstantsSlots; ++slot) {
-    auto handle
-      = allocator.AllocateRaw(graphics::ResourceViewType::kConstantBuffer,
-        graphics::DescriptorVisibility::kShaderVisible);
-    CHECK_F(handle.IsValid(),
-      "GroundGridPass: failed to allocate pass constants descriptor");
-    pass_constants_indices_[slot] = allocator.GetShaderVisibleIndex(handle);
-
-    const auto offset = static_cast<std::uint32_t>(slot * kPassConstantsStride);
-    const auto view_desc = graphics::BufferViewDescription {
-      .view_type = graphics::ResourceViewType::kConstantBuffer,
-      .visibility = graphics::DescriptorVisibility::kShaderVisible,
-      .range = { offset, kPassConstantsStride },
-    };
-    const auto view = registry.RegisterView(
-      *pass_constants_buffer_, std::move(handle), view_desc);
-    CHECK_F(view->IsValid(),
-      "GroundGridPass: failed to register pass constants view");
-  }
-}
-
-auto GroundGridPass::ReleasePassConstantsBuffer() -> void
-{
-  if (pass_constants_buffer_ == nullptr) {
-    pass_constants_mapped_ptr_ = nullptr;
-    pass_constants_indices_.fill(kInvalidShaderVisibleIndex);
-    pass_constants_slot_ = 0U;
-    return;
-  }
-
-  if (pass_constants_buffer_->IsMapped()) {
-    pass_constants_buffer_->UnMap();
-  }
-
-  if (auto gfx = renderer_.GetGraphics(); gfx != nullptr) {
-    auto& registry = gfx->GetResourceRegistry();
-    if (registry.Contains(*pass_constants_buffer_)) {
-      registry.UnRegisterResource(*pass_constants_buffer_);
-    }
-  }
-
-  pass_constants_mapped_ptr_ = nullptr;
-  pass_constants_buffer_.reset();
-  pass_constants_indices_.fill(kInvalidShaderVisibleIndex);
-  pass_constants_slot_ = 0U;
-}
-
 auto GroundGridPass::UpdatePassConstants(const RenderContext& ctx)
   -> ShaderVisibleIndex
 {
-  EnsurePassConstantsBuffer();
-  CHECK_NOTNULL_F(pass_constants_mapped_ptr_);
-
+  if (!constants_publisher_) {
+    auto gfx = renderer_.GetGraphics();
+    CHECK_NOTNULL_F(gfx.get());
+    constants_publisher_
+      = std::make_unique<internal::PerViewStructuredPublisher<PassConstants>>(
+        observer_ptr { gfx.get() }, renderer_.GetStagingProvider(),
+        observer_ptr { &renderer_.GetInlineTransfersCoordinator() },
+        "Vortex.Stage20.GroundGrid.PassConstants");
+  }
+  if (constants_frame_ != ctx.frame_sequence) {
+    constants_publisher_->OnFrameStart(ctx.frame_sequence, ctx.frame_slot);
+    constants_frame_ = ctx.frame_sequence;
+  }
   PassConstants constants {};
   constants.inv_view_proj = ComputeInvViewProj(ctx);
   FillConstants(constants);
   ComputeGridOffset(constants, ctx);
-
-  const auto slot = pass_constants_slot_ % kPassConstantsSlots;
-  pass_constants_slot_++;
-  std::memcpy(pass_constants_mapped_ptr_ + (slot * kPassConstantsStride),
-    &constants, sizeof(constants));
-  return pass_constants_indices_[slot];
+  const auto slot
+    = constants_publisher_->Publish(ctx.current_view.view_id, constants);
+  CHECK_F(slot.IsValid(), "Ground grid constants publication failed");
+  return slot;
 }
 
 auto GroundGridPass::ComputeInvViewProj(const RenderContext& ctx) const

@@ -195,6 +195,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
   bool aux_proof_layout = false;
   bool offscreen_proof_layout = false;
   bool feature_variant_proof_layout = false;
+  bool proof_wireframe_overlay = false;
   bool point_light_enabled = true;
   bool spot_light_enabled = true;
   std::string exposure_proof_value = "none";
@@ -229,11 +230,19 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
               .Build())
           .WithOption(Option::WithKey("exposure-proof")
               .About("Exposure proof: none, independent, shared, main-only, "
-                     "pip-only, reordered")
+                     "pip-only, reordered, source-loss")
               .Long("exposure-proof")
               .WithValue<std::string>()
               .DefaultValue("none")
               .StoreTo(&exposure_proof_value)
+              .Build())
+          .WithOption(Option::WithKey("proof-wireframe-overlay")
+              .About("Exercise per-frame wireframe overlays in the four-view "
+                     "proof layout")
+              .Long("proof-wireframe-overlay")
+              .WithValue<bool>()
+              .DefaultValue(false)
+              .StoreTo(&proof_wireframe_overlay)
               .Build())
           .WithOption(Option::WithKey("point-light")
               .About(
@@ -336,10 +345,15 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
       .aux_proof_layout = aux_proof_layout,
       .offscreen_proof_layout = offscreen_proof_layout,
       .feature_variant_proof_layout = feature_variant_proof_layout,
+      .proof_wireframe_overlay = proof_wireframe_overlay,
       .point_light_enabled = point_light_enabled,
       .spot_light_enabled = spot_light_enabled,
     };
     using ExposureProof = oxygen::examples::multiview::ExposureProofScenario;
+    if (proof_wireframe_overlay && !proof_layout && !aux_proof_layout) {
+      throw std::invalid_argument(
+        "Wireframe overlay proof requires a four-view proof layout");
+    }
     if (exposure_proof_value == "independent") {
       main_module_config.exposure_proof = ExposureProof::kIndependent;
     } else if (exposure_proof_value == "shared") {
@@ -350,6 +364,8 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
       main_module_config.exposure_proof = ExposureProof::kPipOnly;
     } else if (exposure_proof_value == "reordered") {
       main_module_config.exposure_proof = ExposureProof::kReordered;
+    } else if (exposure_proof_value == "source-loss") {
+      main_module_config.exposure_proof = ExposureProof::kSourceLoss;
     } else if (exposure_proof_value != "none") {
       throw std::invalid_argument("Unknown exposure proof scenario");
     }
