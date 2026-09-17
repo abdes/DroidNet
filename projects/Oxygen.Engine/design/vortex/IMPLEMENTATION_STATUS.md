@@ -251,6 +251,13 @@ fullscreen requests are rejected (`multiview/window-resize-manifest.json`).
 Remaining lifecycle/layout combinations and precision admission/recovery remain
 open.
 
+The native paused mode-cycle proof passes in Debug/Release: twenty event-frame
+captures cover temporary diagnostics/restoration, Manual/disabled/ManualCamera,
+zero/positive target, public seed and camera cut. Main remains unchanged; gains
+match independent expectations within 2e-7 EV, and the debugger run passes.
+`multiview/modes-manifest.json` records this bounded scope. The full exposure
+package remains in progress.
+
 ## 4. Milestone Ledger
 
 | ID | Milestone | Status | Current Evidence | Missing To Close |

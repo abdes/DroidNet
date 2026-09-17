@@ -1330,6 +1330,16 @@ Evidence is `multiview/window-resize-manifest.json`. Remaining lifecycle/mode
 combinations, the complete layout matrix and automatic precision admission/
 recovery still keep slice 5 open.
 
+The paused native mode-cycle proof is qualified in Debug/Release: temporary
+wireframe and restoration, immediate Manual/disabled/ManualCamera entry, zero
+target with positive latent history, positive-target restoration, EV6 seed and
+camera cut. Twenty event-frame captures pass the independent gain and S/P
+checks; main remains byte-identical and diagnostic restoration is exact. The
+physical-camera gain differs from its independent arithmetic by under 2e-7 EV;
+all other expected gains match exactly. The debugger run has no blocking
+graphics messages. Evidence is `multiview/modes-manifest.json`. The complete
+layout matrix and automatic precision admission/recovery remain open.
+
 - [x] Add the early GPU P resolve and bind a frame-invariant P/1P to every HDR pass.
 - [ ] Migrate the entire section 4.4 checklist, including atmosphere producer/
   consumer pairs, fog/color histories, bloom and offscreen/capture domains.

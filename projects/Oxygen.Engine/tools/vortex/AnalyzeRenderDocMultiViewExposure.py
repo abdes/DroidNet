@@ -74,6 +74,7 @@ def build_report(controller, report, capture_path, report_path):
             controller.GetBufferData(frames[0].resource, frames[0].byteOffset, 16)))
         state = bytes(controller.GetBufferData(states[0].resource, states[0].byteOffset, 80))
         gain, target_gain = struct.unpack_from("<2f", state)
+        latent_gain, latent_target = struct.unpack_from("<2f", state, 8)
         raw_luminance, raw_ev, state_flags, fallback = struct.unpack_from("<2f2I", state, 16)
         requested, applied, sequence = struct.unpack_from("<3Q", state, 40)
         settings_revision = struct.unpack_from("<Q", state, 32)[0]
@@ -131,6 +132,7 @@ def build_report(controller, report, capture_path, report_path):
             "width": texture.width, "height": texture.height,
             "write_rectangle": write_rect,
             "frame": sequence, "gain": gain, "target_gain": target_gain,
+            "latent_gain": latent_gain, "latent_target": latent_target,
             "settings_revision": settings_revision,
             "pre_exposure": p, "raw_luminance": raw_luminance, "raw_ev": raw_ev,
             "state_flags": state_flags, "frame_flags": flags,

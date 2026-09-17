@@ -34,7 +34,7 @@ Common validation-oriented options:
 - `--point-light <true|false>` and `--spot-light <true|false>`: enable each
   existing scene light independently for forward/deferred contribution checks.
   Both default to enabled.
-- `--exposure-proof <none|independent|shared|main-only|pip-only|reordered|source-loss|viewport|lifetime|window-resize>`:
+- `--exposure-proof <none|independent|shared|main-only|pip-only|reordered|source-loss|viewport|lifetime|window-resize|modes>`:
   run a paused, static main/PiP exposure comparison with explicit Auto settings
   and a public remeter at frame 32. PiP has two stops of compensation unless it
   shares main's gain. Shared mode steps main by one stop at frame 44; capture
@@ -145,6 +145,14 @@ run `Assert-MultiViewWindowResize.py --directory <reports> --prefix <prefix>
 --output <result.json>` with Pillow. It verifies actual swapchain/view extents,
 retained exposure histories and exact restored images. Headless and fullscreen
 operation are rejected for this proof.
+
+`modes` changes only PiP while game time stays paused: wireframe at GPU frame
+44, restored Auto at 48, Manual EV4 at 52, disabled exposure at 56, physical
+camera at 60, zero Auto target at 64, positive target at 68, EV6 seed at 72,
+and camera cut at 76. Capture frames 42, 43, 47, 51, 55, 59, 63, 67, 71 and 75.
+Run `Assert-MultiViewModes.py --directory <reports> --prefix <prefix>
+--output <result.json>` with Pillow to check immediate gains, retained latent
+history, event generations, diagnostic restoration and main-view isolation.
 
 For the offscreen forward light-binding regression, capture the existing
 `--offscreen-proof-layout true --pip-wireframe false` layout with both lights,
