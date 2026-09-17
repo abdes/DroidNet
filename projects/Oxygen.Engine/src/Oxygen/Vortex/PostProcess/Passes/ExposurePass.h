@@ -142,6 +142,18 @@ public:
     float consumer_rgb_gain { 1.0F };
   };
 
+  //! Capture the absolute RGB maximum before environment attenuation (in P
+  //! units).
+  [[nodiscard]] OXGN_VRTX_API auto CapturePreEnvironmentRange(
+    RenderContext& ctx, const FrameLease& frame,
+    const graphics::Texture& source, ShaderVisibleIndex source_srv) -> bool;
+  //! Submission identity is authoritative if a repeated attempt fails.
+  [[nodiscard]] auto HasPreEnvironmentRange(const FrameLease& frame) const
+    -> bool
+  {
+    return frame && submitted_composition_input_.contains(frame.get());
+  }
+
   //! Evaluate FP32 reference products without granting normal-mode admission.
   enum class SuitabilityScale { kCandidate, kCurrentFrame };
   [[nodiscard]] OXGN_VRTX_API auto EvaluateFp16Products(RenderContext& ctx,
@@ -268,6 +280,7 @@ private:
     resolved_frames_;
   std::unordered_set<const FrameResources*> submitted_suitability_;
   std::unordered_set<const FrameResources*> submitted_conversion_;
+  std::unordered_set<const FrameResources*> submitted_composition_input_;
   std::array<std::vector<FrameLease>, frame::kFramesInFlight.get()>
     frame_bindings_;
   std::vector<std::shared_ptr<StateResources>> state_pool_;

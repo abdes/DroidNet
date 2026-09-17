@@ -481,6 +481,14 @@ auto PostProcessService::PrepareFrameExposure(RenderContext& ctx,
       .lifetime = settings.lifetime });
 }
 
+auto PostProcessService::CapturePreEnvironmentRange(RenderContext& ctx,
+  const graphics::Texture& source, const ShaderVisibleIndex source_srv) -> bool
+{
+  return ctx.current_view.frame_exposure
+    && exposure_pass_->CapturePreEnvironmentRange(
+      ctx, ctx.current_view.frame_exposure, source, source_srv);
+}
+
 auto PostProcessService::PrepareSceneExposure(const ViewId view_id,
   RenderContext& ctx, const Inputs& inputs) -> std::optional<PreparedExposure>
 {

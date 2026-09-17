@@ -7,6 +7,7 @@
 #include "Core/Bindless/Generated.BindlessAbi.hlsl"
 #include "Vortex/Contracts/View/ExposureStateData.hlsli"
 #include "Vortex/Contracts/View/HdrErrorBounds.hlsli"
+#include "Vortex/Contracts/View/HdrStoreChecks.hlsli"
 #include "Vortex/Contracts/Definitions/SceneDefinitions.hlsli"
 
 #define GROUP_SIZE 16
@@ -699,6 +700,7 @@ void VortexExposureFrameCS(uint3 dispatch_id : SV_DispatchThreadID)
     status.Store4(80u, 0u.xxxx);
     status.Store4(96u, 0u.xxxx);
     status.Store4(112u, 0u.xxxx);
+    status.Store4(128u, 0u.xxxx);
     ExposureTargetData initial = (ExposureTargetData)0;
     initial.initial_log_gain = pass.initial_log_gain;
     ExposureStateData state = LoadPrevious(pass.history_srv, initial);
@@ -949,16 +951,62 @@ void ClearSuitability(uint3 pixel : SV_DispatchThreadID)
     StructuredBuffer<SuitabilityConstants> constants = ResourceDescriptorHeap[g_PassConstantsIndex];
     const SuitabilityConstants pass = constants[0];
     RWByteAddressBuffer report = ResourceDescriptorHeap[pass.report_uav];
+    if ((pass.flags & 32u) != 0u) {
+        report.Store4(128u, uint4(0u, 1u, 0u, 0u));
+        return;
+    }
     report.Store4(0u, uint4(asuint(1.0), 0u, 0u, 0u));
     report.Store4(16u, 0u.xxxx);
     report.Store4(32u, uint4(0u, 0u, pass.expected_mask, 0u));
 }
 
+groupshared uint3 s_PreEnvironmentRange[64];
+
+static void GatherPreEnvironmentRange(SuitabilityConstants pass, uint3 pixel, uint lane)
+{
+    uint3 value = 0u.xxx;
+    if (pixel.x < pass.width && pixel.y < pass.height) {
+        Texture2D<float4> source = ResourceDescriptorHeap[pass.source_srv];
+        const float4 sample = source.Load(int3(pixel.xy, 0));
+        value.z = 1u;
+        if (!all(isfinite(sample))) value.y = 2u;
+        else {
+            const float maximum = max(abs(sample.r), max(abs(sample.g), abs(sample.b)));
+            value.x = asuint(maximum);
+            value.y = any(sample.rgb < 0.0) ? 4u : 0u;
+        }
+    }
+    s_PreEnvironmentRange[lane] = value;
+    GroupMemoryBarrierWithGroupSync();
+    [unroll] for (uint stride = 32u; stride > 0u; stride >>= 1u) {
+        if (lane < stride) {
+            const uint3 other = s_PreEnvironmentRange[lane + stride];
+            s_PreEnvironmentRange[lane].x = max(s_PreEnvironmentRange[lane].x, other.x);
+            s_PreEnvironmentRange[lane].y |= other.y;
+            s_PreEnvironmentRange[lane].z += other.z;
+        }
+        GroupMemoryBarrierWithGroupSync();
+    }
+    if (lane == 0u) {
+        RWByteAddressBuffer status = ResourceDescriptorHeap[pass.report_uav];
+        uint unused;
+        status.InterlockedMax(128u, s_PreEnvironmentRange[0].x, unused);
+        status.InterlockedOr(132u, s_PreEnvironmentRange[0].y, unused);
+        status.InterlockedAdd(136u, s_PreEnvironmentRange[0].z, unused);
+        if ((s_PreEnvironmentRange[0].y & 2u) != 0u)
+            CheckHdrStoreRange(float4(asfloat(0x7fc00000u), 0, 0, 1), 11u, pass.report_uav, 0u);
+    }
+}
+
 [numthreads(8, 8, 1)]
-void GatherSuitabilityMaximum(uint3 pixel : SV_DispatchThreadID)
+void GatherSuitabilityMaximum(uint3 pixel : SV_DispatchThreadID, uint lane : SV_GroupIndex)
 {
     StructuredBuffer<SuitabilityConstants> constants = ResourceDescriptorHeap[g_PassConstantsIndex];
     const SuitabilityConstants pass = constants[0];
+    if ((pass.flags & 32u) != 0u) {
+        GatherPreEnvironmentRange(pass, pixel, lane);
+        return;
+    }
     if (pixel.x >= pass.width || pixel.y >= pass.height || pixel.z >= pass.depth) return;
     RWByteAddressBuffer report = ResourceDescriptorHeap[pass.report_uav];
     uint unused;

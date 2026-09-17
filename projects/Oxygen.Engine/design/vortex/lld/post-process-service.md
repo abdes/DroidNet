@@ -856,10 +856,24 @@ Automatic format switching remains disabled until those checks are qualified.
 
 The existing status allocation has a GPU-only tail: the completed/readback prefix
 remains 80 bytes, followed by three 16-byte affine records at 80 (sky view),
-96 (AP), and 112 (fog), for 128 bytes total. Each record is RGB relative/absolute
+96 (AP), and 112 (fog). Each record is RGB relative/absolute
 error and transmittance relative/absolute error. RGB absolute error is in
 scene-referred units; transmittance is dimensionless. Runtime CPU readback still
 copies only the original 80-byte prefix.
+
+The allocation is 144 bytes. Its final 16 bytes capture opaque SceneColor before
+sky/AP/fog/translucency: maximum absolute pre-exposed RGB at 128, flags at 132
+(recorded=1, nonfinite=2, negative RGB=4), checked-pixel count at 136 and zero at
+140. The immutable frame P defines these units. The exposure pass reuses its
+clear/maximum pipelines with evaluator flag bit 5, reducing one full RGBA32
+input read in 8x8 groups. No new texture or buffer is allocated. Nonfinite input
+uses existing source-failure reporting before metering; negative RGB is recorded
+for later signed-bound decisions. The last submission result is authoritative:
+a failed repeated capture invalidates its CPU submission identity even if old GPU
+bytes remain. Only single-sample RGBA32 inputs are currently accepted.
+This peak is a prerequisite for attenuation bounds, not a completed composition
+certificate. Forward translucent source maxima and the final composition remain
+unimplemented.
 
 Frame preparation clears the tail. Producers reduce outward-rounded local store
 bounds into their record, and the later solve/finalizer preserve the tail.

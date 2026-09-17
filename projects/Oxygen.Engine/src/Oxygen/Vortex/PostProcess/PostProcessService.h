@@ -160,6 +160,10 @@ public:
     std::optional<ExposureTransitionToken> status_transition;
     std::optional<std::uint64_t> precision_epoch;
   };
+  //! Observe unattenuated opaque input using the current immutable frame lease.
+  [[nodiscard]] OXGN_VRTX_API auto CapturePreEnvironmentRange(
+    RenderContext& ctx, const graphics::Texture& source,
+    ShaderVisibleIndex source_srv) -> bool;
   //! Solve from the accumulated scene signal before checked color resolution.
   //! The returned record pins the result/config for this view and logical
   //! frame.

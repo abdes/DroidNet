@@ -84,14 +84,26 @@ struct alignas(16) HdrErrorBoundsData {
   float transmittance_absolute { 0.0F };
 };
 
+//! GPU-only opaque SceneColor range before sky/AP/fog/translucency.
+struct alignas(16) HdrCompositionInputData {
+  float maximum_pre_exposed_rgb { 0.0F };
+  //! Recorded=1, nonfinite input=2, negative RGB=4.
+  std::uint32_t flags { 0U };
+  std::uint32_t checked_pixels { 0U };
+  std::uint32_t reserved { 0U };
+};
+
 //! The readback prefix stays non-numerical; the tail remains GPU-owned.
 struct alignas(16) ExposureStatusStorage {
   ExposureCompletedStatus completed;
   std::array<HdrErrorBoundsData, 3> producer_errors {}; // Sky view, AP, fog.
+  HdrCompositionInputData composition_input;
 };
 static_assert(sizeof(HdrErrorBoundsData) == 16U);
 static_assert(offsetof(ExposureStatusStorage, producer_errors) == 80U);
-static_assert(sizeof(ExposureStatusStorage) == 128U);
+static_assert(sizeof(HdrCompositionInputData) == 16U);
+static_assert(offsetof(ExposureStatusStorage, composition_input) == 128U);
+static_assert(sizeof(ExposureStatusStorage) == 144U);
 static_assert(std::is_standard_layout_v<ExposureStatusStorage>);
 
 static_assert(sizeof(ExposureCompletedStatus) == 80U);

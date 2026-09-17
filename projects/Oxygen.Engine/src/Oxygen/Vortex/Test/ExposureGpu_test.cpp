@@ -5167,6 +5167,152 @@ NOLINT_TEST_F(ExposureGpuTest, SuitabilityUsesMeterMaskAndCoverageWeights)
     0U);
 }
 
+NOLINT_TEST_F(
+  ExposureGpuTest, PreEnvironmentRangePreservesStatusAndViewIsolation)
+{
+  auto settings = scene::ExposureSettings {};
+  settings.mode = engine::ExposureMode::kManual;
+  settings.key = 12.5F;
+  settings.manual_ev = 3.0F;
+  const auto config = SharedConfig(settings);
+  std::array<Pixel, 27> pixels {};
+  pixels.fill(Pixel { 1, 2, 3, 1 });
+  pixels[8] = Pixel { -65536, 4, 5, 1 };
+  pixels[26] = Pixel { 6, 7, 32768, 1 };
+  const auto signal = MakeSignal(9U, 3U, pixels);
+  const auto smaller = Uniform(.25F, 2U, 5U);
+  const auto capture = BeginOptionalCapture();
+  ctx_.frame_sequence = frame::SequenceNumber { ++sequence_ };
+  const auto frame = pass_->ResolveFrame(ctx_, config, { .use_fp32 = false });
+  ASSERT_NE(frame, nullptr);
+  EXPECT_EQ(
+    Read<FrameExposureData>(*frame->buffer, ResourceStates::kShaderResource)
+      .pre_exposure,
+    .125F);
+  ASSERT_TRUE(RecordShared(signal, config).executed);
+  // Distinct sentinels verify that this reduction does not clear producer
+  // bounds.
+  const std::array<HdrErrorBoundsData, 3> bounds { HdrErrorBoundsData {
+                                                     .rgb_absolute = .125F },
+    HdrErrorBoundsData { .rgb_absolute = .25F },
+    HdrErrorBoundsData { .rgb_absolute = .5F } };
+  auto upload = CreateUploadBuffer(SizeBytes { sizeof(bounds) });
+  upload->Update(bounds.data(), sizeof(bounds), 0U);
+  {
+    auto recorder = AcquireRecorder("Pre-environment bound sentinels");
+    EnsureTracked(*recorder, upload, ResourceStates::kGenericRead);
+    ASSERT_TRUE(
+      recorder->AdoptKnownResourceState(*frame->current_state->status_buffer));
+    recorder->RequireResourceState(
+      *frame->current_state->status_buffer, ResourceStates::kCopyDest);
+    recorder->FlushBarriers();
+    recorder->CopyBuffer(
+      *frame->current_state->status_buffer, 80U, *upload, 0U, sizeof(bounds));
+    recorder->RequireResourceStateFinal(
+      *frame->current_state->status_buffer, ResourceStates::kUnorderedAccess);
+  }
+  const auto before = Read<ExposureStatusStorage>(
+    *frame->current_state->status_buffer, ResourceStates::kUnorderedAccess);
+  ASSERT_TRUE(pass_->CapturePreEnvironmentRange(
+    ctx_, frame, *signal.texture, signal.srv));
+  EXPECT_TRUE(pass_->HasPreEnvironmentRange(frame));
+  const auto first = Read<ExposureStatusStorage>(
+    *frame->current_state->status_buffer, ResourceStates::kUnorderedAccess);
+  EXPECT_EQ(std::memcmp(&before, &first, 128U), 0);
+  EXPECT_EQ(first.composition_input.maximum_pre_exposed_rgb, 65536.0F);
+  EXPECT_EQ(first.composition_input.flags, 5U);
+  EXPECT_EQ(first.composition_input.checked_pixels, 27U);
+  EXPECT_EQ(first.composition_input.reserved, 0U);
+
+  // A second view cannot overwrite the first view's retained input range.
+  ctx_.current_view.view_id = ViewId { 2U };
+  ctx_.current_view.view_state_handle = CompositionView::ViewStateHandle { 2U };
+  const auto other = pass_->ResolveFrame(ctx_, config, { .use_fp32 = true });
+  ASSERT_NE(other, nullptr);
+  ASSERT_TRUE(pass_->CapturePreEnvironmentRange(
+    ctx_, other, *smaller.texture, smaller.srv));
+  const auto second = Read<ExposureStatusStorage>(
+    *other->current_state->status_buffer, ResourceStates::kUnorderedAccess);
+  EXPECT_EQ(second.composition_input.maximum_pre_exposed_rgb, .25F);
+  EXPECT_EQ(second.composition_input.checked_pixels, 10U);
+  EXPECT_EQ(second.composition_input.flags, 1U);
+  EXPECT_EQ(Read<ExposureStatusStorage>(*frame->current_state->status_buffer,
+              ResourceStates::kUnorderedAccess)
+              .composition_input.maximum_pre_exposed_rgb,
+    65536.0F);
+
+  ctx_.current_view.view_id = ViewId { 1U };
+  ctx_.current_view.view_state_handle = CompositionView::ViewStateHandle { 1U };
+  auto& backend = static_cast<ExposureFailureGraphics&>(Backend());
+  backend.fail_recorder_name = "Vortex Exposure PreEnvironment Range";
+  EXPECT_FALSE(pass_->CapturePreEnvironmentRange(
+    ctx_, frame, *smaller.texture, smaller.srv));
+  EXPECT_FALSE(pass_->HasPreEnvironmentRange(frame));
+  backend.fail_recorder_name.clear();
+  ASSERT_TRUE(pass_->CapturePreEnvironmentRange(
+    ctx_, frame, *smaller.texture, smaller.srv));
+  const auto retry = Read<ExposureStatusStorage>(
+    *frame->current_state->status_buffer, ResourceStates::kUnorderedAccess);
+  EXPECT_EQ(retry.composition_input.maximum_pre_exposed_rgb, .25F);
+  EXPECT_EQ(retry.composition_input.checked_pixels, 10U);
+  EXPECT_EQ(retry.composition_input.flags, 1U);
+  EXPECT_EQ(std::memcmp(&before, &retry, 128U), 0);
+  const std::array products { postprocess::ExposurePass::HdrProduct {
+    .texture = smaller.texture.get(), .srv = smaller.srv, .id = 11U } };
+  ASSERT_TRUE(pass_->EvaluateFp16Products(ctx_, frame, config, products, {}));
+  ASSERT_TRUE(pass_->FinalizeFp16Suitability(ctx_, frame,
+    { .product_layout_revision = 1U, .expected_products = 1U << 10U }));
+  const auto finalized = Read<ExposureStatusStorage>(
+    *frame->current_state->status_buffer, ResourceStates::kUnorderedAccess);
+  EXPECT_EQ(std::memcmp(&retry.composition_input, &finalized.composition_input,
+              sizeof(HdrCompositionInputData)),
+    0);
+  EXPECT_FALSE(pass_->CapturePreEnvironmentRange(
+    ctx_, frame, *smaller.texture, kInvalidShaderVisibleIndex));
+  EXPECT_FALSE(pass_->HasPreEnvironmentRange(frame));
+  if (capture)
+    EXPECT_TRUE(capture->EndCapture());
+}
+
+NOLINT_TEST_F(ExposureGpuTest, PreEnvironmentRangeReportsNonfiniteInput)
+{
+  const auto config = SharedConfig(scene::ExposureSettings {});
+  for (unsigned channel = 0U; channel < 4U; ++channel) {
+    SCOPED_TRACE(channel);
+    std::array<Pixel, 9> pixels {};
+    pixels.fill(Pixel { 2, 3, 4, 1 });
+    pixels[8][channel] = channel % 2U == 0U
+      ? std::numeric_limits<float>::infinity()
+      : std::numeric_limits<float>::quiet_NaN();
+    const auto signal = MakeSignal(9U, 1U, pixels);
+    ctx_.frame_sequence = frame::SequenceNumber { ++sequence_ };
+    const auto frame = pass_->ResolveFrame(ctx_, config, { .use_fp32 = true });
+    ASSERT_NE(frame, nullptr);
+    ASSERT_TRUE(pass_->CapturePreEnvironmentRange(
+      ctx_, frame, *signal.texture, signal.srv));
+    const auto status = Read<ExposureStatusStorage>(
+      *frame->current_state->status_buffer, ResourceStates::kUnorderedAccess);
+    EXPECT_EQ(status.composition_input.maximum_pre_exposed_rgb, 4.0F);
+    EXPECT_EQ(status.composition_input.flags, 3U);
+    EXPECT_EQ(status.composition_input.checked_pixels, 9U);
+    EXPECT_EQ(status.completed.flags, 18U);
+    EXPECT_EQ(status.completed.first_failure_product, 11U);
+    EXPECT_EQ(status.completed.first_failure_kind, 1U);
+    // Later attenuation may hide an invalid source. Finite final pixels must
+    // not authorize adaptation after the earlier producer failure.
+    const auto finite = Uniform(.25F);
+    const auto solved = RecordShared(finite, config);
+    ASSERT_TRUE(solved.executed);
+    EXPECT_EQ(ReadState(solved).flags & 12U, 0U);
+    EXPECT_NE(ReadState(solved).flags & 32U, 0U);
+    const auto after = Read<ExposureStatusStorage>(
+      *frame->current_state->status_buffer, ResourceStates::kUnorderedAccess);
+    EXPECT_EQ(std::memcmp(&status.composition_input, &after.composition_input,
+                sizeof(HdrCompositionInputData)),
+      0);
+  }
+}
+
 NOLINT_TEST_F(ExposureGpuTest, SuitabilityRetainsProducerAndHistoryError)
 {
   struct Case {
