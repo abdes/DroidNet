@@ -529,6 +529,8 @@ auto PostProcessService::PrepareSceneExposure(const ViewId view_id,
         : std::nullopt,
       .lifetime = settings->lifetime,
     });
+  if (exposure.solve_failed || (exposure.frame && !exposure.state))
+    InvalidatePrecision(ctx.current_view.view_state_handle);
   if (exposure.frame && !exposure.state) {
     last_execution_state_ = { .tonemap_requested = true, .view_id = view_id };
     return std::nullopt;
@@ -540,7 +542,7 @@ auto PostProcessService::PrepareSceneExposure(const ViewId view_id,
       && precision->second.configured_frame == ctx.frame_sequence
     ? std::optional { precision->second.epoch }
     : std::nullopt;
-  if (transition && exposure.executed && exposure.state
+  if (transition && exposure.state && !exposure.solve_failed
     && !effective_config.Settings().temporary_unit_exposure) {
     if (precision_epoch) {
       renderer_.MarkExposureTransitionSubmitted(*transition);
@@ -611,6 +613,19 @@ auto PostProcessService::CurrentExposureGeneration(
     : 0U;
 }
 
+auto PostProcessService::InvalidatePrecision(
+  const CompositionView::ViewStateHandle handle) -> void
+{
+  const auto found = precision_states_.find(handle);
+  if (found == precision_states_.end())
+    return;
+  auto& precision = found->second;
+  CHECK_NE_F(precision.epoch, (std::numeric_limits<std::uint64_t>::max)());
+  ++precision.epoch;
+  precision.candidate.reset();
+  precision.restart_streak = true;
+}
+
 auto PostProcessService::SelectPrecisionCandidate(RenderContext& ctx,
   const postprocess::ExposurePass::EligibilityInputs& requirements)
   -> postprocess::ExposurePass::StateLease
@@ -664,6 +679,10 @@ auto PostProcessService::FinalizeScenePrecision(RenderContext& ctx,
   const std::span<const postprocess::ExposurePass::HdrProduct> products) -> bool
 {
   ValidatePreparedExposure(ctx.current_view.view_id, ctx, prepared);
+  // Preparation already invalidated this failed attempt. Repeated consumers
+  // of its fallback must not invalidate a later successful same-frame retry.
+  if (prepared.exposure.solve_failed)
+    return false;
   const auto found = precision_states_.find(prepared.handle);
   if (found == precision_states_.end() || !prepared.precision_epoch
     || *prepared.precision_epoch != found->second.epoch
@@ -677,10 +696,7 @@ auto PostProcessService::FinalizeScenePrecision(RenderContext& ctx,
   const auto reject = [&] {
     // An earlier deferred/completed result cannot authorize a later failed
     // frame. Preserve exposure events while invalidating only qualification.
-    CHECK_NE_F(precision.epoch, (std::numeric_limits<std::uint64_t>::max)());
-    ++precision.epoch;
-    precision.candidate.reset();
-    precision.restart_streak = true;
+    InvalidatePrecision(prepared.handle);
     return false;
   };
   if (precision.diagnostic || !prepared.exposure.frame
