@@ -1413,7 +1413,7 @@ namespace {
   auto ResolveAuthoredPostProcessConfig(const RenderContext& ctx,
     PostProcessService& service,
     const RenderContext::ViewExecutionEntry* captured_view = nullptr)
-    -> PostProcessConfig
+    -> ResolvedPostProcessConfig
   {
     auto config = PostProcessConfig {};
     auto requested = scene::ExposureSettings {};
@@ -1456,39 +1456,23 @@ namespace {
              ? captured_view->render_mode_override.value_or(ctx.render_mode)
              : ctx.render_mode)
         == RenderMode::kWireframe;
-    const auto& active = service.CaptureViewExposureSettings(
+    static_cast<void>(service.CaptureViewExposureSettings(
       captured_view ? captured_view->view_id : ctx.current_view.view_id,
       captured_view ? captured_view->view_state_handle
                     : ctx.current_view.view_state_handle,
-      requested, camera_ev, diagnostic, ctx.GetScene());
-    const auto& exposure = active.resolved.authored;
-    config.enable_auto_exposure
-      = exposure.enabled && exposure.mode == engine::ExposureMode::kAuto;
-    config.fixed_exposure = active.resolved.fixed_scale;
-    config.metering_mode = exposure.metering_mode;
-    config.auto_exposure_speed_up = exposure.speed_up;
-    config.auto_exposure_speed_down = exposure.speed_down;
-    config.auto_exposure_low_percentile = exposure.low_percentile;
-    config.auto_exposure_high_percentile = exposure.high_percentile;
-    config.auto_exposure_min_ev = exposure.min_ev;
-    config.auto_exposure_max_ev = exposure.max_ev;
-    config.auto_exposure_min_log_luminance = exposure.min_log_luminance;
-    config.auto_exposure_log_luminance_range = exposure.log_luminance_range;
-    config.auto_exposure_target_luminance = exposure.target_luminance;
-    config.auto_exposure_spot_meter_radius = exposure.spot_meter_radius;
-    config.resolved_exposure = active.resolved;
-    config.exposure_settings_revision = active.revision;
+      requested, camera_ev, diagnostic, ctx.GetScene()));
 
     if (diagnostic) {
       config.temporary_unit_exposure = true;
-      config.enable_auto_exposure = false;
-      config.fixed_exposure = 1.0F;
       config.tone_mapper = engine::ToneMapper::kNone;
       config.enable_bloom = false;
       config.bloom_intensity = 0.0F;
       config.bloom_threshold = 0.0F;
     }
-    return config;
+    return service.BuildPassConfig(config,
+      captured_view ? captured_view->view_id : ctx.current_view.view_id,
+      captured_view ? captured_view->view_state_handle
+                    : ctx.current_view.view_state_handle);
   }
 
   auto HasPublishedGBufferBindings(const SceneTextureBindings& bindings) -> bool
@@ -1664,7 +1648,7 @@ auto SceneRenderer::PrepareExposureDomain(RenderContext& ctx) -> bool
     || !ctx.current_view.feature_mask.Has(
       CompositionView::ViewFeatureMask::kSceneLighting))
     return true;
-  post_process_->SetConfig(
+  post_process_->SetResolvedConfig(
     ResolveAuthoredPostProcessConfig(ctx, *post_process_));
   // No product-suitability proof has been published yet. Retain the planned
   // FP32 mode until the completed-status admission path can certify all
@@ -2474,7 +2458,7 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
   auto prepared_exposure
     = std::optional<PostProcessService::PreparedExposure> {};
   if (post_process_ != nullptr && wants_scene_lighting) {
-    post_process_->SetConfig(
+    post_process_->SetResolvedConfig(
       ResolveAuthoredPostProcessConfig(ctx, *post_process_));
     auto* accumulated = scene_textures.GetSceneColorResource().get();
     CHECK_NOTNULL_F(accumulated);

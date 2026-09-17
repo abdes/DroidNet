@@ -124,7 +124,7 @@ namespace {
 
   auto SourceFallbackScale(const ExposurePass::Source& source) -> float
   {
-    const auto& initial = *source.config.resolved_exposure;
+    const auto& initial = source.config.Exposure();
     const bool automatic = initial.authored.enabled
       && initial.authored.mode == engine::ExposureMode::kAuto;
     auto log_gain = initial.initial_log_gain;
@@ -434,9 +434,9 @@ auto ExposurePass::AcquireFrame() -> std::shared_ptr<FrameResources>
 }
 
 auto ExposurePass::ResolveFrame(RenderContext& ctx,
-  const PostProcessConfig& config, const FrameInputs& inputs) -> FrameLease
+  const ResolvedPostProcessConfig& config, const FrameInputs& inputs)
+  -> FrameLease
 {
-  CHECK_F(config.resolved_exposure.has_value());
   CHECK_F(!inputs.transition
     || inputs.transition->target == ctx.current_view.view_state_handle);
   auto gfx = renderer_.GetGraphics();
@@ -449,7 +449,8 @@ auto ExposurePass::ResolveFrame(RenderContext& ctx,
   if (const auto found = resolved_frames_.find(key);
     found != resolved_frames_.end())
     return found->second;
-  const bool sharing = inputs.source && !config.temporary_unit_exposure;
+  const bool sharing
+    = inputs.source && !config.Settings().temporary_unit_exposure;
   const auto owner
     = sharing ? inputs.source->handle : ctx.current_view.view_state_handle;
   const auto lifetime = sharing ? inputs.source->lifetime : inputs.lifetime;
@@ -462,7 +463,7 @@ auto ExposurePass::ResolveFrame(RenderContext& ctx,
   frame->current_state->borrowed_from
     = sharing ? owner : CompositionView::kInvalidViewStateHandle;
   frame->current_state->borrowed_lifetime = sharing ? lifetime : 0U;
-  if (!config.temporary_unit_exposure) {
+  if (!config.Settings().temporary_unit_exposure) {
     const auto own = prior_states_.find(ctx.current_view.view_state_handle);
     if (own != prior_states_.end()
       && own->second->owner_lifetime == inputs.lifetime
@@ -471,7 +472,7 @@ auto ExposurePass::ResolveFrame(RenderContext& ctx,
         == frame->current_state->borrowed_lifetime)
       frame->precision_history = own->second;
   }
-  if (!config.temporary_unit_exposure) {
+  if (!config.Settings().temporary_unit_exposure) {
     if (const auto prior = prior_states_.find(owner);
       prior != prior_states_.end() && prior->second->owner_lifetime == lifetime)
       frame->selected_history = prior->second;
@@ -523,7 +524,7 @@ auto ExposurePass::ResolveFrame(RenderContext& ctx,
   if (frame->qualified_candidate)
     track(*frame->qualified_candidate->buffer,
       graphics::ResourceStates::kShaderResource);
-  const auto& resolved = *config.resolved_exposure;
+  const auto& resolved = config.Exposure();
   auto seed = std::optional<float> {};
   if (!sharing && !inputs.rejection && inputs.transition
     && inputs.transition->seed_ev
@@ -536,7 +537,8 @@ auto ExposurePass::ResolveFrame(RenderContext& ctx,
       seed = *resolved_seed;
   }
   const auto flags = (inputs.use_fp32 ? 1U : 0U) | (sharing ? 2U : 0U)
-    | (config.temporary_unit_exposure ? 4U : 0U) | (source_fallback ? 8U : 0U);
+    | (config.Settings().temporary_unit_exposure ? 4U : 0U)
+    | (source_fallback ? 8U : 0U);
   const auto constants = ExposureFrameConstants {
     .output_uav = frame->uav_index.get(),
     .current_state_uav = frame->current_state->uav_index.get(),
@@ -587,7 +589,7 @@ auto ExposurePass::ResolveFrame(RenderContext& ctx,
 }
 
 auto ExposurePass::RestoreFrameFallback(RenderContext& ctx,
-  const PostProcessConfig& config, const FrameResources& frame,
+  const ResolvedPostProcessConfig& config, const FrameResources& frame,
   StateLease fallback) -> bool
 {
   if (!fallback)
@@ -612,7 +614,7 @@ auto ExposurePass::RestoreFrameFallback(RenderContext& ctx,
   track(*fallback->buffer, graphics::ResourceStates::kShaderResource);
   track(
     *frame.current_state->buffer, graphics::ResourceStates::kUnorderedAccess);
-  const auto& settings = config.resolved_exposure->authored;
+  const auto& settings = config.Exposure().authored;
   const auto constants = ExposureFrameConstants {
     .current_state_uav = frame.current_state->uav_index.get(),
     .history_srv = fallback->srv_index.get(),
@@ -642,11 +644,11 @@ auto ExposurePass::RestoreFrameFallback(RenderContext& ctx,
 }
 
 auto ExposurePass::EvaluateFp16Products(RenderContext& ctx,
-  const FrameLease& frame, const PostProcessConfig& config,
+  const FrameLease& frame, const ResolvedPostProcessConfig& config,
   const std::span<const HdrProduct> products, const Inputs& metering,
   const SuitabilityScale scale) -> bool
 {
-  CHECK_F(frame && config.resolved_exposure);
+  CHECK_NOTNULL_F(frame.get());
   auto gfx = renderer_.GetGraphics();
   if (!gfx)
     return false;
@@ -716,20 +718,18 @@ auto ExposurePass::EvaluateFp16Products(RenderContext& ctx,
       flags | (scale == SuitabilityScale::kCurrentFrame ? 16U : 0U),
       product ? product->id : 0U, expected_mask,
       metering.metering_mask_srv.get(),
-      static_cast<std::uint32_t>(
-        config.resolved_exposure->authored.metering_mode),
+      static_cast<std::uint32_t>(config.Exposure().authored.metering_mode),
       static_cast<std::uint32_t>(rectangle.left),
       static_cast<std::uint32_t>(rectangle.top),
       static_cast<std::uint32_t>(std::max(0, rectangle.right - rectangle.left)),
       static_cast<std::uint32_t>(std::max(0, rectangle.bottom - rectangle.top)),
       std::bit_cast<std::uint32_t>(
-        config.resolved_exposure->authored.spot_meter_radius),
+        config.Exposure().authored.spot_meter_radius),
       std::bit_cast<std::uint32_t>(
         product ? product->error_budget_share : 1.0F),
       std::bit_cast<std::uint32_t>(
-        config.resolved_exposure->authored.min_log_luminance),
-      std::bit_cast<std::uint32_t>(
-        config.resolved_exposure->authored.black_influence)
+        config.Exposure().authored.min_log_luminance),
+      std::bit_cast<std::uint32_t>(config.Exposure().authored.black_influence)
     };
     const auto slot = suitability_constants_publisher_->Publish(
       ctx.current_view.view_id, constants);
@@ -850,7 +850,7 @@ auto ExposurePass::FinalizeFp16Suitability(RenderContext& ctx,
 }
 
 auto ExposurePass::ConvertCheckedSceneColor(RenderContext& ctx,
-  const FrameLease& frame, const PostProcessConfig& config,
+  const FrameLease& frame, const ResolvedPostProcessConfig& config,
   const Inputs& inputs, graphics::Texture& destination,
   const ShaderVisibleIndex destination_uav) -> bool
 {
@@ -914,20 +914,19 @@ auto ExposurePass::ConvertCheckedSceneColor(RenderContext& ctx,
   return recording && recording->IsSubmitted();
 }
 
-auto ExposurePass::Execute(RenderContext& ctx, const PostProcessConfig& config,
-  const Inputs& inputs) -> Result
+auto ExposurePass::Execute(RenderContext& ctx,
+  const ResolvedPostProcessConfig& config, const Inputs& inputs) -> Result
 {
-  CHECK_F(config.resolved_exposure.has_value(),
-    "Exposure requires resolved settings");
-  const auto& resolved = *config.resolved_exposure;
-  const bool sharing = inputs.source && !config.temporary_unit_exposure;
-  const bool automatic = !sharing && !config.temporary_unit_exposure
+  const auto& resolved = config.Exposure();
+  const bool sharing
+    = inputs.source && !config.Settings().temporary_unit_exposure;
+  const bool automatic = !sharing && !config.Settings().temporary_unit_exposure
     && resolved.authored.enabled
     && resolved.authored.mode == engine::ExposureMode::kAuto;
   auto result = Result { .requested = true,
     .used_fixed_exposure = !automatic && !sharing,
     .borrowed_exposure = sharing,
-    .exposure_value = config.temporary_unit_exposure ? 1.0F
+    .exposure_value = config.Settings().temporary_unit_exposure ? 1.0F
       : automatic ? (resolved.authored.target_luminance == 0.0F
                         ? 0.0F
                         : std::exp2(resolved.initial_log_gain))
@@ -946,7 +945,7 @@ auto ExposurePass::Execute(RenderContext& ctx, const PostProcessConfig& config,
   }
   CHECK_F(!inputs.transition || inputs.transition->target == handle,
     "Exposure transition targets a different view state");
-  auto* view = config.temporary_unit_exposure
+  auto* view = config.Settings().temporary_unit_exposure
       || handle == CompositionView::kInvalidViewStateHandle
     ? nullptr
     : &exposure_states_[handle];
@@ -985,8 +984,6 @@ auto ExposurePass::Execute(RenderContext& ctx, const PostProcessConfig& config,
     view->source_loss.reset();
   StateLease borrowed;
   if (sharing) {
-    CHECK_F(inputs.source->config.resolved_exposure.has_value(),
-      "A shared source requires captured canonical settings");
     CHECK_F(inputs.source->handle != handle
         && inputs.source->handle != CompositionView::kInvalidViewStateHandle,
       "A shared exposure source must be a distinct persistent root");
@@ -1092,13 +1089,14 @@ auto ExposurePass::Execute(RenderContext& ctx, const PostProcessConfig& config,
 }
 
 auto ExposurePass::RecordState(RenderContext& ctx,
-  const PostProcessConfig& config, const Inputs& inputs, StateLease previous,
-  StateLease borrowed, const bool bootstrap, const bool source_loss,
-  std::shared_ptr<StateResources> reserved) -> StateLease
+  const ResolvedPostProcessConfig& config, const Inputs& inputs,
+  StateLease previous, StateLease borrowed, const bool bootstrap,
+  const bool source_loss, std::shared_ptr<StateResources> reserved)
+  -> StateLease
 {
-  const auto& resolved = *config.resolved_exposure;
+  const auto& resolved = config.Exposure();
   const bool automatic = (!borrowed || source_loss) && !bootstrap
-    && !config.temporary_unit_exposure && resolved.authored.enabled
+    && !config.Settings().temporary_unit_exposure && resolved.authored.enabled
     && resolved.authored.mode == engine::ExposureMode::kAuto;
   auto gfx = renderer_.GetGraphics();
   CHECK_NOTNULL_F(gfx.get());
@@ -1384,7 +1382,7 @@ auto ExposurePass::AcquireState() -> std::shared_ptr<StateResources>
 
 auto ExposurePass::UpdateHistogramConstants(RenderContext& ctx,
   graphics::CommandRecorder& recorder, const Inputs& inputs,
-  const PostProcessConfig& config, const StateResources& state) -> void
+  const ResolvedPostProcessConfig& config, const StateResources& state) -> void
 {
   DCHECK_NOTNULL_F(constants_publisher_.get());
   const auto desc = inputs.scene_signal ? inputs.scene_signal->GetDescriptor()
@@ -1393,21 +1391,23 @@ auto ExposurePass::UpdateHistogramConstants(RenderContext& ctx,
   const auto constants = AutoExposureHistogramConstants {
     .source_texture_index = inputs.scene_signal_srv.get(),
     .histogram_buffer_index = state.histogram_uav_index.get(),
-    .min_log_luminance = config.auto_exposure_min_log_luminance,
-    .inv_log_luminance_range = 1.0F / config.auto_exposure_log_luminance_range,
+    .min_log_luminance = config.Exposure().authored.min_log_luminance,
+    .inv_log_luminance_range
+    = 1.0F / config.Exposure().authored.log_luminance_range,
     .metering_left = static_cast<std::uint32_t>(rectangle.left),
     .metering_top = static_cast<std::uint32_t>(rectangle.top),
     .metering_width
     = static_cast<std::uint32_t>(std::max(0, rectangle.right - rectangle.left)),
     .metering_height
     = static_cast<std::uint32_t>(std::max(0, rectangle.bottom - rectangle.top)),
-    .metering_mode = static_cast<std::uint32_t>(config.metering_mode),
-    .spot_meter_radius = config.auto_exposure_spot_meter_radius,
+    .metering_mode
+    = static_cast<std::uint32_t>(config.Exposure().authored.metering_mode),
+    .spot_meter_radius = config.Exposure().authored.spot_meter_radius,
     .mask_texture_index = inputs.metering_mask_srv.get(),
     .background_enabled
     = environment::ResolveSceneBackground(ctx).has_value() ? 1U : 0U,
     .one_over_pre_exposure = inputs.one_over_pre_exposure,
-    .black_influence = config.resolved_exposure->authored.black_influence,
+    .black_influence = config.Exposure().authored.black_influence,
     .frame_exposure_srv = inputs.frame_exposure
       ? inputs.frame_exposure->srv_index.get()
       : kInvalidShaderVisibleIndex.get(),
@@ -1427,7 +1427,7 @@ auto ExposurePass::UpdateHistogramConstants(RenderContext& ctx,
 }
 
 auto ExposurePass::UpdateAverageConstants(RenderContext& ctx,
-  graphics::CommandRecorder& recorder, const PostProcessConfig& config,
+  graphics::CommandRecorder& recorder, const ResolvedPostProcessConfig& config,
   const StateResources& state, const ShaderVisibleIndex targets_srv,
   const ShaderVisibleIndex previous_srv, const Inputs& inputs,
   ShaderVisibleIndex borrowed_srv, const bool bootstrap, const bool metering,
@@ -1440,17 +1440,18 @@ auto ExposurePass::UpdateAverageConstants(RenderContext& ctx,
       ? static_cast<float>(std::log2(static_cast<double>(value)))
       : -256.0F;
   };
-  const auto& resolved = *config.resolved_exposure;
+  const auto& resolved = config.Exposure();
   const auto seed = inputs.transition
       && inputs.transition->policy == ExposureTransitionPolicy::kSeedFromEv100
       && inputs.transition->seed_ev
     ? scene::ResolveExposureSeedLogGain(resolved, *inputs.transition->seed_ev)
     : std::expected<float, scene::ExposureSettingsError> { 0.0F };
-  const auto generation = inputs.transition && !config.temporary_unit_exposure
+  const auto generation
+    = inputs.transition && !config.Settings().temporary_unit_exposure
     ? inputs.transition->generation
     : 0U;
   std::uint32_t rejection = 0U;
-  if (inputs.rejection && !config.temporary_unit_exposure) {
+  if (inputs.rejection && !config.Settings().temporary_unit_exposure) {
     switch (*inputs.rejection) {
     case ExposureTransitionError::kNotAuto:
       rejection = 1U;
@@ -1469,35 +1470,36 @@ auto ExposurePass::UpdateAverageConstants(RenderContext& ctx,
     .histogram_buffer_index = metering ? state.histogram_uav_index.get()
                                        : kInvalidShaderVisibleIndex.get(),
     .exposure_buffer_index = state.uav_index.get(),
-    .min_log_luminance = config.auto_exposure_min_log_luminance,
-    .log_luminance_range = config.auto_exposure_log_luminance_range,
+    .min_log_luminance = config.Exposure().authored.min_log_luminance,
+    .log_luminance_range = config.Exposure().authored.log_luminance_range,
     .low_percentile
-    = std::clamp(config.auto_exposure_low_percentile, 0.0F, 1.0F),
+    = std::clamp(config.Exposure().authored.low_percentile, 0.0F, 1.0F),
     .high_percentile
-    = std::clamp(config.auto_exposure_high_percentile, 0.0F, 1.0F),
-    .min_ev = config.auto_exposure_min_ev,
+    = std::clamp(config.Exposure().authored.high_percentile, 0.0F, 1.0F),
+    .min_ev = config.Exposure().authored.min_ev,
     .log2_transition_distance
-    = log_rate(config.resolved_exposure->authored.transition_distance),
-    .log2_speed_up = log_rate(config.auto_exposure_speed_up),
-    .log2_speed_down = log_rate(config.auto_exposure_speed_down),
+    = log_rate(config.Exposure().authored.transition_distance),
+    .log2_speed_up = log_rate(config.Exposure().authored.speed_up),
+    .log2_speed_down = log_rate(config.Exposure().authored.speed_down),
     .log2_delta_time = log_rate(ctx.delta_time),
     .targets_srv = targets_srv.get(),
-    .settings_revision
-    = { static_cast<std::uint32_t>(config.exposure_settings_revision),
-      static_cast<std::uint32_t>(config.exposure_settings_revision >> 32U) },
+    .settings_revision = { static_cast<std::uint32_t>(config.Revision()),
+      static_cast<std::uint32_t>(config.Revision() >> 32U) },
     .frame_sequence = { static_cast<std::uint32_t>(ctx.frame_sequence.get()),
       static_cast<std::uint32_t>(ctx.frame_sequence.get() >> 32U) },
     .previous_state_srv = previous_srv.get(),
-    .fixed_scale = config.temporary_unit_exposure ? 1.0F : resolved.fixed_scale,
+    .fixed_scale
+    = config.Settings().temporary_unit_exposure ? 1.0F : resolved.fixed_scale,
     .exposure_mode
-    = !config.temporary_unit_exposure && resolved.authored.enabled
+    = !config.Settings().temporary_unit_exposure && resolved.authored.enabled
       ? static_cast<std::uint32_t>(resolved.authored.mode)
       : 3U,
     .control_flags = (seed.has_value() ? 0U : 1U) | (bootstrap ? 2U : 0U)
       | (rejection << 2U) | (source_loss ? 64U : 0U),
     .requested_generation = { static_cast<std::uint32_t>(generation),
       static_cast<std::uint32_t>(generation >> 32U) },
-    .transition_policy = inputs.transition && !config.temporary_unit_exposure
+    .transition_policy
+    = inputs.transition && !config.Settings().temporary_unit_exposure
       ? static_cast<std::uint32_t>(inputs.transition->policy) + 1U
       : 0U,
     .seed_log_gain = seed.value_or(0.0F),

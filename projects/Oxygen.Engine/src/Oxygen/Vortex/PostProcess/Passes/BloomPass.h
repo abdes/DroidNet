@@ -38,7 +38,8 @@ public:
   BloomPass(BloomPass&&) = delete;
   auto operator=(BloomPass&&) -> BloomPass& = delete;
 
-  [[nodiscard]] OXGN_VRTX_API auto Execute(const PostProcessConfig& config,
+  [[nodiscard]] OXGN_VRTX_API auto Execute(
+    const ResolvedPostProcessConfig& config,
     const PostProcessFrameBindings& bindings) const -> Result;
 
 private:

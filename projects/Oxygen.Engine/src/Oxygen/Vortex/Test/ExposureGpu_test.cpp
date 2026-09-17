@@ -286,22 +286,12 @@ protected:
     -> Snapshot
   {
     settings.key = 12.5F;
-    const auto resolved = scene::ResolveExposureSettings(settings, camera_ev);
+    auto authored = PostProcessConfig { .exposure = settings };
+    authored.temporary_unit_exposure = temporary_unit;
+    const auto resolved
+      = ResolvedPostProcessConfig::Resolve(authored, camera_ev, ++sequence_);
     CHECK_F(resolved.has_value());
-    auto config = PostProcessConfig {};
-    config.resolved_exposure = *resolved;
-    config.temporary_unit_exposure = temporary_unit;
-    config.exposure_settings_revision = ++sequence_;
-    config.metering_mode = settings.metering_mode;
-    config.auto_exposure_min_log_luminance = settings.min_log_luminance;
-    config.auto_exposure_log_luminance_range = settings.log_luminance_range;
-    config.auto_exposure_min_ev = settings.min_ev;
-    config.auto_exposure_max_ev = settings.max_ev;
-    config.auto_exposure_low_percentile = settings.low_percentile;
-    config.auto_exposure_high_percentile = settings.high_percentile;
-    config.auto_exposure_speed_up = settings.speed_up;
-    config.auto_exposure_speed_down = settings.speed_down;
-    config.auto_exposure_spot_meter_radius = settings.spot_meter_radius;
+    const auto& config = *resolved;
     ctx_.frame_sequence = frame::SequenceNumber { sequence_ };
     ctx_.delta_time = dt;
     const auto result = pass_->Execute(ctx_, config,
@@ -341,23 +331,16 @@ protected:
     ctx_.delta_time = dt;
     ctx_.render_mode = diagnostic ? RenderMode::kWireframe : RenderMode::kSolid;
     service.OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
-    const auto& accepted = service.CaptureViewExposureSettings(
+    [[maybe_unused]] const auto& accepted = service.CaptureViewExposureSettings(
       ctx_.current_view.view_id, ctx_.current_view.view_state_handle, settings,
       {}, diagnostic, ctx_.GetScene());
     auto config = PostProcessConfig {};
-    config.resolved_exposure = accepted.resolved;
-    config.exposure_settings_revision = accepted.revision;
-    config.auto_exposure_min_ev = settings.min_ev;
-    config.auto_exposure_max_ev = settings.max_ev;
-    config.auto_exposure_speed_up = settings.speed_up;
-    config.auto_exposure_speed_down = settings.speed_down;
-    config.enable_auto_exposure
-      = settings.enabled && settings.mode == engine::ExposureMode::kAuto;
     config.enable_bloom = false;
     config.bloom_intensity = 0.0F;
     config.tone_mapper = tone_mapper;
     config.gamma = 1.0F;
-    service.SetConfig(config);
+    service.SetResolvedConfig(service.BuildPassConfig(
+      config, ctx_.current_view.view_id, ctx_.current_view.view_state_handle));
     if (before_execute)
       before_execute();
     auto output_desc = TextureDesc {};
@@ -426,9 +409,10 @@ protected:
       *frame->suitability_buffer, ResourceStates::kShaderResource);
   }
 
-  auto EligibilityStep(const Signal& signal, const PostProcessConfig& config,
-    std::uint64_t sequence, std::uint64_t layout = 7U,
-    std::uint32_t expected = 1024U, bool invalidate_previous = false,
+  auto EligibilityStep(const Signal& signal,
+    const ResolvedPostProcessConfig& config, std::uint64_t sequence,
+    std::uint64_t layout = 7U, std::uint32_t expected = 1024U,
+    bool invalidate_previous = false,
     const postprocess::ExposurePass::Source* source = nullptr,
     std::optional<ExposureTransitionToken> transition = {},
     bool metering_available = true, bool capture_eligibility = false)
@@ -531,18 +515,17 @@ protected:
         .render_target = observer_ptr { target.get() } });
   }
   auto SharedConfig(scene::ExposureSettings settings = {},
-    std::optional<float> camera_ev = {}) -> PostProcessConfig
+    std::optional<float> camera_ev = {}, std::uint64_t revision = 1U)
+    -> ResolvedPostProcessConfig
   {
     settings.key = 12.5F;
-    auto config = PostProcessConfig {};
-    config.resolved_exposure
-      = *scene::ResolveExposureSettings(settings, camera_ev);
-    config.exposure_settings_revision = 1U;
-    config.auto_exposure_min_ev = settings.min_ev;
-    config.auto_exposure_max_ev = settings.max_ev;
-    return config;
+    const auto config = ResolvedPostProcessConfig::Resolve(
+      PostProcessConfig { .exposure = settings }, camera_ev, revision);
+    CHECK_F(config.has_value());
+    return *config;
   }
-  auto RecordShared(const Signal& signal, const PostProcessConfig& config,
+  auto RecordShared(const Signal& signal,
+    const ResolvedPostProcessConfig& config,
     const postprocess::ExposurePass::Source* source = nullptr,
     std::optional<ExposureTransitionToken> token = {},
     std::uint64_t lifetime = 0U) -> postprocess::ExposurePass::Result
@@ -1106,6 +1089,93 @@ NOLINT_TEST_F(
 }
 
 NOLINT_TEST_F(
+  ExposureGpuTest, SetConfigLoadsMasksAndRetainsAcceptedReplacementAtomically)
+{
+  auto loader = vortex::testing::FakeAssetLoader {};
+  auto service = PostProcessService(*renderer_, observer_ptr { &loader });
+  auto payload = vortex::testing::MakeCookedTexture1x1Rgba8Payload();
+  data::pak::render::TexturePayloadHeader header {};
+  std::memcpy(&header,
+    payload.data() + sizeof(data::pak::core::TextureResourceDesc),
+    sizeof(header));
+  payload[sizeof(data::pak::core::TextureResourceDesc)
+    + header.data_offset_bytes] = 128U;
+  auto config = PostProcessConfig {};
+  config.exposure.key = 12.5F;
+  config.exposure.metering_mask
+    = loader.PreloadCookedTexture(std::span(payload));
+  service.SetConfig(config);
+  const auto signal = Uniform(.25F);
+  const auto render = [&] {
+    ++sequence_;
+    ctx_.frame_sequence = frame::SequenceNumber { sequence_ };
+    ctx_.frame_slot = frame::Slot { static_cast<unsigned>(sequence_ % 3U) };
+    renderer_->GetUploadCoordinator().OnFrameStart(
+      internal::RendererTagFactory::Get(), ctx_.frame_slot);
+    service.OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
+    return service.PrepareSceneExposure(ctx_.current_view.view_id, ctx_,
+      { .scene_signal = signal.texture.get(), .scene_signal_srv = signal.srv });
+  };
+  auto prepared = render();
+  ASSERT_TRUE(prepared.has_value());
+  EXPECT_EQ(prepared->config.Exposure().authored.metering_mask.get(), 0U);
+  EXPECT_EQ(ReadState(prepared->exposure).flags & 4U, 0U);
+  for (unsigned i = 0U; i < 8U
+    && prepared->config.Exposure().authored.metering_mask
+      != config.exposure.metering_mask;
+    ++i) {
+    WaitForQueueIdle();
+    prepared = render();
+    ASSERT_TRUE(prepared.has_value());
+  }
+  ASSERT_EQ(prepared->config.Exposure().authored, config.exposure);
+  const auto histogram = Read<std::array<std::uint32_t, 264>>(
+    *prepared->exposure.histogram_buffer, ResourceStates::kCommon);
+  EXPECT_EQ(histogram[102], 2056U);
+  EXPECT_EQ(histogram[257], 1U);
+  const auto accepted = prepared->config;
+  const auto accepted_state = ReadState(prepared->exposure);
+  EXPECT_NEAR(accepted_state.displayed_scale, .72F, 2e-4F);
+  config.exposure.metering_mask = loader.MintSyntheticTextureKey();
+  config.exposure.compensation_ev = 1.0F;
+  service.SetConfig(config);
+  for (unsigned i = 0U; i < 3U; ++i) {
+    WaitForQueueIdle();
+    prepared = render();
+    ASSERT_TRUE(prepared.has_value());
+    EXPECT_EQ(
+      prepared->config.Exposure().authored, accepted.Exposure().authored);
+    EXPECT_EQ(prepared->config.Revision(), accepted.Revision());
+    EXPECT_EQ(
+      (Read<std::array<std::uint32_t, 264>>(
+        *prepared->exposure.histogram_buffer, ResourceStates::kCommon)[102]),
+      2056U);
+    EXPECT_EQ(ReadState(prepared->exposure).displayed_scale,
+      accepted_state.displayed_scale);
+  }
+  // The scene entry point supplies the same authored request through capture.
+  ctx_.current_view.view_state_handle
+    = CompositionView::ViewStateHandle { 902U };
+  ctx_.current_view.view_id = ViewId { 902U };
+  service.OnFrameStart(frame::SequenceNumber { ++sequence_ }, ctx_.frame_slot);
+  ctx_.frame_sequence = frame::SequenceNumber { sequence_ };
+  static_cast<void>(
+    service.CaptureViewExposureSettings(ctx_.current_view.view_id,
+      ctx_.current_view.view_state_handle, accepted.Exposure().authored));
+  const auto scene_result
+    = service.PrepareSceneExposure(ctx_.current_view.view_id, ctx_,
+      { .scene_signal = signal.texture.get(), .scene_signal_srv = signal.srv });
+  ASSERT_TRUE(scene_result.has_value());
+  EXPECT_EQ(ReadState(scene_result->exposure).displayed_scale,
+    accepted_state.displayed_scale);
+  EXPECT_EQ(
+    (Read<std::array<std::uint32_t, 264>>(
+      *scene_result->exposure.histogram_buffer, ResourceStates::kCommon)),
+    histogram);
+  WaitForQueueIdle();
+}
+
+NOLINT_TEST_F(
   ExposureGpuTest, LockedServiceGainReachesTonemapDespitePendingOrFailedMask)
 {
   auto loader = vortex::testing::FakeAssetLoader {};
@@ -1146,17 +1216,16 @@ NOLINT_TEST_F(
           PostProcessService::ExposureMaskStatus::kFailed);
       }
       requested.min_ev = requested.max_ev = 2.0F;
-      const auto& accepted
-        = service.ResolveViewExposureSettings(handle, requested);
+      const auto& accepted = service.CaptureViewExposureSettings(
+        ctx_.current_view.view_id, handle, requested);
       ASSERT_EQ(accepted.resolved.authored.min_ev, 2.0F);
       auto config = PostProcessConfig {};
-      config.resolved_exposure = accepted.resolved;
-      config.auto_exposure_min_ev = config.auto_exposure_max_ev = 2.0F;
       config.enable_bloom = false;
       config.bloom_intensity = 0.0F;
       config.tone_mapper = engine::ToneMapper::kNone;
       config.gamma = 1.0F;
-      service.SetConfig(config);
+      service.SetResolvedConfig(service.BuildPassConfig(config,
+        ctx_.current_view.view_id, ctx_.current_view.view_state_handle));
       ctx_.delta_time = 0.0F;
       service.Execute(ctx_.current_view.view_id, ctx_, textures,
         {
@@ -1443,6 +1512,29 @@ NOLINT_TEST_F(ExposureGpuTest, PriorStateLeaseRemainsImmutableAcrossLaterSolves)
   EXPECT_EQ(reread.frame_sequence, first.state.frame_sequence);
 }
 
+NOLINT_TEST_F(ExposureGpuTest, SceneAndDirectSettingsUseIdenticalGainsAndRates)
+{
+  auto service = PostProcessService(*renderer_);
+  auto settings = scene::ExposureSettings {};
+  settings.speed_up = .875F;
+  settings.speed_down = .625F;
+  const auto initial = Uniform(.25F, 4U, 4U);
+  const auto bright = Uniform(.5F, 4U, 4U);
+  const auto dark = Uniform(.015625F, 4U, 4U);
+  const auto compare = [&](const Signal& signal, float luminance, float dt) {
+    const auto direct = Run(signal, settings, dt);
+    const auto pixel = ServicePixel(service, signal, settings, false, dt);
+    EXPECT_NEAR(pixel, luminance * direct.state.displayed_scale, 2e-5F);
+  };
+  compare(initial, .25F, 0.0F);
+  compare(bright, .5F, .25F);
+  compare(dark, .015625F, .25F);
+  settings.mode = engine::ExposureMode::kManual;
+  settings.manual_ev = 14.0F;
+  compare(bright, .5F, 0.0F);
+  EXPECT_NEAR(ServicePixel(service, bright, settings), 0x1p-15F, 1e-7F);
+}
+
 NOLINT_TEST_F(ExposureGpuTest,
   TwoViewsInitializeIndependentlyWithoutWaitingBetweenSubmissions)
 {
@@ -1450,15 +1542,14 @@ NOLINT_TEST_F(ExposureGpuTest,
   settings.mode = engine::ExposureMode::kManual;
   settings.key = 12.5F;
   settings.manual_ev = 4.0F;
-  auto config = PostProcessConfig {};
-  config.resolved_exposure = *scene::ResolveExposureSettings(settings);
+  auto config = SharedConfig(settings);
   ctx_.frame_sequence = frame::SequenceNumber { 1U };
   const auto first = pass_->Execute(ctx_, config, {});
   ASSERT_TRUE(first.executed);
   ctx_.current_view.view_state_handle = CompositionView::ViewStateHandle { 2U };
   ctx_.current_view.view_id = ViewId { 2U };
   settings.manual_ev = 8.0F;
-  config.resolved_exposure = *scene::ResolveExposureSettings(settings);
+  config = SharedConfig(settings);
   const auto second = pass_->Execute(ctx_, config, {});
   ASSERT_TRUE(second.executed);
   EXPECT_NE(first.exposure_buffer, second.exposure_buffer);
@@ -1702,9 +1793,7 @@ NOLINT_TEST_F(
     const auto& late = service.ResolveViewExposureSettings(
       ctx_.current_view.view_state_handle, settings);
     auto config = service.GetConfig();
-    config.resolved_exposure = late.resolved;
-    config.exposure_settings_revision = late.revision;
-    config.enable_auto_exposure = true;
+    config.exposure = late.resolved.authored;
     service.SetConfig(config);
   });
   EXPECT_NEAR(pixel, .25F / 16.0F, 2e-5F);
@@ -1730,8 +1819,7 @@ NOLINT_TEST_F(
     const auto& late = service.ResolveViewExposureSettings(
       ctx_.current_view.view_state_handle, settings);
     auto config = service.GetConfig();
-    config.resolved_exposure = late.resolved;
-    config.exposure_settings_revision = late.revision;
+    config.exposure = late.resolved.authored;
     service.SetConfig(config);
   });
   // The initial invalid-mask fallback uses the canonical key 10 at EV0.
@@ -3264,7 +3352,7 @@ NOLINT_TEST_F(ExposureGpuTest,
     1.0F);
   ctx_.frame_sequence = frame::SequenceNumber { 3U };
   auto diagnostic = SharedConfig();
-  diagnostic.temporary_unit_exposure = true;
+  diagnostic = diagnostic.WithDiagnosticOverride(true);
   const auto unit = pass_->ResolveFrame(ctx_, diagnostic, {});
   ASSERT_NE(unit, nullptr);
   const auto unit_frame
@@ -3933,7 +4021,7 @@ NOLINT_TEST_F(ExposureGpuTest,
     auto* service
       = vortex::testing::RendererPublicationProbe::GetPostProcessService(
         *owner);
-    service->SetConfig(SharedConfig(settings));
+    service->SetResolvedConfig(SharedConfig(settings));
     ASSERT_NE(service->PrepareFrameExposure(ctx, false), nullptr);
   };
   renderer_->RegisterViewExtension(extension);
@@ -4571,8 +4659,7 @@ NOLINT_TEST_F(
         = vortex::testing::RendererPublicationProbe::GetPostProcessService(
           *owner);
       auto cfg = PostProcessConfig {};
-      cfg.resolved_exposure = *scene::ResolveExposureSettings(
-        *hook.render_context.current_view.exposure_override);
+      cfg.exposure = *hook.render_context.current_view.exposure_override;
       service->SetConfig(cfg);
       ASSERT_NE(
         service->PrepareFrameExposure(hook.render_context, false), nullptr);
@@ -4967,7 +5054,6 @@ NOLINT_TEST_F(ExposureGpuTest,
     settings.manual_ev = test_case.ev;
     settings.min_log_luminance = -24.0F;
     auto config = SharedConfig(settings);
-    config.auto_exposure_min_log_luminance = settings.min_log_luminance;
     std::vector<Pixel> pixels(width * height, ordinary);
     pixels.back() = test_case.pixel;
     const auto signal = MakeSignal(width, height, pixels);
@@ -5076,15 +5162,15 @@ NOLINT_TEST_F(ExposureGpuTest,
     auto settings = scene::ExposureSettings {};
     settings.key = 12.5F;
     service.OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
-    const auto& accepted = service.CaptureViewExposureSettings(
+    [[maybe_unused]] const auto& accepted = service.CaptureViewExposureSettings(
       ctx_.current_view.view_id, ctx_.current_view.view_state_handle, settings);
-    auto config = SharedConfig(settings);
-    config.exposure_settings_revision = accepted.revision;
+    auto config = PostProcessConfig { .exposure = settings };
     config.tone_mapper = engine::ToneMapper::kNone;
     config.gamma = 1.0F;
     config.enable_bloom = false;
     config.bloom_intensity = 0.0F;
-    service.SetConfig(config);
+    service.SetResolvedConfig(service.BuildPassConfig(
+      config, ctx_.current_view.view_id, ctx_.current_view.view_state_handle));
     ASSERT_NE(service.PrepareFrameExposure(ctx_, true), nullptr);
     const auto accumulation = Uniform(.25F, 4U, 4U);
     const auto resolved = Uniform(.5F, 4U, 4U);
@@ -5141,15 +5227,15 @@ NOLINT_TEST_F(ExposureGpuTest,
     settings.mode = engine::ExposureMode::kManual;
     settings.manual_ev = test_case.ev;
     settings.key = 12.5F;
-    const auto& accepted = service.CaptureViewExposureSettings(
+    [[maybe_unused]] const auto& accepted = service.CaptureViewExposureSettings(
       ctx_.current_view.view_id, ctx_.current_view.view_state_handle, settings);
-    auto config = SharedConfig(settings);
-    config.exposure_settings_revision = accepted.revision;
+    auto config = PostProcessConfig { .exposure = settings };
     config.tone_mapper = engine::ToneMapper::kNone;
     config.gamma = 1.0F;
     config.enable_bloom = false;
     config.bloom_intensity = 0.0F;
-    service.SetConfig(config);
+    service.SetResolvedConfig(service.BuildPassConfig(
+      config, ctx_.current_view.view_id, ctx_.current_view.view_state_handle));
     const auto frame = service.PrepareFrameExposure(ctx_, test_case.fp32);
     ASSERT_NE(frame, nullptr);
     std::array<Pixel, 16U> pixels;
@@ -5262,9 +5348,8 @@ NOLINT_TEST_F(
       pending ? PostProcessService::ExposureMaskStatus::kPending
               : PostProcessService::ExposureMaskStatus::kFailed);
     auto config = PostProcessConfig {};
-    config.resolved_exposure = captured.resolved;
-    config.exposure_settings_revision = captured.revision;
-    service.SetConfig(config);
+    service.SetResolvedConfig(service.BuildPassConfig(
+      config, ctx_.current_view.view_id, ctx_.current_view.view_state_handle));
     ASSERT_NE(service.PrepareFrameExposure(ctx_, true), nullptr);
     const auto source = Uniform(.25F, 4U, 4U);
     const auto inputs
@@ -5344,7 +5429,7 @@ NOLINT_TEST_F(ExposureGpuTest,
     = [&](std::uint64_t sequence, std::uint64_t layout, std::uint64_t revision,
         const Signal& signal, std::uint32_t expected = 1024U,
         bool invalidate = false, bool metering_available = true) {
-        config.exposure_settings_revision = revision;
+        config = SharedConfig(settings, {}, revision);
         return EligibilityStep(signal, config, sequence, layout, expected,
           invalidate, nullptr, *token, metering_available, sequence == 2U);
       };
@@ -5440,10 +5525,10 @@ NOLINT_TEST_F(
   EXPECT_EQ(EligibilityStep(signal, config, 2U).first.fp16_eligible_streak, 0U);
   ctx_.current_view.view_state_handle
     = CompositionView::ViewStateHandle { 30U };
-  config.temporary_unit_exposure = true;
+  config = config.WithDiagnosticOverride(true);
   EXPECT_EQ(EligibilityStep(signal, config, 3U).first.fp16_eligible_streak, 0U);
   EXPECT_EQ(EligibilityStep(signal, config, 4U).first.fp16_eligible_streak, 0U);
-  config.temporary_unit_exposure = false;
+  config = config.WithDiagnosticOverride(false);
   EXPECT_EQ(EligibilityStep(signal, config, 5U).first.fp16_eligible_streak, 1U);
   EXPECT_EQ(EligibilityStep(signal, config, 6U).first.fp16_eligible_streak, 2U);
   ctx_.frame_sequence = frame::SequenceNumber { 7U };

@@ -56,6 +56,7 @@ using oxygen::vortex::PostProcessService;
 using oxygen::vortex::RenderContext;
 using oxygen::vortex::Renderer;
 using oxygen::vortex::RendererCapabilityFamily;
+using oxygen::vortex::ResolvedPostProcessConfig;
 using oxygen::vortex::SceneTextures;
 using oxygen::vortex::SceneTexturesConfig;
 using oxygen::vortex::testing::FakeGraphics;
@@ -124,8 +125,11 @@ NOLINT_TEST(PostProcessServiceSurfaceTest,
   const auto config = PostProcessConfig {};
 
   EXPECT_TRUE(config.enable_bloom);
-  EXPECT_TRUE(config.enable_auto_exposure);
-  EXPECT_FLOAT_EQ(config.fixed_exposure, 1.0F);
+  EXPECT_TRUE(config.exposure.enabled);
+  EXPECT_EQ(config.exposure.mode, oxygen::engine::ExposureMode::kAuto);
+  EXPECT_FLOAT_EQ(
+    ResolvedPostProcessConfig::Resolve(config)->Exposure().fixed_scale, 1.0F);
+  EXPECT_FLOAT_EQ(config.exposure.speed_down, 1.0F);
   EXPECT_FLOAT_EQ(config.bloom_intensity, 0.5F);
   EXPECT_FLOAT_EQ(config.bloom_threshold, 1.0F);
 }
@@ -170,6 +174,60 @@ protected:
   std::shared_ptr<FakeGraphics> graphics_ {};
   std::shared_ptr<Renderer> renderer_ {};
 };
+
+NOLINT_TEST_F(PostProcessServiceBehaviorTest, ReadModifyApplyUsesEditedExposure)
+{
+  auto service = PostProcessService(*renderer_);
+  auto config = service.GetConfig();
+  config.exposure.mode = oxygen::engine::ExposureMode::kManual;
+  config.exposure.key = 12.5F;
+  config.exposure.manual_ev = 2.0F;
+  config.exposure.speed_down = .75F;
+  service.SetConfig(config);
+  auto context = RenderContext {};
+  context.current_view.view_id = ViewId { 501U };
+  context.current_view.view_state_handle
+    = oxygen::vortex::CompositionView::ViewStateHandle { 501U };
+  context.frame_sequence = oxygen::frame::SequenceNumber { 1U };
+  context.frame_slot = oxygen::frame::Slot { 0U };
+  service.OnFrameStart(context.frame_sequence, context.frame_slot);
+  auto textures
+    = SceneTextures(*graphics_, SceneTexturesConfig { .extent = { 4U, 4U } });
+  service.Execute(context.current_view.view_id, context, textures,
+    { .scene_signal = &textures.GetSceneColor(),
+      .scene_signal_srv = oxygen::ShaderVisibleIndex { 301U } });
+  const auto* bindings = service.InspectBindings(context.current_view.view_id);
+  ASSERT_NE(bindings, nullptr);
+  EXPECT_EQ(bindings->enable_auto_exposure, 0U);
+  EXPECT_EQ(bindings->fixed_exposure, .25F);
+  EXPECT_EQ(bindings->auto_exposure_speed_down, .75F);
+}
+
+NOLINT_TEST_F(PostProcessServiceBehaviorTest,
+  CameraContextSurvivesReadModifyApplyAndRejection)
+{
+  auto service = PostProcessService(*renderer_);
+  auto config = service.GetConfig();
+  config.exposure.mode = oxygen::engine::ExposureMode::kManualCamera;
+  config.exposure.key = 12.5F;
+  service.SetConfig(config, 4.0F);
+  EXPECT_EQ(service.BuildBindings({}).fixed_exposure, 0x1p-4F);
+  config = service.GetConfig();
+  config.exposure.compensation_ev = 1.0F;
+  config.exposure.speed_down = .75F;
+  service.SetConfig(config);
+  EXPECT_EQ(service.BuildBindings({}).fixed_exposure, 0x1p-3F);
+  const auto accepted = service.GetConfig();
+  config.exposure.low_percentile = config.exposure.high_percentile;
+  config.gamma = 1.0F;
+  service.SetConfig(config, 12.0F);
+  EXPECT_EQ(service.GetConfig(), accepted);
+  config = service.GetConfig();
+  config.exposure.compensation_ev = 2.0F;
+  service.SetConfig(config);
+  EXPECT_EQ(service.BuildBindings({}).fixed_exposure, .25F);
+  EXPECT_EQ(service.BuildBindings({}).auto_exposure_speed_down, .75F);
+}
 
 NOLINT_TEST_F(PostProcessServiceBehaviorTest,
   ExecutePublishesStage22BindingsAndRecordsTonemapVisibleOutput)
@@ -229,8 +287,8 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
 {
   auto service = PostProcessService(*renderer_);
   auto config = PostProcessConfig {};
-  config.auto_exposure_min_ev = -3.5F;
-  config.auto_exposure_max_ev = 11.25F;
+  config.exposure.min_ev = -3.5F;
+  config.exposure.max_ev = 11.25F;
   service.SetConfig(config);
 
   auto scene_textures = SceneTextures(*graphics_,
@@ -263,8 +321,8 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
 
   const auto* bindings = service.InspectBindings(context.current_view.view_id);
   ASSERT_NE(bindings, nullptr);
-  EXPECT_FLOAT_EQ(bindings->auto_exposure_min_ev, config.auto_exposure_min_ev);
-  EXPECT_FLOAT_EQ(bindings->auto_exposure_max_ev, config.auto_exposure_max_ev);
+  EXPECT_FLOAT_EQ(bindings->auto_exposure_min_ev, config.exposure.min_ev);
+  EXPECT_FLOAT_EQ(bindings->auto_exposure_max_ev, config.exposure.max_ev);
 }
 
 NOLINT_TEST_F(PostProcessServiceBehaviorTest,
@@ -293,9 +351,10 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
       = oxygen::frame::SequenceNumber { context.frame_sequence.get() + 1U };
     service.OnFrameStart(context.frame_sequence, context.frame_slot);
     auto config = PostProcessConfig {};
-    config.enable_auto_exposure = false;
+    config.exposure.mode = oxygen::engine::ExposureMode::kManual;
+    config.exposure.key = 12.5F;
     config.enable_bloom = false;
-    config.fixed_exposure = gain;
+    config.exposure.manual_ev = -std::log2(gain);
     config.tone_mapper = oxygen::engine::ToneMapper::kNone;
     config.gamma = 1.0F;
     service.SetConfig(config);
@@ -359,15 +418,20 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
 {
   auto service = PostProcessService(*renderer_);
   auto config = PostProcessConfig {};
-  config.enable_auto_exposure = false;
-  config.fixed_exposure = 0x1p-14F;
+  config.exposure.mode = oxygen::engine::ExposureMode::kManual;
+  config.exposure.key = 12.5F;
+  config.exposure.manual_ev = 14.0F;
   service.SetConfig(config);
   for (const float invalid :
-    { 0.0F, -1.0F, std::numeric_limits<float>::infinity(),
+    { 100.0F, -100.0F, std::numeric_limits<float>::infinity(),
       std::numeric_limits<float>::quiet_NaN() }) {
-    config.fixed_exposure = invalid;
+    config.exposure.manual_ev = invalid;
+    config.gamma = 1.0F;
+    config.exposure.speed_down = .75F;
     service.SetConfig(config);
-    EXPECT_EQ(service.GetConfig().fixed_exposure, 0x1p-14F);
+    EXPECT_EQ(service.GetConfig().exposure.manual_ev, 14.0F);
+    EXPECT_EQ(service.GetConfig().gamma, 2.2F);
+    EXPECT_EQ(service.GetConfig().exposure.speed_down, 1.0F);
   }
 }
 
@@ -519,10 +583,7 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
   service.OnFrameStart(context.frame_sequence, context.frame_slot);
   auto requested = oxygen::scene::ExposureSettings {};
   requested.metering_mask = oxygen::content::ResourceKey { 123U };
-  const auto failed
-    = service.ResolveViewExposureSettings(Handle { 1U }, requested);
-  auto config = PostProcessConfig {};
-  config.resolved_exposure = failed.resolved;
+  auto config = PostProcessConfig { .exposure = requested };
   service.SetConfig(config);
   auto textures
     = SceneTextures(*graphics_, SceneTexturesConfig { .extent = { 64U, 64U } });
@@ -537,8 +598,9 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
   context.frame_sequence = oxygen::frame::SequenceNumber { 2U };
   service.OnFrameStart(context.frame_sequence, context.frame_slot);
   requested.metering_mask = {};
-  config.resolved_exposure
-    = service.ResolveViewExposureSettings(Handle { 1U }, requested).resolved;
+  config.exposure
+    = service.ResolveViewExposureSettings(Handle { 1U }, requested)
+        .resolved.authored;
   service.SetConfig(config);
   graphics_->dispatch_log_.dispatches.clear();
   service.Execute(context.current_view.view_id, context, textures, inputs);
@@ -579,9 +641,8 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
   std::weak_ptr<const oxygen::vortex::resources::TextureBinder::ReadyTexture>
     frame_lease = ready.mask;
   auto config = PostProcessConfig {};
-  config.resolved_exposure = ready.resolved;
-  config.exposure_settings_revision = ready.revision;
-  service.SetConfig(config);
+  service.SetResolvedConfig(
+    service.BuildPassConfig(config, ViewId { 1U }, Handle { 1U }));
   auto context = RenderContext {};
   context.current_view.view_id = ViewId { 1U };
   context.current_view.view_state_handle = Handle { 1U };
@@ -709,8 +770,8 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
   settings.mode = oxygen::engine::ExposureMode::kManual;
   settings.key = 12.5F;
   settings.manual_ev = 4.0F;
-  auto config = PostProcessConfig {};
-  config.resolved_exposure = *oxygen::scene::ResolveExposureSettings(settings);
+  const auto config = *ResolvedPostProcessConfig::Resolve(
+    PostProcessConfig { .exposure = settings });
   auto context = RenderContext {};
   context.frame_slot = oxygen::frame::Slot { 0U };
   context.frame_sequence = oxygen::frame::SequenceNumber { 1U };
@@ -836,8 +897,8 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
   settings.key = 12.5F;
   settings.mode = oxygen::engine::ExposureMode::kManual;
   settings.manual_ev = 4.0F;
-  auto config = PostProcessConfig {};
-  config.resolved_exposure = *oxygen::scene::ResolveExposureSettings(settings);
+  const auto config = *ResolvedPostProcessConfig::Resolve(
+    PostProcessConfig { .exposure = settings });
   auto context = RenderContext {};
   context.current_view.view_id = ViewId { 2U };
   context.current_view.view_state_handle = Handle { 2U };
@@ -846,9 +907,8 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
   const auto independent = pass.Execute(context, config, {});
   ASSERT_TRUE(independent.executed);
   settings.mode = oxygen::engine::ExposureMode::kAuto;
-  auto source_config = PostProcessConfig {};
-  source_config.resolved_exposure
-    = *oxygen::scene::ResolveExposureSettings(settings);
+  const auto source_config = *ResolvedPostProcessConfig::Resolve(
+    PostProcessConfig { .exposure = settings });
   const auto seed = renderer_->QueueExposureTransition(
     Handle { 1U }, Policy::kSeedFromEv100, 8.0F);
   ASSERT_TRUE(seed.has_value());

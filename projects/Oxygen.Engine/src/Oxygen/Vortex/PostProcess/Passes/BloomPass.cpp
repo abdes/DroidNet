@@ -19,14 +19,14 @@ BloomPass::BloomPass(Renderer& renderer)
 
 BloomPass::~BloomPass() = default;
 
-auto BloomPass::Execute(const PostProcessConfig& config,
+auto BloomPass::Execute(const ResolvedPostProcessConfig& config,
   const PostProcessFrameBindings& bindings) const -> Result
 {
   static_cast<void>(renderer_);
   const auto output = bloom_chain_->ResolveOutput(bindings);
   return {
-    .requested = config.enable_bloom,
-    .executed = config.enable_bloom && output.ready,
+    .requested = config.Settings().enable_bloom,
+    .executed = config.Settings().enable_bloom && output.ready,
     .bloom_texture_srv = output.bloom_texture_srv,
   };
 }

@@ -80,7 +80,7 @@ public:
 
   struct Source {
     CompositionView::ViewStateHandle handle;
-    PostProcessConfig config;
+    ResolvedPostProcessConfig config;
     std::optional<ExposureTransitionToken> transition;
     std::optional<ExposureTransitionError> rejection;
     std::uint64_t lifetime { 0U };
@@ -137,7 +137,7 @@ public:
   //! Evaluate FP32 reference products without granting normal-mode admission.
   enum class SuitabilityScale { kCandidate, kCurrentFrame };
   [[nodiscard]] OXGN_VRTX_API auto EvaluateFp16Products(RenderContext& ctx,
-    const FrameLease& frame, const PostProcessConfig& config,
+    const FrameLease& frame, const ResolvedPostProcessConfig& config,
     std::span<const HdrProduct> products, const Inputs& metering,
     SuitabilityScale scale = SuitabilityScale::kCandidate) -> bool;
   struct EligibilityInputs {
@@ -155,7 +155,7 @@ public:
   //! remains untouched and must not be published as valid or sampled
   //! downstream.
   [[nodiscard]] OXGN_VRTX_API auto ConvertCheckedSceneColor(RenderContext& ctx,
-    const FrameLease& frame, const PostProcessConfig& config,
+    const FrameLease& frame, const ResolvedPostProcessConfig& config,
     const Inputs& inputs, graphics::Texture& destination,
     ShaderVisibleIndex destination_uav) -> bool;
 
@@ -168,10 +168,11 @@ public:
   auto operator=(ExposurePass&&) -> ExposurePass& = delete;
 
   [[nodiscard]] OXGN_VRTX_API auto Execute(RenderContext& ctx,
-    const PostProcessConfig& config, const Inputs& inputs) -> Result;
+    const ResolvedPostProcessConfig& config, const Inputs& inputs) -> Result;
   //! GPU-only numerical resolve; publication must precede dependent HDR work.
   [[nodiscard]] OXGN_VRTX_API auto ResolveFrame(RenderContext& ctx,
-    const PostProcessConfig& config, const FrameInputs& inputs) -> FrameLease;
+    const ResolvedPostProcessConfig& config, const FrameInputs& inputs)
+    -> FrameLease;
   OXGN_VRTX_API auto OnFrameStart(
     frame::SequenceNumber sequence, frame::Slot slot) -> void;
   OXGN_VRTX_API auto RemoveViewState(
@@ -205,9 +206,9 @@ private:
   auto PreparePublishers(RenderContext& ctx) -> void;
   auto AcquireFrame() -> std::shared_ptr<FrameResources>;
   auto RestoreFrameFallback(RenderContext& ctx,
-    const PostProcessConfig& config, const FrameResources& frame,
+    const ResolvedPostProcessConfig& config, const FrameResources& frame,
     StateLease fallback) -> bool;
-  auto RecordState(RenderContext& ctx, const PostProcessConfig& config,
+  auto RecordState(RenderContext& ctx, const ResolvedPostProcessConfig& config,
     const Inputs& inputs, StateLease previous, StateLease borrowed,
     bool bootstrap = false, bool source_loss = false,
     std::shared_ptr<StateResources> reserved = {}) -> StateLease;
@@ -215,13 +216,14 @@ private:
   auto EnsureHistogramBuffer(StateResources& state) -> void;
   auto UpdateHistogramConstants(RenderContext& ctx,
     graphics::CommandRecorder& recorder, const Inputs& inputs,
-    const PostProcessConfig& config, const StateResources& state) -> void;
+    const ResolvedPostProcessConfig& config, const StateResources& state)
+    -> void;
   auto UpdateAverageConstants(RenderContext& ctx,
-    graphics::CommandRecorder& recorder, const PostProcessConfig& config,
-    const StateResources& state, ShaderVisibleIndex targets_srv,
-    ShaderVisibleIndex previous_srv, const Inputs& inputs,
-    ShaderVisibleIndex borrowed_srv, bool bootstrap, bool metering,
-    bool source_loss) -> void;
+    graphics::CommandRecorder& recorder,
+    const ResolvedPostProcessConfig& config, const StateResources& state,
+    ShaderVisibleIndex targets_srv, ShaderVisibleIndex previous_srv,
+    const Inputs& inputs, ShaderVisibleIndex borrowed_srv, bool bootstrap,
+    bool metering, bool source_loss) -> void;
   auto ReleaseExposureResources() -> void;
 
   Renderer& renderer_;
