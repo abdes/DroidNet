@@ -2,10 +2,9 @@
 
 Status: `active milestone ledger`
 
-This file records Vortex implementation status at milestone granularity. It is
-not a commit log. Each milestone gets one ledger item that is updated in place
-with the current implementation evidence, validation evidence, and residual
-gap.
+This file records milestone status and the item-level exposure delivery tracker
+in section 3. It is not a commit log. Update each existing item in place with
+its implementation evidence, validation evidence, and remaining work.
 
 ## 1. Ledger Rules
 
@@ -17,6 +16,9 @@ gap.
    docs/plans are current, and validation evidence is stated in the row.
 5. If scope changes, update the design document and detailed milestone plan
    before claiming progress.
+6. For exposure delivery, update **Current work** before starting the next item.
+   At each implementation checkpoint, update the affected work-item statuses,
+   evidence and remaining gate. A validated component does not close its slice.
 
 ## 2. Status Vocabulary
 
@@ -32,8 +34,8 @@ gap.
 ## 3. Exposure delivery status
 
 The [implementation plan](plan/exposure-and-lightbench-correction.md) owns the
-requirements, delivery order and acceptance gates for all ten slices. This table
-is the current progress record. Normative equations, layouts and lifetime rules
+requirements, delivery order and acceptance gates for all ten slices. The summary
+table and item-level tracker below are the current progress record. Normative equations, layouts and lifetime rules
 remain in their owning LLDs; detailed commands, results and historical checkpoints
 remain in the linked local manifests and Git history.
 
@@ -48,12 +50,188 @@ qualification remains required; the package is not complete.
 | 2 — Settings and fixed exposure | validated | Canonical authored input, immutable pass snapshots, fixed/camera gain, per-view settings and public mask acceptance are qualified. | [Fixed gain](../../out/build-ninja/analysis/vortex/exposure-lightbench/fixed-gain/evidence-manifest.json), [frame bindings](../../out/build-ninja/analysis/vortex/exposure-lightbench/frame-binding/evidence-manifest.json), [configuration and mask acceptance](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/review-r028-manifest.json) |
 | 3 — Metering and adaptation | validated | Controlled-input histogram, curve, masks and hybrid adaptation; scene acceptance remains slice 5. | [Metering](../../out/build-ninja/analysis/vortex/exposure-lightbench/metering/evidence-manifest.json) |
 | 4 — GPU lifecycle and sharing | validated | Controlled-input/public-event gate, including offscreen routing. Real-scene resource lifetime is tracked in slice 5. | [Lifecycle](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/discontinuity-manifest.json), [offscreen sharing](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/offscreen-sharing-manifest.json) |
-| 5 — HDR migration and recovery | in_progress | FP32 scene path, checked conversion/selection, GPU eligibility/completed-status handling, scene reference collection and producer finite/range reporting have component evidence. Quantization/cumulative error bounds, allocation/lease integration, automatic admission/recovery and the full scene/MultiView matrix remain open. EXP-R027/R029/R031/R032 lifetime corrections are qualified. | [Scene domain](../../out/build-ninja/analysis/vortex/exposure-lightbench/scene/scene-migration-manifest.json), [conversion](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/conversion-manifest.json), [selection](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/selection-manifest.json), [eligibility](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/eligibility-manifest.json), [completed precision status](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/precision-status-manifest.json), [failed-solve invalidation](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/review-r034-manifest.json), [scene reference products](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/required-products-manifest.json), [producer range checks](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/prestore-range-manifest.json), [environment retirement](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/review-r027-manifest.json), [view/HZB lifetime](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/review-lifetime-manifest.json), [MultiView isolation](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/static-matrix-manifest.json), [resize](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/window-resize-manifest.json), [mode/lifecycle proof](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/modes-manifest.json) |
-| 6 — Authoring and persistence | planned | Native physical-camera persistence and texture-resource-index mask contracts are approved; complete source/cook/load/script/editor/DemoShell round-trip remains. | [Slice 6](plan/exposure-and-lightbench-correction.md#slice-6---finish-authoring-serialization-and-configuration-isolation) |
-| 7 — Light units | planned | Directional, point and spot numerical/visual calibration across forward and deferred paths remains. | [Slice 7](plan/exposure-and-lightbench-correction.md#slice-7---complete-the-reference-lighting-unit-chain) |
-| 8 — Measurements | planned | Implement instrumentation and qualify it against independent inputs. | [Slice 8](plan/exposure-and-lightbench-correction.md#slice-8---implement-and-qualify-measurement-instrumentation) |
-| 9 — LightBench and MultiView | planned | Complete all seven experiments and the full native layout/interaction matrix; current MultiView proofs are partial. | [Slice 9](plan/exposure-and-lightbench-correction.md#slice-9---finish-lightbench-and-multiview-visual-behavior) |
-| 10 — Automation and acceptance | planned | Run the same experiments through automation, close every acceptance gate and reconcile owner documents. | [Slice 10](plan/exposure-and-lightbench-correction.md#slice-10---automate-the-same-experiments-and-close-the-package) |
+| 5 — HDR migration and recovery | in_progress | P-domain plumbing and several precision components are validated; cumulative error bounds, production format switching and complete scene/MultiView acceptance remain. | [Detailed items](#32-slice-5-work-items) |
+| 6 — Authoring and persistence | planned | Native physical-camera persistence and texture-resource-index mask contracts are approved; complete source/cook/load/script/editor/DemoShell round-trip remains. | [Detailed items](#33-slice-6-work-items) |
+| 7 — Light units | planned | Directional, point and spot numerical/visual calibration across forward and deferred paths remains. | [Detailed items](#34-slice-7-work-items) |
+| 8 — Measurements | planned | Implement instrumentation and qualify it against independent inputs. | [Detailed items](#35-slice-8-work-items) |
+| 9 — LightBench and MultiView | planned | Complete all seven experiments and the full native layout/interaction matrix; current MultiView proofs are partial. | [Detailed items](#36-slice-9-work-items) |
+| 10 — Automation and acceptance | planned | Run the same experiments through automation, close every acceptance gate and reconcile owner documents. | [Detailed items](#37-slice-10-work-items) |
+
+### 3.1 Current work
+
+- **Active implementation item: EX05-15 — cumulative quantization/error bounds.**
+  Stage: source and mathematical investigation. The GPU implementation and its
+  independent numerical qualification have **not started**. Current work is to
+  derive bounds through aerial perspective, fog composition and temporal reuse;
+  checking each product separately does not close this requirement.
+- **Next concrete action:** define the testable propagation rules and independent
+  counterexamples, then implement the corresponding GPU checks. Follow with
+  EX05-17 through EX05-19; do not enable format switching on the existing range
+  checks alone.
+- **Last completed code checkpoint:** `5c3b6a019`, EX05-12's failed-solve
+  invalidation correction. The regression failed before the fix and passed
+  afterward; same-frame reuse and pending seed acknowledgement are covered.
+- **Latest code validation:** Debug and Release each passed 144 native exposure,
+  24 service, 23 publication, 62 environment, 63 renderer-core and 12 offscreen
+  tests (**328 per configuration**). Four debugger cases passed with only the
+  accepted live-factory shutdown warning. [Exact commands/results](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/review-r034-manifest.json).
+- **Renderer work in progress outside commits:** none at this checkpoint. No
+  build, test or capture process is waiting in the background.
+- **Delivery order:** finish Slice 5's gate before starting Slice 6 integration.
+  Slices 6–10 remain required; their detailed items are below.
+
+**How to read the items:** `validated` closes only the named item's stated scope;
+`in_progress` means partial work or active investigation, with the gap stated;
+`planned` means that delivery item has not started. Existing prerequisites are
+identified explicitly and do not close a later slice. A slice closes only when
+its gate row is validated. Manifests describe their checkpoint; these rows own
+current status, including decisions that supersede older manifest limitations.
+
+### 3.2 Slice 5 work items
+
+[Requirements and gate](plan/exposure-and-lightbench-correction.md#slice-5---complete-pre-exposure-migration-and-numerical-recovery).
+**Slice status: in_progress. Gate: not passed.**
+
+| ID | Work item | Status | Completed scope / remaining work | Evidence |
+| --- | --- | --- | --- | --- |
+| EX05-01 | Early GPU P resolve and immutable frame P/1P binding | validated | GPU-owned P, pinned frame/state leases, submission failure and repeated-resolve behavior are implemented. | [Frame resolve](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/frame-resolve-manifest.json), [domain](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/domain-manifest.json) |
+| EX05-02 | FP32 SceneColor accumulation and HDR format plumbing | validated | Approved FP32 accumulation contract and format-aware resource/PSO plumbing exist. This is not automatic mode switching. | [Formats](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/formats-manifest.json), [allocation contract](lld/scene-textures.md#per-view-fp16-suitability) |
+| EX05-03 | Meter with 1/P; consume S/P in all exposure modes | validated | Unified gain consumption covers Manual, ManualCamera, Auto, disabled and zero-target behavior in the qualified fixtures. | [Domain](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/domain-manifest.json), [mode fixtures](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/modes-manifest.json) |
+| EX05-04 | Deferred emissive/direct/indirect and forward lit/unlit/masked/translucent P domains | in_progress | Source migration exists. Complete mixed-content, upstream endpoint and per-family image-error acceptance remains; do not infer it from the scene-level smoke proof. | [Scene migration scope](../../out/build-ninja/analysis/vortex/exposure-lightbench/scene/scene-migration-manifest.json), [producer inventory](lld/scene-textures.md#exposure-hdr-domain-and-format-inventory) |
+| EX05-05 | Sky/background and sky-view/AP producer-consumer P plumbing | validated | Paired producer/consumer migration, scene sky P invariance and environment binding checks exist. Quantization/mode-switch closure is EX05-15–19. | [Scene migration](../../out/build-ninja/analysis/vortex/exposure-lightbench/scene/scene-migration-manifest.json), [real products](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/required-products-manifest.json) |
+| EX05-06 | Height/volumetric fog and RGB history rebasing | validated | Current/stored P conversion and unchanged transmittance are implemented and exercised. Cumulative temporal quantization is not covered by this item. | [Scene migration](../../out/build-ninja/analysis/vortex/exposure-lightbench/scene/scene-migration-manifest.json), [history/resource lifetime](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/review-lifetime-manifest.json) |
+| EX05-07 | Diagnostic colors, wireframe and display overlays | validated | Per-view unit-gain diagnostics, persistent exposure preservation and frame-retained overlay constants are qualified. Full feature-layout acceptance remains EX05-29. | [Diagnostics](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/diagnostic-manifest.json) |
+| EX05-08 | Canonical processed cubemap narrowing and upload packing | validated | Half/float resource choice, normalization and matching face/mip upload packing are qualified at the static-cubemap scope. | [Cubemap](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/cubemap-manifest.json) |
+| EX05-09 | Bloom and remaining temporal/capture domain audit | in_progress | The inventory finds no owned bloom radiance chain, dynamic captured-sky producer or TAA/TSR producer in this checkout. Explicit closure of active bloom handoff/threshold/shader paths and conditional-product coverage remains; absence of an allocator is not blanket completion. | [Inventory](lld/scene-textures.md#exposure-hdr-domain-and-format-inventory), [section 4.4](plan/exposure-and-lightbench-correction.md#44-migrate-every-active-producer-and-consumer-together) |
+| EX05-10 | Checked SceneColor conversion and conditional FP32 tonemap fallback | validated | Whole-image check precedes narrowing; rejected half contents are not sampled; current conversion verdict is separate from future-candidate qualification. Production allocation/handoff wiring remains EX05-17–18. | [Conversion](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/conversion-manifest.json), [selection](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/selection-manifest.json), [separate reports](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/precision-status-manifest.json) |
+| EX05-11 | GPU per-view suitability and two-result stability | validated | Required-product identity, candidate P, own precision history for borrowers, streak reset and bounded status publication are qualified as primitives. | [Eligibility](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/eligibility-manifest.json) |
+| EX05-12 | Completed-status candidate selection and failure invalidation | validated | Lifetime/settings/layout/generation checks, bounded retry queue, stale-result rejection and failed-solve/fallback invalidation are qualified. Successful same-frame reuse retains acknowledgement. | [Status selection](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/precision-status-manifest.json), [R034 correction](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/review-r034-manifest.json) |
+| EX05-13 | Collect real required scene-reference products | validated | Persistent scene views collect SceneColor, sky-view, AP and fog; missing producers remain missing requirements. Native capture checks 151,424 texels per view in the environment fixture. | [Required products](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/required-products-manifest.json) |
+| EX05-14 | Finite/overflow checks before environment stores | validated | Sky-view/AP/fog report original finite/nonfinite and FP16 headroom failures through the existing status. Auto does not adapt from a producer-failed image. This is not a quantization certificate. | [Pre-store range](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/prestore-range-manifest.json) |
+| EX05-15 | Quantization, cumulative image/meter error and temporal bounds | in_progress | **Current work: investigation only.** Equal per-product allowance and finite/range checks do not prove complete composition or repeated-history error. Derivation, implementation and independent numerical tests remain. | [Required budgets](lld/scene-textures.md#per-view-fp16-suitability); no completion evidence yet |
+| EX05-16 | Full supported-radiance envelope at upstream producers | in_progress | Finite/range reporting and several controlled endpoint fixtures exist. Complete high/low endpoint, underflow/error-budget and FP32 out-of-domain reporting across active producers remains. | [Range scope](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/prestore-range-manifest.json), [acceptance matrix](plan/exposure-and-lightbench-correction.md#9-acceptance-matrix-and-execution) |
+| EX05-17 | Production per-view FP16 admission and allocation switching | planned | **Not enabled. SceneRenderer still forces FP32.** Wire certified candidates to resource/PSO/resolve selection while preserving exposure history. Depends on EX05-15–16. | [Current source boundary](../../src/Oxygen/Vortex/SceneRenderer/SceneRenderer.cpp) |
+| EX05-18 | Checked resolve extraction and all conditional-consumer leases | in_progress | P metadata and checked-consumer primitives exist. Production resolve/extraction must retain the original FP32 accumulation and choose the valid source through every consumer and fence. | [Prepared solve](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/prepared-manifest.json), [selection boundary](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/selection-manifest.json) |
+| EX05-19 | Automatic recovery, excessive-range retention and stable return | planned | End-to-end mode switching/recovery is not implemented. Prove sustained FP32 without repeated resets, reduced-range return and contrasting shared consumers. Depends on EX05-15–18. | [Section 4.5 requirements](plan/exposure-and-lightbench-correction.md#45-first-frame-and-discontinuity-headroom) |
+| EX05-20 | Scene/environment descriptors, histories and queued constants retire safely | validated | Same-frame offscreen resources, fog/HZB removal, transient histories and queued HZB constants are qualified. Mode-transition-specific leases remain EX05-18. | [Environment retirement](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/review-r027-manifest.json), [fog/HZB lifetime](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/review-lifetime-manifest.json) |
+| EX05-21 | Actual memory and bandwidth accounting | planned | Per-texture format-size arithmetic is documented. Measured totals across active products/concurrent views/retained leases and target-device pass timings remain. | [Accounting requirements](lld/scene-textures.md#lifetime-and-memory-accounting) |
+| EX05-22 | Scene startup/cuts/seeds/modes/pause lifecycle matrix | in_progress | Native retry/domain cases and paused MultiView event fixtures exist. Complete scene-integrated active adaptation, startup/cut HDR endpoints and recovery combinations remain. | [Scene migration](../../out/build-ninja/analysis/vortex/exposure-lightbench/scene/scene-migration-manifest.json), [mode fixtures](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/modes-manifest.json) |
+| EX05-23 | Inactive, removed, recreated and replaced-world view lifecycle | in_progress | Short hide/reopen and recreated-handle proofs exist. Long-idle expiration and world replacement in the complete scene matrix remain. | [Lifetime fixture](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/lifetime-manifest.json) |
+| EX05-24 | Shared exposure and source-loss scene combinations | in_progress | Static prior-owner sharing and a source-loss sequence are qualified. Remaining borrowed zero/manual/disabled and feature/layout combinations are not closed. | [Isolation/sharing](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/static-matrix-manifest.json), [source loss](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/source-loss-manifest.json) |
+| EX05-25 | Delayed/stale status, stateless views and device recovery through scenes | in_progress | Controlled status/lifetime/failure primitives and offscreen routes are qualified. Complete scene range/recovery and stateless failure reporting/acceptance remain. | [Status retries](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/status-retry-manifest.json), [offscreen routes](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/offscreen-sharing-manifest.json) |
+| EX05-26 | Main/lit-PiP isolation, reordering and alone-versus-family equivalence | validated | Paused/static proof inputs have exact gain/meter/image agreement and specified sharing latency. This does not qualify moving-camera adaptation or all layouts. | [Static matrix](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/static-matrix-manifest.json) |
+| EX05-27 | Viewport, scissor and whole-window resize | validated | The named scripted resize/scissor fixtures pass without cross-view contamination. | [Viewport/scissor](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/viewport-manifest.json), [window resize](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/window-resize-manifest.json) |
+| EX05-28 | MultiView per-view mode, seed, cut and diagnostic events | validated | Paused scripted events and diagnostic restoration are qualified; runtime physical-camera values are covered, persistence is not. | [Modes](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/modes-manifest.json), [diagnostics](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/diagnostic-manifest.json) |
+| EX05-29 | Complete standard/auxiliary/offscreen/feature layout matrix | in_progress | Routing and selected captures exist. Not every lit pane/layout has complete visual and standalone-equivalence proof. The blue unavailable-shadow diagnostic does not prove the directional-shadow layout. | [Diagnostic scope/limitations](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/diagnostic-manifest.json), [required scenarios](plan/exposure-and-lightbench-correction.md#75-multiview-visual-acceptance) |
+| EX05-30 | Native combined interactions and active adaptation | planned | Complete scripted camera movement, reordering, resize, lifecycle and exposure changes while all panes are visible; verify gain, intermediate images and composite. | [Section 7.5](plan/exposure-and-lightbench-correction.md#75-multiview-visual-acceptance) |
+| EX05-GATE | Entire Slice 5 acceptance gate | in_progress | **Not passed.** Close all remaining items; prove P invariance, upstream bright/dark preservation, complete scene lifecycle and removal of old overloaded-scalar consumption across every active path. Do not start Slice 6 integration first. | [Gate](plan/exposure-and-lightbench-correction.md#slice-5---complete-pre-exposure-migration-and-numerical-recovery) |
+
+### 3.3 Slice 6 work items
+
+**Slice status: planned. Persistence/authoring integration has not started.**
+Approved contracts are requirements, not completed implementation.
+
+| ID | Work item | Status | Exact remaining delivery |
+| --- | --- | --- | --- |
+| EX06-01 | Native physical-camera persistence | planned | Source/cook/load aperture, shutter and ISO; scene-v6 perspective/orthographic 32/40-byte records; v5 20/28-byte defaults f/11, 125/s, ISO100. Keep the existing editor UI. |
+| EX06-02 | Exposure source schemas and component/config parity | planned | Carry all authored exposure fields through JSON schemas and native component/config boundaries; existing canonical runtime types are a prerequisite, not completion of this integration. |
+| EX06-03 | Versioned packed exposure record | planned | Implement the approved 144-byte prefix, mask resource index at 116, reserved 120–131, curve count at 132 and keys at 144; preserve enum ordinals/defaults. |
+| EX06-04 | Cooker, package remapping and loader | planned | Texture path to source-local index, PAK index remapping and runtime ResourceKey hydration; curve and scalar cook/load support. |
+| EX06-05 | Scripting and existing editor/native adapters | planned | Round-trip the same canonical fields and physical-camera values through existing adapters; no new physical-camera editor controls. |
+| EX06-06 | Old/new source-cook-load-save/reload tests | planned | Verify every field, mask, curve, black influence and D, resolved-setting equality, old-record defaults and malformed boundaries. |
+| EX06-07 | Runtime asynchronous mask acceptance prerequisite | validated | Pending/resident/failed masks and atomic accepted revisions already exist from runtime work, including direct SetConfig loading. Persistence round-trip remains EX06-04/06. [Evidence](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/review-r028-manifest.json). |
+| EX06-08 | DemoShell controls and status | planned | Correct controls/labels; expose requested versus effective settings and resource/metering failures. |
+| EX06-09 | Experiment-owned activation policy | planned | Prevent saved camera/scene/post-process reapplication from overriding a LightBench recipe while preserving other demos' behavior and personal settings. |
+| EX06-GATE | Authoring/persistence/isolation gate | planned | Identical resolved settings across the full round-trip, deterministic legacy loading and no personal-settings mutation during batch execution. |
+
+### 3.4 Slice 7 work items
+
+**Slice status: planned. Calibration implementation has not started.**
+
+| ID | Work item | Status | Exact remaining delivery |
+| --- | --- | --- | --- |
+| EX07-01 | Directional reference calibration | planned | Verify the white directional reference against the actual production BRDF/material and exposure equations. |
+| EX07-02 | Point units and distance behavior | planned | Flux/(4*pi), inverse-square attenuation, smooth range fade, 0.001 m numerical floor and zero-separation handling. |
+| EX07-03 | Spot normalization | planned | Smooth-cone solid-angle normalization, hard-cone limit, zero-angle rejection and angular/range boundary tests. |
+| EX07-04 | Shared forward/deferred consumers | planned | Apply the same light-unit helpers and receiver-cosine convention to both active rendering families. |
+| EX07-05 | Production material/color-space oracle | planned | Freeze packed albedo, normal, dielectric specular and color-space interpretation; use an independent reference calculation rather than treating roughness as Lambertian. |
+| EX07-06 | Numerical integration and calibration tests | planned | Independently verify flux integration, distance/cone boundaries, known fade and all three required light experiments. |
+| EX07-GATE | Complete lighting unit chain | planned | Passing directional/point/spot expectations and unit/BRDF contracts; no deferred calibration dependency. |
+
+### 3.5 Slice 8 work items
+
+**Slice status: planned. Reusable benchmark instrumentation has not started.**
+Existing test readbacks/RenderDoc analyzers are not the delivered measurement API.
+
+| ID | Work item | Status | Exact remaining delivery |
+| --- | --- | --- | --- |
+| EX08-01 | Region statistics and identity | planned | Diagnostics/extraction results with frame, view-state, source product/domain, region, validity and sample counts. |
+| EX08-02 | Actual consumed exposure/output probe | planned | Recover scene values with stored P and inspect the gain consumed by that frame; opt-in GPU probe at the production operation; label CPU-derived quantities explicitly. |
+| EX08-03 | Invalid and contaminated regions | planned | Distinguish zero from late, occluded, insufficient, edge-contaminated, partial-coverage and nonfinite measurements. |
+| EX08-04 | Async association and lifetime | planned | Bounded readback/resources, fence-safe ownership and rejection of stale frame/view/experiment revisions. |
+| EX08-05 | Disabled-path cost | planned | Verify zero measurement dispatches/readback allocations when disabled and bounded enabled-path cost. |
+| EX08-06 | Independent instrument qualification | planned | Known GPU signals, P conversion, actual gain, zero/coverage/invalid cases and delayed-readback changes. |
+| EX08-GATE | Instrument qualification before bench verdicts | planned | Instruments must match independent inputs before LightBench uses them to judge rendering. |
+
+### 3.6 Slice 9 work items
+
+**Slice status: planned. LightBench repair and experiment implementation have not
+started. Some MultiView prerequisites were delivered in Slice 5, as identified.**
+
+| ID | Work item | Status | Exact remaining delivery |
+| --- | --- | --- | --- |
+| EX09-01 | One versioned experiment schema/controller | planned | Shared validated definitions and one execution path for interactive and batch use. |
+| EX09-02 | Complete staged application and reset | planned | Own geometry, materials, lights, environment, camera, features, exposure/output, measurement regions and temporal transition; apply coherently at a frame boundary. |
+| EX09-03 | Neutral Reference experiment | planned | Default startup; three readable framed cards, visible-side camera/key, real white directional light and independently selected material/exposure/output reference. |
+| EX09-04 | Fixed Exposure experiment | planned | Known HDR input and EV/key/compensation sweeps through uploaded and consumed gain. |
+| EX09-05 | Adaptation experiment | planned | Both luminance-step directions, controlled dt, masks and compensation curves. |
+| EX09-06 | Lifecycle experiment | planned | Startup, seeds, cuts, mode changes, pause, sharing, stateless views and recovery. |
+| EX09-07 | Point Falloff experiment | planned | Prescribed receiver/distances, visible geometry relationship and independent inverse-square expectations. |
+| EX09-08 | Spot Distribution experiment | planned | Aimed receiver, cone overlay, angular response and integrated flux expectations. |
+| EX09-09 | HDR Domain experiment | planned | Bright/dark endpoints and mixed opaque/forward/translucent/sky/fog content under varying P. |
+| EX09-10 | Focused controls and overlays | planned | Relevant controls, expected/measured values, effective exposure, Pass/Fail/Modified/Invalid states and visible debug overrides; collapsed advanced controls. |
+| EX09-11 | Saved experiment migration/loading | planned | Version the indoor preset, load modified experiments explicitly, separate window/panel preferences and preserve personal files. |
+| EX09-12 | LightBench native visual acceptance | planned | Inspect all seven experiments, startup, transitions and reset at 1080p, 1440p and resized dimensions; aligned measurement regions and reproducible presented captures. |
+| EX09-13 | MultiView operational integration | in_progress | Existing proof CLI, framing fixes and scenario fixtures are prerequisites from Slice 5. Complete controls/measurement integration, combined interactions and all layout/pane acceptance remain. [Current README](../../Examples/MultiView/README.md). |
+| EX09-14 | LightBench operating README | planned | `Examples/LightBench/README.md` does not yet exist; write actual launch/run/reset/save instructions, supported tests and interpretation after implementation. |
+| EX09-15 | MultiView operating README closure | in_progress | Current README documents proof modes and intentional black cells. Reconcile it with the completed matrix, shared latency, measurement results and final repeatable commands. |
+| EX09-GATE | Interactive benchmark and MultiView visual gate | planned | Complete reproducible LightBench and all MultiView layouts/interactions; inspect native presented output of both applications. |
+
+### 3.7 Slice 10 work items
+
+**Slice status: planned. Package-level automation and final acceptance have not
+started. Individual Slice 5 capture/assertion scripts are prerequisites only.**
+
+| ID | Work item | Status | Exact remaining delivery |
+| --- | --- | --- | --- |
+| EX10-01 | Deterministic batch execution | planned | Select/run the same versioned experiments and controller as interactive mode using existing capture CLI. |
+| EX10-02 | LightBench runner and report schema | planned | `tools/vortex/Run-LightBenchValidation.ps1` does not yet exist; implement it and a schema-validated result report. |
+| EX10-03 | Native game-facing/lifecycle cases | planned | Integrate production callers without DemoShell, scene lifecycle, sharing and numerical recovery into the runner. |
+| EX10-04 | Extend the existing MultiView runner | planned | Extend `Run-VortexMultiViewValidation.ps1`, existing analyzer/assertions and result schema; retain structural checks and add exposure/image/interaction acceptance. |
+| EX10-05 | Reuse current per-view proof tools | in_progress | Slice 5 has isolated/reordered/shared, source-loss, resize, lifetime, mode and diagnostic capture/assertion tools. Their integration into the final runner/report and remaining cases are unfinished. |
+| EX10-06 | Complete report provenance | planned | Record resolved parameters, experiment/version/revision, build/shader identity, device/backend, actual dt, frame/view validity, tolerances, measurements and captures. |
+| EX10-07 | Entire acceptance matrix | planned | Run every case in section 9, including native presented-image inspection; required failed/unsupported cases block completion. |
+| EX10-08 | Final owner-document reconciliation | planned | Reconcile equations/contracts, implementation/operating docs and this tracker against final evidence. |
+| EX10-GATE | Full package completion | planned | Every required feature, experiment, command and acceptance gate passes. The overall goal remains active until this is proven. |
+
+### 3.8 Requirement coverage and update discipline
+
+The item IDs are stable work items, not commit-history entries. Update their rows
+in place. When an item is reopened, state the defect and remaining validation
+there; after correction, replace the stale limitation with the current result.
+Record completed code and its proof together. If work stops before validation,
+leave the item `in_progress` and name the missing check. Update section 3.1 before
+moving to another item so the user can see what is being worked on without
+reading tool logs or reconstructing Git history.
+
+| Plan section 8 requirements | Tracking items |
+| --- | --- |
+| Slice 5: early P; full 4.4 migration; S/P; formats; range/recovery; scene lifecycle; MultiView; gate | EX05-01; EX05-04–09/18; EX05-03; EX05-02/17; EX05-10–16/19–21; EX05-22–25; EX05-26–30; EX05-GATE |
+| Slice 6: camera persistence; authoring surfaces; full round-trip; mask runtime; DemoShell; activation policy; gate | EX06-01; EX06-02–05; EX06-06; EX06-07; EX06-08; EX06-09; EX06-GATE |
+| Slice 7: point/spot; shared consumers; independent calibration; material mapping; gate | EX07-02–03; EX07-04; EX07-01/06; EX07-05; EX07-GATE |
+| Slice 8: diagnostics; known inputs; identity; disabled/enabled cost; gate | EX08-01–03; EX08-06; EX08-04; EX08-05; EX08-GATE |
+| Slice 9: definitions; ownership/reset; UI; seven visual experiments; preset/loading; MultiView; both READMEs; gate | EX09-01; EX09-02; EX09-10; EX09-03–09/12; EX09-11; EX09-13; EX09-14–15; EX09-GATE |
+| Slice 10: batch; LightBench runner; MultiView extension; provenance; full acceptance/docs; gate | EX10-01; EX10-02–03; EX10-04–05; EX10-06; EX10-07–08; EX10-GATE |
 
 ### Related editor package
 
@@ -79,7 +257,7 @@ Validated M08 LLD references are `design/vortex/lld/cubemap-processing.md` and
 
 | ID | Milestone | Status | Current Evidence | Missing To Close |
 | --- | --- | --- | --- | --- |
-| Exposure / LightBench / MultiView | Complete global exposure and benchmark package | `in_progress` | Slices 1-4 qualified. GPU P resolve, reserved-state solve and service S/P path pass 106 native, 22 service and 22 publication tests in Debug/Release; fifteen debugger cases and inspected final-consumption capture pass. Evidence: `out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/domain-manifest.json`. | Scene renderer/HDR domain migration, FP32 eligibility and recovery, serialization including approved mask indices and native camera persistence, light calibration, instruments and complete LightBench/MultiView acceptance. |
+| Exposure / LightBench / MultiView | Complete global exposure and benchmark package | `in_progress` | [Current work, slice status and item-level evidence](#3-exposure-delivery-status). | All open items and gates in section 3; no independent completion claim in this summary row. |
 | ED-M08 native extension | V0.1 canonical authoring and rendering | `planned` | Final rendering/IBL contracts, source-local deferred annotations and editor execution plan. | Native implementation, focused tests and visual proof outside the editor, followed by integrated editor qualification. |
 | VTX-M00 | Planning and status truth surface | `validated` | `PLAN.md` was rewritten as a milestone-first plan; this milestone/status ledger exists; restricted doc scans and `git diff --check` passed on 2026-04-25. | No open planning-status gap. |
 | VTX-M01 | Renderer Core and SceneRenderer baseline | `validated` | Vortex module, Renderer Core, publication, upload/resource substrate, SceneRenderer shell, SceneTextures, non-runtime facades, resolve/cleanup, and related tests are present and freshly validated. Build proof passed `cmake --build out\build-ninja --config Debug --target Oxygen.Vortex.LinkTest Oxygen.Vortex.RendererCapability.Tests Oxygen.Vortex.RenderContext.Tests Oxygen.Vortex.SceneRendererShell.Tests Oxygen.Vortex.SceneTextures.Tests Oxygen.Vortex.SceneRendererPublication.Tests Oxygen.Vortex.RenderContextMaterializer.Tests Oxygen.Vortex.RendererFacadePresets.Tests Oxygen.Vortex.RenderGraphHarnessFacade.Tests Oxygen.Vortex.SinglePassHarnessFacade.Tests Oxygen.Vortex.UploadCoordinator.Tests Oxygen.Vortex.ViewConstantsManager.Tests oxygen-examples-vortexbasic --parallel 4`. Focused CTest passed the corresponding Vortex substrate/facade suites plus `Oxygen.Vortex.LinkTest`. Runtime proof `tools\vortex\Run-VortexBasicRuntimeValidation.ps1 -Output out\build-ninja\analysis\vortex\m01-m03-closeout\vortexbasic-foundation -Frame 3 -RunFrames 6 -Fps 10 -BuildJobs 4` passed overall with runtime exit 0, final present nonzero, CDB/debug-layer `overall_verdict=pass`, no D3D12/DXGI errors, and no blocking warnings. | No open VTX-M01 closure gap. |
