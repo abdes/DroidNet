@@ -25,6 +25,7 @@
 namespace oxygen::vortex::testing {
 
 struct RendererPublicationProbe {
+  using FogPassConstants = environment::VolumetricFogPass::PassConstants;
   static auto EnvironmentTextures(SceneRenderer& renderer, ViewId view)
     -> std::vector<std::shared_ptr<graphics::Texture>>
   {

@@ -15,6 +15,7 @@
 
 #include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Console/Console.h>
+#include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
 #include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
@@ -23,6 +24,7 @@
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/FrameCaptureController.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
+#include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Graphics/Direct3D12/Test/Fixtures/ReadbackTestFixture.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
@@ -37,6 +39,7 @@
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Vortex/Environment/Internal/IblProcessor.h>
 #include <Oxygen/Vortex/Environment/Passes/AtmosphereComposePass.h>
+#include <Oxygen/Vortex/Environment/Passes/FogPass.h>
 #include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
 #include <Oxygen/Vortex/PostProcess/PostProcessService.h>
 #include <Oxygen/Vortex/RenderContext.h>
@@ -53,6 +56,7 @@
 #include <Oxygen/Vortex/Types/ExposureStateData.h>
 #include <Oxygen/Vortex/Types/ViewConstants.h>
 #include <Oxygen/Vortex/Types/ViewFrameBindings.h>
+#include <Oxygen/Vortex/Types/ViewHistoryFrameBindings.h>
 #include <Oxygen/Vortex/Upload/UploadCoordinator.h>
 #include <Oxygen/Vortex/ViewExtension.h>
 
@@ -216,29 +220,47 @@ protected:
     ReadbackTestFixture::TearDown();
   }
   auto MakeSignal(std::uint32_t width, std::uint32_t height,
-    std::span<const Pixel> pixels) -> Signal
+    std::span<const Pixel> pixels, std::uint32_t depth = 1U,
+    Format format = Format::kRGBA32Float, bool bindless_texture = false)
+    -> Signal
   {
-    CHECK_F(pixels.size() == 1U || pixels.size() == width * height);
+    CHECK_F(pixels.size() == 1U || pixels.size() == width * height * depth);
+    CHECK_F(format == Format::kRGBA32Float || format == Format::kRGBA16Float);
+    const auto type
+      = depth == 1U ? TextureType::kTexture2D : TextureType::kTexture3D;
+    const auto stride = format == Format::kRGBA32Float ? 16U : 8U;
     auto texture = CreateRegisteredTexture({
       .width = width,
       .height = height,
-      .format = Format::kRGBA32Float,
-      .texture_type = TextureType::kTexture2D,
+      .depth = depth,
+      .format = format,
+      .texture_type = type,
       .debug_name = "ExposureFloatFixture",
       .is_shader_resource = true,
       .initial_state = ResourceStates::kCommon,
     });
-    const auto pitch = ((width * 16U + 255U) / 256U) * 256U;
+    const auto pitch = ((width * stride + 255U) / 256U) * 256U;
     auto upload
-      = CreateUploadBuffer(SizeBytes { std::uint64_t(pitch) * height });
-    std::vector<std::byte> bytes(std::size_t(pitch) * height);
-    for (std::uint32_t y = 0; y < height; ++y) {
-      for (std::uint32_t x = 0; x < width; ++x) {
-        const auto& pixel = pixels[pixels.size() == 1U ? 0U : y * width + x];
-        std::memcpy(
-          bytes.data() + std::size_t(y) * pitch + x * 16U, pixel.data(), 16U);
+      = CreateUploadBuffer(SizeBytes { std::uint64_t(pitch) * height * depth });
+    std::vector<std::byte> bytes(std::size_t(pitch) * height * depth);
+    for (std::uint32_t z = 0; z < depth; ++z)
+      for (std::uint32_t y = 0; y < height; ++y) {
+        for (std::uint32_t x = 0; x < width; ++x) {
+          const auto& pixel
+            = pixels[pixels.size() == 1U ? 0U : (z * height + y) * width + x];
+          auto* destination
+            = bytes.data() + (std::size_t(z) * height + y) * pitch + x * stride;
+          if (format == Format::kRGBA32Float) {
+            std::memcpy(destination, pixel.data(), 16U);
+          } else {
+            const std::array packed { data::HalfFloat { pixel[0] }.get(),
+              data::HalfFloat { pixel[1] }.get(),
+              data::HalfFloat { pixel[2] }.get(),
+              data::HalfFloat { pixel[3] }.get() };
+            std::memcpy(destination, packed.data(), 8U);
+          }
+        }
       }
-    }
     upload->Update(bytes.data(), bytes.size(), 0U);
     {
       auto recorder = AcquireRecorder("Exposure fixture upload");
@@ -251,7 +273,7 @@ protected:
           .buffer_offset = 0U,
           .buffer_row_pitch = pitch,
           .buffer_slice_pitch = std::uint64_t(pitch) * height,
-          .dst_slice = { .width = width, .height = height, .depth = 1U },
+          .dst_slice = { .width = width, .height = height, .depth = depth },
         },
         *texture);
       recorder->RequireResourceStateFinal(
@@ -259,14 +281,17 @@ protected:
     }
     WaitForQueueIdle();
     auto& allocator = renderer_->GetGraphics()->GetDescriptorAllocator();
-    auto handle = allocator.AllocateRaw(
-      ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
+    auto handle = bindless_texture
+      ? allocator.AllocateBindless(oxygen::bindless::generated::kTexturesDomain,
+          ResourceViewType::kTexture_SRV)
+      : allocator.AllocateRaw(
+          ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
     auto srv = allocator.GetShaderVisibleIndex(handle);
     const auto view = Backend().GetResourceRegistry().RegisterView(*texture,
       std::move(handle),
       TextureViewDescription {
-        .format = Format::kRGBA32Float,
-        .dimension = TextureType::kTexture2D,
+        .format = format,
+        .dimension = type,
       });
     CHECK_F(view->IsValid());
     return { std::move(texture), srv };
@@ -277,6 +302,49 @@ protected:
     const auto pixels
       = std::array<Pixel, 1> { Pixel { value, value, value, 1.0F } };
     return MakeSignal(width, height, pixels);
+  }
+  template <typename T>
+  auto PublishFixtureData(const T& value) -> ShaderVisibleIndex
+  {
+    auto buffer = CreateRegisteredBuffer({ .size_bytes = sizeof(T),
+      .usage = BufferUsage::kNone,
+      .memory = BufferMemory::kUpload,
+      .debug_name = "Fog edge fixture bindings" });
+    buffer->Update(&value, sizeof(T), 0U);
+    auto& allocator = renderer_->GetGraphics()->GetDescriptorAllocator();
+    auto handle = allocator.AllocateBindless(
+      oxygen::bindless::generated::kGlobalSrvDomain,
+      ResourceViewType::kStructuredBuffer_SRV);
+    const auto index = allocator.GetShaderVisibleIndex(handle);
+    Backend().GetResourceRegistry().RegisterView(*buffer, std::move(handle),
+      BufferViewDescription {
+        .view_type = ResourceViewType::kStructuredBuffer_SRV,
+        .range = { 0U, sizeof(T) },
+        .stride = sizeof(T) });
+    return index;
+  }
+  auto ReadFloatTexture(const Texture& texture) -> std::vector<Pixel>
+  {
+    CHECK_F(texture.GetDescriptor().format == Format::kRGBA32Float);
+    auto readback
+      = GetReadbackManager()->CreateTextureReadback("Fog edge output");
+    {
+      auto recorder = AcquireRecorder("Fog edge readback");
+      CHECK_F(recorder->AdoptKnownResourceState(texture));
+      CHECK_F(readback->EnqueueCopy(*recorder, texture, {}).has_value());
+    }
+    const auto mapped = readback->MapNow();
+    CHECK_F(mapped.has_value());
+    const auto& desc = texture.GetDescriptor();
+    std::vector<Pixel> pixels(desc.width * desc.height * desc.depth);
+    for (unsigned z = 0; z < desc.depth; ++z)
+      for (unsigned y = 0; y < desc.height; ++y)
+        for (unsigned x = 0; x < desc.width; ++x)
+          std::memcpy(pixels[(z * desc.height + y) * desc.width + x].data(),
+            mapped->Data() + z * mapped->Layout().slice_pitch.get()
+              + y * mapped->Layout().row_pitch.get() + x * sizeof(Pixel),
+            sizeof(Pixel));
+    return pixels;
   }
   template <typename Payload>
   auto Read(const Buffer& source, ResourceStates final_state) -> Payload
@@ -4855,6 +4923,258 @@ NOLINT_TEST_F(
   FlushBackend();
 }
 
+NOLINT_TEST_F(ExposureGpuTest, FogCompositionClampsViewportAndDepthEdges)
+{
+  pass_.reset();
+  renderer_->OnShutdown();
+  auto config = RendererConfig {};
+  config.upload_queue_key = QueueKeyFor().get();
+  renderer_ = std::make_unique<Renderer>(GetGraphicsShared(), config,
+    kPhase1DefaultRuntimeCapabilityFamilies
+      | RendererCapabilityFamily::kEnvironmentLighting);
+  auto scene = scene::Scene("Fog composition edges", 1U);
+  scene.SetEnvironment(std::make_unique<scene::SceneEnvironment>());
+  auto& fog = scene.GetEnvironment()->AddSystem<scene::environment::Fog>();
+  fog.SetEnabled(true);
+  fog.SetEnableVolumetricFog(true);
+  ctx_.scene = observer_ptr { &scene };
+  ctx_.current_view.with_height_fog = true;
+  auto textures = SceneTextures(Backend(),
+    { .extent = { 8U, 8U },
+      .enable_velocity = false,
+      .scene_color_format = Format::kRGBA32Float });
+  auto framebuffer = Backend().CreateFramebuffer(FramebufferDesc {}
+      .AddColorAttachment(textures.GetSceneColorResource())
+      .SetDepthAttachment({ .texture = textures.GetSceneDepthResource() }));
+  auto& allocator = renderer_->GetGraphics()->GetDescriptorAllocator();
+  auto depth_handle = allocator.AllocateRaw(
+    ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
+  const auto depth_slot = allocator.GetShaderVisibleIndex(depth_handle);
+  Backend().GetResourceRegistry().RegisterView(textures.GetSceneDepth(),
+    std::move(depth_handle),
+    TextureViewDescription {
+      .format = textures.GetSceneDepth().GetDescriptor().format,
+      .dimension = TextureType::kTexture2D });
+  auto scene_bindings = SceneTextureBindings {};
+  scene_bindings.scene_depth_srv = depth_slot.get();
+  const auto scene_slot = PublishFixtureData(scene_bindings);
+  const auto environment_view_slot = PublishFixtureData(EnvironmentViewData {});
+  auto compose = environment::FogPass(*renderer_);
+  std::array<Pixel, 8> pixels;
+  for (unsigned z = 0; z < 2; ++z)
+    for (unsigned y = 0; y < 2; ++y)
+      for (unsigned x = 0; x < 2; ++x)
+        pixels[(z * 2 + y) * 2 + x]
+          = Pixel { float(x), float(y), float(z), 1.0F - float(z) };
+  const auto capture = BeginOptionalCapture();
+  for (const auto format : { Format::kRGBA32Float, Format::kRGBA16Float }) {
+    const auto volume = MakeSignal(2, 2, pixels, 2, format, true);
+    auto environment_static = EnvironmentStaticData {};
+    environment_static.fog.flags
+      = kGpuFogFlagEnabled | kGpuFogFlagRenderInMainPass;
+    environment_static.volumetric_fog.flags = kGpuVolumetricFogFlagEnabled
+      | kGpuVolumetricFogFlagIntegratedScatteringValid;
+    environment_static.volumetric_fog.integrated_light_scattering_srv
+      = volume.srv.get();
+    environment_static.volumetric_fog.distance_m = 1.0F;
+    environment_static.volumetric_fog.grid_depth = 2U;
+    auto environment_bindings = EnvironmentFrameBindings {};
+    environment_bindings.environment_static_slot
+      = PublishFixtureData(environment_static);
+    environment_bindings.environment_view_slot = environment_view_slot;
+    auto view_bindings = ViewFrameBindings {};
+    view_bindings.environment_frame_slot
+      = PublishFixtureData(environment_bindings);
+    view_bindings.scene_texture_frame_slot = scene_slot;
+    const auto view_slot = PublishFixtureData(view_bindings);
+    for (const auto distance : { 0.0F, .25F, 1.0F, 4.0F }) {
+      SCOPED_TRACE(distance);
+      auto view = ViewConstants::GpuData {};
+      view.view_frame_bindings_bslot
+        = BindlessViewFrameBindingsSlot { view_slot };
+      view.reverse_z = 0U;
+      view.inverse_view_projection_matrix = glm::mat4 { 0.0F };
+      view.inverse_view_projection_matrix[3] = { 0, 0, -distance, 1 };
+      auto constants
+        = CreateUploadBuffer(SizeBytes { 256U }, BufferUsage::kConstant);
+      constants->Update(&view, sizeof(view), 0U);
+      ctx_.view_constants = constants;
+      {
+        auto recorder = AcquireRecorder("Fog edge initialization");
+        for (const auto& texture : { textures.GetSceneColorResource(),
+               textures.GetSceneDepthResource() })
+          if (!recorder->AdoptKnownResourceState(*texture))
+            recorder->BeginTrackingResourceState(
+              *texture, texture->GetDescriptor().initial_state);
+        recorder->RequireResourceState(
+          textures.GetSceneColor(), ResourceStates::kRenderTarget);
+        recorder->RequireResourceState(
+          textures.GetSceneDepth(), ResourceStates::kDepthWrite);
+        recorder->FlushBarriers();
+        recorder->ClearFramebuffer(
+          *framebuffer, std::vector<std::optional<Color>> { Color {} }, 0.0F);
+      }
+      ASSERT_TRUE(compose.Record(ctx_, textures).executed);
+      const auto result = ReadFloatTexture(textures.GetSceneColor());
+      const double z = std::clamp(
+        2 * std::sqrt(std::clamp(double(distance), 0.0, 1.0)) - .5, 0.0, 1.0);
+      for (unsigned y = 0; y < 8; ++y)
+        for (unsigned x = 0; x < 8; ++x) {
+          const auto& pixel = result[y * 8 + x];
+          EXPECT_NEAR(
+            pixel[0], std::clamp((double(x) + .5) / 4 - .5, 0.0, 1.0), 3e-7);
+          EXPECT_NEAR(
+            pixel[1], std::clamp((double(y) + .5) / 4 - .5, 0.0, 1.0), 3e-7);
+          EXPECT_NEAR(pixel[2], z, 3e-7);
+          EXPECT_NEAR(pixel[3], z, 3e-7);
+        }
+    }
+  }
+  if (capture)
+    EXPECT_TRUE(capture->EndCapture());
+  ctx_.view_constants.reset();
+  ctx_.scene.reset();
+  WaitForQueueIdle();
+}
+
+NOLINT_TEST_F(
+  ExposureGpuTest, FogHistoryClampsEdgesAndRejectsOutsideCoordinates)
+{
+  namespace root = oxygen::bindless::generated::d3d12;
+  std::vector<RootBindingItem> bindings;
+  for (const auto& parameter : root::kRootParamTable) {
+    RootBindingDesc binding {};
+    binding.binding_slot_desc.register_index = parameter.shader_register;
+    binding.binding_slot_desc.register_space = parameter.register_space;
+    binding.visibility = ShaderStageFlags::kAll;
+    if (parameter.kind == root::RootParamKind::DescriptorTable) {
+      const auto& range = parameter.ranges.front();
+      CHECK_F(range.range_type == root::RangeType::SRV
+        || range.range_type == root::RangeType::Sampler);
+      binding.data = DescriptorTableBinding { .view_type
+        = range.range_type == root::RangeType::Sampler
+          ? ResourceViewType::kSampler
+          : ResourceViewType::kRawBuffer_SRV,
+        .base_index = range.base_register,
+        .count = range.num_descriptors };
+    } else if (parameter.kind == root::RootParamKind::CBV) {
+      binding.data = DirectBufferBinding {};
+    } else {
+      binding.data = PushConstantsBinding { .size = parameter.constants_count };
+    }
+    bindings.emplace_back(binding);
+  }
+  const auto pipeline
+    = ComputePipelineDesc::Builder {}
+        .SetComputeShader(ShaderRequest { .stage = ShaderType::kCompute,
+          .source_path = "Vortex/Services/Environment/VolumetricFog.hlsl",
+          .entry_point = "VortexVolumetricFogCS" })
+        .SetRootBindings(bindings)
+        .SetDebugName("Fog history edge fixture")
+        .Build();
+  auto output = CreateRegisteredTexture({ .width = 1U,
+    .height = 1U,
+    .depth = 2U,
+    .format = Format::kRGBA32Float,
+    .texture_type = TextureType::kTexture3D,
+    .is_shader_resource = true,
+    .is_uav = true,
+    .initial_state = ResourceStates::kCommon });
+  auto& allocator = renderer_->GetGraphics()->GetDescriptorAllocator();
+  auto handle = allocator.AllocateRaw(
+    ResourceViewType::kTexture_UAV, DescriptorVisibility::kShaderVisible);
+  const auto output_slot = allocator.GetShaderVisibleIndex(handle);
+  Backend().GetResourceRegistry().RegisterView(*output, std::move(handle),
+    TextureViewDescription { .view_type = ResourceViewType::kTexture_UAV,
+      .format = Format::kRGBA32Float,
+      .dimension = TextureType::kTexture3D });
+  std::array<Pixel, 8> samples;
+  for (unsigned z = 0; z < 2; ++z)
+    for (unsigned y = 0; y < 2; ++y)
+      for (unsigned x = 0; x < 2; ++x)
+        samples[(z * 2 + y) * 2 + x]
+          = Pixel { float(x), float(y), float(z), 1.0F - float(z) };
+  const std::array coordinates { glm::vec2 { 0, .5F }, glm::vec2 { 1, .5F },
+    glm::vec2 { .5F, 0 }, glm::vec2 { .5F, 1 }, glm::vec2 { .0625F, .5F },
+    glm::vec2 { .9375F, .5F }, glm::vec2 { .5F, .0625F },
+    glm::vec2 { .5F, .9375F }, glm::vec2 { .25F, .25F }, glm::vec2 { .5F, .5F },
+    glm::vec2 { .75F, .75F }, glm::vec2 { -.01F, .5F },
+    glm::vec2 { 1.01F, .5F }, glm::vec2 { .5F, -.01F },
+    glm::vec2 { .5F, 1.01F } };
+  const auto capture = BeginOptionalCapture();
+  for (const auto format : { Format::kRGBA32Float, Format::kRGBA16Float }) {
+    const auto volume = MakeSignal(2, 2, samples, 2, format, true);
+    auto params
+      = vortex::testing::RendererPublicationProbe::FogPassConstants {};
+    params.output_header = { output_slot.get(), 1U, 1U, 2U };
+    params.grid.end_distance_m = 10.0F;
+    params.grid_z.grid_z_params[0] = 1.0F;
+    params.grid_z.grid_z_params[1] = 0.0F;
+    params.grid_z.grid_z_params[2] = 1.0F;
+    params.temporal_history0 = { volume.srv.get(), 1U, 1.0F, 1U };
+    const auto pass_slot = PublishFixtureData(params);
+    for (const auto uv : coordinates)
+      for (const float depth : { 1.0F, std::sqrt(2.0F), 3.0F, .5F, 8.0F }) {
+        SCOPED_TRACE(uv.x);
+        SCOPED_TRACE(uv.y);
+        SCOPED_TRACE(depth);
+        auto history = ViewHistoryFrameBindings {};
+        history.validity_flags = static_cast<std::uint32_t>(
+          ViewHistoryValidityFlagBits::kPreviousViewValid);
+        history.previous_view_matrix[3].z = -depth;
+        history.previous_projection_matrix = glm::mat4 { 0.0F };
+        history.previous_projection_matrix[3]
+          = { 2 * uv.x - 1, 1 - 2 * uv.y, 0, 1 };
+        auto frame_bindings = ViewFrameBindings {};
+        frame_bindings.history_frame_slot = PublishFixtureData(history);
+        auto view = ViewConstants::GpuData {};
+        view.view_frame_bindings_bslot = BindlessViewFrameBindingsSlot {
+          PublishFixtureData(frame_bindings)
+        };
+        view.inverse_view_projection_matrix = glm::mat4 { 0.0F };
+        view.inverse_view_projection_matrix[3].w = 1.0F;
+        auto view_buffer
+          = CreateUploadBuffer(SizeBytes { 256U }, BufferUsage::kConstant);
+        view_buffer->Update(&view, sizeof(view), 0U);
+        {
+          auto recorder = AcquireRecorder("Fog history edge dispatch");
+          if (!recorder->AdoptKnownResourceState(*output))
+            recorder->BeginTrackingResourceState(
+              *output, ResourceStates::kCommon, false);
+          recorder->RequireResourceState(
+            *output, ResourceStates::kUnorderedAccess);
+          recorder->FlushBarriers();
+          recorder->SetPipelineState(pipeline);
+          recorder->SetComputeRootConstantBufferView(
+            static_cast<std::uint32_t>(root::RootParam::kViewConstants),
+            view_buffer->GetGPUVirtualAddress());
+          recorder->SetComputeRoot32BitConstant(
+            static_cast<std::uint32_t>(root::RootParam::kRootConstants), 0U,
+            0U);
+          recorder->SetComputeRoot32BitConstant(
+            static_cast<std::uint32_t>(root::RootParam::kRootConstants),
+            pass_slot.get(), 1U);
+          recorder->Dispatch(1U, 1U, 1U);
+        }
+        const bool rejected = uv.x < 0 || uv.x > 1 || uv.y < 0 || uv.y > 1
+          || depth < 1 || depth >= 4;
+        const double w
+          = std::clamp((std::log2(double(depth)) + .5) / 2, 0.0, 1.0);
+        const double z = std::clamp(2 * w - .5, 0.0, 1.0);
+        const std::array expected = rejected
+          ? std::array<double, 4> { 0, 0, 0, 1 }
+          : std::array<double, 4> { std::clamp(2 * double(uv.x) - .5, 0.0, 1.0),
+              std::clamp(2 * double(uv.y) - .5, 0.0, 1.0), z, 1 - z };
+        for (const auto& actual : ReadFloatTexture(*output))
+          for (unsigned c = 0; c < 4; ++c)
+            EXPECT_NEAR(actual[c], expected[c], 3e-6);
+      }
+  }
+  if (capture)
+    EXPECT_TRUE(capture->EndCapture());
+  WaitForQueueIdle();
+}
+
 NOLINT_TEST_F(ExposureGpuTest, DeferredApPreservesInscatterAtLowAndZeroOpacity)
 {
   pass_.reset();
@@ -5313,6 +5633,267 @@ NOLINT_TEST_F(ExposureGpuTest, PreEnvironmentRangeReportsNonfiniteInput)
   }
 }
 
+NOLINT_TEST_F(ExposureGpuTest, FilterGradientsEncloseReferenceNeighborsAndRetry)
+{
+  auto settings = scene::ExposureSettings {};
+  settings.mode = engine::ExposureMode::kManual;
+  settings.key = 12.5F;
+  settings.manual_ev = 3.0F; // P=1/8; transmittance must remain unscaled.
+  const auto config = SharedConfig(settings);
+  const auto capture = BeginOptionalCapture();
+  unsigned case_index = 0U;
+  for (const auto format : { Format::kRGBA32Float, Format::kRGBA16Float })
+    for (const auto shape :
+      { std::array { 9U, 3U, 1U }, std::array { 9U, 3U, 2U },
+        std::array { 1U, 1U, 2U }, std::array { 1U, 1U, 1U } })
+      for (const bool retained : { false, true }) {
+        SCOPED_TRACE(case_index);
+        const auto [width, height, depth] = shape;
+        std::vector<Pixel> pixels(width * height * depth);
+        for (unsigned z = 0; z < depth; ++z)
+          for (unsigned y = 0; y < height; ++y)
+            for (unsigned x = 0; x < width; ++x)
+              pixels[(z * height + y) * width + x]
+                = Pixel { float(x) + float(y) / 4, float(y) * 2 + float(z) / 2,
+                    float(z) * 4 + float(x) / 8, float(x + y + z) / 16 };
+        const auto signal = MakeSignal(width, height, pixels, depth, format);
+        const auto id = std::array { 5U, 6U, 10U }[case_index++ % 3U];
+        const auto record_index = id == 5U ? 0U : id == 6U ? 1U : 2U;
+        const bool transmission = id != 5U;
+        const HdrErrorBoundsData bounds = retained
+          ? HdrErrorBoundsData { .rgb_relative = 1.0F / 128,
+              .rgb_absolute = .125F,
+              .transmittance_relative = 1.0F / 64,
+              .transmittance_absolute = 1.0F / 512 }
+          : HdrErrorBoundsData {};
+        ctx_.frame_sequence = frame::SequenceNumber { ++sequence_ };
+        const auto frame = pass_->ResolveFrame(ctx_, config, {});
+        ASSERT_NE(frame, nullptr);
+        auto upload = CreateUploadBuffer(SizeBytes { sizeof(bounds) });
+        upload->Update(&bounds, sizeof(bounds), 0U);
+        {
+          auto recorder = AcquireRecorder("Filter gradient controlled bounds");
+          EnsureTracked(*recorder, upload, ResourceStates::kGenericRead);
+          ASSERT_TRUE(recorder->AdoptKnownResourceState(
+            *frame->current_state->status_buffer));
+          recorder->RequireResourceState(
+            *frame->current_state->status_buffer, ResourceStates::kCopyDest);
+          recorder->FlushBarriers();
+          recorder->CopyBuffer(*frame->current_state->status_buffer,
+            80U + record_index * 16U, *upload, 0U, sizeof(bounds));
+          recorder->RequireResourceStateFinal(
+            *frame->current_state->status_buffer,
+            ResourceStates::kUnorderedAccess);
+        }
+        const auto read_status = [&] {
+          return Read<ExposureStatusStorage>(
+            *frame->current_state->status_buffer,
+            ResourceStates::kUnorderedAccess);
+        };
+        const auto before = read_status();
+        postprocess::ExposurePass::HdrProduct product { .texture
+          = signal.texture.get(),
+          .srv = signal.srv,
+          .id = id,
+          .transmittance = transmission };
+        ASSERT_TRUE(pass_->GatherFilterGradients(ctx_, frame, product));
+        EXPECT_TRUE(pass_->HasFilterGradients(frame, id));
+        const auto after = read_status();
+        EXPECT_EQ(std::memcmp(&before, &after, 160U), 0);
+        const auto& gradient = after.filter_gradients[record_index];
+        EXPECT_EQ(gradient.flags, 1U);
+        EXPECT_EQ(gradient.checked_texels, pixels.size());
+        std::array<double, 3> expected_rgb {}, expected_t {};
+        const auto interval = [&](float stored, unsigned channel) {
+          const double observed = double(stored) * (channel == 3U ? 1 : 8);
+          const double relative = channel == 3U ? bounds.transmittance_relative
+                                                : bounds.rgb_relative;
+          const double absolute = channel == 3U ? bounds.transmittance_absolute
+                                                : bounds.rgb_absolute;
+          std::array result { std::max(
+                                0.0, (observed - absolute) / (1 + relative)),
+            (observed + absolute) / (1 - relative) };
+          if (channel == 3U) {
+            result[0] = std::min(1.0, result[0]);
+            result[1] = std::min(1.0, result[1]);
+          }
+          return result;
+        };
+        for (unsigned z = 0; z < depth; ++z)
+          for (unsigned y = 0; y < height; ++y)
+            for (unsigned x = 0; x < width; ++x) {
+              const auto index = (z * height + y) * width + x;
+              const std::array coordinate { x, y, z };
+              for (unsigned axis = 0; axis < 3; ++axis) {
+                const bool boundary = coordinate[axis] + 1U >= shape[axis];
+                if (boundary)
+                  continue;
+                const auto stride
+                  = std::array { 1U, width, width * height }[axis];
+                const auto neighbor = index + stride;
+                for (unsigned c = 0; c < (transmission ? 4U : 3U); ++c) {
+                  const auto a = interval(pixels[index][c], c);
+                  const auto b = interval(pixels[neighbor][c], c);
+                  auto& expected
+                    = c == 3U ? expected_t[axis] : expected_rgb[axis];
+                  expected
+                    = std::max(expected, std::max(a[1] - b[0], b[1] - a[0]));
+                }
+              }
+            }
+        for (unsigned axis = 0; axis < 3; ++axis) {
+          EXPECT_GE(double(gradient.rgb[axis]), expected_rgb[axis]);
+          EXPECT_GE(double(gradient.transmittance[axis]), expected_t[axis]);
+          EXPECT_LE(
+            double(gradient.rgb[axis]), expected_rgb[axis] * 1.001 + 1e-6);
+          EXPECT_LE(double(gradient.transmittance[axis]),
+            expected_t[axis] * 1.001 + 1e-6);
+          if (shape[axis] == 1U) {
+            EXPECT_EQ(gradient.rgb[axis], 0.0F);
+            EXPECT_EQ(gradient.transmittance[axis], 0.0F);
+          }
+        }
+        for (unsigned peer = 0; peer < 3; ++peer)
+          if (peer != record_index)
+            EXPECT_EQ(
+              std::memcmp(&before.filter_gradients[peer],
+                &after.filter_gradients[peer], sizeof(HdrFilterGradientData)),
+              0);
+        const auto constant
+          = Uniform(2.0F, retained ? 1U : 9U, retained ? 1U : 3U);
+        ctx_.current_view.view_id = ViewId { 2U };
+        ctx_.current_view.view_state_handle
+          = CompositionView::ViewStateHandle { 2U };
+        const auto other = pass_->ResolveFrame(ctx_, config, {});
+        ASSERT_TRUE(pass_->GatherFilterGradients(ctx_, other,
+          { .texture = constant.texture.get(),
+            .srv = constant.srv,
+            .id = id,
+            .transmittance = transmission }));
+        const auto retained_status = read_status();
+        EXPECT_EQ(
+          std::memcmp(&gradient,
+            &retained_status.filter_gradients[record_index], sizeof(gradient)),
+          0);
+        ctx_.current_view.view_id = ViewId { 1U };
+        ctx_.current_view.view_state_handle
+          = CompositionView::ViewStateHandle { 1U };
+        product.srv = kInvalidShaderVisibleIndex;
+        EXPECT_FALSE(pass_->GatherFilterGradients(ctx_, frame, product));
+        EXPECT_FALSE(pass_->HasFilterGradients(frame, id));
+        product.srv = signal.srv;
+        auto& backend = static_cast<ExposureFailureGraphics&>(Backend());
+        backend.fail_recorder_name = "Vortex Exposure Filter Gradients";
+        EXPECT_FALSE(pass_->GatherFilterGradients(ctx_, frame, product));
+        EXPECT_FALSE(pass_->HasFilterGradients(frame, id));
+        backend.fail_recorder_name.clear();
+        ASSERT_TRUE(pass_->GatherFilterGradients(ctx_, frame,
+          { .texture = constant.texture.get(),
+            .srv = constant.srv,
+            .id = id,
+            .transmittance = transmission }));
+        EXPECT_TRUE(pass_->HasFilterGradients(frame, id));
+        const auto retried = read_status().filter_gradients[record_index];
+        EXPECT_EQ(retried.flags, 1U);
+        EXPECT_EQ(retried.checked_texels, retained ? 1U : 27U);
+        EXPECT_EQ(retried.rgb, (std::array<float, 3> {}));
+        EXPECT_EQ(retried.transmittance, (std::array<float, 3> {}));
+      }
+  if (capture)
+    EXPECT_TRUE(capture->EndCapture());
+}
+
+NOLINT_TEST_F(
+  ExposureGpuTest, FilterGradientsRejectInvalidIntervalsAndPreserveTinyGaps)
+{
+  struct Case {
+    float rgb;
+    float alpha;
+    HdrErrorBoundsData bounds;
+    bool transmission;
+    bool valid;
+  };
+  const auto infinity = std::numeric_limits<float>::infinity();
+  const auto nan = std::numeric_limits<float>::quiet_NaN();
+  const std::array cases { Case {
+                             std::bit_cast<float>(1U), .5F, {}, true, true },
+    Case { 1, std::bit_cast<float>(1U), {}, true, true },
+    Case { 1, 0, { .transmittance_absolute = std::bit_cast<float>(1U) }, true,
+      true },
+    Case { 1, std::numeric_limits<float>::min(),
+      { .transmittance_absolute = std::bit_cast<float>(0x007fffffU) }, true,
+      true },
+    Case { 1, 0,
+      { .transmittance_relative = .5F, .transmittance_absolute = -0.0F }, true,
+      true },
+    Case { std::bit_cast<float>(0x80000001U), .5F, {}, true, false },
+    Case { infinity, .5F, {}, true, false }, Case { nan, .5F, {}, true, false },
+    Case { 1, 1.125F, {}, true, false }, Case { 1, nan, {}, false, true },
+    Case { 1, .5F, { .rgb_relative = 1 }, true, false },
+    Case { 1, .5F, { .rgb_absolute = std::bit_cast<float>(0x80000001U) }, true,
+      false },
+    Case { 1, .5F, { .transmittance_relative = 1 }, true, false },
+    Case { 1, .5F, { .transmittance_relative = 1 }, false, true },
+    Case { std::numeric_limits<float>::max(), .5F, { .rgb_absolute = 1 }, true,
+      false } };
+  auto settings = scene::ExposureSettings {};
+  settings.mode = engine::ExposureMode::kManual;
+  settings.key = 12.5F;
+  settings.manual_ev = 0.0F;
+  for (const auto& test : cases) {
+    SCOPED_TRACE(test.rgb);
+    const auto id = test.transmission ? 6U : 5U;
+    const auto record_index = test.transmission ? 1U : 0U;
+    const std::array pixels { Pixel { 0, 0, 0, 0 },
+      Pixel { test.rgb, 0, 0, test.alpha } };
+    const auto signal = MakeSignal(2U, 1U, pixels);
+    ctx_.frame_sequence = frame::SequenceNumber { ++sequence_ };
+    const auto frame = pass_->ResolveFrame(ctx_, SharedConfig(settings), {});
+    ASSERT_NE(frame, nullptr);
+    auto upload = CreateUploadBuffer(SizeBytes { sizeof(test.bounds) });
+    upload->Update(&test.bounds, sizeof(test.bounds), 0U);
+    {
+      auto recorder = AcquireRecorder("Invalid gradient bounds fixture");
+      EnsureTracked(*recorder, upload, ResourceStates::kGenericRead);
+      ASSERT_TRUE(recorder->AdoptKnownResourceState(
+        *frame->current_state->status_buffer));
+      recorder->RequireResourceState(
+        *frame->current_state->status_buffer, ResourceStates::kCopyDest);
+      recorder->FlushBarriers();
+      recorder->CopyBuffer(*frame->current_state->status_buffer,
+        80U + record_index * 16U, *upload, 0U, sizeof(test.bounds));
+      recorder->RequireResourceStateFinal(
+        *frame->current_state->status_buffer, ResourceStates::kUnorderedAccess);
+    }
+    ASSERT_TRUE(pass_->GatherFilterGradients(ctx_, frame,
+      { .texture = signal.texture.get(),
+        .srv = signal.srv,
+        .id = id,
+        .transmittance = test.transmission }));
+    const auto result = Read<ExposureStatusStorage>(
+      *frame->current_state->status_buffer, ResourceStates::kUnorderedAccess)
+                          .filter_gradients[record_index];
+    EXPECT_EQ(result.flags, test.valid ? 1U : 3U);
+    EXPECT_EQ(result.checked_texels, 2U);
+    if (test.valid) {
+      EXPECT_GE(double(result.rgb[0]), double(test.rgb));
+      EXPECT_GT(result.rgb[0], 0.0F);
+      EXPECT_EQ(result.rgb[1], 0.0F);
+      EXPECT_EQ(result.rgb[2], 0.0F);
+      if (test.transmission) {
+        const double upper
+          = (double(test.alpha) + test.bounds.transmittance_absolute)
+          / (1.0 - test.bounds.transmittance_relative);
+        EXPECT_GE(double(result.transmittance[0]), std::min(1.0, upper));
+        if (upper == 0)
+          EXPECT_EQ(result.transmittance[0], 0.0F);
+      }
+      if (!test.transmission)
+        EXPECT_EQ(result.transmittance, (std::array<float, 3> {}));
+    }
+  }
+}
+
 NOLINT_TEST_F(ExposureGpuTest, OpaqueApErrorInvalidatesWhenInputCaptureChanges)
 {
   auto settings = scene::ExposureSettings {};
@@ -5406,6 +5987,8 @@ NOLINT_TEST_F(ExposureGpuTest, OpaqueApErrorUsesInputPeakAndActualGain)
     Case { 32, .0001F, { .rgb_absolute = .25F } },
     Case { 1e-30F, 1, { .transmittance_absolute = 1e-30F } },
     Case { 1, 1, { .rgb_absolute = std::bit_cast<float>(1U) } },
+    Case { 1, 0x1p100F, { .rgb_absolute = std::bit_cast<float>(1U) } },
+    Case { 1, 1, { .rgb_relative = std::bit_cast<float>(1U) } },
     Case { 1, infinity, {}, false }, Case { 1, -1, {}, false },
     Case { 1, nan, {}, false }, Case { 1, 1, { .rgb_relative = 1 }, false },
     Case { 1, 1, { .transmittance_relative = 1 }, false },
@@ -5473,8 +6056,26 @@ NOLINT_TEST_F(ExposureGpuTest, OpaqueApErrorUsesInputPeakAndActualGain)
           * test.bounds.transmittance_absolute;
     EXPECT_GE(double(actual.rgb_relative), relative);
     EXPECT_GE(double(actual.rgb_absolute), absolute);
+    const auto promote = [](double value) {
+      return value > 0 && value < std::numeric_limits<float>::min()
+        ? double(std::numeric_limits<float>::min())
+        : value;
+    };
+    const double operand_ceiling = test.gain < .0001F
+      ? 0
+      : promote(test.gain) * promote(test.bounds.rgb_absolute)
+        + promote(std::ldexp(double(test.peak), int(test.ev)))
+          * promote(test.bounds.transmittance_absolute);
     EXPECT_LE(double(actual.rgb_absolute),
-      absolute * 1.00001 + double(std::numeric_limits<float>::min()) * 1.00001);
+      operand_ceiling * 1.00001
+        + double(std::numeric_limits<float>::min()) * 1.00001);
+    EXPECT_EQ(std::bit_cast<std::uint32_t>(actual.rgb_relative),
+      test.gain < .0001F
+        ? 0U
+        : std::max(std::bit_cast<std::uint32_t>(test.bounds.rgb_relative)
+              & 0x7fffffffU,
+            std::bit_cast<std::uint32_t>(test.bounds.transmittance_relative)
+              & 0x7fffffffU));
     if (absolute == 0)
       EXPECT_EQ(actual.rgb_absolute, 0.0F);
     auto& backend = static_cast<ExposureFailureGraphics&>(Backend());

@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "Vortex/Contracts/View/FrameExposureHelpers.hlsli"
+#include "Vortex/Contracts/Definitions/SceneDefinitions.hlsli"
 #include "Vortex/Contracts/Environment/EnvironmentHelpers.hlsli"
 #include "Vortex/Contracts/Environment/EnvironmentViewHelpers.hlsli"
 #include "Vortex/Contracts/View/ViewConstants.hlsli"
@@ -310,7 +311,7 @@ static float4 SampleIntegratedVolumetricFog(
     }
     Texture3D<float4> integrated_light_scattering =
         ResourceDescriptorHeap[volumetric_fog.integrated_light_scattering_srv];
-    SamplerState linear_sampler = SamplerDescriptorHeap[0];
+    SamplerState linear_sampler = SamplerDescriptorHeap[VORTEX_SAMPLER_LINEAR_CLAMP];
     return integrated_light_scattering.SampleLevel(
         linear_sampler,
         float3(uv, depth_fraction),

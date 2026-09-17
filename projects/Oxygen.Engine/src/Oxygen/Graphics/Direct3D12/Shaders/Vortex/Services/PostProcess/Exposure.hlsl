@@ -702,6 +702,8 @@ void VortexExposureFrameCS(uint3 dispatch_id : SV_DispatchThreadID)
     status.Store4(112u, 0u.xxxx);
     status.Store4(128u, 0u.xxxx);
     status.Store4(144u, 0u.xxxx);
+    [unroll] for (uint offset = 160u; offset < 256u; offset += 16u)
+        status.Store4(offset, 0u.xxxx);
     ExposureTargetData initial = (ExposureTargetData)0;
     initial.initial_log_gain = pass.initial_log_gain;
     ExposureStateData state = LoadPrevious(pass.history_srv, initial);
@@ -819,7 +821,7 @@ static float2 SuitabilityReferenceInterval(float observed, float2 bound)
 {
     // Exact producer records preserve the signed point path used by external
     // FP32 fixtures. Nonzero affine certificates require nonnegative radiance.
-    return all(bound == 0.0.xx) ? observed.xx : HdrReferenceInterval(observed, bound);
+    return all((asuint(bound) & 0x7fffffffu) == 0u.xx) ? observed.xx : HdrReferenceInterval(observed, bound);
 }
 
 struct SceneColorConversionConstants {
@@ -936,6 +938,11 @@ static void SuitabilityFailure(RWByteAddressBuffer report, uint product, uint fl
     report.InterlockedAdd(counter, 1u, unused);
 }
 
+static uint FilterGradientOffset(uint product)
+{
+    return product == 5u ? 160u : product == 6u ? 192u : 224u;
+}
+
 static float4 SuitabilitySample(SuitabilityConstants pass, uint3 pixel)
 {
     if ((pass.flags & 8u) != 0u) {
@@ -952,6 +959,12 @@ void ClearSuitability(uint3 pixel : SV_DispatchThreadID)
     StructuredBuffer<SuitabilityConstants> constants = ResourceDescriptorHeap[g_PassConstantsIndex];
     const SuitabilityConstants pass = constants[0];
     RWByteAddressBuffer report = ResourceDescriptorHeap[pass.report_uav];
+    if ((pass.flags & 128u) != 0u) {
+        const uint offset = FilterGradientOffset(pass.product);
+        report.Store4(offset, uint4(0u, 0u, 0u, 1u));
+        report.Store4(offset + 16u, 0u.xxxx);
+        return;
+    }
     if ((pass.flags & 32u) != 0u) {
         report.Store4(128u, uint4(0u, 1u, 0u, 0u));
         report.Store4(144u, uint4(0u, asuint(HdrBoundInfinity()), 0u, 0u));
@@ -963,6 +976,100 @@ void ClearSuitability(uint3 pixel : SV_DispatchThreadID)
 }
 
 groupshared uint3 s_PreEnvironmentRange[64];
+groupshared uint3 s_FilterRgbGradient[64];
+groupshared uint3 s_FilterTransmissionGradient[64];
+groupshared uint2 s_FilterFlagsCount[64];
+
+static bool FilterReferenceIntervals(float4 sample, float4 bounds, float p,
+    bool transmission, out float4 low, out float4 high)
+{
+    low = high = 0.0.xxxx;
+    if (!SuitabilityBoundValid(bounds.xy) || !isfinite(p) || p <= 0.0
+        || (transmission && !SuitabilityBoundValid(bounds.zw))) return false;
+    const float2 rgb_bound = float2(bounds.x, HdrUpperProduct(bounds.y, p));
+    [unroll] for (uint c = 0u; c < 3u; ++c) {
+        if (!HdrFiniteNonnegative(sample[c])) return false;
+        const float2 interval = HdrReferenceInterval(asfloat(asuint(sample[c]) & 0x7fffffffu), rgb_bound);
+        if (!all(isfinite(interval))) return false;
+        low[c] = interval.x;
+        high[c] = interval.y;
+    }
+    if (transmission) {
+        if (!HdrFiniteNonnegative(sample.a) || sample.a > 1.0) return false;
+        const float2 interval = HdrReferenceInterval(asfloat(asuint(sample.a) & 0x7fffffffu), bounds.zw);
+        if (!all(isfinite(interval))) return false;
+        // Integer clamp preserves a positive subnormal endpoint under FTZ.
+        low.a = asfloat(min(asuint(interval.x) & 0x7fffffffu, 0x3f800000u));
+        high.a = asfloat(min(asuint(interval.y) & 0x7fffffffu, 0x3f800000u));
+    }
+    return true;
+}
+
+static void GatherFilterGradients(SuitabilityConstants pass, uint3 pixel, uint lane)
+{
+    RWByteAddressBuffer status = ResourceDescriptorHeap[pass.report_uav];
+    StructuredBuffer<FrameExposureData> frame = ResourceDescriptorHeap[pass.frame_srv];
+    const float p = frame[0].pre_exposure;
+    const float inverse_p = frame[0].one_over_pre_exposure;
+    const float4 bounds = asfloat(status.Load4(HdrProducerBoundOffset(pass.product)));
+    uint3 rgb = 0u.xxx;
+    uint3 transmission = 0u.xxx;
+    uint2 flags_count = 0u.xx;
+    if (all(pixel < uint3(pass.width, pass.height, pass.depth))) {
+        flags_count.y = 1u;
+        float4 low, high;
+        const bool with_transmission = (pass.flags & 4u) != 0u;
+        bool valid = isfinite(inverse_p) && inverse_p > 0.0;
+        valid = FilterReferenceIntervals(SuitabilitySample(pass, pixel), bounds, p,
+            with_transmission, low, high) && valid;
+        [unroll] for (uint axis = 0u; axis < 3u; ++axis) {
+            const uint3 extent = uint3(pass.width, pass.height, pass.depth);
+            uint3 neighbor = pixel;
+            neighbor[axis] += 1u;
+            if (valid && extent[axis] > 1u && all(neighbor < extent)) {
+                float4 other_low, other_high;
+                valid = FilterReferenceIntervals(SuitabilitySample(pass, neighbor), bounds, p,
+                    with_transmission, other_low, other_high);
+                if (valid) {
+                    float maximum_rgb = 0.0;
+                    [unroll] for (uint c = 0u; c < 3u; ++c)
+                        maximum_rgb = max(maximum_rgb, max(HdrUpperDifference(high[c], other_low[c]),
+                            HdrUpperDifference(other_high[c], low[c])));
+                    const float scaled = HdrUpperProduct(maximum_rgb, inverse_p);
+                    const float t = max(HdrUpperDifference(high.a, other_low.a),
+                        HdrUpperDifference(other_high.a, low.a));
+                    rgb[axis] = asuint(scaled);
+                    transmission[axis] = asuint(t);
+                    valid = isfinite(scaled) && isfinite(t);
+                }
+            }
+        }
+        if (!valid) flags_count.x = 2u;
+    }
+    s_FilterRgbGradient[lane] = rgb;
+    s_FilterTransmissionGradient[lane] = transmission;
+    s_FilterFlagsCount[lane] = flags_count;
+    GroupMemoryBarrierWithGroupSync();
+    [unroll] for (uint stride = 32u; stride > 0u; stride >>= 1u) {
+        if (lane < stride) {
+            s_FilterRgbGradient[lane] = max(s_FilterRgbGradient[lane], s_FilterRgbGradient[lane + stride]);
+            s_FilterTransmissionGradient[lane] = max(s_FilterTransmissionGradient[lane], s_FilterTransmissionGradient[lane + stride]);
+            s_FilterFlagsCount[lane].x |= s_FilterFlagsCount[lane + stride].x;
+            s_FilterFlagsCount[lane].y += s_FilterFlagsCount[lane + stride].y;
+        }
+        GroupMemoryBarrierWithGroupSync();
+    }
+    if (lane == 0u) {
+        const uint offset = FilterGradientOffset(pass.product);
+        uint unused;
+        [unroll] for (uint axis = 0u; axis < 3u; ++axis) {
+            status.InterlockedMax(offset + axis * 4u, s_FilterRgbGradient[0][axis], unused);
+            status.InterlockedMax(offset + 16u + axis * 4u, s_FilterTransmissionGradient[0][axis], unused);
+        }
+        status.InterlockedOr(offset + 12u, s_FilterFlagsCount[0].x, unused);
+        status.InterlockedAdd(offset + 28u, s_FilterFlagsCount[0].y, unused);
+    }
+}
 
 static void GatherPreEnvironmentRange(SuitabilityConstants pass, uint3 pixel, uint lane)
 {
@@ -1005,6 +1112,10 @@ void GatherSuitabilityMaximum(uint3 pixel : SV_DispatchThreadID, uint lane : SV_
 {
     StructuredBuffer<SuitabilityConstants> constants = ResourceDescriptorHeap[g_PassConstantsIndex];
     const SuitabilityConstants pass = constants[0];
+    if ((pass.flags & 128u) != 0u) {
+        GatherFilterGradients(pass, pixel, lane);
+        return;
+    }
     if ((pass.flags & 32u) != 0u) {
         GatherPreEnvironmentRange(pass, pixel, lane);
         return;
@@ -1054,7 +1165,7 @@ void SelectSuitabilityCandidate(uint3 pixel : SV_DispatchThreadID)
             const float maximum = HdrUpperProduct(asfloat(input.x), inverse_p);
             // C is the exact opaque FP32 input. For I + C*T, nonnegativity
             // bounds relative error by max(rI,rT); the source peak bounds C*aT.
-            result = float2(max(bounds.x, bounds.z),
+            result = float2(asfloat(max(asuint(bounds.x) & 0x7fffffffu, asuint(bounds.z) & 0x7fffffffu)),
                 HdrUpperSum(HdrUpperProduct(maximum, bounds.w),
                     HdrUpperProduct(pass.consumer_rgb_gain, bounds.y)));
             valid = isfinite(maximum) && SuitabilityBoundValid(result);

@@ -30,13 +30,23 @@ def build_report(controller, report, capture_path, report_path):
         writes = [x.descriptor for x in pipeline.GetReadWriteResources(rd.ShaderStage.Compute, True)]
         statuses = [x for x in writes if names.get(str(x.resource)) == "Vortex.PostProcess.Exposure.Status"]
         if shader.entryPoint in ("VortexExposureFrameCS", "ClearSuitability"):
+            is_input_clear = shader.entryPoint == "VortexExposureFrameCS"
+            if shader.entryPoint == "ClearSuitability" and statuses:
+                clears = [x.descriptor for x in pipeline.GetReadOnlyResources(rd.ShaderStage.Compute, True)
+                          if x.descriptor.byteSize == x.descriptor.elementByteSize == 96]
+                if len(clears) != 1:
+                    raise RuntimeError("Missing clear constants")
+                c = clears[0]
+                flags = struct.unpack("<I", bytes(controller.GetBufferData(c.resource, c.byteOffset + 28, 4)))[0]
+                is_input_clear = bool(flags & 32)
             for status in statuses:
-                data = bytes(controller.GetBufferData(status.resource, 0, 160))
-                if shader.entryPoint == "VortexExposureFrameCS" and data != bytes(160):
+                data = bytes(controller.GetBufferData(status.resource, 0, 256))
+                if shader.entryPoint == "VortexExposureFrameCS" and data != bytes(256):
                     raise RuntimeError("Frame preparation did not clear the entire status allocation")
-                if len(data) != 160 or struct.unpack_from("<I", data, 152)[0] != 0:
+                if len(data) != 256 or (is_input_clear and struct.unpack_from("<I", data, 152)[0] != 0):
                     raise RuntimeError("Input replacement left the AP record valid")
-                retained.pop(str(status.resource), None)
+                if is_input_clear:
+                    retained.pop(str(status.resource), None)
         if shader.entryPoint in ("VortexExposureAverageCS", "FinalizeFp16Suitability"):
             for status in statuses:
                 if str(status.resource) in retained:
@@ -60,8 +70,8 @@ def build_report(controller, report, capture_path, report_path):
         gain = struct.unpack_from("<f", raw, 80)[0]
         inverse_p = struct.unpack("<f", bytes(controller.GetBufferData(frames[0].resource, 4, 4)))[0]
         status = statuses[0].resource
-        data = bytes(controller.GetBufferData(status, 0, 160))
-        if len(data) != 160:
+        data = bytes(controller.GetBufferData(status, 0, 256))
+        if len(data) != 256:
             raise RuntimeError("Incorrect status allocation size")
         bounds = struct.unpack_from("<4f", data, 96)
         peak, flags, count, reserved = struct.unpack_from("<f3I", data, 128)
@@ -71,19 +81,23 @@ def build_report(controller, report, capture_path, report_path):
                        and math.isfinite(gain) and gain >= 0)
         expected_r = Fraction(0)
         expected_a = Fraction(0)
+        operand_ceiling = Fraction(0)
         if well_formed and gain >= disabled_threshold:
             well_formed = all(math.isfinite(v) and v >= 0 for v in bounds) and bounds[0] < 1 and bounds[2] < 1
             if well_formed:
                 maximum = Fraction(peak) * Fraction(inverse_p)
                 expected_r = Fraction(max(bounds[0], bounds[2]))
                 expected_a = Fraction(gain) * Fraction(bounds[1]) + maximum * Fraction(bounds[3])
+                def promote(value):
+                    return max(Fraction(value), Fraction(1, 2**126)) if value > 0 else Fraction(0)
+                operand_ceiling = promote(gain) * promote(bounds[1]) + promote(maximum) * promote(bounds[3])
                 well_formed = maximum <= Fraction(maximum_float) and expected_a <= Fraction(maximum_float)
         if bool(valid) != well_formed or output_reserved != 0 or reserved != 0:
             raise RuntimeError(f"Invalid metadata classification: input={peak, flags, count}, bounds={bounds}, gain={gain}, output={r,a,valid}")
         if well_formed:
             if not math.isfinite(r) or not math.isfinite(a) or Fraction(r) < expected_r or Fraction(a) < expected_a:
                 raise RuntimeError("GPU coefficient does not enclose the exact transfer")
-            if a > float(expected_a) * 1.00001 + math.ldexp(1.00001, -126):
+            if a > float(operand_ceiling) * 1.00001 + math.ldexp(1.00001, -126):
                 raise RuntimeError("Unexpectedly loose AP coefficient")
         elif not math.isinf(a) or a < 0:
             raise RuntimeError("Invalid input did not produce an unbounded record")

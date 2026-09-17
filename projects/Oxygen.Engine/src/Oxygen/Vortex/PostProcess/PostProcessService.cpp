@@ -721,6 +721,11 @@ auto PostProcessService::FinalizeScenePrecision(RenderContext& ctx,
       || settings.mask_status == ExposureMaskStatus::kFailed))
     return reject();
   for (const auto& product : products) {
+    if (product.id == 5U || product.id == 6U || product.id == 10U)
+      static_cast<void>(exposure_pass_->GatherFilterGradients(
+        ctx, prepared.exposure.frame, product));
+  }
+  for (const auto& product : products) {
     if (product.id == 6U && product.texture != nullptr) {
       // Intermediate retained-error transport only. It cannot authorize
       // admission until the remaining consumer/candidate terms are qualified.

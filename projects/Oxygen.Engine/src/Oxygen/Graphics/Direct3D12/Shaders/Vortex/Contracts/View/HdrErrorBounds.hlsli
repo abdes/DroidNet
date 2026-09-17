@@ -24,7 +24,7 @@ static bool HdrFiniteNonnegative(float value)
 static float HdrBoundUp(float value)
 {
     const uint bits = asuint(value);
-    if (bits == 0u) return 0.0;
+    if ((bits & 0x7fffffffu) == 0u) return 0.0;
     if (!isfinite(value) || (bits & 0x80000000u) != 0u) return HdrBoundInfinity();
     return asfloat(min(max(bits, 0x00800000u) + 4u, 0x7f800000u));
 }
@@ -36,27 +36,48 @@ static float HdrBoundDown(float value)
     return bits <= 0x00800004u ? 0.0 : asfloat(bits - 4u);
 }
 
+// Widen operands before arithmetic: widening only a flushed result can miss
+// a subnormal multiplied by a large gain, or added to a nearby normal value.
+static float HdrUpperOperand(float value)
+{
+    const uint bits = asuint(value);
+    if ((bits & 0x7fffffffu) == 0u) return 0.0;
+    if (!HdrFiniteNonnegative(value)) return HdrBoundInfinity();
+    return asfloat(max(bits, 0x00800000u));
+}
+
 static float HdrUpperSum(float a, float b)
 {
-    const float result = a + b;
-    return result == 0.0 && (asuint(a) != 0u || asuint(b) != 0u)
+    const float result = HdrUpperOperand(a) + HdrUpperOperand(b);
+    return result == 0.0 && ((asuint(a) & 0x7fffffffu) != 0u || (asuint(b) & 0x7fffffffu) != 0u)
         ? asfloat(0x00800000u) : HdrBoundUp(result);
 }
 
 static float HdrUpperProduct(float a, float b)
 {
-    if (asuint(a) == 0u || asuint(b) == 0u) return 0.0;
-    const float result = a * b;
+    if ((asuint(a) & 0x7fffffffu) == 0u || (asuint(b) & 0x7fffffffu) == 0u) return 0.0;
+    const float result = HdrUpperOperand(a) * HdrUpperOperand(b);
     return result == 0.0 ? asfloat(0x00800000u) : HdrBoundUp(result);
+}
+
+// Nonnegative finite endpoints; compare bits so FTZ cannot erase a tiny gap.
+static float HdrUpperDifference(float high, float low)
+{
+    const uint high_bits = asuint(high) & 0x7fffffffu;
+    const uint low_bits = asuint(low) & 0x7fffffffu;
+    if (high_bits <= low_bits) return 0.0;
+    const float difference = high - low;
+    return difference == 0.0 ? asfloat(0x00800000u) : HdrBoundUp(difference);
 }
 
 static float2 HdrReferenceInterval(float observed, float2 bound)
 {
-    if (!isfinite(observed) || observed < 0.0 || !all(isfinite(bound))
-        || any(bound < 0.0) || bound.x >= 1.0)
+    if (!HdrFiniteNonnegative(observed) || !HdrFiniteNonnegative(bound.x)
+        || !HdrFiniteNonnegative(bound.y) || bound.x >= 1.0)
         return float2(0.0, HdrBoundInfinity());
-    if (all(bound == 0.0.xx)) return observed.xx;
-    const float low = HdrBoundDown(HdrBoundDown(max(observed - bound.y, 0.0))
+    if (all((asuint(bound) & 0x7fffffffu) == 0u.xx)) return observed.xx;
+    const float lower_observed = (asuint(observed) & 0x7fffffffu) < 0x00800000u ? 0.0 : observed;
+    const float low = HdrBoundDown(HdrBoundDown(max(lower_observed - HdrUpperOperand(bound.y), 0.0))
         / HdrUpperSum(1.0, bound.x));
     const float numerator = HdrUpperSum(observed, bound.y);
     const float high = numerator == 0.0 ? 0.0

@@ -102,12 +102,21 @@ struct alignas(16) HdrOpaqueApErrorData {
   std::uint32_t reserved { 0U };
 };
 
+//! GPU-only reference gradient maxima for linear-clamp sampling.
+struct alignas(16) HdrFilterGradientData {
+  std::array<float, 3> rgb {}; // Scene-referred maximum adjacent differences.
+  std::uint32_t flags { 0U }; // Recorded=1, invalid input/interval=2.
+  std::array<float, 3> transmittance {};
+  std::uint32_t checked_texels { 0U };
+};
+
 //! The readback prefix stays non-numerical; the tail remains GPU-owned.
 struct alignas(16) ExposureStatusStorage {
   ExposureCompletedStatus completed;
   std::array<HdrErrorBoundsData, 3> producer_errors {}; // Sky view, AP, fog.
   HdrCompositionInputData composition_input;
   HdrOpaqueApErrorData opaque_ap_error;
+  std::array<HdrFilterGradientData, 3> filter_gradients {}; // Sky, AP, fog.
 };
 static_assert(sizeof(HdrErrorBoundsData) == 16U);
 static_assert(offsetof(ExposureStatusStorage, producer_errors) == 80U);
@@ -115,7 +124,12 @@ static_assert(sizeof(HdrCompositionInputData) == 16U);
 static_assert(offsetof(ExposureStatusStorage, composition_input) == 128U);
 static_assert(sizeof(HdrOpaqueApErrorData) == 16U);
 static_assert(offsetof(ExposureStatusStorage, opaque_ap_error) == 144U);
-static_assert(sizeof(ExposureStatusStorage) == 160U);
+static_assert(sizeof(HdrFilterGradientData) == 32U);
+static_assert(offsetof(HdrFilterGradientData, flags) == 12U);
+static_assert(offsetof(HdrFilterGradientData, transmittance) == 16U);
+static_assert(offsetof(HdrFilterGradientData, checked_texels) == 28U);
+static_assert(offsetof(ExposureStatusStorage, filter_gradients) == 160U);
+static_assert(sizeof(ExposureStatusStorage) == 256U);
 static_assert(std::is_standard_layout_v<ExposureStatusStorage>);
 
 static_assert(sizeof(ExposureCompletedStatus) == 80U);

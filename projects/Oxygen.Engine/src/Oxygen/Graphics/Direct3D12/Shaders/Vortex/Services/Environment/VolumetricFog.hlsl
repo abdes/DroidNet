@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "Vortex/Contracts/View/FrameExposureHelpers.hlsli"
+#include "Vortex/Contracts/Definitions/SceneDefinitions.hlsli"
 #include "Vortex/Contracts/View/HdrStoreChecks.hlsli"
 #include "Vortex/Contracts/View/HdrErrorBounds.hlsli"
 #include "Core/Bindless/Generated.BindlessAbi.hlsl"
@@ -312,7 +313,7 @@ static bool TrySampleTemporalHistory(
     Texture3D<float4> history_texture =
         ResourceDescriptorHeap[
             pass.temporal_history0.previous_integrated_light_scattering_srv];
-    const SamplerState linear_sampler = SamplerDescriptorHeap[0];
+    const SamplerState linear_sampler = SamplerDescriptorHeap[VORTEX_SAMPLER_LINEAR_CLAMP];
     const float previous_w =
         (previous_z_slice + 0.5f) / max(float(pass.output_header.output_depth), 1.0f);
     history_value =
@@ -569,7 +570,7 @@ void VortexVolumetricFogCS(uint3 dispatch_id : SV_DispatchThreadID)
             ByteAddressBuffer previous_status = ResourceDescriptorHeap[pass.previous_error_bounds_srv];
             const float4 bounds = asfloat(previous_status.Load4(112u));
             [unroll] for (uint c = 0u; c < 3u; ++c) {
-                if (all(bounds.xy == 0.0.xx)) {
+                if (all((asuint(bounds.xy) & 0x7fffffffu) == 0u.xx)) {
                     history_low[c] = history_high[c] = history_value[c] * (GetPreExposure() * inverse_previous_p);
                 } else {
                     const float observed = max(history_value[c], 0.0) * inverse_previous_p;

@@ -347,21 +347,23 @@ def deferred_ap_branch_regression():
             "corrected_image_admission_pass": True}
 
 
-def linear_clamp_sample(values, shape, coordinate):
-    """Exact tensor interpolation in texel-center coordinates, including edges."""
+def linear_sample(values, shape, coordinate, wrap=False):
+    """Exact tensor interpolation with clamp or periodic texel addressing."""
     axes = []
     for size, value in zip(shape, coordinate):
-        value = min(F(size - 1), max(F(0), value))
+        if not wrap:
+            value = min(F(size - 1), max(F(0), value))
         left = math.floor(value)
         fraction = value - left
-        axes.append(((left, 1 - fraction), (min(left + 1, size - 1), fraction)))
+        axes.append(((left % size if wrap else left, 1 - fraction),
+                     ((left + 1) % size if wrap else min(left + 1, size - 1), fraction)))
     result = F(0)
     for x, y, z in product(*axes):
         result += values[(z[0] * shape[1] + y[0]) * shape[0] + x[0]] * x[1] * y[1] * z[1]
     return result
 
 
-def gradient_limits(values, shape, retained=Bound()):
+def gradient_limits(values, shape, retained=Bound(), wrap=False):
     """Enclose reference neighbor differences using retained per-texel intervals."""
     intervals = [retained.reference_interval(value) for value in values]
     maxima = [F(0), F(0), F(0)]
@@ -369,8 +371,11 @@ def gradient_limits(values, shape, retained=Bound()):
         coordinate = (x, y, z)
         here = intervals[(z * shape[1] + y) * shape[0] + x]
         for axis, stride in enumerate((1, shape[0], shape[0] * shape[1])):
-            if coordinate[axis] + 1 < shape[axis]:
-                there = intervals[(z * shape[1] + y) * shape[0] + x + stride]
+            if shape[axis] > 1 and (coordinate[axis] + 1 < shape[axis] or wrap):
+                index = (z * shape[1] + y) * shape[0] + x
+                boundary = coordinate[axis] + 1 == shape[axis]
+                neighbor = index - (shape[axis] - 1) * stride if boundary else index + stride
+                there = intervals[neighbor]
                 maxima[axis] = max(maxima[axis], here[1] - there[0], there[1] - here[0])
     return maxima
 
@@ -399,7 +404,7 @@ def filter_test_values(size, pattern, rng):
     return [f32(rng.randrange(65537) / 17) for _ in range(size)]
 
 
-def check_filter_coordinates():
+def check_filter_coordinates(wrap=False):
     rng = random.Random(0x46494c54)
     storage = Bound(F(1, 2048), F(1, 2**25))
     checks = 0
@@ -408,8 +413,8 @@ def check_filter_coordinates():
         for pattern in range(8):
             reference = filter_test_values(size, pattern, rng)
             stored = [half(value) for value in reference]
-            exact_gradients = gradient_limits(reference, shape)
-            enclosed_gradients = gradient_limits(stored, shape, storage)
+            exact_gradients = gradient_limits(reference, shape, wrap=wrap)
+            enclosed_gradients = gradient_limits(stored, shape, storage, wrap=wrap)
             for exact, enclosed in zip(exact_gradients, enclosed_gradients):
                 require(exact <= enclosed, "retained reference gradient")
                 checks += 1
@@ -420,15 +425,15 @@ def check_filter_coordinates():
                                 + F(1, 512) for extent in shape)
                 choices = [legal_fixed8_coordinates(value) for value in nominal]
                 first = tuple(values[0] for values in choices)
-                baseline = linear_clamp_sample(reference, shape, first)
+                baseline = linear_sample(reference, shape, first, wrap)
                 for second in product(*choices):
-                    reference_at_second = linear_clamp_sample(reference, shape, second)
-                    observed = linear_clamp_sample(stored, shape, second)
+                    reference_at_second = linear_sample(reference, shape, second, wrap)
+                    observed = linear_sample(stored, shape, second, wrap)
                     displacement = [abs(a - b) for a, b in zip(first, second)]
                     coordinate_error = sum(g * d for g, d in zip(exact_gradients, displacement))
                     enclosed_error = sum(g * d for g, d in zip(enclosed_gradients, displacement))
                     require(abs(reference_at_second - baseline) <= coordinate_error,
-                            "linear-clamp Lipschitz bound across cell/edge boundaries")
+                            "linear-filter Lipschitz bound across cell/edge boundaries")
                     require(abs(observed - reference_at_second) <= storage.error(reference_at_second),
                             "common-weight storage bound")
                     allowance = storage.error(baseline) + (1 + storage.relative) * enclosed_error
@@ -447,13 +452,13 @@ def filter_coordinate_counterexample():
     require(positions == (F(0), F(1, 256)), "legal fixed8 tie alternatives")
     values = [F(0), F(1)]
     require([half(v) for v in values] == values, "no texel store error")
-    baseline = linear_clamp_sample(values, (2, 1, 1), (positions[0], F(0), F(0)))
-    other = linear_clamp_sample(values, (2, 1, 1), (positions[1], F(0), F(0)))
+    baseline = linear_sample(values, (2, 1, 1), (positions[0], F(0), F(0)))
+    other = linear_sample(values, (2, 1, 1), (positions[1], F(0), F(0)))
     require(abs(other - baseline) > image_budget(baseline), "coordinate error exceeds image budget")
     require(is_dark(baseline, F(1, 4096)) and not is_dark(other, F(1, 4096)),
             "coordinate error changes dark classification")
     relative = F(1, 1024)
-    retained = linear_clamp_sample([F(0), 1 + relative], (2, 1, 1),
+    retained = linear_sample([F(0), 1 + relative], (2, 1, 1),
                                    (positions[1], F(0), F(0)))
     require(abs(retained - baseline) > relative * baseline + (other - baseline),
             "omitting the relative/displacement cross term must fail")
@@ -468,6 +473,44 @@ def filter_coordinate_counterexample():
             "scope": "Allowed coordinate-rounding counterexample, not a claim about a measured device"}
 
 
+def bound_operand_ftz_counterexample():
+    tiny, normal = F(1, 2**149), F(1, 2**126)
+    gain = F(2**100)
+    exact_product = tiny * gain
+    # If the tiny input flushes, the previous post-result fallback supplies
+    # only the smallest normal. It cannot recover the amplified contribution.
+    require(normal < exact_product, "post-result widening misses amplified operand loss")
+    require(normal * gain >= exact_product, "pre-arithmetic upper operand contains product")
+    largest_subnormal = normal - tiny
+    exact_sum = normal + largest_subnormal
+    old_sum_bound = normal + 4 * tiny
+    require(old_sum_bound < exact_sum, "four result ULPs do not cover a flushed addend")
+    require(2 * normal >= exact_sum, "upper operands contain the sum")
+    observed = 2 * normal
+    exact_difference = observed - largest_subnormal
+    old_lower_bound = observed - 8 * tiny
+    require(old_lower_bound > exact_difference, "post-result lower rounding misses a flushed subtrahend")
+    require(observed - normal <= exact_difference, "upper subtrahend preserves lower enclosure")
+    return {"smallest_subnormal": float(tiny), "gain": float(gain),
+            "exact_product": float(exact_product), "old_product_upper": float(normal),
+            "exact_sum": float(exact_sum), "old_sum_upper": float(old_sum_bound),
+            "exact_difference": float(exact_difference), "old_difference_lower": float(old_lower_bound),
+            "hardware_observation": False,
+            "scope": "Required operand handling under FTZ; not a claim that every device flushes this operation"}
+
+
+def filter_wrap_counterexample():
+    values, shape = [F(0), F(1), F(2)], (3, 1, 1)
+    first, second = (F(5, 2), F(0), F(0)), (F(5, 2) + F(1, 256), F(0), F(0))
+    difference = abs(linear_sample(values, shape, first, True) - linear_sample(values, shape, second, True))
+    clamp_gradient = gradient_limits(values, shape)[0]
+    wrap_gradient = gradient_limits(values, shape, wrap=True)[0]
+    require(difference > clamp_gradient / 256, "omitting periodic edge underestimates the filter")
+    require(difference == wrap_gradient / 256, "periodic gradient encloses seam variation")
+    return {"texels": [0, 1, 2], "clamp_gradient": float(clamp_gradient),
+            "periodic_gradient": float(wrap_gradient), "sample_difference": float(difference)}
+
+
 def main():
     parser = ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
@@ -480,11 +523,13 @@ def main():
               "scope": "Exact scalar/componentwise algebra and binary16 counterexamples; not GPU qualification",
               "algebra_checks": check_algebra(),
               "consumer_interval_checks": check_consumer_intervals(),
-              "filter_coordinate_checks": check_filter_coordinates(),
+              "filter_coordinate_checks": check_filter_coordinates() + check_filter_coordinates(True),
               "counterexamples": {"AP strength": amplification_counterexample(),
                                   "dark classification": classification_counterexample(),
                                   "temporal history": temporal_counterexample(),
-                                  "filter coordinate rounding": filter_coordinate_counterexample()},
+                                  "filter coordinate rounding": filter_coordinate_counterexample(),
+                                  "bound operand FTZ": bound_operand_ftz_counterexample(),
+                                  "periodic filter edge": filter_wrap_counterexample()},
               "regressions": {"removed deferred AP branch": deferred_ap_branch_regression()},
               "remaining": ["Justify runtime source/consumer bounds and carry certificate lifetimes",
                             "Implement outward-safe GPU arithmetic, coverage and filtering rules",
