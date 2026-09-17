@@ -29,6 +29,7 @@
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereState.h>
+#include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererCapability.h>
@@ -314,6 +315,10 @@ VolumetricFogPass::~VolumetricFogPass()
 auto VolumetricFogPass::OnFrameStart(
   const frame::SequenceNumber sequence, const frame::Slot slot) -> void
 {
+  if (exposure_frame_ != sequence) {
+    exposure_readers_[slot.get()].clear();
+    exposure_frame_ = sequence;
+  }
   auto gfx = renderer_.GetGraphics();
   if (gfx != nullptr) {
     std::unordered_set<const graphics::Texture*> released;
@@ -482,6 +487,12 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
     && NearlyEqual(history_entry.grid_z_params[1], grid_z_params.y)
     && NearlyEqual(history_entry.grid_z_params[2], grid_z_params.z);
   if (history_matches) {
+    if (history_entry.frame_exposure) {
+      constants.previous_frame_exposure_srv
+        = history_entry.frame_exposure->srv_index.get();
+      exposure_readers_[ctx.frame_slot.get()].push_back(
+        history_entry.frame_exposure);
+    }
     constants.temporal_history0.previous_integrated_light_scattering_srv
       = history_entry.srv.get();
     constants.temporal_history0.enabled = 1U;
@@ -589,6 +600,14 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
   TrackTextureFromKnownOrInitial(*recorder, *texture);
   recorder->RequireResourceState(
     *texture, graphics::ResourceStates::kUnorderedAccess);
+  if (history_matches && history_entry.frame_exposure) {
+    const auto& previous_p = *history_entry.frame_exposure->buffer;
+    if (!recorder->AdoptKnownResourceState(previous_p))
+      recorder->BeginTrackingResourceState(
+        previous_p, graphics::ResourceStates::kShaderResource, false);
+    recorder->RequireResourceState(
+      previous_p, graphics::ResourceStates::kShaderResource);
+  }
   recorder->FlushBarriers();
 
   recorder->SetPipelineState(BuildPipelineDesc());
@@ -653,6 +672,7 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
       live_textures_.push_back(history_entry.texture);
     }
     history_entry.texture = texture;
+    history_entry.frame_exposure = ctx.current_view.frame_exposure;
     history_entry.srv = integrated_srv;
     history_entry.width = width;
     history_entry.height = height;

@@ -75,14 +75,6 @@ static inline bool IsReflectionCaptureView(EnvironmentViewData environment_view)
     return (environment_view.flags & kEnvironmentViewFlagReflectionCapture) != 0u;
 }
 
-static float3 ClampPreExposedDiskLuminance(float3 pre_exposed_luminance)
-{
-    // Mirrors UE5.7 SkyAtmosphere.usf::GetLightDiskLuminance: clamp the
-    // pre-exposed disk luminance per channel to 64000 to avoid overflow and
-    // pathological TAA input from the solar disk.
-    return min(pre_exposed_luminance, 64000.0f.xxx);
-}
-
 static inline float2 ResolveSkyViewUvFromLocalDirection(
     EnvironmentStaticData env_data,
     EnvironmentViewData environment_view,
@@ -230,7 +222,7 @@ float4 VortexSkyPassPS(VortexFullscreenTriangleOutput input) : SV_Target0
 
         sky_color *= env_data.sky_sphere.tint_rgb
             * max(env_data.sky_sphere.intensity, 0.0f);
-        return float4(max(sky_color, 0.0f.xxx), 1.0f);
+        return float4(max(sky_color, 0.0f.xxx) * GetPreExposure(), 1.0f);
     }
 
     if (env_data.atmosphere.sky_view_lut_slot == K_INVALID_BINDLESS_INDEX)
@@ -263,8 +255,7 @@ float4 VortexSkyPassPS(VortexFullscreenTriangleOutput input) : SV_Target0
     // atmosphere pipeline.
     SamplerState linear_sampler
         = SamplerDescriptorHeap[kAtmosphereLinearClampSampler];
-    const float view_pre_exposure = max(GetPreExposure(), 1.0e-6f);
-    const float view_one_over_pre_exposure = rcp(view_pre_exposure);
+    const float view_pre_exposure = GetPreExposure();
     const float4 sky_sample = sky_view_lut.SampleLevel(linear_sampler, uv, 0.0f);
     float3 sky_color = max(
         sky_sample.rgb * environment_view.sky_luminance_factor_height_fog_contribution.xyz,
@@ -295,8 +286,7 @@ float4 VortexSkyPassPS(VortexFullscreenTriangleOutput input) : SV_Target0
             light_direction_local,
             cos_half_apex,
             environment_view.atmosphere_light0_disk_luminance_rgb.xyz) * view_pre_exposure;
-        sky_color += ClampPreExposedDiskLuminance(
-            disk_luminance_pre_exposed);
+        sky_color += disk_luminance_pre_exposed;
     }
     if (light1_disk_enabled)
     {
@@ -312,16 +302,10 @@ float4 VortexSkyPassPS(VortexFullscreenTriangleOutput input) : SV_Target0
             light_direction_local,
             cos_half_apex,
             environment_view.atmosphere_light1_disk_luminance_rgb.xyz) * view_pre_exposure;
-        sky_color += ClampPreExposedDiskLuminance(
-            disk_luminance_pre_exposed);
+        sky_color += disk_luminance_pre_exposed;
     }
 
-    // Mirrors UE5.7 SkyAtmosphere.usf::PrepareOutput (line 869): clamp the
-    // pre-exposed luminance per channel to Max10BitsFloat*0.5 (32256) so the
-    // sky stays within fp10 range and leaves headroom for bloom/clouds/etc.
-    // Max10BitsFloat is defined in UE Common.ush:144 as 64512.0f.
-    sky_color = min(sky_color, 32256.0f.xxx);
-    return float4(sky_color * view_one_over_pre_exposure, sky_sample.a);
+    return float4(sky_color, sky_sample.a);
 }
 
 [shader("compute")]

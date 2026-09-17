@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include "Vortex/Contracts/View/FrameExposureHelpers.hlsli"
 #include "Vortex/Services/Lighting/DeferredLightingCommon.hlsli"
 #include "Vortex/Services/Shadows/DirectionalShadowCommon.hlsli"
 #include "Vortex/Services/Lighting/AtmosphereDirectionalLightShared.hlsli"
@@ -43,7 +44,7 @@ float4 DeferredLightDirectionalPS(VortexFullscreenTriangleOutput input) : SV_Tar
         if (!HasDeferredLightingInputs(bindings) || scene_depth >= 1.0f) {
             return 0.0f.xxxx;
         }
-        return float4(EvaluateDeferredStaticSkyLightDiffuse(surface), 0.0f);
+        return float4(EvaluateDeferredStaticSkyLightDiffuse(surface) * GetPreExposure(), 0.0f);
     }
 
 #if defined(DEBUG_IBL_ONLY)
@@ -67,14 +68,14 @@ float4 DeferredLightDirectionalPS(VortexFullscreenTriangleOutput input) : SV_Tar
         LoadDeferredLightColor(light_constants.light_color_and_intensity));
 #if defined(DEBUG_DIRECT_LIGHTING_ONLY)
     const float NoL = saturate(dot(surface.world_normal, light_dir));
-    return float4(surface.base_color * deferred_light_radiance * NoL, 0.0f);
+    return float4(surface.base_color * deferred_light_radiance * NoL * GetPreExposure(), 0.0f);
 #elif defined(DEBUG_DIRECT_LIGHT_GATES)
     const float transmittance_luma = dot(
         saturate(light_constants.atmosphere_transmittance_and_padding.xyz),
         float3(0.2126f, 0.7152f, 0.0722f));
     return float4(saturate(light_attenuation), saturate(transmittance_luma), 0.0f, 0.0f);
 #elif defined(DEBUG_DIRECT_BRDF_CORE)
-    return float4(EvaluateCookTorranceLighting(surface, light_dir, 1.0f.xxx), 0.0f);
+    return float4(EvaluateCookTorranceLighting(surface, light_dir, 1.0f.xxx) * GetPreExposure(), 0.0f);
 #endif
     const float3 lighting = EvaluateDeferredLightAtWorldPosition(
         input.uv,
@@ -85,5 +86,5 @@ float4 DeferredLightDirectionalPS(VortexFullscreenTriangleOutput input) : SV_Tar
         light_attenuation,
         camera_position,
         bindings);
-    return float4(lighting, 0.0f);
+    return float4(lighting * GetPreExposure(), 0.0f);
 }

@@ -148,6 +148,13 @@ nor publishes new adaptation history. Zero displayed gain selects positive
 latent gain for numerical P. Recovery and diagnostic frames use P=1; a missing
 root history also forces the source-initialization fallback flag and FP32.
 
+Scene publication binds this GPU record from the global structured-SRV domain;
+the old PreparedSceneFrame exposure scalar no longer supplies numerical P.
+Resolved SceneColor metadata retains the frame-record lease. Pre-scene
+preparation failure returns to the view caller before HDR draws and does not
+publish a replacement output. Display wireframe overlays run after tonemapping;
+full-view HDR diagnostics use their pinned unit-exposure domain.
+
 `VortexExposureFrameCS` uses a 48-byte structured constants record: output UAV,
 reserved-current-state UAV, prior-state SRV and candidate-state SRV at offsets
 0/4/8/12; fixed gain, initial log gain and seed log gain at 16/20/24; exposure

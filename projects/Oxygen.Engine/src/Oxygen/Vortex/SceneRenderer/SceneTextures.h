@@ -23,6 +23,9 @@
 #include <Oxygen/Vortex/api_export.h>
 
 namespace oxygen::vortex {
+namespace postprocess {
+  struct FrameExposureResources;
+}
 
 struct SceneTexturesConfig {
   glm::uvec2 extent { 0, 0 };
@@ -197,6 +200,7 @@ struct SceneTextureAspectView {
 struct SceneTextureExtractRef {
   graphics::Texture* texture { nullptr };
   bool valid { false };
+  std::shared_ptr<const postprocess::FrameExposureResources> exposure;
 };
 
 struct SceneTextureExtracts {

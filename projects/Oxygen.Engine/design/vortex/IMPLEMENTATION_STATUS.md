@@ -142,17 +142,30 @@ target, source-loss continuity and unavailable fallback have native coverage.
 Tone curves preserve ordinary response and remain finite at 2^64 input.
 Debug and Release pass 106 native, 22 service and 22 publication tests; fifteen
 debugger cases and the final S/P RenderDoc audit pass. Evidence is
-`lifecycle/domain-manifest.json`. Scene renderer publication, active HDR
-producer conversion, precision eligibility/status integration and scene/MultiView
-validation remain open.
+`lifecycle/domain-manifest.json` records that service-level checkpoint.
 The dual-format allocation path is now implemented for SceneColor, its resolved
 artifact and per-view sky/AP/fog products, with format-correct views and
 compatible fog-history retention. Debug/Release evidence includes 107 native,
 7 texture, 6 pool, 56 environment, 22 service, 22 publication and 78 rebuilt
 renderer/context/facade regressions. The final FP32 storage debugger case has
 no blocking graphics messages; evidence is `lifecycle/formats-manifest.json`.
-This does not yet enable automatic precision admission or complete the scene
-HDR domain migration.
+Scene publication now uses the GPU frame record, with matching P-domain
+emissive/direct/forward, sky/AP and fog writes, retained product/history leases,
+and display-side wireframe overlay. Preparation failures return without HDR
+draws or replacement output and preserve pending requests. Native tests cover
+standalone/in-frame retries, real-scene sky P invariance and high radiance, plus
+paired-view fog history blending with RGB rebasing and unchanged transmittance.
+The scene path currently retains FP32. Automatic precision admission/recovery,
+canonical cubemap narrowing qualification and the remaining scene/MultiView
+acceptance matrix still keep slice 5 open.
+The conservative-FP32 scene cutover passes 111 native, 7 texture, 6 pool,
+56 environment, 22 service and 22 publication tests per configuration, plus
+78 renderer/context/facade regressions. Four scene debugger cases and the
+refreshed VortexBasic runtime/debugger/capture proof pass. Actual bound-resource
+inspection verifies fog/AP consumption and FP32 products; the final S/P pixel
+matches an independent oracle, and the mapped image was inspected. Evidence is
+`scene/scene-migration-manifest.json`. FP16 admission/recovery and remaining
+scene/MultiView acceptance are not closed by this checkpoint.
 Mask identity now follows the approved existing resource-index model.
 
 ## 4. Milestone Ledger

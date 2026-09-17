@@ -254,6 +254,7 @@ def resource_used_in_events(controller, resource_id, event_ids):
 
 def find_named_resource_usage(controller, resource_records, event_ids, *tokens):
     matches = []
+    candidates = {}
     for resource in resource_records:
         resource_id = safe_getattr(resource, "resourceId")
         name = safe_getattr(resource, "name", "")
@@ -262,8 +263,33 @@ def find_named_resource_usage(controller, resource_records, event_ids, *tokens):
         lower_name = name.lower()
         if not all(token.lower() in lower_name for token in tokens):
             continue
+        candidates[str(resource_id)] = {"resource_id": resource_id, "name": name}
         if resource_used_in_events(controller, resource_id, event_ids):
             matches.append({"resource_id": resource_id, "name": name})
+    if matches or not candidates:
+        return matches
+    # GetUsage can omit dynamically indexed descriptor-heap accesses. Query
+    # the resources actually used by the shader at draws/dispatches instead.
+    rd = renderdoc_module()
+    found = set()
+    for action in collect_action_records(controller):
+        if action.event_id not in event_ids:
+            continue
+        if action.flags & rd.ActionFlags.Dispatch:
+            stage = rd.ShaderStage.Compute
+        elif action.flags & rd.ActionFlags.Drawcall:
+            stage = rd.ShaderStage.Pixel
+        else:
+            continue
+        controller.SetFrameEvent(action.event_id, True)
+        pipeline = controller.GetPipelineState()
+        resources = list(pipeline.GetReadOnlyResources(stage, True))
+        resources += list(pipeline.GetReadWriteResources(stage, True))
+        for resource in resources:
+            key = str(resource.descriptor.resource)
+            if key in candidates and key not in found:
+                found.add(key)
+                matches.append(candidates[key])
     return matches
 
 

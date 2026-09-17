@@ -423,10 +423,10 @@ public:
       return pipeline_.feature_profile;
     }
 
-    OXGN_VRTX_API auto ExecuteNow() -> void;
+    OXGN_VRTX_API auto ExecuteNow() -> bool;
     OXGN_VRTX_API auto ExecuteInsideFrame(engine::FrameContext& frame_context)
-      -> void;
-    OXGN_VRTX_API auto Execute() -> co::Co<void>;
+      -> bool;
+    OXGN_VRTX_API auto Execute() -> co::Co<bool>;
 
   private:
     observer_ptr<Renderer> renderer_ { nullptr };
@@ -858,7 +858,7 @@ private:
   auto RefreshCurrentViewFrameBindings(
     RenderContext& render_context, SceneRenderer& scene_renderer) -> void;
   auto PublishCurrentViewPreSceneFrameBindings(
-    RenderContext& render_context, SceneRenderer& scene_renderer) -> void;
+    RenderContext& render_context, SceneRenderer& scene_renderer) -> bool;
   auto PublishCurrentViewPostSceneFrameBindings(
     RenderContext& render_context, SceneRenderer& scene_renderer) -> void;
   auto ResetPublicationState() -> void;

@@ -173,7 +173,7 @@ static VortexSingleScatteringResult IntegrateSkyLight(
     Texture2D<float4> multi_scat_lut = ResourceDescriptorHeap[PassMultiScatteringLutSrv(pass)];
     SamplerState linear_sampler
         = SamplerDescriptorHeap[kAtmosphereLinearClampSampler];
-    const float output_pre_exposure = max(GetPreExposure(), 1.0e-6f);
+    const float output_pre_exposure = GetPreExposure();
     VortexSamplingSetup sampling = (VortexSamplingSetup)0;
     sampling.VariableSampleCount = true;
     sampling.SampleCountIni = 0.0f;

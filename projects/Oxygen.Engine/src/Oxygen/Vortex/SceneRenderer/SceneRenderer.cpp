@@ -1384,6 +1384,15 @@ namespace {
     };
   }
 
+  auto InitialExposureSceneConfig(
+    const Renderer& renderer, SceneTexturesConfig config) -> SceneTexturesConfig
+  {
+    if (renderer.HasCapability(
+          RendererCapabilityFamily::kFinalOutputComposition))
+      config.scene_color_format = Format::kRGBA32Float;
+    return config;
+  }
+
   auto ResolveAuthoredPostProcessConfig(const RenderContext& ctx,
     PostProcessService& service,
     const RenderContext::ViewExecutionEntry* captured_view = nullptr)
@@ -1497,8 +1506,8 @@ SceneRenderer::SceneRenderer(Renderer& renderer, Graphics& gfx,
   const SceneTexturesConfig config, const ShadingMode default_shading_mode)
   : renderer_(renderer)
   , gfx_(gfx)
-  , scene_textures_(gfx, config)
-  , scene_texture_pool_(gfx, config)
+  , scene_textures_(gfx, InitialExposureSceneConfig(renderer, config))
+  , scene_texture_pool_(gfx, InitialExposureSceneConfig(renderer, config))
   , active_scene_textures_(&scene_textures_)
   , inspected_scene_textures_(&scene_textures_)
   , default_shading_mode_(default_shading_mode)
@@ -1629,6 +1638,22 @@ void SceneRenderer::PrimePreparedViews(RenderContext& ctx)
   }
 }
 
+auto SceneRenderer::PrepareExposureDomain(RenderContext& ctx) -> bool
+{
+  if (!post_process_
+    || !ctx.current_view.feature_mask.Has(
+      CompositionView::ViewFeatureMask::kSceneLighting))
+    return true;
+  post_process_->SetConfig(
+    ResolveAuthoredPostProcessConfig(ctx, *post_process_));
+  // No product-suitability proof has been published yet. Retain the planned
+  // FP32 mode until the completed-status admission path can certify all
+  // products.
+  ctx.current_view.frame_exposure
+    = post_process_->PrepareFrameExposure(ctx, true);
+  return ctx.current_view.frame_exposure != nullptr;
+}
+
 void SceneRenderer::BindPreparedView(RenderContext& ctx)
 {
   ctx.current_view.prepared_frame.reset(nullptr);
@@ -1664,8 +1689,18 @@ void SceneRenderer::RenderViewFamily(RenderContext& ctx)
       continue;
     }
 
-    ++rendered_scene_view_count;
+    ctx.frame_views[view_index].rendered = false;
+    if (std::ranges::any_of(
+          entry.resolved_aux_inputs, [&auxiliary_products](const auto& input) {
+            return input.valid && input.input.required
+              && !auxiliary_products.contains(input.input.id);
+          }))
+      continue;
     internal::PerViewScope view_scope { ctx, view_index };
+    if (post_process_
+      && ctx.current_view.feature_mask.Has(
+        CompositionView::ViewFeatureMask::kSceneLighting))
+      ctx.current_view.hdr_color_format = Format::kRGBA32Float;
     auto scene_texture_lease
       = scene_texture_pool_.Acquire(BuildSceneTextureLeaseKey(ctx));
     ctx.current_view.hdr_color_format
@@ -1678,11 +1713,19 @@ void SceneRenderer::RenderViewFamily(RenderContext& ctx)
     BindPreparedView(ctx);
     ResetPerViewSceneProducts();
     renderer_.DispatchViewExtensionsOnViewSetup(ctx);
-    renderer_.PublishCurrentViewPreSceneFrameBindings(ctx, *this);
+    if (!renderer_.PublishCurrentViewPreSceneFrameBindings(ctx, *this))
+      continue;
     renderer_.DispatchViewExtensionsOnPreRenderViewGpu(ctx);
     RenderCurrentView(ctx);
+    if (post_process_
+      && ctx.current_view.feature_mask.Has(
+        CompositionView::ViewFeatureMask::kSceneLighting)
+      && !post_process_->GetLastExecutionState().wrote_visible_output)
+      continue;
     renderer_.PublishCurrentViewPostSceneFrameBindings(ctx, *this);
     renderer_.DispatchViewExtensionsOnPostRenderViewGpu(ctx);
+    ctx.frame_views[view_index].rendered = true;
+    ++rendered_scene_view_count;
 
     for (const auto& output : entry.produced_aux_outputs) {
       if (output.kind != CompositionView::AuxOutputKind::kColorTexture) {
@@ -1709,10 +1752,8 @@ void SceneRenderer::RenderViewFamily(RenderContext& ctx)
         continue;
       }
       const auto product_it = auxiliary_products.find(input.input.id);
-      CHECK_F(product_it != auxiliary_products.end(),
-        "SceneRenderer: resolved auxiliary input {} for view {} was not "
-        "extracted before consumption",
-        input.input.id.get(), entry.view_id.get());
+      if (product_it == auxiliary_products.end())
+        continue;
       auto target = ResolveFramebufferColorTexture(entry.primary_target);
       CHECK_F(static_cast<bool>(target),
         "SceneRenderer: auxiliary consumer view {} has no color target",
@@ -1764,15 +1805,22 @@ void SceneRenderer::RenderViewFamily(RenderContext& ctx)
     scene_texture_pool_.GetLiveLeaseCount());
 }
 
-void SceneRenderer::OnRender(RenderContext& ctx)
+auto SceneRenderer::OnRender(RenderContext& ctx) -> bool
 {
   if (!ctx.frame_views.empty() && ctx.current_view.view_id == kInvalidViewId
     && !ctx.per_view_scope_active_) {
     RenderViewFamily(ctx);
-    return;
+    return std::ranges::any_of(
+      ctx.frame_views, [](const auto& view) { return view.rendered; });
   }
-
+  if (post_process_ && !ctx.current_view.frame_exposure
+    && !renderer_.PublishCurrentViewPreSceneFrameBindings(ctx, *this))
+    return false;
   RenderCurrentView(ctx);
+  return !post_process_
+    || !ctx.current_view.feature_mask.Has(
+      CompositionView::ViewFeatureMask::kSceneLighting)
+    || post_process_->GetLastExecutionState().wrote_visible_output;
 }
 
 void SceneRenderer::RenderCurrentView(RenderContext& ctx)
@@ -2376,10 +2424,12 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
 
   // Stage 19: reserved - DistortionModule
 
-  if (base_pass_ != nullptr && wants_scene_lighting
-    && ctx.render_mode == RenderMode::kOverlayWireframe && !wireframe_only) {
+  const auto draw_wireframe_overlay = [&](const graphics::Framebuffer* target) {
+    if (base_pass_ == nullptr || !wants_scene_lighting || wireframe_only
+      || ctx.render_mode != RenderMode::kOverlayWireframe)
+      return;
     const auto overlay_draws
-      = base_pass_->ExecuteWireframeOverlay(ctx, scene_textures);
+      = base_pass_->ExecuteWireframeOverlay(ctx, scene_textures, target);
     RecordDiagnosticsPass(renderer_,
       DiagnosticsPassRecord {
         .name = "Vortex.Stage20.WireframeOverlay",
@@ -2389,7 +2439,10 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
           "Vortex.PreparedSceneFrame" },
         .outputs = { "Vortex.SceneColor" },
       });
-  }
+  };
+
+  if (!post_process_)
+    draw_wireframe_overlay(nullptr);
 
   // Maintain late scene-texture publication before the output handoff stages.
   if (wants_scene_texture_publication) {
@@ -2487,6 +2540,8 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
     };
     post_process_->Execute(
       ctx.current_view.view_id, ctx, scene_textures, post_process_inputs);
+    if (!post_process_->GetLastExecutionState().wrote_visible_output)
+      return;
     published_view_frame_bindings_.post_process_frame_slot
       = post_process_->ResolveBindingSlot(ctx.current_view.view_id);
     RecordDiagnosticsPass(renderer_,
@@ -2504,6 +2559,9 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
       published_view_frame_bindings_.post_process_frame_slot);
     renderer_.RefreshCurrentViewFrameBindings(ctx, *this);
   }
+
+  if (post_process_)
+    draw_wireframe_overlay(ResolveLateOverlayTarget(ctx).get());
 
   // Stage 20: Ground grid
   if (ground_grid_pass_ != nullptr && wants_scene_lighting && !wireframe_only) {

@@ -1161,9 +1161,8 @@ native, 22/22 service and 22/22 publication tests. Fifteen debugger cases have
 no blocking graphics messages. RenderDoc verifies the reserved-state writes,
 unchanged frame records and final S/P pixels. Evidence is
 `lifecycle/domain-manifest.json` and `lifecycle/domain-analysis.txt`.
-Scene renderer publication still uses the CPU-prepared binding. The full HDR
-producer/consumer migration, status-qualified format selection and scene-
-integrated gates below remain open; this does not qualify slice 5.
+These service-level results are extended by the scene cutover below; they do
+not independently qualify slice 5.
 
 The allocation path now carries RGBA16F/RGBA32F through SceneTexturesConfig,
 the existing pool key, per-view environment allocation and matching SRV/UAV
@@ -1175,14 +1174,38 @@ pipeline/output artifacts, and a native storage fixture preserves RGB from
 7 texture, 6 pool, 56 environment, 22 service and 22 publication tests, plus
 78 rebuilt renderer/context/facade regressions. The corrected storage fixture
 passes its debugger run without blocking graphics messages. Evidence is
-`lifecycle/formats-manifest.json`. This provides the allocation mechanism;
-status-qualified per-view mode selection and producer-domain conversion remain
-required before enabling the complete scene path.
+`lifecycle/formats-manifest.json` records this allocation checkpoint.
 
-- [ ] Add the early GPU P resolve and bind a frame-invariant P/1P to every HDR pass.
+Scene rendering now publishes the GPU frame record before HDR work and retains
+it in resolved-color products and fog history. Emissive, deferred/forward
+lighting, sky/AP and fog writes use the P domain; tonemapping removes P once.
+Wireframe overlays run on mapped output. The old sky radiance caps and exposure
+cancellation are removed. Fog history rebases RGB without scaling transmittance;
+its texture-domain checks and final fog sampling use the actual texture domain.
+Preparation failure skips the view and required auxiliary dependants, preserves
+the caller's existing output and queued request, and returns failure from both
+offscreen entry paths. The current scene path conservatively retains FP32 until
+all required products can supply completed suitability proof. Automatic FP16
+admission, range-triggered recovery, canonical cubemap narrowing qualification,
+and the complete scene/MultiView matrix remain open.
+
+This conservative-FP32 scene increment passes 111 native tests, 7 texture,
+6 pool, 56 environment, 22 service and 22 publication tests in Debug and
+Release, plus 78 rebuilt renderer/context/facade regressions. Four native scene
+debugger cases pass without blocking graphics messages. The refreshed
+VortexBasic runtime/debugger/capture proof passes with fog/AP consumption
+verified from actually used bindless resources; an independent final-pixel
+oracle checks S/P within one output code value. The mapped image was inspected.
+Paired-view native tests separately prove nonunit-P sky invariance, high-radiance
+preservation, actual fog history blending/RGB rebasing, unchanged transmittance,
+and recoverable pre-scene failure. Evidence is
+`scene/scene-migration-manifest.json`. These results do not certify FP16
+eligibility, range-triggered recovery or the remaining MultiView gates.
+
+- [x] Add the early GPU P resolve and bind a frame-invariant P/1P to every HDR pass.
 - [ ] Migrate the entire section 4.4 checklist, including atmosphere producer/
   consumer pairs, fog/color histories, bloom and offscreen/capture domains.
-- [ ] Meter with 1/P and tonemap with S/P in every mode, including disabled and
+- [x] Meter with 1/P and tonemap with S/P in every mode, including disabled and
   zero-target cases. Remove obsolete manual-exposure cancellation paths.
 - [ ] Add transient FP32 bootstrap/remeter products and matching PSO/resolve
   format keys. Keep exposure history through FP32-to-FP16 transition.

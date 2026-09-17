@@ -48,6 +48,19 @@ processing retains its existing source_radiance_scale and qualifies the actual
 half upload, including dark required signals, rather than only avoiding maximum
 overflow. Dynamic capture work retains its existing owning scope.
 
+The active sky/AP producers and consumers now keep their radiance in the same
+P domain. Sky sphere radiance is multiplied by P at its SceneColor write;
+atmosphere LUT radiance and solar-disk radiance are not divided back out or
+silently capped to FP16/FP10 maxima. Height/local fog scale added RGB only.
+Volumetric-fog history retains the producing frame record and pins that record
+for current readers; reprojection multiplies stored RGB by P_current/P_stored
+before blending. Both fog-volume readers validate the texture descriptor domain
+(the distant-sky SH buffer still uses the buffer-SRV domain).
+
+Scene rendering conservatively retains FP32 while product eligibility/status
+integration is incomplete. This avoids treating successful metering as proof
+of representability; it is not completion of the required FP16 return policy.
+
 Every active high-range producer participates in pre-store range/eligibility
 checks; upgrading SceneColor after an AP/fog/sky overflow cannot repair it.
 Eligibility belongs to each view even when gain is borrowed. Format retention

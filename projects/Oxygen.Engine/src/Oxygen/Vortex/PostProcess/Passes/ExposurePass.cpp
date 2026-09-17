@@ -14,6 +14,7 @@
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Core/Bindless/Generated.BindlessAbi.h>
 #include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
 #include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
@@ -337,8 +338,11 @@ auto ExposurePass::AcquireFrame() -> std::shared_ptr<FrameResources>
   auto& allocator = gfx->GetDescriptorAllocator();
   for (const auto type : { graphics::ResourceViewType::kStructuredBuffer_SRV,
          graphics::ResourceViewType::kStructuredBuffer_UAV }) {
-    auto handle = allocator.AllocateRaw(
-      type, graphics::DescriptorVisibility::kShaderVisible);
+    auto handle = type == graphics::ResourceViewType::kStructuredBuffer_SRV
+      ? allocator.AllocateBindless(
+          ::oxygen::bindless::generated::kGlobalSrvDomain, type)
+      : allocator.AllocateRaw(
+          type, graphics::DescriptorVisibility::kShaderVisible);
     CHECK_F(handle.IsValid());
     const auto index = allocator.GetShaderVisibleIndex(handle);
     const auto view = registry.RegisterView(*frame->buffer, std::move(handle),

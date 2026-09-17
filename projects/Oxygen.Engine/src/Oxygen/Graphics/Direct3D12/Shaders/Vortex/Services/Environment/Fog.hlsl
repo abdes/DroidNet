@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include "Vortex/Contracts/View/FrameExposureHelpers.hlsli"
 #include "Vortex/Contracts/Environment/EnvironmentHelpers.hlsli"
 #include "Vortex/Contracts/Environment/EnvironmentViewHelpers.hlsli"
 #include "Vortex/Contracts/View/ViewConstants.hlsli"
@@ -261,7 +262,7 @@ static float4 EvaluateExponentialHeightFog(
         + ComputeSkyAmbientContribution(fog, env_data, environment_view);
     if (FogFlagEnabled(fog.flags, GPU_FOG_FLAG_CUBEMAP_USABLE)
         && fog.cubemap_srv != K_INVALID_BINDLESS_INDEX
-        && BX_IN_GLOBAL_SRV(fog.cubemap_srv)) {
+        && BX_IN_TEXTURES(fog.cubemap_srv)) {
         const float fade_alpha =
             saturate(camera_to_receiver_length * fog.cubemap_fade_inv_range
                 + fog.cubemap_fade_bias);
@@ -286,7 +287,7 @@ static float4 SampleIntegratedVolumetricFog(
             volumetric_fog.flags,
             GPU_VOLUMETRIC_FOG_FLAG_INTEGRATED_SCATTERING_VALID)
         || volumetric_fog.integrated_light_scattering_srv == K_INVALID_BINDLESS_INDEX
-        || !BX_IN_GLOBAL_SRV(volumetric_fog.integrated_light_scattering_srv)) {
+        || !BX_IN_TEXTURES(volumetric_fog.integrated_light_scattering_srv)) {
         return float4(0.0f, 0.0f, 0.0f, 1.0f);
     }
 
@@ -374,6 +375,7 @@ float4 VortexFogPassPS(VortexFullscreenTriangleOutput input) : SV_Target0
             environment_view,
             world_position);
     }
+    height_fog.rgb *= GetPreExposure();
     const float4 volumetric_fog = SampleIntegratedVolumetricFog(
         env_data.volumetric_fog,
         input.uv,

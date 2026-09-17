@@ -198,9 +198,10 @@ public:
     frame::Slot slot, std::optional<glm::uvec2> frame_extent);
   OXGN_VRTX_API void OnPreRender(const engine::FrameContext& frame);
   OXGN_VRTX_API void PrimePreparedViews(RenderContext& ctx);
+  OXGN_VRTX_API auto PrepareExposureDomain(RenderContext& ctx) -> bool;
   OXGN_VRTX_API void PrimePreparedView(RenderContext& ctx);
   OXGN_VRTX_API void RenderViewFamily(RenderContext& ctx);
-  OXGN_VRTX_API void OnRender(RenderContext& ctx);
+  OXGN_VRTX_API auto OnRender(RenderContext& ctx) -> bool;
   OXGN_VRTX_API void OnCompositing(RenderContext& ctx);
   OXGN_VRTX_API void OnFrameEnd(const engine::FrameContext& frame);
   OXGN_VRTX_API void RemoveViewState(ViewId view_id,

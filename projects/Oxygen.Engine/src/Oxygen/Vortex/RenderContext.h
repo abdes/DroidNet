@@ -44,6 +44,9 @@ class Scene;
 } // namespace oxygen::scene
 
 namespace oxygen::vortex {
+namespace postprocess {
+  struct FrameExposureResources;
+}
 
 struct CompositionView;
 struct OcclusionFrameResults;
@@ -135,6 +138,7 @@ struct RenderContext {
     observer_ptr<graphics::Framebuffer> composite_source;
     observer_ptr<graphics::Framebuffer> primary_target;
     std::optional<scene::ExposureSettings> exposure_override;
+    bool rendered { false };
   };
 
   std::unordered_map<size_t, bool> pass_enable_flags;
@@ -148,6 +152,7 @@ struct RenderContext {
   struct ViewSpecific {
     //! Engine-selected HDR resource mode; absent uses the scene family default.
     std::optional<Format> hdr_color_format;
+    std::shared_ptr<const postprocess::FrameExposureResources> frame_exposure;
     //! Captured camera/world/device discontinuity for this view's history.
     bool history_discontinuity { false };
     oxygen::ViewId view_id { kInvalidViewId };

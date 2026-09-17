@@ -7,6 +7,7 @@
 #pragma once
 
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Vortex/Environment/EnvironmentLightingService.h>
 #include <Oxygen/Vortex/Internal/PreviousViewHistoryCache.h>
 #include <Oxygen/Vortex/Lighting/LightingService.h>
 #include <Oxygen/Vortex/PostProcess/PostProcessService.h>
@@ -18,6 +19,19 @@
 namespace oxygen::vortex::testing {
 
 struct RendererPublicationProbe {
+  static auto FogHistory(SceneRenderer& renderer, ViewId view)
+    -> std::pair<std::shared_ptr<graphics::Texture>,
+      postprocess::ExposurePass::FrameLease>
+  {
+    if (!renderer.environment_ || !renderer.environment_->volumetric_fog_pass_)
+      return {};
+    const auto& histories
+      = renderer.environment_->volumetric_fog_pass_->history_by_view_;
+    const auto found = histories.find(view);
+    return found == histories.end()
+      ? decltype(FogHistory(renderer, view)) {}
+      : std::pair { found->second.texture, found->second.frame_exposure };
+  }
   static auto FrameExposureStates(const PostProcessService& service,
     frame::Slot slot) -> std::vector<postprocess::ExposurePass::StateLease>
   {
