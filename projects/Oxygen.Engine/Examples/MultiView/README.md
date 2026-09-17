@@ -64,6 +64,18 @@ checks 60 steady-state frames for scene-texture allocation churn.
 - Per-view execution is serialized through Vortex view-family rendering.
 - Scene views share content but not view constants, histories, exposure, or
   product publication state.
+- Each scene and offscreen view supplies a stable, producer-owned temporal
+  handle. Auto exposure therefore adapts across frames instead of restarting
+  on every composition update.
 - Proof-specific camera/layout/overlay text stays in the demo and tooling code;
   production renderer paths consume the same runtime feature profiles as other
   Vortex callers.
+
+For exposure captures, `tools/vortex/AnalyzeRenderDocMultiViewExposure.py`
+exports the composite and each mapped view, reads its GPU P/S/target/meter state,
+and compares opaque probes against an independent tone-curve oracle. Run it with
+the existing `tools/shadows/Invoke-RenderDocUiAnalysis.ps1` runner. Its arithmetic
+verdict is separate from lighting, temporal and visual acceptance; inspect every
+pane and the reported nonzero scene probes. The analyzer exports the full-frame
+composite before seeking backward through bindless draws, and the capture's
+native thumbnail provides a separate presentation reference.
