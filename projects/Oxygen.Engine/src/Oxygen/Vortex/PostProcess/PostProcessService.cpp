@@ -534,8 +534,8 @@ auto PostProcessService::PrepareFrameExposure(RenderContext& ctx,
       .lifetime = settings.lifetime });
 }
 
-auto PostProcessService::Execute(const ViewId view_id, RenderContext& ctx,
-  const SceneTextures& scene_textures, const Inputs& inputs) -> void
+auto PostProcessService::PrepareSceneExposure(const ViewId view_id,
+  RenderContext& ctx, const Inputs& inputs) -> std::optional<PreparedExposure>
 {
   const auto* settings = &CaptureConfiguredExposure(view_id, ctx);
   auto effective_config = config_;
@@ -583,12 +583,39 @@ auto PostProcessService::Execute(const ViewId view_id, RenderContext& ctx,
     });
   if (exposure.frame && !exposure.state) {
     last_execution_state_ = { .tonemap_requested = true, .view_id = view_id };
-    return;
+    return std::nullopt;
   }
   if (transition && exposure.executed && exposure.state
     && !effective_config.temporary_unit_exposure) {
     EnqueueExposureStatus(*transition, exposure.state, ctx, settings->revision);
   }
+  return PreparedExposure { this, exposure, std::move(effective_config),
+    view_id, ctx.current_view.view_state_handle, settings->lifetime,
+    ctx.frame_sequence };
+}
+
+auto PostProcessService::Execute(const ViewId view_id, RenderContext& ctx,
+  const SceneTextures& scene_textures, const Inputs& inputs,
+  const PreparedExposure* prepared_exposure) -> void
+{
+  auto local_exposure = std::optional<PreparedExposure> {};
+  if (!prepared_exposure) {
+    local_exposure = PrepareSceneExposure(view_id, ctx, inputs);
+    if (!local_exposure) {
+      last_execution_state_ = { .tonemap_requested = true, .view_id = view_id };
+      return;
+    }
+    prepared_exposure = &*local_exposure;
+  }
+  CHECK_F(prepared_exposure->owner == this
+      && prepared_exposure->view_id == view_id
+      && prepared_exposure->handle == ctx.current_view.view_state_handle
+      && prepared_exposure->lifetime
+        == renderer_.EnsureExposureLifetime(ctx.current_view.view_state_handle)
+      && prepared_exposure->sequence == ctx.frame_sequence,
+    "Prepared exposure belongs to another service, view lifetime or frame");
+  const auto& exposure = prepared_exposure->exposure;
+  const auto& effective_config = prepared_exposure->config;
   auto bindings = BuildBindings(inputs, effective_config);
   if (effective_config.temporary_unit_exposure) {
     bindings.enable_auto_exposure = 0U;

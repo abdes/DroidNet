@@ -1229,10 +1229,24 @@ coverage. The zero-alpha coverage regression fails before the policy fix.
 RenderDoc verifies four checks precede conversion and all 27 output texels match
 independent half bit patterns. Evidence is `lifecycle/conversion-manifest.json`.
 The focused debugger run has no blocking graphics messages.
-This primitive is not yet wired into SceneRenderer's resolve; final-S ordering,
-rejection consumption, required-product aggregation and status-qualified
+This primitive is not yet wired into SceneRenderer's resolve; rejection
+consumption, required-product aggregation and status-qualified
 admission/recovery remain open. CPU submission success never authorizes use of
 a rejected resolve texture.
+
+SceneRenderer now solves exposure from FP32 accumulation before Stage 21 and
+passes the prepared result/configuration into Stage 22 without a second meter.
+Service/view/handle/lifetime/frame checks reject mismatched prepared records.
+Native fixtures verify persistent/stateless result reuse and failed preparation
+after a successful sibling: both offscreen paths preserve output and pending
+seed, skip resolve/tonemap, and apply the seed on the next-frame retry.
+Debug/Release pass 127 native, 22 service, 23 publication, 61 renderer-core and
+12 offscreen tests. Two MultiView captures prove meter/solve/resolve/tonemap
+ordering and immutable final-state consumption. Gains, meter values, complete
+mapped and pre-composition images match the qualified baseline exactly. Five
+debugger cases have no blocking graphics messages. Evidence is
+`lifecycle/prepared-manifest.json`; this makes final S available for checked
+conversion but does not enable FP16 admission or close the remaining slice-5 gates.
 
 Canonical static-sky cubemap processing now qualifies all generated mips before
 choosing half or float storage. Texture/upload/SRV formats agree, source

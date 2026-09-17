@@ -107,7 +107,8 @@ public:
 class ExposureGpuTest : public graphics::d3d12::testing::ReadbackTestFixture {
 protected:
   auto CheckOffscreenSharing(bool inside_frame) -> void;
-  auto CheckSceneExposureRetry(bool inside_frame) -> void;
+  auto CheckSceneExposureRetry(bool inside_frame, bool late_failure = false)
+    -> void;
   auto CreateBackend(const SerializedBackendConfig& config,
     const SerializedPathFinderConfig& paths)
     -> std::shared_ptr<graphics::d3d12::Graphics> override
@@ -311,7 +312,8 @@ protected:
     scene::ExposureSettings settings = {}, bool diagnostic = false,
     float dt = 0.0F, std::function<void()> before_execute = {},
     engine::ToneMapper tone_mapper = engine::ToneMapper::kNone,
-    bool start_new_frame = true) -> float
+    bool start_new_frame = true,
+    const PostProcessService::PreparedExposure* prepared = nullptr) -> float
   {
     settings.key = 12.5F;
     if (start_new_frame)
@@ -355,7 +357,8 @@ protected:
         .scene_signal = signal.texture.get(),
         .post_target = observer_ptr<const Framebuffer> { framebuffer.get() },
         .scene_signal_srv = signal.srv,
-      });
+      },
+      prepared);
     if (!service.GetLastExecutionState().tonemap_executed)
       return std::numeric_limits<float>::quiet_NaN();
     auto readback
@@ -3583,7 +3586,8 @@ NOLINT_TEST_F(
   FlushBackend();
 }
 
-auto ExposureGpuTest::CheckSceneExposureRetry(const bool inside_frame) -> void
+auto ExposureGpuTest::CheckSceneExposureRetry(
+  const bool inside_frame, const bool late_failure) -> void
 {
   pass_.reset();
   renderer_->OnShutdown();
@@ -3661,23 +3665,31 @@ auto ExposureGpuTest::CheckSceneExposureRetry(const bool inside_frame) -> void
     return pixel;
   };
   const auto handle = CompositionView::ViewStateHandle { 7000U };
-  const auto seed = renderer_->QueueExposureTransition(
+  auto seed = renderer_->QueueExposureTransition(
     handle, ExposureTransitionPolicy::kSeedFromEv100, 8.0F);
   ASSERT_TRUE(seed.has_value());
   auto input = Renderer::OffscreenSceneViewInput::FromCamera(
     "Retry", ViewId { 7000U }, view, camera);
   input.SetViewStateHandle(handle);
+  auto successful_input = Renderer::OffscreenSceneViewInput::FromCamera(
+    "Successful sibling", ViewId { 6999U }, view, camera);
+  successful_input.SetViewStateHandle(
+    CompositionView::ViewStateHandle { 6999U });
+  auto successful_output = CreateRegisteredTexture(output->GetDescriptor());
+  auto successful_target = Backend().CreateFramebuffer(
+    FramebufferDesc {}.AddColorAttachment(successful_output));
   auto frame = engine::FrameContext {};
   frame.SetScene(observer_ptr { scene.get() });
-  auto invoke = [&](const unsigned sequence) {
+  auto invoke = [&](const unsigned sequence, const bool sibling = false) {
     auto facade = renderer_->ForOffscreenScene();
     facade.SetFrameSession({ .frame_slot = frame::Slot { sequence - 1U },
       .frame_sequence = frame::SequenceNumber { sequence },
       .delta_time_seconds = 0.0F });
     facade.SetSceneSource({ .scene = observer_ptr { scene.get() } });
-    facade.SetViewIntent(input);
+    facade.SetViewIntent(sibling ? successful_input : input);
     facade.SetOutputTarget(
-      { .framebuffer = observer_ptr { framebuffer.get() } });
+      { .framebuffer = observer_ptr {
+          sibling ? successful_target.get() : framebuffer.get() } });
     auto session = facade.Finalize();
     CHECK_F(session.has_value());
     if (!inside_frame)
@@ -3692,15 +3704,29 @@ auto ExposureGpuTest::CheckSceneExposureRetry(const bool inside_frame) -> void
     return result;
   };
   auto& backend = static_cast<ExposureFailureGraphics&>(Backend());
-  backend.recorder_names.clear();
-  backend.fail_next_frame_recorder = true;
-  EXPECT_FALSE(invoke(1U));
-  for (const auto& name : backend.recorder_names) {
-    EXPECT_EQ(name.find("BasePass"), std::string::npos);
-    EXPECT_EQ(name.find("Tonemap"), std::string::npos);
-    EXPECT_EQ(name.find("DeferredLight"), std::string::npos);
+  auto prior_output = sentinel;
+  if (late_failure) {
+    ASSERT_TRUE(invoke(1U));
+    prior_output = read_pixel();
+    seed = renderer_->QueueExposureTransition(
+      handle, ExposureTransitionPolicy::kSeedFromEv100, 8.0F);
+    ASSERT_TRUE(seed.has_value());
+    ASSERT_TRUE(invoke(2U, true));
   }
-  EXPECT_EQ(read_pixel(), sentinel);
+  backend.recorder_names.clear();
+  backend.fail_next_frame_recorder = !late_failure;
+  backend.fail_next_exposure_recorder = late_failure;
+  backend.fail_next_fallback_recorder = late_failure;
+  EXPECT_FALSE(invoke(late_failure ? 2U : 1U));
+  for (const auto& name : backend.recorder_names) {
+    if (!late_failure) {
+      EXPECT_EQ(name.find("BasePass"), std::string::npos);
+      EXPECT_EQ(name.find("DeferredLight"), std::string::npos);
+    }
+    EXPECT_EQ(name.find("Tonemap"), std::string::npos);
+    EXPECT_EQ(name.find("ResolveSceneColor"), std::string::npos);
+  }
+  EXPECT_EQ(read_pixel(), prior_output);
   EXPECT_EQ(renderer_->InspectExposureTransition(handle)->phase,
     ExposureTransitionPhase::kQueued);
   auto* scene_renderer
@@ -3713,7 +3739,7 @@ auto ExposureGpuTest::CheckSceneExposureRetry(const bool inside_frame) -> void
       *scene_renderer);
   ASSERT_NE(service, nullptr);
   EXPECT_FALSE(service->GetLastExecutionState().wrote_visible_output);
-  EXPECT_TRUE(invoke(2U));
+  EXPECT_TRUE(invoke(late_failure ? 3U : 2U));
   EXPECT_EQ(read_pixel()[0], 0.0F);
   const auto state
     = vortex::testing::RendererPublicationProbe::ExposureStateForView(
@@ -3736,6 +3762,18 @@ NOLINT_TEST_F(ExposureGpuTest,
   SceneExposurePreparationFailurePreservesOutputAndRetriesInsideFrame)
 {
   CheckSceneExposureRetry(true);
+}
+
+NOLINT_TEST_F(ExposureGpuTest,
+  LateExposureFailureAfterSuccessfulSiblingPreservesStandaloneOutput)
+{
+  CheckSceneExposureRetry(false, true);
+}
+
+NOLINT_TEST_F(ExposureGpuTest,
+  LateExposureFailureAfterSuccessfulSiblingPreservesInsideFrameOutput)
+{
+  CheckSceneExposureRetry(true, true);
 }
 
 NOLINT_TEST_F(ExposureGpuTest,
@@ -4401,6 +4439,86 @@ NOLINT_TEST_F(ExposureGpuTest,
       }
     ctx_.scene = {};
   }
+}
+
+NOLINT_TEST_F(ExposureGpuTest,
+  PreparedSceneExposureIsSolvedOnceAndPinnedAcrossResolvedColorConsumption)
+{
+  for (const bool persistent : { true, false }) {
+    SCOPED_TRACE(persistent);
+    auto service = PostProcessService(*renderer_);
+    ctx_.current_view.view_state_handle = persistent
+      ? CompositionView::ViewStateHandle { 91U }
+      : CompositionView::kInvalidViewStateHandle;
+    ctx_.frame_sequence = frame::SequenceNumber { ++sequence_ };
+    auto settings = scene::ExposureSettings {};
+    settings.key = 12.5F;
+    service.OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
+    const auto& accepted = service.CaptureViewExposureSettings(
+      ctx_.current_view.view_id, ctx_.current_view.view_state_handle, settings);
+    auto config = SharedConfig(settings);
+    config.exposure_settings_revision = accepted.revision;
+    config.tone_mapper = engine::ToneMapper::kNone;
+    config.gamma = 1.0F;
+    config.enable_bloom = false;
+    config.bloom_intensity = 0.0F;
+    service.SetConfig(config);
+    ASSERT_NE(service.PrepareFrameExposure(ctx_, true), nullptr);
+    const auto accumulation = Uniform(.25F, 4U, 4U);
+    const auto resolved = Uniform(.5F, 4U, 4U);
+    auto& recorder_names
+      = static_cast<ExposureFailureGraphics&>(Backend()).recorder_names;
+    recorder_names.clear();
+    const auto prepared
+      = service.PrepareSceneExposure(ctx_.current_view.view_id, ctx_,
+        { .scene_signal = accumulation.texture.get(),
+          .scene_signal_srv = accumulation.srv });
+    ASSERT_TRUE(prepared.has_value());
+    ASSERT_NE(prepared->exposure.state, nullptr);
+    const auto before = Read<ExposureStateData>(
+      *prepared->exposure.state->buffer, ResourceStates::kShaderResource);
+    EXPECT_NEAR(before.displayed_scale, .72F, 2e-5F);
+    EXPECT_NEAR(before.raw_metered_luminance, .25F, 2e-5F);
+    // A different signal and mapper at Stage 22 must neither remeter nor
+    // replace the configuration pinned when the accumulation was solved.
+    EXPECT_NEAR(ServicePixel(service, resolved, settings, false, 0.0F, {},
+                  engine::ToneMapper::kAcesFitted, false, &*prepared),
+      .36F, 2e-5F);
+    const auto after = Read<ExposureStateData>(
+      *prepared->exposure.state->buffer, ResourceStates::kShaderResource);
+    EXPECT_EQ(std::memcmp(&before, &after, sizeof(before)), 0);
+    EXPECT_EQ(std::count(recorder_names.begin(), recorder_names.end(),
+                "Vortex Exposure"),
+      1);
+  }
+}
+
+NOLINT_TEST_F(ExposureGpuTest,
+  FailedPreparationCannotReuseAnotherViewsSuccessfulOutputStatus)
+{
+  auto service = PostProcessService(*renderer_);
+  const auto signal = Uniform(.25F, 4U, 4U);
+  ctx_.current_view.view_id = ViewId { 92U };
+  ctx_.current_view.view_state_handle
+    = CompositionView::ViewStateHandle { 92U };
+  EXPECT_NEAR(ServicePixel(service, signal), .18F, 2e-5F);
+  ctx_.current_view.view_id = ViewId { 1U };
+  ctx_.current_view.view_state_handle = CompositionView::ViewStateHandle { 1U };
+  EXPECT_NEAR(ServicePixel(service, signal), .18F, 2e-5F);
+  ASSERT_TRUE(service.GetLastExecutionState().wrote_visible_output);
+  ctx_.current_view.view_id = ViewId { 92U };
+  ctx_.current_view.view_state_handle
+    = CompositionView::ViewStateHandle { 92U };
+  ASSERT_NE(service.PrepareFrameExposure(ctx_, true), nullptr);
+  auto& backend = static_cast<ExposureFailureGraphics&>(Backend());
+  backend.fail_next_exposure_recorder = true;
+  backend.fail_next_fallback_recorder = true;
+  const auto prepared
+    = service.PrepareSceneExposure(ctx_.current_view.view_id, ctx_,
+      { .scene_signal = signal.texture.get(), .scene_signal_srv = signal.srv });
+  EXPECT_FALSE(prepared.has_value());
+  EXPECT_FALSE(service.GetLastExecutionState().wrote_visible_output);
+  EXPECT_EQ(service.GetLastExecutionState().view_id, ctx_.current_view.view_id);
 }
 
 NOLINT_TEST_F(ExposureGpuTest,
