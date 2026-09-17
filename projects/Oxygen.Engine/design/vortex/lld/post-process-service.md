@@ -852,6 +852,54 @@ consumer coefficients/source bounds, filtering, coverage, history identity and
 outward-safe GPU arithmetic against independent inputs and real scene captures.
 Automatic format switching remains disabled until those checks are qualified.
 
+### Linear-clamp filtering coordinate error
+
+The published [Direct3D sampling specification](https://microsoft.github.io/DirectX-Specs/d3d/archive/D3D11_3_FunctionalSpec.htm)
+requires at least eight fractional address bits (7.18.16.1), permits 0.6 ULP in
+float-to-fixed conversion (3.2.4.1), and applies FP32 rules to filtering of floating
+formats regardless of storage width (7.18.16.2). This does not establish identical
+FP16/FP32 sample weights. Native D3D12 qualification remains required.
+
+For the mip-zero linear-clamp AP/fog consumers, the following enclosure is derived
+from the interpolation equations. Let `Gd` bound every adjacent reference-texel
+difference along axis `d`. The exact piecewise multilinear interpolant `f` obeys
+
+```text
+D = sum_d Gd * abs(xd - yd)
+abs(f(x) - f(y)) <= D
+```
+
+This also holds across cell boundaries and at clamped edges. Each axis derivative
+is a convex combination of adjacent differences; moving one coordinate at a time
+gives the sum. If the stored texels have a common affine certificate `(r,a)`, the
+same-weight interpolation preserves it. Combining store error at `x` with the
+coordinate displacement from `y` gives
+
+```text
+abs(f_hat(x) - f(y)) <= r*f(y) + a + (1+r)*D
+```
+
+The `(1+r)` factor matters: the storage allowance at `x` also changes with the
+reference value. Obtain reference gradients from retained texel intervals, not
+just observed differences: for adjacent intervals `[lo_i,hi_i]`, `[lo_j,hi_j]`,
+the difference bound is `max(hi_i-lo_j, hi_j-lo_i)`. Incomplete or nonfinite
+intervals cannot supply a finite gradient certificate.
+
+The coordinate displacement still needs a runtime bound covering normalized
+coordinate scaling/subtraction, legal fixed-point snapping and the union of
+neighbor footprints. Filtering arithmetic/FTZ error is an additional term. The
+current exact oracle qualifies the spatial algebra, not those hardware bounds;
+it does not change resource sampling or permit format admission.
+
+The oracle checks 9,312 cases across singleton, 2D and 3D grids, constant/ramp-like
+and alternating data, half rounding, retained reference intervals, cell crossings
+and clamp edges. A separate legal-rounding counterexample uses exact texels
+`[0,1]` and binary32 normalized coordinate `257/1024` in a two-texel texture.
+Its texel coordinate is `1/512`; legal eight-bit fractional snapping alternatives
+are `0` and `1/256`. The resulting samples `0` and `1/256` have no texel storage
+error but exceed the image allowance and disagree at the dark cutoff. This is a
+permitted-rounding counterexample, not a measured device failure.
+
 ### GPU producer-bound transport
 
 The existing status allocation has a GPU-only tail: the completed/readback prefix
