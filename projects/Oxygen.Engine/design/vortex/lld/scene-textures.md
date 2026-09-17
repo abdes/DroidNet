@@ -131,6 +131,33 @@ An unforeseen normal-frame range failure retains valid history and schedules
 FP32 recovery after status completion. Explicit scene out-of-domain failure in
 FP32 is reported; it is not an endless format/reinitialization loop.
 
+### Scene reference-product collection
+
+SceneRenderer collects the actual FP32 reference allocations after HDR rendering:
+accumulated SceneColor (qualification ID 11 for its planned resolve), sky-view
+LUT (5), camera aerial perspective (6), and volumetric fog (10). SceneColor's
+raster/additive producers share one allocation and are not counted as separate
+narrowing stages. Required intermediates follow the view's feature participation
+and authored environment state; a missing publication or failed producer remains
+a required missing product. Absent features add no requirement.
+
+Environment publication pairs each view's descriptors with its submitted texture
+leases. Sky-view, aerial-perspective and fog producers publish success only after
+observing command-list submission. Failed recording/submission retires newly
+registered textures and cannot replace valid fog history.
+
+The reference evaluator divides its image allowance among the collected
+allocations and tests the scene's actual coverage/mask policy. Layout identity
+changes when required IDs, dimensions, coverage or transmittance treatment change;
+format selection itself must not change that identity. Layout state is per
+persistent view and is removed with its lifetime.
+
+Persistent views submit these reference checks and completed reports while
+SceneRenderer retains FP32. Stateless views retain FP32 without layout or
+admission history. They do not yet authorize normal-mode allocations: pre-store checks and
+complete composition/temporal error propagation remain required before enabling
+the switch.
+
 ### Lifetime and memory accounting
 
 Product metadata carries stored P and exposure-record generation through

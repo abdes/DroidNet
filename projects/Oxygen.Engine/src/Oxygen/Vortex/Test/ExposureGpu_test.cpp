@@ -98,6 +98,7 @@ public:
   bool fail_next_frame_recorder { false };
   bool fail_next_fallback_recorder { false };
   bool fail_status_recorder { false };
+  std::string fail_recorder_name;
   bool fail_next_suitability_recorder { false };
   auto AcquireCommandRecorder(const graphics::QueueKey& queue,
     std::string_view name, bool immediate = true)
@@ -105,6 +106,8 @@ public:
       std::function<void(graphics::CommandRecorder*)>> override
   {
     recorder_names.emplace_back(name);
+    if (!fail_recorder_name.empty() && name == fail_recorder_name)
+      return { nullptr, [](graphics::CommandRecorder*) { } };
     if (fail_status_recorder && name == "Exposure status readback")
       return { nullptr, [](graphics::CommandRecorder*) { } };
     if (fail_next_suitability_recorder
@@ -4499,6 +4502,7 @@ NOLINT_TEST_F(
     Renderer& renderer;
     std::unordered_map<ViewId, std::vector<std::shared_ptr<Texture>>> textures;
     std::unordered_map<ViewId, std::vector<ShaderVisibleIndex>> slots;
+    std::unordered_map<ViewId, postprocess::ExposurePass::FrameLease> exposure;
     explicit Capture(Renderer& value)
       : renderer(value)
     {
@@ -4514,6 +4518,7 @@ NOLINT_TEST_F(
       auto* owner
         = vortex::testing::RendererPublicationProbe::GetSceneRenderer(renderer);
       const auto id = hook.render_context.current_view.view_id;
+      exposure[id] = hook.render_context.current_view.frame_exposure;
       textures[id]
         = vortex::testing::RendererPublicationProbe::EnvironmentTextures(
           *owner, id);
@@ -4583,6 +4588,7 @@ NOLINT_TEST_F(
   renderer_->OnFrameEnd(observer_ptr { &frame });
   reclaimer.OnBeginFrame(frame::Slot { 1U });
   begin(2U, frame::Slot { 1U });
+  const auto gpu_capture = BeginOptionalCapture();
   ASSERT_TRUE(render(0U));
   const auto retained = capture->textures.at(ViewId { 111U });
   const auto retained_slots = capture->slots.at(ViewId { 111U });
@@ -4595,6 +4601,8 @@ NOLINT_TEST_F(
   }
   // No queue-idle wait or readback map occurs between these offscreen views.
   ASSERT_TRUE(render(1U));
+  if (gpu_capture)
+    EXPECT_TRUE(gpu_capture->EndCapture());
   for (std::size_t i = 0U; i < retained.size(); ++i) {
     const auto& texture = retained[i];
     EXPECT_TRUE(registry.Contains(*texture)) << texture->GetName();
@@ -4603,6 +4611,21 @@ NOLINT_TEST_F(
         TextureViewDescription { .format = texture->GetDescriptor().format,
           .dimension = texture->GetDescriptor().texture_type }),
       retained_slots[i]);
+  }
+  constexpr std::uint32_t required
+    = (1U << 4U) | (1U << 5U) | (1U << 9U) | (1U << 10U);
+  for (const auto id : { ViewId { 111U }, ViewId { 112U } }) {
+    const auto& exposure = capture->exposure.at(id);
+    ASSERT_NE(exposure, nullptr);
+    const auto report = Read<HdrSuitabilityData>(
+      *exposure->suitability_buffer, ResourceStates::kShaderResource);
+    EXPECT_EQ(report.expected_products, required);
+    EXPECT_EQ(report.checked_products, required);
+    EXPECT_GT(report.checked_samples, 256U);
+    const auto state = Read<ExposureStateData>(
+      *exposure->current_state->buffer, ResourceStates::kShaderResource);
+    EXPECT_EQ(state.displayed_scale, .0625F);
+    EXPECT_NE(state.product_layout_revision[0], 0U);
   }
   const auto actual = read();
   unsigned nontrivial = 0U;
@@ -4620,6 +4643,22 @@ NOLINT_TEST_F(
   EXPECT_TRUE(registry.Contains(*retained.front()));
   reclaimer.OnBeginFrame(frame::Slot { 1U });
   EXPECT_FALSE(registry.Contains(*retained.front()));
+  begin(3U, frame::Slot { 2U });
+  static_cast<ExposureFailureGraphics&>(Backend()).fail_recorder_name
+    = "EnvironmentLightingService AtmosphereSkyViewLut";
+  ASSERT_TRUE(render(0U));
+  static_cast<ExposureFailureGraphics&>(Backend()).fail_recorder_name.clear();
+  const auto& missing = capture->exposure.at(ViewId { 111U });
+  const auto report = Read<HdrSuitabilityData>(
+    *missing->suitability_buffer, ResourceStates::kShaderResource);
+  EXPECT_EQ(report.expected_products, required);
+  EXPECT_EQ(report.checked_products, required & ~(1U << 4U));
+  const auto status = Read<ExposureCompletedStatus>(
+    *missing->current_state->status_buffer, ResourceStates::kCopySource);
+  EXPECT_NE(status.first_failure_kind & 16U, 0U);
+  EXPECT_EQ(status.fp16_eligible_streak, 0U);
+  renderer_->OnFrameEnd(observer_ptr { &frame });
+  WaitForQueueIdle();
 }
 
 NOLINT_TEST_F(

@@ -3360,4 +3360,75 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
   EXPECT_EQ(amplified->processed_rgba.front().r * model.intensity_mul, 1.0F);
 }
 
+NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
+  RadiancePublicationRetainsViewResourcesAndPreservesMissingRequirements)
+{
+  auto service = EnvironmentLightingService(*renderer_);
+  auto scene = MakeSceneWithAtmosphereEnvironment();
+  static_cast<void>(AddAtmosphereDirectionalLight(*scene, "Primary",
+    oxygen::scene::AtmosphereLightSlot::kPrimary, true, 2U, true,
+    { 1.0F, 1.0F, 1.0F }, { 1.0F, .95F, .9F }, 100000.0F));
+  auto fog
+    = scene->GetEnvironment()->TryGetSystem<oxygen::scene::environment::Fog>();
+  ASSERT_NE(fog.get(), nullptr);
+  fog->SetEnableVolumetricFog(true);
+  scene->Update();
+  auto resolved = MakeResolvedView(64.0F, 64.0F);
+  auto view = oxygen::vortex::CompositionView {};
+  view.id = ViewId { 910U };
+  view.with_atmosphere = true;
+  view.with_height_fog = true;
+  auto ctx = MakeRenderContext(view.id, resolved, view);
+  ctx.scene = oxygen::observer_ptr { scene.get() };
+  ctx.view_constants = graphics_->CreateBuffer({ .size_bytes = 1024U,
+    .usage = oxygen::graphics::BufferUsage::kConstant,
+    .memory = oxygen::graphics::BufferMemory::kUpload,
+    .debug_name = "RadiancePublication.ViewConstants" });
+  const auto publish = [&](unsigned sequence) {
+    ctx.frame_sequence = oxygen::frame::SequenceNumber { sequence };
+    ctx.frame_slot = oxygen::frame::Slot { sequence % 3U };
+    service.OnFrameStart(ctx.frame_sequence, ctx.frame_slot);
+    static_cast<void>(service.PublishEnvironmentBindings(ctx));
+    return service.InspectViewRadianceResources(view.id);
+  };
+  const auto* first = publish(1U);
+  ASSERT_NE(first, nullptr);
+  EXPECT_TRUE(first->atmosphere_required);
+  EXPECT_TRUE(first->volumetric_fog_required);
+  ASSERT_NE(first->sky_view, nullptr);
+  ASSERT_NE(first->aerial_perspective, nullptr);
+  ASSERT_NE(first->volumetric_fog, nullptr);
+  const auto retained = *first;
+  for (const bool recording : { false, true }) {
+    graphics_->SetFailRecording(recording);
+    graphics_->SetFailSubmission(!recording);
+    const auto* failed = publish(recording ? 3U : 2U);
+    ASSERT_NE(failed, nullptr);
+    EXPECT_TRUE(failed->atmosphere_required);
+    EXPECT_TRUE(failed->volumetric_fog_required);
+    EXPECT_EQ(failed->sky_view, nullptr);
+    EXPECT_EQ(failed->aerial_perspective, nullptr);
+    EXPECT_EQ(failed->volumetric_fog, nullptr);
+    graphics_->SetFailRecording(false);
+    graphics_->SetFailSubmission(false);
+  }
+  const auto* recovered = publish(4U);
+  ASSERT_NE(recovered, nullptr);
+  ASSERT_NE(recovered->sky_view, nullptr);
+  ASSERT_NE(recovered->aerial_perspective, nullptr);
+  ASSERT_NE(recovered->volumetric_fog, nullptr);
+  EXPECT_NE(recovered->sky_view, retained.sky_view);
+  EXPECT_NE(recovered->aerial_perspective, retained.aerial_perspective);
+  EXPECT_NE(recovered->volumetric_fog, retained.volumetric_fog);
+  ctx.current_view.with_atmosphere = false;
+  ctx.current_view.with_height_fog = false;
+  const auto* absent = publish(5U);
+  ASSERT_NE(absent, nullptr);
+  EXPECT_FALSE(absent->atmosphere_required);
+  EXPECT_FALSE(absent->volumetric_fog_required);
+  EXPECT_EQ(absent->sky_view, nullptr);
+  EXPECT_EQ(absent->aerial_perspective, nullptr);
+  EXPECT_EQ(absent->volumetric_fog, nullptr);
+}
+
 } // namespace

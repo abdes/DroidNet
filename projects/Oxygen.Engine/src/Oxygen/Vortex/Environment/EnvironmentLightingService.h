@@ -68,6 +68,16 @@ class TextureBinder;
 
 class EnvironmentLightingService {
 public:
+  //! Per-view radiance resources paired with the published shader descriptors.
+  //! Requirements express authored/view intent even when a producer fails.
+  struct ViewRadianceResources {
+    bool atmosphere_required { false };
+    bool volumetric_fog_required { false };
+    std::shared_ptr<const graphics::Texture> sky_view;
+    std::shared_ptr<const graphics::Texture> aerial_perspective;
+    std::shared_ptr<const graphics::Texture> volumetric_fog;
+  };
+
   struct ProbeRefreshState {
     frame::SequenceNumber frame_sequence { 0U };
     frame::Slot frame_slot { frame::kInvalidSlot };
@@ -278,6 +288,8 @@ public:
     ViewId view_id) const -> const EnvironmentStaticData*;
   [[nodiscard]] OXGN_VRTX_API auto InspectEnvironmentViewProducts(
     ViewId view_id) const -> const environment::EnvironmentViewProducts*;
+  [[nodiscard]] OXGN_VRTX_API auto InspectViewRadianceResources(
+    ViewId view_id) const -> const ViewRadianceResources*;
   [[nodiscard]] OXGN_VRTX_API auto ResolveEnvironmentFrameSlot(
     ViewId view_id) const -> ShaderVisibleIndex;
   [[nodiscard]] OXGN_VRTX_NDAPI auto InspectProbeState() const noexcept
@@ -324,6 +336,7 @@ private:
     EnvironmentStaticData static_data {};
     EnvironmentViewData view_data {};
     environment::EnvironmentViewProducts view_products {};
+    ViewRadianceResources radiance;
   };
 
   auto EnsurePublishResources() -> bool;

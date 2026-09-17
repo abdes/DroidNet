@@ -19,6 +19,7 @@
 #include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
+#include <Oxygen/Graphics/Common/CommandList.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
@@ -635,21 +636,28 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
     static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants),
     constants_alloc->srv.get(), 1U);
 
-  graphics::GpuEventScope pass_scope(*recorder,
-    "Vortex.Stage14.VolumetricFog",
-    profiling::ProfileGranularity::kDiagnostic,
-    profiling::ProfileCategory::kPass);
   const auto dispatch_x
     = (width + (kThreadGroupSizeX - 1U)) / kThreadGroupSizeX;
   const auto dispatch_y
     = (height + (kThreadGroupSizeY - 1U)) / kThreadGroupSizeY;
   const auto dispatch_z
     = (depth + (kThreadGroupSizeZ - 1U)) / kThreadGroupSizeZ;
-  recorder->Dispatch(dispatch_x, dispatch_y, dispatch_z);
-  recorder->RequireResourceStateFinal(
-    *texture, graphics::ResourceStates::kShaderResource);
+  {
+    graphics::GpuEventScope pass_scope(*recorder,
+      "Vortex.Stage14.VolumetricFog",
+      profiling::ProfileGranularity::kDiagnostic,
+      profiling::ProfileCategory::kPass);
+    recorder->Dispatch(dispatch_x, dispatch_y, dispatch_z);
+    recorder->RequireResourceStateFinal(
+      *texture, graphics::ResourceStates::kShaderResource);
+  }
+  const auto recording = recorder->GetCommandListForInspection();
+  recorder.reset();
+  if (!recording || !recording->IsSubmitted())
+    return state;
 
   state.executed = true;
+  state.texture = texture;
   state.integrated_light_scattering_srv = integrated_srv;
   state.integrated_light_scattering_uav = integrated_uav;
   state.width = width;

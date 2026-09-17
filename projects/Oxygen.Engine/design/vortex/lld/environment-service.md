@@ -15,6 +15,22 @@ historical design/implementation baselines where they conflict with this extensi
 They are not alternate authoring/runtime authorities. Preserve historical VTX
 evidence and unrelated engine fog-family obligations at their recorded scope.
 
+## Radiance resource publication for exposure qualification
+
+The existing per-view publication retains submitted sky-view, aerial-perspective
+and integrated-fog texture leases alongside their shader descriptors.
+`InspectViewRadianceResources` exposes those resources to SceneRenderer's HDR
+reference checks. Required flags describe authored view participation and remain
+set when an expected producer is unavailable; callers must not infer absence of
+a requirement from an invalid descriptor.
+
+The three producers observe command-list submission before publishing their
+resource and success state. Recording/submission failures retire newly registered
+textures through the existing frame reclaimer. A failed fog dispatch does not
+replace the previous temporal history. These rules establish resource availability;
+FP16 pre-store and cumulative error checks are separate requirements owned by
+[SceneTextures](scene-textures.md#per-view-fp16-suitability).
+
 ## Mandatory Vortex Rule
 
 - For Vortex planning and implementation, `Oxygen.Renderer` is legacy dead
