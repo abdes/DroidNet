@@ -347,6 +347,127 @@ def deferred_ap_branch_regression():
             "corrected_image_admission_pass": True}
 
 
+def linear_clamp_sample(values, shape, coordinate):
+    """Exact tensor interpolation in texel-center coordinates, including edges."""
+    axes = []
+    for size, value in zip(shape, coordinate):
+        value = min(F(size - 1), max(F(0), value))
+        left = math.floor(value)
+        fraction = value - left
+        axes.append(((left, 1 - fraction), (min(left + 1, size - 1), fraction)))
+    result = F(0)
+    for x, y, z in product(*axes):
+        result += values[(z[0] * shape[1] + y[0]) * shape[0] + x[0]] * x[1] * y[1] * z[1]
+    return result
+
+
+def gradient_limits(values, shape, retained=Bound()):
+    """Enclose reference neighbor differences using retained per-texel intervals."""
+    intervals = [retained.reference_interval(value) for value in values]
+    maxima = [F(0), F(0), F(0)]
+    for z, y, x in product(range(shape[2]), range(shape[1]), range(shape[0])):
+        coordinate = (x, y, z)
+        here = intervals[(z * shape[1] + y) * shape[0] + x]
+        for axis, stride in enumerate((1, shape[0], shape[0] * shape[1])):
+            if coordinate[axis] + 1 < shape[axis]:
+                there = intervals[(z * shape[1] + y) * shape[0] + x + stride]
+                maxima[axis] = max(maxima[axis], here[1] - there[0], there[1] - here[0])
+    return maxima
+
+
+def legal_fixed8_coordinates(value):
+    """D3D float-to-fixed tolerance: .6 of one 8-bit fractional step."""
+    lower = math.ceil(value * 256 - F(3, 5))
+    upper = math.floor(value * 256 + F(3, 5))
+    return tuple(F(index, 256) for index in range(lower, upper + 1))
+
+
+def filter_test_values(size, pattern, rng):
+    if pattern == 0:
+        return [F(1)] * size
+    if pattern == 1:
+        return [F(0)] * size
+    if pattern == 2:
+        return [F((index % 2) * 8192) for index in range(size)]
+    if pattern == 3:
+        return [f32(rng.randrange(16385) / 16384) for _ in range(size)]
+    if pattern == 4:
+        return [f32(index / 17) for index in range(size)]
+    if pattern == 5:
+        return [f32(math.ldexp(1 + rng.randrange(1024) / 1024,
+                              rng.randrange(-40, 14))) for _ in range(size)]
+    return [f32(rng.randrange(65537) / 17) for _ in range(size)]
+
+
+def check_filter_coordinates():
+    rng = random.Random(0x46494c54)
+    storage = Bound(F(1, 2048), F(1, 2**25))
+    checks = 0
+    for shape in ((1, 1, 1), (3, 4, 1), (3, 4, 2), (2, 2, 2)):
+        size = math.prod(shape)
+        for pattern in range(8):
+            reference = filter_test_values(size, pattern, rng)
+            stored = [half(value) for value in reference]
+            exact_gradients = gradient_limits(reference, shape)
+            enclosed_gradients = gradient_limits(stored, shape, storage)
+            for exact, enclosed in zip(exact_gradients, enclosed_gradients):
+                require(exact <= enclosed, "retained reference gradient")
+                checks += 1
+            for _ in range(12):
+                # Half-step ties admit two legal fixed-point coordinates.
+                # Include clamp edges and crossings of integer cell boundaries.
+                nominal = tuple(F(rng.choice((-1, 0, 255, 256, extent * 256 - 1)), 256)
+                                + F(1, 512) for extent in shape)
+                choices = [legal_fixed8_coordinates(value) for value in nominal]
+                first = tuple(values[0] for values in choices)
+                baseline = linear_clamp_sample(reference, shape, first)
+                for second in product(*choices):
+                    reference_at_second = linear_clamp_sample(reference, shape, second)
+                    observed = linear_clamp_sample(stored, shape, second)
+                    displacement = [abs(a - b) for a, b in zip(first, second)]
+                    coordinate_error = sum(g * d for g, d in zip(exact_gradients, displacement))
+                    enclosed_error = sum(g * d for g, d in zip(enclosed_gradients, displacement))
+                    require(abs(reference_at_second - baseline) <= coordinate_error,
+                            "linear-clamp Lipschitz bound across cell/edge boundaries")
+                    require(abs(observed - reference_at_second) <= storage.error(reference_at_second),
+                            "common-weight storage bound")
+                    allowance = storage.error(baseline) + (1 + storage.relative) * enclosed_error
+                    require(abs(observed - baseline) <= allowance, "combined storage/coordinate bound")
+                    checks += 3
+    return checks
+
+
+def filter_coordinate_counterexample():
+    # u=257/1024 is exactly binary32 for a two-texel texture. u*2-.5=1/512.
+    # Both adjacent 16.8 coordinates are legal at the half-step tie. The texels
+    # 0 and 1 themselves are exactly representable in both resource formats.
+    uv = F(257, 1024)
+    require(f32(uv) == uv, "counterexample normalized coordinate is binary32")
+    positions = legal_fixed8_coordinates(uv * 2 - F(1, 2))
+    require(positions == (F(0), F(1, 256)), "legal fixed8 tie alternatives")
+    values = [F(0), F(1)]
+    require([half(v) for v in values] == values, "no texel store error")
+    baseline = linear_clamp_sample(values, (2, 1, 1), (positions[0], F(0), F(0)))
+    other = linear_clamp_sample(values, (2, 1, 1), (positions[1], F(0), F(0)))
+    require(abs(other - baseline) > image_budget(baseline), "coordinate error exceeds image budget")
+    require(is_dark(baseline, F(1, 4096)) and not is_dark(other, F(1, 4096)),
+            "coordinate error changes dark classification")
+    relative = F(1, 1024)
+    retained = linear_clamp_sample([F(0), 1 + relative], (2, 1, 1),
+                                   (positions[1], F(0), F(0)))
+    require(abs(retained - baseline) > relative * baseline + (other - baseline),
+            "omitting the relative/displacement cross term must fail")
+    require(abs(retained - baseline) == relative * baseline + (1 + relative) * (other - baseline),
+            "relative/displacement cross term encloses the tight case")
+    return {"texels": [0, 1], "normalized_coordinate": float(uv),
+            "legal_texel_coordinates": [float(p) for p in positions],
+            "filtered_results": [float(baseline), float(other)],
+            "store_error": 0, "texel_checks_alone_suffice": False,
+            "retained_relative_cross_term_required": True,
+            "hardware_observation": False,
+            "scope": "Allowed coordinate-rounding counterexample, not a claim about a measured device"}
+
+
 def main():
     parser = ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
@@ -359,9 +480,11 @@ def main():
               "scope": "Exact scalar/componentwise algebra and binary16 counterexamples; not GPU qualification",
               "algebra_checks": check_algebra(),
               "consumer_interval_checks": check_consumer_intervals(),
+              "filter_coordinate_checks": check_filter_coordinates(),
               "counterexamples": {"AP strength": amplification_counterexample(),
                                   "dark classification": classification_counterexample(),
-                                  "temporal history": temporal_counterexample()},
+                                  "temporal history": temporal_counterexample(),
+                                  "filter coordinate rounding": filter_coordinate_counterexample()},
               "regressions": {"removed deferred AP branch": deferred_ap_branch_regression()},
               "remaining": ["Justify runtime source/consumer bounds and carry certificate lifetimes",
                             "Implement outward-safe GPU arithmetic, coverage and filtering rules",
@@ -369,7 +492,8 @@ def main():
               "verdict": "pass"}
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8", newline="\n")
-    print(f"PASS: {report['algebra_checks']} algebra checks, {report['consumer_interval_checks']} consumer checks "
+    print(f"PASS: {report['algebra_checks']} algebra checks, {report['consumer_interval_checks']} consumer checks, "
+          f"{report['filter_coordinate_checks']} filtering checks "
           f"and {len(report['counterexamples'])} per-product acceptance counterexamples: {args.output}")
 
 
