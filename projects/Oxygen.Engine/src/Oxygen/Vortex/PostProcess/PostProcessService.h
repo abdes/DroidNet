@@ -63,6 +63,10 @@ public:
     ShaderVisibleIndex eye_adaptation_srv { kInvalidShaderVisibleIndex };
     ShaderVisibleIndex eye_adaptation_uav { kInvalidShaderVisibleIndex };
     ShaderVisibleIndex post_history_srv { kInvalidShaderVisibleIndex };
+    //! Keep this accumulation immutable through every checked-color consumer.
+    const graphics::Texture* scene_fallback { nullptr };
+    ShaderVisibleIndex scene_fallback_srv { kInvalidShaderVisibleIndex };
+    postprocess::ExposurePass::FrameLease checked_resolution;
   };
 
   struct ExecutionState {
@@ -147,6 +151,11 @@ public:
   [[nodiscard]] OXGN_VRTX_API auto PrepareSceneExposure(
     ViewId view_id, RenderContext& ctx, const Inputs& inputs)
     -> std::optional<PreparedExposure>;
+  //! Check/narrow using the prepared final gain and accepted metering policy.
+  //! A submitted check still requires GPU rejection handling by the consumer.
+  [[nodiscard]] OXGN_VRTX_API auto ConvertSceneColor(RenderContext& ctx,
+    const PreparedExposure& prepared, const Inputs& inputs,
+    graphics::Texture& destination, ShaderVisibleIndex destination_uav) -> bool;
   OXGN_VRTX_API auto Execute(ViewId view_id, RenderContext& ctx,
     const SceneTextures& scene_textures, const Inputs& inputs,
     const PreparedExposure* prepared_exposure = nullptr) -> void;
@@ -175,6 +184,8 @@ public:
 
 private:
   friend struct testing::RendererPublicationProbe;
+  auto ValidatePreparedExposure(ViewId view_id, const RenderContext& ctx,
+    const PreparedExposure& prepared) const -> void;
   auto CaptureConfiguredExposure(ViewId view_id, RenderContext& ctx)
     -> const ExposureSettingsState&;
   struct CapturedExposureSettings {

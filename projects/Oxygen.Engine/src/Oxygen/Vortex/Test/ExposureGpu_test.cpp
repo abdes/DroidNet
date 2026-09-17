@@ -313,7 +313,9 @@ protected:
     float dt = 0.0F, std::function<void()> before_execute = {},
     engine::ToneMapper tone_mapper = engine::ToneMapper::kNone,
     bool start_new_frame = true,
-    const PostProcessService::PreparedExposure* prepared = nullptr) -> float
+    const PostProcessService::PreparedExposure* prepared = nullptr,
+    const Signal* fallback = nullptr,
+    postprocess::ExposurePass::FrameLease checked_resolution = {}) -> float
   {
     settings.key = 12.5F;
     if (start_new_frame)
@@ -357,6 +359,10 @@ protected:
         .scene_signal = signal.texture.get(),
         .post_target = observer_ptr<const Framebuffer> { framebuffer.get() },
         .scene_signal_srv = signal.srv,
+        .scene_fallback = fallback ? fallback->texture.get() : nullptr,
+        .scene_fallback_srv
+        = fallback ? fallback->srv : kInvalidShaderVisibleIndex,
+        .checked_resolution = std::move(checked_resolution),
       },
       prepared);
     if (!service.GetLastExecutionState().tonemap_executed)
@@ -4490,6 +4496,190 @@ NOLINT_TEST_F(ExposureGpuTest,
     EXPECT_EQ(std::count(recorder_names.begin(), recorder_names.end(),
                 "Vortex Exposure"),
       1);
+  }
+}
+
+NOLINT_TEST_F(ExposureGpuTest,
+  TonemapSelectsCheckedHalfOrOriginalFloatWithoutChangingExposure)
+{
+  struct Case {
+    const char* name;
+    float value;
+    float ev;
+    bool fp32;
+    bool overflow;
+    float expected;
+  };
+  const std::array cases {
+    Case { "accepted half", 1.0F / 3.0F, 0, true, false, .333251953125F },
+    Case { "overflow fallback", 1.0F / 3.0F, 0, true, true, 1.0F / 3.0F },
+    Case { "dark loss fallback", 0x1p-30F, -30, true, false, 1.0F },
+    Case { "nonunit P", 1.0F / 3.0F, -2, false, false, .333251953125F },
+  };
+  for (const auto& test_case : cases) {
+    SCOPED_TRACE(test_case.name);
+    auto service = PostProcessService(*renderer_);
+    ctx_.frame_sequence = frame::SequenceNumber { ++sequence_ };
+    service.OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
+    auto settings = scene::ExposureSettings {};
+    settings.mode = engine::ExposureMode::kManual;
+    settings.manual_ev = test_case.ev;
+    settings.key = 12.5F;
+    const auto& accepted = service.CaptureViewExposureSettings(
+      ctx_.current_view.view_id, ctx_.current_view.view_state_handle, settings);
+    auto config = SharedConfig(settings);
+    config.exposure_settings_revision = accepted.revision;
+    config.tone_mapper = engine::ToneMapper::kNone;
+    config.gamma = 1.0F;
+    config.enable_bloom = false;
+    config.bloom_intensity = 0.0F;
+    service.SetConfig(config);
+    const auto frame = service.PrepareFrameExposure(ctx_, test_case.fp32);
+    ASSERT_NE(frame, nullptr);
+    std::array<Pixel, 16U> pixels;
+    pixels.fill(
+      Pixel { test_case.value, test_case.value, test_case.value, 1.0F });
+    if (test_case.overflow)
+      pixels.back() = Pixel { 0x1p20F, 0x1p20F, 0x1p20F, 1.0F };
+    const auto accumulation = MakeSignal(4U, 4U, pixels);
+    const auto prepared
+      = service.PrepareSceneExposure(ctx_.current_view.view_id, ctx_,
+        { .scene_signal = accumulation.texture.get(),
+          .scene_signal_srv = accumulation.srv });
+    ASSERT_TRUE(prepared.has_value());
+    const auto before = Read<ExposureStateData>(
+      *prepared->exposure.state->buffer, ResourceStates::kShaderResource);
+    auto destination = CreateRegisteredTexture(TextureDesc { .width = 4U,
+      .height = 4U,
+      .format = Format::kRGBA16Float,
+      .texture_type = TextureType::kTexture2D,
+      .debug_name = "CheckedTonemapHalf",
+      .is_shader_resource = true,
+      .is_uav = true,
+      .initial_state = ResourceStates::kCommon });
+    constexpr std::array<std::uint16_t, 4U> sentinel { 0x3400U, 0x3400U,
+      0x3400U, 0x3c00U };
+    std::array<std::byte, 1024U> initial {};
+    for (unsigned y = 0U; y < 4U; ++y)
+      for (unsigned x = 0U; x < 4U; ++x)
+        std::memcpy(initial.data() + y * 256U + x * sizeof(sentinel),
+          sentinel.data(), sizeof(sentinel));
+    auto upload = CreateUploadBuffer(SizeBytes { initial.size() });
+    upload->Update(initial.data(), initial.size(), 0U);
+    {
+      auto recorder = AcquireRecorder("Initialize checked tonemap sentinel");
+      EnsureTracked(*recorder, upload, ResourceStates::kGenericRead);
+      EnsureTracked(*recorder, destination, ResourceStates::kCommon);
+      recorder->RequireResourceState(*destination, ResourceStates::kCopyDest);
+      recorder->FlushBarriers();
+      recorder->CopyBufferToTexture(*upload,
+        { .buffer_offset = 0U,
+          .buffer_row_pitch = 256U,
+          .buffer_slice_pitch = 1024U,
+          .dst_slice = { .width = 4U, .height = 4U, .depth = 1U } },
+        *destination);
+      recorder->RequireResourceStateFinal(
+        *destination, ResourceStates::kShaderResource);
+    }
+    const auto bind = [&](ResourceViewType type) {
+      auto& allocator = renderer_->GetGraphics()->GetDescriptorAllocator();
+      auto allocation
+        = allocator.AllocateRaw(type, DescriptorVisibility::kShaderVisible);
+      const auto index = allocator.GetShaderVisibleIndex(allocation);
+      CHECK_F(Backend()
+          .GetResourceRegistry()
+          .RegisterView(*destination, std::move(allocation),
+            TextureViewDescription { .view_type = type,
+              .format = Format::kRGBA16Float,
+              .dimension = TextureType::kTexture2D })
+          ->IsValid());
+      return index;
+    };
+    const auto uav = bind(ResourceViewType::kTexture_UAV);
+    const Signal resolved { destination, bind(ResourceViewType::kTexture_SRV) };
+    const auto capture = test_case.overflow
+      ? BeginOptionalCapture()
+      : observer_ptr<FrameCaptureController> {};
+    ASSERT_TRUE(service.ConvertSceneColor(ctx_, *prepared,
+      { .scene_signal = accumulation.texture.get(),
+        .scene_signal_srv = accumulation.srv },
+      *destination, uav));
+    EXPECT_NEAR(
+      ServicePixel(service, resolved, settings, false, 0.0F, {},
+        engine::ToneMapper::kNone, false, &*prepared, &accumulation, frame),
+      test_case.expected, 1e-7F);
+    if (capture)
+      EXPECT_TRUE(capture->EndCapture());
+    const auto report = Read<HdrSuitabilityData>(
+      *frame->suitability_buffer, ResourceStates::kShaderResource);
+    const bool rejected = test_case.overflow || test_case.value == 0x1p-30F;
+    EXPECT_EQ(report.failure_flags != 0U, rejected);
+    const auto after = Read<ExposureStateData>(
+      *prepared->exposure.state->buffer, ResourceStates::kShaderResource);
+    EXPECT_EQ(std::memcmp(&before, &after, sizeof(before)), 0);
+    const auto* bindings = service.InspectBindings(ctx_.current_view.view_id);
+    ASSERT_NE(bindings, nullptr);
+    EXPECT_EQ(bindings->scene_fallback_srv, accumulation.srv);
+    EXPECT_EQ(bindings->conversion_report_srv, frame->suitability_srv);
+  }
+}
+
+NOLINT_TEST_F(
+  ExposureGpuTest, CheckedConversionWaitsForInitialMeteringMaskPolicy)
+{
+  for (const bool pending : { true, false }) {
+    SCOPED_TRACE(pending);
+    auto loader = vortex::testing::FakeAssetLoader {};
+    auto service = PostProcessService(*renderer_,
+      pending ? observer_ptr { &loader }
+              : observer_ptr<vortex::testing::FakeAssetLoader> {});
+    ctx_.frame_sequence = frame::SequenceNumber { ++sequence_ };
+    service.OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
+    auto requested = scene::ExposureSettings {};
+    requested.metering_mask = pending ? loader.MintSyntheticTextureKey()
+                                      : content::ResourceKey { 123U };
+    const auto& captured
+      = service.CaptureViewExposureSettings(ctx_.current_view.view_id,
+        ctx_.current_view.view_state_handle, requested);
+    EXPECT_EQ(captured.revision, 0U);
+    EXPECT_EQ(captured.mask_status,
+      pending ? PostProcessService::ExposureMaskStatus::kPending
+              : PostProcessService::ExposureMaskStatus::kFailed);
+    auto config = PostProcessConfig {};
+    config.resolved_exposure = captured.resolved;
+    config.exposure_settings_revision = captured.revision;
+    service.SetConfig(config);
+    ASSERT_NE(service.PrepareFrameExposure(ctx_, true), nullptr);
+    const auto source = Uniform(.25F, 4U, 4U);
+    const auto inputs
+      = PostProcessService::Inputs { .scene_signal = source.texture.get(),
+          .scene_signal_srv = source.srv };
+    const auto prepared
+      = service.PrepareSceneExposure(ctx_.current_view.view_id, ctx_, inputs);
+    ASSERT_TRUE(prepared.has_value());
+    auto destination = CreateRegisteredTexture(TextureDesc { .width = 4U,
+      .height = 4U,
+      .format = Format::kRGBA16Float,
+      .texture_type = TextureType::kTexture2D,
+      .is_shader_resource = true,
+      .is_uav = true,
+      .initial_state = ResourceStates::kCommon });
+    auto& allocator = renderer_->GetGraphics()->GetDescriptorAllocator();
+    auto allocation = allocator.AllocateRaw(
+      ResourceViewType::kTexture_UAV, DescriptorVisibility::kShaderVisible);
+    const auto index = allocator.GetShaderVisibleIndex(allocation);
+    ASSERT_TRUE(Backend()
+        .GetResourceRegistry()
+        .RegisterView(*destination, std::move(allocation),
+          TextureViewDescription { .view_type = ResourceViewType::kTexture_UAV,
+            .format = Format::kRGBA16Float,
+            .dimension = TextureType::kTexture2D })
+        ->IsValid());
+    auto& backend = static_cast<ExposureFailureGraphics&>(Backend());
+    backend.recorder_names.clear();
+    EXPECT_FALSE(
+      service.ConvertSceneColor(ctx_, *prepared, inputs, *destination, index));
+    EXPECT_TRUE(backend.recorder_names.empty());
   }
 }
 

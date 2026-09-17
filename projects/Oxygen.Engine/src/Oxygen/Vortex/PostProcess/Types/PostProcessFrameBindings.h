@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 
 #include <Oxygen/Core/Bindless/Types.h>
@@ -43,12 +44,18 @@ struct alignas(packing::kShaderDataFieldAlignment) PostProcessFrameBindings {
   float auto_exposure_target_luminance { 0.18F };
   float auto_exposure_spot_meter_radius { 0.2F };
   std::uint32_t flags { 0U };
-  std::uint32_t reserved { 0U };
+  //! When present, resolved_scene_color_srv is conditional on this GPU report.
+  ShaderVisibleIndex scene_fallback_srv { kInvalidShaderVisibleIndex };
+  ShaderVisibleIndex conversion_report_srv { kInvalidShaderVisibleIndex };
 };
 
 static_assert(
   alignof(PostProcessFrameBindings) == packing::kShaderDataFieldAlignment);
 static_assert(
   sizeof(PostProcessFrameBindings) % packing::kShaderDataFieldAlignment == 0);
+static_assert(sizeof(PostProcessFrameBindings) == 112U);
+static_assert(offsetof(PostProcessFrameBindings, scene_fallback_srv) == 104U);
+static_assert(
+  offsetof(PostProcessFrameBindings, conversion_report_srv) == 108U);
 
 } // namespace oxygen::vortex

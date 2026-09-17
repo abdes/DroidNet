@@ -49,9 +49,14 @@ namespace {
     std::uint32_t frame_exposure_srv;
     std::array<float, 3> background_color;
     std::uint32_t background_enabled;
+    std::uint32_t fallback_texture_index;
+    std::uint32_t conversion_report_index;
+    std::array<std::uint32_t, 2> reserved {};
   };
 
-  static_assert(sizeof(TonemapPassConstants) == 48U);
+  static_assert(sizeof(TonemapPassConstants) == 64U);
+  static_assert(offsetof(TonemapPassConstants, fallback_texture_index) == 48U);
+  static_assert(offsetof(TonemapPassConstants, conversion_report_index) == 52U);
 
   auto RangeTypeToViewType(const bindless_d3d12::RangeType type)
     -> graphics::ResourceViewType
@@ -259,6 +264,23 @@ auto TonemapPass::Record(RenderContext& ctx,
   }
 
   TrackTextureFromKnownOrInitial(*recorder, *inputs.scene_signal);
+  const bool checked_resolve = inputs.conversion_report != nullptr;
+  CHECK_F(checked_resolve == inputs.conversion_report_srv.IsValid()
+    && checked_resolve == (inputs.scene_fallback != nullptr)
+    && checked_resolve == inputs.scene_fallback_srv.IsValid());
+  if (checked_resolve) {
+    const auto& source = inputs.scene_signal->GetDescriptor();
+    const auto& fallback = inputs.scene_fallback->GetDescriptor();
+    CHECK_F(source.format == Format::kRGBA16Float
+      && fallback.format == Format::kRGBA32Float
+      && source.width == fallback.width && source.height == fallback.height);
+    TrackTextureFromKnownOrInitial(*recorder, *inputs.scene_fallback);
+    TrackBufferAsShaderReadable(*recorder, *inputs.conversion_report);
+    recorder->RequireResourceState(
+      *inputs.scene_fallback, graphics::ResourceStates::kShaderResource);
+    recorder->RequireResourceState(
+      *inputs.conversion_report, graphics::ResourceStates::kShaderResource);
+  }
   TrackTextureFromKnownOrInitial(*recorder, target_color);
   if (inputs.exposure_buffer != nullptr) {
     TrackBufferAsShaderReadable(*recorder, *inputs.exposure_buffer);
@@ -311,7 +333,7 @@ auto TonemapPass::UpdatePassConstants(RenderContext& ctx, const Inputs& inputs)
     CHECK_NOTNULL_F(gfx.get());
     constants_publisher_
       = std::make_unique<::oxygen::vortex::internal::PerViewStructuredPublisher<
-        std::array<std::uint32_t, 12U>>>(observer_ptr { gfx.get() },
+        std::array<std::uint32_t, 16U>>>(observer_ptr { gfx.get() },
         renderer_.GetStagingProvider(),
         observer_ptr { &renderer_.GetInlineTransfersCoordinator() },
         "Vortex.PostProcess.Tonemap.Constants");
@@ -337,10 +359,12 @@ auto TonemapPass::UpdatePassConstants(RenderContext& ctx, const Inputs& inputs)
       background_color.z,
     },
     .background_enabled = inputs.background_color.has_value() ? 1U : 0U,
+    .fallback_texture_index = inputs.scene_fallback_srv.get(),
+    .conversion_report_index = inputs.conversion_report_srv.get(),
   };
 
   const auto slot = constants_publisher_->Publish(ctx.current_view.view_id,
-    std::bit_cast<std::array<std::uint32_t, 12U>>(constants));
+    std::bit_cast<std::array<std::uint32_t, 16U>>(constants));
   CHECK_F(slot.IsValid(), "Tonemap constants publication failed");
   return slot;
 }

@@ -52,4 +52,12 @@ static const uint EXPOSURE_LATENT_SCALE_OFFSET = 8u;
 static const uint EXPOSURE_METER_EV_OFFSET = 20u;
 static const uint EXPOSURE_FLAGS_OFFSET = 24u;
 
+// Product 11 is the resolved SceneColor boundary in the HDR inventory.
+static bool IsCheckedSceneColorAccepted(ByteAddressBuffer report)
+{
+    const uint product_mask = 1u << 10u;
+    return report.Load(12u) == 0u && report.Load(8u) == product_mask
+        && report.Load(40u) == product_mask;
+}
+
 #endif

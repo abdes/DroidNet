@@ -518,8 +518,32 @@ hands off the SceneRenderer-owned output. Apply final S/P once, including disabl
 S=1. UI/background composition remains independent. Bloom thresholds are scene
 referred. TAA/TSR slots remain future work, not implied implementation.
 
-Tonemap constants remain 48 bytes: the former padding word at byte 28 now holds
-the frame-exposure SRV (invalid means scene-referred input). The pixel shader
+Tonemap constants occupy 64 bytes. The frame-exposure SRV remains at byte 28
+(invalid means scene-referred input); background RGB/enabled remain at 32/44.
+Fallback SceneColor SRV and conversion-report SRV occupy bytes 48/52, followed
+by two zero words. Invalid fallback/report indices select the ordinary source.
+For a checked resolve, both source textures share extent and pinned P. The GPU
+uses the FP16 source only when product 11's whole-image check passes; otherwise
+it reads the original FP32 accumulation. Conversion stores and tonemapping share
+the acceptance predicate. Keep the report unchanged between conversion and its
+consumers. This fallback preserves the valid FP32 meter and S/history; it does
+not authorize ignoring failures in upstream radiance products.
+The caller retains immutable FP32 accumulation through the last conditional
+consumer; publishing the report does not extend a scene-texture pool lease.
+SceneRenderer's eventual conditional extraction must retain that lease when
+consumers outlive the current view's execution.
+An unresolved initial mask revision prevents conversion submission: unknown
+meter weights cannot establish suitability. The caller retains the FP32 source
+without attaching an uncomputed conversion report.
+
+The 112-byte post-process binding record carries fallback/report SRVs at bytes
+104/108. A non-invalid report makes its resolved-color SRV conditional, so
+consumers must use the same GPU acceptance test. These fields replace the old
+reserved word and tail padding without growing the record. The current bloom
+wrapper only forwards its separately supplied texture; any future owned bloom
+chain must honor checked source selection before reading resolved color.
+
+The pixel shader
 multiplies current S by that record's 1/P once before mapping foreground and
 bloom. Background composition stays outside this multiplication. ACES and
 Filmic evaluate their existing quadratic ratios after dividing numerator and
