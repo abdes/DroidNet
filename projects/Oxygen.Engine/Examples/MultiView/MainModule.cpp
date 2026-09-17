@@ -200,7 +200,8 @@ auto MainModule::OnAttachedImpl(
   };
   shell_config.enable_camera_rig = !exposure_proof;
   shell_config.enable_renderer_bound_panels = false;
-  if (config_.exposure_proof == ExposureProofScenario::kAtmosphere) {
+  if (config_.exposure_proof == ExposureProofScenario::kAtmosphere
+    || config_.exposure_proof == ExposureProofScenario::kAtmosphereLit) {
     shell_config.force_environment_override = false;
     shell_config.initial_preview_sun_enabled = false;
   }
@@ -240,6 +241,8 @@ auto MainModule::OnAttachedImpl(
   (void)scene_bootstrapper_.EnsureSceneWithContent();
   if (config_.exposure_proof == ExposureProofScenario::kAtmosphere) {
     scene_bootstrapper_.ApplyAtmosphereProof(0U);
+  } else if (config_.exposure_proof == ExposureProofScenario::kAtmosphereLit) {
+    scene_bootstrapper_.ApplyLitAtmosphereProof();
   }
   const auto extent = ResolveRenderExtent();
   if (HasPositiveExtent(extent)) {
@@ -964,6 +967,13 @@ auto MainModule::UpdateComposition(oxygen::engine::FrameContext& context,
       view.with_height_fog = false;
       view.shading_mode = frame >= 56U ? vortex::ShadingMode::kForward
                                        : vortex::ShadingMode::kDeferred;
+    } else if (proof == ExposureProofScenario::kAtmosphereLit) {
+      exposure.compensation_ev = 0.0F;
+      exposure.metering_mode = frame < 48U ? engine::MeteringMode::kAverage
+                                           : engine::MeteringMode::kSpot;
+      view.with_atmosphere = true;
+      view.with_height_fog = false;
+      view.shading_mode = vortex::ShadingMode::kDeferred;
     }
     view.force_wireframe = false;
     if (proof == ExposureProofScenario::kModes && view.id == pip_view_id_) {
@@ -1012,7 +1022,8 @@ auto MainModule::UpdateComposition(oxygen::engine::FrameContext& context,
       continue;
     }
     if ((frame == 32U && proof != ExposureProofScenario::kAtmosphere)
-      || (proof == ExposureProofScenario::kShared && frame == 44U)) {
+      || (proof == ExposureProofScenario::kShared && frame == 44U)
+      || (proof == ExposureProofScenario::kAtmosphereLit && frame == 48U)) {
       const auto request = renderer->QueueExposureTransition(
         view.view_state_handle, vortex::ExposureTransitionPolicy::kRemeter);
       CHECK_F(request.has_value(), "MultiView proof remeter request failed");
