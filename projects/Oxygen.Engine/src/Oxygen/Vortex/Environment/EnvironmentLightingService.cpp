@@ -1123,6 +1123,14 @@ auto EnvironmentLightingService::PublishEnvironmentBindings(RenderContext& ctx,
       .static_data = static_data,
       .view_data = view_data,
       .view_products = products,
+      .radiance = {
+        .atmosphere_required = ctx.current_view.with_atmosphere && stable_state.view_products.atmosphere.enabled,
+        .volumetric_fog_required = wants_volumetric_fog && ctx.current_view.with_height_fog
+          && stable_state.view_products.volumetric_fog.enabled,
+        .sky_view = sky_view_state.texture,
+        .aerial_perspective = camera_aerial_state.texture,
+        .volumetric_fog = pending_volumetric_fog_state_.texture,
+      },
     });
 
   last_publication_state_.frame_sequence = current_sequence_;
@@ -1452,6 +1460,13 @@ auto EnvironmentLightingService::InspectEnvironmentViewProducts(
 {
   const auto it = published_views_.find(view_id);
   return it != published_views_.end() ? &it->second.view_products : nullptr;
+}
+
+auto EnvironmentLightingService::InspectViewRadianceResources(
+  const ViewId view_id) const -> const ViewRadianceResources*
+{
+  const auto it = published_views_.find(view_id);
+  return it != published_views_.end() ? &it->second.radiance : nullptr;
 }
 
 auto EnvironmentLightingService::ResolveEnvironmentFrameSlot(

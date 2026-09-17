@@ -39,6 +39,8 @@ namespace environment {
     struct RecordState {
       bool requested { false };
       bool executed { false };
+      //! Submitted radiance resource retained for this view's consumers.
+      std::shared_ptr<const graphics::Texture> texture;
       ShaderVisibleIndex sky_view_lut_srv { kInvalidShaderVisibleIndex };
       ShaderVisibleIndex sky_view_lut_uav { kInvalidShaderVisibleIndex };
       std::uint32_t width { 0U };

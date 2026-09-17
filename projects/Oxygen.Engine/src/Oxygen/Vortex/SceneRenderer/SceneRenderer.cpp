@@ -51,6 +51,8 @@
 #include <Oxygen/Scene/Types/Traversal.h>
 #include <Oxygen/Vortex/Environment/EnvironmentLightingService.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereLightTranslation.h>
+#include <Oxygen/Vortex/Environment/Internal/AtmosphereState.h>
+#include <Oxygen/Vortex/Environment/SceneBackground.h>
 #include <Oxygen/Vortex/Internal/PerViewScope.h>
 #include <Oxygen/Vortex/Lighting/LightingService.h>
 #include <Oxygen/Vortex/Passes/GroundGridPass.h>
@@ -1475,6 +1477,68 @@ namespace {
                     : ctx.current_view.view_state_handle);
   }
 
+  auto CollectExposureProducts(const RenderContext& ctx,
+    const graphics::Texture& accumulated, ShaderVisibleIndex accumulated_srv,
+    const EnvironmentLightingService* environment_service)
+    -> std::vector<postprocess::ExposurePass::HdrProduct>
+  {
+    auto products = std::vector<postprocess::ExposurePass::HdrProduct> {
+      { .texture = &accumulated,
+        .srv = accumulated_srv,
+        .id = 11U,
+        .metering = true,
+        .coverage = environment::ResolveSceneBackground(ctx).has_value() }
+    };
+    const auto* radiance = environment_service
+      ? environment_service->InspectViewRadianceResources(
+          ctx.current_view.view_id)
+      : nullptr;
+    const auto* published = environment_service
+      ? environment_service->InspectEnvironmentViewProducts(
+          ctx.current_view.view_id)
+      : nullptr;
+    if (environment_service) {
+      const auto& authored
+        = environment_service->InspectAtmosphereState().view_products;
+      const bool atmosphere_required = ctx.current_view.with_atmosphere
+        && ctx.current_view.feature_mask.Has(
+          CompositionView::ViewFeatureMask::kEnvironment)
+        && authored.atmosphere.enabled;
+      const bool fog_required = ctx.current_view.with_height_fog
+        && ctx.current_view.feature_mask.Has(
+          CompositionView::ViewFeatureMask::kVolumetrics)
+        && authored.volumetric_fog.enabled;
+      if (atmosphere_required) {
+        products.push_back(
+          { .texture = radiance ? radiance->sky_view.get() : nullptr,
+            .srv = published ? published->sky_view_lut_srv
+                             : kInvalidShaderVisibleIndex,
+            .id = 5U });
+        products.push_back(
+          { .texture = radiance ? radiance->aerial_perspective.get() : nullptr,
+            .srv = published ? published->camera_aerial_perspective_srv
+                             : kInvalidShaderVisibleIndex,
+            .id = 6U,
+            .transmittance = true });
+      }
+      if (fog_required) {
+        products.push_back(
+          { .texture = radiance ? radiance->volumetric_fog.get() : nullptr,
+            .srv = published ? published->integrated_light_scattering_srv
+                             : kInvalidShaderVisibleIndex,
+            .id = 10U,
+            .transmittance = true });
+      }
+    }
+    // SceneColor already accumulates all raster/additive terms in FP32. Split
+    // the narrowing allowance across the actual intermediate allocations and
+    // the final resolve, rather than granting each the full image budget.
+    const float share = 1.0F / static_cast<float>(products.size());
+    for (auto& product : products)
+      product.error_budget_share = share;
+    return products;
+  }
+
   auto HasPublishedGBufferBindings(const SceneTextureBindings& bindings) -> bool
   {
     return std::ranges::all_of(bindings.gbuffer_srvs.begin(),
@@ -1650,9 +1714,9 @@ auto SceneRenderer::PrepareExposureDomain(RenderContext& ctx) -> bool
     return true;
   post_process_->SetResolvedConfig(
     ResolveAuthoredPostProcessConfig(ctx, *post_process_));
-  // No product-suitability proof has been published yet. Retain the planned
-  // FP32 mode until the completed-status admission path can certify all
-  // products.
+  // Retain FP32 until producer pre-store checks and cumulative composition
+  // error bounds can certify normal-mode allocations. Reference-product
+  // qualification runs after this frame's HDR producers.
   ctx.current_view.frame_exposure
     = post_process_->PrepareFrameExposure(ctx, true);
   return ctx.current_view.frame_exposure != nullptr;
@@ -2457,6 +2521,8 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
   // consumes this exact result instead of metering the resolved texture again.
   auto prepared_exposure
     = std::optional<PostProcessService::PreparedExposure> {};
+  auto precision_products
+    = std::vector<postprocess::ExposurePass::HdrProduct> {};
   if (post_process_ != nullptr && wants_scene_lighting) {
     post_process_->SetResolvedConfig(
       ResolveAuthoredPostProcessConfig(ctx, *post_process_));
@@ -2465,6 +2531,36 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
     const auto accumulated_srv
       = ShaderVisibleIndex { RegisterSceneTextureView(*accumulated,
         MakeSrvDesc(*accumulated, accumulated->GetDescriptor().format)) };
+    precision_products = CollectExposureProducts(
+      ctx, *accumulated, accumulated_srv, environment_.get());
+    auto layout = ExposureProductLayout {};
+    CHECK_LE_F(precision_products.size(), layout.products.size());
+    auto expected_products = std::uint32_t { 0U };
+    for (std::size_t i = 0; i < precision_products.size(); ++i) {
+      const auto& product = precision_products[i];
+      const auto desc = product.texture ? product.texture->GetDescriptor()
+                                        : graphics::TextureDesc {};
+      layout.products[i] = { product.id, desc.width, desc.height, desc.depth,
+        (product.coverage ? 1U : 0U) | (product.transmittance ? 2U : 0U) };
+      expected_products |= 1U << (product.id - 1U);
+    }
+    const auto handle = ctx.current_view.view_state_handle;
+    if (handle != CompositionView::kInvalidViewStateHandle) {
+      auto& retained = exposure_product_layouts_[handle];
+      if (retained.revision == 0U || retained.products != layout.products) {
+        CHECK_NE_F(retained.revision,
+          (std::numeric_limits<std::uint64_t>::max)());
+        layout.revision = retained.revision + 1U;
+        retained = layout;
+      }
+      layout = retained;
+      // Collect/qualify the real scene products while accumulation and all
+      // intermediates remain FP32. Normal-mode allocation additionally requires
+      // producer pre-store checks and the complete composition error bound.
+      static_cast<void>(post_process_->SelectPrecisionCandidate(ctx,
+        { .product_layout_revision = layout.revision,
+          .expected_products = expected_products }));
+    }
     prepared_exposure
       = post_process_->PrepareSceneExposure(ctx.current_view.view_id, ctx,
         { .scene_signal = accumulated, .scene_signal_srv = accumulated_srv });
@@ -2503,6 +2599,10 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
         .valid = true,
       });
   }
+
+  if (prepared_exposure && !precision_products.empty())
+    static_cast<void>(post_process_->FinalizeScenePrecision(
+      ctx, *prepared_exposure, precision_products));
 
   // Stage 22: Post processing
   if (post_process_ != nullptr && wants_scene_lighting) {
@@ -2621,6 +2721,7 @@ void SceneRenderer::RemoveViewState(const ViewId view_id,
   const CompositionView::ViewStateHandle view_state_handle)
 {
   InvalidatePublishedViewFrameBindings();
+  exposure_product_layouts_.erase(view_state_handle);
   if (environment_)
     environment_->RemoveViewState(view_id);
   if (screen_hzb_)

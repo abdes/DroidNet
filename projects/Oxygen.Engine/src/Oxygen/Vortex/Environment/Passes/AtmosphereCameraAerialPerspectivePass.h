@@ -39,6 +39,8 @@ namespace environment {
     struct RecordState {
       bool requested { false };
       bool executed { false };
+      //! Submitted radiance resource retained for this view's consumers.
+      std::shared_ptr<const graphics::Texture> texture;
       ShaderVisibleIndex camera_aerial_perspective_srv {
         kInvalidShaderVisibleIndex
       };

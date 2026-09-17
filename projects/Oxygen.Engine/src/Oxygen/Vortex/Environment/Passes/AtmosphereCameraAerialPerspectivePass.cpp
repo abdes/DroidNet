@@ -13,7 +13,9 @@
 
 #include <glm/geometric.hpp>
 
+#include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
+#include <Oxygen/Graphics/Common/CommandList.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
@@ -282,6 +284,12 @@ auto AtmosphereCameraAerialPerspectivePass::Record(RenderContext& ctx,
     registry.Register(texture);
   }
 
+  bool texture_committed = false;
+  auto retire_unpublished = ScopeGuard([&]() noexcept {
+    if (!texture_committed)
+      internal::RetireEnvironmentResource(*gfx, texture);
+  });
+
   auto& allocator = gfx->GetDescriptorAllocator();
   auto srv_handle = allocator.AllocateBindless(
     bindless::generated::kTexturesDomain,
@@ -432,22 +440,30 @@ auto AtmosphereCameraAerialPerspectivePass::Record(RenderContext& ctx,
     static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants),
     constants_alloc->srv.get(), 1U);
 
-  graphics::GpuEventScope pass_scope(*recorder,
-    "Vortex.Environment.AtmosphereCameraAerialPerspective",
-    profiling::ProfileGranularity::kDiagnostic,
-    profiling::ProfileCategory::kPass);
   const auto dispatch_x
     = (width + (kThreadGroupSizeX - 1U)) / kThreadGroupSizeX;
   const auto dispatch_y
     = (height + (kThreadGroupSizeY - 1U)) / kThreadGroupSizeY;
   const auto dispatch_z
     = (depth + (kThreadGroupSizeZ - 1U)) / kThreadGroupSizeZ;
-  recorder->Dispatch(dispatch_x, dispatch_y, dispatch_z);
-  recorder->RequireResourceStateFinal(
-    *texture, graphics::ResourceStates::kShaderResource);
+  {
+    graphics::GpuEventScope pass_scope(*recorder,
+      "Vortex.Environment.AtmosphereCameraAerialPerspective",
+      profiling::ProfileGranularity::kDiagnostic,
+      profiling::ProfileCategory::kPass);
+    recorder->Dispatch(dispatch_x, dispatch_y, dispatch_z);
+    recorder->RequireResourceStateFinal(
+      *texture, graphics::ResourceStates::kShaderResource);
+  }
+  const auto recording = recorder->GetCommandListForInspection();
+  recorder.reset();
+  if (!recording || !recording->IsSubmitted())
+    return state;
 
   live_textures_.push_back(texture);
+  texture_committed = true;
   state.executed = true;
+  state.texture = texture;
   state.camera_aerial_perspective_srv = aerial_srv;
   state.camera_aerial_perspective_uav = aerial_uav;
   state.width = width;

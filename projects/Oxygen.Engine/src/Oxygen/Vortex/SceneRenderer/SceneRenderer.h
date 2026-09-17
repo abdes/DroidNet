@@ -11,6 +11,7 @@
 #include <memory>
 #include <optional>
 #include <string_view>
+#include <unordered_map>
 #include <vector>
 
 #include <glm/vec2.hpp>
@@ -246,6 +247,13 @@ public:
 
 private:
   friend struct testing::RendererPublicationProbe;
+
+  struct ExposureProductLayout {
+    std::array<std::array<std::uint32_t, 5U>, 4U> products {};
+    std::uint64_t revision { 0U };
+  };
+  std::unordered_map<CompositionView::ViewStateHandle, ExposureProductLayout>
+    exposure_product_layouts_;
 
   struct ExtractArtifact {
     std::shared_ptr<graphics::Texture> texture;
