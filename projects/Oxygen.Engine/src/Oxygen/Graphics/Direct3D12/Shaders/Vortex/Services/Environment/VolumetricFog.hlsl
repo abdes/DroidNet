@@ -6,6 +6,7 @@
 
 #include "Vortex/Contracts/View/FrameExposureHelpers.hlsli"
 #include "Vortex/Contracts/View/HdrStoreChecks.hlsli"
+#include "Vortex/Contracts/View/HdrErrorBounds.hlsli"
 #include "Core/Bindless/Generated.BindlessAbi.hlsl"
 
 #include "Vortex/Contracts/View/ViewConstants.hlsli"
@@ -145,7 +146,7 @@ struct VolumetricFogPassConstants
     uint previous_frame_exposure_srv;
     uint exposure_status_uav;
     uint exposure_fp16_store;
-    uint exposure_padding;
+    uint previous_error_bounds_srv;
 };
 
 struct VolumetricLocalFogMedia
@@ -542,14 +543,53 @@ void VortexVolumetricFogCS(uint3 dispatch_id : SV_DispatchThreadID)
         dispatch_id,
         pass.temporal_history1.frame_jitter_offsets[0].xyz,
         world_position);
+    float4 reference_low = output_value;
+    float4 reference_high = output_value;
     float4 history_value = output_value;
-    if (TrySampleTemporalHistory(pass, world_position, history_value))
+    bool certified_history = true;
+    if (pass.exposure_status_uav != K_INVALID_BINDLESS_INDEX) {
+        certified_history = pass.previous_error_bounds_srv != K_INVALID_BINDLESS_INDEX;
+        if (certified_history) {
+            ByteAddressBuffer previous_status = ResourceDescriptorHeap[pass.previous_error_bounds_srv];
+            const float4 previous_bounds = asfloat(previous_status.Load4(112u));
+            certified_history = all(isfinite(previous_bounds)) && all(previous_bounds >= 0.0)
+                && previous_bounds.x < 1.0 && previous_bounds.z < 1.0;
+        }
+    }
+    if (certified_history && TrySampleTemporalHistory(pass, world_position, history_value))
     {
         float inverse_previous_p = 1.0f;
         if (pass.previous_frame_exposure_srv != K_INVALID_BINDLESS_INDEX) {
             StructuredBuffer<FrameExposureData> previous_frame = ResourceDescriptorHeap[pass.previous_frame_exposure_srv];
             inverse_previous_p = previous_frame[0].one_over_pre_exposure;
         }
+        float4 history_low = history_value;
+        float4 history_high = history_value;
+        if (pass.previous_error_bounds_srv != K_INVALID_BINDLESS_INDEX) {
+            ByteAddressBuffer previous_status = ResourceDescriptorHeap[pass.previous_error_bounds_srv];
+            const float4 bounds = asfloat(previous_status.Load4(112u));
+            [unroll] for (uint c = 0u; c < 3u; ++c) {
+                if (all(bounds.xy == 0.0.xx)) {
+                    history_low[c] = history_high[c] = history_value[c] * (GetPreExposure() * inverse_previous_p);
+                } else {
+                    const float observed = max(history_value[c], 0.0) * inverse_previous_p;
+                    const float2 interval = HdrReferenceInterval(observed, bounds.xy);
+                    history_low[c] = HdrBoundDown(interval.x * GetPreExposure());
+                    history_high[c] = HdrUpperProduct(interval.y, GetPreExposure());
+                }
+            }
+            const float2 transmission = HdrReferenceInterval(saturate(history_value.a), bounds.zw);
+            history_low.a = saturate(transmission.x);
+            history_high.a = saturate(transmission.y);
+        } else {
+            history_low.rgb *= GetPreExposure() * inverse_previous_p;
+            history_high.rgb *= GetPreExposure() * inverse_previous_p;
+        }
+        const float weight = saturate(pass.temporal_history0.history_weight);
+        reference_low = lerp(output_value, max(history_low, 0.0.xxxx), weight);
+        reference_high = lerp(output_value, max(history_high, 0.0.xxxx), weight);
+        reference_low.a = saturate(reference_low.a);
+        reference_high.a = saturate(reference_high.a);
         history_value.rgb *= GetPreExposure() * inverse_previous_p;
         output_value = lerp(
             output_value,
@@ -577,8 +617,11 @@ void VortexVolumetricFogCS(uint3 dispatch_id : SV_DispatchThreadID)
             output_value = accumulated / float(sample_count);
             output_value.a = saturate(output_value.a);
         }
+        reference_low = reference_high = output_value;
     }
 
+    RecordHdrStoreBounds(output_value, reference_low, reference_high, GetOneOverPreExposure(),
+        10u, pass.exposure_status_uav, pass.exposure_fp16_store);
     CheckHdrStoreRange(output_value, 10u, pass.exposure_status_uav, pass.exposure_fp16_store);
     output_texture[dispatch_id] = output_value;
 }

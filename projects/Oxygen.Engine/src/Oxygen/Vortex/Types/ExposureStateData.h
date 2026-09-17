@@ -76,6 +76,24 @@ struct alignas(16) ExposureCompletedStatus {
   std::uint32_t transition_rejection_reason { 0U };
   std::uint32_t reserved { 0U };
 };
+//! GPU-only affine error data: abs(observed-reference) <= r*reference+a.
+struct alignas(16) HdrErrorBoundsData {
+  float rgb_relative { 0.0F };
+  float rgb_absolute { 0.0F };
+  float transmittance_relative { 0.0F };
+  float transmittance_absolute { 0.0F };
+};
+
+//! The readback prefix stays non-numerical; the tail remains GPU-owned.
+struct alignas(16) ExposureStatusStorage {
+  ExposureCompletedStatus completed;
+  std::array<HdrErrorBoundsData, 3> producer_errors {}; // Sky view, AP, fog.
+};
+static_assert(sizeof(HdrErrorBoundsData) == 16U);
+static_assert(offsetof(ExposureStatusStorage, producer_errors) == 80U);
+static_assert(sizeof(ExposureStatusStorage) == 128U);
+static_assert(std::is_standard_layout_v<ExposureStatusStorage>);
+
 static_assert(sizeof(ExposureCompletedStatus) == 80U);
 static_assert(offsetof(ExposureCompletedStatus, view_state_identity) == 0U);
 static_assert(offsetof(ExposureCompletedStatus, frame_sequence) == 8U);

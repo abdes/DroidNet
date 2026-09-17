@@ -454,6 +454,7 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
 
   static_assert(offsetof(PassConstants, exposure_status_uav) == 532U);
   static_assert(offsetof(PassConstants, exposure_fp16_store) == 536U);
+  static_assert(offsetof(PassConstants, previous_error_bounds_srv) == 540U);
   auto constants = PassConstants {};
   constants.exposure_status_uav = ctx.current_view.frame_exposure
     ? ctx.current_view.frame_exposure->current_state->status_uav_index.get()
@@ -499,7 +500,11 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
   auto& history_entry = temporal_reprojection_enabled
     ? history_by_view_[ctx.current_view.view_id]
     : transient_history;
+  // A repeated producer call in the same logical frame must not read the
+  // current writable status allocation as its previous error certificate.
   const auto history_matches = temporal_reprojection_enabled
+    && (!ctx.current_view.frame_exposure
+      || history_entry.frame_exposure != ctx.current_view.frame_exposure)
     && !ctx.current_view.history_discontinuity && history_entry.valid
     && history_entry.texture != nullptr && history_entry.srv.IsValid()
     && history_entry.width == width && history_entry.height == height
@@ -513,6 +518,8 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
     if (history_entry.frame_exposure) {
       constants.previous_frame_exposure_srv
         = history_entry.frame_exposure->srv_index.get();
+      constants.previous_error_bounds_srv
+        = history_entry.frame_exposure->current_state->status_srv_index.get();
       exposure_readers_[ctx.frame_slot.get()].push_back(
         history_entry.frame_exposure);
     }
@@ -639,6 +646,13 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
         previous_p, graphics::ResourceStates::kShaderResource, false);
     recorder->RequireResourceState(
       previous_p, graphics::ResourceStates::kShaderResource);
+    const auto& previous_errors
+      = *history_entry.frame_exposure->current_state->status_buffer;
+    if (!recorder->AdoptKnownResourceState(previous_errors))
+      recorder->BeginTrackingResourceState(
+        previous_errors, graphics::ResourceStates::kCommon, false);
+    recorder->RequireResourceState(
+      previous_errors, graphics::ResourceStates::kShaderResource);
   }
   recorder->FlushBarriers();
 

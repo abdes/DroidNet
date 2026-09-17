@@ -695,6 +695,9 @@ void VortexExposureFrameCS(uint3 dispatch_id : SV_DispatchThreadID)
     status.Store4(32u, 0u.xxxx);
     status.Store4(48u, 0u.xxxx);
     status.Store4(64u, 0u.xxxx);
+    status.Store4(80u, 0u.xxxx);
+    status.Store4(96u, 0u.xxxx);
+    status.Store4(112u, 0u.xxxx);
     ExposureTargetData initial = (ExposureTargetData)0;
     initial.initial_log_gain = pass.initial_log_gain;
     ExposureStateData state = LoadPrevious(pass.history_srv, initial);
