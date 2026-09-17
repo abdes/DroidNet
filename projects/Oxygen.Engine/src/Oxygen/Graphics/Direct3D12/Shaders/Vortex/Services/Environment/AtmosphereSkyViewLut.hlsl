@@ -10,6 +10,7 @@
 #include "Vortex/Services/Environment/AtmosphereUeMirrorCommon.hlsli"
 #include "Vortex/Contracts/View/FrameExposureHelpers.hlsli"
 #include "Vortex/Contracts/View/HdrStoreChecks.hlsli"
+#include "Vortex/Contracts/View/HdrErrorBounds.hlsli"
 #include "Vortex/Contracts/View/ViewFrameBindings.hlsli"
 
 cbuffer RootConstants : register(b2, space0)
@@ -276,7 +277,8 @@ void VortexAtmosphereSkyViewLutCS(uint3 dispatch_id : SV_DispatchThreadID)
         float3(1.0f / 3.0f, 1.0f / 3.0f, 1.0f / 3.0f));
     CheckHdrStoreRange(float4(scattering.L, transmittance), 5u,
         pass.dispatch_header.exposure_status_uav, pass.dispatch_header.exposure_fp16_store);
-    output_texture[dispatch_id.xy] = float4(
-        max(scattering.L, 0.0f.xxx),
-        saturate(transmittance));
+    const float4 output_value = float4(max(scattering.L, 0.0f.xxx), saturate(transmittance));
+    RecordHdrStoreBounds(output_value, output_value, output_value, GetOneOverPreExposure(),
+        5u, pass.dispatch_header.exposure_status_uav, pass.dispatch_header.exposure_fp16_store);
+    output_texture[dispatch_id.xy] = output_value;
 }

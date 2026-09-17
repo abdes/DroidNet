@@ -55,6 +55,7 @@ namespace postprocess {
     std::shared_ptr<graphics::Buffer> histogram_buffer;
     std::shared_ptr<graphics::Buffer> status_buffer;
     ShaderVisibleIndex status_uav_index { kInvalidShaderVisibleIndex };
+    ShaderVisibleIndex status_srv_index { kInvalidShaderVisibleIndex };
     ShaderVisibleIndex srv_index { kInvalidShaderVisibleIndex };
     ShaderVisibleIndex uav_index { kInvalidShaderVisibleIndex };
     ShaderVisibleIndex histogram_uav_index { kInvalidShaderVisibleIndex };

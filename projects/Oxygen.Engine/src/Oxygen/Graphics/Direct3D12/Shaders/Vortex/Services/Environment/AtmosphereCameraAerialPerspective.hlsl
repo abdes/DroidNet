@@ -14,6 +14,7 @@
 #include "Vortex/Contracts/Environment/EnvironmentFrameBindings.hlsli"
 #include "Vortex/Contracts/View/FrameExposureHelpers.hlsli"
 #include "Vortex/Contracts/View/HdrStoreChecks.hlsli"
+#include "Vortex/Contracts/View/HdrErrorBounds.hlsli"
 #include "Vortex/Contracts/View/ViewFrameBindings.hlsli"
 
 cbuffer RootConstants : register(b2, space0)
@@ -412,7 +413,8 @@ void VortexAtmosphereCameraAerialPerspectiveCS(uint3 dispatch_id : SV_DispatchTh
     const float transmittance = dot(throughput, float3(1.0f / 3.0f, 1.0f / 3.0f, 1.0f / 3.0f));
     CheckHdrStoreRange(float4(luminance, transmittance), 6u,
         pass.atmosphere_scales0.exposure_status_uav, pass.atmosphere_scales1.exposure_fp16_store);
-    output_texture[dispatch_id] = float4(
-        max(luminance, 0.0f.xxx),
-        saturate(transmittance));
+    const float4 output_value = float4(max(luminance, 0.0f.xxx), saturate(transmittance));
+    RecordHdrStoreBounds(output_value, output_value, output_value, GetOneOverPreExposure(),
+        6u, pass.atmosphere_scales0.exposure_status_uav, pass.atmosphere_scales1.exposure_fp16_store);
+    output_texture[dispatch_id] = output_value;
 }

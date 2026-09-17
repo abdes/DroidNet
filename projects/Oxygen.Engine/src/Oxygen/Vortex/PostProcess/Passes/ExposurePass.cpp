@@ -1383,25 +1383,30 @@ auto ExposurePass::AcquireState() -> std::shared_ptr<StateResources>
       state->uav_index = index;
   }
   state->status_buffer
-    = gfx->CreateBuffer({ .size_bytes = sizeof(ExposureCompletedStatus),
+    = gfx->CreateBuffer({ .size_bytes = sizeof(ExposureStatusStorage),
       .usage = graphics::BufferUsage::kStorage,
       .memory = graphics::BufferMemory::kDeviceLocal,
       .debug_name = "Vortex.PostProcess.Exposure.Status" });
   CHECK_NOTNULL_F(state->status_buffer.get());
   RegisterResourceIfNeeded(*gfx, state->status_buffer);
-  auto status_handle
-    = allocator.AllocateRaw(graphics::ResourceViewType::kRawBuffer_UAV,
-      graphics::DescriptorVisibility::kShaderVisible);
-  CHECK_F(status_handle.IsValid());
-  state->status_uav_index = allocator.GetShaderVisibleIndex(status_handle);
-  const auto status_view
-    = registry.RegisterView(*state->status_buffer, std::move(status_handle),
-      graphics::BufferViewDescription {
-        .view_type = graphics::ResourceViewType::kRawBuffer_UAV,
-        .visibility = graphics::DescriptorVisibility::kShaderVisible,
-        .range = { 0U, sizeof(ExposureCompletedStatus) },
-        .stride = 0U });
-  CHECK_F(status_view->IsValid());
+  for (const auto type : { graphics::ResourceViewType::kRawBuffer_SRV,
+         graphics::ResourceViewType::kRawBuffer_UAV }) {
+    auto handle = allocator.AllocateRaw(
+      type, graphics::DescriptorVisibility::kShaderVisible);
+    CHECK_F(handle.IsValid());
+    const auto index = allocator.GetShaderVisibleIndex(handle);
+    const auto view
+      = registry.RegisterView(*state->status_buffer, std::move(handle),
+        graphics::BufferViewDescription { .view_type = type,
+          .visibility = graphics::DescriptorVisibility::kShaderVisible,
+          .range = { 0U, sizeof(ExposureStatusStorage) },
+          .stride = 0U });
+    CHECK_F(view->IsValid());
+    if (type == graphics::ResourceViewType::kRawBuffer_SRV)
+      state->status_srv_index = index;
+    else
+      state->status_uav_index = index;
+  }
   state_pool_.push_back(state);
   return state;
 }

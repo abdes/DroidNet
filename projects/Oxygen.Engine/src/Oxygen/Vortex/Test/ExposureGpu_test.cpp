@@ -4771,6 +4771,13 @@ NOLINT_TEST_F(
           *owner, published[index]);
       ASSERT_NE(texture, nullptr);
       ASSERT_NE(exposure, nullptr);
+      const auto certificate = Read<ExposureStatusStorage>(
+        *exposure->current_state->status_buffer, ResourceStates::kCopySource);
+      const auto& fog_error = certificate.producer_errors[2];
+      EXPECT_EQ(fog_error.rgb_relative, 0.0F);
+      EXPECT_EQ(fog_error.rgb_absolute, 0.0F);
+      EXPECT_EQ(fog_error.transmittance_relative, 0.0F);
+      EXPECT_EQ(fog_error.transmittance_absolute, 0.0F);
       const auto domain = Read<FrameExposureData>(
         *exposure->buffer, ResourceStates::kShaderResource);
       EXPECT_EQ(domain.pre_exposure,
@@ -6262,6 +6269,255 @@ NOLINT_TEST_F(ExposureGpuTest,
   EXPECT_EQ(applied->phase, ExposureTransitionPhase::kApplied);
   EXPECT_EQ(applied->applied_generation, seed->generation);
   WaitForQueueIdle();
+}
+
+NOLINT_TEST_F(ExposureGpuTest,
+  FogErrorBoundsContainRepeatedHalfHistoryAndSurviveFloatRecovery)
+{
+  pass_.reset();
+  renderer_->OnShutdown();
+  auto config = RendererConfig {};
+  config.upload_queue_key = QueueKeyFor().get();
+  renderer_ = std::make_unique<Renderer>(GetGraphicsShared(), config,
+    RendererCapabilityFamily::kScenePreparation
+      | RendererCapabilityFamily::kDeferredShading
+      | RendererCapabilityFamily::kLightingData
+      | RendererCapabilityFamily::kEnvironmentLighting
+      | RendererCapabilityFamily::kFinalOutputComposition);
+  console::Console console;
+  renderer_->RegisterConsoleBindings(observer_ptr { &console });
+  ASSERT_EQ(
+    console.Execute("vtx.volumetric_fog.temporal_reprojection true").status,
+    console::ExecutionStatus::kOk);
+  ASSERT_EQ(console.Execute("vtx.volumetric_fog.jitter false").status,
+    console::ExecutionStatus::kOk);
+  auto scene = std::make_shared<scene::Scene>("Fog error bounds", 4U);
+  scene->SetEnvironment(std::make_unique<scene::SceneEnvironment>());
+  auto& fog = scene->GetEnvironment()->AddSystem<scene::environment::Fog>();
+  fog.SetEnabled(true);
+  fog.SetEnableHeightFog(true);
+  fog.SetEnableVolumetricFog(true);
+  fog.SetExtinctionSigmaTPerMeter(.01F);
+  fog.SetHeightFalloffPerMeter(0.0F);
+  fog.SetVolumetricFogDistance(1000.0F);
+  auto& sky
+    = scene->GetEnvironment()->AddSystem<scene::environment::SkySphere>();
+  sky.SetEnabled(true);
+  sky.SetSource(scene::environment::SkySphereSource::kSolidColor);
+  auto& post = scene->GetEnvironment()
+                 ->AddSystem<scene::environment::PostProcessVolume>();
+  auto settings = scene::ExposureSettings {};
+  settings.key = 12.5F;
+  settings.mode = engine::ExposureMode::kManual;
+  settings.manual_ev = 0.0F;
+  post.SetExposureSettings(settings);
+  auto camera = scene->CreateNode("Camera");
+  auto lens = std::make_unique<scene::PerspectiveCamera>();
+  auto view = View {};
+  view.viewport = { .width = 4.0F, .height = 4.0F };
+  lens->SetViewport(view.viewport);
+  ASSERT_TRUE(camera.AttachCamera(std::move(lens)));
+  auto color = CreateRegisteredTexture({ .width = 4U,
+    .height = 4U,
+    .format = Format::kRGBA32Float,
+    .is_shader_resource = true,
+    .is_render_target = true,
+    .initial_state = ResourceStates::kCommon });
+  auto target
+    = Backend().CreateFramebuffer(FramebufferDesc {}.AddColorAttachment(color));
+  struct Probe final : IViewExtension {
+    Renderer& renderer;
+    EnvironmentLightingService producer;
+    bool use_half { true };
+    postprocess::ExposurePass::FrameLease frame;
+    std::shared_ptr<const Texture> observed;
+    std::shared_ptr<const Texture> reference;
+    explicit Probe(Renderer& value)
+      : renderer(value)
+      , producer(value)
+    {
+    }
+    auto OnViewSetup(const ViewSetupContext& hook) -> void override
+    {
+      hook.render_context.current_view.with_height_fog = true;
+    }
+    auto OnPreRenderViewGpu(const ViewRenderGpuContext& hook) -> void override
+    {
+      auto& ctx = hook.render_context;
+      const auto old_format = ctx.current_view.hdr_color_format;
+      ctx.current_view.hdr_color_format
+        = use_half ? Format::kRGBA16Float : Format::kRGBA32Float;
+      producer.OnFrameStart(ctx.frame_sequence, ctx.frame_slot);
+      static_cast<void>(producer.PublishEnvironmentBindings(ctx));
+      if (ctx.frame_sequence.get() == 1U) {
+        static_cast<void>(producer.PublishEnvironmentBindings(ctx));
+        EXPECT_FALSE(producer.GetLastViewProductGenerationState()
+            .volumetric_fog_temporal_history_reprojection_executed);
+      }
+      const auto* resources
+        = producer.InspectViewRadianceResources(ctx.current_view.view_id);
+      CHECK_NOTNULL_F(resources);
+      observed = resources->volumetric_fog;
+      ctx.current_view.hdr_color_format = old_format;
+    }
+    auto OnPostRenderViewGpu(const ViewRenderGpuContext& hook) -> void override
+    {
+      auto* owner
+        = vortex::testing::RendererPublicationProbe::GetSceneRenderer(renderer);
+      reference = vortex::testing::RendererPublicationProbe::FogHistory(
+        *owner, hook.render_context.current_view.view_id)
+                    .first;
+      frame = hook.render_context.current_view.frame_exposure;
+    }
+  };
+  auto probe = std::make_shared<Probe>(*renderer_);
+  renderer_->RegisterViewExtension(probe);
+  const auto half_to_double = [](std::uint16_t bits) {
+    const auto exponent = (bits >> 10U) & 31U;
+    const auto mantissa = bits & 1023U;
+    const double magnitude = exponent == 0U
+      ? std::ldexp(double(mantissa), -24)
+      : std::ldexp(double(1024U + mantissa), int(exponent) - 25);
+    return bits & 0x8000U ? -magnitude : magnitude;
+  };
+  const auto read_volume = [&](const Texture& texture) {
+    auto readback
+      = GetReadbackManager()->CreateTextureReadback("Fog bound volume");
+    {
+      auto recorder = AcquireRecorder("Fog bound volume readback");
+      CHECK_F(recorder->AdoptKnownResourceState(texture));
+      CHECK_F(readback->EnqueueCopy(*recorder, texture, {}).has_value());
+    }
+    const auto mapped = readback->MapNow();
+    CHECK_F(mapped.has_value());
+    const auto& desc = texture.GetDescriptor();
+    std::vector<std::array<double, 4>> values(
+      desc.width * desc.height * desc.depth);
+    const bool half = desc.format == Format::kRGBA16Float;
+    for (unsigned z = 0U; z < desc.depth; ++z)
+      for (unsigned y = 0U; y < desc.height; ++y)
+        for (unsigned x = 0U; x < desc.width; ++x) {
+          const auto* bytes = mapped->Data()
+            + z * mapped->Layout().slice_pitch.get()
+            + y * mapped->Layout().row_pitch.get() + x * (half ? 8U : 16U);
+          auto& value = values[(z * desc.height + y) * desc.width + x];
+          for (unsigned c = 0U; c < 4U; ++c) {
+            if (half) {
+              std::uint16_t bits;
+              std::memcpy(&bits, bytes + c * 2U, 2U);
+              value[c] = half_to_double(bits);
+            } else {
+              float component;
+              std::memcpy(&component, bytes + c * 4U, 4U);
+              value[c] = component;
+            }
+          }
+        }
+    return values;
+  };
+  auto frame = engine::FrameContext {};
+  frame.SetScene(observer_ptr { scene.get() });
+  double opacity = 1.0;
+  double previous_observed = 1.0;
+  double maximum_error = 0.0;
+  double last_half_error = 0.0;
+  HdrErrorBoundsData last_half_bounds;
+  for (unsigned step = 1U; step <= 74U; ++step) {
+    SCOPED_TRACE(step);
+    const double desired = 1.0 + 1.0 / 2048.0 + 1.0 / 4194304.0;
+    const double weight = double(.9F);
+    const double fresh = step == 1U ? 1.0
+      : step == 73U                 ? std::numeric_limits<double>::infinity()
+      : step == 74U                 ? .25
+                    : (desired - weight * previous_observed) / (1.0 - weight);
+    const float emissive = float(std::max(fresh, 0.0) / opacity);
+    fog.SetVolumetricFogEmissive({ emissive, emissive, emissive });
+    probe->use_half = step <= 64U;
+    scene->Update();
+    const auto slot = frame::Slot { (step - 1U) % 3U };
+    frame.SetFrameSlot(slot, engine::internal::EngineTagFactory::Get());
+    frame.SetFrameSequenceNumber(frame::SequenceNumber { step },
+      engine::internal::EngineTagFactory::Get());
+    renderer_->OnFrameStart(observer_ptr { &frame });
+    auto input = Renderer::OffscreenSceneViewInput::FromCamera(
+      "Fog bounds", ViewId { 942U }, view, camera);
+    input.SetViewStateHandle(CompositionView::ViewStateHandle { 942U });
+    auto facade = renderer_->ForOffscreenScene();
+    facade.SetFrameSession({ .frame_slot = slot,
+      .frame_sequence = frame::SequenceNumber { step },
+      .delta_time_seconds = 0.0F });
+    facade.SetSceneSource({ .scene = observer_ptr { scene.get() } });
+    facade.SetViewIntent(input);
+    facade.SetOutputTarget({ .framebuffer = observer_ptr { target.get() } });
+    auto session = facade.Finalize();
+    ASSERT_TRUE(session.has_value());
+    const auto capture = step == 64U ? BeginOptionalCapture()
+                                     : observer_ptr<FrameCaptureController> {};
+    ASSERT_TRUE(session->ExecuteInsideFrame(frame));
+    if (capture)
+      EXPECT_TRUE(capture->EndCapture());
+    ASSERT_NE(probe->observed, nullptr);
+    ASSERT_NE(probe->reference, nullptr);
+    const auto observed = read_volume(*probe->observed);
+    const auto reference = read_volume(*probe->reference);
+    ASSERT_EQ(observed.size(), reference.size());
+    const auto storage = Read<ExposureStatusStorage>(
+      *probe->frame->current_state->status_buffer, ResourceStates::kCopySource);
+    const auto& bounds = storage.producer_errors[2];
+    if (step == 73U) {
+      EXPECT_TRUE(std::isinf(bounds.rgb_absolute));
+      EXPECT_NE(storage.completed.flags & 16U, 0U);
+      renderer_->OnFrameEnd(observer_ptr { &frame });
+      WaitForQueueIdle();
+      continue;
+    }
+    EXPECT_TRUE(std::isfinite(bounds.rgb_relative));
+    EXPECT_TRUE(std::isfinite(bounds.rgb_absolute));
+    for (std::size_t i = 0U; i < observed.size(); ++i)
+      for (unsigned c = 0U; c < 4U; ++c) {
+        const double error = std::abs(observed[i][c] - reference[i][c]);
+        const double allowance = c == 3U
+          ? double(bounds.transmittance_relative) * reference[i][c]
+            + bounds.transmittance_absolute
+          : double(bounds.rgb_relative) * reference[i][c] + bounds.rgb_absolute;
+        EXPECT_LE(error, allowance) << "voxel=" << i << " channel=" << c;
+      }
+    const double error = std::abs(observed.back()[0] - reference.back()[0]);
+    maximum_error = std::max(maximum_error, error);
+    if (step == 1U)
+      opacity = reference.back()[0];
+    previous_observed = observed.back()[0];
+    if (step == 64U) {
+      last_half_error = error;
+      last_half_bounds = bounds;
+    }
+    if (step == 65U) {
+      EXPECT_GT(
+        error, 0.0); // FP32 storage does not erase reused history error.
+      EXPECT_GT(bounds.rgb_absolute + bounds.rgb_relative, 0.0F);
+    }
+    if (step == 72U) {
+      EXPECT_LT(error, last_half_error);
+      EXPECT_LT(bounds.rgb_absolute, last_half_bounds.rgb_absolute);
+    }
+    if (step == 74U) {
+      EXPECT_EQ(error, 0.0);
+      EXPECT_EQ(bounds.rgb_relative, 0.0F);
+      EXPECT_EQ(bounds.rgb_absolute, 0.0F);
+      EXPECT_EQ(bounds.transmittance_relative, 0.0F);
+      EXPECT_EQ(bounds.transmittance_absolute, 0.0F);
+      EXPECT_EQ(storage.completed.flags & 16U, 0U);
+    }
+    renderer_->OnFrameEnd(observer_ptr { &frame });
+    WaitForQueueIdle();
+  }
+  EXPECT_GT(maximum_error, .001);
+  RecordProperty("maximum_observed_error", std::to_string(maximum_error));
+  RecordProperty("last_half_error", std::to_string(last_half_error));
+  RecordProperty(
+    "last_half_relative_bound", std::to_string(last_half_bounds.rgb_relative));
+  RecordProperty(
+    "last_half_absolute_bound", std::to_string(last_half_bounds.rgb_absolute));
 }
 
 } // namespace

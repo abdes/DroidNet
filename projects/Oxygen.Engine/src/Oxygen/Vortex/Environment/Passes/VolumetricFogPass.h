@@ -210,7 +210,9 @@ namespace environment {
       };
       std::uint32_t exposure_status_uav { kInvalidShaderVisibleIndex.get() };
       std::uint32_t exposure_fp16_store { 0U };
-      std::uint32_t exposure_padding { 0U };
+      std::uint32_t previous_error_bounds_srv {
+        kInvalidShaderVisibleIndex.get()
+      };
     };
 
     Renderer& renderer_;

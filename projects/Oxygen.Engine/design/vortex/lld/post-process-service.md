@@ -667,8 +667,9 @@ No separate mask loader, texture cache or upload allocator is introduced.
 
 ## Quantization error propagation
 
-**Implementation state:** mathematical rules and independent CPU counterexamples
-exist; GPU bound transport/evaluation and native qualification are unfinished.
+**Implementation state:** mathematical rules, independent CPU counterexamples
+and the GPU producer/history transport substep have evidence. Complete consumer
+composition, coverage and meter admission/native qualification remain unfinished.
 Do not use these equations as a claim that current FP16 admission is safe.
 
 The independent checker is
@@ -757,6 +758,31 @@ Before closing EX05-15, implement and verify certificate transport, actual
 consumer coefficients/source bounds, filtering, coverage, history identity and
 outward-safe GPU arithmetic against independent inputs and real scene captures.
 Automatic format switching remains disabled until those checks are qualified.
+
+### GPU producer-bound transport
+
+The existing status allocation has a GPU-only tail: the completed/readback prefix
+remains 80 bytes, followed by three 16-byte affine records at 80 (sky view),
+96 (AP), and 112 (fog), for 128 bytes total. Each record is RGB relative/absolute
+error and transmittance relative/absolute error. RGB absolute error is in
+scene-referred units; transmittance is dimensionless. Runtime CPU readback still
+copies only the original 80-byte prefix.
+
+Frame preparation clears the tail. Producers reduce outward-rounded local store
+bounds into their record, and the later solve/finalizer preserve the tail.
+Fog history retains the status SRV through its existing frame-exposure lease;
+its constant byte 540 selects that exact prior record. Missing tracked history or
+unbounded fog-history error cannot supply a valid history certificate. An
+unrelated producer failure does not invalidate an otherwise bounded fog history.
+A repeated producer call cannot treat the current writable status record as
+previous-frame history. FP32 writes
+can retain inherited history error even though they add no half-store error.
+
+The transport/history substep is qualified by the 74-frame native fixture and
+GPU binding audits recorded in the implementation tracker. Complete composition
+and metering admission do not yet consume these bounds; they do not authorize a
+production format switch. Full filtering/arithmetic/domain qualification remains
+part of EX05-15.
 
 ## Producer range checks
 

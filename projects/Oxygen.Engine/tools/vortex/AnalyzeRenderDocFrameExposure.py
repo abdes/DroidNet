@@ -37,7 +37,7 @@ def build_report(controller, report, capture_path, report_path):
         if len(frames) != 1 or len(states) != 1:
             raise RuntimeError("Frame and current-state UAVs are not uniquely bound")
         statuses = [x for x in writes if names.get(str(x.resource)) == "Vortex.PostProcess.Exposure.Status"]
-        if len(statuses) != 1 or bytes(controller.GetBufferData(statuses[0].resource, 0, 80)) != bytes(80):
+        if len(statuses) != 1 or bytes(controller.GetBufferData(statuses[0].resource, 0, 128)) != bytes(128):
             raise RuntimeError("Frame preparation must clear the current producer status")
         frame = frames[0]
         values = struct.unpack("<2f2I", bytes(controller.GetBufferData(frame.resource, frame.byteOffset, 16)))
