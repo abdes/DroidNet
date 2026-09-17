@@ -559,8 +559,20 @@ Dark classification and black-influence mass quantization share the production
 meter helpers. A zero-mass dark sample need not preserve positive-versus-zero
 luminance, but weighted/dark classification still preserves the aggregate
 synthetic-dark fallback. A contributing positive sample retains the stated EV
-bound. The 80-byte evaluator constants end with radius, error-budget share,
+bound. The evaluator constants retain their original 80-byte prefix with radius, error-budget share,
 minimum log luminance and accepted black influence at offsets 64/68/72/76.
+The record is now 96 bytes: a nonnegative consumer RGB gain is appended at 80,
+with zero-reserved words at 84/88/92. Scene collection captures AP scattering
+strength with the same nonnegative clamp as the consumer. The gain participates
+in the per-view product revision so an old completed certificate cannot survive
+an amplification edit. No additional HDR texture or status buffer is introduced.
+
+For this local gate, divide the absolute allowance successively by
+`max(consumer_gain,1)` and `max(S,1)` while retaining the relative allowance.
+This preserves both the existing product check and its amplified contribution
+without overflowing a `consumer_gain*S` product. Nonfinite or negative supplied
+gain rejects qualification. This gate catches AP amplification loss; it does not
+certify attenuation, filtering, temporal or complete composed-image error.
 Flag bit 4 selects the frame's pinned P instead of a newly selected candidate;
 this mode qualifies a current-frame conversion, not a future admission scale.
 

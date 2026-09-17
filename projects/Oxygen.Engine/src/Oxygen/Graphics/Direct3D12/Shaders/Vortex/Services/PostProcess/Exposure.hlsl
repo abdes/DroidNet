@@ -793,6 +793,7 @@ struct SuitabilityConstants {
     uint product; uint expected_mask; uint mask_srv; uint meter_mode;
     uint left; uint top; uint meter_width; uint meter_height;
     float radius; float budget_share; float min_log_luminance; float black_influence;
+    float consumer_rgb_gain; uint3 reserved;
 };
 
 struct SceneColorConversionConstants {
@@ -996,6 +997,10 @@ void CheckSuitabilityProduct(uint3 pixel : SV_DispatchThreadID)
     if (!all(isfinite(sample))) return;
     uint unused;
     report.InterlockedAdd(36u, 1u, unused);
+    if (!isfinite(pass.consumer_rgb_gain) || pass.consumer_rgb_gain < 0.0) {
+        SuitabilityFailure(report, pass.product, 1u, 20u);
+        return;
+    }
     StructuredBuffer<FrameExposureData> frame = ResourceDescriptorHeap[pass.frame_srv];
     ByteAddressBuffer state = ResourceDescriptorHeap[pass.state_srv];
     const float s = asfloat(state.Load(0u));
@@ -1015,8 +1020,12 @@ void CheckSuitabilityProduct(uint3 pixel : SV_DispatchThreadID)
     const float3 error = abs(reference - narrowed);
     const float relative_budget = .0025 * pass.budget_share;
     const float absolute_budget = 1e-5 * pass.budget_share;
-    bool image_failure = any(error > abs(reference) * relative_budget + absolute_budget)
-        || any(error * s > abs(reference * s) * relative_budget + absolute_budget);
+    // Preserve both the stored product and its amplified contribution. Divide
+    // the absolute allowance instead of multiplying values by gain*S, which
+    // could overflow even though the qualification comparison is well-defined.
+    const float rgb_absolute_budget = (absolute_budget / max(pass.consumer_rgb_gain, 1.0))
+        / max(s, 1.0);
+    bool image_failure = any(error > abs(reference) * relative_budget + rgb_absolute_budget);
     if ((pass.flags & 4u) != 0u) {
         const float t = saturate(sample.a);
         const float dt = abs(f16tof32(f32tof16(t)) - t);

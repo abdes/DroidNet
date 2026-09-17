@@ -4649,7 +4649,37 @@ NOLINT_TEST_F(
   EXPECT_TRUE(registry.Contains(*retained.front()));
   reclaimer.OnBeginFrame(frame::Slot { 1U });
   EXPECT_FALSE(registry.Contains(*retained.front()));
+  const auto original_state = Read<ExposureStateData>(
+    *capture->exposure.at(ViewId { 111U })->current_state->buffer,
+    ResourceStates::kShaderResource);
+  scene->GetEnvironment()
+    ->TryGetSystem<scene::environment::SkyAtmosphere>()
+    ->SetAerialScatteringStrength(2.0F);
+  scene->Update();
   begin(3U, frame::Slot { 2U });
+  ASSERT_TRUE(render(0U));
+  const auto amplified_state = Read<ExposureStateData>(
+    *capture->exposure.at(ViewId { 111U })->current_state->buffer,
+    ResourceStates::kShaderResource);
+  EXPECT_NE(amplified_state.product_layout_revision,
+    original_state.product_layout_revision);
+  EXPECT_EQ(amplified_state.displayed_scale, original_state.displayed_scale);
+  EXPECT_EQ(
+    amplified_state.requested_generation, original_state.requested_generation);
+  EXPECT_EQ(
+    amplified_state.applied_generation, original_state.applied_generation);
+  renderer_->OnFrameEnd(observer_ptr { &frame });
+  WaitForQueueIdle();
+  begin(4U, frame::Slot { 0U });
+  ASSERT_TRUE(render(0U));
+  const auto stable_state = Read<ExposureStateData>(
+    *capture->exposure.at(ViewId { 111U })->current_state->buffer,
+    ResourceStates::kShaderResource);
+  EXPECT_EQ(stable_state.product_layout_revision,
+    amplified_state.product_layout_revision);
+  renderer_->OnFrameEnd(observer_ptr { &frame });
+  WaitForQueueIdle();
+  begin(5U, frame::Slot { 1U });
   static_cast<ExposureFailureGraphics&>(Backend()).fail_recorder_name
     = "EnvironmentLightingService AtmosphereSkyViewLut";
   ASSERT_TRUE(render(0U));
@@ -5044,6 +5074,66 @@ NOLINT_TEST_F(ExposureGpuTest, SuitabilityRejectsRequiredFortySixStopSignal)
   EXPECT_EQ(result.first_failure_product, 1U);
 }
 
+NOLINT_TEST_F(ExposureGpuTest, SuitabilityAccountsForConsumerRgbAmplification)
+{
+  // Independent FP32 reference: an 8192 sample anchors candidate P at one;
+  // AP contributes 1e-8 * 1e6 = .01 at the other scene pixel. Both local
+  // narrowing checks pass without consumer gain, but half storage loses AP.
+  const std::array scene_pixels { Pixel { 8192, 8192, 8192, 1 },
+    Pixel { .01F, .01F, .01F, 1 } };
+  const std::array<Pixel, 1> ap_pixel { Pixel { 1e-8F, 1e-8F, 1e-8F, 1 } };
+  const auto scene_signal = MakeSignal(2U, 1U, scene_pixels);
+  const auto ap_signal = MakeSignal(1U, 1U, ap_pixel);
+  auto settings = scene::ExposureSettings {};
+  settings.mode = engine::ExposureMode::kManual;
+  settings.key = 12.5F;
+  settings.manual_ev = 0.0F;
+  const auto config = SharedConfig(settings);
+  const std::array gains { 0.0F, .5F, 1.0F, 1e6F, -1.0F,
+    std::numeric_limits<float>::infinity(),
+    std::numeric_limits<float>::quiet_NaN() };
+  const auto capture = BeginOptionalCapture();
+  for (const auto gain : gains) {
+    SCOPED_TRACE(gain);
+    ctx_.frame_sequence = frame::SequenceNumber { ++sequence_ };
+    const auto frame = pass_->ResolveFrame(ctx_, config, { .use_fp32 = true });
+    ASSERT_NE(frame, nullptr);
+    const auto solved = RecordShared(scene_signal, config);
+    ASSERT_TRUE(solved.executed);
+    const std::array products { postprocess::ExposurePass::HdrProduct {
+                                  .texture = scene_signal.texture.get(),
+                                  .srv = scene_signal.srv,
+                                  .id = 11U,
+                                  .error_budget_share = .25F },
+      postprocess::ExposurePass::HdrProduct {
+        .texture = ap_signal.texture.get(),
+        .srv = ap_signal.srv,
+        .id = 6U,
+        .transmittance = true,
+        .error_budget_share = .25F,
+        .consumer_rgb_gain = gain } };
+    ASSERT_TRUE(pass_->EvaluateFp16Products(ctx_, frame, config, products, {}));
+    const auto report = Read<HdrSuitabilityData>(
+      *frame->suitability_buffer, ResourceStates::kShaderResource);
+    EXPECT_EQ(report.candidate_pre_exposure, 1.0F);
+    EXPECT_EQ(report.checked_samples, 3U);
+    if (!std::isfinite(gain) || gain < 0.0F) {
+      EXPECT_EQ(report.failure_flags, 1U);
+      EXPECT_EQ(report.rejected_samples, 1U);
+      EXPECT_EQ(report.first_failure_product, 6U);
+    } else if (gain == 1e6F) {
+      EXPECT_EQ(report.failure_flags, 4U);
+      EXPECT_EQ(report.image_failures, 1U);
+      EXPECT_EQ(report.first_failure_product, 6U);
+    } else {
+      EXPECT_EQ(report.failure_flags, 0U);
+    }
+    EXPECT_EQ(ReadState(solved).displayed_scale, 1.0F);
+  }
+  if (capture)
+    EXPECT_TRUE(capture->EndCapture());
+}
+
 NOLINT_TEST_F(ExposureGpuTest,
   SuitabilityIgnoresBelowBudgetComponentsButRespectsDisplayedGain)
 {
@@ -5074,6 +5164,52 @@ NOLINT_TEST_F(ExposureGpuTest, SuitabilityUsesMeterMaskAndCoverageWeights)
   EXPECT_EQ(
     Qualify(MakeSignal(1U, 1U, covered), true, {}, nullptr, true).failure_flags,
     0U);
+}
+
+NOLINT_TEST_F(ExposureGpuTest,
+  SuitabilityRgbGainLeavesTransmissionUnscaledAndAvoidsCombinedGainOverflow)
+{
+  struct Case {
+    float background;
+    Pixel ap;
+    float gain;
+    float ev;
+    std::uint32_t expected_failure;
+  };
+  // RGB gain must not amplify the tiny transmission error. In the second
+  // case gain*S exceeds FP32, while (2^-100 * gain)*S is finite and its loss
+  // must still be rejected.
+  const std::array cases { Case { .125F, { 0, 0, 0, 1e-8F }, 1e6F, 0.0F, 0U },
+    Case {
+      8192.0F, { 0x1p-100F, 0x1p-100F, 0x1p-100F, 1 }, 0x1p100F, -32.0F, 4U } };
+  for (const auto& test : cases) {
+    SCOPED_TRACE(test.gain);
+    const auto scene_signal = Uniform(test.background, 1U, 1U);
+    const auto ap_signal = MakeSignal(1U, 1U, std::span { &test.ap, 1U });
+    auto settings = scene::ExposureSettings {};
+    settings.mode = engine::ExposureMode::kManual;
+    settings.key = 12.5F;
+    settings.manual_ev = test.ev;
+    const auto config = SharedConfig(settings);
+    ctx_.frame_sequence = frame::SequenceNumber { ++sequence_ };
+    const auto frame = pass_->ResolveFrame(ctx_, config, { .use_fp32 = true });
+    ASSERT_NE(frame, nullptr);
+    ASSERT_TRUE(RecordShared(scene_signal, config).executed);
+    const std::array products { postprocess::ExposurePass::HdrProduct {
+                                  .texture = scene_signal.texture.get(),
+                                  .srv = scene_signal.srv,
+                                  .id = 11U },
+      postprocess::ExposurePass::HdrProduct {
+        .texture = ap_signal.texture.get(),
+        .srv = ap_signal.srv,
+        .id = 6U,
+        .transmittance = true,
+        .consumer_rgb_gain = test.gain } };
+    ASSERT_TRUE(pass_->EvaluateFp16Products(ctx_, frame, config, products, {}));
+    const auto report = Read<HdrSuitabilityData>(
+      *frame->suitability_buffer, ResourceStates::kShaderResource);
+    EXPECT_EQ(report.failure_flags, test.expected_failure);
+  }
 }
 
 NOLINT_TEST_F(

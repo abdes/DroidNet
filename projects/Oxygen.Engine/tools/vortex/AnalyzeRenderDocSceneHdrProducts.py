@@ -25,13 +25,15 @@ def build_report(controller, report, capture_path, report_path):
         reads = [x.descriptor for x in pipeline.GetReadOnlyResources(rd.ShaderStage.Compute, True)]
         writes = [x.descriptor for x in pipeline.GetReadWriteResources(rd.ShaderStage.Compute, True)]
         outputs = [x for x in writes if names.get(str(x.resource)) == "Vortex.Exposure.Suitability"]
-        constants = [x for x in reads if x.byteSize == 80 and x.elementByteSize == 80]
+        constants = [x for x in reads if x.byteSize == 96 and x.elementByteSize == 96]
         if outputs and constants:
             if len(outputs) != 1 or len(constants) != 1:
                 raise RuntimeError("Ambiguous reference evaluation bindings")
             c = constants[0]
-            raw = bytes(controller.GetBufferData(c.resource, c.byteOffset, 80))
-            words = struct.unpack("<20I", raw)
+            raw = bytes(controller.GetBufferData(c.resource, c.byteOffset, 96))
+            words = struct.unpack("<24I", raw)
+            if words[20:] != (0x3f800000, 0, 0, 0):
+                raise RuntimeError("Reference fixture gain/reserved ABI mismatch")
             if words[9] != expected_mask:
                 raise RuntimeError(f"Missing required product in evaluation mask: {words[9]}")
             product_id = words[8]

@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <cmath>
 #include <cstring>
 #include <optional>
@@ -1519,7 +1520,9 @@ namespace {
             .srv = published ? published->camera_aerial_perspective_srv
                              : kInvalidShaderVisibleIndex,
             .id = 6U,
-            .transmittance = true });
+            .transmittance = true,
+            .consumer_rgb_gain = std::fmax(
+              authored.atmosphere.aerial_scattering_strength, 0.0F) });
       }
       if (fog_required) {
         products.push_back(
@@ -2541,7 +2544,8 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
       const auto desc = product.texture ? product.texture->GetDescriptor()
                                         : graphics::TextureDesc {};
       layout.products[i] = { product.id, desc.width, desc.height, desc.depth,
-        (product.coverage ? 1U : 0U) | (product.transmittance ? 2U : 0U) };
+        (product.coverage ? 1U : 0U) | (product.transmittance ? 2U : 0U),
+        std::bit_cast<std::uint32_t>(product.consumer_rgb_gain) };
       expected_products |= 1U << (product.id - 1U);
     }
     const auto handle = ctx.current_view.view_state_handle;

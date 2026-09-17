@@ -138,6 +138,8 @@ public:
     bool coverage { false };
     bool transmittance { false };
     float error_budget_share { 1.0F };
+    //! Known RGB amplification after storage; transmittance is not scaled.
+    float consumer_rgb_gain { 1.0F };
   };
 
   //! Evaluate FP32 reference products without granting normal-mode admission.
@@ -253,7 +255,7 @@ private:
   std::array<std::optional<graphics::ComputePipelineDesc>, 4>
     suitability_pipelines_;
   std::unique_ptr<::oxygen::vortex::internal::PerViewStructuredPublisher<
-    std::array<std::uint32_t, 20U>>>
+    std::array<std::uint32_t, 24U>>>
     suitability_constants_publisher_;
   std::unique_ptr<::oxygen::vortex::internal::PerViewStructuredPublisher<
     std::array<std::uint32_t, 8U>>>

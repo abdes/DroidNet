@@ -349,7 +349,7 @@ auto ExposurePass::PreparePublishers(RenderContext& ctx) -> void
         "Vortex.PostProcess.Exposure.FrameConstants");
     suitability_constants_publisher_
       = std::make_unique<::oxygen::vortex::internal::PerViewStructuredPublisher<
-        std::array<std::uint32_t, 20U>>>(observer_ptr { gfx.get() },
+        std::array<std::uint32_t, 24U>>>(observer_ptr { gfx.get() },
         renderer_.GetStagingProvider(),
         observer_ptr { &renderer_.GetInlineTransfersCoordinator() },
         "Vortex.Exposure.Suitability.Constants");
@@ -728,7 +728,7 @@ auto ExposurePass::EvaluateFp16Products(RenderContext& ctx,
         | (product->coverage ? 2U : 0U) | (product->transmittance ? 4U : 0U)
         | (desc.texture_type == TextureType::kTexture3D ? 8U : 0U)
                                : 0U;
-    const auto constants = std::array<std::uint32_t, 20U> { report_uav.get(),
+    const auto constants = std::array<std::uint32_t, 24U> { report_uav.get(),
       product ? product->srv.get() : kInvalidShaderVisibleIndex.get(),
       frame->srv_index.get(), frame->current_state->srv_index.get(), desc.width,
       desc.height, desc.depth,
@@ -746,8 +746,9 @@ auto ExposurePass::EvaluateFp16Products(RenderContext& ctx,
         product ? product->error_budget_share : 1.0F),
       std::bit_cast<std::uint32_t>(
         config.Exposure().authored.min_log_luminance),
-      std::bit_cast<std::uint32_t>(
-        config.Exposure().authored.black_influence) };
+      std::bit_cast<std::uint32_t>(config.Exposure().authored.black_influence),
+      std::bit_cast<std::uint32_t>(product ? product->consumer_rgb_gain : 1.0F),
+      0U, 0U, 0U };
     const auto slot = suitability_constants_publisher_->Publish(
       ctx.current_view.view_id, constants);
     CHECK_F(slot.IsValid());
