@@ -517,9 +517,28 @@ and retain the matching GPU lease; this finalizer does not select resource forma
 The finalizer's 64-byte constants are state UAV, own-previous SRV, status UAV,
 report SRV at bytes 0/4/8/12; layout uint2 at 16; required mask at 24; controls at
 28 (persistent=1, invalidate previous=2); frame SRV at 32; expected frame uint2
-at 36; zero at 44; lifetime uint2 at 48 and two zeros at 56. All uint64 identities
+at 36; optional current-conversion report SRV at 44 (invalid index when absent);
+lifetime uint2 at 48 and two zeros at 56. All uint64 identities
 use uint2 arithmetic, including frame-counter carry. Completed flags are valid
 state=1, failed qualification=2, eligible=4 and rejected transition=8.
+
+The current-frame conversion and future candidate evaluation have separate
+48-byte reports retained by the same frame lease. Candidate evaluation cannot
+overwrite the conversion verdict consumed by tonemapping. In FP16 mode the
+finalizer also requires a successful current conversion; FP32 recovery may
+qualify a future scale even when narrowing at the current scale would fail.
+This adds a bounded reduction buffer, not another HDR texture.
+
+`SelectPrecisionCandidate` configures the view's settings, lifetime, transition
+and required-product identity before frame preparation. It returns only a
+completed eligible state lease; the numerical candidate P remains GPU-owned.
+`FinalizeScenePrecision` evaluates the supplied products and submits the finalizer
+before post-process publication, then queues one combined transition/precision
+status copy. Both uses share the existing three-pending/one-deferred queue.
+Qualification changes invalidate pending admission; duplicate finalization is
+idempotent. Copy transport failures retry the retained record, while a completed
+packet with stale identity is discarded. Completion may acknowledge its original
+transition but may admit precision only for the current matching qualification.
 
 The evaluator reads FP32 2D/3D reference products and their stored P. A GPU
 maximum reduction selects the largest bounded power-of-two P that leaves two

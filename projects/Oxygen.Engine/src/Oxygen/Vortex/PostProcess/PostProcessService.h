@@ -157,6 +157,8 @@ public:
     CompositionView::ViewStateHandle handle;
     std::uint64_t lifetime;
     frame::SequenceNumber sequence;
+    std::optional<ExposureTransitionToken> status_transition;
+    std::optional<std::uint64_t> precision_epoch;
   };
   //! Solve from the accumulated scene signal before checked color resolution.
   //! The returned record pins the result/config for this view and logical
@@ -169,6 +171,15 @@ public:
   [[nodiscard]] OXGN_VRTX_API auto ConvertSceneColor(RenderContext& ctx,
     const PreparedExposure& prepared, const Inputs& inputs,
     graphics::Texture& destination, ShaderVisibleIndex destination_uav) -> bool;
+  //! Configure the current view's required products before frame preparation.
+  //! Returns only a matching completed GPU candidate; numerical P stays on GPU.
+  [[nodiscard]] OXGN_VRTX_API auto SelectPrecisionCandidate(RenderContext& ctx,
+    const postprocess::ExposurePass::EligibilityInputs& requirements)
+    -> postprocess::ExposurePass::StateLease;
+  //! Evaluate/finalize before Execute, then copy one combined completed status.
+  [[nodiscard]] OXGN_VRTX_API auto FinalizeScenePrecision(RenderContext& ctx,
+    const PreparedExposure& prepared,
+    std::span<const postprocess::ExposurePass::HdrProduct> products) -> bool;
   OXGN_VRTX_API auto Execute(ViewId view_id, RenderContext& ctx,
     const SceneTextures& scene_textures, const Inputs& inputs,
     const PreparedExposure* prepared_exposure = nullptr) -> void;
@@ -219,12 +230,37 @@ private:
     PostProcessFrameBindings bindings {};
   };
 
+  struct PrecisionState {
+    std::uint64_t lifetime { 0U };
+    std::uint64_t settings_revision { 0U };
+    std::uint64_t layout_revision { 0U };
+    std::uint32_t expected_products { 0U };
+    std::uint64_t transition_generation { 0U };
+    std::uint64_t epoch { 0U };
+    std::uint64_t last_completed_frame { 0U };
+    frame::SequenceNumber configured_frame { 0U };
+    std::optional<frame::SequenceNumber> finalized_frame;
+    std::uint64_t finalized_epoch { 0U };
+    bool diagnostic { false };
+    bool restart_streak { true };
+    postprocess::ExposurePass::StateLease candidate;
+  };
+  std::unordered_map<CompositionView::ViewStateHandle, PrecisionState>
+    precision_states_;
+  struct PrecisionTicket {
+    std::uint64_t layout_revision;
+    std::uint64_t epoch;
+    std::uint64_t transition_generation;
+  };
   struct PendingExposureStatus {
     postprocess::ExposurePass::StateLease state;
     std::shared_ptr<graphics::GpuBufferReadback> readback;
-    ExposureTransitionToken token;
+    std::optional<ExposureTransitionToken> token;
+    CompositionView::ViewStateHandle handle;
+    std::uint64_t lifetime;
     std::uint64_t frame_sequence;
     std::uint64_t settings_revision;
+    std::optional<PrecisionTicket> precision;
   };
   std::unordered_map<CompositionView::ViewStateHandle,
     std::deque<PendingExposureStatus>>
@@ -232,6 +268,10 @@ private:
   std::unordered_map<CompositionView::ViewStateHandle, PendingExposureStatus>
     deferred_exposure_status_;
   auto IsExposureStatusNeeded(const PendingExposureStatus& job) const -> bool;
+  auto IsPrecisionStatusNeeded(const PendingExposureStatus& job) const -> bool;
+  auto QueueExposureStatus(PendingExposureStatus job) -> void;
+  auto CurrentExposureGeneration(CompositionView::ViewStateHandle handle,
+    std::uint64_t lifetime) const -> std::uint64_t;
   auto DeferExposureStatus(PendingExposureStatus job) -> void;
   auto TryEnqueueExposureStatus(PendingExposureStatus job) -> bool;
   auto PollExposureStatus() -> void;
