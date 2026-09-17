@@ -1202,6 +1202,18 @@ and recoverable pre-scene failure. Evidence is
 `scene/scene-migration-manifest.json`. These results do not certify FP16
 eligibility, range-triggered recovery or the remaining MultiView gates.
 
+The independent GPU product evaluator now selects a power-of-two candidate P
+from FP32 reference products and checks overflow margin, scene/displayed RGB
+error, transmittance, and the actual meter contribution. Meter dark suppression
+shares production helpers, including zero-mass coverage changes and synthetic-
+dark fallback. Required 46-stop signals fail while below-budget components can
+pass. Debug/Release pass 119 native tests and 22 service/22 publication tests;
+eight focused debugger cases and the qualifier RenderDoc audit pass. Evidence
+is `lifecycle/suitability-manifest.json`. These local checks do not grant format
+admission. The accumulation-boundary proposal in SceneTextures is pending user
+approval; cumulative error aggregation, stability and status-qualified switching
+remain open.
+
 - [x] Add the early GPU P resolve and bind a frame-invariant P/1P to every HDR pass.
 - [ ] Migrate the entire section 4.4 checklist, including atmosphere producer/
   consumer pairs, fog/color histories, bloom and offscreen/capture domains.

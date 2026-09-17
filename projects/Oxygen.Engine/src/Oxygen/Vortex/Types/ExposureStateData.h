@@ -24,6 +24,23 @@ struct alignas(16) FrameExposureData {
   std::uint32_t flags { 0U };
 };
 
+//! GPU qualification of reference products; this alone is not format admission.
+struct alignas(16) HdrSuitabilityData {
+  float candidate_pre_exposure { 1.0F };
+  float maximum_scene_rgb { 0.0F };
+  std::uint32_t checked_products { 0U };
+  std::uint32_t failure_flags { 0U };
+  std::uint32_t first_failure_product { 0U };
+  std::uint32_t rejected_samples { 0U };
+  std::uint32_t metering_failures { 0U };
+  std::uint32_t image_failures { 0U };
+  std::uint32_t overflow_failures { 0U };
+  std::uint32_t checked_samples { 0U };
+  std::uint32_t expected_products { 0U };
+  std::uint32_t reserved { 0U };
+};
+static_assert(sizeof(HdrSuitabilityData) == 48U);
+
 //! Shared GPU exposure-state ABI; uint64 identities use low/high uint32 words.
 struct alignas(16) ExposureStateData {
   float displayed_scale { 1.0F };

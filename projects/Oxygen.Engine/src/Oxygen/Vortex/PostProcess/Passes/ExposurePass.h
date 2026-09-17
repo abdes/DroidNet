@@ -11,6 +11,7 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <span>
 #include <unordered_map>
 #include <vector>
 
@@ -64,6 +65,9 @@ namespace postprocess {
     std::shared_ptr<ExposureStateResources> current_state;
     std::shared_ptr<const ExposureStateResources> selected_history;
     std::shared_ptr<const ExposureStateResources> qualified_candidate;
+    std::shared_ptr<graphics::Buffer> suitability_buffer;
+    ShaderVisibleIndex suitability_srv { kInvalidShaderVisibleIndex };
+    ShaderVisibleIndex suitability_uav { kInvalidShaderVisibleIndex };
   };
 class ExposurePass {
 public:
@@ -117,6 +121,21 @@ public:
     std::optional<ExposureTransitionError> rejection;
     std::uint64_t lifetime { 0U };
   };
+
+  struct HdrProduct {
+    const graphics::Texture* texture { nullptr };
+    ShaderVisibleIndex srv { kInvalidShaderVisibleIndex };
+    std::uint32_t id { 0U };
+    bool metering { false };
+    bool coverage { false };
+    bool transmittance { false };
+    float error_budget_share { 1.0F };
+  };
+
+  //! Evaluate FP32 reference products without granting normal-mode admission.
+  [[nodiscard]] OXGN_VRTX_API auto EvaluateFp16Products(RenderContext& ctx,
+    const FrameLease& frame, const PostProcessConfig& config,
+    std::span<const HdrProduct> products, const Inputs& metering) -> bool;
 
   OXGN_VRTX_API explicit ExposurePass(Renderer& renderer);
   OXGN_VRTX_API ~ExposurePass();
@@ -199,6 +218,11 @@ private:
   std::optional<graphics::ComputePipelineDesc> average_pipeline_ {};
   std::optional<graphics::ComputePipelineDesc> frame_pipeline_ {};
   std::optional<graphics::ComputePipelineDesc> fallback_pipeline_ {};
+  std::array<std::optional<graphics::ComputePipelineDesc>, 4>
+    suitability_pipelines_;
+  std::unique_ptr<::oxygen::vortex::internal::PerViewStructuredPublisher<
+    std::array<std::uint32_t, 20U>>>
+    suitability_constants_publisher_;
   std::unique_ptr<::oxygen::vortex::internal::PerViewStructuredPublisher<
     std::array<std::uint32_t, 12U>>>
     frame_constants_publisher_;

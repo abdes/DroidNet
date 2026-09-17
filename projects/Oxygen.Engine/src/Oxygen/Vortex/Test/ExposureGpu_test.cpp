@@ -361,6 +361,29 @@ protected:
     return pixel[0];
   }
 
+  auto Qualify(const Signal& signal, bool meter,
+    scene::ExposureSettings settings = {}, const Signal* mask = nullptr,
+    bool coverage = false) -> HdrSuitabilityData
+  {
+    settings.mode = engine::ExposureMode::kManual;
+    const auto config = SharedConfig(settings);
+    ctx_.frame_sequence = frame::SequenceNumber { ++sequence_ };
+    const auto frame = pass_->ResolveFrame(ctx_, config, { .use_fp32 = true });
+    CHECK_NOTNULL_F(frame.get());
+    CHECK_F(RecordShared(signal, config).executed);
+    const std::array products { postprocess::ExposurePass::HdrProduct {
+      .texture = signal.texture.get(),
+      .srv = signal.srv,
+      .id = 1U,
+      .metering = meter,
+      .coverage = coverage } };
+    CHECK_F(pass_->EvaluateFp16Products(ctx_, frame, config, products,
+      { .metering_mask = mask ? mask->texture.get() : nullptr,
+        .metering_mask_srv = mask ? mask->srv : kInvalidShaderVisibleIndex }));
+    return Read<HdrSuitabilityData>(
+      *frame->suitability_buffer, ResourceStates::kShaderResource);
+  }
+
   auto ResetHistory() -> void
   {
     pass_->RemoveViewState(ctx_.current_view.view_state_handle);
@@ -3914,6 +3937,245 @@ NOLINT_TEST_F(
   }
   renderer_->RegisterConsoleBindings({});
   FlushBackend();
+}
+
+NOLINT_TEST_F(ExposureGpuTest, SuitabilitySelectsGpuCandidateWithTwoStopMargin)
+{
+  const auto capture = BeginOptionalCapture();
+  const auto result = Qualify(Uniform(1.0F, 4U, 4U), true);
+  EXPECT_EQ(result.candidate_pre_exposure, 8192.0F);
+  EXPECT_EQ(result.maximum_scene_rgb, 1.0F);
+  EXPECT_EQ(result.failure_flags, 0U);
+  EXPECT_EQ(result.checked_samples, 16U);
+  EXPECT_EQ(result.checked_products, 1U);
+  EXPECT_EQ(result.expected_products, 1U);
+  if (capture) EXPECT_TRUE(capture->EndCapture());
+}
+
+NOLINT_TEST_F(ExposureGpuTest, SuitabilityRejectsRequiredFortySixStopSignal)
+{
+  const std::array pixels { Pixel { 0x1p30F, 0x1p30F, 0x1p30F, 1.0F },
+    Pixel { 0x1p-16F, 0x1p-16F, 0x1p-16F, 1.0F } };
+  auto settings = scene::ExposureSettings {};
+  settings.min_log_luminance = -24.0F;
+  settings.log_luminance_range = 56.0F;
+  const auto result = Qualify(MakeSignal(2U, 1U, pixels), true, settings);
+  EXPECT_EQ(result.candidate_pre_exposure, 0x1p-17F);
+  EXPECT_NE(result.failure_flags & 8U, 0U);
+  EXPECT_EQ(result.metering_failures, 1U);
+  EXPECT_EQ(result.first_failure_product, 1U);
+}
+
+NOLINT_TEST_F(ExposureGpuTest,
+  SuitabilityIgnoresBelowBudgetComponentsButRespectsDisplayedGain)
+{
+  const std::array<Pixel, 1> pixel { Pixel { 1.0F, .5F, 0x1p-40F, 1.0F } };
+  EXPECT_EQ(Qualify(MakeSignal(1U, 1U, pixel), true).failure_flags, 0U);
+  const std::array wide { Pixel { 0x1p30F, 0x1p30F, 0x1p30F, 1.0F },
+    Pixel { 0x1p-24F, 0x1p-24F, 0x1p-24F, 1.0F } };
+  const auto signal = MakeSignal(2U, 1U, wide);
+  EXPECT_EQ(Qualify(signal, false).failure_flags, 0U);
+  auto bright = scene::ExposureSettings {};
+  bright.manual_ev = -32.0F;
+  EXPECT_NE(Qualify(signal, false, bright).failure_flags & 4U, 0U);
+}
+
+NOLINT_TEST_F(ExposureGpuTest, SuitabilityUsesMeterMaskAndCoverageWeights)
+{
+  const std::array wide { Pixel { 0x1p30F, 0x1p30F, 0x1p30F, 1.0F },
+    Pixel { 0x1p-24F, 0x1p-24F, 0x1p-24F, 1.0F } };
+  const std::array mask_pixels { Pixel { 1.0F, 0, 0, 1 },
+    Pixel { 0, 0, 0, 1 } };
+  const auto mask = MakeSignal(2U, 1U, mask_pixels);
+  const auto signal = MakeSignal(2U, 1U, wide);
+  auto required_dark = scene::ExposureSettings {};
+  required_dark.black_influence = 1.0F;
+  EXPECT_NE(Qualify(signal, true, required_dark).failure_flags & 8U, 0U);
+  EXPECT_EQ(Qualify(signal, true, required_dark, &mask).failure_flags, 0U);
+  const std::array<Pixel, 1> covered { Pixel { .25F, .25F, .25F, .5F } };
+  EXPECT_EQ(
+    Qualify(MakeSignal(1U, 1U, covered), true, {}, nullptr, true).failure_flags,
+    0U);
+}
+
+NOLINT_TEST_F(
+  ExposureGpuTest, SuitabilityRejectsNonfiniteAndMissingRequiredProducts)
+{
+  const auto nonfinite
+    = Qualify(Uniform(std::numeric_limits<float>::infinity()), false);
+  EXPECT_NE(nonfinite.failure_flags & 1U, 0U);
+  EXPECT_EQ(nonfinite.rejected_samples, 1U);
+  const auto signal = Uniform(.25F);
+  ctx_.frame_sequence = frame::SequenceNumber { ++sequence_ };
+  const auto config = SharedConfig();
+  const auto frame = pass_->ResolveFrame(ctx_, config, { .use_fp32 = true });
+  ASSERT_NE(frame, nullptr);
+  const std::array products {
+    postprocess::ExposurePass::HdrProduct {
+      .texture = signal.texture.get(), .srv = signal.srv, .id = 1U },
+    postprocess::ExposurePass::HdrProduct { .id = 6U }
+  };
+  ASSERT_TRUE(pass_->EvaluateFp16Products(ctx_, frame, config, products, {}));
+  const auto missing = Read<HdrSuitabilityData>(
+    *frame->suitability_buffer, ResourceStates::kShaderResource);
+  EXPECT_EQ(missing.failure_flags, 16U);
+  EXPECT_EQ(missing.first_failure_product, 6U);
+  EXPECT_EQ(missing.expected_products, 33U);
+  EXPECT_EQ(missing.checked_products, 1U);
+}
+
+NOLINT_TEST_F(ExposureGpuTest, SuitabilityChecksVolumeRgbAndTransmittance)
+{
+  auto texture = CreateRegisteredTexture({ .width = 2U,
+    .height = 1U,
+    .depth = 2U,
+    .format = Format::kRGBA32Float,
+    .texture_type = TextureType::kTexture3D,
+    .is_shader_resource = true,
+    .initial_state = ResourceStates::kCommon });
+  std::array<std::byte, 512U> bytes {};
+  const Pixel value { .25F, .5F, .75F, .5F };
+  for (unsigned z = 0U; z < 2U; ++z)
+    for (unsigned x = 0U; x < 2U; ++x)
+      std::memcpy(bytes.data() + z * 256U + x * sizeof(Pixel), value.data(),
+        sizeof(Pixel));
+  auto upload = CreateUploadBuffer(SizeBytes { bytes.size() });
+  upload->Update(bytes.data(), bytes.size(), 0U);
+  {
+    auto recorder = AcquireRecorder("Suitability volume upload");
+    EnsureTracked(*recorder, upload, ResourceStates::kGenericRead);
+    EnsureTracked(*recorder, texture, ResourceStates::kCommon);
+    recorder->RequireResourceState(*texture, ResourceStates::kCopyDest);
+    recorder->FlushBarriers();
+    recorder->CopyBufferToTexture(*upload,
+      { .buffer_offset = 0U,
+        .buffer_row_pitch = 256U,
+        .buffer_slice_pitch = 256U,
+        .dst_slice = { .width = 2U, .height = 1U, .depth = 2U } },
+      *texture);
+    recorder->RequireResourceStateFinal(
+      *texture, ResourceStates::kShaderResource);
+  }
+  auto& allocator = renderer_->GetGraphics()->GetDescriptorAllocator();
+  auto handle = allocator.AllocateRaw(
+    ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
+  const auto srv = allocator.GetShaderVisibleIndex(handle);
+  Backend().GetResourceRegistry().RegisterView(*texture, std::move(handle),
+    TextureViewDescription {
+      .format = Format::kRGBA32Float, .dimension = TextureType::kTexture3D });
+  auto settings = scene::ExposureSettings {};
+  settings.mode = engine::ExposureMode::kManual;
+  settings.manual_ev = 0.0F;
+  const auto config = SharedConfig(settings);
+  ctx_.frame_sequence = frame::SequenceNumber { 1U };
+  const auto frame = pass_->ResolveFrame(ctx_, config, { .use_fp32 = true });
+  ASSERT_NE(frame, nullptr);
+  const std::array products { postprocess::ExposurePass::HdrProduct {
+    .texture = texture.get(), .srv = srv, .id = 10U, .transmittance = true } };
+  ASSERT_TRUE(pass_->EvaluateFp16Products(ctx_, frame, config, products, {}));
+  const auto result = Read<HdrSuitabilityData>(
+    *frame->suitability_buffer, ResourceStates::kShaderResource);
+  EXPECT_EQ(result.maximum_scene_rgb, .75F);
+  EXPECT_EQ(result.candidate_pre_exposure, 16384.0F);
+  EXPECT_EQ(result.checked_samples, 4U);
+  EXPECT_EQ(result.checked_products, 1U << 9U);
+  EXPECT_EQ(result.failure_flags, 0U);
+  const Pixel tiny_transmittance { 0.0F, 0.0F, 0.0F, 0x1p-25F };
+  for (unsigned z = 0U; z < 2U; ++z)
+    for (unsigned x = 0U; x < 2U; ++x)
+      std::memcpy(bytes.data() + z * 256U + x * sizeof(Pixel),
+        tiny_transmittance.data(), sizeof(Pixel));
+  upload->Update(bytes.data(), bytes.size(), 0U);
+  {
+    auto recorder = AcquireRecorder("Suitability transmittance update");
+    EnsureTracked(*recorder, upload, ResourceStates::kGenericRead);
+    ASSERT_TRUE(recorder->AdoptKnownResourceState(*texture));
+    recorder->RequireResourceState(*texture, ResourceStates::kCopyDest);
+    recorder->FlushBarriers();
+    recorder->CopyBufferToTexture(*upload,
+      { .buffer_offset = 0U,
+        .buffer_row_pitch = 256U,
+        .buffer_slice_pitch = 256U,
+        .dst_slice = { .width = 2U, .height = 1U, .depth = 2U } },
+      *texture);
+    recorder->RequireResourceStateFinal(
+      *texture, ResourceStates::kShaderResource);
+  }
+  const auto bright = Uniform(0x1p30F);
+  ctx_.frame_sequence = frame::SequenceNumber { 2U };
+  const auto next = pass_->ResolveFrame(ctx_, config, { .use_fp32 = true });
+  const std::array combined {
+    postprocess::ExposurePass::HdrProduct {
+      .texture = bright.texture.get(), .srv = bright.srv, .id = 1U },
+    products[0]
+  };
+  ASSERT_TRUE(pass_->EvaluateFp16Products(ctx_, next, config, combined, {}));
+  const auto failed = Read<HdrSuitabilityData>(
+    *next->suitability_buffer, ResourceStates::kShaderResource);
+  EXPECT_EQ(failed.failure_flags, 4U);
+  EXPECT_EQ(failed.first_failure_product, 10U);
+  EXPECT_EQ(failed.image_failures, 4U);
+}
+
+NOLINT_TEST_F(
+  ExposureGpuTest, SuitabilitySharesDiscardedDarkAndSyntheticFallbackSemantics)
+{
+  const std::array original { Pixel { 0x1p30F, 0x1p30F, 0x1p30F, 1.0F },
+    Pixel { 0x1p-24F, 0x1p-24F, 0x1p-24F, 1.0F } };
+  const std::array narrowed { original[0], Pixel { 0, 0, 0, 1 } };
+  auto settings = scene::ExposureSettings {};
+  settings.black_influence = 0.0F;
+  const auto signal = MakeSignal(2U, 1U, original);
+  EXPECT_EQ(Qualify(signal, true, settings).failure_flags, 0U);
+  ResetHistory();
+  const auto before = Run(signal, settings);
+  ResetHistory();
+  const auto after = Run(MakeSignal(2U, 1U, narrowed), settings);
+  EXPECT_TRUE(std::equal(before.histogram.begin(),
+    before.histogram.begin() + 256, after.histogram.begin()));
+  EXPECT_EQ(before.histogram[257], after.histogram[257]);
+  EXPECT_EQ(before.histogram[261], after.histogram[261]);
+  EXPECT_EQ(before.state.displayed_scale, after.state.displayed_scale);
+  EXPECT_EQ(before.state.raw_metered_ev, after.state.raw_metered_ev);
+  ResetHistory();
+  const auto dark_before = Run(Uniform(0x1p-24F), settings);
+  ResetHistory();
+  const auto dark_after = Run(Uniform(0.0F), settings);
+  EXPECT_EQ(
+    dark_before.state.displayed_scale, dark_after.state.displayed_scale);
+  EXPECT_NE(dark_before.state.flags & 16U, 0U);
+  EXPECT_NE(dark_after.state.flags & 16U, 0U);
+  EXPECT_EQ(Qualify(Uniform(0x1p-24F), true, settings).failure_flags, 0U);
+  settings.black_influence = 1.0F;
+  EXPECT_NE(Qualify(signal, true, settings).failure_flags & 8U, 0U);
+}
+
+NOLINT_TEST_F(
+  ExposureGpuTest, SuitabilityIgnoresCoverageMassChangesAfterDarkDiscard)
+{
+  auto scene = scene::Scene("DiscardedCoverage", 1U);
+  scene.SetEnvironment(std::make_unique<scene::SceneEnvironment>());
+  scene.GetEnvironment()
+    ->AddSystem<scene::environment::Background>()
+    .SetEnabled(true);
+  ctx_.scene = observer_ptr { &scene };
+  const std::array original { Pixel { 0x1p30F, 0x1p30F, 0x1p30F, 1.0F },
+    Pixel { 0x1p-24F * .1F, 0x1p-24F * .1F, 0x1p-24F * .1F, .1F } };
+  const std::array narrowed { original[0], Pixel { 0, 0, 0, .0999755859375F } };
+  auto settings = scene::ExposureSettings {};
+  settings.black_influence = 0.0F;
+  const auto signal = MakeSignal(2U, 1U, original);
+  EXPECT_EQ(Qualify(signal, true, settings, nullptr, true).failure_flags, 0U);
+  ResetHistory();
+  const auto before = Run(signal, settings);
+  ResetHistory();
+  const auto after = Run(MakeSignal(2U, 1U, narrowed), settings);
+  EXPECT_TRUE(std::equal(before.histogram.begin(),
+    before.histogram.begin() + 256, after.histogram.begin()));
+  EXPECT_EQ(before.histogram[257], after.histogram[257]);
+  EXPECT_EQ(before.histogram[261], after.histogram[261]);
+  EXPECT_EQ(before.state.displayed_scale, after.state.displayed_scale);
+  ctx_.scene.reset();
 }
 
 } // namespace

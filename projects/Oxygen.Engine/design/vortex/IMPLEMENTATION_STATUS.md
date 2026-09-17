@@ -166,6 +166,13 @@ inspection verifies fog/AP consumption and FP32 products; the final S/P pixel
 matches an independent oracle, and the mapped image was inspected. Evidence is
 `scene/scene-migration-manifest.json`. FP16 admission/recovery and remaining
 scene/MultiView acceptance are not closed by this checkpoint.
+The local GPU FP16 product evaluator is qualified separately: 119 native tests
+per configuration, 22 service/22 publication tests, eight debugger cases and a
+RenderDoc reduction/ABI audit pass (`lifecycle/suitability-manifest.json`). It
+handles required signal loss, insignificant components, displayed-gain error,
+mask/coverage/dark contribution, transmittance and missing products. It does not
+authorize format switches. The normal-mode accumulation/storage choice remains
+pending user approval, followed by cumulative error and admission integration.
 Mask identity now follows the approved existing resource-index model.
 
 ## 4. Milestone Ledger
