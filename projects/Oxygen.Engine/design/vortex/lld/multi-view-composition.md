@@ -776,6 +776,10 @@ The [exposure execution plan](../plan/exposure-and-lightbench-correction.md#42-s
 owns the complete source, fallback and destruction contract:
 
 - each history-capable view owns exposure state through `ViewStateHandle`
+- MultiView assigns its producer-owned logical view identity as the persistent
+  handle for each scene and offscreen view. This identity survives per-frame
+  composition rebuilding and layout/extent changes; distinct cameras retain
+  distinct histories. Omitting the handle explicitly selects stateless rendering.
 - a view that specifies an exposure source reads the source handle's
   previous-frame exposure product at frame start
 - the source view's current frame may update its own exposure state for the

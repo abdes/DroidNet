@@ -1226,6 +1226,15 @@ each pass 121 native and 61 environment tests; two focused debugger cases have
 no blocking graphics messages. Evidence is `lifecycle/cubemap-manifest.json`.
 This canonical-resource checkpoint does not grant per-view FP16 admission.
 
+MultiView's scene and offscreen producers now supply persistent view-state
+handles instead of rebuilding stateless Auto exposure every frame. Early and
+settled native captures are distinct qualification cases. The ordinary lit
+main/PiP reaches independent steady gains; the offscreen forward pane remains
+black because its shader reads the unpublished legacy positional-light slot
+instead of the canonical local-light buffer. Correcting that active consumer is
+required by this slice's HDR/MultiView gate. Full light-unit calibration remains
+slice 7. Per-view S/P arithmetic alone does not certify a correctly lit image.
+
 - [x] Add the early GPU P resolve and bind a frame-invariant P/1P to every HDR pass.
 - [ ] Migrate the entire section 4.4 checklist, including atmosphere producer/
   consumer pairs, fog/color histories, bloom and offscreen/capture domains.

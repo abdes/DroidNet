@@ -600,12 +600,12 @@ auto MainModule::RenderOffscreenProofProducts(engine::FrameContext& context)
       .scene = observer_ptr<scene::Scene> { active_scene_.operator->() },
     });
     facade.SetViewIntent(vortex::Renderer::OffscreenSceneViewInput::FromCamera(
-                           name, view_id, MakeLocalView(product.width, product.height),
-                           camera)
-                           .SetWithAtmosphere(true)
-                           .SetForceWireframe(force_wireframe)
-                           .SetClearColor(
-                             graphics::Color { 0.025F, 0.035F, 0.05F, 1.0F }));
+      name, view_id, MakeLocalView(product.width, product.height), camera)
+        .SetViewStateHandle(
+          vortex::CompositionView::ViewStateHandle { view_id.get() })
+        .SetWithAtmosphere(true)
+        .SetForceWireframe(force_wireframe)
+        .SetClearColor(graphics::Color { 0.025F, 0.035F, 0.05F, 1.0F }));
     facade.SetOutputTarget(vortex::Renderer::OutputTargetInput {
       .framebuffer = observer_ptr<graphics::Framebuffer> {
         product.framebuffer.get() },
@@ -628,7 +628,11 @@ auto MainModule::RenderOffscreenProofProducts(engine::FrameContext& context)
       return;
     }
 
-    session->ExecuteInsideFrame(context);
+    if (!session->ExecuteInsideFrame(context)) {
+      LOG_F(
+        WARNING, "[MultiView] Offscreen proof {} did not produce output", name);
+      return;
+    }
     LOG_F(INFO, "Vortex.OffscreenProof.Render name={} view_id={} texture={}",
       name, view_id.get(),
       ResolveFramebufferColorTexture(*product.framebuffer)
@@ -844,6 +848,19 @@ auto MainModule::DrawFeatureVariantProofOverlay() -> void
 }
 
 auto MainModule::UpdateComposition(oxygen::engine::FrameContext& context,
+  std::vector<vortex::CompositionView>& views) -> void
+{
+  BuildComposition(context, views);
+  for (auto& view : views) {
+    if (view.camera.has_value()) {
+      // The demo owns these logical IDs for the complete view lifetime.
+      view.view_state_handle
+        = vortex::CompositionView::ViewStateHandle { view.id.get() };
+    }
+  }
+}
+
+auto MainModule::BuildComposition(oxygen::engine::FrameContext& context,
   std::vector<vortex::CompositionView>& views) -> void
 {
   auto& shell = GetShell();

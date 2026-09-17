@@ -180,6 +180,16 @@ Debug/Release each pass 121 native and 61 environment tests. Two debugger cases
 have no blocking graphics messages (`lifecycle/cubemap-manifest.json`).
 Mask identity now follows the approved existing resource-index model.
 
+MultiView now provides persistent producer-owned exposure handles for scene and
+offscreen views. Debug/Release builds pass; six Debug layout smoke runs pass the
+debug-layer audit. Ordinary main/lit-PiP reaches distinct stable gains, with
+captured S/P probes within one output code value. Early/settled images and native
+thumbnails were inspected. This is not MultiView acceptance: the forward
+offscreen pane remains black because its shader reads an unpublished legacy
+light slot; startup adaptation, scripted lifecycle/sharing and standalone/family
+equivalence still need qualification. Evidence is
+`multiview/persistent-handles-manifest.json` under the exposure evidence root.
+
 ## 4. Milestone Ledger
 
 | ID | Milestone | Status | Current Evidence | Missing To Close |

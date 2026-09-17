@@ -134,6 +134,9 @@ protected:
   auto OnFrameEnd(observer_ptr<engine::FrameContext> context) -> void override;
 
 private:
+  auto BuildComposition(engine::FrameContext& context,
+    std::vector<vortex::CompositionView>& views) -> void;
+
   struct OffscreenProofProduct {
     std::shared_ptr<graphics::Framebuffer> framebuffer {};
     uint32_t width { 0U };
