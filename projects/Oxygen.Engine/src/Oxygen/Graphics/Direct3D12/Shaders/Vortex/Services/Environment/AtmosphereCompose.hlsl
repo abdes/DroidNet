@@ -79,8 +79,7 @@ float4 VortexAtmosphereComposePS(VortexFullscreenTriangleOutput input) : SV_Targ
     const float transmittance = saturate(dot(aerial.transmittance, float3(1.0f / 3.0f, 1.0f / 3.0f, 1.0f / 3.0f)));
 
     const float atmosphere_alpha = saturate(1.0f - transmittance);
-    const float3 atmosphere_color = atmosphere_alpha > 1.0e-5f
-        ? inscatter / atmosphere_alpha
-        : 0.0f.xxx;
-    return float4(atmosphere_color, atmosphere_alpha);
+    // Inscatter is already the additive radiance contribution. One/InvSrcAlpha
+    // blending preserves it even when transmittance is one.
+    return float4(inscatter, atmosphere_alpha);
 }

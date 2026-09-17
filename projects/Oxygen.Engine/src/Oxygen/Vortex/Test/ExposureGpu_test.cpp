@@ -35,6 +35,7 @@
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Vortex/Environment/Internal/IblProcessor.h>
+#include <Oxygen/Vortex/Environment/Passes/AtmosphereComposePass.h>
 #include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
 #include <Oxygen/Vortex/PostProcess/PostProcessService.h>
 #include <Oxygen/Vortex/RenderContext.h>
@@ -45,7 +46,12 @@
 #include <Oxygen/Vortex/Test/Fakes/AssetLoader.h>
 #include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
 #include <Oxygen/Vortex/Test/Fixtures/TextureBinderPayloads.h>
+#include <Oxygen/Vortex/Types/EnvironmentFrameBindings.h>
+#include <Oxygen/Vortex/Types/EnvironmentStaticData.h>
+#include <Oxygen/Vortex/Types/EnvironmentViewData.h>
 #include <Oxygen/Vortex/Types/ExposureStateData.h>
+#include <Oxygen/Vortex/Types/ViewConstants.h>
+#include <Oxygen/Vortex/Types/ViewFrameBindings.h>
 #include <Oxygen/Vortex/Upload/UploadCoordinator.h>
 #include <Oxygen/Vortex/ViewExtension.h>
 
@@ -4816,6 +4822,199 @@ NOLINT_TEST_F(
   }
   renderer_->RegisterConsoleBindings({});
   FlushBackend();
+}
+
+NOLINT_TEST_F(ExposureGpuTest, DeferredApPreservesInscatterAtLowAndZeroOpacity)
+{
+  pass_.reset();
+  renderer_->OnShutdown();
+  auto config = RendererConfig {};
+  config.upload_queue_key = QueueKeyFor().get();
+  renderer_ = std::make_unique<Renderer>(GetGraphicsShared(), config,
+    kPhase1DefaultRuntimeCapabilityFamilies
+      | RendererCapabilityFamily::kEnvironmentLighting);
+  auto scene = scene::Scene("ApBlend", 1U);
+  scene.SetEnvironment(std::make_unique<scene::SceneEnvironment>());
+  scene.GetEnvironment()
+    ->AddSystem<scene::environment::SkyAtmosphere>()
+    .SetEnabled(true);
+  ctx_.scene = observer_ptr { &scene };
+  ctx_.current_view.with_atmosphere = true;
+  auto textures = SceneTextures(Backend(),
+    { .extent = { 4U, 4U },
+      .enable_velocity = false,
+      .scene_color_format = Format::kRGBA32Float });
+  auto framebuffer
+    = Backend().CreateFramebuffer(FramebufferDesc {}.SetDepthAttachment(
+      { .texture = textures.GetSceneDepthResource() }));
+  auto& allocator = renderer_->GetGraphics()->GetDescriptorAllocator();
+  auto& registry = Backend().GetResourceRegistry();
+  const auto texture_srv
+    = [&](const Texture& texture, Format format, TextureType dimension) {
+        auto handle = allocator.AllocateRaw(
+          ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
+        const auto index = allocator.GetShaderVisibleIndex(handle);
+        registry.RegisterView(texture, std::move(handle),
+          TextureViewDescription { .format = format, .dimension = dimension });
+        return index;
+      };
+  const auto publish = [&]<typename T>(const T& value) {
+    auto buffer = CreateRegisteredBuffer({ .size_bytes = sizeof(T),
+      .usage = BufferUsage::kNone,
+      .memory = BufferMemory::kUpload,
+      .debug_name = "AP blend fixture bindings" });
+    buffer->Update(&value, sizeof(T), 0U);
+    auto handle = allocator.AllocateBindless(
+      oxygen::bindless::generated::kGlobalSrvDomain,
+      ResourceViewType::kStructuredBuffer_SRV);
+    const auto index = allocator.GetShaderVisibleIndex(handle);
+    registry.RegisterView(*buffer, std::move(handle),
+      BufferViewDescription {
+        .view_type = ResourceViewType::kStructuredBuffer_SRV,
+        .range = { 0U, sizeof(T) },
+        .stride = sizeof(T) });
+    return index;
+  };
+  auto scene_bindings = SceneTextureBindings {};
+  scene_bindings.scene_depth_srv = texture_srv(textures.GetSceneDepth(),
+    textures.GetSceneDepth().GetDescriptor().format, TextureType::kTexture2D)
+                                     .get();
+  const auto scene_slot = publish(scene_bindings);
+  auto environment_view = EnvironmentViewData {};
+  environment_view.sky_aerial_luminance_aerial_start_depth_km.w = 0.0F;
+  environment_view.camera_aerial_volume_depth_params = { 1, 1, 1, 10000 };
+  const auto environment_view_slot = publish(environment_view);
+  auto compose = environment::AtmosphereComposePass(*renderer_);
+  const auto capture = BeginOptionalCapture();
+  // 1e-5 is not a representable value of 1-T near T=1 in binary32.
+  // Exercise the adjacent representable opacities on each side, plus zero,
+  // the reported FP32-loss case, an ordinary opacity and full attenuation.
+  const std::array transmittances { 1.0F, 1.0F - 0x1p-17F,
+    1.0F - 167.0F * 0x1p-24F, 1.0F - 168.0F * 0x1p-24F, .5F, 0.0F };
+  for (const auto format : { Format::kRGBA32Float, Format::kRGBA16Float }) {
+    SCOPED_TRACE(static_cast<unsigned>(format));
+    for (const auto transmittance : transmittances) {
+      for (const float background : { 0.0F, .5F }) {
+        for (const float coverage : { 0.0F, .25F, 1.0F }) {
+          SCOPED_TRACE(transmittance);
+          SCOPED_TRACE(background);
+          SCOPED_TRACE(coverage);
+          auto volume = CreateRegisteredTexture({ .width = 1U,
+            .height = 1U,
+            .depth = 1U,
+            .format = format,
+            .texture_type = TextureType::kTexture3D,
+            .is_shader_resource = true,
+            .initial_state = ResourceStates::kCommon });
+          Pixel sample { .01F, .02F, .04F, transmittance };
+          std::array<std::byte, 1536U> bytes {};
+          if (format == Format::kRGBA16Float) {
+            // Independently specified binary16 payload and exact decoded
+            // values. All four near-one T cases round to 1; .5 and 0 are exact.
+            const std::array<std::uint16_t, 4> bits { 0x211fU, 0x251fU, 0x291fU,
+              static_cast<std::uint16_t>(transmittance > .5F ? 0x3c00U
+                  : transmittance == .5F                     ? 0x3800U
+                                                             : 0U) };
+            std::memcpy(bytes.data(), bits.data(), sizeof(bits));
+            sample = { 1311.0F / 131072.0F, 1311.0F / 65536.0F,
+              1311.0F / 32768.0F, transmittance > .5F ? 1.0F : transmittance };
+          } else {
+            std::memcpy(bytes.data(), sample.data(), sizeof(sample));
+          }
+          const Pixel destination { background, background, background,
+            coverage };
+          for (unsigned y = 0; y < 4U; ++y)
+            for (unsigned x = 0; x < 4U; ++x)
+              std::memcpy(bytes.data() + 512U + y * 256U + x * sizeof(Pixel),
+                destination.data(), sizeof(destination));
+          auto upload = CreateUploadBuffer(SizeBytes { bytes.size() });
+          upload->Update(bytes.data(), bytes.size(), 0U);
+          {
+            auto recorder = AcquireRecorder("AP blend fixture initialization");
+            EnsureTracked(*recorder, upload, ResourceStates::kGenericRead);
+            EnsureTracked(*recorder, volume, ResourceStates::kCommon);
+            recorder->RequireResourceState(*volume, ResourceStates::kCopyDest);
+            for (const auto& texture : { textures.GetSceneColorResource(),
+                   textures.GetSceneDepthResource() }) {
+              if (!recorder->AdoptKnownResourceState(*texture))
+                recorder->BeginTrackingResourceState(
+                  *texture, texture->GetDescriptor().initial_state);
+            }
+            recorder->RequireResourceState(
+              textures.GetSceneColor(), ResourceStates::kCopyDest);
+            recorder->RequireResourceState(
+              textures.GetSceneDepth(), ResourceStates::kDepthWrite);
+            recorder->FlushBarriers();
+            recorder->CopyBufferToTexture(*upload,
+              { .buffer_row_pitch = 256U,
+                .buffer_slice_pitch = 256U,
+                .dst_slice = { .width = 1U, .height = 1U, .depth = 1U } },
+              *volume);
+            recorder->CopyBufferToTexture(*upload,
+              { .buffer_offset = 512U,
+                .buffer_row_pitch = 256U,
+                .buffer_slice_pitch = 1024U,
+                .dst_slice = { .width = 4U, .height = 4U, .depth = 1U } },
+              textures.GetSceneColor());
+            recorder->ClearFramebuffer(*framebuffer, std::nullopt, 0.0F);
+            recorder->RequireResourceStateFinal(
+              *volume, ResourceStates::kShaderResource);
+          }
+          auto environment_static = EnvironmentStaticData {};
+          environment_static.atmosphere.camera_volume_lut_slot
+            = texture_srv(*volume, format, TextureType::kTexture3D).get();
+          auto environment_bindings = EnvironmentFrameBindings {};
+          environment_bindings.environment_static_slot
+            = publish(environment_static);
+          environment_bindings.environment_view_slot = environment_view_slot;
+          auto view_bindings = ViewFrameBindings {};
+          view_bindings.environment_frame_slot = publish(environment_bindings);
+          view_bindings.scene_texture_frame_slot = scene_slot;
+          auto view = ViewConstants::GpuData {};
+          view.view_frame_bindings_bslot
+            = BindlessViewFrameBindingsSlot { publish(view_bindings) };
+          view.reverse_z = 0U;
+          auto constants
+            = CreateUploadBuffer(SizeBytes { 256U }, BufferUsage::kConstant);
+          constants->Update(&view, sizeof(view), 0U);
+          ctx_.view_constants = constants;
+          ASSERT_TRUE(compose.Record(ctx_, textures).executed);
+          auto readback
+            = GetReadbackManager()->CreateTextureReadback("AP composed pixel");
+          {
+            auto recorder = AcquireRecorder("AP composed pixel readback");
+            ASSERT_TRUE(
+              recorder->AdoptKnownResourceState(textures.GetSceneColor()));
+            ASSERT_TRUE(readback
+                ->EnqueueCopy(*recorder, textures.GetSceneColor(),
+                  { .src_slice = { .x = 1U,
+                      .y = 1U,
+                      .width = 1U,
+                      .height = 1U,
+                      .depth = 1U } })
+                .has_value());
+          }
+          const auto mapped = readback->MapNow();
+          ASSERT_TRUE(mapped.has_value());
+          Pixel result {};
+          std::memcpy(result.data(), mapped->Data(), sizeof(result));
+          // Independent double-precision transfer also describes forward AP.
+          // 3e-7 bounds FP32 sample/arithmetic/blend rounding for these unit
+          // inputs.
+          for (unsigned c = 0U; c < 3U; ++c)
+            EXPECT_NEAR(result[c],
+              double(sample[c]) + double(background) * sample[3], 3e-7);
+          EXPECT_NEAR(result[3],
+            1.0 - double(sample[3]) + double(coverage) * sample[3], 3e-7);
+        }
+      }
+    }
+  }
+  if (capture)
+    EXPECT_TRUE(capture->EndCapture());
+  ctx_.view_constants.reset();
+  ctx_.scene.reset();
+  WaitForQueueIdle();
 }
 
 NOLINT_TEST_F(ExposureGpuTest, SuitabilitySelectsGpuCandidateWithTwoStopMargin)

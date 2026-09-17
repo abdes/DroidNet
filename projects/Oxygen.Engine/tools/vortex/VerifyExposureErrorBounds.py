@@ -234,19 +234,10 @@ class Interval:
         return self.low <= value <= self.high
 
 
-def ap_composition_interval(background, inscatter, transmittance, deferred):
-    contribution = inscatter
-    if deferred:
-        # AtmosphereCompose divides RGB by opacity only above the branch
-        # threshold, then SrcAlpha blending multiplies it back. This is the
-        # exact-arithmetic transfer, not a claim about GPU division rounding.
-        opacity = transmittance.complement()
-        threshold = f32(1e-5)
-        if opacity.high <= threshold:
-            contribution = Interval(F(0), F(0))
-        elif opacity.low <= threshold:
-            contribution = Interval(F(0), inscatter.high)
-    return background.multiply(transmittance).add(contribution)
+def ap_composition_interval(background, inscatter, transmittance):
+    # Both forward AP and deferred One/InvSrcAlpha blending implement this
+    # transfer. Inscatter does not depend on an opacity threshold or division.
+    return background.multiply(transmittance).add(inscatter)
 
 
 def fog_composition_interval(background, height_rgb, height_t, volume_rgb, volume_t):
@@ -298,25 +289,25 @@ def check_consumer_intervals():
                 (ht.low, ht.high), (scatter.low, scatter.high), (t.low, t.high)):
             require(fog.contains(v + h * tv + x * th * tv), "fog consumer enclosure")
             checks += 1
-        for deferred in (False, True):
-            ap = ap_composition_interval(bg, scatter, t, deferred)
+        for background_scale in (F(0), F(1)):
+            source = bg.multiply(Interval(background_scale, background_scale))
+            ap = ap_composition_interval(source, scatter, t)
             for x, v, tv in product((bg.low, bg.high), (scatter.low, scatter.high), (t.low, t.high)):
-                contribution = v if not deferred or 1 - tv > f32(1e-5) else F(0)
-                require(ap.contains(x * tv + contribution), "AP consumer enclosure")
+                require(ap.contains(background_scale * x * tv + v), "AP consumer enclosure")
                 checks += 1
         out_coverage = coverage_interval(coverage, t)
         for a, tv in product((coverage.low, coverage.high), (t.low, t.high)):
             require(out_coverage.contains(1 - tv + a * tv), "coverage blend enclosure")
             checks += 1
 
-    # Straddle the deferred branch, including equality (the zero branch).
+    # The removed branch must not suppress inscatter below or at its threshold.
     threshold = f32(1e-5)
     branch_t = Interval(1 - 2 * threshold, F(1))
-    branch = ap_composition_interval(Interval(F(0), F(0)), Interval(F(1), F(2)), branch_t, True)
-    require(branch == Interval(F(0), F(2)), "branch union must retain both outcomes")
+    branch = ap_composition_interval(Interval(F(0), F(0)), Interval(F(1), F(2)), branch_t)
+    require(branch == Interval(F(1), F(2)), "inscatter survives across the old threshold")
     equality = ap_composition_interval(Interval(F(0), F(0)), Interval(F(1), F(2)),
-                                       Interval(1 - threshold, 1 - threshold), True)
-    require(equality == Interval(F(0), F(0)), "opacity equality suppresses inscatter")
+                                       Interval(1 - threshold, 1 - threshold))
+    require(equality == Interval(F(1), F(2)), "inscatter survives equality at the old threshold")
 
     rgb = Interval(F(1, 100), F(1, 50))
     require(meter_normalization_interval(rgb, Interval(F(0), F(0)), F(1))[0] == "unweighted",
@@ -332,7 +323,7 @@ def check_consumer_intervals():
     return checks + 6
 
 
-def deferred_ap_branch_counterexample():
+def deferred_ap_branch_regression():
     transmittance, inscatter = f32(1 - 2**-16), f32(.01)
     narrowed_t, narrowed_rgb = half(transmittance), half(inscatter)
     require(1 - transmittance > f32(1e-5) and narrowed_t == 1, "half store crosses AP branch")
@@ -342,10 +333,18 @@ def deferred_ap_branch_counterexample():
     require(abs(actual - reference) > image_budget(reference), "branch loss exceeds final image budget")
     # A smooth x*T+I model reports only the small RGB rounding error at x=0.
     require(abs(narrowed_rgb - reference) <= image_budget(reference), "smooth model misses branch loss")
+    # R036 removes that lossy operation. Keep the old failure as a regression,
+    # not as an ongoing restriction on the corrected consumer.
+    corrected = ap_composition_interval(Interval(F(0), F(0)),
+        Interval(narrowed_rgb, narrowed_rgb), Interval(narrowed_t, narrowed_t))
+    require(corrected.low == narrowed_rgb and corrected.high == narrowed_rgb,
+            "corrected deferred agrees with forward")
+    require(abs(corrected.low - reference) <= image_budget(reference), "corrected image admission")
     return {"reference_transmittance": float(transmittance), "half_transmittance": float(narrowed_t),
-            "reference_deferred_rgb": float(reference), "half_deferred_rgb": float(actual),
-            "forward_half_rgb": float(narrowed_rgb), "local_checks_pass": True,
-            "smooth_composition_check_passes": True, "deferred_image_admission_pass": False}
+            "reference_rgb": float(reference), "legacy_half_deferred_rgb": float(actual),
+            "corrected_half_deferred_rgb": float(corrected.low), "forward_half_rgb": float(narrowed_rgb),
+            "local_checks_pass": True, "legacy_image_admission_pass": False,
+            "corrected_image_admission_pass": True}
 
 
 def main():
@@ -362,8 +361,8 @@ def main():
               "consumer_interval_checks": check_consumer_intervals(),
               "counterexamples": {"AP strength": amplification_counterexample(),
                                   "dark classification": classification_counterexample(),
-                                  "temporal history": temporal_counterexample(),
-                                  "deferred AP branch": deferred_ap_branch_counterexample()},
+                                  "temporal history": temporal_counterexample()},
+              "regressions": {"removed deferred AP branch": deferred_ap_branch_regression()},
               "remaining": ["Justify runtime source/consumer bounds and carry certificate lifetimes",
                             "Implement outward-safe GPU arithmetic, coverage and filtering rules",
                             "Qualify actual GPU composition and temporal behavior before format switching"],
