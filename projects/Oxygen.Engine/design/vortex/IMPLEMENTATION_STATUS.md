@@ -199,6 +199,11 @@ nonzero SceneColor and ordinary metering, while neither yields zero radiance and
 synthetic dark. The native repaired pane and isolated mapped images were
 inspected. Evidence is `multiview/forward-binding-manifest.json`; light-unit,
 shadow and remaining MultiView parity are not claimed by this checkpoint.
+Lit PiP and the offscreen preview/capture cameras now retain the four sample
+objects within their images. The rebuilt Debug native presentation and isolated
+outputs were inspected, four S/P probe sets pass, and the focused debugger run
+has no blocking graphics messages (`multiview/framing-manifest.json`). Other
+proof layouts and scripted exposure/lifecycle acceptance remain open.
 
 ## 4. Milestone Ledger
 

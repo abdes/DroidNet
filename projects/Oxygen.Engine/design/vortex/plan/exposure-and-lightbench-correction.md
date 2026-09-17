@@ -1248,6 +1248,14 @@ Mapped S/P probes pass within one output code value, and the repaired native
 forward pane was inspected. `multiview/forward-binding-manifest.json` records
 this bounded correction. Physical-unit and shadow parity remain separate gates.
 
+The lit PiP and both offscreen cameras now aim at the objects' shared center
+with wider framing instead of targeting the floor below them. A rebuilt Debug
+capture retains all four objects in each isolated image and in the native
+presentation; all four S/P probe sets pass. The focused debugger run has no
+blocking graphics messages. Evidence is `multiview/framing-manifest.json`.
+Other proof-layout framing and the scripted exposure/lifecycle matrix remain
+open; this is a camera-pose correction, not full visual acceptance.
+
 - [x] Add the early GPU P resolve and bind a frame-invariant P/1P to every HDR pass.
 - [ ] Migrate the entire section 4.4 checklist, including atmosphere producer/
   consumer pairs, fog/color histories, bloom and offscreen/capture domains.

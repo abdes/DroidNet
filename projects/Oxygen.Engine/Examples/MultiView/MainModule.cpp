@@ -313,11 +313,11 @@ auto MainModule::UpdateCameras(const platform::window::ExtentT& extent) -> void
     if (cam_opt) {
       auto& cam = cam_opt->get();
 
-      // Position the PiP camera (match legacy)
+      // Frame the sample objects around their shared center.
       constexpr glm::vec3 pip_position = glm::vec3(-5.0F, 0.4F, 4.0F);
       pip_camera_node_.GetTransform().SetLocalPosition(pip_position);
 
-      constexpr glm::vec3 target = glm::vec3(0.0F, 0.0F, -2.0F);
+      constexpr glm::vec3 target = glm::vec3(-0.75F, 0.0F, 0.0F);
       constexpr glm::vec3 world_up = space::move::Up;
       const glm::mat4 view_mat = glm::lookAt(pip_position, target, world_up);
       const glm::quat pip_rot = glm::quat_cast(glm::inverse(view_mat));
@@ -325,7 +325,7 @@ auto MainModule::UpdateCameras(const platform::window::ExtentT& extent) -> void
 
       // PiP aspect ratio from its intended viewport
       const auto pip_layout = ComputePipLayout(extent);
-      constexpr float kPipCamFov = 35.0F;
+      constexpr float kPipCamFov = 45.0F;
       constexpr float kPipCamNear = 0.05F;
       constexpr float kPipCamFar = 100.0F;
 
@@ -436,10 +436,10 @@ auto MainModule::UpdateCameras(const platform::window::ExtentT& extent) -> void
   };
 
   configure_offscreen_camera(offscreen_preview_camera_node_,
-    glm::vec3(-3.2F, 2.2F, 4.8F), glm::vec3(0.0F, 0.0F, -1.6F), 38.0F,
+    glm::vec3(-3.2F, 2.2F, 4.8F), glm::vec3(-0.75F, 0.0F, 0.0F), 45.0F,
     kOffscreenPreviewWidth, kOffscreenPreviewHeight);
   configure_offscreen_camera(offscreen_capture_camera_node_,
-    glm::vec3(3.8F, 3.0F, 3.4F), glm::vec3(0.0F, 0.1F, -1.8F), 32.0F,
+    glm::vec3(5.0F, 4.0F, 4.0F), glm::vec3(-0.75F, 0.0F, 0.0F), 45.0F,
     kOffscreenCaptureWidth, kOffscreenCaptureHeight);
 }
 

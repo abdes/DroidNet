@@ -70,6 +70,9 @@ checks 60 steady-state frames for scene-texture allocation churn.
 - Each scene and offscreen view supplies a stable, producer-owned temporal
   handle. Auto exposure therefore adapts across frames instead of restarting
   on every composition update.
+- Lit PiP and the two offscreen previews aim at the sample objects' shared
+  center with enough field of view to retain all four objects. Offscreen
+  viewport origins remain local; screen placement belongs to composition.
 - Proof-specific camera/layout/overlay text stays in the demo and tooling code;
   production renderer paths consume the same runtime feature profiles as other
   Vortex callers.
