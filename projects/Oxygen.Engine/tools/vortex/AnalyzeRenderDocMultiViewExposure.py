@@ -129,6 +129,10 @@ def build_report(controller, report, capture_path, report_path):
         save_image(controller, rd, target, precomposition)
         view_results.append({
             "index": index, "event": draw.event_id,
+            "debug_visualizations": [a.path for a in actions
+                if a.flags & rd.ActionFlags.Drawcall
+                and (tones[index - 1].event_id if index else 0) < a.event_id < draw.event_id
+                and "Vortex.DebugVisualization." in a.path],
             "width": texture.width, "height": texture.height,
             "write_rectangle": write_rect,
             "frame": sequence, "gain": gain, "target_gain": target_gain,

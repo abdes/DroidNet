@@ -588,7 +588,8 @@ public:
     std::vector<CompositionView::AuxOutputDesc> produced_aux_outputs = {},
     std::vector<CompositionView::AuxInputDesc> consumed_aux_outputs = {},
     std::string debug_name = {},
-    std::optional<scene::ExposureSettings> exposure_override = {}) -> ViewId;
+    std::optional<scene::ExposureSettings> exposure_override = {},
+    std::optional<ShaderDebugMode> shader_debug_mode_override = {}) -> ViewId;
   OXGN_VRTX_NDAPI auto ResolvePublishedRuntimeViewId(
     ViewId intent_view_id) const noexcept -> ViewId;
   auto GetRigidTransformHistoryCache() noexcept
@@ -788,6 +789,7 @@ private:
     frame::SequenceNumber last_seen_frame { 0U };
     std::optional<ShadingMode> shading_mode_override;
     std::optional<RenderMode> render_mode_override;
+    std::optional<ShaderDebugMode> shader_debug_mode_override;
     CompositionView::ViewStateHandle view_state_handle {
       CompositionView::kInvalidViewStateHandle
     };

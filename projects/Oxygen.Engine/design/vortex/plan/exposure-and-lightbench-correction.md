@@ -1343,6 +1343,20 @@ all other expected gains match exactly. The debugger run has no blocking
 graphics messages. Evidence is `multiview/modes-manifest.json`. The complete
 layout matrix and automatic precision admission/recovery remain open.
 
+Per-view shader-debug overrides now survive publication, updates and execution
+scope, including explicit Disabled overrides of a global diagnostic mode.
+Registered exposure controls use that resolved mode: a normal view's camera cut
+remeters on its event frame while a diagnostic sibling defers its cut until
+normal rendering resumes. The native regression fails before the control-capture
+fix and passes afterward. Debug/Release each pass 122 native, 22 post-process,
+23 runtime-publication, 12 offscreen and 61 renderer-core tests. Four standard/
+auxiliary captures verify the actual normals/shadow-diagnostic draws, transient
+unit gain and per-view S/P; images were inspected. Three debugger cases have no
+blocking graphics messages. Evidence is `multiview/diagnostic-manifest.json`.
+The shadow pane currently displays the shader's blue unavailable-shadow
+diagnostic; this proves routing, not rendered directional-shadow coverage or
+the full layout matrix. Those gates and precision admission/recovery remain open.
+
 - [x] Add the early GPU P resolve and bind a frame-invariant P/1P to every HDR pass.
 - [ ] Migrate the entire section 4.4 checklist, including atmosphere producer/
   consumer pairs, fog/color histories, bloom and offscreen/capture domains.

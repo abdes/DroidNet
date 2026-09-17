@@ -372,10 +372,9 @@ auto PostProcessService::CaptureRegisteredExposureControls(
   for (const auto& intent : renderer_.GetRegisteredExposureIntents()) {
     if (intent.source_loss)
       PreserveRemovedExposureSource(intent.source_loss, intent.handle);
-    const bool suppressed = intent.diagnostic
-      || ctx.shader_debug_mode != ShaderDebugMode::kDisabled
-      || (intent.handle == ctx.current_view.view_state_handle
-        && ctx.render_mode == RenderMode::kWireframe);
+    // Registered intents already resolve each view's overrides against the
+    // renderer defaults. The current scope may belong to a different view.
+    const bool suppressed = intent.diagnostic;
     const auto& captured = CaptureViewExposureSettings(intent.view_id,
       intent.handle, intent.settings.value_or(inherited), intent.camera_ev,
       suppressed, ctx.GetScene());

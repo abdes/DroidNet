@@ -388,6 +388,13 @@ whether a product is scene-referred, pre-exposed or already display-mapped;
 never apply a second gain or tone curve implicitly. Compatible resizing and
 format changes preserve exposure, while recreating size/format-dependent leases.
 
+Per-view shader-debug overrides are captured with the runtime view and applied
+for its execution scope, including offscreen execution. An absent override
+inherits the renderer default; an explicit Disabled value suppresses that
+default for this view. Restore the default after each view. Exposure capture
+and shared-source metadata use the same effective mode so diagnostic output
+uses transient unit exposure without consuming persistent transitions.
+
 Qualify ordinary lit main/PiP (`--pip-wireframe false`), standard, auxiliary,
 offscreen and feature layouts. Compare each view's pre-composition result
 against standalone rendering with equal settings/history/dt, then inspect final
