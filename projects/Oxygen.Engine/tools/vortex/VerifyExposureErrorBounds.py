@@ -208,6 +208,146 @@ def temporal_counterexample():
             "cumulative_image_admission_pass": False, "cumulative_meter_pass": False}
 
 
+@dataclass(frozen=True)
+class Interval:
+    """Exact nonnegative enclosure; GPU arithmetic/filtering error is separate."""
+
+    low: F
+    high: F
+
+    def __post_init__(self):
+        if not 0 <= self.low <= self.high:
+            raise ValueError("Expected an ordered nonnegative interval")
+
+    def add(self, other):
+        return Interval(self.low + other.low, self.high + other.high)
+
+    def multiply(self, other):
+        return Interval(self.low * other.low, self.high * other.high)
+
+    def complement(self):
+        if self.high > 1:
+            raise ValueError("Complement requires a unit interval")
+        return Interval(1 - self.high, 1 - self.low)
+
+    def contains(self, value):
+        return self.low <= value <= self.high
+
+
+def ap_composition_interval(background, inscatter, transmittance, deferred):
+    contribution = inscatter
+    if deferred:
+        # AtmosphereCompose divides RGB by opacity only above the branch
+        # threshold, then SrcAlpha blending multiplies it back. This is the
+        # exact-arithmetic transfer, not a claim about GPU division rounding.
+        opacity = transmittance.complement()
+        threshold = f32(1e-5)
+        if opacity.high <= threshold:
+            contribution = Interval(F(0), F(0))
+        elif opacity.low <= threshold:
+            contribution = Interval(F(0), inscatter.high)
+    return background.multiply(transmittance).add(contribution)
+
+
+def fog_composition_interval(background, height_rgb, height_t, volume_rgb, volume_t):
+    # Fog.hlsl followed by the pass's One/InvSrcAlpha RGB blend.
+    return volume_rgb.add(height_rgb.multiply(volume_t)).add(
+        background.multiply(height_t.multiply(volume_t)))
+
+
+def coverage_interval(destination, transmittance):
+    # Both environment passes blend alpha with One/InvSrcAlpha.
+    # Keep the two occurrences of T correlated: 1-T+A*T = 1-(1-A)*T.
+    return destination.complement().multiply(transmittance).complement()
+
+
+def quantize_weight(value):
+    return math.floor(min(F(1), max(F(0), value)) * 4095 + F(1, 2))
+
+
+def meter_normalization_interval(rgb, coverage, profile_mask):
+    low_weight = quantize_weight(profile_mask * coverage.low)
+    high_weight = quantize_weight(profile_mask * coverage.high)
+    if low_weight != high_weight:
+        return "unstable_weight", None
+    if high_weight == 0:
+        return "unweighted", None
+    # Histogram normalization has no denominator floor. A nonzero quantized
+    # weight proves positive coverage; preserve that gate before division.
+    require(coverage.low > 0, "weighted samples need positive coverage")
+    return "weighted", Interval(rgb.low / coverage.high, rgb.high / coverage.low)
+
+
+def check_consumer_intervals():
+    rng = random.Random(0x41504647)
+    checks = 0
+    for _ in range(500):
+        def radiance():
+            a, b = sorted((F(rng.randrange(32769), 1024), F(rng.randrange(32769), 1024)))
+            return Interval(a, b)
+
+        def unit():
+            a, b = sorted((F(rng.randrange(1025), 1024), F(rng.randrange(1025), 1024)))
+            return Interval(a, b)
+
+        bg, scatter, height = radiance(), radiance(), radiance()
+        t, ht, coverage = unit(), unit(), unit()
+        fog = fog_composition_interval(bg, height, ht, scatter, t)
+        for x, h, th, v, tv in product(
+                (bg.low, bg.high), (height.low, height.high),
+                (ht.low, ht.high), (scatter.low, scatter.high), (t.low, t.high)):
+            require(fog.contains(v + h * tv + x * th * tv), "fog consumer enclosure")
+            checks += 1
+        for deferred in (False, True):
+            ap = ap_composition_interval(bg, scatter, t, deferred)
+            for x, v, tv in product((bg.low, bg.high), (scatter.low, scatter.high), (t.low, t.high)):
+                contribution = v if not deferred or 1 - tv > f32(1e-5) else F(0)
+                require(ap.contains(x * tv + contribution), "AP consumer enclosure")
+                checks += 1
+        out_coverage = coverage_interval(coverage, t)
+        for a, tv in product((coverage.low, coverage.high), (t.low, t.high)):
+            require(out_coverage.contains(1 - tv + a * tv), "coverage blend enclosure")
+            checks += 1
+
+    # Straddle the deferred branch, including equality (the zero branch).
+    threshold = f32(1e-5)
+    branch_t = Interval(1 - 2 * threshold, F(1))
+    branch = ap_composition_interval(Interval(F(0), F(0)), Interval(F(1), F(2)), branch_t, True)
+    require(branch == Interval(F(0), F(2)), "branch union must retain both outcomes")
+    equality = ap_composition_interval(Interval(F(0), F(0)), Interval(F(1), F(2)),
+                                       Interval(1 - threshold, 1 - threshold), True)
+    require(equality == Interval(F(0), F(0)), "opacity equality suppresses inscatter")
+
+    rgb = Interval(F(1, 100), F(1, 50))
+    require(meter_normalization_interval(rgb, Interval(F(0), F(0)), F(1))[0] == "unweighted",
+            "zero coverage must skip division")
+    mass_boundary = F(1, 8190)
+    require(meter_normalization_interval(rgb, Interval(F(0), mass_boundary), F(1))[0]
+            == "unstable_weight", "half-up weight boundary must reject")
+    status, normalized = meter_normalization_interval(rgb, Interval(mass_boundary, mass_boundary), F(1))
+    require(status == "weighted" and normalized == Interval(rgb.low / mass_boundary, rgb.high / mass_boundary),
+            "positive weight uses actual coverage")
+    require(meter_normalization_interval(rgb, Interval(F(0), F(1)), F(0))[0] == "unweighted",
+            "zero profile/mask must skip division")
+    return checks + 6
+
+
+def deferred_ap_branch_counterexample():
+    transmittance, inscatter = f32(1 - 2**-16), f32(.01)
+    narrowed_t, narrowed_rgb = half(transmittance), half(inscatter)
+    require(1 - transmittance > f32(1e-5) and narrowed_t == 1, "half store crosses AP branch")
+    require(abs(narrowed_t - transmittance) <= image_budget(transmittance, F(1, 4)), "local T budget")
+    require(abs(narrowed_rgb - inscatter) <= image_budget(inscatter, F(1, 4)), "local RGB budget")
+    actual, reference = F(0), inscatter
+    require(abs(actual - reference) > image_budget(reference), "branch loss exceeds final image budget")
+    # A smooth x*T+I model reports only the small RGB rounding error at x=0.
+    require(abs(narrowed_rgb - reference) <= image_budget(reference), "smooth model misses branch loss")
+    return {"reference_transmittance": float(transmittance), "half_transmittance": float(narrowed_t),
+            "reference_deferred_rgb": float(reference), "half_deferred_rgb": float(actual),
+            "forward_half_rgb": float(narrowed_rgb), "local_checks_pass": True,
+            "smooth_composition_check_passes": True, "deferred_image_admission_pass": False}
+
+
 def main():
     parser = ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
@@ -219,16 +359,19 @@ def main():
     report = {"candidate_scale_context": {"maximum_scene_rgb": 8192, "candidate_pre_exposure": 1},
               "scope": "Exact scalar/componentwise algebra and binary16 counterexamples; not GPU qualification",
               "algebra_checks": check_algebra(),
+              "consumer_interval_checks": check_consumer_intervals(),
               "counterexamples": {"AP strength": amplification_counterexample(),
                                   "dark classification": classification_counterexample(),
-                                  "temporal history": temporal_counterexample()},
+                                  "temporal history": temporal_counterexample(),
+                                  "deferred AP branch": deferred_ap_branch_counterexample()},
               "remaining": ["Justify runtime source/consumer bounds and carry certificate lifetimes",
                             "Implement outward-safe GPU arithmetic, coverage and filtering rules",
                             "Qualify actual GPU composition and temporal behavior before format switching"],
               "verdict": "pass"}
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8", newline="\n")
-    print(f"PASS: {report['algebra_checks']} algebra checks and three per-product acceptance counterexamples: {args.output}")
+    print(f"PASS: {report['algebra_checks']} algebra checks, {report['consumer_interval_checks']} consumer checks "
+          f"and {len(report['counterexamples'])} per-product acceptance counterexamples: {args.output}")
 
 
 if __name__ == "__main__":
