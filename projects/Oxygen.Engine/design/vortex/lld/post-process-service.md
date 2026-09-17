@@ -733,7 +733,7 @@ it does not retroactively remove error already present in reused history. The
 GPU implementation must conservatively account for its own bound-arithmetic
 rounding and reject incomplete certificates.
 
-The checker contains three concrete counterexamples to independent per-product
+The checker contains four concrete counterexamples to independent per-product
 acceptance. An additional 8192-radiance sample makes the existing global selector
 choose P=1, so these examples use a realizable candidate scale:
 
@@ -753,6 +753,48 @@ choose P=1, so these examples use a realizable candidate scale:
   `0.004875` error near unit radiance, exceeding the approximately `0.002500`
   admission allowance and the full meter EV budget. The recurrence bound covers
   the error; resetting error accounting at every store does not.
+- Deferred AP has an additional branch loss: a stored transmittance
+  `1 - 2^-16` rounds to one in FP16. Its opacity changes from above `1e-5` to
+  zero, suppressing an inscatter contribution of approximately `0.01`. Both
+  local RGB/T checks pass; a smooth `background*T + inscatter` model misses
+  this loss because it does not model the deferred consumer's branch.
+
+### Consumer transfer and coverage
+
+The exact-arithmetic consumer oracle follows the shader and blend state together.
+Its interval tests do not establish hardware filtering, division or blend-rounding
+error. These remain required before GPU admission can use the transfer rules.
+
+| Consumer | Transfer before subsequent stages |
+| --- | --- |
+| AP near fade (`AerialPerspective.hlsli`) | `I = weight*sample.rgb`, `T = 1-weight*(1-sample.a)`; strength scales `I` only |
+| Lit forward AP (`ForwardMesh_PS.hlsl`) | `C = background*T + I`; material coverage is returned separately |
+| Deferred AP (`AtmosphereCompose.hlsl`, `AtmosphereComposePass.cpp`) | `alpha = saturate(1-T)`; RGB source is `I/alpha` only when `alpha > 1e-5`, otherwise zero; `SrcAlpha/InvSrcAlpha` blending therefore contributes `I` or zero, plus `background*T` in exact arithmetic |
+| Fog (`Fog.hlsl`, `FogPass.cpp`) | `C = volume.rgb + height.rgb*volume.T + background*height.T*volume.T`; RGB blending uses `One/InvSrcAlpha` |
+| Environment destination coverage | `A_out = 1-T + A_in*T`, with the combined height/volume `T` for fog |
+
+For deferred AP, an opacity interval wholly at or below the threshold contributes
+zero; one wholly above contributes the inscatter interval; one spanning the
+threshold requires the union of both results. Equality belongs to the zero branch.
+Do not replace this consumer with the forward transfer during admission.
+
+Preserve the correlation in destination coverage: for independent intervals
+`A=[a0,a1]` and `T=[t0,t1]` within `[0,1]`, the enclosure is
+`[1-(1-a0)*t1, 1-(1-a1)*t0]`. Treating the two occurrences of `T` as unrelated
+needlessly widens coverage and can exceed one.
+
+The histogram first computes
+`weight = floor(saturate(profile*mask*coverage)*4095 + 0.5)` and skips zero-weight
+samples. Only positive-weight samples divide RGB by actual coverage, with **no
+denominator floor**. The existing suitability image check's `max(alpha,1e-6)`
+is not the histogram's normalization operation. A coverage interval must preserve
+quantized weight; a boundary-spanning interval cannot certify that sample's mass.
+For stable positive weight and nonnegative RGB interval `[c0,c1]`, normalize to
+`[c0/a1,c1/a0]`. Stable zero weight skips division, including a zero profile/mask.
+
+`consumer-error-oracle.json` records 26,006 exact consumer/coverage checks and the
+additional deferred-branch counterexample. These supplement the 48,000 affine
+algebra checks; none is a substitute for native consumer qualification.
 
 Before closing EX05-15, implement and verify certificate transport, actual
 consumer coefficients/source bounds, filtering, coverage, history identity and
