@@ -710,6 +710,8 @@ auto ExposurePass::EvaluateFp16Products(RenderContext& ctx,
   track(*frame->buffer, graphics::ResourceStates::kShaderResource);
   track(
     *frame->current_state->buffer, graphics::ResourceStates::kShaderResource);
+  track(*frame->current_state->status_buffer,
+    graphics::ResourceStates::kShaderResource);
   track(*report_buffer, graphics::ResourceStates::kUnorderedAccess);
   if (metering.metering_mask) {
     TrackTextureFromKnownOrInitial(*recorder, *metering.metering_mask);
@@ -748,7 +750,7 @@ auto ExposurePass::EvaluateFp16Products(RenderContext& ctx,
         config.Exposure().authored.min_log_luminance),
       std::bit_cast<std::uint32_t>(config.Exposure().authored.black_influence),
       std::bit_cast<std::uint32_t>(product ? product->consumer_rgb_gain : 1.0F),
-      0U, 0U, 0U };
+      frame->current_state->status_srv_index.get(), 0U, 0U };
     const auto slot = suitability_constants_publisher_->Publish(
       ctx.current_view.view_id, constants);
     CHECK_F(slot.IsValid());

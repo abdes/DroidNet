@@ -28,7 +28,7 @@ def build_report(controller, report, capture_path, report_path):
             raise RuntimeError("Suitability constants/report are not uniquely bound")
         c = constants[0]
         words = struct.unpack("<24I", bytes(controller.GetBufferData(c.resource, c.byteOffset, 96)))
-        if words[20:] != (0x3f800000, 0, 0, 0):
+        if words[20] != 0x3f800000 or words[21] == 0xffffffff or words[22:] != (0, 0):
             raise RuntimeError("Default consumer gain/reserved ABI mismatch")
         output = outputs[0]
         values = struct.unpack("<2f10I", bytes(controller.GetBufferData(output.resource, output.byteOffset, 48)))

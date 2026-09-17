@@ -27,7 +27,7 @@ def build_report(controller, report, capture_path, report_path):
         if check_constants:
             c = check_constants[0]
             words = struct.unpack("<24I", bytes(controller.GetBufferData(c.resource, c.byteOffset, 96)))
-            if words[20:] != (0x3f800000, 0, 0, 0):
+            if words[20] != 0x3f800000 or words[21] == 0xffffffff or words[22:] != (0, 0):
                 raise RuntimeError("SceneColor conversion must use unit consumer gain")
             if not words[7] & 16 or words[9] != 1024:
                 raise RuntimeError("The conversion check must use current P and product 11")

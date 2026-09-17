@@ -48,7 +48,7 @@ def build_report(controller, report, capture_path, report_path):
         if words[8] != 6:
             continue
         gain = struct.unpack_from("<f", raw, 80)[0]
-        if words[21:] != (0, 0, 0):
+        if words[21] == 0xffffffff or words[22:] != (0, 0):
             raise RuntimeError("Nonzero qualification padding")
         if scene:
             sources = [x for x in reads if str(x.resource) in volume_gains]

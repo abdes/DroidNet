@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <array>
+#include <bit>
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
@@ -5166,6 +5167,117 @@ NOLINT_TEST_F(ExposureGpuTest, SuitabilityUsesMeterMaskAndCoverageWeights)
     0U);
 }
 
+NOLINT_TEST_F(ExposureGpuTest, SuitabilityRetainsProducerAndHistoryError)
+{
+  struct Case {
+    float observed;
+    HdrErrorBoundsData bounds;
+    float gain;
+    std::uint32_t failure;
+    float anchor { 8192.0F };
+    bool meter { false };
+    bool huge_bound { false };
+  };
+  const std::array cases { Case { 1.01F, {}, 1, 0 },
+    Case { 1.01F, { .rgb_absolute = .01F }, 1, 4 },
+    Case { 1.01F, { .rgb_relative = .02F }, 1, 4 },
+    Case { 1.01F, { .rgb_absolute = 1e-7F }, 1, 0 },
+    Case { 0, { .rgb_absolute = 1e-8F }, 1, 0 },
+    Case { 0, { .rgb_absolute = 1e-8F }, 1e6F, 4 },
+    Case {
+      1.01F, { .rgb_absolute = std::numeric_limits<float>::infinity() }, 1, 4 },
+    Case { 1.01F, { .rgb_relative = 1.0F }, 1, 4 },
+    Case { 1.01F, { .rgb_absolute = -.01F }, 1, 4 },
+    Case { 1.01F, { .transmittance_absolute = .01F }, 1, 4 },
+    Case { 1.01F, { .transmittance_relative = .02F }, 1, 4 },
+    Case { 1.01F, { .transmittance_relative = 1.0F }, 1, 4 },
+    Case { 8180.0F, { .rgb_absolute = 16.0F }, 1, 0, 1.0F },
+    Case { 0, { .rgb_absolute = 1e-8F }, 1, 8, 8192.0F, true },
+    Case { 0, { .rgb_absolute = std::bit_cast<float>(0x7f7ffff0U) }, 1, 4, 8192,
+      false, true },
+    Case { 0, { .rgb_absolute = std::bit_cast<float>(0x7f7ffff1U) }, 1, 4, 8192,
+      false, true },
+    Case { 0, { .rgb_absolute = std::bit_cast<float>(0x7f7ffff2U) }, 1, 4, 8192,
+      false, true },
+    Case { 0, { .rgb_absolute = std::bit_cast<float>(0x7f7ffff3U) }, 1, 4, 8192,
+      false, true } };
+  auto settings = scene::ExposureSettings {};
+  settings.mode = engine::ExposureMode::kManual;
+  settings.key = 12.5F;
+  settings.manual_ev = 0.0F;
+  settings.black_influence = 1.0F;
+  const auto config = SharedConfig(settings);
+  const auto capture = BeginOptionalCapture();
+  for (std::size_t index = 0; index < cases.size(); ++index) {
+    SCOPED_TRACE(index);
+    const auto& test = cases[index];
+    const auto anchor = Uniform(test.anchor, 1U, 1U);
+    const std::array<Pixel, 1> pixel { Pixel {
+      test.observed, test.observed, test.observed, .5F } };
+    const auto fog = MakeSignal(1U, 1U, pixel);
+    ctx_.frame_sequence = frame::SequenceNumber { ++sequence_ };
+    const auto frame = pass_->ResolveFrame(ctx_, config, { .use_fp32 = true });
+    ASSERT_NE(frame, nullptr);
+    const auto solved = RecordShared(anchor, config);
+    ASSERT_TRUE(solved.executed);
+    // Controlled GPU inputs, independent of the producer's bound arithmetic.
+    // A bad unrelated sky certificate must not contaminate the fog record.
+    std::array<HdrErrorBoundsData, 3> tail {};
+    tail[0].rgb_absolute = std::numeric_limits<float>::infinity();
+    tail[2] = test.bounds;
+    auto upload = CreateUploadBuffer(SizeBytes { sizeof(tail) });
+    upload->Update(tail.data(), sizeof(tail), 0U);
+    {
+      auto recorder = AcquireRecorder("Retained error fixture");
+      EnsureTracked(*recorder, upload, ResourceStates::kGenericRead);
+      ASSERT_TRUE(recorder->AdoptKnownResourceState(
+        *frame->current_state->status_buffer));
+      recorder->RequireResourceState(
+        *frame->current_state->status_buffer, ResourceStates::kCopyDest);
+      recorder->FlushBarriers();
+      recorder->CopyBuffer(
+        *frame->current_state->status_buffer, 80U, *upload, 0U, sizeof(tail));
+      recorder->RequireResourceStateFinal(
+        *frame->current_state->status_buffer, ResourceStates::kShaderResource);
+    }
+    const std::array products {
+      postprocess::ExposurePass::HdrProduct {
+        .texture = anchor.texture.get(), .srv = anchor.srv, .id = 11U },
+      postprocess::ExposurePass::HdrProduct { .texture = fog.texture.get(),
+        .srv = fog.srv,
+        .id = 10U,
+        .metering = test.meter,
+        .transmittance = true,
+        .consumer_rgb_gain = test.gain }
+    };
+    ASSERT_TRUE(pass_->EvaluateFp16Products(ctx_, frame, config, products, {}));
+    const auto report = Read<HdrSuitabilityData>(
+      *frame->suitability_buffer, ResourceStates::kShaderResource);
+    EXPECT_EQ(report.failure_flags, test.failure);
+    EXPECT_EQ(report.image_failures, (test.failure & 4U) != 0U ? 1U : 0U);
+    EXPECT_EQ(report.metering_failures, (test.failure & 8U) != 0U ? 1U : 0U);
+    if (!test.huge_bound)
+      EXPECT_EQ(report.candidate_pre_exposure, 1.0F);
+    EXPECT_EQ(report.checked_samples, 2U);
+    if (test.failure != 0U)
+      EXPECT_EQ(report.first_failure_product, 10U);
+    if (test.anchor == 1.0F)
+      EXPECT_GE(report.maximum_scene_rgb, 8196.0F);
+    ASSERT_TRUE(pass_->FinalizeFp16Suitability(ctx_, frame,
+      { .product_layout_revision = 1U,
+        .expected_products = (1U << 9U) | (1U << 10U) }));
+    if (test.failure != 0U) {
+      const auto status = Read<ExposureCompletedStatus>(
+        *frame->current_state->status_buffer, ResourceStates::kUnorderedAccess);
+      EXPECT_EQ(status.fp16_eligible_streak, 0U);
+      EXPECT_EQ(status.flags & 4U, 0U);
+    }
+    EXPECT_EQ(ReadState(solved).displayed_scale, 1.0F);
+  }
+  if (capture)
+    EXPECT_TRUE(capture->EndCapture());
+}
+
 NOLINT_TEST_F(ExposureGpuTest,
   SuitabilityRgbGainLeavesTransmissionUnscaledAndAvoidsCombinedGainOverflow)
 {
@@ -6830,6 +6942,11 @@ NOLINT_TEST_F(ExposureGpuTest,
       EXPECT_GT(
         error, 0.0); // FP32 storage does not erase reused history error.
       EXPECT_GT(bounds.rgb_absolute + bounds.rgb_relative, 0.0F);
+      const auto qualification = Read<HdrSuitabilityData>(
+        *probe->frame->suitability_buffer, ResourceStates::kShaderResource);
+      EXPECT_NE(qualification.failure_flags & 4U, 0U);
+      EXPECT_EQ(qualification.first_failure_product, 10U);
+      EXPECT_EQ(storage.completed.fp16_eligible_streak, 0U);
     }
     if (step == 72U) {
       EXPECT_LT(error, last_half_error);
@@ -6842,6 +6959,10 @@ NOLINT_TEST_F(ExposureGpuTest,
       EXPECT_EQ(bounds.transmittance_relative, 0.0F);
       EXPECT_EQ(bounds.transmittance_absolute, 0.0F);
       EXPECT_EQ(storage.completed.flags & 16U, 0U);
+      const auto qualification = Read<HdrSuitabilityData>(
+        *probe->frame->suitability_buffer, ResourceStates::kShaderResource);
+      EXPECT_EQ(qualification.failure_flags, 0U);
+      EXPECT_EQ(storage.completed.fp16_eligible_streak, 1U);
     }
     renderer_->OnFrameEnd(observer_ptr { &frame });
     WaitForQueueIdle();
