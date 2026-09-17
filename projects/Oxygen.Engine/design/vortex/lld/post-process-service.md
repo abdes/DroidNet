@@ -790,9 +790,12 @@ representable opacities on either side of the removed threshold, nonzero
 backgrounds and partial coverage. Its expected values use an independent
 double-precision transfer, not production math helpers. The capture checker
 [`AnalyzeRenderDocApComposition.py`](../../../tools/vortex/AnalyzeRenderDocApComposition.py)
-reads actual LUT inputs and before/after targets for all 72 draws. This qualifies
-that controlled consumer transfer; actual forward raster and mixed-scene image
-acceptance remain separate tracker items.
+reads actual LUT inputs and before/after targets for all 72 draws. The MultiView
+`atmosphere` fixture additionally qualifies actual deferred/alpha-one-forward
+image agreement on isolated emissive cards and inspects mixed translucent
+presentation. Its binding audit verifies the staged authored sun, disabled local
+lighting/IBL, lit scalar materials and AP sampling. This bounded fixture does not
+establish cumulative quantization bounds or general material/light calibration.
 
 Preserve the correlation in destination coverage: for independent intervals
 `A=[a0,a1]` and `T=[t0,t1]` within `[0,1]`, the enclosure is

@@ -165,3 +165,35 @@ canonical light count/kinds/flags, consumed grid ranges/indices, and nonzero
 forward SceneColor. The disabled case requires zero scene radiance. These are
 binding/contribution checks; calibrated forward/deferred brightness and shadow
 parity require their own acceptance cases.
+
+`atmosphere` fixes both views at Manual EV2, key 12.5, compensation zero,
+with paused poses and emissive cards on the lit shader path. AP starts at
+zero distance, uses scattering strength 0.01 and an authored 1000-lux sun.
+The proof disables the standard point/spot lights and replaces the sample meshes
+with cards facing -Y. Both cameras are in front (-Y); the sun is behind (+Y),
+so visible card normals have nonpositive N·L. No authored specular-factor switch
+is used to claim isolation. The background card stays opaque throughout.
+DemoShell uses the existing scene-authored environment mode for this scenario,
+so its override profile cannot replace the proof sun or atmosphere settings.
+The complete initial recipe is staged before scene publication, including the
+sun, so paused execution starts with coherent environment inputs.
+GPU frames before 44 use opaque deferred cards; frames 44–47 use the same
+four foreground cards as alpha-one forward materials; from frame 48 the first
+card is half-alpha forward and the others are opaque.
+Capture frames 42, 46 and 50 (GPU frames 43, 47 and 51). Analyze each with
+`AnalyzeRenderDocMultiViewExposure.py`, then
+`AnalyzeRenderDocMultiViewAtmosphere.py` using `-PassName ApDeferred`,
+`ApForward` and `ApMixed`, respectively. Use matching report prefixes ending in
+`.exposure.txt` and `.ap.txt`. Run `Assert-MultiViewAtmosphere.py --deferred
+<frame42.ap.json> --forward <frame46.ap.json> --mixed <frame50.ap.json> --output
+<result.json>` with NumPy and Pillow. It compares every HDR pixel at the frozen
+0.5% relative plus `1e-5` absolute budget. Passing the ordinary exposure analyzer
+alone does not establish this comparison. Inspect all three presented phases.
+The comparison also requires a measured AP contribution on at least 100 pixels
+per view/phase. On AP-affected geometry, fewer than 1% of mapped pixels may be
+near-white in all RGB channels (codes >=250), and at least 5% must retain a
+channel spread above eight codes. These readability checks supplement the raw
+float comparison and native image inspection.
+The grid is a diagnostic overlay using opaque depth; it may cross forward cards
+that do not write depth. The raw scene comparison precedes that overlay and does
+not claim identical final grid occlusion between material domains.

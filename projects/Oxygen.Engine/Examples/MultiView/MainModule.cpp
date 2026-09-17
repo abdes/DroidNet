@@ -142,7 +142,10 @@ MainModule::MainModule(
   const DemoAppContext& app, MainModuleConfig config) noexcept
   : Base(app)
   , app_(app)
-  , scene_bootstrapper_(config.point_light_enabled, config.spot_light_enabled)
+  , scene_bootstrapper_(config.point_light_enabled
+        && config.exposure_proof != ExposureProofScenario::kAtmosphere,
+      config.spot_light_enabled
+        && config.exposure_proof != ExposureProofScenario::kAtmosphere)
   , config_(std::move(config))
 {
 
@@ -197,6 +200,10 @@ auto MainModule::OnAttachedImpl(
   };
   shell_config.enable_camera_rig = !exposure_proof;
   shell_config.enable_renderer_bound_panels = false;
+  if (config_.exposure_proof == ExposureProofScenario::kAtmosphere) {
+    shell_config.force_environment_override = false;
+    shell_config.initial_preview_sun_enabled = false;
+  }
 
   CHECK_F(shell->Initialize(shell_config),
     "MultiView: DemoShell initialization failed");
@@ -231,6 +238,9 @@ auto MainModule::OnAttachedImpl(
   shell->SetStagedMainCamera(main_camera_node_);
   scene_bootstrapper_.BindToScene(staged_scene);
   (void)scene_bootstrapper_.EnsureSceneWithContent();
+  if (config_.exposure_proof == ExposureProofScenario::kAtmosphere) {
+    scene_bootstrapper_.ApplyAtmosphereProof(0U);
+  }
   const auto extent = ResolveRenderExtent();
   if (HasPositiveExtent(extent)) {
     UpdateCameras(extent);
@@ -328,7 +338,10 @@ auto MainModule::UpdateCameras(const platform::window::ExtentT& extent) -> void
       auto& cam = cam_opt->get();
 
       // Frame the sample objects around their shared center.
-      constexpr glm::vec3 pip_position = glm::vec3(-5.0F, 0.4F, 4.0F);
+      const glm::vec3 pip_position
+        = config_.exposure_proof == ExposureProofScenario::kAtmosphere
+        ? glm::vec3(-5.0F, -6.0F, 4.0F)
+        : glm::vec3(-5.0F, 0.4F, 4.0F);
       pip_camera_node_.GetTransform().SetLocalPosition(pip_position);
 
       constexpr glm::vec3 target = glm::vec3(-0.75F, 0.0F, 0.0F);
@@ -491,6 +504,11 @@ auto MainModule::OnFrameStart(
 
   // Ensure content exists
   (void)scene_bootstrapper_.EnsureSceneWithContent();
+
+  if (config_.exposure_proof == ExposureProofScenario::kAtmosphere) {
+    scene_bootstrapper_.ApplyAtmosphereProof(
+      context->GetFrameSequenceNumber().get());
+  }
 
   // Ensure drone is configured once the rig is available
   const auto rig = shell.GetCameraRig();
@@ -938,6 +956,13 @@ auto MainModule::UpdateComposition(oxygen::engine::FrameContext& context,
     auto exposure = scene::ExposureSettings {};
     exposure.key = 12.5F;
     exposure.compensation_ev = view.id == pip_view_id_ ? 2.0F : 0.0F;
+    if (proof == ExposureProofScenario::kAtmosphere) {
+      exposure.mode = engine::ExposureMode::kManual;
+      exposure.manual_ev = 2.0F;
+      exposure.compensation_ev = 0.0F;
+      view.with_atmosphere = true;
+      view.with_height_fog = false;
+    }
     view.force_wireframe = false;
     if (proof == ExposureProofScenario::kModes && view.id == pip_view_id_) {
       if (frame >= 44U && frame < 48U) {
@@ -984,7 +1009,7 @@ auto MainModule::UpdateComposition(oxygen::engine::FrameContext& context,
       || view.exposure_source_view_id != kInvalidViewId) {
       continue;
     }
-    if (frame == 32U
+    if ((frame == 32U && proof != ExposureProofScenario::kAtmosphere)
       || (proof == ExposureProofScenario::kShared && frame == 44U)) {
       const auto request = renderer->QueueExposureTransition(
         view.view_state_handle, vortex::ExposureTransitionPolicy::kRemeter);

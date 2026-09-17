@@ -231,7 +231,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
           .WithOption(Option::WithKey("exposure-proof")
               .About("Exposure proof: none, independent, shared, main-only, "
                      "pip-only, reordered, source-loss, viewport, lifetime, "
-                     "window-resize, modes")
+                     "window-resize, modes, atmosphere")
               .Long("exposure-proof")
               .WithValue<std::string>()
               .DefaultValue("none")
@@ -375,6 +375,8 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
       main_module_config.exposure_proof = ExposureProof::kWindowResize;
     } else if (exposure_proof_value == "modes") {
       main_module_config.exposure_proof = ExposureProof::kModes;
+    } else if (exposure_proof_value == "atmosphere") {
+      main_module_config.exposure_proof = ExposureProof::kAtmosphere;
     } else if (exposure_proof_value != "none") {
       throw std::invalid_argument("Unknown exposure proof scenario");
     }
