@@ -2339,6 +2339,15 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
   // Stage 14: reserved - EnvironmentLightingService volumetrics
 
   // Stage 15: Sky / atmosphere / fog
+  if (post_process_ && ctx.current_view.frame_exposure
+    && base_pass_wrote_scene_color && !wireframe_only
+    && !rendered_debug_visualization) {
+    auto& source = scene_textures.GetSceneColor();
+    const auto source_srv = ShaderVisibleIndex { RegisterSceneTextureView(
+      source, MakeSrvDesc(source, source.GetDescriptor().format)) };
+    static_cast<void>(
+      post_process_->CapturePreEnvironmentRange(ctx, source, source_srv));
+  }
   if (environment_ != nullptr && wants_environment && !wireframe_only
     && !IsNonIblDebugMode(ctx.shader_debug_mode)) {
     environment_->RenderSkyAndFog(ctx, scene_textures);
