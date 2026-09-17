@@ -83,6 +83,12 @@ def main():
     changed_order = by_extent(reordered)
     if len(expected) != 2 or expected.keys() != changed_order.keys():
         raise AssertionError("Proof views require distinct matching extents")
+    isolated_keys = [
+        (item["views"][0]["width"], item["views"][0]["height"])
+        for item in (main_view, pip_view)
+    ]
+    if len(set(isolated_keys)) != 2 or set(isolated_keys) != expected.keys():
+        raise AssertionError("Isolated reports must cover both distinct family views")
     results = {}
     for label, item in (("main", main_view), ("pip", pip_view)):
         view = item["views"][0]
