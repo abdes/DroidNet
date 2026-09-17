@@ -154,6 +154,16 @@ public:
     return frame && submitted_composition_input_.contains(frame.get());
   }
 
+  //! Propagate only retained AP store error through the opaque radiance
+  //! transfer.
+  //! True means submitted; inspect the GPU record for well-formed inputs.
+  [[nodiscard]] OXGN_VRTX_API auto PropagateOpaqueApError(RenderContext& ctx,
+    const FrameLease& frame, float scattering_strength) -> bool;
+  [[nodiscard]] auto HasOpaqueApError(const FrameLease& frame) const -> bool
+  {
+    return frame && submitted_opaque_ap_error_.contains(frame.get());
+  }
+
   //! Evaluate FP32 reference products without granting normal-mode admission.
   enum class SuitabilityScale { kCandidate, kCurrentFrame };
   [[nodiscard]] OXGN_VRTX_API auto EvaluateFp16Products(RenderContext& ctx,
@@ -281,6 +291,7 @@ private:
   std::unordered_set<const FrameResources*> submitted_suitability_;
   std::unordered_set<const FrameResources*> submitted_conversion_;
   std::unordered_set<const FrameResources*> submitted_composition_input_;
+  std::unordered_set<const FrameResources*> submitted_opaque_ap_error_;
   std::array<std::vector<FrameLease>, frame::kFramesInFlight.get()>
     frame_bindings_;
   std::vector<std::shared_ptr<StateResources>> state_pool_;

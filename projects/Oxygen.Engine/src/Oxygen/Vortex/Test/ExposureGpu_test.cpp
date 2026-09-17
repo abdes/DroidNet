@@ -5313,6 +5313,182 @@ NOLINT_TEST_F(ExposureGpuTest, PreEnvironmentRangeReportsNonfiniteInput)
   }
 }
 
+NOLINT_TEST_F(ExposureGpuTest, OpaqueApErrorInvalidatesWhenInputCaptureChanges)
+{
+  auto settings = scene::ExposureSettings {};
+  settings.mode = engine::ExposureMode::kManual;
+  settings.key = 12.5F;
+  settings.manual_ev = 0.0F;
+  ctx_.frame_sequence = frame::SequenceNumber { ++sequence_ };
+  const auto frame = pass_->ResolveFrame(ctx_, SharedConfig(settings), {});
+  ASSERT_NE(frame, nullptr);
+  const auto small_source = Uniform(1.0F);
+  const auto large = Uniform(100.0F);
+  ASSERT_TRUE(pass_->CapturePreEnvironmentRange(
+    ctx_, frame, *small_source.texture, small_source.srv));
+  const HdrErrorBoundsData bounds { .transmittance_absolute = .125F };
+  auto upload = CreateUploadBuffer(SizeBytes { sizeof(bounds) });
+  upload->Update(&bounds, sizeof(bounds), 0U);
+  {
+    auto recorder = AcquireRecorder("Opaque AP dependency bounds");
+    EnsureTracked(*recorder, upload, ResourceStates::kGenericRead);
+    ASSERT_TRUE(
+      recorder->AdoptKnownResourceState(*frame->current_state->status_buffer));
+    recorder->RequireResourceState(
+      *frame->current_state->status_buffer, ResourceStates::kCopyDest);
+    recorder->FlushBarriers();
+    recorder->CopyBuffer(
+      *frame->current_state->status_buffer, 96U, *upload, 0U, sizeof(bounds));
+    recorder->RequireResourceStateFinal(
+      *frame->current_state->status_buffer, ResourceStates::kUnorderedAccess);
+  }
+  const auto read_bound = [&] {
+    return Read<ExposureStatusStorage>(
+      *frame->current_state->status_buffer, ResourceStates::kUnorderedAccess)
+      .opaque_ap_error;
+  };
+  ASSERT_TRUE(pass_->PropagateOpaqueApError(ctx_, frame, 1.0F));
+  ASSERT_TRUE(pass_->HasOpaqueApError(frame));
+  EXPECT_GE(read_bound().rgb_absolute, .125F);
+  ASSERT_TRUE(
+    pass_->CapturePreEnvironmentRange(ctx_, frame, *large.texture, large.srv));
+  EXPECT_FALSE(pass_->HasOpaqueApError(frame));
+  EXPECT_EQ(read_bound().valid, 0U);
+  ASSERT_TRUE(pass_->PropagateOpaqueApError(ctx_, frame, 1.0F));
+  EXPECT_GE(read_bound().rgb_absolute, 12.5F);
+
+  for (const bool invalid_srv : { true, false }) {
+    SCOPED_TRACE(invalid_srv);
+    auto& backend = static_cast<ExposureFailureGraphics&>(Backend());
+    if (!invalid_srv)
+      backend.fail_recorder_name = "Vortex Exposure PreEnvironment Range";
+    EXPECT_FALSE(
+      pass_->CapturePreEnvironmentRange(ctx_, frame, *small_source.texture,
+        invalid_srv ? kInvalidShaderVisibleIndex : small_source.srv));
+    backend.fail_recorder_name.clear();
+    EXPECT_FALSE(pass_->HasPreEnvironmentRange(frame));
+    EXPECT_FALSE(pass_->HasOpaqueApError(frame));
+    EXPECT_FALSE(pass_->PropagateOpaqueApError(ctx_, frame, 1.0F));
+    ASSERT_TRUE(pass_->CapturePreEnvironmentRange(
+      ctx_, frame, *small_source.texture, small_source.srv));
+    EXPECT_FALSE(pass_->HasOpaqueApError(frame));
+    EXPECT_EQ(read_bound().valid, 0U);
+    ASSERT_TRUE(pass_->PropagateOpaqueApError(ctx_, frame, 1.0F));
+    EXPECT_TRUE(pass_->HasOpaqueApError(frame));
+    EXPECT_GE(read_bound().rgb_absolute, .125F);
+    EXPECT_LT(read_bound().rgb_absolute, .126F);
+  }
+}
+
+NOLINT_TEST_F(ExposureGpuTest, OpaqueApErrorUsesInputPeakAndActualGain)
+{
+  struct Case {
+    float peak;
+    float gain;
+    HdrErrorBoundsData bounds;
+    bool valid { true };
+    float ev { 0.0F };
+  };
+  const auto infinity = std::numeric_limits<float>::infinity();
+  const auto nan = std::numeric_limits<float>::quiet_NaN();
+  const std::array cases { Case { 32, 8,
+                             { .rgb_relative = .01F,
+                               .rgb_absolute = .002F,
+                               .transmittance_relative = .02F,
+                               .transmittance_absolute = 1e-5F } },
+    Case { 8192, 1, { .transmittance_absolute = 1e-4F } },
+    Case { 1, 1e6F, { .rgb_absolute = 1e-8F } },
+    Case { 16, 8, { .rgb_absolute = .002F, .transmittance_absolute = 1e-5F },
+      true, 3 },
+    Case { 0, 2, { .rgb_absolute = .125F } }, Case { 32, 1, {} },
+    Case { 32, 0, { .rgb_absolute = infinity } },
+    Case { 32, .00005F, { .rgb_absolute = infinity } },
+    Case { 32, .0001F, { .rgb_absolute = .25F } },
+    Case { 1e-30F, 1, { .transmittance_absolute = 1e-30F } },
+    Case { 1, 1, { .rgb_absolute = std::bit_cast<float>(1U) } },
+    Case { 1, infinity, {}, false }, Case { 1, -1, {}, false },
+    Case { 1, nan, {}, false }, Case { 1, 1, { .rgb_relative = 1 }, false },
+    Case { 1, 1, { .transmittance_relative = 1 }, false },
+    Case { 1, 1, { .rgb_absolute = -1 }, false },
+    Case { 1, 1, { .rgb_absolute = std::bit_cast<float>(0x80000001U) }, false },
+    Case { 1, std::bit_cast<float>(0x80000001U), {}, false },
+    Case { 1, 1, { .transmittance_absolute = nan }, false },
+    Case { -1, 1, {}, false }, Case { infinity, 1, {}, false },
+    Case {
+      1, std::numeric_limits<float>::max(), { .rgb_absolute = 2 }, false } };
+  const auto capture = BeginOptionalCapture();
+  for (std::size_t index = 0U; index < cases.size(); ++index) {
+    SCOPED_TRACE(index);
+    const auto& test = cases[index];
+    auto settings = scene::ExposureSettings {};
+    settings.mode = engine::ExposureMode::kManual;
+    settings.key = 12.5F;
+    settings.manual_ev = test.ev;
+    ctx_.frame_sequence = frame::SequenceNumber { ++sequence_ };
+    const auto frame = pass_->ResolveFrame(ctx_, SharedConfig(settings), {});
+    ASSERT_NE(frame, nullptr);
+    EXPECT_FALSE(pass_->PropagateOpaqueApError(ctx_, frame, test.gain));
+    const auto source = Uniform(test.peak);
+    ASSERT_TRUE(pass_->CapturePreEnvironmentRange(
+      ctx_, frame, *source.texture, source.srv));
+    auto upload = CreateUploadBuffer(SizeBytes { sizeof(test.bounds) });
+    upload->Update(&test.bounds, sizeof(test.bounds), 0U);
+    {
+      auto recorder = AcquireRecorder("Opaque AP controlled bounds");
+      EnsureTracked(*recorder, upload, ResourceStates::kGenericRead);
+      ASSERT_TRUE(recorder->AdoptKnownResourceState(
+        *frame->current_state->status_buffer));
+      recorder->RequireResourceState(
+        *frame->current_state->status_buffer, ResourceStates::kCopyDest);
+      recorder->FlushBarriers();
+      recorder->CopyBuffer(*frame->current_state->status_buffer, 96U, *upload,
+        0U, sizeof(test.bounds));
+      recorder->RequireResourceStateFinal(
+        *frame->current_state->status_buffer, ResourceStates::kUnorderedAccess);
+    }
+    const auto before = Read<ExposureStatusStorage>(
+      *frame->current_state->status_buffer, ResourceStates::kUnorderedAccess);
+    ASSERT_TRUE(pass_->PropagateOpaqueApError(ctx_, frame, test.gain));
+    EXPECT_TRUE(pass_->HasOpaqueApError(frame));
+    const auto after = Read<ExposureStatusStorage>(
+      *frame->current_state->status_buffer, ResourceStates::kUnorderedAccess);
+    EXPECT_EQ(std::memcmp(&before, &after, 144U), 0);
+    const auto& actual = after.opaque_ap_error;
+    EXPECT_EQ(actual.valid, test.valid ? 1U : 0U);
+    EXPECT_EQ(actual.reserved, 0U);
+    if (!test.valid) {
+      EXPECT_TRUE(std::isinf(actual.rgb_absolute));
+      continue;
+    }
+    // Independent double arithmetic over the authored binary32 inputs. These
+    // cases have at most two products and a sum; the GPU rounds outward.
+    const double relative = test.gain < .0001F
+      ? 0
+      : std::max(double(test.bounds.rgb_relative),
+          double(test.bounds.transmittance_relative));
+    const double absolute = test.gain < .0001F
+      ? 0
+      : double(test.gain) * test.bounds.rgb_absolute
+        + std::ldexp(double(test.peak), int(test.ev))
+          * test.bounds.transmittance_absolute;
+    EXPECT_GE(double(actual.rgb_relative), relative);
+    EXPECT_GE(double(actual.rgb_absolute), absolute);
+    EXPECT_LE(double(actual.rgb_absolute),
+      absolute * 1.00001 + double(std::numeric_limits<float>::min()) * 1.00001);
+    if (absolute == 0)
+      EXPECT_EQ(actual.rgb_absolute, 0.0F);
+    auto& backend = static_cast<ExposureFailureGraphics&>(Backend());
+    backend.fail_recorder_name = "Vortex Exposure Opaque AP Error";
+    EXPECT_FALSE(pass_->PropagateOpaqueApError(ctx_, frame, test.gain));
+    EXPECT_FALSE(pass_->HasOpaqueApError(frame));
+    backend.fail_recorder_name.clear();
+    ASSERT_TRUE(pass_->PropagateOpaqueApError(ctx_, frame, test.gain));
+    EXPECT_TRUE(pass_->HasOpaqueApError(frame));
+  }
+  if (capture)
+    EXPECT_TRUE(capture->EndCapture());
+}
+
 NOLINT_TEST_F(ExposureGpuTest, SuitabilityRetainsProducerAndHistoryError)
 {
   struct Case {

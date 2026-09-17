@@ -298,6 +298,7 @@ auto ExposurePass::OnFrameStart(
   submitted_suitability_.clear();
   submitted_conversion_.clear();
   submitted_composition_input_.clear();
+  submitted_opaque_ap_error_.clear();
   prior_states_.clear();
   bootstrap_states_.clear();
   for (const auto& [handle, view] : exposure_states_) {
@@ -660,6 +661,7 @@ auto ExposurePass::CapturePreEnvironmentRange(RenderContext& ctx,
 {
   CHECK_NOTNULL_F(frame.get());
   submitted_composition_input_.erase(frame.get());
+  submitted_opaque_ap_error_.erase(frame.get());
   const auto& desc = source.GetDescriptor();
   if (!source_srv.IsValid() || desc.format != Format::kRGBA32Float
     || desc.texture_type != TextureType::kTexture2D || desc.sample_count != 1U)
@@ -712,6 +714,59 @@ auto ExposurePass::CapturePreEnvironmentRange(RenderContext& ctx,
   const bool submitted = recording && recording->IsSubmitted();
   if (submitted)
     submitted_composition_input_.insert(frame.get());
+  return submitted;
+}
+
+auto ExposurePass::PropagateOpaqueApError(RenderContext& ctx,
+  const FrameLease& frame, const float scattering_strength) -> bool
+{
+  CHECK_NOTNULL_F(frame.get());
+  submitted_opaque_ap_error_.erase(frame.get());
+  if (!HasPreEnvironmentRange(frame))
+    return false;
+  auto gfx = renderer_.GetGraphics();
+  if (!gfx)
+    return false;
+  PreparePublishers(ctx);
+  EnsurePipelines();
+  auto recorder = gfx->AcquireCommandRecorder(
+    gfx->QueueKeyFor(graphics::QueueRole::kGraphics),
+    "Vortex Exposure Opaque AP Error");
+  if (!recorder)
+    return false;
+  const auto recording = recorder->GetCommandListForInspection();
+  auto& status = *frame->current_state->status_buffer;
+  if (!recorder->AdoptKnownResourceState(status))
+    recorder->BeginTrackingResourceState(
+      status, graphics::ResourceStates::kCommon, false);
+  if (!recorder->AdoptKnownResourceState(*frame->buffer))
+    recorder->BeginTrackingResourceState(
+      *frame->buffer, graphics::ResourceStates::kCommon, false);
+  recorder->RequireResourceState(
+    status, graphics::ResourceStates::kUnorderedAccess);
+  recorder->RequireResourceState(
+    *frame->buffer, graphics::ResourceStates::kShaderResource);
+  auto constants = std::array<std::uint32_t, 24U> {};
+  constants[0] = frame->current_state->status_uav_index.get();
+  constants[2] = frame->srv_index.get();
+  constants[7] = 64U;
+  constants[20] = std::bit_cast<std::uint32_t>(scattering_strength);
+  const auto slot = suitability_constants_publisher_->Publish(
+    ctx.current_view.view_id, constants);
+  CHECK_F(slot.IsValid());
+  recorder->FlushBarriers();
+  recorder->SetPipelineState(*suitability_pipelines_[2]);
+  recorder->SetComputeRoot32BitConstant(
+    static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants), 0U,
+    0U);
+  recorder->SetComputeRoot32BitConstant(
+    static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants),
+    slot.get(), 1U);
+  recorder->Dispatch(1U, 1U, 1U);
+  recorder.reset();
+  const bool submitted = recording && recording->IsSubmitted();
+  if (submitted)
+    submitted_opaque_ap_error_.insert(frame.get());
   return submitted;
 }
 

@@ -11,6 +11,14 @@
 
 static float HdrBoundInfinity() { return asfloat(0x7f800000u); }
 
+// Bit validation rejects negative subnormal metadata even on FTZ hardware.
+// Negative zero is mathematically zero and remains acceptable.
+static bool HdrFiniteNonnegative(float value)
+{
+    const uint bits = asuint(value);
+    return bits <= 0x7f7fffffu || bits == 0x80000000u;
+}
+
 // Preserve exact zero. Positive subnormal bounds round outward to the smallest
 // normal value so later FP32 arithmetic cannot silently flush the bound away.
 static float HdrBoundUp(float value)

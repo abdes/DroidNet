@@ -701,6 +701,7 @@ void VortexExposureFrameCS(uint3 dispatch_id : SV_DispatchThreadID)
     status.Store4(96u, 0u.xxxx);
     status.Store4(112u, 0u.xxxx);
     status.Store4(128u, 0u.xxxx);
+    status.Store4(144u, 0u.xxxx);
     ExposureTargetData initial = (ExposureTargetData)0;
     initial.initial_log_gain = pass.initial_log_gain;
     ExposureStateData state = LoadPrevious(pass.history_srv, initial);
@@ -811,7 +812,7 @@ static float4 SuitabilityProducerBounds(SuitabilityConstants pass)
 
 static bool SuitabilityBoundValid(float2 bound)
 {
-    return all(isfinite(bound)) && all(bound >= 0.0) && bound.x < 1.0;
+    return HdrFiniteNonnegative(bound.x) && HdrFiniteNonnegative(bound.y) && bound.x < 1.0;
 }
 
 static float2 SuitabilityReferenceInterval(float observed, float2 bound)
@@ -953,6 +954,7 @@ void ClearSuitability(uint3 pixel : SV_DispatchThreadID)
     RWByteAddressBuffer report = ResourceDescriptorHeap[pass.report_uav];
     if ((pass.flags & 32u) != 0u) {
         report.Store4(128u, uint4(0u, 1u, 0u, 0u));
+        report.Store4(144u, uint4(0u, asuint(HdrBoundInfinity()), 0u, 0u));
         return;
     }
     report.Store4(0u, uint4(asuint(1.0), 0u, 0u, 0u));
@@ -1035,6 +1037,33 @@ void SelectSuitabilityCandidate(uint3 pixel : SV_DispatchThreadID)
     StructuredBuffer<SuitabilityConstants> constants = ResourceDescriptorHeap[g_PassConstantsIndex];
     const SuitabilityConstants pass = constants[0];
     RWByteAddressBuffer report = ResourceDescriptorHeap[pass.report_uav];
+    if ((pass.flags & 64u) != 0u) {
+        const float4 bounds = asfloat(report.Load4(96u));
+        const uint4 input = report.Load4(128u);
+        StructuredBuffer<FrameExposureData> frame = ResourceDescriptorHeap[pass.frame_srv];
+        const float inverse_p = frame[0].one_over_pre_exposure;
+        float2 result = float2(0.0, HdrBoundInfinity());
+        bool valid = input.y == 1u && input.z != 0u
+            && HdrFiniteNonnegative(asfloat(input.x))
+            && isfinite(inverse_p) && inverse_p > 0.0
+            && HdrFiniteNonnegative(pass.consumer_rgb_gain);
+        if (valid && pass.consumer_rgb_gain < 0.0001) {
+            // Match the existing AP consumer's disabled-strength branch.
+            result = 0.0.xx;
+        } else if (valid && SuitabilityBoundValid(bounds.xy) && SuitabilityBoundValid(bounds.zw)) {
+            const float maximum = HdrUpperProduct(asfloat(input.x), inverse_p);
+            // C is the exact opaque FP32 input. For I + C*T, nonnegativity
+            // bounds relative error by max(rI,rT); the source peak bounds C*aT.
+            result = float2(max(bounds.x, bounds.z),
+                HdrUpperSum(HdrUpperProduct(maximum, bounds.w),
+                    HdrUpperProduct(pass.consumer_rgb_gain, bounds.y)));
+            valid = isfinite(maximum) && SuitabilityBoundValid(result);
+        } else {
+            valid = false;
+        }
+        report.Store4(144u, uint4(asuint(valid ? result : float2(0.0, HdrBoundInfinity())), valid ? 1u : 0u, 0u));
+        return;
+    }
     const float maximum = asfloat(report.Load(4u));
     float p = maximum > 0.0 ? exp2(clamp(floor(log2(16376.0) - log2(maximum)), -32.0, 32.0)) : 1.0;
     if (maximum * p > 16376.0 && p > exp2(-32.0)) p *= 0.5;
