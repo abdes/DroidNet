@@ -6,6 +6,7 @@
 
 #include "Core/Bindless/Generated.BindlessAbi.hlsl"
 #include "Vortex/Contracts/View/ExposureStateData.hlsli"
+#include "Vortex/Contracts/View/HdrErrorBounds.hlsli"
 #include "Vortex/Contracts/Definitions/SceneDefinitions.hlsli"
 
 #define GROUP_SIZE 16
@@ -793,8 +794,30 @@ struct SuitabilityConstants {
     uint product; uint expected_mask; uint mask_srv; uint meter_mode;
     uint left; uint top; uint meter_width; uint meter_height;
     float radius; float budget_share; float min_log_luminance; float black_influence;
-    float consumer_rgb_gain; uint3 reserved;
+    float consumer_rgb_gain; uint producer_bounds_srv; uint2 reserved;
 };
+
+static float4 SuitabilityProducerBounds(SuitabilityConstants pass)
+{
+    if (pass.product != 5u && pass.product != 6u && pass.product != 10u)
+        return 0.0.xxxx;
+    if (pass.producer_bounds_srv == K_INVALID_BINDLESS_INDEX)
+        return float4(0.0, HdrBoundInfinity(), 0.0, HdrBoundInfinity());
+    ByteAddressBuffer status = ResourceDescriptorHeap[pass.producer_bounds_srv];
+    return asfloat(status.Load4(HdrProducerBoundOffset(pass.product)));
+}
+
+static bool SuitabilityBoundValid(float2 bound)
+{
+    return all(isfinite(bound)) && all(bound >= 0.0) && bound.x < 1.0;
+}
+
+static float2 SuitabilityReferenceInterval(float observed, float2 bound)
+{
+    // Exact producer records preserve the signed point path used by external
+    // FP32 fixtures. Nonzero affine certificates require nonnegative radiance.
+    return all(bound == 0.0.xx) ? observed.xx : HdrReferenceInterval(observed, bound);
+}
 
 struct SceneColorConversionConstants {
     uint source_srv; uint destination_uav; uint report_srv; uint width;
@@ -946,8 +969,15 @@ void GatherSuitabilityMaximum(uint3 pixel : SV_DispatchThreadID)
         return;
     }
     StructuredBuffer<FrameExposureData> frame = ResourceDescriptorHeap[pass.frame_srv];
-    const float3 scene = abs(sample.rgb) * frame[0].one_over_pre_exposure;
-    const float maximum = max(scene.x, max(scene.y, scene.z));
+    const float3 scene = sample.rgb * frame[0].one_over_pre_exposure;
+    float maximum = max(abs(scene.x), max(abs(scene.y), abs(scene.z)));
+    const float4 bounds = SuitabilityProducerBounds(pass);
+    if (SuitabilityBoundValid(bounds.xy)) {
+        [unroll] for (uint c = 0u; c < 3u; ++c) {
+            const float2 reference = SuitabilityReferenceInterval(scene[c], bounds.xy);
+            if (all(isfinite(reference))) maximum = max(maximum, max(abs(reference.x), abs(reference.y)));
+        }
+    }
     report.InterlockedMax(4u, asuint(maximum), unused);
 }
 
@@ -1001,6 +1031,12 @@ void CheckSuitabilityProduct(uint3 pixel : SV_DispatchThreadID)
         SuitabilityFailure(report, pass.product, 1u, 20u);
         return;
     }
+    const float4 bounds = SuitabilityProducerBounds(pass);
+    if (!SuitabilityBoundValid(bounds.xy)
+        || ((pass.flags & 4u) != 0u && !SuitabilityBoundValid(bounds.zw))) {
+        SuitabilityFailure(report, pass.product, 4u, 28u);
+        return;
+    }
     StructuredBuffer<FrameExposureData> frame = ResourceDescriptorHeap[pass.frame_srv];
     ByteAddressBuffer state = ResourceDescriptorHeap[pass.state_srv];
     const float s = asfloat(state.Load(0u));
@@ -1017,7 +1053,27 @@ void CheckSuitabilityProduct(uint3 pixel : SV_DispatchThreadID)
     const float narrowed_alpha = (pass.flags & 2u) != 0u ? f16tof32(f32tof16(alpha)) : 1.0;
     const float3 reference = scene / max(alpha, 1e-6);
     const float3 narrowed = restored / max(narrowed_alpha, 1e-6);
-    const float3 error = abs(reference - narrowed);
+    float3 reference_low = reference;
+    float3 reference_high = reference;
+    const bool inherited_rgb_error = any(bounds.xy != 0.0.xx);
+    if (inherited_rgb_error) {
+        [unroll] for (uint c = 0u; c < 3u; ++c) {
+            const float2 interval = SuitabilityReferenceInterval(scene[c], bounds.xy);
+            if (!all(isfinite(interval))) {
+                SuitabilityFailure(report, pass.product, 4u, 28u);
+                return;
+            }
+            reference_low[c] = HdrBoundDown(interval.x / max(alpha, 1e-6));
+            reference_high[c] = HdrBoundUp(interval.y / max(alpha, 1e-6));
+        }
+    }
+    // Normalization and the final outward expansion can overflow an endpoint
+    // that was finite before those operations. Inf > Inf is not a rejection.
+    if (!all(isfinite(reference_low)) || !all(isfinite(reference_high))
+        || !all(isfinite(narrowed))) {
+        SuitabilityFailure(report, pass.product, 4u, 28u);
+        return;
+    }
     const float relative_budget = .0025 * pass.budget_share;
     const float absolute_budget = 1e-5 * pass.budget_share;
     // Preserve both the stored product and its amplified contribution. Divide
@@ -1025,12 +1081,23 @@ void CheckSuitabilityProduct(uint3 pixel : SV_DispatchThreadID)
     // could overflow even though the qualification comparison is well-defined.
     const float rgb_absolute_budget = (absolute_budget / max(pass.consumer_rgb_gain, 1.0))
         / max(s, 1.0);
-    bool image_failure = any(error > abs(reference) * relative_budget + rgb_absolute_budget);
+    // The maximum of |candidate-reference|-r*reference on a nonnegative
+    // interval occurs at an endpoint. Include inherited error and this store.
+    bool image_failure = any(abs(reference_low - narrowed) > abs(reference_low) * relative_budget + rgb_absolute_budget)
+        || any(abs(reference_high - narrowed) > abs(reference_high) * relative_budget + rgb_absolute_budget);
     if ((pass.flags & 4u) != 0u) {
         const float t = saturate(sample.a);
-        const float dt = abs(f16tof32(f32tof16(t)) - t);
+        float2 reference_t = SuitabilityReferenceInterval(t, bounds.zw);
+        if (!all(isfinite(reference_t))) {
+            SuitabilityFailure(report, pass.product, 4u, 28u);
+            return;
+        }
+        reference_t = saturate(reference_t);
+        const float candidate_t = f16tof32(f32tof16(t));
         const float maximum = asfloat(report.Load(4u));
-        image_failure = image_failure || dt > t * relative_budget + absolute_budget / max(maximum * max(s, 1.0), 1e-30);
+        const float transmission_absolute_budget = (absolute_budget / max(maximum, 1e-30)) / max(s, 1.0);
+        image_failure = image_failure || any(abs(candidate_t.xx - reference_t)
+            > reference_t * relative_budget + transmission_absolute_budget);
     }
     if (image_failure) SuitabilityFailure(report, pass.product, 4u, 28u);
     uint2 cell; float2 uv;
@@ -1070,6 +1137,23 @@ void CheckSuitabilityProduct(uint3 pixel : SV_DispatchThreadID)
         meter_failure = meter_failure || ((luminance == 0.0) != (narrowed_luminance == 0.0))
             || (luminance > 0.0 && (narrowed_luminance <= 0.0
                 || abs(log2(narrowed_luminance / luminance)) > 1.0 / 1024.0));
+    }
+    if (inherited_rgb_error) {
+        [unroll] for (uint endpoint = 0u; endpoint < 2u; ++endpoint) {
+            const float reference_luminance = Luminance(endpoint == 0u ? reference_low : reference_high);
+            if (!isfinite(reference_luminance)) {
+                meter_failure = true;
+                continue;
+            }
+            const bool reference_dark = IsDarkMeterSample(reference_luminance, pass.min_log_luminance);
+            const uint reference_mass = MeterContribution(weight, reference_dark, pass.black_influence);
+            meter_failure = meter_failure || reference_dark != narrowed_dark || reference_mass != narrowed_mass;
+            if (reference_mass != 0u || narrowed_mass != 0u) {
+                meter_failure = meter_failure || ((reference_luminance == 0.0) != (narrowed_luminance == 0.0))
+                    || (reference_luminance > 0.0 && (narrowed_luminance <= 0.0
+                        || abs(log2(narrowed_luminance / reference_luminance)) > 1.0 / 1024.0));
+            }
+        }
     }
     if (meter_failure) SuitabilityFailure(report, pass.product, 8u, 24u);
 }

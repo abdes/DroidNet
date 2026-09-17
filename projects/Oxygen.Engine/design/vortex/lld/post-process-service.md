@@ -561,8 +561,9 @@ luminance, but weighted/dark classification still preserves the aggregate
 synthetic-dark fallback. A contributing positive sample retains the stated EV
 bound. The evaluator constants retain their original 80-byte prefix with radius, error-budget share,
 minimum log luminance and accepted black influence at offsets 64/68/72/76.
-The record is now 96 bytes: a nonnegative consumer RGB gain is appended at 80,
-with zero-reserved words at 84/88/92. Scene collection captures AP scattering
+The record is 96 bytes: a nonnegative consumer RGB gain is at 80, the current
+producer-bound status SRV is at 84, and zero-reserved words are at 88/92.
+Scene collection captures AP scattering
 strength with the same nonnegative clamp as the consumer. The gain participates
 in the per-view product revision so an old completed certificate cannot survive
 an amplification edit. No additional HDR texture or status buffer is introduced.
@@ -573,6 +574,21 @@ This preserves both the existing product check and its amplified contribution
 without overflowing a `consumer_gain*S` product. Nonfinite or negative supplied
 gain rejects qualification. This gate catches AP amplification loss; it does not
 certify attenuation, filtering, temporal or complete composed-image error.
+
+Qualification reads the existing GPU-only producer tail for sky view, AP and fog.
+Its reference interval includes retained producer/history error before adding
+candidate-store error. The maximum reduction includes finite reference upper
+bounds; local RGB/transmission allowance checks cover both interval endpoints.
+Zero records retain the exact-point path. Invalid or unbounded certificates
+reject image qualification, while an unrelated producer record cannot taint this
+product. No numerical CPU readback or new status allocation is added. This is
+local product/history admission, not final composed-image or meter propagation.
+Validate endpoints after their final normalization/outward expansion, not only
+before it: finite certificates near the FP32 limit can overflow during that
+last operation. Nonfinite compared endpoints reject admission explicitly; an
+`Inf > Inf` comparison cannot serve as the rejection condition. Direct-product
+metering checks both finite luminance endpoints for retained classifications,
+mass and EV error. SceneColor still needs the full composition/coverage bounds.
 Flag bit 4 selects the frame's pinned P instead of a newly selected candidate;
 this mode qualifies a current-frame conversion, not a future admission scale.
 
@@ -852,10 +868,12 @@ previous-frame history. FP32 writes
 can retain inherited history error even though they add no half-store error.
 
 The transport/history substep is qualified by the 74-frame native fixture and
-GPU binding audits recorded in the implementation tracker. Complete composition
-and metering admission do not yet consume these bounds; they do not authorize a
-production format switch. Full filtering/arithmetic/domain qualification remains
-part of EX05-15.
+GPU binding audits recorded in the implementation tracker. Local product/image
+and direct-product meter checks consume this tail through evaluator byte 84;
+FP32 recovery retains uncertainty until its history permits qualification.
+Final SceneColor still lacks the full composed error/coverage envelope. These
+checks do not authorize production format switching. Full filtering/arithmetic/
+domain qualification remains part of EX05-15.
 
 ## Producer range checks
 

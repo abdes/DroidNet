@@ -19,6 +19,7 @@ def build_report(controller, report, capture_path, report_path):
     previous = None
     final_tail = None
     consumers = 0
+    qualifications = 0
     for action in collect_action_records(controller):
         if not action.flags & rd.ActionFlags.Dispatch:
             continue
@@ -26,6 +27,22 @@ def build_report(controller, report, capture_path, report_path):
         pipeline = controller.GetPipelineState()
         reads = [x.descriptor for x in pipeline.GetReadOnlyResources(rd.ShaderStage.Compute, True)]
         writes = [x.descriptor for x in pipeline.GetReadWriteResources(rd.ShaderStage.Compute, True)]
+        shader = pipeline.GetShaderReflection(rd.ShaderStage.Compute)
+        if shader and shader.entryPoint == "CheckSuitabilityProduct":
+            constants = [x for x in reads if x.byteSize == x.elementByteSize == 96]
+            if len(constants) != 1:
+                raise RuntimeError("Missing local qualification constants")
+            c = constants[0]
+            words = struct.unpack("<24I", bytes(controller.GetBufferData(c.resource, c.byteOffset, 96)))
+            if words[8] == 10:
+                bound_reads = [x for x in reads if names.get(str(x.resource)) == "Vortex.PostProcess.Exposure.Status"]
+                reports = [x for x in writes if names.get(str(x.resource)) == "Vortex.Exposure.Suitability"]
+                if len(bound_reads) != 1 or len(reports) != 1 or bound_reads[0].resource != current:
+                    raise RuntimeError("Qualification did not consume this frame's producer certificate")
+                values = struct.unpack("<2f10I", bytes(controller.GetBufferData(reports[0].resource, 0, 48)))
+                if not values[3] & 4 or values[4] != 10:
+                    raise RuntimeError("Retained fog error failed to block qualification")
+                qualifications += 1
         statuses = [x for x in writes if names.get(str(x.resource)) == "Vortex.PostProcess.Exposure.Status"]
         frames = [x for x in writes if names.get(str(x.resource)) == "Vortex.PostProcess.Exposure.Frame"]
         if frames and statuses:
@@ -63,10 +80,11 @@ def build_report(controller, report, capture_path, report_path):
             if statuses[0].resource != current or bytes(controller.GetBufferData(current, 80, 48)) != final_tail:
                 raise RuntimeError("Exposure solve/finalization overwrote the GPU-only error tail")
             consumers += 1
-    if sorted(producers) != [0, 1] or consumers != 2:
+    if sorted(producers) != [0, 1] or consumers != 2 or qualifications != 1:
         raise RuntimeError(f"Incomplete half/float producer and solve/finalizer chain: {producers}, {consumers}")
     report.append("hdr_error_history_verdict=pass")
-    report.append("scope=GPU error transport/history; final composition and meter admission remain open")
+    report.append("local_history_qualification=pass")
+    report.append("scope=GPU error transport/history and local qualification; final composition and meter admission remain open")
 
 
 if __name__ == "__main__":
