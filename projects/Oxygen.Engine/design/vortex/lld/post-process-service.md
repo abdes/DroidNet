@@ -665,6 +665,95 @@ accepted lease; frame readers still keep it alive. The binder outlives its
 leases and uses the existing graphics reclaimer for resource/descriptor release.
 No separate mask loader, texture cache or upload allocator is introduced.
 
+## Quantization error propagation
+
+**Implementation state:** mathematical rules and independent CPU counterexamples
+exist; GPU bound transport/evaluation and native qualification are unfinished.
+Do not use these equations as a claim that current FP16 admission is safe.
+
+The independent checker is
+[`VerifyExposureErrorBounds.py`](../../../tools/vortex/VerifyExposureErrorBounds.py).
+It uses exact rational reference arithmetic and binary16/binary32 rounding without
+calling production helpers. Binary16's representation and preserved denormals
+follow the [Direct3D floating-point rules](https://learn.microsoft.com/en-us/windows/win32/direct3d11/floating-point-rules#16-bit-floating-point-rules).
+The checker does not model every legal GPU FP32 instruction ordering or replace
+native validation. The existing PBR budgets and half-budget admission margin
+remain unchanged.
+
+For a nonnegative reference component `x`, an affine certificate `(r, a)` means
+`abs(x_hat - x) <= r*x + a`, with nonnegative coefficients. The rules below are
+componentwise and apply only when their stated source bounds are established:
+
+| Operation | Propagated certificate |
+| --- | --- |
+| Nonnegative sum `x + y` | `r = max(rx, ry)`, `a = ax + ay` |
+| Common gain `k*x`, `k >= 0` | `r = rx`, `a = k*ax` |
+| Convex interpolation `(1-w)*x + w*y`, `0 <= w <= 1` | `r = max(rx, ry)`, `a = (1-w)*ax + w*ay` |
+| Attenuation `x*t`, `0 <= t <= 1`, justified `0 <= x <= M` | `r = (1+rx)*(1+rt)-1`, `a = ax*(1+rt) + M*at*(1+rx) + ax*at` |
+
+For attenuation, expand `(x+ex)*(t+et)-x*t` and bound all three error terms;
+omitting `x*et` or the cross term is unsound. For addition, nonnegativity lets
+`max(rx, ry)` bound the relative part; signed cancellation does not satisfy this
+rule. An unproved source maximum, sign, coefficient or interpolation condition
+cannot authorize FP16. Amplification scales the absolute term even when the
+relative term is unchanged.
+
+For a nonnegative observed value and `r < 1`, invert the certificate to obtain
+an interval for the reference:
+
+```text
+reference_lo = max(0, (observed - a)/(1+r))
+reference_hi = (observed + a)/(1-r)
+```
+
+A monotone half quantizer maps an input interval to the interval between its
+quantized endpoints. This accounts for crossing a rounding boundary; adding an
+error measured only at the interval center is insufficient. Luminance uses its
+positive RGB weights to propagate component bounds. Meter admission must prove
+that the interval preserves every required dark/zero/mass classification and
+meets the EV budget. A small image error does not prove unchanged histogram mass.
+
+Coverage must use the actual premultiplied/unpremultiplied consumer convention.
+If normalization divides by alpha, propagate the numerator and denominator
+intervals through the same denominator floor used by the production operation.
+Transmittance is a separate attenuation coefficient and is never P-scaled.
+Image checks must cover both scene-referred and final-S-scaled error.
+
+For temporal reuse with weight `w`, a scalar absolute-error envelope obeys
+
+```text
+E_next <= (1-w)*E_fresh + w*E_history + E_arithmetic + E_new_store
+```
+
+Convert error units together with RGB when converting stored P. Keep the prior
+certificate with the exact history lease/identity being sampled, and discard it
+when that history is invalidated. A switch to FP32 removes new half-store error;
+it does not retroactively remove error already present in reused history. The
+GPU implementation must conservatively account for its own bound-arithmetic
+rounding and reject incomplete certificates.
+
+The checker contains three concrete counterexamples to independent per-product
+acceptance. An additional 8192-radiance sample makes the existing global selector
+choose P=1, so these examples use a realizable candidate scale:
+
+- AP RGB near `1e-8` rounds to zero and passes a local absolute allowance. The
+  source permits scattering strength `1e6`; its contribution near `0.01` is then
+  lost. Checking the independently narrowed final FP32 scene also misses the
+  missing upstream contribution.
+- Transmittance rounding moves a composed sample across the `2^-12` dark-bin
+  boundary, although the independent final-scene rounding remains below that
+  boundary and within the local EV tolerance.
+- With the production fog history weight near `0.9`, a 64-frame sequence keeps
+  every local store within its quarter-share allowance but accumulates about
+  `0.004875` error near unit radiance, exceeding the approximately `0.002500`
+  admission allowance and the full meter EV budget. The recurrence bound covers
+  the error; resetting error accounting at every store does not.
+
+Before closing EX05-15, implement and verify certificate transport, actual
+consumer coefficients/source bounds, filtering, coverage, history identity and
+outward-safe GPU arithmetic against independent inputs and real scene captures.
+Automatic format switching remains disabled until those checks are qualified.
+
 ## Producer range checks
 
 Sky-view, camera aerial-perspective and volumetric-fog shaders check their FP32

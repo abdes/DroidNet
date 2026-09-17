@@ -60,15 +60,17 @@ qualification remains required; the package is not complete.
 ### 3.1 Current work
 
 - **Active implementation item: EX05-15 — cumulative quantization/error bounds.**
-  Stage: source and mathematical investigation. The GPU implementation and its
-  independent numerical qualification have **not started**. Current work is to
-  derive bounds through aerial perspective, fog composition and temporal reuse;
-  checking each product separately does not close this requirement.
-- **Next concrete action:** define the testable propagation rules and independent
-  counterexamples, then implement the corresponding GPU checks. Follow with
-  EX05-17 through EX05-19; do not enable format switching on the existing range
-  checks alone.
-- **Last completed code checkpoint:** `5c3b6a019`, EX05-12's failed-solve
+  Stage: the initial propagation rules and independent CPU counterexamples are
+  recorded and tested. The checker passes 48,000 exact-arithmetic assertions and
+  reproduces AP amplification, dark-bin changes and cumulative temporal error.
+  **GPU bound transport/evaluation and native qualification have not started.**
+  [Rules and limitations](lld/post-process-service.md#quantization-error-propagation),
+  [CPU results](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/error-bounds-oracle.json).
+- **Next concrete action:** establish the runtime source/consumer bounds and
+  certificate/history ownership, then implement outward-safe GPU propagation and
+  native comparisons. Follow with EX05-17 through EX05-19; do not enable format
+  switching on the existing range checks alone.
+- **Last completed renderer checkpoint:** `5c3b6a019`, EX05-12's failed-solve
   invalidation correction. The regression failed before the fix and passed
   afterward; same-frame reuse and pending seed acknowledgement are covered.
 - **Latest code validation:** Debug and Release each passed 144 native exposure,
@@ -108,7 +110,7 @@ current status, including decisions that supersede older manifest limitations.
 | EX05-12 | Completed-status candidate selection and failure invalidation | validated | Lifetime/settings/layout/generation checks, bounded retry queue, stale-result rejection and failed-solve/fallback invalidation are qualified. Successful same-frame reuse retains acknowledgement. | [Status selection](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/precision-status-manifest.json), [R034 correction](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/review-r034-manifest.json) |
 | EX05-13 | Collect real required scene-reference products | validated | Persistent scene views collect SceneColor, sky-view, AP and fog; missing producers remain missing requirements. Native capture checks 151,424 texels per view in the environment fixture. | [Required products](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/required-products-manifest.json) |
 | EX05-14 | Finite/overflow checks before environment stores | validated | Sky-view/AP/fog report original finite/nonfinite and FP16 headroom failures through the existing status. Auto does not adapt from a producer-failed image. This is not a quantization certificate. | [Pre-store range](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/prestore-range-manifest.json) |
-| EX05-15 | Quantization, cumulative image/meter error and temporal bounds | in_progress | **Current work: investigation only.** Equal per-product allowance and finite/range checks do not prove complete composition or repeated-history error. Derivation, implementation and independent numerical tests remain. | [Required budgets](lld/scene-textures.md#per-view-fp16-suitability); no completion evidence yet |
+| EX05-15 | Quantization, cumulative image/meter error and temporal bounds | in_progress | **Current work: GPU integration design after the initial mathematical check.** Affine composition/inversion rules and three counterexamples pass 48,000 CPU assertions. Runtime bounds, certificate/history transport, outward-safe GPU arithmetic and complete native qualification remain. | [Required budgets](lld/scene-textures.md#per-view-fp16-suitability), [propagation rules](lld/post-process-service.md#quantization-error-propagation), [CPU oracle only](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/error-bounds-oracle.json) |
 | EX05-16 | Full supported-radiance envelope at upstream producers | in_progress | Finite/range reporting and several controlled endpoint fixtures exist. Complete high/low endpoint, underflow/error-budget and FP32 out-of-domain reporting across active producers remains. | [Range scope](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/prestore-range-manifest.json), [acceptance matrix](plan/exposure-and-lightbench-correction.md#9-acceptance-matrix-and-execution) |
 | EX05-17 | Production per-view FP16 admission and allocation switching | planned | **Not enabled. SceneRenderer still forces FP32.** Wire certified candidates to resource/PSO/resolve selection while preserving exposure history. Depends on EX05-15–16. | [Current source boundary](../../src/Oxygen/Vortex/SceneRenderer/SceneRenderer.cpp) |
 | EX05-18 | Checked resolve extraction and all conditional-consumer leases | in_progress | P metadata and checked-consumer primitives exist. Production resolve/extraction must retain the original FP32 accumulation and choose the valid source through every consumer and fence. | [Prepared solve](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/prepared-manifest.json), [selection boundary](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/selection-manifest.json) |
