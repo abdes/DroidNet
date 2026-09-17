@@ -95,7 +95,8 @@ namespace {
     target.with_height_fog = source.camera.has_value() && source.with_height_fog;
     target.with_local_fog = source.camera.has_value() && source.with_local_fog;
     target.shading_mode = source.camera.has_value()
-      ? std::optional<vortex::ShadingMode> { vortex::ShadingMode::kDeferred }
+      ? std::optional<vortex::ShadingMode> { source.shading_mode.value_or(
+          vortex::ShadingMode::kDeferred) }
       : std::nullopt;
     return target;
   }

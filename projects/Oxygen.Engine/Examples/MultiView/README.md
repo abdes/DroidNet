@@ -180,6 +180,10 @@ sun, so paused execution starts with coherent environment inputs.
 GPU frames before 44 use opaque deferred cards; frames 44–47 use the same
 four foreground cards as alpha-one forward materials; from frame 48 the first
 card is half-alpha forward and the others are opaque.
+Frames 52–55 restore opaque deferred cards at scattering strength 8; from frame
+56 the same cards use the opaque forward base pass. Capture frames 54 and 58
+(GPU frames 55 and 59) for this stronger AP comparison. Opaque/masked forward
+base passes must leave AP to Stage 15; only later translucency applies it inline.
 Capture frames 42, 46 and 50 (GPU frames 43, 47 and 51). Analyze each with
 `AnalyzeRenderDocMultiViewExposure.py`, then
 `AnalyzeRenderDocMultiViewAtmosphere.py` using `-PassName ApDeferred`,
@@ -189,6 +193,10 @@ Capture frames 42, 46 and 50 (GPU frames 43, 47 and 51). Analyze each with
 <result.json>` with NumPy and Pillow. It compares every HDR pixel at the frozen
 0.5% relative plus `1e-5` absolute budget. Passing the ordinary exposure analyzer
 alone does not establish this comparison. Inspect all three presented phases.
+For the opaque pair, use `-PassName ApOpaqueReference` and `ApOpaqueForward`,
+then add `--opaque-reference <frame54.ap.json> --opaque-forward <frame58.ap.json>`
+to the comparison command. It also rejects inline AP reads in the opaque forward
+base pass. Inspect both additional presented phases.
 The comparison also requires a measured AP contribution on at least 100 pixels
 per view/phase. On AP-affected geometry, fewer than 1% of mapped pixels may be
 near-white in all RGB channels (codes >=250), and at least 5% must retain a
