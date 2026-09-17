@@ -8,6 +8,8 @@
 
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Vortex/Environment/EnvironmentLightingService.h>
+#include <Oxygen/Vortex/Environment/Passes/AtmosphereCameraAerialPerspectivePass.h>
+#include <Oxygen/Vortex/Environment/Passes/AtmosphereSkyViewLutPass.h>
 #include <Oxygen/Vortex/Internal/PreviousViewHistoryCache.h>
 #include <Oxygen/Vortex/Lighting/LightingService.h>
 #include <Oxygen/Vortex/Passes/GroundGridPass.h>
@@ -21,6 +23,32 @@
 namespace oxygen::vortex::testing {
 
 struct RendererPublicationProbe {
+  static auto EnvironmentTextures(SceneRenderer& renderer, ViewId view)
+    -> std::vector<std::shared_ptr<graphics::Texture>>
+  {
+    auto result = std::vector<std::shared_ptr<graphics::Texture>> {};
+    auto* environment = renderer.environment_.get();
+    if (!environment)
+      return result;
+    if (environment->sky_view_lut_pass_)
+      for (const auto& texture :
+        environment->sky_view_lut_pass_->live_textures_)
+        result.push_back(texture);
+    if (environment->camera_aerial_perspective_pass_)
+      for (const auto& texture :
+        environment->camera_aerial_perspective_pass_->live_textures_)
+        result.push_back(texture);
+    if (environment->volumetric_fog_pass_) {
+      for (const auto& texture :
+        environment->volumetric_fog_pass_->live_textures_)
+        result.push_back(texture);
+      const auto history
+        = environment->volumetric_fog_pass_->history_by_view_.find(view);
+      if (history != environment->volumetric_fog_pass_->history_by_view_.end())
+        result.push_back(history->second.texture);
+    }
+    return result;
+  }
   static auto PublishGroundGridConstants(
     GroundGridPass& pass, const RenderContext& ctx) -> ShaderVisibleIndex
   {

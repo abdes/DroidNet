@@ -85,6 +85,12 @@ checks; upgrading SceneColor after an AP/fog/sky overflow cannot repair it.
 Eligibility belongs to each view even when gain is borrowed. Format retention
 does not repeatedly reset exposure. Environment resource retirement uses the
 existing leases/fences and includes outstanding history/readback readers.
+Registry removal, descriptor release and resource destruction retire together
+through the graphics deferred reclaimer. A same-frame offscreen reset can occur
+while earlier views are queued; it must not return sky-view, AP, fog, cached
+atmosphere/IBL or local-fog descriptor indices to the allocator immediately.
+No queue-idle wait is added to environment cleanup. Ordinary engine-frame
+queue flushing does not make these same-frame replacement paths safe.
 
 ## Current Implementation Status
 

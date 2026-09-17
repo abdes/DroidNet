@@ -16,6 +16,7 @@
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereState.h>
+#include <Oxygen/Vortex/Environment/Internal/ResourceRetirement.h>
 #include <Oxygen/Vortex/Renderer.h>
 
 namespace oxygen::vortex::environment::internal {
@@ -150,19 +151,9 @@ auto AtmosphereLutCache::ResetResources() -> void
 {
   auto gfx = renderer_.GetGraphics();
   if (gfx != nullptr) {
-    auto& registry = gfx->GetResourceRegistry();
-    if (transmittance_texture_ != nullptr
-      && registry.Contains(*transmittance_texture_)) {
-      registry.UnRegisterResource(*transmittance_texture_);
-    }
-    if (multi_scattering_texture_ != nullptr
-      && registry.Contains(*multi_scattering_texture_)) {
-      registry.UnRegisterResource(*multi_scattering_texture_);
-    }
-    if (distant_sky_light_buffer_ != nullptr
-      && registry.Contains(*distant_sky_light_buffer_)) {
-      registry.UnRegisterResource(*distant_sky_light_buffer_);
-    }
+    RetireEnvironmentResource(*gfx, transmittance_texture_);
+    RetireEnvironmentResource(*gfx, multi_scattering_texture_);
+    RetireEnvironmentResource(*gfx, distant_sky_light_buffer_);
   }
 
   transmittance_texture_.reset();
@@ -212,9 +203,7 @@ auto AtmosphereLutCache::EnsureTexture(
 
   auto& registry = gfx->GetResourceRegistry();
   if (wants_recreate) {
-    if (texture != nullptr && registry.Contains(*texture)) {
-      registry.UnRegisterResource(*texture);
-    }
+    RetireEnvironmentResource(*gfx, texture);
     texture = gfx->CreateTexture({
       .width = width,
       .height = height,
@@ -303,9 +292,7 @@ auto AtmosphereLutCache::EnsureStructuredBuffer(
     = buffer == nullptr || buffer->GetSize() != size_bytes;
   auto& registry = gfx->GetResourceRegistry();
   if (wants_recreate) {
-    if (buffer != nullptr && registry.Contains(*buffer)) {
-      registry.UnRegisterResource(*buffer);
-    }
+    RetireEnvironmentResource(*gfx, buffer);
     buffer = gfx->CreateBuffer({
       .size_bytes = size_bytes,
       .usage = graphics::BufferUsage::kStorage,

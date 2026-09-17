@@ -24,6 +24,7 @@
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
+#include <Oxygen/Vortex/Environment/Internal/ResourceRetirement.h>
 #include <Oxygen/Vortex/Environment/Internal/StaticSkyLightProcessor.h>
 #include <Oxygen/Vortex/Environment/Passes/IblProbePass.h>
 #include <Oxygen/Vortex/Renderer.h>
@@ -65,32 +66,6 @@ namespace {
       offset += mip_size * mip_size;
     }
     return offset;
-  }
-
-  auto ResetResource(Graphics& gfx, std::shared_ptr<graphics::Texture>& texture)
-    -> void
-  {
-    if (texture == nullptr) {
-      return;
-    }
-    auto& registry = gfx.GetResourceRegistry();
-    if (registry.Contains(*texture)) {
-      registry.UnRegisterResource(*texture);
-    }
-    gfx.GetDeferredReclaimer().RegisterDeferredRelease(std::move(texture));
-  }
-
-  auto ResetResource(Graphics& gfx, std::shared_ptr<graphics::Buffer>& buffer)
-    -> void
-  {
-    if (buffer == nullptr) {
-      return;
-    }
-    auto& registry = gfx.GetResourceRegistry();
-    if (registry.Contains(*buffer)) {
-      registry.UnRegisterResource(*buffer);
-    }
-    gfx.GetDeferredReclaimer().RegisterDeferredRelease(std::move(buffer));
   }
 
   auto EncodeRgba16(const std::span<const glm::vec4> rgba)
@@ -180,8 +155,8 @@ auto IblProcessor::RefreshStaticSkyLightProducts(
       != StaticSkyLightUnavailableReason::kGpuProductsPending
     || source_cubemap == nullptr) {
     if (const auto gfx = renderer_.GetGraphics(); gfx != nullptr) {
-      ResetResource(*gfx, cache.processed_cubemap);
-      ResetResource(*gfx, cache.diffuse_sh_buffer);
+      RetireEnvironmentResource(*gfx, cache.processed_cubemap);
+      RetireEnvironmentResource(*gfx, cache.diffuse_sh_buffer);
     }
     cache = StaticSkyLightProductCache {};
     return {
@@ -200,8 +175,8 @@ auto IblProcessor::RefreshStaticSkyLightProducts(
     = !cache.has_submitted_current_key || cache.key != key || precision_upgrade;
   if (key_changed) {
     if (const auto gfx = renderer_.GetGraphics(); gfx != nullptr) {
-      ResetResource(*gfx, cache.processed_cubemap);
-      ResetResource(*gfx, cache.diffuse_sh_buffer);
+      RetireEnvironmentResource(*gfx, cache.processed_cubemap);
+      RetireEnvironmentResource(*gfx, cache.diffuse_sh_buffer);
     }
     cache = StaticSkyLightProductCache {};
     cache.key = key;

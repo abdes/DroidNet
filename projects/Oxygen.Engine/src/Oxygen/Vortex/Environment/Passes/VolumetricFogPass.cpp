@@ -29,6 +29,7 @@
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereState.h>
+#include <Oxygen/Vortex/Environment/Internal/ResourceRetirement.h>
 #include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
@@ -194,11 +195,7 @@ namespace {
       return;
     }
 
-    auto& registry = gfx.GetResourceRegistry();
-    if (registry.Contains(*texture)) {
-      registry.UnRegisterResource(*texture);
-    }
-    gfx.RegisterDeferredRelease(std::move(texture));
+    internal::RetireEnvironmentResource(gfx, texture);
   }
 
   auto ReleaseLiveTextures(Graphics& gfx,
