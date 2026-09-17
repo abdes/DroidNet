@@ -720,6 +720,15 @@ auto PostProcessService::FinalizeScenePrecision(RenderContext& ctx,
     && (settings.mask_status == ExposureMaskStatus::kPending
       || settings.mask_status == ExposureMaskStatus::kFailed))
     return reject();
+  for (const auto& product : products) {
+    if (product.id == 6U && product.texture != nullptr) {
+      // Intermediate retained-error transport only. It cannot authorize
+      // admission until the remaining consumer/candidate terms are qualified.
+      static_cast<void>(exposure_pass_->PropagateOpaqueApError(
+        ctx, prepared.exposure.frame, product.consumer_rgb_gain));
+      break;
+    }
+  }
   if (!exposure_pass_->EvaluateFp16Products(ctx, prepared.exposure.frame,
         prepared.config, products,
         { .metering_mask = mask ? mask->texture.get() : nullptr,

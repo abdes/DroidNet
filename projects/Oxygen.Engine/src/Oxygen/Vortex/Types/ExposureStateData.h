@@ -93,17 +93,29 @@ struct alignas(16) HdrCompositionInputData {
   std::uint32_t reserved { 0U };
 };
 
+//! Retained store-error contribution to opaque I + C*T, before later stages.
+//! Excludes filtering/arithmetic/coverage and prospective candidate stores.
+struct alignas(16) HdrOpaqueApErrorData {
+  float rgb_relative { 0.0F };
+  float rgb_absolute { 0.0F }; // Scene-referred units.
+  std::uint32_t valid { 0U };
+  std::uint32_t reserved { 0U };
+};
+
 //! The readback prefix stays non-numerical; the tail remains GPU-owned.
 struct alignas(16) ExposureStatusStorage {
   ExposureCompletedStatus completed;
   std::array<HdrErrorBoundsData, 3> producer_errors {}; // Sky view, AP, fog.
   HdrCompositionInputData composition_input;
+  HdrOpaqueApErrorData opaque_ap_error;
 };
 static_assert(sizeof(HdrErrorBoundsData) == 16U);
 static_assert(offsetof(ExposureStatusStorage, producer_errors) == 80U);
 static_assert(sizeof(HdrCompositionInputData) == 16U);
 static_assert(offsetof(ExposureStatusStorage, composition_input) == 128U);
-static_assert(sizeof(ExposureStatusStorage) == 144U);
+static_assert(sizeof(HdrOpaqueApErrorData) == 16U);
+static_assert(offsetof(ExposureStatusStorage, opaque_ap_error) == 144U);
+static_assert(sizeof(ExposureStatusStorage) == 160U);
 static_assert(std::is_standard_layout_v<ExposureStatusStorage>);
 
 static_assert(sizeof(ExposureCompletedStatus) == 80U);

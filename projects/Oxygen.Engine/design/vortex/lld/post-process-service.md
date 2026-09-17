@@ -861,7 +861,7 @@ error and transmittance relative/absolute error. RGB absolute error is in
 scene-referred units; transmittance is dimensionless. Runtime CPU readback still
 copies only the original 80-byte prefix.
 
-The allocation is 144 bytes. Its final 16 bytes capture opaque SceneColor before
+The allocation is 160 bytes. The 16 bytes at 128 capture opaque SceneColor before
 sky/AP/fog/translucency: maximum absolute pre-exposed RGB at 128, flags at 132
 (recorded=1, nonfinite=2, negative RGB=4), checked-pixel count at 136 and zero at
 140. The immutable frame P defines these units. The exposure pass reuses its
@@ -874,6 +874,27 @@ bytes remain. Only single-sample RGBA32 inputs are currently accepted.
 This peak is a prerequisite for attenuation bounds, not a completed composition
 certificate. Forward translucent source maxima and the final composition remain
 unimplemented.
+
+Bytes 144–159 hold an intermediate opaque-AP retained store-error contribution:
+RGB relative/absolute coefficients at 144/148, a well-formed-input flag at 152,
+and zero at 156. This is **not a complete composition or admission certificate**.
+For exact nonnegative opaque input `C <= M` and retained AP bounds
+`(rI,aI,rT,aT)`, the ideal transfer `gain*I + C*T` has
+`r = max(rI,rT)` and `a = gain*aI + M*aT`. The captured P-domain peak is converted
+outward into scene-referred M. Convex sampling/fading can retain this algebraic
+envelope, but hardware filtering and arithmetic error are additional terms still
+to be implemented. The gain-below-`0.0001` identity branch matches the current AP
+consumer. Invalid sign/range/bounds/gain produce an invalid record with infinite
+absolute error; products and sums round outward, including underflow/overflow.
+The existing candidate-selection pipeline reuses evaluator flag bit 6 for this
+single-thread calculation. A failed repeated submission invalidates its CPU
+identity. Every input-range capture attempt also invalidates the derived AP
+submission identity; a successfully recorded recapture clears its GPU-valid flag.
+Reusing a frame lease after source replacement requires propagation again. A
+failed acquisition cannot clear old GPU bytes, so CPU submission identity remains
+authoritative. The record is preserved through solve/finalization, but is not consumed
+for admission until filtering, coverage, later fog/translucency and candidate
+store contributions are complete. CPU status readback remains 80 bytes.
 
 Frame preparation clears the tail. Producers reduce outward-rounded local store
 bounds into their record, and the later solve/finalizer preserve the tail.
