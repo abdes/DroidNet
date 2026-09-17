@@ -1265,6 +1265,20 @@ differences, including the compared composition region. Evidence is
 `multiview/retirement-manifest.json`. The bounded MultiView proof controls are
 qualified separately; the complete slice-5 lifecycle gate remains open.
 
+The bounded MultiView exposure proof now qualifies independent main/PiP,
+standalone equivalents, reordered submission and one-frame source sharing in
+Debug and Release. The proof uses public pause/remeter controls and fixed
+camera/settings inputs. Isolated and reordered gain, meter, full mapped and
+pre-composition images match exactly; the compared final-composite region also
+matches exactly. Composition now follows z-order independently of submission.
+At GPU frame 44 a shared owner's one-stop remeter changes only its current gain;
+the consumer adopts it at frame 45. All five latency errors are zero.
+Fourteen capture audits and five focused debugger cases pass. Both configurations
+pass 121 native, 59 renderer-core, 22 post-process and 22 publication tests.
+Evidence is `multiview/static-matrix-manifest.json`. These static/paused cases do
+not close active adaptation, resize/scissor, hide/recreate, source destruction,
+remaining proof layouts, or automatic precision admission/recovery.
+
 - [x] Add the early GPU P resolve and bind a frame-invariant P/1P to every HDR pass.
 - [ ] Migrate the entire section 4.4 checklist, including atmosphere producer/
   consumer pairs, fog/color histories, bloom and offscreen/capture domains.

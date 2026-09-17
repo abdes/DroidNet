@@ -772,6 +772,17 @@ step rather than surface composition.
 
 ### 11.2 Exposure Sharing
 
+MultiView's bounded `--exposure-proof` cases use explicit per-view Auto settings
+and the public paused simulation clock (zero exposure timestep). At frame 32,
+each independent owner receives one public remeter request after procedural
+content warmup. `independent`, `main-only`, `pip-only` and `reordered` therefore
+compare the same fixed scene, viewport and initialized exposure state. PiP has
+two stops of compensation in these cases. `shared` instead borrows main's prior
+gain; a main-only compensation/remeter step at frame 44 exposes the one-frame
+latency. The proof freezes camera input and cannot be combined with the other
+proof layouts. Normal interactive operation retains its ordinary clock/settings.
+Composition follows z-order independently of view submission order.
+
 The [exposure execution plan](../plan/exposure-and-lightbench-correction.md#42-shared-exposure-one-writer-and-deterministic-readers)
 owns the complete source, fallback and destruction contract:
 

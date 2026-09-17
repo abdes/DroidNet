@@ -12,6 +12,7 @@
 #include <ranges>
 #include <source_location>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -196,6 +197,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
   bool feature_variant_proof_layout = false;
   bool point_light_enabled = true;
   bool spot_light_enabled = true;
+  std::string exposure_proof_value = "none";
   oxygen::examples::cli::GraphicsToolingCliState graphics_tooling_cli {};
   oxygen::examples::cli::FrameCaptureCliState capture_cli {};
   oxygen::examples::DemoAppContext app {};
@@ -224,6 +226,14 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
               .DefaultValue("copy")
               .UserFriendlyName("mode")
               .StoreTo(&compositing_mode_value)
+              .Build())
+          .WithOption(Option::WithKey("exposure-proof")
+              .About("Exposure proof: none, independent, shared, main-only, "
+                     "pip-only, reordered")
+              .Long("exposure-proof")
+              .WithValue<std::string>()
+              .DefaultValue("none")
+              .StoreTo(&exposure_proof_value)
               .Build())
           .WithOption(Option::WithKey("point-light")
               .About(
@@ -329,6 +339,26 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
       .point_light_enabled = point_light_enabled,
       .spot_light_enabled = spot_light_enabled,
     };
+    using ExposureProof = oxygen::examples::multiview::ExposureProofScenario;
+    if (exposure_proof_value == "independent") {
+      main_module_config.exposure_proof = ExposureProof::kIndependent;
+    } else if (exposure_proof_value == "shared") {
+      main_module_config.exposure_proof = ExposureProof::kShared;
+    } else if (exposure_proof_value == "main-only") {
+      main_module_config.exposure_proof = ExposureProof::kMainOnly;
+    } else if (exposure_proof_value == "pip-only") {
+      main_module_config.exposure_proof = ExposureProof::kPipOnly;
+    } else if (exposure_proof_value == "reordered") {
+      main_module_config.exposure_proof = ExposureProof::kReordered;
+    } else if (exposure_proof_value != "none") {
+      throw std::invalid_argument("Unknown exposure proof scenario");
+    }
+    if (main_module_config.exposure_proof != ExposureProof::kNone
+      && (proof_layout || aux_proof_layout || offscreen_proof_layout
+        || feature_variant_proof_layout)) {
+      throw std::invalid_argument(
+        "Exposure proof requires the ordinary main/PiP layout");
+    }
     auto mode_lower = compositing_mode_value;
     std::ranges::transform(mode_lower, mode_lower.begin(),
       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });

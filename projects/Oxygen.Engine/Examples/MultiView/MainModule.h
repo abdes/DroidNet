@@ -43,6 +43,15 @@ class CameraRigController;
 
 namespace oxygen::examples::multiview {
 
+enum class ExposureProofScenario : uint8_t {
+  kNone,
+  kIndependent,
+  kShared,
+  kMainOnly,
+  kPipOnly,
+  kReordered,
+};
+
 struct MainModuleConfig {
   CompositingMode compositing_mode { CompositingMode::kBlend };
   bool pip_force_wireframe { true };
@@ -53,6 +62,7 @@ struct MainModuleConfig {
   bool feature_variant_proof_layout { false };
   bool point_light_enabled { true };
   bool spot_light_enabled { true };
+  ExposureProofScenario exposure_proof { ExposureProofScenario::kNone };
 };
 
 //! Multi-view rendering example demonstrating Phase 2 features.

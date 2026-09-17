@@ -34,6 +34,12 @@ Common validation-oriented options:
 - `--point-light <true|false>` and `--spot-light <true|false>`: enable each
   existing scene light independently for forward/deferred contribution checks.
   Both default to enabled.
+- `--exposure-proof <none|independent|shared|main-only|pip-only|reordered>`:
+  run a paused, static main/PiP exposure comparison with explicit Auto settings
+  and a public remeter at frame 32. PiP has two stops of compensation unless it
+  shares main's gain. Shared mode steps main by one stop at frame 44; capture
+  frames 42, 43 and 44 to inspect GPU frame sequences 43, 44 and 45.
+  These cases use fixed camera inputs and cannot be combined with proof layouts.
 - `--proof-layout <true|false>`: run the VTX-M06A multi-view proof layout.
 - `--aux-proof-layout <true|false>`: run the VTX-M06A auxiliary
   producer/consumer proof layout.
@@ -85,6 +91,18 @@ verdict is separate from lighting, temporal and visual acceptance; inspect every
 pane and the reported nonzero scene probes. The analyzer exports the full-frame
 composite before seeking backward through bindless draws, and the capture's
 native thumbnail provides a separate presentation reference.
+
+The analyzer also writes a JSON record and each complete pre-composition image.
+Capture `independent`, `main-only`, `pip-only` and `reordered` at frame 40, then
+run `tools/vortex/Assert-MultiViewExposureEquivalence.py` (Python with Pillow)
+with `--family`, `--main`, `--pip`, `--reordered` pointing to those JSON files
+and `--output` pointing to the comparison report. It compares scene probes,
+gain/meter values and full per-view images; the reordered-composite comparison
+excludes the left toolbar/gizmo and top capture FPS label.
+For shared mode, pass the frame-42/43/44 JSON records to
+`tools/vortex/Assert-MultiViewSharedExposure.py` as `--before`, `--step`, and
+`--after`, plus `--output`. It verifies owner generations, borrowed-state flags,
+the one-stop owner change, and the consumer's exact one-frame delay.
 
 For the offscreen forward light-binding regression, capture the existing
 `--offscreen-proof-layout true --pip-wireframe false` layout with both lights,
