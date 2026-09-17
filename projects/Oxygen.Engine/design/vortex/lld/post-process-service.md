@@ -7,11 +7,22 @@ Historical VTX-M03 closure remains at its original fixed/auto baseline scope.
 ## Ownership and public boundary
 
 PostProcessService owns exposure settings resolution, persistent GPU state keyed
-by producer-owned `ViewStateHandle`, early frame-exposure resolve, Stage-22
-exposure/bloom/tonemapping, and bounded completed status. Renderer Core owns
-view registration, relationship validation and transient transition routing.
+by producer-owned `ViewStateHandle`, early frame-exposure resolve, exposure
+solving before color resolution, Stage-22 bloom/tonemapping, and bounded
+completed status. Renderer Core owns view registration, relationship validation
+and transient transition routing.
 SceneRenderer supplies the exact scene signal/SRV, depth/SRV and post target;
 post-process passes cannot invent another input or output routing path.
+
+After all SceneColor accumulation, SceneRenderer calls `PrepareSceneExposure`
+before Stage 21. This solves from the FP32 accumulation and pins the numerical
+result and post-process configuration for the logical view, state handle and
+frame sequence. Stage 22 consumes that prepared result with the resolved color;
+it does not meter a second time. This ordering also applies to stateless and
+diagnostic views. Direct service fixtures may let `Execute` prepare its own
+result when no prior preparation was supplied. A prepared result from another
+service, view identity/lifetime or logical frame is rejected. Unavailable frame fallback
+prevents the scene resolve and visible-output update.
 
 ViewId is a frame-publication identity, never a temporal-history key. Native
 applications and DemoShell submit the same public typed events and canonical
@@ -302,8 +313,9 @@ sequenceDiagram
     Post->>GPU: resolve immutable FrameExposureData from prior state
     GPU->>GPU: UAV to SRV ordering before first HDR producer
     GPU->>GPU: scene writes P*C_scene; record range/eligibility
-    Post->>GPU: Stage 22 histogram and owner-only current state solve
+    Post->>GPU: FP32 SceneColor histogram and owner-only current state solve
     GPU->>GPU: current state UAV to SRV ordering
+    GPU->>GPU: Stage 21 color resolution with final S available
     GPU->>GPU: bloom and tonemap consume S/P
     GPU->>GPU: copy completed status after all producers
     GPU-->>Post: fence-completed asynchronous status
@@ -499,8 +511,9 @@ retains valid history. Use bounded status and no full-resolution telemetry targe
 
 ## Post chain and qualification
 
-Stage 21 optionally resolves scene color. Stage 22 performs owner exposure solve,
-bloom extraction/filtering when present, and tonemapping; Stage 23 extracts and
+Owner exposure solves from FP32 accumulation before Stage 21 optionally resolves
+scene color. Stage 22 consumes that prepared exposure for bloom extraction/
+filtering when present and tonemapping; Stage 23 extracts and
 hands off the SceneRenderer-owned output. Apply final S/P once, including disabled
 S=1. UI/background composition remains independent. Bloom thresholds are scene
 referred. TAA/TSR slots remain future work, not implied implementation.

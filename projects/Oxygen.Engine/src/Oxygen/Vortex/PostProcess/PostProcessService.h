@@ -132,9 +132,24 @@ public:
     bool use_fp32,
     postprocess::ExposurePass::StateLease qualified_candidate = {})
     -> postprocess::ExposurePass::FrameLease;
-  OXGN_VRTX_API auto Execute(
-    ViewId view_id, RenderContext& ctx, const SceneTextures& scene_textures,
-    const Inputs& inputs) -> void;
+  struct PreparedExposure {
+    const PostProcessService* owner;
+    postprocess::ExposurePass::Result exposure;
+    PostProcessConfig config;
+    ViewId view_id;
+    CompositionView::ViewStateHandle handle;
+    std::uint64_t lifetime;
+    frame::SequenceNumber sequence;
+  };
+  //! Solve from the accumulated scene signal before checked color resolution.
+  //! The returned record pins the result/config for this view and logical
+  //! frame.
+  [[nodiscard]] OXGN_VRTX_API auto PrepareSceneExposure(
+    ViewId view_id, RenderContext& ctx, const Inputs& inputs)
+    -> std::optional<PreparedExposure>;
+  OXGN_VRTX_API auto Execute(ViewId view_id, RenderContext& ctx,
+    const SceneTextures& scene_textures, const Inputs& inputs,
+    const PreparedExposure* prepared_exposure = nullptr) -> void;
   OXGN_VRTX_API auto RemoveViewState(ViewId view_id,
     CompositionView::ViewStateHandle view_state_handle
     = CompositionView::kInvalidViewStateHandle) -> void;

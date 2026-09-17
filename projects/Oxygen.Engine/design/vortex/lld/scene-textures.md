@@ -527,13 +527,15 @@ Stage 12 (Deferred Lighting)
   └─ Writes: SceneColor (accumulated lighting)
 
 Stage 21 (Resolve scene color)
-  └─ Copies: SceneColor -> resolved_scene_color artifact
+  └─ Exposure solve reads FP32 SceneColor before color resolution; pins final S
+  └─ Resolves: SceneColor -> resolved_scene_color artifact
   └─ Copies: SceneDepth -> resolved_scene_depth artifact
   └─ Resolved artifacts now become the explicit handoff source for composition/tools
 
 Stage 22 (Post-Process)
   └─ Reads: SceneColor, SceneDepth, Velocity
-  └─ Consumes the SceneRenderer-owned Stage-21 handoff bundle (texture + SRV + target)
+  └─ Consumes the SceneRenderer-owned Stage-21 handoff bundle and prepared exposure
+  └─ Does not remeter the resolved texture
 
 Stage 23 (Cleanup)
   └─ SceneTextureExtracts finalized

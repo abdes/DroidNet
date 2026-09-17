@@ -2469,6 +2469,25 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
     PublishCustomDepthProducts();
   }
 
+  // Meter the FP32 accumulation before any resolved-color narrowing. Stage 22
+  // consumes this exact result instead of metering the resolved texture again.
+  auto prepared_exposure
+    = std::optional<PostProcessService::PreparedExposure> {};
+  if (post_process_ != nullptr && wants_scene_lighting) {
+    post_process_->SetConfig(
+      ResolveAuthoredPostProcessConfig(ctx, *post_process_));
+    auto* accumulated = scene_textures.GetSceneColorResource().get();
+    CHECK_NOTNULL_F(accumulated);
+    const auto accumulated_srv
+      = ShaderVisibleIndex { RegisterSceneTextureView(*accumulated,
+        MakeSrvDesc(*accumulated, accumulated->GetDescriptor().format)) };
+    prepared_exposure
+      = post_process_->PrepareSceneExposure(ctx.current_view.view_id, ctx,
+        { .scene_signal = accumulated, .scene_signal_srv = accumulated_srv });
+    if (!prepared_exposure)
+      return;
+  }
+
   // Stage 21: Resolve scene color
   if (wants_resolve) {
     ResolveSceneColor(ctx);
@@ -2503,8 +2522,6 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
 
   // Stage 22: Post processing
   if (post_process_ != nullptr && wants_scene_lighting) {
-    post_process_->SetConfig(
-      ResolveAuthoredPostProcessConfig(ctx, *post_process_));
     auto post_target = observer_ptr<const graphics::Framebuffer> {};
     if (const auto* active_view = ctx.GetActiveViewEntry();
       active_view != nullptr) {
@@ -2558,8 +2575,8 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
       .scene_velocity_srv
       = ShaderVisibleIndex { scene_texture_bindings_.velocity_srv },
     };
-    post_process_->Execute(
-      ctx.current_view.view_id, ctx, scene_textures, post_process_inputs);
+    post_process_->Execute(ctx.current_view.view_id, ctx, scene_textures,
+      post_process_inputs, &*prepared_exposure);
     if (!post_process_->GetLastExecutionState().wrote_visible_output)
       return;
     published_view_frame_bindings_.post_process_frame_slot
