@@ -133,6 +133,7 @@ struct RenderContext {
     observer_ptr<const CompositionView> composition_view;
     std::optional<ShadingMode> shading_mode_override;
     std::optional<RenderMode> render_mode_override;
+    std::optional<ShaderDebugMode> shader_debug_mode_override;
     observer_ptr<const oxygen::ResolvedView> resolved_view;
     observer_ptr<graphics::Framebuffer> render_target;
     observer_ptr<graphics::Framebuffer> composite_source;

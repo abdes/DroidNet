@@ -215,6 +215,56 @@ NOLINT_TEST_F(RuntimeViewPublicationTest,
 }
 
 NOLINT_TEST_F(RuntimeViewPublicationTest,
+  ShaderDebugOverridesArePublishedUpdatedAndScopedPerView)
+{
+  using namespace oxygen::vortex;
+  auto frame = FrameContext {};
+  PrepareFrameContext(frame, 1U);
+  framebuffer_ = MakeFramebuffer();
+  auto first = CompositionView {};
+  first.id = ViewId { 101U };
+  first.view = MakeViewContext("normal diagnostic").view;
+  first.render_settings.shader_debug_mode = ShaderDebugMode::kWorldNormals;
+  auto second = first;
+  second.id = ViewId { 102U };
+  second.render_settings.shader_debug_mode = ShaderDebugMode::kDisabled;
+  const auto publish = [&](const CompositionView& view) {
+    return renderer_->PublishRuntimeCompositionView(frame,
+      { .composition_view = view,
+        .render_target = oxygen::observer_ptr { framebuffer_.get() } });
+  };
+  const auto first_id = publish(first);
+  const auto second_id = publish(second);
+  ASSERT_NE(first_id, oxygen::kInvalidViewId);
+  ASSERT_NE(second_id, oxygen::kInvalidViewId);
+  auto context = RenderContext {};
+  context.shader_debug_mode = ShaderDebugMode::kSceneDepthRaw;
+  const auto verify = [&](const ShaderDebugMode expected_first) {
+    RendererPublicationProbe::PopulateRenderContextViewState(
+      *renderer_, context, frame, false);
+    ASSERT_EQ(context.frame_views.size(), 2U);
+    for (std::size_t i = 0; i < context.frame_views.size(); ++i) {
+      {
+        internal::PerViewScope scope(context, i);
+        EXPECT_EQ(context.shader_debug_mode,
+          context.current_view.view_id == first_id
+            ? expected_first
+            : ShaderDebugMode::kDisabled);
+      }
+      EXPECT_EQ(context.shader_debug_mode, ShaderDebugMode::kSceneDepthRaw);
+    }
+  };
+  verify(ShaderDebugMode::kWorldNormals);
+  first.render_settings.shader_debug_mode
+    = ShaderDebugMode::kDirectionalShadowMask;
+  EXPECT_EQ(publish(first), first_id);
+  verify(ShaderDebugMode::kDirectionalShadowMask);
+  first.render_settings.shader_debug_mode.reset();
+  EXPECT_EQ(publish(first), first_id);
+  verify(ShaderDebugMode::kSceneDepthRaw);
+}
+
+NOLINT_TEST_F(RuntimeViewPublicationTest,
   RemovePublishedRuntimeViewClearsMappingAndFrameContextView)
 {
   auto frame_context = FrameContext {};

@@ -310,10 +310,13 @@ protected:
   auto ServicePixel(PostProcessService& service, const Signal& signal,
     scene::ExposureSettings settings = {}, bool diagnostic = false,
     float dt = 0.0F, std::function<void()> before_execute = {},
-    engine::ToneMapper tone_mapper = engine::ToneMapper::kNone) -> float
+    engine::ToneMapper tone_mapper = engine::ToneMapper::kNone,
+    bool start_new_frame = true) -> float
   {
     settings.key = 12.5F;
-    ctx_.frame_sequence = frame::SequenceNumber { ++sequence_ };
+    if (start_new_frame)
+      ++sequence_;
+    ctx_.frame_sequence = frame::SequenceNumber { sequence_ };
     ctx_.delta_time = dt;
     ctx_.render_mode = diagnostic ? RenderMode::kWireframe : RenderMode::kSolid;
     service.OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
@@ -403,7 +406,8 @@ protected:
   }
   auto PublishExposureOwner(engine::FrameContext& frame, const ViewId intent_id,
     CompositionView::ViewStateHandle handle, scene::ExposureSettings settings,
-    ViewId source = kInvalidViewId, bool diagnostic = false) -> ViewId
+    ViewId source = kInvalidViewId, bool diagnostic = false,
+    std::optional<ShaderDebugMode> debug_override = {}) -> ViewId
   {
     auto texture = CreateRegisteredTexture(TextureDesc { .width = 4U,
       .height = 4U,
@@ -419,6 +423,7 @@ protected:
     view.render_settings.exposure = std::move(settings);
     view.exposure_source_view_id = source;
     view.force_wireframe = diagnostic;
+    view.render_settings.shader_debug_mode = debug_override;
     return renderer_->PublishRuntimeCompositionView(frame,
       { .composition_view = view,
         .render_target = observer_ptr { target.get() } });
@@ -2734,6 +2739,65 @@ NOLINT_TEST_F(
     ServicePixel(service, Uniform(.25F, 4U, 4U), {}, true), .25F, 2e-5F);
   EXPECT_FALSE(renderer_->InspectExposureTransition(handle).has_value());
   EXPECT_NEAR(ServicePixel(service, Uniform(8.0F, 4U, 4U)), .18F, 2e-5F);
+}
+
+NOLINT_TEST_F(ExposureGpuTest,
+  RegisteredDebugOverrideControlsCameraCutsIndependentlyOfGlobalMode)
+{
+  auto service = PostProcessService(*renderer_);
+  auto frame = engine::FrameContext {};
+  const auto normal_handle = CompositionView::ViewStateHandle { 81U };
+  const auto debug_handle = CompositionView::ViewStateHandle { 82U };
+  auto settings = scene::ExposureSettings {};
+  settings.key = 12.5F;
+  const auto normal = PublishExposureOwner(frame, ViewId { 81U }, normal_handle,
+    settings, kInvalidViewId, false, ShaderDebugMode::kDisabled);
+  auto debug = PublishExposureOwner(frame, ViewId { 82U }, debug_handle,
+    settings, kInvalidViewId, false, ShaderDebugMode::kDisabled);
+  const auto dim = Uniform(.25F, 4U, 4U);
+  const auto bright = Uniform(8.0F, 4U, 4U);
+  const auto run = [&](ViewId id, CompositionView::ViewStateHandle handle,
+                     const Signal& signal, bool diagnostic) {
+    ctx_.current_view.view_id = id;
+    ctx_.current_view.view_state_handle = handle;
+    ctx_.shader_debug_mode = diagnostic ? ShaderDebugMode::kWorldNormals
+                                        : ShaderDebugMode::kDisabled;
+    return ServicePixel(service, signal, settings, diagnostic, 0.0F, {},
+      engine::ToneMapper::kNone, false);
+  };
+  const auto capture_frame = [&] {
+    ctx_.frame_sequence = frame::SequenceNumber { ++sequence_ };
+    service.OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
+    ctx_.shader_debug_mode = ShaderDebugMode::kWorldNormals;
+    ctx_.render_mode = RenderMode::kSolid;
+    service.CaptureRegisteredExposureControls(ctx_);
+  };
+  renderer_->SetShaderDebugMode(ShaderDebugMode::kWorldNormals);
+  capture_frame();
+  EXPECT_NEAR(run(normal, normal_handle, dim, false), .18F, 2e-5F);
+  EXPECT_NEAR(run(debug, debug_handle, dim, false), .18F, 2e-5F);
+
+  ASSERT_EQ(PublishExposureOwner(frame, ViewId { 82U }, debug_handle, settings,
+              kInvalidViewId, false, ShaderDebugMode::kWorldNormals),
+    debug);
+  ASSERT_TRUE(renderer_
+      ->NotifyViewDiscontinuity(normal_handle, ViewDiscontinuity::kCameraCut)
+      .has_value());
+  ASSERT_TRUE(renderer_
+      ->NotifyViewDiscontinuity(debug_handle, ViewDiscontinuity::kCameraCut)
+      .has_value());
+  capture_frame();
+  EXPECT_NEAR(run(normal, normal_handle, bright, false), .18F, 2e-5F);
+  EXPECT_NEAR(run(debug, debug_handle, dim, true), .25F, 2e-5F);
+  EXPECT_TRUE(renderer_->InspectExposureTransition(normal_handle).has_value());
+  EXPECT_FALSE(renderer_->InspectExposureTransition(debug_handle).has_value());
+
+  ASSERT_EQ(PublishExposureOwner(frame, ViewId { 82U }, debug_handle, settings,
+              kInvalidViewId, false, ShaderDebugMode::kDisabled),
+    debug);
+  capture_frame();
+  EXPECT_NEAR(run(debug, debug_handle, bright, false), .18F, 2e-5F);
+  EXPECT_TRUE(renderer_->InspectExposureTransition(debug_handle).has_value());
 }
 
 NOLINT_TEST_F(

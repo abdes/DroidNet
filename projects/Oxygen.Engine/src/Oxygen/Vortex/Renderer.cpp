@@ -2116,7 +2116,8 @@ auto Renderer::PublishRuntimeCompositionView(
     composition_view.feature_profile, composition_view.feature_mask,
     composition_view.produced_aux_outputs,
     composition_view.consumed_aux_outputs, std::string(composition_view.name),
-    composition_view.render_settings.exposure);
+    composition_view.render_settings.exposure,
+    composition_view.render_settings.shader_debug_mode);
 
   if (published_view_id == kInvalidViewId)
     return kInvalidViewId;
@@ -2163,7 +2164,8 @@ auto Renderer::UpsertPublishedRuntimeView(engine::FrameContext& frame_context,
   std::vector<CompositionView::AuxOutputDesc> produced_aux_outputs,
   std::vector<CompositionView::AuxInputDesc> consumed_aux_outputs,
   std::string debug_name,
-  std::optional<scene::ExposureSettings> exposure_override) -> ViewId
+  std::optional<scene::ExposureSettings> exposure_override,
+  const std::optional<ShaderDebugMode> shader_debug_mode_override) -> ViewId
 {
   CHECK_F(intent_view_id != kInvalidViewId,
     "Renderer::UpsertPublishedRuntimeView requires a valid intent view id");
@@ -2225,6 +2227,7 @@ auto Renderer::UpsertPublishedRuntimeView(engine::FrameContext& frame_context,
     it->second.last_seen_frame = frame_context.GetFrameSequenceNumber();
     it->second.shading_mode_override = shading_mode_override;
     it->second.render_mode_override = render_mode_override;
+    it->second.shader_debug_mode_override = shader_debug_mode_override;
     it->second.view_state_handle = view_state_handle;
     it->second.view_kind = view_kind;
     it->second.feature_profile = feature_profile;
@@ -2264,6 +2267,7 @@ auto Renderer::UpsertPublishedRuntimeView(engine::FrameContext& frame_context,
         .last_seen_frame = frame_context.GetFrameSequenceNumber(),
         .shading_mode_override = shading_mode_override,
         .render_mode_override = render_mode_override,
+        .shader_debug_mode_override = shader_debug_mode_override,
         .view_state_handle = view_state_handle,
         .view_kind = view_kind,
         .feature_profile = feature_profile,
@@ -2347,7 +2351,7 @@ auto Renderer::GetExposureSourceIntent(const ViewId source_view_id) const
   -> std::optional<ExposureSourceIntent>
 {
   const auto default_mode = GetRenderMode();
-  const bool diagnostic = GetShaderDebugMode() != ShaderDebugMode::kDisabled;
+  const auto default_debug_mode = GetShaderDebugMode();
   std::shared_lock registration_lock(view_registration_mutex_);
   std::shared_lock state_lock(view_state_mutex_);
   const auto* root = ResolvePublishedExposureRootLocked(source_view_id);
@@ -2360,7 +2364,8 @@ auto Renderer::GetExposureSourceIntent(const ViewId source_view_id) const
     .settings = root->exposure_override,
     .camera_ev = view != resolved_views_.end() ? view->second.CameraEv()
                                                : std::optional<float> {},
-    .diagnostic = diagnostic
+    .diagnostic = root->shader_debug_mode_override.value_or(default_debug_mode)
+        != ShaderDebugMode::kDisabled
       || root->render_mode_override.value_or(default_mode)
         == RenderMode::kWireframe
       || root->feature_profile
@@ -2372,7 +2377,7 @@ auto Renderer::GetRegisteredExposureIntents() const
   -> std::vector<ExposureSourceIntent>
 {
   const auto default_mode = GetRenderMode();
-  const bool diagnostic = GetShaderDebugMode() != ShaderDebugMode::kDisabled;
+  const auto default_debug_mode = GetShaderDebugMode();
   std::shared_lock registration_lock(view_registration_mutex_);
   std::shared_lock state_lock(view_state_mutex_);
   auto intents = std::vector<ExposureSourceIntent> {};
@@ -2390,7 +2395,9 @@ auto Renderer::GetRegisteredExposureIntents() const
       .settings = state.exposure_override,
       .camera_ev = view != resolved_views_.end() ? view->second.CameraEv()
                                                  : std::optional<float> {},
-      .diagnostic = diagnostic
+      .diagnostic
+      = state.shader_debug_mode_override.value_or(default_debug_mode)
+          != ShaderDebugMode::kDisabled
         || state.render_mode_override.value_or(default_mode)
           == RenderMode::kWireframe
         || state.feature_profile
@@ -3020,6 +3027,7 @@ auto Renderer::PopulateRenderContextViewState(RenderContext& render_context,
         entry.produced_aux_outputs = state.produced_aux_outputs;
         entry.consumed_aux_outputs = state.consumed_aux_outputs;
         entry.exposure_override = state.exposure_override;
+        entry.shader_debug_mode_override = state.shader_debug_mode_override;
         const auto* root = ResolvePublishedExposureRootLocked(view.id);
         CHECK_NOTNULL_F(root, "Registered exposure ownership must be acyclic");
         entry.exposure_view_id = root->published_view_id;
@@ -3858,6 +3866,7 @@ auto Renderer::ValidatedOffscreenSceneSession::ExecuteNow() -> bool
     .render_mode_override = view_intent.force_wireframe
       ? std::optional<RenderMode> { RenderMode::kWireframe }
       : view_intent.render_settings.render_mode,
+    .shader_debug_mode_override = view_intent.render_settings.shader_debug_mode,
     .resolved_view = observer_ptr<const ResolvedView> { &resolved_view },
     .render_target = output_target_.framebuffer,
     .composite_source = output_target_.framebuffer,
@@ -3942,6 +3951,7 @@ auto Renderer::ValidatedOffscreenSceneSession::ExecuteInsideFrame(
     .render_mode_override = view_intent.force_wireframe
       ? std::optional<RenderMode> { RenderMode::kWireframe }
       : view_intent.render_settings.render_mode,
+    .shader_debug_mode_override = view_intent.render_settings.shader_debug_mode,
     .resolved_view = observer_ptr<const ResolvedView> { &resolved_view },
     .render_target = output_target_.framebuffer,
     .composite_source = output_target_.framebuffer,

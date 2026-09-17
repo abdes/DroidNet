@@ -1447,7 +1447,11 @@ namespace {
     }
     const auto camera_ev = resolved_view != nullptr ? resolved_view->CameraEv()
                                                     : std::optional<float> {};
-    const bool diagnostic = ctx.shader_debug_mode != ShaderDebugMode::kDisabled
+    const bool diagnostic
+      = (captured_view ? captured_view->shader_debug_mode_override.value_or(
+                           ctx.shader_debug_mode)
+                       : ctx.shader_debug_mode)
+        != ShaderDebugMode::kDisabled
       || (captured_view
              ? captured_view->render_mode_override.value_or(ctx.render_mode)
              : ctx.render_mode)
@@ -1475,8 +1479,7 @@ namespace {
     config.resolved_exposure = active.resolved;
     config.exposure_settings_revision = active.revision;
 
-    if (ctx.shader_debug_mode != ShaderDebugMode::kDisabled
-      || ctx.render_mode == RenderMode::kWireframe) {
+    if (diagnostic) {
       config.temporary_unit_exposure = true;
       config.enable_auto_exposure = false;
       config.fixed_exposure = 1.0F;
