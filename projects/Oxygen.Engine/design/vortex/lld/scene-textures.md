@@ -21,7 +21,8 @@
 
 ## Exposure HDR domain and format inventory
 
-The exposure delivery uses normal RGBA16F and bootstrap/recovery RGBA32F through
+The exposure delivery uses qualified RGBA16F and bootstrap/recovery RGBA32F
+radiance products, with RGBA32F SceneColor accumulation in both modes, through
 existing texture descriptors, lease keys and PSO format keys. This section is
 the source-to-consumer migration checklist, audited at `7c44dffa8`.
 The slice-5 source refresh distinguishes active SceneRenderer-owned radiance
@@ -33,7 +34,7 @@ not completed implementation.
 
 | Product ID / product | Producer and current storage | Consumers / required domain | Format action |
 | --- | --- | --- | --- |
-| 1 SceneColor: base emissive | `Materials/GBufferMaterialOutput.hlsli`, `Vortex/SceneRenderer/SceneTextures.cpp`, RGBA16F | Deferred/forward lighting, fog, resolve, meter, tonemap; write P times scene RGB, preserve coverage | Dual RGBA16F/RGBA32F |
+| 1 SceneColor: base emissive | `Materials/GBufferMaterialOutput.hlsli`, `Vortex/SceneRenderer/SceneTextures.cpp`, RGBA16F at audit baseline | Deferred/forward lighting, fog, resolve, meter, tonemap; write P times scene RGB, preserve coverage | RGBA32F accumulation in both modes |
 | 2 SceneColor: deferred direct | `Services/Lighting/DeferredLight*.hlsl` and `DeferredLightingCommon.hlsli` | Add P-scaled BRDF radiance to product 1; no exposure in photometric light packets | Same SceneColor lease and blend-compatible PSOs |
 | 3 SceneColor: indirect | `Services/Lighting/DeferredShadingCommon.hlsli`, `DeferredLightDirectional.hlsl`, forward environment SH/IBL consumers | Canonical scene-referred IBL converted to P at destination | Same SceneColor; SH remains float buffers |
 | 4 Forward lit/unlit/opaque/masked/translucent | `Stages/Translucency/ForwardMesh_PS.hlsl`, `ForwardDirectLighting.hlsli`, material evaluation | One P on scene radiance; remove old GetExposure division/sRGB branch on HDR path; alpha/coverage unscaled | Same SceneColor and forward PSO formats |
@@ -43,7 +44,7 @@ not completed implementation.
 | 8 Height fog | `Services/Environment/Fog.hlsl` | SceneColor; scale added inscattering by P, retain attenuation | Same SceneColor |
 | 9 Local fog compose | `Services/Environment/LocalFogVolumeCompose.hlsl` | SceneColor; same radiance/attenuation separation | Same SceneColor |
 | 10 Volumetric fog/history | `Vortex/Environment/Passes/VolumetricFogPass.cpp`, RGBA16F 3D; `VolumetricFog.hlsl` | Fog compose and temporal reprojection; RGB carries stored P, alpha is transmittance | Dual current/history 3D textures; convert prior RGB by P_current/P_stored before interpolation |
-| 11 Resolved HDR / composition handoff | `Vortex/SceneRenderer/ResolveSceneColor.cpp`, descriptor-cloned SceneColor artifact; Stage 22 writes caller-owned composite targets | Stage 22 reads resolved HDR; auxiliary/offscreen final-color handoff is display-mapped when post processing runs | Resolve/copy format follows SceneColor; do not promote bounded post-tonemap targets merely because a caller named them HDR |
+| 11 Resolved HDR / composition handoff | `Vortex/SceneRenderer/ResolveSceneColor.cpp`, existing resolved-color artifact; Stage 22 writes caller-owned composite targets | Stage 22 reads resolved HDR; auxiliary/offscreen final-color handoff is display-mapped when post processing runs | Checked conversion from FP32 accumulation to qualified RGBA16F or recovery RGBA32F; bounded post-tonemap targets retain their format |
 | 12 Bloom products | `Vortex/PostProcess/Internal/BloomChain.cpp` currently only forwards an externally supplied SRV; `BloomDownsample.hlsl` / `BloomUpsample.hlsl` exist | Tonemap; threshold scene-referred, RGB in source P, final S/P once | Any allocated radiance chain must inherit source HDR mode; no existing owned chain allocation found in this audit |
 | 13 Static processed sky cubemap | `StaticSkyLightProcessor.cpp`, `IblProcessor.cpp`, normalized RGBA16F plus source_radiance_scale | Sky/IBL consumers restore resource scale; independent of view P/S | Preserve existing normalization; qualify narrowing and select RGBA32F if required source signal cannot fit; upload packing and descriptor must agree |
 | 14 Canonical atmosphere transmittance | `AtmosphereLutCache.cpp`, RGBA16F | All atmosphere integrators; dimensionless | Unchanged; never P-scaled |
@@ -59,7 +60,8 @@ Dynamic captured-scene/specular sky and TAA/TSR have no active producer in this
 audited checkout; their ED-M08/future contracts must carry domain metadata when
 activated, but this inventory does not claim their implementation or validation.
 
-The exact dual-format allocation set is SceneColor, composition HDR/optional
+SceneColor remains RGBA32F for accumulation in both modes. The exact dual-format
+allocation set is composition HDR/optional
 resolved HDR, sky-view LUT, camera AP volume, volumetric-fog current/history,
 any active bloom radiance allocation, and the canonical processed cubemap when
 its own normalization fails qualification. Other entries write into these
@@ -78,9 +80,9 @@ per-view structured publisher. Each submitted payload is immutable through its
 frame slot's retirement, including repeated views and families larger than a
 fixed ring. Their HLSL consumers use the matching structured-buffer descriptors.
 
-The cumulative-blend check requires an accumulation-boundary decision before
-normal-mode admission is enabled. Fixed-function output-merger blending does
-not expose its cumulative pre-store value to the pixel shader. The recommended
+SceneColor accumulation remains RGBA32F in both resource modes. This contract
+was approved on 2026-09-17. Fixed-function output-merger blending does
+not expose its cumulative pre-store value to the pixel shader. The
 implementation keeps the existing SceneColor allocation RGBA32F for accumulation
 and performs checked conversion into the existing resolved-color allocation:
 RGBA16F when qualified, RGBA32F during recovery. This adds no telemetry target,
@@ -88,12 +90,11 @@ but retains one FP32 allocation in normal mode: eight extra bytes per SceneColor
 texel versus the original all-FP16 normal-mode inventory (15.82 MiB at 1080p,
 63.28 MiB at 4K). Other qualified view-radiance products can still use FP16.
 
-The alternative is programmable ordered-UAV blending into SceneColor, which
-permits cumulative checks within the shader but changes the raster blend path
-and requires ROV capability handling. See Microsoft's
-[ordered-view specification](https://microsoft.github.io/DirectX-Specs/d3d/RasterOrderViews.html).
-This choice is pending user approval; the current conservative-FP32 scene path
-does not constitute approval or completion of normal-mode format admission.
+Use the conventional raster blend path. Ordered-UAV blending is not part of
+this contract. Checking an individual FP16 blend store would not independently
+bound accumulated rounding error or recover information lost by earlier stores.
+The current conservative-FP32 scene path does not constitute completion of
+checked conversion or normal-mode format admission.
 
 Exposure validity does not imply FP16 eligibility. At audited radiance write
 boundaries, test finite FP32 values before narrowing, including cumulative
@@ -151,8 +152,9 @@ record those passes and target-device timings in slice-5/10 reports.
 SceneTexturesConfig and SceneTextureLeaseKey carry the actual SceneColor format;
 only RGBA16F and RGBA32F are accepted. The pool separates and reuses those
 physical families without changing depth, GBuffers or velocity formats. The
-active family propagates its HDR format to the per-view context; sky-view LUT,
-camera AP volume and volumetric-fog allocation/views use that same format.
+scene path keeps accumulation RGBA32F. Its per-view radiance mode independently
+selects the resolved-color, sky-view LUT, camera AP volume and volumetric-fog
+formats; it must not infer eligibility from the accumulation texture's format.
 Canonical transmittance and unit-illuminance multiple scattering remain FP16.
 Compatible fog history remains readable across a format change through its own
 correctly typed descriptor. Runtime admission and stored-P conversion remain

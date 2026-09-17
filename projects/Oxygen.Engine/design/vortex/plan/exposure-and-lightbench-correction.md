@@ -423,8 +423,10 @@ updates with the corresponding C++ producers.
 An unseeded first frame cannot choose a reliable FP16 scale from exposure
 history. A tiny fixed P can erase dark pixels; P=1 can overflow bright pixels.
 
-Use transient FP32 scene color and required high-range view-dependent
-intermediates for first unseeded metering, remeter cuts and device recovery.
+Keep SceneColor accumulation FP32 in both modes. Convert into the existing
+resolved-color texture with suitability checks: FP16 when qualified, FP32 for
+bootstrap/recovery. Required high-range view-dependent intermediates also use
+FP32 for first unseeded metering, remeter cuts and device recovery.
 Use P=1, meter and tonemap that frame. Exposure validity and FP16 suitability
 are separate conditions. The CPU starts this format on the known event and
 retains it until nonblocking completed status for the matching view, settings
@@ -1210,9 +1212,10 @@ dark fallback. Required 46-stop signals fail while below-budget components can
 pass. Debug/Release pass 119 native tests and 22 service/22 publication tests;
 eight focused debugger cases and the qualifier RenderDoc audit pass. Evidence
 is `lifecycle/suitability-manifest.json`. These local checks do not grant format
-admission. The accumulation-boundary proposal in SceneTextures is pending user
-approval; cumulative error aggregation, stability and status-qualified switching
-remain open.
+admission. The approved accumulation boundary retains FP32 SceneColor in both
+modes and checks conversion into the existing resolved-color allocation;
+SceneTextures owns the allocation and memory contract. Cumulative error
+aggregation, stability and status-qualified switching remain open.
 
 Canonical static-sky cubemap processing now qualifies all generated mips before
 choosing half or float storage. Texture/upload/SRV formats agree, source
