@@ -2184,10 +2184,8 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
             || std::ranges::all_of(blend_state,
               [](const auto& target) { return !target.blend_enable; });
         }
-        const auto expected_src_blend
-          = pipeline_name == "Vortex.Environment.Fog"
-          ? oxygen::graphics::BlendFactor::kOne
-          : oxygen::graphics::BlendFactor::kSrcAlpha;
+        // Both atmosphere and fog emit additive inscatter directly.
+        const auto expected_src_blend = oxygen::graphics::BlendFactor::kOne;
         const auto expected_dest_blend
           = oxygen::graphics::BlendFactor::kInvSrcAlpha;
         return !blend_state.empty()

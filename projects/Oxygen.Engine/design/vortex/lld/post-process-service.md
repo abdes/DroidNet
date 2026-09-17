@@ -733,7 +733,7 @@ it does not retroactively remove error already present in reused history. The
 GPU implementation must conservatively account for its own bound-arithmetic
 rounding and reject incomplete certificates.
 
-The checker contains four concrete counterexamples to independent per-product
+The checker contains three concrete counterexamples to independent per-product
 acceptance. An additional 8192-radiance sample makes the existing global selector
 choose P=1, so these examples use a realizable candidate scale:
 
@@ -753,30 +753,39 @@ choose P=1, so these examples use a realizable candidate scale:
   `0.004875` error near unit radiance, exceeding the approximately `0.002500`
   admission allowance and the full meter EV budget. The recurrence bound covers
   the error; resetting error accounting at every store does not.
-- Deferred AP has an additional branch loss: a stored transmittance
-  `1 - 2^-16` rounds to one in FP16. Its opacity changes from above `1e-5` to
-  zero, suppressing an inscatter contribution of approximately `0.01`. Both
-  local RGB/T checks pass; a smooth `background*T + inscatter` model misses
-  this loss because it does not model the deferred consumer's branch.
+
+The former deferred AP opacity threshold is retained as a regression against
+the removed implementation. It discarded positive inscatter below opacity `1e-5`
+even in FP32; rounding transmittance `1 - 2^-16` to one exposed the same loss in
+FP16. The corrected additive-source blend preserves inscatter in both cases.
 
 ### Consumer transfer and coverage
 
 The exact-arithmetic consumer oracle follows the shader and blend state together.
-Its interval tests do not establish hardware filtering, division or blend-rounding
+Its interval tests do not establish hardware filtering or blend-rounding
 error. These remain required before GPU admission can use the transfer rules.
 
 | Consumer | Transfer before subsequent stages |
 | --- | --- |
 | AP near fade (`AerialPerspective.hlsli`) | `I = weight*sample.rgb`, `T = 1-weight*(1-sample.a)`; strength scales `I` only |
 | Lit forward AP (`ForwardMesh_PS.hlsl`) | `C = background*T + I`; material coverage is returned separately |
-| Deferred AP (`AtmosphereCompose.hlsl`, `AtmosphereComposePass.cpp`) | `alpha = saturate(1-T)`; RGB source is `I/alpha` only when `alpha > 1e-5`, otherwise zero; `SrcAlpha/InvSrcAlpha` blending therefore contributes `I` or zero, plus `background*T` in exact arithmetic |
+| Deferred AP (`AtmosphereCompose.hlsl`, `AtmosphereComposePass.cpp`) | Output `(I, saturate(1-T))`; `One/InvSrcAlpha` RGB blending gives `C = I + background*T`, including at zero opacity |
 | Fog (`Fog.hlsl`, `FogPass.cpp`) | `C = volume.rgb + height.rgb*volume.T + background*height.T*volume.T`; RGB blending uses `One/InvSrcAlpha` |
 | Environment destination coverage | `A_out = 1-T + A_in*T`, with the combined height/volume `T` for fog |
 
-For deferred AP, an opacity interval wholly at or below the threshold contributes
-zero; one wholly above contributes the inscatter interval; one spanning the
-threshold requires the union of both results. Equality belongs to the zero branch.
-Do not replace this consumer with the forward transfer during admission.
+Deferred and forward AP use the same radiance transfer. No opacity division or
+threshold is needed. Alpha blending remains `One/InvSrcAlpha`, so the correction
+does not change the destination coverage equation.
+
+The native `DeferredApPreservesInscatterAtLowAndZeroOpacity` fixture exercises
+the actual deferred shader and blend with FP32/FP16 LUT inputs, zero opacity,
+representable opacities on either side of the removed threshold, nonzero
+backgrounds and partial coverage. Its expected values use an independent
+double-precision transfer, not production math helpers. The capture checker
+[`AnalyzeRenderDocApComposition.py`](../../../tools/vortex/AnalyzeRenderDocApComposition.py)
+reads actual LUT inputs and before/after targets for all 72 draws. This qualifies
+that controlled consumer transfer; actual forward raster and mixed-scene image
+acceptance remain separate tracker items.
 
 Preserve the correlation in destination coverage: for independent intervals
 `A=[a0,a1]` and `T=[t0,t1]` within `[0,1]`, the enclosure is
@@ -792,8 +801,8 @@ quantized weight; a boundary-spanning interval cannot certify that sample's mass
 For stable positive weight and nonnegative RGB interval `[c0,c1]`, normalize to
 `[c0/a1,c1/a0]`. Stable zero weight skips division, including a zero profile/mask.
 
-`consumer-error-oracle.json` records 26,006 exact consumer/coverage checks and the
-additional deferred-branch counterexample. These supplement the 48,000 affine
+`review-r036-consumer-oracle.json` records 26,006 exact consumer/coverage checks and
+the removed-branch regression. These supplement the 48,000 affine
 algebra checks; none is a substitute for native consumer qualification.
 
 Before closing EX05-15, implement and verify certificate transport, actual
