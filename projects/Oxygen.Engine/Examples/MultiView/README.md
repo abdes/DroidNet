@@ -34,7 +34,7 @@ Common validation-oriented options:
 - `--point-light <true|false>` and `--spot-light <true|false>`: enable each
   existing scene light independently for forward/deferred contribution checks.
   Both default to enabled.
-- `--exposure-proof <none|independent|shared|main-only|pip-only|reordered|source-loss|viewport>`:
+- `--exposure-proof <none|independent|shared|main-only|pip-only|reordered|source-loss|viewport|lifetime>`:
   run a paused, static main/PiP exposure comparison with explicit Auto settings
   and a public remeter at frame 32. PiP has two stops of compensation unless it
   shares main's gain. Shared mode steps main by one stop at frame 44; capture
@@ -131,6 +131,13 @@ run `Assert-MultiViewViewport.py --directory <reports> --prefix <prefix>
 main-view isolation, matching raster/meter rectangles, untouched pixels outside
 the scissor, and exact restoration of PiP. The tonemap oracle checks only pixels
 inside the actual draw scissor; this case preserves prior pixels outside it.
+
+`lifetime` hides PiP on GPU frames 44–47 without destroying its registration,
+reopens it at frame 48 with one extra stop of requested compensation, then
+creates a new logical view/handle at frame 52. Game time stays paused. Capture
+frames 42, 43, 47 and 51 and run `Assert-MultiViewLifetime.py --directory <reports>
+--prefix <prefix> --output <result.json>` with Pillow. The retained view must
+preserve its old gain/image; the new view must initialize from its own target.
 
 For the offscreen forward light-binding regression, capture the existing
 `--offscreen-proof-layout true --pip-wireframe false` layout with both lights,

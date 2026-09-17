@@ -866,6 +866,13 @@ auto MainModule::UpdateComposition(oxygen::engine::FrameContext& context,
   std::vector<vortex::CompositionView>& views) -> void
 {
   const auto sequence = context.GetFrameSequenceNumber().get();
+  retain_inactive_pip_
+    = config_.exposure_proof == ExposureProofScenario::kLifetime
+    && sequence >= 44U && sequence < 48U;
+  if (config_.exposure_proof == ExposureProofScenario::kLifetime
+    && sequence == 52U) {
+    pip_view_id_ = GetOrCreateViewId("RecreatedPipView");
+  }
   viewport_proof_resized_
     = config_.exposure_proof == ExposureProofScenario::kViewport
     && sequence >= 44U && sequence < 52U;
@@ -921,6 +928,10 @@ auto MainModule::UpdateComposition(oxygen::engine::FrameContext& context,
     auto exposure = scene::ExposureSettings {};
     exposure.key = 12.5F;
     exposure.compensation_ev = view.id == pip_view_id_ ? 2.0F : 0.0F;
+    if (proof == ExposureProofScenario::kLifetime && frame >= 48U
+      && view.id == pip_view_id_) {
+      exposure.compensation_ev = 3.0F;
+    }
     if (proof == ExposureProofScenario::kShared
       || (proof == ExposureProofScenario::kSourceLoss && !source_lost)) {
       if (view.id == pip_view_id_) {
@@ -934,8 +945,9 @@ auto MainModule::UpdateComposition(oxygen::engine::FrameContext& context,
   }
   std::erase_if(views, [&](const auto& view) {
     return view.camera.has_value()
-      && ((proof == ExposureProofScenario::kMainOnly
-            && view.id != main_view_id_)
+      && ((retain_inactive_pip_ && view.id == pip_view_id_)
+        || (proof == ExposureProofScenario::kMainOnly
+          && view.id != main_view_id_)
         || ((proof == ExposureProofScenario::kPipOnly || source_lost)
           && view.id != pip_view_id_));
   });
@@ -1363,5 +1375,10 @@ auto MainModule::BuildComposition(oxygen::engine::FrameContext& context,
 }
 
 auto MainModule::ClearBackbufferReferences() -> void { }
+
+auto MainModule::RetainInactiveView(const ViewId view_id) const noexcept -> bool
+{
+  return retain_inactive_pip_ && view_id == pip_view_id_;
+}
 
 } // namespace oxygen::examples::multiview

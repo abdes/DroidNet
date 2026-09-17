@@ -105,6 +105,13 @@ protected:
   auto GetOrCreateViewId(std::string_view name) -> ViewId;
   auto ClearViewIds() -> void;
 
+  //! Retain an omitted view's registration/history with no current outputs.
+  //! The renderer's normal idle-retirement policy still applies.
+  virtual auto RetainInactiveView(ViewId /*view_id*/) const noexcept -> bool
+  {
+    return false;
+  }
+
   //! Resolve the active Vortex renderer module if available.
   auto ResolveVortexRenderer() const noexcept -> observer_ptr<vortex::Renderer>;
 
