@@ -155,9 +155,8 @@ and display-side wireframe overlay. Preparation failures return without HDR
 draws or replacement output and preserve pending requests. Native tests cover
 standalone/in-frame retries, real-scene sky P invariance and high radiance, plus
 paired-view fog history blending with RGB rebasing and unchanged transmittance.
-The scene path currently retains FP32. Automatic precision admission/recovery,
-canonical cubemap narrowing qualification and the remaining scene/MultiView
-acceptance matrix still keep slice 5 open.
+The scene path currently retains FP32. Automatic precision admission/recovery
+and the remaining scene/MultiView acceptance matrix still keep slice 5 open.
 The conservative-FP32 scene cutover passes 111 native, 7 texture, 6 pool,
 56 environment, 22 service and 22 publication tests per configuration, plus
 78 renderer/context/facade regressions. Four scene debugger cases and the
@@ -173,6 +172,12 @@ handles required signal loss, insignificant components, displayed-gain error,
 mask/coverage/dark contribution, transmittance and missing products. It does not
 authorize format switches. The normal-mode accumulation/storage choice remains
 pending user approval, followed by cumulative error and admission integration.
+Canonical static-sky cubemap narrowing is qualified: generated mips and authored
+intensity determine half/float storage, matching uploads/views preserve required
+signals, and same-key intensity edits promote before publishing amplified half
+loss. Harmless edits reuse the cache; promoted products remain FP32 when dimmed.
+Debug/Release each pass 121 native and 61 environment tests. Two debugger cases
+have no blocking graphics messages (`lifecycle/cubemap-manifest.json`).
 Mask identity now follows the approved existing resource-index model.
 
 ## 4. Milestone Ledger

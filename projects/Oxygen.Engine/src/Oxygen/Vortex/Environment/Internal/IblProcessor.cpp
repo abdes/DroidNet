@@ -117,6 +117,8 @@ struct IblProcessor::StaticSkyLightProductCache {
   std::optional<upload::UploadTicket> processed_cubemap_upload {};
   std::optional<upload::UploadTicket> diffuse_sh_upload {};
   bool has_submitted_current_key { false };
+  double half_storage_gain_limit { 0.0 };
+  Format processed_format { Format::kRGBA16Float };
 };
 
 IblProcessor::IblProcessor(Renderer& renderer)
@@ -190,7 +192,12 @@ auto IblProcessor::RefreshStaticSkyLightProducts(
   }
 
   const auto key = state.static_sky_light.key;
-  const auto key_changed = !cache.has_submitted_current_key || cache.key != key;
+  const bool precision_upgrade = cache.has_submitted_current_key
+    && cache.key == key && cache.processed_format == Format::kRGBA16Float
+    && static_cast<double>(sky_light.intensity_mul)
+      > cache.half_storage_gain_limit;
+  const auto key_changed
+    = !cache.has_submitted_current_key || cache.key != key || precision_upgrade;
   if (key_changed) {
     if (const auto gfx = renderer_.GetGraphics(); gfx != nullptr) {
       ResetResource(*gfx, cache.processed_cubemap);
@@ -231,7 +238,7 @@ auto IblProcessor::RefreshStaticSkyLightProducts(
       .mip_levels = mip_count,
       .sample_count = 1U,
       .sample_quality = 0U,
-      .format = Format::kRGBA16Float,
+      .format = cpu_products->processed_format,
       .texture_type = TextureType::kTextureCube,
       .debug_name = "Vortex.StaticSkyLight.ProcessedCubemap",
       .is_shader_resource = true,
@@ -255,7 +262,16 @@ auto IblProcessor::RefreshStaticSkyLightProducts(
     }
     processed_cubemap->SetName("Vortex.StaticSkyLight.ProcessedCubemap");
 
-    auto encoded_rgba16 = EncodeRgba16(cpu_products->processed_rgba);
+    static_assert(sizeof(glm::vec4) == sizeof(float) * 4U);
+    const bool use_half
+      = cpu_products->processed_format == Format::kRGBA16Float;
+    auto encoded_rgba16 = use_half ? EncodeRgba16(cpu_products->processed_rgba)
+                                   : std::vector<std::uint16_t> {};
+    const auto bytes_per_pixel
+      = use_half ? sizeof(std::uint16_t) * 4U : sizeof(glm::vec4);
+    const auto* encoded_bytes = use_half
+      ? reinterpret_cast<const std::byte*>(encoded_rgba16.data())
+      : reinterpret_cast<const std::byte*>(cpu_products->processed_rgba.data());
     auto dst_subresources = std::vector<upload::UploadSubresource> {};
     auto src_view = upload::UploadTextureSourceView {};
     dst_subresources.reserve(6U * mip_count);
@@ -267,9 +283,8 @@ auto IblProcessor::RefreshStaticSkyLightProducts(
           = ProcessedMipOffset(face, mip, face_size, mip_count);
         const auto element_count
           = static_cast<std::size_t>(mip_size) * mip_size;
-        const auto* bytes = reinterpret_cast<const std::byte*>(
-          encoded_rgba16.data() + element_offset * 4U);
-        const auto byte_count = element_count * sizeof(std::uint16_t) * 4U;
+        const auto* bytes = encoded_bytes + element_offset * bytes_per_pixel;
+        const auto byte_count = element_count * bytes_per_pixel;
         dst_subresources.push_back({
           .mip = mip,
           .array_slice = face,
@@ -282,7 +297,7 @@ auto IblProcessor::RefreshStaticSkyLightProducts(
         });
         src_view.subresources.push_back({
           .bytes = std::span<const std::byte>(bytes, byte_count),
-          .row_pitch = mip_size * sizeof(std::uint16_t) * 4U,
+          .row_pitch = static_cast<std::uint32_t>(mip_size * bytes_per_pixel),
           .slice_pitch = static_cast<std::uint32_t>(byte_count),
         });
       }
@@ -296,7 +311,7 @@ auto IblProcessor::RefreshStaticSkyLightProducts(
         .width = face_size,
         .height = face_size,
         .depth = 1U,
-        .format = Format::kRGBA16Float,
+        .format = cpu_products->processed_format,
       },
       .subresources = std::move(dst_subresources),
       .data = std::move(src_view),
@@ -333,7 +348,7 @@ auto IblProcessor::RefreshStaticSkyLightProducts(
       graphics::TextureViewDescription {
         .view_type = graphics::ResourceViewType::kTexture_SRV,
         .visibility = graphics::DescriptorVisibility::kShaderVisible,
-        .format = Format::kRGBA16Float,
+        .format = cpu_products->processed_format,
         .dimension = TextureType::kTextureCube,
         .sub_resources = graphics::TextureSubResourceSet::EntireTexture(),
         .is_read_only_dsv = false,
@@ -397,6 +412,8 @@ auto IblProcessor::RefreshStaticSkyLightProducts(
       .unavailable_reason
       = StaticSkyLightUnavailableReason::kGpuProductsPending,
     };
+    cache.half_storage_gain_limit = cpu_products->half_storage_gain_limit;
+    cache.processed_format = cpu_products->processed_format;
     cache.processed_cubemap = std::move(processed_cubemap);
     cache.diffuse_sh_buffer = std::move(diffuse_sh_buffer);
     cache.processed_cubemap_upload = *texture_ticket;

@@ -48,6 +48,25 @@ processing retains its existing source_radiance_scale and qualifies the actual
 half upload, including dark required signals, rather than only avoiding maximum
 overflow. Dynamic capture work retains its existing owning scope.
 
+Static-sky CPU processing now qualifies the generated mip chain before upload.
+It retains the existing source normalization and evaluates decoded binary16
+values against half the image budget, including the supported maximum displayed
+gain, plus the half-margin luminance tolerance. This canonical resource check
+does not use a view's P. Insignificant components can remain half precision;
+loss that can become visible selects RGBA32F for the processed cubemap. Texture
+format, upload element size/pitches and SRV format follow the same decision.
+Nonfinite or negative input radiance and nonfinite generated products are
+reported as processing failures; diffuse SH retains its FP32 representation.
+
+The qualifier records the maximum authored sky intensity allowed by those
+half-upload bounds. The current processed-cubemap consumer applies that intensity
+through published `radiance_scale`; diffuse SH remains a separate FP32 product.
+An intensity edit within the bound reuses the product. Crossing the bound
+invalidates the half product before publication and regenerates from the original
+FP32 source with FP32 storage, even when source key/revision are unchanged.
+Promotion is retained for that source key when intensity falls again, avoiding
+repeated uploads during intensity animation. Source normalization is unchanged.
+
 The active sky/AP producers and consumers now keep their radiance in the same
 P domain. Sky sphere radiance is multiplied by P at its SceneColor write;
 atmosphere LUT radiance and solar-disk radiance are not divided back out or

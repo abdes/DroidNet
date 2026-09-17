@@ -1,6 +1,6 @@
 # Exposure management and LightBench implementation plan
 
-Status: `in_progress` — slices 1-2 checkpointed; slice 3 next.
+Status: `in_progress` — slices 1-4 qualified; slice 5 active.
 
 Date: 2026-09-16
 
@@ -1186,8 +1186,8 @@ Preparation failure skips the view and required auxiliary dependants, preserves
 the caller's existing output and queued request, and returns failure from both
 offscreen entry paths. The current scene path conservatively retains FP32 until
 all required products can supply completed suitability proof. Automatic FP16
-admission, range-triggered recovery, canonical cubemap narrowing qualification,
-and the complete scene/MultiView matrix remain open.
+admission, range-triggered recovery and the complete scene/MultiView matrix
+remain open. Canonical cubemap narrowing is qualified separately below.
 
 This conservative-FP32 scene increment passes 111 native tests, 7 texture,
 6 pool, 56 environment, 22 service and 22 publication tests in Debug and
@@ -1213,6 +1213,18 @@ is `lifecycle/suitability-manifest.json`. These local checks do not grant format
 admission. The accumulation-boundary proposal in SceneTextures is pending user
 approval; cumulative error aggregation, stability and status-qualified switching
 remain open.
+
+Canonical static-sky cubemap processing now qualifies all generated mips before
+choosing half or float storage. Texture/upload/SRV formats agree, source
+normalization is preserved, and invalid radiance fails processing. The cached
+half product carries an authored-intensity bound: harmless edits reuse it;
+crossing the bound regenerates from the original source into FP32 before
+publication, and subsequent dimming retains the promoted allocation. Native
+readback verifies all faces/mips in both formats and reconstructs unit radiance
+from a 2^-50 source amplified by the actual published 2^50 scale. Debug/Release
+each pass 121 native and 61 environment tests; two focused debugger cases have
+no blocking graphics messages. Evidence is `lifecycle/cubemap-manifest.json`.
+This canonical-resource checkpoint does not grant per-view FP16 admission.
 
 - [x] Add the early GPU P resolve and bind a frame-invariant P/1P to every HDR pass.
 - [ ] Migrate the entire section 4.4 checklist, including atmosphere producer/
