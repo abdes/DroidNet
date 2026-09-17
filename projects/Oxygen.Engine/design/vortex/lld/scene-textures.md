@@ -68,6 +68,12 @@ GBuffers, velocity, shadow maps, transmittance or display targets.
 
 ### Per-view FP16 suitability
 
+Resolved/extracted textures and their registered shader-visible views retire
+together through the existing GPU-frame reclaimer. Switching views, resizing,
+or replacing an artifact retains its registry entries until that frame slot is
+safe to reclaim. Earlier views' submitted shader indices remain stable through
+later view preparation and rendering.
+
 The cumulative-blend check requires an accumulation-boundary decision before
 normal-mode admission is enabled. Fixed-function output-merger blending does
 not expose its cumulative pre-store value to the pixel shader. The recommended

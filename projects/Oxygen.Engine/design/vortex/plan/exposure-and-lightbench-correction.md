@@ -1256,6 +1256,15 @@ blocking graphics messages. Evidence is `multiview/framing-manifest.json`.
 Other proof-layout framing and the scripted exposure/lifecycle matrix remain
 open; this is a camera-pose correction, not full visual acceptance.
 
+Extracted texture replacement now defers registry/view removal together with
+the texture through GPU-frame retirement. The direct descriptor regression
+fails before this fix and passes in the 59-test renderer-core suite in both
+Debug and Release. Fresh native captures preserve earlier submitted views;
+isolated/family and reordered comparisons report zero gain, meter and image
+differences, including the compared composition region. Evidence is
+`multiview/retirement-manifest.json`. The bounded MultiView proof controls are
+qualified separately; the complete slice-5 lifecycle gate remains open.
+
 - [x] Add the early GPU P resolve and bind a frame-invariant P/1P to every HDR pass.
 - [ ] Migrate the entire section 4.4 checklist, including atmosphere producer/
   consumer pairs, fog/color histories, bloom and offscreen/capture domains.

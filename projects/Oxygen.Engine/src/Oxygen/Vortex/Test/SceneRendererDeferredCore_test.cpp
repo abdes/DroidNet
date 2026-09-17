@@ -24,6 +24,7 @@
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Queues.h>
+#include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Scene/Environment/Fog.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
@@ -438,6 +439,42 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   const auto rebound_context
     = RenderForView(first_view_id_, first_resolved_view_);
   EXPECT_EQ(rebound_context.current_view.prepared_frame.get(), first_prepared);
+}
+
+NOLINT_TEST_F(SceneRendererDeferredCoreTest,
+  ResolvedArtifactDescriptorsSurviveOtherViewsUntilSlotRetires)
+{
+  auto& reclaimer = graphics_->GetDeferredReclaimer();
+  reclaimer.OnBeginFrame(oxygen::frame::Slot { 1U });
+  static_cast<void>(RenderForView(first_view_id_, first_resolved_view_));
+  auto first = scene_renderer_->GetResolvedSceneColorTexture();
+  ASSERT_NE(first, nullptr);
+  auto& registry = graphics_->GetResourceRegistry();
+  const auto desc = oxygen::graphics::TextureViewDescription {
+    .view_type = oxygen::graphics::ResourceViewType::kTexture_SRV,
+    .visibility = oxygen::graphics::DescriptorVisibility::kShaderVisible,
+    .format = first->GetDescriptor().format,
+    .dimension = first->GetDescriptor().texture_type,
+    .sub_resources = oxygen::graphics::TextureSubResourceSet::EntireTexture(),
+  };
+  auto slot = registry.FindShaderVisibleIndex(*first, desc);
+  if (!slot) {
+    auto& allocator = graphics_->GetDescriptorAllocator();
+    auto handle = allocator.AllocateRaw(desc.view_type, desc.visibility);
+    ASSERT_TRUE(handle.IsValid());
+    slot = allocator.GetShaderVisibleIndex(handle);
+    ASSERT_TRUE(
+      registry.RegisterView(*first, std::move(handle), desc)->IsValid());
+  }
+  static_cast<void>(RenderForView(second_view_id_, second_resolved_view_));
+  EXPECT_NE(scene_renderer_->GetResolvedSceneColorTexture(), first);
+  EXPECT_TRUE(registry.Contains(*first));
+  EXPECT_EQ(registry.FindShaderVisibleIndex(*first, desc), slot);
+  reclaimer.OnBeginFrame(oxygen::frame::Slot { 2U });
+  EXPECT_EQ(registry.FindShaderVisibleIndex(*first, desc), slot);
+  reclaimer.OnBeginFrame(oxygen::frame::Slot { 1U });
+  EXPECT_FALSE(registry.Contains(*first));
+  EXPECT_FALSE(registry.FindShaderVisibleIndex(*first, desc).has_value());
 }
 
 NOLINT_TEST_F(SceneRendererDeferredCoreTest,

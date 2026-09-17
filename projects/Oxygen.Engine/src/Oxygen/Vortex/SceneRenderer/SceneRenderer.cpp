@@ -27,6 +27,7 @@
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
+#include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
@@ -434,6 +435,22 @@ namespace {
       request.publish_previous_furthest = true;
     }
     return request;
+  }
+
+  auto RetireExtractTexture(
+    Graphics& gfx, std::shared_ptr<graphics::Texture>& texture) -> void
+  {
+    if (!texture) {
+      return;
+    }
+    auto* registry = &gfx.GetResourceRegistry();
+    gfx.GetDeferredReclaimer().RegisterDeferredAction(
+      [registry, texture = std::move(texture)]() mutable {
+        // Keep submitted shader indices alive as long as their texture.
+        // Graphics flushes its reclaimer before tearing down the registry.
+        registry->UnRegisterResource(*texture);
+        texture.reset();
+      });
   }
 
   auto ResolveLateOverlayTarget(const RenderContext& ctx)
@@ -2928,24 +2945,11 @@ void SceneRenderer::ResetPerViewSceneProducts()
 
 void SceneRenderer::ResetExtractArtifacts()
 {
-  auto& registry = gfx_.GetResourceRegistry();
-  const auto reset_artifact
-    = [this, &registry](std::shared_ptr<graphics::Texture>& texture) -> void {
-    if (!texture) {
-      return;
-    }
-    if (registry.Contains(*texture)) {
-      gfx_.ForgetKnownResourceState(*texture);
-      registry.UnRegisterResource(*texture);
-    }
-    gfx_.RegisterDeferredRelease(std::move(texture));
-  };
-
   scene_texture_extracts_.Reset();
-  reset_artifact(resolved_scene_color_artifact_.texture);
-  reset_artifact(resolved_scene_depth_artifact_.texture);
-  reset_artifact(prev_scene_depth_artifact_.texture);
-  reset_artifact(prev_velocity_artifact_.texture);
+  RetireExtractTexture(gfx_, resolved_scene_color_artifact_.texture);
+  RetireExtractTexture(gfx_, resolved_scene_depth_artifact_.texture);
+  RetireExtractTexture(gfx_, prev_scene_depth_artifact_.texture);
+  RetireExtractTexture(gfx_, prev_velocity_artifact_.texture);
 }
 
 auto SceneRenderer::EnsureArtifactTexture(ExtractArtifact& artifact,
@@ -2972,12 +2976,7 @@ auto SceneRenderer::EnsureArtifactTexture(ExtractArtifact& artifact,
     artifact_desc.use_clear_value = false;
     artifact_desc.clear_value = {};
     artifact_desc.initial_state = graphics::ResourceStates::kCommon;
-    auto& registry = gfx_.GetResourceRegistry();
-    if (artifact.texture != nullptr && registry.Contains(*artifact.texture)) {
-      gfx_.ForgetKnownResourceState(*artifact.texture);
-      registry.UnRegisterResource(*artifact.texture);
-      gfx_.RegisterDeferredRelease(std::move(artifact.texture));
-    }
+    RetireExtractTexture(gfx_, artifact.texture);
     artifact.texture = gfx_.CreateTexture(artifact_desc);
   }
 
