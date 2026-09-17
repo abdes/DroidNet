@@ -509,6 +509,10 @@ void VortexExposureAverageCS(uint3 dispatch_thread_id : SV_DispatchThreadID)
             | EXPOSURE_HISTORY_VALID | EXPOSURE_INITIALIZED;
     }
     ExposureStateData next = previous;
+    next.flags &= ~(EXPOSURE_RANGE_FAILURE | EXPOSURE_FP16_ELIGIBLE);
+    next.fp16_candidate_pre_exposure = 1.0;
+    next.fp16_eligible_streak = 0u;
+    next.product_layout_revision = 0u.xx;
     next.settings_revision = pass.settings_revision;
     next.frame_sequence = pass.frame_sequence;
     next.flags &= ~(EXPOSURE_LUMINANCE_VALID | EXPOSURE_METER_EV_VALID | EXPOSURE_ZERO_TARGET | EXPOSURE_MODE_MASK);
@@ -728,6 +732,10 @@ void VortexExposureFrameCS(uint3 dispatch_id : SV_DispatchThreadID)
     p = clamp(p, exp2(-32.0), exp2(32.0));
     if ((flags & (1u | 4u | 8u)) != 0u) p = 1.0;
     if ((flags & 8u) != 0u) flags |= 1u;
+    state.flags &= ~(EXPOSURE_RANGE_FAILURE | EXPOSURE_FP16_ELIGIBLE);
+    state.fp16_candidate_pre_exposure = 1.0;
+    state.fp16_eligible_streak = 0u;
+    state.product_layout_revision = 0u.xx;
     RWByteAddressBuffer current = ResourceDescriptorHeap[pass.current_state_uav];
     StoreState(current, state);
     FrameExposureData frame;
@@ -771,6 +779,73 @@ struct SceneColorConversionConstants {
     uint source_srv; uint destination_uav; uint report_srv; uint width;
     uint height; uint reserved0; uint reserved1; uint reserved2;
 };
+
+struct EligibilityConstants {
+    uint state_uav; uint previous_srv; uint status_uav; uint report_srv;
+    uint2 layout; uint expected_products; uint controls;
+    uint frame_srv; uint2 sequence; uint reserved0;
+    uint2 lifetime; uint2 reserved1;
+};
+
+[numthreads(1, 1, 1)]
+void FinalizeFp16Suitability(uint3 pixel : SV_DispatchThreadID)
+{
+    StructuredBuffer<EligibilityConstants> constants = ResourceDescriptorHeap[g_PassConstantsIndex];
+    const EligibilityConstants pass = constants[0];
+    RWByteAddressBuffer state = ResourceDescriptorHeap[pass.state_uav];
+    RWByteAddressBuffer status = ResourceDescriptorHeap[pass.status_uav];
+    ByteAddressBuffer report = ResourceDescriptorHeap[pass.report_srv];
+    StructuredBuffer<FrameExposureData> frame = ResourceDescriptorHeap[pass.frame_srv];
+    const ExposureStateData previous = LoadPrevious(pass.previous_srv, (ExposureTargetData)0);
+    const uint2 settings = state.Load2(32u);
+    const uint2 requested = state.Load2(40u);
+    const uint2 applied = state.Load2(48u);
+    const uint2 sequence = state.Load2(56u);
+    const float4 gains = asfloat(state.Load4(0u));
+    uint flags = state.Load(24u) & ~(EXPOSURE_FP16_ELIGIBLE | EXPOSURE_RANGE_FAILURE);
+    uint failure = report.Load(12u);
+    uint first_failure = report.Load(16u);
+    const uint mismatch = (pass.expected_products ^ report.Load(8u))
+        | (pass.expected_products ^ report.Load(40u));
+    if (mismatch != 0u || report.Load(36u) == 0u) {
+        failure |= 16u;
+        if (first_failure == 0u && mismatch != 0u)
+            first_failure = uint(firstbitlow(mismatch)) + 1u;
+    }
+    const float candidate = asfloat(report.Load(0u));
+    const bool valid_candidate = isfinite(candidate)
+        && candidate >= exp2(-32.0) && candidate <= exp2(32.0);
+    if (!valid_candidate) failure |= 2u;
+    const bool valid = (flags & (EXPOSURE_HISTORY_VALID | EXPOSURE_INITIALIZED))
+            == (EXPOSURE_HISTORY_VALID | EXPOSURE_INITIALIZED)
+        && all(sequence == pass.sequence) && all(isfinite(gains))
+        && gains.x >= 0.0 && gains.z > 0.0 && gains.w > 0.0;
+    const bool transition_complete = all(requested == applied)
+        || (flags & EXPOSURE_REQUEST_REJECTED) != 0u;
+    const bool qualifying = valid && failure == 0u && transition_complete
+        && (pass.controls & 1u) != 0u && (frame[0].flags & (4u | 8u)) == 0u;
+    const bool continuous = pass.previous_srv != K_INVALID_BINDLESS_INDEX
+        && (pass.controls & 2u) == 0u
+        && GenerationGreater(sequence, previous.frame_sequence)
+        && all(previous.settings_revision == settings)
+        && all(previous.requested_generation == requested)
+        && all(previous.applied_generation == applied)
+        && all(previous.product_layout_revision == pass.layout)
+        && previous.fp16_candidate_pre_exposure == candidate;
+    const uint streak = qualifying
+        ? (continuous ? min(previous.fp16_eligible_streak, 1u) + 1u : 1u) : 0u;
+    if (failure != 0u) flags |= EXPOSURE_RANGE_FAILURE;
+    if (streak >= 2u) flags |= EXPOSURE_FP16_ELIGIBLE;
+    state.Store(24u, flags);
+    state.Store4(64u, uint4(asuint(valid_candidate ? candidate : 1.0), streak, pass.layout));
+    const uint status_flags = (valid ? 1u : 0u) | (failure != 0u ? 2u : 0u)
+        | (streak >= 2u ? 4u : 0u) | ((flags & EXPOSURE_REQUEST_REJECTED) != 0u ? 8u : 0u);
+    status.Store4(0u, uint4(pass.lifetime, pass.sequence));
+    status.Store4(16u, uint4(settings, requested));
+    status.Store4(32u, uint4(applied, pass.layout));
+    status.Store4(48u, uint4(status_flags, first_failure, failure, streak));
+    status.Store4(64u, uint4(sequence, (flags & EXPOSURE_REJECTION_MASK) >> EXPOSURE_REJECTION_SHIFT, 0u));
+}
 
 [numthreads(8, 8, 1)]
 void ConvertQualifiedSceneColor(uint3 pixel : SV_DispatchThreadID)

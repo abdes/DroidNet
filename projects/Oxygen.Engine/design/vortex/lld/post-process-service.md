@@ -466,6 +466,35 @@ are nonfinite input=1, insufficient overflow margin=2, image error=4, metering
 error=8, missing product=16. The record is frame-retained with existing exposure
 resources and is not itself a format-admission certificate.
 
+After a submitted product evaluation, `FinalizeFp16Suitability` updates only
+precision metadata in the current 80-byte exposure state and writes the existing
+80-byte completed status. Fresh frame solves clear inherited eligibility; a
+missing current-frame evaluation cannot finalize. The GPU compares the view's
+own prior precision record, including for borrowers. Two consecutive rendered
+results for that view must qualify with identical settings, requested/applied event
+generations, product layout and candidate P. Inactive engine frames do not count
+as failed view results; an intervening solve without qualification clears the
+streak. Streaks saturate at two; repeating
+finalization in one frame cannot advance them. Explicit invalidation restarts
+the streak, and source identity/lifetime changes cannot inherit it. Callers
+invalidate prior qualification for source-control events and recording failures.
+
+An incomplete transition, invalid/uninitialized gain, stateless view, diagnostic
+override or unpublished-source fallback cannot qualify. A terminal rejected
+request does not remain a pending reset. Range/product failures reset the streak
+and publish failure product/kind without altering gain, metering or exposure
+event state. Settings/layout changes and candidate-scale changes
+restart at one qualifying frame. The candidate state generation is its GPU
+frame sequence. CPU admission must still validate completed identity/revisions
+and retain the matching GPU lease; this finalizer does not select resource formats.
+
+The finalizer's 64-byte constants are state UAV, own-previous SRV, status UAV,
+report SRV at bytes 0/4/8/12; layout uint2 at 16; required mask at 24; controls at
+28 (persistent=1, invalidate previous=2); frame SRV at 32; expected frame uint2
+at 36; zero at 44; lifetime uint2 at 48 and two zeros at 56. All uint64 identities
+use uint2 arithmetic, including frame-counter carry. Completed flags are valid
+state=1, failed qualification=2, eligible=4 and rejected transition=8.
+
 The evaluator reads FP32 2D/3D reference products and their stored P. A GPU
 maximum reduction selects the largest bounded power-of-two P that leaves two
 stops of headroom; candidate narrowing is then evaluated against half the

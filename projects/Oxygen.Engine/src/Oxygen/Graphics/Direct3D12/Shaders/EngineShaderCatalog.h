@@ -493,7 +493,8 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
       EntryPoint { .type=kCompute, .name="GatherSuitabilityMaximum" },
       EntryPoint { .type=kCompute, .name="SelectSuitabilityCandidate" },
       EntryPoint { .type=kCompute, .name="CheckSuitabilityProduct" },
-      EntryPoint { .type=kCompute, .name="ConvertQualifiedSceneColor" } }
+      EntryPoint { .type=kCompute, .name="ConvertQualifiedSceneColor" },
+      EntryPoint { .type=kCompute, .name="FinalizeFp16Suitability" } }
   },
   // Light culling compute shader (final clustered analytic path)
   ShaderFileSpec {

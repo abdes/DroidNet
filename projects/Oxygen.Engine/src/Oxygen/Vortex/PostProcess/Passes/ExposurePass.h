@@ -13,6 +13,7 @@
 #include <optional>
 #include <span>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include <Oxygen/Core/Bindless/Types.h>
@@ -64,6 +65,7 @@ namespace postprocess {
     ShaderVisibleIndex uav_index { kInvalidShaderVisibleIndex };
     std::shared_ptr<ExposureStateResources> current_state;
     std::shared_ptr<const ExposureStateResources> selected_history;
+    std::shared_ptr<const ExposureStateResources> precision_history;
     std::shared_ptr<const ExposureStateResources> qualified_candidate;
     std::shared_ptr<graphics::Buffer> suitability_buffer;
     ShaderVisibleIndex suitability_srv { kInvalidShaderVisibleIndex };
@@ -138,6 +140,14 @@ public:
     const FrameLease& frame, const PostProcessConfig& config,
     std::span<const HdrProduct> products, const Inputs& metering,
     SuitabilityScale scale = SuitabilityScale::kCandidate) -> bool;
+  struct EligibilityInputs {
+    std::uint64_t product_layout_revision { 0U };
+    std::uint32_t expected_products { 0U };
+    bool invalidate_previous { false };
+  };
+  //! Publish bounded GPU eligibility after a submitted complete product check.
+  [[nodiscard]] OXGN_VRTX_API auto FinalizeFp16Suitability(RenderContext& ctx,
+    const FrameLease& frame, const EligibilityInputs& inputs) -> bool;
 
   //! Check the current frame's FP32 SceneColor before writing its FP16 resolve.
   //! Call after the exposure solve. True means submitted, not suitable: the GPU
@@ -231,6 +241,7 @@ private:
   std::optional<graphics::ComputePipelineDesc> frame_pipeline_ {};
   std::optional<graphics::ComputePipelineDesc> fallback_pipeline_ {};
   std::optional<graphics::ComputePipelineDesc> convert_pipeline_ {};
+  std::optional<graphics::ComputePipelineDesc> eligibility_pipeline_ {};
   std::array<std::optional<graphics::ComputePipelineDesc>, 4>
     suitability_pipelines_;
   std::unique_ptr<::oxygen::vortex::internal::PerViewStructuredPublisher<
@@ -245,6 +256,7 @@ private:
   std::vector<std::shared_ptr<FrameResources>> frame_pool_;
   std::map<std::pair<ViewId, CompositionView::ViewStateHandle>, FrameLease>
     resolved_frames_;
+  std::unordered_set<const FrameResources*> submitted_suitability_;
   std::array<std::vector<FrameLease>, frame::kFramesInFlight.get()>
     frame_bindings_;
   std::vector<std::shared_ptr<StateResources>> state_pool_;

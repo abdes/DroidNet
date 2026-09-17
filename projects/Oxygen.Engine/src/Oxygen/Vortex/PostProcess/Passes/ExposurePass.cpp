@@ -294,6 +294,7 @@ auto ExposurePass::OnFrameStart(
   frame_states_[slot.get()].clear();
   frame_bindings_[slot.get()].clear();
   resolved_frames_.clear();
+  submitted_suitability_.clear();
   prior_states_.clear();
   bootstrap_states_.clear();
   for (const auto& [handle, view] : exposure_states_) {
@@ -367,6 +368,7 @@ auto ExposurePass::AcquireFrame() -> std::shared_ptr<FrameResources>
     if (frame.use_count() == 1) {
       frame->current_state.reset();
       frame->selected_history.reset();
+      frame->precision_history.reset();
       frame->qualified_candidate.reset();
       return frame;
     }
@@ -460,6 +462,15 @@ auto ExposurePass::ResolveFrame(RenderContext& ctx,
   frame->current_state->borrowed_from
     = sharing ? owner : CompositionView::kInvalidViewStateHandle;
   frame->current_state->borrowed_lifetime = sharing ? lifetime : 0U;
+  if (!config.temporary_unit_exposure) {
+    const auto own = prior_states_.find(ctx.current_view.view_state_handle);
+    if (own != prior_states_.end()
+      && own->second->owner_lifetime == inputs.lifetime
+      && own->second->borrowed_from == frame->current_state->borrowed_from
+      && own->second->borrowed_lifetime
+        == frame->current_state->borrowed_lifetime)
+      frame->precision_history = own->second;
+  }
   if (!config.temporary_unit_exposure) {
     if (const auto prior = prior_states_.find(owner);
       prior != prior_states_.end() && prior->second->owner_lifetime == lifetime)
@@ -641,6 +652,7 @@ auto ExposurePass::EvaluateFp16Products(RenderContext& ctx,
     return false;
   PreparePublishers(ctx);
   EnsurePipelines();
+  submitted_suitability_.erase(frame.get());
   std::uint32_t expected_mask = 0U;
   std::uint64_t texels = 0U;
   for (const auto& product : products) {
@@ -752,6 +764,87 @@ auto ExposurePass::EvaluateFp16Products(RenderContext& ctx,
       dispatch(3U, &product);
   recorder->RequireResourceStateFinal(
     *frame->suitability_buffer, graphics::ResourceStates::kShaderResource);
+  recorder.reset();
+  if (!recording || !recording->IsSubmitted())
+    return false;
+  submitted_suitability_.insert(frame.get());
+  return true;
+}
+
+auto ExposurePass::FinalizeFp16Suitability(RenderContext& ctx,
+  const FrameLease& frame, const EligibilityInputs& inputs) -> bool
+{
+  CHECK_F(inputs.product_layout_revision != 0U && inputs.expected_products != 0U
+    && (inputs.expected_products & 0x80000000U) == 0U);
+  auto gfx = renderer_.GetGraphics();
+  if (!gfx)
+    return false;
+  PreparePublishers(ctx);
+  const auto current = resolved_frames_.find(
+    { ctx.current_view.view_id, ctx.current_view.view_state_handle });
+  if (!frame || current == resolved_frames_.end() || current->second != frame
+    || !submitted_suitability_.contains(frame.get()))
+    return false;
+  EnsurePipelines();
+  auto recorder = gfx->AcquireCommandRecorder(
+    gfx->QueueKeyFor(graphics::QueueRole::kGraphics),
+    "Vortex FP16 Eligibility");
+  if (!recorder)
+    return false;
+  const auto recording = recorder->GetCommandListForInspection();
+  const auto track
+    = [&](const graphics::Buffer& buffer, graphics::ResourceStates state) {
+        if (!recorder->AdoptKnownResourceState(buffer))
+          recorder->BeginTrackingResourceState(
+            buffer, graphics::ResourceStates::kCommon, false);
+        recorder->RequireResourceState(buffer, state);
+      };
+  track(*frame->buffer, graphics::ResourceStates::kShaderResource);
+  track(*frame->suitability_buffer, graphics::ResourceStates::kShaderResource);
+  track(
+    *frame->current_state->buffer, graphics::ResourceStates::kUnorderedAccess);
+  track(*frame->current_state->status_buffer,
+    graphics::ResourceStates::kUnorderedAccess);
+  if (frame->precision_history)
+    track(*frame->precision_history->buffer,
+      graphics::ResourceStates::kShaderResource);
+  const auto words = [](const std::uint64_t value) {
+    return std::array<std::uint32_t, 2> { static_cast<std::uint32_t>(value),
+      static_cast<std::uint32_t>(value >> 32U) };
+  };
+  const auto layout = words(inputs.product_layout_revision);
+  const auto sequence = words(ctx.frame_sequence.get());
+  const auto lifetime = words(frame->current_state->owner_lifetime);
+  const std::array<std::uint32_t, 16U> constants {
+    frame->current_state->uav_index.get(),
+    frame->precision_history ? frame->precision_history->srv_index.get()
+                             : kInvalidShaderVisibleIndex.get(),
+    frame->current_state->status_uav_index.get(), frame->suitability_srv.get(),
+    layout[0], layout[1], inputs.expected_products,
+    (ctx.current_view.view_state_handle
+          != CompositionView::kInvalidViewStateHandle
+        ? 1U
+        : 0U)
+      | (inputs.invalidate_previous ? 2U : 0U),
+    frame->srv_index.get(), sequence[0], sequence[1], 0U, lifetime[0],
+    lifetime[1], 0U, 0U
+  };
+  const auto slot
+    = constants_publisher_->Publish(ctx.current_view.view_id, constants);
+  CHECK_F(slot.IsValid());
+  recorder->FlushBarriers();
+  recorder->SetPipelineState(*eligibility_pipeline_);
+  recorder->SetComputeRoot32BitConstant(
+    static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants), 0U,
+    0U);
+  recorder->SetComputeRoot32BitConstant(
+    static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants),
+    slot.get(), 1U);
+  recorder->Dispatch(1U, 1U, 1U);
+  recorder->RequireResourceStateFinal(
+    *frame->current_state->buffer, graphics::ResourceStates::kShaderResource);
+  recorder->RequireResourceStateFinal(*frame->current_state->status_buffer,
+    graphics::ResourceStates::kCopySource);
   recorder.reset();
   return recording && recording->IsSubmitted();
 }
@@ -1159,6 +1252,9 @@ auto ExposurePass::RemoveViewState(CompositionView::ViewStateHandle handle)
 
 auto ExposurePass::EnsurePipelines() -> void
 {
+  if (!eligibility_pipeline_)
+    eligibility_pipeline_ = BuildExposurePipeline(
+      "FinalizeFp16Suitability", "Vortex.Exposure.Fp16Eligibility");
   if (!convert_pipeline_)
     convert_pipeline_ = BuildExposurePipeline(
       "ConvertQualifiedSceneColor", "Vortex.Exposure.CheckedSceneColor");
@@ -1444,6 +1540,7 @@ auto ExposurePass::ReleaseExposureResources() -> void
   for (auto& frame : frame_pool_) {
     frame->current_state.reset();
     frame->selected_history.reset();
+    frame->precision_history.reset();
     frame->qualified_candidate.reset();
   }
   if (auto gfx = renderer_.GetGraphics()) {
