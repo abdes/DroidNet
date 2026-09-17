@@ -208,7 +208,9 @@ namespace environment {
       std::uint32_t previous_frame_exposure_srv {
         kInvalidShaderVisibleIndex.get()
       };
-      std::uint32_t exposure_padding[3] {};
+      std::uint32_t exposure_status_uav { kInvalidShaderVisibleIndex.get() };
+      std::uint32_t exposure_fp16_store { 0U };
+      std::uint32_t exposure_padding { 0U };
     };
 
     Renderer& renderer_;

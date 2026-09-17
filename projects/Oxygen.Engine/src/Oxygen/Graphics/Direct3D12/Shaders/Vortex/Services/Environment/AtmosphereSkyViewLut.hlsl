@@ -9,6 +9,7 @@
 #include "Vortex/Services/Environment/AtmosphereParityCommon.hlsli"
 #include "Vortex/Services/Environment/AtmosphereUeMirrorCommon.hlsli"
 #include "Vortex/Contracts/View/FrameExposureHelpers.hlsli"
+#include "Vortex/Contracts/View/HdrStoreChecks.hlsli"
 #include "Vortex/Contracts/View/ViewFrameBindings.hlsli"
 
 cbuffer RootConstants : register(b2, space0)
@@ -37,8 +38,8 @@ struct SkyViewDispatchHeader
 {
     uint multi_scattering_height;
     uint active_light_count;
-    uint _pad0;
-    uint _pad1;
+    uint exposure_status_uav;
+    uint exposure_fp16_store;
 };
 
 struct SkyViewSamplingAtmosphere0
@@ -273,6 +274,8 @@ void VortexAtmosphereSkyViewLutCS(uint3 dispatch_id : SV_DispatchThreadID)
     const float transmittance = dot(
         scattering.Transmittance,
         float3(1.0f / 3.0f, 1.0f / 3.0f, 1.0f / 3.0f));
+    CheckHdrStoreRange(float4(scattering.L, transmittance), 5u,
+        pass.dispatch_header.exposure_status_uav, pass.dispatch_header.exposure_fp16_store);
     output_texture[dispatch_id.xy] = float4(
         max(scattering.L, 0.0f.xxx),
         saturate(transmittance));

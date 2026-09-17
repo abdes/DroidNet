@@ -5999,4 +5999,178 @@ NOLINT_TEST_F(ExposureGpuTest,
   WaitForQueueIdle();
 }
 
+NOLINT_TEST_F(
+  ExposureGpuTest, ProducerRangeFailureSurvivesSolveAndPreventsAutoAdaptation)
+{
+  pass_.reset();
+  renderer_->OnShutdown();
+  auto config = RendererConfig {};
+  config.upload_queue_key = QueueKeyFor().get();
+  renderer_ = std::make_unique<Renderer>(GetGraphicsShared(), config,
+    RendererCapabilityFamily::kScenePreparation
+      | RendererCapabilityFamily::kDeferredShading
+      | RendererCapabilityFamily::kLightingData
+      | RendererCapabilityFamily::kEnvironmentLighting
+      | RendererCapabilityFamily::kFinalOutputComposition);
+  console::Console console;
+  renderer_->RegisterConsoleBindings(observer_ptr { &console });
+  ASSERT_EQ(
+    console.Execute("vtx.volumetric_fog.temporal_reprojection false").status,
+    console::ExecutionStatus::kOk);
+  ASSERT_EQ(console.Execute("vtx.volumetric_fog.jitter false").status,
+    console::ExecutionStatus::kOk);
+  auto scene = std::make_shared<scene::Scene>("Producer range", 4U);
+  scene->SetEnvironment(std::make_unique<scene::SceneEnvironment>());
+  auto& fog = scene->GetEnvironment()->AddSystem<scene::environment::Fog>();
+  fog.SetEnabled(true);
+  fog.SetEnableHeightFog(true);
+  fog.SetEnableVolumetricFog(true);
+  fog.SetExtinctionSigmaTPerMeter(.01F);
+  fog.SetHeightFalloffPerMeter(0.0F);
+  fog.SetVolumetricFogDistance(1000.0F);
+  auto& sky
+    = scene->GetEnvironment()->AddSystem<scene::environment::SkySphere>();
+  sky.SetEnabled(true);
+  sky.SetSource(scene::environment::SkySphereSource::kSolidColor);
+  auto& post = scene->GetEnvironment()
+                 ->AddSystem<scene::environment::PostProcessVolume>();
+  auto settings = scene::ExposureSettings {};
+  settings.key = 12.5F;
+  post.SetExposureSettings(settings);
+  auto camera = scene->CreateNode("Camera");
+  auto lens = std::make_unique<scene::PerspectiveCamera>();
+  auto view = View {};
+  view.viewport = { .width = 4.0F, .height = 4.0F };
+  lens->SetViewport(view.viewport);
+  ASSERT_TRUE(camera.AttachCamera(std::move(lens)));
+  auto color = CreateRegisteredTexture({ .width = 4U,
+    .height = 4U,
+    .format = Format::kRGBA32Float,
+    .is_shader_resource = true,
+    .is_render_target = true,
+    .initial_state = ResourceStates::kCommon });
+  auto target
+    = Backend().CreateFramebuffer(FramebufferDesc {}.AddColorAttachment(color));
+  struct Probe final : IViewExtension {
+    EnvironmentLightingService half_producer;
+    bool inject_half { false };
+    postprocess::ExposurePass::FrameLease frame;
+    std::shared_ptr<const Texture> half_texture;
+    explicit Probe(Renderer& renderer)
+      : half_producer(renderer)
+    {
+    }
+    auto OnViewSetup(const ViewSetupContext& hook) -> void override
+    {
+      hook.render_context.current_view.with_height_fog = true;
+    }
+    auto OnPreRenderViewGpu(const ViewRenderGpuContext& hook) -> void override
+    {
+      EXPECT_FLOAT_EQ(hook.render_context.delta_time, 1.0F);
+      if (!inject_half)
+        return;
+      auto& ctx = hook.render_context;
+      const auto old_format = ctx.current_view.hdr_color_format;
+      ctx.current_view.hdr_color_format = Format::kRGBA16Float;
+      half_producer.OnFrameStart(ctx.frame_sequence, ctx.frame_slot);
+      static_cast<void>(half_producer.PublishEnvironmentBindings(ctx));
+      const auto* resources
+        = half_producer.InspectViewRadianceResources(ctx.current_view.view_id);
+      CHECK_NOTNULL_F(resources);
+      half_texture = resources->volumetric_fog;
+      ctx.current_view.hdr_color_format = old_format;
+    }
+    auto OnPostRenderViewGpu(const ViewRenderGpuContext& hook) -> void override
+    {
+      frame = hook.render_context.current_view.frame_exposure;
+    }
+  };
+  auto probe = std::make_shared<Probe>(*renderer_);
+  renderer_->RegisterViewExtension(probe);
+  auto frame = engine::FrameContext {};
+  frame.SetScene(observer_ptr { scene.get() });
+  auto timing = engine::ModuleTimingData {};
+  timing.game_delta_time
+    = time::CanonicalDuration { std::chrono::nanoseconds { 1000000000 } };
+  frame.SetModuleTimingData(timing, engine::internal::EngineTagFactory::Get());
+  ExposureStateData previous {};
+  for (unsigned step = 1U; step <= 4U; ++step) {
+    SCOPED_TRACE(step);
+    const float sky_value = step == 1U ? .25F : 4.0F;
+    sky.SetSolidColorRgb({ sky_value, sky_value, sky_value });
+    const auto emissive = step == 1U ? .125F
+      : step == 3U                   ? std::numeric_limits<float>::infinity()
+                                     : 0x1p26F;
+    fog.SetVolumetricFogEmissive({ emissive, emissive, emissive });
+    probe->inject_half = step == 2U;
+    scene->Update();
+    const auto slot = frame::Slot { (step - 1U) % 3U };
+    frame.SetFrameSlot(slot, engine::internal::EngineTagFactory::Get());
+    frame.SetFrameSequenceNumber(frame::SequenceNumber { step },
+      engine::internal::EngineTagFactory::Get());
+    renderer_->OnFrameStart(observer_ptr { &frame });
+    auto input = Renderer::OffscreenSceneViewInput::FromCamera(
+      "Producer range", ViewId { 941U }, view, camera);
+    input.SetViewStateHandle(CompositionView::ViewStateHandle { 941U });
+    auto facade = renderer_->ForOffscreenScene();
+    facade.SetFrameSession({ .frame_slot = slot,
+      .frame_sequence = frame::SequenceNumber { step },
+      .delta_time_seconds = 1.0F });
+    facade.SetSceneSource({ .scene = observer_ptr { scene.get() } });
+    facade.SetViewIntent(input);
+    facade.SetOutputTarget({ .framebuffer = observer_ptr { target.get() } });
+    auto session = facade.Finalize();
+    ASSERT_TRUE(session.has_value());
+    const auto capture = step == 2U ? BeginOptionalCapture()
+                                    : observer_ptr<FrameCaptureController> {};
+    ASSERT_TRUE(session->ExecuteInsideFrame(frame));
+    if (capture)
+      EXPECT_TRUE(capture->EndCapture());
+    ASSERT_NE(probe->frame, nullptr);
+    const auto state = Read<ExposureStateData>(
+      *probe->frame->current_state->buffer, ResourceStates::kShaderResource);
+    const auto status = Read<ExposureCompletedStatus>(
+      *probe->frame->current_state->status_buffer, ResourceStates::kCopySource);
+    if (step == 2U || step == 3U) {
+      EXPECT_EQ(status.flags & 18U, 18U);
+      EXPECT_EQ(status.first_failure_product, 10U);
+      EXPECT_NE(status.first_failure_kind & (step == 2U ? 2U : 1U), 0U);
+      EXPECT_EQ(status.fp16_eligible_streak, 0U);
+      EXPECT_EQ(state.displayed_scale, previous.displayed_scale);
+      EXPECT_EQ(state.latent_scale, previous.latent_scale);
+      EXPECT_EQ(state.flags & 12U, 0U);
+      EXPECT_NE(state.flags & 32U, 0U);
+    } else {
+      EXPECT_EQ(status.flags & 16U, 0U);
+      EXPECT_NE(state.flags & 4U, 0U);
+      if (step == 4U)
+        EXPECT_LT(state.displayed_scale, previous.displayed_scale);
+    }
+    if (step == 2U) {
+      ASSERT_NE(probe->half_texture, nullptr);
+      EXPECT_EQ(
+        probe->half_texture->GetDescriptor().format, Format::kRGBA16Float);
+      auto readback
+        = GetReadbackManager()->CreateTextureReadback("Overflowed half fog");
+      {
+        auto recorder = AcquireRecorder("Overflowed half fog readback");
+        ASSERT_TRUE(recorder->AdoptKnownResourceState(*probe->half_texture));
+        ASSERT_TRUE(readback
+            ->EnqueueCopy(*recorder, *probe->half_texture,
+              { .src_slice
+                = { .z = 31U, .width = 1U, .height = 1U, .depth = 1U } })
+            .has_value());
+      }
+      const auto mapped = readback->MapNow();
+      ASSERT_TRUE(mapped.has_value());
+      std::uint16_t red;
+      std::memcpy(&red, mapped->Data(), sizeof(red));
+      EXPECT_EQ(red, 0x7bffU); // The stored half has clipped to 65504.
+    }
+    previous = state;
+    renderer_->OnFrameEnd(observer_ptr { &frame });
+    WaitForQueueIdle();
+  }
+}
+
 } // namespace

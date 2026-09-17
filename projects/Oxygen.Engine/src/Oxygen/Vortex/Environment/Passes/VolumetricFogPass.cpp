@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <limits>
 #include <stdexcept>
 #include <unordered_set>
@@ -451,7 +452,14 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
   const auto sky_light_injection_ready
     = sky_light_injection_requested && distant_sky_light_lut_srv.IsValid();
 
+  static_assert(offsetof(PassConstants, exposure_status_uav) == 532U);
+  static_assert(offsetof(PassConstants, exposure_fp16_store) == 536U);
   auto constants = PassConstants {};
+  constants.exposure_status_uav = ctx.current_view.frame_exposure
+    ? ctx.current_view.frame_exposure->current_state->status_uav_index.get()
+    : kInvalidShaderVisibleIndex.get();
+  constants.exposure_fp16_store
+    = texture->GetDescriptor().format == Format::kRGBA16Float ? 1U : 0U;
   constants.output_header.output_texture_uav = integrated_uav.get();
   constants.output_header.output_width = width;
   constants.output_header.output_height = height;
@@ -612,6 +620,15 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
     return state;
   }
 
+  if (ctx.current_view.frame_exposure) {
+    const auto& status
+      = *ctx.current_view.frame_exposure->current_state->status_buffer;
+    if (!recorder->AdoptKnownResourceState(status))
+      recorder->BeginTrackingResourceState(
+        status, graphics::ResourceStates::kCommon, false);
+    recorder->RequireResourceState(
+      status, graphics::ResourceStates::kUnorderedAccess);
+  }
   TrackTextureFromKnownOrInitial(*recorder, *texture);
   recorder->RequireResourceState(
     *texture, graphics::ResourceStates::kUnorderedAccess);

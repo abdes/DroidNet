@@ -196,7 +196,8 @@ full-view HDR diagnostics use their pinned unit-exposure domain.
 reserved-current-state UAV, prior-state SRV and candidate-state SRV at offsets
 0/4/8/12; fixed gain, initial log gain and seed log gain at 16/20/24; exposure
 mode at 28; frame flags, controls and current-state SRV at 32/36/40;
-reserved zero at 44. Controls bit 0 means valid seed and bit 1 means zero target.
+current completed-status UAV at 44. The resolve clears this 80-byte record
+before HDR producers run. Controls bit 0 means valid seed and bit 1 means zero target.
 Candidate selection requires GPU eligibility and a streak
 of at least two; the CPU integration must additionally validate completed
 status identity, settings, event and layout before supplying that candidate.
@@ -253,7 +254,7 @@ remain stored on invalid input; current validity describes the current frame.
 | 24 | uint2 | requested_generation |
 | 32 | uint2 | applied_generation |
 | 40 | uint2 | product_layout_revision |
-| 48 | uint | flags (valid state, range failure, FP16 eligible) |
+| 48 | uint | flags: valid=1, range failure=2, FP16 eligible=4, rejected transition=8, producer failure=16 |
 | 52 | uint | first_failure_product (zero means none) |
 | 56 | uint | first_failure_kind |
 | 60 | uint | fp16_eligible_streak |
@@ -520,7 +521,8 @@ report SRV at bytes 0/4/8/12; layout uint2 at 16; required mask at 24; controls 
 at 36; optional current-conversion report SRV at 44 (invalid index when absent);
 lifetime uint2 at 48 and two zeros at 56. All uint64 identities
 use uint2 arithmetic, including frame-counter carry. Completed flags are valid
-state=1, failed qualification=2, eligible=4 and rejected transition=8.
+state=1, failed qualification=2, eligible=4, rejected transition=8 and
+producer-origin failure=16.
 
 The current-frame conversion and future candidate evaluation have separate
 48-byte reports retained by the same frame lease. Candidate evaluation cannot
@@ -658,13 +660,37 @@ accepted lease; frame readers still keep it alive. The binder outlives its
 leases and uses the existing graphics reclaimer for resource/descriptor release.
 No separate mask loader, texture cache or upload allocator is introduced.
 
+## Producer range checks
+
+Sky-view, camera aerial-perspective and volumetric-fog shaders check their FP32
+store inputs before narrowing. `CheckHdrStoreRange` records nonfinite values
+(kind 1), or FP16 RGB above the two-stop headroom limit 16376 (kind 2), using
+atomic operations on the existing completed-status record. It preserves the
+first producer ID and combines failure kinds. FP32 stores still check finite
+values. These checks do not certify quantization or cumulative image error.
+
+The solve preserves producer-origin failures, sets the exposure range flag and
+invalidates the current meter. Ordinary Auto adaptation cannot consume the
+failed image; its prior valid gain and meter history remain available. Explicit
+seed, fixed/locked and zero-target rules retain their established precedence.
+The finalizer merges this failure with candidate/conversion results instead of
+overwriting it. The next frame clears the producer report before any new stores.
+Direct exposure solves without a prepared frame do not read prior status bytes.
+
+The producer flag distinguishes an upstream failure from a later candidate
+failure, so repeated finalization cannot misclassify a candidate rejection as
+an upstream write failure. The 80-byte status size and offsets are unchanged.
+Sky-view uses existing constant padding at bytes 40/44 for status UAV and FP16
+store flag; camera AP uses bytes 88/108; volumetric fog uses bytes 532/536.
+The flag follows the actual destination format, not an inferred exposure mode.
+
 ## Unified solve controls (slice 4 implementation)
 
 The solve record is 112 bytes. Its original 64-byte metering/rate/revision prefix
 is followed by previous-state SRV at 64, exact fixed scale at 68, mode at 72
 (Manual=0, ManualCamera=1, Auto=2, disabled=3), control flags at 76 (invalid seed
 bit 0, source initialization fallback bit 1, captured rejection reason in bits
-2..5, source-loss continuity bit 6), request generation uint2 at 80,
+2..5, source-loss continuity bit 6, preserve current producer status bit 7), request generation uint2 at 80,
 policy at 88 (none=0, Preserve=1, Remeter=2, Seed=3), seed log gain at 92,
 status UAV at 96, borrowed prior-state SRV at 100 (invalid for owner solves),
 and view lifetime uint2 at 104. State flags add mode in bits 10..11,

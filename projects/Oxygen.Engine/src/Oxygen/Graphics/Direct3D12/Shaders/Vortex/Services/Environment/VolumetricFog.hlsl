@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "Vortex/Contracts/View/FrameExposureHelpers.hlsli"
+#include "Vortex/Contracts/View/HdrStoreChecks.hlsli"
 #include "Core/Bindless/Generated.BindlessAbi.hlsl"
 
 #include "Vortex/Contracts/View/ViewConstants.hlsli"
@@ -142,7 +143,9 @@ struct VolumetricFogPassConstants
     float4 light1_direction_enabled;
     float4 light1_illuminance_rgb;
     uint previous_frame_exposure_srv;
-    uint3 exposure_padding;
+    uint exposure_status_uav;
+    uint exposure_fp16_store;
+    uint exposure_padding;
 };
 
 struct VolumetricLocalFogMedia
@@ -576,5 +579,6 @@ void VortexVolumetricFogCS(uint3 dispatch_id : SV_DispatchThreadID)
         }
     }
 
+    CheckHdrStoreRange(output_value, 10u, pass.exposure_status_uav, pass.exposure_fp16_store);
     output_texture[dispatch_id] = output_value;
 }

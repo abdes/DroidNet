@@ -215,12 +215,13 @@ namespace {
     std::uint32_t flags;
     std::uint32_t controls;
     std::uint32_t current_state_srv;
-    std::uint32_t reserved;
+    std::uint32_t status_uav;
   };
   static_assert(sizeof(ExposureFrameConstants) == 48U);
   static_assert(offsetof(ExposureFrameConstants, fixed_scale) == 16U);
   static_assert(offsetof(ExposureFrameConstants, flags) == 32U);
   static_assert(offsetof(ExposureFrameConstants, current_state_srv) == 40U);
+  static_assert(offsetof(ExposureFrameConstants, status_uav) == 44U);
 
   auto BuildExposurePipeline(std::string_view entry_point,
     std::string_view debug_name) -> graphics::ComputePipelineDesc
@@ -523,6 +524,8 @@ auto ExposurePass::ResolveFrame(RenderContext& ctx,
         recorder->RequireResourceState(buffer, state);
       };
   track(*frame->buffer, graphics::ResourceStates::kUnorderedAccess);
+  track(*frame->current_state->status_buffer,
+    graphics::ResourceStates::kUnorderedAccess);
   track(
     *frame->current_state->buffer, graphics::ResourceStates::kUnorderedAccess);
   if (frame->selected_history)
@@ -569,7 +572,7 @@ auto ExposurePass::ResolveFrame(RenderContext& ctx,
           ? 2U
           : 0U),
     .current_state_srv = frame->current_state->srv_index.get(),
-    .reserved = 0U,
+    .status_uav = frame->current_state->status_uav_index.get(),
   };
   const auto slot
     = frame_constants_publisher_->Publish(ctx.current_view.view_id,
@@ -1517,7 +1520,11 @@ auto ExposurePass::UpdateAverageConstants(RenderContext& ctx,
       ? static_cast<std::uint32_t>(resolved.authored.mode)
       : 3U,
     .control_flags = (seed.has_value() ? 0U : 1U) | (bootstrap ? 2U : 0U)
-      | (rejection << 2U) | (source_loss ? 64U : 0U),
+      | (rejection << 2U) | (source_loss ? 64U : 0U)
+      | (inputs.frame_exposure
+            && inputs.frame_exposure->current_state.get() == &state
+          ? 128U
+          : 0U),
     .requested_generation = { static_cast<std::uint32_t>(generation),
       static_cast<std::uint32_t>(generation >> 32U) },
     .transition_policy
