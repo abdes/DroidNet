@@ -19,6 +19,15 @@
 namespace oxygen::vortex::testing {
 
 struct RendererPublicationProbe {
+  static auto BuildStaticSkyPublication(EnvironmentLightingService& service,
+    const RenderContext& ctx, const EnvironmentProbeState& state,
+    const environment::SkyLightEnvironmentModel& model) -> EnvironmentStaticData
+  {
+    service.probe_state_ = state;
+    auto products = environment::EnvironmentViewProducts {};
+    products.sky_light = model;
+    return service.BuildEnvironmentStaticData(ctx, products);
+  }
   static auto FogHistory(SceneRenderer& renderer, ViewId view)
     -> std::pair<std::shared_ptr<graphics::Texture>,
       postprocess::ExposurePass::FrameLease>

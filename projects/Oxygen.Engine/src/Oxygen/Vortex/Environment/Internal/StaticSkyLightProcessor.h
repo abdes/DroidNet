@@ -15,6 +15,7 @@
 #include <glm/vec3.hpp>
 #include <glm/vec4.hpp>
 
+#include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Vortex/Environment/Types/SkyLightEnvironmentModel.h>
 #include <Oxygen/Vortex/api_export.h>
 
@@ -30,6 +31,7 @@ enum class StaticSkyLightProcessFailure : std::uint8_t {
   kInvalidDimensions,
   kUnsupportedFormat,
   kInvalidPayloadLayout,
+  kInvalidRadiance,
 };
 
 struct StaticSkyLightCpuProducts {
@@ -40,6 +42,9 @@ struct StaticSkyLightCpuProducts {
   std::uint32_t mip_count { 0U };
   float source_radiance_scale { 1.0F };
   float average_brightness { 0.0F };
+  Format processed_format { Format::kRGBA16Float };
+  //! Largest authored intensity allowed by the half-upload error bounds.
+  double half_storage_gain_limit { 0.0 };
 };
 
 [[nodiscard]] OXGN_VRTX_API auto ProcessStaticSkyLightCubemapCpu(

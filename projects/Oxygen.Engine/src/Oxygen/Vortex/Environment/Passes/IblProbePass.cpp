@@ -7,6 +7,7 @@
 #include <Oxygen/Vortex/Environment/Passes/IblProbePass.h>
 
 #include <bit>
+#include <cmath>
 
 #include <Oxygen/Data/TextureResource.h>
 
@@ -147,7 +148,11 @@ auto IblProbePass::RefreshStaticSkyLight(
   auto next_state = current_state;
   const auto previous_revision = next_state.probes.probe_revision;
 
-  if (!sky_light.enabled || sky_light.diffuse_intensity <= 0.0F) {
+  if (!std::isfinite(sky_light.intensity_mul)
+    || sky_light.intensity_mul < 0.0F) {
+    MarkStaticSkyLightUnavailable(
+      next_state, StaticSkyLightUnavailableReason::kProcessingFailed);
+  } else if (!sky_light.enabled || sky_light.diffuse_intensity <= 0.0F) {
     DisableStaticSkyLightProducts(next_state);
   } else if (sky_light.source == kSkyLightSourceCapturedScene) {
     MarkStaticSkyLightUnavailable(

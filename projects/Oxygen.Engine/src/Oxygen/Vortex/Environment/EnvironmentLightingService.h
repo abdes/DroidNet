@@ -330,7 +330,8 @@ private:
   auto PrepareLocalFogForStage14(RenderContext& ctx,
     const SceneTextures& scene_textures)
     -> const environment::internal::LocalFogVolumeState::ViewProducts&;
-  [[nodiscard]] auto BuildEnvironmentStaticData(const RenderContext& ctx,
+  [[nodiscard]] OXGN_VRTX_API auto BuildEnvironmentStaticData(
+    const RenderContext& ctx,
     const environment::EnvironmentViewProducts& view_products)
     -> EnvironmentStaticData;
   [[nodiscard]] auto BuildEnvironmentViewData(const RenderContext& ctx) const

@@ -17,6 +17,8 @@
 #include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
+#include <Oxygen/Data/HalfFloat.h>
+#include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/FrameCaptureController.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
@@ -30,6 +32,7 @@
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkySphere.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Vortex/Environment/Internal/IblProcessor.h>
 #include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
 #include <Oxygen/Vortex/PostProcess/PostProcessService.h>
 #include <Oxygen/Vortex/RenderContext.h>
@@ -38,6 +41,7 @@
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
 #include <Oxygen/Vortex/Test/Fakes/AssetLoader.h>
 #include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
+#include <Oxygen/Vortex/Test/Fixtures/TextureBinderPayloads.h>
 #include <Oxygen/Vortex/Types/ExposureStateData.h>
 #include <Oxygen/Vortex/Upload/UploadCoordinator.h>
 #include <Oxygen/Vortex/ViewExtension.h>
@@ -64,6 +68,15 @@ using Pixel = std::array<float, 4>;
 class ExposureFailureGraphics final : public graphics::d3d12::Graphics {
 public:
   using graphics::d3d12::Graphics::Graphics;
+  mutable std::weak_ptr<graphics::Texture> processed_sky;
+  auto CreateTexture(const TextureDesc& desc) const
+    -> std::shared_ptr<graphics::Texture> override
+  {
+    auto texture = graphics::d3d12::Graphics::CreateTexture(desc);
+    if (desc.debug_name == "Vortex.StaticSkyLight.ProcessedCubemap")
+      processed_sky = texture;
+    return texture;
+  }
   std::vector<std::string> recorder_names;
   bool fail_next_exposure_recorder { false };
   bool fail_next_frame_recorder { false };
@@ -4176,6 +4189,204 @@ NOLINT_TEST_F(
   EXPECT_EQ(before.histogram[261], after.histogram[261]);
   EXPECT_EQ(before.state.displayed_scale, after.state.displayed_scale);
   ctx_.scene.reset();
+}
+
+NOLINT_TEST_F(ExposureGpuTest,
+  StaticSkyUploadKeepsHalfAndFloatStorageCoherentAcrossFacesAndMips)
+{
+  for (const bool wide : { false, true }) {
+    data::pak::core::TextureResourceDesc desc {};
+    desc.texture_type = static_cast<std::uint8_t>(TextureType::kTextureCube);
+    desc.width = desc.height = 2U;
+    desc.depth = 1U;
+    desc.array_layers = 6U;
+    desc.mip_levels = 1U;
+    desc.format = static_cast<std::uint8_t>(Format::kRGBA32Float);
+    desc.alignment = 256U;
+    desc.content_hash = wide ? 2U : 1U;
+    std::vector<std::uint8_t> data_region(6U * 4U * sizeof(Pixel));
+    std::vector<data::pak::render::SubresourceLayout> layouts;
+    std::array<Pixel, 6U> colors;
+    for (unsigned face = 0U; face < 6U; ++face) {
+      colors[face] = { wide ? 0x1p30F : .5F, wide ? 0x1p-24F : .25F,
+        .25F + face * .125F, 1.0F };
+      for (unsigned pixel = 0U; pixel < 4U; ++pixel)
+        std::memcpy(data_region.data() + (face * 4U + pixel) * sizeof(Pixel),
+          colors[face].data(), sizeof(Pixel));
+      layouts.push_back({ .offset_bytes = face * 64U,
+        .row_pitch_bytes = 32U,
+        .size_bytes = 64U });
+    }
+    auto payload = vortex::testing::detail::BuildV4TexturePayload(
+      desc, layouts, data_region);
+    desc.size_bytes = static_cast<std::uint32_t>(payload.size());
+    auto source = data::TextureResource(desc, std::move(payload));
+    auto model = environment::SkyLightEnvironmentModel {};
+    model.enabled = true;
+    model.source = environment::kSkyLightSourceSpecifiedCubemap;
+    model.cubemap_resource = content::ResourceKey { wide ? 502U : 501U };
+    model.lower_hemisphere_is_solid_color = false;
+    auto processor = environment::internal::IblProcessor(*renderer_);
+    const auto first
+      = processor.RefreshStaticSkyLightProducts({}, model, &source);
+    auto texture
+      = static_cast<ExposureFailureGraphics&>(Backend()).processed_sky.lock();
+    ASSERT_NE(texture, nullptr);
+    ASSERT_EQ(texture->GetDescriptor().format,
+      wide ? Format::kRGBA32Float : Format::kRGBA16Float);
+    ASSERT_EQ(texture->GetDescriptor().mip_levels, 2U);
+    WaitForQueueIdle();
+    renderer_->GetUploadCoordinator().OnFrameStart(
+      vortex::internal::RendererTagFactory::Get(),
+      frame::Slot { wide ? 1U : 0U });
+    const auto ready = processor.RefreshStaticSkyLightProducts(
+      first.probe_state, model, &source);
+    ASSERT_TRUE(ready.probe_state.valid);
+    const auto scale = ready.probe_state.static_sky_light.source_radiance_scale;
+    for (unsigned face = 0U; face < 6U; ++face) {
+      for (unsigned mip = 0U; mip < 2U; ++mip) {
+        auto readback
+          = GetReadbackManager()->CreateTextureReadback("Processed sky texel");
+        {
+          auto recorder = AcquireRecorder("Processed sky readback");
+          ASSERT_TRUE(recorder->AdoptKnownResourceState(*texture));
+          ASSERT_TRUE(readback
+              ->EnqueueCopy(*recorder, *texture,
+                { .src_slice = { .width = 1U,
+                    .height = 1U,
+                    .depth = 1U,
+                    .mip_level = mip,
+                    .array_slice = face } })
+              .has_value());
+        }
+        const auto mapped = readback->MapNow();
+        ASSERT_TRUE(mapped.has_value());
+        Pixel pixel {};
+        if (wide)
+          std::memcpy(pixel.data(), mapped->Data(), sizeof(pixel));
+        else {
+          std::array<std::uint16_t, 4U> packed {};
+          std::memcpy(packed.data(), mapped->Data(), sizeof(packed));
+          for (unsigned channel = 0U; channel < 4U; ++channel)
+            pixel[channel] = data::HalfFloat { packed[channel] }.ToFloat();
+        }
+        for (unsigned channel = 0U; channel < 3U; ++channel)
+          EXPECT_NEAR(static_cast<double>(pixel[channel]) * scale,
+            colors[face][channel],
+            std::abs(static_cast<double>(colors[face][channel])) * 2e-5
+              + 0x1p-120);
+        EXPECT_EQ(pixel[3], 1.0F);
+      }
+    }
+    FlushBackend();
+  }
+}
+
+NOLINT_TEST_F(ExposureGpuTest,
+  StaticSkyIntensityEditPromotesBeforePublishingAmplifiedHalfLoss)
+{
+  data::pak::core::TextureResourceDesc desc {};
+  desc.texture_type = static_cast<std::uint8_t>(TextureType::kTextureCube);
+  desc.width = desc.height = desc.depth = 1U;
+  desc.array_layers = 6U;
+  desc.mip_levels = 1U;
+  desc.format = static_cast<std::uint8_t>(Format::kRGBA32Float);
+  desc.alignment = 256U;
+  desc.content_hash = 99U;
+  std::vector<std::uint8_t> bytes(6U * sizeof(Pixel));
+  std::vector<data::pak::render::SubresourceLayout> layouts;
+  const Pixel color { 0x1p-50F, 0x1p-50F, 0x1p-50F, 1.0F };
+  for (unsigned face = 0U; face < 6U; ++face) {
+    std::memcpy(
+      bytes.data() + face * sizeof(Pixel), color.data(), sizeof(Pixel));
+    layouts.push_back({ .offset_bytes = face * 16U,
+      .row_pitch_bytes = 16U,
+      .size_bytes = 16U });
+  }
+  auto payload
+    = vortex::testing::detail::BuildV4TexturePayload(desc, layouts, bytes);
+  desc.size_bytes = static_cast<std::uint32_t>(payload.size());
+  auto source = data::TextureResource(desc, std::move(payload));
+  auto model = environment::SkyLightEnvironmentModel {};
+  model.enabled = true;
+  model.source = environment::kSkyLightSourceSpecifiedCubemap;
+  model.cubemap_resource = content::ResourceKey { 511U };
+  model.lower_hemisphere_is_solid_color = false;
+  auto processor = environment::internal::IblProcessor(*renderer_);
+  auto state
+    = processor.RefreshStaticSkyLightProducts({}, model, &source).probe_state;
+  auto half
+    = static_cast<ExposureFailureGraphics&>(Backend()).processed_sky.lock();
+  ASSERT_NE(half, nullptr);
+  EXPECT_EQ(half->GetDescriptor().format, Format::kRGBA16Float);
+  WaitForQueueIdle();
+  renderer_->GetUploadCoordinator().OnFrameStart(
+    vortex::internal::RendererTagFactory::Get(), frame::Slot { 0U });
+  state = processor.RefreshStaticSkyLightProducts(state, model, &source)
+            .probe_state;
+  ASSERT_TRUE(state.valid);
+  const auto original_key = state.static_sky_light.key;
+  const auto original_revision = state.static_sky_light.product_revision;
+  model.intensity_mul = 2.0F;
+  const auto harmless
+    = processor.RefreshStaticSkyLightProducts(state, model, &source);
+  EXPECT_FALSE(harmless.refreshed);
+  EXPECT_EQ(
+    harmless.probe_state.static_sky_light.product_revision, original_revision);
+  EXPECT_EQ(
+    static_cast<ExposureFailureGraphics&>(Backend()).processed_sky.lock(),
+    half);
+  model.intensity_mul = 0x1p50F;
+  const auto pending = processor.RefreshStaticSkyLightProducts(
+    harmless.probe_state, model, &source);
+  EXPECT_FALSE(pending.probe_state.valid);
+  EXPECT_EQ(pending.probe_state.static_sky_light.processed_cubemap_srv,
+    kInvalidShaderVisibleIndex);
+  auto full
+    = static_cast<ExposureFailureGraphics&>(Backend()).processed_sky.lock();
+  ASSERT_NE(full, nullptr);
+  EXPECT_NE(full, half);
+  EXPECT_EQ(full->GetDescriptor().format, Format::kRGBA32Float);
+  WaitForQueueIdle();
+  renderer_->GetUploadCoordinator().OnFrameStart(
+    vortex::internal::RendererTagFactory::Get(), frame::Slot { 1U });
+  state = processor
+            .RefreshStaticSkyLightProducts(pending.probe_state, model, &source)
+            .probe_state;
+  ASSERT_TRUE(state.valid);
+  EXPECT_EQ(state.static_sky_light.key, original_key);
+  EXPECT_GT(state.static_sky_light.product_revision, original_revision);
+  auto service = EnvironmentLightingService(*renderer_);
+  const auto published
+    = vortex::testing::RendererPublicationProbe::BuildStaticSkyPublication(
+      service, ctx_, state, model);
+  EXPECT_EQ(published.sky_light.radiance_scale, 0x1p50F);
+  auto readback
+    = GetReadbackManager()->CreateTextureReadback("Promoted sky pixel");
+  {
+    auto recorder = AcquireRecorder("Promoted sky readback");
+    ASSERT_TRUE(recorder->AdoptKnownResourceState(*full));
+    ASSERT_TRUE(readback
+        ->EnqueueCopy(*recorder, *full,
+          { .src_slice = { .width = 1U, .height = 1U, .depth = 1U } })
+        .has_value());
+  }
+  const auto mapped = readback->MapNow();
+  ASSERT_TRUE(mapped.has_value());
+  Pixel actual {};
+  std::memcpy(actual.data(), mapped->Data(), sizeof(actual));
+  for (unsigned channel = 0U; channel < 3U; ++channel)
+    EXPECT_EQ(actual[channel] * published.sky_light.radiance_scale, 1.0F);
+  model.intensity_mul = 1.0F;
+  const auto dimmed
+    = processor.RefreshStaticSkyLightProducts(state, model, &source);
+  EXPECT_FALSE(dimmed.refreshed);
+  EXPECT_EQ(dimmed.probe_state.static_sky_light.product_revision,
+    state.static_sky_light.product_revision);
+  EXPECT_EQ(
+    static_cast<ExposureFailureGraphics&>(Backend()).processed_sky.lock(),
+    full);
+  FlushBackend();
 }
 
 } // namespace

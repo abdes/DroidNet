@@ -10,6 +10,7 @@
 #include <array>
 #include <cmath>
 #include <cstring>
+#include <limits>
 #include <numbers>
 
 #include <glm/common.hpp>
@@ -295,6 +296,51 @@ namespace {
     return color;
   }
 
+  auto HalfStorageGainLimit(const StaticSkyLightCpuProducts& products) -> double
+  {
+    constexpr double relative_budget = 0.0025;
+    constexpr double absolute_budget = 1.0e-5;
+    constexpr double maximum_display_gain = 0x1p32;
+    const double scale = products.source_radiance_scale;
+    double maximum_gain = std::numeric_limits<double>::infinity();
+    for (const auto& pixel : products.processed_rgba) {
+      std::array<double, 3> reference {}, recovered {};
+      for (std::size_t channel = 0U; channel < 3U; ++channel) {
+        const auto value = pixel[static_cast<glm::length_t>(channel)];
+        const double narrowed = data::HalfFloat { value }.ToFloat();
+        if (!std::isfinite(narrowed))
+          return -1.0;
+        reference[channel] = static_cast<double>(value) * scale;
+        recovered[channel] = narrowed * scale;
+        const double error = std::abs(reference[channel] - recovered[channel]);
+        // Canonical resources serve views with different gains. Qualify the
+        // bounded exposure envelope, without introducing view-owned P here.
+        const double excess
+          = error - std::abs(reference[channel]) * relative_budget;
+        if (excess > 0.0)
+          maximum_gain = (std::min)(maximum_gain,
+            absolute_budget / (maximum_display_gain * excess));
+      }
+      const double luminance
+        = reference[0] * .2126 + reference[1] * .7152 + reference[2] * .0722;
+      const double narrowed_luminance
+        = recovered[0] * .2126 + recovered[1] * .7152 + recovered[2] * .0722;
+      if (luminance > 0.0
+        && (narrowed_luminance <= 0.0
+          || std::abs(std::log2(narrowed_luminance / luminance))
+            > 1.0 / 1024.0))
+        maximum_gain = (std::min)(maximum_gain,
+          absolute_budget / (maximum_display_gain * luminance));
+      const double alpha = pixel.a;
+      const double narrowed_alpha = data::HalfFloat { pixel.a }.ToFloat();
+      if (!std::isfinite(narrowed_alpha)
+        || std::abs(alpha - narrowed_alpha)
+          > relative_budget * std::abs(alpha) + absolute_budget)
+        return -1.0;
+    }
+    return maximum_gain;
+  }
+
   auto GenerateProcessedMips(StaticSkyLightCpuProducts& products) -> void
   {
     for (std::uint32_t face = 0U; face < kCubeFaceCount; ++face) {
@@ -340,6 +386,8 @@ auto ProcessStaticSkyLightCubemapCpu(
   const std::uint32_t output_face_size)
   -> std::expected<StaticSkyLightCpuProducts, StaticSkyLightProcessFailure>
 {
+  if (!std::isfinite(sky_light.intensity_mul) || sky_light.intensity_mul < 0.0F)
+    return std::unexpected(StaticSkyLightProcessFailure::kInvalidRadiance);
   if (output_face_size == 0U || source_cubemap.GetWidth() == 0U
     || source_cubemap.GetHeight() == 0U
     || source_cubemap.GetWidth() != source_cubemap.GetHeight()
@@ -362,6 +410,11 @@ auto ProcessStaticSkyLightCubemapCpu(
         if (!source.has_value()) {
           return std::unexpected(source.error());
         }
+        if (!std::isfinite(source->r) || !std::isfinite(source->g)
+          || !std::isfinite(source->b) || !std::isfinite(source->a)
+          || source->r < 0.0F || source->g < 0.0F || source->b < 0.0F)
+          return std::unexpected(
+            StaticSkyLightProcessFailure::kInvalidRadiance);
         max_luminance = (std::max)(max_luminance, source->r);
         max_luminance = (std::max)(max_luminance, source->g);
         max_luminance = (std::max)(max_luminance, source->b);
@@ -400,6 +453,11 @@ auto ProcessStaticSkyLightCubemapCpu(
 
         const auto color = ProcessedColor(
           *source, source_direction_ws, sky_light, source_radiance_scale);
+        if (!std::isfinite(color.r) || !std::isfinite(color.g)
+          || !std::isfinite(color.b) || color.r < 0.0F || color.g < 0.0F
+          || color.b < 0.0F)
+          return std::unexpected(
+            StaticSkyLightProcessFailure::kInvalidRadiance);
         const auto index
           = ProcessedMipOffset(face, 0U, output_face_size, products.mip_count)
           + (static_cast<std::size_t>(y) * output_face_size) + x;
@@ -429,6 +487,19 @@ auto ProcessStaticSkyLightCubemapCpu(
   products.diffuse_irradiance_sh
     = PackDiffuseSh(sh, products.average_brightness);
   GenerateProcessedMips(products);
+  const auto finite_rgba = [](const glm::vec4& value) {
+    return std::isfinite(value.r) && std::isfinite(value.g)
+      && std::isfinite(value.b) && std::isfinite(value.a);
+  };
+  if (!std::ranges::all_of(products.processed_rgba, finite_rgba)
+    || !std::ranges::all_of(products.diffuse_irradiance_sh, finite_rgba)
+    || !std::isfinite(products.average_brightness))
+    return std::unexpected(StaticSkyLightProcessFailure::kInvalidRadiance);
+  products.half_storage_gain_limit = HalfStorageGainLimit(products);
+  products.processed_format = static_cast<double>(sky_light.intensity_mul)
+      <= products.half_storage_gain_limit
+    ? Format::kRGBA16Float
+    : Format::kRGBA32Float;
   return products;
 }
 
