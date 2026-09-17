@@ -92,6 +92,36 @@ namespace {
     recorder.BeginTrackingResourceState(texture, initial);
   }
 
+  auto MeteringRectangle(
+    const RenderContext& ctx, const graphics::TextureDesc& desc) -> Scissors
+  {
+    auto rectangle = Scissors {
+      .left = 0,
+      .top = 0,
+      .right = static_cast<std::int32_t>(desc.width),
+      .bottom = static_cast<std::int32_t>(desc.height),
+    };
+    if (ctx.current_view.resolved_view != nullptr) {
+      const auto clamped
+        = ::oxygen::vortex::internal::ResolveClampedViewportState(
+          ctx.current_view.resolved_view->Viewport(),
+          ctx.current_view.resolved_view->Scissor(), desc.width, desc.height);
+      const auto& viewport = clamped.viewport;
+      // Include exactly the pixel centres covered by the raster viewport.
+      rectangle.left = std::max(clamped.scissors.left,
+        static_cast<std::int32_t>(std::ceil(viewport.top_left_x - 0.5F)));
+      rectangle.top = std::max(clamped.scissors.top,
+        static_cast<std::int32_t>(std::ceil(viewport.top_left_y - 0.5F)));
+      rectangle.right = std::min(clamped.scissors.right,
+        static_cast<std::int32_t>(
+          std::ceil(viewport.top_left_x + viewport.width - 0.5F)));
+      rectangle.bottom = std::min(clamped.scissors.bottom,
+        static_cast<std::int32_t>(
+          std::ceil(viewport.top_left_y + viewport.height - 0.5F)));
+    }
+    return rectangle;
+  }
+
   auto SourceFallbackScale(const ExposurePass::Source& source) -> float
   {
     const auto& initial = *source.config.resolved_exposure;
@@ -280,6 +310,8 @@ auto ExposurePass::OnFrameStart(
     average_constants_publisher_->OnFrameStart(sequence, slot);
   if (frame_constants_publisher_)
     frame_constants_publisher_->OnFrameStart(sequence, slot);
+  if (suitability_constants_publisher_)
+    suitability_constants_publisher_->OnFrameStart(sequence, slot);
 }
 
 auto ExposurePass::PreparePublishers(RenderContext& ctx) -> void
@@ -310,6 +342,12 @@ auto ExposurePass::PreparePublishers(RenderContext& ctx) -> void
         renderer_.GetStagingProvider(),
         observer_ptr { &renderer_.GetInlineTransfersCoordinator() },
         "Vortex.PostProcess.Exposure.FrameConstants");
+    suitability_constants_publisher_
+      = std::make_unique<::oxygen::vortex::internal::PerViewStructuredPublisher<
+        std::array<std::uint32_t, 20U>>>(observer_ptr { gfx.get() },
+        renderer_.GetStagingProvider(),
+        observer_ptr { &renderer_.GetInlineTransfersCoordinator() },
+        "Vortex.Exposure.Suitability.Constants");
     target_frame_.reset();
   }
   OnFrameStart(ctx.frame_sequence, ctx.frame_slot);
@@ -355,6 +393,31 @@ auto ExposurePass::AcquireFrame() -> std::shared_ptr<FrameResources>
       frame->srv_index = index;
     else
       frame->uav_index = index;
+  }
+  frame->suitability_buffer
+    = gfx->CreateBuffer({ .size_bytes = sizeof(HdrSuitabilityData),
+      .usage = graphics::BufferUsage::kStorage,
+      .memory = graphics::BufferMemory::kDeviceLocal,
+      .debug_name = "Vortex.Exposure.Suitability" });
+  CHECK_NOTNULL_F(frame->suitability_buffer.get());
+  RegisterResourceIfNeeded(*gfx, frame->suitability_buffer);
+  for (const auto type : { graphics::ResourceViewType::kRawBuffer_SRV,
+         graphics::ResourceViewType::kRawBuffer_UAV }) {
+    auto handle = allocator.AllocateRaw(
+      type, graphics::DescriptorVisibility::kShaderVisible);
+    CHECK_F(handle.IsValid());
+    const auto index = allocator.GetShaderVisibleIndex(handle);
+    const auto view
+      = registry.RegisterView(*frame->suitability_buffer, std::move(handle),
+        graphics::BufferViewDescription { .view_type = type,
+          .visibility = graphics::DescriptorVisibility::kShaderVisible,
+          .range = { 0U, sizeof(HdrSuitabilityData) },
+          .stride = 0U });
+    CHECK_F(view->IsValid());
+    if (type == graphics::ResourceViewType::kRawBuffer_SRV)
+      frame->suitability_srv = index;
+    else
+      frame->suitability_uav = index;
   }
   frame_pool_.push_back(frame);
   return frame;
@@ -556,6 +619,129 @@ auto ExposurePass::RestoreFrameFallback(RenderContext& ctx,
     *frame.current_state->buffer, graphics::ResourceStates::kShaderResource);
   recorder.reset();
   frame_states_[ctx.frame_slot.get()].push_back(std::move(fallback));
+  return recording && recording->IsSubmitted();
+}
+
+auto ExposurePass::EvaluateFp16Products(RenderContext& ctx,
+  const FrameLease& frame, const PostProcessConfig& config,
+  const std::span<const HdrProduct> products, const Inputs& metering) -> bool
+{
+  CHECK_F(frame && config.resolved_exposure);
+  auto gfx = renderer_.GetGraphics();
+  if (!gfx)
+    return false;
+  PreparePublishers(ctx);
+  EnsurePipelines();
+  std::uint32_t expected_mask = 0U;
+  std::uint64_t texels = 0U;
+  for (const auto& product : products) {
+    CHECK_F(product.id > 0U && product.id <= 31U);
+    const auto bit = 1U << (product.id - 1U);
+    CHECK_F((expected_mask & bit) == 0U);
+    expected_mask |= bit;
+    CHECK_F(std::isfinite(product.error_budget_share)
+      && product.error_budget_share > 0.0F
+      && product.error_budget_share <= 1.0F);
+    if (!product.texture || !product.srv.IsValid())
+      continue;
+    const auto& desc = product.texture->GetDescriptor();
+    CHECK_F(desc.format == Format::kRGBA32Float);
+    CHECK_F(desc.texture_type == TextureType::kTexture2D
+      || desc.texture_type == TextureType::kTexture3D);
+    CHECK_F(!product.metering || desc.texture_type == TextureType::kTexture2D);
+    texels += std::uint64_t(desc.width) * desc.height * desc.depth;
+  }
+  CHECK_LE_F(texels, std::numeric_limits<std::uint32_t>::max());
+  auto recorder = gfx->AcquireCommandRecorder(
+    gfx->QueueKeyFor(graphics::QueueRole::kGraphics),
+    "Vortex Exposure Suitability");
+  if (!recorder)
+    return false;
+  const auto recording = recorder->GetCommandListForInspection();
+  const auto track
+    = [&](const graphics::Buffer& buffer, graphics::ResourceStates state) {
+        if (!recorder->IsResourceTracked(buffer)
+          && !recorder->AdoptKnownResourceState(buffer))
+          recorder->BeginTrackingResourceState(
+            buffer, graphics::ResourceStates::kCommon, false);
+        recorder->RequireResourceState(buffer, state);
+      };
+  track(*frame->buffer, graphics::ResourceStates::kShaderResource);
+  track(
+    *frame->current_state->buffer, graphics::ResourceStates::kShaderResource);
+  track(*frame->suitability_buffer, graphics::ResourceStates::kUnorderedAccess);
+  if (metering.metering_mask) {
+    TrackTextureFromKnownOrInitial(*recorder, *metering.metering_mask);
+    recorder->RequireResourceState(
+      *metering.metering_mask, graphics::ResourceStates::kShaderResource);
+  }
+  const auto dispatch = [&](
+                          const unsigned pipeline, const HdrProduct* product) {
+    const auto desc
+      = product ? product->texture->GetDescriptor() : graphics::TextureDesc {};
+    const auto rectangle = product && product->metering
+      ? MeteringRectangle(ctx, desc)
+      : Scissors { .right = static_cast<std::int32_t>(desc.width),
+          .bottom = static_cast<std::int32_t>(desc.height) };
+    const auto flags = product ? (product->metering ? 1U : 0U)
+        | (product->coverage ? 2U : 0U) | (product->transmittance ? 4U : 0U)
+        | (desc.texture_type == TextureType::kTexture3D ? 8U : 0U)
+                               : 0U;
+    const auto constants = std::array<std::uint32_t, 20U> {
+      frame->suitability_uav.get(),
+      product ? product->srv.get() : kInvalidShaderVisibleIndex.get(),
+      frame->srv_index.get(), frame->current_state->srv_index.get(), desc.width,
+      desc.height, desc.depth, flags, product ? product->id : 0U, expected_mask,
+      metering.metering_mask_srv.get(),
+      static_cast<std::uint32_t>(
+        config.resolved_exposure->authored.metering_mode),
+      static_cast<std::uint32_t>(rectangle.left),
+      static_cast<std::uint32_t>(rectangle.top),
+      static_cast<std::uint32_t>(std::max(0, rectangle.right - rectangle.left)),
+      static_cast<std::uint32_t>(std::max(0, rectangle.bottom - rectangle.top)),
+      std::bit_cast<std::uint32_t>(
+        config.resolved_exposure->authored.spot_meter_radius),
+      std::bit_cast<std::uint32_t>(
+        product ? product->error_budget_share : 1.0F),
+      std::bit_cast<std::uint32_t>(
+        config.resolved_exposure->authored.min_log_luminance),
+      std::bit_cast<std::uint32_t>(
+        config.resolved_exposure->authored.black_influence)
+    };
+    const auto slot = suitability_constants_publisher_->Publish(
+      ctx.current_view.view_id, constants);
+    CHECK_F(slot.IsValid());
+    recorder->RequireResourceState(
+      *frame->suitability_buffer, graphics::ResourceStates::kUnorderedAccess);
+    recorder->FlushBarriers();
+    recorder->SetPipelineState(*suitability_pipelines_[pipeline]);
+    recorder->SetComputeRoot32BitConstant(
+      static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants), 0U,
+      0U);
+    recorder->SetComputeRoot32BitConstant(
+      static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants),
+      slot.get(), 1U);
+    recorder->Dispatch(product ? (desc.width + 7U) / 8U : 1U,
+      product ? (desc.height + 7U) / 8U : 1U,
+      product && desc.texture_type == TextureType::kTexture3D ? desc.depth
+                                                              : 1U);
+  };
+  dispatch(0U, nullptr);
+  for (const auto& product : products) {
+    if (!product.texture || !product.srv.IsValid())
+      continue;
+    TrackTextureFromKnownOrInitial(*recorder, *product.texture);
+    recorder->RequireResourceState(
+      *product.texture, graphics::ResourceStates::kShaderResource);
+    dispatch(1U, &product);
+  }
+  dispatch(2U, nullptr);
+  for (const auto& product : products)
+    if (product.texture && product.srv.IsValid())
+      dispatch(3U, &product);
+  recorder->RequireResourceStateFinal(
+    *frame->suitability_buffer, graphics::ResourceStates::kShaderResource);
+  recorder.reset();
   return recording && recording->IsSubmitted();
 }
 
@@ -897,6 +1083,12 @@ auto ExposurePass::RemoveViewState(CompositionView::ViewStateHandle handle)
 
 auto ExposurePass::EnsurePipelines() -> void
 {
+  constexpr std::array names { "ClearSuitability", "GatherSuitabilityMaximum",
+    "SelectSuitabilityCandidate", "CheckSuitabilityProduct" };
+  for (std::size_t index = 0; index < names.size(); ++index)
+    if (!suitability_pipelines_[index])
+      suitability_pipelines_[index]
+        = BuildExposurePipeline(names[index], names[index]);
   if (!fallback_pipeline_) {
     fallback_pipeline_ = BuildExposurePipeline(
       "VortexExposureFallbackCS", "Vortex.PostProcess.Exposure.Fallback");
@@ -1022,30 +1214,7 @@ auto ExposurePass::UpdateHistogramConstants(RenderContext& ctx,
   DCHECK_NOTNULL_F(constants_publisher_.get());
   const auto desc = inputs.scene_signal ? inputs.scene_signal->GetDescriptor()
                                         : graphics::TextureDesc {};
-  auto rectangle = Scissors {
-    .left = 0,
-    .top = 0,
-    .right = static_cast<std::int32_t>(desc.width),
-    .bottom = static_cast<std::int32_t>(desc.height),
-  };
-  if (ctx.current_view.resolved_view != nullptr) {
-    const auto clamped
-      = ::oxygen::vortex::internal::ResolveClampedViewportState(
-        ctx.current_view.resolved_view->Viewport(),
-        ctx.current_view.resolved_view->Scissor(), desc.width, desc.height);
-    const auto& viewport = clamped.viewport;
-    // Include exactly the pixel centres covered by the raster viewport.
-    rectangle.left = std::max(clamped.scissors.left,
-      static_cast<std::int32_t>(std::ceil(viewport.top_left_x - 0.5F)));
-    rectangle.top = std::max(clamped.scissors.top,
-      static_cast<std::int32_t>(std::ceil(viewport.top_left_y - 0.5F)));
-    rectangle.right = std::min(clamped.scissors.right,
-      static_cast<std::int32_t>(
-        std::ceil(viewport.top_left_x + viewport.width - 0.5F)));
-    rectangle.bottom = std::min(clamped.scissors.bottom,
-      static_cast<std::int32_t>(
-        std::ceil(viewport.top_left_y + viewport.height - 0.5F)));
-  }
+  const auto rectangle = MeteringRectangle(ctx, desc);
   const auto constants = AutoExposureHistogramConstants {
     .source_texture_index = inputs.scene_signal_srv.get(),
     .histogram_buffer_index = state.histogram_uav_index.get(),
@@ -1205,6 +1374,10 @@ auto ExposurePass::ReleaseExposureResources() -> void
       if (registry.Contains(*frame->buffer))
         registry.UnRegisterResource(*frame->buffer);
       gfx->RegisterDeferredRelease(std::move(frame->buffer));
+      gfx->ForgetKnownResourceState(*frame->suitability_buffer);
+      if (registry.Contains(*frame->suitability_buffer))
+        registry.UnRegisterResource(*frame->suitability_buffer);
+      gfx->RegisterDeferredRelease(std::move(frame->suitability_buffer));
     }
     for (auto& state : state_pool_) {
       for (auto* resource :

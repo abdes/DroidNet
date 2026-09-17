@@ -68,6 +68,23 @@ GBuffers, velocity, shadow maps, transmittance or display targets.
 
 ### Per-view FP16 suitability
 
+The cumulative-blend check requires an accumulation-boundary decision before
+normal-mode admission is enabled. Fixed-function output-merger blending does
+not expose its cumulative pre-store value to the pixel shader. The recommended
+implementation keeps the existing SceneColor allocation RGBA32F for accumulation
+and performs checked conversion into the existing resolved-color allocation:
+RGBA16F when qualified, RGBA32F during recovery. This adds no telemetry target,
+but retains one FP32 allocation in normal mode: eight extra bytes per SceneColor
+texel versus the original all-FP16 normal-mode inventory (15.82 MiB at 1080p,
+63.28 MiB at 4K). Other qualified view-radiance products can still use FP16.
+
+The alternative is programmable ordered-UAV blending into SceneColor, which
+permits cumulative checks within the shader but changes the raster blend path
+and requires ROV capability handling. See Microsoft's
+[ordered-view specification](https://microsoft.github.io/DirectX-Specs/d3d/RasterOrderViews.html).
+This choice is pending user approval; the current conservative-FP32 scene path
+does not constitute approval or completion of normal-mode format admission.
+
 Exposure validity does not imply FP16 eligibility. At audited radiance write
 boundaries, test finite FP32 values before narrowing, including cumulative
 additive lighting and blending. Detect accumulation overflow as well as

@@ -445,6 +445,32 @@ two consecutive eligible completed frames, half-error margin and two stops of
 overflow margin. The first FP16 frame pins the qualified candidate GPU P record;
 CPU does not read or compute P. Stale or delayed status cannot demote a view.
 
+The product evaluator uses a 48-byte GPU reduction record: candidate P and
+maximum scene RGB at 0/4; checked-product mask and failure flags at 8/12;
+first failed product and rejected-sample count at 16/20; metering, image and
+overflow failure counts at 24/28/32; checked-sample count, expected mask and
+reserved zero at 36/40/44. Product IDs 1-31 map to mask bits 0-30. Failure bits
+are nonfinite input=1, insufficient overflow margin=2, image error=4, metering
+error=8, missing product=16. The record is frame-retained with existing exposure
+resources and is not itself a format-admission certificate.
+
+The evaluator reads FP32 2D/3D reference products and their stored P. A GPU
+maximum reduction selects the largest bounded power-of-two P that leaves two
+stops of headroom; candidate narrowing is then evaluated against half the
+image-error budget and 1/1024-EV metering tolerance. Image checks include both
+scene-referred and S-scaled error, so insignificant RGB loss can pass while the
+same loss amplified by displayed gain fails. Metering checks use the existing
+bounded sample grid, content rectangle, mask/profile and quantized coverage
+weights. Missing products and nonfinite samples cannot produce an empty pass.
+Dark classification and black-influence mass quantization share the production
+meter helpers. A zero-mass dark sample need not preserve positive-versus-zero
+luminance, but weighted/dark classification still preserves the aggregate
+synthetic-dark fallback. A contributing positive sample retains the stated EV
+bound. The 80-byte evaluator constants end with radius, error-budget share,
+minimum log luminance and accepted black influence at offsets 64/68/72/76.
+Cumulative blend/error aggregation, stability and completed-status admission
+remain separate required integration gates.
+
 Normal-path pre-store overflow/nonfinite or required-signal underflow invalidates
 metering and retains history. Schedule FP32 recovery after completed status,
 without blocking. FP32 out-of-domain input reports a content/range error and

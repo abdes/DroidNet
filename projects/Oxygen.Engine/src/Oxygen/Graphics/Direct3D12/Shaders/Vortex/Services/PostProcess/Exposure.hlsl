@@ -130,6 +130,16 @@ static uint QuantizeWeight(float weight)
     return uint(floor(saturate(weight) * 4095.0 + 0.5));
 }
 
+static bool IsDarkMeterSample(float luminance, float min_log_luminance)
+{
+    return luminance <= exp2(min_log_luminance);
+}
+
+static uint MeterContribution(uint base_weight, bool dark, float black_influence)
+{
+    return dark ? uint(floor(float(base_weight) * black_influence + 0.5)) : base_weight;
+}
+
 [numthreads(256, 1, 1)]
 void ClearHistogram(uint group_index : SV_GroupIndex)
 {
@@ -204,8 +214,7 @@ static void MeterSample(AutoExposureHistogramConstants pass, uint2 cell)
     }
     InterlockedAdd(s_Histogram[METER_FINITE], 1u);
     InterlockedAdd(s_Histogram[METER_WEIGHTED], 1u);
-    const float lower_bound = exp2(pass.min_log_luminance);
-    if (luminance <= lower_bound) {
+    if (IsDarkMeterSample(luminance, pass.min_log_luminance)) {
         InterlockedAdd(s_Histogram[METER_DARK], 1u);
         if (luminance == 0.0) {
             InterlockedAdd(s_Histogram[METER_BLACK], 1u);
@@ -214,7 +223,7 @@ static void MeterSample(AutoExposureHistogramConstants pass, uint2 cell)
         }
         // Apply influence to classified dark samples, never to ordinary mass
         // interpolated into bin zero from above the window boundary.
-        const uint dark_weight = uint(floor(float(weight) * pass.black_influence + 0.5));
+        const uint dark_weight = MeterContribution(weight, true, pass.black_influence);
         InterlockedAdd(s_Histogram[0], dark_weight);
         return;
     }
@@ -748,4 +757,172 @@ void VortexExposureFallbackCS(uint3 dispatch_id : SV_DispatchThreadID)
     }
     destination.Store4(0u, gains);
     destination.Store(EXPOSURE_FLAGS_OFFSET, flags);
+}
+
+struct SuitabilityConstants {
+    uint report_uav; uint source_srv; uint frame_srv; uint state_srv;
+    uint width; uint height; uint depth; uint flags;
+    uint product; uint expected_mask; uint mask_srv; uint meter_mode;
+    uint left; uint top; uint meter_width; uint meter_height;
+    float radius; float budget_share; float min_log_luminance; float black_influence;
+};
+
+static void SuitabilityFailure(RWByteAddressBuffer report, uint product, uint flags, uint counter)
+{
+    uint unused;
+    report.InterlockedOr(12u, flags, unused);
+    report.InterlockedCompareExchange(16u, 0u, product, unused);
+    report.InterlockedAdd(counter, 1u, unused);
+}
+
+static float4 SuitabilitySample(SuitabilityConstants pass, uint3 pixel)
+{
+    if ((pass.flags & 8u) != 0u) {
+        Texture3D<float4> source = ResourceDescriptorHeap[pass.source_srv];
+        return source.Load(int4(pixel, 0));
+    }
+    Texture2D<float4> source = ResourceDescriptorHeap[pass.source_srv];
+    return source.Load(int3(pixel.xy, 0));
+}
+
+[numthreads(1, 1, 1)]
+void ClearSuitability(uint3 pixel : SV_DispatchThreadID)
+{
+    StructuredBuffer<SuitabilityConstants> constants = ResourceDescriptorHeap[g_PassConstantsIndex];
+    const SuitabilityConstants pass = constants[0];
+    RWByteAddressBuffer report = ResourceDescriptorHeap[pass.report_uav];
+    report.Store4(0u, uint4(asuint(1.0), 0u, 0u, 0u));
+    report.Store4(16u, 0u.xxxx);
+    report.Store4(32u, uint4(0u, 0u, pass.expected_mask, 0u));
+}
+
+[numthreads(8, 8, 1)]
+void GatherSuitabilityMaximum(uint3 pixel : SV_DispatchThreadID)
+{
+    StructuredBuffer<SuitabilityConstants> constants = ResourceDescriptorHeap[g_PassConstantsIndex];
+    const SuitabilityConstants pass = constants[0];
+    if (pixel.x >= pass.width || pixel.y >= pass.height || pixel.z >= pass.depth) return;
+    RWByteAddressBuffer report = ResourceDescriptorHeap[pass.report_uav];
+    uint unused;
+    if (all(pixel == 0u.xxx)) report.InterlockedOr(8u, 1u << (pass.product - 1u), unused);
+    const float4 sample = SuitabilitySample(pass, pixel);
+    if (!all(isfinite(sample))) {
+        SuitabilityFailure(report, pass.product, 1u, 20u);
+        return;
+    }
+    StructuredBuffer<FrameExposureData> frame = ResourceDescriptorHeap[pass.frame_srv];
+    const float3 scene = abs(sample.rgb) * frame[0].one_over_pre_exposure;
+    const float maximum = max(scene.x, max(scene.y, scene.z));
+    report.InterlockedMax(4u, asuint(maximum), unused);
+}
+
+[numthreads(1, 1, 1)]
+void SelectSuitabilityCandidate(uint3 pixel : SV_DispatchThreadID)
+{
+    StructuredBuffer<SuitabilityConstants> constants = ResourceDescriptorHeap[g_PassConstantsIndex];
+    const SuitabilityConstants pass = constants[0];
+    RWByteAddressBuffer report = ResourceDescriptorHeap[pass.report_uav];
+    const float maximum = asfloat(report.Load(4u));
+    float p = maximum > 0.0 ? exp2(clamp(floor(log2(16376.0) - log2(maximum)), -32.0, 32.0)) : 1.0;
+    if (maximum * p > 16376.0 && p > exp2(-32.0)) p *= 0.5;
+    report.Store(0u, asuint(p));
+    const uint missing = pass.expected_mask & ~report.Load(8u);
+    if (pass.expected_mask == 0u || missing != 0u) {
+        uint unused;
+        report.InterlockedOr(12u, 16u, unused);
+        if (missing != 0u) report.InterlockedCompareExchange(16u, 0u, uint(firstbitlow(missing)) + 1u, unused);
+    }
+}
+
+static bool SuitabilityMeterCell(SuitabilityConstants pass, uint2 pixel, out uint2 cell, out float2 uv)
+{
+    cell = 0u.xx; uv = 0.0.xx;
+    if ((pass.flags & 1u) == 0u || pass.meter_width == 0u || pass.meter_height == 0u) return false;
+    if (pixel.x < pass.left || pixel.y < pass.top || pixel.x >= pass.left + pass.meter_width || pixel.y >= pass.top + pass.meter_height) return false;
+    const uint2 extent = uint2(pass.meter_width, pass.meter_height);
+    const uint2 grid = min(extent, METER_GRID_LIMIT);
+    const uint2 relative = pixel - uint2(pass.left, pass.top);
+    cell = min(uint2((float2(relative) + 0.5) * float2(grid) / float2(extent)), grid - 1u);
+    uv = (float2(cell) + 0.5) / float2(grid);
+    return all(relative == min(uint2(uv * float2(extent)), extent - 1u));
+}
+
+[numthreads(8, 8, 1)]
+void CheckSuitabilityProduct(uint3 pixel : SV_DispatchThreadID)
+{
+    StructuredBuffer<SuitabilityConstants> constants = ResourceDescriptorHeap[g_PassConstantsIndex];
+    const SuitabilityConstants pass = constants[0];
+    if (pixel.x >= pass.width || pixel.y >= pass.height || pixel.z >= pass.depth) return;
+    RWByteAddressBuffer report = ResourceDescriptorHeap[pass.report_uav];
+    const float4 sample = SuitabilitySample(pass, pixel);
+    if (!all(isfinite(sample))) return;
+    uint unused;
+    report.InterlockedAdd(36u, 1u, unused);
+    StructuredBuffer<FrameExposureData> frame = ResourceDescriptorHeap[pass.frame_srv];
+    ByteAddressBuffer state = ResourceDescriptorHeap[pass.state_srv];
+    const float s = asfloat(state.Load(0u));
+    const float inverse_p = frame[0].one_over_pre_exposure;
+    const float candidate_p = asfloat(report.Load(0u));
+    const float3 scene = sample.rgb * inverse_p;
+    const float3 proposed = scene * candidate_p;
+    if (any(abs(proposed) > 16376.0)) {
+        SuitabilityFailure(report, pass.product, 2u, 32u);
+        return;
+    }
+    const float3 restored = f16tof32(f32tof16(proposed)) / candidate_p;
+    const float alpha = (pass.flags & 2u) != 0u ? saturate(sample.a) : 1.0;
+    const float narrowed_alpha = (pass.flags & 2u) != 0u ? f16tof32(f32tof16(alpha)) : 1.0;
+    const float3 reference = scene / max(alpha, 1e-6);
+    const float3 narrowed = restored / max(narrowed_alpha, 1e-6);
+    const float3 error = abs(reference - narrowed);
+    const float relative_budget = .0025 * pass.budget_share;
+    const float absolute_budget = 1e-5 * pass.budget_share;
+    bool image_failure = any(error > abs(reference) * relative_budget + absolute_budget)
+        || any(error * s > abs(reference * s) * relative_budget + absolute_budget);
+    if ((pass.flags & 4u) != 0u) {
+        const float t = saturate(sample.a);
+        const float dt = abs(f16tof32(f32tof16(t)) - t);
+        const float maximum = asfloat(report.Load(4u));
+        image_failure = image_failure || dt > t * relative_budget + absolute_budget / max(maximum * max(s, 1.0), 1e-30);
+    }
+    if (image_failure) SuitabilityFailure(report, pass.product, 4u, 28u);
+    uint2 cell; float2 uv;
+    if (!SuitabilityMeterCell(pass, pixel.xy, cell, uv)) return;
+    float mask = 1.0;
+    if (pass.mask_srv != K_INVALID_BINDLESS_INDEX) {
+        Texture2D<float4> mask_texture = ResourceDescriptorHeap[pass.mask_srv];
+        SamplerState mask_sampler = SamplerDescriptorHeap[VORTEX_SAMPLER_LINEAR_CLAMP];
+        mask = mask_texture.SampleLevel(mask_sampler, uv, 0).r;
+    }
+    if (!isfinite(mask)) {
+        SuitabilityFailure(report, pass.product, 1u, 20u);
+        return;
+    }
+    const uint2 grid = min(uint2(pass.meter_width, pass.meter_height), METER_GRID_LIMIT);
+    const float distance = length((float2(cell * 2u + 1u) - float2(grid)) / float2(grid));
+    float profile = 1.0;
+    if (pass.meter_mode == 1u) profile = saturate(1.0 - distance);
+    else if (pass.meter_mode == 2u) {
+        profile = pass.radius > 0.0 ? saturate(1.0 - distance / pass.radius) : (all(cell * 2u + 1u == grid) ? 1.0 : 0.0);
+        profile *= profile;
+    }
+    const uint weight = QuantizeWeight(profile * saturate(mask) * alpha);
+    const uint narrowed_weight = QuantizeWeight(profile * saturate(mask) * narrowed_alpha);
+    if (weight == 0u && narrowed_weight == 0u) return;
+    const float luminance = Luminance(reference);
+    const float narrowed_luminance = Luminance(narrowed);
+    const bool dark = IsDarkMeterSample(luminance, pass.min_log_luminance);
+    const bool narrowed_dark = IsDarkMeterSample(narrowed_luminance, pass.min_log_luminance);
+    const uint mass = MeterContribution(weight, dark, pass.black_influence);
+    const uint narrowed_mass = MeterContribution(narrowed_weight, narrowed_dark, pass.black_influence);
+    // Weighted/dark classification controls the aggregate synthetic-dark
+    // fallback even when black influence removes all histogram mass.
+    bool meter_failure = ((weight == 0u) != (narrowed_weight == 0u))
+        || dark != narrowed_dark || mass != narrowed_mass;
+    if (mass != 0u || narrowed_mass != 0u) {
+        meter_failure = meter_failure || ((luminance == 0.0) != (narrowed_luminance == 0.0))
+            || (luminance > 0.0 && (narrowed_luminance <= 0.0
+                || abs(log2(narrowed_luminance / luminance)) > 1.0 / 1024.0));
+    }
+    if (meter_failure) SuitabilityFailure(report, pass.product, 8u, 24u);
 }
