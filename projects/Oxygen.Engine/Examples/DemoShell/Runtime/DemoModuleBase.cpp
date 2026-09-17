@@ -240,6 +240,17 @@ auto DemoModuleBase::ReleaseInactiveRuntimeViews(
       continue;
     }
 
+    if (context != nullptr && RetainInactiveView(view_id)) {
+      const auto published = renderer->ResolvePublishedRuntimeViewId(view_id);
+      if (published != kInvalidViewId) {
+        auto inactive = context->GetViewContext(published);
+        inactive.render_target = {};
+        inactive.composite_source = {};
+        context->UpdateView(published, std::move(inactive));
+        continue;
+      }
+    }
+
     if (context != nullptr) {
       renderer->RemovePublishedRuntimeView(*context, view_id);
     } else {

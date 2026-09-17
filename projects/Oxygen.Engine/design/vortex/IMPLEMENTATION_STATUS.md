@@ -238,6 +238,12 @@ output exactly, with matching raster/meter rectangles and unchanged pixels
 outside the scissor. The focused debugger run passes
 (`multiview/viewport-manifest.json`). Whole-window resize and remaining lifecycle
 and precision gates remain open.
+Short hide/reopen and fresh-handle recreation are now qualified through native
+MultiView in Debug/Release. Eight captures preserve main output exactly, retain
+PiP history across hiding, and initialize recreated PiP from its new target
+without inheriting the old transition. The debugger run passes and inspected
+images agree (`multiview/lifetime-manifest.json`). This does not close long-idle
+expiration, all lifecycle modes or automatic precision admission/recovery.
 
 ## 4. Milestone Ledger
 

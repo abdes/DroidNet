@@ -230,7 +230,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
               .Build())
           .WithOption(Option::WithKey("exposure-proof")
               .About("Exposure proof: none, independent, shared, main-only, "
-                     "pip-only, reordered, source-loss, viewport")
+                     "pip-only, reordered, source-loss, viewport, lifetime")
               .Long("exposure-proof")
               .WithValue<std::string>()
               .DefaultValue("none")
@@ -368,6 +368,8 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
       main_module_config.exposure_proof = ExposureProof::kSourceLoss;
     } else if (exposure_proof_value == "viewport") {
       main_module_config.exposure_proof = ExposureProof::kViewport;
+    } else if (exposure_proof_value == "lifetime") {
+      main_module_config.exposure_proof = ExposureProof::kLifetime;
     } else if (exposure_proof_value != "none") {
       throw std::invalid_argument("Unknown exposure proof scenario");
     }

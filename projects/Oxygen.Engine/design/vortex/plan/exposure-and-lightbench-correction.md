@@ -1310,6 +1310,17 @@ only where the draw writes. The debugger run has no blocking graphics messages.
 Evidence is `multiview/viewport-manifest.json`. Whole-window resize,
 hide/recreate and the remaining lifecycle/precision gates remain open.
 
+The bounded short-inactivity proof retains a hidden PiP registration with no
+targets on frames 44–47, reopens its handle at frame 48, and creates a fresh
+logical view/handle at frame 52. Debug/Release builds and eight capture audits
+pass: main's image/gain remains exact, the retained PiP preserves its gain/full
+image despite a new target, and recreation initializes independently without
+the old applied generation. Initialization agrees with the independent target
+within 1e-6 EV. The debugger run has no blocking graphics messages and images
+were inspected. `multiview/lifetime-manifest.json` records this scope; long-idle
+expiration, other mode/lifecycle combinations and precision admission/recovery
+remain open.
+
 - [x] Add the early GPU P resolve and bind a frame-invariant P/1P to every HDR pass.
 - [ ] Migrate the entire section 4.4 checklist, including atmosphere producer/
   consumer pairs, fog/color histories, bloom and offscreen/capture domains.

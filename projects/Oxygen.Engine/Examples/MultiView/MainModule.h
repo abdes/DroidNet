@@ -52,6 +52,7 @@ enum class ExposureProofScenario : uint8_t {
   kReordered,
   kSourceLoss,
   kViewport,
+  kLifetime,
 };
 
 struct MainModuleConfig {
@@ -132,6 +133,7 @@ protected:
   auto BuildDefaultWindowProperties() const
     -> platform::window::Properties override;
   auto ClearBackbufferReferences() -> void override;
+  auto RetainInactiveView(ViewId view_id) const noexcept -> bool override;
   auto UpdateComposition(engine::FrameContext& context,
     std::vector<vortex::CompositionView>& views) -> void override;
 
@@ -198,6 +200,7 @@ private:
   MainModuleConfig config_ {};
   bool viewport_proof_resized_ { false };
   bool viewport_proof_scissored_ { false };
+  bool retain_inactive_pip_ { false };
   platform::window::ExtentT last_viewport_ { 0, 0 };
 };
 

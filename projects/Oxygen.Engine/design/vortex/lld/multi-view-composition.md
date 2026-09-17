@@ -800,6 +800,14 @@ runtime publication, offscreen sessions and composition views. An unspecified
 or invalid scissor keeps the existing full-viewport default; valid rectangles
 reach the shared raster/metering clamp without being replaced by camera defaults.
 
+The `lifetime` proof omits PiP on frames 44–47 while retaining its registration
+and exposure handle with null frame targets. It reopens that handle at frame 48
+with one more stop of requested compensation; paused adaptation must preserve
+the old gain. At frame 52 it replaces the logical view/handle, which must meter
+and initialize independently. Main remains unchanged throughout. DemoShell's
+retention hook uses the existing no-target inactive-view path and does not extend
+the renderer's normal idle-retirement limit.
+
 The [exposure execution plan](../plan/exposure-and-lightbench-correction.md#42-shared-exposure-one-writer-and-deterministic-readers)
 owns the complete source, fallback and destruction contract:
 
