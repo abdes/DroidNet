@@ -860,7 +860,7 @@ float-to-fixed conversion (3.2.4.1), and applies FP32 rules to filtering of floa
 formats regardless of storage width (7.18.16.2). This does not establish identical
 FP16/FP32 sample weights. Native D3D12 qualification remains required.
 
-For the mip-zero linear-clamp AP/fog consumers, the following enclosure is derived
+For the mip-zero linear-clamp sky/AP/fog consumers, the following enclosure is derived
 from the interpolation equations. Let `Gd` bound every adjacent reference-texel
 difference along axis `d`. The exact piecewise multilinear interpolant `f` obeys
 
@@ -891,7 +891,7 @@ neighbor footprints. Filtering arithmetic/FTZ error is an additional term. The
 current exact oracle qualifies the spatial algebra, not those hardware bounds;
 it does not change resource sampling or permit format admission.
 
-The oracle checks 9,312 cases across singleton, 2D and 3D grids, constant/ramp-like
+The oracle checks 18,624 clamp/periodic cases across singleton, 2D and 3D grids, constant/ramp-like
 and alternating data, half rounding, retained reference intervals, cell crossings
 and clamp edges. A separate legal-rounding counterexample uses exact texels
 `[0,1]` and binary32 normalized coordinate `257/1024` in a two-texel texture.
@@ -899,6 +899,13 @@ Its texel coordinate is `1/512`; legal eight-bit fractional snapping alternative
 are `0` and `1/256`. The resulting samples `0` and `1/256` have no texel storage
 error but exceed the image allowance and disagree at the dark cutoff. This is a
 permitted-rounding counterexample, not a measured device failure.
+
+Fog composition/history use the same linear-clamp slot 3 as atmosphere. The
+former slot-0 wrap behavior mixed opposite viewport edges and near/far slices;
+native regressions cover both resource formats, edge/interior samples, geometry
+beyond fog distance and history rejection outside the frustum. The periodic
+oracle remains a negative control: `[0,1,2]` has adjacent maximum 1 but periodic
+maximum 2. There is no periodic production collector mode.
 
 ### GPU producer-bound transport
 
@@ -909,7 +916,7 @@ error and transmittance relative/absolute error. RGB absolute error is in
 scene-referred units; transmittance is dimensionless. Runtime CPU readback still
 copies only the original 80-byte prefix.
 
-The allocation is 160 bytes. The 16 bytes at 128 capture opaque SceneColor before
+The allocation is 256 bytes. The 16 bytes at 128 capture opaque SceneColor before
 sky/AP/fog/translucency: maximum absolute pre-exposed RGB at 128, flags at 132
 (recorded=1, nonfinite=2, negative RGB=4), checked-pixel count at 136 and zero at
 140. The immutable frame P defines these units. The exposure pass reuses its
@@ -943,6 +950,27 @@ failed acquisition cannot clear old GPU bytes, so CPU submission identity remain
 authoritative. The record is preserved through solve/finalization, but is not consumed
 for admission until filtering, coverage, later fog/translucency and candidate
 store contributions are complete. CPU status readback remains 80 bytes.
+
+Three 32-byte records at 160/192/224 hold reference gradient maxima for sky-view,
+AP and fog. Each contains RGB X/Y/Z maxima (scene-referred) at 0/4/8, flags at 12
+(recorded=1, invalid input/interval=2), transmittance X/Y/Z maxima at 16/20/24,
+and checked-texel count at 28. Positive-axis neighbors suffice for linear clamp;
+singleton axes have zero gradient. RGB bounds are converted to the texture's P domain before
+interval inversion, then differences are converted outward to scene units.
+Alpha is considered only for products declaring transmittance and is never
+P-scaled. Invalid reference intervals invalidate the entire product record.
+Positive subnormal bound operands are promoted outward before sums/products,
+not merely after an underflowed result. A flushed tiny operand multiplied by a
+large gain can otherwise lose an error much larger than the smallest normal.
+Interval zero tests and unit-interval clamps use bits to preserve tiny positive
+metadata/endpoints. Lower interval numerators use an outward lower observed
+operand and upper absolute-error operand before subtraction.
+The existing clear/maximum pipelines reuse evaluator bit 7 for this reduction;
+8x8 groups reduce locally before global maxima/count/flag atomics. This adds no
+texture or separate buffer. Every attempt invalidates the CPU submission identity
+for that product; successful retry clears its own record without touching peers.
+These gradients alone do not certify coordinate displacement, filtering
+arithmetic, or final image/meter error. Admission remains disabled.
 
 Frame preparation clears the tail. Producers reduce outward-rounded local store
 bounds into their record, and the later solve/finalizer preserve the tail.

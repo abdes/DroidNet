@@ -47,7 +47,7 @@ def build_report(controller, report, capture_path, report_path):
         frames = [x for x in writes if names.get(str(x.resource)) == "Vortex.PostProcess.Exposure.Frame"]
         if frames and statuses:
             current = statuses[0].resource
-            if bytes(controller.GetBufferData(current, 0, 160)) != bytes(160):
+            if bytes(controller.GetBufferData(current, 0, 256)) != bytes(256):
                 raise RuntimeError("The full GPU status allocation was not cleared")
 
         if "Vortex.Stage14.VolumetricFog" in action.path and statuses:

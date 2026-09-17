@@ -1394,6 +1394,13 @@ only to prevent duplicate implementation; it is not a completion claim.
 
 ### 11.2 Blocking Work Before Fog Parity Can Close
 
+- [x] Use slot-3 linear clamp for finite view-local fog composition and history.
+      Debug/Release captures qualify 8 composition draws and 150 history cases
+      per build, including viewport/depth edges, interior controls and 84
+      outside-frustum rejections. Native regressions reproduce opposite-edge
+      mixing with the former wrap sampler; focused debugger checks pass.
+      [Evidence](../../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/filter-gradients-manifest.json).
+      This bounded correction does not close the full fog-parity work below.
 - [ ] Replace the current simplified height-fog shader path with the UE5.7
       parity-grade height-fog family described in Section 4.
 - [ ] Implement full height-fog use of second layer, cubemap inscattering,

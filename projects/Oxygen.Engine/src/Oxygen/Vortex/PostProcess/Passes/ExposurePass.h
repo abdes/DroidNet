@@ -164,6 +164,13 @@ public:
     return frame && submitted_opaque_ap_error_.contains(frame.get());
   }
 
+  //! Gather reference neighbor differences for a filtered sky/AP/fog product.
+  //! True means submitted; GPU flags must also show complete valid inputs.
+  [[nodiscard]] OXGN_VRTX_API auto GatherFilterGradients(RenderContext& ctx,
+    const FrameLease& frame, const HdrProduct& product) -> bool;
+  [[nodiscard]] OXGN_VRTX_API auto HasFilterGradients(
+    const FrameLease& frame, std::uint32_t product) const -> bool;
+
   //! Evaluate FP32 reference products without granting normal-mode admission.
   enum class SuitabilityScale { kCandidate, kCurrentFrame };
   [[nodiscard]] OXGN_VRTX_API auto EvaluateFp16Products(RenderContext& ctx,
@@ -292,6 +299,8 @@ private:
   std::unordered_set<const FrameResources*> submitted_conversion_;
   std::unordered_set<const FrameResources*> submitted_composition_input_;
   std::unordered_set<const FrameResources*> submitted_opaque_ap_error_;
+  std::unordered_map<const FrameResources*, std::uint32_t>
+    submitted_filter_gradients_;
   std::array<std::vector<FrameLease>, frame::kFramesInFlight.get()>
     frame_bindings_;
   std::vector<std::shared_ptr<StateResources>> state_pool_;

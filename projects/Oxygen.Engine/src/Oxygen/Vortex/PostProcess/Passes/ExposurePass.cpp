@@ -299,6 +299,7 @@ auto ExposurePass::OnFrameStart(
   submitted_conversion_.clear();
   submitted_composition_input_.clear();
   submitted_opaque_ap_error_.clear();
+  submitted_filter_gradients_.clear();
   prior_states_.clear();
   bootstrap_states_.clear();
   for (const auto& [handle, view] : exposure_states_) {
@@ -767,6 +768,94 @@ auto ExposurePass::PropagateOpaqueApError(RenderContext& ctx,
   const bool submitted = recording && recording->IsSubmitted();
   if (submitted)
     submitted_opaque_ap_error_.insert(frame.get());
+  return submitted;
+}
+
+auto ExposurePass::HasFilterGradients(
+  const FrameLease& frame, const std::uint32_t product) const -> bool
+{
+  if (!frame || (product != 5U && product != 6U && product != 10U))
+    return false;
+  const auto found = submitted_filter_gradients_.find(frame.get());
+  return found != submitted_filter_gradients_.end()
+    && (found->second & (1U << (product - 1U))) != 0U;
+}
+
+auto ExposurePass::GatherFilterGradients(RenderContext& ctx,
+  const FrameLease& frame, const HdrProduct& product) -> bool
+{
+  CHECK_NOTNULL_F(frame.get());
+  if (product.id != 5U && product.id != 6U && product.id != 10U)
+    return false;
+  const auto bit = 1U << (product.id - 1U);
+  submitted_filter_gradients_[frame.get()] &= ~bit;
+  if (!product.texture || !product.srv.IsValid())
+    return false;
+  const auto& desc = product.texture->GetDescriptor();
+  if ((desc.format != Format::kRGBA32Float
+        && desc.format != Format::kRGBA16Float)
+    || (desc.texture_type != TextureType::kTexture2D
+      && desc.texture_type != TextureType::kTexture3D)
+    || desc.sample_count != 1U || desc.width == 0U || desc.height == 0U
+    || desc.depth == 0U
+    || std::uint64_t(desc.width) * desc.height * desc.depth
+      > std::numeric_limits<std::uint32_t>::max())
+    return false;
+  auto gfx = renderer_.GetGraphics();
+  if (!gfx)
+    return false;
+  PreparePublishers(ctx);
+  EnsurePipelines();
+  auto recorder = gfx->AcquireCommandRecorder(
+    gfx->QueueKeyFor(graphics::QueueRole::kGraphics),
+    "Vortex Exposure Filter Gradients");
+  if (!recorder)
+    return false;
+  const auto recording = recorder->GetCommandListForInspection();
+  auto& status = *frame->current_state->status_buffer;
+  if (!recorder->AdoptKnownResourceState(status))
+    recorder->BeginTrackingResourceState(
+      status, graphics::ResourceStates::kCommon, false);
+  if (!recorder->AdoptKnownResourceState(*frame->buffer))
+    recorder->BeginTrackingResourceState(
+      *frame->buffer, graphics::ResourceStates::kCommon, false);
+  TrackTextureFromKnownOrInitial(*recorder, *product.texture);
+  recorder->RequireResourceState(
+    *product.texture, graphics::ResourceStates::kShaderResource);
+  recorder->RequireResourceState(
+    *frame->buffer, graphics::ResourceStates::kShaderResource);
+  auto constants = std::array<std::uint32_t, 24U> {};
+  constants[0] = frame->current_state->status_uav_index.get();
+  constants[1] = product.srv.get();
+  constants[2] = frame->srv_index.get();
+  constants[4] = desc.width;
+  constants[5] = desc.height;
+  constants[6] = desc.depth;
+  constants[7] = 128U | (product.transmittance ? 4U : 0U)
+    | (desc.texture_type == TextureType::kTexture3D ? 8U : 0U);
+  constants[8] = product.id;
+  const auto slot = suitability_constants_publisher_->Publish(
+    ctx.current_view.view_id, constants);
+  CHECK_F(slot.IsValid());
+  for (unsigned pipeline = 0U; pipeline < 2U; ++pipeline) {
+    recorder->RequireResourceState(
+      status, graphics::ResourceStates::kUnorderedAccess);
+    recorder->FlushBarriers();
+    recorder->SetPipelineState(*suitability_pipelines_[pipeline]);
+    recorder->SetComputeRoot32BitConstant(
+      static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants), 0U,
+      0U);
+    recorder->SetComputeRoot32BitConstant(
+      static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants),
+      slot.get(), 1U);
+    recorder->Dispatch(pipeline == 0U ? 1U : (desc.width + 7U) / 8U,
+      pipeline == 0U ? 1U : (desc.height + 7U) / 8U,
+      pipeline == 0U ? 1U : desc.depth);
+  }
+  recorder.reset();
+  const bool submitted = recording && recording->IsSubmitted();
+  if (submitted)
+    submitted_filter_gradients_[frame.get()] |= bit;
   return submitted;
 }
 
