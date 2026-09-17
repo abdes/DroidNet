@@ -50,7 +50,7 @@ Reference root: `F:/Epic Games/UE_5.7/Engine`.
 | Adaptation | Exact linear/exponential crossing integration gives consistent trajectories across frame schedules |
 | Histogram | 256 bins and a bounded normalized-view grid retain current bin resolution while bounding cost and accumulation |
 | Mask/curve | Scalar texture multiplied by analytic weights; at most 64 curve keys evaluated once per view |
-| HDR precision | Two modes in existing resources: FP16 normally, targeted FP32 for bootstrap/recovery; no generic precision-management service |
+| HDR precision | FP32 SceneColor accumulation in both modes; checked conversion into existing resolved color, FP16 when suitable and FP32 during recovery; other qualified radiance products remain dual-format; no generic precision-management service |
 | Validation | Production renderer paths, independent expected values, readable LightBench scenes and native MultiView visual isolation |
 
 UE's borrower-bootstrap exception, generic curve infrastructure, legacy exposure
