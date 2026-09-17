@@ -109,6 +109,8 @@ public:
     FrameLease frame;
     bool requested { false };
     bool executed { false };
+    //! An attempted current solve failed; a usable fallback may still exist.
+    bool solve_failed { false };
     bool used_fixed_exposure { false };
     bool borrowed_exposure { false };
     float exposure_value { 1.0F };

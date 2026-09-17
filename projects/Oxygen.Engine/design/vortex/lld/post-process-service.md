@@ -538,7 +538,12 @@ completed eligible state lease; the numerical candidate P remains GPU-owned.
 before post-process publication, then queues one combined transition/precision
 status copy. Both uses share the existing three-pending/one-deferred queue.
 Qualification changes invalidate pending admission; duplicate finalization is
-idempotent. Copy transport failures retry the retained record, while a completed
+idempotent. A failed solve is distinguished from successful same-frame reuse.
+Even when a fallback copy succeeds, preparation immediately invalidates the
+precision epoch/candidate and restarts qualification; its fallback cannot certify
+FP16. The next valid results start at streaks one and two. This leaves displayed
+fallback and pending exposure intent intact. Reusing a successfully submitted
+solve retains its deferred transition acknowledgement and can finalize normally. Copy transport failures retry the retained record, while a completed
 packet with stale identity is discarded. Completion may acknowledge its original
 transition but may admit precision only for the current matching qualification.
 

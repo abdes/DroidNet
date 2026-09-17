@@ -6173,4 +6173,95 @@ NOLINT_TEST_F(
   }
 }
 
+NOLINT_TEST_F(ExposureGpuTest,
+  FailedSolveFallbackRestartsPrecisionWithoutRejectingSuccessfulReuse)
+{
+  auto service = PostProcessService(*renderer_);
+  auto config = PostProcessConfig {};
+  config.exposure.key = 12.5F;
+  service.SetConfig(config);
+  auto& backend = static_cast<ExposureFailureGraphics&>(Backend());
+  const auto signal = Uniform(1.0F, 4U, 4U);
+  const auto requirements = postprocess::ExposurePass::EligibilityInputs {
+    .product_layout_revision = 7U, .expected_products = 1024U
+  };
+  const auto inputs
+    = PostProcessService::Inputs { .scene_signal = signal.texture.get(),
+        .scene_signal_srv = signal.srv };
+  const std::array products { postprocess::ExposurePass::HdrProduct {
+    .texture = signal.texture.get(),
+    .srv = signal.srv,
+    .id = 11U,
+    .metering = true } };
+  const auto begin = [&] {
+    WaitForQueueIdle();
+    ctx_.frame_sequence = frame::SequenceNumber { ++sequence_ };
+    ctx_.frame_slot = frame::Slot { static_cast<unsigned>(sequence_ % 3U) };
+    service.OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
+    return service.SelectPrecisionCandidate(ctx_, requirements);
+  };
+  const auto finish = [&](std::uint32_t streak, bool fail, bool reuse) {
+    SCOPED_TRACE(sequence_);
+    CHECK_NOTNULL_F(service.PrepareFrameExposure(ctx_, true).get());
+    backend.fail_next_exposure_recorder = fail;
+    const auto prepared
+      = service.PrepareSceneExposure(ctx_.current_view.view_id, ctx_, inputs);
+    CHECK_F(prepared.has_value());
+    EXPECT_EQ(prepared->exposure.executed, !fail);
+    CHECK_NOTNULL_F(prepared->exposure.state.get());
+    if (reuse) {
+      const auto reused
+        = service.PrepareSceneExposure(ctx_.current_view.view_id, ctx_, inputs);
+      CHECK_F(reused.has_value());
+      EXPECT_FALSE(reused->exposure.executed);
+      EXPECT_EQ(reused->exposure.state, prepared->exposure.state);
+      EXPECT_TRUE(service.FinalizeScenePrecision(ctx_, *reused, products));
+    }
+    EXPECT_EQ(service.FinalizeScenePrecision(ctx_, *prepared, products), !fail);
+    const auto state = ReadState(prepared->exposure);
+    if (!fail)
+      EXPECT_EQ(state.fp16_eligible_streak, streak);
+    return state;
+  };
+  EXPECT_EQ(begin(), nullptr);
+  const auto initial = finish(1U, false, false);
+  EXPECT_EQ(begin(), nullptr);
+  finish(2U, false, false);
+  ASSERT_NE(begin(), nullptr);
+  backend.fail_status_recorder = true;
+  finish(2U, false, false);
+  ASSERT_NE(begin(), nullptr);
+  const auto fallback = finish(0U, true, false);
+  EXPECT_EQ(fallback.displayed_scale, initial.displayed_scale);
+  EXPECT_EQ(service.SelectPrecisionCandidate(ctx_, requirements), nullptr);
+  backend.fail_status_recorder = false;
+  EXPECT_EQ(begin(), nullptr);
+  finish(1U, false, true);
+  EXPECT_EQ(begin(), nullptr);
+  finish(2U, false, true);
+  ASSERT_NE(begin(), nullptr);
+  finish(2U, false, true);
+
+  const auto seed
+    = renderer_->QueueExposureTransition(ctx_.current_view.view_state_handle,
+      ExposureTransitionPolicy::kSeedFromEv100, 4.0F);
+  ASSERT_TRUE(seed.has_value());
+  EXPECT_EQ(begin(), nullptr);
+  const auto pending_fallback = finish(0U, true, false);
+  EXPECT_EQ(pending_fallback.displayed_scale, initial.displayed_scale);
+  const auto pending = renderer_->InspectExposureTransition(seed->target);
+  ASSERT_TRUE(pending.has_value());
+  EXPECT_EQ(pending->phase, ExposureTransitionPhase::kQueued);
+  EXPECT_LT(pending->applied_generation, seed->generation);
+  EXPECT_EQ(begin(), nullptr);
+  const auto seeded = finish(1U, false, true);
+  EXPECT_EQ(seeded.displayed_scale, 0x1p-4F);
+  EXPECT_EQ(begin(), nullptr);
+  const auto applied = renderer_->InspectExposureTransition(seed->target);
+  ASSERT_TRUE(applied.has_value());
+  EXPECT_EQ(applied->phase, ExposureTransitionPhase::kApplied);
+  EXPECT_EQ(applied->applied_generation, seed->generation);
+  WaitForQueueIdle();
+}
+
 } // namespace

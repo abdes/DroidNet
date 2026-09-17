@@ -270,6 +270,7 @@ private:
   auto IsExposureStatusNeeded(const PendingExposureStatus& job) const -> bool;
   auto IsPrecisionStatusNeeded(const PendingExposureStatus& job) const -> bool;
   auto QueueExposureStatus(PendingExposureStatus job) -> void;
+  auto InvalidatePrecision(CompositionView::ViewStateHandle handle) -> void;
   auto CurrentExposureGeneration(CompositionView::ViewStateHandle handle,
     std::uint64_t lifetime) const -> std::uint64_t;
   auto DeferExposureStatus(PendingExposureStatus job) -> void;

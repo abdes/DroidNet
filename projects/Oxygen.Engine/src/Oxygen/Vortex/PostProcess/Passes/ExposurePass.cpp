@@ -1091,6 +1091,7 @@ auto ExposurePass::Execute(RenderContext& ctx,
     continuity ? continuity : borrowed, false, static_cast<bool>(continuity),
     reserved);
   if (!state) {
+    result.solve_failed = true;
     const auto fallback = continuity ? continuity
       : sharing                      ? borrowed
                                      : previous;
