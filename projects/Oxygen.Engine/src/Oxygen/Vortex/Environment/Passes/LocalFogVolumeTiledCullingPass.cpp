@@ -23,6 +23,7 @@
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
+#include <Oxygen/Vortex/Environment/Internal/ResourceRetirement.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererCapability.h>
@@ -209,30 +210,14 @@ LocalFogVolumeTiledCullingPass::~LocalFogVolumeTiledCullingPass()
     return;
   }
 
-  auto& registry = gfx->GetResourceRegistry();
-  const auto unregister_buffer_if_present =
-    [&registry](const std::shared_ptr<graphics::Buffer>& resource) {
-      if (resource != nullptr && registry.Contains(*resource)) {
-        registry.UnRegisterResource(*resource);
-      }
-    };
-  const auto unregister_texture_if_present =
-    [&registry](const std::shared_ptr<graphics::Texture>& resource) {
-      if (resource != nullptr && registry.Contains(*resource)) {
-        registry.UnRegisterResource(*resource);
-      }
-    };
-
-  unregister_texture_if_present(tile_data_texture_);
-  unregister_buffer_if_present(occupied_tile_buffer_);
-  unregister_buffer_if_present(indirect_args_buffer_);
-  unregister_buffer_if_present(indirect_count_clear_buffer_);
-  for (const auto& retired : retired_textures_) {
-    unregister_texture_if_present(retired);
-  }
-  for (const auto& retired : retired_buffers_) {
-    unregister_buffer_if_present(retired);
-  }
+  internal::RetireEnvironmentResource(*gfx, tile_data_texture_);
+  internal::RetireEnvironmentResource(*gfx, occupied_tile_buffer_);
+  internal::RetireEnvironmentResource(*gfx, indirect_args_buffer_);
+  internal::RetireEnvironmentResource(*gfx, indirect_count_clear_buffer_);
+  for (auto& retired : retired_textures_)
+    internal::RetireEnvironmentResource(*gfx, retired);
+  for (auto& retired : retired_buffers_)
+    internal::RetireEnvironmentResource(*gfx, retired);
 }
 
 auto LocalFogVolumeTiledCullingPass::EnsurePassConstantsBuffer() -> bool
@@ -326,12 +311,7 @@ auto LocalFogVolumeTiledCullingPass::EnsureTileDataTexture(
   const auto new_uav_index = allocator.GetShaderVisibleIndex(uav_handle);
   registry.RegisterView(*new_texture, std::move(uav_handle), uav_desc);
 
-  if (tile_data_texture_ != nullptr) {
-    if (registry.Contains(*tile_data_texture_)) {
-      registry.UnRegisterResource(*tile_data_texture_);
-    }
-    gfx->RegisterDeferredRelease(std::move(tile_data_texture_));
-  }
+  internal::RetireEnvironmentResource(*gfx, tile_data_texture_);
 
   tile_data_texture_ = std::move(new_texture);
   tile_data_texture_srv_ = new_srv_index;

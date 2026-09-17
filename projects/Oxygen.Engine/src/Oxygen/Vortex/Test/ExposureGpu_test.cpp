@@ -30,7 +30,9 @@
 #include <Oxygen/Scene/Environment/Fog.h>
 #include <Oxygen/Scene/Environment/PostProcessVolume.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
+#include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Scene/Environment/SkySphere.h>
+#include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Vortex/Environment/Internal/IblProcessor.h>
 #include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
@@ -3983,6 +3985,200 @@ NOLINT_TEST_F(ExposureGpuTest,
   }
   extension->before = [](RenderContext&) { };
   FlushBackend();
+}
+
+NOLINT_TEST_F(
+  ExposureGpuTest, SameFrameOffscreenEnvironmentDescriptorsSurviveQueuedViews)
+{
+  pass_.reset();
+  renderer_->OnShutdown();
+  auto config = RendererConfig {};
+  config.upload_queue_key = QueueKeyFor().get();
+  renderer_ = std::make_unique<Renderer>(GetGraphicsShared(), config,
+    RendererCapabilityFamily::kScenePreparation
+      | RendererCapabilityFamily::kDeferredShading
+      | RendererCapabilityFamily::kLightingData
+      | RendererCapabilityFamily::kEnvironmentLighting
+      | RendererCapabilityFamily::kFinalOutputComposition);
+  console::Console console;
+  renderer_->RegisterConsoleBindings(observer_ptr { &console });
+  ASSERT_EQ(console.Execute("vtx.volumetric_fog.jitter false").status,
+    console::ExecutionStatus::kOk);
+  auto scene = std::make_shared<scene::Scene>("OffscreenRetirement", 8U);
+  scene->SetEnvironment(std::make_unique<scene::SceneEnvironment>());
+  scene->GetEnvironment()
+    ->AddSystem<scene::environment::SkyAtmosphere>()
+    .SetEnabled(true);
+  auto& fog = scene->GetEnvironment()->AddSystem<scene::environment::Fog>();
+  fog.SetEnabled(true);
+  fog.SetEnableHeightFog(true);
+  fog.SetEnableVolumetricFog(true);
+  fog.SetExtinctionSigmaTPerMeter(.01F);
+  fog.SetHeightFalloffPerMeter(0.0F);
+  fog.SetVolumetricFogDistance(1000.0F);
+  fog.SetVolumetricFogEmissive({ .125F, .25F, .5F });
+  auto& post = scene->GetEnvironment()
+                 ->AddSystem<scene::environment::PostProcessVolume>();
+  auto settings = scene::ExposureSettings {};
+  settings.mode = engine::ExposureMode::kManual;
+  settings.manual_ev = 4.0F;
+  settings.key = 12.5F;
+  post.SetExposureSettings(settings);
+  post.SetToneMapper(engine::ToneMapper::kNone);
+  post.SetDisplayGamma(1.0F);
+  post.SetBloomIntensity(0.0F);
+  auto sun = scene->CreateNode("Sun");
+  auto light = std::make_unique<scene::DirectionalLight>();
+  light->SetEnvironmentContribution(true);
+  light->SetAtmosphereLightSlot(scene::AtmosphereLightSlot::kPrimary);
+  light->SetIntensityLux(1000.0F);
+  ASSERT_TRUE(sun.AttachLight(std::move(light)));
+  auto view = View {};
+  view.viewport = { .width = 16.0F, .height = 16.0F };
+  std::array<scene::SceneNode, 2> cameras;
+  std::array<std::shared_ptr<Texture>, 2> colors;
+  std::array<std::shared_ptr<Framebuffer>, 2> targets;
+  for (unsigned i = 0U; i < 2U; ++i) {
+    cameras[i] = scene->CreateNode(i ? "High camera" : "Low camera");
+    auto lens = std::make_unique<scene::PerspectiveCamera>();
+    lens->SetViewport(view.viewport);
+    ASSERT_TRUE(cameras[i].AttachCamera(std::move(lens)));
+    cameras[i].GetTransform().SetLocalPosition({ 0, -10, i ? 2000.0F : 2.0F });
+    colors[i] = CreateRegisteredTexture({ .width = 16U,
+      .height = 16U,
+      .format = Format::kRGBA32Float,
+      .is_shader_resource = true,
+      .is_render_target = true,
+      .initial_state = ResourceStates::kCommon });
+    targets[i] = Backend().CreateFramebuffer(
+      FramebufferDesc {}.AddColorAttachment(colors[i]));
+  }
+  scene->Update();
+  struct Capture final : IViewExtension {
+    Renderer& renderer;
+    std::unordered_map<ViewId, std::vector<std::shared_ptr<Texture>>> textures;
+    std::unordered_map<ViewId, std::vector<ShaderVisibleIndex>> slots;
+    explicit Capture(Renderer& value)
+      : renderer(value)
+    {
+    }
+    auto OnViewSetup(const ViewSetupContext& hook) -> void override
+    {
+      // The public extension supplies the fog participation flag absent from
+      // the offscreen builder's current authoring surface.
+      hook.render_context.current_view.with_height_fog = true;
+    }
+    auto OnPostRenderViewGpu(const ViewRenderGpuContext& hook) -> void override
+    {
+      auto* owner
+        = vortex::testing::RendererPublicationProbe::GetSceneRenderer(renderer);
+      const auto id = hook.render_context.current_view.view_id;
+      textures[id]
+        = vortex::testing::RendererPublicationProbe::EnvironmentTextures(
+          *owner, id);
+      slots[id].clear();
+      for (const auto& texture : textures[id]) {
+        const auto slot
+          = renderer.GetGraphics()
+              ->GetResourceRegistry()
+              .FindShaderVisibleIndex(*texture,
+                TextureViewDescription {
+                  .format = texture->GetDescriptor().format,
+                  .dimension = texture->GetDescriptor().texture_type });
+        CHECK_F(slot.has_value());
+        slots[id].push_back(*slot);
+      }
+    }
+  };
+  auto capture = std::make_shared<Capture>(*renderer_);
+  renderer_->RegisterViewExtension(capture);
+  auto frame = engine::FrameContext {};
+  frame.SetScene(observer_ptr { scene.get() });
+  const auto begin = [&](std::uint64_t sequence, frame::Slot slot) {
+    frame.SetFrameSequenceNumber(frame::SequenceNumber { sequence },
+      engine::internal::EngineTagFactory::Get());
+    frame.SetFrameSlot(slot, engine::internal::EngineTagFactory::Get());
+    renderer_->OnFrameStart(observer_ptr { &frame });
+  };
+  const auto render = [&](unsigned index) {
+    auto input = Renderer::OffscreenSceneViewInput::FromCamera(
+      "Environment retirement", ViewId { 111U + index }, view, cameras[index]);
+    input.SetWithAtmosphere(true);
+    input.SetViewStateHandle(CompositionView::ViewStateHandle { 111U + index });
+    auto facade = renderer_->ForOffscreenScene();
+    facade.SetFrameSession({ .frame_slot = frame.GetFrameSlot(),
+      .frame_sequence = frame.GetFrameSequenceNumber(),
+      .delta_time_seconds = 0.0F });
+    facade.SetSceneSource({ .scene = observer_ptr { scene.get() } });
+    facade.SetViewIntent(input);
+    facade.SetOutputTarget(
+      { .framebuffer = observer_ptr { targets[index].get() } });
+    auto session = facade.Finalize();
+    CHECK_F(session.has_value());
+    return session->ExecuteInsideFrame(frame);
+  };
+  const auto read = [&] {
+    auto readback = GetReadbackManager()->CreateTextureReadback(
+      "Offscreen environment image");
+    {
+      auto recorder = AcquireRecorder("Offscreen environment readback");
+      CHECK_F(recorder->AdoptKnownResourceState(*colors[0]));
+      CHECK_F(readback->EnqueueCopy(*recorder, *colors[0], {}).has_value());
+    }
+    const auto mapped = readback->MapNow();
+    CHECK_F(mapped.has_value());
+    std::array<Pixel, 256U> pixels;
+    for (unsigned y = 0; y < 16U; ++y)
+      std::memcpy(pixels.data() + y * 16U,
+        mapped->Data() + y * mapped->Layout().row_pitch.get(),
+        16U * sizeof(Pixel));
+    return pixels;
+  };
+  auto& reclaimer = Backend().GetDeferredReclaimer();
+  reclaimer.OnBeginFrame(frame::Slot { 0U });
+  begin(1U, frame::Slot { 0U });
+  ASSERT_TRUE(render(0U));
+  const auto reference = read();
+  renderer_->OnFrameEnd(observer_ptr { &frame });
+  reclaimer.OnBeginFrame(frame::Slot { 1U });
+  begin(2U, frame::Slot { 1U });
+  ASSERT_TRUE(render(0U));
+  const auto retained = capture->textures.at(ViewId { 111U });
+  const auto retained_slots = capture->slots.at(ViewId { 111U });
+  ASSERT_GE(
+    retained.size(), 4U); // Sky/AP plus replaced and current fog history.
+  auto& registry = Backend().GetResourceRegistry();
+  for (const auto& texture : retained) {
+    ASSERT_NE(texture, nullptr);
+    ASSERT_TRUE(registry.Contains(*texture)) << texture->GetName();
+  }
+  // No queue-idle wait or readback map occurs between these offscreen views.
+  ASSERT_TRUE(render(1U));
+  for (std::size_t i = 0U; i < retained.size(); ++i) {
+    const auto& texture = retained[i];
+    EXPECT_TRUE(registry.Contains(*texture)) << texture->GetName();
+    EXPECT_EQ(
+      registry.FindShaderVisibleIndex(*texture,
+        TextureViewDescription { .format = texture->GetDescriptor().format,
+          .dimension = texture->GetDescriptor().texture_type }),
+      retained_slots[i]);
+  }
+  const auto actual = read();
+  unsigned nontrivial = 0U;
+  for (unsigned i = 0; i < actual.size(); ++i)
+    for (unsigned c = 0; c < 3U; ++c) {
+      EXPECT_TRUE(std::isfinite(actual[i][c]));
+      EXPECT_NEAR(actual[i][c], reference[i][c],
+        2e-5F + .005F * std::abs(reference[i][c]));
+      nontrivial += reference[i][c] > .001F && reference[i][c] < .99F ? 1U : 0U;
+    }
+  EXPECT_GT(nontrivial, 0U);
+  renderer_->OnFrameEnd(observer_ptr { &frame });
+  WaitForQueueIdle();
+  reclaimer.OnBeginFrame(frame::Slot { 2U });
+  EXPECT_TRUE(registry.Contains(*retained.front()));
+  reclaimer.OnBeginFrame(frame::Slot { 1U });
+  EXPECT_FALSE(registry.Contains(*retained.front()));
 }
 
 NOLINT_TEST_F(

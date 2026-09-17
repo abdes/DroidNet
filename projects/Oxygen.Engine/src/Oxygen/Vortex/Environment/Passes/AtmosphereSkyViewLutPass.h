@@ -23,6 +23,9 @@ namespace oxygen::vortex {
 
 struct RenderContext;
 class Renderer;
+namespace testing {
+  struct RendererPublicationProbe;
+}
 
 namespace environment::internal {
   class AtmosphereLutCache;
@@ -63,6 +66,7 @@ namespace environment {
       const internal::AtmosphereLutCache& cache) -> RecordState;
 
   private:
+    friend struct ::oxygen::vortex::testing::RendererPublicationProbe;
     struct alignas(16) OutputHeader {
       std::uint32_t output_texture_uav { 0U };
       std::uint32_t output_width { 0U };

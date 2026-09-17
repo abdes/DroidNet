@@ -26,6 +26,7 @@
 #include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereLutCache.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereState.h>
+#include <Oxygen/Vortex/Environment/Internal/ResourceRetirement.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererCapability.h>
@@ -176,15 +177,11 @@ namespace {
   auto ReleaseLiveTextures(Graphics& gfx,
     std::vector<std::shared_ptr<graphics::Texture>>& live_textures) -> void
   {
-    auto& registry = gfx.GetResourceRegistry();
     for (auto& texture : live_textures) {
       if (texture == nullptr) {
         continue;
       }
-      if (registry.Contains(*texture)) {
-        registry.UnRegisterResource(*texture);
-      }
-      gfx.RegisterDeferredRelease(std::move(texture));
+      internal::RetireEnvironmentResource(gfx, texture);
     }
     live_textures.clear();
   }
