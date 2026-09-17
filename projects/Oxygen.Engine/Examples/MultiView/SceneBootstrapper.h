@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <memory>
 
 #include <Oxygen/Base/ObserverPtr.h>
@@ -42,6 +43,9 @@ public:
   [[nodiscard]] auto GetCylinderNode() const -> scene::SceneNode;
   [[nodiscard]] auto GetConeNode() const -> scene::SceneNode;
   [[nodiscard]] auto GetGroundPlaneNode() const -> scene::SceneNode;
+  //! Deterministic deferred/forward/mixed AP fixture for the exposure proof
+  //! CLI.
+  auto ApplyAtmosphereProof(std::uint64_t frame) -> void;
 
 private:
   auto EnsureSphere(scene::Scene& scene) -> void;
@@ -63,6 +67,8 @@ private:
   bool spot_light_enabled_ { true };
   scene::SceneNode key_light_node_;
   scene::SceneNode fill_light_node_;
+  scene::SceneNode proof_sun_node_;
+  std::uint32_t atmosphere_proof_phase_ { ~0U };
 };
 
 } // namespace oxygen::examples::multiview

@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <array>
 #include <cstring>
 #include <memory>
 #include <string>
@@ -21,11 +22,13 @@
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
+#include <Oxygen/Scene/Environment/SceneEnvironment.h>
+#include <Oxygen/Scene/Environment/SkyAtmosphere.h>
+#include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Light/PointLight.h>
 #include <Oxygen/Scene/Light/SpotLight.h>
 #include <Oxygen/Scene/SceneFlags.h>
 #include <Oxygen/Scene/Types/Flags.h>
-
 
 #include "MultiView/SceneBootstrapper.h"
 
@@ -43,8 +46,9 @@ namespace {
     }
   }
 
-  auto MakeSolidColorMaterial(const char* name, const glm::vec4& rgba)
-    -> std::shared_ptr<const data::MaterialAsset>
+  auto MakeSolidColorMaterial(const char* name, const glm::vec4& rgba,
+    data::MaterialDomain domain = data::MaterialDomain::kOpaque,
+    bool emission_only = false) -> std::shared_ptr<const data::MaterialAsset>
   {
     using data::AssetKey;
     using data::AssetType;
@@ -62,7 +66,7 @@ namespace {
     desc.header.name[n] = '\0';
     desc.header.version = 1;
     desc.header.streaming_priority = 255;
-    desc.material_domain = static_cast<uint8_t>(MaterialDomain::kOpaque);
+    desc.material_domain = static_cast<uint8_t>(domain);
     desc.flags = pak::render::kMaterialFlag_NoTextureSampling;
     desc.shader_stages = 0;
     desc.base_color[0] = rgba.r;
@@ -73,6 +77,16 @@ namespace {
     desc.metalness = Unorm16 { 0.0F };
     desc.roughness = Unorm16 { 0.5F };
     desc.ambient_occlusion = Unorm16 { 1.0F };
+    if (emission_only) {
+      // Keep the lit shader path (including AP). Direct-light isolation is
+      // established by backlighting the cards, not by unsupported material
+      // knobs.
+      for (unsigned channel = 0; channel < 3U; ++channel) {
+        desc.emissive_factor[channel]
+          = data::HalfFloat { 4.0F * rgba[channel] };
+        desc.base_color[channel] = 0.0F;
+      }
+    }
 
     const AssetKey asset_key = AssetKey::FromVirtualPath(
       "/Engine/Examples/MultiView/Materials/" + std::string(name) + ".omat");
@@ -92,6 +106,8 @@ void SceneBootstrapper::BindToScene(observer_ptr<scene::Scene> scene)
     cone_node_ = {};
     key_light_node_ = {};
     fill_light_node_ = {};
+    proof_sun_node_ = {};
+    atmosphere_proof_phase_ = ~0U;
   }
 }
 
@@ -114,6 +130,100 @@ auto SceneBootstrapper::EnsureSceneWithContent() -> observer_ptr<scene::Scene>
 auto SceneBootstrapper::GetScene() const -> observer_ptr<scene::Scene>
 {
   return scene_;
+}
+
+auto SceneBootstrapper::ApplyAtmosphereProof(const std::uint64_t frame) -> void
+{
+  CHECK_NOTNULL_F(scene_.get());
+  if (!scene_->GetEnvironment())
+    scene_->SetEnvironment(std::make_unique<scene::SceneEnvironment>());
+  auto* atmosphere = scene_->GetEnvironment()
+                       ->TryGetSystem<scene::environment::SkyAtmosphere>()
+                       .get();
+  if (!atmosphere)
+    atmosphere = &scene_->GetEnvironment()
+                    ->AddSystem<scene::environment::SkyAtmosphere>();
+  atmosphere->SetEnabled(true);
+  atmosphere->SetAerialPerspectiveStartDepthMeters(0.0F);
+  atmosphere->SetAerialScatteringStrength(0.01F);
+  if (!proof_sun_node_.IsAlive()) {
+    proof_sun_node_ = scene_->CreateNode("AtmosphereProofSun");
+    auto sun = std::make_unique<scene::DirectionalLight>();
+    sun->SetIntensityLux(1000.0F);
+    sun->SetEnvironmentContribution(true);
+    sun->SetIsSunLight(true);
+    sun->SetAtmosphereLightSlot(scene::AtmosphereLightSlot::kPrimary);
+    sun->Common().casts_shadows = false;
+    CHECK_F(proof_sun_node_.AttachLight(std::move(sun)));
+    const auto direction = glm::normalize(glm::vec3 { 0.0F, -.5F, -1.0F });
+    proof_sun_node_.GetTransform().SetLocalRotation(
+      glm::angleAxis(std::acos(glm::dot(space::move::Forward, direction)),
+        glm::normalize(glm::cross(space::move::Forward, direction))));
+  }
+  const std::uint32_t phase = frame < 44U ? 0U : frame < 48U ? 1U : 2U;
+  if (phase == atmosphere_proof_phase_)
+    return;
+  const std::array nodes { sphere_node_, cube_node_, cylinder_node_, cone_node_,
+    ground_plane_node_ };
+  if (phase == 0U) {
+    auto quad = data::MakeQuadMeshAsset(1.5F, 2.0F);
+    CHECK_F(quad.has_value());
+    auto mesh
+      = data::MeshBuilder(0, "Atmosphere proof card")
+          .WithVertices(quad->first)
+          .WithIndices(quad->second)
+          .BeginSubMesh("card",
+            MakeSolidColorMaterial("AtmosphereProofCardBase", { 0, 0, 0, 1 }))
+          .WithMeshView(data::pak::geometry::MeshViewDesc { .first_index = 0,
+            .index_count = static_cast<std::uint32_t>(quad->second.size()),
+            .first_vertex = 0,
+            .vertex_count = static_cast<std::uint32_t>(quad->first.size()) })
+          .EndSubMesh()
+          .Build();
+    data::pak::geometry::GeometryAssetDesc desc {};
+    desc.lod_count = 1;
+    desc.bounding_box_min[0] = -.75F;
+    desc.bounding_box_min[2] = -1.0F;
+    desc.bounding_box_max[0] = .75F;
+    desc.bounding_box_max[2] = 1.0F;
+    auto geometry = std::make_shared<data::GeometryAsset>(
+      data::AssetKey::FromVirtualPath(
+        "/Engine/Examples/MultiView/Geometry/AtmosphereProofCard.ogeo"),
+      desc, std::vector<std::shared_ptr<data::Mesh>> { std::move(mesh) });
+    for (std::size_t i = 0; i < nodes.size(); ++i) {
+      auto node = nodes[i];
+      node.GetRenderable().SetGeometry(geometry);
+      node.GetTransform().SetLocalRotation(glm::quat { 1, 0, 0, 0 });
+      node.GetTransform().SetLocalPosition(i < 4U
+          ? glm::vec3 { -3.0F + 2.0F * static_cast<float>(i), 0, 0 }
+          : glm::vec3 { 0, 2, 0 });
+      node.GetTransform().SetLocalScale(
+        i < 4U ? glm::vec3 { 1 } : glm::vec3 { 6, 1, 2 });
+    }
+  }
+  const std::array colors { glm::vec4 { .2F, .7F, .3F, 1 },
+    glm::vec4 { .7F, .7F, .7F, 1 }, glm::vec4 { .4F, .4F, .9F, 1 },
+    glm::vec4 { .9F, .4F, .4F, 1 }, glm::vec4 { .18F, .18F, .18F, 1 } };
+  for (std::size_t i = 0; i < nodes.size(); ++i) {
+    auto node = nodes[i];
+    const bool forward = (phase == 1U && i < 4U) || (phase == 2U && i == 0U);
+    auto color = colors[i];
+    if (phase == 2U && i == 0U)
+      color.a = .5F;
+    const auto name
+      = "AtmosphereProof" + std::to_string(phase) + "-" + std::to_string(i);
+    auto material = MakeSolidColorMaterial(name.c_str(), color,
+      forward ? data::MaterialDomain::kAlphaBlended
+              : data::MaterialDomain::kOpaque,
+      true);
+    node.GetRenderable().SetMaterialOverride(0U, 0U, std::move(material));
+    SetShadowParticipation(node, false, false);
+  }
+  atmosphere_proof_phase_ = phase;
+  LOG_F(INFO,
+    "Vortex.MultiView.AtmosphereProof frame={} phase={} (0=deferred, "
+    "1=forward, 2=mixed)",
+    frame, phase);
 }
 
 auto SceneBootstrapper::GetSphereNode() const -> scene::SceneNode

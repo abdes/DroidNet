@@ -55,6 +55,7 @@ enum class ExposureProofScenario : uint8_t {
   kLifetime,
   kWindowResize,
   kModes,
+  kAtmosphere,
 };
 
 struct MainModuleConfig {
