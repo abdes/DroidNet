@@ -204,6 +204,13 @@ objects within their images. The rebuilt Debug native presentation and isolated
 outputs were inspected, four S/P probe sets pass, and the focused debugger run
 has no blocking graphics messages (`multiview/framing-manifest.json`). Other
 proof layouts and scripted exposure/lifecycle acceptance remain open.
+Extracted texture descriptors now retire with their textures through the GPU
+frame reclaimer. A direct registry-lifetime regression fails on the old code
+and passes in the 59-test renderer-core suite in Debug and Release. Fresh native
+comparisons show zero isolated/family or reordered gain, meter, mapped-image,
+pre-composition-image and compared-composite differences. Evidence is
+`multiview/retirement-manifest.json`; the proof controls and remaining lifecycle
+matrix are a separate qualification increment.
 
 ## 4. Milestone Ledger
 
