@@ -1279,6 +1279,25 @@ Evidence is `multiview/static-matrix-manifest.json`. These static/paused cases d
 not close active adaptation, resize/scissor, hide/recreate, source destruction,
 remaining proof layouts, or automatic precision admission/recovery.
 
+Ground-grid and wireframe constants now use the existing frame-retained
+structured publisher (208/32-byte paired CPU/HLSL records). The old eight-slot
+ring fails the queued-view regression. Current tests preserve submitted bytes
+across all three in-flight slots and safe slot reuse; velocity intermediates
+also retain their descriptors until retirement on base-pass teardown. Debug and
+Release pass 61 core, 121 native, 22 post-process and 22 publication tests, and
+both shader packs contain 202 modules. Four-view native overlay captures verify
+three grid matrices and four frame-varying wireframe payloads/domain flags.
+
+The nonzero Auto source-loss case now runs through real MultiView rendering:
+main disappears at GPU frame 44, PiP retains its last borrowed gain and its
+complete image exactly, and independent adaptation resumes with game time after
+frame 46. Eight refreshed captures pass; the closed-form temporal oracle differs
+by less than 8e-7 EV, including the exponential branch. Two focused debugger
+cases have no blocking graphics messages, and final images were inspected.
+Evidence is `multiview/overlay-source-loss-manifest.json`. Other source-loss
+mode/zero-gain combinations, resize/scissor, hide/recreate and precision
+admission/recovery remain open.
+
 - [x] Add the early GPU P resolve and bind a frame-invariant P/1P to every HDR pass.
 - [ ] Migrate the entire section 4.4 checklist, including atmosphere producer/
   consumer pairs, fog/color histories, bloom and offscreen/capture domains.

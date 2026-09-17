@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <cstddef>
 #include <cstring>
 #include <optional>
@@ -16,6 +17,7 @@
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
+#include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
@@ -25,6 +27,7 @@
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Vortex/Internal/MeshRasterState.h>
+#include <Oxygen/Vortex/Internal/PerViewStructuredPublisher.h>
 #include <Oxygen/Vortex/Internal/ViewportClamp.h>
 #include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/RenderContext.h>
@@ -39,8 +42,6 @@ namespace oxygen::vortex {
 namespace {
   namespace bindless_d3d12 = oxygen::bindless::generated::d3d12;
   constexpr std::uint32_t kVelocityMergeThreadGroupSize = 8U;
-  constexpr std::uint32_t kWireframePassConstantsStride
-    = packing::kConstantBufferAlignment;
 
   struct alignas(packing::kShaderDataFieldAlignment) WireframePassConstants {
     float wire_color[4] { 1.0F, 1.0F, 1.0F, 1.0F };
@@ -137,12 +138,12 @@ namespace {
       return;
     }
 
-    auto& registry = gfx.GetResourceRegistry();
-    if (registry.Contains(*texture)) {
-      gfx.ForgetKnownResourceState(*texture);
-      registry.UnRegisterResource(*texture);
-    }
-    gfx.RegisterDeferredRelease(std::move(texture));
+    auto* registry = &gfx.GetResourceRegistry();
+    gfx.GetDeferredReclaimer().RegisterDeferredAction(
+      [registry, texture = std::move(texture)]() mutable {
+        registry->UnRegisterResource(*texture);
+        texture.reset();
+      });
   }
 
   auto NeedsStageTextureRebuild(
@@ -996,116 +997,40 @@ BasePassModule::BasePassModule(
   , mesh_processor_(std::make_unique<BasePassMeshProcessor>(renderer))
 {
   static_cast<void>(scene_textures_config);
-  wireframe_constants_indices_.fill(kInvalidShaderVisibleIndex);
 }
 
 BasePassModule::~BasePassModule()
 {
-  ReleaseWireframeConstantsBuffer();
   if (auto* gfx = renderer_.GetGraphics().get(); gfx != nullptr) {
     ResetStageTexture(*gfx, velocity_base_copy_);
     ResetStageTexture(*gfx, velocity_motion_vector_world_offset_);
   }
 }
 
-auto BasePassModule::EnsureWireframeConstantsBuffer(Graphics& gfx) -> void
-{
-  if (wireframe_constants_buffer_ == nullptr
-    || wireframe_constants_mapped_ptr_ == nullptr
-    || !wireframe_constants_indices_[0].IsValid()) {
-    ReleaseWireframeConstantsBuffer();
-
-    auto& registry = gfx.GetResourceRegistry();
-    auto& allocator = gfx.GetDescriptorAllocator();
-    const auto desc = graphics::BufferDesc {
-      .size_bytes
-      = kWireframePassConstantsStride * kWireframePassConstantsSlots,
-      .usage = graphics::BufferUsage::kConstant,
-      .memory = graphics::BufferMemory::kUpload,
-      .debug_name = "Vortex.Stage20.Wireframe.PassConstants",
-    };
-
-    wireframe_constants_buffer_ = gfx.CreateBuffer(desc);
-    CHECK_NOTNULL_F(wireframe_constants_buffer_.get(),
-      "BasePassModule: failed to create wireframe constants buffer");
-    wireframe_constants_buffer_->SetName(desc.debug_name);
-    registry.Register(wireframe_constants_buffer_);
-
-    wireframe_constants_mapped_ptr_ = static_cast<std::byte*>(
-      wireframe_constants_buffer_->Map(0U, desc.size_bytes));
-    CHECK_NOTNULL_F(wireframe_constants_mapped_ptr_,
-      "BasePassModule: failed to map wireframe constants buffer");
-
-    wireframe_constants_indices_.fill(kInvalidShaderVisibleIndex);
-    for (std::size_t slot = 0U; slot < kWireframePassConstantsSlots; ++slot) {
-      auto handle
-        = allocator.AllocateRaw(graphics::ResourceViewType::kConstantBuffer,
-          graphics::DescriptorVisibility::kShaderVisible);
-      CHECK_F(handle.IsValid(),
-        "BasePassModule: failed to allocate wireframe constants descriptor");
-      wireframe_constants_indices_[slot]
-        = allocator.GetShaderVisibleIndex(handle);
-
-      const auto offset
-        = static_cast<std::uint64_t>(slot * kWireframePassConstantsStride);
-      const auto view_desc = graphics::BufferViewDescription {
-        .view_type = graphics::ResourceViewType::kConstantBuffer,
-        .visibility = graphics::DescriptorVisibility::kShaderVisible,
-        .range = { offset, kWireframePassConstantsStride },
-      };
-      const auto view = registry.RegisterView(
-        *wireframe_constants_buffer_, std::move(handle), view_desc);
-      CHECK_F(view->IsValid(),
-        "BasePassModule: failed to register wireframe constants descriptor");
-    }
-  }
-}
-
 auto BasePassModule::WriteWireframeConstants(Graphics& gfx,
   const RenderContext& ctx, const bool write_pre_exposed) -> ShaderVisibleIndex
 {
-  EnsureWireframeConstantsBuffer(gfx);
-  CHECK_NOTNULL_F(wireframe_constants_mapped_ptr_);
-
+  if (!wireframe_constants_publisher_) {
+    wireframe_constants_publisher_ = std::make_unique<
+      internal::PerViewStructuredPublisher<std::array<float, 8>>>(
+      observer_ptr { &gfx }, renderer_.GetStagingProvider(),
+      observer_ptr { &renderer_.GetInlineTransfersCoordinator() },
+      "Vortex.Stage20.Wireframe.PassConstants");
+  }
+  if (wireframe_constants_frame_ != ctx.frame_sequence) {
+    wireframe_constants_publisher_->OnFrameStart(
+      ctx.frame_sequence, ctx.frame_slot);
+    wireframe_constants_frame_ = ctx.frame_sequence;
+  }
   const auto constants = WireframePassConstants {
     .wire_color = { ctx.wireframe_color.r, ctx.wireframe_color.g,
       ctx.wireframe_color.b, ctx.wireframe_color.a },
     .write_pre_exposed = write_pre_exposed ? 1.0F : 0.0F,
   };
-  const auto slot = wireframe_constants_slot_ % kWireframePassConstantsSlots;
-  ++wireframe_constants_slot_;
-  std::memcpy(
-    wireframe_constants_mapped_ptr_ + (slot * kWireframePassConstantsStride),
-    &constants, sizeof(constants));
-  return wireframe_constants_indices_[slot];
-}
-
-auto BasePassModule::ReleaseWireframeConstantsBuffer() -> void
-{
-  if (wireframe_constants_buffer_ == nullptr) {
-    wireframe_constants_mapped_ptr_ = nullptr;
-    wireframe_constants_indices_.fill(kInvalidShaderVisibleIndex);
-    wireframe_constants_slot_ = 0U;
-    return;
-  }
-
-  if (wireframe_constants_buffer_->IsMapped()) {
-    wireframe_constants_buffer_->UnMap();
-  }
-
-  if (auto gfx = renderer_.GetGraphics(); gfx != nullptr) {
-    auto& registry = gfx->GetResourceRegistry();
-    if (registry.Contains(*wireframe_constants_buffer_)) {
-      registry.UnRegisterResource(*wireframe_constants_buffer_);
-    }
-    gfx->RegisterDeferredRelease(std::move(wireframe_constants_buffer_));
-  } else {
-    wireframe_constants_buffer_.reset();
-  }
-
-  wireframe_constants_mapped_ptr_ = nullptr;
-  wireframe_constants_indices_.fill(kInvalidShaderVisibleIndex);
-  wireframe_constants_slot_ = 0U;
+  const auto slot = wireframe_constants_publisher_->Publish(
+    ctx.current_view.view_id, std::bit_cast<std::array<float, 8>>(constants));
+  CHECK_F(slot.IsValid(), "Wireframe constants publication failed");
+  return slot;
 }
 
 auto BasePassModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)

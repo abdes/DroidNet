@@ -50,6 +50,7 @@ enum class ExposureProofScenario : uint8_t {
   kMainOnly,
   kPipOnly,
   kReordered,
+  kSourceLoss,
 };
 
 struct MainModuleConfig {
@@ -60,6 +61,7 @@ struct MainModuleConfig {
   bool aux_proof_layout { false };
   bool offscreen_proof_layout { false };
   bool feature_variant_proof_layout { false };
+  bool proof_wireframe_overlay { false };
   bool point_light_enabled { true };
   bool spot_light_enabled { true };
   ExposureProofScenario exposure_proof { ExposureProofScenario::kNone };

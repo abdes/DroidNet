@@ -870,6 +870,21 @@ auto MainModule::UpdateComposition(oxygen::engine::FrameContext& context,
       // The demo owns these logical IDs for the complete view lifetime.
       view.view_state_handle
         = vortex::CompositionView::ViewStateHandle { view.id.get() };
+      if (config_.proof_wireframe_overlay) {
+        view.render_settings.render_mode
+          = vortex::RenderMode::kOverlayWireframe;
+      }
+    }
+  }
+  if (config_.proof_wireframe_overlay) {
+    const std::array colors {
+      graphics::Color { .8F, .2F, .2F, 1.0F },
+      graphics::Color { .2F, .8F, .2F, 1.0F },
+      graphics::Color { .2F, .2F, .8F, 1.0F },
+    };
+    if (const auto renderer = ResolveVortexRenderer()) {
+      renderer->SetWireframeColor(
+        colors[context.GetFrameSequenceNumber().get() % colors.size()]);
     }
   }
   const auto proof = config_.exposure_proof;
@@ -879,6 +894,18 @@ auto MainModule::UpdateComposition(oxygen::engine::FrameContext& context,
   // Proof inputs own the poses after DemoShell activates the selected camera.
   UpdateCameras(ResolveRenderExtent());
   const auto frame = context.GetFrameSequenceNumber().get();
+  const bool source_lost
+    = proof == ExposureProofScenario::kSourceLoss && frame >= 44U;
+  if (proof == ExposureProofScenario::kSourceLoss) {
+    if (frame == 46U) {
+      app_.engine->GetSimulationClock().SetPaused(false);
+    }
+    if (frame >= 43U && frame <= 52U) {
+      LOG_F(INFO, "Vortex.MultiView.SourceLoss frame={} delta_seconds={:.9g}",
+        frame,
+        std::chrono::duration<float>(context.GetGameDeltaTime().get()).count());
+    }
+  }
   auto renderer = ResolveVortexRenderer();
   CHECK_NOTNULL_F(renderer.get());
   for (auto& view : views) {
@@ -888,10 +915,11 @@ auto MainModule::UpdateComposition(oxygen::engine::FrameContext& context,
     auto exposure = scene::ExposureSettings {};
     exposure.key = 12.5F;
     exposure.compensation_ev = view.id == pip_view_id_ ? 2.0F : 0.0F;
-    if (proof == ExposureProofScenario::kShared) {
+    if (proof == ExposureProofScenario::kShared
+      || (proof == ExposureProofScenario::kSourceLoss && !source_lost)) {
       if (view.id == pip_view_id_) {
         view.exposure_source_view_id = main_view_id_;
-      } else if (frame >= 44U) {
+      } else if (proof == ExposureProofScenario::kShared && frame >= 44U) {
         exposure.compensation_ev = 1.0F;
       }
     }
@@ -902,7 +930,7 @@ auto MainModule::UpdateComposition(oxygen::engine::FrameContext& context,
     return view.camera.has_value()
       && ((proof == ExposureProofScenario::kMainOnly
             && view.id != main_view_id_)
-        || (proof == ExposureProofScenario::kPipOnly
+        || ((proof == ExposureProofScenario::kPipOnly || source_lost)
           && view.id != pip_view_id_));
   });
   for (const auto& view : views) {
@@ -1257,7 +1285,11 @@ auto MainModule::BuildComposition(oxygen::engine::FrameContext& context,
   auto main_comp = vortex::CompositionView::ForScene(
     main_view_id_, main_view, main_camera_node_);
   main_comp.with_atmosphere = true;
-  if (config_.exposure_proof != ExposureProofScenario::kPipOnly) {
+  const bool pip_only
+    = config_.exposure_proof == ExposureProofScenario::kPipOnly
+    || (config_.exposure_proof == ExposureProofScenario::kSourceLoss
+      && context.GetFrameSequenceNumber().get() >= 44U);
+  if (!pip_only) {
     shell.OnMainViewReady(context, main_comp);
   }
   const graphics::Color kMainClearColor { 0.1F, 0.2F, 0.38F, 1.0F };
@@ -1309,7 +1341,7 @@ auto MainModule::BuildComposition(oxygen::engine::FrameContext& context,
     pip_comp.clear_color = kPipClearColor;
     pip_comp.opacity = 1.0F;
     pip_comp.force_wireframe = config_.pip_force_wireframe;
-    if (config_.exposure_proof == ExposureProofScenario::kPipOnly) {
+    if (pip_only) {
       shell.OnMainViewReady(context, pip_comp);
     }
 

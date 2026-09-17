@@ -63,8 +63,9 @@ struct WireframePassConstants {
   float4 color = float4(1.0f, 1.0f, 1.0f, 1.0f);
   float write_pre_exposed = 1.0f;
   if (BX_IsValidSlot(g_PassConstantsIndex)) {
-    ConstantBuffer<WireframePassConstants> pc
+    StructuredBuffer<WireframePassConstants> constants
       = ResourceDescriptorHeap[g_PassConstantsIndex];
+    const WireframePassConstants pc = constants[0];
     color = pc.wire_color;
     write_pre_exposed = pc.write_pre_exposed;
   }

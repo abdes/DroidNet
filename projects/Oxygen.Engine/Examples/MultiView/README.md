@@ -34,12 +34,15 @@ Common validation-oriented options:
 - `--point-light <true|false>` and `--spot-light <true|false>`: enable each
   existing scene light independently for forward/deferred contribution checks.
   Both default to enabled.
-- `--exposure-proof <none|independent|shared|main-only|pip-only|reordered>`:
+- `--exposure-proof <none|independent|shared|main-only|pip-only|reordered|source-loss>`:
   run a paused, static main/PiP exposure comparison with explicit Auto settings
   and a public remeter at frame 32. PiP has two stops of compensation unless it
   shares main's gain. Shared mode steps main by one stop at frame 44; capture
   frames 42, 43 and 44 to inspect GPU frame sequences 43, 44 and 45.
   These cases use fixed camera inputs and cannot be combined with proof layouts.
+- `--proof-wireframe-overlay true`: add overlays to the four-view proof layout
+  and cycle their color each frame to check immutable in-flight draw constants.
+  Requires `--proof-layout true` or `--aux-proof-layout true`.
 - `--proof-layout <true|false>`: run the VTX-M06A multi-view proof layout.
 - `--aux-proof-layout <true|false>`: run the VTX-M06A auxiliary
   producer/consumer proof layout.
@@ -105,6 +108,18 @@ For shared mode, pass the frame-42/43/44 JSON records to
 `tools/vortex/Assert-MultiViewSharedExposure.py` as `--before`, `--step`, and
 `--after`, plus `--output`. It verifies owner generations, borrowed-state flags,
 the one-stop owner change, and the consumer's exact one-frame delay.
+
+`source-loss` shares main until GPU frame 43, removes main at frame 44, and
+resumes game time after frame 46. Capture frames 42, 43, 46 and 51 to observe
+GPU frames 43, 44, 47 and 52. Run `Assert-MultiViewSourceLoss.py` (with Pillow)
+using `--before`, `--continuity`, `--first`, `--later`, the corresponding
+`--first-log`/`--later-log`, and `--output`. It checks image/gain continuity and
+the independent high-precision adaptation trajectory using recorded game time.
+
+`AnalyzeRenderDocOverlayConstants.py` checks grid matrices against each draw's
+actual ViewConstants and wireframe colors/domain flags against the four-view
+overlay fixture. Use `-PassName OverlayFamily` for that fixture, or
+`OverlaySourceLoss` for the grid-only lifecycle captures.
 
 For the offscreen forward light-binding regression, capture the existing
 `--offscreen-proof-layout true --pip-wireframe false` layout with both lights,

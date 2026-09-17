@@ -125,6 +125,7 @@ def build_report(controller, report, capture_path, report_path):
             "frame": sequence, "gain": gain, "target_gain": target_gain,
             "pre_exposure": p, "raw_luminance": raw_luminance, "raw_ev": raw_ev,
             "state_flags": state_flags, "frame_flags": flags,
+            "fallback_reason": fallback,
             "requested_generation": requested, "applied_generation": applied,
             "image": str(output), "precomposition_image": str(precomposition),
             "probes": probes,

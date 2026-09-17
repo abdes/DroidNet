@@ -65,7 +65,8 @@ GroundGridPSOutput VortexGroundGridPS(VortexFullscreenTriangleOutput input)
         return output;
     }
 
-    ConstantBuffer<GroundGridPassConstants> pass = ResourceDescriptorHeap[g_PassConstantsIndex];
+    StructuredBuffer<GroundGridPassConstants> pass_buffer = ResourceDescriptorHeap[g_PassConstantsIndex];
+    const GroundGridPassConstants pass = pass_buffer[0];
 
     const float plane_height = pass.plane_height;
     const float spacing = max(pass.spacing, EPSILON);

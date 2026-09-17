@@ -783,6 +783,13 @@ latency. The proof freezes camera input and cannot be combined with the other
 proof layouts. Normal interactive operation retains its ordinary clock/settings.
 Composition follows z-order independently of view submission order.
 
+The `source-loss` case shares main until frame 43, removes main and the stale
+source intent at frame 44, then resumes game time after frame 46. The retained
+PiP handle must preserve its last borrowed gain through source destruction and
+continue independent Auto adaptation. Runtime game deltas are recorded for an
+independent closed-form trajectory comparison; no numerical gain is read back
+into runtime control.
+
 The [exposure execution plan](../plan/exposure-and-lightbench-correction.md#42-shared-exposure-one-writer-and-deterministic-readers)
 owns the complete source, fallback and destruction contract:
 

@@ -10,8 +10,10 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <optional>
 
 #include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Vortex/RenderMode.h>
 #include <Oxygen/Vortex/SceneRenderer/ShadingMode.h>
 #include <Oxygen/Vortex/api_export.h>
@@ -33,6 +35,12 @@ struct SceneTexturesConfig;
 class Renderer;
 class SceneTextures;
 class BasePassMeshProcessor;
+namespace internal {
+  template <typename Payload> class PerViewStructuredPublisher;
+}
+namespace testing {
+  struct RendererPublicationProbe;
+}
 
 struct BasePassConfig {
   bool write_velocity { true };
@@ -74,22 +82,17 @@ public:
     -> const BasePassExecutionResult&;
 
 private:
-  static constexpr std::size_t kWireframePassConstantsSlots = 8U;
-
-  auto EnsureWireframeConstantsBuffer(Graphics& gfx) -> void;
-  auto WriteWireframeConstants(Graphics& gfx, const RenderContext& ctx,
-    bool write_pre_exposed) -> ShaderVisibleIndex;
-  auto ReleaseWireframeConstantsBuffer() -> void;
+  friend struct testing::RendererPublicationProbe;
+  OXGN_VRTX_API auto WriteWireframeConstants(Graphics& gfx,
+    const RenderContext& ctx, bool write_pre_exposed) -> ShaderVisibleIndex;
 
   Renderer& renderer_;
   BasePassConfig config_ {};
   BasePassExecutionResult last_execution_result_ {};
   std::unique_ptr<BasePassMeshProcessor> mesh_processor_;
-  std::shared_ptr<oxygen::graphics::Buffer> wireframe_constants_buffer_ {};
-  std::byte* wireframe_constants_mapped_ptr_ { nullptr };
-  std::array<ShaderVisibleIndex, kWireframePassConstantsSlots>
-    wireframe_constants_indices_ {};
-  std::size_t wireframe_constants_slot_ { 0U };
+  std::unique_ptr<internal::PerViewStructuredPublisher<std::array<float, 8>>>
+    wireframe_constants_publisher_;
+  std::optional<frame::SequenceNumber> wireframe_constants_frame_;
   std::shared_ptr<oxygen::graphics::Framebuffer> framebuffer_ {};
   std::shared_ptr<oxygen::graphics::Framebuffer> color_clear_framebuffer_ {};
   std::shared_ptr<oxygen::graphics::Framebuffer> forward_framebuffer_ {};
