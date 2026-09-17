@@ -808,6 +808,12 @@ and initialize independently. Main remains unchanged throughout. DemoShell's
 retention hook uses the existing no-target inactive-view path and does not extend
 the renderer's normal idle-retirement limit.
 
+The `window-resize` proof uses the public window resize API after frame 44 to
+change the swapchain to 1280x800, then restores the original window extent after
+frame 52. Both view handles and paused exposure histories remain unchanged.
+Captures after event/surface processing verify the new extents and exact image
+restoration; this mode requires a windowed presentation surface.
+
 The [exposure execution plan](../plan/exposure-and-lightbench-correction.md#42-shared-exposure-one-writer-and-deterministic-readers)
 owns the complete source, fallback and destruction contract:
 

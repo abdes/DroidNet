@@ -230,7 +230,8 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
               .Build())
           .WithOption(Option::WithKey("exposure-proof")
               .About("Exposure proof: none, independent, shared, main-only, "
-                     "pip-only, reordered, source-loss, viewport, lifetime")
+                     "pip-only, reordered, source-loss, viewport, lifetime, "
+                     "window-resize")
               .Long("exposure-proof")
               .WithValue<std::string>()
               .DefaultValue("none")
@@ -370,8 +371,15 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
       main_module_config.exposure_proof = ExposureProof::kViewport;
     } else if (exposure_proof_value == "lifetime") {
       main_module_config.exposure_proof = ExposureProof::kLifetime;
+    } else if (exposure_proof_value == "window-resize") {
+      main_module_config.exposure_proof = ExposureProof::kWindowResize;
     } else if (exposure_proof_value != "none") {
       throw std::invalid_argument("Unknown exposure proof scenario");
+    }
+    if (main_module_config.exposure_proof == ExposureProof::kWindowResize
+      && (headless || app.fullscreen)) {
+      throw std::invalid_argument(
+        "Window-resize proof requires a windowed presentation surface");
     }
     if (main_module_config.exposure_proof != ExposureProof::kNone
       && (proof_layout || aux_proof_layout || offscreen_proof_layout

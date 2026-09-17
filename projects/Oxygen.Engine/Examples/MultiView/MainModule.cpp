@@ -503,6 +503,16 @@ auto MainModule::OnFrameStart(
 auto MainModule::OnFrameEnd(observer_ptr<engine::FrameContext> context) -> void
 {
   Base::OnFrameEnd(context);
+  if (config_.exposure_proof == ExposureProofScenario::kWindowResize
+    && app_window_ && app_window_->GetWindow()) {
+    const auto frame = context->GetFrameSequenceNumber().get();
+    if (frame == 44U) {
+      window_proof_initial_extent_ = app_window_->GetWindow()->Size();
+      app_window_->GetWindow()->Resize({ .width = 1280U, .height = 800U });
+    } else if (frame == 52U) {
+      app_window_->GetWindow()->Resize(window_proof_initial_extent_);
+    }
+  }
 }
 
 auto MainModule::OnGuiUpdate(observer_ptr<engine::FrameContext> context)
