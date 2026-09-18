@@ -746,6 +746,8 @@ private:
   auto PrepareExposureTransition(CompositionView::ViewStateHandle target,
     ExposureTransitionPolicy policy, frame::SequenceNumber frame,
     bool suppressed) -> void;
+  auto RequestExposureRecovery(CompositionView::ViewStateHandle target,
+    std::uint64_t lifetime, std::uint64_t generation) -> void;
   auto ObserveExposureWorld(
     CompositionView::ViewStateHandle target, const scene::Scene* world) -> void;
   auto CapturedViewDiscontinuities(CompositionView::ViewStateHandle target,

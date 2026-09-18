@@ -271,6 +271,8 @@ private:
     std::uint64_t layout_revision;
     std::uint64_t epoch;
     std::uint64_t transition_generation;
+    bool normal_mode;
+    bool auto_owner;
   };
   struct PendingExposureStatus {
     postprocess::ExposurePass::StateLease state;

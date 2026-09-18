@@ -841,7 +841,13 @@ auto PostProcessService::FinalizeScenePrecision(
     .frame_sequence = ctx.frame_sequence.get(),
     .settings_revision = prepared.config.Revision(),
     .precision = PrecisionTicket { precision.layout_revision, precision.epoch,
-      precision.transition_generation } });
+      precision.transition_generation,
+      ctx.current_view.hdr_color_format == Format::kRGBA16Float,
+      prepared.config.Exposure().authored.enabled
+        && prepared.config.Exposure().authored.mode
+          == engine::ExposureMode::kAuto
+        && precision.source_handle
+          == CompositionView::kInvalidViewStateHandle } });
   return true;
 }
 
@@ -1153,10 +1159,18 @@ auto PostProcessService::PollExposureStatus() -> void
         if (IsPrecisionStatusNeeded(job)) {
           auto& precision = precision_states_.at(job.handle);
           precision.last_completed_frame = job.frame_sequence;
-          // TODO(EX05-19): issue one renderer-owned recovery/remeter transition
-          // for a newly completed normal-mode range failure. FP32 suitability
-          // retention must not repeatedly reset numerical exposure history.
-          // Scope: design/vortex/IMPLEMENTATION_STATUS.md, EX05-19.
+          // Producer failure or rejected current conversion is distinct from
+          // prospective FP16 suitability. A failed producer invalidates
+          // metering; rejected conversion retains the valid FP32 meter and
+          // adaptation.
+          if (job.precision->normal_mode
+            && (status.flags & (16U | 32U)) != 0U) {
+            InvalidatePrecision(job.handle);
+            if (job.precision->auto_owner && (status.flags & 16U) != 0U)
+              renderer_.RequestExposureRecovery(
+                job.handle, job.lifetime, job.precision->transition_generation);
+            return true;
+          }
           const bool eligible = (status.flags & 7U) == 5U
             && status.fp16_eligible_streak == 2U
             && integer(status.candidate_state_generation) == job.frame_sequence;

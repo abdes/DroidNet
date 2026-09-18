@@ -870,17 +870,20 @@ void FinalizeFp16Suitability(uint3 pixel : SV_DispatchThreadID)
     uint failure = report.Load(12u);
     uint first_failure = report.Load(16u);
     const uint producer_flags = status.Load(48u) & 16u;
+    bool conversion_failed = false;
     if (producer_flags != 0u) {
         failure |= status.Load(56u);
         first_failure = status.Load(52u);
     }
     if ((frame[0].flags & 1u) == 0u) {
         if (pass.conversion_report_srv == K_INVALID_BINDLESS_INDEX) {
+            conversion_failed = true;
             failure |= 16u;
             if (first_failure == 0u) first_failure = 11u;
         } else {
             ByteAddressBuffer conversion = ResourceDescriptorHeap[pass.conversion_report_srv];
             if (!IsCheckedSceneColorAccepted(conversion)) {
+                conversion_failed = true;
                 const uint conversion_failure = conversion.Load(12u);
                 failure |= conversion_failure != 0u ? conversion_failure : 16u;
                 if (first_failure == 0u) first_failure = 11u;
@@ -921,7 +924,8 @@ void FinalizeFp16Suitability(uint3 pixel : SV_DispatchThreadID)
     state.Store(24u, flags);
     state.Store4(64u, uint4(asuint(valid_candidate ? candidate : 1.0), streak, pass.layout));
     const uint status_flags = (valid ? 1u : 0u) | (failure != 0u ? 2u : 0u)
-        | (streak >= 2u ? 4u : 0u) | ((flags & EXPOSURE_REQUEST_REJECTED) != 0u ? 8u : 0u) | producer_flags;
+        | (streak >= 2u ? 4u : 0u) | ((flags & EXPOSURE_REQUEST_REJECTED) != 0u ? 8u : 0u)
+        | producer_flags | (conversion_failed ? 32u : 0u);
     status.Store4(0u, uint4(pass.lifetime, pass.sequence));
     status.Store4(16u, uint4(settings, requested));
     status.Store4(32u, uint4(applied, pass.layout));
