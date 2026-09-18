@@ -477,9 +477,9 @@ static float4 EvaluateVolumetricFogSample(
             back_distance);
     const float height_fog_density =
         EvaluateHeightFogMediaDensity(pass, sample_world_position.z);
-    const float extinction =
-        height_fog_density * max(pass.grid.global_extinction_scale, 0.0f) * near_fade
-        + max(local_fog_media.extinction, 0.0f);
+    const float height_extinction =
+        height_fog_density * max(pass.grid.global_extinction_scale, 0.0f) * near_fade;
+    const float extinction = height_extinction + max(local_fog_media.extinction, 0.0f);
     const float transmittance = exp(-extinction * ray_length);
     const float opacity = saturate(OneMinusExpNegative(extinction * ray_length));
 
@@ -509,12 +509,18 @@ static float4 EvaluateVolumetricFogSample(
         (directional_lighting * pass.media1.static_lighting_scattering_intensity
             + sky_lighting)
         * 2.0e-5f;
-    const float3 scattering =
+    const float3 height_source =
         max(pass.media0.albedo_rgb, 0.0f.xxx) * bounded_lighting
-        + local_fog_media.scattering * bounded_lighting
         + max(pass.media1.emissive_rgb, 0.0f.xxx);
-    const float3 integrated_luminance =
-        (scattering + local_fog_media.emissive) * opacity;
+    // Local injection publishes extinction-weighted coefficients. Mix source
+    // functions before applying Beer-Lambert opacity; multiplying those
+    // coefficients by opacity directly would apply density twice. Form the
+    // height weight first to avoid multiplying bright RGB by a large density.
+    const float3 source_function = extinction > 0.0f
+        ? height_source * (height_extinction / extinction)
+            + (local_fog_media.scattering * bounded_lighting + local_fog_media.emissive) / extinction
+        : 0.0f.xxx;
+    const float3 integrated_luminance = source_function * opacity;
     CheckHdrStoreRange(float4(integrated_luminance, transmittance), 10u,
         pass.exposure_status_uav, 0u, 1.0);
     return float4(max(integrated_luminance, 0.0f.xxx) * GetPreExposure(), saturate(transmittance));
