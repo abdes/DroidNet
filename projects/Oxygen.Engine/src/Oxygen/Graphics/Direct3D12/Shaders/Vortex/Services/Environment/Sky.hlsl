@@ -7,6 +7,7 @@
 #include "Vortex/Contracts/Environment/EnvironmentHelpers.hlsli"
 #include "Vortex/Contracts/Environment/EnvironmentViewHelpers.hlsli"
 #include "Vortex/Contracts/View/FrameExposureHelpers.hlsli"
+#include "Vortex/Contracts/View/HdrConsumerInputs.hlsli"
 #include "Vortex/Contracts/View/ViewConstants.hlsli"
 
 #include "Vortex/Contracts/Scene/SceneTextures.hlsli"
@@ -184,6 +185,7 @@ VortexFullscreenTriangleOutput VortexSkyPassVS(uint vertex_id : SV_VertexID)
 }
 
 [shader("pixel")]
+[earlydepthstencil]
 float4 VortexSkyPassPS(VortexFullscreenTriangleOutput input) : SV_Target0
 {
     EnvironmentStaticData env_data = (EnvironmentStaticData)0;
@@ -256,6 +258,8 @@ float4 VortexSkyPassPS(VortexFullscreenTriangleOutput input) : SV_Target0
     SamplerState linear_sampler
         = SamplerDescriptorHeap[kAtmosphereLinearClampSampler];
     const float view_pre_exposure = GetPreExposure();
+    RecordHdrConsumerUsage(HDR_CONSUMER_SKY,
+        environment_view.sky_luminance_factor_height_fog_contribution.xyz);
     const float4 sky_sample = sky_view_lut.SampleLevel(linear_sampler, uv, 0.0f);
     float3 sky_color = max(
         sky_sample.rgb * environment_view.sky_luminance_factor_height_fog_contribution.xyz,

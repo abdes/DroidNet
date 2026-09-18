@@ -602,12 +602,21 @@ auto PostProcessService::ConvertSceneColor(RenderContext& ctx,
       || settings.mask_status == ExposureMaskStatus::kFailed);
   if (initial_mask_unavailable || (needs_mask && !mask))
     return false;
+  std::uint32_t composition_products = 0U;
+  if (prepared.precision_epoch) {
+    if (precision == precision_states_.end()
+      || precision->second.epoch != *prepared.precision_epoch
+      || precision->second.configured_frame != ctx.frame_sequence)
+      return false;
+    composition_products = precision->second.expected_products;
+  }
   return exposure_pass_->ConvertCheckedSceneColor(ctx, prepared.exposure.frame,
     prepared.config,
     { .scene_signal = inputs.scene_signal,
       .scene_signal_srv = inputs.scene_signal_srv,
       .metering_mask = mask ? mask->texture.get() : nullptr,
-      .metering_mask_srv = mask ? mask->srv : kInvalidShaderVisibleIndex },
+      .metering_mask_srv = mask ? mask->srv : kInvalidShaderVisibleIndex,
+      .composition_products = composition_products },
     destination, destination_uav);
 }
 
@@ -682,9 +691,11 @@ auto PostProcessService::SelectPrecisionCandidate(RenderContext& ctx,
   return precision.candidate;
 }
 
-auto PostProcessService::FinalizeScenePrecision(RenderContext& ctx,
+auto PostProcessService::PrepareScenePrecision(RenderContext& ctx,
   const PreparedExposure& prepared,
-  const std::span<const postprocess::ExposurePass::HdrProduct> products) -> bool
+  const std::span<const postprocess::ExposurePass::HdrProduct> products,
+  std::optional<postprocess::ExposurePass::SceneComposition> composition)
+  -> bool
 {
   ValidatePreparedExposure(ctx.current_view.view_id, ctx, prepared);
   // Preparation already invalidated this failed attempt. Repeated consumers
@@ -697,10 +708,10 @@ auto PostProcessService::FinalizeScenePrecision(RenderContext& ctx,
     || found->second.configured_frame != ctx.frame_sequence)
     return false;
   auto& precision = found->second;
-  if (precision.finalized_frame == ctx.frame_sequence)
-    return precision.finalized_epoch == precision.epoch;
+  if (precision.prepared_frame == ctx.frame_sequence)
+    return precision.prepared_epoch == precision.epoch;
   CHECK_F(!published_views_.contains(prepared.view_id),
-    "Precision finalization must precede post-process publication");
+    "Precision preparation must precede post-process publication");
   const auto reject = [&] {
     // An earlier deferred/completed result cannot authorize a later failed
     // frame. Preserve exposure events while invalidating only qualification.
@@ -737,12 +748,41 @@ auto PostProcessService::FinalizeScenePrecision(RenderContext& ctx,
   if (!exposure_pass_->EvaluateFp16Products(ctx, prepared.exposure.frame,
         prepared.config, products,
         { .metering_mask = mask ? mask->texture.get() : nullptr,
-          .metering_mask_srv = mask ? mask->srv : kInvalidShaderVisibleIndex })
+          .metering_mask_srv = mask ? mask->srv : kInvalidShaderVisibleIndex,
+          .scene_composition = composition }))
+    return reject();
+  precision.prepared_frame = ctx.frame_sequence;
+  precision.prepared_epoch = precision.epoch;
+  return true;
+}
+
+auto PostProcessService::FinalizeScenePrecision(
+  RenderContext& ctx, const PreparedExposure& prepared) -> bool
+{
+  ValidatePreparedExposure(ctx.current_view.view_id, ctx, prepared);
+  if (prepared.exposure.solve_failed)
+    return false;
+  const auto found = precision_states_.find(prepared.handle);
+  if (found == precision_states_.end() || !prepared.precision_epoch
+    || *prepared.precision_epoch != found->second.epoch
+    || found->second.configured_frame != ctx.frame_sequence)
+    return false;
+  auto& precision = found->second;
+  if (precision.finalized_frame == ctx.frame_sequence)
+    return precision.finalized_epoch == precision.epoch;
+  CHECK_F(!published_views_.contains(prepared.view_id),
+    "Precision finalization must precede post-process publication");
+  if (precision.prepared_frame != ctx.frame_sequence
+    || precision.prepared_epoch != precision.epoch
+    || CurrentExposureGeneration(prepared.handle, prepared.lifetime)
+      != precision.transition_generation
     || !exposure_pass_->FinalizeFp16Suitability(ctx, prepared.exposure.frame,
       { .product_layout_revision = precision.layout_revision,
         .expected_products = precision.expected_products,
-        .invalidate_previous = precision.restart_streak }))
-    return reject();
+        .invalidate_previous = precision.restart_streak })) {
+    InvalidatePrecision(prepared.handle);
+    return false;
+  }
   precision.restart_streak = false;
   precision.finalized_frame = ctx.frame_sequence;
   precision.finalized_epoch = precision.epoch;

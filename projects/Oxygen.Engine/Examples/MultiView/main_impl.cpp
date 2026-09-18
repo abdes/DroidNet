@@ -199,6 +199,10 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
   bool point_light_enabled = true;
   bool spot_light_enabled = true;
   std::string exposure_proof_value = "none";
+  std::string visual_fog_value = "volume";
+  bool visual_fog_cycle = false;
+  bool visual_fog_hold_local = false;
+  bool visual_fog_jitter = true;
   oxygen::examples::cli::GraphicsToolingCliState graphics_tooling_cli {};
   oxygen::examples::cli::FrameCaptureCliState capture_cli {};
   oxygen::examples::DemoAppContext app {};
@@ -231,11 +235,44 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
           .WithOption(Option::WithKey("exposure-proof")
               .About("Exposure proof: none, independent, shared, main-only, "
                      "pip-only, reordered, source-loss, viewport, lifetime, "
-                     "window-resize, modes, atmosphere, atmosphere-lit")
+                     "window-resize, modes, atmosphere, atmosphere-lit, "
+                     "consumer-visual")
               .Long("exposure-proof")
               .WithValue<std::string>()
               .DefaultValue("none")
               .StoreTo(&exposure_proof_value)
+              .Build())
+          .WithOption(Option::WithKey("visual-fog")
+              .About(
+                "Initial consumer-visual comparison: clear, volume, or local")
+              .Long("visual-fog")
+              .WithValue<std::string>()
+              .DefaultValue("volume")
+              .StoreTo(&visual_fog_value)
+              .Build())
+          .WithOption(Option::WithKey("visual-fog-cycle")
+              .About("Script the visual controls: clear, volume at 32, local "
+                     "at 96, clear at 128")
+              .Long("visual-fog-cycle")
+              .WithValue<bool>()
+              .DefaultValue(false)
+              .StoreTo(&visual_fog_cycle)
+              .Build())
+          .WithOption(Option::WithKey("visual-fog-hold-local")
+              .About("Run the visual fog cycle and leave Local fog active for "
+                     "temporal diagnosis")
+              .Long("visual-fog-hold-local")
+              .WithValue<bool>()
+              .DefaultValue(false)
+              .StoreTo(&visual_fog_hold_local)
+              .Build())
+          .WithOption(Option::WithKey("visual-fog-jitter")
+              .About(
+                "Volumetric jitter for the bounded consumer-visual comparison")
+              .Long("visual-fog-jitter")
+              .WithValue<bool>()
+              .DefaultValue(true)
+              .StoreTo(&visual_fog_jitter)
               .Build())
           .WithOption(Option::WithKey("proof-wireframe-overlay")
               .About("Exercise per-frame wireframe overlays in the four-view "
@@ -379,8 +416,26 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
       main_module_config.exposure_proof = ExposureProof::kAtmosphere;
     } else if (exposure_proof_value == "atmosphere-lit") {
       main_module_config.exposure_proof = ExposureProof::kAtmosphereLit;
+    } else if (exposure_proof_value == "consumer-visual") {
+      main_module_config.exposure_proof = ExposureProof::kConsumerVisual;
     } else if (exposure_proof_value != "none") {
       throw std::invalid_argument("Unknown exposure proof scenario");
+    }
+    using VisualFog = oxygen::examples::multiview::VisualFogMode;
+    main_module_config.visual_fog_jitter = visual_fog_jitter;
+    if (visual_fog_value == "clear")
+      main_module_config.visual_fog_mode = VisualFog::kClear;
+    else if (visual_fog_value == "local")
+      main_module_config.visual_fog_mode = VisualFog::kLocal;
+    else if (visual_fog_value != "volume")
+      throw std::invalid_argument("Unknown visual fog comparison");
+    if (visual_fog_cycle || visual_fog_hold_local) {
+      if (main_module_config.exposure_proof != ExposureProof::kConsumerVisual)
+        throw std::invalid_argument(
+          "Visual fog cycling requires consumer-visual");
+      main_module_config.visual_fog_cycle = true;
+      main_module_config.visual_fog_hold_local = visual_fog_hold_local;
+      main_module_config.visual_fog_mode = VisualFog::kClear;
     }
     if (main_module_config.exposure_proof == ExposureProof::kWindowResize
       && (headless || app.fullscreen)) {

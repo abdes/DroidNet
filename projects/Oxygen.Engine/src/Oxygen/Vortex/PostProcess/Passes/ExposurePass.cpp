@@ -352,7 +352,7 @@ auto ExposurePass::PreparePublishers(RenderContext& ctx) -> void
         "Vortex.PostProcess.Exposure.FrameConstants");
     suitability_constants_publisher_
       = std::make_unique<::oxygen::vortex::internal::PerViewStructuredPublisher<
-        std::array<std::uint32_t, 24U>>>(observer_ptr { gfx.get() },
+        std::array<std::uint32_t, 32U>>>(observer_ptr { gfx.get() },
         renderer_.GetStagingProvider(),
         observer_ptr { &renderer_.GetInlineTransfersCoordinator() },
         "Vortex.Exposure.Suitability.Constants");
@@ -687,7 +687,7 @@ auto ExposurePass::CapturePreEnvironmentRange(RenderContext& ctx,
     source, graphics::ResourceStates::kShaderResource);
   recorder->RequireResourceState(
     status, graphics::ResourceStates::kUnorderedAccess);
-  const auto constants = std::array<std::uint32_t, 24U> {
+  const auto constants = std::array<std::uint32_t, 32U> {
     frame->current_state->status_uav_index.get(), source_srv.get(),
     frame->srv_index.get(), frame->current_state->srv_index.get(), desc.width,
     desc.height, 1U, 32U, 11U, 0U, kInvalidShaderVisibleIndex.get(), 0U, 0U, 0U,
@@ -747,7 +747,7 @@ auto ExposurePass::PropagateOpaqueApError(RenderContext& ctx,
     status, graphics::ResourceStates::kUnorderedAccess);
   recorder->RequireResourceState(
     *frame->buffer, graphics::ResourceStates::kShaderResource);
-  auto constants = std::array<std::uint32_t, 24U> {};
+  auto constants = std::array<std::uint32_t, 32U> {};
   constants[0] = frame->current_state->status_uav_index.get();
   constants[2] = frame->srv_index.get();
   constants[7] = 64U;
@@ -824,7 +824,7 @@ auto ExposurePass::GatherFilterGradients(RenderContext& ctx,
     *product.texture, graphics::ResourceStates::kShaderResource);
   recorder->RequireResourceState(
     *frame->buffer, graphics::ResourceStates::kShaderResource);
-  auto constants = std::array<std::uint32_t, 24U> {};
+  auto constants = std::array<std::uint32_t, 32U> {};
   constants[0] = frame->current_state->status_uav_index.get();
   constants[1] = product.srv.get();
   constants[2] = frame->srv_index.get();
@@ -875,6 +875,8 @@ auto ExposurePass::EvaluateFp16Products(RenderContext& ctx,
     = current_scale ? frame->conversion_buffer : frame->suitability_buffer;
   const auto report_uav
     = current_scale ? frame->conversion_uav : frame->suitability_uav;
+  const auto report_srv
+    = current_scale ? frame->conversion_srv : frame->suitability_srv;
   if (current_scale)
     submitted_conversion_.erase(frame.get());
   else
@@ -889,6 +891,7 @@ auto ExposurePass::EvaluateFp16Products(RenderContext& ctx,
     CHECK_F(std::isfinite(product.error_budget_share)
       && product.error_budget_share > 0.0F
       && product.error_budget_share <= 1.0F);
+    CHECK_F(!product.composed_error || product.id == 11U);
     if (!product.texture || !product.srv.IsValid())
       continue;
     const auto& desc = product.texture->GetDescriptor();
@@ -924,23 +927,45 @@ auto ExposurePass::EvaluateFp16Products(RenderContext& ctx,
     recorder->RequireResourceState(
       *metering.metering_mask, graphics::ResourceStates::kShaderResource);
   }
-  const auto dispatch = [&](
-                          const unsigned pipeline, const HdrProduct* product) {
+  if (metering.scene_composition && metering.scene_composition->opaque_depth) {
+    TrackTextureFromKnownOrInitial(
+      *recorder, *metering.scene_composition->opaque_depth);
+    recorder->RequireResourceState(*metering.scene_composition->opaque_depth,
+      graphics::ResourceStates::kShaderResource);
+  }
+  const auto background
+    = environment::ResolveSceneBackground(ctx).value_or(Vec3 { 0.0F });
+  const auto dispatch = [&](const unsigned pipeline, const HdrProduct* product,
+                          const std::uint32_t additional_flags = 0U) {
+    const bool candidate_bounds = (additional_flags & 512U) != 0U;
     const auto desc
       = product ? product->texture->GetDescriptor() : graphics::TextureDesc {};
+    bool opaque_depth_usable = false;
+    if (product && product->id == 11U && metering.scene_composition
+      && metering.scene_composition->opaque_depth
+      && metering.scene_composition->opaque_depth_srv.IsValid()) {
+      const auto& depth = metering.scene_composition->opaque_depth->GetDescriptor();
+      opaque_depth_usable = depth.texture_type == TextureType::kTexture2D
+        && depth.sample_count == 1U && depth.width == desc.width
+        && depth.height == desc.height;
+    }
     const auto rectangle = product && product->metering
       ? MeteringRectangle(ctx, desc)
       : Scissors { .right = static_cast<std::int32_t>(desc.width),
           .bottom = static_cast<std::int32_t>(desc.height) };
     const auto flags = product ? (product->metering ? 1U : 0U)
         | (product->coverage ? 2U : 0U) | (product->transmittance ? 4U : 0U)
+        | (product->composed_error ? 256U : 0U)
         | (desc.texture_type == TextureType::kTexture3D ? 8U : 0U)
                                : 0U;
-    const auto constants = std::array<std::uint32_t, 24U> { report_uav.get(),
+    const auto constants = std::array<std::uint32_t, 32U> { candidate_bounds
+        ? frame->current_state->status_uav_index.get()
+        : report_uav.get(),
       product ? product->srv.get() : kInvalidShaderVisibleIndex.get(),
       frame->srv_index.get(), frame->current_state->srv_index.get(), desc.width,
       desc.height, desc.depth,
-      flags | (scale == SuitabilityScale::kCurrentFrame ? 16U : 0U),
+      flags | (scale == SuitabilityScale::kCurrentFrame ? 16U : 0U)
+        | additional_flags,
       product ? product->id : 0U, expected_mask,
       metering.metering_mask_srv.get(),
       static_cast<std::uint32_t>(config.Exposure().authored.metering_mode),
@@ -956,12 +981,28 @@ auto ExposurePass::EvaluateFp16Products(RenderContext& ctx,
         config.Exposure().authored.min_log_luminance),
       std::bit_cast<std::uint32_t>(config.Exposure().authored.black_influence),
       std::bit_cast<std::uint32_t>(product ? product->consumer_rgb_gain : 1.0F),
-      frame->current_state->status_srv_index.get(), 0U, 0U };
+      frame->current_state->status_srv_index.get(),
+      candidate_bounds ? report_srv.get() : 0U, metering.composition_products,
+      std::bit_cast<std::uint32_t>(background.x),
+      std::bit_cast<std::uint32_t>(background.y),
+      std::bit_cast<std::uint32_t>(background.z),
+      static_cast<std::uint32_t>(config.Settings().tone_mapper),
+      std::bit_cast<std::uint32_t>(std::max(config.Settings().gamma, 1.0e-4F)),
+      metering.scene_composition
+        ? metering.scene_composition->opaque_depth_srv.get()
+        : 0U,
+      metering.scene_composition && metering.scene_composition->reverse_z ? 1U
+                                                                          : 0U,
+      opaque_depth_usable ? 1U : 0U };
     const auto slot = suitability_constants_publisher_->Publish(
       ctx.current_view.view_id, constants);
     CHECK_F(slot.IsValid());
-    recorder->RequireResourceState(
-      *report_buffer, graphics::ResourceStates::kUnorderedAccess);
+    recorder->RequireResourceState(*report_buffer,
+      candidate_bounds ? graphics::ResourceStates::kShaderResource
+                       : graphics::ResourceStates::kUnorderedAccess);
+    recorder->RequireResourceState(*frame->current_state->status_buffer,
+      candidate_bounds ? graphics::ResourceStates::kUnorderedAccess
+                       : graphics::ResourceStates::kShaderResource);
     recorder->FlushBarriers();
     recorder->SetPipelineState(*suitability_pipelines_[pipeline]);
     recorder->SetComputeRoot32BitConstant(
@@ -976,6 +1017,8 @@ auto ExposurePass::EvaluateFp16Products(RenderContext& ctx,
                                                               : 1U);
   };
   dispatch(0U, nullptr);
+  if (!current_scale && metering.scene_composition)
+    dispatch(0U, nullptr, 512U | 1024U);
   for (const auto& product : products) {
     if (!product.texture || !product.srv.IsValid())
       continue;
@@ -985,6 +1028,65 @@ auto ExposurePass::EvaluateFp16Products(RenderContext& ctx,
     dispatch(1U, &product);
   }
   dispatch(2U, nullptr);
+  if (!current_scale) {
+    dispatch(0U, nullptr, 512U);
+    for (const auto& product : products)
+      if (product.texture && product.srv.IsValid()
+        && (product.id == 5U || product.id == 6U || product.id == 10U))
+        dispatch(1U, &product, 512U);
+  }
+  if (!current_scale && metering.scene_composition) {
+    // Same 128-byte publisher and selector pipeline; a separate constant view
+    // describes the complete consumer chain after candidate stores exist.
+    auto constants = std::array<std::uint32_t, 32U> {};
+    constants[0] = frame->current_state->status_uav_index.get();
+    constants[1] = report_srv.get();
+    constants[2] = frame->srv_index.get();
+    constants[7] = 1024U;
+    constants[20] = std::bit_cast<std::uint32_t>(1.0F);
+    const auto& composition = *metering.scene_composition;
+    const auto operations = 16ULL
+      * (std::min<std::uint64_t>(composition.translucent_triangles, 0xffffffffU)
+        + composition.local_fog_instances + 8ULL);
+    constants[21] = static_cast<std::uint32_t>(
+      std::min<std::uint64_t>(operations, 0xffffffffU));
+    constants[22] = expected_mask;
+    for (const auto& product : products) {
+      if (product.id == 11U && product.texture && product.srv.IsValid()) {
+        const auto& desc = product.texture->GetDescriptor();
+        constants[23] = desc.width * desc.height;
+      }
+      const auto index = product.id == 5U ? 8U
+        : product.id == 6U                ? 12U
+        : product.id == 10U               ? 16U
+                                          : 0U;
+      if (index == 0U || !product.texture || !product.srv.IsValid())
+        continue;
+      const auto& desc = product.texture->GetDescriptor();
+      constants[index] = desc.width;
+      constants[index + 1U] = desc.height;
+      constants[index + 2U] = desc.depth;
+      constants[index + 3U] = desc.format == Format::kRGBA16Float ? 1U : 0U;
+      if (product.id == 6U)
+        constants[20] = std::bit_cast<std::uint32_t>(product.consumer_rgb_gain);
+    }
+    const auto slot = suitability_constants_publisher_->Publish(
+      ctx.current_view.view_id, constants);
+    CHECK_F(slot.IsValid());
+    recorder->RequireResourceState(
+      *report_buffer, graphics::ResourceStates::kShaderResource);
+    recorder->RequireResourceState(*frame->current_state->status_buffer,
+      graphics::ResourceStates::kUnorderedAccess);
+    recorder->FlushBarriers();
+    recorder->SetPipelineState(*suitability_pipelines_[2U]);
+    recorder->SetComputeRoot32BitConstant(
+      static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants), 0U,
+      0U);
+    recorder->SetComputeRoot32BitConstant(
+      static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants),
+      slot.get(), 1U);
+    recorder->Dispatch(1U, 1U, 1U);
+  }
   for (const auto& product : products)
     if (product.texture && product.srv.IsValid())
       dispatch(3U, &product);
@@ -1103,7 +1205,8 @@ auto ExposurePass::ConvertCheckedSceneColor(RenderContext& ctx,
     .srv = inputs.scene_signal_srv,
     .id = 11U,
     .metering = true,
-    .coverage = environment::ResolveSceneBackground(ctx).has_value() } };
+    .coverage = environment::ResolveSceneBackground(ctx).has_value(),
+    .composed_error = inputs.composition_products != 0U } };
   if (!EvaluateFp16Products(
         ctx, frame, config, products, inputs, SuitabilityScale::kCurrentFrame))
     return false;

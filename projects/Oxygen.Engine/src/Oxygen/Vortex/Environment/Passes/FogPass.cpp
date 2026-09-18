@@ -20,6 +20,7 @@
 #include <Oxygen/Scene/Environment/Fog.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Vortex/Internal/ViewportClamp.h>
+#include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererCapability.h>
@@ -255,6 +256,15 @@ auto FogPass::Record(
     scene_textures.GetSceneColor(), graphics::ResourceStates::kRenderTarget);
   recorder->RequireResourceState(
     scene_textures.GetSceneDepth(), graphics::ResourceStates::kDepthRead);
+  if (const auto& frame = ctx.current_view.frame_exposure) {
+    const auto& status = *frame->current_state->status_buffer;
+    if (!recorder->IsResourceTracked(status)
+      && !recorder->AdoptKnownResourceState(status))
+      recorder->BeginTrackingResourceState(
+        status, graphics::ResourceStates::kCommon, false);
+    recorder->RequireResourceState(
+      status, graphics::ResourceStates::kUnorderedAccess);
+  }
   recorder->FlushBarriers();
   recorder->BindFrameBuffer(*framebuffer);
   SetViewportAndScissor(*recorder, ctx, scene_textures);

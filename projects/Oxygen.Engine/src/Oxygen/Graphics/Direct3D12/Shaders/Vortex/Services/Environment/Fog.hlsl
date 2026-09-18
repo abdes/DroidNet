@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "Vortex/Contracts/View/FrameExposureHelpers.hlsli"
+#include "Vortex/Contracts/View/HdrConsumerInputs.hlsli"
 #include "Vortex/Contracts/Definitions/SceneDefinitions.hlsli"
 #include "Vortex/Contracts/Environment/EnvironmentHelpers.hlsli"
 #include "Vortex/Contracts/Environment/EnvironmentViewHelpers.hlsli"
@@ -376,6 +377,7 @@ float4 VortexFogPassPS(VortexFullscreenTriangleOutput input) : SV_Target0
             environment_view,
             world_position);
     }
+    RecordHdrConsumerInput(height_fog.rgb, HDR_INPUT_HEIGHT_FOG);
     height_fog.rgb *= GetPreExposure();
     const float4 volumetric_fog = SampleIntegratedVolumetricFog(
         env_data.volumetric_fog,

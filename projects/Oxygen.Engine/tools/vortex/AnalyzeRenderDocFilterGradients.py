@@ -68,11 +68,11 @@ def build_report(controller, report, capture_path, report_path):
         if shader.entryPoint != "GatherSuitabilityMaximum":
             continue
         reads = [x.descriptor for x in pipeline.GetReadOnlyResources(rd.ShaderStage.Compute, True)]
-        constants = [x for x in reads if x.byteSize == x.elementByteSize == 96]
+        constants = [x for x in reads if x.byteSize == x.elementByteSize == 128]
         if len(constants) != 1:
             raise RuntimeError("Missing gradient constants")
         c = constants[0]
-        words = struct.unpack("<24I", bytes(controller.GetBufferData(c.resource, c.byteOffset, 96)))
+        words = struct.unpack("<32I", bytes(controller.GetBufferData(c.resource, c.byteOffset, 128)))
         if not words[7] & 128:
             continue
         sources = [x for x in reads if str(x.resource) in textures]

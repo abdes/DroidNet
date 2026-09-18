@@ -39,12 +39,12 @@ def build_report(controller, report, capture_path, report_path):
         if not shader or shader.entryPoint != "CheckSuitabilityProduct":
             continue
         reads = [x.descriptor for x in pipeline.GetReadOnlyResources(rd.ShaderStage.Compute, True)]
-        constants = [x for x in reads if x.byteSize == x.elementByteSize == 96]
+        constants = [x for x in reads if x.byteSize == x.elementByteSize == 128]
         if len(constants) != 1:
-            raise RuntimeError("Expected the 96-byte qualification record")
+            raise RuntimeError("Expected the 128-byte qualification record")
         c = constants[0]
-        raw = bytes(controller.GetBufferData(c.resource, c.byteOffset, 96))
-        words = struct.unpack("<24I", raw)
+        raw = bytes(controller.GetBufferData(c.resource, c.byteOffset, 128))
+        words = struct.unpack("<32I", raw)
         if words[8] != 6:
             continue
         gain = struct.unpack_from("<f", raw, 80)[0]

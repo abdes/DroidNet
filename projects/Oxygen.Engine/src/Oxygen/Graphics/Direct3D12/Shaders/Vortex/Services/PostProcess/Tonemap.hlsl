@@ -6,7 +6,7 @@
 
 #include "Core/Bindless/Generated.BindlessAbi.hlsl"
 #include "Vortex/Contracts/View/ExposureStateData.hlsli"
-#include "Vortex/Shared/ColorSpace.hlsli"
+#include "Vortex/Services/PostProcess/ToneMapping.hlsli"
 #include "Vortex/Shared/FullscreenTriangle.hlsli"
 
 cbuffer RootConstants : register(b2, space0)
@@ -31,83 +31,6 @@ struct TonemapPassConstants
     uint conversion_report_index;
     uint2 reserved;
 };
-
-static float3 ACESFitted(float3 color)
-{
-    static const float3x3 kInputMat = {
-        {0.59719, 0.35458, 0.04823},
-        {0.07600, 0.90834, 0.01566},
-        {0.02840, 0.13383, 0.83777}
-    };
-    static const float3x3 kOutputMat = {
-        { 1.60475, -0.53108, -0.07367},
-        {-0.10208,  1.10813, -0.00605},
-        {-0.00327, -0.07276,  1.07602}
-    };
-
-    color = mul(kInputMat, color);
-    const float3 inverse_scale = rcp(max(abs(color), 1.0));
-    const float3 scaled = color * inverse_scale;
-    const float3 a = scaled * (scaled + 0.0245786 * inverse_scale)
-        - 0.000090537 * inverse_scale * inverse_scale;
-    const float3 b = scaled * (0.983729 * scaled + 0.4329510 * inverse_scale)
-        + 0.238081 * inverse_scale * inverse_scale;
-    color = a / b;
-    color = mul(kOutputMat, color);
-    return saturate(color);
-}
-
-static float3 Reinhard(float3 color)
-{
-    return color / (color + 1.0);
-}
-
-static float3 Uncharted2Tonemap(float3 x)
-{
-    static const float A = 0.15;
-    static const float B = 0.50;
-    static const float C = 0.10;
-    static const float D = 0.20;
-    static const float E = 0.02;
-    static const float F = 0.30;
-    const float3 inverse_scale = rcp(max(abs(x), 1.0));
-    const float3 scaled = x * inverse_scale;
-    return ((scaled * (A * scaled + C * B * inverse_scale) + D * E * inverse_scale * inverse_scale)
-        / (scaled * (A * scaled + B * inverse_scale) + D * F * inverse_scale * inverse_scale)) - E / F;
-}
-
-static float3 Filmic(float3 color)
-{
-    static const float white_point = 11.2;
-    static const float exposure_bias = 2.0;
-    const float3 curr = Uncharted2Tonemap(exposure_bias * color);
-    const float3 white_scale = 1.0 / Uncharted2Tonemap(white_point);
-    return curr * white_scale;
-}
-
-static float DitherBayer4x4(uint2 pixel_pos)
-{
-    static const float kBayer4x4[16] = {
-        0.0,  8.0,  2.0, 10.0,
-        12.0, 4.0, 14.0,  6.0,
-        3.0, 11.0,  1.0,  9.0,
-        15.0, 7.0, 13.0,  5.0
-    };
-
-    const uint index = (pixel_pos.x & 3u) | ((pixel_pos.y & 3u) << 2u);
-    return (kBayer4x4[index] / 16.0) - 0.5;
-}
-
-static float3 MapForeground(float3 color, uint tone_mapper, float gamma)
-{
-    switch (tone_mapper) {
-        case 1u: color = ACESFitted(color); break;
-        case 2u: color = Filmic(color); break;
-        case 3u: color = Reinhard(color); break;
-        default: color = saturate(color); break;
-    }
-    return pow(max(color, 0.0f), 1.0f / max(gamma, 1.0e-4f));
-}
 
 [shader("vertex")]
 VortexFullscreenTriangleOutput VortexTonemapVS(uint vertex_id : SV_VertexID)

@@ -21,6 +21,7 @@
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/Internal/ViewportClamp.h>
+#include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererCapability.h>
@@ -244,8 +245,8 @@ auto AtmosphereComposePass::Record(
   auto framebuffer
     = gfx->CreateFramebuffer(BuildAtmosphereFramebuffer(scene_textures));
   const auto queue_key = gfx->QueueKeyFor(graphics::QueueRole::kGraphics);
-  auto recorder
-    = gfx->AcquireCommandRecorder(queue_key, "EnvironmentLightingService Atmosphere");
+  auto recorder = gfx->AcquireCommandRecorder(
+    queue_key, "EnvironmentLightingService Atmosphere");
   if (!recorder) {
     state.executed = false;
     return state;
@@ -260,6 +261,15 @@ auto AtmosphereComposePass::Record(
     scene_textures.GetSceneColor(), graphics::ResourceStates::kRenderTarget);
   recorder->RequireResourceState(
     scene_textures.GetSceneDepth(), graphics::ResourceStates::kDepthRead);
+  if (const auto& frame = ctx.current_view.frame_exposure) {
+    const auto& status = *frame->current_state->status_buffer;
+    if (!recorder->IsResourceTracked(status)
+      && !recorder->AdoptKnownResourceState(status))
+      recorder->BeginTrackingResourceState(
+        status, graphics::ResourceStates::kCommon, false);
+    recorder->RequireResourceState(
+      status, graphics::ResourceStates::kUnorderedAccess);
+  }
   recorder->FlushBarriers();
   recorder->BindFrameBuffer(*framebuffer);
   SetViewportAndScissor(*recorder, ctx, scene_textures);
@@ -270,11 +280,11 @@ auto AtmosphereComposePass::Record(
       ctx.view_constants->GetGPUVirtualAddress());
   }
   recorder->SetGraphicsRoot32BitConstant(
-    static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants),
-    0U, 0U);
+    static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants), 0U,
+    0U);
   recorder->SetGraphicsRoot32BitConstant(
-    static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants),
-    0U, 1U);
+    static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants), 0U,
+    1U);
   recorder->Draw(3U, 1U, 0U, 0U);
   recorder->RequireResourceStateFinal(
     scene_textures.GetSceneColor(), graphics::ResourceStates::kRenderTarget);

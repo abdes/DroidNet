@@ -7,8 +7,12 @@
 #include "Core/Bindless/Generated.BindlessAbi.hlsl"
 #include "Vortex/Contracts/View/ExposureStateData.hlsli"
 #include "Vortex/Contracts/View/HdrErrorBounds.hlsli"
+#include "Vortex/Services/PostProcess/HdrSceneComposition.hlsli"
 #include "Vortex/Contracts/View/HdrStoreChecks.hlsli"
 #include "Vortex/Contracts/Definitions/SceneDefinitions.hlsli"
+#include "Vortex/Services/PostProcess/ToneMapping.hlsli"
+#include "Vortex/Services/PostProcess/ToneMappingBounds.hlsli"
+#include "Vortex/Services/PostProcess/ToneMappingFastBounds.hlsli"
 
 #define GROUP_SIZE 16
 #define HISTOGRAM_BINS 256
@@ -702,7 +706,7 @@ void VortexExposureFrameCS(uint3 dispatch_id : SV_DispatchThreadID)
     status.Store4(112u, 0u.xxxx);
     status.Store4(128u, 0u.xxxx);
     status.Store4(144u, 0u.xxxx);
-    [unroll] for (uint offset = 160u; offset < 256u; offset += 16u)
+    [unroll] for (uint offset = 160u; offset < 384u; offset += 16u)
         status.Store4(offset, 0u.xxxx);
     ExposureTargetData initial = (ExposureTargetData)0;
     initial.initial_log_gain = pass.initial_log_gain;
@@ -800,10 +804,18 @@ struct SuitabilityConstants {
     uint left; uint top; uint meter_width; uint meter_height;
     float radius; float budget_share; float min_log_luminance; float black_influence;
     float consumer_rgb_gain; uint producer_bounds_srv; uint2 reserved;
+    float3 background_color; uint tone_mapper;
+    float gamma; uint3 presentation_reserved;
 };
 
 static float4 SuitabilityProducerBounds(SuitabilityConstants pass)
 {
+    if (pass.product == 11u && (pass.flags & 256u) != 0u) {
+        if (pass.producer_bounds_srv == K_INVALID_BINDLESS_INDEX)
+            return float4(0.0, HdrBoundInfinity(), 0.0, HdrBoundInfinity());
+        ByteAddressBuffer status = ResourceDescriptorHeap[pass.producer_bounds_srv];
+        return asfloat(status.Load4(256u));
+    }
     if (pass.product != 5u && pass.product != 6u && pass.product != 10u)
         return 0.0.xxxx;
     if (pass.producer_bounds_srv == K_INVALID_BINDLESS_INDEX)
@@ -927,15 +939,18 @@ void ConvertQualifiedSceneColor(uint3 pixel : SV_DispatchThreadID)
     Texture2D<float4> source = ResourceDescriptorHeap[pass.source_srv];
     RWTexture2D<float4> destination = ResourceDescriptorHeap[pass.destination_uav];
     const float4 sample = source.Load(int3(pixel.xy, 0));
-    destination[pixel.xy] = float4(sample.rgb, saturate(sample.a));
+    destination[pixel.xy] = HdrRoundToHalf(float4(sample.rgb, saturate(sample.a)));
 }
 
 static void SuitabilityFailure(RWByteAddressBuffer report, uint product, uint flags, uint counter)
 {
-    uint unused;
-    report.InterlockedOr(12u, flags, unused);
-    report.InterlockedCompareExchange(16u, 0u, product, unused);
-    report.InterlockedAdd(counter, 1u, unused);
+    const uint count = WaveActiveCountBits(true);
+    if (WaveIsFirstLane()) {
+        uint unused;
+        report.InterlockedOr(12u, flags, unused);
+        report.InterlockedCompareExchange(16u, 0u, product, unused);
+        report.InterlockedAdd(counter, count, unused);
+    }
 }
 
 static uint FilterGradientOffset(uint product)
@@ -959,10 +974,22 @@ void ClearSuitability(uint3 pixel : SV_DispatchThreadID)
     StructuredBuffer<SuitabilityConstants> constants = ResourceDescriptorHeap[g_PassConstantsIndex];
     const SuitabilityConstants pass = constants[0];
     RWByteAddressBuffer report = ResourceDescriptorHeap[pass.report_uav];
+    if ((pass.flags & 512u) != 0u) {
+        report.Store4(304u, 0u.xxxx);
+        report.Store4(320u, 0u.xxxx);
+        report.Store4(336u, 0u.xxxx);
+        if ((pass.flags & 1024u) != 0u) {
+            report.Store4(256u, 0u.xxxx);
+            report.Store4(272u, 0u.xxxx);
+            report.Store4(288u, 0u.xxxx);
+        }
+        return;
+    }
     if ((pass.flags & 128u) != 0u) {
         const uint offset = FilterGradientOffset(pass.product);
         report.Store4(offset, uint4(0u, 0u, 0u, 1u));
         report.Store4(offset + 16u, 0u.xxxx);
+        report.Store(368u + (pass.product == 5u ? 0u : pass.product == 6u ? 4u : 8u), 0u);
         return;
     }
     if ((pass.flags & 32u) != 0u) {
@@ -979,6 +1006,63 @@ groupshared uint3 s_PreEnvironmentRange[64];
 groupshared uint3 s_FilterRgbGradient[64];
 groupshared uint3 s_FilterTransmissionGradient[64];
 groupshared uint2 s_FilterFlagsCount[64];
+groupshared uint s_FilterReferenceMaximum[64];
+groupshared uint4 s_CandidateBounds[64];
+
+static void GatherCandidateProductBounds(SuitabilityConstants pass, uint3 pixel, uint lane)
+{
+    RWByteAddressBuffer status = ResourceDescriptorHeap[pass.report_uav];
+    ByteAddressBuffer report = ResourceDescriptorHeap[pass.reserved.x];
+    StructuredBuffer<FrameExposureData> frame = ResourceDescriptorHeap[pass.frame_srv];
+    float4 result = 0.0.xxxx;
+    if (pixel.x < pass.width && pixel.y < pass.height && pixel.z < pass.depth) {
+        const float p = frame[0].pre_exposure;
+        const float inverse_p = frame[0].one_over_pre_exposure;
+        const float candidate_p = asfloat(report.Load(0u));
+        const float4 bounds = asfloat(status.Load4(HdrProducerBoundOffset(pass.product)));
+        const float4 sample = SuitabilitySample(pass, pixel);
+        bool valid = isfinite(p) && p > 0.0 && isfinite(inverse_p) && inverse_p > 0.0
+            && isfinite(candidate_p) && candidate_p > 0.0
+            && SuitabilityBoundValid(bounds.xy)
+            && ((pass.flags & 4u) == 0u || SuitabilityBoundValid(bounds.zw));
+        [unroll] for (uint c = 0u; c < 4u; ++c) {
+            if (c == 3u && (pass.flags & 4u) == 0u) continue;
+            valid = valid && HdrFiniteNonnegative(sample[c]);
+            const float2 source_bound = c == 3u ? bounds.zw
+                : float2(bounds.x, HdrUpperProduct(bounds.y, p));
+            float2 reference = HdrReferenceInterval(sample[c], source_bound);
+            if (c == 3u) reference = saturate(reference);
+            const float candidate = HdrRoundToHalf(c == 3u ? sample.a
+                : (sample[c] * inverse_p) * candidate_p);
+            if (c != 3u) {
+                // Move the reference and rounded observation into common
+                // scene units before deriving the prospective certificate.
+                reference.x = HdrBoundDown(reference.x * inverse_p);
+                reference.y = HdrUpperProduct(reference.y, inverse_p);
+            }
+            const float2 component = HdrEnclosureBound(
+                c == 3u ? candidate : candidate / candidate_p, reference);
+            valid = valid && all(isfinite(reference)) && all(isfinite(component));
+            if (c == 3u) result.zw = component;
+            else result.xy = max(result.xy, component);
+        }
+        if (!valid) result = float4(0.0, HdrBoundInfinity(), 0.0, HdrBoundInfinity());
+    }
+    s_CandidateBounds[lane] = asuint(result);
+    GroupMemoryBarrierWithGroupSync();
+    [unroll] for (uint stride = 32u; stride > 0u; stride >>= 1u) {
+        if (lane < stride) s_CandidateBounds[lane] = max(s_CandidateBounds[lane], s_CandidateBounds[lane + stride]);
+        GroupMemoryBarrierWithGroupSync();
+    }
+    if (lane == 0u) {
+        const uint offset = pass.product == 5u ? 304u : pass.product == 6u ? 320u : 336u;
+        uint unused;
+        status.InterlockedMax(offset, s_CandidateBounds[0].x, unused);
+        status.InterlockedMax(offset + 4u, s_CandidateBounds[0].y, unused);
+        status.InterlockedMax(offset + 8u, s_CandidateBounds[0].z, unused);
+        status.InterlockedMax(offset + 12u, s_CandidateBounds[0].w, unused);
+    }
+}
 
 static bool FilterReferenceIntervals(float4 sample, float4 bounds, float p,
     bool transmission, out float4 low, out float4 high)
@@ -1015,6 +1099,7 @@ static void GatherFilterGradients(SuitabilityConstants pass, uint3 pixel, uint l
     uint3 rgb = 0u.xxx;
     uint3 transmission = 0u.xxx;
     uint2 flags_count = 0u.xx;
+    uint maximum = 0u;
     if (all(pixel < uint3(pass.width, pass.height, pass.depth))) {
         flags_count.y = 1u;
         float4 low, high;
@@ -1022,6 +1107,8 @@ static void GatherFilterGradients(SuitabilityConstants pass, uint3 pixel, uint l
         bool valid = isfinite(inverse_p) && inverse_p > 0.0;
         valid = FilterReferenceIntervals(SuitabilitySample(pass, pixel), bounds, p,
             with_transmission, low, high) && valid;
+        if (valid) maximum = asuint(HdrUpperProduct(
+            asfloat(max(asuint(high.r), max(asuint(high.g), asuint(high.b)))), inverse_p));
         [unroll] for (uint axis = 0u; axis < 3u; ++axis) {
             const uint3 extent = uint3(pass.width, pass.height, pass.depth);
             uint3 neighbor = pixel;
@@ -1049,6 +1136,7 @@ static void GatherFilterGradients(SuitabilityConstants pass, uint3 pixel, uint l
     s_FilterRgbGradient[lane] = rgb;
     s_FilterTransmissionGradient[lane] = transmission;
     s_FilterFlagsCount[lane] = flags_count;
+    s_FilterReferenceMaximum[lane] = maximum;
     GroupMemoryBarrierWithGroupSync();
     [unroll] for (uint stride = 32u; stride > 0u; stride >>= 1u) {
         if (lane < stride) {
@@ -1056,6 +1144,7 @@ static void GatherFilterGradients(SuitabilityConstants pass, uint3 pixel, uint l
             s_FilterTransmissionGradient[lane] = max(s_FilterTransmissionGradient[lane], s_FilterTransmissionGradient[lane + stride]);
             s_FilterFlagsCount[lane].x |= s_FilterFlagsCount[lane + stride].x;
             s_FilterFlagsCount[lane].y += s_FilterFlagsCount[lane + stride].y;
+            s_FilterReferenceMaximum[lane] = max(s_FilterReferenceMaximum[lane], s_FilterReferenceMaximum[lane + stride]);
         }
         GroupMemoryBarrierWithGroupSync();
     }
@@ -1068,6 +1157,8 @@ static void GatherFilterGradients(SuitabilityConstants pass, uint3 pixel, uint l
         }
         status.InterlockedOr(offset + 12u, s_FilterFlagsCount[0].x, unused);
         status.InterlockedAdd(offset + 28u, s_FilterFlagsCount[0].y, unused);
+        status.InterlockedMax(368u + (pass.product == 5u ? 0u : pass.product == 6u ? 4u : 8u),
+            s_FilterReferenceMaximum[0], unused);
     }
 }
 
@@ -1080,9 +1171,10 @@ static void GatherPreEnvironmentRange(SuitabilityConstants pass, uint3 pixel, ui
         value.z = 1u;
         if (!all(isfinite(sample))) value.y = 2u;
         else {
-            const float maximum = max(abs(sample.r), max(abs(sample.g), abs(sample.b)));
-            value.x = asuint(maximum);
-            value.y = any(sample.rgb < 0.0) ? 4u : 0u;
+            const uint3 bits = asuint(sample.rgb);
+            const uint3 magnitude = bits & 0x7fffffffu.xxx;
+            value.x = max(magnitude.x, max(magnitude.y, magnitude.z));
+            value.y = any(and(bits != magnitude, magnitude != 0u.xxx)) ? 4u : 0u;
         }
     }
     s_PreEnvironmentRange[lane] = value;
@@ -1112,6 +1204,10 @@ void GatherSuitabilityMaximum(uint3 pixel : SV_DispatchThreadID, uint lane : SV_
 {
     StructuredBuffer<SuitabilityConstants> constants = ResourceDescriptorHeap[g_PassConstantsIndex];
     const SuitabilityConstants pass = constants[0];
+    if ((pass.flags & 512u) != 0u) {
+        GatherCandidateProductBounds(pass, pixel, lane);
+        return;
+    }
     if ((pass.flags & 128u) != 0u) {
         GatherFilterGradients(pass, pixel, lane);
         return;
@@ -1130,16 +1226,20 @@ void GatherSuitabilityMaximum(uint3 pixel : SV_DispatchThreadID, uint lane : SV_
         return;
     }
     StructuredBuffer<FrameExposureData> frame = ResourceDescriptorHeap[pass.frame_srv];
-    const float3 scene = sample.rgb * frame[0].one_over_pre_exposure;
-    float maximum = max(abs(scene.x), max(abs(scene.y), abs(scene.z)));
+    float maximum = 0.0;
+    [unroll] for (uint c = 0u; c < 3u; ++c)
+        maximum = max(maximum, HdrUpperProduct(abs(sample[c]), frame[0].one_over_pre_exposure));
     const float4 bounds = SuitabilityProducerBounds(pass);
     if (SuitabilityBoundValid(bounds.xy)) {
         [unroll] for (uint c = 0u; c < 3u; ++c) {
-            const float2 reference = SuitabilityReferenceInterval(scene[c], bounds.xy);
-            if (all(isfinite(reference))) maximum = max(maximum, max(abs(reference.x), abs(reference.y)));
+            const float2 reference = HdrReferenceInterval(sample[c],
+                float2(bounds.x, HdrUpperProduct(bounds.y, frame[0].pre_exposure)));
+            if (all(isfinite(reference)))
+                maximum = max(maximum, HdrUpperProduct(reference.y, frame[0].one_over_pre_exposure));
         }
     }
-    report.InterlockedMax(4u, asuint(maximum), unused);
+    const uint maximum_bits = WaveActiveMax(asuint(maximum));
+    if (WaveIsFirstLane()) report.InterlockedMax(4u, maximum_bits, unused);
 }
 
 [numthreads(1, 1, 1)]
@@ -1147,6 +1247,10 @@ void SelectSuitabilityCandidate(uint3 pixel : SV_DispatchThreadID)
 {
     StructuredBuffer<SuitabilityConstants> constants = ResourceDescriptorHeap[g_PassConstantsIndex];
     const SuitabilityConstants pass = constants[0];
+    if ((pass.flags & 1024u) != 0u) {
+        ComposeSceneErrorBounds(g_PassConstantsIndex);
+        return;
+    }
     RWByteAddressBuffer report = ResourceDescriptorHeap[pass.report_uav];
     if ((pass.flags & 64u) != 0u) {
         const float4 bounds = asfloat(report.Load4(96u));
@@ -1204,6 +1308,201 @@ static bool SuitabilityMeterCell(SuitabilityConstants pass, uint2 pixel, out uin
     return all(relative == min(uint2(uv * float2(extent)), extent - 1u));
 }
 
+struct SceneAdmissionIntervals {
+    float4 reference_low;
+    float4 reference_high;
+    float4 candidate_low;
+    float4 candidate_high;
+};
+
+// Expand a reference interval through a prospective affine error certificate.
+// Coefficients refer to the same ideal image as the current-frame certificate.
+static float2 SceneCandidateInterval(float2 reference, float2 error)
+{
+    if (all((asuint(error) & 0x7fffffffu) == 0u.xx)) return reference;
+    const float low = HdrBoundDown(max(HdrBoundDown(reference.x
+        * HdrBoundDown(1.0 - error.x)) - HdrUpperOperand(error.y), 0.0));
+    const float high = HdrUpperSum(HdrUpperProduct(reference.y,
+        HdrUpperSum(1.0, error.x)), error.y);
+    return float2(low, high);
+}
+
+static bool BuildSceneAdmissionIntervals(SuitabilityConstants pass, float4 sample, uint2 pixel,
+    float inverse_p, float candidate_p, out SceneAdmissionIntervals intervals)
+{
+    intervals = (SceneAdmissionIntervals)0;
+    if (pass.producer_bounds_srv == K_INVALID_BINDLESS_INDEX) return false;
+    ByteAddressBuffer status = ResourceDescriptorHeap[pass.producer_bounds_srv];
+    const float4 current = asfloat(status.Load4(256u));
+    const float4 candidate = asfloat(status.Load4(272u));
+    const uint4 identity = status.Load4(288u);
+    const bool current_store = (pass.flags & 16u) != 0u;
+    const uint required_flags = current_store ? 1u : 3u;
+    const uint required_products = pass.reserved.y != 0u
+        ? pass.reserved.y : pass.expected_mask;
+    if ((identity.z & required_flags) != required_flags
+        || identity.y != required_products || identity.w != 0u
+        || (!current_store && asfloat(identity.x) != candidate_p)
+        || !SuitabilityBoundValid(current.xy)
+        || !SuitabilityBoundValid(current.zw)
+        || (!current_store && (!SuitabilityBoundValid(candidate.xy)
+            || !SuitabilityBoundValid(candidate.zw)))) return false;
+
+    const float4 observed = float4(sample.rgb * inverse_p,
+        (pass.flags & 2u) != 0u ? saturate(sample.a) : 1.0);
+    if (!all(isfinite(observed)) || any(observed < 0.0)) return false;
+    bool opaque_coverage = false;
+    if (pass.presentation_reserved.z != 0u && sample.a == 1.0) {
+        Texture2D<float> depth = ResourceDescriptorHeap[pass.presentation_reserved.x];
+        const float value = depth.Load(int3(pixel, 0));
+        const float far_depth = pass.presentation_reserved.y != 0u ? 0.0 : 1.0;
+        opaque_coverage = HdrFiniteNonnegative(value) && value <= 1.0
+            && abs(value - far_depth) >= 0.001;
+    }
+    [unroll] for (uint c = 0u; c < 4u; ++c) {
+        const bool coverage = c == 3u;
+        float2 reference = SuitabilityReferenceInterval(observed[c],
+            coverage ? current.zw : current.xy);
+        if (coverage && ((pass.flags & 2u) == 0u || opaque_coverage)) reference = 1.0.xx;
+        if (!all(isfinite(reference))) return false;
+        if (coverage) reference = saturate(reference);
+        float2 proposed = current_store ? observed[c].xx
+            : SceneCandidateInterval(reference, coverage ? candidate.zw : candidate.xy);
+        if (coverage && ((pass.flags & 2u) == 0u || opaque_coverage)) proposed = 1.0.xx;
+        if (coverage) proposed = saturate(proposed);
+        if (!all(isfinite(proposed))) return false;
+        const float scale = coverage ? 1.0 : candidate_p;
+        // Power-of-two P preserves normal endpoints exactly. Subnormal
+        // products are far below the smallest half value and narrow to zero.
+        const float2 stored = proposed * scale;
+        if (!all(isfinite(stored)) || (!coverage && stored.y > 16376.0)) return false;
+        const float2 narrowed = HdrRoundToHalf(stored) / scale;
+        if (!all(isfinite(narrowed))) return false;
+        intervals.reference_low[c] = reference.x;
+        intervals.reference_high[c] = reference.y;
+        intervals.candidate_low[c] = narrowed.x;
+        intervals.candidate_high[c] = narrowed.y;
+    }
+    return true;
+}
+
+static bool SceneImageIntervalsPass(SceneAdmissionIntervals intervals, float s)
+{
+    const float3 reference_low = intervals.reference_low.rgb
+        / max(intervals.reference_high.a, 1e-6);
+    const float3 reference_high = intervals.reference_high.rgb
+        / max(intervals.reference_low.a, 1e-6);
+    const float3 candidate_low = intervals.candidate_low.rgb
+        / max(intervals.candidate_high.a, 1e-6);
+    const float3 candidate_high = intervals.candidate_high.rgb
+        / max(intervals.candidate_low.a, 1e-6);
+    if (!all(isfinite(reference_low)) || !all(isfinite(reference_high))
+        || !all(isfinite(candidate_low)) || !all(isfinite(candidate_high))) return false;
+    const float absolute = 1e-5 / max(s, 1.0);
+    // The extrema of |candidate-reference|-r*reference occur at corners.
+    return all(abs(candidate_high - reference_low) <= .0025 * reference_low + absolute)
+        && all(abs(candidate_low - reference_high) <= .0025 * reference_high + absolute)
+        && all(abs(intervals.candidate_high.rgb - intervals.reference_low.rgb)
+            <= .0025 * intervals.reference_low.rgb + absolute)
+        && all(abs(intervals.candidate_low.rgb - intervals.reference_high.rgb)
+            <= .0025 * intervals.reference_high.rgb + absolute);
+}
+
+static bool SceneDisplayIntervalsPass(SceneAdmissionIntervals intervals,
+    SuitabilityConstants pass, float s, uint2 pixel)
+{
+    if (!isfinite(pass.gamma) || !isfinite(s) || s < 0.0
+        || ((pass.flags & 2u) != 0u && !all(isfinite(pass.background_color)))) return false;
+    // Identical point inputs execute the same mapping, including background and
+    // dither. Avoid interval dependency widening for this exact identity case.
+    if (all(asuint(intervals.reference_low) == asuint(intervals.reference_high))
+        && all(asuint(intervals.reference_low) == asuint(intervals.candidate_low))
+        && all(asuint(intervals.reference_low) == asuint(intervals.candidate_high))) return true;
+    const float allowance = HdrBoundDown(0.5 / 255.0);
+    ToneRgbBounds combined;
+    if (ToneDisplayQuickBounds(min(intervals.reference_low, intervals.candidate_low),
+        max(intervals.reference_high, intervals.candidate_high), s, pass.tone_mapper,
+        pass.gamma, (pass.flags & 2u) != 0u, pass.background_color, pixel, combined)
+        && all(combined.high - combined.low <= allowance)) return true;
+    // Unresolved intervals retain FP32. Runtime cost must not grow with
+    // uncertainty through per-pixel recursive or general interval refinement.
+    return false;
+}
+
+static bool SceneMeterIntervalsPass(SceneAdmissionIntervals intervals,
+    float profile_mask, float min_log_luminance, float black_influence)
+{
+    const uint4 weights = uint4(
+        QuantizeWeight(profile_mask * intervals.reference_low.a),
+        QuantizeWeight(profile_mask * intervals.reference_high.a),
+        QuantizeWeight(profile_mask * intervals.candidate_low.a),
+        QuantizeWeight(profile_mask * intervals.candidate_high.a));
+    if (any(weights != weights.xxxx)) return false;
+    if (weights.x == 0u) return true;
+    if (intervals.reference_low.a <= 0.0 || intervals.candidate_low.a <= 0.0) return false;
+    // Match the histogram: positive mass divides by actual coverage, with no
+    // image-normalization floor. Correlation has already been retained by the
+    // producer of these coverage intervals.
+    const float4 luminance = float4(
+        Luminance(intervals.reference_low.rgb / intervals.reference_high.a),
+        Luminance(intervals.reference_high.rgb / intervals.reference_low.a),
+        Luminance(intervals.candidate_low.rgb / intervals.candidate_high.a),
+        Luminance(intervals.candidate_high.rgb / intervals.candidate_low.a));
+    if (!all(isfinite(luminance))) return false;
+    const bool4 dark = bool4(IsDarkMeterSample(luminance.x, min_log_luminance),
+        IsDarkMeterSample(luminance.y, min_log_luminance),
+        IsDarkMeterSample(luminance.z, min_log_luminance),
+        IsDarkMeterSample(luminance.w, min_log_luminance));
+    if (any(dark != dark.xxxx)) return false;
+    if (MeterContribution(weights.x, dark.x, black_influence) == 0u) return true;
+    const bool4 zero = luminance == 0.0.xxxx;
+    if (any(zero != zero.xxxx)) return false;
+    if (zero.x) return true;
+    const float2 ratio = float2(luminance.w / luminance.x, luminance.y / luminance.z);
+    return all(isfinite(ratio)) && all(abs(log2(ratio)) <= 1.0 / 1024.0);
+}
+
+static void CheckComposedScene(SuitabilityConstants pass, uint3 pixel, float4 sample,
+    RWByteAddressBuffer report)
+{
+    StructuredBuffer<FrameExposureData> frame = ResourceDescriptorHeap[pass.frame_srv];
+    ByteAddressBuffer state = ResourceDescriptorHeap[pass.state_srv];
+    SceneAdmissionIntervals intervals;
+    if (!BuildSceneAdmissionIntervals(pass, sample, pixel.xy, frame[0].one_over_pre_exposure,
+        asfloat(report.Load(0u)), intervals)) {
+        SuitabilityFailure(report, pass.product, 16u, 28u);
+        return;
+    }
+    const float gain = asfloat(state.Load(0u));
+    if (!SceneImageIntervalsPass(intervals, gain)
+        || !SceneDisplayIntervalsPass(intervals, pass, gain, pixel.xy))
+        SuitabilityFailure(report, pass.product, 4u, 28u);
+    uint2 cell; float2 uv;
+    if (!SuitabilityMeterCell(pass, pixel.xy, cell, uv)) return;
+    float mask = 1.0;
+    if (pass.mask_srv != K_INVALID_BINDLESS_INDEX) {
+        Texture2D<float4> texture = ResourceDescriptorHeap[pass.mask_srv];
+        SamplerState sampler = SamplerDescriptorHeap[VORTEX_SAMPLER_LINEAR_CLAMP];
+        mask = texture.SampleLevel(sampler, uv, 0).r;
+    }
+    if (!isfinite(mask)) {
+        SuitabilityFailure(report, pass.product, 1u, 20u);
+        return;
+    }
+    const uint2 grid = min(uint2(pass.meter_width, pass.meter_height), METER_GRID_LIMIT);
+    const float distance = length((float2(cell * 2u + 1u) - float2(grid)) / float2(grid));
+    float profile = 1.0;
+    if (pass.meter_mode == 1u) profile = saturate(1.0 - distance);
+    else if (pass.meter_mode == 2u) {
+        profile = pass.radius > 0.0 ? saturate(1.0 - distance / pass.radius)
+            : (all(cell * 2u + 1u == grid) ? 1.0 : 0.0);
+        profile *= profile;
+    }
+    if (!SceneMeterIntervalsPass(intervals, profile * saturate(mask),
+        pass.min_log_luminance, pass.black_influence))
+        SuitabilityFailure(report, pass.product, 8u, 24u);
+}
+
 [numthreads(8, 8, 1)]
 void CheckSuitabilityProduct(uint3 pixel : SV_DispatchThreadID)
 {
@@ -1214,7 +1513,12 @@ void CheckSuitabilityProduct(uint3 pixel : SV_DispatchThreadID)
     const float4 sample = SuitabilitySample(pass, pixel);
     if (!all(isfinite(sample))) return;
     uint unused;
-    report.InterlockedAdd(36u, 1u, unused);
+    const uint checked = WaveActiveCountBits(true);
+    if (WaveIsFirstLane()) report.InterlockedAdd(36u, checked, unused);
+    if ((pass.flags & 256u) != 0u) {
+        CheckComposedScene(pass, pixel, sample, report);
+        return;
+    }
     if (!isfinite(pass.consumer_rgb_gain) || pass.consumer_rgb_gain < 0.0) {
         SuitabilityFailure(report, pass.product, 1u, 20u);
         return;
@@ -1236,9 +1540,9 @@ void CheckSuitabilityProduct(uint3 pixel : SV_DispatchThreadID)
         SuitabilityFailure(report, pass.product, 2u, 32u);
         return;
     }
-    const float3 restored = f16tof32(f32tof16(proposed)) / candidate_p;
+    const float3 restored = HdrRoundToHalf(proposed) / candidate_p;
     const float alpha = (pass.flags & 2u) != 0u ? saturate(sample.a) : 1.0;
-    const float narrowed_alpha = (pass.flags & 2u) != 0u ? f16tof32(f32tof16(alpha)) : 1.0;
+    const float narrowed_alpha = (pass.flags & 2u) != 0u ? HdrRoundToHalf(alpha) : 1.0;
     const float3 reference = scene / max(alpha, 1e-6);
     const float3 narrowed = restored / max(narrowed_alpha, 1e-6);
     float3 reference_low = reference;
@@ -1281,7 +1585,7 @@ void CheckSuitabilityProduct(uint3 pixel : SV_DispatchThreadID)
             return;
         }
         reference_t = saturate(reference_t);
-        const float candidate_t = f16tof32(f32tof16(t));
+        const float candidate_t = HdrRoundToHalf(t);
         const float maximum = asfloat(report.Load(4u));
         const float transmission_absolute_budget = (absolute_budget / max(maximum, 1e-30)) / max(s, 1.0);
         image_failure = image_failure || any(abs(candidate_t.xx - reference_t)

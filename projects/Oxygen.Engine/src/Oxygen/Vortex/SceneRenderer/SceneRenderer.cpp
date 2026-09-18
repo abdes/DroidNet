@@ -1488,7 +1488,8 @@ namespace {
         .srv = accumulated_srv,
         .id = 11U,
         .metering = true,
-        .coverage = environment::ResolveSceneBackground(ctx).has_value() }
+        .coverage = environment::ResolveSceneBackground(ctx).has_value(),
+        .composed_error = true }
     };
     const auto* radiance = environment_service
       ? environment_service->InspectViewRadianceResources(
@@ -1514,7 +1515,8 @@ namespace {
           { .texture = radiance ? radiance->sky_view.get() : nullptr,
             .srv = published ? published->sky_view_lut_srv
                              : kInvalidShaderVisibleIndex,
-            .id = 5U });
+            .id = 5U,
+            .transmittance = true });
         products.push_back(
           { .texture = radiance ? radiance->aerial_perspective.get() : nullptr,
             .srv = published ? published->camera_aerial_perspective_srv
@@ -2581,9 +2583,32 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
       return;
   }
 
+  // Certify current/candidate consumer error before checked narrowing.
+  if (prepared_exposure && !precision_products.empty()) {
+    auto* depth = scene_textures.GetSceneDepthResource().get();
+    const auto depth_srv = ShaderVisibleIndex { RegisterSceneTextureView(*depth,
+      MakeSrvDesc(
+        *depth, ResolveDepthSrvFormat(depth->GetDescriptor().format))) };
+    const auto local_instances
+      = environment_ && environment_->GetLastStage15State().local_fog_executed
+      ? environment_->GetLastStage14State().local_fog_instance_count
+      : 0U;
+    static_cast<void>(post_process_->PrepareScenePrecision(ctx,
+      *prepared_exposure, precision_products,
+      postprocess::ExposurePass::SceneComposition { .opaque_depth = depth,
+        .opaque_depth_srv = depth_srv,
+        .translucent_triangles = translucency_result.triangle_count,
+        .local_fog_instances = local_instances,
+        .reverse_z = IsReverseZ(ctx) }));
+  }
+
   // Stage 21: Resolve scene color
   if (wants_resolve) {
     ResolveSceneColor(ctx);
+  }
+  if (prepared_exposure && !precision_products.empty()) {
+    static_cast<void>(
+      post_process_->FinalizeScenePrecision(ctx, *prepared_exposure));
   }
   RecordDiagnosticsPass(renderer_,
     DiagnosticsPassRecord {
@@ -2612,10 +2637,6 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
         .valid = true,
       });
   }
-
-  if (prepared_exposure && !precision_products.empty())
-    static_cast<void>(post_process_->FinalizeScenePrecision(
-      ctx, *prepared_exposure, precision_products));
 
   // Stage 22: Post processing
   if (post_process_ != nullptr && wants_scene_lighting) {

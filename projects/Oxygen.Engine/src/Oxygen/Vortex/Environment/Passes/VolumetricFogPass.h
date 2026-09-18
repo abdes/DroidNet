@@ -177,7 +177,7 @@ namespace environment {
       std::uint32_t previous_integrated_light_scattering_srv {
         kInvalidShaderVisibleIndex.get()
       };
-      std::uint32_t enabled { 0U };
+      std::uint32_t enabled { 0U }; // Enabled=1, sampled history is FP16=2.
       float history_weight { 0.9F };
       std::uint32_t history_miss_supersample_count { 1U };
     };

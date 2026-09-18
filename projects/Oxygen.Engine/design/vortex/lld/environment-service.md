@@ -115,6 +115,16 @@ Stateless views and views with temporal reprojection disabled keep no persistent
 history entry; their current volumes and exposure readers remain frame-retained
 until GPU consumers finish. Unpublished fog allocations also retire on failure.
 
+Fog volume texels represent fixed cell centers. Reconstruct history positions
+from `dispatch_id + 0.5`, independently of current Halton offsets. The inverse
+log-depth mapping already returns that center coordinate; normalize it by the
+grid depth without adding another half cell. The integrated path length and
+near fade use the same fixed endpoint. Jitter varies media and lighting samples
+within the cell; it must not change the represented depth or the integration
+domain. A static XYZ-gradient history must reproduce its texels, and homogeneous
+media must preserve transmittance across jitter offsets. This contract does not
+claim completion of the separate volumetric-fog parity work below.
+
 Local-fog culling and composition transient constants reset at the environment
 service's frame boundary, once for the frame slot. Every view appends its own
 allocation during recording. Per-view recording must not retire descriptors

@@ -26,7 +26,7 @@ struct ViewFrameBindings
     uint debug_frame_slot;
     uint history_frame_slot;
     uint ray_tracing_frame_slot;
-    uint _pad0;
+    uint exposure_status_uav;
     uint _pad1;
     uint _pad2;
 };
@@ -47,7 +47,7 @@ static inline ViewFrameBindings MakeInvalidViewFrameBindings()
     bindings.debug_frame_slot = K_INVALID_BINDLESS_INDEX;
     bindings.history_frame_slot = K_INVALID_BINDLESS_INDEX;
     bindings.ray_tracing_frame_slot = K_INVALID_BINDLESS_INDEX;
-    bindings._pad0 = 0u;
+    bindings.exposure_status_uav = K_INVALID_BINDLESS_INDEX;
     bindings._pad1 = 0u;
     bindings._pad2 = 0u;
     return bindings;

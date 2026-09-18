@@ -13,6 +13,7 @@
 #include "Vortex/Services/Environment/AerialPerspective.hlsli"
 #include "Vortex/Contracts/Scene/SceneTextures.hlsli"
 #include "Vortex/Contracts/View/ViewFrameBindings.hlsli"
+#include "Vortex/Contracts/View/HdrConsumerInputs.hlsli"
 #include "Vortex/Services/Environment/AtmosphereParityCommon.hlsli"
 #include "Vortex/Shared/FullscreenTriangle.hlsli"
 #include "Vortex/Shared/PositionReconstruction.hlsli"
@@ -41,6 +42,7 @@ VortexFullscreenTriangleOutput VortexAtmosphereComposeVS(uint vertex_id : SV_Ver
 }
 
 [shader("pixel")]
+[earlydepthstencil]
 float4 VortexAtmosphereComposePS(VortexFullscreenTriangleOutput input) : SV_Target0
 {
     const SceneTextureBindingData bindings
@@ -69,6 +71,7 @@ float4 VortexAtmosphereComposePS(VortexFullscreenTriangleOutput input) : SV_Targ
     }
 
     const float3 sun_dir = GetSunDirectionWS();
+    RecordHdrConsumerUsage(HDR_CONSUMER_OPAQUE_AP);
     const AerialPerspectiveResult aerial = ComputeAerialPerspective(
         env_data,
         world_position,

@@ -30,12 +30,12 @@ def build_report(controller, report, capture_path, report_path):
         reads = [x.descriptor for x in pipeline.GetReadOnlyResources(rd.ShaderStage.Compute, True)]
         writes = [x.descriptor for x in pipeline.GetReadWriteResources(rd.ShaderStage.Compute, True)]
         if shader.entryPoint == "CheckSuitabilityProduct":
-            constants = [x for x in reads if x.byteSize == x.elementByteSize == 96]
+            constants = [x for x in reads if x.byteSize == x.elementByteSize == 128]
             if len(constants) != 1:
                 raise RuntimeError("Missing qualification constants")
             c = constants[0]
-            raw = bytes(controller.GetBufferData(c.resource, c.byteOffset, 96))
-            words = struct.unpack("<24I", raw)
+            raw = bytes(controller.GetBufferData(c.resource, c.byteOffset, 128))
+            words = struct.unpack("<32I", raw)
             if words[8] != 10:
                 continue
             if words[21] == 0xffffffff or words[22:] != (0, 0) or words[7] & 2:

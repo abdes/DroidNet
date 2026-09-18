@@ -36,6 +36,8 @@ struct TranslucencyExecutionResult {
   bool requested { false };
   bool executed { false };
   std::uint32_t draw_count { 0U };
+  //! Submitted triangle instances bound the number of blends at any pixel.
+  std::uint64_t triangle_count { 0U };
   TranslucencySkipReason skip_reason { TranslucencySkipReason::kNotRequested };
 };
 
