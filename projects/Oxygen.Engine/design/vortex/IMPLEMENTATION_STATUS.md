@@ -27,8 +27,9 @@ its implementation evidence, validation evidence, and remaining work.
 9. For subsequent broad native gates, freeze the checkpoint and binary/shader/
    fixture hashes, then delegate the specified test run to one validation
    subagent. Its mandate is test execution and reporting only: no edits, builds
-   or scope expansion. Continue independent work without changing tested inputs
-   or running competing GPU work; reconcile its result before committing.
+   or scope expansion. Continue source implementation, review and documentation
+   while it runs; defer only builds, runtime-input changes and competing GPU work.
+   Reconcile its result before committing.
    Keep short focused checks local and do not restart an already-running gate.
 
 ## 2. Status Vocabulary
@@ -52,8 +53,9 @@ remain in the linked local manifests and Git history.
 
 FP32 SceneColor accumulation in both modes is approved and required by the
 [allocation contract](lld/scene-textures.md#per-view-fp16-suitability).
-Automatic FP16 admission is not yet enabled. Complete LightBench and MultiView
-qualification remains required; the package is not complete.
+Production per-view FP16 admission is enabled and Debug-qualified by EX05-17.
+Complete LightBench, MultiView and Slice 5 acceptance remain required; the package
+is not complete.
 
 | Slice | Status | Current boundary / remaining gate | Evidence |
 | --- | --- | --- | --- |
@@ -61,7 +63,7 @@ qualification remains required; the package is not complete.
 | 2 — Settings and fixed exposure | validated | Canonical authored input, immutable pass snapshots, fixed/camera gain, per-view settings and public mask acceptance are qualified. | [Fixed gain](../../out/build-ninja/analysis/vortex/exposure-lightbench/fixed-gain/evidence-manifest.json), [frame bindings](../../out/build-ninja/analysis/vortex/exposure-lightbench/frame-binding/evidence-manifest.json), [configuration and mask acceptance](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/review-r028-manifest.json) |
 | 3 — Metering and adaptation | validated | Controlled-input histogram, curve, masks and hybrid adaptation; scene acceptance remains slice 5. | [Metering](../../out/build-ninja/analysis/vortex/exposure-lightbench/metering/evidence-manifest.json) |
 | 4 — GPU lifecycle and sharing | validated | Controlled-input/public-event gate, including offscreen routing. Real-scene resource lifetime is tracked in slice 5. | [Lifecycle](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/discontinuity-manifest.json), [offscreen sharing](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/offscreen-sharing-manifest.json) |
-| 5 — HDR migration and recovery | in_progress | P-domain plumbing and several precision components are validated; cumulative error bounds, production format switching and complete scene/MultiView acceptance remain. | [Detailed items](#32-slice-5-work-items) |
+| 5 — HDR migration and recovery | in_progress | P domains, cumulative error bounds, producer qualification, production format admission and queued mixed-format consumers are validated. Full recovery/retention/return and remaining scene/MultiView acceptance are open. | [Detailed items](#32-slice-5-work-items) |
 | 6 — Authoring and persistence | planned | Native physical-camera persistence and texture-resource-index mask contracts are approved; complete source/cook/load/script/editor/DemoShell round-trip remains. | [Detailed items](#33-slice-6-work-items) |
 | 7 — Light units | planned | Directional, point and spot numerical/visual calibration across forward and deferred paths remains. | [Detailed items](#34-slice-7-work-items) |
 | 8 — Measurements | planned | Implement instrumentation and qualify it against independent inputs. | [Detailed items](#35-slice-8-work-items) |
@@ -171,11 +173,19 @@ qualification remains required; the package is not complete.
   native capture verifies P=32768, S=0.25, accepted half conversion, the FP32
   fallback binding and final RGB 0.06053922 against 0.0605392157 including dither.
   [Admission evidence, commands, capture and hashes](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/admission-increment-manifest.json).
-  **Next item: EX05-18 — in progress.** Complete queued mixed-format family,
-  auxiliary/offscreen and conditional-consumer lifetime acceptance. EX05-19 still
-  owns the renderer-issued recovery/remeter event and full scene retention/return
-  matrix; a TODO marks that status-processing boundary. Release remains at Slice 5
-  closure under the agreed validation cadence.
+  **Completed: EX05-18 — validated in Debug.** The three-view native family
+  checks 18 mapped outputs across alternating submission order and mixed-format
+  exposure changes. Delayed tonemap consumers retain accepted half, rejected-half
+  fallback and full HDR inputs through frame-slot reuse and view removal, releasing
+  extraction owners before the consumer fence completes. A black sentinel in the
+  rejected half destination distinguishes bright FP32 fallback from incorrect half
+  sampling; an unconditional control reads black. The frozen native gate passes
+  all 190 tests with all 35 runtime hashes unchanged. The later test-only sentinel
+  enhancement passes its focused Debug test (five queued consumers).
+  [Queued-consumer evidence and commands](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/queued-consumer-manifest.json).
+  **Next: EX05-19.** Implement the renderer-issued recovery/remeter event and
+  full scene retention/return matrix; a TODO marks that status-processing boundary.
+  Release remains at Slice 5 closure under the agreed validation cadence.
   **Deferred feature boundaries:** owned bloom and specular/captured-sky products
   remain outside this increment. Their source TODOs link the owner plan and
   dependency issues; the active external-bloom audit remains EX05-09.
@@ -203,8 +213,8 @@ qualification remains required; the package is not complete.
   Default-size device placement measures 278,528 bytes for FP32 versus 139,264
   for equivalent FP16 resources: +136 KiB on this adapter per retained cache
   generation. Switching view modes reuses one canonical generation. Actual LUT
-  producer and sampling controls pass in both builds; the completed producer
-  matrix remains pending.
+  producer and sampling controls pass in both builds; the complete active producer
+  matrix is Debug-qualified by EX05-16.
   **Implemented upstream corrections:** retain local-fog extinction/falloff and
   emission in FP32 within the existing instance buffer (64 bytes, formerly 48).
   Preserve signed height integrals without overflowing a downward-ray intermediate.
@@ -218,9 +228,8 @@ qualification remains required; the package is not complete.
   refresh dispatches take 0.008912 ms (transmittance) and 0.020768 ms (multiple
   scattering). These are dispatch medians, not end-to-end frame latency or a
   measured FP16-to-FP32 timing delta; native queue intervals are also recorded.
-  **Remaining Slice 5 work:** production FP16 allocation switching,
-  mode-transition leases and scene-integrated recovery/retention/return remain
-  EX05-17–19. Other open slice items remain in the table below, including the
+  **Remaining Slice 5 work:** full scene-integrated recovery/retention/return
+  remains EX05-19. Other open slice items remain in the table below, including the
   external-bloom audit, mixed-content and complete native MultiView acceptance.
   The Slice 5 gate and Slices 6–10 remain open.
 
@@ -288,7 +297,8 @@ qualification remains required; the package is not complete.
   fixture. Physical-light calibration, all material families, ordinary AE
   readability and all MultiView layouts retain their separate acceptance rows.
   Consumer error propagation is closed in EX05-15; production format switching
-  and the remaining Slice 5 work are not complete.
+  is Debug-qualified in EX05-17 and queued consumers in EX05-18. Full recovery
+  acceptance remains EX05-19, followed by the other open Slice 5 gates.
 - **Delivery order:** finish Slice 5's gate before starting Slice 6 integration.
   Slices 6–10 remain required; their detailed items are below.
 
@@ -315,17 +325,17 @@ current status, including decisions that supersede older manifest limitations.
 | EX05-07 | Diagnostic colors, wireframe and display overlays | validated | Per-view unit-gain diagnostics, persistent exposure preservation and frame-retained overlay constants are qualified. Full feature-layout acceptance remains EX05-29. | [Diagnostics](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/diagnostic-manifest.json) |
 | EX05-08 | Canonical processed cubemap narrowing and upload packing | validated | Half/float resource choice, normalization and matching face/mip upload packing are qualified at the static-cubemap scope. | [Cubemap](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/cubemap-manifest.json) |
 | EX05-09 | Bloom and remaining temporal/capture domain audit | in_progress | The inventory finds no owned bloom radiance chain, dynamic captured-sky producer or TAA/TSR producer in this checkout. Explicit closure of active bloom handoff/threshold/shader paths and conditional-product coverage remains; absence of an allocator is not blanket completion. | [Inventory](lld/scene-textures.md#exposure-hdr-domain-and-format-inventory), [section 4.4](plan/exposure-and-lightbench-correction.md#44-migrate-every-active-producer-and-consumer-together) |
-| EX05-10 | Checked SceneColor conversion and conditional FP32 tonemap fallback | validated | Whole-image check precedes narrowing; rejected half contents are not sampled; current conversion verdict is separate from future-candidate qualification. Production allocation/handoff wiring remains EX05-17–18. | [Conversion](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/conversion-manifest.json), [selection](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/selection-manifest.json), [separate reports](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/precision-status-manifest.json) |
+| EX05-10 | Checked SceneColor conversion and conditional FP32 tonemap fallback | validated | Whole-image check precedes narrowing; rejected half contents are not sampled; current conversion verdict is separate from future-candidate qualification. Production admission and checked handoff are implemented in EX05-17; queued consumers are Debug-qualified in EX05-18. | [Conversion](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/conversion-manifest.json), [selection](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/selection-manifest.json), [separate reports](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/precision-status-manifest.json) |
 | EX05-11 | GPU per-view suitability and two-result stability | validated | Required-product identity, candidate P, own precision history for borrowers, streak reset and bounded status publication are qualified as primitives. | [Eligibility](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/eligibility-manifest.json) |
 | EX05-12 | Completed-status candidate selection and failure invalidation | validated | Lifetime/settings/layout/generation checks, bounded retry queue, stale-result rejection and failed-solve/fallback invalidation are qualified. Successful same-frame reuse retains acknowledgement. | [Status selection](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/precision-status-manifest.json), [R034 correction](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/review-r034-manifest.json) |
 | EX05-13 | Collect real required scene-reference products | validated | Persistent scene views collect SceneColor, sky-view, AP and fog; missing producers remain missing requirements. Native capture checks 151,424 texels per view in the environment fixture. | [Required products](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/required-products-manifest.json) |
 | EX05-14 | Finite/overflow checks before environment stores | validated | Sky-view/AP/fog report original finite/nonfinite and FP16 headroom failures through the existing status. Auto does not adapt from a producer-failed image. This is not a quantization certificate. | [Pre-store range](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/prestore-range-manifest.json) |
-| EX05-15 | Quantization, cumulative image/meter error and temporal bounds | validated | Hardware-filtered current/candidate certificates cover producer stores, retained history, sky/AP/fog/translucent composition, coverage/depth and final image/meter tolerances. Preparation precedes checked conversion; eligibility follows it. GPU status384 / CPU prefix80; no additional HDR texture. Debug/Release each pass 330 owning tests and 308,016 exact arithmetic checks. Final Release Fog/Local audits pass 8,192 transfers; the four-phase visual/ROI cycle and 12 negative controls pass. User confirmed the local-fog lifetime correction. Controlled 1080p/4K and actual two-view scene costs are recorded. Production format switching remains EX05-17. | [Completion evidence and commands](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/consumer-completion-manifest.json), [Runtime contract](lld/post-process-service.md#quantization-error-propagation), [Per-view budgets](lld/scene-textures.md#per-view-fp16-suitability) |
+| EX05-15 | Quantization, cumulative image/meter error and temporal bounds | validated | Hardware-filtered current/candidate certificates cover producer stores, retained history, sky/AP/fog/translucent composition, coverage/depth and final image/meter tolerances. Preparation precedes checked conversion; eligibility follows it. GPU status384 / CPU prefix80; no additional HDR texture. Debug/Release each pass 330 owning tests and 308,016 exact arithmetic checks. Final Release Fog/Local audits pass 8,192 transfers; the four-phase visual/ROI cycle and 12 negative controls pass. User confirmed the local-fog lifetime correction. Controlled 1080p/4K and actual two-view scene costs are recorded. Production format switching and queued consumers are Debug-qualified in EX05-17–18. | [Completion evidence and commands](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/consumer-completion-manifest.json), [Runtime contract](lld/post-process-service.md#quantization-error-propagation), [Per-view budgets](lld/scene-textures.md#per-view-fp16-suitability) |
 | EX05-16 | Full supported-radiance envelope at upstream producers | validated | Active producer matrix and pre-composition source checks qualified in Debug. Final gate: 350 tests; after the no-prepass depth-publication correction, 65 affected tests pass (80 native cases). Lighting matrices cover 324 direct, 180 SH, 144 analytic sky and 10 distant-sky cases; compiled replay and targeted capture are inspected. Release remains at Slice 5 closure. | [Lighting/source closure](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/lighting-producer-increment-manifest.json), [producer mapping](lld/scene-textures.md#producer-range-qualification), [environment increment](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/domain-producer-increment-manifest.json), [material increment](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/material-domain-increment-manifest.json), [injection increment](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/injection-increment-manifest.json) |
 | EX05-17 | Production per-view FP16 admission and allocation switching | validated | Early current-layout/source-compatible candidate selection is enabled. FP32 accumulation, half-capable environment qualification, checked resolve/fallback and supporting ownership are implemented. All 382 owning Debug tests pass; native admission, eight resize/view cases, source changes, fallback retention/failures and inspected S/P capture pass. Vacuum-layout proof is distinct from remaining nonzero/full recovery acceptance. | [Completion evidence](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/admission-increment-manifest.json), [resource contract](lld/scene-textures.md#per-view-fp16-suitability) |
-| EX05-18 | Checked resolve extraction and all conditional-consumer leases | in_progress | Production checked resolve, retained artifact/descriptor/family ownership, texture-only FP32 access and basic retained-content/fence tests are implemented with EX05-17. Complete queued mixed-format families, auxiliary/offscreen consumers and mode-transition lifetime matrix remain. | [Admission/ownership increment](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/admission-increment-manifest.json), [selection boundary](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/selection-manifest.json) |
-| EX05-19 | Automatic recovery, excessive-range retention and stable return | planned | End-to-end mode switching/recovery is not implemented. Prove sustained FP32 without repeated resets, reduced-range return and contrasting shared consumers. Depends on EX05-15–18. | [Section 4.5 requirements](plan/exposure-and-lightbench-correction.md#45-first-frame-and-discontinuity-headroom) |
-| EX05-20 | Scene/environment descriptors, histories and queued constants retire safely | validated | Same-frame offscreen resources, fog/HZB removal, transient histories and queued HZB constants are qualified. Mode-transition-specific leases remain EX05-18. | [Environment retirement](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/review-r027-manifest.json), [fog/HZB lifetime](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/review-lifetime-manifest.json) |
+| EX05-18 | Checked resolve extraction and all conditional-consumer leases | validated | EX05-17 ownership is qualified through a three-view mixed-format auxiliary family (18 outputs) and delayed offscreen HDR consumers across slot reuse/view removal. Five queued tonemap consumers cover accepted half, deterministic rejected-half fallback/control and full formats, with extraction release before the fence. Frozen Debug gate: 190 passed; later sentinel-only focused test passed. Release remains at Slice 5 closure. | [Queued-consumer evidence](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/queued-consumer-manifest.json), [ownership contract](lld/scene-textures.md#36-scenetextureextracts), [Admission/ownership increment](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/admission-increment-manifest.json) |
+| EX05-19 | Automatic recovery, excessive-range retention and stable return | planned | Production admission and basic store-failure fallback are implemented. The renderer-issued recovery/remeter event and full scene matrix remain: sustained FP32 without repeated resets, reduced-range return and contrasting shared consumers. Depends on EX05-15–18. | [Section 4.5 requirements](plan/exposure-and-lightbench-correction.md#45-first-frame-and-discontinuity-headroom) |
+| EX05-20 | Scene/environment descriptors, histories and queued constants retire safely | validated | Same-frame offscreen resources, fog/HZB removal, transient histories and queued HZB constants are qualified. Mode-transition-specific leases are Debug-qualified in EX05-18. | [Environment retirement](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/review-r027-manifest.json), [fog/HZB lifetime](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/review-lifetime-manifest.json) |
 | EX05-21 | Actual memory and bandwidth accounting | planned | Per-texture format-size arithmetic is documented. Measured totals across active products/concurrent views/retained leases and target-device pass timings remain. | [Accounting requirements](lld/scene-textures.md#lifetime-and-memory-accounting) |
 | EX05-22 | Scene startup/cuts/seeds/modes/pause lifecycle matrix | in_progress | Native retry/domain cases and paused MultiView event fixtures exist. Complete scene-integrated active adaptation, startup/cut HDR endpoints and recovery combinations remain. | [Scene migration](../../out/build-ninja/analysis/vortex/exposure-lightbench/scene/scene-migration-manifest.json), [mode fixtures](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/modes-manifest.json) |
 | EX05-23 | Inactive, removed, recreated and replaced-world view lifecycle | in_progress | Short hide/reopen and recreated-handle proofs exist. Long-idle expiration and world replacement in the complete scene matrix remain. | [Lifetime fixture](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/lifetime-manifest.json) |

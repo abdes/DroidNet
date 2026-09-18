@@ -584,8 +584,12 @@ Handoff artifacts produced during post-render cleanup.
 
 ```cpp
 struct SceneTextureExtractRef {
+  std::shared_ptr<const graphics::Texture> retained_texture;
   graphics::Texture* texture{nullptr};  // extracted/handoff artifact
   bool valid{false};
+  std::shared_ptr<const postprocess::FrameExposureResources> exposure;
+  graphics::Texture* fallback{nullptr}; // original FP32 accumulation, if conditional
+  std::shared_ptr<const SceneTextureLease> source_lease;
 };
 
 struct SceneTextureExtracts {
@@ -601,11 +605,24 @@ struct SceneTextureExtracts {
 
 **Ownership:** `SceneRenderer` produces the resolved artifacts at stage 21 and
 finalizes the handoff/history set during `PostRenderCleanup` (stage 23).
-Renderer Core helper surfaces may consume extracted artifacts for composition
-handoff or history management. The extract refs are non-owning descriptors for
-explicit copied handoff artifacts; they are not permission to treat live
-`SceneTextures` attachments as extracted outputs. `resolved_scene_color` is the
-artifact that Renderer Core composition consumes for the published scene view.
+Queued consumers retain the complete extract record. It owns the artifact and
+registered views, frame-pinned exposure and conversion report, and the family
+lease protecting the original FP32 accumulation. View removal, subsequent
+format changes and frame-slot reuse cannot replace those inputs. After submission,
+the existing GPU-frame reclaimer protects resources until the consumer fence
+retires, even when the final extraction owner has been released.
+
+Stage 22 tonemap consumes conditional resolved color by binding both sources and
+the same conversion report: an accepted conversion selects the half artifact;
+a rejected conversion selects the retained FP32 source. Texture-only access via
+`GetResolvedSceneColorTexture()` returns an owning reference to the unconditional
+FP32 source. These handoff contracts do not authorize caching a raw pointer to a
+live `SceneTextures` attachment.
+
+Auxiliary and offscreen composition publish the producer's post-process output.
+It is already display-mapped with that producer's exposure. Composition copies
+that output without applying the consuming view's exposure again. The consumer
+may independently render its own scene in a different HDR format.
 
 **File:** `SceneRenderer/SceneTextures.h`
 
