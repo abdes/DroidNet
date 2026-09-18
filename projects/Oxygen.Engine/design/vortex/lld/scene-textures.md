@@ -256,6 +256,47 @@ by a guessed fixed frame count or count aliased SceneColor consumers as separate
 textures. Bandwidth increases for each actual read/write of a promoted product;
 record those passes and target-device timings in slice-5/10 reports.
 
+The native EX05-21 fixture observes committed D3D12 texture footprints at every
+texture creation and at named lifecycle checkpoints. Weak references and native
+resource identity avoid extending lifetimes or double-counting aliases. It reports
+raw texel bytes separately from device placement requirements, and pool allocation
+counts separately from leased families. The pool retains reusable allocations
+after view/consumer release; those bytes remain part of the cached footprint.
+Caller output targets, buffers, descriptor heaps and unrelated backend allocations
+are outside this texture report.
+
+The Debug qualification uses a full-resolution main view and a second view at
+half width/height, an emissive surface, vacuum atmosphere and zero-extinction fog.
+Both use the default LUT/volume dimensions. Temporal reuse is a separate control:
+its retained uncertainty conservatively rejects the prospective half scene
+certificate in this fixture, while the non-temporal control qualifies for FP16.
+The controls therefore vary temporal work as well as format; their difference is
+not an isolated format-only cost.
+
+| Main / second view | Temporal fog / steady HDR mode | Two-view HDR MiB | Creation-time peak MiB | Cached after retirement MiB |
+| --- | --- | ---: | ---: | ---: |
+| 1920x1080 / 960x540 | Off / FP16 | 229.328 | 294.953 | 86.578 |
+| 1920x1080 / 960x540 | On / FP32 retention | 374.453 | 384.016 | 86.578 |
+| 3840x2160 / 1920x1080 | Off / FP16 | 827.328 | 1075.828 | 322.828 |
+| 3840x2160 / 1920x1080 | On / FP32 retention | 1375.641 | 1410.578 | 322.828 |
+
+All four cases retain two outputs across settings invalidation requiring FP32,
+then release them and cross the actual fence/slot-retirement boundaries. Four cached families
+remain, with no leased family after retirement. The two canonical LUTs keep one
+shared generation. For one SceneColor allocation, the measured FP32 footprint
+is 33.750 MiB at 1080p and 127.500 MiB at 4K; querying the same descriptor in FP16
+gives 16.875 and 63.750 MiB. These device placement deltas differ from raw texel
+arithmetic and are specific to the captured adapter/descriptor flags.
+
+Four inspected captures verify selected sources, pinned P/S and final consumption.
+The traffic report counts primary qualification loads, checked resolve or copy,
+tonemap, and full sky/AP/fog UAV stores from their actual shapes/formats. It keeps
+filtered taps, side/buffer reads, blending and compression outside those byte
+totals. Logical transfer quantities and warm replay event durations are reported
+separately from physical DRAM bandwidth or whole-frame latency. Debug timing is
+qualified here; Release performance qualification remains at Slice 5 closure.
+[Native reports, capture analysis, exact commands and scope](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/accounting-manifest.json).
+
 ### Allocation contract
 
 SceneTexturesConfig and SceneTextureLeaseKey carry the actual SceneColor format;

@@ -63,7 +63,7 @@ is not complete.
 | 2 — Settings and fixed exposure | validated | Canonical authored input, immutable pass snapshots, fixed/camera gain, per-view settings and public mask acceptance are qualified. | [Fixed gain](../../out/build-ninja/analysis/vortex/exposure-lightbench/fixed-gain/evidence-manifest.json), [frame bindings](../../out/build-ninja/analysis/vortex/exposure-lightbench/frame-binding/evidence-manifest.json), [configuration and mask acceptance](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/review-r028-manifest.json) |
 | 3 — Metering and adaptation | validated | Controlled-input histogram, curve, masks and hybrid adaptation; scene acceptance remains slice 5. | [Metering](../../out/build-ninja/analysis/vortex/exposure-lightbench/metering/evidence-manifest.json) |
 | 4 — GPU lifecycle and sharing | validated | Controlled-input/public-event gate, including offscreen routing. Real-scene resource lifetime is tracked in slice 5. | [Lifecycle](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/discontinuity-manifest.json), [offscreen sharing](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/offscreen-sharing-manifest.json) |
-| 5 — HDR migration and recovery | in_progress | P domains, cumulative error bounds, producer qualification, production format admission and queued mixed-format consumers are validated. Automatic recovery/retention/return is Debug-qualified; resource accounting and remaining scene/MultiView acceptance are open. | [Detailed items](#32-slice-5-work-items) |
+| 5 — HDR migration and recovery | in_progress | P domains, cumulative error bounds, producer qualification, production format admission and queued mixed-format consumers are validated. Automatic recovery/retention/return is Debug-qualified; remaining scene/MultiView acceptance is open; allocation/transfer costs are Debug-qualified. | [Detailed items](#32-slice-5-work-items) |
 | 6 — Authoring and persistence | planned | Native physical-camera persistence and texture-resource-index mask contracts are approved; complete source/cook/load/script/editor/DemoShell round-trip remains. | [Detailed items](#33-slice-6-work-items) |
 | 7 — Light units | planned | Directional, point and spot numerical/visual calibration across forward and deferred paths remains. | [Detailed items](#34-slice-7-work-items) |
 | 8 — Measurements | planned | Implement instrumentation and qualify it against independent inputs. | [Detailed items](#35-slice-8-work-items) |
@@ -208,10 +208,22 @@ is not complete.
   requirements are documented; shader, temporal-history and captured-sky TODOs
   identify the deferred activation work. No owned bloom filter or TAA/TSR/capture
   producer is claimed. [Audit, commands and evidence](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/bloom-handoff-manifest.json).
-  **Next: EX05-21.** Measure actual HDR allocations, simultaneous views and
-  retained/cached generations, plus pass traffic and timing. Remaining scene/
-  MultiView lifecycle items keep their own gates below. Release remains at Slice 5
-  closure.
+  **Completed: EX05-21 — validated in Debug.** Four native 1080p/4K ×
+  temporal-off/on cases pass with 35 unchanged frozen runtime hashes. Weak native
+  resource tracking counts each committed texture once, records peaks at creation,
+  and separates raw bytes, placement bytes, retained leases and cached families.
+  With two views, qualified-FP16 HDR footprints are 229.328/827.328 MiB at the
+  steady checkpoint (1080p/4K main); peaks are 294.953/1075.828 MiB. Temporal-fog
+  controls conservatively retain FP32: steady 374.453/1375.641 MiB, peak
+  384.016/1410.578 MiB. These controls vary temporal work and format together.
+  Four inspected captures verify actual formats, S/P, final pixels, logical
+  primary reads and sky/AP/fog/resolve/tonemap writes. Warm Debug event durations
+  are recorded separately from logical bytes and physical DRAM bandwidth.
+  The report excludes caller outputs, buffers, heaps and unrelated backend
+  allocations; Release performance remains at Slice 5 closure.
+  [Allocation/traffic/timing evidence and commands](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/accounting-manifest.json).
+  **Next: EX05-22.** Close the remaining scene startup/cut/seed/mode/pause
+  combinations, followed by the other open lifecycle and MultiView gates.
   **Deferred feature boundaries:** owned bloom, temporal color and specular/
   captured-sky products retain their source TODOs and feature dependency issues.
   **Domain implementation:** failure kind 32 distinguishes unsupported
@@ -253,8 +265,8 @@ is not complete.
   refresh dispatches take 0.008912 ms (transmittance) and 0.020768 ms (multiple
   scattering). These are dispatch medians, not end-to-end frame latency or a
   measured FP16-to-FP32 timing delta; native queue intervals are also recorded.
-  **Remaining Slice 5 work:** actual resource accounting, remaining scene
-  lifecycle combinations and complete native MultiView acceptance.
+  **Remaining Slice 5 work:** remaining scene lifecycle combinations and
+  complete native MultiView acceptance, plus Release closure qualification.
   EX05-19 closes the named recovery/retention/return matrix, not these other gates.
   The Slice 5 gate and Slices 6–10 remain open.
 
@@ -361,7 +373,7 @@ current status, including decisions that supersede older manifest limitations.
 | EX05-18 | Checked resolve extraction and all conditional-consumer leases | validated | EX05-17 ownership is qualified through a three-view mixed-format auxiliary family (18 outputs) and delayed offscreen HDR consumers across slot reuse/view removal. Five queued tonemap consumers cover accepted half, deterministic rejected-half fallback/control and full formats, with extraction release before the fence. Frozen Debug gate: 190 passed; later sentinel-only focused test passed. Release remains at Slice 5 closure. | [Queued-consumer evidence](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/queued-consumer-manifest.json), [ownership contract](lld/scene-textures.md#36-scenetextureextracts), [Admission/ownership increment](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/admission-increment-manifest.json) |
 | EX05-19 | Automatic recovery, excessive-range retention and stable return | validated | Producer failures request one implicit Auto Remeter; conversion-only rejection preserves valid adaptation. Fixed/disabled/borrowed failures and newer explicit requests retain authority. Native scene tests cover five owner/control modes, six-frame unsupported retention, 46-stop FP32 adaptation, reduced-range return and contrasting shared formats. Debug gate: 238 passed; 37 frozen hashes unchanged. Release and other lifecycle combinations remain at their slice gates. | [Recovery evidence](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/recovery-increment-manifest.json), [runtime contract](lld/post-process-service.md#bootstrap-recovery-and-format-eligibility) |
 | EX05-20 | Scene/environment descriptors, histories and queued constants retire safely | validated | Same-frame offscreen resources, fog/HZB removal, transient histories and queued HZB constants are qualified. Mode-transition-specific leases are Debug-qualified in EX05-18. | [Environment retirement](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/review-r027-manifest.json), [fog/HZB lifetime](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/review-lifetime-manifest.json) |
-| EX05-21 | Actual memory and bandwidth accounting | planned | Per-texture format-size arithmetic is documented. Measured totals across active products/concurrent views/retained leases and target-device pass timings remain. | [Accounting requirements](lld/scene-textures.md#lifetime-and-memory-accounting) |
+| EX05-21 | Actual memory and bandwidth accounting | validated | Four opt-in native 1080p/4K × temporal-off/on cases pass; creation-time peaks, retained outputs, cached families and shared canonical LUTs are measured from deduplicated D3D12 resources. Four capture replays verify format/P/S and final pixels, direct logical texture traffic including promoted producer writes, and warm Debug event times. Texture/report exclusions are explicit; Release performance remains at Slice 5 closure. | [Full evidence and scope](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/accounting-manifest.json), [allocation contract and measured table](lld/scene-textures.md#lifetime-and-memory-accounting) |
 | EX05-22 | Scene startup/cuts/seeds/modes/pause lifecycle matrix | in_progress | Native retry/domain cases and paused MultiView event fixtures exist. Complete scene-integrated active adaptation, startup/cut HDR endpoints and recovery combinations remain. | [Scene migration](../../out/build-ninja/analysis/vortex/exposure-lightbench/scene/scene-migration-manifest.json), [mode fixtures](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/modes-manifest.json) |
 | EX05-23 | Inactive, removed, recreated and replaced-world view lifecycle | in_progress | Short hide/reopen and recreated-handle proofs exist. Long-idle expiration and world replacement in the complete scene matrix remain. | [Lifetime fixture](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/lifetime-manifest.json) |
 | EX05-24 | Shared exposure and source-loss scene combinations | in_progress | Static prior-owner sharing and a source-loss sequence are qualified. Remaining borrowed zero/manual/disabled and feature/layout combinations are not closed. | [Isolation/sharing](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/static-matrix-manifest.json), [source loss](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/source-loss-manifest.json) |
