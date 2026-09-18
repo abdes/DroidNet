@@ -266,6 +266,16 @@ public:
   OXGN_VRTX_API auto RemoveViewState(ViewId view_id) -> void;
   OXGN_VRTX_API auto RefreshPersistentProbeState(
     bool environment_source_changed) -> void;
+  struct ViewRadianceLayout {
+    glm::uvec3 sky_view {};
+    glm::uvec3 aerial_perspective {};
+    glm::uvec3 volumetric_fog {};
+    float aerial_rgb_gain { 1.0F };
+  };
+  //! Describe required allocations before any view-dependent radiance is
+  //! written.
+  [[nodiscard]] OXGN_VRTX_API auto DescribeViewRadianceLayout(
+    const RenderContext& ctx) -> ViewRadianceLayout;
   [[nodiscard]] OXGN_VRTX_API auto BuildBindings(
     ShaderVisibleIndex environment_static_slot,
     ShaderVisibleIndex environment_view_slot,

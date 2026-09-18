@@ -611,8 +611,10 @@ auto PostProcessService::ConvertSceneColor(RenderContext& ctx,
   const bool initial_mask_unavailable = settings.revision == 0U
     && (settings.mask_status == ExposureMaskStatus::kPending
       || settings.mask_status == ExposureMaskStatus::kFailed);
-  if (initial_mask_unavailable || (needs_mask && !mask))
+  if (initial_mask_unavailable || (needs_mask && !mask)) {
+    InvalidatePrecision(prepared.handle);
     return false;
+  }
   std::uint32_t composition_products = 0U;
   if (prepared.precision_epoch) {
     if (precision == precision_states_.end()
@@ -621,14 +623,17 @@ auto PostProcessService::ConvertSceneColor(RenderContext& ctx,
       return false;
     composition_products = precision->second.expected_products;
   }
-  return exposure_pass_->ConvertCheckedSceneColor(ctx, prepared.exposure.frame,
-    prepared.config,
+  const bool submitted = exposure_pass_->ConvertCheckedSceneColor(ctx,
+    prepared.exposure.frame, prepared.config,
     { .scene_signal = inputs.scene_signal,
       .scene_signal_srv = inputs.scene_signal_srv,
       .metering_mask = mask ? mask->texture.get() : nullptr,
       .metering_mask_srv = mask ? mask->srv : kInvalidShaderVisibleIndex,
       .composition_products = composition_products },
     destination, destination_uav);
+  if (!submitted)
+    InvalidatePrecision(prepared.handle);
+  return submitted;
 }
 
 auto PostProcessService::CurrentExposureGeneration(
@@ -669,12 +674,37 @@ auto PostProcessService::SelectPrecisionCandidate(RenderContext& ctx,
   const bool diagnostic = GetConfig().temporary_unit_exposure
     || ctx.shader_debug_mode != ShaderDebugMode::kDisabled
     || ctx.render_mode == RenderMode::kWireframe;
+  const auto source_handle = ctx.current_view.exposure_view_state_handle;
+  const auto* source = !diagnostic
+      && source_handle != CompositionView::kInvalidViewStateHandle
+      && source_handle != handle
+    ? &CaptureSharedExposureSource(
+        ctx, ctx.current_view.exposure_view_id, source_handle)
+    : nullptr;
+  const auto source_identity
+    = source ? source->handle : CompositionView::kInvalidViewStateHandle;
+  const auto source_lifetime = source ? source->lifetime : 0U;
+  const auto source_revision = source ? source->config.Revision() : 0U;
+  const auto source_generation
+    = source && source->transition ? source->transition->generation : 0U;
+  const auto source_transition = source
+    ? renderer_.InspectExposureTransition(source->handle)
+    : std::nullopt;
+  const bool source_pending = source_transition
+    && source_transition->phase == ExposureTransitionPhase::kQueued
+    && source_transition->applied_generation
+      < source_transition->request.generation;
   auto& precision = precision_states_[handle];
   const bool changed = precision.lifetime != settings.lifetime
     || precision.settings_revision != settings.revision
     || precision.layout_revision != requirements.product_layout_revision
     || precision.expected_products != requirements.expected_products
     || precision.transition_generation != generation
+    || precision.source_handle != source_identity
+    || precision.source_lifetime != source_lifetime
+    || precision.source_revision != source_revision
+    || precision.source_generation != source_generation
+    || precision.source_pending != source_pending
     || precision.diagnostic != diagnostic;
   if (changed
     || (requirements.invalidate_previous
@@ -687,6 +717,11 @@ auto PostProcessService::SelectPrecisionCandidate(RenderContext& ctx,
     precision.layout_revision = requirements.product_layout_revision;
     precision.expected_products = requirements.expected_products;
     precision.transition_generation = generation;
+    precision.source_handle = source_identity;
+    precision.source_lifetime = source_lifetime;
+    precision.source_revision = source_revision;
+    precision.source_generation = source_generation;
+    precision.source_pending = source_pending;
     precision.diagnostic = diagnostic;
     precision.restart_streak = true;
     precision.last_completed_frame = 0U;
@@ -694,6 +729,8 @@ auto PostProcessService::SelectPrecisionCandidate(RenderContext& ctx,
   }
   precision.configured_frame = ctx.frame_sequence;
   if (diagnostic)
+    return {};
+  if (source_pending)
     return {};
   const auto transition = renderer_.InspectExposureTransition(handle);
   if (transition && transition->phase == ExposureTransitionPhase::kQueued
@@ -1116,6 +1153,10 @@ auto PostProcessService::PollExposureStatus() -> void
         if (IsPrecisionStatusNeeded(job)) {
           auto& precision = precision_states_.at(job.handle);
           precision.last_completed_frame = job.frame_sequence;
+          // TODO(EX05-19): issue one renderer-owned recovery/remeter transition
+          // for a newly completed normal-mode range failure. FP32 suitability
+          // retention must not repeatedly reset numerical exposure history.
+          // Scope: design/vortex/IMPLEMENTATION_STATUS.md, EX05-19.
           const bool eligible = (status.flags & 7U) == 5U
             && status.fp16_eligible_streak == 2U
             && integer(status.candidate_state_generation) == job.frame_sequence;

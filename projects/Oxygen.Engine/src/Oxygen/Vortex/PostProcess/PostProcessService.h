@@ -247,6 +247,13 @@ private:
     std::uint64_t layout_revision { 0U };
     std::uint32_t expected_products { 0U };
     std::uint64_t transition_generation { 0U };
+    CompositionView::ViewStateHandle source_handle {
+      CompositionView::kInvalidViewStateHandle
+    };
+    std::uint64_t source_lifetime { 0U };
+    std::uint64_t source_revision { 0U };
+    std::uint64_t source_generation { 0U };
+    bool source_pending { false };
     std::uint64_t epoch { 0U };
     std::uint64_t last_completed_frame { 0U };
     frame::SequenceNumber configured_frame { 0U };

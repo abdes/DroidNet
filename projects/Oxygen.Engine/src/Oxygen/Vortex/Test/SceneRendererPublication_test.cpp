@@ -6,7 +6,10 @@
 
 #include <Oxygen/Testing/GTest.h>
 
+#include <array>
+#include <cstring>
 #include <memory>
+#include <vector>
 #include <limits>
 #include <ranges>
 
@@ -1133,27 +1136,37 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
   second_context.current_view.screen_hzb_request.current_closest = true;
   second_context.current_view.screen_hzb_request.current_furthest = true;
 
-  const auto constant_buffer_count = [&]() {
-    return graphics_->GetDescriptorAllocator()
-      .GetAllocatedDescriptorsCount(
-        oxygen::graphics::ResourceViewType::kConstantBuffer,
-        oxygen::graphics::DescriptorVisibility::kShaderVisible)
-      .get();
+  struct Snapshot {
+    oxygen::ShaderVisibleIndex slot;
+    const std::byte* data;
+    std::array<std::byte, 48U> bytes;
   };
-
-  const auto before = constant_buffer_count();
+  std::vector<Snapshot> first_payloads;
+  graphics_->buffer_view_log_.events.clear();
   screen_hzb.OnFrameStart();
   screen_hzb.Execute(first_context, scene_textures);
-  const auto after_first_view = constant_buffer_count();
-  EXPECT_GT(after_first_view, before);
-
+  ASSERT_FALSE(graphics_->buffer_view_log_.events.empty());
+  for (const auto& event : graphics_->buffer_view_log_.events) {
+    ASSERT_EQ(event.stride, 48U);
+    ASSERT_GE(event.size, 48U);
+    Snapshot copy { event.slot, event.data, {} };
+    std::memcpy(copy.bytes.data(), event.data, copy.bytes.size());
+    first_payloads.push_back(copy);
+  }
+  graphics_->buffer_view_log_.events.clear();
   screen_hzb.Execute(second_context, scene_textures);
-  const auto after_second_view = constant_buffer_count();
-  EXPECT_GT(after_second_view, after_first_view);
-
+  ASSERT_FALSE(graphics_->buffer_view_log_.events.empty());
+  for (const auto& first : first_payloads) {
+    EXPECT_EQ(std::memcmp(first.data, first.bytes.data(), first.bytes.size()), 0);
+    for (const auto& second : graphics_->buffer_view_log_.events)
+      EXPECT_NE(first.slot, second.slot);
+  }
+  // A repeated setup in the same frame cannot overwrite already queued data.
   screen_hzb.OnFrameStart();
   screen_hzb.Execute(first_context, scene_textures);
-  EXPECT_EQ(constant_buffer_count(), after_second_view);
+  for (const auto& first : first_payloads)
+    EXPECT_EQ(std::memcmp(first.data, first.bytes.data(), first.bytes.size()), 0);
+
 }
 
 NOLINT_TEST_F(SceneRendererPublicationTest,
@@ -1297,6 +1310,9 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
   auto render_context = MakeSceneRenderContext(
     scene, view_id, resolved_view, oxygen::observer_ptr { framebuffer.get() });
 
+  render_context.current_view.view_state_handle = CompositionView::ViewStateHandle { 23U };
+  render_context.frame_views.front().view_state_handle = CompositionView::ViewStateHandle { 23U };
+
   PrepareFrameContext(
     frame_context, oxygen::frame::SequenceNumber { 5U }, oxygen::frame::Slot { 0U });
   render_context.frame_sequence = oxygen::frame::SequenceNumber { 5U };
@@ -1417,11 +1433,8 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
                  return !target.blend_enable;
                });
         }
-        const auto expected_src_blend
-          = pipeline_name == "Vortex.Environment.Fog"
-          ? oxygen::graphics::BlendFactor::kOne
-          : oxygen::graphics::BlendFactor::kSrcAlpha;
-        // Fog exports opacity (1 - transmittance), with premultiplied RGB.
+        const auto expected_src_blend = oxygen::graphics::BlendFactor::kOne;
+        // Both fog and AP export opacity with premultiplied RGB.
         // Both passes therefore retain destination * (1 - output alpha).
         return !blend_state.empty()
           && std::ranges::all_of(blend_state, [&](const auto& target) {

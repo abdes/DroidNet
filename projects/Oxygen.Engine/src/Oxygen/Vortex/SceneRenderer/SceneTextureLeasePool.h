@@ -52,6 +52,7 @@ struct SceneTextureLeaseKey {
 };
 
 class SceneTextureLeasePool;
+struct SceneTextureLeaseStorage;
 
 class SceneTextureLease {
 public:
@@ -75,12 +76,9 @@ public:
 private:
   friend class SceneTextureLeasePool;
 
-  SceneTextureLease(SceneTextureLeasePool& pool, std::size_t slot,
-    std::uint64_t generation) noexcept;
-
-  SceneTextureLeasePool* pool_ { nullptr };
-  std::size_t slot_ { 0U };
-  std::uint64_t generation_ { 0U };
+  explicit SceneTextureLease(
+    std::shared_ptr<SceneTextureLeaseStorage> storage) noexcept;
+  std::shared_ptr<SceneTextureLeaseStorage> storage_;
 };
 
 class SceneTextureLeasePool {
@@ -108,16 +106,6 @@ public:
 private:
   friend class SceneTextureLease;
 
-  struct Entry {
-    SceneTextureLeaseKey key {};
-    std::unique_ptr<SceneTextures> scene_textures;
-    bool active { false };
-    std::uint64_t generation { 0U };
-    std::uint64_t lease_id { 0U };
-  };
-
-  OXGN_VRTX_API void Release(
-    std::size_t slot, std::uint64_t generation) noexcept;
   [[nodiscard]] OXGN_VRTX_API auto BuildConfig(
     const SceneTextureLeaseKey& key) const -> SceneTexturesConfig;
   [[nodiscard]] OXGN_VRTX_API auto CountLiveLeasesForKey(
@@ -126,7 +114,7 @@ private:
   Graphics& gfx_;
   SceneTexturesConfig base_config_;
   std::size_t max_live_leases_per_key_ { 16U };
-  std::vector<Entry> entries_;
+  std::vector<std::shared_ptr<SceneTextureLeaseStorage>> entries_;
   std::size_t allocation_count_ { 0U };
   std::uint64_t next_lease_id_ { 1U };
 };

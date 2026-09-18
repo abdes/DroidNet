@@ -24,6 +24,7 @@
 #include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/Environment/Types/EnvironmentAmbientBridgeBindings.h>
 #include <Oxygen/Vortex/Lighting/Types/FrameLightingInputs.h>
+#include <Oxygen/Vortex/PostProcess/PostProcessService.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextureLeasePool.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
 #include <Oxygen/Vortex/SceneRenderer/ShadingMode.h>
@@ -254,6 +255,8 @@ private:
   };
   std::unordered_map<CompositionView::ViewStateHandle, ExposureProductLayout>
     exposure_product_layouts_;
+  auto DescribeExposureProductLayout(const RenderContext& ctx)
+    -> ExposureProductLayout;
 
   struct ExtractArtifact {
     std::shared_ptr<graphics::Texture> texture;
@@ -272,8 +275,8 @@ private:
   OXGN_VRTX_API void BindPreparedView(RenderContext& ctx);
   OXGN_VRTX_API void RenderCurrentView(RenderContext& ctx);
   OXGN_VRTX_API auto EnsureArtifactTexture(ExtractArtifact& artifact,
-    std::string_view debug_name, const graphics::Texture& source)
-    -> graphics::Texture*;
+    std::string_view debug_name, const graphics::Texture& source,
+    std::optional<Format> format = {}) -> graphics::Texture*;
   OXGN_VRTX_NDAPI auto ResolveVelocitySourceTexture() const
     -> const graphics::Texture*;
   OXGN_VRTX_API auto RegisterSceneTextureView(graphics::Texture& texture,
@@ -284,7 +287,8 @@ private:
     RenderContext& ctx, const SceneTextures& scene_textures) -> bool;
   OXGN_VRTX_API void RenderDeferredLighting(
     RenderContext& ctx, const SceneTextures& scene_textures);
-  OXGN_VRTX_API void ResolveSceneColor(RenderContext& ctx);
+  OXGN_VRTX_API void ResolveSceneColor(RenderContext& ctx,
+    const PostProcessService::PreparedExposure* prepared = nullptr);
   OXGN_VRTX_API void PostRenderCleanup(RenderContext& ctx);
 
   Renderer& renderer_;
@@ -298,6 +302,7 @@ private:
   SceneTextureSetupMode setup_mode_ {};
   SceneTextureBindings scene_texture_bindings_ {};
   SceneTextureExtracts scene_texture_extracts_ {};
+  std::shared_ptr<SceneTextureLease> active_scene_texture_lease_;
   ExtractArtifact resolved_scene_color_artifact_ {};
   ExtractArtifact resolved_scene_depth_artifact_ {};
   ExtractArtifact prev_scene_depth_artifact_ {};

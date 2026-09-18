@@ -22,6 +22,10 @@ namespace oxygen::graphics {
 class Texture;
 }
 
+namespace oxygen {
+class ResolvedView;
+}
+
 namespace oxygen::vortex {
 namespace testing {
   struct RendererPublicationProbe;
@@ -41,6 +45,8 @@ namespace environment {
 
   class VolumetricFogPass {
   public:
+    [[nodiscard]] OXGN_VRTX_API static auto GridExtent(const ResolvedView& view)
+      -> glm::uvec3;
     struct RecordState {
       bool requested { false };
       bool executed { false };

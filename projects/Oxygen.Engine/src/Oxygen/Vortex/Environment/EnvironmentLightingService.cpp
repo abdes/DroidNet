@@ -1010,6 +1010,30 @@ auto EnvironmentLightingService::BuildEnvironmentStaticData(
   return data;
 }
 
+auto EnvironmentLightingService::DescribeViewRadianceLayout(
+  const RenderContext& ctx) -> ViewRadianceLayout
+{
+  RefreshStableAtmosphereState(ctx.GetScene().get());
+  atmosphere_lut_cache_->RefreshForState(atmosphere_state_->GetState());
+  const auto& authored = atmosphere_state_->GetState().view_products;
+  const auto& sizes = atmosphere_lut_cache_->GetState().internal_parameters;
+  auto result = ViewRadianceLayout {};
+  if (ctx.current_view.with_atmosphere && authored.atmosphere.enabled
+    && ctx.current_view.feature_mask.Has(
+      CompositionView::ViewFeatureMask::kEnvironment)) {
+    result.sky_view = { sizes.sky_view_width, sizes.sky_view_height, 1U };
+    result.aerial_perspective = { sizes.camera_aerial_width,
+      sizes.camera_aerial_height, sizes.camera_aerial_depth_resolution };
+    result.aerial_rgb_gain
+      = std::fmax(authored.atmosphere.aerial_scattering_strength, 0.0F);
+  }
+  if (ctx.current_view.with_height_fog && authored.volumetric_fog.enabled
+    && CurrentViewWantsVolumetrics(ctx) && ctx.current_view.resolved_view)
+    result.volumetric_fog = environment::VolumetricFogPass::GridExtent(
+      *ctx.current_view.resolved_view);
+  return result;
+}
+
 auto EnvironmentLightingService::PublishEnvironmentBindings(RenderContext& ctx,
   const ShaderVisibleIndex environment_static_slot,
   const ShaderVisibleIndex environment_view_slot,

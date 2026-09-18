@@ -341,6 +341,11 @@ auto VolumetricFogPass::OnFrameStart(
   pass_constants_buffer_.OnFrameStart(sequence, slot);
 }
 
+auto VolumetricFogPass::GridExtent(const ResolvedView& view) -> glm::uvec3
+{
+  return { ResolveGridWidth(view), ResolveGridHeight(view), kDepthResolution };
+}
+
 auto VolumetricFogPass::Record(RenderContext& ctx,
   const internal::StableAtmosphereState& stable_state,
   const ShaderVisibleIndex distant_sky_light_lut_srv,
@@ -368,9 +373,10 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
   }
 
   const auto& resolved_view = *ctx.current_view.resolved_view;
-  const auto width = ResolveGridWidth(resolved_view);
-  const auto height = ResolveGridHeight(resolved_view);
-  const auto depth = kDepthResolution;
+  const auto extent = GridExtent(resolved_view);
+  const auto width = extent.x;
+  const auto height = extent.y;
+  const auto depth = extent.z;
   auto texture = gfx->CreateTexture({
     .width = width,
     .height = height,

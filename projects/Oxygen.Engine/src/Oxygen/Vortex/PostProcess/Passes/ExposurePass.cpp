@@ -913,7 +913,12 @@ auto ExposurePass::EvaluateFp16Products(RenderContext& ctx,
     if (!product.texture || !product.srv.IsValid())
       continue;
     const auto& desc = product.texture->GetDescriptor();
-    CHECK_F(desc.format == Format::kRGBA32Float);
+    // Normal-mode intermediates carry their pre-store enclosure in the frame's
+    // status record. Sampling their typed half texture is valid only for these
+    // bound-producing products; SceneColor remains an FP32 accumulation.
+    CHECK_F(desc.format == Format::kRGBA32Float
+      || (desc.format == Format::kRGBA16Float
+        && (product.id == 5U || product.id == 6U || product.id == 10U)));
     CHECK_F(desc.texture_type == TextureType::kTexture2D
       || desc.texture_type == TextureType::kTexture3D);
     CHECK_F(!product.metering || desc.texture_type == TextureType::kTexture2D);

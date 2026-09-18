@@ -147,4 +147,21 @@ TEST(
   EXPECT_EQ(pool.GetAllocationCount(), 2U);
 }
 
+TEST(SceneTextureLeasePoolTest, RetainedLeaseOutlivesPoolWithoutDanglingRelease)
+{
+  FakeGraphics graphics;
+  auto retained = oxygen::vortex::SceneTextureLease {};
+  const auto key = SceneTextureLeaseKey::FromConfig(MakeConfig());
+  {
+    auto pool = std::make_unique<SceneTextureLeasePool>(graphics, MakeConfig());
+    retained = pool->Acquire(key);
+    EXPECT_TRUE(retained.IsValid());
+    EXPECT_EQ(pool->GetLiveLeaseCount(), 1U);
+  }
+  EXPECT_EQ(retained.GetKey(), key);
+  EXPECT_EQ(retained.GetSceneTextures().GetExtent(), key.extent);
+  retained.Release();
+  EXPECT_FALSE(retained.IsValid());
+}
+
 } // namespace
