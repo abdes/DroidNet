@@ -384,6 +384,14 @@ auto EnvironmentLightingService::OnFrameStart(
   if (local_fog_state_ != nullptr) {
     local_fog_state_->OnFrameStart(sequence, slot);
   }
+  // Retain every view's constant descriptors until the frame slot retires.
+  // Resetting inside Record invalidates earlier views still queued on the GPU.
+  if (local_fog_tiled_culling_ != nullptr) {
+    local_fog_tiled_culling_->OnFrameStart(sequence, slot);
+  }
+  if (local_fog_compose_ != nullptr) {
+    local_fog_compose_->OnFrameStart(sequence, slot);
+  }
   if (atmosphere_lut_cache_ != nullptr) {
     atmosphere_lut_cache_->OnFrameStart(sequence, slot);
   }

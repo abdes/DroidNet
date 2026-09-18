@@ -35,6 +35,9 @@ public:
   OXGN_VRTX_API explicit LocalFogVolumeComposePass(Renderer& renderer);
   OXGN_VRTX_API ~LocalFogVolumeComposePass();
 
+  OXGN_VRTX_API auto OnFrameStart(
+    frame::SequenceNumber sequence, frame::Slot slot) -> void;
+
   LocalFogVolumeComposePass(const LocalFogVolumeComposePass&) = delete;
   auto operator=(const LocalFogVolumeComposePass&)
     -> LocalFogVolumeComposePass& = delete;

@@ -220,6 +220,14 @@ LocalFogVolumeTiledCullingPass::~LocalFogVolumeTiledCullingPass()
     internal::RetireEnvironmentResource(*gfx, retired);
 }
 
+auto LocalFogVolumeTiledCullingPass::OnFrameStart(
+  const frame::SequenceNumber sequence, const frame::Slot slot) -> void
+{
+  if (EnsurePassConstantsBuffer()) {
+    pass_constants_buffer_->OnFrameStart(sequence, slot);
+  }
+}
+
 auto LocalFogVolumeTiledCullingPass::EnsurePassConstantsBuffer() -> bool
 {
   if (pass_constants_buffer_.has_value()) {
@@ -526,7 +534,6 @@ auto LocalFogVolumeTiledCullingPass::Record(RenderContext& ctx,
   const auto tile_covered_resolution_y
     = static_cast<float>(tile_pixel_size * tile_resolution_y);
 
-  pass_constants_buffer_->OnFrameStart(ctx.frame_sequence, ctx.frame_slot);
   const auto constants = PassConstants {
     .instance_buffer_slot = products.instance_buffer_slot.get(),
     .instance_culling_buffer_slot = products.instance_culling_buffer_slot.get(),
