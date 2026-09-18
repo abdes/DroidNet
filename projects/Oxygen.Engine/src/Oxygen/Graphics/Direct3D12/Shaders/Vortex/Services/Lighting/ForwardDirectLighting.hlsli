@@ -2,6 +2,7 @@
 #define OXYGEN_VORTEX_SERVICES_LIGHTING_FORWARDDIRECTLIGHTING_HLSLI
 
 #include "Vortex/Contracts/Lighting/ForwardLocalLightRecord.hlsli"
+#include "Vortex/Contracts/View/HdrConsumerInputs.hlsli"
 #include "Vortex/Stages/Translucency/ForwardPbr.hlsli"
 #include "Vortex/Contracts/Lighting/LightingHelpers.hlsli"
 #include "Vortex/Services/Shadows/DirectionalShadowCommon.hlsli"
@@ -11,6 +12,13 @@
 #include "Vortex/Services/Lighting/AtmosphereDirectionalLightShared.hlsli"
 
 static const uint kDirectionalLightFlagAffectsWorld = 1u << 0u;
+
+static void RecordForwardHdrSource(float3 scene_rgb)
+{
+#if !defined(OXYGEN_OPAQUE_OUTPUT) || defined(OXYGEN_DEPTH_COMPLETE)
+    RecordHdrSceneSource(scene_rgb, 4u);
+#endif
+}
 
 struct DirectionalLightDiagnosticTerms
 {
@@ -115,9 +123,11 @@ static inline float3 EvaluateDirectionalLightContribution(
     float  metalness,
     float  roughness)
 {
-    return EvaluateDirectionalLightDiagnosticTerms(
+    const float3 radiance = EvaluateDirectionalLightDiagnosticTerms(
         dl, world_pos, screen_position_xy, shadow_normal_ws, N, V, NdotV, F0, base_rgb,
         metalness, roughness).full_direct;
+    RecordForwardHdrSource(radiance);
+    return radiance;
 }
 
 static inline float3 EvaluateDirectionalLightContributionRawLambert(
@@ -320,8 +330,10 @@ float3 AccumulateLocalLightsClustered(
             const float3 kS = F;
             const float3 kD = (1.0 - kS) * (1.0 - metalness);
             const float3 diffuse = kD * base_rgb;
-            direct += (diffuse + specular) * light.color_id_falloff_and_ray_bias.rgb
+            const float3 contribution = (diffuse + specular) * light.color_id_falloff_and_ray_bias.rgb
                 * light.color_id_falloff_and_ray_bias.w * atten * NdotL;
+            RecordForwardHdrSource(contribution);
+            direct += contribution;
         }
     }
 

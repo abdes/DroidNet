@@ -75,6 +75,56 @@ allocations or remain dimensionless/FP32. Do not promote depth, normals,
 GBuffers, velocity, shadow maps or display targets. Canonical atmosphere transfers
 use the separate shared FP32 contract below.
 
+### Producer-range qualification
+
+The EX05-16 matrix exercises the active producers in the inventory, with evidence
+linked from `design/vortex/IMPLEMENTATION_STATUS.md`. Native expected values use
+double arithmetic, with 2e-5 relative plus 2^-120 absolute RGB tolerance. Direct
+deferred lighting additionally propagates the R8 specular half-code uncertainty
+through the analytic BRDF; this is separate from the FP16 image-error budget.
+Material emission is checked after alpha rejection and before other lighting can
+cancel an unsupported value. Deferred emission reports product 1; forward
+emission reports product 4. Each deferred direct-light and indirect contribution
+reports product 2 or 3 before blending; forward checks individual light and IBL
+terms before summation. Zero-coverage translucent fragments produce no source
+status. Base-pass, deferred-light and translucency owners transition the existing
+status UAV. Final accumulated-image scans remain necessary for cumulative range
+failures; an invalid source retains the last valid Auto exposure state even if
+the final accumulated pixel is positive.
+
+Opaque producer checks require completed depth. The completed-prepass shader
+permutation forces early depth while retaining alpha rejection. Without a complete
+prepass, the first color/depth draw omits source-status writes; BasePass replays
+its existing draw commands against finished, read-only depth with every color
+write disabled. This adds no texture or exposure mode. It costs an additional
+raster traversal only on that fallback path and preserves no-prepass masked holes
+and draw-order-independent visibility. Matching framebuffer/PSO keys include
+depth-read-only state and the depth-complete shader permutation.
+Stage 10 publishes depth written by the base pass even when Stage 3 was disabled;
+deferred lighting must not lose its depth input in that layout.
+Dedicated validation entries have no color outputs. The deferred entry evaluates
+only alpha/material emission, excluding GBuffer packing and velocity. The forward
+entry validates emission and its individual light/IBL sources, excluding final
+color composition, pre-exposure conversion and aerial perspective. Its light
+evaluation is required to detect cancellation between light contributions; an
+emission-only replay cannot qualify that boundary.
+
+| Products | Range proof |
+| --- | --- |
+| 1, 4 | Cooked typed material/emissive samples through deferred/forward, opaque/masked/translucent paths; exact sRGB decode ownership |
+| 2, 4 | Directional/point/spot lit-surface matrix at P endpoints; independent current-BRDF calculation, including partial coverage and explicit unsupported output |
+| 3, 13, 16 | Static diffuse SH from isotropic cubemaps, including simultaneous 2^-24 and 2^30 components; normalized half/float cubemap upload; distant-sky linearity and dual-source additivity |
+| 5–10, 14–15 | Actual atmosphere/fog producers, tiny canonical transfers, analytic thin scattering for both lights, local composition/injection and history-domain checks |
+| 11, 17 | Whole-image input/final range scans, checked conversion, diagnostic domain and consumer-composition certificates |
+| 12 | No owned bloom producer is active; external handoff/threshold audit remains EX05-09 |
+
+Distant-sky range checks use unit-light native anchors and the linear transfer
+equation; they do not establish absolute atmosphere-model accuracy. Direct-light
+tests qualify the current equations; physical unit corrections remain Slice 7.
+Specular IBL publishes no prefiltered/BRDF products, and dynamic sky capture and
+TAA/TSR remain inactive. Source TODOs at `IblProcessor`, `BloomChain` and
+`SceneRenderer::PrepareExposureDomain` identify their required exposure work.
+
 ### Per-view FP16 suitability
 
 Resolved/extracted textures and their registered shader-visible views retire

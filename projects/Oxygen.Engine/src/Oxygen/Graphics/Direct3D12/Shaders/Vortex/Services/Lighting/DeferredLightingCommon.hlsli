@@ -10,6 +10,7 @@
 #include "Vortex/Contracts/View/ViewConstants.hlsli"
 
 #include "Vortex/Contracts/View/ViewFrameBindings.hlsli"
+#include "Vortex/Contracts/View/HdrConsumerInputs.hlsli"
 #include "Vortex/Services/Lighting/DeferredShadingCommon.hlsli"
 
 struct DeferredLightConstants

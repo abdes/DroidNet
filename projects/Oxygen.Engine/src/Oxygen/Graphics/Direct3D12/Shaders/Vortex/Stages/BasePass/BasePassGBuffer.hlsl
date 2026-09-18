@@ -133,6 +133,9 @@ BasePassGBufferVSOutput BasePassGBufferVS(
 }
 
 [shader("pixel")]
+#if defined(OXYGEN_DEPTH_COMPLETE)
+[earlydepthstencil]
+#endif
 GBufferOutput BasePassGBufferPS(
     BasePassGBufferVSOutput input, bool is_front_face : SV_IsFrontFace)
 {
@@ -153,4 +156,19 @@ GBufferOutput BasePassGBufferPS(
     output.velocity = current_ndc - previous_ndc;
 #endif
     return output;
+}
+
+// Read-only-depth validation replay; no GBuffer packing or velocity work.
+[shader("pixel")]
+[earlydepthstencil]
+void BasePassValidateRadiancePS(
+    BasePassGBufferVSOutput input, bool is_front_face : SV_IsFrontFace)
+{
+    ApplyBasePassAlphaClip(input.uv, g_DrawIndex);
+    const MaterialSurface surface = EvaluateMaterialSurface(input.world_pos,
+        input.world_normal, input.world_tangent, input.world_bitangent, input.uv,
+        g_DrawIndex, is_front_face);
+    const ViewFrameBindings bindings = LoadViewFrameBindings(bindless_view_frame_bindings_slot);
+    CheckHdrStoreRange(float4(surface.emissive, 1.0f), 1u,
+        bindings.exposure_status_uav, 0u, 1.0f);
 }

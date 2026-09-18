@@ -68,7 +68,14 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
   ShaderFileSpec {
     .path="Vortex/Stages/Translucency/ForwardMesh_PS.hlsl",
     .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
-    .permutations=std::array<std::string_view, 4> { "ALPHA_TEST", "OXYGEN_HDR_OUTPUT", "OXYGEN_OPAQUE_OUTPUT", "SKIP_BRDF_LUT" }
+    .permutations=std::array<std::string_view, 5> { "ALPHA_TEST", "OXYGEN_HDR_OUTPUT", "OXYGEN_OPAQUE_OUTPUT", "SKIP_BRDF_LUT", "OXYGEN_DEPTH_COMPLETE" }
+  },
+  RequiredDefineShaderFileSpec<1, 3, 1> {
+    .path="Vortex/Stages/Translucency/ForwardMesh_PS.hlsl",
+    .entries=std::array { EntryPoint { .type=kPixel, .name="ValidateRadiancePS" } },
+    .required_defines=std::array<std::string_view, 3>
+      { "OXYGEN_HDR_OUTPUT", "OXYGEN_OPAQUE_OUTPUT", "OXYGEN_DEPTH_COMPLETE" },
+    .permutations=std::array<std::string_view, 1> { "ALPHA_TEST" }
   },
   RequiredDefineShaderFileSpec<1, 1, 2> {
     .path="Vortex/Stages/Translucency/ForwardMesh_PS.hlsl",
@@ -276,6 +283,12 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
   ShaderFileSpec {
     .path="Vortex/Stages/BasePass/BasePassGBuffer.hlsl",
     .entries=std::array { EntryPoint { .type=kPixel, .name="BasePassGBufferPS" }, EntryPoint { .type=kVertex, .name="BasePassGBufferVS" } },
+    .permutations=std::array<std::string_view, 3> { "HAS_VELOCITY", "ALPHA_TEST", "OXYGEN_DEPTH_COMPLETE" }
+  },
+  RequiredDefineShaderFileSpec<1, 1, 2> {
+    .path="Vortex/Stages/BasePass/BasePassGBuffer.hlsl",
+    .entries=std::array { EntryPoint { .type=kPixel, .name="BasePassValidateRadiancePS" } },
+    .required_defines=std::array<std::string_view, 1> { "OXYGEN_DEPTH_COMPLETE" },
     .permutations=std::array<std::string_view, 2> { "HAS_VELOCITY", "ALPHA_TEST" }
   },
   ShaderFileSpec {

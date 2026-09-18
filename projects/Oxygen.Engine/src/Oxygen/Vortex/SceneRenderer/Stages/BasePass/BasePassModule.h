@@ -96,6 +96,8 @@ private:
   std::shared_ptr<oxygen::graphics::Framebuffer> framebuffer_ {};
   std::shared_ptr<oxygen::graphics::Framebuffer> color_clear_framebuffer_ {};
   std::shared_ptr<oxygen::graphics::Framebuffer> forward_framebuffer_ {};
+  std::shared_ptr<oxygen::graphics::Framebuffer> range_framebuffer_ {};
+  std::shared_ptr<oxygen::graphics::Framebuffer> forward_range_framebuffer_ {};
   std::shared_ptr<oxygen::graphics::Framebuffer>
     forward_color_clear_framebuffer_ {};
   std::shared_ptr<oxygen::graphics::Framebuffer> wireframe_framebuffer_ {};

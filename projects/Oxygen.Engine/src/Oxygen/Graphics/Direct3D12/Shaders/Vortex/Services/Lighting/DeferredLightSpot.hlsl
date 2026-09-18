@@ -80,5 +80,6 @@ float4 DeferredLightSpotPS(DeferredLightVolumeVSOutput input) : SV_Target0
         base_attenuation * spot_attenuation * shadow_visibility,
         camera_position,
         bindings);
+    RecordHdrSceneSource(lighting, 2u);
     return float4(lighting * GetPreExposure(), 0.0f);
 }

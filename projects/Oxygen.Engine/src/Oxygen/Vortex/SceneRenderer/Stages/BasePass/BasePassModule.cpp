@@ -29,6 +29,7 @@
 #include <Oxygen/Vortex/Internal/MeshRasterState.h>
 #include <Oxygen/Vortex/Internal/PerViewStructuredPublisher.h>
 #include <Oxygen/Vortex/Internal/ViewportClamp.h>
+#include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
 #include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
@@ -420,7 +421,8 @@ namespace {
 
   auto NeedsFramebufferRebuild(
     const std::shared_ptr<graphics::Framebuffer>& framebuffer,
-    const SceneTextures& scene_textures, const bool writes_velocity) -> bool
+    const SceneTextures& scene_textures, const bool writes_velocity,
+    const bool depth_read_only) -> bool
   {
     if (!framebuffer) {
       return true;
@@ -430,6 +432,7 @@ namespace {
     const auto expected_color_attachments
       = writes_velocity && scene_textures.GetVelocity() != nullptr ? 6U : 5U;
     if (desc.color_attachments.size() != expected_color_attachments
+      || desc.depth_attachment.is_read_only != depth_read_only
       || desc.depth_attachment.texture.get()
         != scene_textures.GetSceneDepthResource().get()) {
       return true;
@@ -613,19 +616,22 @@ namespace {
 
   auto BuildBasePassPipelineDesc(const SceneTextures& scene_textures,
     const BasePassConfig& config, const internal::MeshRasterState raster_state,
-    const bool reverse_z, const bool writes_velocity)
-    -> graphics::GraphicsPipelineDesc
+    const bool reverse_z, const bool writes_velocity,
+    const bool range_only = false) -> graphics::GraphicsPipelineDesc
   {
     auto root_bindings = BuildVortexRootBindings();
     auto defines = std::vector<graphics::ShaderDefine> {};
     AddBooleanDefine(raster_state.alpha_test, "ALPHA_TEST", defines);
     AddBooleanDefine(writes_velocity, "HAS_VELOCITY", defines);
+    AddBooleanDefine(
+      config.early_z_pass_done, "OXYGEN_DEPTH_COMPLETE", defines);
 
     auto blend_targets = std::vector<graphics::BlendTargetDesc>(
       writes_velocity && scene_textures.GetVelocity() != nullptr ? 6U : 5U);
     for (auto& blend_target : blend_targets) {
       blend_target.blend_enable = false;
-      blend_target.write_mask = graphics::ColorWriteMask::kAll;
+      blend_target.write_mask = range_only ? graphics::ColorWriteMask::kNone
+                                           : graphics::ColorWriteMask::kAll;
     }
 
     const auto depth_state = graphics::DepthStencilStateDesc {
@@ -658,7 +664,8 @@ namespace {
       .SetPixelShader(graphics::ShaderRequest {
         .stage = ShaderType::kPixel,
         .source_path = "Vortex/Stages/BasePass/BasePassGBuffer.hlsl",
-        .entry_point = "BasePassGBufferPS",
+        .entry_point
+        = range_only ? "BasePassValidateRadiancePS" : "BasePassGBufferPS",
         .defines = defines,
       })
       .SetPrimitiveTopology(graphics::PrimitiveType::kTriangleList)
@@ -683,7 +690,8 @@ namespace {
 
   auto BuildForwardBasePassPipelineDesc(const SceneTextures& scene_textures,
     const BasePassConfig& config, const internal::MeshRasterState raster_state,
-    const bool reverse_z) -> graphics::GraphicsPipelineDesc
+    const bool reverse_z, const bool range_only = false)
+    -> graphics::GraphicsPipelineDesc
   {
     auto root_bindings = BuildVortexRootBindings();
     auto defines = std::vector<graphics::ShaderDefine> {
@@ -697,10 +705,13 @@ namespace {
       },
     };
     AddBooleanDefine(raster_state.alpha_test, "ALPHA_TEST", defines);
+    AddBooleanDefine(
+      config.early_z_pass_done, "OXYGEN_DEPTH_COMPLETE", defines);
 
     auto blend_target = graphics::BlendTargetDesc {};
     blend_target.blend_enable = false;
-    blend_target.write_mask = graphics::ColorWriteMask::kAll;
+    blend_target.write_mask = range_only ? graphics::ColorWriteMask::kNone
+                                         : graphics::ColorWriteMask::kAll;
 
     const auto depth_state = graphics::DepthStencilStateDesc {
       .depth_test_enable = true,
@@ -719,7 +730,7 @@ namespace {
       .SetPixelShader(graphics::ShaderRequest {
         .stage = ShaderType::kPixel,
         .source_path = "Vortex/Stages/Translucency/ForwardMesh_PS.hlsl",
-        .entry_point = "PS",
+        .entry_point = range_only ? "ValidateRadiancePS" : "PS",
         .defines = std::move(defines),
       })
       .SetPrimitiveTopology(graphics::PrimitiveType::kTriangleList)
@@ -1155,6 +1166,65 @@ auto BasePassModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
     return last_execution_result_;
   }
 
+  if (const auto& frame = ctx.current_view.frame_exposure) {
+    const auto& status = *frame->current_state->status_buffer;
+    if (!recorder->IsResourceTracked(status)
+      && !recorder->AdoptKnownResourceState(status))
+      recorder->BeginTrackingResourceState(
+        status, graphics::ResourceStates::kCommon, false);
+    recorder->RequireResourceState(
+      status, graphics::ResourceStates::kUnorderedAccess);
+  }
+
+  const auto validate_without_prepass = [&] {
+    if (config_.early_z_pass_done || !ctx.current_view.frame_exposure)
+      return;
+    // Without a complete prepass, only the finished depth buffer determines
+    // visibility independently of draw order. Replay with color/depth writes
+    // disabled; the same shader checks only surviving material sources.
+    graphics::GpuEventScope range_scope(*recorder,
+      "Vortex.Stage9.BasePass.VisibleRadianceCheck",
+      profiling::ProfileGranularity::kDiagnostic,
+      profiling::ProfileCategory::kPass);
+    auto range_config = config_;
+    range_config.early_z_pass_done = true;
+    auto& target
+      = forward_solid ? forward_range_framebuffer_ : range_framebuffer_;
+    if (forward_solid) {
+      if (NeedsForwardFramebufferRebuild(target, scene_textures, true))
+        target = gfx->CreateFramebuffer(
+          BuildForwardBasePassFramebuffer(scene_textures, true));
+    } else if (NeedsFramebufferRebuild(
+                 target, scene_textures, writes_velocity, true)) {
+      target = gfx->CreateFramebuffer(
+        BuildBasePassFramebuffer(scene_textures, true, writes_velocity));
+    }
+    recorder->RequireResourceState(
+      scene_textures.GetSceneDepth(), graphics::ResourceStates::kDepthRead);
+    recorder->FlushBarriers();
+    recorder->BindFrameBuffer(*target);
+    auto raster = std::optional<internal::MeshRasterState> {};
+    for (const auto& draw : mesh_processor_->GetDrawCommands()) {
+      const auto next = ResolveRasterState(prepared_frame, draw);
+      if (!raster.has_value() || *raster != next) {
+        recorder->SetPipelineState(forward_solid
+            ? BuildForwardBasePassPipelineDesc(
+                scene_textures, range_config, next, reverse_z, true)
+            : BuildBasePassPipelineDesc(scene_textures, range_config, next,
+                reverse_z, writes_velocity, true));
+        recorder->SetGraphicsRootConstantBufferView(
+          view_constants_param, ctx.view_constants->GetGPUVirtualAddress());
+        recorder->SetGraphicsRoot32BitConstant(
+          root_constants_param, kInvalidShaderVisibleIndex.get(), 1U);
+        raster = next;
+      }
+      recorder->SetGraphicsRoot32BitConstant(
+        root_constants_param, draw.draw_index, 0U);
+      recorder->Draw(draw.is_indexed ? draw.index_count : draw.vertex_count,
+        draw.instance_count, 0U, draw.start_instance);
+    }
+  };
+
   if (forward_solid) {
     const auto depth_read_only = config_.early_z_pass_done;
     if (NeedsForwardFramebufferRebuild(
@@ -1213,6 +1283,7 @@ auto BasePassModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
         draw_command.instance_count, 0U, draw_command.start_instance);
     }
 
+    validate_without_prepass();
     recorder->RequireResourceStateFinal(
       scene_textures.GetSceneColor(), graphics::ResourceStates::kRenderTarget);
     recorder->RequireResourceStateFinal(
@@ -1227,7 +1298,8 @@ auto BasePassModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
   last_execution_result_.wrote_scene_color = true;
   BeginBasePassResourceTracking(*recorder, scene_textures, config_);
 
-  if (NeedsFramebufferRebuild(framebuffer_, scene_textures, writes_velocity)) {
+  if (NeedsFramebufferRebuild(framebuffer_, scene_textures, writes_velocity,
+        config_.early_z_pass_done)) {
     framebuffer_ = gfx->CreateFramebuffer(BuildBasePassFramebuffer(
       scene_textures, config_.early_z_pass_done, writes_velocity));
   }
@@ -1275,6 +1347,8 @@ auto BasePassModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
         draw_command.instance_count, 0U, draw_command.start_instance);
     }
   }
+
+  validate_without_prepass();
 
   if (requires_velocity_aux) {
     auto& velocity_base_copy

@@ -212,7 +212,9 @@ static VortexSingleScatteringResult VortexIntegrateSingleScatteredLuminance(
     const float rayleigh_phase0 = VortexRayleighPhase(cos_theta0);
     const float mie_phase0 = VortexHenyeyGreensteinPhase(atmosphere.mie_g, -cos_theta0);
     const float uniform_phase = 1.0f / (4.0f * kVortexSkyPi);
-    const bool second_light_enabled = any(light1_illuminance > 1.0e-6f.xxx);
+    // A small canonical contribution can become significant after exposure.
+    // Only an exactly absent light may be skipped before radiance integration.
+    const bool second_light_enabled = any(light1_illuminance > 0.0f.xxx);
     float rayleigh_phase1 = 0.0f;
     float mie_phase1 = 0.0f;
     if (second_light_enabled)

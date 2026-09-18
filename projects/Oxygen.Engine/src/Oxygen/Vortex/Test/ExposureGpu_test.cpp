@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <array>
 #include <bit>
 #include <cmath>
@@ -45,8 +46,11 @@
 #include <Oxygen/Scene/Environment/PostProcessVolume.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
+#include <Oxygen/Scene/Environment/SkyLight.h>
 #include <Oxygen/Scene/Environment/SkySphere.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
+#include <Oxygen/Scene/Light/PointLight.h>
+#include <Oxygen/Scene/Light/SpotLight.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereLutCache.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereState.h>
@@ -56,6 +60,7 @@
 #include <Oxygen/Vortex/Environment/Passes/AtmosphereMultiScatteringLutPass.h>
 #include <Oxygen/Vortex/Environment/Passes/AtmosphereSkyViewLutPass.h>
 #include <Oxygen/Vortex/Environment/Passes/AtmosphereTransmittanceLutPass.h>
+#include <Oxygen/Vortex/Environment/Passes/DistantSkyLightLutPass.h>
 #include <Oxygen/Vortex/Environment/Passes/FogPass.h>
 #include <Oxygen/Vortex/Environment/Passes/LocalFogVolumeComposePass.h>
 #include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
@@ -7086,13 +7091,717 @@ NOLINT_TEST_F(
               EXPECT_EQ(status.flags & 18U, 18U);
               EXPECT_NE(status.first_failure_kind & 32U, 0U);
               EXPECT_EQ(status.first_failure_product,
-                domain == data::MaterialDomain::kAlphaBlended ? 4U : 11U);
+                domain == data::MaterialDomain::kAlphaBlended ? 4U
+                  : forward                                   ? 4U
+                                                              : 1U);
             } else
               EXPECT_EQ(status.flags & 16U, 0U);
             ++case_count;
           }
   probe->prepare = {};
   RecordProperty("material_endpoint_cases", case_count);
+  WaitForQueueIdle();
+}
+
+// A single visible surface isolates light transport from scene composition.
+class ExposureLightingGpuTest : public ExposureGpuTest {
+protected:
+  struct Probe final : IViewExtension {
+    Renderer& renderer;
+    std::shared_ptr<const Texture> color;
+    explicit Probe(Renderer& value)
+      : renderer(value)
+    {
+    }
+    postprocess::ExposurePass::FrameLease exposure;
+    unsigned draws = 0;
+    std::vector<float> raster_depths;
+    bool early_depth_complete = false;
+    std::function<void(RenderContext&)> prepare;
+    auto OnViewSetup(const ViewSetupContext& hook) -> void override
+    {
+      prepare(hook.render_context);
+    }
+    auto OnPostRenderViewGpu(const ViewRenderGpuContext& hook) -> void override
+    {
+      exposure = hook.render_context.current_view.frame_exposure;
+      auto* owner
+        = vortex::testing::RendererPublicationProbe::GetSceneRenderer(renderer);
+      const auto& extracted
+        = owner->GetSceneTextureExtracts().resolved_scene_color;
+      color = extracted.valid ? extracted.texture->shared_from_this() : nullptr;
+
+      const auto prepared = hook.render_context.current_view.prepared_frame;
+      draws = prepared
+        ? static_cast<unsigned>(
+            prepared->draw_metadata_bytes.size() / sizeof(DrawMetadata))
+        : 0;
+      raster_depths.clear();
+      early_depth_complete
+        = hook.render_context.current_view.IsEarlyDepthComplete();
+      if (prepared) {
+        for (const auto& draw :
+          vortex::testing::RendererPublicationProbe::BasePassDrawCommands(
+            *owner)) {
+          if (draw.draw_index >= prepared->GetDrawMetadata().size())
+            continue;
+          const auto material
+            = prepared->GetDrawMetadata()[draw.draw_index].material_handle;
+          const auto item = std::ranges::find_if(
+            prepared->render_items, [material](const auto& value) {
+              return value.material_handle.get() == material;
+            });
+          ASSERT_NE(item, prepared->render_items.end());
+          raster_depths.push_back(item->world_bounding_sphere.z + 1.0F);
+        }
+      }
+    }
+  };
+  auto SetUp() -> void override
+  {
+    ExposureGpuTest::SetUp();
+    pass_.reset();
+    renderer_->OnShutdown();
+    auto renderer_config = RendererConfig {};
+    renderer_config.upload_queue_key = QueueKeyFor().get();
+    renderer_ = std::make_unique<Renderer>(GetGraphicsShared(), renderer_config,
+      kPhase1DefaultRuntimeCapabilityFamilies
+        | RendererCapabilityFamily::kDeferredShading
+        | RendererCapabilityFamily::kLightingData
+        | RendererCapabilityFamily::kFinalOutputComposition
+        | RendererCapabilityFamily::kEnvironmentLighting);
+    owned_asset_loader_ = std::make_unique<vortex::testing::FakeAssetLoader>();
+    owned_test_engine_
+      = std::make_unique<::testing::NiceMock<ExposureTestEngine>>();
+    ON_CALL(*owned_test_engine_, GetAssetLoader())
+      .WillByDefault(::testing::Return(
+        observer_ptr<content::IAssetLoader> { owned_asset_loader_.get() }));
+    ASSERT_TRUE(renderer_->OnAttached(
+      observer_ptr<IAsyncEngine> { owned_test_engine_.get() }));
+    renderer_->RegisterConsoleBindings(observer_ptr { &fixture_console });
+    ASSERT_EQ(fixture_console.Execute("vtx.occlusion.enable false").status,
+      console::ExecutionStatus::kOk);
+    scene = std::make_shared<scene::Scene>("Lighting producer domain", 8U);
+    scene->SetEnvironment(std::make_unique<scene::SceneEnvironment>());
+    auto& post = scene->GetEnvironment()
+                   ->AddSystem<scene::environment::PostProcessVolume>();
+    settings = scene::ExposureSettings {};
+    settings.mode = engine::ExposureMode::kManual;
+    settings.manual_ev = 0;
+    settings.key = 12.5F;
+    post.SetExposureSettings(settings);
+    post.SetToneMapper(engine::ToneMapper::kNone);
+    post.SetDisplayGamma(1);
+    post.SetBloomIntensity(0);
+    camera = scene->CreateNode("Camera");
+    auto lens = std::make_unique<scene::PerspectiveCamera>();
+    view = View {};
+    view.viewport = { .width = 1, .height = 1 };
+    lens->SetViewport(view.viewport);
+    ASSERT_TRUE(camera.AttachCamera(std::move(lens)));
+    mesh_node = scene->CreateNode("Radiance triangle");
+    std::vector<data::Vertex> vertices(3);
+    const std::array positions { glm::vec3 { -2, -2, -1 },
+      glm::vec3 { 2, -2, -1 }, glm::vec3 { 0, 2, -1 } };
+    for (unsigned i = 0; i < 3; ++i) {
+      vertices[i] = { .position = positions[i],
+        .normal = { 0, 0, 1 },
+        .texcoord = { .5F, .5F },
+        .tangent = { 1, 0, 0 },
+        .bitangent = { 0, 1, 0 },
+        .color = { 1, 1, 1, 1 } };
+    }
+    std::shared_ptr<data::Mesh> mesh
+      = data::MeshBuilder()
+          .WithVertices(vertices)
+          .WithIndices(std::vector<std::uint32_t> { 0, 1, 2 })
+          .BeginSubMesh("Radiance", data::MaterialAsset::CreateDefault())
+          .WithMeshView({ .first_index = 0,
+            .index_count = 3,
+            .first_vertex = 0,
+            .vertex_count = 3 })
+          .EndSubMesh()
+          .Build();
+    data::pak::geometry::GeometryAssetDesc geometry_desc {};
+    geometry_desc.lod_count = 1;
+    geometry_desc.bounding_box_min[0] = geometry_desc.bounding_box_min[1] = -2;
+    geometry_desc.bounding_box_max[0] = geometry_desc.bounding_box_max[1] = 2;
+    geometry_desc.bounding_box_min[2] = geometry_desc.bounding_box_max[2] = -1;
+    mesh_node.GetRenderable().SetGeometry(std::make_shared<data::GeometryAsset>(
+      data::AssetKey::FromVirtualPath("/Test/Exposure/Domain.ogeo"),
+      geometry_desc, std::vector<std::shared_ptr<data::Mesh>> { mesh }));
+    auto output = CreateRegisteredTexture({ .width = 1,
+      .height = 1,
+      .format = Format::kRGBA32Float,
+      .is_render_target = true,
+      .initial_state = ResourceStates::kCommon });
+    framebuffer = Backend().CreateFramebuffer(
+      FramebufferDesc {}.AddColorAttachment(output));
+    probe = std::make_shared<Probe>(*renderer_);
+    probe->prepare = [&](RenderContext& ctx) {
+      ctx.current_view.depth_prepass_mode = depth_mode;
+      auto* owner = vortex::testing::RendererPublicationProbe::GetSceneRenderer(
+        *renderer_);
+      auto* service
+        = vortex::testing::RendererPublicationProbe::GetPostProcessService(
+          *owner);
+      service->SetResolvedConfig(SharedConfig(settings));
+      ASSERT_NE(service->PrepareFrameExposure(ctx, false), nullptr);
+    };
+
+    renderer_->RegisterViewExtension(probe);
+    frame.SetScene(observer_ptr { scene.get() });
+  }
+
+  auto SetSurface(data::MaterialDomain domain, float emission = 0,
+    bool rejected_mask = false) -> void
+  {
+    data::pak::render::MaterialAssetDesc desc {};
+    desc.material_domain = static_cast<std::uint8_t>(domain);
+    desc.flags = data::pak::render::kMaterialFlag_NoTextureSampling
+      | data::pak::render::kMaterialFlag_DoubleSided;
+    if (domain == data::MaterialDomain::kMasked)
+      desc.flags |= data::pak::render::kMaterialFlag_AlphaTest;
+    desc.base_color[0] = desc.base_color[1] = desc.base_color[2] = 1;
+    desc.base_color[3] = rejected_mask                ? 0
+      : domain == data::MaterialDomain::kAlphaBlended ? .5F
+                                                      : 1.0F;
+    for (auto& value : desc.emissive_factor)
+      value = data::HalfFloat { emission };
+    desc.normal_scale = 1;
+    desc.roughness = data::Unorm16 { 1 };
+    desc.ambient_occlusion = data::Unorm16 { 1 };
+    desc.uv_scale[0] = desc.uv_scale[1] = 1;
+    mesh_node.GetRenderable().SetMaterialOverride(0, 0,
+      std::make_shared<data::MaterialAsset>(
+        data::AssetKey::FromVirtualPath("/Test/Exposure/Lit"
+          + std::to_string(static_cast<int>(domain)) + "-"
+          + std::to_string(++material_sequence) + ".omat"),
+        desc, std::vector<data::ShaderReference> {}));
+  }
+
+  auto RenderSurface(bool forward, float ev) -> void
+  {
+    probe->color.reset();
+    probe->draws = 0;
+    settings.manual_ev = ev;
+    scene->GetEnvironment()
+      ->TryGetSystem<scene::environment::PostProcessVolume>()
+      ->SetExposureSettings(settings);
+    scene->Update();
+    scene->SyncObservers();
+    for (unsigned warmup = 0; warmup < 5; ++warmup) {
+      const auto slot = frame::Slot { sequence % 3 };
+      Backend().BeginFrame(frame::SequenceNumber { sequence + 1 }, slot);
+      frame.SetFrameSlot(slot, engine::internal::EngineTagFactory::Get());
+      frame.SetFrameSequenceNumber(frame::SequenceNumber { ++sequence },
+        engine::internal::EngineTagFactory::Get());
+      renderer_->OnFrameStart(observer_ptr { &frame });
+      auto facade = renderer_->ForOffscreenScene();
+      facade.SetFrameSession({ .frame_slot = slot,
+        .frame_sequence = frame::SequenceNumber { sequence },
+        .delta_time_seconds = frame_delta_seconds });
+      facade.SetSceneSource({ .scene = observer_ptr { scene.get() } });
+      facade.SetViewIntent(Renderer::OffscreenSceneViewInput::FromCamera(
+        "Lighting", ViewId { 100U }, view, camera)
+          .SetViewStateHandle(CompositionView::ViewStateHandle { 100U }));
+      facade.SetOutputTarget(
+        { .framebuffer = observer_ptr { framebuffer.get() } });
+      facade.SetPipeline(forward
+          ? Renderer::OffscreenPipelineInput::Forward()
+          : Renderer::OffscreenPipelineInput::Deferred());
+      auto session = facade.Finalize();
+      ASSERT_TRUE(session.has_value());
+      ASSERT_TRUE(session->ExecuteInsideFrame(frame));
+      renderer_->OnFrameEnd(observer_ptr { &frame });
+      Backend().EndFrame(frame::SequenceNumber { sequence }, slot);
+      WaitForQueueIdle();
+    }
+    ASSERT_EQ(probe->draws, expected_draws);
+    ASSERT_NE(probe->color, nullptr);
+    ASSERT_NE(probe->exposure, nullptr);
+    const auto domain_data = Read<FrameExposureData>(
+      *probe->exposure->buffer, ResourceStates::kShaderResource);
+    if (settings.mode == engine::ExposureMode::kManual)
+      EXPECT_EQ(domain_data.pre_exposure, std::exp2(-double(ev)));
+  }
+
+  auto TearDown() -> void override
+  {
+    if (probe) {
+      probe->prepare = {};
+      probe->color.reset();
+      probe->exposure.reset();
+    }
+    probe.reset();
+    framebuffer.reset();
+    ExposureGpuTest::TearDown();
+  }
+
+  std::shared_ptr<scene::Scene> scene;
+  scene::SceneNode camera;
+  scene::SceneNode mesh_node;
+  scene::ExposureSettings settings;
+  View view;
+  std::shared_ptr<Framebuffer> framebuffer;
+  std::shared_ptr<Probe> probe;
+  engine::FrameContext frame;
+  unsigned sequence = 0;
+  unsigned material_sequence = 0;
+  unsigned expected_draws = 1;
+  float frame_delta_seconds = 0;
+  DepthPrePassMode depth_mode = DepthPrePassMode::kOpaqueAndMasked;
+  console::Console fixture_console;
+};
+
+NOLINT_TEST_F(
+  ExposureLightingGpuTest, DirectLightRadiancePreservesSupportedRange)
+{
+  auto sun = scene->CreateNode("Directional");
+  auto directional = std::make_unique<scene::DirectionalLight>();
+  directional->Common().casts_shadows = false;
+  directional->Common().color_rgb = { .25F, .5F, 1.0F };
+  directional->SetEnvironmentContribution(true);
+  ASSERT_TRUE(sun.AttachLight(std::move(directional)));
+  sun.GetTransform().SetLocalRotation(
+    glm::quat { .70710678F, .70710678F, 0, 0 });
+  auto point_node = scene->CreateNode("Point");
+  auto point = std::make_unique<scene::PointLight>();
+  point->Common().casts_shadows = false;
+  point->Common().color_rgb = { .25F, .5F, 1.0F };
+  point->SetRange(100);
+  ASSERT_TRUE(point_node.AttachLight(std::move(point)));
+  auto spot_node = scene->CreateNode("Spot");
+  auto spot = std::make_unique<scene::SpotLight>();
+  spot->Common().casts_shadows = false;
+  spot->Common().color_rgb = { .25F, .5F, 1.0F };
+  spot->SetRange(100);
+  ASSERT_TRUE(spot_node.AttachLight(std::move(spot)));
+  spot_node.GetTransform().SetLocalRotation(
+    glm::quat { .70710678F, .70710678F, 0, 0 });
+  unsigned cases = 0;
+  for (const bool forward : { false, true })
+    for (const auto domain :
+      { data::MaterialDomain::kOpaque, data::MaterialDomain::kMasked,
+        data::MaterialDomain::kAlphaBlended }) {
+      SetSurface(domain);
+      const bool forward_shader
+        = forward || domain == data::MaterialDomain::kAlphaBlended;
+      const double coverage
+        = domain == data::MaterialDomain::kAlphaBlended ? .5 : 1;
+      // Independent double-precision on-axis GGX evaluation for a white,
+      // nonmetal surface at roughness 1. This checks the current transport
+      // equations; Slice 7 owns their differing photometric calibrations.
+      const double pi = std::acos(-1.0);
+      const double f0 = .04;
+      const double oct = 1.0 / 1023;
+      const double n = forward_shader ? 1.0
+                                      : (1 - 2 * oct)
+          / std::sqrt(2 * oct * oct + (1 - 2 * oct) * (1 - 2 * oct));
+      const double g = 2 * n / (n + 1);
+      const double specular = f0 * g * g / (4 * pi * n * n);
+      const double brdf = ((1 - f0) / (forward_shader ? 1 : pi) + specular) * n;
+      // R8 UNORM stores the .5 specular value at either adjacent code. Carry
+      // its half-code uncertainty through this linear-in-F0 expression.
+      const double brdf_error = forward_shader
+        ? 0
+        : .04 / 255 * std::abs(g * g / (4 * pi * n * n) - 1 / pi) * n;
+      for (unsigned kind = 0; kind < 3; ++kind) {
+        auto d = sun.GetLightAs<scene::DirectionalLight>();
+        auto p = point_node.GetLightAs<scene::PointLight>();
+        auto s = spot_node.GetLightAs<scene::SpotLight>();
+        d->get().Common().affects_world = kind == 0;
+        p->get().Common().affects_world = kind == 1;
+        s->get().Common().affects_world = kind == 2;
+        // Replace the authoring component to publish a light mutation and
+        // invalidate the resolver's cached directional membership.
+        ASSERT_TRUE(sun.ReplaceLight(
+          std::make_unique<scene::DirectionalLight>(d->get())));
+        d = sun.GetLightAs<scene::DirectionalLight>();
+        const double attenuation = kind == 0 ? (forward_shader ? 1 / pi : 1)
+          : forward_shader                   ? .99 * .99
+                                             : std::pow(1 - 1e-8, 2) / 2;
+        const double coefficient = brdf * attenuation;
+        for (const double radiance :
+          { 0.0, 0x1p-24, .25, 131072.0, 0x1p32 * .999, 0x1p35 })
+          for (const float ev : { -32.0F, 0.0F, 32.0F }) {
+            SCOPED_TRACE(forward);
+            SCOPED_TRACE(static_cast<int>(domain));
+            SCOPED_TRACE(kind);
+            SCOPED_TRACE(radiance);
+            SCOPED_TRACE(ev);
+            const float intensity = static_cast<float>(radiance / coefficient);
+            d->get().SetIntensityLux(intensity);
+            p->get().SetLuminousFluxLm(intensity);
+            s->get().SetLuminousFluxLm(intensity);
+            ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, ev));
+            const auto pixels = ReadFloatTexture(*probe->color);
+            ASSERT_EQ(pixels.size(), 1U);
+            for (unsigned channel = 0; channel < 3; ++channel) {
+              const double expected = intensity * coefficient * coverage
+                * std::exp2(double(channel) - 2 - ev);
+              EXPECT_NEAR(pixels[0][channel], expected,
+                std::abs(expected) * (2e-5 + brdf_error / brdf) + 0x1p-120);
+            }
+            EXPECT_FLOAT_EQ(pixels[0][3], static_cast<float>(coverage));
+            const auto status = Read<ExposureCompletedStatus>(
+              *probe->exposure->current_state->status_buffer,
+              ResourceStates::kCopySource);
+            if (radiance > 0x1p32) {
+              EXPECT_EQ(status.flags & 18U, 18U);
+              EXPECT_NE(status.first_failure_kind & 32U, 0U);
+              EXPECT_EQ(status.first_failure_product,
+                domain == data::MaterialDomain::kAlphaBlended || forward ? 4U
+                                                                         : 2U);
+            } else
+              EXPECT_EQ(status.flags & 16U, 0U);
+            ++cases;
+          }
+      }
+    }
+  RecordProperty("direct_light_endpoint_cases", cases);
+}
+
+NOLINT_TEST_F(ExposureLightingGpuTest,
+  SourceFailureSurvivesPositiveLightingAndPreservesAutoHistory)
+{
+  auto point_node = scene->CreateNode("Cancellation control");
+  auto light = std::make_unique<scene::PointLight>();
+  light->Common().casts_shadows = false;
+  light->SetRange(100);
+  light->SetLuminousFluxLm(100);
+  ASSERT_TRUE(point_node.AttachLight(std::move(light)));
+  auto fill_node = scene->CreateNode("Positive fill");
+  auto fill = std::make_unique<scene::PointLight>();
+  fill->Common().casts_shadows = false;
+  fill->SetRange(100);
+  ASSERT_TRUE(fill_node.AttachLight(std::move(fill)));
+  settings.mode = engine::ExposureMode::kAuto;
+  frame_delta_seconds = .1F;
+  unsigned cases = 0;
+  for (const bool prepass : { true, false })
+    for (const bool invalid_light : { false, true })
+      for (const bool forward : { false, true })
+        for (const auto domain :
+          { data::MaterialDomain::kOpaque, data::MaterialDomain::kMasked,
+            data::MaterialDomain::kAlphaBlended }) {
+          SCOPED_TRACE(forward);
+          SCOPED_TRACE(static_cast<int>(domain));
+          SCOPED_TRACE(invalid_light);
+          SCOPED_TRACE(prepass);
+          depth_mode = prepass ? DepthPrePassMode::kOpaqueAndMasked
+                               : DepthPrePassMode::kDisabled;
+          point_node.GetLightAs<scene::PointLight>()->get().SetLuminousFluxLm(
+            invalid_light ? 0.0F : 100.0F);
+          fill_node.GetLightAs<scene::PointLight>()->get().SetLuminousFluxLm(
+            invalid_light ? 200.0F : 0.0F);
+          SetSurface(domain, 1);
+          ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0));
+          const auto before
+            = Read<ExposureStateData>(*probe->exposure->current_state->buffer,
+              ResourceStates::kShaderResource);
+          auto status = Read<ExposureCompletedStatus>(
+            *probe->exposure->current_state->status_buffer,
+            ResourceStates::kCopySource);
+          EXPECT_EQ(status.flags & 16U, 0U);
+          EXPECT_EQ(before.flags & 12U, 12U);
+          if (invalid_light)
+            point_node.GetLightAs<scene::PointLight>()->get().SetLuminousFluxLm(
+              -100.0F);
+          else
+            SetSurface(domain, -1);
+          ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0));
+          const auto pixels = ReadFloatTexture(*probe->color);
+          ASSERT_EQ(pixels.size(), 1U);
+          for (unsigned c = 0; c < 3; ++c) {
+            ASSERT_TRUE(std::isfinite(pixels[0][c]));
+            EXPECT_GT(pixels[0][c], 0);
+          }
+          status = Read<ExposureCompletedStatus>(
+            *probe->exposure->current_state->status_buffer,
+            ResourceStates::kCopySource);
+          EXPECT_EQ(status.flags & 18U, 18U);
+          EXPECT_EQ(status.first_failure_kind & 32U, 32U);
+          EXPECT_EQ(status.first_failure_product,
+            forward || domain == data::MaterialDomain::kAlphaBlended ? 4U
+              : invalid_light                                        ? 2U
+                                                                     : 1U);
+          const auto after
+            = Read<ExposureStateData>(*probe->exposure->current_state->buffer,
+              ResourceStates::kShaderResource);
+          EXPECT_EQ(after.displayed_scale, before.displayed_scale);
+          EXPECT_EQ(after.latent_scale, before.latent_scale);
+          EXPECT_EQ(after.flags & 12U, 0U);
+          EXPECT_EQ(after.flags & 32U, 32U);
+          ++cases;
+          if (domain != data::MaterialDomain::kOpaque) {
+            SetSurface(domain, invalid_light ? 1.0F : -1.0F, true);
+            ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0));
+            const auto empty = ReadFloatTexture(*probe->color);
+            ASSERT_EQ(empty.size(), 1U);
+            EXPECT_EQ(empty[0], (Pixel { 0, 0, 0, 0 }));
+            status = Read<ExposureCompletedStatus>(
+              *probe->exposure->current_state->status_buffer,
+              ResourceStates::kCopySource);
+            EXPECT_EQ(status.flags & 16U, 0U);
+            ++cases;
+          }
+        }
+  RecordProperty("source_cancellation_and_rejection_cases", cases);
+}
+
+NOLINT_TEST_F(
+  ExposureLightingGpuTest, EmissiveFailureRespectsFinishedDepthAndMaskHoles)
+{
+  auto blocker = scene->CreateNode("Foreground");
+  blocker.GetRenderable().SetGeometry(mesh_node.GetRenderable().GetGeometry());
+  blocker.GetTransform().SetLocalPosition({ 0, 0, .25F });
+  expected_draws = 2;
+  settings.mode = engine::ExposureMode::kAuto;
+  const auto set_blocker
+    = [&](data::MaterialDomain domain, float emission, bool hole = false) {
+        const auto saved = mesh_node;
+        mesh_node = blocker;
+        SetSurface(domain, emission, hole);
+        mesh_node = saved;
+      };
+  unsigned cases = 0;
+  for (const bool prepass : { true, false })
+    for (const bool forward : { false, true })
+      for (const auto domain :
+        { data::MaterialDomain::kOpaque, data::MaterialDomain::kMasked })
+        for (const bool negative_first : { true, false }) {
+          SCOPED_TRACE(prepass);
+          SCOPED_TRACE(forward);
+          SCOPED_TRACE(static_cast<int>(domain));
+          SCOPED_TRACE(negative_first);
+          depth_mode = prepass ? DepthPrePassMode::kOpaqueAndMasked
+                               : DepthPrePassMode::kDisabled;
+          mesh_node.GetTransform().SetLocalPosition({ 0, 0, 0 });
+          SetSurface(domain, negative_first ? -1.0F : 1.0F);
+          blocker.GetRenderable().SetMaterialOverride(
+            0, 0, mesh_node.GetRenderable().ResolveSubmeshMaterial(0, 0));
+          ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0));
+          // Register one material first, then the other, to exercise each
+          // actual material-sorted raster order; assert the resulting order.
+          if (negative_first)
+            set_blocker(domain, 1);
+          else
+            SetSurface(domain, -1);
+          ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0));
+          ASSERT_EQ(probe->raster_depths.size(), 2U);
+          if (probe->raster_depths[0] != (negative_first ? 0.0F : .25F)) {
+            // Keep the image identical while reversing which scene node owns
+            // each surface; verify the renderer's resulting raster order.
+            const auto negative
+              = mesh_node.GetRenderable().ResolveSubmeshMaterial(0, 0);
+            const auto positive
+              = blocker.GetRenderable().ResolveSubmeshMaterial(0, 0);
+            mesh_node.GetRenderable().SetMaterialOverride(0, 0, positive);
+            blocker.GetRenderable().SetMaterialOverride(0, 0, negative);
+            mesh_node.GetTransform().SetLocalPosition({ 0, 0, .25F });
+            blocker.GetTransform().SetLocalPosition({ 0, 0, 0 });
+            std::swap(mesh_node, blocker);
+            ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0));
+            ASSERT_EQ(probe->raster_depths.size(), 2U);
+          }
+          EXPECT_EQ(probe->early_depth_complete, prepass);
+          EXPECT_EQ(probe->raster_depths[0], negative_first ? 0.0F : .25F);
+          const auto pixels = ReadFloatTexture(*probe->color);
+          ASSERT_EQ(pixels.size(), 1U);
+          EXPECT_GT(pixels[0][0], 0);
+          auto status = Read<ExposureCompletedStatus>(
+            *probe->exposure->current_state->status_buffer,
+            ResourceStates::kCopySource);
+          EXPECT_EQ(status.flags & 16U, 0U);
+          const auto meter
+            = Read<ExposureStateData>(*probe->exposure->current_state->buffer,
+              ResourceStates::kShaderResource);
+          EXPECT_EQ(meter.flags & 12U, 12U);
+          ++cases;
+          mesh_node.GetTransform().SetLocalPosition({ 0, 0, .5F });
+          ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0));
+          ASSERT_EQ(probe->raster_depths.size(), 2U);
+          status = Read<ExposureCompletedStatus>(
+            *probe->exposure->current_state->status_buffer,
+            ResourceStates::kCopySource);
+          EXPECT_EQ(status.flags & 18U, 18U);
+          EXPECT_EQ(status.first_failure_kind & 32U, 32U);
+          EXPECT_EQ(status.first_failure_product, forward ? 4U : 1U);
+          ++cases;
+          if (domain == data::MaterialDomain::kMasked) {
+            mesh_node.GetTransform().SetLocalPosition({ 0, 0, 0 });
+            set_blocker(domain, 1, true);
+            ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0));
+            ASSERT_EQ(probe->raster_depths.size(), 2U);
+            status = Read<ExposureCompletedStatus>(
+              *probe->exposure->current_state->status_buffer,
+              ResourceStates::kCopySource);
+            EXPECT_EQ(status.flags & 18U, 18U);
+            EXPECT_EQ(status.first_failure_product, forward ? 4U : 1U);
+            ++cases;
+          }
+        }
+  RecordProperty("emissive_depth_visibility_cases", cases);
+}
+
+NOLINT_TEST_F(ExposureLightingGpuTest, StaticSkyDiffusePreservesSupportedRange)
+{
+  auto& sky
+    = scene->GetEnvironment()->AddSystem<scene::environment::SkyLight>();
+  sky.SetEnabled(true);
+  sky.SetSource(scene::environment::SkyLightSource::kSpecifiedCubemap);
+  sky.SetLowerHemisphereIsSolidColor(false);
+  sky.SetSpecularIntensity(0);
+  sky.SetDiffuseIntensity(1);
+  unsigned cases = 0;
+  for (const Pixel source_color :
+    { Pixel { .25F, .5F, 1, 1 }, Pixel { 0x1p-24F, .25F, 0x1p30F, 1 } }) {
+    data::pak::core::TextureResourceDesc desc {};
+    desc.texture_type = static_cast<std::uint8_t>(TextureType::kTextureCube);
+    desc.width = desc.height = desc.depth = desc.mip_levels = 1;
+    desc.array_layers = 6;
+    desc.format = static_cast<std::uint8_t>(Format::kRGBA32Float);
+    desc.alignment = 256;
+    const auto key = owned_asset_loader_->MintSyntheticTextureKey();
+    desc.content_hash = key.get();
+    std::vector<std::uint8_t> data_region(6 * sizeof(Pixel));
+    std::vector<data::pak::render::SubresourceLayout> layouts;
+    for (unsigned face = 0; face < 6; ++face) {
+      std::memcpy(data_region.data() + face * sizeof(Pixel),
+        source_color.data(), sizeof(Pixel));
+      layouts.push_back({ .offset_bytes = face * sizeof(Pixel),
+        .row_pitch_bytes = sizeof(Pixel),
+        .size_bytes = sizeof(Pixel) });
+    }
+    auto payload = vortex::testing::detail::BuildV4TexturePayload(
+      desc, layouts, data_region);
+    desc.size_bytes = static_cast<std::uint32_t>(payload.size());
+    owned_asset_loader_->SetTexture(
+      key, std::make_shared<data::TextureResource>(desc, std::move(payload)));
+    sky.SetCubemapResource(key);
+    for (const bool forward : { false, true })
+      for (const auto domain :
+        { data::MaterialDomain::kOpaque, data::MaterialDomain::kMasked,
+          data::MaterialDomain::kAlphaBlended }) {
+        SetSurface(domain);
+        const double coverage
+          = domain == data::MaterialDomain::kAlphaBlended ? .5 : 1;
+        for (const float multiplier :
+          { 0.0F, 0x1p-24F, 1.0F, 0x1p32F * .999F, 0x1p35F })
+          for (const float ev : { -32.0F, 0.0F, 32.0F }) {
+            SCOPED_TRACE(source_color[2]);
+            SCOPED_TRACE(forward);
+            SCOPED_TRACE(static_cast<int>(domain));
+            SCOPED_TRACE(multiplier);
+            SCOPED_TRACE(ev);
+            sky.SetIntensityMul(multiplier);
+            ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, ev));
+            const auto pixels = ReadFloatTexture(*probe->color);
+            ASSERT_EQ(pixels.size(), 1U);
+            // Isotropic radiance projects to the constant SH coefficient.
+            // Lambert convolution / pi returns that same radiance,
+            // independently of normal, cubemap orientation or canonical
+            // normalization.
+            for (unsigned channel = 0; channel < 3; ++channel) {
+              const double expected = double(source_color[channel]) * multiplier
+                * coverage * std::exp2(-double(ev));
+              EXPECT_NEAR(pixels[0][channel], expected,
+                std::abs(expected) * 2e-5 + 0x1p-120);
+            }
+            EXPECT_FLOAT_EQ(pixels[0][3], static_cast<float>(coverage));
+            const auto status = Read<ExposureCompletedStatus>(
+              *probe->exposure->current_state->status_buffer,
+              ResourceStates::kCopySource);
+            if (double(source_color[2]) * multiplier > 0x1p32) {
+              EXPECT_EQ(status.flags & 18U, 18U);
+              EXPECT_NE(status.first_failure_kind & 32U, 0U);
+              EXPECT_EQ(status.first_failure_product,
+                domain == data::MaterialDomain::kAlphaBlended || forward ? 4U
+                                                                         : 3U);
+            } else
+              EXPECT_EQ(status.flags & 16U, 0U);
+            ++cases;
+          }
+      }
+  }
+  RecordProperty("static_sky_endpoint_cases", cases);
+}
+
+NOLINT_TEST_F(ExposureGpuTest, DistantSkyRadiancePreservesLinearRange)
+{
+  pass_.reset();
+  renderer_->OnShutdown();
+  auto config = RendererConfig {};
+  config.upload_queue_key = QueueKeyFor().get();
+  renderer_ = std::make_unique<Renderer>(GetGraphicsShared(), config,
+    kPhase1DefaultRuntimeCapabilityFamilies
+      | RendererCapabilityFamily::kEnvironmentLighting);
+  ctx_.current_view.with_atmosphere = true;
+  auto view_data = ViewConstants::GpuData {};
+  auto view_buffer
+    = CreateUploadBuffer(SizeBytes { 256U }, BufferUsage::kConstant);
+  view_buffer->Update(&view_data, sizeof(view_data), 0U);
+  ctx_.view_constants = view_buffer;
+  auto stable = environment::internal::StableAtmosphereState {};
+  stable.atmosphere_revision = 1;
+  stable.view_products.atmosphere.enabled = true;
+  auto cache = environment::internal::AtmosphereLutCache(*renderer_);
+  auto transmittance = environment::AtmosphereTransmittanceLutPass(*renderer_);
+  auto scattering = environment::AtmosphereMultiScatteringLutPass(*renderer_);
+  auto distant = environment::DistantSkyLightLutPass(*renderer_);
+  const auto render = [&](const std::array<float, 2>& intensity) {
+    ctx_.frame_sequence = frame::SequenceNumber { ++sequence_ };
+    ctx_.frame_slot = frame::Slot { unsigned(sequence_ % 3) };
+    stable.light_revision = sequence_;
+    stable.view_products.atmosphere_light_count = 2;
+    for (unsigned i = 0; i < 2; ++i) {
+      auto& light = stable.view_products.atmosphere_lights[i];
+      light.enabled = true;
+      light.direction_to_light_ws = i == 0
+        ? glm::vec3 { 0, 0, 1 }
+        : glm::normalize(glm::vec3 { 1, 0, 1 });
+      light.illuminance_rgb_lux = glm::vec3 { intensity[i] };
+    }
+    cache.OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
+    cache.RefreshForState(stable);
+    transmittance.OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
+    scattering.OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
+    distant.OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
+    if (cache.NeedsTransmittanceBuild())
+      EXPECT_TRUE(transmittance.Record(ctx_, stable, cache).executed);
+    if (cache.NeedsMultiScatteringBuild())
+      EXPECT_TRUE(scattering.Record(ctx_, stable, cache).executed);
+    EXPECT_TRUE(distant.Record(ctx_, stable, cache).executed);
+    return Read<Pixel>(
+      *cache.GetDistantSkyLightBuffer(), ResourceStates::kShaderResource);
+  };
+  const auto first = render({ 1, 0 });
+  const auto second = render({ 0, 1 });
+  for (unsigned channel = 0; channel < 3; ++channel) {
+    ASSERT_GT(first[channel], 0.0F);
+    ASSERT_GT(second[channel], 0.0F);
+  }
+  unsigned cases = 0;
+  // Linearity of the radiative-transfer equation provides an independent
+  // scaling/additivity oracle. Unit-light native anchors are not an absolute
+  // atmospheric-accuracy reference; no production helper computes expected RGB.
+  for (const float gain : { 0.0F, 0x1p-24F, 1.0F, 0x1p32F, 0x1p38F })
+    for (const bool dual : { false, true }) {
+      SCOPED_TRACE(gain);
+      SCOPED_TRACE(dual);
+      const auto result = render({ gain, dual ? gain * .5F : 0.0F });
+      for (unsigned channel = 0; channel < 3; ++channel) {
+        const double expected = double(gain)
+          * (double(first[channel]) + (dual ? .5 * second[channel] : 0));
+        EXPECT_NEAR(
+          result[channel], expected, std::abs(expected) * 2e-5 + 0x1p-120);
+      }
+      EXPECT_EQ(result[3], 0);
+      ++cases;
+    }
+  ctx_.view_constants.reset();
+  RecordProperty("distant_sky_range_cases", cases);
   WaitForQueueIdle();
 }
 
@@ -8114,6 +8823,7 @@ NOLINT_TEST_F(ExposureGpuTest, SkyProducerPreservesThinBrightScattering)
   renderer_ = std::make_unique<Renderer>(GetGraphicsShared(), config,
     kPhase1DefaultRuntimeCapabilityFamilies
       | RendererCapabilityFamily::kEnvironmentLighting);
+  pass_ = std::make_unique<postprocess::ExposurePass>(*renderer_);
   ctx_.current_view.with_atmosphere = true;
   ctx_.current_view.hdr_color_format = Format::kRGBA32Float;
   auto view_data = ViewConstants::GpuData {};
@@ -8136,42 +8846,84 @@ NOLINT_TEST_F(ExposureGpuTest, SkyProducerPreservesThinBrightScattering)
   atmosphere.ozone_absorption_rgb = {};
   atmosphere.ground_albedo_rgb = {};
   atmosphere.multi_scattering_factor = 0;
-  auto& light = stable.view_products.atmosphere_lights[0];
-  light.enabled = true;
-  light.direction_to_light_ws = { 0, 0, 1 };
-  light.illuminance_rgb_lux = { 1.88e9F, 1.88e9F, 1.88e9F };
-  stable.view_products.atmosphere_light_count = 1;
   auto environment_view = EnvironmentViewData {};
   environment_view.sky_planet_translated_world_center_km_and_view_height_km
     = { 0, 0, -1, 1.25F };
   unsigned sequence = 0;
-  for (const float extinction :
-    { 0.0F, 1e-12F, .999e-9F, 1e-9F, 1.001e-9F, 1e-6F }) {
-    SCOPED_TRACE(extinction);
-    atmosphere.rayleigh_scattering_rgb = glm::vec3 { extinction / 1000.0F };
-    ctx_.frame_sequence = frame::SequenceNumber { ++sequence };
-    ctx_.frame_slot = frame::Slot { (sequence - 1U) % 3U };
-    stable.atmosphere_revision = sequence;
-    cache.OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
-    cache.RefreshForState(stable);
-    transmittance.OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
-    multiple.OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
-    sky.OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
-    ASSERT_TRUE(transmittance.Record(ctx_, stable, cache).executed);
-    ASSERT_TRUE(multiple.Record(ctx_, stable, cache).executed);
-    const auto produced = sky.Record(ctx_, environment_view, stable, cache);
-    ASSERT_TRUE(produced.executed);
-    const auto pixels = ReadFloatTexture(*produced.texture);
-    // Row zero is exactly zenith. Constant-density, single Rayleigh scattering
-    // toward a zenith sun has constant total light+view attenuation along the
-    // .75 km ray: L = E * phase(1) * sigma * d * exp(-sigma*d).
-    const double sigma = double(atmosphere.rayleigh_scattering_rgb.x) * 1000;
-    const double expected = double(light.illuminance_rgb_lux.x)
-      * (3 / (8 * std::acos(-1.0))) * sigma * .75 * std::exp(-sigma * .75);
-    for (unsigned x = 0; x < produced.width; ++x)
-      for (unsigned c = 0; c < 3; ++c)
-        EXPECT_NEAR(pixels[x][c], expected, expected * 2e-5 + 0x1p-120);
-  }
+  auto settings = scene::ExposureSettings {};
+  settings.mode = engine::ExposureMode::kManual;
+  unsigned cases = 0;
+  for (const unsigned light_slot : { 0U, 1U })
+    for (const float illuminance : { .5e-6F, 1e-6F, 1.001e-6F, 1.88e9F })
+      for (const float ev : { -32.0F, 0.0F, 32.0F }) {
+        stable.view_products.atmosphere_lights = {};
+        auto& light = stable.view_products.atmosphere_lights[light_slot];
+        light.enabled = true;
+        light.direction_to_light_ws = { 0, 0, 1 };
+        light.illuminance_rgb_lux = glm::vec3 { illuminance };
+        stable.view_products.atmosphere_light_count = light_slot + 1;
+        settings.manual_ev = ev;
+        const auto exposure_config = SharedConfig(settings);
+        SCOPED_TRACE(light_slot);
+        SCOPED_TRACE(illuminance);
+        SCOPED_TRACE(ev);
+        for (const float extinction :
+          { 0.0F, 1e-12F, .999e-9F, 1e-9F, 1.001e-9F, 1e-6F }) {
+          SCOPED_TRACE(extinction);
+          atmosphere.rayleigh_scattering_rgb
+            = glm::vec3 { extinction / 1000.0F };
+          ctx_.frame_sequence = frame::SequenceNumber { ++sequence };
+          ctx_.frame_slot = frame::Slot { (sequence - 1U) % 3U };
+          const auto exposure
+            = pass_->ResolveFrame(ctx_, exposure_config, { .use_fp32 = false });
+          ASSERT_NE(exposure, nullptr);
+          ctx_.current_view.frame_exposure = exposure;
+          auto bindings = ViewFrameBindings {};
+          bindings.frame_exposure_slot = exposure->srv_index;
+          bindings.exposure_status_uav
+            = exposure->current_state->status_uav_index;
+          view_data.view_frame_bindings_bslot
+            = BindlessViewFrameBindingsSlot { PublishFixtureData(bindings) };
+          view_buffer->Update(&view_data, sizeof(view_data), 0U);
+          stable.atmosphere_revision = sequence;
+          cache.OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
+          cache.RefreshForState(stable);
+          transmittance.OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
+          multiple.OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
+          sky.OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
+          const auto capture = light_slot == 1 && illuminance == .5e-6F
+              && ev == -32 && extinction == 1e-6F
+            ? BeginOptionalCapture()
+            : observer_ptr<FrameCaptureController> {};
+          ASSERT_TRUE(transmittance.Record(ctx_, stable, cache).executed);
+          ASSERT_TRUE(multiple.Record(ctx_, stable, cache).executed);
+          const auto produced
+            = sky.Record(ctx_, environment_view, stable, cache);
+          ASSERT_TRUE(produced.executed);
+          const auto pixels = ReadFloatTexture(*produced.texture);
+          // Row zero is exactly zenith. Constant-density, single Rayleigh
+          // scattering toward a zenith sun has constant total light+view
+          // attenuation along the .75 km ray: L = E * phase(1) * sigma * d *
+          // exp(-sigma*d).
+          const double sigma
+            = double(atmosphere.rayleigh_scattering_rgb.x) * 1000;
+          const double expected = double(light.illuminance_rgb_lux.x)
+            * (3 / (8 * std::acos(-1.0))) * sigma * .75 * std::exp(-sigma * .75)
+            * std::exp2(-double(ev));
+          for (unsigned x = 0; x < produced.width; ++x)
+            for (unsigned c = 0; c < 3; ++c)
+              EXPECT_NEAR(pixels[x][c], expected, expected * 2e-5 + 0x1p-120);
+          if (capture)
+            EXPECT_TRUE(capture->EndCapture());
+          const auto status = Read<ExposureCompletedStatus>(
+            *exposure->current_state->status_buffer,
+            ResourceStates::kCopySource);
+          EXPECT_EQ(status.flags & 16U, 0U);
+          ++cases;
+        }
+      }
+  RecordProperty("sky_scattering_endpoint_cases", cases);
+  ctx_.current_view.frame_exposure.reset();
   ctx_.view_constants.reset();
   WaitForQueueIdle();
 }

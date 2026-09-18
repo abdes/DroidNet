@@ -44,7 +44,9 @@ float4 DeferredLightDirectionalPS(VortexFullscreenTriangleOutput input) : SV_Tar
         if (!HasDeferredLightingInputs(bindings) || scene_depth >= 1.0f) {
             return 0.0f.xxxx;
         }
-        return float4(EvaluateDeferredStaticSkyLightDiffuse(surface) * GetPreExposure(), 0.0f);
+        const float3 diffuse = EvaluateDeferredStaticSkyLightDiffuse(surface);
+        RecordHdrSceneSource(diffuse, 3u);
+        return float4(diffuse * GetPreExposure(), 0.0f);
     }
 
 #if defined(DEBUG_IBL_ONLY)
@@ -86,5 +88,6 @@ float4 DeferredLightDirectionalPS(VortexFullscreenTriangleOutput input) : SV_Tar
         light_attenuation,
         camera_position,
         bindings);
+    RecordHdrSceneSource(lighting, 2u);
     return float4(lighting * GetPreExposure(), 0.0f);
 }

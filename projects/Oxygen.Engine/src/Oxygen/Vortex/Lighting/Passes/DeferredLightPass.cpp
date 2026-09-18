@@ -29,6 +29,7 @@
 #include <Oxygen/Vortex/Internal/ViewportClamp.h>
 #include <Oxygen/Vortex/Lighting/Internal/DeferredLightProxyGeometry.h>
 #include <Oxygen/Vortex/Lighting/Passes/DeferredLightPass.h>
+#include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
@@ -847,6 +848,15 @@ auto DeferredLightPass::Record(RenderContext& ctx,
   RequireKnownPersistentState(*recorder, scene_textures.GetGBufferMaterial());
   RequireKnownPersistentState(*recorder, scene_textures.GetGBufferBaseColor());
   RequireKnownPersistentState(*recorder, scene_textures.GetGBufferCustomData());
+  if (const auto& frame = ctx.current_view.frame_exposure) {
+    const auto& status = *frame->current_state->status_buffer;
+    if (!recorder->IsResourceTracked(status)
+      && !recorder->AdoptKnownResourceState(status))
+      recorder->BeginTrackingResourceState(
+        status, graphics::ResourceStates::kCommon, false);
+    recorder->RequireResourceState(
+      status, graphics::ResourceStates::kUnorderedAccess);
+  }
   if (directional_shadow_surface != nullptr
     && state.consumed_directional_shadow_product) {
     if (!recorder->AdoptKnownResourceState(*directional_shadow_surface)) {
