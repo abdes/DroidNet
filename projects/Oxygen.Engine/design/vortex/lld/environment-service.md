@@ -115,6 +115,11 @@ Stateless views and views with temporal reprojection disabled keep no persistent
 history entry; their current volumes and exposure readers remain frame-retained
 until GPU consumers finish. Unpublished fog allocations also retire on failure.
 
+Local-fog culling and composition transient constants reset at the environment
+service's frame boundary, once for the frame slot. Every view appends its own
+allocation during recording. Per-view recording must not retire descriptors
+referenced by earlier queued views; the last view is not a GPU-completion fence.
+
 ## Current Implementation Status
 
 This LLD is the continuation document for the active environment lane. It is

@@ -42,6 +42,9 @@ public:
   OXGN_VRTX_API explicit LocalFogVolumeTiledCullingPass(Renderer& renderer);
   OXGN_VRTX_API ~LocalFogVolumeTiledCullingPass();
 
+  OXGN_VRTX_API auto OnFrameStart(
+    frame::SequenceNumber sequence, frame::Slot slot) -> void;
+
   LocalFogVolumeTiledCullingPass(const LocalFogVolumeTiledCullingPass&) = delete;
   auto operator=(const LocalFogVolumeTiledCullingPass&)
     -> LocalFogVolumeTiledCullingPass& = delete;

@@ -3012,6 +3012,49 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
 }
 
 NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
+  LocalFogQueuedViewsKeepEarlierConstantDescriptorsAlive)
+{
+  auto service = EnvironmentLightingService(*renderer_);
+  const auto sequence = oxygen::frame::SequenceNumber { 9U };
+  const auto slot = oxygen::frame::Slot { 2U };
+  service.OnFrameStart(sequence, slot);
+  auto scene = MakeSceneWithLocalFog();
+  auto textures = SceneTextures(*graphics_,
+    SceneTexturesConfig { .extent = { 64U, 64U }, .enable_velocity = false });
+  auto& allocator = graphics_->GetDescriptorAllocator();
+  const auto live_descriptors = [&] {
+    return allocator
+      .GetAllocatedDescriptorsCount(
+        oxygen::graphics::ResourceViewType::kStructuredBuffer_SRV,
+        oxygen::graphics::DescriptorVisibility::kShaderVisible)
+      .get();
+  };
+  std::optional<std::uint32_t> previous_count;
+  for (std::uint32_t index = 0; index < 3; ++index) {
+    SCOPED_TRACE(index);
+    auto resolved = MakeResolvedView(64.0F / float(index + 1U), 64.0F);
+    auto composition = oxygen::vortex::CompositionView {};
+    composition.id = ViewId { 100U + index };
+    composition.with_height_fog = true;
+    composition.with_local_fog = true;
+    auto ctx = MakeRenderContext(composition.id, resolved, composition);
+    ctx.frame_sequence = sequence;
+    ctx.frame_slot = slot;
+    ctx.scene = oxygen::observer_ptr { scene.get() };
+    service.RenderSkyAndFog(ctx, textures);
+    ASSERT_TRUE(service.GetLastStage15State().local_fog_executed);
+    const auto current_count = live_descriptors();
+    if (previous_count) {
+      // Each view adds instance, culling-instance, culling-control and compose-
+      // control SRVs. Preparing a later view cannot release any earlier SRV:
+      // its recorded commands may still be waiting to execute on the GPU.
+      EXPECT_GE(current_count, *previous_count + 4U);
+    }
+    previous_count = current_count;
+  }
+}
+
+NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   LocalFogStage14UsesViewportTileResolutionForSubViewportViews)
 {
   auto service = EnvironmentLightingService(*renderer_);

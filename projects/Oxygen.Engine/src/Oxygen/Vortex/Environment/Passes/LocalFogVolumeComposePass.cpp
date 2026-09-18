@@ -248,6 +248,14 @@ LocalFogVolumeComposePass::LocalFogVolumeComposePass(Renderer& renderer)
 
 LocalFogVolumeComposePass::~LocalFogVolumeComposePass() = default;
 
+auto LocalFogVolumeComposePass::OnFrameStart(
+  const frame::SequenceNumber sequence, const frame::Slot slot) -> void
+{
+  if (EnsurePassConstantsBuffer()) {
+    pass_constants_buffer_->OnFrameStart(sequence, slot);
+  }
+}
+
 auto LocalFogVolumeComposePass::EnsurePassConstantsBuffer() -> bool
 {
   if (pass_constants_buffer_.has_value()) {
@@ -309,7 +317,6 @@ auto LocalFogVolumeComposePass::Record(RenderContext& ctx,
     reverse_z = resolved_view->ReverseZ();
   }
 
-  pass_constants_buffer_->OnFrameStart(ctx.frame_sequence, ctx.frame_slot);
   auto constants = PassConstants {
     .instance_buffer_slot = products.instance_buffer_slot.get(),
     .tile_data_texture_slot = products.tile_data_texture_slot.get(),
