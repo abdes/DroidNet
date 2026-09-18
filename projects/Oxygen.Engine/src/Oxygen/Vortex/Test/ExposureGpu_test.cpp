@@ -7401,7 +7401,121 @@ protected:
     frame.SetScene(observer_ptr { scene.get() });
   }
 
+  auto MakeEmissiveMaterial(float value) -> std::shared_ptr<data::MaterialAsset>
+  {
+    data::pak::core::TextureResourceDesc desc {};
+    desc.texture_type = static_cast<std::uint8_t>(TextureType::kTexture2D);
+    desc.width = desc.height = desc.depth = desc.mip_levels = desc.array_layers
+      = 1;
+    desc.format = static_cast<std::uint8_t>(Format::kRGBA32Float);
+    desc.alignment = 256;
+    const auto key = owned_asset_loader_->MintSyntheticTextureKey();
+    desc.content_hash = key.get();
+    const Pixel pixel { value, value, value, 1 };
+    std::vector<std::uint8_t> bytes(sizeof(pixel));
+    std::memcpy(bytes.data(), pixel.data(), sizeof(pixel));
+    const std::array layouts { data::pak::render::SubresourceLayout {
+      .offset_bytes = 0,
+      .row_pitch_bytes = sizeof(pixel),
+      .size_bytes = sizeof(pixel) } };
+    auto payload
+      = vortex::testing::detail::BuildV4TexturePayload(desc, layouts, bytes);
+    desc.size_bytes = static_cast<std::uint32_t>(payload.size());
+    owned_asset_loader_->SetTexture(
+      key, std::make_shared<data::TextureResource>(desc, std::move(payload)));
+    data::pak::render::MaterialAssetDesc authored {};
+    authored.flags = data::pak::render::kMaterialFlag_DoubleSided;
+    authored.base_color[3] = 1;
+    authored.normal_scale = 1;
+    authored.roughness = data::Unorm16 { 1 };
+    authored.ambient_occlusion = data::Unorm16 { 1 };
+    authored.uv_scale[0] = authored.uv_scale[1] = 1;
+    for (auto& component : authored.emissive_factor)
+      component = data::HalfFloat { 1.0F };
+    std::vector<content::ResourceKey> keys(6);
+    keys[5] = key;
+    return std::make_shared<data::MaterialAsset>(
+      data::AssetKey::FromVirtualPath(
+        "/Test/Exposure/Wide" + std::to_string(key.get()) + ".omat"),
+      authored, std::vector<data::ShaderReference> {}, keys);
+  }
+
   auto MeasureHdrAllocationAccounting(bool temporal) -> void;
+
+  auto UniformReferenceGain(float luminance) const -> double
+  {
+    // Independent one-pixel, full-percentile histogram oracle. Both adjacent
+    // bins retain their rounded share of the fixed 4095 sample mass.
+    if (luminance <= std::exp2(settings.min_log_luminance))
+      return std::exp2(-double(settings.min_ev) + settings.compensation_ev)
+        * (settings.target_luminance / .18) * (settings.key / 12.5);
+    const double bin
+      = std::clamp((std::log2(double(luminance)) - settings.min_log_luminance)
+            / settings.log_luminance_range,
+          0.0, 1.0)
+      * 255;
+    const double lower = std::floor(bin);
+    const double upper_mass = std::floor((bin - lower) * 4095 + .5);
+    const double measured_log = settings.min_log_luminance
+      + (lower + upper_mass / 4095) * settings.log_luminance_range / 255;
+    const double ev = std::clamp(measured_log - std::log2(.18),
+      double(settings.min_ev), double(settings.max_ev));
+    return std::exp2(-ev + settings.compensation_ev)
+      * (settings.target_luminance / .18) * (settings.key / 12.5);
+  }
+
+  auto ExpectSurfaceExposure(float luminance, double expected_gain,
+    const Texture& reference, ExposureStateData& state) -> void
+  {
+    state = Read<ExposureStateData>(
+      *probe->exposure->current_state->buffer, ResourceStates::kShaderResource);
+    const auto domain = Read<FrameExposureData>(
+      *probe->exposure->buffer, ResourceStates::kShaderResource);
+    EXPECT_TRUE(std::isfinite(domain.pre_exposure));
+    EXPECT_GT(domain.pre_exposure, 0);
+    EXPECT_GT(state.latent_scale, 0);
+    if (expected_gain == 0)
+      EXPECT_EQ(state.displayed_scale, 0);
+    else {
+      ASSERT_GT(state.displayed_scale, 0);
+      EXPECT_NEAR(std::log2(double(state.displayed_scale)),
+        std::log2(expected_gain), 4e-4);
+    }
+    if (luminance >= 0) {
+      const auto hdr = ReadFloatTexture(reference);
+      ASSERT_EQ(hdr.size(), 1U);
+      for (unsigned c = 0; c < 3; ++c)
+        EXPECT_NEAR(double(hdr[0][c]) / domain.pre_exposure, luminance,
+          double(luminance) * 2e-5 + 0x1p-120);
+    }
+    const auto mapped = ReadFloatTexture(
+      *framebuffer->GetDescriptor().color_attachments.front().texture);
+    ASSERT_EQ(mapped.size(), 1U);
+    const double expected = std::clamp(
+      std::clamp(double(luminance) * expected_gain, 0.0, 1.0) - .5 / 255, 0.0,
+      1.0);
+    for (unsigned c = 0; c < 3; ++c)
+      EXPECT_NEAR(mapped[0][c], expected, 2e-4);
+    EXPECT_EQ(mapped[0][3], 1);
+  }
+
+  auto ReferenceAdaptedGain(
+    double previous, double target, double seconds) const -> double
+  {
+    const double q = std::log2(previous);
+    const double destination = std::log2(target);
+    const double radius = std::abs(destination - q);
+    const double speed
+      = target < previous ? settings.speed_up : settings.speed_down;
+    if (radius == 0 || speed == 0 || seconds == 0)
+      return previous;
+    const double distance = settings.transition_distance;
+    const double crossing = std::max(radius - distance, 0.0) / speed;
+    const double remaining = seconds <= crossing ? radius - speed * seconds
+                                                 : std::min(radius, distance)
+        * std::exp(-speed * (seconds - crossing) / distance);
+    return std::exp2(destination - (destination > q ? 1 : -1) * remaining);
+  }
 
   auto SetSurface(data::MaterialDomain domain, float emission = 0,
     bool rejected_mask = false) -> void
@@ -7516,6 +7630,318 @@ protected:
   DepthPrePassMode depth_mode = DepthPrePassMode::kOpaqueAndMasked;
   console::Console fixture_console;
 };
+
+NOLINT_TEST_F(
+  ExposureLightingGpuTest, SceneLifecycleHdrStartupCutsSeedsAndPause)
+{
+  verify_manual_p = false;
+  probe->prepare = [](RenderContext&) { };
+  settings.mode = engine::ExposureMode::kAuto;
+  settings.min_ev = -22;
+  settings.max_ev = 30;
+  settings.min_log_luminance = -24;
+  settings.log_luminance_range = 56;
+  settings.low_percentile = 0;
+  settings.high_percentile = 1;
+  settings.speed_up = .75F;
+  settings.speed_down = .5F;
+  ASSERT_TRUE(scene::ResolveExposureSettings(settings).has_value());
+  std::shared_ptr<const Texture> reference;
+  Format format = Format::kUnknown;
+  probe->inspect = [&](const RenderContext& ctx,
+                     const SceneTextureExtractRef& color, unsigned) {
+    EXPECT_FLOAT_EQ(ctx.delta_time, frame_delta_seconds);
+    format = color.texture->GetDescriptor().format;
+    auto* owner
+      = vortex::testing::RendererPublicationProbe::GetSceneRenderer(*renderer_);
+    reference = owner->GetResolvedSceneColorTexture();
+  };
+  ExposureStateData state;
+  unsigned cases = 0;
+  unsigned checks = 0;
+  for (const bool forward : { false, true })
+    for (const float value : { 0.0F, 0x1p-24F, .25F, 0x1p32F }) {
+      SCOPED_TRACE(
+        ::testing::Message() << "forward=" << forward << " source=" << value);
+      const float changed = value == 0 ? .25F
+        : value == 0x1p32F             ? 0x1p30F
+                                       : value * 4;
+      const auto initial_material = MakeEmissiveMaterial(value);
+      const auto changed_material = MakeEmissiveMaterial(changed);
+      surface_view_id = 9000;
+      frame_delta_seconds = 0;
+      // Asset readiness is established on another history before first use.
+      mesh_node.GetRenderable().SetMaterialOverride(0, 0, changed_material);
+      ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0, 4));
+      mesh_node.GetRenderable().SetMaterialOverride(0, 0, initial_material);
+      ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0, 4));
+      surface_view_id = 1600 + cases;
+      const auto handle = CompositionView::ViewStateHandle { surface_view_id };
+      const auto render = [&](float input, double expected) {
+        ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0, 1));
+        ASSERT_NE(reference, nullptr);
+        ASSERT_NO_FATAL_FAILURE(
+          ExpectSurfaceExposure(input, expected, *reference, state));
+        ++checks;
+      };
+      const double initial = UniformReferenceGain(value);
+      const double target = UniformReferenceGain(changed);
+      const auto capture = !forward && value == 0x1p32F
+        ? BeginOptionalCapture()
+        : observer_ptr<FrameCaptureController> {};
+      ASSERT_NO_FATAL_FAILURE(render(value, initial));
+      if (capture)
+        EXPECT_TRUE(capture->EndCapture());
+      EXPECT_EQ(format, Format::kRGBA32Float);
+      EXPECT_EQ(state.flags & 31U, value <= 0x1p-24F ? 27U : 15U);
+      EXPECT_EQ(state.fallback_reason, 0U);
+      EXPECT_EQ(Read<FrameExposureData>(
+                  *probe->exposure->buffer, ResourceStates::kShaderResource)
+                  .pre_exposure,
+        1);
+      mesh_node.GetRenderable().SetMaterialOverride(0, 0, changed_material);
+      ASSERT_NO_FATAL_FAILURE(render(changed, initial));
+      EXPECT_NEAR(
+        std::log2(double(state.target_scale)), std::log2(target), 4e-4);
+      frame_delta_seconds = .25F;
+      const double adapted = ReferenceAdaptedGain(initial, target, .25);
+      ASSERT_NO_FATAL_FAILURE(render(changed, adapted));
+      frame_delta_seconds = 0;
+      ASSERT_TRUE(renderer_
+          ->NotifyViewDiscontinuity(handle, ViewDiscontinuity::kCameraCut)
+          .has_value());
+      ASSERT_NO_FATAL_FAILURE(render(changed, target));
+      EXPECT_EQ(format, Format::kRGBA32Float);
+      EXPECT_EQ(state.requested_generation, state.applied_generation);
+      EXPECT_NE(state.applied_generation[0], 0U);
+      const float seed_ev = value <= 0x1p-24F ? -24.0F : 31.0F;
+      const auto seed = renderer_->QueueExposureTransition(
+        handle, ExposureTransitionPolicy::kSeedFromEv100, seed_ev);
+      ASSERT_TRUE(seed.has_value());
+      ASSERT_TRUE(renderer_
+          ->NotifyViewDiscontinuity(handle, ViewDiscontinuity::kCameraCut)
+          .has_value());
+      frame_delta_seconds = .25F;
+      const double seeded = std::exp2(-double(seed_ev));
+      ASSERT_NO_FATAL_FAILURE(render(changed, seeded));
+      EXPECT_EQ(state.applied_generation[0], seed->generation);
+      const double after_seed = ReferenceAdaptedGain(seeded, target, .25);
+      ASSERT_NO_FATAL_FAILURE(render(changed, after_seed));
+      const auto preserve = renderer_->QueueExposureTransition(
+        handle, ExposureTransitionPolicy::kPreserve);
+      ASSERT_TRUE(preserve.has_value());
+      ASSERT_TRUE(renderer_
+          ->NotifyViewDiscontinuity(handle, ViewDiscontinuity::kCameraCut)
+          .has_value());
+      ASSERT_NO_FATAL_FAILURE(render(changed, after_seed));
+      EXPECT_EQ(state.applied_generation[0], preserve->generation);
+      surface_view_id += 500;
+      const auto startup = renderer_->QueueExposureTransition(
+        CompositionView::ViewStateHandle { surface_view_id },
+        ExposureTransitionPolicy::kSeedFromEv100, -8.0F);
+      ASSERT_TRUE(startup.has_value());
+      ASSERT_TRUE(renderer_->RetryExposureTransition(*startup).has_value());
+      ASSERT_NO_FATAL_FAILURE(render(changed, 256));
+      EXPECT_EQ(format, Format::kRGBA32Float);
+      EXPECT_EQ(state.applied_generation[0], startup->generation);
+      ASSERT_TRUE(renderer_->RetryExposureTransition(*startup).has_value());
+      ASSERT_NO_FATAL_FAILURE(
+        render(changed, ReferenceAdaptedGain(256, target, .25)));
+      EXPECT_EQ(state.applied_generation[0], startup->generation);
+      reference.reset();
+      ++cases;
+    }
+  for (const bool forward : { false, true }) {
+    SCOPED_TRACE(
+      ::testing::Message() << "unmetered startup forward=" << forward);
+    surface_view_id = forward ? 2501U : 2500U;
+    frame_delta_seconds = 0;
+    SetSurface(data::MaterialDomain::kOpaque, -1);
+    ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0, 1));
+    ASSERT_NO_FATAL_FAILURE(ExpectSurfaceExposure(-1, 1, *reference, state));
+    EXPECT_EQ(state.flags & 2U, 0U);
+    SetSurface(data::MaterialDomain::kOpaque, .25F);
+    ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0, 1));
+    ASSERT_NO_FATAL_FAILURE(ExpectSurfaceExposure(
+      .25F, UniformReferenceGain(.25F), *reference, state));
+    EXPECT_NE(state.flags & 2U, 0U);
+    surface_view_id += 100;
+    SetSurface(data::MaterialDomain::kOpaque, -1);
+    const auto seed = renderer_->QueueExposureTransition(
+      CompositionView::ViewStateHandle { surface_view_id },
+      ExposureTransitionPolicy::kSeedFromEv100, 6.0F);
+    ASSERT_TRUE(seed.has_value());
+    ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0, 1));
+    ASSERT_NO_FATAL_FAILURE(
+      ExpectSurfaceExposure(-1, 0x1p-6, *reference, state));
+    EXPECT_EQ(state.flags & 12U, 0U);
+    EXPECT_NE(state.flags & 2U, 0U);
+    EXPECT_EQ(state.applied_generation[0], seed->generation);
+    frame_delta_seconds = .25F;
+    SetSurface(data::MaterialDomain::kOpaque, .25F);
+    ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0, 1));
+    ASSERT_NO_FATAL_FAILURE(ExpectSurfaceExposure(.25F,
+      ReferenceAdaptedGain(0x1p-6, UniformReferenceGain(.25F), .25), *reference,
+      state));
+    checks += 4;
+  }
+  probe->inspect = {};
+  reference.reset();
+  RecordProperty("unmetered_startup_paths", 2);
+  RecordProperty("scene_hdr_lifecycle_cases", cases);
+  RecordProperty("scene_hdr_lifecycle_frames_checked", checks);
+}
+
+NOLINT_TEST_F(ExposureLightingGpuTest,
+  SceneLifecycleModesPhysicalCameraZeroTargetAndLockedRange)
+{
+  verify_manual_p = false;
+  probe->prepare = [](RenderContext&) { };
+  std::shared_ptr<const Texture> reference;
+  probe->inspect
+    = [&](const RenderContext& ctx, const SceneTextureExtractRef&, unsigned) {
+        EXPECT_FLOAT_EQ(ctx.delta_time, frame_delta_seconds);
+        reference = vortex::testing::RendererPublicationProbe::GetSceneRenderer(
+          *renderer_)
+                      ->GetResolvedSceneColorTexture();
+      };
+  ExposureStateData state;
+  unsigned cases = 0;
+  unsigned checks = 0;
+  for (const bool forward : { false, true })
+    for (const bool orthographic : { false, true }) {
+      SCOPED_TRACE(::testing::Message()
+        << "forward=" << forward << " orthographic=" << orthographic);
+      scene::CameraExposure physical {
+        .aperture_f = 2, .shutter_rate = 4, .iso = 100
+      };
+      if (orthographic) {
+        auto lens = std::make_unique<scene::OrthographicCamera>();
+        lens->SetViewport(view.viewport);
+        lens->SetExtents(-1, 1, -1, 1, .1F, 10);
+        lens->SetExposure(physical);
+        ASSERT_TRUE(camera.ReplaceCamera(std::move(lens)));
+      } else {
+        auto lens = std::make_unique<scene::PerspectiveCamera>();
+        lens->SetViewport(view.viewport);
+        lens->SetExposure(physical);
+        ASSERT_TRUE(camera.ReplaceCamera(std::move(lens)));
+      }
+      settings = scene::ExposureSettings {};
+      settings.key = 12.5F;
+      settings.mode = engine::ExposureMode::kManual;
+      settings.min_ev = -22;
+      settings.max_ev = 30;
+      settings.min_log_luminance = -24;
+      settings.log_luminance_range = 56;
+      settings.low_percentile = 0;
+      settings.high_percentile = 1;
+      settings.speed_up = settings.speed_down = .5F;
+      ASSERT_TRUE(scene::ResolveExposureSettings(settings).has_value());
+      frame_delta_seconds = 0;
+      surface_view_id = 9000;
+      SetSurface(data::MaterialDomain::kOpaque, .25F);
+      ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0, 4));
+      surface_view_id = 3000 + cases;
+      const auto handle = CompositionView::ViewStateHandle { surface_view_id };
+      const auto render = [&](float input, double expected, float ev = 0) {
+        ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, ev, 1));
+        ASSERT_NE(reference, nullptr);
+        ASSERT_NO_FATAL_FAILURE(
+          ExpectSurfaceExposure(input, expected, *reference, state));
+        ++checks;
+      };
+      ASSERT_NO_FATAL_FAILURE(render(.25F, 1));
+      const auto rejected_seed = renderer_->QueueExposureTransition(
+        handle, ExposureTransitionPolicy::kSeedFromEv100, 10.0F);
+      ASSERT_TRUE(rejected_seed.has_value());
+      ASSERT_NO_FATAL_FAILURE(render(.25F, 0x1p-4, 4));
+      EXPECT_NE(state.flags & (1U << 12U), 0U);
+      EXPECT_EQ((state.flags >> 16U) & 15U, 1U);
+      ASSERT_NO_FATAL_FAILURE(render(.25F, .25, 2));
+      const auto rejected = renderer_->InspectExposureTransition(handle);
+      ASSERT_TRUE(rejected.has_value());
+      EXPECT_EQ(rejected->phase, ExposureTransitionPhase::kRejected);
+      EXPECT_EQ(rejected->error, ExposureTransitionError::kNotAuto);
+      settings.mode = engine::ExposureMode::kAuto;
+      frame_delta_seconds = .5F;
+      const double target = UniformReferenceGain(.25F);
+      ASSERT_NO_FATAL_FAILURE(render(.25F, .25));
+      // The Manual start crosses D=1.5 during this half-second step.
+      const double adapted = ReferenceAdaptedGain(.25, target, .5);
+      ASSERT_NO_FATAL_FAILURE(render(.25F, adapted));
+      frame_delta_seconds = 0;
+      SetSurface(data::MaterialDomain::kOpaque, 1);
+      ASSERT_NO_FATAL_FAILURE(render(1, adapted));
+      settings.compensation_ev = 1;
+      ASSERT_NO_FATAL_FAILURE(render(1, adapted));
+      EXPECT_NEAR(std::log2(double(state.target_scale)),
+        std::log2(UniformReferenceGain(1)), 4e-4);
+      settings.compensation_ev = 0;
+      settings.speed_up = settings.speed_down = 0;
+      frame_delta_seconds = 1;
+      ASSERT_NO_FATAL_FAILURE(render(1, adapted));
+      settings.mode = engine::ExposureMode::kManualCamera;
+      frame_delta_seconds = 0;
+      ASSERT_NO_FATAL_FAILURE(render(1, 0x1p-4));
+      physical.iso = 400;
+      if (orthographic)
+        camera.GetCameraAs<scene::OrthographicCamera>()->get().SetExposure(
+          physical);
+      else
+        camera.GetCameraAs<scene::PerspectiveCamera>()->get().SetExposure(
+          physical);
+      ASSERT_NO_FATAL_FAILURE(render(1, .25));
+      settings.enabled = false;
+      const auto disabled_reset = renderer_->QueueExposureTransition(
+        handle, ExposureTransitionPolicy::kRemeter);
+      ASSERT_TRUE(disabled_reset.has_value());
+      ASSERT_NO_FATAL_FAILURE(render(1, 1));
+      EXPECT_NE(state.flags & (1U << 12U), 0U);
+      EXPECT_EQ((state.flags >> 16U) & 15U, 1U);
+      settings.enabled = true;
+      settings.mode = engine::ExposureMode::kAuto;
+      settings.target_luminance = 0;
+      ASSERT_NO_FATAL_FAILURE(render(1, 0));
+      EXPECT_EQ(renderer_->InspectExposureTransition(handle)->phase,
+        ExposureTransitionPhase::kRejected);
+      EXPECT_NE(state.flags & 64U, 0U);
+      settings.target_luminance = .18F;
+      ASSERT_NO_FATAL_FAILURE(render(1, UniformReferenceGain(1)));
+      settings.target_luminance = 0;
+      ASSERT_NO_FATAL_FAILURE(render(1, 0));
+      const auto zero_seed = renderer_->QueueExposureTransition(
+        handle, ExposureTransitionPolicy::kSeedFromEv100, 6.0F);
+      ASSERT_TRUE(zero_seed.has_value());
+      ASSERT_NO_FATAL_FAILURE(render(1, 0));
+      EXPECT_FLOAT_EQ(state.latent_scale, 0x1p-6F);
+      SetSurface(data::MaterialDomain::kOpaque, -1);
+      settings.target_luminance = .18F;
+      ASSERT_NO_FATAL_FAILURE(render(-1, UniformReferenceGain(1)));
+      EXPECT_EQ(state.flags & 12U, 0U);
+      settings.min_ev = settings.max_ev = 4;
+      const auto remeter = renderer_->QueueExposureTransition(
+        handle, ExposureTransitionPolicy::kRemeter);
+      ASSERT_TRUE(remeter.has_value());
+      ASSERT_NO_FATAL_FAILURE(render(-1, 0x1p-4));
+      EXPECT_EQ(state.applied_generation[0], remeter->generation);
+      SetSurface(data::MaterialDomain::kOpaque, .25F);
+      const auto locked_seed = renderer_->QueueExposureTransition(
+        handle, ExposureTransitionPolicy::kSeedFromEv100, -5.0F);
+      ASSERT_TRUE(locked_seed.has_value());
+      ASSERT_NO_FATAL_FAILURE(render(.25F, 32));
+      EXPECT_EQ(state.applied_generation[0], locked_seed->generation);
+      ASSERT_NO_FATAL_FAILURE(render(.25F, 0x1p-4));
+      settings.target_luminance = 0;
+      ASSERT_NO_FATAL_FAILURE(render(.25F, 0));
+      EXPECT_FLOAT_EQ(state.latent_scale, 0x1p-4F);
+      ++cases;
+    }
+  probe->inspect = {};
+  reference.reset();
+  RecordProperty("scene_mode_camera_cases", cases);
+  RecordProperty("scene_mode_frames_checked", checks);
+}
 
 auto ExposureLightingGpuTest::MeasureHdrAllocationAccounting(bool temporal)
   -> void
@@ -7838,47 +8264,10 @@ NOLINT_TEST_F(ExposureLightingGpuTest,
   dim.GetTransform().SetLocalScale({ .25F, 1, 1 });
   dim.GetTransform().SetLocalPosition({ .5F, 0, 0 });
   expected_draws = 2;
-  const auto material = [&](float value) {
-    data::pak::core::TextureResourceDesc desc {};
-    desc.texture_type = static_cast<std::uint8_t>(TextureType::kTexture2D);
-    desc.width = desc.height = desc.depth = desc.mip_levels = desc.array_layers
-      = 1;
-    desc.format = static_cast<std::uint8_t>(Format::kRGBA32Float);
-    desc.alignment = 256;
-    const auto key = owned_asset_loader_->MintSyntheticTextureKey();
-    desc.content_hash = key.get();
-    const Pixel pixel { value, value, value, 1 };
-    std::vector<std::uint8_t> bytes(sizeof(pixel));
-    std::memcpy(bytes.data(), pixel.data(), sizeof(pixel));
-    const std::array layouts { data::pak::render::SubresourceLayout {
-      .offset_bytes = 0,
-      .row_pitch_bytes = sizeof(pixel),
-      .size_bytes = sizeof(pixel) } };
-    auto payload
-      = vortex::testing::detail::BuildV4TexturePayload(desc, layouts, bytes);
-    desc.size_bytes = static_cast<std::uint32_t>(payload.size());
-    owned_asset_loader_->SetTexture(
-      key, std::make_shared<data::TextureResource>(desc, std::move(payload)));
-    data::pak::render::MaterialAssetDesc authored {};
-    authored.flags = data::pak::render::kMaterialFlag_DoubleSided;
-    authored.base_color[3] = 1;
-    authored.normal_scale = 1;
-    authored.roughness = data::Unorm16 { 1 };
-    authored.ambient_occlusion = data::Unorm16 { 1 };
-    authored.uv_scale[0] = authored.uv_scale[1] = 1;
-    for (auto& component : authored.emissive_factor)
-      component = data::HalfFloat { 1.0F };
-    std::vector<content::ResourceKey> keys(6);
-    keys[5] = key;
-    return std::make_shared<data::MaterialAsset>(
-      data::AssetKey::FromVirtualPath(
-        "/Test/Exposure/Wide" + std::to_string(key.get()) + ".omat"),
-      authored, std::vector<data::ShaderReference> {}, keys);
-  };
-  const auto bright = material(0x1p30F);
-  const auto changed_bright = material(0x1p29F);
-  const auto dark = material(0x1p-16F);
-  const auto ordinary = material(.25F);
+  const auto bright = MakeEmissiveMaterial(0x1p30F);
+  const auto changed_bright = MakeEmissiveMaterial(0x1p29F);
+  const auto dark = MakeEmissiveMaterial(0x1p-16F);
+  const auto ordinary = MakeEmissiveMaterial(.25F);
   const auto set_pair = [&](const auto& left, const auto& right) {
     mesh_node.GetRenderable().SetMaterialOverride(0, 0, left);
     dim.GetRenderable().SetMaterialOverride(0, 0, right);
