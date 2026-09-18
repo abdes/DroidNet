@@ -8,6 +8,7 @@
 #define OXYGEN_D3D12_SHADERS_VORTEX_MATERIALS_GBUFFERMATERIALOUTPUT_HLSLI
 
 #include "Vortex/Contracts/View/FrameExposureHelpers.hlsli"
+#include "Vortex/Contracts/View/HdrStoreChecks.hlsli"
 #include "Vortex/Shared/MaskedAlphaTest.hlsli"
 #include "Vortex/Materials/ForwardMaterialEval.hlsli"
 
@@ -46,6 +47,11 @@ static inline GBufferOutput PackGBufferOutput(
     }
 #endif
     // Surviving opaque/masked fragments have full foreground coverage.
+#if defined(OXYGEN_DEPTH_COMPLETE)
+    const ViewFrameBindings bindings = LoadViewFrameBindings(bindless_view_frame_bindings_slot);
+    CheckHdrStoreRange(float4(surface.emissive, 1.0f), 1u,
+        bindings.exposure_status_uav, 0u, 1.0f);
+#endif
     output.emissive_scene_color = float4(surface.emissive * GetPreExposure(), 1.0f);
 #if defined(HAS_VELOCITY)
     output.velocity = float2(0.0f, 0.0f);

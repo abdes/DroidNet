@@ -555,7 +555,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
 }
 
 NOLINT_TEST_F(SceneRendererDeferredCoreTest,
-  DepthPrepassDisabledModeLeavesCompletenessDisabled)
+  DisabledPrepassKeepsCompletenessDisabledAndPublishesBaseDepth)
 {
   scene_renderer_->OnFrameStart(frame_context_);
 
@@ -584,7 +584,8 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
 
   EXPECT_EQ(context.current_view.depth_prepass_completeness,
     oxygen::vortex::DepthPrePassCompleteness::kDisabled);
-  EXPECT_EQ(scene_renderer_->GetSceneTextureBindings().scene_depth_srv,
+  EXPECT_TRUE(context.current_view.HasValidSceneDepthProduct());
+  EXPECT_NE(scene_renderer_->GetSceneTextureBindings().scene_depth_srv,
     oxygen::vortex::SceneTextureBindings::kInvalidIndex);
   EXPECT_EQ(scene_renderer_->GetSceneTextureBindings().partial_depth_srv,
     oxygen::vortex::SceneTextureBindings::kInvalidIndex);

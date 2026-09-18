@@ -17,6 +17,13 @@ static const uint HDR_CONSUMER_SKY = 16u;
 static const uint HDR_CONSUMER_OPAQUE_AP = 32u;
 static const uint HDR_CONSUMER_TRANSLUCENT_AP = 64u;
 
+static void RecordHdrSceneSource(float3 scene_rgb, uint product)
+{
+    const ViewFrameBindings bindings = LoadViewFrameBindings(bindless_view_frame_bindings_slot);
+    CheckHdrStoreRange(float4(scene_rgb, 1.0), product,
+        bindings.exposure_status_uav, 0u, 1.0);
+}
+
 static void RecordHdrConsumerUsage(uint usage, float3 sky_gain = 1.0.xxx)
 {
     const ViewFrameBindings bindings = LoadViewFrameBindings(bindless_view_frame_bindings_slot);

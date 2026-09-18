@@ -597,6 +597,12 @@ contract is [the rendering extension](../plan/editor-v01-rendering-contract.md#3
 
 #### 4.2.5 `scene::DirectionalLight`
 
+Atmospheric integration retains every positive secondary illuminance component.
+Do not apply a fixed source-intensity cutoff before integration: a small
+scene-referred contribution may become significant after exposure. Exact-zero
+secondary illumination skips the secondary integration. The shared integrator
+applies this rule to sky-view, aerial perspective and distant-sky products.
+
 Store one canonical atmosphere assignment per directional light. Existing native
 per-pixel transmittance/disk-luminance parameters remain engine-owned values;
 they do not become additional editor sliders by appearing in this LLD. Do not

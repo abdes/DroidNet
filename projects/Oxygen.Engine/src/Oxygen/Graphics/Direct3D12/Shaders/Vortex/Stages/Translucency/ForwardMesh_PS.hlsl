@@ -141,7 +141,10 @@ static float3 ComputeForwardIblTerm(ForwardEnvironmentState env_state,
   }
 #endif
 
-  return ibl_spec_term + ibl_diffuse * base_rgb * (1.0f - surf.metalness);
+  const float3 diffuse = ibl_diffuse * base_rgb * (1.0f - surf.metalness);
+  RecordForwardHdrSource(ibl_spec_term);
+  RecordForwardHdrSource(diffuse);
+  return ibl_spec_term + diffuse;
 }
 
 static ForwardLightingTerms ComputeForwardLightingTerms(VSOutput input,
@@ -177,8 +180,33 @@ static ForwardLightingTerms ComputeForwardLightingTerms(VSOutput input,
   return terms;
 }
 
+// Validate visible source terms without output composition or aerial perspective.
+// Forward source checks require the BRDF/light/IBL terms themselves: checking
+// only emission would miss cancellation between separate light contributions.
 [shader("pixel")]
-#if !defined(OXYGEN_OPAQUE_OUTPUT)
+[earlydepthstencil]
+void ValidateRadiancePS(VSOutput input)
+{
+  SamplerState linear_sampler = SamplerDescriptorHeap[0];
+#ifdef ALPHA_TEST
+  ApplyMaskedAlphaClip(EvaluateMaskedAlphaTest(input.uv, g_DrawIndex, linear_sampler));
+#endif
+  const MaterialSurface surf = EvaluateMaterialSurface(input.world_pos,
+    input.world_normal, input.world_tangent, input.world_bitangent, input.uv,
+    g_DrawIndex, input.is_front_face);
+  RecordForwardHdrSource(surf.emissive);
+  if ((surf.flags & MATERIAL_FLAG_UNLIT) != 0u) {
+    RecordForwardHdrSource(surf.base_rgb * input.color);
+    return;
+  }
+  const float3 shadow_normal = ComputeShadowSurfaceNormal(
+    input.world_pos, input.world_normal, input.is_front_face);
+  ComputeForwardLightingTerms(input, surf, shadow_normal,
+    ResolveForwardEnvironmentState(), linear_sampler);
+}
+
+[shader("pixel")]
+#if !defined(OXYGEN_OPAQUE_OUTPUT) || defined(OXYGEN_DEPTH_COMPLETE)
 [earlydepthstencil]
 #endif
 float4 PS(VSOutput input)
@@ -197,7 +225,20 @@ float4 PS(VSOutput input)
     input.world_normal, input.world_tangent, input.world_bitangent, input.uv,
     g_DrawIndex, input.is_front_face);
 
+#if !defined(OXYGEN_OPAQUE_OUTPUT)
+  if (surf.base_a <= 0.0f) return 0.0f.xxxx;
+#endif
+
+  // Validate emission before lighting can cancel an unsupported source value.
+  // Alpha rejection above precedes every status write.
+#if !defined(OXYGEN_OPAQUE_OUTPUT) || defined(OXYGEN_DEPTH_COMPLETE)
+  const ViewFrameBindings bindings = LoadViewFrameBindings(bindless_view_frame_bindings_slot);
+  CheckHdrStoreRange(float4(surf.emissive, 1.0f), 4u,
+    bindings.exposure_status_uav, 0u, 1.0f);
+#endif
+
   if ((surf.flags & MATERIAL_FLAG_UNLIT) != 0u) {
+    RecordForwardHdrSource(surf.base_rgb * input.color);
     const float3 unlit_color = surf.base_rgb * input.color + surf.emissive;
 #  if !defined(OXYGEN_OPAQUE_OUTPUT)
     RecordHdrConsumerInput(unlit_color, HDR_INPUT_TRANSLUCENCY);

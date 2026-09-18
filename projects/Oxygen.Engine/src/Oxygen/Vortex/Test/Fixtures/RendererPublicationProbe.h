@@ -18,6 +18,7 @@
 #include <Oxygen/Vortex/PostProcess/PostProcessService.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
+#include <Oxygen/Vortex/SceneRenderer/Stages/BasePass/BasePassMeshProcessor.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/BasePass/BasePassModule.h>
 #include <Oxygen/Vortex/Shadows/ShadowService.h>
 #include <Oxygen/Vortex/Types/FrameLightSelection.h>
@@ -25,6 +26,11 @@
 namespace oxygen::vortex::testing {
 
 struct RendererPublicationProbe {
+  static auto BasePassDrawCommands(const SceneRenderer& renderer)
+    -> std::span<const BasePassDrawCommand>
+  {
+    return renderer.base_pass_->mesh_processor_->GetDrawCommands();
+  }
   using FogPassConstants = environment::VolumetricFogPass::PassConstants;
   static auto EnvironmentTextures(SceneRenderer& renderer, ViewId view)
     -> std::vector<std::shared_ptr<graphics::Texture>>

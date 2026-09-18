@@ -1719,9 +1719,12 @@ auto SceneRenderer::PrepareExposureDomain(RenderContext& ctx) -> bool
     return true;
   post_process_->SetResolvedConfig(
     ResolveAuthoredPostProcessConfig(ctx, *post_process_));
-  // Retain FP32 until producer pre-store checks and cumulative composition
-  // error bounds can certify normal-mode allocations. Reference-product
-  // qualification runs after this frame's HDR producers.
+  // TODO(EX05-17): select per-view allocations from completed suitability
+  // certificates after EX05-16 closes; preserve exposure history on
+  // transitions. SceneColor accumulation stays FP32 in both modes. EX05-18/19
+  // own queued leases and scene-integrated recovery/retention/return
+  // validation. Scope: design/vortex/IMPLEMENTATION_STATUS.md (EX05-17 through
+  // EX05-19).
   ctx.current_view.frame_exposure
     = post_process_->PrepareFrameExposure(ctx, true);
   return ctx.current_view.frame_exposure != nullptr;
@@ -2250,6 +2253,8 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
     base_pass_draw_count = base_pass_result.draw_count;
     base_pass_occlusion_culled_draw_count
       = base_pass_result.occlusion_culled_draw_count;
+    if (base_pass_result.wrote_scene_color && !wireframe_only)
+      ctx.current_view.scene_depth_product_valid = true;
     if (base_pass_result.published_base_pass_products
       && base_pass_result.completed_velocity_for_dynamic_geometry) {
       PublishBasePassVelocity();
@@ -2837,6 +2842,7 @@ void SceneRenderer::PublishDeferredBasePassSceneTextures(RenderContext& ctx)
   scene_textures.RebuildWithGBuffers();
   setup_mode_.SetFlags(SceneTextureSetupMode::Flag::kGBuffers
     | SceneTextureSetupMode::Flag::kSceneColor
+    | SceneTextureSetupMode::Flag::kSceneDepth
     | SceneTextureSetupMode::Flag::kStencil);
   RefreshSceneTextureBindings();
   renderer_.RefreshCurrentViewFrameBindings(ctx, *this);
