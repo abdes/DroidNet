@@ -15,6 +15,7 @@
 #include <limits>
 #include <numeric>
 #include <span>
+#include <unordered_set>
 
 #include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Console/Console.h>
@@ -174,6 +175,20 @@ public:
   }
   mutable std::weak_ptr<graphics::Texture> processed_sky;
   bool track_resources { false };
+  bool account_texture_allocations { false };
+  unsigned accounting_iteration { 0 };
+  mutable std::uint64_t peak_texture_bytes { 0 };
+  mutable std::uint64_t peak_hdr_bytes { 0 };
+  mutable unsigned peak_hdr_iteration { 0 };
+  static auto IsExposureHdrTexture(std::string_view name) -> bool
+  {
+    return name == "SceneColor" || name == "ResolvedSceneColor"
+      || name.find("SkyView") != std::string_view::npos
+      || name.find("Aerial") != std::string_view::npos
+      || name.find("IntegratedLightScattering") != std::string_view::npos
+      || name.find("AtmosphereTransmittance") != std::string_view::npos
+      || name.find("AtmosphereMultiScattering") != std::string_view::npos;
+  }
   mutable std::vector<std::weak_ptr<graphics::Texture>> tracked_textures;
   mutable std::vector<std::weak_ptr<graphics::Buffer>> tracked_buffers;
   auto CreateBuffer(const BufferDesc& desc) const
@@ -192,6 +207,31 @@ public:
       processed_sky = texture;
     if (track_resources)
       tracked_textures.push_back(texture);
+    if (account_texture_allocations) {
+      std::unordered_set<ID3D12Resource*> unique;
+      std::uint64_t total = 0;
+      std::uint64_t hdr = 0;
+      for (const auto& weak : tracked_textures) {
+        const auto live = weak.lock();
+        if (!live)
+          continue;
+        auto* native = live->GetNativeResource()->AsPointer<ID3D12Resource>();
+        if (!native || !unique.insert(native).second)
+          continue;
+        const auto shape = native->GetDesc();
+        const auto bytes = GetCurrentDevice()
+                             ->GetResourceAllocationInfo(0U, 1U, &shape)
+                             .SizeInBytes;
+        total += bytes;
+        if (IsExposureHdrTexture(live->GetDescriptor().debug_name))
+          hdr += bytes;
+      }
+      peak_texture_bytes = std::max(peak_texture_bytes, total);
+      if (hdr > peak_hdr_bytes) {
+        peak_hdr_bytes = hdr;
+        peak_hdr_iteration = accounting_iteration;
+      }
+    }
     return texture;
   }
   std::vector<std::string> recorder_names;
@@ -7361,6 +7401,8 @@ protected:
     frame.SetScene(observer_ptr { scene.get() });
   }
 
+  auto MeasureHdrAllocationAccounting(bool temporal) -> void;
+
   auto SetSurface(data::MaterialDomain domain, float emission = 0,
     bool rejected_mask = false) -> void
   {
@@ -7474,6 +7516,298 @@ protected:
   DepthPrePassMode depth_mode = DepthPrePassMode::kOpaqueAndMasked;
   console::Console fixture_console;
 };
+
+auto ExposureLightingGpuTest::MeasureHdrAllocationAccounting(bool temporal)
+  -> void
+{
+  std::uint32_t width = 1920;
+  char* width_text = nullptr;
+  std::size_t width_size = 0;
+  if (_dupenv_s(&width_text, &width_size, "OXYGEN_EXPOSURE_TIMING_WIDTH") == 0
+    && width_text) {
+    width = static_cast<std::uint32_t>(std::strtoul(width_text, nullptr, 10));
+    std::free(width_text);
+  }
+  ASSERT_TRUE(width == 1920 || width == 3840);
+  const auto height = width * 9U / 16U;
+  view.viewport = { .width = float(width), .height = float(height) };
+  camera.GetCameraAs<scene::PerspectiveCamera>()->get().SetViewport(
+    view.viewport);
+  SetSurface(data::MaterialDomain::kOpaque, .25F);
+  auto& sky
+    = scene->GetEnvironment()->AddSystem<scene::environment::SkyAtmosphere>();
+  sky.SetEnabled(true);
+  sky.SetRayleighScatteringRgb({ 0, 0, 0 });
+  sky.SetMieScatteringRgb({ 0, 0, 0 });
+  sky.SetMieAbsorptionRgb({ 0, 0, 0 });
+  sky.SetOzoneAbsorptionRgb({ 0, 0, 0 });
+  auto& fog = scene->GetEnvironment()->AddSystem<scene::environment::Fog>();
+  fog.SetEnabled(true);
+  fog.SetEnableHeightFog(true);
+  fog.SetEnableVolumetricFog(true);
+  fog.SetExtinctionSigmaTPerMeter(0);
+  ASSERT_EQ(
+    fixture_console
+      .Execute(temporal ? "vtx.volumetric_fog.temporal_reprojection true"
+                        : "vtx.volumetric_fog.temporal_reprojection false")
+      .status,
+    console::ExecutionStatus::kOk);
+  ASSERT_EQ(fixture_console.Execute("vtx.volumetric_fog.jitter false").status,
+    console::ExecutionStatus::kOk);
+  probe->prepare = [](RenderContext& ctx) {
+    ctx.current_view.with_atmosphere = true;
+    ctx.current_view.with_height_fog = true;
+  };
+  scene->Update();
+  scene->SyncObservers();
+  std::array<std::shared_ptr<Texture>, 2> outputs;
+  std::array<std::shared_ptr<Framebuffer>, 2> targets;
+  for (unsigned index = 0; index < 2; ++index) {
+    outputs[index] = CreateRegisteredTexture({ .width = width >> index,
+      .height = height >> index,
+      .format = Format::kRGBA32Float,
+      .is_render_target = true,
+      .initial_state = ResourceStates::kCommon });
+    targets[index] = Backend().CreateFramebuffer(
+      FramebufferDesc {}.AddColorAttachment(outputs[index]));
+  }
+  struct ViewRecord {
+    ViewId id;
+    SceneTextureExtractRef color;
+  };
+  std::unordered_map<CompositionView::ViewStateHandle, ViewRecord> current;
+  std::vector<SceneTextureExtractRef> retained;
+  probe->inspect = [&](const RenderContext& ctx,
+                     const SceneTextureExtractRef& color, unsigned) {
+    current.insert_or_assign(ctx.current_view.view_state_handle,
+      ViewRecord { ctx.current_view.view_id, color });
+  };
+  auto& backend = static_cast<ExposureFailureGraphics&>(Backend());
+  backend.track_resources = true;
+  backend.account_texture_allocations = true;
+  const auto snapshot = [&](const std::string& phase) {
+    for (const auto& [handle, record] : current) {
+      const auto storage = Read<ExposureStatusStorage>(
+        *record.color.exposure->current_state->status_buffer,
+        ResourceStates::kCopySource);
+      const auto& status = storage.completed;
+      std::string status_words;
+      for (const auto word :
+        std::bit_cast<std::array<std::uint32_t, 96>>(storage)) {
+        if (!status_words.empty())
+          status_words += ',';
+        status_words += std::to_string(word);
+      }
+      RecordProperty(
+        phase + "_status_words_" + std::to_string(handle.get()), status_words);
+      const auto report
+        = Read<HdrSuitabilityData>(*record.color.exposure->suitability_buffer,
+          ResourceStates::kShaderResource);
+      RecordProperty(phase + "_view_" + std::to_string(handle.get()),
+        "flags=" + std::to_string(status.flags)
+          + ";first_product=" + std::to_string(status.first_failure_product)
+          + ";kind=" + std::to_string(status.first_failure_kind) + ";streak="
+          + std::to_string(status.fp16_eligible_streak) + ";candidate="
+          + std::to_string(report.candidate_pre_exposure) + ";candidate_r_bits="
+          + std::to_string(std::bit_cast<std::uint32_t>(
+            storage.scene_error.candidate_rgb_relative))
+          + ";candidate_a_bits="
+          + std::to_string(std::bit_cast<std::uint32_t>(
+            storage.scene_error.candidate_rgb_absolute))
+          + ";fog_r_bits="
+          + std::to_string(std::bit_cast<std::uint32_t>(
+            storage.candidate_errors[2].rgb_relative))
+          + ";fog_a_bits="
+          + std::to_string(std::bit_cast<std::uint32_t>(
+            storage.candidate_errors[2].rgb_absolute))
+          + ";fog_tr_bits="
+          + std::to_string(std::bit_cast<std::uint32_t>(
+            storage.candidate_errors[2].transmittance_relative))
+          + ";fog_ta_bits="
+          + std::to_string(std::bit_cast<std::uint32_t>(
+            storage.candidate_errors[2].transmittance_absolute)));
+    }
+    std::unordered_set<ID3D12Resource*> unique;
+    std::uint64_t placed = 0;
+    std::uint64_t hdr_placed = 0;
+    std::uint64_t hdr_raw = 0;
+    unsigned ordinal = 0;
+    for (const auto& weak : backend.tracked_textures) {
+      const auto identity = ordinal++;
+      const auto texture = weak.lock();
+      if (!texture)
+        continue;
+      auto* resource
+        = texture->GetNativeResource()->AsPointer<ID3D12Resource>();
+      if (!resource || !unique.insert(resource).second)
+        continue;
+      const auto native = resource->GetDesc();
+      const auto bytes = backend.GetCurrentDevice()
+                           ->GetResourceAllocationInfo(0U, 1U, &native)
+                           .SizeInBytes;
+      const auto& desc = texture->GetDescriptor();
+      const auto& name = desc.debug_name;
+      const bool hdr = ExposureFailureGraphics::IsExposureHdrTexture(name);
+      std::uint64_t raw = 0;
+      if (hdr) {
+        ASSERT_TRUE(desc.format == Format::kRGBA16Float
+          || desc.format == Format::kRGBA32Float);
+        for (unsigned mip = 0; mip < native.MipLevels; ++mip) {
+          const auto depth
+            = native.Dimension == D3D12_RESOURCE_DIMENSION_TEXTURE3D
+            ? std::max(unsigned(native.DepthOrArraySize) >> mip, 1U)
+            : unsigned(native.DepthOrArraySize);
+          raw += std::max(native.Width >> mip, std::uint64_t { 1 })
+            * std::max(native.Height >> mip, 1U) * depth
+            * (desc.format == Format::kRGBA32Float ? 16U : 8U)
+            * native.SampleDesc.Count;
+        }
+        hdr_raw += raw;
+        hdr_placed += bytes;
+      }
+      placed += bytes;
+      auto comparable = native;
+      comparable.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+      const auto half_bytes = hdr
+        ? backend.GetCurrentDevice()
+            ->GetResourceAllocationInfo(0U, 1U, &comparable)
+            .SizeInBytes
+        : 0U;
+      comparable.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
+      const auto float_bytes = hdr
+        ? backend.GetCurrentDevice()
+            ->GetResourceAllocationInfo(0U, 1U, &comparable)
+            .SizeInBytes
+        : 0U;
+      RecordProperty(phase + "_texture_" + std::to_string(identity),
+        name + ";format=" + std::to_string(static_cast<unsigned>(desc.format))
+          + ";width=" + std::to_string(desc.width) + ";height="
+          + std::to_string(desc.height) + ";depth=" + std::to_string(desc.depth)
+          + ";layers=" + std::to_string(desc.array_size)
+          + ";mips=" + std::to_string(desc.mip_levels)
+          + ";samples=" + std::to_string(desc.sample_count)
+          + ";placement_bytes=" + std::to_string(bytes)
+          + ";same_desc_fp16_bytes=" + std::to_string(half_bytes)
+          + ";same_desc_fp32_bytes=" + std::to_string(float_bytes)
+          + ";hdr_raw_bytes=" + std::to_string(raw));
+    }
+    const auto* owner
+      = vortex::testing::RendererPublicationProbe::GetSceneRenderer(*renderer_);
+    ASSERT_NE(owner, nullptr);
+    const auto [families, live]
+      = vortex::testing::RendererPublicationProbe::SceneTexturePoolCounts(
+        *owner);
+    RecordProperty(phase + "_placed_bytes", std::to_string(placed));
+    RecordProperty(phase + "_hdr_placed_bytes", std::to_string(hdr_placed));
+    RecordProperty(phase + "_hdr_raw_bytes", std::to_string(hdr_raw));
+    RecordProperty(phase + "_pool_families", std::to_string(families));
+    RecordProperty(phase + "_leased_families", std::to_string(live));
+    RecordProperty(
+      phase + "_retained_extracts", std::to_string(retained.size()));
+  };
+  for (unsigned iteration = 0; iteration < 22; ++iteration) {
+    backend.accounting_iteration = iteration;
+    const auto slot = frame::Slot { sequence % 3U };
+    Backend().BeginFrame(frame::SequenceNumber { ++sequence }, slot);
+    frame.SetFrameSlot(slot, engine::internal::EngineTagFactory::Get());
+    frame.SetFrameSequenceNumber(frame::SequenceNumber { sequence },
+      engine::internal::EngineTagFactory::Get());
+    renderer_->OnFrameStart(observer_ptr { &frame });
+    if (iteration < 18) {
+      const unsigned views = iteration < 8 ? 1 : 2;
+      for (unsigned index = 0; index < views; ++index) {
+        auto sized_view = view;
+        sized_view.viewport.width = float(width >> index);
+        sized_view.viewport.height = float(height >> index);
+        auto input = CompositionView::ForScene(
+          ViewId { 500U + index }, sized_view, camera);
+        input.view_state_handle
+          = CompositionView::ViewStateHandle { 500U + index };
+        auto exposure = settings;
+        exposure.manual_ev = iteration >= 16 ? 1.0F : 0.0F;
+        input.render_settings.exposure = exposure;
+        ASSERT_NE(
+          renderer_->PublishRuntimeCompositionView(frame,
+            { .composition_view = input,
+              .render_target = observer_ptr { targets[index].get() },
+              .composite_source = observer_ptr { targets[index].get() } }),
+          kInvalidViewId);
+      }
+      const auto capture = iteration == 15
+        ? BeginOptionalCapture()
+        : observer_ptr<FrameCaptureController> {};
+      auto loop = co::testing::TestEventLoop {};
+      co::Run(loop, [&]() -> co::Co<void> {
+        co_await renderer_->OnPreRender(observer_ptr { &frame });
+        co_await renderer_->OnRender(observer_ptr { &frame });
+      });
+      if (capture)
+        EXPECT_TRUE(capture->EndCapture());
+      if (iteration == 0)
+        snapshot("bootstrap_one");
+      if (iteration == 7 || iteration == 15) {
+        for (const auto& [handle, record] : current) {
+          EXPECT_EQ(record.color.texture->GetDescriptor().format,
+            temporal ? Format::kRGBA32Float : Format::kRGBA16Float);
+          if (iteration == 15)
+            retained.push_back(record.color);
+        }
+        snapshot(iteration == 7 ? "steady_one" : "steady_two_retained");
+      }
+      if (iteration == 8)
+        snapshot("mixed_two");
+      if (iteration == 16) {
+        for (const auto& [handle, record] : current)
+          EXPECT_EQ(
+            record.color.texture->GetDescriptor().format, Format::kRGBA32Float);
+        snapshot("recovery_two_retained");
+      }
+      if (iteration == 17) {
+        auto* owner
+          = vortex::testing::RendererPublicationProbe::GetSceneRenderer(
+            *renderer_);
+        for (const auto& [handle, record] : current)
+          owner->RemoveViewState(record.id, handle);
+        current.clear();
+        retained.clear();
+        probe->color.reset();
+        probe->exposure.reset();
+        snapshot("released_before_fence");
+      }
+    }
+    renderer_->OnFrameEnd(observer_ptr { &frame });
+    Backend().EndFrame(frame::SequenceNumber { sequence }, slot);
+    WaitForQueueIdle();
+    if (iteration == 21)
+      snapshot("retired_cached");
+  }
+  backend.track_resources = false;
+  backend.account_texture_allocations = false;
+  probe->inspect = {};
+  RecordProperty("main_width", width);
+  RecordProperty("main_height", height);
+  RecordProperty("concurrent_views", 2);
+  RecordProperty("temporal_fog", temporal ? 1 : 0);
+  RecordProperty(
+    "peak_traced_texture_bytes", std::to_string(backend.peak_texture_bytes));
+  RecordProperty("peak_hdr_bytes", std::to_string(backend.peak_hdr_bytes));
+  RecordProperty("peak_hdr_iteration", backend.peak_hdr_iteration);
+  const auto adapter = backend.GetCurrentDevice()->GetAdapterLuid();
+  RecordProperty("adapter_luid_low", std::to_string(adapter.LowPart));
+  RecordProperty("adapter_luid_high", std::to_string(adapter.HighPart));
+}
+
+NOLINT_TEST_F(
+  ExposureLightingGpuTest, DISABLED_ProductionHdrAllocationAccounting)
+{
+  MeasureHdrAllocationAccounting(false);
+}
+
+NOLINT_TEST_F(ExposureLightingGpuTest,
+  DISABLED_ProductionHdrAllocationAccountingWithTemporalFog)
+{
+  MeasureHdrAllocationAccounting(true);
+}
 
 NOLINT_TEST_F(ExposureLightingGpuTest,
   ProductionWideRangeRetainsAdaptationAndQualifiesSharedViewsIndependently)

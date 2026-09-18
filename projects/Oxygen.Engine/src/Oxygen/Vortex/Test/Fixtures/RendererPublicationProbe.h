@@ -26,6 +26,13 @@
 namespace oxygen::vortex::testing {
 
 struct RendererPublicationProbe {
+  static auto SceneTexturePoolCounts(const SceneRenderer& renderer)
+    -> std::pair<std::size_t, std::size_t>
+  {
+    return { renderer.scene_texture_pool_.GetAllocationCount(),
+      renderer.scene_texture_pool_.GetLiveLeaseCount() };
+  }
+
   static auto BasePassDrawCommands(const SceneRenderer& renderer)
     -> std::span<const BasePassDrawCommand>
   {
