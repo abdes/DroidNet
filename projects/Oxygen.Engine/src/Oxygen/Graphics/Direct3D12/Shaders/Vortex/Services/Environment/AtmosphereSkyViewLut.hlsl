@@ -276,7 +276,8 @@ void VortexAtmosphereSkyViewLutCS(uint3 dispatch_id : SV_DispatchThreadID)
         scattering.Transmittance,
         float3(1.0f / 3.0f, 1.0f / 3.0f, 1.0f / 3.0f));
     CheckHdrStoreRange(float4(scattering.L, transmittance), 5u,
-        pass.dispatch_header.exposure_status_uav, pass.dispatch_header.exposure_fp16_store);
+        pass.dispatch_header.exposure_status_uav, pass.dispatch_header.exposure_fp16_store,
+        GetPreExposure());
     const float4 output_value = float4(max(scattering.L, 0.0f.xxx), saturate(transmittance));
     RecordHdrStoreBounds(output_value, output_value, output_value, GetOneOverPreExposure(),
         5u, pass.dispatch_header.exposure_status_uav, pass.dispatch_header.exposure_fp16_store);

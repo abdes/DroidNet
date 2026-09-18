@@ -164,6 +164,8 @@ public:
   [[nodiscard]] OXGN_VRTX_API auto CapturePreEnvironmentRange(
     RenderContext& ctx, const graphics::Texture& source,
     ShaderVisibleIndex source_srv) -> bool;
+  [[nodiscard]] OXGN_VRTX_API auto CheckSceneColorRange(RenderContext& ctx,
+    const graphics::Texture& source, ShaderVisibleIndex source_srv) -> bool;
   //! Solve from the accumulated scene signal before checked color resolution.
   //! The returned record pins the result/config for this view and logical
   //! frame.

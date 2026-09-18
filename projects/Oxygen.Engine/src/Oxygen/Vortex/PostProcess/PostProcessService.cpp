@@ -489,6 +489,17 @@ auto PostProcessService::CapturePreEnvironmentRange(RenderContext& ctx,
       ctx, ctx.current_view.frame_exposure, source, source_srv);
 }
 
+auto PostProcessService::CheckSceneColorRange(RenderContext& ctx,
+  const graphics::Texture& source, const ShaderVisibleIndex source_srv) -> bool
+{
+  const bool submitted = ctx.current_view.frame_exposure
+    && exposure_pass_->CheckSceneColorRange(
+      ctx, ctx.current_view.frame_exposure, source, source_srv);
+  if (!submitted)
+    InvalidatePrecision(ctx.current_view.view_state_handle);
+  return submitted;
+}
+
 auto PostProcessService::PrepareSceneExposure(const ViewId view_id,
   RenderContext& ctx, const Inputs& inputs) -> std::optional<PreparedExposure>
 {

@@ -57,10 +57,62 @@ def build_scene_report(controller, report, capture_path, report_path, rd, durati
     report.append(f'scene_admission_timing_collection=complete total_gpu_ms={result["qualification_gpu_ms"]}')
 
 
+def build_producer_report(controller, report, capture_path, report_path, rd, durations):
+    textures = {str(t.resourceId): t for t in controller.GetTextures()}
+    rows = []
+    entries = {'GatherSuitabilityMaximum', 'VortexAtmosphereTransmittanceLutCS',
+               'VortexAtmosphereMultiScatteringLutCS'}
+    for action in collect_action_records(controller):
+        if not action.flags & rd.ActionFlags.Dispatch:
+            continue
+        controller.SetFrameEvent(action.event_id, True)
+        pipeline = controller.GetPipelineState()
+        shader = pipeline.GetShaderReflection(rd.ShaderStage.Compute)
+        if not shader or shader.entryPoint not in entries:
+            continue
+        duration = durations.get(action.event_id)
+        if duration is None or not math.isfinite(duration) or duration < 0:
+            raise RuntimeError('Missing producer GPU duration')
+        reads = pipeline.GetReadOnlyResources(rd.ShaderStage.Compute, True)
+        writes = pipeline.GetReadWriteResources(rd.ShaderStage.Compute, True)
+        if shader.entryPoint == 'GatherSuitabilityMaximum':
+            constants = [x.descriptor for x in reads
+                         if x.descriptor.byteSize == x.descriptor.elementByteSize == 128]
+            if len(constants) != 1:
+                raise RuntimeError('Missing final-range constants')
+            data = bytes(controller.GetBufferData(constants[0].resource, constants[0].byteOffset, 128))
+            flags = struct.unpack_from('<I', data, 28)[0]
+            if flags & (32 | 2048) != (32 | 2048):
+                raise RuntimeError('Timing dispatch is not the final SceneColor scan')
+        resources = reads if shader.entryPoint == 'GatherSuitabilityMaximum' else writes
+        targets = [textures[str(x.descriptor.resource)] for x in resources
+                   if str(x.descriptor.resource) in textures]
+        if len(targets) != 1:
+            raise RuntimeError('Expected one producer timing texture')
+        target = targets[0]
+        rows.append({'event': action.event_id, 'entry': shader.entryPoint,
+                     'width': target.width, 'height': target.height, 'gpu_ms': duration})
+    groups = {}
+    for row in rows:
+        key = f'{row["entry"]}:{row["width"]}x{row["height"]}'
+        groups.setdefault(key, []).append(row['gpu_ms'])
+    if len(groups) != 4 or any(len(values) != 3 for values in groups.values()):
+        raise RuntimeError('Incomplete 1080p/4K range and canonical refresh timing matrix')
+    summary = {key: {'warm_min_ms': min(values[1:]),
+                     'warm_median_ms': statistics.median(values[1:]),
+                     'warm_max_ms': max(values[1:])} for key, values in groups.items()}
+    result = {'capture': str(capture_path), 'summary': summary, 'dispatches': rows,
+              'scope': 'Native replay dispatch GPU duration; first iteration excluded. Canonical LUTs use default sizes in FP32. No FP16 timing baseline or frame-rate claim.'}
+    Path(report_path).with_suffix('.json').write_text(json.dumps(result, indent=2) + '\n')
+    report.append('producer_timing_collection=complete')
+
+
 def build_report(controller, report, capture_path, report_path):
     rd = renderdoc_module()
     names = resource_id_to_name(controller)
     durations = {r.eventId: r.value.d * 1000 for r in controller.FetchCounters([rd.GPUCounter.EventGPUDuration])}
+    if os.environ.get('OXYGEN_RENDERDOC_PASS_NAME') == 'ProducerRangeTiming':
+        return build_producer_report(controller, report, capture_path, report_path, rd, durations)
     if os.environ.get('OXYGEN_RENDERDOC_PASS_NAME') == 'SceneAdmissionTiming':
         return build_scene_report(controller, report, capture_path, report_path, rd, durations)
     rows = []

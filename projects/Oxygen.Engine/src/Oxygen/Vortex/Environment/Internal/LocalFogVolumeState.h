@@ -7,6 +7,7 @@
 #pragma once
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <vector>
 
@@ -27,10 +28,17 @@ namespace environment::internal {
 struct LocalFogVolumeGpuInstance {
   std::array<std::uint32_t, 4> data0 {};
   std::array<std::uint32_t, 4> data1 {};
-  std::array<std::uint32_t, 4> data2 {};
+  std::array<float, 4> extinction_falloff_offset {};
+  std::array<float, 4> emissive {};
 
   [[nodiscard]] auto GetUniformScale() const noexcept -> float;
 };
+
+static_assert(sizeof(LocalFogVolumeGpuInstance) == 64);
+static_assert(offsetof(LocalFogVolumeGpuInstance, data1) == 16);
+static_assert(
+  offsetof(LocalFogVolumeGpuInstance, extinction_falloff_offset) == 32);
+static_assert(offsetof(LocalFogVolumeGpuInstance, emissive) == 48);
 
 struct LocalFogVolumeCullingInstance {
   std::array<float, 4> sphere_world {};

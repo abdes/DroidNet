@@ -2576,6 +2576,9 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
         { .product_layout_revision = layout.revision,
           .expected_products = expected_products }));
     }
+    if (!post_process_->CheckSceneColorRange(
+          ctx, *accumulated, accumulated_srv))
+      return;
     prepared_exposure
       = post_process_->PrepareSceneExposure(ctx.current_view.view_id, ctx,
         { .scene_signal = accumulated, .scene_signal_srv = accumulated_srv });

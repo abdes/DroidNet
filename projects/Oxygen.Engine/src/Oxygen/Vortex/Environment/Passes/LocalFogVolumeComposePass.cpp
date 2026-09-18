@@ -20,6 +20,7 @@
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Vortex/Internal/ViewportClamp.h>
+#include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererCapability.h>
@@ -358,6 +359,15 @@ auto LocalFogVolumeComposePass::Record(RenderContext& ctx,
   recorder->RequireResourceState(
     *products.occupied_tile_draw_args_buffer,
     graphics::ResourceStates::kIndirectArgument);
+  if (const auto& frame = ctx.current_view.frame_exposure) {
+    const auto& status = *frame->current_state->status_buffer;
+    if (!recorder->IsResourceTracked(status)
+      && !recorder->AdoptKnownResourceState(status))
+      recorder->BeginTrackingResourceState(
+        status, graphics::ResourceStates::kCommon, false);
+    recorder->RequireResourceState(
+      status, graphics::ResourceStates::kUnorderedAccess);
+  }
   recorder->FlushBarriers();
 
   recorder->BindFrameBuffer(*framebuffer);

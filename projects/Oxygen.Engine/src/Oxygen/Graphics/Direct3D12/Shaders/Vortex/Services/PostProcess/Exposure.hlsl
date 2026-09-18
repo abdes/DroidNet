@@ -1002,7 +1002,7 @@ void ClearSuitability(uint3 pixel : SV_DispatchThreadID)
     report.Store4(32u, uint4(0u, 0u, pass.expected_mask, 0u));
 }
 
-groupshared uint3 s_PreEnvironmentRange[64];
+groupshared uint4 s_PreEnvironmentRange[64];
 groupshared uint3 s_FilterRgbGradient[64];
 groupshared uint3 s_FilterTransmissionGradient[64];
 groupshared uint2 s_FilterFlagsCount[64];
@@ -1164,10 +1164,12 @@ static void GatherFilterGradients(SuitabilityConstants pass, uint3 pixel, uint l
 
 static void GatherPreEnvironmentRange(SuitabilityConstants pass, uint3 pixel, uint lane)
 {
-    uint3 value = 0u.xxx;
+    uint4 value = 0u.xxxx;
     if (pixel.x < pass.width && pixel.y < pass.height) {
         Texture2D<float4> source = ResourceDescriptorHeap[pass.source_srv];
         const float4 sample = source.Load(int3(pixel.xy, 0));
+        StructuredBuffer<FrameExposureData> frame = ResourceDescriptorHeap[pass.frame_srv];
+        value.w = ClassifyHdrStoreRange(sample, frame[0].pre_exposure, 0u);
         value.z = 1u;
         if (!all(isfinite(sample))) value.y = 2u;
         else {
@@ -1181,21 +1183,23 @@ static void GatherPreEnvironmentRange(SuitabilityConstants pass, uint3 pixel, ui
     GroupMemoryBarrierWithGroupSync();
     [unroll] for (uint stride = 32u; stride > 0u; stride >>= 1u) {
         if (lane < stride) {
-            const uint3 other = s_PreEnvironmentRange[lane + stride];
+            const uint4 other = s_PreEnvironmentRange[lane + stride];
             s_PreEnvironmentRange[lane].x = max(s_PreEnvironmentRange[lane].x, other.x);
             s_PreEnvironmentRange[lane].y |= other.y;
             s_PreEnvironmentRange[lane].z += other.z;
+            s_PreEnvironmentRange[lane].w |= other.w;
         }
         GroupMemoryBarrierWithGroupSync();
     }
     if (lane == 0u) {
         RWByteAddressBuffer status = ResourceDescriptorHeap[pass.report_uav];
         uint unused;
-        status.InterlockedMax(128u, s_PreEnvironmentRange[0].x, unused);
-        status.InterlockedOr(132u, s_PreEnvironmentRange[0].y, unused);
-        status.InterlockedAdd(136u, s_PreEnvironmentRange[0].z, unused);
-        if ((s_PreEnvironmentRange[0].y & 2u) != 0u)
-            CheckHdrStoreRange(float4(asfloat(0x7fc00000u), 0, 0, 1), 11u, pass.report_uav, 0u);
+        if ((pass.flags & 2048u) == 0u) {
+            status.InterlockedMax(128u, s_PreEnvironmentRange[0].x, unused);
+            status.InterlockedOr(132u, s_PreEnvironmentRange[0].y, unused);
+            status.InterlockedAdd(136u, s_PreEnvironmentRange[0].z, unused);
+        }
+        RecordHdrRangeFailure(s_PreEnvironmentRange[0].w, 11u, pass.report_uav);
     }
 }
 

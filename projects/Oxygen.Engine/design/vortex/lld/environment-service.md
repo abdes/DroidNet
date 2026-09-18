@@ -56,6 +56,14 @@ AP and volumetric-fog radiance carry frame-pinned P/generation and support the
 two HDR formats. Migrate atmosphere producers and Sky/AerialPerspective consumers
 together, removing old GetExposure/inverse-exposure cancellation.
 
+The shared transmittance and unit-illuminance multiple-scattering textures use
+RGBA32F in both view modes (approved 2026-09-18). This preserves tiny generated
+transfers before physical illumination amplifies them; view pre-exposure cannot
+recover a coefficient already rounded to zero. Allocation count, cache ownership
+and P independence are unchanged. At default dimensions the increase is 136 KiB
+of raw texels per retained cache generation; allocation alignment is separate.
+Per-view sky/AP/fog/resolved-radiance format selection remains conditional.
+
 Fog added RGB uses P; attenuation/transmittance remains unchanged. Reprojected
 volumetric RGB converts by P_current/P_stored before interpolation, preserving
 alpha. Resource identity includes compatible format and domain metadata; resize
@@ -622,6 +630,21 @@ diffuse/specular products and their Stage-13/forward consumption.
 Authoring source: `src/Oxygen/Scene/Light/DirectionalLight.h`.
 
 #### 4.2.6 `scene::LocalFogVolume`
+
+The runtime instance SRV has a 64-byte stride. Bytes 0–15 hold camera-relative
+position and uniform scale as FP32 bits; 16–27 hold the existing packed rotation;
+28–31 hold UNORM8 albedo/phase; 32–47 hold FP32 radial extinction, height extinction,
+scaled height falloff and height offset; 48–59 hold FP32 emissive RGB, with 60–63
+reserved zero. Both direct composition and volumetric injection decode this same
+record. The separate 16-byte culling sphere is unchanged. Radiometric fields must
+not narrow to R11G11B10: small transfer coefficients and bright emission are
+required before integration. This adds 16 bytes per uploaded instance.
+
+Optically thin media use a series for `1-exp(-x)` and its continuous integral
+`(1-exp(-extinction*d))/extinction`, whose zero-extinction limit is `d`. Atmosphere
+integration has no positive extinction floor. Signed local-fog height integrals
+factor from the denser endpoint, avoiding a growing exponential multiplied by an
+underflowing prefactor; the existing height clipping policy is retained.
 
 Local fog volumes are **node-attached** components, not `SceneEnvironment`
 systems.

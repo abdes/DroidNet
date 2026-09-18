@@ -86,6 +86,7 @@ LocalFogTileVertexOutput VortexLocalFogVolumeComposeVS(
 }
 
 [shader("pixel")]
+[earlydepthstencil]
 float4 VortexLocalFogVolumeComposePS(LocalFogTileVertexOutput input) : SV_Target0
 {
     if (g_PassConstantsIndex == K_INVALID_BINDLESS_INDEX)

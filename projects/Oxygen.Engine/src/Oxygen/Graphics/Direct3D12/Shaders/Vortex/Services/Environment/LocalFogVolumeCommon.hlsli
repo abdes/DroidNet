@@ -8,18 +8,21 @@
 #define OXYGEN_D3D12_SHADERS_VORTEX_SERVICES_ENVIRONMENT_LOCALFOGVOLUMECOMMON_HLSLI
 
 #include "Vortex/Services/Environment/AtmospherePhase.hlsli"
+#include "Vortex/Services/Environment/TransmittanceMath.hlsli"
 #include "Vortex/Contracts/Environment/EnvironmentHelpers.hlsli"
 #include "Vortex/Contracts/Environment/EnvironmentStaticData.hlsli"
 #include "Vortex/Contracts/Lighting/LightingHelpers.hlsli"
 #include "Vortex/Contracts/View/ViewConstants.hlsli"
 #include "Vortex/Contracts/Scene/ScreenHzbBindings.hlsli"
 #include "Vortex/Contracts/View/ViewFrameBindings.hlsli"
+#include "Vortex/Contracts/View/HdrStoreChecks.hlsli"
 
 struct LocalFogVolumeInstanceData
 {
     uint4 data0;
     uint4 data1;
-    uint4 data2;
+    float4 extinction_falloff_offset;
+    float4 emissive;
 };
 
 struct LocalFogVolumeCullingData
@@ -112,40 +115,6 @@ static inline float2 UnpackFloat2FromUInt(uint packed)
     return float2(f16tof32(packed & 0xFFFFu), f16tof32(packed >> 16u));
 }
 
-static inline float DecodeUnsignedMiniFloat(uint value, uint mantissa_bits)
-{
-    const uint exponent_bits = 5u;
-    const uint exponent_mask = (1u << exponent_bits) - 1u;
-    const uint mantissa_mask = (1u << mantissa_bits) - 1u;
-    const uint exponent = (value >> mantissa_bits) & exponent_mask;
-    const uint mantissa = value & mantissa_mask;
-
-    if (exponent == 0u)
-    {
-        if (mantissa == 0u)
-        {
-            return 0.0f;
-        }
-        return ldexp((float)mantissa / (float)(1u << mantissa_bits), -14);
-    }
-
-    if (exponent == exponent_mask)
-    {
-        return 65504.0f;
-    }
-
-    return ldexp(1.0f + (float)mantissa / (float)(1u << mantissa_bits),
-        int(exponent) - 15);
-}
-
-static inline float3 UnpackFloat111110(uint packed)
-{
-    return float3(
-        DecodeUnsignedMiniFloat((packed >> 0u) & 0x7FFu, 6u),
-        DecodeUnsignedMiniFloat((packed >> 11u) & 0x7FFu, 6u),
-        DecodeUnsignedMiniFloat((packed >> 22u) & 0x3FFu, 5u));
-}
-
 static inline float4 UnpackUNorm8888(uint packed)
 {
     return float4(
@@ -176,16 +145,14 @@ static inline DecodedLocalFogVolumeInstanceData DecodeLocalFogVolumeInstanceData
         y_vec * decoded.uniform_scale_inv,
         z_vec * decoded.uniform_scale_inv);
 
-    const float3 packed_extinction = UnpackFloat111110(instance.data2.x);
-    decoded.radial_fog_extinction = packed_extinction.x;
-    decoded.height_fog_extinction = packed_extinction.y;
-    decoded.height_fog_falloff = packed_extinction.z;
-
-    decoded.emissive = UnpackFloat111110(instance.data2.y);
-    const float4 packed_albedo_phase = UnpackUNorm8888(instance.data2.z);
+    decoded.radial_fog_extinction = instance.extinction_falloff_offset.x;
+    decoded.height_fog_extinction = instance.extinction_falloff_offset.y;
+    decoded.height_fog_falloff = instance.extinction_falloff_offset.z;
+    decoded.height_fog_offset = instance.extinction_falloff_offset.w;
+    decoded.emissive = instance.emissive.rgb;
+    const float4 packed_albedo_phase = UnpackUNorm8888(instance.data1.w);
     decoded.albedo = packed_albedo_phase.rgb;
     decoded.phase_g = packed_albedo_phase.a;
-    decoded.height_fog_offset = asfloat(instance.data2.w);
     return decoded;
 }
 
@@ -481,19 +448,20 @@ static inline LocalFogVolumeIntegralData EvaluateLocalFogVolumeIntegral(
             : ray_dir_local.z;
         float factor0 = max(-80.0f, start_height * instance.height_fog_falloff);
         const float factor1 = safe_dir_z * ray_length_local * instance.height_fog_falloff;
+        // Factor from the denser endpoint to avoid exp(-factor1) overflow on
+        // downward rays whose endpoint densities are both representable.
+        const float density_difference = factor1 >= 0.0f
+            ? exp(-factor0) * OneMinusExpNegative(factor1)
+            : -exp(-(factor0 + factor1)) * OneMinusExpNegative(-factor1);
         height_optical_depth
             = (instance.height_fog_extinction / (instance.height_fog_falloff * safe_dir_z))
-            * (exp(-factor0) - exp(-(factor0 + factor1)));
+            * density_difference;
     }
 
-    const float transmittance_radial = exp(-radial_optical_depth);
-    const float transmittance_height = exp(-height_optical_depth);
-    const float combined_transmittance
-        = 1.0f - (1.0f - transmittance_radial) * (1.0f - transmittance_height);
-    const float optical_depth = -log(max(combined_transmittance, 1.0e-6f));
-    const float transmittance
-        = exp(-optical_depth * instance.uniform_scale);
-    fog_data.coverage = saturate(1.0f - transmittance);
+    const float combined_opacity = OneMinusExpNegative(radial_optical_depth)
+        * OneMinusExpNegative(height_optical_depth);
+    const float optical_depth = OpticalDepthFromOpacity(combined_opacity);
+    fog_data.coverage = saturate(OneMinusExpNegative(optical_depth * instance.uniform_scale));
     fog_data.integrated_luminance_factor = fog_data.coverage;
     return fog_data;
 }
@@ -579,6 +547,8 @@ static inline float4 GetLocalFogVolumeInstanceContribution(
         ray_dir_local, traced_length);
     const float3 luminance = EvaluateLocalFogVolumeInScattering(
         instance, fog_data, linear_sampler, ray_dir_world);
+    CheckHdrStoreRange(float4(luminance, fog_data.coverage), 9u,
+        LoadViewFrameBindings(bindless_view_frame_bindings_slot).exposure_status_uav, 0u, 1.0);
     return float4(luminance, 1.0f - fog_data.coverage);
 }
 

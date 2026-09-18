@@ -15,6 +15,7 @@
 #include "Vortex/Contracts/View/ViewFrameBindings.hlsli"
 #include "Vortex/Contracts/View/ViewHistoryFrameBindings.hlsli"
 #include "Vortex/Services/Environment/LocalFogVolumeCommon.hlsli"
+#include "Vortex/Services/Environment/TransmittanceMath.hlsli"
 #include "Vortex/Services/Shadows/DirectionalShadowCommon.hlsli"
 #include "Vortex/Shared/PositionReconstruction.hlsli"
 
@@ -361,16 +362,11 @@ static VolumetricLocalFogMedia EvaluateLocalFogVolumeFroxelMedia(
             * (unit_space_position.z - instance.height_fog_offset));
     const float radial_extinction = instance.radial_fog_extinction
         * pow(sphere_fade, 0.82f);
-    const float height_transmittance = exp(-max(height_extinction, 0.0f));
-    const float radial_transmittance = exp(-max(radial_extinction, 0.0f));
-    const float combined_transmittance = max(
-        height_transmittance
-            - height_transmittance * radial_transmittance
-            + radial_transmittance,
-        1.0e-6f);
+    const float opacity = OneMinusExpNegative(max(height_extinction, 0.0f))
+        * OneMinusExpNegative(max(radial_extinction, 0.0f));
 
     const float extinction = min(max(max_density, 0.0f),
-        max(-log(combined_transmittance), 0.0f)) * saturate(soft_density_scale);
+        OpticalDepthFromOpacity(opacity)) * saturate(soft_density_scale);
     media.extinction = extinction;
     media.scattering = extinction * max(instance.albedo, 0.0f.xxx);
     media.emissive = extinction * max(instance.emissive, 0.0f.xxx);
@@ -485,7 +481,7 @@ static float4 EvaluateVolumetricFogSample(
         height_fog_density * max(pass.grid.global_extinction_scale, 0.0f) * near_fade
         + max(local_fog_media.extinction, 0.0f);
     const float transmittance = exp(-extinction * ray_length);
-    const float opacity = saturate(1.0f - transmittance);
+    const float opacity = saturate(OneMinusExpNegative(extinction * ray_length));
 
     float light0_shadow_visibility = 1.0f;
     if (pass.grid_z.shadowed_directional_light0_enabled > 0.0f
@@ -519,7 +515,8 @@ static float4 EvaluateVolumetricFogSample(
         + max(pass.media1.emissive_rgb, 0.0f.xxx);
     const float3 integrated_luminance =
         (scattering + local_fog_media.emissive) * opacity;
-
+    CheckHdrStoreRange(float4(integrated_luminance, transmittance), 10u,
+        pass.exposure_status_uav, 0u, 1.0);
     return float4(max(integrated_luminance, 0.0f.xxx) * GetPreExposure(), saturate(transmittance));
 }
 
@@ -644,7 +641,8 @@ void VortexVolumetricFogCS(uint3 dispatch_id : SV_DispatchThreadID)
 
     RecordHdrStoreBounds(output_value, reference_low, reference_high, GetOneOverPreExposure(),
         10u, pass.exposure_status_uav, pass.exposure_fp16_store);
-    CheckHdrStoreRange(output_value, 10u, pass.exposure_status_uav, pass.exposure_fp16_store);
+    CheckHdrStoreRange(output_value, 10u, pass.exposure_status_uav, pass.exposure_fp16_store,
+        GetPreExposure());
     output_texture[dispatch_id] = pass.exposure_fp16_store != 0u
         ? HdrRoundToHalf(output_value) : output_value;
 }
