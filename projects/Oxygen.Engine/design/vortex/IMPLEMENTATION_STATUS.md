@@ -63,7 +63,7 @@ is not complete.
 | 2 — Settings and fixed exposure | validated | Canonical authored input, immutable pass snapshots, fixed/camera gain, per-view settings and public mask acceptance are qualified. | [Fixed gain](../../out/build-ninja/analysis/vortex/exposure-lightbench/fixed-gain/evidence-manifest.json), [frame bindings](../../out/build-ninja/analysis/vortex/exposure-lightbench/frame-binding/evidence-manifest.json), [configuration and mask acceptance](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/review-r028-manifest.json) |
 | 3 — Metering and adaptation | validated | Controlled-input histogram, curve, masks and hybrid adaptation; scene acceptance remains slice 5. | [Metering](../../out/build-ninja/analysis/vortex/exposure-lightbench/metering/evidence-manifest.json) |
 | 4 — GPU lifecycle and sharing | validated | Controlled-input/public-event gate, including offscreen routing. Real-scene resource lifetime is tracked in slice 5. | [Lifecycle](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/discontinuity-manifest.json), [offscreen sharing](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/offscreen-sharing-manifest.json) |
-| 5 — HDR migration and recovery | in_progress | P domains, cumulative error bounds, producer qualification, production format admission and queued mixed-format consumers are validated. Automatic recovery/retention/return is Debug-qualified; external bloom, resource accounting and remaining scene/MultiView acceptance are open. | [Detailed items](#32-slice-5-work-items) |
+| 5 — HDR migration and recovery | in_progress | P domains, cumulative error bounds, producer qualification, production format admission and queued mixed-format consumers are validated. Automatic recovery/retention/return is Debug-qualified; resource accounting and remaining scene/MultiView acceptance are open. | [Detailed items](#32-slice-5-work-items) |
 | 6 — Authoring and persistence | planned | Native physical-camera persistence and texture-resource-index mask contracts are approved; complete source/cook/load/script/editor/DemoShell round-trip remains. | [Detailed items](#33-slice-6-work-items) |
 | 7 — Light units | planned | Directional, point and spot numerical/visual calibration across forward and deferred paths remains. | [Detailed items](#34-slice-7-work-items) |
 | 8 — Measurements | planned | Implement instrumentation and qualify it against independent inputs. | [Detailed items](#35-slice-8-work-items) |
@@ -198,12 +198,22 @@ is not complete.
   also passes after correcting its fixture to use the owning frame's actual dt;
   its earlier claim of nonzero elapsed time was not established by the old fixture.
   [Recovery evidence and exact commands](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/recovery-increment-manifest.json).
-  **Next: EX05-09.** The active external-bloom consumer audit and native test
-  draft are prepared. Remaining scene/MultiView lifecycle items keep their own
-  gates below; Release remains at Slice 5 closure.
-  **Deferred feature boundaries:** owned bloom and specular/captured-sky products
-  remain outside this increment. Their source TODOs link the owner plan and
-  dependency issues; the active external-bloom audit remains EX05-09.
+  **Completed: EX05-09 — validated in Debug.** Disabling bloom now prevents
+  an external SRV and nonzero intensity from activating its tonemap contribution.
+  The native regression failed before the fix (six cases, 18 RGB checks: .25
+  instead of .125) and passes all 24 P/format/toggle/intensity cases afterward.
+  Nine checked-color cases include three external-bloom accepted-half/fallback
+  combinations. The frozen gate passes 194 native exposure and 24 post-process
+  tests (218), with all 36 runtime hashes unchanged. Caller extent/P/lifetime
+  requirements are documented; shader, temporal-history and captured-sky TODOs
+  identify the deferred activation work. No owned bloom filter or TAA/TSR/capture
+  producer is claimed. [Audit, commands and evidence](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/bloom-handoff-manifest.json).
+  **Next: EX05-21.** Measure actual HDR allocations, simultaneous views and
+  retained/cached generations, plus pass traffic and timing. Remaining scene/
+  MultiView lifecycle items keep their own gates below. Release remains at Slice 5
+  closure.
+  **Deferred feature boundaries:** owned bloom, temporal color and specular/
+  captured-sky products retain their source TODOs and feature dependency issues.
   **Domain implementation:** failure kind 32 distinguishes unsupported
   scene RGB from FP16 headroom. The limit is scaled exactly by pinned P, avoiding
   reciprocal rounding at the upper endpoint; pre-environment
@@ -243,8 +253,8 @@ is not complete.
   refresh dispatches take 0.008912 ms (transmittance) and 0.020768 ms (multiple
   scattering). These are dispatch medians, not end-to-end frame latency or a
   measured FP16-to-FP32 timing delta; native queue intervals are also recorded.
-  **Remaining Slice 5 work:** external-bloom audit, actual resource accounting,
-  remaining scene lifecycle combinations and complete native MultiView acceptance.
+  **Remaining Slice 5 work:** actual resource accounting, remaining scene
+  lifecycle combinations and complete native MultiView acceptance.
   EX05-19 closes the named recovery/retention/return matrix, not these other gates.
   The Slice 5 gate and Slices 6–10 remain open.
 
@@ -339,7 +349,7 @@ current status, including decisions that supersede older manifest limitations.
 | EX05-06 | Height/volumetric fog and RGB history rebasing | validated | Current/stored P conversion and unchanged transmittance are implemented and exercised. Cumulative temporal quantization is not covered by this item. | [Scene migration](../../out/build-ninja/analysis/vortex/exposure-lightbench/scene/scene-migration-manifest.json), [history/resource lifetime](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/review-lifetime-manifest.json) |
 | EX05-07 | Diagnostic colors, wireframe and display overlays | validated | Per-view unit-gain diagnostics, persistent exposure preservation and frame-retained overlay constants are qualified. Full feature-layout acceptance remains EX05-29. | [Diagnostics](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/diagnostic-manifest.json) |
 | EX05-08 | Canonical processed cubemap narrowing and upload packing | validated | Half/float resource choice, normalization and matching face/mip upload packing are qualified at the static-cubemap scope. | [Cubemap](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/cubemap-manifest.json) |
-| EX05-09 | Bloom and remaining temporal/capture domain audit | in_progress | The inventory finds no owned bloom radiance chain, dynamic captured-sky producer or TAA/TSR producer in this checkout. Explicit closure of active bloom handoff/threshold/shader paths and conditional-product coverage remains; absence of an allocator is not blanket completion. | [Inventory](lld/scene-textures.md#exposure-hdr-domain-and-format-inventory), [section 4.4](plan/exposure-and-lightbench-correction.md#44-migrate-every-active-producer-and-consumer-together) |
+| EX05-09 | Bloom and remaining temporal/capture domain audit | validated | Active external bloom handoff qualified: disabled bloom supplies no SRV; matching-P radiance is added before S/P, including checked-half/fallback scene inputs. Debug gate: 218 passed; 24 domain/toggle cases and nine checked-color cases. Owned bloom shaders are inactive UV placeholders, threshold has no active filter, and temporal/captured/specular producers remain feature dependencies with code TODOs. | [Audit and native evidence](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/bloom-handoff-manifest.json), [consumer contract](lld/post-process-service.md#post-chain-and-qualification) |
 | EX05-10 | Checked SceneColor conversion and conditional FP32 tonemap fallback | validated | Whole-image check precedes narrowing; rejected half contents are not sampled; current conversion verdict is separate from future-candidate qualification. Production admission and checked handoff are implemented in EX05-17; queued consumers are Debug-qualified in EX05-18. | [Conversion](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/conversion-manifest.json), [selection](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/selection-manifest.json), [separate reports](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/precision-status-manifest.json) |
 | EX05-11 | GPU per-view suitability and two-result stability | validated | Required-product identity, candidate P, own precision history for borrowers, streak reset and bounded status publication are qualified as primitives. | [Eligibility](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/eligibility-manifest.json) |
 | EX05-12 | Completed-status candidate selection and failure invalidation | validated | Lifetime/settings/layout/generation checks, bounded retry queue, stale-result rejection and failed-solve/fallback invalidation are qualified. Successful same-frame reuse retains acknowledgement. | [Status selection](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/precision-status-manifest.json), [R034 correction](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/review-r034-manifest.json) |

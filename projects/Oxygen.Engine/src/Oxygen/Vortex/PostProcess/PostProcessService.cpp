@@ -391,6 +391,11 @@ auto PostProcessService::BuildBindings(const Inputs& inputs,
     .bloom_texture_srv = inputs.bloom_texture_srv,
     .eye_adaptation_srv = inputs.eye_adaptation_srv,
     .eye_adaptation_uav = inputs.eye_adaptation_uav,
+    // TODO(exposure, temporal color): before activating this unused handoff,
+    // retain its stored P/generation, convert RGB by P_current/P_stored, and
+    // include its error in admission. Scope:
+    // design/vortex/lld/post-process-service.md, post chain; feature dependency:
+    // https://github.com/abdes/DroidNet/issues/15
     .post_history_srv = inputs.post_history_srv,
     .tone_mapper = config.Settings().tone_mapper,
     .metering_mode = config.Exposure().authored.metering_mode,

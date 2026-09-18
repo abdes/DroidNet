@@ -633,8 +633,9 @@ by three zero words. It preserves the frame's stored RGB domain and narrows
 saturated coverage consistently with the qualifier. Existing frame-retained
 publishers and the 48-byte report provide lifetime and synchronization; no
 additional full-resolution texture or exposure history is allocated.
-Cumulative blend/error aggregation, stability and completed-status admission
-remain separate required integration gates.
+Cumulative blend/error aggregation and GPU stability determine eligibility;
+matching completed status authorizes production format admission independently
+of this current conversion result.
 
 Normal-path pre-store overflow/nonfinite or required-signal underflow invalidates
 metering and retains history. Schedule FP32 recovery after completed status,
@@ -689,6 +690,25 @@ consumers must use the same GPU acceptance test. These fields replace the old
 reserved word and tail padding without growing the record. The current bloom
 wrapper only forwards its separately supplied texture; any future owned bloom
 chain must honor checked source selection before reading resolved color.
+
+The optional external bloom SRV is a caller-owned, shader-readable texture with
+the same extent and pinned P as the scene source. Its producer retains the texture
+and registered view through GPU consumption. Tonemap reads it independently of
+the checked scene-color selection, adds its radiance, and applies S/P once to the
+sum. A rejected scene conversion selects the original FP32 scene source without
+altering bloom's domain. Disabling bloom returns an invalid SRV from `BloomPass`,
+so a supplied texture and nonzero intensity cannot activate the shader read.
+
+Ordinary `SceneRenderer` supplies no external bloom texture. The owned chain has
+no allocation or recorded dispatch; catalogued downsample/upsample entries still
+return diagnostic UV colors. Authored threshold is stored and published but has
+no active filtering consumer. Activating those entries requires the work in
+[owned bloom issue 12](https://github.com/abdes/DroidNet/issues/12): checked source
+selection, scene-referred thresholding, matching-P filtering, the view HDR format
+and cumulative image-error qualification. Source TODOs mark each activation site.
+The unused `post_history_srv` handoff similarly requires stored P/generation and
+exposure-correct temporal conversion before activation; its dependency is
+[temporal color issue 15](https://github.com/abdes/DroidNet/issues/15).
 
 The pixel shader
 multiplies current S by that record's 1/P once before mapping foreground and

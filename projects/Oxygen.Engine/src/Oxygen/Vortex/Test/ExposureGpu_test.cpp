@@ -608,7 +608,8 @@ protected:
     bool start_new_frame = true,
     const PostProcessService::PreparedExposure* prepared = nullptr,
     const Signal* fallback = nullptr,
-    postprocess::ExposurePass::FrameLease checked_resolution = {}) -> float
+    postprocess::ExposurePass::FrameLease checked_resolution = {},
+    const Signal* bloom = nullptr, float bloom_intensity = 0.0F) -> float
   {
     settings.key = 12.5F;
     if (start_new_frame)
@@ -621,8 +622,8 @@ protected:
       ctx_.current_view.view_id, ctx_.current_view.view_state_handle, settings,
       {}, diagnostic, ctx_.GetScene());
     auto config = PostProcessConfig {};
-    config.enable_bloom = false;
-    config.bloom_intensity = 0.0F;
+    config.enable_bloom = bloom != nullptr;
+    config.bloom_intensity = bloom_intensity;
     config.tone_mapper = tone_mapper;
     config.gamma = 1.0F;
     service.SetResolvedConfig(service.BuildPassConfig(
@@ -645,6 +646,7 @@ protected:
         .scene_signal = signal.texture.get(),
         .post_target = observer_ptr<const Framebuffer> { framebuffer.get() },
         .scene_signal_srv = signal.srv,
+        .bloom_texture_srv = bloom ? bloom->srv : kInvalidShaderVisibleIndex,
         .scene_fallback = fallback ? fallback->texture.get() : nullptr,
         .scene_fallback_srv
         = fallback ? fallback->srv : kInvalidShaderVisibleIndex,
@@ -3758,6 +3760,65 @@ NOLINT_TEST_F(
     Read<FrameExposureData>(*disabled->buffer, ResourceStates::kShaderResource)
       .pre_exposure,
     1.0F);
+}
+
+NOLINT_TEST_F(ExposureGpuTest, ExternalBloomUsesFrameDomainAndHonorsDisable)
+{
+  auto service = PostProcessService(*renderer_);
+  auto textures = SceneTextures(Backend(), { .extent = { 4U, 4U } });
+  unsigned cases = 0;
+  for (const float ev : { -16.0F, 0.0F, 16.0F })
+    for (const bool fp32 : { false, true })
+      for (const bool enabled : { false, true })
+        for (const float intensity : { 0.0F, .5F }) {
+          SCOPED_TRACE(::testing::Message()
+            << "ev=" << ev << " fp32=" << fp32 << " enabled=" << enabled
+            << " intensity=" << intensity);
+          ctx_.frame_sequence = frame::SequenceNumber { ++sequence_ };
+          service.OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
+          auto settings = scene::ExposureSettings {};
+          settings.mode = engine::ExposureMode::kManual;
+          settings.manual_ev = ev;
+          settings.key = 12.5F;
+          [[maybe_unused]] const auto& captured
+            = service.CaptureViewExposureSettings(ctx_.current_view.view_id,
+              ctx_.current_view.view_state_handle, settings);
+          auto config = PostProcessConfig {};
+          config.enable_bloom = enabled;
+          config.bloom_intensity = intensity;
+          config.tone_mapper = engine::ToneMapper::kNone;
+          config.gamma = 1;
+          service.SetResolvedConfig(service.BuildPassConfig(config,
+            ctx_.current_view.view_id, ctx_.current_view.view_state_handle));
+          const auto frame = service.PrepareFrameExposure(ctx_, fp32);
+          ASSERT_NE(frame, nullptr);
+          const double s = std::exp2(-double(ev));
+          const double p = fp32 ? 1 : s;
+          const auto source = Uniform(float(.125 * p / s), 4U, 4U);
+          const auto bloom = Uniform(float(.25 * p / s), 4U, 4U);
+          auto output = CreateRegisteredTexture({ .width = 4,
+            .height = 4,
+            .format = Format::kRGBA32Float,
+            .is_render_target = true,
+            .initial_state = ResourceStates::kCommon });
+          auto target = Backend().CreateFramebuffer(
+            FramebufferDesc {}.AddColorAttachment(output));
+          service.Execute(ctx_.current_view.view_id, ctx_, textures,
+            { .scene_signal = source.texture.get(),
+              .post_target = observer_ptr<const Framebuffer> { target.get() },
+              .scene_signal_srv = source.srv,
+              .bloom_texture_srv = bloom.srv });
+          ASSERT_TRUE(service.GetLastExecutionState().tonemap_executed);
+          EXPECT_EQ(service.GetLastExecutionState().bloom_requested, enabled);
+          // Pixel (1,0) has zero Bayer offset, independent of production
+          // helpers.
+          const auto pixels = ReadFloatTexture(*output);
+          const double expected = .125 + (enabled ? .25 * intensity : 0);
+          for (unsigned c = 0; c < 3; ++c)
+            EXPECT_NEAR(pixels[1][c], expected, 2e-6);
+          ++cases;
+        }
+  RecordProperty("external_bloom_cases", cases);
 }
 
 NOLINT_TEST_F(
@@ -11000,6 +11061,7 @@ NOLINT_TEST_F(ExposureGpuTest,
     bool overflow;
     float expected;
     bool missing_certificate { false };
+    bool bloom { false };
   };
   const std::array cases {
     Case { "accepted half", 1.0F / 3.0F, 0, true, false, .333251953125F },
@@ -11010,6 +11072,12 @@ NOLINT_TEST_F(ExposureGpuTest,
     Case { "nonunit P", 1.0F / 3.0F, -2, false, false, .333251953125F },
     Case { "missing certificate fallback", 1.0F / 3.0F, 0, true, false,
       1.0F / 3.0F, true },
+    Case { "accepted half with external bloom", 1.0F / 3.0F, 0, true, false,
+      .333251953125F + .0625F, false, true },
+    Case { "float fallback with external bloom", 1.0F / 3.0F, 0, true, true,
+      1.0F / 3.0F + .0625F, false, true },
+    Case { "nonunit P with external bloom", 1.0F / 3.0F, -2, false, false,
+      .333251953125F + .0625F, false, true },
   };
   for (const auto& test_case : cases) {
     SCOPED_TRACE(test_case.name);
@@ -11025,8 +11093,8 @@ NOLINT_TEST_F(ExposureGpuTest,
     auto config = PostProcessConfig { .exposure = settings };
     config.tone_mapper = engine::ToneMapper::kNone;
     config.gamma = 1.0F;
-    config.enable_bloom = false;
-    config.bloom_intensity = 0.0F;
+    config.enable_bloom = test_case.bloom;
+    config.bloom_intensity = test_case.bloom ? .5F : 0.0F;
     service.SetResolvedConfig(service.BuildPassConfig(
       config, ctx_.current_view.view_id, ctx_.current_view.view_state_handle));
     static_cast<void>(service.SelectPrecisionCandidate(
@@ -11123,9 +11191,13 @@ NOLINT_TEST_F(ExposureGpuTest,
       !test_case.missing_certificate);
     const auto finalized = Read<ExposureStateData>(
       *prepared->exposure.state->buffer, ResourceStates::kShaderResource);
+    const auto bloom = Uniform(
+      float(.125 * (test_case.fp32 ? std::exp2(double(test_case.ev)) : 1.0)),
+      4U, 4U);
     EXPECT_NEAR(
       ServicePixel(service, resolved, settings, false, 0.0F, {},
-        engine::ToneMapper::kNone, false, &*prepared, &accumulation, frame),
+        engine::ToneMapper::kNone, false, &*prepared, &accumulation, frame,
+        test_case.bloom ? &bloom : nullptr, test_case.bloom ? .5F : 0.0F),
       test_case.expected, 1e-7F);
     if (capture)
       EXPECT_TRUE(capture->EndCapture());
