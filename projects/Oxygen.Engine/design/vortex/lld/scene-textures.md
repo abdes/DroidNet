@@ -127,6 +127,23 @@ TAA/TSR remain inactive. Source TODOs at `IblProcessor`, `BloomChain` and
 
 ### Per-view FP16 suitability
 
+Admission is configured before the frame exposure binding and radiance writes.
+The environment owner describes the current required dimensions using the same
+cache parameters and fog-grid resolver as allocation. Scene extent, required
+product identity, coverage/transmittance semantics and AP consumer gain form the
+layout revision. The late actual-product comparison remains a failure backstop.
+Source-handle/lifetime/settings/transition changes invalidate a borrower's prior
+precision certificate without changing numerical exposure authority.
+
+The view HDR format controls environment intermediates and resolved color;
+SceneColor-family lease keys remain FP32 when post processing is active. A half
+resolve carries its conversion report, original FP32 fallback and family lease.
+Unconditional texture-only consumers receive the retained FP32 source. Artifact
+ownership keeps the texture and registered views together and schedules retirement
+through the existing reclaimer only after the last retained extraction is released.
+Family storage is shared by the pool and its lease, so retained fallback contents
+cannot be reused and lease destruction does not call a destroyed pool.
+
 Resolved/extracted textures and their registered shader-visible views retire
 together through the existing GPU-frame reclaimer. Switching views, resizing,
 or replacing an artifact retains its registry entries until that frame slot is
@@ -150,8 +167,8 @@ texel versus the original all-FP16 normal-mode inventory (15.82 MiB at 1080p,
 Use the conventional raster blend path. Ordered-UAV blending is not part of
 this contract. Checking an individual FP16 blend store would not independently
 bound accumulated rounding error or recover information lost by earlier stores.
-The current conservative-FP32 scene path does not constitute completion of
-checked conversion or normal-mode format admission.
+Normal-mode admission and checked conversion use the completed per-view
+certificate; FP32 accumulation alone does not authorize a half-format resolve.
 
 Exposure validity does not imply FP16 eligibility. At audited radiance write
 boundaries, test finite FP32 values before narrowing, including cumulative
@@ -194,12 +211,11 @@ Their checks use the actual destination format. A finite source that clips to
 65504 in a typed FP16 store remains distinguishable from a nonfinite source;
 post-store finiteness alone cannot make that distinction. The solve invalidates
 the affected meter and retains ordinary Auto history. Quantization/image-error
-checks, complete temporal propagation and normal-mode switching remain separate
-open requirements.
+certificates remain separate from these source-range checks and govern admission.
 
 ### Scene reference-product collection
 
-SceneRenderer collects the actual FP32 reference allocations after HDR rendering:
+SceneRenderer collects the actual allocations after HDR rendering: FP32
 accumulated SceneColor (qualification ID 11 for its planned resolve), sky-view
 LUT (5), camera aerial perspective (6), and volumetric fog (10). SceneColor's
 raster/additive producers share one allocation and are not counted as separate

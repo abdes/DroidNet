@@ -488,6 +488,18 @@ two consecutive eligible completed frames, half-error margin and two stops of
 overflow margin. The first FP16 frame pins the qualified candidate GPU P record;
 CPU does not read or compute P. Stale or delayed status cannot demote a view.
 
+SceneRenderer selects the format before radiance production from the current
+required-product layout. A borrower's precision epoch also includes source
+identity, lifetime, settings revision, requested generation and pending/applied
+state. It remains FP32 while a source request is pending and starts a fresh
+qualification streak after that request completes. A published but uninitialized
+source retains the GPU source-fallback/FP32 flags.
+
+The evaluator accepts typed half intermediates only for sky-view, AP and fog
+products (5/6/10), using their recorded pre-store error enclosures. Their decoded
+half values are not exact reference samples. Accumulation/conversion input stays
+FP32. Conservative uncertainty may retain FP32 even when gain history is valid.
+
 The product evaluator uses a 48-byte GPU reduction record: candidate P and
 maximum scene RGB at 0/4; checked-product mask and failure flags at 8/12;
 first failed product and rejected-sample count at 16/20; metering, image and
@@ -648,10 +660,12 @@ it reads the original FP32 accumulation. Conversion stores and tonemapping share
 the acceptance predicate. Keep the report unchanged between conversion and its
 consumers. This fallback preserves the valid FP32 meter and S/history; it does
 not authorize ignoring failures in upstream radiance products.
-The caller retains immutable FP32 accumulation through the last conditional
-consumer; publishing the report does not extend a scene-texture pool lease.
-SceneRenderer's eventual conditional extraction must retain that lease when
-consumers outlive the current view's execution.
+SceneRenderer's conditional extraction retains the original family lease and the
+artifact's texture/descriptor ownership alongside the frame exposure/report.
+Copy the complete extraction record when queueing a conditional consumer.
+Texture-only consumers receive a retained, unconditional FP32 source. Ownership
+prevents pool reuse and schedules descriptor retirement after the last consumer
+releases, through the existing GPU-frame reclaimer.
 An unresolved initial mask revision prevents conversion submission: unknown
 meter weights cannot establish suitability. The caller retains the FP32 source
 without attaching an uncomputed conversion report.

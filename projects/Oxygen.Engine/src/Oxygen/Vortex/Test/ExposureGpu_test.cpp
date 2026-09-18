@@ -508,9 +508,12 @@ protected:
       result.data(), mapped->Bytes().data(), result.size() * sizeof(result[0]));
     return result;
   }
-  auto ReadFloatTexture(const Texture& texture) -> std::vector<Pixel>
+  auto ReadFloatTexture(const Texture& texture, bool allow_half = false)
+    -> std::vector<Pixel>
   {
-    CHECK_F(texture.GetDescriptor().format == Format::kRGBA32Float);
+    const bool half = texture.GetDescriptor().format == Format::kRGBA16Float;
+    CHECK_F(texture.GetDescriptor().format == Format::kRGBA32Float
+      || (allow_half && half));
     auto readback
       = GetReadbackManager()->CreateTextureReadback("Fog edge output");
     {
@@ -524,11 +527,20 @@ protected:
     std::vector<Pixel> pixels(desc.width * desc.height * desc.depth);
     for (unsigned z = 0; z < desc.depth; ++z)
       for (unsigned y = 0; y < desc.height; ++y)
-        for (unsigned x = 0; x < desc.width; ++x)
-          std::memcpy(pixels[(z * desc.height + y) * desc.width + x].data(),
-            mapped->Data() + z * mapped->Layout().slice_pitch.get()
-              + y * mapped->Layout().row_pitch.get() + x * sizeof(Pixel),
-            sizeof(Pixel));
+        for (unsigned x = 0; x < desc.width; ++x) {
+          auto& pixel = pixels[(z * desc.height + y) * desc.width + x];
+          const auto* bytes = mapped->Data()
+            + z * mapped->Layout().slice_pitch.get()
+            + y * mapped->Layout().row_pitch.get()
+            + x * (half ? 8U : sizeof(Pixel));
+          if (half) {
+            std::array<std::uint16_t, 4> packed;
+            std::memcpy(packed.data(), bytes, sizeof(packed));
+            for (unsigned c = 0; c < 4; ++c)
+              pixel[c] = data::HalfFloat { packed[c] }.ToFloat();
+          } else
+            std::memcpy(pixel.data(), bytes, sizeof(pixel));
+        }
     return pixels;
   }
   template <typename Payload>
@@ -3543,6 +3555,34 @@ NOLINT_TEST_F(
     *fresh->current_state->buffer, ResourceStates::kShaderResource);
   EXPECT_EQ(zero.displayed_scale, 0.0F);
   EXPECT_GT(zero.latent_scale, 0.0F);
+}
+
+NOLINT_TEST_F(
+  ExposureGpuTest, BorrowedUninitializedPublicationCannotAuthorizeHalfDomain)
+{
+  ctx_.current_view.view_state_handle
+    = CompositionView::ViewStateHandle { 10U };
+  ctx_.frame_sequence = frame::SequenceNumber { 1U };
+  const auto config = SharedConfig();
+  const auto invalid
+    = RecordShared(Uniform(std::numeric_limits<float>::quiet_NaN()), config);
+  ASSERT_TRUE(invalid.executed);
+  const auto source_state = ReadState(invalid);
+  ASSERT_EQ(source_state.flags & 2U, 0U);
+  auto source = postprocess::ExposurePass::Source {
+    .handle = ctx_.current_view.view_state_handle, .config = config
+  };
+  ctx_.current_view.view_state_handle
+    = CompositionView::ViewStateHandle { 20U };
+  ctx_.frame_sequence = frame::SequenceNumber { 2U };
+  ctx_.frame_slot = frame::Slot { 1U };
+  const auto borrowed = pass_->ResolveFrame(
+    ctx_, config, { .use_fp32 = false, .source = &source });
+  ASSERT_NE(borrowed, nullptr);
+  const auto domain = Read<FrameExposureData>(
+    *borrowed->buffer, ResourceStates::kShaderResource);
+  EXPECT_EQ(domain.flags & 11U, 11U);
+  EXPECT_EQ(domain.pre_exposure, 1.0F);
 }
 
 NOLINT_TEST_F(ExposureGpuTest, FrameResolveBorrowsPriorRootAndTagsRootFallback)
@@ -7118,6 +7158,9 @@ protected:
     std::vector<float> raster_depths;
     bool early_depth_complete = false;
     std::function<void(RenderContext&)> prepare;
+    std::function<void(
+      const RenderContext&, const SceneTextureExtractRef&, unsigned)>
+      inspect;
     auto OnViewSetup(const ViewSetupContext& hook) -> void override
     {
       prepare(hook.render_context);
@@ -7155,6 +7198,8 @@ protected:
           raster_depths.push_back(item->world_bounding_sphere.z + 1.0F);
         }
       }
+      if (inspect)
+        inspect(hook.render_context, extracted, draws);
     }
   };
   auto SetUp() -> void override
@@ -7280,7 +7325,7 @@ protected:
         desc, std::vector<data::ShaderReference> {}));
   }
 
-  auto RenderSurface(bool forward, float ev) -> void
+  auto RenderSurface(bool forward, float ev, unsigned frames = 5) -> void
   {
     probe->color.reset();
     probe->draws = 0;
@@ -7290,7 +7335,7 @@ protected:
       ->SetExposureSettings(settings);
     scene->Update();
     scene->SyncObservers();
-    for (unsigned warmup = 0; warmup < 5; ++warmup) {
+    for (unsigned warmup = 0; warmup < frames; ++warmup) {
       const auto slot = frame::Slot { sequence % 3 };
       Backend().BeginFrame(frame::SequenceNumber { sequence + 1 }, slot);
       frame.SetFrameSlot(slot, engine::internal::EngineTagFactory::Get());
@@ -7303,8 +7348,10 @@ protected:
         .delta_time_seconds = frame_delta_seconds });
       facade.SetSceneSource({ .scene = observer_ptr { scene.get() } });
       facade.SetViewIntent(Renderer::OffscreenSceneViewInput::FromCamera(
-        "Lighting", ViewId { 100U }, view, camera)
-          .SetViewStateHandle(CompositionView::ViewStateHandle { 100U }));
+        "Lighting", ViewId { surface_view_id }, view, camera)
+          .SetViewStateHandle(
+            CompositionView::ViewStateHandle { surface_view_id })
+          .SetExposureSourceViewId(surface_source_id));
       facade.SetOutputTarget(
         { .framebuffer = observer_ptr { framebuffer.get() } });
       facade.SetPipeline(forward
@@ -7322,7 +7369,7 @@ protected:
     ASSERT_NE(probe->exposure, nullptr);
     const auto domain_data = Read<FrameExposureData>(
       *probe->exposure->buffer, ResourceStates::kShaderResource);
-    if (settings.mode == engine::ExposureMode::kManual)
+    if (verify_manual_p && settings.mode == engine::ExposureMode::kManual)
       EXPECT_EQ(domain_data.pre_exposure, std::exp2(-double(ev)));
   }
 
@@ -7330,6 +7377,7 @@ protected:
   {
     if (probe) {
       probe->prepare = {};
+      probe->inspect = {};
       probe->color.reset();
       probe->exposure.reset();
     }
@@ -7349,10 +7397,362 @@ protected:
   unsigned sequence = 0;
   unsigned material_sequence = 0;
   unsigned expected_draws = 1;
+  std::uint32_t surface_view_id = 100U;
+  ViewId surface_source_id = kInvalidViewId;
+  bool verify_manual_p = true;
   float frame_delta_seconds = 0;
   DepthPrePassMode depth_mode = DepthPrePassMode::kOpaqueAndMasked;
   console::Console fixture_console;
 };
+
+NOLINT_TEST_F(ExposureLightingGpuTest,
+  ProductionAdmissionRejectsCurrentAtmosphereLayoutChanges)
+{
+  verify_manual_p = false;
+  settings.mode = engine::ExposureMode::kAuto;
+  SetSurface(data::MaterialDomain::kOpaque, .25F);
+  auto& sky
+    = scene->GetEnvironment()->AddSystem<scene::environment::SkyAtmosphere>();
+  sky.SetEnabled(true);
+  // Exact vacuum transfer isolates layout compatibility from conservative
+  // interpolation budgets of a nonuniform atmosphere.
+  sky.SetRayleighScatteringRgb({ 0, 0, 0 });
+  sky.SetMieScatteringRgb({ 0, 0, 0 });
+  sky.SetMieAbsorptionRgb({ 0, 0, 0 });
+  sky.SetOzoneAbsorptionRgb({ 0, 0, 0 });
+  auto& fog = scene->GetEnvironment()->AddSystem<scene::environment::Fog>();
+  fog.SetEnabled(true);
+  fog.SetEnableHeightFog(true);
+  fog.SetEnableVolumetricFog(true);
+  fog.SetExtinctionSigmaTPerMeter(0);
+  ASSERT_EQ(
+    fixture_console.Execute("vtx.volumetric_fog.temporal_reprojection false")
+      .status,
+    console::ExecutionStatus::kOk);
+  ASSERT_EQ(fixture_console.Execute("vtx.volumetric_fog.jitter false").status,
+    console::ExecutionStatus::kOk);
+  probe->prepare = [](RenderContext& ctx) {
+    ctx.current_view.with_atmosphere = true;
+    ctx.current_view.with_height_fog = true;
+  };
+  struct Snapshot {
+    SceneTextureExtractRef color;
+    postprocess::ExposurePass::FrameLease frame;
+    glm::uvec3 aerial;
+    Format aerial_format;
+    Format sky_format = Format::kUnknown;
+    Format fog_format = Format::kUnknown;
+  };
+  std::unordered_map<std::uint32_t, Snapshot> snapshots;
+  probe->inspect = [&](const RenderContext& ctx,
+                     const SceneTextureExtractRef& color, unsigned) {
+    auto* owner
+      = vortex::testing::RendererPublicationProbe::GetSceneRenderer(*renderer_);
+    const auto textures
+      = vortex::testing::RendererPublicationProbe::EnvironmentTextures(
+        *owner, ctx.current_view.view_id);
+    Snapshot snapshot { color, ctx.current_view.frame_exposure, {},
+      Format::kUnknown };
+    for (const auto& texture : textures) {
+      const auto& desc = texture->GetDescriptor();
+      if (desc.debug_name.find("SkyView") != std::string::npos)
+        snapshot.sky_format = desc.format;
+      if (desc.debug_name.find("IntegratedLightScattering")
+        != std::string::npos)
+        snapshot.fog_format = desc.format;
+      if (desc.texture_type == TextureType::kTexture3D
+        && desc.debug_name.find("Aerial") != std::string::npos) {
+        snapshot.aerial = { desc.width, desc.height, desc.depth };
+        snapshot.aerial_format = desc.format;
+      }
+    }
+    snapshots.insert_or_assign(
+      static_cast<std::uint32_t>(ctx.current_view.view_id.get()),
+      std::move(snapshot));
+  };
+  const auto settle = [&](std::uint32_t id) {
+    surface_view_id = id;
+    ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0));
+    for (unsigned retry = 0; retry < 10
+      && snapshots.at(id).color.texture->GetDescriptor().format
+        != Format::kRGBA16Float;
+      ++retry) {
+      const auto& f = snapshots.at(id).frame;
+      const auto status = Read<ExposureCompletedStatus>(
+        *f->current_state->status_buffer, ResourceStates::kCopySource);
+      const auto report = Read<HdrSuitabilityData>(
+        *f->suitability_buffer, ResourceStates::kShaderResource);
+      std::printf("admission_layout frame=%u flags=%u product=%u kind=%u "
+                  "streak=%u candidate=%g report=%u products=%u\n",
+        sequence, status.flags, status.first_failure_product,
+        status.first_failure_kind, status.fp16_eligible_streak,
+        report.candidate_pre_exposure, report.failure_flags,
+        report.checked_products);
+      ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0, 1));
+    }
+    ASSERT_EQ(snapshots.at(id).color.texture->GetDescriptor().format,
+      Format::kRGBA16Float);
+    ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0, 1));
+    const auto& current = snapshots.at(id);
+    EXPECT_EQ(
+      current.color.texture->GetDescriptor().format, Format::kRGBA16Float);
+    EXPECT_EQ(current.aerial_format, Format::kRGBA16Float);
+    EXPECT_EQ(current.sky_format, Format::kRGBA16Float);
+    EXPECT_EQ(current.fog_format, Format::kRGBA16Float);
+    const auto conversion = Read<HdrSuitabilityData>(
+      *current.frame->conversion_buffer, ResourceStates::kShaderResource);
+    EXPECT_EQ(conversion.failure_flags, 0U);
+  };
+  ASSERT_NO_FATAL_FAILURE(settle(100));
+  ASSERT_NO_FATAL_FAILURE(settle(101));
+  struct Change {
+    const char* command;
+    glm::uvec3 extent;
+  };
+  const std::array changes {
+    Change {
+      "vtx.sky_atmosphere.aerial_perspective_lut.width 16", { 16, 16, 32 } },
+    Change {
+      "vtx.sky_atmosphere.aerial_perspective_lut.width 128", { 128, 128, 32 } },
+    Change { "vtx.sky_atmosphere.aerial_perspective_lut.depth_resolution 16",
+      { 128, 128, 16 } },
+    Change { "vtx.sky_atmosphere.aerial_perspective_lut.depth_resolution 64",
+      { 128, 128, 64 } }
+  };
+  unsigned cases = 0;
+  for (const auto& change : changes) {
+    SCOPED_TRACE(change.command);
+    ASSERT_EQ(fixture_console.Execute(change.command).status,
+      console::ExecutionStatus::kOk);
+    // The first view must reject its stale certificate before a second view
+    // can refresh the shared cache and conceal a stale-layout selection.
+    for (const auto id : { 100U, 101U }) {
+      surface_view_id = id;
+      const auto before = Read<ExposureStateData>(
+        *snapshots.at(id).frame->current_state->buffer,
+        ResourceStates::kShaderResource);
+      ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0, 1));
+      const auto& current = snapshots.at(id);
+      EXPECT_EQ(
+        current.color.texture->GetDescriptor().format, Format::kRGBA32Float);
+      EXPECT_EQ(current.aerial_format, Format::kRGBA32Float);
+      EXPECT_EQ(current.sky_format, Format::kRGBA32Float);
+      EXPECT_EQ(current.fog_format, Format::kRGBA32Float);
+      EXPECT_EQ(current.aerial, change.extent);
+      EXPECT_EQ(current.frame->qualified_candidate, nullptr);
+      const auto after = Read<ExposureStateData>(
+        *current.frame->current_state->buffer, ResourceStates::kShaderResource);
+      EXPECT_EQ(after.displayed_scale, before.displayed_scale);
+      EXPECT_EQ(after.latent_scale, before.latent_scale);
+      EXPECT_EQ(after.requested_generation, before.requested_generation);
+      EXPECT_EQ(after.applied_generation, before.applied_generation);
+      EXPECT_NE(after.flags & 1U, 0U);
+      ++cases;
+    }
+    ASSERT_NO_FATAL_FAILURE(settle(100));
+    ASSERT_NO_FATAL_FAILURE(settle(101));
+  }
+  surface_view_id = 100;
+  const auto before_failure
+    = Read<ExposureStateData>(*snapshots.at(100).frame->current_state->buffer,
+      ResourceStates::kShaderResource);
+  fog.SetExtinctionSigmaTPerMeter(.01F);
+  fog.SetVolumetricFogEmissive({ 65504, 65504, 65504 });
+  ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0, 1));
+  const auto failed = snapshots.at(100).frame;
+  const auto failure = Read<ExposureCompletedStatus>(
+    *failed->current_state->status_buffer, ResourceStates::kCopySource);
+  EXPECT_EQ(snapshots.at(100).fog_format, Format::kRGBA16Float);
+  EXPECT_EQ(failure.flags & 18U, 18U);
+  EXPECT_EQ(failure.first_failure_product, 10U);
+  EXPECT_NE(failure.first_failure_kind & 2U, 0U);
+  const auto held = Read<ExposureStateData>(
+    *failed->current_state->buffer, ResourceStates::kShaderResource);
+  EXPECT_EQ(held.displayed_scale, before_failure.displayed_scale);
+  EXPECT_EQ(held.latent_scale, before_failure.latent_scale);
+  EXPECT_EQ(held.flags & 12U, 0U);
+  ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0, 1));
+  EXPECT_EQ(snapshots.at(100).color.texture->GetDescriptor().format,
+    Format::kRGBA32Float);
+  EXPECT_EQ(snapshots.at(100).fog_format, Format::kRGBA32Float);
+  fog.SetExtinctionSigmaTPerMeter(0);
+  fog.SetVolumetricFogEmissive({ 0, 0, 0 });
+  ASSERT_NO_FATAL_FAILURE(settle(100));
+  ASSERT_NO_FATAL_FAILURE(settle(101));
+  probe->inspect = {};
+  snapshots.clear();
+  RecordProperty("current_layout_resize_view_cases", cases);
+  RecordProperty("normal_half_store_failure_cases", 1);
+}
+
+NOLINT_TEST_F(
+  ExposureLightingGpuTest, ProductionAdmissionInvalidatesBorrowerOnSourceChange)
+{
+  verify_manual_p = false;
+  probe->prepare = [](RenderContext&) { };
+  SetSurface(data::MaterialDomain::kOpaque, .25F);
+  auto& service = OwnedExposureService();
+  auto source_settings = settings;
+  source_settings.manual_ev = 0;
+  const auto root_a = PublishExposureOwner(frame, ViewId { 800U },
+    CompositionView::ViewStateHandle { 800U }, source_settings);
+  ctx_.scene = observer_ptr { scene.get() };
+  const auto publish_source
+    = [&](ViewId view_id, CompositionView::ViewStateHandle handle,
+        scene::ExposureSettings authored) {
+        ctx_.current_view.view_id = view_id;
+        ctx_.current_view.view_state_handle = handle;
+        ctx_.current_view.exposure_view_state_handle
+          = CompositionView::kInvalidViewStateHandle;
+        sequence_ = sequence;
+        ServicePixel(service, Uniform(.25F, 4U, 4U), authored);
+        sequence = static_cast<unsigned>(sequence_);
+      };
+  publish_source(
+    root_a, CompositionView::ViewStateHandle { 800U }, source_settings);
+  surface_source_id = ViewId { 800U };
+  SceneTextureExtractRef current;
+  postprocess::ExposurePass::FrameLease exposure;
+  probe->inspect = [&](const RenderContext& ctx,
+                     const SceneTextureExtractRef& color, unsigned) {
+    current = color;
+    exposure = ctx.current_view.frame_exposure;
+  };
+  const auto settle = [&] {
+    ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0));
+    for (unsigned retry = 0; retry < 8
+      && current.texture->GetDescriptor().format != Format::kRGBA16Float;
+      ++retry)
+      ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0, 1));
+    ASSERT_EQ(current.texture->GetDescriptor().format, Format::kRGBA16Float);
+    const auto state = Read<ExposureStateData>(
+      *exposure->current_state->buffer, ResourceStates::kShaderResource);
+    EXPECT_NE(state.flags & 128U, 0U);
+  };
+  ASSERT_NO_FATAL_FAILURE(settle());
+  const auto old_candidate = exposure->qualified_candidate;
+  ASSERT_NE(old_candidate, nullptr);
+  source_settings.manual_ev = 4;
+  const auto root_b = PublishExposureOwner(frame, ViewId { 801U },
+    CompositionView::ViewStateHandle { 801U }, source_settings);
+  publish_source(
+    root_b, CompositionView::ViewStateHandle { 801U }, source_settings);
+  surface_source_id = ViewId { 801U };
+  ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0, 1));
+  EXPECT_EQ(current.texture->GetDescriptor().format, Format::kRGBA32Float);
+  EXPECT_EQ(exposure->qualified_candidate, nullptr);
+  auto state = Read<ExposureStateData>(
+    *exposure->current_state->buffer, ResourceStates::kShaderResource);
+  EXPECT_EQ(state.displayed_scale, 0x1p-4F);
+  ASSERT_NO_FATAL_FAILURE(settle());
+  EXPECT_NE(exposure->qualified_candidate, old_candidate);
+  const auto request = renderer_->QueueExposureTransition(
+    CompositionView::ViewStateHandle { 801U },
+    ExposureTransitionPolicy::kPreserve);
+  ASSERT_TRUE(request.has_value());
+  ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0, 1));
+  EXPECT_EQ(current.texture->GetDescriptor().format, Format::kRGBA32Float);
+  EXPECT_EQ(exposure->qualified_candidate, nullptr);
+  publish_source(
+    root_b, CompositionView::ViewStateHandle { 801U }, source_settings);
+  ASSERT_NO_FATAL_FAILURE(settle());
+  state = Read<ExposureStateData>(
+    *exposure->current_state->buffer, ResourceStates::kShaderResource);
+  EXPECT_EQ(state.displayed_scale, 0x1p-4F);
+  probe->inspect = {};
+  current = {};
+  exposure.reset();
+}
+
+NOLINT_TEST_F(
+  ExposureLightingGpuTest, ProductionAdmissionPinsCandidateAndRetainsFallback)
+{
+  verify_manual_p = false;
+  probe->prepare = [](RenderContext&) { };
+  SetSurface(data::MaterialDomain::kOpaque, .25F);
+  struct Record {
+    SceneTextureExtractRef color;
+    postprocess::ExposurePass::FrameLease frame;
+    Format accumulation;
+    unsigned draws;
+  };
+  std::vector<Record> records;
+  probe->inspect = [&](const RenderContext& ctx,
+                     const SceneTextureExtractRef& color, unsigned draws) {
+    auto* owner
+      = vortex::testing::RendererPublicationProbe::GetSceneRenderer(*renderer_);
+    records.push_back({ color, ctx.current_view.frame_exposure,
+      owner->GetSceneTextures().GetSceneColor().GetDescriptor().format,
+      draws });
+  };
+  ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0));
+  for (unsigned retry = 0; retry < 6
+    && records.back().color.texture->GetDescriptor().format
+      != Format::kRGBA16Float;
+    ++retry)
+    ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0, 1));
+  ASSERT_FALSE(records.empty());
+  EXPECT_EQ(records.front().color.texture->GetDescriptor().format,
+    Format::kRGBA32Float);
+  ASSERT_EQ(
+    records.back().color.texture->GetDescriptor().format, Format::kRGBA16Float);
+  const auto half = records.back();
+  ASSERT_NE(half.color.fallback, nullptr);
+  ASSERT_NE(half.color.source_lease, nullptr);
+  ASSERT_NE(half.frame->qualified_candidate, nullptr);
+  const auto domain = Read<FrameExposureData>(
+    *half.frame->buffer, ResourceStates::kShaderResource);
+  const auto qualified = Read<ExposureStateData>(
+    *half.frame->qualified_candidate->buffer, ResourceStates::kShaderResource);
+  EXPECT_EQ(domain.pre_exposure, qualified.fp16_candidate_pre_exposure);
+  const auto report = Read<HdrSuitabilityData>(
+    *half.frame->conversion_buffer, ResourceStates::kShaderResource);
+  EXPECT_EQ(report.failure_flags, 0U);
+  EXPECT_EQ(report.checked_products, 1024U);
+  const auto before = Read<ExposureStateData>(
+    *half.frame->current_state->buffer, ResourceStates::kShaderResource);
+  EXPECT_EQ(before.displayed_scale, 1.0F);
+  const auto pixels = ReadFloatTexture(*half.color.texture, true);
+  ASSERT_EQ(pixels.size(), 1U);
+  EXPECT_NEAR(pixels[0][0] / domain.pre_exposure, .25F, .005F * .25F + 2e-5F);
+  for (const auto& r : records)
+    EXPECT_EQ(r.accumulation, Format::kRGBA32Float);
+  const auto saved_fallback = ReadFloatTexture(*half.color.fallback);
+  records.clear();
+  ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 2, 1));
+  EXPECT_EQ(records.front().color.texture->GetDescriptor().format,
+    Format::kRGBA32Float);
+  ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 2));
+  EXPECT_EQ(
+    records.back().color.texture->GetDescriptor().format, Format::kRGBA16Float);
+  EXPECT_EQ(ReadFloatTexture(*half.color.fallback), saved_fallback);
+  EXPECT_EQ(ReadFloatTexture(*half.color.texture, true), pixels);
+  const auto after
+    = Read<ExposureStateData>(*records.back().frame->current_state->buffer,
+      ResourceStates::kShaderResource);
+  EXPECT_EQ(after.displayed_scale, .25F);
+  const auto capture = BeginOptionalCapture();
+  ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 2, 1));
+  if (capture) EXPECT_TRUE(capture->EndCapture());
+  auto& backend = static_cast<ExposureFailureGraphics&>(Backend());
+  backend.fail_recorder_name = "Vortex Checked SceneColor Conversion";
+  ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 2, 1));
+  backend.fail_recorder_name.clear();
+  EXPECT_EQ(
+    records.back().color.texture->GetDescriptor().format, Format::kRGBA32Float);
+  EXPECT_EQ(records.back().color.fallback, nullptr);
+  ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 2, 1));
+  EXPECT_EQ(
+    records.back().color.texture->GetDescriptor().format, Format::kRGBA32Float);
+  EXPECT_EQ(records.back().frame->qualified_candidate, nullptr);
+  const auto after_failure
+    = Read<ExposureStateData>(*records.back().frame->current_state->buffer,
+      ResourceStates::kShaderResource);
+  EXPECT_EQ(after_failure.displayed_scale, after.displayed_scale);
+  EXPECT_EQ(after_failure.applied_generation, after.applied_generation);
+  probe->inspect = {};
+  records.clear();
+}
 
 NOLINT_TEST_F(
   ExposureLightingGpuTest, DirectLightRadiancePreservesSupportedRange)

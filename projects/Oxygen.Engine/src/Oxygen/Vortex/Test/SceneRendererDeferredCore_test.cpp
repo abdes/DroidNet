@@ -446,7 +446,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
 }
 
 NOLINT_TEST_F(SceneRendererDeferredCoreTest,
-  ResolvedArtifactDescriptorsSurviveOtherViewsUntilSlotRetires)
+  ResolvedArtifactDescriptorsRetireAfterLastConsumerAndFence)
 {
   auto& reclaimer = graphics_->GetDeferredReclaimer();
   reclaimer.OnBeginFrame(oxygen::frame::Slot { 1U });
@@ -477,8 +477,17 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   reclaimer.OnBeginFrame(oxygen::frame::Slot { 2U });
   EXPECT_EQ(registry.FindShaderVisibleIndex(*first, desc), slot);
   reclaimer.OnBeginFrame(oxygen::frame::Slot { 1U });
-  EXPECT_FALSE(registry.Contains(*first));
-  EXPECT_FALSE(registry.FindShaderVisibleIndex(*first, desc).has_value());
+  EXPECT_TRUE(registry.Contains(*first));
+  EXPECT_EQ(registry.FindShaderVisibleIndex(*first, desc), slot);
+  // Observe the underlying resource without retaining the extraction wrapper.
+  const auto resource = first->shared_from_this();
+  first.reset();
+  EXPECT_TRUE(registry.Contains(*resource));
+  reclaimer.OnBeginFrame(oxygen::frame::Slot { 2U });
+  EXPECT_TRUE(registry.Contains(*resource));
+  reclaimer.OnBeginFrame(oxygen::frame::Slot { 1U });
+  EXPECT_FALSE(registry.Contains(*resource));
+  EXPECT_FALSE(registry.FindShaderVisibleIndex(*resource, desc).has_value());
 }
 
 NOLINT_TEST_F(SceneRendererDeferredCoreTest,

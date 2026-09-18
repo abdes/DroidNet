@@ -441,19 +441,10 @@ namespace {
   }
 
   auto RetireExtractTexture(
-    Graphics& gfx, std::shared_ptr<graphics::Texture>& texture) -> void
+    Graphics& /*gfx*/, std::shared_ptr<graphics::Texture>& texture) -> void
   {
-    if (!texture) {
-      return;
-    }
-    auto* registry = &gfx.GetResourceRegistry();
-    gfx.GetDeferredReclaimer().RegisterDeferredAction(
-      [registry, texture = std::move(texture)]() mutable {
-        // Keep submitted shader indices alive as long as their texture.
-        // Graphics flushes its reclaimer before tearing down the registry.
-        registry->UnRegisterResource(*texture);
-        texture.reset();
-      });
+    // Artifact ownership schedules GPU-safe descriptor retirement on last use.
+    texture.reset();
   }
 
   auto ResolveLateOverlayTarget(const RenderContext& ctx)
@@ -1711,6 +1702,31 @@ void SceneRenderer::PrimePreparedViews(RenderContext& ctx)
   }
 }
 
+auto SceneRenderer::DescribeExposureProductLayout(const RenderContext& ctx)
+  -> ExposureProductLayout
+{
+  auto layout = ExposureProductLayout {};
+  const auto extent = ResolveRenderContextTargetExtent(ctx).value_or(
+    ActiveSceneTextures().GetExtent());
+  layout.products[0] = { 11U, extent.x, extent.y, 1U,
+    environment::ResolveSceneBackground(ctx).has_value() ? 1U : 0U,
+    std::bit_cast<std::uint32_t>(1.0F) };
+  if (environment_) {
+    const auto required = environment_->DescribeViewRadianceLayout(ctx);
+    std::size_t index = 1U;
+    const auto append
+      = [&](const std::uint32_t id, const glm::uvec3 size, float gain) {
+          if (size.x != 0U)
+            layout.products[index++] = { id, size.x, size.y, size.z, 2U,
+              std::bit_cast<std::uint32_t>(gain) };
+        };
+    append(5U, required.sky_view, 1.0F);
+    append(6U, required.aerial_perspective, required.aerial_rgb_gain);
+    append(10U, required.volumetric_fog, 1.0F);
+  }
+  return layout;
+}
+
 auto SceneRenderer::PrepareExposureDomain(RenderContext& ctx) -> bool
 {
   if (!post_process_
@@ -1719,14 +1735,32 @@ auto SceneRenderer::PrepareExposureDomain(RenderContext& ctx) -> bool
     return true;
   post_process_->SetResolvedConfig(
     ResolveAuthoredPostProcessConfig(ctx, *post_process_));
-  // TODO(EX05-17): select per-view allocations from completed suitability
-  // certificates after EX05-16 closes; preserve exposure history on
-  // transitions. SceneColor accumulation stays FP32 in both modes. EX05-18/19
-  // own queued leases and scene-integrated recovery/retention/return
-  // validation. Scope: design/vortex/IMPLEMENTATION_STATUS.md (EX05-17 through
-  // EX05-19).
+  auto layout = DescribeExposureProductLayout(ctx);
+  auto candidate = postprocess::ExposurePass::StateLease {};
+  const auto handle = ctx.current_view.view_state_handle;
+  if (handle != CompositionView::kInvalidViewStateHandle) {
+    auto& retained = exposure_product_layouts_[handle];
+    if (retained.revision == 0U || retained.products != layout.products) {
+      CHECK_NE_F(
+        retained.revision, (std::numeric_limits<std::uint64_t>::max)());
+      layout.revision = retained.revision + 1U;
+      retained = layout;
+    }
+    std::uint32_t expected = 0U;
+    for (const auto& product : retained.products)
+      if (product[0] != 0U)
+        expected |= 1U << (product[0] - 1U);
+    candidate = post_process_->SelectPrecisionCandidate(ctx,
+      { .product_layout_revision = retained.revision,
+        .expected_products = expected });
+  }
+  // Raw harness views without a retained family cannot export conditional HDR.
+  if (!active_scene_texture_lease_)
+    candidate.reset();
+  ctx.current_view.hdr_color_format
+    = candidate ? Format::kRGBA16Float : Format::kRGBA32Float;
   ctx.current_view.frame_exposure
-    = post_process_->PrepareFrameExposure(ctx, true);
+    = post_process_->PrepareFrameExposure(ctx, !candidate, candidate);
   return ctx.current_view.frame_exposure != nullptr;
 }
 
@@ -1777,15 +1811,16 @@ void SceneRenderer::RenderViewFamily(RenderContext& ctx)
       && ctx.current_view.feature_mask.Has(
         CompositionView::ViewFeatureMask::kSceneLighting))
       ctx.current_view.hdr_color_format = Format::kRGBA32Float;
-    auto scene_texture_lease
-      = scene_texture_pool_.Acquire(BuildSceneTextureLeaseKey(ctx));
-    ctx.current_view.hdr_color_format
-      = scene_texture_lease.GetKey().scene_color_format;
-    auto& leased_scene_textures = scene_texture_lease.GetSceneTextures();
+    auto scene_texture_lease = std::make_shared<SceneTextureLease>(
+      scene_texture_pool_.Acquire(BuildSceneTextureLeaseKey(ctx)));
+    active_scene_texture_lease_ = scene_texture_lease;
+    auto& leased_scene_textures = scene_texture_lease->GetSceneTextures();
     active_scene_textures_ = &leased_scene_textures;
     inspected_scene_textures_ = &leased_scene_textures;
-    auto restore_scene_texture_family = ScopeGuard(
-      [this]() noexcept { active_scene_textures_ = &scene_textures_; });
+    auto restore_scene_texture_family = ScopeGuard([this]() noexcept {
+      active_scene_textures_ = &scene_textures_;
+      active_scene_texture_lease_.reset();
+    });
     BindPreparedView(ctx);
     ResetPerViewSceneProducts();
     renderer_.DispatchViewExtensionsOnViewSetup(ctx);
@@ -1903,8 +1938,9 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
 {
   deferred_lighting_state_ = {};
   auto& scene_textures = ActiveSceneTextures();
-  ctx.current_view.hdr_color_format
-    = scene_textures.GetConfig().scene_color_format;
+  if (!ctx.current_view.frame_exposure)
+    ctx.current_view.hdr_color_format
+      = scene_textures.GetConfig().scene_color_format;
   if (const auto target_extent = ResolveRenderContextTargetExtent(ctx);
     target_extent.has_value() && *target_extent != scene_textures.GetExtent()) {
     ResizeSceneTextureFamily(*target_extent);
@@ -2582,9 +2618,8 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
         retained = layout;
       }
       layout = retained;
-      // Collect/qualify the real scene products while accumulation and all
-      // intermediates remain FP32. Normal-mode allocation additionally requires
-      // producer pre-store checks and the complete composition error bound.
+      // A producer configuration changed or failed after pre-scene selection.
+      // Invalidate admission without changing the already-pinned frame domain.
       static_cast<void>(post_process_->SelectPrecisionCandidate(ctx,
         { .product_layout_revision = layout.revision,
           .expected_products = expected_products }));
@@ -2620,7 +2655,7 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
 
   // Stage 21: Resolve scene color
   if (wants_resolve) {
-    ResolveSceneColor(ctx);
+    ResolveSceneColor(ctx, prepared_exposure ? &*prepared_exposure : nullptr);
   }
   if (prepared_exposure && !precision_products.empty()) {
     static_cast<void>(
@@ -2708,6 +2743,15 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
       .scene_depth_srv = scene_depth_srv,
       .scene_velocity_srv
       = ShaderVisibleIndex { scene_texture_bindings_.velocity_srv },
+      .scene_fallback = scene_texture_extracts_.resolved_scene_color.fallback,
+      .scene_fallback_srv
+      = scene_texture_extracts_.resolved_scene_color.fallback
+        ? ShaderVisibleIndex { scene_texture_bindings_.scene_color_srv }
+        : kInvalidShaderVisibleIndex,
+      .checked_resolution
+      = scene_texture_extracts_.resolved_scene_color.fallback
+        ? ctx.current_view.frame_exposure
+        : nullptr,
     };
     post_process_->Execute(ctx.current_view.view_id, ctx, scene_textures,
       post_process_inputs, &*prepared_exposure);
@@ -2893,6 +2937,10 @@ auto SceneRenderer::GetSceneTextureExtracts() const
 auto SceneRenderer::GetResolvedSceneColorTexture() const
   -> std::shared_ptr<graphics::Texture>
 {
+  const auto& color = scene_texture_extracts_.resolved_scene_color;
+  if (color.fallback && color.source_lease)
+    return std::shared_ptr<graphics::Texture>(
+      std::make_shared<SceneTextureExtractRef>(color), color.fallback);
   return resolved_scene_color_artifact_.texture;
 }
 
@@ -3085,7 +3133,9 @@ auto SceneRenderer::BuildSceneTextureLeaseKey(const RenderContext& ctx) const
   -> SceneTextureLeaseKey
 {
   auto key = SceneTextureLeaseKey::FromConfig(scene_textures_.GetConfig());
-  if (ctx.current_view.hdr_color_format)
+  if (post_process_)
+    key.scene_color_format = Format::kRGBA32Float;
+  else if (ctx.current_view.hdr_color_format)
     key.scene_color_format = *ctx.current_view.hdr_color_format;
   if (const auto target_extent = ResolveRenderContextTargetExtent(ctx);
     target_extent.has_value()) {
@@ -3113,8 +3163,8 @@ void SceneRenderer::ResetExtractArtifacts()
 }
 
 auto SceneRenderer::EnsureArtifactTexture(ExtractArtifact& artifact,
-  std::string_view debug_name, const graphics::Texture& source)
-  -> graphics::Texture*
+  std::string_view debug_name, const graphics::Texture& source,
+  const std::optional<Format> format) -> graphics::Texture*
 {
   const auto& source_desc = source.GetDescriptor();
   const auto requires_reallocation = [&]() -> bool {
@@ -3124,7 +3174,7 @@ auto SceneRenderer::EnsureArtifactTexture(ExtractArtifact& artifact,
     const auto& current_desc = artifact.texture->GetDescriptor();
     return current_desc.width != source_desc.width
       || current_desc.height != source_desc.height
-      || current_desc.format != source_desc.format
+      || current_desc.format != format.value_or(source_desc.format)
       || current_desc.sample_count != source_desc.sample_count;
   }();
 
@@ -3132,12 +3182,29 @@ auto SceneRenderer::EnsureArtifactTexture(ExtractArtifact& artifact,
     auto artifact_desc = source_desc;
     artifact_desc.debug_name = std::string(debug_name);
     artifact_desc.is_render_target = false;
-    artifact_desc.is_uav = false;
+    artifact_desc.format = format.value_or(source_desc.format);
+    artifact_desc.is_uav = format.has_value();
     artifact_desc.use_clear_value = false;
     artifact_desc.clear_value = {};
     artifact_desc.initial_state = graphics::ResourceStates::kCommon;
     RetireExtractTexture(gfx_, artifact.texture);
-    artifact.texture = gfx_.CreateTexture(artifact_desc);
+    auto texture = gfx_.CreateTexture(artifact_desc);
+    if (texture) {
+      // Register the underlying resource, not the ownership wrapper: the
+      // registry must not form a cycle with the retained graphics owner.
+      gfx_.GetResourceRegistry().Register(texture);
+      auto* resource = texture.get();
+      artifact.texture = std::shared_ptr<graphics::Texture>(resource,
+        [graphics = renderer_.GetGraphics(), texture = std::move(texture)](
+          graphics::Texture*) mutable {
+          auto* registry = &graphics->GetResourceRegistry();
+          graphics->GetDeferredReclaimer().RegisterDeferredAction(
+            [registry, texture = std::move(texture)]() mutable {
+              registry->UnRegisterResource(*texture);
+              texture.reset();
+            });
+        });
+    }
   }
 
   if (artifact.texture != nullptr) {

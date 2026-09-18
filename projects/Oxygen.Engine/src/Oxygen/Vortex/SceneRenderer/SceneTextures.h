@@ -197,10 +197,18 @@ struct SceneTextureAspectView {
   }
 };
 
+class SceneTextureLease;
+
 struct SceneTextureExtractRef {
+  //! Own the artifact and registered views until the last queued consumer.
+  std::shared_ptr<const graphics::Texture> retained_texture;
   graphics::Texture* texture { nullptr };
   bool valid { false };
   std::shared_ptr<const postprocess::FrameExposureResources> exposure;
+  //! Conditional color: use exposure's conversion report to select this source
+  //! or the original FP32 accumulation. Retain the complete record when queued.
+  graphics::Texture* fallback { nullptr };
+  std::shared_ptr<const SceneTextureLease> source_lease;
 };
 
 struct SceneTextureExtracts {

@@ -82,6 +82,11 @@ void SceneRenderer::PostRenderCleanup(RenderContext& /*ctx*/)
     .valid = velocity_ready,
   };
 
+  scene_texture_extracts_.prev_scene_depth.retained_texture
+    = prev_scene_depth_artifact_.texture;
+  scene_texture_extracts_.prev_velocity.retained_texture
+    = prev_velocity_artifact_.texture;
+
   if ((scene_texture_extracts_.prev_scene_depth.texture == nullptr
         || !scene_texture_extracts_.prev_scene_depth.valid)
     && (scene_texture_extracts_.prev_velocity.texture == nullptr

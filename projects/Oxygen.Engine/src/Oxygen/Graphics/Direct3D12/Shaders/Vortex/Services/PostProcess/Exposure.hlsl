@@ -720,6 +720,9 @@ void VortexExposureFrameCS(uint3 dispatch_id : SV_DispatchThreadID)
         // Borrow only numerical gain; no producer request or meter identity.
         state = (ExposureStateData)0;
         ExposureStateData source = LoadPrevious(pass.history_srv, initial);
+        if ((source.flags & (EXPOSURE_HISTORY_VALID | EXPOSURE_INITIALIZED))
+            != (EXPOSURE_HISTORY_VALID | EXPOSURE_INITIALIZED))
+            flags |= 8u;
         state.displayed_scale = source.displayed_scale;
         state.target_scale = source.target_scale;
         state.latent_scale = source.latent_scale;
