@@ -736,6 +736,23 @@ auto Renderer::PrepareExposureTransition(
     previous_view_history_cache_->Invalidate(target);
 }
 
+auto Renderer::RequestExposureRecovery(CompositionView::ViewStateHandle target,
+  const std::uint64_t lifetime, const std::uint64_t generation) -> void
+{
+  std::unique_lock lock(view_state_mutex_);
+  const auto found = exposure_transitions_.find(target);
+  if (found == exposure_transitions_.end() || found->second.lifetime != lifetime
+    || found->second.generation != generation
+    || (found->second.status
+      && found->second.status->phase == ExposureTransitionPhase::kQueued))
+    return;
+  // A concurrent explicit request or recreated view wins over old GPU status.
+  const auto issued = IssueExposureTransitionLocked(
+    target, ExposureTransitionPolicy::kRemeter, {}, true);
+  CHECK_F(
+    issued.has_value(), "Exposure recovery generation could not be allocated");
+}
+
 auto Renderer::EnsureExposureLifetime(CompositionView::ViewStateHandle target)
   -> std::uint64_t
 {

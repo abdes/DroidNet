@@ -63,7 +63,7 @@ is not complete.
 | 2 — Settings and fixed exposure | validated | Canonical authored input, immutable pass snapshots, fixed/camera gain, per-view settings and public mask acceptance are qualified. | [Fixed gain](../../out/build-ninja/analysis/vortex/exposure-lightbench/fixed-gain/evidence-manifest.json), [frame bindings](../../out/build-ninja/analysis/vortex/exposure-lightbench/frame-binding/evidence-manifest.json), [configuration and mask acceptance](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/review-r028-manifest.json) |
 | 3 — Metering and adaptation | validated | Controlled-input histogram, curve, masks and hybrid adaptation; scene acceptance remains slice 5. | [Metering](../../out/build-ninja/analysis/vortex/exposure-lightbench/metering/evidence-manifest.json) |
 | 4 — GPU lifecycle and sharing | validated | Controlled-input/public-event gate, including offscreen routing. Real-scene resource lifetime is tracked in slice 5. | [Lifecycle](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/discontinuity-manifest.json), [offscreen sharing](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/offscreen-sharing-manifest.json) |
-| 5 — HDR migration and recovery | in_progress | P domains, cumulative error bounds, producer qualification, production format admission and queued mixed-format consumers are validated. Full recovery/retention/return and remaining scene/MultiView acceptance are open. | [Detailed items](#32-slice-5-work-items) |
+| 5 — HDR migration and recovery | in_progress | P domains, cumulative error bounds, producer qualification, production format admission and queued mixed-format consumers are validated. Automatic recovery/retention/return is Debug-qualified; external bloom, resource accounting and remaining scene/MultiView acceptance are open. | [Detailed items](#32-slice-5-work-items) |
 | 6 — Authoring and persistence | planned | Native physical-camera persistence and texture-resource-index mask contracts are approved; complete source/cook/load/script/editor/DemoShell round-trip remains. | [Detailed items](#33-slice-6-work-items) |
 | 7 — Light units | planned | Directional, point and spot numerical/visual calibration across forward and deferred paths remains. | [Detailed items](#34-slice-7-work-items) |
 | 8 — Measurements | planned | Implement instrumentation and qualify it against independent inputs. | [Detailed items](#35-slice-8-work-items) |
@@ -183,9 +183,24 @@ is not complete.
   all 190 tests with all 35 runtime hashes unchanged. The later test-only sentinel
   enhancement passes its focused Debug test (five queued consumers).
   [Queued-consumer evidence and commands](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/queued-consumer-manifest.json).
-  **Next: EX05-19.** Implement the renderer-issued recovery/remeter event and
-  full scene retention/return matrix; a TODO marks that status-processing boundary.
-  Release remains at Slice 5 closure under the agreed validation cadence.
+  **Completed: EX05-19 — validated in Debug.** Matching normal-mode producer
+  failure issues one renderer-owned Auto Remeter. Conversion-only rejection
+  invalidates precision while preserving the valid FP32 meter, adaptation and
+  generation. Fixed/disabled/borrowed failures do not reset numerical authority;
+  newer explicit requests win. Five owner/control cases retain history through
+  six unsupported FP32 frames, then repair and return. The actual 46-stop scene
+  preserves both endpoints, continues adaptation for eight frames and returns
+  after range reduction; sixteen alternating shared-consumer renders retain
+  independent format suitability. Render-context timing is explicitly checked.
+  **Evidence:** the frozen Debug gate passes all 238 tests (193 native exposure,
+  24 post-process, 21 publication), including the final explicit-Preserve control.
+  All 37 runtime hashes match before/after. The existing source-cancellation test
+  also passes after correcting its fixture to use the owning frame's actual dt;
+  its earlier claim of nonzero elapsed time was not established by the old fixture.
+  [Recovery evidence and exact commands](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/recovery-increment-manifest.json).
+  **Next: EX05-09.** The active external-bloom consumer audit and native test
+  draft are prepared. Remaining scene/MultiView lifecycle items keep their own
+  gates below; Release remains at Slice 5 closure.
   **Deferred feature boundaries:** owned bloom and specular/captured-sky products
   remain outside this increment. Their source TODOs link the owner plan and
   dependency issues; the active external-bloom audit remains EX05-09.
@@ -228,9 +243,9 @@ is not complete.
   refresh dispatches take 0.008912 ms (transmittance) and 0.020768 ms (multiple
   scattering). These are dispatch medians, not end-to-end frame latency or a
   measured FP16-to-FP32 timing delta; native queue intervals are also recorded.
-  **Remaining Slice 5 work:** full scene-integrated recovery/retention/return
-  remains EX05-19. Other open slice items remain in the table below, including the
-  external-bloom audit, mixed-content and complete native MultiView acceptance.
+  **Remaining Slice 5 work:** external-bloom audit, actual resource accounting,
+  remaining scene lifecycle combinations and complete native MultiView acceptance.
+  EX05-19 closes the named recovery/retention/return matrix, not these other gates.
   The Slice 5 gate and Slices 6–10 remain open.
 
 - **Open visual report: all-white MultiView meshes.** The user observed all
@@ -297,8 +312,8 @@ is not complete.
   fixture. Physical-light calibration, all material families, ordinary AE
   readability and all MultiView layouts retain their separate acceptance rows.
   Consumer error propagation is closed in EX05-15; production format switching
-  is Debug-qualified in EX05-17 and queued consumers in EX05-18. Full recovery
-  acceptance remains EX05-19, followed by the other open Slice 5 gates.
+  is Debug-qualified in EX05-17, queued consumers in EX05-18 and automatic
+  recovery/retention/return in EX05-19. The other Slice 5 gates remain open.
 - **Delivery order:** finish Slice 5's gate before starting Slice 6 integration.
   Slices 6–10 remain required; their detailed items are below.
 
@@ -334,7 +349,7 @@ current status, including decisions that supersede older manifest limitations.
 | EX05-16 | Full supported-radiance envelope at upstream producers | validated | Active producer matrix and pre-composition source checks qualified in Debug. Final gate: 350 tests; after the no-prepass depth-publication correction, 65 affected tests pass (80 native cases). Lighting matrices cover 324 direct, 180 SH, 144 analytic sky and 10 distant-sky cases; compiled replay and targeted capture are inspected. Release remains at Slice 5 closure. | [Lighting/source closure](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/lighting-producer-increment-manifest.json), [producer mapping](lld/scene-textures.md#producer-range-qualification), [environment increment](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/domain-producer-increment-manifest.json), [material increment](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/material-domain-increment-manifest.json), [injection increment](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/injection-increment-manifest.json) |
 | EX05-17 | Production per-view FP16 admission and allocation switching | validated | Early current-layout/source-compatible candidate selection is enabled. FP32 accumulation, half-capable environment qualification, checked resolve/fallback and supporting ownership are implemented. All 382 owning Debug tests pass; native admission, eight resize/view cases, source changes, fallback retention/failures and inspected S/P capture pass. Vacuum-layout proof is distinct from remaining nonzero/full recovery acceptance. | [Completion evidence](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/admission-increment-manifest.json), [resource contract](lld/scene-textures.md#per-view-fp16-suitability) |
 | EX05-18 | Checked resolve extraction and all conditional-consumer leases | validated | EX05-17 ownership is qualified through a three-view mixed-format auxiliary family (18 outputs) and delayed offscreen HDR consumers across slot reuse/view removal. Five queued tonemap consumers cover accepted half, deterministic rejected-half fallback/control and full formats, with extraction release before the fence. Frozen Debug gate: 190 passed; later sentinel-only focused test passed. Release remains at Slice 5 closure. | [Queued-consumer evidence](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/queued-consumer-manifest.json), [ownership contract](lld/scene-textures.md#36-scenetextureextracts), [Admission/ownership increment](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/admission-increment-manifest.json) |
-| EX05-19 | Automatic recovery, excessive-range retention and stable return | planned | Production admission and basic store-failure fallback are implemented. The renderer-issued recovery/remeter event and full scene matrix remain: sustained FP32 without repeated resets, reduced-range return and contrasting shared consumers. Depends on EX05-15–18. | [Section 4.5 requirements](plan/exposure-and-lightbench-correction.md#45-first-frame-and-discontinuity-headroom) |
+| EX05-19 | Automatic recovery, excessive-range retention and stable return | validated | Producer failures request one implicit Auto Remeter; conversion-only rejection preserves valid adaptation. Fixed/disabled/borrowed failures and newer explicit requests retain authority. Native scene tests cover five owner/control modes, six-frame unsupported retention, 46-stop FP32 adaptation, reduced-range return and contrasting shared formats. Debug gate: 238 passed; 37 frozen hashes unchanged. Release and other lifecycle combinations remain at their slice gates. | [Recovery evidence](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/recovery-increment-manifest.json), [runtime contract](lld/post-process-service.md#bootstrap-recovery-and-format-eligibility) |
 | EX05-20 | Scene/environment descriptors, histories and queued constants retire safely | validated | Same-frame offscreen resources, fog/HZB removal, transient histories and queued HZB constants are qualified. Mode-transition-specific leases are Debug-qualified in EX05-18. | [Environment retirement](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/review-r027-manifest.json), [fog/HZB lifetime](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/review-lifetime-manifest.json) |
 | EX05-21 | Actual memory and bandwidth accounting | planned | Per-texture format-size arithmetic is documented. Measured totals across active products/concurrent views/retained leases and target-device pass timings remain. | [Accounting requirements](lld/scene-textures.md#lifetime-and-memory-accounting) |
 | EX05-22 | Scene startup/cuts/seeds/modes/pause lifecycle matrix | in_progress | Native retry/domain cases and paused MultiView event fixtures exist. Complete scene-integrated active adaptation, startup/cut HDR endpoints and recovery combinations remain. | [Scene migration](../../out/build-ninja/analysis/vortex/exposure-lightbench/scene/scene-migration-manifest.json), [mode fixtures](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/modes-manifest.json) |

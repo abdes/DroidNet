@@ -258,7 +258,7 @@ remain stored on invalid input; current validity describes the current frame.
 | 24 | uint2 | requested_generation |
 | 32 | uint2 | applied_generation |
 | 40 | uint2 | product_layout_revision |
-| 48 | uint | flags: valid=1, range failure=2, FP16 eligible=4, rejected transition=8, producer failure=16 |
+| 48 | uint | flags: valid=1, range failure=2, FP16 eligible=4, rejected transition=8, producer failure=16, rejected current conversion=32 |
 | 52 | uint | first_failure_product (zero means none) |
 | 56 | uint | first_failure_kind |
 | 60 | uint | fp16_eligible_streak |
@@ -640,6 +640,19 @@ Normal-path pre-store overflow/nonfinite or required-signal underflow invalidate
 metering and retains history. Schedule FP32 recovery after completed status,
 without blocking. FP32 out-of-domain input reports a content/range error and
 retains valid history. Use bounded status and no full-resolution telemetry target.
+
+The completed ticket records whether its view used the normal half format and
+owned Auto exposure. A matching normal-frame producer failure or rejected current
+conversion invalidates that precision epoch. A producer failure on an Auto owner
+receives one implicit renderer-issued Remeter request. Conversion-only rejection
+preserves the valid FP32 meter and ordinary adaptation; fixed modes and borrowers
+only return their own products to FP32. Borrower failures never reset the source's
+numerical history.
+Renderer allocation checks lifetime and generation under the transition lock, so
+a newer explicit request or recreated view cannot be superseded by old GPU status.
+The invalidated epoch discards other queued packets from that normal-mode attempt.
+Prospective suitability failure and continued FP32 retention issue no transitions;
+normal adaptation continues until fresh stable eligibility permits return.
 
 ## Post chain and qualification
 
