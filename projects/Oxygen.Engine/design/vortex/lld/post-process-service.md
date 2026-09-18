@@ -392,6 +392,15 @@ clamped to its EV bounds and evaluated with its target, key, bias and curve;
 never use the inactive Manual EV. Initialization remains pending. Explicit seeds
 outside meter range are legal when the resulting gain is numerically supported.
 
+Native scene qualification exercises these rules through both forward and
+deferred rendering, including supported HDR endpoints, paused cuts, explicit
+seed/Preserve precedence, retries, invalid initial metering and both camera
+projections. Physical camera inputs and authored modes are checked against the
+rendered pixel as well as GPU state. Rejection is visible in the event-frame GPU
+record; public CPU status changes only after its normal completed-status poll.
+The [EX05-22 evidence](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/scene-lifecycle-manifest.json)
+records the independent histogram, hybrid-response and final-pixel oracles.
+
 A new view, camera cut, replaced world or device recovery remeters by default.
 Preserve and Seed are explicit alternatives. Walking, streaming, light changes,
 compatible resize and format changes preserve exposure. Stateless Auto uses
