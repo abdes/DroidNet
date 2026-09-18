@@ -464,19 +464,32 @@ if(WIN32)
       ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>"
     COMMAND
       "${PROJECT_SOURCE_DIR}/packages/DXC/bin/${exposure_probe_arch}/dxc.exe" -T
-      cs_6_6 -E CS -O3 -HV 2021 -I "${exposure_shader_root}" -Fo
-      "${exposure_probe_output}"
+      cs_6_6 -E CS -O3 -HV 2021 -I "${exposure_shader_root}" -I
+      "${PROJECT_SOURCE_DIR}/src/Oxygen" -Fo "${exposure_probe_output}"
+      "${CMAKE_CURRENT_SOURCE_DIR}/Shaders/ToneBoundsProbe.hlsl"
+    # DXC dependency generation is a separate preprocessing action; -MD does
+    # not compile DXIL, even when -Fo is supplied.
+    COMMAND
+      "${PROJECT_SOURCE_DIR}/packages/DXC/bin/${exposure_probe_arch}/dxc.exe" -T
+      cs_6_6 -E CS -O3 -HV 2021 -I "${exposure_shader_root}" -I
+      "${PROJECT_SOURCE_DIR}/src/Oxygen" -MD -MF "${exposure_probe_output}.d"
+      -Fo "${exposure_probe_output}"
       "${CMAKE_CURRENT_SOURCE_DIR}/Shaders/ToneBoundsProbe.hlsl"
     DEPENDS
       "Shaders/ToneBoundsProbe.hlsl"
       "${exposure_shader_root}/Vortex/Contracts/View/HdrHardwareSampling.hlsli"
       "${exposure_shader_root}/Vortex/Contracts/View/HdrIntervalMath.hlsli"
+      "${exposure_shader_root}/Vortex/Contracts/View/HdrRadianceRange.hlsli"
+      "${exposure_shader_root}/Vortex/Services/Environment/TransmittanceMath.hlsli"
+      "${exposure_shader_root}/Vortex/Services/Environment/LocalFogVolumeCommon.hlsli"
+      "${exposure_shader_root}/Vortex/Services/Environment/VolumetricFog.hlsl"
       "${exposure_shader_root}/Vortex/Contracts/View/ExposureStateData.hlsli"
       "${exposure_shader_root}/Vortex/Services/PostProcess/HdrSceneComposition.hlsli"
       "${exposure_shader_root}/Vortex/Services/PostProcess/ToneMappingBounds.hlsli"
       "${exposure_shader_root}/Vortex/Services/PostProcess/ToneMappingFastBounds.hlsli"
       "${exposure_shader_root}/Vortex/Services/PostProcess/ToneMapping.hlsli"
       "${exposure_shader_root}/Vortex/Shared/ColorSpace.hlsli"
+    DEPFILE "${exposure_probe_output}.d"
     VERBATIM
   )
   add_custom_target(

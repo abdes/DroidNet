@@ -1211,9 +1211,9 @@ The transport/history substep is qualified by the 74-frame native fixture and
 GPU binding audits recorded in the implementation tracker. Local product/image
 and direct-product meter checks consume this tail through evaluator byte 84;
 FP32 recovery retains uncertainty until its history permits qualification.
-Final SceneColor still lacks the full composed error/coverage envelope. These
-checks do not authorize production format switching. Full filtering/arithmetic/
-domain qualification remains part of EX05-15.
+The complete SceneColor envelope now combines these retained bounds with sampled
+consumer composition, coverage and display/meter checks, qualified in EX05-15.
+Production format switching remains EX05-17; producer-domain completion is EX05-16.
 
 ## Producer range checks
 
@@ -1221,8 +1221,30 @@ Sky-view, camera aerial-perspective and volumetric-fog shaders check their FP32
 store inputs before narrowing. `CheckHdrStoreRange` records nonfinite values
 (kind 1), or FP16 RGB above the two-stop headroom limit 16376 (kind 2), using
 atomic operations on the existing completed-status record. It preserves the
-first producer ID and combines failure kinds. FP32 stores still check finite
-values. These checks do not certify quantization or cumulative image error.
+first producer ID and combines failure kinds. Kind 32 distinguishes negative
+or above-2^32 scene-referred RGB (and invalid P-domain metadata) from a request
+for greater texture precision. It applies to FP32 and FP16 stores. Compare the
+stored value against `2^32 * P`: this power-of-two scaling is exact for every
+supported P. Multiplying by a rounded inverse P can miss an adjacent value just
+above the limit. Negative zero is allowed; negative subnormals
+are detected by bits. Positive tiny components have no universal floor here:
+the image/meter certificate decides required preservation. EX05-16 qualification
+of the extended domain checks remains in progress. These checks are separate
+from the quantization/cumulative image certificate.
+
+The pre-environment scan checks accumulated opaque SceneColor and preserves the
+input certificate used by AP/fog composition. A separate final scan checks all
+accumulated SceneColor before the metering solve, using the same reduction and
+status storage without clearing the opaque certificate. A failed final-scan
+submission invalidates the precision epoch, preventing an older prepared ticket
+from authorizing admission; numerical exposure history remains intact.
+
+Sky/background (product 7), height fog (8), local-fog contributions (9) and
+translucency (4) also report original source values before later attenuation or
+sanitization. Local-fog composition transitions the existing frame status UAV;
+its early depth test excludes fragments rejected by scene depth. Volumetric
+samples report before the RGB nonnegative clamp and temporal blend, in addition
+to the final product-10 store check.
 
 The solve preserves producer-origin failures, sets the exposure range flag and
 invalidates the current meter. Ordinary Auto adaptation cannot consume the
@@ -1234,7 +1256,7 @@ Direct exposure solves without a prepared frame do not read prior status bytes.
 
 The producer flag distinguishes an upstream failure from a later candidate
 failure, so repeated finalization cannot misclassify a candidate rejection as
-an upstream write failure. The 80-byte status size and offsets are unchanged.
+an upstream write failure. The 80-byte completed-status prefix and offsets are unchanged.
 Sky-view uses existing constant padding at bytes 40/44 for status UAV and FP16
 store flag; camera AP uses bytes 88/108; volumetric fog uses bytes 532/536.
 The flag follows the actual destination format, not an inferred exposure mode.

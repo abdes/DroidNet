@@ -224,6 +224,8 @@ float4 VortexSkyPassPS(VortexFullscreenTriangleOutput input) : SV_Target0
 
         sky_color *= env_data.sky_sphere.tint_rgb
             * max(env_data.sky_sphere.intensity, 0.0f);
+        CheckHdrStoreRange(float4(sky_color, 1.0), 7u,
+            LoadViewFrameBindings(bindless_view_frame_bindings_slot).exposure_status_uav, 0u, 1.0);
         return float4(max(sky_color, 0.0f.xxx) * GetPreExposure(), 1.0f);
     }
 
@@ -261,9 +263,12 @@ float4 VortexSkyPassPS(VortexFullscreenTriangleOutput input) : SV_Target0
     RecordHdrConsumerUsage(HDR_CONSUMER_SKY,
         environment_view.sky_luminance_factor_height_fog_contribution.xyz);
     const float4 sky_sample = sky_view_lut.SampleLevel(linear_sampler, uv, 0.0f);
-    float3 sky_color = max(
-        sky_sample.rgb * environment_view.sky_luminance_factor_height_fog_contribution.xyz,
-        0.0f.xxx);
+    float3 sky_color = sky_sample.rgb
+        * environment_view.sky_luminance_factor_height_fog_contribution.xyz;
+    CheckHdrStoreRange(float4(sky_color, sky_sample.a), 7u,
+        LoadViewFrameBindings(bindless_view_frame_bindings_slot).exposure_status_uav,
+        0u, view_pre_exposure);
+    sky_color = max(sky_color, 0.0f.xxx);
 
     const float3 planet_center_to_camera = float3(0.0f, 0.0f, view_height);
     const bool reflection_capture_view = IsReflectionCaptureView(environment_view);
@@ -309,6 +314,9 @@ float4 VortexSkyPassPS(VortexFullscreenTriangleOutput input) : SV_Target0
         sky_color += disk_luminance_pre_exposed;
     }
 
+    CheckHdrStoreRange(float4(sky_color, sky_sample.a), 7u,
+        LoadViewFrameBindings(bindless_view_frame_bindings_slot).exposure_status_uav,
+        0u, view_pre_exposure);
     return float4(sky_color, sky_sample.a);
 }
 

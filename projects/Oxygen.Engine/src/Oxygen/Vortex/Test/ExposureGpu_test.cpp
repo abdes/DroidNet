@@ -35,15 +35,23 @@
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Environment/Background.h>
 #include <Oxygen/Scene/Environment/Fog.h>
+#include <Oxygen/Scene/Environment/LocalFogVolume.h>
 #include <Oxygen/Scene/Environment/PostProcessVolume.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Scene/Environment/SkySphere.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Vortex/Environment/Internal/AtmosphereLutCache.h>
+#include <Oxygen/Vortex/Environment/Internal/AtmosphereState.h>
 #include <Oxygen/Vortex/Environment/Internal/IblProcessor.h>
+#include <Oxygen/Vortex/Environment/Internal/LocalFogVolumeState.h>
 #include <Oxygen/Vortex/Environment/Passes/AtmosphereComposePass.h>
+#include <Oxygen/Vortex/Environment/Passes/AtmosphereMultiScatteringLutPass.h>
+#include <Oxygen/Vortex/Environment/Passes/AtmosphereSkyViewLutPass.h>
+#include <Oxygen/Vortex/Environment/Passes/AtmosphereTransmittanceLutPass.h>
 #include <Oxygen/Vortex/Environment/Passes/FogPass.h>
+#include <Oxygen/Vortex/Environment/Passes/LocalFogVolumeComposePass.h>
 #include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
 #include <Oxygen/Vortex/PostProcess/PostProcessService.h>
 #include <Oxygen/Vortex/RenderContext.h>
@@ -365,8 +373,8 @@ protected:
     return index;
   }
   auto RunToneProbe(std::span<const std::byte> inputs_data,
-    std::uint32_t record_count, std::uint32_t mode = 0U)
-    -> std::vector<std::array<float, 8>>
+    std::uint32_t record_count, std::uint32_t mode = 0U,
+    bool capture_enabled = true) -> std::vector<std::array<float, 8>>
   {
     std::ifstream shader(
       OXYGEN_EXPOSURE_TONE_PROBE, std::ios::binary | std::ios::ate);
@@ -424,7 +432,13 @@ protected:
           .Build();
     auto readback = GetReadbackManager()->CreateBufferReadback(
       "Tone bound arithmetic results");
-    const auto capture = BeginOptionalCapture();
+    const auto capture = capture_enabled
+      ? BeginOptionalCapture()
+      : observer_ptr<FrameCaptureController> {};
+    const auto probe_view = ViewConstants::GpuData {};
+    auto probe_view_buffer
+      = CreateUploadBuffer(SizeBytes { 256U }, BufferUsage::kConstant);
+    probe_view_buffer->Update(&probe_view, sizeof(probe_view), 0U);
     {
       auto recorder = AcquireRecorder("Tone bound arithmetic");
       EnsureTracked(*recorder, inputs, ResourceStates::kGenericRead);
@@ -432,6 +446,10 @@ protected:
       recorder->RequireResourceState(*output, ResourceStates::kUnorderedAccess);
       recorder->FlushBarriers();
       recorder->SetPipelineState(pipeline);
+      recorder->SetComputeRootConstantBufferView(
+        static_cast<std::uint32_t>(
+          oxygen::bindless::generated::d3d12::RootParam::kViewConstants),
+        probe_view_buffer->GetGPUVirtualAddress());
       const auto root = static_cast<std::uint32_t>(
         oxygen::bindless::generated::d3d12::RootParam::kRootConstants);
       recorder->SetComputeRoot32BitConstant(root, 0U, 0U);
@@ -5458,64 +5476,75 @@ NOLINT_TEST_F(ExposureGpuTest, FogStableCellsPreserveHistoryAndHomogeneousMedia)
   for (const auto format : { Format::kRGBA32Float, Format::kRGBA16Float }) {
     const auto volume = MakeSignal(4, 4, samples, 4, format, true);
     for (const bool reuse_history : { false, true })
-      for (const float fade_distance : { 0.0F, 2.0F })
-        for (const auto offset : offsets) {
-          SCOPED_TRACE(reuse_history);
-          SCOPED_TRACE(fade_distance);
-          SCOPED_TRACE(offset.z);
-          auto params
-            = vortex::testing::RendererPublicationProbe::FogPassConstants {};
-          params.output_header = { output_slot.get(), 4U, 4U, 4U };
-          params.grid = { 1.0F, 32.0F, fade_distance, 1.0F };
-          params.grid_z = { { 1.0F, 0.0F, 1.0F }, 0.0F };
-          params.height_fog0.primary_density = .06F;
-          params.height_fog1.match_height_fog_factor = 1.0F;
-          params.height_fog1.enabled = 1U;
-          params.media1 = { { 2.0F, 3.0F, 4.0F }, 1.0F };
-          params.temporal_history0 = { volume.srv.get(),
-            reuse_history ? (format == Format::kRGBA16Float ? 3U : 1U) : 0U,
-            1.0F, 1U };
-          for (unsigned c = 0; c < 4; ++c)
-            params.temporal_history1.frame_jitter_offsets[0][c] = offset[c];
-          const auto pass_slot = PublishFixtureData(params);
-          {
-            auto recorder = AcquireRecorder("Fog stable cell dispatch");
-            if (!recorder->AdoptKnownResourceState(*output))
-              recorder->BeginTrackingResourceState(
-                *output, ResourceStates::kCommon, false);
-            recorder->RequireResourceState(
-              *output, ResourceStates::kUnorderedAccess);
-            recorder->FlushBarriers();
-            recorder->SetPipelineState(pipeline);
-            recorder->SetComputeRootConstantBufferView(
-              static_cast<std::uint32_t>(root::RootParam::kViewConstants),
-              view_buffer->GetGPUVirtualAddress());
-            recorder->SetComputeRoot32BitConstant(
-              static_cast<std::uint32_t>(root::RootParam::kRootConstants), 0U,
-              0U);
-            recorder->SetComputeRoot32BitConstant(
-              static_cast<std::uint32_t>(root::RootParam::kRootConstants),
-              pass_slot.get(), 1U);
-            recorder->Dispatch(1U, 1U, 1U);
-          }
-          const auto actual = ReadFloatTexture(*output);
-          ASSERT_EQ(actual.size(), samples.size());
-          for (unsigned i = 0; i < samples.size(); ++i) {
-            // Independent fixed-depth Beer-Lambert oracle, including near fade.
-            const double length = std::exp2(double(i / 16) + .5) - 1;
-            const double fade = fade_distance > 0
-              ? std::min(length / double(fade_distance), 1.0)
-              : 1.0;
-            const double t = std::exp(-double(.06F) * fade * length);
-            for (unsigned c = 0; c < 4; ++c) {
-              const double expected = reuse_history ? double(samples[i][c])
-                : c == 3                            ? t
-                                                    : double(c + 2) * (1 - t);
-              EXPECT_NEAR(actual[i][c], expected, 3e-6)
-                << "voxel=" << i << " channel=" << c;
+      for (const float density : { .06F, 0x1p-40F })
+        for (const float fade_distance : { 0.0F, 2.0F })
+          for (const auto offset : offsets) {
+            SCOPED_TRACE(reuse_history);
+            SCOPED_TRACE(fade_distance);
+            SCOPED_TRACE(offset.z);
+            SCOPED_TRACE(density);
+            const float emission_scale = density < .001F ? 1e9F : 1.0F;
+            auto params
+              = vortex::testing::RendererPublicationProbe::FogPassConstants {};
+            params.output_header = { output_slot.get(), 4U, 4U, 4U };
+            params.grid = { 1.0F, 32.0F, fade_distance, 1.0F };
+            params.grid_z = { { 1.0F, 0.0F, 1.0F }, 0.0F };
+            params.height_fog0.primary_density = density;
+            params.height_fog1.match_height_fog_factor = 1.0F;
+            params.height_fog1.enabled = 1U;
+            params.media1 = { { 2 * emission_scale, 3 * emission_scale,
+                                4 * emission_scale },
+              1.0F };
+            params.temporal_history0 = { volume.srv.get(),
+              reuse_history ? (format == Format::kRGBA16Float ? 3U : 1U) : 0U,
+              1.0F, 1U };
+            for (unsigned c = 0; c < 4; ++c)
+              params.temporal_history1.frame_jitter_offsets[0][c] = offset[c];
+            const auto pass_slot = PublishFixtureData(params);
+            {
+              auto recorder = AcquireRecorder("Fog stable cell dispatch");
+              if (!recorder->AdoptKnownResourceState(*output))
+                recorder->BeginTrackingResourceState(
+                  *output, ResourceStates::kCommon, false);
+              recorder->RequireResourceState(
+                *output, ResourceStates::kUnorderedAccess);
+              recorder->FlushBarriers();
+              recorder->SetPipelineState(pipeline);
+              recorder->SetComputeRootConstantBufferView(
+                static_cast<std::uint32_t>(root::RootParam::kViewConstants),
+                view_buffer->GetGPUVirtualAddress());
+              recorder->SetComputeRoot32BitConstant(
+                static_cast<std::uint32_t>(root::RootParam::kRootConstants), 0U,
+                0U);
+              recorder->SetComputeRoot32BitConstant(
+                static_cast<std::uint32_t>(root::RootParam::kRootConstants),
+                pass_slot.get(), 1U);
+              recorder->Dispatch(1U, 1U, 1U);
+            }
+            const auto actual = ReadFloatTexture(*output);
+            ASSERT_EQ(actual.size(), samples.size());
+            for (unsigned i = 0; i < samples.size(); ++i) {
+              // Independent fixed-depth Beer-Lambert oracle, including near
+              // fade.
+              const double length = std::exp2(double(i / 16) + .5) - 1;
+              const double fade = fade_distance > 0
+                ? std::min(length / double(fade_distance), 1.0)
+                : 1.0;
+              const double t = std::exp(-double(density) * fade * length);
+              const double opacity
+                = -std::expm1(-double(density) * fade * length);
+              for (unsigned c = 0; c < 4; ++c) {
+                const double expected = reuse_history ? double(samples[i][c])
+                  : c == 3                            ? t
+                           : double(params.media1.emissive_rgb[c]) * opacity;
+                const double tolerance = reuse_history
+                  ? 3e-6
+                  : std::min(3e-6, std::abs(expected) * 2e-5 + 0x1p-120);
+                EXPECT_NEAR(actual[i][c], expected, tolerance)
+                  << "voxel=" << i << " channel=" << c;
+              }
             }
           }
-        }
   }
   if (capture)
     EXPECT_TRUE(capture->EndCapture());
@@ -5890,7 +5919,13 @@ NOLINT_TEST_F(
   EXPECT_TRUE(pass_->HasPreEnvironmentRange(frame));
   const auto first = Read<ExposureStatusStorage>(
     *frame->current_state->status_buffer, ResourceStates::kUnorderedAccess);
-  EXPECT_EQ(std::memcmp(&before, &first, 128U), 0);
+  auto expected_status = before;
+  expected_status.completed.flags |= 18U;
+  expected_status.completed.first_failure_product = 11U;
+  expected_status.completed.first_failure_kind |= 32U;
+  // Only the required producer verdict may change; identities and the
+  // independently uploaded producer-error sentinels remain byte-identical.
+  EXPECT_EQ(std::memcmp(&expected_status, &first, 128U), 0);
   EXPECT_EQ(first.composition_input.maximum_pre_exposed_rgb, 65536.0F);
   EXPECT_EQ(first.composition_input.flags, 5U);
   EXPECT_EQ(first.composition_input.checked_pixels, 27U);
@@ -5928,7 +5963,7 @@ NOLINT_TEST_F(
   EXPECT_EQ(retry.composition_input.maximum_pre_exposed_rgb, .25F);
   EXPECT_EQ(retry.composition_input.checked_pixels, 10U);
   EXPECT_EQ(retry.composition_input.flags, 1U);
-  EXPECT_EQ(std::memcmp(&before, &retry, 128U), 0);
+  EXPECT_EQ(std::memcmp(&expected_status, &retry, 128U), 0);
   const std::array products { postprocess::ExposurePass::HdrProduct {
     .texture = smaller.texture.get(), .srv = smaller.srv, .id = 11U } };
   ASSERT_TRUE(pass_->EvaluateFp16Products(ctx_, frame, config, products, {}));
@@ -6461,6 +6496,94 @@ NOLINT_TEST_F(ExposureGpuTest, OpaqueApErrorUsesInputPeakAndActualGain)
   }
   if (capture)
     EXPECT_TRUE(capture->EndCapture());
+}
+
+NOLINT_TEST_F(ExposureGpuTest, DISABLED_ProducerRangeAndCanonicalTiming)
+{
+  pass_.reset();
+  renderer_->OnShutdown();
+  auto config = RendererConfig {};
+  config.upload_queue_key = QueueKeyFor().get();
+  renderer_ = std::make_unique<Renderer>(GetGraphicsShared(), config,
+    kPhase1DefaultRuntimeCapabilityFamilies
+      | RendererCapabilityFamily::kEnvironmentLighting);
+  pass_ = std::make_unique<postprocess::ExposurePass>(*renderer_);
+  auto timestamps = Backend().GetTimestampQueryProvider();
+  ASSERT_NE(timestamps, nullptr);
+  ASSERT_TRUE(timestamps->EnsureCapacity(2U));
+  std::uint64_t frequency = 0U;
+  ASSERT_TRUE(GetQueue()->TryGetTimestampFrequency(frequency));
+  ASSERT_GT(frequency, 0U);
+  const auto measure = [&](const char* name, unsigned width, unsigned height,
+                         unsigned iteration,
+                         const std::function<void()>& work) {
+    WaitForQueueIdle();
+    {
+      auto recorder = AcquireRecorder("Producer native timing begin");
+      ASSERT_TRUE(timestamps->WriteTimestamp(*recorder, 0U));
+    }
+    work();
+    {
+      auto recorder = AcquireRecorder("Producer native timing end");
+      ASSERT_TRUE(timestamps->WriteTimestamp(*recorder, 1U));
+      ASSERT_TRUE(timestamps->RecordResolve(*recorder, 2U));
+    }
+    WaitForQueueIdle();
+    const auto ticks = timestamps->GetResolvedTicks();
+    ASSERT_GE(ticks.size(), 2U);
+    ASSERT_GE(ticks[1], ticks[0]);
+    std::printf(
+      "producer_native case=%s width=%u height=%u iteration=%u queue_ms=%.6f\n",
+      name, width, height, iteration,
+      double(ticks[1] - ticks[0]) * 1000.0 / double(frequency));
+  };
+  auto settings = scene::ExposureSettings {};
+  settings.mode = engine::ExposureMode::kManual;
+  const auto resolved = SharedConfig(settings);
+  const auto capture = BeginOptionalCapture();
+  for (const unsigned width : { 1920U, 3840U }) {
+    const auto height = width * 9U / 16U;
+    const auto signal = Uniform(1.0F, width, height);
+    ctx_.frame_sequence = frame::SequenceNumber { ++sequence_ };
+    const auto frame
+      = pass_->ResolveFrame(ctx_, resolved, { .use_fp32 = true });
+    ASSERT_NE(frame, nullptr);
+    for (unsigned iteration = 0; iteration < 3; ++iteration)
+      measure("final_range", width, height, iteration, [&] {
+        ASSERT_TRUE(pass_->CheckSceneColorRange(
+          ctx_, frame, *signal.texture, signal.srv));
+      });
+    const auto status = Read<ExposureCompletedStatus>(
+      *frame->current_state->status_buffer, ResourceStates::kUnorderedAccess);
+    EXPECT_EQ(status.flags & 16U, 0U);
+  }
+  ctx_.current_view.with_atmosphere = true;
+  auto view = ViewConstants::GpuData {};
+  auto constants
+    = CreateUploadBuffer(SizeBytes { 256U }, BufferUsage::kConstant);
+  constants->Update(&view, sizeof(view), 0U);
+  ctx_.view_constants = constants;
+  auto cache = environment::internal::AtmosphereLutCache(*renderer_);
+  auto transmittance = environment::AtmosphereTransmittanceLutPass(*renderer_);
+  auto multiple = environment::AtmosphereMultiScatteringLutPass(*renderer_);
+  auto stable = environment::internal::StableAtmosphereState {};
+  stable.view_products.atmosphere.enabled = true;
+  for (unsigned iteration = 0; iteration < 3; ++iteration) {
+    ctx_.frame_sequence = frame::SequenceNumber { ++sequence_ };
+    stable.atmosphere_revision = sequence_;
+    cache.OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
+    cache.RefreshForState(stable);
+    transmittance.OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
+    multiple.OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
+    measure("canonical_refresh", 256, 64, iteration, [&] {
+      ASSERT_TRUE(transmittance.Record(ctx_, stable, cache).executed);
+      ASSERT_TRUE(multiple.Record(ctx_, stable, cache).executed);
+    });
+  }
+  if (capture)
+    EXPECT_TRUE(capture->EndCapture());
+  ctx_.view_constants.reset();
+  WaitForQueueIdle();
 }
 
 NOLINT_TEST_F(ExposureGpuTest, DISABLED_ComposedAdmissionFullResolutionTiming)
@@ -7008,6 +7131,733 @@ NOLINT_TEST_F(
     EXPECT_TRUE(capture->EndCapture());
 }
 
+NOLINT_TEST_F(
+  ExposureGpuTest, FinalSceneRangePreservesOpaqueCertificateAndValidHistory)
+{
+  auto settings = scene::ExposureSettings {};
+  settings.key = 12.5F;
+  const auto prior = Run(Uniform(.25F), settings);
+  const auto config = SharedConfig(settings);
+  ctx_.frame_sequence = frame::SequenceNumber { ++sequence_ };
+  const auto frame = pass_->ResolveFrame(ctx_, config, { .use_fp32 = true });
+  ASSERT_NE(frame, nullptr);
+  const auto opaque = Uniform(.5F, 4U, 4U);
+  ASSERT_TRUE(pass_->CapturePreEnvironmentRange(
+    ctx_, frame, *opaque.texture, opaque.srv));
+  const auto before = Read<ExposureStatusStorage>(
+    *frame->current_state->status_buffer, ResourceStates::kUnorderedAccess);
+  const auto unsupported = Uniform(0x1p33F, 4U, 4U);
+  ASSERT_TRUE(pass_->CheckSceneColorRange(
+    ctx_, frame, *unsupported.texture, unsupported.srv));
+  const auto after = Read<ExposureStatusStorage>(
+    *frame->current_state->status_buffer, ResourceStates::kUnorderedAccess);
+  EXPECT_EQ(std::memcmp(&before.composition_input, &after.composition_input,
+              sizeof(before.composition_input)),
+    0);
+  EXPECT_TRUE(pass_->HasPreEnvironmentRange(frame));
+  EXPECT_EQ(after.completed.flags & 18U, 18U);
+  EXPECT_EQ(after.completed.first_failure_product, 11U);
+  EXPECT_EQ(after.completed.first_failure_kind, 32U);
+  const auto solved = RecordShared(unsupported, config);
+  ASSERT_TRUE(solved.executed);
+  const auto state = ReadState(solved);
+  EXPECT_EQ(state.displayed_scale, prior.state.displayed_scale);
+  EXPECT_EQ(state.latent_scale, prior.state.latent_scale);
+  EXPECT_EQ(state.flags & 12U, 0U);
+  EXPECT_NE(state.flags & 32U, 0U);
+}
+
+NOLINT_TEST_F(
+  ExposureGpuTest, ProducerDomainDistinguishesFloatRangeFromHalfHeadroom)
+{
+  const auto infinity = std::numeric_limits<float>::infinity();
+  const auto tiny = std::numeric_limits<float>::denorm_min();
+  const std::array scene_values { 0.0F, -0.0F, tiny, -tiny, 0x1p-25F, 0x1p-24F,
+    1.0F, std::nextafter(0x1p32F, 0.0F), 0x1p32F,
+    std::nextafter(0x1p32F, infinity), -1.0F, infinity,
+    std::numeric_limits<float>::quiet_NaN() };
+  std::vector<std::array<float, 4>> inputs;
+  std::vector<unsigned> expected;
+  for (const float p :
+    { 0x1p-32F, .1F, .6184799671173096F, 1.0F, 1.1F, 3.1415927F, 0x1p32F })
+    for (const float scene : scene_values)
+      for (unsigned channel = 0; channel < 3; ++channel)
+        for (const bool half : { false, true }) {
+          std::array<float, 4> value { 0, 0, 0, 1 };
+          value[channel] = scene * p;
+          inputs.push_back(value);
+          inputs.push_back({ p, half ? 1.0F : 0.0F, 0, 0 });
+          unsigned flags = 0;
+          const double reference = double(value[channel]) / double(p);
+          if (!std::isfinite(value[channel])) {
+            flags = 1U;
+          } else {
+            // The oracle uses the supplied float's exact mathematical value;
+            // it does not call production bound or classification helpers.
+            if (reference < 0 || reference > 4294967296.0)
+              flags |= 32U;
+            if (half && std::abs(double(value[channel])) > 16376.0)
+              flags |= 2U;
+          }
+          expected.push_back(flags);
+        }
+  for (const float invalid_p : { 0.0F, -1.0F, 0x1p-33F, 0x1p33F, infinity }) {
+    inputs.push_back({ 1, 1, 1, 1 });
+    inputs.push_back({ invalid_p, 0, 0, 0 });
+    expected.push_back(std::isfinite(invalid_p) ? 32U : 1U);
+  }
+  const auto results = RunToneProbe(std::as_bytes(std::span { inputs }),
+    static_cast<std::uint32_t>(expected.size()), 128U);
+  ASSERT_EQ(results.size(), expected.size());
+  for (std::size_t i = 0; i < expected.size(); ++i)
+    EXPECT_EQ(results[i][0], float(expected[i])) << "case=" << i;
+  RecordProperty("producer_domain_cases", expected.size());
+}
+
+NOLINT_TEST_F(ExposureGpuTest,
+  FinalSceneRangeFailureInvalidatesAdmissionAndAllowsFreshRetry)
+{
+  auto service = PostProcessService(*renderer_);
+  auto config = PostProcessConfig {};
+  config.exposure.key = 12.5F;
+  service.SetConfig(config);
+  const auto signal = Uniform(1.0F, 4U, 4U);
+  const auto requirements = postprocess::ExposurePass::EligibilityInputs {
+    .product_layout_revision = 7U, .expected_products = 1024U
+  };
+  const std::array products { postprocess::ExposurePass::HdrProduct {
+    .texture = signal.texture.get(),
+    .srv = signal.srv,
+    .id = 11U,
+    .metering = true } };
+  const auto transition = renderer_->QueueExposureTransition(
+    ctx_.current_view.view_state_handle, ExposureTransitionPolicy::kRemeter);
+  ASSERT_TRUE(transition.has_value());
+  auto& backend = static_cast<ExposureFailureGraphics&>(Backend());
+  for (unsigned step = 0; step < 5; ++step) {
+    SCOPED_TRACE(step);
+    WaitForQueueIdle();
+    ctx_.frame_sequence = frame::SequenceNumber { ++sequence_ };
+    ctx_.frame_slot = frame::Slot { unsigned(sequence_ % 3U) };
+    service.OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
+    const auto candidate = service.SelectPrecisionCandidate(ctx_, requirements);
+    EXPECT_EQ(candidate != nullptr, step == 2U || step == 4U);
+    ctx_.current_view.frame_exposure = service.PrepareFrameExposure(ctx_, true);
+    ASSERT_NE(ctx_.current_view.frame_exposure, nullptr);
+    auto prepared = service.PrepareSceneExposure(ctx_.current_view.view_id,
+      ctx_,
+      { .scene_signal = signal.texture.get(), .scene_signal_srv = signal.srv });
+    ASSERT_TRUE(prepared.has_value());
+    const auto before = ReadState(prepared->exposure);
+    if (step == 2U) {
+      backend.fail_recorder_name = "Vortex Exposure Final Scene Range";
+      EXPECT_FALSE(
+        service.CheckSceneColorRange(ctx_, *signal.texture, signal.srv));
+      backend.fail_recorder_name.clear();
+      EXPECT_EQ(service.SelectPrecisionCandidate(ctx_, requirements), nullptr);
+      EXPECT_FALSE(service.PrepareScenePrecision(ctx_, *prepared, products));
+      EXPECT_FALSE(service.FinalizeScenePrecision(ctx_, *prepared));
+      ASSERT_TRUE(
+        service.CheckSceneColorRange(ctx_, *signal.texture, signal.srv));
+      prepared = service.PrepareSceneExposure(ctx_.current_view.view_id, ctx_,
+        { .scene_signal = signal.texture.get(),
+          .scene_signal_srv = signal.srv });
+      ASSERT_TRUE(prepared.has_value());
+    }
+    ASSERT_TRUE(service.PrepareScenePrecision(ctx_, *prepared, products));
+    ASSERT_TRUE(service.FinalizeScenePrecision(ctx_, *prepared));
+    const auto after = ReadState(prepared->exposure);
+    EXPECT_EQ(after.displayed_scale, before.displayed_scale);
+    EXPECT_EQ(after.latent_scale, before.latent_scale);
+    EXPECT_EQ(after.applied_generation, before.applied_generation);
+    EXPECT_EQ(after.fp16_eligible_streak, step == 0U || step == 2U ? 1U : 2U);
+  }
+  const auto status
+    = renderer_->InspectExposureTransition(ctx_.current_view.view_state_handle);
+  ASSERT_TRUE(status.has_value());
+  EXPECT_EQ(status->applied_generation, transition->generation);
+}
+
+NOLINT_TEST_F(
+  ExposureGpuTest, CanonicalAtmosphereStoresPreserveAmplifiedSmallTransfers)
+{
+  auto cache = environment::internal::AtmosphereLutCache(*renderer_);
+  auto stable = environment::internal::StableAtmosphereState {};
+  stable.view_products.atmosphere.enabled = true;
+  stable.atmosphere_revision = 1U;
+  cache.RefreshForState(stable);
+  ASSERT_TRUE(cache.EnsureResources());
+  constexpr float transfer = 1.0e-12F;
+  constexpr float radiance = 1.88e9F;
+  const std::array textures { cache.GetTransmittanceTexture(),
+    cache.GetMultiScatteringTexture() };
+  std::uint64_t allocation_bytes = 0U;
+  std::uint64_t half_allocation_bytes = 0U;
+  for (const auto& texture : textures) {
+    ASSERT_NE(texture, nullptr);
+    const auto& desc = texture->GetDescriptor();
+    ASSERT_EQ(desc.format, Format::kRGBA32Float);
+    auto native_desc
+      = texture->GetNativeResource()->AsPointer<ID3D12Resource>()->GetDesc();
+    auto* device
+      = static_cast<ExposureFailureGraphics&>(Backend()).GetCurrentDevice();
+    allocation_bytes
+      += device->GetResourceAllocationInfo(0U, 1U, &native_desc).SizeInBytes;
+    native_desc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+    half_allocation_bytes
+      += device->GetResourceAllocationInfo(0U, 1U, &native_desc).SizeInBytes;
+    const std::vector<Pixel> values(std::size_t(desc.width) * desc.height,
+      Pixel { transfer, transfer, transfer, 0 });
+    const auto bytes = std::as_bytes(std::span { values });
+    auto upload = CreateUploadBuffer(SizeBytes { bytes.size() });
+    upload->Update(bytes.data(), bytes.size(), 0U);
+    auto recorder = AcquireRecorder("Canonical small transfer upload");
+    EnsureTracked(*recorder, upload, ResourceStates::kGenericRead);
+    if (!recorder->AdoptKnownResourceState(*texture))
+      recorder->BeginTrackingResourceState(*texture, desc.initial_state);
+    recorder->RequireResourceState(*texture, ResourceStates::kCopyDest);
+    recorder->FlushBarriers();
+    recorder->CopyBufferToTexture(*upload,
+      { .buffer_offset = 0U,
+        .buffer_row_pitch = desc.width * 16U,
+        .buffer_slice_pitch = std::uint64_t(desc.width) * desc.height * 16U,
+        .dst_slice
+        = { .width = desc.width, .height = desc.height, .depth = 1U } },
+      *texture);
+    recorder->RequireResourceStateFinal(
+      *texture, ResourceStates::kShaderResource);
+  }
+  const std::array<Pixel, 1> tiny_pixel { Pixel {
+    transfer, transfer, transfer, 0 } };
+  const auto half_control
+    = MakeSignal(1U, 1U, tiny_pixel, 1U, Format::kRGBA16Float);
+  const std::array<std::array<std::uint32_t, 4>, 3> inputs {
+    std::array { cache.GetState().transmittance_lut_srv.get(),
+      std::bit_cast<std::uint32_t>(radiance), 0U, 0U },
+    std::array { cache.GetState().multi_scattering_lut_srv.get(),
+      std::bit_cast<std::uint32_t>(radiance), 0U, 0U },
+    std::array {
+      half_control.srv.get(), std::bit_cast<std::uint32_t>(radiance), 0U, 0U }
+  };
+  const auto results
+    = RunToneProbe(std::as_bytes(std::span { inputs }), 3U, 256U);
+  for (unsigned i = 0; i < 2; ++i)
+    for (unsigned c = 0; c < 3; ++c) {
+      EXPECT_NEAR(results[i][c], double(transfer) * radiance,
+        double(transfer) * radiance * 2e-5);
+      EXPECT_EQ(results[i][4 + c], transfer);
+    }
+  EXPECT_EQ(
+    results[2][0], 0.0F); // The old half format erases the required signal.
+  for (const auto format : { Format::kRGBA16Float, Format::kRGBA32Float }) {
+    ctx_.current_view.hdr_color_format = format;
+    cache.RefreshForState(stable);
+    EXPECT_EQ(cache.GetTransmittanceTexture(), textures[0]);
+    EXPECT_EQ(cache.GetMultiScatteringTexture(), textures[1]);
+  }
+  RecordProperty(
+    "canonical_fp32_placement_bytes", std::to_string(allocation_bytes));
+  RecordProperty(
+    "same_shape_fp16_placement_bytes", std::to_string(half_allocation_bytes));
+  RecordProperty("canonical_generations_across_view_modes", 1);
+  WaitForQueueIdle();
+}
+
+NOLINT_TEST_F(
+  ExposureGpuTest, CanonicalAtmosphereProducersRetainTinyIlluminatedSignals)
+{
+  pass_.reset();
+  renderer_->OnShutdown();
+  auto config = RendererConfig {};
+  config.upload_queue_key = QueueKeyFor().get();
+  renderer_ = std::make_unique<Renderer>(GetGraphicsShared(), config,
+    kPhase1DefaultRuntimeCapabilityFamilies
+      | RendererCapabilityFamily::kEnvironmentLighting);
+  ctx_.current_view.with_atmosphere = true;
+  auto view_data = ViewConstants::GpuData {};
+  auto view_buffer
+    = CreateUploadBuffer(SizeBytes { 256U }, BufferUsage::kConstant);
+  view_buffer->Update(&view_data, sizeof(view_data), 0U);
+  ctx_.view_constants = view_buffer;
+  auto cache = environment::internal::AtmosphereLutCache(*renderer_);
+  auto transmittance = environment::AtmosphereTransmittanceLutPass(*renderer_);
+  auto scattering = environment::AtmosphereMultiScatteringLutPass(*renderer_);
+  auto stable = environment::internal::StableAtmosphereState {};
+  auto& atmosphere = stable.view_products.atmosphere;
+  atmosphere.enabled = true;
+  atmosphere.planet_radius_m = 1000;
+  atmosphere.atmosphere_height_m = 1000;
+  atmosphere.rayleigh_scattering_rgb = {};
+  atmosphere.mie_scattering_rgb = {};
+  atmosphere.mie_absorption_rgb = {};
+  atmosphere.ozone_absorption_rgb = { .0276F, .0001F, 0 };
+  atmosphere.ozone_density_profile.layers[0]
+    = { .width_m = 2000, .constant_term = 1 };
+  atmosphere.ozone_density_profile.layers[1] = { .constant_term = 1 };
+  const auto begin = [&](unsigned sequence) {
+    ctx_.frame_sequence = frame::SequenceNumber { sequence };
+    ctx_.frame_slot = frame::Slot { (sequence - 1U) % 3U };
+    stable.atmosphere_revision = sequence;
+    cache.OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
+    cache.RefreshForState(stable);
+    transmittance.OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
+    scattering.OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
+  };
+  begin(1U);
+  ASSERT_TRUE(transmittance.Record(ctx_, stable, cache).executed);
+  const auto trans_pixels = ReadFloatTexture(*cache.GetTransmittanceTexture());
+  const auto& trans_desc = cache.GetTransmittanceTexture()->GetDescriptor();
+  // Constant absorption makes Beer-Lambert independent of the integration
+  // quadrature. Geometry is reconstructed in double from the documented LUT UV.
+  const double horizon = std::sqrt(3.0);
+  const double rho = (.5 / trans_desc.height) * horizon;
+  const double radius = std::sqrt(1 + rho * rho);
+  const double length
+    = 2 - radius + (.5 / trans_desc.width) * (rho + horizon - (2 - radius));
+  const double expected_trans
+    = std::exp(-double(float(.0276F * 1000.0F)) * length);
+  ASSERT_GT(expected_trans, 0.0);
+  EXPECT_NEAR(trans_pixels[0][0], expected_trans, expected_trans * 2e-5);
+  EXPECT_EQ(data::HalfFloat { trans_pixels[0][0] }.ToFloat(), 0.0F);
+  const auto check_illumination = [&](const Texture& texture,
+                                    ShaderVisibleIndex srv, unsigned pixel,
+                                    unsigned channel, const Pixel& value) {
+    const auto& desc = texture.GetDescriptor();
+    const auto half
+      = MakeSignal(1U, 1U, std::span { &value, 1U }, 1U, Format::kRGBA16Float);
+    constexpr float gain = 1.88e9F;
+    // Slot 3 is the renderer's registered linear-clamp sampler.
+    const std::array<std::array<std::uint32_t, 4>, 4> inputs {
+      std::array { srv.get(), 3U,
+        std::bit_cast<std::uint32_t>(
+          (float(pixel % desc.width) + .5F) / float(desc.width)),
+        std::bit_cast<std::uint32_t>(
+          (float(pixel / desc.width) + .5F) / float(desc.height)) },
+      std::array { std::bit_cast<std::uint32_t>(gain), 0U, 0U, 0U },
+      std::array { half.srv.get(), 3U, std::bit_cast<std::uint32_t>(.5F),
+        std::bit_cast<std::uint32_t>(.5F) },
+      std::array { std::bit_cast<std::uint32_t>(gain), 0U, 0U, 0U }
+    };
+    const auto result
+      = RunToneProbe(std::as_bytes(std::span { inputs }), 2U, 512U);
+    const double expected = double(value[channel]) * gain;
+    EXPECT_GE(expected, 0x1p-24);
+    EXPECT_LE(expected, 0x1p32);
+    EXPECT_NEAR(result[0][channel], expected, expected * 2e-5);
+    EXPECT_EQ(result[1][channel], 0.0F);
+  };
+  check_illumination(*cache.GetTransmittanceTexture(),
+    cache.GetState().transmittance_lut_srv, 0U, 0U, trans_pixels[0]);
+  atmosphere = environment::AtmosphereModel {};
+  atmosphere.enabled = true;
+  begin(2U);
+  ASSERT_TRUE(transmittance.Record(ctx_, stable, cache).executed);
+  ASSERT_TRUE(scattering.Record(ctx_, stable, cache).executed);
+  const auto baseline = ReadFloatTexture(*cache.GetMultiScatteringTexture());
+  unsigned brightest = 0U, channel = 0U;
+  for (unsigned pixel = 0; pixel < baseline.size(); ++pixel)
+    for (unsigned c = 0; c < 3; ++c)
+      if (baseline[pixel][c] > baseline[brightest][channel]) {
+        brightest = pixel;
+        channel = c;
+      }
+  ASSERT_GT(baseline[brightest][channel], 0.0F);
+  atmosphere.multi_scattering_factor = 0x1p-30F;
+  begin(3U);
+  ASSERT_TRUE(transmittance.Record(ctx_, stable, cache).executed);
+  ASSERT_TRUE(scattering.Record(ctx_, stable, cache).executed);
+  const auto tiny = ReadFloatTexture(*cache.GetMultiScatteringTexture());
+  const double expected_scattering
+    = double(baseline[brightest][channel]) * 0x1p-30;
+  EXPECT_NEAR(
+    tiny[brightest][channel], expected_scattering, expected_scattering * 2e-5);
+  check_illumination(*cache.GetMultiScatteringTexture(),
+    cache.GetState().multi_scattering_lut_srv, brightest, channel,
+    tiny[brightest]);
+  ctx_.view_constants.reset();
+  WaitForQueueIdle();
+}
+
+NOLINT_TEST_F(
+  ExposureGpuTest, ThinMediaArithmeticPreservesAmplifiedRequiredSignals)
+{
+  std::vector<std::array<float, 4>> inputs;
+  for (const float depth : { -.1F, -.01F, -1e-8F, 0.0F, 0x1p-40F, 0x1p-24F,
+         1e-5F, .00999F, .01F, .1F, 1.0F, 10.0F })
+    for (const float source : { 0x1p-24F, 1.0F, 0x1p32F })
+      inputs.push_back({ depth, source, 0, 0 });
+  const auto output = RunToneProbe(std::as_bytes(std::span { inputs }),
+    static_cast<std::uint32_t>(inputs.size()), 1024U);
+  unsigned reproduced_losses = 0;
+  for (std::size_t i = 0; i < inputs.size(); ++i) {
+    const double opacity = -std::expm1(-double(inputs[i][0]));
+    const double input_opacity = std::min(std::abs(double(inputs[i][0])), 1.0);
+    const double optical_depth = input_opacity < 1.0 - double(1e-6F)
+      ? -std::log1p(-input_opacity)
+      : -std::log(double(1e-6F));
+    const double radiance = opacity * double(inputs[i][1]);
+    EXPECT_NEAR(output[i][0], opacity, std::abs(opacity) * 2e-5 + 0x1p-120);
+    EXPECT_NEAR(output[i][1], optical_depth, optical_depth * 2e-5 + 0x1p-120);
+    EXPECT_NEAR(output[i][2], radiance, std::abs(radiance) * 2e-5 + 0x1p-120);
+    if (radiance >= 0x1p-24 && output[i][3] == 0) {
+      EXPECT_GT(output[i][2], 0);
+      ++reproduced_losses;
+    }
+  }
+  EXPECT_GT(reproduced_losses, 0U);
+}
+
+NOLINT_TEST_F(ExposureGpuTest, SkyProducerPreservesThinBrightScattering)
+{
+  pass_.reset();
+  renderer_->OnShutdown();
+  auto config = RendererConfig {};
+  config.upload_queue_key = QueueKeyFor().get();
+  renderer_ = std::make_unique<Renderer>(GetGraphicsShared(), config,
+    kPhase1DefaultRuntimeCapabilityFamilies
+      | RendererCapabilityFamily::kEnvironmentLighting);
+  ctx_.current_view.with_atmosphere = true;
+  ctx_.current_view.hdr_color_format = Format::kRGBA32Float;
+  auto view_data = ViewConstants::GpuData {};
+  auto view_buffer
+    = CreateUploadBuffer(SizeBytes { 256U }, BufferUsage::kConstant);
+  view_buffer->Update(&view_data, sizeof(view_data), 0U);
+  ctx_.view_constants = view_buffer;
+  auto cache = environment::internal::AtmosphereLutCache(*renderer_);
+  auto transmittance = environment::AtmosphereTransmittanceLutPass(*renderer_);
+  auto multiple = environment::AtmosphereMultiScatteringLutPass(*renderer_);
+  auto sky = environment::AtmosphereSkyViewLutPass(*renderer_);
+  auto stable = environment::internal::StableAtmosphereState {};
+  auto& atmosphere = stable.view_products.atmosphere;
+  atmosphere.enabled = true;
+  atmosphere.planet_radius_m = 1000;
+  atmosphere.atmosphere_height_m = 1000;
+  atmosphere.rayleigh_scale_height_m = 1e15F;
+  atmosphere.mie_scattering_rgb = {};
+  atmosphere.mie_absorption_rgb = {};
+  atmosphere.ozone_absorption_rgb = {};
+  atmosphere.ground_albedo_rgb = {};
+  atmosphere.multi_scattering_factor = 0;
+  auto& light = stable.view_products.atmosphere_lights[0];
+  light.enabled = true;
+  light.direction_to_light_ws = { 0, 0, 1 };
+  light.illuminance_rgb_lux = { 1.88e9F, 1.88e9F, 1.88e9F };
+  stable.view_products.atmosphere_light_count = 1;
+  auto environment_view = EnvironmentViewData {};
+  environment_view.sky_planet_translated_world_center_km_and_view_height_km
+    = { 0, 0, -1, 1.25F };
+  unsigned sequence = 0;
+  for (const float extinction :
+    { 0.0F, 1e-12F, .999e-9F, 1e-9F, 1.001e-9F, 1e-6F }) {
+    SCOPED_TRACE(extinction);
+    atmosphere.rayleigh_scattering_rgb = glm::vec3 { extinction / 1000.0F };
+    ctx_.frame_sequence = frame::SequenceNumber { ++sequence };
+    ctx_.frame_slot = frame::Slot { (sequence - 1U) % 3U };
+    stable.atmosphere_revision = sequence;
+    cache.OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
+    cache.RefreshForState(stable);
+    transmittance.OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
+    multiple.OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
+    sky.OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
+    ASSERT_TRUE(transmittance.Record(ctx_, stable, cache).executed);
+    ASSERT_TRUE(multiple.Record(ctx_, stable, cache).executed);
+    const auto produced = sky.Record(ctx_, environment_view, stable, cache);
+    ASSERT_TRUE(produced.executed);
+    const auto pixels = ReadFloatTexture(*produced.texture);
+    // Row zero is exactly zenith. Constant-density, single Rayleigh scattering
+    // toward a zenith sun has constant total light+view attenuation along the
+    // .75 km ray: L = E * phase(1) * sigma * d * exp(-sigma*d).
+    const double sigma = double(atmosphere.rayleigh_scattering_rgb.x) * 1000;
+    const double expected = double(light.illuminance_rgb_lux.x)
+      * (3 / (8 * std::acos(-1.0))) * sigma * .75 * std::exp(-sigma * .75);
+    for (unsigned x = 0; x < produced.width; ++x)
+      for (unsigned c = 0; c < 3; ++c)
+        EXPECT_NEAR(pixels[x][c], expected, expected * 2e-5 + 0x1p-120);
+  }
+  ctx_.view_constants.reset();
+  WaitForQueueIdle();
+}
+
+NOLINT_TEST_F(ExposureGpuTest, ThinScatteringIntegralHasContinuousVacuumLimit)
+{
+  std::vector<Pixel> inputs;
+  for (const float extinction : { 0.0F, 1e-12F, 0.999e-9F, 1e-9F, 1.001e-9F,
+         1e-5F, .00999F, .01F, .1F, 1.0F, 100.0F })
+    for (const float distance : { 0.0F, 1e-3F, 1.0F, 100.0F })
+      for (const float source : { .0001496056465063816F, 1.0F, 0x1p32F })
+        inputs.push_back({ extinction, distance, source, 0 });
+  const auto output = RunToneProbe(std::as_bytes(std::span { inputs }),
+    static_cast<std::uint32_t>(inputs.size()), 2048U);
+  for (std::size_t i = 0; i < inputs.size(); ++i) {
+    SCOPED_TRACE(i);
+    const double extinction = inputs[i][0], distance = inputs[i][1];
+    const double integral = extinction == 0
+      ? distance
+      : -std::expm1(-extinction * distance) / extinction;
+    const double radiance = integral * inputs[i][2];
+    EXPECT_NEAR(output[i][0], integral, integral * 2e-5 + 0x1p-120);
+    EXPECT_NEAR(output[i][1], radiance, radiance * 2e-5 + 0x1p-120);
+  }
+  RecordProperty("continuous_integral_cases", inputs.size());
+}
+
+NOLINT_TEST_F(ExposureGpuTest, AuthoredLocalFogPreservesRadiometryThroughUpload)
+{
+  pass_.reset();
+  renderer_->OnShutdown();
+  auto renderer_config = RendererConfig {};
+  renderer_config.upload_queue_key = QueueKeyFor().get();
+  renderer_ = std::make_unique<Renderer>(GetGraphicsShared(), renderer_config,
+    kPhase1DefaultRuntimeCapabilityFamilies
+      | RendererCapabilityFamily::kEnvironmentLighting);
+  pass_ = std::make_unique<postprocess::ExposurePass>(*renderer_);
+  console::Console console;
+  renderer_->RegisterConsoleBindings(observer_ptr { &console });
+  ASSERT_EQ(console.Execute("vtx.local_fog.global_start_distance_m 0").status,
+    console::ExecutionStatus::kOk);
+  auto fog_scene
+    = std::make_shared<scene::Scene>("Local fog radiometric domain", 8U);
+  auto node = fog_scene->CreateNode("Authored local fog");
+  auto impl = node.GetImpl();
+  ASSERT_TRUE(impl.has_value());
+  auto& fog = impl->get().AddComponent<scene::environment::LocalFogVolume>();
+  fog.SetEnabled(true);
+  fog.SetFogAlbedo({ 0, 0, 0 });
+  fog.SetHeightFogOffset(0);
+  node.GetTransform().SetLocalScale({ .2F, .2F, .2F });
+  fog_scene->Update();
+  auto resolved_params = ResolvedView::Params {};
+  resolved_params.view_config.viewport = { .width = 1, .height = 1 };
+  resolved_params.view_config.scissor = { .right = 1, .bottom = 1 };
+  auto lens = scene::PerspectiveCamera {};
+  lens.SetViewport(resolved_params.view_config.viewport);
+  resolved_params.proj_matrix = lens.ProjectionMatrix();
+  auto resolved = ResolvedView { resolved_params };
+  ctx_.scene = observer_ptr { fog_scene.get() };
+  ctx_.current_view.resolved_view = observer_ptr { &resolved };
+  ctx_.current_view.with_local_fog = true;
+  auto state = environment::internal::LocalFogVolumeState(*renderer_);
+  auto compose = environment::LocalFogVolumeComposePass(*renderer_);
+  auto textures = SceneTextures(Backend(),
+    { .extent = { 1U, 1U },
+      .enable_velocity = false,
+      .scene_color_format = Format::kRGBA32Float });
+  auto framebuffer = Backend().CreateFramebuffer(FramebufferDesc {}
+      .AddColorAttachment(textures.GetSceneColorResource())
+      .SetDepthAttachment({ .texture = textures.GetSceneDepthResource(),
+        .format = textures.GetSceneDepth().GetDescriptor().format }));
+  auto tiles = CreateRegisteredTexture({ .width = 1,
+    .height = 1,
+    .array_size = 2,
+    .format = Format::kR32UInt,
+    .texture_type = TextureType::kTexture2DArray,
+    .is_shader_resource = true,
+    .initial_state = ResourceStates::kCommon });
+  auto tile_upload = CreateUploadBuffer(SizeBytes { 1024U });
+  std::array<std::uint32_t, 256> tile_values {};
+  tile_values[0] = 1U; // One volume, instance index zero in array slice one.
+  tile_upload->Update(tile_values.data(), sizeof(tile_values), 0U);
+  {
+    auto recorder = AcquireRecorder("Local fog tile fixture upload");
+    EnsureTracked(*recorder, tile_upload, ResourceStates::kGenericRead);
+    EnsureTracked(*recorder, tiles, ResourceStates::kCommon);
+    recorder->RequireResourceState(*tiles, ResourceStates::kCopyDest);
+    recorder->FlushBarriers();
+    recorder->CopyBufferToTexture(*tile_upload,
+      { .buffer_offset = 0U,
+        .buffer_row_pitch = 256U,
+        .buffer_slice_pitch = 256U,
+        .dst_slice = { .width = 1, .height = 1, .depth = 1 } },
+      *tiles);
+    recorder->RequireResourceStateFinal(
+      *tiles, ResourceStates::kShaderResource);
+  }
+  auto& allocator = renderer_->GetGraphics()->GetDescriptorAllocator();
+  const auto texture_srv = [&](const Texture& texture, TextureType type) {
+    auto handle = allocator.AllocateRaw(
+      ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
+    const auto index = allocator.GetShaderVisibleIndex(handle);
+    Backend().GetResourceRegistry().RegisterView(texture, std::move(handle),
+      TextureViewDescription {
+        .format = texture.GetDescriptor().format, .dimension = type });
+    return index;
+  };
+  const auto tiles_slot = texture_srv(*tiles, TextureType::kTexture2DArray);
+  auto scene_bindings = SceneTextureBindings {};
+  scene_bindings.scene_depth_srv
+    = texture_srv(textures.GetSceneDepth(), TextureType::kTexture2D).get();
+  const auto scene_slot = PublishFixtureData(scene_bindings);
+  const auto occupied_slot = PublishFixtureData(std::uint32_t { 0U });
+  auto args = CreateUploadBuffer(SizeBytes { 16U });
+  const std::array<std::uint32_t, 4> draw_args { 6U, 1U, 0U, 0U };
+  args->Update(draw_args.data(), sizeof(draw_args), 0U);
+  auto settings = scene::ExposureSettings {};
+  settings.mode = engine::ExposureMode::kManual;
+  settings.manual_ev = 0;
+  const auto config = SharedConfig(settings);
+  struct Case {
+    float radial, height, falloff, emission;
+    bool expected_range_failure { false };
+  };
+  const std::array cases { Case { 1, 0, 100, 0 },
+    Case { 1, 0x1p-24F, 100, 0x1p-24F }, Case { 1, 0x1p-16F, 100, 0x1p-16F },
+    Case { 1, 0x1p-14F, 100, 0x1p-14F }, Case { .45F, .25F, 100, 1 },
+    Case { 1, 1, 100, 131072 }, Case { 0x1p-24F, 1, 100, 0x1p32F },
+    Case { 0x1p-16F, 1, 100, 0x1p32F }, Case { 0x1p-14F, 1, 100, 0x1p32F },
+    Case { 0x1p-24F, 0x1p-24F, 100, 0x1p32F }, Case { 1, 1, 10000, 1 },
+    Case { 1, 1, 100, 0x1p37F, true } };
+  unsigned sequence = 0;
+  for (const auto& value : cases) {
+    SCOPED_TRACE(sequence);
+    fog.SetRadialFogExtinction(value.radial);
+    fog.SetHeightFogExtinction(value.height);
+    fog.SetHeightFogFalloff(value.falloff);
+    fog.SetFogEmissive(
+      { value.emission, value.emission / 2, value.emission / 4 });
+    state.OnFrameStart(
+      frame::SequenceNumber { ++sequence }, frame::Slot { 0U });
+    auto products = state.Prepare(ctx_);
+    ASSERT_TRUE(products.buffer_ready);
+    ASSERT_EQ(products.instance_count, 1U);
+    const std::array<std::array<std::uint32_t, 4>, 2> decode_input {
+      std::array { products.instance_buffer_slot.get(), 0U, 0U, 0U },
+      std::array { 0U, 0U, 0U, 0U }
+    };
+    const auto decoded = RunToneProbe(
+      std::as_bytes(std::span { decode_input }), 1U, 4096U, false);
+    EXPECT_EQ(decoded[0][0], value.radial);
+    EXPECT_EQ(decoded[0][1], value.height);
+    EXPECT_EQ(decoded[0][2], value.falloff * .01F);
+    EXPECT_EQ(decoded[0][3], 0.0F);
+    EXPECT_EQ(decoded[0][4], value.emission);
+    EXPECT_EQ(decoded[0][5], value.emission / 2);
+    EXPECT_EQ(decoded[0][6], value.emission / 4);
+    EXPECT_EQ(decoded[0][7], 1.0F);
+    // Reversed rays and small positive/negative changes of height exercise
+    // the production signed integral, not a duplicate arithmetic helper.
+    const std::array rays { Pixel { 1, -1, 1, 0 }, Pixel { 0, 1, 1, 0 },
+      Pixel { .5F, 1, 1e-6F, 0 }, Pixel { .5F, -1, 1e-6F, 0 } };
+    std::vector<std::array<std::uint32_t, 4>> inputs;
+    for (const auto ray : rays) {
+      inputs.push_back({ products.instance_buffer_slot.get(), 0U, 0U, 0U });
+      inputs.push_back(std::bit_cast<std::array<std::uint32_t, 4>>(ray));
+    }
+    const auto actual = RunToneProbe(std::as_bytes(std::span { inputs }),
+      static_cast<std::uint32_t>(rays.size()), 8192U, false);
+    for (std::size_t i = 0; i < rays.size(); ++i) {
+      SCOPED_TRACE(i);
+      const double start = rays[i][0], direction = rays[i][1],
+                   length = rays[i][2];
+      const double falloff = double(value.falloff * .01F);
+      const double radial_depth = double(value.radial) * .75
+        * ((1 - start * start) * length - start * direction * length * length
+          - length * length * length / 3);
+      const double height_depth = double(value.height)
+        * std::exp(-start * falloff)
+        * -std::expm1(-direction * length * falloff) / (falloff * direction);
+      const double combined
+        = -std::expm1(-radial_depth) * -std::expm1(-height_depth);
+      // The complement would lose very thin coverage in double too. At unit
+      // scale the product of opacities is the exact unsaturated coverage.
+      const double coverage = std::min(combined, 1.0 - 1e-6);
+      EXPECT_NEAR(actual[i][3], coverage, coverage * 2e-5 + 0x1p-120);
+      const double media_opacity = -std::expm1(-double(value.radial))
+        * -std::expm1(-double(value.height));
+      const double media_extinction = media_opacity < 1 - 1e-6
+        ? -std::log1p(-media_opacity)
+        : -std::log(1e-6);
+      EXPECT_NEAR(
+        actual[i][7], media_extinction, media_extinction * 2e-5 + 0x1p-120);
+      for (unsigned c = 0; c < 3; ++c) {
+        const double source = double(value.emission) / double(1U << c);
+        EXPECT_NEAR(
+          actual[i][c], source * coverage, source * coverage * 2e-5 + 0x1p-120);
+        EXPECT_NEAR(actual[i][c + 4], source * media_extinction,
+          source * media_extinction * 2e-5 + 0x1p-120);
+      }
+    }
+    ctx_.frame_sequence = frame::SequenceNumber { sequence };
+    const auto frame = pass_->ResolveFrame(ctx_, config, { .use_fp32 = true });
+    ASSERT_NE(frame, nullptr);
+    ctx_.current_view.frame_exposure = frame;
+    auto bindings = ViewFrameBindings {};
+    bindings.scene_texture_frame_slot = scene_slot;
+    bindings.frame_exposure_slot = frame->srv_index;
+    bindings.exposure_status_uav = frame->current_state->status_uav_index;
+    auto view = ViewConstants::GpuData {};
+    view.view_frame_bindings_bslot
+      = BindlessViewFrameBindingsSlot { PublishFixtureData(bindings) };
+    view.inverse_view_projection_matrix = glm::mat4 { 0.0F };
+    view.inverse_view_projection_matrix[3] = { 0, 0, .5F, 1 };
+    auto constants
+      = CreateUploadBuffer(SizeBytes { 256U }, BufferUsage::kConstant);
+    constants->Update(&view, sizeof(view), 0U);
+    ctx_.view_constants = constants;
+    {
+      auto recorder = AcquireRecorder("Local fog compose initialization");
+      for (const auto& texture :
+        { textures.GetSceneColorResource(), textures.GetSceneDepthResource() })
+        if (!recorder->AdoptKnownResourceState(*texture))
+          recorder->BeginTrackingResourceState(
+            *texture, texture->GetDescriptor().initial_state);
+      EnsureTracked(*recorder, args, ResourceStates::kGenericRead);
+      recorder->RequireResourceState(
+        textures.GetSceneColor(), ResourceStates::kRenderTarget);
+      recorder->RequireResourceState(
+        textures.GetSceneDepth(), ResourceStates::kDepthWrite);
+      recorder->FlushBarriers();
+      recorder->ClearFramebuffer(
+        *framebuffer, std::vector<std::optional<Color>> { Color {} }, .5F);
+    }
+    products.tile_data_ready = true;
+    products.tile_data_texture_slot = tiles_slot;
+    products.occupied_tile_buffer_slot = occupied_slot;
+    products.tile_resolution_x = products.tile_resolution_y = 1;
+    products.max_instances_per_tile = 1;
+    products.occupied_tile_draw_args_buffer
+      = observer_ptr<const Buffer> { args.get() };
+    compose.OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
+    const auto capture = value.emission == 131072
+      ? BeginOptionalCapture()
+      : observer_ptr<FrameCaptureController> {};
+    ASSERT_TRUE(compose.Record(ctx_, textures, products).executed);
+    if (capture)
+      EXPECT_TRUE(capture->EndCapture());
+    const auto pixels = ReadFloatTexture(textures.GetSceneColor());
+    const double falloff = double(value.falloff * .01F);
+    const double start = renderer_->GetLocalFogGlobalStartDistanceMeters();
+    const double height_depth = double(value.height)
+      * std::exp(-start * falloff) * -std::expm1(-(.5 - start) * falloff)
+      / falloff;
+    const double radial_depth = double(value.radial) * .75
+      * ((.5 - .125 / 3) - (start - start * start * start / 3));
+    const double coverage
+      = -std::expm1(-radial_depth) * -std::expm1(-height_depth);
+    for (unsigned c = 0; c < 3; ++c) {
+      const double expected
+        = double(value.emission) / double(1U << c) * coverage;
+      EXPECT_NEAR(pixels[0][c], expected, expected * 2e-5 + 0x1p-120);
+    }
+    const auto status = Read<ExposureCompletedStatus>(
+      *frame->current_state->status_buffer, ResourceStates::kUnorderedAccess);
+    if (value.expected_range_failure) {
+      ASSERT_GT(double(value.emission) * coverage, 0x1p32);
+      EXPECT_EQ(status.first_failure_product, 9U);
+      EXPECT_EQ(status.first_failure_kind, 32U);
+      EXPECT_EQ(status.flags & 18U, 18U);
+    } else {
+      ASSERT_LE(double(value.emission) * coverage, 0x1p32);
+      EXPECT_EQ(status.flags & 16U, 0U);
+    }
+    ctx_.current_view.frame_exposure.reset();
+    ctx_.view_constants.reset();
+  }
+  RecordProperty("authored_local_fog_cases", cases.size() * 4);
+  ctx_.current_view.resolved_view.reset();
+  ctx_.scene.reset();
+  WaitForQueueIdle();
+}
+
 NOLINT_TEST_F(ExposureGpuTest, ConsumerArithmeticContainsAttenuationAndRounding)
 {
   std::vector<std::array<float, 4>> inputs;
@@ -7018,11 +7868,13 @@ NOLINT_TEST_F(ExposureGpuTest, ConsumerArithmeticContainsAttenuationAndRounding)
           for (const float maximum : { 0.0F, 0x1p-24F, 1.0F, 0x1p32F })
             for (const float steps : { 0.0F, 128.0F, 4096.0F })
               for (const float inverse_p : { 0x1p-32F, 1.0F, 0x1p32F }) {
-                inputs.push_back({ relative, absolute, t_relative, t_absolute });
+                inputs.push_back(
+                  { relative, absolute, t_relative, t_absolute });
                 inputs.push_back({ maximum, steps, inverse_p, 0.0F });
               }
   const auto count = static_cast<std::uint32_t>(inputs.size() / 2U);
-  const auto results = RunToneProbe(std::as_bytes(std::span { inputs }), count, 64U);
+  const auto results
+    = RunToneProbe(std::as_bytes(std::span { inputs }), count, 64U);
   for (std::size_t i = 0; i < results.size(); ++i) {
     SCOPED_TRACE(i);
     const auto& b = inputs[i * 2U];
@@ -7035,10 +7887,10 @@ NOLINT_TEST_F(ExposureGpuTest, ConsumerArithmeticContainsAttenuationAndRounding)
     for (const double source_sign : { -1.0, 1.0 })
       for (const double t_sign : { -1.0, 1.0 }) {
         const double reference = double(c[0]) * .25;
-        const double source = std::max(0.0, double(c[0])
-          + source_sign * (double(b[0]) * c[0] + b[1]));
-        const double transmission = std::clamp(.25
-          + t_sign * (double(b[2]) * .25 + b[3]), 0.0, 1.0);
+        const double source = std::max(
+          0.0, double(c[0]) + source_sign * (double(b[0]) * c[0] + b[1]));
+        const double transmission
+          = std::clamp(.25 + t_sign * (double(b[2]) * .25 + b[3]), 0.0, 1.0);
         const double error = std::abs(source * transmission - reference);
         EXPECT_LE(error, double(result[0]) * reference + result[1]);
         EXPECT_LE(error, double(result[2]) * reference + result[3]);
@@ -8660,12 +9512,13 @@ NOLINT_TEST_F(
     = time::CanonicalDuration { std::chrono::nanoseconds { 1000000000 } };
   frame.SetModuleTimingData(timing, engine::internal::EngineTagFactory::Get());
   ExposureStateData previous {};
-  for (unsigned step = 1U; step <= 4U; ++step) {
+  for (unsigned step = 1U; step <= 7U; ++step) {
     SCOPED_TRACE(step);
-    const float sky_value = step == 1U ? .25F : 4.0F;
+    const float sky_value = step == 1U ? .25F : step == 6U ? 0x1p34F : 4.0F;
     sky.SetSolidColorRgb({ sky_value, sky_value, sky_value });
     const auto emissive = step == 1U ? .125F
       : step == 3U                   ? std::numeric_limits<float>::infinity()
+      : step == 4U                   ? 0x1p36F
                                      : 0x1p26F;
     fog.SetVolumetricFogEmissive({ emissive, emissive, emissive });
     probe->inject_half = step == 2U;
@@ -8697,10 +9550,14 @@ NOLINT_TEST_F(
       *probe->frame->current_state->buffer, ResourceStates::kShaderResource);
     const auto status = Read<ExposureCompletedStatus>(
       *probe->frame->current_state->status_buffer, ResourceStates::kCopySource);
-    if (step == 2U || step == 3U) {
+    if (step == 2U || step == 3U || step == 4U || step == 6U) {
       EXPECT_EQ(status.flags & 18U, 18U);
-      EXPECT_EQ(status.first_failure_product, 10U);
-      EXPECT_NE(status.first_failure_kind & (step == 2U ? 2U : 1U), 0U);
+      EXPECT_EQ(status.first_failure_product, step == 6U ? 7U : 10U);
+      EXPECT_NE(status.first_failure_kind
+          & (step == 2U    ? 2U
+              : step == 3U ? 1U
+                           : 32U),
+        0U);
       EXPECT_EQ(status.fp16_eligible_streak, 0U);
       EXPECT_EQ(state.displayed_scale, previous.displayed_scale);
       EXPECT_EQ(state.latent_scale, previous.latent_scale);
@@ -8709,7 +9566,7 @@ NOLINT_TEST_F(
     } else {
       EXPECT_EQ(status.flags & 16U, 0U);
       EXPECT_NE(state.flags & 4U, 0U);
-      if (step == 4U)
+      if (step == 5U)
         EXPECT_LT(state.displayed_scale, previous.displayed_scale);
     }
     if (step == 2U) {

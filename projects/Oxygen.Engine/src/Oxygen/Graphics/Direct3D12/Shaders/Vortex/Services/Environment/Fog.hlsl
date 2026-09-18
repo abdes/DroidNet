@@ -15,6 +15,7 @@
 #include "Vortex/Contracts/View/ViewFrameBindings.hlsli"
 #include "Vortex/Shared/FullscreenTriangle.hlsli"
 #include "Vortex/Shared/PositionReconstruction.hlsli"
+#include "Vortex/Services/Environment/TransmittanceMath.hlsli"
 
 static const float kFogEpsilon = 0.001f;
 static const float kFogEpsilon2 = 0.01f;
@@ -203,7 +204,7 @@ static float3 ComputeDirectionalInscatteringForLight(
     const float dir_integral =
         line_integral * max(ray_length - fog.directional_start_distance_m, 0.0f)
         / max(ray_length, kFogEpsilon);
-    const float directional_fog_factor = saturate(exp2(-dir_integral));
+    const float directional_opacity = saturate(OneMinusExpNegative(dir_integral * log(2.0f)));
     const float angular_radius = max(light_direction_angular_size.w, 0.0f);
     const float solid_angle =
         2.0f * kPi * (1.0f - cos(angular_radius));
@@ -214,7 +215,7 @@ static float3 ComputeDirectionalInscatteringForLight(
     const float3 directional_color =
         fog.directional_inscattering_luminance_rgb
         + height_fog_contribution * light_illuminance_rgb;
-    return directional_color * directional_phase * (1.0f - directional_fog_factor);
+    return directional_color * directional_phase * directional_opacity;
 }
 
 static float4 EvaluateExponentialHeightFog(
@@ -235,11 +236,14 @@ static float4 EvaluateExponentialHeightFog(
 
     float transmittance =
         max(saturate(exp2(-line_integral)), fog.min_transmittance);
+    float opacity = min(saturate(OneMinusExpNegative(line_integral * log(2.0f))),
+        1.0f - fog.min_transmittance);
     float3 directional_inscattering = 0.0f.xxx;
 
     if (fog.cutoff_distance_m > 0.0f
         && camera_to_receiver_length > fog.cutoff_distance_m) {
         transmittance = 1.0f;
+        opacity = 0.0f;
     } else if (FogFlagEnabled(fog.flags, GPU_FOG_FLAG_DIRECTIONAL_INSCATTERING)) {
         directional_inscattering += ComputeDirectionalInscatteringForLight(
             fog,
@@ -275,7 +279,7 @@ static float4 EvaluateExponentialHeightFog(
     }
 
     const float3 fog_color =
-        inscattering_color * (1.0f - transmittance) + directional_inscattering;
+        inscattering_color * opacity + directional_inscattering;
     return float4(fog_color, transmittance);
 }
 

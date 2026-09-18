@@ -15,6 +15,7 @@
 #include "Vortex/Shared/Math.hlsli"
 #include "Vortex/Services/Environment/AtmosphereConstants.hlsli"
 #include "Vortex/Services/Environment/ParityTransmittance.hlsli"
+#include "Vortex/Services/Environment/TransmittanceMath.hlsli"
 
 static const float kVortexSkyPi = 3.14159265359f;
 
@@ -363,10 +364,11 @@ static VortexSingleScatteringResult VortexIntegrateSingleScatteredLuminance(
         }
 
         result.MultiScatAs1 += throughput * (atmosphere.rayleigh_scattering_per_km_rgb * d_r + atmosphere.mie_scattering_per_km_rgb * d_m) * dt;
-        const float3 safe_extinction = max(extinction, 1.0e-9f.xxx);
-        const float3 sint = (S - S * sample_transmittance) / safe_extinction;
-        const float3 sint_mie_only = (SMieOnly - SMieOnly * sample_transmittance) / safe_extinction;
-        const float3 sint_ray_only = (SRayOnly - SRayOnly * sample_transmittance) / safe_extinction;
+        const float3 integrated_transmittance
+            = IntegratedTransmittance(extinction, dt * distance_scale);
+        const float3 sint = S * integrated_transmittance;
+        const float3 sint_mie_only = SMieOnly * integrated_transmittance;
+        const float3 sint_ray_only = SRayOnly * integrated_transmittance;
 
         result.L += throughput * sint;
         result.LMieOnly += throughput * sint_mie_only;

@@ -199,7 +199,7 @@ auto AtmosphereLutCache::EnsureTexture(
   const auto wants_recreate = texture == nullptr
     || texture->GetDescriptor().width != width
     || texture->GetDescriptor().height != height
-    || texture->GetDescriptor().format != Format::kRGBA16Float;
+    || texture->GetDescriptor().format != Format::kRGBA32Float;
 
   auto& registry = gfx->GetResourceRegistry();
   if (wants_recreate) {
@@ -212,7 +212,7 @@ auto AtmosphereLutCache::EnsureTexture(
       .mip_levels = 1U,
       .sample_count = 1U,
       .sample_quality = 0U,
-      .format = Format::kRGBA16Float,
+      .format = Format::kRGBA32Float,
       .texture_type = TextureType::kTexture2D,
       .debug_name = std::string(debug_name),
       .is_shader_resource = true,
@@ -248,7 +248,7 @@ auto AtmosphereLutCache::EnsureTexture(
       graphics::TextureViewDescription {
         .view_type = graphics::ResourceViewType::kTexture_SRV,
         .visibility = graphics::DescriptorVisibility::kShaderVisible,
-        .format = Format::kRGBA16Float,
+        .format = Format::kRGBA32Float,
         .dimension = TextureType::kTexture2D,
         .sub_resources = graphics::TextureSubResourceSet::EntireTexture(),
         .is_read_only_dsv = false,
@@ -268,7 +268,7 @@ auto AtmosphereLutCache::EnsureTexture(
       graphics::TextureViewDescription {
         .view_type = graphics::ResourceViewType::kTexture_UAV,
         .visibility = graphics::DescriptorVisibility::kShaderVisible,
-        .format = Format::kRGBA16Float,
+        .format = Format::kRGBA32Float,
         .dimension = TextureType::kTexture2D,
         .sub_resources = graphics::TextureSubResourceSet::EntireTexture(),
         .is_read_only_dsv = false,

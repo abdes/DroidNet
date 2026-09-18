@@ -161,6 +161,11 @@ public:
   [[nodiscard]] OXGN_VRTX_API auto CapturePreEnvironmentRange(
     RenderContext& ctx, const FrameLease& frame,
     const graphics::Texture& source, ShaderVisibleIndex source_srv) -> bool;
+  //! Check final accumulation before metering, preserving earlier opaque
+  //! inputs.
+  [[nodiscard]] OXGN_VRTX_API auto CheckSceneColorRange(RenderContext& ctx,
+    const FrameLease& frame, const graphics::Texture& source,
+    ShaderVisibleIndex source_srv) -> bool;
   //! Submission identity is authoritative if a repeated attempt fails.
   [[nodiscard]] auto HasPreEnvironmentRange(const FrameLease& frame) const
     -> bool
@@ -234,6 +239,9 @@ public:
     = CompositionView::kInvalidViewStateHandle) -> void;
 
 private:
+  auto RecordSceneRange(RenderContext& ctx, const FrameLease& frame,
+    const graphics::Texture& source, ShaderVisibleIndex source_srv,
+    bool capture_opaque_input) -> bool;
   friend struct ::oxygen::vortex::testing::RendererPublicationProbe;
   struct PerViewExposureState {
     StateLease latest;

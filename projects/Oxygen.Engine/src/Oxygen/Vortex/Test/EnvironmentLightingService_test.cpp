@@ -3271,8 +3271,10 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
         ++radiance_views;
       }
       if (desc.debug_name.find("Transmittance") != std::string::npos
-        || desc.debug_name.find("MultiScattering") != std::string::npos)
-        EXPECT_EQ(desc.format, Format::kRGBA16Float);
+        || desc.debug_name.find("MultiScattering") != std::string::npos) {
+        EXPECT_EQ(desc.format, Format::kRGBA32Float);
+        EXPECT_EQ(event.view_format, Format::kRGBA32Float);
+      }
     }
     EXPECT_EQ(radiance_views, 3U);
     EXPECT_EQ(service.GetLastViewProductGenerationState()

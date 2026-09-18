@@ -9,6 +9,7 @@
 
 #include "Vortex/Contracts/View/FrameExposureHelpers.hlsli"
 #include "Vortex/Contracts/View/HdrErrorBounds.hlsli"
+#include "Vortex/Contracts/View/HdrStoreChecks.hlsli"
 
 static const uint HDR_INPUT_TRANSLUCENCY = 0u;
 static const uint HDR_INPUT_HEIGHT_FOG = 1u;
@@ -46,11 +47,15 @@ static void RecordHdrConsumerInput(float3 scene_rgb, uint input_kind)
     const uint flags = WaveActiveBitOr(observed | (valid ? 0u : observed << 2u));
     const uint3 magnitude = asuint(scene_rgb) & 0x7fffffffu.xxx;
     const uint peak = WaveActiveMax(valid ? max(magnitude.x, max(magnitude.y, magnitude.z)) : 0u);
+    const uint range_failure = WaveActiveBitOr(
+        ClassifyHdrStoreRange(float4(scene_rgb, 1.0), 1.0, 0u));
     if (WaveIsFirstLane()) {
         RWByteAddressBuffer status = ResourceDescriptorHeap[bindings.exposure_status_uav];
         uint unused;
         status.InterlockedMax(352u + input_kind * 4u, peak, unused);
         status.InterlockedOr(360u, flags, unused);
+        RecordHdrRangeFailure(range_failure,
+            input_kind == HDR_INPUT_TRANSLUCENCY ? 4u : 8u, bindings.exposure_status_uav);
     }
 }
 

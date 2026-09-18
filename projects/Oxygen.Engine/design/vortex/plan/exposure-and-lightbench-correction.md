@@ -491,8 +491,11 @@ producer/product ID, frame and settings generation. At the audited high-range
 write boundaries, check values before narrowing and atomically record the first
 failure. Reuse the completed-status readback ring from initialization. Test the
 checks with injected overflow/underflow; do not infer a pre-store failure from
-an already saturated texture. Depth, normals, coverage and transmittance formats
-remain unchanged.
+an already saturated texture. Depth, normals and coverage formats remain unchanged. The shared canonical
+transmittance and unit-illuminance multiple-scattering tables use RGBA32F in both
+view modes (approved 2026-09-18); see the owning scene-texture format inventory.
+Per-view radiance and its transmittance alpha retain their conditional FP16/FP32
+contract.
 
 ## 5. Robust metering and authoring
 

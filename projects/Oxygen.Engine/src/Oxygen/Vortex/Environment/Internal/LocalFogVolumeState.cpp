@@ -57,12 +57,6 @@ auto PackHalf2(const float a, const float b) -> std::uint32_t
   return glm::packHalf2x16(glm::vec2 { a, b });
 }
 
-auto PackFloat111110(const float x, const float y, const float z)
-  -> std::uint32_t
-{
-  return glm::packF2x11_1x10(glm::vec3 { x, y, z });
-}
-
 auto PackUnorm8888(const glm::vec4& value) -> std::uint32_t
 {
   return glm::packUnorm4x8(glm::clamp(value, 0.0F, 1.0F));
@@ -154,21 +148,19 @@ auto MakeGpuInstance(const scene::environment::LocalFogVolume& local_fog,
     PackHalf2(x_vec.x, x_vec.y),
     PackHalf2(x_vec.z, y_vec.x),
     PackHalf2(y_vec.y, y_vec.z),
-    0U,
-  };
-  instance.data2 = {
-    PackFloat111110(radial_fog_extinction, height_fog_extinction,
-      std::max(height_fog_falloff, kLocalFogSafeFalloffThreshold)
-        * kLocalFogFalloffScaleUi),
-    PackFloat111110(emissive.x, emissive.y, emissive.z),
     PackUnorm8888(glm::vec4 {
       albedo.x,
       albedo.y,
       albedo.z,
       phase_g,
     }),
-    FloatBits(local_fog.GetHeightFogOffset()),
   };
+  instance.extinction_falloff_offset
+    = { radial_fog_extinction, height_fog_extinction,
+        std::max(height_fog_falloff, kLocalFogSafeFalloffThreshold)
+          * kLocalFogFalloffScaleUi,
+        local_fog.GetHeightFogOffset() };
+  instance.emissive = { emissive.x, emissive.y, emissive.z, 0.0F };
   return instance;
 }
 

@@ -83,7 +83,59 @@ qualification remains required; the package is not complete.
   1152x630 PiP. Embedded checks remain in their rendering-pass costs; these
   sums are not end-to-end frame latency.
   [Completion manifest, hashes, commands and reports](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/consumer-completion-manifest.json).
-- **Next item: EX05-16.** Complete remaining producer-domain/pre-store guards.
+- **Active item: EX05-16.** Complete remaining producer-domain/pre-store guards.
+  Audit the frozen [2^-24,2^32] scene-radiance envelope at the existing write
+  boundaries, including cumulative FP32 SceneColor, sky/AP/fog, forward/deferred
+  lighting and canonical environment consumers. Preserve insignificant values
+  according to the existing image/meter budgets; do not introduce a per-component
+  floor. Extend the existing bounded status for unsupported FP32 radiance and
+  qualify bright/dark endpoints plus narrowing failures as one producer matrix.
+  EX05-15 is closed; EX05-16 remains in progress.
+  **Domain implementation in progress:** failure kind 32 distinguishes unsupported
+  scene RGB from FP16 headroom. The limit is scaled exactly by pinned P, avoiding
+  reciprocal rounding at the upper endpoint; pre-environment
+  and final SceneColor scans preserve separate opaque inputs and reject invalid
+  metering. Submission failure invalidates only the existing precision epoch.
+  **Validated environment increment:** the complete affected gate passes in both
+  Debug and Release: 177 native exposure, 24 post-process, 63 environment, 63
+  deferred-scene and 12 offscreen tests (339 per build). This includes 551 range
+  boundary
+  cases, 132 continuous-integral cases, actual canonical and sky LUT producers,
+  hardware sampling, authored local-fog upload/decoding/composition, 48 local-fog
+  integral/injection cases, final-scan failure/retry and retained Auto history.
+  The local-fog draw asserts product 9/kind 32 for an explicit unsupported case;
+  the renderer asserts product 7 for invalid sky and product 10 for invalid fog.
+  [Commands, results, memory measurements and inspected native capture](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/domain-producer-increment-manifest.json).
+  **Canonical-format correction approved:** the user approved FP32 for the same
+  shared transmittance and unit-illuminance multiple-scattering tables. A transfer
+  of 1e-12 rounds to zero in FP16, but multiplying by a supported 1.88e9-nit
+  source should produce 0.00188, inside the supported scene domain and beyond
+  the allowed error if lost. The independent control is
+  `lifecycle/domain-canonical-half-control.json`. Allocation/recreation and both
+  descriptor formats now use RGBA32F; per-view FP16/FP32 selection is unchanged.
+  Default-size device placement measures 278,528 bytes for FP32 versus 139,264
+  for equivalent FP16 resources: +136 KiB on this adapter per retained cache
+  generation. Switching view modes reuses one canonical generation. Actual LUT
+  producer and sampling controls pass in both builds; the completed producer
+  matrix remains pending.
+  **Implemented upstream corrections:** retain local-fog extinction/falloff and
+  emission in FP32 within the existing instance buffer (64 bytes, formerly 48).
+  Preserve signed height integrals without overflowing a downward-ray intermediate.
+  Use the continuous atmosphere scattering integral at zero/tiny extinction,
+  eliminating the energy loss from the former 1e-9 denominator floor. Sky,
+  height-fog, local-fog and translucent sources report range failures before
+  sanitization or attenuation can hide them; volumetric samples are checked before
+  their nonnegative clamp and temporal filtering.
+  **Measured GPU cost:** warmed Release replay on RTX 3080 measures the final
+  SceneColor scan at 0.081152 ms (1080p) and 0.263264 ms (4K). Default FP32 LUT
+  refresh dispatches take 0.008912 ms (transmittance) and 0.020768 ms (multiple
+  scattering). These are dispatch medians, not end-to-end frame latency or a
+  measured FP16-to-FP32 timing delta; native queue intervals are also recorded.
+  **Remaining EX05-16 gate:** complete the named bright/dark endpoint matrix for
+  deferred emissive/direct/indirect, forward lit/unlit/masked/translucent and
+  distant-sky/SH consumers and full volumetric local-media injection output;
+  complete the producer matrix before closing the item. This increment is not
+  closure of those producer families.
   Production FP16 allocation switching, mode-transition leases and scene-integrated
   recovery/retention/return remain EX05-17–19. The Slice 5 gate and Slices 6–10
   remain open; this completion applies to EX05-15.
@@ -185,7 +237,7 @@ current status, including decisions that supersede older manifest limitations.
 | EX05-13 | Collect real required scene-reference products | validated | Persistent scene views collect SceneColor, sky-view, AP and fog; missing producers remain missing requirements. Native capture checks 151,424 texels per view in the environment fixture. | [Required products](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/required-products-manifest.json) |
 | EX05-14 | Finite/overflow checks before environment stores | validated | Sky-view/AP/fog report original finite/nonfinite and FP16 headroom failures through the existing status. Auto does not adapt from a producer-failed image. This is not a quantization certificate. | [Pre-store range](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/prestore-range-manifest.json) |
 | EX05-15 | Quantization, cumulative image/meter error and temporal bounds | validated | Hardware-filtered current/candidate certificates cover producer stores, retained history, sky/AP/fog/translucent composition, coverage/depth and final image/meter tolerances. Preparation precedes checked conversion; eligibility follows it. GPU status384 / CPU prefix80; no additional HDR texture. Debug/Release each pass 330 owning tests and 308,016 exact arithmetic checks. Final Release Fog/Local audits pass 8,192 transfers; the four-phase visual/ROI cycle and 12 negative controls pass. User confirmed the local-fog lifetime correction. Controlled 1080p/4K and actual two-view scene costs are recorded. Production format switching remains EX05-17. | [Completion evidence and commands](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/consumer-completion-manifest.json), [Runtime contract](lld/post-process-service.md#quantization-error-propagation), [Per-view budgets](lld/scene-textures.md#per-view-fp16-suitability) |
-| EX05-16 | Full supported-radiance envelope at upstream producers | in_progress | Finite/range reporting and several controlled endpoint fixtures exist. Complete high/low endpoint, underflow/error-budget and FP32 out-of-domain reporting across active producers remains. | [Range scope](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/prestore-range-manifest.json), [acceptance matrix](plan/exposure-and-lightbench-correction.md#9-acceptance-matrix-and-execution) |
+| EX05-16 | Full supported-radiance envelope at upstream producers | in_progress | Environment increment validated in Debug/Release: approved FP32 canonical LUTs, continuous thin-media integration, 64-byte local-fog upload, per-producer range reporting and final SceneColor scan. Each build passes all 339 owning tests; native and replay GPU costs are recorded. Deferred/forward and distant-sky/SH endpoint matrix and full local-media injection output remain open. | [Environment increment](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/domain-producer-increment-manifest.json), [acceptance matrix](plan/exposure-and-lightbench-correction.md#9-acceptance-matrix-and-execution) |
 | EX05-17 | Production per-view FP16 admission and allocation switching | planned | **Not enabled. SceneRenderer still forces FP32.** Wire certified candidates to resource/PSO/resolve selection while preserving exposure history. Depends on EX05-15–16. | [Current source boundary](../../src/Oxygen/Vortex/SceneRenderer/SceneRenderer.cpp) |
 | EX05-18 | Checked resolve extraction and all conditional-consumer leases | in_progress | P metadata and checked-consumer primitives exist. Production resolve/extraction must retain the original FP32 accumulation and choose the valid source through every consumer and fence. | [Prepared solve](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/prepared-manifest.json), [selection boundary](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/selection-manifest.json) |
 | EX05-19 | Automatic recovery, excessive-range retention and stable return | planned | End-to-end mode switching/recovery is not implemented. Prove sustained FP32 without repeated resets, reduced-range return and contrasting shared consumers. Depends on EX05-15–18. | [Section 4.5 requirements](plan/exposure-and-lightbench-correction.md#45-first-frame-and-discontinuity-headroom) |

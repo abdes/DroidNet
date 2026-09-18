@@ -8,23 +8,86 @@
 #include "Vortex/Services/PostProcess/ToneMappingBounds.hlsli"
 #include "Vortex/Services/PostProcess/ToneMappingFastBounds.hlsli"
 #include "Vortex/Contracts/View/HdrHardwareSampling.hlsli"
+#include "Vortex/Contracts/View/HdrRadianceRange.hlsli"
 #include "Vortex/Services/PostProcess/HdrSceneComposition.hlsli"
-
-cbuffer RootConstants : register(b2, space0) {
-    uint unused;
-    uint pass_index;
-}
+#include "Vortex/Services/Environment/TransmittanceMath.hlsli"
+#include "Vortex/Services/Environment/VolumetricFog.hlsl"
 
 struct ProbeConstants { uint inputs; uint output; uint count; uint reserved; };
 
 [numthreads(64, 1, 1)]
 void CS(uint3 thread : SV_DispatchThreadID)
 {
-    StructuredBuffer<ProbeConstants> constants = ResourceDescriptorHeap[pass_index];
+    StructuredBuffer<ProbeConstants> constants = ResourceDescriptorHeap[g_PassConstantsIndex];
     const ProbeConstants pass = constants[0];
     if (thread.x >= pass.count) return;
     StructuredBuffer<uint4> input = ResourceDescriptorHeap[pass.inputs];
     RWByteAddressBuffer output = ResourceDescriptorHeap[pass.output];
+    if (pass.reserved == 8192u || pass.reserved == 4096u) {
+        const uint4 settings = input[thread.x * 2u];
+        const float4 ray = asfloat(input[thread.x * 2u + 1u]);
+        StructuredBuffer<LocalFogVolumeInstanceData> instances = ResourceDescriptorHeap[settings.x];
+        const LocalFogVolumeInstanceData encoded = instances[settings.y];
+        const DecodedLocalFogVolumeInstanceData fog = DecodeLocalFogVolumeInstanceData(encoded);
+        if (pass.reserved == 4096u) {
+            output.Store4(thread.x * 32u, asuint(float4(fog.radial_fog_extinction,
+                fog.height_fog_extinction, fog.height_fog_falloff, fog.height_fog_offset)));
+            output.Store4(thread.x * 32u + 16u, asuint(float4(fog.emissive, fog.uniform_scale)));
+        } else {
+            const LocalFogVolumeIntegralData integral = EvaluateLocalFogVolumeIntegral(
+                fog, float3(0, 0, ray.x), float3(0, 0, ray.y), ray.z);
+            SamplerState linear_sampler = SamplerDescriptorHeap[VORTEX_SAMPLER_LINEAR_CLAMP];
+            const float3 scattering = EvaluateLocalFogVolumeInScattering(
+                fog, integral, linear_sampler, float3(0, 0, ray.y));
+            const VolumetricLocalFogMedia media = EvaluateLocalFogVolumeFroxelMedia(
+                encoded, float3(0, 0, ray.w), 1.0, 100.0);
+            output.Store4(thread.x * 32u, asuint(float4(scattering, integral.coverage)));
+            output.Store4(thread.x * 32u + 16u, asuint(float4(media.emissive, media.extinction)));
+        }
+        return;
+    }
+    if (pass.reserved == 2048u) {
+        const float4 data = asfloat(input[thread.x]);
+        const float integral = IntegratedTransmittance(data.x, data.y);
+        output.Store4(thread.x * 32u, asuint(float4(integral, integral * data.z, 0, 0)));
+        output.Store4(thread.x * 32u + 16u, 0u.xxxx);
+        return;
+    }
+    if (pass.reserved == 1024u) {
+        const float4 data = asfloat(input[thread.x]);
+        const float opacity = OneMinusExpNegative(data.x);
+        output.Store4(thread.x * 32u, asuint(float4(opacity,
+            OpticalDepthFromOpacity(abs(data.x)), opacity * data.y,
+            (1.0 - exp(-data.x)) * data.y)));
+        output.Store4(thread.x * 32u + 16u, 0u.xxxx);
+        return;
+    }
+    if (pass.reserved == 512u) {
+        const uint4 settings = input[thread.x * 2u];
+        const float gain = asfloat(input[thread.x * 2u + 1u].x);
+        Texture2D<float4> source = ResourceDescriptorHeap[settings.x];
+        SamplerState linear_sampler = SamplerDescriptorHeap[settings.y];
+        const float4 value = source.SampleLevel(linear_sampler, asfloat(settings.zw), 0.0);
+        output.Store4(thread.x * 32u, asuint(value * gain));
+        output.Store4(thread.x * 32u + 16u, asuint(value));
+        return;
+    }
+    if (pass.reserved == 256u) {
+        const uint4 settings = input[thread.x];
+        Texture2D<float4> source = ResourceDescriptorHeap[settings.x];
+        const float4 value = source.Load(int3(0, 0, 0));
+        output.Store4(thread.x * 32u, asuint(value * asfloat(settings.y)));
+        output.Store4(thread.x * 32u + 16u, asuint(value));
+        return;
+    }
+    if (pass.reserved == 128u) {
+        const float4 value = asfloat(input[thread.x * 2u]);
+        const float4 settings = asfloat(input[thread.x * 2u + 1u]);
+        output.Store4(thread.x * 32u, asuint(float4(
+            float(ClassifyHdrStoreRange(value, settings.x, uint(settings.y))), 0, 0, 0)));
+        output.Store4(thread.x * 32u + 16u, 0u.xxxx);
+        return;
+    }
     if (pass.reserved == 64u) {
         const float4 bounds = asfloat(input[thread.x * 2u]);
         const float4 settings = asfloat(input[thread.x * 2u + 1u]);

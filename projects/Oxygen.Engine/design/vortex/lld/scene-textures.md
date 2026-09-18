@@ -47,8 +47,8 @@ not completed implementation.
 | 11 Resolved HDR / composition handoff | `Vortex/SceneRenderer/ResolveSceneColor.cpp`, existing resolved-color artifact; Stage 22 writes caller-owned composite targets | Stage 22 reads resolved HDR; auxiliary/offscreen final-color handoff is display-mapped when post processing runs | Checked conversion from FP32 accumulation to qualified RGBA16F or recovery RGBA32F; bounded post-tonemap targets retain their format |
 | 12 Bloom products | `Vortex/PostProcess/Internal/BloomChain.cpp` currently only forwards an externally supplied SRV; `BloomDownsample.hlsl` / `BloomUpsample.hlsl` exist | Tonemap; threshold scene-referred, RGB in source P, final S/P once | Any allocated radiance chain must inherit source HDR mode; no existing owned chain allocation found in this audit |
 | 13 Static processed sky cubemap | `StaticSkyLightProcessor.cpp`, `IblProcessor.cpp`, normalized RGBA16F plus source_radiance_scale | Sky/IBL consumers restore resource scale; independent of view P/S | Preserve existing normalization; qualify narrowing and select RGBA32F if required source signal cannot fit; upload packing and descriptor must agree |
-| 14 Canonical atmosphere transmittance | `AtmosphereLutCache.cpp`, RGBA16F | All atmosphere integrators; dimensionless | Unchanged; never P-scaled |
-| 15 Canonical multiple scattering | `AtmosphereLutCache.cpp`, RGBA16F; `AtmosphereMultiScatteringLut.hlsl` | Sky-view/AP integrators; unit-illuminance transfer, not exposed radiance | Unchanged transfer domain; audit integrator before multiplying physical illuminance |
+| 14 Canonical atmosphere transmittance | `AtmosphereLutCache.cpp`, RGBA32F | All atmosphere integrators; dimensionless | Shared FP32 storage approved for EX05-16; never P-scaled |
+| 15 Canonical multiple scattering | `AtmosphereLutCache.cpp`, RGBA32F; `AtmosphereMultiScatteringLut.hlsl` | Sky-view/AP integrators; unit-illuminance transfer, not exposed radiance | Shared FP32 storage approved for EX05-16; preserve tiny transfers before multiplying physical illuminance |
 | 16 Distant sky / diffuse SH | `AtmosphereLutCache.cpp` float4 buffer; static sky float SH buffer | Environment/lighting; scene-referred with explicit resource normalization where present | FP32 buffers retained, no view-dependent scaling |
 | 17 Diagnostic colors | `BasePassWireframe.hlsl`, `ForwardWireframe_PS.hlsl`, `ForwardDebug_PS.hlsl`, base/debug visualization | Temporary unit-gain output; preserve persistent exposure and pending events | Remove inverse-old-exposure workaround; HDR diagnostic writes use current P, display overlays bypass scene metering |
 
@@ -66,7 +66,8 @@ resolved HDR, sky-view LUT, camera AP volume, volumetric-fog current/history,
 any active bloom radiance allocation, and the canonical processed cubemap when
 its own normalization fails qualification. Other entries write into these
 allocations or remain dimensionless/FP32. Do not promote depth, normals,
-GBuffers, velocity, shadow maps, transmittance or display targets.
+GBuffers, velocity, shadow maps or display targets. Canonical atmosphere transfers
+use the separate shared FP32 contract below.
 
 ### Per-view FP16 suitability
 
@@ -191,7 +192,13 @@ physical families without changing depth, GBuffers or velocity formats. The
 scene path keeps accumulation RGBA32F. Its per-view radiance mode independently
 selects the resolved-color, sky-view LUT, camera AP volume and volumetric-fog
 formats; it must not infer eligibility from the accumulation texture's format.
-Canonical transmittance and unit-illuminance multiple scattering remain FP16.
+Canonical transmittance and unit-illuminance multiple scattering use FP32 in both
+modes, as approved on 2026-09-18. Their exposure-independent transfer values can
+be far below the FP16 minimum yet yield required radiance after illumination.
+The same two resources remain shared across views: default 256x64 and 32x32
+RGBA32F tables add 136 KiB of raw texels per retained cache generation. Allocation
+alignment and overlapping generations must be counted separately. This does not
+change the per-view FP16/FP32 radiance selection contract.
 Compatible fog history remains readable across a format change through its own
 correctly typed descriptor. Runtime admission and stored-P conversion remain
 separate requirements; dual-format allocation alone does not prove eligibility.

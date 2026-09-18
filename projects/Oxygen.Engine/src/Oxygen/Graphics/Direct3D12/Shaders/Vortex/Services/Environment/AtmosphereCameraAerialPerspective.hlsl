@@ -412,7 +412,8 @@ void VortexAtmosphereCameraAerialPerspectiveCS(uint3 dispatch_id : SV_DispatchTh
     const float3 throughput = scattering.Transmittance;
     const float transmittance = dot(throughput, float3(1.0f / 3.0f, 1.0f / 3.0f, 1.0f / 3.0f));
     CheckHdrStoreRange(float4(luminance, transmittance), 6u,
-        pass.atmosphere_scales0.exposure_status_uav, pass.atmosphere_scales1.exposure_fp16_store);
+        pass.atmosphere_scales0.exposure_status_uav, pass.atmosphere_scales1.exposure_fp16_store,
+        GetPreExposure());
     const float4 output_value = float4(max(luminance, 0.0f.xxx), saturate(transmittance));
     RecordHdrStoreBounds(output_value, output_value, output_value, GetOneOverPreExposure(),
         6u, pass.atmosphere_scales0.exposure_status_uav, pass.atmosphere_scales1.exposure_fp16_store);
