@@ -23,10 +23,12 @@ auto BloomPass::Execute(const ResolvedPostProcessConfig& config,
   const PostProcessFrameBindings& bindings) const -> Result
 {
   static_cast<void>(renderer_);
+  if (!config.Settings().enable_bloom)
+    return {};
   const auto output = bloom_chain_->ResolveOutput(bindings);
   return {
-    .requested = config.Settings().enable_bloom,
-    .executed = config.Settings().enable_bloom && output.ready,
+    .requested = true,
+    .executed = output.ready,
     .bloom_texture_srv = output.bloom_texture_srv,
   };
 }

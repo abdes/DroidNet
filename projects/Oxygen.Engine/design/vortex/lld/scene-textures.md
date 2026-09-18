@@ -116,7 +116,7 @@ emission-only replay cannot qualify that boundary.
 | 3, 13, 16 | Static diffuse SH from isotropic cubemaps, including simultaneous 2^-24 and 2^30 components; normalized half/float cubemap upload; distant-sky linearity and dual-source additivity |
 | 5–10, 14–15 | Actual atmosphere/fog producers, tiny canonical transfers, analytic thin scattering for both lights, local composition/injection and history-domain checks |
 | 11, 17 | Whole-image input/final range scans, checked conversion, diagnostic domain and consumer-composition certificates |
-| 12 | No owned bloom producer is active; external handoff/threshold audit remains EX05-09 |
+| 12 | External matching-P handoff and disabled behavior are Debug-qualified by EX05-09, including checked scene fallback. Owned filter entries remain inactive placeholders; their thresholds/format/error work is tracked by issue 12. |
 
 Distant-sky range checks use unit-light native anchors and the linear transfer
 equation; they do not establish absolute atmosphere-model accuracy. Direct-light
@@ -235,10 +235,10 @@ format selection itself must not change that identity. Layout state is per
 persistent view and is removed with its lifetime.
 
 Persistent views submit these reference checks and completed reports while
-SceneRenderer retains FP32. Stateless views retain FP32 without layout or
-admission history. They do not yet authorize normal-mode allocations: pre-store checks and
-complete composition/temporal error propagation remain required before enabling
-the switch.
+rendering in either HDR mode. Matching completed eligibility authorizes the
+normal-mode allocations described above; pre-store and composition/temporal error
+checks continue after admission. Stateless views retain FP32 without layout or
+admission history.
 
 ### Lifetime and memory accounting
 

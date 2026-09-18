@@ -59,6 +59,8 @@ public:
     ShaderVisibleIndex scene_signal_srv { kInvalidShaderVisibleIndex };
     ShaderVisibleIndex scene_depth_srv { kInvalidShaderVisibleIndex };
     ShaderVisibleIndex scene_velocity_srv { kInvalidShaderVisibleIndex };
+    //! Optional external bloom, matching scene extent and frame P. The caller
+    //! retains its texture/SRV and establishes shader-read state through use.
     ShaderVisibleIndex bloom_texture_srv { kInvalidShaderVisibleIndex };
     ShaderVisibleIndex eye_adaptation_srv { kInvalidShaderVisibleIndex };
     ShaderVisibleIndex eye_adaptation_uav { kInvalidShaderVisibleIndex };
