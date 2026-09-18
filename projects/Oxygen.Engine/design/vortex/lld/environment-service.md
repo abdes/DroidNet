@@ -631,6 +631,15 @@ Authoring source: `src/Oxygen/Scene/Light/DirectionalLight.h`.
 
 #### 4.2.6 `scene::LocalFogVolume`
 
+Volumetric injection treats local scattering/emissive values as coefficients
+already weighted by local extinction. For total extinction `sigma = sigma_h +
+sigma_l`, the source function is `height_source * (sigma_h / sigma) +
+(local_scattering * lighting + local_emissive) / sigma`. Integrated RGB is that
+source function times `1-exp(-sigma*d)`; vacuum returns zero RGB and unit
+transmittance. The height weight is formed before multiplying RGB. This preserves
+bright sources without a density-times-RGB overflow and avoids applying local
+extinction twice. Temporal filtering and P scaling consume the integrated result.
+
 The runtime instance SRV has a 64-byte stride. Bytes 0–15 hold camera-relative
 position and uniform scale as FP32 bits; 16–27 hold the existing packed rotation;
 28–31 hold UNORM8 albedo/phase; 32–47 hold FP32 radial extinction, height extinction,
