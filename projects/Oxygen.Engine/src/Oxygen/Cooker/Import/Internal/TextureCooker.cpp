@@ -439,6 +439,28 @@ namespace {
     return result;
   }
 
+  //! Change RGB transfer encoding in float precision; alpha is unchanged.
+  [[nodiscard]] auto ConvertTransferEncoding(ScratchImage&& source,
+    const ColorSpace source_space, const ColorSpace target_space)
+    -> ScratchImage
+  {
+    if (source_space == target_space) {
+      return std::move(source);
+    }
+    auto result = source.Meta().format == Format::kRGBA32Float
+      ? std::move(source)
+      : ConvertRgba8ToFloat32(source);
+    if (!result.IsValid()) {
+      return {};
+    }
+    if (target_space == ColorSpace::kLinear) {
+      image::color::ConvertSrgbToLinear(result);
+    } else {
+      image::color::ConvertLinearToSrgb(result);
+    }
+    return result;
+  }
+
   //! Convert RGBA32Float image to RGBA16Float.
   /*!
    Converts 32-bit float values to 16-bit half float using GLM.
@@ -594,8 +616,9 @@ namespace detail {
           if (!result.IsValid()) {
             return Err(TextureImportError::kMipGenerationFailed);
           }
+        } else {
+          return Err(TextureImportError::kHdrRequiresFloatFormat);
         }
-        // If bake_hdr_to_ldr is false, let ConvertToOutputFormat handle error
         break;
 
       case HdrHandling::kKeepFloat:
@@ -616,13 +639,6 @@ namespace detail {
       if (desc.flip_normal_green) {
         image::content::FlipNormalGreen(result);
       }
-    }
-
-    // Color space conversion for sRGB content
-    if (desc.source_color_space == ColorSpace::kSRGB
-      && result.Meta().format == Format::kRGBA8UNorm) {
-      // Convert to linear for processing if needed
-      // Note: Mip generation will handle color space internally
     }
 
     return Ok(std::move(result));
@@ -665,10 +681,10 @@ namespace detail {
         image, desc.renormalize_normals_in_mips, target_mip_count);
     } else if (desc.texture_type == TextureType::kTexture3D) {
       result = image::mip::GenerateChain3D(
-        image, desc.mip_filter, desc.mip_filter_space, target_mip_count);
+        image, desc.mip_filter, ColorSpace::kLinear, target_mip_count);
     } else {
       result = image::mip::GenerateChain2D(
-        image, desc.mip_filter, desc.mip_filter_space, target_mip_count);
+        image, desc.mip_filter, ColorSpace::kLinear, target_mip_count);
     }
 
     if (!result.IsValid()) {
@@ -775,9 +791,15 @@ namespace detail {
         || current_format == Format::kRGBA8UNormSRGB) {
         return Ok(std::move(image));
       }
-      // HDR input without bake_hdr_to_ldr - error
+      // HDR policy was applied before transfer conversion. A float working
+      // image can also originate from LDR RGB decoded without 8-bit
+      // requantization.
       if (current_format == Format::kRGBA32Float) {
-        return Err(TextureImportError::kHdrRequiresFloatFormat);
+        auto bytes = ConvertFloat32ToRgba8(image);
+        if (!bytes.IsValid()) {
+          return Err(TextureImportError::kOutputFormatInvalid);
+        }
+        return Ok(std::move(bytes));
       }
     }
 
@@ -921,6 +943,17 @@ namespace {
       resolved_desc.bake_hdr_to_ldr = false;
     }
 
+    // HDR tone mapping consumes linear radiance, regardless of source encoding.
+    auto working_space = resolved_desc.source_color_space;
+    if (is_working_hdr_input && working_space != ColorSpace::kLinear) {
+      *working = ConvertTransferEncoding(
+        std::move(*working), working_space, ColorSpace::kLinear);
+      if (!working->IsValid()) {
+        return Err(TextureImportError::kOutputFormatInvalid);
+      }
+      working_space = ColorSpace::kLinear;
+    }
+
     // Stage 3: Apply content-specific processing
     auto processed
       = detail::ApplyContentProcessing(std::move(*working), resolved_desc);
@@ -928,10 +961,50 @@ namespace {
       return Err(processed.error());
     }
 
+    // Filter linear-light values, then encode once for storage.
+    // Skip an encoding round trip when no mip generation is needed.
+    auto target_mips = resolved_desc.mip_policy == MipPolicy::kNone
+      ? 1U
+      : image::mip::ComputeMipCount(
+          processed->Meta().width, processed->Meta().height);
+    if (resolved_desc.mip_policy == MipPolicy::kMaxCount) {
+      target_mips = (std::min)(target_mips,
+        static_cast<std::uint32_t>(resolved_desc.max_mip_levels));
+    }
+    if (target_mips > processed->Meta().mip_levels) {
+      const bool color_content = resolved_desc.intent == TextureIntent::kAlbedo
+        || resolved_desc.intent == TextureIntent::kEmissive
+        || IsHdrIntent(resolved_desc.intent);
+      if ((IsFloatFormat(resolved_desc.output_format) || color_content)
+        && processed->Meta().format != Format::kRGBA32Float) {
+        *processed = ConvertRgba8ToFloat32(*processed);
+        if (!processed->IsValid()) {
+          return Err(TextureImportError::kOutputFormatInvalid);
+        }
+      }
+      *processed = ConvertTransferEncoding(
+        std::move(*processed), working_space, ColorSpace::kLinear);
+      if (!processed->IsValid()) {
+        return Err(TextureImportError::kOutputFormatInvalid);
+      }
+      working_space = ColorSpace::kLinear;
+    }
+
     // Stage 4: Generate mips
     auto with_mips = detail::GenerateMips(std::move(*processed), resolved_desc);
     if (!with_mips) {
       return Err(with_mips.error());
+    }
+
+    const auto output_space
+      = oxygen::graphics::detail::GetFormatInfo(resolved_desc.output_format)
+          .is_srgb
+      ? ColorSpace::kSRGB
+      : ColorSpace::kLinear;
+    *with_mips = ConvertTransferEncoding(
+      std::move(*with_mips), working_space, output_space);
+    if (!with_mips->IsValid()) {
+      return Err(TextureImportError::kOutputFormatInvalid);
     }
 
     // Stage 5: Convert to output format

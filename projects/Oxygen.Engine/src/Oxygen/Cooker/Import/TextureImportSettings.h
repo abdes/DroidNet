@@ -33,7 +33,6 @@ struct TextureImportSettings {
   std::string preset;
   std::string mip_policy;
   std::string mip_filter;
-  std::string mip_filter_space;
   std::string bc7_quality;
   std::string packing_policy;
   std::string cube_layout;

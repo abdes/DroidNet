@@ -266,9 +266,6 @@
                 "filter": {
                     "$ref": "#/definitions/mip_filter"
                 },
-                "filter_space": {
-                    "$ref": "#/definitions/color_space"
-                },
                 "renormalize": {
                     "type": "boolean"
                 }

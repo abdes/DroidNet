@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <array>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -19,6 +20,8 @@
 #include <Oxygen/Core/Types/ColorSpace.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
+#include <Oxygen/Data/HalfFloat.h>
+#include <Oxygen/Data/PakFormat.h>
 
 namespace {
 
@@ -250,6 +253,150 @@ eturn A ScratchImage containing a 2x2 RGBA32Float image.
 //===----------------------------------------------------------------------===//
 // Validation Tests (6.2)
 //===----------------------------------------------------------------------===//
+
+NOLINT_TEST(
+  TextureCookerColorTransferTest, ConvertsDeclaredSourceToStoredEncoding)
+{
+  constexpr std::array<std::uint8_t, 4> source { 128, 64, 10, 192 };
+  const auto decode = [](double value) {
+    return value <= .04045 ? value / 12.92
+                           : std::pow((value + .055) / 1.055, 2.4);
+  };
+  const auto encode = [](double value) {
+    return value <= .0031308 ? value * 12.92
+                             : 1.055 * std::pow(value, 1 / 2.4) - .055;
+  };
+  for (const auto source_space : { ColorSpace::kLinear, ColorSpace::kSRGB })
+    for (const auto output : { Format::kRGBA32Float, Format::kRGBA16Float,
+           Format::kRGBA8UNorm, Format::kRGBA8UNormSRGB }) {
+      SCOPED_TRACE(static_cast<int>(source_space));
+      SCOPED_TRACE(static_cast<int>(output));
+      auto image = ScratchImage::Create(
+        { .width = 1, .height = 1, .format = Format::kRGBA8UNorm });
+      std::memcpy(
+        image.GetMutablePixels(0, 0).data(), source.data(), source.size());
+      auto desc = TextureImportDesc {};
+      desc.intent = TextureIntent::kEmissive;
+      desc.source_color_space = source_space;
+      desc.output_format = output;
+      desc.mip_policy = MipPolicy::kNone;
+      const auto cooked
+        = CookTexture(std::move(image), desc, TightPackedPolicy::Instance());
+      ASSERT_TRUE(cooked.has_value()) << static_cast<int>(cooked.error());
+      EXPECT_EQ(cooked->desc.format, output);
+      oxygen::data::pak::render::TexturePayloadHeader header {};
+      std::memcpy(&header, cooked->payload.data(), sizeof(header));
+      const auto* data = cooked->payload.data() + header.data_offset_bytes
+        + cooked->layouts[0].offset_bytes;
+      for (unsigned c = 0; c < 4; ++c) {
+        const double normalized = double(source[c]) / 255;
+        const double linear = c < 3 && source_space == ColorSpace::kSRGB
+          ? decode(normalized)
+          : normalized;
+        const double expected = c < 3 && output == Format::kRGBA8UNormSRGB
+          ? encode(linear)
+          : linear;
+        double actual = 0, tolerance = 2e-6;
+        if (output == Format::kRGBA32Float) {
+          float value;
+          std::memcpy(&value, data + c * 4, 4);
+          actual = value;
+        } else if (output == Format::kRGBA16Float) {
+          std::uint16_t bits;
+          std::memcpy(&bits, data + c * 2, 2);
+          actual = oxygen::data::HalfFloat { bits }.ToFloat();
+          tolerance = expected * .0006 + 0x1p-24;
+        } else {
+          actual = double(std::to_integer<unsigned>(data[c])) / 255;
+          tolerance = .5 / 255 + 1e-6;
+        }
+        EXPECT_NEAR(actual, expected, tolerance) << "channel=" << c;
+      }
+    }
+}
+
+NOLINT_TEST(TextureCookerColorTransferTest, FiltersColorMipsInLinearLight)
+{
+  for (const auto source_space : { ColorSpace::kLinear, ColorSpace::kSRGB })
+    for (const std::uint8_t dark :
+      { std::uint8_t { 0 }, std::uint8_t { 128 } }) {
+      const std::array<std::uint8_t, 16> pixels { dark, dark, dark, 64, 255,
+        255, 255, 64, dark, dark, dark, 64, 255, 255, 255, 64 };
+      auto image = ScratchImage::Create(
+        { .width = 2, .height = 2, .format = Format::kRGBA8UNorm });
+      std::memcpy(
+        image.GetMutablePixels(0, 0).data(), pixels.data(), pixels.size());
+      auto desc = TextureImportDesc {};
+      desc.intent = TextureIntent::kEmissive;
+      desc.source_color_space = source_space;
+      desc.output_format = Format::kRGBA32Float;
+      desc.mip_filter = MipFilter::kBox;
+      const auto cooked
+        = CookTexture(std::move(image), desc, TightPackedPolicy::Instance());
+      ASSERT_TRUE(cooked.has_value()) << static_cast<int>(cooked.error());
+      ASSERT_EQ(cooked->desc.mip_levels, 2U);
+      oxygen::data::pak::render::TexturePayloadHeader header {};
+      std::memcpy(&header, cooked->payload.data(), sizeof(header));
+      std::array<float, 4> actual {};
+      std::memcpy(actual.data(),
+        cooked->payload.data() + header.data_offset_bytes
+          + cooked->layouts[1].offset_bytes,
+        sizeof(actual));
+      const double code = double(dark) / 255;
+      const double linear = source_space == ColorSpace::kLinear ? code
+        : code <= .04045                                        ? code / 12.92
+                         : std::pow((code + .055) / 1.055, 2.4);
+      const double expected = .5 * (linear + 1);
+      for (unsigned c = 0; c < 3; ++c)
+        EXPECT_NEAR(actual[c], expected, 2e-6);
+      EXPECT_NEAR(actual[3], 64.0 / 255, 1e-7);
+    }
+}
+
+NOLINT_TEST(
+  TextureCookerColorTransferTest, DarkColorMipsQuantizeOnlyAtFinalStorage)
+{
+  for (const unsigned size : { 2U, 4U }) {
+    auto image = ScratchImage::Create(
+      { .width = size, .height = size, .format = Format::kRGBA8UNorm });
+    auto pixels = image.GetMutablePixels(0, 0);
+    for (unsigned pixel = 0; pixel < size * size; ++pixel) {
+      for (unsigned c = 0; c < 3; ++c)
+        pixels[pixel * 4 + c]
+          = std::byte { static_cast<unsigned char>(pixel == 0 ? 1 : 0) };
+      pixels[pixel * 4 + 3] = std::byte { 128 };
+    }
+    auto desc = TextureImportDesc {};
+    desc.intent = TextureIntent::kEmissive;
+    desc.source_color_space = ColorSpace::kLinear;
+    desc.mip_filter = MipFilter::kBox;
+    desc.output_format = Format::kRGBA8UNormSRGB;
+    const auto cooked
+      = CookTexture(std::move(image), desc, TightPackedPolicy::Instance());
+    ASSERT_TRUE(cooked.has_value()) << static_cast<int>(cooked.error());
+    ASSERT_EQ(cooked->desc.mip_levels, size == 2 ? 2 : 3);
+    oxygen::data::pak::render::TexturePayloadHeader header {};
+    std::memcpy(&header, cooked->payload.data(), sizeof(header));
+    for (unsigned mip = 1; mip < cooked->desc.mip_levels; ++mip) {
+      const double linear = 1.0 / (255.0 * double(1U << (mip * 2)));
+      const auto expected
+        = static_cast<unsigned>(std::floor(255.0 * 12.92 * linear + .5));
+      EXPECT_GT(expected, 0U);
+      const auto width = size >> mip;
+      const auto& layout = cooked->layouts[mip];
+      const auto* data = cooked->payload.data() + header.data_offset_bytes
+        + layout.offset_bytes;
+      for (unsigned y = 0; y < width; ++y)
+        for (unsigned x = 0; x < width; ++x) {
+          const auto* pixel = data + y * layout.row_pitch_bytes + x * 4;
+          for (unsigned c = 0; c < 3; ++c)
+            EXPECT_EQ(std::to_integer<unsigned>(pixel[c]),
+              x == 0 && y == 0 ? expected : 0U);
+          EXPECT_EQ(std::to_integer<unsigned>(pixel[3]), 128U);
+        }
+    }
+  }
+}
 
 class TextureCookerValidationTest : public ::testing::Test { };
 

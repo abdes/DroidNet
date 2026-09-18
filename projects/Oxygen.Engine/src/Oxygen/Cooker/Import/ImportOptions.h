@@ -559,9 +559,6 @@ struct ImportOptions final {
     //! Mip filter kernel used when generating mips.
     MipFilter mip_filter = MipFilter::kKaiser;
 
-    //! Color space for mip filtering.
-    ColorSpace mip_filter_space = ColorSpace::kLinear;
-
     //! Output format for color textures (e.g., base color, emissive).
     Format color_output_format = Format::kBC7UNormSRGB;
 

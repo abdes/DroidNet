@@ -60,6 +60,12 @@ Dynamic captured-scene/specular sky and TAA/TSR have no active producer in this
 audited checkout; their ED-M08/future contracts must carry domain metadata when
 activated, but this inventory does not claim their implementation or validation.
 
+Material texture samples use the cooked resource's typed SRV encoding. The
+texture binder preserves that format: sRGB views decode in hardware, while
+UNORM and float views yield linear samples. Shared forward/deferred material
+evaluation must not apply another sRGB conversion or clamp emissive samples to
+one. The existing material asset and 112-byte GPU material layouts suffice.
+
 SceneColor remains RGBA32F for accumulation in both modes. The exact dual-format
 allocation set is composition HDR/optional
 resolved HDR, sky-view LUT, camera AP volume, volumetric-fog current/history,

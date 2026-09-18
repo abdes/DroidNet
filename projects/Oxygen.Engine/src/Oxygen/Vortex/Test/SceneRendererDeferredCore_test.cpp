@@ -787,8 +787,8 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
     bindings.velocity_srv, oxygen::vortex::SceneTextureBindings::kInvalidIndex);
 }
 
-NOLINT_TEST_F(
-  SceneRendererDeferredCoreTest, ForwardBasePassDoesNotPublishGBufferProducts)
+NOLINT_TEST_F(SceneRendererDeferredCoreTest,
+  ForwardBasePassPublishesColorAndDepthWithoutGBuffers)
 {
   scene_renderer_->OnFrameStart(frame_context_);
 
@@ -828,10 +828,12 @@ NOLINT_TEST_F(
   const auto& bindings = scene_renderer_->GetSceneTextureBindings();
   EXPECT_EQ(
     scene_renderer_->GetEffectiveShadingMode(context), ShadingMode::kForward);
-  EXPECT_EQ(bindings.scene_color_srv,
+  EXPECT_NE(bindings.scene_color_srv,
     oxygen::vortex::SceneTextureBindings::kInvalidIndex);
-  EXPECT_EQ(bindings.scene_color_uav,
+  EXPECT_NE(bindings.scene_color_uav,
     oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+  EXPECT_TRUE(
+    scene_renderer_->GetSceneTextureExtracts().resolved_scene_color.valid);
   for (const auto gbuffer_srv : bindings.gbuffer_srvs) {
     EXPECT_EQ(gbuffer_srv, oxygen::vortex::SceneTextureBindings::kInvalidIndex);
   }

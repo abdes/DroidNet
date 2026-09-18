@@ -2257,6 +2257,14 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
     if (base_pass_result.published_base_pass_products) {
       PublishDeferredBasePassSceneTextures(ctx);
       renderer_.RefreshCurrentViewFrameBindings(ctx, *this);
+    } else if (base_pass_result.wrote_scene_color
+      && shading_mode == ShadingMode::kForward && !wireframe_only) {
+      // Forward base shading writes these attachments without producing
+      // GBuffers. Publish them for environment consumers and the HDR resolve.
+      setup_mode_.SetFlags(SceneTextureSetupMode::Flag::kSceneColor
+        | SceneTextureSetupMode::Flag::kSceneDepth);
+      RefreshSceneTextureBindings();
+      renderer_.RefreshCurrentViewFrameBindings(ctx, *this);
     }
   }
   RecordDiagnosticsPass(renderer_,

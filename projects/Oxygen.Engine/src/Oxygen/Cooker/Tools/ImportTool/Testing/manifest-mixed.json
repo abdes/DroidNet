@@ -16,7 +16,6 @@
       "content_hashing": false,
       "mip_policy": "none",
       "mip_filter": "box",
-      "mip_filter_space": "linear",
       "output_format": "rgba8_srgb",
       "data_format": "rgba8",
       "hdr_handling": "keep",

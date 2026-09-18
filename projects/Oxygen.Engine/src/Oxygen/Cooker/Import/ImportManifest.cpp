@@ -497,10 +497,6 @@ namespace {
     if (!ReadStringField(obj, "mip_filter", settings.mip_filter, errors)) {
       return false;
     }
-    if (!ReadStringField(
-          obj, "mip_filter_space", settings.mip_filter_space, errors)) {
-      return false;
-    }
     if (!ReadStringField(obj, "bc7_quality", settings.bc7_quality, errors)) {
       return false;
     }

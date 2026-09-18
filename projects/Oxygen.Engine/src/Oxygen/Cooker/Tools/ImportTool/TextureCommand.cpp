@@ -156,14 +156,6 @@ auto TextureCommand::BuildCommand() -> std::shared_ptr<clap::Command>
                       .StoreTo(&options_.mip_filter)
                       .Build();
 
-  auto mip_filter_space
-    = Option::WithKey("mip-filter-space")
-        .About("Color space for mip filtering (srgb, linear)")
-        .Long("mip-filter-space")
-        .WithValue<std::string>()
-        .StoreTo(&options_.mip_filter_space)
-        .Build();
-
   auto bc7_quality = Option::WithKey("bc7-quality")
                        .About("BC7 quality (none, fast, default, high)")
                        .Long("bc7-quality")
@@ -289,7 +281,6 @@ auto TextureCommand::BuildCommand() -> std::shared_ptr<clap::Command>
     .WithOption(std::move(mip_policy))
     .WithOption(std::move(max_mips))
     .WithOption(std::move(mip_filter))
-    .WithOption(std::move(mip_filter_space))
     .WithOption(std::move(bc7_quality))
     .WithOption(std::move(packing_policy))
     .WithOption(std::move(hdr_handling))
