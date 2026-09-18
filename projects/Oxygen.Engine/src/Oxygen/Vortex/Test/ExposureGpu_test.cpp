@@ -64,6 +64,7 @@
 #include <Oxygen/Vortex/Environment/Passes/FogPass.h>
 #include <Oxygen/Vortex/Environment/Passes/LocalFogVolumeComposePass.h>
 #include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
+#include <Oxygen/Vortex/PostProcess/Passes/TonemapPass.h>
 #include <Oxygen/Vortex/PostProcess/PostProcessService.h>
 #include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/RenderContext.h>
@@ -7404,6 +7405,280 @@ protected:
   DepthPrePassMode depth_mode = DepthPrePassMode::kOpaqueAndMasked;
   console::Console fixture_console;
 };
+
+NOLINT_TEST_F(ExposureLightingGpuTest,
+  MixedPrecisionFamilyAuxiliaryHandoffUsesMappedProducerOutput)
+{
+  verify_manual_p = false;
+  probe->prepare = [](RenderContext&) { };
+  SetSurface(data::MaterialDomain::kOpaque, .25F);
+  scene->Update();
+  scene->SyncObservers();
+  std::array<std::shared_ptr<Texture>, 3> outputs;
+  std::array<std::shared_ptr<Framebuffer>, 3> targets;
+  for (unsigned i = 0; i < 3; ++i) {
+    outputs[i] = CreateRegisteredTexture({ .width = 1,
+      .height = 1,
+      .format = Format::kRGBA32Float,
+      .is_render_target = true,
+      .initial_state = ResourceStates::kCommon });
+    targets[i] = Backend().CreateFramebuffer(
+      FramebufferDesc {}.AddColorAttachment(outputs[i]));
+  }
+  std::unordered_map<CompositionView::ViewStateHandle, SceneTextureExtractRef>
+    snapshots;
+  probe->inspect = [&](const RenderContext& ctx,
+                     const SceneTextureExtractRef& color, unsigned) {
+    snapshots.insert_or_assign(ctx.current_view.view_state_handle, color);
+  };
+  unsigned checked = 0;
+  for (unsigned iteration = 0; iteration < 12; ++iteration) {
+    SCOPED_TRACE(iteration);
+    const auto slot = frame::Slot { sequence % 3U };
+    Backend().BeginFrame(frame::SequenceNumber { ++sequence }, slot);
+    frame.SetFrameSlot(slot, engine::internal::EngineTagFactory::Get());
+    frame.SetFrameSequenceNumber(frame::SequenceNumber { sequence },
+      engine::internal::EngineTagFactory::Get());
+    renderer_->OnFrameStart(observer_ptr { &frame });
+    const auto order = iteration % 2 == 0 ? std::array { 1U, 2U, 0U }
+                                          : std::array { 2U, 1U, 0U };
+    for (const auto index : order) {
+      auto input
+        = CompositionView::ForScene(ViewId { 500U + index }, view, camera);
+      input.view_state_handle = index == 1
+        ? CompositionView::kInvalidViewStateHandle
+        : CompositionView::ViewStateHandle { 500U + index };
+      auto exposure = settings;
+      exposure.manual_ev = index == 0 ? (iteration >= 8 ? 3.0F : 0.0F)
+        : index == 1                  ? 1.0F
+                                      : 2.0F;
+      input.render_settings.exposure = exposure;
+      if (index == 0) {
+        input.view_kind = CompositionView::ViewKind::kAuxiliary;
+        input.produced_aux_outputs.push_back(
+          { .id = CompositionView::AuxOutputId { 7001U },
+            .kind = CompositionView::AuxOutputKind::kColorTexture,
+            .debug_name = "Exposure lifetime producer" });
+      } else if (index == 1) {
+        input.consumed_aux_outputs.push_back(
+          { .id = CompositionView::AuxOutputId { 7001U },
+            .kind = CompositionView::AuxOutputKind::kColorTexture,
+            .required = true });
+      }
+      ASSERT_NE(
+        renderer_->PublishRuntimeCompositionView(frame,
+          { .composition_view = input,
+            .render_target = observer_ptr { targets[index].get() },
+            .composite_source = observer_ptr { targets[index].get() } }),
+        kInvalidViewId);
+    }
+    auto loop = co::testing::TestEventLoop {};
+    co::Run(loop, [&]() -> co::Co<void> {
+      co_await renderer_->OnPreRender(observer_ptr { &frame });
+      co_await renderer_->OnRender(observer_ptr { &frame });
+    });
+    renderer_->OnFrameEnd(observer_ptr { &frame });
+    Backend().EndFrame(frame::SequenceNumber { sequence }, slot);
+    WaitForQueueIdle();
+    if (iteration < 6)
+      continue;
+    const double producer_gain = iteration >= 8 ? .125 : 1;
+    const std::array expected { .25 * producer_gain - .5 / 255,
+      .25 * producer_gain - .5 / 255, .25 * .25 - .5 / 255 };
+    for (unsigned index = 0; index < 3; ++index) {
+      const auto pixels = ReadFloatTexture(*outputs[index]);
+      ASSERT_EQ(pixels.size(), 1U);
+      for (unsigned c = 0; c < 3; ++c)
+        EXPECT_NEAR(pixels[0][c], expected[index], 2e-5);
+      EXPECT_EQ(pixels[0][3], 1);
+      ++checked;
+    }
+    EXPECT_EQ(snapshots.at(CompositionView::kInvalidViewStateHandle)
+                .texture->GetDescriptor()
+                .format,
+      Format::kRGBA32Float);
+    if (iteration >= 7)
+      EXPECT_EQ(snapshots.at(CompositionView::ViewStateHandle { 502U })
+                  .texture->GetDescriptor()
+                  .format,
+        Format::kRGBA16Float);
+    if (iteration == 7 || iteration == 11)
+      EXPECT_EQ(snapshots.at(CompositionView::ViewStateHandle { 500U })
+                  .texture->GetDescriptor()
+                  .format,
+        Format::kRGBA16Float);
+    if (iteration == 8)
+      EXPECT_EQ(snapshots.at(CompositionView::ViewStateHandle { 500U })
+                  .texture->GetDescriptor()
+                  .format,
+        Format::kRGBA32Float);
+  }
+  probe->inspect = {};
+  snapshots.clear();
+  RecordProperty("mixed_family_auxiliary_outputs", checked);
+}
+
+NOLINT_TEST_F(ExposureLightingGpuTest,
+  QueuedHdrConsumersRetainMixedFormatsAcrossViewRetirement)
+{
+  verify_manual_p = false;
+  probe->prepare = [](RenderContext&) { };
+  SceneTextureExtractRef latest;
+  probe->inspect
+    = [&](const RenderContext&, const SceneTextureExtractRef& color, unsigned) {
+        latest = color;
+      };
+  SetSurface(data::MaterialDomain::kOpaque, .25F);
+  ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0));
+  for (unsigned retry = 0;
+    retry < 8 && latest.texture->GetDescriptor().format != Format::kRGBA16Float;
+    ++retry)
+    ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0, 1));
+  ASSERT_EQ(latest.texture->GetDescriptor().format, Format::kRGBA16Float);
+  struct Pending {
+    SceneTextureExtractRef source;
+    float scene_value;
+    float displayed_gain;
+    bool checked;
+    std::shared_ptr<Texture> output;
+    std::shared_ptr<Framebuffer> target;
+  };
+  std::vector<Pending> pending;
+  const auto retain = [&](float value, float gain, bool checked = true) {
+    auto output = CreateRegisteredTexture({ .width = 1,
+      .height = 1,
+      .format = Format::kRGBA32Float,
+      .is_render_target = true,
+      .initial_state = ResourceStates::kCommon });
+    auto target = Backend().CreateFramebuffer(
+      FramebufferDesc {}.AddColorAttachment(output));
+    pending.push_back(
+      { latest, value, gain, checked, std::move(output), std::move(target) });
+  };
+  retain(.25F, 1.0F);
+  SetSurface(data::MaterialDomain::kOpaque, 65504);
+  ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0, 1));
+  ASSERT_EQ(latest.texture->GetDescriptor().format, Format::kRGBA16Float);
+  const auto rejected = Read<HdrSuitabilityData>(
+    *latest.exposure->conversion_buffer, ResourceStates::kShaderResource);
+  ASSERT_NE(rejected.failure_flags, 0U);
+  ASSERT_NE(latest.fallback, nullptr);
+  retain(65504, 1.0F);
+  retain(0, 1.0F, false);
+  surface_view_id = 101;
+  SetSurface(data::MaterialDomain::kOpaque, .5F);
+  ASSERT_NO_FATAL_FAILURE(RenderSurface(true, 0, 1));
+  ASSERT_EQ(latest.texture->GetDescriptor().format, Format::kRGBA32Float);
+  retain(.5F, 1.0F);
+  surface_view_id = 100;
+  SetSurface(data::MaterialDomain::kOpaque, .75F);
+  ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 2, 1));
+  ASSERT_EQ(latest.texture->GetDescriptor().format, Format::kRGBA32Float);
+  retain(.75F, .25F);
+  ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 2, 4));
+  auto* owner
+    = vortex::testing::RendererPublicationProbe::GetSceneRenderer(*renderer_);
+  owner->RemoveViewState(
+    ViewId { 100U }, CompositionView::ViewStateHandle { 100U });
+  owner->RemoveViewState(
+    ViewId { 101U }, CompositionView::ViewStateHandle { 101U });
+  latest = {};
+  const auto srv = [&](const Texture& texture) {
+    const auto view_desc
+      = TextureViewDescription { .view_type = ResourceViewType::kTexture_SRV,
+          .visibility = DescriptorVisibility::kShaderVisible,
+          .format = texture.GetDescriptor().format,
+          .dimension = texture.GetDescriptor().texture_type,
+          .sub_resources = TextureSubResourceSet::EntireTexture() };
+    const auto index = Backend().GetResourceRegistry().FindShaderVisibleIndex(
+      texture, view_desc);
+    EXPECT_TRUE(index.has_value());
+    return index.value_or(kInvalidShaderVisibleIndex);
+  };
+  const auto consumer_slot = frame::Slot { sequence % 3U };
+  Backend().BeginFrame(frame::SequenceNumber { ++sequence }, consumer_slot);
+  frame.SetFrameSlot(consumer_slot, engine::internal::EngineTagFactory::Get());
+  frame.SetFrameSequenceNumber(frame::SequenceNumber { sequence },
+    engine::internal::EngineTagFactory::Get());
+  renderer_->OnFrameStart(observer_ptr { &frame });
+  // Poison only the rejected half destination. The checked consumer must read
+  // the retained bright FP32 fallback; an unconditional control must read
+  // black.
+  const auto zeros = std::array<std::byte, 256> {};
+  auto upload = CreateUploadBuffer(SizeBytes { zeros.size() });
+  upload->Update(zeros.data(), zeros.size(), 0U);
+  {
+    auto recorder = AcquireRecorder("Rejected half consumer sentinel");
+    auto& rejected_half = *pending[1].source.texture;
+    EnsureTracked(*recorder, upload, ResourceStates::kGenericRead);
+    ASSERT_TRUE(recorder->AdoptKnownResourceState(rejected_half));
+    recorder->RequireResourceState(rejected_half, ResourceStates::kCopyDest);
+    recorder->FlushBarriers();
+    recorder->CopyBufferToTexture(*upload,
+      { .buffer_offset = 0U,
+        .buffer_row_pitch = 256U,
+        .buffer_slice_pitch = 256U,
+        .dst_slice = { .width = 1U, .height = 1U, .depth = 1U } },
+      rejected_half);
+    recorder->RequireResourceStateFinal(
+      rejected_half, ResourceStates::kShaderResource);
+  }
+  auto consumer = postprocess::TonemapPass(*renderer_);
+  auto consume_context = RenderContext {};
+  consume_context.frame_sequence = frame::SequenceNumber { sequence };
+  consume_context.frame_slot = consumer_slot;
+  for (unsigned index = 0; index < pending.size(); ++index) {
+    auto& job = pending[index];
+    ASSERT_TRUE(job.source.valid);
+    ASSERT_NE(job.source.retained_texture, nullptr);
+    const auto& exposure = job.source.exposure;
+    ASSERT_NE(exposure, nullptr);
+    const auto* fallback = job.checked ? job.source.fallback : nullptr;
+    consume_context.current_view.view_id = ViewId { 900U + index };
+    const auto result
+      = consumer.Record(consume_context, owner->GetSceneTextures(),
+        {
+          .scene_signal = job.source.texture,
+          .exposure_buffer = exposure->current_state->buffer.get(),
+          .frame_exposure_buffer = exposure->buffer.get(),
+          .scene_signal_srv = srv(*job.source.texture),
+          .exposure_buffer_srv = exposure->current_state->srv_index,
+          .frame_exposure_srv = exposure->srv_index,
+          .post_target = observer_ptr<const Framebuffer> { job.target.get() },
+          .tone_mapper = engine::ToneMapper::kNone,
+          .gamma = 1,
+          .scene_fallback = fallback,
+          .scene_fallback_srv
+          = fallback ? srv(*fallback) : kInvalidShaderVisibleIndex,
+          .conversion_report
+          = fallback ? exposure->conversion_buffer.get() : nullptr,
+          .conversion_report_srv
+          = fallback ? exposure->conversion_srv : kInvalidShaderVisibleIndex,
+        });
+    ASSERT_TRUE(result.executed);
+  }
+  // Release the last extraction owners after submission, before the frame's
+  // fence completes. All consumers are queued before any readback waits.
+  for (auto& job : pending)
+    job.source = {};
+  renderer_->OnFrameEnd(observer_ptr { &frame });
+  Backend().EndFrame(frame::SequenceNumber { sequence }, consumer_slot);
+  WaitForQueueIdle();
+  for (const auto& job : pending) {
+    const auto pixel = ReadFloatTexture(*job.output);
+    ASSERT_EQ(pixel.size(), 1U);
+    const double expected = std::clamp(
+      std::clamp(double(job.scene_value) * job.displayed_gain, 0.0, 1.0)
+        - .5 / 255,
+      0.0, 1.0);
+    for (unsigned c = 0; c < 3; ++c)
+      EXPECT_NEAR(pixel[0][c], expected, 2e-5);
+    EXPECT_EQ(pixel[0][3], 1.0F);
+  }
+  RecordProperty("queued_mixed_hdr_consumers", pending.size());
+  probe->inspect = {};
+  pending.clear();
+}
 
 NOLINT_TEST_F(ExposureLightingGpuTest,
   ProductionAdmissionRejectsCurrentAtmosphereLayoutChanges)
