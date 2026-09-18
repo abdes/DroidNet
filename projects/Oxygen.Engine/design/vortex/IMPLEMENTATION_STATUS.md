@@ -59,6 +59,35 @@ qualification remains required; the package is not complete.
 
 ### 3.1 Current work
 
+- **Completed: EX05-15 — validated.** Current/prospective store errors,
+  hardware-filtering bounds, retained temporal uncertainty, sky/AP/fog and
+  translucent composition, coverage/depth and final image/meter tolerances are
+  integrated. Prepare the scene certificate before checked conversion; finalize
+  eligibility afterward so the current conversion verdict participates.
+  GPU status is 384 bytes; the completed CPU prefix remains 80 bytes.
+- **Final evidence:** all **330 owning tests pass per configuration** in Debug
+  and Release: 168 native exposure, 24 post-process, 63 environment, 63 deferred
+  scene and 12 offscreen tests. All five prior failures pass without weakening
+  accepted-half, prior-gain, headroom or retirement assertions. Both builds pass
+  308,016 exact consumer-arithmetic checks. Final Release Fog/Local captures pass
+  8,192 exact transfer checks with actual source maxima and per-view S/P checks.
+  The four-phase visual cycle preserves colors in object-specific regions and
+  restores Clear exactly; twelve negative controls protect the checker.
+- **Fog corrections:** fixed history coordinates and jitter-dependent integration
+  endpoints. Local-fog constant descriptors now survive all queued views until
+  frame-slot retirement. That independent fix is committed as `969cbfdb7`, and
+  the user confirmed that the flicker is fixed.
+- **Measured cost:** six native timing cases cover 1080p/4K in both builds.
+  Release scene replay measures 4.145472 ms (Fog) and 2.546688 ms (Local) for
+  explicit qualification/finalization dispatches across 2560x1400 main and
+  1152x630 PiP. Embedded checks remain in their rendering-pass costs; these
+  sums are not end-to-end frame latency.
+  [Completion manifest, hashes, commands and reports](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/consumer-completion-manifest.json).
+- **Next item: EX05-16.** Complete remaining producer-domain/pre-store guards.
+  Production FP16 allocation switching, mode-transition leases and scene-integrated
+  recovery/retention/return remain EX05-17–19. The Slice 5 gate and Slices 6–10
+  remain open; this completion applies to EX05-15.
+
 - **Open visual report: all-white MultiView meshes.** The user observed all
   meshes rendered white in test windows. Reinspection of
   `multiview/atmosphere-Debug-42.exposure.png` confirms an earlier captured case
@@ -106,89 +135,6 @@ qualification remains required; the package is not complete.
   debugger reports only the accepted factory warning. This is a configured
   profile comparison, not a production AE change or an Average readability pass.
   [Evidence and commands](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/lit-profiles-manifest.json).
-- **Active item: EX05-15 — final consumer error-bound propagation.** Producer
-  bounds and fog-history transport exist. AP now has the continuous additive
-  transfer required by the propagation rules; consumer amplification/attenuation,
-  coverage and final image/meter admission still need GPU integration.
-  **Implementation cadence:** complete the remaining consumer chain as one
-  integrated item: filtering/arithmetic, sky/AP/fog/translucency composition,
-  correlated coverage, prospective stores, and final image/meter admission.
-  Use focused checks during implementation. Run the affected broad suites at
-  the integrated acceptance gate, or when a specific failure warrants them;
-  do not repeat them for each helper or documentation edit. The item remains
-  open until its complete native acceptance evidence exists.
-  **Completed mathematical substep: linear-clamp coordinate error.** The
-  exact-rational oracle passes 9,312 filtering checks, alongside 48,000 algebra
-  and 26,006 consumer checks. It covers retained reference-gradient enclosures,
-  clamp/cell crossings, a zero-store-error coordinate-rounding counterexample,
-  and a negative control for omitting the relative/displacement cross term.
-  [Evidence](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/filter-coordinate-manifest.json),
-  [derived enclosure and sampling sources](lld/post-process-service.md#linear-clamp-filtering-coordinate-error).
-  **Qualified dependency: gradients, FTZ bounds and fog edge sampling.**
-  Sky/AP/fog reference gradients occupy the existing GPU status tail (256 bytes
-  total; CPU prefix remains 80). Debug and Release each pass 318 affected tests,
-  48 captured gradient records, 38 AP arithmetic records, and four real-scene
-  gradient records with finalizer preservation. Two native fog regressions
-  reproduce opposite-edge mixing with the old wrap sampler and qualify clamp
-  sampling: 8 composition draws / 2,048 scalar checks and 150 history cases /
-  1,200 scalar checks per build, including 84 outside-frustum rejections.
-  FTZ operand/interval cases cover tiny values, amplification and signed zero.
-  Eight MultiView view-image comparisons are exact; both composites inspected.
-  Six focused debugger tests pass and MultiView exits 0, with only accepted
-  factory warnings. The extended oracle has 18,624 filtering checks; 3,600
-  independent checks qualify its fast gradient checker. No format admission
-  is enabled by these intermediate bounds.
-  [Evidence and commands](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/filter-gradients-manifest.json).
-  **Completed substep: retained opaque-AP store-error contribution.** The GPU
-  combines the captured input peak with actual scattering strength using
-  outward-safe arithmetic in GPU bytes 144–159; CPU readback remains 80 bytes.
-  Debug/Release each pass 314 affected tests, including 23 arithmetic cases and
-  input-replacement/failure invalidation (R042). Exact-rational capture checks
-  cover 34 native records and two real-scene records per build; finalization
-  preserves the records. Eight view-image comparisons are exact and both
-  composites were inspected. Both debugger runs have only accepted factory
-  warnings. [Evidence](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/opaque-ap-error-manifest.json).
-  This intermediate record cannot authorize FP16; filtering/arithmetic/coverage,
-  subsequent consumers and candidate stores remain open.
-  **Completed substep: opaque input range before environment attenuation.**
-  The existing pass/status allocation captures maximum absolute RGB in frame P
-  units in GPU bytes 128–143; CPU readback remains 80 bytes. Debug/Release each
-  pass 312 affected tests and 204 shader modules. Native regressions cover partial
-  groups, non-unit P, negative/nonfinite inputs, independent views, failed retries
-  and preservation through solve/finalization. Four captures pass independent
-  source-value and before-atmosphere ordering checks. Eight view-image comparisons
-  are exact; both composites inspected. Two debugger runs have only accepted
-  factory warnings. [Input-range evidence](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/pre-environment-manifest.json).
-  This peak is not yet a composed error certificate; translucent source maxima,
-  attenuation/filtering/coverage and final image/meter admission remain.
-  **Completed correction: R040/R041 opaque-forward AP ownership.** Opaque/masked
-  forward surfaces now receive AP once at Stage 15; later translucent surfaces
-  retain inline AP. DemoShell preserves explicit shading mode overrides. The old
-  path failed on 1,177,577 main / 201,164 PiP pixels. Debug/Release each pass 286
-  affected tests and exact opaque-forward/deferred HDR equality over 4,309,760
-  pixels; captures show zero inline opaque AP reads. All five phases pass binding,
-  contribution and readability checks, twelve prior-phase view comparisons remain
-  exact, and the stronger AP composites were inspected in both builds. The debugger
-  has only the accepted factory warning. [Evidence](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/opaque-ap-manifest.json).
-  **Completed substep: retained local error.** Qualification now reads the existing
-  GPU producer/history tail and checks reference interval endpoints for local
-  image and direct-product meter error. Invalid bounds fail closed, including
-  R039's reproduced post-expansion overflow. Eighteen controlled cases and the
-  74-frame fog fixture prove retained uncertainty blocks eligibility and clean
-  history restarts its streak. Debug/Release each pass 333 affected tests; eight
-  captures and three debugger cases pass, with only accepted factory warnings.
-  Four AP baseline comparisons remain exact; Release composite inspected.
-  [Retained-error evidence](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/retained-error-manifest.json).
-  Final SceneColor still lacks the complete composed error/coverage envelope.
-  **Completed substep: local RGB amplification.** AP gain now travels in 96-byte
-  qualification constants and the per-view product revision. The overflow-safe
-  comparison rejects amplified storage loss, leaves transmission unscaled and
-  preserves exposure generations across gain edits. Debug/Release each pass
-  332 affected tests; seven-case, ABI, conversion and real-scene captures pass;
-  three debugger cases have only accepted live-factory warnings. Four AP baseline
-  view comparisons remain exact; Release composite inspected.
-  [Gain evidence](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/consumer-gain-manifest.json).
-  This local gate does not close cumulative composition, filtering or coverage.
 - **Qualified AP composition prerequisite.** The `atmosphere` proof
   stages a complete backlit-card recipe before publication, retains scene-owned
   sun settings and uses actual deferred, alpha-one forward and mixed rendering.
@@ -202,16 +148,11 @@ qualification remains required; the package is not complete.
   identity and correct half subnormal decoding/rounding, including R038. Debug
   and Release each pass 147 Data, 34 MaterialBinder and 146 native exposure tests
   (327 each), with failing-before regressions. [Evidence](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/source-values-manifest.json).
-- **Next concrete action:** connect retained bounds through actual AP/fog consumer
-  operations and coverage into final image/meter checks, then qualify independent
-  numerical counterexamples natively. EX05-16–19 must pass before production
-  format switching can be enabled.
-- **Remaining boundaries:** this AP proof is an isolated emissive-card fixture,
-  not physical-light calibration or all material-family acceptance. The mixed
-  phase has binding/readability/presentation evidence, not a cumulative error
-  certificate. Grid overlay occlusion can differ because forward cards do not
-  write opaque depth. Full consumer-bound propagation and FP16 switching remain
-  unimplemented; Slice 5 is not closed.
+- **Remaining boundaries:** the AP prerequisite uses an isolated emissive-card
+  fixture. Physical-light calibration, all material families, ordinary AE
+  readability and all MultiView layouts retain their separate acceptance rows.
+  Consumer error propagation is closed in EX05-15; production format switching
+  and the remaining Slice 5 work are not complete.
 - **Delivery order:** finish Slice 5's gate before starting Slice 6 integration.
   Slices 6–10 remain required; their detailed items are below.
 
@@ -243,7 +184,7 @@ current status, including decisions that supersede older manifest limitations.
 | EX05-12 | Completed-status candidate selection and failure invalidation | validated | Lifetime/settings/layout/generation checks, bounded retry queue, stale-result rejection and failed-solve/fallback invalidation are qualified. Successful same-frame reuse retains acknowledgement. | [Status selection](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/precision-status-manifest.json), [R034 correction](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/review-r034-manifest.json) |
 | EX05-13 | Collect real required scene-reference products | validated | Persistent scene views collect SceneColor, sky-view, AP and fog; missing producers remain missing requirements. Native capture checks 151,424 texels per view in the environment fixture. | [Required products](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/required-products-manifest.json) |
 | EX05-14 | Finite/overflow checks before environment stores | validated | Sky-view/AP/fog report original finite/nonfinite and FP16 headroom failures through the existing status. Auto does not adapt from a producer-failed image. This is not a quantization certificate. | [Pre-store range](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/prestore-range-manifest.json) |
-| EX05-15 | Quantization, cumulative image/meter error and temporal bounds | in_progress | **Active: implement the complete remaining consumer chain as one item.** Qualified dependencies include producer/history bounds, opaque AP transfer and source peaks, local gain, reference gradients, FTZ operand handling, and fog edge sampling. Latest Debug/Release runs each pass 318 affected tests; captured gradient/AP/fog cases and eight exact MultiView image comparisons pass. Still required: hardware filtering/arithmetic contribution, sky/AP/fog/translucency composition, correlated coverage, candidate-store intervals and final image/meter admission. Focused checks during implementation; broad validation at the integrated exit gate. | [Latest gradient/fog evidence](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/filter-gradients-manifest.json), [AP transfer](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/opaque-ap-error-manifest.json), [Source range](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/pre-environment-manifest.json), [Retained history](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/retained-error-manifest.json), [Required budgets](lld/scene-textures.md#per-view-fp16-suitability), [Propagation rules](lld/post-process-service.md#quantization-error-propagation) |
+| EX05-15 | Quantization, cumulative image/meter error and temporal bounds | validated | Hardware-filtered current/candidate certificates cover producer stores, retained history, sky/AP/fog/translucent composition, coverage/depth and final image/meter tolerances. Preparation precedes checked conversion; eligibility follows it. GPU status384 / CPU prefix80; no additional HDR texture. Debug/Release each pass 330 owning tests and 308,016 exact arithmetic checks. Final Release Fog/Local audits pass 8,192 transfers; the four-phase visual/ROI cycle and 12 negative controls pass. User confirmed the local-fog lifetime correction. Controlled 1080p/4K and actual two-view scene costs are recorded. Production format switching remains EX05-17. | [Completion evidence and commands](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/consumer-completion-manifest.json), [Runtime contract](lld/post-process-service.md#quantization-error-propagation), [Per-view budgets](lld/scene-textures.md#per-view-fp16-suitability) |
 | EX05-16 | Full supported-radiance envelope at upstream producers | in_progress | Finite/range reporting and several controlled endpoint fixtures exist. Complete high/low endpoint, underflow/error-budget and FP32 out-of-domain reporting across active producers remains. | [Range scope](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/prestore-range-manifest.json), [acceptance matrix](plan/exposure-and-lightbench-correction.md#9-acceptance-matrix-and-execution) |
 | EX05-17 | Production per-view FP16 admission and allocation switching | planned | **Not enabled. SceneRenderer still forces FP32.** Wire certified candidates to resource/PSO/resolve selection while preserving exposure history. Depends on EX05-15–16. | [Current source boundary](../../src/Oxygen/Vortex/SceneRenderer/SceneRenderer.cpp) |
 | EX05-18 | Checked resolve extraction and all conditional-consumer leases | in_progress | P metadata and checked-consumer primitives exist. Production resolve/extraction must retain the original FP32 accumulation and choose the valid source through every consumer and fence. | [Prepared solve](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/prepared-manifest.json), [selection boundary](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/selection-manifest.json) |

@@ -43,11 +43,11 @@ def build_report(controller, report, capture_path, report_path):
         if not shader or shader.entryPoint not in ("ClearSuitability", "GatherSuitabilityMaximum"):
             continue
         reads = [x.descriptor for x in pipeline.GetReadOnlyResources(rd.ShaderStage.Compute, True)]
-        constants = [x for x in reads if x.byteSize == x.elementByteSize == 96]
+        constants = [x for x in reads if x.byteSize == x.elementByteSize == 128]
         if len(constants) != 1:
             raise RuntimeError("Missing reduction constants")
         c = constants[0]
-        words = struct.unpack("<24I", bytes(controller.GetBufferData(c.resource, c.byteOffset, 96)))
+        words = struct.unpack("<32I", bytes(controller.GetBufferData(c.resource, c.byteOffset, 128)))
         if not words[7] & 32:
             continue
         writes = [x.descriptor for x in pipeline.GetReadWriteResources(rd.ShaderStage.Compute, True)]

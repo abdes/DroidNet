@@ -1499,6 +1499,10 @@ auto Renderer::PublishCurrentViewPreSceneFrameBindings(
     ? render_context.current_view.frame_exposure->srv_index
     : publication_state.frame_exposure_publisher->Publish(
         render_context.current_view.view_id, FrameExposureData {});
+  view_bindings.exposure_status_uav = render_context.current_view.frame_exposure
+    ? render_context.current_view.frame_exposure->current_state
+        ->status_uav_index
+    : kInvalidShaderVisibleIndex;
   view_bindings.history_frame_slot
     = PublishCurrentViewHistoryFrameBindings(render_context, publication_state);
 

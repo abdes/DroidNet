@@ -7,8 +7,10 @@
 #include <array>
 #include <bit>
 #include <cmath>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <fstream>
 #include <limits>
 #include <numeric>
 #include <span>
@@ -25,6 +27,8 @@
 #include <Oxygen/Graphics/Common/FrameCaptureController.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
+#include <Oxygen/Graphics/Common/ShaderByteCode.h>
+#include <Oxygen/Graphics/Common/TimestampQueryProvider.h>
 #include <Oxygen/Graphics/Direct3D12/Test/Fixtures/ReadbackTestFixture.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
@@ -79,9 +83,46 @@ using namespace oxygen::graphics;
 using namespace oxygen::vortex;
 using Pixel = std::array<float, 4>;
 
+auto ExposureProbeRootBindings() -> std::vector<RootBindingItem>
+{
+  namespace root = oxygen::bindless::generated::d3d12;
+  std::vector<RootBindingItem> bindings;
+  for (const auto& parameter : root::kRootParamTable) {
+    RootBindingDesc binding {};
+    binding.binding_slot_desc.register_index = parameter.shader_register;
+    binding.binding_slot_desc.register_space = parameter.register_space;
+    binding.visibility = ShaderStageFlags::kAll;
+    if (parameter.kind == root::RootParamKind::DescriptorTable) {
+      const auto& range = parameter.ranges.front();
+      CHECK_F(range.range_type == root::RangeType::SRV
+        || range.range_type == root::RangeType::Sampler);
+      binding.data = DescriptorTableBinding { .view_type
+        = range.range_type == root::RangeType::Sampler
+          ? ResourceViewType::kSampler
+          : ResourceViewType::kRawBuffer_SRV,
+        .base_index = range.base_register,
+        .count = range.num_descriptors };
+    } else if (parameter.kind == root::RootParamKind::CBV) {
+      binding.data = DirectBufferBinding {};
+    } else {
+      binding.data = PushConstantsBinding { .size = parameter.constants_count };
+    }
+    bindings.emplace_back(binding);
+  }
+  return bindings;
+}
+
 class ExposureFailureGraphics final : public graphics::d3d12::Graphics {
 public:
   using graphics::d3d12::Graphics::Graphics;
+  std::shared_ptr<graphics::IShaderByteCode> tone_probe;
+  auto GetShader(const graphics::ShaderRequest& request) const
+    -> std::shared_ptr<graphics::IShaderByteCode> override
+  {
+    if (request.source_path == "Tests/ToneBoundsProbe.hlsl")
+      return tone_probe;
+    return graphics::d3d12::Graphics::GetShader(request);
+  }
   mutable std::weak_ptr<graphics::Texture> processed_sky;
   bool track_resources { false };
   mutable std::vector<std::weak_ptr<graphics::Texture>> tracked_textures;
@@ -322,6 +363,93 @@ protected:
         .range = { 0U, sizeof(T) },
         .stride = sizeof(T) });
     return index;
+  }
+  auto RunToneProbe(std::span<const std::byte> inputs_data,
+    std::uint32_t record_count, std::uint32_t mode = 0U)
+    -> std::vector<std::array<float, 8>>
+  {
+    std::ifstream shader(
+      OXYGEN_EXPOSURE_TONE_PROBE, std::ios::binary | std::ios::ate);
+    CHECK_F(shader.good());
+    const auto bytes = static_cast<std::size_t>(shader.tellg());
+    CHECK_GT_F(bytes, 0U);
+    CHECK_EQ_F(bytes % sizeof(std::uint32_t), 0U);
+    std::vector<std::uint32_t> code(bytes / sizeof(std::uint32_t));
+    shader.seekg(0);
+    shader.read(reinterpret_cast<char*>(code.data()),
+      static_cast<std::streamsize>(bytes));
+    CHECK_F(shader.good());
+    static_cast<ExposureFailureGraphics&>(Backend()).tone_probe
+      = std::make_shared<ShaderByteCode<std::vector<std::uint32_t>>>(
+        std::move(code));
+
+    const auto input_size = inputs_data.size_bytes();
+    auto inputs = CreateRegisteredBuffer({ .size_bytes = input_size,
+      .usage = BufferUsage::kNone,
+      .memory = BufferMemory::kUpload,
+      .debug_name = "Tone bound arithmetic inputs" });
+    inputs->Update(inputs_data.data(), input_size, 0U);
+    auto output = CreateRegisteredBuffer({ .size_bytes = record_count * 32U,
+      .usage = BufferUsage::kStorage,
+      .memory = BufferMemory::kDeviceLocal,
+      .debug_name = "Tone bound arithmetic output" });
+    auto& allocator = renderer_->GetGraphics()->GetDescriptorAllocator();
+    auto input_handle = allocator.AllocateBindless(
+      oxygen::bindless::generated::kGlobalSrvDomain,
+      ResourceViewType::kStructuredBuffer_SRV);
+    const auto input_slot = allocator.GetShaderVisibleIndex(input_handle);
+    Backend().GetResourceRegistry().RegisterView(*inputs,
+      std::move(input_handle),
+      BufferViewDescription {
+        .view_type = ResourceViewType::kStructuredBuffer_SRV,
+        .range = { 0U, input_size },
+        .stride = 16U });
+    auto output_handle = allocator.AllocateRaw(
+      ResourceViewType::kRawBuffer_UAV, DescriptorVisibility::kShaderVisible);
+    const auto output_slot = allocator.GetShaderVisibleIndex(output_handle);
+    Backend().GetResourceRegistry().RegisterView(*output,
+      std::move(output_handle),
+      BufferViewDescription { .view_type = ResourceViewType::kRawBuffer_UAV,
+        .range = { 0U, record_count * 32U },
+        .stride = 0U });
+    const auto constants = PublishFixtureData(std::array<std::uint32_t, 4> {
+      input_slot.get(), output_slot.get(), record_count, mode });
+    const auto pipeline
+      = ComputePipelineDesc::Builder {}
+          .SetComputeShader(ShaderRequest { .stage = ShaderType::kCompute,
+            .source_path = "Tests/ToneBoundsProbe.hlsl",
+            .entry_point = "CS" })
+          .SetRootBindings(ExposureProbeRootBindings())
+          .SetDebugName("Tone bound arithmetic probe")
+          .Build();
+    auto readback = GetReadbackManager()->CreateBufferReadback(
+      "Tone bound arithmetic results");
+    const auto capture = BeginOptionalCapture();
+    {
+      auto recorder = AcquireRecorder("Tone bound arithmetic");
+      EnsureTracked(*recorder, inputs, ResourceStates::kGenericRead);
+      EnsureTracked(*recorder, output, ResourceStates::kCommon);
+      recorder->RequireResourceState(*output, ResourceStates::kUnorderedAccess);
+      recorder->FlushBarriers();
+      recorder->SetPipelineState(pipeline);
+      const auto root = static_cast<std::uint32_t>(
+        oxygen::bindless::generated::d3d12::RootParam::kRootConstants);
+      recorder->SetComputeRoot32BitConstant(root, 0U, 0U);
+      recorder->SetComputeRoot32BitConstant(root, constants.get(), 1U);
+      recorder->Dispatch(
+        static_cast<std::uint32_t>((record_count + 63U) / 64U), 1U, 1U);
+      CHECK_F(
+        readback->EnqueueCopy(*recorder, *output, { 0U, record_count * 32U })
+          .has_value());
+    }
+    if (capture)
+      EXPECT_TRUE(capture->EndCapture());
+    const auto mapped = readback->MapNow();
+    CHECK_F(mapped.has_value());
+    std::vector<std::array<float, 8>> result(record_count);
+    std::memcpy(
+      result.data(), mapped->Bytes().data(), result.size() * sizeof(result[0]));
+    return result;
   }
   auto ReadFloatTexture(const Texture& texture) -> std::vector<Pixel>
   {
@@ -3375,6 +3503,9 @@ NOLINT_TEST_F(ExposureGpuTest, FrameResolveBorrowsPriorRootAndTagsRootFallback)
     .config = SharedConfig(settings) };
   settings.manual_ev = 8.0F;
   ctx_.frame_sequence = frame::SequenceNumber { 2U };
+  // The first solve is still queued; its transient descriptors belong to slot
+  // 0.
+  ctx_.frame_slot = frame::Slot { 1U };
   ASSERT_TRUE(RecordShared(signal, SharedConfig(settings)).executed);
   ctx_.current_view.view_state_handle
     = CompositionView::ViewStateHandle { 20U };
@@ -4348,8 +4479,7 @@ auto ExposureGpuTest::CheckFogViewRetirement(
       baseline_resources = resources;
     if (baseline_resources)
       EXPECT_EQ(resources, *baseline_resources);
-    if (baseline_resources && resources != *baseline_resources
-      && iteration == 3U) {
+    if (baseline_resources && resources != *baseline_resources) {
       std::map<std::string, unsigned> names;
       for (auto weak : tracked.tracked_buffers)
         if (auto resource = weak.lock();
@@ -4923,6 +5053,127 @@ NOLINT_TEST_F(
   FlushBackend();
 }
 
+NOLINT_TEST_F(
+  ExposureGpuTest, HeightFogInputPeakUsesSceneUnitsAndRejectsNonfiniteInput)
+{
+  pass_.reset();
+  renderer_->OnShutdown();
+  auto renderer_config = RendererConfig {};
+  renderer_config.upload_queue_key = QueueKeyFor().get();
+  renderer_ = std::make_unique<Renderer>(GetGraphicsShared(), renderer_config,
+    kPhase1DefaultRuntimeCapabilityFamilies
+      | RendererCapabilityFamily::kEnvironmentLighting);
+  pass_ = std::make_unique<postprocess::ExposurePass>(*renderer_);
+  auto scene = scene::Scene("Height fog source range", 1U);
+  scene.SetEnvironment(std::make_unique<scene::SceneEnvironment>());
+  auto& fog = scene.GetEnvironment()->AddSystem<scene::environment::Fog>();
+  fog.SetEnabled(true);
+  fog.SetEnableHeightFog(true);
+  ctx_.scene = observer_ptr { &scene };
+  ctx_.current_view.with_height_fog = true;
+  auto textures = SceneTextures(Backend(),
+    { .extent = { 8U, 8U },
+      .enable_velocity = false,
+      .scene_color_format = Format::kRGBA32Float });
+  auto framebuffer = Backend().CreateFramebuffer(FramebufferDesc {}
+      .AddColorAttachment(textures.GetSceneColorResource())
+      .SetDepthAttachment({ .texture = textures.GetSceneDepthResource() }));
+  auto& allocator = renderer_->GetGraphics()->GetDescriptorAllocator();
+  auto depth_handle = allocator.AllocateRaw(
+    ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
+  const auto depth_slot = allocator.GetShaderVisibleIndex(depth_handle);
+  Backend().GetResourceRegistry().RegisterView(textures.GetSceneDepth(),
+    std::move(depth_handle),
+    TextureViewDescription {
+      .format = textures.GetSceneDepth().GetDescriptor().format,
+      .dimension = TextureType::kTexture2D });
+  auto scene_bindings = SceneTextureBindings {};
+  scene_bindings.scene_depth_srv = depth_slot.get();
+  const auto scene_slot = PublishFixtureData(scene_bindings);
+  const auto environment_view_slot = PublishFixtureData(EnvironmentViewData {});
+  auto compose = environment::FogPass(*renderer_);
+  auto settings = scene::ExposureSettings {};
+  settings.mode = engine::ExposureMode::kManual;
+  settings.manual_ev
+    = -2.0F; // P=4; the collected source peak must remain scene referred.
+  const auto config = SharedConfig(settings);
+  const auto capture = BeginOptionalCapture();
+  for (const float scale :
+    { .8F, .2F, std::numeric_limits<float>::quiet_NaN() }) {
+    SCOPED_TRACE(scale);
+    ctx_.frame_sequence = frame::SequenceNumber { ++sequence_ };
+    const auto frame = pass_->ResolveFrame(ctx_, config, { .use_fp32 = false });
+    ASSERT_NE(frame, nullptr);
+    ctx_.current_view.frame_exposure = frame;
+    auto environment_static = EnvironmentStaticData {};
+    environment_static.fog.flags = kGpuFogFlagEnabled
+      | kGpuFogFlagRenderInMainPass | kGpuFogFlagHeightFogEnabled;
+    environment_static.fog.primary_density = .1F;
+    environment_static.fog.primary_height_falloff = 0.0F;
+    environment_static.fog.fog_inscattering_luminance_rgb
+      = { scale * .25F, scale * .5F, scale };
+    auto environment_bindings = EnvironmentFrameBindings {};
+    environment_bindings.environment_static_slot
+      = PublishFixtureData(environment_static);
+    environment_bindings.environment_view_slot = environment_view_slot;
+    auto view_bindings = ViewFrameBindings {};
+    view_bindings.environment_frame_slot
+      = PublishFixtureData(environment_bindings);
+    view_bindings.scene_texture_frame_slot = scene_slot;
+    view_bindings.frame_exposure_slot = frame->srv_index;
+    view_bindings.exposure_status_uav = frame->current_state->status_uav_index;
+    auto view = ViewConstants::GpuData {};
+    view.view_frame_bindings_bslot
+      = BindlessViewFrameBindingsSlot { PublishFixtureData(view_bindings) };
+    view.reverse_z = 0U;
+    view.inverse_view_projection_matrix = glm::mat4 { 0.0F };
+    view.inverse_view_projection_matrix[3] = { 0, 0, -1, 1 };
+    auto constants
+      = CreateUploadBuffer(SizeBytes { 256U }, BufferUsage::kConstant);
+    constants->Update(&view, sizeof(view), 0U);
+    ctx_.view_constants = constants;
+    {
+      auto recorder = AcquireRecorder("Height fog source initialization");
+      for (const auto& texture :
+        { textures.GetSceneColorResource(), textures.GetSceneDepthResource() })
+        if (!recorder->AdoptKnownResourceState(*texture))
+          recorder->BeginTrackingResourceState(
+            *texture, texture->GetDescriptor().initial_state);
+      recorder->RequireResourceState(
+        textures.GetSceneColor(), ResourceStates::kRenderTarget);
+      recorder->RequireResourceState(
+        textures.GetSceneDepth(), ResourceStates::kDepthWrite);
+      recorder->FlushBarriers();
+      recorder->ClearFramebuffer(
+        *framebuffer, std::vector<std::optional<Color>> { Color {} }, 0.0F);
+    }
+    ASSERT_TRUE(compose.Record(ctx_, textures).executed);
+    const auto pixels = ReadFloatTexture(textures.GetSceneColor());
+    const auto input = Read<ExposureStatusStorage>(
+      *frame->current_state->status_buffer, ResourceStates::kUnorderedAccess)
+                         .consumer_inputs;
+    EXPECT_EQ(input.translucent_rgb_max, 0.0F);
+    EXPECT_EQ(input.sky_rgb_gain_max, 0.0F);
+    if (std::isfinite(scale)) {
+      EXPECT_EQ(input.flags, 2U);
+      const double expected
+        = double(scale) * (1.0 - std::exp2(-std::log(2.0) * double(.1F)));
+      EXPECT_NEAR(input.height_fog_rgb_max, expected, 2e-6);
+      for (const auto& pixel : pixels)
+        EXPECT_EQ(input.height_fog_rgb_max, pixel[2] / 4.0F);
+    } else {
+      EXPECT_EQ(input.flags, 10U);
+      EXPECT_EQ(input.height_fog_rgb_max, 0.0F);
+    }
+  }
+  if (capture)
+    EXPECT_TRUE(capture->EndCapture());
+  ctx_.view_constants.reset();
+  ctx_.current_view.frame_exposure.reset();
+  ctx_.scene.reset();
+  WaitForQueueIdle();
+}
+
 NOLINT_TEST_F(ExposureGpuTest, FogCompositionClampsViewportAndDepthEdges)
 {
   pass_.reset();
@@ -5041,29 +5292,7 @@ NOLINT_TEST_F(
   ExposureGpuTest, FogHistoryClampsEdgesAndRejectsOutsideCoordinates)
 {
   namespace root = oxygen::bindless::generated::d3d12;
-  std::vector<RootBindingItem> bindings;
-  for (const auto& parameter : root::kRootParamTable) {
-    RootBindingDesc binding {};
-    binding.binding_slot_desc.register_index = parameter.shader_register;
-    binding.binding_slot_desc.register_space = parameter.register_space;
-    binding.visibility = ShaderStageFlags::kAll;
-    if (parameter.kind == root::RootParamKind::DescriptorTable) {
-      const auto& range = parameter.ranges.front();
-      CHECK_F(range.range_type == root::RangeType::SRV
-        || range.range_type == root::RangeType::Sampler);
-      binding.data = DescriptorTableBinding { .view_type
-        = range.range_type == root::RangeType::Sampler
-          ? ResourceViewType::kSampler
-          : ResourceViewType::kRawBuffer_SRV,
-        .base_index = range.base_register,
-        .count = range.num_descriptors };
-    } else if (parameter.kind == root::RootParamKind::CBV) {
-      binding.data = DirectBufferBinding {};
-    } else {
-      binding.data = PushConstantsBinding { .size = parameter.constants_count };
-    }
-    bindings.emplace_back(binding);
-  }
+  const auto bindings = ExposureProbeRootBindings();
   const auto pipeline
     = ComputePipelineDesc::Builder {}
         .SetComputeShader(ShaderRequest { .stage = ShaderType::kCompute,
@@ -5159,7 +5388,7 @@ NOLINT_TEST_F(
         const bool rejected = uv.x < 0 || uv.x > 1 || uv.y < 0 || uv.y > 1
           || depth < 1 || depth >= 4;
         const double w
-          = std::clamp((std::log2(double(depth)) + .5) / 2, 0.0, 1.0);
+          = std::clamp(std::log2(double(depth)) / 2, 0.0, 1.0);
         const double z = std::clamp(2 * w - .5, 0.0, 1.0);
         const std::array expected = rejected
           ? std::array<double, 4> { 0, 0, 0, 1 }
@@ -5169,6 +5398,124 @@ NOLINT_TEST_F(
           for (unsigned c = 0; c < 4; ++c)
             EXPECT_NEAR(actual[c], expected[c], 3e-6);
       }
+  }
+  if (capture)
+    EXPECT_TRUE(capture->EndCapture());
+  WaitForQueueIdle();
+}
+
+NOLINT_TEST_F(ExposureGpuTest, FogStableCellsPreserveHistoryAndHomogeneousMedia)
+{
+  namespace root = oxygen::bindless::generated::d3d12;
+  const auto pipeline
+    = ComputePipelineDesc::Builder {}
+        .SetComputeShader(ShaderRequest { .stage = ShaderType::kCompute,
+          .source_path = "Vortex/Services/Environment/VolumetricFog.hlsl",
+          .entry_point = "VortexVolumetricFogCS" })
+        .SetRootBindings(ExposureProbeRootBindings())
+        .SetDebugName("Fog stable cell fixture")
+        .Build();
+  auto output = CreateRegisteredTexture({ .width = 4U,
+    .height = 4U,
+    .depth = 4U,
+    .format = Format::kRGBA32Float,
+    .texture_type = TextureType::kTexture3D,
+    .is_shader_resource = true,
+    .is_uav = true,
+    .initial_state = ResourceStates::kCommon });
+  auto& allocator = renderer_->GetGraphics()->GetDescriptorAllocator();
+  auto handle = allocator.AllocateRaw(
+    ResourceViewType::kTexture_UAV, DescriptorVisibility::kShaderVisible);
+  const auto output_slot = allocator.GetShaderVisibleIndex(handle);
+  Backend().GetResourceRegistry().RegisterView(*output, std::move(handle),
+    TextureViewDescription { .view_type = ResourceViewType::kTexture_UAV,
+      .format = Format::kRGBA32Float,
+      .dimension = TextureType::kTexture3D });
+  std::array<Pixel, 64> samples;
+  for (unsigned z = 0; z < 4; ++z)
+    for (unsigned y = 0; y < 4; ++y)
+      for (unsigned x = 0; x < 4; ++x)
+        samples[(z * 4 + y) * 4 + x]
+          = { float(x) / 4, float(y) / 4, float(z) / 4, 1 - float(z) / 4 };
+  auto history = ViewHistoryFrameBindings {};
+  history.validity_flags = static_cast<std::uint32_t>(
+    ViewHistoryValidityFlagBits::kPreviousViewValid);
+  history.previous_projection_matrix[2][2] = -1.0F / 32;
+  auto frame_bindings = ViewFrameBindings {};
+  frame_bindings.history_frame_slot = PublishFixtureData(history);
+  auto view = ViewConstants::GpuData {};
+  view.view_frame_bindings_bslot
+    = BindlessViewFrameBindingsSlot { PublishFixtureData(frame_bindings) };
+  view.projection_matrix = history.previous_projection_matrix;
+  view.inverse_view_projection_matrix = glm::mat4 { 1.0F };
+  view.inverse_view_projection_matrix[2][2] = -32.0F;
+  auto view_buffer
+    = CreateUploadBuffer(SizeBytes { 256U }, BufferUsage::kConstant);
+  view_buffer->Update(&view, sizeof(view), 0U);
+  const std::array offsets { glm::vec4 { .5F, .5F, .5F, 0 },
+    glm::vec4 { .125F, .375F, .75F, 0 }, glm::vec4 { .875F, .625F, .25F, 0 } };
+  const auto capture = BeginOptionalCapture();
+  for (const auto format : { Format::kRGBA32Float, Format::kRGBA16Float }) {
+    const auto volume = MakeSignal(4, 4, samples, 4, format, true);
+    for (const bool reuse_history : { false, true })
+      for (const float fade_distance : { 0.0F, 2.0F })
+        for (const auto offset : offsets) {
+          SCOPED_TRACE(reuse_history);
+          SCOPED_TRACE(fade_distance);
+          SCOPED_TRACE(offset.z);
+          auto params
+            = vortex::testing::RendererPublicationProbe::FogPassConstants {};
+          params.output_header = { output_slot.get(), 4U, 4U, 4U };
+          params.grid = { 1.0F, 32.0F, fade_distance, 1.0F };
+          params.grid_z = { { 1.0F, 0.0F, 1.0F }, 0.0F };
+          params.height_fog0.primary_density = .06F;
+          params.height_fog1.match_height_fog_factor = 1.0F;
+          params.height_fog1.enabled = 1U;
+          params.media1 = { { 2.0F, 3.0F, 4.0F }, 1.0F };
+          params.temporal_history0 = { volume.srv.get(),
+            reuse_history ? (format == Format::kRGBA16Float ? 3U : 1U) : 0U,
+            1.0F, 1U };
+          for (unsigned c = 0; c < 4; ++c)
+            params.temporal_history1.frame_jitter_offsets[0][c] = offset[c];
+          const auto pass_slot = PublishFixtureData(params);
+          {
+            auto recorder = AcquireRecorder("Fog stable cell dispatch");
+            if (!recorder->AdoptKnownResourceState(*output))
+              recorder->BeginTrackingResourceState(
+                *output, ResourceStates::kCommon, false);
+            recorder->RequireResourceState(
+              *output, ResourceStates::kUnorderedAccess);
+            recorder->FlushBarriers();
+            recorder->SetPipelineState(pipeline);
+            recorder->SetComputeRootConstantBufferView(
+              static_cast<std::uint32_t>(root::RootParam::kViewConstants),
+              view_buffer->GetGPUVirtualAddress());
+            recorder->SetComputeRoot32BitConstant(
+              static_cast<std::uint32_t>(root::RootParam::kRootConstants), 0U,
+              0U);
+            recorder->SetComputeRoot32BitConstant(
+              static_cast<std::uint32_t>(root::RootParam::kRootConstants),
+              pass_slot.get(), 1U);
+            recorder->Dispatch(1U, 1U, 1U);
+          }
+          const auto actual = ReadFloatTexture(*output);
+          ASSERT_EQ(actual.size(), samples.size());
+          for (unsigned i = 0; i < samples.size(); ++i) {
+            // Independent fixed-depth Beer-Lambert oracle, including near fade.
+            const double length = std::exp2(double(i / 16) + .5) - 1;
+            const double fade = fade_distance > 0
+              ? std::min(length / double(fade_distance), 1.0)
+              : 1.0;
+            const double t = std::exp(-double(.06F) * fade * length);
+            for (unsigned c = 0; c < 4; ++c) {
+              const double expected = reuse_history ? double(samples[i][c])
+                : c == 3                            ? t
+                                                    : double(c + 2) * (1 - t);
+              EXPECT_NEAR(actual[i][c], expected, 3e-6)
+                << "voxel=" << i << " channel=" << c;
+            }
+          }
+        }
   }
   if (capture)
     EXPECT_TRUE(capture->EndCapture());
@@ -5373,12 +5720,17 @@ NOLINT_TEST_F(ExposureGpuTest, SuitabilitySelectsGpuCandidateWithTwoStopMargin)
   const auto capture = BeginOptionalCapture();
   const auto result = Qualify(Uniform(1.0F, 4U, 4U), true);
   EXPECT_EQ(result.candidate_pre_exposure, 8192.0F);
-  EXPECT_EQ(result.maximum_scene_rgb, 1.0F);
+  EXPECT_GE(result.maximum_scene_rgb, 1.0F);
+  // Unit P and zero retained error need only the four-ULP outward product
+  // guard.
+  EXPECT_LE(std::bit_cast<std::uint32_t>(result.maximum_scene_rgb),
+    std::bit_cast<std::uint32_t>(1.0F) + 4U);
   EXPECT_EQ(result.failure_flags, 0U);
   EXPECT_EQ(result.checked_samples, 16U);
   EXPECT_EQ(result.checked_products, 1U);
   EXPECT_EQ(result.expected_products, 1U);
-  if (capture) EXPECT_TRUE(capture->EndCapture());
+  if (capture)
+    EXPECT_TRUE(capture->EndCapture());
 }
 
 NOLINT_TEST_F(ExposureGpuTest, SuitabilityRejectsRequiredFortySixStopSignal)
@@ -5592,6 +5944,27 @@ NOLINT_TEST_F(
   EXPECT_FALSE(pass_->HasPreEnvironmentRange(frame));
   if (capture)
     EXPECT_TRUE(capture->EndCapture());
+}
+
+NOLINT_TEST_F(ExposureGpuTest, PreEnvironmentRangePreservesSignedTinyInputs)
+{
+  const auto config = SharedConfig(scene::ExposureSettings {});
+  for (const auto bits : { 1U, 0x80000001U, 0x80000000U }) {
+    SCOPED_TRACE(bits);
+    const auto signal = Uniform(std::bit_cast<float>(bits));
+    ctx_.frame_sequence = frame::SequenceNumber { ++sequence_ };
+    const auto frame = pass_->ResolveFrame(ctx_, config, { .use_fp32 = true });
+    ASSERT_NE(frame, nullptr);
+    ASSERT_TRUE(pass_->CapturePreEnvironmentRange(
+      ctx_, frame, *signal.texture, signal.srv));
+    const auto status = Read<ExposureStatusStorage>(
+      *frame->current_state->status_buffer, ResourceStates::kUnorderedAccess);
+    EXPECT_EQ(std::bit_cast<std::uint32_t>(
+                status.composition_input.maximum_pre_exposed_rgb),
+      bits & 0x7fffffffU);
+    EXPECT_EQ(status.composition_input.flags, bits == 0x80000001U ? 5U : 1U);
+    EXPECT_EQ(status.composition_input.checked_pixels, 1U);
+  }
 }
 
 NOLINT_TEST_F(ExposureGpuTest, PreEnvironmentRangeReportsNonfiniteInput)
@@ -6090,6 +6463,787 @@ NOLINT_TEST_F(ExposureGpuTest, OpaqueApErrorUsesInputPeakAndActualGain)
     EXPECT_TRUE(capture->EndCapture());
 }
 
+NOLINT_TEST_F(ExposureGpuTest, DISABLED_ComposedAdmissionFullResolutionTiming)
+{
+  std::uint32_t width = 960U;
+  char* width_text = nullptr;
+  std::size_t width_size = 0U;
+  if (_dupenv_s(&width_text, &width_size, "OXYGEN_EXPOSURE_TIMING_WIDTH") == 0
+    && width_text) {
+    width = static_cast<std::uint32_t>(std::strtoul(width_text, nullptr, 10));
+    std::free(width_text);
+  }
+  ASSERT_GE(width, 64U);
+  ASSERT_LE(width, 3840U);
+  const std::uint32_t height = width * 9U / 16U;
+  auto scene = scene::Scene("Admission timing", 1U);
+  scene.SetEnvironment(std::make_unique<scene::SceneEnvironment>());
+  auto& background
+    = scene.GetEnvironment()->AddSystem<scene::environment::Background>();
+  background.SetEnabled(true);
+  background.SetColorRgb({ .25F, .25F, .25F });
+  ctx_.scene = observer_ptr { &scene };
+  auto timestamps = Backend().GetTimestampQueryProvider();
+  ASSERT_NE(timestamps, nullptr);
+  ASSERT_TRUE(timestamps->EnsureCapacity(2U));
+  std::uint64_t frequency = 0U;
+  ASSERT_TRUE(GetQueue()->TryGetTimestampFrequency(frequency));
+  ASSERT_GT(frequency, 0U);
+  struct Case {
+    const char* name;
+    engine::ToneMapper mapper;
+    float gamma;
+    float alpha;
+    float alpha_error;
+    float rgb_error;
+    bool neutral;
+    unsigned views;
+  };
+  const std::array cases {
+    Case {
+      "opaque", engine::ToneMapper::kAcesFitted, 2.2F, 1, 0, .0001F, false, 1 },
+    Case { "uncertain", engine::ToneMapper::kAcesFitted, 2.2F, .7F, .0001F,
+      .0001F, false, 1 },
+    Case { "filmic", engine::ToneMapper::kFilmic, 2.2F, .7F, .0001F, .0001F,
+      false, 1 },
+    Case { "gamma", engine::ToneMapper::kAcesFitted, .8F, .7F, .0001F, .0001F,
+      false, 1 },
+    Case {
+      "wide", engine::ToneMapper::kAcesFitted, 2.2F, .5F, .001F, 0, true, 1 },
+    Case { "main_pip", engine::ToneMapper::kAcesFitted, 2.2F, .7F, .0001F,
+      .0001F, false, 2 },
+  };
+  const auto anchor = Uniform(8192.0F);
+  const auto capture = BeginOptionalCapture();
+  unsigned case_index = 0U;
+  for (const auto& test : cases) {
+    SCOPED_TRACE(test.name);
+    background.SetColorRgb(test.neutral ? Vec3 { 0.0F } : Vec3 { .25F });
+    auto settings = scene::ExposureSettings {};
+    settings.mode = engine::ExposureMode::kManual;
+    settings.key = 12.5F;
+    settings.manual_ev = 0.0F;
+    const auto resolved
+      = ResolvedPostProcessConfig::Resolve({ .exposure = settings,
+        .tone_mapper = test.mapper,
+        .enable_bloom = false,
+        .gamma = test.gamma });
+    ASSERT_TRUE(resolved.has_value());
+    ctx_.frame_sequence = frame::SequenceNumber { ++sequence_ };
+    struct View {
+      Signal signal;
+      postprocess::ExposurePass::FrameLease frame;
+      ViewId id;
+      CompositionView::ViewStateHandle handle;
+      std::uint32_t width;
+      std::uint32_t height;
+    };
+    std::vector<View> views;
+    for (unsigned index = 0U; index < test.views; ++index) {
+      const auto view_width = index == 0U ? width : width / 2U;
+      const auto view_height = index == 0U ? height : height / 2U;
+      const auto id = 100U + case_index * 2U + index;
+      ctx_.current_view.view_id = ViewId { id };
+      ctx_.current_view.view_state_handle
+        = CompositionView::ViewStateHandle { id };
+      const std::array<Pixel, 1> pixel { test.neutral
+          ? Pixel { .5F, .5F, .5F, test.alpha }
+          : Pixel { .18F * test.alpha, .24F * test.alpha, .35F * test.alpha,
+              test.alpha } };
+      auto signal = MakeSignal(view_width, view_height, pixel);
+      const auto frame
+        = pass_->ResolveFrame(ctx_, *resolved, { .use_fp32 = true });
+      ASSERT_NE(frame, nullptr);
+      ASSERT_TRUE(RecordShared(signal, *resolved).executed);
+      const auto error
+        = HdrSceneErrorData { .candidate_rgb_relative = test.rgb_error,
+            .candidate_coverage_absolute = test.alpha_error,
+            .candidate_pre_exposure = 1.0F,
+            .checked_products = (1U << 10U) | 1U,
+            .flags = 3U };
+      auto upload = CreateUploadBuffer(SizeBytes { sizeof(error) });
+      upload->Update(&error, sizeof(error), 0U);
+      {
+        auto recorder = AcquireRecorder("Admission timing certificate");
+        EnsureTracked(*recorder, upload, ResourceStates::kGenericRead);
+        ASSERT_TRUE(recorder->AdoptKnownResourceState(
+          *frame->current_state->status_buffer));
+        recorder->RequireResourceState(
+          *frame->current_state->status_buffer, ResourceStates::kCopyDest);
+        recorder->FlushBarriers();
+        recorder->CopyBuffer(*frame->current_state->status_buffer,
+          offsetof(ExposureStatusStorage, scene_error), *upload, 0U,
+          sizeof(error));
+        recorder->RequireResourceStateFinal(
+          *frame->current_state->status_buffer,
+          ResourceStates::kShaderResource);
+      }
+      views.push_back({ std::move(signal), frame, ctx_.current_view.view_id,
+        ctx_.current_view.view_state_handle, view_width, view_height });
+    }
+    for (unsigned iteration = 0U; iteration < 3U; ++iteration) {
+      WaitForQueueIdle();
+      {
+        auto recorder = AcquireRecorder("Admission native timing begin");
+        ASSERT_TRUE(timestamps->WriteTimestamp(*recorder, 0U));
+      }
+      for (const auto& view : views) {
+        ctx_.current_view.view_id = view.id;
+        ctx_.current_view.view_state_handle = view.handle;
+        const std::array products {
+          postprocess::ExposurePass::HdrProduct {
+            .texture = anchor.texture.get(), .srv = anchor.srv, .id = 1U },
+          postprocess::ExposurePass::HdrProduct {
+            .texture = view.signal.texture.get(),
+            .srv = view.signal.srv,
+            .id = 11U,
+            .coverage = true,
+            .composed_error = true },
+        };
+        ASSERT_TRUE(pass_->EvaluateFp16Products(
+          ctx_, view.frame, *resolved, products, {}));
+      }
+      {
+        auto recorder = AcquireRecorder("Admission native timing end");
+        ASSERT_TRUE(timestamps->WriteTimestamp(*recorder, 1U));
+        ASSERT_TRUE(timestamps->RecordResolve(*recorder, 2U));
+      }
+      WaitForQueueIdle();
+      const auto ticks = timestamps->GetResolvedTicks();
+      ASSERT_GE(ticks.size(), 2U);
+      ASSERT_GE(ticks[1], ticks[0]);
+      std::array<std::uint32_t, 2> flags {};
+      for (std::size_t index = 0; index < views.size(); ++index) {
+        const auto& view = views[index];
+        const auto report = Read<HdrSuitabilityData>(
+          *view.frame->suitability_buffer, ResourceStates::kShaderResource);
+        EXPECT_EQ(report.checked_samples, view.width * view.height + 1U);
+        EXPECT_EQ(report.failure_flags & ~4U, 0U);
+        flags[index] = report.failure_flags;
+      }
+      // Queue timestamps include inter-dispatch barriers and any CPU submission
+      // gaps. Replay event counters separately measure dispatch execution only.
+      std::printf("admission_native case=%s width=%u height=%u views=%u "
+                  "iteration=%u queue_ms=%.6f first_flags=%u second_flags=%u\n",
+        test.name, width, height, test.views, iteration,
+        double(ticks[1] - ticks[0]) * 1000.0 / double(frequency), flags[0],
+        flags[1]);
+    }
+    ++case_index;
+  }
+  if (capture)
+    EXPECT_TRUE(capture->EndCapture());
+  ctx_.scene.reset();
+}
+
+NOLINT_TEST_F(ExposureGpuTest, SceneDisplayAdmissionChecksGammaAndBackground)
+{
+  struct Case {
+    const char* name;
+    float radiance;
+    float alpha;
+    float gamma;
+    float alpha_error;
+    bool background;
+    float background_value;
+    std::uint32_t failure;
+    engine::ToneMapper mapper { engine::ToneMapper::kNone };
+  };
+  const std::array cases {
+    Case {
+      "gamma reveals below-float-budget loss", 8e-6F, 1, 2.2F, 0, false, 0, 4 },
+    Case {
+      "linear display keeps loss insignificant", 8e-6F, 1, 1, 0, false, 0, 0 },
+    Case { "white background exposes coverage error", 0, .5F, 2.2F, .1F, true,
+      1, 4 },
+    Case { "black image does not require unused coverage", 0, .5F, 2.2F, .1F,
+      true, 0, 0 },
+    Case {
+      "half coverage changes dark background", 0, .9987F, 2.2F, 0, true, 1, 4 },
+    Case { "ACES toe hides tiny radiance", 8e-6F, 1, 2.2F, 0, false, 0, 0,
+      engine::ToneMapper::kAcesFitted },
+    Case { "Filmic exposes tiny radiance", 8e-6F, 1, 2.2F, 0, false, 0, 4,
+      engine::ToneMapper::kFilmic },
+    Case { "Reinhard exposes tiny radiance", 8e-6F, 1, 2.2F, 0, false, 0, 4,
+      engine::ToneMapper::kReinhard },
+  };
+  const auto capture = BeginOptionalCapture();
+  for (const auto& test : cases) {
+    SCOPED_TRACE(test.name);
+    auto scene = scene::Scene("Display admission", 1U);
+    scene.SetEnvironment(std::make_unique<scene::SceneEnvironment>());
+    auto& background
+      = scene.GetEnvironment()->AddSystem<scene::environment::Background>();
+    background.SetEnabled(test.background);
+    background.SetColorRgb(
+      { test.background_value, test.background_value, test.background_value });
+    ctx_.scene = observer_ptr { &scene };
+    auto settings = scene::ExposureSettings {};
+    settings.mode = engine::ExposureMode::kManual;
+    settings.key = 12.5F;
+    settings.manual_ev = 0.0F;
+    const auto resolved
+      = ResolvedPostProcessConfig::Resolve({ .exposure = settings,
+        .tone_mapper = test.mapper,
+        .enable_bloom = false,
+        .gamma = test.gamma });
+    ASSERT_TRUE(resolved.has_value());
+    const std::array<Pixel, 1> pixels { Pixel {
+      test.radiance, test.radiance, test.radiance, test.alpha } };
+    const auto signal = MakeSignal(1U, 1U, pixels);
+    const auto anchor = Uniform(0x1p33F);
+    ctx_.frame_sequence = frame::SequenceNumber { ++sequence_ };
+    const auto frame
+      = pass_->ResolveFrame(ctx_, *resolved, { .use_fp32 = true });
+    ASSERT_NE(frame, nullptr);
+    ASSERT_TRUE(RecordShared(signal, *resolved).executed);
+    const auto error
+      = HdrSceneErrorData { .candidate_coverage_absolute = test.alpha_error,
+          .candidate_pre_exposure = 0x1p-20F,
+          .checked_products = (1U << 10U) | 1U,
+          .flags = 3U };
+    auto upload = CreateUploadBuffer(SizeBytes { sizeof(error) });
+    upload->Update(&error, sizeof(error), 0U);
+    {
+      auto recorder = AcquireRecorder("Display admission certificate");
+      EnsureTracked(*recorder, upload, ResourceStates::kGenericRead);
+      ASSERT_TRUE(recorder->AdoptKnownResourceState(
+        *frame->current_state->status_buffer));
+      recorder->RequireResourceState(
+        *frame->current_state->status_buffer, ResourceStates::kCopyDest);
+      recorder->FlushBarriers();
+      recorder->CopyBuffer(*frame->current_state->status_buffer,
+        offsetof(ExposureStatusStorage, scene_error), *upload, 0U,
+        sizeof(error));
+      recorder->RequireResourceStateFinal(
+        *frame->current_state->status_buffer, ResourceStates::kShaderResource);
+    }
+    const std::array products {
+      postprocess::ExposurePass::HdrProduct {
+        .texture = anchor.texture.get(), .srv = anchor.srv, .id = 1U },
+      postprocess::ExposurePass::HdrProduct { .texture = signal.texture.get(),
+        .srv = signal.srv,
+        .id = 11U,
+        .coverage = test.background,
+        .composed_error = true }
+    };
+    ASSERT_TRUE(
+      pass_->EvaluateFp16Products(ctx_, frame, *resolved, products, {}));
+    const auto report = Read<HdrSuitabilityData>(
+      *frame->suitability_buffer, ResourceStates::kShaderResource);
+    EXPECT_EQ(report.candidate_pre_exposure, 0x1p-20F);
+    EXPECT_EQ(report.failure_flags, test.failure);
+    EXPECT_EQ(report.metering_failures, 0U);
+    ctx_.scene.reset();
+  }
+  if (capture)
+    EXPECT_TRUE(capture->EndCapture());
+}
+
+NOLINT_TEST_F(ExposureGpuTest, QuickToneBoundsCoverColorAndCoverageBoxes)
+{
+  const std::array levels { 0.0F, .001F, .01F, .05F, .18F, 1.0F, 4.0F, 100.0F };
+  std::vector<std::array<float, 4>> inputs;
+  for (const float red : levels)
+    for (const float green : levels)
+      for (const float blue : levels)
+        for (const float alpha : { 0.0F, .25F, .7F, 1.0F }) {
+          Pixel low { red, green, blue, alpha }, high = low;
+          for (unsigned c = 0U; c < 3U; ++c) {
+            const float radius = std::max(low[c] * .0001F, 1e-8F);
+            low[c] = std::max(0.0F, low[c] - radius);
+            high[c] += radius;
+          }
+          if (alpha > 0.0F && alpha < 1.0F) {
+            low[3] -= .0001F;
+            high[3] += .0001F;
+          }
+          inputs.push_back(low);
+          inputs.push_back(high);
+        }
+  const auto count = static_cast<std::uint32_t>(inputs.size() / 2U);
+  std::uint32_t mode = 3U; // ACES, gamma 2.2.
+  char* mode_text = nullptr;
+  std::size_t mode_size = 0U;
+  if (_dupenv_s(&mode_text, &mode_size, "OXYGEN_EXPOSURE_TONE_PROBE_MODE") == 0
+    && mode_text) {
+    mode = static_cast<std::uint32_t>(std::strtoul(mode_text, nullptr, 10));
+    std::free(mode_text);
+    ASSERT_NE(mode & 1U, 0U);
+  }
+  const auto results
+    = RunToneProbe(std::as_bytes(std::span { inputs }), count, mode);
+  for (std::size_t i = 0; i < results.size(); ++i) {
+    SCOPED_TRACE(i);
+    const auto& result = results[i];
+    EXPECT_EQ(result[3], 1.0F);
+    for (unsigned c = 0U; c < 3U; ++c) {
+      EXPECT_GE(result[c], 0.0F);
+      EXPECT_LE(result[c], result[c + 4U]);
+      EXPECT_LE(result[c + 4U], 1.0F);
+    }
+  }
+}
+
+NOLINT_TEST_F(
+  ExposureGpuTest, HardwareFilterEnclosuresRetainFormatAndHistoryError)
+{
+  std::vector<std::array<float, 4>> inputs;
+  const std::array levels { 0.0F, 0x1p-149F, 0x1p-126F, 0x1p-24F, 0x1p-14F, .5F,
+    1.0F, 65504.0F };
+  for (const auto value : levels)
+    for (const auto relative : { 0.0F, 0x1p-11F, .01F })
+      for (const auto gradient : { 0.0F, 0x1p-24F, .125F })
+        for (const auto width : { 1.0F, 32.0F, 16384.0F })
+          for (const auto half : { 0.0F, 1.0F }) {
+            inputs.push_back({ value, relative, 0.0F, half });
+            inputs.push_back({ gradient, gradient, gradient, value });
+            inputs.push_back({ width, width, 32.0F, 0.0F });
+          }
+  // Captured half-sampler rounding at the midpoint of two exactly stored
+  // half texels. There is no texel-store error to hide the filtering error.
+  inputs.push_back({ .5419921875F, 0.0F, 0.0F, 1.0F });
+  inputs.push_back({ 0.0F, 0.0F, .06494140625F, .541748046875F });
+  inputs.push_back({ 1.0F, 1.0F, 32.0F, 0.0F });
+  const auto count = static_cast<std::uint32_t>(inputs.size() / 3U);
+  const auto results
+    = RunToneProbe(std::as_bytes(std::span { inputs }), count, 32U);
+  for (std::size_t i = 0U; i < results.size(); ++i) {
+    SCOPED_TRACE(i);
+    const auto& interval = results[i];
+    const auto reference = double(inputs[i * 3U + 1U][3]);
+    EXPECT_LE(double(interval[0]), reference);
+    EXPECT_GE(double(interval[1]), reference);
+    EXPECT_TRUE(std::isfinite(interval[0]));
+    EXPECT_TRUE(std::isfinite(interval[1]));
+    if (inputs[i * 3U][1] == 0.0F && inputs[i * 3U][3] == 0.0F) {
+      EXPECT_EQ(std::bit_cast<std::uint32_t>(interval[0]),
+        std::bit_cast<std::uint32_t>(inputs[i * 3U][0]));
+      EXPECT_EQ(std::bit_cast<std::uint32_t>(interval[1]),
+        std::bit_cast<std::uint32_t>(inputs[i * 3U][0]));
+    }
+  }
+  RecordProperty("hardware_filter_interval_cases", count);
+}
+
+NOLINT_TEST_F(ExposureGpuTest, ToneBoundsEncloseSignedTinyArithmetic)
+{
+  using Case = std::array<std::uint32_t, 4>;
+  std::vector<Case> cases;
+  const auto one = std::bit_cast<std::uint32_t>(1.0F);
+  const auto large = std::bit_cast<std::uint32_t>(0x1p100F);
+  for (const auto sign : { 0U, 0x80000000U }) {
+    for (const auto magnitude :
+      { 0U, 1U, 0x007fffffU, 0x00800000U, 0x00800001U, 0x00800002U, 0x00800003U,
+        0x00800004U, 0x00800005U, 0x00800006U, 0x00800007U, 0x00800008U,
+        0x00800009U, 0x3f000000U, 0x3f800000U, 0x71800000U }) {
+      const auto value = magnitude | sign;
+      cases.push_back({ value, value, one, one });
+      cases.push_back({ value, value, large, large });
+    }
+  }
+  cases.push_back({ 1U, 1U, 0x00800000U, 0x00800000U });
+  cases.push_back({ 0x80000001U, 0x80000001U, 0x80800000U, 0x80800000U });
+  cases.push_back({ 0x80000001U, 1U, large, large });
+  const auto results = RunToneProbe(std::as_bytes(std::span { cases }),
+    static_cast<std::uint32_t>(cases.size()));
+  for (std::size_t i = 0; i < cases.size(); ++i) {
+    SCOPED_TRACE(i);
+    const auto& result = results[i];
+    const auto value = [&](unsigned index) {
+      return double(std::bit_cast<float>(cases[i][index]));
+    };
+    EXPECT_LE(result[0], value(0));
+    EXPECT_GE(result[1], value(0));
+    for (unsigned left = 0; left < 2; ++left)
+      for (unsigned right = 2; right < 4; ++right) {
+        // Products of two finite binary32 values are exact in binary64.
+        const double sum = value(left) + value(right);
+        const double product = value(left) * value(right);
+        EXPECT_LE(result[2], sum);
+        EXPECT_GE(result[3], sum);
+        EXPECT_LE(result[4], product);
+        EXPECT_GE(result[5], product);
+      }
+    for (unsigned endpoint = 0; endpoint < 2; ++endpoint) {
+      const double positive = std::max(0.0, value(endpoint));
+      EXPECT_LE(result[6], positive * positive);
+      EXPECT_GE(result[7], positive * positive);
+    }
+  }
+}
+
+NOLINT_TEST_F(
+  ExposureGpuTest, ComposedSceneAdmissionUsesCandidateAndCoverageIntervals)
+{
+  constexpr auto scene_bit = 1U << 10U;
+  struct Case {
+    const char* name;
+    Pixel pixel;
+    HdrSceneErrorData error;
+    std::uint32_t failure;
+    bool metering { true };
+    bool current_store { false };
+    std::uint32_t required_products { 0U };
+  };
+  const auto complete = HdrSceneErrorData {
+    .candidate_pre_exposure = 1.0F,
+    .checked_products = scene_bit,
+    .flags = 3U,
+  };
+  auto candidate_error = complete;
+  candidate_error.candidate_rgb_absolute = .01F;
+  auto retained_error = complete;
+  retained_error.current_rgb_absolute = .01F;
+  auto tiny_error = complete;
+  tiny_error.candidate_rgb_absolute = 1e-8F;
+  auto coverage_error = complete;
+  coverage_error.candidate_coverage_absolute = .001F;
+  auto dark_error = complete;
+  // Half spacing immediately above 2^-12 is 2^-22; cross its half-way point.
+  dark_error.candidate_rgb_absolute = 2e-7F;
+  auto stale = complete;
+  stale.candidate_pre_exposure = 2.0F;
+  auto missing = complete;
+  missing.flags = 1U;
+  auto incomplete = complete;
+  incomplete.checked_products = 0U;
+  auto invalid = complete;
+  invalid.candidate_rgb_absolute = std::numeric_limits<float>::infinity();
+  auto current_only = invalid;
+  current_only.flags = 1U;
+  current_only.checked_products = scene_bit | (1U << 9U);
+  current_only.candidate_pre_exposure = 2.0F;
+  auto current_retained = current_only;
+  current_retained.current_rgb_absolute = .01F;
+  const std::array cases {
+    Case { "exact", { 1, 1, 1, 1 }, complete, 0 },
+    Case { "upstream candidate differs", { 1, 1, 1, 1 }, candidate_error, 12 },
+    Case { "retained reference differs", { 1, 1, 1, 1 }, retained_error, 12 },
+    Case { "insignificant candidate", { 1, 1, 1, 1 }, tiny_error, 0 },
+    // The bounded runtime display check cannot certify this wide coverage
+    // interval. Retain both its unresolved-image and definite mass failures.
+    Case { "coverage changes mass and exceeds the cheap enclosure",
+      { .5F, .5F, .5F, .5F }, coverage_error, 12 },
+    Case { "dark cutoff crossed", { 0x1p-12F, 0x1p-12F, 0x1p-12F, 1 },
+      dark_error, 8 },
+    Case { "zero weight skips normalization", { 0, 0, 0, 0 }, complete, 0 },
+    Case { "another candidate", { 1, 1, 1, 1 }, stale, 16 },
+    Case { "missing candidate", { 1, 1, 1, 1 }, missing, 16 },
+    Case { "incomplete product mask", { 1, 1, 1, 1 }, incomplete, 16 },
+    Case { "invalid coefficient", { 1, 1, 1, 1 }, invalid, 16 },
+    Case { "current resolve ignores prospective fields", { 1, 1, 1, 1 },
+      current_only, 0, true, true, scene_bit | (1U << 9U) },
+    Case { "current resolve requires all producers", { 1, 1, 1, 1 }, complete,
+      16, true, true, scene_bit | (1U << 9U) },
+    Case { "current resolve preserves retained errors", { 1, 1, 1, 1 },
+      current_retained, 12, true, true, scene_bit | (1U << 9U) },
+  };
+  auto settings = scene::ExposureSettings {};
+  settings.mode = engine::ExposureMode::kManual;
+  settings.key = 12.5F;
+  settings.manual_ev = 0.0F;
+  const auto config = SharedConfig(settings);
+  const auto capture = BeginOptionalCapture();
+  for (const auto& test : cases) {
+    SCOPED_TRACE(test.name);
+    // An exact 8192 anchor fixes candidate P=1 independently of the case.
+    const std::array pixels { test.pixel, Pixel { 8192, 8192, 8192, 1 } };
+    const auto signal = MakeSignal(2U, 1U, pixels);
+    ctx_.frame_sequence = frame::SequenceNumber { ++sequence_ };
+    const auto frame = pass_->ResolveFrame(ctx_, config, { .use_fp32 = true });
+    ASSERT_NE(frame, nullptr);
+    ASSERT_TRUE(RecordShared(signal, config).executed);
+    const auto cleared = Read<ExposureStatusStorage>(
+      *frame->current_state->status_buffer, ResourceStates::kCopySource);
+    EXPECT_EQ(cleared.scene_error.flags, 0U);
+    auto upload = CreateUploadBuffer(SizeBytes { sizeof(test.error) });
+    upload->Update(&test.error, sizeof(test.error), 0U);
+    {
+      auto recorder = AcquireRecorder("Composed admission fixture");
+      EnsureTracked(*recorder, upload, ResourceStates::kGenericRead);
+      ASSERT_TRUE(recorder->AdoptKnownResourceState(
+        *frame->current_state->status_buffer));
+      recorder->RequireResourceState(
+        *frame->current_state->status_buffer, ResourceStates::kCopyDest);
+      recorder->FlushBarriers();
+      recorder->CopyBuffer(*frame->current_state->status_buffer,
+        offsetof(ExposureStatusStorage, scene_error), *upload, 0U,
+        sizeof(test.error));
+      recorder->RequireResourceStateFinal(
+        *frame->current_state->status_buffer, ResourceStates::kShaderResource);
+    }
+    const std::array products { postprocess::ExposurePass::HdrProduct {
+      .texture = signal.texture.get(),
+      .srv = signal.srv,
+      .id = 11U,
+      .metering = test.metering,
+      .coverage = true,
+      .composed_error = true } };
+    ASSERT_TRUE(pass_->EvaluateFp16Products(ctx_, frame, config, products,
+      { .composition_products = test.required_products },
+      test.current_store
+        ? postprocess::ExposurePass::SuitabilityScale::kCurrentFrame
+        : postprocess::ExposurePass::SuitabilityScale::kCandidate));
+    const auto report = Read<HdrSuitabilityData>(
+      *(test.current_store ? frame->conversion_buffer
+                           : frame->suitability_buffer),
+      ResourceStates::kShaderResource);
+    EXPECT_EQ(report.candidate_pre_exposure, 1.0F);
+    EXPECT_EQ(report.failure_flags, test.failure);
+    EXPECT_EQ(report.checked_samples, 2U);
+    if (test.current_store)
+      continue;
+    ASSERT_TRUE(pass_->FinalizeFp16Suitability(ctx_, frame,
+      { .product_layout_revision = 1U,
+        .expected_products = scene_bit,
+        .invalidate_previous = true }));
+    const auto status = Read<ExposureStatusStorage>(
+      *frame->current_state->status_buffer, ResourceStates::kUnorderedAccess);
+    EXPECT_EQ(
+      status.completed.fp16_eligible_streak, test.failure == 0U ? 1U : 0U);
+    EXPECT_EQ(status.scene_error.flags, test.error.flags);
+  }
+  if (capture)
+    EXPECT_TRUE(capture->EndCapture());
+}
+
+NOLINT_TEST_F(ExposureGpuTest, ConsumerArithmeticContainsAttenuationAndRounding)
+{
+  std::vector<std::array<float, 4>> inputs;
+  for (const float relative : { 0.0F, 0x1p-11F, .01F })
+    for (const float absolute : { 0.0F, 0x1p-149F, 0x1p-120F, .001F })
+      for (const float t_relative : { 0.0F, .002F })
+        for (const float t_absolute : { 0.0F, 1e-8F })
+          for (const float maximum : { 0.0F, 0x1p-24F, 1.0F, 0x1p32F })
+            for (const float steps : { 0.0F, 128.0F, 4096.0F })
+              for (const float inverse_p : { 0x1p-32F, 1.0F, 0x1p32F }) {
+                inputs.push_back({ relative, absolute, t_relative, t_absolute });
+                inputs.push_back({ maximum, steps, inverse_p, 0.0F });
+              }
+  const auto count = static_cast<std::uint32_t>(inputs.size() / 2U);
+  const auto results = RunToneProbe(std::as_bytes(std::span { inputs }), count, 64U);
+  for (std::size_t i = 0; i < results.size(); ++i) {
+    SCOPED_TRACE(i);
+    const auto& b = inputs[i * 2U];
+    const auto& c = inputs[i * 2U + 1U];
+    const auto& result = results[i];
+    for (const float value : result) {
+      EXPECT_TRUE(std::isfinite(value));
+      EXPECT_GE(value, 0.0F);
+    }
+    for (const double source_sign : { -1.0, 1.0 })
+      for (const double t_sign : { -1.0, 1.0 }) {
+        const double reference = double(c[0]) * .25;
+        const double source = std::max(0.0, double(c[0])
+          + source_sign * (double(b[0]) * c[0] + b[1]));
+        const double transmission = std::clamp(.25
+          + t_sign * (double(b[2]) * .25 + b[3]), 0.0, 1.0);
+        const double error = std::abs(source * transmission - reference);
+        EXPECT_LE(error, double(result[0]) * reference + result[1]);
+        EXPECT_LE(error, double(result[2]) * reference + result[3]);
+      }
+    EXPECT_EQ(result[6], 0.0F);
+    EXPECT_GE(double(result[7]), double(b[0]) * c[0] + b[1]);
+  }
+  RecordProperty("consumer_arithmetic_cases", count);
+}
+
+NOLINT_TEST_F(ExposureGpuTest, ComposedCoverageRequiresValidOpaqueDepth)
+{
+  struct Case {
+    const char* name;
+    float depth;
+    bool reverse;
+    bool supplied;
+    unsigned width;
+    float alpha;
+    bool admitted;
+  };
+  const std::array cases {
+    Case { "reverse opaque", .5F, true, true, 2U, 1, true },
+    Case { "forward opaque", .5F, false, true, 2U, 1, true },
+    Case { "reverse near", 1, true, true, 2U, 1, true },
+    Case { "forward near", 0, false, true, 2U, 1, true },
+    Case { "reverse far", 0, true, true, 2U, 1, false },
+    Case { "forward far", 1, false, true, 2U, 1, false },
+    Case { "uncertain horizon", .0005F, true, true, 2U, 1, false },
+    Case { "no depth", .5F, true, false, 2U, 1, false },
+    Case { "partial coverage", .5F, true, true, 2U, .5F, false },
+    Case { "mismatched depth", .5F, false, true, 1U, 1, false },
+    Case { "negative depth", -.1F, true, true, 2U, 1, false },
+    Case { "depth above one", 1.1F, false, true, 2U, 1, false },
+    Case { "NaN depth", std::numeric_limits<float>::quiet_NaN(), true,
+      true, 2U, 1, false },
+    Case { "infinite depth", std::numeric_limits<float>::infinity(), false,
+      true, 2U, 1, false },
+    Case { "negative subnormal depth", std::bit_cast<float>(0x80000001U),
+      false, true, 2U, 1, false },
+  };
+  auto settings = scene::ExposureSettings {};
+  settings.mode = engine::ExposureMode::kManual;
+  settings.key = 12.5F;
+  settings.manual_ev = 0.0F;
+  const auto config = SharedConfig(settings);
+  const auto capture = BeginOptionalCapture();
+  for (const auto& test : cases) {
+    SCOPED_TRACE(test.name);
+    const std::array pixels { Pixel { .5F, .5F, .5F, test.alpha },
+      Pixel { 8192, 8192, 8192, 1 } };
+    const auto signal = MakeSignal(2U, 1U, pixels);
+    const auto depth = Uniform(test.depth, test.width, 1U);
+    ctx_.frame_sequence = frame::SequenceNumber { ++sequence_ };
+    const auto frame = pass_->ResolveFrame(ctx_, config, { .use_fp32 = true });
+    ASSERT_NE(frame, nullptr);
+    ASSERT_TRUE(RecordShared(signal, config).executed);
+    const auto error = HdrSceneErrorData {
+      .current_coverage_absolute = .001F,
+      .candidate_pre_exposure = 1.0F,
+      .checked_products = 1U << 10U,
+      .flags = 1U,
+    };
+    auto upload = CreateUploadBuffer(SizeBytes { sizeof(error) });
+    upload->Update(&error, sizeof(error), 0U);
+    {
+      auto recorder = AcquireRecorder("Opaque coverage fixture");
+      EnsureTracked(*recorder, upload, ResourceStates::kGenericRead);
+      ASSERT_TRUE(recorder->AdoptKnownResourceState(*frame->current_state->status_buffer));
+      recorder->RequireResourceState(*frame->current_state->status_buffer, ResourceStates::kCopyDest);
+      recorder->FlushBarriers();
+      recorder->CopyBuffer(*frame->current_state->status_buffer,
+        offsetof(ExposureStatusStorage, scene_error), *upload, 0U, sizeof(error));
+      recorder->RequireResourceStateFinal(*frame->current_state->status_buffer, ResourceStates::kShaderResource);
+    }
+    const std::array products { postprocess::ExposurePass::HdrProduct {
+      .texture = signal.texture.get(), .srv = signal.srv, .id = 11U,
+      .metering = true, .coverage = true, .composed_error = true } };
+    const auto composition = postprocess::ExposurePass::SceneComposition {
+      .opaque_depth = test.supplied ? depth.texture.get() : nullptr,
+      .opaque_depth_srv = test.supplied ? depth.srv : kInvalidShaderVisibleIndex,
+      .reverse_z = test.reverse,
+    };
+    ASSERT_TRUE(pass_->EvaluateFp16Products(ctx_, frame, config, products,
+      { .scene_composition = composition }, postprocess::ExposurePass::SuitabilityScale::kCurrentFrame));
+    const auto result = Read<HdrSuitabilityData>(*frame->conversion_buffer, ResourceStates::kShaderResource);
+    EXPECT_EQ(result.failure_flags == 0U, test.admitted);
+    if (!test.admitted) EXPECT_NE(result.failure_flags & 8U, 0U);
+    EXPECT_EQ(result.checked_samples, 2U);
+  }
+  if (capture) EXPECT_TRUE(capture->EndCapture());
+}
+
+NOLINT_TEST_F(
+  ExposureGpuTest, ProspectiveProductBoundsIncludeRetainedErrorAndSelectedScale)
+{
+  const std::array<float, 8> observed { 1.00075F, 1.0F / 3.0F, 0x1p-25F,
+    3.0F * 0x1p-25F, 8190.0F, .25F, .5F, 0.0F };
+  // Exact independent binary16 results at P=1, including ties and exponent
+  // carry.
+  const std::array<double, 8> narrowed { 1.0009765625, 1365.0 / 4096.0, 0.0,
+    0x1p-23, 8192.0, .25, .5, 0.0 };
+  std::array<Pixel, 8> pixels {};
+  for (std::size_t i = 0; i < pixels.size(); ++i)
+    pixels[i] = { observed[i], observed[i], observed[i], 1.0F - 0x1p-16F };
+  const auto image = MakeSignal(4U, 2U, pixels);
+  const auto volume = MakeSignal(2U, 2U, pixels, 2U);
+  const auto anchor = Uniform(8192.0F);
+  auto settings = scene::ExposureSettings {};
+  settings.mode = engine::ExposureMode::kManual;
+  settings.manual_ev = 0.0F;
+  const auto config = SharedConfig(settings);
+  ctx_.frame_sequence = frame::SequenceNumber { ++sequence_ };
+  const auto frame = pass_->ResolveFrame(ctx_, config, { .use_fp32 = true });
+  ASSERT_NE(frame, nullptr);
+  ASSERT_TRUE(RecordShared(anchor, config).executed);
+  const std::array products {
+    postprocess::ExposurePass::HdrProduct {
+      .texture = anchor.texture.get(), .srv = anchor.srv, .id = 11U },
+    postprocess::ExposurePass::HdrProduct {
+      .texture = image.texture.get(), .srv = image.srv, .id = 5U },
+    postprocess::ExposurePass::HdrProduct { .texture = volume.texture.get(),
+      .srv = volume.srv,
+      .id = 6U,
+      .transmittance = true },
+    postprocess::ExposurePass::HdrProduct { .texture = volume.texture.get(),
+      .srv = volume.srv,
+      .id = 10U,
+      .transmittance = true },
+  };
+  const auto capture = BeginOptionalCapture();
+  std::array<HdrErrorBoundsData, 3> exact_result {};
+  for (unsigned trial = 0U; trial < 4U; ++trial) {
+    SCOPED_TRACE(trial);
+    std::array<HdrErrorBoundsData, 3> prior {};
+    if (trial == 1U)
+      prior.fill({ .rgb_relative = .002F,
+        .rgb_absolute = .01F,
+        .transmittance_relative = .001F,
+        .transmittance_absolute = .0001F });
+    if (trial == 2U)
+      prior[2].rgb_relative = 1.0F;
+    auto upload = CreateUploadBuffer(SizeBytes { sizeof(prior) });
+    upload->Update(prior.data(), sizeof(prior), 0U);
+    {
+      auto recorder = AcquireRecorder("Prospective bounds fixture");
+      EnsureTracked(*recorder, upload, ResourceStates::kGenericRead);
+      ASSERT_TRUE(recorder->AdoptKnownResourceState(
+        *frame->current_state->status_buffer));
+      recorder->RequireResourceState(
+        *frame->current_state->status_buffer, ResourceStates::kCopyDest);
+      recorder->FlushBarriers();
+      recorder->CopyBuffer(*frame->current_state->status_buffer,
+        offsetof(ExposureStatusStorage, producer_errors), *upload, 0U,
+        sizeof(prior));
+      recorder->RequireResourceStateFinal(
+        *frame->current_state->status_buffer, ResourceStates::kShaderResource);
+    }
+    ASSERT_TRUE(pass_->EvaluateFp16Products(ctx_, frame, config, products, {}));
+    const auto report = Read<HdrSuitabilityData>(
+      *frame->suitability_buffer, ResourceStates::kShaderResource);
+    EXPECT_EQ(report.candidate_pre_exposure, 1.0F);
+    const auto status = Read<ExposureStatusStorage>(
+      *frame->current_state->status_buffer, ResourceStates::kShaderResource);
+    for (std::size_t product = 0; product < prior.size(); ++product) {
+      const auto& actual = status.candidate_errors[product];
+      if (trial == 2U && product == 2U) {
+        EXPECT_TRUE(std::isinf(actual.rgb_absolute));
+        continue;
+      }
+      for (std::size_t i = 0; i < observed.size(); ++i) {
+        const double low = std::max(0.0,
+          (double(observed[i]) - prior[product].rgb_absolute)
+            / (1.0 + prior[product].rgb_relative));
+        const double high = (double(observed[i]) + prior[product].rgb_absolute)
+          / (1.0 - prior[product].rgb_relative);
+        for (const double reference : { low, high })
+          EXPECT_LE(std::abs(narrowed[i] - reference),
+            actual.rgb_relative * reference + actual.rgb_absolute);
+      }
+      if (product != 0U) {
+        const double t = double(pixels[0][3]);
+        const double low = std::max(0.0,
+          (t - prior[product].transmittance_absolute)
+            / (1.0 + prior[product].transmittance_relative));
+        const double high = std::min(1.0,
+          (t + prior[product].transmittance_absolute)
+            / (1.0 - prior[product].transmittance_relative));
+        for (const double reference : { low, high })
+          EXPECT_LE(std::abs(1.0 - reference),
+            actual.transmittance_relative * reference
+              + actual.transmittance_absolute);
+      }
+    }
+    if (trial == 0U)
+      exact_result = status.candidate_errors;
+    if (trial == 3U)
+      EXPECT_EQ(std::memcmp(exact_result.data(), status.candidate_errors.data(),
+                  sizeof(exact_result)),
+        0);
+  }
+  if (capture)
+    EXPECT_TRUE(capture->EndCapture());
+}
+
 NOLINT_TEST_F(ExposureGpuTest, SuitabilityRetainsProducerAndHistoryError)
 {
   struct Case {
@@ -6324,7 +7478,9 @@ NOLINT_TEST_F(ExposureGpuTest, SuitabilityChecksVolumeRgbAndTransmittance)
   ASSERT_TRUE(pass_->EvaluateFp16Products(ctx_, frame, config, products, {}));
   const auto result = Read<HdrSuitabilityData>(
     *frame->suitability_buffer, ResourceStates::kShaderResource);
-  EXPECT_EQ(result.maximum_scene_rgb, .75F);
+  EXPECT_GE(result.maximum_scene_rgb, .75F);
+  EXPECT_LE(std::bit_cast<std::uint32_t>(result.maximum_scene_rgb),
+    std::bit_cast<std::uint32_t>(.75F) + 4U);
   EXPECT_EQ(result.candidate_pre_exposure, 16384.0F);
   EXPECT_EQ(result.checked_samples, 4U);
   EXPECT_EQ(result.checked_products, 1U << 9U);
@@ -6446,9 +7602,19 @@ NOLINT_TEST_F(ExposureGpuTest,
     std::uint32_t failure;
     PackedPixel last_pixel;
     bool automatic { false };
+    bool zero_meter_mask { false };
   };
   const std::array cases {
     Case { "ordinary", ordinary, 0, true, false, 0U, expected },
+    Case { "typed half rounding",
+      { 1.500732421875F, 1.500244140625F, 1.50048828125F, 1.0F }, 0, true,
+      false, 0U, { 0x3e01U, 0x3e00U, 0x3e00U, 0x3c00U } },
+    Case { "odd tie and exponent boundary",
+      { 1.50146484375F, 8198.0F, 1.99951171875F, 1.0F }, 0, true, false, 0U,
+      { 0x3e02U, 0x7001U, 0x4000U, 0x3c00U } },
+    Case { "subnormal nearest even",
+      { 1.75F * 0x1p-24F, 2.5F * 0x1p-24F, 3.5F * 0x1p-24F, 0.0F }, 0, true,
+      false, 0U, { 2U, 2U, 4U, 0U }, false, true },
     Case { "overflow", { 0x1p20F, 0x1p20F, 0x1p20F, 1 }, 0, true, false, 2U,
       sentinel },
     Case { "nonfinite", { std::numeric_limits<float>::quiet_NaN(), 0, 0, 1 }, 0,
@@ -6531,8 +7697,15 @@ NOLINT_TEST_F(ExposureGpuTest,
     const auto capture = &test_case == &cases.front()
       ? BeginOptionalCapture()
       : observer_ptr<FrameCaptureController> {};
+    const auto zero_mask = test_case.zero_meter_mask
+      ? std::optional<Signal> { Uniform(0.0F) }
+      : std::nullopt;
     ASSERT_TRUE(pass_->ConvertCheckedSceneColor(ctx_, frame, config,
-      { .scene_signal = signal.texture.get(), .scene_signal_srv = signal.srv },
+      { .scene_signal = signal.texture.get(),
+        .scene_signal_srv = signal.srv,
+        .metering_mask = zero_mask ? zero_mask->texture.get() : nullptr,
+        .metering_mask_srv
+        = zero_mask ? zero_mask->srv : kInvalidShaderVisibleIndex },
       *destination, uav));
     if (capture)
       EXPECT_TRUE(capture->EndCapture());
@@ -6636,6 +7809,7 @@ NOLINT_TEST_F(ExposureGpuTest,
     bool fp32;
     bool overflow;
     float expected;
+    bool missing_certificate { false };
   };
   const std::array cases {
     Case { "accepted half", 1.0F / 3.0F, 0, true, false, .333251953125F },
@@ -6644,6 +7818,8 @@ NOLINT_TEST_F(ExposureGpuTest,
     Case { "future candidate cannot approve current conversion", 0x1p20F, 20,
       true, false, 1.0F },
     Case { "nonunit P", 1.0F / 3.0F, -2, false, false, .333251953125F },
+    Case { "missing certificate fallback", 1.0F / 3.0F, 0, true, false,
+      1.0F / 3.0F, true },
   };
   for (const auto& test_case : cases) {
     SCOPED_TRACE(test_case.name);
@@ -6673,6 +7849,10 @@ NOLINT_TEST_F(ExposureGpuTest,
     if (test_case.overflow)
       pixels.back() = Pixel { 0x1p20F, 0x1p20F, 0x1p20F, 1.0F };
     const auto accumulation = MakeSignal(4U, 4U, pixels);
+    ctx_.current_view.frame_exposure = frame;
+    if (!test_case.missing_certificate)
+      ASSERT_TRUE(service.CapturePreEnvironmentRange(
+        ctx_, *accumulation.texture, accumulation.srv));
     const auto prepared
       = service.PrepareSceneExposure(ctx_.current_view.view_id, ctx_,
         { .scene_signal = accumulation.texture.get(),
@@ -6731,6 +7911,15 @@ NOLINT_TEST_F(ExposureGpuTest,
     const auto capture = test_case.overflow
       ? BeginOptionalCapture()
       : observer_ptr<FrameCaptureController> {};
+    const std::array products { postprocess::ExposurePass::HdrProduct {
+      .texture = accumulation.texture.get(),
+      .srv = accumulation.srv,
+      .id = 11U,
+      .metering = true,
+      .composed_error = true } };
+    if (!test_case.missing_certificate)
+      ASSERT_TRUE(service.PrepareScenePrecision(ctx_, *prepared, products,
+        postprocess::ExposurePass::SceneComposition {}));
     ASSERT_TRUE(service.ConvertSceneColor(ctx_, *prepared,
       { .scene_signal = accumulation.texture.get(),
         .scene_signal_srv = accumulation.srv },
@@ -6740,12 +7929,8 @@ NOLINT_TEST_F(ExposureGpuTest,
     EXPECT_EQ(std::memcmp(&before, &converted_state, sizeof(before)), 0);
     const auto conversion_before = Read<HdrSuitabilityData>(
       *frame->conversion_buffer, ResourceStates::kShaderResource);
-    const std::array products { postprocess::ExposurePass::HdrProduct {
-      .texture = accumulation.texture.get(),
-      .srv = accumulation.srv,
-      .id = 11U,
-      .metering = true } };
-    ASSERT_TRUE(service.FinalizeScenePrecision(ctx_, *prepared, products));
+    EXPECT_EQ(service.FinalizeScenePrecision(ctx_, *prepared),
+      !test_case.missing_certificate);
     const auto finalized = Read<ExposureStateData>(
       *prepared->exposure.state->buffer, ResourceStates::kShaderResource);
     EXPECT_NEAR(
@@ -6758,7 +7943,7 @@ NOLINT_TEST_F(ExposureGpuTest,
       *frame->conversion_buffer, ResourceStates::kShaderResource);
     EXPECT_EQ(std::memcmp(&conversion_before, &report, sizeof(report)), 0);
     const bool rejected = test_case.overflow || test_case.value == 0x1p-30F
-      || test_case.value == 0x1p20F;
+      || test_case.value == 0x1p20F || test_case.missing_certificate;
     EXPECT_EQ(report.failure_flags != 0U, rejected);
     if (!test_case.fp32 && rejected)
       EXPECT_EQ(finalized.fp16_eligible_streak, 0U);
@@ -7231,10 +8416,12 @@ NOLINT_TEST_F(ExposureGpuTest,
       .srv = signal.srv,
       .id = 11U,
       .metering = true } };
-    EXPECT_EQ(
-      service.FinalizeScenePrecision(ctx_, *prepared, products), !diagnostic);
+    EXPECT_EQ((service.PrepareScenePrecision(ctx_, *prepared, products)
+                && service.FinalizeScenePrecision(ctx_, *prepared)),
+      !diagnostic);
     if (!diagnostic) {
-      EXPECT_TRUE(service.FinalizeScenePrecision(ctx_, *prepared, products));
+      EXPECT_TRUE((service.PrepareScenePrecision(ctx_, *prepared, products)
+        && service.FinalizeScenePrecision(ctx_, *prepared)));
       EXPECT_EQ(
         ReadState(prepared->exposure).fp16_eligible_streak, expected_streak);
     }
@@ -7310,7 +8497,8 @@ NOLINT_TEST_F(
       .srv = signal.srv,
       .id = 11U,
       .metering = true } };
-    ASSERT_TRUE(service.FinalizeScenePrecision(ctx_, *prepared, products));
+    ASSERT_TRUE((service.PrepareScenePrecision(ctx_, *prepared, products)
+      && service.FinalizeScenePrecision(ctx_, *prepared)));
     const auto counts
       = vortex::testing::RendererPublicationProbe::ExposureStatusCounts(
         service, ctx_.current_view.view_state_handle);
@@ -7367,8 +8555,9 @@ NOLINT_TEST_F(ExposureGpuTest,
       .id = 11U,
       .metering = true } };
     backend.fail_next_suitability_recorder = i == 2U;
-    EXPECT_EQ(
-      service.FinalizeScenePrecision(ctx_, *prepared, products), i != 2U);
+    EXPECT_EQ((service.PrepareScenePrecision(ctx_, *prepared, products)
+                && service.FinalizeScenePrecision(ctx_, *prepared)),
+      i != 2U);
   }
   backend.fail_status_recorder = false;
   EXPECT_EQ(begin(), nullptr);
@@ -7592,9 +8781,12 @@ NOLINT_TEST_F(ExposureGpuTest,
       CHECK_F(reused.has_value());
       EXPECT_FALSE(reused->exposure.executed);
       EXPECT_EQ(reused->exposure.state, prepared->exposure.state);
-      EXPECT_TRUE(service.FinalizeScenePrecision(ctx_, *reused, products));
+      EXPECT_TRUE((service.PrepareScenePrecision(ctx_, *reused, products)
+        && service.FinalizeScenePrecision(ctx_, *reused)));
     }
-    EXPECT_EQ(service.FinalizeScenePrecision(ctx_, *prepared, products), !fail);
+    EXPECT_EQ((service.PrepareScenePrecision(ctx_, *prepared, products)
+                && service.FinalizeScenePrecision(ctx_, *prepared)),
+      !fail);
     const auto state = ReadState(prepared->exposure);
     if (!fail)
       EXPECT_EQ(state.fp16_eligible_streak, streak);
@@ -7792,6 +8984,19 @@ NOLINT_TEST_F(ExposureGpuTest,
   double maximum_error = 0.0;
   double last_half_error = 0.0;
   HdrErrorBoundsData last_half_bounds;
+  unsigned capture_step = 64U;
+  char* capture_step_text = nullptr;
+  std::size_t capture_step_size = 0U;
+  if (_dupenv_s(&capture_step_text, &capture_step_size,
+        "OXYGEN_EXPOSURE_FOG_CAPTURE_STEP")
+      == 0
+    && capture_step_text) {
+    capture_step
+      = static_cast<unsigned>(std::strtoul(capture_step_text, nullptr, 10));
+    std::free(capture_step_text);
+    ASSERT_GE(capture_step, 1U);
+    ASSERT_LE(capture_step, 74U);
+  }
   for (unsigned step = 1U; step <= 74U; ++step) {
     SCOPED_TRACE(step);
     const double desired = 1.0 + 1.0 / 2048.0 + 1.0 / 4194304.0;
@@ -7821,8 +9026,9 @@ NOLINT_TEST_F(ExposureGpuTest,
     facade.SetOutputTarget({ .framebuffer = observer_ptr { target.get() } });
     auto session = facade.Finalize();
     ASSERT_TRUE(session.has_value());
-    const auto capture = step == 64U ? BeginOptionalCapture()
-                                     : observer_ptr<FrameCaptureController> {};
+    const auto capture = step == capture_step
+      ? BeginOptionalCapture()
+      : observer_ptr<FrameCaptureController> {};
     ASSERT_TRUE(session->ExecuteInsideFrame(frame));
     if (capture)
       EXPECT_TRUE(capture->EndCapture());

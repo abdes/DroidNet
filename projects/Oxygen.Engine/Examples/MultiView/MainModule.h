@@ -7,6 +7,7 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 #include <string_view>
 #include <vector>
 
@@ -57,6 +58,7 @@ enum class ExposureProofScenario : uint8_t {
   kModes,
   kAtmosphere,
   kAtmosphereLit,
+  kConsumerVisual,
 };
 
 struct MainModuleConfig {
@@ -71,6 +73,10 @@ struct MainModuleConfig {
   bool point_light_enabled { true };
   bool spot_light_enabled { true };
   ExposureProofScenario exposure_proof { ExposureProofScenario::kNone };
+  VisualFogMode visual_fog_mode { VisualFogMode::kVolumetric };
+  bool visual_fog_cycle { false };
+  bool visual_fog_hold_local { false };
+  bool visual_fog_jitter { true };
 };
 
 //! Multi-view rendering example demonstrating Phase 2 features.
@@ -172,6 +178,7 @@ private:
   auto AppendRuntimeCompositionLayers(engine::FrameContext& context,
     vortex::Renderer::RuntimeCompositionInput& input) -> void override;
   auto DrawFeatureVariantProofOverlay() -> void;
+  auto DrawConsumerVisualControls() -> void;
 
   const examples::DemoAppContext& app_;
   SceneBootstrapper scene_bootstrapper_;
@@ -202,6 +209,7 @@ private:
 
   observer_ptr<examples::ui::CameraRigController> last_camera_rig_ { nullptr };
   MainModuleConfig config_ {};
+  std::optional<VisualFogMode> pending_visual_fog_mode_;
   bool viewport_proof_resized_ { false };
   bool viewport_proof_scissored_ { false };
   bool retain_inactive_pip_ { false };

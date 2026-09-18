@@ -25,6 +25,7 @@
 #include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Vortex/Internal/MeshRasterState.h>
 #include <Oxygen/Vortex/Internal/ViewportClamp.h>
+#include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
 #include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
@@ -384,6 +385,15 @@ auto TranslucencyModule::Execute(RenderContext& ctx,
     scene_textures.GetSceneColor(), graphics::ResourceStates::kRenderTarget);
   recorder->RequireResourceState(
     scene_textures.GetSceneDepth(), graphics::ResourceStates::kDepthRead);
+  if (const auto& frame = ctx.current_view.frame_exposure) {
+    const auto& status = *frame->current_state->status_buffer;
+    if (!recorder->IsResourceTracked(status)
+      && !recorder->AdoptKnownResourceState(status))
+      recorder->BeginTrackingResourceState(
+        status, graphics::ResourceStates::kCommon, false);
+    recorder->RequireResourceState(
+      status, graphics::ResourceStates::kUnorderedAccess);
+  }
   recorder->FlushBarriers();
   recorder->BindFrameBuffer(*framebuffer_);
   SetViewportAndScissor(*recorder, ctx, scene_textures);
@@ -415,6 +425,14 @@ auto TranslucencyModule::Execute(RenderContext& ctx,
     recorder->Draw(draw_command.is_indexed ? draw_command.index_count
                                            : draw_command.vertex_count,
       draw_command.instance_count, 0U, draw_command.start_instance);
+    const auto vertices = draw_command.is_indexed ? draw_command.index_count
+                                                  : draw_command.vertex_count;
+    const auto triangles
+      = std::uint64_t(vertices / 3U) * draw_command.instance_count;
+    result.triangle_count = triangles
+        > (std::numeric_limits<std::uint64_t>::max)() - result.triangle_count
+      ? (std::numeric_limits<std::uint64_t>::max)()
+      : result.triangle_count + triangles;
   }
 
   recorder->RequireResourceStateFinal(

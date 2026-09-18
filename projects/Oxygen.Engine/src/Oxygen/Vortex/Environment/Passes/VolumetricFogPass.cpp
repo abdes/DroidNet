@@ -525,9 +525,11 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
     }
     constants.temporal_history0.previous_integrated_light_scattering_srv
       = history_entry.srv.get();
-    constants.temporal_history0.enabled = 1U;
-    constants.temporal_history0.history_weight
-      = kUeVolumetricFogHistoryWeight;
+    constants.temporal_history0.enabled = 1U
+      | (history_entry.texture->GetDescriptor().format == Format::kRGBA16Float
+          ? 2U
+          : 0U);
+    constants.temporal_history0.history_weight = kUeVolumetricFogHistoryWeight;
   }
   constants.temporal_history0.history_miss_supersample_count
     = temporal_reprojection_enabled ? history_miss_supersample_count : 1U;

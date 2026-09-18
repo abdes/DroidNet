@@ -180,10 +180,15 @@ public:
   [[nodiscard]] OXGN_VRTX_API auto SelectPrecisionCandidate(RenderContext& ctx,
     const postprocess::ExposurePass::EligibilityInputs& requirements)
     -> postprocess::ExposurePass::StateLease;
-  //! Evaluate/finalize before Execute, then copy one combined completed status.
-  [[nodiscard]] OXGN_VRTX_API auto FinalizeScenePrecision(RenderContext& ctx,
+  //! Generate current/candidate certificates before any checked conversion.
+  [[nodiscard]] OXGN_VRTX_API auto PrepareScenePrecision(RenderContext& ctx,
     const PreparedExposure& prepared,
-    std::span<const postprocess::ExposurePass::HdrProduct> products) -> bool;
+    std::span<const postprocess::ExposurePass::HdrProduct> products,
+    std::optional<postprocess::ExposurePass::SceneComposition> composition
+    = std::nullopt) -> bool;
+  //! Finalize after checked conversion, then copy one combined completed status.
+  [[nodiscard]] OXGN_VRTX_API auto FinalizeScenePrecision(RenderContext& ctx,
+    const PreparedExposure& prepared) -> bool;
   OXGN_VRTX_API auto Execute(ViewId view_id, RenderContext& ctx,
     const SceneTextures& scene_textures, const Inputs& inputs,
     const PreparedExposure* prepared_exposure = nullptr) -> void;
@@ -243,6 +248,8 @@ private:
     std::uint64_t epoch { 0U };
     std::uint64_t last_completed_frame { 0U };
     frame::SequenceNumber configured_frame { 0U };
+    std::optional<frame::SequenceNumber> prepared_frame;
+    std::uint64_t prepared_epoch { 0U };
     std::optional<frame::SequenceNumber> finalized_frame;
     std::uint64_t finalized_epoch { 0U };
     bool diagnostic { false };

@@ -175,6 +175,10 @@ immutable record before scene work and retain its descriptor through post-scene
 publication. The old ViewColorData/GetExposure vocabulary is removed. Flags: bit 0
 bootstrap/recovery FP32, bit 1 borrowed prior state, bit 2 transient diagnostic
 unit gain, bit 3 source-initialization fallback. Reserved bits are zero.
+Its former reserved word at byte 52 now carries `exposure_status_uav` for bounded
+consumer-source collection; it is invalid when this view has no exposure frame.
+The frame lease retains the corresponding buffer and descriptor through all
+writers. This routing does not place numerical exposure under CPU control.
 
 The pre-scene compute resolve owns a frame-retained structured SRV/UAV record
 and reserves the current 80-byte state for the later exposure solve. It retains
@@ -534,9 +538,12 @@ This adds a bounded reduction buffer, not another HDR texture.
 `SelectPrecisionCandidate` configures the view's settings, lifetime, transition
 and required-product identity before frame preparation. It returns only a
 completed eligible state lease; the numerical candidate P remains GPU-owned.
-`FinalizeScenePrecision` evaluates the supplied products and submits the finalizer
-before post-process publication, then queues one combined transition/precision
-status copy. Both uses share the existing three-pending/one-deferred queue.
+`PrepareScenePrecision` evaluates the supplied products and produces current
+and candidate error certificates before checked conversion. It does not finalize
+eligibility or queue a completed status. `FinalizeScenePrecision` runs after any
+checked conversion and before post-process publication, so the current conversion
+verdict participates in eligibility. It then queues one combined transition/
+precision status copy. Both uses share the existing three-pending/one-deferred queue.
 Qualification changes invalidate pending admission; duplicate finalization is
 idempotent. A failed solve is distinguished from successful same-frame reuse.
 Even when a fallback copy succeeds, preparation immediately invalidates the
@@ -561,8 +568,12 @@ luminance, but weighted/dark classification still preserves the aggregate
 synthetic-dark fallback. A contributing positive sample retains the stated EV
 bound. The evaluator constants retain their original 80-byte prefix with radius, error-budget share,
 minimum log luminance and accepted black influence at offsets 64/68/72/76.
-The record is 96 bytes: a nonnegative consumer RGB gain is at 80, the current
-producer-bound status SRV is at 84, and zero-reserved words are at 88/92.
+The evaluator record is 128 bytes. Consumer RGB gain is at 80 and the current
+producer-bound status SRV at 84. Byte 88 carries the selected-P report SRV only
+for candidate-store reduction; byte 92 carries a required upstream product mask
+for current scene conversion. Presentation controls occupy the new tail:
+linear background RGB at 96/100/104, tone-mapper kind at 108, gamma at 112, and
+three zero words at 116/120/124. Point/product modes ignore presentation fields.
 Scene collection captures AP scattering
 strength with the same nonnegative clamp as the consumer. The gain participates
 in the per-view product revision so an old completed certificate cannot survive
@@ -699,6 +710,141 @@ No separate mask loader, texture cache or upload allocator is introduced.
 and the GPU producer/history transport substep have evidence. Complete consumer
 composition, coverage and meter admission/native qualification remain unfinished.
 Do not use these equations as a claim that current FP16 admission is safe.
+
+The integrated scene-admission path requires a whole-scene certificate rather
+than treating the final FP32 image as the prospective FP16 image. Its GPU-only
+record starts at status byte 256: current RGB relative/absolute and coverage
+relative/absolute bounds at 256/260/264/268; candidate equivalents at
+272/276/280/284; candidate P, checked-product mask, validity flags and a zero
+reserved word at 288/292/296/300. Current validity is bit 0; candidate validity
+is bit 1. The allocation is 384 bytes and the completed CPU prefix stays 80.
+Frame initialization clears the entire tail. Missing validity, another candidate
+P or an incomplete product mask rejects scene admission. This transport and
+interval consumer are under implementation; producer composition remains open.
+
+Both certificates refer to the same nonnegative ideal scene. Inverting the
+current certificate encloses that reference; applying the candidate certificate
+encloses the candidate before its final store. Quantize both endpoints using the
+candidate P. Image admission compares the extreme reference/candidate pairs
+after the image coverage convention. Meter admission first proves one quantized
+weight for all coverage endpoints, skips stable zero weight, and otherwise
+divides by actual positive coverage without a denominator floor. All luminance
+endpoints must preserve dark/zero classification and mass and meet the half-budget
+EV limit. A current-frame checked resolve uses the observed pre-store value as
+its candidate; upstream candidate bounds are only used for prospective admission.
+The current resolve still requires the complete upstream product mask, supplied
+in evaluator constant byte 92. It does not require a prospective candidate P or
+candidate bounds: those fields may be unavailable while current error is valid.
+PostProcessService supplies the configured scene product mask only for the
+matching prepared precision epoch and frame. A stale prepared epoch cannot
+submit a checked scene resolve.
+
+Scene image admission checks both premultiplied RGB and coverage-normalized
+RGB in scene and displayed-gain units. It additionally encloses the current
+tone mapper, gamma, SDR background composition and Bayer dither before the final
+saturate, requiring at most half a UNorm8 code of difference for admission.
+This catches a dark RGB loss that satisfies the absolute HDR allowance but
+becomes visible after gamma, and coverage changes visible against a background.
+An unchanged black image does not require preservation of unused coverage.
+
+`ToneMapping.hlsli` owns the unchanged presentation functions and coefficients.
+`ToneMappingFastBounds.hlsli` supplies the bounded runtime enclosure; its scalar
+curve allowances cover both endpoint evaluation and presentation. ACES matrix
+coefficients of either sign select the appropriate interval ends. Background
+blending retains the repeated foreground value's correlation and includes
+rounding of the renderer's original operation order. Filmic uses its separately
+derived allowance; gamma outside [1,4] uses the signed power enclosure from
+`ToneMappingBounds.hlsli`. Runtime admission never performs a general interval
+fallback or recursive/coverage refinement: an unresolved bound rejects FP16.
+The arithmetic allowances are independently derived by
+`VerifyToneMappingFastBounds.py`. This is conservative admission, not a change
+to rendered tone mapping. Full GPU-time qualification remains required.
+
+The signed arithmetic uses integer magnitude tests for zero/subnormal values,
+widens subnormal operands before arithmetic, and steps normal endpoints in the
+correct sign-dependent direction. Reciprocal, log2 and exp2 enclosures include
+the [Direct3D arithmetic tolerances](https://microsoft.github.io/DirectX-Specs/d3d/archive/D3D11_3_FunctionalSpec.htm#22.10%20Arithmetic%20Instructions),
+in addition to outward evaluation rounding. The test-only DXIL probe is compiled
+separately from `shaders.bin`; it exercises the same helper source with signed
+zero, subnormal, normal-boundary, addition, multiplication and power controls.
+Independent capture checks use exact rational arithmetic for these cases.
+The current bloom wrapper produces no owned bloom signal; integrating an owned
+bloom chain must extend the display enclosure with that contribution.
+
+Prospective sky/AP/fog store certificates occupy three 16-byte records at
+304/320/336, with RGB relative/absolute and T relative/absolute coefficients.
+After selecting candidate P, the existing maximum pipeline uses flag 512 to
+reduce the error of each prospective nearest-even store against the retained
+reference interval. It reads the selected-P report as an SRV and reads/writes
+status through its UAV; resource transitions separate this phase from ordinary
+qualification. Repeated evaluations clear all three records first. These are
+store certificates, not sampled-consumer certificates; sampling and composition
+must extend them before setting whole-scene validity.
+
+Consumer source peaks occupy bytes 352/356 for translucent lighting before AP
+and analytic height-fog radiance before volume attenuation, both scene referred.
+Flags at 360 record observed translucency/height inputs (1/2), invalid inputs
+(4/8), atmospheric sky/deferred-AP/translucent-AP consumers (16/32/64), and
+invalid sky gain (128). Byte 364 stores the maximum observed sky RGB gain.
+The shaders reduce maxima/flags per active wave into
+the existing status allocation. ViewFrameBindings routes its UAV at byte 52,
+consuming one reserved slot while retaining the 64-byte layout. Fog and
+TranslucencyModule retain and transition the frame status for their writes.
+Translucent shaders use early depth testing so depth-rejected fragments do not
+contribute, and the module records submitted triangle instances as an upper
+bound on per-pixel blend count. The sky and AP passes also transition the frame
+status for their usage writes. Usage is distinct from allocation: a required fog
+volume remains locally qualified even when no visible scene fragment consumes it.
+
+Scene finalization generates the current/prospective consumer certificate after
+prospective stores and before final per-pixel admission. It reuses the 128-byte
+constant publisher and selector pipeline with flag 1024. That constant view
+contains the three product extents/formats, AP strength, the required product
+mask, the complete pre-environment pixel count, and a conservative FP32
+arithmetic-step count from submitted translucent triangles/local-fog instances.
+The producer clears the prior scene certificate on same-frame retries.
+
+Sampled RGB/transmittance bounds feed the actual nonnegative transfers: AP
+inscatter plus attenuated opaque lighting; volume scattering plus jointly
+attenuated height scattering/background; the disjoint sky branch with its
+observed gain; and convex straight-alpha translucent composition. Analytic
+local-fog contributions share the same FP32 sources in both resource modes and
+cannot amplify retained error through their bounded attenuation. Their blend
+arithmetic still participates in the operation count. Near-fade and
+opacity/inverse-opacity cancellation receive an absolute transmittance rounding
+allowance; a relative RGB allowance alone cannot cover cancellation near zero T.
+
+Coverage uses `1-(1-A)*T` with a single shared T error. The final pixel check
+additionally uses current opaque depth: where opaque geometry is established and
+observed coverage is exactly one, sky depth rejection and the environment/local
+fog/translucency blend equations preserve reference and candidate coverage one.
+The depth descriptor, reverse-Z flag and presence flag occupy evaluator offsets
+116/120/124. Uploaded fixtures without depth retain general interval checks.
+This prevents sky-coverage uncertainty from being assigned to opaque pixels.
+
+The gradient reduction also records per-product reference RGB maxima at
+368/372/376 (sky/AP/fog), with a zero word at 380. Each maximum is reduced from
+outward reference intervals in scene units and cleared on retry. These maxima
+convert additive-source relative error into a bounded absolute contribution:
+`E_source <= r_source*M_source + a_source`. A tiny inscatter term therefore does
+not assign its relative error to the entire scene. AP's maximum also bounds the
+background before volumetric-fog attenuation. The GPU allocation is 384 bytes;
+the completed CPU prefix remains 80 and no texture is added.
+
+The complete producer remains in native qualification; its presence does not
+enable production resource switching or close EX05-15.
+
+HDR half writes explicitly round to nearest-even before the typed store, and
+their predictors use the same operation. Direct3D's floating-format conversion
+and `f32tof16` use round-toward-zero ([conversion rules, section 3.2.2](https://microsoft.github.io/DirectX-Specs/d3d/archive/D3D11_3_FunctionalSpec.htm#3.2.2%20Floating%20Point%20Conversion));
+using either directly does not satisfy the frozen `2^-25` subnormal store budget.
+`HdrRoundToHalf` starts with the truncated half, compares the source against the
+exact midpoint to its next representable magnitude, and advances on above-midpoint
+or odd ties. The decoded result is exactly representable by the destination.
+Apply it to sky-view, camera AP, volumetric fog, and the final checked resolve
+only when their destination is FP16. FP32 producers retain their original values.
+Finite overflow remains a pre-store range failure; it cannot be approved through
+the saturated half result.
 
 The independent checker is
 [`VerifyExposureErrorBounds.py`](../../../tools/vortex/VerifyExposureErrorBounds.py).
@@ -856,9 +1002,41 @@ Automatic format switching remains disabled until those checks are qualified.
 
 The published [Direct3D sampling specification](https://microsoft.github.io/DirectX-Specs/d3d/archive/D3D11_3_FunctionalSpec.htm)
 requires at least eight fractional address bits (7.18.16.1), permits 0.6 ULP in
-float-to-fixed conversion (3.2.4.1), and applies FP32 rules to filtering of floating
-formats regardless of storage width (7.18.16.2). This does not establish identical
-FP16/FP32 sample weights. Native D3D12 qualification remains required.
+float-to-fixed conversion (3.2.4.1), and refers floating-format filtering to the
+floating-point rules (7.18.16.2). Do not infer FP32 result accuracy from that
+reference for an FP16 source. Native sampling shows an additional contribution
+beyond texel-store error: at identical coordinates, half and float fog histories
+can return samples whose difference exceeds the retained store-only certificate.
+Both address displacement and format-dependent interpolation arithmetic require
+an enclosure before history inversion or consumer admission. Native D3D12
+qualification remains required; equal FP16/FP32 sample weights are not assumed.
+
+**Approved sampling contract: hardware filtering.** Preserve hardware linear
+sampling for view-dependent HDR sky/AP/fog products and histories in both resource
+modes. Carry conservative, format-aware sampling enclosures through history and
+consumer composition. This is separate from the approved FP32 SceneColor
+accumulation contract. Explicit FP32 bilinear/trilinear texel interpolation is
+not the selected implementation; no additional texture or resource mode is added.
+
+UE5.7.4 source grounds this choice: `SkyAtmosphere.usf:1017` samples the sky-view
+LUT with `SampleLevel`, `SkyAtmosphereCommon.ush:104` samples camera AP with
+`Texture3DSampleLevel`, and `HeightFogCommon.ush:437` samples integrated fog using
+the shared linear sampler. `VolumetricFog.usf:1066-1068` hardware-samples history,
+rescales its RGB by current/previous pre-exposure and then temporally blends it.
+`Common.ush:372-375` delegates `Texture3DSampleLevel` directly to `SampleLevel`.
+These references are under `F:\Epic Games\UE_5.7\Engine\Shaders\Private`.
+The UE sampling path is precedent; it does not establish Oxygen's per-view
+error-budget admission guarantee.
+
+The enclosure must cover address displacement and filtering arithmetic for the
+actual sampled resource format, including retained error after an FP16 history
+is written back to FP32. Derive bounds from the supported sampling contract;
+an empirical epsilon fitted to a single captured failure is insufficient.
+Native qualification must cover the existing history regression, repeated
+reprojection, format transitions, coordinate boundaries and the complete sampled
+consumer chain. Wider bounds can retain FP32 for more views. If an enclosure
+cannot establish suitability, preserve FP32 and continue normal exposure
+adaptation without resetting it. Implementation and qualification remain open.
 
 For the mip-zero linear-clamp sky/AP/fog consumers, the following enclosure is derived
 from the interpolation equations. Let `Gd` bound every adjacent reference-texel
@@ -885,11 +1063,58 @@ just observed differences: for adjacent intervals `[lo_i,hi_i]`, `[lo_j,hi_j]`,
 the difference bound is `max(hi_i-lo_j, hi_j-lo_i)`. Incomplete or nonfinite
 intervals cannot supply a finite gradient certificate.
 
-The coordinate displacement still needs a runtime bound covering normalized
-coordinate scaling/subtraction, legal fixed-point snapping and the union of
-neighbor footprints. Filtering arithmetic/FTZ error is an additional term. The
-current exact oracle qualifies the spatial algebra, not those hardware bounds;
-it does not change resource sampling or permit format admission.
+`HdrHardwareSampling.hlsli` carries the approved hardware-sampling enclosure.
+For each non-singleton axis of extent `n <= 16384`, two independently rounded
+mip-zero addresses have the conservative displacement
+`delta = 1.2/256 + 8*2^-23*(n+0.5)`. The first term covers both legal fixed-point
+snaps; the second covers normalized-coordinate multiply/subtract rounding.
+Singleton axes have no spatial variation. Use `D = sum(Gd*delta_d)` and
+`L = sum(Gd)` in the sampled texture's stored units, including when the retained
+RGB certificate and gradients were originally expressed in scene units.
+
+For filtering arithmetic use `u=2^-10, eta=2^-24` for an FP16 source and
+`u=2^-23, eta=2^-126` for FP32. One ULP conservatively covers format conversion
+and the specified unfused/fused tolerances. Expanding eight nonnegative weighted
+terms permits at most 16 rounding steps on a term's dependency path: three
+weight conversions, three complements, three multiplications and seven serial
+additions. Fewer than 64 elementary operations contribute additive underflow.
+The full 3D allowance remains in place for 2D and singleton dimensions. Define
+`q=(1+u)^16-1` and `e=64*eta*(1+u)^16`. The additive term includes errors in
+weights multiplied by texel magnitude; treating every underflow as an unscaled
+value error is insufficient.
+
+For texel certificate `(r,a)`, the observed hardware sample has an enclosure
+against the ideal reference interpolant with
+
+```text
+ro = r + (1+r)*(q+e)
+ao = (1+q)*(a+(1+r)*D) + e*(1+a+(1+r)*(L+D))
+```
+
+Compute the FP32 reference sampler's `(qf,ef)` independently. Its certificate is
+`rf=qf+ef`, `af=ef*(L+1)`. Relative to the hardware-sampled reference, use
+`R=(ro+rf)/(1-rf)`, `A=ao+(1+R)*af` before interval inversion. All runtime bound
+operations widen outward and account for FP32 operand/result flushing.
+
+Intersect that interval with an independent enclosure from Direct3D's rule that
+a filtered result lies in the accessed texel min/max hull (7.18.16.3). The union
+of both footprints spans at most two adjacent edges per axis, giving
+`(r, a+(1+r)*(2*L+2*2^-126))`; the small extra term covers FP32 flush behavior.
+This intersection avoids assigning format-relative error to an exact constant
+field. Identical FP32 inputs, coordinates, format and sampler preserve the
+zero-error identity; any retained FP16 error disables that shortcut.
+
+Fog history reads its source format from bit 1 of the existing history-enable
+word (bit 0 enables history); the 544-byte pass layout is unchanged. It validates
+the prior gradient record and texel count, applies the sampling enclosure before
+reference inversion, and transfers the resulting RGB interval to current P.
+The output format alone never determines the history source format.
+
+`VerifyHardwareFilterBounds.py` checks independent rational models of legal
+address choices, FP16/FP32 weighted expansions, retained error and hull
+intersection. Native bound-arithmetic and history captures qualify the GPU
+implementation separately. This transport does not by itself establish the
+complete sampled-consumer certificate or authorize production format switching.
 
 The oracle checks 18,624 clamp/periodic cases across singleton, 2D and 3D grids, constant/ramp-like
 and alternating data, half rounding, retained reference intervals, cell crossings
@@ -916,7 +1141,7 @@ error and transmittance relative/absolute error. RGB absolute error is in
 scene-referred units; transmittance is dimensionless. Runtime CPU readback still
 copies only the original 80-byte prefix.
 
-The allocation is 256 bytes. The 16 bytes at 128 capture opaque SceneColor before
+The allocation is 384 bytes. The 16 bytes at 128 capture opaque SceneColor before
 sky/AP/fog/translucency: maximum absolute pre-exposed RGB at 128, flags at 132
 (recorded=1, nonfinite=2, negative RGB=4), checked-pixel count at 136 and zero at
 140. The immutable frame P defines these units. The exposure pass reuses its

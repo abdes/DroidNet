@@ -15,6 +15,7 @@
 #include <imgui.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Console/Console.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/PhaseRegistry.h>
@@ -197,11 +198,26 @@ auto MainModule::OnAttachedImpl(
     .environment = false,
     .lighting = false,
     .post_process = !config_.feature_variant_proof_layout && !exposure_proof,
+    .ground_grid
+    = config_.exposure_proof != ExposureProofScenario::kConsumerVisual,
   };
   shell_config.enable_camera_rig = !exposure_proof;
   shell_config.enable_renderer_bound_panels = false;
+  if (config_.exposure_proof == ExposureProofScenario::kConsumerVisual) {
+    auto plan = console::ConsoleStartupPlan {};
+    plan
+      .Set("vtx.local_fog.global_start_distance_m", 0.1,
+        console::CVarValueOrigin::kAppForced)
+      .Set("vtx.local_fog.enable", true, console::CVarValueOrigin::kAppForced)
+      .Set("vtx.local_fog.render_during_height_fog_pass", true,
+        console::CVarValueOrigin::kAppForced)
+      .Set("vtx.volumetric_fog.jitter", config_.visual_fog_jitter,
+        console::CVarValueOrigin::kAppForced);
+    app_.engine->GetConsole().ApplyStartupPlan(plan);
+  }
   if (config_.exposure_proof == ExposureProofScenario::kAtmosphere
-    || config_.exposure_proof == ExposureProofScenario::kAtmosphereLit) {
+    || config_.exposure_proof == ExposureProofScenario::kAtmosphereLit
+    || config_.exposure_proof == ExposureProofScenario::kConsumerVisual) {
     shell_config.force_environment_override = false;
     shell_config.initial_preview_sun_enabled = false;
   }
@@ -230,10 +246,10 @@ auto MainModule::OnAttachedImpl(
       = CreatePerspectiveCameraNode(*staged_scene, "DiagnosticsCamera");
   }
   if (config_.offscreen_proof_layout) {
-    offscreen_preview_camera_node_
-      = CreatePerspectiveCameraNode(*staged_scene, "M06BOffscreenPreviewCamera");
-    offscreen_capture_camera_node_
-      = CreatePerspectiveCameraNode(*staged_scene, "M06BOffscreenCaptureCamera");
+    offscreen_preview_camera_node_ = CreatePerspectiveCameraNode(
+      *staged_scene, "M06BOffscreenPreviewCamera");
+    offscreen_capture_camera_node_ = CreatePerspectiveCameraNode(
+      *staged_scene, "M06BOffscreenCaptureCamera");
   }
 
   shell->SetStagedMainCamera(main_camera_node_);
@@ -243,6 +259,8 @@ auto MainModule::OnAttachedImpl(
     scene_bootstrapper_.ApplyAtmosphereProof(0U);
   } else if (config_.exposure_proof == ExposureProofScenario::kAtmosphereLit) {
     scene_bootstrapper_.ApplyLitAtmosphereProof();
+  } else if (config_.exposure_proof == ExposureProofScenario::kConsumerVisual) {
+    scene_bootstrapper_.ApplyConsumerVisualProof(config_.visual_fog_mode);
   }
   const auto extent = ResolveRenderExtent();
   if (HasPositiveExtent(extent)) {
@@ -308,9 +326,12 @@ auto MainModule::UpdateCameras(const platform::window::ExtentT& extent) -> void
 
       main_camera_node_.GetTransform().SetLocalPosition(kMainCamPos);
       if (config_.exposure_proof != ExposureProofScenario::kNone) {
-        const glm::vec3 position { 4.0F, -6.0F, 4.0F };
-        const auto view_matrix = glm::lookAt(
-          position, glm::vec3(-0.75F, 0.0F, 0.0F), space::move::Up);
+        const bool daylight
+          = config_.exposure_proof == ExposureProofScenario::kConsumerVisual;
+        const glm::vec3 position = daylight ? glm::vec3(4.0F, -7.0F, 1.7F)
+                                            : glm::vec3(4.0F, -6.0F, 4.0F);
+        const glm::vec3 target(-0.75F, 0.0F, daylight ? 0.5F : 0.0F);
+        const auto view_matrix = glm::lookAt(position, target, space::move::Up);
         main_camera_node_.GetTransform().SetLocalPosition(position);
         main_camera_node_.GetTransform().SetLocalRotation(
           glm::quat_cast(glm::inverse(view_matrix)));
@@ -321,7 +342,10 @@ auto MainModule::UpdateCameras(const platform::window::ExtentT& extent) -> void
               / static_cast<float>(extent.height))
           : 1.0F);
       cam.SetNearPlane(kMainCamNear);
-      cam.SetFarPlane(kMainCamFar);
+      cam.SetFarPlane(
+        config_.exposure_proof == ExposureProofScenario::kConsumerVisual
+          ? 1000.0F
+          : kMainCamFar);
       cam.SetViewport(ViewPort {
         .top_left_x = 0.0F,
         .top_left_y = 0.0F,
@@ -341,13 +365,15 @@ auto MainModule::UpdateCameras(const platform::window::ExtentT& extent) -> void
       auto& cam = cam_opt->get();
 
       // Frame the sample objects around their shared center.
-      const glm::vec3 pip_position
-        = config_.exposure_proof == ExposureProofScenario::kAtmosphere
+      const bool daylight
+        = config_.exposure_proof == ExposureProofScenario::kConsumerVisual;
+      const glm::vec3 pip_position = daylight ? glm::vec3(-5.0F, -4.0F, 1.5F)
+        : config_.exposure_proof == ExposureProofScenario::kAtmosphere
         ? glm::vec3(-5.0F, -6.0F, 4.0F)
         : glm::vec3(-5.0F, 0.4F, 4.0F);
       pip_camera_node_.GetTransform().SetLocalPosition(pip_position);
 
-      constexpr glm::vec3 target = glm::vec3(-0.75F, 0.0F, 0.0F);
+      const glm::vec3 target(-0.75F, 0.0F, daylight ? 0.5F : 0.0F);
       constexpr glm::vec3 world_up = space::move::Up;
       const glm::mat4 view_mat = glm::lookAt(pip_position, target, world_up);
       const glm::quat pip_rot = glm::quat_cast(glm::inverse(view_mat));
@@ -363,7 +389,7 @@ auto MainModule::UpdateCameras(const platform::window::ExtentT& extent) -> void
       cam.SetAspectRatio(
         pip_layout.height > 0 ? (pip_layout.width / pip_layout.height) : 1.0F);
       cam.SetNearPlane(kPipCamNear);
-      cam.SetFarPlane(kPipCamFar);
+      cam.SetFarPlane(daylight ? 1000.0F : kPipCamFar);
       cam.SetViewport(ViewPort {
         // The camera renders into a dedicated PiP-sized offscreen target.
         // Its local viewport must start at (0,0); the absolute on-screen
@@ -379,7 +405,8 @@ auto MainModule::UpdateCameras(const platform::window::ExtentT& extent) -> void
   }
 
   if (!config_.proof_layout && !config_.aux_proof_layout
-    && !config_.offscreen_proof_layout && !config_.feature_variant_proof_layout) {
+    && !config_.offscreen_proof_layout
+    && !config_.feature_variant_proof_layout) {
     return;
   }
 
@@ -508,6 +535,22 @@ auto MainModule::OnFrameStart(
   // Ensure content exists
   (void)scene_bootstrapper_.EnsureSceneWithContent();
 
+  if (config_.exposure_proof == ExposureProofScenario::kConsumerVisual
+    && config_.visual_fog_cycle) {
+    const auto frame = context->GetFrameSequenceNumber().get();
+    if (frame == 32U)
+      pending_visual_fog_mode_ = VisualFogMode::kVolumetric;
+    if (frame == 96U)
+      pending_visual_fog_mode_ = VisualFogMode::kLocal;
+    if (frame == 128U && !config_.visual_fog_hold_local)
+      pending_visual_fog_mode_ = VisualFogMode::kClear;
+  }
+  if (pending_visual_fog_mode_) {
+    config_.visual_fog_mode = *pending_visual_fog_mode_;
+    pending_visual_fog_mode_.reset();
+    scene_bootstrapper_.ApplyConsumerVisualProof(config_.visual_fog_mode);
+  }
+
   if (config_.exposure_proof == ExposureProofScenario::kAtmosphere) {
     scene_bootstrapper_.ApplyAtmosphereProof(
       context->GetFrameSequenceNumber().get());
@@ -518,7 +561,6 @@ auto MainModule::OnFrameStart(
   if (rig != last_camera_rig_) {
     last_camera_rig_ = rig;
   }
-
 }
 
 auto MainModule::OnFrameEnd(observer_ptr<engine::FrameContext> context) -> void
@@ -548,10 +590,50 @@ auto MainModule::OnGuiUpdate(observer_ptr<engine::FrameContext> context)
 
   auto& shell = GetShell();
   CHECK_NOTNULL_F(&shell, "DemoShell required for GUI update");
-  shell.Draw(context);
+  if (config_.exposure_proof != ExposureProofScenario::kConsumerVisual)
+    shell.Draw(context);
   DrawFeatureVariantProofOverlay();
+  DrawConsumerVisualControls();
 
   co_return;
+}
+
+auto MainModule::DrawConsumerVisualControls() -> void
+{
+  if (config_.exposure_proof != ExposureProofScenario::kConsumerVisual)
+    return;
+  const auto renderer = ResolveVortexRenderer();
+  if (!renderer || !renderer->IsImGuiFrameActive())
+    return;
+  auto* imgui_context = renderer->GetImGuiContext();
+  if (!imgui_context)
+    return;
+  ImGui::SetCurrentContext(imgui_context);
+  ImGui::SetNextWindowPos(ImVec2(20.0F, 20.0F), ImGuiCond_FirstUseEver);
+  ImGui::SetNextWindowBgAlpha(0.94F);
+  constexpr auto flags = ImGuiWindowFlags_AlwaysAutoResize
+    | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings;
+  if (ImGui::Begin("EX05-15 visual check", nullptr, flags)) {
+    ImGui::TextUnformatted(
+      "Original materials | Fixed cameras | Exposure: EV15");
+    ImGui::TextUnformatted("Current scene format: FP32 in both views");
+    ImGui::Separator();
+    auto mode = static_cast<int>(config_.visual_fog_mode);
+    bool changed = ImGui::RadioButton(
+      "Clear (reference)", &mode, static_cast<int>(VisualFogMode::kClear));
+    ImGui::SameLine();
+    changed |= ImGui::RadioButton(
+      "Fog", &mode, static_cast<int>(VisualFogMode::kVolumetric));
+    ImGui::SameLine();
+    changed |= ImGui::RadioButton(
+      "Local fog", &mode, static_cast<int>(VisualFogMode::kLocal));
+    if (changed)
+      pending_visual_fog_mode_ = static_cast<VisualFogMode>(mode);
+    ImGui::TextUnformatted(
+      "Compare material colors, smooth haze and object edges.");
+    ImGui::TextUnformatted("PiP shows the same scene from another angle.");
+  }
+  ImGui::End();
 }
 
 auto MainModule::OnGameplay(observer_ptr<engine::FrameContext> context)
@@ -952,6 +1034,12 @@ auto MainModule::UpdateComposition(oxygen::engine::FrameContext& context,
   }
   auto renderer = ResolveVortexRenderer();
   CHECK_NOTNULL_F(renderer.get());
+  if (proof == ExposureProofScenario::kConsumerVisual
+    && renderer->GetGroundGridConfig().enabled) {
+    auto grid = renderer->GetGroundGridConfig();
+    grid.enabled = false;
+    renderer->SetGroundGridConfig(grid);
+  }
   for (auto& view : views) {
     if (!view.camera.has_value()) {
       continue;
@@ -967,6 +1055,14 @@ auto MainModule::UpdateComposition(oxygen::engine::FrameContext& context,
       view.with_height_fog = false;
       view.shading_mode = frame >= 56U ? vortex::ShadingMode::kForward
                                        : vortex::ShadingMode::kDeferred;
+    } else if (proof == ExposureProofScenario::kConsumerVisual) {
+      exposure.mode = engine::ExposureMode::kManual;
+      exposure.manual_ev = 15.0F;
+      exposure.compensation_ev = 0.0F;
+      view.with_atmosphere = true;
+      view.with_height_fog = config_.visual_fog_mode != VisualFogMode::kClear;
+      view.with_local_fog = config_.visual_fog_mode == VisualFogMode::kLocal;
+      view.shading_mode = vortex::ShadingMode::kDeferred;
     } else if (proof == ExposureProofScenario::kAtmosphereLit) {
       exposure.compensation_ev = 0.0F;
       exposure.metering_mode = frame < 48U ? engine::MeteringMode::kAverage
@@ -1021,7 +1117,8 @@ auto MainModule::UpdateComposition(oxygen::engine::FrameContext& context,
       || view.exposure_source_view_id != kInvalidViewId) {
       continue;
     }
-    if ((frame == 32U && proof != ExposureProofScenario::kAtmosphere)
+    if ((frame == 32U && proof != ExposureProofScenario::kAtmosphere
+          && proof != ExposureProofScenario::kConsumerVisual)
       || (proof == ExposureProofScenario::kShared && frame == 44U)
       || (proof == ExposureProofScenario::kAtmosphereLit && frame == 48U)) {
       const auto request = renderer->QueueExposureTransition(

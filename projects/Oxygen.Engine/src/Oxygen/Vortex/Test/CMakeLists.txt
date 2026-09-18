@@ -441,4 +441,56 @@ if(WIN32)
     PRIVATE
       OXYGEN_EXPOSURE_WORKSPACE="${PROJECT_SOURCE_DIR}"
   )
+  # Compile the arithmetic probe separately; it must not enter shaders.bin.
+  if(CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64")
+    set(exposure_probe_arch "x64")
+  elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "x86")
+    set(exposure_probe_arch "x86")
+  elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "ARM64")
+    set(exposure_probe_arch "arm64")
+  endif()
+  set(
+    exposure_shader_root
+    "${PROJECT_SOURCE_DIR}/src/Oxygen/Graphics/Direct3D12/Shaders"
+  )
+  set(
+    exposure_probe_output
+    "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>/ToneBoundsProbe.dxil"
+  )
+  add_custom_command(
+    OUTPUT
+      "${exposure_probe_output}"
+    COMMAND
+      ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>"
+    COMMAND
+      "${PROJECT_SOURCE_DIR}/packages/DXC/bin/${exposure_probe_arch}/dxc.exe" -T
+      cs_6_6 -E CS -O3 -HV 2021 -I "${exposure_shader_root}" -Fo
+      "${exposure_probe_output}"
+      "${CMAKE_CURRENT_SOURCE_DIR}/Shaders/ToneBoundsProbe.hlsl"
+    DEPENDS
+      "Shaders/ToneBoundsProbe.hlsl"
+      "${exposure_shader_root}/Vortex/Contracts/View/HdrHardwareSampling.hlsli"
+      "${exposure_shader_root}/Vortex/Contracts/View/HdrIntervalMath.hlsli"
+      "${exposure_shader_root}/Vortex/Contracts/View/ExposureStateData.hlsli"
+      "${exposure_shader_root}/Vortex/Services/PostProcess/HdrSceneComposition.hlsli"
+      "${exposure_shader_root}/Vortex/Services/PostProcess/ToneMappingBounds.hlsli"
+      "${exposure_shader_root}/Vortex/Services/PostProcess/ToneMappingFastBounds.hlsli"
+      "${exposure_shader_root}/Vortex/Services/PostProcess/ToneMapping.hlsli"
+      "${exposure_shader_root}/Vortex/Shared/ColorSpace.hlsli"
+    VERBATIM
+  )
+  add_custom_target(
+    oxygen-vortex-tone-bounds-probe
+    DEPENDS
+      "${exposure_probe_output}"
+  )
+  add_dependencies(
+    Oxygen.Vortex.ExposureGpu.Tests
+    oxygen-vortex-tone-bounds-probe
+  )
+  target_compile_definitions(
+    Oxygen.Vortex.ExposureGpu.Tests
+    PRIVATE
+      OXYGEN_EXPOSURE_TONE_PROBE="${exposure_probe_output}"
+  )
 endif()

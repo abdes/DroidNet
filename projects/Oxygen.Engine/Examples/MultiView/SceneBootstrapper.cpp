@@ -22,8 +22,11 @@
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
+#include <Oxygen/Scene/Environment/Fog.h>
+#include <Oxygen/Scene/Environment/LocalFogVolume.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
+#include <Oxygen/Scene/Environment/SkyLight.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Light/PointLight.h>
 #include <Oxygen/Scene/Light/SpotLight.h>
@@ -107,6 +110,7 @@ void SceneBootstrapper::BindToScene(observer_ptr<scene::Scene> scene)
     key_light_node_ = {};
     fill_light_node_ = {};
     proof_sun_node_ = {};
+    visual_local_fog_node_ = {};
     atmosphere_proof_phase_ = ~0U;
   }
 }
@@ -169,6 +173,65 @@ auto SceneBootstrapper::ApplyLitAtmosphereProof() -> void
   // The cards isolate emission by backlighting. The lit-material fixture must
   // light the visible faces of the original meshes instead.
   EnsureProofAtmosphere(110000.0F, 1.0F, false);
+}
+
+auto SceneBootstrapper::ApplyConsumerVisualProof(const VisualFogMode fog_mode)
+  -> void
+{
+  ApplyLitAtmosphereProof();
+  auto& environment = *scene_->GetEnvironment();
+  auto* sky_light
+    = environment.TryGetSystem<scene::environment::SkyLight>().get();
+  if (!sky_light)
+    sky_light = &environment.AddSystem<scene::environment::SkyLight>();
+  sky_light->SetEnabled(true);
+  sky_light->SetDiffuseIntensity(1.0F);
+  sky_light->SetSpecularIntensity(0.0F);
+  sky_light->SetVolumetricScatteringIntensity(1.0F);
+  // The existing atmosphere LUT supplies volumetric ambient independently of
+  // captured-scene surface IBL, which this renderer does not yet provide.
+  ground_plane_node_.GetTransform().SetLocalScale({ 2000.0F, 2000.0F, 0.1F });
+  if (auto sun = proof_sun_node_.GetLightAs<scene::DirectionalLight>(); sun)
+    sun->get().Common().casts_shadows = true;
+  auto* fog = environment.TryGetSystem<scene::environment::Fog>().get();
+  if (!fog)
+    fog = &environment.AddSystem<scene::environment::Fog>();
+  const bool volumetric = fog_mode == VisualFogMode::kVolumetric;
+  fog->SetEnabled(volumetric);
+  fog->SetEnableHeightFog(volumetric);
+  fog->SetEnableVolumetricFog(volumetric);
+  fog->SetExtinctionSigmaTPerMeter(0.06F);
+  fog->SetHeightFalloffPerMeter(0.12F);
+  fog->SetHeightOffsetMeters(0.0F);
+  fog->SetStartDistanceMeters(0.0F);
+  fog->SetFogInscatteringLuminance({ 300.0F, 450.0F, 650.0F });
+  fog->SetVolumetricFogAlbedo({ 0.4F, 0.5F, 0.6F });
+  fog->SetVolumetricFogEmissive({ 0.0F, 0.0F, 0.0F });
+  fog->SetVolumetricFogDistance(40.0F);
+  fog->SetVolumetricFogStartDistance(0.0F);
+  fog->SetVolumetricFogNearFadeInDistance(1.0F);
+  fog->SetVolumetricFogScatteringDistribution(0.1F);
+  if (!visual_local_fog_node_.IsAlive()) {
+    visual_local_fog_node_ = scene_->CreateNode("VisualReviewLocalFog");
+    const auto node = visual_local_fog_node_.GetImpl();
+    CHECK_F(node.has_value());
+    node->get().AddComponent<scene::environment::LocalFogVolume>();
+    visual_local_fog_node_.GetTransform().SetLocalPosition(
+      { -1.75F, -0.25F, 0.3F });
+    visual_local_fog_node_.GetTransform().SetLocalScale(
+      { 0.45F, 0.45F, 0.3F });
+  }
+  auto& local = visual_local_fog_node_.GetImpl()
+                  ->get()
+                  .GetComponent<scene::environment::LocalFogVolume>();
+  local.SetEnabled(fog_mode == VisualFogMode::kLocal);
+  local.SetRadialFogExtinction(0.9F);
+  local.SetHeightFogExtinction(0.45F);
+  local.SetHeightFogFalloff(0.5F);
+  local.SetHeightFogOffset(-0.5F);
+  local.SetFogAlbedo({ 0.45F, 0.6F, 0.8F });
+  local.SetFogEmissive({ 0.0F, 0.0F, 0.0F });
+  local.SetFogPhaseG(0.1F);
 }
 
 auto SceneBootstrapper::ApplyAtmosphereProof(const std::uint64_t frame) -> void

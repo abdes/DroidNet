@@ -110,6 +110,35 @@ struct alignas(16) HdrFilterGradientData {
   std::uint32_t checked_texels { 0U };
 };
 
+//! Whole-scene affine bounds before the final resolve. RGB is scene referred;
+//! coverage is dimensionless. Candidate bounds include prospective upstream
+//! stores, but exclude the final store checked by scene admission.
+struct alignas(16) HdrSceneErrorData {
+  float current_rgb_relative { 0.0F };
+  float current_rgb_absolute { 0.0F };
+  float current_coverage_relative { 0.0F };
+  float current_coverage_absolute { 0.0F };
+  float candidate_rgb_relative { 0.0F };
+  float candidate_rgb_absolute { 0.0F };
+  float candidate_coverage_relative { 0.0F };
+  float candidate_coverage_absolute { 0.0F };
+  float candidate_pre_exposure { 1.0F };
+  std::uint32_t checked_products { 0U };
+  std::uint32_t flags { 0U }; // Complete current=1, complete candidate=2.
+  std::uint32_t reserved { 0U };
+};
+
+//! Shader-observed nonnegative inputs before AP/fog attenuation, in scene
+//! units.
+struct alignas(16) HdrConsumerInputData {
+  float translucent_rgb_max { 0.0F };
+  float height_fog_rgb_max { 0.0F };
+  //! Translucency/height=1/2; invalid inputs=4/8; sky/opaque AP/translucent
+  //! AP consumers=16/32/64; invalid sky gain=128.
+  std::uint32_t flags { 0U };
+  float sky_rgb_gain_max { 0.0F };
+};
+
 //! The readback prefix stays non-numerical; the tail remains GPU-owned.
 struct alignas(16) ExposureStatusStorage {
   ExposureCompletedStatus completed;
@@ -117,6 +146,13 @@ struct alignas(16) ExposureStatusStorage {
   HdrCompositionInputData composition_input;
   HdrOpaqueApErrorData opaque_ap_error;
   std::array<HdrFilterGradientData, 3> filter_gradients {}; // Sky, AP, fog.
+  HdrSceneErrorData scene_error;
+  //! Prospective stores at the selected candidate P, including retained error.
+  std::array<HdrErrorBoundsData, 3> candidate_errors {}; // Sky, AP, fog.
+  HdrConsumerInputData consumer_inputs;
+  //! Scene-referred reference RGB maxima for sky, AP and fog, respectively.
+  std::array<float, 3> product_reference_rgb_max {};
+  std::uint32_t product_range_reserved { 0U };
 };
 static_assert(sizeof(HdrErrorBoundsData) == 16U);
 static_assert(offsetof(ExposureStatusStorage, producer_errors) == 80U);
@@ -129,7 +165,16 @@ static_assert(offsetof(HdrFilterGradientData, flags) == 12U);
 static_assert(offsetof(HdrFilterGradientData, transmittance) == 16U);
 static_assert(offsetof(HdrFilterGradientData, checked_texels) == 28U);
 static_assert(offsetof(ExposureStatusStorage, filter_gradients) == 160U);
-static_assert(sizeof(ExposureStatusStorage) == 256U);
+static_assert(sizeof(HdrSceneErrorData) == 48U);
+static_assert(offsetof(HdrSceneErrorData, candidate_rgb_relative) == 16U);
+static_assert(offsetof(HdrSceneErrorData, candidate_pre_exposure) == 32U);
+static_assert(offsetof(HdrSceneErrorData, flags) == 40U);
+static_assert(offsetof(ExposureStatusStorage, scene_error) == 256U);
+static_assert(offsetof(ExposureStatusStorage, candidate_errors) == 304U);
+static_assert(sizeof(HdrConsumerInputData) == 16U);
+static_assert(offsetof(ExposureStatusStorage, consumer_inputs) == 352U);
+static_assert(offsetof(ExposureStatusStorage, product_reference_rgb_max) == 368U);
+static_assert(sizeof(ExposureStatusStorage) == 384U);
 static_assert(std::is_standard_layout_v<ExposureStatusStorage>);
 
 static_assert(sizeof(ExposureCompletedStatus) == 80U);

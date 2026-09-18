@@ -23,10 +23,10 @@ def build_report(controller, report, capture_path, report_path):
         reads = [x.descriptor for x in pipeline.GetReadOnlyResources(rd.ShaderStage.Compute, True)]
         writes = [x.descriptor for x in pipeline.GetReadWriteResources(rd.ShaderStage.Compute, True)]
         constants = [r for r in reads if r.byteSize == 32 and r.elementByteSize == 32]
-        check_constants = [r for r in reads if r.byteSize == 96 and r.elementByteSize == 96]
+        check_constants = [r for r in reads if r.byteSize == 128 and r.elementByteSize == 128]
         if check_constants:
             c = check_constants[0]
-            words = struct.unpack("<24I", bytes(controller.GetBufferData(c.resource, c.byteOffset, 96)))
+            words = struct.unpack("<32I", bytes(controller.GetBufferData(c.resource, c.byteOffset, 128)))
             if words[20] != 0x3f800000 or words[21] == 0xffffffff or words[22:] != (0, 0):
                 raise RuntimeError("SceneColor conversion must use unit consumer gain")
             if not words[7] & 16 or words[9] != 1024:

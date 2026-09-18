@@ -34,7 +34,7 @@ Common validation-oriented options:
 - `--point-light <true|false>` and `--spot-light <true|false>`: enable each
   existing scene light independently for forward/deferred contribution checks.
   Both default to enabled.
-- `--exposure-proof <none|independent|shared|main-only|pip-only|reordered|source-loss|viewport|lifetime|window-resize|modes|atmosphere|atmosphere-lit>`:
+- `--exposure-proof <none|independent|shared|main-only|pip-only|reordered|source-loss|viewport|lifetime|window-resize|modes|atmosphere|atmosphere-lit|consumer-visual>`:
   run a paused, static main/PiP exposure comparison with explicit Auto settings
   and a public remeter at frame 32. PiP has two stops of compensation unless it
   shares main's gain. Shared mode steps main by one stop at frame 44; capture
@@ -166,6 +166,62 @@ canonical light count/kinds/flags, consumed grid ranges/indices, and nonzero
 forward SceneColor. The disabled case requires zero scene radiance. These are
 binding/contribution checks; calibrated forward/deferred brightness and shadow
 parity require their own acceptance cases.
+
+For the EX05-15 human visual checkpoint, launch from the engine directory:
+
+```powershell
+./out/build-ninja/bin/Debug/Oxygen.Examples.MultiView.exe --exposure-proof consumer-visual --visual-fog volume --pip-wireframe false --fps 60 -v=-1
+```
+
+`tools/vortex/Show-ExposureVisualCheck.ps1` launches the same check from any
+working directory; `-Fog clear` or `-Fog local` selects its initial choice.
+Use `-Configuration Release` after building that configuration to select it
+instead of Debug.
+`--visual-fog-jitter false` is a fixture-only diagnostic control; the normal
+visual checkpoint keeps jitter enabled.
+
+The small overlay switches the same original meshes/materials between **Clear
+(reference)**, **Fog**, and **Local fog**. Cameras, lighting and exposure remain
+fixed. EV15 gives an exact gain of `1/32768`; there is no AE settling ambiguity in
+this A/B comparison. Both views currently render in FP32. This checkpoint shows
+consumer composition and readability; automatic FP16 switching is still disabled.
+Use `--visual-fog clear` or `--visual-fog local` for matching scripted captures.
+Allow volumetric history to settle after switching; qualification captures use
+frame 96 or later.
+
+Look for recognizable green/blue/red materials in both views, a smooth depth
+veil in **Fog**, and a localized patch around the left sphere in **Local fog**.
+The local volume extends onto the ground in front of the sphere so both camera
+angles show its contribution. Object boundaries should remain intact, and
+returning to **Clear** should restore the reference without a brightness jump
+caused by exposure adaptation. Keep any feedback tied to the selected fog choice
+and view. The original scene, ground surface and point/spot lights are retained;
+the editor grid is hidden in this checkpoint.
+
+The visual recipe deliberately uses noticeable fog: base extinction is
+`0.06 m^-1`; the local patch uses radial/height extinction `0.9/0.45` with a
+fixture-only `0.1 m` start distance and a 2.25 m horizontal radius centered at
+`(-1.75, -0.25, 0.3)`. These are demonstration settings; the
+engine defaults and saved console preferences are unchanged.
+
+The daylight framing includes a visible procedural sky, an extended ground plane
+and the authored 110,000-lux sun with shadows. Volumetric fog uses the existing
+distant-sky ambient LUT. Captured-scene surface IBL is not supplied by this
+checkpoint; this does not add a sky-capture implementation.
+
+The bounded scripted round-trip uses `--visual-fog-cycle true`: it starts clear,
+requests Fog at GPU frame 32, Local fog at 96, and Clear at 128 through the same
+queued state-change path as the radio buttons. Capture CLI frames 30/94/126/158
+to inspect clear/settled fog/local/returned clear. This checks state transitions;
+the human review also checks the mouse-operated controls.
+For longer transition diagnostics, `--visual-fog-hold-local true` runs the same
+cycle through Fog and Local, then leaves Local active instead of returning to
+Clear at frame 128. It does not change the rendering or exposure settings.
+
+The image checker measures red/green/blue inside fixed interior regions of the
+cone, sphere and cylinder. Sky/background pixels do not establish material
+visibility. Its negative controls remove each material region while preserving
+the blue sky.
 
 `atmosphere-lit` retains the original sphere, cube, cylinder, cone, ground and
 their non-emissive materials. It adds an authored 110,000-lux sun and atmosphere

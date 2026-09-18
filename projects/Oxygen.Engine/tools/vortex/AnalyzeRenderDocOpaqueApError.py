@@ -33,17 +33,17 @@ def build_report(controller, report, capture_path, report_path):
             is_input_clear = shader.entryPoint == "VortexExposureFrameCS"
             if shader.entryPoint == "ClearSuitability" and statuses:
                 clears = [x.descriptor for x in pipeline.GetReadOnlyResources(rd.ShaderStage.Compute, True)
-                          if x.descriptor.byteSize == x.descriptor.elementByteSize == 96]
+                          if x.descriptor.byteSize == x.descriptor.elementByteSize == 128]
                 if len(clears) != 1:
                     raise RuntimeError("Missing clear constants")
                 c = clears[0]
                 flags = struct.unpack("<I", bytes(controller.GetBufferData(c.resource, c.byteOffset + 28, 4)))[0]
                 is_input_clear = bool(flags & 32)
             for status in statuses:
-                data = bytes(controller.GetBufferData(status.resource, 0, 256))
-                if shader.entryPoint == "VortexExposureFrameCS" and data != bytes(256):
+                data = bytes(controller.GetBufferData(status.resource, 0, 384))
+                if shader.entryPoint == "VortexExposureFrameCS" and data != bytes(384):
                     raise RuntimeError("Frame preparation did not clear the entire status allocation")
-                if len(data) != 256 or (is_input_clear and struct.unpack_from("<I", data, 152)[0] != 0):
+                if len(data) != 384 or (is_input_clear and struct.unpack_from("<I", data, 152)[0] != 0):
                     raise RuntimeError("Input replacement left the AP record valid")
                 if is_input_clear:
                     retained.pop(str(status.resource), None)
@@ -57,11 +57,11 @@ def build_report(controller, report, capture_path, report_path):
         if shader.entryPoint != "SelectSuitabilityCandidate":
             continue
         reads = [x.descriptor for x in pipeline.GetReadOnlyResources(rd.ShaderStage.Compute, True)]
-        constants = [x for x in reads if x.byteSize == x.elementByteSize == 96]
+        constants = [x for x in reads if x.byteSize == x.elementByteSize == 128]
         if len(constants) != 1:
             raise RuntimeError("Missing qualification constants")
         c = constants[0]
-        raw = bytes(controller.GetBufferData(c.resource, c.byteOffset, 96))
+        raw = bytes(controller.GetBufferData(c.resource, c.byteOffset, 128))
         if not struct.unpack_from("<I", raw, 28)[0] & 64:
             continue
         frames = [x for x in reads if names.get(str(x.resource)) == "Vortex.PostProcess.Exposure.Frame"]
@@ -70,8 +70,8 @@ def build_report(controller, report, capture_path, report_path):
         gain = struct.unpack_from("<f", raw, 80)[0]
         inverse_p = struct.unpack("<f", bytes(controller.GetBufferData(frames[0].resource, 4, 4)))[0]
         status = statuses[0].resource
-        data = bytes(controller.GetBufferData(status, 0, 256))
-        if len(data) != 256:
+        data = bytes(controller.GetBufferData(status, 0, 384))
+        if len(data) != 384:
             raise RuntimeError("Incorrect status allocation size")
         bounds = struct.unpack_from("<4f", data, 96)
         peak, flags, count, reserved = struct.unpack_from("<f3I", data, 128)

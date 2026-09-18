@@ -8,6 +8,7 @@
 #include "Vortex/Contracts/Definitions/SceneDefinitions.hlsli"
 #include "Vortex/Contracts/View/HdrStoreChecks.hlsli"
 #include "Vortex/Contracts/View/HdrErrorBounds.hlsli"
+#include "Vortex/Contracts/View/HdrHardwareSampling.hlsli"
 #include "Core/Bindless/Generated.BindlessAbi.hlsl"
 
 #include "Vortex/Contracts/View/ViewConstants.hlsli"
@@ -218,6 +219,22 @@ static float ComputeDeviceDepthFromViewDepth(float view_depth)
         : (reverse_z != 0u ? 0.0f : 1.0f);
 }
 
+static float ComputeCellViewDepth(VolumetricFogPassConstants pass, float z_slice)
+{
+    return clamp(ComputeDepthFromZSlice(z_slice, pass.grid_z.grid_z_params),
+        pass.grid.start_distance_m, pass.grid.end_distance_m);
+}
+
+static float3 ComputeCellWorldPosition(
+    VolumetricFogPassConstants pass, uint3 cell, float3 offset)
+{
+    const float2 uv = (float2(cell.xy) + saturate(offset.xy))
+        / max(float2(pass.output_header.output_width, pass.output_header.output_height), 1.0f.xx);
+    const float depth = ComputeCellViewDepth(pass, float(cell.z) + saturate(offset.z));
+    return ReconstructWorldPosition(uv, ComputeDeviceDepthFromViewDepth(depth),
+        inverse_view_projection_matrix);
+}
+
 static float EvaluateHeightFogLayerDensity(
     float density,
     float height_falloff,
@@ -315,7 +332,7 @@ static bool TrySampleTemporalHistory(
             pass.temporal_history0.previous_integrated_light_scattering_srv];
     const SamplerState linear_sampler = SamplerDescriptorHeap[VORTEX_SAMPLER_LINEAR_CLAMP];
     const float previous_w =
-        (previous_z_slice + 0.5f) / max(float(pass.output_header.output_depth), 1.0f);
+        previous_z_slice / max(float(pass.output_header.output_depth), 1.0f);
     history_value =
         history_texture.SampleLevel(
             linear_sampler, float3(previous_uv, saturate(previous_w)), 0.0f);
@@ -430,23 +447,14 @@ static VolumetricLocalFogMedia EvaluateLocalFogVolumesForFroxel(
 static float4 EvaluateVolumetricFogSample(
     VolumetricFogPassConstants pass,
     uint3 dispatch_id,
-    float3 cell_offset,
-    out float3 sample_world_position)
+    float3 cell_offset)
 {
     const float z_base = float(dispatch_id.z);
-    const float front_distance = clamp(
-        ComputeDepthFromZSlice(z_base, pass.grid_z.grid_z_params),
-        pass.grid.start_distance_m,
-        pass.grid.end_distance_m);
-    const float back_distance = clamp(
-        ComputeDepthFromZSlice(z_base + 1.0f, pass.grid_z.grid_z_params),
-        pass.grid.start_distance_m,
-        pass.grid.end_distance_m);
-    const float slice_distance = clamp(
-        ComputeDepthFromZSlice(z_base + saturate(cell_offset.z),
-            pass.grid_z.grid_z_params),
-        pass.grid.start_distance_m,
-        pass.grid.end_distance_m);
+    const float front_distance = ComputeCellViewDepth(pass, z_base);
+    const float back_distance = ComputeCellViewDepth(pass, z_base + 1.0f);
+    // Each stored texel represents the fixed cell center used by fog sampling.
+    // Jitter varies media/lighting evaluation, never the integrated path length.
+    const float slice_distance = ComputeCellViewDepth(pass, z_base + 0.5f);
     const float ray_length = max(slice_distance - pass.grid.start_distance_m, 0.0f);
     const float near_fade = pass.grid.near_fade_in_distance_m > 1.0e-3f
         ? saturate(ray_length / pass.grid.near_fade_in_distance_m)
@@ -456,9 +464,7 @@ static float4 EvaluateVolumetricFogSample(
         (float2(dispatch_id.xy) + saturate(cell_offset.xy))
         / max(float2(pass.output_header.output_width, pass.output_header.output_height),
             float2(1.0f, 1.0f));
-    const float device_depth = ComputeDeviceDepthFromViewDepth(slice_distance);
-    sample_world_position =
-        ReconstructWorldPosition(screen_uv, device_depth, inverse_view_projection_matrix);
+    const float3 sample_world_position = ComputeCellWorldPosition(pass, dispatch_id, cell_offset);
     const float3 translated_world_position = sample_world_position - camera_position;
     const float3 camera_delta = camera_position - sample_world_position;
     const float camera_delta_length_sq = dot(camera_delta, camera_delta);
@@ -538,12 +544,12 @@ void VortexVolumetricFogCS(uint3 dispatch_id : SV_DispatchThreadID)
     RWTexture3D<float4> output_texture =
         ResourceDescriptorHeap[pass.output_header.output_texture_uav];
 
-    float3 world_position = 0.0f.xxx;
     float4 output_value = EvaluateVolumetricFogSample(
         pass,
         dispatch_id,
-        pass.temporal_history1.frame_jitter_offsets[0].xyz,
-        world_position);
+        pass.temporal_history1.frame_jitter_offsets[0].xyz);
+    // History is stored on the fixed grid, independently of this frame's sample.
+    const float3 history_world_position = ComputeCellWorldPosition(pass, dispatch_id, 0.5f.xxx);
     float4 reference_low = output_value;
     float4 reference_high = output_value;
     float4 history_value = output_value;
@@ -557,29 +563,46 @@ void VortexVolumetricFogCS(uint3 dispatch_id : SV_DispatchThreadID)
                 && previous_bounds.x < 1.0 && previous_bounds.z < 1.0;
         }
     }
-    if (certified_history && TrySampleTemporalHistory(pass, world_position, history_value))
+    if (certified_history && TrySampleTemporalHistory(pass, history_world_position, history_value))
     {
         float inverse_previous_p = 1.0f;
+        float previous_p = 1.0f;
         if (pass.previous_frame_exposure_srv != K_INVALID_BINDLESS_INDEX) {
             StructuredBuffer<FrameExposureData> previous_frame = ResourceDescriptorHeap[pass.previous_frame_exposure_srv];
             inverse_previous_p = previous_frame[0].one_over_pre_exposure;
+            previous_p = previous_frame[0].pre_exposure;
         }
         float4 history_low = history_value;
         float4 history_high = history_value;
         if (pass.previous_error_bounds_srv != K_INVALID_BINDLESS_INDEX) {
             ByteAddressBuffer previous_status = ResourceDescriptorHeap[pass.previous_error_bounds_srv];
             const float4 bounds = asfloat(previous_status.Load4(112u));
+            const uint3 extent = uint3(pass.output_header.output_width,
+                pass.output_header.output_height, pass.output_header.output_depth);
+            const uint gradient_flags = previous_status.Load(236u);
+            const bool gradients_valid = (gradient_flags & 3u) == 1u
+                && previous_status.Load(252u) == extent.x * extent.y * extent.z;
+            const bool half_history = (pass.temporal_history0.enabled & 2u) != 0u;
+            const float3 rgb_gradient = asfloat(previous_status.Load3(224u));
+            const float3 t_gradient = asfloat(previous_status.Load3(240u));
             [unroll] for (uint c = 0u; c < 3u; ++c) {
-                if (all((asuint(bounds.xy) & 0x7fffffffu) == 0u.xx)) {
+                if (!half_history && all((asuint(bounds.xy) & 0x7fffffffu) == 0u.xx)) {
                     history_low[c] = history_high[c] = history_value[c] * (GetPreExposure() * inverse_previous_p);
                 } else {
-                    const float observed = max(history_value[c], 0.0) * inverse_previous_p;
-                    const float2 interval = HdrReferenceInterval(observed, bounds.xy);
-                    history_low[c] = HdrBoundDown(interval.x * GetPreExposure());
-                    history_high[c] = HdrUpperProduct(interval.y, GetPreExposure());
+                    const float3 stored_gradient = float3(HdrUpperProduct(rgb_gradient.x, previous_p),
+                        HdrUpperProduct(rgb_gradient.y, previous_p), HdrUpperProduct(rgb_gradient.z, previous_p));
+                    const float2 interval = gradients_valid
+                        ? HdrHardwareFilterInterval(max(history_value[c], 0.0),
+                            float2(bounds.x, HdrUpperProduct(bounds.y, previous_p)), stored_gradient, extent, half_history)
+                        : float2(0.0, HdrBoundInfinity());
+                    const float transfer = GetPreExposure() * inverse_previous_p;
+                    history_low[c] = HdrBoundDown(interval.x * transfer);
+                    history_high[c] = HdrUpperProduct(interval.y, transfer);
                 }
             }
-            const float2 transmission = HdrReferenceInterval(saturate(history_value.a), bounds.zw);
+            const float2 transmission = gradients_valid || (!half_history && all(bounds.zw == 0.0.xx))
+                ? HdrHardwareFilterInterval(saturate(history_value.a), bounds.zw, t_gradient, extent, half_history)
+                : float2(0.0, 1.0);
             history_low.a = saturate(transmission.x);
             history_high.a = saturate(transmission.y);
         } else {
@@ -608,12 +631,10 @@ void VortexVolumetricFogCS(uint3 dispatch_id : SV_DispatchThreadID)
             [loop]
             for (uint sample_index = 1u; sample_index < sample_count; ++sample_index)
             {
-                float3 unused_world_position = 0.0f.xxx;
                 accumulated += EvaluateVolumetricFogSample(
                     pass,
                     dispatch_id,
-                    pass.temporal_history1.frame_jitter_offsets[sample_index].xyz,
-                    unused_world_position);
+                    pass.temporal_history1.frame_jitter_offsets[sample_index].xyz);
             }
             output_value = accumulated / float(sample_count);
             output_value.a = saturate(output_value.a);
@@ -624,5 +645,6 @@ void VortexVolumetricFogCS(uint3 dispatch_id : SV_DispatchThreadID)
     RecordHdrStoreBounds(output_value, reference_low, reference_high, GetOneOverPreExposure(),
         10u, pass.exposure_status_uav, pass.exposure_fp16_store);
     CheckHdrStoreRange(output_value, 10u, pass.exposure_status_uav, pass.exposure_fp16_store);
-    output_texture[dispatch_id] = output_value;
+    output_texture[dispatch_id] = pass.exposure_fp16_store != 0u
+        ? HdrRoundToHalf(output_value) : output_value;
 }

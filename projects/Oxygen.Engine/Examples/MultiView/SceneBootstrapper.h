@@ -15,6 +15,8 @@
 
 namespace oxygen::examples::multiview {
 
+enum class VisualFogMode : std::uint8_t { kClear, kVolumetric, kLocal };
+
 //! Builds and maintains the sample scene graph for the MultiView demo.
 /*!
  Creates geometry (Sphere, Cube, Cylinder, Cone) and lighting (key + fill)
@@ -48,6 +50,8 @@ public:
   auto ApplyAtmosphereProof(std::uint64_t frame) -> void;
   //! Sunlit original meshes/materials with ordinary point and spot lights.
   auto ApplyLitAtmosphereProof() -> void;
+  //! Original lit meshes with a fixed, switchable fog comparison recipe.
+  auto ApplyConsumerVisualProof(VisualFogMode fog_mode) -> void;
 
 private:
   auto EnsureProofAtmosphere(
@@ -72,6 +76,7 @@ private:
   scene::SceneNode key_light_node_;
   scene::SceneNode fill_light_node_;
   scene::SceneNode proof_sun_node_;
+  scene::SceneNode visual_local_fog_node_;
   std::uint32_t atmosphere_proof_phase_ { ~0U };
 };
 

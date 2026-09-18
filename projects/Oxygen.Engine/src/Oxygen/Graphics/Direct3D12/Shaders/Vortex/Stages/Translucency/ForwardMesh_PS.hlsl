@@ -16,6 +16,7 @@
 #include "Vortex/Contracts/Draw/MaterialShadingConstants.hlsli"
 #include "Vortex/Contracts/Draw/Vertex.hlsli"
 #include "Vortex/Contracts/View/FrameExposureHelpers.hlsli"
+#include "Vortex/Contracts/View/HdrConsumerInputs.hlsli"
 #include "Vortex/Contracts/View/ViewConstants.hlsli"
 
 #include "Vortex/Contracts/Definitions/MaterialFlags.hlsli"
@@ -176,7 +177,11 @@ static ForwardLightingTerms ComputeForwardLightingTerms(VSOutput input,
   return terms;
 }
 
-[shader("pixel")] float4 PS(VSOutput input)
+[shader("pixel")]
+#if !defined(OXYGEN_OPAQUE_OUTPUT)
+[earlydepthstencil]
+#endif
+float4 PS(VSOutput input)
   : SV_Target0
 {
   SamplerState linear_sampler = SamplerDescriptorHeap[0];
@@ -194,6 +199,9 @@ static ForwardLightingTerms ComputeForwardLightingTerms(VSOutput input,
 
   if ((surf.flags & MATERIAL_FLAG_UNLIT) != 0u) {
     const float3 unlit_color = surf.base_rgb * input.color + surf.emissive;
+#  if !defined(OXYGEN_OPAQUE_OUTPUT)
+    RecordHdrConsumerInput(unlit_color, HDR_INPUT_TRANSLUCENCY);
+#  endif
 #  ifdef OXYGEN_HDR_OUTPUT
     return float4(unlit_color * GetPreExposure(), ResolveOutputCoverage(surf.base_a));
 #  else
@@ -227,6 +235,9 @@ static ForwardLightingTerms ComputeForwardLightingTerms(VSOutput input,
   final_color = full_direct + lighting.ibl + surf.emissive;
 #  endif
 
+#  if !defined(OXYGEN_OPAQUE_OUTPUT)
+  RecordHdrConsumerInput(final_color, HDR_INPUT_TRANSLUCENCY);
+#  endif
   final_color *= GetPreExposure();
 
   // Opaque/masked base passes receive AP once in Stage 15. Translucency runs
@@ -241,6 +252,7 @@ static ForwardLightingTerms ComputeForwardLightingTerms(VSOutput input,
       s_dir = float3(0.5, 0.707, 0.5);
     }
 
+    RecordHdrConsumerUsage(HDR_CONSUMER_TRANSLUCENT_AP);
     const AerialPerspectiveResult ap = ComputeAerialPerspective(
       env_state.data, input.world_pos, camera_position, s_dir);
     final_color = ApplyAerialPerspective(final_color, ap);

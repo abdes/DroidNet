@@ -90,6 +90,14 @@ public:
     std::uint64_t lifetime { 0U };
   };
 
+  struct SceneComposition {
+    const graphics::Texture* opaque_depth { nullptr };
+    ShaderVisibleIndex opaque_depth_srv { kInvalidShaderVisibleIndex };
+    std::uint64_t translucent_triangles { 0U };
+    std::uint32_t local_fog_instances { 0U };
+    bool reverse_z { true };
+  };
+
   struct Inputs {
     const graphics::Texture* scene_signal { nullptr };
     ShaderVisibleIndex scene_signal_srv { kInvalidShaderVisibleIndex };
@@ -103,6 +111,10 @@ public:
     const Source* source { nullptr };
     std::optional<ExposureTransitionError> rejection;
     std::uint64_t lifetime { 0U };
+    //! Nonzero for a scene resolve requiring these composed upstream products.
+    std::uint32_t composition_products { 0U };
+    //! Generate a real consumer certificate; absent for uploaded fixtures.
+    std::optional<SceneComposition> scene_composition;
   };
 
   struct Result {
@@ -140,6 +152,8 @@ public:
     float error_budget_share { 1.0F };
     //! Known RGB amplification after storage; transmittance is not scaled.
     float consumer_rgb_gain { 1.0F };
+    //! Require this frame's whole-scene reference/candidate certificate.
+    bool composed_error { false };
   };
 
   //! Capture the absolute RGB maximum before environment attenuation (in P
@@ -284,7 +298,7 @@ private:
   std::array<std::optional<graphics::ComputePipelineDesc>, 4>
     suitability_pipelines_;
   std::unique_ptr<::oxygen::vortex::internal::PerViewStructuredPublisher<
-    std::array<std::uint32_t, 24U>>>
+    std::array<std::uint32_t, 32U>>>
     suitability_constants_publisher_;
   std::unique_ptr<::oxygen::vortex::internal::PerViewStructuredPublisher<
     std::array<std::uint32_t, 8U>>>
