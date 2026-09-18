@@ -364,7 +364,6 @@ struct TextureTuning final {
   MipPolicy mip_policy = MipPolicy::kNone;
   uint8_t max_mip_levels = 1;
   MipFilter mip_filter = MipFilter::kKaiser;
-  ColorSpace mip_filter_space = ColorSpace::kLinear;
 
   // Output
   Format color_output_format = Format::kBC7UNormSRGB;
@@ -432,7 +431,6 @@ CLI-only optional flags (NOT valid in manifest job objects):
 | `--mip-policy` | `string` | `none` / `full` / `max` |
 | `--max-mips` | `uint32` | Max mip levels (when `--mip-policy=max`) |
 | `--mip-filter` | `string` | `box` / `kaiser` / `lanczos` |
-| `--mip-filter-space` | `string` | `srgb` / `linear` |
 | `--bc7-quality` | `string` | `none` / `fast` / `default` / `high` |
 | `--packing-policy` | `string` | `d3d12` / `tight` |
 | `--hdr-handling` | `string` | `error` / `tonemap` / `keep` |
@@ -491,7 +489,7 @@ Fields valid in a `type: "texture"` manifest job:
 Allowed top-level keys for `type: "texture"`:
 `id`, `type`, `name`, `source`, `sources`, `preset`, `intent`,
 `color_space`, `output_format`, `data_format`, `mip_policy`, `max_mips`,
-`mip_filter`, `mip_filter_space`, `bc7_quality`, `packing_policy`,
+`mip_filter`, `bc7_quality`, `packing_policy`,
 `hdr_handling`, `exposure_ev`, `bake_hdr_to_ldr`, `bake_hdr`,
 `flip_y`, `force_rgba`, `flip_normal_green`, `renormalize_normals`,
 `cubemap`, `equirect_to_cube`, `cube_face_size`, `cube_layout`,
@@ -664,7 +662,6 @@ Top-level validation rules:
   "policy": "full",
   "max_mips": 8,
   "filter": "kaiser",
-  "filter_space": "linear",
   "renormalize": true
 }
 ```
@@ -675,7 +672,6 @@ Top-level validation rules:
 | `"full"` | `MipPolicy::kFullChain` | Full chain to 1×1 |
 | `"max"` | `MipPolicy::kMaxCount` | `max_mips` required |
 | `filter` | `TextureImportDesc::mip_filter` | `box` / `kaiser` / `lanczos` |
-| `filter_space` | `TextureImportDesc::mip_filter_space` | `srgb` / `linear` |
 | `renormalize` | `TextureImportDesc::renormalize_normals_in_mips` | Normal maps only |
 
 #### 7.4.6 `output` Settings
@@ -697,6 +693,22 @@ Top-level validation rules:
 | `"bc7_srgb"` | `kBC7UNormSRGB` | BC7 compressed, sRGB |
 | `"rgba16f"` | `kRGBA16Float` | Half-precision float |
 | `"rgba32f"` | `kRGBA32Float` | Full-precision float |
+
+Source RGB is interpreted using `source_color_space`. Color mip chains are
+computed in linear FP32, then encoded and quantized once for `output_format`.
+Alpha is never gamma-converted. Normal and data textures retain their semantic
+processing. With no generated mips, source RGB converts directly to the output
+encoding. HDR tone mapping, when requested, consumes linear radiance.
+
+The former `mip_filter_space` setting and `mips.filter_space` recipe field were
+removed with user approval on 2026-09-18. Remove those keys from existing recipes
+and the corresponding CLI option from scripts. Source encoding, output format
+and filter-kernel selection remain explicit; color averaging is always linear.
+
+Runtime SRVs preserve the cooked format, so sRGB formats decode during sampling
+and linear formats need no shader decode. Previously cooked textures containing
+sRGB-encoded RGB under a linear format must be recooked from their source and
+import settings; runtime sampling follows the declared format.
 
 Packing policy values: `"d3d12"` (256-byte row pitch, 512-byte subresource
 alignment) or `"tight"` (4-byte alignment for storage efficiency).

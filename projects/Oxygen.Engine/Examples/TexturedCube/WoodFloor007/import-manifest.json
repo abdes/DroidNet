@@ -7,7 +7,6 @@
       "content_hashing": true,
       "mip_policy": "full",
       "mip_filter": "kaiser",
-      "mip_filter_space": "linear",
       "bc7_quality": "high",
       "packing_policy": "d3d12"
     },

@@ -128,7 +128,6 @@ NOLINT_TEST(TextureDescriptorJsonSchemaTest, AcceptsCanonicalDocument)
     "mips": {
       "policy": "full",
       "filter": "kaiser",
-      "filter_space": "linear",
       "renormalize": true
     },
     "output": {
@@ -148,6 +147,19 @@ NOLINT_TEST(TextureDescriptorJsonSchemaTest, AcceptsCanonicalDocument)
 
   auto errors = std::string {};
   EXPECT_TRUE(ValidateSchema(*schema, doc, errors)) << errors;
+}
+
+NOLINT_TEST(TextureDescriptorJsonSchemaTest, RejectsRemovedMipFilterSpace)
+{
+  const auto repo_root = FindRepoRoot();
+  ASSERT_FALSE(repo_root.empty());
+  const auto schema = LoadJsonFile(SchemaFile(repo_root));
+  ASSERT_TRUE(schema.has_value());
+  const auto doc = json::parse(R"({
+    "source": "Textures/color.png", "mips": { "filter_space": "srgb" }
+  })");
+  auto errors = std::string {};
+  EXPECT_FALSE(ValidateSchema(*schema, doc, errors));
 }
 
 NOLINT_TEST(TextureDescriptorJsonSchemaTest, RejectsUnknownNestedFields)

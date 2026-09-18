@@ -139,9 +139,6 @@ namespace {
       if (mips.contains("filter")) {
         settings.mip_filter = mips.at("filter").get<std::string>();
       }
-      if (mips.contains("filter_space")) {
-        settings.mip_filter_space = mips.at("filter_space").get<std::string>();
-      }
       if (mips.contains("renormalize")) {
         settings.renormalize_normals = mips.at("renormalize").get<bool>();
       }

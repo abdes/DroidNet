@@ -309,7 +309,6 @@ auto MapSettingsToTuning(const TextureImportSettings& settings,
     tuning.mip_policy = desc.mip_policy;
     tuning.max_mip_levels = desc.max_mip_levels;
     tuning.mip_filter = desc.mip_filter;
-    tuning.mip_filter_space = desc.mip_filter_space;
     tuning.color_output_format = desc.output_format;
     tuning.data_output_format = desc.output_format;
     tuning.bc7_quality = desc.bc7_quality;
@@ -406,16 +405,6 @@ auto MapSettingsToTuning(const TextureImportSettings& settings,
       return false;
     }
     tuning.mip_filter = *parsed;
-  }
-
-  if (!settings.mip_filter_space.empty()) {
-    auto parsed = ParseColorSpace(settings.mip_filter_space);
-    if (!parsed.has_value()) {
-      error_stream << "ERROR: invalid mip_filter_space: "
-                   << settings.mip_filter_space << "\n";
-      return false;
-    }
-    tuning.mip_filter_space = *parsed;
   }
 
   const bool bc7_quality_set = !settings.bc7_quality.empty();

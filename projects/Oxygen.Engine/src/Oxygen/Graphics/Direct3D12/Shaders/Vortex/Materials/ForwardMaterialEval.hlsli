@@ -163,10 +163,9 @@ MaterialSurface EvaluateMaterialSurface(
             Texture2D<float4> base_tex = ResourceDescriptorHeap[mat.base_color_texture_index];
             SamplerState samp = SamplerDescriptorHeap[0];
             float4 texel = base_tex.Sample(samp, uv);
-            // Base-color textures are authored in sRGB. Since the engine binds
-            // RGBA8 as UNORM (non-sRGB) and renders to a non-sRGB backbuffer,
-            // we must manually convert.
-            s.base_rgb *= SrgbToLinear(texel.rgb);
+            // The cooked format determines transfer decoding: sRGB SRVs
+            // decode in hardware; linear UNORM/float SRVs already yield linear RGB.
+            s.base_rgb *= texel.rgb;
             s.base_a   *= texel.a;
         }
 
@@ -293,8 +292,8 @@ MaterialSurface EvaluateMaterialSurface(
             && mat.emissive_texture_index != K_INVALID_BINDLESS_INDEX) {
             Texture2D<float4> emissive_tex = ResourceDescriptorHeap[mat.emissive_texture_index];
             SamplerState samp = SamplerDescriptorHeap[0];
-            // Emissive textures are typically sRGB-encoded.
-            float3 emissive_sample = SrgbToLinear(emissive_tex.Sample(samp, uv).rgb);
+            // Preserve linear HDR values and avoid decoding sRGB SRVs twice.
+            float3 emissive_sample = emissive_tex.Sample(samp, uv).rgb;
             s.emissive *= emissive_sample;
         }
 

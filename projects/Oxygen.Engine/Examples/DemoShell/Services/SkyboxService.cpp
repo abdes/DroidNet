@@ -155,7 +155,6 @@ auto SkyboxService::StartLoadSkybox(const std::string& file_path,
     // the mip chain for roughness-based filtering.
     desc.mip_policy = MipPolicy::kFullChain;
     desc.mip_filter = MipFilter::kKaiser;
-    desc.mip_filter_space = ColorSpace::kLinear;
 
     auto equirect_result = ImportCubeMapFromEquirect(img_path,
       static_cast<uint32_t>(options.cube_face_size), desc,
@@ -192,7 +191,6 @@ auto SkyboxService::StartLoadSkybox(const std::string& file_path,
     // the mip chain for roughness-based filtering.
     desc.mip_policy = MipPolicy::kFullChain;
     desc.mip_filter = MipFilter::kKaiser;
-    desc.mip_filter_space = ColorSpace::kLinear;
 
     const auto layout = CubeLayoutFromSkyboxLayout(options.layout);
     auto layout_result = ImportCubeMapFromLayoutImage(

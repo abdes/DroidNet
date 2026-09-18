@@ -120,7 +120,6 @@
                                 "preset",
                                 "mip_policy",
                                 "mip_filter",
-                                "mip_filter_space",
                                 "bc7_quality",
                                 "packing_policy",
                                 "cube_layout",
@@ -544,9 +543,6 @@
                 "mip_filter": {
                     "$ref": "#/definitions/mip_filter"
                 },
-                "mip_filter_space": {
-                    "$ref": "#/definitions/color_space"
-                },
                 "bc7_quality": {
                     "$ref": "#/definitions/bc7_quality"
                 },
@@ -956,9 +952,6 @@
                 },
                 "mip_filter": {
                     "$ref": "#/definitions/mip_filter"
-                },
-                "mip_filter_space": {
-                    "$ref": "#/definitions/color_space"
                 },
                 "bc7_quality": {
                     "$ref": "#/definitions/bc7_quality"

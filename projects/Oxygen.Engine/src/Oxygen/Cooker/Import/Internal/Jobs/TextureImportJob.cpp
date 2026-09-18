@@ -132,7 +132,6 @@ auto IsColorIntent(const TextureIntent intent) -> bool
     desc.mip_policy = tuning.mip_policy;
     desc.max_mip_levels = tuning.max_mip_levels;
     desc.mip_filter = tuning.mip_filter;
-    desc.mip_filter_space = tuning.mip_filter_space;
     desc.output_format = IsColorIntent(desc.intent) ? tuning.color_output_format
                                                     : tuning.data_output_format;
     desc.bc7_quality
@@ -215,7 +214,6 @@ auto TextureImportJob::ExecuteAsync() -> co::Co<ImportReport>
     DLOG_F(INFO, "  data_format: {}", tuning.data_output_format);
     DLOG_F(INFO, "  mip_policy: {}", tuning.mip_policy);
     DLOG_F(INFO, "  mip_filter: {}", tuning.mip_filter);
-    DLOG_F(INFO, "  mip_filter_space: {}", tuning.mip_filter_space);
     DLOG_F(INFO, "  bc7_quality: {}", tuning.bc7_quality);
     DLOG_F(INFO, "  max_mips: {}", tuning.max_mip_levels);
     DLOG_F(INFO, "  packing_policy: {}", tuning.packing_policy_id);
@@ -669,7 +667,6 @@ auto TextureImportJob::CookTexture(
       desc.mip_policy = tuning.mip_policy;
       desc.max_mip_levels = tuning.max_mip_levels;
       desc.mip_filter = tuning.mip_filter;
-      desc.mip_filter_space = tuning.mip_filter_space;
       desc.output_format = IsColorIntent(desc.intent)
         ? tuning.color_output_format
         : tuning.data_output_format;

@@ -11,6 +11,13 @@ textures before lighting; normals, metalness, roughness and mask samples are
 data. Output retains the existing tone curves, DisplayGamma and target encoding.
 Exposure is not a color-space conversion.
 
+The cooked texture format owns its transfer encoding. An sRGB SRV performs the
+decode during sampling; UNORM and floating-point SRVs return linear values.
+Material evaluation consumes those samples directly. Applying another sRGB
+decode would darken tagged sRGB textures and clamp HDR emissive texels before
+pre-exposure. This rule applies to both base-color and emissive texture samples;
+alpha remains a linear coverage value.
+
 | Quantity | Unit / meaning |
 | --- | --- |
 | Directional light / Sun | Lux, illuminance on a perpendicular receiver |

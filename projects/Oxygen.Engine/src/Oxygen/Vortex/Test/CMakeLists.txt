@@ -432,6 +432,7 @@ if(WIN32)
     SOURCES
       "ExposureGpu_test.cpp"
     DEPS
+      oxygen::cooker
       oxygen::vortex
       oxygen::graphics-direct3d12
       oxygen::testing

@@ -34,7 +34,6 @@
       "content_hashing": false,
       "mip_policy": "none",
       "mip_filter": "box",
-      "mip_filter_space": "linear",
       "bc7_quality": "none",
       "hdr_handling": "keep",
       "max_mips": 1,

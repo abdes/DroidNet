@@ -138,9 +138,6 @@ struct TextureImportDesc {
   //! Filter kernel for mip generation.
   MipFilter mip_filter = MipFilter::kBox;
 
-  //! Color space for mip filtering (typically linear for correct results).
-  ColorSpace mip_filter_space = ColorSpace::kLinear;
-
   //=== Output Format ===-----------------------------------------------------//
 
   //! Final stored format for the texture data.

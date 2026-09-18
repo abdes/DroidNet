@@ -344,7 +344,7 @@ These stages follow the current synchronous implementation in
 10) **Generate mips**
     - `MipPolicy::kNone`, `kFullChain`, or `kMaxCount`
     - Normal maps use specialized mips; 3D textures use 3D mip generator
-    - `mip_filter` + `mip_filter_space` control filtering
+    - `mip_filter` selects the kernel; color mip filtering uses linear light
 
 11) **Convert to output format / compress**
     - Supported formats:
@@ -436,7 +436,7 @@ payload is created by `TextureEmitter` and reused across all failures.
 - Pre/post validation rules (dimension pairing, depth/type, mip policy, BC7)
 - HDR handling: `kTonemapAuto`, `kError` behavior, `exposure_ev` usage
 - Normal map handling: `flip_normal_green`, normal-map mip generation
-- Mip policies and filters, including `mip_filter_space`
+- Mip policies and filter kernels, with linear-light color filtering
 - Output formats: RGBA8 (linear/sRGB), RGBA16F, RGBA32F, BC7 (linear/sRGB)
 - sRGB reinterpretation for RGBA8/BC7 when the storage is bit-identical
 - Packing policy alignment and layer-major subresource ordering

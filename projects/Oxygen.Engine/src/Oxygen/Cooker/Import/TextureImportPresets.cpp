@@ -161,7 +161,6 @@ void ApplyPreset(TextureImportDesc& desc, const TexturePreset preset) noexcept
   desc.mip_policy = MipPolicy::kFullChain;
   desc.max_mip_levels = 1;
   desc.mip_filter = MipFilter::kBox;
-  desc.mip_filter_space = ColorSpace::kLinear;
   desc.output_format = Format::kRGBA8UNorm;
   desc.bc7_quality = Bc7Quality::kNone;
   desc.hdr_handling = HdrHandling::kTonemapAuto;
@@ -172,7 +171,6 @@ void ApplyPreset(TextureImportDesc& desc, const TexturePreset preset) noexcept
   case TexturePreset::kAlbedo:
     desc.intent = TextureIntent::kAlbedo;
     desc.source_color_space = ColorSpace::kSRGB;
-    desc.mip_filter_space = ColorSpace::kSRGB;
     desc.output_format = Format::kBC7UNormSRGB;
     desc.bc7_quality = Bc7Quality::kDefault;
     break;
@@ -216,7 +214,6 @@ void ApplyPreset(TextureImportDesc& desc, const TexturePreset preset) noexcept
   case TexturePreset::kEmissive:
     desc.intent = TextureIntent::kEmissive;
     desc.source_color_space = ColorSpace::kSRGB;
-    desc.mip_filter_space = ColorSpace::kSRGB;
     desc.output_format = Format::kBC7UNormSRGB;
     desc.bc7_quality = Bc7Quality::kDefault;
     break;
@@ -225,7 +222,6 @@ void ApplyPreset(TextureImportDesc& desc, const TexturePreset preset) noexcept
     desc.intent = TextureIntent::kData;
     desc.source_color_space = ColorSpace::kSRGB;
     desc.mip_filter = MipFilter::kLanczos;
-    desc.mip_filter_space = ColorSpace::kSRGB;
     desc.output_format = Format::kBC7UNormSRGB;
     desc.bc7_quality = Bc7Quality::kDefault;
     break;
