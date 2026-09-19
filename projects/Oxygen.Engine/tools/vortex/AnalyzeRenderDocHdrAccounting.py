@@ -14,6 +14,15 @@ from renderdoc_ui_analysis import (
 )
 
 
+REPLAY_SCOPE = (
+    "Replay event durations: two warm samples after one warmup. "
+    "Direct primary texture traffic is derived from actual resource formats and dispatch extents. "
+    "Unmodeled traffic remains zero, not a claim of no accesses. Buffer, mask/depth side reads, "
+    "filtered taps, blending and cache/compression traffic are not included in byte totals. "
+    "These are logical transfer quantities, not measured DRAM bandwidth or frame latency."
+)
+
+
 def summarize_events(rows):
     full_volume_producers = {
         "VortexAtmosphereSkyViewLutCS",
@@ -162,12 +171,7 @@ def build_report(controller, report, capture_path, report_path):
     assert len(views) == 2
     totals = summarize_events(rows)
     result = {"status": "pass", "capture": str(capture_path), "views": views, "by_entry": totals,
-              "events": rows, "scope": (
-                  "Debug-shader replay event durations: two warm samples after one warmup. "
-                  "Direct primary texture traffic is derived from actual resource formats and dispatch extents. "
-                  "Unmodeled traffic remains zero, not a claim of no accesses. Buffer, mask/depth side reads, "
-                  "filtered taps, blending and cache/compression traffic are not included in byte totals. "
-                  "These are logical transfer quantities, not measured DRAM bandwidth or frame latency.")}
+              "events": rows, "scope": REPLAY_SCOPE}
     Path(report_path).with_suffix(".json").write_text(json.dumps(result, indent=2) + "\n")
     report.append("hdr_accounting_replay=pass")
 
