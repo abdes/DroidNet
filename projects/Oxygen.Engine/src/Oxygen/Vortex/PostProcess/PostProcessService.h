@@ -7,6 +7,7 @@
 #pragma once
 
 #include <array>
+#include <cstddef>
 #include <deque>
 #include <map>
 #include <memory>
@@ -240,8 +241,17 @@ private:
     const ResolvedPostProcessConfig& config) const -> PostProcessFrameBindings;
   struct PublishedView {
     ShaderVisibleIndex slot { kInvalidShaderVisibleIndex };
+    // Make the CPU cache's existing gap explicit; bindings retain GPU
+    // alignment.
+    std::array<std::byte,
+      alignof(PostProcessFrameBindings) - sizeof(ShaderVisibleIndex)>
+      slot_padding {};
     PostProcessFrameBindings bindings {};
   };
+  static_assert(
+    offsetof(PublishedView, bindings) == alignof(PostProcessFrameBindings));
+  static_assert(sizeof(PublishedView)
+    == sizeof(PostProcessFrameBindings) + alignof(PostProcessFrameBindings));
 
   struct PrecisionState {
     std::uint64_t lifetime { 0U };

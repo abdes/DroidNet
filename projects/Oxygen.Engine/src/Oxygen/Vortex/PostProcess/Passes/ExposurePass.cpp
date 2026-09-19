@@ -25,6 +25,7 @@
 #include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
@@ -1561,12 +1562,18 @@ auto ExposurePass::RecordState(RenderContext& ctx,
       *state->histogram_buffer, graphics::ResourceStates::kUnorderedAccess);
   }
   recorder->FlushBarriers();
-  recorder->SetPipelineState(*average_pipeline_);
-  UpdateAverageConstants(ctx, *recorder, config, *state, targets_srv,
-    previous ? previous->srv_index : kInvalidShaderVisibleIndex, inputs,
-    borrowed ? borrowed->srv_index : kInvalidShaderVisibleIndex, bootstrap,
-    automatic, source_loss);
-  recorder->Dispatch(1U, 1U, 1U);
+  {
+    graphics::GpuEventScope solve_scope(*recorder,
+      "Vortex.PostProcess.Exposure.Solve",
+      profiling::ProfileGranularity::kDiagnostic,
+      profiling::ProfileCategory::kPass);
+    recorder->SetPipelineState(*average_pipeline_);
+    UpdateAverageConstants(ctx, *recorder, config, *state, targets_srv,
+      previous ? previous->srv_index : kInvalidShaderVisibleIndex, inputs,
+      borrowed ? borrowed->srv_index : kInvalidShaderVisibleIndex, bootstrap,
+      automatic, source_loss);
+    recorder->Dispatch(1U, 1U, 1U);
+  }
   recorder->RequireResourceStateFinal(
     *state->buffer, graphics::ResourceStates::kShaderResource);
   recorder->RequireResourceStateFinal(

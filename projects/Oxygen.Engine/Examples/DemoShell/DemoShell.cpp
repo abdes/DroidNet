@@ -583,6 +583,9 @@ auto DemoShell::OnSceneActivated(scene::Scene& scene) -> void
   impl_->rendering_settings_service.OnSceneActivated(scene);
   impl_->light_culling_settings_service.OnSceneActivated(scene);
   impl_->environment_settings_service.OnSceneActivated(scene);
+  // TODO(exposure/EX06-09): Add experiment-owned activation policy so saved
+  // post-process settings cannot replace an authored benchmark recipe.
+  // Owner: design/vortex/plan/exposure-and-lightbench-correction.md, Slice 6.
   impl_->post_process_settings_service.BindScene(observer_ptr { &scene });
   if (impl_->config.panel_config.ground_grid) {
     impl_->grid_settings_service.OnSceneActivated(scene);

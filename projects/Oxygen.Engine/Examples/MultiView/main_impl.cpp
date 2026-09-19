@@ -237,7 +237,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
               .About("Exposure proof: none, independent, shared, main-only, "
                      "pip-only, reordered, source-loss, viewport, lifetime, "
                      "window-resize, modes, atmosphere, atmosphere-lit, "
-                     "consumer-visual, layouts")
+                     "consumer-visual, layouts, mixed, interactions")
               .Long("exposure-proof")
               .WithValue<std::string>()
               .DefaultValue("none")
@@ -429,13 +429,18 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
       main_module_config.exposure_proof = ExposureProof::kConsumerVisual;
     } else if (exposure_proof_value == "layouts") {
       main_module_config.exposure_proof = ExposureProof::kLayouts;
+    } else if (exposure_proof_value == "mixed") {
+      main_module_config.exposure_proof = ExposureProof::kMixed;
+    } else if (exposure_proof_value == "interactions") {
+      main_module_config.exposure_proof = ExposureProof::kInteractions;
     } else if (exposure_proof_value != "none") {
       throw std::invalid_argument("Unknown exposure proof scenario");
     }
     if (!exposure_view_only.empty()
-      && main_module_config.exposure_proof != ExposureProof::kLayouts)
+      && main_module_config.exposure_proof != ExposureProof::kLayouts
+      && main_module_config.exposure_proof != ExposureProof::kMixed)
       throw std::invalid_argument(
-        "Exposure view selection requires layouts proof");
+        "Exposure view selection requires layouts or mixed proof");
     main_module_config.exposure_view_only = exposure_view_only;
     using VisualFog = oxygen::examples::multiview::VisualFogMode;
     main_module_config.visual_fog_jitter = visual_fog_jitter;
@@ -453,18 +458,25 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
       main_module_config.visual_fog_hold_local = visual_fog_hold_local;
       main_module_config.visual_fog_mode = VisualFog::kClear;
     }
-    if (main_module_config.exposure_proof == ExposureProof::kWindowResize
+    if ((main_module_config.exposure_proof == ExposureProof::kWindowResize
+          || main_module_config.exposure_proof == ExposureProof::kInteractions)
       && (headless || app.fullscreen)) {
       throw std::invalid_argument(
-        "Window-resize proof requires a windowed presentation surface");
+        "This proof requires a windowed presentation surface");
     }
     if (main_module_config.exposure_proof != ExposureProof::kNone
       && main_module_config.exposure_proof != ExposureProof::kLayouts
+      && main_module_config.exposure_proof != ExposureProof::kMixed
+      && main_module_config.exposure_proof != ExposureProof::kInteractions
       && (proof_layout || aux_proof_layout || offscreen_proof_layout
         || feature_variant_proof_layout)) {
       throw std::invalid_argument(
         "Exposure proof requires the ordinary main/PiP layout");
     }
+    if (main_module_config.exposure_proof == ExposureProof::kInteractions
+      && (proof_layout || aux_proof_layout || feature_variant_proof_layout))
+      throw std::invalid_argument(
+        "Interactions require ordinary or offscreen layout");
     auto mode_lower = compositing_mode_value;
     std::ranges::transform(mode_lower, mode_lower.begin(),
       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });

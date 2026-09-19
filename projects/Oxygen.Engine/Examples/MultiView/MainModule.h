@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
@@ -61,6 +62,8 @@ enum class ExposureProofScenario : uint8_t {
   kAtmosphereLit,
   kConsumerVisual,
   kLayouts,
+  kMixed,
+  kInteractions,
 };
 
 struct MainModuleConfig {
@@ -182,6 +185,9 @@ private:
     vortex::Renderer::RuntimeCompositionInput& input) -> void override;
   auto DrawFeatureVariantProofOverlay() -> void;
   auto DrawConsumerVisualControls() -> void;
+  auto ApplyInteractionProof(engine::FrameContext& context,
+    std::vector<vortex::CompositionView>& views) -> void;
+  auto DrawInteractionProofOverlay(std::uint64_t frame) -> void;
 
   const examples::DemoAppContext& app_;
   SceneBootstrapper scene_bootstrapper_;

@@ -28,7 +28,35 @@ def save_image(controller, rd, resource, path):
         raise RuntimeError(f"Could not export {path}")
 
 
-def build_report(controller, report, capture_path, report_path):
+def pixel_reader(controller, rd, resource, texture, subresource):
+    """Read a supported image once instead of submitting one GPU pick per pixel."""
+    name = texture.format.Name()
+    layouts = {"R16G16B16A16_FLOAT": ("<4e", 8, 1),
+               "R32G32B32A32_FLOAT": ("<4f", 16, 1),
+               "R8G8B8A8_UNORM": ("<4B", 4, 255)}
+    if name not in layouts:
+        return lambda x, y: list(controller.PickPixel(
+            resource, x, y, subresource, rd.CompType.Float).floatValue)
+    layout, stride, scale = layouts[name]
+    data = bytes(controller.GetTextureData(resource, subresource))
+    if len(data) != texture.width * texture.height * stride:
+        raise RuntimeError(f"Unexpected texture data extent for {name}")
+
+    def read(x, y):
+        return [v / scale for v in struct.unpack_from(
+            layout, data, (y * texture.width + x) * stride)]
+
+    # Keep an independent API control for channel order and row layout.
+    x, y = texture.width // 2, texture.height // 2
+    control = controller.PickPixel(resource, x, y, subresource, rd.CompType.Float).floatValue
+    if any(not math.isfinite(a) or not math.isfinite(b)
+           or abs(a - b) > max(abs(a), abs(b)) * 1e-7 + 1e-8
+           for a, b in zip(read(x, y), control)):
+        raise RuntimeError(f"Texture download disagrees with pixel API for {name}")
+    return read
+
+
+def build_report(controller, report, capture_path, report_path, selected_frames=None):
     rd = renderdoc_module()
     names = resource_id_to_name(controller)
     textures = {str(t.resourceId): t for t in controller.GetTextures()}
@@ -80,7 +108,9 @@ def build_report(controller, report, capture_path, report_path):
         settings_revision = struct.unpack_from("<Q", state, 32)[0]
         if not all(math.isfinite(x) for x in (p, inverse_p, gain)) or p <= 0 or abs(p * inverse_p - 1) > 1e-6:
             raise RuntimeError(f"Invalid exposure domain at event {draw.event_id}")
-        frame_key = (str(frames[0].resource), frames[0].byteOffset)
+        if selected_frames is not None and sequence not in selected_frames:
+            continue
+        frame_key = (sequence, str(frames[0].resource), frames[0].byteOffset)
         if frame_key in frame_resources:
             raise RuntimeError("Different mapped views alias one frame exposure record")
         frame_resources.add(frame_key)
@@ -89,6 +119,8 @@ def build_report(controller, report, capture_path, report_path):
         target_desc = textures[str(target)]
         if (texture.width, texture.height) != (target_desc.width, target_desc.height):
             raise RuntimeError("Oracle requires equal source and mapped-output extents")
+        read_source = pixel_reader(controller, rd, source.resource, texture, sub)
+        read_target = pixel_reader(controller, rd, target, target_desc, sub)
         checked = 0
         nonzero_scene_probes = 0
         max_error = 0.0
@@ -99,7 +131,7 @@ def build_report(controller, report, capture_path, report_path):
                 if not (write_rect[0] <= x < write_rect[0] + write_rect[2]
                         and write_rect[1] <= y < write_rect[1] + write_rect[3]):
                     continue
-                pixel = list(controller.PickPixel(source.resource, x, y, sub, rd.CompType.Float).floatValue)
+                pixel = read_source(x, y)
                 if not all(math.isfinite(c) for c in pixel):
                     raise RuntimeError(f"Nonfinite source at event {draw.event_id}, pixel {x},{y}")
                 if background_enabled and pixel[3] < 1:
@@ -108,7 +140,7 @@ def build_report(controller, report, capture_path, report_path):
                 expected = map_color([c * gain / p for c in pixel[:3]], mapper, gamma)
                 dither = (bayer[(x & 3) | ((y & 3) << 2)] / 16 - .5) / 255
                 expected = [min(1, max(0, c + dither)) for c in expected]
-                actual = list(controller.PickPixel(target, x, y, sub, rd.CompType.Float).floatValue)
+                actual = read_target(x, y)
                 error = max(abs(c - e) for c, e in zip(actual[:3], expected))
                 if not all(math.isfinite(c) for c in actual) or error > 1 / 255:
                     raise RuntimeError(f"S/P mismatch at event {draw.event_id}, pixel {x},{y}: {actual} vs {expected}")
@@ -128,7 +160,16 @@ def build_report(controller, report, capture_path, report_path):
         save_image(controller, rd, target, precomposition)
         view_results.append({
             "index": index, "event": draw.event_id,
+            "previous_tonemap_event": tones[index - 1].event_id if index else 0,
             "target_name": names.get(str(target), str(target)),
+            "state_resource": str(states[0].resource),
+            "shading_path": "forward" if any(
+                (tones[index - 1].event_id if index else 0) < a.event_id < draw.event_id
+                and "Vortex.Stage9.BasePass.Forward" in a.path for a in actions
+            ) else "deferred" if any(
+                (tones[index - 1].event_id if index else 0) < a.event_id < draw.event_id
+                and "Vortex.Stage12.DeferredLighting" in a.path for a in actions
+            ) else "diagnostic",
             "debug_visualizations": [a.path for a in actions
                 if a.flags & rd.ActionFlags.Drawcall
                 and (tones[index - 1].event_id if index else 0) < a.event_id < draw.event_id

@@ -940,6 +940,51 @@ protected:
   postprocess::ExposurePass::StateLease last_state_;
 };
 
+NOLINT_TEST_F(ExposureGpuTest, CompositionConstantsSurviveLaterSubmission)
+{
+  static_cast<void>(OwnedExposureService());
+  const std::array sources { Uniform(.25F), Uniform(.5F), Uniform(.75F) };
+  auto output = CreateRegisteredTexture({ .width = 1,
+    .height = 1,
+    .format = Format::kRGBA32Float,
+    .is_render_target = true,
+    .initial_state = ResourceStates::kCommon });
+  auto target = Backend().CreateFramebuffer(
+    FramebufferDesc {}.AddColorAttachment(output));
+  engine::FrameContext frame;
+  frame.SetFrameSlot(
+    frame::Slot { 0 }, engine::internal::EngineTagFactory::Get());
+  frame.SetFrameSequenceNumber(
+    frame::SequenceNumber { 1 }, engine::internal::EngineTagFactory::Get());
+  Backend().BeginFrame(frame::SequenceNumber { 1 }, frame::Slot { 0 });
+  renderer_->OnFrameStart(observer_ptr { &frame });
+  const ViewPort viewport { .width = 1, .height = 1 };
+  auto first = CompositionSubmission {};
+  first.composite_target = target;
+  for (unsigned i = 0; i < 2; ++i)
+    first.tasks.push_back(CompositingTask::MakeTextureBlend(
+      std::const_pointer_cast<Texture>(sources[i].texture), viewport, 1));
+  renderer_->RegisterComposition(std::move(first), {});
+  auto last = CompositionSubmission {};
+  last.composite_target = target;
+  last.tasks.push_back(CompositingTask::MakeTextureBlend(
+    std::const_pointer_cast<Texture>(sources[2].texture), viewport, 1));
+  renderer_->RegisterComposition(std::move(last), {});
+  const auto capture = BeginOptionalCapture();
+  auto loop = co::testing::TestEventLoop {};
+  co::Run(loop, [&]() -> co::Co<void> {
+    co_await renderer_->OnCompositing(observer_ptr { &frame });
+  });
+  renderer_->OnFrameEnd(observer_ptr { &frame });
+  Backend().EndFrame(frame::SequenceNumber { 1 }, frame::Slot { 0 });
+  WaitForQueueIdle();
+  if (capture)
+    EXPECT_TRUE(capture->EndCapture());
+  const auto pixel = ReadFloatTexture(*output);
+  ASSERT_EQ(pixel.size(), 1U);
+  EXPECT_EQ(pixel[0], (Pixel { .75F, .75F, .75F, 1 }));
+}
+
 NOLINT_TEST_F(ExposureGpuTest, ConservedTwoBinMassAndIndependentMeter)
 {
   auto settings = scene::ExposureSettings {};
