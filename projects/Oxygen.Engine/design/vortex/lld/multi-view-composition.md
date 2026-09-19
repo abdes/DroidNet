@@ -282,6 +282,20 @@ Eviction and invalidation:
 | producer marks handle transient/stateless | do not allocate temporal state |
 | optional idle trimming for service caches | release only GPU resources, never reinterpret a new producer as the old handle |
 
+Persistent offscreen producers end their lifetime with
+`Renderer::ReleaseOffscreenViewState(view_id, handle)`, using the pair they
+supplied to the facade. Call it between executions. Release is idempotent and
+retires exposure identity, camera history, environment/HZB state and view constants
+through existing owners/fences; retained GPU consumers remain valid. Registered
+views use `RemovePublishedRuntimeView`, which also performs source-loss routing;
+the offscreen release rejects registered ownership. This explicit producer-owned
+release follows the view-state lifetime model used by UE5.7's
+`FSceneViewStateReference::Destroy` without adding a separate state allocator.
+MultiView's persistent offscreen preview and capture producers release their
+named view-id/handle pairs during module shutdown, before dropping their targets
+and scene. If the renderer has already shut down, its owners have retired that
+state and the module only releases its remaining targets.
+
 Renderer-owned LRU keyed only by `ViewId` is rejected. It is simpler in the
 short term, but it leaks history across reused ids and makes editor viewport
 lifetime ambiguous.
