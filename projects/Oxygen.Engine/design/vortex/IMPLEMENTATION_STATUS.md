@@ -89,45 +89,34 @@ Slices 6-10, including the complete LightBench delivery; the package is not comp
 
 ### 3.1 Current work
 
-**Execution is paused at the user's request (2026-09-20).** No engine change,
-build or native run is authorized to resume automatically. The user requested a
-concrete test-file decomposition and a visible, bounded performance work proposal.
+**Completed: user-authorized exposure test decomposition.** The pending idle
+frame-state fix and lifecycle accounting changes were committed first as
+`8903305db591c948a81b378c5f7ee2d6b6d519c9`. H5 remains committed as
+`28e0f1eeeea08e0137025023b1a97b136b99b20d`. No engine performance change or
+benchmark campaign was included in the subsequent structural work.
 
-**Committed:** H5 is `28e0f1eeeea08e0137025023b1a97b136b99b20d`
-(`perf(vortex): reuse retained textures and exposure readbacks`). R089's separate
-shutdown fix is `493dbba6f`. H5 removes the measured 12 texture/two buffer
-creations per I02 frame; live placement stays 777.707 MiB. GPU p95 changes
-18.612 -> 8.919 ms and total-frame p99 26.679 -> 12.403 ms in one matched
-3,600-frame pair. All four image comparisons pass. The [H5 closeout](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/h5-closeout-manifest.json)
-records 131 CPU checks, 17 native cases, commit identity and limitations.
-Most Frame-span improvement is outside named scopes; this is not a shader-work
-or idle-time attribution.
+The 16,960-line `ExposureGpu_test.cpp` is removed. `Test/Exposure/` now contains
+32 focused correctness files, shared fixtures with out-of-line implementations,
+and separate opt-in benchmark sources: 51 `.cpp` files and eight headers in all.
+The largest source is 801 lines; the largest shared header is 192 lines.
+`MeasureReleaseBaseline` is a short coordinator over named private operations;
+allocation `RunLifecycle` is 21 lines over seven phases. `ServicePixel` uses
+named options instead of ten trailing positional controls, with 39 call sites
+mapped to their original arguments. Control statements use braces.
 
-**Uncommitted:** R091's idle exposure-frame lease release, the expanded untimed
-lifecycle accounting fixture and related documentation. Seven focused Debug
-checks pass. The current and modified pre-H5 Release matrices each pass eight
-cases; matching controls have zero peak growth and identical retired populations.
-Current source/runtime restoration is complete. Evidence is under
-`out/build-ninja/analysis/vortex/exposure-lightbench/slice51/lifecycle-memory/`.
-The baseline includes the same idle-frame fix and executed fixture; it is not
-pristine `493dbba6f`. Temporal production/FP32 controls have different P histories,
-so their cross-control memory difference is not an isolated format-cost result.
-This follow-up has not been committed or marked as whole-item acceptance.
+**Validation:** Debug and Release builds pass. The Release compile/link check
+also covers benchmark bodies excluded by Debug; no benchmark was executed.
+All 228 discovered test identities are preserved: 220 ordinary tests and eight
+disabled opt-ins. The single ordinary run passed 220/220 with no skips or D3D12
+diagnostics in 376.995 seconds; source/runtime/shader hashes stayed unchanged.
+No opt-in timing or allocation experiment was run. Initial compile failures are
+preserved in the evidence, alongside token/assertion and argument-mapping audits.
 
-**Maintainability problem:** `ExposureGpu_test.cpp` is 16,960 lines. The proposed
-next structural change separates shared fixtures, domain tests, performance
-benchmarks and allocation accounting into focused translation units, preserving
-all test identities and the existing executable initially. No split has started.
-
-**Performance still open:** exposure/precision p95 is 2.551 ms against the
-0.65 ms two-view budget. No next optimization is approved or in progress.
-Before work resumes, record one concrete engine hypothesis, its measured cost,
-intended change, smallest validation gate, expected result and stop condition
-here. No additional memory-test or instrumentation-overhead expansion is planned.
-
-EX051-10 and Slice 5.1 remain open. EX051-04/05 retain causal-reference and
-attribution gaps; final regression, repeatability, workload/4K and acceptance
-gates remain open. Slice 5.2 and original Slices 6-10 remain required.
+[Source navigation and editing rules](../../src/Oxygen/Vortex/Test/Exposure/README.md)
+and [structural closeout](../../out/build-ninja/analysis/vortex/exposure-test-split/closeout.json)
+record the file map, commands, results and commit. This closes the requested
+maintainability task, not the complete exposure/performance delivery. Performance
+work remains separate; no new optimization was started during this task.
 
 ### 3.2 Slice 5 work items
 
@@ -413,7 +402,10 @@ Clang-tidy suggestions that affect semantics require a correctness review.
 
 The initial read-only inventory counted 14,095 lines/211 declared tests in
 ExposureGpu_test.cpp, including four opt-in timing/allocation tests. These are
-historical baseline counts; freeze the actual names/counts after Slice 5.1.
+historical baseline counts. On 2026-09-20 the user explicitly advanced the
+exposure-test decomposition: the frozen inventory is 228 tests (220 ordinary
+and eight opt-in), preserved under `Test/Exposure/`. This does not
+authorize unrelated Slice 5.2 cleanup.
 PostProcessService, deferred-core and offscreen suites also need scoped review.
 Use responsibility boundaries, not arbitrary file-size or file-count quotas.
 
