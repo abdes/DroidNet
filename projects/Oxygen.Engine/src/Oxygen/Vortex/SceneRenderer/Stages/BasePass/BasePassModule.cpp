@@ -1092,7 +1092,7 @@ auto BasePassModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
   if (!recorder) {
     return last_execution_result_;
   }
-  ctx.GetRenderer().GetDiagnosticsService().AttachGpuTimelineCollector(
+  renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(
     *recorder);
   graphics::GpuEventScope stage_scope(*recorder, "Vortex.Stage9.BasePass",
     profiling::ProfileGranularity::kTelemetry,
@@ -1506,7 +1506,7 @@ auto BasePassModule::ExecuteWireframeOverlay(RenderContext& ctx,
   if (!recorder) {
     return 0U;
   }
-  ctx.GetRenderer().GetDiagnosticsService().AttachGpuTimelineCollector(
+  renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(
     *recorder);
 
   graphics::GpuEventScope overlay_scope(*recorder,

@@ -408,7 +408,7 @@ struct OcclusionModule::Impl {
     return static_cast<std::uint32_t>(candidate_storage.size());
   }
 
-  auto SubmitCurrent(RenderContext& ctx, Graphics& gfx,
+  auto SubmitCurrent(RenderContext& ctx, Renderer& renderer, Graphics& gfx,
     const std::uint32_t draw_count, const std::uint32_t candidate_count) -> bool
   {
     if (candidate_count == 0U || result_buffer == nullptr
@@ -460,7 +460,7 @@ struct OcclusionModule::Impl {
     if (!recorder) {
       return false;
     }
-    ctx.GetRenderer().GetDiagnosticsService().AttachGpuTimelineCollector(
+    renderer.GetDiagnosticsService().AttachGpuTimelineCollector(
       *recorder);
 
     TrackBufferFromKnownOrInitial(*recorder, *result_buffer);
@@ -588,7 +588,7 @@ void OcclusionModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
   }
 
   const auto readback_enqueued
-    = impl_->SubmitCurrent(ctx, *gfx, draw_count, candidate_count);
+    = impl_->SubmitCurrent(ctx, renderer_, *gfx, draw_count, candidate_count);
   if (!readback_enqueued && !previous_results_valid) {
     impl_->stats.fallback_reason
       = OcclusionFallbackReason::kReadbackUnavailable;
