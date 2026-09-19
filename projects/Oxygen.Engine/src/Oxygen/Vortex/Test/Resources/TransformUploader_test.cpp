@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <array>
 #include <memory>
 
 #include <glm/glm.hpp>
@@ -263,6 +264,38 @@ NOLINT_TEST_F(TransformUploaderBasicTest,
   // The actual values depend on FakeGraphics implementation
   EXPECT_TRUE(uploader.GetWorldMatrices().size() == 1);
   EXPECT_TRUE(uploader.GetNormalMatrices().size() == 1);
+}
+
+//! Later views receive all their transforms without mutating earlier SRVs.
+NOLINT_TEST_F(TransformUploaderBasicTest,
+  AllocatingAfterPublicationCreatesFreshTransformSnapshots)
+{
+  auto& uploader = TransformUploaderRef();
+  const auto snapshot = [&] {
+    return std::array { uploader.GetWorldsSrvIndex(),
+      uploader.GetPreviousWorldsSrvIndex(), uploader.GetNormalsSrvIndex() };
+  };
+  for (unsigned frame = 0; frame < 2; ++frame) {
+    uploader.OnFrameStart(
+      RendererTagFactory::Get(), SequenceNumber { frame }, Slot { 0 });
+    const auto first = uploader.GetOrAllocate(glm::mat4 { 1 });
+    const auto original = snapshot();
+    const auto moved = glm::translate(glm::mat4 { 1 }, glm::vec3 { 20, 0, 0 });
+    const auto second = uploader.GetOrAllocate(moved, glm::mat4 { 1 });
+    const auto expanded = snapshot();
+    for (unsigned index = 0; index < original.size(); ++index) {
+      EXPECT_TRUE(original[index].IsValid());
+      EXPECT_TRUE(expanded[index].IsValid());
+      EXPECT_NE(original[index], expanded[index]);
+    }
+    EXPECT_TRUE(uploader.IsHandleValid(first));
+    EXPECT_TRUE(uploader.IsHandleValid(second));
+    EXPECT_EQ(uploader.GetWorldMatrices()[second.get()], moved);
+    EXPECT_EQ(
+      uploader.GetPreviousWorldMatrices()[second.get()], glm::mat4 { 1 });
+    uploader.EnsureFrameResources();
+    EXPECT_EQ(snapshot(), expanded);
+  }
 }
 
 //! GetWorldMatrices and GetNormalMatrices return correct data after

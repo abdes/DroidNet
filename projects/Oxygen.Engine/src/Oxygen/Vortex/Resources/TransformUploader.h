@@ -65,6 +65,9 @@ namespace oxygen::vortex::resources {
    allocations and direct writes to GPU memory. The class also performs lazy
    upload when `GetWorldsSrvIndex()`/`GetNormalsSrvIndex()` is called from a
    const context and the SRV indices are not yet populated.
+ - Further allocations invalidate the cached publication, including updates to
+   reused slots. The next upload publishes fresh current/previous/normal arrays;
+   SRVs already captured by earlier views retain their original snapshot.
 
  ### Semantics and guarantees
 
