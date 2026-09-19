@@ -1731,8 +1731,9 @@ auto SceneRenderer::PrepareExposureDomain(RenderContext& ctx) -> bool
 {
   if (!post_process_
     || !ctx.current_view.feature_mask.Has(
-      CompositionView::ViewFeatureMask::kSceneLighting))
+      CompositionView::ViewFeatureMask::kSceneLighting)) {
     return true;
+  }
   post_process_->SetResolvedConfig(
     ResolveAuthoredPostProcessConfig(ctx, *post_process_));
   auto layout = DescribeExposureProductLayout(ctx);
@@ -1747,20 +1748,26 @@ auto SceneRenderer::PrepareExposureDomain(RenderContext& ctx) -> bool
       retained = layout;
     }
     std::uint32_t expected = 0U;
-    for (const auto& product : retained.products)
-      if (product[0] != 0U)
+    for (const auto& product : retained.products) {
+      if (product[0] != 0U) {
         expected |= 1U << (product[0] - 1U);
+      }
+    }
     candidate = post_process_->SelectPrecisionCandidate(ctx,
       { .product_layout_revision = retained.revision,
         .expected_products = expected });
   }
   // Raw harness views without a retained family cannot export conditional HDR.
-  if (!active_scene_texture_lease_)
+  if (!active_scene_texture_lease_) {
     candidate.reset();
+  }
+  const auto fp32_reference
+    = renderer_.GetDiagnosticsService().IsHdrFp32ReferenceEnabled();
   ctx.current_view.hdr_color_format
-    = candidate ? Format::kRGBA16Float : Format::kRGBA32Float;
+    = candidate && !fp32_reference ? Format::kRGBA16Float : Format::kRGBA32Float;
   ctx.current_view.frame_exposure
-    = post_process_->PrepareFrameExposure(ctx, !candidate, candidate);
+    = post_process_->PrepareFrameExposure(
+      ctx, fp32_reference || !candidate, candidate, fp32_reference);
   return ctx.current_view.frame_exposure != nullptr;
 }
 

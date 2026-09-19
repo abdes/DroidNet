@@ -706,8 +706,9 @@ void VortexExposureFrameCS(uint3 dispatch_id : SV_DispatchThreadID)
     status.Store4(112u, 0u.xxxx);
     status.Store4(128u, 0u.xxxx);
     status.Store4(144u, 0u.xxxx);
-    [unroll] for (uint offset = 160u; offset < 384u; offset += 16u)
+    [unroll] for (uint offset = 160u; offset < 384u; offset += 16u) {
         status.Store4(offset, 0u.xxxx);
+    }
     ExposureTargetData initial = (ExposureTargetData)0;
     initial.initial_log_gain = pass.initial_log_gain;
     ExposureStateData state = LoadPrevious(pass.history_srv, initial);
@@ -721,8 +722,9 @@ void VortexExposureFrameCS(uint3 dispatch_id : SV_DispatchThreadID)
         state = (ExposureStateData)0;
         ExposureStateData source = LoadPrevious(pass.history_srv, initial);
         if ((source.flags & (EXPOSURE_HISTORY_VALID | EXPOSURE_INITIALIZED))
-            != (EXPOSURE_HISTORY_VALID | EXPOSURE_INITIALIZED))
+            != (EXPOSURE_HISTORY_VALID | EXPOSURE_INITIALIZED)) {
             flags |= 8u;
+        }
         state.displayed_scale = source.displayed_scale;
         state.target_scale = source.target_scale;
         state.latent_scale = source.latent_scale;
@@ -745,26 +747,41 @@ void VortexExposureFrameCS(uint3 dispatch_id : SV_DispatchThreadID)
     }
     float p = state.displayed_scale > 0.0 ? state.displayed_scale : state.latent_scale;
     if (!borrowed && !diagnostic) {
-        if (pass.mode != 2u) p = pass.mode == 3u ? 1.0 : pass.fixed_scale;
-        else if ((pass.controls & 1u) != 0u) p = exp2(pass.seed_log_gain);
+        if (pass.mode != 2u) {
+            p = pass.mode == 3u ? 1.0 : pass.fixed_scale;
+        } else if ((pass.controls & 1u) != 0u) {
+            p = exp2(pass.seed_log_gain);
+        }
     }
+    bool candidate_valid = false;
     if (pass.candidate_srv != K_INVALID_BINDLESS_INDEX) {
         const ExposureStateData candidate = LoadPrevious(pass.candidate_srv, initial);
         if ((candidate.flags & 256u) != 0u && candidate.fp16_eligible_streak >= 2u
             && isfinite(candidate.fp16_candidate_pre_exposure)
             && candidate.fp16_candidate_pre_exposure >= exp2(-32.0)
-            && candidate.fp16_candidate_pre_exposure <= exp2(32.0))
+            && candidate.fp16_candidate_pre_exposure <= exp2(32.0)) {
             p = candidate.fp16_candidate_pre_exposure;
-        else
+            candidate_valid = true;
+        } else {
             flags |= 1u;
+        }
     }
     if (!isfinite(p) || p <= 0.0) {
         flags |= 1u;
         p = 1.0;
     }
     p = clamp(p, exp2(-32.0), exp2(32.0));
-    if ((flags & (1u | 4u | 8u)) != 0u) p = 1.0;
-    if ((flags & 8u) != 0u) flags |= 1u;
+    // The format-only FP32 reference keeps the same already-qualified P as
+    // the production view. Ordinary recovery and invalid candidates retain
+    // their P = 1 contract; exposure history and gain are unchanged.
+    const bool preserve_candidate_p = (pass.controls & 4u) != 0u && candidate_valid;
+    if ((flags & (4u | 8u)) != 0u
+        || ((flags & 1u) != 0u && !preserve_candidate_p)) {
+        p = 1.0;
+    }
+    if ((flags & 8u) != 0u) {
+        flags |= 1u;
+    }
     state.flags &= ~(EXPOSURE_RANGE_FAILURE | EXPOSURE_FP16_ELIGIBLE);
     state.fp16_candidate_pre_exposure = 1.0;
     state.fp16_eligible_streak = 0u;

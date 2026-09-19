@@ -106,6 +106,18 @@ auto DiagnosticsService::FindShaderDebugMode(
   return ResolveShaderDebugMode(canonical_name);
 }
 
+auto DiagnosticsService::SetHdrFp32ReferenceEnabled(const bool enabled) -> void
+{
+  std::scoped_lock lock(mutex_);
+  hdr_fp32_reference_enabled_ = enabled;
+}
+
+auto DiagnosticsService::IsHdrFp32ReferenceEnabled() const -> bool
+{
+  std::scoped_lock lock(mutex_);
+  return hdr_fp32_reference_enabled_;
+}
+
 auto DiagnosticsService::AttachGpuTimelineCollector(
   graphics::CommandRecorder& recorder) const -> void
 {

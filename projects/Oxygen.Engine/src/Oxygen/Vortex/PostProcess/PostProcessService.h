@@ -150,7 +150,8 @@ public:
   //! Resolve before writing pre-exposed radiance; Execute consumes this binding.
   [[nodiscard]] OXGN_VRTX_API auto PrepareFrameExposure(RenderContext& ctx,
     bool use_fp32,
-    postprocess::ExposurePass::StateLease qualified_candidate = {})
+    postprocess::ExposurePass::StateLease qualified_candidate = {},
+    bool preserve_fp32_candidate_p = false)
     -> postprocess::ExposurePass::FrameLease;
   struct PreparedExposure {
     const PostProcessService* owner;

@@ -135,6 +135,9 @@ public:
 
   struct FrameInputs {
     bool use_fp32 { false };
+    //! Format-only reference: retain a valid candidate P in FP32 storage.
+    //! An absent/invalid candidate still uses ordinary recovery P = 1.
+    bool preserve_fp32_candidate_p { false };
     StateLease qualified_candidate;
     const Source* source { nullptr };
     std::optional<ExposureTransitionToken> transition;

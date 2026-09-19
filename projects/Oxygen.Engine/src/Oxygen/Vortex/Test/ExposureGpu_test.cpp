@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <array>
 #include <bit>
+#include <charconv>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -14,9 +15,11 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
 #include <limits>
 #include <numeric>
 #include <span>
+#include <stdexcept>
 #include <unordered_set>
 
 #include <nlohmann/json.hpp>
@@ -80,6 +83,7 @@
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/Hzb/ScreenHzbModule.h>
 #include <Oxygen/Vortex/Test/Fakes/AssetLoader.h>
+#include <Oxygen/Vortex/Test/Fixtures/ExposureBenchmarkScene.h>
 #include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
 #include <Oxygen/Vortex/Test/Fixtures/TextureBinderPayloads.h>
 #include <Oxygen/Vortex/Types/EnvironmentFrameBindings.h>
@@ -3885,6 +3889,149 @@ NOLINT_TEST_F(ExposureGpuTest,
   EXPECT_EQ(invalid_frame.flags, 1U);
 }
 
+NOLINT_TEST_F(
+  ExposureGpuTest, Fp32ReferencePreservesQualifiedCandidateAndExposureHistory)
+{
+  auto settings = scene::ExposureSettings {};
+  const auto config = SharedConfig(settings, {}, 71U);
+  const auto signal = Uniform(.25F);
+  ctx_.frame_sequence = frame::SequenceNumber { 1U };
+  const auto previous = RecordShared(signal, config);
+  ASSERT_TRUE(previous.executed);
+  auto candidate = ReadState(previous);
+  ASSERT_NEAR(candidate.displayed_scale, .72F, 2e-5F);
+  ASSERT_NE(candidate.raw_metered_luminance, 0.0F);
+  candidate.flags |= 256U;
+  candidate.fp16_candidate_pre_exposure = .125F;
+  candidate.fp16_eligible_streak = 2U;
+  auto upload = CreateUploadBuffer(SizeBytes { sizeof(candidate) });
+  upload->Update(&candidate, sizeof(candidate), 0U);
+  {
+    auto recorder = AcquireRecorder("FP32 reference qualified candidate");
+    EnsureTracked(*recorder, upload, ResourceStates::kGenericRead);
+    ASSERT_TRUE(recorder->AdoptKnownResourceState(*previous.state->buffer));
+    recorder->RequireResourceState(
+      *previous.state->buffer, ResourceStates::kCopyDest);
+    recorder->FlushBarriers();
+    recorder->CopyBuffer(
+      *previous.state->buffer, 0U, *upload, 0U, sizeof(candidate));
+    recorder->RequireResourceStateFinal(
+      *previous.state->buffer, ResourceStates::kShaderResource);
+  }
+  ctx_.frame_sequence = frame::SequenceNumber { 2U };
+  const auto resolved = pass_->ResolveFrame(ctx_, config,
+    { .use_fp32 = true,
+      .preserve_fp32_candidate_p = true,
+      .qualified_candidate = previous.state });
+  ASSERT_NE(resolved, nullptr);
+  EXPECT_EQ(resolved->selected_history, previous.state);
+  const auto domain = Read<FrameExposureData>(
+    *resolved->buffer, ResourceStates::kShaderResource);
+  EXPECT_EQ(domain.pre_exposure, .125F);
+  EXPECT_EQ(domain.one_over_pre_exposure, 8.0F);
+  EXPECT_EQ(domain.flags, 1U);
+  EXPECT_EQ(
+    domain.global_exposure_state_slot, resolved->current_state->srv_index);
+  const auto prepared = Read<ExposureStateData>(
+    *resolved->current_state->buffer, ResourceStates::kShaderResource);
+  EXPECT_EQ(std::memcmp(&candidate, &prepared, 24U), 0);
+  EXPECT_EQ(prepared.settings_revision, candidate.settings_revision);
+  EXPECT_EQ(prepared.requested_generation, candidate.requested_generation);
+  EXPECT_EQ(prepared.applied_generation, candidate.applied_generation);
+  const auto retained = ReadState(previous);
+  EXPECT_EQ(std::memcmp(&candidate, &retained, sizeof(candidate)), 0);
+  // Execute meters the pinned frame domain, so its input already contains P.
+  const auto result = RecordShared(Uniform(.25F * .125F), config);
+  ASSERT_TRUE(result.executed);
+  const auto solved = ReadState(result);
+  EXPECT_EQ(std::memcmp(&candidate, &solved, 24U), 0);
+  EXPECT_EQ(solved.settings_revision, candidate.settings_revision);
+  EXPECT_EQ(solved.requested_generation, candidate.requested_generation);
+  EXPECT_EQ(solved.applied_generation, candidate.applied_generation);
+  EXPECT_EQ(solved.frame_sequence, (std::array<std::uint32_t, 2> { 2U, 0U }));
+}
+
+NOLINT_TEST_F(
+  ExposureGpuTest, Fp32ReferenceRequiresValidCandidateAndHonorsUnitFallbacks)
+{
+  auto settings = scene::ExposureSettings {};
+  settings.mode = engine::ExposureMode::kManual;
+  settings.manual_ev = 4.0F;
+  const auto config = SharedConfig(settings);
+  ctx_.frame_sequence = frame::SequenceNumber { ++sequence_ };
+  const auto previous = RecordShared(Uniform(.25F), config);
+  ASSERT_TRUE(previous.executed);
+  const auto original = ReadState(previous);
+  struct Case {
+    const char* name;
+    float candidate_p;
+    unsigned streak;
+    bool eligible;
+    bool absent;
+    bool diagnostic;
+    bool missing_source;
+  };
+  const std::array cases {
+    Case { "absent", .125F, 2U, true, true, false, false },
+    Case { "not eligible", .125F, 2U, false, false, false, false },
+    Case { "one eligible frame", .125F, 1U, true, false, false, false },
+    Case { "zero", 0, 2U, true, false, false, false },
+    Case { "below supported P", 0x1p-33F, 2U, true, false, false, false },
+    Case { "above supported P", 0x1p33F, 2U, true, false, false, false },
+    Case { "NaN", std::numeric_limits<float>::quiet_NaN(), 2U, true, false,
+      false, false },
+    Case { "infinite", std::numeric_limits<float>::infinity(), 2U, true, false,
+      false, false },
+    Case { "diagnostic wins", .125F, 2U, true, false, true, false },
+    Case { "missing source wins", .125F, 2U, true, false, false, true },
+  };
+  for (const auto& test_case : cases) {
+    SCOPED_TRACE(test_case.name);
+    auto candidate = original;
+    candidate.flags
+      = test_case.eligible ? original.flags | 256U : original.flags & ~256U;
+    candidate.fp16_candidate_pre_exposure = test_case.candidate_p;
+    candidate.fp16_eligible_streak = test_case.streak;
+    auto upload = CreateUploadBuffer(SizeBytes { sizeof(candidate) });
+    upload->Update(&candidate, sizeof(candidate), 0U);
+    {
+      auto recorder = AcquireRecorder("FP32 reference fallback candidate");
+      EnsureTracked(*recorder, upload, ResourceStates::kGenericRead);
+      ASSERT_TRUE(recorder->AdoptKnownResourceState(*previous.state->buffer));
+      recorder->RequireResourceState(
+        *previous.state->buffer, ResourceStates::kCopyDest);
+      recorder->FlushBarriers();
+      recorder->CopyBuffer(
+        *previous.state->buffer, 0U, *upload, 0U, sizeof(candidate));
+      recorder->RequireResourceStateFinal(
+        *previous.state->buffer, ResourceStates::kShaderResource);
+    }
+    const auto source = postprocess::ExposurePass::Source {
+      .handle = CompositionView::ViewStateHandle { 900U }, .config = config
+    };
+    ctx_.frame_sequence = frame::SequenceNumber { ++sequence_ };
+    const auto resolved = pass_->ResolveFrame(ctx_,
+      test_case.diagnostic ? config.WithDiagnosticOverride(true) : config,
+      { .use_fp32 = true,
+        .preserve_fp32_candidate_p = true,
+        .qualified_candidate = test_case.absent ? nullptr : previous.state,
+        .source = test_case.missing_source ? &source : nullptr });
+    ASSERT_NE(resolved, nullptr);
+    const auto domain = Read<FrameExposureData>(
+      *resolved->buffer, ResourceStates::kShaderResource);
+    EXPECT_EQ(domain.pre_exposure, 1.0F);
+    EXPECT_EQ(domain.one_over_pre_exposure, 1.0F);
+    EXPECT_EQ(domain.flags,
+      test_case.diagnostic         ? 5U
+        : test_case.missing_source ? 11U
+                                   : 1U);
+    const auto state = Read<ExposureStateData>(
+      *resolved->current_state->buffer, ResourceStates::kShaderResource);
+    EXPECT_EQ(state.displayed_scale, test_case.diagnostic ? 1.0F : 0x1p-4F);
+    const auto retained = ReadState(previous);
+    EXPECT_EQ(std::memcmp(&candidate, &retained, sizeof(candidate)), 0);
+  }
+}
 NOLINT_TEST_F(
   ExposureGpuTest, FrameResolvePreservesOperationalEndpointsAndCameraGain)
 {
@@ -8996,6 +9143,8 @@ NOLINT_TEST_F(
 
 class ExposureProfilingOverheadTest : public ExposureLightingGpuTest {
 protected:
+  auto MeasureReleaseBaseline(bool mixed_scene) -> void;
+
   auto BackendConfigJson() const -> std::string override
   {
     return R"({"enable_debug_layer":false})";
@@ -9198,6 +9347,471 @@ NOLINT_TEST_F(ExposureProfilingOverheadTest, DISABLED_ReleaseCollectionOnOff)
     "includes driver calls and recording enqueue work. The separate finalization "
     "frame includes writer drain. Not a presented FPS or exposure CPU-budget "
     "acceptance test.");
+#endif
+}
+NOLINT_TEST_F(ExposureProfilingOverheadTest, DISABLED_ReleaseControlledBaseline)
+{
+  MeasureReleaseBaseline(false);
+}
+
+NOLINT_TEST_F(ExposureProfilingOverheadTest, DISABLED_ReleaseMixedBaseline)
+{
+  MeasureReleaseBaseline(true);
+}
+
+auto ExposureProfilingOverheadTest::MeasureReleaseBaseline(
+  const bool mixed_scene) -> void
+{
+#ifndef NDEBUG
+  FAIL() << "This performance measurement requires Release.";
+#else
+  const auto option = [](const char* name, std::string fallback) {
+    char* value = nullptr;
+    std::size_t size = 0U;
+    const auto result = _dupenv_s(&value, &size, name);
+    const auto owned
+      = std::unique_ptr<char, decltype(&std::free)>(value, &std::free);
+    if (result != 0) {
+      throw std::runtime_error(std::string { "Cannot read " } + name);
+    }
+    return value ? std::string { value } : std::move(fallback);
+  };
+  const auto workload
+    = option("OXYGEN_EXPOSURE_BASELINE_CASE", mixed_scene ? "M01" : "C01");
+  if (mixed_scene) {
+    ASSERT_TRUE(workload == "M01" || workload == "M02" || workload == "M03"
+      || workload == "M04")
+      << "Mixed baseline requires M01, M02, M03 or M04";
+  } else {
+    ASSERT_TRUE(workload == "C01" || workload == "C02")
+      << "Controlled baseline requires C01 or C02";
+  }
+  const auto precision
+    = option("OXYGEN_EXPOSURE_BASELINE_PRECISION", "production");
+  ASSERT_TRUE(precision == "production" || precision == "fp32")
+    << "OXYGEN_EXPOSURE_BASELINE_PRECISION must be production or fp32";
+  const auto fp32_reference = precision == "fp32";
+  const auto width_text = option("OXYGEN_EXPOSURE_TIMING_WIDTH", "1920");
+  ASSERT_TRUE(width_text == "1920" || width_text == "3840")
+    << "OXYGEN_EXPOSURE_TIMING_WIDTH must be 1920 or 3840";
+  const auto frames_text = option("OXYGEN_EXPOSURE_BASELINE_FRAMES", "3600");
+  unsigned sample_count = 0U;
+  const auto parsed = std::from_chars(
+    frames_text.data(), frames_text.data() + frames_text.size(), sample_count);
+  ASSERT_TRUE(parsed.ec == std::errc {}
+    && parsed.ptr == frames_text.data() + frames_text.size()
+    && sample_count >= 1800U && sample_count <= 20000U)
+    << "OXYGEN_EXPOSURE_BASELINE_FRAMES must be an integer in [1800, 20000]";
+  const auto run_id = option("OXYGEN_EXPOSURE_BASELINE_RUN", "run01");
+  ASSERT_TRUE(!run_id.empty() && run_id.size() <= 64U
+    && std::ranges::all_of(run_id,
+      [](const char c) {
+        return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+          || (c >= '0' && c <= '9') || c == '-' || c == '_';
+      }))
+    << "OXYGEN_EXPOSURE_BASELINE_RUN must contain 1-64 ASCII letters, digits, "
+       "hyphens or underscores";
+  ASSERT_TRUE(CapturePath().empty())
+    << "Native baseline measurements do not permit RenderDoc capture";
+  const auto width = width_text == "1920" ? 1920U : 3840U;
+  const auto height = width * 9U / 16U;
+  const auto temporal
+    = workload == "C02" || workload == "M02" || workload == "M04";
+  const auto forward = workload == "M03" || workload == "M04";
+  const auto view_count = workload == "M01" || workload == "M04" ? 1U : 2U;
+  const auto expected_format
+    = fp32_reference || temporal ? Format::kRGBA32Float : Format::kRGBA16Float;
+  const auto directory = std::filesystem::path { OXYGEN_EXPOSURE_WORKSPACE }
+    / "out/build-ninja/analysis/vortex/exposure-lightbench/slice51";
+  std::filesystem::create_directories(directory);
+  const auto stem = std::string { mixed_scene ? "mixed-" : "controlled-" }
+    + workload + "-" + width_text + (fp32_reference ? "-fp32" : "") + "-"
+    + run_id + "-Release";
+  const auto gpu_path = directory / (stem + ".gpu.json");
+  const auto cpu_path = directory / (stem + ".cpu.csv");
+  const auto manifest_path = directory / (stem + ".json");
+  ASSERT_FALSE(std::filesystem::exists(gpu_path)
+    || std::filesystem::exists(cpu_path)
+    || std::filesystem::exists(manifest_path))
+    << "Choose a new run ID; existing baseline evidence is not overwritten";
+
+  view.viewport = { .width = float(width), .height = float(height) };
+  auto cameras = std::array { camera, camera };
+  if (mixed_scene) {
+    ASSERT_TRUE(scene->DestroyNode(mesh_node));
+    ASSERT_TRUE(scene->DestroyNode(camera));
+    const auto recipe
+      = vortex::testing::PopulateMixedExposureBenchmarkScene(*scene);
+    cameras = { recipe.main_camera, recipe.secondary_camera };
+    for (unsigned index = 0U; index < view_count; ++index) {
+      auto& lens
+        = cameras[index].GetCameraAs<scene::PerspectiveCamera>()->get();
+      auto viewport = view.viewport;
+      viewport.width = float(width >> index);
+      viewport.height = float(height >> index);
+      lens.SetViewport(viewport);
+      lens.SetAspectRatio(float(width) / float(height));
+    }
+    settings = scene::ExposureSettings {};
+    settings.key = 12.5F;
+    if (workload == "M03") {
+      settings.mode = engine::ExposureMode::kManual;
+      settings.manual_ev = 14.5F;
+    }
+    scene->GetEnvironment()
+      ->TryGetSystem<scene::environment::PostProcessVolume>()
+      ->SetExposureSettings(settings);
+  } else {
+    // Preserve the historical controlled camera, including aspect 1 and FOV 1.
+    auto& lens = camera.GetCameraAs<scene::PerspectiveCamera>()->get();
+    ASSERT_FLOAT_EQ(lens.GetAspectRatio(), 1.0F);
+    ASSERT_FLOAT_EQ(lens.GetFieldOfView(), 1.0F);
+    lens.SetViewport(view.viewport);
+    SetSurface(data::MaterialDomain::kOpaque, .25F);
+    auto& sky
+      = scene->GetEnvironment()->AddSystem<scene::environment::SkyAtmosphere>();
+    sky.SetEnabled(true);
+    sky.SetRayleighScatteringRgb({ 0, 0, 0 });
+    sky.SetMieScatteringRgb({ 0, 0, 0 });
+    sky.SetMieAbsorptionRgb({ 0, 0, 0 });
+    sky.SetOzoneAbsorptionRgb({ 0, 0, 0 });
+    auto& fog = scene->GetEnvironment()->AddSystem<scene::environment::Fog>();
+    fog.SetEnabled(true);
+    fog.SetEnableHeightFog(true);
+    fog.SetEnableVolumetricFog(true);
+    fog.SetExtinctionSigmaTPerMeter(0);
+  }
+  ASSERT_EQ(
+    fixture_console
+      .Execute(temporal ? "vtx.volumetric_fog.temporal_reprojection true"
+                        : "vtx.volumetric_fog.temporal_reprojection false")
+      .status,
+    console::ExecutionStatus::kOk);
+  ASSERT_EQ(fixture_console.Execute("vtx.volumetric_fog.jitter false").status,
+    console::ExecutionStatus::kOk);
+  const auto quality_commands = std::array {
+    "vtx.sky_atmosphere.aerial_perspective_lut.width 64",
+    "vtx.sky_atmosphere.aerial_perspective_lut.depth_resolution 32",
+    "vtx.sky_atmosphere.aerial_perspective_lut.depth_km 96.0",
+    "vtx.sky_atmosphere.aerial_perspective_lut.sample_count_max_per_slice 2.0",
+    "vtx.volumetric_fog.history_miss_supersample_count 4",
+    "vtx.volumetric_fog.directional_shadows true"
+  };
+  for (const auto* command : quality_commands) {
+    ASSERT_EQ(
+      fixture_console.Execute(command).status, console::ExecutionStatus::kOk)
+      << command;
+  }
+  probe->prepare = [](RenderContext& context) {
+    context.current_view.with_atmosphere = true;
+    context.current_view.with_height_fog = true;
+  };
+  scene->Update();
+  scene->SyncObservers();
+
+  auto& backend = static_cast<ExposureFailureGraphics&>(Backend());
+  backend.track_resources = true;
+  // GetResourceAllocationInfo is reserved for the two untimed snapshots.
+  backend.account_texture_allocations = false;
+  auto targets = std::vector<std::shared_ptr<Framebuffer>>(view_count);
+  for (unsigned index = 0U; index < targets.size(); ++index) {
+    auto output = CreateRegisteredTexture({ .width = width >> index,
+      .height = height >> index,
+      .format = Format::kRGBA32Float,
+      .debug_name = std::string { mixed_scene ? "MixedBaseline.Output"
+                                              : "ControlledBaseline.Output" }
+        + std::to_string(index),
+      .is_render_target = true,
+      .initial_state = ResourceStates::kCommon });
+    targets[index] = Backend().CreateFramebuffer(
+      FramebufferDesc {}.AddColorAttachment(output));
+  }
+  const auto snapshot = [&]() {
+    auto textures = nlohmann::json::array();
+    auto buffers = nlohmann::json::array();
+    auto unique = std::unordered_set<ID3D12Resource*> {};
+    std::uint64_t texture_bytes = 0U;
+    std::uint64_t buffer_bytes = 0U;
+    for (const auto& weak : backend.tracked_textures) {
+      const auto texture = weak.lock();
+      if (!texture) {
+        continue;
+      }
+      auto* native = texture->GetNativeResource()->AsPointer<ID3D12Resource>();
+      if (!native || !unique.insert(native).second) {
+        continue;
+      }
+      const auto shape = native->GetDesc();
+      const auto bytes = backend.GetCurrentDevice()
+                           ->GetResourceAllocationInfo(0U, 1U, &shape)
+                           .SizeInBytes;
+      const auto& desc = texture->GetDescriptor();
+      textures.push_back({ { "name", desc.debug_name },
+        { "format", static_cast<unsigned>(desc.format) },
+        { "width", desc.width }, { "height", desc.height },
+        { "depth", desc.depth }, { "array_layers", desc.array_size },
+        { "mips", desc.mip_levels }, { "samples", desc.sample_count },
+        { "placement_bytes", bytes },
+        { "exposure_hdr",
+          ExposureFailureGraphics::IsExposureHdrTexture(desc.debug_name) } });
+      texture_bytes += bytes;
+    }
+    for (const auto& weak : backend.tracked_buffers) {
+      const auto buffer = weak.lock();
+      if (!buffer) {
+        continue;
+      }
+      auto* native = buffer->GetNativeResource()->AsPointer<ID3D12Resource>();
+      if (!native || !unique.insert(native).second) {
+        continue;
+      }
+      const auto shape = native->GetDesc();
+      const auto bytes = backend.GetCurrentDevice()
+                           ->GetResourceAllocationInfo(0U, 1U, &shape)
+                           .SizeInBytes;
+      const auto& desc = buffer->GetDescriptor();
+      buffers.push_back({ { "name", desc.debug_name },
+        { "logical_bytes", desc.size_bytes }, { "placement_bytes", bytes } });
+      buffer_bytes += bytes;
+    }
+    const auto* owner
+      = vortex::testing::RendererPublicationProbe::GetSceneRenderer(*renderer_);
+    const auto [families, leased]
+      = vortex::testing::RendererPublicationProbe::SceneTexturePoolCounts(
+        *owner);
+    return nlohmann::json { { "textures", std::move(textures) },
+      { "buffers", std::move(buffers) },
+      { "texture_placement_bytes", texture_bytes },
+      { "buffer_placement_bytes", buffer_bytes },
+      { "texture_creation_count", backend.tracked_textures.size() },
+      { "buffer_creation_count", backend.tracked_buffers.size() },
+      { "scene_texture_families", families },
+      { "leased_scene_texture_families", leased } };
+  };
+
+  auto timing = frame.GetModuleTimingData();
+  constexpr auto simulation_dt_ns = 16'666'667;
+  timing.game_delta_time
+    = time::CanonicalDuration { std::chrono::nanoseconds { simulation_dt_ns } };
+  frame.SetModuleTimingData(timing, engine::internal::EngineTagFactory::Get());
+  auto& diagnostics = renderer_->GetDiagnosticsService();
+  diagnostics.SetHdrFp32ReferenceEnabled(fp32_reference);
+  diagnostics.SetEnabledFeatures(DiagnosticsFeature::kGpuTimeline);
+  diagnostics.SetGpuTimelineEnabled(true);
+  using Clock = std::chrono::steady_clock;
+  struct Sample {
+    unsigned frame_sequence;
+    double wall_ms;
+    double frame_start_ms;
+    double submission_ms;
+    std::array<unsigned, 2> formats;
+  };
+  const auto milliseconds = [](const auto duration) {
+    return std::chrono::duration<double, std::milli>(duration).count();
+  };
+  auto require_ready = false;
+  auto seen_views = std::array<bool, 2> {};
+  auto formats = std::array<unsigned, 2> {};
+  auto draw_counts = std::array<unsigned, 2> {};
+  auto warm_draw_counts = std::array<unsigned, 2> {};
+  probe->inspect
+    = [&](const RenderContext& context, const SceneTextureExtractRef& color,
+        const unsigned draws) {
+        const auto index = context.current_view.view_state_handle.get() - 500U;
+        CHECK_F(index < seen_views.size());
+        CHECK_F(!seen_views[index]);
+        seen_views[index] = true;
+        draw_counts[index] = draws;
+        if (require_ready) {
+          CHECK_F(color.valid && color.texture != nullptr && color.exposure);
+          if (mixed_scene) {
+            CHECK_F(draws > 0U && draws <= 5U);
+            CHECK_F(draws == warm_draw_counts[index]);
+          } else {
+            CHECK_F(draws == 1U);
+          }
+          CHECK_F(color.texture->GetDescriptor().width == width >> index);
+          CHECK_F(color.texture->GetDescriptor().height == height >> index);
+          if (!mixed_scene || fp32_reference) {
+            CHECK_F(color.texture->GetDescriptor().format == expected_format);
+          }
+        }
+        formats[index] = color.texture
+          ? static_cast<unsigned>(color.texture->GetDescriptor().format)
+          : static_cast<unsigned>(Format::kUnknown);
+      };
+  const auto render = [&](const bool start_recording) -> Sample {
+    const auto started = Clock::now();
+    seen_views.fill(false);
+    const auto slot = frame::Slot { sequence % 3U };
+    const auto frame_sequence = frame::SequenceNumber { ++sequence };
+    Backend().BeginFrame(frame_sequence, slot);
+    const auto after_frame_start = Clock::now();
+    frame.SetFrameSlot(slot, engine::internal::EngineTagFactory::Get());
+    frame.SetFrameSequenceNumber(
+      frame_sequence, engine::internal::EngineTagFactory::Get());
+    renderer_->OnFrameStart(observer_ptr { &frame });
+    if (start_recording) {
+      CHECK_F(diagnostics.RequestGpuTimelineRecording(gpu_path, sample_count));
+    }
+    for (unsigned index = 0U; index < targets.size(); ++index) {
+      auto sized_view = view;
+      sized_view.viewport.width = float(width >> index);
+      sized_view.viewport.height = float(height >> index);
+      auto input = CompositionView::ForScene(
+        ViewId { 500U + index }, sized_view, cameras[index]);
+      input.view_state_handle
+        = CompositionView::ViewStateHandle { 500U + index };
+      input.render_settings.exposure = settings;
+      CHECK_F(renderer_->PublishRuntimeCompositionView(frame,
+                { .composition_view = input,
+                  .render_target = observer_ptr { targets[index].get() },
+                  .composite_source = observer_ptr { targets[index].get() } },
+                forward ? ShadingMode::kForward : ShadingMode::kDeferred)
+        != kInvalidViewId);
+    }
+    auto loop = co::testing::TestEventLoop {};
+    co::Run(loop, [&]() -> co::Co<void> {
+      co_await renderer_->OnPreRender(observer_ptr { &frame });
+      co_await renderer_->OnRender(observer_ptr { &frame });
+      co_await renderer_->OnCompositing(observer_ptr { &frame });
+    });
+    if (require_ready) {
+      for (unsigned index = 0U; index < view_count; ++index) {
+        CHECK_F(seen_views[index]);
+      }
+    }
+    renderer_->OnFrameEnd(observer_ptr { &frame });
+    Backend().EndFrame(frame_sequence, slot);
+    const auto ended = Clock::now();
+    return { sequence, milliseconds(ended - started),
+      milliseconds(after_frame_start - started),
+      milliseconds(ended - after_frame_start), formats };
+  };
+  const auto warm_start = Clock::now();
+  unsigned warm_frames = 0U;
+  while (warm_frames < 300U
+    || Clock::now() - warm_start < std::chrono::seconds { 10 }) {
+    static_cast<void>(render(false));
+    ++warm_frames;
+  }
+  const auto warm_seconds
+    = std::chrono::duration<double>(Clock::now() - warm_start).count();
+  warm_draw_counts = draw_counts;
+  const auto before = snapshot();
+  auto samples = std::vector<Sample> {};
+  samples.reserve(sample_count);
+  require_ready = true;
+  const auto sample_start = Clock::now();
+  auto previous_end = sample_start;
+  for (unsigned index = 0U; index < sample_count; ++index) {
+    auto sample = render(index == 0U);
+    const auto ended = Clock::now();
+    sample.wall_ms = milliseconds(ended - previous_end);
+    previous_end = ended;
+    samples.push_back(sample);
+  }
+  const auto sample_seconds
+    = std::chrono::duration<double>(Clock::now() - sample_start).count();
+  const auto after = snapshot();
+  // Resolve the last recording outside the declared sample population. This
+  // explicit drain is not part of the timed renderer loop or a frame-rate
+  // claim.
+  WaitForQueueIdle();
+  const auto finalization = render(false);
+  probe->inspect = {};
+  backend.track_resources = false;
+
+  auto cpu = std::ofstream(cpu_path, std::ios::binary);
+  ASSERT_TRUE(cpu.is_open());
+  cpu << std::setprecision(17)
+      << "frame_seq,simulation_dt_ns,wall_ms,frame_start_ms,submission_ms,"
+         "main_format,secondary_format\n";
+  for (const auto& sample : samples) {
+    cpu << sample.frame_sequence << ',' << simulation_dt_ns << ','
+        << sample.wall_ms << ',' << sample.frame_start_ms << ','
+        << sample.submission_ms << ',' << sample.formats[0] << ','
+        << sample.formats[1] << '\n';
+  }
+  cpu.close();
+  ASSERT_TRUE(cpu.good());
+  auto gpu_stream = std::ifstream(gpu_path);
+  ASSERT_TRUE(gpu_stream.is_open());
+  const auto gpu = nlohmann::json::parse(gpu_stream);
+  const auto adapter = backend.GetCurrentDevice()->GetAdapterLuid();
+  const auto manifest = nlohmann::json { { "schema_version", 1 },
+    { "workload", workload }, { "run_id", run_id },
+    { "configuration", "Release" }, { "width", width }, { "height", height },
+    { "view_count", view_count }, { "prepared_draw_counts", warm_draw_counts },
+    { "secondary_width", view_count == 2U ? width / 2U : 0U },
+    { "secondary_height", view_count == 2U ? height / 2U : 0U },
+    { "view_ids",
+      view_count == 2U ? std::vector { 500, 501 } : std::vector { 500 } },
+    { "view_state_handles",
+      view_count == 2U ? std::vector { 500, 501 } : std::vector { 500 } },
+    { "shading", forward ? "Forward" : "Deferred" },
+    { "exposure",
+      { { "mode",
+          settings.mode == engine::ExposureMode::kAuto ? "Auto" : "Manual" },
+        { "manual_ev", settings.manual_ev }, { "key", settings.key },
+        { "metering", "Average" }, { "min_ev", settings.min_ev },
+        { "max_ev", settings.max_ev }, { "speed_up", settings.speed_up },
+        { "speed_down", settings.speed_down } } },
+    { "precision", precision },
+    { "precision_scope", "Format-only control; certification remains enabled" },
+    { "recipe",
+      mixed_scene
+        ? "MultiView mixed exposure"
+        : "Emissive triangle 0.25, vacuum atmosphere, zero-extinction fog" },
+    { "camera_aspect", mixed_scene ? double(width) / height : 1.0 },
+    { "camera_fov_radians", mixed_scene ? double(glm::radians(45.0F)) : 1.0 },
+    { "tone_mapper", "None" }, { "display_gamma", 1 },
+    { "quality_commands", quality_commands }, { "temporal_fog", temporal },
+    { "jitter", false }, { "simulation_dt_ns", simulation_dt_ns },
+    { "frame_slots", 3 }, { "warmup_frames", warm_frames },
+    { "warmup_seconds", warm_seconds }, { "sample_count", sample_count },
+    { "sample_seconds", sample_seconds },
+    { "first_frame_seq", samples.front().frame_sequence },
+    { "last_frame_seq", samples.back().frame_sequence },
+    { "adapter_luid_low", adapter.LowPart },
+    { "adapter_luid_high", adapter.HighPart },
+    { "cpu_samples", cpu_path.filename().string() },
+    { "gpu_samples", gpu_path.filename().string() },
+    { "gpu_complete", gpu.at("complete") },
+    { "gpu_timing_valid", gpu.at("timing_valid") },
+    { "resources_before", before }, { "resources_after", after },
+    { "resource_scope",
+      "Resources created after fixture setup, including "
+      "outputs; native placement requirements, not committed heap residency. "
+      "No retained extracts beyond normal renderer/probe ownership." },
+    { "finalization_frame_seq", finalization.frame_sequence },
+    { "finalization_wall_ms", finalization.wall_ms },
+    { "scope",
+      "Native offscreen workload; no presented FPS claim. "
+      "Frame-start duration includes backend waits; submission is a "
+      "CPU/driver/recording span, not pure active CPU time. Correctness "
+      "readbacks and explicit drains are absent from measured frames. "
+      "Source/binary/shader hashes and clock/thermal samples belong to the "
+      "external frozen-checkpoint runner." } };
+  auto output = std::ofstream(manifest_path, std::ios::binary);
+  ASSERT_TRUE(output.is_open());
+  output << manifest.dump(2) << '\n';
+  output.close();
+  ASSERT_TRUE(output.good());
+  RecordProperty("baseline_manifest", manifest_path.string());
+  EXPECT_GE(sample_seconds, 30.0);
+  EXPECT_EQ(gpu.at("complete"), true);
+  EXPECT_EQ(gpu.at("timing_valid"), true);
+  EXPECT_EQ(gpu.at("first_frame_seq"), samples.front().frame_sequence);
+  ASSERT_EQ(gpu.at("frames").size(), sample_count);
+  auto frame_ids = std::unordered_set<unsigned> {};
+  for (const auto& measured : gpu.at("frames")) {
+    EXPECT_TRUE(
+      frame_ids.insert(measured.at("frame_seq").get<unsigned>()).second);
+  }
+  for (const auto& sample : samples) {
+    EXPECT_TRUE(frame_ids.contains(sample.frame_sequence));
+  }
 #endif
 }
 auto ExposureLightingGpuTest::MeasureHdrAllocationAccounting(bool temporal)
@@ -10316,6 +10930,131 @@ NOLINT_TEST_F(
   exposure.reset();
 }
 
+NOLINT_TEST_F(
+  ExposureLightingGpuTest, Fp32ReferenceSwitchPreservesSceneExposureAndHistory)
+{
+  verify_manual_p = false;
+  probe->prepare = [](RenderContext&) { };
+  settings.mode = engine::ExposureMode::kAuto;
+  settings.low_percentile = 0.0F;
+  settings.high_percentile = 1.0F;
+  SetSurface(data::MaterialDomain::kOpaque, .25F);
+  auto& diagnostics = renderer_->GetDiagnosticsService();
+  ASSERT_FALSE(diagnostics.IsHdrFp32ReferenceEnabled());
+  SceneTextureExtractRef current;
+  unsigned current_draws = 0U;
+  probe->inspect = [&](const RenderContext& context,
+                     const SceneTextureExtractRef& color,
+                     const unsigned draws) {
+    current_draws = draws;
+    EXPECT_FLOAT_EQ(context.delta_time, frame_delta_seconds);
+    const auto* owner
+      = vortex::testing::RendererPublicationProbe::GetSceneRenderer(*renderer_);
+    EXPECT_EQ(owner->GetSceneTextures().GetSceneColor().GetDescriptor().format,
+      Format::kRGBA32Float);
+    current = color;
+  };
+  for (const bool forward : { false, true }) {
+    SCOPED_TRACE(::testing::Message() << "forward=" << forward);
+    surface_view_id = forward ? 9301U : 9300U;
+    frame_delta_seconds = 0.0F;
+    const auto handle = CompositionView::ViewStateHandle { surface_view_id };
+    const auto seed = renderer_->QueueExposureTransition(
+      handle, ExposureTransitionPolicy::kSeedFromEv100, 3.0F);
+    ASSERT_TRUE(seed.has_value());
+    ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0, 8));
+    ASSERT_EQ(current_draws, 1U);
+    ASSERT_TRUE(current.valid);
+    ASSERT_NE(current.texture, nullptr);
+    ASSERT_EQ(current.texture->GetDescriptor().format, Format::kRGBA16Float);
+    ASSERT_NE(current.exposure, nullptr);
+    ASSERT_NE(current.exposure->qualified_candidate, nullptr);
+    const auto before_domain = Read<FrameExposureData>(
+      *current.exposure->buffer, ResourceStates::kShaderResource);
+    const auto before
+      = Read<ExposureStateData>(*current.exposure->current_state->buffer,
+        ResourceStates::kShaderResource);
+    EXPECT_EQ(before_domain.flags, 0U);
+    ASSERT_NE(before_domain.pre_exposure, 1.0F);
+    EXPECT_EQ(before.displayed_scale, .125F);
+    EXPECT_EQ(before.latent_scale, .125F);
+    EXPECT_NE(before.target_scale, before.displayed_scale);
+    EXPECT_EQ(before.requested_generation, before.applied_generation);
+    EXPECT_EQ(before.applied_generation[0], seed->generation);
+    EXPECT_NEAR(std::log2(double(before.target_scale)),
+      std::log2(UniformReferenceGain(.25F)), 4e-4);
+    const auto output_texture
+      = framebuffer->GetDescriptor().color_attachments.front().texture;
+    const auto before_output = ReadFloatTexture(*output_texture);
+    ASSERT_EQ(before_output.size(), 1U);
+    constexpr auto expected_output = .25F * .125F - .5F / 255.0F;
+    for (unsigned channel = 0U; channel < 3U; ++channel) {
+      EXPECT_NEAR(before_output[0][channel], expected_output, 2e-4F);
+    }
+    for (const bool reference : { true, false }) {
+      SCOPED_TRACE(::testing::Message() << "reference=" << reference);
+      diagnostics.SetHdrFp32ReferenceEnabled(reference);
+      EXPECT_EQ(diagnostics.IsHdrFp32ReferenceEnabled(), reference);
+      ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0, 1));
+      ASSERT_EQ(current_draws, 1U);
+      ASSERT_TRUE(current.valid);
+      ASSERT_NE(current.texture, nullptr);
+      ASSERT_EQ(current.texture->GetDescriptor().format,
+        reference ? Format::kRGBA32Float : Format::kRGBA16Float);
+      ASSERT_NE(current.exposure, nullptr);
+      ASSERT_NE(current.exposure->qualified_candidate, nullptr);
+      ASSERT_NE(current.exposure->selected_history, nullptr);
+      const auto domain = Read<FrameExposureData>(
+        *current.exposure->buffer, ResourceStates::kShaderResource);
+      const auto state
+        = Read<ExposureStateData>(*current.exposure->current_state->buffer,
+          ResourceStates::kShaderResource);
+      EXPECT_EQ(domain.flags, reference ? 1U : 0U);
+      EXPECT_EQ(domain.pre_exposure, before_domain.pre_exposure);
+      EXPECT_EQ(
+        domain.one_over_pre_exposure, before_domain.one_over_pre_exposure);
+      EXPECT_EQ(state.displayed_scale, .125F);
+      EXPECT_EQ(state.latent_scale, .125F);
+      EXPECT_EQ(state.target_scale, before.target_scale);
+      EXPECT_EQ(state.latent_target_scale, before.latent_target_scale);
+      EXPECT_EQ(state.raw_metered_luminance, before.raw_metered_luminance);
+      EXPECT_EQ(state.raw_metered_ev, before.raw_metered_ev);
+      EXPECT_EQ(state.settings_revision, before.settings_revision);
+      EXPECT_EQ(state.requested_generation, before.requested_generation);
+      EXPECT_EQ(state.applied_generation, before.applied_generation);
+      EXPECT_EQ(state.product_layout_revision, before.product_layout_revision);
+      EXPECT_GE(state.fp16_eligible_streak, 2U);
+      EXPECT_EQ(state.fallback_reason, before.fallback_reason);
+      const auto pixels = ReadFloatTexture(*current.texture, !reference);
+      ASSERT_EQ(pixels.size(), 1U);
+      const auto output = ReadFloatTexture(*output_texture);
+      ASSERT_EQ(output.size(), 1U);
+      for (unsigned channel = 0U; channel < 3U; ++channel) {
+        EXPECT_NEAR(
+          pixels[0][channel] / domain.pre_exposure, .25F, .005F * .25F + 2e-5F);
+        EXPECT_NEAR(output[0][channel], expected_output, 2e-4F);
+        EXPECT_NEAR(output[0][channel], before_output[0][channel], 1.0F / 255);
+      }
+    }
+    frame_delta_seconds = .25F;
+    ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0, 1));
+    ASSERT_EQ(current_draws, 1U);
+    const auto adapted
+      = Read<ExposureStateData>(*current.exposure->current_state->buffer,
+        ResourceStates::kShaderResource);
+    const auto expected_gain
+      = ReferenceAdaptedGain(.125, UniformReferenceGain(.25F), .25);
+    EXPECT_NEAR(std::log2(double(adapted.displayed_scale)),
+      std::log2(expected_gain), 4e-4);
+    EXPECT_GT(adapted.displayed_scale, .125F);
+    EXPECT_EQ(adapted.applied_generation, before.applied_generation);
+    EXPECT_EQ(adapted.requested_generation, before.requested_generation);
+    EXPECT_TRUE(
+      renderer_->ReleaseOffscreenViewState(ViewId { surface_view_id }, handle));
+    current = {};
+  }
+  probe->inspect = {};
+}
 NOLINT_TEST_F(
   ExposureLightingGpuTest, ProductionAdmissionPinsCandidateAndRetainsFallback)
 {

@@ -463,7 +463,8 @@ auto PostProcessService::CaptureConfiguredExposure(
 
 auto PostProcessService::PrepareFrameExposure(
   RenderContext& ctx, const bool use_fp32,
-  postprocess::ExposurePass::StateLease qualified_candidate)
+  postprocess::ExposurePass::StateLease qualified_candidate,
+  const bool preserve_fp32_candidate_p)
   -> postprocess::ExposurePass::FrameLease
 {
   profiling::CpuProfileScope cpu_scope(
@@ -487,6 +488,7 @@ auto PostProcessService::PrepareFrameExposure(
   return exposure_pass_->ResolveFrame(
     ctx, config,
     { .use_fp32 = use_fp32,
+      .preserve_fp32_candidate_p = preserve_fp32_candidate_p,
       .qualified_candidate = std::move(qualified_candidate),
       .source = source,
       .transition = renderer_.CaptureExposureTransition(
