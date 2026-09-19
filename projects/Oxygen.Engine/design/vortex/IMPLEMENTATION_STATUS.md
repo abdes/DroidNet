@@ -318,8 +318,8 @@ delivery, remain required; the package is not complete.
   corrected Debug/Release captures restore readable materials and pass eight
   exact isolated/family comparisons. No production AE algorithm change was made.
   [Slice 5 closure audit, commands and evidence](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/slice5-closure-manifest.json).
-  **Current work: user-directed hold.** Commit the Slice 5 closeout, then wait
-  for instructions on performance and code-quality work, including clang-tidy
+  **Current work: user-directed hold.** The Slice 5 closeout is committed. Await
+  instructions on performance and code-quality work, including clang-tidy
   and test-suite structure. No quality edits or restructuring are authorized.
   Do not begin Slice 6. Slices 6-10 remain required after the agreed hold.
   **Deferred feature boundaries:** owned bloom, temporal color and specular/
