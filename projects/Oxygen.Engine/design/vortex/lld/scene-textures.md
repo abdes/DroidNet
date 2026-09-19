@@ -265,7 +265,7 @@ after view/consumer release; those bytes remain part of the cached footprint.
 Caller output targets, buffers, descriptor heaps and unrelated backend allocations
 are outside this texture report.
 
-The Debug qualification uses a full-resolution main view and a second view at
+The Debug and Release qualification uses a full-resolution main view and a second view at
 half width/height, an emissive surface, vacuum atmosphere and zero-extinction fog.
 Both use the default LUT/volume dimensions. Temporal reuse is a separate control:
 its retained uncertainty conservatively rejects the prospective half scene
@@ -273,12 +273,12 @@ certificate in this fixture, while the non-temporal control qualifies for FP16.
 The controls therefore vary temporal work as well as format; their difference is
 not an isolated format-only cost.
 
-| Main / second view | Temporal fog / steady HDR mode | Two-view HDR MiB | Creation-time peak MiB | Cached after retirement MiB |
-| --- | --- | ---: | ---: | ---: |
-| 1920x1080 / 960x540 | Off / FP16 | 229.328 | 294.953 | 86.578 |
-| 1920x1080 / 960x540 | On / FP32 retention | 374.453 | 384.016 | 86.578 |
-| 3840x2160 / 1920x1080 | Off / FP16 | 827.328 | 1075.828 | 322.828 |
-| 3840x2160 / 1920x1080 | On / FP32 retention | 1375.641 | 1410.578 | 322.828 |
+| Main / second view | Temporal fog / steady HDR mode | Two-view HDR MiB (Debug) | Two-view HDR MiB (Release) | Creation-time peak MiB | Cached after retirement MiB |
+| --- | --- | ---: | ---: | ---: | ---: |
+| 1920x1080 / 960x540 | Off / FP16 | 229.328 | 229.328 | 294.953 | 86.578 |
+| 1920x1080 / 960x540 | On / FP32 retention | 374.453 | 381.703 | 384.016 | 86.578 |
+| 3840x2160 / 1920x1080 | Off / FP16 | 827.328 | 827.328 | 1075.828 | 322.828 |
+| 3840x2160 / 1920x1080 | On / FP32 retention | 1375.641 | 1401.203 | 1410.578 | 322.828 |
 
 All four cases retain two outputs across settings invalidation requiring FP32,
 then release them and cross the actual fence/slot-retirement boundaries. Four cached families
@@ -293,8 +293,27 @@ The traffic report counts primary qualification loads, checked resolve or copy,
 tonemap, and full sky/AP/fog UAV stores from their actual shapes/formats. It keeps
 filtered taps, side/buffer reads, blending and compression outside those byte
 totals. Logical transfer quantities and warm replay event durations are reported
-separately from physical DRAM bandwidth or whole-frame latency. Debug timing is
-qualified here; Release performance qualification remains at Slice 5 closure.
+separately from physical DRAM bandwidth or whole-frame latency. Release repeats
+all four allocation/retirement cases. Creation-time peaks and retired cached
+footprints match Debug; intermediate retained temporal snapshots differ and
+are listed separately above.
+
+| Main resolution / temporal fog | Explicit qualification (ms) | Conversion or copy (ms) | Tonemap (ms) | Fog compute (ms) |
+| --- | ---: | ---: | ---: | ---: |
+| 1080p / Off | 3.273248 | 0.089936 | 0.105456 | 0.189168 |
+| 1080p / On | 3.188288 | 0.091696 | 0.134368 | 2.657600 |
+| 4K / Off | 7.728880 | 0.232096 | 0.375344 | 0.723744 |
+| 4K / On | 9.343680 | 0.322688 | 0.504320 | 10.411648 |
+
+These are sums of warm per-event replay medians across both views on the
+captured adapter. Explicit qualification includes clear, maximum gathering,
+candidate selection, product checks and finalization; checks embedded in other
+rendering passes remain in those passes' costs. Normal cases convert to FP16;
+temporal cases retain/copy FP32. Modeled primary texture reads range from
+399,716,096 to 1,605,690,368 bytes per captured frame, and modeled writes from
+75,008,000 to 419,553,280 bytes, with the exclusions above.
+[Release allocation phases](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/accounting-summary-Release.json)
+and [traffic/timing results](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/accounting-performance-Release.json).
 [Native reports, capture analysis, exact commands and scope](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/accounting-manifest.json).
 
 ### Allocation contract
@@ -730,7 +749,8 @@ Stage 23 (Cleanup)
 
 | Product | Format | Size | Lifecycle |
 | ------- | ------ | ---- | --------- |
-| SceneColor | `R16G16B16A16_FLOAT` | `extent.x × extent.y` | Persistent, resized on viewport change |
+| SceneColor accumulation | `R32G32B32A32_FLOAT` in scene rendering | `extent.x × extent.y` | Per-view family; resized/recreated through the lease pool |
+| Resolved HDR | Qualified `R16G16B16A16_FLOAT` or recovery/retained `R32G32B32A32_FLOAT` | `extent.x × extent.y` | Existing resolve artifact; checked conversion and retained FP32 fallback carry frame-pinned exposure metadata |
 | SceneDepth | `D32_FLOAT_S8X24_UINT` | `extent.x × extent.y` | Persistent; carries scene depth + scene stencil family |
 | PartialDepth | `R32_FLOAT` | `extent.x × extent.y` | Persistent |
 | Stencil | Scene/custom stencil family | `extent.x × extent.y` | Routed from the stencil aspect of `SceneDepth`, and from `CustomDepth` when the optional custom path is enabled |
@@ -742,6 +762,11 @@ Stage 23 (Cleanup)
 | CustomDepth | `D32_FLOAT_S8X24_UINT` | `extent.x × extent.y` | Persistent (if enabled); carries custom depth + optional custom stencil family |
 
 ### 5.2 Allocation Strategy
+
+The low-level `SceneTexturesConfig` accepts RGBA16F and RGBA32F color formats;
+the production scene renderer always selects RGBA32F for accumulation. FP16
+admission selects the resolved HDR and qualified environment products, as
+specified by the exposure inventory above.
 
 All textures are allocated at construction time based on
 `SceneTexturesConfig`. `GBufferShadowFactors` / `GBufferWorldTangent` remain
