@@ -21,9 +21,11 @@
 #include <span>
 #include <stdexcept>
 #include <unordered_set>
+#include <utility>
 
 #include <nlohmann/json.hpp>
 
+#include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Console/Console.h>
 #include <Oxygen/Cooker/Import/Internal/TextureCooker.h>
@@ -180,17 +182,24 @@ public:
   auto GetShader(const graphics::ShaderRequest& request) const
     -> std::shared_ptr<graphics::IShaderByteCode> override
   {
-    if (request.source_path == "Tests/ToneBoundsProbe.hlsl")
+    if (request.source_path == "Tests/ToneBoundsProbe.hlsl") {
       return tone_probe;
+    }
     return graphics::d3d12::Graphics::GetShader(request);
   }
   mutable std::weak_ptr<graphics::Texture> processed_sky;
   bool track_resources { false };
   bool account_texture_allocations { false };
   unsigned accounting_iteration { 0 };
+  std::string accounting_phase;
   mutable std::uint64_t peak_texture_bytes { 0 };
   mutable std::uint64_t peak_hdr_bytes { 0 };
+  mutable std::uint64_t peak_buffer_bytes { 0 };
+  mutable std::uint64_t peak_placement_bytes { 0 };
+  mutable std::uint64_t peak_engine_placement_bytes { 0 };
   mutable unsigned peak_hdr_iteration { 0 };
+  mutable nlohmann::json allocation_peaks = nlohmann::json::object();
+  mutable nlohmann::json allocation_peak_history = nlohmann::json::array();
   static auto IsExposureHdrTexture(std::string_view name) -> bool
   {
     return name == "SceneColor" || name == "ResolvedSceneColor"
@@ -202,46 +211,164 @@ public:
   }
   mutable std::vector<std::weak_ptr<graphics::Texture>> tracked_textures;
   mutable std::vector<std::weak_ptr<graphics::Buffer>> tracked_buffers;
+  auto MeasureTrackedPlacement() const -> nlohmann::json
+  {
+    auto textures = nlohmann::json::array();
+    auto buffers = nlohmann::json::array();
+    std::unordered_set<ID3D12Resource*> unique;
+    std::uint64_t texture_bytes = 0U;
+    std::uint64_t buffer_bytes = 0U;
+    std::uint64_t hdr_bytes = 0U;
+    std::uint64_t fixture_output_bytes = 0U;
+    std::uint64_t delayed_output_bytes = 0U;
+    std::uint64_t depth_readback_bytes = 0U;
+    for (std::size_t ordinal = 0U; ordinal < tracked_textures.size();
+      ++ordinal) {
+      const auto texture = tracked_textures[ordinal].lock();
+      if (!texture) {
+        continue;
+      }
+      auto* native = texture->GetNativeResource()->AsPointer<ID3D12Resource>();
+      if (!native || !unique.insert(native).second) {
+        continue;
+      }
+      const auto shape = native->GetDesc();
+      const auto bytes = GetCurrentDevice()
+                           ->GetResourceAllocationInfo(0U, 1U, &shape)
+                           .SizeInBytes;
+      const auto& desc = texture->GetDescriptor();
+      const bool hdr = IsExposureHdrTexture(desc.debug_name);
+      const bool fixture_output
+        = desc.debug_name.starts_with("LifecycleAccounting.Output");
+      const bool delayed_output
+        = desc.debug_name.starts_with("LifecycleAccounting.DelayedConsumer");
+      textures.push_back({ { "id", ordinal }, { "name", desc.debug_name },
+        { "format", static_cast<unsigned>(desc.format) },
+        { "width", desc.width }, { "height", desc.height },
+        { "depth", desc.depth }, { "array_layers", desc.array_size },
+        { "mips", desc.mip_levels }, { "samples", desc.sample_count },
+        { "sample_quality", desc.sample_quality },
+        { "texture_type", static_cast<unsigned>(desc.texture_type) },
+        { "native_format", static_cast<unsigned>(shape.Format) },
+        { "native_flags", static_cast<unsigned>(shape.Flags) },
+        { "native_layout", static_cast<unsigned>(shape.Layout) },
+        { "native_alignment", shape.Alignment },
+        { "native_dimension", static_cast<unsigned>(shape.Dimension) },
+        { "placement_bytes", bytes }, { "exposure_hdr", hdr },
+        { "fixture_output", fixture_output || delayed_output },
+        { "registered", GetResourceRegistry().Contains(*texture) } });
+      texture_bytes += bytes;
+      if (hdr) {
+        hdr_bytes += bytes;
+      }
+      if (fixture_output) {
+        fixture_output_bytes += bytes;
+      }
+      if (delayed_output) {
+        delayed_output_bytes += bytes;
+      }
+    }
+    for (std::size_t ordinal = 0U; ordinal < tracked_buffers.size();
+      ++ordinal) {
+      const auto buffer = tracked_buffers[ordinal].lock();
+      if (!buffer) {
+        continue;
+      }
+      auto* native = buffer->GetNativeResource()->AsPointer<ID3D12Resource>();
+      if (!native || !unique.insert(native).second) {
+        continue;
+      }
+      const auto shape = native->GetDesc();
+      const auto bytes = GetCurrentDevice()
+                           ->GetResourceAllocationInfo(0U, 1U, &shape)
+                           .SizeInBytes;
+      const auto desc = buffer->GetDescriptor();
+      const bool depth_readback
+        = desc.debug_name.starts_with("LifecycleAccounting.DepthReadback");
+      buffers.push_back({ { "id", ordinal }, { "name", desc.debug_name },
+        { "logical_bytes", desc.size_bytes }, { "placement_bytes", bytes },
+        { "memory", static_cast<unsigned>(desc.memory) },
+        { "usage", static_cast<unsigned>(desc.usage) },
+        { "native_flags", static_cast<unsigned>(shape.Flags) },
+        { "native_layout", static_cast<unsigned>(shape.Layout) },
+        { "native_alignment", shape.Alignment },
+        { "fixture_output", depth_readback },
+        { "registered", GetResourceRegistry().Contains(*buffer) } });
+      buffer_bytes += bytes;
+      if (depth_readback) {
+        depth_readback_bytes += bytes;
+      }
+    }
+    return { { "textures", std::move(textures) },
+      { "buffers", std::move(buffers) },
+      { "texture_placement_bytes", texture_bytes },
+      { "buffer_placement_bytes", buffer_bytes },
+      { "hdr_placement_bytes", hdr_bytes },
+      { "total_placement_bytes", texture_bytes + buffer_bytes },
+      { "fixture_output_placement_bytes", fixture_output_bytes },
+      { "delayed_output_placement_bytes", delayed_output_bytes },
+      { "depth_readback_placement_bytes", depth_readback_bytes },
+      { "engine_placement_bytes",
+        texture_bytes + buffer_bytes - fixture_output_bytes
+          - delayed_output_bytes - depth_readback_bytes },
+      { "texture_creation_count", tracked_textures.size() },
+      { "buffer_creation_count", tracked_buffers.size() } };
+  }
+  auto ObserveAllocationPeak() const -> void
+  {
+    auto snapshot = MeasureTrackedPlacement();
+    auto changed = nlohmann::json::array();
+    const auto update
+      = [&](const char* name, const char* field, std::uint64_t& peak) {
+          const auto bytes = snapshot.at(field).get<std::uint64_t>();
+          if (bytes > peak) {
+            peak = bytes;
+            allocation_peaks[name] = { { "iteration", accounting_iteration },
+              { "phase", accounting_phase }, { "bytes", bytes },
+              { "history_index", allocation_peak_history.size() } };
+            changed.push_back(name);
+          }
+        };
+    update("textures", "texture_placement_bytes", peak_texture_bytes);
+    update("buffers", "buffer_placement_bytes", peak_buffer_bytes);
+    update("combined", "total_placement_bytes", peak_placement_bytes);
+    update("engine", "engine_placement_bytes", peak_engine_placement_bytes);
+    const auto previous_hdr = peak_hdr_bytes;
+    update("hdr", "hdr_placement_bytes", peak_hdr_bytes);
+    if (peak_hdr_bytes != previous_hdr) {
+      peak_hdr_iteration = accounting_iteration;
+    }
+    if (!changed.empty()) {
+      allocation_peak_history.push_back(
+        { { "iteration", accounting_iteration }, { "phase", accounting_phase },
+          { "changed_categories", std::move(changed) },
+          { "resources", std::move(snapshot) } });
+    }
+  }
   auto CreateBuffer(const BufferDesc& desc) const
     -> std::shared_ptr<graphics::Buffer> override
   {
     auto buffer = graphics::d3d12::Graphics::CreateBuffer(desc);
-    if (track_resources)
+    if (track_resources && buffer) {
       tracked_buffers.push_back(buffer);
+    }
+    if (account_texture_allocations && buffer) {
+      ObserveAllocationPeak();
+    }
     return buffer;
   }
   auto CreateTexture(const TextureDesc& desc) const
     -> std::shared_ptr<graphics::Texture> override
   {
     auto texture = graphics::d3d12::Graphics::CreateTexture(desc);
-    if (desc.debug_name == "Vortex.StaticSkyLight.ProcessedCubemap")
+    if (desc.debug_name == "Vortex.StaticSkyLight.ProcessedCubemap") {
       processed_sky = texture;
-    if (track_resources)
+    }
+    if (track_resources && texture) {
       tracked_textures.push_back(texture);
-    if (account_texture_allocations) {
-      std::unordered_set<ID3D12Resource*> unique;
-      std::uint64_t total = 0;
-      std::uint64_t hdr = 0;
-      for (const auto& weak : tracked_textures) {
-        const auto live = weak.lock();
-        if (!live)
-          continue;
-        auto* native = live->GetNativeResource()->AsPointer<ID3D12Resource>();
-        if (!native || !unique.insert(native).second)
-          continue;
-        const auto shape = native->GetDesc();
-        const auto bytes = GetCurrentDevice()
-                             ->GetResourceAllocationInfo(0U, 1U, &shape)
-                             .SizeInBytes;
-        total += bytes;
-        if (IsExposureHdrTexture(live->GetDescriptor().debug_name))
-          hdr += bytes;
-      }
-      peak_texture_bytes = std::max(peak_texture_bytes, total);
-      if (hdr > peak_hdr_bytes) {
-        peak_hdr_bytes = hdr;
-        peak_hdr_iteration = accounting_iteration;
-      }
+    }
+    if (account_texture_allocations && texture) {
+      ObserveAllocationPeak();
     }
     return texture;
   }
@@ -251,6 +378,9 @@ public:
   bool fail_next_fallback_recorder { false };
   bool fail_status_recorder { false };
   std::string fail_recorder_name;
+  bool defer_tonemap_recorders { false };
+  std::vector<std::shared_ptr<const graphics::CommandList>>
+    deferred_tonemap_recordings;
   bool fail_next_suitability_recorder { false };
   auto AcquireCommandRecorder(const graphics::QueueKey& queue,
     std::string_view name, bool immediate = true)
@@ -258,10 +388,12 @@ public:
       std::function<void(graphics::CommandRecorder*)>> override
   {
     recorder_names.emplace_back(name);
-    if (!fail_recorder_name.empty() && name == fail_recorder_name)
+    if (!fail_recorder_name.empty() && name == fail_recorder_name) {
       return { nullptr, [](graphics::CommandRecorder*) { } };
-    if (fail_status_recorder && name == "Exposure status readback")
+    }
+    if (fail_status_recorder && name == "Exposure status readback") {
       return { nullptr, [](graphics::CommandRecorder*) { } };
+    }
     if (fail_next_suitability_recorder
       && name == "Vortex Exposure Suitability") {
       fail_next_suitability_recorder = false;
@@ -279,8 +411,14 @@ public:
       fail_next_exposure_recorder = false;
       return { nullptr, [](graphics::CommandRecorder*) { } };
     }
-    return graphics::d3d12::Graphics::AcquireCommandRecorder(
-      queue, name, immediate);
+    const bool defer = defer_tonemap_recorders && name == "Vortex PostProcess";
+    auto recorder = graphics::d3d12::Graphics::AcquireCommandRecorder(
+      queue, name, immediate && !defer);
+    if (defer && recorder) {
+      deferred_tonemap_recordings.push_back(
+        recorder->GetCommandListForInspection());
+    }
+    return recorder;
   }
 };
 
@@ -10556,16 +10694,30 @@ auto ExposureProfilingOverheadTest::MeasureReleaseBaseline(
 auto ExposureLightingGpuTest::MeasureHdrAllocationAccounting(bool temporal)
   -> void
 {
-  std::uint32_t width = 1920;
-  char* width_text = nullptr;
-  std::size_t width_size = 0;
-  if (_dupenv_s(&width_text, &width_size, "OXYGEN_EXPOSURE_TIMING_WIDTH") == 0
-    && width_text) {
-    width = static_cast<std::uint32_t>(std::strtoul(width_text, nullptr, 10));
-    std::free(width_text);
-  }
-  ASSERT_TRUE(width == 1920 || width == 3840);
+  const auto environment = [](const char* name, const char* fallback) {
+    char* text = nullptr;
+    std::size_t size = 0U;
+    if (_dupenv_s(&text, &size, name) != 0 || !text) {
+      return std::string { fallback };
+    }
+    const auto owned
+      = std::unique_ptr<char, decltype(&std::free)>(text, &std::free);
+    return std::string { owned.get() };
+  };
+  const auto width_text = environment("OXYGEN_EXPOSURE_TIMING_WIDTH", "1920");
+  std::uint32_t width = 0U;
+  const auto parsed = std::from_chars(
+    width_text.data(), width_text.data() + width_text.size(), width);
+  ASSERT_EQ(parsed.ec, std::errc {});
+  ASSERT_EQ(parsed.ptr, width_text.data() + width_text.size());
+  ASSERT_TRUE(width == 1920U || width == 3840U);
+  const auto precision
+    = environment("OXYGEN_EXPOSURE_BASELINE_PRECISION", "production");
+  ASSERT_TRUE(precision == "production" || precision == "fp32");
+  const bool fp32_reference = precision == "fp32";
   const auto height = width * 9U / 16U;
+  verify_manual_p = false;
+  renderer_->GetDiagnosticsService().SetHdrFp32ReferenceEnabled(fp32_reference);
   view.viewport = { .width = float(width), .height = float(height) };
   camera.GetCameraAs<scene::PerspectiveCamera>()->get().SetViewport(
     view.viewport);
@@ -10590,245 +10742,655 @@ auto ExposureLightingGpuTest::MeasureHdrAllocationAccounting(bool temporal)
     console::ExecutionStatus::kOk);
   ASSERT_EQ(fixture_console.Execute("vtx.volumetric_fog.jitter false").status,
     console::ExecutionStatus::kOk);
-  probe->prepare = [](RenderContext& ctx) {
-    ctx.current_view.with_atmosphere = true;
-    ctx.current_view.with_height_fog = true;
+  probe->prepare = [](RenderContext& context) {
+    context.current_view.with_atmosphere = true;
+    context.current_view.with_height_fog = true;
   };
   scene->Update();
   scene->SyncObservers();
+
+  auto& backend = static_cast<ExposureFailureGraphics&>(Backend());
+  backend.tracked_textures.clear();
+  backend.tracked_buffers.clear();
+  backend.peak_texture_bytes = backend.peak_hdr_bytes = 0U;
+  backend.peak_buffer_bytes = backend.peak_placement_bytes = 0U;
+  backend.peak_engine_placement_bytes = 0U;
+  backend.allocation_peaks = nlohmann::json::object();
+  backend.allocation_peak_history = nlohmann::json::array();
+  backend.accounting_phase = "fixed_fixture_outputs";
+  backend.track_resources = true;
+  backend.account_texture_allocations = true;
   std::array<std::shared_ptr<Texture>, 2> outputs;
   std::array<std::shared_ptr<Framebuffer>, 2> targets;
-  for (unsigned index = 0; index < 2; ++index) {
-    outputs[index] = CreateRegisteredTexture({ .width = width >> index,
+  std::array<std::shared_ptr<Texture>, 2> consumer_outputs;
+  std::array<std::shared_ptr<Framebuffer>, 2> consumer_targets;
+  struct DepthReadback {
+    std::shared_ptr<graphics::Buffer> buffer;
+    D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint {};
+    UINT64 row_bytes { 0U };
+    UINT64 alias_stride { 0U };
+  };
+  std::array<DepthReadback, 2> depth_readbacks;
+  auto consumer = postprocess::TonemapPass(*renderer_);
+  auto cleanup = ScopeGuard([&]() noexcept {
+    backend.defer_tonemap_recorders = false;
+    Backend().SubmitDeferredCommandLists();
+    WaitForQueueIdle();
+    backend.deferred_tonemap_recordings.clear();
+    backend.account_texture_allocations = false;
+    backend.track_resources = false;
+    probe->inspect = {};
+    probe->color.reset();
+    probe->exposure.reset();
+    targets = {};
+    consumer_targets = {};
+    for (auto* collection : { &outputs, &consumer_outputs }) {
+      for (auto& texture : *collection) {
+        if (texture) {
+          Backend().GetResourceRegistry().UnRegisterResource(*texture);
+          Backend().RegisterDeferredRelease(std::move(texture));
+        }
+      }
+    }
+    for (auto& readback : depth_readbacks) {
+      if (readback.buffer) {
+        Backend().GetResourceRegistry().UnRegisterResource(*readback.buffer);
+        Backend().RegisterDeferredRelease(std::move(readback.buffer));
+      }
+    }
+  });
+  for (unsigned index = 0U; index < 2U; ++index) {
+    outputs[index] = Backend().CreateTexture({ .width = width >> index,
       .height = height >> index,
       .format = Format::kRGBA32Float,
+      .debug_name = "LifecycleAccounting.Output" + std::to_string(index),
       .is_render_target = true,
       .initial_state = ResourceStates::kCommon });
+    ASSERT_NE(outputs[index], nullptr);
+    Backend().GetResourceRegistry().Register(outputs[index]);
     targets[index] = Backend().CreateFramebuffer(
       FramebufferDesc {}.AddColorAttachment(outputs[index]));
+    consumer_outputs[index] = Backend().CreateTexture({ .width = 1U,
+      .height = 1U,
+      .format = Format::kRGBA32Float,
+      .debug_name
+      = "LifecycleAccounting.DelayedConsumer" + std::to_string(index),
+      .is_render_target = true,
+      .initial_state = ResourceStates::kCommon });
+    ASSERT_NE(consumer_outputs[index], nullptr);
+    Backend().GetResourceRegistry().Register(consumer_outputs[index]);
+    consumer_targets[index] = Backend().CreateFramebuffer(
+      FramebufferDesc {}.AddColorAttachment(consumer_outputs[index]));
   }
+  const auto without_diagnostics = [&](auto&& action) {
+    const bool tracked = std::exchange(backend.track_resources, false);
+    const bool accounted
+      = std::exchange(backend.account_texture_allocations, false);
+    auto restore = ScopeGuard([&]() noexcept {
+      backend.track_resources = tracked;
+      backend.account_texture_allocations = accounted;
+    });
+    return action();
+  };
   struct ViewRecord {
     ViewId id;
     SceneTextureExtractRef color;
+    std::array<SceneTextureExtractRef, 2> depths;
+    unsigned draws;
   };
   std::unordered_map<CompositionView::ViewStateHandle, ViewRecord> current;
-  std::vector<SceneTextureExtractRef> retained;
-  probe->inspect = [&](const RenderContext& ctx,
-                     const SceneTextureExtractRef& color, unsigned) {
-    current.insert_or_assign(ctx.current_view.view_state_handle,
-      ViewRecord { ctx.current_view.view_id, color });
-  };
-  auto& backend = static_cast<ExposureFailureGraphics&>(Backend());
-  backend.track_resources = true;
-  backend.account_texture_allocations = true;
-  const auto snapshot = [&](const std::string& phase) {
-    for (const auto& [handle, record] : current) {
-      const auto storage = Read<ExposureStatusStorage>(
-        *record.color.exposure->current_state->status_buffer,
-        ResourceStates::kCopySource);
-      const auto& status = storage.completed;
-      std::string status_words;
-      for (const auto word :
-        std::bit_cast<std::array<std::uint32_t, 96>>(storage)) {
-        if (!status_words.empty())
-          status_words += ',';
-        status_words += std::to_string(word);
-      }
-      RecordProperty(
-        phase + "_status_words_" + std::to_string(handle.get()), status_words);
-      const auto report
-        = Read<HdrSuitabilityData>(*record.color.exposure->suitability_buffer,
-          ResourceStates::kShaderResource);
-      RecordProperty(phase + "_view_" + std::to_string(handle.get()),
-        "flags=" + std::to_string(status.flags)
-          + ";first_product=" + std::to_string(status.first_failure_product)
-          + ";kind=" + std::to_string(status.first_failure_kind) + ";streak="
-          + std::to_string(status.fp16_eligible_streak) + ";candidate="
-          + std::to_string(report.candidate_pre_exposure) + ";candidate_r_bits="
-          + std::to_string(std::bit_cast<std::uint32_t>(
-            storage.scene_error.candidate_rgb_relative))
-          + ";candidate_a_bits="
-          + std::to_string(std::bit_cast<std::uint32_t>(
-            storage.scene_error.candidate_rgb_absolute))
-          + ";fog_r_bits="
-          + std::to_string(std::bit_cast<std::uint32_t>(
-            storage.candidate_errors[2].rgb_relative))
-          + ";fog_a_bits="
-          + std::to_string(std::bit_cast<std::uint32_t>(
-            storage.candidate_errors[2].rgb_absolute))
-          + ";fog_tr_bits="
-          + std::to_string(std::bit_cast<std::uint32_t>(
-            storage.candidate_errors[2].transmittance_relative))
-          + ";fog_ta_bits="
-          + std::to_string(std::bit_cast<std::uint32_t>(
-            storage.candidate_errors[2].transmittance_absolute)));
-    }
-    std::unordered_set<ID3D12Resource*> unique;
-    std::uint64_t placed = 0;
-    std::uint64_t hdr_placed = 0;
-    std::uint64_t hdr_raw = 0;
-    unsigned ordinal = 0;
-    for (const auto& weak : backend.tracked_textures) {
-      const auto identity = ordinal++;
-      const auto texture = weak.lock();
-      if (!texture)
-        continue;
-      auto* resource
-        = texture->GetNativeResource()->AsPointer<ID3D12Resource>();
-      if (!resource || !unique.insert(resource).second)
-        continue;
-      const auto native = resource->GetDesc();
-      const auto bytes = backend.GetCurrentDevice()
-                           ->GetResourceAllocationInfo(0U, 1U, &native)
-                           .SizeInBytes;
-      const auto& desc = texture->GetDescriptor();
-      const auto& name = desc.debug_name;
-      const bool hdr = ExposureFailureGraphics::IsExposureHdrTexture(name);
-      std::uint64_t raw = 0;
-      if (hdr) {
-        ASSERT_TRUE(desc.format == Format::kRGBA16Float
-          || desc.format == Format::kRGBA32Float);
-        for (unsigned mip = 0; mip < native.MipLevels; ++mip) {
-          const auto depth
-            = native.Dimension == D3D12_RESOURCE_DIMENSION_TEXTURE3D
-            ? std::max(unsigned(native.DepthOrArraySize) >> mip, 1U)
-            : unsigned(native.DepthOrArraySize);
-          raw += std::max(native.Width >> mip, std::uint64_t { 1 })
-            * std::max(native.Height >> mip, 1U) * depth
-            * (desc.format == Format::kRGBA32Float ? 16U : 8U)
-            * native.SampleDesc.Count;
-        }
-        hdr_raw += raw;
-        hdr_placed += bytes;
-      }
-      placed += bytes;
-      auto comparable = native;
-      comparable.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
-      const auto half_bytes = hdr
-        ? backend.GetCurrentDevice()
-            ->GetResourceAllocationInfo(0U, 1U, &comparable)
-            .SizeInBytes
-        : 0U;
-      comparable.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
-      const auto float_bytes = hdr
-        ? backend.GetCurrentDevice()
-            ->GetResourceAllocationInfo(0U, 1U, &comparable)
-            .SizeInBytes
-        : 0U;
-      RecordProperty(phase + "_texture_" + std::to_string(identity),
-        name + ";format=" + std::to_string(static_cast<unsigned>(desc.format))
-          + ";width=" + std::to_string(desc.width) + ";height="
-          + std::to_string(desc.height) + ";depth=" + std::to_string(desc.depth)
-          + ";layers=" + std::to_string(desc.array_size)
-          + ";mips=" + std::to_string(desc.mip_levels)
-          + ";samples=" + std::to_string(desc.sample_count)
-          + ";placement_bytes=" + std::to_string(bytes)
-          + ";same_desc_fp16_bytes=" + std::to_string(half_bytes)
-          + ";same_desc_fp32_bytes=" + std::to_string(float_bytes)
-          + ";hdr_raw_bytes=" + std::to_string(raw));
-    }
+  std::array<ViewRecord, 2> retained;
+  auto phases = nlohmann::json::array();
+  auto frames = nlohmann::json::array();
+  probe->inspect = [&](const RenderContext& context,
+                     const SceneTextureExtractRef& color, unsigned draws) {
     const auto* owner
       = vortex::testing::RendererPublicationProbe::GetSceneRenderer(*renderer_);
-    ASSERT_NE(owner, nullptr);
-    const auto [families, live]
-      = vortex::testing::RendererPublicationProbe::SceneTexturePoolCounts(
-        *owner);
-    RecordProperty(phase + "_placed_bytes", std::to_string(placed));
-    RecordProperty(phase + "_hdr_placed_bytes", std::to_string(hdr_placed));
-    RecordProperty(phase + "_hdr_raw_bytes", std::to_string(hdr_raw));
-    RecordProperty(phase + "_pool_families", std::to_string(families));
-    RecordProperty(phase + "_leased_families", std::to_string(live));
-    RecordProperty(
-      phase + "_retained_extracts", std::to_string(retained.size()));
+    CHECK_NOTNULL_F(owner);
+    const auto& extracts = owner->GetSceneTextureExtracts();
+    current.insert_or_assign(context.current_view.view_state_handle,
+      ViewRecord { context.current_view.view_id, color,
+        { extracts.resolved_scene_depth, extracts.prev_scene_depth }, draws });
+    frames.push_back({ { "sequence", context.frame_sequence.get() },
+      { "phase", backend.accounting_phase },
+      { "view", context.current_view.view_id.get() },
+      { "handle", context.current_view.view_state_handle.get() },
+      { "format",
+        static_cast<unsigned>(color.texture->GetDescriptor().format) },
+      { "width", color.texture->GetDescriptor().width },
+      { "height", color.texture->GetDescriptor().height },
+      { "draws", draws } });
   };
-  for (unsigned iteration = 0; iteration < 22; ++iteration) {
-    backend.accounting_iteration = iteration;
-    const auto slot = frame::Slot { sequence % 3U };
+  const auto snapshot = [&](const std::string& phase) {
+    auto record = backend.MeasureTrackedPlacement();
+    record["phase"] = phase;
+    record["sequence"] = sequence;
+    record["slot"] = frame.GetFrameSlot().get();
+    record["views"] = nlohmann::json::array();
+    record["retained_extracts"] = std::count_if(retained.begin(),
+      retained.end(),
+      [](const auto& item) { return item.color.retained_texture != nullptr; });
+    record["retained_depth_aliases"] = std::accumulate(retained.begin(),
+      retained.end(), 0U, [](unsigned count, const auto& item) {
+        return count
+          + static_cast<unsigned>(std::count_if(
+            item.depths.begin(), item.depths.end(), [](const auto& depth) {
+              return depth.retained_texture != nullptr;
+            }));
+      });
+    const auto* owner
+      = vortex::testing::RendererPublicationProbe::GetSceneRenderer(*renderer_);
+    if (owner) {
+      const auto [families, leased]
+        = vortex::testing::RendererPublicationProbe::SceneTexturePoolCounts(
+          *owner);
+      record["pool_families"] = families;
+      record["leased_families"] = leased;
+    }
+    without_diagnostics([&] {
+      for (const auto& [handle, item] : current) {
+        const auto& exposure = item.color.exposure;
+        CHECK_NOTNULL_F(exposure.get());
+        const auto state = Read<ExposureStateData>(
+          *exposure->current_state->buffer, ResourceStates::kShaderResource);
+        const auto domain = Read<FrameExposureData>(
+          *exposure->buffer, ResourceStates::kShaderResource);
+        const auto status = Read<ExposureStatusStorage>(
+          *exposure->current_state->status_buffer, ResourceStates::kCopySource);
+        const auto report = Read<HdrSuitabilityData>(
+          *exposure->suitability_buffer, ResourceStates::kShaderResource);
+        record["views"].push_back({ { "handle", handle.get() },
+          { "view", item.id.get() }, { "draws", item.draws },
+          { "format",
+            static_cast<unsigned>(item.color.texture->GetDescriptor().format) },
+          { "P", domain.pre_exposure }, { "gain", state.displayed_scale },
+          { "lifetime", exposure->current_state->owner_lifetime },
+          { "state_words",
+            std::bit_cast<std::array<std::uint32_t, sizeof(state) / 4U>>(
+              state) },
+          { "frame_words",
+            std::bit_cast<std::array<std::uint32_t, sizeof(domain) / 4U>>(
+              domain) },
+          { "status_words",
+            std::bit_cast<std::array<std::uint32_t, sizeof(status) / 4U>>(
+              status) },
+          { "suitability_words",
+            std::bit_cast<std::array<std::uint32_t, sizeof(report) / 4U>>(
+              report) } });
+      }
+    });
+    phases.push_back(record);
+    return record;
+  };
+  const auto render_frame = [&](unsigned view_count, unsigned layout, float ev,
+                              const std::string& phase) {
+    backend.accounting_phase = phase;
+    ++backend.accounting_iteration;
+    const auto slot = frame::Slot { sequence % frame::kFramesInFlight.get() };
     Backend().BeginFrame(frame::SequenceNumber { ++sequence }, slot);
     frame.SetFrameSlot(slot, engine::internal::EngineTagFactory::Get());
     frame.SetFrameSequenceNumber(frame::SequenceNumber { sequence },
       engine::internal::EngineTagFactory::Get());
     renderer_->OnFrameStart(observer_ptr { &frame });
-    if (iteration < 18) {
-      const unsigned views = iteration < 8 ? 1 : 2;
-      for (unsigned index = 0; index < views; ++index) {
-        auto sized_view = view;
-        sized_view.viewport.width = float(width >> index);
-        sized_view.viewport.height = float(height >> index);
-        auto input = CompositionView::ForScene(
-          ViewId { 500U + index }, sized_view, camera);
-        input.view_state_handle
-          = CompositionView::ViewStateHandle { 500U + index };
-        auto exposure = settings;
-        exposure.manual_ev = iteration >= 16 ? 1.0F : 0.0F;
-        input.render_settings.exposure = exposure;
-        ASSERT_NE(
-          renderer_->PublishRuntimeCompositionView(frame,
-            { .composition_view = input,
-              .render_target = observer_ptr { targets[index].get() },
-              .composite_source = observer_ptr { targets[index].get() } }),
-          kInvalidViewId);
-      }
-      const auto capture = iteration == 15
-        ? BeginOptionalCapture()
-        : observer_ptr<FrameCaptureController> {};
+    for (unsigned index = 0U; index < view_count; ++index) {
+      const auto output_index = index ^ layout;
+      auto sized_view = view;
+      sized_view.viewport.width = float(width >> output_index);
+      sized_view.viewport.height = float(height >> output_index);
+      auto input = CompositionView::ForScene(
+        ViewId { 500U + index }, sized_view, camera);
+      input.view_state_handle
+        = CompositionView::ViewStateHandle { 500U + index };
+      auto exposure = settings;
+      exposure.manual_ev = ev;
+      input.render_settings.exposure = exposure;
+      ASSERT_NE(
+        renderer_->PublishRuntimeCompositionView(frame,
+          { .composition_view = input,
+            .render_target = observer_ptr { targets[output_index].get() },
+            .composite_source = observer_ptr { targets[output_index].get() } }),
+        kInvalidViewId);
+    }
+    if (view_count != 0U) {
       auto loop = co::testing::TestEventLoop {};
       co::Run(loop, [&]() -> co::Co<void> {
         co_await renderer_->OnPreRender(observer_ptr { &frame });
         co_await renderer_->OnRender(observer_ptr { &frame });
       });
-      if (capture)
-        EXPECT_TRUE(capture->EndCapture());
-      if (iteration == 0)
-        snapshot("bootstrap_one");
-      if (iteration == 7 || iteration == 15) {
-        for (const auto& [handle, record] : current) {
-          EXPECT_EQ(record.color.texture->GetDescriptor().format,
-            temporal ? Format::kRGBA32Float : Format::kRGBA16Float);
-          if (iteration == 15)
-            retained.push_back(record.color);
-        }
-        snapshot(iteration == 7 ? "steady_one" : "steady_two_retained");
-      }
-      if (iteration == 8)
-        snapshot("mixed_two");
-      if (iteration == 16) {
-        for (const auto& [handle, record] : current)
-          EXPECT_EQ(
-            record.color.texture->GetDescriptor().format, Format::kRGBA32Float);
-        snapshot("recovery_two_retained");
-      }
-      if (iteration == 17) {
-        auto* owner
-          = vortex::testing::RendererPublicationProbe::GetSceneRenderer(
-            *renderer_);
-        for (const auto& [handle, record] : current)
-          owner->RemoveViewState(record.id, handle);
-        current.clear();
-        retained.clear();
-        probe->color.reset();
-        probe->exposure.reset();
-        snapshot("released_before_fence");
-      }
     }
     renderer_->OnFrameEnd(observer_ptr { &frame });
     Backend().EndFrame(frame::SequenceNumber { sequence }, slot);
     WaitForQueueIdle();
-    if (iteration == 21)
-      snapshot("retired_cached");
+  };
+  const auto remove_views = [&] {
+    for (unsigned index = 0U; index < 2U; ++index) {
+      renderer_->RemovePublishedRuntimeView(frame, ViewId { 500U + index });
+    }
+    current.clear();
+    probe->color.reset();
+    probe->exposure.reset();
+  };
+  const auto srv = [&](const Texture& texture) {
+    const auto index
+      = Backend().GetResourceRegistry().FindShaderVisibleIndex(texture,
+        TextureViewDescription { .view_type = ResourceViewType::kTexture_SRV,
+          .visibility = DescriptorVisibility::kShaderVisible,
+          .format = texture.GetDescriptor().format,
+          .dimension = texture.GetDescriptor().texture_type,
+          .sub_resources = TextureSubResourceSet::EntireTexture() });
+    CHECK_F(index.has_value());
+    return *index;
+  };
+  const auto population = [](const nlohmann::json& snapshot) {
+    std::vector<std::string> rows;
+    for (const auto* kind : { "textures", "buffers" }) {
+      for (auto row : snapshot.at(kind)) {
+        row.erase("id");
+        row.erase("registered");
+        rows.push_back(std::string(kind) + row.dump());
+      }
+    }
+    std::ranges::sort(rows);
+    return rows;
+  };
+  const auto ensure_depth_readback = [&](unsigned index, const Texture& depth) {
+    auto& readback = depth_readbacks[index];
+    if (readback.buffer) {
+      ASSERT_EQ(
+        readback.footprint.Footprint.Width, depth.GetDescriptor().width);
+      ASSERT_EQ(
+        readback.footprint.Footprint.Height, depth.GetDescriptor().height);
+      return;
+    }
+    auto* source = depth.GetNativeResource()->AsPointer<ID3D12Resource>();
+    const auto desc = source->GetDesc();
+    UINT rows = 0U;
+    UINT64 bytes = 0U;
+    Backend().GetCurrentDevice()->GetCopyableFootprints(&desc, 0U, 1U, 0U,
+      &readback.footprint, &rows, &readback.row_bytes, &bytes);
+    ASSERT_EQ(rows, depth.GetDescriptor().height);
+    ASSERT_GT(bytes, 0U);
+    ASSERT_NE(bytes, (std::numeric_limits<UINT64>::max)());
+    constexpr UINT64 alignment = D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT;
+    readback.alias_stride = (bytes + alignment - 1U) & ~(alignment - 1U);
+    readback.buffer
+      = Backend().CreateBuffer({ .size_bytes = 2U * readback.alias_stride,
+        .usage = BufferUsage::kNone,
+        .memory = BufferMemory::kReadBack,
+        .debug_name
+        = "LifecycleAccounting.DepthReadback" + std::to_string(index) });
+    ASSERT_NE(readback.buffer, nullptr);
+    Backend().GetResourceRegistry().Register(readback.buffer);
+  };
+  const auto copy_depth = [&](graphics::CommandRecorder& recorder,
+                            const Texture& depth, unsigned index,
+                            unsigned alias) {
+    const auto& readback = depth_readbacks[index];
+    CHECK_NOTNULL_F(readback.buffer.get());
+    if (!recorder.IsResourceTracked(depth)) {
+      CHECK_F(recorder.AdoptKnownResourceState(depth));
+    }
+    if (!recorder.IsResourceTracked(*readback.buffer)
+      && !recorder.AdoptKnownResourceState(*readback.buffer)) {
+      recorder.BeginTrackingResourceState(
+        *readback.buffer, ResourceStates::kCopyDest);
+    }
+    recorder.RequireResourceState(depth, ResourceStates::kCopySource);
+    recorder.RequireResourceState(*readback.buffer, ResourceStates::kCopyDest);
+    recorder.FlushBarriers();
+    D3D12_TEXTURE_COPY_LOCATION source {};
+    source.pResource = depth.GetNativeResource()->AsPointer<ID3D12Resource>();
+    source.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+    source.SubresourceIndex = 0U;
+    D3D12_TEXTURE_COPY_LOCATION destination {};
+    destination.pResource
+      = readback.buffer->GetNativeResource()->AsPointer<ID3D12Resource>();
+    destination.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+    destination.PlacedFootprint = readback.footprint;
+    destination.PlacedFootprint.Offset += alias * readback.alias_stride;
+    const auto recording = recorder.GetCommandListForInspection();
+    const auto* native
+      = static_cast<const graphics::d3d12::CommandList*>(recording.get());
+    native->GetCommandList()->CopyTextureRegion(
+      &destination, 0U, 0U, 0U, &source, nullptr);
+  };
+  const auto depth_sample = [&](unsigned index, unsigned alias) {
+    const auto& readback = depth_readbacks[index];
+    const auto width = readback.footprint.Footprint.Width;
+    CHECK_EQ_F(readback.row_bytes % width, 0U);
+    const auto stride = readback.row_bytes / width;
+    CHECK_GE_F(stride, sizeof(std::uint32_t));
+    const auto* bytes = static_cast<const std::byte*>(readback.buffer->Map());
+    CHECK_NOTNULL_F(bytes);
+    std::uint32_t bits = 0U;
+    std::memcpy(&bits,
+      bytes + readback.footprint.Offset + alias * readback.alias_stride
+        + (readback.footprint.Footprint.Height / 2U)
+          * readback.footprint.Footprint.RowPitch
+        + (width / 2U) * stride,
+      sizeof(bits));
+    readback.buffer->UnMap();
+    return bits;
+  };
+  static_cast<void>(snapshot("cold_fixture"));
+  ASSERT_NO_FATAL_FAILURE(render_frame(1U, 0U, 0.0F, "bootstrap_one"));
+  static_cast<void>(snapshot("bootstrap_one"));
+  for (unsigned warm = 1U; warm < 8U; ++warm) {
+    ASSERT_NO_FATAL_FAILURE(render_frame(1U, 0U, 0.0F, "qualify_one"));
   }
-  backend.track_resources = false;
+  static_cast<void>(snapshot("steady_one"));
+  std::vector<std::string> retired_population;
+  auto consumer_results = nlohmann::json::array();
+  auto depth_results = nlohmann::json::array();
+  for (unsigned cycle = 0U; cycle < 3U; ++cycle) {
+    SCOPED_TRACE(cycle);
+    const auto prefix = "cycle" + std::to_string(cycle) + "_";
+    for (unsigned warm = 0U; warm < 8U; ++warm) {
+      ASSERT_NO_FATAL_FAILURE(
+        render_frame(2U, 0U, 0.0F, prefix + "qualify_two"));
+    }
+    for (unsigned index = 0U; index < 2U; ++index) {
+      const auto handle = CompositionView::ViewStateHandle { 500U + index };
+      ASSERT_TRUE(current.contains(handle));
+      retained[index] = current.at(handle);
+      ASSERT_GT(retained[index].draws, 0U);
+      ASSERT_TRUE(retained[index].color.valid);
+      ASSERT_NE(retained[index].color.retained_texture, nullptr);
+      for (const auto& depth : retained[index].depths) {
+        ASSERT_TRUE(depth.valid);
+        ASSERT_NE(depth.texture, nullptr);
+        ASSERT_NE(depth.retained_texture, nullptr);
+      }
+      ASSERT_EQ(
+        retained[index].depths[0].texture, retained[index].depths[1].texture);
+      EXPECT_FALSE(retained[index].depths[0].retained_texture.owner_before(
+        retained[index].depths[1].retained_texture));
+      EXPECT_FALSE(retained[index].depths[1].retained_texture.owner_before(
+        retained[index].depths[0].retained_texture));
+      if (fp32_reference) {
+        EXPECT_EQ(retained[index].color.texture->GetDescriptor().format,
+          Format::kRGBA32Float);
+      } else if (!temporal) {
+        EXPECT_EQ(retained[index].color.texture->GetDescriptor().format,
+          Format::kRGBA16Float);
+      }
+      ASSERT_TRUE(renderer_
+          ->NotifyViewDiscontinuity(handle, ViewDiscontinuity::kCameraCut)
+          .has_value());
+    }
+    backend.accounting_phase = prefix + "depth_reference";
+    std::array<std::uint32_t, 2> reference_depth;
+    for (unsigned index = 0U; index < 2U; ++index) {
+      const auto& depth = *retained[index].depths[0].texture;
+      ASSERT_NO_FATAL_FAILURE(ensure_depth_readback(index, depth));
+      {
+        auto recorder = AcquireRecorder("Lifecycle immutable depth reference");
+        copy_depth(*recorder, depth, index, 0U);
+        recorder->RequireResourceStateFinal(
+          depth, ResourceStates::kShaderResource);
+      }
+    }
+    WaitForQueueIdle();
+    for (unsigned index = 0U; index < 2U; ++index) {
+      reference_depth[index] = depth_sample(index, 0U);
+      const auto value = std::bit_cast<float>(reference_depth[index]);
+      ASSERT_TRUE(std::isfinite(value));
+      ASSERT_GT(value, 0.0F);
+      ASSERT_LT(value, 1.0F);
+    }
+    static_cast<void>(snapshot(prefix + "steady_two_retained"));
+    ASSERT_NO_FATAL_FAILURE(render_frame(2U, 0U, 1.0F, prefix + "recovery"));
+    static_cast<void>(snapshot(prefix + "recovery_two_retained"));
+    for (unsigned warm = 0U; warm < 8U; ++warm) {
+      ASSERT_NO_FATAL_FAILURE(render_frame(2U, 1U, 1.0F, prefix + "resized"));
+    }
+    static_cast<void>(snapshot(prefix + "resized_two_retained"));
+    std::array<ExposureStateData, 2> saved_states;
+    std::array<FrameExposureData, 2> saved_domains;
+    std::array<std::uint64_t, 2> saved_lifetimes;
+    std::array<std::weak_ptr<const Texture>, 2> wrapper_lifetimes;
+    std::array<std::weak_ptr<const Texture>, 2> resource_lifetimes;
+    std::array<std::weak_ptr<const Texture>, 2> depth_wrapper_lifetimes;
+    std::array<std::weak_ptr<const Texture>, 2> depth_resource_lifetimes;
+    without_diagnostics([&] {
+      for (unsigned index = 0U; index < 2U; ++index) {
+        const auto& source = retained[index].color;
+        saved_states[index]
+          = Read<ExposureStateData>(*source.exposure->current_state->buffer,
+            ResourceStates::kShaderResource);
+        saved_domains[index] = Read<FrameExposureData>(
+          *source.exposure->buffer, ResourceStates::kShaderResource);
+        saved_lifetimes[index] = source.exposure->current_state->owner_lifetime;
+        wrapper_lifetimes[index] = source.retained_texture;
+        resource_lifetimes[index] = source.texture->shared_from_this();
+        depth_wrapper_lifetimes[index]
+          = retained[index].depths[0].retained_texture;
+        depth_resource_lifetimes[index]
+          = retained[index].depths[0].texture->shared_from_this();
+      }
+    });
+    backend.accounting_phase = prefix + "queued_consumers";
+    backend.deferred_tonemap_recordings.clear();
+    {
+      backend.defer_tonemap_recorders = true;
+      auto restore = ScopeGuard(
+        [&]() noexcept { backend.defer_tonemap_recorders = false; });
+      auto consume_context = RenderContext {};
+      consume_context.frame_sequence = frame::SequenceNumber { sequence };
+      consume_context.frame_slot = frame.GetFrameSlot();
+      auto* owner = vortex::testing::RendererPublicationProbe::GetSceneRenderer(
+        *renderer_);
+      ASSERT_NE(owner, nullptr);
+      for (unsigned index = 0U; index < 2U; ++index) {
+        const auto& source = retained[index].color;
+        const auto& exposure = source.exposure;
+        consume_context.current_view.view_id = ViewId { 900U + index };
+        ASSERT_TRUE(consumer
+            .Record(consume_context, owner->GetSceneTextures(),
+              { .scene_signal = source.texture,
+                .exposure_buffer = exposure->current_state->buffer.get(),
+                .frame_exposure_buffer = exposure->buffer.get(),
+                .scene_signal_srv = srv(*source.texture),
+                .exposure_buffer_srv = exposure->current_state->srv_index,
+                .frame_exposure_srv = exposure->srv_index,
+                .post_target
+                = observer_ptr<const Framebuffer> { consumer_targets[index]
+                    .get() },
+                .tone_mapper = engine::ToneMapper::kNone,
+                .gamma = 1.0F,
+                .scene_fallback = source.fallback,
+                .scene_fallback_srv = source.fallback
+                  ? srv(*source.fallback)
+                  : kInvalidShaderVisibleIndex,
+                .conversion_report
+                = source.fallback ? exposure->conversion_buffer.get() : nullptr,
+                .conversion_report_srv = source.fallback
+                  ? exposure->conversion_srv
+                  : kInvalidShaderVisibleIndex })
+            .executed);
+      }
+    }
+    ASSERT_EQ(backend.deferred_tonemap_recordings.size(), 2U);
+    std::shared_ptr<const graphics::CommandList> depth_recording;
+    {
+      auto recorder
+        = AcquireDeferredRecorder("Lifecycle retained depth aliases");
+      for (unsigned index = 0U; index < 2U; ++index) {
+        for (unsigned alias = 0U; alias < 2U; ++alias) {
+          copy_depth(
+            *recorder, *retained[index].depths[alias].texture, index, alias);
+        }
+        recorder->RequireResourceStateFinal(
+          *retained[index].depths[0].texture, ResourceStates::kShaderResource);
+      }
+      depth_recording = recorder->GetCommandListForInspection();
+    }
+    ASSERT_NE(depth_recording, nullptr);
+    ASSERT_FALSE(depth_recording->IsSubmitted());
+    for (const auto& recording : backend.deferred_tonemap_recordings) {
+      ASSERT_FALSE(recording->IsSubmitted());
+    }
+    remove_views();
+    static_cast<void>(snapshot(prefix + "removed_retained_pending"));
+    ASSERT_NO_FATAL_FAILURE(render_frame(2U, 1U, 2.0F, prefix + "readded"));
+    ASSERT_FALSE(depth_recording->IsSubmitted());
+    for (const auto& recording : backend.deferred_tonemap_recordings) {
+      ASSERT_FALSE(recording->IsSubmitted());
+    }
+    for (unsigned index = 0U; index < 2U; ++index) {
+      const auto handle = CompositionView::ViewStateHandle { 500U + index };
+      ASSERT_TRUE(current.contains(handle));
+      EXPECT_NE(
+        current.at(handle).color.exposure->current_state->owner_lifetime,
+        saved_lifetimes[index]);
+    }
+    without_diagnostics([&] {
+      for (unsigned index = 0U; index < 2U; ++index) {
+        const auto& source = retained[index].color;
+        const auto state
+          = Read<ExposureStateData>(*source.exposure->current_state->buffer,
+            ResourceStates::kShaderResource);
+        const auto domain = Read<FrameExposureData>(
+          *source.exposure->buffer, ResourceStates::kShaderResource);
+        EXPECT_EQ(std::memcmp(&state, &saved_states[index], sizeof(state)), 0);
+        EXPECT_EQ(
+          std::memcmp(&domain, &saved_domains[index], sizeof(domain)), 0);
+      }
+    });
+    static_cast<void>(snapshot(prefix + "readded_retained_pending"));
+    const auto completion = SignalQueue();
+    {
+      auto recorder
+        = AcquireDeferredRecorder("Lifecycle retained consumer completion");
+      recorder->RecordQueueSignal(completion.get());
+    }
+    EXPECT_LT(GetQueue()->GetCompletedValue(), completion.get());
+    retained = {};
+    for (unsigned index = 0U; index < 2U; ++index) {
+      EXPECT_TRUE(wrapper_lifetimes[index].expired());
+      EXPECT_FALSE(resource_lifetimes[index].expired());
+      EXPECT_TRUE(depth_wrapper_lifetimes[index].expired());
+      EXPECT_FALSE(depth_resource_lifetimes[index].expired());
+    }
+    auto pending_snapshot = backend.MeasureTrackedPlacement();
+    pending_snapshot["phase"] = prefix + "released_queued_before_submission";
+    pending_snapshot["sequence"] = sequence;
+    pending_snapshot["slot"] = frame.GetFrameSlot().get();
+    pending_snapshot["retained_extracts"] = 0U;
+    pending_snapshot["retained_depth_aliases"] = 0U;
+    phases.push_back(std::move(pending_snapshot));
+    EXPECT_LT(GetQueue()->GetCompletedValue(), completion.get());
+    Backend().SubmitDeferredCommandLists();
+    ASSERT_TRUE(depth_recording->IsSubmitted());
+    for (const auto& recording : backend.deferred_tonemap_recordings) {
+      ASSERT_TRUE(recording->IsSubmitted());
+    }
+    WaitForQueue(completion);
+    WaitForQueueIdle();
+    for (unsigned index = 0U; index < 2U; ++index) {
+      for (unsigned alias = 0U; alias < 2U; ++alias) {
+        const auto actual = depth_sample(index, alias);
+        EXPECT_EQ(actual, reference_depth[index]);
+        depth_results.push_back({ { "cycle", cycle }, { "view", index },
+          { "alias", alias }, { "reference_bits", reference_depth[index] },
+          { "actual_bits", actual },
+          { "width", depth_readbacks[index].footprint.Footprint.Width },
+          { "height", depth_readbacks[index].footprint.Footprint.Height } });
+      }
+    }
+    depth_recording.reset();
+    without_diagnostics([&] {
+      for (unsigned index = 0U; index < 2U; ++index) {
+        const auto pixel = ReadFloatTexture(*consumer_outputs[index]);
+        ASSERT_EQ(pixel.size(), 1U);
+        // A 1x1 output samples the source center. Ordered dithering uses that
+        // source pixel, so the half-size view can have a different Bayer rank.
+        // Construct the 4x4 rank independently from its interleaved bit pairs.
+        const auto sample_x = (width >> index) / 2U;
+        const auto sample_y = (height >> index) / 2U;
+        const auto bayer_rank = 8U * ((sample_x ^ sample_y) & 1U)
+          + 4U * (sample_y & 1U) + 2U * (((sample_x ^ sample_y) >> 1U) & 1U)
+          + ((sample_y >> 1U) & 1U);
+        const double expected = .25 + (double(bayer_rank) / 16.0 - .5) / 255.0;
+        EXPECT_EQ(saved_states[index].displayed_scale, 1.0F);
+        ASSERT_GT(saved_domains[index].pre_exposure, 0.0F);
+        for (unsigned channel = 0U; channel < 3U; ++channel) {
+          EXPECT_NEAR(pixel.front()[channel], expected, 2e-5);
+        }
+        EXPECT_EQ(pixel.front()[3], 1.0F);
+        consumer_results.push_back({ { "cycle", cycle }, { "view", index },
+          { "expected", expected }, { "actual", pixel.front() },
+          { "source_pixel", { sample_x, sample_y } },
+          { "bayer_rank", bayer_rank },
+          { "P", saved_domains[index].pre_exposure },
+          { "gain", saved_states[index].displayed_scale },
+          { "retired_lifetime", saved_lifetimes[index] },
+          { "requested_generation", saved_states[index].requested_generation },
+          { "applied_generation", saved_states[index].applied_generation } });
+      }
+    });
+    backend.deferred_tonemap_recordings.clear();
+    remove_views();
+    static_cast<void>(snapshot(prefix + "released_before_fence"));
+    for (unsigned drain = 0U; drain < 2U * frame::kFramesInFlight.get();
+      ++drain) {
+      ASSERT_NO_FATAL_FAILURE(
+        render_frame(0U, 0U, 0.0F, prefix + "retirement"));
+    }
+    for (const auto& lifetime : resource_lifetimes) {
+      EXPECT_TRUE(lifetime.expired());
+    }
+    for (const auto& lifetime : depth_resource_lifetimes) {
+      EXPECT_TRUE(lifetime.expired());
+    }
+    const auto retired = snapshot(prefix + "retired_cached");
+    EXPECT_EQ(retired.at("leased_families").get<std::size_t>(), 0U);
+    const auto signature = population(retired);
+    if (cycle != 0U) {
+      EXPECT_EQ(signature, retired_population)
+        << "Repeated visits to the same descriptors must return to the same "
+           "cached population";
+    }
+    retired_population = signature;
+  }
   backend.account_texture_allocations = false;
+  backend.track_resources = false;
   probe->inspect = {};
+  const auto adapter = backend.GetCurrentDevice()->GetAdapterLuid();
+  const auto report = nlohmann::json { { "schema_version", 1U },
+    { "precision", precision }, { "width", width }, { "height", height },
+    { "temporal_fog", temporal }, { "cycles", 3U }, { "frame_slots", 3U },
+    { "scope",
+      "Creation-time unique live texture/buffer placement; fixed fixture "
+      "outputs included and named, diagnostic readbacks excluded. "
+      "Queue-drained lifecycle schedule with explicitly deferred retained "
+      "consumers; not heap commitment, residency, arbitrary concurrency or "
+      "timed performance." },
+    { "layout",
+      "Two fixed large/half outputs; layout1 swaps their view assignments" },
+    { "phases", phases }, { "frames", frames },
+    { "allocation_peaks", backend.allocation_peaks },
+    { "allocation_peak_history", backend.allocation_peak_history },
+    { "delayed_consumers", consumer_results },
+    { "delayed_depth_consumers", depth_results },
+    { "adapter_luid_low", adapter.LowPart },
+    { "adapter_luid_high", adapter.HighPart } };
+  RecordProperty("allocation_lifecycle_report", report.dump());
   RecordProperty("main_width", width);
   RecordProperty("main_height", height);
   RecordProperty("concurrent_views", 2);
   RecordProperty("temporal_fog", temporal ? 1 : 0);
+  RecordProperty("precision", precision);
   RecordProperty(
     "peak_traced_texture_bytes", std::to_string(backend.peak_texture_bytes));
   RecordProperty("peak_hdr_bytes", std::to_string(backend.peak_hdr_bytes));
+  RecordProperty(
+    "peak_buffer_bytes", std::to_string(backend.peak_buffer_bytes));
+  RecordProperty(
+    "peak_placement_bytes", std::to_string(backend.peak_placement_bytes));
+  RecordProperty("peak_engine_placement_bytes",
+    std::to_string(backend.peak_engine_placement_bytes));
   RecordProperty("peak_hdr_iteration", backend.peak_hdr_iteration);
-  const auto adapter = backend.GetCurrentDevice()->GetAdapterLuid();
   RecordProperty("adapter_luid_low", std::to_string(adapter.LowPart));
   RecordProperty("adapter_luid_high", std::to_string(adapter.HighPart));
 }

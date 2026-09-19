@@ -304,6 +304,18 @@ auto ExposurePass::OnFrameStart(
   submitted_filter_gradients_.clear();
   prior_states_.clear();
   bootstrap_states_.clear();
+  // Retired frame records must not keep state/history leases out of the reuse
+  // pool merely because a different idle frame is acquired next. Sole pool
+  // ownership uses the same retirement criterion as AcquireFrame; retained
+  // consumers and frame-slot bindings keep their references until completion.
+  for (const auto& frame : frame_pool_) {
+    if (frame.use_count() == 1) {
+      frame->current_state.reset();
+      frame->selected_history.reset();
+      frame->precision_history.reset();
+      frame->qualified_candidate.reset();
+    }
+  }
   for (const auto& [handle, view] : exposure_states_) {
     if (view.latest) {
       prior_states_.emplace(handle, view.latest);

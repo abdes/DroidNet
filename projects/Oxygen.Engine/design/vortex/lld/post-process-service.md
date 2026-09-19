@@ -1357,6 +1357,12 @@ submitted solve advances the per-view latest state. An owner writes at most
 once per logical frame; stateless invocations allocate transient records and
 retain no latest state. The shared initialization upload is removed.
 
+At frame start, pooled frame records whose sole owner is the frame pool release
+their state, selected-history, precision-history and qualified-candidate leases.
+Such idle records must not prevent state reuse simply because another frame
+record is acquired next. Frame-slot bindings and retained consumers continue
+holding active records, so their immutable state/history remains protected.
+
 Completed transition records are read through the existing nonblocking readback
 manager. At most three pending copies per view retain their state leases, plus
 one coalesced latest submitted record awaiting a copy. Saturation, copy-recording

@@ -304,14 +304,38 @@ by a guessed fixed frame count or count aliased SceneColor consumers as separate
 textures. Bandwidth increases for each actual read/write of a promoted product;
 record those passes and target-device timings in slice-5/10 reports.
 
-The native EX05-21 fixture observes committed D3D12 texture footprints at every
-texture creation and at named lifecycle checkpoints. Weak references and native
+The original Slice 5 EX05-21 fixture observes D3D12 texture placement requirements
+at every texture creation and at named lifecycle checkpoints. Weak references and native
 resource identity avoid extending lifetimes or double-counting aliases. It reports
 raw texel bytes separately from device placement requirements, and pool allocation
 counts separately from leased families. The pool retains reusable allocations
 after view/consumer release; those bytes remain part of the cached footprint.
 Caller output targets, buffers, descriptor heaps and unrelated backend allocations
 are outside this texture report.
+
+Slice 5.1 extends this same untimed fixture to include buffer and combined
+placement peaks. Each successful tracked texture or buffer creation updates the
+high-water mark over unique live native resources; weak observations include
+idle, unregistered cache allocations without extending their lifetime. Record
+the triggering lifecycle phase and descriptor population. These are placement
+requirements within the declared trace, not committed heap usage, residency or
+an arbitrary-concurrency worst case. Keep fixed fixture allocations, caller
+outputs and diagnostic readbacks identifiable; status inspection must not create
+allocations inside the engine trace.
+
+The qualification schedule repeats three cut/resize/remove/re-add cycles with
+two fixed view-size layouts and delayed consumers holding complete extraction
+records. Public view removal and reuse must create the appropriate new lifetime.
+Record actual P and formats in production and the existing format-only FP32
+control, with identical scene, temporal setting, events and reader delays.
+After readers and their retirement slots are released, already visited descriptor
+populations must stabilize across cycles; intentionally cached SceneTextures
+families remain counted. A pre-H5/current peak comparison requires this same
+extended harness on both revisions. Historical texture-only reports below and
+H5's steady snapshots cannot serve as that lifecycle-peak denominator.
+
+This extension is under implementation; its results are not yet qualified. The
+following tables preserve the original Slice 5 texture-only checkpoint.
 
 The Debug and Release qualification uses a full-resolution main view and a second view at
 half width/height, an emissive surface, vacuum atmosphere and zero-extinction fog.
