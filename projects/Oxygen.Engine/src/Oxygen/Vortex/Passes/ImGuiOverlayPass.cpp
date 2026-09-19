@@ -64,6 +64,8 @@ auto ImGuiOverlayPass::Record(const Inputs& inputs) const -> bool
   if (!recorder) {
     return false;
   }
+  renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(
+    *recorder);
 
   TrackTextureFromKnownOrInitial(*recorder, *inputs.color_texture);
   recorder->RequireResourceState(

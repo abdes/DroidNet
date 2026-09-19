@@ -5,6 +5,8 @@
 //===----------------------------------------------------------------------===//
 
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
+#include <Oxygen/Vortex/Renderer.h>
+#include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneRenderer.h>
 
@@ -138,7 +140,11 @@ void SceneRenderer::ResolveSceneColor(
     queue_key, "Vortex ResolveSceneColor");
   CHECK_F(static_cast<bool>(recorder_ptr),
     "SceneRenderer: failed to acquire a recorder for Stage 21 resolves");
+  renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(
+    *recorder_ptr);
   auto& recorder = *recorder_ptr;
+  graphics::GpuEventScope scope(recorder, "Vortex.ResolveSceneColor",
+    profiling::ProfileGranularity::kTelemetry, profiling::ProfileCategory::kPass);
 
   if (!converted && scene_texture_extracts_.resolved_scene_color.valid
     && scene_texture_extracts_.resolved_scene_color.texture != nullptr) {

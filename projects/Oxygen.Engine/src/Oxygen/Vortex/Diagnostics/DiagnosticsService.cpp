@@ -10,6 +10,8 @@
 #include <string>
 #include <utility>
 
+#include <Oxygen/Graphics/Common/CommandQueue.h>
+#include <Oxygen/Graphics/Common/Types/QueueRole.h>
 #include <Oxygen/Vortex/Internal/GpuTimelineProfiler.h>
 
 namespace oxygen::vortex {
@@ -104,6 +106,18 @@ auto DiagnosticsService::FindShaderDebugMode(
   return ResolveShaderDebugMode(canonical_name);
 }
 
+auto DiagnosticsService::AttachGpuTimelineCollector(
+  graphics::CommandRecorder& recorder) const -> void
+{
+  std::scoped_lock lock(mutex_);
+  const auto queue = recorder.GetTargetQueue();
+  if (!queue || queue->GetQueueRole() != graphics::QueueRole::kGraphics) {
+    return;
+  }
+  recorder.SetTelemetryCollector(observer_ptr<graphics::IGpuProfileCollector> {
+    gpu_timeline_profiler_.get() });
+}
+
 auto DiagnosticsService::SetGpuTimelineProfiler(
   const observer_ptr<internal::GpuTimelineProfiler> profiler) -> void
 {
@@ -153,6 +167,14 @@ auto DiagnosticsService::RequestGpuTimelineExport(
   if (gpu_timeline_profiler_ != nullptr) {
     gpu_timeline_profiler_->RequestOneShotExport(path);
   }
+}
+
+auto DiagnosticsService::RequestGpuTimelineRecording(
+  const std::filesystem::path& path, const std::uint32_t frame_count) -> bool
+{
+  std::scoped_lock lock(mutex_);
+  return gpu_timeline_profiler_ != nullptr
+    && gpu_timeline_profiler_->RequestRecording(path, frame_count);
 }
 
 auto DiagnosticsService::SyncGpuTimelineDiagnostics() -> void

@@ -437,6 +437,8 @@ auto AtmosphereCameraAerialPerspectivePass::Record(RenderContext& ctx,
   if (!recorder) {
     return state;
   }
+  renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(
+    *recorder);
 
   if (ctx.current_view.frame_exposure) {
     const auto& status
@@ -472,7 +474,7 @@ auto AtmosphereCameraAerialPerspectivePass::Record(RenderContext& ctx,
   {
     graphics::GpuEventScope pass_scope(*recorder,
       "Vortex.Environment.AtmosphereCameraAerialPerspective",
-      profiling::ProfileGranularity::kDiagnostic,
+      profiling::ProfileGranularity::kTelemetry,
       profiling::ProfileCategory::kPass);
     recorder->Dispatch(dispatch_x, dispatch_y, dispatch_z);
     recorder->RequireResourceStateFinal(

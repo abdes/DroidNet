@@ -369,6 +369,8 @@ auto TranslucencyModule::Execute(RenderContext& ctx,
     result.skip_reason = TranslucencySkipReason::kRecorderUnavailable;
     return result;
   }
+  ctx.GetRenderer().GetDiagnosticsService().AttachGpuTimelineCollector(
+    *recorder);
 
   graphics::GpuEventScope stage_scope(*recorder, "Vortex.Stage18.Translucency",
     profiling::ProfileGranularity::kTelemetry,

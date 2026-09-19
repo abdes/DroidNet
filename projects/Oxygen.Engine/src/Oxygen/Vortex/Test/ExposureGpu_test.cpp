@@ -7,15 +7,19 @@
 #include <algorithm>
 #include <array>
 #include <bit>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <limits>
 #include <numeric>
 #include <span>
 #include <unordered_set>
+
+#include <nlohmann/json.hpp>
 
 #include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Console/Console.h>
@@ -983,6 +987,74 @@ NOLINT_TEST_F(ExposureGpuTest, CompositionConstantsSurviveLaterSubmission)
   const auto pixel = ReadFloatTexture(*output);
   ASSERT_EQ(pixel.size(), 1U);
   EXPECT_EQ(pixel[0], (Pixel { .75F, .75F, .75F, 1 }));
+}
+
+NOLINT_TEST_F(ExposureGpuTest, NativeExposureTimelineRecordsMeteringScopes)
+{
+  pass_.reset();
+  renderer_->OnShutdown();
+  auto config = RendererConfig {};
+  config.upload_queue_key = QueueKeyFor().get();
+  renderer_ = std::make_unique<Renderer>(
+    GetGraphicsShared(), config,
+    kPhase1DefaultRuntimeCapabilityFamilies
+      | RendererCapabilityFamily::kDiagnosticsAndProfiling);
+  pass_ = std::make_unique<postprocess::ExposurePass>(*renderer_);
+  auto& diagnostics = renderer_->GetDiagnosticsService();
+  diagnostics.SetEnabledFeatures(DiagnosticsFeature::kGpuTimeline);
+  diagnostics.SetGpuTimelineEnabled(true);
+  const auto path = std::filesystem::path { OXYGEN_EXPOSURE_WORKSPACE }
+    / "out/build-ninja/analysis/vortex/exposure-lightbench/slice51"
+#ifdef NDEBUG
+    / "native-timeline-smoke-Release.json";
+#else
+    / "native-timeline-smoke-Debug.json";
+#endif
+  const auto signal = Uniform(.25F, 4U, 4U);
+  auto frame_context = engine::FrameContext {};
+  for (unsigned sequence = 1U; sequence <= 3U; ++sequence) {
+    const auto slot = frame::Slot { sequence - 1U };
+    const auto frame_sequence = frame::SequenceNumber { sequence };
+    frame_context.SetFrameSequenceNumber(
+      frame_sequence, engine::internal::EngineTagFactory::Get());
+    frame_context.SetFrameSlot(slot, engine::internal::EngineTagFactory::Get());
+    Backend().BeginFrame(frame_sequence, slot);
+    renderer_->OnFrameStart(observer_ptr { &frame_context });
+    if (sequence == 1U) {
+      ASSERT_TRUE(diagnostics.RequestGpuTimelineRecording(path, 2U));
+    }
+    if (sequence <= 2U) {
+      ctx_.frame_slot = slot;
+      pass_->OnFrameStart(frame_sequence, slot);
+      const auto snapshot = Run(signal);
+      EXPECT_NEAR(snapshot.state.displayed_scale, .72F, 2e-4F);
+    }
+    auto loop = co::testing::TestEventLoop {};
+    co::Run(loop, [&]() -> co::Co<void> {
+      co_await renderer_->OnCompositing(observer_ptr { &frame_context });
+    });
+    renderer_->OnFrameEnd(observer_ptr { &frame_context });
+    Backend().EndFrame(frame_sequence, slot);
+    WaitForQueueIdle();
+  }
+  auto stream = std::ifstream(path);
+  const auto report = nlohmann::json::parse(stream);
+  EXPECT_EQ(report.at("complete"), true);
+  EXPECT_EQ(report.at("timing_valid"), true);
+  ASSERT_EQ(report.at("frames").size(), 2U);
+  for (const auto& frame : report.at("frames")) {
+    auto names = std::unordered_set<std::string> {};
+    for (const auto& scope : frame.at("scopes")) {
+      EXPECT_EQ(scope.at("valid"), true);
+      EXPECT_GT(scope.at("duration_ms").get<double>(), 0.0);
+      names.insert(scope.at("name").get<std::string>());
+    }
+    EXPECT_TRUE(names.contains("Vortex.Frame"));
+    EXPECT_TRUE(names.contains("Vortex.PostProcess.Exposure.MeterAndAdapt"));
+    EXPECT_TRUE(names.contains("Vortex.PostProcess.Exposure.Histogram"));
+    EXPECT_TRUE(names.contains("Vortex.PostProcess.Exposure.Solve"));
+  }
+  RecordProperty("native_timeline_report", path.string());
 }
 
 NOLINT_TEST_F(ExposureGpuTest, ConservedTwoBinMassAndIndependentMeter)
@@ -7295,6 +7367,10 @@ NOLINT_TEST_F(
 // A single visible surface isolates light transport from scene composition.
 class ExposureLightingGpuTest : public ExposureGpuTest {
 protected:
+  virtual auto AdditionalCapabilities() const -> CapabilitySet
+  {
+    return RendererCapabilityFamily::kNone;
+  }
   struct Probe final : IViewExtension {
     Renderer& renderer;
     std::shared_ptr<const Texture> color;
@@ -7363,7 +7439,8 @@ protected:
         | RendererCapabilityFamily::kDeferredShading
         | RendererCapabilityFamily::kLightingData
         | RendererCapabilityFamily::kFinalOutputComposition
-        | RendererCapabilityFamily::kEnvironmentLighting);
+        | RendererCapabilityFamily::kEnvironmentLighting
+        | AdditionalCapabilities());
     owned_asset_loader_ = std::make_unique<vortex::testing::FakeAssetLoader>();
     owned_test_engine_
       = std::make_unique<::testing::NiceMock<ExposureTestEngine>>();
@@ -8917,6 +8994,212 @@ NOLINT_TEST_F(
   RecordProperty("stale_scene_status_cases", 6);
 }
 
+class ExposureProfilingOverheadTest : public ExposureLightingGpuTest {
+protected:
+  auto BackendConfigJson() const -> std::string override
+  {
+    return R"({"enable_debug_layer":false})";
+  }
+  auto AdditionalCapabilities() const -> CapabilitySet override
+  {
+    return RendererCapabilityFamily::kDiagnosticsAndProfiling;
+  }
+};
+
+NOLINT_TEST_F(ExposureProfilingOverheadTest, DISABLED_ReleaseCollectionOnOff)
+{
+#ifndef NDEBUG
+  FAIL() << "This performance measurement requires Release.";
+#else
+  // Reuse C01: the existing two-view accounting recipe. This run removes its
+  // correctness readbacks and explicit queue drains from the timed loop.
+  constexpr unsigned width = 1920U;
+  constexpr unsigned height = 1080U;
+  view.viewport = { .width = float(width), .height = float(height) };
+  camera.GetCameraAs<scene::PerspectiveCamera>()->get().SetViewport(
+    view.viewport);
+  SetSurface(data::MaterialDomain::kOpaque, .25F);
+  auto& sky
+    = scene->GetEnvironment()->AddSystem<scene::environment::SkyAtmosphere>();
+  sky.SetEnabled(true);
+  sky.SetRayleighScatteringRgb({ 0, 0, 0 });
+  sky.SetMieScatteringRgb({ 0, 0, 0 });
+  sky.SetMieAbsorptionRgb({ 0, 0, 0 });
+  sky.SetOzoneAbsorptionRgb({ 0, 0, 0 });
+  auto& fog = scene->GetEnvironment()->AddSystem<scene::environment::Fog>();
+  fog.SetEnabled(true);
+  fog.SetEnableHeightFog(true);
+  fog.SetEnableVolumetricFog(true);
+  fog.SetExtinctionSigmaTPerMeter(0);
+  ASSERT_EQ(
+    fixture_console.Execute("vtx.volumetric_fog.temporal_reprojection false")
+      .status,
+    console::ExecutionStatus::kOk);
+  ASSERT_EQ(fixture_console.Execute("vtx.volumetric_fog.jitter false").status,
+            console::ExecutionStatus::kOk);
+  probe->prepare = [](RenderContext& context) {
+    context.current_view.with_atmosphere = true;
+    context.current_view.with_height_fog = true;
+  };
+  scene->Update();
+  scene->SyncObservers();
+  std::array<std::shared_ptr<Framebuffer>, 2> targets;
+  for (unsigned index = 0U; index < targets.size(); ++index) {
+    auto output
+      = CreateRegisteredTexture({ .width = width >> index,
+                                  .height = height >> index,
+                                  .format = Format::kRGBA32Float,
+                                  .is_render_target = true,
+                                  .initial_state = ResourceStates::kCommon });
+    targets[index] = Backend().CreateFramebuffer(
+      FramebufferDesc {}.AddColorAttachment(output));
+  }
+  auto timing = frame.GetModuleTimingData();
+  timing.game_delta_time
+    = time::CanonicalDuration { std::chrono::nanoseconds { 16'666'667 } };
+  frame.SetModuleTimingData(timing, engine::internal::EngineTagFactory::Get());
+  auto& diagnostics = renderer_->GetDiagnosticsService();
+  diagnostics.SetEnabledFeatures(DiagnosticsFeature::kGpuTimeline);
+  const auto directory = std::filesystem::path { OXYGEN_EXPOSURE_WORKSPACE }
+    / "out/build-ninja/analysis/vortex/exposure-lightbench/slice51";
+  std::filesystem::create_directories(directory);
+  const auto recording = directory / "overhead-on-Release.gpu.json";
+  using Clock = std::chrono::steady_clock;
+  struct Sample {
+    unsigned frame_sequence;
+    double wall_ms;
+    double frame_start_ms;
+    double submission_ms;
+  };
+  const auto milliseconds = [](const auto duration) {
+    return std::chrono::duration<double, std::milli>(duration).count();
+  };
+  constexpr auto sample_count = 3600U;
+  auto require_fp16 = false;
+  auto seen_views = std::array<bool, 2> {};
+  probe->inspect = [&](const RenderContext& context,
+                     const SceneTextureExtractRef& color, const unsigned draws) {
+    const auto index = context.current_view.view_state_handle.get() - 500U;
+    CHECK_F(index < seen_views.size());
+    if (require_fp16) {
+      CHECK_F(color.valid && color.texture != nullptr && draws == 1U);
+      CHECK_F(color.texture->GetDescriptor().format == Format::kRGBA16Float);
+    }
+    seen_views[index] = true;
+  };
+  const auto render = [&](const bool start_recording) -> Sample {
+    const auto started = Clock::now();
+    seen_views.fill(false);
+    const auto slot = frame::Slot { sequence % 3U };
+    const auto frame_sequence = frame::SequenceNumber { ++sequence };
+    Backend().BeginFrame(frame_sequence, slot);
+    const auto after_frame_start = Clock::now();
+    frame.SetFrameSlot(slot, engine::internal::EngineTagFactory::Get());
+    frame.SetFrameSequenceNumber(frame_sequence,
+                                 engine::internal::EngineTagFactory::Get());
+    renderer_->OnFrameStart(observer_ptr { &frame });
+    if (start_recording) {
+      CHECK_F(diagnostics.RequestGpuTimelineRecording(recording, sample_count));
+    }
+    for (unsigned index = 0U; index < targets.size(); ++index) {
+      auto sized_view = view;
+      sized_view.viewport.width = float(width >> index);
+      sized_view.viewport.height = float(height >> index);
+      auto input = CompositionView::ForScene(ViewId { 500U + index },
+                                             sized_view, camera);
+      input.view_state_handle
+        = CompositionView::ViewStateHandle { 500U + index };
+      input.render_settings.exposure = settings;
+      CHECK_F(renderer_->PublishRuntimeCompositionView(
+                frame,
+                { .composition_view = input,
+                  .render_target = observer_ptr { targets[index].get() },
+                  .composite_source = observer_ptr { targets[index].get() } })
+              != kInvalidViewId);
+    }
+    auto loop = co::testing::TestEventLoop {};
+    co::Run(loop, [&]() -> co::Co<void> {
+      co_await renderer_->OnPreRender(observer_ptr { &frame });
+      co_await renderer_->OnRender(observer_ptr { &frame });
+      co_await renderer_->OnCompositing(observer_ptr { &frame });
+    });
+    if (require_fp16) {
+      CHECK_F(seen_views[0] && seen_views[1]);
+    }
+    renderer_->OnFrameEnd(observer_ptr { &frame });
+    Backend().EndFrame(frame_sequence, slot);
+    const auto ended = Clock::now();
+    return { sequence, milliseconds(ended - started),
+             milliseconds(after_frame_start - started),
+             milliseconds(ended - after_frame_start) };
+  };
+  for (const bool enabled : { false, true }) {
+    diagnostics.SetGpuTimelineEnabled(enabled);
+    require_fp16 = false;
+    const auto warm_start = Clock::now();
+    unsigned warm_frames = 0U;
+    while (warm_frames < 300U
+           || Clock::now() - warm_start < std::chrono::seconds { 10 }) {
+      static_cast<void>(render(false));
+      ++warm_frames;
+    }
+    std::vector<Sample> samples;
+    samples.reserve(sample_count);
+    require_fp16 = true;
+    const auto sample_start = Clock::now();
+    auto previous_end = sample_start;
+    for (unsigned index = 0U; index < sample_count; ++index) {
+      auto sample = render(enabled && index == 0U);
+      const auto ended = Clock::now();
+      sample.wall_ms = milliseconds(ended - previous_end);
+      previous_end = ended;
+      samples.push_back(sample);
+    }
+    const auto elapsed
+      = std::chrono::duration<double>(Clock::now() - sample_start).count();
+    // One ordinary frame publishes the final GPU capture. Its time is outside
+    // the declared steady-state population, and no explicit GPU wait is added.
+    const auto label = enabled ? "on" : "off";
+    const auto finish_sample = render(false);
+    RecordProperty(std::string { label } + "_finish_wall_ms",
+      std::to_string(finish_sample.wall_ms));
+    RecordProperty(std::string { label } + "_finish_submission_ms",
+      std::to_string(finish_sample.submission_ms));
+    const auto path
+      = directory / (std::string { "overhead-" } + label + "-Release.csv");
+    auto stream = std::ofstream(path);
+    stream << "frame_seq,wall_ms,frame_start_ms,submission_ms\n";
+    for (const auto& sample : samples) {
+      stream << sample.frame_sequence << ',' << sample.wall_ms << ','
+             << sample.frame_start_ms << ',' << sample.submission_ms << '\n';
+    }
+    stream.close();
+    RecordProperty(std::string { label } + "_sample_count", sample_count);
+    RecordProperty(std::string { label } + "_elapsed_seconds",
+                   std::to_string(elapsed));
+    RecordProperty(std::string { label } + "_raw_samples", path.string());
+    EXPECT_GE(elapsed, 30.0);
+  }
+  auto stream = std::ifstream(recording);
+  const auto report = nlohmann::json::parse(stream);
+  EXPECT_EQ(report.at("complete"), true);
+  EXPECT_EQ(report.at("timing_valid"), true);
+  const auto adapter = Backend().GetCurrentDevice()->GetAdapterLuid();
+  RecordProperty("adapter_luid_low", std::to_string(adapter.LowPart));
+  RecordProperty("adapter_luid_high", std::to_string(adapter.HighPart));
+  RecordProperty("workload",
+                 "C01: 1920x1080 + 960x540, Manual EV0, emissive triangle, "
+                 "vacuum atmosphere, zero-extinction fog, temporal off, fixed "
+                 "dt 1/60, native offscreen");
+  RecordProperty(
+    "scope",
+    "Collection/export on versus runtime off. Scope wrappers exist in both. "
+    "Wall interval includes ordinary frame-start queue waits; submission span "
+    "includes driver calls and recording enqueue work. The separate finalization "
+    "frame includes writer drain. Not a presented FPS or exposure CPU-budget "
+    "acceptance test.");
+#endif
+}
 auto ExposureLightingGpuTest::MeasureHdrAllocationAccounting(bool temporal)
   -> void
 {

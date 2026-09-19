@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <Oxygen/Vortex/Renderer.h>
+#include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneRenderer.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 
@@ -100,7 +102,11 @@ void SceneRenderer::PostRenderCleanup(RenderContext& /*ctx*/)
     queue_key, "Vortex PostRenderCleanup");
   CHECK_F(static_cast<bool>(recorder_ptr),
     "SceneRenderer: failed to acquire a recorder for Stage 23 extraction");
+  renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(
+    *recorder_ptr);
   auto& recorder = *recorder_ptr;
+  graphics::GpuEventScope scope(recorder, "Vortex.PostRenderCleanup",
+    profiling::ProfileGranularity::kTelemetry, profiling::ProfileCategory::kPass);
 
   if (scene_texture_extracts_.prev_scene_depth.valid
     && scene_texture_extracts_.prev_scene_depth.texture != nullptr

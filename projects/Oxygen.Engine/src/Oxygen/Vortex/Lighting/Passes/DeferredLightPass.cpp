@@ -837,6 +837,8 @@ auto DeferredLightPass::Record(RenderContext& ctx,
   if (!recorder) {
     return state;
   }
+  renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(
+    *recorder);
   graphics::GpuEventScope stage_scope(*recorder,
     "Vortex.Stage12.DeferredLighting",
     profiling::ProfileGranularity::kTelemetry,

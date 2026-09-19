@@ -80,7 +80,8 @@ public:
 
 class GpuTimelineProfiler final : public graphics::IGpuProfileCollector {
 public:
-  OXGN_VRTX_API explicit GpuTimelineProfiler(observer_ptr<Graphics> graphics);
+  OXGN_VRTX_API explicit GpuTimelineProfiler(
+    observer_ptr<Graphics> graphics, bool record_frame_span = false);
   OXGN_VRTX_API ~GpuTimelineProfiler() override;
 
   OXYGEN_MAKE_NON_COPYABLE(GpuTimelineProfiler)
@@ -103,6 +104,8 @@ public:
   OXGN_VRTX_API auto AddSink(std::shared_ptr<GpuTimelineSink> sink) -> void;
   OXGN_VRTX_API auto RequestOneShotExport(const std::filesystem::path& path)
     -> void;
+  [[nodiscard]] OXGN_VRTX_API auto RequestRecording(
+    const std::filesystem::path& path, uint32_t frame_count) -> bool;
 
   [[nodiscard]] OXGN_VRTX_API auto GetLastPublishedFrame() const
     -> std::optional<GpuTimelineFrame>;
@@ -156,10 +159,12 @@ private:
   uint32_t query_stride_ { 0U };
   std::vector<uint32_t> scope_stack_ {};
   GpuFrameCapture frame_capture_ {};
+  std::unique_ptr<graphics::GpuProfileCollectorState> frame_scope_state_ {};
   std::deque<GpuFrameCapture> pending_frames_ {};
   std::vector<GpuFrameCapture> reusable_captures_ {};
   std::unordered_map<std::string, uint64_t> interned_names_ {};
   std::vector<std::shared_ptr<GpuTimelineSink>> sinks_ {};
+  std::weak_ptr<GpuTimelineSink> recording_sink_ {};
   mutable std::mutex published_frame_mutex_;
   std::optional<GpuTimelineFrame> last_published_frame_ {};
 };

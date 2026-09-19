@@ -766,6 +766,8 @@ void ScreenHzbModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
   if (!recorder) {
     return;
   }
+  ctx.GetRenderer().GetDiagnosticsService().AttachGpuTimelineCollector(
+    *recorder);
 
   const auto write_slot
     = state.has_current_output ? (state.current_history_slot ^ 1U) : 0U;

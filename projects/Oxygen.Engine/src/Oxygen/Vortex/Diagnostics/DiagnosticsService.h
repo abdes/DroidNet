@@ -22,6 +22,10 @@
 #include <Oxygen/Vortex/RendererCapability.h>
 #include <Oxygen/Vortex/api_export.h>
 
+namespace oxygen::graphics {
+class CommandRecorder;
+}
+
 namespace oxygen::vortex {
 
 namespace internal {
@@ -74,6 +78,15 @@ public:
     -> void;
   OXGN_VRTX_API auto RequestGpuTimelineExport(
     const std::filesystem::path& path) -> void;
+  //! Record an exact frame-sequence window starting at the current frame.
+  //! Requires enabled collection; only one recording may be active. Invalid
+  //! samples remain in the JSON report; shutdown marks partial output incomplete.
+  [[nodiscard]] OXGN_VRTX_API auto RequestGpuTimelineRecording(
+    const std::filesystem::path& path, std::uint32_t frame_count) -> bool;
+  //! Attach this renderer's collector to a graphics-queue pass recorder.
+  //! The recorder and its scopes must finish before renderer shutdown.
+  OXGN_VRTX_API auto AttachGpuTimelineCollector(
+    graphics::CommandRecorder& recorder) const -> void;
   [[nodiscard]] OXGN_VRTX_API auto ExportCaptureManifest(
     const std::filesystem::path& path,
     const DiagnosticsCaptureManifestOptions& options = {}) -> bool;

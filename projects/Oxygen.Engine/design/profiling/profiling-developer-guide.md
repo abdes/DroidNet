@@ -228,6 +228,26 @@ Set `rndr.gpu_timestamps.export_next_frame` to a file path. The file extension d
 
 The export reflects the same published built-in timeline model as the viewer. It includes per-scope timing, hierarchy, and validity.
 
+### 7.4 Recording a native frame window
+
+Use `DiagnosticsService::RequestGpuTimelineRecording(path, frame_count)` after
+renderer frame start, with `kGpuTimeline` and timing collection enabled. The
+request returns whether recording started. Only one recording may be active;
+the window starts at the current engine frame and accepts up to 1,000,000 frames.
+The JSON output contains the requested window, individual frame records and a
+completion/validity footer. Check both `complete` and `timing_valid` before
+using it for performance acceptance. Unavailable or disabled frames remain
+explicit in the file; they are not replaced with later fast frames. Shutdown
+marks a partial recording incomplete.
+
+Use the `Vortex.Frame` scope for the graphics-frame duration. Nested exposure
+and environment scopes provide attribution; do not add their inclusive times
+to the parent frame time or sum their individual percentiles. `Vortex.Frame`
+does not measure CPU/presentation time or a cross-queue critical path. Account
+for the recorder's bounded worker queue and final drain when qualifying
+profiling overhead. A full export queue cancels the recording explicitly;
+incomplete/invalid output cannot establish a performance result.
+
 ## 8. Tracy
 
 Tracy is the detailed tracing view.
