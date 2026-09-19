@@ -74,27 +74,24 @@ Important baseline facts:
 
 ### Global exposure, LightBench and MultiView
 
-The active [exposure package](plan/exposure-and-lightbench-correction.md) follows
-its ten ordered slices: contract/compiler/layout audit; canonical settings and
-fixed gain; histogram/curve/hybrid adaptation; GPU lifecycle/sharing; all-path
-HDR migration and native MultiView; persistence/configuration; physical lights;
-independent instruments; interactive demos; automated/native acceptance.
+The active [exposure package](plan/exposure-and-lightbench-correction.md) retains
+its ten original slices and inserts Slice 5.1 performance qualification and
+Slice 5.2 code quality before Slice 6. Delivery order is contracts; canonical
+settings/fixed gain; metering/adaptation; lifecycle/sharing; HDR migration and
+native MultiView; **5.1 performance; 5.2 quality**; persistence/configuration;
+physical lights; independent instruments; interactive demos; final acceptance.
 
-Status: `in_progress`, slices 1-3 qualified; slice 4 active. The bounded metering/adaptation core
-passes 35 native Debug/Release cases, 14 independent references and 134 focused
-regressions; the public-pause integration adds 36 focused checks per
-configuration and a separate native GPU case. Unified GPU mode/history and
-explicit transition acknowledgement now pass 54 native cases per configuration
-and under CDB, with inspected Auto/Manual GPU-state consumption captures.
-Sharing and implicit lifecycle events remain open. Lifecycle work follows the
-execution plan. The [checkpoint](plan/exposure-contract-checkpoint.md)
-records slice-1 contracts. Canonical settings, public per-view overrides,
-cancellation-safe target compilation, exact fixed/camera gains and frame-safe
-post-process uploads pass 95 focused tests and 12 native arithmetic/debug-layer
-cases. The explicit frame record and pre/post descriptor pinning additionally
-pass 45 publication/runtime/ShaderBake checks and a native sky-consumer ABI probe.
-GPU P selection, S/P integration, remaining lifecycle/sharing,
-FP32 runtime migration and LightBench/MultiView acceptance remain open.
+Status: `in_progress`. Slices 1-5 have numerical/integration qualification;
+native 1080p/60 performance acceptance remains open in Slice 5.1. Slice 5.2
+then fixes scoped clang-tidy issues and restructures tests while preserving
+behavior and performance. Both task breakdowns, budgets and current evidence
+are maintained in [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md#3-exposure-delivery-status).
+The user approved the plan and authorized Slice 5.1 execution on 2026-09-19.
+EX051-01 is active; quality edits retain the EX052-03 agreement gate.
+Slices 6-10, including the full LightBench delivery, are still
+required. Earlier incremental test counts and proofs remain in the tracker's
+linked manifests and Git history; the
+[contract checkpoint](plan/exposure-contract-checkpoint.md) owns Slice 1 decisions.
 Implementation must pass each slice gate before the next. FP16 eligibility is
 per-view and separate from exposure validity; retained FP32 does not reset
 adaptation. Prior VTX-M03/M06 closure is not this package's acceptance evidence.

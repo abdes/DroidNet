@@ -7,6 +7,7 @@ Status: `in_progress` — current slice state and evidence are maintained in the
 are updated there; this plan owns the requirements and gates.
 
 Date: 2026-09-16
+Updated: 2026-09-19 — required Slices 5.1 and 5.2 inserted before Slice 6.
 
 Paths are relative to `projects/Oxygen.Engine` unless identified as
 repository-root paths.
@@ -21,9 +22,13 @@ shared exposure, unified pre-exposure, authoring round-trip, diagnostics, and
 automated qualification. Required light-unit corrections for the bench are
 included.
 
-Execute the slices in section 8 in order. Engine slices use native fixtures and
-RenderDoc before the bench instrumentation is available. Each slice includes
-its tests and owning-document updates.
+Execute the slices in section 8 in order, including 5 -> 5.1 -> 5.2 -> 6.
+Engine correctness slices use native fixtures and RenderDoc before the bench
+instrumentation is available. Performance acceptance uses Oxygen's built-in
+profiling and native Release execution. Each slice includes its tests and
+owning-document updates. The user approved the inserted plan and authorized
+Slice 5.1 execution on 2026-09-19. Slice 5.2 retains its diagnostic-inventory and
+restructuring-design agreement gate before quality edits.
 
 The [exposure reference companion](../lld/exposure-improvement-plan.md) contains
 UE source pointers and Oxygen's implementation choices. This document owns
@@ -882,6 +887,43 @@ views and recovery.
 output invariant within precision budgets. Startup/cuts preserve bright and
 dark meter signals; all scene-integrated lifecycle cases pass. No active HDR
 path consumes the old overloaded scalar.
+
+### Slice 5.1 - Qualify and correct exposure performance
+
+The authoritative task breakdown, measurement protocol, budgets, dependencies
+and commit boundaries are in
+[IMPLEMENTATION_STATUS.md, Slice 5.1](../IMPLEMENTATION_STATUS.md#321-slice-51-performance-qualification-and-correction).
+
+- Use existing native GPU telemetry and CPU/GPU profiling to attribute the
+  complete exposure/precision cost in optimized Release builds.
+- Establish frozen representative workloads and a safe FP32 reference before
+  correcting measured scan, reduction, temporal, memory or submission costs.
+- Preserve every Slice 5 numerical, sampling, lifecycle and lifetime contract.
+- Meet the primary 1080p/60 gate and explicit subsystem budgets; qualify 4K
+  scaling without claiming a blanket 4K/60 target.
+
+**Gate:** EX051-GATE passes with native timing distributions, controlled cost
+attribution, bounded resources, independently verified correctness and current
+owner evidence. Existing replay cost measurements alone do not close it.
+
+### Slice 5.2 - Improve exposure code quality and test structure
+
+The authoritative task breakdown, suppression policy, proposed suite boundaries
+and proof requirements are in
+[IMPLEMENTATION_STATUS.md, Slice 5.2](../IMPLEMENTATION_STATUS.md#322-slice-52-code-quality-and-test-structure).
+
+- Complete Slice 5.1 first; agree the actual diagnostic inventory and structure
+  with the user before quality editing starts.
+- Fix scoped clang-tidy issues using repository configuration; justify narrow
+  exceptions without hiding warning families or skipped translation units.
+- Separate shared fixtures and coherent scenario groups while preserving test
+  identity/discovery, independent oracles, native ownership and opt-in workloads.
+- Keep restructuring behavior-preserving and verify the accepted performance
+  baseline in Release after the owning correctness gates.
+
+**Gate:** EX052-GATE passes with justified diagnostic disposition, complete
+coverage mapping, independently buildable commits and no numerical/performance
+regression. Both inserted slices must close before Slice 6 starts.
 
 ### Slice 6 - Finish authoring, serialization and configuration isolation
 
