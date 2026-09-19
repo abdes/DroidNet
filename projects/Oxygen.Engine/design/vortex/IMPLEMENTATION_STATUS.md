@@ -32,10 +32,18 @@ its implementation evidence, validation evidence, and remaining work.
    Reconcile its result before committing.
    Keep short focused checks local and do not restart an already-running gate.
 10. Performance measurements and conclusions use Release only. Debug is for
-    correctness. Reuse existing profiling facilities.
-11. After Slice 5 closure, wait for the user to define the performance and
-    quality tasks. Do not start Slice 6, quality edits, warning suppression or
-    test restructuring before that discussion and authorization.
+    correctness. Slice 5.1 uses Release measurements at each performance
+    checkpoint; the general rule reserving Release for slice closure does not
+    postpone those measurements. Reuse Oxygen's existing profiling facilities.
+11. Execute the inserted slices in order: 5 -> 5.1 performance -> 5.2 code
+    quality -> 6. The user approved the plan and authorized Slice 5.1 execution
+    on 2026-09-19. Start at EX051-01 and follow its dependencies and budgets.
+    Actionable implementation-review feedback is authorized again. Slice 5.2
+    retains its diagnostic-inventory/design agreement gate before quality edits.
+12. Slice 5.2 requires an agreed diagnostic inventory and restructuring design
+    before quality edits. Fix warnings; justify every retained suppression.
+    Keep mathematical, performance and structural changes in distinct coherent
+    checkpoints, each independently buildable and validated before its commit.
 
 ## 2. Status Vocabulary
 
@@ -51,16 +59,18 @@ its implementation evidence, validation evidence, and remaining work.
 ## 3. Exposure delivery status
 
 The [implementation plan](plan/exposure-and-lightbench-correction.md) owns the
-requirements, delivery order and acceptance gates for all ten slices. The summary
+requirements and delivery order for the original ten slices. The inserted
+Slices 5.1 and 5.2 below own their detailed tasks and acceptance gates. The summary
 table and item-level tracker below are the current progress record. Normative equations, layouts and lifetime rules
 remain in their owning LLDs; detailed commands, results and historical checkpoints
 remain in the linked local manifests and Git history.
 
 FP32 SceneColor accumulation in both modes is approved and required by the
 [allocation contract](lld/scene-textures.md#per-view-fp16-suitability).
-Production per-view FP16 admission and the Slice 5 scene/MultiView gate are
-qualified in Debug and Release. Slices 6-10, including the complete LightBench
-delivery, remain required; the package is not complete.
+Production per-view FP16 admission and the Slice 5 numerical/scene/MultiView gate
+are qualified in Debug and Release. The collected replay costs do not establish
+native 60 fps performance acceptance. Slices 5.1 and 5.2 must close before
+Slices 6-10, including the complete LightBench delivery; the package is not complete.
 
 | Slice | Status | Current boundary / remaining gate | Evidence |
 | --- | --- | --- | --- |
@@ -68,7 +78,9 @@ delivery, remain required; the package is not complete.
 | 2 — Settings and fixed exposure | validated | Canonical authored input, immutable pass snapshots, fixed/camera gain, per-view settings and public mask acceptance are qualified. | [Fixed gain](../../out/build-ninja/analysis/vortex/exposure-lightbench/fixed-gain/evidence-manifest.json), [frame bindings](../../out/build-ninja/analysis/vortex/exposure-lightbench/frame-binding/evidence-manifest.json), [configuration and mask acceptance](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/review-r028-manifest.json) |
 | 3 — Metering and adaptation | validated | Controlled-input histogram, curve, masks and hybrid adaptation; scene acceptance remains slice 5. | [Metering](../../out/build-ninja/analysis/vortex/exposure-lightbench/metering/evidence-manifest.json) |
 | 4 — GPU lifecycle and sharing | validated | Controlled-input/public-event gate, including offscreen routing. Real-scene resource lifetime is tracked in slice 5. | [Lifecycle](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/discontinuity-manifest.json), [offscreen sharing](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/offscreen-sharing-manifest.json) |
-| 5 — HDR migration and recovery | validated | Complete scene/HDR gate qualified in Debug and Release, including native layouts/interactions and Release allocation/performance evidence. | [Detailed items](#32-slice-5-work-items) |
+| 5 — HDR migration and recovery | validated | Numerical, lifecycle and native layout/interaction correctness qualified in Debug and Release. Collected Release costs motivate the separate, still-open performance gate in Slice 5.1. | [Detailed items](#32-slice-5-work-items) |
+| 5.1 — Exposure performance | in_progress | Plan approved and execution authorized on 2026-09-19; EX051-01 baseline/workload/acceptance freeze is the active item. Native profiling and performance qualification remain pending. | [Tasks and budgets](#321-slice-51-performance-qualification-and-correction) |
+| 5.2 — Exposure code quality | planned | Plan approved on 2026-09-19. Execution follows 5.1; EX052-03 covers the concrete diagnostic inventory and suite design. Preserve numerical coverage and performance. | [Tasks and gates](#322-slice-52-code-quality-and-test-structure) |
 | 6 — Authoring and persistence | planned | Native physical-camera persistence and texture-resource-index mask contracts are approved; complete source/cook/load/script/editor/DemoShell round-trip remains. | [Detailed items](#33-slice-6-work-items) |
 | 7 — Light units | planned | Directional, point and spot numerical/visual calibration across forward and deferred paths remains. | [Detailed items](#34-slice-7-work-items) |
 | 8 — Measurements | planned | Implement instrumentation and qualify it against independent inputs. | [Detailed items](#35-slice-8-work-items) |
@@ -77,365 +89,21 @@ delivery, remain required; the package is not complete.
 
 ### 3.1 Current work
 
-- **Completed: EX05-15 — validated.** Current/prospective store errors,
-  hardware-filtering bounds, retained temporal uncertainty, sky/AP/fog and
-  translucent composition, coverage/depth and final image/meter tolerances are
-  integrated. Prepare the scene certificate before checked conversion; finalize
-  eligibility afterward so the current conversion verdict participates.
-  GPU status is 384 bytes; the completed CPU prefix remains 80 bytes.
-- **Final evidence:** all **330 owning tests pass per configuration** in Debug
-  and Release: 168 native exposure, 24 post-process, 63 environment, 63 deferred
-  scene and 12 offscreen tests. All five prior failures pass without weakening
-  accepted-half, prior-gain, headroom or retirement assertions. Both builds pass
-  308,016 exact consumer-arithmetic checks. Final Release Fog/Local captures pass
-  8,192 exact transfer checks with actual source maxima and per-view S/P checks.
-  The four-phase visual cycle preserves colors in object-specific regions and
-  restores Clear exactly; twelve negative controls protect the checker.
-- **Fog corrections:** fixed history coordinates and jitter-dependent integration
-  endpoints. Local-fog constant descriptors now survive all queued views until
-  frame-slot retirement. That independent fix is committed as `969cbfdb7`, and
-  the user confirmed that the flicker is fixed.
-- **Measured cost:** six native timing cases cover 1080p/4K in both builds.
-  Release scene replay measures 4.145472 ms (Fog) and 2.546688 ms (Local) for
-  explicit qualification/finalization dispatches across 2560x1400 main and
-  1152x630 PiP. Embedded checks remain in their rendering-pass costs; these
-  sums are not end-to-end frame latency.
-  [Completion manifest, hashes, commands and reports](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/consumer-completion-manifest.json).
-- **Completed: EX05-16 — validated in Debug.** Producer-domain/pre-store guards
-  and the active producer range matrix are implemented.
-  Audit the frozen [2^-24,2^32] scene-radiance envelope at the existing write
-  boundaries, including cumulative FP32 SceneColor, sky/AP/fog, forward/deferred
-  lighting and canonical environment consumers. Preserve insignificant values
-  according to the existing image/meter budgets; do not introduce a per-component
-  floor. Extend the existing bounded status for unsupported FP32 radiance and
-  qualify bright/dark endpoints plus narrowing failures as one producer matrix.
-  EX05-15 and EX05-16 are closed. Release qualification of this final increment
-  is recorded in the completed Slice 5 closure gate.
-  **Validated material/cooking increment:** typed material samples now preserve
-  HDR radiance and decode sRGB exactly once. Forward shading publishes color/depth
-  for HDR resolve while leaving GBuffer bindings absent. The 324-case native
-  cooker-through-renderer matrix passes in Debug and Release: emission and unlit
-  color across deferred/forward, opaque/masked/partial-alpha paths, typed float/
-  UNORM/sRGB textures, P endpoints and explicit unsupported range reporting.
-  The matrix isolates material color; the lighting matrix below covers direct
-  and indirect contributions separately.
-  **User-approved import contract implemented:** `mip_filter_space` is removed
-  from API, schemas, CLI, presets and recipes. Color mips use linear FP32 followed
-  by final output encoding/quantization. Source encoding, output format and kernel
-  remain explicit. Independent tests preserve alpha and dark multi-level mips.
-  All 691 owning tests pass per configuration: 340 Vortex, 345 cooker and 6
-  DemoShell SkyboxService tests. ImportTool, MultiView and TexturedCube build in
-  both configurations. Independently parsed standalone cooked assets preserve
-  sRGB byte128 as approximately 0.2158605 linear and HDR 2^32 exactly.
-  [Material increment, commands, cases and hashes](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/material-domain-increment-manifest.json).
-  **Validated local-injection correction:** local extinction-weighted source
-  coefficients are divided by total extinction before Beer-Lambert opacity.
-  This preserves thin-medium signals and the height-only limit. All 27 authored
-  upload / production-shader / output cases pass in Debug and Release, including
-  mixed media, emission/scattering, P endpoints and product-10 range failures.
-  Both builds pass 36 affected native tests and all 63 environment tests.
-  A targeted Release capture verifies RGB 0.00102278 at P=1, where the old shader
-  produced 5.88e-16. These centered-froxel controls isolate source integration.
-  [Injection evidence, oracle, capture and hashes](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/injection-increment-manifest.json).
-  **Completed lighting qualification:** 324 directional/point/spot cases and
-  180 static diffuse-SH cases cover deferred/forward, opaque/masked/partial-alpha,
-  P endpoints and unsupported output. Ten distant-sky linearity/additivity cases
-  and 144 analytic primary/secondary sky cases cover canonical transport.
-  Removed the shared secondary-light illuminance cutoff that discarded small
-  contributions before exposure. A targeted Debug capture verifies all 192
-  zenith texels and the pinned P=2^32 binding against the independent oracle.
-  **Visible source checks:** material emission, individual direct lights and
-  indirect terms are checked before cancellation can hide an unsupported source.
-  Forty source-cancellation/zero-coverage cases retain valid Auto history with
-  nonzero elapsed time; forty visibility cases cover both actual raster orders,
-  hidden/revealed surfaces, masked holes and complete/disabled prepasses.
-  Without a complete prepass, dedicated validation entries replay existing draws
-  against read-only finished depth with no color outputs. Deferred replay omits
-  GBuffer/velocity work; forward retains necessary per-source lighting while
-  omitting final composition/AP. No additional texture is allocated. Stage 10
-  now publishes base-pass depth even without Stage 3, preserving deferred lights.
-  **Validation:** the owning Debug gate passes 184 native exposure, 24 post-process,
-  63 environment, 63 deferred-scene, 12 offscreen and 4 shader-catalog tests (350).
-  After the final no-prepass publication correction, all 63 deferred-scene tests
-  and both focused native tests (80 cases) pass again. All six compiled replay
-  variants have zero color-output instructions. The earlier 344-test Release
-  gate predates these final source checks and is not their validation evidence.
-  [Lighting evidence, exact commands, capture and hashes](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/lighting-producer-increment-manifest.json).
-  **Completed: EX05-17 — validated in Debug.** Production format selection now
-  precedes HDR writes, using the current layout and a matching completed
-  candidate. SceneColor remains FP32; qualified sky/AP/fog and resolved color use
-  FP16. Checked conversion and tonemap share the report and retained FP32 source.
-  Extraction ownership retains textures/descriptors/families until consumer
-  release, and pool leases no longer call a destroyed pool on release.
-  **Evidence:** all 382 owning Debug tests pass: 188 native exposure, 24
-  post-process, 63 environment, 63 deferred scene, 21 publication, 12 offscreen,
-  7 lease-pool and 4 shader-catalog tests. Native checks cover eight AP resize/view
-  cases, stable half sky/AP/fog qualification, producer-store failure and return,
-  borrower source/pending-event invalidation, uninitialized-source fallback,
-  settings invalidation, retained contents and conversion-submission failure.
-  The layout fixture uses vacuum/zero extinction to isolate exact transfer; it
-  does not close nonzero-environment/full recovery acceptance. The inspected
-  native capture verifies P=32768, S=0.25, accepted half conversion, the FP32
-  fallback binding and final RGB 0.06053922 against 0.0605392157 including dither.
-  [Admission evidence, commands, capture and hashes](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/admission-increment-manifest.json).
-  **Completed: EX05-18 — validated in Debug.** The three-view native family
-  checks 18 mapped outputs across alternating submission order and mixed-format
-  exposure changes. Delayed tonemap consumers retain accepted half, rejected-half
-  fallback and full HDR inputs through frame-slot reuse and view removal, releasing
-  extraction owners before the consumer fence completes. A black sentinel in the
-  rejected half destination distinguishes bright FP32 fallback from incorrect half
-  sampling; an unconditional control reads black. The frozen native gate passes
-  all 190 tests with all 35 runtime hashes unchanged. The later test-only sentinel
-  enhancement passes its focused Debug test (five queued consumers).
-  [Queued-consumer evidence and commands](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/queued-consumer-manifest.json).
-  **Completed: EX05-19 — validated in Debug.** Matching normal-mode producer
-  failure issues one renderer-owned Auto Remeter. Conversion-only rejection
-  invalidates precision while preserving the valid FP32 meter, adaptation and
-  generation. Fixed/disabled/borrowed failures do not reset numerical authority;
-  newer explicit requests win. Five owner/control cases retain history through
-  six unsupported FP32 frames, then repair and return. The actual 46-stop scene
-  preserves both endpoints, continues adaptation for eight frames and returns
-  after range reduction; sixteen alternating shared-consumer renders retain
-  independent format suitability. Render-context timing is explicitly checked.
-  **Evidence:** the frozen Debug gate passes all 238 tests (193 native exposure,
-  24 post-process, 21 publication), including the final explicit-Preserve control.
-  All 37 runtime hashes match before/after. The existing source-cancellation test
-  also passes after correcting its fixture to use the owning frame's actual dt;
-  its earlier claim of nonzero elapsed time was not established by the old fixture.
-  [Recovery evidence and exact commands](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/recovery-increment-manifest.json).
-  **Completed: EX05-09 — validated in Debug.** Disabling bloom now prevents
-  an external SRV and nonzero intensity from activating its tonemap contribution.
-  The native regression failed before the fix (six cases, 18 RGB checks: .25
-  instead of .125) and passes all 24 P/format/toggle/intensity cases afterward.
-  Nine checked-color cases include three external-bloom accepted-half/fallback
-  combinations. The frozen gate passes 194 native exposure and 24 post-process
-  tests (218), with all 36 runtime hashes unchanged. Caller extent/P/lifetime
-  requirements are documented; shader, temporal-history and captured-sky TODOs
-  identify the deferred activation work. No owned bloom filter or TAA/TSR/capture
-  producer is claimed. [Audit, commands and evidence](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/bloom-handoff-manifest.json).
-  **Completed: EX05-21 — validated in Debug.** Four native 1080p/4K ×
-  temporal-off/on cases pass with 35 unchanged frozen runtime hashes. Weak native
-  resource tracking counts each committed texture once, records peaks at creation,
-  and separates raw bytes, placement bytes, retained leases and cached families.
-  With two views, qualified-FP16 HDR footprints are 229.328/827.328 MiB at the
-  steady checkpoint (1080p/4K main); peaks are 294.953/1075.828 MiB. Temporal-fog
-  controls conservatively retain FP32: steady 374.453/1375.641 MiB, peak
-  384.016/1410.578 MiB. These controls vary temporal work and format together.
-  Four inspected captures verify actual formats, S/P, final pixels, logical
-  primary reads and sky/AP/fog/resolve/tonemap writes. Historical Debug event
-  durations are diagnostic artifacts only, not performance evidence. The report
-  excludes caller outputs, buffers, heaps and unrelated backend allocations.
-  Release measurement is recorded in the final Slice 5 closure evidence.
-  [Allocation/traffic/timing evidence and commands](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/accounting-manifest.json).
-  **Completed: EX05-22 — validated in Debug.** The final gate passes all
-  196 native tests with 35 unchanged frozen runtime hashes. Eight HDR/path cases
-  and four mode/projection cases check 160 rendered frames: first valid and
-  initially invalid Auto, explicit seed without metering, paused/zero-speed
-  response, authored target clamps, camera cuts, explicit Seed/Preserve precedence,
-  retries, Manual/Auto/physical-camera/disabled changes, compensation, zero-target
-  restoration and locked-range precedence. Independent histogram/response/pixel
-  oracles use the supported authored domain and normal asynchronous CPU status.
-  The inspected upper-endpoint capture preserves source RGB 2^32 in FP32 at P=1;
-  authored maxEV30 gives S=2^-30 and the expected saturated/dithered output
-  0.99803919. This is intentional endpoint clipping under that authored bound.
-  [Scene lifecycle evidence and commands](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/scene-lifecycle-manifest.json).
-  **Completed: EX05-23 — validated in Debug.** The owning gate passes
-  222 tests (199 native exposure and 23 publication), with all 36 frozen runtime
-  hashes unchanged. Public offscreen release preserves retained GPU readers,
-  rejects registered ownership and invalidates retired camera history. Tests
-  cover both shading paths, fresh lifetime/token reuse, public age-60/61 pruning,
-  explicit removal and actual scene replacement with Preserve precedence.
-  MultiView releases both persistent offscreen identities before its targets and
-  scene at shutdown; its separate Debug build passes. No unchanged native gate
-  was repeated for this caller integration.
-  [Lifetime closure and commands](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/scene-retirement-manifest.json).
-  **Completed: EX05-24 — validated in Debug.** Both real-scene sharing
-  sequences pass (102 frames), including initial fallback, alternating actual
-  execution order, contrasting consumer images/settings, zero/restore and
-  Manual/ManualCamera/disabled changes, diagnostic seed preservation, feature
-  profiles, inactive-root retention and six source-loss policies. The owning
-  gate passes 294 tests with 39 unchanged runtime inputs. A first-frame geometry
-  defect found by this matrix is fixed: later transform allocations publish
-  fresh arrays while earlier views retain their snapshots. Native readbacks and
-  the corrected capture verify HDR .25/1, valid consumer vertices and matching
-  final output. Full MultiView layout/interaction acceptance remains separate.
-  [Sharing closure, defect evidence and commands](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/scene-sharing-manifest.json).
-  **Completed: EX05-25 — validated in Debug.** All 204 native tests pass
-  with 35 unchanged runtime inputs. Scene qualification covers 24 stateless
-  frame checks through supported endpoints, negative/NaN input and zero-target
-  recovery; 12 frames of continued FP32 adaptation while actual readback delivery
-  is withheld; six stale generation/settings/lifetime cases; and public device
-  recovery with explicit-transition precedence on both shading paths. The
-  stateless 2^32 capture verifies FP32/P1 and correct final S/P consumption.
-  Device coverage is the renderer event contract, not physical adapter removal.
-  [Scene status closure and commands](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/scene-stateless-recovery-manifest.json).
-  **Completed: EX05-29 — static native layouts validated in Debug.** All five
-  layouts have inspected composites, passing S/P checks and clean debug-layer
-  audits. The 17 selected views give 19 isolated/family comparisons including
-  required producers: identical gain, maximum meter difference 9.54e-7 EV and
-  at most one mapped/precomposition code. Both auxiliary copy regions are exact;
-  all three expected-black feature interiors are RGB0 and feature-stage checks
-  pass. The real separate-framebuffer routing defect is corrected by selecting
-  final output consistently for post-processing, overlays and auxiliary handoff.
-  The owning gate passes 280 tests with 38 unchanged runtime inputs. The checker
-  requires exact selected/producer sets and rejects full-family substitutions.
-  [Layout closure and commands](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/layout-matrix-manifest.json).
-  **Qualified offscreen intent correction (EX05-04/30):** the offscreen facade
-  accepts a complete canonical exposure override for both execution paths;
-  `nullopt` restores scene inheritance. Input copies/moves and finalized
-  sessions retain their owned diagnostic names. The focused Debug checkpoint
-  passes 19 tests with 37 unchanged runtime inputs, including both-path ownership
-  checks and native forward/deferred Manual-to-Auto-to-disabled gain checks.
-  The subsequent owning mixed-content/interaction checkpoint is recorded below.
-  [Focused commands and results](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/offscreen-intent-validation-result.json).
-  **Completed in Debug: EX05-04 / EX05-30 — mixed materials and native
-  combined interactions.** The owning gate passes **284 tests** (207 native
-  exposure, 63 deferred-core, 14 offscreen), with 38 unchanged runtime inputs.
-  Eight refreshed capture ranges pass 227 view checks across 58 frames, including
-  independent histogram/target/response checks, prior-owner latency and source-loss
-  continuity; maximum response error is 3.82e-6 EV. Four mixed-scene views exactly
-  match their isolated gain, meter and mapped/precomposition images. Opaque,
-  masked, emissive and translucent intermediate contributions pass. Fourteen
-  offline oracle controls and eleven negative timeline controls pass.
-  Ordinary/offscreen native debug-layer audits report no D3D12/DXGI errors or
-  blocking warnings. The full 2560x1400 native client at frame 51 has all four
-  lit panes, toolbar and material/phase legend. Native presentation resolves the
-  documented RenderDoc GUI replay limitation. The explicit CPU alignment gap
-  preserves `PublishedView` layout and removes C4324 without suppressing it.
-  [Complete evidence, commands and hashes](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/mixed-interactions-manifest.json).
-  **Completed: EX05-GATE — Slice 5 qualified in Debug and Release.**
-  Release passes 504 tests across 13 owning suites with 47 unchanged runtime
-  inputs, plus four opt-in allocation/performance cases. All five native layouts
-  pass 19 isolated/family comparisons covering 17 selected views, exact auxiliary
-  copies and three expected-black cells. Mixed-material contributions and four
-  exact isolated/family comparisons pass. The active sequence passes 227 view
-  checks across 58 frames (maximum response error 5.21e-6 EV). Seven Release
-  debug-layer audits pass with no errors/blocking warnings; the complete native
-  window at frame 190 is inspected. Release-only timing and allocation results
-  are recorded in the SceneTextures owner.
-  The offscreen layouts proof now explicitly preserves its original Average
-  profile. Its accidental Spot override had settled to a 17.6-times higher gain;
-  corrected Debug/Release captures restore readable materials and pass eight
-  exact isolated/family comparisons. No production AE algorithm change was made.
-  [Slice 5 closure audit, commands and evidence](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/slice5-closure-manifest.json).
-  **Current work: user-directed hold.** The Slice 5 closeout is committed. Await
-  instructions on performance and code-quality work, including clang-tidy
-  and test-suite structure. No quality edits or restructuring are authorized.
-  Do not begin Slice 6. Slices 6-10 remain required after the agreed hold.
-  **Deferred feature boundaries:** owned bloom, temporal color and specular/
-  captured-sky products retain their source TODOs and feature dependency issues.
-  **Domain implementation:** failure kind 32 distinguishes unsupported
-  scene RGB from FP16 headroom. The limit is scaled exactly by pinned P, avoiding
-  reciprocal rounding at the upper endpoint; pre-environment
-  and final SceneColor scans preserve separate opaque inputs and reject invalid
-  metering. Submission failure invalidates only the existing precision epoch.
-  **Validated environment increment:** the complete affected gate passes in both
-  Debug and Release: 177 native exposure, 24 post-process, 63 environment, 63
-  deferred-scene and 12 offscreen tests (339 per build). This includes 551 range
-  boundary cases, 132 continuous-integral cases, actual canonical and sky LUT producers,
-  hardware sampling, authored local-fog upload/decoding/composition, 48 local-fog
-  integral/injection cases, final-scan failure/retry and retained Auto history.
-  The local-fog draw asserts product 9/kind 32 for an explicit unsupported case;
-  the renderer asserts product 7 for invalid sky and product 10 for invalid fog.
-  [Commands, results, memory measurements and inspected native capture](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/domain-producer-increment-manifest.json).
-  **Canonical-format correction approved:** the user approved FP32 for the same
-  shared transmittance and unit-illuminance multiple-scattering tables. A transfer
-  of 1e-12 rounds to zero in FP16, but multiplying by a supported 1.88e9-nit
-  source should produce 0.00188, inside the supported scene domain and beyond
-  the allowed error if lost. The independent control is
-  `lifecycle/domain-canonical-half-control.json`. Allocation/recreation and both
-  descriptor formats now use RGBA32F; per-view FP16/FP32 selection is unchanged.
-  Default-size device placement measures 278,528 bytes for FP32 versus 139,264
-  for equivalent FP16 resources: +136 KiB on this adapter per retained cache
-  generation. Switching view modes reuses one canonical generation. Actual LUT
-  producer and sampling controls pass in both builds; the complete active producer
-  matrix is Debug-qualified by EX05-16.
-  **Implemented upstream corrections:** retain local-fog extinction/falloff and
-  emission in FP32 within the existing instance buffer (64 bytes, formerly 48).
-  Preserve signed height integrals without overflowing a downward-ray intermediate.
-  Use the continuous atmosphere scattering integral at zero/tiny extinction,
-  eliminating the energy loss from the former 1e-9 denominator floor. Sky,
-  height-fog, local-fog and translucent sources report range failures before
-  sanitization or attenuation can hide them; volumetric samples are checked before
-  their nonnegative clamp and temporal filtering.
-  **Measured GPU cost:** warmed Release replay on RTX 3080 measures the final
-  SceneColor scan at 0.081152 ms (1080p) and 0.263264 ms (4K). Default FP32 LUT
-  refresh dispatches take 0.008912 ms (transmittance) and 0.020768 ms (multiple
-  scattering). These are dispatch medians, not end-to-end frame latency or a
-  measured FP16-to-FP32 timing delta; native queue intervals are also recorded.
-  **Slice 5 gate:** qualified in Debug and Release. Slices 6–10 remain open;
-  implementation is held for the user-directed performance/quality discussion.
+**Approval:** both Slice 5.1 and Slice 5.2 plans are approved (2026-09-19).
+Slice 5.1 execution is authorized.
 
-- **Original visual report: all-white MultiView meshes.** The user observed all
-  meshes rendered white in test windows. Reinspection of
-  `multiview/atmosphere-Debug-42.exposure.png` confirms an earlier captured case
-  with washed-out meshes and ground; the exact run the user saw is unidentified.
-  This is failed material/readability evidence. The later
-  `multiview/opaque-ap-Release-58.exposure.png` has readable colored cards, but
-  uses a different, isolated emissive fixture and does not close the original
-  lit-scene report. The bounded original-material diagnosis/profile comparison
-  below is qualified; current mixed-scene acceptance is recorded in EX05-04/30.
-- **Qualified investigation: EX05-04/29 — captured lit-scene washout.** The
-  ordinary Debug main/lit-PiP run retains material colors. The earlier atmosphere
-  fixture and the new sunlit original-mesh comparison have separate diagnoses;
-  the emissive-card result is not substitute evidence for either.
-  **Verified diagnosis of the archived all-white capture:** GPU frame 43 of
-  `atmosphere-Debug-42` uses Manual mode (solve mode 0), fixed/current/target gain
-  0.25 and a 110,000-lux directional light. Geometry is finite FP32; its minimum
-  exposed RGB component is 9.556 in main / 6.260 in PiP. Independent full-geometry
-  ACES/gamma/dither evaluation reproduces output within 0.522 byte codes.
-  Near-white geometry fractions are 100% / 99.456%. This is display washout from
-  that lighting/manual-exposure combination, not unfinished AE. The base-pass
-  emissive values are already uniform (0.720215), so this archived fixture also
-  cannot establish material identity. [Diagnosis](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/white-report-old-diagnosis.json).
-  **Average remains a failed readability control.** `atmosphere-lit` keeps
-  original non-emissive materials and Auto exposure. Average's <1% per-material
-  near-white check fails in main; that threshold has not been relaxed. The
-  earlier fixed-Average investigation's frames 43 and 133
-  have identical images and current/target gains; remeter generation 1 is applied.
-  Simulation is paused (GPU delta=0); the equality to target, not elapsed wall
-  time, rules out pending adaptation in those captures. Independent histogram
-  reduction reproduces main L=221.154 and PiP L=2529.377. Main contains 44.15%
-  background samples (median L=3.22), versus 16.01% in PiP (median L=1.89);
-  geometry medians are 4929 / 5144. The full-image trimmed geometric mean yields
-  an 11.44-times higher main gain, causing its brighter mapped materials.
-  [Settling check](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/white-report-auto-settling.json),
-  [meter diagnosis](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/white-report-auto-meter-diagnosis.json).
-  The user's exact observed run/frame is unidentified; these findings apply to
-  the named captures. The ordinary current Debug run retains colored meshes at
-  frame 97. The new controlled fixture passes in Debug and Release: changing
-  Average to Spot and issuing the public remeter leaves HDR inputs byte-identical
-  while all three colored materials pass in both views (zero near-white pixels,
-  88.5–100% colored). Independent histogram reduction verifies the measured
-  target; current/target gains match exactly after remeter. Four paired captures,
-  four inspected composites and synthetic white rejection controls pass. Two
-  additional AP captures preserve eight baseline view images exactly. The
-  debugger reports only the accepted factory warning. This is a configured
-  profile comparison, not a production AE change or an Average readability pass.
-  [Evidence and commands](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/lit-profiles-manifest.json).
-- **Qualified AP composition prerequisite.** The `atmosphere` proof
-  stages a complete backlit-card recipe before publication, retains scene-owned
-  sun settings and uses actual deferred, alpha-one forward and mixed rendering.
-  Debug and Release each compare all 4,309,760 HDR pixels across main/PiP with
-  zero out-of-budget pixels, maximum RGB error `4.77e-7` and exact alpha agreement.
-  All phases have measured AP contribution, zero near-white fraction and readable
-  colors. Actual bindings and all six composites were inspected. The debugger
-  reports only the accepted live-factory graphics warning; the ordinary MultiView
-  baseline remains exact in four view comparisons. [Evidence](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/atmosphere-composition-manifest.json).
-- **Source-value corrections:** `6267aa93f` preserves distinct emissive material
-  identity and correct half subnormal decoding/rounding, including R038. Debug
-  and Release each pass 147 Data, 34 MaterialBinder and 146 native exposure tests
-  (327 each), with failing-before regressions. [Evidence](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/source-values-manifest.json).
-- **Remaining boundaries:** the AP prerequisite uses an isolated emissive-card
-  fixture. Physical-light calibration remains Slice 7 work. Material domains,
-  configured ordinary AE readability and native MultiView layouts/interactions
-  are qualified by their named Slice 5 rows.
-  Consumer error propagation is closed in EX05-15; production format switching
-  is Debug-qualified in EX05-17, queued consumers in EX05-18 and automatic
-  recovery/retention/return in EX05-19. The complete Slice 5 gate is now qualified in Debug and Release.
-- **Delivery order:** Slice 5 is qualified. Wait for the user-directed
-  performance/quality discussion before further implementation. Slices 6–10
-  remain required; their detailed items are below.
+**Active item:** EX051-01 — freeze the baseline, workloads and acceptance contract
+for [Slice 5.1](#321-slice-51-performance-qualification-and-correction).
+
+**Current boundary:** baseline evidence and native performance qualification are
+pending. Use Release measurements and Oxygen's profiling facilities for the
+1080p/60 primary target and 4K scaling; follow the task dependencies before optimization.
+
+**Next gate:** EX051-GATE must pass before Slice 5.2. Quality edits require
+agreement on the diagnostic inventory and restructuring design in EX052-03.
+Both slices must close before Slice 6.
+
+### 3.2 Slice 5 work items
 
 **How to read the items:** `validated` closes only the named item's stated scope;
 `in_progress` means partial work or active investigation, with the gap stated;
@@ -443,8 +111,6 @@ delivery, remain required; the package is not complete.
 identified explicitly and do not close a later slice. A slice closes only when
 its gate row is validated. Manifests describe their checkpoint; these rows own
 current status, including decisions that supersede older manifest limitations.
-
-### 3.2 Slice 5 work items
 
 [Requirements and gate](plan/exposure-and-lightbench-correction.md#slice-5---complete-pre-exposure-migration-and-numerical-recovery).
 **Slice status: validated. Gate: passed in Debug and Release.**
@@ -454,7 +120,7 @@ current status, including decisions that supersede older manifest limitations.
 | EX05-01 | Early GPU P resolve and immutable frame P/1P binding | validated | GPU-owned P, pinned frame/state leases, submission failure and repeated-resolve behavior are implemented. | [Frame resolve](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/frame-resolve-manifest.json), [domain](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/domain-manifest.json) |
 | EX05-02 | FP32 SceneColor accumulation and HDR format plumbing | validated | Approved FP32 accumulation contract and format-aware resource/PSO plumbing exist. This is not automatic mode switching. | [Formats](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/formats-manifest.json), [allocation contract](lld/scene-textures.md#per-view-fp16-suitability) |
 | EX05-03 | Meter with 1/P; consume S/P in all exposure modes | validated | Unified gain consumption covers Manual, ManualCamera, Auto, disabled and zero-target behavior in the qualified fixtures. | [Domain](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/domain-manifest.json), [mode fixtures](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/modes-manifest.json) |
-| EX05-04 | Deferred emissive/direct/indirect and forward lit/unlit/masked/translucent P domains | validated | **Source corrections:** emissive RGB was omitted from material-cache identity; shared half decoding halved subnormals and encoding dropped the carry into minimum normal (R038). All three source-value regressions are corrected; Debug/Release each pass 327 affected tests. This closes the named corrections only. The original non-emissive sunlit materials now have a qualified Average/Spot comparison in both views/builds; identical HDR inputs separate meter-target washout from adaptation. The 324-case cooked-material domain matrix now passes in both builds, including HDR/sRGB sampling and forward resolve publication. Direct/indirect producer endpoints are now qualified by the lighting matrix. Mixed-content Debug acceptance now passes: four exact isolated/family image comparisons, actual opaque/masked/emissive/translucent contributions and the 284-test owning gate. Release is qualified in EX05-GATE. | [Mixed acceptance](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/mixed-interactions-manifest.json), [Cooked-material matrix](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/material-domain-increment-manifest.json), [Source-value evidence](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/source-values-manifest.json), [source regressions](../../src/Oxygen/Data/Test/HalfFloat_test.cpp), [material regression](../../src/Oxygen/Vortex/Test/Resources/MaterialBinder_basic_test.cpp), [scene migration scope](../../out/build-ninja/analysis/vortex/exposure-lightbench/scene/scene-migration-manifest.json), [producer inventory](lld/scene-textures.md#exposure-hdr-domain-and-format-inventory) |
+| EX05-04 | Deferred emissive/direct/indirect and forward lit/unlit/masked/translucent P domains | validated | **Source corrections:** emissive RGB was omitted from material-cache identity; shared half decoding halved subnormals and encoding dropped the carry into minimum normal (R038). All three source-value regressions are corrected; Debug/Release each pass 327 affected tests. This closes the named corrections only. The original non-emissive sunlit materials now have a qualified Average/Spot comparison in both views/builds; identical HDR inputs separate meter-target washout from adaptation. The 324-case cooked-material domain matrix now passes in both builds, including HDR/sRGB sampling and forward resolve publication. Direct/indirect producer endpoints are now qualified by the lighting matrix. Mixed-content Debug acceptance now passes: four exact isolated/family image comparisons, actual opaque/masked/emissive/translucent contributions and the 284-test owning gate. Release is qualified in EX05-GATE. | [Lit-profile investigation](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/lit-profiles-manifest.json), [Mixed acceptance](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/mixed-interactions-manifest.json), [Cooked-material matrix](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/material-domain-increment-manifest.json), [Source-value evidence](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/source-values-manifest.json), [source regressions](../../src/Oxygen/Data/Test/HalfFloat_test.cpp), [material regression](../../src/Oxygen/Vortex/Test/Resources/MaterialBinder_basic_test.cpp), [scene migration scope](../../out/build-ninja/analysis/vortex/exposure-lightbench/scene/scene-migration-manifest.json), [producer inventory](lld/scene-textures.md#exposure-hdr-domain-and-format-inventory) |
 | EX05-05 | Sky/background and sky-view/AP producer-consumer P plumbing | validated | Paired P-domain/binding proofs and R036 low/zero-opacity correction are qualified. The isolated AP fixture adds actual deferred/alpha-one-forward whole-HDR-image agreement and readable mixed presentation in both views/configurations. R040/R041 additionally qualify exactly-once opaque-forward AP and explicit shading routing, with exact full-image agreement. This does not close broader material families or quantization/mode switching (EX05-04/15–19). | [Scene migration](../../out/build-ninja/analysis/vortex/exposure-lightbench/scene/scene-migration-manifest.json), [real products](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/required-products-manifest.json), [controlled AP correction](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/review-r036-manifest.json), [native scene AP fixture](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/atmosphere-composition-manifest.json), [opaque forward](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/opaque-ap-manifest.json) |
 | EX05-06 | Height/volumetric fog and RGB history rebasing | validated | Current/stored P conversion and unchanged transmittance are implemented and exercised. Cumulative temporal quantization is not covered by this item. | [Scene migration](../../out/build-ninja/analysis/vortex/exposure-lightbench/scene/scene-migration-manifest.json), [history/resource lifetime](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/review-lifetime-manifest.json) |
 | EX05-07 | Diagnostic colors, wireframe and display overlays | validated | Per-view unit-gain diagnostics, persistent exposure preservation and frame-retained overlay constants are qualified. Full feature-layout acceptance remains EX05-29. | [Diagnostics](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/diagnostic-manifest.json) |
@@ -480,13 +146,277 @@ current status, including decisions that supersede older manifest limitations.
 | EX05-27 | Viewport, scissor and whole-window resize | validated | The named scripted resize/scissor fixtures pass without cross-view contamination. | [Viewport/scissor](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/viewport-manifest.json), [window resize](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/window-resize-manifest.json) |
 | EX05-28 | MultiView per-view mode, seed, cut and diagnostic events | validated | Paused scripted events and diagnostic restoration are qualified; runtime physical-camera values are covered, persistence is not. | [Modes](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/modes-manifest.json), [diagnostics](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/diagnostic-manifest.json) |
 | EX05-29 | Complete standard/auxiliary/offscreen/feature layout matrix | validated | All five native layouts pass in Debug and Release: 17 selected views/19 comparisons within frozen tolerances, exact auxiliary copies, three expected-black cells and feature-stage checks. The offscreen proof preserves its original Average profile; corrected Debug/Release comparisons and image inspection pass. | [Debug layout evidence](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/layout-matrix-manifest.json), [Final closure](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/slice5-closure-manifest.json) |
-| EX05-30 | Native combined interactions and active adaptation | validated | The refreshed native sequence passes 227 view checks across 58 frames: modes, camera motion, seed/cut, ordering, viewport/scissor/window resize, retained/recreated lifetime, prior-owner sharing, source loss/recreation and pause. Independent histogram/target/response checks pass; 11 negative checker controls reject corruption. Both native debug-layer audits and complete client inspection pass. Owning Debug gate: 284 passed with 38 unchanged runtime inputs. Release is qualified in EX05-GATE. | [Section 7.5](plan/exposure-and-lightbench-correction.md#75-multiview-visual-acceptance), [Active evidence](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/mixed-interactions-manifest.json) |
-| EX05-GATE | Entire Slice 5 acceptance gate | validated | Passed in Debug and Release. Release: 504 owning tests plus four opt-in accounting runs; 47 runtime hashes unchanged. Native layouts, material contributions, 227 active view checks/58 frames, debug-layer audits and presented output pass. Approved inactive feature boundaries remain documented. Further implementation is held for the user-directed performance/quality discussion. | [Full requirement/evidence mapping, commands and results](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/slice5-closure-manifest.json) |
+| EX05-30 | Native combined interactions and active adaptation | validated | The refreshed native sequence passes 227 view checks across 58 frames: modes, camera motion, seed/cut, ordering, viewport/scissor/window resize, retained/recreated lifetime, prior-owner sharing, source loss/recreation and pause. Independent histogram/target/response checks pass; 11 negative checker controls reject corruption. Both native debug-layer audits and complete client inspection pass. Owning Debug gate: 284 passed with 38 unchanged runtime inputs. Release is qualified in EX05-GATE. | [Section 7.5](plan/exposure-and-lightbench-correction.md#75-multiview-visual-acceptance), [Active evidence](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/mixed-interactions-manifest.json), [Offscreen intent prerequisite](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/offscreen-intent-validation-result.json) |
+| EX05-GATE | Slice 5 numerical and integration acceptance gate | validated | Passed in Debug and Release. Release: 504 owning tests plus four opt-in accounting runs; 47 runtime hashes unchanged. Native layouts, material contributions, 227 active view checks/58 frames, debug-layer audits and presented output pass. This is not native 60 fps acceptance: EX051-GATE remains open. Approved inactive feature boundaries remain documented. | [Full requirement/evidence mapping, commands and results](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/slice5-closure-manifest.json) |
 
+### 3.2.1 Slice 5.1 performance qualification and correction
+
+**Slice status: in_progress. Plan and execution approved on 2026-09-19;
+EX051-01 is active. No new performance qualification is claimed.**
+Owner: Vortex exposure/PostProcess, with Environment, Graphics profiling and
+SceneTextures participation. IDs EX051-* belong to Slice 5.1. This is required
+work between the validated Slice 5 correctness baseline and Slice 5.2.
+
+#### Objective, baseline and scope
+
+Qualify and rectify exposure's production cost without weakening the supported
+radiance range, image/meter tolerances, current-frame range protection, temporal
+error bounds or lifecycle/lease rules. FP32 SceneColor accumulation remains
+required. Changing those contracts or replacing automatic format admission with
+a different shipping policy requires a separate design decision with the user.
+
+Freeze 6092dc0d6 and its repaired Slice 5 manifests as the pre-optimization
+baseline. Existing Release replay measurements identify 3.19-3.27 ms of explicit
+qualification at 1080p and 7.73-9.34 ms at 4K, plus up to 10.41 ms of temporal fog
+across two views. These are hypotheses for attribution, not native frame-time
+acceptance. The accounting fixture uses Manual exposure, a simple emissive scene,
+vacuum atmosphere/zero-extinction fog, a short lifecycle run and two warm replay
+samples. Retained-output memory peaks are not ordinary steady-state residency.
+
+The primary target is native **1080p at 60 fps** on the reference RTX 3080.
+**4K qualifies scaling; it has no blanket 60 fps requirement.** Record the actual
+CPU, RAM, adapter/LUID, driver, power/clock state, Release compiler/shader options
+and tool versions. Other hardware is a portability check until its budgets are
+explicitly defined. Do not extrapolate one GPU's milliseconds to another GPU.
+At 4K, use 3840x2160 for the main view and 1920x1080 for the secondary view;
+preserve the same scene, quality settings and scripted simulation timebase.
+
+#### Published context and budget rationale
+
+Primary sources inspected on 2026-09-19:
+
+- [Epic's volumetric fog performance guidance](https://dev.epicgames.com/documentation/en-us/unreal-engine/volumetric-fog-in-unreal-engine#performance)
+  reports approximately 1 ms on PS4 at High and 3 ms on GTX 970 at Epic, with
+  eight times as many voxels in the latter setting. These are useful effect-cost
+  context, not equivalent hardware, resolution, quality or exposure guarantees.
+- [Epic's auto-exposure documentation](https://dev.epicgames.com/documentation/en-us/unreal-engine/auto-exposure-eye-adaptation?application_version=4.27)
+  distinguishes histogram and cheaper downsampled metering, but supplies no
+  directly usable budget for Oxygen's combined exposure/precision contract.
+- [AMD's SPD description](https://gpuopen.com/fidelityfx-spd/)
+  supports investigating reductions that avoid repeated global synchronization.
+  It is an algorithm reference, not an exposure benchmark or a requirement to
+  introduce FidelityFX into Oxygen.
+
+No directly comparable published number was found for Oxygen's full guarantee.
+The following are therefore **Oxygen engineering targets**, selected from the
+16.67 ms frame budget, not claims of measured parity. A 0.50 ms single-view
+exposure allowance is 3% of that budget; the two-view allowance is 3.9% and
+allows fixed per-view work as well as 25% more pixels. The whole-frame p95 target
+reserves approximately 16% headroom. The 4K allowance grows with four times the
+pixels and remains a scaling ceiling, not permission for superlinear growth.
+
+| Metric on frozen workloads | One 1920x1080 view | 1920x1080 main + 960x540 secondary | 4K scaling requirement |
+| --- | --- | --- | --- |
+| Native GPU frame, steady p95 / p99 | <=14.0 / <=16.67 ms | <=14.0 / <=16.67 ms | Report both percentiles and maximum; no 60 fps claim required |
+| Uncapped complete frame interval, steady p99 | <=16.67 ms | <=16.67 ms | Report CPU/GPU/presentation limits separately |
+| Attributed exposure + precision GPU work, p95 / p99 | <=0.50 / <=0.75 ms | <=0.65 / <=1.00 ms | p95 <=2.00 / <=2.60 ms respectively, and <=4.5 times corresponding 1080p p95 + 0.05 ms |
+| Exposure CPU preparation/submission, p95 / p99 | <=0.10 / <=0.20 ms | <=0.15 / <=0.30 ms | Active CPU p95 <=1.25 times 1080p + 0.02 ms; report waits separately |
+| Warm exposure transitions: additional GPU work over matched steady state, p99 | <=1.00 ms | <=1.30 ms | Report scaling and worst transition; preserve event-frame semantics |
+
+Budget accounting must include histogram/adaptation, P resolution, qualification,
+reductions, range/error bookkeeping, added resolve/copy work and exposure-related
+work embedded in atmosphere/fog/other producers. Attribute embedded work with
+matched fixed-format controls; report the calculation and uncertainty. Keep
+ordinary fog, base tonemapping and unrelated rendering costs separate, while
+including them in the whole-frame gate. Do not hide expensive protection work
+under an environment pass or subtract format savings from the gross attributed
+cost. Report actual whole-frame net benefit separately. Do not sum overlapping
+CPU/GPU work, nested scopes or independent percentile values into a purported
+measured frame time.
+
+For memory, freeze descriptor-derived live, in-flight, retained and cached byte
+budgets in EX051-03. Require no unexplained allocation growth over repeated
+cut/resize/view-removal cycles, no steady-state resource churn after warmup, and
+no >5% increase in matching lifecycle peaks without a documented user-approved
+tradeoff. Scratch/reduction resources and outputs must be accounted for; list
+intentional cache and lease retention separately. Logical traffic is not measured
+DRAM bandwidth. A safe FP32 control must establish whether admission's time and
+memory savings justify its cost.
+
+If an unrelated baseline workload already misses 60 fps, isolate and report the
+cause. Do not weaken the workload, change its quality after measurement, silently
+raise these budgets or mark this slice validated. Bring the bounded scope/budget
+decision to the user with measurements.
+
+#### Native measurement protocol
+
+1. Use the existing [profiling APIs](../profiling/profiling-developer-guide.md)
+   and [GPU timeline](../profiling/built-in-gpu-timing-architecture.md).
+   GpuEventScope telemetry feeds native timing/export; diagnostic scopes feed
+   detailed Tracy/capture analysis. Use CpuProfileScope for preparation,
+   recording, submission and waits. Reuse GpuTimelineProfiler's frame sink;
+   add no second profiler or general benchmark framework.
+2. Audit actual scope coverage. Exposure solve, tonemap and fog are currently
+   diagnostic-only; the built-in collector admits only telemetry. Current
+   OXYGEN_WITH_TRACY is OFF. Enable an optimized Release Tracy build when
+   needed, preserving the one-client ownership in Oxygen.Tracy. Ensure complete
+   native GPU timing coverage; reject overflowed/incomplete frames. The built-in
+   graphics-queue timeline is not a cross-queue critical-path profiler.
+3. Freeze deterministic camera paths, scene/assets, lights, material mix, fog
+   dimensions, history settings, P/precision policy, exposure mode and seeds.
+   Record actual game delta time; matched A/B runs use the same simulation
+   timebase so faster rendering cannot change adaptation or scene inputs.
+   Run natively without RenderDoc/debug-layer/GPU-validation overhead for the
+   acceptance measurements. Keep correctness/debug-layer runs separate.
+4. Warm for at least 300 frames and 10 seconds, with assets/PSOs resident and
+   histories in the intended state. For each final acceptance condition collect
+   at least 1,800 frames and 30 seconds in each of three independent runs.
+   Interleave baseline/candidate runs, keep power/quality settings fixed, and
+   record thermal/clock variation. Every run must meet its gates; report each
+   run and aggregate results. Use nearest-rank percentiles on the recorded frame
+   samples and state the sample population. Do not discard slow frames without a documented
+   external cause and replacement run. Cold start and transition windows are
+   separate named workloads, not deleted outliers.
+5. Disable VSync, frame caps, dynamic resolution and frame generation for
+   uncapped attribution; then verify normal 60 Hz presentation/pacing. Measure
+   instrumentation-on/off overhead. If it exceeds max(0.05 ms, 1% of native GPU
+   frame p95), reduce scope density/use separate trace runs and retain a valid
+   low-overhead acceptance run. Never subtract assumed profiler overhead.
+6. Collect p50/p95/p99/max, frame count, GPU/CPU timing validity, active CPU
+   versus wait time, per-view/product costs, dispatches, command lists,
+   barriers, scanned texels, atomics where measurable, precision occupancy,
+   history acceptance/miss reasons, resource bytes and transition latency.
+   Report noise/repeatability; a claimed improvement must exceed measurement
+   uncertainty. Replay remains diagnostic evidence, not the frame-rate gate.
+
+Mandatory workloads: reproduce the original controlled case; a representative
+lit mixed opaque/masked/emissive/translucent scene; and a moving indoor/outdoor
+lighting/fog case with stable and disoccluded temporal history. Freeze exact
+existing scene/asset identities or bounded existing-demo recipes in EX051-03.
+Cover single and two-view families, Manual and Auto, temporal fog off/on, both
+rendering paths, accepted FP16 and forced/retained FP32. Use a coverage matrix
+with representative combinations rather than a wasteful full Cartesian product.
+Startup, seeds/cuts, mode changes, brightness changes, sharing/source loss,
+resize, repeated view recreation and delayed acknowledgment need bounded spike
+and correctness cases. A new LightBench implementation is not a prerequisite.
+
+#### Tasks, dependencies and proof
+
+Each subsequent row stays planned until work starts. Update its evidence and remaining gap
+in place. Evidence belongs under the existing exposure-lightbench analysis root
+in a slice51 subdirectory; record revision, source/binary/shader hashes,
+configuration, commands, workload identity, raw samples and derived results.
+
+| ID | Work item / owner | Status | Depends on | Required delivery and exit evidence |
+| --- | --- | --- | --- | --- |
+| EX051-01 | Freeze scope and acceptance contract / rendering owner | in_progress | User approval recorded 2026-09-19 | Plan and execution are authorized. Freeze baseline revision, target hardware, budget accounting, benchmark matrix and correctness invariants above. Baseline checkpoint evidence remains pending; no optimization starts with an undefined baseline. |
+| EX051-02 | Native profiling coverage / Graphics + Vortex diagnostics | planned | 01 | Map existing CPU/GPU scopes; add missing stable telemetry around exposure, qualification and relevant producer work using existing APIs. Retain per-view/product/phase identity in detailed tracing. Qualify timestamp validity, nested-scope accounting, frame/queue coverage and profiler overhead; smoke native export and Tracy when enabled. |
+| EX051-03 | Repeatable workloads and memory model / existing demo + test owners | planned | 01 | Freeze exact assets/cameras/quality, the single/two-view matrix and transition scripts. Reuse existing MultiView/native fixtures. Separate representative runtime timing from correctness readbacks and lifecycle retention stress. Define live/cache/lease/scratch byte budgets from actual descriptors and permitted in-flight generations. |
+| EX051-04 | Safe reference and causal controls / PostProcess + Environment | planned | 02, 03 | Supply a benchmark-only all-FP32 reference preserving exposure/P, output semantics, features and history. Qualify it against independent references. Add narrowly scoped attribution controls for format, certificate arithmetic, reductions/atomics and history misses; unsafe ablations cannot ship or count as correctness evidence. Do not use disabled exposure as the reference. |
+| EX051-05 | Native baseline and diagnosis / rendering owner | planned | 04 | Measure current runtime and controls under the protocol. Separate Auto metering, explicit proof scans, embedded producer checks, base fog, format/copy costs, CPU submission and waits. Identify causal bottlenecks and FP16's net benefit, including uncertainty. Commit the usable measurement checkpoint before optimization. |
+| EX051-06 | Reduce shared bound-update contention / HDR shader owners | planned | 05 | Test max/flag/count-preserving wave/group reductions for the per-voxel global updates in HdrErrorBounds and related hot paths. Inspect optimized shader output; preserve invalid-lane participation, nonfinite/outward-bound semantics and all reported failures. Record independent correctness and native before/after evidence; retain only a justified improvement. |
+| EX051-07 | Consolidate repeated scans / ExposurePass + producers | planned | 05 | Attribute all gather variants separately, including gradients/range/candidate work. Fuse compatible passes/reductions and reuse immutable producer results where valid. Prove current content, frame P, candidate P, settings, layout and lifetime identity; never reuse a certificate merely because exposure is unchanged. Include barriers and submission costs in the comparison. |
+| EX051-08 | Temporal fog cost and bound propagation / Environment | planned | 05 | Isolate reprojection/filtering, certificate construction, bound publication, misses/supersampling and storage format. Hoist view-uniform work only after checking compiler output and dependencies. Preserve hardware sampling, cumulative uncertainty, history rebasing and disocclusion correctness. Compare identical temporal/format conditions before attributing savings. |
+| EX051-09 | Economical admission and recovery / PostProcess | planned | 06-08 | Establish a cheap, correct steady path and bounded bootstrap/recovery behavior. Avoid repeated work that cannot affect a decision; validate every proposed invalidation key. Keep current-frame range protection, conservative FP32 fallback, actual consecutive-frame eligibility and event precedence. A changed shipping precision/retry policy needs an explicit owner-design decision before code. |
+| EX051-10 | Resolve, resource lifetime and memory cost / SceneTextures | planned | 05, 09 | Remove only measured unnecessary copies/allocations and redundant retention. Prove frame-pinned P, delayed consumers, auxiliary/offscreen reads and fences remain correct. Measure steady live bytes, transition peaks, cache retirement and traffic against the same FP32 control; include reduction scratch. |
+| EX051-11 | CPU preparation and submission / PostProcess + Graphics callers | planned | 05, 07-10 | Address measured descriptor/publication/allocation/command-list overhead. Preserve queue ordering and ordinary frame synchronization; introduce no CPU waits/readbacks to make exposure decisions. Record active CPU and wait distributions; keep this row bounded to exposure-related work. |
+| EX051-12 | Integrated numerical and lifecycle regression / test owners | planned | 06-11 | Run focused failing-before controls with each change, then the owning Debug gate for coherent item closure. Preserve supported HDR endpoints, subnormals, black/zero, metering mass, image budgets, invalid masks, two-view orders, temporal uncertainty, candidate rejection and delayed leases. Reconcile all affected C++/HLSL layouts and callers in one buildable increment. |
+| EX051-13 | Native Release acceptance and 4K scaling / rendering owner | planned | 12 | Execute the frozen final matrix and transition runs. Meet the budgets, expose every miss and compare actual whole-frame costs with FP32 and pre-optimization baselines. Confirm no retained-memory growth, no quality reductions and no unexplained superlinear cost. Run normal presented-output and separate debug-layer correctness checks. |
+| EX051-14 | Owner/status closure and handoff / rendering owner | planned | 13 | Reconcile runtime policy, profiling/operating instructions, source/report identities and all rows. Remove temporary unsafe controls from shipping paths. Record cost attribution, remaining limitations and the Slice 5.2 inventory. Commit the validated performance increment before quality restructuring. |
+| EX051-GATE | Production performance acceptance | planned | 01-14 | Native Release primary 1080p/60 and subsystem budgets pass; 4K scaling is bounded; FP16 economics and memory are explained; numerical/lifecycle gates remain valid. User-approved deviations must be explicit. Commit and proceed only to the authorized Slice 5.2 scope, never directly to Slice 6. |
+
+EX051-06 through 11 are measured hypotheses, not commands to apply speculative
+rewrites. A row can close without code changes only when causal measurements
+demonstrate that no correction is needed and its contribution fits the final
+budget. A real missing capability in a different owner must be addressed or
+explicitly scoped with the user; it cannot be hidden by a passing aggregate.
+
+Commit boundaries: first a usable profiling/reference/workload baseline
+(01-05); then one measured, independently buildable correction at a time
+(06-11, keeping coupled C++/HLSL/callers/tests together); finally integrated
+acceptance and owner closure (12-14). Do not accumulate unrelated optimizations.
+Release A/B measurements belong to each performance correction. Use focused
+Debug checks between checkpoints and broader owning Debug at item closure;
+the final slice also receives the owning Release correctness gate. Freeze
+runtime inputs before delegated validation; no concurrent rebuild or GPU work.
+
+### 3.2.2 Slice 5.2 code quality and test structure
+
+**Slice status: planned; plan approved on 2026-09-19.** Execution follows
+EX051-GATE. The later EX052-03 discussion covers the actual diagnostic inventory
+and concrete restructuring design before quality edits.
+IDs EX052-* belong to Slice 5.2. This slice changes code quality and ownership
+structure while preserving the final Slice 5.1 behavior, ABI and measured costs.
+No Slice 6 feature work is included.
+
+#### Scope and established tools
+
+Start from the exact Slice 5/5.1 change manifest: exposure/PostProcess,
+SceneRenderer/SceneTextures and relevant Environment, Graphics, Data/cooker,
+example, test and analysis-tool changes. Follow actual callers and shared
+fixtures, but exclude unrelated engine-wide cleanup. HLSL and Python quality
+need appropriate review; clang-tidy does not validate them.
+
+Use tools/cli/oxytidy.ps1 (oxytidy.py), the real compile database and repository
+.clangd adjustments. The wrapper is analysis-only; review and apply fixes in
+bounded batches. Include test translation units explicitly. Preserve the parent
+.clang-tidy and Test/.clang-tidy policies; inventory existing exclusions rather
+than treating suppressed checks as a clean result. Record compiler/tool versions,
+scope, effective checks, translation-unit count, diagnostic count and parse
+failures. No compiled input, skipped unit or external parse failure may silently
+become a passing analysis result.
+
+Fix warnings at their cause. New or retained NOLINT/check exclusions need the
+exact diagnostic, location, reason the code must remain, alternatives considered
+and a narrow documented scope. Do not disable a warning family, broaden filters,
+cast away a real problem or add blanket suppressions to obtain a zero count.
+Existing justified test-value exceptions can remain with recorded rationale.
+Clang-tidy suggestions that affect semantics require a correctness review.
+
+The initial read-only inventory counted 14,095 lines/211 declared tests in
+ExposureGpu_test.cpp, including four opt-in timing/allocation tests. These are
+historical baseline counts; freeze the actual names/counts after Slice 5.1.
+PostProcessService, deferred-core and offscreen suites also need scoped review.
+Use responsibility boundaries, not arbitrary file-size or file-count quotas.
+
+Proposed native-suite structure to agree in EX052-03:
+
+- Shared fixture/resource setup owns backend, renderer, upload/readback,
+  frame/queue and capture lifetime once; explicit per-test reset remains.
+- Independent numeric references remain distinct from production algorithms.
+- Coherent groups cover metering/adaptation; lifecycle/sharing; producer domains;
+  precision/conversion/recovery/queued consumers; and scene/offscreen/composition.
+- Profiling/allocation workloads retain their explicit opt-in execution.
+- Prefer multiple translation units under the existing test target initially.
+  Introduce separate executables only for demonstrated ownership/runtime benefit.
+  Preserve filter names, discovery, capture scripts and isolation, or provide
+  an explicit reviewed old-to-new test identity map.
+- Treat /bigobj as a compiler capacity option, not a hidden warning. Reassess it
+  after splitting; retain or remove it based on actual supported-build evidence.
+
+#### Tasks, dependencies and proof
+
+Evidence belongs in slice52 under the existing analysis root. Preserve the
+Slice 5.1 source/runtime/performance baseline for non-regression comparisons.
+
+| ID | Work item / owner | Status | Depends on | Required delivery and exit evidence |
+| --- | --- | --- | --- | --- |
+| EX052-01 | Freeze quality scope and baseline / rendering + test owners | planned | EX051-GATE | Record exact changed/related files, API/ABI contracts, all discovered test identities/parameters, enabled/opt-in counts and native performance baseline. Identify unrelated files explicitly; no implementation edits yet. |
+| EX052-02 | Actual diagnostics inventory / C++ owners | planned | 01 | Run scoped oxytidy with current compilation inputs and tests included. Classify actionable correctness/lifetime, performance, API/style and external-tool issues. Inventory existing suppressions and uncovered headers/TUs. Preserve raw logs and a unique diagnostic ledger; do not infer warning counts from file size. |
+| EX052-03 | Agree restructuring design / user + rendering/test owners | planned | 01, 02 | Present fixture ownership, proposed file/target groups, independent oracle boundary, test identity mapping, intended runtime simplifications and suppression decisions. Obtain the user's agreement before any quality edit. Keep changes behavior-preserving and avoid a new generic test/exposure framework. |
+| EX052-04 | Correctness and lifetime diagnostics / C++ owners | planned | 03 | Fix verified clang-tidy defects in coherent owner batches. Add a meaningful regression for real behavior defects; if a fix changes the accepted contract, reopen the relevant owner decision. Keep mechanical changes separate from algorithm fixes. Run focused Debug checks per batch. |
+| EX052-05 | Extract shared native fixture ownership / native test owner | planned | 03, 04 | Separate backend/resource/frame/capture helpers with explicit ownership and reset. Keep one source of fixture behavior, deterministic cleanup and no mutable process-global state. Prove old tests still discover and pass before moving scenario groups. |
+| EX052-06 | Split scenario translation units / native test owner | planned | 05 | Move the agreed coherent groups, preserving test/filter identity and data vectors. Wire every TU into CMake/discovery. Keep independent references independent, preserve both renderer paths and all opt-in tests. Verify no dropped, duplicated, disabled or newly order-dependent coverage. |
+| EX052-07 | Remaining owner/test/tool structure / relevant owners | planned | 03, 06 | Apply agreed bounded simplifications to PostProcess/ExposurePass, deferred/offscreen fixtures and touched evidence tooling. Remove duplication only where ownership/contracts match; keep C++/HLSL layout and state transitions explicit. Audit oracle self-validation and malformed/empty report handling. |
+| EX052-08 | Readability and remaining tidy fixes / C++ owners | planned | 04-07 | Resolve remaining actionable diagnostics; make names, helpers, constness and interfaces clear without burying domain values behind meaningless constants. Review every retained narrow suppression. Do not expand .clang-tidy exclusions to conceal unresolved diagnostics. |
+| EX052-09 | Build/discovery/tooling integrity / build + test owners | planned | 06-08 | Regenerate actual build/discovery inputs and confirm existing scripts and test filters work. Reassess /bigobj with real MSVC builds. Inventory before/after identities including disabled/parameterized tests and shader probes; update wrappers only when needed. No arbitrary suite merges/splits or duplicated shader builds. |
+| EX052-10 | Final diagnostic and owning correctness gates / test owners | planned | 09 | Rerun scoped tidy and relevant compiler checks on final code: zero unresolved actionable in-scope diagnostics, only explicitly justified narrow exceptions, no hidden parse failures. Run broader owning Debug suites, then owning Release at slice closure. Require explicit coverage parity and no newly suppressed/skipped cases. |
+| EX052-11 | Performance and visual non-regression / rendering owner | planned | 10 | Reuse the frozen native Release workloads and valid profiling protocol. Every 5.1 absolute budget still passes; investigate p95 cost growth exceeding max(0.05 ms, 5% of baseline), or a material p99/memory regression beyond repeatability. Inspect representative native output and relevant lifecycle captures when affected. Do not redo unrelated captures without a reason. |
+| EX052-12 | Final owner/status reconciliation and commit / rendering owner | planned | 11 | Record file/fixture ownership, test identity map, exact diagnostic disposition, suppression rationale, test/performance evidence and final hashes. Update all affected rows and operating commands. Commit the complete quality increment before any authorized Slice 6 work. |
+| EX052-GATE | Code-quality acceptance | planned | 01-12 | Agreed restructuring delivered; actionable tidy/compiler issues fixed, exceptions justified, tests/callers/ABI and independent oracles preserved, Debug/Release gates pass, Slice 5.1 performance retained and documents current. No quality or scope gap may be relabeled complete to start Slice 6. |
+
+Commit boundaries: actionable diagnostic fixes by owner; usable shared fixtures
+with their migrated callers; each coherent scenario group plus CMake/discovery;
+then final owner/tooling closure. Avoid scaffolding-only or arbitrary file-count
+commits. Each commit must build and preserve test discovery. Focused Debug checks
+cover intermediate moves; owning Debug closes each coherent item. Final Release
+and performance non-regression close the slice. Do not combine these mechanical
+commits with new performance algorithms or Slice 6 functionality.
 
 ### 3.3 Slice 6 work items
 
-**Slice status: planned. Persistence/authoring integration has not started.**
+**Slice status: planned. Depends on EX051-GATE and EX052-GATE.
+Persistence/authoring integration has not started.**
 Approved contracts are requirements, not completed implementation.
 
 | ID | Work item | Status | Exact remaining delivery |
@@ -585,6 +515,8 @@ reading tool logs or reconstructing Git history.
 | Plan section 8 requirements | Tracking items |
 | --- | --- |
 | Slice 5: early P; full 4.4 migration; S/P; formats; range/recovery; scene lifecycle; MultiView; gate | EX05-01; EX05-04–09/18; EX05-03; EX05-02/17; EX05-10–16/19–21; EX05-22–25; EX05-26–30; EX05-GATE |
+| Slice 5.1: native profiling; fixed workloads/reference; attribution; measured corrections; budgets/scaling; closure | EX051-01–05; EX051-06–11; EX051-12–14; EX051-GATE |
+| Slice 5.2: diagnostic inventory/design; fixes; fixture/suite structure; coverage/tidy/build/performance parity; closure | EX052-01–03; EX052-04–09; EX052-10–12; EX052-GATE |
 | Slice 6: camera persistence; authoring surfaces; full round-trip; mask runtime; DemoShell; activation policy; gate | EX06-01; EX06-02–05; EX06-06; EX06-07; EX06-08; EX06-09; EX06-GATE |
 | Slice 7: point/spot; shared consumers; independent calibration; material mapping; gate | EX07-02–03; EX07-04; EX07-01/06; EX07-05; EX07-GATE |
 | Slice 8: diagnostics; known inputs; identity; disabled/enabled cost; gate | EX08-01–03; EX08-06; EX08-04; EX08-05; EX08-GATE |
