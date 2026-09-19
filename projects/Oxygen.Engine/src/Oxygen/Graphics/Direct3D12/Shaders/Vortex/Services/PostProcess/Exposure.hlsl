@@ -1244,6 +1244,27 @@ void GatherSuitabilityMaximum(uint3 pixel : SV_DispatchThreadID, uint lane : SV_
         GatherPreEnvironmentRange(pass, pixel, lane);
         return;
     }
+    // AP/fog gradients already enclose every finite RGBA texel in this frame.
+    // Sky gradients do not validate unused alpha, so sky keeps its full scan.
+    // Invalid or incomplete certificates retain the original scan below.
+    if ((pass.flags & (2048u | 4u)) == (2048u | 4u)
+        && (pass.product == 6u || pass.product == 10u)
+        && pass.producer_bounds_srv != K_INVALID_BINDLESS_INDEX) {
+        ByteAddressBuffer status = ResourceDescriptorHeap[pass.producer_bounds_srv];
+        const uint offset = FilterGradientOffset(pass.product);
+        const uint maximum_bits = status.Load(pass.product == 6u ? 372u : 376u);
+        if (status.Load(offset + 12u) == 1u
+            && status.Load(offset + 28u) == pass.width * pass.height * pass.depth
+            && maximum_bits <= 0x7f7fffffu) {
+            if (all(pixel == 0u.xxx)) {
+                RWByteAddressBuffer report = ResourceDescriptorHeap[pass.report_uav];
+                uint unused;
+                report.InterlockedOr(8u, 1u << (pass.product - 1u), unused);
+                report.InterlockedMax(4u, maximum_bits, unused);
+            }
+            return;
+        }
+    }
     if (pixel.x >= pass.width || pixel.y >= pass.height || pixel.z >= pass.depth) return;
     RWByteAddressBuffer report = ResourceDescriptorHeap[pass.report_uav];
     uint unused;

@@ -896,11 +896,13 @@ auto ExposurePass::PropagateOpaqueApError(RenderContext& ctx,
 auto ExposurePass::HasFilterGradients(
   const FrameLease& frame, const std::uint32_t product) const -> bool
 {
-  if (!frame || (product != 5U && product != 6U && product != 10U))
+  if (!frame || (product != 5U && product != 6U && product != 10U)) {
     return false;
+  }
   const auto found = submitted_filter_gradients_.find(frame.get());
+  const auto index = product == 5U ? 0U : product == 6U ? 1U : 2U;
   return found != submitted_filter_gradients_.end()
-    && (found->second & (1U << (product - 1U))) != 0U;
+    && found->second[index].texture != nullptr;
 }
 
 auto ExposurePass::GatherFilterGradients(RenderContext& ctx,
@@ -915,8 +917,8 @@ auto ExposurePass::GatherFilterGradients(RenderContext& ctx,
   if (product.id != 5U && product.id != 6U && product.id != 10U) {
     return false;
   }
-  const auto bit = 1U << (product.id - 1U);
-  submitted_filter_gradients_[frame.get()] &= ~bit;
+  const auto index = product.id == 5U ? 0U : product.id == 6U ? 1U : 2U;
+  submitted_filter_gradients_[frame.get()][index] = {};
   if (!product.texture || !product.srv.IsValid()) {
     return false;
   }
@@ -997,7 +999,7 @@ auto ExposurePass::GatherFilterGradients(RenderContext& ctx,
   recorder.reset();
   const bool submitted = recording && recording->IsSubmitted();
   if (submitted) {
-    submitted_filter_gradients_[frame.get()] |= bit;
+    submitted_filter_gradients_[frame.get()][index] = product;
   }
   return submitted;
 }
@@ -1225,7 +1227,17 @@ auto ExposurePass::EvaluateFp16Products(
       TrackTextureFromKnownOrInitial(*recorder, *product.texture);
       recorder->RequireResourceState(*product.texture,
                                      graphics::ResourceStates::kShaderResource);
-      dispatch(1U, &product);
+      bool reuse_maximum = false;
+      if (!current_scale && product.transmittance
+          && (product.id == 6U || product.id == 10U)) {
+        const auto gradients = submitted_filter_gradients_.find(frame.get());
+        if (gradients != submitted_filter_gradients_.end()) {
+          const auto& recorded = gradients->second[product.id == 6U ? 1U : 2U];
+          reuse_maximum = recorded.texture == product.texture
+            && recorded.srv == product.srv && recorded.transmittance;
+        }
+      }
+      dispatch(1U, &product, reuse_maximum ? 2048U : 0U);
     }
     dispatch(2U, nullptr);
     if (!current_scale) {

@@ -92,32 +92,31 @@ Slices 6-10, including the complete LightBench delivery; the package is not comp
 **Approval:** both Slice 5.1 and Slice 5.2 plans are approved (2026-09-19).
 Slice 5.1 execution is authorized.
 
-**Active items:** EX051-03/04/05. The controlled/mixed native benchmark and
-format-only FP32 control are committed at `528ae2e3` with a [usable checkpoint](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/native-benchmark-checkpoint-manifest.json).
-Release builds without warnings; three focused reference cases pass in Debug
-and Release. M01 passes 6,000 matched frames; its explicit exposure p95 is
-1.879 ms versus the single-view 0.50 ms budget, and frame-interval p99 is
-19.314 ms versus 16.67 ms.
+**Active items:** EX051-03/04/05/07. Controlled/mixed benchmarks and the FP32
+format control are committed at `528ae2e3`; moving indoor/outdoor workloads at
+`8ef068b2`; the standalone HZB telemetry owner fix (EXP-R086) at `8370a1e9`.
+Their exact builds, native measurements and limits are linked in the rows below.
+Instrumentation is frozen; no further overhead campaign is planned.
 
-The matched C01 pair uses identical runtime/source inputs and 3,600 frames per
-condition. Production FP16 versus format-only FP32 gives GPU-frame p95
-18.734/21.998 ms, explicit exposure p95 2.435/1.764 ms, and live placement
-563.270/679.520 MiB. Both retain certification. This single pair measures a
-format tradeoff; it does not establish repeatability or final acceptance.
-No performance optimization is implemented yet. Indoor/outdoor and transition
-coverage, full memory/reference qualification and causal diagnosis remain open.
+**Current correction:** H1 is retained after focused correctness, owning Debug
+closeout and two I02 comparisons. It reuses complete, valid current-frame AP/fog
+maxima and keeps the original scan as fallback. [Consolidated evidence](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/h1-closeout-manifest.json)
+links the exact source, builds, runtime inputs, raw measurements and image checks.
+Five focused Debug tests pass; the owning suite is accounted for by 212 original
+passes plus the queued-HZB case passing after the separately committed EXP-R086
+fix. Actual Release DXIL confirms the guarded fast path and fallback.
 
-**Current boundary:** instrumentation is committed and frozen; no further
-overhead work is planned. I01 and I02 each pass 3,600 matched frames, three
-camera cycles, shadow/history readiness and inspected endpoint images.
-[I02](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/indoor-I02-validation-result-Release.json)
-uses full-path warmup (1,200 frames / 30.42 s); exposure p95/p99 is
-4.547/5.345 ms and frame-interval p99 is 33.092 ms, both over budget. I01's
-first qualification predates the full-path warmup change; final acceptance
-will use the current recipe. The [workload evidence](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/indoor-workload-checkpoint.json)
-retains both exact source/runtime identities and visual artifacts.
-An AP/fog maximum-reuse optimization is drafted separately; it is not yet
-applied or measured. Long builds and native validation use subagents.
+**Measured result:** maximum-gather mean falls 0.461 -> 0.396 ms in the first
+pair and 0.487 -> 0.359 ms in the repeat. Repeat GPU-frame mean falls
+18.402 -> 17.403 ms; frame-interval mean falls 22.016 -> 20.650 ms. The original
+scan also reproduces the large tails seen in the first candidate run, so the
+first pair does not establish an H1-specific whole-frame regression. Unchanged
+scopes vary: do not credit all aggregate gains to H1 or claim final repeatability.
+Memory and creation counts are unchanged. All endpoint comparisons pass the
+pre-existing float/UNorm8 budgets; tiny exterior drift is retained in the evidence
+without a cause claim or widened tolerance. The repeat still misses the 60 Hz
+and exposure budgets. H1 can commit; EX051-07 overall, remaining work and full
+slice acceptance stay open. No further H1 run or correctness gate is requested.
 
 **Next gate:** EX051-GATE must pass before Slice 5.2. Quality edits require
 agreement on the diagnostic inventory and restructuring design in EX052-03.
@@ -343,7 +342,7 @@ configuration, commands, workload identity, raw samples and derived results.
 | EX051-04 | Safe reference and causal controls / PostProcess + Environment | in_progress | 02, 03 | Default-off format-only FP32 control preserves qualified P, exposure/history and all certification. Three focused cases pass in Debug (initial fallback plus corrected two-case retry) and [Release](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/fp32-reference-validation-result-Release.json), including forward/deferred scene switches; 35 runtime and ten source hashes unchanged. The shared benchmark exposes production/FP32 selection. [Matched C01 comparison](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/native-benchmark-checkpoint-manifest.json) passes 3,600 frames per condition on identical source/runtime inputs; both modes retain certification. Full independent reference qualification and certificate/reduction/history causal controls remain open; unsafe ablations cannot ship or count as correctness evidence. |
 | EX051-05 | Native baseline and diagnosis / rendering owner | in_progress | 04 | [Native checkpoint](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/native-benchmark-checkpoint-manifest.json): matched C01 production/FP32 and representative M01 pass, with their budget misses retained. C01 FP32 lowers explicit exposure p95 by 0.671 ms but raises GPU-frame p95 by 3.263 ms and live placement by 116.25 MiB in one pair; no repeatability claim. Source diagnosis identifies repeated producer maximum/bound/suitability scans, with no optimization yet. Remaining matrix, embedded checks, causal controls, pure active CPU versus waits and uncertainty remain open. |
 | EX051-06 | Reduce shared bound-update contention / HDR shader owners | planned | 05 | Test max/flag/count-preserving wave/group reductions for the per-voxel global updates in HdrErrorBounds and related hot paths. Inspect optimized shader output; preserve invalid-lane participation, nonfinite/outward-bound semantics and all reported failures. Record independent correctness and native before/after evidence; retain only a justified improvement. |
-| EX051-07 | Consolidate repeated scans / ExposurePass + producers | planned | 05 | Attribute all gather variants separately, including gradients/range/candidate work. Fuse compatible passes/reductions and reuse immutable producer results where valid. Prove current content, frame P, candidate P, settings, layout and lifetime identity; never reuse a certificate merely because exposure is unchanged. Include barriers and submission costs in the comparison. |
+| EX051-07 | Consolidate repeated scans / ExposurePass + producers | in_progress | 05 | H1 retained: reuse complete/valid/finite current-frame AP/fog maxima for matching texture/SRV/transmittance; otherwise run the original scan. Sky, SceneColor and candidate-bound scans unchanged; no GPU layout/resource/retry-policy change. [Closeout evidence](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/h1-closeout-manifest.json): five focused Debug cases, owning gate reconciled 212 + corrected HZB case, actual DXIL and two I02 pairs. Maximum-gather mean improves 0.461 -> 0.396 ms and 0.487 -> 0.359 ms; repeat whole-frame metrics improve, memory/churn unchanged, endpoint budgets pass. Aggregate gains are not wholly attributable to H1. Remaining compatible scan fusion and slice budgets stay open. |
 | EX051-08 | Temporal fog cost and bound propagation / Environment | planned | 05 | Isolate reprojection/filtering, certificate construction, bound publication, misses/supersampling and storage format. Hoist view-uniform work only after checking compiler output and dependencies. Preserve hardware sampling, cumulative uncertainty, history rebasing and disocclusion correctness. Compare identical temporal/format conditions before attributing savings. |
 | EX051-09 | Economical admission and recovery / PostProcess | planned | 06-08 | Establish a cheap, correct steady path and bounded bootstrap/recovery behavior. Avoid repeated work that cannot affect a decision; validate every proposed invalidation key. Keep current-frame range protection, conservative FP32 fallback, actual consecutive-frame eligibility and event precedence. A changed shipping precision/retry policy needs an explicit owner-design decision before code. |
 | EX051-10 | Resolve, resource lifetime and memory cost / SceneTextures | planned | 05, 09 | [C01 evidence](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/controlled-C01-churn-diagnosis.json) identifies 14 texture creations/frame (four extracted outputs plus three environment radiance outputs per view) and two buffer creations/frame while live snapshots remain stable. No reuse correction implemented yet. Remove only measured unnecessary copies/allocations and redundant retention. Prove frame-pinned P, delayed consumers, auxiliary/offscreen reads and fences remain correct. Measure steady live bytes, transition peaks, cache retirement and traffic against the same FP32 control; include reduction scratch. |
