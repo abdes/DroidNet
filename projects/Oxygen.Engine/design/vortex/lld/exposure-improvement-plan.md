@@ -2,7 +2,7 @@
 
 Status: `reference`
 
-Updated: 2026-09-16
+Updated: 2026-09-20
 
 The [exposure and LightBench implementation plan](../plan/exposure-and-lightbench-correction.md)
 owns requirements, algorithms, delivery order and acceptance. LightBench is the
@@ -20,6 +20,8 @@ mandatory delivery gate.
 | LightBench and MultiView behavior | [Execution plan section 7](../plan/exposure-and-lightbench-correction.md#7-lightbench-benchmark-and-multiview-visual-qualification) |
 | Measurements | [DiagnosticsService LLD](diagnostics-service.md), with experiment semantics owned by LightBench |
 | Compiler/format checkpoint | [Audit report](../plan/exposure-contract-checkpoint.md), [HDR inventory](scene-textures.md#exposure-hdr-domain-and-format-inventory), per-view eligibility independent of gain validity |
+| Performance controls and execution | [EX051 scopes and benchmark matrix](../IMPLEMENTATION_STATUS.md#321-slice-51-performance-qualification-and-correction); [FP32-only control](post-process-service.md#slice-51-fp32-baseline-and-precision-policy) |
+| Fallback allocation ownership | [EX051-10A SceneColor lease contract](scene-textures.md#ex051-10a-independent-scenecolor-fallback-ownership) |
 | Sequence and tests | [Implementation slices](../plan/exposure-and-lightbench-correction.md#8-ordered-implementation-slices) and [acceptance matrix](../plan/exposure-and-lightbench-correction.md#9-acceptance-matrix-and-execution) |
 
 ## 2. UE5.7 source map
@@ -51,6 +53,9 @@ Reference root: `F:/Epic Games/UE_5.7/Engine`.
 | Histogram | 256 bins and a bounded normalized-view grid retain current bin resolution while bounding cost and accumulation |
 | Mask/curve | Scalar texture multiplied by analytic weights; at most 64 curve keys evaluated once per view |
 | HDR precision | FP32 SceneColor accumulation in both modes; checked conversion into existing resolved color, FP16 when suitable and FP32 during recovery; other qualified radiance products remain dual-format; no generic precision-management service |
+| FP32 performance baseline | EX051-04 adds FP32 storage with P=1 and normal exposure/history/events, omitting FP16-admission work. The existing format-only `fp32` control still executes certification and remains a numerical diagnostic. |
+| Precision economics | EX051-05 uses four production/FP32-only pairs. EX051-09 selects the operating policy from those results and specifies admission/retry transitions. |
+| Fallback retention | EX051-10A replaces whole-family retention with an independent SceneColor lease; unrelated attachments remain reusable while delayed color consumers retain their input. |
 | Validation | Production renderer paths, independent expected values, readable LightBench scenes and native MultiView visual isolation |
 
 UE's borrower-bootstrap exception, generic curve infrastructure, legacy exposure

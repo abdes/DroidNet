@@ -673,6 +673,54 @@ The invalidated epoch discards other queued packets from that normal-mode attemp
 Prospective suitability failure and continued FP32 retention issue no transitions;
 normal adaptation continues until fresh stable eligibility permits return.
 
+## Slice 5.1 FP32 baseline and precision policy
+
+**EX051-04 delivery: planned `fp32-only` performance control.** Keep the existing
+`fp32` selector as a format-only diagnostic: it preserves its own qualified P
+and still executes certification. It is not the FP32-only performance baseline.
+
+The new control has these requirements:
+
+- Use FP32 SceneColor accumulation, resolved color and per-view sky/AP/fog
+  storage. Set frame P and 1/P to one.
+- Keep Manual, ManualCamera, Auto, disabled and zero-target exposure behavior;
+  preserve metering, adaptation, masks, curves, events and owner/borrower routing.
+- Keep ordinary rendering, temporal reprojection, current-frame finite/range
+  protection and exposure-transition acknowledgements.
+- Do not gather prospective FP16 gradients, build FP16-only error certificates,
+  evaluate half eligibility, narrow SceneColor or enqueue eligibility-only
+  readbacks. Keep a shared calculation only when an active non-admission consumer
+  needs it; identify that consumer in the control's implementation review.
+- Publish an unconditional FP32 extraction with the normal immutable exposure
+  record. No conditional conversion verdict or fallback texture is required.
+- Select the control at runtime in the existing native benchmark executable.
+  On a mode change, invalidate precision candidates and rebase or rebuild affected
+  radiance histories. Preserve exposure gain and authored transition requests.
+
+EX051-05 compares total production behavior with this baseline in four fixed
+pairs. Record actual P, formats and rejection reasons at untimed checkpoints.
+The existing temporal format-only comparison has 13 differing P observations
+across seven phases; its measured memory difference describes the two complete
+operating trajectories.
+
+**EX051-09 delivery: an explicit precision state/decision table before code.**
+
+| State | Required work | Exit condition |
+| --- | --- | --- |
+| FP32 operation | Normal exposure/rendering, range protection and valid history; no repeated full prospective qualification without an attempt trigger. | The selected policy starts an admission attempt after a named input/event change or bounded retry condition. |
+| Admission attempt | Fresh required-product checks, gradients and candidate/error certificates for the participating frames. | Two actual consecutive eligible frames for the same valid candidate permit FP16; rejection returns to FP32 operation. |
+| Qualified FP16 | Current-frame producer protection, checked SceneColor conversion, correct P/history rebasing and retained FP32 fallback. | Range/conversion failure or a validity-key change selects the existing safe recovery behavior. |
+| Recovery | P=1 and FP32 products; preserve event precedence and valid adaptation. Producer range failure follows the existing remeter contract; conversion-only rejection preserves solved exposure. | A named recovery/retry condition permits a new admission attempt. |
+
+The table must list view lifetime, settings/mask/curve revision, exposure event
+generation, source-owner identity, required-product layout, radiance-producing
+inputs, temporal source/P/error state and shader-debug mode as validity inputs.
+Define which of those inputs each reusable result depends on. A reused result
+cannot turn an unchecked frame into an eligible frame. Old acknowledgements
+cannot cross a lifetime, generation or precision epoch. Shared gain does not
+qualify a consumer's local products. General fog rendering changes belong to
+the environment owner; this item owns only exposure-related precision behavior.
+
 ## Post chain and qualification
 
 Owner exposure solves from FP32 accumulation before Stage 21 optionally resolves

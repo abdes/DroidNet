@@ -7,7 +7,7 @@ Status: `in_progress` — current slice state and evidence are maintained in the
 are updated there; this plan owns the requirements and gates.
 
 Date: 2026-09-16
-Updated: 2026-09-19 — required Slices 5.1 and 5.2 inserted before Slice 6.
+Updated: 2026-09-20 — Slice 5.1 resource ownership, FP32 baseline, decision runs and item scopes revised.
 
 Paths are relative to `projects/Oxygen.Engine` unless identified as
 repository-root paths.
@@ -29,6 +29,13 @@ profiling and native Release execution. Each slice includes its tests and
 owning-document updates. The user approved the inserted plan and authorized
 Slice 5.1 execution on 2026-09-19. Slice 5.2 retains its diagnostic-inventory and
 restructuring-design agreement gate before quality edits.
+
+For a fresh start or resume, read the tracker's
+[Current work](../IMPLEMENTATION_STATUS.md#31-current-work) for the active
+checkpoint and execution state. Its
+[remaining performance order](../IMPLEMENTATION_STATUS.md#delivery-order-and-ownership)
+starts with EX051-03 inventory and EX051-10A ownership. Do not restart completed
+items from historical milestone or manifest instructions.
 
 The [exposure reference companion](../lld/exposure-improvement-plan.md) contains
 UE source pointers and Oxygen's implementation choices. This document owns
@@ -67,7 +74,8 @@ by the features above.
   lifecycle, and diagnostics owners. Add no separate exposure framework.
 - Use one settings resolver, one exposure-state family, one metering algorithm,
   and one frame-exposure binding shared by rendering families.
-- Use two HDR resource modes: normal FP16 and bootstrap/recovery FP32. Implement
+- Use FP32 accumulation with optional qualified FP16 storage. Keep FP32 for
+  bootstrap, recovery and FP32-only operation. Implement
   them through existing texture descriptors, PSO keys and resource leases;
   add no general dynamic-precision service.
 - Reuse one bounded status/readback path for initialization acknowledgment,
@@ -435,15 +443,17 @@ updates with the corresponding C++ producers.
 ### 4.5 First-frame and discontinuity headroom
 
 An unseeded first frame cannot choose a reliable FP16 scale from exposure
-history. A tiny fixed P can erase dark pixels; P=1 can overflow bright pixels.
+history. A tiny fixed P can erase dark half-float values; P=1 can overflow
+bright half-float values.
 
 Keep SceneColor accumulation FP32 in both modes. Convert into the existing
-resolved-color texture with suitability checks: FP16 when qualified, FP32 for
-bootstrap/recovery. Required high-range view-dependent intermediates also use
+resolved-color texture with suitability checks: FP16 when qualified and selected
+by the precision policy, FP32 for bootstrap, recovery or FP32-only operation.
+Required high-range view-dependent intermediates also use
 FP32 for first unseeded metering, remeter cuts and device recovery.
 Use P=1, meter and tonemap that frame. Exposure validity and FP16 suitability
 are separate conditions. The CPU starts this format on the known event and
-retains it until nonblocking completed status for the matching view, settings
+permits FP16 only after nonblocking completed status for the matching view, settings
 revision and requested/applied transition generation confirms both valid GPU
 history and FP16 eligibility for that view's required HDR products. Older valid
 history with a pending reset cannot authorize the switch. Delayed acknowledgment
@@ -467,6 +477,12 @@ FP16 frame; an acknowledgment for another candidate, superseded settings/event,
 destroyed/recreated view or incompatible product layout cannot authorize return.
 Subsequent unexpected range failures follow the recovery rule below. The
 status path remains bounded; there is no third format or precision service.
+
+EX051-09 specifies when a persistent FP32 view attempts admission again. It must
+separate mandatory current-frame protection from prospective FP16 work and name
+the retry triggers and certificate-validity keys. The EX051-04 performance
+baseline stays FP32 with P=1 and omits FP16-admission work while preserving
+metering, adaptation, transitions, sharing and temporal rendering.
 
 Suitability belongs to each view, including borrowers: shared gain validity does
 not certify the consumer's image. Qualify stable excessive-range retention,
@@ -894,13 +910,34 @@ The authoritative task breakdown, measurement protocol, budgets, dependencies
 and commit boundaries are in
 [IMPLEMENTATION_STATUS.md, Slice 5.1](../IMPLEMENTATION_STATUS.md#321-slice-51-performance-qualification-and-correction).
 
-- Use existing native GPU telemetry and CPU/GPU profiling to attribute the
-  complete exposure/precision cost in optimized Release builds.
-- Establish frozen representative workloads and a safe FP32 reference before
-  correcting measured scan, reduction, temporal, memory or submission costs.
-- Preserve every Slice 5 numerical, sampling, lifecycle and lifetime contract.
-- Meet the primary 1080p/60 gate and explicit subsystem budgets; qualify 4K
-  scaling without claiming a blanket 4K/60 target.
+- Close the delivered profiling, H1/H2 scan, rejected H3, H4/H5 reuse and R091
+  lifecycle-accounting checkpoints. Their final matrix coverage belongs to 13.
+- Implement EX051-10A: lease FP32 SceneColor independently so a checked-half
+  fallback does not retain depth, GBuffer, velocity or custom-depth attachments.
+  Both color reuse and attachment-family reuse must honor readers and GPU fences.
+- Replace the performance reference in EX051-04 with `fp32-only`: FP32 storage,
+  P=1, normal exposure/events/history and current-frame protection, with no FP16
+  candidate scans, FP16-only certificates or eligibility-only status jobs.
+  Preserve the existing `fp32` format-only control for numerical diagnostics.
+- EX051-05 runs four production/FP32-only pairs in one Release binary: C01 at
+  1080p and 4K, C02 at 1080p, and I02 at 1080p. Eight timed runs decide whether
+  FP16 helps accepted-half, temporal and retained-FP32 operation. Repeat a pair
+  once only if timing variation prevents the decision.
+- EX051-09 owns the explicit FP32/admission/FP16/recovery state machine, retry
+  triggers and certificate validity. Preserve two actual consecutive eligible
+  frames, GPU-owned P/S, current-frame protection and immutable histories.
+  Fold exposure-related temporal precision work from 08 into this item.
+- EX051-11 uses existing profiling to isolate active exposure CPU work from
+  queue waits. Correct only the identified preparation/submission bottleneck.
+- EX051-12 integrates correctness. EX051-13 alone runs final production
+  acceptance: eight recipes at two resolutions, three runs per cell, with the
+  fixed transition schedule attached to the 1080p I02 runs and one presentation
+  check. EX051-14 reconciles the results and owner documents.
+
+An item closes with its named delivery and accept/reject evidence. Rejected
+experiments close without a production change. Final performance acceptance
+does not keep completed implementation items open. Store raw results once;
+analyses and the checkpoint manifest link them by path/hash.
 
 **Gate:** EX051-GATE passes with native timing distributions, controlled cost
 attribution, bounded resources, independently verified correctness and current
