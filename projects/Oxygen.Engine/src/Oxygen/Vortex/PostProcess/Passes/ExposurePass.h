@@ -324,7 +324,8 @@ private:
   std::unordered_set<const FrameResources*> submitted_conversion_;
   std::unordered_set<const FrameResources*> submitted_composition_input_;
   std::unordered_set<const FrameResources*> submitted_opaque_ap_error_;
-  std::unordered_map<const FrameResources*, std::uint32_t>
+  // Current-frame producer identity for the submitted gradient certificate.
+  std::unordered_map<const FrameResources*, std::array<HdrProduct, 3U>>
     submitted_filter_gradients_;
   std::array<std::vector<FrameLease>, frame::kFramesInFlight.get()>
     frame_bindings_;

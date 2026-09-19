@@ -255,6 +255,16 @@ changes when required IDs, dimensions, coverage or transmittance treatment chang
 format selection itself must not change that identity. Layout state is per
 persistent view and is removed with its lifetime.
 
+Prospective qualification may reuse the current aerial-perspective or fog
+gradient certificate's scene-referred maximum. The submitted texture, SRV and
+transmittance contract must match, and the GPU record must be complete, valid
+and finite. These immutable producer records use the same outward-rounded
+interval endpoints as the ordinary maximum scan. Invalid or incomplete records
+execute that scan unchanged. Sky retains its scan because its gradient contract
+does not validate unused alpha; SceneColor and candidate-bound scans are also
+unchanged. Reuse removes texture reads and bound arithmetic, while retaining the
+dispatch so the GPU can select the original scan without a CPU readback.
+
 Persistent views submit these reference checks and completed reports while
 rendering in either HDR mode. Matching completed eligibility authorizes the
 normal-mode allocations described above; pre-store and composition/temporal error
