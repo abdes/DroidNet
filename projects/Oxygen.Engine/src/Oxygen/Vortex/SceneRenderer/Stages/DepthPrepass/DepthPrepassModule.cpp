@@ -357,7 +357,7 @@ void DepthPrepassModule::Execute(
   if (!recorder) {
     return;
   }
-  ctx.GetRenderer().GetDiagnosticsService().AttachGpuTimelineCollector(
+  renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(
     *recorder);
   graphics::GpuEventScope stage_scope(*recorder, "Vortex.Stage3.DepthPrepass",
     profiling::ProfileGranularity::kTelemetry,
