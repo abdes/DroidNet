@@ -47,9 +47,6 @@
         "--line-length",
         "80"
     ],
-    "chat.instructionsFilesLocations": {
-        ".github": true
-    },
     "github.copilot.chat.codesearch.enabled": true,
     "github.copilot.chat.commitMessageGeneration.instructions": [
         {

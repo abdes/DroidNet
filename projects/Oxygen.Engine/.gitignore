@@ -15,7 +15,6 @@ Thumbs.db
 *.swo
 *~
 .idea/
-.vscode/
 *.code-workspace
 .env
 .env.*
