@@ -607,6 +607,15 @@ public:
   OXGN_VRTX_API auto RemovePublishedRuntimeView(ViewId intent_view_id) -> void;
   OXGN_VRTX_API auto RemovePublishedRuntimeView(
     engine::FrameContext& frame_context, ViewId intent_view_id) -> void;
+  //! End a caller-owned persistent offscreen view lifetime between executions.
+  /*!
+   Supply the same view id and state handle used by the offscreen producer.
+   Repeated release is harmless; retained GPU readers retire through normal
+   fences. Invalid identities and registered view ownership return false;
+   registered views use RemovePublishedRuntimeView instead.
+  */
+  [[nodiscard]] OXGN_VRTX_API auto ReleaseOffscreenViewState(
+    ViewId view_id, CompositionView::ViewStateHandle view_state_handle) -> bool;
   OXGN_VRTX_API auto PruneStalePublishedRuntimeViews(
     engine::FrameContext& frame_context) -> std::vector<ViewId>;
   OXGN_VRTX_API auto UnregisterViewRenderGraph(ViewId view_id) -> void;

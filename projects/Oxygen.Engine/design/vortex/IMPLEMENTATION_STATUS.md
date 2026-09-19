@@ -234,8 +234,21 @@ is not complete.
   authored maxEV30 gives S=2^-30 and the expected saturated/dithered output
   0.99803919. This is intentional endpoint clipping under that authored bound.
   [Scene lifecycle evidence and commands](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/scene-lifecycle-manifest.json).
-  **Next: EX05-23.** Qualify long-idle pruning and real world replacement,
-  followed by remaining sharing, stateless/device and full MultiView combinations.
+  **Completed: EX05-23 — validated in Debug.** The owning gate passes
+  222 tests (199 native exposure and 23 publication), with all 36 frozen runtime
+  hashes unchanged. Public offscreen release preserves retained GPU readers,
+  rejects registered ownership and invalidates retired camera history. Tests
+  cover both shading paths, fresh lifetime/token reuse, public age-60/61 pruning,
+  explicit removal and actual scene replacement with Preserve precedence.
+  MultiView releases both persistent offscreen identities before its targets and
+  scene at shutdown; its separate Debug build passes. No unchanged native gate
+  was repeated for this caller integration.
+  [Lifetime closure and commands](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/scene-retirement-manifest.json).
+  **Current work: EX05-24 — shared exposure and source-loss scene combinations.**
+  Exercise actual owner/consumer images with alternating order, owner mode and
+  zero-target changes, inactive-root retention, source removal and diagnostic
+  overrides. Stateless/device recovery and full MultiView layouts retain their
+  separate gates. Release validation remains at Slice 5 closure.
   **Deferred feature boundaries:** owned bloom, temporal color and specular/
   captured-sky products retain their source TODOs and feature dependency issues.
   **Domain implementation:** failure kind 32 distinguishes unsupported
@@ -387,7 +400,7 @@ current status, including decisions that supersede older manifest limitations.
 | EX05-20 | Scene/environment descriptors, histories and queued constants retire safely | validated | Same-frame offscreen resources, fog/HZB removal, transient histories and queued HZB constants are qualified. Mode-transition-specific leases are Debug-qualified in EX05-18. | [Environment retirement](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/review-r027-manifest.json), [fog/HZB lifetime](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/review-lifetime-manifest.json) |
 | EX05-21 | Actual memory and bandwidth accounting | validated | Four opt-in native 1080p/4K × temporal-off/on cases pass; creation-time peaks, retained outputs, cached families and shared canonical LUTs are measured from deduplicated D3D12 resources. Four capture replays verify format/P/S and final pixels, direct logical texture traffic including promoted producer writes, and warm Debug event times. Texture/report exclusions are explicit; Release performance remains at Slice 5 closure. | [Full evidence and scope](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/accounting-manifest.json), [allocation contract and measured table](lld/scene-textures.md#lifetime-and-memory-accounting) |
 | EX05-22 | Scene startup/cuts/seeds/modes/pause lifecycle matrix | validated | 160 real-scene frame checks cover forward/deferred HDR startup, invalid-meter startup and seeds, cuts/overrides/retries, pause/zero-speed adaptation, Manual/Auto/disabled/physical camera in both projections, compensation and zero/locked target precedence. All 196 native Debug tests pass; an inspected 2^32 startup capture verifies FP32/P1 and final S/P. EX05-19 supplies recovery/retention controls. Release and the separate remaining lifecycle/layout gates remain open. | [Scene lifecycle closure](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/scene-lifecycle-manifest.json), [recovery matrix](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/recovery-increment-manifest.json) |
-| EX05-23 | Inactive, removed, recreated and replaced-world view lifecycle | in_progress | Short hide/reopen and recreated-handle proofs exist. Long-idle expiration and world replacement in the complete scene matrix remain. | [Lifetime fixture](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/lifetime-manifest.json) |
+| EX05-23 | Inactive, removed, recreated and replaced-world view lifecycle | validated | Public offscreen release, retained GPU readers, fresh reuse, registered-owner protection, camera-history invalidation, age-60/61 pruning and actual scene replacement pass on both shading paths. MultiView tears down its persistent offscreen pairs. 222 Debug tests and the owning MultiView Debug build pass; Release remains at slice closure. | [Lifetime closure](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/scene-retirement-manifest.json) |
 | EX05-24 | Shared exposure and source-loss scene combinations | in_progress | Static prior-owner sharing and a source-loss sequence are qualified. Remaining borrowed zero/manual/disabled and feature/layout combinations are not closed. | [Isolation/sharing](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/static-matrix-manifest.json), [source loss](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/source-loss-manifest.json) |
 | EX05-25 | Delayed/stale status, stateless views and device recovery through scenes | in_progress | Controlled status/lifetime/failure primitives and offscreen routes are qualified. Complete scene range/recovery and stateless failure reporting/acceptance remain. | [Status retries](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/status-retry-manifest.json), [offscreen routes](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/offscreen-sharing-manifest.json) |
 | EX05-26 | Main/lit-PiP isolation, reordering and alone-versus-family equivalence | validated | Paused/static proof inputs have exact gain/meter/image agreement and specified sharing latency. This does not qualify moving-camera adaptation or all layouts. | [Static matrix](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/static-matrix-manifest.json) |

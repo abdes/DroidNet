@@ -944,6 +944,8 @@ auto Renderer::RetireExposureTransitions(
 {
   std::unique_lock lock(view_state_mutex_);
   exposure_transitions_.erase(target);
+  // Reusing a retired producer handle must not revive its camera history.
+  previous_view_history_cache_->Invalidate(target);
 }
 
 Renderer::Renderer(std::weak_ptr<Graphics> graphics, RendererConfig config,
@@ -2534,6 +2536,33 @@ auto Renderer::RemovePublishedRuntimeView(
   if (view_const_manager_) {
     view_const_manager_->RemoveView(detached.published_view_id);
   }
+}
+
+auto Renderer::ReleaseOffscreenViewState(const ViewId view_id,
+  const CompositionView::ViewStateHandle view_state_handle) -> bool
+{
+  if (view_id == kInvalidViewId
+    || view_state_handle == CompositionView::kInvalidViewStateHandle)
+    return false;
+  {
+    std::shared_lock lock(view_state_mutex_);
+    if (std::ranges::any_of(
+          published_runtime_views_by_intent_, [&](const auto& entry) {
+            return entry.second.published_view_id == view_id
+              || entry.second.view_state_handle == view_state_handle;
+          })) {
+      LOG_F(ERROR,
+        "Registered views must be removed through their publication owner");
+      return false;
+    }
+  }
+  RetireExposureTransitions(view_state_handle);
+  if (scene_renderer_)
+    scene_renderer_->RemoveViewState(view_id, view_state_handle);
+  UnregisterViewRenderGraph(view_id);
+  if (view_const_manager_)
+    view_const_manager_->RemoveView(view_id);
+  return true;
 }
 
 auto Renderer::PruneStalePublishedRuntimeViews(

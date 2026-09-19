@@ -43,6 +43,8 @@ namespace {
   constexpr uint32_t kOffscreenPreviewHeight = 288U;
   constexpr uint32_t kOffscreenCaptureWidth = 256U;
   constexpr uint32_t kOffscreenCaptureHeight = 256U;
+  constexpr auto kOffscreenPreviewViewId = ViewId { 0x060B0101ULL };
+  constexpr auto kOffscreenCaptureViewId = ViewId { 0x060B0102ULL };
 
   auto HasPositiveExtent(const platform::window::ExtentT& extent) -> bool
   {
@@ -273,6 +275,19 @@ auto MainModule::OnAttachedImpl(
 
 auto MainModule::OnShutdown() noexcept -> void
 {
+  if (config_.offscreen_proof_layout) {
+    if (auto renderer = ResolveVortexRenderer()) {
+      for (const auto view_id :
+        { kOffscreenPreviewViewId, kOffscreenCaptureViewId }) {
+        if (!renderer->ReleaseOffscreenViewState(view_id,
+              vortex::CompositionView::ViewStateHandle { view_id.get() })) {
+          LOG_F(WARNING,
+            "[MultiView] Offscreen view {} could not release its state",
+            view_id.get());
+        }
+      }
+    }
+  }
   for (auto* product : { &offscreen_preview_, &offscreen_capture_ }) {
     product->framebuffer.reset();
   }
@@ -769,10 +784,10 @@ auto MainModule::RenderOffscreenProofProducts(engine::FrameContext& context)
   };
 
   render_product(offscreen_preview_, "M06B.OffscreenPreview.Deferred",
-    ViewId { 0x060B0101ULL }, offscreen_preview_camera_node_,
+    kOffscreenPreviewViewId, offscreen_preview_camera_node_,
     vortex::Renderer::OffscreenPipelineInput::Deferred(), false);
   render_product(offscreen_capture_, "M06B.OffscreenCapture.Forward",
-    ViewId { 0x060B0102ULL }, offscreen_capture_camera_node_,
+    kOffscreenCaptureViewId, offscreen_capture_camera_node_,
     vortex::Renderer::OffscreenPipelineInput::Forward(), false);
 }
 
