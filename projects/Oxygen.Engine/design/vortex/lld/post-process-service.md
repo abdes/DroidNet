@@ -434,6 +434,15 @@ not modify borrowed gain. If root is inactive, retain its last publication.
 With no publication use the root's disabled/manual/seed/EV0 initialization gain;
 never initialize from a consumer image. Bootstrap suitability remains per view.
 
+The scene-integrated sharing regression uses separated owner/consumer cameras
+and emissive surfaces on both shading paths. It alternates actual execution
+order through optional auxiliary dependencies, verifies source-mode changes and
+zero/restore latency, retains an inactive root through idle pruning, and checks
+source removal for Auto, Manual, ManualCamera, disabled and zero-target
+consumers. Diagnostic source frames preserve queued exposure intent. These
+numerical scene tests supplement the separate native MultiView layout and
+visual acceptance matrix.
+
 A borrowing-view cut resets its camera/color histories and bootstrap, not root
 exposure. Explicit detachment remeters by default; Preserve/Seed are opt-in and
 do not revive dormant independent history.

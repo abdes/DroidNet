@@ -136,6 +136,12 @@ auto TransformUploader::GetOrAllocate(
   }
 
   ++frame_write_count_;
+  // A later view can allocate after an earlier view has published its arrays.
+  // Publish a fresh transient snapshot; already-issued SRVs remain immutable.
+  uploaded_this_frame_ = false;
+  worlds_srv_index_ = kInvalidShaderVisibleIndex;
+  previous_worlds_srv_index_ = kInvalidShaderVisibleIndex;
+  normals_srv_index_ = kInvalidShaderVisibleIndex;
   const auto handle = vortex::sceneprep::TransformHandle {
     vortex::sceneprep::TransformHandle::Index { index },
     vortex::sceneprep::TransformHandle::Generation {

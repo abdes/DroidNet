@@ -172,6 +172,14 @@ class InitViewsModule {
 | Motion-history / velocity auxiliary products | BasePassModule (opaque velocity), later stages | Published alongside the prepared-scene payload, keyed to prepared-frame indices / draw order and referencing explicit current/previous transform or deformation publication slots |
 | Culling statistics | DiagnosticsService (Phase 5) | Optional Tracy counters |
 
+Transform publication is immutable for each prepared view. If later view
+preparation allocates or updates additional transform slots, `TransformUploader`
+invalidates its cached SRVs and publishes fresh current, previous and normal
+arrays through the existing transient buffers. Earlier prepared views retain
+their original SRVs. A once-per-frame upload cannot cover handles allocated
+after the first view's publication, even when retained CPU capacity masks the
+problem in later frames.
+
 ### 3.3 Sequence Diagram
 
 ```text
