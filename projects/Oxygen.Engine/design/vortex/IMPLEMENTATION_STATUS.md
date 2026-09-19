@@ -93,7 +93,7 @@ Slices 6-10, including the complete LightBench delivery; the package is not comp
 Slice 5.1 execution is authorized.
 
 **Active items:** EX051-03/04/05. The controlled/mixed native benchmark and
-format-only FP32 control have a [usable checkpoint](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/native-benchmark-checkpoint-manifest.json).
+format-only FP32 control are committed at `528ae2e3` with a [usable checkpoint](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/native-benchmark-checkpoint-manifest.json).
 Release builds without warnings; three focused reference cases pass in Debug
 and Release. M01 passes 6,000 matched frames; its explicit exposure p95 is
 1.879 ms versus the single-view 0.50 ms budget, and frame-interval p99 is
@@ -107,11 +107,17 @@ format tradeoff; it does not establish repeatability or final acceptance.
 No performance optimization is implemented yet. Indoor/outdoor and transition
 coverage, full memory/reference qualification and causal diagnosis remain open.
 
-**Current boundary:** instrumentation is committed and frozen. The user accepts
-its overhead as negligible for this benchmark; no further overhead work is
-planned. Commit the validated controlled/mixed checkpoint before integrating
-the separately prepared indoor/outdoor draft or changing qualification scans.
-Long builds and native validation use subagents.
+**Current boundary:** instrumentation is committed and frozen; no further
+overhead work is planned. I01 and I02 each pass 3,600 matched frames, three
+camera cycles, shadow/history readiness and inspected endpoint images.
+[I02](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/indoor-I02-validation-result-Release.json)
+uses full-path warmup (1,200 frames / 30.42 s); exposure p95/p99 is
+4.547/5.345 ms and frame-interval p99 is 33.092 ms, both over budget. I01's
+first qualification predates the full-path warmup change; final acceptance
+will use the current recipe. The [workload evidence](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/indoor-workload-checkpoint.json)
+retains both exact source/runtime identities and visual artifacts.
+An AP/fog maximum-reuse optimization is drafted separately; it is not yet
+applied or measured. Long builds and native validation use subagents.
 
 **Next gate:** EX051-GATE must pass before Slice 5.2. Quality edits require
 agreement on the diagnostic inventory and restructuring design in EX052-03.
@@ -308,7 +314,9 @@ and correctness cases. A new LightBench implementation is not a prerequisite.
 
 The native workload entry points are
 `ExposureProfilingOverheadTest.DISABLED_ReleaseControlledBaseline` (C01/C02)
-and `ExposureProfilingOverheadTest.DISABLED_ReleaseMixedBaseline` (M01-M04)
+and `ExposureProfilingOverheadTest.DISABLED_ReleaseMixedBaseline` (M01-M04),
+plus `ExposureIndoorOutdoorBenchmarkTest.DISABLED_ReleaseIndoorOutdoorBaseline`
+(I01/I02)
 in `Oxygen.Vortex.ExposureGpu.Tests.exe`. Select one exact test with
 `--gtest_also_run_disabled_tests --gtest_filter=<entry>`. Configure it with
 `OXYGEN_EXPOSURE_BASELINE_CASE`, `OXYGEN_EXPOSURE_TIMING_WIDTH` (1920 or 3840),
@@ -317,8 +325,10 @@ in `Oxygen.Vortex.ExposureGpu.Tests.exe`. Select one exact test with
 `OXYGEN_EXPOSURE_BASELINE_RUN`. Existing output names cannot be overwritten.
 Each invocation writes the workload/settings/resource manifest and matched
 CPU/GPU samples under `slice51`. These offscreen entries do not establish the
-presented 60 Hz gate. Mixed recipe integration and the expanded reference still
-require native qualification; their presence is not completion of EX051-03/04.
+presented 60 Hz gate. I01/I02 require a whole number of 1,200-frame motion
+cycles and export exterior/interior images after timing ends. I01/I02 and the
+remaining mixed/reference matrix still require native qualification; their
+presence is not completion of EX051-03/04.
 
 Each subsequent row stays planned until work starts. Update its evidence and remaining gap
 in place. Evidence belongs under the existing exposure-lightbench analysis root
@@ -329,7 +339,7 @@ configuration, commands, workload identity, raw samples and derived results.
 | --- | --- | --- | --- | --- |
 | EX051-01 | Freeze scope and acceptance contract / rendering owner | validated | User approval recorded 2026-09-19 | [Baseline manifest](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/baseline-manifest.json) verifies 27 source identities against 6092dc0d6, preserves and rehashes 48 Release runtime inputs, and freezes RTX 3080/Ryzen 9950X hardware, the approved budgets/accounting, eight workload combinations and numerical/lifetime invariants. Ten prior evidence files rehashed; historical replay limits explicit. Exact executable recipes and descriptor-derived memory budgets belong to 03; native timings remain 05. |
 | EX051-02 | Native profiling coverage / Graphics + Vortex diagnostics | in_progress | 01 | Native capability is committed and frozen for this benchmark: [profiling checkpoint](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/profiling-closeout-manifest.json). Delayed-frame retention, bounded export and R085 termination are covered; 17 timeline, 8 diagnostics and 3 native Debug cases pass. The accepted 3,600-frame-per-condition Release overhead check reports +0.138 ms mean frame cost. No further overhead investigation is planned. Full workload/CPU attribution and performance acceptance remain in 03-14. |
-| EX051-03 | Repeatable workloads and memory model / existing demo + test owners | in_progress | 01 | C01/C02 and M01-M04 share a warning-free Release loop with frozen quality/timebase, exact view sizes, readiness checks and untimed memory snapshots. [M01](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/mixed-M01-validation-result-Release.json): 6,000 frames, five draws, FP32 throughout; exposure p95 1.879 ms, frame p99 19.314 ms, stable 778.582 MiB live placement and 7 textures/1 buffer created per frame. [C01 memory model](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/controlled-memory-model.json): 563.270 MiB, 14 textures/2 buffers per frame. Indoor/outdoor and transition coverage, remaining matrix execution, peaks/retirement and full memory budgets remain open. |
+| EX051-03 | Repeatable workloads and memory model / existing demo + test owners | in_progress | 01 | C01/C02 and M01-M04 share a warning-free Release loop with frozen quality/timebase, exact view sizes, readiness checks and untimed memory snapshots. [M01](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/mixed-M01-validation-result-Release.json): 6,000 frames, five draws, FP32 throughout; exposure p95 1.879 ms, frame p99 19.314 ms, stable 778.582 MiB live placement and 7 textures/1 buffer created per frame. [C01 memory model](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/controlled-memory-model.json): 563.270 MiB, 14 textures/2 buffers per frame. I01/I02 implementation now adds an enclosure, fixed camera cycle, shadow/history checks and untimed endpoint images; [I01/I02 evidence](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/indoor-workload-checkpoint.json): each passes 3,600 frames and three cycles, all sampled history reprojected without reset; six endpoint images inspected. I02 uses full-path warmup; I01 retains its earlier stationary-warmup identity. Performance acceptance remains open. Transition coverage, remaining matrix execution, peaks/retirement and full memory budgets remain open. |
 | EX051-04 | Safe reference and causal controls / PostProcess + Environment | in_progress | 02, 03 | Default-off format-only FP32 control preserves qualified P, exposure/history and all certification. Three focused cases pass in Debug (initial fallback plus corrected two-case retry) and [Release](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/fp32-reference-validation-result-Release.json), including forward/deferred scene switches; 35 runtime and ten source hashes unchanged. The shared benchmark exposes production/FP32 selection. [Matched C01 comparison](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/native-benchmark-checkpoint-manifest.json) passes 3,600 frames per condition on identical source/runtime inputs; both modes retain certification. Full independent reference qualification and certificate/reduction/history causal controls remain open; unsafe ablations cannot ship or count as correctness evidence. |
 | EX051-05 | Native baseline and diagnosis / rendering owner | in_progress | 04 | [Native checkpoint](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/native-benchmark-checkpoint-manifest.json): matched C01 production/FP32 and representative M01 pass, with their budget misses retained. C01 FP32 lowers explicit exposure p95 by 0.671 ms but raises GPU-frame p95 by 3.263 ms and live placement by 116.25 MiB in one pair; no repeatability claim. Source diagnosis identifies repeated producer maximum/bound/suitability scans, with no optimization yet. Remaining matrix, embedded checks, causal controls, pure active CPU versus waits and uncertainty remain open. |
 | EX051-06 | Reduce shared bound-update contention / HDR shader owners | planned | 05 | Test max/flag/count-preserving wave/group reductions for the per-voxel global updates in HdrErrorBounds and related hot paths. Inspect optimized shader output; preserve invalid-lane participation, nonfinite/outward-bound semantics and all reported failures. Record independent correctness and native before/after evidence; retain only a justified improvement. |

@@ -9143,7 +9143,8 @@ NOLINT_TEST_F(
 
 class ExposureProfilingOverheadTest : public ExposureLightingGpuTest {
 protected:
-  auto MeasureReleaseBaseline(bool mixed_scene) -> void;
+  enum class BaselineRecipe { kControlled, kMixed, kIndoorOutdoor };
+  auto MeasureReleaseBaseline(BaselineRecipe recipe) -> void;
 
   auto BackendConfigJson() const -> std::string override
   {
@@ -9155,6 +9156,15 @@ protected:
   }
 };
 
+class ExposureIndoorOutdoorBenchmarkTest
+  : public ExposureProfilingOverheadTest {
+protected:
+  auto AdditionalCapabilities() const -> CapabilitySet override
+  {
+    return ExposureProfilingOverheadTest::AdditionalCapabilities()
+      | RendererCapabilityFamily::kShadowing;
+  }
+};
 NOLINT_TEST_F(ExposureProfilingOverheadTest, DISABLED_ReleaseCollectionOnOff)
 {
 #ifndef NDEBUG
@@ -9351,20 +9361,29 @@ NOLINT_TEST_F(ExposureProfilingOverheadTest, DISABLED_ReleaseCollectionOnOff)
 }
 NOLINT_TEST_F(ExposureProfilingOverheadTest, DISABLED_ReleaseControlledBaseline)
 {
-  MeasureReleaseBaseline(false);
+  MeasureReleaseBaseline(BaselineRecipe::kControlled);
 }
 
 NOLINT_TEST_F(ExposureProfilingOverheadTest, DISABLED_ReleaseMixedBaseline)
 {
-  MeasureReleaseBaseline(true);
+  MeasureReleaseBaseline(BaselineRecipe::kMixed);
+}
+
+NOLINT_TEST_F(
+  ExposureIndoorOutdoorBenchmarkTest, DISABLED_ReleaseIndoorOutdoorBaseline)
+{
+  MeasureReleaseBaseline(BaselineRecipe::kIndoorOutdoor);
 }
 
 auto ExposureProfilingOverheadTest::MeasureReleaseBaseline(
-  const bool mixed_scene) -> void
+  const BaselineRecipe kind) -> void
 {
 #ifndef NDEBUG
+  static_cast<void>(kind);
   FAIL() << "This performance measurement requires Release.";
 #else
+  const auto moving = kind == BaselineRecipe::kIndoorOutdoor;
+  const auto mixed_scene = kind != BaselineRecipe::kControlled;
   const auto option = [](const char* name, std::string fallback) {
     char* value = nullptr;
     std::size_t size = 0U;
@@ -9376,9 +9395,12 @@ auto ExposureProfilingOverheadTest::MeasureReleaseBaseline(
     }
     return value ? std::string { value } : std::move(fallback);
   };
-  const auto workload
-    = option("OXYGEN_EXPOSURE_BASELINE_CASE", mixed_scene ? "M01" : "C01");
-  if (mixed_scene) {
+  const auto workload = option("OXYGEN_EXPOSURE_BASELINE_CASE",
+    moving ? "I01" : (mixed_scene ? "M01" : "C01"));
+  if (moving) {
+    ASSERT_TRUE(workload == "I01" || workload == "I02")
+      << "Indoor/outdoor baseline requires I01 or I02";
+  } else if (mixed_scene) {
     ASSERT_TRUE(workload == "M01" || workload == "M02" || workload == "M03"
       || workload == "M04")
       << "Mixed baseline requires M01, M02, M03 or M04";
@@ -9402,6 +9424,10 @@ auto ExposureProfilingOverheadTest::MeasureReleaseBaseline(
     && parsed.ptr == frames_text.data() + frames_text.size()
     && sample_count >= 1800U && sample_count <= 20000U)
     << "OXYGEN_EXPOSURE_BASELINE_FRAMES must be an integer in [1800, 20000]";
+  if (moving) {
+    ASSERT_EQ(sample_count % 1200U, 0U)
+      << "Indoor/outdoor measurements require complete 1200-frame cycles";
+  }
   const auto run_id = option("OXYGEN_EXPOSURE_BASELINE_RUN", "run01");
   ASSERT_TRUE(!run_id.empty() && run_id.size() <= 64U
     && std::ranges::all_of(run_id,
@@ -9416,15 +9442,19 @@ auto ExposureProfilingOverheadTest::MeasureReleaseBaseline(
   const auto width = width_text == "1920" ? 1920U : 3840U;
   const auto height = width * 9U / 16U;
   const auto temporal
-    = workload == "C02" || workload == "M02" || workload == "M04";
-  const auto forward = workload == "M03" || workload == "M04";
-  const auto view_count = workload == "M01" || workload == "M04" ? 1U : 2U;
+    = moving || workload == "C02" || workload == "M02" || workload == "M04";
+  const auto forward
+    = workload == "M03" || workload == "M04" || workload == "I02";
+  const auto view_count
+    = workload == "M01" || workload == "M04" || workload == "I01" ? 1U : 2U;
   const auto expected_format
     = fp32_reference || temporal ? Format::kRGBA32Float : Format::kRGBA16Float;
   const auto directory = std::filesystem::path { OXYGEN_EXPOSURE_WORKSPACE }
     / "out/build-ninja/analysis/vortex/exposure-lightbench/slice51";
   std::filesystem::create_directories(directory);
-  const auto stem = std::string { mixed_scene ? "mixed-" : "controlled-" }
+  const auto stem
+    = std::string { moving ? "indoor-"
+                           : (mixed_scene ? "mixed-" : "controlled-") }
     + workload + "-" + width_text + (fp32_reference ? "-fp32" : "") + "-"
     + run_id + "-Release";
   const auto gpu_path = directory / (stem + ".gpu.json");
@@ -9441,7 +9471,7 @@ auto ExposureProfilingOverheadTest::MeasureReleaseBaseline(
     ASSERT_TRUE(scene->DestroyNode(mesh_node));
     ASSERT_TRUE(scene->DestroyNode(camera));
     const auto recipe
-      = vortex::testing::PopulateMixedExposureBenchmarkScene(*scene);
+      = vortex::testing::PopulateMixedExposureBenchmarkScene(*scene, moving);
     cameras = { recipe.main_camera, recipe.secondary_camera };
     for (unsigned index = 0U; index < view_count; ++index) {
       auto& lens
@@ -9605,6 +9635,10 @@ auto ExposureProfilingOverheadTest::MeasureReleaseBaseline(
     double frame_start_ms;
     double submission_ms;
     std::array<unsigned, 2> formats;
+    std::array<unsigned, 2> draws;
+    std::array<unsigned, 2> path_phases;
+    std::array<unsigned, 2> history_reprojected;
+    std::array<unsigned, 2> history_reset;
   };
   const auto milliseconds = [](const auto duration) {
     return std::chrono::duration<double, std::milli>(duration).count();
@@ -9614,33 +9648,101 @@ auto ExposureProfilingOverheadTest::MeasureReleaseBaseline(
   auto formats = std::array<unsigned, 2> {};
   auto draw_counts = std::array<unsigned, 2> {};
   auto warm_draw_counts = std::array<unsigned, 2> {};
-  probe->inspect
-    = [&](const RenderContext& context, const SceneTextureExtractRef& color,
-        const unsigned draws) {
-        const auto index = context.current_view.view_state_handle.get() - 500U;
-        CHECK_F(index < seen_views.size());
-        CHECK_F(!seen_views[index]);
-        seen_views[index] = true;
-        draw_counts[index] = draws;
-        if (require_ready) {
-          CHECK_F(color.valid && color.texture != nullptr && color.exposure);
-          if (mixed_scene) {
-            CHECK_F(draws > 0U && draws <= 5U);
-            CHECK_F(draws == warm_draw_counts[index]);
-          } else {
-            CHECK_F(draws == 1U);
-          }
-          CHECK_F(color.texture->GetDescriptor().width == width >> index);
-          CHECK_F(color.texture->GetDescriptor().height == height >> index);
-          if (!mixed_scene || fp32_reference) {
-            CHECK_F(color.texture->GetDescriptor().format == expected_format);
-          }
+  auto path_phases = std::array<unsigned, 2> {};
+  auto history_reprojected = std::array<unsigned, 2> {};
+  auto history_reset = std::array<unsigned, 2> {};
+  auto capture_endpoint = false;
+  std::array<SceneTextureExtractRef, 2> endpoint_hdr;
+  std::array<postprocess::ExposurePass::FrameLease, 2> endpoint_exposure;
+  const auto update_path = [&](const unsigned sample_frame) {
+    for (unsigned index = 0U; index < view_count; ++index) {
+      const auto phase = (sample_frame + index * 600U) % 1200U;
+      path_phases[index] = phase;
+      auto progress = 0.0F;
+      if (phase >= 300U && phase < 600U) {
+        progress = float(phase - 300U) / 300.0F;
+      } else if (phase >= 600U && phase < 900U) {
+        progress = 1.0F;
+      } else if (phase >= 900U) {
+        progress = 1.0F - float(phase - 900U) / 300.0F;
+      }
+      progress = progress * progress * (3.0F - 2.0F * progress);
+      const auto position = glm::vec3 { index == 0U ? 2.25F : 2.6F,
+        -8.0F + 9.5F * progress, 1.2F };
+      cameras[index].GetTransform().SetLocalPosition(position);
+      const auto camera_view = glm::lookAt(
+        position, glm::vec3 { -.75F, 0.0F, .25F }, space::move::Up);
+      cameras[index].GetTransform().SetLocalRotation(
+        glm::quat_cast(glm::inverse(camera_view)));
+    }
+    scene->Update();
+    scene->SyncObservers();
+  };
+  probe->inspect = [&](const RenderContext& context,
+                     const SceneTextureExtractRef& color,
+                     const unsigned draws) {
+    const auto index = context.current_view.view_state_handle.get() - 500U;
+    CHECK_F(index < seen_views.size());
+    CHECK_F(!seen_views[index]);
+    seen_views[index] = true;
+    draw_counts[index] = draws;
+    if (capture_endpoint) {
+      CHECK_F(color.valid && color.texture != nullptr);
+      endpoint_hdr[index] = color;
+      endpoint_exposure[index] = context.current_view.frame_exposure;
+    }
+    if (require_ready) {
+      CHECK_F(color.valid && color.texture != nullptr && color.exposure);
+      if (moving) {
+        CHECK_F(draws > 0U && draws <= 11U);
+        const auto* owner
+          = vortex::testing::RendererPublicationProbe::GetSceneRenderer(
+            *renderer_);
+        const auto* shadows
+          = vortex::testing::RendererPublicationProbe::GetShadowService(*owner);
+        CHECK_NOTNULL_F(shadows);
+        CHECK_NOTNULL_F(
+          shadows->InspectShadowSurface(context.current_view.view_id));
+        CHECK_F(shadows->ResolveShadowFrameSlot(context.current_view.view_id)
+          != kInvalidShaderVisibleIndex);
+        const auto& shadow_state = shadows->GetLastRenderState();
+        CHECK_F(
+          shadow_state.frame_sequence == frame::SequenceNumber { sequence });
+        CHECK_F(shadow_state.rendered_cascade_count > 0U);
+        CHECK_F(shadow_state.shadow_caster_draw_count > 0U);
+        const auto& environment = owner->GetLastEnvironmentLightingState();
+        CHECK_F(environment.stage14_integrated_light_scattering_valid);
+        CHECK_F(environment.stage14_volumetric_fog_executed);
+        CHECK_F(environment.stage14_volumetric_fog_temporal_history_requested);
+        history_reprojected[index]
+          = environment
+              .stage14_volumetric_fog_temporal_history_reprojection_executed
+          ? 1U
+          : 0U;
+        history_reset[index]
+          = environment.stage14_volumetric_fog_temporal_history_reset ? 1U : 0U;
+        const auto phase = path_phases[index];
+        if ((phase >= 10U && phase < 300U) || (phase >= 610U && phase < 900U)) {
+          CHECK_F(history_reprojected[index] == 1U);
         }
-        formats[index] = color.texture
-          ? static_cast<unsigned>(color.texture->GetDescriptor().format)
-          : static_cast<unsigned>(Format::kUnknown);
-      };
-  const auto render = [&](const bool start_recording) -> Sample {
+      } else if (mixed_scene) {
+        CHECK_F(draws > 0U && draws <= 5U);
+        CHECK_F(draws == warm_draw_counts[index]);
+      } else {
+        CHECK_F(draws == 1U);
+      }
+      CHECK_F(color.texture->GetDescriptor().width == width >> index);
+      CHECK_F(color.texture->GetDescriptor().height == height >> index);
+      if (!mixed_scene || fp32_reference) {
+        CHECK_F(color.texture->GetDescriptor().format == expected_format);
+      }
+    }
+    formats[index] = color.texture
+      ? static_cast<unsigned>(color.texture->GetDescriptor().format)
+      : static_cast<unsigned>(Format::kUnknown);
+  };
+  const auto render = [&](const bool start_recording,
+                        const unsigned sample_frame = 0U) -> Sample {
     const auto started = Clock::now();
     seen_views.fill(false);
     const auto slot = frame::Slot { sequence % 3U };
@@ -9650,6 +9752,9 @@ auto ExposureProfilingOverheadTest::MeasureReleaseBaseline(
     frame.SetFrameSlot(slot, engine::internal::EngineTagFactory::Get());
     frame.SetFrameSequenceNumber(
       frame_sequence, engine::internal::EngineTagFactory::Get());
+    if (moving) {
+      update_path(sample_frame);
+    }
     renderer_->OnFrameStart(observer_ptr { &frame });
     if (start_recording) {
       CHECK_F(diagnostics.RequestGpuTimelineRecording(gpu_path, sample_count));
@@ -9686,13 +9791,16 @@ auto ExposureProfilingOverheadTest::MeasureReleaseBaseline(
     const auto ended = Clock::now();
     return { sequence, milliseconds(ended - started),
       milliseconds(after_frame_start - started),
-      milliseconds(ended - after_frame_start), formats };
+      milliseconds(ended - after_frame_start), formats, draw_counts,
+      path_phases, history_reprojected, history_reset };
   };
   const auto warm_start = Clock::now();
   unsigned warm_frames = 0U;
-  while (warm_frames < 300U
-    || Clock::now() - warm_start < std::chrono::seconds { 10 }) {
-    static_cast<void>(render(false));
+  const auto minimum_warm_frames = moving ? 1200U : 300U;
+  while (warm_frames < minimum_warm_frames
+    || Clock::now() - warm_start < std::chrono::seconds { 10 }
+    || (moving && warm_frames % 1200U != 0U)) {
+    static_cast<void>(render(false, moving ? warm_frames : 0U));
     ++warm_frames;
   }
   const auto warm_seconds
@@ -9705,7 +9813,7 @@ auto ExposureProfilingOverheadTest::MeasureReleaseBaseline(
   const auto sample_start = Clock::now();
   auto previous_end = sample_start;
   for (unsigned index = 0U; index < sample_count; ++index) {
-    auto sample = render(index == 0U);
+    auto sample = render(index == 0U, index);
     const auto ended = Clock::now();
     sample.wall_ms = milliseconds(ended - previous_end);
     previous_end = ended;
@@ -9718,20 +9826,106 @@ auto ExposureProfilingOverheadTest::MeasureReleaseBaseline(
   // explicit drain is not part of the timed renderer loop or a frame-rate
   // claim.
   WaitForQueueIdle();
-  const auto finalization = render(false);
-  probe->inspect = {};
+  capture_endpoint = moving;
+  const auto finalization = render(false, sample_count);
   backend.track_resources = false;
+  auto endpoints = nlohmann::json::array();
+  const auto save_endpoint = [&](const unsigned path_frame) {
+    WaitForQueueIdle();
+    for (unsigned index = 0U; index < view_count; ++index) {
+      const auto& extract = endpoint_hdr[index];
+      CHECK_NOTNULL_F(extract.texture);
+      CHECK_NOTNULL_F(endpoint_exposure[index].get());
+      const auto domain = Read<FrameExposureData>(
+        *endpoint_exposure[index]->buffer, ResourceStates::kShaderResource);
+      const auto* hdr_texture = extract.texture;
+      auto used_fallback = false;
+      if (extract.fallback != nullptr) {
+        CHECK_NOTNULL_F(extract.exposure.get());
+        const auto report
+          = Read<HdrSuitabilityData>(*extract.exposure->conversion_buffer,
+            ResourceStates::kShaderResource);
+        constexpr auto scene_product_mask = 1U << 10U;
+        const auto accepted = report.failure_flags == 0U
+          && report.checked_products == scene_product_mask
+          && report.expected_products == scene_product_mask;
+        if (!accepted) {
+          hdr_texture = extract.fallback;
+          used_fallback = true;
+        }
+      }
+      const auto hdr = ReadFloatTexture(*hdr_texture, true);
+      const auto pixels = ReadFloatTexture(
+        *targets[index]->GetDescriptor().color_attachments.front().texture);
+      auto scene_luminance = 0.0;
+      auto display_luminance = 0.0;
+      CHECK_F(hdr.size() == pixels.size() && !pixels.empty());
+      for (std::size_t pixel = 0U; pixel < pixels.size(); ++pixel) {
+        for (unsigned channel = 0U; channel < 3U; ++channel) {
+          CHECK_F(std::isfinite(hdr[pixel][channel]));
+          CHECK_F(std::isfinite(pixels[pixel][channel]));
+        }
+        const auto luminance = [](const Pixel& value) {
+          return .2126 * value[0] + .7152 * value[1] + .0722 * value[2];
+        };
+        scene_luminance += luminance(hdr[pixel]) * domain.one_over_pre_exposure;
+        display_luminance += luminance(pixels[pixel]);
+      }
+      scene_luminance /= double(pixels.size());
+      display_luminance /= double(pixels.size());
+      CHECK_F(scene_luminance > 0.0 && display_luminance > 0.0);
+      const auto filename = stem + "-endpoint-" + std::to_string(path_frame)
+        + "-view-" + std::to_string(index) + ".rgba32f";
+      const auto path = directory / filename;
+      CHECK_F(!std::filesystem::exists(path));
+      auto output = std::ofstream(path, std::ios::binary);
+      CHECK_F(output.is_open());
+      output.write(reinterpret_cast<const char*>(pixels.data()),
+        static_cast<std::streamsize>(pixels.size() * sizeof(Pixel)));
+      output.close();
+      CHECK_F(output.good());
+      endpoints.push_back({ { "file", filename }, { "view_index", index },
+        { "width", width >> index }, { "height", height >> index },
+        { "path_phase", path_phases[index] }, { "frame_sequence", sequence },
+        { "pre_exposure", domain.pre_exposure },
+        { "used_fp32_fallback", used_fallback },
+        { "mean_scene_luminance", scene_luminance },
+        { "mean_display_luminance", display_luminance },
+        { "encoding",
+          "Little-endian float32 RGBA, row-major; final renderer output, no "
+          "additional normalization" } });
+      endpoint_hdr[index] = {};
+      endpoint_exposure[index].reset();
+    }
+  };
+  if (moving) {
+    save_endpoint(0U);
+    capture_endpoint = false;
+    for (unsigned path_frame = 1U; path_frame <= 600U; ++path_frame) {
+      capture_endpoint = path_frame == 600U;
+      static_cast<void>(render(false, path_frame));
+    }
+    save_endpoint(600U);
+  }
+  probe->inspect = {};
 
   auto cpu = std::ofstream(cpu_path, std::ios::binary);
   ASSERT_TRUE(cpu.is_open());
   cpu << std::setprecision(17)
       << "frame_seq,simulation_dt_ns,wall_ms,frame_start_ms,submission_ms,"
-         "main_format,secondary_format\n";
+         "main_format,secondary_format,main_draws,secondary_draws,"
+         "main_path_phase,secondary_path_phase,main_history_reprojected,"
+         "secondary_history_reprojected,main_history_reset,secondary_history_"
+         "reset\n";
   for (const auto& sample : samples) {
     cpu << sample.frame_sequence << ',' << simulation_dt_ns << ','
         << sample.wall_ms << ',' << sample.frame_start_ms << ','
         << sample.submission_ms << ',' << sample.formats[0] << ','
-        << sample.formats[1] << '\n';
+        << sample.formats[1] << ',' << sample.draws[0] << ',' << sample.draws[1]
+        << ',' << sample.path_phases[0] << ',' << sample.path_phases[1] << ','
+        << sample.history_reprojected[0] << ',' << sample.history_reprojected[1]
+        << ',' << sample.history_reset[0] << ',' << sample.history_reset[1]
+        << '\n';
   }
   cpu.close();
   ASSERT_TRUE(cpu.good());
@@ -9758,11 +9952,18 @@ auto ExposureProfilingOverheadTest::MeasureReleaseBaseline(
         { "max_ev", settings.max_ev }, { "speed_up", settings.speed_up },
         { "speed_down", settings.speed_down } } },
     { "precision", precision },
-    { "precision_scope", "Format-only control; certification remains enabled" },
+    { "precision_scope",
+      fp32_reference ? "Format-only FP32 control; certification remains enabled"
+                     : "Production admission; certification remains enabled" },
     { "recipe",
-      mixed_scene
-        ? "MultiView mixed exposure"
-        : "Emissive triangle 0.25, vacuum atmosphere, zero-extinction fog" },
+      moving ? "MultiView mixed exposure with six-piece sun-shadowed enclosure"
+             : (mixed_scene ? "MultiView mixed exposure"
+                            : "Emissive triangle 0.25, vacuum atmosphere, "
+                              "zero-extinction fog") },
+    { "camera_path",
+      moving ? "1200 frames: 300 exterior hold, 300 smoothstep entry, 300 "
+               "interior hold, 300 smoothstep exit; secondary phase +600"
+             : "Static" },
     { "camera_aspect", mixed_scene ? double(width) / height : 1.0 },
     { "camera_fov_radians", mixed_scene ? double(glm::radians(45.0F)) : 1.0 },
     { "tone_mapper", "None" }, { "display_gamma", 1 },
@@ -9786,6 +9987,7 @@ auto ExposureProfilingOverheadTest::MeasureReleaseBaseline(
       "No retained extracts beyond normal renderer/probe ownership." },
     { "finalization_frame_seq", finalization.frame_sequence },
     { "finalization_wall_ms", finalization.wall_ms },
+    { "untimed_endpoint_images", endpoints },
     { "scope",
       "Native offscreen workload; no presented FPS claim. "
       "Frame-start duration includes backend waits; submission is a "

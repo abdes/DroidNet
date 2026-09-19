@@ -49,6 +49,8 @@ namespace oxygen::vortex::testing {
 struct MixedExposureBenchmarkScene {
   //! Sphere, cube, cylinder, cone, ground; one submesh per surface.
   std::array<scene::SceneNode, 5> surfaces;
+  //! Optional roof, back, left, right, front-left and front-right walls.
+  std::array<scene::SceneNode, 6> enclosure;
   scene::SceneNode main_camera;
   scene::SceneNode secondary_camera;
   scene::SceneNode sun;
@@ -64,9 +66,12 @@ struct MixedExposureBenchmarkScene {
  postprocessing, but must not already contain the recipe's atmosphere, SkyLight
  or fog systems. The caller owns camera viewport/aspect, exposure, renderer
  quality/history settings, simulation time and rendering path.
+ The optional enclosure adds a roof and five walls with a front opening
+ spanning x = 1..3.5 at y = -3; the caller owns any indoor/outdoor camera path.
 */
 [[nodiscard]] inline auto PopulateMixedExposureBenchmarkScene(
-  scene::Scene& scene) -> MixedExposureBenchmarkScene
+  scene::Scene& scene, const bool with_enclosure = false)
+  -> MixedExposureBenchmarkScene
 {
   auto result = MixedExposureBenchmarkScene {};
   const auto material =
@@ -173,6 +178,27 @@ struct MixedExposureBenchmarkScene {
   result.surfaces[3].GetRenderable().SetMaterialOverride(0, 0,
     material("MixedExposureMasked", { .9F, .4F, .4F, .8F },
       data::MaterialDomain::kMasked));
+
+  if (with_enclosure) {
+    const auto enclosure_material
+      = material("ExposureBenchmarkEnclosure", { .18F, .18F, .18F, 1.0F });
+    const std::array names { "ExposureBenchmarkRoof", "ExposureBenchmarkBack",
+      "ExposureBenchmarkLeft", "ExposureBenchmarkRight",
+      "ExposureBenchmarkFrontLeft", "ExposureBenchmarkFrontRight" };
+    const std::array positions { glm::vec3 { 0.0F, .5F, 3.1F },
+      glm::vec3 { 0.0F, 4.0F, 1.3F }, glm::vec3 { -4.0F, .5F, 1.3F },
+      glm::vec3 { 4.0F, .5F, 1.3F }, glm::vec3 { -1.5F, -3.0F, 1.3F },
+      glm::vec3 { 3.75F, -3.0F, 1.3F } };
+    const std::array scales { glm::vec3 { 8.0F, 7.0F, .2F },
+      glm::vec3 { 8.0F, .2F, 3.6F }, glm::vec3 { .2F, 7.0F, 3.6F },
+      glm::vec3 { .2F, 7.0F, 3.6F }, glm::vec3 { 5.0F, .2F, 3.6F },
+      glm::vec3 { .5F, .2F, 3.6F } };
+    for (std::size_t index = 0U; index < result.enclosure.size(); ++index) {
+      result.enclosure[index] = surface(names[index], data::MakeCubeMeshAsset(),
+        enclosure_material, positions[index]);
+      result.enclosure[index].GetTransform().SetLocalScale(scales[index]);
+    }
+  }
 
   result.key_light = scene.CreateNode("KeyLight");
   auto spot = std::make_unique<scene::SpotLight>();
