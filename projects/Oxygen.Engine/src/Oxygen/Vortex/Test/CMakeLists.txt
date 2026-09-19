@@ -442,6 +442,12 @@ if(WIN32)
     PRIVATE
       OXYGEN_EXPOSURE_WORKSPACE="${PROJECT_SOURCE_DIR}"
   )
+  # The native GPU fixtures exceed the standard COFF section-count limit.
+  target_compile_options(
+    Oxygen.Vortex.ExposureGpu.Tests
+    PRIVATE
+      $<$<CXX_COMPILER_ID:MSVC>:/bigobj>
+  )
   # Compile the arithmetic probe separately; it must not enter shaders.bin.
   if(CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64")
     set(exposure_probe_arch "x64")

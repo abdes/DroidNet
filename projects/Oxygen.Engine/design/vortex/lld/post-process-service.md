@@ -742,6 +742,15 @@ frames in flight, failed submission, source loss and stale acknowledgments.
 Captures must prove bound resources, barriers, state identities and actual final
 consumption. Native game fixtures must exercise the public API without DemoShell.
 
+Scene-integrated status tests retain actual completed GPU readback tickets while
+withholding CPU delivery. Metering and adaptation continue in FP32; only delivery
+of an eligible matching ticket permits FP16. A newer transition, settings
+revision or recreated lifetime rejects older eligibility. Stateless scene tests
+cover the supported radiance endpoints, invalid producers and zero-target
+precedence without creating persistent exposure history. Device-recovery tests
+exercise the renderer's public recovery event and explicit-transition precedence;
+they do not simulate physical adapter removal.
+
 ## Metering mask residency
 
 Native exposure settings use Content ResourceKey, following the approved

@@ -7577,8 +7577,9 @@ protected:
       facade.SetSceneSource({ .scene = observer_ptr { scene.get() } });
       facade.SetViewIntent(Renderer::OffscreenSceneViewInput::FromCamera(
         "Lighting", ViewId { surface_view_id }, view, camera)
-          .SetViewStateHandle(
-            CompositionView::ViewStateHandle { surface_view_id })
+          .SetViewStateHandle(persistent_surface_state
+              ? CompositionView::ViewStateHandle { surface_view_id }
+              : CompositionView::kInvalidViewStateHandle)
           .SetExposureSourceViewId(surface_source_id));
       facade.SetOutputTarget(
         { .framebuffer = observer_ptr { framebuffer.get() } });
@@ -7670,6 +7671,7 @@ protected:
   std::uint32_t surface_view_id = 100U;
   ViewId surface_source_id = kInvalidViewId;
   bool verify_manual_p = true;
+  bool persistent_surface_state = true;
   float frame_delta_seconds = 0;
   DepthPrePassMode depth_mode = DepthPrePassMode::kOpaqueAndMasked;
   console::Console fixture_console;
@@ -8524,6 +8526,287 @@ NOLINT_TEST_F(ExposureLightingGpuTest, SharedSceneLifecycleForward)
 NOLINT_TEST_F(ExposureLightingGpuTest, SharedSceneLifecycleDeferred)
 {
   QualifySharedSceneLifecycle(false);
+}
+
+NOLINT_TEST_F(
+  ExposureLightingGpuTest, StatelessSceneAutoRemetersEveryInvocation)
+{
+  verify_manual_p = false;
+  probe->prepare = [](RenderContext&) { };
+  settings.mode = engine::ExposureMode::kAuto;
+  settings.low_percentile = 0;
+  settings.high_percentile = 1;
+  settings.min_log_luminance = -24;
+  settings.log_luminance_range = 56;
+  settings.min_ev = -22;
+  settings.max_ev = 30;
+  const auto bright = MakeEmissiveMaterial(0x1p32F);
+  frame_delta_seconds = .25F;
+  std::shared_ptr<const Texture> reference;
+  probe->inspect = [&](const RenderContext& ctx,
+                     const SceneTextureExtractRef& color, unsigned) {
+    EXPECT_EQ(ctx.current_view.view_state_handle,
+      CompositionView::kInvalidViewStateHandle);
+    EXPECT_EQ(color.texture->GetDescriptor().format, Format::kRGBA32Float);
+    reference
+      = vortex::testing::RendererPublicationProbe::GetSceneRenderer(*renderer_)
+          ->GetResolvedSceneColorTexture();
+  };
+  persistent_surface_state = false;
+  unsigned checks = 0;
+  for (const bool forward : { false, true }) {
+    // Warm the texture binding without introducing persistent exposure history.
+    mesh_node.GetRenderable().SetMaterialOverride(0, 0, bright);
+    ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0));
+    for (const float luminance :
+      { 0.0F, 0x1p-24F, .25F, 4.0F, 0x1p32F, 1.0F }) {
+      if (luminance == 0x1p32F)
+        mesh_node.GetRenderable().SetMaterialOverride(0, 0, bright);
+      else
+        SetSurface(data::MaterialDomain::kOpaque, luminance);
+      const auto capture
+        = !forward && luminance == 0x1p32F ? BeginOptionalCapture() : nullptr;
+      ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0, 1));
+      if (capture)
+        EXPECT_TRUE(capture->EndCapture());
+      ASSERT_NE(reference, nullptr);
+      ExposureStateData state;
+      ASSERT_NO_FATAL_FAILURE(ExpectSurfaceExposure(
+        luminance, UniformReferenceGain(luminance), *reference, state));
+      const auto domain = Read<FrameExposureData>(
+        *probe->exposure->buffer, ResourceStates::kShaderResource);
+      EXPECT_EQ(domain.pre_exposure, 1);
+      EXPECT_FALSE(
+        vortex::testing::RendererPublicationProbe::HasExposureViewState(
+          OwnedExposureService(), CompositionView::kInvalidViewStateHandle));
+      EXPECT_FALSE(
+        vortex::testing::RendererPublicationProbe::HasExposureViewState(
+          OwnedExposureService(),
+          CompositionView::ViewStateHandle { surface_view_id }));
+      ++checks;
+    }
+    for (const float invalid :
+      { -1.0F, std::numeric_limits<float>::quiet_NaN() }) {
+      SetSurface(data::MaterialDomain::kOpaque, invalid);
+      ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0, 1));
+      ExposureStateData state;
+      ASSERT_NO_FATAL_FAILURE(ExpectSurfaceExposure(-1, 1, *reference, state));
+      EXPECT_EQ(state.flags & 12U, 0U);
+      const auto report = Read<ExposureCompletedStatus>(
+        *probe->exposure->current_state->status_buffer,
+        ResourceStates::kCopySource);
+      EXPECT_NE(report.flags & 16U, 0U);
+      EXPECT_NE(report.first_failure_kind, 0U);
+      settings.target_luminance = 0;
+      ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0, 1));
+      ASSERT_NO_FATAL_FAILURE(ExpectSurfaceExposure(-1, 0, *reference, state));
+      settings.target_luminance = .18F;
+      SetSurface(data::MaterialDomain::kOpaque, .25F);
+      ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0, 1));
+      ASSERT_NO_FATAL_FAILURE(ExpectSurfaceExposure(
+        .25F, UniformReferenceGain(.25F), *reference, state));
+      checks += 3;
+    }
+  }
+  probe->inspect = {};
+  RecordProperty("stateless_scene_frames", checks);
+}
+
+NOLINT_TEST_F(
+  ExposureLightingGpuTest, SceneDeviceRecoveryRejectsPriorEligibility)
+{
+  verify_manual_p = false;
+  probe->prepare = [](RenderContext&) { };
+  settings.mode = engine::ExposureMode::kAuto;
+  settings.low_percentile = 0;
+  settings.high_percentile = 1;
+  std::shared_ptr<const Texture> reference;
+  SceneTextureExtractRef current;
+  probe->inspect
+    = [&](const RenderContext&, const SceneTextureExtractRef& color, unsigned) {
+        current = color;
+        reference = vortex::testing::RendererPublicationProbe::GetSceneRenderer(
+          *renderer_)
+                      ->GetResolvedSceneColorTexture();
+      };
+  for (const bool forward : { false, true }) {
+    surface_view_id = forward ? 4601U : 4600U;
+    const auto handle = CompositionView::ViewStateHandle { surface_view_id };
+    SetSurface(data::MaterialDomain::kOpaque, .25F);
+    ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0, 8));
+    EXPECT_EQ(current.texture->GetDescriptor().format, Format::kRGBA16Float);
+    const auto old = renderer_->QueueExposureTransition(
+      handle, ExposureTransitionPolicy::kSeedFromEv100, 4.0F);
+    ASSERT_TRUE(old.has_value());
+    ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0, 1));
+    ExposureStateData state;
+    ASSERT_NO_FATAL_FAILURE(
+      ExpectSurfaceExposure(.25F, .0625, *reference, state));
+    EXPECT_EQ(state.applied_generation[0], old->generation);
+    // Queue newer intent before polling the completed old GPU submission.
+    const auto newer = renderer_->QueueExposureTransition(
+      handle, ExposureTransitionPolicy::kSeedFromEv100, 3.0F);
+    ASSERT_TRUE(newer.has_value());
+    ASSERT_TRUE(renderer_
+        ->NotifyViewDiscontinuity(handle, ViewDiscontinuity::kDeviceRecovery)
+        .has_value());
+    SetSurface(data::MaterialDomain::kOpaque, 1);
+    ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0, 1));
+    EXPECT_EQ(current.texture->GetDescriptor().format, Format::kRGBA32Float);
+    ASSERT_NO_FATAL_FAILURE(ExpectSurfaceExposure(1, .125, *reference, state));
+    EXPECT_EQ(state.applied_generation[0], newer->generation);
+    EXPECT_EQ(renderer_->InspectExposureTransition(handle)->request, *newer);
+    ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0, 8));
+    EXPECT_EQ(current.texture->GetDescriptor().format, Format::kRGBA16Float);
+    ASSERT_TRUE(renderer_
+        ->NotifyViewDiscontinuity(handle, ViewDiscontinuity::kDeviceRecovery)
+        .has_value());
+    SetSurface(data::MaterialDomain::kOpaque, 4);
+    ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0, 1));
+    EXPECT_EQ(current.texture->GetDescriptor().format, Format::kRGBA32Float);
+    ASSERT_NO_FATAL_FAILURE(
+      ExpectSurfaceExposure(4, UniformReferenceGain(4), *reference, state));
+    const auto domain = Read<FrameExposureData>(
+      *probe->exposure->buffer, ResourceStates::kShaderResource);
+    EXPECT_EQ(domain.pre_exposure, 1);
+    const auto recovery = renderer_->InspectExposureTransition(handle);
+    ASSERT_TRUE(recovery.has_value());
+    EXPECT_GT(recovery->request.generation, newer->generation);
+    EXPECT_EQ(recovery->request.policy, ExposureTransitionPolicy::kRemeter);
+    ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0, 8));
+    EXPECT_EQ(current.texture->GetDescriptor().format, Format::kRGBA16Float);
+    EXPECT_EQ(renderer_->InspectExposureTransition(handle)->phase,
+      ExposureTransitionPhase::kApplied);
+    EXPECT_TRUE(
+      renderer_->ReleaseOffscreenViewState(ViewId { surface_view_id }, handle));
+  }
+  probe->inspect = {};
+  RecordProperty("device_recovery_scene_paths", 2);
+}
+
+NOLINT_TEST_F(
+  ExposureLightingGpuTest, SceneDelayedStatusCannotAuthorizeStalePrecision)
+{
+  using Probe = vortex::testing::RendererPublicationProbe;
+  verify_manual_p = false;
+  probe->prepare = [](RenderContext&) { };
+  settings.mode = engine::ExposureMode::kAuto;
+  settings.low_percentile = 0;
+  settings.high_percentile = 1;
+  settings.speed_up = settings.speed_down = 1;
+  frame_delta_seconds = .25F;
+  SceneTextureExtractRef current;
+  std::shared_ptr<const Texture> reference;
+  probe->inspect
+    = [&](const RenderContext&, const SceneTextureExtractRef& color, unsigned) {
+        current = color;
+        reference
+          = Probe::GetSceneRenderer(*renderer_)->GetResolvedSceneColorTexture();
+      };
+  unsigned delayed_frames = 0;
+  for (const bool forward : { false, true }) {
+    settings.compensation_ev = 0;
+    surface_view_id = 9000;
+    SetSurface(data::MaterialDomain::kOpaque, .25F);
+    ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0));
+    surface_view_id = forward ? 4701U : 4700U;
+    const auto handle = CompositionView::ViewStateHandle { surface_view_id };
+    auto& service = OwnedExposureService();
+    const auto seed = renderer_->QueueExposureTransition(
+      handle, ExposureTransitionPolicy::kSeedFromEv100, 4.0F);
+    ASSERT_TRUE(seed.has_value());
+    Probe::ExposureStatusJobs held;
+    double expected = .0625;
+    ExposureStateData state;
+    for (unsigned iteration = 0; iteration < 6; ++iteration) {
+      ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0, 1));
+      EXPECT_EQ(current.texture->GetDescriptor().format, Format::kRGBA32Float);
+      ASSERT_NO_FATAL_FAILURE(
+        ExpectSurfaceExposure(.25F, expected, *reference, state));
+      EXPECT_EQ(state.applied_generation[0], seed->generation);
+      EXPECT_EQ(renderer_->InspectExposureTransition(handle)->phase,
+        ExposureTransitionPhase::kQueued);
+      // Coalesce delayed delivery to the latest real completed ticket. No
+      // status bytes are fabricated, and at most two ticket batches coexist.
+      held = Probe::TakeExposureStatuses(service, handle);
+      ASSERT_EQ(held.size(), 1U);
+      ASSERT_NE(held.front().readback, nullptr);
+      expected
+        = ReferenceAdaptedGain(expected, UniformReferenceGain(.25F), .25);
+      ++delayed_frames;
+    }
+    const auto eligible = Read<ExposureCompletedStatus>(
+      *held.front().state->status_buffer, ResourceStates::kCopySource);
+    EXPECT_EQ(eligible.flags & 7U, 5U);
+    EXPECT_EQ(eligible.fp16_eligible_streak, 2U);
+    Probe::RestoreExposureStatuses(service, handle, std::move(held));
+    ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0, 1));
+    EXPECT_EQ(current.texture->GetDescriptor().format, Format::kRGBA16Float);
+    ASSERT_NO_FATAL_FAILURE(
+      ExpectSurfaceExposure(.25F, expected, *reference, state));
+    EXPECT_EQ(renderer_->InspectExposureTransition(handle)->phase,
+      ExposureTransitionPhase::kApplied);
+
+    // A delayed eligible packet cannot authorize a newer request generation.
+    held = Probe::TakeExposureStatuses(service, handle);
+    ASSERT_EQ(held.size(), 1U);
+    const auto newer = renderer_->QueueExposureTransition(
+      handle, ExposureTransitionPolicy::kSeedFromEv100, 8.0F);
+    ASSERT_TRUE(newer.has_value());
+    Probe::RestoreExposureStatuses(service, handle, std::move(held));
+    ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0, 1));
+    EXPECT_EQ(current.texture->GetDescriptor().format, Format::kRGBA32Float);
+    ASSERT_NO_FATAL_FAILURE(
+      ExpectSurfaceExposure(.25F, 0x1p-8, *reference, state));
+    EXPECT_EQ(renderer_->InspectExposureTransition(handle)->request, *newer);
+    EXPECT_EQ(renderer_->InspectExposureTransition(handle)->phase,
+      ExposureTransitionPhase::kQueued);
+
+    // Nor can it certify changed settings, even if polled before preparation.
+    ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0, 8));
+    EXPECT_EQ(current.texture->GetDescriptor().format, Format::kRGBA16Float);
+    const auto before
+      = Read<ExposureStateData>(*current.exposure->current_state->buffer,
+        ResourceStates::kShaderResource);
+    held = Probe::TakeExposureStatuses(service, handle);
+    ASSERT_EQ(held.size(), 1U);
+    settings.compensation_ev = 1;
+    Probe::RestoreExposureStatuses(service, handle, std::move(held));
+    ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0, 1));
+    EXPECT_EQ(current.texture->GetDescriptor().format, Format::kRGBA32Float);
+    ASSERT_NO_FATAL_FAILURE(ExpectSurfaceExposure(.25F,
+      ReferenceAdaptedGain(
+        before.displayed_scale, UniformReferenceGain(.25F), .25),
+      *reference, state));
+    EXPECT_NE(state.settings_revision, before.settings_revision);
+
+    // Retirement must reject old readers even after the same handle is reused.
+    ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0, 8));
+    EXPECT_EQ(current.texture->GetDescriptor().format, Format::kRGBA16Float);
+    held = Probe::TakeExposureStatuses(service, handle);
+    ASSERT_EQ(held.size(), 1U);
+    const auto retired_lifetime = held.front().lifetime;
+    EXPECT_TRUE(
+      renderer_->ReleaseOffscreenViewState(ViewId { surface_view_id }, handle));
+    const auto replacement = renderer_->QueueExposureTransition(
+      handle, ExposureTransitionPolicy::kSeedFromEv100, 6.0F);
+    ASSERT_TRUE(replacement.has_value());
+    EXPECT_NE(replacement->lifetime, retired_lifetime);
+    settings.compensation_ev = 0;
+    Probe::RestoreExposureStatuses(service, handle, std::move(held));
+    ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0, 1));
+    EXPECT_EQ(current.texture->GetDescriptor().format, Format::kRGBA32Float);
+    ASSERT_NO_FATAL_FAILURE(
+      ExpectSurfaceExposure(.25F, 0x1p-6, *reference, state));
+    EXPECT_EQ(
+      renderer_->InspectExposureTransition(handle)->request, *replacement);
+    EXPECT_FALSE(renderer_->RetryExposureTransition(*newer).has_value());
+    EXPECT_TRUE(
+      renderer_->ReleaseOffscreenViewState(ViewId { surface_view_id }, handle));
+  }
+  probe->inspect = {};
+  RecordProperty("delayed_scene_frames", delayed_frames);
+  RecordProperty("stale_scene_status_cases", 6);
 }
 
 auto ExposureLightingGpuTest::MeasureHdrAllocationAccounting(bool temporal)

@@ -255,9 +255,20 @@ is not complete.
   the corrected capture verify HDR .25/1, valid consumer vertices and matching
   final output. Full MultiView layout/interaction acceptance remains separate.
   [Sharing closure, defect evidence and commands](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/scene-sharing-manifest.json).
-  **Current work: EX05-25 — stateless Auto, delayed/stale status and device
-  recovery through real scenes.** The next implementation patch is prepared;
-  its validation has not run. Release remains at Slice 5 closure.
+  **Completed: EX05-25 — validated in Debug.** All 204 native tests pass
+  with 35 unchanged runtime inputs. Scene qualification covers 24 stateless
+  frame checks through supported endpoints, negative/NaN input and zero-target
+  recovery; 12 frames of continued FP32 adaptation while actual readback delivery
+  is withheld; six stale generation/settings/lifetime cases; and public device
+  recovery with explicit-transition precedence on both shading paths. The
+  stateless 2^32 capture verifies FP32/P1 and correct final S/P consumption.
+  Device coverage is the renderer event contract, not physical adapter removal.
+  [Scene status closure and commands](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/scene-stateless-recovery-manifest.json).
+  **Current work: EX05-29 — complete native layout and standalone/family
+  acceptance.** Prepare the existing MultiView controls for standard, auxiliary,
+  offscreen and feature layouts, retaining intentional diagnostic cells. The
+  mixed-material gap (EX05-04) and active interactions (EX05-30) remain open;
+  Release validation remains at Slice 5 closure.
   **Deferred feature boundaries:** owned bloom, temporal color and specular/
   captured-sky products retain their source TODOs and feature dependency issues.
   **Domain implementation:** failure kind 32 distinguishes unsupported
@@ -411,7 +422,7 @@ current status, including decisions that supersede older manifest limitations.
 | EX05-22 | Scene startup/cuts/seeds/modes/pause lifecycle matrix | validated | 160 real-scene frame checks cover forward/deferred HDR startup, invalid-meter startup and seeds, cuts/overrides/retries, pause/zero-speed adaptation, Manual/Auto/disabled/physical camera in both projections, compensation and zero/locked target precedence. All 196 native Debug tests pass; an inspected 2^32 startup capture verifies FP32/P1 and final S/P. EX05-19 supplies recovery/retention controls. Release and the separate remaining lifecycle/layout gates remain open. | [Scene lifecycle closure](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/scene-lifecycle-manifest.json), [recovery matrix](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/recovery-increment-manifest.json) |
 | EX05-23 | Inactive, removed, recreated and replaced-world view lifecycle | validated | Public offscreen release, retained GPU readers, fresh reuse, registered-owner protection, camera-history invalidation, age-60/61 pruning and actual scene replacement pass on both shading paths. MultiView tears down its persistent offscreen pairs. 222 Debug tests and the owning MultiView Debug build pass; Release remains at slice closure. | [Lifetime closure](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/scene-retirement-manifest.json) |
 | EX05-24 | Shared exposure and source-loss scene combinations | validated | 102 native scene frames cover both shading paths and actual render orders, contrasting images/settings, initial fallback, zero/manual/physical/disabled source modes, diagnostics, inactive ownership and six source-loss policies. First-frame later-view transform publication is corrected and captured. Owning Debug gate: 294 tests passed. Full pane/layout combinations remain EX05-29/30; Release remains at slice closure. | [Shared-scene closure](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/scene-sharing-manifest.json) |
-| EX05-25 | Delayed/stale status, stateless views and device recovery through scenes | in_progress | Controlled status/lifetime/failure primitives and offscreen routes are qualified. Complete scene range/recovery and stateless failure reporting/acceptance remain. | [Status retries](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/status-retry-manifest.json), [offscreen routes](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/offscreen-sharing-manifest.json) |
+| EX05-25 | Delayed/stale status, stateless Auto and device recovery | validated | Real-scene tests cover stateless endpoints/invalid input/zero-target recovery, delayed actual GPU readback delivery while FP32 adapts, stale generation/settings/lifetime rejection and public device-event precedence/requalification. All 204 native Debug tests pass; the stateless 2^32 capture verifies FP32/P1 and S/P. Physical adapter removal is outside this event-contract proof; Release remains at slice closure. | [Scene status closure](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/scene-stateless-recovery-manifest.json), [bounded status retries](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/status-retry-manifest.json) |
 | EX05-26 | Main/lit-PiP isolation, reordering and alone-versus-family equivalence | validated | Paused/static proof inputs have exact gain/meter/image agreement and specified sharing latency. This does not qualify moving-camera adaptation or all layouts. | [Static matrix](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/static-matrix-manifest.json) |
 | EX05-27 | Viewport, scissor and whole-window resize | validated | The named scripted resize/scissor fixtures pass without cross-view contamination. | [Viewport/scissor](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/viewport-manifest.json), [window resize](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/window-resize-manifest.json) |
 | EX05-28 | MultiView per-view mode, seed, cut and diagnostic events | validated | Paused scripted events and diagnostic restoration are qualified; runtime physical-camera values are covered, persistence is not. | [Modes](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/modes-manifest.json), [diagnostics](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/diagnostic-manifest.json) |
