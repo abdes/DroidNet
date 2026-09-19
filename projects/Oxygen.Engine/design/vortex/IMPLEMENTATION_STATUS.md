@@ -275,6 +275,14 @@ is not complete.
   The owning gate passes 280 tests with 38 unchanged runtime inputs. The checker
   requires exact selected/producer sets and rejects full-family substitutions.
   [Layout closure and commands](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/layout-matrix-manifest.json).
+  **Qualified offscreen intent correction (EX05-04/30):** the offscreen facade
+  accepts a complete canonical exposure override for both execution paths;
+  `nullopt` restores scene inheritance. Input copies/moves and finalized
+  sessions retain their owned diagnostic names. The focused Debug checkpoint
+  passes 19 tests with 37 unchanged runtime inputs, including both-path ownership
+  checks and native forward/deferred Manual-to-Auto-to-disabled gain checks.
+  The complete mixed-content and interaction gates remain open.
+  [Focused commands and results](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/offscreen-intent-validation-result.json).
   **Current work: EX05-04 / EX05-30 — mixed content and active combined
   interactions.** Extend the existing MultiView scenario with mixed material
   domains and controlled camera, exposure, resize and lifecycle phases. The

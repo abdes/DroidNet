@@ -3776,6 +3776,45 @@ Renderer::OffscreenSceneViewInput::OffscreenSceneViewInput()
   SyncName();
 }
 
+Renderer::OffscreenSceneViewInput::OffscreenSceneViewInput(
+  const OffscreenSceneViewInput& other)
+  : name_storage_(other.name_storage_)
+  , composition_view_(other.composition_view_)
+{
+  SyncName();
+}
+
+Renderer::OffscreenSceneViewInput::OffscreenSceneViewInput(
+  OffscreenSceneViewInput&& other) noexcept
+  : name_storage_(std::move(other.name_storage_))
+  , composition_view_(std::move(other.composition_view_))
+{
+  SyncName();
+  other.SyncName();
+}
+
+auto Renderer::OffscreenSceneViewInput::operator=(
+  const OffscreenSceneViewInput& other) -> OffscreenSceneViewInput&
+{
+  if (this != &other) {
+    auto copy = OffscreenSceneViewInput(other);
+    *this = std::move(copy);
+  }
+  return *this;
+}
+
+auto Renderer::OffscreenSceneViewInput::operator=(
+  OffscreenSceneViewInput&& other) noexcept -> OffscreenSceneViewInput&
+{
+  if (this != &other) {
+    name_storage_ = std::move(other.name_storage_);
+    composition_view_ = std::move(other.composition_view_);
+    SyncName();
+    other.SyncName();
+  }
+  return *this;
+}
+
 auto Renderer::OffscreenSceneViewInput::FromCamera(std::string name,
   const ViewId view_id, const View& view, const scene::SceneNode& camera)
   -> OffscreenSceneViewInput
@@ -3818,6 +3857,13 @@ auto Renderer::OffscreenSceneViewInput::SetExposureSourceViewId(
 auto Renderer::OffscreenSceneViewInput::SyncName() noexcept -> void
 {
   composition_view_.name = name_storage_;
+}
+
+auto Renderer::OffscreenSceneViewInput::SetExposureOverride(
+  std::optional<scene::ExposureSettings> exposure) -> OffscreenSceneViewInput&
+{
+  composition_view_.render_settings.exposure = std::move(exposure);
+  return *this;
 }
 
 auto Renderer::OffscreenSceneViewInput::SetViewStateHandle(
@@ -3921,6 +3967,7 @@ auto Renderer::ValidatedOffscreenSceneSession::ExecuteNow() -> bool
     .render_target = output_target_.framebuffer,
     .composite_source = output_target_.framebuffer,
     .primary_target = output_target_.framebuffer,
+    .exposure_override = view_intent.render_settings.exposure,
   });
 
   if (!scene_renderer.OnRender(render_context))
@@ -4006,6 +4053,7 @@ auto Renderer::ValidatedOffscreenSceneSession::ExecuteInsideFrame(
     .render_target = output_target_.framebuffer,
     .composite_source = output_target_.framebuffer,
     .primary_target = output_target_.framebuffer,
+    .exposure_override = view_intent.render_settings.exposure,
   });
 
   if (!scene_renderer.OnRender(render_context))
