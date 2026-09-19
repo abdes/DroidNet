@@ -56,13 +56,17 @@ auto TimestampQueryBackend::WriteTimestamp(
 }
 
 auto TimestampQueryBackend::RecordResolve(graphics::CommandRecorder& recorder,
-  const uint32_t used_query_slots) -> bool
+  const uint32_t used_query_slots, const uint32_t first_query_slot) -> bool
 {
   if (query_heap_ == nullptr || readback_resource_ == nullptr) {
     return false;
   }
-  if (used_query_slots == 0U || used_query_slots > capacity_queries_) {
-    return used_query_slots == 0U;
+  if (first_query_slot > capacity_queries_
+    || used_query_slots > capacity_queries_ - first_query_slot) {
+    return false;
+  }
+  if (used_query_slots == 0U) {
+    return true;
   }
 
   auto& d3d12_recorder = static_cast<CommandRecorder&>(recorder);
@@ -72,11 +76,13 @@ auto TimestampQueryBackend::RecordResolve(graphics::CommandRecorder& recorder,
   }
 
   command_list->ResolveQueryData(query_heap_.Get(), D3D12_QUERY_TYPE_TIMESTAMP,
-    0U, used_query_slots, readback_resource_.Get(), 0U);
+    first_query_slot, used_query_slots, readback_resource_.Get(),
+    static_cast<uint64_t>(first_query_slot) * sizeof(uint64_t));
   return true;
 }
 
-auto TimestampQueryBackend::GetResolvedTicks() const -> std::span<const uint64_t>
+auto TimestampQueryBackend::GetResolvedTicks() const
+  -> std::span<const uint64_t>
 {
   if (mapped_ticks_ == nullptr || capacity_queries_ == 0U) {
     return {};
@@ -85,8 +91,8 @@ auto TimestampQueryBackend::GetResolvedTicks() const -> std::span<const uint64_t
   return { mapped_ticks_, capacity_queries_ };
 }
 
-auto TimestampQueryBackend::RecreateResources(
-  const uint32_t capacity_queries) -> bool
+auto TimestampQueryBackend::RecreateResources(const uint32_t capacity_queries)
+  -> bool
 {
   DCHECK_GT_F(capacity_queries, 0U);
 
@@ -101,8 +107,8 @@ auto TimestampQueryBackend::RecreateResources(
   query_heap_desc.NodeMask = 0U;
 
   try {
-    ThrowOnFailed(device->CreateQueryHeap(
-                    &query_heap_desc, IID_PPV_ARGS(&query_heap_)),
+    ThrowOnFailed(
+      device->CreateQueryHeap(&query_heap_desc, IID_PPV_ARGS(&query_heap_)),
       "Failed to create D3D12 timestamp query heap");
 
     const auto buffer_size
@@ -128,10 +134,10 @@ auto TimestampQueryBackend::RecreateResources(
     resource_desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
     resource_desc.Flags = D3D12_RESOURCE_FLAG_NONE;
 
-    ThrowOnFailed(device->CreateCommittedResource(&heap_props,
-                    D3D12_HEAP_FLAG_NONE, &resource_desc,
-                    D3D12_RESOURCE_STATE_COPY_DEST, nullptr,
-                    IID_PPV_ARGS(&readback_resource_)),
+    ThrowOnFailed(
+      device->CreateCommittedResource(&heap_props, D3D12_HEAP_FLAG_NONE,
+        &resource_desc, D3D12_RESOURCE_STATE_COPY_DEST, nullptr,
+        IID_PPV_ARGS(&readback_resource_)),
       "Failed to create D3D12 timestamp readback resource");
 
     void* mapped = nullptr;

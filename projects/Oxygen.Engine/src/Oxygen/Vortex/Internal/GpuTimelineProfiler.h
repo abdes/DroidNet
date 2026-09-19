@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <deque>
 #include <filesystem>
 #include <memory>
 #include <mutex>
@@ -121,6 +122,8 @@ private:
   struct GpuFrameCapture {
     uint64_t frame_sequence { 0 };
     uint64_t resolve_fence_value { 0 };
+    uint64_t timestamp_frequency_hz { 0 };
+    uint32_t query_offset { 0 };
     uint32_t used_query_slots { 0 };
     bool profiling_enabled { false };
     bool overflowed { false };
@@ -132,12 +135,13 @@ private:
   static constexpr uint32_t kInvalidScopeId = 0xFFFFFFFFU;
   static constexpr uint8_t kGpuScopeFlagComplete = 1U << 0U;
   static constexpr uint8_t kGpuScopeFlagValid = 1U << 1U;
+  static constexpr uint32_t kCaptureSlots = frame::kFramesInFlight.get() + 1U;
 
   auto ConsumePreviousFrame() -> void;
   auto ResetForFrame(frame::SequenceNumber frame_sequence) -> void;
   auto CloseIncompleteScopes() -> void;
-  auto BuildTimelineFrame(const std::span<const uint64_t>& ticks) const
-    -> GpuTimelineFrame;
+  auto BuildTimelineFrame(const GpuFrameCapture& capture,
+    const std::span<const uint64_t>& ticks) const -> GpuTimelineFrame;
   auto PublishFrame(const GpuTimelineFrame& frame) -> void;
   auto InternName(std::string_view name) -> const char*;
   auto ResolveGraphicsQueue() const -> observer_ptr<graphics::CommandQueue>;
@@ -149,9 +153,11 @@ private:
   bool enabled_ { false };
   bool retain_latest_frame_ { false };
   uint32_t max_scopes_per_frame_ { 4096U };
-  uint64_t timestamp_frequency_hz_ { 0U };
+  uint32_t query_stride_ { 0U };
   std::vector<uint32_t> scope_stack_ {};
   GpuFrameCapture frame_capture_ {};
+  std::deque<GpuFrameCapture> pending_frames_ {};
+  std::vector<GpuFrameCapture> reusable_captures_ {};
   std::unordered_map<std::string, uint64_t> interned_names_ {};
   std::vector<std::shared_ptr<GpuTimelineSink>> sinks_ {};
   mutable std::mutex published_frame_mutex_;

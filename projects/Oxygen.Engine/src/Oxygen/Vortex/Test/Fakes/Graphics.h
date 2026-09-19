@@ -192,11 +192,14 @@ public:
   auto Signal(const uint64_t value) const -> void override
   {
     current_ = value;
-    completed_ = value;
+    if (auto_complete_)
+      completed_ = value;
   }
   [[nodiscard]] auto Signal() const -> uint64_t override
   {
-    completed_ = ++current_;
+    ++current_;
+    if (auto_complete_)
+      completed_ = current_;
     return current_;
   }
   auto Wait(uint64_t /*value*/, std::chrono::milliseconds /*timeout*/) const
@@ -212,6 +215,8 @@ public:
   {
     return current_;
   }
+  auto SetAutoComplete(const bool enabled) -> void { auto_complete_ = enabled; }
+  auto CompleteThrough(const uint64_t value) -> void { completed_ = value; }
   auto TryGetTimestampFrequency(uint64_t& out_hz) const -> bool override
   {
     out_hz = timestamp_frequency_hz_;
@@ -241,18 +246,24 @@ private:
   auto SignalImmediate(const uint64_t value) const -> void override
   {
     current_ = value;
-    completed_ = value;
+    if (auto_complete_)
+      completed_ = value;
   }
 
   QueueRole role_ { QueueRole::kGraphics };
   mutable uint64_t current_ { 0 };
   mutable uint64_t completed_ { 0 };
+  bool auto_complete_ { true };
   uint64_t timestamp_frequency_hz_ { 1'000'000U };
 };
 
 class FakeTimestampQueryProvider final : public TimestampQueryProvider {
 public:
   auto SetNextTick(const uint64_t next_tick) -> void { next_tick_ = next_tick; }
+  auto SetResolveSucceeds(const bool succeeds) -> void
+  {
+    resolve_succeeds_ = succeeds;
+  }
 
   auto EnsureCapacity(const uint32_t required_query_count) -> bool override
   {
@@ -277,12 +288,16 @@ public:
     return true;
   }
 
-  auto RecordResolve(CommandRecorder&, const uint32_t used_query_slots)
+  auto RecordResolve(CommandRecorder&, const uint32_t used_query_slots,
+    const uint32_t first_query_slot = 0U)
     -> bool override
   {
+    if (first_query_slot > ticks_.size()
+      || used_query_slots > ticks_.size() - first_query_slot)
+      return false;
     ++resolve_count_;
     last_resolved_query_count_ = used_query_slots;
-    return true;
+    return resolve_succeeds_;
   }
 
   [[nodiscard]] auto GetResolvedTicks() const
@@ -312,6 +327,7 @@ private:
   uint32_t write_count_ { 0U };
   uint32_t resolve_count_ { 0U };
   uint32_t last_resolved_query_count_ { 0U };
+  bool resolve_succeeds_ { true };
 };
 
 //! CommandRecorder that records buffer and texture copy operations for

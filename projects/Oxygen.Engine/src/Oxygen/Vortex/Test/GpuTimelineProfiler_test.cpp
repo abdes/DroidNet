@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
@@ -71,7 +72,8 @@ auto WaitForFile(const std::filesystem::path& path) -> bool
 TEST(GpuTimelineProfilerTest, DisabledFastPathProducesNoWritesOrResolve)
 {
   auto graphics = MakeGraphics();
-  auto profiler = GpuTimelineProfiler(observer_ptr<Graphics> { graphics.get() });
+  auto profiler
+    = GpuTimelineProfiler(observer_ptr<Graphics> { graphics.get() });
 
   profiler.SetEnabled(false);
   profiler.OnFrameStart(oxygen::frame::SequenceNumber { 1U });
@@ -94,7 +96,8 @@ TEST(GpuTimelineProfilerTest, DisabledFastPathProducesNoWritesOrResolve)
 TEST(GpuTimelineProfilerTest, PublishesNestedTimelineOnNextFrame)
 {
   auto graphics = MakeGraphics();
-  auto profiler = GpuTimelineProfiler(observer_ptr<Graphics> { graphics.get() });
+  auto profiler
+    = GpuTimelineProfiler(observer_ptr<Graphics> { graphics.get() });
   auto sink = std::make_shared<CapturingSink>();
 
   profiler.SetEnabled(true);
@@ -131,14 +134,14 @@ TEST(GpuTimelineProfilerTest, PublishesNestedTimelineOnNextFrame)
   EXPECT_GT(frame.scopes[0].duration_ms, 0.0F);
   EXPECT_GT(frame.scopes[1].duration_ms, 0.0F);
   EXPECT_EQ(graphics->GetTimestampQueryProvider().ResolveCount(), 1U);
-  EXPECT_EQ(
-    graphics->GetTimestampQueryProvider().LastResolvedQueryCount(), 4U);
+  EXPECT_EQ(graphics->GetTimestampQueryProvider().LastResolvedQueryCount(), 4U);
 }
 
 TEST(GpuTimelineProfilerTest, RetainedLatestFramePublishesWithoutExternalSink)
 {
   auto graphics = MakeGraphics();
-  auto profiler = GpuTimelineProfiler(observer_ptr<Graphics> { graphics.get() });
+  auto profiler
+    = GpuTimelineProfiler(observer_ptr<Graphics> { graphics.get() });
 
   profiler.SetEnabled(true);
   profiler.SetRetainLatestFrame(true);
@@ -164,11 +167,11 @@ TEST(GpuTimelineProfilerTest, RetainedLatestFramePublishesWithoutExternalSink)
   EXPECT_TRUE(frame->scopes.front().valid);
 }
 
-TEST(
-  GpuTimelineProfilerTest, LargeAbsoluteTicksStillProduceNonZeroDurations)
+TEST(GpuTimelineProfilerTest, LargeAbsoluteTicksStillProduceNonZeroDurations)
 {
   auto graphics = MakeGraphics();
-  auto profiler = GpuTimelineProfiler(observer_ptr<Graphics> { graphics.get() });
+  auto profiler
+    = GpuTimelineProfiler(observer_ptr<Graphics> { graphics.get() });
   auto sink = std::make_shared<CapturingSink>();
 
   graphics->GetTimestampQueryProvider().SetNextTick(1'000'000'000'000U);
@@ -206,7 +209,8 @@ TEST(
 TEST(GpuTimelineProfilerTest, DeeplyNestedScopesPreserveParentChain)
 {
   auto graphics = MakeGraphics();
-  auto profiler = GpuTimelineProfiler(observer_ptr<Graphics> { graphics.get() });
+  auto profiler
+    = GpuTimelineProfiler(observer_ptr<Graphics> { graphics.get() });
   auto sink = std::make_shared<CapturingSink>();
 
   profiler.SetEnabled(true);
@@ -218,7 +222,8 @@ TEST(GpuTimelineProfilerTest, DeeplyNestedScopesPreserveParentChain)
   recorder->SetTelemetryCollector(
     observer_ptr<oxygen::graphics::IGpuProfileCollector> { &profiler });
 
-  auto scopes = std::vector<std::unique_ptr<oxygen::graphics::GpuEventScope>> {};
+  auto scopes
+    = std::vector<std::unique_ptr<oxygen::graphics::GpuEventScope>> {};
   scopes.reserve(8U);
   for (int i = 0; i < 8; ++i) {
     scopes.push_back(std::make_unique<oxygen::graphics::GpuEventScope>(
@@ -245,11 +250,11 @@ TEST(GpuTimelineProfilerTest, DeeplyNestedScopesPreserveParentChain)
     graphics->GetTimestampQueryProvider().LastResolvedQueryCount(), 16U);
 }
 
-TEST(
-  GpuTimelineProfilerTest, OverflowStopsFurtherScopesAndPublishesDiagnostic)
+TEST(GpuTimelineProfilerTest, OverflowStopsFurtherScopesAndPublishesDiagnostic)
 {
   auto graphics = MakeGraphics();
-  auto profiler = GpuTimelineProfiler(observer_ptr<Graphics> { graphics.get() });
+  auto profiler
+    = GpuTimelineProfiler(observer_ptr<Graphics> { graphics.get() });
   auto sink = std::make_shared<CapturingSink>();
 
   profiler.SetEnabled(true);
@@ -278,14 +283,15 @@ TEST(
   EXPECT_TRUE(frame.overflowed);
   ASSERT_EQ(frame.scopes.size(), 1U);
   EXPECT_THAT(frame.diagnostics,
-    testing::Contains(testing::Field(
-      &GpuTimelineDiagnostic::code, "gpu.timestamp.overflow")));
+    testing::Contains(
+      testing::Field(&GpuTimelineDiagnostic::code, "gpu.timestamp.overflow")));
 }
 
 TEST(GpuTimelineProfilerTest, IncompleteScopeIsMarkedInvalid)
 {
   auto graphics = MakeGraphics();
-  auto profiler = GpuTimelineProfiler(observer_ptr<Graphics> { graphics.get() });
+  auto profiler
+    = GpuTimelineProfiler(observer_ptr<Graphics> { graphics.get() });
   auto sink = std::make_shared<CapturingSink>();
 
   profiler.SetEnabled(true);
@@ -314,6 +320,162 @@ TEST(GpuTimelineProfilerTest, IncompleteScopeIsMarkedInvalid)
       &GpuTimelineDiagnostic::code, "gpu.timestamp.incomplete_scope")));
 }
 
+TEST(GpuTimelineProfilerTest, DelayedFramesKeepIndependentTimestampStorage)
+{
+  auto graphics = MakeGraphics();
+  auto& queue = static_cast<oxygen::vortex::testing::FakeCommandQueue&>(
+    *graphics->GetCommandQueue(QueueRole::kGraphics));
+  queue.SetAutoComplete(false);
+  auto profiler
+    = GpuTimelineProfiler(observer_ptr<Graphics> { graphics.get() });
+  auto sink = std::make_shared<CapturingSink>();
+  profiler.SetEnabled(true);
+  profiler.SetMaxScopesPerFrame(4U);
+  profiler.AddSink(sink);
+
+  for (uint64_t sequence = 1U; sequence <= 3U; ++sequence) {
+    profiler.OnFrameStart(oxygen::frame::SequenceNumber { sequence });
+    auto recorder = AcquireTelemetryRecorder(*graphics, "DelayedFrame");
+    recorder->SetTelemetryCollector(
+      observer_ptr<oxygen::graphics::IGpuProfileCollector> { &profiler });
+    graphics->GetTimestampQueryProvider().SetNextTick(sequence * 1000U);
+    {
+      oxygen::graphics::GpuEventScope scope(*recorder, "DelayedScope",
+        oxygen::profiling::ProfileGranularity::kTelemetry);
+      graphics->GetTimestampQueryProvider().SetNextTick(sequence * 1100U);
+    }
+    recorder.reset();
+    profiler.OnFrameRecordTailResolve();
+    EXPECT_TRUE(sink->frames.empty());
+  }
+
+  profiler.SetEnabled(false);
+  queue.CompleteThrough(queue.GetCurrentValue());
+  profiler.OnFrameStart(oxygen::frame::SequenceNumber { 4U });
+  ASSERT_EQ(sink->frames.size(), 3U);
+  for (std::size_t i = 0; i < sink->frames.size(); ++i) {
+    const auto& frame = sink->frames[i];
+    EXPECT_EQ(frame.frame_sequence, i + 1U);
+    ASSERT_EQ(frame.scopes.size(), 1U);
+    EXPECT_TRUE(frame.scopes.front().valid);
+    EXPECT_EQ(frame.scopes.front().display_name, "DelayedScope");
+    EXPECT_NEAR(frame.scopes.front().duration_ms,
+      0.1F * static_cast<float>(i + 1U), 1.0e-6F);
+    EXPECT_TRUE(frame.diagnostics.empty());
+  }
+}
+
+TEST(GpuTimelineProfilerTest, CaptureBacklogReportsMissingFrameWithoutOverwrite)
+{
+  auto graphics = MakeGraphics();
+  auto& queue = static_cast<oxygen::vortex::testing::FakeCommandQueue&>(
+    *graphics->GetCommandQueue(QueueRole::kGraphics));
+  queue.SetAutoComplete(false);
+  auto profiler
+    = GpuTimelineProfiler(observer_ptr<Graphics> { graphics.get() });
+  auto sink = std::make_shared<CapturingSink>();
+  profiler.SetEnabled(true);
+  profiler.SetMaxScopesPerFrame(1U);
+  profiler.AddSink(sink);
+  constexpr auto capture_slots = oxygen::frame::kFramesInFlight.get() + 1U;
+  for (uint64_t sequence = 1U; sequence <= capture_slots + 1U; ++sequence) {
+    profiler.OnFrameStart(oxygen::frame::SequenceNumber { sequence });
+    auto recorder = AcquireTelemetryRecorder(*graphics, "BacklogFrame");
+    recorder->SetTelemetryCollector(
+      observer_ptr<oxygen::graphics::IGpuProfileCollector> { &profiler });
+    {
+      oxygen::graphics::GpuEventScope scope(
+        *recorder, "Scope", oxygen::profiling::ProfileGranularity::kTelemetry);
+    }
+    recorder.reset();
+    profiler.OnFrameRecordTailResolve();
+  }
+  EXPECT_EQ(
+    graphics->GetTimestampQueryProvider().WriteCount(), 2U * capture_slots);
+  EXPECT_EQ(
+    graphics->GetTimestampQueryProvider().ResolveCount(), capture_slots);
+  queue.CompleteThrough(queue.GetCurrentValue());
+  profiler.OnFrameStart(oxygen::frame::SequenceNumber { capture_slots + 2U });
+  ASSERT_EQ(sink->frames.size(), capture_slots + 1U);
+  const auto missing
+    = std::ranges::find(sink->frames, static_cast<uint64_t>(capture_slots + 1U),
+      &GpuTimelineFrame::frame_sequence);
+  ASSERT_NE(missing, sink->frames.end());
+  EXPECT_FALSE(missing->profiling_enabled);
+  EXPECT_THAT(missing->diagnostics,
+    testing::Contains(testing::Field(
+      &GpuTimelineDiagnostic::code, "gpu.timestamp.capture_backlog")));
+}
+
+TEST(GpuTimelineProfilerTest, CapacityGrowthPreservesPendingCaptures)
+{
+  auto graphics = MakeGraphics();
+  auto& queue = static_cast<oxygen::vortex::testing::FakeCommandQueue&>(
+    *graphics->GetCommandQueue(QueueRole::kGraphics));
+  queue.SetAutoComplete(false);
+  auto profiler
+    = GpuTimelineProfiler(observer_ptr<Graphics> { graphics.get() });
+  auto sink = std::make_shared<CapturingSink>();
+  profiler.SetEnabled(true);
+  profiler.SetMaxScopesPerFrame(1U);
+  profiler.AddSink(sink);
+  profiler.OnFrameStart(oxygen::frame::SequenceNumber { 1U });
+  auto recorder = AcquireTelemetryRecorder(*graphics, "BeforeGrowth");
+  recorder->SetTelemetryCollector(
+    observer_ptr<oxygen::graphics::IGpuProfileCollector> { &profiler });
+  {
+    oxygen::graphics::GpuEventScope scope(
+      *recorder, "Original", oxygen::profiling::ProfileGranularity::kTelemetry);
+  }
+  recorder.reset();
+  profiler.OnFrameRecordTailResolve();
+  const auto old_capacity = graphics->GetTimestampQueryProvider().GetCapacity();
+  profiler.SetMaxScopesPerFrame(8U);
+  profiler.OnFrameStart(oxygen::frame::SequenceNumber { 2U });
+  EXPECT_EQ(graphics->GetTimestampQueryProvider().GetCapacity(), old_capacity);
+  queue.CompleteThrough(queue.GetCurrentValue());
+  profiler.OnFrameStart(oxygen::frame::SequenceNumber { 3U });
+  EXPECT_GT(graphics->GetTimestampQueryProvider().GetCapacity(), old_capacity);
+  const auto original = std::ranges::find(
+    sink->frames, uint64_t { 1U }, &GpuTimelineFrame::frame_sequence);
+  ASSERT_NE(original, sink->frames.end());
+  ASSERT_EQ(original->scopes.size(), 1U);
+  EXPECT_TRUE(original->scopes.front().valid);
+  EXPECT_EQ(original->scopes.front().display_name, "Original");
+  EXPECT_NEAR(original->scopes.front().duration_ms, 0.1F, 1.0e-6F);
+}
+
+TEST(GpuTimelineProfilerTest, FailedResolvePublishesInvalidTiming)
+{
+  auto graphics = MakeGraphics();
+  graphics->GetTimestampQueryProvider().SetResolveSucceeds(false);
+  auto profiler
+    = GpuTimelineProfiler(observer_ptr<Graphics> { graphics.get() });
+  auto sink = std::make_shared<CapturingSink>();
+  profiler.SetEnabled(true);
+  profiler.AddSink(sink);
+  profiler.OnFrameStart(oxygen::frame::SequenceNumber { 1U });
+  auto recorder = AcquireTelemetryRecorder(*graphics, "FailedResolve");
+  recorder->SetTelemetryCollector(
+    observer_ptr<oxygen::graphics::IGpuProfileCollector> { &profiler });
+  {
+    oxygen::graphics::GpuEventScope scope(
+      *recorder, "Scope", oxygen::profiling::ProfileGranularity::kTelemetry);
+  }
+  recorder.reset();
+  profiler.OnFrameRecordTailResolve();
+  profiler.OnFrameStart(oxygen::frame::SequenceNumber { 2U });
+  ASSERT_EQ(sink->frames.size(), 1U);
+  const auto& frame = sink->frames.front();
+  EXPECT_EQ(frame.frame_sequence, 1U);
+  EXPECT_FALSE(frame.profiling_enabled);
+  ASSERT_EQ(frame.scopes.size(), 1U);
+  EXPECT_FALSE(frame.scopes.front().valid);
+  EXPECT_THAT(frame.diagnostics,
+    testing::Contains(testing::Field(
+      &GpuTimelineDiagnostic::code, "gpu.timestamp.resolve_failed")));
+}
+
 TEST(GpuTimelineProfilerTest, OneShotExportWritesJsonFrame)
 {
   auto graphics = MakeGraphics();
@@ -324,7 +486,8 @@ TEST(GpuTimelineProfilerTest, OneShotExportWritesJsonFrame)
   const auto export_path = export_dir / "frame.json";
 
   {
-    auto profiler = GpuTimelineProfiler(observer_ptr<Graphics> { graphics.get() });
+    auto profiler
+      = GpuTimelineProfiler(observer_ptr<Graphics> { graphics.get() });
 
     profiler.SetEnabled(true);
     profiler.OnFrameStart(oxygen::frame::SequenceNumber { 21U });
