@@ -64,6 +64,60 @@ selection, including producers also required by another case. Optional
 to verify the mapped copy into the consumer's top-left inset. The current
 four-pane layout at 2560x1400 uses a 256x233 inset.
 
+- `--exposure-proof mixed`: render the existing meshes as an opaque sphere,
+  emissive cube, masked cone and translucent cylinder under the daylight/fog
+  recipe. It uses Average metering and supports the layout and named-view
+  controls above. Each view, including offscreen products, owns its exposure
+  recipe (key 12.5, adaptation speeds 3 EV/s up and 1 EV/s down), so saved
+  DemoShell settings cannot replace it. Use `--pip-wireframe false` for lit PiP
+  validation.
+- `--exposure-proof interactions`: run the same mixed scene through the bounded
+  sequence below in ordinary or offscreen layout. Use a windowed run of at
+  least 144 frames. The overlay identifies the phase and material domains;
+  `Vortex.MultiView.Interactions` logs the actual game delta used by the renderer.
+
+| Engine frame | Interaction |
+| --- | --- |
+| 32 | Remeter after resources are resident |
+| 40 | Unpause and begin camera motion |
+| 44–51 | PiP compensation +0.5 EV |
+| 52–59 | PiP Manual EV14.5 |
+| 56–95 | PiP uses the forward path |
+| 60 | PiP returns to Auto |
+| 64 / 68 | PiP seed EV15 / camera cut |
+| 72–79 | Reverse submission order |
+| 76–83 | Resize PiP; inset scissor at 80–83 |
+| 88 / 96 | Resize window to 1280x800 / restore |
+| 100–103 | Hide PiP while retaining its state |
+| 104 / 108 | Reopen PiP / create a fresh PiP identity |
+| 112–119 | PiP borrows main exposure; seed the owner at 116 |
+| 120–127 | Remove the owner; PiP continues independently |
+| 128 | Recreate the main view |
+| 136 | Pause the final state |
+
+Capture indices are zero-based: capture index 43 records engine frame 44.
+Capture overhead changes actual dt; response validation must use the captured
+solver dt, not assume the requested `--fps` was achieved.
+
+For numerical interaction checks, analyze captures with
+`tools/vortex/AnalyzeRenderDocExposureTransitions.py` through
+`tools/shadows/Invoke-RenderDocUiAnalysis.ps1`. Set
+`OXYGEN_RENDERDOC_EXPOSURE_FRAMES` to the comma-separated engine frames to
+inspect. The analyzer checks histogram reduction, target interpolation, the
+actual adaptation timestep and descriptor-identified shared history. The
+`Vortex.PostProcess.Exposure.Solve` marker permits direct selection of each
+solve. Feed the phase reports to `Assert-MultiViewExposureInteractions.py
+--reports <reports...> --output <result.json>` for the complete event timeline,
+including prior-owner latency and source-loss continuity.
+
+For mixed materials, use `AnalyzeRenderDocMixedMaterials.py` on one static
+four-view capture, followed by `Assert-MultiViewMixedMaterials.py --report
+<report.json> --output <result.json>`. It checks opaque/masked base colors,
+masked coverage, scene-referred emission and the translucent pass contribution.
+Read raw intermediate textures at the end marker following the last draw;
+the draw event itself may expose pre-draw contents. Compare each named view
+against its isolated capture with `Assert-MultiViewLayoutExposure.py` as above.
+
 - `--proof-wireframe-overlay true`: add overlays to the four-view proof layout
   and cycle their color each frame to check immutable in-flight draw constants.
   Requires `--proof-layout true` or `--aux-proof-layout true`.

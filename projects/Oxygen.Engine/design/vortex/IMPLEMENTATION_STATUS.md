@@ -63,11 +63,11 @@ is not complete.
 | 2 — Settings and fixed exposure | validated | Canonical authored input, immutable pass snapshots, fixed/camera gain, per-view settings and public mask acceptance are qualified. | [Fixed gain](../../out/build-ninja/analysis/vortex/exposure-lightbench/fixed-gain/evidence-manifest.json), [frame bindings](../../out/build-ninja/analysis/vortex/exposure-lightbench/frame-binding/evidence-manifest.json), [configuration and mask acceptance](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/review-r028-manifest.json) |
 | 3 — Metering and adaptation | validated | Controlled-input histogram, curve, masks and hybrid adaptation; scene acceptance remains slice 5. | [Metering](../../out/build-ninja/analysis/vortex/exposure-lightbench/metering/evidence-manifest.json) |
 | 4 — GPU lifecycle and sharing | validated | Controlled-input/public-event gate, including offscreen routing. Real-scene resource lifetime is tracked in slice 5. | [Lifecycle](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/discontinuity-manifest.json), [offscreen sharing](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/offscreen-sharing-manifest.json) |
-| 5 — HDR migration and recovery | in_progress | P domains, cumulative error bounds, producer qualification, production format admission and queued mixed-format consumers are validated. Automatic recovery/retention/return is Debug-qualified; remaining scene/MultiView acceptance is open; allocation/transfer costs are Debug-qualified. | [Detailed items](#32-slice-5-work-items) |
+| 5 — HDR migration and recovery | in_progress | All named implementation items are Debug-qualified, including native mixed material/layout/interaction acceptance. Release qualification and the final Slice 5 gate audit remain. | [Detailed items](#32-slice-5-work-items) |
 | 6 — Authoring and persistence | planned | Native physical-camera persistence and texture-resource-index mask contracts are approved; complete source/cook/load/script/editor/DemoShell round-trip remains. | [Detailed items](#33-slice-6-work-items) |
 | 7 — Light units | planned | Directional, point and spot numerical/visual calibration across forward and deferred paths remains. | [Detailed items](#34-slice-7-work-items) |
 | 8 — Measurements | planned | Implement instrumentation and qualify it against independent inputs. | [Detailed items](#35-slice-8-work-items) |
-| 9 — LightBench and MultiView | planned | Complete all seven experiments and the full native layout/interaction matrix; current MultiView proofs are partial. | [Detailed items](#36-slice-9-work-items) |
+| 9 — LightBench and MultiView | planned | Complete all seven experiments and final integrated native operation. MultiView Debug layout/interaction proofs are qualified in Slice 5; final package acceptance remains. | [Detailed items](#36-slice-9-work-items) |
 | 10 — Automation and acceptance | planned | Run the same experiments through automation, close every acceptance gate and reconcile owner documents. | [Detailed items](#37-slice-10-work-items) |
 
 ### 3.1 Current work
@@ -281,12 +281,28 @@ is not complete.
   sessions retain their owned diagnostic names. The focused Debug checkpoint
   passes 19 tests with 37 unchanged runtime inputs, including both-path ownership
   checks and native forward/deferred Manual-to-Auto-to-disabled gain checks.
-  The complete mixed-content and interaction gates remain open.
+  The subsequent owning mixed-content/interaction checkpoint is recorded below.
   [Focused commands and results](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/offscreen-intent-validation-result.json).
-  **Current work: EX05-04 / EX05-30 — mixed content and active combined
-  interactions.** Extend the existing MultiView scenario with mixed material
-  domains and controlled camera, exposure, resize and lifecycle phases. The
-  complete Slice 5 gate and Release validation remain open; Slices 6-10 follow.
+  **Completed in Debug: EX05-04 / EX05-30 — mixed materials and native
+  combined interactions.** The owning gate passes **284 tests** (207 native
+  exposure, 63 deferred-core, 14 offscreen), with 38 unchanged runtime inputs.
+  Eight refreshed capture ranges pass 227 view checks across 58 frames, including
+  independent histogram/target/response checks, prior-owner latency and source-loss
+  continuity; maximum response error is 3.82e-6 EV. Four mixed-scene views exactly
+  match their isolated gain, meter and mapped/precomposition images. Opaque,
+  masked, emissive and translucent intermediate contributions pass. Fourteen
+  offline oracle controls and eleven negative timeline controls pass.
+  Ordinary/offscreen native debug-layer audits report no D3D12/DXGI errors or
+  blocking warnings. The full 2560x1400 native client at frame 51 has all four
+  lit panes, toolbar and material/phase legend. Native presentation resolves the
+  documented RenderDoc GUI replay limitation. The explicit CPU alignment gap
+  preserves `PublishedView` layout and removes C4324 without suppressing it.
+  [Complete evidence, commands and hashes](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/mixed-interactions-manifest.json).
+  **Current work: EX05-GATE — Slice 5 Release qualification and final audit.**
+  All named Slice 5 implementation items are Debug-qualified. Rebuild and run
+  the affected Release owners, qualify the native layouts/interactions in
+  Release, and reconcile the full Slice 5 gate before starting Slice 6.
+  Slices 6-10, including the complete LightBench delivery, remain required.
   **Deferred feature boundaries:** owned bloom, temporal color and specular/
   captured-sky products retain their source TODOs and feature dependency issues.
   **Domain implementation:** failure kind 32 distinguishes unsupported
@@ -328,12 +344,11 @@ is not complete.
   refresh dispatches take 0.008912 ms (transmittance) and 0.020768 ms (multiple
   scattering). These are dispatch medians, not end-to-end frame latency or a
   measured FP16-to-FP32 timing delta; native queue intervals are also recorded.
-  **Remaining Slice 5 work:** remaining scene lifecycle combinations and
-  complete native MultiView acceptance, plus Release closure qualification.
-  EX05-19 closes the named recovery/retention/return matrix, not these other gates.
+  **Remaining Slice 5 work:** Release closure qualification and the final
+  requirement-to-evidence audit. All named implementation items are Debug-qualified.
   The Slice 5 gate and Slices 6–10 remain open.
 
-- **Open visual report: all-white MultiView meshes.** The user observed all
+- **Original visual report: all-white MultiView meshes.** The user observed all
   meshes rendered white in test windows. Reinspection of
   `multiview/atmosphere-Debug-42.exposure.png` confirms an earlier captured case
   with washed-out meshes and ground; the exact run the user saw is unidentified.
@@ -341,7 +356,7 @@ is not complete.
   `multiview/opaque-ap-Release-58.exposure.png` has readable colored cards, but
   uses a different, isolated emissive fixture and does not close the original
   lit-scene report. The bounded original-material diagnosis/profile comparison
-  below is now qualified; complete EX05-04/29 acceptance remains open.
+  below is qualified; current mixed-scene acceptance is recorded in EX05-04/30.
 - **Qualified investigation: EX05-04/29 — captured lit-scene washout.** The
   ordinary Debug main/lit-PiP run retains material colors. The earlier atmosphere
   fixture and the new sunlit original-mesh comparison have separate diagnoses;
@@ -394,8 +409,9 @@ is not complete.
   and Release each pass 147 Data, 34 MaterialBinder and 146 native exposure tests
   (327 each), with failing-before regressions. [Evidence](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/source-values-manifest.json).
 - **Remaining boundaries:** the AP prerequisite uses an isolated emissive-card
-  fixture. Physical-light calibration, all material families, ordinary AE
-  readability and all MultiView layouts retain their separate acceptance rows.
+  fixture. Physical-light calibration remains Slice 7 work. Material domains,
+  configured ordinary AE readability and native MultiView layouts/interactions
+  are qualified by their named Slice 5 rows.
   Consumer error propagation is closed in EX05-15; production format switching
   is Debug-qualified in EX05-17, queued consumers in EX05-18 and automatic
   recovery/retention/return in EX05-19. The other Slice 5 gates remain open.
@@ -419,7 +435,7 @@ current status, including decisions that supersede older manifest limitations.
 | EX05-01 | Early GPU P resolve and immutable frame P/1P binding | validated | GPU-owned P, pinned frame/state leases, submission failure and repeated-resolve behavior are implemented. | [Frame resolve](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/frame-resolve-manifest.json), [domain](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/domain-manifest.json) |
 | EX05-02 | FP32 SceneColor accumulation and HDR format plumbing | validated | Approved FP32 accumulation contract and format-aware resource/PSO plumbing exist. This is not automatic mode switching. | [Formats](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/formats-manifest.json), [allocation contract](lld/scene-textures.md#per-view-fp16-suitability) |
 | EX05-03 | Meter with 1/P; consume S/P in all exposure modes | validated | Unified gain consumption covers Manual, ManualCamera, Auto, disabled and zero-target behavior in the qualified fixtures. | [Domain](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/domain-manifest.json), [mode fixtures](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/modes-manifest.json) |
-| EX05-04 | Deferred emissive/direct/indirect and forward lit/unlit/masked/translucent P domains | in_progress | **Source corrections:** emissive RGB was omitted from material-cache identity; shared half decoding halved subnormals and encoding dropped the carry into minimum normal (R038). All three source-value regressions are corrected; Debug/Release each pass 327 affected tests. This closes the named corrections only. The original non-emissive sunlit materials now have a qualified Average/Spot comparison in both views/builds; identical HDR inputs separate meter-target washout from adaptation. The 324-case cooked-material domain matrix now passes in both builds, including HDR/sRGB sampling and forward resolve publication. Direct/indirect producer endpoints are now qualified by the lighting matrix. Complete mixed-content acceptance remains. | [Cooked-material matrix](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/material-domain-increment-manifest.json), [Source-value evidence](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/source-values-manifest.json), [source regressions](../../src/Oxygen/Data/Test/HalfFloat_test.cpp), [material regression](../../src/Oxygen/Vortex/Test/Resources/MaterialBinder_basic_test.cpp), [scene migration scope](../../out/build-ninja/analysis/vortex/exposure-lightbench/scene/scene-migration-manifest.json), [producer inventory](lld/scene-textures.md#exposure-hdr-domain-and-format-inventory) |
+| EX05-04 | Deferred emissive/direct/indirect and forward lit/unlit/masked/translucent P domains | validated | **Source corrections:** emissive RGB was omitted from material-cache identity; shared half decoding halved subnormals and encoding dropped the carry into minimum normal (R038). All three source-value regressions are corrected; Debug/Release each pass 327 affected tests. This closes the named corrections only. The original non-emissive sunlit materials now have a qualified Average/Spot comparison in both views/builds; identical HDR inputs separate meter-target washout from adaptation. The 324-case cooked-material domain matrix now passes in both builds, including HDR/sRGB sampling and forward resolve publication. Direct/indirect producer endpoints are now qualified by the lighting matrix. Mixed-content Debug acceptance now passes: four exact isolated/family image comparisons, actual opaque/masked/emissive/translucent contributions and the 284-test owning gate. Release remains at slice closure. | [Mixed acceptance](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/mixed-interactions-manifest.json), [Cooked-material matrix](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/material-domain-increment-manifest.json), [Source-value evidence](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/source-values-manifest.json), [source regressions](../../src/Oxygen/Data/Test/HalfFloat_test.cpp), [material regression](../../src/Oxygen/Vortex/Test/Resources/MaterialBinder_basic_test.cpp), [scene migration scope](../../out/build-ninja/analysis/vortex/exposure-lightbench/scene/scene-migration-manifest.json), [producer inventory](lld/scene-textures.md#exposure-hdr-domain-and-format-inventory) |
 | EX05-05 | Sky/background and sky-view/AP producer-consumer P plumbing | validated | Paired P-domain/binding proofs and R036 low/zero-opacity correction are qualified. The isolated AP fixture adds actual deferred/alpha-one-forward whole-HDR-image agreement and readable mixed presentation in both views/configurations. R040/R041 additionally qualify exactly-once opaque-forward AP and explicit shading routing, with exact full-image agreement. This does not close broader material families or quantization/mode switching (EX05-04/15–19). | [Scene migration](../../out/build-ninja/analysis/vortex/exposure-lightbench/scene/scene-migration-manifest.json), [real products](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/required-products-manifest.json), [controlled AP correction](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/review-r036-manifest.json), [native scene AP fixture](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/atmosphere-composition-manifest.json), [opaque forward](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/opaque-ap-manifest.json) |
 | EX05-06 | Height/volumetric fog and RGB history rebasing | validated | Current/stored P conversion and unchanged transmittance are implemented and exercised. Cumulative temporal quantization is not covered by this item. | [Scene migration](../../out/build-ninja/analysis/vortex/exposure-lightbench/scene/scene-migration-manifest.json), [history/resource lifetime](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/review-lifetime-manifest.json) |
 | EX05-07 | Diagnostic colors, wireframe and display overlays | validated | Per-view unit-gain diagnostics, persistent exposure preservation and frame-retained overlay constants are qualified. Full feature-layout acceptance remains EX05-29. | [Diagnostics](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/diagnostic-manifest.json) |
@@ -445,7 +461,7 @@ current status, including decisions that supersede older manifest limitations.
 | EX05-27 | Viewport, scissor and whole-window resize | validated | The named scripted resize/scissor fixtures pass without cross-view contamination. | [Viewport/scissor](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/viewport-manifest.json), [window resize](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/window-resize-manifest.json) |
 | EX05-28 | MultiView per-view mode, seed, cut and diagnostic events | validated | Paused scripted events and diagnostic restoration are qualified; runtime physical-camera values are covered, persistence is not. | [Modes](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/modes-manifest.json), [diagnostics](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/diagnostic-manifest.json) |
 | EX05-29 | Complete standard/auxiliary/offscreen/feature layout matrix | validated | All five static native layouts have inspected composites and clean Debug-layer audits. Seventeen selected views/19 comparisons agree within frozen tolerances; auxiliary mapped-copy regions are exact, three expected-black cells and feature stages pass. Separate scene/compositing target routing is corrected. Owning Debug gate: 280 passed. Active interaction and mixed-content acceptance remain EX05-30/04; Release remains at slice closure. | [Complete static layout evidence](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/layout-matrix-manifest.json) |
-| EX05-30 | Native combined interactions and active adaptation | in_progress | Preparing the existing MultiView scenario for scripted camera movement, reordering, resize, lifecycle and exposure changes while all panes are visible; verify gain, intermediate images and composite. | [Section 7.5](plan/exposure-and-lightbench-correction.md#75-multiview-visual-acceptance) |
+| EX05-30 | Native combined interactions and active adaptation | validated | The refreshed native sequence passes 227 view checks across 58 frames: modes, camera motion, seed/cut, ordering, viewport/scissor/window resize, retained/recreated lifetime, prior-owner sharing, source loss/recreation and pause. Independent histogram/target/response checks pass; 11 negative checker controls reject corruption. Both native debug-layer audits and complete client inspection pass. Owning Debug gate: 284 passed with 38 unchanged runtime inputs. Release remains at slice closure. | [Section 7.5](plan/exposure-and-lightbench-correction.md#75-multiview-visual-acceptance), [Active evidence](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/mixed-interactions-manifest.json) |
 | EX05-GATE | Entire Slice 5 acceptance gate | in_progress | **Not passed.** Close all remaining items; prove P invariance, upstream bright/dark preservation, complete scene lifecycle and removal of old overloaded-scalar consumption across every active path. Do not start Slice 6 integration first. | [Gate](plan/exposure-and-lightbench-correction.md#slice-5---complete-pre-exposure-migration-and-numerical-recovery) |
 
 ### 3.3 Slice 6 work items

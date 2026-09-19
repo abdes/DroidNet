@@ -52,6 +52,9 @@ public:
   auto ApplyLitAtmosphereProof() -> void;
   //! Original lit meshes with a fixed, switchable fog comparison recipe.
   auto ApplyConsumerVisualProof(VisualFogMode fog_mode) -> void;
+  //! Opaque, masked, translucent and emissive surfaces under one daylight
+  //! recipe.
+  auto ApplyMixedExposureProof() -> void;
 
 private:
   auto EnsureProofAtmosphere(

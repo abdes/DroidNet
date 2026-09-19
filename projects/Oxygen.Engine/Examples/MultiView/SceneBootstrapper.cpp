@@ -51,7 +51,8 @@ namespace {
 
   auto MakeSolidColorMaterial(const char* name, const glm::vec4& rgba,
     data::MaterialDomain domain = data::MaterialDomain::kOpaque,
-    bool emission_only = false) -> std::shared_ptr<const data::MaterialAsset>
+    bool emission_only = false, float emissive_scale = 4.0F)
+    -> std::shared_ptr<const data::MaterialAsset>
   {
     using data::AssetKey;
     using data::AssetType;
@@ -86,7 +87,7 @@ namespace {
       // knobs.
       for (unsigned channel = 0; channel < 3U; ++channel) {
         desc.emissive_factor[channel]
-          = data::HalfFloat { 4.0F * rgba[channel] };
+          = data::HalfFloat { emissive_scale * rgba[channel] };
         desc.base_color[channel] = 0.0F;
       }
     }
@@ -173,6 +174,22 @@ auto SceneBootstrapper::ApplyLitAtmosphereProof() -> void
   // The cards isolate emission by backlighting. The lit-material fixture must
   // light the visible faces of the original meshes instead.
   EnsureProofAtmosphere(110000.0F, 1.0F, false);
+}
+
+auto SceneBootstrapper::ApplyMixedExposureProof() -> void
+{
+  ApplyConsumerVisualProof(VisualFogMode::kVolumetric);
+  // The original sphere remains opaque and lit. The other existing shapes
+  // exercise material domains together at comparable daylight radiance.
+  cube_node_.GetRenderable().SetMaterialOverride(0, 0,
+    MakeSolidColorMaterial("MixedExposureEmissive", { .7F, .65F, .5F, 1 },
+      data::MaterialDomain::kOpaque, true, 4096));
+  cylinder_node_.GetRenderable().SetMaterialOverride(0, 0,
+    MakeSolidColorMaterial("MixedExposureTranslucent", { .3F, .4F, .9F, .5F },
+      data::MaterialDomain::kAlphaBlended));
+  cone_node_.GetRenderable().SetMaterialOverride(0, 0,
+    MakeSolidColorMaterial("MixedExposureMasked", { .9F, .4F, .4F, .8F },
+      data::MaterialDomain::kMasked));
 }
 
 auto SceneBootstrapper::ApplyConsumerVisualProof(const VisualFogMode fog_mode)

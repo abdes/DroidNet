@@ -40,6 +40,17 @@
 namespace oxygen::examples::multiview {
 
 namespace {
+  constexpr auto IsMixedProof(ExposureProofScenario proof) -> bool
+  {
+    return proof == ExposureProofScenario::kMixed
+      || proof == ExposureProofScenario::kInteractions;
+  }
+
+  constexpr auto IsLayoutExposureProof(ExposureProofScenario proof) -> bool
+  {
+    return proof == ExposureProofScenario::kLayouts || IsMixedProof(proof);
+  }
+
   constexpr size_t kDefaultSceneCapacity = 128;
   constexpr uint32_t kOffscreenPreviewWidth = 512U;
   constexpr uint32_t kOffscreenPreviewHeight = 288U;
@@ -226,7 +237,7 @@ auto MainModule::OnAttachedImpl(
   if (config_.exposure_proof == ExposureProofScenario::kAtmosphere
     || config_.exposure_proof == ExposureProofScenario::kAtmosphereLit
     || config_.exposure_proof == ExposureProofScenario::kConsumerVisual
-    || config_.exposure_proof == ExposureProofScenario::kLayouts) {
+    || IsLayoutExposureProof(config_.exposure_proof)) {
     shell_config.force_environment_override = false;
     shell_config.initial_preview_sun_enabled = false;
   }
@@ -271,8 +282,11 @@ auto MainModule::OnAttachedImpl(
   } else if (config_.exposure_proof == ExposureProofScenario::kConsumerVisual) {
     scene_bootstrapper_.ApplyConsumerVisualProof(config_.visual_fog_mode);
   }
-  if (config_.exposure_proof == ExposureProofScenario::kLayouts) {
-    scene_bootstrapper_.ApplyConsumerVisualProof(VisualFogMode::kVolumetric);
+  if (IsLayoutExposureProof(config_.exposure_proof)) {
+    if (IsMixedProof(config_.exposure_proof))
+      scene_bootstrapper_.ApplyMixedExposureProof();
+    else
+      scene_bootstrapper_.ApplyConsumerVisualProof(VisualFogMode::kVolumetric);
     auto& environment = *staged_scene->GetEnvironment();
     auto* post
       = environment.TryGetSystem<scene::environment::PostProcessVolume>().get();
@@ -280,7 +294,9 @@ auto MainModule::OnAttachedImpl(
       post = &environment.AddSystem<scene::environment::PostProcessVolume>();
     auto exposure = scene::ExposureSettings {};
     exposure.key = 12.5F;
-    exposure.metering_mode = engine::MeteringMode::kSpot;
+    exposure.metering_mode = IsMixedProof(config_.exposure_proof)
+      ? engine::MeteringMode::kAverage
+      : engine::MeteringMode::kSpot;
     post->SetExposureSettings(exposure);
   }
   const auto extent = ResolveRenderExtent();
@@ -600,13 +616,16 @@ auto MainModule::OnFrameStart(
 auto MainModule::OnFrameEnd(observer_ptr<engine::FrameContext> context) -> void
 {
   Base::OnFrameEnd(context);
-  if (config_.exposure_proof == ExposureProofScenario::kWindowResize
+  if ((config_.exposure_proof == ExposureProofScenario::kWindowResize
+        || config_.exposure_proof == ExposureProofScenario::kInteractions)
     && app_window_ && app_window_->GetWindow()) {
     const auto frame = context->GetFrameSequenceNumber().get();
-    if (frame == 44U) {
+    const bool interactions
+      = config_.exposure_proof == ExposureProofScenario::kInteractions;
+    if (frame == (interactions ? 88U : 44U)) {
       window_proof_initial_extent_ = app_window_->GetWindow()->Size();
       app_window_->GetWindow()->Resize({ .width = 1280U, .height = 800U });
-    } else if (frame == 52U) {
+    } else if (frame == (interactions ? 96U : 52U)) {
       app_window_->GetWindow()->Resize(window_proof_initial_extent_);
     }
   }
@@ -628,6 +647,7 @@ auto MainModule::OnGuiUpdate(observer_ptr<engine::FrameContext> context)
     shell.Draw(context);
   DrawFeatureVariantProofOverlay();
   DrawConsumerVisualControls();
+  DrawInteractionProofOverlay(context->GetFrameSequenceNumber().get());
 
   co_return;
 }
@@ -759,7 +779,7 @@ auto MainModule::RenderOffscreenProofProducts(engine::FrameContext& context)
     if (!config_.exposure_view_only.empty()
       && config_.exposure_view_only != name)
       return;
-    if (config_.exposure_proof == ExposureProofScenario::kLayouts
+    if (IsLayoutExposureProof(config_.exposure_proof)
       && context.GetFrameSequenceNumber().get() == 32U) {
       const auto request = renderer->QueueExposureTransition(
         vortex::CompositionView::ViewStateHandle { view_id.get() },
@@ -771,13 +791,23 @@ auto MainModule::RenderOffscreenProofProducts(engine::FrameContext& context)
     facade.SetSceneSource(vortex::Renderer::SceneSourceInput {
       .scene = observer_ptr<scene::Scene> { active_scene_.operator->() },
     });
-    facade.SetViewIntent(vortex::Renderer::OffscreenSceneViewInput::FromCamera(
-      name, view_id, MakeLocalView(product.width, product.height), camera)
-        .SetViewStateHandle(
-          vortex::CompositionView::ViewStateHandle { view_id.get() })
-        .SetWithAtmosphere(true)
-        .SetForceWireframe(force_wireframe)
-        .SetClearColor(graphics::Color { 0.025F, 0.035F, 0.05F, 1.0F }));
+    auto view_intent
+      = vortex::Renderer::OffscreenSceneViewInput::FromCamera(
+        name, view_id, MakeLocalView(product.width, product.height), camera)
+          .SetViewStateHandle(
+            vortex::CompositionView::ViewStateHandle { view_id.get() })
+          .SetWithAtmosphere(true)
+          .SetForceWireframe(force_wireframe)
+          .SetClearColor(graphics::Color { 0.025F, 0.035F, 0.05F, 1.0F });
+    if (IsLayoutExposureProof(config_.exposure_proof)) {
+      auto exposure = scene::ExposureSettings {};
+      exposure.key = 12.5F;
+      exposure.metering_mode = IsMixedProof(config_.exposure_proof)
+        ? engine::MeteringMode::kAverage
+        : engine::MeteringMode::kSpot;
+      view_intent.SetExposureOverride(std::move(exposure));
+    }
+    facade.SetViewIntent(view_intent);
     facade.SetOutputTarget(vortex::Renderer::OutputTargetInput {
       .framebuffer = observer_ptr<graphics::Framebuffer> {
         product.framebuffer.get() },
@@ -1030,17 +1060,24 @@ auto MainModule::UpdateComposition(oxygen::engine::FrameContext& context,
   std::vector<vortex::CompositionView>& views) -> void
 {
   const auto sequence = context.GetFrameSequenceNumber().get();
+  const bool interactions
+    = config_.exposure_proof == ExposureProofScenario::kInteractions;
   retain_inactive_pip_
-    = config_.exposure_proof == ExposureProofScenario::kLifetime
-    && sequence >= 44U && sequence < 48U;
+    = (config_.exposure_proof == ExposureProofScenario::kLifetime
+        && sequence >= 44U && sequence < 48U)
+    || (interactions && sequence >= 100U && sequence < 104U);
+  if (interactions && sequence == 108U)
+    pip_view_id_ = GetOrCreateViewId("InteractionsRecreatedPiP");
   if (config_.exposure_proof == ExposureProofScenario::kLifetime
     && sequence == 52U) {
     pip_view_id_ = GetOrCreateViewId("RecreatedPipView");
   }
   viewport_proof_resized_
-    = config_.exposure_proof == ExposureProofScenario::kViewport
-    && sequence >= 44U && sequence < 52U;
-  viewport_proof_scissored_ = viewport_proof_resized_ && sequence >= 48U;
+    = (config_.exposure_proof == ExposureProofScenario::kViewport
+        && sequence >= 44U && sequence < 52U)
+    || (interactions && sequence >= 76U && sequence < 84U);
+  viewport_proof_scissored_
+    = viewport_proof_resized_ && sequence >= (interactions ? 80U : 48U);
   BuildComposition(context, views);
   for (auto& view : views) {
     if (view.camera.has_value()) {
@@ -1072,7 +1109,8 @@ auto MainModule::UpdateComposition(oxygen::engine::FrameContext& context,
   UpdateCameras(ResolveRenderExtent());
   const auto frame = context.GetFrameSequenceNumber().get();
   const bool source_lost
-    = proof == ExposureProofScenario::kSourceLoss && frame >= 44U;
+    = (proof == ExposureProofScenario::kSourceLoss && frame >= 44U)
+    || (interactions && frame >= 120U && frame < 128U);
   if (proof == ExposureProofScenario::kSourceLoss) {
     if (frame == 46U) {
       app_.engine->GetSimulationClock().SetPaused(false);
@@ -1122,12 +1160,13 @@ auto MainModule::UpdateComposition(oxygen::engine::FrameContext& context,
       view.with_height_fog = false;
       view.shading_mode = vortex::ShadingMode::kDeferred;
     }
-    if (proof == ExposureProofScenario::kLayouts) {
+    if (IsLayoutExposureProof(proof)) {
       exposure.compensation_ev = 0;
       // The NoEnvironment camera's center lies in a deep cast shadow. Meter
       // its whole image so the proof retains readable directly-lit materials.
-      exposure.metering_mode = view.feature_profile
-          == vortex::CompositionView::ViewFeatureProfile::kNoEnvironment
+      exposure.metering_mode = IsMixedProof(proof)
+          || view.feature_profile
+            == vortex::CompositionView::ViewFeatureProfile::kNoEnvironment
         ? engine::MeteringMode::kAverage
         : engine::MeteringMode::kSpot;
       // Exercise an exposed lit auxiliary product instead of normals colors.
@@ -1169,6 +1208,8 @@ auto MainModule::UpdateComposition(oxygen::engine::FrameContext& context,
     }
     view.render_settings.exposure = std::move(exposure);
   }
+  if (interactions)
+    ApplyInteractionProof(context, views);
   std::erase_if(views, [&](const auto& view) {
     return view.camera.has_value()
       && ((retain_inactive_pip_ && view.id == pip_view_id_)
@@ -1205,8 +1246,7 @@ auto MainModule::UpdateComposition(oxygen::engine::FrameContext& context,
       }
     }
   }
-  if (proof == ExposureProofScenario::kLayouts
-    && !config_.exposure_view_only.empty()) {
+  if (IsLayoutExposureProof(proof) && !config_.exposure_view_only.empty()) {
     const auto selected = std::ranges::find(
       views, config_.exposure_view_only, &vortex::CompositionView::name);
     const bool offscreen = config_.offscreen_proof_layout
@@ -1247,6 +1287,122 @@ auto MainModule::UpdateComposition(oxygen::engine::FrameContext& context,
       std::iter_swap(main, pip);
     }
   }
+}
+
+auto MainModule::ApplyInteractionProof(engine::FrameContext& context,
+  std::vector<vortex::CompositionView>& views) -> void
+{
+  const auto frame = context.GetFrameSequenceNumber().get();
+  if (frame == 40U)
+    app_.engine->GetSimulationClock().SetPaused(false);
+  if (frame == 136U)
+    app_.engine->GetSimulationClock().SetPaused(true);
+  const auto renderer = ResolveVortexRenderer();
+  CHECK_NOTNULL_F(renderer.get());
+  if (frame >= 40U) {
+    const float phase
+      = static_cast<float>(std::min(frame, uint64_t { 132 }) - 40U);
+    const auto move_camera = [&](scene::SceneNode& node, float direction) {
+      if (!node.IsAlive())
+        return;
+      const auto base = node.GetTransform().GetLocalPosition();
+      CHECK_F(base.has_value());
+      const auto position = *base
+        + glm::vec3 { direction * .6F * std::sin(phase * .07F),
+            .3F * std::sin(phase * .045F), 0 };
+      const auto matrix
+        = glm::lookAt(position, glm::vec3 { -.75F, 0, 0 }, space::move::Up);
+      node.GetTransform().SetLocalPosition(position);
+      node.GetTransform().SetLocalRotation(
+        glm::quat_cast(glm::inverse(matrix)));
+    };
+    move_camera(main_camera_node_, 1);
+    move_camera(pip_camera_node_, -1);
+    move_camera(offscreen_preview_camera_node_, 1);
+    move_camera(offscreen_capture_camera_node_, -1);
+  }
+  for (auto& view : views) {
+    if (!view.camera.has_value())
+      continue;
+    auto exposure = *view.render_settings.exposure;
+    if (view.id == pip_view_id_) {
+      exposure.compensation_ev = frame >= 44U && frame < 52U ? .5F : 0;
+      if (frame >= 52U && frame < 60U) {
+        exposure.mode = engine::ExposureMode::kManual;
+        exposure.manual_ev = 14.5F;
+      }
+      view.shading_mode = frame >= 56U && frame < 96U
+        ? vortex::ShadingMode::kForward
+        : vortex::ShadingMode::kDeferred;
+      if (frame >= 112U && frame < 120U)
+        view.exposure_source_view_id = main_view_id_;
+      if (frame == 64U) {
+        CHECK_F(renderer
+            ->QueueExposureTransition(view.view_state_handle,
+              vortex::ExposureTransitionPolicy::kSeedFromEv100, 15.0F)
+            .has_value());
+      } else if (frame == 68U) {
+        CHECK_F(renderer
+            ->NotifyViewDiscontinuity(
+              view.view_state_handle, vortex::ViewDiscontinuity::kCameraCut)
+            .has_value());
+      }
+    } else if (view.id == main_view_id_ && frame == 116U) {
+      CHECK_F(renderer
+          ->QueueExposureTransition(view.view_state_handle,
+            vortex::ExposureTransitionPolicy::kSeedFromEv100, 15.0F)
+          .has_value());
+    }
+    view.render_settings.exposure = std::move(exposure);
+  }
+  if (frame >= 72U && frame < 80U)
+    std::reverse(views.begin(), views.end());
+  LOG_F(INFO,
+    "Vortex.MultiView.Interactions frame={} delta_seconds={:.9g} main={} "
+    "pip={} "
+    "hidden={} resized={} shared={} source_removed={}",
+    frame,
+    std::chrono::duration<double>(context.GetGameDeltaTime().get()).count(),
+    main_view_id_.get(), pip_view_id_.get(), retain_inactive_pip_,
+    viewport_proof_resized_, frame >= 112U && frame < 120U,
+    frame >= 120U && frame < 128U);
+}
+
+auto MainModule::DrawInteractionProofOverlay(std::uint64_t frame) -> void
+{
+  if (!IsMixedProof(config_.exposure_proof))
+    return;
+  const auto renderer = ResolveVortexRenderer();
+  if (!renderer || !renderer->IsImGuiFrameActive()
+    || !renderer->GetImGuiContext())
+    return;
+  ImGui::SetCurrentContext(renderer->GetImGuiContext());
+  ImGui::SetNextWindowPos(ImVec2(128, 20), ImGuiCond_Always);
+  ImGui::SetNextWindowBgAlpha(.9F);
+  constexpr auto flags = ImGuiWindowFlags_AlwaysAutoResize
+    | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings
+    | ImGuiWindowFlags_NoInputs;
+  if (ImGui::Begin("Mixed exposure validation", nullptr, flags)) {
+    ImGui::TextUnformatted(
+      "Sphere: opaque | Cube: emissive | Cone: masked | Cylinder: translucent");
+    const char* phase = config_.exposure_proof == ExposureProofScenario::kMixed
+      ? "Static reference"
+      : frame < 40U  ? "Static reference"
+      : frame < 52U  ? "Motion and compensation"
+      : frame < 60U  ? "PiP manual exposure"
+      : frame < 72U  ? "Auto, seed and cut"
+      : frame < 88U  ? "Reorder, viewport and scissor"
+      : frame < 100U ? "Window resize"
+      : frame < 108U ? "Hide and reopen"
+      : frame < 112U ? "Fresh PiP lifetime"
+      : frame < 120U ? "Shared exposure"
+      : frame < 128U ? "Source removed"
+      : frame < 136U ? "Source recreated"
+                     : "Paused final state";
+    ImGui::Text(
+      "Frame %llu | %s", static_cast<unsigned long long>(frame), phase);
+  }
+  ImGui::End();
 }
 
 auto MainModule::BuildComposition(oxygen::engine::FrameContext& context,
@@ -1579,7 +1735,10 @@ auto MainModule::BuildComposition(oxygen::engine::FrameContext& context,
   const bool pip_only
     = config_.exposure_proof == ExposureProofScenario::kPipOnly
     || (config_.exposure_proof == ExposureProofScenario::kSourceLoss
-      && context.GetFrameSequenceNumber().get() >= 44U);
+      && context.GetFrameSequenceNumber().get() >= 44U)
+    || (config_.exposure_proof == ExposureProofScenario::kInteractions
+      && context.GetFrameSequenceNumber().get() >= 120U
+      && context.GetFrameSequenceNumber().get() < 128U);
   if (!pip_only) {
     shell.OnMainViewReady(context, main_comp);
   }
