@@ -566,6 +566,8 @@ auto LocalFogVolumeTiledCullingPass::Record(RenderContext& ctx,
   if (!recorder) {
     return state;
   }
+  renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(
+    *recorder);
 
   TrackTextureFromKnownOrInitial(*recorder, *tile_data_texture_);
   TrackBufferFromKnownOrInitial(*recorder, *occupied_tile_buffer_);
@@ -603,7 +605,7 @@ auto LocalFogVolumeTiledCullingPass::Record(RenderContext& ctx,
     constants_alloc->srv.get(), 1U);
 
   graphics::GpuEventScope pass_scope(*recorder, "Vortex.Stage14.LocalFogTiledCulling",
-    profiling::ProfileGranularity::kDiagnostic,
+    profiling::ProfileGranularity::kTelemetry,
     profiling::ProfileCategory::kPass);
   const auto dispatch_x = std::max(
     1U, (tile_resolution_x + (kThreadGroupSize - 1U)) / kThreadGroupSize);

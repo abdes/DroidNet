@@ -5,9 +5,12 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <atomic>
+#include <condition_variable>
 #include <cstring>
 #include <fstream>
 #include <limits>
+#include <thread>
 
 #include <fmt/format.h>
 
@@ -76,6 +79,57 @@ auto EscapeJson(std::string_view input) -> std::string
   return escaped;
 }
 
+auto WriteJsonFrame(std::ostream& out,
+  const oxygen::vortex::internal::GpuTimelineFrame& frame) -> void
+{
+  out << "{\n";
+  out << fmt::format("  \"version\": 1,\n");
+  out << fmt::format("  \"frame_seq\": {},\n", frame.frame_sequence);
+  out << fmt::format(
+    "  \"timestamp_freq_hz\": {},\n", frame.timestamp_frequency_hz);
+  out << fmt::format("  \"profiling_enabled\": {},\n",
+    frame.profiling_enabled ? "true" : "false");
+  out << fmt::format(
+    "  \"overflowed\": {},\n", frame.overflowed ? "true" : "false");
+  out << fmt::format("  \"used_query_slots\": {},\n", frame.used_query_slots);
+  out << "  \"scopes\": [\n";
+  for (std::size_t i = 0; i < frame.scopes.size(); ++i) {
+    const auto& scope = frame.scopes[i];
+    out << "    {\n";
+    out << fmt::format("      \"scope_id\": {},\n", scope.scope_id);
+    out << fmt::format(
+      "      \"parent_scope_id\": {},\n", scope.parent_scope_id);
+    out << fmt::format("      \"name_hash\": {},\n", scope.name_hash);
+    out << fmt::format(
+      "      \"name\": \"{}\",\n", EscapeJson(scope.display_name));
+    out << fmt::format("      \"depth\": {},\n", scope.depth);
+    out << fmt::format("      \"stream_id\": {},\n", scope.stream_id);
+    out << fmt::format(
+      "      \"begin_query_slot\": {},\n", scope.begin_query_slot);
+    out << fmt::format("      \"end_query_slot\": {},\n", scope.end_query_slot);
+    out << fmt::format("      \"start_ms\": {:.6f},\n", scope.start_ms);
+    out << fmt::format("      \"end_ms\": {:.6f},\n", scope.end_ms);
+    out << fmt::format("      \"duration_ms\": {:.6f},\n", scope.duration_ms);
+    out << fmt::format(
+      "      \"valid\": {},\n", scope.valid ? "true" : "false");
+    out << fmt::format("      \"flags\": {}\n", scope.flags);
+    out << (i + 1U == frame.scopes.size() ? "    }\n" : "    },\n");
+  }
+  out << "  ],\n";
+  out << "  \"diagnostics\": [\n";
+  for (std::size_t i = 0; i < frame.diagnostics.size(); ++i) {
+    const auto& diagnostic = frame.diagnostics[i];
+    out << "    {\n";
+    out << fmt::format(
+      "      \"code\": \"{}\",\n", EscapeJson(diagnostic.code));
+    out << fmt::format(
+      "      \"message\": \"{}\"\n", EscapeJson(diagnostic.message));
+    out << (i + 1U == frame.diagnostics.size() ? "    }\n" : "    },\n");
+  }
+  out << "  ]\n";
+  out << "}\n";
+}
+
 class FileExportSink final : public oxygen::vortex::internal::GpuTimelineSink {
 public:
   OXYGEN_MAKE_NON_COPYABLE(FileExportSink)
@@ -135,68 +189,156 @@ private:
     -> void
   {
     std::ofstream out(output_path_, std::ios::binary | std::ios::trunc);
-    out << "{\n";
-    out << fmt::format("  \"version\": 1,\n");
-    out << fmt::format("  \"frame_seq\": {},\n", frame.frame_sequence);
-    out << fmt::format(
-      "  \"timestamp_freq_hz\": {},\n", frame.timestamp_frequency_hz);
-    out << fmt::format("  \"profiling_enabled\": {},\n",
-      frame.profiling_enabled ? "true" : "false");
-    out << fmt::format(
-      "  \"overflowed\": {},\n", frame.overflowed ? "true" : "false");
-    out << fmt::format("  \"used_query_slots\": {},\n", frame.used_query_slots);
-    out << "  \"scopes\": [\n";
-    for (std::size_t i = 0; i < frame.scopes.size(); ++i) {
-      const auto& scope = frame.scopes[i];
-      out << "    {\n";
-      out << fmt::format("      \"scope_id\": {},\n", scope.scope_id);
-      out << fmt::format(
-        "      \"parent_scope_id\": {},\n", scope.parent_scope_id);
-      out << fmt::format("      \"name_hash\": {},\n", scope.name_hash);
-      out << fmt::format(
-        "      \"name\": \"{}\",\n", EscapeJson(scope.display_name));
-      out << fmt::format("      \"depth\": {},\n", scope.depth);
-      out << fmt::format("      \"stream_id\": {},\n", scope.stream_id);
-      out << fmt::format(
-        "      \"begin_query_slot\": {},\n", scope.begin_query_slot);
-      out << fmt::format(
-        "      \"end_query_slot\": {},\n", scope.end_query_slot);
-      out << fmt::format("      \"start_ms\": {:.6f},\n", scope.start_ms);
-      out << fmt::format("      \"end_ms\": {:.6f},\n", scope.end_ms);
-      out << fmt::format("      \"duration_ms\": {:.6f},\n", scope.duration_ms);
-      out << fmt::format(
-        "      \"valid\": {},\n", scope.valid ? "true" : "false");
-      out << fmt::format("      \"flags\": {}\n", scope.flags);
-      out << (i + 1U == frame.scopes.size() ? "    }\n" : "    },\n");
-    }
-    out << "  ],\n";
-    out << "  \"diagnostics\": [\n";
-    for (std::size_t i = 0; i < frame.diagnostics.size(); ++i) {
-      const auto& diagnostic = frame.diagnostics[i];
-      out << "    {\n";
-      out << fmt::format(
-        "      \"code\": \"{}\",\n", EscapeJson(diagnostic.code));
-      out << fmt::format(
-        "      \"message\": \"{}\"\n", EscapeJson(diagnostic.message));
-      out << (i + 1U == frame.diagnostics.size() ? "    }\n" : "    },\n");
-    }
-    out << "  ]\n";
-    out << "}\n";
+    WriteJsonFrame(out, frame);
   }
 
   std::filesystem::path output_path_;
   bool completed_ { false };
 };
 
+class RecordingExportSink final
+  : public oxygen::vortex::internal::GpuTimelineSink {
+public:
+  RecordingExportSink(const std::filesystem::path& path,
+    const uint64_t first_frame, const uint32_t frame_count)
+    : first_frame_(first_frame)
+    , seen_(frame_count, false)
+  {
+    if (!path.parent_path().empty()) {
+      std::filesystem::create_directories(path.parent_path());
+    }
+    output_.exceptions(std::ios::badbit | std::ios::failbit);
+    output_.open(path, std::ios::binary | std::ios::trunc);
+    output_ << fmt::format(
+      "{{\n\"version\": 2,\n\"first_frame_seq\": {},\n"
+      "\"requested_frames\": {},\n\"serialization\": \"worker\",\n"
+      "\"queue_capacity_frames\": {},\n\"frames\": [\n",
+      first_frame, frame_count, kMaximumQueuedFrames);
+    worker_ = std::jthread([this]() { WriteFrames(); });
+  }
+
+  ~RecordingExportSink() override
+  {
+    {
+      std::scoped_lock lock(queue_mutex_);
+      producer_done_ = true;
+    }
+    queue_ready_.notify_one();
+    worker_.join();
+  }
+
+  OXYGEN_MAKE_NON_COPYABLE(RecordingExportSink)
+  OXYGEN_MAKE_NON_MOVABLE(RecordingExportSink)
+
+  auto ConsumeFrame(const oxygen::vortex::internal::GpuTimelineFrame& frame)
+    -> bool override
+  {
+    if (write_failed_.load(std::memory_order_acquire)) {
+      return false;
+    }
+    if (frame.frame_sequence < first_frame_
+      || frame.frame_sequence - first_frame_ >= seen_.size()) {
+      return true;
+    }
+    const auto index
+      = static_cast<std::size_t>(frame.frame_sequence - first_frame_);
+    if (seen_[index]) {
+      ++duplicate_frames_;
+      return true;
+    }
+    try {
+      std::scoped_lock lock(queue_mutex_);
+      if (pending_.size() == kMaximumQueuedFrames) {
+        cancelled_frame_ = frame.frame_sequence;
+        cancel_reason_ = "export_queue_full";
+        return false;
+      }
+      pending_.push_back(frame);
+      seen_[index] = true;
+      ++received_frames_;
+    } catch (const std::exception& ex) {
+      cancelled_frame_ = frame.frame_sequence;
+      cancel_reason_ = "export_queue_allocation_failed";
+      LOG_F(ERROR, "GPU timeline recording enqueue failed: {}", ex.what());
+      return false;
+    }
+    queue_ready_.notify_one();
+    return received_frames_ != seen_.size();
+  }
+
+private:
+  auto WriteFrames() noexcept -> void
+  {
+    try {
+      for (;;) {
+        auto frame = oxygen::vortex::internal::GpuTimelineFrame {};
+        {
+          auto lock = std::unique_lock(queue_mutex_);
+          queue_ready_.wait(
+            lock, [this]() { return producer_done_ || !pending_.empty(); });
+          if (pending_.empty()) {
+            break;
+          }
+          frame = std::move(pending_.front());
+          pending_.pop_front();
+        }
+        if (written_frames_ != 0U) {
+          output_ << ",\n";
+        }
+        WriteJsonFrame(output_, frame);
+        ++written_frames_;
+        timing_valid_ = timing_valid_ && frame.profiling_enabled
+          && !frame.overflowed && frame.timestamp_frequency_hz != 0U
+          && !frame.scopes.empty() && frame.diagnostics.empty()
+          && std::ranges::all_of(
+            frame.scopes, [](const auto& scope) { return scope.valid; });
+      }
+      const auto complete = written_frames_ == seen_.size();
+      output_ << fmt::format(
+        "\n],\n\"written_frames\": {},\n\"duplicate_frames\": {},\n"
+        "\"complete\": {},\n\"timing_valid\": {},\n"
+        "\"cancel_reason\": \"{}\",\n\"cancelled_frame_seq\": {}\n}}\n",
+        written_frames_, duplicate_frames_, complete,
+        complete && timing_valid_ && duplicate_frames_ == 0U, cancel_reason_,
+        cancelled_frame_.value_or(0U));
+      output_.close();
+    } catch (const std::exception& ex) {
+      write_failed_.store(true, std::memory_order_release);
+      LOG_F(ERROR, "GPU timeline recording write failed: {}", ex.what());
+    }
+  }
+
+  static constexpr auto kMaximumQueuedFrames = std::size_t { 8U };
+  std::ofstream output_;
+  uint64_t first_frame_ { 0U };
+  std::vector<bool> seen_;
+  uint32_t received_frames_ { 0U };
+  uint32_t written_frames_ { 0U };
+  uint64_t duplicate_frames_ { 0U };
+  bool timing_valid_ { true };
+  std::optional<uint64_t> cancelled_frame_;
+  std::string_view cancel_reason_;
+  std::mutex queue_mutex_;
+  std::condition_variable queue_ready_;
+  std::deque<oxygen::vortex::internal::GpuTimelineFrame> pending_;
+  bool producer_done_ { false };
+  std::atomic<bool> write_failed_ { false };
+  std::jthread worker_;
+};
+
 } // namespace
 
 namespace oxygen::vortex::internal {
 
-GpuTimelineProfiler::GpuTimelineProfiler(const observer_ptr<Graphics> graphics)
+GpuTimelineProfiler::GpuTimelineProfiler(
+  const observer_ptr<Graphics> graphics, const bool record_frame_span)
   : graphics_(graphics)
 {
   frame_capture_.scopes.reserve(max_scopes_per_frame_);
   scope_stack_.reserve(max_scopes_per_frame_);
+  if (record_frame_span) {
+    frame_scope_state_ = std::make_unique<graphics::GpuProfileCollectorState>();
+  }
 }
 
 GpuTimelineProfiler::~GpuTimelineProfiler() = default;
@@ -232,7 +374,14 @@ auto GpuTimelineProfiler::OnFrameStart(
   if (frame_capture_.resolve_submitted) {
     pending_frames_.push_back(std::move(frame_capture_));
     frame_capture_ = {};
-  } else if (!frame_capture_.diagnostics.empty()) {
+  } else if (!frame_capture_.diagnostics.empty()
+    || !recording_sink_.expired()) {
+    if (frame_capture_.diagnostics.empty()) {
+      AddDiagnostic("gpu.timestamp.unavailable",
+        frame_capture_.profiling_enabled
+          ? "frame has no resolved telemetry scopes"
+          : "timing collection was disabled or unavailable for this frame");
+    }
     // Missing samples are explicit, including a full capture ring. Never
     // silently turn a delayed or failed frame into a faster distribution.
     PublishFrame(BuildTimelineFrame(frame_capture_, {}));
@@ -243,6 +392,26 @@ auto GpuTimelineProfiler::OnFrameStart(
     reusable_captures_.pop_back();
   }
   ResetForFrame(frame_sequence);
+  if (frame_scope_state_ && frame_capture_.profiling_enabled) {
+    *frame_scope_state_ = {};
+    auto recorder = graphics_->AcquireCommandRecorder(
+      graphics_->QueueKeyFor(graphics::QueueRole::kGraphics),
+      "GpuTimestamp.FrameBegin");
+    if (!recorder) {
+      AddDiagnostic("gpu.timestamp.frame_begin_failed",
+        "failed to acquire the graphics-frame timestamp recorder");
+      frame_capture_.profiling_enabled = false;
+      return;
+    }
+    const auto desc = profiling::GpuProfileScopeDesc {
+      .label = "Vortex.Frame",
+      .granularity = profiling::ProfileGranularity::kTelemetry,
+      .category = profiling::ProfileCategory::kPass,
+    };
+    BeginScope(*recorder,
+      { .desc = desc, .base_label = desc.label, .formatted_name = desc.label },
+      *frame_scope_state_);
+  }
 }
 
 auto GpuTimelineProfiler::OnFrameRecordTailResolve() -> void
@@ -250,8 +419,6 @@ auto GpuTimelineProfiler::OnFrameRecordTailResolve() -> void
   if (frame_capture_.resolve_submitted) {
     return;
   }
-
-  CloseIncompleteScopes();
 
   if (frame_capture_.used_query_slots == 0U) {
     return;
@@ -277,6 +444,10 @@ auto GpuTimelineProfiler::OnFrameRecordTailResolve() -> void
       return;
     }
 
+    if (frame_scope_state_) {
+      EndScope(*recorder, *frame_scope_state_);
+    }
+    CloseIncompleteScopes();
     if (frame_capture_.profiling_enabled
       && !provider->RecordResolve(*recorder, frame_capture_.used_query_slots,
         frame_capture_.query_offset)) {
@@ -418,6 +589,29 @@ auto GpuTimelineProfiler::RequestOneShotExport(
     return;
   }
   AddSink(std::make_shared<FileExportSink>(path));
+}
+
+auto GpuTimelineProfiler::RequestRecording(
+  const std::filesystem::path& path, const uint32_t frame_count) -> bool
+{
+  constexpr auto max_recording_frames = 1'000'000U;
+  if (path.empty() || frame_count == 0U || frame_count > max_recording_frames
+    || !frame_capture_.profiling_enabled || !recording_sink_.expired()
+    || frame_capture_.frame_sequence
+      > std::numeric_limits<uint64_t>::max() - (frame_count - 1U)) {
+    return false;
+  }
+  try {
+    auto sink = std::make_shared<RecordingExportSink>(
+      path, frame_capture_.frame_sequence, frame_count);
+    recording_sink_ = sink;
+    AddSink(std::move(sink));
+    return true;
+  } catch (const std::exception& ex) {
+    LOG_F(ERROR, "GPU timeline recording failed for '{}': {}", path.string(),
+      ex.what());
+    return false;
+  }
 }
 
 auto GpuTimelineProfiler::GetLastPublishedFrame() const

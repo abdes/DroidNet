@@ -232,6 +232,8 @@ auto AtmosphereTransmittanceLutPass::Record(RenderContext& ctx,
   if (!recorder) {
     return state;
   }
+  renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(
+    *recorder);
 
   const auto& texture = *cache.GetTransmittanceTexture();
   TrackTextureFromKnownOrInitial(*recorder, texture);
@@ -248,7 +250,7 @@ auto AtmosphereTransmittanceLutPass::Record(RenderContext& ctx,
 
   graphics::GpuEventScope pass_scope(*recorder,
     "Vortex.Environment.AtmosphereTransmittanceLut",
-    profiling::ProfileGranularity::kDiagnostic,
+    profiling::ProfileGranularity::kTelemetry,
     profiling::ProfileCategory::kPass);
   const auto dispatch_x = (constants.output_width + (kThreadGroupSizeX - 1U))
     / kThreadGroupSizeX;

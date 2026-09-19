@@ -284,6 +284,8 @@ auto DistantSkyLightLutPass::Record(RenderContext& ctx,
   if (!recorder) {
     return state;
   }
+  renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(
+    *recorder);
 
   const auto& buffer = *cache.GetDistantSkyLightBuffer();
   TrackBufferFromKnownOrInitial(*recorder, buffer);
@@ -303,7 +305,7 @@ auto DistantSkyLightLutPass::Record(RenderContext& ctx,
 
   graphics::GpuEventScope pass_scope(*recorder,
     "Vortex.Environment.DistantSkyLightLut",
-    profiling::ProfileGranularity::kDiagnostic,
+    profiling::ProfileGranularity::kTelemetry,
     profiling::ProfileCategory::kPass);
   recorder->Dispatch(1U, 1U, 1U);
   recorder->RequireResourceStateFinal(

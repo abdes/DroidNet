@@ -460,6 +460,8 @@ struct OcclusionModule::Impl {
     if (!recorder) {
       return false;
     }
+    ctx.GetRenderer().GetDiagnosticsService().AttachGpuTimelineCollector(
+      *recorder);
 
     TrackBufferFromKnownOrInitial(*recorder, *result_buffer);
     recorder->RequireResourceState(

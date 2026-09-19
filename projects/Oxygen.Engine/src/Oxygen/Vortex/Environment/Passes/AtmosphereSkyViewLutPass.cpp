@@ -439,6 +439,8 @@ auto AtmosphereSkyViewLutPass::Record(RenderContext& ctx,
   if (!recorder) {
     return state;
   }
+  renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(
+    *recorder);
 
   if (ctx.current_view.frame_exposure) {
     const auto& status
@@ -472,7 +474,7 @@ auto AtmosphereSkyViewLutPass::Record(RenderContext& ctx,
   {
     graphics::GpuEventScope pass_scope(*recorder,
       "Vortex.Environment.AtmosphereSkyViewLut",
-      profiling::ProfileGranularity::kDiagnostic,
+      profiling::ProfileGranularity::kTelemetry,
       profiling::ProfileCategory::kPass);
     recorder->Dispatch(dispatch_x, dispatch_y, 1U);
     recorder->RequireResourceStateFinal(

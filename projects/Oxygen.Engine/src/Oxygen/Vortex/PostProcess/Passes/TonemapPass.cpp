@@ -262,6 +262,8 @@ auto TonemapPass::Record(RenderContext& ctx,
   if (!recorder) {
     return state;
   }
+  renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(
+    *recorder);
 
   TrackTextureFromKnownOrInitial(*recorder, *inputs.scene_signal);
   const bool checked_resolve = inputs.conversion_report != nullptr;
@@ -304,7 +306,7 @@ auto TonemapPass::Record(RenderContext& ctx,
   recorder->BindFrameBuffer(*inputs.post_target);
   SetViewportAndScissor(*recorder, ctx, *inputs.post_target);
   graphics::GpuEventScope pass_scope(*recorder, "Vortex.PostProcess.Tonemap",
-    profiling::ProfileGranularity::kDiagnostic,
+    profiling::ProfileGranularity::kTelemetry,
     profiling::ProfileCategory::kPass);
   recorder->SetPipelineState(BuildTonemapPipelineDesc(*inputs.post_target));
   const auto pass_constants_index = UpdatePassConstants(ctx, inputs);

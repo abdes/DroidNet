@@ -245,6 +245,8 @@ auto AtmosphereMultiScatteringLutPass::Record(RenderContext& ctx,
   if (!recorder) {
     return state;
   }
+  renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(
+    *recorder);
 
   const auto& texture = *cache.GetMultiScatteringTexture();
   TrackTextureFromKnownOrInitial(*recorder, texture);
@@ -261,7 +263,7 @@ auto AtmosphereMultiScatteringLutPass::Record(RenderContext& ctx,
 
   graphics::GpuEventScope pass_scope(*recorder,
     "Vortex.Environment.AtmosphereMultiScatteringLut",
-    profiling::ProfileGranularity::kDiagnostic,
+    profiling::ProfileGranularity::kTelemetry,
     profiling::ProfileCategory::kPass);
   const auto dispatch_x = (constants.output_width + (kThreadGroupSize - 1U))
     / kThreadGroupSize;

@@ -302,6 +302,8 @@ auto GroundGridPass::Record(
     gfx->RegisterDeferredRelease(std::move(framebuffer));
     return state;
   }
+  renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(
+    *recorder);
 
   graphics::GpuEventScope pass_scope(*recorder, "Vortex.Stage20.GroundGrid",
     profiling::ProfileGranularity::kDiagnostic,

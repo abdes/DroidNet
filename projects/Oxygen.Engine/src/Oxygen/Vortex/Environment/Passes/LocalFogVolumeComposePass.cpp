@@ -344,13 +344,15 @@ auto LocalFogVolumeComposePass::Record(RenderContext& ctx,
   if (!recorder) {
     return state;
   }
+  renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(
+    *recorder);
 
   TrackTextureFromKnownOrInitial(*recorder, scene_textures.GetSceneColor());
   TrackTextureFromKnownOrInitial(*recorder, scene_textures.GetSceneDepth());
   TrackBufferFromKnownOrInitial(*recorder, *products.occupied_tile_draw_args_buffer);
 
   graphics::GpuEventScope pass_scope(*recorder, "Vortex.Stage15.LocalFog",
-    profiling::ProfileGranularity::kDiagnostic,
+    profiling::ProfileGranularity::kTelemetry,
     profiling::ProfileCategory::kPass);
   recorder->RequireResourceState(
     scene_textures.GetSceneColor(), graphics::ResourceStates::kRenderTarget);

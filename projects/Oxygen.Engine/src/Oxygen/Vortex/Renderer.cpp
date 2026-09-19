@@ -979,7 +979,7 @@ Renderer::Renderer(std::weak_ptr<Graphics> graphics, RendererConfig config,
   diagnostics_service_
     = std::make_unique<DiagnosticsService>(capability_families_);
   gpu_timeline_profiler_ = std::make_unique<internal::GpuTimelineProfiler>(
-    observer_ptr { gfx.get() });
+    observer_ptr { gfx.get() }, true);
   diagnostics_service_->SetGpuTimelineProfiler(
     observer_ptr { gpu_timeline_profiler_.get() });
   render_context_pool_

@@ -358,6 +358,8 @@ auto ShadowDepthPass::RecordSlices(const PreparedViewShadowInput& view_input,
   if (!recorder) {
     return last_render_state_;
   }
+  renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(
+    *recorder);
 
   graphics::GpuEventScope stage_scope(*recorder, "Vortex.Stage8.ShadowDepths",
     profiling::ProfileGranularity::kTelemetry,

@@ -1881,6 +1881,8 @@ void SceneRenderer::RenderViewFamily(RenderContext& ctx)
         queue_key, "Vortex Auxiliary View Consumption");
       CHECK_F(static_cast<bool>(recorder),
         "SceneRenderer: failed to acquire auxiliary consumption recorder");
+      renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(
+        *recorder);
       graphics::GpuEventScope consume_scope(*recorder, "Vortex.AuxView.Consume",
         profiling::ProfileGranularity::kTelemetry,
         profiling::ProfileCategory::kPass,
@@ -3305,6 +3307,8 @@ auto SceneRenderer::RenderDebugVisualization(
   if (!recorder) {
     return false;
   }
+  renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(
+    *recorder);
 
   graphics::GpuEventScope debug_scope(*recorder,
     fmt::format(

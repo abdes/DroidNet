@@ -246,9 +246,11 @@ auto FogPass::Record(
     state.executed = false;
     return state;
   }
+  renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(
+    *recorder);
 
   graphics::GpuEventScope pass_scope(*recorder, "Vortex.Stage15.Fog",
-    profiling::ProfileGranularity::kDiagnostic,
+    profiling::ProfileGranularity::kTelemetry,
     profiling::ProfileCategory::kPass);
   TrackTextureFromKnownOrInitial(*recorder, scene_textures.GetSceneColor());
   TrackTextureFromKnownOrInitial(*recorder, scene_textures.GetSceneDepth());

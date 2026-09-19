@@ -13,6 +13,8 @@
 #include <thread>
 #include <vector>
 
+#include <nlohmann/json.hpp>
+
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Testing/GTest.h>
@@ -135,6 +137,38 @@ TEST(GpuTimelineProfilerTest, PublishesNestedTimelineOnNextFrame)
   EXPECT_GT(frame.scopes[1].duration_ms, 0.0F);
   EXPECT_EQ(graphics->GetTimestampQueryProvider().ResolveCount(), 1U);
   EXPECT_EQ(graphics->GetTimestampQueryProvider().LastResolvedQueryCount(), 4U);
+}
+
+TEST(GpuTimelineProfilerTest, FrameSpanIncludesSeparatePassRecorders)
+{
+  auto graphics = MakeGraphics();
+  auto profiler
+    = GpuTimelineProfiler(observer_ptr<Graphics> { graphics.get() }, true);
+  auto sink = std::make_shared<CapturingSink>();
+  profiler.SetEnabled(true);
+  profiler.AddSink(sink);
+  profiler.OnFrameStart(oxygen::frame::SequenceNumber { 1U });
+  {
+    auto recorder = AcquireTelemetryRecorder(*graphics, "IndependentPass");
+    recorder->SetTelemetryCollector(
+      observer_ptr<oxygen::graphics::IGpuProfileCollector> { &profiler });
+    oxygen::graphics::GpuEventScope scope(
+      *recorder, "Pass", oxygen::profiling::ProfileGranularity::kTelemetry);
+  }
+  profiler.OnFrameRecordTailResolve();
+  profiler.OnFrameStart(oxygen::frame::SequenceNumber { 2U });
+  ASSERT_EQ(sink->frames.size(), 1U);
+  ASSERT_EQ(sink->frames[0].scopes.size(), 2U);
+  const auto& frame = sink->frames[0].scopes[0];
+  const auto& pass = sink->frames[0].scopes[1];
+  EXPECT_TRUE(frame.valid);
+  EXPECT_TRUE(pass.valid);
+  EXPECT_EQ(frame.display_name, "Vortex.Frame");
+  EXPECT_EQ(pass.parent_scope_id, frame.scope_id);
+  EXPECT_NEAR(frame.duration_ms, .3F, 1e-6F);
+  EXPECT_NEAR(pass.duration_ms, .1F, 1e-6F);
+  EXPECT_GE(pass.start_ms, frame.start_ms);
+  EXPECT_LE(pass.end_ms, frame.end_ms);
 }
 
 TEST(GpuTimelineProfilerTest, RetainedLatestFramePublishesWithoutExternalSink)
@@ -474,6 +508,190 @@ TEST(GpuTimelineProfilerTest, FailedResolvePublishesInvalidTiming)
   EXPECT_THAT(frame.diagnostics,
     testing::Contains(testing::Field(
       &GpuTimelineDiagnostic::code, "gpu.timestamp.resolve_failed")));
+}
+
+TEST(GpuTimelineProfilerTest, RecordingRetainsInvalidFramesInExactWindow)
+{
+  auto graphics = MakeGraphics();
+  const auto directory = std::filesystem::temp_directory_path()
+    / ("oxygen_timeline_recording_"
+      + std::to_string(
+        std::chrono::steady_clock::now().time_since_epoch().count()));
+  const auto path = directory / "frames.json";
+  auto profiler
+    = GpuTimelineProfiler(observer_ptr<Graphics> { graphics.get() });
+  profiler.SetEnabled(true);
+  profiler.SetMaxScopesPerFrame(1U);
+  for (uint64_t sequence = 20U; sequence <= 24U; ++sequence) {
+    profiler.OnFrameStart(oxygen::frame::SequenceNumber { sequence });
+    if (sequence == 21U) {
+      EXPECT_FALSE(profiler.RequestRecording(path, 0U));
+      ASSERT_TRUE(profiler.RequestRecording(path, 3U));
+      EXPECT_FALSE(profiler.RequestRecording(directory / "second.json", 1U));
+    }
+    auto recorder = AcquireTelemetryRecorder(*graphics, "RecordedFrame");
+    recorder->SetTelemetryCollector(
+      observer_ptr<oxygen::graphics::IGpuProfileCollector> { &profiler });
+    {
+      oxygen::graphics::GpuEventScope scope(*recorder, "RecordedScope",
+        oxygen::profiling::ProfileGranularity::kTelemetry);
+    }
+    if (sequence == 22U) {
+      oxygen::graphics::GpuEventScope scope(*recorder, "OverflowScope",
+        oxygen::profiling::ProfileGranularity::kTelemetry);
+    }
+    recorder.reset();
+    profiler.OnFrameRecordTailResolve();
+  }
+  auto stream = std::ifstream(path);
+  const auto report = nlohmann::json::parse(stream);
+  stream.close();
+  EXPECT_EQ(report.at("version"), 2);
+  EXPECT_EQ(report.at("first_frame_seq"), 21);
+  EXPECT_EQ(report.at("requested_frames"), 3);
+  EXPECT_EQ(report.at("written_frames"), 3);
+  EXPECT_EQ(report.at("complete"), true);
+  EXPECT_EQ(report.at("timing_valid"), false);
+  const auto& frames = report.at("frames");
+  ASSERT_EQ(frames.size(), 3U);
+  for (std::size_t i = 0U; i < frames.size(); ++i) {
+    EXPECT_EQ(frames[i].at("frame_seq"), 21U + i);
+  }
+  EXPECT_EQ(frames[1].at("overflowed"), true);
+  EXPECT_FALSE(frames[1].at("diagnostics").empty());
+  EXPECT_FALSE(std::filesystem::exists(directory / "second.json"));
+  EXPECT_EQ(std::filesystem::remove_all(directory), 2U);
+}
+
+TEST(GpuTimelineProfilerTest, EmptyAndDisabledFramesTerminateRecordingWindow)
+{
+  auto graphics = MakeGraphics();
+  const auto directory = std::filesystem::temp_directory_path()
+    / ("oxygen_timeline_gaps_"
+      + std::to_string(
+        std::chrono::steady_clock::now().time_since_epoch().count()));
+  const auto path = directory / "frames.json";
+  {
+    auto profiler
+      = GpuTimelineProfiler(observer_ptr<Graphics> { graphics.get() });
+    profiler.SetEnabled(true);
+    for (uint64_t sequence = 21U; sequence <= 25U; ++sequence) {
+      profiler.SetEnabled(sequence != 23U);
+      profiler.OnFrameStart(oxygen::frame::SequenceNumber { sequence });
+      if (sequence == 21U) {
+        ASSERT_TRUE(profiler.RequestRecording(path, 4U));
+      }
+      if (sequence != 22U && sequence != 23U) {
+        auto recorder = AcquireTelemetryRecorder(*graphics, "GapControl");
+        recorder->SetTelemetryCollector(
+          observer_ptr<oxygen::graphics::IGpuProfileCollector> { &profiler });
+        oxygen::graphics::GpuEventScope scope(*recorder, "Scope",
+          oxygen::profiling::ProfileGranularity::kTelemetry);
+      }
+      profiler.OnFrameRecordTailResolve();
+    }
+    auto stream = std::ifstream(path);
+    const auto report = nlohmann::json::parse(stream);
+    stream.close();
+    EXPECT_EQ(report.at("complete"), true);
+    EXPECT_EQ(report.at("timing_valid"), false);
+    ASSERT_EQ(report.at("frames").size(), 4U);
+    for (const auto index : { 1U, 2U }) {
+      const auto& frame = report.at("frames")[index];
+      EXPECT_TRUE(frame.at("scopes").empty());
+      EXPECT_EQ(
+        frame.at("diagnostics")[0].at("code"), "gpu.timestamp.unavailable");
+    }
+    EXPECT_TRUE(profiler.RequestRecording(directory / "next.json", 1U));
+  }
+  EXPECT_EQ(std::filesystem::remove_all(directory), 3U);
+}
+
+TEST(GpuTimelineProfilerTest, RecordingKeepsDelayedFramesAfterBacklogDiagnostic)
+{
+  auto graphics = MakeGraphics();
+  auto& queue = static_cast<oxygen::vortex::testing::FakeCommandQueue&>(
+    *graphics->GetCommandQueue(QueueRole::kGraphics));
+  queue.SetAutoComplete(false);
+  const auto directory = std::filesystem::temp_directory_path()
+    / ("oxygen_timeline_delayed_recording_"
+      + std::to_string(
+        std::chrono::steady_clock::now().time_since_epoch().count()));
+  const auto path = directory / "frames.json";
+  auto profiler
+    = GpuTimelineProfiler(observer_ptr<Graphics> { graphics.get() });
+  profiler.SetEnabled(true);
+  constexpr auto frame_count = oxygen::frame::kFramesInFlight.get() + 2U;
+  for (uint64_t sequence = 1U; sequence <= frame_count; ++sequence) {
+    profiler.OnFrameStart(oxygen::frame::SequenceNumber { sequence });
+    if (sequence == 1U) {
+      ASSERT_TRUE(profiler.RequestRecording(path, frame_count));
+    }
+    {
+      auto recorder = AcquireTelemetryRecorder(*graphics, "DelayedRecording");
+      recorder->SetTelemetryCollector(
+        observer_ptr<oxygen::graphics::IGpuProfileCollector> { &profiler });
+      oxygen::graphics::GpuEventScope scope(
+        *recorder, "Scope", oxygen::profiling::ProfileGranularity::kTelemetry);
+    }
+    profiler.OnFrameRecordTailResolve();
+  }
+  // The unavailable last frame is published before the earlier GPU captures.
+  // A later sequence must not truncate those genuinely pending captures.
+  profiler.OnFrameStart(oxygen::frame::SequenceNumber { frame_count + 1U });
+  queue.CompleteThrough(queue.GetCurrentValue());
+  profiler.OnFrameStart(oxygen::frame::SequenceNumber { frame_count + 2U });
+  auto stream = std::ifstream(path);
+  const auto report = nlohmann::json::parse(stream);
+  stream.close();
+  EXPECT_EQ(report.at("complete"), true);
+  EXPECT_EQ(report.at("timing_valid"), false);
+  EXPECT_EQ(report.at("written_frames"), frame_count);
+  ASSERT_EQ(report.at("frames").size(), frame_count);
+  EXPECT_EQ(report.at("frames")[0].at("frame_seq"), frame_count);
+  for (uint32_t index = 1U; index < frame_count; ++index) {
+    EXPECT_EQ(report.at("frames")[index].at("frame_seq"), index);
+    EXPECT_EQ(report.at("frames")[index].at("scopes")[0].at("valid"), true);
+  }
+  EXPECT_EQ(std::filesystem::remove_all(directory), 2U);
+}
+
+TEST(GpuTimelineProfilerTest, RecordingShutdownMarksMissingFramesIncomplete)
+{
+  auto graphics = MakeGraphics();
+  const auto directory = std::filesystem::temp_directory_path()
+    / ("oxygen_timeline_partial_"
+      + std::to_string(
+        std::chrono::steady_clock::now().time_since_epoch().count()));
+  const auto path = directory / "frames.json";
+  {
+    auto profiler
+      = GpuTimelineProfiler(observer_ptr<Graphics> { graphics.get() });
+    EXPECT_FALSE(profiler.RequestRecording(path, 4U));
+    profiler.SetEnabled(true);
+    profiler.OnFrameStart(oxygen::frame::SequenceNumber { 1U });
+    EXPECT_FALSE(profiler.RequestRecording(path, 1'000'001U));
+    ASSERT_TRUE(profiler.RequestRecording(path, 4U));
+    auto recorder = AcquireTelemetryRecorder(*graphics, "PartialRecording");
+    recorder->SetTelemetryCollector(
+      observer_ptr<oxygen::graphics::IGpuProfileCollector> { &profiler });
+    {
+      oxygen::graphics::GpuEventScope scope(
+        *recorder, "Scope", oxygen::profiling::ProfileGranularity::kTelemetry);
+    }
+    recorder.reset();
+    profiler.OnFrameRecordTailResolve();
+    profiler.OnFrameStart(oxygen::frame::SequenceNumber { 2U });
+  }
+  auto stream = std::ifstream(path);
+  const auto report = nlohmann::json::parse(stream);
+  stream.close();
+  EXPECT_EQ(report.at("complete"), false);
+  EXPECT_EQ(report.at("timing_valid"), false);
+  EXPECT_EQ(report.at("requested_frames"), 4);
+  EXPECT_EQ(report.at("written_frames"), 1);
+  EXPECT_EQ(report.at("frames").size(), 1U);
+  EXPECT_EQ(std::filesystem::remove_all(directory), 2U);
 }
 
 TEST(GpuTimelineProfilerTest, OneShotExportWritesJsonFrame)

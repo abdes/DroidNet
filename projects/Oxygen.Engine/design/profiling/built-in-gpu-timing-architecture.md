@@ -184,6 +184,13 @@ At frame tail:
 2. otherwise one bulk resolve is issued for the used query range,
 3. the frame becomes publishable once the queue/fence model guarantees validity.
 
+Vortex enables a `Vortex.Frame` telemetry root. Its begin timestamp is submitted
+at renderer frame start; its end timestamp precedes the frame-tail bulk resolve
+on the same graphics queue. Pass recorders attach that renderer's collector and
+become children of this span. The span includes gaps between pass submissions;
+it is not a sum of pass durations. It excludes CPU/presentation time and the
+profiler's final query resolve, and does not describe a cross-queue critical path.
+
 The collector reserves `frame::kFramesInFlight + 1` independent ranges in the
 existing timestamp heap and readback buffer. Query indices and resolve byte
 offsets identify the same range. Capture metadata, timestamp frequency and scope
@@ -205,6 +212,39 @@ remain visible in recording results. Performance acceptance rejects incomplete
 populations rather than dropping their slow or unavailable frames. Consumers
 associate records by frame sequence: an unavailable-frame diagnostic can be
 published before an older pending capture completes.
+
+### 8.5 Bounded recording
+
+`DiagnosticsService::RequestGpuTimelineRecording(path, frame_count)` records
+the exact sequence window starting at the collector's current frame. Call it
+after renderer frame start with timing enabled. It returns false for an invalid
+request, unavailable collection, file-open failure or an existing active
+recording. The maximum window is 1,000,000 frames.
+
+The existing frame sink streams a version-2 JSON document containing the
+requested window and version-1 frame objects. No-scope, disabled and otherwise
+unavailable frames receive explicit diagnostics. Delayed frames retain their
+identity even when unavailable-frame diagnostics arrive first. Output order is
+publication order; consumers use `frame_seq`, never array position, to associate
+samples. The sink keeps bounded identity bits rather than the entire recording
+in memory. It releases recording ownership when all requested identities have
+reached a measured or unavailable state.
+
+The footer distinguishes `complete` (every requested identity is present) from
+`timing_valid` (complete, no duplicate identities, no unavailable/overflowed
+frames, no diagnostics and all scopes valid). Shutdown closes partial output
+with both flags false. I/O failure leaves an invalid/truncated file and logs the
+failure. Such output cannot establish a performance result. One-shot export
+retains its original schema and behavior.
+
+Recording copies each published CPU frame into a queue capped at eight frames.
+One worker serializes and writes them. A full queue cancels the recording with
+`cancel_reason: "export_queue_full"`, identifies the rejected sequence and
+produces incomplete, invalid evidence; it never grows the queue or silently
+discards samples. Completion/shutdown drains the bounded queue and joins the
+worker before the report is read or its output path reused. Native performance
+runs must qualify instrumentation-on/off overhead, including enqueue costs and
+the final drain; file output is not assumed free.
 
 ## 9. Capacity and Overflow
 
