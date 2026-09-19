@@ -7,6 +7,8 @@
 #pragma once
 
 #include <algorithm>
+#include <deque>
+#include <iterator>
 
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Vortex/Environment/EnvironmentLightingService.h>
@@ -175,6 +177,25 @@ struct RendererPublicationProbe {
         ? 0U
         : pending->second.size(),
       service.deferred_exposure_status_.contains(handle) ? 1U : 0U };
+  }
+
+  using ExposureStatusJobs
+    = std::deque<PostProcessService::PendingExposureStatus>;
+
+  // Hold real GPU readbacks outside CPU polling to exercise delayed delivery.
+  static auto TakeExposureStatuses(PostProcessService& service,
+    CompositionView::ViewStateHandle handle) -> ExposureStatusJobs
+  {
+    auto entry = service.pending_exposure_status_.extract(handle);
+    return entry.empty() ? ExposureStatusJobs {} : std::move(entry.mapped());
+  }
+
+  static auto RestoreExposureStatuses(PostProcessService& service,
+    CompositionView::ViewStateHandle handle, ExposureStatusJobs jobs) -> void
+  {
+    auto& pending = service.pending_exposure_status_[handle];
+    pending.insert(pending.end(), std::make_move_iterator(jobs.begin()),
+      std::make_move_iterator(jobs.end()));
   }
 
   static auto GetPostProcessService(SceneRenderer& renderer)
