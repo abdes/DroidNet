@@ -6916,6 +6916,194 @@ NOLINT_TEST_F(ExposureGpuTest, ProducerMaximumReuseFallsBackForUnprovenRecords)
   }
 }
 
+NOLINT_TEST_F(ExposureGpuTest, ProducerChecksPreserveOrderedFailuresAndCounts)
+{
+  auto settings = scene::ExposureSettings {};
+  settings.mode = engine::ExposureMode::kManual;
+  settings.manual_ev = 0.0F;
+  settings.key = 12.5F;
+  const auto config = SharedConfig(settings);
+  const auto meter = Uniform(.25F);
+  const std::array<Pixel, 1> finite { Pixel { .25F, .5F, 2.0F, .5F } };
+  const std::array<Pixel, 1> nonfinite { Pixel {
+    .25F, .5F, 2.0F, std::numeric_limits<float>::quiet_NaN() } };
+  const auto scene = MakeSignal(9U, 1U, finite);
+  constexpr auto expected_products = (1U << 5U) | (1U << 9U) | (1U << 10U);
+  const auto failure_bit
+    = [](const unsigned id) { return id == 11U ? 1U : (id == 6U ? 2U : 4U); };
+  for (const auto format : { Format::kRGBA32Float, Format::kRGBA16Float }) {
+    const auto producer = MakeSignal(9U, 3U, finite, 2U, format);
+    const auto invalid = MakeSignal(9U, 3U, nonfinite, 2U, format);
+    auto order = std::array { 6U, 10U, 11U };
+    do {
+      for (const unsigned invalid_product : { 0U, 6U, 10U }) {
+        const auto first_mask = invalid_product == 0U ? 0U : 7U;
+        for (unsigned mask = first_mask; mask < 8U; ++mask) {
+          SCOPED_TRACE(::testing::Message()
+            << "format=" << static_cast<unsigned>(format)
+            << " order=" << order[0] << ',' << order[1] << ',' << order[2]
+            << " invalid=" << invalid_product << " gain-mask=" << mask);
+          ctx_.frame_sequence = frame::SequenceNumber { ++sequence_ };
+          const auto frame
+            = pass_->ResolveFrame(ctx_, config, { .use_fp32 = true });
+          ASSERT_NE(frame, nullptr);
+          ASSERT_TRUE(RecordShared(meter, config).executed);
+          std::array<postprocess::ExposurePass::HdrProduct, 3> products;
+          auto expected_first = invalid_product;
+          auto expected_rejected = invalid_product == 0U ? 0U : 54U;
+          for (unsigned index = 0U; index < order.size(); ++index) {
+            const auto id = order[index];
+            const auto& signal = id == 11U
+              ? scene
+              : (id == invalid_product ? invalid : producer);
+            const auto bad_gain = (mask & failure_bit(id)) != 0U;
+            products[index] = { .texture = signal.texture.get(),
+              .srv = signal.srv,
+              .id = id,
+              .transmittance = id != 11U,
+              .consumer_rgb_gain
+              = bad_gain ? std::numeric_limits<float>::quiet_NaN() : 1.0F };
+            if (id != invalid_product && bad_gain) {
+              expected_rejected += id == 11U ? 9U : 54U;
+              if (expected_first == 0U) {
+                expected_first = id;
+              }
+            }
+            if (id != 11U) {
+              ASSERT_TRUE(
+                pass_->GatherFilterGradients(ctx_, frame, products[index]));
+            }
+          }
+          ASSERT_TRUE(
+            pass_->EvaluateFp16Products(ctx_, frame, config, products, {}));
+          const auto report = Read<HdrSuitabilityData>(
+            *frame->suitability_buffer, ResourceStates::kShaderResource);
+          EXPECT_EQ(report.first_failure_product, expected_first);
+          EXPECT_EQ(report.failure_flags, expected_rejected == 0U ? 0U : 1U);
+          EXPECT_EQ(report.rejected_samples, expected_rejected);
+          EXPECT_EQ(report.checked_samples, invalid_product == 0U ? 117U : 63U);
+          EXPECT_EQ(report.checked_products, expected_products);
+          EXPECT_EQ(report.expected_products, expected_products);
+          EXPECT_EQ(report.image_failures, 0U);
+          EXPECT_EQ(report.metering_failures, 0U);
+          EXPECT_EQ(report.overflow_failures, 0U);
+          EXPECT_EQ(report.reserved, 0U);
+          EXPECT_EQ(report.candidate_pre_exposure, 4096.0F);
+          EXPECT_EQ(std::bit_cast<std::uint32_t>(report.maximum_scene_rgb),
+            0x40000004U);
+          const auto status
+            = Read<ExposureStatusStorage>(*frame->current_state->status_buffer,
+              ResourceStates::kShaderResource);
+          for (const auto id : { 6U, 10U }) {
+            const auto& bound = status.candidate_errors[id == 6U ? 1U : 2U];
+            if (id == invalid_product) {
+              EXPECT_TRUE(std::isinf(bound.rgb_absolute));
+              EXPECT_TRUE(std::isinf(bound.transmittance_absolute));
+            } else {
+              for (const auto value : { bound.rgb_relative, bound.rgb_absolute,
+                     bound.transmittance_relative,
+                     bound.transmittance_absolute }) {
+                EXPECT_TRUE(std::isfinite(value));
+                EXPECT_GE(value, 0.0F);
+                EXPECT_LE(value, 2e-5F);
+              }
+            }
+          }
+        }
+      }
+    } while (std::next_permutation(order.begin(), order.end()));
+  }
+}
+
+NOLINT_TEST_F(ExposureGpuTest, CurrentScaleProducerChecksKeepOrderedFailures)
+{
+  auto settings = scene::ExposureSettings {};
+  settings.mode = engine::ExposureMode::kManual;
+  settings.manual_ev = 0.0F;
+  const auto config = SharedConfig(settings);
+  const auto meter = Uniform(.25F);
+  const auto signal = Uniform(.5F, 9U, 1U);
+  for (const bool reverse : { false, true }) {
+    ctx_.frame_sequence = frame::SequenceNumber { ++sequence_ };
+    const auto frame = pass_->ResolveFrame(ctx_, config, { .use_fp32 = true });
+    ASSERT_NE(frame, nullptr);
+    ASSERT_TRUE(RecordShared(meter, config).executed);
+    auto products = std::array {
+      postprocess::ExposurePass::HdrProduct { .texture = signal.texture.get(),
+        .srv = signal.srv,
+        .id = 6U,
+        .transmittance = true,
+        .consumer_rgb_gain = std::numeric_limits<float>::quiet_NaN() },
+      postprocess::ExposurePass::HdrProduct { .texture = signal.texture.get(),
+        .srv = signal.srv,
+        .id = 10U,
+        .transmittance = true,
+        .consumer_rgb_gain = std::numeric_limits<float>::quiet_NaN() }
+    };
+    if (reverse) {
+      std::ranges::reverse(products);
+    }
+    ASSERT_TRUE(pass_->EvaluateFp16Products(ctx_, frame, config, products, {},
+      postprocess::ExposurePass::SuitabilityScale::kCurrentFrame));
+    const auto report = Read<HdrSuitabilityData>(
+      *frame->conversion_buffer, ResourceStates::kShaderResource);
+    EXPECT_EQ(report.first_failure_product, products.front().id);
+    EXPECT_EQ(report.failure_flags, 1U);
+    EXPECT_EQ(report.rejected_samples, 18U);
+    EXPECT_EQ(report.checked_samples, 18U);
+    EXPECT_EQ(report.image_failures, 0U);
+    EXPECT_EQ(report.metering_failures, 0U);
+    EXPECT_EQ(report.overflow_failures, 0U);
+    EXPECT_EQ(report.reserved, 0U);
+    EXPECT_EQ(report.candidate_pre_exposure, 1.0F);
+  }
+}
+NOLINT_TEST_F(ExposureGpuTest, ProducerChecksKeepDivergentLaneFailures)
+{
+  auto settings = scene::ExposureSettings {};
+  settings.mode = engine::ExposureMode::kManual;
+  settings.manual_ev = 0.0F;
+  settings.key = 12.5F;
+  const auto config = SharedConfig(settings);
+  const auto meter = Uniform(.25F);
+  auto pixels = std::array<Pixel, 9> {};
+  pixels.fill(Pixel { .25F, .5F, 2.0F, .5F });
+  for (const auto index : { 1U, 3U }) {
+    pixels[index] = { 0x1p-64F, 0.0F, 0.0F, .5F };
+  }
+  for (const auto index : { 2U, 5U, 8U }) {
+    pixels[index][3] = std::numeric_limits<float>::quiet_NaN();
+  }
+  const auto signal = MakeSignal(9U, 1U, pixels);
+  for (const auto id : { 6U, 10U }) {
+    ctx_.frame_sequence = frame::SequenceNumber { ++sequence_ };
+    const auto frame = pass_->ResolveFrame(ctx_, config, { .use_fp32 = true });
+    ASSERT_NE(frame, nullptr);
+    ASSERT_TRUE(RecordShared(meter, config).executed);
+    const auto product
+      = postprocess::ExposurePass::HdrProduct { .texture = signal.texture.get(),
+          .srv = signal.srv,
+          .id = id,
+          .transmittance = true,
+          .consumer_rgb_gain = 0x1p60F };
+    ASSERT_TRUE(pass_->GatherFilterGradients(ctx_, frame, product));
+    ASSERT_TRUE(pass_->EvaluateFp16Products(
+      ctx_, frame, config, std::span { &product, 1U }, {}));
+    const auto report = Read<HdrSuitabilityData>(
+      *frame->suitability_buffer, ResourceStates::kShaderResource);
+    // Three nonfinite texels are rejected by the maximum scan. Of six finite
+    // texels, two lose RGB in half storage; their amplified contribution is
+    // 1/16, so they exceed the independently specified absolute image budget.
+    EXPECT_EQ(report.first_failure_product, id);
+    EXPECT_EQ(report.failure_flags, 1U | 4U);
+    EXPECT_EQ(report.rejected_samples, 3U);
+    EXPECT_EQ(report.checked_samples, 6U);
+    EXPECT_EQ(report.image_failures, 2U);
+    EXPECT_EQ(report.metering_failures, 0U);
+    EXPECT_EQ(report.overflow_failures, 0U);
+    EXPECT_EQ(report.reserved, 0U);
+  }
+}
 NOLINT_TEST_F(ExposureGpuTest, FilterGradientsEncloseReferenceNeighborsAndRetry)
 {
   auto settings = scene::ExposureSettings {};
