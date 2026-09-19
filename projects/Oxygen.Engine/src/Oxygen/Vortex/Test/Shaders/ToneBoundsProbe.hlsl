@@ -9,6 +9,7 @@
 #include "Vortex/Services/PostProcess/ToneMappingFastBounds.hlsli"
 #include "Vortex/Contracts/View/HdrHardwareSampling.hlsli"
 #include "Vortex/Contracts/View/HdrRadianceRange.hlsli"
+#include "Vortex/Contracts/View/HdrErrorBounds.hlsli"
 #include "Vortex/Services/PostProcess/HdrSceneComposition.hlsli"
 #include "Vortex/Services/Environment/TransmittanceMath.hlsli"
 #include "Vortex/Services/Environment/VolumetricFog.hlsl"
@@ -20,9 +21,58 @@ void CS(uint3 thread : SV_DispatchThreadID)
 {
     StructuredBuffer<ProbeConstants> constants = ResourceDescriptorHeap[g_PassConstantsIndex];
     const ProbeConstants pass = constants[0];
-    if (thread.x >= pass.count) return;
     StructuredBuffer<uint4> input = ResourceDescriptorHeap[pass.inputs];
     RWByteAddressBuffer output = ResourceDescriptorHeap[pass.output];
+    if (pass.reserved == 16384u) {
+        // One padded 64-lane group: status [80,128), scalar coefficients
+        // [128,1152), lane metadata [1152,1664), in a 2048-byte output.
+        if (pass.count != 64u) {
+            return;
+        }
+        const uint4 settings = input[0];
+        if (thread.x == 0u) {
+            output.Store4(0u, uint4(WaveGetLaneCount(), 64u, settings.xy));
+            output.Store4(16u, 0x13579bdfu.xxxx);
+            output.Store4(32u, 0x2468ace0u.xxxx);
+            output.Store4(48u, 0x55aa55aau.xxxx);
+            output.Store4(64u, 0xaa55aa55u.xxxx);
+            output.Store4(80u, input[1]);
+            output.Store4(96u, input[2]);
+            output.Store4(112u, input[3]);
+        }
+        DeviceMemoryBarrierWithGroupSync();
+        const uint base = 4u + thread.x * 4u;
+        const float4 value = asfloat(input[base]);
+        const float4 low = asfloat(input[base + 1u]);
+        const float4 high = asfloat(input[base + 2u]);
+        const uint control = input[base + 3u].x;
+        const uint wave_lane = WaveGetLaneIndex();
+        const bool active = (control & 1u) != 0u
+            && ((control & 2u) == 0u || wave_lane != 0u);
+        const float inverse_p = asfloat(settings.z);
+
+        // Scalar coefficients are computed independently of publication.
+        // The CPU serial unsigned-max oracle consumes these raw words.
+        const float4 stored = settings.y != 0u ? HdrRoundToHalf(value) : value;
+        float2 rgb = 0.0.xx;
+        [unroll] for (uint c = 0u; c < 3u; ++c) {
+            rgb = max(rgb, HdrEnclosureBound(stored[c], float2(low[c], high[c])));
+        }
+        rgb.y = HdrUpperProduct(rgb.y, inverse_p);
+        const float2 transmission = HdrEnclosureBound(stored.a, float2(low.a, high.a));
+        output.Store4(128u + thread.x * 16u, asuint(float4(rgb, transmission)));
+        output.Store2(1152u + thread.x * 8u, uint2(wave_lane, active ? 1u : 0u));
+        if (active) {
+            RecordHdrStoreBounds(value, low, high, inverse_p,
+                settings.x, pass.output, settings.y);
+        }
+        // This barrier is outside the divergent production-helper call.
+        DeviceMemoryBarrierWithGroupSync();
+        return;
+    }
+    if (thread.x >= pass.count) {
+        return;
+    }
     if (pass.reserved == 8192u || pass.reserved == 4096u) {
         const uint4 settings = input[thread.x * 2u];
         const float4 ray = asfloat(input[thread.x * 2u + 1u]);
