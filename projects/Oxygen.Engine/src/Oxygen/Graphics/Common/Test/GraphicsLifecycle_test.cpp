@@ -15,7 +15,9 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
+#include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
 #include <Oxygen/Graphics/Common/ReadbackManager.h>
+#include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Test/Mocks/MockGraphics.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 
@@ -168,6 +170,35 @@ NOLINT_TEST(GraphicsLifecycleTest, Stop_AllowsMissingReadbackManager)
     .WillByDefault(::testing::Return(observer_ptr<ReadbackManager> {}));
 
   EXPECT_NO_THROW(gfx.Stop());
+}
+
+NOLINT_TEST(GraphicsLifecycleTest,
+  Destructor_DrainsLateRetirementWhileCommonComponentsRemainAccessible)
+{
+  // MockGraphics has no early destructor drain. The Common Graphics destructor
+  // must run these actions before Composition takes its exclusive teardown
+  // lock.
+  auto gfx = std::make_unique<TestGraphics>("Late retirement");
+  auto* const owner = static_cast<oxygen::Graphics*>(gfx.get());
+  auto* const registry = &owner->GetResourceRegistry();
+  unsigned completed = 0U;
+  gfx->Stop();
+  gfx->Flush();
+  for (unsigned slot = 0U; slot < oxygen::frame::kFramesInFlight.get();
+    ++slot) {
+    auto& reclaimer = gfx->GetDeferredReclaimer();
+    reclaimer.OnBeginFrame(oxygen::frame::Slot { slot });
+    reclaimer.RegisterDeferredAction([owner, registry, &completed]() {
+      EXPECT_EQ(&owner->GetResourceRegistry(), registry);
+      EXPECT_EQ(owner->GetResourceRegistry().GetRegisteredResourceCount(), 0U);
+      EXPECT_EQ(owner->GetCommandQueue(oxygen::graphics::QueueRole::kGraphics),
+        nullptr);
+      ++completed;
+    });
+  }
+  EXPECT_EQ(completed, 0U);
+  gfx.reset();
+  EXPECT_EQ(completed, oxygen::frame::kFramesInFlight.get());
 }
 
 } // namespace
