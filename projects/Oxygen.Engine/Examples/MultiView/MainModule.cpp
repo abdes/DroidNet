@@ -802,15 +802,15 @@ auto MainModule::RenderOffscreenProofProducts(engine::FrameContext& context)
     if (IsLayoutExposureProof(config_.exposure_proof)) {
       auto exposure = scene::ExposureSettings {};
       exposure.key = 12.5F;
-      exposure.metering_mode = IsMixedProof(config_.exposure_proof)
-        ? engine::MeteringMode::kAverage
-        : engine::MeteringMode::kSpot;
+      // Preserve the scene-authored profile for these proof cameras. The
+      // preview's central shadow is not representative of its lit image.
+      exposure.metering_mode = engine::MeteringMode::kAverage;
       view_intent.SetExposureOverride(std::move(exposure));
     }
     facade.SetViewIntent(view_intent);
     facade.SetOutputTarget(vortex::Renderer::OutputTargetInput {
-      .framebuffer = observer_ptr<graphics::Framebuffer> {
-        product.framebuffer.get() },
+      .framebuffer
+      = observer_ptr<graphics::Framebuffer> { product.framebuffer.get() },
     });
     facade.SetPipeline(pipeline);
 

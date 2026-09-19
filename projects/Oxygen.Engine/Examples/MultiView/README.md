@@ -44,10 +44,11 @@ Common validation-oriented options:
 - `--exposure-proof layouts`: use the existing sunlit scene with volumetric fog
   and Auto exposure in ordinary, standard, auxiliary, offscreen or feature
   layouts. It preserves wireframe and feature diagnostics and uses a lit
-  auxiliary color producer. Most panes use Spot; NoEnvironment uses Average
-  because its camera center lies in a deep cast shadow. Simulation is paused
-  and registered/offscreen owners remeter at frame 32, so capture frame 40 for
-  the static comparison.
+  auxiliary color producer. Most panes use Spot; NoEnvironment and the
+  offscreen preview/capture use Average. Their central shadows would make
+  Spot metering overexpose the rest of the image. Simulation is paused and
+  registered/offscreen owners remeter at frame 32, so capture frame 40 for the
+  static comparison.
 - `--exposure-view-only "<view name>"`: with `layouts`, keep the named view and
   its auxiliary producers for an isolated comparison at the same viewport and
   camera settings. For example, standard layout uses `M06A.LitPerspective`;
