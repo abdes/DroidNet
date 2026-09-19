@@ -271,6 +271,7 @@ set(
   "Environment/Internal/FogRenderer.cpp"
   "Environment/Internal/IblProcessor.cpp"
   "Environment/Internal/LocalFogVolumeState.cpp"
+  "Environment/Internal/ResourceRetirement.h"
   "Environment/Internal/StaticSkyLightProcessor.cpp"
   "Environment/Passes/SkyPass.cpp"
   "Environment/Passes/AtmosphereComposePass.cpp"

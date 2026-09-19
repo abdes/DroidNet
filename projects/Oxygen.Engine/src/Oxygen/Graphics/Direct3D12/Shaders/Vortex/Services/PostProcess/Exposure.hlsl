@@ -966,16 +966,32 @@ void ConvertQualifiedSceneColor(uint3 pixel : SV_DispatchThreadID)
     destination[pixel.xy] = HdrRoundToHalf(float4(sample.rgb, saturate(sample.a)));
 }
 
-static void SuitabilityFailure(RWByteAddressBuffer report, uint product, uint flags, uint counter)
+static void SuitabilityFailure(RWByteAddressBuffer report, uint product, uint flags,
+    uint counter, bool defer_first_product)
 {
     const uint count = WaveActiveCountBits(true);
     if (WaveIsFirstLane()) {
         uint unused;
         report.InterlockedOr(12u, flags, unused);
-        report.InterlockedCompareExchange(16u, 0u, product, unused);
+        if (defer_first_product) {
+            // The report's reserved word is transient and cleared by the
+            // original-order publication dispatch before report consumption.
+            report.InterlockedOr(44u, 1u << (product - 1u), unused);
+        } else {
+            report.InterlockedCompareExchange(16u, 0u, product, unused);
+        }
         report.InterlockedAdd(counter, count, unused);
     }
 }
+
+static void SuitabilityFailure(RWByteAddressBuffer report, uint product, uint flags, uint counter)
+{
+    SuitabilityFailure(report, product, flags, counter, false);
+}
+
+static void CheckPointSuitability(SuitabilityConstants pass, uint3 pixel, float4 sample,
+    RWByteAddressBuffer report, float4 bounds, float3 scene, float3 proposed,
+    float3 restored, bool defer_first_product);
 
 static uint FilterGradientOffset(uint product)
 {
@@ -1036,46 +1052,79 @@ groupshared uint4 s_CandidateBounds[64];
 static void GatherCandidateProductBounds(SuitabilityConstants pass, uint3 pixel, uint lane)
 {
     RWByteAddressBuffer status = ResourceDescriptorHeap[pass.report_uav];
-    ByteAddressBuffer report = ResourceDescriptorHeap[pass.reserved.x];
     StructuredBuffer<FrameExposureData> frame = ResourceDescriptorHeap[pass.frame_srv];
+    const bool fused_point_check = (pass.flags & 4096u) != 0u;
+    float candidate_p;
+    if (fused_point_check) {
+        RWByteAddressBuffer report = ResourceDescriptorHeap[pass.reserved.x];
+        candidate_p = asfloat(report.Load(0u));
+    } else {
+        ByteAddressBuffer report = ResourceDescriptorHeap[pass.reserved.x];
+        candidate_p = asfloat(report.Load(0u));
+    }
+    const float p = frame[0].pre_exposure;
+    const float inverse_p = frame[0].one_over_pre_exposure;
+    const float4 bounds = asfloat(status.Load4(HdrProducerBoundOffset(pass.product)));
+    const bool in_bounds = all(pixel < uint3(pass.width, pass.height, pass.depth));
+    float4 sample = 0.0.xxxx;
+    float3 scene = 0.0.xxx;
+    float3 proposed = 0.0.xxx;
+    float3 restored = 0.0.xxx;
     float4 result = 0.0.xxxx;
-    if (pixel.x < pass.width && pixel.y < pass.height && pixel.z < pass.depth) {
-        const float p = frame[0].pre_exposure;
-        const float inverse_p = frame[0].one_over_pre_exposure;
-        const float candidate_p = asfloat(report.Load(0u));
-        const float4 bounds = asfloat(status.Load4(HdrProducerBoundOffset(pass.product)));
-        const float4 sample = SuitabilitySample(pass, pixel);
+    if (in_bounds) {
+        sample = SuitabilitySample(pass, pixel);
+        scene = sample.rgb * inverse_p;
+        proposed = scene * candidate_p;
+        restored = HdrRoundToHalf(proposed) / candidate_p;
         bool valid = isfinite(p) && p > 0.0 && isfinite(inverse_p) && inverse_p > 0.0
             && isfinite(candidate_p) && candidate_p > 0.0
             && SuitabilityBoundValid(bounds.xy)
             && ((pass.flags & 4u) == 0u || SuitabilityBoundValid(bounds.zw));
         [unroll] for (uint c = 0u; c < 4u; ++c) {
-            if (c == 3u && (pass.flags & 4u) == 0u) continue;
+            if (c == 3u && (pass.flags & 4u) == 0u) {
+                continue;
+            }
             valid = valid && HdrFiniteNonnegative(sample[c]);
             const float2 source_bound = c == 3u ? bounds.zw
                 : float2(bounds.x, HdrUpperProduct(bounds.y, p));
             float2 reference = HdrReferenceInterval(sample[c], source_bound);
-            if (c == 3u) reference = saturate(reference);
-            const float candidate = HdrRoundToHalf(c == 3u ? sample.a
-                : (sample[c] * inverse_p) * candidate_p);
-            if (c != 3u) {
-                // Move the reference and rounded observation into common
-                // scene units before deriving the prospective certificate.
+            if (c == 3u) {
+                reference = saturate(reference);
+            } else {
                 reference.x = HdrBoundDown(reference.x * inverse_p);
                 reference.y = HdrUpperProduct(reference.y, inverse_p);
             }
             const float2 component = HdrEnclosureBound(
-                c == 3u ? candidate : candidate / candidate_p, reference);
+                c == 3u ? HdrRoundToHalf(sample.a) : restored[c], reference);
             valid = valid && all(isfinite(reference)) && all(isfinite(component));
-            if (c == 3u) result.zw = component;
-            else result.xy = max(result.xy, component);
+            if (c == 3u) {
+                result.zw = component;
+            } else {
+                result.xy = max(result.xy, component);
+            }
         }
-        if (!valid) result = float4(0.0, HdrBoundInfinity(), 0.0, HdrBoundInfinity());
+        if (!valid) {
+            result = float4(0.0, HdrBoundInfinity(), 0.0, HdrBoundInfinity());
+        }
+    }
+    // Helper returns are local: every lane still reaches the reduction below.
+    // Consume shared texel calculations before the group barriers so they need
+    // not remain live across reduction. Report and status are distinct UAVs.
+    if (fused_point_check && in_bounds && all(isfinite(sample))) {
+        RWByteAddressBuffer report = ResourceDescriptorHeap[pass.reserved.x];
+        uint unused;
+        const uint checked = WaveActiveCountBits(true);
+        if (WaveIsFirstLane()) {
+            report.InterlockedAdd(36u, checked, unused);
+        }
+        CheckPointSuitability(pass, pixel, sample, report, bounds, scene, proposed, restored, true);
     }
     s_CandidateBounds[lane] = asuint(result);
     GroupMemoryBarrierWithGroupSync();
     [unroll] for (uint stride = 32u; stride > 0u; stride >>= 1u) {
-        if (lane < stride) s_CandidateBounds[lane] = max(s_CandidateBounds[lane], s_CandidateBounds[lane + stride]);
+        if (lane < stride) {
+            s_CandidateBounds[lane] = max(s_CandidateBounds[lane], s_CandidateBounds[lane + stride]);
+        }
         GroupMemoryBarrierWithGroupSync();
     }
     if (lane == 0u) {
@@ -1552,44 +1601,39 @@ static void CheckComposedScene(SuitabilityConstants pass, uint3 pixel, float4 sa
         SuitabilityFailure(report, pass.product, 8u, 24u);
 }
 
-[numthreads(8, 8, 1)]
-void CheckSuitabilityProduct(uint3 pixel : SV_DispatchThreadID)
+static void CheckPointSuitability(SuitabilityConstants pass, uint3 pixel, float4 sample,
+    RWByteAddressBuffer report, float4 bounds, float3 scene, float3 proposed,
+    float3 restored, bool defer_first_product)
 {
-    StructuredBuffer<SuitabilityConstants> constants = ResourceDescriptorHeap[g_PassConstantsIndex];
-    const SuitabilityConstants pass = constants[0];
-    if (pixel.x >= pass.width || pixel.y >= pass.height || pixel.z >= pass.depth) return;
-    RWByteAddressBuffer report = ResourceDescriptorHeap[pass.report_uav];
-    const float4 sample = SuitabilitySample(pass, pixel);
-    if (!all(isfinite(sample))) return;
-    uint unused;
-    const uint checked = WaveActiveCountBits(true);
-    if (WaveIsFirstLane()) report.InterlockedAdd(36u, checked, unused);
-    if ((pass.flags & 256u) != 0u) {
-        CheckComposedScene(pass, pixel, sample, report);
-        return;
-    }
     if (!isfinite(pass.consumer_rgb_gain) || pass.consumer_rgb_gain < 0.0) {
-        SuitabilityFailure(report, pass.product, 1u, 20u);
+        SuitabilityFailure(report, pass.product, 1u, 20u, defer_first_product);
         return;
     }
-    const float4 bounds = SuitabilityProducerBounds(pass);
+    if (!defer_first_product) {
+        bounds = SuitabilityProducerBounds(pass);
+    }
     if (!SuitabilityBoundValid(bounds.xy)
         || ((pass.flags & 4u) != 0u && !SuitabilityBoundValid(bounds.zw))) {
-        SuitabilityFailure(report, pass.product, 4u, 28u);
+        SuitabilityFailure(report, pass.product, 4u, 28u, defer_first_product);
         return;
     }
-    StructuredBuffer<FrameExposureData> frame = ResourceDescriptorHeap[pass.frame_srv];
     ByteAddressBuffer state = ResourceDescriptorHeap[pass.state_srv];
     const float s = asfloat(state.Load(0u));
-    const float inverse_p = frame[0].one_over_pre_exposure;
-    const float candidate_p = asfloat(report.Load(0u));
-    const float3 scene = sample.rgb * inverse_p;
-    const float3 proposed = scene * candidate_p;
+    // Keep the separate path's validation and arithmetic order unchanged.
+    if (!defer_first_product) {
+        StructuredBuffer<FrameExposureData> frame = ResourceDescriptorHeap[pass.frame_srv];
+        const float inverse_p = frame[0].one_over_pre_exposure;
+        const float candidate_p = asfloat(report.Load(0u));
+        scene = sample.rgb * inverse_p;
+        proposed = scene * candidate_p;
+    }
     if (any(abs(proposed) > 16376.0)) {
-        SuitabilityFailure(report, pass.product, 2u, 32u);
+        SuitabilityFailure(report, pass.product, 2u, 32u, defer_first_product);
         return;
     }
-    const float3 restored = HdrRoundToHalf(proposed) / candidate_p;
+    if (!defer_first_product) {
+        restored = HdrRoundToHalf(proposed) / asfloat(report.Load(0u));
+    }
     const float alpha = (pass.flags & 2u) != 0u ? saturate(sample.a) : 1.0;
     const float narrowed_alpha = (pass.flags & 2u) != 0u ? HdrRoundToHalf(alpha) : 1.0;
     const float3 reference = scene / max(alpha, 1e-6);
@@ -1601,7 +1645,7 @@ void CheckSuitabilityProduct(uint3 pixel : SV_DispatchThreadID)
         [unroll] for (uint c = 0u; c < 3u; ++c) {
             const float2 interval = SuitabilityReferenceInterval(scene[c], bounds.xy);
             if (!all(isfinite(interval))) {
-                SuitabilityFailure(report, pass.product, 4u, 28u);
+                SuitabilityFailure(report, pass.product, 4u, 28u, defer_first_product);
                 return;
             }
             reference_low[c] = HdrBoundDown(interval.x / max(alpha, 1e-6));
@@ -1612,7 +1656,7 @@ void CheckSuitabilityProduct(uint3 pixel : SV_DispatchThreadID)
     // that was finite before those operations. Inf > Inf is not a rejection.
     if (!all(isfinite(reference_low)) || !all(isfinite(reference_high))
         || !all(isfinite(narrowed))) {
-        SuitabilityFailure(report, pass.product, 4u, 28u);
+        SuitabilityFailure(report, pass.product, 4u, 28u, defer_first_product);
         return;
     }
     const float relative_budget = .0025 * pass.budget_share;
@@ -1630,7 +1674,7 @@ void CheckSuitabilityProduct(uint3 pixel : SV_DispatchThreadID)
         const float t = saturate(sample.a);
         float2 reference_t = SuitabilityReferenceInterval(t, bounds.zw);
         if (!all(isfinite(reference_t))) {
-            SuitabilityFailure(report, pass.product, 4u, 28u);
+            SuitabilityFailure(report, pass.product, 4u, 28u, defer_first_product);
             return;
         }
         reference_t = saturate(reference_t);
@@ -1640,9 +1684,13 @@ void CheckSuitabilityProduct(uint3 pixel : SV_DispatchThreadID)
         image_failure = image_failure || any(abs(candidate_t.xx - reference_t)
             > reference_t * relative_budget + transmission_absolute_budget);
     }
-    if (image_failure) SuitabilityFailure(report, pass.product, 4u, 28u);
+    if (image_failure) {
+        SuitabilityFailure(report, pass.product, 4u, 28u, defer_first_product);
+    }
     uint2 cell; float2 uv;
-    if (!SuitabilityMeterCell(pass, pixel.xy, cell, uv)) return;
+    if (!SuitabilityMeterCell(pass, pixel.xy, cell, uv)) {
+        return;
+    }
     float mask = 1.0;
     if (pass.mask_srv != K_INVALID_BINDLESS_INDEX) {
         Texture2D<float4> mask_texture = ResourceDescriptorHeap[pass.mask_srv];
@@ -1650,20 +1698,23 @@ void CheckSuitabilityProduct(uint3 pixel : SV_DispatchThreadID)
         mask = mask_texture.SampleLevel(mask_sampler, uv, 0).r;
     }
     if (!isfinite(mask)) {
-        SuitabilityFailure(report, pass.product, 1u, 20u);
+        SuitabilityFailure(report, pass.product, 1u, 20u, defer_first_product);
         return;
     }
     const uint2 grid = min(uint2(pass.meter_width, pass.meter_height), METER_GRID_LIMIT);
     const float distance = length((float2(cell * 2u + 1u) - float2(grid)) / float2(grid));
     float profile = 1.0;
-    if (pass.meter_mode == 1u) profile = saturate(1.0 - distance);
-    else if (pass.meter_mode == 2u) {
+    if (pass.meter_mode == 1u) {
+        profile = saturate(1.0 - distance);
+    } else if (pass.meter_mode == 2u) {
         profile = pass.radius > 0.0 ? saturate(1.0 - distance / pass.radius) : (all(cell * 2u + 1u == grid) ? 1.0 : 0.0);
         profile *= profile;
     }
     const uint weight = QuantizeWeight(profile * saturate(mask) * alpha);
     const uint narrowed_weight = QuantizeWeight(profile * saturate(mask) * narrowed_alpha);
-    if (weight == 0u && narrowed_weight == 0u) return;
+    if (weight == 0u && narrowed_weight == 0u) {
+        return;
+    }
     const float luminance = Luminance(reference);
     const float narrowed_luminance = Luminance(narrowed);
     const bool dark = IsDarkMeterSample(luminance, pass.min_log_luminance);
@@ -1696,5 +1747,44 @@ void CheckSuitabilityProduct(uint3 pixel : SV_DispatchThreadID)
             }
         }
     }
-    if (meter_failure) SuitabilityFailure(report, pass.product, 8u, 24u);
+    if (meter_failure) {
+        SuitabilityFailure(report, pass.product, 8u, 24u, defer_first_product);
+    }
+}
+
+[numthreads(8, 8, 1)]
+void CheckSuitabilityProduct(uint3 pixel : SV_DispatchThreadID)
+{
+    StructuredBuffer<SuitabilityConstants> constants = ResourceDescriptorHeap[g_PassConstantsIndex];
+    const SuitabilityConstants pass = constants[0];
+    RWByteAddressBuffer report = ResourceDescriptorHeap[pass.report_uav];
+    if ((pass.flags & 8192u) != 0u) {
+        if (all(pixel == 0u.xxx)) {
+            const uint bit = 1u << (pass.product - 1u);
+            uint unused;
+            if ((report.Load(44u) & bit) != 0u) {
+                report.InterlockedCompareExchange(16u, 0u, pass.product, unused);
+            }
+            report.InterlockedAnd(44u, ~bit, unused);
+        }
+        return;
+    }
+    if (pixel.x >= pass.width || pixel.y >= pass.height || pixel.z >= pass.depth) {
+        return;
+    }
+    const float4 sample = SuitabilitySample(pass, pixel);
+    if (!all(isfinite(sample))) {
+        return;
+    }
+    uint unused;
+    const uint checked = WaveActiveCountBits(true);
+    if (WaveIsFirstLane()) {
+        report.InterlockedAdd(36u, checked, unused);
+    }
+    if ((pass.flags & 256u) != 0u) {
+        CheckComposedScene(pass, pixel, sample, report);
+        return;
+    }
+    CheckPointSuitability(pass, pixel, sample, report,
+        0.0.xxxx, 0.0.xxx, 0.0.xxx, 0.0.xxx, false);
 }

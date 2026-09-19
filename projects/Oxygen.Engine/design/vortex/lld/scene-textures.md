@@ -265,6 +265,23 @@ does not validate unused alpha; SceneColor and candidate-bound scans are also
 unchanged. Reuse removes texture reads and bound arithmetic, while retaining the
 dispatch so the GPU can select the original scan without a CPU readback.
 
+For prospective AP/fog products with transmittance, but without metering,
+coverage or composed-image flags, candidate-bound gathering also performs the
+point suitability check. The two operations share the texel, producer bounds
+and RGB conversion calculations. Other products and current-scale checks keep
+their separate path. All lanes still participate in candidate-bound reduction,
+including lanes outside the product extent or rejected by a point check.
+
+Early point-check flags and counters are commutative; first-failure selection is
+not. During this fused dispatch, the suitability report's reserved word at byte
+44 temporarily holds pending product bits. At each product's original check-loop
+position, publication selects its failure only if no earlier failure exists,
+then clears its bit. The word is zero again before the report is published.
+Composed SceneColor checks remain after complete candidate-bound publication.
+Report and producer status use their distinct UAVs during fusion, with the
+existing memory barriers; the fused path does not alias either through an SRV.
+No GPU layout, allocation or format policy changes.
+
 Persistent views submit these reference checks and completed reports while
 rendering in either HDR mode. Matching completed eligibility authorizes the
 normal-mode allocations described above; pre-store and composition/temporal error

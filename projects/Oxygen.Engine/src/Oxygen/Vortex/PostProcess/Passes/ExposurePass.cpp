@@ -1122,6 +1122,8 @@ auto ExposurePass::EvaluateFp16Products(
                         profiling::Var("flags", additional_flags),
                         profiling::Var("current_scale", current_scale)));
       const bool candidate_bounds = (additional_flags & 512U) != 0U;
+      const bool fused_point_check = (additional_flags & 4096U) != 0U;
+      const bool publish_point_failure = (additional_flags & 8192U) != 0U;
       const auto desc = product ? product->texture->GetDescriptor()
                                 : graphics::TextureDesc {};
       bool opaque_depth_usable = false;
@@ -1174,8 +1176,11 @@ auto ExposurePass::EvaluateFp16Products(
           config.Exposure().authored.black_influence),
         std::bit_cast<std::uint32_t>(product ? product->consumer_rgb_gain
                                              : 1.0F),
-        frame->current_state->status_srv_index.get(),
-        candidate_bounds ? report_srv.get() : 0U,
+        fused_point_check ? kInvalidShaderVisibleIndex.get()
+                          : frame->current_state->status_srv_index.get(),
+        candidate_bounds
+          ? (fused_point_check ? report_uav.get() : report_srv.get())
+          : 0U,
         metering.composition_products,
         std::bit_cast<std::uint32_t>(background.x),
         std::bit_cast<std::uint32_t>(background.y),
@@ -1196,8 +1201,9 @@ auto ExposurePass::EvaluateFp16Products(
       CHECK_F(slot.IsValid());
       recorder->RequireResourceState(
         *report_buffer,
-        candidate_bounds ? graphics::ResourceStates::kShaderResource
-                         : graphics::ResourceStates::kUnorderedAccess);
+        candidate_bounds && !fused_point_check
+          ? graphics::ResourceStates::kShaderResource
+          : graphics::ResourceStates::kUnorderedAccess);
       recorder->RequireResourceState(
         *frame->current_state->status_buffer,
         candidate_bounds ? graphics::ResourceStates::kUnorderedAccess
@@ -1210,11 +1216,12 @@ auto ExposurePass::EvaluateFp16Products(
       recorder->SetComputeRoot32BitConstant(
         static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants),
         slot.get(), 1U);
-      recorder->Dispatch(product ? (desc.width + 7U) / 8U : 1U,
-                         product ? (desc.height + 7U) / 8U : 1U,
-                         product && desc.texture_type == TextureType::kTexture3D
-                           ? desc.depth
-                           : 1U);
+      const bool scan_product = product && !publish_point_failure;
+      recorder->Dispatch(scan_product ? (desc.width + 7U) / 8U : 1U,
+        scan_product ? (desc.height + 7U) / 8U : 1U,
+        scan_product && desc.texture_type == TextureType::kTexture3D
+          ? desc.depth
+          : 1U);
     };
     dispatch(0U, nullptr);
     if (!current_scale && metering.scene_composition) {
@@ -1240,12 +1247,19 @@ auto ExposurePass::EvaluateFp16Products(
       dispatch(1U, &product, reuse_maximum ? 2048U : 0U);
     }
     dispatch(2U, nullptr);
+    std::uint32_t fused_point_products = 0U;
     if (!current_scale) {
       dispatch(0U, nullptr, 512U);
       for (const auto& product : products) {
         if (product.texture && product.srv.IsValid()
             && (product.id == 5U || product.id == 6U || product.id == 10U)) {
-          dispatch(1U, &product, 512U);
+          const bool fuse_point_check = (product.id == 6U || product.id == 10U)
+            && product.transmittance && !product.metering && !product.coverage
+            && !product.composed_error;
+          dispatch(1U, &product, 512U | (fuse_point_check ? 4096U : 0U));
+          if (fuse_point_check) {
+            fused_point_products |= 1U << (product.id - 1U);
+          }
         }
       }
     }
@@ -1308,7 +1322,11 @@ auto ExposurePass::EvaluateFp16Products(
     }
     for (const auto& product : products) {
       if (product.texture && product.srv.IsValid()) {
-        dispatch(3U, &product);
+        // Fused point failures become visible to first-failure selection only
+        // at this product's original position, after scene composition.
+        const bool fused
+          = (fused_point_products & (1U << (product.id - 1U))) != 0U;
+        dispatch(3U, &product, fused ? 8192U : 0U);
       }
     }
     recorder->RequireResourceStateFinal(
