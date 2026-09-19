@@ -97,7 +97,7 @@ public:
 
   //! Invoke a callable for every unique CommandQueue.
   template <std::invocable<graphics::CommandQueue&> Fn>
-  auto ForEachQueue(Fn&& fn) -> void
+  auto ForEachQueue(Fn&& fn) const -> void
   {
     std::vector<std::shared_ptr<graphics::CommandQueue>> queues;
     {

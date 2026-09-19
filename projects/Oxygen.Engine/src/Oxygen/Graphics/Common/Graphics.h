@@ -7,6 +7,7 @@
 
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string_view>
 #include <vector>
 
@@ -20,6 +21,7 @@
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/Shaders.h>
 #include <Oxygen/Graphics/Common/Types/QueueRole.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Common/api_export.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/LiveObject.h>
@@ -181,6 +183,14 @@ public:
     -> observer_ptr<graphics::CommandQueue>;
 
   OXGN_GFX_NDAPI virtual auto FlushCommandQueues() -> void;
+
+  //! Return the agreed resource state across all queues that track it.
+  /*! No state is returned when no queue tracks the resource, a tracked state
+      is unknown, or queues disagree. Includes queues available only by name.
+      Call after completion when using the result to recycle a resource. */
+  OXGN_GFX_NDAPI auto TryGetKnownResourceState(
+    const graphics::NativeResource& resource) const
+    -> std::optional<graphics::ResourceStates>;
 
   OXGN_GFX_NDAPI virtual auto AcquireCommandRecorder(
     const graphics::QueueKey& queue_key, std::string_view command_list_name,

@@ -27,6 +27,9 @@ class ResolvedView;
 }
 
 namespace oxygen::vortex {
+namespace internal {
+  class RetainedTexturePool;
+}
 namespace testing {
   struct RendererPublicationProbe;
 }
@@ -101,6 +104,7 @@ namespace environment {
 
   private:
     friend struct ::oxygen::vortex::testing::RendererPublicationProbe;
+    auto ClearHistory(ViewId view_id) -> void;
     struct alignas(16) OutputHeader {
       std::uint32_t output_texture_uav { 0U };
       std::uint32_t output_width { 0U };
@@ -223,6 +227,8 @@ namespace environment {
 
     Renderer& renderer_;
     upload::TransientStructuredBuffer pass_constants_buffer_;
+    std::unique_ptr<::oxygen::vortex::internal::RetainedTexturePool>
+      output_pool_;
     std::vector<std::shared_ptr<graphics::Texture>> live_textures_ {};
 
     struct HistoryEntry {

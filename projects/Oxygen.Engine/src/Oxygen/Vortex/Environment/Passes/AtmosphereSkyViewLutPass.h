@@ -11,6 +11,7 @@
 #include <vector>
 
 #include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Vortex/Types/EnvironmentViewData.h>
 #include <Oxygen/Vortex/Upload/TransientStructuredBuffer.h>
 #include <Oxygen/Vortex/api_export.h>
@@ -23,6 +24,9 @@ namespace oxygen::vortex {
 
 struct RenderContext;
 class Renderer;
+namespace internal {
+  class RetainedTexturePool;
+}
 namespace testing {
   struct RendererPublicationProbe;
 }
@@ -62,6 +66,7 @@ namespace environment {
 
     OXGN_VRTX_API auto OnFrameStart(
       frame::SequenceNumber sequence, frame::Slot slot) -> void;
+    OXGN_VRTX_API auto RemoveViewState(ViewId view_id) -> void;
     [[nodiscard]] OXGN_VRTX_API auto Record(RenderContext& ctx,
       const EnvironmentViewData& view_data,
       const internal::StableAtmosphereState& stable_state,
@@ -140,6 +145,8 @@ namespace environment {
 
     Renderer& renderer_;
     upload::TransientStructuredBuffer pass_constants_buffer_;
+    std::unique_ptr<::oxygen::vortex::internal::RetainedTexturePool>
+      output_pool_;
     std::vector<std::shared_ptr<graphics::Texture>> live_textures_ {};
   };
 

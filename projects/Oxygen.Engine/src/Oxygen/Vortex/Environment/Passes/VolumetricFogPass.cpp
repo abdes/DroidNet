@@ -11,7 +11,6 @@
 #include <cstddef>
 #include <limits>
 #include <stdexcept>
-#include <unordered_set>
 #include <vector>
 
 #include <glm/geometric.hpp>
@@ -32,7 +31,7 @@
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereState.h>
-#include <Oxygen/Vortex/Environment/Internal/ResourceRetirement.h>
+#include <Oxygen/Vortex/Internal/RetainedTexturePool.h>
 #include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
@@ -184,33 +183,6 @@ namespace {
     recorder.BeginTrackingResourceState(texture, initial, true);
   }
 
-  auto ReleaseTexture(Graphics& gfx,
-    std::shared_ptr<graphics::Texture>& texture,
-    std::unordered_set<const graphics::Texture*>& released) -> void
-  {
-    if (texture == nullptr) {
-      return;
-    }
-
-    const auto* raw_texture = texture.get();
-    if (!released.insert(raw_texture).second) {
-      texture.reset();
-      return;
-    }
-
-    internal::RetireEnvironmentResource(gfx, texture);
-  }
-
-  auto ReleaseLiveTextures(Graphics& gfx,
-    std::vector<std::shared_ptr<graphics::Texture>>& live_textures,
-    std::unordered_set<const graphics::Texture*>& released) -> void
-  {
-    for (auto& texture : live_textures) {
-      ReleaseTexture(gfx, texture, released);
-    }
-    live_textures.clear();
-  }
-
   auto SetVec4(float (&target)[4], const glm::vec3 value, const float w = 0.0F)
     -> void
   {
@@ -297,28 +269,30 @@ VolumetricFogPass::VolumetricFogPass(Renderer& renderer)
 
 VolumetricFogPass::~VolumetricFogPass()
 {
-  auto gfx = renderer_.GetGraphics();
-  if (gfx == nullptr) {
-    live_textures_.clear();
-    history_by_view_.clear();
-    return;
+  live_textures_.clear();
+  while (!history_by_view_.empty()) {
+    ClearHistory(history_by_view_.begin()->first);
   }
-
-  std::unordered_set<const graphics::Texture*> released;
-  ReleaseLiveTextures(*gfx, live_textures_, released);
-  for (auto& [_, history] : history_by_view_) {
-    ReleaseTexture(*gfx, history.texture, released);
+  if (output_pool_) {
+    output_pool_->Clear();
   }
-  history_by_view_.clear();
 }
 
 auto VolumetricFogPass::RemoveViewState(const ViewId view_id) -> void
 {
+  if (output_pool_) {
+    output_pool_->RemoveView(view_id);
+  }
+  ClearHistory(view_id);
+}
+
+auto VolumetricFogPass::ClearHistory(const ViewId view_id) -> void
+{
   const auto found = history_by_view_.find(view_id);
-  if (found == history_by_view_.end())
+  if (found == history_by_view_.end()) {
     return;
+  }
   if (auto gfx = renderer_.GetGraphics()) {
-    internal::RetireEnvironmentResource(*gfx, found->second.texture);
     gfx->RegisterDeferredRelease(std::move(found->second.frame_exposure));
   }
   history_by_view_.erase(found);
@@ -331,12 +305,9 @@ auto VolumetricFogPass::OnFrameStart(
     exposure_readers_[slot.get()].clear();
     exposure_frame_ = sequence;
   }
-  auto gfx = renderer_.GetGraphics();
-  if (gfx != nullptr) {
-    std::unordered_set<const graphics::Texture*> released;
-    ReleaseLiveTextures(*gfx, live_textures_, released);
-  } else {
-    live_textures_.clear();
+  live_textures_.clear();
+  if (output_pool_) {
+    output_pool_->OnFrameStart(sequence);
   }
   pass_constants_buffer_.OnFrameStart(sequence, slot);
 }
@@ -366,18 +337,28 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
 
   auto gfx = renderer_.GetGraphics();
   if (gfx == nullptr) {
+    RemoveViewState(ctx.current_view.view_id);
     return state;
   }
   if (ctx.view_constants == nullptr) {
+    RemoveViewState(ctx.current_view.view_id);
     return state;
   }
 
+  if (!output_pool_) {
+    output_pool_
+      = std::make_unique<::oxygen::vortex::internal::RetainedTexturePool>(gfx);
+    output_pool_->OnFrameStart(ctx.frame_sequence);
+  }
+  const auto recyclable = ctx.current_view.view_id != kInvalidViewId
+    && ctx.current_view.view_state_handle
+      != CompositionView::kInvalidViewStateHandle;
   const auto& resolved_view = *ctx.current_view.resolved_view;
   const auto extent = GridExtent(resolved_view);
   const auto width = extent.x;
   const auto height = extent.y;
   const auto depth = extent.z;
-  auto texture = gfx->CreateTexture({
+  const auto texture_desc = graphics::TextureDesc {
     .width = width,
     .height = height,
     .depth = depth,
@@ -397,20 +378,20 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
     .use_clear_value = false,
     .initial_state = graphics::ResourceStates::kCommon,
     .cpu_access = graphics::ResourceAccessMode::kImmutable,
-  });
+  };
+  auto texture
+    = output_pool_->Acquire(ctx.current_view.view_id, texture_desc, recyclable);
   if (texture == nullptr) {
+    RemoveViewState(ctx.current_view.view_id);
     return state;
   }
-  texture->SetName("Vortex.Environment.IntegratedLightScattering");
-
   auto& registry = gfx->GetResourceRegistry();
-  if (!registry.Contains(*texture)) {
-    registry.Register(texture);
-  }
   bool texture_committed = false;
   auto retire_unpublished = ScopeGuard([&]() noexcept {
-    if (!texture_committed)
-      internal::RetireEnvironmentResource(*gfx, texture);
+    if (!texture_committed) {
+      output_pool_->RemoveView(ctx.current_view.view_id);
+      texture.reset();
+    }
   });
 
   auto& allocator = gfx->GetDescriptorAllocator();
@@ -501,8 +482,9 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
     constants.temporal_history1.frame_jitter_offsets[sample_index][3] = jitter.w;
   }
   HistoryEntry transient_history;
-  if (!temporal_reprojection_enabled)
-    RemoveViewState(ctx.current_view.view_id);
+  if (!temporal_reprojection_enabled) {
+    ClearHistory(ctx.current_view.view_id);
+  }
   auto& history_entry = temporal_reprojection_enabled
     ? history_by_view_[ctx.current_view.view_id]
     : transient_history;
@@ -640,9 +622,10 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
   if (ctx.current_view.frame_exposure) {
     const auto& status
       = *ctx.current_view.frame_exposure->current_state->status_buffer;
-    if (!recorder->AdoptKnownResourceState(status))
+    if (!recorder->AdoptKnownResourceState(status)) {
       recorder->BeginTrackingResourceState(
         status, graphics::ResourceStates::kCommon, false);
+    }
     recorder->RequireResourceState(
       status, graphics::ResourceStates::kUnorderedAccess);
   }
@@ -651,16 +634,18 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
     *texture, graphics::ResourceStates::kUnorderedAccess);
   if (history_matches && history_entry.frame_exposure) {
     const auto& previous_p = *history_entry.frame_exposure->buffer;
-    if (!recorder->AdoptKnownResourceState(previous_p))
+    if (!recorder->AdoptKnownResourceState(previous_p)) {
       recorder->BeginTrackingResourceState(
         previous_p, graphics::ResourceStates::kShaderResource, false);
+    }
     recorder->RequireResourceState(
       previous_p, graphics::ResourceStates::kShaderResource);
     const auto& previous_errors
       = *history_entry.frame_exposure->current_state->status_buffer;
-    if (!recorder->AdoptKnownResourceState(previous_errors))
+    if (!recorder->AdoptKnownResourceState(previous_errors)) {
       recorder->BeginTrackingResourceState(
         previous_errors, graphics::ResourceStates::kCommon, false);
+    }
     recorder->RequireResourceState(
       previous_errors, graphics::ResourceStates::kShaderResource);
   }
@@ -694,8 +679,9 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
   }
   const auto recording = recorder->GetCommandListForInspection();
   recorder.reset();
-  if (!recording || !recording->IsSubmitted())
+  if (!recording || !recording->IsSubmitted()) {
     return state;
+  }
 
   state.executed = true;
   state.texture = texture;
@@ -734,6 +720,8 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
     if (history_entry.texture != nullptr) {
       live_textures_.push_back(history_entry.texture);
     }
+    // History and publication share the retained wrapper, so a live history
+    // reader keeps this texture out of the pool's available UAV outputs.
     history_entry.texture = texture;
     history_entry.frame_exposure = ctx.current_view.frame_exposure;
     history_entry.srv = integrated_srv;
@@ -750,9 +738,10 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
     live_textures_.push_back(texture);
   }
   texture_committed = true;
-  if (ctx.current_view.frame_exposure)
+  if (ctx.current_view.frame_exposure) {
     exposure_readers_[ctx.frame_slot.get()].push_back(
       ctx.current_view.frame_exposure);
+  }
   return state;
 }
 

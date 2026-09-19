@@ -1373,6 +1373,25 @@ lifetimes. Runtime removal also retires queued intent for views that never
 created a SceneRenderer or GPU exposure state.
 Diagnostic records do not enqueue authored-transition acknowledgements.
 
+Completed, unmapped buffer readbacks may opt into `ResetForReuse()`. It forgets
+the completed ticket/range and returns the client to Idle while preserving its
+staging capacity and registration. A nonblocking refresh may establish readiness;
+pending, mapped, cancelled and failed requests cannot be recycled. Existing
+`Reset()` and destruction still release storage. This API does not apply to
+texture readbacks.
+
+PostProcessService owns at most three pending/reusable readbacks per live view
+lifetime, matching frames in flight. A completed mapping is destroyed before
+rearming; a reused request receives a fresh ticket and range. Reusable slots are
+discarded on lifetime change, device recovery, view removal and shutdown. Weak
+pool identity prevents older completions from refilling a replacement pool.
+Pending jobs retain Graphics ownership until their readback/state leases are
+released. Failed transport follows the existing deferred retry path. No reuse
+waits for the GPU or changes acknowledgement, adaptation or precision policy.
+The measured 80-byte status copy occupies a 64 KiB D3D12 placement, giving a
+192 KiB per-view staging ceiling for three slots; actual occupancy is measured
+separately from that ceiling.
+
 At frame start the pass pins each owner's latest successfully submitted record.
 Consumers copy its gain fields into their own immutable record, retaining the
 source resource through their frame slot. A source update in the current frame

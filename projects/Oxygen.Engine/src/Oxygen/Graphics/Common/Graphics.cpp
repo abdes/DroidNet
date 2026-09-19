@@ -554,6 +554,35 @@ auto Graphics::FlushCommandQueues() -> void
   qm.ForEachQueue([](const graphics::CommandQueue& q) { q.Flush(); });
 }
 
+auto Graphics::TryGetKnownResourceState(
+  const graphics::NativeResource& resource) const
+  -> std::optional<graphics::ResourceStates>
+{
+  if (!resource->IsValid()) {
+    return std::nullopt;
+  }
+  std::optional<graphics::ResourceStates> agreed_state;
+  bool inconsistent = false;
+  GetComponent<QueueManager>().ForEachQueue(
+    [&](const graphics::CommandQueue& queue) {
+      const auto state = queue.TryGetKnownResourceState(resource);
+      if (!state.has_value()) {
+        return;
+      }
+      if (*state == graphics::ResourceStates::kUnknown
+        || *state == graphics::ResourceStates::kUndefined
+        || (agreed_state.has_value() && *state != *agreed_state)) {
+        inconsistent = true;
+        return;
+      }
+      agreed_state = state;
+    });
+  if (inconsistent) {
+    return std::nullopt;
+  }
+  return agreed_state;
+}
+
 auto Graphics::GetCommandQueue(const graphics::QueueKey& key) const
   -> observer_ptr<graphics::CommandQueue>
 {

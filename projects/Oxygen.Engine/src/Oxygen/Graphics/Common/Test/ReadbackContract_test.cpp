@@ -85,6 +85,14 @@ public:
 
   auto Reset() -> void override { active_map_.reset(); }
 
+  auto ResetForReuse() -> std::expected<void, ReadbackError> override
+  {
+    // This mapping-only fixture never enqueues a request to rearm.
+    return std::unexpected(active_map_.expired()
+        ? ReadbackError::kNotReady
+        : ReadbackError::kAlreadyMapped);
+  }
+
 private:
   auto CreateMapping() -> std::expected<MappedBufferReadback, ReadbackError>
   {
@@ -101,6 +109,41 @@ private:
   std::weak_ptr<void> active_map_ {};
   std::vector<std::byte> bytes_;
 };
+
+NOLINT_TEST(ReadbackContractTest, BufferReuseStateGatePreservesFailedError)
+{
+  using oxygen::graphics::detail::ValidateBufferReadbackReuseState;
+  for (const auto error : { ReadbackError::kBackendFailure,
+         ReadbackError::kQueueUnavailable, ReadbackError::kShutdown }) {
+    const auto failed
+      = ValidateBufferReadbackReuseState(ReadbackState::kFailed, error);
+    ASSERT_FALSE(failed.has_value());
+    EXPECT_EQ(failed.error(), error);
+  }
+  const auto missing_error
+    = ValidateBufferReadbackReuseState(ReadbackState::kFailed, std::nullopt);
+  ASSERT_FALSE(missing_error.has_value());
+  EXPECT_EQ(missing_error.error(), ReadbackError::kBackendFailure);
+}
+
+NOLINT_TEST(ReadbackContractTest, BufferReuseStateGateAcceptsOnlyReady)
+{
+  using oxygen::graphics::detail::ValidateBufferReadbackReuseState;
+  const auto rejected = std::array {
+    std::pair { ReadbackState::kIdle, ReadbackError::kNotReady },
+    std::pair { ReadbackState::kPending, ReadbackError::kAlreadyPending },
+    std::pair { ReadbackState::kMapped, ReadbackError::kAlreadyMapped },
+    std::pair { ReadbackState::kCancelled, ReadbackError::kCancelled },
+  };
+  for (const auto [state, error] : rejected) {
+    const auto result = ValidateBufferReadbackReuseState(state, std::nullopt);
+    ASSERT_FALSE(result.has_value());
+    EXPECT_EQ(result.error(), error);
+  }
+  EXPECT_TRUE(
+    ValidateBufferReadbackReuseState(ReadbackState::kReady, std::nullopt)
+      .has_value());
+}
 
 class ContractTextureReadback final : public GpuTextureReadback {
 public:

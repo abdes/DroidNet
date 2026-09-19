@@ -55,6 +55,7 @@
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereState.h>
 #include <Oxygen/Vortex/Environment/SceneBackground.h>
 #include <Oxygen/Vortex/Internal/PerViewScope.h>
+#include <Oxygen/Vortex/Internal/RetainedTexturePool.h>
 #include <Oxygen/Vortex/Lighting/LightingService.h>
 #include <Oxygen/Vortex/Passes/GroundGridPass.h>
 #include <Oxygen/Vortex/PostProcess/PostProcessService.h>
@@ -1637,6 +1638,12 @@ void SceneRenderer::BeginFrame(const frame::SequenceNumber sequence,
   setup_mode_.Reset();
   scene_texture_bindings_.Invalidate();
   ResetExtractArtifacts();
+  for (auto* artifact : { &resolved_scene_color_artifact_,
+         &resolved_scene_depth_artifact_, &prev_velocity_artifact_ }) {
+    if (artifact->pool) {
+      artifact->pool->OnFrameStart(sequence);
+    }
+  }
   InvalidatePublishedViewFrameBindings();
   deferred_lighting_state_ = {};
   environment_lighting_state_ = {};
@@ -2812,10 +2819,18 @@ void SceneRenderer::RemoveViewState(const ViewId view_id,
 {
   InvalidatePublishedViewFrameBindings();
   exposure_product_layouts_.erase(view_state_handle);
-  if (environment_)
+  for (auto* artifact : { &resolved_scene_color_artifact_,
+         &resolved_scene_depth_artifact_, &prev_velocity_artifact_ }) {
+    if (artifact->pool) {
+      artifact->pool->RemoveView(view_id);
+    }
+  }
+  if (environment_) {
     environment_->RemoveViewState(view_id);
-  if (screen_hzb_)
+  }
+  if (screen_hzb_) {
     screen_hzb_->RemoveViewState(view_id);
+  }
   if (post_process_ != nullptr) {
     post_process_->RemoveViewState(view_id, view_state_handle);
   }
@@ -3111,6 +3126,12 @@ void SceneRenderer::ResizeSceneTextureFamily(const glm::uvec2 new_extent)
   setup_mode_.Reset();
   scene_texture_bindings_.Invalidate();
   ResetExtractArtifacts();
+  for (auto* artifact : { &resolved_scene_color_artifact_,
+         &resolved_scene_depth_artifact_, &prev_velocity_artifact_ }) {
+    if (artifact->pool) {
+      artifact->pool->Clear();
+    }
+  }
 }
 
 auto SceneRenderer::ActiveSceneTextures() -> SceneTextures&
@@ -3157,9 +3178,10 @@ void SceneRenderer::ResetExtractArtifacts()
   RetireExtractTexture(gfx_, prev_velocity_artifact_.texture);
 }
 
-auto SceneRenderer::EnsureArtifactTexture(ExtractArtifact& artifact,
-  std::string_view debug_name, const graphics::Texture& source,
-  const std::optional<Format> format) -> graphics::Texture*
+auto SceneRenderer::EnsureArtifactTexture(RenderContext& ctx,
+  ExtractArtifact& artifact, std::string_view debug_name,
+  const graphics::Texture& source, const std::optional<Format> format)
+  -> graphics::Texture*
 {
   const auto& source_desc = source.GetDescriptor();
   const auto requires_reallocation = [&]() -> bool {
@@ -3183,30 +3205,15 @@ auto SceneRenderer::EnsureArtifactTexture(ExtractArtifact& artifact,
     artifact_desc.clear_value = {};
     artifact_desc.initial_state = graphics::ResourceStates::kCommon;
     RetireExtractTexture(gfx_, artifact.texture);
-    auto texture = gfx_.CreateTexture(artifact_desc);
-    if (texture) {
-      // Register the underlying resource, not the ownership wrapper: the
-      // registry must not form a cycle with the retained graphics owner.
-      gfx_.GetResourceRegistry().Register(texture);
-      auto* resource = texture.get();
-      artifact.texture = std::shared_ptr<graphics::Texture>(resource,
-        [graphics = renderer_.GetGraphics(), texture = std::move(texture)](
-          graphics::Texture*) mutable {
-          auto* registry = &graphics->GetResourceRegistry();
-          graphics->GetDeferredReclaimer().RegisterDeferredAction(
-            [registry, texture = std::move(texture)]() mutable {
-              registry->UnRegisterResource(*texture);
-              texture.reset();
-            });
-        });
+    if (!artifact.pool) {
+      artifact.pool = std::make_unique<internal::RetainedTexturePool>(
+        renderer_.GetGraphics());
     }
-  }
-
-  if (artifact.texture != nullptr) {
-    auto& registry = gfx_.GetResourceRegistry();
-    if (!registry.Contains(*artifact.texture)) {
-      registry.Register(artifact.texture);
-    }
+    artifact.pool->OnFrameStart(ctx.frame_sequence);
+    const bool recyclable = ctx.current_view.view_state_handle
+      != CompositionView::kInvalidViewStateHandle;
+    artifact.texture = artifact.pool->Acquire(
+      ctx.current_view.view_id, artifact_desc, recyclable);
   }
 
   return artifact.texture.get();

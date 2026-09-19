@@ -74,6 +74,7 @@
 #include <Oxygen/Vortex/Environment/Passes/FogPass.h>
 #include <Oxygen/Vortex/Environment/Passes/LocalFogVolumeComposePass.h>
 #include <Oxygen/Vortex/Internal/PreviousViewHistoryCache.h>
+#include <Oxygen/Vortex/Internal/RetainedTexturePool.h>
 #include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
 #include <Oxygen/Vortex/PostProcess/Passes/TonemapPass.h>
 #include <Oxygen/Vortex/PostProcess/PostProcessService.h>
@@ -4899,6 +4900,13 @@ auto ExposureGpuTest::CheckFogViewRetirement(
       persistent && temporal ? 1U : 0U);
     ASSERT_EQ(capture->textures.size(), 1U);
     auto texture = capture->textures.front();
+    // This observer owns the underlying allocation, not the retained wrapper.
+    // Keeping it alive lets the test inspect registration after wrapper
+    // release.
+    const auto underlying = texture->shared_from_this();
+    ASSERT_EQ(underlying.get(), texture.get());
+    ASSERT_TRUE(
+      texture.owner_before(underlying) || underlying.owner_before(texture));
     ASSERT_TRUE(registry.Contains(*texture));
     if (persistent) {
       owner->OnFrameStart(frame);
@@ -4936,7 +4944,16 @@ auto ExposureGpuTest::CheckFogViewRetirement(
         frame::SequenceNumber { ++sequence }, retired_slot, std::nullopt);
       reclaimer.OnBeginFrame(retired_slot);
     }
-    EXPECT_FALSE(registry.Contains(*texture));
+    EXPECT_TRUE(registry.Contains(*texture));
+    texture.reset();
+    for (unsigned retire = 0U; retire < frame::kFramesInFlight.get();
+      ++retire) {
+      const auto retired_slot = frame::Slot { retire };
+      owner->OnStandaloneFrameStart(
+        frame::SequenceNumber { ++sequence }, retired_slot, std::nullopt);
+      reclaimer.OnBeginFrame(retired_slot);
+    }
+    EXPECT_FALSE(registry.Contains(*underlying));
     auto* service
       = vortex::testing::RendererPublicationProbe::GetPostProcessService(
         *owner);
@@ -5249,10 +5266,11 @@ NOLINT_TEST_F(
     const auto mapped = readback->MapNow();
     CHECK_F(mapped.has_value());
     std::array<Pixel, 256U> pixels;
-    for (unsigned y = 0; y < 16U; ++y)
+    for (unsigned y = 0; y < 16U; ++y) {
       std::memcpy(pixels.data() + y * 16U,
         mapped->Data() + y * mapped->Layout().row_pitch.get(),
         16U * sizeof(Pixel));
+    }
     return pixels;
   };
   auto& reclaimer = Backend().GetDeferredReclaimer();
@@ -5265,7 +5283,7 @@ NOLINT_TEST_F(
   begin(2U, frame::Slot { 1U });
   const auto gpu_capture = BeginOptionalCapture();
   ASSERT_TRUE(render(0U));
-  const auto retained = capture->textures.at(ViewId { 111U });
+  auto retained = capture->textures.at(ViewId { 111U });
   const auto retained_slots = capture->slots.at(ViewId { 111U });
   ASSERT_GE(
     retained.size(), 4U); // Sky/AP plus replaced and current fog history.
@@ -5276,8 +5294,9 @@ NOLINT_TEST_F(
   }
   // No queue-idle wait or readback map occurs between these offscreen views.
   ASSERT_TRUE(render(1U));
-  if (gpu_capture)
+  if (gpu_capture) {
     EXPECT_TRUE(gpu_capture->EndCapture());
+  }
   for (std::size_t i = 0U; i < retained.size(); ++i) {
     const auto& texture = retained[i];
     EXPECT_TRUE(registry.Contains(*texture)) << texture->GetName();
@@ -5304,20 +5323,21 @@ NOLINT_TEST_F(
   }
   const auto actual = read();
   unsigned nontrivial = 0U;
-  for (unsigned i = 0; i < actual.size(); ++i)
+  for (unsigned i = 0; i < actual.size(); ++i) {
     for (unsigned c = 0; c < 3U; ++c) {
       EXPECT_TRUE(std::isfinite(actual[i][c]));
       EXPECT_NEAR(actual[i][c], reference[i][c],
         2e-5F + .005F * std::abs(reference[i][c]));
       nontrivial += reference[i][c] > .001F && reference[i][c] < .99F ? 1U : 0U;
     }
+  }
   EXPECT_GT(nontrivial, 0U);
   renderer_->OnFrameEnd(observer_ptr { &frame });
   WaitForQueueIdle();
   reclaimer.OnBeginFrame(frame::Slot { 2U });
   EXPECT_TRUE(registry.Contains(*retained.front()));
   reclaimer.OnBeginFrame(frame::Slot { 1U });
-  EXPECT_FALSE(registry.Contains(*retained.front()));
+  EXPECT_TRUE(registry.Contains(*retained.front()));
   const auto original_state = Read<ExposureStateData>(
     *capture->exposure.at(ViewId { 111U })->current_state->buffer,
     ResourceStates::kShaderResource);
@@ -5325,6 +5345,7 @@ NOLINT_TEST_F(
     ->TryGetSystem<scene::environment::SkyAtmosphere>()
     ->SetAerialScatteringStrength(2.0F);
   scene->Update();
+  reclaimer.OnBeginFrame(frame::Slot { 2U });
   begin(3U, frame::Slot { 2U });
   ASSERT_TRUE(render(0U));
   const auto amplified_state = Read<ExposureStateData>(
@@ -5339,6 +5360,16 @@ NOLINT_TEST_F(
     amplified_state.applied_generation, original_state.applied_generation);
   renderer_->OnFrameEnd(observer_ptr { &frame });
   WaitForQueueIdle();
+  // The producer and captured view now refer to the replacement snapshot.
+  // Keep only an underlying observer when releasing the old retained readers.
+  const auto retired_resource = retained.front()->shared_from_this();
+  EXPECT_TRUE(registry.Contains(*retired_resource));
+  retained.clear();
+  capture->textures.clear();
+  reclaimer.OnBeginFrame(frame::Slot { 1U });
+  EXPECT_TRUE(registry.Contains(*retired_resource));
+  reclaimer.OnBeginFrame(frame::Slot { 2U });
+  EXPECT_FALSE(registry.Contains(*retired_resource));
   begin(4U, frame::Slot { 0U });
   ASSERT_TRUE(render(0U));
   const auto stable_state = Read<ExposureStateData>(
@@ -9398,6 +9429,128 @@ NOLINT_TEST_F(
   }
   probe->inspect = {};
   RecordProperty("device_recovery_scene_paths", 2);
+}
+
+NOLINT_TEST_F(ExposureLightingGpuTest,
+  ExposureStatusReadbacksReuseWithinViewLifetimeAndInvalidateOnRecovery)
+{
+  using PublicationProbe = vortex::testing::RendererPublicationProbe;
+  probe->prepare = [](RenderContext&) { };
+  settings.mode = engine::ExposureMode::kAuto;
+  settings.low_percentile = 0;
+  settings.high_percentile = 1;
+  surface_view_id = 4820U;
+  const auto handle = CompositionView::ViewStateHandle { surface_view_id };
+  SetSurface(data::MaterialDomain::kOpaque, .25F);
+  scene->GetEnvironment()
+    ->TryGetSystem<scene::environment::PostProcessVolume>()
+    ->SetExposureSettings(settings);
+  scene->Update();
+  scene->SyncObservers();
+
+  // Only normal frame-slot synchronization drives completion. No queue-idle
+  // waits, mapped image inspection or explicit status polling drive reuse.
+  const auto render_frame = [&]() -> void {
+    const auto slot = frame::Slot { sequence % frame::kFramesInFlight.get() };
+    Backend().BeginFrame(frame::SequenceNumber { ++sequence }, slot);
+    frame.SetFrameSlot(slot, engine::internal::EngineTagFactory::Get());
+    frame.SetFrameSequenceNumber(frame::SequenceNumber { sequence },
+      engine::internal::EngineTagFactory::Get());
+    renderer_->OnFrameStart(observer_ptr { &frame });
+    auto facade = renderer_->ForOffscreenScene();
+    facade.SetFrameSession({ .frame_slot = slot,
+      .frame_sequence = frame::SequenceNumber { sequence },
+      .delta_time_seconds = 0.0F });
+    facade.SetSceneSource({ .scene = observer_ptr { scene.get() } });
+    facade.SetViewIntent(Renderer::OffscreenSceneViewInput::FromCamera(
+      "Status readback reuse", ViewId { surface_view_id }, view, camera)
+        .SetViewStateHandle(handle));
+    facade.SetOutputTarget(
+      { .framebuffer = observer_ptr { framebuffer.get() } });
+    facade.SetPipeline(Renderer::OffscreenPipelineInput::Forward());
+    auto session = facade.Finalize();
+    ASSERT_TRUE(session.has_value());
+    ASSERT_TRUE(session->ExecuteInsideFrame(frame));
+    renderer_->OnFrameEnd(observer_ptr { &frame });
+    Backend().EndFrame(frame::SequenceNumber { sequence }, slot);
+  };
+  const auto same_owner = [](const auto& left, const auto& right) {
+    return !left.owner_before(right) && !right.owner_before(left);
+  };
+  std::weak_ptr<const void> stable_pool;
+  std::vector<PublicationProbe::ExposureReadbackIdentity> identities;
+  unsigned reused_submissions = 0U;
+  PostProcessService* service = nullptr;
+  constexpr auto stable_frames = 4U * frame::kFramesInFlight.get();
+  for (unsigned iteration = 0U; iteration < stable_frames; ++iteration) {
+    SCOPED_TRACE(iteration);
+    ASSERT_NO_FATAL_FAILURE(render_frame());
+    auto* owner = PublicationProbe::GetSceneRenderer(*renderer_);
+    ASSERT_NE(owner, nullptr);
+    service = PublicationProbe::GetPostProcessService(*owner);
+    ASSERT_NE(service, nullptr);
+    const auto reuse
+      = PublicationProbe::ExposureStatusReuseForView(*service, handle);
+    ASSERT_FALSE(reuse.pool.expired());
+    ASSERT_GT(reuse.pending.size() + reuse.available.size(), 0U);
+    EXPECT_LE(reuse.pending.size() + reuse.available.size(),
+      frame::kFramesInFlight.get());
+    if (iteration == 0U) {
+      stable_pool = reuse.pool;
+    } else {
+      EXPECT_TRUE(same_owner(stable_pool, reuse.pool));
+    }
+    for (const auto& current : reuse.pending) {
+      ASSERT_FALSE(current.readback.expired());
+      const auto seen
+        = std::ranges::find_if(identities, [&](const auto& prior) {
+            return same_owner(prior.readback, current.readback);
+          });
+      if (seen == identities.end()) {
+        identities.push_back(current);
+      } else if (current.frame_sequence > seen->frame_sequence) {
+        // A new ticket on the same ownership identity proves actual reuse,
+        // rather than observing one incomplete readback in successive frames.
+        ++reused_submissions;
+        seen->frame_sequence = current.frame_sequence;
+      }
+    }
+  }
+  EXPECT_GT(reused_submissions, 0U);
+  EXPECT_LE(identities.size(), frame::kFramesInFlight.get());
+  ASSERT_NE(service, nullptr);
+  ASSERT_FALSE(stable_pool.expired());
+
+  ASSERT_TRUE(renderer_
+      ->NotifyViewDiscontinuity(handle, ViewDiscontinuity::kDeviceRecovery)
+      .has_value());
+  ASSERT_NO_FATAL_FAILURE(render_frame());
+  const auto recovered
+    = PublicationProbe::ExposureStatusReuseForView(*service, handle);
+  EXPECT_TRUE(stable_pool.expired());
+  ASSERT_FALSE(recovered.pool.expired());
+  EXPECT_FALSE(same_owner(stable_pool, recovered.pool));
+  EXPECT_LE(recovered.pending.size() + recovered.available.size(),
+    frame::kFramesInFlight.get());
+
+  ASSERT_TRUE(
+    renderer_->ReleaseOffscreenViewState(ViewId { surface_view_id }, handle));
+  EXPECT_TRUE(recovered.pool.expired());
+  const auto removed
+    = PublicationProbe::ExposureStatusReuseForView(*service, handle);
+  EXPECT_TRUE(removed.pool.expired());
+  EXPECT_TRUE(removed.pending.empty());
+  EXPECT_TRUE(removed.available.empty());
+  const auto remaining
+    = PublicationProbe::ExposureStatusCounts(*service, handle);
+  EXPECT_EQ(remaining.first, 0U);
+  EXPECT_EQ(remaining.second, 0U);
+  RecordProperty(
+    "status_readback_stable_frames", static_cast<int>(stable_frames));
+  RecordProperty(
+    "status_readback_reused_submissions", static_cast<int>(reused_submissions));
+  RecordProperty(
+    "status_readback_unique_identities", static_cast<int>(identities.size()));
 }
 
 NOLINT_TEST_F(
@@ -14894,6 +15047,201 @@ NOLINT_TEST_F(ExposureGpuTest,
     EXPECT_EQ(bindings->scene_fallback_srv, accumulation.srv);
     EXPECT_EQ(bindings->conversion_report_srv, frame->conversion_srv);
   }
+}
+
+NOLINT_TEST_F(
+  ExposureGpuTest, RecycledPoisonedHalfRejectsConversionAndUsesOriginalFloat)
+{
+  auto pool = vortex::internal::RetainedTexturePool(GetGraphicsShared());
+  ctx_.frame_sequence = frame::SequenceNumber { ++sequence_ };
+  pool.OnFrameStart(ctx_.frame_sequence);
+  auto& reclaimer = Backend().GetDeferredReclaimer();
+  reclaimer.OnBeginFrame(ctx_.frame_slot);
+  const auto desc = TextureDesc { .width = 4U,
+    .height = 4U,
+    .format = Format::kRGBA16Float,
+    .texture_type = TextureType::kTexture2D,
+    .debug_name = "RecycledCheckedTonemapHalf",
+    .is_shader_resource = true,
+    .is_uav = true,
+    .initial_state = ResourceStates::kCommon };
+  auto destination = pool.Acquire(ctx_.current_view.view_id, desc, true);
+  ASSERT_NE(destination, nullptr);
+  constexpr std::array<std::uint16_t, 4U> poison { 0x3400U, 0x3400U, 0x3400U,
+    0x3c00U };
+  std::array<std::byte, 1024U> initial {};
+  for (unsigned y = 0U; y < 4U; ++y) {
+    for (unsigned x = 0U; x < 4U; ++x) {
+      std::memcpy(initial.data() + y * 256U + x * sizeof(poison), poison.data(),
+        sizeof(poison));
+    }
+  }
+  auto upload = CreateUploadBuffer(SizeBytes { initial.size() });
+  upload->Update(initial.data(), initial.size(), 0U);
+  {
+    auto recorder = AcquireRecorder("Poison retained half before recycling");
+    EnsureTracked(*recorder, upload, ResourceStates::kGenericRead);
+    // The pool owns registration. The fixture's EnsureTracked(texture) would
+    // retain an additional reader and prevent this deliberate reuse.
+    recorder->BeginTrackingResourceState(*destination, ResourceStates::kCommon);
+    recorder->RequireResourceState(*destination, ResourceStates::kCopyDest);
+    recorder->FlushBarriers();
+    recorder->CopyBufferToTexture(*upload,
+      { .buffer_offset = 0U,
+        .buffer_row_pitch = 256U,
+        .buffer_slice_pitch = 1024U,
+        .dst_slice = { .width = 4U, .height = 4U, .depth = 1U } },
+      *destination);
+    recorder->RequireResourceStateFinal(
+      *destination, ResourceStates::kCopySource);
+  }
+  WaitForQueueIdle();
+  const auto native = destination->GetNativeResource();
+  auto* const physical_identity = destination.get();
+  const std::weak_ptr<Texture> physical = destination->shared_from_this();
+  ASSERT_EQ(
+    Backend().TryGetKnownResourceState(native), ResourceStates::kCopySource);
+  destination.reset();
+  reclaimer.OnBeginFrame(ctx_.frame_slot);
+  ASSERT_FALSE(physical.expired());
+  ASSERT_FALSE(Backend().GetResourceRegistry().Contains(*physical.lock()));
+  ASSERT_FALSE(GetQueue()->TryGetKnownResourceState(native).has_value());
+  ctx_.frame_sequence = frame::SequenceNumber { ++sequence_ };
+  pool.OnFrameStart(ctx_.frame_sequence);
+  destination = pool.Acquire(ctx_.current_view.view_id, desc, true);
+  ASSERT_EQ(destination.get(), physical_identity);
+  ASSERT_EQ(
+    GetQueue()->TryGetKnownResourceState(native), ResourceStates::kCopySource);
+
+  auto service = PostProcessService(*renderer_);
+  service.OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
+  auto settings = scene::ExposureSettings {};
+  settings.mode = engine::ExposureMode::kManual;
+  settings.manual_ev = 0.0F;
+  settings.key = 12.5F;
+  [[maybe_unused]] const auto& accepted = service.CaptureViewExposureSettings(
+    ctx_.current_view.view_id, ctx_.current_view.view_state_handle, settings);
+  auto config = PostProcessConfig { .exposure = settings };
+  config.tone_mapper = engine::ToneMapper::kNone;
+  config.gamma = 1.0F;
+  config.enable_bloom = false;
+  config.bloom_intensity = 0.0F;
+  service.SetResolvedConfig(service.BuildPassConfig(
+    config, ctx_.current_view.view_id, ctx_.current_view.view_state_handle));
+  static_cast<void>(service.SelectPrecisionCandidate(
+    ctx_, { .product_layout_revision = 1U, .expected_products = 1024U }));
+  const auto frame = service.PrepareFrameExposure(ctx_, true);
+  ASSERT_NE(frame, nullptr);
+  ctx_.current_view.frame_exposure = frame;
+  std::array<Pixel, 16U> pixels;
+  pixels.fill(Pixel { 1.0F / 3.0F, 1.0F / 3.0F, 1.0F / 3.0F, 1.0F });
+  pixels.back() = Pixel { 0x1p20F, 0x1p20F, 0x1p20F, 1.0F };
+  const auto accumulation = MakeSignal(4U, 4U, pixels);
+  ASSERT_TRUE(service.CapturePreEnvironmentRange(
+    ctx_, *accumulation.texture, accumulation.srv));
+  const auto prepared
+    = service.PrepareSceneExposure(ctx_.current_view.view_id, ctx_,
+      { .scene_signal = accumulation.texture.get(),
+        .scene_signal_srv = accumulation.srv });
+  ASSERT_TRUE(prepared.has_value());
+  const auto solved = Read<ExposureStateData>(
+    *prepared->exposure.state->buffer, ResourceStates::kShaderResource);
+  EXPECT_EQ(solved.displayed_scale, 1.0F);
+  const auto domain
+    = Read<FrameExposureData>(*frame->buffer, ResourceStates::kShaderResource);
+  EXPECT_EQ(domain.pre_exposure, 1.0F);
+  EXPECT_EQ(domain.one_over_pre_exposure, 1.0F);
+  const auto bind = [&](const ResourceViewType type) {
+    auto& allocator = renderer_->GetGraphics()->GetDescriptorAllocator();
+    auto allocation
+      = allocator.AllocateRaw(type, DescriptorVisibility::kShaderVisible);
+    const auto index = allocator.GetShaderVisibleIndex(allocation);
+    CHECK_F(Backend()
+        .GetResourceRegistry()
+        .RegisterView(*destination, std::move(allocation),
+          TextureViewDescription { .view_type = type,
+            .format = Format::kRGBA16Float,
+            .dimension = TextureType::kTexture2D })
+        ->IsValid());
+    return index;
+  };
+  const auto uav = bind(ResourceViewType::kTexture_UAV);
+  const Signal resolved { destination, bind(ResourceViewType::kTexture_SRV) };
+  const std::array products { postprocess::ExposurePass::HdrProduct {
+    .texture = accumulation.texture.get(),
+    .srv = accumulation.srv,
+    .id = 11U,
+    .metering = true,
+    .composed_error = true } };
+  ASSERT_TRUE(service.PrepareScenePrecision(
+    ctx_, *prepared, products, postprocess::ExposurePass::SceneComposition {}));
+  ASSERT_TRUE(service.ConvertSceneColor(ctx_, *prepared,
+    { .scene_signal = accumulation.texture.get(),
+      .scene_signal_srv = accumulation.srv },
+    *destination, uav));
+  EXPECT_EQ(GetQueue()->TryGetKnownResourceState(native),
+    ResourceStates::kShaderResource);
+  const auto converted = Read<ExposureStateData>(
+    *prepared->exposure.state->buffer, ResourceStates::kShaderResource);
+  EXPECT_EQ(std::memcmp(&solved, &converted, sizeof(solved)), 0);
+  const auto report = Read<HdrSuitabilityData>(
+    *frame->conversion_buffer, ResourceStates::kShaderResource);
+  EXPECT_EQ(report.candidate_pre_exposure, 1.0F);
+  EXPECT_EQ(report.expected_products, 1024U);
+  EXPECT_EQ(report.checked_products, 1024U);
+  // Composed-scene qualification rejects an unrepresentable interval before
+  // the point-sample overflow path. Only the deliberately oversized texel
+  // must fail; rejection of every texel would hide an invalid certificate.
+  EXPECT_EQ(report.failure_flags, 16U);
+  EXPECT_EQ(report.image_failures, 1U);
+  EXPECT_EQ(report.checked_samples, 16U);
+  EXPECT_EQ(report.first_failure_product, 11U);
+  ASSERT_TRUE(service.FinalizeScenePrecision(ctx_, *prepared));
+  const auto finalized = Read<ExposureStateData>(
+    *prepared->exposure.state->buffer, ResourceStates::kShaderResource);
+
+  // Rejection must preserve the poisoned contents across the entire image.
+  // The visible result below must therefore come from the original FP32 input.
+  {
+    auto readback
+      = GetReadbackManager()->CreateTextureReadback("Recycled half poison");
+    {
+      auto recorder = AcquireRecorder("Read rejected recycled half");
+      ASSERT_TRUE(recorder->AdoptKnownResourceState(*destination));
+      ASSERT_TRUE(
+        readback->EnqueueCopy(*recorder, *destination, {}).has_value());
+    }
+    const auto mapped = readback->MapNow();
+    ASSERT_TRUE(mapped.has_value());
+    for (unsigned y = 0U; y < 4U; ++y) {
+      for (unsigned x = 0U; x < 4U; ++x) {
+        std::array<std::uint16_t, 4U> actual {};
+        std::memcpy(actual.data(),
+          mapped->Data() + y * mapped->Layout().row_pitch.get()
+            + x * sizeof(poison),
+          sizeof(actual));
+        EXPECT_EQ(actual, poison);
+      }
+    }
+  }
+  EXPECT_NEAR(
+    ServicePixel(service, resolved, settings, false, 0.0F, {},
+      engine::ToneMapper::kNone, false, &*prepared, &accumulation, frame),
+    1.0F / 3.0F, 1e-7F)
+    << "Consuming the stale half texture would return 0.25 instead";
+  const auto after = Read<ExposureStateData>(
+    *prepared->exposure.state->buffer, ResourceStates::kShaderResource);
+  EXPECT_EQ(std::memcmp(&finalized, &after, sizeof(finalized)), 0);
+  const auto report_after = Read<HdrSuitabilityData>(
+    *frame->conversion_buffer, ResourceStates::kShaderResource);
+  EXPECT_EQ(std::memcmp(&report, &report_after, sizeof(report)), 0);
+  const auto domain_after
+    = Read<FrameExposureData>(*frame->buffer, ResourceStates::kShaderResource);
+  EXPECT_EQ(std::memcmp(&domain, &domain_after, sizeof(domain)), 0);
+  const auto* bindings = service.InspectBindings(ctx_.current_view.view_id);
+  ASSERT_NE(bindings, nullptr);
+  EXPECT_EQ(bindings->scene_fallback_srv, accumulation.srv);
+  EXPECT_EQ(bindings->conversion_report_srv, frame->conversion_srv);
 }
 
 NOLINT_TEST_F(

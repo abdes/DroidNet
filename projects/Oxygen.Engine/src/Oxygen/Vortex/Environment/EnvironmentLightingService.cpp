@@ -351,8 +351,15 @@ auto EnvironmentLightingService::EnsureSkyTextureBinder()
 auto EnvironmentLightingService::RemoveViewState(const ViewId view_id) -> void
 {
   published_views_.erase(view_id);
-  if (volumetric_fog_pass_)
+  if (sky_view_lut_pass_) {
+    sky_view_lut_pass_->RemoveViewState(view_id);
+  }
+  if (camera_aerial_perspective_pass_) {
+    camera_aerial_perspective_pass_->RemoveViewState(view_id);
+  }
+  if (volumetric_fog_pass_) {
     volumetric_fog_pass_->RemoveViewState(view_id);
+  }
 }
 
 auto EnvironmentLightingService::OnFrameStart(

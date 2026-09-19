@@ -91,6 +91,8 @@ m_gtest_program(SceneTextures SOURCES "SceneTextures_test.cpp")
 
 m_gtest_program(SceneTextureLeasePool SOURCES "SceneTextureLeasePool_test.cpp")
 
+m_gtest_program(RetainedTexturePool SOURCES "RetainedTexturePool_test.cpp")
+
 m_gtest_program(LightingService SOURCES "LightingService_test.cpp")
 
 m_gtest_program(PostProcessService SOURCES "PostProcessService_test.cpp")
@@ -154,6 +156,12 @@ add_custom_target(
   Oxygen.Vortex.SceneTextureLeasePool
   DEPENDS
     Oxygen.Vortex.SceneTextureLeasePool.Tests
+)
+
+add_custom_target(
+  Oxygen.Vortex.RetainedTexturePool
+  DEPENDS
+    Oxygen.Vortex.RetainedTexturePool.Tests
 )
 
 add_custom_target(

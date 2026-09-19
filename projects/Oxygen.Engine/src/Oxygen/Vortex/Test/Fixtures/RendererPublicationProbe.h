@@ -7,8 +7,11 @@
 #pragma once
 
 #include <algorithm>
+#include <cstdint>
 #include <deque>
 #include <iterator>
+#include <memory>
+#include <vector>
 
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Vortex/Environment/EnvironmentLightingService.h>
@@ -189,6 +192,37 @@ struct RendererPublicationProbe {
 
   using ExposureStatusJobs
     = std::deque<PostProcessService::PendingExposureStatus>;
+
+  struct ExposureReadbackIdentity {
+    std::weak_ptr<graphics::GpuBufferReadback> readback;
+    std::uint64_t frame_sequence;
+  };
+
+  struct ExposureStatusReuseState {
+    std::weak_ptr<const void> pool;
+    std::vector<ExposureReadbackIdentity> pending;
+    std::vector<std::weak_ptr<graphics::GpuBufferReadback>> available;
+  };
+
+  static auto ExposureStatusReuseForView(const PostProcessService& service,
+    CompositionView::ViewStateHandle handle) -> ExposureStatusReuseState
+  {
+    auto result = ExposureStatusReuseState {};
+    if (const auto pool = service.reusable_exposure_status_.find(handle);
+      pool != service.reusable_exposure_status_.end()) {
+      result.pool = pool->second;
+      for (const auto& readback : pool->second->available) {
+        result.available.emplace_back(readback);
+      }
+    }
+    if (const auto pending = service.pending_exposure_status_.find(handle);
+      pending != service.pending_exposure_status_.end()) {
+      for (const auto& job : pending->second) {
+        result.pending.push_back({ job.readback, job.frame_sequence });
+      }
+    }
+    return result;
+  }
 
   // Hold real GPU readbacks outside CPU polling to exercise delayed delivery.
   static auto TakeExposureStatuses(PostProcessService& service,
