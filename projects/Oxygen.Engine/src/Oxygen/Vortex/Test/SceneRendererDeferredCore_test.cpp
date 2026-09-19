@@ -491,6 +491,110 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
 }
 
 NOLINT_TEST_F(SceneRendererDeferredCoreTest,
+  DepthAliasesRetireOnlyAfterBothReadersAndTheirFence)
+{
+  auto& reclaimer = graphics_->GetDeferredReclaimer();
+  auto& registry = graphics_->GetResourceRegistry();
+  reclaimer.OnBeginFrame(oxygen::frame::Slot { 1U });
+  std::array<oxygen::vortex::SceneTextureExtractRef, 2> resolved;
+  std::array<oxygen::vortex::SceneTextureExtractRef, 2> previous;
+  std::array<std::shared_ptr<oxygen::graphics::Texture>, 2> resources;
+  std::array<oxygen::graphics::TextureViewDescription, 2> descriptions;
+  std::array<oxygen::ShaderVisibleIndex, 2> slots;
+  std::array<glm::uvec2, 2> extents;
+  for (unsigned index = 0U; index < resolved.size(); ++index) {
+    if (index == 0U) {
+      static_cast<void>(RenderForView(first_view_id_, first_resolved_view_));
+    } else {
+      static_cast<void>(RenderForView(second_view_id_, second_resolved_view_));
+    }
+    const auto& extracts = scene_renderer_->GetSceneTextureExtracts();
+    resolved[index] = extracts.resolved_scene_depth;
+    previous[index] = extracts.prev_scene_depth;
+    ASSERT_TRUE(resolved[index].valid && previous[index].valid);
+    ASSERT_NE(resolved[index].texture, nullptr);
+    ASSERT_NE(resolved[index].retained_texture, nullptr);
+    ASSERT_EQ(previous[index].texture, resolved[index].texture);
+    ASSERT_EQ(
+      previous[index].retained_texture, resolved[index].retained_texture);
+    EXPECT_FALSE(previous[index].retained_texture.owner_before(
+      resolved[index].retained_texture));
+    EXPECT_FALSE(resolved[index].retained_texture.owner_before(
+      previous[index].retained_texture));
+    EXPECT_NE(resolved[index].texture,
+      &scene_renderer_->GetSceneTextures().GetSceneDepth());
+    resources[index] = resolved[index].texture->shared_from_this();
+    const auto& texture_desc = resources[index]->GetDescriptor();
+    extents[index] = { texture_desc.width, texture_desc.height };
+    descriptions[index]
+      = { .view_type = oxygen::graphics::ResourceViewType::kTexture_SRV,
+          .visibility = oxygen::graphics::DescriptorVisibility::kShaderVisible,
+          .format = texture_desc.format,
+          .dimension = texture_desc.texture_type,
+          .sub_resources
+          = oxygen::graphics::TextureSubResourceSet::EntireTexture() };
+    auto slot
+      = registry.FindShaderVisibleIndex(*resources[index], descriptions[index]);
+    if (!slot) {
+      auto handle = graphics_->GetDescriptorAllocator().AllocateRaw(
+        descriptions[index].view_type, descriptions[index].visibility);
+      ASSERT_TRUE(handle.IsValid());
+      slot = graphics_->GetDescriptorAllocator().GetShaderVisibleIndex(handle);
+      ASSERT_TRUE(registry
+          .RegisterView(
+            *resources[index], std::move(handle), descriptions[index])
+          ->IsValid());
+    }
+    slots[index] = *slot;
+  }
+  EXPECT_NE(resources[0], resources[1]);
+
+  reclaimer.OnBeginFrame(oxygen::frame::Slot { 2U });
+  scene_renderer_->OnStandaloneFrameStart(oxygen::frame::SequenceNumber { 2U },
+    oxygen::frame::Slot { 2U }, glm::uvec2 { 128U, 72U });
+  EXPECT_EQ(scene_renderer_->GetSceneTextures().GetExtent(),
+    (glm::uvec2 { 128U, 72U }));
+  scene_renderer_.reset();
+  for (unsigned index = 0U; index < resolved.size(); ++index) {
+    SCOPED_TRACE(index);
+    const auto& texture = *resources[index];
+    EXPECT_EQ(texture.GetDescriptor().width, extents[index].x);
+    EXPECT_EQ(texture.GetDescriptor().height, extents[index].y);
+    EXPECT_TRUE(registry.Contains(texture));
+    EXPECT_EQ(registry.FindShaderVisibleIndex(texture, descriptions[index]),
+      slots[index]);
+    const auto owner = std::weak_ptr<const oxygen::graphics::Texture>(
+      resolved[index].retained_texture);
+    if (index == 0U) {
+      resolved[index] = {};
+    } else {
+      previous[index] = {};
+    }
+    EXPECT_FALSE(owner.expired());
+    reclaimer.OnBeginFrame(oxygen::frame::Slot { 1U });
+    reclaimer.OnBeginFrame(oxygen::frame::Slot { 2U });
+    EXPECT_TRUE(registry.Contains(texture));
+    EXPECT_EQ(registry.FindShaderVisibleIndex(texture, descriptions[index]),
+      slots[index]);
+
+    // The observed underlying resource does not own the extraction wrapper.
+    // Its final reader releases in slot2; another slot cannot retire it.
+    resolved[index] = {};
+    previous[index] = {};
+    EXPECT_TRUE(owner.expired());
+    EXPECT_TRUE(registry.Contains(texture));
+    reclaimer.OnBeginFrame(oxygen::frame::Slot { 1U });
+    EXPECT_TRUE(registry.Contains(texture));
+    EXPECT_EQ(registry.FindShaderVisibleIndex(texture, descriptions[index]),
+      slots[index]);
+    reclaimer.OnBeginFrame(oxygen::frame::Slot { 2U });
+    EXPECT_FALSE(registry.Contains(texture));
+    EXPECT_FALSE(registry.FindShaderVisibleIndex(texture, descriptions[index])
+        .has_value());
+  }
+}
+
+NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   RenderViewFamilySerializesSceneViewsAndRestoresCursor)
 {
   scene_renderer_->OnFrameStart(frame_context_);

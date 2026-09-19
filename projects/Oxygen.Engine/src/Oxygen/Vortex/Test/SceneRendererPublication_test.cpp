@@ -623,14 +623,82 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
         && copy.dst == extracts.resolved_scene_depth.texture;
     }));
   EXPECT_TRUE(extracts.prev_scene_depth.valid);
-  EXPECT_NE(extracts.prev_scene_depth.texture, nullptr);
-  EXPECT_TRUE(std::ranges::any_of(graphics_->texture_copy_log_.copies,
-    [&extracts](const auto& copy) -> bool {
+  EXPECT_EQ(
+    extracts.prev_scene_depth.texture, extracts.resolved_scene_depth.texture);
+  EXPECT_NE(extracts.resolved_scene_depth.texture,
+    &scene_renderer.GetSceneTextures().GetSceneDepth());
+  ASSERT_NE(extracts.resolved_scene_depth.retained_texture, nullptr);
+  EXPECT_EQ(extracts.prev_scene_depth.retained_texture,
+    extracts.resolved_scene_depth.retained_texture);
+  EXPECT_FALSE(extracts.prev_scene_depth.retained_texture.owner_before(
+    extracts.resolved_scene_depth.retained_texture));
+  EXPECT_FALSE(extracts.resolved_scene_depth.retained_texture.owner_before(
+    extracts.prev_scene_depth.retained_texture));
+  EXPECT_TRUE(std::ranges::none_of(
+    graphics_->texture_copy_log_.copies, [&extracts](const auto& copy) -> bool {
       return copy.src == extracts.resolved_scene_depth.texture
-        && copy.dst == extracts.prev_scene_depth.texture;
+        || copy.src == copy.dst;
     }));
   EXPECT_FALSE(extracts.prev_velocity.valid);
   EXPECT_EQ(extracts.prev_velocity.texture, nullptr);
+}
+
+NOLINT_TEST_F(SceneRendererPublicationTest, CleanupRejectsUnusableResolvedDepth)
+{
+  auto config = SceneTexturesConfig {
+    .extent = { 4U, 4U },
+    .enable_velocity = false,
+    .enable_custom_depth = false,
+    .gbuffer_count = 4U,
+    .msaa_sample_count = 1U,
+  };
+  auto scene_renderer
+    = SceneRenderer(*renderer_, *graphics_, config, ShadingMode::kDeferred);
+  auto texture = graphics_->CreateTexture(TextureDesc {
+    .width = 4U,
+    .height = 4U,
+    .format = Format::kDepth32Stencil8,
+    .debug_name = "CleanupResolvedDepth",
+    .is_shader_resource = true,
+    .initial_state = ResourceStates::kCommon,
+  });
+  ASSERT_NE(texture, nullptr);
+  auto resolved = oxygen::vortex::SceneTextureExtractRef {
+    .retained_texture = texture, .texture = texture.get(), .valid = true
+  };
+  auto valid_null = resolved;
+  valid_null.texture = nullptr;
+  auto invalid_nonnull = resolved;
+  invalid_nonnull.valid = false;
+  const std::array unusable { valid_null, invalid_nonnull,
+    oxygen::vortex::SceneTextureExtractRef {} };
+  const auto copies_before = graphics_->texture_copy_log_.copies.size();
+  for (std::size_t index = 0U; index < unusable.size(); ++index) {
+    SCOPED_TRACE(index);
+    // Prime an owned previous snapshot before each failure case, so clearing
+    // cannot pass merely because an earlier case already left it empty.
+    RendererPublicationProbe::CleanupWithResolvedDepth(
+      scene_renderer, resolved);
+    const auto& previous
+      = scene_renderer.GetSceneTextureExtracts().prev_scene_depth;
+    ASSERT_TRUE(previous.valid);
+    ASSERT_EQ(previous.texture, resolved.texture);
+    ASSERT_EQ(previous.retained_texture, resolved.retained_texture);
+    EXPECT_FALSE(
+      previous.retained_texture.owner_before(resolved.retained_texture));
+    EXPECT_FALSE(
+      resolved.retained_texture.owner_before(previous.retained_texture));
+
+    RendererPublicationProbe::CleanupWithResolvedDepth(
+      scene_renderer, unusable[index]);
+    EXPECT_FALSE(previous.valid);
+    EXPECT_EQ(previous.texture, nullptr);
+    EXPECT_EQ(previous.retained_texture, nullptr);
+    EXPECT_EQ(previous.exposure, nullptr);
+    EXPECT_EQ(previous.fallback, nullptr);
+    EXPECT_EQ(previous.source_lease, nullptr);
+  }
+  EXPECT_EQ(graphics_->texture_copy_log_.copies.size(), copies_before);
 }
 
 NOLINT_TEST_F(SceneRendererPublicationTest,
@@ -696,10 +764,21 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
     EXPECT_TRUE(extracts.resolved_scene_depth.valid);
     EXPECT_TRUE(extracts.prev_scene_depth.valid);
     EXPECT_TRUE(extracts.prev_velocity.valid);
-    EXPECT_TRUE(std::ranges::any_of(graphics_->texture_copy_log_.copies,
-      [&extracts](const auto& copy) -> bool {
+    EXPECT_EQ(
+      extracts.prev_scene_depth.texture, extracts.resolved_scene_depth.texture);
+    EXPECT_NE(extracts.resolved_scene_depth.texture,
+      &scene_renderer.GetSceneTextures().GetSceneDepth());
+    ASSERT_NE(extracts.resolved_scene_depth.retained_texture, nullptr);
+    EXPECT_EQ(extracts.prev_scene_depth.retained_texture,
+      extracts.resolved_scene_depth.retained_texture);
+    EXPECT_FALSE(extracts.prev_scene_depth.retained_texture.owner_before(
+      extracts.resolved_scene_depth.retained_texture));
+    EXPECT_FALSE(extracts.resolved_scene_depth.retained_texture.owner_before(
+      extracts.prev_scene_depth.retained_texture));
+    EXPECT_TRUE(std::ranges::none_of(
+      graphics_->texture_copy_log_.copies, [&extracts](const auto& copy) -> bool {
         return copy.src == extracts.resolved_scene_depth.texture
-          && copy.dst == extracts.prev_scene_depth.texture;
+          || copy.src == copy.dst;
       }));
     EXPECT_TRUE(std::ranges::any_of(graphics_->texture_copy_log_.copies,
       [&scene_renderer, &extracts](const auto& copy) -> bool {

@@ -3154,7 +3154,6 @@ void SceneRenderer::ResetExtractArtifacts()
   scene_texture_extracts_.Reset();
   RetireExtractTexture(gfx_, resolved_scene_color_artifact_.texture);
   RetireExtractTexture(gfx_, resolved_scene_depth_artifact_.texture);
-  RetireExtractTexture(gfx_, prev_scene_depth_artifact_.texture);
   RetireExtractTexture(gfx_, prev_velocity_artifact_.texture);
 }
 
