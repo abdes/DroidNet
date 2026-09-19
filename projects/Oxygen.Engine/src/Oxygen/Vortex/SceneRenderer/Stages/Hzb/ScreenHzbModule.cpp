@@ -766,7 +766,7 @@ void ScreenHzbModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
   if (!recorder) {
     return;
   }
-  ctx.GetRenderer().GetDiagnosticsService().AttachGpuTimelineCollector(
+  impl_->renderer.GetDiagnosticsService().AttachGpuTimelineCollector(
     *recorder);
 
   const auto write_slot
