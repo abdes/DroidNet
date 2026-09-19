@@ -70,6 +70,12 @@ public:
     std::string_view canonical_name) const noexcept
     -> std::optional<ShaderDebugMode>;
 
+  //! Diagnostic format control for exposure comparisons. Configure before
+  //! preparing views. Keeps their numerical exposure and qualified frame P;
+  //! all precision checks remain enabled. This is not authored exposure state.
+  OXGN_VRTX_API auto SetHdrFp32ReferenceEnabled(bool enabled) -> void;
+  [[nodiscard]] OXGN_VRTX_API auto IsHdrFp32ReferenceEnabled() const -> bool;
+
   OXGN_VRTX_API auto SetGpuTimelineEnabled(bool enabled) -> void;
   [[nodiscard]] OXGN_VRTX_API auto IsGpuTimelineEnabled() const -> bool;
   OXGN_VRTX_API auto SetGpuTimelineMaxScopesPerFrame(std::uint32_t max_scopes)
@@ -124,6 +130,7 @@ private:
   ShaderDebugMode shader_debug_mode_ { ShaderDebugMode::kDisabled };
   observer_ptr<internal::GpuTimelineProfiler> gpu_timeline_profiler_ { nullptr };
   bool gpu_timeline_enabled_requested_ { false };
+  bool hdr_fp32_reference_enabled_ { false };
   DiagnosticsFrameLedger frame_ledger_ {};
 };
 

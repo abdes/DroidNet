@@ -213,6 +213,27 @@ post-store finiteness alone cannot make that distinction. The solve invalidates
 the affected meter and retains ordinary Auto history. Quantization/image-error
 certificates remain separate from these source-range checks and govern admission.
 
+### Benchmark format control
+
+`DiagnosticsService::SetHdrFp32ReferenceEnabled` requests FP32 view-radiance
+storage for a diagnostic comparison. Configure it before preparing the views.
+It retains ordinary exposure, adaptation, transition generations and all range
+and suitability checks. This is a format-only control for EX051-04; it does not
+yet provide the separate certificate-arithmetic ablations.
+
+The view still selects its qualified GPU candidate. The frame resolver's
+48-byte constants use control bit `0x4` to preserve that candidate P when FP32
+storage is requested. An absent or invalid candidate, a unit-exposure diagnostic
+or a missing shared source still uses P = 1. Ordinary production FP32 recovery
+is unchanged. Frame flags report the actual FP32 storage mode; no GPU layout or
+authored exposure mode is added. The CPU snapshot and GPU frame lease pin this
+choice before producers execute.
+
+Controlled fixtures verify qualified candidate P, exposure/history preservation,
+invalid-candidate fallbacks and forward/deferred format switches. Workload
+qualification and remaining reference coverage are recorded in
+[EX051-04](../IMPLEMENTATION_STATUS.md#321-slice-51-performance-qualification-and-correction).
+
 ### Scene reference-product collection
 
 SceneRenderer collects the actual allocations after HDR rendering: FP32

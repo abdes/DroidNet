@@ -456,6 +456,7 @@ auto ExposurePass::ResolveFrame(RenderContext& ctx,
     profiling::Vars(profiling::Var("view", ctx.current_view.view_id.get())));
   CHECK_F(!inputs.transition
           || inputs.transition->target == ctx.current_view.view_state_handle);
+  CHECK_F(!inputs.preserve_fp32_candidate_p || inputs.use_fp32);
   auto gfx = renderer_.GetGraphics();
   if (!gfx) {
     return {};
@@ -599,7 +600,8 @@ auto ExposurePass::ResolveFrame(RenderContext& ctx,
                && resolved.authored.mode == engine::ExposureMode::kAuto
                && resolved.authored.target_luminance == 0.0F
              ? 2U
-             : 0U),
+             : 0U)
+        | (inputs.preserve_fp32_candidate_p ? 4U : 0U),
       .current_state_srv = frame->current_state->srv_index.get(),
       .status_uav = frame->current_state->status_uav_index.get(),
     };
