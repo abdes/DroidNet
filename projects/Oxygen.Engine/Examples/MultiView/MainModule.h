@@ -8,6 +8,7 @@
 
 #include <memory>
 #include <optional>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -59,6 +60,7 @@ enum class ExposureProofScenario : uint8_t {
   kAtmosphere,
   kAtmosphereLit,
   kConsumerVisual,
+  kLayouts,
 };
 
 struct MainModuleConfig {
@@ -73,6 +75,7 @@ struct MainModuleConfig {
   bool point_light_enabled { true };
   bool spot_light_enabled { true };
   ExposureProofScenario exposure_proof { ExposureProofScenario::kNone };
+  std::string exposure_view_only;
   VisualFogMode visual_fog_mode { VisualFogMode::kVolumetric };
   bool visual_fog_cycle { false };
   bool visual_fog_hold_local { false };

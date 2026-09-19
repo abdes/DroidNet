@@ -402,6 +402,13 @@ whether a product is scene-referred, pre-exposed or already display-mapped;
 never apply a second gain or tone curve implicitly. Compatible resizing and
 format changes preserve exposure, while recreating size/format-dependent leases.
 
+The runtime auxiliary color handoff copies the producer's final mapped output
+into the consumer's final output region. Both use `composite_source` when supplied,
+otherwise the primary target, matching post-processing and late overlays. Scene
+and compositing framebuffers may be distinct. The consumer's own exposure does
+not reprocess the copied region; RGBA copy contents remain exact. Native tests
+cover both shared and separate framebuffer pairs with mixed HDR precision.
+
 Per-view shader-debug overrides are captured with the runtime view and applied
 for its execution scope, including offscreen execution. An absent override
 inherits the renderer default; an explicit Disabled value suppresses that

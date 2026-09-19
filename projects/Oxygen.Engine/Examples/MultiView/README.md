@@ -41,6 +41,29 @@ Common validation-oriented options:
   frames 42, 43 and 44 to inspect GPU frame sequences 43, 44 and 45.
   These cases use fixed camera inputs and cannot be combined with proof layouts.
   The two atmosphere cases use their own recipes described below.
+- `--exposure-proof layouts`: use the existing sunlit scene with volumetric fog
+  and Auto exposure in ordinary, standard, auxiliary, offscreen or feature
+  layouts. It preserves wireframe and feature diagnostics and uses a lit
+  auxiliary color producer. Most panes use Spot; NoEnvironment uses Average
+  because its camera center lies in a deep cast shadow. Simulation is paused
+  and registered/offscreen owners remeter at frame 32, so capture frame 40 for
+  the static comparison.
+- `--exposure-view-only "<view name>"`: with `layouts`, keep the named view and
+  its auxiliary producers for an isolated comparison at the same viewport and
+  camera settings. For example, standard layout uses `M06A.LitPerspective`;
+  offscreen products use `M06B.OffscreenPreview.Deferred` and
+  `M06B.OffscreenCapture.Forward`. An empty selection renders the full family.
+
+Layout comparison reports include stable render-target names. Run
+`python tools/vortex/Assert-MultiViewLayoutExposure.py --family <report.json>
+--cases <cases.json> --output <result.json>`. Each entry in the JSON `cases`
+array specifies `report`, `selected_target`, and `required_producers`; the
+captured target set must match exactly. Every mapped family view needs its own
+selection, including producers also required by another case. Optional
+`auxiliary_copies` entries specify `producer`, `consumer`, and pixel `extent`
+to verify the mapped copy into the consumer's top-left inset. The current
+four-pane layout at 2560x1400 uses a 256x233 inset.
+
 - `--proof-wireframe-overlay true`: add overlays to the four-view proof layout
   and cycle their color each frame to check immutable in-flight draw constants.
   Requires `--proof-layout true` or `--aux-proof-layout true`.
@@ -183,8 +206,8 @@ visual checkpoint keeps jitter enabled.
 The small overlay switches the same original meshes/materials between **Clear
 (reference)**, **Fog**, and **Local fog**. Cameras, lighting and exposure remain
 fixed. EV15 gives an exact gain of `1/32768`; there is no AE settling ambiguity in
-this A/B comparison. Both views currently render in FP32. This checkpoint shows
-consumer composition and readability; automatic FP16 switching is still disabled.
+this A/B comparison. Automatic precision selection is per view and retains FP32
+when the current products or temporal history cannot meet the FP16 error budget.
 Use `--visual-fog clear` or `--visual-fog local` for matching scripted captures.
 Allow volumetric history to settle after switching; qualification captures use
 frame 96 or later.

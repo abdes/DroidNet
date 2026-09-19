@@ -233,7 +233,7 @@ namespace {
   }
 
   auto ResolveFramebufferColorTexture(
-    const observer_ptr<graphics::Framebuffer> framebuffer)
+    const observer_ptr<const graphics::Framebuffer> framebuffer)
     -> std::shared_ptr<graphics::Texture>
   {
     if (framebuffer == nullptr) {
@@ -447,7 +447,7 @@ namespace {
     texture.reset();
   }
 
-  auto ResolveLateOverlayTarget(const RenderContext& ctx)
+  auto ResolveViewOutputTarget(const RenderContext& ctx)
     -> observer_ptr<const graphics::Framebuffer>
   {
     if (const auto* active_view = ctx.GetActiveViewEntry();
@@ -1842,7 +1842,8 @@ void SceneRenderer::RenderViewFamily(RenderContext& ctx)
       if (output.kind != CompositionView::AuxOutputKind::kColorTexture) {
         continue;
       }
-      auto texture = ResolveFramebufferColorTexture(entry.primary_target);
+      auto texture
+        = ResolveFramebufferColorTexture(ResolveViewOutputTarget(ctx));
       CHECK_F(static_cast<bool>(texture),
         "SceneRenderer: auxiliary output {} from view {} has no color texture",
         output.id.get(), entry.view_id.get());
@@ -1865,7 +1866,8 @@ void SceneRenderer::RenderViewFamily(RenderContext& ctx)
       const auto product_it = auxiliary_products.find(input.input.id);
       if (product_it == auxiliary_products.end())
         continue;
-      auto target = ResolveFramebufferColorTexture(entry.primary_target);
+      auto target
+        = ResolveFramebufferColorTexture(ResolveViewOutputTarget(ctx));
       CHECK_F(static_cast<bool>(target),
         "SceneRenderer: auxiliary consumer view {} has no color target",
         entry.view_id.get());
@@ -2691,22 +2693,7 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
 
   // Stage 22: Post processing
   if (post_process_ != nullptr && wants_scene_lighting) {
-    auto post_target = observer_ptr<const graphics::Framebuffer> {};
-    if (const auto* active_view = ctx.GetActiveViewEntry();
-      active_view != nullptr) {
-      if (active_view->composite_source != nullptr) {
-        post_target = observer_ptr<const graphics::Framebuffer> {
-          active_view->composite_source.get()
-        };
-      } else if (active_view->primary_target != nullptr) {
-        post_target = observer_ptr<const graphics::Framebuffer> {
-          active_view->primary_target.get()
-        };
-      }
-    }
-    if (post_target == nullptr) {
-      post_target = ctx.pass_target;
-    }
+    const auto post_target = ResolveViewOutputTarget(ctx);
 
     const auto* scene_signal = scene_textures.GetSceneColorResource().get();
     auto scene_signal_kind = std::string_view { "scene_color" };
@@ -2776,12 +2763,12 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
   }
 
   if (post_process_)
-    draw_wireframe_overlay(ResolveLateOverlayTarget(ctx).get());
+    draw_wireframe_overlay(ResolveViewOutputTarget(ctx).get());
 
   // Stage 20: Ground grid
   if (ground_grid_pass_ != nullptr && wants_scene_lighting && !wireframe_only) {
     static_cast<void>(ground_grid_pass_->Record(
-      ctx, scene_textures, ResolveLateOverlayTarget(ctx)));
+      ctx, scene_textures, ResolveViewOutputTarget(ctx)));
     RecordDiagnosticsPass(renderer_,
       DiagnosticsPassRecord {
         .name = "Vortex.Stage20.GroundGrid",
