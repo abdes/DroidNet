@@ -79,7 +79,7 @@ Slices 6-10, including the complete LightBench delivery; the package is not comp
 | 3 — Metering and adaptation | validated | Controlled-input histogram, curve, masks and hybrid adaptation; scene acceptance remains slice 5. | [Metering](../../out/build-ninja/analysis/vortex/exposure-lightbench/metering/evidence-manifest.json) |
 | 4 — GPU lifecycle and sharing | validated | Controlled-input/public-event gate, including offscreen routing. Real-scene resource lifetime is tracked in slice 5. | [Lifecycle](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/discontinuity-manifest.json), [offscreen sharing](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/offscreen-sharing-manifest.json) |
 | 5 — HDR migration and recovery | validated | Numerical, lifecycle and native layout/interaction correctness qualified in Debug and Release. Collected Release costs motivate the separate, still-open performance gate in Slice 5.1. | [Detailed items](#32-slice-5-work-items) |
-| 5.1 — Exposure performance | in_progress | EX051-07: H1 maximum reuse is committed; H2 scan fusion is retained after 216/216 owning Debug tests and two Release comparisons. Qualification savings repeat; whole-frame improvement is not established. Remaining workload/reference coverage and final performance budgets stay open. | [Current results and next action](#31-current-work), [tasks and budgets](#321-slice-51-performance-qualification-and-correction) |
+| 5.1 — Exposure performance | in_progress | EX051-06 producer-bound reduction is active. EX051-07 H1 maximum reuse is committed; H2 scan fusion is retained after 216/216 owning Debug tests and two Release comparisons. Qualification savings repeat; whole-frame improvement is not established. Remaining workload/reference coverage and final performance budgets stay open. | [Current results and next action](#31-current-work), [tasks and budgets](#321-slice-51-performance-qualification-and-correction) |
 | 5.2 — Exposure code quality | planned | Plan approved on 2026-09-19. Execution follows 5.1; EX052-03 covers the concrete diagnostic inventory and suite design. Preserve numerical coverage and performance. | [Tasks and gates](#322-slice-52-code-quality-and-test-structure) |
 | 6 — Authoring and persistence | planned | Native physical-camera persistence and texture-resource-index mask contracts are approved; complete source/cook/load/script/editor/DemoShell round-trip remains. | [Detailed items](#33-slice-6-work-items) |
 | 7 — Light units | planned | Directional, point and spot numerical/visual calibration across forward and deferred paths remains. | [Detailed items](#34-slice-7-work-items) |
@@ -89,106 +89,38 @@ Slices 6-10, including the complete LightBench delivery; the package is not comp
 
 ### 3.1 Current work
 
-**Approval:** both Slice 5.1 and Slice 5.2 plans are approved (2026-09-19).
-Slice 5.1 execution is authorized.
+**Active item:** EX051-06 — qualify shared producer-bound publication cost.
+H3 wave publication was implemented and tested, then **rejected for no measured
+benefit**. Its matched I02 producer-union mean/p95 changed 0.960/1.265 ->
+0.964/1.278 ms; GPU-frame mean changed 15.193 -> 15.472 ms. [Scope comparison](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/h3-producer-scope-comparison.json)
+and [native/output audit](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/h3-candidate-validation-result-Release.json)
+preserve all 3,600 frames per condition, outliers and unchanged image budgets.
+The candidate passed five focused Debug tests and actual compiled inspection;
+correctness alone does not justify retention without a measured benefit.
 
-**Current implementation item:** EX051-07 — consolidate repeated qualification
-scans. **H1 is complete and committed in `73ced156`**: AP/fog maxima reuse, guarded
-fallback, regression coverage, owner contract and measured qualification.
+**Current execution / next action:** H2 source and both runtime shader archives
+are restored. The [single restored-scalar regression](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/h3-restored-scalar-validation-result-Debug.json)
+passes all 30 cases without diagnostics. [H3 closeout](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/h3-closeout-manifest.json)
+records the rejection, restoration and retained regression. No further H3 run
+is planned. Next: inspect the already-measured 14 texture/two buffer creations
+per two-view frame in EX051-10 and identify a correction using existing lease
+ownership. Bound-cost attribution and final performance acceptance remain open.
 
-**Completed validation:** five focused Debug cases; owning suite reconciled as
-212 original passes plus the corrected HZB case; actual Release DXIL inspection;
-two I02 baseline/H1 pairs with 3,600 frames per condition. All output comparisons
-pass the existing float/UNorm8 budgets. No tolerance was widened.
-[Exact source, runtime and validation evidence](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/h1-closeout-manifest.json).
+**Retained checkpoint:** EX051-07 H1/H2 are committed; H2 is `efecd6185`.
+[H2 closeout and detailed results](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/h2-closeout-manifest.json)
+record 216/216 owning Debug passes, two Release comparisons, unchanged output
+budgets and the repeated qualification saving. Whole-frame speedup is not
+established; all outliers and budget misses remain in the evidence and task row.
+EX051-07 overall remains open.
 
-**Completed H1 matched repeat (milliseconds):**
+**Remaining acceptance:** EX051-03/04/05 retain workload, reference, memory and
+attribution gaps. The performance matrix, CPU attribution, resource churn and
+final 60-fps/subsystem budgets remain open. Instrumentation overhead is accepted
+and frozen; no further H2 or overhead run is queued.
 
-| Measurement | Original mean | H1 mean | Original p95 | H1 p95 |
-| --- | ---: | ---: | ---: | ---: |
-| Maximum gather | 0.487 | 0.359 | 0.975 | 0.584 |
-| Explicit exposure | 2.872 | 2.245 | 4.887 | 2.807 |
-| GPU frame | 18.402 | 17.403 | 25.658 | 22.138 |
-| Frame interval | 22.016 | 20.650 | 30.700 | 26.379 |
-
-Memory remains 842.520 MiB of measured live placement; churn remains 14 textures
-and two buffers per frame. Maximum-gather cost decreased in both comparisons.
-Unchanged scopes also vary, so aggregate improvements are not wholly attributed
-to H1. This is a retained optimization, not final 60-fps or slice acceptance.
-
-**H2 retained; implementation and validation complete for this increment:** AP/fog candidate-bound and
-suitability scans share texture loads and RGB conversion work, preserving failure
-ordering and counters. Changes are in `ExposurePass.cpp`, `Exposure.hlsl`,
-`ExposureGpu_test.cpp` and the scene-texture owner contract. The [closeout manifest](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/h2-closeout-manifest.json)
-records exact sources, evidence and the commit. Two independent ordering/count/bounds oracles pass on retained H1;
-[ten focused H2 cases](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/h2-focused-validation-result-Debug.json)
-and the [owning Debug gate: 216/216 enabled tests](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/h2-owning-validation-result-Debug.json)
-pass. Eight disabled tests were not executed. The debug layer reports no D3D12
-errors, warnings or UAV diagnostics; all 35 runtime and five source identities
-remained unchanged. Debug/Release builds and
-[archive-matched Release DXIL inspection](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/h2-compiled-inspection-Release.json)
-pass.
-
-**First H2 Release comparison (milliseconds; 3,600 frames per condition):**
-
-| Measurement | Retained H1 mean | H2 mean | Retained H1 p95 | H2 p95 |
-| --- | ---: | ---: | ---: | ---: |
-| Total product qualification | 1.465 | 1.403 | 1.944 | 1.787 |
-| Explicit exposure | 2.245 | 2.199 | 2.807 | 2.656 |
-| GPU frame | 17.403 | 16.351 | 22.138 | 20.710 |
-| Frame interval | 20.650 | 19.366 | 26.379 | 24.689 |
-
-[Native comparison](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/h2-I02-validation-result-Release.json)
-passes data integrity, matched settings and all four endpoint comparisons against
-the existing float/UNorm8 budgets. Memory/churn remain unchanged.
-[Affected-scope analysis](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/h2-affected-scope-comparison.json)
-records combined AP/fog mean 0.284 -> 0.214 ms; SceneColor stays near 0.748 ms.
-The qualification maximum increased from 4.148 to **11.075 ms** and is retained.
-This first comparison does not establish repeatability or final acceptance:
-H2 GPU-frame p99 is 25.718 ms and frame-interval p99 is 29.550 ms, above the
-16.67 ms targets; explicit exposure p95 alone exceeds the two-view 0.65 ms budget.
-
-**Matched H1/H2 repeat complete (milliseconds; 3,600 frames each):**
-
-| Measurement | H1 mean | H2 mean | H1 p95 | H2 p95 |
-| --- | ---: | ---: | ---: | ---: |
-| Total product qualification | 1.423 | 1.361 | 1.708 | 1.652 |
-| Explicit exposure | 2.188 | 2.145 | 2.623 | 2.590 |
-| GPU frame | 18.093 | 18.346 | 22.613 | 23.114 |
-| Frame interval | 21.404 | 21.630 | 26.870 | 27.368 |
-
-[Baseline](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/h2-repeat-baseline-validation-result-Release.json)
-and [candidate](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/h2-repeat-candidate-validation-result-Release.json)
-passed native execution and all 35 runtime/12 source post-hashes. Qualification
-savings repeat: 0.062 ms (4.37%) mean. GPU-frame mean increased 0.253 ms (1.40%)
-and frame interval increased 0.225 ms (1.05%); no frame-rate gain is established.
-All maxima remain recorded. [Affected-scope comparison](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/h2-repeat-affected-scope-comparison.json)
-records AP/fog mean 0.281 -> 0.211 ms and p95 0.493 -> 0.208 ms across all frames.
-
-**Retention decision:** both Release comparisons show approximately 0.062 ms
-less qualification work. The repeat's affected AP/fog mean falls 0.070 ms;
-its p95/p99/maximum also fall. Matching settings, every non-timing field and
-resource snapshots are identical; all four endpoints pass unchanged float and
-UNorm8 budgets (two byte-identical). [Existing-scope analysis](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/h2-repeat-scope-name-deltas.json)
-records named interval-union mean 5.723 -> 5.678 ms and unscoped frame span
-12.369 -> 12.669 ms. Unscoped span includes unrecorded work and gaps; it is not
-an idle-time attribution. Retain H2 for the repeated qualification reduction;
-the whole-frame increase remains unexplained and no frame-rate gain is claimed.
-
-**Current execution state / next action:** both native runs and monitors are
-finished; H2 sources are restored and retained in the validated checkpoint.
-No further H2 benchmark, owning Debug run or instrumentation investigation is
-queued. Next, assess remaining repeated qualification work from the
-existing measurements before choosing the next bounded implementation.
-
-**Remaining scope:** EX051-03/04/05 retain workload, reference, memory and
-attribution gaps listed in their rows. EX051-07 and EX051-GATE remain open;
-subsequent performance corrections and final matrix acceptance are not complete.
-Instrumentation overhead is accepted and frozen for this benchmark.
-
-**Next gate:** EX051-GATE must pass before Slice 5.2. Quality edits require
-agreement on the diagnostic inventory and restructuring design in EX052-03.
-Both slices must close before Slice 6.
+**Next gate:** EX051-GATE precedes Slice 5.2, whose quality edits require the
+EX052-03 diagnostic-inventory/design agreement. Both approved inserted slices
+must close before original Slice 6; the full package remains active.
 
 ### 3.2 Slice 5 work items
 
@@ -239,7 +171,7 @@ current status, including decisions that supersede older manifest limitations.
 ### 3.2.1 Slice 5.1 performance qualification and correction
 
 **Slice status: in_progress. Plan and execution approved on 2026-09-19;
-EX051-01 is frozen; EX051-07 is active and H1 is committed. Instrumentation is frozen for diagnostic use; performance acceptance remains open.**
+EX051-01 is frozen; EX051-06 is active and EX051-07 H1/H2 are committed. Instrumentation is frozen for diagnostic use; performance acceptance remains open.**
 Owner: Vortex exposure/PostProcess, with Environment, Graphics profiling and
 SceneTextures participation. IDs EX051-* belong to Slice 5.1. This is required
 work between the validated Slice 5 correctness baseline and Slice 5.2.
@@ -409,8 +341,8 @@ configuration, commands, workload identity, raw samples and derived results.
 | EX051-03 | Repeatable workloads and memory model / existing demo + test owners | in_progress | 01 | C01/C02 and M01-M04 share a warning-free Release loop with frozen quality/timebase, exact view sizes, readiness checks and untimed memory snapshots. [M01](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/mixed-M01-validation-result-Release.json): 6,000 frames, five draws, FP32 throughout; exposure p95 1.879 ms, frame p99 19.314 ms, stable 778.582 MiB live placement and 7 textures/1 buffer created per frame. [C01 memory model](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/controlled-memory-model.json): 563.270 MiB, 14 textures/2 buffers per frame. I01/I02 implementation now adds an enclosure, fixed camera cycle, shadow/history checks and untimed endpoint images; [I01/I02 evidence](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/indoor-workload-checkpoint.json): each passes 3,600 frames and three cycles, all sampled history reprojected without reset; six endpoint images inspected. I02 uses full-path warmup; I01 retains its earlier stationary-warmup identity. Performance acceptance remains open. Transition coverage, remaining matrix execution, peaks/retirement and full memory budgets remain open. |
 | EX051-04 | Safe reference and causal controls / PostProcess + Environment | in_progress | 02, 03 | Default-off format-only FP32 control preserves qualified P, exposure/history and all certification. Three focused cases pass in Debug (initial fallback plus corrected two-case retry) and [Release](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/fp32-reference-validation-result-Release.json), including forward/deferred scene switches; 35 runtime and ten source hashes unchanged. The shared benchmark exposes production/FP32 selection. [Matched C01 comparison](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/native-benchmark-checkpoint-manifest.json) passes 3,600 frames per condition on identical source/runtime inputs; both modes retain certification. Full independent reference qualification and certificate/reduction/history causal controls remain open; unsafe ablations cannot ship or count as correctness evidence. |
 | EX051-05 | Native baseline and diagnosis / rendering owner | in_progress | 04 | [Native checkpoint](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/native-benchmark-checkpoint-manifest.json): matched C01 production/FP32 and representative M01 pass, with their budget misses retained. C01 FP32 lowers explicit exposure p95 by 0.671 ms but raises GPU-frame p95 by 3.263 ms and live placement by 116.25 MiB in one pair; no repeatability claim. Source diagnosis identifies repeated producer maximum/bound/suitability scans; the first correction (H1) is committed under EX051-07. Remaining matrix, embedded checks, causal controls, pure active CPU versus waits and uncertainty remain open. |
-| EX051-06 | Reduce shared bound-update contention / HDR shader owners | planned | 05 | Test max/flag/count-preserving wave/group reductions for the per-voxel global updates in HdrErrorBounds and related hot paths. Inspect optimized shader output; preserve invalid-lane participation, nonfinite/outward-bound semantics and all reported failures. Record independent correctness and native before/after evidence; retain only a justified improvement. |
-| EX051-07 | Consolidate repeated scans / ExposurePass + producers | in_progress | 05 | **H1 complete, committed `73ced156`**: guarded reuse of current AP/fog maxima. [Closeout evidence](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/h1-closeout-manifest.json) covers focused/owning Debug, actual DXIL and two I02 pairs; maximum-gather mean improves 0.461 -> 0.396 ms and 0.487 -> 0.359 ms, with unchanged memory/churn and passing endpoint budgets. **H2 retained and validated for this increment:** AP/fog candidate-bound/suitability fusion preserves ordered failures and counters. Ten focused cases and [216/216 owning Debug tests](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/h2-owning-validation-result-Debug.json) pass without D3D12/UAV diagnostics; Release build/DXIL pass. [First I02 comparison](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/h2-I02-validation-result-Release.json): qualification mean/p95 1.465/1.944 -> 1.403/1.787 ms; maximum 4.148 -> 11.075 ms retained; endpoint budgets pass. Matched repeat native runs pass: qualification mean 1.423 -> 1.361 ms, while GPU-frame mean rises 18.093 -> 18.346 ms. All matched settings/resource/output audits pass. Affected AP/fog mean improves 0.281 -> 0.211 ms; the frame-span increase remains unexplained and no frame-rate gain is claimed. [Closeout evidence](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/h2-closeout-manifest.json) records source/test/compiled/timing identities and the commit. [Current work](#31-current-work) records the execution state and results. Whole-item and slice acceptance remain open. |
+| EX051-06 | Reduce shared bound-update contention / HDR shader owners | in_progress | 05 | **H3 tested and rejected:** wave-reduced unsigned coefficient publication with zero-update elision preserved exact maxima, invalid/infinity semantics, sparse/partial lanes and every caller output store. [Five focused Debug tests](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/h3-focused-validation-result-Debug.json) pass, including 30 publication cases; [actual Release DXIL](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/h3-candidate-compiled-inspection-Release.json) verifies the change. [Matched I02 comparison](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/h3-producer-scope-comparison.json), 3,600 frames per condition: producer-union mean/p95 0.960/1.265 -> 0.964/1.278 ms, no saving; all three producer distributions increased slightly. Frame mean 15.193 -> 15.472 ms; increased unscoped span is not an idle attribution. Image budgets, settings and resources match. H2 production source and Debug/Release archives restored exactly. [Restored-scalar regression](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/h3-restored-scalar-validation-result-Debug.json) passes 1/1 test with all 30 cases and no diagnostics. [Closeout](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/h3-closeout-manifest.json) retains the regression/evidence, not the optimization. Remaining: establish bound-publication contribution against causal controls/final budgets; no blind further wave/group rewrite or H3 repeat. |
+| EX051-07 | Consolidate repeated scans / ExposurePass + producers | in_progress | 05 | **H1 complete, committed `73ced156`**: guarded reuse of current AP/fog maxima. [Closeout evidence](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/h1-closeout-manifest.json) covers focused/owning Debug, actual DXIL and two I02 pairs; maximum-gather mean improves 0.461 -> 0.396 ms and 0.487 -> 0.359 ms, with unchanged memory/churn and passing endpoint budgets. **H2 retained and validated for this increment:** AP/fog candidate-bound/suitability fusion preserves ordered failures and counters. Ten focused cases and [216/216 owning Debug tests](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/h2-owning-validation-result-Debug.json) pass without D3D12/UAV diagnostics; Release build/DXIL pass. [First I02 comparison](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/h2-I02-validation-result-Release.json): qualification mean/p95 1.465/1.944 -> 1.403/1.787 ms; maximum 4.148 -> 11.075 ms retained; endpoint budgets pass. Matched repeat native runs pass: qualification mean 1.423 -> 1.361 ms, while GPU-frame mean rises 18.093 -> 18.346 ms. All matched settings/resource/output audits pass. Affected AP/fog mean improves 0.281 -> 0.211 ms; the frame-span increase remains unexplained and no frame-rate gain is claimed. [Closeout evidence](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/h2-closeout-manifest.json) records source/test/compiled/timing identities and the commit. [Current work](#31-current-work) records the execution state and results. Remaining: qualify retained scan changes across the outstanding workload/4K matrix and establish that the contribution fits the final budget; whole-item and slice acceptance remain open. |
 | EX051-08 | Temporal fog cost and bound propagation / Environment | planned | 05 | Isolate reprojection/filtering, certificate construction, bound publication, misses/supersampling and storage format. Hoist view-uniform work only after checking compiler output and dependencies. Preserve hardware sampling, cumulative uncertainty, history rebasing and disocclusion correctness. Compare identical temporal/format conditions before attributing savings. |
 | EX051-09 | Economical admission and recovery / PostProcess | planned | 06-08 | Establish a cheap, correct steady path and bounded bootstrap/recovery behavior. Avoid repeated work that cannot affect a decision; validate every proposed invalidation key. Keep current-frame range protection, conservative FP32 fallback, actual consecutive-frame eligibility and event precedence. A changed shipping precision/retry policy needs an explicit owner-design decision before code. |
 | EX051-10 | Resolve, resource lifetime and memory cost / SceneTextures | planned | 05, 09 | [C01 evidence](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/controlled-C01-churn-diagnosis.json) identifies 14 texture creations/frame (four extracted outputs plus three environment radiance outputs per view) and two buffer creations/frame while live snapshots remain stable. No reuse correction implemented yet. Remove only measured unnecessary copies/allocations and redundant retention. Prove frame-pinned P, delayed consumers, auxiliary/offscreen reads and fences remain correct. Measure steady live bytes, transition peaks, cache retirement and traffic against the same FP32 control; include reduction scratch. |
