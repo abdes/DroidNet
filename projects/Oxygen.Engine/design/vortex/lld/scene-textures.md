@@ -282,11 +282,15 @@ Report and producer status use their distinct UAVs during fusion, with the
 existing memory barriers; the fused path does not alias either through an SRV.
 No GPU layout, allocation or format policy changes.
 
-Persistent views submit these reference checks and completed reports while
+The current implementation submits these reference checks and completed reports while
 rendering in either HDR mode. Matching completed eligibility authorizes the
 normal-mode allocations described above; pre-store and composition/temporal error
 checks continue after admission. Stateless views retain FP32 without layout or
 admission history.
+
+EX051-04 adds an FP32-only performance control without prospective half
+qualification. EX051-09 replaces the current attempt cadence with an explicit
+operating policy; every FP16 use still requires its current-frame protection.
 
 ### Lifetime and memory accounting
 
@@ -334,8 +338,14 @@ families remain counted. A pre-H5/current peak comparison requires this same
 extended harness on both revisions. Historical texture-only reports below and
 H5's steady snapshots cannot serve as that lifecycle-peak denominator.
 
-This extension is under implementation; its results are not yet qualified. The
-following tables preserve the original Slice 5 texture-only checkpoint.
+The extension and R091 idle-frame lease release are committed as `8903305`.
+Seven focused Debug cases and eight Release cases on each side pass. The matched
+pre-H5/current comparison uses the same R091 fix and executed accounting body;
+all five peak categories and retired populations match within each control.
+See the [common-fix protocol](../../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/lifecycle-memory/protocol-shared-idle-fix.json)
+and the [current Release memory table](../../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/lifecycle-memory/audit-current-Release-memory-table.json).
+
+The following tables preserve the original Slice 5 texture-only checkpoint.
 
 The Debug and Release qualification uses a full-resolution main view and a second view at
 half width/height, an emissive surface, vacuum atmosphere and zero-extinction fog.
@@ -735,7 +745,7 @@ struct SceneTextureExtracts {
 };
 ```
 
-**Ownership:** `SceneRenderer` produces the resolved artifacts at stage 21 and
+**Current ownership:** `SceneRenderer` produces the resolved artifacts at stage 21 and
 finalizes the handoff/history set during `PostRenderCleanup` (stage 23).
 Queued consumers retain the complete extract record. It owns the artifact and
 registered views, frame-pinned exposure and conversion report, and the family
@@ -772,6 +782,63 @@ assumes the descriptor's initial state and introduces no CPU wait. The next
 producer overwrites its output, except that a rejected checked FP16 conversion
 may leave stale texels: its conversion report and retained FP32 fallback remain
 mandatory for every conditional consumer.
+
+### EX051-10A independent SceneColor fallback ownership
+
+**Status: planned.** Replace the whole-family lease held by a conditional color
+extraction with ownership of the FP32 SceneColor allocation itself. Keep FP32
+lighting accumulation and the existing GPU-selected checked-half fallback.
+
+**Source entry points:** trace `SceneRenderer::BuildSceneTextureLeaseKey` and
+family acquisition in
+[SceneRenderer.cpp](../../../src/Oxygen/Vortex/SceneRenderer/SceneRenderer.cpp),
+reuse eligibility in
+[SceneTextureLeasePool.cpp](../../../src/Oxygen/Vortex/SceneRenderer/SceneTextureLeasePool.cpp),
+the extraction's `source_lease` in
+[ResolveSceneColor.cpp](../../../src/Oxygen/Vortex/SceneRenderer/ResolveSceneColor.cpp),
+and `SceneTextureExtractRef` in
+[SceneTextures.h](../../../src/Oxygen/Vortex/SceneRenderer/SceneTextures.h).
+Carry the independent color lease through the existing extraction/consumer API;
+keep attachment-family and color-allocation reuse decisions separate.
+
+The current Release lifecycle measurements show the cost of whole-family
+retention. Each case renders two views; the secondary is half the main extent.
+
+| Main resolution / temporal fog | Production engine peak MiB | Format-only FP32 engine peak MiB | Excess production peak MiB |
+| --- | ---: | ---: | ---: |
+| 1080p / off | 978.457 | 733.770 | 244.688 |
+| 1080p / on | 908.957 | 757.832 | 151.125 |
+| 4K / off | 3585.957 | 2684.207 | 901.750 |
+| 4K / on | 3335.457 | 2771.082 | 564.375 |
+
+Temporal-off production leaves six cached families after retirement; the FP32
+control leaves two. The extra families occupy 302.25 MiB at 1080p and
+1,128.75 MiB at 4K. Of those totals, 216 MiB and 806.25 MiB are depth, partial
+depth, GBuffer, velocity and custom-depth attachments unrelated to the fallback.
+Temporal-on production briefly selects FP16 and leaves four families versus two;
+the extra cached bytes are 151.125 MiB and 564.375 MiB respectively.
+
+Required ownership and reuse behavior:
+
+1. Acquire FP32 SceneColor through an independent allocation lease. The active
+   view uses a writable color allocation that has no retained readers.
+2. A conditional extraction retains that color lease, its registered views, the
+   resolved artifact, exposure records and conversion report. It does not retain
+   the attachment family merely to keep SceneColor alive.
+3. Family reuse may recycle depth/GBuffer/velocity/custom-depth attachments after
+   their own readers and GPU fences retire. Retained color readers do not block it.
+4. SceneColor reuse checks its own lease ownership and completion. Replacing
+   `source_lease` with an ordinary texture pointer alone is insufficient: family
+   reuse must not overwrite color still owned by an extraction.
+5. Preserve actual resource-state adoption, resize/format keys, delayed/offscreen
+   readers and view-lifetime invalidation. View removal must retire only the
+   owners that have finished; no CPU wait is added to make a resource reusable.
+
+Use the existing queued color/depth consumer checks and one existing 4K
+temporal-off lifecycle case. Verify old color output after family reuse, resource
+and descriptor lifetime through submission/completion, and absence of extra
+unrelated attachment generations caused solely by color fallback ownership.
+Measure the post-change format benefit through EX051-05's four pairs.
 
 Stage 22 tonemap consumes conditional resolved color by binding both sources and
 the same conversion report: an accepted conversion selects the half artifact;

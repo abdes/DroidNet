@@ -87,7 +87,13 @@ then fixes scoped clang-tidy issues and restructures tests while preserving
 behavior and performance. Both task breakdowns, budgets and current evidence
 are maintained in [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md#3-exposure-delivery-status).
 The user approved the plan and authorized Slice 5.1 execution on 2026-09-19.
-EX051-10 is active; follow the tracker's [Current work](IMPLEMENTATION_STATUS.md#31-current-work).
+The 2026-09-20 performance revision closes the delivered H1-H5/R091 checkpoints.
+Resume at the tracker's Current work checkpoint. Remaining performance order:
+EX051-03 documentation-only inventory, 10A SceneColor ownership, 04 FP32-only baseline,
+05 four-pair format decision, 09 precision policy, 11 CPU attribution and 12-14
+integration/acceptance. EX051-08 is merged into 09. Follow the tracker's
+[Current work](IMPLEMENTATION_STATUS.md#31-current-work) and
+[bounded task scopes](IMPLEMENTATION_STATUS.md#321-slice-51-performance-qualification-and-correction).
 Quality edits retain the EX052-03 agreement gate.
 Slices 6-10, including the full LightBench delivery, are still
 required. Earlier incremental test counts and proofs remain in the tracker's
