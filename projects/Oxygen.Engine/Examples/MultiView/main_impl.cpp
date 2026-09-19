@@ -199,6 +199,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
   bool point_light_enabled = true;
   bool spot_light_enabled = true;
   std::string exposure_proof_value = "none";
+  std::string exposure_view_only;
   std::string visual_fog_value = "volume";
   bool visual_fog_cycle = false;
   bool visual_fog_hold_local = false;
@@ -236,11 +237,19 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
               .About("Exposure proof: none, independent, shared, main-only, "
                      "pip-only, reordered, source-loss, viewport, lifetime, "
                      "window-resize, modes, atmosphere, atmosphere-lit, "
-                     "consumer-visual")
+                     "consumer-visual, layouts")
               .Long("exposure-proof")
               .WithValue<std::string>()
               .DefaultValue("none")
               .StoreTo(&exposure_proof_value)
+              .Build())
+          .WithOption(Option::WithKey("exposure-view-only")
+              .About("Layouts proof: render one named view and its required "
+                     "producers")
+              .Long("exposure-view-only")
+              .WithValue<std::string>()
+              .DefaultValue("")
+              .StoreTo(&exposure_view_only)
               .Build())
           .WithOption(Option::WithKey("visual-fog")
               .About(
@@ -418,9 +427,16 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
       main_module_config.exposure_proof = ExposureProof::kAtmosphereLit;
     } else if (exposure_proof_value == "consumer-visual") {
       main_module_config.exposure_proof = ExposureProof::kConsumerVisual;
+    } else if (exposure_proof_value == "layouts") {
+      main_module_config.exposure_proof = ExposureProof::kLayouts;
     } else if (exposure_proof_value != "none") {
       throw std::invalid_argument("Unknown exposure proof scenario");
     }
+    if (!exposure_view_only.empty()
+      && main_module_config.exposure_proof != ExposureProof::kLayouts)
+      throw std::invalid_argument(
+        "Exposure view selection requires layouts proof");
+    main_module_config.exposure_view_only = exposure_view_only;
     using VisualFog = oxygen::examples::multiview::VisualFogMode;
     main_module_config.visual_fog_jitter = visual_fog_jitter;
     if (visual_fog_value == "clear")
@@ -443,6 +459,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
         "Window-resize proof requires a windowed presentation surface");
     }
     if (main_module_config.exposure_proof != ExposureProof::kNone
+      && main_module_config.exposure_proof != ExposureProof::kLayouts
       && (proof_layout || aux_proof_layout || offscreen_proof_layout
         || feature_variant_proof_layout)) {
       throw std::invalid_argument(

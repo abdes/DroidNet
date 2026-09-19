@@ -264,11 +264,21 @@ is not complete.
   stateless 2^32 capture verifies FP32/P1 and correct final S/P consumption.
   Device coverage is the renderer event contract, not physical adapter removal.
   [Scene status closure and commands](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/scene-stateless-recovery-manifest.json).
-  **Current work: EX05-29 — complete native layout and standalone/family
-  acceptance.** Prepare the existing MultiView controls for standard, auxiliary,
-  offscreen and feature layouts, retaining intentional diagnostic cells. The
-  mixed-material gap (EX05-04) and active interactions (EX05-30) remain open;
-  Release validation remains at Slice 5 closure.
+  **Completed: EX05-29 — static native layouts validated in Debug.** All five
+  layouts have inspected composites, passing S/P checks and clean debug-layer
+  audits. The 17 selected views give 19 isolated/family comparisons including
+  required producers: identical gain, maximum meter difference 9.54e-7 EV and
+  at most one mapped/precomposition code. Both auxiliary copy regions are exact;
+  all three expected-black feature interiors are RGB0 and feature-stage checks
+  pass. The real separate-framebuffer routing defect is corrected by selecting
+  final output consistently for post-processing, overlays and auxiliary handoff.
+  The owning gate passes 280 tests with 38 unchanged runtime inputs. The checker
+  requires exact selected/producer sets and rejects full-family substitutions.
+  [Layout closure and commands](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/layout-matrix-manifest.json).
+  **Current work: EX05-04 / EX05-30 — mixed content and active combined
+  interactions.** Extend the existing MultiView scenario with mixed material
+  domains and controlled camera, exposure, resize and lifecycle phases. The
+  complete Slice 5 gate and Release validation remain open; Slices 6-10 follow.
   **Deferred feature boundaries:** owned bloom, temporal color and specular/
   captured-sky products retain their source TODOs and feature dependency issues.
   **Domain implementation:** failure kind 32 distinguishes unsupported
@@ -426,8 +436,8 @@ current status, including decisions that supersede older manifest limitations.
 | EX05-26 | Main/lit-PiP isolation, reordering and alone-versus-family equivalence | validated | Paused/static proof inputs have exact gain/meter/image agreement and specified sharing latency. This does not qualify moving-camera adaptation or all layouts. | [Static matrix](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/static-matrix-manifest.json) |
 | EX05-27 | Viewport, scissor and whole-window resize | validated | The named scripted resize/scissor fixtures pass without cross-view contamination. | [Viewport/scissor](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/viewport-manifest.json), [window resize](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/window-resize-manifest.json) |
 | EX05-28 | MultiView per-view mode, seed, cut and diagnostic events | validated | Paused scripted events and diagnostic restoration are qualified; runtime physical-camera values are covered, persistence is not. | [Modes](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/modes-manifest.json), [diagnostics](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/diagnostic-manifest.json) |
-| EX05-29 | Complete standard/auxiliary/offscreen/feature layout matrix | in_progress | Routing and selected captures exist. Named white captures are diagnosed: archived Manual .25 under 110000-lux sun clips in tonemapping; the new Average main view reaches a background-influenced target. The original-material Average/Spot comparison is qualified in Debug/Release with identical HDR inputs, readable Spot outputs and a retained failing Average control. The user-observed exact window is unidentified. Not every lit pane/layout has complete visual and standalone-equivalence proof. The blue unavailable-shadow diagnostic does not prove the directional-shadow layout. | [Lit-material diagnosis/profile evidence](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/lit-profiles-manifest.json), [Failed earlier appearance](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/atmosphere-Debug-42.exposure.png), [diagnostic scope/limitations](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/diagnostic-manifest.json), [required scenarios](plan/exposure-and-lightbench-correction.md#75-multiview-visual-acceptance) |
-| EX05-30 | Native combined interactions and active adaptation | planned | Complete scripted camera movement, reordering, resize, lifecycle and exposure changes while all panes are visible; verify gain, intermediate images and composite. | [Section 7.5](plan/exposure-and-lightbench-correction.md#75-multiview-visual-acceptance) |
+| EX05-29 | Complete standard/auxiliary/offscreen/feature layout matrix | validated | All five static native layouts have inspected composites and clean Debug-layer audits. Seventeen selected views/19 comparisons agree within frozen tolerances; auxiliary mapped-copy regions are exact, three expected-black cells and feature stages pass. Separate scene/compositing target routing is corrected. Owning Debug gate: 280 passed. Active interaction and mixed-content acceptance remain EX05-30/04; Release remains at slice closure. | [Complete static layout evidence](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/layout-matrix-manifest.json) |
+| EX05-30 | Native combined interactions and active adaptation | in_progress | Preparing the existing MultiView scenario for scripted camera movement, reordering, resize, lifecycle and exposure changes while all panes are visible; verify gain, intermediate images and composite. | [Section 7.5](plan/exposure-and-lightbench-correction.md#75-multiview-visual-acceptance) |
 | EX05-GATE | Entire Slice 5 acceptance gate | in_progress | **Not passed.** Close all remaining items; prove P invariance, upstream bright/dark preservation, complete scene lifecycle and removal of old overloaded-scalar consumption across every active path. Do not start Slice 6 integration first. | [Gate](plan/exposure-and-lightbench-correction.md#slice-5---complete-pre-exposure-migration-and-numerical-recovery) |
 
 ### 3.3 Slice 6 work items

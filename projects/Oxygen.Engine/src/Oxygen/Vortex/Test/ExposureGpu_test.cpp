@@ -7443,6 +7443,7 @@ protected:
 
   auto MeasureHdrAllocationAccounting(bool temporal) -> void;
   auto QualifySharedSceneLifecycle(bool forward) -> void;
+  auto QualifyMixedPrecisionAuxiliaryHandoff(bool split_targets) -> void;
 
   auto UniformReferenceGain(float luminance) const -> double
   {
@@ -9369,8 +9370,8 @@ NOLINT_TEST_F(ExposureLightingGpuTest,
   current = {};
 }
 
-NOLINT_TEST_F(ExposureLightingGpuTest,
-  MixedPrecisionFamilyAuxiliaryHandoffUsesMappedProducerOutput)
+auto ExposureLightingGpuTest::QualifyMixedPrecisionAuxiliaryHandoff(
+  bool split_targets) -> void
 {
   verify_manual_p = false;
   probe->prepare = [](RenderContext&) { };
@@ -9379,6 +9380,7 @@ NOLINT_TEST_F(ExposureLightingGpuTest,
   scene->SyncObservers();
   std::array<std::shared_ptr<Texture>, 3> outputs;
   std::array<std::shared_ptr<Framebuffer>, 3> targets;
+  std::array<std::shared_ptr<Framebuffer>, 3> scene_targets;
   for (unsigned i = 0; i < 3; ++i) {
     outputs[i] = CreateRegisteredTexture({ .width = 1,
       .height = 1,
@@ -9387,6 +9389,16 @@ NOLINT_TEST_F(ExposureLightingGpuTest,
       .initial_state = ResourceStates::kCommon });
     targets[i] = Backend().CreateFramebuffer(
       FramebufferDesc {}.AddColorAttachment(outputs[i]));
+    scene_targets[i] = targets[i];
+    if (split_targets) {
+      auto scene_output = CreateRegisteredTexture({ .width = 1,
+        .height = 1,
+        .format = Format::kRGBA32Float,
+        .is_render_target = true,
+        .initial_state = ResourceStates::kCommon });
+      scene_targets[i] = Backend().CreateFramebuffer(
+        FramebufferDesc {}.AddColorAttachment(scene_output));
+    }
   }
   std::unordered_map<CompositionView::ViewStateHandle, SceneTextureExtractRef>
     snapshots;
@@ -9431,7 +9443,7 @@ NOLINT_TEST_F(ExposureLightingGpuTest,
       ASSERT_NE(
         renderer_->PublishRuntimeCompositionView(frame,
           { .composition_view = input,
-            .render_target = observer_ptr { targets[index].get() },
+            .render_target = observer_ptr { scene_targets[index].get() },
             .composite_source = observer_ptr { targets[index].get() } }),
         kInvalidViewId);
     }
@@ -9479,6 +9491,18 @@ NOLINT_TEST_F(ExposureLightingGpuTest,
   probe->inspect = {};
   snapshots.clear();
   RecordProperty("mixed_family_auxiliary_outputs", checked);
+}
+
+NOLINT_TEST_F(ExposureLightingGpuTest,
+  MixedPrecisionFamilyAuxiliaryHandoffUsesMappedProducerOutput)
+{
+  QualifyMixedPrecisionAuxiliaryHandoff(false);
+}
+
+NOLINT_TEST_F(ExposureLightingGpuTest,
+  SplitSceneAndCompositeTargetsPreserveAuxiliaryMappedOutput)
+{
+  QualifyMixedPrecisionAuxiliaryHandoff(true);
 }
 
 NOLINT_TEST_F(ExposureLightingGpuTest,

@@ -26,6 +26,8 @@
 #include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
+#include <Oxygen/Scene/Environment/PostProcessVolume.h>
+#include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Vortex/CompositionView.h>
@@ -43,6 +45,10 @@ namespace {
   constexpr uint32_t kOffscreenPreviewHeight = 288U;
   constexpr uint32_t kOffscreenCaptureWidth = 256U;
   constexpr uint32_t kOffscreenCaptureHeight = 256U;
+  constexpr std::string_view kOffscreenPreviewName
+    = "M06B.OffscreenPreview.Deferred";
+  constexpr std::string_view kOffscreenCaptureName
+    = "M06B.OffscreenCapture.Forward";
   constexpr auto kOffscreenPreviewViewId = ViewId { 0x060B0101ULL };
   constexpr auto kOffscreenCaptureViewId = ViewId { 0x060B0102ULL };
 
@@ -219,7 +225,8 @@ auto MainModule::OnAttachedImpl(
   }
   if (config_.exposure_proof == ExposureProofScenario::kAtmosphere
     || config_.exposure_proof == ExposureProofScenario::kAtmosphereLit
-    || config_.exposure_proof == ExposureProofScenario::kConsumerVisual) {
+    || config_.exposure_proof == ExposureProofScenario::kConsumerVisual
+    || config_.exposure_proof == ExposureProofScenario::kLayouts) {
     shell_config.force_environment_override = false;
     shell_config.initial_preview_sun_enabled = false;
   }
@@ -263,6 +270,18 @@ auto MainModule::OnAttachedImpl(
     scene_bootstrapper_.ApplyLitAtmosphereProof();
   } else if (config_.exposure_proof == ExposureProofScenario::kConsumerVisual) {
     scene_bootstrapper_.ApplyConsumerVisualProof(config_.visual_fog_mode);
+  }
+  if (config_.exposure_proof == ExposureProofScenario::kLayouts) {
+    scene_bootstrapper_.ApplyConsumerVisualProof(VisualFogMode::kVolumetric);
+    auto& environment = *staged_scene->GetEnvironment();
+    auto* post
+      = environment.TryGetSystem<scene::environment::PostProcessVolume>().get();
+    if (!post)
+      post = &environment.AddSystem<scene::environment::PostProcessVolume>();
+    auto exposure = scene::ExposureSettings {};
+    exposure.key = 12.5F;
+    exposure.metering_mode = engine::MeteringMode::kSpot;
+    post->SetExposureSettings(exposure);
   }
   const auto extent = ResolveRenderExtent();
   if (HasPositiveExtent(extent)) {
@@ -732,11 +751,21 @@ auto MainModule::RenderOffscreenProofProducts(engine::FrameContext& context)
     .scene = observer_ptr<scene::Scene> { active_scene_.operator->() },
   };
 
-  auto render_product =
-    [&](OffscreenProofProduct& product, const char* name, const ViewId view_id,
-      const scene::SceneNode& camera,
-      const vortex::Renderer::OffscreenPipelineInput pipeline,
-      const bool force_wireframe) -> void {
+  auto render_product
+    = [&](OffscreenProofProduct& product, const char* name,
+        const ViewId view_id, const scene::SceneNode& camera,
+        const vortex::Renderer::OffscreenPipelineInput pipeline,
+        const bool force_wireframe) -> void {
+    if (!config_.exposure_view_only.empty()
+      && config_.exposure_view_only != name)
+      return;
+    if (config_.exposure_proof == ExposureProofScenario::kLayouts
+      && context.GetFrameSequenceNumber().get() == 32U) {
+      const auto request = renderer->QueueExposureTransition(
+        vortex::CompositionView::ViewStateHandle { view_id.get() },
+        vortex::ExposureTransitionPolicy::kRemeter);
+      CHECK_F(request.has_value(), "Offscreen layout proof remeter failed");
+    }
     auto facade = renderer->ForOffscreenScene();
     facade.SetFrameSession(frame_session);
     facade.SetSceneSource(vortex::Renderer::SceneSourceInput {
@@ -783,10 +812,10 @@ auto MainModule::RenderOffscreenProofProducts(engine::FrameContext& context)
         .debug_name);
   };
 
-  render_product(offscreen_preview_, "M06B.OffscreenPreview.Deferred",
+  render_product(offscreen_preview_, kOffscreenPreviewName.data(),
     kOffscreenPreviewViewId, offscreen_preview_camera_node_,
     vortex::Renderer::OffscreenPipelineInput::Deferred(), false);
-  render_product(offscreen_capture_, "M06B.OffscreenCapture.Forward",
+  render_product(offscreen_capture_, kOffscreenCaptureName.data(),
     kOffscreenCaptureViewId, offscreen_capture_camera_node_,
     vortex::Renderer::OffscreenPipelineInput::Forward(), false);
 }
@@ -865,7 +894,8 @@ auto MainModule::OnPreRender(observer_ptr<engine::FrameContext> context)
   co_return;
 }
 
-auto MainModule::AppendRuntimeCompositionLayers(engine::FrameContext& /*context*/,
+auto MainModule::AppendRuntimeCompositionLayers(
+  engine::FrameContext& /*context*/,
   vortex::Renderer::RuntimeCompositionInput& input) -> void
 {
   if (!config_.offscreen_proof_layout || !offscreen_preview_.framebuffer
@@ -895,7 +925,9 @@ auto MainModule::AppendRuntimeCompositionLayers(engine::FrameContext& /*context*
   const float capture_size = std::min(256.0F, std::floor(sh * 0.22F));
   const float panel_y = std::max(kMargin, sh - kMargin - preview_h);
 
-  input.texture_layers.push_back(vortex::Renderer::RuntimeTextureCompositionLayer {
+  if (config_.exposure_view_only.empty()
+    || config_.exposure_view_only == kOffscreenPreviewName) {
+    input.texture_layers.push_back(vortex::Renderer::RuntimeTextureCompositionLayer {
     .source_texture = preview_texture,
     .viewport = ViewPort {
       .top_left_x = kMargin,
@@ -908,8 +940,11 @@ auto MainModule::AppendRuntimeCompositionLayers(engine::FrameContext& /*context*
     .opacity = 1.0F,
     .debug_name = "M06B.OffscreenPreview.Deferred.Composite",
   });
+  }
 
-  input.texture_layers.push_back(vortex::Renderer::RuntimeTextureCompositionLayer {
+  if (config_.exposure_view_only.empty()
+    || config_.exposure_view_only == kOffscreenCaptureName) {
+    input.texture_layers.push_back(vortex::Renderer::RuntimeTextureCompositionLayer {
     .source_texture = capture_texture,
     .viewport = ViewPort {
       .top_left_x = kMargin + preview_w + kGap,
@@ -922,6 +957,7 @@ auto MainModule::AppendRuntimeCompositionLayers(engine::FrameContext& /*context*
     .opacity = 1.0F,
     .debug_name = "M06B.OffscreenCapture.Forward.Composite",
   });
+  }
 }
 
 auto MainModule::DrawFeatureVariantProofOverlay() -> void
@@ -1086,7 +1122,21 @@ auto MainModule::UpdateComposition(oxygen::engine::FrameContext& context,
       view.with_height_fog = false;
       view.shading_mode = vortex::ShadingMode::kDeferred;
     }
-    view.force_wireframe = false;
+    if (proof == ExposureProofScenario::kLayouts) {
+      exposure.compensation_ev = 0;
+      // The NoEnvironment camera's center lies in a deep cast shadow. Meter
+      // its whole image so the proof retains readable directly-lit materials.
+      exposure.metering_mode = view.feature_profile
+          == vortex::CompositionView::ViewFeatureProfile::kNoEnvironment
+        ? engine::MeteringMode::kAverage
+        : engine::MeteringMode::kSpot;
+      // Exercise an exposed lit auxiliary product instead of normals colors.
+      if (config_.aux_proof_layout && view.id == debug_view_id_)
+        view.render_settings.shader_debug_mode
+          = vortex::ShaderDebugMode::kDisabled;
+    } else {
+      view.force_wireframe = false;
+    }
     if (proof == ExposureProofScenario::kModes && view.id == pip_view_id_) {
       if (frame >= 44U && frame < 48U) {
         view.force_wireframe = true;
@@ -1154,6 +1204,39 @@ auto MainModule::UpdateComposition(oxygen::engine::FrameContext& context,
         CHECK_F(request.has_value());
       }
     }
+  }
+  if (proof == ExposureProofScenario::kLayouts
+    && !config_.exposure_view_only.empty()) {
+    const auto selected = std::ranges::find(
+      views, config_.exposure_view_only, &vortex::CompositionView::name);
+    const bool offscreen = config_.offscreen_proof_layout
+      && (config_.exposure_view_only == kOffscreenPreviewName
+        || config_.exposure_view_only == kOffscreenCaptureName);
+    CHECK_F(selected != views.end() || offscreen,
+      "Exposure proof view '{}' is not in this layout",
+      config_.exposure_view_only);
+    std::vector<ViewId> needed;
+    if (selected != views.end())
+      needed.push_back(selected->id);
+    for (size_t index = 0; index < needed.size(); ++index) {
+      const auto consumer
+        = std::ranges::find(views, needed[index], &vortex::CompositionView::id);
+      CHECK_F(consumer != views.end());
+      for (const auto& input : consumer->consumed_aux_outputs) {
+        const auto producer
+          = std::ranges::find_if(views, [&](const auto& view) {
+              return std::ranges::any_of(view.produced_aux_outputs,
+                [&](const auto& output) { return output.id == input.id; });
+            });
+        if (producer != views.end()
+          && std::ranges::find(needed, producer->id) == needed.end())
+          needed.push_back(producer->id);
+      }
+    }
+    std::erase_if(views, [&](const auto& view) {
+      return view.camera.has_value()
+        && std::ranges::find(needed, view.id) == needed.end();
+    });
   }
   if (proof == ExposureProofScenario::kReordered) {
     const auto main
