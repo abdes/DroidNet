@@ -47,6 +47,7 @@ PostProcessService::~PostProcessService()
 {
   pending_exposure_status_.clear();
   deferred_exposure_status_.clear();
+  reusable_exposure_status_.clear();
   captured_exposure_settings_.clear();
   captured_exposure_sources_.clear();
   // Binder owns descriptor retirement; release all its leases first.
@@ -180,6 +181,7 @@ auto PostProcessService::ResolveViewExposureSettings(
   }
   const auto lifetime = renderer_.EnsureExposureLifetime(handle);
   if (state->lifetime != lifetime) {
+    reusable_exposure_status_.erase(handle);
     *state = {};
     state->lifetime = lifetime;
   }
@@ -277,8 +279,9 @@ auto PostProcessService::CaptureViewExposureSettings(const ViewId view_id,
   renderer_.ObserveExposureWorld(handle, world.get());
   auto settings = ResolveViewExposureSettings(handle, requested, camera_ev);
   const auto owner = renderer_.GetExposureSourceIntent(view_id);
-  if (owner && owner->handle == handle && owner->source_loss)
+  if (owner && owner->handle == handle && owner->source_loss) {
     PreserveRemovedExposureSource(owner->source_loss, handle);
+  }
   renderer_.PrepareExposureTransition(handle,
     settings.resolved.authored.enabled
         && settings.resolved.authored.mode == engine::ExposureMode::kAuto
@@ -287,6 +290,13 @@ auto PostProcessService::CaptureViewExposureSettings(const ViewId view_id,
     current_sequence_, suppress_transitions || (owner && owner->diagnostic));
   static_cast<void>(
     renderer_.CaptureExposureTransition(handle, current_sequence_));
+  const auto discontinuities
+    = renderer_.CapturedViewDiscontinuities(handle, current_sequence_);
+  if ((discontinuities
+        & (1U << static_cast<unsigned>(ViewDiscontinuity::kDeviceRecovery)))
+    != 0U) {
+    reusable_exposure_status_.erase(handle);
+  }
   return captured_exposure_settings_
     .emplace(key, CapturedExposureSettings { handle, std::move(settings) })
     .first->second.settings;
@@ -1039,6 +1049,7 @@ auto PostProcessService::RemoveViewState(const ViewId view_id,
   precision_states_.erase(view_state_handle);
   pending_exposure_status_.erase(view_state_handle);
   deferred_exposure_status_.erase(view_state_handle);
+  reusable_exposure_status_.erase(view_state_handle);
   renderer_.RetireExposureTransitions(view_state_handle);
   exposure_pass_->RemoveViewState(view_state_handle);
 }
@@ -1059,8 +1070,9 @@ auto PostProcessService::EnqueueExposureStatus(
 
 auto PostProcessService::QueueExposureStatus(PendingExposureStatus job) -> void
 {
-  if (!IsExposureStatusNeeded(job))
+  if (!IsExposureStatusNeeded(job)) {
     return;
+  }
   const auto same_frame = [&](const PendingExposureStatus& existing) {
     return existing.lifetime == job.lifetime
       && existing.frame_sequence == job.frame_sequence
@@ -1127,11 +1139,13 @@ auto PostProcessService::DeferExposureStatus(PendingExposureStatus job) -> void
   if (!IsExposureStatusNeeded(job))
     return;
   job.readback.reset();
+  job.reuse_pool.reset();
   const auto found = deferred_exposure_status_.find(job.handle);
   if (found == deferred_exposure_status_.end()
     || found->second.lifetime != job.lifetime
-    || found->second.frame_sequence <= job.frame_sequence)
+    || found->second.frame_sequence <= job.frame_sequence) {
     deferred_exposure_status_.insert_or_assign(job.handle, std::move(job));
+  }
 }
 
 auto PostProcessService::TryEnqueueExposureStatus(PendingExposureStatus job)
@@ -1152,7 +1166,19 @@ auto PostProcessService::TryEnqueueExposureStatus(PendingExposureStatus job)
   if (!manager) {
     return false;
   }
-  auto readback = manager->CreateBufferReadback("Exposure completed status");
+  auto& pool = reusable_exposure_status_[job.handle];
+  if (!pool || pool->lifetime != job.lifetime || pool->graphics_owner != gfx) {
+    pool = std::make_shared<ExposureReadbackPool>();
+    pool->graphics_owner = gfx;
+    pool->lifetime = job.lifetime;
+  }
+  std::shared_ptr<graphics::GpuBufferReadback> readback;
+  if (!pool->available.empty()) {
+    readback = std::move(pool->available.back());
+    pool->available.pop_back();
+  } else {
+    readback = manager->CreateBufferReadback("Exposure completed status");
+  }
   if (!readback) {
     return false;
   }
@@ -1182,9 +1208,27 @@ auto PostProcessService::TryEnqueueExposureStatus(PendingExposureStatus job)
     static_cast<void>(readback->Cancel());
     return false;
   }
+  job.readback_graphics = std::move(gfx);
   job.readback = std::move(readback);
+  job.reuse_pool = pool;
   pending.push_back(std::move(job));
   return true;
+}
+
+auto PostProcessService::RecycleExposureStatus(PendingExposureStatus& job)
+  -> void
+{
+  const auto pool = job.reuse_pool.lock();
+  if (!pool || pool->lifetime != job.lifetime
+    || pool->graphics_owner != job.readback_graphics || !job.readback
+    || pool->available.size() >= frame::kFramesInFlight.get()) {
+    return;
+  }
+  // Poll's mapped guard has been destroyed before this call. Rearming never
+  // waits and refuses incomplete, cancelled, failed or still-mapped requests.
+  if (job.readback->ResetForReuse().has_value()) {
+    pool->available.push_back(std::move(job.readback));
+  }
 }
 
 auto PostProcessService::PollExposureStatus() -> void
@@ -1263,6 +1307,8 @@ auto PostProcessService::PollExposureStatus() -> void
       };
       if (!complete()) {
         DeferExposureStatus(std::move(job));
+      } else {
+        RecycleExposureStatus(job);
       }
       pending.pop_front();
     }

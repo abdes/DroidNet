@@ -69,12 +69,14 @@ void SceneRenderer::ResolveSceneColor(
   const bool narrow = scene_color_ready && prepared
     && ctx.current_view.hdr_color_format == Format::kRGBA16Float
     && active_scene_texture_lease_;
+  graphics::Texture* resolved_color = nullptr;
+  if (scene_color_ready) {
+    resolved_color = EnsureArtifactTexture(ctx, resolved_scene_color_artifact_,
+      "ResolvedSceneColor", scene_textures.GetSceneColor(),
+      narrow ? std::optional { Format::kRGBA16Float } : std::nullopt);
+  }
   scene_texture_extracts_.resolved_scene_color = {
-    .texture = scene_color_ready
-      ? EnsureArtifactTexture(resolved_scene_color_artifact_,
-          "ResolvedSceneColor", scene_textures.GetSceneColor(),
-          narrow ? std::optional { Format::kRGBA16Float } : std::nullopt)
-      : nullptr,
+    .texture = resolved_color,
     .valid = scene_color_ready,
     .exposure = scene_color_ready ? ctx.current_view.frame_exposure : nullptr,
   };
@@ -83,11 +85,13 @@ void SceneRenderer::ResolveSceneColor(
     = setup_mode_.IsSet(SceneTextureSetupMode::Flag::kSceneDepth)
     && scene_texture_bindings_.scene_depth_srv
       != SceneTextureBindings::kInvalidIndex;
+  graphics::Texture* resolved_depth = nullptr;
+  if (scene_depth_ready) {
+    resolved_depth = EnsureArtifactTexture(ctx, resolved_scene_depth_artifact_,
+      "ResolvedSceneDepth", scene_textures.GetSceneDepth());
+  }
   scene_texture_extracts_.resolved_scene_depth = {
-    .texture = scene_depth_ready
-      ? EnsureArtifactTexture(resolved_scene_depth_artifact_,
-          "ResolvedSceneDepth", scene_textures.GetSceneDepth())
-      : nullptr,
+    .texture = resolved_depth,
     .valid = scene_depth_ready,
   };
 
@@ -121,7 +125,7 @@ void SceneRenderer::ResolveSceneColor(
       // Submission failure cannot publish unchecked half data. Preserve the
       // solved exposure and fall back to an unconditional FP32 snapshot.
       scene_texture_extracts_.resolved_scene_color.texture
-        = EnsureArtifactTexture(resolved_scene_color_artifact_,
+        = EnsureArtifactTexture(ctx, resolved_scene_color_artifact_,
           "ResolvedSceneColor", scene_textures.GetSceneColor());
     }
   }

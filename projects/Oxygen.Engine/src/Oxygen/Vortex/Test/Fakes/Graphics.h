@@ -1010,9 +1010,9 @@ public:
         continue;
       }
 
-      const auto name = spec.role == QueueRole::kTransfer ? "CopyQ" : "GfxQ";
-      queues_[spec.key] = std::make_shared<FakeCommandQueue>(name, spec.role);
+      queues_[spec.key] = CreateCommandQueue(spec.key, spec.role);
     }
+    Graphics::CreateCommandQueues(queue_strategy);
   }
   auto QueueKeyFor(const graphics::QueueRole role) const
     -> graphics::QueueKey override
@@ -1102,10 +1102,14 @@ public:
   mutable bool throw_on_create_buffer_ { false };
 
 protected:
-  [[nodiscard]] auto CreateCommandQueue(const QueueKey& /*queue_name*/,
-    QueueRole /*role*/) -> std::shared_ptr<CommandQueue> override
+  [[nodiscard]] auto CreateCommandQueue(const QueueKey& queue_name,
+    const QueueRole role) -> std::shared_ptr<CommandQueue> override
   {
-    return {};
+    if (const auto found = queues_.find(queue_name); found != queues_.end()) {
+      return found->second;
+    }
+    const auto name = role == QueueRole::kTransfer ? "CopyQ" : "GfxQ";
+    return std::make_shared<FakeCommandQueue>(name, role);
   }
   [[nodiscard]] auto CreateCommandListImpl(
     QueueRole /*role*/, std::string_view /*command_list_name*/)

@@ -470,6 +470,124 @@ NOLINT_TEST_F(BufferReadbackLifecycleTest,
   EXPECT_EQ(registry.GetRegisteredResourceCount(), baseline_count);
 }
 
+NOLINT_TEST_F(BufferReadbackLifecycleTest,
+  ResetForReusePreservesCapacityAndPublishesFreshData)
+{
+  const auto first_bytes = MakePatternBytes(96, 0x21);
+  const auto second_bytes = MakePatternBytes(96, 0x72);
+  const auto larger_bytes = MakePatternBytes(160, 0xB3);
+  auto first = CreateBufferWithBytes(first_bytes, "reuse-first-source");
+  auto second = CreateBufferWithBytes(second_bytes, "reuse-second-source");
+  auto larger = CreateBufferWithBytes(larger_bytes, "reuse-larger-source");
+  auto readback = CreateBufferReadback("reuse-capacity");
+  const auto baseline_count = Registry().GetRegisteredResourceCount();
+  const auto first_ticket
+    = EnqueueBufferReadback(readback, first, { 7, 32 }, "reuse-first-copy");
+  const std::byte* original_storage = nullptr;
+  {
+    const auto mapped = readback->MapNow();
+    ASSERT_TRUE(mapped.has_value());
+    original_storage = mapped->Bytes().data();
+    EXPECT_EQ(CopyMappedBytes(*mapped), SliceBytes(first_bytes, 7, 32));
+  }
+  ASSERT_TRUE(readback->ResetForReuse().has_value());
+  EXPECT_EQ(readback->GetState(), ReadbackState::kIdle);
+  EXPECT_FALSE(readback->Ticket().has_value());
+  EXPECT_EQ(Registry().GetRegisteredResourceCount(), baseline_count + 1U);
+  const auto forgotten = GetReadbackManager()->Await(first_ticket);
+  ASSERT_FALSE(forgotten.has_value());
+  EXPECT_EQ(forgotten.error(), ReadbackError::kTicketNotFound);
+  const auto idle_map = readback->TryMap();
+  ASSERT_FALSE(idle_map.has_value());
+  EXPECT_EQ(idle_map.error(), ReadbackError::kNotReady);
+
+  const auto second_ticket
+    = EnqueueBufferReadback(readback, second, { 19, 12 }, "reuse-second-copy");
+  EXPECT_NE(second_ticket.id, first_ticket.id);
+  {
+    const auto mapped = readback->MapNow();
+    ASSERT_TRUE(mapped.has_value());
+    EXPECT_EQ(mapped->Bytes().data(), original_storage);
+    EXPECT_EQ(CopyMappedBytes(*mapped), SliceBytes(second_bytes, 19, 12));
+  }
+  ASSERT_TRUE(readback->ResetForReuse().has_value());
+  const auto larger_ticket
+    = EnqueueBufferReadback(readback, larger, { 11, 80 }, "reuse-growth-copy");
+  EXPECT_NE(larger_ticket.id, second_ticket.id);
+  {
+    const auto mapped = readback->MapNow();
+    ASSERT_TRUE(mapped.has_value());
+    EXPECT_EQ(CopyMappedBytes(*mapped), SliceBytes(larger_bytes, 11, 80));
+  }
+  EXPECT_EQ(Registry().GetRegisteredResourceCount(), baseline_count + 1U);
+  readback->Reset();
+  EXPECT_EQ(readback->GetState(), ReadbackState::kIdle);
+  EXPECT_EQ(Registry().GetRegisteredResourceCount(), baseline_count);
+}
+
+NOLINT_TEST_F(BufferReadbackLifecycleTest,
+  ResetForReuseRefusesIdlePendingMappedAndCancelledRequests)
+{
+  const auto bytes = MakePatternBytes(64, 0x42);
+  auto source = CreateBufferWithBytes(bytes, "reuse-state-source");
+  auto readback = CreateBufferReadback("reuse-state");
+  const auto idle = readback->ResetForReuse();
+  ASSERT_FALSE(idle.has_value());
+  EXPECT_EQ(idle.error(), ReadbackError::kNotReady);
+  const auto ticket = EnqueueBufferReadback(
+    readback, source, { 5, 24 }, "reuse-state-pending", false);
+  const auto pending = readback->ResetForReuse();
+  ASSERT_FALSE(pending.has_value());
+  EXPECT_EQ(pending.error(), ReadbackError::kAlreadyPending);
+  ASSERT_TRUE(readback->Ticket().has_value());
+  EXPECT_EQ(readback->Ticket()->id, ticket.id);
+  EXPECT_EQ(readback->GetState(), ReadbackState::kPending);
+  SubmitDeferred();
+  {
+    auto mapped = readback->MapNow();
+    ASSERT_TRUE(mapped.has_value());
+    auto moved = std::move(*mapped);
+    const auto active = readback->ResetForReuse();
+    ASSERT_FALSE(active.has_value());
+    EXPECT_EQ(active.error(), ReadbackError::kAlreadyMapped);
+    EXPECT_EQ(CopyMappedBytes(moved), SliceBytes(bytes, 5, 24));
+    EXPECT_EQ(readback->GetState(), ReadbackState::kMapped);
+  }
+  ASSERT_TRUE(readback->ResetForReuse().has_value());
+  const auto cancelled_ticket = EnqueueBufferReadback(
+    readback, source, { 9, 12 }, "reuse-state-cancel", false);
+  const auto cancellation = readback->Cancel();
+  ASSERT_TRUE(cancellation.has_value());
+  ASSERT_TRUE(*cancellation);
+  const auto cancelled = readback->ResetForReuse();
+  ASSERT_FALSE(cancelled.has_value());
+  EXPECT_EQ(cancelled.error(), ReadbackError::kCancelled);
+  EXPECT_EQ(readback->GetState(), ReadbackState::kCancelled);
+  ASSERT_TRUE(readback->Ticket().has_value());
+  EXPECT_EQ(readback->Ticket()->id, cancelled_ticket.id);
+  SubmitDeferred();
+  WaitForQueueIdle();
+}
+
+NOLINT_TEST_F(BufferReadbackLifecycleTest,
+  ResetForReuseRefreshesCompletedPendingRequestWithoutMapping)
+{
+  auto source = CreateBufferWithBytes(MakePatternBytes(48), "reuse-refresh");
+  auto readback = CreateBufferReadback("reuse-refresh");
+  const auto ticket
+    = EnqueueBufferReadback(readback, source, { 8, 20 }, "reuse-refresh-copy");
+  WaitForQueueIdle();
+  ASSERT_EQ(readback->GetState(), ReadbackState::kPending);
+  const auto registered_count = Registry().GetRegisteredResourceCount();
+  ASSERT_TRUE(readback->ResetForReuse().has_value());
+  EXPECT_EQ(readback->GetState(), ReadbackState::kIdle);
+  EXPECT_FALSE(readback->Ticket().has_value());
+  EXPECT_EQ(Registry().GetRegisteredResourceCount(), registered_count);
+  const auto forgotten = GetReadbackManager()->Await(ticket);
+  ASSERT_FALSE(forgotten.has_value());
+  EXPECT_EQ(forgotten.error(), ReadbackError::kTicketNotFound);
+}
+
 NOLINT_TEST_F(
   BufferReadbackCoroutineTest, AwaitAsyncCompletesWhenIsReadyPumpsCompletion)
 {

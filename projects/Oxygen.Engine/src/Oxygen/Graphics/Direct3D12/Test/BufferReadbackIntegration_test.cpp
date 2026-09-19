@@ -148,6 +148,41 @@ class BufferReadbackFrameLifecycleTest : public BufferReadbackTestBase { };
 class BufferReadbackCoroutineTest : public BufferReadbackTestBase { };
 class BufferReadbackShutdownTest : public BufferReadbackTestBase { };
 
+class ReadbackAllocationGraphics final
+  : public oxygen::graphics::d3d12::Graphics {
+public:
+  using Graphics::Graphics;
+
+  auto CreateBuffer(const BufferDesc& desc) const
+    -> std::shared_ptr<Buffer> override
+  {
+    auto buffer = Graphics::CreateBuffer(desc);
+    if (desc.memory == BufferMemory::kReadBack
+      && desc.debug_name.ends_with("-staging")) {
+      staging_allocations.push_back(buffer);
+    }
+    return buffer;
+  }
+
+  mutable std::vector<std::weak_ptr<Buffer>> staging_allocations;
+};
+
+class BufferReadbackReuseTest : public BufferReadbackTestBase {
+protected:
+  auto CreateBackend(const oxygen::SerializedBackendConfig& config,
+    const oxygen::SerializedPathFinderConfig& paths)
+    -> std::shared_ptr<oxygen::graphics::d3d12::Graphics> override
+  {
+    return std::make_shared<ReadbackAllocationGraphics>(config, paths);
+  }
+
+  auto StagingAllocations() const -> const std::vector<std::weak_ptr<Buffer>>&
+  {
+    return static_cast<const ReadbackAllocationGraphics&>(Backend())
+      .staging_allocations;
+  }
+};
+
 class TransferQueueBufferReadbackTest
   : public TransferQueueReadbackTestFixture {
 protected:
@@ -561,6 +596,142 @@ NOLINT_TEST_F(BufferReadbackLifecycleTest,
 
   EXPECT_EQ(readback->GetState(), ReadbackState::kIdle);
   EXPECT_EQ(registry.GetRegisteredResourceCount(), baseline_count);
+}
+
+NOLINT_TEST_F(BufferReadbackReuseTest,
+  ResetForReuseRetainsAllocationAndGrowsOnlyWhenRequired)
+{
+  const auto first_bytes = MakePatternBytes(96, 0x21);
+  const auto second_bytes = MakePatternBytes(96, 0x72);
+  const auto larger_bytes = MakePatternBytes(160, 0xB3);
+  auto first
+    = CreateInitializedDeviceBuffer(first_bytes, "reuse-capacity-first");
+  auto second
+    = CreateInitializedDeviceBuffer(second_bytes, "reuse-capacity-second");
+  auto larger
+    = CreateInitializedDeviceBuffer(larger_bytes, "reuse-capacity-larger");
+  auto readback = CreateBufferReadback("reuse-capacity");
+  auto& registry = Backend().GetResourceRegistry();
+  const auto baseline_count = registry.GetRegisteredResourceCount();
+  const auto first_ticket
+    = EnqueueReadback(readback, first, { 7, 32 }, "reuse-capacity-first-copy");
+  {
+    const auto mapped = readback->MapNow();
+    ASSERT_TRUE(mapped.has_value());
+    EXPECT_EQ(CopyMappedBytes(*mapped), SliceBytes(first_bytes, 7, 32));
+  }
+  ASSERT_EQ(StagingAllocations().size(), 1U);
+  const auto original = StagingAllocations().front();
+  ASSERT_FALSE(original.expired());
+  ASSERT_TRUE(readback->ResetForReuse().has_value());
+  EXPECT_EQ(readback->GetState(), ReadbackState::kIdle);
+  EXPECT_FALSE(readback->Ticket().has_value());
+  EXPECT_FALSE(original.expired());
+  EXPECT_EQ(registry.GetRegisteredResourceCount(), baseline_count + 1U);
+  const auto forgotten = AwaitReadback(first_ticket);
+  ASSERT_FALSE(forgotten.has_value());
+  EXPECT_EQ(forgotten.error(), ReadbackError::kTicketNotFound);
+  const auto unmapped_idle = readback->TryMap();
+  ASSERT_FALSE(unmapped_idle.has_value());
+  EXPECT_EQ(unmapped_idle.error(), ReadbackError::kNotReady);
+
+  const auto second_ticket = EnqueueReadback(
+    readback, second, { 19, 12 }, "reuse-capacity-second-copy");
+  EXPECT_NE(second_ticket.id, first_ticket.id);
+  {
+    const auto mapped = readback->MapNow();
+    ASSERT_TRUE(mapped.has_value());
+    EXPECT_EQ(CopyMappedBytes(*mapped), SliceBytes(second_bytes, 19, 12));
+  }
+  ASSERT_EQ(StagingAllocations().size(), 1U);
+  EXPECT_EQ(StagingAllocations().front().lock(), original.lock());
+  ASSERT_TRUE(readback->ResetForReuse().has_value());
+  const auto larger_ticket = EnqueueReadback(
+    readback, larger, { 11, 80 }, "reuse-capacity-growth-copy");
+  EXPECT_NE(larger_ticket.id, second_ticket.id);
+  {
+    const auto mapped = readback->MapNow();
+    ASSERT_TRUE(mapped.has_value());
+    EXPECT_EQ(CopyMappedBytes(*mapped), SliceBytes(larger_bytes, 11, 80));
+  }
+  ASSERT_EQ(StagingAllocations().size(), 2U);
+  EXPECT_TRUE(original.expired());
+  const auto grown = StagingAllocations().back();
+  ASSERT_FALSE(grown.expired());
+  EXPECT_GE(grown.lock()->GetSize(), 80U);
+  EXPECT_EQ(registry.GetRegisteredResourceCount(), baseline_count + 1U);
+  readback->Reset();
+  EXPECT_TRUE(grown.expired());
+  EXPECT_EQ(registry.GetRegisteredResourceCount(), baseline_count);
+}
+
+NOLINT_TEST_F(BufferReadbackReuseTest,
+  ResetForReuseRefusesIdlePendingMappedAndCancelledRequests)
+{
+  const auto bytes = MakePatternBytes(64, 0x42);
+  auto source = CreateInitializedDeviceBuffer(bytes, "reuse-state-source");
+  auto readback = CreateBufferReadback("reuse-state");
+  const auto idle = readback->ResetForReuse();
+  ASSERT_FALSE(idle.has_value());
+  EXPECT_EQ(idle.error(), ReadbackError::kNotReady);
+  const auto ticket = EnqueueReadback(readback, source, { 5, 24 },
+    "reuse-state-pending", oxygen::graphics::QueueRole::kGraphics, false);
+  const auto pending = readback->ResetForReuse();
+  ASSERT_FALSE(pending.has_value());
+  EXPECT_EQ(pending.error(), ReadbackError::kAlreadyPending);
+  ASSERT_TRUE(readback->Ticket().has_value());
+  EXPECT_EQ(readback->Ticket()->id, ticket.id);
+  EXPECT_EQ(readback->GetState(), ReadbackState::kPending);
+  SubmitDeferredRecorders();
+  {
+    auto mapped = readback->MapNow();
+    ASSERT_TRUE(mapped.has_value());
+    auto moved = std::move(*mapped);
+    const auto active = readback->ResetForReuse();
+    ASSERT_FALSE(active.has_value());
+    EXPECT_EQ(active.error(), ReadbackError::kAlreadyMapped);
+    EXPECT_EQ(CopyMappedBytes(moved), SliceBytes(bytes, 5, 24));
+    EXPECT_EQ(readback->GetState(), ReadbackState::kMapped);
+    EXPECT_EQ(StagingAllocations().size(), 1U);
+  }
+  ASSERT_TRUE(readback->ResetForReuse().has_value());
+
+  auto cancelled_source
+    = CreateInitializedDeviceBuffer(bytes, "reuse-cancel-source");
+  const auto cancelled_ticket
+    = EnqueueReadback(readback, cancelled_source, { 9, 12 },
+      "reuse-state-cancel", oxygen::graphics::QueueRole::kGraphics, false);
+  const auto cancellation = readback->Cancel();
+  ASSERT_TRUE(cancellation.has_value());
+  ASSERT_TRUE(*cancellation);
+  const auto cancelled = readback->ResetForReuse();
+  ASSERT_FALSE(cancelled.has_value());
+  EXPECT_EQ(cancelled.error(), ReadbackError::kCancelled);
+  EXPECT_EQ(readback->GetState(), ReadbackState::kCancelled);
+  ASSERT_TRUE(readback->Ticket().has_value());
+  EXPECT_EQ(readback->Ticket()->id, cancelled_ticket.id);
+  SubmitDeferredRecorders();
+  WaitForQueueIdle();
+}
+
+NOLINT_TEST_F(BufferReadbackReuseTest,
+  ResetForReuseRefreshesCompletedPendingRequestWithoutMapping)
+{
+  auto source = CreateInitializedDeviceBuffer(
+    MakePatternBytes(48), "reuse-refresh-source");
+  auto readback = CreateBufferReadback("reuse-refresh");
+  const auto ticket
+    = EnqueueReadback(readback, source, { 8, 20 }, "reuse-refresh-copy");
+  WaitForQueueIdle();
+  ASSERT_EQ(readback->GetState(), ReadbackState::kPending);
+  ASSERT_TRUE(readback->ResetForReuse().has_value());
+  EXPECT_EQ(readback->GetState(), ReadbackState::kIdle);
+  EXPECT_FALSE(readback->Ticket().has_value());
+  ASSERT_EQ(StagingAllocations().size(), 1U);
+  EXPECT_FALSE(StagingAllocations().front().expired());
+  const auto forgotten = AwaitReadback(ticket);
+  ASSERT_FALSE(forgotten.has_value());
+  EXPECT_EQ(forgotten.error(), ReadbackError::kTicketNotFound);
 }
 
 NOLINT_TEST_F(BufferReadbackManagerTest,

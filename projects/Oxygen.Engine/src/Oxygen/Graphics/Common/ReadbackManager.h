@@ -50,6 +50,20 @@ public:
 
   virtual auto Cancel() -> std::expected<bool, ReadbackError> = 0;
   virtual auto Reset() -> void = 0;
+
+  //! Rearm a completed, unmapped request while retaining staging capacity.
+  /*!
+    Does not wait or invalidate a live mapping. Success forgets the old ticket,
+    clears the request range/error, and returns to Idle without releasing the
+    staging allocation or its registration. A later EnqueueCopy may grow it.
+
+    Pending requests return kAlreadyPending unless a nonblocking completion
+    refresh proves them complete; mapped requests return kAlreadyMapped,
+    cancelled requests kCancelled, failed requests their stored error (or
+    kBackendFailure), and Idle requests kNotReady. Reset() retains its existing
+    release behavior; owners opt into capacity reuse explicitly.
+  */
+  virtual auto ResetForReuse() -> std::expected<void, ReadbackError> = 0;
 };
 
 class OXGN_GFX_API GpuTextureReadback {

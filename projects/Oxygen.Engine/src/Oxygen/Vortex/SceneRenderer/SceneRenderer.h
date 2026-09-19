@@ -23,6 +23,7 @@
 #include <Oxygen/Scene/Light/DirectionalLightResolver.h>
 #include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/Environment/Types/EnvironmentAmbientBridgeBindings.h>
+#include <Oxygen/Vortex/Internal/RetainedTexturePool.h>
 #include <Oxygen/Vortex/Lighting/Types/FrameLightingInputs.h>
 #include <Oxygen/Vortex/PostProcess/PostProcessService.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextureLeasePool.h>
@@ -260,6 +261,7 @@ private:
 
   struct ExtractArtifact {
     std::shared_ptr<graphics::Texture> texture;
+    std::unique_ptr<internal::RetainedTexturePool> pool;
   };
 
   OXGN_VRTX_API void RefreshSceneTextureBindings();
@@ -274,9 +276,10 @@ private:
     const RenderContext& ctx) const -> SceneTextureLeaseKey;
   OXGN_VRTX_API void BindPreparedView(RenderContext& ctx);
   OXGN_VRTX_API void RenderCurrentView(RenderContext& ctx);
-  OXGN_VRTX_API auto EnsureArtifactTexture(ExtractArtifact& artifact,
-    std::string_view debug_name, const graphics::Texture& source,
-    std::optional<Format> format = {}) -> graphics::Texture*;
+  OXGN_VRTX_API auto EnsureArtifactTexture(RenderContext& ctx,
+    ExtractArtifact& artifact, std::string_view debug_name,
+    const graphics::Texture& source, std::optional<Format> format = {})
+    -> graphics::Texture*;
   OXGN_VRTX_NDAPI auto ResolveVelocitySourceTexture() const
     -> const graphics::Texture*;
   OXGN_VRTX_API auto RegisterSceneTextureView(graphics::Texture& texture,

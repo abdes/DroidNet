@@ -57,7 +57,7 @@ auto CopyTextureIntoArtifact(graphics::CommandRecorder& recorder,
 // Stage 23 extraction/handoff owner: PostRenderCleanup is the only retained
 // seam allowed to publish PrevSceneDepth and snapshot PrevVelocity for their
 // handoff after Stage 22 completes.
-void SceneRenderer::PostRenderCleanup(RenderContext& /*ctx*/)
+void SceneRenderer::PostRenderCleanup(RenderContext& ctx)
 {
   // Both consumers read the same immutable Stage 21 snapshot. Retain its
   // ownership wrapper so either reader can outlive the view and the other
@@ -75,10 +75,13 @@ void SceneRenderer::PostRenderCleanup(RenderContext& /*ctx*/)
     && scene_texture_bindings_.velocity_srv
       != SceneTextureBindings::kInvalidIndex
     && velocity_texture != nullptr;
+  graphics::Texture* previous_velocity = nullptr;
+  if (velocity_ready) {
+    previous_velocity = EnsureArtifactTexture(
+      ctx, prev_velocity_artifact_, "PrevVelocity", *velocity_texture);
+  }
   scene_texture_extracts_.prev_velocity = {
-    .texture = velocity_ready ? EnsureArtifactTexture(prev_velocity_artifact_,
-                                  "PrevVelocity", *velocity_texture)
-                              : nullptr,
+    .texture = previous_velocity,
     .valid = velocity_ready,
   };
 

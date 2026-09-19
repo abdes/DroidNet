@@ -330,6 +330,7 @@ public:
 
   auto Cancel() -> std::expected<bool, ReadbackError> override;
   auto Reset() -> void override;
+  auto ResetForReuse() -> std::expected<void, ReadbackError> override;
 
   auto OnManagerCancelled() -> void
   {
@@ -578,6 +579,28 @@ auto D3D12BufferReadback::Cancel() -> std::expected<bool, ReadbackError>
     last_error_ = ReadbackError::kCancelled;
   }
   return *cancelled;
+}
+
+auto D3D12BufferReadback::ResetForReuse() -> std::expected<void, ReadbackError>
+{
+  if (const auto refresh = RefreshStateFromTracker(); !refresh.has_value()) {
+    return std::unexpected(refresh.error());
+  }
+  if (const auto ready
+    = graphics::detail::ValidateBufferReadbackReuseState(state_, last_error_);
+    !ready.has_value()) {
+    return std::unexpected(ready.error());
+  }
+  if (!ticket_.has_value() || readback_buffer_ == nullptr) {
+    return std::unexpected(ReadbackError::kBackendFailure);
+  }
+  manager_.UntrackCancellationHandler(ticket_->id);
+  manager_.ForgetTicket(ticket_->id);
+  ticket_.reset();
+  last_error_.reset();
+  resolved_range_ = {};
+  state_ = ReadbackState::kIdle;
+  return {};
 }
 
 auto D3D12BufferReadback::Reset() -> void

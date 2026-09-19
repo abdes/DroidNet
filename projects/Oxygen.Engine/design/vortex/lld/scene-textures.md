@@ -730,6 +730,25 @@ destruction; the shared wrapper unregisters the resource and its views only afte
 the final reader releases it and the existing GPU-frame reclaimer retires it.
 Velocity retains its separate stage-23 snapshot.
 
+Resolved color, shared depth and previous velocity each use a private
+`RetainedTexturePool`; sky-view, aerial-perspective and volumetric-fog outputs
+use the same ownership mechanism in their producing passes. Each pool holds at
+most one idle allocation per persistent view and complete allocation descriptor.
+Active and queued readers hold the wrapper, so these idle slots do not bound
+the separate in-flight population. Stateless products bypass idle retention.
+Descriptor changes, view removal, inactivity and owner destruction invalidate
+eligibility; late releases cannot recreate an invalidated entry.
+
+Only the final wrapper release schedules the existing GPU-frame retirement.
+After retirement, unregister the underlying resource and views, and retain it
+only when no external underlying owner remains and all queue records agree on a
+known resource state. Reuse registers the resource again and adopts that saved
+state; unknown or conflicting states require a fresh allocation. Reuse never
+assumes the descriptor's initial state and introduces no CPU wait. The next
+producer overwrites its output, except that a rejected checked FP16 conversion
+may leave stale texels: its conversion report and retained FP32 fallback remain
+mandatory for every conditional consumer.
+
 Stage 22 tonemap consumes conditional resolved color by binding both sources and
 the same conversion report: an accepted conversion selects the half artifact;
 a rejected conversion selects the retained FP32 source. Texture-only access via

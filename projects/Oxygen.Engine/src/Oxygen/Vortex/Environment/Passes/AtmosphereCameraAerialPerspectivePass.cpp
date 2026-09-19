@@ -29,7 +29,7 @@
 #include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereLutCache.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereState.h>
-#include <Oxygen/Vortex/Environment/Internal/ResourceRetirement.h>
+#include <Oxygen/Vortex/Internal/RetainedTexturePool.h>
 #include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
@@ -180,18 +180,6 @@ namespace {
                     : glm::vec3 { 0.0F, 0.0F, 0.0F });
   }
 
-  auto ReleaseLiveTextures(Graphics& gfx,
-    std::vector<std::shared_ptr<graphics::Texture>>& live_textures) -> void
-  {
-    for (auto& texture : live_textures) {
-      if (texture == nullptr) {
-        continue;
-      }
-      internal::RetireEnvironmentResource(gfx, texture);
-    }
-    live_textures.clear();
-  }
-
 } // namespace
 
 AtmosphereCameraAerialPerspectivePass::AtmosphereCameraAerialPerspectivePass(
@@ -207,24 +195,28 @@ AtmosphereCameraAerialPerspectivePass::AtmosphereCameraAerialPerspectivePass(
 
 AtmosphereCameraAerialPerspectivePass::~AtmosphereCameraAerialPerspectivePass()
 {
-  auto gfx = renderer_.GetGraphics();
-  if (gfx == nullptr) {
-    return;
+  live_textures_.clear();
+  if (output_pool_) {
+    output_pool_->Clear();
   }
-
-  ReleaseLiveTextures(*gfx, live_textures_);
 }
 
 auto AtmosphereCameraAerialPerspectivePass::OnFrameStart(
   const frame::SequenceNumber sequence, const frame::Slot slot) -> void
 {
-  auto gfx = renderer_.GetGraphics();
-  if (gfx != nullptr) {
-    ReleaseLiveTextures(*gfx, live_textures_);
-  } else {
-    live_textures_.clear();
+  live_textures_.clear();
+  if (output_pool_) {
+    output_pool_->OnFrameStart(sequence);
   }
   pass_constants_buffer_.OnFrameStart(sequence, slot);
+}
+
+auto AtmosphereCameraAerialPerspectivePass::RemoveViewState(
+  const ViewId view_id) -> void
+{
+  if (output_pool_) {
+    output_pool_->RemoveView(view_id);
+  }
 }
 
 auto AtmosphereCameraAerialPerspectivePass::Record(RenderContext& ctx,
@@ -243,19 +235,29 @@ auto AtmosphereCameraAerialPerspectivePass::Record(RenderContext& ctx,
   if (!state.requested
     || !renderer_.HasCapability(RendererCapabilityFamily::kEnvironmentLighting)
     || ctx.view_constants == nullptr) {
+    RemoveViewState(ctx.current_view.view_id);
     return state;
   }
 
   auto gfx = renderer_.GetGraphics();
   if (gfx == nullptr) {
+    RemoveViewState(ctx.current_view.view_id);
     return state;
   }
 
+  if (!output_pool_) {
+    output_pool_
+      = std::make_unique<::oxygen::vortex::internal::RetainedTexturePool>(gfx);
+    output_pool_->OnFrameStart(ctx.frame_sequence);
+  }
+  const auto recyclable = ctx.current_view.view_id != kInvalidViewId
+    && ctx.current_view.view_state_handle
+      != CompositionView::kInvalidViewStateHandle;
   const auto width = cache_state.internal_parameters.camera_aerial_width;
   const auto height = cache_state.internal_parameters.camera_aerial_height;
   const auto depth
     = cache_state.internal_parameters.camera_aerial_depth_resolution;
-  auto texture = gfx->CreateTexture({
+  const auto texture_desc = graphics::TextureDesc {
     .width = width,
     .height = height,
     .depth = depth,
@@ -275,21 +277,21 @@ auto AtmosphereCameraAerialPerspectivePass::Record(RenderContext& ctx,
     .use_clear_value = false,
     .initial_state = graphics::ResourceStates::kCommon,
     .cpu_access = graphics::ResourceAccessMode::kImmutable,
-  });
+  };
+  auto texture
+    = output_pool_->Acquire(ctx.current_view.view_id, texture_desc, recyclable);
   if (texture == nullptr) {
+    RemoveViewState(ctx.current_view.view_id);
     return state;
   }
-  texture->SetName("Vortex.Environment.AtmosphereCameraAerialPerspective");
-
   auto& registry = gfx->GetResourceRegistry();
-  if (!registry.Contains(*texture)) {
-    registry.Register(texture);
-  }
 
   bool texture_committed = false;
   auto retire_unpublished = ScopeGuard([&]() noexcept {
-    if (!texture_committed)
-      internal::RetireEnvironmentResource(*gfx, texture);
+    if (!texture_committed) {
+      RemoveViewState(ctx.current_view.view_id);
+      texture.reset();
+    }
   });
 
   auto& allocator = gfx->GetDescriptorAllocator();
@@ -443,9 +445,10 @@ auto AtmosphereCameraAerialPerspectivePass::Record(RenderContext& ctx,
   if (ctx.current_view.frame_exposure) {
     const auto& status
       = *ctx.current_view.frame_exposure->current_state->status_buffer;
-    if (!recorder->AdoptKnownResourceState(status))
+    if (!recorder->AdoptKnownResourceState(status)) {
       recorder->BeginTrackingResourceState(
         status, graphics::ResourceStates::kCommon, false);
+    }
     recorder->RequireResourceState(
       status, graphics::ResourceStates::kUnorderedAccess);
   }
@@ -482,8 +485,9 @@ auto AtmosphereCameraAerialPerspectivePass::Record(RenderContext& ctx,
   }
   const auto recording = recorder->GetCommandListForInspection();
   recorder.reset();
-  if (!recording || !recording->IsSubmitted())
+  if (!recording || !recording->IsSubmitted()) {
     return state;
+  }
 
   live_textures_.push_back(texture);
   texture_committed = true;

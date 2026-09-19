@@ -245,6 +245,8 @@ set(
   "Internal/RenderContextMaterializer.h"
   "Internal/RenderContextPool.h"
   "Internal/RenderScope.h"
+  "Internal/RetainedTexturePool.cpp"
+  "Internal/RetainedTexturePool.h"
   "Internal/ViewportClamp.h"
   "Internal/ViewLifecycleService.cpp"
   "Internal/ViewLifecycleService.h"

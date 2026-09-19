@@ -25,6 +25,10 @@
 #include <Oxygen/Vortex/Resources/TextureBinder.h>
 #include <Oxygen/Vortex/api_export.h>
 
+namespace oxygen {
+class Graphics;
+}
+
 namespace oxygen::graphics {
 class Framebuffer;
 class Texture;
@@ -287,9 +291,17 @@ private:
     bool normal_mode;
     bool auto_owner;
   };
+  struct ExposureReadbackPool {
+    // Keep the manager's Graphics owner alive until its readbacks are released.
+    std::shared_ptr<Graphics> graphics_owner;
+    std::uint64_t lifetime { 0U };
+    std::vector<std::shared_ptr<graphics::GpuBufferReadback>> available;
+  };
   struct PendingExposureStatus {
+    std::shared_ptr<Graphics> readback_graphics;
     postprocess::ExposurePass::StateLease state;
     std::shared_ptr<graphics::GpuBufferReadback> readback;
+    std::weak_ptr<ExposureReadbackPool> reuse_pool;
     std::optional<ExposureTransitionToken> token;
     CompositionView::ViewStateHandle handle;
     std::uint64_t lifetime;
@@ -302,6 +314,9 @@ private:
     pending_exposure_status_;
   std::unordered_map<CompositionView::ViewStateHandle, PendingExposureStatus>
     deferred_exposure_status_;
+  std::unordered_map<CompositionView::ViewStateHandle,
+    std::shared_ptr<ExposureReadbackPool>>
+    reusable_exposure_status_;
   auto IsExposureStatusNeeded(const PendingExposureStatus& job) const -> bool;
   auto IsPrecisionStatusNeeded(const PendingExposureStatus& job) const -> bool;
   auto QueueExposureStatus(PendingExposureStatus job) -> void;
@@ -310,6 +325,7 @@ private:
     std::uint64_t lifetime) const -> std::uint64_t;
   auto DeferExposureStatus(PendingExposureStatus job) -> void;
   auto TryEnqueueExposureStatus(PendingExposureStatus job) -> bool;
+  auto RecycleExposureStatus(PendingExposureStatus& job) -> void;
   auto PollExposureStatus() -> void;
   OXGN_VRTX_API auto EnqueueExposureStatus(const ExposureTransitionToken& token,
     postprocess::ExposurePass::StateLease state, const RenderContext& ctx,
