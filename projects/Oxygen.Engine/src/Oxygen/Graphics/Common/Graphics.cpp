@@ -241,6 +241,11 @@ Graphics::~Graphics()
   // Clear the CommandList pool
   auto& command_list_pool = GetComponent<CommandListPool>();
   command_list_pool.Clear();
+
+  // A retained reader can enqueue retirement after the explicit Stop/Flush
+  // protocol and release the final Graphics owner. Run those callbacks while
+  // the registry and queues still exist, before Composition locks teardown.
+  GetDeferredReclaimer().ProcessAllDeferredReleases();
 }
 
 auto Graphics::ActivateAsync(co::TaskStarted<> started) -> co::Co<>
