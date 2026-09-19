@@ -388,6 +388,13 @@ source was removed or ownership became invalid. Frame-captured
 settings distinguish the logical view ID and state handle, since an offscreen
 intent ID can numerically equal a registered source's published ID.
 
+`OffscreenSceneViewInput::SetExposureOverride` supplies the same complete
+canonical view-local settings as a registered composition view. Both standalone
+and in-frame execution carry that override into exposure resolution; `nullopt`
+restores scene inheritance. This does not mutate shared scene settings. The
+input owns its diagnostic name, including across copies, moves, and finalization;
+a validated session remains independent of its original input and facade.
+
 Validated offscreen execution returns a success boolean for both synchronous
 entry points and the coroutine entry point. A failed pre-scene exposure resolve
 skips dependent HDR rendering and output publication, leaves the caller's

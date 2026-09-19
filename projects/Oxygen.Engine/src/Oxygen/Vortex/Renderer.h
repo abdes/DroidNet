@@ -334,6 +334,14 @@ public:
   class OffscreenSceneViewInput {
   public:
     OXGN_VRTX_API OffscreenSceneViewInput();
+    OXGN_VRTX_API OffscreenSceneViewInput(const OffscreenSceneViewInput& other);
+    OXGN_VRTX_API OffscreenSceneViewInput(
+      OffscreenSceneViewInput&& other) noexcept;
+    OXGN_VRTX_API auto operator=(const OffscreenSceneViewInput& other)
+      -> OffscreenSceneViewInput&;
+    OXGN_VRTX_API auto operator=(OffscreenSceneViewInput&& other) noexcept
+      -> OffscreenSceneViewInput&;
+    ~OffscreenSceneViewInput() = default;
 
     OXGN_VRTX_NDAPI static auto FromCamera(std::string name, ViewId view_id,
       const View& view, const scene::SceneNode& camera)
@@ -346,6 +354,11 @@ public:
     OXGN_VRTX_API auto SetForceWireframe(bool enabled)
       -> OffscreenSceneViewInput&;
     OXGN_VRTX_API auto SetExposureSourceViewId(ViewId view_id)
+      -> OffscreenSceneViewInput&;
+    //! Set complete view-local exposure intent; nullopt restores scene
+    //! inheritance.
+    OXGN_VRTX_API auto SetExposureOverride(
+      std::optional<scene::ExposureSettings> exposure)
       -> OffscreenSceneViewInput&;
     OXGN_VRTX_API auto SetViewStateHandle(
       CompositionView::ViewStateHandle handle) -> OffscreenSceneViewInput&;

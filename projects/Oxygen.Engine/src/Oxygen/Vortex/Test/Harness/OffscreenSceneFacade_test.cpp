@@ -6,6 +6,8 @@
 
 #include <memory>
 #include <ranges>
+#include <string>
+#include <utility>
 
 #include <Oxygen/Testing/GTest.h>
 
@@ -157,6 +159,95 @@ protected:
   oxygen::scene::SceneNode camera_ {};
   std::shared_ptr<Renderer> renderer_ {};
 };
+
+NOLINT_TEST_F(OffscreenSceneFacadeTest, ViewInputCopiesAndMovesOwnTheirNames)
+{
+  using Input = Renderer::OffscreenSceneViewInput;
+  for (const auto& name : { std::string("Short"), std::string(160, 'N') }) {
+    SCOPED_TRACE(name);
+    auto source = Input::FromCamera(name, ViewId { 42U }, MakeView(), camera_);
+    auto copy = Input(source);
+    auto assigned = Input {};
+    assigned = source;
+    EXPECT_NE(copy.ViewIntent().name.data(), source.ViewIntent().name.data());
+    EXPECT_NE(
+      assigned.ViewIntent().name.data(), source.ViewIntent().name.data());
+    auto moved = Input(std::move(copy));
+    auto move_assigned = Input {};
+    move_assigned = std::move(assigned);
+    EXPECT_NE(moved.ViewIntent().name.data(), copy.ViewIntent().name.data());
+    EXPECT_NE(move_assigned.ViewIntent().name.data(),
+      assigned.ViewIntent().name.data());
+    source = Input {};
+    copy = Input {};
+    assigned = Input {};
+    EXPECT_EQ(moved.ViewIntent().name, name);
+    EXPECT_EQ(move_assigned.ViewIntent().name, name);
+    EXPECT_EQ(moved.ViewIntent().id, ViewId { 42U });
+    EXPECT_EQ(move_assigned.ViewIntent().id, ViewId { 42U });
+  }
+}
+
+NOLINT_TEST_F(OffscreenSceneFacadeTest,
+  SessionRetainsNameAndExposureAfterBuilderDestruction)
+{
+  struct Capture final : oxygen::vortex::IViewExtension {
+    std::vector<std::string> names;
+    std::vector<std::optional<oxygen::scene::ExposureSettings>> exposures;
+    auto OnViewSetup(const oxygen::vortex::ViewSetupContext& context)
+      -> void override
+    {
+      const auto* entry = context.render_context.GetActiveViewEntry();
+      ASSERT_NE(entry, nullptr);
+      names.push_back(entry->debug_name);
+      exposures.push_back(
+        context.render_context.current_view.exposure_override);
+    }
+  };
+  auto capture = std::make_shared<Capture>();
+  renderer_->RegisterViewExtension(capture);
+  const auto name = std::string(160, 'N');
+  for (const bool override_enabled : { true, false }) {
+    auto result = [&] {
+      auto facade = renderer_->ForOffscreenScene();
+      facade.SetFrameSession(MakeFrameSession());
+      facade.SetSceneSource({ .scene = oxygen::observer_ptr { scene_.get() } });
+      facade.SetOutputTarget(MakeOutputTarget());
+      auto exposure = oxygen::scene::ExposureSettings {};
+      exposure.manual_ev = 4;
+      exposure.speed_down = .5F;
+      auto input = Renderer::OffscreenSceneViewInput::FromCamera(
+        name, ViewId { 42U }, MakeView(), camera_)
+                     .SetExposureOverride(exposure);
+      if (!override_enabled)
+        input.SetExposureOverride(std::nullopt);
+      facade.SetViewIntent(input);
+      return facade.Finalize();
+    }();
+    ASSERT_TRUE(result.has_value());
+    auto session = std::move(result).value();
+    ASSERT_TRUE(session.ExecuteNow());
+    auto frame = oxygen::engine::FrameContext {};
+    frame.SetScene(oxygen::observer_ptr { scene_.get() });
+    frame.SetFrameSequenceNumber(oxygen::frame::SequenceNumber { 18U },
+      oxygen::engine::internal::EngineTagFactory::Get());
+    frame.SetFrameSlot(oxygen::frame::Slot { 2U },
+      oxygen::engine::internal::EngineTagFactory::Get());
+    renderer_->OnFrameStart(oxygen::observer_ptr { &frame });
+    ASSERT_TRUE(session.ExecuteInsideFrame(frame));
+    renderer_->OnFrameEnd(oxygen::observer_ptr { &frame });
+  }
+  ASSERT_EQ(capture->names.size(), 4U);
+  ASSERT_EQ(capture->exposures.size(), 4U);
+  for (unsigned i = 0; i < 4; ++i) {
+    EXPECT_EQ(capture->names[i], name);
+    ASSERT_EQ(capture->exposures[i].has_value(), i < 2);
+    if (i < 2) {
+      EXPECT_EQ(capture->exposures[i]->manual_ev, 4);
+      EXPECT_EQ(capture->exposures[i]->speed_down, .5F);
+    }
+  }
+}
 
 NOLINT_TEST_F(OffscreenSceneFacadeTest, BothExecutionPathsPreserveLocalScissor)
 {

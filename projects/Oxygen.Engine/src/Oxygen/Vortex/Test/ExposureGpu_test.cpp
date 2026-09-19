@@ -7581,7 +7581,8 @@ protected:
           .SetViewStateHandle(persistent_surface_state
               ? CompositionView::ViewStateHandle { surface_view_id }
               : CompositionView::kInvalidViewStateHandle)
-          .SetExposureSourceViewId(surface_source_id));
+          .SetExposureSourceViewId(surface_source_id)
+          .SetExposureOverride(surface_exposure_override));
       facade.SetOutputTarget(
         { .framebuffer = observer_ptr { framebuffer.get() } });
       facade.SetPipeline(forward
@@ -7671,6 +7672,7 @@ protected:
   unsigned expected_draws = 1;
   std::uint32_t surface_view_id = 100U;
   ViewId surface_source_id = kInvalidViewId;
+  std::optional<scene::ExposureSettings> surface_exposure_override;
   bool verify_manual_p = true;
   bool persistent_surface_state = true;
   float frame_delta_seconds = 0;
@@ -8527,6 +8529,66 @@ NOLINT_TEST_F(ExposureLightingGpuTest, SharedSceneLifecycleForward)
 NOLINT_TEST_F(ExposureLightingGpuTest, SharedSceneLifecycleDeferred)
 {
   QualifySharedSceneLifecycle(false);
+}
+
+NOLINT_TEST_F(
+  ExposureLightingGpuTest, OffscreenExposureOverridePreservesSceneIntent)
+{
+  verify_manual_p = false;
+  probe->prepare = [](RenderContext&) { };
+  settings.enabled = false;
+  settings.speed_up = settings.speed_down = 7;
+  frame_delta_seconds = .25F;
+  std::shared_ptr<const Texture> reference;
+  probe->inspect
+    = [&](const RenderContext&, const SceneTextureExtractRef&, unsigned) {
+        reference = vortex::testing::RendererPublicationProbe::GetSceneRenderer(
+          *renderer_)
+                      ->GetResolvedSceneColorTexture();
+      };
+  SetSurface(data::MaterialDomain::kOpaque, .25F);
+  for (const bool forward : { false, true }) {
+    SCOPED_TRACE(forward ? "forward" : "deferred");
+    surface_view_id = forward ? 4801U : 4800U;
+    auto local = scene::ExposureSettings {};
+    local.key = 12.5F;
+    local.mode = engine::ExposureMode::kManual;
+    local.manual_ev = 4;
+    local.compensation_ev = 1;
+    surface_exposure_override = local;
+    ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0));
+    ASSERT_NE(reference, nullptr);
+    auto state = ExposureStateData {};
+    ASSERT_NO_FATAL_FAILURE(
+      ExpectSurfaceExposure(.25F, .125, *reference, state));
+
+    local.mode = engine::ExposureMode::kAuto;
+    local.compensation_ev = 0;
+    local.low_percentile = 0;
+    local.high_percentile = 1;
+    local.speed_up = .5F;
+    local.speed_down = 1;
+    surface_exposure_override = local;
+    ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0, 1));
+    ASSERT_NO_FATAL_FAILURE(
+      ExpectSurfaceExposure(.25F, .125, *reference, state));
+    ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0, 1));
+    ASSERT_NO_FATAL_FAILURE(
+      ExpectSurfaceExposure(.25F, .125 * std::exp2(.25), *reference, state));
+
+    const auto& inherited
+      = scene->GetEnvironment()
+          ->TryGetSystem<scene::environment::PostProcessVolume>()
+          ->GetExposureSettings();
+    EXPECT_FALSE(inherited.enabled);
+    EXPECT_EQ(inherited.speed_up, 7);
+    EXPECT_EQ(inherited.speed_down, 7);
+    surface_exposure_override.reset();
+    ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0, 1));
+    ASSERT_NO_FATAL_FAILURE(ExpectSurfaceExposure(.25F, 1, *reference, state));
+    EXPECT_TRUE(renderer_->ReleaseOffscreenViewState(ViewId { surface_view_id },
+      CompositionView::ViewStateHandle { surface_view_id }));
+  }
 }
 
 NOLINT_TEST_F(
