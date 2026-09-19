@@ -305,7 +305,6 @@ private:
   std::shared_ptr<SceneTextureLease> active_scene_texture_lease_;
   ExtractArtifact resolved_scene_color_artifact_ {};
   ExtractArtifact resolved_scene_depth_artifact_ {};
-  ExtractArtifact prev_scene_depth_artifact_ {};
   ExtractArtifact prev_velocity_artifact_ {};
   std::shared_ptr<graphics::Framebuffer> debug_visualization_framebuffer_ {};
   ViewId published_view_id_ { kInvalidViewId };

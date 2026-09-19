@@ -28,6 +28,14 @@
 namespace oxygen::vortex::testing {
 
 struct RendererPublicationProbe {
+  static inline auto CleanupWithResolvedDepth(
+    SceneRenderer& renderer, SceneTextureExtractRef resolved) -> void
+  {
+    renderer.scene_texture_extracts_.resolved_scene_depth = std::move(resolved);
+    auto context = RenderContext {};
+    renderer.PostRenderCleanup(context);
+  }
+
   static auto SceneTexturePoolCounts(const SceneRenderer& renderer)
     -> std::pair<std::size_t, std::size_t>
   {

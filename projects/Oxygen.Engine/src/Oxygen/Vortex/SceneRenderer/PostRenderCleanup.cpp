@@ -55,21 +55,19 @@ auto CopyTextureIntoArtifact(graphics::CommandRecorder& recorder,
 } // namespace
 
 // Stage 23 extraction/handoff owner: PostRenderCleanup is the only retained
-// seam allowed to snapshot the PrevSceneDepth/PrevVelocity artifacts and
-// finalize their handoff after Stage 22 completes.
+// seam allowed to publish PrevSceneDepth and snapshot PrevVelocity for their
+// handoff after Stage 22 completes.
 void SceneRenderer::PostRenderCleanup(RenderContext& /*ctx*/)
 {
-  auto& scene_textures = ActiveSceneTextures();
-  const auto scene_depth_ready
-    = scene_texture_extracts_.resolved_scene_depth.valid
-    && scene_texture_extracts_.resolved_scene_depth.texture != nullptr;
-  scene_texture_extracts_.prev_scene_depth = {
-    .texture = scene_depth_ready
-      ? EnsureArtifactTexture(prev_scene_depth_artifact_, "PrevSceneDepth",
-          scene_textures.GetSceneDepth())
-      : nullptr,
-    .valid = scene_depth_ready,
-  };
+  // Both consumers read the same immutable Stage 21 snapshot. Retain its
+  // ownership wrapper so either reader can outlive the view and the other
+  // reader; final release still retires through the GPU-frame reclaimer.
+  const auto& resolved_depth = scene_texture_extracts_.resolved_scene_depth;
+  if (resolved_depth.valid && resolved_depth.texture != nullptr) {
+    scene_texture_extracts_.prev_scene_depth = resolved_depth;
+  } else {
+    scene_texture_extracts_.prev_scene_depth = {};
+  }
 
   const auto* velocity_texture = ResolveVelocitySourceTexture();
   const auto velocity_ready
@@ -84,39 +82,26 @@ void SceneRenderer::PostRenderCleanup(RenderContext& /*ctx*/)
     .valid = velocity_ready,
   };
 
-  scene_texture_extracts_.prev_scene_depth.retained_texture
-    = prev_scene_depth_artifact_.texture;
   scene_texture_extracts_.prev_velocity.retained_texture
     = prev_velocity_artifact_.texture;
 
-  if ((scene_texture_extracts_.prev_scene_depth.texture == nullptr
-        || !scene_texture_extracts_.prev_scene_depth.valid)
-    && (scene_texture_extracts_.prev_velocity.texture == nullptr
-      || !scene_texture_extracts_.prev_velocity.valid)) {
+  if (scene_texture_extracts_.prev_velocity.texture == nullptr
+    || !scene_texture_extracts_.prev_velocity.valid) {
     FinalizeSceneTextureExtractions();
     return;
   }
 
   const auto queue_key = gfx_.QueueKeyFor(graphics::QueueRole::kGraphics);
-  auto recorder_ptr = gfx_.AcquireCommandRecorder(
-    queue_key, "Vortex PostRenderCleanup");
+  auto recorder_ptr
+    = gfx_.AcquireCommandRecorder(queue_key, "Vortex PostRenderCleanup");
   CHECK_F(static_cast<bool>(recorder_ptr),
     "SceneRenderer: failed to acquire a recorder for Stage 23 extraction");
-  renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(
-    *recorder_ptr);
+  renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(*recorder_ptr);
   auto& recorder = *recorder_ptr;
   graphics::GpuEventScope scope(recorder, "Vortex.PostRenderCleanup",
-    profiling::ProfileGranularity::kTelemetry, profiling::ProfileCategory::kPass);
+    profiling::ProfileGranularity::kTelemetry,
+    profiling::ProfileCategory::kPass);
 
-  if (scene_texture_extracts_.prev_scene_depth.valid
-    && scene_texture_extracts_.prev_scene_depth.texture != nullptr
-    && scene_texture_extracts_.resolved_scene_depth.valid
-    && scene_texture_extracts_.resolved_scene_depth.texture != nullptr) {
-    CopyTextureIntoArtifact(recorder,
-      *scene_texture_extracts_.resolved_scene_depth.texture,
-      *scene_texture_extracts_.prev_scene_depth.texture,
-      graphics::ResourceStates::kShaderResource);
-  }
   if (scene_texture_extracts_.prev_velocity.valid
     && scene_texture_extracts_.prev_velocity.texture != nullptr
     && velocity_texture != nullptr) {

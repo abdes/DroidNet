@@ -720,6 +720,16 @@ format changes and frame-slot reuse cannot replace those inputs. After submissio
 the existing GPU-frame reclaimer protects resources until the consumer fence
 retires, even when the final extraction owner has been released.
 
+`ResolvedSceneDepth` and `PrevSceneDepth` are two read-only handoffs of the same
+immutable stage-21 snapshot. Stage 23 copies the complete extraction reference,
+including its retained ownership, instead of allocating and copying another
+depth texture. Neither handoff aliases the mutable live scene-depth attachment.
+An invalid or null resolved snapshot produces an empty previous-depth handoff.
+Either reader can outlive the other, another view/frame, resize or renderer
+destruction; the shared wrapper unregisters the resource and its views only after
+the final reader releases it and the existing GPU-frame reclaimer retires it.
+Velocity retains its separate stage-23 snapshot.
+
 Stage 22 tonemap consumes conditional resolved color by binding both sources and
 the same conversion report: an accepted conversion selects the half artifact;
 a rejected conversion selects the retained FP32 source. Texture-only access via
