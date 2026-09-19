@@ -163,7 +163,7 @@ sequenceDiagram
 At frame start, the system:
 
 1. advances backend-owned profiling frame state,
-2. finalizes the previous frame when valid,
+2. publishes completed captures in submission order, retaining delayed frames,
 3. resets per-frame telemetry collection state,
 4. begins a new telemetry frame window.
 
@@ -183,6 +183,28 @@ At frame tail:
 1. if no telemetry scopes were recorded, no resolve is needed,
 2. otherwise one bulk resolve is issued for the used query range,
 3. the frame becomes publishable once the queue/fence model guarantees validity.
+
+The collector reserves `frame::kFramesInFlight + 1` independent ranges in the
+existing timestamp heap and readback buffer. Query indices and resolve byte
+offsets identify the same range. Capture metadata, timestamp frequency and scope
+names survive until fence completion and consumption; a range cannot be reused
+while its capture remains pending. The collector adds no queue wait and does
+not change the engine's ordinary frame-start synchronization.
+
+At the default 4096 scopes, four ranges require 32768 timestamp slots and
+256 KiB of mapped timestamp readback storage. Scope metadata is also bounded
+by these four captures and reuses its vector storage.
+
+If all ranges remain pending, that frame reports
+`gpu.timestamp.capture_backlog` instead of overwriting a range. Increasing
+capacity while captures are pending reports
+`gpu.timestamp.reconfigure_pending`; backend allocations grow only after those
+captures complete. Disabling collection still allows pending frames to retire.
+These unavailable samples, failed resolves, overflow and incomplete scopes must
+remain visible in recording results. Performance acceptance rejects incomplete
+populations rather than dropping their slow or unavailable frames. Consumers
+associate records by frame sequence: an unavailable-frame diagnostic can be
+published before an older pending capture completes.
 
 ## 9. Capacity and Overflow
 

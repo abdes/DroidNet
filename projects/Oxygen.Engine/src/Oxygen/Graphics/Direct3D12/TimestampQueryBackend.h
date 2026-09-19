@@ -41,7 +41,7 @@ public:
     graphics::CommandRecorder& recorder, uint32_t query_slot) -> bool override;
 
   OXGN_D3D12_API auto RecordResolve(graphics::CommandRecorder& recorder,
-    uint32_t used_query_slots) -> bool override;
+    uint32_t used_query_slots, uint32_t first_query_slot = 0U) -> bool override;
 
   [[nodiscard]] OXGN_D3D12_API auto GetResolvedTicks() const
     -> std::span<const uint64_t> override;

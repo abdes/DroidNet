@@ -23,17 +23,18 @@ public:
 
   [[nodiscard]] virtual auto GetCapacity() const noexcept -> uint32_t = 0;
 
-  virtual auto WriteTimestamp(
-    CommandRecorder& recorder, uint32_t query_slot) -> bool
-    = 0;
+  virtual auto WriteTimestamp(CommandRecorder& recorder, uint32_t query_slot)
+    -> bool = 0;
 
-  virtual auto RecordResolve(
-    CommandRecorder& recorder, uint32_t used_query_slots) -> bool
-    = 0;
+  //! Resolve a contiguous query range to the matching offset in
+  //! GetResolvedTicks. The caller retains that range until its submission fence
+  //! completes and consumption finishes; growing capacity must not invalidate
+  //! pending work.
+  virtual auto RecordResolve(CommandRecorder& recorder,
+    uint32_t used_query_slots, uint32_t first_query_slot = 0U) -> bool = 0;
 
   [[nodiscard]] virtual auto GetResolvedTicks() const
-    -> std::span<const uint64_t>
-    = 0;
+    -> std::span<const uint64_t> = 0;
 };
 
 } // namespace oxygen::graphics

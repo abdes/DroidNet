@@ -226,3 +226,9 @@ m_gtest_program(
     "SubmitOrderedQueueActions_test.cpp"
     ${D3D12_TEST_FIXTURES}
 )
+m_gtest_program(
+  TimestampQueryBackend
+  SOURCES
+    "TimestampQueryBackend_test.cpp"
+    ${D3D12_TEST_FIXTURES}
+)
