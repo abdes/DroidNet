@@ -84,7 +84,7 @@ restoration of unstaged content. The hook never writes or stages source files.
 
 ## Checking hook
 
-Both the monorepo and engine pre-commit profiles define `oxyformat`, limited to
+The monorepo root's single pre-commit configuration defines `oxyformat`, limited to
 C++ filenames under the engine's owned source and example trees. The shared
 policy applies its exclusions inside the command. The hook invokes this
 checkout's Python source directly, using an isolated pre-commit environment with
@@ -120,11 +120,11 @@ Five fresh-process checks per input size, including Python startup and without a
 persistent result cache, measured:
 
 | Files | First run | Median | Maximum |
-| --- | --- | --- | --- |
-| 1 | 315 ms | 333 ms | 381 ms |
-| 10 | 417 ms | 417 ms | 444 ms |
-| 50 | 716 ms | 716 ms | 742 ms |
-| 74 | 856 ms | 773 ms | 856 ms |
+| ----- | --------- | ------ | ------- |
+| 1     | 315 ms    | 333 ms | 381 ms  |
+| 10    | 417 ms    | 417 ms | 444 ms  |
+| 50    | 716 ms    | 716 ms | 742 ms  |
+| 74    | 856 ms    | 773 ms | 856 ms  |
 
 Reproduce with `python tools/oxytools/scripts/benchmark_format.py`. These are
 local measurements, not cross-machine latency guarantees. Each sample starts a
