@@ -69,9 +69,12 @@ public:
   [[nodiscard]] OXGN_VRTX_API auto GetSceneTextures() -> SceneTextures&;
   [[nodiscard]] OXGN_VRTX_API auto GetSceneTextures() const
     -> const SceneTextures&;
-  [[nodiscard]] OXGN_VRTX_API auto GetKey() const -> const SceneTextureLeaseKey&;
+  [[nodiscard]] OXGN_VRTX_API auto GetKey() const
+    -> const SceneTextureLeaseKey&;
   [[nodiscard]] OXGN_VRTX_API auto GetLeaseId() const noexcept -> std::uint64_t;
   OXGN_VRTX_API void Release() noexcept;
+  //! Prevent attachment reuse until the submitted frame's fence retires.
+  OXGN_VRTX_API void Retire(Graphics& gfx);
 
 private:
   friend class SceneTextureLeasePool;
@@ -88,12 +91,13 @@ public:
   OXGN_VRTX_API ~SceneTextureLeasePool();
 
   SceneTextureLeasePool(const SceneTextureLeasePool&) = delete;
-  auto operator=(const SceneTextureLeasePool&) -> SceneTextureLeasePool& = delete;
+  auto operator=(const SceneTextureLeasePool&)
+    -> SceneTextureLeasePool& = delete;
   SceneTextureLeasePool(SceneTextureLeasePool&&) = delete;
   auto operator=(SceneTextureLeasePool&&) -> SceneTextureLeasePool& = delete;
 
-  [[nodiscard]] OXGN_VRTX_API auto Acquire(const SceneTextureLeaseKey& key)
-    -> SceneTextureLease;
+  [[nodiscard]] OXGN_VRTX_API auto Acquire(const SceneTextureLeaseKey& key,
+    std::shared_ptr<graphics::Texture> leased_color = {}) -> SceneTextureLease;
   [[nodiscard]] OXGN_VRTX_API auto GetAllocationCount() const noexcept
     -> std::size_t;
   [[nodiscard]] OXGN_VRTX_API auto GetLiveLeaseCount() const noexcept

@@ -1573,6 +1573,7 @@ SceneRenderer::SceneRenderer(Renderer& renderer, Graphics& gfx,
   , gfx_(gfx)
   , scene_textures_(gfx, InitialExposureSceneConfig(renderer, config))
   , scene_texture_pool_(gfx, InitialExposureSceneConfig(renderer, config))
+  , scene_color_pool_(renderer.GetGraphics())
   , active_scene_textures_(&scene_textures_)
   , inspected_scene_textures_(&scene_textures_)
   , default_shading_mode_(default_shading_mode)
@@ -1638,6 +1639,7 @@ void SceneRenderer::BeginFrame(const frame::SequenceNumber sequence,
   setup_mode_.Reset();
   scene_texture_bindings_.Invalidate();
   ResetExtractArtifacts();
+  scene_color_pool_.OnFrameStart(sequence);
   for (auto* artifact : { &resolved_scene_color_artifact_,
          &resolved_scene_depth_artifact_, &prev_velocity_artifact_ }) {
     if (artifact->pool) {
@@ -1770,11 +1772,11 @@ auto SceneRenderer::PrepareExposureDomain(RenderContext& ctx) -> bool
   }
   const auto fp32_reference
     = renderer_.GetDiagnosticsService().IsHdrFp32ReferenceEnabled();
-  ctx.current_view.hdr_color_format
-    = candidate && !fp32_reference ? Format::kRGBA16Float : Format::kRGBA32Float;
-  ctx.current_view.frame_exposure
-    = post_process_->PrepareFrameExposure(
-      ctx, fp32_reference || !candidate, candidate, fp32_reference);
+  ctx.current_view.hdr_color_format = candidate && !fp32_reference
+    ? Format::kRGBA16Float
+    : Format::kRGBA32Float;
+  ctx.current_view.frame_exposure = post_process_->PrepareFrameExposure(
+    ctx, fp32_reference || !candidate, candidate, fp32_reference);
   return ctx.current_view.frame_exposure != nullptr;
 }
 
@@ -1825,14 +1827,26 @@ void SceneRenderer::RenderViewFamily(RenderContext& ctx)
       && ctx.current_view.feature_mask.Has(
         CompositionView::ViewFeatureMask::kSceneLighting))
       ctx.current_view.hdr_color_format = Format::kRGBA32Float;
+    const auto lease_key = BuildSceneTextureLeaseKey(ctx);
+    auto color_config = scene_textures_.GetConfig();
+    color_config.extent = lease_key.extent;
+    color_config.scene_color_format = lease_key.scene_color_format;
+    color_config.msaa_sample_count = lease_key.msaa_sample_count;
+    auto color = scene_color_pool_.Acquire(ctx.current_view.view_id,
+      SceneTextures::SceneColorDescriptor(color_config),
+      ctx.current_view.view_state_handle
+        != CompositionView::kInvalidViewStateHandle);
     auto scene_texture_lease = std::make_shared<SceneTextureLease>(
-      scene_texture_pool_.Acquire(BuildSceneTextureLeaseKey(ctx)));
+      scene_texture_pool_.Acquire(lease_key, std::move(color)));
     active_scene_texture_lease_ = scene_texture_lease;
     auto& leased_scene_textures = scene_texture_lease->GetSceneTextures();
     active_scene_textures_ = &leased_scene_textures;
     inspected_scene_textures_ = &leased_scene_textures;
     auto restore_scene_texture_family = ScopeGuard([this]() noexcept {
       active_scene_textures_ = &scene_textures_;
+      // Attachment reuse waits for its submitted frame, independently of any
+      // retained color reader. No callback reaches the pool after destruction.
+      active_scene_texture_lease_->Retire(gfx_);
       active_scene_texture_lease_.reset();
     });
     BindPreparedView(ctx);
@@ -1895,8 +1909,7 @@ void SceneRenderer::RenderViewFamily(RenderContext& ctx)
         queue_key, "Vortex Auxiliary View Consumption");
       CHECK_F(static_cast<bool>(recorder),
         "SceneRenderer: failed to acquire auxiliary consumption recorder");
-      renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(
-        *recorder);
+      renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(*recorder);
       graphics::GpuEventScope consume_scope(*recorder, "Vortex.AuxView.Consume",
         profiling::ProfileGranularity::kTelemetry,
         profiling::ProfileCategory::kPass,
@@ -2630,8 +2643,8 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
     if (handle != CompositionView::kInvalidViewStateHandle) {
       auto& retained = exposure_product_layouts_[handle];
       if (retained.revision == 0U || retained.products != layout.products) {
-        CHECK_NE_F(retained.revision,
-          (std::numeric_limits<std::uint64_t>::max)());
+        CHECK_NE_F(
+          retained.revision, (std::numeric_limits<std::uint64_t>::max)());
         layout.revision = retained.revision + 1U;
         retained = layout;
       }
@@ -2819,6 +2832,7 @@ void SceneRenderer::RemoveViewState(const ViewId view_id,
 {
   InvalidatePublishedViewFrameBindings();
   exposure_product_layouts_.erase(view_state_handle);
+  scene_color_pool_.RemoveView(view_id);
   for (auto* artifact : { &resolved_scene_color_artifact_,
          &resolved_scene_depth_artifact_, &prev_velocity_artifact_ }) {
     if (artifact->pool) {
@@ -2949,7 +2963,7 @@ auto SceneRenderer::GetResolvedSceneColorTexture() const
   -> std::shared_ptr<graphics::Texture>
 {
   const auto& color = scene_texture_extracts_.resolved_scene_color;
-  if (color.fallback && color.source_lease)
+  if (color.fallback && color.source_color)
     return std::shared_ptr<graphics::Texture>(
       std::make_shared<SceneTextureExtractRef>(color), color.fallback);
   return resolved_scene_color_artifact_.texture;
@@ -3320,8 +3334,7 @@ auto SceneRenderer::RenderDebugVisualization(
   if (!recorder) {
     return false;
   }
-  renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(
-    *recorder);
+  renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(*recorder);
 
   graphics::GpuEventScope debug_scope(*recorder,
     fmt::format(

@@ -4,8 +4,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Testing/GTest.h>
 
+#include <Oxygen/Vortex/Internal/RetainedTexturePool.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextureLeasePool.h>
 #include <Oxygen/Vortex/Test/Fakes/Graphics.h>
 
@@ -172,6 +174,44 @@ TEST(SceneTextureLeasePoolTest, RetainedLeaseOutlivesPoolWithoutDanglingRelease)
   EXPECT_EQ(retained.GetSceneTextures().GetExtent(), key.extent);
   retained.Release();
   EXPECT_FALSE(retained.IsValid());
+}
+
+TEST(SceneTextureLeasePoolTest, ColorReadersDoNotRetainAttachmentFamily)
+{
+  auto graphics = std::make_shared<FakeGraphics>();
+  graphics->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy {});
+  auto colors = oxygen::vortex::internal::RetainedTexturePool(graphics);
+  const auto config = MakeConfig();
+  const auto key = SceneTextureLeaseKey::FromConfig(config);
+  SceneTextureLeasePool families(*graphics, config);
+  const auto view = oxygen::ViewId {
+    1U,
+  };
+  const auto desc = oxygen::vortex::SceneTextures::SceneColorDescriptor(config);
+  auto reader = colors.Acquire(view, desc, true);
+  auto first = families.Acquire(key, reader);
+  auto* family = &first.GetSceneTextures();
+  const auto* depth = &family->GetSceneDepth();
+  const auto* color = reader.get();
+  first.Retire(*graphics);
+  first.Release();
+  EXPECT_EQ(families.GetLiveLeaseCount(), 1U);
+  {
+    auto pending = families.Acquire(key, colors.Acquire(view, desc, true));
+    EXPECT_NE(&pending.GetSceneTextures(), family);
+    EXPECT_NE(&pending.GetSceneTextures().GetSceneColor(), color);
+  }
+  graphics->GetDeferredReclaimer().ProcessAllDeferredReleases();
+  EXPECT_EQ(families.GetLiveLeaseCount(), 0U);
+  auto next = families.Acquire(key, colors.Acquire(view, desc, true));
+  EXPECT_EQ(&next.GetSceneTextures(), family);
+  EXPECT_EQ(&next.GetSceneTextures().GetSceneDepth(), depth);
+  EXPECT_NE(&next.GetSceneTextures().GetSceneColor(), color);
+  EXPECT_TRUE(graphics->GetResourceRegistry().Contains(*reader));
+  reader.reset();
+  next.Retire(*graphics);
+  next.Release();
+  graphics->GetDeferredReclaimer().ProcessAllDeferredReleases();
 }
 
 } // namespace

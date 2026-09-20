@@ -155,8 +155,8 @@ struct SceneTextureBindings {
   static constexpr std::uint32_t kInvalidIndex
     = std::numeric_limits<std::uint32_t>::max();
 
-  static constexpr auto MakeInvalidGBufferSrvs() -> std::array<std::uint32_t,
-    static_cast<std::size_t>(GBufferIndex::kCount)>
+  static constexpr auto MakeInvalidGBufferSrvs()
+    -> std::array<std::uint32_t, static_cast<std::size_t>(GBufferIndex::kCount)>
   {
     return { kInvalidIndex, kInvalidIndex, kInvalidIndex, kInvalidIndex,
       kInvalidIndex, kInvalidIndex };
@@ -172,8 +172,7 @@ struct SceneTextureBindings {
   // The published ABI reserves the full logical GBuffer family now. Phase 3
   // only activates A-D; E/F remain stable invalid slots until their owning
   // later phase publishes them.
-  std::array<std::uint32_t,
-    static_cast<std::size_t>(GBufferIndex::kCount)>
+  std::array<std::uint32_t, static_cast<std::size_t>(GBufferIndex::kCount)>
     gbuffer_srvs { MakeInvalidGBufferSrvs() };
   std::uint32_t scene_color_uav { kInvalidIndex };
   std::uint32_t velocity_uav { kInvalidIndex };
@@ -197,8 +196,6 @@ struct SceneTextureAspectView {
   }
 };
 
-class SceneTextureLease;
-
 struct SceneTextureExtractRef {
   //! Own the artifact and registered views until the last queued consumer.
   std::shared_ptr<const graphics::Texture> retained_texture;
@@ -208,7 +205,8 @@ struct SceneTextureExtractRef {
   //! Conditional color: use exposure's conversion report to select this source
   //! or the original FP32 accumulation. Retain the complete record when queued.
   graphics::Texture* fallback { nullptr };
-  std::shared_ptr<const SceneTextureLease> source_lease;
+  //! Independent allocation lease from RetainedTexturePool, not a family owner.
+  std::shared_ptr<const graphics::Texture> source_color;
 };
 
 struct SceneTextureExtracts {
@@ -222,8 +220,9 @@ struct SceneTextureExtracts {
 
 class SceneTextures {
 public:
-  OXGN_VRTX_API explicit SceneTextures(
-    Graphics& gfx, const SceneTexturesConfig& config);
+  OXGN_VRTX_API explicit SceneTextures(Graphics& gfx,
+    const SceneTexturesConfig& config,
+    std::shared_ptr<graphics::Texture> leased_color = {});
   OXGN_VRTX_API ~SceneTextures();
 
   SceneTextures(const SceneTextures&) = delete;
@@ -236,6 +235,9 @@ public:
   [[nodiscard]] OXGN_VRTX_API auto GetPartialDepth() const
     -> graphics::Texture&;
   [[nodiscard]] OXGN_VRTX_API auto GetSceneColorResource() const
+    -> const std::shared_ptr<graphics::Texture>&;
+  //! Retain the independent allocation for an immutable queued color reader.
+  [[nodiscard]] OXGN_VRTX_API auto GetSceneColorLease() const
     -> const std::shared_ptr<graphics::Texture>&;
   [[nodiscard]] OXGN_VRTX_API auto GetSceneDepthResource() const
     -> const std::shared_ptr<graphics::Texture>&;
@@ -275,8 +277,14 @@ public:
     -> const SceneTexturesConfig&;
 
   OXGN_VRTX_API static void ValidateConfig(const SceneTexturesConfig& config);
+  [[nodiscard]] OXGN_VRTX_API static auto SceneColorDescriptor(
+    const SceneTexturesConfig& config) -> graphics::TextureDesc;
 
 private:
+  friend class SceneTextureLease;
+  friend class SceneTextureLeasePool;
+  void SetLeasedSceneColor(std::shared_ptr<graphics::Texture> color);
+  void ReleaseLeasedSceneColor() noexcept;
   // Substrate constraint: Graphics::CreateTexture() returns shared_ptr.
   // SceneTextures is the sole logical owner of these resources; the shared_ptr
   // is an artifact of the graphics API, not an invitation for shared ownership.
@@ -285,7 +293,8 @@ private:
   };
 
   OXGN_VRTX_API static void ValidateExtent(glm::uvec2 extent);
-  OXGN_VRTX_API void AllocateTextures();
+  OXGN_VRTX_API void AllocateTextures(
+    std::shared_ptr<graphics::Texture> leased_color = {});
   OXGN_VRTX_API void ReleaseTextures() noexcept;
   OXGN_VRTX_API void RegisterTexture(RegisteredTexture& texture);
   OXGN_VRTX_API void UnregisterTexture(RegisteredTexture& texture) noexcept;
@@ -298,6 +307,8 @@ private:
   Graphics& gfx_;
   SceneTexturesConfig config_;
   RegisteredTexture scene_color_ {};
+  std::shared_ptr<graphics::Texture> scene_color_lease_;
+  bool leased_scene_color_ { false };
   RegisteredTexture scene_depth_ {};
   RegisteredTexture partial_depth_ {};
   std::array<RegisteredTexture, static_cast<std::size_t>(GBufferIndex::kCount)>

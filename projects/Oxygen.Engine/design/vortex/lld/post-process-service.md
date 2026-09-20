@@ -782,7 +782,7 @@ it reads the original FP32 accumulation. Conversion stores and tonemapping share
 the acceptance predicate. Keep the report unchanged between conversion and its
 consumers. This fallback preserves the valid FP32 meter and S/history; it does
 not authorize ignoring failures in upstream radiance products.
-SceneRenderer's conditional extraction retains the original family lease and the
+SceneRenderer's conditional extraction retains the independent color lease and the
 artifact's texture/descriptor ownership alongside the frame exposure/report.
 Copy the complete extraction record when queueing a conditional consumer.
 Texture-only consumers receive a retained, unconditional FP32 source. Ownership
