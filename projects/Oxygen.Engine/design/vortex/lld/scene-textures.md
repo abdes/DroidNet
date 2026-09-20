@@ -413,7 +413,7 @@ rather than a fixed multiplier per view, determine the total.
 | Population / owner | Descriptor-based expectation | Existing observation / retirement rule |
 | --- | --- | --- |
 | Live scene attachments / `SceneTextures` | FP32 accumulation: 16 bytes/texel; depth, partial depth, four GBuffers and enabled velocity/custom depth retain the formats in section 5.1. Main/secondary dimensions follow the recipe. | Deduplicate native identities; count placement separately from raw texels. Family cache and leased counts are distinct. |
-| Resolved color and queued fallback / `ResolveSceneColor` | 8 bytes/texel for admitted half resolve, 16 for FP32 resolve; a conditional extraction additionally retains original FP32 color and its immutable P/state/report. | Current whole-family fallback retention is the measured 10A defect below. Queued readers and descriptor retirement remain mandatory after that correction. |
+| Resolved color and queued fallback / `ResolveSceneColor` | 8 bytes/texel for admitted half resolve, 16 for FP32 resolve; a conditional extraction additionally retains original FP32 color and its immutable P/state/report. | EX051-10A removes the measured whole-family fallback retention below. Queued readers and descriptor retirement remain mandatory and are qualified by its checkpoint. |
 | Depth extracts / `ExtractSceneDepth` | Resolved and previous depth can alias one artifact; count one native allocation, not two logical outputs. | H4/H5 and the lifecycle fixture verify both delayed aliases after source-family reuse. |
 | Environment current products and history / environment passes | Sky-view dimensions use the existing quality descriptor; AP is 64 x 64 x 32 for steady recipes. Fog dimensions come from the existing viewport/grid resolver. Qualified radiance uses 8 bytes/texel, FP32 uses 16. | Temporal recipes retain actual previous fog products, stored P and certificates until their readers/fences finish. Reprojection on does not imply half admission. |
 | Shared canonical atmosphere cache | One shared 256 x 64 and one 32 x 32 RGBA32F table: 136 KiB raw per generation. | Count each unique cache generation once across views; include placement alignment and overlapping retired generations. |
@@ -866,7 +866,7 @@ and `SceneTextureExtractRef` in
 Carry the independent color lease through the existing extraction/consumer API;
 keep attachment-family and color-allocation reuse decisions separate.
 
-The current Release lifecycle measurements show the cost of whole-family
+The pre-10A matched Release lifecycle measurements show the cost of whole-family
 retention. Each case renders two views; the secondary is half the main extent.
 
 | Main resolution / temporal fog | Production engine peak MiB | Format-only FP32 engine peak MiB | Excess production peak MiB |
