@@ -808,6 +808,57 @@ records commands and frozen hashes. Proceed to 11 CPU attribution,
 I02 FP32-only explicit-exposure p95 already identifies a remaining budget gap;
 this proposal makes no claim that 13/GATE is satisfied.
 
+### EX051-11 CPU attribution checkpoint
+
+The approved FP32 default was measured through the existing CPU profiler in an
+isolated optimized Release build with Tracy enabled. One missing exposure-owner
+scope was added, followed by nested Graphics acquisition/finalization and D3D12
+binding/submission/wait scopes to diagnose the first result. Each frozen batch
+passes its one Debug production smoke and one I02 native run; each captures
+6,000 steady frames and verifies all 1,005 input hashes. These traces qualify CPU
+attribution only, not production GPU performance or the final matrix.
+
+The detailed trace gives the following **elapsed main-thread** intervals,
+intersected with the exposure-owner interval union. Nested categories overlap;
+their percentiles must not be added. Backend frame-start waits are outside this
+union. Driver and scheduler time remain included, so these are not active-only
+CPU measurements.
+
+| Interval, two-view I02 at 1080p | p95 ms | p99 ms | Observation |
+| --- | ---: | ---: | --- |
+| Exposure owner union | 0.762 | 0.902 | Active-CPU target 0.15/0.30 ms is not demonstrated. Initial trace was 0.776/0.946 ms. |
+| Recorder acquisition | 0.128 | 0.154 | Eight acquisitions per frame. |
+| Recorder finalization | 0.265 | 0.325 | Includes eight immediate submissions and retirement bookkeeping. |
+| Native `ExecuteCommandLists` | 0.206 | 0.256 | Nested inside finalization; about 25% of aggregate exposure elapsed time. |
+| Compute-pipeline binding | 0.066 | 0.080 | Twelve bindings per frame. |
+| Exposure outside acquisition/finalization/binding | 0.314 | 0.367 | Settings, state/resource tracking, publication, recording and profiling remain in this interval. |
+| Explicit fence wait inside exposure | 0 | 0 | No matching wait interval in any sampled exposure scope. |
+
+Subtracting native submission intervals frame by frame still leaves
+0.563/0.662 ms p95/p99. This subtraction is diagnostic, not a replacement metric
+or permission to exclude driver CPU work from acceptance. No isolated
+exposure-bookkeeping correction has been demonstrated to close the gap. Removing
+one adjacent range/solve submission would address only part of the eight
+submissions; retaining event ordering, immutable records and submitted-work
+acknowledgements remains mandatory.
+
+**Decision pending:** retain the evidence and keep 11 in progress. Broader work
+on caller-owned recording batches and constant/descriptor publication crosses
+the current bounded item into renderer/Graphics ownership and requires an
+explicit scope decision before implementation. The concrete extension would
+first attribute the remaining publication/recording interval, then evaluate
+sharing recorders only across adjacent exposure stages while preserving their
+resource transitions, status/failure semantics and GPU scope identities. It must
+not silently become a general submission-system rewrite, relax budgets, or
+discard slow frames. If that extension is declined, record the CPU target as
+unmet and keep 13/GATE open; do not run the expensive final matrix merely to
+restate this unresolved prerequisite.
+
+The [CPU checkpoint](../../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/cpu-attribution/checkpoint-manifest.json)
+links the original and detailed raw traces, CPU exports, analyses, commands and
+hashes. No production rendering correction was made in this item. EX051-12–14
+and final acceptance remain pending.
+
 ### Slice 5.1 event operation inventory
 
 EX051-03 fixes the following script for the three 1080p I02 acceptance runs in

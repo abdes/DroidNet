@@ -15,6 +15,7 @@
 #include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Common/Internal/Commander.h>
 #include <Oxygen/Graphics/Common/Internal/DeferredReclaimerComponent.h>
+#include <Oxygen/Profiling/CpuProfileScope.h>
 
 namespace oxygen::graphics::internal {
 
@@ -39,6 +40,8 @@ auto Commander::PrepareCommandRecorder(
   return { recorder.release(),
     [this, cmd_list = std::move(command_list), immediate](
       graphics::CommandRecorder* rec) mutable {
+      profiling::CpuProfileScope cpu_scope("Graphics.FinalizeCommandRecorder",
+        profiling::ProfileCategory::kGeneral);
       DLOG_SCOPE_F(1, "~CommandRecorder()");
       if (!rec) {
         DLOG_F(WARNING, "deleter invoked with null pointer");

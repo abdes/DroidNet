@@ -18,12 +18,12 @@
 #include <Oxygen/Console/CVar.h>
 #include <Oxygen/Console/Command.h>
 #include <Oxygen/Console/Console.h>
-#include <Oxygen/Graphics/Common/ImGui/ImGuiGraphicsBackend.h>
 #include <Oxygen/Graphics/Common/CommandList.h>
 #include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/FrameCaptureController.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
+#include <Oxygen/Graphics/Common/ImGui/ImGuiGraphicsBackend.h>
 #include <Oxygen/Graphics/Common/Internal/CommandListPool.h>
 #include <Oxygen/Graphics/Common/Internal/Commander.h>
 #include <Oxygen/Graphics/Common/Internal/DeferredReclaimerComponent.h>
@@ -35,6 +35,7 @@
 #include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
+#include <Oxygen/Profiling/CpuProfileScope.h>
 
 using oxygen::Graphics;
 using oxygen::graphics::internal::Commander;
@@ -602,6 +603,8 @@ auto Graphics::AcquireCommandRecorder(const graphics::QueueKey& queue_key,
   -> std::unique_ptr<graphics::CommandRecorder,
     std::function<void(graphics::CommandRecorder*)>>
 {
+  profiling::CpuProfileScope cpu_scope(
+    "Graphics.AcquireCommandRecorder", profiling::ProfileCategory::kGeneral);
   // Get the command queue from the queue key
   auto queue = GetCommandQueue(queue_key);
   DCHECK_NOTNULL_F(

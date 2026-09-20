@@ -21,6 +21,7 @@
 #include <Oxygen/Graphics/Direct3D12/Devices/DebugLayer.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
 
+#include <Oxygen/Profiling/CpuProfileScope.h>
 #include <Oxygen/Tracy/D3D12.h>
 
 using oxygen::graphics::d3d12::CommandQueue;
@@ -263,6 +264,8 @@ void CommandQueue::QueueWaitImmediate(const uint64_t value) const
 void CommandQueue::Wait(
   const uint64_t value, const std::chrono::milliseconds timeout) const
 {
+  oxygen::profiling::CpuProfileScope cpu_scope(
+    "D3D12.FenceWait", oxygen::profiling::ProfileCategory::kSynchronization);
   DCHECK_F(timeout.count() <= (std::numeric_limits<DWORD>::max)(),
     "timeout value must fit in a DWORD");
   auto completed_value = fence_->GetCompletedValue();
@@ -343,6 +346,8 @@ auto CommandQueue::BeginProfilingFrame() const -> void
 
 void CommandQueue::Submit(std::shared_ptr<graphics::CommandList> command_list)
 {
+  oxygen::profiling::CpuProfileScope cpu_scope(
+    "D3D12.SubmitCommandList", oxygen::profiling::ProfileCategory::kGeneral);
   // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
   auto* d3d12_command_list = static_cast<CommandList*>(command_list.get());
   const auto submit_actions = d3d12_command_list->TakeSubmitQueueActions();
@@ -353,7 +358,11 @@ void CommandQueue::Submit(std::shared_ptr<graphics::CommandList> command_list)
   }
 
   ID3D12CommandList* d3d12_lists[] = { d3d12_command_list->GetCommandList() };
-  command_queue_->ExecuteCommandLists(_countof(d3d12_lists), d3d12_lists);
+  {
+    oxygen::profiling::CpuProfileScope driver_scope("D3D12.ExecuteCommandLists",
+      oxygen::profiling::ProfileCategory::kGeneral);
+    command_queue_->ExecuteCommandLists(_countof(d3d12_lists), d3d12_lists);
+  }
 
   for (const auto& action : submit_actions) {
     if (action.kind == graphics::CommandList::SubmitQueueActionKind::kSignal) {
