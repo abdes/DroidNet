@@ -7,7 +7,7 @@ Status: `in_progress` — current slice state and evidence are maintained in the
 are updated there; this plan owns the requirements and gates.
 
 Date: 2026-09-16
-Updated: 2026-09-20 — Slice 5.1 resource ownership, FP32 baseline, decision runs and item scopes revised.
+Updated: 2026-09-21 — Slice 5.1 closed at the user-accepted measured CPU cost; further CPU optimization deferred.
 
 Paths are relative to `projects/Oxygen.Engine` unless identified as
 repository-root paths.
@@ -34,8 +34,9 @@ For a fresh start or resume, read the tracker's
 [Current work](../IMPLEMENTATION_STATUS.md#31-current-work) for the active
 checkpoint and execution state. Its
 [remaining performance order](../IMPLEMENTATION_STATUS.md#delivery-order-and-ownership)
-starts with EX051-03 inventory and EX051-10A ownership. Do not restart completed
-items from historical milestone or manifest instructions.
+is complete. Slice 5.1 closed on 2026-09-21; Slice 5.2 is unblocked but not
+started. Do not restart completed items from historical milestone or manifest
+instructions.
 
 The [exposure reference companion](../lld/exposure-improvement-plan.md) contains
 UE source pointers and Oxygen's implementation choices. This document owns
@@ -961,6 +962,15 @@ analyses and the checkpoint manifest link them by path/hash.
 **Gate:** EX051-GATE passes with native timing distributions, controlled cost
 attribution, bounded resources, independently verified correctness and current
 owner evidence. Existing replay cost measurements alone do not close it.
+
+**Closed 2026-09-21:** the full native GPU matrix, correctness, resource and
+presentation gates pass. Joint 13A/B reduces measured active I02 1080p CPU
+p95/p99 by 27.0%/29.6%, to 0.514935/0.625473 ms. The user explicitly accepts
+that CPU cost for current delivery and defers further optimization to a later
+milestone. This accepted disposition closes 13/14/GATE; the original CPU limits
+remain future goals, not passed results. Broader CPU/scaling qualification
+belongs to that deferred work. No further benchmark or production correction
+is required in Slice 5.1.
 
 ### Slice 5.2 - Improve exposure code quality and test structure
 

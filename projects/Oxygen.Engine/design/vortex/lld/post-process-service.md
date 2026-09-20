@@ -957,6 +957,13 @@ performance, event windows and presentation remain in 13/GATE.
 
 ### EX051-13 final collection and gate disposition
 
+**Closed 2026-09-21:** the completed GPU/event/presentation evidence, accepted
+13A/B correction and explicit acceptance of measured CPU cost close this gate.
+See [the final CPU decision](#approved-ex051-13ab-joint-cpu-correction).
+The diagnostic sequence below is retained as historical evidence; its earlier
+holds and proposed next steps are superseded by that closeout.
+
+
 The final frozen production matrix is collected: **48 valid runs, 296,100 steady
 frames**, all eight recipes at 1080p/4K with three runs each. Every run has at
 least 1,800 frames and 38.887 seconds of steady data. All 981 frozen inputs stayed
@@ -1183,12 +1190,14 @@ intervals and checks complete coverage of every measured frame. Both active
 CPU targets fail: **0.514935/0.625473 ms p95/p99 versus 0.15/0.30 ms**. Scheduler
 gaps explain only 0.000982 ms of candidate p95; they are not the remaining cost.
 
-**Decision requested:** retain the unchanged target and agree another correction
-scope, or explicitly accept a revised CPU target. Further API changes still
-require the user's review before coding. No further production correction or
-4K capture begins before that direction is agreed. The accepted A/B correction
-is retained, no budget exception is assumed, and the completed GPU matrix is
-not repeated.
+**Accepted closeout (2026-09-21):** the user directed, "Accept measured CPU
+cost for now. Further optimization will happen in a later milestone."
+EX051-13/14/GATE therefore close at the measured operating point. The original
+CPU limits remain later optimization targets; they are not relabeled as passed
+or replaced with an invented threshold. Broader active CPU/scaling qualification
+moves with that follow-up. Existing GPU scaling evidence remains qualified.
+No additional capture, production correction or repeated matrix is required for
+this slice. A future API change still requires review before coding.
 
 The reference diagnosis is 27.1% native submission, 16.7% acquisition, 7.6%
 finalization outside native submission, and 9.8% compute binding. A hypothetical
