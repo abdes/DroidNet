@@ -224,6 +224,13 @@ identity fails. Use `--configuration all` explicitly for metadata-free databases
 or to retain every configuration. Equivalent commands are deduplicated; distinct
 commands for the same source remain separate contexts.
 
+Entries identified as another configuration are skipped before response-file
+expansion, so selecting Debug does not require generated response files from
+Release or RelWithDebInfo. If recorded arguments and output do not establish the
+configuration, response files are expanded to discover it. Missing response files
+for selected entries, unresolved configurations, or `--configuration all` still
+fail explicitly.
+
 LLVM discovers/inherits the nearest `.clang-tidy`; the effective configuration
 is snapshotted and verified. Header filters use LLVM-compatible regexes and
 compiler path spellings, including `..` paths. Project header exclusions remain

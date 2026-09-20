@@ -331,12 +331,15 @@ def read_database(
         if source_filter is not None and not source_filter(source):
             continue
         scoped_entries += 1
+        args = entry.get("arguments") or split_command(entry["command"])
+        # Unselected configurations may not have generated response files yet.
+        # Use recorded metadata before opening them; check again after expansion
+        # for configurations whose identity is supplied by a response file.
+        name = configuration_name(entry, args)
+        if configuration and name is not None and name != configuration:
+            continue
         response_inputs: dict[str, str] = {}
-        args = expand_responses(
-            entry.get("arguments") or split_command(entry["command"]),
-            directory,
-            inputs=response_inputs,
-        )
+        args = expand_responses(args, directory, inputs=response_inputs)
         name = configuration_name(entry, args)
         if configuration and name is None:
             unknown.append(str(source))
