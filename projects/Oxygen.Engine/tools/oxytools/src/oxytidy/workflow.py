@@ -146,6 +146,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help="Hide individual diagnostics; retain run context, progress, and summary",
     )
     output_options.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Show full environment, tool, configuration, and discovery context",
+    )
+    output_options.add_argument(
         "--no-quiet",
         action="store_true",
         help="Retain LLVM suppression statistics in raw logs",
@@ -280,7 +285,7 @@ def run(args, root: Path, runner: Runner, run_dir: Path, summary: dict) -> int:
         root, args.paths, args.all, args.include_tests, ownership_file=ownership_file
     )
     inputs = scope.inputs()
-    runner.reporter.rows(
+    runner.reporter.detail_rows(
         [
             (
                 "Owned roots",
@@ -304,7 +309,7 @@ def run(args, root: Path, runner: Runner, run_dir: Path, summary: dict) -> int:
         fixes={},
     )
     config_file = absolute(args.config_file, root) if args.config_file else None
-    runner.reporter.rows(
+    runner.reporter.detail_rows(
         [
             (
                 "Tidy config",
@@ -321,7 +326,7 @@ def run(args, root: Path, runner: Runner, run_dir: Path, summary: dict) -> int:
             "option to use normal .clang-tidy discovery."
         )
     clangd_file = absolute(args.clangd_file, root)
-    runner.reporter.rows([("Clangd", clangd_file)])
+    runner.reporter.detail_rows([("Clangd", clangd_file)])
     summary["clangd_file"] = str(clangd_file)
     config = parse_clangd(
         clangd_file,
@@ -336,7 +341,7 @@ def run(args, root: Path, runner: Runner, run_dir: Path, summary: dict) -> int:
         compilation_database=str(database),
         database_selection=database_reason,
     )
-    runner.reporter.rows(
+    runner.reporter.detail_rows(
         [
             ("Compile DB", database),
             ("DB choice", database_reason),
@@ -355,7 +360,7 @@ def run(args, root: Path, runner: Runner, run_dir: Path, summary: dict) -> int:
     headers = {
         path_key(path): path for path in inputs if path.suffix.lower() in HEADERS
     }
-    runner.reporter.rows(
+    runner.reporter.detail_rows(
         [
             (
                 "Discovery scope",
@@ -371,7 +376,7 @@ def run(args, root: Path, runner: Runner, run_dir: Path, summary: dict) -> int:
             ),
         ]
     )
-    runner.reporter.section("LLVM", [])
+    runner.reporter.detail_section("LLVM", [])
     tidy, scanner, formatter, versions = resolve_tools(args, runner, run_dir)
     summary["tools"] = versions
     analyzer = Analyzer(
@@ -439,7 +444,7 @@ def run(args, root: Path, runner: Runner, run_dir: Path, summary: dict) -> int:
     prepared.sort(key=lambda item: (path_key(item.context.file), item.context.identity))
     summary["selected"].sort(key=lambda item: (path_key(item["file"]), item["context"]))
     summary["selected_count"] = len(prepared)
-    runner.reporter.rows(
+    runner.reporter.detail_rows(
         [
             (
                 "Selection",
@@ -780,16 +785,12 @@ def main(argv: list[str], *, root: Path | None = None) -> int:
         gaps = summary.get("coverage_gaps", [])
         if gaps:
             runner.reporter.section("Analysis gaps", [])
-            for gap in gaps[:10]:
+            for gap in gaps:
                 runner.reporter.rows(
                     [
                         ("File", Path(gap["file"]) if gap.get("file") else "scope"),
                         ("Reason", gap["reason"]),
                     ]
-                )
-            if len(gaps) > 10:
-                runner.reporter.message(
-                    f"{len(gaps) - 10} further gaps are recorded in the report.", "dim"
                 )
         runner.reporter.finish(summary)
     return code
