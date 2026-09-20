@@ -36,6 +36,7 @@
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/ClearFlags.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/Profiling/CpuProfileScope.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Scene/Detail/TransformComponent.h>
 #include <Oxygen/Scene/Environment/PostProcessVolume.h>
@@ -1739,6 +1740,9 @@ auto SceneRenderer::DescribeExposureProductLayout(const RenderContext& ctx)
 
 auto SceneRenderer::PrepareExposureDomain(RenderContext& ctx) -> bool
 {
+  profiling::CpuProfileScope cpu_scope(
+    "Vortex.SceneRenderer.PrepareExposureDomain",
+    profiling::ProfileCategory::kPass);
   if (!post_process_
     || !ctx.current_view.feature_mask.Has(
       CompositionView::ViewFeatureMask::kSceneLighting)) {
