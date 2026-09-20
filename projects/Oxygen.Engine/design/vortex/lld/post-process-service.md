@@ -1097,6 +1097,35 @@ reference raw results once by path/hash, source/runtime freezes, clock/thermal
 telemetry and the presentation proof. One partial final telemetry row from a
 stopped sampler is preserved and identified; no native sample was discarded.
 
+### Approved EX051-13A/B joint CPU correction
+
+The user explicitly approved these two items together after reviewing the source
+and the non-overlapping CPU costs. This extends the earlier bounded 11A/11B
+scope; those completed decisions remain closed. The user requires clean API
+changes and migration, removal of superseded entry points, and no compatibility
+wrappers or parallel legacy implementations. Unrelated Oxygen submission sites
+need not adopt batching.
+
+| Item | Implementation contract | Verification and stopping condition |
+| --- | --- | --- |
+| EX051-13A | SceneRenderer owns recording across the participating Vortex stages. Passes record through explicit recorder references rather than independently acquiring/submitting micro command lists. Keep frame resolve before its scene consumers, pre-environment range before environment work, and final range/metering after accumulation. Recorded resources may feed later commands in the same recording; CPU history publication, transition submission and reusable cache readiness commit only after actual submission. Abort/failure discards pending publication and preserves prior history. Existing immutable readers and GPU-fence retirement remain authoritative. | Focused command lifecycle/state-order tests, recording/submission failure and retry, once-per-frame solve, source sharing, producer history and queued-consumer cases. Compile affected Debug/Release paths and run owning gates. Use Tracy to verify actual recorder/submission counts and measured CPU benefit, with unchanged numerical/GPU phase work and resource stability. A count reduction is not itself a timing acceptance result. |
+| EX051-13B | Intern root signatures by complete binding layout and D3D12 flags, not by shader/PSO identity alone. Share their ownership safely across PSOs. Reuse unchanged descriptor heaps, root signatures and root tables; invalidate on real heap/signature changes and reset at recording begin. Keep required PSO changes and root-argument writes. Avoid temporary heap-list allocation. Root-constant capacity, generated bindings and shader ABI do not change. | Prove compatible layouts share a root signature and incompatible layouts/flags do not; verify lifetime, compute/graphics switching, heap changes, recorder reset and indirect-command compatibility. Existing native output checks must pass. Attribute binding reduction separately from 13A, without adding overlapping timings or claiming the entire binding category can be removed. |
+
+The reference diagnosis is 27.1% native submission, 16.7% acquisition, 7.6%
+finalization outside native submission, and 9.8% compute binding. A hypothetical
+six-to-two reduction of all acquisition/finalization cost exposes about 34.2%
+of the measured total, not a demonstrated saving. No 45–60% prediction is an
+acceptance criterion. Budgets and numerical tolerances stay fixed.
+
+Implement these as one coherent joint correction with normal hooks; do not
+interleave production edits with frozen collection. Logging remains fully OFF,
+GPU timing remains enabled, and Tracy is the profiling tool. Do not add another
+custom timing mechanism. First qualify the changed contracts, then measure I02
+at the agreed checkpoint before expanding acceptance. Existing baseline payloads
+remain unchanged; final candidate qualification follows only after implementation
+is stable. Map/dense-handle rewrites, root-constant ABI changes and unrelated
+renderer optimizations are outside these two approved items.
+
 ### Slice 5.1 event operation inventory
 
 EX051-03 fixes the following script for the three 1080p I02 acceptance runs in

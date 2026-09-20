@@ -927,6 +927,14 @@ and commit boundaries are in
   triggers and certificate validity. Preserve two actual consecutive eligible
   frames, GPU-owned P/S, current-frame protection and immutable histories.
   Fold exposure-related temporal precision work from 08 into this item.
+- EX051-13A/13B are a user-approved joint follow-up to the measured CPU budget
+  failure: shared recording ownership at the participating Vortex stages, plus
+  D3D12 root-signature/binding reuse. The tracker and PostProcess owner carry the
+  concrete scope and gates. Migrate affected APIs cleanly, remove superseded
+  entry points, and preserve actual-submission publication and GPU-fence safety.
+  Do not migrate unrelated Oxygen callers merely to make everything batch.
+  Keep logging OFF, GPU timing unchanged and use Tracy; no further custom timing
+  mechanism, map rewrite or shader/root-constant ABI change is authorized.
 - EX051-11 uses existing profiling to isolate active exposure CPU work from
   queue waits. Correct only the identified preparation/submission bottleneck.
   The user-approved bounded candidates are EX051-11A (one recorder/submission
