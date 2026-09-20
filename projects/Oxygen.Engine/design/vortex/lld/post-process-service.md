@@ -955,11 +955,78 @@ links exact commands, per-suite results, reused checkpoints and the unchanged
 Scene/shader source audit. This closes correctness integration only; final
 performance, event windows and presentation remain in 13/GATE.
 
+### EX051-13 final collection and gate disposition
+
+The final frozen production matrix is collected: **48 valid runs, 296,100 steady
+frames**, all eight recipes at 1080p/4K with three runs each. Every run has at
+least 1,800 frames and 38.887 seconds of steady data. All 981 frozen inputs stayed
+unchanged. The first I02 attempt failed the test transport's delayed-status bound;
+its evidence remains separate from the 48 valid runs. No native benchmark was
+rerun for analysis or report generation.
+
+The following values are the worst per-run GPU frame p95/p99 of three runs,
+in milliseconds. They are not pooled percentiles.
+
+| Recipe | 1080p p95 / p99 | 4K p95 / p99 |
+| --- | ---: | ---: |
+| C01 | 3.799 / 5.011 | 7.214 / 8.386 |
+| C02 | 3.826 / 5.061 | 7.236 / 8.773 |
+| M01 | 5.903 / 7.461 | 16.937 / 18.339 |
+| M02 | 8.474 / 10.181 | 22.568 / 24.690 |
+| M03 | 5.919 / 7.181 | 15.267 / 16.668 |
+| M04 | 4.405 / 5.275 | 11.669 / 13.712 |
+| I01 | 5.977 / 6.946 | 17.379 / 18.765 |
+| I02 | 6.411 / 7.779 | 15.163 / 16.990 |
+
+Against the matching recorded pre-policy production baselines, conservative
+GPU frame p95 reductions are **54.7% C01/1080p, 55.1% C01/4K, 63.1% C02/1080p
+and 41.8% I02/1080p**. No before/after improvement is claimed for cells without
+a matching recorded baseline. The approved C01 steady-memory increases remain
+106/398.625 MiB at 1080p/4K; C02/I02 decrease by 1.125 MiB.
+
+| Acceptance evidence | Recorded result |
+| --- | --- |
+| Whole-frame 1080p targets | All 24 runs pass GPU p95/p99 and uncapped wall p99 targets; worst wall p99 is 12.035 ms. |
+| Explicit exposure dispatches and 4K scaling | All 48 runs pass their explicit-dispatch budgets; all 24 corresponding 4K comparisons pass scaling. Resolve/copy attribution is qualified below. |
+| Warm transitions | Three full I02 scripts pass; worst per-operation additional GPU p99, including the entire resolve scope, is 0.392 ms against 1.30 ms. Startup is separate: 60 frames per run. |
+| Correctness/output | All native checks and exports pass. All 64 same-cell endpoint comparisons pass unchanged float and UNorm8 budgets; maximum float difference 7.75e-7, maximum gain difference 9.83e-7 stops. |
+| Resource stability | Zero steady texture/buffer creation churn in every run. Placement snapshots and accepted 10/10A lifecycle evidence are retained. No new lifecycle campaign. |
+| Presentation | One 180-frame VortexBasic launch with target 60 fps and VSync passes. Its captured EV14 output has gain 2^-14 and pre-storage RGB 0.25; replay numerical checks and visual inspection pass. This is not a measured monitor-refresh-rate claim. |
+
+**Gate disposition is required for two qualification gaps.** No exception has
+yet been approved, and no target is silently widened:
+
+1. Active exposure CPU p95/p99 and 4K CPU scaling are not established by the
+   whole-renderer CPU CSV or the instrumented elapsed owner intervals. The
+   latter include driver/scheduling time and do not demonstrate the original
+   0.15/0.30-ms two-view active-CPU limits.
+2. `ResolveSceneColor` times both color snapshots and ordinary depth copies.
+   Explicit exposure passes; including the entire resolve as a conservative
+   upper bound exceeds the 1080p exposure p95 threshold in 14 runs across
+   M01/M02/M04/I01/I02. Exact exposure-related copy attribution is therefore
+   unproven. The whole resolve scope is reported separately; it is neither
+   silently omitted nor presented as exact exposure work.
+
+The concrete proposed closeout is to accept this slice with those two explicitly
+recorded qualification exceptions: retain the demonstrated whole-frame envelope,
+explicit-dispatch/scaling, transition, correctness and resource results, without
+claiming that the active-only CPU or stricter copy-inclusive sub-budgets passed.
+This requires the owner's decision. The user prohibited benchmark reruns; none
+are scheduled. Without that disposition, 13/GATE remain open and the Slice 5.2
+handoff is prepared but not unblocked.
+
+The [performance report](../../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/acceptance13/performance-report.md),
+[per-run decision table](../../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/acceptance13/decision-table.json)
+and [checkpoint](../../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/acceptance13/checkpoint-manifest.json)
+reference raw results once by path/hash, source/runtime freezes, clock/thermal
+telemetry and the presentation proof. One partial final telemetry row from a
+stopped sampler is preserved and identified; no native sample was discarded.
+
 ### Slice 5.1 event operation inventory
 
 EX051-03 fixes the following script for the three 1080p I02 acceptance runs in
 EX051-13. The existing runner now implements it when
-`OXYGEN_EXPOSURE_BASELINE_ACCEPTANCE=1`; native collection remains pending.
+`OXYGEN_EXPOSURE_BASELINE_ACCEPTANCE=1`; all three I02 event collections pass.
 All acceptance runs record their first 60 startup frames separately. I02 at
 1080p additionally appends matched and event cycles; other cells keep only
 startup and steady windows. Correctness readbacks occur after collection.
