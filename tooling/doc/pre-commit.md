@@ -4,6 +4,30 @@ A framework for managing and maintaining multi-language pre-commit hooks.
 
 For more information see: <https://pre-commit.com/>.
 
+The repository root's `.pre-commit-config.yaml` is the single configuration for
+DroidNet, including Oxygen.Engine. It includes Prettier, oxyformat, gersemi,
+whitespace checks, Conventional Commits, and XamlStyler.
+
+## Prettier formatting
+
+The root configuration runs `prettier --write` on supplied CSS, HTML, JSON, JSONC,
+Markdown, TypeScript, TSX, YAML, and YML files using Prettier 3.9.8 with its default
+formatting rules. There are no style overrides or
+custom Prettier configuration files. The exact version is pinned in the hook so
+developers use the same formatting rules.
+
+Pre-commit installs the formatter and its Node environment in its external cache
+once, then reuses that environment. DroidNet does not need a `package.json`, npm
+or pnpm lockfile, or repository-local `node_modules` for this hook.
+
+When the hook changes a file, the commit stops. Review and stage the formatted
+file, then retry. The hook does not stage changes automatically. To run it
+explicitly on selected files:
+
+```powershell
+pre-commit run prettier --files README.md
+```
+
 ## Quick Start
 
 ### 1. Install pre-commit and pre-requisites
@@ -60,22 +84,22 @@ repos:
 
   - repo: local
     hooks:
-    # Use dotnet format already installed locally
-    - id: dotnet-format
-      name: C# dotnet-format
-      language: system
-      entry: dotnet format --include
-      types_or: ["c#"]
+      # Use dotnet format already installed locally
+      - id: dotnet-format
+        name: C# dotnet-format
+        language: system
+        entry: dotnet format --include
+        types_or: ["c#"]
 
   - repo: local
     hooks:
-    # Use XamlStyler already installed locally as a dotnet tool
-    - id: xaml-styler
-      name: XAML styler
-      language: system
-      entry: dotnet xstyler -f
-      types: [file]
-      files: \.xaml$
+      # Use XamlStyler already installed locally as a dotnet tool
+      - id: xaml-styler
+        name: XAML styler
+        language: system
+        entry: dotnet xstyler -f
+        types: [file]
+        files: \.xaml$
 ```
 
 ### 3. Install the git hook scripts

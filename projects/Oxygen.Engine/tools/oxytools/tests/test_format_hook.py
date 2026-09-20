@@ -35,9 +35,9 @@ def hook_from(path: Path) -> dict:
 
 
 class HookConfigurationTests(unittest.TestCase):
-    def test_both_profiles_use_identical_check_only_hook(self):
+    def test_root_profile_has_check_only_hook_without_engine_duplicate(self):
         hook = hook_from(REPOSITORY / ".pre-commit-config.yaml")
-        self.assertEqual(hook, hook_from(ENGINE / ".pre-commit-config.yaml"))
+        self.assertFalse((ENGINE / ".pre-commit-config.yaml").exists())
         self.assertNotIn("--fix", hook["entry"])
         self.assertNotIn("--all", hook["entry"])
         self.assertNotIn("uv", hook["entry"])
