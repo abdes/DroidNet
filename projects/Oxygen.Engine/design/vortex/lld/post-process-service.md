@@ -958,8 +958,18 @@ performance, event windows and presentation remain in 13/GATE.
 ### Slice 5.1 event operation inventory
 
 EX051-03 fixes the following script for the three 1080p I02 acceptance runs in
-EX051-13. Existing steady benchmark entry points do not yet append this script.
-No event timing or new execution is claimed by this documentation inventory.
+EX051-13. The existing runner now implements it when
+`OXYGEN_EXPOSURE_BASELINE_ACCEPTANCE=1`; native collection remains pending.
+All acceptance runs record their first 60 startup frames separately. I02 at
+1080p additionally appends matched and event cycles; other cells keep only
+startup and steady windows. Correctness readbacks occur after collection.
+
+For the first run of a final-matrix cell, `OXYGEN_EXPOSURE_BASELINE_FRAMES=auto`
+selects `ceil(max(1800, warmup_fps * 40) / quantum) * quantum` after the normal
+warmup, with quantum 1,200 for moving cases and 300 otherwise. Subsequent runs
+of that cell use its selected integer count. This avoids an extra calibration
+launch; minimum warmup/sample duration, whole moving cycles, and frozen quality
+remain unchanged. The completed 05 pair protocol is unchanged.
 
 Use the same dt, path and quality as I02. After steady collection, render one
 unmodified 1,200-frame matched cycle, then an event cycle of 1,200 frames with
@@ -978,12 +988,16 @@ untimed checkpoints after collection.
 | 60; 120 | `Renderer::QueueExposureTransition(500, kSeedFromEv100, 14.5F)`; then `NotifyViewDiscontinuity(500, kCameraCut)` | Seed owns its frame; cut remeters according to existing precedence; applied generation matches the issued token. |
 | 180; 240 | Publish main `CompositionView::render_settings.exposure` with Manual EV14.5; restore the captured Auto settings through `PublishRuntimeCompositionView` | Immediate manual solve; Manual-to-Auto continuity followed by ordinary adaptation. |
 | 300; 360 | `DirectionalLight::SetIntensityLux(440000)`; restore 110000, then `Scene::Update` / `SyncObservers` before rendering | A fourfold sun step changes the target while valid Auto history adapts; no implicit remeter merely for precision rejection. |
-| 420; 480; 540; 600 | Publish secondary `exposure_source_view_id=500`; remove source with `RemovePublishedRuntimeView(frame, 500)` and omit it; republish source; restore secondary source to `kInvalidViewId` | Borrow previous completed source gain; source loss gets consumer-owned fallback; re-add creates a new source lifetime; independent gain resumes without stale acknowledgement. |
+| 420; 480; 540; 600 | Publish secondary `exposure_source_view_id=500`; remove source with `RemovePublishedRuntimeView(frame, 500)` and omit it, preserving the runtime's automatic borrower detachment; republish source and restore the requested sharing; restore secondary source to `kInvalidViewId` | Borrow previous completed source gain; source loss gets consumer-owned fallback; re-add creates a new source lifetime; independent gain resumes without stale acknowledgement. Republishing an absent source is invalid, so the consumer publishes detached while the source is absent. |
 | 660; 720 | Swap the two existing output/view extents and camera viewports via `PublishRuntimeCompositionView`; restore original assignment | Preserve numerical exposure, invalidate incompatible precision/history layout, and retain any old readers until their fences. No third size population. |
 | 780; 840 | Remove secondary using `RemovePublishedRuntimeView(frame, 501)` and omit publication; republish with the same public IDs | New lifetime despite reused ID; old color/state remain immutable for retained consumers. |
 | 900–905; 906 | Queue `kSeedFromEv100, 14.5F` on main. Hold status delivery for six frames with existing `RendererPublicationProbe::TakeExposureStatuses`; restore held jobs with `RestoreExposureStatuses` before frame 906 | GPU seed/adaptation proceeds while CPU acknowledgement is delayed; no stale precision authorization, unbounded retry allocation or CPU wait. |
 
 Acknowledgement delay is test transport control, not a new public rendering API.
+Held jobs are hidden across CPU polling, then restored before submission on
+frames 900–905 to preserve the existing three-job queue capacity. Frame 906
+restores delivery before polling. The script does not create extra retry
+capacity by leaving the service queue empty throughout each held frame.
 Reuse the seam in
 [`SceneDelayedStatusCannotAuthorizeStalePrecision`](../../../src/Oxygen/Vortex/Test/Exposure/ScenePrecision_test.cpp).
 Public transition definitions are in

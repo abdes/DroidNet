@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cmath>
 #include <unordered_set>
 
 #include <Oxygen/OxCo/Run.h>
@@ -58,6 +59,19 @@ auto ExposureBaselineScenario::InspectView(const RenderContext& context,
   CHECK_F(!seen_views.at(index));
   seen_views.at(index) = true;
   draw_counts.at(index) = draws;
+  if (capture_event) {
+    current_checkpoint.exposure.at(index) = context.current_view.frame_exposure;
+    current_checkpoint.formats.at(index)
+      = static_cast<unsigned>(color.texture->GetDescriptor().format);
+    const auto* owner
+      = vortex::testing::RendererPublicationProbe::GetSceneRenderer(
+        *fixture_.renderer_);
+    current_checkpoint.history_reset.at(index)
+      = owner->GetLastEnvironmentLightingState()
+          .stage14_volumetric_fog_temporal_history_reset
+      ? 1U
+      : 0U;
+  }
   if (capture_endpoint) {
     CHECK_F(color.valid && color.texture != nullptr);
     endpoint_hdr.at(index) = color;
@@ -97,7 +111,9 @@ auto ExposureBaselineScenario::InspectView(const RenderContext& context,
       history_reset.at(index)
         = environment.stage14_volumetric_fog_temporal_history_reset ? 1U : 0U;
       const auto phase = path_phases.at(index);
-      if ((phase >= 10U && phase < 300U) || (phase >= 610U && phase < 900U)) {
+      if (!event_cycle
+        && ((phase >= 10U && phase < 300U)
+          || (phase >= 610U && phase < 900U))) {
         CHECK_F(history_reprojected.at(index) == 1U);
       }
     } else if (mixed_scene) {
@@ -106,8 +122,10 @@ auto ExposureBaselineScenario::InspectView(const RenderContext& context,
     } else {
       CHECK_F(draws == 1U);
     }
-    CHECK_F(color.texture->GetDescriptor().width == width >> index);
-    CHECK_F(color.texture->GetDescriptor().height == height >> index);
+    CHECK_F(color.texture->GetDescriptor().width
+      == width >> target_indices.at(index));
+    CHECK_F(color.texture->GetDescriptor().height
+      == height >> target_indices.at(index));
     if (!mixed_scene || fp32_reference || fp32_only) {
       CHECK_F(color.texture->GetDescriptor().format == expected_format);
     }
@@ -122,6 +140,10 @@ auto ExposureBaselineScenario::RenderFrame(const bool start_recording,
 {
   const auto started = Clock::now();
   seen_views.fill(false);
+  draw_counts.fill(0U);
+  formats.fill(static_cast<unsigned>(Format::kUnknown));
+  history_reprojected.fill(0U);
+  history_reset.fill(0U);
   const auto slot = frame::Slot {
     fixture_.sequence % 3U,
   };
@@ -133,21 +155,55 @@ auto ExposureBaselineScenario::RenderFrame(const bool start_recording,
   fixture_.frame.SetFrameSlot(slot, engine::internal::EngineTagFactory::Get());
   fixture_.frame.SetFrameSequenceNumber(
     frame_sequence, engine::internal::EngineTagFactory::Get());
+  if (event_cycle && sample_frame == 906U) {
+    auto* owner = vortex::testing::RendererPublicationProbe::GetSceneRenderer(
+      *fixture_.renderer_);
+    auto* service
+      = vortex::testing::RendererPublicationProbe::GetPostProcessService(
+        *owner);
+    vortex::testing::RendererPublicationProbe::RestoreExposureStatuses(*service,
+      CompositionView::ViewStateHandle {
+        500U,
+      },
+      std::move(held_statuses));
+    held_statuses.clear();
+  }
   if (moving) {
     UpdatePath(sample_frame);
   }
   fixture_.renderer_->OnFrameStart(observer_ptr {
     &fixture_.frame,
   });
+  if (event_cycle) {
+    ApplyEvent(sample_frame);
+    if (sample_frame >= 900U && sample_frame <= 905U) {
+      auto* owner = vortex::testing::RendererPublicationProbe::GetSceneRenderer(
+        *fixture_.renderer_);
+      auto* service
+        = vortex::testing::RendererPublicationProbe::GetPostProcessService(
+          *owner);
+      vortex::testing::RendererPublicationProbe::RestoreExposureStatuses(
+        *service,
+        CompositionView::ViewStateHandle {
+          500U,
+        },
+        std::move(held_statuses));
+      held_statuses.clear();
+    }
+  }
   if (start_recording) {
     CHECK_F(
       fixture_.renderer_->GetDiagnosticsService().RequestGpuTimelineRecording(
-        gpu_path, sample_count));
+        recording_path, recording_frames));
   }
   for (unsigned index = 0U; index < targets.size(); ++index) {
+    if (!enabled_views.at(index)) {
+      continue;
+    }
+    const auto target_index = target_indices.at(index);
     auto sized_view = fixture_.view;
-    sized_view.viewport.width = static_cast<float>(width >> index);
-    sized_view.viewport.height = static_cast<float>(height >> index);
+    sized_view.viewport.width = static_cast<float>(width >> target_index);
+    sized_view.viewport.height = static_cast<float>(height >> target_index);
     auto input = CompositionView::ForScene(
       ViewId {
         500U + index,
@@ -156,11 +212,14 @@ auto ExposureBaselineScenario::RenderFrame(const bool start_recording,
     input.view_state_handle = CompositionView::ViewStateHandle {
       500U + index,
     };
-    input.render_settings.exposure = fixture_.settings;
+    input.render_settings.exposure = view_settings.at(index);
+    if (index == 1U) {
+      input.exposure_source_view_id = secondary_source;
+    }
     CHECK_F(fixture_.renderer_->PublishRuntimeCompositionView(fixture_.frame,
               { .composition_view = input,
-                .render_target = observer_ptr { targets.at(index).get(), },
-                .composite_source = observer_ptr { targets.at(index).get(), }, },
+                .render_target = observer_ptr { targets.at(target_index).get(), },
+                .composite_source = observer_ptr { targets.at(target_index).get(), }, },
               forward ? ShadingMode::kForward : ShadingMode::kDeferred)
       != kInvalidViewId);
   }
@@ -180,8 +239,11 @@ auto ExposureBaselineScenario::RenderFrame(const bool start_recording,
   });
   if (require_ready) {
     for (unsigned index = 0U; index < view_count; ++index) {
-      CHECK_F(seen_views.at(index));
+      CHECK_F(seen_views.at(index) == enabled_views.at(index));
     }
+  }
+  if (event_cycle) {
+    ObserveEvent(sample_frame);
   }
   fixture_.renderer_->OnFrameEnd(observer_ptr {
     &fixture_.frame,
@@ -206,16 +268,34 @@ auto ExposureBaselineScenario::WarmUp() -> void
   const auto warm_start = Clock::now();
   warm_frames = 0U;
   const auto minimum_warm_frames = moving ? 1200U : 300U;
+  if (acceptance) {
+    startup.samples.reserve(60U);
+    recording_path = startup.gpu;
+    recording_frames = 60U;
+  }
   while (warm_frames < minimum_warm_frames
     || Clock::now() - warm_start < std::chrono::seconds { 10, }
     || (moving && warm_frames % 1200U != 0U)) {
-    static_cast<void>(RenderFrame(false, moving ? warm_frames : 0U));
+    const auto sample
+      = RenderFrame(acceptance && warm_frames == 0U, moving ? warm_frames : 0U);
+    if (acceptance && warm_frames < 60U) {
+      startup.samples.push_back(sample);
+      startup.seconds += sample.wall_ms / 1000.0;
+    }
     ++warm_frames;
   }
   warm_seconds
     = std::chrono::duration<double>(Clock::now() - warm_start).count();
+  if (automatic_sample_count) {
+    const auto quantum = moving ? 1200U : 300U;
+    const auto target = std::max(1800.0, 40.0 * warm_frames / warm_seconds);
+    sample_count = static_cast<unsigned>(std::ceil(target / quantum)) * quantum;
+    CHECK_LE_F(sample_count, 20000U);
+  }
   warm_draw_counts = draw_counts;
   before = Snapshot();
+  recording_path = gpu_path;
+  recording_frames = sample_count;
 }
 
 auto ExposureBaselineScenario::MeasureFrames() -> void

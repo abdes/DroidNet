@@ -495,6 +495,7 @@ if(WIN32)
       "Exposure/Benchmarks/ExposureAllocationSetup.cpp"
       "Exposure/Benchmarks/ExposureAllocation_bench.cpp"
       "Exposure/Benchmarks/ExposureBaselineRendering.cpp"
+      "Exposure/Benchmarks/ExposureBaselineEvents.cpp"
       "Exposure/Benchmarks/ExposureBaselineResults.cpp"
       "Exposure/Benchmarks/ExposureBaselineScenario.h"
       "Exposure/Benchmarks/ExposureBaselineSetup.cpp"
