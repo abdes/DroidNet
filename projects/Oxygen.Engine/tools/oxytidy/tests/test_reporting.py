@@ -47,7 +47,7 @@ class ReportingTests(unittest.TestCase):
                 summary = self.summary()
                 reporter.start(summary)
                 reporter.ownership(
-                    self.root / ".oxytidy.json", "target checkout policy"
+                    self.root / ".oxytools.json", "target checkout policy"
                 )
                 reporter.finish(summary)
                 text = stream.getvalue()

@@ -99,7 +99,7 @@ class Reporter:
         project = Path(summary["project_root"])
         package = Path(summary["tool_package"])
         tool = next(
-            (path for path in package.parents if (path / ".oxytidy.json").is_file()),
+            (path for path in package.parents if (path / ".oxytools.json").is_file()),
             package,
         )
         self.aliases["@project"] = project

@@ -22,7 +22,7 @@ class PackagingTests(unittest.TestCase):
     def test_editable_install_locates_its_checkout_from_another_directory(self):
         with tempfile.TemporaryDirectory() as directory:
             other = Path(directory)
-            (other / ".oxytidy.json").write_text("{}", encoding="utf-8")
+            (other / ".oxytools.json").write_text("{}", encoding="utf-8")
             with patch("pathlib.Path.cwd", return_value=other):
                 self.assertEqual(engine_root(), ENGINE)
 
@@ -31,11 +31,13 @@ class PackagingTests(unittest.TestCase):
             root = Path(directory)
             checkout = root / "engine"
             checkout.mkdir()
-            (checkout / ".oxytidy.json").write_text("{}", encoding="utf-8")
+            (checkout / ".oxytools.json").write_text("{}", encoding="utf-8")
             installed = root / "site-packages/oxytidy/workflow.py"
             with patch("oxytidy.workflow.__file__", str(installed)):
                 with patch("pathlib.Path.cwd", return_value=checkout):
                     self.assertEqual(engine_root(), checkout)
+                # The old tool-specific filename is no longer a root marker.
+                (root / ".oxytidy.json").write_text("{}", encoding="utf-8")
                 with (
                     patch("pathlib.Path.cwd", return_value=root),
                     self.assertRaises(ToolError),
