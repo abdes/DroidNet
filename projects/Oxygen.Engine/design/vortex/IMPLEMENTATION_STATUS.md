@@ -96,7 +96,7 @@ Slices 6-10, including the complete LightBench delivery; the package is not comp
 
 ### 3.1 Current work
 
-**Performance resumed (2026-09-20): bounded 11 work validated; next is 12 integration.** The eight
+**Performance resumed (2026-09-20): 12 validated; next is 13 final acceptance.** The eight
 existing workload entry points, fixed controls, public event operations and
 bounded event script are mapped below. The SceneTextures owner inventory links
 the existing descriptor and lifecycle reports; no build or native run was needed
@@ -121,7 +121,8 @@ diagnostics and stale-control acknowledgement rejection are implemented and
 pass 122 focused Debug checks (97 CPU, 25 native). The
 [policy checkpoint](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/production-policy/checkpoint-manifest.json)
 records exact commands and 648 unchanged frozen inputs. Bounded 11 work is now
-validated below; 12–14/GATE remain open.
+validated below. 12 now passes 371 normal Release checks using existing
+coverage and retained Debug evidence; 13–14/GATE remain open.
 Event-script execution remains
 in 13; neither this inventory nor historical manifests close final acceptance.
 
@@ -228,8 +229,8 @@ with its own correctness checks, measured result and accept/reject decision.
 Only 13 owns the final repeated performance matrix. GATE evaluates that evidence.
 A completed or rejected experiment does not wait for 13 to close.
 
-**Next action:** run EX051-12 owning correctness integration with accepted
-11A recorder ownership and 11B immutable constant reuse. The
+**Next action:** EX051-13 final acceptance, including the documented event
+script and normal presentation, after the validated 12 integration gate. The
 [bounded contract](lld/post-process-service.md#ex051-11-cpu-attribution-checkpoint)
 was agreed by the user on 2026-09-20. Existing traces do not demonstrate the
 active-CPU budget; each candidate requires its own accept/reject evidence.
@@ -483,7 +484,7 @@ existing presented-output path. Do not rerun this matrix at intermediate items.
 | EX051-11 | CPU attribution and bounded corrections / PostProcess + Graphics callers | validated | 05, 09 | Existing profiling separates exposure preparation/submission intervals from explicit frame-start waits. 11A is accepted for measured CPU benefit; 11B is accepted for source-proven resource work and maintainability under the user-directed criterion, with no demonstrated total CPU gain. Owning Debug and matched instrumented Release evidence are recorded below. No general submission rewrite. Active-only CPU budget proof and normal production performance acceptance remain 13/GATE; this closes the bounded delivery/decision scope. [Owner decisions](lld/post-process-service.md#ex051-11-cpu-attribution-checkpoint), [checkpoint](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/cpu-attribution/checkpoint-manifest.json). |
 | EX051-11A | Adjacent exposure recorder ownership / PostProcess + ExposurePass | validated | 11 attribution | Final range and histogram/solve share one successful submission; reused same-frame solves retain an independent current range check. Owning Debug: 228 native + 88 CPU pass (latest unique outcomes); two diagnostic/lifecycle fixture failures diagnosed, corrected and preserved. Matched Release I02: all 6,000 frames use six submissions instead of eight; elapsed CPU p95/p99 0.762/0.902 -> 0.646/0.760 ms, all five cycle p95 ranges disjoint. GPU phase counts, memory and zero steady churn preserved; four endpoint pairs pass. All 1,011 frozen inputs unchanged. Accept candidate; active-only CPU/global budgets remain open. [Decision](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/cpu-attribution/recorder/decision-table.json), [checkpoint](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/cpu-attribution/checkpoint-manifest.json). |
 | EX051-11B | Exposure constant and descriptor publication / ExposurePass + existing upload owner | validated | 11A decision | Accepted for clarity and reduced resource work under the user-directed criterion: publish one immutable histogram record per view, explicitly rebind for clear/accumulation; four publications become two in every sampled frame, removing two staging allocations and descriptor lookup/create operations plus 128 payload-write bytes per two-view frame. No persistent storage or lifetime change; GPU placement unchanged. Total elapsed CPU p95/p99 0.640/0.804 -> 0.664/0.775 ms, overlapping cycle ranges: no total CPU gain demonstrated. All 228 Debug cases and four endpoint pairs pass; GPU phase counts and six submissions preserved. Valid baseline/candidate freezes pass; invalid initial baseline retained. [Decision](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/cpu-attribution/publication/decision-table.json), [checkpoint](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/cpu-attribution/checkpoint-manifest.json). |
-| EX051-12 | Integrated correctness / existing owners | in_progress | 04, 09, 10A, 11 | Map existing numerical, range, mask, history, two-view, rejection and delayed-lease cases to the changed contracts. Run the owning correctness gates at final integration. Add only a named missing case; retain accepted checkpoint evidence for unchanged behavior. |
+| EX051-12 | Integrated correctness / existing owners | validated | 04, 09, 10A, 11 | Existing numerical/mask/range/history, transitions/sharing/stale status, independent color/fences and combined recording/constant reuse coverage mapped in the owner. Reused accepted Debug and unchanged Scene/settings/shader-catalog evidence; no new test or repeated old campaign. Missing normal Release (Tracy off) gate passes 371/371 enabled checks: 143 CPU + 228 native, no failures/errors/skips; 979 frozen inputs unchanged. Eight disabled benchmarks unrun. [Coverage](lld/post-process-service.md#ex051-12-integration-coverage), [checkpoint](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/integration12/checkpoint-manifest.json). Final performance remains13/GATE. |
 | EX051-13 | Final performance acceptance / rendering owner | planned | 12 | Execute the 16 production cells/48 runs and attached event windows defined above, plus normal presentation. Verify GPU/CPU distributions, scaling, transition latency, memory and output. This is the sole final performance campaign. |
 | EX051-14 | Owner and evidence closeout | planned | 13 | Reconcile owner docs, item decisions, implementation commits and the evidence index. Record the Slice 5.2 handoff. No new implementation or benchmark programme. |
 | EX051-GATE | Slice acceptance | planned | 12, 13, 14 | Evaluate the existing acceptance contract and completed evidence. Then proceed to Slice 5.2; original Slices 6-10 remain required. |

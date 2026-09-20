@@ -929,8 +929,31 @@ budget proof and production performance acceptance remain open in 13/GATE.
 
 The [CPU checkpoint](../../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/cpu-attribution/checkpoint-manifest.json)
 links the original and detailed raw traces, CPU exports, analyses, commands and
-hashes and the accepted 11A/11B increments. EX051-12–14 and final acceptance
-remain pending.
+hashes and the accepted 11A/11B increments. EX051-12 is qualified below; 13–14
+and final acceptance remain pending.
+
+### EX051-12 integration coverage
+
+The changed contracts map to existing owning cases below. No new test was
+needed. Current Debug evidence was reused; the missing normal Release gate
+(Tracy off) passed **371/371** enabled checks: 143 CPU and 228 native. All 979
+frozen inputs stayed unchanged; eight disabled benchmarks were not run.
+
+| Changed contract | Existing coverage | Evidence treatment |
+| --- | --- | --- |
+| Production FP32/P1 and explicit certification controls | `Fp32Only_test.cpp`, `Fp32Reference_test.cpp`, DiagnosticsService defaults/revision checks | Reuse current Debug; qualify normal Release. |
+| Numerical gain, histogram, masks, curves and fixed/zero modes | `Metering_test.cpp`, `Masks_test.cpp`, `Transitions_test.cpp`, FP32-only fixed-mode cases | Existing native owner suite covers constant reuse; no new test needed. ExposureSettings equations are unchanged and retain accepted evidence. |
+| Current range and temporal history | `RangeGuards_test.cpp`, `FogHistory_test.cpp`, FP32-only temporal/range case | Both renderer-reconstruction fixture corrections and their original failures are preserved in11A. |
+| Events, sharing and stale packets | `ScenePrecision_test.cpp`, `SourceLoss_test.cpp`, `SceneLifecycle_test.cpp`, precision-control acknowledgement case | Retain accepted delayed-status/lifetime coverage; normal Release owner suite qualifies optimized paths. |
+| Independent SceneColor readers/fences | SceneTextures/RetainedTexturePool owner tests and `QueuedConsumers_test.cpp` | Reuse10A Debug4K lifecycle evidence; qualify missing Release owner checks. No repeated lifecycle benchmark. |
+| Combined final range/solve and same-frame reuse | `CombinedSceneRangePreservesSeedRetryInvalidMeterAndRetainedState`, existing preparation/failure/reuse tests | Current Debug accepted; normal Release adds the missing optimized-build proof. |
+| Runtime/public post-process integration | PostProcessService, SceneRendererDeferredCore, RendererPublicationSplit, DiagnosticsService | Reuse accepted Debug; one normal Release batch. |
+| Shader catalog and layouts | Accepted04 catalog tests and234-module Debug/Release archives | Shader and Scene source roots are unchanged from5f5aa9e85 through8c39ab62b; no catalog/settings rerun. |
+
+The [integration checkpoint](../../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/integration12/checkpoint-manifest.json)
+links exact commands, per-suite results, reused checkpoints and the unchanged
+Scene/shader source audit. This closes correctness integration only; final
+performance, event windows and presentation remain in 13/GATE.
 
 ### Slice 5.1 event operation inventory
 
