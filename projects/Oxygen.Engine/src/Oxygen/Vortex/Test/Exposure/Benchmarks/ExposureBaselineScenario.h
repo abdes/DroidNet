@@ -80,6 +80,8 @@ private:
   std::string run_id;
   std::string stem;
   bool fp32_reference {};
+  bool fp32_only {};
+  bool warmup_only {};
   bool temporal {};
   bool forward {};
   unsigned sample_count {};

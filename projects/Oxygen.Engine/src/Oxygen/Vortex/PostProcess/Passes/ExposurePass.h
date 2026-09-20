@@ -61,6 +61,7 @@ namespace postprocess {
     ShaderVisibleIndex histogram_uav_index { kInvalidShaderVisibleIndex };
   };
   struct FrameExposureResources {
+    bool fp32_only { false };
     std::shared_ptr<graphics::Buffer> buffer;
     ShaderVisibleIndex srv_index { kInvalidShaderVisibleIndex };
     ShaderVisibleIndex uav_index { kInvalidShaderVisibleIndex };
@@ -135,6 +136,7 @@ public:
 
   struct FrameInputs {
     bool use_fp32 { false };
+    bool fp32_only { false };
     //! Format-only reference: retain a valid candidate P in FP32 storage.
     //! An absent/invalid candidate still uses ordinary recovery P = 1.
     bool preserve_fp32_candidate_p { false };
@@ -266,7 +268,7 @@ private:
 
   auto EnsurePipelines() -> void;
   auto PreparePublishers(RenderContext& ctx) -> void;
-  auto AcquireFrame() -> std::shared_ptr<FrameResources>;
+  auto AcquireFrame(bool fp32_only) -> std::shared_ptr<FrameResources>;
   auto RestoreFrameFallback(RenderContext& ctx,
     const ResolvedPostProcessConfig& config, const FrameResources& frame,
     StateLease fallback) -> bool;

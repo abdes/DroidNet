@@ -81,20 +81,26 @@ auto ExposureBaselineScenario::ReadOptions() -> void
       << "Controlled baseline requires C01 or C02";
   }
   precision = option("OXYGEN_EXPOSURE_BASELINE_PRECISION", "production");
-  ASSERT_TRUE(precision == "production" || precision == "fp32")
-    << "OXYGEN_EXPOSURE_BASELINE_PRECISION must be production or fp32";
+  ASSERT_TRUE(precision == "production" || precision == "fp32"
+    || precision == "fp32-only")
+    << "OXYGEN_EXPOSURE_BASELINE_PRECISION must be production, fp32 or "
+       "fp32-only";
   fp32_reference = precision == "fp32";
+  fp32_only = precision == "fp32-only";
   width_text = option("OXYGEN_EXPOSURE_TIMING_WIDTH", "1920");
   ASSERT_TRUE(width_text == "1920" || width_text == "3840")
     << "OXYGEN_EXPOSURE_TIMING_WIDTH must be 1920 or 3840";
   const auto frames_text = option("OXYGEN_EXPOSURE_BASELINE_FRAMES", "3600");
+  warmup_only = frames_text == "warmup";
+  const auto measured_frames = warmup_only ? std::string { "2400", } : frames_text;
   sample_count = 0U;
-  const auto parsed = std::from_chars(
-    frames_text.data(), std::to_address(frames_text.end()), sample_count);
+  const auto parsed = std::from_chars(measured_frames.data(),
+    std::to_address(measured_frames.end()), sample_count);
   ASSERT_TRUE(parsed.ec == std::errc {}
-    && parsed.ptr == std::to_address(frames_text.end()) && sample_count >= 1800U
-    && sample_count <= 20000U)
-    << "OXYGEN_EXPOSURE_BASELINE_FRAMES must be an integer in [1800, 20000]";
+    && parsed.ptr == std::to_address(measured_frames.end())
+    && sample_count >= 1800U && sample_count <= 20000U)
+    << "OXYGEN_EXPOSURE_BASELINE_FRAMES must be warmup or an integer in [1800, "
+       "20000]";
   if (moving) {
     ASSERT_EQ(sample_count % 1200U, 0U)
       << "Indoor/outdoor measurements require complete 1200-frame cycles";
@@ -117,14 +123,16 @@ auto ExposureBaselineScenario::ReadOptions() -> void
   forward = workload == "M03" || workload == "M04" || workload == "I02";
   view_count
     = workload == "M01" || workload == "M04" || workload == "I01" ? 1U : 2U;
-  expected_format
-    = fp32_reference || temporal ? Format::kRGBA32Float : Format::kRGBA16Float;
+  expected_format = fp32_reference || fp32_only || temporal
+    ? Format::kRGBA32Float
+    : Format::kRGBA16Float;
   directory = std::filesystem::path {
     OXYGEN_EXPOSURE_WORKSPACE,
   } / "out/build-ninja/analysis/vortex/exposure-lightbench/slice51";
   std::filesystem::create_directories(directory);
   stem = filename_prefix + workload + "-" + width_text
-    + (fp32_reference ? "-fp32" : "") + "-" + run_id + "-Release";
+    + (precision == "production" ? "" : "-" + precision) + "-" + run_id
+    + "-Release";
   gpu_path = directory / (stem + ".gpu.json");
   cpu_path = directory / (stem + ".cpu.csv");
   manifest_path = directory / (stem + ".json");
@@ -273,7 +281,9 @@ auto ExposureBaselineScenario::Setup() -> void
   fixture_.frame.SetModuleTimingData(
     timing, engine::internal::EngineTagFactory::Get());
   auto& diagnostics = fixture_.renderer_->GetDiagnosticsService();
-  diagnostics.SetHdrFp32ReferenceEnabled(fp32_reference);
+  diagnostics.SetHdrPrecisionControl(fp32_only ? HdrPrecisionControl::kFp32Only
+      : fp32_reference ? HdrPrecisionControl::kFp32Reference
+                       : HdrPrecisionControl::kProduction);
   diagnostics.SetEnabledFeatures(DiagnosticsFeature::kGpuTimeline);
   diagnostics.SetGpuTimelineEnabled(true);
   fixture_.probe->inspect

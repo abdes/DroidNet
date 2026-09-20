@@ -26,6 +26,18 @@ auto ExposureBaselineScenario::SaveEndpoint(const unsigned path_frame) -> void
     CHECK_NOTNULL_F(endpoint_exposure.at(index).get());
     const auto domain = fixture_.Read<FrameExposureData>(
       *endpoint_exposure.at(index)->buffer, ResourceStates::kShaderResource);
+    const auto state = fixture_.Read<ExposureStateData>(
+      *endpoint_exposure.at(index)->current_state->buffer,
+      ResourceStates::kShaderResource);
+    const auto status = fixture_.Read<ExposureCompletedStatus>(
+      *endpoint_exposure.at(index)->current_state->status_buffer,
+      ResourceStates::kCopySource);
+    if (fp32_only) {
+      CHECK_F(
+        domain.pre_exposure == 1.0F && domain.one_over_pre_exposure == 1.0F);
+      CHECK_F(extract.fallback == nullptr);
+      CHECK_F(endpoint_exposure.at(index)->suitability_buffer == nullptr);
+    }
     const auto* hdr_texture = extract.texture;
     auto used_fallback = false;
     if (extract.fallback != nullptr) {
@@ -76,6 +88,26 @@ auto ExposureBaselineScenario::SaveEndpoint(const unsigned path_frame) -> void
     output.close();
     CHECK_F(output.good());
     endpoints.push_back({
+      {
+        "displayed_scale",
+        state.displayed_scale,
+      },
+      {
+        "status_flags",
+        status.flags,
+      },
+      {
+        "first_failure_product",
+        status.first_failure_product,
+      },
+      {
+        "first_failure_kind",
+        status.first_failure_kind,
+      },
+      {
+        "fp16_eligible_streak",
+        status.fp16_eligible_streak,
+      },
       {
         "file",
         filename,
@@ -133,13 +165,13 @@ auto ExposureBaselineScenario::CaptureEndpoints() -> void
   // explicit drain is not part of the timed renderer loop or a frame-rate
   // claim.
   fixture_.WaitForQueueIdle();
-  capture_endpoint = moving;
+  capture_endpoint = true;
   finalization = RenderFrame(false, sample_count);
   backend.track_resources = false;
   endpoints = nlohmann::json::array();
+  SaveEndpoint(0U);
+  capture_endpoint = false;
   if (moving) {
-    SaveEndpoint(0U);
-    capture_endpoint = false;
     for (unsigned path_frame = 1U; path_frame <= 600U; ++path_frame) {
       capture_endpoint = path_frame == 600U;
       static_cast<void>(RenderFrame(false, path_frame));
@@ -211,7 +243,8 @@ auto ExposureBaselineScenario::WriteAndValidateResults() -> void
         { "speed_down", fixture_.settings.speed_down, }, }, },
     { "precision", precision, },
     { "precision_scope",
-      fp32_reference ? "Format-only FP32 control; certification remains enabled"
+      fp32_only ? "FP32-only control; P=1, exposure and range protection active, no FP16 admission"
+      : fp32_reference ? "Format-only FP32 control; certification remains enabled"
                      : "Production admission; certification remains enabled", },
     { "recipe", recipe, },
     { "camera_path",

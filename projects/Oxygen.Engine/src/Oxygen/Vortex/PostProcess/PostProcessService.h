@@ -279,6 +279,7 @@ private:
     std::optional<frame::SequenceNumber> finalized_frame;
     std::uint64_t finalized_epoch { 0U };
     bool diagnostic { false };
+    bool fp32_only { false };
     bool restart_streak { true };
     postprocess::ExposurePass::StateLease candidate;
   };

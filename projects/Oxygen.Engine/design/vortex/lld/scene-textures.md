@@ -219,8 +219,10 @@ certificates remain separate from these source-range checks and govern admission
 `DiagnosticsService::SetHdrFp32ReferenceEnabled` requests FP32 view-radiance
 storage for a diagnostic comparison. Configure it before preparing the views.
 It retains ordinary exposure, adaptation, transition generations and all range
-and suitability checks. This is a format-only control for EX051-04; it does not
-yet provide the separate certificate-arithmetic ablations.
+and suitability checks. This remains the format-only diagnostic. The separate
+`DiagnosticsService::SetHdrPrecisionControl(kFp32Only)` baseline is qualified in
+EX051-04: it pins FP32/P1, omits admission certificates and publishes an
+unconditional FP32 artifact while preserving normal exposure and range checks.
 
 The view still selects its qualified GPU candidate. The frame resolver's
 48-byte constants use control bit `0x4` to preserve that candidate P when FP32
@@ -289,8 +291,8 @@ normal-mode allocations described above; pre-store and composition/temporal erro
 checks continue after admission. Stateless views retain FP32 without layout or
 admission history.
 
-EX051-04 adds an FP32-only performance control without prospective half
-qualification. EX051-09 replaces the current attempt cadence with an explicit
+EX051-04 provides the qualified FP32-only control without prospective half
+qualification. EX051-09 will replace the current production attempt cadence with an explicit
 operating policy; every FP16 use still requires its current-frame protection.
 
 ### Lifetime and memory accounting

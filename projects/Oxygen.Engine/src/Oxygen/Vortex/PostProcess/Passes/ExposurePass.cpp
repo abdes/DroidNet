@@ -381,10 +381,11 @@ auto ExposurePass::PreparePublishers(RenderContext& ctx) -> void
   OnFrameStart(ctx.frame_sequence, ctx.frame_slot);
 }
 
-auto ExposurePass::AcquireFrame() -> std::shared_ptr<FrameResources>
+auto ExposurePass::AcquireFrame(const bool fp32_only)
+  -> std::shared_ptr<FrameResources>
 {
   for (const auto& frame : frame_pool_) {
-    if (frame.use_count() == 1) {
+    if (frame.use_count() == 1 && frame->fp32_only == fp32_only) {
       frame->current_state.reset();
       frame->selected_history.reset();
       frame->precision_history.reset();
@@ -395,6 +396,7 @@ auto ExposurePass::AcquireFrame() -> std::shared_ptr<FrameResources>
   auto gfx = renderer_.GetGraphics();
   CHECK_NOTNULL_F(gfx.get());
   auto frame = std::make_shared<FrameResources>();
+  frame->fp32_only = fp32_only;
   frame->buffer = gfx->CreateBuffer({ .size_bytes = sizeof(FrameExposureData),
     .usage = graphics::BufferUsage::kStorage,
     .memory = graphics::BufferMemory::kDeviceLocal,
@@ -450,10 +452,12 @@ auto ExposurePass::AcquireFrame() -> std::shared_ptr<FrameResources>
             uav = index;
         }
       };
-  create_report(frame->suitability_buffer, frame->suitability_srv,
-    frame->suitability_uav, "Vortex.Exposure.Suitability");
-  create_report(frame->conversion_buffer, frame->conversion_srv,
-    frame->conversion_uav, "Vortex.Exposure.Conversion");
+  if (!fp32_only) {
+    create_report(frame->suitability_buffer, frame->suitability_srv,
+      frame->suitability_uav, "Vortex.Exposure.Suitability");
+    create_report(frame->conversion_buffer, frame->conversion_srv,
+      frame->conversion_uav, "Vortex.Exposure.Conversion");
+  }
   frame_pool_.push_back(frame);
   return frame;
 }
@@ -469,6 +473,9 @@ auto ExposurePass::ResolveFrame(RenderContext& ctx,
   CHECK_F(!inputs.transition
           || inputs.transition->target == ctx.current_view.view_state_handle);
   CHECK_F(!inputs.preserve_fp32_candidate_p || inputs.use_fp32);
+  CHECK_F(!inputs.fp32_only
+    || (inputs.use_fp32 && !inputs.preserve_fp32_candidate_p
+      && !inputs.qualified_candidate));
   auto gfx = renderer_.GetGraphics();
   if (!gfx) {
     return {};
@@ -489,7 +496,7 @@ auto ExposurePass::ResolveFrame(RenderContext& ctx,
   CHECK_F(!sharing
           || (owner != CompositionView::kInvalidViewStateHandle
               && owner != ctx.current_view.view_state_handle));
-  auto frame = AcquireFrame();
+  auto frame = AcquireFrame(inputs.fp32_only);
   frame->current_state = AcquireState();
   frame->current_state->owner_lifetime = inputs.lifetime;
   frame->current_state->borrowed_from
@@ -590,7 +597,7 @@ auto ExposurePass::ResolveFrame(RenderContext& ctx,
     }
     const auto flags = (inputs.use_fp32 ? 1U : 0U) | (sharing ? 2U : 0U)
       | (config.Settings().temporary_unit_exposure ? 4U : 0U)
-      | (source_fallback ? 8U : 0U);
+      | (source_fallback ? 8U : 0U) | (inputs.fp32_only ? 16U : 0U);
     const auto constants = ExposureFrameConstants {
       .output_uav = frame->uav_index.get(),
       .current_state_uav = frame->current_state->uav_index.get(),
@@ -781,35 +788,21 @@ auto ExposurePass::RecordSceneRange(RenderContext& ctx, const FrameLease& frame,
     recorder->RequireResourceState(status,
                                    graphics::ResourceStates::kUnorderedAccess);
     const auto constants = std::array<std::uint32_t, 32U> {
-      frame->current_state->status_uav_index.get(),
-      source_srv.get(),
-      frame->srv_index.get(),
-      frame->current_state->srv_index.get(),
-      desc.width,
-      desc.height,
-      1U,
-      32U | (capture_opaque_input ? 0U : 2048U),
-      11U,
-      0U,
-      kInvalidShaderVisibleIndex.get(),
-      0U,
-      0U,
-      0U,
-      desc.width,
-      desc.height,
-      0U,
-      std::bit_cast<std::uint32_t>(1.0F),
-      0U,
-      0U,
-      std::bit_cast<std::uint32_t>(1.0F),
-      kInvalidShaderVisibleIndex.get(),
-      0U,
+      frame->current_state->status_uav_index.get(), source_srv.get(),
+      frame->srv_index.get(), frame->current_state->srv_index.get(), desc.width,
+      desc.height, 1U,
+      32U | (capture_opaque_input && !frame->fp32_only ? 0U : 2048U)
+        | (frame->fp32_only ? 4096U : 0U),
+      11U, 0U, kInvalidShaderVisibleIndex.get(), 0U, 0U, 0U, desc.width,
+      desc.height, 0U, std::bit_cast<std::uint32_t>(1.0F), 0U, 0U,
+      std::bit_cast<std::uint32_t>(1.0F), kInvalidShaderVisibleIndex.get(), 0U,
       0U
     };
     const auto slot = suitability_constants_publisher_->Publish(
       ctx.current_view.view_id, constants);
     CHECK_F(slot.IsValid());
-    for (unsigned index = capture_opaque_input ? 0U : 1U; index < 2U; ++index) {
+    for (unsigned index = capture_opaque_input && !frame->fp32_only ? 0U : 1U;
+      index < 2U; ++index) {
       recorder->RequireResourceState(
         status, graphics::ResourceStates::kUnorderedAccess);
       recorder->FlushBarriers();
@@ -2238,14 +2231,15 @@ auto ExposurePass::ReleaseExposureResources() -> void
       if (registry.Contains(*frame->buffer))
         registry.UnRegisterResource(*frame->buffer);
       gfx->RegisterDeferredRelease(std::move(frame->buffer));
-      gfx->ForgetKnownResourceState(*frame->suitability_buffer);
-      if (registry.Contains(*frame->suitability_buffer))
-        registry.UnRegisterResource(*frame->suitability_buffer);
-      gfx->RegisterDeferredRelease(std::move(frame->suitability_buffer));
-      gfx->ForgetKnownResourceState(*frame->conversion_buffer);
-      if (registry.Contains(*frame->conversion_buffer))
-        registry.UnRegisterResource(*frame->conversion_buffer);
-      gfx->RegisterDeferredRelease(std::move(frame->conversion_buffer));
+      for (auto* report :
+        { &frame->suitability_buffer, &frame->conversion_buffer }) {
+        if (*report) {
+          gfx->ForgetKnownResourceState(**report);
+          if (registry.Contains(**report))
+            registry.UnRegisterResource(**report);
+          gfx->RegisterDeferredRelease(std::move(*report));
+        }
+      }
     }
     for (auto& state : state_pool_) {
       for (auto* resource :

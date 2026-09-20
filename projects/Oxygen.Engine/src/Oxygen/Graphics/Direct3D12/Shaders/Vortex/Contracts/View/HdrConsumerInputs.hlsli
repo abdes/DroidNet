@@ -26,6 +26,7 @@ static void RecordHdrSceneSource(float3 scene_rgb, uint product)
 
 static void RecordHdrConsumerUsage(uint usage, float3 sky_gain = 1.0.xxx)
 {
+    if (IsFp32OnlyExposure()) return;
     const ViewFrameBindings bindings = LoadViewFrameBindings(bindless_view_frame_bindings_slot);
     if (bindings.exposure_status_uav == K_INVALID_BINDLESS_INDEX) return;
     const bool valid = HdrFiniteNonnegative(sky_gain.x)
@@ -48,6 +49,15 @@ static void RecordHdrConsumerInput(float3 scene_rgb, uint input_kind)
 {
     const ViewFrameBindings bindings = LoadViewFrameBindings(bindless_view_frame_bindings_slot);
     if (bindings.exposure_status_uav == K_INVALID_BINDLESS_INDEX) return;
+    if (IsFp32OnlyExposure()) {
+        const uint failure = WaveActiveBitOr(
+            ClassifyHdrStoreRange(float4(scene_rgb, 1.0), 1.0, 0u));
+        if (WaveIsFirstLane()) {
+            RecordHdrRangeFailure(failure,
+                input_kind == HDR_INPUT_TRANSLUCENCY ? 4u : 8u, bindings.exposure_status_uav);
+        }
+        return;
+    }
     const bool valid = HdrFiniteNonnegative(scene_rgb.x)
         && HdrFiniteNonnegative(scene_rgb.y) && HdrFiniteNonnegative(scene_rgb.z);
     const uint observed = 1u << input_kind;

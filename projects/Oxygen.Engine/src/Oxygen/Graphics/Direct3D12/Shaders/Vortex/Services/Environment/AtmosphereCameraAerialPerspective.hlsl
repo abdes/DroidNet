@@ -415,8 +415,10 @@ void VortexAtmosphereCameraAerialPerspectiveCS(uint3 dispatch_id : SV_DispatchTh
         pass.atmosphere_scales0.exposure_status_uav, pass.atmosphere_scales1.exposure_fp16_store,
         GetPreExposure());
     const float4 output_value = float4(max(luminance, 0.0f.xxx), saturate(transmittance));
-    RecordHdrStoreBounds(output_value, output_value, output_value, GetOneOverPreExposure(),
-        6u, pass.atmosphere_scales0.exposure_status_uav, pass.atmosphere_scales1.exposure_fp16_store);
+    if (!IsFp32OnlyExposure()) {
+        RecordHdrStoreBounds(output_value, output_value, output_value, GetOneOverPreExposure(),
+            6u, pass.atmosphere_scales0.exposure_status_uav, pass.atmosphere_scales1.exposure_fp16_store);
+    }
     output_texture[dispatch_id] = pass.atmosphere_scales1.exposure_fp16_store != 0u
         ? HdrRoundToHalf(output_value) : output_value;
 }

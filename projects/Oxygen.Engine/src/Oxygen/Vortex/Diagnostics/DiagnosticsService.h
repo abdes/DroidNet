@@ -40,6 +40,12 @@ struct DiagnosticsConfig {
     -> DiagnosticsConfig;
 };
 
+enum class HdrPrecisionControl : std::uint8_t {
+  kProduction,
+  kFp32Reference,
+  kFp32Only,
+};
+
 class DiagnosticsService {
 public:
   OXGN_VRTX_API explicit DiagnosticsService(
@@ -75,6 +81,11 @@ public:
   //! all precision checks remain enabled. This is not authored exposure state.
   OXGN_VRTX_API auto SetHdrFp32ReferenceEnabled(bool enabled) -> void;
   [[nodiscard]] OXGN_VRTX_API auto IsHdrFp32ReferenceEnabled() const -> bool;
+  //! Runtime comparison mode; capture before preparing a view's HDR domain.
+  OXGN_VRTX_API auto SetHdrPrecisionControl(HdrPrecisionControl control)
+    -> void;
+  [[nodiscard]] OXGN_VRTX_API auto GetHdrPrecisionControl() const
+    -> HdrPrecisionControl;
 
   OXGN_VRTX_API auto SetGpuTimelineEnabled(bool enabled) -> void;
   [[nodiscard]] OXGN_VRTX_API auto IsGpuTimelineEnabled() const -> bool;
@@ -130,7 +141,9 @@ private:
   ShaderDebugMode shader_debug_mode_ { ShaderDebugMode::kDisabled };
   observer_ptr<internal::GpuTimelineProfiler> gpu_timeline_profiler_ { nullptr };
   bool gpu_timeline_enabled_requested_ { false };
-  bool hdr_fp32_reference_enabled_ { false };
+  HdrPrecisionControl hdr_precision_control_ {
+    HdrPrecisionControl::kProduction
+  };
   DiagnosticsFrameLedger frame_ledger_ {};
 };
 

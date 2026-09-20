@@ -495,9 +495,9 @@ auto PostProcessService::PrepareFrameExposure(
     ? &CaptureSharedExposureSource(ctx, ctx.current_view.exposure_view_id,
                                    source_handle)
     : nullptr;
-  return exposure_pass_->ResolveFrame(
-    ctx, config,
+  return exposure_pass_->ResolveFrame(ctx, config,
     { .use_fp32 = use_fp32,
+      .fp32_only = ctx.current_view.hdr_fp32_only,
       .preserve_fp32_candidate_p = preserve_fp32_candidate_p,
       .qualified_candidate = std::move(qualified_candidate),
       .source = source,
@@ -593,6 +593,7 @@ auto PostProcessService::PrepareSceneExposure(const ViewId view_id,
     = precision_states_.find(ctx.current_view.view_state_handle);
   const auto precision_epoch = precision != precision_states_.end()
       && precision->second.configured_frame == ctx.frame_sequence
+      && !precision->second.fp32_only
     ? std::optional { precision->second.epoch }
     : std::nullopt;
   if (transition && exposure.state && !exposure.solve_failed
@@ -749,7 +750,8 @@ auto PostProcessService::SelectPrecisionCandidate(RenderContext& ctx,
     || precision.source_revision != source_revision
     || precision.source_generation != source_generation
     || precision.source_pending != source_pending
-    || precision.diagnostic != diagnostic;
+    || precision.diagnostic != diagnostic
+    || precision.fp32_only != ctx.current_view.hdr_fp32_only;
   if (changed
     || (requirements.invalidate_previous
       && (!precision.restart_streak
@@ -767,12 +769,13 @@ auto PostProcessService::SelectPrecisionCandidate(RenderContext& ctx,
     precision.source_generation = source_generation;
     precision.source_pending = source_pending;
     precision.diagnostic = diagnostic;
+    precision.fp32_only = ctx.current_view.hdr_fp32_only;
     precision.restart_streak = true;
     precision.last_completed_frame = 0U;
     precision.candidate.reset();
   }
   precision.configured_frame = ctx.frame_sequence;
-  if (diagnostic)
+  if (diagnostic || precision.fp32_only)
     return {};
   if (source_pending)
     return {};
@@ -795,7 +798,7 @@ auto PostProcessService::PrepareScenePrecision(
   ValidatePreparedExposure(ctx.current_view.view_id, ctx, prepared);
   // Preparation already invalidated this failed attempt. Repeated consumers
   // of its fallback must not invalidate a later successful same-frame retry.
-  if (prepared.exposure.solve_failed) {
+  if (prepared.exposure.solve_failed || ctx.current_view.hdr_fp32_only) {
     return false;
   }
   const auto found = precision_states_.find(prepared.handle);

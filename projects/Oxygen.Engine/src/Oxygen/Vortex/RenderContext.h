@@ -153,6 +153,9 @@ struct RenderContext {
   struct ViewSpecific {
     //! Engine-selected HDR resource mode; absent uses the scene family default.
     std::optional<Format> hdr_color_format;
+    //! Frame-pinned FP32-only control; exposure and range protection stay
+    //! active.
+    bool hdr_fp32_only { false };
     std::shared_ptr<const postprocess::FrameExposureResources> frame_exposure;
     //! Captured camera/world/device discontinuity for this view's history.
     bool history_discontinuity { false };
