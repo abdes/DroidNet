@@ -852,7 +852,7 @@ budgets remain in 13/GATE.
 | Candidate | Concrete ownership/change | Verification and stopping condition |
 | --- | --- | --- |
 | EX051-11A | `SceneRenderer` currently invokes `CheckSceneColorRange` immediately before `PrepareSceneExposure`. Move the final range recording into the enclosing exposure operation. One recorder owns final range, histogram and solve, with one successful submission before state publication. Two-view I02 should fall from eight exposure command lists to six. | Prove exact recorder count and unchanged GPU work/order; focused Debug range/numerical, failure/retry, transition/generation, sharing and queued-reader cases, then owning exposure correctness. Compile affected Release paths and use the existing I02 trace controls for a matched CPU comparison. Retain only with correctness and demonstrated benefit; reject without broadening into other renderer stages if it does not help. |
-| EX051-11B | `RecordState` calls `UpdateHistogramConstants` before clear and again before accumulation with the same inputs. Attribute publication, then evaluate publishing one immutable record and binding its index for both dispatches. Evaluate any further constant/descriptor reuse only after its cost and safe ownership are established. | Compare publication/descriptor activity and CPU time; qualify histogram/mask, two-view, mode/event, lifetime and retained-reader behavior. Payloads, shader layouts and output budgets stay identical. Reject an ineffective candidate rather than assuming that fewer publications must improve frame time. |
+| EX051-11B | `RecordState` called `UpdateHistogramConstants` before clear and again before accumulation with the same inputs. Attribute publication, then evaluate publishing one immutable record and binding its index for both dispatches. Evaluate any further constant/descriptor reuse only after its cost and safe ownership are established. | Compare publication/descriptor activity and CPU time; qualify histogram/mask, two-view, mode/event, lifetime and retained-reader behavior. Payloads, shader layouts and output budgets stay identical. For this candidate, the user explicitly directed consideration of clarity, maintainability and resource reductions when timing benefit is small or absent. Report each benefit separately; fewer publications do not establish a frame-time improvement. |
 
 11A keeps frame P/state resolve and pre-environment range as separate submissions:
 intervening rendering work makes them different ordering boundaries. Each GPU
@@ -895,11 +895,41 @@ three are identical, and the remaining maximum difference is 1.49e-7 with at mos
 one UNorm8 code. All 1,011 frozen inputs remain unchanged. See the
 [11A decision table](../../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/cpu-attribution/recorder/decision-table.json).
 This accepts the candidate, not the active-only CPU target or final GPU matrix.
-Proceed to 11B as the next independent correction.
+
+**11B accepted for resource work and maintainability:** `PublishHistogramConstants`
+now returns one immutable record per view. `RecordState` explicitly rebinds it
+after both pipeline changes. This separates allocation/publication from binding
+and avoids constructing and publishing the same payload again. The trace confirms
+four publications per two-view frame become two: 12,000 fewer publications over
+6,000 frames. The existing publisher makes one staging allocation and descriptor
+lookup/create operation per publication, so both operation counts are halved for
+these constants. Payload writes fall by 128 bytes per two-view frame; allocated
+GPU texture/buffer placement is unchanged. No descriptor-heap capacity or resident
+memory reduction is claimed, and no persistent cache or lifetime extension was
+introduced.
+
+Total exposure elapsed CPU p95/p99 changes from 0.640/0.804 to 0.664/0.775 ms;
+cycle ranges overlap. **No total CPU/frame-time improvement is demonstrated.**
+The pre-change helper accounts for only 1.9% of aggregate exposure elapsed time
+(0.011 ms p95). Its scope includes binding before the refactor; binding remains
+inside the enclosing exposure interval after the refactor, so the narrower helper
+timing alone is not an end-to-end saving. This does not justify a descriptor-store
+redesign. The user's resource/maintainability criterion is the acceptance basis.
+
+All 228 owning Debug cases and the instrumented Release run pass; all four
+endpoint pairs meet the unchanged budgets and preserve gain. GPU phase counts,
+six submissions per frame, memory placement and zero steady resource creation
+are preserved. The initial baseline capture was invalidated by changed frozen
+inputs; it remains preserved, and its authorized fresh-freeze retry passed with
+1,013 unchanged inputs. The candidate passes with 1,014 unchanged inputs. The
+retained source is byte-identical to that validated candidate. See the
+[11B decision table](../../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/cpu-attribution/publication/decision-table.json).
+The bounded 11 work is complete; proceed to 12 integration. Active-only CPU
+budget proof and production performance acceptance remain open in 13/GATE.
 
 The [CPU checkpoint](../../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/cpu-attribution/checkpoint-manifest.json)
 links the original and detailed raw traces, CPU exports, analyses, commands and
-hashes and the accepted 11A increment. EX051-11B, EX051-12–14 and final acceptance
+hashes and the accepted 11A/11B increments. EX051-12–14 and final acceptance
 remain pending.
 
 ### Slice 5.1 event operation inventory

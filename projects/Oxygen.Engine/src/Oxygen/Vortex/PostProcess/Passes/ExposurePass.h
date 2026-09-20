@@ -284,10 +284,9 @@ private:
     std::shared_ptr<StateResources> reserved = {}) -> StateLease;
   auto AcquireState() -> std::shared_ptr<StateResources>;
   auto EnsureHistogramBuffer(StateResources& state) -> void;
-  auto UpdateHistogramConstants(RenderContext& ctx,
-    graphics::CommandRecorder& recorder, const Inputs& inputs,
+  auto PublishHistogramConstants(RenderContext& ctx, const Inputs& inputs,
     const ResolvedPostProcessConfig& config, const StateResources& state)
-    -> void;
+    -> ShaderVisibleIndex;
   auto UpdateAverageConstants(RenderContext& ctx,
     graphics::CommandRecorder& recorder,
     const ResolvedPostProcessConfig& config, const StateResources& state,
