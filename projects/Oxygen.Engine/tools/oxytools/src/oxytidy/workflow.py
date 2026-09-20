@@ -14,10 +14,7 @@ from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 
-from rich_argparse import RichHelpFormatter
-
-from .analysis import Analyzer, Prepared
-from .common import (
+from oxytools.common import (
     ToolError,
     absolute,
     display,
@@ -26,6 +23,9 @@ from .common import (
     unchanged,
     write_json,
 )
+from rich_argparse import RichHelpFormatter
+
+from .analysis import Analyzer, Prepared
 from .compilation import HEADERS, parse_clangd, read_database
 from .diagnostics import deduplicate, scoped
 from .execution import Runner, bounded_map, checked, executable

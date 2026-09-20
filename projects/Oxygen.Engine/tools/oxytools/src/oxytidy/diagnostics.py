@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .common import ToolError, absolute, digest, validate, yaml_documents
+from oxytools.common import ToolError, absolute, digest, validate, yaml_documents
+
 from .scope import Scope
 
 REPLACEMENT = {

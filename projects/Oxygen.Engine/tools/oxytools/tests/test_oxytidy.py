@@ -16,7 +16,6 @@ import venv
 from pathlib import Path
 from unittest.mock import patch
 
-from oxytidy.common import ToolError, fingerprint, path_key
 from oxytidy.compilation import (
     ClangdConfig,
     expand_responses,
@@ -29,6 +28,7 @@ from oxytidy.execution import Runner, bounded_map
 from oxytidy.fixes import apply_fixes, plan_fixes, replaced_bytes
 from oxytidy.scope import Scope
 from oxytidy.workflow import main, outcome, parse_args, select_ownership_file
+from oxytools.common import ToolError, fingerprint, path_key
 
 
 class Fixture(unittest.TestCase):
@@ -488,17 +488,17 @@ class ExecutionTests(Fixture):
         launcher = self.root / "tools/cli/oxytidy.ps1"
         launcher.parent.mkdir(parents=True)
         shutil.copy2(project.parent / "cli/oxytidy.ps1", launcher)
-        isolated = self.root / "tools/oxytidy"
+        isolated = self.root / "tools/oxytools"
         isolated.mkdir()
         for name in ("pyproject.toml", "README.md"):
             shutil.copy2(project / name, isolated / name)
-        self.write("tools/oxytidy/src/oxytidy/__init__.py", "")
+        self.write("tools/oxytools/src/oxytidy/__init__.py", "")
         self.write(
-            "tools/oxytidy/src/oxytidy/__main__.py",
+            "tools/oxytools/src/oxytidy/__main__.py",
             "from .cli import main\nraise SystemExit(main())\n",
         )
         self.write(
-            "tools/oxytidy/src/oxytidy/cli.py",
+            "tools/oxytools/src/oxytidy/cli.py",
             "import json,sys,os\ndef main():\n print(json.dumps({'args':sys.argv[1:],'cwd':os.getcwd(),'prefix':sys.prefix})); return 7\n",
         )
         arguments = [

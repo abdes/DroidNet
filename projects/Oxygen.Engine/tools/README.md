@@ -21,7 +21,10 @@ rules remain in `.clang-tidy`; formatting rules remain in `.clang-format`.
 
 Oxytidy reads this shared policy for ownership validation and checkout discovery.
 Its explicit ownership override and target/tool-checkout policy precedence are
-documented in [the oxytidy reference](oxytidy/README.md#select-another-engine-checkout).
+documented in [the oxytidy reference](oxytools/docs/oxytidy.md#select-another-engine-checkout).
+
+The [shared Python distribution](oxytools/README.md) provides `oxytidy`. Ownership validation, atomic file writes, and Windows process
+ownership are implemented once in its `oxytools` package.
 
 The shared file replaces `.oxytidy.json`; the old filename is no longer discovered
 automatically. Existing custom policies can still be selected explicitly through

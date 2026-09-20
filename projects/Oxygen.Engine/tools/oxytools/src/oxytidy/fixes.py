@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import os
 import stat
-import tempfile
 from pathlib import Path
 
-from .common import ToolError, file_hash, path_key
+from oxytools.common import ToolError, file_hash, path_key
+from oxytools.files import atomic_write
+
 from .scope import Scope
 
 
@@ -93,20 +93,6 @@ def replaced_bytes(
         cursor = offset + length
     chunks.append(original[cursor:])
     return b"".join(chunks), ranges
-
-
-def atomic_write(path: Path, content: bytes, mode: int) -> None:
-    descriptor, name = tempfile.mkstemp(prefix=".oxytidy-", dir=path.parent)
-    temporary = Path(name)
-    try:
-        with os.fdopen(descriptor, "wb") as stream:
-            stream.write(content)
-            stream.flush()
-            os.fsync(stream.fileno())
-        temporary.chmod(mode)
-        os.replace(temporary, path)
-    finally:
-        temporary.unlink(missing_ok=True)
 
 
 def apply_fixes(

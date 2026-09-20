@@ -1,0 +1,30 @@
+# Oxygen developer tools
+
+The Python distribution provides `oxytidy`, with shared ownership,
+validation, and file-writing code. Python 3.10+ is required.
+
+Install once in your chosen interpreter:
+
+```powershell
+$toolPython = python -c "import sys; print(sys.executable)"
+uv pip install --python $toolPython --editable tools/oxytools
+```
+
+When upgrading an existing editable `oxygen-oxytidy` installation, first remove
+that old distribution with `uv pip uninstall --python $toolPython oxygen-oxytidy`,
+then install `oxygen-tools` using the command above. Command and Python module
+names remain `oxytidy`.
+
+- [Oxytidy reference](docs/oxytidy.md)
+- [Shared repository ownership policy](../README.md#repository-ownership-policy)
+
+The console entry point and `python -m oxytidy` share the same CLI implementation. `tools/cli` contains PowerShell convenience launchers.
+
+Run tests from a working directory on the same drive as the system temporary
+directory (some existing oxytidy fixtures exercise relative checkout paths):
+
+```powershell
+python -m unittest discover -s <engine>/tools/oxytools/tests -v
+uvx ruff check tools/oxytools
+uvx ruff format --check tools/oxytools
+```

@@ -30,7 +30,7 @@ roots. Supports compiler-based header coverage, structured diagnostics,
 coordinated autofix, and incremental analysis. Third-party and system headers
 are dependencies only. Report-only is the default.
 
-See [Oxygen clang-tidy workflow](../oxytidy/README.md) for setup, scope semantics, all options,
+See [Oxygen clang-tidy workflow](../oxytools/docs/oxytidy.md) for setup, scope semantics, all options,
 exit status, implementation details, and verification commands.
 
 ### `oxy-targets.ps1` - Shared Library
@@ -166,7 +166,7 @@ the Python CLI. The launcher installs into the active venv or default Python as 
 forwards arguments unchanged. `--fix` applies validated fixes and verifies them;
 `--export-fixes` writes a reviewable plan. Report-only is the default.
 
-See [the complete oxytidy reference](../oxytidy/README.md).
+See [the complete oxytidy reference](../oxytools/docs/oxytidy.md).
 
 `--project-root PATH` selects another engine checkout. Its shared `.oxytools.json`
 ownership policy takes precedence over the tool checkout's fallback policy; `--ownership-file PATH`
@@ -214,7 +214,7 @@ Smart executable discovery with multiple strategies:
 
 ### Scoped clang-tidy workflow
 
-See [oxytidy documentation](../oxytidy/README.md) for compilation adaptation, project ownership,
+See [oxytidy documentation](../oxytools/docs/oxytidy.md) for compilation adaptation, project ownership,
 header coverage, execution, replacement application, and incremental validity.
 Unlike the build/run tools, oxytidy requires an existing configured build.
 

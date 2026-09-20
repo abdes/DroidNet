@@ -12,7 +12,14 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from .common import ToolError, absolute, digest, path_key, validate, yaml_documents
+from oxytools.common import (
+    ToolError,
+    absolute,
+    digest,
+    path_key,
+    validate,
+    yaml_documents,
+)
 
 SOURCES = {".c", ".cc", ".cpp", ".cxx"}
 HEADERS = {".h", ".hh", ".hpp", ".hxx", ".inc", ".inl", ".ipp", ".tpp"}
