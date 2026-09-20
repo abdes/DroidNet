@@ -96,7 +96,7 @@ Slices 6-10, including the complete LightBench delivery; the package is not comp
 
 ### 3.1 Current work
 
-**Performance resumed (2026-09-20): EX051-03 and EX051-10A complete.** The eight
+**Performance resumed (2026-09-20): 03, 10A, 04 and 05 complete; 09 awaiting agreement.** The eight
 existing workload entry points, fixed controls, public event operations and
 bounded event script are mapped below. The SceneTextures owner inventory links
 the existing descriptor and lifecycle reports; no build or native run was needed
@@ -110,7 +110,13 @@ EX051-04 is validated: 109 focused Debug checks (latest unique outcomes), 13
 Release checks and both 234-module shader builds pass. Its
 [checkpoint](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/fp32-only/checkpoint-manifest.json)
 preserves the corrected temporal-test observation failure and exact frozen
-inputs. Next: EX051-05's four decision pairs. No timed decision runs have started.
+inputs. EX051-05's four pairs now pass: eight timed runs, 60,000 sampled frames,
+ten endpoint comparisons, zero steady allocation churn and no repeats. FP32-only
+reduces graphics-queue frame p95 by 25–50%; admitted half saves memory only in C01.
+See the [decision table](#ex051-05-results-and-decision) and
+[checkpoint](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/decision05/checkpoint-manifest.json).
+Next is agreement on the [concrete 09 policy](lld/post-process-service.md#proposed-ex051-09-policy-awaiting-agreement).
+Production policy is unchanged; 09 implementation and 11–14/GATE remain open.
 Event-script execution remains
 in 13; neither this inventory nor historical manifests close final acceptance.
 
@@ -217,10 +223,9 @@ with its own correctness checks, measured result and accept/reject decision.
 Only 13 owns the final repeated performance matrix. GATE evaluates that evidence.
 A completed or rejected experiment does not wait for 13 to close.
 
-**Next action:** EX051-03, EX051-10A and EX051-04 are complete. Execute D01-D04
-in the qualified Release binary. 10A's Debug lifecycle measurement and 04's
-correctness checks are not format-benefit timing runs. Agreement on 09's
-decision table remains required before changing production precision policy.
+**Next action:** obtain the required agreement on 09's concrete state/decision
+table before changing production policy. 03, 10A, 04 and the four 05 decision
+pairs are complete. Their correctness and decision evidence does not close 13.
 
 Use the existing renderer, profiling APIs, native workloads and GPU status
 reports. Keep FP32 lighting accumulation, exposure equations, current-frame range
@@ -243,13 +248,13 @@ SceneColor fallback ownership is specified in
 - The H5 I02 recording stays FP32 for all 3,600 sampled frames. Mean explicit
   exposure time is 2.146 ms: candidate qualification 1.377, gradients 0.328,
   scene-range checks 0.220, metering/adaptation 0.180 and other work 0.041 ms.
-- Conditional FP16 output retains a whole SceneTextures family for its FP32
-  fallback. Temporal-off retirement retains an extra 302.25 MiB at 1080p and
+- Before 10A, conditional FP16 output retained a whole SceneTextures family for its FP32
+  fallback. Temporal-off retirement retained an extra 302.25 MiB at 1080p and
   1,128.75 MiB at 4K; 216 and 806.25 MiB respectively are unrelated attachments.
-  EX051-10A fixes that ownership.
+  EX051-10A now fixes that ownership with independent color leases.
 - The existing `fp32` control keeps certification enabled. Temporal production
   and that control differ in P at 13 per-view observations across seven phases.
-  EX051-04 adds a true FP32-only baseline; 05 decides the value of dynamic precision.
+  EX051-04 supplies the qualified FP32-only baseline; 05's results are below.
 
 #### Acceptance contract
 
@@ -343,6 +348,46 @@ next temporal precision design. D04 defines the cost to remove from the FP32
 steady state. EX051-05 records those decisions before 09 changes production policy.
 The existing format-only control does not substitute for `fp32-only` in these pairs.
 
+#### EX051-05 results and decision
+
+Completed in one qualified Release binary from implementation `5f5aa9e85` on
+the reference RTX 3080 / Ryzen 9950X system. Each pair used one common count
+chosen from both untimed warmups; every condition exceeded 30 seconds. All
+60,000 frames, including slow frames, remain in the native records. No recording
+was incomplete, overflowed or cancelled. All 648 frozen identities stayed equal.
+
+| Pair | Frames / condition | GPU frame p95: production / FP32-only (ms) | FP32-only minus production steady placement (MiB) | Measured decision |
+| --- | ---: | ---: | ---: | --- |
+| D01: C01, 1080p | 9,600 | 8.385 / 5.322 | +106.000 | Admitted half saves memory but has no frame-time benefit. |
+| D02: C01, 4K | 5,100 | 16.084 / 9.444 | +398.625 | Memory saving scales; the time penalty grows to 6.640 ms. |
+| D03: C02, 1080p | 9,300 | 10.359 / 5.158 | -1.125 | Both stay FP32; reject recurring temporal admission work. |
+| D04: I02, 1080p | 6,000 | 11.015 / 8.232 | -1.125 | Both stay FP32; remove recurring admission work from this operation. |
+
+GPU metrics are graphics-queue frame spans, not a cross-queue critical path.
+Placement is the complete traced steady snapshot, including outputs/cache/
+in-flight resources, not heap commitment or a lifecycle peak. The C01 increases
+are 13.1% and 13.6% of production's traced placement; this is an explicit policy
+tradeoff requiring the 09 agreement, not an assumed memory-budget exemption.
+
+All ten endpoint pairs meet the existing 0.5% + 2e-5 float and one-code-value
+image budgets. C01/C02 are byte-identical; I02's largest float delta is
+2.742e-6, its largest independent UNorm8 delta is one, and endpoint gain differs
+by at most 3.830e-6 stops. All eight runs have zero sampled texture and buffer
+creations. Within-run block p95 ranges are separated for every pair, so variation
+does not prevent these decisions and no pair is repeated.
+
+**Recommendation for 09:** make FP32/P1 the production default and keep checked
+FP16 qualification available only as an explicit diagnostic. This ends further
+production FP16 optimization in this slice, subject to user agreement on the
+memory tradeoff. The complete state/validity table is in the PostProcess owner.
+This is not final acceptance: for example, I02's FP32-only explicit-exposure
+p95 is 0.683 ms before attributing resolve work, above the 0.650 ms target.
+11 must separate active CPU/submission work from waits; 12/13 own integrated
+correctness and final budgets. No target or image tolerance is changed.
+
+[One derived decision report, raw paths/hashes and all distributions](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/decision05/decision-table.json)
+and [checkpoint manifest](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/decision05/checkpoint-manifest.json).
+
 #### EX051-13 final acceptance matrix
 
 Use these frozen recipes in `production` at 1080p and 4K. Run each cell three
@@ -419,11 +464,11 @@ existing presented-output path. Do not rerun this matrix at intermediate items.
 | EX051-02 | Native profiling / Graphics + Diagnostics | validated | 01 | Timestamp retention, coverage, bounded export and R085 are qualified in the [profiling closeout](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/profiling-closeout-manifest.json). Instrumentation overhead is accepted and frozen. |
 | EX051-03 | Recipe, event and memory inventory / existing workload owners | validated | 01 | Documentation-only source inventory complete: eight entry-point/settings mappings and prior workload evidence above; public event operations and fixed script in PostProcessService; live/cache/lease/scratch expectations and existing lifecycle evidence in SceneTextures. Verified against current source and existing reports; no build or native run required/performed. Event-script wiring/execution and final repeated timings belong to 13. |
 | EX051-04 | FP32-only baseline / PostProcess + Environment | validated | 02, 10A | Runtime FP32/P1, admission/certificate bypass, omitted unused reports and precision-only mode invalidation implemented; normal exposure/range/events/sharing/history remain active. Debug: 109 latest unique checks pass; Release: four catalog plus nine native controls pass. Both 234-module shader archives and Release-only benchmark paths compile. Existing `fp32` remains format-only. [Commands, frozen hashes and preserved test-observation correction](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/fp32-only/checkpoint-manifest.json). D01-D04 measurements belong to 05. |
-| EX051-05 | Format-benefit decision / rendering owner | in_progress | 03, 04 | Existing I02 data identifies candidate qualification and gradients as 79% of explicit exposure time. Execute D01-D04 once, record the accept/reject decisions and choose the 09 policy. Exit with one decision table linked to raw results. No new profiler, scenes or benchmark framework. |
+| EX051-05 | Format-benefit decision / rendering owner | validated | 03, 04 | D01-D04 complete in one Release binary: eight timed runs/60,000 frames, ten passing endpoint pairs, zero steady creation churn, 648 unchanged frozen identities. No repeats needed. Every dynamic-production pair is slower; C01 alone saves memory. Reject a frame-time benefit, record the C01 memory tradeoff, and propose FP32 production for the required 09 agreement. [Decision table](#ex051-05-results-and-decision), [raw evidence/checkpoint](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/decision05/checkpoint-manifest.json). Final budgets remain 13. |
 | EX051-06 | Bound-publication reduction experiment / shader owners | validated | 05 checkpoint | H3 was tested, rejected and reverted. [Closeout](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/h3-closeout-manifest.json) preserves the native comparison, DXIL, numerical checks and restored scalar regression. No active follow-up experiment. |
 | EX051-07 | Maximum reuse and scan fusion / ExposurePass + producers | validated | 05 checkpoint | H1 (`73ced156`) and H2 (`efecd6185`) are retained with owning Debug, Release comparisons, DXIL and image checks: [H1](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/h1-closeout-manifest.json), [H2](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/h2-closeout-manifest.json). A new scan hypothesis requires a new 05 decision; final matrix coverage belongs to 13. |
 | EX051-08 | Standalone fog optimization | superseded | — | Removed from active delivery. Exposure-related temporal precision and error propagation belong to 09. General fog optimization is outside this slice. |
-| EX051-09 | Precision operating policy / PostProcess + Environment | planned | 05 | Agree the explicit state/decision table for cheap FP32 operation, candidate attempt, qualified FP16, failure recovery and retry. Specify validity keys and rejection triggers. Preserve mandatory current-frame protection, two actual consecutive eligible frames, event precedence and immutable P/history. Implement only the policy selected by 05; validate affected transitions. |
+| EX051-09 | Precision operating policy / PostProcess + Environment | in_progress | 05 | [Concrete proposed state/decision and validity table](lld/post-process-service.md#proposed-ex051-09-policy-awaiting-agreement) is written from D01-D04: FP32 production, checked qualification/half only by explicit diagnostic request, no automatic production retries. User agreement on policy and observed C01 memory cost is pending. Production policy has not changed. After agreement, implement and validate mode/epoch/acknowledgement transitions before 11; preserve current protection, two actual eligible diagnostic frames, event precedence and immutable histories. |
 | EX051-10 | Copy/reuse/retirement correction / SceneTextures + Graphics | validated | Measured checkpoints | H4 (`20e8968f`), H5 (`28e0f1ee`) and R091/accounting (`8903305`) are committed. H5 removes measured steady churn; R091 passes seven focused Debug cases. The two Release lifecycle matrices pass eight cases each with identical same-control peaks, P/state trajectories and retired populations. Evidence: [H4](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/h4-closeout-manifest.json), [H5](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/h5-closeout-manifest.json), [lifecycle protocol](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/lifecycle-memory/protocol-shared-idle-fix.json), [matched 1080 production](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/lifecycle-memory/audit-matched-1920-production-Release.json), [1080 FP32](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/lifecycle-memory/audit-matched-1920-fp32-Release.json), [4K production](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/lifecycle-memory/audit-matched-3840-production-Release.json), [4K FP32](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/lifecycle-memory/audit-matched-3840-fp32-Release.json). |
 | EX051-10A | Independent SceneColor fallback ownership / SceneTextures | validated | 10 | Independent color allocation/consumer leases and attachment-frame retirement implemented. Framebuffer bindings retain resources separately from immutable reader leases; both pool reuse paths preserve readers/fences. Final Debug batch: 56/56, including existing queued color/depth cases and 4K temporal-off lifecycle. All three retained-resize cycles preserve warmed attachment identities/populations; retired leases are zero. Engine peak 3747.207 MiB (322.5 MiB below the superseded draft); no matched-Release benefit claim. [Checkpoint, exact commands, hashes and preserved diagnosis](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/color-ownership/checkpoint-manifest.json). Item exit passes; Release format-benefit decisions belong to 05 and final acceptance to 13. |
 | EX051-11 | Active CPU attribution / PostProcess + Graphics callers | planned | 05, 09 | Use existing CPU profiling for one targeted attribution of exposure preparation, descriptor publication and command recording/submission. Separate active work from queue waits. Correct only a demonstrated bottleneck; close without a production change when the measured path meets its target. No general submission-system rewrite. |

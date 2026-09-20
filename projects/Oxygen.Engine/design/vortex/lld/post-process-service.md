@@ -755,6 +755,54 @@ cannot cross a lifetime, generation or precision epoch. Shared gain does not
 qualify a consumer's local products. General fog rendering changes belong to
 the environment owner; this item owns only exposure-related precision behavior.
 
+### Proposed EX051-09 policy (awaiting agreement)
+
+**Proposal only; production is unchanged.** The four
+[05 decision pairs](../IMPLEMENTATION_STATUS.md#ex051-05-results-and-decision)
+show no frame-time benefit from the current dynamic policy. C01 admits half but
+trades 3.063/6.640 ms of GPU frame p95 for 106.000/398.625 MiB of steady placement
+at 1080p/4K. C02/I02 remain FP32 while paying admission cost. All output budgets
+pass. The proposed decision is to accept that measured C01 memory tradeoff for
+FP32 production and end further production FP16 optimization in this slice.
+It does not waive bounded-lifetime accounting or final 13/GATE budgets.
+
+Use the existing owners and runtime controls; add no precision framework or
+alternative renderer. `production` would use the qualified FP32-only behavior.
+Keep `fp32-only` as the explicit benchmark reference, preserve `fp32` as the
+existing certified format diagnostic, and expose the existing checked-half
+path only through an explicit `qualified` diagnostic control. That control
+preserves coverage of the implemented admission/conversion/retained-reader
+contracts; it is not another production optimization experiment.
+
+| State | Concrete work | Exit / retry decision |
+| --- | --- | --- |
+| FP32 operation (production default) | FP32 accumulation, resolved color and per-view sky/AP/fog; P=1; normal GPU-owned exposure, metering, adaptation, masks/curves, sharing, events, temporal reprojection and current range protection. No admission scans, error certificates, conversion reports or eligibility-only status jobs. | Ordinary scene, camera, settings and brightness changes remain FP32. No automatic admission or periodic retry. Only an explicit diagnostic control enters qualification. |
+| Candidate attempt (explicit diagnostic only) | Existing full required-product checks, gradients and fresh candidate/error certificates. `fp32` keeps FP32 storage; `qualified` may admit half. | Two actual consecutive eligible submitted/completed frames with the same valid candidate are required. Missing/failed products or identity/epoch changes reset the streak. Continuous checking occurs only while the explicit diagnostic is requested, as with the existing format diagnostic. |
+| Qualified FP16 (explicit `qualified` diagnostic only) | Preserve existing producer protection, current checked conversion, P/history rebasing, reports and independent FP32 fallback leases. No cached certificate substitutes for current checks. | Range/conversion failure or an invalid identity selects existing FP32 diagnostic recovery. Leaving the diagnostic enters production FP32, invalidates eligibility and rebuilds radiance histories. |
+| Recovery | Production remains FP32/P1. Invalid current metering preserves valid gain/history; fresh valid measurements and authored requests follow existing exposure rules. Device recovery, cuts, seeds, source loss and zero-target precedence remain owned by existing lifecycle code. | No production half retry. Within an explicitly selected diagnostic, retain existing failure handling: producer failure follows the Auto-owner remeter contract; conversion-only rejection preserves solved gain; borrowers cannot reset the source. |
+
+This proposal deliberately makes admission and qualified-half states unreachable
+through automatic production behavior. It retains the established diagnostic
+algorithm rather than promising an unmeasured admission cadence or inventing
+scene-change heuristics.
+
+| Validity input / result | Required treatment |
+| --- | --- |
+| View lifetime and source-owner handle/lifetime | No state/status/candidate can cross view removal/recreation or source replacement. Borrowed numerical gain never certifies the borrower's image. |
+| Settings, mask and curve revision; requested/applied exposure generation | Preserve authored intent and GPU gain. Reject stale eligibility and acknowledgements; require a current matching packet before CPU completion. |
+| Precision control/epoch, required-product layout and shader-debug mode | A control change invalidates the precision epoch and rebuilds affected radiance history. Eligibility and acknowledgement packets cannot authorize a different epoch. Diagnostic/unit-gain overrides keep their existing precedence. |
+| Radiance-producing inputs | Production has no reusable half certificate. Diagnostics check actual current products each frame; no reused result stands in for changing materials, lights, environment or camera-dependent radiance. |
+| Temporal source texture, stored P and error state | Production uses FP32 history with ordinary RGB rebasing. Diagnostic current/previous error propagation remains fresh and lease-pinned. Incompatible mode/layout/history changes rebuild, never reinterpret, old contents. |
+| Frame P/S and retained consumers | P/S remain GPU-owned and immutable for each submitted frame. Old color, descriptors, state and reports retire only after their readers and fences; 10A's independent color ownership remains intact. |
+
+After agreement, implement the control/default change and close the named
+mode/epoch/acknowledgement coverage gap using existing delayed-status and queued
+consumer fixtures. Preserve numerical test identities and exercise qualified
+contracts by explicit diagnostic selection. Then proceed to 11 CPU attribution,
+12 owning correctness gates, 13 final acceptance and 14 closeout. The 0.683 ms
+I02 FP32-only explicit-exposure p95 already identifies a remaining budget gap;
+this proposal makes no claim that 13/GATE is satisfied.
+
 ### Slice 5.1 event operation inventory
 
 EX051-03 fixes the following script for the three 1080p I02 acceptance runs in
