@@ -9,6 +9,7 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
+import oxytools
 from oxytools.common import (
     ToolError,
     absolute,
@@ -19,8 +20,8 @@ from oxytools.common import (
     write_json,
     yaml_documents,
 )
+from oxytools.compilation import Context, expand_responses
 
-from .compilation import Context, expand_responses
 from .diagnostics import DIAGNOSTIC_SCHEMA, read_export
 from .execution import Runner, checked
 from .scope import Scope
@@ -108,7 +109,12 @@ class Analyzer:
         self.quiet = quiet
         self._config_lock = threading.Lock()
         self._configs: dict[str, dict] = {}
-        self.code_fingerprint = fingerprint(list(Path(__file__).parent.glob("*.py")))
+        self.code_fingerprint = fingerprint(
+            [
+                *Path(__file__).parent.glob("*.py"),
+                *Path(oxytools.__file__).parent.glob("*.py"),
+            ]
+        )
 
     def configuration(self, context: Context, folder: Path) -> dict:
         files = (

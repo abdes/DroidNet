@@ -23,10 +23,10 @@ from oxytools.common import (
     unchanged,
     write_json,
 )
+from oxytools.compilation import HEADERS, parse_clangd, read_database
 from rich_argparse import RichHelpFormatter
 
 from .analysis import Analyzer, Prepared
-from .compilation import HEADERS, parse_clangd, read_database
 from .diagnostics import deduplicate, scoped
 from .execution import Runner, bounded_map, checked, executable
 from .fixes import apply_fixes, plan_fixes

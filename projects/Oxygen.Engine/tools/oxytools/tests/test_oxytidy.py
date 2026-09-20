@@ -16,7 +16,12 @@ import venv
 from pathlib import Path
 from unittest.mock import patch
 
-from oxytidy.compilation import (
+from oxytidy.execution import Runner, bounded_map
+from oxytidy.fixes import apply_fixes, plan_fixes, replaced_bytes
+from oxytidy.scope import Scope
+from oxytidy.workflow import main, outcome, parse_args, select_ownership_file
+from oxytools.common import ToolError, fingerprint, path_key
+from oxytools.compilation import (
     ClangdConfig,
     expand_responses,
     parse_clangd,
@@ -24,11 +29,6 @@ from oxytidy.compilation import (
     remove_arguments,
     split_command,
 )
-from oxytidy.execution import Runner, bounded_map
-from oxytidy.fixes import apply_fixes, plan_fixes, replaced_bytes
-from oxytidy.scope import Scope
-from oxytidy.workflow import main, outcome, parse_args, select_ownership_file
-from oxytools.common import ToolError, fingerprint, path_key
 
 
 class Fixture(unittest.TestCase):
