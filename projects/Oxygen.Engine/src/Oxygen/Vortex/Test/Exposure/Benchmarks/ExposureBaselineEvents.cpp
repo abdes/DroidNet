@@ -221,18 +221,19 @@ auto ExposureBaselineScenario::ObserveEvent(const unsigned event_frame) -> void
     event_operations.back()["lifetime"] = observation.lifetimes.at(0);
   }
   if (event_frame >= 900U && event_frame <= 905U) {
-    held_statuses = Probe::TakeExposureStatuses(*service,
+    held_statuses = Probe::TakeExposureStatusDelivery(*service,
       CompositionView::ViewStateHandle {
         500U,
       });
-    CHECK_F(held_statuses.size() <= frame::kFramesInFlight.get());
+    CHECK_F(held_statuses.pending.size() <= frame::kFramesInFlight.get());
     const auto status = fixture_.renderer_->InspectExposureTransition(
       CompositionView::ViewStateHandle {
         500U,
       });
     CHECK_F(status && status->phase == ExposureTransitionPhase::kQueued);
   }
-  observation.held_status_jobs = static_cast<unsigned>(held_statuses.size());
+  observation.held_status_jobs
+    = static_cast<unsigned>(held_statuses.pending.size());
   observations.push_back(observation);
   if (capture_event) {
     checkpoints.push_back(std::move(current_checkpoint));
@@ -270,7 +271,7 @@ auto ExposureBaselineScenario::MeasureEventWindows() -> void
     capture_event = false;
     FinalizeRecording(1200U);
   }
-  CHECK_F(held_statuses.empty());
+  CHECK_F(held_statuses.pending.empty() && !held_statuses.deferred);
   recording_path = gpu_path;
   recording_frames = sample_count;
 }
