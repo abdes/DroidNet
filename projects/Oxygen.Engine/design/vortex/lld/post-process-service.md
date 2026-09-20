@@ -1080,13 +1080,15 @@ Histogram publication was 0.011/0.017 ms and 1.2% of aggregate execution. These
 nested measurements identify submission/acquisition as material costs; they do
 not justify another constant-publication experiment.
 
-Before changing submission ownership, collect the missing CPU metric with GPU
-timestamp recording disabled through the existing diagnostics control. The
-completed GPU matrix and its accepted instrumentation campaign are reused. This
-separates CPU qualification from GPU capture/export; it is neither a new GPU
-overhead campaign nor a rendering-quality change. Keep logging OFF, the same
-owner boundaries and driver CPU inclusion, and identify capture mode explicitly
-in the manifest. Numerical endpoints remain checked outside the timed window.
+The user rejected disabling GPU timestamps and further custom instrumentation.
+Keep GPU timing unchanged and use the existing validated Tracy build/captures
+to diagnose submission. All 30 runtime/shader identities still match the 11B
+Tracy checkpoint, so this investigation needs no rebuild. Framewise subtraction
+shows that engine submission work outside `ExecuteCommandLists` is only
+0.0064/0.0125 ms p95/p99; 97.5% of aggregate submission time is inside the native
+call. There are exactly six such calls per frame. Use Tracy's existing Windows
+sampling/context-switch support with elevation and logging OFF to investigate
+that call; do not add more timestamps or change production policy speculatively.
 
 The [performance report](../../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/acceptance13/performance-report.md),
 [per-run decision table](../../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/acceptance13/decision-table.json)
