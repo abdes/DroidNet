@@ -929,6 +929,14 @@ and commit boundaries are in
   Fold exposure-related temporal precision work from 08 into this item.
 - EX051-11 uses existing profiling to isolate active exposure CPU work from
   queue waits. Correct only the identified preparation/submission bottleneck.
+  The user-approved bounded candidates are EX051-11A (one recorder/submission
+  for adjacent final range plus histogram/solve, preserving early boundaries)
+  and EX051-11B (attribute publication and evaluate one immutable histogram
+  constant record for clear and accumulation). Their concrete contracts,
+  checks and accept/reject conditions are tracked in
+  [PostProcessService](../lld/post-process-service.md#ex051-11-cpu-attribution-checkpoint)
+  and the existing item table. They authorize no general submission framework,
+  unsafe descriptor reuse or budget relaxation.
 - EX051-12 integrates correctness. EX051-13 alone runs final production
   acceptance: eight recipes at two resolutions, three runs per cell, with the
   fixed transition schedule attached to the 1080p I02 runs and one presentation

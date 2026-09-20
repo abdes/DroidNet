@@ -842,22 +842,41 @@ one adjacent range/solve submission would address only part of the eight
 submissions; retaining event ordering, immutable records and submitted-work
 acknowledgements remains mandatory.
 
-**Decision pending:** retain the evidence and keep 11 in progress. Broader work
-on caller-owned recording batches and constant/descriptor publication crosses
-the current bounded item into renderer/Graphics ownership and requires an
-explicit scope decision before implementation. The concrete extension would
-first attribute the remaining publication/recording interval, then evaluate
-sharing recorders only across adjacent exposure stages while preserving their
-resource transitions, status/failure semantics and GPU scope identities. It must
-not silently become a general submission-system rewrite, relax budgets, or
-discard slow frames. If that extension is declined, record the CPU target as
-unmet and keep 13/GATE open; do not run the expensive final matrix merely to
-restate this unresolved prerequisite.
+**Agreed scope (user approval, 2026-09-20):** execute the two specific candidates
+below as separate increments. EX051-11 already includes Graphics callers; the
+earlier broad wording did not establish a need for a general submission rewrite.
+The traces show elapsed costs, not a proven descriptor bottleneck or pure active
+CPU cost. Keep 11 in progress until its measured decision is recorded; final
+budgets remain in 13/GATE.
+
+| Candidate | Concrete ownership/change | Verification and stopping condition |
+| --- | --- | --- |
+| EX051-11A | `SceneRenderer` currently invokes `CheckSceneColorRange` immediately before `PrepareSceneExposure`. Move the final range recording into the enclosing exposure operation. One recorder owns final range, histogram and solve, with one successful submission before state publication. Two-view I02 should fall from eight exposure command lists to six. | Prove exact recorder count and unchanged GPU work/order; focused Debug range/numerical, failure/retry, transition/generation, sharing and queued-reader cases, then owning exposure correctness. Compile affected Release paths and use the existing I02 trace controls for a matched CPU comparison. Retain only with correctness and demonstrated benefit; reject without broadening into other renderer stages if it does not help. |
+| EX051-11B | `RecordState` calls `UpdateHistogramConstants` before clear and again before accumulation with the same inputs. Attribute publication, then evaluate publishing one immutable record and binding its index for both dispatches. Evaluate any further constant/descriptor reuse only after its cost and safe ownership are established. | Compare publication/descriptor activity and CPU time; qualify histogram/mask, two-view, mode/event, lifetime and retained-reader behavior. Payloads, shader layouts and output budgets stay identical. Reject an ineffective candidate rather than assuming that fewer publications must improve frame time. |
+
+11A keeps frame P/state resolve and pre-environment range as separate submissions:
+intervening rendering work makes them different ordering boundaries. Each GPU
+phase keeps its existing timing scope and required transitions/UAV ordering.
+Recording is not submission: failed acquisition, recording or submission must
+not publish a solved state, mark a request submitted or acknowledge a transition.
+Partially recorded resources remain safely retained. Existing explicit diagnostic
+qualification, fallback and retry semantics remain covered.
+
+11B uses `PerViewStructuredPublisher` / `TransientStructuredBuffer` as the
+existing publication path. Rebinding a record within one recording does not
+permit mutation of its payload. Persistent/reusable backing storage or descriptors
+must wait for all queued readers and GPU retirement; a frame-slot index alone is
+not a lifetime proof. No new scheduler, general command-batching framework,
+cross-frame deferral or renderer-wide allocator redesign is approved by these
+candidates. Numerical contracts, production FP32 policy, budgets and final matrix
+are unchanged. Commit each candidate's accepted correction or rejected result
+before the next production correction. Use the existing validation subagent and
+frozen serial native batches; raw results remain in the single checkpoint tree.
 
 The [CPU checkpoint](../../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/cpu-attribution/checkpoint-manifest.json)
 links the original and detailed raw traces, CPU exports, analyses, commands and
-hashes. No production rendering correction was made in this item. EX051-12–14
-and final acceptance remain pending.
+hashes. No production rendering correction is yet validated in this item.
+EX051-12–14 and final acceptance remain pending.
 
 ### Slice 5.1 event operation inventory
 
