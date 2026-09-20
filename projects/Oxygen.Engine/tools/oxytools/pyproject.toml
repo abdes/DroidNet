@@ -18,4 +18,4 @@ oxyformat = "oxyformat.cli:main"
 where = ["src"]
 
 [dependency-groups]
-dev = ["ruff>=0.15,<0.16"]
+dev = ["ruff>=0.15,<0.16", "pre-commit>=4.5,<5"]

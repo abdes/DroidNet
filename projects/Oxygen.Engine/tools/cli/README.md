@@ -174,7 +174,7 @@ needed. The launcher uses the active venv or Python on PATH and never installs
 dependencies during a run. Install the shared `tools/oxytools` package once.
 
 See [the oxyformat reference](../oxytools/docs/oxyformat.md) for exit codes,
-failure handling and performance measurements.
+failure handling, performance measurements, and the checking pre-commit hook.
 
 ### `oxytidy.ps1`
 

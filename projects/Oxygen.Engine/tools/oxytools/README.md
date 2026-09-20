@@ -30,3 +30,9 @@ python -m unittest discover -s <engine>/tools/oxytools/tests -v
 uvx ruff check tools/oxytools
 uvx ruff format --check tools/oxytools
 ```
+
+Real hook tests require the `pre-commit` development dependency. If it is installed
+in another interpreter, set `OXYTOOLS_TEST_PRE_COMMIT_PYTHON` to that interpreter's
+absolute path. Hook tests use an isolated temporary Git repository and never
+alter the developer's index. LLVM integration tests require LLVM 22.x; skipped
+integration tests are not validation evidence.
