@@ -721,6 +721,48 @@ cannot cross a lifetime, generation or precision epoch. Shared gain does not
 qualify a consumer's local products. General fog rendering changes belong to
 the environment owner; this item owns only exposure-related precision behavior.
 
+### Slice 5.1 event operation inventory
+
+EX051-03 fixes the following script for the three 1080p I02 acceptance runs in
+EX051-13. Existing steady benchmark entry points do not yet append this script.
+No event timing or new execution is claimed by this documentation inventory.
+
+Use the same dt, path and quality as I02. After steady collection, render one
+unmodified 1,200-frame matched cycle, then an event cycle of 1,200 frames with
+the same phase origin. Frame numbers below are zero-based in the event cycle;
+operations run before view publication. Keep view/handle 500 as main/source and
+501 as secondary/borrower. Record each operation's frame and following 30 frames
+separately from steady data, matched against those path phases in the unmodified
+cycle. Track pending events through completion beyond the window if necessary;
+do not discard slow frames or treat a timeout as successful acknowledgement.
+Restore baseline inputs at the explicit frames below; include restoration cost
+as its own event. Record actual format/P/history and completion generations at
+untimed checkpoints after collection.
+
+| Event frame(s) | Public operation / existing source seam | Required observation |
+| --- | --- | --- |
+| 60; 120 | `Renderer::QueueExposureTransition(500, kSeedFromEv100, 14.5F)`; then `NotifyViewDiscontinuity(500, kCameraCut)` | Seed owns its frame; cut remeters according to existing precedence; applied generation matches the issued token. |
+| 180; 240 | Publish main `CompositionView::render_settings.exposure` with Manual EV14.5; restore the captured Auto settings through `PublishRuntimeCompositionView` | Immediate manual solve; Manual-to-Auto continuity followed by ordinary adaptation. |
+| 300; 360 | `DirectionalLight::SetIntensityLux(440000)`; restore 110000, then `Scene::Update` / `SyncObservers` before rendering | A fourfold sun step changes the target while valid Auto history adapts; no implicit remeter merely for precision rejection. |
+| 420; 480; 540; 600 | Publish secondary `exposure_source_view_id=500`; remove source with `RemovePublishedRuntimeView(frame, 500)` and omit it; republish source; restore secondary source to `kInvalidViewId` | Borrow previous completed source gain; source loss gets consumer-owned fallback; re-add creates a new source lifetime; independent gain resumes without stale acknowledgement. |
+| 660; 720 | Swap the two existing output/view extents and camera viewports via `PublishRuntimeCompositionView`; restore original assignment | Preserve numerical exposure, invalidate incompatible precision/history layout, and retain any old readers until their fences. No third size population. |
+| 780; 840 | Remove secondary using `RemovePublishedRuntimeView(frame, 501)` and omit publication; republish with the same public IDs | New lifetime despite reused ID; old color/state remain immutable for retained consumers. |
+| 900–905; 906 | Queue `kSeedFromEv100, 14.5F` on main. Hold status delivery for six frames with existing `RendererPublicationProbe::TakeExposureStatuses`; restore held jobs with `RestoreExposureStatuses` before frame 906 | GPU seed/adaptation proceeds while CPU acknowledgement is delayed; no stale precision authorization, unbounded retry allocation or CPU wait. |
+
+Acknowledgement delay is test transport control, not a new public rendering API.
+Reuse the seam in
+[`SceneDelayedStatusCannotAuthorizeStalePrecision`](../../../src/Oxygen/Vortex/Test/Exposure/ScenePrecision_test.cpp).
+Public transition definitions are in
+[`Renderer.h`](../../../src/Oxygen/Vortex/Renderer.h); source ownership is in
+[`CompositionView.h`](../../../src/Oxygen/Vortex/CompositionView.h).
+Existing `SceneLifecycle_test.cpp`, `SourceLoss_test.cpp`, `Transitions_test.cpp`
+and `QueuedConsumers_test.cpp` provide correctness coverage for these operations;
+`ExposureAllocationLifecycle.cpp` supplies the delayed-reader/resize/removal
+memory trace. Their prior qualified evidence remains in EX05-18/22–25 and
+EX051-10. EX051-12 maps changed contracts to focused owning checks; EX051-13
+alone wires and measures this combined script. Startup belongs to a separate
+window, never to the warm transition distribution.
+
 ## Post chain and qualification
 
 Owner exposure solves from FP32 accumulation before Stage 21 optionally resolves

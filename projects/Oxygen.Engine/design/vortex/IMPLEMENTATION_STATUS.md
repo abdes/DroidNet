@@ -96,6 +96,14 @@ Slices 6-10, including the complete LightBench delivery; the package is not comp
 
 ### 3.1 Current work
 
+**Performance resumed (2026-09-20): EX051-03 inventory complete.** The eight
+existing workload entry points, fixed controls, public event operations and
+bounded event script are mapped below. The SceneTextures owner inventory links
+the existing descriptor and lifecycle reports; no build or native run was needed
+or performed for this documentation-only item. Next: EX051-10A independent color
+ownership, then 04, then the four decision pairs. Event-script execution remains
+in 13; neither this inventory nor historical manifests close final acceptance.
+
 **Complete: corrected quality review of every file under
 `src/Oxygen/Vortex/Test` (2026-09-20).** Scope: 156 files, comprising 129 C++
 translation units, 21 headers and six non-C++ files. The earlier result based on
@@ -135,7 +143,7 @@ reports, `build-final-all-debug.log`, `build-final-exposure-release.log`,
 `correctness-final-cpu/result.json`, and
 `correctness-final-exposure/result.json`. Failed intermediate and superseded
 suppression-based results remain separate. This closes the requested test review;
-the broader Slice 5.2 engine-quality scope and performance work remain paused.
+the broader Slice 5.2 engine-quality scope remains pending EX051-GATE.
 
 ### 3.2 Slice 5 work items
 
@@ -199,11 +207,8 @@ with its own correctness checks, measured result and accept/reject decision.
 Only 13 owns the final repeated performance matrix. GATE evaluates that evidence.
 A completed or rejected experiment does not wait for 13 to close.
 
-**First action on performance resume:** finish EX051-03 by mapping the eight
-recipes and event schedule below to the current named entry points/public APIs,
-and link the existing descriptor/lifecycle measurements as the memory inventory.
-Update the existing 03 row and owner tables; this step needs no build or native
-run. Then start EX051-10A at its
+**Next action:** EX051-03's documentation-only inventory is complete below.
+Start EX051-10A at its
 [source entry points](lld/scene-textures.md#ex051-10a-independent-scenecolor-fallback-ownership).
 EX051-04 follows 10A. D01-D04 run only after both deliveries are validated.
 
@@ -332,23 +337,63 @@ in 05 and are not a second 48-run acceptance matrix.
 Every acceptance run must meet its cell's targets. Report each run and the
 aggregate; do not replace a failed run with a pooled percentile.
 
-| Recipe | Views | Exposure | Path | Temporal fog |
-| --- | ---: | --- | --- | --- |
-| C01 | 2 | Manual | Deferred | Off |
-| C02 | 2 | Manual | Deferred | On |
-| M01 | 1 | Auto | Deferred | Off |
-| M02 | 2 | Auto | Deferred | On |
-| M03 | 2 | Manual | Forward | Off |
-| M04 | 1 | Auto | Forward | On |
-| I01 | 1 | Auto | Deferred | On |
-| I02 | 2 | Auto | Forward | On |
+| Recipe / `OXYGEN_EXPOSURE_BASELINE_CASE` | Views | Exposure | Path | Temporal fog | Existing test entry point / scene |
+| --- | ---: | --- | --- | --- | --- |
+| C01 | 2 | Manual EV0 | Deferred | Off | `ExposureProfilingOverheadTest.DISABLED_ReleaseControlledBaseline`; emissive triangle 0.25, vacuum atmosphere, zero-extinction fog |
+| C02 | 2 | Manual EV0 | Deferred | On | Same controlled entry point and scene |
+| M01 | 1 | Auto | Deferred | Off | `ExposureProfilingOverheadTest.DISABLED_ReleaseMixedBaseline`; static MultiView mixed scene |
+| M02 | 2 | Auto | Deferred | On | Same mixed entry point and scene |
+| M03 | 2 | Manual EV14.5 | Forward | Off | Same mixed entry point and scene |
+| M04 | 1 | Auto | Forward | On | Same mixed entry point and scene |
+| I01 | 1 | Auto | Deferred | On | `ExposureIndoorOutdoorBenchmarkTest.DISABLED_ReleaseIndoorOutdoorBaseline`; mixed scene plus six-piece shadowed enclosure |
+| I02 | 2 | Auto | Forward | On | Same indoor/outdoor entry point and scene |
+
+**EX051-03 executable inventory.** All entries are in
+[`ExposurePerformance_bench.cpp`](../../src/Oxygen/Vortex/Test/Exposure/Benchmarks/ExposurePerformance_bench.cpp)
+and run from `out/build-ninja/bin/Release/Oxygen.Vortex.ExposureGpu.Tests.exe`
+with `--gtest_also_run_disabled_tests --gtest_filter=<entry-point>`.
+[`ExposureBaselineSetup.cpp`](../../src/Oxygen/Vortex/Test/Exposure/Benchmarks/ExposureBaselineSetup.cpp)
+owns the selectors, view count, path and temporal settings. Set width to 1920 or
+3840, precision to the item-required control, frames to the paired sample count,
+and run ID to a unique name using the five environment variables listed in 05.
+`fp32-only` remains an implementation gap in 04, not an existing selector.
+
+Common controls in
+[`ExposureBaselineScenario.h`](../../src/Oxygen/Vortex/Test/Exposure/Benchmarks/ExposureBaselineScenario.h):
+16,666,667 ns simulation dt, three frame slots, Average metering, key 12.5,
+None tone mapper, gamma 1, jitter off, AP width 64/depth 32/range 96 km/two
+samples per slice, fog history-miss supersampling 4 and directional shadows on.
+Other exposure fields use the existing `scene::ExposureSettings` defaults;
+the run manifest records their resolved values. Views/handles are 500 and 501;
+secondary dimensions are half the main. Controlled cameras retain aspect 1/FOV
+1 radian; mixed cameras use aspect 16:9/FOV 45 degrees. Caller outputs are FP32.
+The indoor fixture enables the shadowing capability; the other two do not.
+
+[`PopulateMixedExposureBenchmarkScene`](../../src/Oxygen/Vortex/Test/Fixtures/ExposureBenchmarkScene.h)
+owns procedural asset identities, five opaque/emissive/masked/translucent/ground
+surfaces, lights and nonzero atmosphere/fog. I01/I02 add the existing enclosure.
+[`ExposureBaselineRendering.cpp`](../../src/Oxygen/Vortex/Test/Exposure/Benchmarks/ExposureBaselineRendering.cpp)
+owns the 1,200-frame path: 300 exterior hold, 300 smoothstep entry, 300 interior
+hold, 300 smoothstep exit; secondary phase is +600. Its warmup already enforces
+300 frames/10 seconds (whole 1,200-frame cycles for I01/I02). Asset readiness,
+draws, actual formats, shadows and temporal history are checked by that harness.
+GPU JSON, CPU CSV and the run manifest are emitted once; untimed endpoint images
+and placement snapshots are separate from sampled frames. Existing
+[native checkpoint](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/native-benchmark-checkpoint-manifest.json)
+and [H5 checkpoint](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/h5-closeout-manifest.json)
+remain prior evidence, not new runs or final acceptance.
 
 Append the same bounded event schedule to the three 1080p I02 runs: seed/cut,
 Manual/Auto switch, brightness step, sharing/source loss, resize, remove/re-add
 and delayed acknowledgement. Record startup and event windows separately from
 steady samples. Qualify warm-transition cost against its matched steady window.
-EX051-03 binds each event to the existing public view/exposure API and fixes its
-script before execution. Verify normal 60 Hz presentation once through an
+The fixed event script is owned by the
+[PostProcessService event inventory](lld/post-process-service.md#slice-51-event-operation-inventory).
+It maps public operations and the existing test-only acknowledgement-delay seam;
+wiring that script into the existing I02 harness and executing it belong to 13.
+Memory expectations are in the
+[SceneTextures inventory](lld/scene-textures.md#slice-51-workload-memory-inventory).
+Verify normal 60 Hz presentation once through an
 existing presented-output path. Do not rerun this matrix at intermediate items.
 
 #### Tasks and exit evidence
@@ -357,7 +402,7 @@ existing presented-output path. Do not rerun this matrix at intermediate items.
 | --- | --- | --- | --- | --- |
 | EX051-01 | Acceptance contract / rendering owner | validated | User approval | Hardware, invariants, budgets and eight recipes are frozen in the [baseline manifest](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/baseline-manifest.json). |
 | EX051-02 | Native profiling / Graphics + Diagnostics | validated | 01 | Timestamp retention, coverage, bounded export and R085 are qualified in the [profiling closeout](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/profiling-closeout-manifest.json). Instrumentation overhead is accepted and frozen. |
-| EX051-03 | Recipe, event and memory inventory / existing workload owners | in_progress | 01 | Bind C01/C02, M01-M04 and I01/I02 to existing entry points and fixed settings; map the event schedule to public APIs; record descriptor-based live/cache/lease/scratch expectations. Reconcile existing workload and lifecycle evidence. Exit with the executable inventory and memory table. Final repeated timings belong to 13. |
+| EX051-03 | Recipe, event and memory inventory / existing workload owners | validated | 01 | Documentation-only source inventory complete: eight entry-point/settings mappings and prior workload evidence above; public event operations and fixed script in PostProcessService; live/cache/lease/scratch expectations and existing lifecycle evidence in SceneTextures. Verified against current source and existing reports; no build or native run required/performed. Event-script wiring/execution and final repeated timings belong to 13. |
 | EX051-04 | FP32-only baseline / PostProcess + Environment | planned | 02, 10A | Add the `fp32-only` control defined above. Keep exposure, rendering and events active; remove only FP16-admission work. Qualify output, gain, sharing, history and recovery with existing focused controls. The existing `fp32` selector stays diagnostic-only. |
 | EX051-05 | Format-benefit decision / rendering owner | in_progress | 03, 04 | Existing I02 data identifies candidate qualification and gradients as 79% of explicit exposure time. Execute D01-D04 once, record the accept/reject decisions and choose the 09 policy. Exit with one decision table linked to raw results. No new profiler, scenes or benchmark framework. |
 | EX051-06 | Bound-publication reduction experiment / shader owners | validated | 05 checkpoint | H3 was tested, rejected and reverted. [Closeout](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/h3-closeout-manifest.json) preserves the native comparison, DXIL, numerical checks and restored scalar regression. No active follow-up experiment. |
