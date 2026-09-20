@@ -31,7 +31,7 @@
 namespace oxygen::vortex::testing {
 
 struct RendererPublicationProbe {
-  static inline auto CleanupWithResolvedDepth(
+  static auto CleanupWithResolvedDepth(
     SceneRenderer& renderer, SceneTextureExtractRef resolved) -> void
   {
     renderer.scene_texture_extracts_.resolved_scene_depth = std::move(resolved);
@@ -42,8 +42,10 @@ struct RendererPublicationProbe {
   static auto SceneTexturePoolCounts(const SceneRenderer& renderer)
     -> std::pair<std::size_t, std::size_t>
   {
-    return { renderer.scene_texture_pool_.GetAllocationCount(),
-      renderer.scene_texture_pool_.GetLiveLeaseCount() };
+    return {
+      renderer.scene_texture_pool_.GetAllocationCount(),
+      renderer.scene_texture_pool_.GetLiveLeaseCount(),
+    };
   }
 
   static auto BasePassDrawCommands(const SceneRenderer& renderer)
@@ -57,24 +59,32 @@ struct RendererPublicationProbe {
   {
     auto result = std::vector<std::shared_ptr<graphics::Texture>> {};
     auto* environment = renderer.environment_.get();
-    if (!environment)
+    if (environment == nullptr) {
       return result;
-    if (environment->sky_view_lut_pass_)
+    }
+    if (environment->sky_view_lut_pass_) {
       for (const auto& texture :
-        environment->sky_view_lut_pass_->live_textures_)
+        environment->sky_view_lut_pass_->live_textures_) {
         result.push_back(texture);
-    if (environment->camera_aerial_perspective_pass_)
+      }
+    }
+    if (environment->camera_aerial_perspective_pass_) {
       for (const auto& texture :
-        environment->camera_aerial_perspective_pass_->live_textures_)
+        environment->camera_aerial_perspective_pass_->live_textures_) {
         result.push_back(texture);
+      }
+    }
     if (environment->volumetric_fog_pass_) {
       for (const auto& texture :
-        environment->volumetric_fog_pass_->live_textures_)
+        environment->volumetric_fog_pass_->live_textures_) {
         result.push_back(texture);
+      }
       const auto history
         = environment->volumetric_fog_pass_->history_by_view_.find(view);
-      if (history != environment->volumetric_fog_pass_->history_by_view_.end())
+      if (history
+        != environment->volumetric_fog_pass_->history_by_view_.end()) {
         result.push_back(history->second.texture);
+      }
     }
     return result;
   }
@@ -91,8 +101,10 @@ struct RendererPublicationProbe {
   static auto VelocityIntermediates(const BasePassModule& pass)
     -> std::array<std::shared_ptr<graphics::Texture>, 2>
   {
-    return { pass.velocity_base_copy_,
-      pass.velocity_motion_vector_world_offset_ };
+    return {
+      pass.velocity_base_copy_,
+      pass.velocity_motion_vector_world_offset_,
+    };
   }
   static auto BuildStaticSkyPublication(EnvironmentLightingService& service,
     const RenderContext& ctx, const EnvironmentProbeState& state,
@@ -107,14 +119,18 @@ struct RendererPublicationProbe {
     -> std::pair<std::shared_ptr<graphics::Texture>,
       postprocess::ExposurePass::FrameLease>
   {
-    if (!renderer.environment_ || !renderer.environment_->volumetric_fog_pass_)
+    if (!renderer.environment_
+      || !renderer.environment_->volumetric_fog_pass_) {
       return {};
+    }
     const auto& histories
       = renderer.environment_->volumetric_fog_pass_->history_by_view_;
     const auto found = histories.find(view);
-    return found == histories.end()
-      ? decltype(FogHistory(renderer, view)) {}
-      : std::pair { found->second.texture, found->second.frame_exposure };
+    return found == histories.end() ? decltype(FogHistory(renderer, view)) {}
+                                    : std::pair {
+                                        found->second.texture,
+                                        found->second.frame_exposure,
+                                      };
   }
   static auto FogHistoryCount(const SceneRenderer& renderer) -> std::size_t
   {
@@ -127,12 +143,12 @@ struct RendererPublicationProbe {
   {
     return static_cast<std::size_t>(
       std::ranges::count_if(service.exposure_pass_->frame_pool_,
-        [](const auto& frame) { return frame.use_count() > 1; }));
+        [](const auto& frame) -> bool { return frame.use_count() > 1; }));
   }
   static auto FrameExposureStates(const PostProcessService& service,
     frame::Slot slot) -> std::vector<postprocess::ExposurePass::StateLease>
   {
-    return service.exposure_pass_->frame_states_[slot.get()];
+    return service.exposure_pass_->frame_states_.at(slot.get());
   }
   static auto PreviousViewHistory(Renderer& renderer)
     -> internal::PreviousViewHistoryCache&
@@ -184,10 +200,12 @@ struct RendererPublicationProbe {
     -> std::pair<std::size_t, std::size_t>
   {
     const auto pending = service.pending_exposure_status_.find(handle);
-    return { pending == service.pending_exposure_status_.end()
+    return {
+      pending == service.pending_exposure_status_.end()
         ? 0U
         : pending->second.size(),
-      service.deferred_exposure_status_.contains(handle) ? 1U : 0U };
+      service.deferred_exposure_status_.contains(handle) ? 1U : 0U,
+    };
   }
 
   using ExposureStatusJobs
@@ -218,7 +236,10 @@ struct RendererPublicationProbe {
     if (const auto pending = service.pending_exposure_status_.find(handle);
       pending != service.pending_exposure_status_.end()) {
       for (const auto& job : pending->second) {
-        result.pending.push_back({ job.readback, job.frame_sequence });
+        result.pending.push_back({
+          .readback = job.readback,
+          .frame_sequence = job.frame_sequence,
+        });
       }
     }
     return result;

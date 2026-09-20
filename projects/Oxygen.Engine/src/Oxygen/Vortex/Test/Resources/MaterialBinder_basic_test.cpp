@@ -25,47 +25,34 @@ namespace {
 using oxygen::content::ResourceKey;
 using oxygen::vortex::testing::MaterialBinderTest;
 
-[[nodiscard]] auto MakeMaterial(ResourceKey base_color_key,
-  ResourceKey normal_key, uint32_t raw_base_color_index,
-  uint32_t raw_normal_index)
-  -> std::shared_ptr<const oxygen::data::MaterialAsset>
-{
-  using oxygen::data::pak::render::MaterialAssetDesc;
-
-  MaterialAssetDesc desc {};
-  desc.base_color_texture
-    = oxygen::data::pak::core::ResourceIndexT { raw_base_color_index };
-  desc.normal_texture
-    = oxygen::data::pak::core::ResourceIndexT { raw_normal_index };
-
-  // Non-zero defaults so we can distinguish from memset/zero init.
-  desc.base_color[0] = 1.0F;
-  desc.base_color[1] = 0.5F;
-  desc.base_color[2] = 0.25F;
-  desc.base_color[3] = 1.0F;
-
-  return std::make_shared<oxygen::data::MaterialAsset>(
-    oxygen::data::AssetKey {}, desc,
-    std::vector<oxygen::data::ShaderReference> {},
-    std::vector { base_color_key, normal_key });
-}
-
 class MaterialBinderBasicTest : public MaterialBinderTest { };
 
 //! Material binder must return stable handles for identical inputs.
 NOLINT_TEST_F(MaterialBinderBasicTest, SameMaterialReturnsSameHandle)
 {
-  const ResourceKey base_color_key { 1001U };
-  const ResourceKey normal_key { 1002U };
+  const ResourceKey base_color_key {
+    1001U,
+  };
+  const ResourceKey normal_key {
+    1002U,
+  };
 
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+    oxygen::frame::Slot {
+      1,
+    });
   MatBinder().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+    oxygen::frame::Slot {
+      1,
+    });
 
   oxygen::vortex::sceneprep::MaterialRef ref;
-  ref.resolved_asset
-    = MakeMaterial(base_color_key, normal_key, 100000U, 200000U);
+  ref.resolved_asset = MakeMaterial({
+    .base_color_key = base_color_key,
+    .normal_key = normal_key,
+    .raw_base_color_index = 100000U,
+    .raw_normal_index = 200000U,
+  });
   ref.source_asset_key = ref.resolved_asset->GetAssetKey();
   ref.resolved_asset_key = ref.resolved_asset->GetAssetKey();
 
@@ -80,24 +67,46 @@ NOLINT_TEST_F(MaterialBinderBasicTest, SameMaterialReturnsSameHandle)
 //! Different materials must yield distinct handles.
 NOLINT_TEST_F(MaterialBinderBasicTest, DifferentMaterialsReturnDifferentHandle)
 {
-  const ResourceKey base_color_key0 { 3001U };
-  const ResourceKey normal_key0 { 3002U };
+  const ResourceKey base_color_key0 {
+    3001U,
+  };
+  const ResourceKey normal_key0 {
+    3002U,
+  };
 
-  const ResourceKey base_color_key1 { 4001U };
-  const ResourceKey normal_key1 { 4002U };
+  const ResourceKey base_color_key1 {
+    4001U,
+  };
+  const ResourceKey normal_key1 {
+    4002U,
+  };
 
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+    oxygen::frame::Slot {
+      1,
+    });
   MatBinder().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+    oxygen::frame::Slot {
+      1,
+    });
 
   oxygen::vortex::sceneprep::MaterialRef ref0;
-  ref0.resolved_asset = MakeMaterial(base_color_key0, normal_key0, 10U, 20U);
+  ref0.resolved_asset = MakeMaterial({
+    .base_color_key = base_color_key0,
+    .normal_key = normal_key0,
+    .raw_base_color_index = 10U,
+    .raw_normal_index = 20U,
+  });
   ref0.source_asset_key = ref0.resolved_asset->GetAssetKey();
   ref0.resolved_asset_key = ref0.resolved_asset->GetAssetKey();
 
   oxygen::vortex::sceneprep::MaterialRef ref1;
-  ref1.resolved_asset = MakeMaterial(base_color_key1, normal_key1, 11U, 21U);
+  ref1.resolved_asset = MakeMaterial({
+    .base_color_key = base_color_key1,
+    .normal_key = normal_key1,
+    .raw_base_color_index = 11U,
+    .raw_normal_index = 21U,
+  });
   ref1.source_asset_key = ref1.resolved_asset->GetAssetKey();
   ref1.resolved_asset_key = ref1.resolved_asset->GetAssetKey();
 
@@ -117,41 +126,89 @@ NOLINT_TEST_F(
   using oxygen::data::MaterialAsset;
   using oxygen::vortex::sceneprep::MaterialRef;
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+    oxygen::frame::Slot {
+      1,
+    });
   MatBinder().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
-  const std::array colors { std::array { 0.0F, 0.0F, 0.0F },
-    std::array { 0x1p-24F, 0.0F, 0.0F }, std::array { 0.0F, 0x1p-24F, 0.0F },
-    std::array { 0.0F, 0.0F, 0x1p-24F }, std::array { 0x1p-23F, 0.0F, 0.0F },
-    std::array { 1.0F, 2.0F, 4.0F },
-    std::array { 65504.0F, 65504.0F, 65504.0F } };
+    oxygen::frame::Slot {
+      1,
+    });
+  const std::array colors {
+    std::array {
+      0.0F,
+      0.0F,
+      0.0F,
+    },
+    std::array {
+      0x1p-24F,
+      0.0F,
+      0.0F,
+    },
+    std::array {
+      0.0F,
+      0x1p-24F,
+      0.0F,
+    },
+    std::array {
+      0.0F,
+      0.0F,
+      0x1p-24F,
+    },
+    std::array {
+      0x1p-23F,
+      0.0F,
+      0.0F,
+    },
+    std::array {
+      1.0F,
+      2.0F,
+      4.0F,
+    },
+    std::array {
+      65504.0F,
+      65504.0F,
+      65504.0F,
+    },
+  };
   std::vector<oxygen::vortex::sceneprep::MaterialHandle> handles;
-  const auto make_ref = [&](const auto& rgb) {
+  const auto make_ref = [&](const auto& rgb) -> auto {
     oxygen::data::pak::render::MaterialAssetDesc desc {};
     desc.material_domain
       = static_cast<std::uint8_t>(oxygen::data::MaterialDomain::kOpaque);
     desc.flags = oxygen::data::pak::render::kMaterialFlag_NoTextureSampling;
-    for (unsigned c = 0; c < 3; ++c)
-      desc.emissive_factor[c] = HalfFloat { rgb[c] };
-    return MaterialRef { .resolved_asset
+    for (unsigned c = 0; c < 3; ++c) {
+      desc.emissive_factor[c] = HalfFloat {
+        rgb.at(c),
+      };
+    }
+    return MaterialRef {
+      .source_asset_key = {},
+      .resolved_asset_key = {},
+      .resolved_asset
       = std::make_shared<const MaterialAsset>(oxygen::data::AssetKey {}, desc,
-        std::vector<oxygen::data::ShaderReference> {}) };
+        std::vector<oxygen::data::ShaderReference> {}),
+    };
   };
   for (const auto& rgb : colors) {
     const auto handle = MatBinder().GetOrAllocate(make_ref(rgb));
     ASSERT_TRUE(MatBinder().IsHandleValid(handle));
-    for (const auto previous : handles)
+    for (const auto previous : handles) {
       EXPECT_NE(handle, previous);
+    }
     handles.push_back(handle);
   }
   ASSERT_EQ(MatBinder().GetMaterialShadingConstants().size(), colors.size());
   for (std::size_t i = 0; i < colors.size(); ++i) {
     // Equal emission still deduplicates, including tiny positive values.
-    EXPECT_EQ(MatBinder().GetOrAllocate(make_ref(colors[i])), handles[i]);
+    EXPECT_EQ(MatBinder().GetOrAllocate(make_ref(colors.at(i))), handles.at(i));
     const auto constants = MatBinder().GetMaterialShadingConstants();
-    EXPECT_TRUE(std::ranges::any_of(constants, [&](const auto& value) {
+    EXPECT_TRUE(std::ranges::any_of(constants, [&](const auto& value) -> auto {
       return value.emissive_factor
-        == glm::vec3 { colors[i][0], colors[i][1], colors[i][2] };
+        == glm::vec3 {
+             colors.at(i).at(0),
+             colors.at(i).at(1),
+             colors.at(i).at(2),
+           };
     }));
   }
 }
@@ -160,9 +217,13 @@ NOLINT_TEST_F(
 NOLINT_TEST_F(MaterialBinderBasicTest, HandleNullAndInvalid)
 {
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+    oxygen::frame::Slot {
+      1,
+    });
   MatBinder().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+    oxygen::frame::Slot {
+      1,
+    });
 
   oxygen::vortex::sceneprep::MaterialRef ref;
   ref.resolved_asset = nullptr;
@@ -174,16 +235,34 @@ NOLINT_TEST_F(MaterialBinderBasicTest, HandleNullAndInvalid)
 //! Identical material content should deduplicate (same handle returned).
 NOLINT_TEST_F(MaterialBinderBasicTest, ContentEqualityDedupes)
 {
-  const ResourceKey base_color_key { 11001U };
-  const ResourceKey normal_key { 11002U };
+  const ResourceKey base_color_key {
+    11001U,
+  };
+  const ResourceKey normal_key {
+    11002U,
+  };
 
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+    oxygen::frame::Slot {
+      1,
+    });
   MatBinder().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+    oxygen::frame::Slot {
+      1,
+    });
 
-  auto a = MakeMaterial(base_color_key, normal_key, 1U, 2U);
-  auto b = MakeMaterial(base_color_key, normal_key, 1U, 2U);
+  auto a = MakeMaterial({
+    .base_color_key = base_color_key,
+    .normal_key = normal_key,
+    .raw_base_color_index = 1U,
+    .raw_normal_index = 2U,
+  });
+  auto b = MakeMaterial({
+    .base_color_key = base_color_key,
+    .normal_key = normal_key,
+    .raw_base_color_index = 1U,
+    .raw_normal_index = 2U,
+  });
 
   oxygen::vortex::sceneprep::MaterialRef ra;
   oxygen::vortex::sceneprep::MaterialRef rb;
@@ -205,16 +284,34 @@ NOLINT_TEST_F(MaterialBinderBasicTest, ContentEqualityDedupes)
 //! Deduplication is based on ResourceKeys, not raw author indices.
 NOLINT_TEST_F(MaterialBinderBasicTest, DedupIgnoresRawAuthorIndicesForSameKeys)
 {
-  const ResourceKey base_color_key { 11101U };
-  const ResourceKey normal_key { 11102U };
+  const ResourceKey base_color_key {
+    11101U,
+  };
+  const ResourceKey normal_key {
+    11102U,
+  };
 
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+    oxygen::frame::Slot {
+      1,
+    });
   MatBinder().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+    oxygen::frame::Slot {
+      1,
+    });
 
-  auto a = MakeMaterial(base_color_key, normal_key, 1U, 2U);
-  auto b = MakeMaterial(base_color_key, normal_key, 999999U, 888888U);
+  auto a = MakeMaterial({
+    .base_color_key = base_color_key,
+    .normal_key = normal_key,
+    .raw_base_color_index = 1U,
+    .raw_normal_index = 2U,
+  });
+  auto b = MakeMaterial({
+    .base_color_key = base_color_key,
+    .normal_key = normal_key,
+    .raw_base_color_index = 999999U,
+    .raw_normal_index = 888888U,
+  });
 
   oxygen::vortex::sceneprep::MaterialRef ra;
   oxygen::vortex::sceneprep::MaterialRef rb;

@@ -67,7 +67,9 @@ protected:
     auto color = graphics_->CreateTexture(color_desc);
 
     auto fb_desc = FramebufferDesc {};
-    fb_desc.AddColorAttachment({ .texture = color });
+    fb_desc.AddColorAttachment({
+      .texture = color,
+    });
     return graphics_->CreateFramebuffer(fb_desc);
   }
 
@@ -84,7 +86,7 @@ protected:
       .max_depth = 1.0F,
     };
     return Renderer::ResolvedViewInput {
-      .view_id = ViewId { 51U },
+      .view_id = ViewId { 51U, },
       .value = oxygen::ResolvedView(params),
     };
   }
@@ -92,14 +94,13 @@ protected:
   [[nodiscard]] auto MakeOutputTarget() const -> Renderer::OutputTargetInput
   {
     return Renderer::OutputTargetInput {
-      .framebuffer
-      = oxygen::observer_ptr<Framebuffer>(framebuffer_.get()),
+      .framebuffer = oxygen::observer_ptr<Framebuffer>(framebuffer_.get()),
     };
   }
 
-  std::shared_ptr<FakeGraphics> graphics_ {};
-  std::shared_ptr<Framebuffer> framebuffer_ {};
-  std::unique_ptr<Renderer> renderer_ {};
+  std::shared_ptr<FakeGraphics> graphics_;
+  std::shared_ptr<Framebuffer> framebuffer_;
+  std::unique_ptr<Renderer> renderer_;
 };
 
 NOLINT_TEST_F(SinglePassHarnessFacadeTest, CanFinalizeTracksRequiredInputs)
@@ -109,7 +110,7 @@ NOLINT_TEST_F(SinglePassHarnessFacadeTest, CanFinalizeTracksRequiredInputs)
   EXPECT_FALSE(facade.CanFinalize());
 
   facade.SetFrameSession(Renderer::FrameSessionInput {
-    .frame_slot = oxygen::frame::Slot { 0U },
+    .frame_slot = oxygen::frame::Slot { 0U, },
   });
   EXPECT_FALSE(facade.CanFinalize());
 
@@ -134,8 +135,8 @@ NOLINT_TEST_F(SinglePassHarnessFacadeTest,
 {
   auto facade = renderer_->ForSinglePassHarness();
   facade.SetFrameSession(Renderer::FrameSessionInput {
-    .frame_slot = oxygen::frame::Slot { 1U },
-    .frame_sequence = oxygen::frame::SequenceNumber { 17U },
+    .frame_slot = oxygen::frame::Slot { 1U, },
+    .frame_sequence = oxygen::frame::SequenceNumber { 17U, },
     .delta_time_seconds = 1.0F / 120.0F,
   });
   facade.SetOutputTarget(MakeOutputTarget());
@@ -143,13 +144,24 @@ NOLINT_TEST_F(SinglePassHarnessFacadeTest,
 
   auto result = facade.Finalize();
 
-  ASSERT_TRUE(result.has_value());
+  if (!result.has_value()) {
+
+    FAIL() << "Expected result to have a value";
+  }
   const auto& render_context = result->GetRenderContext();
   ASSERT_NE(render_context.pass_target.get(), nullptr);
-  EXPECT_EQ(render_context.frame_slot, oxygen::frame::Slot { 1U });
-  EXPECT_EQ(
-    render_context.frame_sequence, oxygen::frame::SequenceNumber { 17U });
-  EXPECT_EQ(render_context.current_view.view_id, ViewId { 51U });
+  EXPECT_EQ(render_context.frame_slot,
+    (oxygen::frame::Slot {
+      1U,
+    }));
+  EXPECT_EQ(render_context.frame_sequence,
+    (oxygen::frame::SequenceNumber {
+      17U,
+    }));
+  EXPECT_EQ(render_context.current_view.view_id,
+    (ViewId {
+      51U,
+    }));
   EXPECT_NE(render_context.current_view.resolved_view.get(), nullptr);
 }
 
@@ -158,19 +170,25 @@ NOLINT_TEST_F(SinglePassHarnessFacadeTest,
 {
   auto facade = renderer_->ForSinglePassHarness();
   facade.SetFrameSession(Renderer::FrameSessionInput {
-    .frame_slot = oxygen::frame::Slot { 0U },
+    .frame_slot = oxygen::frame::Slot { 0U, },
   });
   facade.SetOutputTarget(MakeOutputTarget());
   facade.SetCoreShaderInputs(Renderer::CoreShaderInputsInput {
-    .view_id = ViewId { 77U },
+    .view_id = ViewId { 77U, },
     .value = oxygen::vortex::ViewConstants {},
   });
 
   auto result = facade.Finalize();
 
-  ASSERT_TRUE(result.has_value());
+  if (!result.has_value()) {
+
+    FAIL() << "Expected result to have a value";
+  }
   const auto& render_context = result->GetRenderContext();
-  EXPECT_EQ(render_context.current_view.view_id, ViewId { 77U });
+  EXPECT_EQ(render_context.current_view.view_id,
+    (ViewId {
+      77U,
+    }));
   EXPECT_NE(render_context.view_constants.get(), nullptr);
 }
 
@@ -179,21 +197,26 @@ NOLINT_TEST_F(SinglePassHarnessFacadeTest,
 {
   auto facade = renderer_->ForSinglePassHarness();
   facade.SetFrameSession(Renderer::FrameSessionInput {
-    .frame_slot = oxygen::frame::Slot { 2U },
+    .frame_slot = oxygen::frame::Slot { 2U, },
   });
   facade.SetOutputTarget(MakeOutputTarget());
   facade.SetResolvedView(MakeResolvedViewInput());
 
   auto result = facade.Finalize();
 
-  ASSERT_TRUE(result.has_value());
+  if (!result.has_value()) {
+
+    FAIL() << "Expected result to have a value";
+  }
   const auto* pass_target = result->GetRenderContext().pass_target.get();
   ASSERT_NE(pass_target, nullptr);
   ASSERT_EQ(pass_target->GetDescriptor().color_attachments.size(), 1U);
-  ASSERT_NE(pass_target->GetDescriptor().color_attachments.front().texture, nullptr);
-  EXPECT_TRUE(pass_target->GetDescriptor().color_attachments.front()
-                .texture->GetDescriptor()
-                .is_render_target);
+  ASSERT_NE(
+    pass_target->GetDescriptor().color_attachments.front().texture, nullptr);
+  EXPECT_TRUE(pass_target->GetDescriptor()
+      .color_attachments.front()
+      .texture->GetDescriptor()
+      .is_render_target);
 }
 
 NOLINT_TEST_F(SinglePassHarnessFacadeTest,
@@ -201,28 +224,38 @@ NOLINT_TEST_F(SinglePassHarnessFacadeTest,
 {
   auto facade = renderer_->ForSinglePassHarness();
   facade.SetFrameSession(Renderer::FrameSessionInput {
-    .frame_slot = oxygen::frame::Slot { 2U },
-    .frame_sequence = oxygen::frame::SequenceNumber { 21U },
+    .frame_slot = oxygen::frame::Slot { 2U, },
+    .frame_sequence = oxygen::frame::SequenceNumber { 21U, },
   });
   facade.SetOutputTarget(MakeOutputTarget());
   facade.SetResolvedView(MakeResolvedViewInput());
-  facade.SetPreparedFrame(
-    Renderer::PreparedFrameInput {
-      .value = oxygen::vortex::PreparedSceneFrame {},
-    });
+  facade.SetPreparedFrame(Renderer::PreparedFrameInput {
+    .value = oxygen::vortex::PreparedSceneFrame {},
+  });
   facade.SetCoreShaderInputs(Renderer::CoreShaderInputsInput {
-    .view_id = ViewId { 51U },
+    .view_id = ViewId { 51U, },
     .value = oxygen::vortex::ViewConstants {},
   });
 
   auto result = facade.Finalize();
 
-  ASSERT_TRUE(result.has_value());
+  if (!result.has_value()) {
+
+    FAIL() << "Expected result to have a value";
+  }
   const auto& render_context = result->GetRenderContext();
-  EXPECT_EQ(render_context.frame_slot, oxygen::frame::Slot { 2U });
-  EXPECT_EQ(
-    render_context.frame_sequence, oxygen::frame::SequenceNumber { 21U });
-  EXPECT_EQ(render_context.current_view.view_id, ViewId { 51U });
+  EXPECT_EQ(render_context.frame_slot,
+    (oxygen::frame::Slot {
+      2U,
+    }));
+  EXPECT_EQ(render_context.frame_sequence,
+    (oxygen::frame::SequenceNumber {
+      21U,
+    }));
+  EXPECT_EQ(render_context.current_view.view_id,
+    (ViewId {
+      51U,
+    }));
   EXPECT_NE(render_context.current_view.resolved_view.get(), nullptr);
   EXPECT_NE(render_context.current_view.prepared_frame.get(), nullptr);
   EXPECT_NE(render_context.view_constants.get(), nullptr);
@@ -232,24 +265,29 @@ NOLINT_TEST_F(SinglePassHarnessFacadeTest, PausedFrameSessionPreservesZeroDelta)
 {
   auto facade = renderer_->ForSinglePassHarness();
   facade.SetFrameSession(Renderer::FrameSessionInput {
-    .frame_slot = oxygen::frame::Slot { 0U },
+    .frame_slot = oxygen::frame::Slot { 0U, },
     .delta_time_seconds = 0.0F,
   });
   facade.SetOutputTarget(MakeOutputTarget());
   facade.SetResolvedView(MakeResolvedViewInput());
   const auto result = facade.Finalize();
-  ASSERT_TRUE(result.has_value());
+  if (!result.has_value()) {
+    FAIL() << "Expected result to have a value";
+  }
   EXPECT_EQ(result->GetRenderContext().delta_time, 0.0F);
 }
 
 NOLINT_TEST_F(
   SinglePassHarnessFacadeTest, NegativeAndNonfiniteDeltaRemainInvalid)
 {
-  for (const float delta : { -1.0F, std::numeric_limits<float>::infinity(),
-         std::numeric_limits<float>::quiet_NaN() }) {
+  for (const float delta : {
+         -1.0F,
+         std::numeric_limits<float>::infinity(),
+         std::numeric_limits<float>::quiet_NaN(),
+       }) {
     auto facade = renderer_->ForSinglePassHarness();
     facade.SetFrameSession(Renderer::FrameSessionInput {
-      .frame_slot = oxygen::frame::Slot { 0U },
+      .frame_slot = oxygen::frame::Slot { 0U, },
       .delta_time_seconds = delta,
     });
     facade.SetOutputTarget(MakeOutputTarget());
@@ -263,8 +301,9 @@ NOLINT_TEST_F(
 {
   auto context = oxygen::engine::FrameContext {};
   ASSERT_EQ(context.GetModuleTimingData().game_delta_time.get().count(), 0);
-  EXPECT_NO_FATAL_FAILURE(
-    renderer_->OnFrameStart(oxygen::observer_ptr { &context }));
+  EXPECT_NO_FATAL_FAILURE(renderer_->OnFrameStart(oxygen::observer_ptr {
+    &context,
+  }));
 }
 
 } // namespace

@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <array>
 #include <filesystem>
 #include <memory>
 #include <optional>
@@ -29,14 +30,45 @@ namespace oxygen::vortex::testing {
 
 class MaterialBinderTest : public ::testing::Test {
 protected:
+  struct MaterialRecipe {
+    content::ResourceKey base_color_key;
+    content::ResourceKey normal_key;
+    uint32_t raw_base_color_index {};
+    uint32_t raw_normal_index {};
+    std::array<float, 4> base_color {
+      1.0F,
+      0.5F,
+      0.25F,
+      1.0F,
+    };
+    std::array<float, 2> uv_scale {
+      1.0F,
+      1.0F,
+    };
+    std::array<float, 2> uv_offset {};
+    float uv_rotation_radians {
+      0.0F,
+    };
+    uint8_t uv_set {
+      0U,
+    };
+  };
+  [[nodiscard]] static auto MakeMaterial(const MaterialRecipe& recipe)
+    -> std::shared_ptr<const data::MaterialAsset>;
+
   auto SetUp() -> void override;
   auto TearDown() -> void override;
 
   [[nodiscard]] auto GfxPtr() const -> observer_ptr<Graphics>;
+  [[nodiscard]] auto Gfx() const -> FakeGraphics& { return *gfx_; }
 
   [[nodiscard]] auto Uploader() const -> vortex::upload::UploadCoordinator&;
   [[nodiscard]] auto TexBinder() const -> resources::IResourceBinder&;
   [[nodiscard]] auto MatBinder() const -> resources::MaterialBinder&;
+  [[nodiscard]] auto MaterialConstants(sceneprep::MaterialHandle handle) const
+    -> const MaterialShadingConstants&;
+  [[nodiscard]] auto GridConstants(sceneprep::MaterialHandle handle) const
+    -> const ProceduralGridMaterialConstants&;
   void EmitMaterialAssetEviction(
     const data::AssetKey& key, content::EvictionReason reason) const;
 
@@ -116,8 +148,10 @@ private:
         return sv;
       }
 
-      auto [newIt, inserted]
-        = map_.try_emplace(key, ShaderVisibleIndex { next_ });
+      auto [newIt, inserted] = map_.try_emplace(key,
+        ShaderVisibleIndex {
+          next_,
+        });
       if (inserted) {
         ++next_;
       }
@@ -126,7 +160,9 @@ private:
 
     [[nodiscard]] static auto GetErrorTextureIndex() -> ShaderVisibleIndex
     {
-      return ShaderVisibleIndex { 0U };
+      return ShaderVisibleIndex {
+        0U,
+      };
     }
 
   private:
@@ -134,14 +170,22 @@ private:
     std::unordered_map<content::ResourceKey, graphics::BindlessHandle> handles_;
     std::unordered_map<content::ResourceKey, uint32_t>
       get_or_allocate_calls_by_key_;
-    uint32_t get_or_allocate_total_calls_ { 0U };
-    std::uint32_t next_ { 1U };
+    uint32_t get_or_allocate_total_calls_ {
+      0U,
+    };
+    std::uint32_t next_ {
+      1U,
+    };
     std::optional<content::ResourceKey> error_key_;
-    graphics::DescriptorAllocator* allocator_ { nullptr };
+    graphics::DescriptorAllocator* allocator_ {
+      nullptr,
+    };
     // The fake should mimic real TextureBinder: allocate shader-visible
     // descriptors for per-entry placeholders immediately. Tests may toggle
     // this for diagnostics, but the default behavior matches production.
-    bool allocate_on_request_ { true };
+    bool allocate_on_request_ {
+      true,
+    };
   };
 
   std::shared_ptr<FakeGraphics> gfx_;

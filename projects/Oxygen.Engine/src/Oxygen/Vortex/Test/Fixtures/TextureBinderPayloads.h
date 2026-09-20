@@ -24,21 +24,6 @@ namespace oxygen::vortex::testing {
 
 namespace detail {
 
-  [[nodiscard]] inline auto AlignUpSize(const std::size_t value,
-    const std::size_t alignment) noexcept -> std::size_t
-  {
-    if (alignment == 0U) {
-      return value;
-    }
-
-    const auto mask = alignment - 1U;
-    if ((alignment & mask) != 0U) {
-      return value;
-    }
-
-    return (value + mask) & ~mask;
-  }
-
   inline auto CopyBytes(const std::span<std::byte> destination,
     const std::span<const std::byte> source) noexcept -> void
   {
@@ -85,7 +70,8 @@ namespace detail {
     const auto layouts_offset = sizeof(TexturePayloadHeader);
     const auto unaligned_data_offset = layouts_offset + layout_bytes;
     const auto data_offset
-      = AlignUpSize(unaligned_data_offset, kDataOffsetAlignment);
+      = (unaligned_data_offset + (kDataOffsetAlignment - 1U))
+      & ~(kDataOffsetAlignment - 1U);
 
     const auto total_payload_size = data_offset + data_region.size();
 
@@ -100,7 +86,9 @@ namespace detail {
     header.content_hash = desc.content_hash;
 
     std::vector<std::uint8_t> payload(total_payload_size);
-    const auto payload_bytes = std::as_writable_bytes(std::span { payload });
+    const auto payload_bytes = std::as_writable_bytes(std::span {
+      payload,
+    });
 
     WriteTrivial(payload_bytes, 0U, header);
 
@@ -146,8 +134,10 @@ namespace detail {
   }
   std::vector<uint8_t> data(data_size);
   const auto slice = payload.subspan(data_offset, data_size);
-  detail::CopyBytes(
-    std::as_writable_bytes(std::span { data }), std::as_bytes(slice));
+  detail::CopyBytes(std::as_writable_bytes(std::span {
+                      data,
+                    }),
+    std::as_bytes(slice));
 
   try {
     return std::make_shared<data::TextureResource>(desc, std::move(data));
@@ -173,21 +163,30 @@ namespace detail {
   desc.array_layers = 1U;
   desc.mip_levels = 1U;
   desc.format = static_cast<uint8_t>(Format::kRGBA8UNorm);
-  desc.alignment = 256U; // NOLINT(*-magic-numbers)
+  desc.alignment = 256U;
 
-  constexpr std::array<uint8_t, 4> pixel { 0xFF, 0xFF, 0xFF, 0xFF };
+  constexpr std::array<uint8_t, 4> pixel {
+    0xFF,
+    0xFF,
+    0xFF,
+    0xFF,
+  };
 
   // Cooked data uses a 256-byte row pitch for D3D12-compatible copies.
-  std::vector<std::uint8_t> data_region(256U); // NOLINT(*-magic-numbers)
-  detail::CopyBytes(
-    std::as_writable_bytes(std::span { data_region }).subspan(0, pixel.size()),
-    std::as_bytes(std::span { pixel }));
+  std::vector<std::uint8_t> data_region(256U);
+  detail::CopyBytes(std::as_writable_bytes(std::span {
+                                             data_region,
+                                           })
+                      .subspan(0, pixel.size()),
+    std::as_bytes(std::span {
+      pixel,
+    }));
 
   const std::array<SubresourceLayout, 1> layouts {
     SubresourceLayout {
       .offset_bytes = 0U,
-      .row_pitch_bytes = 256U, // NOLINT(*-magic-numbers)
-      .size_bytes = 256U, // NOLINT(*-magic-numbers)
+      .row_pitch_bytes = 256U,
+      .size_bytes = 256U,
     },
   };
 
@@ -196,11 +195,18 @@ namespace detail {
 
   std::vector<uint8_t> bytes;
   bytes.resize(sizeof(desc) + payload.size());
-  const auto bytes_span = std::as_writable_bytes(std::span { bytes });
-  detail::CopyBytes(
-    bytes_span.subspan(0, sizeof(desc)), std::as_bytes(std::span { &desc, 1 }));
+  const auto bytes_span = std::as_writable_bytes(std::span {
+    bytes,
+  });
+  detail::CopyBytes(bytes_span.subspan(0, sizeof(desc)),
+    std::as_bytes(std::span {
+      &desc,
+      1,
+    }));
   detail::CopyBytes(bytes_span.subspan(sizeof(desc), payload.size()),
-    std::as_bytes(std::span { payload }));
+    std::as_bytes(std::span {
+      payload,
+    }));
   return bytes;
 }
 
@@ -221,9 +227,14 @@ namespace detail {
   desc.array_layers = 1U;
   desc.mip_levels = 1U;
   desc.format = static_cast<uint8_t>(Format::kRGBA8UNorm);
-  desc.alignment = 256U; // NOLINT(*-magic-numbers)
+  desc.alignment = 256U;
 
-  constexpr std::array<uint8_t, 4> pixel { 0xFF, 0xFF, 0xFF, 0xFF };
+  constexpr std::array<uint8_t, 4> pixel {
+    0xFF,
+    0xFF,
+    0xFF,
+    0xFF,
+  };
 
   // Tight-packed (row pitch 4): valid cooked payload.
   const std::vector<std::uint8_t> data_region(pixel.begin(), pixel.end());
@@ -240,11 +251,18 @@ namespace detail {
 
   std::vector<uint8_t> bytes;
   bytes.resize(sizeof(desc) + payload.size());
-  const auto bytes_span = std::as_writable_bytes(std::span { bytes });
-  detail::CopyBytes(
-    bytes_span.subspan(0, sizeof(desc)), std::as_bytes(std::span { &desc, 1 }));
+  const auto bytes_span = std::as_writable_bytes(std::span {
+    bytes,
+  });
+  detail::CopyBytes(bytes_span.subspan(0, sizeof(desc)),
+    std::as_bytes(std::span {
+      &desc,
+      1,
+    }));
   detail::CopyBytes(bytes_span.subspan(sizeof(desc), payload.size()),
-    std::as_bytes(std::span { payload }));
+    std::as_bytes(std::span {
+      payload,
+    }));
   return bytes;
 }
 
@@ -265,10 +283,14 @@ namespace detail {
   desc.array_layers = 1U;
   desc.mip_levels = 1U;
   desc.format = static_cast<uint8_t>(Format::kRGBA8UNorm);
-  desc.alignment = 256U; // NOLINT(*-magic-numbers)
+  desc.alignment = 256U;
 
   // Invalid: row pitch is smaller than bytes_per_row (RGBA8 => 4 bytes).
-  const std::vector<std::uint8_t> data_region { 0xFF, 0xFF, 0xFF };
+  const std::vector<std::uint8_t> data_region {
+    0xFF,
+    0xFF,
+    0xFF,
+  };
   const std::array<SubresourceLayout, 1> layouts {
     SubresourceLayout {
       .offset_bytes = 0U,
@@ -282,11 +304,18 @@ namespace detail {
 
   std::vector<uint8_t> bytes;
   bytes.resize(sizeof(desc) + payload.size());
-  const auto bytes_span = std::as_writable_bytes(std::span { bytes });
-  detail::CopyBytes(
-    bytes_span.subspan(0, sizeof(desc)), std::as_bytes(std::span { &desc, 1 }));
+  const auto bytes_span = std::as_writable_bytes(std::span {
+    bytes,
+  });
+  detail::CopyBytes(bytes_span.subspan(0, sizeof(desc)),
+    std::as_bytes(std::span {
+      &desc,
+      1,
+    }));
   detail::CopyBytes(bytes_span.subspan(sizeof(desc), payload.size()),
-    std::as_bytes(std::span { payload }));
+    std::as_bytes(std::span {
+      payload,
+    }));
   return bytes;
 }
 
@@ -307,7 +336,7 @@ namespace detail {
   desc.array_layers = 1U;
   desc.mip_levels = 4U; // 8x8, 4x4, 2x2, 1x1
   desc.format = static_cast<uint8_t>(Format::kBC7UNorm);
-  desc.alignment = 256U; // NOLINT(*-magic-numbers)
+  desc.alignment = 256U;
 
   // BC7: 4x4 blocks, 16 bytes per block.
   // D3D12-style cooked layout: row pitch aligned to 256, placement aligned to
@@ -315,13 +344,25 @@ namespace detail {
   // => size=512. For smaller mips: blocks_x=1, blocks_y=1 => size=256.
   constexpr std::array<SubresourceLayout, 4> layouts {
     SubresourceLayout {
-      .offset_bytes = 0U, .row_pitch_bytes = 256U, .size_bytes = 512U },
+      .offset_bytes = 0U,
+      .row_pitch_bytes = 256U,
+      .size_bytes = 512U,
+    },
     SubresourceLayout {
-      .offset_bytes = 512U, .row_pitch_bytes = 256U, .size_bytes = 256U },
+      .offset_bytes = 512U,
+      .row_pitch_bytes = 256U,
+      .size_bytes = 256U,
+    },
     SubresourceLayout {
-      .offset_bytes = 1024U, .row_pitch_bytes = 256U, .size_bytes = 256U },
+      .offset_bytes = 1024U,
+      .row_pitch_bytes = 256U,
+      .size_bytes = 256U,
+    },
     SubresourceLayout {
-      .offset_bytes = 1536U, .row_pitch_bytes = 256U, .size_bytes = 256U },
+      .offset_bytes = 1536U,
+      .row_pitch_bytes = 256U,
+      .size_bytes = 256U,
+    },
   };
 
   constexpr std::size_t kDataRegionSize = 1792U;
@@ -329,9 +370,9 @@ namespace detail {
 
   // Populate the first block of each mip with a distinct pattern.
   for (std::size_t mip = 0; mip < layouts.size(); ++mip) {
-    const auto base = static_cast<std::size_t>(layouts[mip].offset_bytes);
+    const auto base = static_cast<std::size_t>(layouts.at(mip).offset_bytes);
     for (std::size_t i = 0; i < 16U; ++i) {
-      data_region[base + i]
+      data_region.at(base + i)
         = static_cast<std::uint8_t>(0xA0U + (mip * 0x10U) + i);
     }
   }
@@ -341,11 +382,18 @@ namespace detail {
 
   std::vector<uint8_t> bytes;
   bytes.resize(sizeof(desc) + payload.size());
-  const auto bytes_span = std::as_writable_bytes(std::span { bytes });
-  detail::CopyBytes(
-    bytes_span.subspan(0, sizeof(desc)), std::as_bytes(std::span { &desc, 1 }));
+  const auto bytes_span = std::as_writable_bytes(std::span {
+    bytes,
+  });
+  detail::CopyBytes(bytes_span.subspan(0, sizeof(desc)),
+    std::as_bytes(std::span {
+      &desc,
+      1,
+    }));
   detail::CopyBytes(bytes_span.subspan(sizeof(desc), payload.size()),
-    std::as_bytes(std::span { payload }));
+    std::as_bytes(std::span {
+      payload,
+    }));
   return bytes;
 }
 
@@ -366,14 +414,14 @@ namespace detail {
   desc.array_layers = 1U;
   desc.mip_levels = 1U;
   desc.format = static_cast<uint8_t>(Format::kBC1UNorm);
-  desc.alignment = 256U; // NOLINT(*-magic-numbers)
+  desc.alignment = 256U;
 
-  std::vector<std::uint8_t> data_region(1024U); // NOLINT(*-magic-numbers)
+  std::vector<std::uint8_t> data_region(1024U);
   const std::array<SubresourceLayout, 1> layouts {
     SubresourceLayout {
       .offset_bytes = 0U,
-      .row_pitch_bytes = 256U, // NOLINT(*-magic-numbers)
-      .size_bytes = 1024U, // NOLINT(*-magic-numbers)
+      .row_pitch_bytes = 256U,
+      .size_bytes = 1024U,
     },
   };
 
@@ -382,11 +430,18 @@ namespace detail {
 
   std::vector<uint8_t> bytes;
   bytes.resize(sizeof(desc) + payload.size());
-  const auto bytes_span = std::as_writable_bytes(std::span { bytes });
-  detail::CopyBytes(
-    bytes_span.subspan(0, sizeof(desc)), std::as_bytes(std::span { &desc, 1 }));
+  const auto bytes_span = std::as_writable_bytes(std::span {
+    bytes,
+  });
+  detail::CopyBytes(bytes_span.subspan(0, sizeof(desc)),
+    std::as_bytes(std::span {
+      &desc,
+      1,
+    }));
   detail::CopyBytes(bytes_span.subspan(sizeof(desc), payload.size()),
-    std::as_bytes(std::span { payload }));
+    std::as_bytes(std::span {
+      payload,
+    }));
   return bytes;
 }
 

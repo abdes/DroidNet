@@ -6,6 +6,8 @@
 
 #include <Oxygen/Testing/GTest.h>
 
+#include <glm/gtc/matrix_access.hpp>
+
 #include <Oxygen/Vortex/Internal/PreviousViewHistoryCache.h>
 
 namespace {
@@ -13,14 +15,20 @@ namespace {
 using oxygen::vortex::CompositionView;
 using oxygen::vortex::internal::PreviousViewHistoryCache;
 
-auto MakeState(const float marker)
-  -> PreviousViewHistoryCache::CurrentState
+auto MakeState(const float marker) -> PreviousViewHistoryCache::CurrentState
 {
   auto state = PreviousViewHistoryCache::CurrentState {};
-  state.view_matrix[3][0] = marker;
-  state.projection_matrix[3][1] = marker;
-  state.inverse_view_projection_matrix[3][3] = marker;
-  state.pixel_jitter = { marker, marker + 1.0F };
+  state.view_matrix
+    = glm::column(state.view_matrix, 3, glm::vec4(marker, 0.0F, 0.0F, 1.0F));
+  state.projection_matrix = glm::column(
+    state.projection_matrix, 3, glm::vec4(0.0F, marker, 0.0F, 1.0F));
+  state.inverse_view_projection_matrix
+    = glm::column(state.inverse_view_projection_matrix, 3,
+      glm::vec4(0.0F, 0.0F, 0.0F, marker));
+  state.pixel_jitter = {
+    marker,
+    marker + 1.0F,
+  };
   state.viewport = {
     .top_left_x = 0.0F,
     .top_left_y = 0.0F,
@@ -35,7 +43,9 @@ auto MakeState(const float marker)
 TEST(PreviousViewHistoryCacheTest, ReusesHistoryForStableProducerHandle)
 {
   PreviousViewHistoryCache cache;
-  const auto handle = CompositionView::ViewStateHandle { 11U };
+  const auto handle = CompositionView::ViewStateHandle {
+    11U,
+  };
 
   cache.BeginFrame(1U, {});
   const auto first = cache.TouchCurrent(handle, MakeState(1.0F));
@@ -46,7 +56,7 @@ TEST(PreviousViewHistoryCacheTest, ReusesHistoryForStableProducerHandle)
 
   EXPECT_FALSE(first.previous_valid);
   EXPECT_TRUE(second.previous_valid);
-  EXPECT_FLOAT_EQ(second.previous.view_matrix[3][0], 1.0F);
+  EXPECT_FLOAT_EQ(glm::column(second.previous.view_matrix, 3).x, 1.0F);
 }
 
 TEST(PreviousViewHistoryCacheTest, DifferentProducerHandleStartsFreshHistory)
@@ -54,15 +64,22 @@ TEST(PreviousViewHistoryCacheTest, DifferentProducerHandleStartsFreshHistory)
   PreviousViewHistoryCache cache;
 
   cache.BeginFrame(1U, {});
-  cache.TouchCurrent(CompositionView::ViewStateHandle { 21U }, MakeState(1.0F));
+  cache.TouchCurrent(
+    CompositionView::ViewStateHandle {
+      21U,
+    },
+    MakeState(1.0F));
   cache.EndFrame();
 
   cache.BeginFrame(2U, {});
   const auto recreated = cache.TouchCurrent(
-    CompositionView::ViewStateHandle { 22U }, MakeState(2.0F));
+    CompositionView::ViewStateHandle {
+      22U,
+    },
+    MakeState(2.0F));
 
   EXPECT_FALSE(recreated.previous_valid);
-  EXPECT_FLOAT_EQ(recreated.previous.view_matrix[3][0], 2.0F);
+  EXPECT_FLOAT_EQ(glm::column(recreated.previous.view_matrix, 3).x, 2.0F);
 }
 
 TEST(PreviousViewHistoryCacheTest, StatelessViewsNeverPublishPreviousHistory)
@@ -78,13 +95,15 @@ TEST(PreviousViewHistoryCacheTest, StatelessViewsNeverPublishPreviousHistory)
 
   EXPECT_FALSE(first.previous_valid);
   EXPECT_FALSE(second.previous_valid);
-  EXPECT_FLOAT_EQ(second.previous.view_matrix[3][0], 2.0F);
+  EXPECT_FLOAT_EQ(glm::column(second.previous.view_matrix, 3).x, 2.0F);
 }
 
 TEST(PreviousViewHistoryCacheTest, DescriptorChangeInvalidatesHistory)
 {
   PreviousViewHistoryCache cache;
-  const auto handle = CompositionView::ViewStateHandle { 31U };
+  const auto handle = CompositionView::ViewStateHandle {
+    31U,
+  };
 
   cache.BeginFrame(1U, {});
   cache.TouchCurrent(handle, MakeState(1.0F));
@@ -97,7 +116,7 @@ TEST(PreviousViewHistoryCacheTest, DescriptorChangeInvalidatesHistory)
   const auto changed = cache.TouchCurrent(handle, resized);
 
   EXPECT_FALSE(changed.previous_valid);
-  EXPECT_FLOAT_EQ(changed.previous.view_matrix[3][0], 2.0F);
+  EXPECT_FLOAT_EQ(glm::column(changed.previous.view_matrix, 3).x, 2.0F);
 }
 
 } // namespace

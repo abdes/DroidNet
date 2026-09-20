@@ -28,7 +28,11 @@ protected:
   {
     testing::RingBufferStagingFixture::SetUp();
     // Create a simple ring buffer staging provider for tests
-    auto provider = MakeRingBuffer(SlotCount { 1 }, 256u);
+    auto provider = MakeRingBuffer(
+      SlotCount {
+        1,
+      },
+      256U);
     ASSERT_NE(provider, nullptr);
   }
 };
@@ -60,7 +64,13 @@ NOLINT_TEST_F(TransientStructuredBufferTest,
   TransientStructuredBuffer transient_buffer(GfxPtr(), Staging(), 64);
 
   // Activate frame slot
-  transient_buffer.OnFrameStart(frame::SequenceNumber { 1 }, frame::Slot { 0 });
+  transient_buffer.OnFrameStart(
+    frame::SequenceNumber {
+      1,
+    },
+    frame::Slot {
+      0,
+    });
   // Act: first allocation
   auto alloc1_result = transient_buffer.Allocate(10);
 
@@ -81,10 +91,22 @@ NOLINT_TEST_F(TransientStructuredBufferTest,
   EXPECT_NE(alloc2.srv, kInvalidShaderVisibleIndex);
   EXPECT_NE(alloc2.mapped_ptr, nullptr);
   // Both allocations should have been created within the current frame
-  EXPECT_EQ(alloc1.sequence, frame::SequenceNumber { 1 });
-  EXPECT_EQ(alloc2.sequence, frame::SequenceNumber { 1 });
-  EXPECT_EQ(alloc1.slot, frame::Slot { 0 });
-  EXPECT_EQ(alloc2.slot, frame::Slot { 0 });
+  EXPECT_EQ(alloc1.sequence,
+    (frame::SequenceNumber {
+      1,
+    }));
+  EXPECT_EQ(alloc2.sequence,
+    (frame::SequenceNumber {
+      1,
+    }));
+  EXPECT_EQ(alloc1.slot,
+    (frame::Slot {
+      0,
+    }));
+  EXPECT_EQ(alloc2.slot,
+    (frame::Slot {
+      0,
+    }));
 }
 
 //! Ensures mapped pointers are stride-aligned even when the staging provider
@@ -93,7 +115,11 @@ NOLINT_TEST_F(TransientStructuredBufferTest,
   StrideAlignmentAdjustsMappedPointerWhenOffsetsMisaligned)
 {
   // Arrange: small alignment to reproduce cross-stride misalignment.
-  auto provider = MakeRingBuffer(SlotCount { 1 }, 16u);
+  auto provider = MakeRingBuffer(
+    SlotCount {
+      1,
+    },
+    16U);
   SetStagingProvider(provider);
   ASSERT_NE(provider, nullptr);
 
@@ -101,8 +127,12 @@ NOLINT_TEST_F(TransientStructuredBufferTest,
   TransientStructuredBuffer a(GfxPtr(), Staging(), 16);
   TransientStructuredBuffer b(GfxPtr(), Staging(), 48);
 
-  const auto seq = frame::SequenceNumber { 1 };
-  const auto slot = frame::Slot { 0 };
+  const auto seq = frame::SequenceNumber {
+    1,
+  };
+  const auto slot = frame::Slot {
+    0,
+  };
   a.OnFrameStart(seq, slot);
   b.OnFrameStart(seq, slot);
 
@@ -123,7 +153,7 @@ NOLINT_TEST_F(TransientStructuredBufferTest,
   // 32, which is not aligned to 48. The transient buffer must shift the mapped
   // pointer forward to the next 48-byte boundary.
   const auto delta = static_cast<std::uint64_t>(b_ptr - a_ptr);
-  EXPECT_EQ(delta, 48u);
+  EXPECT_EQ(delta, 48U);
 }
 
 NOLINT_TEST_F(TransientStructuredBufferTest, AllocateZeroIsNoOpSuccess)
@@ -132,7 +162,13 @@ NOLINT_TEST_F(TransientStructuredBufferTest, AllocateZeroIsNoOpSuccess)
   TransientStructuredBuffer transient_buffer(GfxPtr(), Staging(), 64);
 
   // Activate frame slot
-  transient_buffer.OnFrameStart(frame::SequenceNumber { 1 }, frame::Slot { 0 });
+  transient_buffer.OnFrameStart(
+    frame::SequenceNumber {
+      1,
+    },
+    frame::Slot {
+      0,
+    });
   // Act
   auto alloc_result_zero = transient_buffer.Allocate(0);
 
@@ -143,8 +179,14 @@ NOLINT_TEST_F(TransientStructuredBufferTest, AllocateZeroIsNoOpSuccess)
   const auto alloc0 = *alloc_result_zero;
   EXPECT_EQ(alloc0.srv, kInvalidShaderVisibleIndex);
   EXPECT_EQ(alloc0.mapped_ptr, nullptr);
-  EXPECT_EQ(alloc0.sequence, frame::SequenceNumber { 1 });
-  EXPECT_EQ(alloc0.slot, frame::Slot { 0 });
+  EXPECT_EQ(alloc0.sequence,
+    (frame::SequenceNumber {
+      1,
+    }));
+  EXPECT_EQ(alloc0.slot,
+    (frame::Slot {
+      0,
+    }));
 }
 
 NOLINT_TEST_F(TransientStructuredBufferTest,
@@ -155,7 +197,11 @@ NOLINT_TEST_F(TransientStructuredBufferTest,
 
   // Recreate uploader/provider after changing gfx behaviour
   auto& uploader = Uploader();
-  auto provider = uploader.CreateRingBufferStaging(SlotCount { 1 }, 256u, 0.5f);
+  auto provider = uploader.CreateRingBufferStaging(
+    SlotCount {
+      1,
+    },
+    256U, 0.5F);
   SetStagingProvider(provider);
   ASSERT_NE(provider, nullptr);
 
@@ -163,7 +209,13 @@ NOLINT_TEST_F(TransientStructuredBufferTest,
   TransientStructuredBuffer transient_buffer(GfxPtr(), Staging(), 64);
 
   // Activate frame slot so allocator will attempt staging allocation
-  transient_buffer.OnFrameStart(frame::SequenceNumber { 1 }, frame::Slot { 0 });
+  transient_buffer.OnFrameStart(
+    frame::SequenceNumber {
+      1,
+    },
+    frame::Slot {
+      0,
+    });
 
   // Act
   auto alloc_result_fail = transient_buffer.Allocate(10);
@@ -184,14 +236,24 @@ NOLINT_TEST_F(
 
   // Recreate uploader/provider after changing gfx behaviour
   auto& uploader = Uploader();
-  auto provider = uploader.CreateRingBufferStaging(SlotCount { 1 }, 256u, 0.5f);
+  auto provider = uploader.CreateRingBufferStaging(
+    SlotCount {
+      1,
+    },
+    256U, 0.5F);
   SetStagingProvider(provider);
   ASSERT_NE(provider, nullptr);
 
   TransientStructuredBuffer transient_buffer(GfxPtr(), Staging(), 64);
 
   // Activate frame slot
-  transient_buffer.OnFrameStart(frame::SequenceNumber { 1 }, frame::Slot { 0 });
+  transient_buffer.OnFrameStart(
+    frame::SequenceNumber {
+      1,
+    },
+    frame::Slot {
+      0,
+    });
   // Act
   auto alloc_result = transient_buffer.Allocate(10);
 
@@ -211,7 +273,13 @@ NOLINT_TEST_F(
     GfxPtr(), Staging(), 8); // 8-byte stride
 
   // Activate frame slot
-  transient_buffer.OnFrameStart(frame::SequenceNumber { 1 }, frame::Slot { 0 });
+  transient_buffer.OnFrameStart(
+    frame::SequenceNumber {
+      1,
+    },
+    frame::Slot {
+      0,
+    });
   // Act
   auto alloc_result = transient_buffer.Allocate(4);
 
@@ -224,35 +292,60 @@ NOLINT_TEST_F(
   ASSERT_NE(mapped, nullptr);
 
   // Arrange/Act: write pattern to first and last element
-  mapped[0] = 0xAABBCCDDEEFF0011ull;
-  mapped[3] = 0x1122334455667788ull;
+  const auto elements = std::span {
+    mapped,
+    4U,
+  };
+  elements.front() = 0xAABBCCDDEEFF0011ULL;
+  elements.back() = 0x1122334455667788ULL;
 
   // Assert: reads reflect writes while allocation is active
-  EXPECT_EQ(mapped[0], 0xAABBCCDDEEFF0011ull);
-  EXPECT_EQ(mapped[3], 0x1122334455667788ull);
+  EXPECT_EQ(elements.front(), 0xAABBCCDDEEFF0011ULL);
+  EXPECT_EQ(elements.back(), 0x1122334455667788ULL);
 
   // Act: starting the next frame resets the slot
-  transient_buffer.OnFrameStart(frame::SequenceNumber { 2 }, frame::Slot { 0 });
+  transient_buffer.OnFrameStart(
+    frame::SequenceNumber {
+      2,
+    },
+    frame::Slot {
+      0,
+    });
 
   // Assert: allocation for previous sequence should now be considered invalid
-  EXPECT_FALSE(alloc.IsValid(frame::SequenceNumber { 2 }));
+  EXPECT_FALSE(alloc.IsValid(frame::SequenceNumber {
+    2,
+  }));
 }
 
 NOLINT_TEST_F(TransientStructuredBufferTest, AllocationTryWriteObjectCopiesPod)
 {
   struct Payload {
-    std::uint32_t a { 0U };
-    std::uint32_t b { 0U };
+    std::uint32_t a {
+      0U,
+    };
+    std::uint32_t b {
+      0U,
+    };
   };
 
   TransientStructuredBuffer transient_buffer(
     GfxPtr(), Staging(), static_cast<std::uint32_t>(sizeof(Payload)));
-  transient_buffer.OnFrameStart(frame::SequenceNumber { 1 }, frame::Slot { 0 });
+  transient_buffer.OnFrameStart(
+    frame::SequenceNumber {
+      1,
+    },
+    frame::Slot {
+      0,
+    });
 
   auto alloc_result = transient_buffer.Allocate(1);
   ASSERT_TRUE(alloc_result.has_value());
 
-  const Payload expected { .a = 0xAABBCCDDU, .b = 0x11223344U };
+  const Payload expected {
+    .a = 0xAABBCCDDU,
+    .b = 0x11223344U,
+  };
   EXPECT_TRUE(alloc_result->TryWriteObject(expected));
 
   const auto* payload = static_cast<const Payload*>(alloc_result->mapped_ptr);
@@ -266,14 +359,26 @@ NOLINT_TEST_F(TransientStructuredBufferTest,
 {
   TransientStructuredBuffer transient_buffer(
     GfxPtr(), Staging(), static_cast<std::uint32_t>(sizeof(std::uint32_t)));
-  transient_buffer.OnFrameStart(frame::SequenceNumber { 1 }, frame::Slot { 0 });
+  transient_buffer.OnFrameStart(
+    frame::SequenceNumber {
+      1,
+    },
+    frame::Slot {
+      0,
+    });
 
   auto alloc_result = transient_buffer.Allocate(2);
   ASSERT_TRUE(alloc_result.has_value());
 
-  const std::array<std::uint32_t, 3> values { 1U, 2U, 3U };
-  EXPECT_FALSE(alloc_result->TryWriteRange(
-    std::span<const std::uint32_t> { values.data(), values.size() }));
+  const std::array<std::uint32_t, 3> values {
+    1U,
+    2U,
+    3U,
+  };
+  EXPECT_FALSE(alloc_result->TryWriteRange(std::span<const std::uint32_t> {
+    values.data(),
+    values.size(),
+  }));
 }
 
 // Reset can be called multiple times and leaves object in cleared state
@@ -284,19 +389,38 @@ NOLINT_TEST_F(
   TransientStructuredBuffer transient_buffer(GfxPtr(), Staging(), 64);
 
   // Activate frame slot
-  transient_buffer.OnFrameStart(frame::SequenceNumber { 1 }, frame::Slot { 0 });
+  transient_buffer.OnFrameStart(
+    frame::SequenceNumber {
+      1,
+    },
+    frame::Slot {
+      0,
+    });
   // Act: allocate then advance frame twice to emulate reset -> idempotent
   auto initial_alloc = transient_buffer.Allocate(2);
   ASSERT_TRUE(initial_alloc.has_value());
 
   // Idempotency: starting the next frame twice should be safe and should
   // retire previous allocations for the slot.
-  transient_buffer.OnFrameStart(frame::SequenceNumber { 2 }, frame::Slot { 0 });
+  transient_buffer.OnFrameStart(
+    frame::SequenceNumber {
+      2,
+    },
+    frame::Slot {
+      0,
+    });
   EXPECT_NO_THROW(transient_buffer.OnFrameStart(
-    frame::SequenceNumber { 3 }, frame::Slot { 0 }));
+    frame::SequenceNumber {
+      3,
+    },
+    frame::Slot {
+      0,
+    }));
 
   // After the slot reset, the earlier allocation must no longer be valid.
-  EXPECT_FALSE(initial_alloc->IsValid(frame::SequenceNumber { 3 }));
+  EXPECT_FALSE(initial_alloc->IsValid(frame::SequenceNumber {
+    3,
+  }));
 
   // Ensure a new allocation for the new frame succeeds.
   auto new_alloc = transient_buffer.Allocate(1);
@@ -311,7 +435,13 @@ NOLINT_TEST_F(
   TransientStructuredBuffer transient_buffer(GfxPtr(), Staging(), 64);
 
   // Activate frame slot
-  transient_buffer.OnFrameStart(frame::SequenceNumber { 1 }, frame::Slot { 0 });
+  transient_buffer.OnFrameStart(
+    frame::SequenceNumber {
+      1,
+    },
+    frame::Slot {
+      0,
+    });
   // Act: initial allocation
   auto r1 = transient_buffer.Allocate(4);
   ASSERT_TRUE(r1.has_value())
@@ -321,9 +451,21 @@ NOLINT_TEST_F(
 
   // Act: reset then allocate again
   // Reset the slot by moving to the next frame
-  transient_buffer.OnFrameStart(frame::SequenceNumber { 2 }, frame::Slot { 0 });
+  transient_buffer.OnFrameStart(
+    frame::SequenceNumber {
+      2,
+    },
+    frame::Slot {
+      0,
+    });
   // Need to re-activate slot for new frame
-  transient_buffer.OnFrameStart(frame::SequenceNumber { 2 }, frame::Slot { 0 });
+  transient_buffer.OnFrameStart(
+    frame::SequenceNumber {
+      2,
+    },
+    frame::Slot {
+      0,
+    });
   auto r2 = transient_buffer.Allocate(4);
 
   // Assert: second allocation succeeds and provides valid mapping
@@ -343,8 +485,13 @@ NOLINT_TEST_F(
   TransientStructuredBuffer transient_buffer(GfxPtr(), Staging(), 16);
 
   // Activate slot for this frame
-  const auto seq = frame::SequenceNumber { 1 };
-  transient_buffer.OnFrameStart(seq, frame::Slot { 0 });
+  const auto seq = frame::SequenceNumber {
+    1,
+  };
+  transient_buffer.OnFrameStart(seq,
+    frame::Slot {
+      0,
+    });
 
   auto a1 = transient_buffer.Allocate(2);
   ASSERT_TRUE(a1.has_value());
@@ -357,10 +504,20 @@ NOLINT_TEST_F(
 
   // After moving to next frame the slot is reset, and new allocations should
   // not match the old sequence
-  transient_buffer.OnFrameStart(frame::SequenceNumber { 2 }, frame::Slot { 0 });
+  transient_buffer.OnFrameStart(
+    frame::SequenceNumber {
+      2,
+    },
+    frame::Slot {
+      0,
+    });
 
-  EXPECT_FALSE(a1->IsValid(frame::SequenceNumber { 2 }));
-  EXPECT_FALSE(a2->IsValid(frame::SequenceNumber { 2 }));
+  EXPECT_FALSE(a1->IsValid(frame::SequenceNumber {
+    2,
+  }));
+  EXPECT_FALSE(a2->IsValid(frame::SequenceNumber {
+    2,
+  }));
 }
 
 } // namespace oxygen::vortex::upload

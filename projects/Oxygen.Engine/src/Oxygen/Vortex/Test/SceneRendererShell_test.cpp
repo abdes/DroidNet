@@ -25,11 +25,11 @@
 
 namespace {
 
+using oxygen::Graphics;
 using oxygen::ViewId;
 using oxygen::ViewPort;
-using oxygen::Graphics;
-using oxygen::vortex::CompositionView;
 using oxygen::vortex::CapabilitySet;
+using oxygen::vortex::CompositionView;
 using oxygen::vortex::RenderContext;
 using oxygen::vortex::Renderer;
 using oxygen::vortex::RendererCapabilityFamily;
@@ -51,14 +51,16 @@ auto MakeSceneView() -> CompositionView
   };
 
   auto composition_view = CompositionView {};
-  composition_view.id = ViewId { 7U };
+  composition_view.id = ViewId {
+    7U,
+  };
   composition_view.view = view;
   composition_view.shading_mode = ShadingMode::kForward;
   return composition_view;
 }
 
-auto MakeFrameView(const float width, const float height, const bool is_scene_view)
-  -> oxygen::engine::ViewContext
+auto MakeFrameView(const float width, const float height,
+  const bool is_scene_view) -> oxygen::engine::ViewContext
 {
   auto view = oxygen::engine::ViewContext {};
   view.view.viewport = ViewPort {
@@ -84,14 +86,17 @@ auto DestroyRenderer(Renderer* renderer) -> void
 }
 
 auto MakeRenderer(const std::shared_ptr<FakeGraphics>& graphics,
-  const CapabilitySet capabilities = CapabilitySet {}) -> std::shared_ptr<Renderer>
+  const CapabilitySet capabilities = CapabilitySet {})
+  -> std::shared_ptr<Renderer>
 {
   auto config = oxygen::RendererConfig {};
   config.upload_queue_key
     = graphics->QueueKeyFor(oxygen::graphics::QueueRole::kGraphics).get();
-  return { new Renderer(
-             std::weak_ptr<Graphics>(graphics), std::move(config), capabilities),
-    DestroyRenderer };
+  return {
+    new Renderer(
+      std::weak_ptr<Graphics>(graphics), std::move(config), capabilities),
+    DestroyRenderer,
+  };
 }
 
 NOLINT_TEST(SceneRendererShellProofSurfaceTest,
@@ -108,12 +113,17 @@ NOLINT_TEST(SceneRendererShellProofSurfaceTest,
   auto context = RenderContext {};
   auto composition_view = MakeSceneView();
   context.current_view.composition_view
-    = oxygen::observer_ptr<const CompositionView> { &composition_view };
+    = oxygen::observer_ptr<const CompositionView> {
+        &composition_view,
+      };
 
   ASSERT_NE(context.GetCurrentCompositionView(), nullptr);
   EXPECT_EQ(context.GetCurrentCompositionView()->id, composition_view.id);
-  const auto shading_mode = context.GetCurrentCompositionView()->GetShadingMode();
-  ASSERT_TRUE(shading_mode.has_value());
+  const auto shading_mode
+    = context.GetCurrentCompositionView()->GetShadingMode();
+  if (!shading_mode.has_value()) {
+    FAIL() << "Expected shading_mode to have a value";
+  }
   EXPECT_EQ(*shading_mode, ShadingMode::kForward);
 }
 
@@ -125,7 +135,11 @@ NOLINT_TEST(SceneRendererShellProofSurfaceTest,
   const auto renderer = MakeRenderer(graphics);
 
   auto scene_renderer
-    = SceneRenderBuilder::Build(*renderer, *graphics, CapabilitySet {}, { 640U, 480U });
+    = SceneRenderBuilder::Build(*renderer, *graphics, CapabilitySet {},
+      {
+        640U,
+        480U,
+      });
 
   ASSERT_NE(scene_renderer, nullptr);
   EXPECT_EQ(scene_renderer->GetSceneTextures().GetExtent().x, 640U);
@@ -140,7 +154,11 @@ NOLINT_TEST(SceneRendererShellProofSurfaceTest,
   const auto renderer = MakeRenderer(graphics);
 
   auto scene_renderer
-    = SceneRenderBuilder::Build(*renderer, *graphics, CapabilitySet {}, { 0U, 0U });
+    = SceneRenderBuilder::Build(*renderer, *graphics, CapabilitySet {},
+      {
+        0U,
+        0U,
+      });
 
   ASSERT_NE(scene_renderer, nullptr);
   EXPECT_EQ(scene_renderer->GetSceneTextures().GetExtent().x, 1U);
@@ -152,11 +170,15 @@ NOLINT_TEST(SceneRendererShellProofSurfaceTest,
 {
   auto graphics = std::make_shared<FakeGraphics>();
   graphics->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());
-  const auto renderer = MakeRenderer(graphics,
-    RendererCapabilityFamily::kDeferredShading);
+  const auto renderer
+    = MakeRenderer(graphics, RendererCapabilityFamily::kDeferredShading);
 
   auto scene_renderer = SceneRenderBuilder::Build(*renderer, *graphics,
-    RendererCapabilityFamily::kDeferredShading, { 320U, 180U });
+    RendererCapabilityFamily::kDeferredShading,
+    {
+      320U,
+      180U,
+    });
 
   ASSERT_NE(scene_renderer, nullptr);
   EXPECT_EQ(scene_renderer->GetDefaultShadingMode(), ShadingMode::kDeferred);
@@ -167,17 +189,23 @@ NOLINT_TEST(SceneRendererShellProofSurfaceTest,
 {
   auto graphics = std::make_shared<FakeGraphics>();
   graphics->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());
-  const auto renderer = MakeRenderer(graphics,
-    RendererCapabilityFamily::kDeferredShading);
+  const auto renderer
+    = MakeRenderer(graphics, RendererCapabilityFamily::kDeferredShading);
 
   auto scene_renderer = SceneRenderBuilder::Build(*renderer, *graphics,
-    RendererCapabilityFamily::kDeferredShading, { 320U, 180U });
+    RendererCapabilityFamily::kDeferredShading,
+    {
+      320U,
+      180U,
+    });
   auto context = RenderContext {};
   auto composition_view = MakeSceneView();
 
   ASSERT_NE(scene_renderer, nullptr);
   context.current_view.composition_view
-    = oxygen::observer_ptr<const CompositionView> { &composition_view };
+    = oxygen::observer_ptr<const CompositionView> {
+        &composition_view,
+      };
 
   EXPECT_EQ(
     scene_renderer->GetEffectiveShadingMode(context), ShadingMode::kForward);
@@ -188,11 +216,15 @@ NOLINT_TEST(SceneRendererShellProofSurfaceTest,
 {
   auto graphics = std::make_shared<FakeGraphics>();
   graphics->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());
-  const auto renderer = MakeRenderer(graphics,
-    RendererCapabilityFamily::kDeferredShading);
+  const auto renderer
+    = MakeRenderer(graphics, RendererCapabilityFamily::kDeferredShading);
 
   auto scene_renderer = SceneRenderBuilder::Build(*renderer, *graphics,
-    RendererCapabilityFamily::kDeferredShading, { 320U, 180U });
+    RendererCapabilityFamily::kDeferredShading,
+    {
+      320U,
+      180U,
+    });
   auto context = RenderContext {};
 
   ASSERT_NE(scene_renderer, nullptr);
@@ -210,7 +242,11 @@ NOLINT_TEST(SceneRendererShellProofSurfaceTest,
   const auto renderer = MakeRenderer(graphics);
 
   auto scene_renderer
-    = SceneRenderBuilder::Build(*renderer, *graphics, CapabilitySet {}, { 1280U, 720U });
+    = SceneRenderBuilder::Build(*renderer, *graphics, CapabilitySet {},
+      {
+        1280U,
+        720U,
+      });
 
   ASSERT_NE(scene_renderer, nullptr);
   EXPECT_EQ(scene_renderer->GetDefaultShadingMode(), ShadingMode::kForward);
@@ -225,16 +261,41 @@ NOLINT_TEST(SceneRendererShellProofSurfaceTest,
 {
   auto graphics = std::make_shared<FakeGraphics>();
   graphics->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());
-  const auto renderer = MakeRenderer(graphics,
-    RendererCapabilityFamily::kDeferredShading);
+  const auto renderer
+    = MakeRenderer(graphics, RendererCapabilityFamily::kDeferredShading);
   auto scene_renderer = SceneRenderBuilder::Build(*renderer, *graphics,
-    RendererCapabilityFamily::kDeferredShading, { 640U, 360U });
+    RendererCapabilityFamily::kDeferredShading,
+    {
+      640U,
+      360U,
+    });
   auto frame_context = oxygen::engine::FrameContext {};
   auto render_context = RenderContext {};
 
   const SceneRenderer::StageOrder expected_stage_order {
-    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
-    21, 22, 23,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
   };
 
   ASSERT_NE(scene_renderer, nullptr);
@@ -253,7 +314,11 @@ NOLINT_TEST(SceneRendererShellProofSurfaceTest,
   graphics->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());
   const auto renderer = MakeRenderer(graphics);
   auto scene_renderer
-    = SceneRenderBuilder::Build(*renderer, *graphics, CapabilitySet {}, { 1U, 1U });
+    = SceneRenderBuilder::Build(*renderer, *graphics, CapabilitySet {},
+      {
+        1U,
+        1U,
+      });
   auto frame_context = oxygen::engine::FrameContext {};
 
   static_cast<void>(
@@ -267,7 +332,10 @@ NOLINT_TEST(SceneRendererShellProofSurfaceTest,
   scene_renderer->OnFrameStart(frame_context);
 
   EXPECT_EQ(scene_renderer->GetSceneTextures().GetExtent(),
-    (glm::uvec2 { 320U, 180U }));
+    (glm::uvec2 {
+      320U,
+      180U,
+    }));
 }
 
 } // namespace

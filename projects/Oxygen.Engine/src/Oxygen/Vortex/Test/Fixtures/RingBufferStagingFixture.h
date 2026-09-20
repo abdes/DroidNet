@@ -15,14 +15,14 @@ namespace oxygen::vortex::upload::testing {
 class RingBufferStagingFixture : public UploadCoordinatorTest {
 protected:
   auto MakeRingBuffer(frame::SlotCount partitions, std::uint32_t alignment,
-    float slack = 0.5f) -> std::shared_ptr<StagingProvider>
+    float slack = 0.5F) -> std::shared_ptr<StagingProvider>
   {
     auto p = Uploader().CreateRingBufferStaging(partitions, alignment, slack);
     SetStagingProvider(p);
     return p;
   }
 
-  auto CaptureStats() const
+  [[nodiscard]] auto CaptureStats() const
     -> oxygen::vortex::upload::StagingProvider::StagingStats
   {
     return Staging().GetStats();
@@ -57,10 +57,8 @@ protected:
 
   // For RingBufferStaging tests we want to notify providers via the
   // InlineTransfersCoordinator path (InlineCoordinatorTag) because the
-  // provider implements OnFrameStart(InlineCoordinatorTag,...). This hides
-  // the UploadCoordinatorTest::SimulateFrameStart which routes through the
-  // UploadCoordinator (UploaderTag path).
-  auto SimulateFrameStart(frame::Slot slot) -> void
+  // provider implements OnFrameStart(InlineCoordinatorTag,...).
+  auto SimulateStagingFrameStart(frame::Slot slot) -> void
   {
     auto tag
       = oxygen::vortex::upload::internal::InlineCoordinatorTagFactory::Get();

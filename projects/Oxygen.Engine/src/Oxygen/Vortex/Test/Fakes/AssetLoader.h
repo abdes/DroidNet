@@ -52,8 +52,9 @@ public:
 
     const auto cooked = cooked_payloads_.find(key);
     if (cooked != cooked_payloads_.end()) {
-      const auto decoded
-        = DecodeCookedTexturePayload(std::span { cooked->second });
+      const auto decoded = DecodeCookedTexturePayload(std::span {
+        cooked->second,
+      });
       textures_.insert_or_assign(key, decoded);
       on_complete(decoded);
       return;
@@ -158,7 +159,9 @@ public:
   [[nodiscard]] auto QueryResidencyPolicyState() const
     -> content::ResidencyPolicyState override
   {
-    return content::ResidencyPolicyState { .policy = residency_policy_ };
+    return content::ResidencyPolicyState {
+      .policy = residency_policy_,
+    };
   }
 
   [[nodiscard]] auto EnumerateMountedScenes() const
@@ -423,17 +426,24 @@ public:
     const auto id = next_subscription_id_++;
     eviction_handlers_[resource_type].insert_or_assign(id, std::move(handler));
     return MakeEvictionSubscription(resource_type, id,
-      observer_ptr<IAssetLoader> { this }, eviction_alive_token_);
+      observer_ptr<IAssetLoader> {
+        this,
+      },
+      eviction_alive_token_);
   }
 
   [[nodiscard]] auto MintSyntheticTextureKey() -> content::ResourceKey override
   {
-    return content::ResourceKey { next_key_++ };
+    return content::ResourceKey {
+      next_key_++,
+    };
   }
 
   [[nodiscard]] auto MintSyntheticBufferKey() -> content::ResourceKey override
   {
-    return content::ResourceKey { next_key_++ };
+    return content::ResourceKey {
+      next_key_++,
+    };
   }
 
   auto SetTexture(content::ResourceKey key,
@@ -494,7 +504,9 @@ public:
   }
 
 private:
+  // Signature is prescribed by IAssetLoader.
   void UnsubscribeResourceEvictions(
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
     TypeId resource_type, uint64_t id) noexcept override
   {
     const auto it = eviction_handlers_.find(resource_type);
@@ -552,9 +564,15 @@ private:
     cooked_payloads_;
   std::unordered_map<TypeId, std::unordered_map<std::uint64_t, EvictionHandler>>
     eviction_handlers_;
-  std::uint64_t next_subscription_id_ { 1U };
-  std::shared_ptr<int> eviction_alive_token_ { std::make_shared<int>(0) };
-  std::uint64_t next_key_ { 1U };
+  std::uint64_t next_subscription_id_ {
+    1U,
+  };
+  std::shared_ptr<int> eviction_alive_token_ {
+    std::make_shared<int>(0),
+  };
+  std::uint64_t next_key_ {
+    1U,
+  };
   content::ResidencyPolicy residency_policy_ {};
 };
 

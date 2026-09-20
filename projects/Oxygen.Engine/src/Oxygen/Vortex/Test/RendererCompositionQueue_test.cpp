@@ -37,11 +37,11 @@ using oxygen::graphics::QueueRole;
 using oxygen::graphics::ResourceStates;
 using oxygen::graphics::Surface;
 using oxygen::graphics::Texture;
-using oxygen::vortex::Renderer;
-using oxygen::vortex::ShadingMode;
 using oxygen::vortex::CompositionView;
 using oxygen::vortex::IViewExtension;
 using oxygen::vortex::PostCompositionContext;
+using oxygen::vortex::Renderer;
+using oxygen::vortex::ShadingMode;
 using oxygen::vortex::testing::FakeGraphics;
 
 class FakeSurface final : public Surface {
@@ -72,7 +72,9 @@ public:
     return backbuffer_->GetDescriptor().height;
   }
 
-  mutable std::uint32_t present_count_ { 0U };
+  mutable std::uint32_t present_count_ {
+    0U,
+  };
 
 private:
   std::shared_ptr<Texture> backbuffer_;
@@ -112,7 +114,12 @@ protected:
     desc.is_render_target = true;
     desc.is_shader_resource = true;
     desc.use_clear_value = true;
-    desc.clear_value = { 0.0F, 0.0F, 0.0F, 1.0F };
+    desc.clear_value = {
+      0.0F,
+      0.0F,
+      0.0F,
+      1.0F,
+    };
     desc.initial_state = ResourceStates::kCommon;
     desc.debug_name = std::string(debug_name);
     return graphics_->CreateTexture(desc);
@@ -123,7 +130,9 @@ protected:
     -> std::shared_ptr<Framebuffer>
   {
     auto fb_desc = FramebufferDesc {};
-    fb_desc.AddColorAttachment({ .texture = texture });
+    fb_desc.AddColorAttachment({
+      .texture = texture,
+    });
     return graphics_->CreateFramebuffer(fb_desc);
   }
 
@@ -138,12 +147,14 @@ protected:
     submission.composite_target = target;
     submission.tasks.push_back(
       oxygen::vortex::CompositingTask::MakeTextureBlend(source,
-        oxygen::ViewPort { .top_left_x = 0.0F,
+        oxygen::ViewPort {
+          .top_left_x = 0.0F,
           .top_left_y = 0.0F,
           .width = 64.0F,
           .height = 64.0F,
           .min_depth = 0.0F,
-          .max_depth = 1.0F },
+          .max_depth = 1.0F,
+        },
         1.0F));
     return submission;
   }
@@ -164,9 +175,12 @@ protected:
     view_context.metadata.name = "RuntimeScene";
     view_context.metadata.purpose = "scene";
     view_context.metadata.is_scene_view = true;
-    view_context.render_target = oxygen::observer_ptr { render_target.get() };
-    view_context.composite_source
-      = oxygen::observer_ptr { composite_source.get() };
+    view_context.render_target = oxygen::observer_ptr {
+      render_target.get(),
+    };
+    view_context.composite_source = oxygen::observer_ptr {
+      composite_source.get(),
+    };
     return view_context;
   }
 
@@ -182,18 +196,22 @@ NOLINT_TEST_F(RendererCompositionQueueTest,
   auto surface = std::make_shared<FakeSurface>(surface_texture);
   auto target = MakeFramebuffer(surface_texture);
 
-  frame_context_->AddSurface(oxygen::observer_ptr<Surface> { surface.get() });
+  frame_context_->AddSurface(oxygen::observer_ptr<Surface> {
+    surface.get(),
+  });
 
   auto harness
     = oxygen::vortex::harness::single_pass::presets::ForFullscreenGraphicsPass(
       *renderer_,
       Renderer::FrameSessionInput {
-        .frame_slot = oxygen::frame::Slot { 0U },
-        .frame_sequence = oxygen::frame::SequenceNumber { 1U },
+        .frame_slot = oxygen::frame::Slot { 0U, },
+        .frame_sequence = oxygen::frame::SequenceNumber { 1U, },
       },
-      oxygen::observer_ptr<Framebuffer> { target.get() });
+      oxygen::observer_ptr<Framebuffer> { target.get(), });
   auto active_frame = harness.Finalize();
-  ASSERT_TRUE(active_frame.has_value());
+  if (!active_frame.has_value()) {
+    FAIL() << "Expected active_frame to have a value";
+  }
 
   graphics_->draw_log_.draws.clear();
 
@@ -203,9 +221,13 @@ NOLINT_TEST_F(RendererCompositionQueueTest,
     MakeSubmission("Queue.SourceB", target), surface);
 
   auto loop = oxygen::co::testing::TestEventLoop {};
+  // co::Run retains this closure until synchronous completion, within the
+  // captured objects lifetimes.
+  // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
   oxygen::co::Run(loop, [&]() -> oxygen::co::Co<void> {
-    co_await renderer_->OnCompositing(
-      oxygen::observer_ptr<FrameContext> { frame_context_.get() });
+    co_await renderer_->OnCompositing(oxygen::observer_ptr<FrameContext> {
+      frame_context_.get(),
+    });
   });
 
   EXPECT_EQ(graphics_->draw_log_.draws.size(), 2U);
@@ -222,19 +244,25 @@ NOLINT_TEST_F(RendererCompositionQueueTest,
   auto target_a = MakeFramebuffer(surface_a_texture);
   auto target_b = MakeFramebuffer(surface_b_texture);
 
-  frame_context_->AddSurface(oxygen::observer_ptr<Surface> { surface_a.get() });
-  frame_context_->AddSurface(oxygen::observer_ptr<Surface> { surface_b.get() });
+  frame_context_->AddSurface(oxygen::observer_ptr<Surface> {
+    surface_a.get(),
+  });
+  frame_context_->AddSurface(oxygen::observer_ptr<Surface> {
+    surface_b.get(),
+  });
 
   auto harness
     = oxygen::vortex::harness::single_pass::presets::ForFullscreenGraphicsPass(
       *renderer_,
       Renderer::FrameSessionInput {
-        .frame_slot = oxygen::frame::Slot { 0U },
-        .frame_sequence = oxygen::frame::SequenceNumber { 1U },
+        .frame_slot = oxygen::frame::Slot { 0U, },
+        .frame_sequence = oxygen::frame::SequenceNumber { 1U, },
       },
-      oxygen::observer_ptr<Framebuffer> { target_a.get() });
+      oxygen::observer_ptr<Framebuffer> { target_a.get(), });
   auto active_frame = harness.Finalize();
-  ASSERT_TRUE(active_frame.has_value());
+  if (!active_frame.has_value()) {
+    FAIL() << "Expected active_frame to have a value";
+  }
 
   renderer_->RegisterComposition(
     MakeSubmission("Queue.SourceA", target_a), surface_a);
@@ -242,9 +270,13 @@ NOLINT_TEST_F(RendererCompositionQueueTest,
     MakeSubmission("Queue.SourceB", target_b), surface_b);
 
   auto loop = oxygen::co::testing::TestEventLoop {};
+  // co::Run retains this closure until synchronous completion, within the
+  // captured objects lifetimes.
+  // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
   oxygen::co::Run(loop, [&]() -> oxygen::co::Co<void> {
-    co_await renderer_->OnCompositing(
-      oxygen::observer_ptr<FrameContext> { frame_context_.get() });
+    co_await renderer_->OnCompositing(oxygen::observer_ptr<FrameContext> {
+      frame_context_.get(),
+    });
   });
 
   EXPECT_EQ(graphics_->draw_log_.draws.size(), 2U);
@@ -259,34 +291,46 @@ NOLINT_TEST_F(
   auto surface = std::make_shared<FakeSurface>(surface_texture);
   auto target = MakeFramebuffer(surface_texture);
 
-  frame_context_->AddSurface(oxygen::observer_ptr<Surface> { surface.get() });
+  frame_context_->AddSurface(oxygen::observer_ptr<Surface> {
+    surface.get(),
+  });
 
   auto harness
     = oxygen::vortex::harness::single_pass::presets::ForFullscreenGraphicsPass(
       *renderer_,
       Renderer::FrameSessionInput {
-        .frame_slot = oxygen::frame::Slot { 0U },
-        .frame_sequence = oxygen::frame::SequenceNumber { 1U },
+        .frame_slot = oxygen::frame::Slot { 0U, },
+        .frame_sequence = oxygen::frame::SequenceNumber { 1U, },
       },
-      oxygen::observer_ptr<Framebuffer> { target.get() });
+      oxygen::observer_ptr<Framebuffer> { target.get(), });
   auto active_frame = harness.Finalize();
-  ASSERT_TRUE(active_frame.has_value());
+  if (!active_frame.has_value()) {
+    FAIL() << "Expected active_frame to have a value";
+  }
 
   renderer_->RegisterComposition(
     MakeSubmission("Queue.Drain", target), surface);
 
   auto loop = oxygen::co::testing::TestEventLoop {};
+  // co::Run retains this closure until synchronous completion, within the
+  // captured objects lifetimes.
+  // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
   oxygen::co::Run(loop, [&]() -> oxygen::co::Co<void> {
-    co_await renderer_->OnCompositing(
-      oxygen::observer_ptr<FrameContext> { frame_context_.get() });
+    co_await renderer_->OnCompositing(oxygen::observer_ptr<FrameContext> {
+      frame_context_.get(),
+    });
   });
 
   const auto first_draw_count = graphics_->draw_log_.draws.size();
   EXPECT_EQ(first_draw_count, 1U);
 
+  // co::Run retains this closure until synchronous completion, within the
+  // captured objects lifetimes.
+  // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
   oxygen::co::Run(loop, [&]() -> oxygen::co::Co<void> {
-    co_await renderer_->OnCompositing(
-      oxygen::observer_ptr<FrameContext> { frame_context_.get() });
+    co_await renderer_->OnCompositing(oxygen::observer_ptr<FrameContext> {
+      frame_context_.get(),
+    });
   });
 
   EXPECT_EQ(graphics_->draw_log_.draws.size(), first_draw_count);
@@ -299,29 +343,35 @@ NOLINT_TEST_F(RendererCompositionQueueTest,
   auto surface = std::make_shared<FakeSurface>(surface_texture);
   auto present_target = MakeFramebuffer(surface_texture);
 
-  frame_context_->AddSurface(oxygen::observer_ptr<Surface> { surface.get() });
+  frame_context_->AddSurface(oxygen::observer_ptr<Surface> {
+    surface.get(),
+  });
 
   auto harness
     = oxygen::vortex::harness::single_pass::presets::ForFullscreenGraphicsPass(
       *renderer_,
       Renderer::FrameSessionInput {
-        .frame_slot = oxygen::frame::Slot { 0U },
-        .frame_sequence = oxygen::frame::SequenceNumber { 1U },
+        .frame_slot = oxygen::frame::Slot { 0U, },
+        .frame_sequence = oxygen::frame::SequenceNumber { 1U, },
       },
-      oxygen::observer_ptr<Framebuffer> { present_target.get() });
+      oxygen::observer_ptr<Framebuffer> { present_target.get(), });
   auto active_frame = harness.Finalize();
-  ASSERT_TRUE(active_frame.has_value());
+  if (!active_frame.has_value()) {
+    FAIL() << "Expected active_frame to have a value";
+  }
 
   auto scene_texture = MakeColorTexture("Queue.RuntimeScene");
   graphics_->GetResourceRegistry().Register(scene_texture);
   auto scene_target = MakeFramebuffer(scene_texture);
 
-  constexpr auto intent_view_id = ViewId { 41U };
+  constexpr auto intent_view_id = ViewId {
+    41U,
+  };
   const auto published_view_id = renderer_->UpsertPublishedRuntimeView(
     *frame_context_, intent_view_id,
     MakeRuntimeViewContext(scene_target, scene_target), ShadingMode::kDeferred);
-  EXPECT_EQ(
-    renderer_->ResolvePublishedRuntimeViewId(intent_view_id), published_view_id);
+  EXPECT_EQ(renderer_->ResolvePublishedRuntimeViewId(intent_view_id),
+    published_view_id);
 
   graphics_->texture_copy_log_.copies.clear();
   graphics_->draw_log_.draws.clear();
@@ -346,14 +396,19 @@ NOLINT_TEST_F(RendererCompositionQueueTest,
   });
 
   auto loop = oxygen::co::testing::TestEventLoop {};
+  // co::Run retains this closure until synchronous completion, within the
+  // captured objects lifetimes.
+  // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
   oxygen::co::Run(loop, [&]() -> oxygen::co::Co<void> {
-    co_await renderer_->OnCompositing(
-      oxygen::observer_ptr<FrameContext> { frame_context_.get() });
+    co_await renderer_->OnCompositing(oxygen::observer_ptr<FrameContext> {
+      frame_context_.get(),
+    });
   });
 
   ASSERT_EQ(graphics_->texture_copy_log_.copies.size(), 1U);
-  EXPECT_EQ(graphics_->texture_copy_log_.copies[0].src, scene_texture.get());
-  EXPECT_EQ(graphics_->texture_copy_log_.copies[0].dst, surface_texture.get());
+  EXPECT_EQ(graphics_->texture_copy_log_.copies.at(0).src, scene_texture.get());
+  EXPECT_EQ(
+    graphics_->texture_copy_log_.copies.at(0).dst, surface_texture.get());
   EXPECT_TRUE(graphics_->draw_log_.draws.empty());
   EXPECT_TRUE(frame_context_->IsSurfacePresentable(0));
 }
@@ -365,18 +420,22 @@ NOLINT_TEST_F(RendererCompositionQueueTest,
   auto surface = std::make_shared<FakeSurface>(surface_texture);
   auto present_target = MakeFramebuffer(surface_texture);
 
-  frame_context_->AddSurface(oxygen::observer_ptr<Surface> { surface.get() });
+  frame_context_->AddSurface(oxygen::observer_ptr<Surface> {
+    surface.get(),
+  });
 
   auto harness
     = oxygen::vortex::harness::single_pass::presets::ForFullscreenGraphicsPass(
       *renderer_,
       Renderer::FrameSessionInput {
-        .frame_slot = oxygen::frame::Slot { 0U },
-        .frame_sequence = oxygen::frame::SequenceNumber { 1U },
+        .frame_slot = oxygen::frame::Slot { 0U, },
+        .frame_sequence = oxygen::frame::SequenceNumber { 1U, },
       },
-      oxygen::observer_ptr<Framebuffer> { present_target.get() });
+      oxygen::observer_ptr<Framebuffer> { present_target.get(), });
   auto active_frame = harness.Finalize();
-  ASSERT_TRUE(active_frame.has_value());
+  if (!active_frame.has_value()) {
+    FAIL() << "Expected active_frame to have a value";
+  }
 
   auto source_texture = MakeColorTexture("Queue.RuntimeTextureLayer");
   graphics_->GetResourceRegistry().Register(source_texture);
@@ -405,9 +464,13 @@ NOLINT_TEST_F(RendererCompositionQueueTest,
   });
 
   auto loop = oxygen::co::testing::TestEventLoop {};
+  // co::Run retains this closure until synchronous completion, within the
+  // captured objects lifetimes.
+  // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
   oxygen::co::Run(loop, [&]() -> oxygen::co::Co<void> {
-    co_await renderer_->OnCompositing(
-      oxygen::observer_ptr<FrameContext> { frame_context_.get() });
+    co_await renderer_->OnCompositing(oxygen::observer_ptr<FrameContext> {
+      frame_context_.get(),
+    });
   });
 
   EXPECT_TRUE(graphics_->texture_copy_log_.copies.empty());
@@ -422,29 +485,33 @@ NOLINT_TEST_F(RendererCompositionQueueTest,
   auto surface = std::make_shared<FakeSurface>(surface_texture);
   auto target = MakeFramebuffer(surface_texture);
 
-  frame_context_->AddSurface(oxygen::observer_ptr<Surface> { surface.get() });
+  frame_context_->AddSurface(oxygen::observer_ptr<Surface> {
+    surface.get(),
+  });
 
   auto harness
     = oxygen::vortex::harness::single_pass::presets::ForFullscreenGraphicsPass(
       *renderer_,
       Renderer::FrameSessionInput {
-        .frame_slot = oxygen::frame::Slot { 0U },
-        .frame_sequence = oxygen::frame::SequenceNumber { 1U },
+        .frame_slot = oxygen::frame::Slot { 0U, },
+        .frame_sequence = oxygen::frame::SequenceNumber { 1U, },
       },
-      oxygen::observer_ptr<Framebuffer> { target.get() });
+      oxygen::observer_ptr<Framebuffer> { target.get(), });
   auto active_frame = harness.Finalize();
-  ASSERT_TRUE(active_frame.has_value());
+  if (!active_frame.has_value()) {
+    FAIL() << "Expected active_frame to have a value";
+  }
 
   auto overlay_ran = false;
   auto submission = MakeSubmission("Queue.SurfaceOverlaySource", target);
   submission.surface_overlays.push_back(CompositionView::OverlayBatch {
     .lane = CompositionView::OverlayLane::kSurfaceScreen,
     .target = CompositionView::OverlayTarget::kSurface,
-    .view_id = ViewId { 0U },
+    .view_id = ViewId { 0U, },
     .surface_id = CompositionView::kDefaultSurfaceRoute,
     .priority = 0,
     .debug_name = "Queue.SurfaceOverlay",
-    .record = [&](oxygen::graphics::CommandRecorder& recorder) {
+    .record = [&](oxygen::graphics::CommandRecorder& recorder) -> void {
       EXPECT_FALSE(frame_context_->IsSurfacePresentable(0));
       overlay_ran = true;
       recorder.Draw(77U, 1U, 0U, 0U);
@@ -454,9 +521,13 @@ NOLINT_TEST_F(RendererCompositionQueueTest,
   renderer_->RegisterComposition(std::move(submission), surface);
 
   auto loop = oxygen::co::testing::TestEventLoop {};
+  // co::Run retains this closure until synchronous completion, within the
+  // captured objects lifetimes.
+  // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
   oxygen::co::Run(loop, [&]() -> oxygen::co::Co<void> {
-    co_await renderer_->OnCompositing(
-      oxygen::observer_ptr<FrameContext> { frame_context_.get() });
+    co_await renderer_->OnCompositing(oxygen::observer_ptr<FrameContext> {
+      frame_context_.get(),
+    });
   });
 
   ASSERT_TRUE(overlay_ran);
@@ -478,14 +549,19 @@ NOLINT_TEST_F(RendererCompositionQueueTest,
     auto OnPostComposition(const PostCompositionContext& context)
       -> void override
     {
-      EXPECT_EQ(
-        context.surface_id, CompositionView::SurfaceRouteId { 12U });
+      EXPECT_EQ(context.surface_id,
+        (CompositionView::SurfaceRouteId {
+          12U,
+        }));
       EXPECT_FALSE(context.frame_context.IsSurfacePresentable(0));
       called_ = true;
       context.recorder.Draw(88U, 1U, 0U, 0U);
     }
 
   private:
+    // This noncopyable test callback borrows fixture state that outlives
+    // callback execution.
+    // NOLINTNEXTLINE(cppcoreguidelines-avoid-const-or-ref-data-members)
     bool& called_;
   };
 
@@ -493,31 +569,41 @@ NOLINT_TEST_F(RendererCompositionQueueTest,
   auto surface = std::make_shared<FakeSurface>(surface_texture);
   auto target = MakeFramebuffer(surface_texture);
 
-  frame_context_->AddSurface(oxygen::observer_ptr<Surface> { surface.get() });
+  frame_context_->AddSurface(oxygen::observer_ptr<Surface> {
+    surface.get(),
+  });
 
   auto harness
     = oxygen::vortex::harness::single_pass::presets::ForFullscreenGraphicsPass(
       *renderer_,
       Renderer::FrameSessionInput {
-        .frame_slot = oxygen::frame::Slot { 0U },
-        .frame_sequence = oxygen::frame::SequenceNumber { 1U },
+        .frame_slot = oxygen::frame::Slot { 0U, },
+        .frame_sequence = oxygen::frame::SequenceNumber { 1U, },
       },
-      oxygen::observer_ptr<Framebuffer> { target.get() });
+      oxygen::observer_ptr<Framebuffer> { target.get(), });
   auto active_frame = harness.Finalize();
-  ASSERT_TRUE(active_frame.has_value());
+  if (!active_frame.has_value()) {
+    FAIL() << "Expected active_frame to have a value";
+  }
 
   auto extension_called = false;
   renderer_->RegisterViewExtension(
     std::make_shared<RecordingExtension>(extension_called));
 
   auto submission = MakeSubmission("Queue.ExtensionSource", target);
-  submission.surface_id = CompositionView::SurfaceRouteId { 12U };
+  submission.surface_id = CompositionView::SurfaceRouteId {
+    12U,
+  };
   renderer_->RegisterComposition(std::move(submission), surface);
 
   auto loop = oxygen::co::testing::TestEventLoop {};
+  // co::Run retains this closure until synchronous completion, within the
+  // captured objects lifetimes.
+  // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
   oxygen::co::Run(loop, [&]() -> oxygen::co::Co<void> {
-    co_await renderer_->OnCompositing(
-      oxygen::observer_ptr<FrameContext> { frame_context_.get() });
+    co_await renderer_->OnCompositing(oxygen::observer_ptr<FrameContext> {
+      frame_context_.get(),
+    });
   });
 
   ASSERT_TRUE(extension_called);

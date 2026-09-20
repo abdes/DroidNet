@@ -36,7 +36,7 @@ using oxygen::scene::Scene;
 using oxygen::scene::SceneNode;
 using oxygen::scene::SceneNodeFlags;
 
-using namespace oxygen::vortex::sceneprep::testing;
+using oxygen::vortex::sceneprep::testing::ScenePrepTestFixture;
 
 namespace {
 
@@ -50,10 +50,7 @@ protected:
     EmplaceContextWithView();
   }
 
-  auto InvokeFilter()
-  {
-    return ExtractionPreFilter(Context(), State(), Proto());
-  }
+  auto InvokeFilter() { ExtractionPreFilter(Context(), State(), Proto()); }
 };
 
 //! Verifies that when a scene node is marked invisible via its flags the

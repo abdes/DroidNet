@@ -28,7 +28,9 @@ NOLINT_TEST_F(
 {
   // Arrange
   auto& uploader = GeoUploader();
-  BeginFrame(Slot { 0 });
+  BeginFrame(Slot {
+    0,
+  });
 
   const auto mesh = MakeValidTriangleMesh("Tri", true);
 
@@ -40,10 +42,10 @@ NOLINT_TEST_F(
   for (std::size_t i = 0; i < kCount; ++i) {
     auto key_bytes
       = std::array<std::uint8_t, oxygen::data::AssetKey::kSizeBytes> {};
-    // NOLINTBEGIN(*-magic-numbers)
-    key_bytes[0] = static_cast<std::uint8_t>(i & 0xFFU);
-    key_bytes[1] = static_cast<std::uint8_t>((i >> 8) & 0xFFU);
-    // NOLINTEND(*-magic-numbers)
+
+    key_bytes.at(0) = static_cast<std::uint8_t>(i & 0xFFU);
+    key_bytes.at(1) = static_cast<std::uint8_t>((i >> 8) & 0xFFU);
+
     const auto key = oxygen::data::AssetKey::FromBytes(key_bytes);
 
     const oxygen::vortex::sceneprep::GeometryRef geometry {
@@ -74,7 +76,9 @@ NOLINT_TEST_F(GeometryUploaderEdgeTest, RepeatedEnsureNoUnboundedTicketGrowth)
   // Arrange
   auto& uploader = GeoUploader();
 
-  BeginFrame(Slot { 0 });
+  BeginFrame(Slot {
+    0,
+  });
   const auto mesh = MakeValidTriangleMesh("Tri", true);
   const auto asset_key = MakeGeometryAssetKey("edge_repeated_ensure");
   const oxygen::vortex::sceneprep::GeometryRef geometry {

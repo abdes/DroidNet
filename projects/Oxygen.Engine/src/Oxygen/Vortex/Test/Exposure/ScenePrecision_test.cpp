@@ -8,6 +8,7 @@
 #include <array>
 #include <cstdint>
 #include <memory>
+#include <print>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -34,18 +35,21 @@
 
 namespace oxygen::vortex::testing::exposure {
 
-using namespace oxygen::graphics;
+using graphics::ResourceStates;
+using graphics::Texture;
 
 NOLINT_TEST_F(ExposureLightingGpuTest,
   ExposureStatusReadbacksReuseWithinViewLifetimeAndInvalidateOnRecovery)
 {
   using PublicationProbe = vortex::testing::RendererPublicationProbe;
-  probe->prepare = [](RenderContext&) { };
+  probe->prepare = [](RenderContext&) -> void { };
   settings.mode = engine::ExposureMode::kAuto;
   settings.low_percentile = 0;
   settings.high_percentile = 1;
   surface_view_id = 4820U;
-  const auto handle = CompositionView::ViewStateHandle { surface_view_id };
+  const auto handle = CompositionView::ViewStateHandle {
+    surface_view_id,
+  };
   SetSurface(data::MaterialDomain::kOpaque, .25F);
   scene->GetEnvironment()
     ->TryGetSystem<scene::environment::PostProcessVolume>()
@@ -56,30 +60,53 @@ NOLINT_TEST_F(ExposureLightingGpuTest,
   // Only normal frame-slot synchronization drives completion. No queue-idle
   // waits, mapped image inspection or explicit status polling drive reuse.
   const auto render_frame = [&]() -> void {
-    const auto slot = frame::Slot { sequence % frame::kFramesInFlight.get() };
-    Backend().BeginFrame(frame::SequenceNumber { ++sequence }, slot);
+    const auto slot = frame::Slot {
+      sequence % frame::kFramesInFlight.get(),
+    };
+    Backend().BeginFrame(
+      frame::SequenceNumber {
+        ++sequence,
+      },
+      slot);
     frame.SetFrameSlot(slot, engine::internal::EngineTagFactory::Get());
-    frame.SetFrameSequenceNumber(frame::SequenceNumber { sequence },
+    frame.SetFrameSequenceNumber(
+      frame::SequenceNumber {
+        sequence,
+      },
       engine::internal::EngineTagFactory::Get());
-    renderer_->OnFrameStart(observer_ptr { &frame });
+    renderer_->OnFrameStart(observer_ptr {
+      &frame,
+    });
     auto facade = renderer_->ForOffscreenScene();
     facade.SetFrameSession({ .frame_slot = slot,
-      .frame_sequence = frame::SequenceNumber { sequence },
-      .delta_time_seconds = 0.0F });
-    facade.SetSceneSource({ .scene = observer_ptr { scene.get() } });
-    facade.SetViewIntent(Renderer::OffscreenSceneViewInput::FromCamera(
-      "Status readback reuse", ViewId { surface_view_id }, view, camera)
+      .frame_sequence = frame::SequenceNumber { sequence, },
+      .delta_time_seconds = 0.0F, });
+    facade.SetSceneSource({ .scene = observer_ptr { scene.get(), }, });
+    facade.SetViewIntent(
+      Renderer::OffscreenSceneViewInput::FromCamera("Status readback reuse",
+        ViewId {
+          surface_view_id,
+        },
+        view, camera)
         .SetViewStateHandle(handle));
     facade.SetOutputTarget(
-      { .framebuffer = observer_ptr { framebuffer.get() } });
+      { .framebuffer = observer_ptr { framebuffer.get(), }, });
     facade.SetPipeline(Renderer::OffscreenPipelineInput::Forward());
     auto session = facade.Finalize();
-    ASSERT_TRUE(session.has_value());
+    if (!session.has_value()) {
+      FAIL() << "Expected session to contain a value";
+    }
     ASSERT_TRUE(session->ExecuteInsideFrame(frame));
-    renderer_->OnFrameEnd(observer_ptr { &frame });
-    Backend().EndFrame(frame::SequenceNumber { sequence }, slot);
+    renderer_->OnFrameEnd(observer_ptr {
+      &frame,
+    });
+    Backend().EndFrame(
+      frame::SequenceNumber {
+        sequence,
+      },
+      slot);
   };
-  const auto same_owner = [](const auto& left, const auto& right) {
+  const auto same_owner = [](const auto& left, const auto& right) -> auto {
     return !left.owner_before(right) && !right.owner_before(left);
   };
   std::weak_ptr<const void> stable_pool;
@@ -108,7 +135,7 @@ NOLINT_TEST_F(ExposureLightingGpuTest,
     for (const auto& current : reuse.pending) {
       ASSERT_FALSE(current.readback.expired());
       const auto seen
-        = std::ranges::find_if(identities, [&](const auto& prior) {
+        = std::ranges::find_if(identities, [&](const auto& prior) -> auto {
             return same_owner(prior.readback, current.readback);
           });
       if (seen == identities.end()) {
@@ -138,8 +165,11 @@ NOLINT_TEST_F(ExposureLightingGpuTest,
   EXPECT_LE(recovered.pending.size() + recovered.available.size(),
     frame::kFramesInFlight.get());
 
-  ASSERT_TRUE(
-    renderer_->ReleaseOffscreenViewState(ViewId { surface_view_id }, handle));
+  ASSERT_TRUE(renderer_->ReleaseOffscreenViewState(
+    ViewId {
+      surface_view_id,
+    },
+    handle));
   EXPECT_TRUE(recovered.pool.expired());
   const auto removed
     = PublicationProbe::ExposureStatusReuseForView(*service, handle);
@@ -163,7 +193,7 @@ NOLINT_TEST_F(
 {
   using Probe = vortex::testing::RendererPublicationProbe;
   verify_manual_p = false;
-  probe->prepare = [](RenderContext&) { };
+  probe->prepare = [](RenderContext&) -> void { };
   settings.mode = engine::ExposureMode::kAuto;
   settings.low_percentile = 0;
   settings.high_percentile = 1;
@@ -171,24 +201,31 @@ NOLINT_TEST_F(
   frame_delta_seconds = .25F;
   SceneTextureExtractRef current;
   std::shared_ptr<const Texture> reference;
-  probe->inspect
-    = [&](const RenderContext&, const SceneTextureExtractRef& color, unsigned) {
-        current = color;
-        reference
-          = Probe::GetSceneRenderer(*renderer_)->GetResolvedSceneColorTexture();
-      };
+  probe->inspect = [&](const RenderContext&,
+                     const SceneTextureExtractRef& color, unsigned) -> void {
+    current = color;
+    reference
+      = Probe::GetSceneRenderer(*renderer_)->GetResolvedSceneColorTexture();
+  };
   unsigned delayed_frames = 0;
-  for (const bool forward : { false, true }) {
+  for (const bool forward : {
+         false,
+         true,
+       }) {
     settings.compensation_ev = 0;
     surface_view_id = 9000;
     SetSurface(data::MaterialDomain::kOpaque, .25F);
     ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0));
     surface_view_id = forward ? 4701U : 4700U;
-    const auto handle = CompositionView::ViewStateHandle { surface_view_id };
+    const auto handle = CompositionView::ViewStateHandle {
+      surface_view_id,
+    };
     auto& service = OwnedExposureService();
     const auto seed = renderer_->QueueExposureTransition(
       handle, ExposureTransitionPolicy::kSeedFromEv100, 4.0F);
-    ASSERT_TRUE(seed.has_value());
+    if (!seed.has_value()) {
+      FAIL() << "Expected seed to contain a value";
+    }
     Probe::ExposureStatusJobs held;
     double expected = .0625;
     ExposureStateData state;
@@ -197,8 +234,8 @@ NOLINT_TEST_F(
       EXPECT_EQ(current.texture->GetDescriptor().format, Format::kRGBA32Float);
       ASSERT_NO_FATAL_FAILURE(
         ExpectSurfaceExposure(.25F, expected, *reference, state));
-      EXPECT_EQ(state.applied_generation[0], seed->generation);
-      EXPECT_EQ(renderer_->InspectExposureTransition(handle)->phase,
+      EXPECT_EQ(state.applied_generation.at(0), seed->generation);
+      EXPECT_EQ(InspectRequiredTransition(handle).phase,
         ExposureTransitionPhase::kQueued);
       // Coalesce delayed delivery to the latest real completed ticket. No
       // status bytes are fabricated, and at most two ticket batches coexist.
@@ -218,7 +255,7 @@ NOLINT_TEST_F(
     EXPECT_EQ(current.texture->GetDescriptor().format, Format::kRGBA16Float);
     ASSERT_NO_FATAL_FAILURE(
       ExpectSurfaceExposure(.25F, expected, *reference, state));
-    EXPECT_EQ(renderer_->InspectExposureTransition(handle)->phase,
+    EXPECT_EQ(InspectRequiredTransition(handle).phase,
       ExposureTransitionPhase::kApplied);
 
     // A delayed eligible packet cannot authorize a newer request generation.
@@ -226,14 +263,16 @@ NOLINT_TEST_F(
     ASSERT_EQ(held.size(), 1U);
     const auto newer = renderer_->QueueExposureTransition(
       handle, ExposureTransitionPolicy::kSeedFromEv100, 8.0F);
-    ASSERT_TRUE(newer.has_value());
+    if (!newer.has_value()) {
+      FAIL() << "Expected newer to contain a value";
+    }
     Probe::RestoreExposureStatuses(service, handle, std::move(held));
     ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0, 1));
     EXPECT_EQ(current.texture->GetDescriptor().format, Format::kRGBA32Float);
     ASSERT_NO_FATAL_FAILURE(
       ExpectSurfaceExposure(.25F, 0x1p-8, *reference, state));
-    EXPECT_EQ(renderer_->InspectExposureTransition(handle)->request, *newer);
-    EXPECT_EQ(renderer_->InspectExposureTransition(handle)->phase,
+    EXPECT_EQ(InspectRequiredTransition(handle).request, *newer);
+    EXPECT_EQ(InspectRequiredTransition(handle).phase,
       ExposureTransitionPhase::kQueued);
 
     // Nor can it certify changed settings, even if polled before preparation.
@@ -260,11 +299,16 @@ NOLINT_TEST_F(
     held = Probe::TakeExposureStatuses(service, handle);
     ASSERT_EQ(held.size(), 1U);
     const auto retired_lifetime = held.front().lifetime;
-    EXPECT_TRUE(
-      renderer_->ReleaseOffscreenViewState(ViewId { surface_view_id }, handle));
+    EXPECT_TRUE(renderer_->ReleaseOffscreenViewState(
+      ViewId {
+        surface_view_id,
+      },
+      handle));
     const auto replacement = renderer_->QueueExposureTransition(
       handle, ExposureTransitionPolicy::kSeedFromEv100, 6.0F);
-    ASSERT_TRUE(replacement.has_value());
+    if (!replacement.has_value()) {
+      FAIL() << "Expected replacement to contain a value";
+    }
     EXPECT_NE(replacement->lifetime, retired_lifetime);
     settings.compensation_ev = 0;
     Probe::RestoreExposureStatuses(service, handle, std::move(held));
@@ -272,11 +316,13 @@ NOLINT_TEST_F(
     EXPECT_EQ(current.texture->GetDescriptor().format, Format::kRGBA32Float);
     ASSERT_NO_FATAL_FAILURE(
       ExpectSurfaceExposure(.25F, 0x1p-6, *reference, state));
-    EXPECT_EQ(
-      renderer_->InspectExposureTransition(handle)->request, *replacement);
+    EXPECT_EQ(InspectRequiredTransition(handle).request, *replacement);
     EXPECT_FALSE(renderer_->RetryExposureTransition(*newer).has_value());
-    EXPECT_TRUE(
-      renderer_->ReleaseOffscreenViewState(ViewId { surface_view_id }, handle));
+    EXPECT_TRUE(renderer_->ReleaseOffscreenViewState(
+      ViewId {
+        surface_view_id,
+      },
+      handle));
   }
   probe->inspect = {};
   RecordProperty("delayed_scene_frames", delayed_frames);
@@ -294,10 +340,26 @@ NOLINT_TEST_F(ExposureLightingGpuTest,
   sky.SetEnabled(true);
   // Exact vacuum transfer isolates layout compatibility from conservative
   // interpolation budgets of a nonuniform atmosphere.
-  sky.SetRayleighScatteringRgb({ 0, 0, 0 });
-  sky.SetMieScatteringRgb({ 0, 0, 0 });
-  sky.SetMieAbsorptionRgb({ 0, 0, 0 });
-  sky.SetOzoneAbsorptionRgb({ 0, 0, 0 });
+  sky.SetRayleighScatteringRgb({
+    0,
+    0,
+    0,
+  });
+  sky.SetMieScatteringRgb({
+    0,
+    0,
+    0,
+  });
+  sky.SetMieAbsorptionRgb({
+    0,
+    0,
+    0,
+  });
+  sky.SetOzoneAbsorptionRgb({
+    0,
+    0,
+    0,
+  });
   auto& fog = scene->GetEnvironment()->AddSystem<scene::environment::Fog>();
   fog.SetEnabled(true);
   fog.SetEnableHeightFog(true);
@@ -309,7 +371,7 @@ NOLINT_TEST_F(ExposureLightingGpuTest,
     console::ExecutionStatus::kOk);
   ASSERT_EQ(fixture_console.Execute("vtx.volumetric_fog.jitter false").status,
     console::ExecutionStatus::kOk);
-  probe->prepare = [](RenderContext& ctx) {
+  probe->prepare = [](RenderContext& ctx) -> void {
     ctx.current_view.with_atmosphere = true;
     ctx.current_view.with_height_fog = true;
   };
@@ -323,26 +385,33 @@ NOLINT_TEST_F(ExposureLightingGpuTest,
   };
   std::unordered_map<std::uint32_t, Snapshot> snapshots;
   probe->inspect = [&](const RenderContext& ctx,
-                     const SceneTextureExtractRef& color, unsigned) {
+                     const SceneTextureExtractRef& color, unsigned) -> void {
     auto* owner
       = vortex::testing::RendererPublicationProbe::GetSceneRenderer(*renderer_);
     const auto textures
       = vortex::testing::RendererPublicationProbe::EnvironmentTextures(
         *owner, ctx.current_view.view_id);
-    Snapshot snapshot { color, ctx.current_view.frame_exposure, {},
-      Format::kUnknown };
+    Snapshot snapshot {
+      .color = color,
+      .frame = ctx.current_view.frame_exposure,
+      .aerial = {},
+      .aerial_format = Format::kUnknown,
+    };
     for (const auto& texture : textures) {
       const auto& desc = texture->GetDescriptor();
-      if (desc.debug_name.find("SkyView") != std::string::npos) {
+      if (desc.debug_name.contains("SkyView")) {
         snapshot.sky_format = desc.format;
       }
-      if (desc.debug_name.find("IntegratedLightScattering")
-        != std::string::npos) {
+      if (desc.debug_name.contains("IntegratedLightScattering")) {
         snapshot.fog_format = desc.format;
       }
       if (desc.texture_type == TextureType::kTexture3D
-        && desc.debug_name.find("Aerial") != std::string::npos) {
-        snapshot.aerial = { desc.width, desc.height, desc.depth };
+        && desc.debug_name.contains("Aerial")) {
+        snapshot.aerial = {
+          desc.width,
+          desc.height,
+          desc.depth,
+        };
         snapshot.aerial_format = desc.format;
       }
     }
@@ -350,7 +419,7 @@ NOLINT_TEST_F(ExposureLightingGpuTest,
       static_cast<std::uint32_t>(ctx.current_view.view_id.get()),
       std::move(snapshot));
   };
-  const auto settle = [&](std::uint32_t id) {
+  const auto settle = [&](std::uint32_t id) -> void {
     surface_view_id = id;
     ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0));
     for (unsigned retry = 0; retry < 10
@@ -362,8 +431,8 @@ NOLINT_TEST_F(ExposureLightingGpuTest,
         *f->current_state->status_buffer, ResourceStates::kCopySource);
       const auto report = Read<HdrSuitabilityData>(
         *f->suitability_buffer, ResourceStates::kShaderResource);
-      std::printf("admission_layout frame=%u flags=%u product=%u kind=%u "
-                  "streak=%u candidate=%g report=%u products=%u\n",
+      std::println("admission_layout frame={} flags={} product={} kind={} "
+                   "streak={} candidate={:g} report={} products={}",
         sequence, status.flags, status.first_failure_product,
         status.first_failure_kind, status.fp16_eligible_streak,
         report.candidate_pre_exposure, report.failure_flags,
@@ -390,14 +459,16 @@ NOLINT_TEST_F(ExposureLightingGpuTest,
     glm::uvec3 extent;
   };
   const std::array changes {
-    Change {
-      "vtx.sky_atmosphere.aerial_perspective_lut.width 16", { 16, 16, 32 } },
-    Change {
-      "vtx.sky_atmosphere.aerial_perspective_lut.width 128", { 128, 128, 32 } },
-    Change { "vtx.sky_atmosphere.aerial_perspective_lut.depth_resolution 16",
-      { 128, 128, 16 } },
-    Change { "vtx.sky_atmosphere.aerial_perspective_lut.depth_resolution 64",
-      { 128, 128, 64 } }
+    Change { .command = "vtx.sky_atmosphere.aerial_perspective_lut.width 16",
+      .extent = { 16, 16, 32, }, },
+    Change { .command = "vtx.sky_atmosphere.aerial_perspective_lut.width 128",
+      .extent = { 128, 128, 32, }, },
+    Change { .command
+      = "vtx.sky_atmosphere.aerial_perspective_lut.depth_resolution 16",
+      .extent = { 128, 128, 16, }, },
+    Change { .command
+      = "vtx.sky_atmosphere.aerial_perspective_lut.depth_resolution 64",
+      .extent = { 128, 128, 64, }, },
   };
   unsigned cases = 0;
   for (const auto& change : changes) {
@@ -406,7 +477,10 @@ NOLINT_TEST_F(ExposureLightingGpuTest,
       console::ExecutionStatus::kOk);
     // The first view must reject its stale certificate before a second view
     // can refresh the shared cache and conceal a stale-layout selection.
-    for (const auto id : { 100U, 101U }) {
+    for (const auto id : {
+           100U,
+           101U,
+         }) {
       surface_view_id = id;
       const auto before = Read<ExposureStateData>(
         *snapshots.at(id).frame->current_state->buffer,
@@ -437,7 +511,11 @@ NOLINT_TEST_F(ExposureLightingGpuTest,
     = Read<ExposureStateData>(*snapshots.at(100).frame->current_state->buffer,
       ResourceStates::kShaderResource);
   fog.SetExtinctionSigmaTPerMeter(.01F);
-  fog.SetVolumetricFogEmissive({ 65504, 65504, 65504 });
+  fog.SetVolumetricFogEmissive({
+    65504,
+    65504,
+    65504,
+  });
   ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0, 1));
   const auto failed = snapshots.at(100).frame;
   const auto failure = Read<ExposureCompletedStatus>(
@@ -456,7 +534,11 @@ NOLINT_TEST_F(ExposureLightingGpuTest,
     Format::kRGBA32Float);
   EXPECT_EQ(snapshots.at(100).fog_format, Format::kRGBA32Float);
   fog.SetExtinctionSigmaTPerMeter(0);
-  fog.SetVolumetricFogEmissive({ 0, 0, 0 });
+  fog.SetVolumetricFogEmissive({
+    0,
+    0,
+    0,
+  });
   ASSERT_NO_FATAL_FAILURE(settle(100));
   ASSERT_NO_FATAL_FAILURE(settle(101));
   probe->inspect = {};
@@ -469,36 +551,49 @@ NOLINT_TEST_F(
   ExposureLightingGpuTest, ProductionAdmissionInvalidatesBorrowerOnSourceChange)
 {
   verify_manual_p = false;
-  probe->prepare = [](RenderContext&) { };
+  probe->prepare = [](RenderContext&) -> void { };
   SetSurface(data::MaterialDomain::kOpaque, .25F);
   auto& service = OwnedExposureService();
   auto source_settings = settings;
   source_settings.manual_ev = 0;
-  const auto root_a = PublishExposureOwner(frame, ViewId { 800U },
-    CompositionView::ViewStateHandle { 800U }, source_settings);
-  ctx_.scene = observer_ptr { scene.get() };
+  const auto root_a = PublishExposureOwner(frame,
+    ViewId {
+      800U,
+    },
+    CompositionView::ViewStateHandle {
+      800U,
+    },
+    source_settings);
+  ctx_.scene = observer_ptr {
+    scene.get(),
+  };
   const auto publish_source
     = [&](ViewId view_id, CompositionView::ViewStateHandle handle,
-        scene::ExposureSettings authored) {
-        ctx_.current_view.view_id = view_id;
-        ctx_.current_view.view_state_handle = handle;
-        ctx_.current_view.exposure_view_state_handle
-          = CompositionView::kInvalidViewStateHandle;
-        sequence_ = sequence;
-        ServicePixel(service, Uniform(.25F, 4U, 4U), authored);
-        sequence = static_cast<unsigned>(sequence_);
-      };
-  publish_source(
-    root_a, CompositionView::ViewStateHandle { 800U }, source_settings);
-  surface_source_id = ViewId { 800U };
+        scene::ExposureSettings authored) -> void {
+    ctx_.current_view.view_id = view_id;
+    ctx_.current_view.view_state_handle = handle;
+    ctx_.current_view.exposure_view_state_handle
+      = CompositionView::kInvalidViewStateHandle;
+    sequence_ = sequence;
+    ServicePixel(service, Uniform(.25F, 4U, 4U), std::move(authored));
+    sequence = static_cast<unsigned>(sequence_);
+  };
+  publish_source(root_a,
+    CompositionView::ViewStateHandle {
+      800U,
+    },
+    source_settings);
+  surface_source_id = ViewId {
+    800U,
+  };
   SceneTextureExtractRef current;
   postprocess::ExposurePass::FrameLease exposure;
   probe->inspect = [&](const RenderContext& ctx,
-                     const SceneTextureExtractRef& color, unsigned) {
+                     const SceneTextureExtractRef& color, unsigned) -> void {
     current = color;
     exposure = ctx.current_view.frame_exposure;
   };
-  const auto settle = [&] {
+  const auto settle = [&] -> void {
     ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0));
     for (unsigned retry = 0; retry < 8
       && current.texture->GetDescriptor().format != Format::kRGBA16Float;
@@ -514,11 +609,22 @@ NOLINT_TEST_F(
   const auto old_candidate = exposure->qualified_candidate;
   ASSERT_NE(old_candidate, nullptr);
   source_settings.manual_ev = 4;
-  const auto root_b = PublishExposureOwner(frame, ViewId { 801U },
-    CompositionView::ViewStateHandle { 801U }, source_settings);
-  publish_source(
-    root_b, CompositionView::ViewStateHandle { 801U }, source_settings);
-  surface_source_id = ViewId { 801U };
+  const auto root_b = PublishExposureOwner(frame,
+    ViewId {
+      801U,
+    },
+    CompositionView::ViewStateHandle {
+      801U,
+    },
+    source_settings);
+  publish_source(root_b,
+    CompositionView::ViewStateHandle {
+      801U,
+    },
+    source_settings);
+  surface_source_id = ViewId {
+    801U,
+  };
   ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0, 1));
   EXPECT_EQ(current.texture->GetDescriptor().format, Format::kRGBA32Float);
   EXPECT_EQ(exposure->qualified_candidate, nullptr);
@@ -528,14 +634,21 @@ NOLINT_TEST_F(
   ASSERT_NO_FATAL_FAILURE(settle());
   EXPECT_NE(exposure->qualified_candidate, old_candidate);
   const auto request = renderer_->QueueExposureTransition(
-    CompositionView::ViewStateHandle { 801U },
+    CompositionView::ViewStateHandle {
+      801U,
+    },
     ExposureTransitionPolicy::kPreserve);
-  ASSERT_TRUE(request.has_value());
+  if (!request.has_value()) {
+    FAIL() << "Expected request to contain a value";
+  }
   ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0, 1));
   EXPECT_EQ(current.texture->GetDescriptor().format, Format::kRGBA32Float);
   EXPECT_EQ(exposure->qualified_candidate, nullptr);
-  publish_source(
-    root_b, CompositionView::ViewStateHandle { 801U }, source_settings);
+  publish_source(root_b,
+    CompositionView::ViewStateHandle {
+      801U,
+    },
+    source_settings);
   ASSERT_NO_FATAL_FAILURE(settle());
   state = Read<ExposureStateData>(
     *exposure->current_state->buffer, ResourceStates::kShaderResource);
@@ -549,7 +662,7 @@ NOLINT_TEST_F(
   ExposureLightingGpuTest, ProductionAdmissionPinsCandidateAndRetainsFallback)
 {
   verify_manual_p = false;
-  probe->prepare = [](RenderContext&) { };
+  probe->prepare = [](RenderContext&) -> void { };
   SetSurface(data::MaterialDomain::kOpaque, .25F);
   struct Record {
     SceneTextureExtractRef color;
@@ -558,13 +671,18 @@ NOLINT_TEST_F(
     unsigned draws;
   };
   std::vector<Record> records;
-  probe->inspect = [&](const RenderContext& ctx,
-                     const SceneTextureExtractRef& color, unsigned draws) {
+  probe->inspect
+    = [&](const RenderContext& ctx, const SceneTextureExtractRef& color,
+        unsigned draws) -> void {
     auto* owner
       = vortex::testing::RendererPublicationProbe::GetSceneRenderer(*renderer_);
-    records.push_back({ color, ctx.current_view.frame_exposure,
-      owner->GetSceneTextures().GetSceneColor().GetDescriptor().format,
-      draws });
+    records.push_back({
+      .color = color,
+      .frame = ctx.current_view.frame_exposure,
+      .accumulation
+      = owner->GetSceneTextures().GetSceneColor().GetDescriptor().format,
+      .draws = draws,
+    });
   };
   ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0));
   for (unsigned retry = 0; retry < 6
@@ -596,7 +714,8 @@ NOLINT_TEST_F(
   EXPECT_EQ(before.displayed_scale, 1.0F);
   const auto pixels = ReadFloatTexture(*half.color.texture, true);
   ASSERT_EQ(pixels.size(), 1U);
-  EXPECT_NEAR(pixels[0][0] / domain.pre_exposure, .25F, .005F * .25F + 2e-5F);
+  EXPECT_NEAR(
+    pixels.at(0).at(0) / domain.pre_exposure, .25F, (.005F * .25F) + 2e-5F);
   for (const auto& r : records) {
     EXPECT_EQ(r.accumulation, Format::kRGBA32Float);
   }
@@ -619,7 +738,7 @@ NOLINT_TEST_F(
   if (capture) {
     EXPECT_TRUE(capture->EndCapture());
   }
-  auto& backend = static_cast<ExposureFailureGraphics&>(Backend());
+  auto& backend = FailureBackend();
   backend.fail_recorder_name = "Vortex Checked SceneColor Conversion";
   ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 2, 1));
   backend.fail_recorder_name.clear();

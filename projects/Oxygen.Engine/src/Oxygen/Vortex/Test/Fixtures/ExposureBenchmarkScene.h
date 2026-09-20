@@ -74,49 +74,70 @@ struct MixedExposureBenchmarkScene {
   -> MixedExposureBenchmarkScene
 {
   auto result = MixedExposureBenchmarkScene {};
-  const auto material =
-    [](const std::string_view name, const glm::vec4 rgba,
-      const data::MaterialDomain domain = data::MaterialDomain::kOpaque,
-      const bool emission_only = false, const float emissive_scale = 4.0F) {
-      auto desc = data::pak::render::MaterialAssetDesc {};
-      desc.header.asset_type
-        = static_cast<std::uint8_t>(data::AssetType::kMaterial);
-      const auto count = std::min(name.size(), sizeof(desc.header.name) - 1U);
-      std::memcpy(desc.header.name, name.data(), count);
-      desc.header.name[count] = '\0';
-      desc.header.version = 1U;
-      desc.header.streaming_priority = 255U;
-      desc.material_domain = static_cast<std::uint8_t>(domain);
-      desc.flags = data::pak::render::kMaterialFlag_NoTextureSampling;
-      desc.shader_stages = 0U;
-      for (unsigned channel = 0U; channel < 4U; ++channel) {
-        desc.base_color[channel] = rgba[channel];
-      }
-      desc.normal_scale = 1.0F;
-      desc.metalness = data::Unorm16 { 0.0F };
-      desc.roughness = data::Unorm16 { .5F };
-      desc.ambient_occlusion = data::Unorm16 { 1.0F };
-      if (emission_only) {
-        for (unsigned channel = 0U; channel < 3U; ++channel) {
-          desc.emissive_factor[channel]
-            = data::HalfFloat { emissive_scale * rgba[channel] };
-          desc.base_color[channel] = 0.0F;
-        }
-      }
-      return std::make_shared<const data::MaterialAsset>(
-        data::AssetKey::FromVirtualPath("/Engine/Examples/MultiView/Materials/"
-          + std::string { name } + ".omat"),
-        desc, std::vector<data::ShaderReference> {});
+  const auto material
+    = [](const std::string_view name, const glm::vec4 rgba,
+        const data::MaterialDomain domain = data::MaterialDomain::kOpaque,
+        const bool emission_only = false,
+        const float emissive_scale
+        = 4.0F) -> std::shared_ptr<const oxygen::data::MaterialAsset> {
+    auto desc = data::pak::render::MaterialAssetDesc {};
+    desc.header.asset_type
+      = static_cast<std::uint8_t>(data::AssetType::kMaterial);
+    const auto count = std::min(name.size(), sizeof(desc.header.name) - 1U);
+    std::memcpy(std::data(desc.header.name), name.data(), count);
+    desc.header.name[count] = '\0';
+    desc.header.version = 1U;
+    desc.header.streaming_priority = 255U;
+    desc.material_domain = static_cast<std::uint8_t>(domain);
+    desc.flags = data::pak::render::kMaterialFlag_NoTextureSampling;
+    desc.shader_stages = 0U;
+    std::ranges::copy(
+      std::array {
+        rgba.x,
+        rgba.y,
+        rgba.z,
+        rgba.w,
+      },
+      std::begin(desc.base_color));
+    desc.normal_scale = 1.0F;
+    desc.metalness = data::Unorm16 {
+      0.0F,
     };
-  const auto surface = [&](const std::string_view name, const auto& mesh_data,
-                         std::shared_ptr<const data::MaterialAsset> base,
-                         const glm::vec3 position,
-                         const bool casts_shadows = true) {
+    desc.roughness = data::Unorm16 {
+      .5F,
+    };
+    desc.ambient_occlusion = data::Unorm16 {
+      1.0F,
+    };
+    if (emission_only) {
+      std::ranges::transform(
+        std::array {
+          rgba.x,
+          rgba.y,
+          rgba.z,
+        },
+        std::begin(desc.emissive_factor),
+        [emissive_scale](const float channel) -> data::HalfFloat {
+          return data::HalfFloat {
+            emissive_scale * channel,
+          };
+        });
+      std::fill_n(std::begin(desc.base_color), 3, 0.0F);
+    }
+    return std::make_shared<const data::MaterialAsset>(
+      data::AssetKey::FromVirtualPath("/Engine/Examples/MultiView/Materials/"
+        + std::string { name, } + ".omat"),
+      desc, std::vector<data::ShaderReference> {});
+  };
+  const auto surface
+    = [&](const std::string_view name, const auto& mesh_data,
+        std::shared_ptr<const data::MaterialAsset> base,
+        const glm::vec3 position, const bool casts_shadows = true) -> auto {
     CHECK_F(
       mesh_data.has_value(), "Cannot create mixed benchmark mesh {}", name);
     auto mesh
       = data::MeshBuilder(
-        0, name == "GroundPlane" ? "Ground" : std::string { name })
+        0, name == "GroundPlane" ? "Ground" : std::string { name, })
           .WithVertices(mesh_data->first)
           .WithIndices(mesh_data->second)
           .BeginSubMesh("full", std::move(base))
@@ -124,7 +145,7 @@ struct MixedExposureBenchmarkScene {
             .index_count = static_cast<std::uint32_t>(mesh_data->second.size()),
             .first_vertex = 0U,
             .vertex_count
-            = static_cast<std::uint32_t>(mesh_data->first.size()) })
+            = static_cast<std::uint32_t>(mesh_data->first.size()), })
           .EndSubMesh()
           .Build();
     CHECK_NOTNULL_F(mesh.get());
@@ -132,15 +153,27 @@ struct MixedExposureBenchmarkScene {
     desc.lod_count = 1U;
     const auto minimum = mesh->BoundingBoxMin();
     const auto maximum = mesh->BoundingBoxMax();
-    for (unsigned axis = 0U; axis < 3U; ++axis) {
-      desc.bounding_box_min[axis] = minimum[axis];
-      desc.bounding_box_max[axis] = maximum[axis];
-    }
-    auto node = scene.CreateNode(std::string { name });
+    std::ranges::copy(
+      std::array {
+        minimum.x,
+        minimum.y,
+        minimum.z,
+      },
+      std::begin(desc.bounding_box_min));
+    std::ranges::copy(
+      std::array {
+        maximum.x,
+        maximum.y,
+        maximum.z,
+      },
+      std::begin(desc.bounding_box_max));
+    auto node = scene.CreateNode(std::string {
+      name,
+    });
     node.GetRenderable().SetGeometry(std::make_shared<data::GeometryAsset>(
       data::AssetKey::FromVirtualPath("/Engine/Examples/MultiView/Geometry/"
-        + std::string { name } + ".ogeo"),
-      desc, std::vector<std::shared_ptr<data::Mesh>> { std::move(mesh) }));
+        + std::string { name, } + ".ogeo"),
+      desc, std::vector<std::shared_ptr<data::Mesh>> { std::move(mesh), }));
     const auto flags_ref = node.GetFlags();
     CHECK_F(flags_ref.has_value());
     auto& flags = flags_ref->get();
@@ -151,52 +184,195 @@ struct MixedExposureBenchmarkScene {
     node.GetTransform().SetLocalPosition(position);
     return node;
   };
-  result.surfaces[0] = surface("Sphere", data::MakeSphereMeshAsset(32U, 32U),
-    material("SphereMaterial", { .2F, .7F, .3F, 1.0F }), { -2.0F, 1.0F, 0.0F });
-  result.surfaces[1] = surface("Cube", data::MakeCubeMeshAsset(),
-    material("CubeMaterial", { .7F, .7F, .7F, 1.0F }), { 1.0F, -1.0F, 0.0F });
-  result.surfaces[2]
+  result.surfaces.at(0) = surface("Sphere", data::MakeSphereMeshAsset(32U, 32U),
+    material("SphereMaterial",
+      {
+        .2F,
+        .7F,
+        .3F,
+        1.0F,
+      }),
+    {
+      -2.0F,
+      1.0F,
+      0.0F,
+    });
+  result.surfaces.at(1) = surface("Cube", data::MakeCubeMeshAsset(),
+    material("CubeMaterial",
+      {
+        .7F,
+        .7F,
+        .7F,
+        1.0F,
+      }),
+    {
+      1.0F,
+      -1.0F,
+      0.0F,
+    });
+  result.surfaces.at(2)
     = surface("Cylinder", data::MakeCylinderMeshAsset(16U, 1.0F, .5F),
-      material("CylinderMaterial", { .4F, .4F, .9F, 1.0F }),
-      { -.5F, -.5F, 0.0F });
-  result.surfaces[2].GetTransform().SetLocalRotation(
+      material("CylinderMaterial",
+        {
+          .4F,
+          .4F,
+          .9F,
+          1.0F,
+        }),
+      {
+        -.5F,
+        -.5F,
+        0.0F,
+      });
+  result.surfaces.at(2).GetTransform().SetLocalRotation(
     glm::quat(glm::vec3(glm::radians(30.0F), glm::radians(45.0F), 0.0F)));
-  result.surfaces[3] = surface("Cone", data::MakeConeMeshAsset(16U, 1.0F, .5F),
-    material("ConeMaterial", { .9F, .4F, .4F, 1.0F }), { -2.5F, -.5F, 0.0F });
-  result.surfaces[3].GetTransform().SetLocalRotation(
+  result.surfaces.at(3)
+    = surface("Cone", data::MakeConeMeshAsset(16U, 1.0F, .5F),
+      material("ConeMaterial",
+        {
+          .9F,
+          .4F,
+          .4F,
+          1.0F,
+        }),
+      {
+        -2.5F,
+        -.5F,
+        0.0F,
+      });
+  result.surfaces.at(3).GetTransform().SetLocalRotation(
     glm::quat(glm::vec3(glm::radians(30.0F), glm::radians(20.0F), 0.0F)));
-  result.surfaces[4] = surface("GroundPlane", data::MakeCubeMeshAsset(),
-    material("GroundMaterial", { .18F, .18F, .18F, 1.0F }),
-    { 0.0F, 0.0F, -.55F }, false);
-  result.surfaces[4].GetTransform().SetLocalScale({ 2000.0F, 2000.0F, .1F });
-  result.surfaces[1].GetRenderable().SetMaterialOverride(0, 0,
-    material("MixedExposureEmissive", { .7F, .65F, .5F, 1.0F },
+  result.surfaces.at(4) = surface("GroundPlane", data::MakeCubeMeshAsset(),
+    material("GroundMaterial",
+      {
+        .18F,
+        .18F,
+        .18F,
+        1.0F,
+      }),
+    {
+      0.0F,
+      0.0F,
+      -.55F,
+    },
+    false);
+  result.surfaces.at(4).GetTransform().SetLocalScale({
+    2000.0F,
+    2000.0F,
+    .1F,
+  });
+  result.surfaces.at(1).GetRenderable().SetMaterialOverride(0, 0,
+    material("MixedExposureEmissive",
+      {
+        .7F,
+        .65F,
+        .5F,
+        1.0F,
+      },
       data::MaterialDomain::kOpaque, true, 4096.0F));
-  result.surfaces[2].GetRenderable().SetMaterialOverride(0, 0,
-    material("MixedExposureTranslucent", { .3F, .4F, .9F, .5F },
+  result.surfaces.at(2).GetRenderable().SetMaterialOverride(0, 0,
+    material("MixedExposureTranslucent",
+      {
+        .3F,
+        .4F,
+        .9F,
+        .5F,
+      },
       data::MaterialDomain::kAlphaBlended));
-  result.surfaces[3].GetRenderable().SetMaterialOverride(0, 0,
-    material("MixedExposureMasked", { .9F, .4F, .4F, .8F },
+  result.surfaces.at(3).GetRenderable().SetMaterialOverride(0, 0,
+    material("MixedExposureMasked",
+      {
+        .9F,
+        .4F,
+        .4F,
+        .8F,
+      },
       data::MaterialDomain::kMasked));
 
   if (with_enclosure) {
-    const auto enclosure_material
-      = material("ExposureBenchmarkEnclosure", { .18F, .18F, .18F, 1.0F });
-    const std::array names { "ExposureBenchmarkRoof", "ExposureBenchmarkBack",
-      "ExposureBenchmarkLeft", "ExposureBenchmarkRight",
-      "ExposureBenchmarkFrontLeft", "ExposureBenchmarkFrontRight" };
-    const std::array positions { glm::vec3 { 0.0F, .5F, 3.1F },
-      glm::vec3 { 0.0F, 4.0F, 1.3F }, glm::vec3 { -4.0F, .5F, 1.3F },
-      glm::vec3 { 4.0F, .5F, 1.3F }, glm::vec3 { -1.5F, -3.0F, 1.3F },
-      glm::vec3 { 3.75F, -3.0F, 1.3F } };
-    const std::array scales { glm::vec3 { 8.0F, 7.0F, .2F },
-      glm::vec3 { 8.0F, .2F, 3.6F }, glm::vec3 { .2F, 7.0F, 3.6F },
-      glm::vec3 { .2F, 7.0F, 3.6F }, glm::vec3 { 5.0F, .2F, 3.6F },
-      glm::vec3 { .5F, .2F, 3.6F } };
+    const auto enclosure_material = material("ExposureBenchmarkEnclosure",
+      {
+        .18F,
+        .18F,
+        .18F,
+        1.0F,
+      });
+    const std::array names {
+      "ExposureBenchmarkRoof",
+      "ExposureBenchmarkBack",
+      "ExposureBenchmarkLeft",
+      "ExposureBenchmarkRight",
+      "ExposureBenchmarkFrontLeft",
+      "ExposureBenchmarkFrontRight",
+    };
+    const std::array positions {
+      glm::vec3 {
+        0.0F,
+        .5F,
+        3.1F,
+      },
+      glm::vec3 {
+        0.0F,
+        4.0F,
+        1.3F,
+      },
+      glm::vec3 {
+        -4.0F,
+        .5F,
+        1.3F,
+      },
+      glm::vec3 {
+        4.0F,
+        .5F,
+        1.3F,
+      },
+      glm::vec3 {
+        -1.5F,
+        -3.0F,
+        1.3F,
+      },
+      glm::vec3 {
+        3.75F,
+        -3.0F,
+        1.3F,
+      },
+    };
+    const std::array scales {
+      glm::vec3 {
+        8.0F,
+        7.0F,
+        .2F,
+      },
+      glm::vec3 {
+        8.0F,
+        .2F,
+        3.6F,
+      },
+      glm::vec3 {
+        .2F,
+        7.0F,
+        3.6F,
+      },
+      glm::vec3 {
+        .2F,
+        7.0F,
+        3.6F,
+      },
+      glm::vec3 {
+        5.0F,
+        .2F,
+        3.6F,
+      },
+      glm::vec3 {
+        .5F,
+        .2F,
+        3.6F,
+      },
+    };
     for (std::size_t index = 0U; index < result.enclosure.size(); ++index) {
-      result.enclosure[index] = surface(names[index], data::MakeCubeMeshAsset(),
-        enclosure_material, positions[index]);
-      result.enclosure[index].GetTransform().SetLocalScale(scales[index]);
+      result.enclosure.at(index) = surface(names.at(index),
+        data::MakeCubeMeshAsset(), enclosure_material, positions.at(index));
+      result.enclosure.at(index).GetTransform().SetLocalScale(scales.at(index));
     }
   }
 
@@ -204,16 +380,32 @@ struct MixedExposureBenchmarkScene {
   auto spot = std::make_unique<scene::SpotLight>();
   spot->Common().affects_world = true;
   spot->Common().casts_shadows = true;
-  spot->Common().color_rgb = { 1.0F, .98F, .95F };
+  spot->Common().color_rgb = {
+    1.0F,
+    .98F,
+    .95F,
+  };
   spot->SetLuminousFluxLm(5000.0F);
   spot->SetRange(250.0F);
   spot->SetSourceRadius(.4F);
   spot->SetInnerConeAngleRadians(glm::radians(35.0F));
   spot->SetOuterConeAngleRadians(glm::radians(45.0F));
   CHECK_F(result.key_light.AttachLight(std::move(spot)));
-  result.key_light.GetTransform().SetLocalPosition({ 3.0F, 3.0F, 3.0F });
-  const auto key_direction = glm::normalize(
-    glm::vec3 { -.5F, 0.0F, 0.0F } - glm::vec3 { 3.0F, 3.0F, 3.0F });
+  result.key_light.GetTransform().SetLocalPosition({
+    3.0F,
+    3.0F,
+    3.0F,
+  });
+  const auto key_direction = glm::normalize(glm::vec3 {
+                                              -.5F,
+                                              0.0F,
+                                              0.0F,
+                                            }
+    - glm::vec3 {
+      3.0F,
+      3.0F,
+      3.0F,
+    });
   result.key_light.GetTransform().SetLocalRotation(
     glm::angleAxis(std::acos(glm::dot(space::move::Forward, key_direction)),
       glm::normalize(glm::cross(space::move::Forward, key_direction))));
@@ -222,12 +414,20 @@ struct MixedExposureBenchmarkScene {
   auto point = std::make_unique<scene::PointLight>();
   point->Common().affects_world = true;
   point->Common().casts_shadows = true;
-  point->Common().color_rgb = { .7F, .85F, 1.0F };
+  point->Common().color_rgb = {
+    .7F,
+    .85F,
+    1.0F,
+  };
   point->SetLuminousFluxLm(2000.0F);
   point->SetRange(300.0F);
   point->SetSourceRadius(.2F);
   CHECK_F(result.fill_light.AttachLight(std::move(point)));
-  result.fill_light.GetTransform().SetLocalPosition({ -2.0F, 2.0F, 2.0F });
+  result.fill_light.GetTransform().SetLocalPosition({
+    -2.0F,
+    2.0F,
+    2.0F,
+  });
 
   result.sun = scene.CreateNode("AtmosphereProofSun");
   auto sun = std::make_unique<scene::DirectionalLight>();
@@ -237,7 +437,11 @@ struct MixedExposureBenchmarkScene {
   sun->SetAtmosphereLightSlot(scene::AtmosphereLightSlot::kPrimary);
   sun->Common().casts_shadows = true;
   CHECK_F(result.sun.AttachLight(std::move(sun)));
-  const auto sun_direction = glm::normalize(glm::vec3 { 0.0F, .5F, -1.0F });
+  const auto sun_direction = glm::normalize(glm::vec3 {
+    0.0F,
+    .5F,
+    -1.0F,
+  });
   result.sun.GetTransform().SetLocalRotation(
     glm::angleAxis(std::acos(glm::dot(space::move::Forward, sun_direction)),
       glm::normalize(glm::cross(space::move::Forward, sun_direction))));
@@ -263,9 +467,21 @@ struct MixedExposureBenchmarkScene {
   fog.SetHeightFalloffPerMeter(.12F);
   fog.SetHeightOffsetMeters(0.0F);
   fog.SetStartDistanceMeters(0.0F);
-  fog.SetFogInscatteringLuminance({ 300.0F, 450.0F, 650.0F });
-  fog.SetVolumetricFogAlbedo({ .4F, .5F, .6F });
-  fog.SetVolumetricFogEmissive({ 0.0F, 0.0F, 0.0F });
+  fog.SetFogInscatteringLuminance({
+    300.0F,
+    450.0F,
+    650.0F,
+  });
+  fog.SetVolumetricFogAlbedo({
+    .4F,
+    .5F,
+    .6F,
+  });
+  fog.SetVolumetricFogEmissive({
+    0.0F,
+    0.0F,
+    0.0F,
+  });
   fog.SetVolumetricFogDistance(40.0F);
   fog.SetVolumetricFogStartDistance(0.0F);
   fog.SetVolumetricFogNearFadeInDistance(1.0F);
@@ -276,19 +492,35 @@ struct MixedExposureBenchmarkScene {
   CHECK_F(local_impl.has_value());
   auto& local
     = local_impl->get().AddComponent<scene::environment::LocalFogVolume>();
-  local_node.GetTransform().SetLocalPosition({ -1.75F, -.25F, .3F });
-  local_node.GetTransform().SetLocalScale({ .45F, .45F, .3F });
+  local_node.GetTransform().SetLocalPosition({
+    -1.75F,
+    -.25F,
+    .3F,
+  });
+  local_node.GetTransform().SetLocalScale({
+    .45F,
+    .45F,
+    .3F,
+  });
   local.SetEnabled(false);
   local.SetRadialFogExtinction(.9F);
   local.SetHeightFogExtinction(.45F);
   local.SetHeightFogFalloff(.5F);
   local.SetHeightFogOffset(-.5F);
-  local.SetFogAlbedo({ .45F, .6F, .8F });
-  local.SetFogEmissive({ 0.0F, 0.0F, 0.0F });
+  local.SetFogAlbedo({
+    .45F,
+    .6F,
+    .8F,
+  });
+  local.SetFogEmissive({
+    0.0F,
+    0.0F,
+    0.0F,
+  });
   local.SetFogPhaseG(.1F);
 
   const auto camera = [&](const char* name, const glm::vec3 position,
-                        const float near_plane) {
+                        const float near_plane) -> scene::SceneNode {
     auto node = scene.CreateNode(name);
     auto lens = std::make_unique<scene::PerspectiveCamera>();
     lens->SetFieldOfView(glm::radians(45.0F));
@@ -296,13 +528,30 @@ struct MixedExposureBenchmarkScene {
     lens->SetFarPlane(100.0F);
     CHECK_F(node.AttachCamera(std::move(lens)));
     node.GetTransform().SetLocalPosition(position);
-    const auto view
-      = glm::lookAt(position, glm::vec3 { -.75F, 0.0F, 0.0F }, space::move::Up);
+    const auto view = glm::lookAt(position,
+      glm::vec3 {
+        -.75F,
+        0.0F,
+        0.0F,
+      },
+      space::move::Up);
     node.GetTransform().SetLocalRotation(glm::quat_cast(glm::inverse(view)));
     return node;
   };
-  result.main_camera = camera("MainCamera", { 4.0F, -6.0F, 4.0F }, .1F);
-  result.secondary_camera = camera("PipCamera", { -5.0F, .4F, 4.0F }, .05F);
+  result.main_camera = camera("MainCamera",
+    {
+      4.0F,
+      -6.0F,
+      4.0F,
+    },
+    .1F);
+  result.secondary_camera = camera("PipCamera",
+    {
+      -5.0F,
+      .4F,
+      4.0F,
+    },
+    .05F);
   return result;
 }
 

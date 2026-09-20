@@ -44,32 +44,36 @@ using oxygen::vortex::upload::UploadError;
 {
   const auto vertices = std::vector<oxygen::data::Vertex> {
     oxygen::data::Vertex {
-      .position = glm::vec3 { 0.0F, 0.0F, 0.0F },
-      .normal = glm::vec3 { 0.0F, 0.0F, 1.0F },
-      .texcoord = glm::vec2 { 0.0F, 0.0F },
-      .tangent = glm::vec3 { 1.0F, 0.0F, 0.0F },
-      .bitangent = glm::vec3 { 0.0F, 1.0F, 0.0F },
-      .color = glm::vec4 { 1.0F, 1.0F, 1.0F, 1.0F },
+      .position = glm::vec3 { 0.0F, 0.0F, 0.0F, },
+      .normal = glm::vec3 { 0.0F, 0.0F, 1.0F, },
+      .texcoord = glm::vec2 { 0.0F, 0.0F, },
+      .tangent = glm::vec3 { 1.0F, 0.0F, 0.0F, },
+      .bitangent = glm::vec3 { 0.0F, 1.0F, 0.0F, },
+      .color = glm::vec4 { 1.0F, 1.0F, 1.0F, 1.0F, },
     },
     oxygen::data::Vertex {
-      .position = glm::vec3 { 1.0F, 0.0F, 0.0F },
-      .normal = glm::vec3 { 0.0F, 0.0F, 1.0F },
-      .texcoord = glm::vec2 { 1.0F, 0.0F },
-      .tangent = glm::vec3 { 1.0F, 0.0F, 0.0F },
-      .bitangent = glm::vec3 { 0.0F, 1.0F, 0.0F },
-      .color = glm::vec4 { 1.0F, 1.0F, 1.0F, 1.0F },
+      .position = glm::vec3 { 1.0F, 0.0F, 0.0F, },
+      .normal = glm::vec3 { 0.0F, 0.0F, 1.0F, },
+      .texcoord = glm::vec2 { 1.0F, 0.0F, },
+      .tangent = glm::vec3 { 1.0F, 0.0F, 0.0F, },
+      .bitangent = glm::vec3 { 0.0F, 1.0F, 0.0F, },
+      .color = glm::vec4 { 1.0F, 1.0F, 1.0F, 1.0F, },
     },
     oxygen::data::Vertex {
-      .position = glm::vec3 { 0.0F, 1.0F, 0.0F },
-      .normal = glm::vec3 { 0.0F, 0.0F, 1.0F },
-      .texcoord = glm::vec2 { 0.0F, 1.0F },
-      .tangent = glm::vec3 { 1.0F, 0.0F, 0.0F },
-      .bitangent = glm::vec3 { 0.0F, 1.0F, 0.0F },
-      .color = glm::vec4 { 1.0F, 1.0F, 1.0F, 1.0F },
+      .position = glm::vec3 { 0.0F, 1.0F, 0.0F, },
+      .normal = glm::vec3 { 0.0F, 0.0F, 1.0F, },
+      .texcoord = glm::vec2 { 0.0F, 1.0F, },
+      .tangent = glm::vec3 { 1.0F, 0.0F, 0.0F, },
+      .bitangent = glm::vec3 { 0.0F, 1.0F, 0.0F, },
+      .color = glm::vec4 { 1.0F, 1.0F, 1.0F, 1.0F, },
     },
   };
 
-  const auto indices = std::vector<std::uint32_t> { 0U, 1U, 2U };
+  const auto indices = std::vector<std::uint32_t> {
+    0U,
+    1U,
+    2U,
+  };
   auto builder = oxygen::data::MeshBuilder(0, name).WithVertices(vertices);
   if (indexed) {
     builder.WithIndices(indices);
@@ -92,7 +96,9 @@ using oxygen::vortex::upload::UploadError;
         .EndSubMesh()
         .Build();
 
-  return std::shared_ptr<const oxygen::data::Mesh>(std::move(mesh));
+  return {
+    std::move(mesh),
+  };
 }
 
 //! GetShaderVisibleIndices must return invalid indices while not resident.
@@ -101,7 +107,9 @@ NOLINT_TEST_F(
 {
   // Arrange
   auto& uploader = GeoUploader();
-  BeginFrame(Slot { 0 });
+  BeginFrame(Slot {
+    0,
+  });
 
   const auto mesh = MakeValidTriangleMesh("Tri", true);
   const auto asset_key = MakeGeometryAssetKey("failures_not_resident_indices");
@@ -131,14 +139,14 @@ public:
   {
   }
 
-  auto Allocate(oxygen::SizeBytes, std::string_view)
+  auto Allocate(oxygen::SizeBytes /*size*/, std::string_view /*debug_name*/)
     -> std::expected<Allocation, UploadError> override
   {
     return std::unexpected(UploadError::kStagingAllocFailed);
   }
 
-  auto RetireCompleted(oxygen::vortex::upload::UploaderTag,
-    oxygen::vortex::upload::FenceValue) -> void override
+  auto RetireCompleted(oxygen::vortex::upload::UploaderTag /*unused*/,
+    oxygen::vortex::upload::FenceValue /*completed*/) -> void override
   {
   }
 };
@@ -153,7 +161,9 @@ NOLINT_TEST(GeometryUploaderFailuresStandaloneTest,
 
   auto upload_coordinator
     = std::make_unique<oxygen::vortex::upload::UploadCoordinator>(
-      oxygen::observer_ptr { gfx.get() },
+      oxygen::observer_ptr {
+        gfx.get(),
+      },
       oxygen::vortex::upload::DefaultUploadPolicy());
 
   auto staging = std::make_shared<AlwaysFailStagingProvider>(
@@ -162,14 +172,28 @@ NOLINT_TEST(GeometryUploaderFailuresStandaloneTest,
   auto asset_loader
     = std::make_unique<oxygen::vortex::testing::FakeAssetLoader>();
 
-  auto geo_uploader
-    = std::make_unique<GeometryUploader>(oxygen::observer_ptr { gfx.get() },
-      oxygen::observer_ptr { upload_coordinator.get() },
-      oxygen::observer_ptr { staging.get() },
-      oxygen::observer_ptr { asset_loader.get() });
+  auto geo_uploader = std::make_unique<GeometryUploader>(
+    oxygen::observer_ptr {
+      gfx.get(),
+    },
+    oxygen::observer_ptr {
+      upload_coordinator.get(),
+    },
+    oxygen::observer_ptr {
+      staging.get(),
+    },
+    oxygen::observer_ptr {
+      asset_loader.get(),
+    });
 
-  upload_coordinator->OnFrameStart(RendererTagFactory::Get(), Slot { 0 });
-  geo_uploader->OnFrameStart(RendererTagFactory::Get(), Slot { 0 });
+  upload_coordinator->OnFrameStart(RendererTagFactory::Get(),
+    Slot {
+      0,
+    });
+  geo_uploader->OnFrameStart(RendererTagFactory::Get(),
+    Slot {
+      0,
+    });
 
   const auto mesh = MakeValidTriangleMesh("Tri", true);
 
@@ -202,7 +226,9 @@ NOLINT_TEST_F(
   auto& upload_coordinator = Uploader();
   auto& uploader = GeoUploader();
 
-  BeginFrame(Slot { 0 });
+  BeginFrame(Slot {
+    0,
+  });
 
   const auto mesh = MakeValidTriangleMesh("Tri", true);
   const auto asset_key
@@ -219,8 +245,14 @@ NOLINT_TEST_F(
   ASSERT_GT(uploader.GetPendingUploadCount(), 0U);
 
   // Act: re-enter the same slot so UploadTracker erases the tickets.
-  upload_coordinator.OnFrameStart(RendererTagFactory::Get(), Slot { 0 });
-  uploader.OnFrameStart(RendererTagFactory::Get(), Slot { 0 });
+  upload_coordinator.OnFrameStart(RendererTagFactory::Get(),
+    Slot {
+      0,
+    });
+  uploader.OnFrameStart(RendererTagFactory::Get(),
+    Slot {
+      0,
+    });
 
   const auto indices_0 = uploader.GetShaderVisibleIndices(handle);
 

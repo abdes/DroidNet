@@ -21,13 +21,15 @@
 
 namespace oxygen::vortex::testing::exposure {
 
-using namespace oxygen::graphics;
+using graphics::Framebuffer;
+using graphics::FramebufferDesc;
+using graphics::ResourceStates;
 
 ExposureBaselineScenario::ExposureBaselineScenario(
   ExposureProfilingOverheadTest& fixture,
   const ExposureProfilingOverheadTest::BaselineRecipe kind)
   : fixture_(fixture)
-  , backend(static_cast<ExposureFailureGraphics&>(fixture.Backend()))
+  , backend(fixture.FailureBackend())
   , moving(
       kind == ExposureProfilingOverheadTest::BaselineRecipe::kIndoorOutdoor)
   , mixed_scene(
@@ -42,19 +44,31 @@ ExposureBaselineScenario::~ExposureBaselineScenario()
 
 auto ExposureBaselineScenario::ReadOptions() -> void
 {
-  const auto option = [](const char* name, std::string fallback) {
+  const auto option
+    = [](const char* name, std::string fallback) -> std::string {
     char* value = nullptr;
     std::size_t size = 0U;
     const auto result = _dupenv_s(&value, &size, name);
     const auto owned
       = std::unique_ptr<char, decltype(&std::free)>(value, &std::free);
     if (result != 0) {
-      throw std::runtime_error(std::string { "Cannot read " } + name);
+      throw std::runtime_error(std::string {
+                                 "Cannot read ",
+                               }
+        + name);
     }
-    return value ? std::string { value } : std::move(fallback);
+    return value ? std::string { value, } : std::move(fallback);
   };
-  workload = option("OXYGEN_EXPOSURE_BASELINE_CASE",
-    moving ? "I01" : (mixed_scene ? "M01" : "C01"));
+  std::string default_workload = "C01";
+  std::string filename_prefix = "controlled-";
+  if (moving) {
+    default_workload = "I01";
+    filename_prefix = "indoor-";
+  } else if (mixed_scene) {
+    default_workload = "M01";
+    filename_prefix = "mixed-";
+  }
+  workload = option("OXYGEN_EXPOSURE_BASELINE_CASE", default_workload);
   if (moving) {
     ASSERT_TRUE(workload == "I01" || workload == "I02")
       << "Indoor/outdoor baseline requires I01 or I02";
@@ -76,10 +90,10 @@ auto ExposureBaselineScenario::ReadOptions() -> void
   const auto frames_text = option("OXYGEN_EXPOSURE_BASELINE_FRAMES", "3600");
   sample_count = 0U;
   const auto parsed = std::from_chars(
-    frames_text.data(), frames_text.data() + frames_text.size(), sample_count);
+    frames_text.data(), std::to_address(frames_text.end()), sample_count);
   ASSERT_TRUE(parsed.ec == std::errc {}
-    && parsed.ptr == frames_text.data() + frames_text.size()
-    && sample_count >= 1800U && sample_count <= 20000U)
+    && parsed.ptr == std::to_address(frames_text.end()) && sample_count >= 1800U
+    && sample_count <= 20000U)
     << "OXYGEN_EXPOSURE_BASELINE_FRAMES must be an integer in [1800, 20000]";
   if (moving) {
     ASSERT_EQ(sample_count % 1200U, 0U)
@@ -88,7 +102,7 @@ auto ExposureBaselineScenario::ReadOptions() -> void
   run_id = option("OXYGEN_EXPOSURE_BASELINE_RUN", "run01");
   ASSERT_TRUE(!run_id.empty() && run_id.size() <= 64U
     && std::ranges::all_of(run_id,
-      [](const char c) {
+      [](const char c) -> bool {
         return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
           || (c >= '0' && c <= '9') || c == '-' || c == '_';
       }))
@@ -105,13 +119,12 @@ auto ExposureBaselineScenario::ReadOptions() -> void
     = workload == "M01" || workload == "M04" || workload == "I01" ? 1U : 2U;
   expected_format
     = fp32_reference || temporal ? Format::kRGBA32Float : Format::kRGBA16Float;
-  directory = std::filesystem::path { OXYGEN_EXPOSURE_WORKSPACE }
-    / "out/build-ninja/analysis/vortex/exposure-lightbench/slice51";
+  directory = std::filesystem::path {
+    OXYGEN_EXPOSURE_WORKSPACE,
+  } / "out/build-ninja/analysis/vortex/exposure-lightbench/slice51";
   std::filesystem::create_directories(directory);
-  stem = std::string { moving ? "indoor-"
-                              : (mixed_scene ? "mixed-" : "controlled-") }
-    + workload + "-" + width_text + (fp32_reference ? "-fp32" : "") + "-"
-    + run_id + "-Release";
+  stem = filename_prefix + workload + "-" + width_text
+    + (fp32_reference ? "-fp32" : "") + "-" + run_id + "-Release";
   gpu_path = directory / (stem + ".gpu.json");
   cpu_path = directory / (stem + ".cpu.csv");
   manifest_path = directory / (stem + ".json");
@@ -123,22 +136,36 @@ auto ExposureBaselineScenario::ReadOptions() -> void
 
 auto ExposureBaselineScenario::ConfigureScene() -> void
 {
-  fixture_.view.viewport = { .width = float(width), .height = float(height) };
-  cameras = std::array { fixture_.camera, fixture_.camera };
+  fixture_.view.viewport = {
+    .width = static_cast<float>(width),
+    .height = static_cast<float>(height),
+  };
+  cameras = std::array {
+    fixture_.camera,
+    fixture_.camera,
+  };
   if (mixed_scene) {
     ASSERT_TRUE(fixture_.scene->DestroyNode(fixture_.mesh_node));
     ASSERT_TRUE(fixture_.scene->DestroyNode(fixture_.camera));
     const auto recipe = vortex::testing::PopulateMixedExposureBenchmarkScene(
       *fixture_.scene, moving);
-    cameras = { recipe.main_camera, recipe.secondary_camera };
+    cameras = {
+      recipe.main_camera,
+      recipe.secondary_camera,
+    };
     for (unsigned index = 0U; index < view_count; ++index) {
-      auto& lens
-        = cameras[index].GetCameraAs<scene::PerspectiveCamera>()->get();
+      const auto camera_lens
+        = cameras.at(index).GetCameraAs<scene::PerspectiveCamera>();
+      if (!camera_lens.has_value()) {
+        FAIL() << "Expected a perspective camera";
+      }
+      auto& lens = camera_lens->get();
       auto viewport = fixture_.view.viewport;
-      viewport.width = float(width >> index);
-      viewport.height = float(height >> index);
+      viewport.width = static_cast<float>(width >> index);
+      viewport.height = static_cast<float>(height >> index);
       lens.SetViewport(viewport);
-      lens.SetAspectRatio(float(width) / float(height));
+      lens.SetAspectRatio(
+        static_cast<float>(width) / static_cast<float>(height));
     }
     fixture_.settings = scene::ExposureSettings {};
     fixture_.settings.key = 12.5F;
@@ -151,7 +178,12 @@ auto ExposureBaselineScenario::ConfigureScene() -> void
       ->SetExposureSettings(fixture_.settings);
   } else {
     // Preserve the historical controlled camera, including aspect 1 and FOV 1.
-    auto& lens = fixture_.camera.GetCameraAs<scene::PerspectiveCamera>()->get();
+    const auto camera_lens
+      = fixture_.camera.GetCameraAs<scene::PerspectiveCamera>();
+    if (!camera_lens.has_value()) {
+      FAIL() << "Expected a perspective camera";
+    }
+    auto& lens = camera_lens->get();
     ASSERT_FLOAT_EQ(lens.GetAspectRatio(), 1.0F);
     ASSERT_FLOAT_EQ(lens.GetFieldOfView(), 1.0F);
     lens.SetViewport(fixture_.view.viewport);
@@ -159,10 +191,26 @@ auto ExposureBaselineScenario::ConfigureScene() -> void
     auto& sky = fixture_.scene->GetEnvironment()
                   ->AddSystem<scene::environment::SkyAtmosphere>();
     sky.SetEnabled(true);
-    sky.SetRayleighScatteringRgb({ 0, 0, 0 });
-    sky.SetMieScatteringRgb({ 0, 0, 0 });
-    sky.SetMieAbsorptionRgb({ 0, 0, 0 });
-    sky.SetOzoneAbsorptionRgb({ 0, 0, 0 });
+    sky.SetRayleighScatteringRgb({
+      0,
+      0,
+      0,
+    });
+    sky.SetMieScatteringRgb({
+      0,
+      0,
+      0,
+    });
+    sky.SetMieAbsorptionRgb({
+      0,
+      0,
+      0,
+    });
+    sky.SetOzoneAbsorptionRgb({
+      0,
+      0,
+      0,
+    });
     auto& fog
       = fixture_.scene->GetEnvironment()->AddSystem<scene::environment::Fog>();
     fog.SetEnabled(true);
@@ -184,7 +232,7 @@ auto ExposureBaselineScenario::ConfigureScene() -> void
       console::ExecutionStatus::kOk)
       << command;
   }
-  fixture_.probe->prepare = [](RenderContext& context) {
+  fixture_.probe->prepare = [](RenderContext& context) -> void {
     context.current_view.with_atmosphere = true;
     context.current_view.with_height_fog = true;
   };
@@ -200,11 +248,11 @@ auto ExposureBaselineScenario::CreateTargets() -> void
       .height = height >> index,
       .format = Format::kRGBA32Float,
       .debug_name = std::string { mixed_scene ? "MixedBaseline.Output"
-                                              : "ControlledBaseline.Output" }
+                                              : "ControlledBaseline.Output", }
         + std::to_string(index),
       .is_render_target = true,
-      .initial_state = ResourceStates::kCommon });
-    targets[index] = fixture_.Backend().CreateFramebuffer(
+      .initial_state = ResourceStates::kCommon, });
+    targets.at(index) = fixture_.Backend().CreateFramebuffer(
       FramebufferDesc {}.AddColorAttachment(output));
   }
 }
@@ -217,8 +265,11 @@ auto ExposureBaselineScenario::Setup() -> void
   backend.account_texture_allocations = false;
   ASSERT_NO_FATAL_FAILURE(CreateTargets());
   auto timing = fixture_.frame.GetModuleTimingData();
-  timing.game_delta_time
-    = time::CanonicalDuration { std::chrono::nanoseconds { simulation_dt_ns } };
+  timing.game_delta_time = time::CanonicalDuration {
+    std::chrono::nanoseconds {
+      simulation_dt_ns,
+    },
+  };
   fixture_.frame.SetModuleTimingData(
     timing, engine::internal::EngineTagFactory::Get());
   auto& diagnostics = fixture_.renderer_->GetDiagnosticsService();
@@ -227,7 +278,7 @@ auto ExposureBaselineScenario::Setup() -> void
   diagnostics.SetGpuTimelineEnabled(true);
   fixture_.probe->inspect
     = [this](const RenderContext& context, const SceneTextureExtractRef& color,
-        unsigned draws) { InspectView(context, color, draws); };
+        unsigned draws) -> void { InspectView(context, color, draws); };
 }
 
 } // namespace oxygen::vortex::testing::exposure

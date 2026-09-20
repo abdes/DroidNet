@@ -25,9 +25,13 @@ class MaterialBinderErrorStressTest : public MaterialBinderTest { };
 NOLINT_TEST_F(MaterialBinderErrorStressTest, EnsureFrameResourcesSmoke)
 {
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+    oxygen::frame::Slot {
+      1,
+    });
   MatBinder().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+    oxygen::frame::Slot {
+      1,
+    });
 
   // No materials allocated; EnsureFrameResources should be safe to call.
   MatBinder().EnsureFrameResources();
@@ -38,30 +42,44 @@ NOLINT_TEST_F(MaterialBinderErrorStressTest, EnsureFrameResourcesSmoke)
 NOLINT_TEST_F(MaterialBinderErrorStressTest, DescriptorExhaustionStress)
 {
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+    oxygen::frame::Slot {
+      1,
+    });
   MatBinder().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+    oxygen::frame::Slot {
+      1,
+    });
 
   constexpr int N = 512;
   for (int i = 0; i < N; ++i) {
-    const ResourceKey base { static_cast<uint32_t>(100000 + (i * 2)) };
-    const ResourceKey normal { static_cast<uint32_t>(100001 + (i * 2)) };
+    const ResourceKey base {
+      static_cast<uint32_t>(100000 + (i * 2)),
+    };
+    const ResourceKey normal {
+      static_cast<uint32_t>(100001 + (i * 2)),
+    };
 
     auto desc
       = std::make_shared<oxygen::data::MaterialAsset>(oxygen::data::AssetKey {},
         oxygen::data::pak::render::MaterialAssetDesc {},
         std::vector<oxygen::data::ShaderReference> {},
-        std::vector { base, normal });
+        std::vector {
+          base,
+          normal,
+        });
 
     oxygen::vortex::sceneprep::MaterialRef ref;
     ref.resolved_asset = desc;
     ref.source_asset_key = ref.resolved_asset->GetAssetKey();
     ref.resolved_asset_key = ref.resolved_asset->GetAssetKey();
-    MatBinder().GetOrAllocate(ref);
+    const auto handle = MatBinder().GetOrAllocate(ref);
+    ASSERT_TRUE(MatBinder().IsHandleValid(handle)) << "material " << i;
 
     // allocate texture SRVs via texture binder
-    [[maybe_unused]] const auto tmpBase = TexBinder().GetOrAllocate(base);
-    [[maybe_unused]] const auto tmpNormal = TexBinder().GetOrAllocate(normal);
+    const auto base_srv = TexBinder().GetOrAllocate(base);
+    EXPECT_TRUE(base_srv.IsValid()) << "material " << i;
+    const auto normal_srv = TexBinder().GetOrAllocate(normal);
+    EXPECT_TRUE(normal_srv.IsValid()) << "material " << i;
   }
 
   // At least some descriptors must have been allocated.
@@ -72,18 +90,29 @@ NOLINT_TEST_F(MaterialBinderErrorStressTest, DescriptorExhaustionStress)
 //! (smoke).
 NOLINT_TEST_F(MaterialBinderErrorStressTest, EnsureFrameResourcesUploads)
 {
-  constexpr ResourceKey base { 120001U };
-  constexpr ResourceKey normal { 120002U };
+  constexpr ResourceKey base {
+    120001U,
+  };
+  constexpr ResourceKey normal {
+    120002U,
+  };
 
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+    oxygen::frame::Slot {
+      1,
+    });
   MatBinder().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+    oxygen::frame::Slot {
+      1,
+    });
 
   const auto mat = std::make_shared<oxygen::data::MaterialAsset>(
     oxygen::data::AssetKey {}, oxygen::data::pak::render::MaterialAssetDesc {},
     std::vector<oxygen::data::ShaderReference> {},
-    std::vector { base, normal });
+    std::vector {
+      base,
+      normal,
+    });
   oxygen::vortex::sceneprep::MaterialRef ref;
   ref.resolved_asset = mat;
   ref.source_asset_key = ref.resolved_asset->GetAssetKey();
@@ -103,27 +132,41 @@ NOLINT_TEST_F(MaterialBinderErrorStressTest, EnsureFrameResourcesUploads)
 NOLINT_TEST_F(MaterialBinderErrorStressTest, StressAllocation)
 {
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+    oxygen::frame::Slot {
+      1,
+    });
   MatBinder().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+    oxygen::frame::Slot {
+      1,
+    });
 
   for (int i = 0; i < 200; ++i) {
-    const ResourceKey base { static_cast<uint32_t>(200000 + i) };
-    const ResourceKey normal { static_cast<uint32_t>(300000 + i) };
+    const ResourceKey base {
+      static_cast<uint32_t>(200000 + i),
+    };
+    const ResourceKey normal {
+      static_cast<uint32_t>(300000 + i),
+    };
 
     auto m
       = std::make_shared<oxygen::data::MaterialAsset>(oxygen::data::AssetKey {},
         oxygen::data::pak::render::MaterialAssetDesc {},
         std::vector<oxygen::data::ShaderReference> {},
-        std::vector { base, normal });
+        std::vector {
+          base,
+          normal,
+        });
 
     oxygen::vortex::sceneprep::MaterialRef ref;
     ref.resolved_asset = m;
     ref.source_asset_key = ref.resolved_asset->GetAssetKey();
     ref.resolved_asset_key = ref.resolved_asset->GetAssetKey();
-    MatBinder().GetOrAllocate(ref);
-    [[maybe_unused]] const auto tmpBase = TexBinder().GetOrAllocate(base);
-    [[maybe_unused]] const auto tmpNormal = TexBinder().GetOrAllocate(normal);
+    const auto handle = MatBinder().GetOrAllocate(ref);
+    ASSERT_TRUE(MatBinder().IsHandleValid(handle)) << "material " << i;
+    const auto base_srv = TexBinder().GetOrAllocate(base);
+    EXPECT_TRUE(base_srv.IsValid()) << "material " << i;
+    const auto normal_srv = TexBinder().GetOrAllocate(normal);
+    EXPECT_TRUE(normal_srv.IsValid()) << "material " << i;
   }
 
   EXPECT_GT(AllocatedTextureSrvCount(), 0U);

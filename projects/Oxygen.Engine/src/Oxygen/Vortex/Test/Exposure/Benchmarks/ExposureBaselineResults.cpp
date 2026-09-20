@@ -14,17 +14,18 @@
 
 namespace oxygen::vortex::testing::exposure {
 
-using namespace oxygen::graphics;
+using graphics::Framebuffer;
+using graphics::ResourceStates;
 
 auto ExposureBaselineScenario::SaveEndpoint(const unsigned path_frame) -> void
 {
   fixture_.WaitForQueueIdle();
   for (unsigned index = 0U; index < view_count; ++index) {
-    const auto& extract = endpoint_hdr[index];
+    const auto& extract = endpoint_hdr.at(index);
     CHECK_NOTNULL_F(extract.texture);
-    CHECK_NOTNULL_F(endpoint_exposure[index].get());
+    CHECK_NOTNULL_F(endpoint_exposure.at(index).get());
     const auto domain = fixture_.Read<FrameExposureData>(
-      *endpoint_exposure[index]->buffer, ResourceStates::kShaderResource);
+      *endpoint_exposure.at(index)->buffer, ResourceStates::kShaderResource);
     const auto* hdr_texture = extract.texture;
     auto used_fallback = false;
     if (extract.fallback != nullptr) {
@@ -42,23 +43,25 @@ auto ExposureBaselineScenario::SaveEndpoint(const unsigned path_frame) -> void
     }
     const auto hdr = fixture_.ReadFloatTexture(*hdr_texture, true);
     const auto pixels = fixture_.ReadFloatTexture(
-      *targets[index]->GetDescriptor().color_attachments.front().texture);
+      *targets.at(index)->GetDescriptor().color_attachments.front().texture);
     auto scene_luminance = 0.0;
     auto display_luminance = 0.0;
     CHECK_F(hdr.size() == pixels.size() && !pixels.empty());
     for (std::size_t pixel = 0U; pixel < pixels.size(); ++pixel) {
       for (unsigned channel = 0U; channel < 3U; ++channel) {
-        CHECK_F(std::isfinite(hdr[pixel][channel]));
-        CHECK_F(std::isfinite(pixels[pixel][channel]));
+        CHECK_F(std::isfinite(hdr.at(pixel).at(channel)));
+        CHECK_F(std::isfinite(pixels.at(pixel).at(channel)));
       }
-      const auto luminance = [](const Pixel& value) {
-        return .2126 * value[0] + .7152 * value[1] + .0722 * value[2];
+      const auto luminance = [](const Pixel& value) -> double {
+        return (.2126 * value.at(0)) + (.7152 * value.at(1))
+          + (.0722 * value.at(2));
       };
-      scene_luminance += luminance(hdr[pixel]) * domain.one_over_pre_exposure;
-      display_luminance += luminance(pixels[pixel]);
+      scene_luminance
+        += luminance(hdr.at(pixel)) * domain.one_over_pre_exposure;
+      display_luminance += luminance(pixels.at(pixel));
     }
-    scene_luminance /= double(pixels.size());
-    display_luminance /= double(pixels.size());
+    scene_luminance /= static_cast<double>(pixels.size());
+    display_luminance /= static_cast<double>(pixels.size());
     CHECK_F(scene_luminance > 0.0 && display_luminance > 0.0);
     const auto filename = stem + "-endpoint-" + std::to_string(path_frame)
       + "-view-" + std::to_string(index) + ".rgba32f";
@@ -66,23 +69,61 @@ auto ExposureBaselineScenario::SaveEndpoint(const unsigned path_frame) -> void
     CHECK_F(!std::filesystem::exists(path));
     auto output = std::ofstream(path, std::ios::binary);
     CHECK_F(output.is_open());
+    // ostream::write accepts char bytes; Pixel storage is serialized unchanged.
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
     output.write(reinterpret_cast<const char*>(pixels.data()),
       static_cast<std::streamsize>(pixels.size() * sizeof(Pixel)));
     output.close();
     CHECK_F(output.good());
-    endpoints.push_back({ { "file", filename }, { "view_index", index },
-      { "width", width >> index }, { "height", height >> index },
-      { "path_phase", path_phases[index] },
-      { "frame_sequence", fixture_.sequence },
-      { "pre_exposure", domain.pre_exposure },
-      { "used_fp32_fallback", used_fallback },
-      { "mean_scene_luminance", scene_luminance },
-      { "mean_display_luminance", display_luminance },
-      { "encoding",
+    endpoints.push_back({
+      {
+        "file",
+        filename,
+      },
+      {
+        "view_index",
+        index,
+      },
+      {
+        "width",
+        width >> index,
+      },
+      {
+        "height",
+        height >> index,
+      },
+      {
+        "path_phase",
+        path_phases.at(index),
+      },
+      {
+        "frame_sequence",
+        fixture_.sequence,
+      },
+      {
+        "pre_exposure",
+        domain.pre_exposure,
+      },
+      {
+        "used_fp32_fallback",
+        used_fallback,
+      },
+      {
+        "mean_scene_luminance",
+        scene_luminance,
+      },
+      {
+        "mean_display_luminance",
+        display_luminance,
+      },
+      {
+        "encoding",
         "Little-endian float32 RGBA, row-major; final renderer output, no "
-        "additional normalization" } });
-    endpoint_hdr[index] = {};
-    endpoint_exposure[index].reset();
+        "additional normalization",
+      },
+    });
+    endpoint_hdr.at(index) = {};
+    endpoint_exposure.at(index).reset();
   }
 }
 
@@ -121,11 +162,12 @@ auto ExposureBaselineScenario::WriteCpuSamples() -> void
   for (const auto& sample : samples) {
     cpu << sample.frame_sequence << ',' << simulation_dt_ns << ','
         << sample.wall_ms << ',' << sample.frame_start_ms << ','
-        << sample.submission_ms << ',' << sample.formats[0] << ','
-        << sample.formats[1] << ',' << sample.draws[0] << ',' << sample.draws[1]
-        << ',' << sample.path_phases[0] << ',' << sample.path_phases[1] << ','
-        << sample.history_reprojected[0] << ',' << sample.history_reprojected[1]
-        << ',' << sample.history_reset[0] << ',' << sample.history_reset[1]
+        << sample.submission_ms << ',' << sample.formats.at(0) << ','
+        << sample.formats.at(1) << ',' << sample.draws.at(0) << ','
+        << sample.draws.at(1) << ',' << sample.path_phases.at(0) << ','
+        << sample.path_phases.at(1) << ',' << sample.history_reprojected.at(0)
+        << ',' << sample.history_reprojected.at(1) << ','
+        << sample.history_reset.at(0) << ',' << sample.history_reset.at(1)
         << '\n';
   }
   cpu.close();
@@ -139,77 +181,83 @@ auto ExposureBaselineScenario::WriteAndValidateResults() -> void
   ASSERT_TRUE(gpu_stream.is_open());
   const auto gpu = nlohmann::json::parse(gpu_stream);
   const auto adapter = backend.GetCurrentDevice()->GetAdapterLuid();
-  const auto manifest = nlohmann::json { { "schema_version", 1 },
-    { "workload", workload }, { "run_id", run_id },
-    { "configuration", "Release" }, { "width", width }, { "height", height },
-    { "view_count", view_count }, { "prepared_draw_counts", warm_draw_counts },
-    { "secondary_width", view_count == 2U ? width / 2U : 0U },
-    { "secondary_height", view_count == 2U ? height / 2U : 0U },
+  const char* recipe
+    = "Emissive triangle 0.25, vacuum atmosphere, zero-extinction fog";
+  if (moving) {
+    recipe = "MultiView mixed exposure with six-piece sun-shadowed enclosure";
+  } else if (mixed_scene) {
+    recipe = "MultiView mixed exposure";
+  }
+  const auto manifest = nlohmann::json { { "schema_version", 1, },
+    { "workload", workload, }, { "run_id", run_id, },
+    { "configuration", "Release", }, { "width", width, }, { "height", height, },
+    { "view_count", view_count, }, { "prepared_draw_counts", warm_draw_counts, },
+    { "secondary_width", view_count == 2U ? width / 2U : 0U, },
+    { "secondary_height", view_count == 2U ? height / 2U : 0U, },
     { "view_ids",
-      view_count == 2U ? std::vector { 500, 501 } : std::vector { 500 } },
+      view_count == 2U ? std::vector { 500, 501, } : std::vector { 500, }, },
     { "view_state_handles",
-      view_count == 2U ? std::vector { 500, 501 } : std::vector { 500 } },
-    { "shading", forward ? "Forward" : "Deferred" },
+      view_count == 2U ? std::vector { 500, 501, } : std::vector { 500, }, },
+    { "shading", forward ? "Forward" : "Deferred", },
     { "exposure",
       { { "mode",
           fixture_.settings.mode == engine::ExposureMode::kAuto ? "Auto"
-                                                                : "Manual" },
-        { "manual_ev", fixture_.settings.manual_ev },
-        { "key", fixture_.settings.key }, { "metering", "Average" },
-        { "min_ev", fixture_.settings.min_ev },
-        { "max_ev", fixture_.settings.max_ev },
-        { "speed_up", fixture_.settings.speed_up },
-        { "speed_down", fixture_.settings.speed_down } } },
-    { "precision", precision },
+                                                                : "Manual", },
+        { "manual_ev", fixture_.settings.manual_ev, },
+        { "key", fixture_.settings.key, }, { "metering", "Average", },
+        { "min_ev", fixture_.settings.min_ev, },
+        { "max_ev", fixture_.settings.max_ev, },
+        { "speed_up", fixture_.settings.speed_up, },
+        { "speed_down", fixture_.settings.speed_down, }, }, },
+    { "precision", precision, },
     { "precision_scope",
       fp32_reference ? "Format-only FP32 control; certification remains enabled"
-                     : "Production admission; certification remains enabled" },
-    { "recipe",
-      moving ? "MultiView mixed exposure with six-piece sun-shadowed enclosure"
-             : (mixed_scene ? "MultiView mixed exposure"
-                            : "Emissive triangle 0.25, vacuum atmosphere, "
-                              "zero-extinction fog") },
+                     : "Production admission; certification remains enabled", },
+    { "recipe", recipe, },
     { "camera_path",
       moving ? "1200 frames: 300 exterior hold, 300 smoothstep entry, 300 "
                "interior hold, 300 smoothstep exit; secondary phase +600"
-             : "Static" },
-    { "camera_aspect", mixed_scene ? double(width) / height : 1.0 },
-    { "camera_fov_radians", mixed_scene ? double(glm::radians(45.0F)) : 1.0 },
-    { "tone_mapper", "None" }, { "display_gamma", 1 },
-    { "quality_commands", quality_commands }, { "temporal_fog", temporal },
-    { "jitter", false }, { "simulation_dt_ns", simulation_dt_ns },
-    { "frame_slots", 3 }, { "warmup_frames", warm_frames },
-    { "warmup_seconds", warm_seconds }, { "sample_count", sample_count },
-    { "sample_seconds", sample_seconds },
-    { "first_frame_seq", samples.front().frame_sequence },
-    { "last_frame_seq", samples.back().frame_sequence },
-    { "adapter_luid_low", adapter.LowPart },
-    { "adapter_luid_high", adapter.HighPart },
-    { "cpu_samples", cpu_path.filename().string() },
-    { "gpu_samples", gpu_path.filename().string() },
-    { "gpu_complete", gpu.at("complete") },
-    { "gpu_timing_valid", gpu.at("timing_valid") },
-    { "resources_before", before }, { "resources_after", after },
+             : "Static", },
+    { "camera_aspect",
+      mixed_scene ? static_cast<double>(width) / height : 1.0, },
+    { "camera_fov_radians",
+      mixed_scene ? static_cast<double>(glm::radians(45.0F)) : 1.0, },
+    { "tone_mapper", "None", }, { "display_gamma", 1, },
+    { "quality_commands", quality_commands, }, { "temporal_fog", temporal, },
+    { "jitter", false, }, { "simulation_dt_ns", simulation_dt_ns, },
+    { "frame_slots", 3, }, { "warmup_frames", warm_frames, },
+    { "warmup_seconds", warm_seconds, }, { "sample_count", sample_count, },
+    { "sample_seconds", sample_seconds, },
+    { "first_frame_seq", samples.front().frame_sequence, },
+    { "last_frame_seq", samples.back().frame_sequence, },
+    { "adapter_luid_low", adapter.LowPart, },
+    { "adapter_luid_high", adapter.HighPart, },
+    { "cpu_samples", cpu_path.filename().string(), },
+    { "gpu_samples", gpu_path.filename().string(), },
+    { "gpu_complete", gpu.at("complete"), },
+    { "gpu_timing_valid", gpu.at("timing_valid"), },
+    { "resources_before", before, }, { "resources_after", after, },
     { "resource_scope",
       "Resources created after fixture setup, including "
       "outputs; native placement requirements, not committed heap residency. "
-      "No retained extracts beyond normal renderer/probe ownership." },
-    { "finalization_frame_seq", finalization.frame_sequence },
-    { "finalization_wall_ms", finalization.wall_ms },
-    { "untimed_endpoint_images", endpoints },
+      "No retained extracts beyond normal renderer/probe ownership.", },
+    { "finalization_frame_seq", finalization.frame_sequence, },
+    { "finalization_wall_ms", finalization.wall_ms, },
+    { "untimed_endpoint_images", endpoints, },
     { "scope",
       "Native offscreen workload; no presented FPS claim. "
       "Frame-start duration includes backend waits; submission is a "
       "CPU/driver/recording span, not pure active CPU time. Correctness "
       "readbacks and explicit drains are absent from measured frames. "
       "Source/binary/shader hashes and clock/thermal samples belong to the "
-      "external frozen-checkpoint runner." } };
+      "external frozen-checkpoint runner.", }, };
   auto output = std::ofstream(manifest_path, std::ios::binary);
   ASSERT_TRUE(output.is_open());
   output << manifest.dump(2) << '\n';
   output.close();
   ASSERT_TRUE(output.good());
-  fixture_.RecordProperty("baseline_manifest", manifest_path.string());
+  oxygen::vortex::testing::exposure::ExposureProfilingOverheadTest::
+    RecordProperty("baseline_manifest", manifest_path.string());
   EXPECT_GE(sample_seconds, 30.0);
   EXPECT_EQ(gpu.at("complete"), true);
   EXPECT_EQ(gpu.at("timing_valid"), true);

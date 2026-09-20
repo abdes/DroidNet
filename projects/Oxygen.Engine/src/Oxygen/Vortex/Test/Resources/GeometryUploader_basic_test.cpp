@@ -40,7 +40,9 @@ NOLINT_TEST_F(
 {
   // Arrange
   auto& uploader = GeoUploader();
-  BeginFrame(oxygen::frame::Slot { 0 });
+  BeginFrame(oxygen::frame::Slot {
+    0,
+  });
 
   const auto mesh = MakeValidTriangleMesh("Tri", true);
   const auto asset_key = MakeGeometryAssetKey("basic_valid_handle");
@@ -63,7 +65,9 @@ NOLINT_TEST_F(
 {
   // Arrange
   auto& uploader = GeoUploader();
-  BeginFrame(oxygen::frame::Slot { 0 });
+  BeginFrame(oxygen::frame::Slot {
+    0,
+  });
 
   const auto mesh = MakeValidTriangleMesh("Tri", true);
   const auto asset_key = MakeGeometryAssetKey("basic_same_identity");
@@ -78,6 +82,7 @@ NOLINT_TEST_F(
   const auto handle_1 = uploader.GetOrAllocate(geometry);
 
   // Assert
+  ASSERT_TRUE(uploader.IsHandleValid(handle_0));
   EXPECT_EQ(handle_1, handle_0);
 }
 
@@ -87,7 +92,9 @@ NOLINT_TEST_F(GeometryUploaderBasicTest,
 {
   // Arrange
   auto& uploader = GeoUploader();
-  BeginFrame(oxygen::frame::Slot { 0 });
+  BeginFrame(oxygen::frame::Slot {
+    0,
+  });
 
   const auto mesh_a = MakeValidTriangleMesh("TriA", true);
   const auto mesh_b = MakeValidTriangleMesh("TriB", true);
@@ -118,7 +125,9 @@ NOLINT_TEST_F(
 {
   // Arrange
   auto& uploader = GeoUploader();
-  BeginFrame(oxygen::frame::Slot { 0 });
+  BeginFrame(oxygen::frame::Slot {
+    0,
+  });
 
   const auto mesh = MakeValidTriangleMesh("Tri", true);
   const auto asset_key = MakeGeometryAssetKey("basic_criticality_upgrade");
@@ -133,7 +142,9 @@ NOLINT_TEST_F(
   ASSERT_GT(uploader.GetPendingUploadCount(), 0U);
 
   // Retire initial uploads.
-  BeginFrame(oxygen::frame::Slot { 1 });
+  BeginFrame(oxygen::frame::Slot {
+    1,
+  });
   ASSERT_EQ(uploader.GetPendingUploadCount(), 0U);
 
   // Act: upgrade criticality.
@@ -159,9 +170,11 @@ NOLINT_TEST_F(GeometryUploaderBasicTest,
 {
   // Arrange
   auto& uploader = GeoUploader();
-  BeginFrame(oxygen::frame::Slot { 0 });
+  BeginFrame(oxygen::frame::Slot {
+    0,
+  });
 
-  const auto mesh = MakeInvalidMesh_NoVertices("Bad");
+  const auto mesh = MakeInvalidMesh_NonFiniteVertex("Bad");
   const auto asset_key = MakeGeometryAssetKey("basic_invalid_mesh");
   const oxygen::vortex::sceneprep::GeometryRef geometry {
     .asset_key = asset_key,

@@ -4,8 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <array>
-#include <cstdint>
 #include <memory>
 
 #include <Oxygen/Testing/GTest.h>
@@ -24,57 +22,6 @@ namespace {
 
 using oxygen::content::ResourceKey;
 using oxygen::vortex::testing::MaterialBinderTest;
-
-[[nodiscard]] auto MakeMaterial(ResourceKey base_color_key,
-  ResourceKey normal_key, uint32_t raw_base_color_index,
-  uint32_t raw_normal_index)
-  -> std::shared_ptr<const oxygen::data::MaterialAsset>
-{
-  using oxygen::data::pak::render::MaterialAssetDesc;
-
-  MaterialAssetDesc desc {};
-  desc.base_color_texture
-    = oxygen::data::pak::core::ResourceIndexT { raw_base_color_index };
-  desc.normal_texture
-    = oxygen::data::pak::core::ResourceIndexT { raw_normal_index };
-
-  // Non-zero defaults so we can distinguish from memset/zero init.
-  desc.base_color[0] = 1.0F;
-  desc.base_color[1] = 0.5F;
-  desc.base_color[2] = 0.25F;
-  desc.base_color[3] = 1.0F;
-
-  return std::make_shared<oxygen::data::MaterialAsset>(
-    oxygen::data::AssetKey {}, desc,
-    std::vector<oxygen::data::ShaderReference> {},
-    std::vector { base_color_key, normal_key });
-}
-
-[[nodiscard]] auto MakeMaterialWithUv(ResourceKey base_color_key,
-  ResourceKey normal_key, uint32_t raw_base_color_index,
-  uint32_t raw_normal_index, std::array<float, 2> uv_scale,
-  std::array<float, 2> uv_offset, float uv_rotation_radians, uint8_t uv_set)
-  -> std::shared_ptr<const oxygen::data::MaterialAsset>
-{
-  using oxygen::data::pak::render::MaterialAssetDesc;
-
-  MaterialAssetDesc desc {};
-  desc.base_color_texture
-    = oxygen::data::pak::core::ResourceIndexT { raw_base_color_index };
-  desc.normal_texture
-    = oxygen::data::pak::core::ResourceIndexT { raw_normal_index };
-  desc.uv_scale[0] = uv_scale[0];
-  desc.uv_scale[1] = uv_scale[1];
-  desc.uv_offset[0] = uv_offset[0];
-  desc.uv_offset[1] = uv_offset[1];
-  desc.uv_rotation_radians = uv_rotation_radians;
-  desc.uv_set = uv_set;
-
-  return std::make_shared<oxygen::data::MaterialAsset>(
-    oxygen::data::AssetKey {}, desc,
-    std::vector<oxygen::data::ShaderReference> {},
-    std::vector { base_color_key, normal_key });
-}
 
 [[nodiscard]] auto MakeProceduralGridMaterial(ResourceKey base_color_key)
   -> std::shared_ptr<const oxygen::data::MaterialAsset>
@@ -107,7 +54,9 @@ using oxygen::vortex::testing::MaterialBinderTest;
   return std::make_shared<oxygen::data::MaterialAsset>(
     oxygen::data::AssetKey {}, desc,
     std::vector<oxygen::data::ShaderReference> {},
-    std::vector { base_color_key });
+    std::vector {
+      base_color_key,
+    });
 }
 
 class MaterialBinderBindingTest : public MaterialBinderTest { };
@@ -117,20 +66,36 @@ class MaterialBinderBindingTest : public MaterialBinderTest { };
 NOLINT_TEST_F(MaterialBinderBindingTest,
   SerializeMaterialShadingConstantsUsesTextureBinderSrvIndices)
 {
-  constexpr ResourceKey base_color_key { 2001U };
-  constexpr ResourceKey normal_key { 2002U };
+  constexpr ResourceKey base_color_key {
+    2001U,
+  };
+  constexpr ResourceKey normal_key {
+    2002U,
+  };
 
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+    oxygen::frame::Slot {
+      1,
+    });
   MatBinder().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+    oxygen::frame::Slot {
+      1,
+    });
 
-  constexpr oxygen::ShaderVisibleIndex kRawBaseColorIndex { 123456U };
-  constexpr oxygen::ShaderVisibleIndex kRawNormalIndex { 654321U };
+  constexpr oxygen::ShaderVisibleIndex kRawBaseColorIndex {
+    123456U,
+  };
+  constexpr oxygen::ShaderVisibleIndex kRawNormalIndex {
+    654321U,
+  };
 
   oxygen::vortex::sceneprep::MaterialRef ref;
-  ref.resolved_asset = MakeMaterial(base_color_key, normal_key,
-    kRawBaseColorIndex.get(), kRawNormalIndex.get());
+  ref.resolved_asset = MakeMaterial({
+    .base_color_key = base_color_key,
+    .normal_key = normal_key,
+    .raw_base_color_index = kRawBaseColorIndex.get(),
+    .raw_normal_index = kRawNormalIndex.get(),
+  });
   ref.source_asset_key = ref.resolved_asset->GetAssetKey();
   ref.resolved_asset_key = ref.resolved_asset->GetAssetKey();
 
@@ -145,9 +110,7 @@ NOLINT_TEST_F(MaterialBinderBindingTest,
   const auto all_constants = MatBinder().GetMaterialShadingConstants();
   ASSERT_LT(
     static_cast<std::size_t>(material_handle.get()), all_constants.size());
-  const auto& constants
-    // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
-    = all_constants[static_cast<std::size_t>(material_handle.get())];
+  const auto& constants = MaterialConstants(material_handle);
 
   EXPECT_EQ(constants.base_color_texture_index, expected_base_color_srv);
   EXPECT_EQ(constants.normal_texture_index, expected_normal_srv);
@@ -160,18 +123,33 @@ NOLINT_TEST_F(MaterialBinderBindingTest,
 NOLINT_TEST_F(
   MaterialBinderBindingTest, SerializeMaterialShadingConstantsCopiesUv)
 {
-  constexpr ResourceKey base_color_key { 22101U };
-  constexpr ResourceKey normal_key { 22102U };
+  constexpr ResourceKey base_color_key {
+    22101U,
+  };
+  constexpr ResourceKey normal_key {
+    22102U,
+  };
 
   // Arrange
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+    oxygen::frame::Slot {
+      1,
+    });
   MatBinder().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+    oxygen::frame::Slot {
+      1,
+    });
 
   oxygen::vortex::sceneprep::MaterialRef ref;
-  ref.resolved_asset = MakeMaterialWithUv(base_color_key, normal_key, 1U, 2U,
-    { 2.0F, 3.0F }, { 0.25F, -0.5F }, 0.75F, 2U);
+  ref.resolved_asset = MakeMaterial({ .base_color_key = base_color_key,
+    .normal_key = normal_key,
+    .raw_base_color_index = 1U,
+    .raw_normal_index = 2U,
+    .base_color = { 1.0F, 1.0F, 1.0F, 1.0F, },
+    .uv_scale = { 2.0F, 3.0F, },
+    .uv_offset = { 0.25F, -0.5F, },
+    .uv_rotation_radians = 0.75F,
+    .uv_set = 2U, });
   ref.source_asset_key = ref.resolved_asset->GetAssetKey();
   ref.resolved_asset_key = ref.resolved_asset->GetAssetKey();
 
@@ -182,9 +160,7 @@ NOLINT_TEST_F(
   // Assert
   const auto all_constants = MatBinder().GetMaterialShadingConstants();
   ASSERT_LT(static_cast<std::size_t>(handle.get()), all_constants.size());
-  const auto& constants
-    // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
-    = all_constants[static_cast<std::size_t>(handle.get())];
+  const auto& constants = MaterialConstants(handle);
 
   EXPECT_FLOAT_EQ(constants.uv_scale.x, 2.0F);
   EXPECT_FLOAT_EQ(constants.uv_scale.y, 3.0F);
@@ -198,19 +174,32 @@ NOLINT_TEST_F(
 //! must use the error texture index as fallback.
 NOLINT_TEST_F(MaterialBinderBindingTest, MissingResourceFallback)
 {
-  constexpr ResourceKey base_color_key { 22001U };
-  constexpr ResourceKey normal_key { 22002U };
+  constexpr ResourceKey base_color_key {
+    22001U,
+  };
+  constexpr ResourceKey normal_key {
+    22002U,
+  };
 
   // Configure FakeTextureBinder to report normal_key as error
   SetTextureBinderErrorKey(normal_key);
 
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+    oxygen::frame::Slot {
+      1,
+    });
   MatBinder().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+    oxygen::frame::Slot {
+      1,
+    });
 
   oxygen::vortex::sceneprep::MaterialRef ref;
-  ref.resolved_asset = MakeMaterial(base_color_key, normal_key, 7U, 8U);
+  ref.resolved_asset = MakeMaterial({
+    .base_color_key = base_color_key,
+    .normal_key = normal_key,
+    .raw_base_color_index = 7U,
+    .raw_normal_index = 8U,
+  });
   ref.source_asset_key = ref.resolved_asset->GetAssetKey();
   ref.resolved_asset_key = ref.resolved_asset->GetAssetKey();
 
@@ -224,22 +213,40 @@ NOLINT_TEST_F(MaterialBinderBindingTest, MissingResourceFallback)
 //! Materials that reference the same ResourceKey must share the same SRV index.
 NOLINT_TEST_F(MaterialBinderBindingTest, SharedSrvIndicesForSameResource)
 {
-  constexpr ResourceKey base_color_key { 7001U };
-  constexpr ResourceKey normal_key { 7002U };
+  constexpr ResourceKey base_color_key {
+    7001U,
+  };
+  constexpr ResourceKey normal_key {
+    7002U,
+  };
 
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+    oxygen::frame::Slot {
+      1,
+    });
   MatBinder().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+    oxygen::frame::Slot {
+      1,
+    });
 
   // Two materials differ in color but reference same texture keys.
   oxygen::vortex::sceneprep::MaterialRef a;
-  a.resolved_asset = MakeMaterial(base_color_key, normal_key, 42U, 43U);
+  a.resolved_asset = MakeMaterial({
+    .base_color_key = base_color_key,
+    .normal_key = normal_key,
+    .raw_base_color_index = 42U,
+    .raw_normal_index = 43U,
+  });
   a.source_asset_key = a.resolved_asset->GetAssetKey();
   a.resolved_asset_key = a.resolved_asset->GetAssetKey();
 
   oxygen::vortex::sceneprep::MaterialRef b;
-  b.resolved_asset = MakeMaterial(base_color_key, normal_key, 44U, 45U);
+  b.resolved_asset = MakeMaterial({
+    .base_color_key = base_color_key,
+    .normal_key = normal_key,
+    .raw_base_color_index = 44U,
+    .raw_normal_index = 45U,
+  });
   b.source_asset_key = b.resolved_asset->GetAssetKey();
   b.resolved_asset_key = b.resolved_asset->GetAssetKey();
 
@@ -256,10 +263,8 @@ NOLINT_TEST_F(MaterialBinderBindingTest, SharedSrvIndicesForSameResource)
   ASSERT_LT(static_cast<std::size_t>(handleA.get()), all_constants.size());
   ASSERT_LT(static_cast<std::size_t>(handleB.get()), all_constants.size());
 
-  // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
-  const auto& constA = all_constants[static_cast<std::size_t>(handleA.get())];
-  // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
-  const auto& constB = all_constants[static_cast<std::size_t>(handleB.get())];
+  const auto& constA = MaterialConstants(handleA);
+  const auto& constB = MaterialConstants(handleB);
 
   EXPECT_EQ(constA.base_color_texture_index, expectedBaseSrv);
   EXPECT_EQ(constB.base_color_texture_index, expectedBaseSrv);
@@ -274,22 +279,35 @@ NOLINT_TEST_F(MaterialBinderBindingTest, SharedSrvIndicesForSameResource)
 //! EnsureFrameResources.
 NOLINT_TEST_F(MaterialBinderBindingTest, BindlessIndexStabilityWithinFrame)
 {
-  constexpr ResourceKey base_color_key { 21001U };
-  constexpr ResourceKey normal_key { 21002U };
+  constexpr ResourceKey base_color_key {
+    21001U,
+  };
+  constexpr ResourceKey normal_key {
+    21002U,
+  };
 
   // Ensure material constants' texture indices remain stable while the
   // texture is still loading and after the texture binder supplies the
   // concrete SRV. We use placeholder indices first and then simulate
   // allocation completion.
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+    oxygen::frame::Slot {
+      1,
+    });
   MatBinder().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+    oxygen::frame::Slot {
+      1,
+    });
 
   const auto placeholder_base = GetPlaceholderIndexForKey(base_color_key);
 
   oxygen::vortex::sceneprep::MaterialRef ref;
-  ref.resolved_asset = MakeMaterial(base_color_key, normal_key, 7U, 8U);
+  ref.resolved_asset = MakeMaterial({
+    .base_color_key = base_color_key,
+    .normal_key = normal_key,
+    .raw_base_color_index = 7U,
+    .raw_normal_index = 8U,
+  });
   ref.source_asset_key = ref.resolved_asset->GetAssetKey();
   ref.resolved_asset_key = ref.resolved_asset->GetAssetKey();
 
@@ -298,9 +316,7 @@ NOLINT_TEST_F(MaterialBinderBindingTest, BindlessIndexStabilityWithinFrame)
 
   // MaterialBinder should expose the same placeholder index within frame.
   MatBinder().EnsureFrameResources();
-  const auto all_constants = MatBinder().GetMaterialShadingConstants();
-  // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
-  const auto& constants0 = all_constants[static_cast<std::size_t>(h.get())];
+  const auto& constants0 = MaterialConstants(h);
   EXPECT_EQ(constants0.base_color_texture_index, placeholder_base);
 
   // Now simulate the texture becoming available and allocate the shader-visible
@@ -310,10 +326,7 @@ NOLINT_TEST_F(MaterialBinderBindingTest, BindlessIndexStabilityWithinFrame)
   EXPECT_EQ(placeholder_base, real_base);
 
   // Material constants must still report the same bindless index.
-  const auto all_constants_after = MatBinder().GetMaterialShadingConstants();
-  const auto& constants1
-    // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
-    = all_constants_after[static_cast<std::size_t>(h.get())];
+  const auto& constants1 = MaterialConstants(h);
   EXPECT_EQ(constants1.base_color_texture_index, real_base);
 }
 
@@ -321,7 +334,9 @@ NOLINT_TEST_F(MaterialBinderBindingTest, BindlessIndexStabilityWithinFrame)
 //! repeatedly.
 NOLINT_TEST_F(MaterialBinderBindingTest, TextureBinderContractViolation)
 {
-  constexpr ResourceKey key { 21011U };
+  constexpr ResourceKey key {
+    21011U,
+  };
   const auto a = TexBinder().GetOrAllocate(key).get();
   const auto b = TexBinder().GetOrAllocate(key).get();
   EXPECT_EQ(a, b);
@@ -331,20 +346,33 @@ NOLINT_TEST_F(MaterialBinderBindingTest, TextureBinderContractViolation)
 //! not allocate shader-visible descriptors.
 NOLINT_TEST_F(MaterialBinderBindingTest, PlaceholderReferenceCounting)
 {
-  constexpr ResourceKey base_color_key { 21021U };
-  constexpr ResourceKey normal_key { 21022U };
+  constexpr ResourceKey base_color_key {
+    21021U,
+  };
+  constexpr ResourceKey normal_key {
+    21022U,
+  };
 
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+    oxygen::frame::Slot {
+      1,
+    });
   MatBinder().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+    oxygen::frame::Slot {
+      1,
+    });
 
   // Creating a material triggers TextureBinder allocations for per-entry
   // placeholders; the descriptor count should increase as a result.
   const auto before_count = AllocatedTextureSrvCount();
 
   oxygen::vortex::sceneprep::MaterialRef ref;
-  ref.resolved_asset = MakeMaterial(base_color_key, normal_key, 77U, 88U);
+  ref.resolved_asset = MakeMaterial({
+    .base_color_key = base_color_key,
+    .normal_key = normal_key,
+    .raw_base_color_index = 77U,
+    .raw_normal_index = 88U,
+  });
   ref.source_asset_key = ref.resolved_asset->GetAssetKey();
   ref.resolved_asset_key = ref.resolved_asset->GetAssetKey();
 
@@ -363,8 +391,7 @@ NOLINT_TEST_F(MaterialBinderBindingTest, PlaceholderReferenceCounting)
 
   const auto all_constants = MatBinder().GetMaterialShadingConstants();
   ASSERT_LT(static_cast<std::size_t>(h.get()), all_constants.size());
-  // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
-  const auto& constants = all_constants[static_cast<std::size_t>(h.get())];
+  const auto& constants = MaterialConstants(h);
 
   EXPECT_EQ(constants.base_color_texture_index, expected_base);
   EXPECT_EQ(constants.normal_texture_index, expected_normal);
@@ -378,20 +405,36 @@ NOLINT_TEST_F(MaterialBinderBindingTest, PlaceholderReferenceCounting)
 NOLINT_TEST_F(MaterialBinderBindingTest,
   MaterialShadingConstantsDoNotExposeRawAuthorIndices)
 {
-  constexpr ResourceKey base_color_key { 9001U };
-  constexpr ResourceKey normal_key { 9002U };
+  constexpr ResourceKey base_color_key {
+    9001U,
+  };
+  constexpr ResourceKey normal_key {
+    9002U,
+  };
 
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+    oxygen::frame::Slot {
+      1,
+    });
   MatBinder().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+    oxygen::frame::Slot {
+      1,
+    });
 
-  constexpr oxygen::ShaderVisibleIndex kRawBase { 555555U };
-  constexpr oxygen::ShaderVisibleIndex kRawNormal { 666666U };
+  constexpr oxygen::ShaderVisibleIndex kRawBase {
+    555555U,
+  };
+  constexpr oxygen::ShaderVisibleIndex kRawNormal {
+    666666U,
+  };
 
   oxygen::vortex::sceneprep::MaterialRef ref;
-  ref.resolved_asset = MakeMaterial(
-    base_color_key, normal_key, kRawBase.get(), kRawNormal.get());
+  ref.resolved_asset = MakeMaterial({
+    .base_color_key = base_color_key,
+    .normal_key = normal_key,
+    .raw_base_color_index = kRawBase.get(),
+    .raw_normal_index = kRawNormal.get(),
+  });
   ref.source_asset_key = ref.resolved_asset->GetAssetKey();
   ref.resolved_asset_key = ref.resolved_asset->GetAssetKey();
 
@@ -400,8 +443,7 @@ NOLINT_TEST_F(MaterialBinderBindingTest,
 
   const auto all_constants = MatBinder().GetMaterialShadingConstants();
   ASSERT_LT(static_cast<std::size_t>(handle.get()), all_constants.size());
-  // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
-  const auto& constants = all_constants[static_cast<std::size_t>(handle.get())];
+  const auto& constants = MaterialConstants(handle);
 
   EXPECT_NE(constants.base_color_texture_index, kRawBase);
   EXPECT_NE(constants.normal_texture_index, kRawNormal);
@@ -410,12 +452,18 @@ NOLINT_TEST_F(MaterialBinderBindingTest,
 NOLINT_TEST_F(MaterialBinderBindingTest,
   ProceduralGridConstantsUseSeparateMaterialExtensionTable)
 {
-  constexpr ResourceKey base_color_key { 9401U };
+  constexpr ResourceKey base_color_key {
+    9401U,
+  };
 
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+    oxygen::frame::Slot {
+      1,
+    });
   MatBinder().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+    oxygen::frame::Slot {
+      1,
+    });
 
   oxygen::vortex::sceneprep::MaterialRef ref;
   ref.resolved_asset = MakeProceduralGridMaterial(base_color_key);
@@ -432,10 +480,8 @@ NOLINT_TEST_F(MaterialBinderBindingTest,
     static_cast<std::size_t>(handle.get()), all_material_constants.size());
   ASSERT_LT(static_cast<std::size_t>(handle.get()), all_grid_constants.size());
 
-  const auto& material_constants
-    = all_material_constants[static_cast<std::size_t>(handle.get())];
-  const auto& grid_constants
-    = all_grid_constants[static_cast<std::size_t>(handle.get())];
+  const auto& material_constants = MaterialConstants(handle);
+  const auto& grid_constants = GridConstants(handle);
 
   EXPECT_NE(MatBinder().GetProceduralGridMaterialsSrvIndex(),
     oxygen::kInvalidShaderVisibleIndex);
@@ -449,16 +495,29 @@ NOLINT_TEST_F(MaterialBinderBindingTest,
 //! Cache hits must not re-invoke the texture binder.
 NOLINT_TEST_F(MaterialBinderBindingTest, CacheHitDoesNotCallTextureBinder)
 {
-  constexpr ResourceKey base_color_key { 9301U };
-  constexpr ResourceKey normal_key { 9302U };
+  constexpr ResourceKey base_color_key {
+    9301U,
+  };
+  constexpr ResourceKey normal_key {
+    9302U,
+  };
 
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+    oxygen::frame::Slot {
+      1,
+    });
   MatBinder().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+    oxygen::frame::Slot {
+      1,
+    });
 
   oxygen::vortex::sceneprep::MaterialRef ref;
-  ref.resolved_asset = MakeMaterial(base_color_key, normal_key, 7U, 8U);
+  ref.resolved_asset = MakeMaterial({
+    .base_color_key = base_color_key,
+    .normal_key = normal_key,
+    .raw_base_color_index = 7U,
+    .raw_normal_index = 8U,
+  });
   ref.source_asset_key = ref.resolved_asset->GetAssetKey();
   ref.resolved_asset_key = ref.resolved_asset->GetAssetKey();
 

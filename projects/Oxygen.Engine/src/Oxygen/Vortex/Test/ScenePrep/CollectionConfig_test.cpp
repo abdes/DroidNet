@@ -15,7 +15,8 @@ namespace {
 NOLINT_TEST(CollectionConfig, CollectionConfig_BasicFactory_StaticAsserts)
 {
   // ReSharper disable CppIdenticalOperandsInBinaryExpression
-  using namespace oxygen::vortex::sceneprep;
+  using oxygen::vortex::sceneprep::CreateBasicCollectionConfig;
+  using oxygen::vortex::sceneprep::RenderItemDataExtractor;
 
   // Arrange
   [[maybe_unused]] auto cfg = CreateBasicCollectionConfig();

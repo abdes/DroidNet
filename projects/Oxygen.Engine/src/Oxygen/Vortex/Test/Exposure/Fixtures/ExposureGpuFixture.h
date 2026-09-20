@@ -15,14 +15,17 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/FrameCaptureController.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
+#include <Oxygen/Graphics/Common/ReadbackTypes.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Direct3D12/Test/Fixtures/ReadbackTestFixture.h>
 #include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
@@ -47,26 +50,51 @@ struct ExposureSignal {
 };
 
 struct ServicePixelOptions {
-  bool diagnostic { false };
-  float delta_time_seconds { 0.0F };
+  bool diagnostic {
+    false,
+  };
+  float delta_time_seconds {
+    0.0F,
+  };
   std::function<void()> before_execute;
-  engine::ToneMapper tone_mapper { engine::ToneMapper::kNone };
-  bool start_new_frame { true };
-  const PostProcessService::PreparedExposure* prepared { nullptr };
-  const ExposureSignal* fallback { nullptr };
+  engine::ToneMapper tone_mapper {
+    engine::ToneMapper::kNone,
+  };
+  bool start_new_frame {
+    true,
+  };
+  const PostProcessService::PreparedExposure* prepared {
+    nullptr,
+  };
+  const ExposureSignal* fallback {
+    nullptr,
+  };
   postprocess::ExposurePass::FrameLease checked_resolution;
-  const ExposureSignal* bloom { nullptr };
-  float bloom_intensity { 0.0F };
+  const ExposureSignal* bloom {
+    nullptr,
+  };
+  float bloom_intensity {
+    0.0F,
+  };
 };
 
 class ExposureTestEngine;
+class ExposureFailureGraphics;
 
 class ExposureGpuTest : public graphics::d3d12::testing::ReadbackTestFixture {
 public:
   ExposureGpuTest();
   ~ExposureGpuTest() override;
 
+  OXYGEN_MAKE_NON_COPYABLE(ExposureGpuTest)
+  OXYGEN_MAKE_NON_MOVABLE(ExposureGpuTest)
+
 protected:
+  static auto MappedTextureBytes(const graphics::MappedTextureReadback& mapped,
+    std::size_t texel_bytes) -> std::span<const std::byte>;
+  auto FailureBackend() -> ExposureFailureGraphics&;
+  auto InspectRequiredTransition(CompositionView::ViewStateHandle handle) const
+    -> ExposureTransitionStatus;
   auto CheckOffscreenSharing(bool inside_frame) -> void;
   auto CheckSceneExposureRetry(bool inside_frame, bool late_failure = false)
     -> void;
@@ -77,7 +105,7 @@ protected:
   using Signal = ExposureSignal;
   struct Snapshot {
     ExposureStateData state;
-    std::array<std::uint32_t, 264> histogram;
+    std::array<std::uint32_t, 264> histogram {};
   };
 
   auto BackendConfigJson() const -> std::string override;
@@ -95,21 +123,26 @@ protected:
   template <typename T>
   auto PublishFixtureData(const T& value) -> ShaderVisibleIndex
   {
-    auto buffer = CreateRegisteredBuffer({ .size_bytes = sizeof(T),
+    static_assert(std::is_trivially_copyable_v<T>);
+    auto buffer = CreateRegisteredBuffer({
+      .size_bytes = sizeof(T),
       .usage = graphics::BufferUsage::kNone,
       .memory = graphics::BufferMemory::kUpload,
-      .debug_name = "Fog edge fixture bindings" });
+      .debug_name = "Fog edge fixture bindings",
+    });
+    CHECK_F(buffer != nullptr);
     buffer->Update(&value, sizeof(T), 0U);
     auto& allocator = renderer_->GetGraphics()->GetDescriptorAllocator();
     auto handle = allocator.AllocateBindless(
       oxygen::bindless::generated::kGlobalSrvDomain,
       graphics::ResourceViewType::kStructuredBuffer_SRV);
+    CHECK_F(handle.IsValid());
     const auto index = allocator.GetShaderVisibleIndex(handle);
     Backend().GetResourceRegistry().RegisterView(*buffer, std::move(handle),
       graphics::BufferViewDescription {
         .view_type = graphics::ResourceViewType::kStructuredBuffer_SRV,
-        .range = { 0U, sizeof(T) },
-        .stride = sizeof(T) });
+        .range = { 0U, sizeof(T), },
+        .stride = sizeof(T), });
     return index;
   }
   auto RunToneProbe(std::span<const std::byte> inputs_data,
@@ -121,18 +154,24 @@ protected:
   auto Read(const graphics::Buffer& source,
     graphics::ResourceStates final_state) -> Payload
   {
+    static_assert(std::is_trivially_copyable_v<Payload>);
     auto readback
       = GetReadbackManager()->CreateBufferReadback("Exposure fixture readback");
+    CHECK_F(readback != nullptr);
     {
       auto recorder = AcquireRecorder("Exposure fixture copy");
       recorder->BeginTrackingResourceState(source, final_state, false);
-      const auto ticket
-        = readback->EnqueueCopy(*recorder, source, { 0U, sizeof(Payload) });
+      const auto ticket = readback->EnqueueCopy(*recorder, source,
+        {
+          0U,
+          sizeof(Payload),
+        });
       CHECK_F(ticket.has_value());
       recorder->RequireResourceStateFinal(source, final_state);
     }
     const auto mapped = readback->MapNow();
     CHECK_F(mapped.has_value());
+    CHECK_F(mapped->Bytes().size() >= sizeof(Payload));
     Payload result {};
     std::memcpy(&result, mapped->Bytes().data(), sizeof(result));
     return result;
@@ -161,7 +200,7 @@ protected:
     -> std::pair<ExposureStateData, ExposureCompletedStatus>;
 
   auto ResetHistory() -> void;
-  auto PublishExposureOwner(engine::FrameContext& frame, const ViewId intent_id,
+  auto PublishExposureOwner(engine::FrameContext& frame, ViewId intent_id,
     CompositionView::ViewStateHandle handle, scene::ExposureSettings settings,
     ViewId source = kInvalidViewId, bool diagnostic = false,
     std::optional<ShaderDebugMode> debug_override = {}) -> ViewId;
@@ -185,7 +224,9 @@ protected:
   std::vector<std::shared_ptr<graphics::Framebuffer>> registered_targets_;
   std::unique_ptr<postprocess::ExposurePass> pass_;
   RenderContext ctx_;
-  std::uint64_t sequence_ { 0U };
+  std::uint64_t sequence_ {
+    0U,
+  };
   postprocess::ExposurePass::StateLease last_state_;
 };
 

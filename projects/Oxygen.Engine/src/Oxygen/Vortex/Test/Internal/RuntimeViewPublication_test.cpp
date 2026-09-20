@@ -24,8 +24,8 @@
 #include <Oxygen/Vortex/PostProcess/PostProcessService.h>
 #include <Oxygen/Vortex/Renderer.h>
 
-#include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
 #include <Oxygen/Vortex/Test/Fakes/Graphics.h>
+#include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
 
 namespace oxygen::engine::internal {
 struct EngineTagFactory {
@@ -92,7 +92,9 @@ protected:
     frame_context.SetCurrentPhase(oxygen::core::PhaseId::kFrameStart,
       oxygen::engine::internal::EngineTagFactory::Get());
     frame_context.SetFrameSequenceNumber(
-      oxygen::frame::SequenceNumber { frame_number },
+      oxygen::frame::SequenceNumber {
+        frame_number,
+      },
       oxygen::engine::internal::EngineTagFactory::Get());
   }
 
@@ -111,7 +113,9 @@ protected:
     auto color = graphics_->CreateTexture(color_desc);
 
     auto fb_desc = FramebufferDesc {};
-    fb_desc.AddColorAttachment({ .texture = color });
+    fb_desc.AddColorAttachment({
+      .texture = color,
+    });
     return graphics_->CreateFramebuffer(fb_desc);
   }
 
@@ -134,14 +138,14 @@ protected:
 
     auto result = renderer_->ForSinglePassHarness()
                     .SetFrameSession(Renderer::FrameSessionInput {
-                      .frame_slot = oxygen::frame::Slot { 0U },
-                      .frame_sequence = oxygen::frame::SequenceNumber { 1U },
+                      .frame_slot = oxygen::frame::Slot { 0U, },
+                      .frame_sequence = oxygen::frame::SequenceNumber { 1U, },
                       .delta_time_seconds
                       = oxygen::time::SimulationClock::kMinDeltaTimeSeconds,
                     })
                     .SetOutputTarget(Renderer::OutputTargetInput {
-                      .framebuffer = oxygen::observer_ptr<Framebuffer>(
-                        framebuffer_.get()),
+                      .framebuffer
+                      = oxygen::observer_ptr<Framebuffer>(framebuffer_.get()),
                     })
                     .SetResolvedView(Renderer::ResolvedViewInput {
                       .view_id = view_id,
@@ -163,8 +167,9 @@ protected:
     const oxygen::vortex::CompositionView::ViewStateHandle handle,
     const ViewId source = oxygen::kInvalidViewId) -> ViewId
   {
-    if (!framebuffer_)
+    if (!framebuffer_) {
       framebuffer_ = MakeFramebuffer();
+    }
     auto view = oxygen::vortex::CompositionView {};
     view.id = intent;
     view.name = "Exposure owner fixture";
@@ -173,7 +178,7 @@ protected:
     view.exposure_source_view_id = source;
     return renderer_->PublishRuntimeCompositionView(frame,
       { .composition_view = view,
-        .render_target = oxygen::observer_ptr { framebuffer_.get() } });
+        .render_target = oxygen::observer_ptr { framebuffer_.get(), }, });
   }
 
   auto ExposureOwner(FrameContext& frame, const ViewId published)
@@ -183,8 +188,9 @@ protected:
     RendererPublicationProbe::PopulateRenderContextViewState(
       *renderer_, context, frame, false);
     for (const auto& view : context.frame_views) {
-      if (view.view_id == published)
+      if (view.view_id == published) {
         return view.exposure_view_state_handle;
+      }
     }
     ADD_FAILURE() << "Published view missing from frame";
     return oxygen::vortex::CompositionView::kInvalidViewStateHandle;
@@ -200,7 +206,9 @@ NOLINT_TEST_F(RuntimeViewPublicationTest,
   auto frame_context = FrameContext {};
   PrepareFrameContext(frame_context, 1U);
 
-  const auto intent_view_id = ViewId { 11U };
+  const auto intent_view_id = ViewId {
+    11U,
+  };
   const auto first_published = renderer_->UpsertPublishedRuntimeView(
     frame_context, intent_view_id, MakeViewContext("first"));
   EXPECT_NE(first_published, oxygen::kInvalidViewId);
@@ -217,21 +225,31 @@ NOLINT_TEST_F(RuntimeViewPublicationTest,
 NOLINT_TEST_F(RuntimeViewPublicationTest,
   ShaderDebugOverridesArePublishedUpdatedAndScopedPerView)
 {
-  using namespace oxygen::vortex;
+  using oxygen::vortex::CompositionView;
+  using oxygen::vortex::RenderContext;
+  using oxygen::vortex::SceneRenderer;
+  using oxygen::vortex::SceneTexturesConfig;
+  using oxygen::vortex::ShaderDebugMode;
+  using oxygen::vortex::ShadingMode;
+  namespace internal = oxygen::vortex::internal;
   auto frame = FrameContext {};
   PrepareFrameContext(frame, 1U);
   framebuffer_ = MakeFramebuffer();
   auto first = CompositionView {};
-  first.id = ViewId { 101U };
+  first.id = ViewId {
+    101U,
+  };
   first.view = MakeViewContext("normal diagnostic").view;
   first.render_settings.shader_debug_mode = ShaderDebugMode::kWorldNormals;
   auto second = first;
-  second.id = ViewId { 102U };
+  second.id = ViewId {
+    102U,
+  };
   second.render_settings.shader_debug_mode = ShaderDebugMode::kDisabled;
-  const auto publish = [&](const CompositionView& view) {
+  const auto publish = [&](const CompositionView& view) -> ViewId {
     return renderer_->PublishRuntimeCompositionView(frame,
       { .composition_view = view,
-        .render_target = oxygen::observer_ptr { framebuffer_.get() } });
+        .render_target = oxygen::observer_ptr { framebuffer_.get(), }, });
   };
   const auto first_id = publish(first);
   const auto second_id = publish(second);
@@ -239,7 +257,7 @@ NOLINT_TEST_F(RuntimeViewPublicationTest,
   ASSERT_NE(second_id, oxygen::kInvalidViewId);
   auto context = RenderContext {};
   context.shader_debug_mode = ShaderDebugMode::kSceneDepthRaw;
-  const auto verify = [&](const ShaderDebugMode expected_first) {
+  const auto verify = [&](const ShaderDebugMode expected_first) -> void {
     RendererPublicationProbe::PopulateRenderContextViewState(
       *renderer_, context, frame, false);
     ASSERT_EQ(context.frame_views.size(), 2U);
@@ -270,7 +288,9 @@ NOLINT_TEST_F(RuntimeViewPublicationTest,
   auto frame_context = FrameContext {};
   PrepareFrameContext(frame_context, 1U);
 
-  const auto intent_view_id = ViewId { 12U };
+  const auto intent_view_id = ViewId {
+    12U,
+  };
   const auto published_view_id = renderer_->UpsertPublishedRuntimeView(
     frame_context, intent_view_id, MakeViewContext("removable"));
   ASSERT_NE(published_view_id, oxygen::kInvalidViewId);
@@ -290,12 +310,17 @@ NOLINT_TEST_F(
   auto frame_context = FrameContext {};
   PrepareFrameContext(frame_context, 1U);
 
-  const auto intent_view_id = ViewId { 13U };
+  const auto intent_view_id = ViewId {
+    13U,
+  };
   const auto published_view_id = renderer_->UpsertPublishedRuntimeView(
     frame_context, intent_view_id, MakeViewContext("stale"));
   ASSERT_NE(published_view_id, oxygen::kInvalidViewId);
 
-  frame_context.SetFrameSequenceNumber(oxygen::frame::SequenceNumber { 1000U },
+  frame_context.SetFrameSequenceNumber(
+    oxygen::frame::SequenceNumber {
+      1000U,
+    },
     oxygen::engine::internal::EngineTagFactory::Get());
   const auto pruned = renderer_->PruneStalePublishedRuntimeViews(frame_context);
 
@@ -314,7 +339,9 @@ NOLINT_TEST_F(RuntimeViewPublicationTest,
   auto frame_context = FrameContext {};
   PrepareFrameContext(frame_context, 1U);
 
-  const auto intent_view_id = ViewId { 14U };
+  const auto intent_view_id = ViewId {
+    14U,
+  };
   const auto published_view_id = renderer_->UpsertPublishedRuntimeView(
     frame_context, intent_view_id, MakeViewContext("removable-view-constants"));
   ASSERT_NE(published_view_id, oxygen::kInvalidViewId);
@@ -335,7 +362,9 @@ NOLINT_TEST_F(RuntimeViewPublicationTest,
   auto frame_context = FrameContext {};
   PrepareFrameContext(frame_context, 1U);
 
-  const auto intent_view_id = ViewId { 16U };
+  const auto intent_view_id = ViewId {
+    16U,
+  };
   const auto published_view_id = renderer_->UpsertPublishedRuntimeView(
     frame_context, intent_view_id, MakeViewContext("shutdown-removable"));
   ASSERT_NE(published_view_id, oxygen::kInvalidViewId);
@@ -358,7 +387,9 @@ NOLINT_TEST_F(RuntimeViewPublicationTest,
   auto frame_context = FrameContext {};
   PrepareFrameContext(frame_context, 1U);
 
-  const auto intent_view_id = ViewId { 15U };
+  const auto intent_view_id = ViewId {
+    15U,
+  };
   const auto published_view_id = renderer_->UpsertPublishedRuntimeView(
     frame_context, intent_view_id, MakeViewContext("stale-view-constants"));
   ASSERT_NE(published_view_id, oxygen::kInvalidViewId);
@@ -366,7 +397,10 @@ NOLINT_TEST_F(RuntimeViewPublicationTest,
   const auto first_buffer = MaterializeViewConstantsBuffer(published_view_id);
   ASSERT_NE(first_buffer, nullptr);
 
-  frame_context.SetFrameSequenceNumber(oxygen::frame::SequenceNumber { 1000U },
+  frame_context.SetFrameSequenceNumber(
+    oxygen::frame::SequenceNumber {
+      1000U,
+    },
     oxygen::engine::internal::EngineTagFactory::Get());
   const auto pruned = renderer_->PruneStalePublishedRuntimeViews(frame_context);
 
@@ -381,7 +415,13 @@ NOLINT_TEST_F(RuntimeViewPublicationTest,
 NOLINT_TEST_F(RuntimeViewPublicationTest,
   PublishedExposureOverridesResolveIndependentlyAndCanBeUpdatedAndCleared)
 {
-  using namespace oxygen::vortex;
+  using oxygen::vortex::CompositionView;
+  using oxygen::vortex::RenderContext;
+  using oxygen::vortex::SceneRenderer;
+  using oxygen::vortex::SceneTexturesConfig;
+  using oxygen::vortex::ShaderDebugMode;
+  using oxygen::vortex::ShadingMode;
+  namespace internal = oxygen::vortex::internal;
   auto frame = FrameContext {};
   PrepareFrameContext(frame, 1U);
   auto scene
@@ -394,42 +434,61 @@ NOLINT_TEST_F(RuntimeViewPublicationTest,
   post.SetManualExposureEv(10.0F);
   auto target = MakeFramebuffer();
   auto scene_renderer = SceneRenderer(*renderer_, *graphics_,
-    SceneTexturesConfig { .extent = { 64U, 64U } }, ShadingMode::kDeferred);
+    SceneTexturesConfig { .extent = { 64U, 64U, }, }, ShadingMode::kDeferred);
   auto first = CompositionView {};
-  first.id = ViewId { 31U };
+  first.id = ViewId {
+    31U,
+  };
   first.name = "ExposureFirst";
   first.view = MakeViewContext("first").view;
-  first.view_state_handle = CompositionView::ViewStateHandle { 101U };
+  first.view_state_handle = CompositionView::ViewStateHandle {
+    101U,
+  };
   first.render_settings.exposure = post.GetExposureSettings();
   first.render_settings.exposure->manual_ev = 14.0F;
   auto second = first;
-  second.id = ViewId { 32U };
+  second.id = ViewId {
+    32U,
+  };
   second.name = "ExposureSecond";
-  second.view_state_handle = CompositionView::ViewStateHandle { 102U };
+  second.view_state_handle = CompositionView::ViewStateHandle {
+    102U,
+  };
   second.render_settings.exposure->manual_ev = 16.0F;
 
-  const auto run = [&](const std::uint32_t sequence, const float first_gain) {
+  const auto run
+    = [&](const std::uint32_t sequence, const float first_gain) -> void {
     PrepareFrameContext(frame, sequence);
-    const auto publish = [&](const CompositionView& view) {
+    const auto publish = [&](const CompositionView& view) -> ViewId {
       return renderer_->PublishRuntimeCompositionView(frame,
         Renderer::RuntimeViewPublishInput {
           .composition_view = view,
-          .render_target = oxygen::observer_ptr { target.get() },
-          .composite_source = oxygen::observer_ptr { target.get() },
+          .render_target = oxygen::observer_ptr { target.get(), },
+          .composite_source = oxygen::observer_ptr { target.get(), },
         });
     };
     const auto first_id = publish(first);
     const auto second_id = publish(second);
     auto context = RenderContext {};
-    context.scene = oxygen::observer_ptr { scene.get() };
-    context.frame_sequence = oxygen::frame::SequenceNumber { sequence };
-    context.frame_slot = oxygen::frame::Slot { 0U };
+    context.scene = oxygen::observer_ptr {
+      scene.get(),
+    };
+    context.frame_sequence = oxygen::frame::SequenceNumber {
+      sequence,
+    };
+    context.frame_slot = oxygen::frame::Slot {
+      0U,
+    };
     context.view_constants = MaterializeViewConstantsBuffer(first_id);
     RendererPublicationProbe::PopulateRenderContextViewState(
       *renderer_, context, frame, false);
     ASSERT_EQ(context.frame_views.size(), 2U);
-    scene_renderer.OnStandaloneFrameStart(
-      context.frame_sequence, context.frame_slot, glm::uvec2 { 64U, 64U });
+    scene_renderer.OnStandaloneFrameStart(context.frame_sequence,
+      context.frame_slot,
+      glm::uvec2 {
+        64U,
+        64U,
+      });
     for (std::size_t i = 0; i < context.frame_views.size(); ++i) {
       internal::PerViewScope scope(context, i);
       scene_renderer.OnRender(context);
@@ -459,7 +518,9 @@ NOLINT_TEST_F(RuntimeViewPublicationTest,
   auto frame_context = FrameContext {};
   PrepareFrameContext(frame_context, 1U);
 
-  const auto intent_view_id = ViewId { 17U };
+  const auto intent_view_id = ViewId {
+    17U,
+  };
   const auto published_view_id = renderer_->UpsertPublishedRuntimeView(
     frame_context, intent_view_id, MakeViewContext("shutdown-cleanup"));
   ASSERT_NE(published_view_id, oxygen::kInvalidViewId);
@@ -469,8 +530,8 @@ NOLINT_TEST_F(RuntimeViewPublicationTest,
 
   EXPECT_EQ(renderer_->ResolvePublishedRuntimeViewId(intent_view_id),
     oxygen::kInvalidViewId);
-  EXPECT_EQ(RendererPublicationProbe::GetViewConstantsManager(*renderer_),
-    nullptr);
+  EXPECT_EQ(
+    RendererPublicationProbe::GetViewConstantsManager(*renderer_), nullptr);
 }
 
 NOLINT_TEST_F(RuntimeViewPublicationTest,
@@ -480,25 +541,44 @@ NOLINT_TEST_F(RuntimeViewPublicationTest,
   using Policy = oxygen::vortex::ExposureTransitionPolicy;
   using Phase = oxygen::vortex::ExposureTransitionPhase;
   const auto first = renderer_->QueueExposureTransition(
-    Handle { 1U }, Policy::kSeedFromEv100, 14.0F);
-  ASSERT_TRUE(first.has_value());
+    Handle {
+      1U,
+    },
+    Policy::kSeedFromEv100, 14.0F);
+  if (!first.has_value()) {
+    FAIL() << "Expected first to have a value";
+  }
   EXPECT_EQ(first->generation, 1U);
   EXPECT_NE(first->lifetime, 0U);
   EXPECT_EQ(renderer_->RetryExposureTransition(*first), Phase::kQueued);
   EXPECT_EQ(renderer_->RetryExposureTransition(*first), Phase::kQueued);
-  const auto next
-    = renderer_->QueueExposureTransition(Handle { 1U }, Policy::kRemeter);
-  ASSERT_TRUE(next.has_value());
+  const auto next = renderer_->QueueExposureTransition(
+    Handle {
+      1U,
+    },
+    Policy::kRemeter);
+  if (!next.has_value()) {
+    FAIL() << "Expected next to have a value";
+  }
   EXPECT_EQ(next->generation, 2U);
   EXPECT_EQ(next->lifetime, first->lifetime);
   EXPECT_EQ(renderer_->RetryExposureTransition(*first), Phase::kSuperseded);
-  const auto status = renderer_->InspectExposureTransition(Handle { 1U });
-  ASSERT_TRUE(status.has_value());
+  const auto status = renderer_->InspectExposureTransition(Handle {
+    1U,
+  });
+  if (!status.has_value()) {
+    FAIL() << "Expected status to have a value";
+  }
   EXPECT_EQ(status->request, *next);
   EXPECT_EQ(status->applied_generation, 0U);
-  const auto other
-    = renderer_->QueueExposureTransition(Handle { 2U }, Policy::kPreserve);
-  ASSERT_TRUE(other.has_value());
+  const auto other = renderer_->QueueExposureTransition(
+    Handle {
+      2U,
+    },
+    Policy::kPreserve);
+  if (!other.has_value()) {
+    FAIL() << "Expected other to have a value";
+  }
   EXPECT_EQ(other->generation, 1U);
   EXPECT_NE(other->lifetime, first->lifetime);
 }
@@ -510,8 +590,13 @@ NOLINT_TEST_F(RuntimeViewPublicationTest,
   using Policy = oxygen::vortex::ExposureTransitionPolicy;
   using Error = oxygen::vortex::ExposureTransitionError;
   const auto issued = renderer_->QueueExposureTransition(
-    Handle { 1U }, Policy::kSeedFromEv100, 14.0F);
-  ASSERT_TRUE(issued.has_value());
+    Handle {
+      1U,
+    },
+    Policy::kSeedFromEv100, 14.0F);
+  if (!issued.has_value()) {
+    FAIL() << "Expected issued to have a value";
+  }
   auto conflict = *issued;
   conflict.seed_ev = 15.0F;
   EXPECT_EQ(renderer_->RetryExposureTransition(conflict).error(),
@@ -524,8 +609,13 @@ NOLINT_TEST_F(RuntimeViewPublicationTest,
   ++unknown.lifetime;
   EXPECT_EQ(
     renderer_->RetryExposureTransition(unknown).error(), Error::kUnknownToken);
-  EXPECT_EQ(
-    renderer_->InspectExposureTransition(Handle { 1U })->request, *issued);
+  const auto transition = renderer_->InspectExposureTransition(Handle {
+    1U,
+  });
+  if (!transition.has_value()) {
+    FAIL() << "Expected transition to have a value";
+  }
+  EXPECT_EQ(transition->request, *issued);
 }
 
 NOLINT_TEST_F(RuntimeViewPublicationTest,
@@ -540,23 +630,43 @@ NOLINT_TEST_F(RuntimeViewPublicationTest,
                 Policy::kRemeter)
               .error(),
     Error::kInvalidTarget);
-  EXPECT_EQ(
-    renderer_->QueueExposureTransition(Handle { 1U }, Policy::kSeedFromEv100)
-      .error(),
-    Error::kInvalidSeed);
-  EXPECT_EQ(
-    renderer_->QueueExposureTransition(Handle { 1U }, Policy::kPreserve, 0.0F)
-      .error(),
-    Error::kInvalidSeed);
   EXPECT_EQ(renderer_
-              ->QueueExposureTransition(Handle { 1U }, Policy::kSeedFromEv100,
-                std::numeric_limits<float>::infinity())
+              ->QueueExposureTransition(
+                Handle {
+                  1U,
+                },
+                Policy::kSeedFromEv100)
               .error(),
     Error::kInvalidSeed);
-  EXPECT_FALSE(renderer_->InspectExposureTransition(Handle { 1U }).has_value());
-  const auto valid
-    = renderer_->QueueExposureTransition(Handle { 1U }, Policy::kRemeter);
-  ASSERT_TRUE(valid.has_value());
+  EXPECT_EQ(renderer_
+              ->QueueExposureTransition(
+                Handle {
+                  1U,
+                },
+                Policy::kPreserve, 0.0F)
+              .error(),
+    Error::kInvalidSeed);
+  EXPECT_EQ(renderer_
+              ->QueueExposureTransition(
+                Handle {
+                  1U,
+                },
+                Policy::kSeedFromEv100, std::numeric_limits<float>::infinity())
+              .error(),
+    Error::kInvalidSeed);
+  EXPECT_FALSE(renderer_
+      ->InspectExposureTransition(Handle {
+        1U,
+      })
+      .has_value());
+  const auto valid = renderer_->QueueExposureTransition(
+    Handle {
+      1U,
+    },
+    Policy::kRemeter);
+  if (!valid.has_value()) {
+    FAIL() << "Expected valid to have a value";
+  }
   EXPECT_EQ(valid->generation, 1U);
 }
 
@@ -566,22 +676,42 @@ NOLINT_TEST_F(
   using Handle = oxygen::vortex::CompositionView::ViewStateHandle;
   using Policy = oxygen::vortex::ExposureTransitionPolicy;
   using Error = oxygen::vortex::ExposureTransitionError;
-  const auto issued
-    = renderer_->QueueExposureTransition(Handle { 1U }, Policy::kRemeter);
-  ASSERT_TRUE(issued.has_value());
+  const auto issued = renderer_->QueueExposureTransition(
+    Handle {
+      1U,
+    },
+    Policy::kRemeter);
+  if (!issued.has_value()) {
+    FAIL() << "Expected issued to have a value";
+  }
   renderer_->OnShutdown();
-  EXPECT_EQ(
-    renderer_->QueueExposureTransition(Handle { 1U }, Policy::kRemeter).error(),
+  EXPECT_EQ(renderer_
+              ->QueueExposureTransition(
+                Handle {
+                  1U,
+                },
+                Policy::kRemeter)
+              .error(),
     Error::kRendererUnavailable);
   EXPECT_EQ(renderer_->RetryExposureTransition(*issued).error(),
     Error::kRendererUnavailable);
-  EXPECT_FALSE(renderer_->InspectExposureTransition(Handle { 1U }).has_value());
+  EXPECT_FALSE(renderer_
+      ->InspectExposureTransition(Handle {
+        1U,
+      })
+      .has_value());
 }
 
 NOLINT_TEST_F(RuntimeViewPublicationTest,
   PreparedViewFamilyPinsExposureThroughLateSceneMutation)
 {
-  using namespace oxygen::vortex;
+  using oxygen::vortex::CompositionView;
+  using oxygen::vortex::RenderContext;
+  using oxygen::vortex::SceneRenderer;
+  using oxygen::vortex::SceneTexturesConfig;
+  using oxygen::vortex::ShaderDebugMode;
+  using oxygen::vortex::ShadingMode;
+  namespace internal = oxygen::vortex::internal;
   auto frame = FrameContext {};
   PrepareFrameContext(frame, 1U);
   auto scene = std::make_shared<oxygen::scene::Scene>("PinnedExposure", 8U);
@@ -591,20 +721,36 @@ NOLINT_TEST_F(RuntimeViewPublicationTest,
   post.SetExposureMode(oxygen::engine::ExposureMode::kManual);
   post.SetExposureKey(12.5F);
   post.SetManualExposureEv(4.0F);
-  const auto first = PublishExposureView(
-    frame, ViewId { 1U }, CompositionView::ViewStateHandle { 11U });
-  const auto second = PublishExposureView(
-    frame, ViewId { 2U }, CompositionView::ViewStateHandle { 22U });
+  const auto first = PublishExposureView(frame,
+    ViewId {
+      1U,
+    },
+    CompositionView::ViewStateHandle {
+      11U,
+    });
+  const auto second = PublishExposureView(frame,
+    ViewId {
+      2U,
+    },
+    CompositionView::ViewStateHandle {
+      22U,
+    });
   auto scene_renderer = SceneRenderer(*renderer_, *graphics_,
-    SceneTexturesConfig { .extent = { 64U, 64U } }, ShadingMode::kDeferred);
+    SceneTexturesConfig { .extent = { 64U, 64U, }, }, ShadingMode::kDeferred);
   auto context = RenderContext {};
-  context.scene = oxygen::observer_ptr { scene.get() };
-  context.frame_sequence = oxygen::frame::SequenceNumber { 1U };
-  context.frame_slot = oxygen::frame::Slot { 0U };
+  context.scene = oxygen::observer_ptr {
+    scene.get(),
+  };
+  context.frame_sequence = oxygen::frame::SequenceNumber {
+    1U,
+  };
+  context.frame_slot = oxygen::frame::Slot {
+    0U,
+  };
   context.view_constants = MaterializeViewConstantsBuffer(first);
   RendererPublicationProbe::PopulateRenderContextViewState(
     *renderer_, context, frame, false);
-  const auto render = [&](const float expected) {
+  const auto render = [&](const float expected) -> void {
     for (std::size_t i = 0; i < context.frame_views.size(); ++i) {
       internal::PerViewScope scope(context, i);
       scene_renderer.OnRender(context);
@@ -612,21 +758,36 @@ NOLINT_TEST_F(RuntimeViewPublicationTest,
     const auto* service
       = RendererPublicationProbe::GetPostProcessService(scene_renderer);
     ASSERT_NE(service, nullptr);
-    for (const auto view : { first, second }) {
+    for (const auto view : {
+           first,
+           second,
+         }) {
       const auto* bindings = service->InspectBindings(view);
       ASSERT_NE(bindings, nullptr);
       EXPECT_EQ(bindings->fixed_exposure, expected);
     }
   };
-  scene_renderer.OnStandaloneFrameStart(
-    context.frame_sequence, context.frame_slot, glm::uvec2 { 64U, 64U });
+  scene_renderer.OnStandaloneFrameStart(context.frame_sequence,
+    context.frame_slot,
+    glm::uvec2 {
+      64U,
+      64U,
+    });
   scene_renderer.PrimePreparedViews(context);
   post.SetManualExposureEv(8.0F);
   render(0x1p-4F);
-  context.frame_sequence = oxygen::frame::SequenceNumber { 2U };
-  context.frame_slot = oxygen::frame::Slot { 1U };
-  scene_renderer.OnStandaloneFrameStart(
-    context.frame_sequence, context.frame_slot, glm::uvec2 { 64U, 64U });
+  context.frame_sequence = oxygen::frame::SequenceNumber {
+    2U,
+  };
+  context.frame_slot = oxygen::frame::Slot {
+    1U,
+  };
+  scene_renderer.OnStandaloneFrameStart(context.frame_sequence,
+    context.frame_slot,
+    glm::uvec2 {
+      64U,
+      64U,
+    });
   render(0x1p-8F);
 }
 
@@ -635,20 +796,71 @@ NOLINT_TEST_F(RuntimeViewPublicationTest, ExposureChainsResolveTheCurrentRoot)
   using Handle = oxygen::vortex::CompositionView::ViewStateHandle;
   auto frame = FrameContext {};
   PrepareFrameContext(frame, 1U);
-  const auto first = PublishExposureView(frame, ViewId { 1U }, Handle { 11U });
-  const auto other = PublishExposureView(frame, ViewId { 4U }, Handle { 44U });
-  const auto middle
-    = PublishExposureView(frame, ViewId { 2U }, Handle { 22U }, ViewId { 1U });
-  const auto leaf
-    = PublishExposureView(frame, ViewId { 3U }, Handle { 33U }, ViewId { 2U });
-  EXPECT_EQ(ExposureOwner(frame, first), Handle { 11U });
-  EXPECT_EQ(ExposureOwner(frame, middle), Handle { 11U });
-  EXPECT_EQ(ExposureOwner(frame, leaf), Handle { 11U });
-  EXPECT_EQ(ExposureOwner(frame, other), Handle { 44U });
-  EXPECT_EQ(
-    PublishExposureView(frame, ViewId { 2U }, Handle { 22U }, ViewId { 4U }),
+  const auto first = PublishExposureView(frame,
+    ViewId {
+      1U,
+    },
+    Handle {
+      11U,
+    });
+  const auto other = PublishExposureView(frame,
+    ViewId {
+      4U,
+    },
+    Handle {
+      44U,
+    });
+  const auto middle = PublishExposureView(frame,
+    ViewId {
+      2U,
+    },
+    Handle {
+      22U,
+    },
+    ViewId {
+      1U,
+    });
+  const auto leaf = PublishExposureView(frame,
+    ViewId {
+      3U,
+    },
+    Handle {
+      33U,
+    },
+    ViewId {
+      2U,
+    });
+  EXPECT_EQ(ExposureOwner(frame, first),
+    (Handle {
+      11U,
+    }));
+  EXPECT_EQ(ExposureOwner(frame, middle),
+    (Handle {
+      11U,
+    }));
+  EXPECT_EQ(ExposureOwner(frame, leaf),
+    (Handle {
+      11U,
+    }));
+  EXPECT_EQ(ExposureOwner(frame, other),
+    (Handle {
+      44U,
+    }));
+  EXPECT_EQ(PublishExposureView(frame,
+              ViewId {
+                2U,
+              },
+              Handle {
+                22U,
+              },
+              ViewId {
+                4U,
+              }),
     middle);
-  EXPECT_EQ(ExposureOwner(frame, leaf), Handle { 44U });
+  EXPECT_EQ(ExposureOwner(frame, leaf),
+    (Handle {
+      44U,
+    }));
 }
 
 NOLINT_TEST_F(
@@ -657,20 +869,64 @@ NOLINT_TEST_F(
   using Handle = oxygen::vortex::CompositionView::ViewStateHandle;
   auto frame = FrameContext {};
   PrepareFrameContext(frame, 1U);
-  const auto root = PublishExposureView(frame, ViewId { 1U }, Handle { 11U });
-  const auto child
-    = PublishExposureView(frame, ViewId { 2U }, Handle { 22U }, ViewId { 1U });
-  EXPECT_EQ(
-    PublishExposureView(frame, ViewId { 1U }, Handle { 55U }, ViewId { 2U }),
+  const auto root = PublishExposureView(frame,
+    ViewId {
+      1U,
+    },
+    Handle {
+      11U,
+    });
+  const auto child = PublishExposureView(frame,
+    ViewId {
+      2U,
+    },
+    Handle {
+      22U,
+    },
+    ViewId {
+      1U,
+    });
+  EXPECT_EQ(PublishExposureView(frame,
+              ViewId {
+                1U,
+              },
+              Handle {
+                55U,
+              },
+              ViewId {
+                2U,
+              }),
     oxygen::kInvalidViewId);
-  EXPECT_EQ(
-    PublishExposureView(frame, ViewId { 2U }, Handle { 66U }, ViewId { 999U }),
+  EXPECT_EQ(PublishExposureView(frame,
+              ViewId {
+                2U,
+              },
+              Handle {
+                66U,
+              },
+              ViewId {
+                999U,
+              }),
     oxygen::kInvalidViewId);
-  EXPECT_EQ(ExposureOwner(frame, root), Handle { 11U });
-  EXPECT_EQ(ExposureOwner(frame, child), Handle { 11U });
-  EXPECT_EQ(PublishExposureView(frame, ViewId { 3U }, Handle { 11U }),
+  EXPECT_EQ(ExposureOwner(frame, root),
+    (Handle {
+      11U,
+    }));
+  EXPECT_EQ(ExposureOwner(frame, child),
+    (Handle {
+      11U,
+    }));
+  EXPECT_EQ(PublishExposureView(frame,
+              ViewId {
+                3U,
+              },
+              Handle {
+                11U,
+              }),
     oxygen::kInvalidViewId);
-  EXPECT_EQ(renderer_->ResolvePublishedRuntimeViewId(ViewId { 3U }),
+  EXPECT_EQ(renderer_->ResolvePublishedRuntimeViewId(ViewId {
+              3U,
+            }),
     oxygen::kInvalidViewId);
 }
 
@@ -681,23 +937,60 @@ NOLINT_TEST_F(
   using Handle = View::ViewStateHandle;
   auto frame = FrameContext {};
   PrepareFrameContext(frame, 1U);
-  ASSERT_NE(
-    PublishExposureView(frame, ViewId { 1U }, View::kInvalidViewStateHandle),
+  ASSERT_NE(PublishExposureView(frame,
+              ViewId {
+                1U,
+              },
+              View::kInvalidViewStateHandle),
     oxygen::kInvalidViewId);
-  EXPECT_EQ(
-    PublishExposureView(frame, ViewId { 2U }, Handle { 22U }, ViewId { 1U }),
+  EXPECT_EQ(PublishExposureView(frame,
+              ViewId {
+                2U,
+              },
+              Handle {
+                22U,
+              },
+              ViewId {
+                1U,
+              }),
     oxygen::kInvalidViewId);
-  const auto root = PublishExposureView(frame, ViewId { 1U }, Handle { 11U });
-  EXPECT_EQ(PublishExposureView(frame, ViewId { 2U },
-              View::kInvalidViewStateHandle, ViewId { 1U }),
+  const auto root = PublishExposureView(frame,
+    ViewId {
+      1U,
+    },
+    Handle {
+      11U,
+    });
+  EXPECT_EQ(PublishExposureView(frame,
+              ViewId {
+                2U,
+              },
+              View::kInvalidViewStateHandle,
+              ViewId {
+                1U,
+              }),
     oxygen::kInvalidViewId);
-  ASSERT_NE(
-    PublishExposureView(frame, ViewId { 2U }, Handle { 22U }, ViewId { 1U }),
+  ASSERT_NE(PublishExposureView(frame,
+              ViewId {
+                2U,
+              },
+              Handle {
+                22U,
+              },
+              ViewId {
+                1U,
+              }),
     oxygen::kInvalidViewId);
-  EXPECT_EQ(
-    PublishExposureView(frame, ViewId { 1U }, View::kInvalidViewStateHandle),
+  EXPECT_EQ(PublishExposureView(frame,
+              ViewId {
+                1U,
+              },
+              View::kInvalidViewStateHandle),
     oxygen::kInvalidViewId);
-  EXPECT_EQ(ExposureOwner(frame, root), Handle { 11U });
+  EXPECT_EQ(ExposureOwner(frame, root),
+    (Handle {
+      11U,
+    }));
 }
 
 NOLINT_TEST_F(
@@ -706,18 +999,58 @@ NOLINT_TEST_F(
   using Handle = oxygen::vortex::CompositionView::ViewStateHandle;
   auto frame = FrameContext {};
   PrepareFrameContext(frame, 1U);
-  PublishExposureView(frame, ViewId { 1U }, Handle { 11U });
-  PublishExposureView(frame, ViewId { 2U }, Handle { 22U }, ViewId { 1U });
-  const auto child
-    = PublishExposureView(frame, ViewId { 3U }, Handle { 33U }, ViewId { 2U });
-  frame.SetFrameSequenceNumber(oxygen::frame::SequenceNumber { 1000U },
+  PublishExposureView(frame,
+    ViewId {
+      1U,
+    },
+    Handle {
+      11U,
+    });
+  PublishExposureView(frame,
+    ViewId {
+      2U,
+    },
+    Handle {
+      22U,
+    },
+    ViewId {
+      1U,
+    });
+  const auto child = PublishExposureView(frame,
+    ViewId {
+      3U,
+    },
+    Handle {
+      33U,
+    },
+    ViewId {
+      2U,
+    });
+  frame.SetFrameSequenceNumber(
+    oxygen::frame::SequenceNumber {
+      1000U,
+    },
     oxygen::engine::internal::EngineTagFactory::Get());
-  ASSERT_EQ(
-    PublishExposureView(frame, ViewId { 3U }, Handle { 33U }, ViewId { 2U }),
+  ASSERT_EQ(PublishExposureView(frame,
+              ViewId {
+                3U,
+              },
+              Handle {
+                33U,
+              },
+              ViewId {
+                2U,
+              }),
     child);
   EXPECT_TRUE(renderer_->PruneStalePublishedRuntimeViews(frame).empty());
-  EXPECT_EQ(ExposureOwner(frame, child), Handle { 11U });
-  renderer_->RemovePublishedRuntimeView(frame, ViewId { 3U });
+  EXPECT_EQ(ExposureOwner(frame, child),
+    (Handle {
+      11U,
+    }));
+  renderer_->RemovePublishedRuntimeView(frame,
+    ViewId {
+      3U,
+    });
   EXPECT_EQ(renderer_->PruneStalePublishedRuntimeViews(frame).size(), 2U);
 }
 
@@ -727,14 +1060,45 @@ NOLINT_TEST_F(
   using Handle = oxygen::vortex::CompositionView::ViewStateHandle;
   auto frame = FrameContext {};
   PrepareFrameContext(frame, 1U);
-  PublishExposureView(frame, ViewId { 1U }, Handle { 11U });
-  const auto middle
-    = PublishExposureView(frame, ViewId { 2U }, Handle { 22U }, ViewId { 1U });
-  const auto leaf
-    = PublishExposureView(frame, ViewId { 3U }, Handle { 33U }, ViewId { 2U });
-  renderer_->RemovePublishedRuntimeView(frame, ViewId { 1U });
-  EXPECT_EQ(ExposureOwner(frame, middle), Handle { 22U });
-  EXPECT_EQ(ExposureOwner(frame, leaf), Handle { 33U });
+  PublishExposureView(frame,
+    ViewId {
+      1U,
+    },
+    Handle {
+      11U,
+    });
+  const auto middle = PublishExposureView(frame,
+    ViewId {
+      2U,
+    },
+    Handle {
+      22U,
+    },
+    ViewId {
+      1U,
+    });
+  const auto leaf = PublishExposureView(frame,
+    ViewId {
+      3U,
+    },
+    Handle {
+      33U,
+    },
+    ViewId {
+      2U,
+    });
+  renderer_->RemovePublishedRuntimeView(frame,
+    ViewId {
+      1U,
+    });
+  EXPECT_EQ(ExposureOwner(frame, middle),
+    (Handle {
+      22U,
+    }));
+  EXPECT_EQ(ExposureOwner(frame, leaf),
+    (Handle {
+      33U,
+    }));
 }
 
 NOLINT_TEST_F(
@@ -743,15 +1107,55 @@ NOLINT_TEST_F(
   using Handle = oxygen::vortex::CompositionView::ViewStateHandle;
   auto frame = FrameContext {};
   PrepareFrameContext(frame, 1U);
-  PublishExposureView(frame, ViewId { 1U }, Handle { 11U });
-  PublishExposureView(frame, ViewId { 2U }, Handle { 22U }, ViewId { 1U });
-  const auto leaf
-    = PublishExposureView(frame, ViewId { 3U }, Handle { 33U }, ViewId { 2U });
-  const auto other
-    = PublishExposureView(frame, ViewId { 4U }, Handle { 44U }, ViewId { 1U });
-  renderer_->RemovePublishedRuntimeView(frame, ViewId { 2U });
-  EXPECT_EQ(ExposureOwner(frame, leaf), Handle { 33U });
-  EXPECT_EQ(ExposureOwner(frame, other), Handle { 11U });
+  PublishExposureView(frame,
+    ViewId {
+      1U,
+    },
+    Handle {
+      11U,
+    });
+  PublishExposureView(frame,
+    ViewId {
+      2U,
+    },
+    Handle {
+      22U,
+    },
+    ViewId {
+      1U,
+    });
+  const auto leaf = PublishExposureView(frame,
+    ViewId {
+      3U,
+    },
+    Handle {
+      33U,
+    },
+    ViewId {
+      2U,
+    });
+  const auto other = PublishExposureView(frame,
+    ViewId {
+      4U,
+    },
+    Handle {
+      44U,
+    },
+    ViewId {
+      1U,
+    });
+  renderer_->RemovePublishedRuntimeView(frame,
+    ViewId {
+      2U,
+    });
+  EXPECT_EQ(ExposureOwner(frame, leaf),
+    (Handle {
+      33U,
+    }));
+  EXPECT_EQ(ExposureOwner(frame, other),
+    (Handle {
+      11U,
+    }));
 }
 
 NOLINT_TEST_F(RuntimeViewPublicationTest,
@@ -760,20 +1164,48 @@ NOLINT_TEST_F(RuntimeViewPublicationTest,
   using Handle = oxygen::vortex::CompositionView::ViewStateHandle;
   auto frame = FrameContext {};
   PrepareFrameContext(frame, 1U);
-  ASSERT_NE(PublishExposureView(frame, ViewId { 1U }, Handle { 11U }),
+  ASSERT_NE(PublishExposureView(frame,
+              ViewId {
+                1U,
+              },
+              Handle {
+                11U,
+              }),
     oxygen::kInvalidViewId);
   const auto old = renderer_->QueueExposureTransition(
-    Handle { 11U }, oxygen::vortex::ExposureTransitionPolicy::kRemeter);
-  ASSERT_TRUE(old.has_value());
-  renderer_->RemovePublishedRuntimeView(frame, ViewId { 1U });
-  EXPECT_FALSE(
-    renderer_->InspectExposureTransition(Handle { 11U }).has_value());
+    Handle {
+      11U,
+    },
+    oxygen::vortex::ExposureTransitionPolicy::kRemeter);
+  if (!old.has_value()) {
+    FAIL() << "Expected old to have a value";
+  }
+  renderer_->RemovePublishedRuntimeView(frame,
+    ViewId {
+      1U,
+    });
+  EXPECT_FALSE(renderer_
+      ->InspectExposureTransition(Handle {
+        11U,
+      })
+      .has_value());
   EXPECT_FALSE(renderer_->RetryExposureTransition(*old).has_value());
-  ASSERT_NE(PublishExposureView(frame, ViewId { 1U }, Handle { 11U }),
+  ASSERT_NE(PublishExposureView(frame,
+              ViewId {
+                1U,
+              },
+              Handle {
+                11U,
+              }),
     oxygen::kInvalidViewId);
   const auto next = renderer_->QueueExposureTransition(
-    Handle { 11U }, oxygen::vortex::ExposureTransitionPolicy::kRemeter);
-  ASSERT_TRUE(next.has_value());
+    Handle {
+      11U,
+    },
+    oxygen::vortex::ExposureTransitionPolicy::kRemeter);
+  if (!next.has_value()) {
+    FAIL() << "Expected next to have a value";
+  }
   EXPECT_NE(next->lifetime, old->lifetime);
 }
 
@@ -783,15 +1215,43 @@ NOLINT_TEST_F(
   using Handle = oxygen::vortex::CompositionView::ViewStateHandle;
   auto frame = FrameContext {};
   PrepareFrameContext(frame, 1U);
-  PublishExposureView(frame, ViewId { 1U }, Handle { 11U });
-  PublishExposureView(frame, ViewId { 2U }, Handle { 22U });
+  PublishExposureView(frame,
+    ViewId {
+      1U,
+    },
+    Handle {
+      11U,
+    });
+  PublishExposureView(frame,
+    ViewId {
+      2U,
+    },
+    Handle {
+      22U,
+    });
   const auto token = renderer_->QueueExposureTransition(
-    Handle { 11U }, oxygen::vortex::ExposureTransitionPolicy::kRemeter);
-  ASSERT_TRUE(token.has_value());
-  EXPECT_EQ(PublishExposureView(frame, ViewId { 1U }, Handle { 22U }),
+    Handle {
+      11U,
+    },
+    oxygen::vortex::ExposureTransitionPolicy::kRemeter);
+  if (!token.has_value()) {
+    FAIL() << "Expected token to have a value";
+  }
+  EXPECT_EQ(PublishExposureView(frame,
+              ViewId {
+                1U,
+              },
+              Handle {
+                22U,
+              }),
     oxygen::kInvalidViewId);
-  EXPECT_EQ(
-    renderer_->InspectExposureTransition(Handle { 11U })->request, *token);
+  const auto transition = renderer_->InspectExposureTransition(Handle {
+    11U,
+  });
+  if (!transition.has_value()) {
+    FAIL() << "Expected transition to have a value";
+  }
+  EXPECT_EQ(transition->request, *token);
   EXPECT_EQ(renderer_->RetryExposureTransition(*token),
     oxygen::vortex::ExposureTransitionPhase::kQueued);
 }
@@ -809,17 +1269,26 @@ NOLINT_TEST_F(RuntimeViewPublicationTest,
     Error::kInvalidTarget);
   EXPECT_EQ(renderer_
               ->NotifyViewDiscontinuity(
-                View::ViewStateHandle { 11U }, static_cast<Reason>(255U))
+                View::ViewStateHandle {
+                  11U,
+                },
+                static_cast<Reason>(255U))
               .error(),
     Error::kInvalidDiscontinuity);
   EXPECT_TRUE(renderer_
       ->NotifyViewDiscontinuity(
-        View::ViewStateHandle { 11U }, Reason::kCameraCut)
+        View::ViewStateHandle {
+          11U,
+        },
+        Reason::kCameraCut)
       .has_value());
   renderer_->OnShutdown();
   EXPECT_EQ(renderer_
               ->NotifyViewDiscontinuity(
-                View::ViewStateHandle { 11U }, Reason::kDeviceRecovery)
+                View::ViewStateHandle {
+                  11U,
+                },
+                Reason::kDeviceRecovery)
               .error(),
     Error::kRendererUnavailable);
 }

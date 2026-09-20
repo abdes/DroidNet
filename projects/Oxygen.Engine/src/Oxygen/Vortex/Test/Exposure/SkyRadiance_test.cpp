@@ -13,6 +13,7 @@
 #include <cstring>
 #include <functional>
 #include <memory>
+#include <numbers>
 #include <span>
 #include <string>
 #include <utility>
@@ -48,7 +49,11 @@
 
 namespace oxygen::vortex::testing::exposure {
 
-using namespace oxygen::graphics;
+using graphics::BufferUsage;
+using graphics::FramebufferDesc;
+using graphics::FrameCaptureController;
+using graphics::ResourceStates;
+using graphics::Texture;
 
 NOLINT_TEST_F(ExposureGpuTest,
   SceneSkyRadianceIsInvariantToNumericalDomainAndPreservesHighRange)
@@ -80,15 +85,20 @@ NOLINT_TEST_F(ExposureGpuTest,
   auto camera = scene->CreateNode("Camera");
   auto lens = std::make_unique<scene::PerspectiveCamera>();
   auto view = View {};
-  view.viewport = { .width = 4.0F, .height = 4.0F };
+  view.viewport = {
+    .width = 4.0F,
+    .height = 4.0F,
+  };
   lens->SetViewport(view.viewport);
   ASSERT_TRUE(camera.AttachCamera(std::move(lens)));
-  auto output = CreateRegisteredTexture({ .width = 4U,
+  auto output = CreateRegisteredTexture({
+    .width = 4U,
     .height = 4U,
     .format = Format::kRGBA32Float,
     .is_shader_resource = true,
     .is_render_target = true,
-    .initial_state = ResourceStates::kCommon });
+    .initial_state = ResourceStates::kCommon,
+  });
   auto framebuffer = Backend().CreateFramebuffer(
     FramebufferDesc {}.AddColorAttachment(output));
   struct ExposureOverride final : IViewExtension {
@@ -100,7 +110,7 @@ NOLINT_TEST_F(ExposureGpuTest,
   };
   bool force_nonunit = false;
   auto extension = std::make_shared<ExposureOverride>();
-  extension->before = [&](RenderContext& ctx) {
+  extension->before = [&](RenderContext& ctx) -> void {
     if (!force_nonunit) {
       return;
     }
@@ -114,31 +124,48 @@ NOLINT_TEST_F(ExposureGpuTest,
   };
   renderer_->RegisterViewExtension(extension);
   unsigned sequence = 0U;
-  for (const bool high_range : { false, true }) {
+  for (const bool high_range : {
+         false,
+         true,
+       }) {
     settings.manual_ev = high_range ? 30.0F : 4.0F;
     post.SetExposureSettings(settings);
-    sky.SetSolidColorRgb({ .25F, .5F, .75F });
+    sky.SetSolidColorRgb({
+      .25F,
+      .5F,
+      .75F,
+    });
     sky.SetIntensity(high_range ? 0x1p30F : 1.0F);
     scene->Update();
     const float expected_scale = high_range ? 1.0F : 1.0F / 16.0F;
-    for (const bool nonunit : { false, true }) {
+    for (const bool nonunit : {
+           false,
+           true,
+         }) {
       force_nonunit = nonunit;
       ++sequence;
-      auto input = Renderer::OffscreenSceneViewInput::FromCamera(
-        "SkyDomain", ViewId { 8100U }, view, camera);
-      input.SetViewStateHandle(CompositionView::ViewStateHandle { 8100U });
+      auto input = Renderer::OffscreenSceneViewInput::FromCamera("SkyDomain",
+        ViewId {
+          8100U,
+        },
+        view, camera);
+      input.SetViewStateHandle(CompositionView::ViewStateHandle {
+        8100U,
+      });
       input.SetWithAtmosphere(true);
       auto facade = renderer_->ForOffscreenScene();
       facade.SetFrameSession(
-        { .frame_slot = frame::Slot { (sequence - 1U) % 3U },
-          .frame_sequence = frame::SequenceNumber { sequence },
-          .delta_time_seconds = 0.0F });
-      facade.SetSceneSource({ .scene = observer_ptr { scene.get() } });
+        { .frame_slot = frame::Slot { (sequence - 1U) % 3U, },
+          .frame_sequence = frame::SequenceNumber { sequence, },
+          .delta_time_seconds = 0.0F, });
+      facade.SetSceneSource({ .scene = observer_ptr { scene.get(), }, });
       facade.SetOutputTarget(
-        { .framebuffer = observer_ptr { framebuffer.get() } });
+        { .framebuffer = observer_ptr { framebuffer.get(), }, });
       facade.SetViewIntent(input);
       auto session = facade.Finalize();
-      ASSERT_TRUE(session.has_value());
+      if (!session.has_value()) {
+        FAIL() << "Expected session to contain a value";
+      }
       ASSERT_TRUE(session->ExecuteNow());
       auto readback
         = GetReadbackManager()->CreateTextureReadback("Scene sky domain pixel");
@@ -151,16 +178,18 @@ NOLINT_TEST_F(ExposureGpuTest,
                   .y = 0U,
                   .width = 1U,
                   .height = 1U,
-                  .depth = 1U } })
+                  .depth = 1U, }, })
             .has_value());
       }
       const auto mapped = readback->MapNow();
-      ASSERT_TRUE(mapped.has_value());
+      if (!mapped.has_value()) {
+        FAIL() << "Expected mapped to contain a value";
+      }
       Pixel pixel {};
       std::memcpy(pixel.data(), mapped->Data(), sizeof(pixel));
-      EXPECT_NEAR(pixel[0], .25F * expected_scale, 2e-5F);
-      EXPECT_NEAR(pixel[1], .5F * expected_scale, 2e-5F);
-      EXPECT_NEAR(pixel[2], .75F * expected_scale, 2e-5F);
+      EXPECT_NEAR(pixel.at(0), .25F * expected_scale, 2e-5F);
+      EXPECT_NEAR(pixel.at(1), .5F * expected_scale, 2e-5F);
+      EXPECT_NEAR(pixel.at(2), .75F * expected_scale, 2e-5F);
       auto* owner = vortex::testing::RendererPublicationProbe::GetSceneRenderer(
         *renderer_);
       const auto& product
@@ -174,7 +203,7 @@ NOLINT_TEST_F(ExposureGpuTest,
         domain.pre_exposure, nonunit ? std::exp2(-settings.manual_ev) : 1.0F);
     }
   }
-  extension->before = [](RenderContext&) { };
+  extension->before = [](RenderContext&) -> void { };
   FlushBackend();
 }
 
@@ -189,8 +218,11 @@ NOLINT_TEST_F(ExposureGpuTest, DistantSkyRadiancePreservesLinearRange)
       | RendererCapabilityFamily::kEnvironmentLighting);
   ctx_.current_view.with_atmosphere = true;
   auto view_data = ViewConstants::GpuData {};
-  auto view_buffer
-    = CreateUploadBuffer(SizeBytes { 256U }, BufferUsage::kConstant);
+  auto view_buffer = CreateUploadBuffer(
+    SizeBytes {
+      256U,
+    },
+    BufferUsage::kConstant);
   view_buffer->Update(&view_data, sizeof(view_data), 0U);
   ctx_.view_constants = view_buffer;
   auto stable = environment::internal::StableAtmosphereState {};
@@ -200,18 +232,25 @@ NOLINT_TEST_F(ExposureGpuTest, DistantSkyRadiancePreservesLinearRange)
   auto transmittance = environment::AtmosphereTransmittanceLutPass(*renderer_);
   auto scattering = environment::AtmosphereMultiScatteringLutPass(*renderer_);
   auto distant = environment::DistantSkyLightLutPass(*renderer_);
-  const auto render = [&](const std::array<float, 2>& intensity) {
-    ctx_.frame_sequence = frame::SequenceNumber { ++sequence_ };
-    ctx_.frame_slot = frame::Slot { unsigned(sequence_ % 3) };
+  const auto render
+    = [&](const std::array<float, 2>& intensity) -> std::array<float, 4> {
+    ctx_.frame_sequence = frame::SequenceNumber {
+      ++sequence_,
+    };
+    ctx_.frame_slot = frame::Slot {
+      static_cast<unsigned>(sequence_ % 3),
+    };
     stable.light_revision = sequence_;
     stable.view_products.atmosphere_light_count = 2;
     for (unsigned i = 0; i < 2; ++i) {
-      auto& light = stable.view_products.atmosphere_lights[i];
+      auto& light = stable.view_products.atmosphere_lights.at(i);
       light.enabled = true;
       light.direction_to_light_ws = i == 0
-        ? glm::vec3 { 0, 0, 1 }
-        : glm::normalize(glm::vec3 { 1, 0, 1 });
-      light.illuminance_rgb_lux = glm::vec3 { intensity[i] };
+        ? glm::vec3 { 0, 0, 1, }
+        : glm::normalize(glm::vec3 { 1, 0, 1, });
+      light.illuminance_rgb_lux = glm::vec3 {
+        intensity.at(i),
+      };
     }
     cache.OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
     cache.RefreshForState(stable);
@@ -228,28 +267,47 @@ NOLINT_TEST_F(ExposureGpuTest, DistantSkyRadiancePreservesLinearRange)
     return Read<Pixel>(
       *cache.GetDistantSkyLightBuffer(), ResourceStates::kShaderResource);
   };
-  const auto first = render({ 1, 0 });
-  const auto second = render({ 0, 1 });
+  const auto first = render({
+    1,
+    0,
+  });
+  const auto second = render({
+    0,
+    1,
+  });
   for (unsigned channel = 0; channel < 3; ++channel) {
-    ASSERT_GT(first[channel], 0.0F);
-    ASSERT_GT(second[channel], 0.0F);
+    ASSERT_GT(first.at(channel), 0.0F);
+    ASSERT_GT(second.at(channel), 0.0F);
   }
   unsigned cases = 0;
   // Linearity of the radiative-transfer equation provides an independent
   // scaling/additivity oracle. Unit-light native anchors are not an absolute
   // atmospheric-accuracy reference; no production helper computes expected RGB.
-  for (const float gain : { 0.0F, 0x1p-24F, 1.0F, 0x1p32F, 0x1p38F }) {
-    for (const bool dual : { false, true }) {
+  for (const float gain : {
+         0.0F,
+         0x1p-24F,
+         1.0F,
+         0x1p32F,
+         0x1p38F,
+       }) {
+    for (const bool dual : {
+           false,
+           true,
+         }) {
       SCOPED_TRACE(gain);
       SCOPED_TRACE(dual);
-      const auto result = render({ gain, dual ? gain * .5F : 0.0F });
+      const auto result = render({
+        gain,
+        dual ? gain * .5F : 0.0F,
+      });
       for (unsigned channel = 0; channel < 3; ++channel) {
-        const double expected = double(gain)
-          * (double(first[channel]) + (dual ? .5 * second[channel] : 0));
+        const double expected = static_cast<double>(gain)
+          * (static_cast<double>(first.at(channel))
+            + (dual ? .5 * second.at(channel) : 0));
         EXPECT_NEAR(
-          result[channel], expected, std::abs(expected) * 2e-5 + 0x1p-120);
+          result.at(channel), expected, (std::abs(expected) * 2e-5) + 0x1p-120);
       }
-      EXPECT_EQ(result[3], 0);
+      EXPECT_EQ(result.at(3), 0);
       ++cases;
     }
   }
@@ -269,8 +327,10 @@ NOLINT_TEST_F(
   ASSERT_TRUE(cache.EnsureResources());
   constexpr float transfer = 1.0e-12F;
   constexpr float radiance = 1.88e9F;
-  const std::array textures { cache.GetTransmittanceTexture(),
-    cache.GetMultiScatteringTexture() };
+  const std::array textures {
+    cache.GetTransmittanceTexture(),
+    cache.GetMultiScatteringTexture(),
+  };
   std::uint64_t allocation_bytes = 0U;
   std::uint64_t half_allocation_bytes = 0U;
   for (const auto& texture : textures) {
@@ -279,17 +339,26 @@ NOLINT_TEST_F(
     ASSERT_EQ(desc.format, Format::kRGBA32Float);
     auto native_desc
       = texture->GetNativeResource()->AsPointer<ID3D12Resource>()->GetDesc();
-    auto* device
-      = static_cast<ExposureFailureGraphics&>(Backend()).GetCurrentDevice();
+    auto* device = FailureBackend().GetCurrentDevice();
     allocation_bytes
       += device->GetResourceAllocationInfo(0U, 1U, &native_desc).SizeInBytes;
     native_desc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
     half_allocation_bytes
       += device->GetResourceAllocationInfo(0U, 1U, &native_desc).SizeInBytes;
-    const std::vector<Pixel> values(std::size_t(desc.width) * desc.height,
-      Pixel { transfer, transfer, transfer, 0 });
-    const auto bytes = std::as_bytes(std::span { values });
-    auto upload = CreateUploadBuffer(SizeBytes { bytes.size() });
+    const std::vector<Pixel> values(
+      static_cast<std::size_t>(desc.width) * desc.height,
+      Pixel {
+        transfer,
+        transfer,
+        transfer,
+        0,
+      });
+    const auto bytes = std::as_bytes(std::span {
+      values,
+    });
+    auto upload = CreateUploadBuffer(SizeBytes {
+      bytes.size(),
+    });
     upload->Update(bytes.data(), bytes.size(), 0U);
     auto recorder = AcquireRecorder("Canonical small transfer upload");
     EnsureTracked(*recorder, upload, ResourceStates::kGenericRead);
@@ -300,42 +369,66 @@ NOLINT_TEST_F(
     recorder->FlushBarriers();
     recorder->CopyBufferToTexture(*upload,
       { .buffer_offset = 0U,
-        .buffer_row_pitch = desc.width * 16U,
-        .buffer_slice_pitch = std::uint64_t(desc.width) * desc.height * 16U,
+        .buffer_row_pitch = static_cast<std::uint64_t>(desc.width) * 16U,
+        .buffer_slice_pitch
+        = static_cast<std::uint64_t>(desc.width) * desc.height * 16U,
         .dst_slice
-        = { .width = desc.width, .height = desc.height, .depth = 1U } },
+        = { .width = desc.width, .height = desc.height, .depth = 1U, }, },
       *texture);
     recorder->RequireResourceStateFinal(
       *texture, ResourceStates::kShaderResource);
   }
-  const std::array<Pixel, 1> tiny_pixel { Pixel {
-    transfer, transfer, transfer, 0 } };
+  const std::array<Pixel, 1> tiny_pixel {
+    Pixel {
+      transfer,
+      transfer,
+      transfer,
+      0,
+    },
+  };
   const auto half_control
     = MakeSignal(1U, 1U, tiny_pixel, 1U, Format::kRGBA16Float);
   const std::array<std::array<std::uint32_t, 4>, 3> inputs {
-    std::array { cache.GetState().transmittance_lut_srv.get(),
-      std::bit_cast<std::uint32_t>(radiance), 0U, 0U },
-    std::array { cache.GetState().multi_scattering_lut_srv.get(),
-      std::bit_cast<std::uint32_t>(radiance), 0U, 0U },
     std::array {
-      half_control.srv.get(), std::bit_cast<std::uint32_t>(radiance), 0U, 0U }
+      cache.GetState().transmittance_lut_srv.get(),
+      std::bit_cast<std::uint32_t>(radiance),
+      0U,
+      0U,
+    },
+    std::array {
+      cache.GetState().multi_scattering_lut_srv.get(),
+      std::bit_cast<std::uint32_t>(radiance),
+      0U,
+      0U,
+    },
+    std::array {
+      half_control.srv.get(),
+      std::bit_cast<std::uint32_t>(radiance),
+      0U,
+      0U,
+    },
   };
-  const auto results
-    = RunToneProbe(std::as_bytes(std::span { inputs }), 3U, 256U);
+  const auto results = RunToneProbe(std::as_bytes(std::span {
+                                      inputs,
+                                    }),
+    3U, 256U);
   for (unsigned i = 0; i < 2; ++i) {
     for (unsigned c = 0; c < 3; ++c) {
-      EXPECT_NEAR(results[i][c], double(transfer) * radiance,
-        double(transfer) * radiance * 2e-5);
-      EXPECT_EQ(results[i][4 + c], transfer);
+      EXPECT_NEAR(results.at(i).at(c), static_cast<double>(transfer) * radiance,
+        static_cast<double>(transfer) * radiance * 2e-5);
+      EXPECT_EQ(results.at(i).at(4 + c), transfer);
     }
   }
-  EXPECT_EQ(results[2][0],
+  EXPECT_EQ(results.at(2).at(0),
     0.0F); // The old half format erases the required signal.
-  for (const auto format : { Format::kRGBA16Float, Format::kRGBA32Float }) {
+  for (const auto format : {
+         Format::kRGBA16Float,
+         Format::kRGBA32Float,
+       }) {
     ctx_.current_view.hdr_color_format = format;
     cache.RefreshForState(stable);
-    EXPECT_EQ(cache.GetTransmittanceTexture(), textures[0]);
-    EXPECT_EQ(cache.GetMultiScatteringTexture(), textures[1]);
+    EXPECT_EQ(cache.GetTransmittanceTexture(), textures.at(0));
+    EXPECT_EQ(cache.GetMultiScatteringTexture(), textures.at(1));
   }
   RecordProperty(
     "canonical_fp32_placement_bytes", std::to_string(allocation_bytes));
@@ -357,8 +450,11 @@ NOLINT_TEST_F(
       | RendererCapabilityFamily::kEnvironmentLighting);
   ctx_.current_view.with_atmosphere = true;
   auto view_data = ViewConstants::GpuData {};
-  auto view_buffer
-    = CreateUploadBuffer(SizeBytes { 256U }, BufferUsage::kConstant);
+  auto view_buffer = CreateUploadBuffer(
+    SizeBytes {
+      256U,
+    },
+    BufferUsage::kConstant);
   view_buffer->Update(&view_data, sizeof(view_data), 0U);
   ctx_.view_constants = view_buffer;
   auto cache = environment::internal::AtmosphereLutCache(*renderer_);
@@ -372,13 +468,25 @@ NOLINT_TEST_F(
   atmosphere.rayleigh_scattering_rgb = {};
   atmosphere.mie_scattering_rgb = {};
   atmosphere.mie_absorption_rgb = {};
-  atmosphere.ozone_absorption_rgb = { .0276F, .0001F, 0 };
-  atmosphere.ozone_density_profile.layers[0]
-    = { .width_m = 2000, .constant_term = 1 };
-  atmosphere.ozone_density_profile.layers[1] = { .constant_term = 1 };
-  const auto begin = [&](unsigned sequence) {
-    ctx_.frame_sequence = frame::SequenceNumber { sequence };
-    ctx_.frame_slot = frame::Slot { (sequence - 1U) % 3U };
+  atmosphere.ozone_absorption_rgb = {
+    .0276F,
+    .0001F,
+    0,
+  };
+  atmosphere.ozone_density_profile.layers.at(0) = {
+    .width_m = 2000,
+    .constant_term = 1,
+  };
+  atmosphere.ozone_density_profile.layers.at(1) = {
+    .constant_term = 1,
+  };
+  const auto begin = [&](unsigned sequence) -> void {
+    ctx_.frame_sequence = frame::SequenceNumber {
+      sequence,
+    };
+    ctx_.frame_slot = frame::Slot {
+      (sequence - 1U) % 3U,
+    };
     stable.atmosphere_revision = sequence;
     cache.OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
     cache.RefreshForState(stable);
@@ -391,73 +499,117 @@ NOLINT_TEST_F(
   const auto& trans_desc = cache.GetTransmittanceTexture()->GetDescriptor();
   // Constant absorption makes Beer-Lambert independent of the integration
   // quadrature. Geometry is reconstructed in double from the documented LUT UV.
-  const double horizon = std::sqrt(3.0);
+  const double horizon = std::numbers::sqrt3;
   const double rho = (.5 / trans_desc.height) * horizon;
-  const double radius = std::sqrt(1 + rho * rho);
+  const double radius = std::sqrt(1 + (rho * rho));
   const double length
-    = 2 - radius + (.5 / trans_desc.width) * (rho + horizon - (2 - radius));
+    = 2 - radius + ((.5 / trans_desc.width) * (rho + horizon - (2 - radius)));
   const double expected_trans
-    = std::exp(-double(float(.0276F * 1000.0F)) * length);
+    = std::exp(-static_cast<double>((.0276F * 1000.0F)) * length);
   ASSERT_GT(expected_trans, 0.0);
-  EXPECT_NEAR(trans_pixels[0][0], expected_trans, expected_trans * 2e-5);
-  EXPECT_EQ(data::HalfFloat { trans_pixels[0][0] }.ToFloat(), 0.0F);
-  const auto check_illumination = [&](const Texture& texture,
-                                    ShaderVisibleIndex srv, unsigned pixel,
-                                    unsigned channel, const Pixel& value) {
+  EXPECT_NEAR(trans_pixels.at(0).at(0), expected_trans, expected_trans * 2e-5);
+  EXPECT_EQ((data::HalfFloat {
+               trans_pixels.at(0).at(0),
+             })
+              .ToFloat(),
+    0.0F);
+  struct ProbeAddress {
+    unsigned pixel;
+    unsigned channel;
+  };
+  const auto check_illumination
+    = [&](const Texture& texture, ShaderVisibleIndex srv, ProbeAddress address,
+        const Pixel& value) -> void {
     const auto& desc = texture.GetDescriptor();
-    const auto half
-      = MakeSignal(1U, 1U, std::span { &value, 1U }, 1U, Format::kRGBA16Float);
+    const auto half = MakeSignal(1U, 1U,
+      std::span {
+        &value,
+        1U,
+      },
+      1U, Format::kRGBA16Float);
     constexpr float gain = 1.88e9F;
+    const auto row = address.pixel / desc.width;
     // Slot 3 is the renderer's registered linear-clamp sampler.
     const std::array<std::array<std::uint32_t, 4>, 4> inputs {
-      std::array { srv.get(), 3U,
+      std::array {
+        srv.get(),
+        3U,
         std::bit_cast<std::uint32_t>(
-          (float(pixel % desc.width) + .5F) / float(desc.width)),
+          (static_cast<float>(address.pixel % desc.width) + .5F)
+          / static_cast<float>(desc.width)),
         std::bit_cast<std::uint32_t>(
-          (float(pixel / desc.width) + .5F) / float(desc.height)) },
-      std::array { std::bit_cast<std::uint32_t>(gain), 0U, 0U, 0U },
-      std::array { half.srv.get(), 3U, std::bit_cast<std::uint32_t>(.5F),
-        std::bit_cast<std::uint32_t>(.5F) },
-      std::array { std::bit_cast<std::uint32_t>(gain), 0U, 0U, 0U }
+          (static_cast<float>(row) + .5F) / static_cast<float>(desc.height)),
+      },
+      std::array {
+        std::bit_cast<std::uint32_t>(gain),
+        0U,
+        0U,
+        0U,
+      },
+      std::array {
+        half.srv.get(),
+        3U,
+        std::bit_cast<std::uint32_t>(.5F),
+        std::bit_cast<std::uint32_t>(.5F),
+      },
+      std::array {
+        std::bit_cast<std::uint32_t>(gain),
+        0U,
+        0U,
+        0U,
+      },
     };
-    const auto result
-      = RunToneProbe(std::as_bytes(std::span { inputs }), 2U, 512U);
-    const double expected = double(value[channel]) * gain;
+    const auto result = RunToneProbe(std::as_bytes(std::span {
+                                       inputs,
+                                     }),
+      2U, 512U);
+    const double expected
+      = static_cast<double>(value.at(address.channel)) * gain;
     EXPECT_GE(expected, 0x1p-24);
     EXPECT_LE(expected, 0x1p32);
-    EXPECT_NEAR(result[0][channel], expected, expected * 2e-5);
-    EXPECT_EQ(result[1][channel], 0.0F);
+    EXPECT_NEAR(result.at(0).at(address.channel), expected, expected * 2e-5);
+    EXPECT_EQ(result.at(1).at(address.channel), 0.0F);
   };
   check_illumination(*cache.GetTransmittanceTexture(),
-    cache.GetState().transmittance_lut_srv, 0U, 0U, trans_pixels[0]);
+    cache.GetState().transmittance_lut_srv,
+    {
+      .pixel = 0U,
+      .channel = 0U,
+    },
+    trans_pixels.at(0));
   atmosphere = environment::AtmosphereModel {};
   atmosphere.enabled = true;
   begin(2U);
   ASSERT_TRUE(transmittance.Record(ctx_, stable, cache).executed);
   ASSERT_TRUE(scattering.Record(ctx_, stable, cache).executed);
   const auto baseline = ReadFloatTexture(*cache.GetMultiScatteringTexture());
-  unsigned brightest = 0U, channel = 0U;
+  unsigned brightest = 0U;
+  unsigned channel = 0U;
   for (unsigned pixel = 0; pixel < baseline.size(); ++pixel) {
     for (unsigned c = 0; c < 3; ++c) {
-      if (baseline[pixel][c] > baseline[brightest][channel]) {
+      if (baseline.at(pixel).at(c) > baseline.at(brightest).at(channel)) {
         brightest = pixel;
         channel = c;
       }
     }
   }
-  ASSERT_GT(baseline[brightest][channel], 0.0F);
+  ASSERT_GT(baseline.at(brightest).at(channel), 0.0F);
   atmosphere.multi_scattering_factor = 0x1p-30F;
   begin(3U);
   ASSERT_TRUE(transmittance.Record(ctx_, stable, cache).executed);
   ASSERT_TRUE(scattering.Record(ctx_, stable, cache).executed);
   const auto tiny = ReadFloatTexture(*cache.GetMultiScatteringTexture());
   const double expected_scattering
-    = double(baseline[brightest][channel]) * 0x1p-30;
-  EXPECT_NEAR(
-    tiny[brightest][channel], expected_scattering, expected_scattering * 2e-5);
+    = static_cast<double>(baseline.at(brightest).at(channel)) * 0x1p-30;
+  EXPECT_NEAR(tiny.at(brightest).at(channel), expected_scattering,
+    expected_scattering * 2e-5);
   check_illumination(*cache.GetMultiScatteringTexture(),
-    cache.GetState().multi_scattering_lut_srv, brightest, channel,
-    tiny[brightest]);
+    cache.GetState().multi_scattering_lut_srv,
+    {
+      .pixel = brightest,
+      .channel = channel,
+    },
+    tiny.at(brightest));
   ctx_.view_constants.reset();
   WaitForQueueIdle();
 }
@@ -466,27 +618,56 @@ NOLINT_TEST_F(
   ExposureGpuTest, ThinMediaArithmeticPreservesAmplifiedRequiredSignals)
 {
   std::vector<std::array<float, 4>> inputs;
-  for (const float depth : { -.1F, -.01F, -1e-8F, 0.0F, 0x1p-40F, 0x1p-24F,
-         1e-5F, .00999F, .01F, .1F, 1.0F, 10.0F }) {
-    for (const float source : { 0x1p-24F, 1.0F, 0x1p32F }) {
-      inputs.push_back({ depth, source, 0, 0 });
+  for (const float depth : {
+         -.1F,
+         -.01F,
+         -1e-8F,
+         0.0F,
+         0x1p-40F,
+         0x1p-24F,
+         1e-5F,
+         .00999F,
+         .01F,
+         .1F,
+         1.0F,
+         10.0F,
+       }) {
+    for (const float source : {
+           0x1p-24F,
+           1.0F,
+           0x1p32F,
+         }) {
+      inputs.push_back({
+        depth,
+        source,
+        0,
+        0,
+      });
     }
   }
-  const auto output = RunToneProbe(std::as_bytes(std::span { inputs }),
+  const auto output = RunToneProbe(std::as_bytes(std::span {
+                                     inputs,
+                                   }),
     static_cast<std::uint32_t>(inputs.size()), 1024U);
   unsigned reproduced_losses = 0;
   for (std::size_t i = 0; i < inputs.size(); ++i) {
-    const double opacity = -std::expm1(-double(inputs[i][0]));
-    const double input_opacity = std::min(std::abs(double(inputs[i][0])), 1.0);
-    const double optical_depth = input_opacity < 1.0 - double(1e-6F)
+    const double opacity
+      = -std::expm1(-static_cast<double>(inputs.at(i).at(0)));
+    const double input_opacity
+      = std::min(std::abs(static_cast<double>(inputs.at(i).at(0))), 1.0);
+    const double optical_depth
+      = input_opacity < 1.0 - static_cast<double>(1e-6F)
       ? -std::log1p(-input_opacity)
-      : -std::log(double(1e-6F));
-    const double radiance = opacity * double(inputs[i][1]);
-    EXPECT_NEAR(output[i][0], opacity, std::abs(opacity) * 2e-5 + 0x1p-120);
-    EXPECT_NEAR(output[i][1], optical_depth, optical_depth * 2e-5 + 0x1p-120);
-    EXPECT_NEAR(output[i][2], radiance, std::abs(radiance) * 2e-5 + 0x1p-120);
-    if (radiance >= 0x1p-24 && output[i][3] == 0) {
-      EXPECT_GT(output[i][2], 0);
+      : -std::log(static_cast<double>(1e-6F));
+    const double radiance = opacity * static_cast<double>(inputs.at(i).at(1));
+    EXPECT_NEAR(
+      output.at(i).at(0), opacity, (std::abs(opacity) * 2e-5) + 0x1p-120);
+    EXPECT_NEAR(
+      output.at(i).at(1), optical_depth, (optical_depth * 2e-5) + 0x1p-120);
+    EXPECT_NEAR(
+      output.at(i).at(2), radiance, (std::abs(radiance) * 2e-5) + 0x1p-120);
+    if (radiance >= 0x1p-24 && output.at(i).at(3) == 0) {
+      EXPECT_GT(output.at(i).at(2), 0);
       ++reproduced_losses;
     }
   }
@@ -506,8 +687,11 @@ NOLINT_TEST_F(ExposureGpuTest, SkyProducerPreservesThinBrightScattering)
   ctx_.current_view.with_atmosphere = true;
   ctx_.current_view.hdr_color_format = Format::kRGBA32Float;
   auto view_data = ViewConstants::GpuData {};
-  auto view_buffer
-    = CreateUploadBuffer(SizeBytes { 256U }, BufferUsage::kConstant);
+  auto view_buffer = CreateUploadBuffer(
+    SizeBytes {
+      256U,
+    },
+    BufferUsage::kConstant);
   view_buffer->Update(&view_data, sizeof(view_data), 0U);
   ctx_.view_constants = view_buffer;
   auto cache = environment::internal::AtmosphereLutCache(*renderer_);
@@ -526,43 +710,79 @@ NOLINT_TEST_F(ExposureGpuTest, SkyProducerPreservesThinBrightScattering)
   atmosphere.ground_albedo_rgb = {};
   atmosphere.multi_scattering_factor = 0;
   auto environment_view = EnvironmentViewData {};
-  environment_view.sky_planet_translated_world_center_km_and_view_height_km
-    = { 0, 0, -1, 1.25F };
+  environment_view.sky_planet_translated_world_center_km_and_view_height_km = {
+    0,
+    0,
+    -1,
+    1.25F,
+  };
   unsigned sequence = 0;
   auto settings = scene::ExposureSettings {};
   settings.mode = engine::ExposureMode::kManual;
   unsigned cases = 0;
-  for (const unsigned light_slot : { 0U, 1U }) {
-    for (const float illuminance : { .5e-6F, 1e-6F, 1.001e-6F, 1.88e9F }) {
-      for (const float ev : { -32.0F, 0.0F, 32.0F }) {
+  for (const unsigned light_slot : {
+         0U,
+         1U,
+       }) {
+    for (const float illuminance : {
+           .5e-6F,
+           1e-6F,
+           1.001e-6F,
+           1.88e9F,
+         }) {
+      for (const float ev : {
+             -32.0F,
+             0.0F,
+             32.0F,
+           }) {
         stable.view_products.atmosphere_lights = {};
-        auto& light = stable.view_products.atmosphere_lights[light_slot];
+        auto& light = stable.view_products.atmosphere_lights.at(light_slot);
         light.enabled = true;
-        light.direction_to_light_ws = { 0, 0, 1 };
-        light.illuminance_rgb_lux = glm::vec3 { illuminance };
+        light.direction_to_light_ws = {
+          0,
+          0,
+          1,
+        };
+        light.illuminance_rgb_lux = glm::vec3 {
+          illuminance,
+        };
         stable.view_products.atmosphere_light_count = light_slot + 1;
         settings.manual_ev = ev;
         const auto exposure_config = SharedConfig(settings);
         SCOPED_TRACE(light_slot);
         SCOPED_TRACE(illuminance);
         SCOPED_TRACE(ev);
-        for (const float extinction :
-          { 0.0F, 1e-12F, .999e-9F, 1e-9F, 1.001e-9F, 1e-6F }) {
+        for (const float extinction : {
+               0.0F,
+               1e-12F,
+               .999e-9F,
+               1e-9F,
+               1.001e-9F,
+               1e-6F,
+             }) {
           SCOPED_TRACE(extinction);
-          atmosphere.rayleigh_scattering_rgb
-            = glm::vec3 { extinction / 1000.0F };
-          ctx_.frame_sequence = frame::SequenceNumber { ++sequence };
-          ctx_.frame_slot = frame::Slot { (sequence - 1U) % 3U };
+          atmosphere.rayleigh_scattering_rgb = glm::vec3 {
+            extinction / 1000.0F,
+          };
+          ctx_.frame_sequence = frame::SequenceNumber {
+            ++sequence,
+          };
+          ctx_.frame_slot = frame::Slot {
+            (sequence - 1U) % 3U,
+          };
+          auto exposure_inputs = postprocess::ExposurePass::FrameInputs {};
+          exposure_inputs.use_fp32 = false;
           const auto exposure
-            = pass_->ResolveFrame(ctx_, exposure_config, { .use_fp32 = false });
+            = pass_->ResolveFrame(ctx_, exposure_config, exposure_inputs);
           ASSERT_NE(exposure, nullptr);
           ctx_.current_view.frame_exposure = exposure;
           auto bindings = ViewFrameBindings {};
           bindings.frame_exposure_slot = exposure->srv_index;
           bindings.exposure_status_uav
             = exposure->current_state->status_uav_index;
-          view_data.view_frame_bindings_bslot
-            = BindlessViewFrameBindingsSlot { PublishFixtureData(bindings) };
+          view_data.view_frame_bindings_bslot = BindlessViewFrameBindingsSlot {
+            PublishFixtureData(bindings),
+          };
           view_buffer->Update(&view_data, sizeof(view_data), 0U);
           stable.atmosphere_revision = sequence;
           cache.OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
@@ -570,10 +790,11 @@ NOLINT_TEST_F(ExposureGpuTest, SkyProducerPreservesThinBrightScattering)
           transmittance.OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
           multiple.OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
           sky.OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
-          const auto capture = light_slot == 1 && illuminance == .5e-6F
-              && ev == -32 && extinction == 1e-6F
-            ? BeginOptionalCapture()
-            : observer_ptr<FrameCaptureController> {};
+          observer_ptr<FrameCaptureController> capture;
+          if (light_slot == 1 && illuminance == .5e-6F && ev == -32
+            && extinction == 1e-6F) {
+            capture = BeginOptionalCapture();
+          }
           ASSERT_TRUE(transmittance.Record(ctx_, stable, cache).executed);
           ASSERT_TRUE(multiple.Record(ctx_, stable, cache).executed);
           const auto produced
@@ -585,13 +806,15 @@ NOLINT_TEST_F(ExposureGpuTest, SkyProducerPreservesThinBrightScattering)
           // attenuation along the .75 km ray: L = E * phase(1) * sigma * d *
           // exp(-sigma*d).
           const double sigma
-            = double(atmosphere.rayleigh_scattering_rgb.x) * 1000;
-          const double expected = double(light.illuminance_rgb_lux.x)
+            = static_cast<double>(atmosphere.rayleigh_scattering_rgb.x) * 1000;
+          const double expected
+            = static_cast<double>(light.illuminance_rgb_lux.x)
             * (3 / (8 * std::acos(-1.0))) * sigma * .75 * std::exp(-sigma * .75)
-            * std::exp2(-double(ev));
+            * std::exp2(-static_cast<double>(ev));
           for (unsigned x = 0; x < produced.width; ++x) {
             for (unsigned c = 0; c < 3; ++c) {
-              EXPECT_NEAR(pixels[x][c], expected, expected * 2e-5 + 0x1p-120);
+              EXPECT_NEAR(
+                pixels.at(x).at(c), expected, (expected * 2e-5) + 0x1p-120);
             }
           }
           if (capture) {
@@ -615,25 +838,53 @@ NOLINT_TEST_F(ExposureGpuTest, SkyProducerPreservesThinBrightScattering)
 NOLINT_TEST_F(ExposureGpuTest, ThinScatteringIntegralHasContinuousVacuumLimit)
 {
   std::vector<Pixel> inputs;
-  for (const float extinction : { 0.0F, 1e-12F, 0.999e-9F, 1e-9F, 1.001e-9F,
-         1e-5F, .00999F, .01F, .1F, 1.0F, 100.0F }) {
-    for (const float distance : { 0.0F, 1e-3F, 1.0F, 100.0F }) {
-      for (const float source : { .0001496056465063816F, 1.0F, 0x1p32F }) {
-        inputs.push_back({ extinction, distance, source, 0 });
+  for (const float extinction : {
+         0.0F,
+         1e-12F,
+         0.999e-9F,
+         1e-9F,
+         1.001e-9F,
+         1e-5F,
+         .00999F,
+         .01F,
+         .1F,
+         1.0F,
+         100.0F,
+       }) {
+    for (const float distance : {
+           0.0F,
+           1e-3F,
+           1.0F,
+           100.0F,
+         }) {
+      for (const float source : {
+             .0001496056465063816F,
+             1.0F,
+             0x1p32F,
+           }) {
+        inputs.push_back({
+          extinction,
+          distance,
+          source,
+          0,
+        });
       }
     }
   }
-  const auto output = RunToneProbe(std::as_bytes(std::span { inputs }),
+  const auto output = RunToneProbe(std::as_bytes(std::span {
+                                     inputs,
+                                   }),
     static_cast<std::uint32_t>(inputs.size()), 2048U);
   for (std::size_t i = 0; i < inputs.size(); ++i) {
     SCOPED_TRACE(i);
-    const double extinction = inputs[i][0], distance = inputs[i][1];
+    const double extinction = inputs.at(i).at(0);
+    const double distance = inputs.at(i).at(1);
     const double integral = extinction == 0
       ? distance
       : -std::expm1(-extinction * distance) / extinction;
-    const double radiance = integral * inputs[i][2];
-    EXPECT_NEAR(output[i][0], integral, integral * 2e-5 + 0x1p-120);
-    EXPECT_NEAR(output[i][1], radiance, radiance * 2e-5 + 0x1p-120);
+    const double radiance = integral * inputs.at(i).at(2);
+    EXPECT_NEAR(output.at(i).at(0), integral, (integral * 2e-5) + 0x1p-120);
+    EXPECT_NEAR(output.at(i).at(1), radiance, (radiance * 2e-5) + 0x1p-120);
   }
   RecordProperty("continuous_integral_cases", inputs.size());
 }

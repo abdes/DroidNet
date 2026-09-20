@@ -26,51 +26,64 @@ using oxygen::vortex::internal::RetainedTexturePool;
 using oxygen::vortex::testing::FakeGraphics;
 namespace frame = oxygen::frame;
 
-constexpr ViewId kView { 51U };
+constexpr ViewId kView {
+  51U,
+};
 
 auto MakeDesc() -> TextureDesc
 {
-  return { .width = 16U,
+  return {
+    .width = 16U,
     .height = 8U,
     .format = Format::kRGBA16Float,
     .debug_name = "Retained output",
     .is_shader_resource = true,
     .is_uav = true,
-    .initial_state = ResourceStates::kCommon };
+    .initial_state = ResourceStates::kCommon,
+  };
 }
 
 auto SetState(CommandQueue& queue, const Texture& texture,
   const ResourceStates state) -> void
 {
-  const std::array states { CommandQueue::KnownResourceState {
-    .resource = texture.GetNativeResource(), .state = state } };
+  const std::array states {
+    CommandQueue::KnownResourceState {
+      .resource = texture.GetNativeResource(),
+      .state = state,
+    },
+  };
   queue.AdoptKnownResourceStates(states);
 }
 
 class NamedQueueStrategy final : public oxygen::graphics::QueuesStrategy {
 public:
-  auto Clone() const -> std::unique_ptr<QueuesStrategy> override
+  [[nodiscard]] auto Clone() const -> std::unique_ptr<QueuesStrategy> override
   {
     return std::make_unique<NamedQueueStrategy>(*this);
   }
-  auto Specifications() const
+  [[nodiscard]] auto Specifications() const
     -> std::vector<oxygen::graphics::QueueSpecification> override
   {
-    using namespace oxygen::graphics;
+    using oxygen::graphics::QueueAllocationPreference;
+    using oxygen::graphics::QueueKey;
+    using oxygen::graphics::QueueSharingPreference;
     return {
-      { .key = QueueKey { "graphics" },
+      { .key = QueueKey { "graphics", },
         .role = QueueRole::kGraphics,
         .allocation_preference = QueueAllocationPreference::kDedicated,
-        .sharing_preference = QueueSharingPreference::kShared },
-      { .key = QueueKey { "named-secondary" },
+        .sharing_preference = QueueSharingPreference::kShared, },
+      { .key = QueueKey { "named-secondary", },
         .role = QueueRole::kGraphics,
         .allocation_preference = QueueAllocationPreference::kDedicated,
-        .sharing_preference = QueueSharingPreference::kNamed },
+        .sharing_preference = QueueSharingPreference::kNamed, },
     };
   }
-  auto KeyFor(QueueRole /*role*/) const -> oxygen::graphics::QueueKey override
+  [[nodiscard]] auto KeyFor(QueueRole /*role*/) const
+    -> oxygen::graphics::QueueKey override
   {
-    return oxygen::graphics::QueueKey { "graphics" };
+    return oxygen::graphics::QueueKey {
+      "graphics",
+    };
   }
 };
 
@@ -81,7 +94,9 @@ protected:
     graphics_ = std::make_shared<FakeGraphics>();
     graphics_->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy {});
     pool_ = std::make_unique<RetainedTexturePool>(graphics_);
-    pool_->OnFrameStart(frame::SequenceNumber { 1U });
+    pool_->OnFrameStart(frame::SequenceNumber {
+      1U,
+    });
     RetireSlot(0U);
   }
   auto TearDown() -> void override
@@ -93,7 +108,9 @@ protected:
   }
   auto RetireSlot(const unsigned slot) -> void
   {
-    graphics_->GetDeferredReclaimer().OnBeginFrame(frame::Slot { slot });
+    graphics_->GetDeferredReclaimer().OnBeginFrame(frame::Slot {
+      slot,
+    });
   }
   auto Acquire(const ViewId view = kView, const bool recyclable = true)
     -> std::shared_ptr<Texture>
@@ -248,7 +265,9 @@ TEST_F(RetainedTexturePoolTest, ClearDropsIdleAndInvalidatesOutstandingReturns)
   const std::weak_ptr<Texture> idle_physical = idle->shared_from_this();
   idle.reset();
   RetireSlot(0U);
-  auto outstanding = Acquire(ViewId { 52U });
+  auto outstanding = Acquire(ViewId {
+    52U,
+  });
   const std::weak_ptr<Texture> outstanding_physical
     = outstanding->shared_from_this();
   pool_->Clear();
@@ -261,17 +280,23 @@ TEST_F(RetainedTexturePoolTest, ClearDropsIdleAndInvalidatesOutstandingReturns)
 TEST_F(RetainedTexturePoolTest, PrunesOnlyViewsAbsentFromPreviousFrame)
 {
   auto active = Acquire();
-  auto stale = Acquire(ViewId { 52U });
+  auto stale = Acquire(ViewId {
+    52U,
+  });
   const auto* active_identity = active.get();
   const std::weak_ptr<Texture> stale_physical = stale->shared_from_this();
   active.reset();
   RetireSlot(0U);
-  pool_->OnFrameStart(frame::SequenceNumber { 2U });
+  pool_->OnFrameStart(frame::SequenceNumber {
+    2U,
+  });
   active = Acquire();
   EXPECT_EQ(active.get(), active_identity);
   active.reset();
   RetireSlot(0U);
-  pool_->OnFrameStart(frame::SequenceNumber { 3U });
+  pool_->OnFrameStart(frame::SequenceNumber {
+    3U,
+  });
   stale.reset();
   RetireSlot(0U);
   EXPECT_TRUE(stale_physical.expired());
@@ -285,7 +310,11 @@ TEST_F(RetainedTexturePoolTest, StatelessOutputsDoNotPopulateIdleCache)
   persistent.reset();
   RetireSlot(0U);
   for (unsigned index = 0U; index < 8U; ++index) {
-    auto stateless = Acquire(ViewId { kView.get() + index }, false);
+    auto stateless = Acquire(
+      ViewId {
+        kView.get() + index,
+      },
+      false);
     const std::weak_ptr<Texture> physical = stateless->shared_from_this();
     stateless.reset();
     RetireSlot(0U);
@@ -370,8 +399,9 @@ TEST_F(
   graphics_->CreateCommandQueues(NamedQueueStrategy {});
   auto texture = Acquire();
   const auto native = texture->GetNativeResource();
-  auto named = graphics_->GetCommandQueue(
-    oxygen::graphics::QueueKey { "named-secondary" });
+  auto named = graphics_->GetCommandQueue(oxygen::graphics::QueueKey {
+    "named-secondary",
+  });
   ASSERT_NE(named, nullptr);
   ASSERT_NE(named, graphics_->GetCommandQueue(QueueRole::kGraphics));
   EXPECT_EQ(graphics_->TryGetKnownResourceState(native),

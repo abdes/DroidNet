@@ -41,7 +41,9 @@ using oxygen::scene::Scene;
 using oxygen::scene::SceneNode;
 using oxygen::scene::SceneNodeFlags;
 
-using namespace oxygen::vortex::sceneprep::testing;
+using oxygen::vortex::sceneprep::testing::MakeGeometryWithLODSubmeshes;
+using oxygen::vortex::sceneprep::testing::MakeSpreadMesh;
+using oxygen::vortex::sceneprep::testing::ScenePrepTestFixture;
 
 namespace {
 
@@ -90,7 +92,9 @@ NOLINT_TEST_F(SubMeshVisibilityFilterTest, ProtoNoGeometry_Death)
 NOLINT_TEST_F(SubMeshVisibilityFilterTest, NoResolvedMesh_MarksDropped)
 {
   // Arrange
-  const auto geom = MakeGeometryWithLODSubmeshes({ 3 });
+  const auto geom = MakeGeometryWithLODSubmeshes({
+    3,
+  });
   SetGeometry(geom);
   SeedVisibilityAndTransform();
 
@@ -112,7 +116,9 @@ NOLINT_TEST_F(SubMeshVisibilityFilterTest, NoResolvedMesh_MarksDropped)
 NOLINT_TEST_F(SubMeshVisibilityFilterTest, AllVisible_CollectsAllIndices)
 {
   // Arrange: 1 LOD with 3 submeshes, resolve mesh
-  const auto geom = MakeGeometryWithLODSubmeshes({ 3 });
+  const auto geom = MakeGeometryWithLODSubmeshes({
+    3,
+  });
   SetGeometry(geom);
   SeedVisibilityAndTransform();
 
@@ -130,10 +136,8 @@ NOLINT_TEST_F(SubMeshVisibilityFilterTest, AllVisible_CollectsAllIndices)
 
   // Assert
   const auto vis = Proto().VisibleSubmeshes();
-  ASSERT_EQ(vis.size(), 3u);
-  EXPECT_EQ(vis[0], 0u);
-  EXPECT_EQ(vis[1], 1u);
-  EXPECT_EQ(vis[2], 2u);
+  ASSERT_EQ(vis.size(), 3U);
+  EXPECT_THAT(vis, ::testing::ElementsAre(0U, 1U, 2U));
 }
 
 //! Some hidden -> only visible indices are collected
@@ -144,7 +148,9 @@ filter must exclude them from the visible list while preserving others.
 NOLINT_TEST_F(SubMeshVisibilityFilterTest, SomeHidden_FiltersOutHidden)
 {
   // Arrange: 1 LOD with 4 submeshes
-  const auto geom = MakeGeometryWithLODSubmeshes({ 4 });
+  const auto geom = MakeGeometryWithLODSubmeshes({
+    4,
+  });
   SetGeometry(geom);
   SeedVisibilityAndTransform();
   ConfigurePerspectiveView(glm::vec3(0, 0, 5), glm::vec3(0, 0, 0));
@@ -152,16 +158,8 @@ NOLINT_TEST_F(SubMeshVisibilityFilterTest, SomeHidden_FiltersOutHidden)
 
   const auto lod = Proto().ResolvedMeshIndex();
   // Hide 1 and 3
-  DLOG_F(INFO, "TEST: Before SetSubmeshVisible: Node.IsValid={}, has_obj={}",
-    Node().IsValid(), Node().GetImpl().has_value());
   Node().GetRenderable().SetSubmeshVisible(lod, 1, false);
-  DLOG_F(INFO,
-    "TEST: After first SetSubmeshVisible: Node.IsValid={}, has_obj={}",
-    Node().IsValid(), Node().GetImpl().has_value());
   Node().GetRenderable().SetSubmeshVisible(lod, 3, false);
-  DLOG_F(INFO,
-    "TEST: After second SetSubmeshVisible: Node.IsValid={}, has_obj={}",
-    Node().IsValid(), Node().GetImpl().has_value());
 
   // Ensure scene reflects the renderable state changes before extraction
   UpdateScene();
@@ -175,9 +173,8 @@ NOLINT_TEST_F(SubMeshVisibilityFilterTest, SomeHidden_FiltersOutHidden)
 
   // Assert
   const auto vis = Proto().VisibleSubmeshes();
-  ASSERT_EQ(vis.size(), 2u);
-  EXPECT_EQ(vis[0], 0u);
-  EXPECT_EQ(vis[1], 2u);
+  ASSERT_EQ(vis.size(), 2U);
+  EXPECT_THAT(vis, ::testing::ElementsAre(0U, 2U));
 }
 
 //! Different LODs: ensure selection uses active LOD submesh set
@@ -188,33 +185,32 @@ submesh set when building the visible indices.
 NOLINT_TEST_F(SubMeshVisibilityFilterTest, MultiLOD_UsesActiveLODSubmeshes)
 {
   // Arrange: LOD0 has 2 submeshes, LOD1 has 1
-  const auto geom = MakeGeometryWithLODSubmeshes({ 2, 1 });
+  const auto geom = MakeGeometryWithLODSubmeshes({
+    2,
+    1,
+  });
   SetGeometry(geom);
   SeedVisibilityAndTransform();
   // Force LOD1 (coarser) via fixed policy
-  Node().GetRenderable().SetLodPolicy(FixedPolicy { 1 });
+  Node().GetRenderable().SetLodPolicy(FixedPolicy {
+    1,
+  });
   // Ensure LOD policy change is applied to the scene/component state
-  DLOG_F(INFO,
-    "TEST: Before UpdateScene (SetLodPolicy): Node.IsValid={}, has_obj={}",
-    Node().IsValid(), Node().GetImpl().has_value());
   UpdateScene();
-  DLOG_F(INFO,
-    "TEST: After UpdateScene (SetLodPolicy): Node.IsValid={}, has_obj={}",
-    Node().IsValid(), Node().GetImpl().has_value());
   ConfigurePerspectiveView(glm::vec3(0, 0, 5), glm::vec3(0, 0, 0));
   MeshResolver(Context(), State(), Proto());
 
   // Proto must be valid and have the resolved mesh for LOD1
   EXPECT_FALSE(Proto().IsDropped());
-  EXPECT_EQ(Proto().ResolvedMeshIndex(), 1u);
+  EXPECT_EQ(Proto().ResolvedMeshIndex(), 1U);
 
   // Act
   SubMeshVisibilityFilter(Context(), State(), Proto());
 
   // Assert: only submesh 0 exists at LOD1
   const auto vis = Proto().VisibleSubmeshes();
-  ASSERT_EQ(vis.size(), 1u);
-  EXPECT_EQ(vis[0], 0u);
+  ASSERT_EQ(vis.size(), 1U);
+  EXPECT_THAT(vis, ::testing::ElementsAre(0U));
 }
 
 //! All hidden -> visible list becomes empty
@@ -224,7 +220,9 @@ empty visible list.
 */
 NOLINT_TEST_F(SubMeshVisibilityFilterTest, AllHidden_ResultsInEmptyList)
 {
-  const auto geom = MakeGeometryWithLODSubmeshes({ 3 });
+  const auto geom = MakeGeometryWithLODSubmeshes({
+    3,
+  });
   SetGeometry(geom);
   SeedVisibilityAndTransform();
   ConfigurePerspectiveView(glm::vec3(0, 0, 5), glm::vec3(0, 0, 0));
@@ -233,17 +231,6 @@ NOLINT_TEST_F(SubMeshVisibilityFilterTest, AllHidden_ResultsInEmptyList)
   Node().GetRenderable().SetAllSubmeshesVisible(false);
 
   // Ensure scene reflects the renderable state changes before extraction
-  DLOG_F(INFO,
-    "TEST: Before UpdateScene (SetAllSubmeshesVisible): Node.IsValid={}, "
-    "has_obj={}",
-    Node().IsValid(), Node().GetImpl().has_value());
-  UpdateScene();
-  DLOG_F(INFO,
-    "TEST: After UpdateScene (SetAllSubmeshesVisible): Node.IsValid={}, "
-    "has_obj={}",
-    Node().IsValid(), Node().GetImpl().has_value());
-
-  // Ensure visibility changes are applied
   UpdateScene();
 
   SubMeshVisibilityFilter(Context(), State(), Proto());
@@ -259,7 +246,9 @@ tests exclude all submeshes and the visible list must be empty.
 NOLINT_TEST_F(SubMeshVisibilityFilterTest, Frustum_AllOutside_RemovesAll)
 {
   // Arrange: 1 LOD with 3 submeshes
-  const auto geom = MakeGeometryWithLODSubmeshes({ 3 });
+  const auto geom = MakeGeometryWithLODSubmeshes({
+    3,
+  });
   SetGeometry(geom);
   SeedVisibilityAndTransform();
   // Camera looks away from origin so geometry at z≈0 is behind frustum
@@ -282,21 +271,80 @@ NOLINT_TEST_F(SubMeshVisibilityFilterTest, Frustum_PartialVisible_SelectsSubset)
 {
   // Arrange: single LOD with 3 submeshes at X=-100,0,100
   using oxygen::data::Mesh;
-  const std::vector<glm::vec3> centers
-    = { { -100.f, 0.f, 0.f }, { 0.f, 0.f, 0.f }, { 100.f, 0.f, 0.f } };
-  const glm::vec3 mesh_bounds_min { -101.f, -1.f, 0.f };
-  const glm::vec3 mesh_bounds_max { 101.f, 1.f, 0.f };
+  const std::vector<glm::vec3> centers = {
+    {
+      -100.F,
+      0.F,
+      0.F,
+    },
+    {
+      0.F,
+      0.F,
+      0.F,
+    },
+    {
+      100.F,
+      0.F,
+      0.F,
+    },
+  };
+  const glm::vec3 mesh_bounds_min {
+    -101.F,
+    -1.F,
+    0.F,
+  };
+  const glm::vec3 mesh_bounds_max {
+    101.F,
+    1.F,
+    0.F,
+  };
   const std::vector<std::pair<glm::vec3, glm::vec3>> submesh_bounds = {
-    { { -101.f, -1.f, 0.f }, { -99.f, 1.f, 0.f } },
-    { { -1.f, -1.f, 0.f }, { 1.f, 1.f, 0.f } },
-    { { 99.f, -1.f, 0.f }, { 101.f, 1.f, 0.f } },
+    {
+      {
+        -101.F,
+        -1.F,
+        0.F,
+      },
+      {
+        -99.F,
+        1.F,
+        0.F,
+      },
+    },
+    {
+      {
+        -1.F,
+        -1.F,
+        0.F,
+      },
+      {
+        1.F,
+        1.F,
+        0.F,
+      },
+    },
+    {
+      {
+        99.F,
+        -1.F,
+        0.F,
+      },
+      {
+        101.F,
+        1.F,
+        0.F,
+      },
+    },
   };
   const auto mesh = MakeSpreadMesh(
     0, centers, mesh_bounds_min, mesh_bounds_max, submesh_bounds);
   oxygen::data::pak::geometry::GeometryAssetDesc desc {};
   desc.lod_count = 1;
-  const auto geom = std::make_shared<GeometryAsset>(
-    oxygen::data::AssetKey {}, desc, std::vector { mesh });
+  const auto geom
+    = std::make_shared<GeometryAsset>(oxygen::data::AssetKey {}, desc,
+      std::vector {
+        mesh,
+      });
 
   SetGeometry(geom);
   SeedVisibilityAndTransform();
@@ -308,8 +356,8 @@ NOLINT_TEST_F(SubMeshVisibilityFilterTest, Frustum_PartialVisible_SelectsSubset)
 
   // Assert: only the middle submesh (index 1) is inside the frustum
   const auto vis = Proto().VisibleSubmeshes();
-  ASSERT_EQ(vis.size(), 1u);
-  EXPECT_EQ(vis[0], 1u);
+  ASSERT_EQ(vis.size(), 1U);
+  EXPECT_THAT(vis, ::testing::ElementsAre(1U));
 }
 
 } // namespace

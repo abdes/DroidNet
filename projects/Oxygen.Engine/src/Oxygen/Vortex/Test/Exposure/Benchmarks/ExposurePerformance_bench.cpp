@@ -8,8 +8,6 @@
 
 namespace oxygen::vortex::testing::exposure {
 
-using namespace oxygen::graphics;
-
 NOLINT_TEST_F(ExposureProfilingOverheadTest, DISABLED_ReleaseControlledBaseline)
 {
   MeasureReleaseBaseline(BaselineRecipe::kControlled);

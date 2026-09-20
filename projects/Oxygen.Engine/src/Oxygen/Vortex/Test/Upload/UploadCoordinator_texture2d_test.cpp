@@ -57,7 +57,7 @@ NOLINT_TEST_F(
     .sample_quality = 0,
     .format = oxygen::Format::kRGBA8UNorm,
     .texture_type = oxygen::TextureType::kTexture2D,
-    .clear_value = oxygen::graphics::Color { 0, 0, 0, 0 },
+    .clear_value = oxygen::graphics::Color { 0, 0, 0, 0, },
   };
   auto tex = GfxPtr()->CreateTexture(tex_desc);
 
@@ -80,7 +80,7 @@ NOLINT_TEST_F(
     .subresources = {},
     .data = UploadTextureSourceView {
       .subresources = std::vector<UploadTextureSourceSubresource> {
-        { std::span<const std::byte>(data.data(), data.size()), static_cast<uint32_t>(512), static_cast<uint32_t>(32768) }
+        { .bytes=std::span<const std::byte>(data.data(), data.size()), .row_pitch=static_cast<uint32_t>(512), .slice_pitch=static_cast<uint32_t>(32768), },
       },
     },
   };
@@ -100,30 +100,32 @@ NOLINT_TEST_F(
   ASSERT_TRUE(log.copy_called);
   ASSERT_NE(log.dst, nullptr);
   EXPECT_EQ(log.dst, tex.get());
-  ASSERT_EQ(log.regions.size(), 1u);
+  ASSERT_EQ(log.regions.size(), 1U);
 
   const auto& r = log.regions.front();
   // Validate row/slice pitches: RGBA8 => bytes/row = 128*4 = 512, aligned to
   // 256 stays 512; slice = 512*64 = 32768
-  EXPECT_EQ(r.buffer_row_pitch, 512u);
-  EXPECT_EQ(r.buffer_slice_pitch, 32768u);
+  EXPECT_EQ(r.buffer_row_pitch, 512U);
+  EXPECT_EQ(r.buffer_slice_pitch, 32768U);
   // Placement alignment: 512B; expect offset multiple of 512 (likely 0)
-  EXPECT_EQ(r.buffer_offset % 512u, 0u);
+  EXPECT_EQ(r.buffer_offset % 512U, 0U);
   // Destination slice covers full subresource at mip0/array0
-  EXPECT_EQ(r.dst_slice.mip_level, 0u);
-  EXPECT_EQ(r.dst_slice.array_slice, 0u);
+  EXPECT_EQ(r.dst_slice.mip_level, 0U);
+  EXPECT_EQ(r.dst_slice.array_slice, 0U);
 
   // Simulate frame advance to complete fences
-  SimulateFrameStart(frame::Slot { 1 });
+  SimulateFrameStart(frame::Slot {
+    1,
+  });
 
   auto complete_result = uploader.IsComplete(ticket);
   ASSERT_TRUE(complete_result.has_value()) << "IsComplete failed";
   EXPECT_TRUE(complete_result.value());
   auto res = uploader.TryGetResult(ticket);
   if (!res.has_value()) {
-    FAIL() << "expected a value";
+    FAIL() << "Expected completed upload result";
   }
-  EXPECT_EQ(res->bytes_uploaded, 32768u);
+  EXPECT_EQ(res->bytes_uploaded, 32768U);
 }
 
 //! Multi-subresource upload: verifies two regions with proper pitches and
@@ -162,13 +164,13 @@ NOLINT_TEST_F(
       .format = oxygen::Format::kRGBA8UNorm,
     },
     .subresources = std::vector<oxygen::vortex::upload::UploadSubresource> {
-      { .mip = 0, .array_slice = 0, .x = 0, .y = 0, .z = 0, .width = 0, .height = 0, .depth = 0 },
-      { .mip = 1, .array_slice = 0, .x = 0, .y = 0, .z = 0, .width = 0, .height = 0, .depth = 0 },
+      { .mip = 0, .array_slice = 0, .x = 0, .y = 0, .z = 0, .width = 0, .height = 0, .depth = 0, },
+      { .mip = 1, .array_slice = 0, .x = 0, .y = 0, .z = 0, .width = 0, .height = 0, .depth = 0, },
     },
     .data = UploadTextureSourceView {
       .subresources = std::vector<UploadTextureSourceSubresource> {
-        { std::span<const std::byte>(data.data(), static_cast<std::size_t>(8192)), static_cast<uint32_t>(256), static_cast<uint32_t>(8192) },
-        { std::span<const std::byte>(data.data() + 8192, static_cast<std::size_t>(4096)), static_cast<uint32_t>(256), static_cast<uint32_t>(4096) },
+        { .bytes=std::span<const std::byte>(data.data(), static_cast<std::size_t>(8192)), .row_pitch=static_cast<uint32_t>(256), .slice_pitch=static_cast<uint32_t>(8192), },
+        { .bytes=std::span<const std::byte>(data).subspan(8192, 4096), .row_pitch=static_cast<uint32_t>(256), .slice_pitch=static_cast<uint32_t>(4096), },
       },
     },
   };
@@ -186,22 +188,24 @@ NOLINT_TEST_F(
   // Assert
   const auto& log = GfxPtr()->texture_log_;
   ASSERT_TRUE(log.copy_called);
-  ASSERT_EQ(log.regions.size(), 2u);
-  const auto& r0 = log.regions[0];
-  const auto& r1 = log.regions[1];
+  ASSERT_EQ(log.regions.size(), 2U);
+  const auto& r0 = log.regions.at(0);
+  const auto& r1 = log.regions.at(1);
 
-  EXPECT_EQ(r0.buffer_row_pitch, 256u);
-  EXPECT_EQ(r0.buffer_slice_pitch, 8192u);
-  EXPECT_EQ(r0.buffer_offset, 0u);
-  EXPECT_EQ(r0.dst_slice.mip_level, 0u);
+  EXPECT_EQ(r0.buffer_row_pitch, 256U);
+  EXPECT_EQ(r0.buffer_slice_pitch, 8192U);
+  EXPECT_EQ(r0.buffer_offset, 0U);
+  EXPECT_EQ(r0.dst_slice.mip_level, 0U);
 
-  EXPECT_EQ(r1.buffer_row_pitch, 256u);
-  EXPECT_EQ(r1.buffer_slice_pitch, 4096u);
-  EXPECT_EQ(r1.buffer_offset, 8192u);
-  EXPECT_EQ(r1.dst_slice.mip_level, 1u);
+  EXPECT_EQ(r1.buffer_row_pitch, 256U);
+  EXPECT_EQ(r1.buffer_slice_pitch, 4096U);
+  EXPECT_EQ(r1.buffer_offset, 8192U);
+  EXPECT_EQ(r1.dst_slice.mip_level, 1U);
 
   // Simulate frame advance to complete fences
-  SimulateFrameStart(frame::Slot { 1 });
+  SimulateFrameStart(frame::Slot {
+    1,
+  });
 
   // Ticket completion
   auto complete_result = uploader.IsComplete(ticket);
@@ -209,7 +213,7 @@ NOLINT_TEST_F(
   EXPECT_TRUE(complete_result.value());
   auto res = uploader.TryGetResult(ticket);
   if (!res.has_value()) {
-    FAIL() << "expected a value";
+    FAIL() << "Expected completed upload result";
   }
   EXPECT_EQ(res->bytes_uploaded, total);
 }
@@ -275,21 +279,23 @@ NOLINT_TEST_F(
 
   const auto& log = GfxPtr()->texture_log_;
   ASSERT_TRUE(log.copy_called);
-  ASSERT_EQ(log.regions.size(), 1u);
+  ASSERT_EQ(log.regions.size(), 1U);
   const auto& r = log.regions.front();
   EXPECT_EQ(r.buffer_row_pitch, expected_row);
   EXPECT_EQ(r.buffer_slice_pitch, expected_slice);
-  EXPECT_EQ(r.buffer_offset % 512u, 0u);
+  EXPECT_EQ(r.buffer_offset % 512U, 0U);
 
   // Simulate frame advance to complete fences
-  SimulateFrameStart(frame::Slot { 1 });
+  SimulateFrameStart(frame::Slot {
+    1,
+  });
 
   auto complete_result = uploader.IsComplete(ticket);
   ASSERT_TRUE(complete_result.has_value()) << "IsComplete failed";
   EXPECT_TRUE(complete_result.value());
   auto res = uploader.TryGetResult(ticket);
   if (!res.has_value()) {
-    FAIL() << "expected a value";
+    FAIL() << "Expected completed upload result";
   }
   EXPECT_EQ(res->bytes_uploaded, expected_slice);
 }
@@ -346,18 +352,20 @@ NOLINT_TEST_F(UploadCoordinatorTest, Texture2D_FullUpload_ProducerFails_NoCopy)
   EXPECT_FALSE(log.copy_called);
 
   // Simulate frame advance to complete fences
-  SimulateFrameStart(frame::Slot { 1 });
+  SimulateFrameStart(frame::Slot {
+    1,
+  });
 
   auto complete_result = uploader.IsComplete(ticket);
   ASSERT_TRUE(complete_result.has_value()) << "IsComplete failed";
   ASSERT_TRUE(complete_result.value());
   auto res = uploader.TryGetResult(ticket);
   if (!res.has_value()) {
-    FAIL() << "expected a value";
+    FAIL() << "Expected completed upload result";
   }
   EXPECT_FALSE(res->success);
   EXPECT_EQ(res->error, oxygen::vortex::upload::UploadError::kProducerFailed);
-  EXPECT_EQ(res->bytes_uploaded, 0u);
+  EXPECT_EQ(res->bytes_uploaded, 0U);
 }
 
 } // namespace

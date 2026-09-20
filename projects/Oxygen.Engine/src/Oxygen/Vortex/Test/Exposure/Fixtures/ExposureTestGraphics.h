@@ -26,16 +26,34 @@ public:
   auto GetShader(const graphics::ShaderRequest& request) const
     -> std::shared_ptr<graphics::IShaderByteCode> override;
   mutable std::weak_ptr<graphics::Texture> processed_sky;
-  bool track_resources { false };
-  bool account_texture_allocations { false };
-  unsigned accounting_iteration { 0 };
+  bool track_resources {
+    false,
+  };
+  bool account_texture_allocations {
+    false,
+  };
+  unsigned accounting_iteration {
+    0,
+  };
   std::string accounting_phase;
-  mutable std::uint64_t peak_texture_bytes { 0 };
-  mutable std::uint64_t peak_hdr_bytes { 0 };
-  mutable std::uint64_t peak_buffer_bytes { 0 };
-  mutable std::uint64_t peak_placement_bytes { 0 };
-  mutable std::uint64_t peak_engine_placement_bytes { 0 };
-  mutable unsigned peak_hdr_iteration { 0 };
+  mutable std::uint64_t peak_texture_bytes {
+    0,
+  };
+  mutable std::uint64_t peak_hdr_bytes {
+    0,
+  };
+  mutable std::uint64_t peak_buffer_bytes {
+    0,
+  };
+  mutable std::uint64_t peak_placement_bytes {
+    0,
+  };
+  mutable std::uint64_t peak_engine_placement_bytes {
+    0,
+  };
+  mutable unsigned peak_hdr_iteration {
+    0,
+  };
   mutable nlohmann::json allocation_peaks = nlohmann::json::object();
   mutable nlohmann::json allocation_peak_history = nlohmann::json::array();
   static auto IsExposureHdrTexture(std::string_view name) -> bool;
@@ -48,17 +66,29 @@ public:
   auto CreateTexture(const graphics::TextureDesc& desc) const
     -> std::shared_ptr<graphics::Texture> override;
   std::vector<std::string> recorder_names;
-  bool fail_next_exposure_recorder { false };
-  bool fail_next_frame_recorder { false };
-  bool fail_next_fallback_recorder { false };
-  bool fail_status_recorder { false };
+  bool fail_next_exposure_recorder {
+    false,
+  };
+  bool fail_next_frame_recorder {
+    false,
+  };
+  bool fail_next_fallback_recorder {
+    false,
+  };
+  bool fail_status_recorder {
+    false,
+  };
   std::string fail_recorder_name;
-  bool defer_tonemap_recorders { false };
+  bool defer_tonemap_recorders {
+    false,
+  };
   std::vector<std::shared_ptr<const graphics::CommandList>>
     deferred_tonemap_recordings;
-  bool fail_next_suitability_recorder { false };
-  auto AcquireCommandRecorder(const graphics::QueueKey& queue,
-    std::string_view name, bool immediate = true)
+  bool fail_next_suitability_recorder {
+    false,
+  };
+  auto AcquireCommandRecorder(
+    const graphics::QueueKey& queue, std::string_view name, bool immediate)
     -> std::unique_ptr<graphics::CommandRecorder,
       std::function<void(graphics::CommandRecorder*)>> override;
 };

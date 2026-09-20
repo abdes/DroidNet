@@ -27,53 +27,97 @@
 
 namespace oxygen::vortex::testing::exposure {
 
-using namespace oxygen::graphics;
+using graphics::FramebufferDesc;
+using graphics::ResourceStates;
+using graphics::Texture;
 
 NOLINT_TEST_F(ExposureGpuTest, CompositionConstantsSurviveLaterSubmission)
 {
   static_cast<void>(OwnedExposureService());
-  const std::array sources { Uniform(.25F), Uniform(.5F), Uniform(.75F) };
-  auto output = CreateRegisteredTexture({ .width = 1,
+  const std::array sources {
+    Uniform(.25F),
+    Uniform(.5F),
+    Uniform(.75F),
+  };
+  auto output = CreateRegisteredTexture({
+    .width = 1,
     .height = 1,
     .format = Format::kRGBA32Float,
     .is_render_target = true,
-    .initial_state = ResourceStates::kCommon });
+    .initial_state = ResourceStates::kCommon,
+  });
   auto target = Backend().CreateFramebuffer(
     FramebufferDesc {}.AddColorAttachment(output));
   engine::FrameContext frame;
   frame.SetFrameSlot(
-    frame::Slot { 0 }, engine::internal::EngineTagFactory::Get());
+    frame::Slot {
+      0,
+    },
+    engine::internal::EngineTagFactory::Get());
   frame.SetFrameSequenceNumber(
-    frame::SequenceNumber { 1 }, engine::internal::EngineTagFactory::Get());
-  Backend().BeginFrame(frame::SequenceNumber { 1 }, frame::Slot { 0 });
-  renderer_->OnFrameStart(observer_ptr { &frame });
-  const ViewPort viewport { .width = 1, .height = 1 };
+    frame::SequenceNumber {
+      1,
+    },
+    engine::internal::EngineTagFactory::Get());
+  Backend().BeginFrame(
+    frame::SequenceNumber {
+      1,
+    },
+    frame::Slot {
+      0,
+    });
+  renderer_->OnFrameStart(observer_ptr {
+    &frame,
+  });
+  const ViewPort viewport {
+    .width = 1,
+    .height = 1,
+  };
   auto first = CompositionSubmission {};
   first.composite_target = target;
   for (unsigned i = 0; i < 2; ++i) {
     first.tasks.push_back(CompositingTask::MakeTextureBlend(
-      std::const_pointer_cast<Texture>(sources[i].texture), viewport, 1));
+      std::const_pointer_cast<Texture>(sources.at(i).texture), viewport, 1));
   }
   renderer_->RegisterComposition(std::move(first), {});
   auto last = CompositionSubmission {};
   last.composite_target = target;
   last.tasks.push_back(CompositingTask::MakeTextureBlend(
-    std::const_pointer_cast<Texture>(sources[2].texture), viewport, 1));
+    std::const_pointer_cast<Texture>(sources.at(2).texture), viewport, 1));
   renderer_->RegisterComposition(std::move(last), {});
   const auto capture = BeginOptionalCapture();
   auto loop = co::testing::TestEventLoop {};
+  // Run waits for completion, so the closure and captured locals outlive the
+  // coroutine.
+  // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
   co::Run(loop, [&]() -> co::Co<void> {
-    co_await renderer_->OnCompositing(observer_ptr { &frame });
+    co_await renderer_->OnCompositing(observer_ptr {
+      &frame,
+    });
   });
-  renderer_->OnFrameEnd(observer_ptr { &frame });
-  Backend().EndFrame(frame::SequenceNumber { 1 }, frame::Slot { 0 });
+  renderer_->OnFrameEnd(observer_ptr {
+    &frame,
+  });
+  Backend().EndFrame(
+    frame::SequenceNumber {
+      1,
+    },
+    frame::Slot {
+      0,
+    });
   WaitForQueueIdle();
   if (capture) {
     EXPECT_TRUE(capture->EndCapture());
   }
   const auto pixel = ReadFloatTexture(*output);
   ASSERT_EQ(pixel.size(), 1U);
-  EXPECT_EQ(pixel[0], (Pixel { .75F, .75F, .75F, 1 }));
+  EXPECT_EQ(pixel.at(0),
+    (Pixel {
+      .75F,
+      .75F,
+      .75F,
+      1,
+    }));
 }
 
 NOLINT_TEST_F(ExposureGpuTest, NativeExposureTimelineRecordsMeteringScopes)
@@ -89,7 +133,7 @@ NOLINT_TEST_F(ExposureGpuTest, NativeExposureTimelineRecordsMeteringScopes)
   auto& diagnostics = renderer_->GetDiagnosticsService();
   diagnostics.SetEnabledFeatures(DiagnosticsFeature::kGpuTimeline);
   diagnostics.SetGpuTimelineEnabled(true);
-  const auto path = std::filesystem::path { OXYGEN_EXPOSURE_WORKSPACE }
+  const auto path = std::filesystem::path { OXYGEN_EXPOSURE_WORKSPACE, }
     / "out/build-ninja/analysis/vortex/exposure-lightbench/slice51"
 #ifdef NDEBUG
     / "native-timeline-smoke-Release.json";
@@ -99,13 +143,19 @@ NOLINT_TEST_F(ExposureGpuTest, NativeExposureTimelineRecordsMeteringScopes)
   const auto signal = Uniform(.25F, 4U, 4U);
   auto frame_context = engine::FrameContext {};
   for (unsigned sequence = 1U; sequence <= 3U; ++sequence) {
-    const auto slot = frame::Slot { sequence - 1U };
-    const auto frame_sequence = frame::SequenceNumber { sequence };
+    const auto slot = frame::Slot {
+      sequence - 1U,
+    };
+    const auto frame_sequence = frame::SequenceNumber {
+      sequence,
+    };
     frame_context.SetFrameSequenceNumber(
       frame_sequence, engine::internal::EngineTagFactory::Get());
     frame_context.SetFrameSlot(slot, engine::internal::EngineTagFactory::Get());
     Backend().BeginFrame(frame_sequence, slot);
-    renderer_->OnFrameStart(observer_ptr { &frame_context });
+    renderer_->OnFrameStart(observer_ptr {
+      &frame_context,
+    });
     if (sequence == 1U) {
       ASSERT_TRUE(diagnostics.RequestGpuTimelineRecording(path, 2U));
     }
@@ -116,10 +166,17 @@ NOLINT_TEST_F(ExposureGpuTest, NativeExposureTimelineRecordsMeteringScopes)
       EXPECT_NEAR(snapshot.state.displayed_scale, .72F, 2e-4F);
     }
     auto loop = co::testing::TestEventLoop {};
+    // Run waits for completion, so the closure and captured locals outlive the
+    // coroutine.
+    // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
     co::Run(loop, [&]() -> co::Co<void> {
-      co_await renderer_->OnCompositing(observer_ptr { &frame_context });
+      co_await renderer_->OnCompositing(observer_ptr {
+        &frame_context,
+      });
     });
-    renderer_->OnFrameEnd(observer_ptr { &frame_context });
+    renderer_->OnFrameEnd(observer_ptr {
+      &frame_context,
+    });
     Backend().EndFrame(frame_sequence, slot);
     WaitForQueueIdle();
   }

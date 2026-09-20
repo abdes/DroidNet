@@ -15,7 +15,10 @@
 
 namespace oxygen::vortex::testing::exposure {
 
-using namespace oxygen::graphics;
+using graphics::Framebuffer;
+using graphics::FramebufferDesc;
+using graphics::ResourceStates;
+using graphics::TextureDesc;
 
 NOLINT_TEST_F(ExposureGpuTest, ZeroTargetRestoresImmediatelyFromLastValidMeter)
 {
@@ -56,15 +59,19 @@ NOLINT_TEST_F(
   const auto signal = Uniform(.25F);
   // Starting target is .72, changed target is .72*2^-8. SpeedUp=3 EV/s,
   // D=1.5: at t=3, remaining error is 1.5*exp(-5/3) stops.
-  const double expected = std::log2(.72) - 8.0 + 1.5 * std::exp(-5.0 / 3.0);
-  for (const unsigned frequency : { 30U, 60U, 120U }) {
+  const double expected = std::log2(.72) - 8.0 + (1.5 * std::exp(-5.0 / 3.0));
+  for (const unsigned frequency : {
+         30U,
+         60U,
+         120U,
+       }) {
     ResetHistory();
     auto settings = scene::ExposureSettings {};
     Run(signal, settings);
     settings.compensation_ev = -8.0F;
     Snapshot result {};
     for (unsigned frame = 0; frame < 3U * frequency; ++frame) {
-      result = Run(signal, settings, 1.0F / frequency);
+      result = Run(signal, settings, 1.0F / static_cast<float>(frequency));
     }
     EXPECT_NEAR(std::log2(result.state.latent_scale), expected, 5e-4)
       << frequency;
@@ -85,8 +92,9 @@ NOLINT_TEST_F(
   settings.speed_up = std::exp2(127.0F);
   settings.transition_distance = std::exp2(127.0F);
   const auto result = Run(signal, settings, 2.0F);
-  const double expected = std::log2(double(initial.state.latent_scale)) - 16.0
-    + 16.0 * std::exp(-2.0);
+  const double expected
+    = std::log2(static_cast<double>(initial.state.latent_scale)) - 16.0
+    + (16.0 * std::exp(-2.0));
   EXPECT_NEAR(std::log2(result.state.latent_scale), expected, 5e-4);
 }
 
@@ -109,11 +117,18 @@ NOLINT_TEST_F(ExposureGpuTest, LongAndIrregularHybridStepsRemainEquivalent)
   Run(signal, settings);
   settings.compensation_ev = -8.0F;
   Snapshot result {};
-  for (float dt : { .125F, .875F, .25F, .25F, .5F, 1.0F }) {
+  for (float dt : {
+         .125F,
+         .875F,
+         .25F,
+         .25F,
+         .5F,
+         1.0F,
+       }) {
     result = Run(signal, settings, dt);
   }
   EXPECT_NEAR(std::log2(result.state.latent_scale),
-    std::log2(.72) - 8.0 + 1.5 * std::exp(-5.0 / 3.0), 5e-4);
+    std::log2(.72) - 8.0 + (1.5 * std::exp(-5.0 / 3.0)), 5e-4);
   const auto settled = Run(signal, settings, 1e30F);
   EXPECT_NEAR(
     std::log2(settled.state.latent_scale), std::log2(.72) - 8.0, 5e-4);
@@ -122,7 +137,16 @@ NOLINT_TEST_F(ExposureGpuTest, LongAndIrregularHybridStepsRemainEquivalent)
 NOLINT_TEST_F(ExposureGpuTest, OrdinaryAutoCurveInterpolatesAtRawMeterEv)
 {
   auto settings = scene::ExposureSettings {};
-  settings.compensation_curve = { { 0.0F, -2.0F }, { 2.0F, 2.0F } };
+  settings.compensation_curve = {
+    {
+      .metered_ev = 0.0F,
+      .compensation_ev = -2.0F,
+    },
+    {
+      .metered_ev = 2.0F,
+      .compensation_ev = 2.0F,
+    },
+  };
   const auto result = Run(Uniform(.25F), settings);
   const double raw_ev = std::log2(.25 / .18);
   // Curve contributes 2*EV-2; the denominator contributes -EV.
@@ -133,7 +157,16 @@ NOLINT_TEST_F(ExposureGpuTest, OrdinaryAutoCurveInterpolatesAtRawMeterEv)
 NOLINT_TEST_F(ExposureGpuTest, OrdinaryAutoCurveClampsBothAuthoredEndpoints)
 {
   auto settings = scene::ExposureSettings {};
-  settings.compensation_curve = { { 1.0F, 2.0F }, { 2.0F, 4.0F } };
+  settings.compensation_curve = {
+    {
+      .metered_ev = 1.0F,
+      .compensation_ev = 2.0F,
+    },
+    {
+      .metered_ev = 2.0F,
+      .compensation_ev = 4.0F,
+    },
+  };
   const auto below = Run(Uniform(.25F), settings);
   EXPECT_NEAR(
     std::log2(below.state.target_scale), 2.0 - std::log2(.25 / .18), 2e-4);
@@ -149,10 +182,19 @@ NOLINT_TEST_F(ExposureGpuTest, CurveInputIgnoresEvClampAndAdaptedHistory)
   const auto initial = Run(signal, settings);
   settings.min_ev = 0.0F;
   settings.max_ev = .1F;
-  settings.compensation_curve = { { 0.0F, -2.0F }, { 2.0F, 2.0F } };
+  settings.compensation_curve = {
+    {
+      .metered_ev = 0.0F,
+      .compensation_ev = -2.0F,
+    },
+    {
+      .metered_ev = 2.0F,
+      .compensation_ev = 2.0F,
+    },
+  };
   settings.speed_up = settings.speed_down = 0.0F;
   const auto result = Run(signal, settings, 1.0F);
-  const double expected = 2.0 * std::log2(.25 / .18) - 2.0 - .1;
+  const double expected = (2.0 * std::log2(.25 / .18)) - 2.0 - .1;
   EXPECT_NEAR(std::log2(result.state.target_scale), expected, 2e-4);
   EXPECT_EQ(result.state.latent_scale, initial.state.latent_scale);
 }
@@ -160,8 +202,12 @@ NOLINT_TEST_F(ExposureGpuTest, CurveInputIgnoresEvClampAndAdaptedHistory)
 NOLINT_TEST_F(ExposureGpuTest, BrighteningUsesSpeedDownAcrossFrameSchedules)
 {
   const auto signal = Uniform(.25F);
-  const double expected = std::log2(.72) + 8.0 - 1.5 * std::exp(-1.0);
-  for (const unsigned frequency : { 30U, 60U, 120U }) {
+  const double expected = std::log2(.72) + 8.0 - (1.5 * std::exp(-1.0));
+  for (const unsigned frequency : {
+         30U,
+         60U,
+         120U,
+       }) {
     ResetHistory();
     auto settings = scene::ExposureSettings {};
     Run(signal, settings);
@@ -170,7 +216,7 @@ NOLINT_TEST_F(ExposureGpuTest, BrighteningUsesSpeedDownAcrossFrameSchedules)
     settings.speed_down = 1.0F;
     Snapshot result {};
     for (unsigned frame = 0; frame < 8U * frequency; ++frame) {
-      result = Run(signal, settings, 1.0F / frequency);
+      result = Run(signal, settings, 1.0F / static_cast<float>(frequency));
     }
     EXPECT_NEAR(std::log2(result.state.latent_scale), expected, 5e-4)
       << frequency;
@@ -188,7 +234,7 @@ NOLINT_TEST_F(
   EXPECT_EQ(dark_output.state.target_scale, 0.0F);
   EXPECT_NEAR(dark_output.state.latent_target_scale, .0225F, 2e-6);
   EXPECT_NEAR(std::log2(dark_output.state.latent_scale),
-    std::log2(.0225) + 1.5 * std::exp(-5.0 / 3.0), 5e-4);
+    std::log2(.0225) + (1.5 * std::exp(-5.0 / 3.0)), 5e-4);
   EXPECT_NEAR(dark_output.state.raw_metered_ev, std::log2(8.0 / .18), 2e-4);
   settings.target_luminance = .36F;
   const auto restored
@@ -200,7 +246,16 @@ NOLINT_TEST_F(ExposureGpuTest, LockedCurveUsesBoundInsteadOfRawMeteredEv)
 {
   auto settings = scene::ExposureSettings {};
   settings.min_ev = settings.max_ev = 2.0F;
-  settings.compensation_curve = { { 0.0F, -2.0F }, { 4.0F, 6.0F } };
+  settings.compensation_curve = {
+    {
+      .metered_ev = 0.0F,
+      .compensation_ev = -2.0F,
+    },
+    {
+      .metered_ev = 4.0F,
+      .compensation_ev = 6.0F,
+    },
+  };
   EXPECT_NEAR(Run(Uniform(.25F), settings).state.displayed_scale, 1.0F, 2e-6);
   EXPECT_NEAR(Run(Uniform(8.0F), settings).state.displayed_scale, 1.0F, 2e-6);
   EXPECT_NEAR(Run(Uniform(0.0F), settings, 0.0F, nullptr, 1.0F, false)
@@ -211,21 +266,31 @@ NOLINT_TEST_F(ExposureGpuTest, LockedCurveUsesBoundInsteadOfRawMeteredEv)
 NOLINT_TEST_F(
   ExposureGpuTest, SubnormalCurveCoordinatesInterpolateAtExactZeroMeterEv)
 {
-  for (const float coordinate :
-    { 1.0e-40F, std::numeric_limits<float>::denorm_min() }) {
+  for (const float coordinate : {
+         1.0e-40F,
+         std::numeric_limits<float>::denorm_min(),
+       }) {
     ResetHistory();
     auto settings = scene::ExposureSettings {};
     settings.min_log_luminance = std::log2(.18F);
     settings.log_luminance_range = 25.0F;
     settings.low_percentile = 0.0F;
     settings.high_percentile = 0x1p-16F;
-    settings.compensation_curve
-      = { { -coordinate, -1.0F }, { coordinate, 1.0F } };
+    settings.compensation_curve = {
+      {
+        .metered_ev = -coordinate,
+        .compensation_ev = -1.0F,
+      },
+      {
+        .metered_ev = coordinate,
+        .compensation_ev = 1.0F,
+      },
+    };
     // Brighter than the dark threshold, but entirely quantized to bin zero.
     // The exact bin position gives EV zero and midpoint compensation zero.
     const auto result = Run(Uniform(.1800001F), settings);
-    ASSERT_EQ(result.histogram[261], 0U);
-    ASSERT_EQ(result.histogram[0], 4095U);
+    ASSERT_EQ(result.histogram.at(261), 0U);
+    ASSERT_EQ(result.histogram.at(0), 4095U);
     ASSERT_EQ(result.state.raw_metered_ev, 0.0F);
     EXPECT_NEAR(result.state.target_scale, 1.0F, 2e-5F);
     EXPECT_NEAR(result.state.displayed_scale, 1.0F, 2e-5F);
@@ -244,19 +309,24 @@ NOLINT_TEST_F(ExposureGpuTest, PublicPausedFrameSessionFreezesGpuAdaptation)
   auto framebuffer = Backend().CreateFramebuffer(
     FramebufferDesc {}.AddColorAttachment(output));
   auto params = ResolvedView::Params {};
-  params.view_config.viewport = { .width = 1.0F, .height = 1.0F };
+  params.view_config.viewport = {
+    .width = 1.0F,
+    .height = 1.0F,
+  };
   auto facade = renderer_->ForSinglePassHarness();
   facade.SetFrameSession(Renderer::FrameSessionInput {
-    .frame_slot = frame::Slot { 0U },
-    .frame_sequence = frame::SequenceNumber { 2U },
+    .frame_slot = frame::Slot { 0U, },
+    .frame_sequence = frame::SequenceNumber { 2U, },
     .delta_time_seconds = 0.0F,
   });
   facade.SetResolvedView(Renderer::ResolvedViewInput {
-    .view_id = ViewId { 1U }, .value = ResolvedView { params } });
+    .view_id = ViewId { 1U, }, .value = ResolvedView { params, }, });
   facade.SetOutputTarget(Renderer::OutputTargetInput {
-    .framebuffer = observer_ptr<Framebuffer> { framebuffer.get() } });
+    .framebuffer = observer_ptr<Framebuffer> { framebuffer.get(), }, });
   const auto paused = facade.Finalize();
-  ASSERT_TRUE(paused.has_value());
+  if (!paused.has_value()) {
+    FAIL() << "Expected paused to contain a value";
+  }
   ASSERT_EQ(paused->GetRenderContext().delta_time, 0.0F);
   const auto after
     = Run(Uniform(8.0F), {}, paused->GetRenderContext().delta_time);

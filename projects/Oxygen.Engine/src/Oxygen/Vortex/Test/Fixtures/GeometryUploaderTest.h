@@ -54,9 +54,6 @@ protected:
   [[nodiscard]] auto MakeValidTriangleMesh(std::string_view name,
     bool indexed = true) const -> std::shared_ptr<const data::Mesh>;
 
-  [[nodiscard]] auto MakeInvalidMesh_NoVertices(std::string_view name) const
-    -> std::shared_ptr<const data::Mesh>;
-
   [[nodiscard]] auto MakeInvalidMesh_NonFiniteVertex(
     std::string_view name) const -> std::shared_ptr<const data::Mesh>;
 

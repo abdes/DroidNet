@@ -76,9 +76,11 @@ auto MakeRenderer(const std::shared_ptr<FakeGraphics>& graphics)
   config.upload_queue_key = graphics->QueueKeyFor(QueueRole::kGraphics).get();
   constexpr auto kCapabilities = RendererCapabilityFamily::kDeferredShading
     | RendererCapabilityFamily::kFinalOutputComposition;
-  return { new Renderer(std::weak_ptr<Graphics>(graphics), std::move(config),
-             kCapabilities),
-    DestroyRenderer };
+  return {
+    new Renderer(
+      std::weak_ptr<Graphics>(graphics), std::move(config), kCapabilities),
+    DestroyRenderer,
+  };
 }
 
 auto MakeFramebuffer(const std::shared_ptr<FakeGraphics>& graphics,
@@ -96,7 +98,9 @@ auto MakeFramebuffer(const std::shared_ptr<FakeGraphics>& graphics,
 
   auto color = graphics->CreateTexture(color_desc);
   auto fb_desc = FramebufferDesc {};
-  fb_desc.AddColorAttachment({ .texture = color });
+  fb_desc.AddColorAttachment({
+    .texture = color,
+  });
   return graphics->CreateFramebuffer(fb_desc);
 }
 
@@ -171,8 +175,8 @@ protected:
     renderer_ = MakeRenderer(graphics_);
   }
 
-  std::shared_ptr<FakeGraphics> graphics_ {};
-  std::shared_ptr<Renderer> renderer_ {};
+  std::shared_ptr<FakeGraphics> graphics_;
+  std::shared_ptr<Renderer> renderer_;
 };
 
 NOLINT_TEST_F(PostProcessServiceBehaviorTest, ReadModifyApplyUsesEditedExposure)
@@ -185,17 +189,28 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest, ReadModifyApplyUsesEditedExposure)
   config.exposure.speed_down = .75F;
   service.SetConfig(config);
   auto context = RenderContext {};
-  context.current_view.view_id = ViewId { 501U };
+  context.current_view.view_id = ViewId {
+    501U,
+  };
   context.current_view.view_state_handle
-    = oxygen::vortex::CompositionView::ViewStateHandle { 501U };
-  context.frame_sequence = oxygen::frame::SequenceNumber { 1U };
-  context.frame_slot = oxygen::frame::Slot { 0U };
+    = oxygen::vortex::CompositionView::ViewStateHandle {
+        501U,
+      };
+  context.frame_sequence = oxygen::frame::SequenceNumber {
+    1U,
+  };
+  context.frame_slot = oxygen::frame::Slot {
+    0U,
+  };
   service.OnFrameStart(context.frame_sequence, context.frame_slot);
   auto textures
-    = SceneTextures(*graphics_, SceneTexturesConfig { .extent = { 4U, 4U } });
-  service.Execute(context.current_view.view_id, context, textures,
-    { .scene_signal = &textures.GetSceneColor(),
-      .scene_signal_srv = oxygen::ShaderVisibleIndex { 301U } });
+    = SceneTextures(*graphics_, SceneTexturesConfig { .extent = { 4U, 4U, }, });
+  auto inputs = PostProcessService::Inputs {};
+  inputs.scene_signal = &textures.GetSceneColor();
+  inputs.scene_signal_srv = oxygen::ShaderVisibleIndex {
+    301U,
+  };
+  service.Execute(context.current_view.view_id, context, textures, inputs);
   const auto* bindings = service.InspectBindings(context.current_view.view_id);
   ASSERT_NE(bindings, nullptr);
   EXPECT_EQ(bindings->enable_auto_exposure, 0U);
@@ -235,7 +250,7 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
   auto service = PostProcessService(*renderer_);
   auto scene_textures = SceneTextures(*graphics_,
     SceneTexturesConfig {
-      .extent = { 64U, 64U },
+      .extent = { 64U, 64U, },
       .enable_velocity = true,
       .enable_custom_depth = false,
       .gbuffer_count = 4U,
@@ -245,23 +260,37 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
     = MakeFramebuffer(graphics_, "PostProcessServiceBehaviorTest.Output");
 
   auto context = RenderContext {};
-  context.current_view.view_id = ViewId { 41U };
-  context.frame_slot = oxygen::frame::Slot { 1U };
-  context.frame_sequence = oxygen::frame::SequenceNumber { 9U };
+  context.current_view.view_id = ViewId {
+    41U,
+  };
+  context.frame_slot = oxygen::frame::Slot {
+    1U,
+  };
+  context.frame_sequence = oxygen::frame::SequenceNumber {
+    9U,
+  };
 
   service.OnFrameStart(context.frame_sequence, context.frame_slot);
   graphics_->draw_log_.draws.clear();
   graphics_->graphics_pipeline_log_.binds.clear();
-  service.Execute(context.current_view.view_id, context, scene_textures,
-    PostProcessService::Inputs {
-      .scene_signal = &scene_textures.GetSceneColor(),
-      .scene_depth = &scene_textures.GetSceneDepth(),
-      .scene_velocity = scene_textures.GetVelocity(),
-      .post_target = oxygen::observer_ptr<Framebuffer> { framebuffer.get() },
-      .scene_signal_srv = oxygen::ShaderVisibleIndex { 301U },
-      .scene_depth_srv = oxygen::ShaderVisibleIndex { 302U },
-      .scene_velocity_srv = oxygen::ShaderVisibleIndex { 303U },
-    });
+  auto inputs = PostProcessService::Inputs {};
+  inputs.scene_signal = &scene_textures.GetSceneColor();
+  inputs.scene_depth = &scene_textures.GetSceneDepth();
+  inputs.scene_velocity = scene_textures.GetVelocity();
+  inputs.post_target = oxygen::observer_ptr<Framebuffer> {
+    framebuffer.get(),
+  };
+  inputs.scene_signal_srv = oxygen::ShaderVisibleIndex {
+    301U,
+  };
+  inputs.scene_depth_srv = oxygen::ShaderVisibleIndex {
+    302U,
+  };
+  inputs.scene_velocity_srv = oxygen::ShaderVisibleIndex {
+    303U,
+  };
+  service.Execute(
+    context.current_view.view_id, context, scene_textures, inputs);
 
   const auto& state = service.GetLastExecutionState();
   ASSERT_NE(service.InspectBindings(context.current_view.view_id), nullptr);
@@ -274,7 +303,9 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
     state.post_process_frame_slot);
   EXPECT_EQ(service.InspectBindings(context.current_view.view_id)
               ->resolved_scene_color_srv,
-    oxygen::ShaderVisibleIndex { 301U });
+    (oxygen::ShaderVisibleIndex {
+      301U,
+    }));
   EXPECT_EQ(graphics_->draw_log_.draws.size(), 1U);
   EXPECT_TRUE(std::ranges::any_of(
     graphics_->graphics_pipeline_log_.binds, [](const auto& bind) -> bool {
@@ -293,7 +324,7 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
 
   auto scene_textures = SceneTextures(*graphics_,
     SceneTexturesConfig {
-      .extent = { 64U, 64U },
+      .extent = { 64U, 64U, },
       .enable_velocity = true,
       .enable_custom_depth = false,
       .gbuffer_count = 4U,
@@ -303,21 +334,35 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
     = MakeFramebuffer(graphics_, "PostProcessServiceBehaviorTest.ClampOutput");
 
   auto context = RenderContext {};
-  context.current_view.view_id = ViewId { 42U };
-  context.frame_slot = oxygen::frame::Slot { 1U };
-  context.frame_sequence = oxygen::frame::SequenceNumber { 10U };
+  context.current_view.view_id = ViewId {
+    42U,
+  };
+  context.frame_slot = oxygen::frame::Slot {
+    1U,
+  };
+  context.frame_sequence = oxygen::frame::SequenceNumber {
+    10U,
+  };
 
   service.OnFrameStart(context.frame_sequence, context.frame_slot);
-  service.Execute(context.current_view.view_id, context, scene_textures,
-    PostProcessService::Inputs {
-      .scene_signal = &scene_textures.GetSceneColor(),
-      .scene_depth = &scene_textures.GetSceneDepth(),
-      .scene_velocity = scene_textures.GetVelocity(),
-      .post_target = oxygen::observer_ptr<Framebuffer> { framebuffer.get() },
-      .scene_signal_srv = oxygen::ShaderVisibleIndex { 401U },
-      .scene_depth_srv = oxygen::ShaderVisibleIndex { 402U },
-      .scene_velocity_srv = oxygen::ShaderVisibleIndex { 403U },
-    });
+  auto inputs = PostProcessService::Inputs {};
+  inputs.scene_signal = &scene_textures.GetSceneColor();
+  inputs.scene_depth = &scene_textures.GetSceneDepth();
+  inputs.scene_velocity = scene_textures.GetVelocity();
+  inputs.post_target = oxygen::observer_ptr<Framebuffer> {
+    framebuffer.get(),
+  };
+  inputs.scene_signal_srv = oxygen::ShaderVisibleIndex {
+    401U,
+  };
+  inputs.scene_depth_srv = oxygen::ShaderVisibleIndex {
+    402U,
+  };
+  inputs.scene_velocity_srv = oxygen::ShaderVisibleIndex {
+    403U,
+  };
+  service.Execute(
+    context.current_view.view_id, context, scene_textures, inputs);
 
   const auto* bindings = service.InspectBindings(context.current_view.view_id);
   ASSERT_NE(bindings, nullptr);
@@ -331,7 +376,7 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
   auto service = PostProcessService(*renderer_);
   auto scene_textures = SceneTextures(*graphics_,
     SceneTexturesConfig {
-      .extent = { 64U, 64U },
+      .extent = { 64U, 64U, },
       .enable_velocity = false,
       .enable_custom_depth = false,
       .gbuffer_count = 4U,
@@ -340,15 +385,26 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
   auto framebuffer
     = MakeFramebuffer(graphics_, "PostProcessServiceBehaviorTest.FixedGain");
   auto context = RenderContext {};
-  context.current_view.view_id = ViewId { 43U };
-  context.frame_sequence = oxygen::frame::SequenceNumber { 11U };
-  context.frame_slot = oxygen::frame::Slot { 1U };
+  context.current_view.view_id = ViewId {
+    43U,
+  };
+  context.frame_sequence = oxygen::frame::SequenceNumber {
+    11U,
+  };
+  context.frame_slot = oxygen::frame::Slot {
+    1U,
+  };
   service.OnFrameStart(context.frame_sequence, context.frame_slot);
 
   // Independent exact binary references, not a second production conversion.
-  for (const float gain : { 0x1p-14F, 0x1p-15F, 0x1p-16F }) {
-    context.frame_sequence
-      = oxygen::frame::SequenceNumber { context.frame_sequence.get() + 1U };
+  for (const float gain : {
+         0x1p-14F,
+         0x1p-15F,
+         0x1p-16F,
+       }) {
+    context.frame_sequence = oxygen::frame::SequenceNumber {
+      context.frame_sequence.get() + 1U,
+    };
     service.OnFrameStart(context.frame_sequence, context.frame_slot);
     auto config = PostProcessConfig {};
     config.exposure.mode = oxygen::engine::ExposureMode::kManual;
@@ -358,14 +414,20 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
     config.tone_mapper = oxygen::engine::ToneMapper::kNone;
     config.gamma = 1.0F;
     service.SetConfig(config);
-    service.Execute(context.current_view.view_id, context, scene_textures,
-      PostProcessService::Inputs {
-        .scene_signal = &scene_textures.GetSceneColor(),
-        .scene_depth = &scene_textures.GetSceneDepth(),
-        .post_target = oxygen::observer_ptr<Framebuffer> { framebuffer.get() },
-        .scene_signal_srv = oxygen::ShaderVisibleIndex { 501U },
-        .scene_depth_srv = oxygen::ShaderVisibleIndex { 502U },
-      });
+    auto inputs = PostProcessService::Inputs {};
+    inputs.scene_signal = &scene_textures.GetSceneColor();
+    inputs.scene_depth = &scene_textures.GetSceneDepth();
+    inputs.post_target = oxygen::observer_ptr<Framebuffer> {
+      framebuffer.get(),
+    };
+    inputs.scene_signal_srv = oxygen::ShaderVisibleIndex {
+      501U,
+    };
+    inputs.scene_depth_srv = oxygen::ShaderVisibleIndex {
+      502U,
+    };
+    service.Execute(
+      context.current_view.view_id, context, scene_textures, inputs);
 
     const auto& state = service.GetLastExecutionState();
     ASSERT_TRUE(state.tonemap_executed);
@@ -387,28 +449,46 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
   requested.mode = oxygen::engine::ExposureMode::kManual;
   requested.manual_ev = 14.0F;
   requested.key = 12.5F;
-  const auto& first
-    = service.ResolveViewExposureSettings(Handle { 1U }, requested);
+  const auto& first = service.ResolveViewExposureSettings(
+    Handle {
+      1U,
+    },
+    requested);
   EXPECT_EQ(first.revision, 1U);
   EXPECT_EQ(first.resolved.fixed_scale, 0x1p-14F);
   EXPECT_FALSE(first.last_error.has_value());
 
   requested.manual_ev = 16.0F;
-  const auto& second
-    = service.ResolveViewExposureSettings(Handle { 2U }, requested);
+  const auto& second = service.ResolveViewExposureSettings(
+    Handle {
+      2U,
+    },
+    requested);
   EXPECT_EQ(second.resolved.fixed_scale, 0x1p-16F);
   requested.low_percentile = requested.high_percentile;
-  const auto& rejected
-    = service.ResolveViewExposureSettings(Handle { 1U }, requested);
+  const auto& rejected = service.ResolveViewExposureSettings(
+    Handle {
+      1U,
+    },
+    requested);
   EXPECT_EQ(rejected.revision, 1U);
   EXPECT_EQ(rejected.resolved.fixed_scale, 0x1p-14F);
   EXPECT_EQ(rejected.last_error,
     oxygen::scene::ExposureSettingsError::kInvalidPercentiles);
 
-  service.RemoveViewState(ViewId { 1U }, Handle { 1U });
+  service.RemoveViewState(
+    ViewId {
+      1U,
+    },
+    Handle {
+      1U,
+    });
   requested.low_percentile = 0.1F;
-  const auto& recreated
-    = service.ResolveViewExposureSettings(Handle { 1U }, requested);
+  const auto& recreated = service.ResolveViewExposureSettings(
+    Handle {
+      1U,
+    },
+    requested);
   EXPECT_EQ(recreated.revision, 1U);
   EXPECT_EQ(recreated.resolved.fixed_scale, 0x1p-16F);
 }
@@ -422,9 +502,12 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
   config.exposure.key = 12.5F;
   config.exposure.manual_ev = 14.0F;
   service.SetConfig(config);
-  for (const float invalid :
-    { 100.0F, -100.0F, std::numeric_limits<float>::infinity(),
-      std::numeric_limits<float>::quiet_NaN() }) {
+  for (const float invalid : {
+         100.0F,
+         -100.0F,
+         std::numeric_limits<float>::infinity(),
+         std::numeric_limits<float>::quiet_NaN(),
+       }) {
     config.exposure.manual_ev = invalid;
     config.gamma = 1.0F;
     config.exposure.speed_down = .75F;
@@ -445,10 +528,17 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
   requested.key = 12.5F;
   requested.manual_ev = 14.0F;
   static_cast<void>(service.ResolveViewExposureSettings(
-    View::ViewStateHandle { 1U }, requested));
-  EXPECT_EQ(
-    service.ResolveViewExposureSettings(View::ViewStateHandle { 1U }, requested)
-      .revision,
+    View::ViewStateHandle {
+      1U,
+    },
+    requested));
+  EXPECT_EQ(service
+              .ResolveViewExposureSettings(
+                View::ViewStateHandle {
+                  1U,
+                },
+                requested)
+              .revision,
     1U);
   EXPECT_EQ(
     service
@@ -470,38 +560,68 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
   using Handle = oxygen::vortex::CompositionView::ViewStateHandle;
   using Status = PostProcessService::ExposureMaskStatus;
   auto loader = oxygen::vortex::testing::FakeAssetLoader {};
-  auto service
-    = PostProcessService(*renderer_, oxygen::observer_ptr { &loader });
+  auto service = PostProcessService(*renderer_,
+    oxygen::observer_ptr {
+      &loader,
+    });
   const auto tag = oxygen::vortex::internal::RendererTagFactory::Get();
-  renderer_->GetUploadCoordinator().OnFrameStart(
-    tag, oxygen::frame::Slot { 1U });
+  renderer_->GetUploadCoordinator().OnFrameStart(tag,
+    oxygen::frame::Slot {
+      1U,
+    });
   service.OnFrameStart(
-    oxygen::frame::SequenceNumber { 1U }, oxygen::frame::Slot { 1U });
+    oxygen::frame::SequenceNumber {
+      1U,
+    },
+    oxygen::frame::Slot {
+      1U,
+    });
   auto requested = oxygen::scene::ExposureSettings {};
-  const auto first
-    = service.ResolveViewExposureSettings(Handle { 1U }, requested);
+  const auto first = service.ResolveViewExposureSettings(
+    Handle {
+      1U,
+    },
+    requested);
   ASSERT_EQ(first.revision, 1U);
   const auto payload
     = oxygen::vortex::testing::MakeCookedTexture1x1Rgba8Payload();
   requested.metering_mask = loader.PreloadCookedTexture(std::span(payload));
   requested.compensation_ev = 2.0F;
-  const auto pending
-    = service.ResolveViewExposureSettings(Handle { 1U }, requested);
+  const auto pending = service.ResolveViewExposureSettings(
+    Handle {
+      1U,
+    },
+    requested);
   EXPECT_EQ(pending.mask_status, Status::kPending);
   EXPECT_EQ(pending.revision, 1U);
   EXPECT_EQ(pending.resolved.authored, first.resolved.authored);
   auto queue = graphics_->GetCommandQueue(
     oxygen::graphics::SingleQueueStrategy().KeyFor(QueueRole::kTransfer));
   ASSERT_NE(queue, nullptr);
-  queue->Signal((std::numeric_limits<std::uint64_t>::max)());
+  queue->Signal(std::numeric_limits<std::uint64_t>::max());
   service.OnFrameStart(
-    oxygen::frame::SequenceNumber { 2U }, oxygen::frame::Slot { 2U });
-  renderer_->GetUploadCoordinator().OnFrameStart(
-    tag, oxygen::frame::Slot { 2U });
+    oxygen::frame::SequenceNumber {
+      2U,
+    },
+    oxygen::frame::Slot {
+      2U,
+    });
+  renderer_->GetUploadCoordinator().OnFrameStart(tag,
+    oxygen::frame::Slot {
+      2U,
+    });
   service.OnFrameStart(
-    oxygen::frame::SequenceNumber { 3U }, oxygen::frame::Slot { 0U });
-  const auto accepted
-    = service.ResolveViewExposureSettings(Handle { 1U }, requested);
+    oxygen::frame::SequenceNumber {
+      3U,
+    },
+    oxygen::frame::Slot {
+      0U,
+    });
+  const auto accepted = service.ResolveViewExposureSettings(
+    Handle {
+      1U,
+    },
+    requested);
   ASSERT_EQ(accepted.mask_status, Status::kReady);
   ASSERT_NE(accepted.mask, nullptr);
   EXPECT_EQ(accepted.revision, 2U);
@@ -509,37 +629,76 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
   const auto valid_request = requested;
   requested.metering_mask = loader.MintSyntheticTextureKey();
   requested.compensation_ev = -2.0F;
-  const auto replacing
-    = service.ResolveViewExposureSettings(Handle { 1U }, requested);
+  const auto replacing = service.ResolveViewExposureSettings(
+    Handle {
+      1U,
+    },
+    requested);
   EXPECT_EQ(replacing.mask_status, Status::kPending);
   EXPECT_EQ(replacing.mask, accepted.mask);
   EXPECT_EQ(replacing.revision, 2U);
   service.OnFrameStart(
-    oxygen::frame::SequenceNumber { 4U }, oxygen::frame::Slot { 1U });
-  const auto failed
-    = service.ResolveViewExposureSettings(Handle { 1U }, requested);
+    oxygen::frame::SequenceNumber {
+      4U,
+    },
+    oxygen::frame::Slot {
+      1U,
+    });
+  const auto failed = service.ResolveViewExposureSettings(
+    Handle {
+      1U,
+    },
+    requested);
   EXPECT_EQ(failed.mask_status, Status::kFailed);
   EXPECT_EQ(failed.resolved.authored, valid_request);
   EXPECT_EQ(failed.mask, accepted.mask);
   EXPECT_EQ(failed.revision, 2U);
   EXPECT_FALSE(failed.mask_error.empty());
   const auto captured = service.CaptureViewExposureSettings(
-    ViewId { 1U }, Handle { 1U }, valid_request);
+    ViewId {
+      1U,
+    },
+    Handle {
+      1U,
+    },
+    valid_request);
   requested = valid_request;
   requested.metering_mask = {};
-  const auto cleared
-    = service.ResolveViewExposureSettings(Handle { 1U }, requested);
+  const auto cleared = service.ResolveViewExposureSettings(
+    Handle {
+      1U,
+    },
+    requested);
   EXPECT_GT(cleared.revision, captured.revision);
   EXPECT_EQ(cleared.mask, nullptr);
-  EXPECT_EQ(
-    service.CaptureViewExposureSettings(ViewId { 1U }, Handle { 1U }, requested)
-      .mask,
+  EXPECT_EQ(service
+              .CaptureViewExposureSettings(
+                ViewId {
+                  1U,
+                },
+                Handle {
+                  1U,
+                },
+                requested)
+              .mask,
     captured.mask);
   service.OnFrameStart(
-    oxygen::frame::SequenceNumber { 5U }, oxygen::frame::Slot { 2U });
-  EXPECT_EQ(
-    service.CaptureViewExposureSettings(ViewId { 1U }, Handle { 1U }, requested)
-      .mask,
+    oxygen::frame::SequenceNumber {
+      5U,
+    },
+    oxygen::frame::Slot {
+      2U,
+    });
+  EXPECT_EQ(service
+              .CaptureViewExposureSettings(
+                ViewId {
+                  1U,
+                },
+                Handle {
+                  1U,
+                },
+                requested)
+              .mask,
     nullptr);
 }
 
@@ -550,22 +709,33 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
   using Status = PostProcessService::ExposureMaskStatus;
   auto service = PostProcessService(*renderer_);
   auto requested = oxygen::scene::ExposureSettings {};
-  requested.metering_mask = oxygen::content::ResourceKey { 123U };
-  const auto failed
-    = service.ResolveViewExposureSettings(Handle { 1U }, requested);
+  requested.metering_mask = oxygen::content::ResourceKey {
+    123U,
+  };
+  const auto failed = service.ResolveViewExposureSettings(
+    Handle {
+      1U,
+    },
+    requested);
   EXPECT_EQ(failed.mask_status, Status::kFailed);
   EXPECT_EQ(failed.revision, 0U);
   EXPECT_EQ(failed.mask, nullptr);
   requested.enabled = false;
-  const auto disabled
-    = service.ResolveViewExposureSettings(Handle { 1U }, requested);
+  const auto disabled = service.ResolveViewExposureSettings(
+    Handle {
+      1U,
+    },
+    requested);
   EXPECT_EQ(disabled.mask_status, Status::kAbsent);
   EXPECT_EQ(disabled.revision, 1U);
   EXPECT_EQ(disabled.resolved.fixed_scale, 1.0F);
   requested.enabled = true;
   requested.mode = oxygen::engine::ExposureMode::kManual;
-  const auto manual
-    = service.ResolveViewExposureSettings(Handle { 1U }, requested);
+  const auto manual = service.ResolveViewExposureSettings(
+    Handle {
+      1U,
+    },
+    requested);
   EXPECT_EQ(manual.mask_status, Status::kAbsent);
   EXPECT_EQ(manual.revision, 2U);
 }
@@ -576,31 +746,50 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
   using Handle = oxygen::vortex::CompositionView::ViewStateHandle;
   auto service = PostProcessService(*renderer_);
   auto context = RenderContext {};
-  context.current_view.view_id = ViewId { 1U };
-  context.current_view.view_state_handle = Handle { 1U };
-  context.frame_sequence = oxygen::frame::SequenceNumber { 1U };
-  context.frame_slot = oxygen::frame::Slot { 0U };
+  context.current_view.view_id = ViewId {
+    1U,
+  };
+  context.current_view.view_state_handle = Handle {
+    1U,
+  };
+  context.frame_sequence = oxygen::frame::SequenceNumber {
+    1U,
+  };
+  context.frame_slot = oxygen::frame::Slot {
+    0U,
+  };
   service.OnFrameStart(context.frame_sequence, context.frame_slot);
   auto requested = oxygen::scene::ExposureSettings {};
-  requested.metering_mask = oxygen::content::ResourceKey { 123U };
-  auto config = PostProcessConfig { .exposure = requested };
+  requested.metering_mask = oxygen::content::ResourceKey {
+    123U,
+  };
+  auto config = PostProcessConfig {
+    .exposure = requested,
+  };
   service.SetConfig(config);
   auto textures
-    = SceneTextures(*graphics_, SceneTexturesConfig { .extent = { 64U, 64U } });
-  const auto inputs = PostProcessService::Inputs {
-    .scene_signal = &textures.GetSceneColor(),
-    .scene_signal_srv = oxygen::ShaderVisibleIndex { 301U },
+    = SceneTextures(*graphics_, SceneTexturesConfig { .extent = { 64U, 64U, }, });
+  auto inputs = PostProcessService::Inputs {};
+  inputs.scene_signal = &textures.GetSceneColor();
+  inputs.scene_signal_srv = oxygen::ShaderVisibleIndex {
+    301U,
   };
   graphics_->dispatch_log_.dispatches.clear();
   service.Execute(context.current_view.view_id, context, textures, inputs);
   EXPECT_EQ(graphics_->dispatch_log_.dispatches.size(),
     2U); // clear + invalid/locked solve
-  context.frame_sequence = oxygen::frame::SequenceNumber { 2U };
+  context.frame_sequence = oxygen::frame::SequenceNumber {
+    2U,
+  };
   service.OnFrameStart(context.frame_sequence, context.frame_slot);
   requested.metering_mask = {};
-  config.exposure
-    = service.ResolveViewExposureSettings(Handle { 1U }, requested)
-        .resolved.authored;
+  config.exposure = service
+                      .ResolveViewExposureSettings(
+                        Handle {
+                          1U,
+                        },
+                        requested)
+                      .resolved.authored;
   service.SetConfig(config);
   graphics_->dispatch_log_.dispatches.clear();
   service.Execute(context.current_view.view_id, context, textures, inputs);
@@ -612,64 +801,132 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
 {
   using Handle = oxygen::vortex::CompositionView::ViewStateHandle;
   auto loader = oxygen::vortex::testing::FakeAssetLoader {};
-  auto service
-    = PostProcessService(*renderer_, oxygen::observer_ptr { &loader });
+  auto service = PostProcessService(*renderer_,
+    oxygen::observer_ptr {
+      &loader,
+    });
   const auto tag = oxygen::vortex::internal::RendererTagFactory::Get();
-  renderer_->GetUploadCoordinator().OnFrameStart(
-    tag, oxygen::frame::Slot { 0U });
+  renderer_->GetUploadCoordinator().OnFrameStart(tag,
+    oxygen::frame::Slot {
+      0U,
+    });
   service.OnFrameStart(
-    oxygen::frame::SequenceNumber { 1U }, oxygen::frame::Slot { 0U });
+    oxygen::frame::SequenceNumber {
+      1U,
+    },
+    oxygen::frame::Slot {
+      0U,
+    });
   const auto payload
     = oxygen::vortex::testing::MakeCookedTexture1x1Rgba8Payload();
   auto requested = oxygen::scene::ExposureSettings {};
   requested.metering_mask = loader.PreloadCookedTexture(std::span(payload));
-  static_cast<void>(
-    service.ResolveViewExposureSettings(Handle { 1U }, requested));
+  static_cast<void>(service.ResolveViewExposureSettings(
+    Handle {
+      1U,
+    },
+    requested));
   auto queue = graphics_->GetCommandQueue(
     oxygen::graphics::SingleQueueStrategy().KeyFor(QueueRole::kTransfer));
   ASSERT_NE(queue, nullptr);
-  queue->Signal((std::numeric_limits<std::uint64_t>::max)());
+  queue->Signal(std::numeric_limits<std::uint64_t>::max());
   service.OnFrameStart(
-    oxygen::frame::SequenceNumber { 2U }, oxygen::frame::Slot { 1U });
-  renderer_->GetUploadCoordinator().OnFrameStart(
-    tag, oxygen::frame::Slot { 1U });
+    oxygen::frame::SequenceNumber {
+      2U,
+    },
+    oxygen::frame::Slot {
+      1U,
+    });
+  renderer_->GetUploadCoordinator().OnFrameStart(tag,
+    oxygen::frame::Slot {
+      1U,
+    });
   service.OnFrameStart(
-    oxygen::frame::SequenceNumber { 3U }, oxygen::frame::Slot { 2U });
+    oxygen::frame::SequenceNumber {
+      3U,
+    },
+    oxygen::frame::Slot {
+      2U,
+    });
   const auto& ready = service.CaptureViewExposureSettings(
-    ViewId { 1U }, Handle { 1U }, requested);
+    ViewId {
+      1U,
+    },
+    Handle {
+      1U,
+    },
+    requested);
   ASSERT_NE(ready.mask, nullptr);
   std::weak_ptr<const oxygen::vortex::resources::TextureBinder::ReadyTexture>
     frame_lease = ready.mask;
   auto config = PostProcessConfig {};
-  service.SetResolvedConfig(
-    service.BuildPassConfig(config, ViewId { 1U }, Handle { 1U }));
+  service.SetResolvedConfig(service.BuildPassConfig(config,
+    ViewId {
+      1U,
+    },
+    Handle {
+      1U,
+    }));
   auto context = RenderContext {};
-  context.current_view.view_id = ViewId { 1U };
-  context.current_view.view_state_handle = Handle { 1U };
-  context.frame_sequence = oxygen::frame::SequenceNumber { 3U };
-  context.frame_slot = oxygen::frame::Slot { 2U };
+  context.current_view.view_id = ViewId {
+    1U,
+  };
+  context.current_view.view_state_handle = Handle {
+    1U,
+  };
+  context.frame_sequence = oxygen::frame::SequenceNumber {
+    3U,
+  };
+  context.frame_slot = oxygen::frame::Slot {
+    2U,
+  };
   auto textures
-    = SceneTextures(*graphics_, SceneTexturesConfig { .extent = { 64U, 64U } });
-  service.Execute(context.current_view.view_id, context, textures,
-    {
-      .scene_signal = &textures.GetSceneColor(),
-      .scene_signal_srv = oxygen::ShaderVisibleIndex { 301U },
-    });
+    = SceneTextures(*graphics_, SceneTexturesConfig { .extent = { 64U, 64U, }, });
+  auto inputs = PostProcessService::Inputs {};
+  inputs.scene_signal = &textures.GetSceneColor();
+  inputs.scene_signal_srv = oxygen::ShaderVisibleIndex {
+    301U,
+  };
+  service.Execute(context.current_view.view_id, context, textures, inputs);
   loader.EmitTextureEviction(
     requested.metering_mask, oxygen::content::EvictionReason::kRefCountZero);
   requested.metering_mask = {};
-  static_cast<void>(
-    service.ResolveViewExposureSettings(Handle { 1U }, requested));
+  static_cast<void>(service.ResolveViewExposureSettings(
+    Handle {
+      1U,
+    },
+    requested));
   EXPECT_FALSE(frame_lease.expired());
-  service.RemoveViewState(ViewId { 1U }, Handle { 1U });
+  service.RemoveViewState(
+    ViewId {
+      1U,
+    },
+    Handle {
+      1U,
+    });
   service.OnFrameStart(
-    oxygen::frame::SequenceNumber { 4U }, oxygen::frame::Slot { 0U });
+    oxygen::frame::SequenceNumber {
+      4U,
+    },
+    oxygen::frame::Slot {
+      0U,
+    });
   EXPECT_FALSE(frame_lease.expired());
   service.OnFrameStart(
-    oxygen::frame::SequenceNumber { 5U }, oxygen::frame::Slot { 1U });
+    oxygen::frame::SequenceNumber {
+      5U,
+    },
+    oxygen::frame::Slot {
+      1U,
+    });
   EXPECT_FALSE(frame_lease.expired());
   service.OnFrameStart(
-    oxygen::frame::SequenceNumber { 6U }, oxygen::frame::Slot { 2U });
+    oxygen::frame::SequenceNumber {
+      6U,
+    },
+    oxygen::frame::Slot {
+      2U,
+    });
   EXPECT_TRUE(frame_lease.expired());
 }
 
@@ -679,14 +936,29 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
   using Handle = oxygen::vortex::CompositionView::ViewStateHandle;
   using Status = PostProcessService::ExposureMaskStatus;
   auto loader = oxygen::vortex::testing::FakeAssetLoader {};
-  auto service
-    = PostProcessService(*renderer_, oxygen::observer_ptr { &loader });
+  auto service = PostProcessService(*renderer_,
+    oxygen::observer_ptr {
+      &loader,
+    });
   service.OnFrameStart(
-    oxygen::frame::SequenceNumber { 1U }, oxygen::frame::Slot { 0U });
+    oxygen::frame::SequenceNumber {
+      1U,
+    },
+    oxygen::frame::Slot {
+      0U,
+    });
   unsigned id = 1U;
-  for (bool previous : { false, true }) {
-    for (bool failure : { false, true }) {
-      const auto handle = Handle { id++ };
+  for (bool previous : {
+         false,
+         true,
+       }) {
+    for (bool failure : {
+           false,
+           true,
+         }) {
+      const auto handle = Handle {
+        id++,
+      };
       auto requested = oxygen::scene::ExposureSettings {};
       requested.key = 12.5F;
       if (previous) {
@@ -699,7 +971,12 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
         Status::kPending);
       if (failure) {
         service.OnFrameStart(
-          oxygen::frame::SequenceNumber { id }, oxygen::frame::Slot { 1U });
+          oxygen::frame::SequenceNumber {
+            id,
+          },
+          oxygen::frame::Slot {
+            1U,
+          });
         EXPECT_EQ(
           service.ResolveViewExposureSettings(handle, requested).mask_status,
           Status::kFailed);
@@ -723,16 +1000,28 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
 {
   using Handle = oxygen::vortex::CompositionView::ViewStateHandle;
   auto loader = oxygen::vortex::testing::FakeAssetLoader {};
-  auto service
-    = PostProcessService(*renderer_, oxygen::observer_ptr { &loader });
+  auto service = PostProcessService(*renderer_,
+    oxygen::observer_ptr {
+      &loader,
+    });
   const auto tag = oxygen::vortex::internal::RendererTagFactory::Get();
-  renderer_->GetUploadCoordinator().OnFrameStart(
-    tag, oxygen::frame::Slot { 0U });
+  renderer_->GetUploadCoordinator().OnFrameStart(tag,
+    oxygen::frame::Slot {
+      0U,
+    });
   service.OnFrameStart(
-    oxygen::frame::SequenceNumber { 1U }, oxygen::frame::Slot { 0U });
+    oxygen::frame::SequenceNumber {
+      1U,
+    },
+    oxygen::frame::Slot {
+      0U,
+    });
   auto requested = oxygen::scene::ExposureSettings {};
-  const auto initial
-    = service.ResolveViewExposureSettings(Handle { 1U }, requested);
+  const auto initial = service.ResolveViewExposureSettings(
+    Handle {
+      1U,
+    },
+    requested);
   auto payload = oxygen::vortex::testing::MakeCookedTexture1x1Rgba8Payload();
   oxygen::data::pak::core::TextureResourceDesc descriptor {};
   std::memcpy(&descriptor, payload.data(), sizeof(descriptor));
@@ -741,20 +1030,38 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
   std::memcpy(payload.data(), &descriptor, sizeof(descriptor));
   requested.metering_mask = loader.PreloadCookedTexture(std::span(payload));
   requested.compensation_ev = 2.0F;
-  static_cast<void>(
-    service.ResolveViewExposureSettings(Handle { 1U }, requested));
+  static_cast<void>(service.ResolveViewExposureSettings(
+    Handle {
+      1U,
+    },
+    requested));
   auto queue = graphics_->GetCommandQueue(
     oxygen::graphics::SingleQueueStrategy().KeyFor(QueueRole::kTransfer));
   ASSERT_NE(queue, nullptr);
-  queue->Signal((std::numeric_limits<std::uint64_t>::max)());
+  queue->Signal(std::numeric_limits<std::uint64_t>::max());
   service.OnFrameStart(
-    oxygen::frame::SequenceNumber { 2U }, oxygen::frame::Slot { 1U });
-  renderer_->GetUploadCoordinator().OnFrameStart(
-    tag, oxygen::frame::Slot { 1U });
+    oxygen::frame::SequenceNumber {
+      2U,
+    },
+    oxygen::frame::Slot {
+      1U,
+    });
+  renderer_->GetUploadCoordinator().OnFrameStart(tag,
+    oxygen::frame::Slot {
+      1U,
+    });
   service.OnFrameStart(
-    oxygen::frame::SequenceNumber { 3U }, oxygen::frame::Slot { 2U });
-  const auto rejected
-    = service.ResolveViewExposureSettings(Handle { 1U }, requested);
+    oxygen::frame::SequenceNumber {
+      3U,
+    },
+    oxygen::frame::Slot {
+      2U,
+    });
+  const auto rejected = service.ResolveViewExposureSettings(
+    Handle {
+      1U,
+    },
+    requested);
   EXPECT_EQ(
     rejected.mask_status, PostProcessService::ExposureMaskStatus::kFailed);
   EXPECT_EQ(rejected.resolved.authored, initial.resolved.authored);
@@ -770,19 +1077,32 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
   settings.mode = oxygen::engine::ExposureMode::kManual;
   settings.key = 12.5F;
   settings.manual_ev = 4.0F;
-  const auto config = *ResolvedPostProcessConfig::Resolve(
-    PostProcessConfig { .exposure = settings });
+  const auto config = *ResolvedPostProcessConfig::Resolve(PostProcessConfig {
+    .exposure = settings,
+  });
   auto context = RenderContext {};
-  context.frame_slot = oxygen::frame::Slot { 0U };
-  context.frame_sequence = oxygen::frame::SequenceNumber { 1U };
-  context.current_view.view_id = ViewId { 1U };
+  context.frame_slot = oxygen::frame::Slot {
+    0U,
+  };
+  context.frame_sequence = oxygen::frame::SequenceNumber {
+    1U,
+  };
+  context.current_view.view_id = ViewId {
+    1U,
+  };
   context.current_view.view_state_handle
-    = oxygen::vortex::CompositionView::ViewStateHandle { 1U };
+    = oxygen::vortex::CompositionView::ViewStateHandle {
+        1U,
+      };
   auto previous = pass.Execute(context, config, {});
   ASSERT_TRUE(previous.executed);
-  for (bool recording_failure : { false, true }) {
-    context.frame_sequence
-      = oxygen::frame::SequenceNumber { context.frame_sequence.get() + 1U };
+  for (bool recording_failure : {
+         false,
+         true,
+       }) {
+    context.frame_sequence = oxygen::frame::SequenceNumber {
+      context.frame_sequence.get() + 1U,
+    };
     graphics_->SetFailSubmission(!recording_failure);
     graphics_->SetFailRecording(recording_failure);
     const auto failed = pass.Execute(context, config, {});
@@ -806,30 +1126,66 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
   using Handle = oxygen::vortex::CompositionView::ViewStateHandle;
   auto service = PostProcessService(*renderer_);
   service.OnFrameStart(
-    oxygen::frame::SequenceNumber { 1U }, oxygen::frame::Slot { 0U });
+    oxygen::frame::SequenceNumber {
+      1U,
+    },
+    oxygen::frame::Slot {
+      0U,
+    });
   auto requested = oxygen::scene::ExposureSettings {};
   requested.key = 12.5F;
   requested.mode = oxygen::engine::ExposureMode::kManual;
   requested.manual_ev = 14.0F;
   const auto first = service.CaptureViewExposureSettings(
-    ViewId { 1U }, Handle { 1U }, requested);
+    ViewId {
+      1U,
+    },
+    Handle {
+      1U,
+    },
+    requested);
   requested.mode = oxygen::engine::ExposureMode::kAuto;
   requested.compensation_ev = 2.0F;
-  const auto late
-    = service.ResolveViewExposureSettings(Handle { 1U }, requested);
+  const auto late = service.ResolveViewExposureSettings(
+    Handle {
+      1U,
+    },
+    requested);
   ASSERT_GT(late.revision, first.revision);
   // Repeated frame-start notifications must not unpin the captured revision.
   service.OnFrameStart(
-    oxygen::frame::SequenceNumber { 1U }, oxygen::frame::Slot { 0U });
+    oxygen::frame::SequenceNumber {
+      1U,
+    },
+    oxygen::frame::Slot {
+      0U,
+    });
   const auto& pinned = service.CaptureViewExposureSettings(
-    ViewId { 1U }, Handle { 1U }, requested);
+    ViewId {
+      1U,
+    },
+    Handle {
+      1U,
+    },
+    requested);
   EXPECT_EQ(pinned.revision, first.revision);
   EXPECT_EQ(pinned.resolved.authored, first.resolved.authored);
   EXPECT_EQ(pinned.resolved.fixed_scale, 0x1p-14F);
   service.OnFrameStart(
-    oxygen::frame::SequenceNumber { 2U }, oxygen::frame::Slot { 1U });
+    oxygen::frame::SequenceNumber {
+      2U,
+    },
+    oxygen::frame::Slot {
+      1U,
+    });
   const auto& next = service.CaptureViewExposureSettings(
-    ViewId { 1U }, Handle { 1U }, requested);
+    ViewId {
+      1U,
+    },
+    Handle {
+      1U,
+    },
+    requested);
   EXPECT_EQ(next.revision, late.revision);
   EXPECT_EQ(next.resolved.authored, requested);
 }
@@ -840,22 +1196,46 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
   using View = oxygen::vortex::CompositionView;
   auto service = PostProcessService(*renderer_);
   service.OnFrameStart(
-    oxygen::frame::SequenceNumber { 1U }, oxygen::frame::Slot { 0U });
+    oxygen::frame::SequenceNumber {
+      1U,
+    },
+    oxygen::frame::Slot {
+      0U,
+    });
   auto settings = oxygen::scene::ExposureSettings {};
   settings.mode = oxygen::engine::ExposureMode::kManual;
   settings.key = 12.5F;
   settings.manual_ev = 4.0F;
   const auto owner = service.CaptureViewExposureSettings(
-    ViewId { 7U }, View::ViewStateHandle { 90U }, settings);
+    ViewId {
+      7U,
+    },
+    View::ViewStateHandle {
+      90U,
+    },
+    settings);
   settings.manual_ev = 12.0F;
   const auto consumer = service.CaptureViewExposureSettings(
-    ViewId { 7U }, View::kInvalidViewStateHandle, settings);
+    ViewId {
+      7U,
+    },
+    View::kInvalidViewStateHandle, settings);
   EXPECT_EQ(owner.resolved.fixed_scale, 0x1p-4F);
   EXPECT_EQ(consumer.resolved.fixed_scale, 0x1p-12F);
-  service.RemoveViewState(ViewId { 7U }, View::kInvalidViewStateHandle);
+  service.RemoveViewState(
+    ViewId {
+      7U,
+    },
+    View::kInvalidViewStateHandle);
   EXPECT_EQ(service
               .CaptureViewExposureSettings(
-                ViewId { 7U }, View::ViewStateHandle { 90U }, settings)
+                ViewId {
+                  7U,
+                },
+                View::ViewStateHandle {
+                  90U,
+                },
+                settings)
               .resolved.fixed_scale,
     0x1p-4F);
 }
@@ -866,23 +1246,42 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
   using View = oxygen::vortex::CompositionView;
   auto service = PostProcessService(*renderer_);
   service.OnFrameStart(
-    oxygen::frame::SequenceNumber { 1U }, oxygen::frame::Slot { 0U });
+    oxygen::frame::SequenceNumber {
+      1U,
+    },
+    oxygen::frame::Slot {
+      0U,
+    });
   auto requested = oxygen::scene::ExposureSettings {};
   requested.key = 12.5F;
   requested.mode = oxygen::engine::ExposureMode::kManual;
   requested.manual_ev = 14.0F;
   const auto first = service.CaptureViewExposureSettings(
-    ViewId { 1U }, View::kInvalidViewStateHandle, requested);
+    ViewId {
+      1U,
+    },
+    View::kInvalidViewStateHandle, requested);
   requested.manual_ev = 16.0F;
   const auto second = service.CaptureViewExposureSettings(
-    ViewId { 2U }, View::kInvalidViewStateHandle, requested);
+    ViewId {
+      2U,
+    },
+    View::kInvalidViewStateHandle, requested);
   EXPECT_EQ(first.resolved.fixed_scale, 0x1p-14F);
   EXPECT_EQ(second.resolved.fixed_scale, 0x1p-16F);
   service.OnFrameStart(
-    oxygen::frame::SequenceNumber { 2U }, oxygen::frame::Slot { 1U });
+    oxygen::frame::SequenceNumber {
+      2U,
+    },
+    oxygen::frame::Slot {
+      1U,
+    });
   requested.key = -1.0F;
   const auto& next = service.CaptureViewExposureSettings(
-    ViewId { 1U }, View::kInvalidViewStateHandle, requested);
+    ViewId {
+      1U,
+    },
+    View::kInvalidViewStateHandle, requested);
   EXPECT_EQ(next.revision, 0U);
   EXPECT_EQ(next.resolved.authored.mode, oxygen::engine::ExposureMode::kAuto);
 }
@@ -897,42 +1296,71 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
   settings.key = 12.5F;
   settings.mode = oxygen::engine::ExposureMode::kManual;
   settings.manual_ev = 4.0F;
-  const auto config = *ResolvedPostProcessConfig::Resolve(
-    PostProcessConfig { .exposure = settings });
+  const auto config = *ResolvedPostProcessConfig::Resolve(PostProcessConfig {
+    .exposure = settings,
+  });
   auto context = RenderContext {};
-  context.current_view.view_id = ViewId { 2U };
-  context.current_view.view_state_handle = Handle { 2U };
-  context.frame_slot = oxygen::frame::Slot { 0U };
-  context.frame_sequence = oxygen::frame::SequenceNumber { 1U };
+  context.current_view.view_id = ViewId {
+    2U,
+  };
+  context.current_view.view_state_handle = Handle {
+    2U,
+  };
+  context.frame_slot = oxygen::frame::Slot {
+    0U,
+  };
+  context.frame_sequence = oxygen::frame::SequenceNumber {
+    1U,
+  };
   const auto independent = pass.Execute(context, config, {});
   ASSERT_TRUE(independent.executed);
   settings.mode = oxygen::engine::ExposureMode::kAuto;
-  const auto source_config = *ResolvedPostProcessConfig::Resolve(
-    PostProcessConfig { .exposure = settings });
+  const auto source_config
+    = *ResolvedPostProcessConfig::Resolve(PostProcessConfig {
+      .exposure = settings,
+    });
   const auto seed = renderer_->QueueExposureTransition(
-    Handle { 1U }, Policy::kSeedFromEv100, 8.0F);
-  ASSERT_TRUE(seed.has_value());
-  const auto source
-    = oxygen::vortex::postprocess::ExposurePass::Source { Handle { 1U },
-        source_config, *seed };
-  for (const bool recording : { false, true }) {
-    context.frame_sequence
-      = oxygen::frame::SequenceNumber { context.frame_sequence.get() + 1U };
+    Handle {
+      1U,
+    },
+    Policy::kSeedFromEv100, 8.0F);
+  if (!seed.has_value()) {
+    FAIL() << "Expected seed to have a value";
+  }
+  auto source = oxygen::vortex::postprocess::ExposurePass::Source {};
+  source.handle = Handle {
+    1U,
+  };
+  source.config = source_config;
+  source.transition = *seed;
+  auto source_inputs = oxygen::vortex::postprocess::ExposurePass::Inputs {};
+  source_inputs.source = &source;
+  for (const bool recording : {
+         false,
+         true,
+       }) {
+    context.frame_sequence = oxygen::frame::SequenceNumber {
+      context.frame_sequence.get() + 1U,
+    };
     graphics_->SetFailRecording(recording);
     graphics_->SetFailSubmission(!recording);
-    const auto failed = pass.Execute(context, config, { .source = &source });
+    const auto failed = pass.Execute(context, config, source_inputs);
     EXPECT_FALSE(failed.executed);
     EXPECT_EQ(failed.state, nullptr);
     EXPECT_EQ(failed.exposure_buffer, nullptr);
     EXPECT_EQ(failed.exposure_value, 0x1p-8F);
     graphics_->SetFailRecording(false);
     graphics_->SetFailSubmission(false);
-    const auto retry = pass.Execute(context, config, { .source = &source });
+    const auto retry = pass.Execute(context, config, source_inputs);
     EXPECT_TRUE(retry.executed);
     EXPECT_TRUE(retry.borrowed_exposure);
     EXPECT_NE(retry.state, independent.state);
-    EXPECT_EQ(renderer_->InspectExposureTransition(seed->target)->phase,
-      oxygen::vortex::ExposureTransitionPhase::kQueued);
+    const auto transition = renderer_->InspectExposureTransition(seed->target);
+    if (!transition.has_value()) {
+      FAIL() << "Expected transition to have a value";
+    }
+    EXPECT_EQ(
+      transition->phase, oxygen::vortex::ExposureTransitionPhase::kQueued);
   }
 }
 
@@ -944,12 +1372,16 @@ NOLINT_TEST_F(
   auto frame = oxygen::engine::FrameContext {};
   const auto target = MakeFramebuffer(graphics_, "ExposureLifetime");
   auto view = View {};
-  view.id = ViewId { 1U };
-  view.view_state_handle = View::ViewStateHandle { 1U };
-  const auto publish = [&] {
+  view.id = ViewId {
+    1U,
+  };
+  view.view_state_handle = View::ViewStateHandle {
+    1U,
+  };
+  const auto publish = [&] -> ViewId {
     return renderer_->PublishRuntimeCompositionView(frame,
       { .composition_view = view,
-        .render_target = oxygen::observer_ptr { target.get() } });
+        .render_target = oxygen::observer_ptr { target.get(), }, });
   };
   auto settings = oxygen::scene::ExposureSettings {};
   settings.mode = oxygen::engine::ExposureMode::kManual;
@@ -957,14 +1389,24 @@ NOLINT_TEST_F(
   settings.manual_ev = 14.0F;
   const auto first_view = publish();
   service.OnFrameStart(
-    oxygen::frame::SequenceNumber { 1U }, oxygen::frame::Slot { 0U });
+    oxygen::frame::SequenceNumber {
+      1U,
+    },
+    oxygen::frame::Slot {
+      0U,
+    });
   const auto first = service.CaptureViewExposureSettings(
     first_view, view.view_state_handle, settings);
   ASSERT_EQ(first.revision, 1U);
   renderer_->RemovePublishedRuntimeView(frame, view.id);
   const auto next_view = publish();
   service.OnFrameStart(
-    oxygen::frame::SequenceNumber { 2U }, oxygen::frame::Slot { 1U });
+    oxygen::frame::SequenceNumber {
+      2U,
+    },
+    oxygen::frame::Slot {
+      1U,
+    });
   settings.key = -1.0F;
   const auto next = service.CaptureViewExposureSettings(
     next_view, view.view_state_handle, settings);

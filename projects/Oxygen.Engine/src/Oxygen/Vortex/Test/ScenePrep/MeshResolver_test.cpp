@@ -7,6 +7,7 @@
 #include <memory>
 
 #include <glm/glm.hpp>
+#include <glm/gtc/matrix_access.hpp>
 #include <glm/gtc/quaternion.hpp>
 
 #include <Oxygen/Testing/GTest.h>
@@ -41,7 +42,8 @@ using oxygen::scene::SceneNode;
 using oxygen::scene::SceneNodeFlags;
 using oxygen::scene::ScreenSpaceErrorPolicy;
 
-using namespace oxygen::vortex::sceneprep::testing;
+using oxygen::vortex::sceneprep::testing::MakeGeometryWithLods;
+using oxygen::vortex::sceneprep::testing::ScenePrepTestFixture;
 
 namespace {
 
@@ -97,16 +99,28 @@ NOLINT_TEST_F(MeshResolverTest, ProtoNoGeometry_Death)
 NOLINT_TEST_F(MeshResolverTest, FixedPolicy_SelectsLOD0)
 {
   // Arrange: 3 LOD geometry and fixed policy 0
-  const auto geom = MakeGeometryWithLods(3, { -1, -1, -1 }, { 1, 1, 1 });
+  const auto geom = MakeGeometryWithLods(3,
+    {
+      -1,
+      -1,
+      -1,
+    },
+    {
+      1,
+      1,
+      1,
+    });
   SetGeometry(geom);
   SeedVisibilityAndTransform();
-  Node().GetRenderable().SetLodPolicy(FixedPolicy { 0 });
+  Node().GetRenderable().SetLodPolicy(FixedPolicy {
+    0,
+  });
 
   // Act
   MeshResolver(Context(), State(), Proto());
 
   // Assert: index must match requested LOD
-  EXPECT_EQ(Proto().ResolvedMeshIndex(), 0u);
+  EXPECT_EQ(Proto().ResolvedMeshIndex(), 0U);
   EXPECT_TRUE(static_cast<bool>(Proto().ResolvedMesh()));
 }
 
@@ -114,16 +128,28 @@ NOLINT_TEST_F(MeshResolverTest, FixedPolicy_SelectsLOD0)
 NOLINT_TEST_F(MeshResolverTest, FixedPolicy_SelectsLOD2)
 {
   // Arrange: 3 LOD geometry and fixed policy 2
-  const auto geom = MakeGeometryWithLods(3, { -1, -1, -1 }, { 1, 1, 1 });
+  const auto geom = MakeGeometryWithLods(3,
+    {
+      -1,
+      -1,
+      -1,
+    },
+    {
+      1,
+      1,
+      1,
+    });
   SetGeometry(geom);
   SeedVisibilityAndTransform();
-  Node().GetRenderable().SetLodPolicy(FixedPolicy { 2 });
+  Node().GetRenderable().SetLodPolicy(FixedPolicy {
+    2,
+  });
 
   // Act
   MeshResolver(Context(), State(), Proto());
 
   // Assert
-  EXPECT_EQ(Proto().ResolvedMeshIndex(), 2u);
+  EXPECT_EQ(Proto().ResolvedMeshIndex(), 2U);
   EXPECT_TRUE(static_cast<bool>(Proto().ResolvedMesh()));
 }
 
@@ -133,44 +159,65 @@ NOLINT_TEST_F(MeshResolverTest, FixedPolicy_SelectsLOD2)
 NOLINT_TEST_F(MeshResolverTest, DistancePolicy_Near_SelectsFineLOD)
 {
   // Arrange
-  const auto geom = MakeGeometryWithLods(3, { -1, -1, -1 }, { 1, 1, 1 });
+  const auto geom = MakeGeometryWithLods(3,
+    {
+      -1,
+      -1,
+      -1,
+    },
+    {
+      1,
+      1,
+      1,
+    });
   SetGeometry(geom);
   SeedVisibilityAndTransform();
-  const DistancePolicy dp { .thresholds = { 2.0f, 10.0f },
-    .hysteresis_ratio = 0.1f };
+  const DistancePolicy dp { .thresholds = { 2.0F, 10.0F, },
+    .hysteresis_ratio = 0.1F, };
   Node().GetRenderable().SetLodPolicy(dp);
 
   // Place camera at the world-sphere center to get distance ~ 0
-  const auto center = glm::vec3(WorldMatrix()[3]); // translation (0.2)
-  ConfigureView(center, /*viewport_height*/ 720.0f, /*m11*/ 1.0f);
+  const auto center
+    = glm::vec3(glm::column(WorldMatrix(), 3)); // translation (0.2)
+  ConfigureView(center, /*viewport_height*/ 720.0F);
 
   // Act
   MeshResolver(Context(), State(), Proto());
 
   // Assert: choose the finest LOD 0
-  EXPECT_EQ(Proto().ResolvedMeshIndex(), 0u);
+  EXPECT_EQ(Proto().ResolvedMeshIndex(), 0U);
 }
 
 //! DistancePolicy chooses coarser LOD when camera is far from the object.
 NOLINT_TEST_F(MeshResolverTest, DistancePolicy_Far_SelectsCoarseLOD)
 {
   // Arrange
-  const auto geom = MakeGeometryWithLods(3, { -1, -1, -1 }, { 1, 1, 1 });
+  const auto geom = MakeGeometryWithLods(3,
+    {
+      -1,
+      -1,
+      -1,
+    },
+    {
+      1,
+      1,
+      1,
+    });
   SetGeometry(geom);
   SeedVisibilityAndTransform();
-  const DistancePolicy dp { .thresholds = { 2.0f, 10.0f },
-    .hysteresis_ratio = 0.1f };
+  const DistancePolicy dp { .thresholds = { 2.0F, 10.0F, },
+    .hysteresis_ratio = 0.1F, };
   Node().GetRenderable().SetLodPolicy(dp);
 
   // Far camera to make normalized distance >> thresholds
-  const auto center = glm::vec3(WorldMatrix()[3]);
-  ConfigureView(center + glm::vec3(100.0f, 0.0f, 0.0f), 720.0f, 1.0f);
+  const auto center = glm::vec3(glm::column(WorldMatrix(), 3));
+  ConfigureView(center + glm::vec3(100.0F, 0.0F, 0.0F), 720.0F);
 
   // Act
   MeshResolver(Context(), State(), Proto());
 
   // Assert: choose coarsest LOD 2
-  EXPECT_EQ(Proto().ResolvedMeshIndex(), 2u);
+  EXPECT_EQ(Proto().ResolvedMeshIndex(), 2U);
 }
 
 //=== Screen-space error policy: selection via sse = f * r / z ========--=====//
@@ -179,45 +226,64 @@ NOLINT_TEST_F(MeshResolverTest, DistancePolicy_Far_SelectsCoarseLOD)
 NOLINT_TEST_F(MeshResolverTest, ScreenSpaceErrorPolicy_NearHighSSE_SelectsFine)
 {
   // Arrange
-  const auto geom = MakeGeometryWithLods(3, { -1, -1, -1 }, { 1, 1, 1 });
+  const auto geom = MakeGeometryWithLods(3,
+    {
+      -1,
+      -1,
+      -1,
+    },
+    {
+      1,
+      1,
+      1,
+    });
   SetGeometry(geom);
   SeedVisibilityAndTransform();
-  const ScreenSpaceErrorPolicy sp { .enter_finer_sse = { 50.0f, 25.0f },
-    .exit_coarser_sse = { 40.0f, 20.0f } };
+  const ScreenSpaceErrorPolicy sp { .enter_finer_sse = { 50.0F, 25.0F, },
+    .exit_coarser_sse = { 40.0F, 20.0F, }, };
   Node().GetRenderable().SetLodPolicy(sp);
 
   // Camera ~ at center -> z ~= 0 -> clamped to 1e-6 -> very large SSE
-  const auto center = glm::vec3(WorldMatrix()[3]);
-  ConfigureView(center, /*viewport_height*/ 1000.0f, /*m11*/ 1.0f);
+  const auto center = glm::vec3(glm::column(WorldMatrix(), 3));
+  ConfigureView(center, /*viewport_height*/ 1000.0F);
 
   // Act
   MeshResolver(Context(), State(), Proto());
 
   // Assert: select finest LOD 0
-  EXPECT_EQ(Proto().ResolvedMeshIndex(), 0u);
+  EXPECT_EQ(Proto().ResolvedMeshIndex(), 0U);
 }
 
 //! ScreenSpaceErrorPolicy selects coarser LOD when SSE is low (far camera).
 NOLINT_TEST_F(MeshResolverTest, ScreenSpaceErrorPolicy_FarLowSSE_SelectsCoarse)
 {
   // Arrange
-  const auto geom = MakeGeometryWithLods(3, { -1, -1, -1 }, { 1, 1, 1 });
+  const auto geom = MakeGeometryWithLods(3,
+    {
+      -1,
+      -1,
+      -1,
+    },
+    {
+      1,
+      1,
+      1,
+    });
   SetGeometry(geom);
   SeedVisibilityAndTransform();
-  const ScreenSpaceErrorPolicy sp { .enter_finer_sse = { 50.0f, 25.0f },
-    .exit_coarser_sse = { 40.0f, 20.0f } };
+  const ScreenSpaceErrorPolicy sp { .enter_finer_sse = { 50.0F, 25.0F, },
+    .exit_coarser_sse = { 40.0F, 20.0F, }, };
   Node().GetRenderable().SetLodPolicy(sp);
 
   // Far camera -> small sse -> coarser LOD
-  const auto center = glm::vec3(WorldMatrix()[3]);
-  ConfigureView(center + glm::vec3(100.0f, 0.0f, 0.0f), /*height*/ 1000.0f,
-    /*m11*/ 1.0f);
+  const auto center = glm::vec3(glm::column(WorldMatrix(), 3));
+  ConfigureView(center + glm::vec3(100.0F, 0.0F, 0.0F), /*height*/ 1000.0F);
 
   // Act
   MeshResolver(Context(), State(), Proto());
 
   // Assert: coarsest LOD 2
-  EXPECT_EQ(Proto().ResolvedMeshIndex(), 2u);
+  EXPECT_EQ(Proto().ResolvedMeshIndex(), 2U);
 }
 
 //! If focal length cannot be computed (viewport height zero) SSE is skipped.
@@ -229,21 +295,30 @@ NOLINT_TEST_F(MeshResolverTest, ScreenSpaceErrorPolicy_FarLowSSE_SelectsCoarse)
 NOLINT_TEST_F(MeshResolverTest, ScreenSpaceErrorPolicy_NoFocal_FallbackLOD0)
 {
   // Arrange: SSE policy but zero viewport height => focal length 0 => skip SSE
-  const auto geom = MakeGeometryWithLods(3, { -1, -1, -1 }, { 1, 1, 1 });
+  const auto geom = MakeGeometryWithLods(3,
+    {
+      -1,
+      -1,
+      -1,
+    },
+    {
+      1,
+      1,
+      1,
+    });
   SetGeometry(geom);
   SeedVisibilityAndTransform();
-  const ScreenSpaceErrorPolicy sp { .enter_finer_sse = { 10.0f, 5.0f },
-    .exit_coarser_sse = { 8.0f, 4.0f } };
+  const ScreenSpaceErrorPolicy sp { .enter_finer_sse = { 10.0F, 5.0F, },
+    .exit_coarser_sse = { 8.0F, 4.0F, }, };
   Node().GetRenderable().SetLodPolicy(sp);
-  const auto center = glm::vec3(WorldMatrix()[3]);
-  ConfigureView(center + glm::vec3(10.0f, 0.0f, 0.0f), /*height*/ 0.0f,
-    /*m11*/ 1.0f);
+  const auto center = glm::vec3(glm::column(WorldMatrix(), 3));
+  ConfigureView(center + glm::vec3(10.0F, 0.0F, 0.0F), /*height*/ 0.0F);
 
   // Act
   MeshResolver(Context(), State(), Proto());
 
   // Assert: no SSE selection performed -> default/fallback LOD 0
-  EXPECT_EQ(Proto().ResolvedMeshIndex(), 0u);
+  EXPECT_EQ(Proto().ResolvedMeshIndex(), 0U);
 }
 
 //=== Negative: Fixed policy index beyond LOD count clamps to last =========//
@@ -253,16 +328,28 @@ NOLINT_TEST_F(MeshResolverTest, ScreenSpaceErrorPolicy_NoFocal_FallbackLOD0)
 NOLINT_TEST_F(MeshResolverTest, FixedPolicy_IndexBeyondRange_ClampsToLast)
 {
   // Arrange: geometry with 2 LODs but request LOD 10
-  const auto geom = MakeGeometryWithLods(2, { -1, -1, -1 }, { 1, 1, 1 });
+  const auto geom = MakeGeometryWithLods(2,
+    {
+      -1,
+      -1,
+      -1,
+    },
+    {
+      1,
+      1,
+      1,
+    });
   SetGeometry(geom);
   SeedVisibilityAndTransform();
-  Node().GetRenderable().SetLodPolicy(FixedPolicy { 10 });
+  Node().GetRenderable().SetLodPolicy(FixedPolicy {
+    10,
+  });
 
   // Act
   MeshResolver(Context(), State(), Proto());
 
   // Assert: clamped to last LOD (index 1)
-  EXPECT_EQ(Proto().ResolvedMeshIndex(), 1u);
+  EXPECT_EQ(Proto().ResolvedMeshIndex(), 1U);
   EXPECT_TRUE(static_cast<bool>(Proto().ResolvedMesh()));
 }
 

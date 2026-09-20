@@ -17,8 +17,10 @@ using oxygen::vortex::SceneTextureQueueAffinity;
 using oxygen::vortex::SceneTexturesConfig;
 using oxygen::vortex::testing::FakeGraphics;
 
-auto MakeConfig(const glm::uvec2 extent = { 160U, 90U })
-  -> SceneTexturesConfig
+auto MakeConfig(const glm::uvec2 extent = {
+                  160U,
+                  90U,
+                }) -> SceneTexturesConfig
 {
   return SceneTexturesConfig {
     .extent = extent,
@@ -35,7 +37,7 @@ TEST(SceneTextureLeasePoolTest, ReusesReleasedLeaseForTheSameKey)
   SceneTextureLeasePool pool(graphics, MakeConfig());
   const auto key = SceneTextureLeaseKey::FromConfig(MakeConfig());
 
-  const auto* first_family = [&] {
+  const auto* first_family = [&] -> oxygen::vortex::SceneTextures* {
     auto lease = pool.Acquire(key);
     EXPECT_EQ(pool.GetLiveLeaseCount(), 1U);
     return &lease.GetSceneTextures();
@@ -85,8 +87,8 @@ TEST(SceneTextureLeasePoolTest, QueueAffinityParticipatesInTheKey)
   {
     auto graphics_lease = pool.Acquire(graphics_key);
     auto future_queue_lease = pool.Acquire(future_queue_key);
-    EXPECT_NE(
-      &graphics_lease.GetSceneTextures(), &future_queue_lease.GetSceneTextures());
+    EXPECT_NE(&graphics_lease.GetSceneTextures(),
+      &future_queue_lease.GetSceneTextures());
   }
 
   EXPECT_EQ(pool.GetLeaseCountForKey(graphics_key), 1U);
@@ -98,11 +100,19 @@ TEST(SceneTextureLeasePoolTest, WarmupHarnessDoesNotAllocateAfterWarmup)
 {
   FakeGraphics graphics;
   SceneTextureLeasePool pool(graphics, MakeConfig());
-  const auto key_a = SceneTextureLeaseKey::FromConfig(MakeConfig({ 160U, 90U }));
-  const auto key_b = SceneTextureLeaseKey::FromConfig(MakeConfig({ 320U, 180U }));
+  const auto key_a = SceneTextureLeaseKey::FromConfig(MakeConfig({
+    160U,
+    90U,
+  }));
+  const auto key_b = SceneTextureLeaseKey::FromConfig(MakeConfig({
+    320U,
+    180U,
+  }));
   constexpr auto kFrameCount = 10U;
   constexpr auto kWarmupFrames = 2U;
-  auto allocations_after_warmup = std::size_t { 0U };
+  auto allocations_after_warmup = std::size_t {
+    0U,
+  };
 
   for (auto frame = 0U; frame < kFrameCount; ++frame) {
     const auto allocations_before = pool.GetAllocationCount();

@@ -13,6 +13,9 @@ namespace oxygen::vortex::testing::exposure {
 
 class ExposureTestEngine : public IAsyncEngine {
 public:
+  // MOCK_METHOD generates the signature syntax and framework calls; noexcept
+  // is required by the IAsyncEngine overrides.
+  // NOLINTBEGIN(bugprone-exception-escape,modernize-use-trailing-return-type)
   MOCK_METHOD(observer_ptr<content::IAssetLoader>, GetAssetLoader, (),
     (const, noexcept, override));
   MOCK_METHOD(scripting::IScriptCompilationService&,
@@ -36,6 +39,7 @@ public:
     (engine::ModuleAttachedCallback, bool), (override));
   MOCK_METHOD(std::optional<std::reference_wrapper<engine::EngineModule>>,
     GetModuleByType, (TypeId), (const, noexcept, override));
+  // NOLINTEND(bugprone-exception-escape,modernize-use-trailing-return-type)
 };
 
 } // namespace oxygen::vortex::testing::exposure

@@ -8,8 +8,8 @@
 
 #include <memory>
 
-#include <Oxygen/Console/Console.h>
 #include <Oxygen/Config/RendererConfig.h>
+#include <Oxygen/Console/Console.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Vortex/Renderer.h>
@@ -48,15 +48,16 @@ protected:
     auto config = RendererConfig {};
     config.upload_queue_key
       = graphics_->QueueKeyFor(QueueRole::kGraphics).get();
-    return std::shared_ptr<Renderer>(
+    return {
       new Renderer(
         std::weak_ptr<Graphics>(graphics_), std::move(config), capabilities),
-      [](Renderer* renderer) {
+      [](Renderer* renderer) -> void {
         if (renderer != nullptr) {
           renderer->OnShutdown();
-          delete renderer;
+          std::default_delete<Renderer> {}(renderer);
         }
-      });
+      },
+    };
   }
 
   [[nodiscard]] auto MakeDefaultRenderer() -> std::shared_ptr<Renderer>
@@ -64,14 +65,15 @@ protected:
     auto config = RendererConfig {};
     config.upload_queue_key
       = graphics_->QueueKeyFor(QueueRole::kGraphics).get();
-    return std::shared_ptr<Renderer>(
+    return {
       new Renderer(std::weak_ptr<Graphics>(graphics_), std::move(config)),
-      [](Renderer* renderer) {
+      [](Renderer* renderer) -> void {
         if (renderer != nullptr) {
           renderer->OnShutdown();
-          delete renderer;
+          std::default_delete<Renderer> {}(renderer);
         }
-      });
+      },
+    };
   }
 
   std::shared_ptr<FakeGraphics> graphics_;
@@ -191,11 +193,12 @@ NOLINT_TEST_F(
 NOLINT_TEST_F(
   RendererCapabilityBindingTest, OcclusionConsoleCVarsDefaultOffAndClamp)
 {
-  const auto renderer = MakeRenderer(
-    RendererCapabilityFamily::kScenePreparation
+  const auto renderer = MakeRenderer(RendererCapabilityFamily::kScenePreparation
     | RendererCapabilityFamily::kDeferredShading);
   auto console = Console {};
-  renderer->RegisterConsoleBindings(oxygen::observer_ptr { &console });
+  renderer->RegisterConsoleBindings(oxygen::observer_ptr {
+    &console,
+  });
 
   EXPECT_FALSE(renderer->GetOcclusionEnabled());
   EXPECT_EQ(renderer->GetOcclusionMaxCandidateCount(), 256U * 256U);

@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <limits>
+#include <ranges>
 #include <string>
 
 #include <Oxygen/Testing/GTest.h>
@@ -44,10 +45,9 @@ using oxygen::vortex::testing::TextureBinderTest;
 [[nodiscard]] auto LastSrvViewTextureForIndex(const FakeGraphics& gfx,
   const uint32_t index) -> const oxygen::graphics::Texture*
 {
-  for (auto it = gfx.srv_view_log_.events.rbegin();
-    it != gfx.srv_view_log_.events.rend(); ++it) {
-    if (it->index == index) {
-      return it->texture;
+  for (auto& event : std::views::reverse(gfx.srv_view_log_.events)) {
+    if (event.index == index) {
+      return event.texture;
     }
   }
   return nullptr;
@@ -64,7 +64,9 @@ NOLINT_TEST_F(TextureBinderEvictionTest, EvictionRepointsToFallback)
     = Loader().PreloadCookedTexture(std::span(payload.data(), payload.size()));
 
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+    oxygen::frame::Slot {
+      1,
+    });
 
   Gfx().srv_view_log_.events.clear();
   const auto srv_index = TexBinder().GetOrAllocate(key);
@@ -75,11 +77,13 @@ NOLINT_TEST_F(TextureBinderEvictionTest, EvictionRepointsToFallback)
       oxygen::graphics::QueueRole::kTransfer));
   ASSERT_NE(q, nullptr);
 
-  q->Signal((std::numeric_limits<std::uint64_t>::max)());
+  q->Signal(std::numeric_limits<std::uint64_t>::max());
 
   TexBinder().OnFrameStart();
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 2 });
+    oxygen::frame::Slot {
+      2,
+    });
   TexBinder().OnFrameStart();
 
   const auto* const resident_texture
@@ -108,7 +112,9 @@ NOLINT_TEST_F(TextureBinderEvictionTest, InFlightCompletionIsDiscarded)
     = Loader().PreloadCookedTexture(std::span(payload.data(), payload.size()));
 
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+    oxygen::frame::Slot {
+      1,
+    });
 
   Gfx().srv_view_log_.events.clear();
   const auto srv_index = TexBinder().GetOrAllocate(key);
@@ -133,9 +139,11 @@ NOLINT_TEST_F(TextureBinderEvictionTest, InFlightCompletionIsDiscarded)
     = CountSrvViewCreationsForIndex(Gfx(), u_srv_index);
   ASSERT_GT(creations_after_eviction, creations_after_submit);
 
-  q->Signal((std::numeric_limits<std::uint64_t>::max)());
+  q->Signal(std::numeric_limits<std::uint64_t>::max());
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 2 });
+    oxygen::frame::Slot {
+      2,
+    });
   TexBinder().OnFrameStart();
 
   // Assert
@@ -157,7 +165,9 @@ NOLINT_TEST_F(TextureBinderEvictionTest, EvictionThenReloadRepoints)
     = Loader().PreloadCookedTexture(std::span(payload.data(), payload.size()));
 
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+    oxygen::frame::Slot {
+      1,
+    });
 
   Gfx().srv_view_log_.events.clear();
   const auto srv_index = TexBinder().GetOrAllocate(key);
@@ -168,10 +178,12 @@ NOLINT_TEST_F(TextureBinderEvictionTest, EvictionThenReloadRepoints)
       oxygen::graphics::QueueRole::kTransfer));
   ASSERT_NE(q, nullptr);
 
-  q->Signal((std::numeric_limits<std::uint64_t>::max)());
+  q->Signal(std::numeric_limits<std::uint64_t>::max());
   TexBinder().OnFrameStart();
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 2 });
+    oxygen::frame::Slot {
+      2,
+    });
   TexBinder().OnFrameStart();
 
   // Act
@@ -185,10 +197,12 @@ NOLINT_TEST_F(TextureBinderEvictionTest, EvictionThenReloadRepoints)
 
   (void)TexBinder().GetOrAllocate(key);
 
-  q->Signal((std::numeric_limits<std::uint64_t>::max)());
+  q->Signal(std::numeric_limits<std::uint64_t>::max());
   TexBinder().OnFrameStart();
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 3 });
+    oxygen::frame::Slot {
+      3,
+    });
   TexBinder().OnFrameStart();
 
   // Assert
@@ -207,7 +221,9 @@ NOLINT_TEST_F(TextureBinderEvictionTest, EvictionIsIdempotent)
     = Loader().PreloadCookedTexture(std::span(payload.data(), payload.size()));
 
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+    oxygen::frame::Slot {
+      1,
+    });
 
   Gfx().srv_view_log_.events.clear();
   const auto srv_index = TexBinder().GetOrAllocate(key);
@@ -218,10 +234,12 @@ NOLINT_TEST_F(TextureBinderEvictionTest, EvictionIsIdempotent)
       oxygen::graphics::QueueRole::kTransfer));
   ASSERT_NE(q, nullptr);
 
-  q->Signal((std::numeric_limits<std::uint64_t>::max)());
+  q->Signal(std::numeric_limits<std::uint64_t>::max());
   TexBinder().OnFrameStart();
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 2 });
+    oxygen::frame::Slot {
+      2,
+    });
   TexBinder().OnFrameStart();
 
   // Act
@@ -245,17 +263,21 @@ NOLINT_TEST_F(
   const auto payload = MakeCookedTexture1x1Rgba8Payload();
   const auto key = Loader().PreloadCookedTexture(std::span(payload));
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+    oxygen::frame::Slot {
+      1,
+    });
   const auto srv = TexBinder().GetOrAllocate(key);
   EXPECT_EQ(TexBinder().AcquireReadyTexture(key), nullptr);
   auto queue
     = GfxPtr()->GetCommandQueue(oxygen::graphics::SingleQueueStrategy().KeyFor(
       oxygen::graphics::QueueRole::kTransfer));
   ASSERT_NE(queue, nullptr);
-  queue->Signal((std::numeric_limits<std::uint64_t>::max)());
+  queue->Signal(std::numeric_limits<std::uint64_t>::max());
   TexBinder().OnFrameStart();
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 2 });
+    oxygen::frame::Slot {
+      2,
+    });
   TexBinder().OnFrameStart();
   auto accepted = TexBinder().AcquireReadyTexture(key);
   ASSERT_NE(accepted, nullptr);

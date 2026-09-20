@@ -50,23 +50,26 @@ auto MakeConfig(FakeGraphics& graphics) -> RendererConfig
   return config;
 }
 
-auto MakeRenderer(std::shared_ptr<FakeGraphics> graphics)
+auto MakeRenderer(const std::shared_ptr<FakeGraphics>& graphics)
   -> std::shared_ptr<Renderer>
 {
-  return std::shared_ptr<Renderer>(
+  return {
     new Renderer(std::weak_ptr<Graphics>(graphics), MakeConfig(*graphics),
       RendererCapabilityFamily::kScenePreparation
         | RendererCapabilityFamily::kDeferredShading),
-    [](Renderer* renderer) {
+    [](Renderer* renderer) -> void {
       if (renderer != nullptr) {
         renderer->OnShutdown();
-        delete renderer;
+        std::default_delete<Renderer> {}(renderer);
       }
-    });
+    },
+  };
 }
 
 struct OcclusionModuleFixture {
-  std::shared_ptr<FakeGraphics> graphics { std::make_shared<FakeGraphics>() };
+  std::shared_ptr<FakeGraphics> graphics {
+    std::make_shared<FakeGraphics>(),
+  };
   std::shared_ptr<Renderer> renderer;
   std::unique_ptr<SceneTextures> scene_textures;
 
@@ -76,7 +79,7 @@ struct OcclusionModuleFixture {
     renderer = MakeRenderer(graphics);
     scene_textures = std::make_unique<SceneTextures>(*graphics,
       SceneTexturesConfig {
-        .extent = { 16U, 16U },
+        .extent = { 16U, 16U, },
       });
   }
 };
@@ -85,7 +88,9 @@ auto MakePreparedFrame(std::vector<oxygen::vortex::DrawMetadata>& metadata)
   -> PreparedSceneFrame
 {
   auto frame = PreparedSceneFrame {};
-  frame.draw_metadata_bytes = std::as_bytes(std::span { metadata });
+  frame.draw_metadata_bytes = std::as_bytes(std::span {
+    metadata,
+  });
   return frame;
 }
 
@@ -93,7 +98,9 @@ auto MakePreparedFrame(std::vector<oxygen::vortex::DrawMetadata>& metadata,
   std::vector<glm::vec4>& bounds) -> PreparedSceneFrame
 {
   auto frame = MakePreparedFrame(metadata);
-  frame.draw_bounding_spheres = std::span<const glm::vec4> { bounds };
+  frame.draw_bounding_spheres = std::span<const glm::vec4> {
+    bounds,
+  };
   return frame;
 }
 
@@ -122,7 +129,9 @@ NOLINT_TEST(OcclusionTypesTest, InvalidResultsAreConservativelyVisible)
 NOLINT_TEST(OcclusionModuleTest, DisabledStagePublishesInvalidVisibleFallback)
 {
   auto fixture = OcclusionModuleFixture {};
-  auto module = OcclusionModule { *fixture.renderer };
+  auto module = OcclusionModule {
+    *fixture.renderer,
+  };
   auto ctx = RenderContext {};
 
   module.Execute(ctx, *fixture.scene_textures);
@@ -137,8 +146,12 @@ NOLINT_TEST(OcclusionModuleTest, DisabledStagePublishesInvalidVisibleFallback)
 NOLINT_TEST(OcclusionModuleTest, EnabledStageWithoutPreparedFrameStaysInvalid)
 {
   auto fixture = OcclusionModuleFixture {};
-  auto module = OcclusionModule { *fixture.renderer,
-    OcclusionConfig { .enabled = true } };
+  auto module = OcclusionModule {
+    *fixture.renderer,
+    OcclusionConfig {
+      .enabled = true,
+    },
+  };
   auto ctx = RenderContext {};
 
   module.Execute(ctx, *fixture.scene_textures);
@@ -152,13 +165,19 @@ NOLINT_TEST(OcclusionModuleTest, EnabledStageWithoutPreparedFrameStaysInvalid)
 NOLINT_TEST(OcclusionModuleTest, MissingCurrentFurthestHzbPublishesAllVisible)
 {
   auto fixture = OcclusionModuleFixture {};
-  auto module = OcclusionModule { *fixture.renderer,
-    OcclusionConfig { .enabled = true } };
+  auto module = OcclusionModule {
+    *fixture.renderer,
+    OcclusionConfig {
+      .enabled = true,
+    },
+  };
   auto metadata = std::vector<oxygen::vortex::DrawMetadata>(3U);
   auto prepared_frame = MakePreparedFrame(metadata);
   auto ctx = RenderContext {};
   ctx.current_view.prepared_frame
-    = oxygen::observer_ptr<const PreparedSceneFrame> { &prepared_frame };
+    = oxygen::observer_ptr<const PreparedSceneFrame> {
+        &prepared_frame,
+      };
 
   module.Execute(ctx, *fixture.scene_textures);
 
@@ -182,13 +201,32 @@ NOLINT_TEST(OcclusionModuleTest,
   CurrentHzbSubmitsGpuTestWhilePublishingConservativeFallback)
 {
   auto fixture = OcclusionModuleFixture {};
-  auto module = OcclusionModule { *fixture.renderer,
-    OcclusionConfig { .enabled = true } };
+  auto module = OcclusionModule {
+    *fixture.renderer,
+    OcclusionConfig {
+      .enabled = true,
+    },
+  };
   auto metadata = std::vector<oxygen::vortex::DrawMetadata>(3U);
   auto bounds = std::vector<glm::vec4> {
-    { 0.0F, 0.0F, 5.0F, 1.0F },
-    { 2.0F, 0.0F, 8.0F, 1.0F },
-    { -2.0F, 0.0F, 8.0F, 1.0F },
+    {
+      0.0F,
+      0.0F,
+      5.0F,
+      1.0F,
+    },
+    {
+      2.0F,
+      0.0F,
+      8.0F,
+      1.0F,
+    },
+    {
+      -2.0F,
+      0.0F,
+      8.0F,
+      1.0F,
+    },
   };
   auto prepared_frame = MakePreparedFrame(metadata, bounds);
   auto hzb_texture
@@ -202,16 +240,24 @@ NOLINT_TEST(OcclusionModuleTest,
     });
 
   auto ctx = RenderContext {};
-  ctx.frame_sequence = oxygen::frame::SequenceNumber { 1U };
-  ctx.frame_slot = oxygen::frame::Slot { 0U };
+  ctx.frame_sequence = oxygen::frame::SequenceNumber {
+    1U,
+  };
+  ctx.frame_slot = oxygen::frame::Slot {
+    0U,
+  };
   ctx.current_view.prepared_frame
-    = oxygen::observer_ptr<const PreparedSceneFrame> { &prepared_frame };
+    = oxygen::observer_ptr<const PreparedSceneFrame> {
+        &prepared_frame,
+      };
   ctx.current_view.screen_hzb_available = true;
   ctx.current_view.screen_hzb_furthest_texture
     = oxygen::observer_ptr<const oxygen::graphics::Texture> {
-        hzb_texture.get()
+        hzb_texture.get(),
       };
-  ctx.current_view.screen_hzb_frame_slot = oxygen::ShaderVisibleIndex { 123U };
+  ctx.current_view.screen_hzb_frame_slot = oxygen::ShaderVisibleIndex {
+    123U,
+  };
 
   module.Execute(ctx, *fixture.scene_textures);
 

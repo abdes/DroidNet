@@ -7,7 +7,9 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <limits>
 #include <memory>
+#include <span>
 #include <utility>
 #include <vector>
 
@@ -26,7 +28,7 @@
 
 namespace oxygen::vortex::testing::exposure {
 
-using namespace oxygen::graphics;
+using graphics::ResourceStates;
 
 NOLINT_TEST_F(
   ExposureLightingGpuTest, DirectLightRadiancePreservesSupportedRange)
@@ -34,30 +36,55 @@ NOLINT_TEST_F(
   auto sun = scene->CreateNode("Directional");
   auto directional = std::make_unique<scene::DirectionalLight>();
   directional->Common().casts_shadows = false;
-  directional->Common().color_rgb = { .25F, .5F, 1.0F };
+  directional->Common().color_rgb = {
+    .25F,
+    .5F,
+    1.0F,
+  };
   directional->SetEnvironmentContribution(true);
   ASSERT_TRUE(sun.AttachLight(std::move(directional)));
-  sun.GetTransform().SetLocalRotation(
-    glm::quat { .70710678F, .70710678F, 0, 0 });
+  sun.GetTransform().SetLocalRotation(glm::quat {
+    .70710678F,
+    .70710678F,
+    0,
+    0,
+  });
   auto point_node = scene->CreateNode("Point");
   auto point = std::make_unique<scene::PointLight>();
   point->Common().casts_shadows = false;
-  point->Common().color_rgb = { .25F, .5F, 1.0F };
+  point->Common().color_rgb = {
+    .25F,
+    .5F,
+    1.0F,
+  };
   point->SetRange(100);
   ASSERT_TRUE(point_node.AttachLight(std::move(point)));
   auto spot_node = scene->CreateNode("Spot");
   auto spot = std::make_unique<scene::SpotLight>();
   spot->Common().casts_shadows = false;
-  spot->Common().color_rgb = { .25F, .5F, 1.0F };
+  spot->Common().color_rgb = {
+    .25F,
+    .5F,
+    1.0F,
+  };
   spot->SetRange(100);
   ASSERT_TRUE(spot_node.AttachLight(std::move(spot)));
-  spot_node.GetTransform().SetLocalRotation(
-    glm::quat { .70710678F, .70710678F, 0, 0 });
+  spot_node.GetTransform().SetLocalRotation(glm::quat {
+    .70710678F,
+    .70710678F,
+    0,
+    0,
+  });
   unsigned cases = 0;
-  for (const bool forward : { false, true }) {
-    for (const auto domain :
-      { data::MaterialDomain::kOpaque, data::MaterialDomain::kMasked,
-        data::MaterialDomain::kAlphaBlended }) {
+  for (const bool forward : {
+         false,
+         true,
+       }) {
+    for (const auto domain : {
+           data::MaterialDomain::kOpaque,
+           data::MaterialDomain::kMasked,
+           data::MaterialDomain::kAlphaBlended,
+         }) {
       SetSurface(domain);
       const bool forward_shader
         = forward || domain == data::MaterialDomain::kAlphaBlended;
@@ -70,54 +97,79 @@ NOLINT_TEST_F(
       const double f0 = .04;
       const double oct = 1.0 / 1023;
       const double n = forward_shader ? 1.0
-                                      : (1 - 2 * oct)
-          / std::sqrt(2 * oct * oct + (1 - 2 * oct) * (1 - 2 * oct));
+                                      : (1 - (2 * oct))
+          / std::sqrt((2 * oct * oct) + ((1 - (2 * oct)) * (1 - (2 * oct))));
       const double g = 2 * n / (n + 1);
       const double specular = f0 * g * g / (4 * pi * n * n);
-      const double brdf = ((1 - f0) / (forward_shader ? 1 : pi) + specular) * n;
+      const double brdf
+        = (((1 - f0) / (forward_shader ? 1 : pi)) + specular) * n;
       // R8 UNORM stores the .5 specular value at either adjacent code. Carry
       // its half-code uncertainty through this linear-in-F0 expression.
       const double brdf_error = forward_shader
         ? 0
-        : .04 / 255 * std::abs(g * g / (4 * pi * n * n) - 1 / pi) * n;
+        : .04 / 255 * std::abs((g * g / (4 * pi * n * n)) - (1 / pi)) * n;
       for (unsigned kind = 0; kind < 3; ++kind) {
-        auto d = sun.GetLightAs<scene::DirectionalLight>();
-        auto p = point_node.GetLightAs<scene::PointLight>();
-        auto s = spot_node.GetLightAs<scene::SpotLight>();
-        d->get().Common().affects_world = kind == 0;
-        p->get().Common().affects_world = kind == 1;
-        s->get().Common().affects_world = kind == 2;
+        auto directional_light = sun.GetLightAs<scene::DirectionalLight>();
+        auto point_light = point_node.GetLightAs<scene::PointLight>();
+        auto spot_light = spot_node.GetLightAs<scene::SpotLight>();
+        if (!directional_light.has_value()) {
+          FAIL() << "Expected directional_light to contain a value";
+        }
+        if (!point_light.has_value()) {
+          FAIL() << "Expected point_light to contain a value";
+        }
+        if (!spot_light.has_value()) {
+          FAIL() << "Expected spot_light to contain a value";
+        }
+        directional_light->get().Common().affects_world = kind == 0;
+        point_light->get().Common().affects_world = kind == 1;
+        spot_light->get().Common().affects_world = kind == 2;
         // Replace the authoring component to publish a light mutation and
         // invalidate the resolver's cached directional membership.
         ASSERT_TRUE(sun.ReplaceLight(
-          std::make_unique<scene::DirectionalLight>(d->get())));
-        d = sun.GetLightAs<scene::DirectionalLight>();
-        const double attenuation = kind == 0 ? (forward_shader ? 1 / pi : 1)
-          : forward_shader                   ? .99 * .99
-                                             : std::pow(1 - 1e-8, 2) / 2;
+          std::make_unique<scene::DirectionalLight>(directional_light->get())));
+        directional_light = sun.GetLightAs<scene::DirectionalLight>();
+        if (!directional_light.has_value()) {
+          FAIL() << "Expected directional_light to contain a value";
+        }
+        double attenuation
+          = forward_shader ? .99 * .99 : std::pow(1 - 1e-8, 2) / 2;
+        if (kind == 0) {
+          attenuation = forward_shader ? 1 / pi : 1;
+        }
         const double coefficient = brdf * attenuation;
-        for (const double radiance :
-          { 0.0, 0x1p-24, .25, 131072.0, 0x1p32 * .999, 0x1p35 }) {
-          for (const float ev : { -32.0F, 0.0F, 32.0F }) {
+        for (const double radiance : {
+               0.0,
+               0x1p-24,
+               .25,
+               131072.0,
+               0x1p32 * .999,
+               0x1p35,
+             }) {
+          for (const float ev : {
+                 -32.0F,
+                 0.0F,
+                 32.0F,
+               }) {
             SCOPED_TRACE(forward);
             SCOPED_TRACE(static_cast<int>(domain));
             SCOPED_TRACE(kind);
             SCOPED_TRACE(radiance);
             SCOPED_TRACE(ev);
-            const float intensity = static_cast<float>(radiance / coefficient);
-            d->get().SetIntensityLux(intensity);
-            p->get().SetLuminousFluxLm(intensity);
-            s->get().SetLuminousFluxLm(intensity);
+            const auto intensity = static_cast<float>(radiance / coefficient);
+            directional_light->get().SetIntensityLux(intensity);
+            point_light->get().SetLuminousFluxLm(intensity);
+            spot_light->get().SetLuminousFluxLm(intensity);
             ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, ev));
             const auto pixels = ReadFloatTexture(*probe->color);
             ASSERT_EQ(pixels.size(), 1U);
             for (unsigned channel = 0; channel < 3; ++channel) {
               const double expected = intensity * coefficient * coverage
-                * std::exp2(double(channel) - 2 - ev);
-              EXPECT_NEAR(pixels[0][channel], expected,
-                std::abs(expected) * (2e-5 + brdf_error / brdf) + 0x1p-120);
+                * std::exp2(static_cast<double>(channel) - 2 - ev);
+              EXPECT_NEAR(pixels.at(0).at(channel), expected,
+                (std::abs(expected) * (2e-5 + (brdf_error / brdf))) + 0x1p-120);
             }
-            EXPECT_FLOAT_EQ(pixels[0][3], static_cast<float>(coverage));
+            EXPECT_FLOAT_EQ(pixels.at(0).at(3), static_cast<float>(coverage));
             const auto status = Read<ExposureCompletedStatus>(
               *probe->exposure->current_state->status_buffer,
               ResourceStates::kCopySource);
@@ -156,12 +208,23 @@ NOLINT_TEST_F(ExposureLightingGpuTest,
   settings.mode = engine::ExposureMode::kAuto;
   frame_delta_seconds = .1F;
   unsigned cases = 0;
-  for (const bool prepass : { true, false }) {
-    for (const bool invalid_light : { false, true }) {
-      for (const bool forward : { false, true }) {
-        for (const auto domain :
-          { data::MaterialDomain::kOpaque, data::MaterialDomain::kMasked,
-            data::MaterialDomain::kAlphaBlended }) {
+  for (const bool prepass : {
+         true,
+         false,
+       }) {
+    for (const bool invalid_light : {
+           false,
+           true,
+         }) {
+      for (const bool forward : {
+             false,
+             true,
+           }) {
+        for (const auto domain : {
+               data::MaterialDomain::kOpaque,
+               data::MaterialDomain::kMasked,
+               data::MaterialDomain::kAlphaBlended,
+             }) {
           SCOPED_TRACE(forward);
           SCOPED_TRACE(static_cast<int>(domain));
           SCOPED_TRACE(invalid_light);
@@ -192,8 +255,8 @@ NOLINT_TEST_F(ExposureLightingGpuTest,
           const auto pixels = ReadFloatTexture(*probe->color);
           ASSERT_EQ(pixels.size(), 1U);
           for (unsigned c = 0; c < 3; ++c) {
-            ASSERT_TRUE(std::isfinite(pixels[0][c]));
-            EXPECT_GT(pixels[0][c], 0);
+            ASSERT_TRUE(std::isfinite(pixels.at(0).at(c)));
+            EXPECT_GT(pixels.at(0).at(c), 0);
           }
           status = Read<ExposureCompletedStatus>(
             *probe->exposure->current_state->status_buffer,
@@ -217,7 +280,13 @@ NOLINT_TEST_F(ExposureLightingGpuTest,
             ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0));
             const auto empty = ReadFloatTexture(*probe->color);
             ASSERT_EQ(empty.size(), 1U);
-            EXPECT_EQ(empty[0], (Pixel { 0, 0, 0, 0 }));
+            EXPECT_EQ(empty.at(0),
+              (Pixel {
+                0,
+                0,
+                0,
+                0,
+              }));
             status = Read<ExposureCompletedStatus>(
               *probe->exposure->current_state->status_buffer,
               ResourceStates::kCopySource);
@@ -236,29 +305,48 @@ NOLINT_TEST_F(
 {
   auto blocker = scene->CreateNode("Foreground");
   blocker.GetRenderable().SetGeometry(mesh_node.GetRenderable().GetGeometry());
-  blocker.GetTransform().SetLocalPosition({ 0, 0, .25F });
+  blocker.GetTransform().SetLocalPosition({
+    0,
+    0,
+    .25F,
+  });
   expected_draws = 2;
   settings.mode = engine::ExposureMode::kAuto;
-  const auto set_blocker
-    = [&](data::MaterialDomain domain, float emission, bool hole = false) {
-        const auto saved = mesh_node;
-        mesh_node = blocker;
-        SetSurface(domain, emission, hole);
-        mesh_node = saved;
-      };
+  const auto set_blocker = [&](data::MaterialDomain domain, float emission,
+                             bool hole = false) -> void {
+    const auto saved = mesh_node;
+    mesh_node = blocker;
+    SetSurface(domain, emission, hole);
+    mesh_node = saved;
+  };
   unsigned cases = 0;
-  for (const bool prepass : { true, false }) {
-    for (const bool forward : { false, true }) {
-      for (const auto domain :
-        { data::MaterialDomain::kOpaque, data::MaterialDomain::kMasked }) {
-        for (const bool negative_first : { true, false }) {
+  for (const bool prepass : {
+         true,
+         false,
+       }) {
+    for (const bool forward : {
+           false,
+           true,
+         }) {
+      for (const auto domain : {
+             data::MaterialDomain::kOpaque,
+             data::MaterialDomain::kMasked,
+           }) {
+        for (const bool negative_first : {
+               true,
+               false,
+             }) {
           SCOPED_TRACE(prepass);
           SCOPED_TRACE(forward);
           SCOPED_TRACE(static_cast<int>(domain));
           SCOPED_TRACE(negative_first);
           depth_mode = prepass ? DepthPrePassMode::kOpaqueAndMasked
                                : DepthPrePassMode::kDisabled;
-          mesh_node.GetTransform().SetLocalPosition({ 0, 0, 0 });
+          mesh_node.GetTransform().SetLocalPosition({
+            0,
+            0,
+            0,
+          });
           SetSurface(domain, negative_first ? -1.0F : 1.0F);
           blocker.GetRenderable().SetMaterialOverride(
             0, 0, mesh_node.GetRenderable().ResolveSubmeshMaterial(0, 0));
@@ -272,7 +360,7 @@ NOLINT_TEST_F(
           }
           ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0));
           ASSERT_EQ(probe->raster_depths.size(), 2U);
-          if (probe->raster_depths[0] != (negative_first ? 0.0F : .25F)) {
+          if (probe->raster_depths.at(0) != (negative_first ? 0.0F : .25F)) {
             // Keep the image identical while reversing which scene node owns
             // each surface; verify the renderer's resulting raster order.
             const auto negative
@@ -281,17 +369,25 @@ NOLINT_TEST_F(
               = blocker.GetRenderable().ResolveSubmeshMaterial(0, 0);
             mesh_node.GetRenderable().SetMaterialOverride(0, 0, positive);
             blocker.GetRenderable().SetMaterialOverride(0, 0, negative);
-            mesh_node.GetTransform().SetLocalPosition({ 0, 0, .25F });
-            blocker.GetTransform().SetLocalPosition({ 0, 0, 0 });
+            mesh_node.GetTransform().SetLocalPosition({
+              0,
+              0,
+              .25F,
+            });
+            blocker.GetTransform().SetLocalPosition({
+              0,
+              0,
+              0,
+            });
             std::swap(mesh_node, blocker);
             ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0));
             ASSERT_EQ(probe->raster_depths.size(), 2U);
           }
           EXPECT_EQ(probe->early_depth_complete, prepass);
-          EXPECT_EQ(probe->raster_depths[0], negative_first ? 0.0F : .25F);
+          EXPECT_EQ(probe->raster_depths.at(0), negative_first ? 0.0F : .25F);
           const auto pixels = ReadFloatTexture(*probe->color);
           ASSERT_EQ(pixels.size(), 1U);
-          EXPECT_GT(pixels[0][0], 0);
+          EXPECT_GT(pixels.at(0).at(0), 0);
           auto status = Read<ExposureCompletedStatus>(
             *probe->exposure->current_state->status_buffer,
             ResourceStates::kCopySource);
@@ -301,7 +397,11 @@ NOLINT_TEST_F(
               ResourceStates::kShaderResource);
           EXPECT_EQ(meter.flags & 12U, 12U);
           ++cases;
-          mesh_node.GetTransform().SetLocalPosition({ 0, 0, .5F });
+          mesh_node.GetTransform().SetLocalPosition({
+            0,
+            0,
+            .5F,
+          });
           ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0));
           ASSERT_EQ(probe->raster_depths.size(), 2U);
           status = Read<ExposureCompletedStatus>(
@@ -312,7 +412,11 @@ NOLINT_TEST_F(
           EXPECT_EQ(status.first_failure_product, forward ? 4U : 1U);
           ++cases;
           if (domain == data::MaterialDomain::kMasked) {
-            mesh_node.GetTransform().SetLocalPosition({ 0, 0, 0 });
+            mesh_node.GetTransform().SetLocalPosition({
+              0,
+              0,
+              0,
+            });
             set_blocker(domain, 1, true);
             ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0));
             ASSERT_EQ(probe->raster_depths.size(), 2U);
@@ -340,8 +444,20 @@ NOLINT_TEST_F(ExposureLightingGpuTest, StaticSkyDiffusePreservesSupportedRange)
   sky.SetSpecularIntensity(0);
   sky.SetDiffuseIntensity(1);
   unsigned cases = 0;
-  for (const Pixel source_color :
-    { Pixel { .25F, .5F, 1, 1 }, Pixel { 0x1p-24F, .25F, 0x1p30F, 1 } }) {
+  for (const Pixel source_color : {
+         Pixel {
+           .25F,
+           .5F,
+           1,
+           1,
+         },
+         Pixel {
+           0x1p-24F,
+           .25F,
+           0x1p30F,
+           1,
+         },
+       }) {
     data::pak::core::TextureResourceDesc desc {};
     desc.texture_type = static_cast<std::uint8_t>(TextureType::kTextureCube);
     desc.width = desc.height = desc.depth = desc.mip_levels = 1;
@@ -350,14 +466,23 @@ NOLINT_TEST_F(ExposureLightingGpuTest, StaticSkyDiffusePreservesSupportedRange)
     desc.alignment = 256;
     const auto key = owned_asset_loader_->MintSyntheticTextureKey();
     desc.content_hash = key.get();
+    static_assert(
+      6U * sizeof(Pixel) <= std::numeric_limits<std::uint32_t>::max());
     std::vector<std::uint8_t> data_region(6 * sizeof(Pixel));
     std::vector<data::pak::render::SubresourceLayout> layouts;
     for (unsigned face = 0; face < 6; ++face) {
-      std::memcpy(data_region.data() + face * sizeof(Pixel),
+      std::memcpy(
+        std::span {
+          data_region,
+        }
+          .subspan(face * sizeof(Pixel), sizeof(Pixel))
+          .data(),
         source_color.data(), sizeof(Pixel));
-      layouts.push_back({ .offset_bytes = face * sizeof(Pixel),
+      layouts.push_back({
+        .offset_bytes = static_cast<std::uint32_t>(face * sizeof(Pixel)),
         .row_pitch_bytes = sizeof(Pixel),
-        .size_bytes = sizeof(Pixel) });
+        .size_bytes = sizeof(Pixel),
+      });
     }
     auto payload = vortex::testing::detail::BuildV4TexturePayload(
       desc, layouts, data_region);
@@ -365,17 +490,31 @@ NOLINT_TEST_F(ExposureLightingGpuTest, StaticSkyDiffusePreservesSupportedRange)
     owned_asset_loader_->SetTexture(
       key, std::make_shared<data::TextureResource>(desc, std::move(payload)));
     sky.SetCubemapResource(key);
-    for (const bool forward : { false, true }) {
-      for (const auto domain :
-        { data::MaterialDomain::kOpaque, data::MaterialDomain::kMasked,
-          data::MaterialDomain::kAlphaBlended }) {
+    for (const bool forward : {
+           false,
+           true,
+         }) {
+      for (const auto domain : {
+             data::MaterialDomain::kOpaque,
+             data::MaterialDomain::kMasked,
+             data::MaterialDomain::kAlphaBlended,
+           }) {
         SetSurface(domain);
         const double coverage
           = domain == data::MaterialDomain::kAlphaBlended ? .5 : 1;
-        for (const float multiplier :
-          { 0.0F, 0x1p-24F, 1.0F, 0x1p32F * .999F, 0x1p35F }) {
-          for (const float ev : { -32.0F, 0.0F, 32.0F }) {
-            SCOPED_TRACE(source_color[2]);
+        for (const float multiplier : {
+               0.0F,
+               0x1p-24F,
+               1.0F,
+               0x1p32F * .999F,
+               0x1p35F,
+             }) {
+          for (const float ev : {
+                 -32.0F,
+                 0.0F,
+                 32.0F,
+               }) {
+            SCOPED_TRACE(source_color.at(2));
             SCOPED_TRACE(forward);
             SCOPED_TRACE(static_cast<int>(domain));
             SCOPED_TRACE(multiplier);
@@ -389,16 +528,17 @@ NOLINT_TEST_F(ExposureLightingGpuTest, StaticSkyDiffusePreservesSupportedRange)
             // independently of normal, cubemap orientation or canonical
             // normalization.
             for (unsigned channel = 0; channel < 3; ++channel) {
-              const double expected = double(source_color[channel]) * multiplier
-                * coverage * std::exp2(-double(ev));
-              EXPECT_NEAR(pixels[0][channel], expected,
-                std::abs(expected) * 2e-5 + 0x1p-120);
+              const double expected
+                = static_cast<double>(source_color.at(channel)) * multiplier
+                * coverage * std::exp2(-static_cast<double>(ev));
+              EXPECT_NEAR(pixels.at(0).at(channel), expected,
+                (std::abs(expected) * 2e-5) + 0x1p-120);
             }
-            EXPECT_FLOAT_EQ(pixels[0][3], static_cast<float>(coverage));
+            EXPECT_FLOAT_EQ(pixels.at(0).at(3), static_cast<float>(coverage));
             const auto status = Read<ExposureCompletedStatus>(
               *probe->exposure->current_state->status_buffer,
               ResourceStates::kCopySource);
-            if (double(source_color[2]) * multiplier > 0x1p32) {
+            if (static_cast<double>(source_color.at(2)) * multiplier > 0x1p32) {
               EXPECT_EQ(status.flags & 18U, 18U);
               EXPECT_NE(status.first_failure_kind & 32U, 0U);
               EXPECT_EQ(status.first_failure_product,

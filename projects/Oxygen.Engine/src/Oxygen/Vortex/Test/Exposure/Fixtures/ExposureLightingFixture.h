@@ -35,6 +35,8 @@ protected:
     auto OnViewSetup(const ViewSetupContext& hook) -> void override;
     auto OnPostRenderViewGpu(const ViewRenderGpuContext& hook) -> void override;
 
+    // The fixture destroys this observer before its owning renderer.
+    // NOLINTNEXTLINE(cppcoreguidelines-avoid-const-or-ref-data-members)
     Renderer& renderer;
     std::shared_ptr<const graphics::Texture> color;
     postprocess::ExposurePass::FrameLease exposure;
