@@ -33,6 +33,7 @@
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkySphere.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Vortex/Diagnostics/DiagnosticsService.h>
 #include <Oxygen/Vortex/Environment/Passes/FogPass.h>
 #include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
 #include <Oxygen/Vortex/Renderer.h>
@@ -527,6 +528,8 @@ NOLINT_TEST_F(ExposureGpuTest,
       | RendererCapabilityFamily::kLightingData
       | RendererCapabilityFamily::kEnvironmentLighting
       | RendererCapabilityFamily::kFinalOutputComposition);
+  renderer_->GetDiagnosticsService().SetHdrPrecisionControl(
+    HdrPrecisionControl::kQualified);
   console::Console console;
   renderer_->RegisterConsoleBindings(observer_ptr {
     &console,
@@ -722,6 +725,11 @@ NOLINT_TEST_F(ExposureGpuTest,
     const auto slot = frame::Slot {
       (step - 1U) % 3U,
     };
+    Backend().BeginFrame(
+      frame::SequenceNumber {
+        step,
+      },
+      slot);
     frame.SetFrameSlot(slot, engine::internal::EngineTagFactory::Get());
     frame.SetFrameSequenceNumber(
       frame::SequenceNumber {
@@ -772,6 +780,11 @@ NOLINT_TEST_F(ExposureGpuTest,
       renderer_->OnFrameEnd(observer_ptr {
         &frame,
       });
+      Backend().EndFrame(
+        frame::SequenceNumber {
+          step,
+        },
+        slot);
       WaitForQueueIdle();
       continue;
     }
@@ -830,6 +843,11 @@ NOLINT_TEST_F(ExposureGpuTest,
     renderer_->OnFrameEnd(observer_ptr {
       &frame,
     });
+    Backend().EndFrame(
+      frame::SequenceNumber {
+        step,
+      },
+      slot);
     WaitForQueueIdle();
   }
   EXPECT_GT(maximum_error, .001);

@@ -94,6 +94,15 @@ namespace {
     recorder.BeginTrackingResourceState(texture, initial);
   }
 
+  auto IsSceneRangeInputValid(const graphics::Texture& source,
+    const ShaderVisibleIndex source_srv) -> bool
+  {
+    const auto& desc = source.GetDescriptor();
+    return source_srv.IsValid() && desc.format == Format::kRGBA32Float
+      && desc.texture_type == TextureType::kTexture2D
+      && desc.sample_count == 1U;
+  }
+
   auto MeteringRectangle(
     const RenderContext& ctx, const graphics::TextureDesc& desc) -> Scissors
   {
@@ -750,10 +759,7 @@ auto ExposurePass::RecordSceneRange(RenderContext& ctx, const FrameLease& frame,
     submitted_composition_input_.erase(frame.get());
     submitted_opaque_ap_error_.erase(frame.get());
   }
-  const auto& desc = source.GetDescriptor();
-  if (!source_srv.IsValid() || desc.format != Format::kRGBA32Float
-      || desc.texture_type != TextureType::kTexture2D
-      || desc.sample_count != 1U) {
+  if (!IsSceneRangeInputValid(source, source_srv)) {
     return false;
   }
   auto gfx = renderer_.GetGraphics();
@@ -771,58 +777,66 @@ auto ExposurePass::RecordSceneRange(RenderContext& ctx, const FrameLease& frame,
   }
   renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(*recorder);
   const auto recording = recorder->GetCommandListForInspection();
-  {
-    graphics::GpuEventScope phase_scope(
-      *recorder, "Vortex.PostProcess.Exposure.SceneRange",
-      profiling::ProfileGranularity::kTelemetry,
-      profiling::ProfileCategory::kCompute,
-      profiling::Vars(profiling::Var("view", ctx.current_view.view_id.get())));
-    auto& status = *frame->current_state->status_buffer;
-    if (!recorder->AdoptKnownResourceState(status)) {
-      recorder->BeginTrackingResourceState(
-        status, graphics::ResourceStates::kCommon, false);
-    }
-    TrackTextureFromKnownOrInitial(*recorder, source);
-    recorder->RequireResourceState(source,
-                                   graphics::ResourceStates::kShaderResource);
-    recorder->RequireResourceState(status,
-                                   graphics::ResourceStates::kUnorderedAccess);
-    const auto constants = std::array<std::uint32_t, 32U> {
-      frame->current_state->status_uav_index.get(), source_srv.get(),
-      frame->srv_index.get(), frame->current_state->srv_index.get(), desc.width,
-      desc.height, 1U,
-      32U | (capture_opaque_input && !frame->fp32_only ? 0U : 2048U)
-        | (frame->fp32_only ? 4096U : 0U),
-      11U, 0U, kInvalidShaderVisibleIndex.get(), 0U, 0U, 0U, desc.width,
-      desc.height, 0U, std::bit_cast<std::uint32_t>(1.0F), 0U, 0U,
-      std::bit_cast<std::uint32_t>(1.0F), kInvalidShaderVisibleIndex.get(), 0U,
-      0U
-    };
-    const auto slot = suitability_constants_publisher_->Publish(
-      ctx.current_view.view_id, constants);
-    CHECK_F(slot.IsValid());
-    for (unsigned index = capture_opaque_input && !frame->fp32_only ? 0U : 1U;
-      index < 2U; ++index) {
-      recorder->RequireResourceState(
-        status, graphics::ResourceStates::kUnorderedAccess);
-      recorder->FlushBarriers();
-      recorder->SetPipelineState(*suitability_pipelines_[index]);
-      recorder->SetComputeRoot32BitConstant(
-        static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants),
-        0U, 0U);
-      recorder->SetComputeRoot32BitConstant(
-        static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants),
-        slot.get(), 1U);
-      recorder->Dispatch(index == 0U ? 1U : (desc.width + 7U) / 8U,
-                         index == 0U ? 1U : (desc.height + 7U) / 8U, 1U);
-    }
-  }
+  RecordSceneRangeCommands(
+    ctx, *recorder, *frame, source, source_srv, capture_opaque_input);
   recorder.reset();
   const bool submitted = recording && recording->IsSubmitted();
   if (submitted && capture_opaque_input) {
     submitted_composition_input_.insert(frame.get());
   }
   return submitted;
+}
+
+auto ExposurePass::RecordSceneRangeCommands(RenderContext& ctx,
+  graphics::CommandRecorder& recorder, const FrameResources& frame,
+  const graphics::Texture& source, const ShaderVisibleIndex source_srv,
+  const bool capture_opaque_input) -> void
+{
+  const auto& desc = source.GetDescriptor();
+  graphics::GpuEventScope phase_scope(recorder,
+    "Vortex.PostProcess.Exposure.SceneRange",
+    profiling::ProfileGranularity::kTelemetry,
+    profiling::ProfileCategory::kCompute,
+    profiling::Vars(profiling::Var("view", ctx.current_view.view_id.get())));
+  auto& status = *frame.current_state->status_buffer;
+  if (!recorder.IsResourceTracked(status)
+    && !recorder.AdoptKnownResourceState(status)) {
+    recorder.BeginTrackingResourceState(
+      status, graphics::ResourceStates::kCommon, false);
+  }
+  TrackTextureFromKnownOrInitial(recorder, source);
+  recorder.RequireResourceState(
+    source, graphics::ResourceStates::kShaderResource);
+  recorder.RequireResourceState(
+    status, graphics::ResourceStates::kUnorderedAccess);
+  const auto constants = std::array<std::uint32_t, 32U> {
+    frame.current_state->status_uav_index.get(), source_srv.get(),
+    frame.srv_index.get(), frame.current_state->srv_index.get(), desc.width,
+    desc.height, 1U,
+    32U | (capture_opaque_input && !frame.fp32_only ? 0U : 2048U)
+      | (frame.fp32_only ? 4096U : 0U),
+    11U, 0U, kInvalidShaderVisibleIndex.get(), 0U, 0U, 0U, desc.width,
+    desc.height, 0U, std::bit_cast<std::uint32_t>(1.0F), 0U, 0U,
+    std::bit_cast<std::uint32_t>(1.0F), kInvalidShaderVisibleIndex.get(), 0U, 0U
+  };
+  const auto slot = suitability_constants_publisher_->Publish(
+    ctx.current_view.view_id, constants);
+  CHECK_F(slot.IsValid());
+  for (unsigned index = capture_opaque_input && !frame.fp32_only ? 0U : 1U;
+    index < 2U; ++index) {
+    recorder.RequireResourceState(
+      status, graphics::ResourceStates::kUnorderedAccess);
+    recorder.FlushBarriers();
+    recorder.SetPipelineState(*suitability_pipelines_[index]);
+    recorder.SetComputeRoot32BitConstant(
+      static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants), 0U,
+      0U);
+    recorder.SetComputeRoot32BitConstant(
+      static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants),
+      slot.get(), 1U);
+    recorder.Dispatch(index == 0U ? 1U : (desc.width + 7U) / 8U,
+      index == 0U ? 1U : (desc.height + 7U) / 8U, 1U);
+  }
 }
 
 auto ExposurePass::PropagateOpaqueApError(RenderContext& ctx,
@@ -1613,6 +1627,16 @@ auto ExposurePass::Execute(RenderContext& ctx,
     }
   };
   if (view && view->submitted_frame == ctx.frame_sequence) {
+    // Reusing a solve does not certify a later accumulation. There is no new
+    // solve recorder to share here, so keep the current range check
+    // independent.
+    if (inputs.require_scene_range
+      && (!result.frame || !inputs.scene_signal
+        || !RecordSceneRange(ctx, result.frame, *inputs.scene_signal,
+          inputs.scene_signal_srv, false))) {
+      result.solve_failed = true;
+      return result;
+    }
     publish_result(view->latest, false);
     return result;
   }
@@ -1741,6 +1765,12 @@ auto ExposurePass::RecordState(RenderContext& ctx,
     "Vortex.PostProcess.Exposure.MeterAndAdapt",
     profiling::ProfileCategory::kPass,
     profiling::Vars(profiling::Var("view", ctx.current_view.view_id.get())));
+  if (inputs.require_scene_range
+    && (!inputs.frame_exposure || !inputs.scene_signal
+      || !IsSceneRangeInputValid(
+        *inputs.scene_signal, inputs.scene_signal_srv))) {
+    return {};
+  }
   const auto& resolved = config.Exposure();
   const bool automatic = (!borrowed || source_loss) && !bootstrap
     && !config.Settings().temporary_unit_exposure && resolved.authored.enabled
@@ -1785,6 +1815,10 @@ auto ExposurePass::RecordState(RenderContext& ctx,
   }
   renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(*recorder);
   const auto recording = recorder->GetCommandListForInspection();
+  if (inputs.require_scene_range) {
+    RecordSceneRangeCommands(ctx, *recorder, *inputs.frame_exposure,
+      *inputs.scene_signal, inputs.scene_signal_srv, false);
+  }
   {
     graphics::GpuEventScope phase_scope(
       *recorder, "Vortex.PostProcess.Exposure.MeterAndAdapt",

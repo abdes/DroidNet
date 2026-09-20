@@ -873,10 +873,34 @@ are unchanged. Commit each candidate's accepted correction or rejected result
 before the next production correction. Use the existing validation subagent and
 frozen serial native batches; raw results remain in the single checkpoint tree.
 
+**11A accepted:** final range and solve share one recorder when a new solve is
+needed. Reusing an already-submitted same-frame solve still checks the current
+accumulation independently; it cannot reuse an earlier range verdict. The normal
+scene caller explicitly requires the final range guard. Standalone range/kernel
+checks use the same recording helper.
+
+All 228 native exposure cases and 88 owning CPU checks pass (latest unique
+outcomes). Two existing fixtures needed their explicit diagnostic mode restored
+after renderer reconstruction; the repeated fog-history fixture also needed the
+backend frame boundaries that drive attachment retirement. The original failures,
+CDB null-buffer diagnosis and affected-only reruns are preserved.
+
+The matched optimized I02 trace records six exposure acquisitions/submissions in
+every one of 6,000 frames, versus eight previously. Elapsed exposure CPU p95/p99
+falls from 0.762/0.902 to 0.646/0.760 ms (15.2%/15.7%). The five candidate-cycle p95s
+range from 0.599 to 0.669 ms, below the baseline range 0.744–0.782 ms. GPU phase
+counts and memory placement are identical; steady texture/buffer creations remain
+zero. All four endpoint pairs preserve gain and pass the existing image budgets;
+three are identical, and the remaining maximum difference is 1.49e-7 with at most
+one UNorm8 code. All 1,011 frozen inputs remain unchanged. See the
+[11A decision table](../../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/cpu-attribution/recorder/decision-table.json).
+This accepts the candidate, not the active-only CPU target or final GPU matrix.
+Proceed to 11B as the next independent correction.
+
 The [CPU checkpoint](../../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/cpu-attribution/checkpoint-manifest.json)
 links the original and detailed raw traces, CPU exports, analyses, commands and
-hashes. No production rendering correction is yet validated in this item.
-EX051-12–14 and final acceptance remain pending.
+hashes and the accepted 11A increment. EX051-11B, EX051-12–14 and final acceptance
+remain pending.
 
 ### Slice 5.1 event operation inventory
 

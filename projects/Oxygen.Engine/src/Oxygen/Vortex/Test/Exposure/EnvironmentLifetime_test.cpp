@@ -28,6 +28,7 @@
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Vortex/Diagnostics/DiagnosticsService.h>
 #include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
@@ -251,6 +252,8 @@ NOLINT_TEST_F(
       | RendererCapabilityFamily::kLightingData
       | RendererCapabilityFamily::kEnvironmentLighting
       | RendererCapabilityFamily::kFinalOutputComposition);
+  renderer_->GetDiagnosticsService().SetHdrPrecisionControl(
+    HdrPrecisionControl::kQualified);
   console::Console console;
   renderer_->RegisterConsoleBindings(observer_ptr {
     &console,
@@ -489,6 +492,7 @@ NOLINT_TEST_F(
        }) {
     const auto& exposure = capture->exposure.at(id);
     ASSERT_NE(exposure, nullptr);
+    ASSERT_NE(exposure->suitability_buffer, nullptr);
     const auto report = Read<HdrSuitabilityData>(
       *exposure->suitability_buffer, ResourceStates::kShaderResource);
     EXPECT_EQ(report.expected_products, required);
