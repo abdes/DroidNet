@@ -106,7 +106,12 @@ temporal-off lifecycle case. Final engine placement peak is 3747.207 MiB; all
 three retained-resize cycles keep identical attachment populations, and all
 retired family leases reach zero. The superseded double-retirement drafts and
 their diagnosis remain in the [10A checkpoint](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/color-ownership/checkpoint-manifest.json).
-Next: 04, then the four decision pairs. Event-script execution remains
+EX051-04 is validated: 109 focused Debug checks (latest unique outcomes), 13
+Release checks and both 234-module shader builds pass. Its
+[checkpoint](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/fp32-only/checkpoint-manifest.json)
+preserves the corrected temporal-test observation failure and exact frozen
+inputs. Next: EX051-05's four decision pairs. No timed decision runs have started.
+Event-script execution remains
 in 13; neither this inventory nor historical manifests close final acceptance.
 
 **Complete: corrected quality review of every file under
@@ -212,9 +217,10 @@ with its own correctness checks, measured result and accept/reject decision.
 Only 13 owns the final repeated performance matrix. GATE evaluates that evidence.
 A completed or rejected experiment does not wait for 13 to close.
 
-**Next action:** EX051-03's inventory and EX051-10A ownership are complete.
-Implement EX051-04 at its owner contract below. D01-D04 run only after 04 is
-validated; 10A's Debug lifecycle measurement is not a format-benefit timing run.
+**Next action:** EX051-03, EX051-10A and EX051-04 are complete. Execute D01-D04
+in the qualified Release binary. 10A's Debug lifecycle measurement and 04's
+correctness checks are not format-benefit timing runs. Agreement on 09's
+decision table remains required before changing production precision policy.
 
 Use the existing renderer, profiling APIs, native workloads and GPU status
 reports. Keep FP32 lighting accumulation, exposure equations, current-frame range
@@ -283,7 +289,7 @@ bottleneck requires a separate owner decision.
 | --- | --- | --- |
 | `production` | Current dynamic FP16/FP32 policy, qualified P and mandatory checked conversion. | Candidate operating mode. |
 | `fp32` | Existing format-only diagnostic control; qualified P and certification remain enabled. | Existing numerical/format diagnostics. |
-| `fp32-only` | Planned all-FP32 path with P=1. Preserve metering, adaptation, events, source sharing, temporal rendering and current-frame range checks. Omit FP16 candidate scans, FP16-only error certificates and eligibility-only status jobs. | Performance and memory reference for 05. |
+| `fp32-only` | Qualified all-FP32 path with P=1. Preserve metering, adaptation, events, source sharing, temporal rendering and current-frame range checks. Omit FP16 candidate scans, FP16-only error certificates and eligibility-only status jobs. | Performance and memory reference for 05. |
 
 Extend `OXYGEN_EXPOSURE_BASELINE_PRECISION` with `fp32-only`. Use runtime selection
 in one Release binary. A mode change resets only precision qualification and
@@ -308,6 +314,11 @@ and `ExposureIndoorOutdoorBenchmarkTest.DISABLED_ReleaseIndoorOutdoorBaseline`.
 Use `OXYGEN_EXPOSURE_BASELINE_CASE`, `OXYGEN_EXPOSURE_TIMING_WIDTH`,
 `OXYGEN_EXPOSURE_BASELINE_PRECISION`, `OXYGEN_EXPOSURE_BASELINE_FRAMES` and a unique
 `OXYGEN_EXPOSURE_BASELINE_RUN`. No source swapping or rebuild between controls.
+`OXYGEN_EXPOSURE_BASELINE_FRAMES=warmup` runs the same warmup without a timed
+population and writes its throughput to the normal unique run manifest. Use
+both controls' warmup results to select one common frame count with duration
+headroom; use an integer for each of the eight timed runs. This is an untimed
+calibration of the existing entry points, not another performance decision run.
 
 - Warm for at least 300 frames and 10 seconds. I02 warmup includes a complete
   1,200-frame path cycle. Both controls use the same simulation timebase.
@@ -360,7 +371,7 @@ with `--gtest_also_run_disabled_tests --gtest_filter=<entry-point>`.
 owns the selectors, view count, path and temporal settings. Set width to 1920 or
 3840, precision to the item-required control, frames to the paired sample count,
 and run ID to a unique name using the five environment variables listed in 05.
-`fp32-only` remains an implementation gap in 04, not an existing selector.
+`fp32-only` is implemented and qualified in 04.
 
 Common controls in
 [`ExposureBaselineScenario.h`](../../src/Oxygen/Vortex/Test/Exposure/Benchmarks/ExposureBaselineScenario.h):
@@ -407,7 +418,7 @@ existing presented-output path. Do not rerun this matrix at intermediate items.
 | EX051-01 | Acceptance contract / rendering owner | validated | User approval | Hardware, invariants, budgets and eight recipes are frozen in the [baseline manifest](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/baseline-manifest.json). |
 | EX051-02 | Native profiling / Graphics + Diagnostics | validated | 01 | Timestamp retention, coverage, bounded export and R085 are qualified in the [profiling closeout](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/profiling-closeout-manifest.json). Instrumentation overhead is accepted and frozen. |
 | EX051-03 | Recipe, event and memory inventory / existing workload owners | validated | 01 | Documentation-only source inventory complete: eight entry-point/settings mappings and prior workload evidence above; public event operations and fixed script in PostProcessService; live/cache/lease/scratch expectations and existing lifecycle evidence in SceneTextures. Verified against current source and existing reports; no build or native run required/performed. Event-script wiring/execution and final repeated timings belong to 13. |
-| EX051-04 | FP32-only baseline / PostProcess + Environment | planned | 02, 10A | Add the `fp32-only` control defined above. Keep exposure, rendering and events active; remove only FP16-admission work. Qualify output, gain, sharing, history and recovery with existing focused controls. The existing `fp32` selector stays diagnostic-only. |
+| EX051-04 | FP32-only baseline / PostProcess + Environment | validated | 02, 10A | Runtime FP32/P1, admission/certificate bypass, omitted unused reports and precision-only mode invalidation implemented; normal exposure/range/events/sharing/history remain active. Debug: 109 latest unique checks pass; Release: four catalog plus nine native controls pass. Both 234-module shader archives and Release-only benchmark paths compile. Existing `fp32` remains format-only. [Commands, frozen hashes and preserved test-observation correction](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/fp32-only/checkpoint-manifest.json). D01-D04 measurements belong to 05. |
 | EX051-05 | Format-benefit decision / rendering owner | in_progress | 03, 04 | Existing I02 data identifies candidate qualification and gradients as 79% of explicit exposure time. Execute D01-D04 once, record the accept/reject decisions and choose the 09 policy. Exit with one decision table linked to raw results. No new profiler, scenes or benchmark framework. |
 | EX051-06 | Bound-publication reduction experiment / shader owners | validated | 05 checkpoint | H3 was tested, rejected and reverted. [Closeout](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/h3-closeout-manifest.json) preserves the native comparison, DXIL, numerical checks and restored scalar regression. No active follow-up experiment. |
 | EX051-07 | Maximum reuse and scan fusion / ExposurePass + producers | validated | 05 checkpoint | H1 (`73ced156`) and H2 (`efecd6185`) are retained with owning Debug, Release comparisons, DXIL and image checks: [H1](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/h1-closeout-manifest.json), [H2](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/h2-closeout-manifest.json). A new scan hypothesis requires a new 05 decision; final matrix coverage belongs to 13. |

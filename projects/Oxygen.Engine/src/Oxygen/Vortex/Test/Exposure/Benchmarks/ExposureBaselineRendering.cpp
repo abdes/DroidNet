@@ -108,7 +108,7 @@ auto ExposureBaselineScenario::InspectView(const RenderContext& context,
     }
     CHECK_F(color.texture->GetDescriptor().width == width >> index);
     CHECK_F(color.texture->GetDescriptor().height == height >> index);
-    if (!mixed_scene || fp32_reference) {
+    if (!mixed_scene || fp32_reference || fp32_only) {
       CHECK_F(color.texture->GetDescriptor().format == expected_format);
     }
   }

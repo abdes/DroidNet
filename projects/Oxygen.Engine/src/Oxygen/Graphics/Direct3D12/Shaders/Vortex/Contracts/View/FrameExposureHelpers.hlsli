@@ -37,4 +37,9 @@ static float GetOneOverPreExposure()
     return GetFrameExposure().one_over_pre_exposure;
 }
 
+static bool IsFp32OnlyExposure()
+{
+    return (GetFrameExposure().flags & 16u) != 0u;
+}
+
 #endif

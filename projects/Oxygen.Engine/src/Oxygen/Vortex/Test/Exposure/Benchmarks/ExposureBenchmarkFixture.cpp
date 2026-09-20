@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <chrono>
+#include <fstream>
 
 #include <Oxygen/Vortex/Test/Exposure/Benchmarks/ExposureBaselineScenario.h>
 
@@ -43,6 +44,47 @@ auto ExposureBaselineScenario::Run() -> void
 {
   ASSERT_NO_FATAL_FAILURE(Setup());
   ASSERT_NO_FATAL_FAILURE(WarmUp());
+  if (warmup_only) {
+    // Untimed calibration selects one common sample count for a decision pair.
+    // No timeline recording or measured population is created by this mode.
+    auto output = std::ofstream(manifest_path, std::ios::binary);
+    ASSERT_TRUE(output.is_open());
+    output << nlohmann::json({
+                               {
+                                 "warmup_only",
+                                 true,
+                               },
+                               {
+                                 "workload",
+                                 workload,
+                               },
+                               {
+                                 "precision",
+                                 precision,
+                               },
+                               {
+                                 "width",
+                                 width,
+                               },
+                               {
+                                 "warmup_frames",
+                                 warm_frames,
+                               },
+                               {
+                                 "warmup_seconds",
+                                 warm_seconds,
+                               },
+                               {
+                                 "simulation_dt_ns",
+                                 simulation_dt_ns,
+                               },
+                             })
+                .dump(2)
+           << '\n';
+    output.close();
+    ASSERT_TRUE(output.good());
+    return;
+  }
   ASSERT_NO_FATAL_FAILURE(MeasureFrames());
   ASSERT_NO_FATAL_FAILURE(CaptureEndpoints());
   ASSERT_NO_FATAL_FAILURE(WriteAndValidateResults());

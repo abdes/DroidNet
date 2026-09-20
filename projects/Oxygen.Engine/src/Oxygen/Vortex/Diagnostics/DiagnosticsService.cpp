@@ -109,13 +109,27 @@ auto DiagnosticsService::FindShaderDebugMode(
 auto DiagnosticsService::SetHdrFp32ReferenceEnabled(const bool enabled) -> void
 {
   std::scoped_lock lock(mutex_);
-  hdr_fp32_reference_enabled_ = enabled;
+  hdr_precision_control_ = enabled ? HdrPrecisionControl::kFp32Reference
+                                   : HdrPrecisionControl::kProduction;
 }
 
 auto DiagnosticsService::IsHdrFp32ReferenceEnabled() const -> bool
 {
   std::scoped_lock lock(mutex_);
-  return hdr_fp32_reference_enabled_;
+  return hdr_precision_control_ == HdrPrecisionControl::kFp32Reference;
+}
+
+auto DiagnosticsService::SetHdrPrecisionControl(
+  const HdrPrecisionControl control) -> void
+{
+  std::scoped_lock lock(mutex_);
+  hdr_precision_control_ = control;
+}
+
+auto DiagnosticsService::GetHdrPrecisionControl() const -> HdrPrecisionControl
+{
+  std::scoped_lock lock(mutex_);
+  return hdr_precision_control_;
 }
 
 auto DiagnosticsService::AttachGpuTimelineCollector(

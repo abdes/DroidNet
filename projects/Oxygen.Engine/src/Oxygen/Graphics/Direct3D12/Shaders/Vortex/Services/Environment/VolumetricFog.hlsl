@@ -556,8 +556,9 @@ void VortexVolumetricFogCS(uint3 dispatch_id : SV_DispatchThreadID)
     float4 reference_low = output_value;
     float4 reference_high = output_value;
     float4 history_value = output_value;
+    const bool fp32_only = IsFp32OnlyExposure();
     bool certified_history = true;
-    if (pass.exposure_status_uav != K_INVALID_BINDLESS_INDEX) {
+    if (!fp32_only && pass.exposure_status_uav != K_INVALID_BINDLESS_INDEX) {
         certified_history = pass.previous_error_bounds_srv != K_INVALID_BINDLESS_INDEX;
         if (certified_history) {
             ByteAddressBuffer previous_status = ResourceDescriptorHeap[pass.previous_error_bounds_srv];
@@ -575,48 +576,50 @@ void VortexVolumetricFogCS(uint3 dispatch_id : SV_DispatchThreadID)
             inverse_previous_p = previous_frame[0].one_over_pre_exposure;
             previous_p = previous_frame[0].pre_exposure;
         }
-        float4 history_low = history_value;
-        float4 history_high = history_value;
-        if (pass.previous_error_bounds_srv != K_INVALID_BINDLESS_INDEX) {
-            ByteAddressBuffer previous_status = ResourceDescriptorHeap[pass.previous_error_bounds_srv];
-            const float4 bounds = asfloat(previous_status.Load4(112u));
-            const uint3 extent = uint3(pass.output_header.output_width,
-                pass.output_header.output_height, pass.output_header.output_depth);
-            const uint gradient_flags = previous_status.Load(236u);
-            const bool gradients_valid = (gradient_flags & 3u) == 1u
-                && previous_status.Load(252u) == extent.x * extent.y * extent.z;
-            const bool half_history = (pass.temporal_history0.enabled & 2u) != 0u;
-            const float3 rgb_gradient = asfloat(previous_status.Load3(224u));
-            const float3 t_gradient = asfloat(previous_status.Load3(240u));
-            [unroll] for (uint c = 0u; c < 3u; ++c) {
-                if (!half_history && all((asuint(bounds.xy) & 0x7fffffffu) == 0u.xx)) {
-                    history_low[c] = history_high[c] = history_value[c] * (GetPreExposure() * inverse_previous_p);
-                } else {
-                    const float3 stored_gradient = float3(HdrUpperProduct(rgb_gradient.x, previous_p),
-                        HdrUpperProduct(rgb_gradient.y, previous_p), HdrUpperProduct(rgb_gradient.z, previous_p));
-                    const float2 interval = gradients_valid
-                        ? HdrHardwareFilterInterval(max(history_value[c], 0.0),
-                            float2(bounds.x, HdrUpperProduct(bounds.y, previous_p)), stored_gradient, extent, half_history)
-                        : float2(0.0, HdrBoundInfinity());
-                    const float transfer = GetPreExposure() * inverse_previous_p;
-                    history_low[c] = HdrBoundDown(interval.x * transfer);
-                    history_high[c] = HdrUpperProduct(interval.y, transfer);
+        if (!fp32_only) {
+            float4 history_low = history_value;
+            float4 history_high = history_value;
+            if (pass.previous_error_bounds_srv != K_INVALID_BINDLESS_INDEX) {
+                ByteAddressBuffer previous_status = ResourceDescriptorHeap[pass.previous_error_bounds_srv];
+                const float4 bounds = asfloat(previous_status.Load4(112u));
+                const uint3 extent = uint3(pass.output_header.output_width,
+                    pass.output_header.output_height, pass.output_header.output_depth);
+                const uint gradient_flags = previous_status.Load(236u);
+                const bool gradients_valid = (gradient_flags & 3u) == 1u
+                    && previous_status.Load(252u) == extent.x * extent.y * extent.z;
+                const bool half_history = (pass.temporal_history0.enabled & 2u) != 0u;
+                const float3 rgb_gradient = asfloat(previous_status.Load3(224u));
+                const float3 t_gradient = asfloat(previous_status.Load3(240u));
+                [unroll] for (uint c = 0u; c < 3u; ++c) {
+                    if (!half_history && all((asuint(bounds.xy) & 0x7fffffffu) == 0u.xx)) {
+                        history_low[c] = history_high[c] = history_value[c] * (GetPreExposure() * inverse_previous_p);
+                    } else {
+                        const float3 stored_gradient = float3(HdrUpperProduct(rgb_gradient.x, previous_p),
+                            HdrUpperProduct(rgb_gradient.y, previous_p), HdrUpperProduct(rgb_gradient.z, previous_p));
+                        const float2 interval = gradients_valid
+                            ? HdrHardwareFilterInterval(max(history_value[c], 0.0),
+                                float2(bounds.x, HdrUpperProduct(bounds.y, previous_p)), stored_gradient, extent, half_history)
+                            : float2(0.0, HdrBoundInfinity());
+                        const float transfer = GetPreExposure() * inverse_previous_p;
+                        history_low[c] = HdrBoundDown(interval.x * transfer);
+                        history_high[c] = HdrUpperProduct(interval.y, transfer);
+                    }
                 }
+                const float2 transmission = gradients_valid || (!half_history && all(bounds.zw == 0.0.xx))
+                    ? HdrHardwareFilterInterval(saturate(history_value.a), bounds.zw, t_gradient, extent, half_history)
+                    : float2(0.0, 1.0);
+                history_low.a = saturate(transmission.x);
+                history_high.a = saturate(transmission.y);
+            } else {
+                history_low.rgb *= GetPreExposure() * inverse_previous_p;
+                history_high.rgb *= GetPreExposure() * inverse_previous_p;
             }
-            const float2 transmission = gradients_valid || (!half_history && all(bounds.zw == 0.0.xx))
-                ? HdrHardwareFilterInterval(saturate(history_value.a), bounds.zw, t_gradient, extent, half_history)
-                : float2(0.0, 1.0);
-            history_low.a = saturate(transmission.x);
-            history_high.a = saturate(transmission.y);
-        } else {
-            history_low.rgb *= GetPreExposure() * inverse_previous_p;
-            history_high.rgb *= GetPreExposure() * inverse_previous_p;
-        }
-        const float weight = saturate(pass.temporal_history0.history_weight);
-        reference_low = lerp(output_value, max(history_low, 0.0.xxxx), weight);
-        reference_high = lerp(output_value, max(history_high, 0.0.xxxx), weight);
-        reference_low.a = saturate(reference_low.a);
-        reference_high.a = saturate(reference_high.a);
+            const float weight = saturate(pass.temporal_history0.history_weight);
+            reference_low = lerp(output_value, max(history_low, 0.0.xxxx), weight);
+            reference_high = lerp(output_value, max(history_high, 0.0.xxxx), weight);
+            reference_low.a = saturate(reference_low.a);
+            reference_high.a = saturate(reference_high.a);
+            }
         history_value.rgb *= GetPreExposure() * inverse_previous_p;
         output_value = lerp(
             output_value,
@@ -645,8 +648,10 @@ void VortexVolumetricFogCS(uint3 dispatch_id : SV_DispatchThreadID)
         reference_low = reference_high = output_value;
     }
 
-    RecordHdrStoreBounds(output_value, reference_low, reference_high, GetOneOverPreExposure(),
-        10u, pass.exposure_status_uav, pass.exposure_fp16_store);
+    if (!fp32_only) {
+        RecordHdrStoreBounds(output_value, reference_low, reference_high, GetOneOverPreExposure(),
+            10u, pass.exposure_status_uav, pass.exposure_fp16_store);
+    }
     CheckHdrStoreRange(output_value, 10u, pass.exposure_status_uav, pass.exposure_fp16_store,
         GetPreExposure());
     output_texture[dispatch_id] = pass.exposure_fp16_store != 0u

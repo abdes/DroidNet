@@ -1715,6 +1715,7 @@ auto SceneRenderer::DescribeExposureProductLayout(const RenderContext& ctx)
   -> ExposureProductLayout
 {
   auto layout = ExposureProductLayout {};
+  layout.fp32_only = ctx.current_view.hdr_fp32_only;
   const auto extent = ResolveRenderContextTargetExtent(ctx).value_or(
     ActiveSceneTextures().GetExtent());
   layout.products[0] = { 11U, extent.x, extent.y, 1U,
@@ -1745,12 +1746,22 @@ auto SceneRenderer::PrepareExposureDomain(RenderContext& ctx) -> bool
   }
   post_process_->SetResolvedConfig(
     ResolveAuthoredPostProcessConfig(ctx, *post_process_));
+  const auto control
+    = renderer_.GetDiagnosticsService().GetHdrPrecisionControl();
+  ctx.current_view.hdr_fp32_only = control == HdrPrecisionControl::kFp32Only;
   auto layout = DescribeExposureProductLayout(ctx);
   auto candidate = postprocess::ExposurePass::StateLease {};
   const auto handle = ctx.current_view.view_state_handle;
   if (handle != CompositionView::kInvalidViewStateHandle) {
     auto& retained = exposure_product_layouts_[handle];
-    if (retained.revision == 0U || retained.products != layout.products) {
+    if (retained.revision == 0U || retained.products != layout.products
+      || retained.fp32_only != layout.fp32_only) {
+      if (retained.revision != 0U && retained.fp32_only != layout.fp32_only
+        && environment_) {
+        // Radiance history is rebuilt across the P=1 control boundary. Exposure
+        // gain and authored transition state remain with PostProcess.
+        environment_->RemoveViewState(ctx.current_view.view_id);
+      }
       CHECK_NE_F(
         retained.revision, (std::numeric_limits<std::uint64_t>::max)());
       layout.revision = retained.revision + 1U;
@@ -1770,8 +1781,7 @@ auto SceneRenderer::PrepareExposureDomain(RenderContext& ctx) -> bool
   if (!active_scene_texture_lease_) {
     candidate.reset();
   }
-  const auto fp32_reference
-    = renderer_.GetDiagnosticsService().IsHdrFp32ReferenceEnabled();
+  const auto fp32_reference = control == HdrPrecisionControl::kFp32Reference;
   ctx.current_view.hdr_color_format = candidate && !fp32_reference
     ? Format::kRGBA16Float
     : Format::kRGBA32Float;
@@ -2625,8 +2635,10 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
     const auto accumulated_srv
       = ShaderVisibleIndex { RegisterSceneTextureView(*accumulated,
         MakeSrvDesc(*accumulated, accumulated->GetDescriptor().format)) };
-    precision_products = CollectExposureProducts(
-      ctx, *accumulated, accumulated_srv, environment_.get());
+    if (!ctx.current_view.hdr_fp32_only) {
+      precision_products = CollectExposureProducts(
+        ctx, *accumulated, accumulated_srv, environment_.get());
+    }
     auto layout = ExposureProductLayout {};
     CHECK_LE_F(precision_products.size(), layout.products.size());
     auto expected_products = std::uint32_t { 0U };
@@ -2640,7 +2652,8 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
       expected_products |= 1U << (product.id - 1U);
     }
     const auto handle = ctx.current_view.view_state_handle;
-    if (handle != CompositionView::kInvalidViewStateHandle) {
+    if (!ctx.current_view.hdr_fp32_only
+      && handle != CompositionView::kInvalidViewStateHandle) {
       auto& retained = exposure_product_layouts_[handle];
       if (retained.revision == 0U || retained.products != layout.products) {
         CHECK_NE_F(

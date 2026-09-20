@@ -675,7 +675,7 @@ normal adaptation continues until fresh stable eligibility permits return.
 
 ## Slice 5.1 FP32 baseline and precision policy
 
-**EX051-04 delivery: planned `fp32-only` performance control.** Keep the existing
+**EX051-04 delivery: validated.** Keep the existing
 `fp32` selector as a format-only diagnostic: it preserves its own qualified P
 and still executes certification. It is not the FP32-only performance baseline.
 
@@ -696,6 +696,40 @@ The new control has these requirements:
 - Select the control at runtime in the existing native benchmark executable.
   On a mode change, invalidate precision candidates and rebase or rebuild affected
   radiance histories. Preserve exposure gain and authored transition requests.
+
+`DiagnosticsService::SetHdrPrecisionControl` selects `kProduction`,
+`kFp32Reference` or `kFp32Only`; the existing format-only Boolean accessor keeps
+its original semantics. SceneRenderer captures the selection before preparing
+the view. Frame-exposure flag `0x10` identifies FP32-only to producer shaders
+without changing GPU record sizes. Changing this mode invalidates the precision
+epoch and rebuilds per-view environment history; exposure state and authored
+requests retain their owner/lifetime and generation.
+
+The baseline omits candidate/product qualification, gradients, producer store
+certificates, composition-bound publication, conversion reports and eligibility
+readbacks. Range-only pre-environment/final SceneColor scans still classify
+original FP32 values; producer store/source checks still feed the same range
+status and exposure solve. The common state/status buffers remain necessary for
+that protection and normal exposure. Transition-only readbacks remain active.
+Fog samples and rebases its ordinary temporal history without executing the
+FP16 error-certificate calculation; mode changes rebuild that history before
+crossing the certificate domain.
+
+The existing Release workload selector accepts `fp32-only` in the same binary.
+`OXYGEN_EXPOSURE_BASELINE_FRAMES=warmup` writes an untimed warmup manifest for
+paired frame-count selection; numeric values retain the sampled-run behavior.
+All recipes now record final output/gain/P/rejection checkpoints outside their
+sample window, including controlled cases. The
+[04 checkpoint](../../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/fp32-only/checkpoint-manifest.json)
+records 109 passing Debug checks (latest unique outcomes), 13 passing Release
+checks and both 234-module shader builds. The five new native cases exercise
+mode/gain/event preservation, fixed/zero-target operation, both existing shared
+lifecycle paths, and actual temporal rendering with mode reset and range
+failure/recovery. Existing FP32-reference and fog-edge controls also pass. The
+initial temporal assertion read observations after the offscreen session had
+reset them; the corrected test captures the submitted view in the existing
+post-render callback. Raw failure evidence is preserved. This closes the
+baseline implementation; its performance comparison belongs to EX051-05.
 
 EX051-05 compares total production behavior with this baseline in four fixed
 pairs. Record actual P, formats and rejection reasons at untimed checkpoints.

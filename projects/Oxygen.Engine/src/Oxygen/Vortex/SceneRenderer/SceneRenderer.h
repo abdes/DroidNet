@@ -253,6 +253,7 @@ private:
   struct ExposureProductLayout {
     std::array<std::array<std::uint32_t, 6U>, 4U> products {};
     std::uint64_t revision { 0U };
+    bool fp32_only { false };
   };
   std::unordered_map<CompositionView::ViewStateHandle, ExposureProductLayout>
     exposure_product_layouts_;

@@ -1237,6 +1237,19 @@ static void GatherFilterGradients(SuitabilityConstants pass, uint3 pixel, uint l
 
 static void GatherPreEnvironmentRange(SuitabilityConstants pass, uint3 pixel, uint lane)
 {
+    // FP32-only retains current range protection without composition bounds.
+    if ((pass.flags & 4096u) != 0u) {
+        uint failure = 0u;
+        if (pixel.x < pass.width && pixel.y < pass.height) {
+            Texture2D<float4> source = ResourceDescriptorHeap[pass.source_srv];
+            StructuredBuffer<FrameExposureData> frame = ResourceDescriptorHeap[pass.frame_srv];
+            failure = ClassifyHdrStoreRange(source.Load(int3(pixel.xy, 0)),
+                frame[0].pre_exposure, 0u);
+        }
+        failure = WaveActiveBitOr(failure);
+        if (WaveIsFirstLane()) RecordHdrRangeFailure(failure, 11u, pass.report_uav);
+        return;
+    }
     uint4 value = 0u.xxxx;
     if (pixel.x < pass.width && pixel.y < pass.height) {
         Texture2D<float4> source = ResourceDescriptorHeap[pass.source_srv];
