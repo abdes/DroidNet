@@ -1150,7 +1150,10 @@ timer or repeated baseline was needed.
 
 | Elapsed CPU/frame metric | Previous baseline | Joint candidate | Reduction |
 | --- | ---: | ---: | ---: |
-| Exposure mean | 0.483860 ms | 0.371625 ms | 23.2% |
+| Active exposure mean | 0.482794 ms | 0.371156 ms | 23.1% |
+| Active exposure p95 | 0.705693 ms | 0.514935 ms | 27.0% |
+| Active exposure p99 | 0.888333 ms | 0.625473 ms | 29.6% |
+| Elapsed exposure mean | 0.483860 ms | 0.371625 ms | 23.2% |
 | Exposure p95 | 0.708597 ms | 0.515917 ms | 27.2% |
 | Exposure p99 | 0.901528 ms | 0.630422 ms | 30.1% |
 | Attributed acquisition p95 | 0.107153 ms | 0.069161 ms | 35.5% |
@@ -1172,10 +1175,20 @@ error is 5.9604645e-8 and quantized output is identical.
 The [decision table](../../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/cpu-corrections13/decision-table.json)
 and [checkpoint](../../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/cpu-corrections13/checkpoint-manifest.json)
 reference raw inputs by path/hash and preserve failed intermediate diagnoses.
-This closes 13A/B's implementation and measured-benefit decisions. The remaining
-13/GATE work is active exposure CPU budget and resolution-scaling qualification;
-the elapsed figures above include scheduler/driver stalls. No budget exception
-has been approved, and the completed GPU matrix is not repeated.
+This closes 13A/B's implementation and measured-benefit decisions. Offline
+extraction through Tracy's own file reader and context-switch API now qualifies
+active CPU from the same captures, without another engine run. The analysis
+intersects each merged zone interval with the native render-thread running
+intervals and checks complete coverage of every measured frame. Both active
+CPU targets fail: **0.514935/0.625473 ms p95/p99 versus 0.15/0.30 ms**. Scheduler
+gaps explain only 0.000982 ms of candidate p95; they are not the remaining cost.
+
+**Decision requested:** retain the unchanged target and agree another correction
+scope, or explicitly accept a revised CPU target. Further API changes still
+require the user's review before coding. No further production correction or
+4K capture begins before that direction is agreed. The accepted A/B correction
+is retained, no budget exception is assumed, and the completed GPU matrix is
+not repeated.
 
 The reference diagnosis is 27.1% native submission, 16.7% acquisition, 7.6%
 finalization outside native submission, and 9.8% compute binding. A hypothetical
