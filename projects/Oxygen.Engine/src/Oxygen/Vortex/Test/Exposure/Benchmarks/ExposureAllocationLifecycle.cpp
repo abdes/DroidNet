@@ -217,7 +217,7 @@ auto ExposureAllocationScenario::QualifyAndRetain(
 auto ExposureAllocationScenario::ResizeAndCapture(
   const std::string& prefix, CycleObservation& observation) -> void
 {
-  static_cast<void>(Snapshot(prefix + "steady_two_retained"));
+  const auto steady = Snapshot(prefix + "steady_two_retained");
   ASSERT_NO_FATAL_FAILURE(RenderFrame(
     {
       .view_count = 2U,
@@ -235,7 +235,10 @@ auto ExposureAllocationScenario::ResizeAndCapture(
       },
       prefix + "resized"));
   }
-  static_cast<void>(Snapshot(prefix + "resized_two_retained"));
+  const auto resized = Snapshot(prefix + "resized_two_retained");
+  EXPECT_EQ(resized.at("pool_families"), steady.at("pool_families"))
+    << "Retained color must not add attachment families for already warmed "
+       "descriptors";
   WithoutDiagnostics([&] -> void {
     for (unsigned index = 0U; index < 2U; ++index) {
       const auto& source = retained_.at(index).color;

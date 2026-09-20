@@ -5,53 +5,56 @@
 //===----------------------------------------------------------------------===//
 
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
-#include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Vortex/RenderContext.h>
+#include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneRenderer.h>
 
 namespace oxygen::vortex {
 
 namespace {
 
-auto TrackTextureFromKnownOrInitial(graphics::CommandRecorder& recorder,
-  const graphics::Texture& texture) -> void
-{
-  if (recorder.IsResourceTracked(texture)) {
-    return;
+  auto TrackTextureFromKnownOrInitial(graphics::CommandRecorder& recorder,
+    const graphics::Texture& texture) -> void
+  {
+    if (recorder.IsResourceTracked(texture)) {
+      return;
+    }
+    if (recorder.AdoptKnownResourceState(texture)) {
+      return;
+    }
+
+    const auto initial = texture.GetDescriptor().initial_state;
+    CHECK_F(initial != graphics::ResourceStates::kUnknown
+        && initial != graphics::ResourceStates::kUndefined,
+      "SceneRenderer: cannot resolve '{}' without a known or declared initial "
+      "state",
+      texture.GetName());
+    recorder.BeginTrackingResourceState(texture, initial);
   }
-  if (recorder.AdoptKnownResourceState(texture)) {
-    return;
+
+  auto CopyTextureIntoArtifact(graphics::CommandRecorder& recorder,
+    const graphics::Texture& source, graphics::Texture& artifact,
+    const graphics::ResourceStates source_final_state) -> void
+  {
+    TrackTextureFromKnownOrInitial(recorder, source);
+    TrackTextureFromKnownOrInitial(recorder, artifact);
+
+    recorder.RequireResourceState(
+      source, graphics::ResourceStates::kCopySource);
+    recorder.RequireResourceState(
+      artifact, graphics::ResourceStates::kCopyDest);
+    recorder.FlushBarriers();
+
+    recorder.CopyTexture(source, graphics::TextureSlice {},
+      graphics::TextureSubResourceSet::EntireTexture(), artifact,
+      graphics::TextureSlice {},
+      graphics::TextureSubResourceSet::EntireTexture());
+
+    recorder.RequireResourceStateFinal(source, source_final_state);
+    recorder.RequireResourceStateFinal(
+      artifact, graphics::ResourceStates::kShaderResource);
   }
-
-  const auto initial = texture.GetDescriptor().initial_state;
-  CHECK_F(initial != graphics::ResourceStates::kUnknown
-      && initial != graphics::ResourceStates::kUndefined,
-    "SceneRenderer: cannot resolve '{}' without a known or declared initial "
-    "state",
-    texture.GetName());
-  recorder.BeginTrackingResourceState(texture, initial);
-}
-
-auto CopyTextureIntoArtifact(graphics::CommandRecorder& recorder,
-  const graphics::Texture& source, graphics::Texture& artifact,
-  const graphics::ResourceStates source_final_state) -> void
-{
-  TrackTextureFromKnownOrInitial(recorder, source);
-  TrackTextureFromKnownOrInitial(recorder, artifact);
-
-  recorder.RequireResourceState(source, graphics::ResourceStates::kCopySource);
-  recorder.RequireResourceState(artifact, graphics::ResourceStates::kCopyDest);
-  recorder.FlushBarriers();
-
-  recorder.CopyTexture(source, graphics::TextureSlice {},
-    graphics::TextureSubResourceSet::EntireTexture(), artifact,
-    graphics::TextureSlice {}, graphics::TextureSubResourceSet::EntireTexture());
-
-  recorder.RequireResourceStateFinal(source, source_final_state);
-  recorder.RequireResourceStateFinal(
-    artifact, graphics::ResourceStates::kShaderResource);
-}
 
 } // namespace
 
@@ -119,8 +122,8 @@ void SceneRenderer::ResolveSceneColor(
     if (converted) {
       scene_texture_extracts_.resolved_scene_color.fallback
         = scene_textures.GetSceneColorResource().get();
-      scene_texture_extracts_.resolved_scene_color.source_lease
-        = active_scene_texture_lease_;
+      scene_texture_extracts_.resolved_scene_color.source_color
+        = scene_textures.GetSceneColorLease();
     } else {
       // Submission failure cannot publish unchecked half data. Preserve the
       // solved exposure and fall back to an unconditional FP32 snapshot.
@@ -140,15 +143,15 @@ void SceneRenderer::ResolveSceneColor(
     && scene_texture_extracts_.resolved_scene_depth.texture != nullptr;
 
   const auto queue_key = gfx_.QueueKeyFor(graphics::QueueRole::kGraphics);
-  auto recorder_ptr = gfx_.AcquireCommandRecorder(
-    queue_key, "Vortex ResolveSceneColor");
+  auto recorder_ptr
+    = gfx_.AcquireCommandRecorder(queue_key, "Vortex ResolveSceneColor");
   CHECK_F(static_cast<bool>(recorder_ptr),
     "SceneRenderer: failed to acquire a recorder for Stage 21 resolves");
-  renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(
-    *recorder_ptr);
+  renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(*recorder_ptr);
   auto& recorder = *recorder_ptr;
   graphics::GpuEventScope scope(recorder, "Vortex.ResolveSceneColor",
-    profiling::ProfileGranularity::kTelemetry, profiling::ProfileCategory::kPass);
+    profiling::ProfileGranularity::kTelemetry,
+    profiling::ProfileCategory::kPass);
 
   if (!converted && scene_texture_extracts_.resolved_scene_color.valid
     && scene_texture_extracts_.resolved_scene_color.texture != nullptr) {

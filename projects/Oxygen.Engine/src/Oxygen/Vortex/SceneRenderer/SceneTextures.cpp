@@ -85,12 +85,13 @@ void SceneTextureExtracts::Reset() noexcept
   prev_velocity = {};
 }
 
-SceneTextures::SceneTextures(Graphics& gfx, const SceneTexturesConfig& config)
+SceneTextures::SceneTextures(Graphics& gfx, const SceneTexturesConfig& config,
+  std::shared_ptr<graphics::Texture> leased_color)
   : gfx_(gfx)
   , config_(config)
 {
   ValidateConfig(config_);
-  AllocateTextures();
+  AllocateTextures(std::move(leased_color));
 }
 
 SceneTextures::~SceneTextures() { ReleaseTextures(); }
@@ -114,6 +115,12 @@ auto SceneTextures::GetSceneColorResource() const
   -> const std::shared_ptr<graphics::Texture>&
 {
   return scene_color_.resource;
+}
+
+auto SceneTextures::GetSceneColorLease() const
+  -> const std::shared_ptr<graphics::Texture>&
+{
+  return scene_color_lease_;
 }
 
 auto SceneTextures::GetSceneDepthResource() const
@@ -259,13 +266,18 @@ void SceneTextures::ValidateExtent(const glm::uvec2 extent)
   }
 }
 
-void SceneTextures::AllocateTextures()
+void SceneTextures::AllocateTextures(
+  std::shared_ptr<graphics::Texture> leased_color)
 {
   ReleaseTextures();
 
-  scene_color_.resource
-    = CreateTexture("SceneColor", config_.scene_color_format, true, true, true);
-  RegisterTexture(scene_color_);
+  if (leased_color) {
+    SetLeasedSceneColor(std::move(leased_color));
+  } else {
+    leased_scene_color_ = false;
+    scene_color_.resource = gfx_.CreateTexture(SceneColorDescriptor(config_));
+    RegisterTexture(scene_color_);
+  }
   scene_depth_.resource
     = CreateTexture("SceneDepth", Format::kDepth32Stencil8, true, true);
   RegisterTexture(scene_depth_);
@@ -301,11 +313,64 @@ void SceneTextures::ReleaseTextures() noexcept
   for (auto& gbuffer : gbuffers_) {
     UnregisterTexture(gbuffer);
   }
-  UnregisterTexture(scene_color_);
+  if (leased_scene_color_) {
+    ReleaseLeasedSceneColor();
+  } else {
+    UnregisterTexture(scene_color_);
+  }
   UnregisterTexture(scene_depth_);
   UnregisterTexture(partial_depth_);
   UnregisterTexture(velocity_);
   UnregisterTexture(custom_depth_);
+}
+
+auto SceneTextures::SceneColorDescriptor(const SceneTexturesConfig& config)
+  -> graphics::TextureDesc
+{
+  ValidateConfig(config);
+  return {
+    .width = config.extent.x,
+    .height = config.extent.y,
+    .sample_count = config.msaa_sample_count,
+    .format = config.scene_color_format,
+    .debug_name = "SceneColor",
+    .is_shader_resource = true,
+    .is_render_target = true,
+    .is_uav = true,
+    .clear_value = {},
+    .use_clear_value = true,
+    .initial_state = graphics::ResourceStates::kRenderTarget,
+  };
+}
+
+void SceneTextures::SetLeasedSceneColor(
+  std::shared_ptr<graphics::Texture> color)
+{
+  CHECK_NOTNULL_F(color.get());
+  const auto& desc = color->GetDescriptor();
+  CHECK_F(desc.width == config_.extent.x && desc.height == config_.extent.y
+    && desc.format == config_.scene_color_format
+    && desc.sample_count == config_.msaa_sample_count);
+  if (!leased_scene_color_) {
+    UnregisterTexture(scene_color_);
+  }
+  // The independent lease owns registration and fence retirement. Replacing
+  // the family binding must neither unregister it nor reset its known state.
+  // Framebuffer bindings own the underlying resource, not the immutable-reader
+  // lease. Their own deferred lifetime must not start a second lease
+  // retirement. RetainedTexturePool still rejects recycling while such resource
+  // owners exist.
+  scene_color_.resource = color->shared_from_this();
+  scene_color_lease_ = std::move(color);
+  leased_scene_color_ = true;
+}
+
+void SceneTextures::ReleaseLeasedSceneColor() noexcept
+{
+  if (leased_scene_color_) {
+    scene_color_.resource.reset();
+    scene_color_lease_.reset();
+  }
 }
 
 void SceneTextures::RegisterTexture(RegisteredTexture& texture)

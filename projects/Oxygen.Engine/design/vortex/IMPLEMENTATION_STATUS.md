@@ -96,12 +96,17 @@ Slices 6-10, including the complete LightBench delivery; the package is not comp
 
 ### 3.1 Current work
 
-**Performance resumed (2026-09-20): EX051-03 inventory complete.** The eight
+**Performance resumed (2026-09-20): EX051-03 and EX051-10A complete.** The eight
 existing workload entry points, fixed controls, public event operations and
 bounded event script are mapped below. The SceneTextures owner inventory links
 the existing descriptor and lifecycle reports; no build or native run was needed
-or performed for this documentation-only item. Next: EX051-10A independent color
-ownership, then 04, then the four decision pairs. Event-script execution remains
+or performed for this documentation-only item. Independent color ownership
+passes 56 focused Debug checks, including queued consumers and the specified 4K
+temporal-off lifecycle case. Final engine placement peak is 3747.207 MiB; all
+three retained-resize cycles keep identical attachment populations, and all
+retired family leases reach zero. The superseded double-retirement drafts and
+their diagnosis remain in the [10A checkpoint](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/color-ownership/checkpoint-manifest.json).
+Next: 04, then the four decision pairs. Event-script execution remains
 in 13; neither this inventory nor historical manifests close final acceptance.
 
 **Complete: corrected quality review of every file under
@@ -207,10 +212,9 @@ with its own correctness checks, measured result and accept/reject decision.
 Only 13 owns the final repeated performance matrix. GATE evaluates that evidence.
 A completed or rejected experiment does not wait for 13 to close.
 
-**Next action:** EX051-03's documentation-only inventory is complete below.
-Start EX051-10A at its
-[source entry points](lld/scene-textures.md#ex051-10a-independent-scenecolor-fallback-ownership).
-EX051-04 follows 10A. D01-D04 run only after both deliveries are validated.
+**Next action:** EX051-03's inventory and EX051-10A ownership are complete.
+Implement EX051-04 at its owner contract below. D01-D04 run only after 04 is
+validated; 10A's Debug lifecycle measurement is not a format-benefit timing run.
 
 Use the existing renderer, profiling APIs, native workloads and GPU status
 reports. Keep FP32 lighting accumulation, exposure equations, current-frame range
@@ -410,7 +414,7 @@ existing presented-output path. Do not rerun this matrix at intermediate items.
 | EX051-08 | Standalone fog optimization | superseded | — | Removed from active delivery. Exposure-related temporal precision and error propagation belong to 09. General fog optimization is outside this slice. |
 | EX051-09 | Precision operating policy / PostProcess + Environment | planned | 05 | Agree the explicit state/decision table for cheap FP32 operation, candidate attempt, qualified FP16, failure recovery and retry. Specify validity keys and rejection triggers. Preserve mandatory current-frame protection, two actual consecutive eligible frames, event precedence and immutable P/history. Implement only the policy selected by 05; validate affected transitions. |
 | EX051-10 | Copy/reuse/retirement correction / SceneTextures + Graphics | validated | Measured checkpoints | H4 (`20e8968f`), H5 (`28e0f1ee`) and R091/accounting (`8903305`) are committed. H5 removes measured steady churn; R091 passes seven focused Debug cases. The two Release lifecycle matrices pass eight cases each with identical same-control peaks, P/state trajectories and retired populations. Evidence: [H4](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/h4-closeout-manifest.json), [H5](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/h5-closeout-manifest.json), [lifecycle protocol](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/lifecycle-memory/protocol-shared-idle-fix.json), [matched 1080 production](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/lifecycle-memory/audit-matched-1920-production-Release.json), [1080 FP32](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/lifecycle-memory/audit-matched-1920-fp32-Release.json), [4K production](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/lifecycle-memory/audit-matched-3840-production-Release.json), [4K FP32](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/lifecycle-memory/audit-matched-3840-fp32-Release.json). |
-| EX051-10A | Independent SceneColor fallback ownership / SceneTextures | planned | 10 | Lease the FP32 SceneColor allocation independently from depth/GBuffer/velocity/custom-depth attachments. A retained fallback keeps only its color, descriptors and exposure records alive. Make both color and family reuse honor their own readers/fences. Exit with the existing queued-consumer checks and one existing 4K temporal-off lifecycle case showing no unrelated attachment retention. No family-wide pool redesign or extra lifecycle framework. |
+| EX051-10A | Independent SceneColor fallback ownership / SceneTextures | validated | 10 | Independent color allocation/consumer leases and attachment-frame retirement implemented. Framebuffer bindings retain resources separately from immutable reader leases; both pool reuse paths preserve readers/fences. Final Debug batch: 56/56, including existing queued color/depth cases and 4K temporal-off lifecycle. All three retained-resize cycles preserve warmed attachment identities/populations; retired leases are zero. Engine peak 3747.207 MiB (322.5 MiB below the superseded draft); no matched-Release benefit claim. [Checkpoint, exact commands, hashes and preserved diagnosis](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/color-ownership/checkpoint-manifest.json). Item exit passes; Release format-benefit decisions belong to 05 and final acceptance to 13. |
 | EX051-11 | Active CPU attribution / PostProcess + Graphics callers | planned | 05, 09 | Use existing CPU profiling for one targeted attribution of exposure preparation, descriptor publication and command recording/submission. Separate active work from queue waits. Correct only a demonstrated bottleneck; close without a production change when the measured path meets its target. No general submission-system rewrite. |
 | EX051-12 | Integrated correctness / existing owners | in_progress | 04, 09, 10A, 11 | Map existing numerical, range, mask, history, two-view, rejection and delayed-lease cases to the changed contracts. Run the owning correctness gates at final integration. Add only a named missing case; retain accepted checkpoint evidence for unchanged behavior. |
 | EX051-13 | Final performance acceptance / rendering owner | planned | 12 | Execute the 16 production cells/48 runs and attached event windows defined above, plus normal presentation. Verify GPU/CPU distributions, scaling, transition latency, memory and output. This is the sole final performance campaign. |

@@ -22,6 +22,7 @@ struct SceneTextureLeaseStorage {
   SceneTextureLeaseKey key;
   std::unique_ptr<SceneTextures> scene_textures;
   std::uint64_t lease_id;
+  bool retired { true };
 };
 
 auto SceneTextureLeaseKey::FromConfig(const SceneTexturesConfig& config)
@@ -46,7 +47,14 @@ SceneTextureLease::~SceneTextureLease() = default;
 SceneTextureLease::SceneTextureLease(SceneTextureLease&& other) noexcept
   = default;
 auto SceneTextureLease::operator=(SceneTextureLease&& other) noexcept
-  -> SceneTextureLease& = default;
+  -> SceneTextureLease&
+{
+  if (this != &other) {
+    Release();
+    storage_ = std::move(other.storage_);
+  }
+  return *this;
+}
 auto SceneTextureLease::IsValid() const noexcept -> bool
 {
   return storage_ != nullptr;
@@ -72,6 +80,26 @@ auto SceneTextureLease::GetLeaseId() const noexcept -> std::uint64_t
 }
 void SceneTextureLease::Release() noexcept { storage_.reset(); }
 
+void SceneTextureLease::Retire(Graphics& gfx)
+{
+  CHECK_NOTNULL_F(storage_.get());
+  if (!storage_->retired) {
+    return;
+  }
+  storage_->retired = false;
+  // Release the writable color lease at submission, not at attachment
+  // retirement. Its own readers start its fence retirement independently.
+  storage_->scene_textures->ReleaseLeasedSceneColor();
+  // The pool may be destroyed before this frame retires. A weak token neither
+  // calls a destroyed pool nor creates a Graphics ownership cycle via color.
+  gfx.GetDeferredReclaimer().RegisterDeferredAction(
+    [entry = std::weak_ptr<SceneTextureLeaseStorage>(storage_)] {
+      if (const auto storage = entry.lock()) {
+        storage->retired = true;
+      }
+    });
+}
+
 SceneTextureLeasePool::SceneTextureLeasePool(Graphics& gfx,
   SceneTexturesConfig base_config, const std::size_t max_live_leases_per_key)
   : gfx_(gfx)
@@ -87,16 +115,19 @@ SceneTextureLeasePool::SceneTextureLeasePool(Graphics& gfx,
 
 SceneTextureLeasePool::~SceneTextureLeasePool() = default;
 
-auto SceneTextureLeasePool::Acquire(const SceneTextureLeaseKey& key)
-  -> SceneTextureLease
+auto SceneTextureLeasePool::Acquire(const SceneTextureLeaseKey& key,
+  std::shared_ptr<graphics::Texture> leased_color) -> SceneTextureLease
 {
   SceneTextures::ValidateConfig(BuildConfig(key));
 
   const auto reusable
     = std::ranges::find_if(entries_, [&key](const auto& entry) {
-        return entry.use_count() == 1 && entry->key == key;
+        return entry.use_count() == 1 && entry->retired && entry->key == key;
       });
   if (reusable != entries_.end()) {
+    if (leased_color) {
+      (*reusable)->scene_textures->SetLeasedSceneColor(std::move(leased_color));
+    }
     (*reusable)->lease_id = next_lease_id_++;
     return SceneTextureLease { *reusable };
   }
@@ -105,15 +136,15 @@ auto SceneTextureLeasePool::Acquire(const SceneTextureLeaseKey& key)
     throw std::runtime_error(fmt::format(
       "SceneTextureLeasePool exhausted for key extent={}x{} msaa={} "
       "velocity={} custom_depth={} queue={}",
-      key.extent.x, key.extent.y, key.msaa_sample_count,
-      key.enable_velocity, key.enable_custom_depth,
-      static_cast<std::uint32_t>(key.queue_affinity)));
+      key.extent.x, key.extent.y, key.msaa_sample_count, key.enable_velocity,
+      key.enable_custom_depth, static_cast<std::uint32_t>(key.queue_affinity)));
   }
 
   auto entry
     = std::make_shared<SceneTextureLeaseStorage>(SceneTextureLeaseStorage {
       .key = key,
-      .scene_textures = std::make_unique<SceneTextures>(gfx_, BuildConfig(key)),
+      .scene_textures = std::make_unique<SceneTextures>(
+        gfx_, BuildConfig(key), std::move(leased_color)),
       .lease_id = next_lease_id_++,
     });
   entries_.push_back(entry);
@@ -128,8 +159,10 @@ auto SceneTextureLeasePool::GetAllocationCount() const noexcept -> std::size_t
 
 auto SceneTextureLeasePool::GetLiveLeaseCount() const noexcept -> std::size_t
 {
-  return static_cast<std::size_t>(std::ranges::count_if(
-    entries_, [](const auto& entry) { return entry.use_count() > 1; }));
+  return static_cast<std::size_t>(
+    std::ranges::count_if(entries_, [](const auto& entry) {
+      return entry.use_count() > 1 || !entry->retired;
+    }));
 }
 
 auto SceneTextureLeasePool::GetLeaseCountForKey(
@@ -163,7 +196,7 @@ auto SceneTextureLeasePool::CountLiveLeasesForKey(
 {
   return static_cast<std::size_t>(
     std::ranges::count_if(entries_, [&key](const auto& entry) {
-      return entry.use_count() > 1 && entry->key == key;
+      return (entry.use_count() > 1 || !entry->retired) && entry->key == key;
     }));
 }
 

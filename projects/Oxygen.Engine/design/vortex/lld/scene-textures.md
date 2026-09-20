@@ -137,12 +137,13 @@ precision certificate without changing numerical exposure authority.
 
 The view HDR format controls environment intermediates and resolved color;
 SceneColor-family lease keys remain FP32 when post processing is active. A half
-resolve carries its conversion report, original FP32 fallback and family lease.
+resolve carries its conversion report and independently leased FP32 fallback.
 Unconditional texture-only consumers receive the retained FP32 source. Artifact
 ownership keeps the texture and registered views together and schedules retirement
 through the existing reclaimer only after the last retained extraction is released.
-Family storage is shared by the pool and its lease, so retained fallback contents
-cannot be reused and lease destruction does not call a destroyed pool.
+Color allocation reuse follows `RetainedTexturePool` reader/fence retirement;
+attachment-family reuse separately waits for its lease and submitted frame.
+Retained fallback readers do not own the attachment family.
 
 Resolved/extracted textures and their registered shader-visible views retire
 together through the existing GPU-frame reclaimer. Switching views, resizing,
@@ -772,7 +773,7 @@ struct SceneTextureExtractRef {
   bool valid{false};
   std::shared_ptr<const postprocess::FrameExposureResources> exposure;
   graphics::Texture* fallback{nullptr}; // original FP32 accumulation, if conditional
-  std::shared_ptr<const SceneTextureLease> source_lease;
+  std::shared_ptr<const graphics::Texture> source_color;
 };
 
 struct SceneTextureExtracts {
@@ -789,8 +790,8 @@ struct SceneTextureExtracts {
 **Current ownership:** `SceneRenderer` produces the resolved artifacts at stage 21 and
 finalizes the handoff/history set during `PostRenderCleanup` (stage 23).
 Queued consumers retain the complete extract record. It owns the artifact and
-registered views, frame-pinned exposure and conversion report, and the family
-lease protecting the original FP32 accumulation. View removal, subsequent
+registered views, frame-pinned exposure and conversion report, and the independent
+color lease protecting the original FP32 accumulation. View removal, subsequent
 format changes and frame-slot reuse cannot replace those inputs. After submission,
 the existing GPU-frame reclaimer protects resources until the consumer fence
 retires, even when the final extraction owner has been released.
@@ -805,7 +806,7 @@ destruction; the shared wrapper unregisters the resource and its views only afte
 the final reader releases it and the existing GPU-frame reclaimer retires it.
 Velocity retains its separate stage-23 snapshot.
 
-Resolved color, shared depth and previous velocity each use a private
+Accumulated color, resolved color, shared depth and previous velocity each use a private
 `RetainedTexturePool`; sky-view, aerial-perspective and volumetric-fog outputs
 use the same ownership mechanism in their producing passes. Each pool holds at
 most one idle allocation per persistent view and complete allocation descriptor.
@@ -826,16 +827,37 @@ mandatory for every conditional consumer.
 
 ### EX051-10A independent SceneColor fallback ownership
 
-**Status: planned.** Replace the whole-family lease held by a conditional color
-extraction with ownership of the FP32 SceneColor allocation itself. Keep FP32
-lighting accumulation and the existing GPU-selected checked-half fallback.
+**Status: validated in the focused Debug owning checks.** Conditional
+color now owns an independent `RetainedTexturePool` lease through `source_color`.
+`SceneTextures::GetSceneColorResource()` supplies the underlying resource to
+framebuffers; `GetSceneColorLease()` supplies immutable extraction ownership.
+These are distinct ownership records for the same allocation. Deferred
+framebuffer owners therefore do not initiate a second color-lease retirement;
+the pool still refuses reuse while underlying resource owners remain.
+`SceneTextureLease::Retire()` releases writable color ownership and independently
+marks attachments unavailable until their frame's reclaimer callback. No CPU
+wait is added. FP32 accumulation and GPU-selected checked-half fallback remain.
+
+The [10A checkpoint](../../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/color-ownership/checkpoint-manifest.json)
+records 56/56 passing checks and 644 unchanged frozen inputs. The 4K temporal-off
+trace has engine/combined/HDR peaks of 3747.207/3987.770/1603.203 MiB. In all three
+cycles, six warmed attachment families keep identical resource identities and
+descriptors through retained-color resize; all six retire to zero leases.
+The three-frame attachment population is independent of fallback readers.
+Queued consumers preserve five HDR outputs and both depth aliases, including
+release before submission/completion. Color/descriptor reuse is additionally
+covered by the 16 existing retained-pool tests and the focused family-reuse test.
+The earlier draft's extra color-retirement interval was diagnosed and corrected;
+its raw evidence remains separate. These are Debug lifecycle observations, not
+a matched-Release comparison with the historical table below. 05 owns the new
+format-benefit measurements and 13 owns final acceptance.
 
 **Source entry points:** trace `SceneRenderer::BuildSceneTextureLeaseKey` and
 family acquisition in
 [SceneRenderer.cpp](../../../src/Oxygen/Vortex/SceneRenderer/SceneRenderer.cpp),
 reuse eligibility in
 [SceneTextureLeasePool.cpp](../../../src/Oxygen/Vortex/SceneRenderer/SceneTextureLeasePool.cpp),
-the extraction's `source_lease` in
+the extraction's `source_color` in
 [ResolveSceneColor.cpp](../../../src/Oxygen/Vortex/SceneRenderer/ResolveSceneColor.cpp),
 and `SceneTextureExtractRef` in
 [SceneTextures.h](../../../src/Oxygen/Vortex/SceneRenderer/SceneTextures.h).
@@ -958,7 +980,7 @@ Stage 23 (Cleanup)
 
 | Product | Format | Size | Lifecycle |
 | ------- | ------ | ---- | --------- |
-| SceneColor accumulation | `R32G32B32A32_FLOAT` in scene rendering | `extent.x × extent.y` | Per-view family; resized/recreated through the lease pool |
+| SceneColor accumulation | `R32G32B32A32_FLOAT` in scene rendering | `extent.x × extent.y` | Independent per-view color lease, bound to the active family; readers and GPU fences govern reuse |
 | Resolved HDR | Qualified `R16G16B16A16_FLOAT` or recovery/retained `R32G32B32A32_FLOAT` | `extent.x × extent.y` | Existing resolve artifact; checked conversion and retained FP32 fallback carry frame-pinned exposure metadata |
 | SceneDepth | `D32_FLOAT_S8X24_UINT` | `extent.x × extent.y` | Persistent; carries scene depth + scene stencil family |
 | PartialDepth | `R32_FLOAT` | `extent.x × extent.y` | Persistent |

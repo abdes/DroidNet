@@ -906,7 +906,7 @@ NOLINT_TEST_F(SceneRendererPublicationTest, CleanupRejectsUnusableResolvedDepth)
     EXPECT_EQ(previous.retained_texture, nullptr);
     EXPECT_EQ(previous.exposure, nullptr);
     EXPECT_EQ(previous.fallback, nullptr);
-    EXPECT_EQ(previous.source_lease, nullptr);
+    EXPECT_EQ(previous.source_color, nullptr);
   }
   EXPECT_EQ(graphics_->texture_copy_log_.copies.size(), copies_before);
 }

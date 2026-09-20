@@ -698,7 +698,7 @@ NOLINT_TEST_F(
     records.back().color.texture->GetDescriptor().format, Format::kRGBA16Float);
   const auto half = records.back();
   ASSERT_NE(half.color.fallback, nullptr);
-  ASSERT_NE(half.color.source_lease, nullptr);
+  ASSERT_NE(half.color.source_color, nullptr);
   ASSERT_NE(half.frame->qualified_candidate, nullptr);
   const auto domain = Read<FrameExposureData>(
     *half.frame->buffer, ResourceStates::kShaderResource);

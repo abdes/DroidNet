@@ -272,8 +272,8 @@ private:
   OXGN_VRTX_API void ResetPerViewSceneProducts();
   OXGN_VRTX_API auto ActiveSceneTextures() -> SceneTextures&;
   OXGN_VRTX_NDAPI auto ActiveSceneTextures() const -> const SceneTextures&;
-  OXGN_VRTX_NDAPI auto BuildSceneTextureLeaseKey(
-    const RenderContext& ctx) const -> SceneTextureLeaseKey;
+  OXGN_VRTX_NDAPI auto BuildSceneTextureLeaseKey(const RenderContext& ctx) const
+    -> SceneTextureLeaseKey;
   OXGN_VRTX_API void BindPreparedView(RenderContext& ctx);
   OXGN_VRTX_API void RenderCurrentView(RenderContext& ctx);
   OXGN_VRTX_API auto EnsureArtifactTexture(RenderContext& ctx,
@@ -300,6 +300,7 @@ private:
   ScreenHzbFrameBindings published_screen_hzb_bindings_ {};
   SceneTextures scene_textures_;
   SceneTextureLeasePool scene_texture_pool_;
+  internal::RetainedTexturePool scene_color_pool_;
   SceneTextures* active_scene_textures_ { nullptr };
   SceneTextures* inspected_scene_textures_ { nullptr };
   SceneTextureSetupMode setup_mode_ {};
