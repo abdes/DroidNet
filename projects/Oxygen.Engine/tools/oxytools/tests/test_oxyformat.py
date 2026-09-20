@@ -120,7 +120,7 @@ class SelectionTests(Fixture):
         with patch(
             "oxyformat.engine.find_formatter", side_effect=AssertionError("LLVM")
         ):
-            code, output, _ = self.invoke("src/vendor/a.cpp")
+            code, _, output = self.invoke("src/vendor/a.cpp")
         self.assertEqual(code, 0)
         self.assertIn("1 skipped", output)
 
@@ -222,12 +222,13 @@ class LLVMTests(Fixture):
         original = path.read_bytes()
         code, output, error = self.invoke("src/a.cpp")
         self.assertEqual(code, 1, error)
-        self.assertIn("Needs formatting: src/a.cpp", output)
+        self.assertIn(f"Needs formatting: {path}", output)
         self.assertNotIn("return", output)
         self.assertEqual(path.read_bytes(), original)
         code, output, error = self.invoke("src/a.cpp", "--fix")
         self.assertEqual(code, 0, error)
-        self.assertIn("1 formatted", output)
+        self.assertIn("Formatted", error)
+        self.assertIn("1 file", error)
         expected = path.read_bytes()
         modified = path.stat().st_mtime_ns
         code, _, error = self.invoke("src/a.cpp")
@@ -240,7 +241,7 @@ class LLVMTests(Fixture):
     def test_invalid_encoding_and_missing_input_do_not_block_valid_files(self):
         invalid = self.write("src/bad.cpp", b"\xff\xfei\x00")
         good = self.write("src/good.cpp", "int  x;\n")
-        code, output, _ = self.invoke(
+        code, _, output = self.invoke(
             "src/bad.cpp", "src/missing.cpp", "src/good.cpp", "--fix", "--jobs", "1"
         )
         self.assertEqual(code, 2)
@@ -330,7 +331,7 @@ class LLVMTests(Fixture):
                     check=False,
                 )
                 self.assertEqual(result.returncode, 1, result.stderr)
-                self.assertIn("Needs formatting: src/a.cpp", result.stdout)
+                self.assertIn(f"Needs formatting: {path}", result.stdout)
                 self.assertNotIn("install", result.stderr.lower())
 
 

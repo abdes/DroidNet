@@ -6,7 +6,6 @@ import argparse
 import math
 import os
 import signal
-import sys
 import tempfile
 import time
 from collections import Counter
@@ -88,14 +87,17 @@ def find_root() -> Path:
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     # Help/argument errors do not pay the schema and formatter import cost.
-    from oxytools.common import ToolError, display
+    from oxytools.common import ToolError
     from oxytools.ownership import Ownership
 
     from .engine import Cancelled, Formatter, Processes, find_formatter, prepare_style
+    from .reporting import Reporter
     from .selection import select_files
 
     started = time.monotonic()
     processes = Processes(args.timeout)
+    reporter = Reporter()
+    processing = False
     previous = {}
     try:
         for name in ("SIGINT", "SIGBREAK"):
@@ -103,15 +105,15 @@ def main(argv: list[str] | None = None) -> int:
                 sig = getattr(signal, name)
                 previous[sig] = signal.signal(sig, lambda *_: processes.cancelled.set())
         root = Path(args.project_root).resolve() if args.project_root else find_root()
-        policy = Ownership.load(root)
         base = Path.cwd() if args.paths_from_cwd else root
-        paths = (
-            policy.project_roots if args.all else [base / name for name in args.paths]
-        )
+        paths = [base / name for name in args.paths]
+        reporter.start(root, paths, fix=args.fix, all_project=args.all)
+        policy = Ownership.load(root)
+        paths = policy.project_roots if args.all else paths
         selection = select_files(policy, paths)
         counts = Counter(failed=len(selection.errors), skipped=selection.skipped)
         for path, error in selection.errors:
-            print(f"Failed: {display(path, root)}: {error}", file=sys.stderr)
+            reporter.error(path, error)
         if selection.files:
             binary = find_formatter(args.clang_format_bin)
             with tempfile.TemporaryDirectory(prefix="oxyformat-") as directory:
@@ -119,36 +121,31 @@ def main(argv: list[str] | None = None) -> int:
                 formatter = Formatter(
                     binary, style, root / ".clang-format", source, args.fix, processes
                 )
+                processing = True
                 for result in formatter.run(selection.files, args.jobs):
                     counts[result.status] += 1
                     if result.status in {"needed", "changed"}:
-                        label = (
-                            "Needs formatting"
-                            if result.status == "needed"
-                            else "Formatted"
-                        )
-                        print(f"{label}: {display(result.path, root)}")
+                        reporter.file(result.path)
                     elif result.error:
-                        print(
-                            f"{result.status.capitalize()}: {display(result.path, root)}: {result.error}",
-                            file=sys.stderr,
+                        reporter.error(
+                            result.path,
+                            result.error,
+                            cancelled=result.status == "cancelled",
                         )
-        elif not selection.errors:
-            print("No eligible C++ files selected.")
-        label = "formatted" if args.fix else "need formatting"
-        changes = counts["changed"] if args.fix else counts["needed"]
-        print(
-            f"{len(selection.files)} selected | {changes} {label} | {counts['unchanged']} compliant | {counts['failed']} failed | {counts['skipped']} skipped | {time.monotonic() - started:.2f}s"
+        reporter.finish(
+            counts,
+            len(selection.files),
+            time.monotonic() - started,
+            cancelled=processes.cancelled.is_set(),
         )
         if processes.cancelled.is_set():
-            print("Cancelled; completed formatting is retained.", file=sys.stderr)
             return 130
         return 2 if counts["failed"] else 1 if counts["needed"] else 0
     except Cancelled:
-        print("Cancelled.", file=sys.stderr)
+        reporter.finish({}, 0, time.monotonic() - started, cancelled=True)
         return 130
     except (OSError, ValueError, ToolError) as error:
-        print(f"oxyformat: {error}", file=sys.stderr)
+        reporter.failure(str(error), started=processing)
         return 2
     finally:
         for sig, handler in previous.items():

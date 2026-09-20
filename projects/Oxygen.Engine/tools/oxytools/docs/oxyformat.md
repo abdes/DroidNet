@@ -58,6 +58,17 @@ files and failures. Already compliant files appear only in summary counts.
 No formatted source or diff is printed. Exit codes are 0 for success, 1 for
 formatting needed, 2 for execution/configuration failures, and 130 for cancellation.
 
+Both tools share a compact cyan tool/scope heading and consistent outcome colors.
+Interactive formatter output groups affected paths under one heading. Its final
+line states the outcome, relevant counts, and duration; zero failure/skip counts
+and redundant compliant totals are omitted. Errors remain actionable, and partial
+or cancelled runs are never labelled clean. `NO_COLOR` disables colors.
+
+When redirected, affected file records stay on stdout with full absolute paths
+on single lines. Context, errors, and summaries go to stderr, matching oxytidy.
+Redirected output has no color or animation. The formatter retains its minimal
+reporting surface; oxytidy exposes additional context through `--verbose`.
+
 ## Performance and delivery gates
 
 The hook processes only supplied filenames; it never scans the project to find
@@ -77,7 +88,7 @@ Both the monorepo and engine pre-commit profiles define `oxyformat`, limited to
 C++ filenames under the engine's owned source and example trees. The shared
 policy applies its exclusions inside the command. The hook invokes this
 checkout's Python source directly, using an isolated pre-commit environment with
-PyYAML and jsonschema installed once. There is no PowerShell or package-manager
+PyYAML, jsonschema, and Rich installed once. There is no PowerShell or package-manager
 invocation on the commit path. Pre-commit dispatches batches serially; oxyformat
 owns parallelism within each batch.
 
@@ -127,3 +138,8 @@ inside the hook and approximately 0.89 seconds for repeated full pre-commit
 invocations. An initial invocation took 3.17 seconds. Isolated partially staged
 tests also passed, with higher and more variable Git/stashing overhead. These
 figures exclude the one-time dependency installation.
+
+The presentation update was validated with 99 tests, including narrow terminals,
+redirected streams, `NO_COLOR`, and distinct clean/failed/cancelled outcomes. Fresh
+process medians remained 325 ms for one file, 370 ms for ten, and 718 ms for all
+74 Base files. Its local evidence is under `out/cli-presentation-validation/`.
