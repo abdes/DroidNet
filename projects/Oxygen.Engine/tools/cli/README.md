@@ -25,11 +25,13 @@ development automation.
 
 ### `oxytidy.ps1` - Scoped Parallel clang-tidy
 
-Runs `clang-tidy` against selected source roots using the repo's
-`compile_commands.json`, `.clang-tidy`, and `.clangd` Add/Remove flag rules.
-It sanitizes the compile database for Clang consumption, executes one
-translation unit per worker, filters diagnostics back to the requested scope,
-and never uses autofix flags.
+Analyzes explicit project files, headers, directories, or all authored project
+roots. Supports compiler-based header coverage, structured diagnostics,
+coordinated autofix, and incremental analysis. Third-party and system headers
+are dependencies only. Report-only is the default.
+
+See [Oxygen clang-tidy workflow](../oxytidy/README.md) for setup, scope semantics, all options,
+exit status, implementation details, and verification commands.
 
 ### `oxy-targets.ps1` - Shared Library
 
@@ -111,13 +113,13 @@ oxyrun gr-d3d -DryRun
 oxybuild base -DryRun
 
 # Run clang-tidy on Vortex using repo defaults
-oxytidy src/Oxygen/Vortex -SummaryOnly
+oxytidy src/Oxygen/Vortex --summary-only
 
 # Inspect the exact translation units that would run
-oxytidy src/Oxygen/Vortex -ListFiles
+oxytidy src/Oxygen/Vortex --list-files
 
 # Smoke-test a single translation unit
-oxytidy src/Oxygen/Vortex/ScenePrep/ScenePrepPipeline.cpp -MaxFiles 1
+oxytidy src/Oxygen/Vortex/ScenePrep/ScenePrepPipeline.cpp --max-files 1
 
 # Combine options
 oxyrun asyncsim -Config Release -NoBuild -- --benchmark
@@ -159,26 +161,17 @@ oxybuild.ps1 [-Target] <string> [-BuildDir <string>] [-Config <string>] [-DryRun
 
 ### `oxytidy.ps1`
 
-**Syntax:**
+Supply explicit source/header paths, directories, or `--all`. Use `--help` for
+the Python CLI. The launcher installs into the active venv or default Python as needed and
+forwards arguments unchanged. `--fix` applies validated fixes and verifies them;
+`--export-fixes` writes a reviewable plan. Report-only is the default.
 
-```powershell
-oxytidy.ps1 [[-Paths] <string[]>] [-Configuration <string>] [-BuildDir <string>] [-Jobs <int>] [-IncludeTests] [-MaxFiles <int>] [-Checks <string>] [-LogDir <string>] [-ListFiles] [-SummaryOnly] [-NoQuiet] [-Help]
-```
+See [the complete oxytidy reference](../oxytidy/README.md).
 
-**Parameters:**
-
-- `Paths` - Files or directories to analyze. Defaults to `src/Oxygen/Vortex`.
-- `Configuration` - Multi-config slice to select from `compile_commands.json` (default: `Debug`).
-- `BuildDir` - Override the directory that contains `compile_commands.json`.
-- `Jobs` - Parallel worker count.
-- `IncludeTests` - Include files under `Test/` in the selected paths.
-- `MaxFiles` - Limit the number of translation units, useful for smoke tests.
-- `Checks` - Optional `clang-tidy --checks=...` override string.
-- `LogDir` - Output directory for logs and the sanitized compile database.
-- `ListFiles` - Print the selected translation units and exit.
-- `SummaryOnly` - Print only the summary instead of replaying every diagnostic.
-- `NoQuiet` - Do not pass `--quiet` to `clang-tidy`.
-- `Help` - Show built-in usage and examples.
+`--project-root PATH` selects another engine checkout. Its ownership policy takes
+precedence over the tool checkout's fallback policy; `--ownership-file PATH`
+explicitly overrides both. The chosen paths and reasons are printed. Build
+configuration and compilation database source paths are never substituted.
 
 ## Fuzzy Matching Examples
 
@@ -221,14 +214,9 @@ Smart executable discovery with multiple strategies:
 
 ### Scoped clang-tidy workflow
 
-`oxytidy.ps1` is optimized for large multi-config Windows builds:
-
-- Reads the compile database location from `.clangd` by default.
-- Applies `.clangd` `Remove` and `Add` rules to a sanitized temporary compile database.
-- Selects a single configuration slice, for example `Debug`, to avoid duplicate work from multi-config databases.
-- Runs `clang-tidy` per translation unit in parallel instead of invoking one huge monolithic process.
-- Filters reported diagnostics to the requested source roots so results stay in your code.
-- Writes logs under `out/clang-tidy/<scope>-<timestamp>/`.
+See [oxytidy documentation](../oxytidy/README.md) for compilation adaptation, project ownership,
+header coverage, execution, replacement application, and incremental validity.
+Unlike the build/run tools, oxytidy requires an existing configured build.
 
 ### Error Handling
 
@@ -239,7 +227,7 @@ Smart executable discovery with multiple strategies:
 
 ## Requirements
 
-- **PowerShell 7.0+** (cross-platform)
+- **PowerShell 7.0+** (cross-platform); oxytidy requires **7.3+** and **uv**
 - **CMake 3.15+** (for File API v1 support)
 - **Visual Studio 2022** (Windows builds)
 - **CMakePresets.json** (recommended for preset support)

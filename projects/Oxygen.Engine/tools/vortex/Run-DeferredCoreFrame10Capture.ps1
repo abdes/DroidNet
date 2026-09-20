@@ -174,14 +174,14 @@ $tidyArguments = @(
 )
 $tidyArguments += $tidyTargets
 $tidyArguments += @(
-  '-IncludeTests',
-  '-Configuration',
+  '--include-tests',
+  '--configuration',
   'Debug',
-  '-SummaryOnly'
+  '--summary-only'
 )
 
 $tidyResult = Invoke-LoggedCommand `
-  -FilePath 'powershell' `
+  -FilePath 'pwsh' `
   -ArgumentList $tidyArguments `
   -LogPath $tidyLogPath `
   -WorkingDirectory $repoRoot
