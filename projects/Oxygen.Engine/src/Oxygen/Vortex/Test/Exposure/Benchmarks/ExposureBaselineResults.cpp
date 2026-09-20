@@ -9,6 +9,7 @@
 #include <iomanip>
 #include <unordered_set>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Vortex/Test/Exposure/Benchmarks/ExposureBaselineScenario.h>
 #include <Oxygen/Vortex/Test/Exposure/Benchmarks/ExposureCpuTiming.h>
@@ -267,6 +268,7 @@ auto ExposureBaselineScenario::WriteAndValidateResults() -> void
     { "adapter_luid_low", adapter.LowPart, },
     { "adapter_luid_high", adapter.HighPart, },
     { "cpu_samples", cpu_path.filename().string(), },
+    { "logging_verbosity", loguru::g_global_verbosity },
     { "cpu_owner_timing", cpu_timing
         ? cpu_timing->Save(directory / (stem + ".cpu-owners.csv"))
         : nlohmann::json(nullptr) },

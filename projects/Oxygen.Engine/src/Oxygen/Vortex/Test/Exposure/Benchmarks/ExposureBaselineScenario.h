@@ -115,6 +115,7 @@ private:
   bool automatic_sample_count {};
   bool acceptance {};
   bool measure_cpu_owners {};
+  bool measure_cpu_details {};
   bool recording_cpu_owners {};
   std::unique_ptr<ExposureCpuTiming> cpu_timing;
   bool event_cycle {};

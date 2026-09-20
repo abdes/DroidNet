@@ -77,21 +77,26 @@ def analyze(manifest_path, schedule_path, metadata_path, output_path):
     assert metadata["events_lost"] == metadata["buffers_lost"] == 0
     assert metadata["qpc_frequency"] == owner["qpc_frequency"]
     source = manifest_path.parent / owner["path"]
-    rows = list(csv.DictReader(source.open()))
+    with source.open() as stream:
+        rows = list(csv.DictReader(stream))
     assert len(rows) == owner["records"]
-    scheduler = list(csv.DictReader(schedule_path.open()))
+    with schedule_path.open() as stream:
+        scheduler = list(csv.DictReader(stream))
     assert len(scheduler) == metadata["records"]
     running, waiting = schedule(scheduler, owner["thread_id"])
     running_ends = [end for _, end in running]
     waiting_ends = [end for _, end in waiting]
     frames = collections.defaultdict(lambda: collections.defaultdict(list))
     labels = collections.Counter()
+    details = collections.defaultdict(lambda: collections.defaultdict(list))
     for row in rows:
         assert int(row["thread_id"]) == owner["thread_id"]
         start, end = int(row["start_qpc"]), int(row["end_qpc"])
         assert running[0][0] <= start <= end <= running[-1][1], "Incomplete scheduler coverage"
         frames[int(row["frame_seq"])][row["kind"]].append((start, end))
         labels[row["label"]] += 1
+        if row["kind"] == "detail":
+            details[row["label"]][int(row["frame_seq"])].append((start, end))
     assert sorted(frames) == list(range(manifest["first_frame_seq"], manifest["last_frame_seq"] + 1))
     assert len(frames) == manifest["sample_count"]
     samples = []
@@ -107,9 +112,15 @@ def analyze(manifest_path, schedule_path, metadata_path, output_path):
                         "descheduled_ms": (elapsed - active - blocked) * factor,
                         "fence_wait_ms": sum(b - a for a, b in merge(spans["fence_wait"])) * factor})
     metrics = {key: distribution([row[key] for row in samples]) for key in samples[0] if key != "frame_seq"}
+    nested = {}
+    for label, detail_frames in details.items():
+        values = [intersection(merge(detail_frames[frame]), running, running_ends) * factor
+                  for frame in sorted(frames)]
+        nested[label] = {"active_ms": distribution(values), "total_active_ms": sum(values)}
     limits = (.1, .2) if manifest["view_count"] == 1 else (.15, .3)
     result = {"case": manifest["workload"], "width": manifest["width"],
               "samples": len(samples), "metrics_ms": metrics, "scope_counts": labels,
+              "nested": nested, "total_active_ms": sum(row["active_ms"] for row in samples),
               "cpu_1080_pass": None if manifest["width"] != 1920 else
                   metrics["active_ms"]["p95"] <= limits[0] and metrics["active_ms"]["p99"] <= limits[1],
               "inputs": [reference(p) for p in [manifest_path, source, schedule_path, metadata_path]]}

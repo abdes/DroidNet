@@ -1053,6 +1053,41 @@ remain equal. Raw checks and commands live in the existing
 [CPU evidence directory](../../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/acceptance13/cpu/).
 This qualifies accounting; workload CPU budgets still require the new collection.
 
+The first active CPU pair completed with 1,034 unchanged inputs and zero ETW
+loss. I02/1080p measured 0.959/1.239 ms p95/p99; 4K p95 was 0.932 ms, passing
+that pair's scaling bound. The user-requested identical 1080p rerun measured
+0.508/0.619 ms. Both used the existing Release INFO logging default. The user
+then required logging fully disabled for all subsequent measurements. The
+`-v=OFF` run confirms zero engine log lines (933 bytes of test/startup output,
+versus 41 MB previously) and measures 0.570/0.722 ms. All three 1080p results
+exceed the unchanged 0.150/0.300-ms CPU targets; no remaining recipes are run
+while this failure is unresolved. Earlier evidence stays intact.
+
+The next bounded diagnostic uses `OXYGEN_EXPOSURE_BASELINE_CPU_DETAIL=1` to
+record the existing nested Graphics acquisition/finalization, D3D12 binding/
+submission and exposure publication scopes. It preserves the owner union,
+sampling and numerical workload, with logging OFF. Nested category percentiles
+are diagnostic and must not be summed. Identify a measured cause before any
+production correction; this does not authorize a general submission rewrite.
+
+That diagnostic's GPU serializer hit `export_queue_full` at frame 7779 and
+exported 5,378/7,200 GPU frames. The native failure is retained; no GPU acceptance
+uses it. Independent CPU export completed all 7,200 frames/381,600 scope records,
+with zero ETW loss and all 1,035 frozen identities equal. Active CPU p95/p99 was
+0.905/1.110 ms. Native `ExecuteCommandLists` alone measured 0.256/0.338 ms and
+27.1% of aggregate exposure CPU execution; acquisition measured 0.155/0.196 ms.
+Histogram publication was 0.011/0.017 ms and 1.2% of aggregate execution. These
+nested measurements identify submission/acquisition as material costs; they do
+not justify another constant-publication experiment.
+
+Before changing submission ownership, collect the missing CPU metric with GPU
+timestamp recording disabled through the existing diagnostics control. The
+completed GPU matrix and its accepted instrumentation campaign are reused. This
+separates CPU qualification from GPU capture/export; it is neither a new GPU
+overhead campaign nor a rendering-quality change. Keep logging OFF, the same
+owner boundaries and driver CPU inclusion, and identify capture mode explicitly
+in the manifest. Numerical endpoints remain checked outside the timed window.
+
 The [performance report](../../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/acceptance13/performance-report.md),
 [per-run decision table](../../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/acceptance13/decision-table.json)
 and [checkpoint](../../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/acceptance13/checkpoint-manifest.json)
