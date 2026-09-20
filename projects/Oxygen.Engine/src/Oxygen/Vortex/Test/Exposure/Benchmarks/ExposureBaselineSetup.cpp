@@ -92,7 +92,15 @@ auto ExposureBaselineScenario::ReadOptions() -> void
     << "OXYGEN_EXPOSURE_TIMING_WIDTH must be 1920 or 3840";
   const auto frames_text = option("OXYGEN_EXPOSURE_BASELINE_FRAMES", "3600");
   warmup_only = frames_text == "warmup";
-  const auto measured_frames = warmup_only ? std::string { "2400", } : frames_text;
+  automatic_sample_count = frames_text == "auto";
+  const auto acceptance_text
+    = option("OXYGEN_EXPOSURE_BASELINE_ACCEPTANCE", "0");
+  ASSERT_TRUE(acceptance_text == "0" || acceptance_text == "1");
+  acceptance = acceptance_text == "1" && !warmup_only;
+  ASSERT_FALSE(acceptance && precision != "production");
+  ASSERT_FALSE(automatic_sample_count && !acceptance);
+  const auto measured_frames = warmup_only || automatic_sample_count
+    ? std::string { "2400", } : frames_text;
   sample_count = 0U;
   const auto parsed = std::from_chars(measured_frames.data(),
     std::to_address(measured_frames.end()), sample_count);
@@ -136,6 +144,18 @@ auto ExposureBaselineScenario::ReadOptions() -> void
   gpu_path = directory / (stem + ".gpu.json");
   cpu_path = directory / (stem + ".cpu.csv");
   manifest_path = directory / (stem + ".json");
+  recording_path = gpu_path;
+  recording_frames = sample_count;
+  startup.name = "startup";
+  startup.gpu = directory / (stem + "-startup.gpu.json");
+  matched.name = "matched";
+  matched.gpu = directory / (stem + "-matched.gpu.json");
+  events.name = "events";
+  events.gpu = directory / (stem + "-events.gpu.json");
+  ASSERT_FALSE(acceptance
+    && (std::filesystem::exists(startup.gpu)
+      || std::filesystem::exists(matched.gpu)
+      || std::filesystem::exists(events.gpu)));
   ASSERT_FALSE(std::filesystem::exists(gpu_path)
     || std::filesystem::exists(cpu_path)
     || std::filesystem::exists(manifest_path))
@@ -161,6 +181,7 @@ auto ExposureBaselineScenario::ConfigureScene() -> void
       recipe.main_camera,
       recipe.secondary_camera,
     };
+    sun = recipe.sun;
     for (unsigned index = 0U; index < view_count; ++index) {
       const auto camera_lens
         = cameras.at(index).GetCameraAs<scene::PerspectiveCamera>();

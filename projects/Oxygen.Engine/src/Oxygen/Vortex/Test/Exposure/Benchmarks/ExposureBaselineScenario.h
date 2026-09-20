@@ -14,6 +14,7 @@
 
 #include <Oxygen/Vortex/Test/Exposure/Benchmarks/ExposureBenchmarkFixture.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestGraphics.h>
+#include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
 namespace oxygen::vortex::testing::exposure {
 
 // Owns one benchmark execution; timed rendering is separate from evidence I/O.
@@ -43,6 +44,27 @@ private:
     std::array<unsigned, 2> history_reprojected {};
     std::array<unsigned, 2> history_reset {};
   };
+  struct Window {
+    std::string name;
+    std::filesystem::path gpu;
+    std::vector<Sample> samples;
+    double seconds {};
+  };
+  struct EventObservation {
+    unsigned event_frame {};
+    std::array<std::uint64_t, 2> lifetimes {};
+    std::array<std::uint64_t, 2> requested {};
+    std::array<std::uint64_t, 2> applied {};
+    std::array<unsigned, 2> phases {};
+    std::array<bool, 2> active {};
+    unsigned held_status_jobs {};
+  };
+  struct EventCheckpoint {
+    unsigned event_frame {};
+    std::array<postprocess::ExposurePass::FrameLease, 2> exposure;
+    std::array<unsigned, 2> formats {};
+    std::array<unsigned, 2> history_reset {};
+  };
   static auto Milliseconds(Clock::duration duration) -> double;
   auto Setup() -> void;
   auto ReadOptions() -> void;
@@ -59,6 +81,12 @@ private:
   auto SaveEndpoint(unsigned path_frame) -> void;
   auto WriteCpuSamples() -> void;
   auto WriteAndValidateResults() -> void;
+  auto FinalizeRecording(unsigned path_frame) -> void;
+  auto MeasureEventWindows() -> void;
+  auto ApplyEvent(unsigned event_frame) -> void;
+  auto ObserveEvent(unsigned event_frame) -> void;
+  auto SaveAcceptanceWindows() -> void;
+  auto SaveWindow(const Window& window) -> void;
 
   static constexpr auto quality_commands = std::array {
     "vtx.sky_atmosphere.aerial_perspective_lut.width 64",
@@ -82,6 +110,10 @@ private:
   bool fp32_reference {};
   bool fp32_only {};
   bool warmup_only {};
+  bool automatic_sample_count {};
+  bool acceptance {};
+  bool event_cycle {};
+  bool capture_event {};
   bool temporal {};
   bool forward {};
   unsigned sample_count {};
@@ -94,7 +126,22 @@ private:
   std::filesystem::path gpu_path;
   std::filesystem::path cpu_path;
   std::filesystem::path manifest_path;
+  std::filesystem::path recording_path;
+  unsigned recording_frames {};
   std::array<scene::SceneNode, 2> cameras;
+  scene::SceneNode sun;
+  std::array<bool, 2> enabled_views {
+    true,
+    true,
+  };
+  std::array<unsigned, 2> target_indices {
+    0U,
+    1U,
+  };
+  std::array<scene::ExposureSettings, 2> view_settings;
+  ViewId secondary_source {
+    kInvalidViewId,
+  };
   std::vector<std::shared_ptr<graphics::Framebuffer>> targets;
   bool require_ready {};
   bool capture_endpoint {};
@@ -114,5 +161,14 @@ private:
   nlohmann::json after;
   nlohmann::json endpoints;
   Sample finalization;
+  Window startup;
+  Window matched;
+  Window events;
+  std::vector<EventObservation> observations;
+  std::vector<EventCheckpoint> checkpoints;
+  EventCheckpoint current_checkpoint;
+  vortex::testing::RendererPublicationProbe::ExposureStatusJobs held_statuses;
+  nlohmann::json event_operations = nlohmann::json::array();
+  nlohmann::json acceptance_windows = nlohmann::json::object();
 };
 } // namespace oxygen::vortex::testing::exposure

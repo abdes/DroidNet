@@ -277,6 +277,7 @@ auto ExposureBaselineScenario::WriteAndValidateResults() -> void
     { "finalization_frame_seq", finalization.frame_sequence, },
     { "finalization_wall_ms", finalization.wall_ms, },
     { "untimed_endpoint_images", endpoints, },
+    { "acceptance_windows", acceptance_windows, },
     { "scope",
       "Native offscreen workload; no presented FPS claim. "
       "Frame-start duration includes backend waits; submission is a "

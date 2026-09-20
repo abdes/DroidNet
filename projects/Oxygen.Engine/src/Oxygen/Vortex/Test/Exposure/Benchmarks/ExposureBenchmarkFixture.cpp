@@ -43,6 +43,7 @@ auto ExposureProfilingOverheadTest::MeasureReleaseBaseline(
 auto ExposureBaselineScenario::Run() -> void
 {
   ASSERT_NO_FATAL_FAILURE(Setup());
+  view_settings.fill(fixture_.settings);
   ASSERT_NO_FATAL_FAILURE(WarmUp());
   if (warmup_only) {
     // Untimed calibration selects one common sample count for a decision pair.
@@ -86,7 +87,13 @@ auto ExposureBaselineScenario::Run() -> void
     return;
   }
   ASSERT_NO_FATAL_FAILURE(MeasureFrames());
+  if (acceptance && workload == "I02" && width == 1920U) {
+    ASSERT_NO_FATAL_FAILURE(MeasureEventWindows());
+  }
   ASSERT_NO_FATAL_FAILURE(CaptureEndpoints());
+  if (acceptance) {
+    ASSERT_NO_FATAL_FAILURE(SaveAcceptanceWindows());
+  }
   ASSERT_NO_FATAL_FAILURE(WriteAndValidateResults());
 }
 auto ExposureBaselineScenario::Milliseconds(const Clock::duration duration)
