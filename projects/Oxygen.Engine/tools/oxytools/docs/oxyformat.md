@@ -71,13 +71,39 @@ measure cold and repeated runs for small commit-sized inputs and module scope.
 Afterward, validate the hook independently, including partially staged files and
 restoration of unstaged content. The hook never writes or stages source files.
 
+## Checking hook
+
+Both the monorepo and engine pre-commit profiles define `oxyformat`, limited to
+C++ filenames under the engine's owned source and example trees. The shared
+policy applies its exclusions inside the command. The hook invokes this
+checkout's Python source directly, using an isolated pre-commit environment with
+PyYAML and jsonschema installed once. There is no PowerShell or package-manager
+invocation on the commit path. Pre-commit dispatches batches serially; oxyformat
+owns parallelism within each batch.
+
+The hook checks staged contents, while pre-commit temporarily stashes unstaged
+changes and restores them afterward. It never passes `--fix`. On failure, run
+`oxyformat <paths> --fix`, stage the intended result, and retry the commit. When
+partially staging a file, stage only the formatting changes you intend to commit.
+
+Only supplied C++ files are checked; changing the policy or style does not
+automatically scan the entire repository. Use `oxyformat --all` deliberately
+after changing those rules. The hook is installed through the repository's
+existing `pre-commit install` workflow.
+
 ## Validation evidence
 
 On Windows with Python 3.14.3 and LLVM 22.1.8, the command's automated suite and
-the existing oxytidy suite passed during standalone command validation. A real Base run
+the existing oxytidy suite passed before the hook was added. A real Base run
 checked 74 files, formatted three, then passed check and idempotence runs. All
 three files were restored byte-for-byte; no C++ formatting edits are included
 with the tool implementation.
+
+Final validation passed all 92 tests, including the real pre-commit staged-file
+tests, with no skips. Ruff checks and formatting passed. The built wheel contains
+both commands and the shared library. Oxytidy's real Base smoke test retained its
+seven contexts and 29 findings after the packaging move. The preserved local
+logs and benchmark JSON are under `out/oxyformat-validation/`.
 
 Five fresh-process checks per input size, including Python startup and without a
 persistent result cache, measured:
@@ -95,3 +121,9 @@ fresh process; OS disk caches are not flushed. The separate pre-commit/Git layer
 adds overhead, especially when stashing partially staged files or creating its
 environment on first use. Full repository hook timing is recorded separately
 from the formatter's duration.
+
+The real monorepo hook on ten compliant Base files reported 0.33–0.35 seconds
+inside the hook and approximately 0.89 seconds for repeated full pre-commit
+invocations. An initial invocation took 3.17 seconds. Isolated partially staged
+tests also passed, with higher and more variable Git/stashing overhead. These
+figures exclude the one-time dependency installation.
