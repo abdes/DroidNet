@@ -8,9 +8,8 @@ from functools import cached_property
 from pathlib import Path
 
 from oxytools.common import ToolError, absolute, path_key, within
+from oxytools.compilation import HEADERS, SOURCES
 from oxytools.ownership import Ownership
-
-from .compilation import HEADERS, SOURCES
 
 
 @dataclass

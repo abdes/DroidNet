@@ -217,8 +217,8 @@ reuse analysis for the old macro value.
 Remove supports exact flags, trailing-prefix wildcards, and bounded operand
 rules for include paths, definitions, forced includes, outputs/dependencies,
 language/target/sysroot options, and common MSVC equivalents. The supported
-operand table is in `compilation.py`. Operands, aliases, and associated `-Xclang`
-markers are removed together. Unknown operand grammar fails instead of silently
+operand table is in the shared `oxytools/compilation.py`. Operands, aliases, and
+associated `-Xclang` markers are removed together. Unknown operand grammar fails instead of silently
 changing the command. Add runs after Remove.
 
 Debug is the default configuration. Identity is established through
@@ -345,11 +345,12 @@ entries are reported and recomputed; they cannot crash report rendering.
 
 Use the [shared verification instructions](../README.md#verification) to install
 this checkout, select a suitable working directory, and run tests and linting.
-The same suite covers both commands and the shared helpers.
+The same suite covers the commands and shared helpers.
 
-The `oxytidy` modules own compilation adaptation, analysis/cache, diagnostics,
-replacement planning, and orchestration. The `oxytools` package owns shared
-ownership validation, file writes, process ownership, and presentation primitives.
+The `oxytidy` modules own analysis/cache, diagnostics, replacement planning, and
+orchestration. The `oxytools` package owns shared
+compilation adaptation, ownership validation, file writes, process ownership, and
+presentation primitives.
 
 Integration tests discover LLVM on PATH or in the standard Windows installation.
 `OXYTIDY_TEST_LLVM` selects another clang-tidy executable. Tests explicitly skip
