@@ -1864,15 +1864,25 @@ auto ExposurePass::RecordState(RenderContext& ctx,
       recorder->RequireResourceState(
         *state->histogram_buffer, graphics::ResourceStates::kUnorderedAccess);
       recorder->FlushBarriers();
+      const auto histogram_constants
+        = PublishHistogramConstants(ctx, inputs, config, *state);
+      const auto bind_histogram_constants = [&]() {
+        recorder->SetComputeRoot32BitConstant(
+          static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants),
+          0U, 0U);
+        recorder->SetComputeRoot32BitConstant(
+          static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants),
+          histogram_constants.get(), 1U);
+      };
       recorder->SetPipelineState(*clear_pipeline_);
-      UpdateHistogramConstants(ctx, *recorder, inputs, config, *state);
+      bind_histogram_constants();
       recorder->Dispatch(1U, 1U, 1U);
       if (inputs.metering_available && inputs.scene_signal
-          && inputs.scene_signal_srv.IsValid()) {
+        && inputs.scene_signal_srv.IsValid()) {
         CHECK_F(std::isfinite(inputs.one_over_pre_exposure)
-                && inputs.one_over_pre_exposure > 0.0F);
+          && inputs.one_over_pre_exposure > 0.0F);
         CHECK_F((inputs.metering_mask != nullptr)
-                == inputs.metering_mask_srv.IsValid());
+          == inputs.metering_mask_srv.IsValid());
         TrackTextureFromKnownOrInitial(*recorder, *inputs.scene_signal);
         recorder->RequireResourceState(
           *inputs.scene_signal, graphics::ResourceStates::kShaderResource);
@@ -1885,7 +1895,7 @@ auto ExposurePass::RecordState(RenderContext& ctx,
           *state->histogram_buffer, graphics::ResourceStates::kUnorderedAccess);
         recorder->FlushBarriers();
         recorder->SetPipelineState(*histogram_pipeline_);
-        UpdateHistogramConstants(ctx, *recorder, inputs, config, *state);
+        bind_histogram_constants();
         const auto& desc = inputs.scene_signal->GetDescriptor();
         recorder->Dispatch(
           (std::min(desc.width, kHistogramGridLimit) + 15U) / 16U,
@@ -2089,10 +2099,13 @@ auto ExposurePass::AcquireState() -> std::shared_ptr<StateResources>
   return state;
 }
 
-auto ExposurePass::UpdateHistogramConstants(RenderContext& ctx,
-  graphics::CommandRecorder& recorder, const Inputs& inputs,
-  const ResolvedPostProcessConfig& config, const StateResources& state) -> void
+auto ExposurePass::PublishHistogramConstants(RenderContext& ctx,
+  const Inputs& inputs, const ResolvedPostProcessConfig& config,
+  const StateResources& state) -> ShaderVisibleIndex
 {
+  profiling::CpuProfileScope cpu_scope(
+    "Vortex.PostProcess.Exposure.HistogramConstants",
+    profiling::ProfileCategory::kPass);
   DCHECK_NOTNULL_F(constants_publisher_.get());
   const auto desc = inputs.scene_signal ? inputs.scene_signal->GetDescriptor()
                                         : graphics::TextureDesc {};
@@ -2126,13 +2139,7 @@ auto ExposurePass::UpdateHistogramConstants(RenderContext& ctx,
   const auto slot = constants_publisher_->Publish(ctx.current_view.view_id,
     std::bit_cast<std::array<std::uint32_t, 16U>>(constants));
   CHECK_F(slot.IsValid(), "Exposure constants publication failed");
-
-  recorder.SetComputeRoot32BitConstant(
-    static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants), 0U,
-    0U);
-  recorder.SetComputeRoot32BitConstant(
-    static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants),
-    slot.get(), 1U);
+  return slot;
 }
 
 auto ExposurePass::UpdateAverageConstants(RenderContext& ctx,

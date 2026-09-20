@@ -937,6 +937,9 @@ and commit boundaries are in
   [PostProcessService](../lld/post-process-service.md#ex051-11-cpu-attribution-checkpoint)
   and the existing item table. They authorize no general submission framework,
   unsafe descriptor reuse or budget relaxation.
+  For 11B specifically, the user directed that clarity, maintainability and
+  resource-operation reduction also inform the decision when measured timing
+  benefit is small or absent; keep those claims separate from frame-time gains.
 - EX051-12 integrates correctness. EX051-13 alone runs final production
   acceptance: eight recipes at two resolutions, three runs per cell, with the
   fixed transition schedule attached to the 1080p I02 runs and one presentation
