@@ -1,6 +1,6 @@
 # Oxygen developer tools
 
-One Python distribution provides `oxytidy` and `oxyformat`, with shared ownership,
+One Python distribution provides `oxytidy`, `oxyformat`, and optional `codemod`, with shared ownership,
 validation, and file-writing code. Python 3.10+ is required.
 
 From the Oxygen.Engine directory, install once in your chosen interpreter:
@@ -10,19 +10,32 @@ $toolPython = python -c "import sys; print(sys.executable)"
 uv pip install --python $toolPython --editable tools/oxytools
 ```
 
-When upgrading an existing editable `oxygen-oxytidy` installation, first remove
-that old distribution with `uv pip uninstall --python $toolPython oxygen-oxytidy`,
+When upgrading an existing `oxygen-oxytidy` or `oxygen-codemod` installation, first remove
+that old distribution with `uv pip uninstall --python $toolPython oxygen-oxytidy oxygen-codemod`,
 then install `oxygen-tools` using the command above. Command and Python module
-names remain `oxytidy` and `oxyformat`.
+names remain `oxytidy`, `oxyformat`, and `codemod`.
 
 - [Oxytidy reference](docs/oxytidy.md)
-- [Oxyformat contract and usage](docs/oxyformat.md)
+- [Codemod usage](docs/codemod.md) and [design](docs/codemod-design.md)
+- [Oxyformat usage](docs/oxyformat.md)
 - [Shared repository ownership policy](../README.md#repository-ownership-policy)
 
-Console entry points and `python -m oxytidy` / `python -m oxyformat` share the same
+Console entry points and the corresponding `python -m` commands share the same
 CLI implementations. `tools/cli` contains PowerShell convenience launchers.
 
+Install the optional codemod support when needed:
+
+```powershell
+uv pip install --python $toolPython --editable './tools/oxytools[codemod]'
+```
+
+The extra installs the Clang Python bindings and pathspec. Native libclang is
+required for C++ renames; formatting and lint analysis do not import it.
+
 ## Verification
+
+Install the codemod extra above to include all rename tests. Tests that need
+missing optional dependencies or native LLVM are skipped.
 
 Start in the Oxygen.Engine directory and keep an absolute path to the package.
 Run tests from the system temporary directory: some fixtures exercise relative

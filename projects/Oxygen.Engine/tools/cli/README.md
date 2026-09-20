@@ -95,6 +95,9 @@ Oxytidy's launcher checks/installs the shared package into the selected Python.
 Oxyformat's launcher uses already installed dependencies and performs no package
 installation during a run. Formatting does not require a build tree.
 
+`codemod` is an optional installed Python command for rename patches, with no
+PowerShell launcher. See [codemod usage](../oxytools/docs/codemod.md).
+
 ## VS Code terminals
 
 When Oxygen.Engine is the opened workspace folder, add a terminal profile to

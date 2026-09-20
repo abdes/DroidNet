@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "oxygen-tools"
 version = "0.1.0"
-description = "Scoped C++ analysis and formatting for Oxygen Engine"
+description = "Scoped C++ analysis, formatting, and rename planning for Oxygen Engine"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = ["PyYAML>=6.0.2,<7", "jsonschema>=4.23,<5", "rich>=13.9,<15", "rich-argparse>=1.6,<2"]
@@ -13,6 +13,10 @@ dependencies = ["PyYAML>=6.0.2,<7", "jsonschema>=4.23,<5", "rich>=13.9,<15", "ri
 [project.scripts]
 oxytidy = "oxytidy.cli:main"
 oxyformat = "oxyformat.cli:main"
+codemod = "codemod.cli:main"
+
+[project.optional-dependencies]
+codemod = ["clang==21.1.7", "pathspec>=0.10.1,<1"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
