@@ -1748,7 +1748,8 @@ auto SceneRenderer::PrepareExposureDomain(RenderContext& ctx) -> bool
     ResolveAuthoredPostProcessConfig(ctx, *post_process_));
   const auto control
     = renderer_.GetDiagnosticsService().GetHdrPrecisionControl();
-  ctx.current_view.hdr_fp32_only = control == HdrPrecisionControl::kFp32Only;
+  ctx.current_view.hdr_fp32_only = control == HdrPrecisionControl::kProduction
+    || control == HdrPrecisionControl::kFp32Only;
   auto layout = DescribeExposureProductLayout(ctx);
   auto candidate = postprocess::ExposurePass::StateLease {};
   const auto handle = ctx.current_view.view_state_handle;

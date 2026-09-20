@@ -77,12 +77,16 @@ auto ExposureAllocationScenario::SetUp() -> void
   ASSERT_TRUE(width_ == 1920U || width_ == 3840U);
   precision_
     = ReadEnvironment("OXYGEN_EXPOSURE_BASELINE_PRECISION", "production");
-  ASSERT_TRUE(precision_ == "production" || precision_ == "fp32");
+  ASSERT_TRUE(precision_ == "production" || precision_ == "fp32"
+    || precision_ == "fp32-only" || precision_ == "qualified");
   fp32_reference_ = precision_ == "fp32";
   height_ = width_ * 9U / 16U;
   fixture_.verify_manual_p = false;
-  fixture_.renderer_->GetDiagnosticsService().SetHdrFp32ReferenceEnabled(
-    fp32_reference_);
+  fixture_.renderer_->GetDiagnosticsService().SetHdrPrecisionControl(
+    fp32_reference_               ? HdrPrecisionControl::kFp32Reference
+      : precision_ == "qualified" ? HdrPrecisionControl::kQualified
+      : precision_ == "fp32-only" ? HdrPrecisionControl::kFp32Only
+                                  : HdrPrecisionControl::kProduction);
   fixture_.view.viewport = {
     .width = static_cast<float>(width_),
     .height = static_cast<float>(height_),

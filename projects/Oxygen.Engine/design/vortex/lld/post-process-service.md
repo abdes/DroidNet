@@ -755,14 +755,14 @@ cannot cross a lifetime, generation or precision epoch. Shared gain does not
 qualify a consumer's local products. General fog rendering changes belong to
 the environment owner; this item owns only exposure-related precision behavior.
 
-### Proposed EX051-09 policy (awaiting agreement)
+### Agreed EX051-09 precision policy
 
-**Proposal only; production is unchanged.** The four
+**Approved by the user on 2026-09-20; implemented and Debug-qualified.** The four
 [05 decision pairs](../IMPLEMENTATION_STATUS.md#ex051-05-results-and-decision)
 show no frame-time benefit from the current dynamic policy. C01 admits half but
 trades 3.063/6.640 ms of GPU frame p95 for 106.000/398.625 MiB of steady placement
 at 1080p/4K. C02/I02 remain FP32 while paying admission cost. All output budgets
-pass. The proposed decision is to accept that measured C01 memory tradeoff for
+pass. The agreed decision accepts that measured C01 memory tradeoff for
 FP32 production and end further production FP16 optimization in this slice.
 It does not waive bounded-lifetime accounting or final 13/GATE budgets.
 
@@ -790,15 +790,20 @@ scene-change heuristics.
 | --- | --- |
 | View lifetime and source-owner handle/lifetime | No state/status/candidate can cross view removal/recreation or source replacement. Borrowed numerical gain never certifies the borrower's image. |
 | Settings, mask and curve revision; requested/applied exposure generation | Preserve authored intent and GPU gain. Reject stale eligibility and acknowledgements; require a current matching packet before CPU completion. |
-| Precision control/epoch, required-product layout and shader-debug mode | A control change invalidates the precision epoch and rebuilds affected radiance history. Eligibility and acknowledgement packets cannot authorize a different epoch. Diagnostic/unit-gain overrides keep their existing precedence. |
+| Precision control/epoch, required-product layout and shader-debug mode | A control revision rejects older status packets before polling can acknowledge them. Crossing between FP32-only and certified operation invalidates eligibility and rebuilds radiance history. The compatible `fp32`/`qualified` format diagnostic keeps its qualified P. Qualification-attempt epochs gate eligibility separately, so a failed certificate cannot erase a valid authored solve. Diagnostic/unit-gain overrides retain precedence. |
 | Radiance-producing inputs | Production has no reusable half certificate. Diagnostics check actual current products each frame; no reused result stands in for changing materials, lights, environment or camera-dependent radiance. |
 | Temporal source texture, stored P and error state | Production uses FP32 history with ordinary RGB rebasing. Diagnostic current/previous error propagation remains fresh and lease-pinned. Incompatible mode/layout/history changes rebuild, never reinterpret, old contents. |
 | Frame P/S and retained consumers | P/S remain GPU-owned and immutable for each submitted frame. Old color, descriptors, state and reports retire only after their readers and fences; 10A's independent color ownership remains intact. |
 
-After agreement, implement the control/default change and close the named
-mode/epoch/acknowledgement coverage gap using existing delayed-status and queued
-consumer fixtures. Preserve numerical test identities and exercise qualified
-contracts by explicit diagnostic selection. Then proceed to 11 CPU attribution,
+The control/default change and named mode/acknowledgement gap pass 122 focused
+Debug checks: 97 CPU and 25 native. Both directions of a control change reject
+an older completed packet before it can acknowledge a seed; a fresh packet
+acknowledges the same solved seed without reapplying it. Qualification-attempt
+failures still preserve valid authored-solve acknowledgements. The existing
+delayed-status, shared/layout, failed-solve and queued-consumer cases pass with
+explicit diagnostic selection and unchanged test identities. The
+[checkpoint](../../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/production-policy/checkpoint-manifest.json)
+records commands and frozen hashes. Proceed to 11 CPU attribution,
 12 owning correctness gates, 13 final acceptance and 14 closeout. The 0.683 ms
 I02 FP32-only explicit-exposure p95 already identifies a remaining budget gap;
 this proposal makes no claim that 13/GATE is satisfied.

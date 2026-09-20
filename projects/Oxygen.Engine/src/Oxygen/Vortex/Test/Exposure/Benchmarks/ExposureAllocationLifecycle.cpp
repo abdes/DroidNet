@@ -173,7 +173,7 @@ auto ExposureAllocationScenario::QualifyAndRetain(
       retained_.at(index).depths.at(1).retained_texture));
     EXPECT_FALSE(retained_.at(index).depths.at(1).retained_texture.owner_before(
       retained_.at(index).depths.at(0).retained_texture));
-    if (fp32_reference_) {
+    if (precision_ != "qualified") {
       EXPECT_EQ(retained_.at(index).color.texture->GetDescriptor().format,
         Format::kRGBA32Float);
     } else if (!temporal_) {

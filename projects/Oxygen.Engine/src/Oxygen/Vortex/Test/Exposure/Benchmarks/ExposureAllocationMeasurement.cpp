@@ -95,8 +95,13 @@ auto ExposureAllocationScenario::Snapshot(const std::string& phase)
         *exposure->buffer, ResourceStates::kShaderResource);
       const auto status = fixture_.Read<ExposureStatusStorage>(
         *exposure->current_state->status_buffer, ResourceStates::kCopySource);
-      const auto report = fixture_.Read<HdrSuitabilityData>(
-        *exposure->suitability_buffer, ResourceStates::kShaderResource);
+      auto report = nlohmann::json {};
+      if (exposure->suitability_buffer) {
+        const auto value = fixture_.Read<HdrSuitabilityData>(
+          *exposure->suitability_buffer, ResourceStates::kShaderResource);
+        report
+          = std::bit_cast<std::array<std::uint32_t, sizeof(value) / 4U>>(value);
+      }
       record.at("views").push_back({
         {
           "handle",
@@ -140,7 +145,7 @@ auto ExposureAllocationScenario::Snapshot(const std::string& phase)
         },
         {
           "suitability_words",
-          std::bit_cast<std::array<std::uint32_t, sizeof(report) / 4U>>(report),
+          report,
         },
       });
     }

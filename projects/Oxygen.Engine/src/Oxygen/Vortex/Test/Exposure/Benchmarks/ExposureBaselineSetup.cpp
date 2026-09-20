@@ -82,11 +82,11 @@ auto ExposureBaselineScenario::ReadOptions() -> void
   }
   precision = option("OXYGEN_EXPOSURE_BASELINE_PRECISION", "production");
   ASSERT_TRUE(precision == "production" || precision == "fp32"
-    || precision == "fp32-only")
+    || precision == "fp32-only" || precision == "qualified")
     << "OXYGEN_EXPOSURE_BASELINE_PRECISION must be production, fp32 or "
-       "fp32-only";
+       "fp32-only or qualified";
   fp32_reference = precision == "fp32";
-  fp32_only = precision == "fp32-only";
+  fp32_only = precision == "fp32-only" || precision == "production";
   width_text = option("OXYGEN_EXPOSURE_TIMING_WIDTH", "1920");
   ASSERT_TRUE(width_text == "1920" || width_text == "3840")
     << "OXYGEN_EXPOSURE_TIMING_WIDTH must be 1920 or 3840";
@@ -281,9 +281,11 @@ auto ExposureBaselineScenario::Setup() -> void
   fixture_.frame.SetModuleTimingData(
     timing, engine::internal::EngineTagFactory::Get());
   auto& diagnostics = fixture_.renderer_->GetDiagnosticsService();
-  diagnostics.SetHdrPrecisionControl(fp32_only ? HdrPrecisionControl::kFp32Only
+  diagnostics.SetHdrPrecisionControl(precision == "production"
+      ? HdrPrecisionControl::kProduction
+      : fp32_only      ? HdrPrecisionControl::kFp32Only
       : fp32_reference ? HdrPrecisionControl::kFp32Reference
-                       : HdrPrecisionControl::kProduction);
+                       : HdrPrecisionControl::kQualified);
   diagnostics.SetEnabledFeatures(DiagnosticsFeature::kGpuTimeline);
   diagnostics.SetGpuTimelineEnabled(true);
   fixture_.probe->inspect

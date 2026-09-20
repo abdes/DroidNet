@@ -16,6 +16,7 @@
 #include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Data/HalfFloat.h>
 #include <Oxygen/Graphics/Common/ShaderByteCode.h>
+#include <Oxygen/Vortex/Diagnostics/DiagnosticsService.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestEngine.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestGraphics.h>
 #include <Oxygen/Vortex/Test/Fakes/AssetLoader.h>
@@ -176,6 +177,10 @@ auto ExposureGpuTest::SetUp() -> void
   auto config = RendererConfig {};
   config.upload_queue_key = QueueKeyFor().get();
   renderer_ = std::make_unique<Renderer>(GetGraphicsShared(), config);
+  // Primitive/qualification fixtures explicitly exercise the certified path.
+  // Production-default behavior has its own scene-level controls.
+  renderer_->GetDiagnosticsService().SetHdrPrecisionControl(
+    HdrPrecisionControl::kQualified);
   pass_ = std::make_unique<postprocess::ExposurePass>(*renderer_);
   ctx_.current_view.view_id = ViewId {
     1U,

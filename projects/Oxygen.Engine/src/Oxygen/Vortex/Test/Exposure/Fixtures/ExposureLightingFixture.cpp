@@ -16,6 +16,7 @@
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Environment/PostProcessVolume.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
+#include <Oxygen/Vortex/Diagnostics/DiagnosticsService.h>
 #include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureLightingFixture.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestEngine.h>
@@ -105,6 +106,11 @@ auto ExposureLightingGpuTest::SetUp() -> void
       | RendererCapabilityFamily::kFinalOutputComposition
       | RendererCapabilityFamily::kEnvironmentLighting
       | AdditionalCapabilities());
+  // These fixtures exercise the certified producer/consumer contracts. Normal
+  // production selection is tested explicitly and selected by benchmark
+  // recipes.
+  renderer_->GetDiagnosticsService().SetHdrPrecisionControl(
+    HdrPrecisionControl::kQualified);
   owned_asset_loader_ = std::make_unique<vortex::testing::FakeAssetLoader>();
   owned_test_engine_
     = std::make_unique<::testing::NiceMock<ExposureTestEngine>>();

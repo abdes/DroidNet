@@ -44,6 +44,7 @@ enum class HdrPrecisionControl : std::uint8_t {
   kProduction,
   kFp32Reference,
   kFp32Only,
+  kQualified,
 };
 
 class DiagnosticsService {
@@ -86,6 +87,8 @@ public:
     -> void;
   [[nodiscard]] OXGN_VRTX_API auto GetHdrPrecisionControl() const
     -> HdrPrecisionControl;
+  [[nodiscard]] OXGN_VRTX_API auto GetHdrPrecisionControlRevision() const
+    -> std::uint64_t;
 
   OXGN_VRTX_API auto SetGpuTimelineEnabled(bool enabled) -> void;
   [[nodiscard]] OXGN_VRTX_API auto IsGpuTimelineEnabled() const -> bool;
@@ -144,6 +147,7 @@ private:
   HdrPrecisionControl hdr_precision_control_ {
     HdrPrecisionControl::kProduction
   };
+  std::uint64_t hdr_precision_control_revision_ { 0U };
   DiagnosticsFrameLedger frame_ledger_ {};
 };
 

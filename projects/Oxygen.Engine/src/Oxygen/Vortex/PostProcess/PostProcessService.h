@@ -287,7 +287,6 @@ private:
     precision_states_;
   struct PrecisionTicket {
     std::uint64_t layout_revision;
-    std::uint64_t epoch;
     std::uint64_t transition_generation;
     bool normal_mode;
     bool auto_owner;
@@ -308,6 +307,8 @@ private:
     std::uint64_t lifetime;
     std::uint64_t frame_sequence;
     std::uint64_t settings_revision;
+    std::uint64_t control_revision { 0U };
+    std::optional<std::uint64_t> precision_epoch;
     std::optional<PrecisionTicket> precision;
   };
   std::unordered_map<CompositionView::ViewStateHandle,

@@ -898,15 +898,13 @@ auto PostProcessService::FinalizeScenePrecision(
   precision.restart_streak = false;
   precision.finalized_frame = ctx.frame_sequence;
   precision.finalized_epoch = precision.epoch;
-  QueueExposureStatus(PendingExposureStatus {
-    .state = prepared.exposure.state,
+  QueueExposureStatus(PendingExposureStatus { .state = prepared.exposure.state,
     .token = prepared.status_transition,
     .handle = prepared.handle,
     .lifetime = prepared.lifetime,
     .frame_sequence = ctx.frame_sequence.get(),
     .settings_revision = prepared.config.Revision(),
-    .precision = PrecisionTicket {
-      precision.layout_revision, precision.epoch,
+    .precision = PrecisionTicket { precision.layout_revision,
       precision.transition_generation,
       ctx.current_view.hdr_color_format == Format::kRGBA16Float,
       prepared.config.Exposure().authored.enabled
@@ -1073,13 +1071,21 @@ auto PostProcessService::EnqueueExposureStatus(
 
 auto PostProcessService::QueueExposureStatus(PendingExposureStatus job) -> void
 {
+  job.control_revision
+    = renderer_.GetDiagnosticsService().GetHdrPrecisionControlRevision();
+  if (const auto precision = precision_states_.find(job.handle);
+    precision != precision_states_.end()) {
+    job.precision_epoch = precision->second.epoch;
+  }
   if (!IsExposureStatusNeeded(job)) {
     return;
   }
   const auto same_frame = [&](const PendingExposureStatus& existing) {
     return existing.lifetime == job.lifetime
       && existing.frame_sequence == job.frame_sequence
-      && existing.settings_revision == job.settings_revision;
+      && existing.settings_revision == job.settings_revision
+      && existing.control_revision == job.control_revision
+      && existing.precision_epoch == job.precision_epoch;
   };
   if (const auto pending = pending_exposure_status_.find(job.handle);
     pending != pending_exposure_status_.end()) {
@@ -1109,6 +1115,12 @@ auto PostProcessService::QueueExposureStatus(PendingExposureStatus job) -> void
 auto PostProcessService::IsExposureStatusNeeded(
   const PendingExposureStatus& job) const -> bool
 {
+  if (job.control_revision
+    != renderer_.GetDiagnosticsService().GetHdrPrecisionControlRevision()) {
+    return false;
+  }
+  // A failed qualification attempt cannot erase a valid authored solve. Its
+  // epoch gates eligibility below; the control revision gates both outcomes.
   return (job.token && renderer_.NeedsExposureAcknowledgement(*job.token))
     || IsPrecisionStatusNeeded(job);
 }
@@ -1131,7 +1143,7 @@ auto PostProcessService::IsPrecisionStatusNeeded(
     && renderer_.EnsureExposureLifetime(job.handle) == job.lifetime
     && current.settings_revision == job.settings_revision
     && current.layout_revision == job.precision->layout_revision
-    && current.epoch == job.precision->epoch && !current.diagnostic
+    && job.precision_epoch == current.epoch && !current.diagnostic
     && current.last_completed_frame < job.frame_sequence
     && CurrentExposureGeneration(job.handle, job.lifetime)
     == job.precision->transition_generation;
@@ -1249,6 +1261,9 @@ auto PostProcessService::PollExposureStatus() -> void
         break;
       }
       const auto complete = [&]() -> bool {
+        if (!IsExposureStatusNeeded(job)) {
+          return true;
+        }
         if (!ready) {
           return false;
         }
