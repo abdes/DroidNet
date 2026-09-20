@@ -66,7 +66,10 @@ NOLINT_TEST_F(
   resolved_inputs.use_fp32 = true;
   resolved_inputs.preserve_fp32_candidate_p = true;
   resolved_inputs.qualified_candidate = previous.state;
-  const auto resolved = pass_->ResolveFrame(ctx_, config, resolved_inputs);
+  const auto resolved = SubmitCommands(
+    "Vortex Exposure Frame", [&](graphics::CommandRecorder& recorder) -> auto {
+      return pass_->ResolveFrame(ctx_, recorder, config, resolved_inputs);
+    });
   ASSERT_NE(resolved, nullptr);
   EXPECT_EQ(resolved->selected_history, previous.state);
   const auto domain = Read<FrameExposureData>(
@@ -275,9 +278,12 @@ NOLINT_TEST_F(
     resolved_inputs.qualified_candidate
       = test_case.absent ? nullptr : previous.state;
     resolved_inputs.source = test_case.missing_source ? &source : nullptr;
-    const auto resolved = pass_->ResolveFrame(ctx_,
-      test_case.diagnostic ? config.WithDiagnosticOverride(true) : config,
-      resolved_inputs);
+    const auto resolved = SubmitCommands("Vortex Exposure Frame",
+      [&](graphics::CommandRecorder& recorder) -> auto {
+        return pass_->ResolveFrame(ctx_, recorder,
+          test_case.diagnostic ? config.WithDiagnosticOverride(true) : config,
+          resolved_inputs);
+      });
     ASSERT_NE(resolved, nullptr);
     const auto domain = Read<FrameExposureData>(
       *resolved->buffer, ResourceStates::kShaderResource);

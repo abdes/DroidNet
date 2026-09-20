@@ -28,6 +28,10 @@ class Framebuffer;
 class Texture;
 } // namespace oxygen::graphics
 
+namespace oxygen::graphics {
+class CommandRecorder;
+}
+
 namespace oxygen::vortex {
 
 struct RenderContext;
@@ -69,10 +73,11 @@ public:
   BasePassModule(BasePassModule&&) = delete;
   auto operator=(BasePassModule&&) -> BasePassModule& = delete;
 
-  OXGN_VRTX_API auto Execute(RenderContext& ctx, SceneTextures& scene_textures)
+  OXGN_VRTX_API auto Execute(RenderContext& ctx,
+    graphics::CommandRecorder& recorder, SceneTextures& scene_textures)
     -> BasePassExecutionResult;
   OXGN_VRTX_API auto ExecuteWireframeOverlay(RenderContext& ctx,
-    SceneTextures& scene_textures,
+    graphics::CommandRecorder& recorder, SceneTextures& scene_textures,
     const graphics::Framebuffer* display_target = nullptr) -> std::uint32_t;
   OXGN_VRTX_API void SetConfig(const BasePassConfig& config);
   [[nodiscard]] OXGN_VRTX_API auto HasPublishedBasePassProducts() const -> bool;

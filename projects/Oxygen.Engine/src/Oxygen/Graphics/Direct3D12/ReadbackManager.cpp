@@ -1273,7 +1273,7 @@ auto D3D12ReadbackManager::ReadBufferNow(const Buffer& source,
   {
     auto recorder = graphics_.AcquireCommandRecorder(
       graphics_.QueueKeyFor(queue_role), "ReadBufferNow");
-    CHECK_NOTNULL_F(recorder.get());
+    CHECK_F(static_cast<bool>(recorder));
     recorder->BeginTrackingResourceState(source, ResourceStates::kCommon, true);
 
     const auto ticket = readback->EnqueueCopy(*recorder, source, range);
@@ -1318,7 +1318,7 @@ auto D3D12ReadbackManager::ReadTextureNow(
   {
     auto recorder = graphics_.AcquireCommandRecorder(
       graphics_.QueueKeyFor(queue_role), "ReadTextureNow");
-    CHECK_NOTNULL_F(recorder.get());
+    CHECK_F(static_cast<bool>(recorder));
     recorder->BeginTrackingResourceState(
       source, source.GetDescriptor().initial_state, true);
 

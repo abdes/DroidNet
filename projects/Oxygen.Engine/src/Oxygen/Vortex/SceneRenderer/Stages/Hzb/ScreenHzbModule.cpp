@@ -9,12 +9,12 @@
 #include <algorithm>
 #include <array>
 #include <bit>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
-#include <cmath>
 #include <cstring>
-#include <memory>
 #include <limits>
+#include <memory>
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -48,146 +48,149 @@ namespace oxygen::vortex {
 
 namespace {
 
-namespace bindless_d3d12 = oxygen::bindless::generated::d3d12;
+  namespace bindless_d3d12 = oxygen::bindless::generated::d3d12;
 
-constexpr std::uint32_t kThreadGroupSize = 8U;
+  constexpr std::uint32_t kThreadGroupSize = 8U;
 
-struct alignas(packing::kShaderDataFieldAlignment) ScreenHzbBuildConstants {
-  ShaderVisibleIndex source_closest_texture_index { kInvalidShaderVisibleIndex };
-  ShaderVisibleIndex source_furthest_texture_index { kInvalidShaderVisibleIndex };
-  ShaderVisibleIndex destination_closest_texture_uav_index {
-    kInvalidShaderVisibleIndex
+  struct alignas(packing::kShaderDataFieldAlignment) ScreenHzbBuildConstants {
+    ShaderVisibleIndex source_closest_texture_index {
+      kInvalidShaderVisibleIndex
+    };
+    ShaderVisibleIndex source_furthest_texture_index {
+      kInvalidShaderVisibleIndex
+    };
+    ShaderVisibleIndex destination_closest_texture_uav_index {
+      kInvalidShaderVisibleIndex
+    };
+    ShaderVisibleIndex destination_furthest_texture_uav_index {
+      kInvalidShaderVisibleIndex
+    };
+    std::uint32_t source_width { 0U };
+    std::uint32_t source_height { 0U };
+    std::uint32_t source_origin_x { 0U };
+    std::uint32_t source_origin_y { 0U };
+    std::uint32_t destination_width { 0U };
+    std::uint32_t destination_height { 0U };
+    std::uint32_t source_texel_step { 1U };
+    std::uint32_t _pad0 { 0U };
   };
-  ShaderVisibleIndex destination_furthest_texture_uav_index {
-    kInvalidShaderVisibleIndex
-  };
-  std::uint32_t source_width { 0U };
-  std::uint32_t source_height { 0U };
-  std::uint32_t source_origin_x { 0U };
-  std::uint32_t source_origin_y { 0U };
-  std::uint32_t destination_width { 0U };
-  std::uint32_t destination_height { 0U };
-  std::uint32_t source_texel_step { 1U };
-  std::uint32_t _pad0 { 0U };
-};
 
-static_assert(sizeof(ScreenHzbBuildConstants) == 48U);
-static_assert(
-  sizeof(ScreenHzbBuildConstants) % packing::kShaderDataFieldAlignment == 0U);
+  static_assert(sizeof(ScreenHzbBuildConstants) == 48U);
+  static_assert(
+    sizeof(ScreenHzbBuildConstants) % packing::kShaderDataFieldAlignment == 0U);
 
-auto RangeTypeToViewType(const bindless_d3d12::RangeType type)
-  -> graphics::ResourceViewType
-{
-  using graphics::ResourceViewType;
-  switch (type) {
-  case bindless_d3d12::RangeType::SRV:
-    return ResourceViewType::kRawBuffer_SRV;
-  case bindless_d3d12::RangeType::Sampler:
-    return ResourceViewType::kSampler;
-  case bindless_d3d12::RangeType::UAV:
-    return ResourceViewType::kRawBuffer_UAV;
-  default:
-    return ResourceViewType::kNone;
+  auto RangeTypeToViewType(const bindless_d3d12::RangeType type)
+    -> graphics::ResourceViewType
+  {
+    using graphics::ResourceViewType;
+    switch (type) {
+    case bindless_d3d12::RangeType::SRV:
+      return ResourceViewType::kRawBuffer_SRV;
+    case bindless_d3d12::RangeType::Sampler:
+      return ResourceViewType::kSampler;
+    case bindless_d3d12::RangeType::UAV:
+      return ResourceViewType::kRawBuffer_UAV;
+    default:
+      return ResourceViewType::kNone;
+    }
   }
-}
 
-auto BuildVortexRootBindings() -> std::vector<graphics::RootBindingItem>
-{
-  std::vector<graphics::RootBindingItem> bindings;
-  bindings.reserve(bindless_d3d12::kRootParamTableCount);
+  auto BuildVortexRootBindings() -> std::vector<graphics::RootBindingItem>
+  {
+    std::vector<graphics::RootBindingItem> bindings;
+    bindings.reserve(bindless_d3d12::kRootParamTableCount);
 
-  for (std::uint32_t index = 0; index < bindless_d3d12::kRootParamTableCount;
-    ++index) {
-    const auto& desc = bindless_d3d12::kRootParamTable.at(index);
-    graphics::RootBindingDesc binding {};
-    binding.binding_slot_desc.register_index = desc.shader_register;
-    binding.binding_slot_desc.register_space = desc.register_space;
-    binding.visibility = graphics::ShaderStageFlags::kAll;
+    for (std::uint32_t index = 0; index < bindless_d3d12::kRootParamTableCount;
+      ++index) {
+      const auto& desc = bindless_d3d12::kRootParamTable.at(index);
+      graphics::RootBindingDesc binding {};
+      binding.binding_slot_desc.register_index = desc.shader_register;
+      binding.binding_slot_desc.register_space = desc.register_space;
+      binding.visibility = graphics::ShaderStageFlags::kAll;
 
-    switch (desc.kind) {
-    case bindless_d3d12::RootParamKind::DescriptorTable: {
-      graphics::DescriptorTableBinding table {};
-      if (desc.ranges_count > 0U && desc.ranges.data() != nullptr) {
-        const auto& range = desc.ranges.front();
-        table.view_type = RangeTypeToViewType(
-          static_cast<bindless_d3d12::RangeType>(range.range_type));
-        table.base_index = range.base_register;
-        table.count
-          = range.num_descriptors == (std::numeric_limits<std::uint32_t>::max)()
-          ? (std::numeric_limits<std::uint32_t>::max)()
-          : range.num_descriptors;
+      switch (desc.kind) {
+      case bindless_d3d12::RootParamKind::DescriptorTable: {
+        graphics::DescriptorTableBinding table {};
+        if (desc.ranges_count > 0U && desc.ranges.data() != nullptr) {
+          const auto& range = desc.ranges.front();
+          table.view_type = RangeTypeToViewType(
+            static_cast<bindless_d3d12::RangeType>(range.range_type));
+          table.base_index = range.base_register;
+          table.count = range.num_descriptors
+              == (std::numeric_limits<std::uint32_t>::max)()
+            ? (std::numeric_limits<std::uint32_t>::max)()
+            : range.num_descriptors;
+        }
+        binding.data = table;
+        break;
       }
-      binding.data = table;
-      break;
-    }
-    case bindless_d3d12::RootParamKind::CBV:
-      binding.data = graphics::DirectBufferBinding {};
-      break;
-    case bindless_d3d12::RootParamKind::RootConstants:
-      binding.data
-        = graphics::PushConstantsBinding { .size = desc.constants_count };
-      break;
+      case bindless_d3d12::RootParamKind::CBV:
+        binding.data = graphics::DirectBufferBinding {};
+        break;
+      case bindless_d3d12::RootParamKind::RootConstants:
+        binding.data
+          = graphics::PushConstantsBinding { .size = desc.constants_count };
+        break;
+      }
+
+      bindings.emplace_back(binding);
     }
 
-    bindings.emplace_back(binding);
+    return bindings;
   }
 
-  return bindings;
-}
+  auto BuildPipelineDesc() -> graphics::ComputePipelineDesc
+  {
+    auto root_bindings = BuildVortexRootBindings();
+    return graphics::ComputePipelineDesc::Builder()
+      .SetComputeShader({
+        .stage = ShaderType::kCompute,
+        .source_path = "Vortex/Stages/Occlusion/ScreenHzbBuild.hlsl",
+        .entry_point = "VortexScreenHzbBuildCS",
+      })
+      .SetRootBindings(std::span<const graphics::RootBindingItem>(
+        root_bindings.data(), root_bindings.size()))
+      .SetDebugName("Vortex.Stage5.ScreenHzbBuild")
+      .Build();
+  }
 
-auto BuildPipelineDesc() -> graphics::ComputePipelineDesc
-{
-  auto root_bindings = BuildVortexRootBindings();
-  return graphics::ComputePipelineDesc::Builder()
-    .SetComputeShader({
-      .stage = ShaderType::kCompute,
-      .source_path = "Vortex/Stages/Occlusion/ScreenHzbBuild.hlsl",
-      .entry_point = "VortexScreenHzbBuildCS",
-    })
-    .SetRootBindings(std::span<const graphics::RootBindingItem>(
-      root_bindings.data(), root_bindings.size()))
-    .SetDebugName("Vortex.Stage5.ScreenHzbBuild")
-    .Build();
-}
+  [[nodiscard]] auto ComputeHzbRootExtent(const std::uint32_t extent)
+    -> std::uint32_t
+  {
+    CHECK_F(extent != 0U, "Screen HZB requires non-zero source dimensions");
+    return (std::max)(std::bit_ceil(extent) >> 1U, 1U);
+  }
 
-[[nodiscard]] auto ComputeHzbRootExtent(const std::uint32_t extent)
-  -> std::uint32_t
-{
-  CHECK_F(extent != 0U, "Screen HZB requires non-zero source dimensions");
-  return (std::max)(std::bit_ceil(extent) >> 1U, 1U);
-}
+  [[nodiscard]] auto ComputeMipCount(
+    const std::uint32_t width, const std::uint32_t height) -> std::uint32_t
+  {
+    CHECK_F(width != 0U && height != 0U,
+      "Screen HZB requires non-zero texture dimensions");
+    return (std::max)(std::bit_width((std::max)(width, height)) - 1U, 1U);
+  }
 
-[[nodiscard]] auto ComputeMipCount(
-  const std::uint32_t width, const std::uint32_t height) -> std::uint32_t
-{
-  CHECK_F(width != 0U && height != 0U,
-    "Screen HZB requires non-zero texture dimensions");
-  return (std::max)(std::bit_width((std::max)(width, height)) - 1U, 1U);
-}
+  [[nodiscard]] auto MipExtent(const std::uint32_t base_extent,
+    const std::uint32_t mip_level) -> std::uint32_t
+  {
+    return (std::max)(1U, base_extent >> mip_level);
+  }
 
-[[nodiscard]] auto MipExtent(
-  const std::uint32_t base_extent, const std::uint32_t mip_level)
-  -> std::uint32_t
-{
-  return (std::max)(1U, base_extent >> mip_level);
-}
+  [[nodiscard]] auto WholeTextureSrvDesc(const graphics::Texture& texture)
+    -> graphics::TextureViewDescription
+  {
+    return graphics::TextureViewDescription {
+      .view_type = graphics::ResourceViewType::kTexture_SRV,
+      .visibility = graphics::DescriptorVisibility::kShaderVisible,
+      .format = texture.GetDescriptor().format,
+      .dimension = texture.GetDescriptor().texture_type,
+      .sub_resources = graphics::TextureSubResourceSet::EntireTexture(),
+      .is_read_only_dsv = false,
+    };
+  }
 
-[[nodiscard]] auto WholeTextureSrvDesc(const graphics::Texture& texture)
-  -> graphics::TextureViewDescription
-{
-  return graphics::TextureViewDescription {
-    .view_type = graphics::ResourceViewType::kTexture_SRV,
-    .visibility = graphics::DescriptorVisibility::kShaderVisible,
-    .format = texture.GetDescriptor().format,
-    .dimension = texture.GetDescriptor().texture_type,
-    .sub_resources = graphics::TextureSubResourceSet::EntireTexture(),
-    .is_read_only_dsv = false,
-  };
-}
-
-[[nodiscard]] auto SingleMipSrvDesc() -> graphics::TextureViewDescription
-{
-  return graphics::TextureViewDescription {
+  [[nodiscard]] auto SingleMipSrvDesc() -> graphics::TextureViewDescription
+  {
+    return graphics::TextureViewDescription {
     .view_type = graphics::ResourceViewType::kTexture_SRV,
     .visibility = graphics::DescriptorVisibility::kShaderVisible,
     .format = oxygen::Format::kR32Float,
@@ -200,11 +203,11 @@ auto BuildPipelineDesc() -> graphics::ComputePipelineDesc
     },
     .is_read_only_dsv = false,
   };
-}
+  }
 
-[[nodiscard]] auto SingleMipUavDesc() -> graphics::TextureViewDescription
-{
-  return graphics::TextureViewDescription {
+  [[nodiscard]] auto SingleMipUavDesc() -> graphics::TextureViewDescription
+  {
+    return graphics::TextureViewDescription {
     .view_type = graphics::ResourceViewType::kTexture_UAV,
     .visibility = graphics::DescriptorVisibility::kShaderVisible,
     .format = oxygen::Format::kR32Float,
@@ -217,58 +220,59 @@ auto BuildPipelineDesc() -> graphics::ComputePipelineDesc
     },
     .is_read_only_dsv = false,
   };
-}
-
-auto TrackTextureFromKnownOrInitial(graphics::CommandRecorder& recorder,
-  const graphics::Texture& texture, graphics::ResourceStates fallback_initial)
-  -> void
-{
-  if (recorder.IsResourceTracked(texture) || recorder.AdoptKnownResourceState(texture)) {
-    return;
   }
 
-  auto initial = texture.GetDescriptor().initial_state;
-  if (initial == graphics::ResourceStates::kUnknown
-    || initial == graphics::ResourceStates::kUndefined) {
-    initial = fallback_initial;
-  }
-  recorder.BeginTrackingResourceState(texture, initial, true);
-}
+  auto TrackTextureFromKnownOrInitial(graphics::CommandRecorder& recorder,
+    const graphics::Texture& texture, graphics::ResourceStates fallback_initial)
+    -> void
+  {
+    if (recorder.IsResourceTracked(texture)
+      || recorder.AdoptKnownResourceState(texture)) {
+      return;
+    }
 
-template <typename Resource>
-auto RegisterResourceIfNeeded(
-  Graphics& gfx, const std::shared_ptr<Resource>& resource) -> void
-{
-  if (!resource) {
-    return;
+    auto initial = texture.GetDescriptor().initial_state;
+    if (initial == graphics::ResourceStates::kUnknown
+      || initial == graphics::ResourceStates::kUndefined) {
+      initial = fallback_initial;
+    }
+    recorder.BeginTrackingResourceState(texture, initial, true);
   }
-  auto& registry = gfx.GetResourceRegistry();
-  if (!registry.Contains(*resource)) {
-    registry.Register(resource);
-  }
-}
 
-[[nodiscard]] auto ComputeScreenPositionScaleBias(
-  const std::uint32_t buffer_width, const std::uint32_t buffer_height,
-  const std::uint32_t view_rect_min_x, const std::uint32_t view_rect_min_y,
-  const std::uint32_t view_rect_width, const std::uint32_t view_rect_height)
-  -> std::array<float, 4>
-{
-  CHECK_F(buffer_width != 0U && buffer_height != 0U,
-    "Screen HZB requires non-zero scene-texture extent");
-  const auto inv_buffer_width = 1.0F / static_cast<float>(buffer_width);
-  const auto inv_buffer_height = 1.0F / static_cast<float>(buffer_height);
-  return {
-    static_cast<float>(view_rect_width) * inv_buffer_width / 2.0F,
-    static_cast<float>(view_rect_height) * inv_buffer_height / -2.0F,
-    (static_cast<float>(view_rect_height) / 2.0F
-      + static_cast<float>(view_rect_min_y))
-      * inv_buffer_height,
-    (static_cast<float>(view_rect_width) / 2.0F
-      + static_cast<float>(view_rect_min_x))
-      * inv_buffer_width,
-  };
-}
+  template <typename Resource>
+  auto RegisterResourceIfNeeded(
+    Graphics& gfx, const std::shared_ptr<Resource>& resource) -> void
+  {
+    if (!resource) {
+      return;
+    }
+    auto& registry = gfx.GetResourceRegistry();
+    if (!registry.Contains(*resource)) {
+      registry.Register(resource);
+    }
+  }
+
+  [[nodiscard]] auto ComputeScreenPositionScaleBias(
+    const std::uint32_t buffer_width, const std::uint32_t buffer_height,
+    const std::uint32_t view_rect_min_x, const std::uint32_t view_rect_min_y,
+    const std::uint32_t view_rect_width, const std::uint32_t view_rect_height)
+    -> std::array<float, 4>
+  {
+    CHECK_F(buffer_width != 0U && buffer_height != 0U,
+      "Screen HZB requires non-zero scene-texture extent");
+    const auto inv_buffer_width = 1.0F / static_cast<float>(buffer_width);
+    const auto inv_buffer_height = 1.0F / static_cast<float>(buffer_height);
+    return {
+      static_cast<float>(view_rect_width) * inv_buffer_width / 2.0F,
+      static_cast<float>(view_rect_height) * inv_buffer_height / -2.0F,
+      (static_cast<float>(view_rect_height) / 2.0F
+        + static_cast<float>(view_rect_min_y))
+        * inv_buffer_height,
+      (static_cast<float>(view_rect_width) / 2.0F
+        + static_cast<float>(view_rect_min_x))
+        * inv_buffer_width,
+    };
+  }
 
 } // namespace
 
@@ -487,8 +491,8 @@ struct ScreenHzbModule::Impl {
         history_desc.texture_type = oxygen::TextureType::kTexture2D;
         history_desc.is_shader_resource = true;
         history_desc.initial_state = graphics::ResourceStates::kCommon;
-        history_desc.debug_name
-          = base_name + "." + semantic_label + ".History" + std::to_string(slot);
+        history_desc.debug_name = base_name + "." + semantic_label + ".History"
+          + std::to_string(slot);
         pyramid.history_textures[slot] = gfx->CreateTexture(history_desc);
         CHECK_NOTNULL_F(pyramid.history_textures[slot].get(),
           "Failed to create Screen HZB {} history texture", semantic_label);
@@ -503,24 +507,23 @@ struct ScreenHzbModule::Impl {
         scratch_desc.is_shader_resource = true;
         scratch_desc.is_uav = true;
         scratch_desc.initial_state = graphics::ResourceStates::kCommon;
-        scratch_desc.debug_name
-          = base_name + "." + semantic_label + ".Scratch" + std::to_string(slot);
+        scratch_desc.debug_name = base_name + "." + semantic_label + ".Scratch"
+          + std::to_string(slot);
         pyramid.scratch_textures[slot] = gfx->CreateTexture(scratch_desc);
         CHECK_NOTNULL_F(pyramid.scratch_textures[slot].get(),
           "Failed to create Screen HZB {} scratch texture", semantic_label);
         RegisterResourceIfNeeded(*gfx, pyramid.scratch_textures[slot]);
 
-        auto history_label = std::string(semantic_label) + "-history-"
-          + std::to_string(slot);
-        CHECK_F(
-          EnsureTextureSrv(*pyramid.history_textures[slot],
-            WholeTextureSrvDesc(*pyramid.history_textures[slot]),
-            pyramid.history_srv_indices[slot], history_label.c_str())
-            .IsValid(),
+        auto history_label
+          = std::string(semantic_label) + "-history-" + std::to_string(slot);
+        CHECK_F(EnsureTextureSrv(*pyramid.history_textures[slot],
+                  WholeTextureSrvDesc(*pyramid.history_textures[slot]),
+                  pyramid.history_srv_indices[slot], history_label.c_str())
+                  .IsValid(),
           "Screen HZB history SRV must be valid");
 
-        auto scratch_label = std::string(semantic_label) + "-scratch-"
-          + std::to_string(slot);
+        auto scratch_label
+          = std::string(semantic_label) + "-scratch-" + std::to_string(slot);
         CHECK_F(
           EnsureTextureSrv(*pyramid.scratch_textures[slot], SingleMipSrvDesc(),
             pyramid.scratch_srv_indices[slot], scratch_label.c_str())
@@ -549,9 +552,8 @@ struct ScreenHzbModule::Impl {
     return state;
   }
 
-  [[nodiscard]] static auto BuildOutput(
-    const ViewState& state, const std::uint32_t slot, const bool available)
-    -> ScreenHzbModule::Output
+  [[nodiscard]] static auto BuildOutput(const ViewState& state,
+    const std::uint32_t slot, const bool available) -> ScreenHzbModule::Output
   {
     if (!available) {
       return {};
@@ -674,7 +676,8 @@ void ScreenHzbModule::RemoveViewState(const ViewId view_id)
   }
 }
 
-void ScreenHzbModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
+void ScreenHzbModule::Execute(RenderContext& ctx,
+  graphics::CommandRecorder& recorder, SceneTextures& scene_textures)
 {
   current_output_ = {};
   previous_output_ = {};
@@ -716,7 +719,8 @@ void ScreenHzbModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
   auto& scene_depth = scene_textures.GetSceneDepth();
   const auto scene_depth_width = scene_depth.GetDescriptor().width;
   const auto scene_depth_height = scene_depth.GetDescriptor().height;
-  const auto build_closest = ctx.current_view.screen_hzb_request.current_closest;
+  const auto build_closest
+    = ctx.current_view.screen_hzb_request.current_closest;
   const auto build_furthest
     = ctx.current_view.screen_hzb_request.current_furthest;
   auto source_width = scene_depth_width;
@@ -727,9 +731,11 @@ void ScreenHzbModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
     resolved_view != nullptr && resolved_view->Viewport().IsValid()) {
     const auto viewport = resolved_view->Viewport();
     source_origin_x = (std::min)(scene_depth_width - 1U,
-      static_cast<std::uint32_t>(std::floor((std::max)(viewport.top_left_x, 0.0F))));
+      static_cast<std::uint32_t>(
+        std::floor((std::max)(viewport.top_left_x, 0.0F))));
     source_origin_y = (std::min)(scene_depth_height - 1U,
-      static_cast<std::uint32_t>(std::floor((std::max)(viewport.top_left_y, 0.0F))));
+      static_cast<std::uint32_t>(
+        std::floor((std::max)(viewport.top_left_y, 0.0F))));
     source_width = (std::min)(scene_depth_width - source_origin_x,
       (std::max)(1U, static_cast<std::uint32_t>(std::ceil(viewport.width))));
     source_height = (std::min)(scene_depth_height - source_origin_y,
@@ -739,8 +745,8 @@ void ScreenHzbModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
   const auto height = ComputeHzbRootExtent(source_height);
   const auto mip_count = ComputeMipCount(width, height);
   auto scene_depth_srv = ShaderVisibleIndex { kInvalidShaderVisibleIndex };
-  scene_depth_srv = impl_->EnsureTextureSrv(
-    scene_depth, WholeTextureSrvDesc(scene_depth), scene_depth_srv, "scene-depth");
+  scene_depth_srv = impl_->EnsureTextureSrv(scene_depth,
+    WholeTextureSrvDesc(scene_depth), scene_depth_srv, "scene-depth");
   if (!scene_depth_srv.IsValid()) {
     return;
   }
@@ -761,14 +767,6 @@ void ScreenHzbModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
     impl_->pipeline_desc = BuildPipelineDesc();
   }
 
-  const auto queue_key = gfx->QueueKeyFor(graphics::QueueRole::kGraphics);
-  auto recorder = gfx->AcquireCommandRecorder(queue_key, "Vortex Stage5 ScreenHzb");
-  if (!recorder) {
-    return;
-  }
-  impl_->renderer.GetDiagnosticsService().AttachGpuTimelineCollector(
-    *recorder);
-
   const auto write_slot
     = state.has_current_output ? (state.current_history_slot ^ 1U) : 0U;
   auto closest_write_texture = state.closest.history_textures[write_slot];
@@ -778,32 +776,32 @@ void ScreenHzbModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
       closest_write_texture.get(), "Screen HZB closest write texture is null");
   }
   if (build_furthest) {
-    CHECK_NOTNULL_F(
-      furthest_write_texture.get(), "Screen HZB furthest write texture is null");
+    CHECK_NOTNULL_F(furthest_write_texture.get(),
+      "Screen HZB furthest write texture is null");
   }
 
   TrackTextureFromKnownOrInitial(
-    *recorder, scene_depth, graphics::ResourceStates::kDepthRead);
+    recorder, scene_depth, graphics::ResourceStates::kDepthRead);
   if (build_closest) {
     TrackTextureFromKnownOrInitial(
-      *recorder, *closest_write_texture, graphics::ResourceStates::kCommon);
+      recorder, *closest_write_texture, graphics::ResourceStates::kCommon);
     for (const auto& scratch_texture : state.closest.scratch_textures) {
       TrackTextureFromKnownOrInitial(
-        *recorder, *scratch_texture, graphics::ResourceStates::kCommon);
+        recorder, *scratch_texture, graphics::ResourceStates::kCommon);
     }
   }
   if (build_furthest) {
     TrackTextureFromKnownOrInitial(
-      *recorder, *furthest_write_texture, graphics::ResourceStates::kCommon);
+      recorder, *furthest_write_texture, graphics::ResourceStates::kCommon);
     for (const auto& scratch_texture : state.furthest.scratch_textures) {
       TrackTextureFromKnownOrInitial(
-        *recorder, *scratch_texture, graphics::ResourceStates::kCommon);
+        recorder, *scratch_texture, graphics::ResourceStates::kCommon);
     }
   }
 
-  recorder->SetPipelineState(*impl_->pipeline_desc);
+  recorder.SetPipelineState(*impl_->pipeline_desc);
   if (ctx.view_constants != nullptr) {
-    recorder->SetComputeRootConstantBufferView(
+    recorder.SetComputeRootConstantBufferView(
       static_cast<std::uint32_t>(bindless_d3d12::RootParam::kViewConstants),
       ctx.view_constants->GetGPUVirtualAddress());
   }
@@ -814,7 +812,7 @@ void ScreenHzbModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
         const std::uint32_t scratch_slot, const std::uint32_t mip_level,
         const std::uint32_t destination_width,
         const std::uint32_t destination_height) {
-        recorder->CopyTexture(*pyramid.scratch_textures[scratch_slot],
+        recorder.CopyTexture(*pyramid.scratch_textures.at(scratch_slot),
           graphics::TextureSlice {
             .x = 0U,
             .y = 0U,
@@ -850,23 +848,23 @@ void ScreenHzbModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
           });
       };
 
-  graphics::GpuEventScope pass_scope(*recorder, "Vortex.Stage5.ScreenHzbBuild",
+  graphics::GpuEventScope pass_scope(recorder, "Vortex.Stage5.ScreenHzbBuild",
     profiling::ProfileGranularity::kDiagnostic,
     profiling::ProfileCategory::kPass);
 
   for (std::uint32_t mip_level = 0U; mip_level < state.mip_count; ++mip_level) {
     const auto destination_width = MipExtent(state.width, mip_level);
     const auto destination_height = MipExtent(state.height, mip_level);
-    const auto source_mip_width = mip_level == 0U
-      ? source_width
-      : MipExtent(state.width, mip_level - 1U);
+    const auto source_mip_width
+      = mip_level == 0U ? source_width : MipExtent(state.width, mip_level - 1U);
     const auto source_mip_height = mip_level == 0U
       ? source_height
       : MipExtent(state.height, mip_level - 1U);
     const auto scratch_slot = mip_level & 1U;
 
     auto closest_source_srv = ShaderVisibleIndex { kInvalidShaderVisibleIndex };
-    auto furthest_source_srv = ShaderVisibleIndex { kInvalidShaderVisibleIndex };
+    auto furthest_source_srv
+      = ShaderVisibleIndex { kInvalidShaderVisibleIndex };
     if (build_closest) {
       closest_source_srv = mip_level == 0U
         ? scene_depth_srv
@@ -900,92 +898,111 @@ void ScreenHzbModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
     CHECK_F(pass_constants_index.IsValid(),
       "Screen HZB constants publication failed");
 
-    recorder->SetComputeRoot32BitConstant(
-      static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants),
-      0U, 0U);
-    recorder->SetComputeRoot32BitConstant(
+    recorder.SetComputeRoot32BitConstant(
+      static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants), 0U,
+      0U);
+    recorder.SetComputeRoot32BitConstant(
       static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants),
       pass_constants_index.get(), 1U);
 
     if (mip_level == 0U) {
-      recorder->RequireResourceState(
+      recorder.RequireResourceState(
         scene_depth, graphics::ResourceStates::kShaderResource);
     } else {
       if (build_closest) {
-        recorder->RequireResourceState(
+        recorder.RequireResourceState(
           *state.closest.scratch_textures[scratch_slot ^ 1U],
           graphics::ResourceStates::kShaderResource);
       }
       if (build_furthest) {
-        recorder->RequireResourceState(
+        recorder.RequireResourceState(
           *state.furthest.scratch_textures[scratch_slot ^ 1U],
           graphics::ResourceStates::kShaderResource);
       }
     }
     if (build_closest) {
-      recorder->RequireResourceState(*state.closest.scratch_textures[scratch_slot],
+      recorder.RequireResourceState(
+        *state.closest.scratch_textures[scratch_slot],
         graphics::ResourceStates::kUnorderedAccess);
     }
     if (build_furthest) {
-      recorder->RequireResourceState(*state.furthest.scratch_textures[scratch_slot],
+      recorder.RequireResourceState(
+        *state.furthest.scratch_textures[scratch_slot],
         graphics::ResourceStates::kUnorderedAccess);
     }
-    recorder->FlushBarriers();
+    recorder.FlushBarriers();
 
-    recorder->Dispatch(
+    recorder.Dispatch(
       (destination_width + (kThreadGroupSize - 1U)) / kThreadGroupSize,
       (destination_height + (kThreadGroupSize - 1U)) / kThreadGroupSize, 1U);
 
     if (build_closest) {
-      recorder->RequireResourceState(*state.closest.scratch_textures[scratch_slot],
+      recorder.RequireResourceState(
+        *state.closest.scratch_textures[scratch_slot],
         graphics::ResourceStates::kCopySource);
-      recorder->RequireResourceState(
+      recorder.RequireResourceState(
         *closest_write_texture, graphics::ResourceStates::kCopyDest);
     }
     if (build_furthest) {
-      recorder->RequireResourceState(*state.furthest.scratch_textures[scratch_slot],
+      recorder.RequireResourceState(
+        *state.furthest.scratch_textures[scratch_slot],
         graphics::ResourceStates::kCopySource);
-      recorder->RequireResourceState(
+      recorder.RequireResourceState(
         *furthest_write_texture, graphics::ResourceStates::kCopyDest);
     }
-    recorder->FlushBarriers();
+    recorder.FlushBarriers();
 
     if (build_closest) {
-      copy_scratch_to_history(state.closest, closest_write_texture, scratch_slot,
-        mip_level, destination_width, destination_height);
+      copy_scratch_to_history(state.closest, closest_write_texture,
+        scratch_slot, mip_level, destination_width, destination_height);
     }
     if (build_furthest) {
-      copy_scratch_to_history(state.furthest, furthest_write_texture, scratch_slot,
-        mip_level, destination_width, destination_height);
+      copy_scratch_to_history(state.furthest, furthest_write_texture,
+        scratch_slot, mip_level, destination_width, destination_height);
     }
   }
 
-  recorder->RequireResourceStateFinal(
+  recorder.RequireResourceState(
     scene_depth, graphics::ResourceStates::kDepthRead);
   if (build_closest) {
-    recorder->RequireResourceStateFinal(
+    recorder.RequireResourceState(
       *state.closest.scratch_textures[0], graphics::ResourceStates::kCommon);
-    recorder->RequireResourceStateFinal(
+    recorder.RequireResourceState(
       *state.closest.scratch_textures[1], graphics::ResourceStates::kCommon);
-    recorder->RequireResourceStateFinal(
+    recorder.RequireResourceState(
       *closest_write_texture, graphics::ResourceStates::kShaderResource);
   }
   if (build_furthest) {
-    recorder->RequireResourceStateFinal(
+    recorder.RequireResourceState(
       *state.furthest.scratch_textures[0], graphics::ResourceStates::kCommon);
-    recorder->RequireResourceStateFinal(
+    recorder.RequireResourceState(
       *state.furthest.scratch_textures[1], graphics::ResourceStates::kCommon);
-    recorder->RequireResourceStateFinal(
+    recorder.RequireResourceState(
       *furthest_write_texture, graphics::ResourceStates::kShaderResource);
   }
 
   const auto had_previous = state.has_current_output;
-  state.current_history_slot = write_slot;
-  current_output_ = Impl::BuildOutput(state, state.current_history_slot, true);
-  state.has_current_output = current_output_.available;
-  state.has_previous_output = had_previous && state.has_current_output;
-  previous_output_ = Impl::BuildOutput(
-    state, state.current_history_slot ^ 1U, state.has_previous_output);
+  current_output_ = Impl::BuildOutput(state, write_slot, true);
+  previous_output_ = Impl::BuildOutput(state, state.current_history_slot,
+    had_previous && current_output_.available);
+  recorder.OnSubmission([this, view_id, write_slot, had_previous,
+                          available = current_output_.available](
+                          const graphics::SubmissionOutcome outcome) -> void {
+    if (outcome != graphics::SubmissionOutcome::kSubmitted) {
+      if (output_view_id_ == view_id) {
+        current_output_ = {};
+        previous_output_ = {};
+      }
+      return;
+    }
+    const auto found = impl_->view_states.find(view_id);
+    if (found == impl_->view_states.end()) {
+      return;
+    }
+    found->second.current_history_slot = write_slot;
+    found->second.has_current_output = available;
+    found->second.has_previous_output = had_previous && available;
+  });
 
   if (current_output_.available) {
     LOG_F(INFO, "screen_hzb_published=true width={} height={} mips={}",

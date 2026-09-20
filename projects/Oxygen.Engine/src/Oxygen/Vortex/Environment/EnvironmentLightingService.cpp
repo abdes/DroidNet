@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <Oxygen/Vortex/Environment/EnvironmentLightingService.h>
+#include <Oxygen/Graphics/Common/CommandRecorder.h>
 
 #include <algorithm>
 #include <cmath>
@@ -15,10 +16,10 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Data/TextureResource.h>
-#include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Scene/Environment/SkySphere.h>
+#include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereLightState.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereLutCache.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereRenderer.h>
@@ -94,8 +95,8 @@ namespace {
       CompositionView::ViewFeatureMask::kVolumetrics);
   }
 
-  auto CurrentViewSelectsSkySphereBackground(const RenderContext& ctx,
-    const scene::SceneEnvironment* env) -> bool
+  auto CurrentViewSelectsSkySphereBackground(
+    const RenderContext& ctx, const scene::SceneEnvironment* env) -> bool
   {
     if (env == nullptr
       || !ctx.current_view.feature_mask.Has(
@@ -108,8 +109,7 @@ namespace {
       && ctx.current_view.with_atmosphere) {
       return false;
     }
-    const auto sky_sphere
-      = env->TryGetSystem<scene::environment::SkySphere>();
+    const auto sky_sphere = env->TryGetSystem<scene::environment::SkySphere>();
     return sky_sphere != nullptr && sky_sphere->IsEnabled();
   }
 
@@ -528,8 +528,8 @@ auto EnvironmentLightingService::BuildBindings(
   return bindings;
 }
 
-auto EnvironmentLightingService::PrepareLocalFogForStage14(
-  RenderContext& ctx, const SceneTextures& scene_textures)
+auto EnvironmentLightingService::PrepareLocalFogForStage14(RenderContext& ctx,
+  graphics::CommandRecorder& recorder, const SceneTextures& scene_textures)
   -> const environment::internal::LocalFogVolumeState::ViewProducts&
 {
   if (pending_local_fog_sequence_ == current_sequence_
@@ -540,8 +540,8 @@ auto EnvironmentLightingService::PrepareLocalFogForStage14(
   auto& local_fog_products = local_fog_state_->Prepare(ctx);
   LOG_F(INFO, "local_fog_volume_instance_count={}",
     local_fog_products.instance_count);
-  pending_local_fog_culling_state_
-    = local_fog_tiled_culling_->Record(ctx, scene_textures, local_fog_products);
+  pending_local_fog_culling_state_ = local_fog_tiled_culling_->Record(
+    ctx, recorder, scene_textures, local_fog_products);
   pending_local_fog_view_id_ = ctx.current_view.view_id;
   pending_local_fog_sequence_ = current_sequence_;
   return local_fog_products;
@@ -953,7 +953,7 @@ auto EnvironmentLightingService::BuildEnvironmentStaticData(
         == oxygen::scene::environment::SkySphereSource::kSolidColor) {
         data.sky_sphere.enabled = data.sky_sphere.intensity > 0.0F ? 1U : 0U;
       } else if (const auto cubemap = sky_sphere->GetCubemapResource();
-                 cubemap.get() != 0U) {
+        cubemap.get() != 0U) {
         data.sky_sphere.enabled = data.sky_sphere.intensity > 0.0F ? 1U : 0U;
         if (const auto asset_loader = renderer_.GetAssetLoader();
           asset_loader != nullptr) {
@@ -1042,6 +1042,7 @@ auto EnvironmentLightingService::DescribeViewRadianceLayout(
 }
 
 auto EnvironmentLightingService::PublishEnvironmentBindings(RenderContext& ctx,
+  graphics::CommandRecorder& recorder,
   const ShaderVisibleIndex environment_static_slot,
   const ShaderVisibleIndex environment_view_slot,
   const bool enable_ambient_bridge, const SceneTextures* scene_textures)
@@ -1100,19 +1101,19 @@ auto EnvironmentLightingService::PublishEnvironmentBindings(RenderContext& ctx,
     : ShaderVisibleIndex { kInvalidShaderVisibleIndex };
 
   const auto sky_view_state = sky_view_lut_pass_->Record(
-    ctx, view_data, stable_state, *atmosphere_lut_cache_);
+    ctx, recorder, view_data, stable_state, *atmosphere_lut_cache_);
   products.sky_view_lut_srv = sky_view_state.sky_view_lut_srv;
 
   const auto camera_aerial_state = camera_aerial_perspective_pass_->Record(
-    ctx, view_data, stable_state, *atmosphere_lut_cache_);
+    ctx, recorder, view_data, stable_state, *atmosphere_lut_cache_);
   products.camera_aerial_perspective_srv
     = camera_aerial_state.camera_aerial_perspective_srv;
   pending_volumetric_fog_state_ = {};
   if (wants_volumetric_fog) {
     const auto* local_fog_products = scene_textures != nullptr
-      ? &PrepareLocalFogForStage14(ctx, *scene_textures)
+      ? &PrepareLocalFogForStage14(ctx, recorder, *scene_textures)
       : nullptr;
-    pending_volumetric_fog_state_ = volumetric_fog_pass_->Record(ctx,
+    pending_volumetric_fog_state_ = volumetric_fog_pass_->Record(ctx, recorder,
       stable_state, products.distant_sky_light_lut_srv, local_fog_products);
     products.integrated_light_scattering_srv
       = pending_volumetric_fog_state_.integrated_light_scattering_srv;
@@ -1155,6 +1156,14 @@ auto EnvironmentLightingService::PublishEnvironmentBindings(RenderContext& ctx,
     enable_ambient_bridge);
   const auto slot
     = bindings_publisher_->Publish(ctx.current_view.view_id, bindings);
+  recorder.OnSubmission([this, view_id = ctx.current_view.view_id, slot](
+                          const graphics::SubmissionOutcome outcome) -> void {
+    const auto found = published_views_.find(view_id);
+    if (outcome == graphics::SubmissionOutcome::kDiscarded
+      && found != published_views_.end() && found->second.slot == slot) {
+      published_views_.erase(found);
+    }
+  });
   published_views_.insert_or_assign(ctx.current_view.view_id,
     PublishedView {
       .slot = slot,
@@ -1328,29 +1337,31 @@ auto EnvironmentLightingService::PublishEnvironmentBindings(RenderContext& ctx,
     last_view_product_generation_state_.sky_light_ibl_unavailable,
     StaticSkyLightProductStatusName(
       last_view_product_generation_state_.sky_light_ibl_status),
-    StaticSkyLightUnavailableReasonName(last_view_product_generation_state_
-        .sky_light_ibl_unavailable_reason),
+    StaticSkyLightUnavailableReasonName(
+      last_view_product_generation_state_.sky_light_ibl_unavailable_reason),
     last_view_product_generation_state_.volumetric_fog_authored_enabled,
     last_view_product_generation_state_.integrated_light_scattering_valid);
 
   return slot;
 }
 
-auto EnvironmentLightingService::RenderSkyAndFog(
-  RenderContext& ctx, const SceneTextures& scene_textures) -> void
+auto EnvironmentLightingService::RenderSkyAndFog(RenderContext& ctx,
+  graphics::CommandRecorder& recorder, const SceneTextures& scene_textures)
+  -> void
 {
   RefreshStableAtmosphereState(ctx.GetScene().get());
   const auto& local_fog_products
-    = PrepareLocalFogForStage14(ctx, scene_textures);
+    = PrepareLocalFogForStage14(ctx, recorder, scene_textures);
   const auto local_fog_culling_state = pending_local_fog_culling_state_;
-  const auto sky_state = sky_->Render(ctx, scene_textures);
-  const auto atmosphere_state = atmosphere_->Render(ctx, scene_textures);
-  const auto fog_state = fog_->Render(ctx, scene_textures);
+  const auto sky_state = sky_->Render(ctx, recorder, scene_textures);
+  const auto atmosphere_state
+    = atmosphere_->Render(ctx, recorder, scene_textures);
+  const auto fog_state = fog_->Render(ctx, recorder, scene_textures);
   auto local_fog_compose_state
     = environment::LocalFogVolumeComposePass::RecordState {};
   if (!pending_volumetric_fog_state_.local_fog_injection_executed) {
-    local_fog_compose_state
-      = local_fog_compose_->Record(ctx, scene_textures, local_fog_products);
+    local_fog_compose_state = local_fog_compose_->Record(
+      ctx, recorder, scene_textures, local_fog_products);
   }
   last_stage14_state_ = {
     .view_id = ctx.current_view.view_id,

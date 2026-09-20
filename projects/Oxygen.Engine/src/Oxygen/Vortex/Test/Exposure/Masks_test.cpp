@@ -163,8 +163,11 @@ NOLINT_TEST_F(
       auto scene_inputs = PostProcessService::Inputs {};
       scene_inputs.scene_signal = signal.texture.get();
       scene_inputs.scene_signal_srv = signal.srv;
-      return service.PrepareSceneExposure(
-        ctx_.current_view.view_id, ctx_, scene_inputs);
+      return SubmitCommands(
+        "Vortex Exposure", [&](graphics::CommandRecorder& recorder) -> auto {
+          return service.PrepareSceneExposure(
+            ctx_.current_view.view_id, ctx_, recorder, scene_inputs);
+        });
     }
   };
   auto prepared = render();
@@ -231,8 +234,11 @@ NOLINT_TEST_F(
   auto scene_result_inputs = PostProcessService::Inputs {};
   scene_result_inputs.scene_signal = signal.texture.get();
   scene_result_inputs.scene_signal_srv = signal.srv;
-  const auto scene_result = service.PrepareSceneExposure(
-    ctx_.current_view.view_id, ctx_, scene_result_inputs);
+  const auto scene_result = SubmitCommands(
+    "Vortex Exposure", [&](graphics::CommandRecorder& recorder) -> auto {
+      return service.PrepareSceneExposure(
+        ctx_.current_view.view_id, ctx_, recorder, scene_result_inputs);
+    });
   if (!scene_result.has_value()) {
     FAIL() << "Expected scene_result to contain a value";
   }
@@ -319,8 +325,11 @@ NOLINT_TEST_F(
           framebuffer.get(),
         };
         exposure_inputs.scene_signal_srv = signal.srv;
-        service.Execute(
-          ctx_.current_view.view_id, ctx_, textures, exposure_inputs);
+        SubmitCommands("Vortex PostProcess",
+          [&](graphics::CommandRecorder& recorder) -> auto {
+            return service.Record(
+              ctx_.current_view.view_id, ctx_, recorder, exposure_inputs);
+          });
       }
       EXPECT_TRUE(service.GetLastExecutionState().tonemap_executed);
       auto readback

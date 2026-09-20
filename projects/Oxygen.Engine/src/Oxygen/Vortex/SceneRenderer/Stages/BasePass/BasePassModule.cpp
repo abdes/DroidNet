@@ -904,13 +904,14 @@ namespace {
   auto BeginPersistentWriteTarget(
     graphics::CommandRecorder& recorder, graphics::Texture& texture) -> void
   {
-    if (!recorder.AdoptKnownResourceState(texture)) {
+    if (!recorder.IsResourceTracked(texture)
+      && !recorder.AdoptKnownResourceState(texture)) {
       auto initial = texture.GetDescriptor().initial_state;
       if (initial == graphics::ResourceStates::kUnknown
         || initial == graphics::ResourceStates::kUndefined) {
         initial = graphics::ResourceStates::kCommon;
       }
-      recorder.BeginTrackingResourceState(texture, initial);
+      recorder.BeginTrackingResourceState(texture, initial, false);
     }
   }
 
@@ -952,20 +953,20 @@ namespace {
   auto TransitionBasePassFinalStates(
     graphics::CommandRecorder& recorder, SceneTextures& scene_textures) -> void
   {
-    recorder.RequireResourceStateFinal(scene_textures.GetGBufferNormal(),
+    recorder.RequireResourceState(scene_textures.GetGBufferNormal(),
       graphics::ResourceStates::kShaderResource);
-    recorder.RequireResourceStateFinal(scene_textures.GetGBufferMaterial(),
+    recorder.RequireResourceState(scene_textures.GetGBufferMaterial(),
       graphics::ResourceStates::kShaderResource);
-    recorder.RequireResourceStateFinal(scene_textures.GetGBufferBaseColor(),
+    recorder.RequireResourceState(scene_textures.GetGBufferBaseColor(),
       graphics::ResourceStates::kShaderResource);
-    recorder.RequireResourceStateFinal(scene_textures.GetGBufferCustomData(),
+    recorder.RequireResourceState(scene_textures.GetGBufferCustomData(),
       graphics::ResourceStates::kShaderResource);
-    recorder.RequireResourceStateFinal(
+    recorder.RequireResourceState(
       scene_textures.GetSceneColor(), graphics::ResourceStates::kRenderTarget);
-    recorder.RequireResourceStateFinal(
+    recorder.RequireResourceState(
       scene_textures.GetSceneDepth(), graphics::ResourceStates::kDepthRead);
     if (scene_textures.GetVelocity() != nullptr) {
-      recorder.RequireResourceStateFinal(*scene_textures.GetVelocity(),
+      recorder.RequireResourceState(*scene_textures.GetVelocity(),
         graphics::ResourceStates::kShaderResource);
     }
   }
@@ -1044,7 +1045,8 @@ auto BasePassModule::WriteWireframeConstants(Graphics& gfx,
   return slot;
 }
 
-auto BasePassModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
+auto BasePassModule::Execute(RenderContext& ctx,
+  graphics::CommandRecorder& recorder, SceneTextures& scene_textures)
   -> BasePassExecutionResult
 {
   last_execution_result_ = {};
@@ -1087,14 +1089,7 @@ auto BasePassModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
           prepared_frame, draw_command);
       });
 
-  const auto queue_key = gfx->QueueKeyFor(graphics::QueueRole::kGraphics);
-  auto recorder = gfx->AcquireCommandRecorder(queue_key, "Vortex BasePass");
-  if (!recorder) {
-    return last_execution_result_;
-  }
-  renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(
-    *recorder);
-  graphics::GpuEventScope stage_scope(*recorder, "Vortex.Stage9.BasePass",
+  graphics::GpuEventScope stage_scope(recorder, "Vortex.Stage9.BasePass",
     profiling::ProfileGranularity::kTelemetry,
     profiling::ProfileCategory::kPass);
 
@@ -1118,22 +1113,22 @@ auto BasePassModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
         BuildWireframeFramebuffer(scene_textures, depth_read_only));
     }
 
-    BeginPersistentWriteTarget(*recorder, scene_textures.GetSceneColor());
-    BeginPersistentWriteTarget(*recorder, scene_textures.GetSceneDepth());
-    recorder->RequireResourceState(
+    BeginPersistentWriteTarget(recorder, scene_textures.GetSceneColor());
+    BeginPersistentWriteTarget(recorder, scene_textures.GetSceneDepth());
+    recorder.RequireResourceState(
       scene_textures.GetSceneColor(), graphics::ResourceStates::kRenderTarget);
-    recorder->RequireResourceState(
+    recorder.RequireResourceState(
       scene_textures.GetSceneDepth(), graphics::ResourceStates::kDepthWrite);
-    recorder->FlushBarriers();
+    recorder.FlushBarriers();
 
-    graphics::GpuEventScope wire_scope(*recorder,
+    graphics::GpuEventScope wire_scope(recorder,
       "Vortex.Stage9.BasePass.Wireframe",
       profiling::ProfileGranularity::kTelemetry,
       profiling::ProfileCategory::kPass);
-    recorder->ClearFramebuffer(
+    recorder.ClearFramebuffer(
       *wireframe_framebuffer_, std::nullopt, reverse_z ? 0.0F : 1.0F, 0U);
-    recorder->BindFrameBuffer(*wireframe_framebuffer_);
-    SetViewportAndScissor(*recorder, ctx, scene_textures);
+    recorder.BindFrameBuffer(*wireframe_framebuffer_);
+    SetViewportAndScissor(recorder, ctx, scene_textures);
     const auto wireframe_constants_index
       = WriteWireframeConstants(*gfx, ctx, true);
     auto current_raster_state = std::optional<internal::MeshRasterState> {};
@@ -1142,25 +1137,25 @@ auto BasePassModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
         = ResolveRasterState(prepared_frame, draw_command);
       if (!current_raster_state.has_value()
         || current_raster_state.value() != raster_state) {
-        recorder->SetPipelineState(BuildWireframePipelineDesc(
+        recorder.SetPipelineState(BuildWireframePipelineDesc(
           scene_textures, raster_state.alpha_test, reverse_z, true, false));
-        recorder->SetGraphicsRootConstantBufferView(
+        recorder.SetGraphicsRootConstantBufferView(
           view_constants_param, ctx.view_constants->GetGPUVirtualAddress());
         current_raster_state = raster_state;
       }
 
-      recorder->SetGraphicsRoot32BitConstant(
+      recorder.SetGraphicsRoot32BitConstant(
         root_constants_param, draw_command.draw_index, 0U);
-      recorder->SetGraphicsRoot32BitConstant(
+      recorder.SetGraphicsRoot32BitConstant(
         root_constants_param, wireframe_constants_index.get(), 1U);
-      recorder->Draw(draw_command.is_indexed ? draw_command.index_count
-                                             : draw_command.vertex_count,
+      recorder.Draw(draw_command.is_indexed ? draw_command.index_count
+                                            : draw_command.vertex_count,
         draw_command.instance_count, 0U, draw_command.start_instance);
     }
 
-    recorder->RequireResourceStateFinal(
+    recorder.RequireResourceState(
       scene_textures.GetSceneColor(), graphics::ResourceStates::kRenderTarget);
-    recorder->RequireResourceStateFinal(
+    recorder.RequireResourceState(
       scene_textures.GetSceneDepth(), graphics::ResourceStates::kDepthRead);
     last_execution_result_.completed_velocity_for_dynamic_geometry = true;
     last_execution_result_.wrote_velocity_target = false;
@@ -1170,11 +1165,12 @@ auto BasePassModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
 
   if (const auto& frame = ctx.current_view.frame_exposure) {
     const auto& status = *frame->current_state->status_buffer;
-    if (!recorder->IsResourceTracked(status)
-      && !recorder->AdoptKnownResourceState(status))
-      recorder->BeginTrackingResourceState(
+    if (!recorder.IsResourceTracked(status)
+      && !recorder.AdoptKnownResourceState(status)) {
+      recorder.BeginTrackingResourceState(
         status, graphics::ResourceStates::kCommon, false);
-    recorder->RequireResourceState(
+    }
+    recorder.RequireResourceState(
       status, graphics::ResourceStates::kUnorderedAccess);
   }
 
@@ -1184,7 +1180,7 @@ auto BasePassModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
     // Without a complete prepass, only the finished depth buffer determines
     // visibility independently of draw order. Replay with color/depth writes
     // disabled; the same shader checks only surviving material sources.
-    graphics::GpuEventScope range_scope(*recorder,
+    graphics::GpuEventScope range_scope(recorder,
       "Vortex.Stage9.BasePass.VisibleRadianceCheck",
       profiling::ProfileGranularity::kDiagnostic,
       profiling::ProfileCategory::kPass);
@@ -1201,28 +1197,28 @@ auto BasePassModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
       target = gfx->CreateFramebuffer(
         BuildBasePassFramebuffer(scene_textures, true, writes_velocity));
     }
-    recorder->RequireResourceState(
+    recorder.RequireResourceState(
       scene_textures.GetSceneDepth(), graphics::ResourceStates::kDepthRead);
-    recorder->FlushBarriers();
-    recorder->BindFrameBuffer(*target);
+    recorder.FlushBarriers();
+    recorder.BindFrameBuffer(*target);
     auto raster = std::optional<internal::MeshRasterState> {};
     for (const auto& draw : mesh_processor_->GetDrawCommands()) {
       const auto next = ResolveRasterState(prepared_frame, draw);
       if (!raster.has_value() || *raster != next) {
-        recorder->SetPipelineState(forward_solid
+        recorder.SetPipelineState(forward_solid
             ? BuildForwardBasePassPipelineDesc(
                 scene_textures, range_config, next, reverse_z, true)
             : BuildBasePassPipelineDesc(scene_textures, range_config, next,
                 reverse_z, writes_velocity, true));
-        recorder->SetGraphicsRootConstantBufferView(
+        recorder.SetGraphicsRootConstantBufferView(
           view_constants_param, ctx.view_constants->GetGPUVirtualAddress());
-        recorder->SetGraphicsRoot32BitConstant(
+        recorder.SetGraphicsRoot32BitConstant(
           root_constants_param, kInvalidShaderVisibleIndex.get(), 1U);
         raster = next;
       }
-      recorder->SetGraphicsRoot32BitConstant(
+      recorder.SetGraphicsRoot32BitConstant(
         root_constants_param, draw.draw_index, 0U);
-      recorder->Draw(draw.is_indexed ? draw.index_count : draw.vertex_count,
+      recorder.Draw(draw.is_indexed ? draw.index_count : draw.vertex_count,
         draw.instance_count, 0U, draw.start_instance);
     }
   };
@@ -1241,27 +1237,27 @@ auto BasePassModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
         BuildForwardColorClearFramebuffer(scene_textures));
     }
 
-    BeginPersistentWriteTarget(*recorder, scene_textures.GetSceneColor());
-    BeginPersistentWriteTarget(*recorder, scene_textures.GetSceneDepth());
-    recorder->RequireResourceState(
+    BeginPersistentWriteTarget(recorder, scene_textures.GetSceneColor());
+    BeginPersistentWriteTarget(recorder, scene_textures.GetSceneDepth());
+    recorder.RequireResourceState(
       scene_textures.GetSceneColor(), graphics::ResourceStates::kRenderTarget);
-    recorder->RequireResourceState(scene_textures.GetSceneDepth(),
+    recorder.RequireResourceState(scene_textures.GetSceneDepth(),
       depth_read_only ? graphics::ResourceStates::kDepthRead
                       : graphics::ResourceStates::kDepthWrite);
-    recorder->FlushBarriers();
+    recorder.FlushBarriers();
 
-    graphics::GpuEventScope forward_scope(*recorder,
+    graphics::GpuEventScope forward_scope(recorder,
       "Vortex.Stage9.BasePass.Forward",
       profiling::ProfileGranularity::kTelemetry,
       profiling::ProfileCategory::kPass);
     if (!config_.early_z_pass_done) {
-      recorder->ClearFramebuffer(
+      recorder.ClearFramebuffer(
         *forward_framebuffer_, std::nullopt, reverse_z ? 0.0F : 1.0F, 0U);
     } else if (forward_color_clear_framebuffer_) {
-      recorder->ClearFramebuffer(*forward_color_clear_framebuffer_);
+      recorder.ClearFramebuffer(*forward_color_clear_framebuffer_);
     }
-    recorder->BindFrameBuffer(*forward_framebuffer_);
-    SetViewportAndScissor(*recorder, ctx, scene_textures);
+    recorder.BindFrameBuffer(*forward_framebuffer_);
+    SetViewportAndScissor(recorder, ctx, scene_textures);
 
     auto current_raster_state = std::optional<internal::MeshRasterState> {};
     for (const auto& draw_command : mesh_processor_->GetDrawCommands()) {
@@ -1269,26 +1265,26 @@ auto BasePassModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
         = ResolveRasterState(prepared_frame, draw_command);
       if (!current_raster_state.has_value()
         || current_raster_state.value() != raster_state) {
-        recorder->SetPipelineState(BuildForwardBasePassPipelineDesc(
+        recorder.SetPipelineState(BuildForwardBasePassPipelineDesc(
           scene_textures, config_, raster_state, reverse_z));
-        recorder->SetGraphicsRootConstantBufferView(
+        recorder.SetGraphicsRootConstantBufferView(
           view_constants_param, ctx.view_constants->GetGPUVirtualAddress());
-        recorder->SetGraphicsRoot32BitConstant(
+        recorder.SetGraphicsRoot32BitConstant(
           root_constants_param, kInvalidShaderVisibleIndex.get(), 1U);
         current_raster_state = raster_state;
       }
 
-      recorder->SetGraphicsRoot32BitConstant(
+      recorder.SetGraphicsRoot32BitConstant(
         root_constants_param, draw_command.draw_index, 0U);
-      recorder->Draw(draw_command.is_indexed ? draw_command.index_count
-                                             : draw_command.vertex_count,
+      recorder.Draw(draw_command.is_indexed ? draw_command.index_count
+                                            : draw_command.vertex_count,
         draw_command.instance_count, 0U, draw_command.start_instance);
     }
 
     validate_without_prepass();
-    recorder->RequireResourceStateFinal(
+    recorder.RequireResourceState(
       scene_textures.GetSceneColor(), graphics::ResourceStates::kRenderTarget);
-    recorder->RequireResourceStateFinal(
+    recorder.RequireResourceState(
       scene_textures.GetSceneDepth(), graphics::ResourceStates::kDepthRead);
     last_execution_result_.completed_velocity_for_dynamic_geometry = true;
     last_execution_result_.wrote_velocity_target = false;
@@ -1298,7 +1294,7 @@ auto BasePassModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
 
   last_execution_result_.published_base_pass_products = true;
   last_execution_result_.wrote_scene_color = true;
-  BeginBasePassResourceTracking(*recorder, scene_textures, config_);
+  BeginBasePassResourceTracking(recorder, scene_textures, config_);
 
   if (NeedsFramebufferRebuild(framebuffer_, scene_textures, writes_velocity,
         config_.early_z_pass_done)) {
@@ -1312,40 +1308,40 @@ auto BasePassModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
       BuildBasePassColorClearFramebuffer(scene_textures, writes_velocity));
   }
 
-  recorder->FlushBarriers();
+  recorder.FlushBarriers();
 
   {
-    graphics::GpuEventScope main_pass_scope(*recorder,
+    graphics::GpuEventScope main_pass_scope(recorder,
       "Vortex.Stage9.BasePass.MainPass",
       profiling::ProfileGranularity::kTelemetry,
       profiling::ProfileCategory::kPass);
     if (!config_.early_z_pass_done) {
-      recorder->ClearFramebuffer(
+      recorder.ClearFramebuffer(
         *framebuffer_, std::nullopt, reverse_z ? 0.0F : 1.0F, 0U);
     } else if (color_clear_framebuffer_) {
-      recorder->ClearFramebuffer(*color_clear_framebuffer_);
+      recorder.ClearFramebuffer(*color_clear_framebuffer_);
     }
-    recorder->BindFrameBuffer(*framebuffer_);
-    SetViewportAndScissor(*recorder, ctx, scene_textures);
+    recorder.BindFrameBuffer(*framebuffer_);
+    SetViewportAndScissor(recorder, ctx, scene_textures);
     auto current_raster_state = std::optional<internal::MeshRasterState> {};
     for (const auto& draw_command : mesh_processor_->GetDrawCommands()) {
       const auto raster_state
         = ResolveRasterState(prepared_frame, draw_command);
       if (!current_raster_state.has_value()
         || current_raster_state.value() != raster_state) {
-        recorder->SetPipelineState(BuildBasePassPipelineDesc(
+        recorder.SetPipelineState(BuildBasePassPipelineDesc(
           scene_textures, config_, raster_state, reverse_z, writes_velocity));
-        recorder->SetGraphicsRootConstantBufferView(
+        recorder.SetGraphicsRootConstantBufferView(
           view_constants_param, ctx.view_constants->GetGPUVirtualAddress());
-        recorder->SetGraphicsRoot32BitConstant(
+        recorder.SetGraphicsRoot32BitConstant(
           root_constants_param, kInvalidShaderVisibleIndex.get(), 1U);
         current_raster_state = raster_state;
       }
 
-      recorder->SetGraphicsRoot32BitConstant(
+      recorder.SetGraphicsRoot32BitConstant(
         root_constants_param, draw_command.draw_index, 0U);
-      recorder->Draw(draw_command.is_indexed ? draw_command.index_count
-                                             : draw_command.vertex_count,
+      recorder.Draw(draw_command.is_indexed ? draw_command.index_count
+                                            : draw_command.vertex_count,
         draw_command.instance_count, 0U, draw_command.start_instance);
     }
   }
@@ -1374,33 +1370,33 @@ auto BasePassModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
           velocity_motion_vector_world_offset_));
     }
 
-    BeginPersistentWriteTarget(*recorder, velocity_base_copy);
-    BeginPersistentWriteTarget(*recorder, velocity_aux);
-    recorder->RequireResourceState(
+    BeginPersistentWriteTarget(recorder, velocity_base_copy);
+    BeginPersistentWriteTarget(recorder, velocity_aux);
+    recorder.RequireResourceState(
       *scene_textures.GetVelocity(), graphics::ResourceStates::kCopySource);
-    recorder->RequireResourceState(
+    recorder.RequireResourceState(
       velocity_base_copy, graphics::ResourceStates::kCopyDest);
-    recorder->RequireResourceState(
+    recorder.RequireResourceState(
       velocity_aux, graphics::ResourceStates::kRenderTarget);
-    recorder->FlushBarriers();
-    recorder->CopyTexture(*scene_textures.GetVelocity(),
+    recorder.FlushBarriers();
+    recorder.CopyTexture(*scene_textures.GetVelocity(),
       graphics::TextureSlice {},
       graphics::TextureSubResourceSet::EntireTexture(), velocity_base_copy,
       graphics::TextureSlice {},
       graphics::TextureSubResourceSet::EntireTexture());
 
     {
-      graphics::GpuEventScope velocity_aux_scope(*recorder,
+      graphics::GpuEventScope velocity_aux_scope(recorder,
         "Vortex.Stage9.BasePass.VelocityAux",
         profiling::ProfileGranularity::kTelemetry,
         profiling::ProfileCategory::kPass);
-      recorder->ClearFramebuffer(*velocity_aux_color_clear_framebuffer_,
+      recorder.ClearFramebuffer(*velocity_aux_color_clear_framebuffer_,
         std::vector<std::optional<graphics::Color>> {
           graphics::Color { 0.0F, 0.0F, 0.0F, 0.0F },
         },
         std::nullopt, std::nullopt);
-      recorder->BindFrameBuffer(*velocity_aux_framebuffer_);
-      SetViewportAndScissor(*recorder, ctx, scene_textures);
+      recorder.BindFrameBuffer(*velocity_aux_framebuffer_);
+      SetViewportAndScissor(recorder, ctx, scene_textures);
 
       auto current_raster_state = std::optional<internal::MeshRasterState> {};
       for (const auto& draw_command : mesh_processor_->GetDrawCommands()) {
@@ -1413,19 +1409,19 @@ auto BasePassModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
           = ResolveRasterState(prepared_frame, draw_command);
         if (!current_raster_state.has_value()
           || current_raster_state.value() != raster_state) {
-          recorder->SetPipelineState(BuildVelocityAuxPipelineDesc(
+          recorder.SetPipelineState(BuildVelocityAuxPipelineDesc(
             scene_textures, raster_state, reverse_z));
-          recorder->SetGraphicsRootConstantBufferView(
+          recorder.SetGraphicsRootConstantBufferView(
             view_constants_param, ctx.view_constants->GetGPUVirtualAddress());
-          recorder->SetGraphicsRoot32BitConstant(
+          recorder.SetGraphicsRoot32BitConstant(
             root_constants_param, kInvalidShaderVisibleIndex.get(), 1U);
           current_raster_state = raster_state;
         }
 
-        recorder->SetGraphicsRoot32BitConstant(
+        recorder.SetGraphicsRoot32BitConstant(
           root_constants_param, draw_command.draw_index, 0U);
-        recorder->Draw(draw_command.is_indexed ? draw_command.index_count
-                                               : draw_command.vertex_count,
+        recorder.Draw(draw_command.is_indexed ? draw_command.index_count
+                                              : draw_command.vertex_count,
           draw_command.instance_count, 0U, draw_command.start_instance);
       }
     }
@@ -1435,28 +1431,28 @@ auto BasePassModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
     const auto velocity_aux_srv = RegisterTextureView(
       *gfx, velocity_aux, MakeTextureSrvDesc(velocity_aux));
 
-    recorder->RequireResourceState(
+    recorder.RequireResourceState(
       velocity_base_copy, graphics::ResourceStates::kShaderResource);
-    recorder->RequireResourceState(
+    recorder.RequireResourceState(
       velocity_aux, graphics::ResourceStates::kShaderResource);
-    recorder->RequireResourceState(*scene_textures.GetVelocity(),
+    recorder.RequireResourceState(*scene_textures.GetVelocity(),
       graphics::ResourceStates::kUnorderedAccess);
-    recorder->FlushBarriers();
+    recorder.FlushBarriers();
 
     {
-      graphics::GpuEventScope velocity_merge_scope(*recorder,
+      graphics::GpuEventScope velocity_merge_scope(recorder,
         "Vortex.Stage9.BasePass.VelocityMerge",
         profiling::ProfileGranularity::kTelemetry,
         profiling::ProfileCategory::kPass);
-      recorder->SetPipelineState(BuildVelocityMergePipelineDesc());
-      recorder->SetComputeRootConstantBufferView(
+      recorder.SetPipelineState(BuildVelocityMergePipelineDesc());
+      recorder.SetComputeRootConstantBufferView(
         view_constants_param, ctx.view_constants->GetGPUVirtualAddress());
-      recorder->SetComputeRoot32BitConstant(
+      recorder.SetComputeRoot32BitConstant(
         root_constants_param, velocity_base_copy_srv, 0U);
-      recorder->SetComputeRoot32BitConstant(
+      recorder.SetComputeRoot32BitConstant(
         root_constants_param, velocity_aux_srv, 1U);
       const auto extent = scene_textures.GetExtent();
-      recorder->Dispatch((extent.x + (kVelocityMergeThreadGroupSize - 1U))
+      recorder.Dispatch((extent.x + (kVelocityMergeThreadGroupSize - 1U))
           / kVelocityMergeThreadGroupSize,
         (extent.y + (kVelocityMergeThreadGroupSize - 1U))
           / kVelocityMergeThreadGroupSize,
@@ -1466,15 +1462,15 @@ auto BasePassModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
 
   last_execution_result_.completed_velocity_for_dynamic_geometry
     = !config_.write_velocity || writes_velocity;
-  TransitionBasePassFinalStates(*recorder, scene_textures);
+  TransitionBasePassFinalStates(recorder, scene_textures);
 
   last_execution_result_.published_base_pass_products = true;
   return last_execution_result_;
 }
 
 auto BasePassModule::ExecuteWireframeOverlay(RenderContext& ctx,
-  SceneTextures& scene_textures, const graphics::Framebuffer* display_target)
-  -> std::uint32_t
+  graphics::CommandRecorder& recorder, SceneTextures& scene_textures,
+  const graphics::Framebuffer* display_target) -> std::uint32_t
 {
   if (config_.shading_mode != ShadingMode::kDeferred) {
     return 0U;
@@ -1500,16 +1496,7 @@ auto BasePassModule::ExecuteWireframeOverlay(RenderContext& ctx,
     return 0U;
   }
 
-  const auto queue_key = gfx->QueueKeyFor(graphics::QueueRole::kGraphics);
-  auto recorder
-    = gfx->AcquireCommandRecorder(queue_key, "Vortex WireframeOverlay");
-  if (!recorder) {
-    return 0U;
-  }
-  renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(
-    *recorder);
-
-  graphics::GpuEventScope overlay_scope(*recorder,
+  graphics::GpuEventScope overlay_scope(recorder,
     "Vortex.Stage20.WireframeOverlay",
     profiling::ProfileGranularity::kTelemetry,
     profiling::ProfileCategory::kPass);
@@ -1526,15 +1513,15 @@ auto BasePassModule::ExecuteWireframeOverlay(RenderContext& ctx,
     wireframe_framebuffer_ = gfx->CreateFramebuffer(
       BuildWireframeFramebuffer(scene_textures, depth_read_only, color));
   }
-  BeginPersistentWriteTarget(*recorder, *color);
-  BeginPersistentWriteTarget(*recorder, scene_textures.GetSceneDepth());
-  recorder->RequireResourceState(
+  BeginPersistentWriteTarget(recorder, *color);
+  BeginPersistentWriteTarget(recorder, scene_textures.GetSceneDepth());
+  recorder.RequireResourceState(
     *color, graphics::ResourceStates::kRenderTarget);
-  recorder->RequireResourceState(
+  recorder.RequireResourceState(
     scene_textures.GetSceneDepth(), graphics::ResourceStates::kDepthRead);
-  recorder->FlushBarriers();
-  recorder->BindFrameBuffer(*wireframe_framebuffer_);
-  SetViewportAndScissor(*recorder, ctx, scene_textures);
+  recorder.FlushBarriers();
+  recorder.BindFrameBuffer(*wireframe_framebuffer_);
+  SetViewportAndScissor(recorder, ctx, scene_textures);
 
   const auto reverse_z = ctx.current_view.resolved_view == nullptr
     || ctx.current_view.resolved_view->ReverseZ();
@@ -1549,25 +1536,25 @@ auto BasePassModule::ExecuteWireframeOverlay(RenderContext& ctx,
     const auto raster_state = ResolveRasterState(prepared_frame, draw_command);
     if (!current_raster_state.has_value()
       || current_raster_state.value() != raster_state) {
-      recorder->SetPipelineState(BuildWireframePipelineDesc(scene_textures,
+      recorder.SetPipelineState(BuildWireframePipelineDesc(scene_textures,
         raster_state.alpha_test, reverse_z, false, true, color.get()));
-      recorder->SetGraphicsRootConstantBufferView(
+      recorder.SetGraphicsRootConstantBufferView(
         view_constants_param, ctx.view_constants->GetGPUVirtualAddress());
       current_raster_state = raster_state;
     }
 
-    recorder->SetGraphicsRoot32BitConstant(
+    recorder.SetGraphicsRoot32BitConstant(
       root_constants_param, draw_command.draw_index, 0U);
-    recorder->SetGraphicsRoot32BitConstant(
+    recorder.SetGraphicsRoot32BitConstant(
       root_constants_param, wireframe_constants_index.get(), 1U);
-    recorder->Draw(draw_command.is_indexed ? draw_command.index_count
-                                           : draw_command.vertex_count,
+    recorder.Draw(draw_command.is_indexed ? draw_command.index_count
+                                          : draw_command.vertex_count,
       draw_command.instance_count, 0U, draw_command.start_instance);
   }
 
-  recorder->RequireResourceStateFinal(
+  recorder.RequireResourceState(
     *color, graphics::ResourceStates::kRenderTarget);
-  recorder->RequireResourceStateFinal(
+  recorder.RequireResourceState(
     scene_textures.GetSceneDepth(), graphics::ResourceStates::kDepthRead);
   return draw_count;
 }

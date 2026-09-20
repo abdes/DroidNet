@@ -1457,7 +1457,9 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
   graphics_->dispatch_log_.dispatches.clear();
   graphics_->compute_pipeline_log_.binds.clear();
   graphics_->texture_copy_log_.copies.clear();
-  scene_renderer.OnRender(render_context);
+  // DepthWrite -> DepthRead -> ShaderResource must remain legal across
+  // the prepass and HZB stages in their shared command recording.
+  ASSERT_TRUE(scene_renderer.OnRender(render_context));
 
   const auto& screen_hzb = scene_renderer.GetPublishedScreenHzbBindings();
   EXPECT_NE(
@@ -1574,7 +1576,11 @@ NOLINT_TEST_F(
   std::vector<Snapshot> first_payloads;
   graphics_->buffer_view_log_.events.clear();
   screen_hzb.OnFrameStart();
-  screen_hzb.Execute(first_context, scene_textures);
+  screen_hzb.Execute(first_context,
+    *graphics_->AcquireCommandRecorder(
+      graphics_->QueueKeyFor(oxygen::graphics::QueueRole::kGraphics),
+      "Test HZB", oxygen::graphics::SubmissionPolicy::kOnScopeExit),
+    scene_textures);
   ASSERT_FALSE(graphics_->buffer_view_log_.events.empty());
   for (const auto& event : graphics_->buffer_view_log_.events) {
     ASSERT_EQ(event.stride, 48U);
@@ -1588,7 +1594,11 @@ NOLINT_TEST_F(
     first_payloads.push_back(copy);
   }
   graphics_->buffer_view_log_.events.clear();
-  screen_hzb.Execute(second_context, scene_textures);
+  screen_hzb.Execute(second_context,
+    *graphics_->AcquireCommandRecorder(
+      graphics_->QueueKeyFor(oxygen::graphics::QueueRole::kGraphics),
+      "Test HZB", oxygen::graphics::SubmissionPolicy::kOnScopeExit),
+    scene_textures);
   ASSERT_FALSE(graphics_->buffer_view_log_.events.empty());
   for (const auto& first : first_payloads) {
     EXPECT_EQ(
@@ -1599,7 +1609,11 @@ NOLINT_TEST_F(
   }
   // A repeated setup in the same frame cannot overwrite already queued data.
   screen_hzb.OnFrameStart();
-  screen_hzb.Execute(first_context, scene_textures);
+  screen_hzb.Execute(first_context,
+    *graphics_->AcquireCommandRecorder(
+      graphics_->QueueKeyFor(oxygen::graphics::QueueRole::kGraphics),
+      "Test HZB", oxygen::graphics::SubmissionPolicy::kOnScopeExit),
+    scene_textures);
   for (const auto& first : first_payloads) {
     EXPECT_EQ(
       std::memcmp(first.data, first.bytes.data(), first.bytes.size()), 0);

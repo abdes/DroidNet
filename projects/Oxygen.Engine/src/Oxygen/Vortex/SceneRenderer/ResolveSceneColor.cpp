@@ -30,7 +30,7 @@ namespace {
       "SceneRenderer: cannot resolve '{}' without a known or declared initial "
       "state",
       texture.GetName());
-    recorder.BeginTrackingResourceState(texture, initial);
+    recorder.BeginTrackingResourceState(texture, initial, false);
   }
 
   auto CopyTextureIntoArtifact(graphics::CommandRecorder& recorder,
@@ -51,8 +51,8 @@ namespace {
       graphics::TextureSlice {},
       graphics::TextureSubResourceSet::EntireTexture());
 
-    recorder.RequireResourceStateFinal(source, source_final_state);
-    recorder.RequireResourceStateFinal(
+    recorder.RequireResourceState(source, source_final_state);
+    recorder.RequireResourceState(
       artifact, graphics::ResourceStates::kShaderResource);
   }
 
@@ -61,8 +61,9 @@ namespace {
 // Stage 21 owner: ResolveSceneColor is the only retained seam allowed to
 // snapshot the ResolvedSceneColor/ResolvedSceneDepth artifacts for Stage 22
 // consumption and the downstream Stage 23 handoff.
-void SceneRenderer::ResolveSceneColor(
-  RenderContext& ctx, const PostProcessService::PreparedExposure* prepared)
+void SceneRenderer::ResolveSceneColor(RenderContext& ctx,
+  graphics::CommandRecorder& recorder,
+  const PostProcessService::PreparedExposure* prepared)
 {
   auto& scene_textures = ActiveSceneTextures();
   const auto scene_color_ready
@@ -114,7 +115,7 @@ void SceneRenderer::ResolveSceneColor(
         .visibility = graphics::DescriptorVisibility::kShaderVisible,
         .format = target.GetDescriptor().format,
         .dimension = TextureType::kTexture2D }) };
-    converted = post_process_->ConvertSceneColor(ctx, *prepared,
+    converted = post_process_->ConvertSceneColor(ctx, recorder, *prepared,
       { .scene_signal = scene_textures.GetSceneColorResource().get(),
         .scene_signal_srv
         = ShaderVisibleIndex { scene_texture_bindings_.scene_color_srv } },
@@ -142,13 +143,6 @@ void SceneRenderer::ResolveSceneColor(
   scene_texture_extracts_.resolved_scene_depth.valid = scene_depth_ready
     && scene_texture_extracts_.resolved_scene_depth.texture != nullptr;
 
-  const auto queue_key = gfx_.QueueKeyFor(graphics::QueueRole::kGraphics);
-  auto recorder_ptr
-    = gfx_.AcquireCommandRecorder(queue_key, "Vortex ResolveSceneColor");
-  CHECK_F(static_cast<bool>(recorder_ptr),
-    "SceneRenderer: failed to acquire a recorder for Stage 21 resolves");
-  renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(*recorder_ptr);
-  auto& recorder = *recorder_ptr;
   graphics::GpuEventScope scope(recorder, "Vortex.ResolveSceneColor",
     profiling::ProfileGranularity::kTelemetry,
     profiling::ProfileCategory::kPass);

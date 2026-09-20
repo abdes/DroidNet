@@ -17,10 +17,11 @@ AtmosphereRenderer::AtmosphereRenderer(Renderer& renderer)
 
 AtmosphereRenderer::~AtmosphereRenderer() = default;
 
-auto AtmosphereRenderer::Render(
-  RenderContext& ctx, const SceneTextures& scene_textures) const -> RenderState
+auto AtmosphereRenderer::Render(RenderContext& ctx,
+  graphics::CommandRecorder& recorder,
+  const SceneTextures& scene_textures) const -> RenderState
 {
-  return pass_->Record(ctx, scene_textures);
+  return pass_->Record(ctx, recorder, scene_textures);
 }
 
 } // namespace oxygen::vortex::environment

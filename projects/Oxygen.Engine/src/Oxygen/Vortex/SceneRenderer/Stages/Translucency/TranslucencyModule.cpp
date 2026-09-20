@@ -269,13 +269,14 @@ namespace {
   auto BeginPersistentWriteTarget(
     graphics::CommandRecorder& recorder, graphics::Texture& texture) -> void
   {
-    if (!recorder.AdoptKnownResourceState(texture)) {
+    if (!recorder.IsResourceTracked(texture)
+      && !recorder.AdoptKnownResourceState(texture)) {
       auto initial = texture.GetDescriptor().initial_state;
       if (initial == graphics::ResourceStates::kUnknown
         || initial == graphics::ResourceStates::kUndefined) {
         initial = graphics::ResourceStates::kCommon;
       }
-      recorder.BeginTrackingResourceState(texture, initial);
+      recorder.BeginTrackingResourceState(texture, initial, false);
     }
   }
 
@@ -326,7 +327,8 @@ TranslucencyModule::TranslucencyModule(Renderer& renderer)
 TranslucencyModule::~TranslucencyModule() = default;
 
 auto TranslucencyModule::Execute(RenderContext& ctx,
-  SceneTextures& scene_textures) -> TranslucencyExecutionResult
+  graphics::CommandRecorder& recorder, SceneTextures& scene_textures)
+  -> TranslucencyExecutionResult
 {
   auto result = TranslucencyExecutionResult {
     .requested = mesh_processor_ != nullptr
@@ -361,18 +363,7 @@ auto TranslucencyModule::Execute(RenderContext& ctx,
     return result;
   }
 
-  const auto queue_key = gfx->QueueKeyFor(graphics::QueueRole::kGraphics);
-  auto recorder = gfx->AcquireCommandRecorder(queue_key, "Vortex Translucency");
-  if (!recorder) {
-    LOG_F(WARNING,
-      "Vortex.Stage18.Translucency skipped: command recorder unavailable");
-    result.skip_reason = TranslucencySkipReason::kRecorderUnavailable;
-    return result;
-  }
-  renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(
-    *recorder);
-
-  graphics::GpuEventScope stage_scope(*recorder, "Vortex.Stage18.Translucency",
+  graphics::GpuEventScope stage_scope(recorder, "Vortex.Stage18.Translucency",
     profiling::ProfileGranularity::kTelemetry,
     profiling::ProfileCategory::kPass);
 
@@ -381,24 +372,25 @@ auto TranslucencyModule::Execute(RenderContext& ctx,
       = gfx->CreateFramebuffer(BuildTranslucencyFramebuffer(scene_textures));
   }
 
-  BeginPersistentWriteTarget(*recorder, scene_textures.GetSceneColor());
-  BeginPersistentWriteTarget(*recorder, scene_textures.GetSceneDepth());
-  recorder->RequireResourceState(
+  BeginPersistentWriteTarget(recorder, scene_textures.GetSceneColor());
+  BeginPersistentWriteTarget(recorder, scene_textures.GetSceneDepth());
+  recorder.RequireResourceState(
     scene_textures.GetSceneColor(), graphics::ResourceStates::kRenderTarget);
-  recorder->RequireResourceState(
+  recorder.RequireResourceState(
     scene_textures.GetSceneDepth(), graphics::ResourceStates::kDepthRead);
   if (const auto& frame = ctx.current_view.frame_exposure) {
     const auto& status = *frame->current_state->status_buffer;
-    if (!recorder->IsResourceTracked(status)
-      && !recorder->AdoptKnownResourceState(status))
-      recorder->BeginTrackingResourceState(
+    if (!recorder.IsResourceTracked(status)
+      && !recorder.AdoptKnownResourceState(status)) {
+      recorder.BeginTrackingResourceState(
         status, graphics::ResourceStates::kCommon, false);
-    recorder->RequireResourceState(
+    }
+    recorder.RequireResourceState(
       status, graphics::ResourceStates::kUnorderedAccess);
   }
-  recorder->FlushBarriers();
-  recorder->BindFrameBuffer(*framebuffer_);
-  SetViewportAndScissor(*recorder, ctx, scene_textures);
+  recorder.FlushBarriers();
+  recorder.BindFrameBuffer(*framebuffer_);
+  SetViewportAndScissor(recorder, ctx, scene_textures);
 
   const auto reverse_z = ctx.current_view.resolved_view == nullptr
     || ctx.current_view.resolved_view->ReverseZ();
@@ -414,18 +406,18 @@ auto TranslucencyModule::Execute(RenderContext& ctx,
       draw_command.draw_index);
     if (!current_raster_state.has_value()
       || *current_raster_state != raster_state) {
-      recorder->SetPipelineState(GetCachedTranslucencyPipelineDesc(
+      recorder.SetPipelineState(GetCachedTranslucencyPipelineDesc(
         *pipeline_cache_, scene_textures, reverse_z, raster_state));
-      recorder->SetGraphicsRootConstantBufferView(
+      recorder.SetGraphicsRootConstantBufferView(
         view_constants_param, ctx.view_constants->GetGPUVirtualAddress());
-      recorder->SetGraphicsRoot32BitConstant(
+      recorder.SetGraphicsRoot32BitConstant(
         root_constants_param, kInvalidShaderVisibleIndex.get(), 1U);
       current_raster_state = raster_state;
     }
-    recorder->SetGraphicsRoot32BitConstant(
+    recorder.SetGraphicsRoot32BitConstant(
       root_constants_param, draw_command.draw_index, 0U);
-    recorder->Draw(draw_command.is_indexed ? draw_command.index_count
-                                           : draw_command.vertex_count,
+    recorder.Draw(draw_command.is_indexed ? draw_command.index_count
+                                          : draw_command.vertex_count,
       draw_command.instance_count, 0U, draw_command.start_instance);
     const auto vertices = draw_command.is_indexed ? draw_command.index_count
                                                   : draw_command.vertex_count;
@@ -437,9 +429,9 @@ auto TranslucencyModule::Execute(RenderContext& ctx,
       : result.triangle_count + triangles;
   }
 
-  recorder->RequireResourceStateFinal(
+  recorder.RequireResourceState(
     scene_textures.GetSceneColor(), graphics::ResourceStates::kRenderTarget);
-  recorder->RequireResourceStateFinal(
+  recorder.RequireResourceState(
     scene_textures.GetSceneDepth(), graphics::ResourceStates::kDepthRead);
 
   result.executed = true;

@@ -15,6 +15,10 @@ namespace oxygen::graphics {
 class Framebuffer;
 }
 
+namespace oxygen::graphics {
+class CommandRecorder;
+}
+
 namespace oxygen::vortex {
 
 struct RenderContext;
@@ -39,7 +43,8 @@ public:
   DepthPrepassModule(DepthPrepassModule&&) = delete;
   auto operator=(DepthPrepassModule&&) -> DepthPrepassModule& = delete;
 
-  OXGN_VRTX_API void Execute(RenderContext& ctx, SceneTextures& scene_textures);
+  OXGN_VRTX_API void Execute(RenderContext& ctx,
+    graphics::CommandRecorder& recorder, SceneTextures& scene_textures);
   OXGN_VRTX_API void SetConfig(const DepthPrepassConfig& config);
 
   [[nodiscard]] OXGN_VRTX_API auto GetCompleteness() const
@@ -50,7 +55,9 @@ public:
 private:
   Renderer& renderer_;
   DepthPrepassConfig config_ {};
-  DepthPrePassCompleteness completeness_ { DepthPrePassCompleteness::kDisabled };
+  DepthPrePassCompleteness completeness_ {
+    DepthPrePassCompleteness::kDisabled
+  };
   bool has_valid_depth_product_ { false };
   bool has_published_depth_products_ { false };
   std::unique_ptr<DepthPrepassMeshProcessor> mesh_processor_;

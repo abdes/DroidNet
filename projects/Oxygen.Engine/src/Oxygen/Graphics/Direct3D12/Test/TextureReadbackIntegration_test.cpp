@@ -170,7 +170,7 @@ NOLINT_TEST_F(D3D12TextureReadbackIntegrationTest,
 
   {
     auto recorder = AcquireRecorder("texture-readback-copy");
-    ASSERT_NE(recorder, nullptr);
+    ASSERT_TRUE(recorder);
 
     EnsureTracked(*recorder, upload, ResourceStates::kGenericRead);
     EnsureTracked(*recorder, texture, ResourceStates::kCommon);
@@ -274,7 +274,7 @@ NOLINT_TEST_F(D3D12TextureReadbackIntegrationTest,
 
   {
     auto recorder = AcquireRecorder("texture-readback-array-slice");
-    ASSERT_NE(recorder, nullptr);
+    ASSERT_TRUE(recorder);
 
     EnsureTracked(*recorder, upload, ResourceStates::kGenericRead);
     EnsureTracked(*recorder, texture, ResourceStates::kCommon);
@@ -372,7 +372,7 @@ NOLINT_TEST_F(D3D12TextureReadbackIntegrationTest,
 
   {
     auto recorder = AcquireRecorder("texture-readback-r32f");
-    ASSERT_NE(recorder, nullptr);
+    ASSERT_TRUE(recorder);
 
     EnsureTracked(*recorder, upload, ResourceStates::kGenericRead);
     EnsureTracked(*recorder, texture, ResourceStates::kCommon);
@@ -466,7 +466,7 @@ NOLINT_TEST_F(D3D12TextureReadbackIntegrationTest,
 
   {
     auto recorder = AcquireRecorder("texture-readback-bc1");
-    ASSERT_NE(recorder, nullptr);
+    ASSERT_TRUE(recorder);
 
     EnsureTracked(*recorder, upload, ResourceStates::kGenericRead);
     EnsureTracked(*recorder, texture, ResourceStates::kCommon);

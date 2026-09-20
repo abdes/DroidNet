@@ -85,7 +85,10 @@ NOLINT_TEST_F(ExposureGpuTest, ProducerChecksPreserveOrderedFailuresAndCounts)
           };
           auto frame_inputs = postprocess::ExposurePass::FrameInputs {};
           frame_inputs.use_fp32 = true;
-          const auto frame = pass_->ResolveFrame(ctx_, config, frame_inputs);
+          const auto frame = SubmitCommands("Vortex Exposure Frame",
+            [&](graphics::CommandRecorder& recorder) -> auto {
+              return pass_->ResolveFrame(ctx_, recorder, config, frame_inputs);
+            });
           ASSERT_NE(frame, nullptr);
           ASSERT_TRUE(RecordShared(meter, config).executed);
           std::array<postprocess::ExposurePass::HdrProduct, 3> products;
@@ -112,12 +115,18 @@ NOLINT_TEST_F(ExposureGpuTest, ProducerChecksPreserveOrderedFailuresAndCounts)
               }
             }
             if (id != 11U) {
-              ASSERT_TRUE(
-                pass_->GatherFilterGradients(ctx_, frame, products.at(index)));
+              ASSERT_TRUE(SubmitCommands("Vortex Exposure Filter Gradients",
+                [&](graphics::CommandRecorder& recorder) -> auto {
+                  return pass_->GatherFilterGradients(
+                    ctx_, recorder, frame, products.at(index));
+                }));
             }
           }
-          ASSERT_TRUE(
-            pass_->EvaluateFp16Products(ctx_, frame, config, products, {}));
+          ASSERT_TRUE(SubmitCommands("Vortex Exposure Suitability",
+            [&](graphics::CommandRecorder& recorder) -> auto {
+              return pass_->EvaluateFp16Products(
+                ctx_, recorder, frame, config, products, {});
+            }));
           const auto report = Read<HdrSuitabilityData>(
             *frame->suitability_buffer, ResourceStates::kShaderResource);
           EXPECT_EQ(report.first_failure_product, expected_first);
@@ -180,7 +189,10 @@ NOLINT_TEST_F(ExposureGpuTest, CurrentScaleProducerChecksKeepOrderedFailures)
     };
     auto frame_inputs = postprocess::ExposurePass::FrameInputs {};
     frame_inputs.use_fp32 = true;
-    const auto frame = pass_->ResolveFrame(ctx_, config, frame_inputs);
+    const auto frame = SubmitCommands("Vortex Exposure Frame",
+      [&](graphics::CommandRecorder& recorder) -> auto {
+        return pass_->ResolveFrame(ctx_, recorder, config, frame_inputs);
+      });
     ASSERT_NE(frame, nullptr);
     ASSERT_TRUE(RecordShared(meter, config).executed);
     auto products = std::array {
@@ -202,8 +214,12 @@ NOLINT_TEST_F(ExposureGpuTest, CurrentScaleProducerChecksKeepOrderedFailures)
     if (reverse) {
       std::ranges::reverse(products);
     }
-    ASSERT_TRUE(pass_->EvaluateFp16Products(ctx_, frame, config, products, {},
-      postprocess::ExposurePass::SuitabilityScale::kCurrentFrame));
+    ASSERT_TRUE(SubmitCommands("Vortex Exposure Suitability",
+      [&](graphics::CommandRecorder& recorder) -> auto {
+        return pass_->EvaluateFp16Products(ctx_, recorder, frame, config,
+          products, {},
+          postprocess::ExposurePass::SuitabilityScale::kCurrentFrame);
+      }));
     const auto report = Read<HdrSuitabilityData>(
       *frame->conversion_buffer, ResourceStates::kShaderResource);
     EXPECT_EQ(report.first_failure_product, products.front().id);
@@ -261,7 +277,10 @@ NOLINT_TEST_F(ExposureGpuTest, ProducerChecksKeepDivergentLaneFailures)
     };
     auto frame_inputs = postprocess::ExposurePass::FrameInputs {};
     frame_inputs.use_fp32 = true;
-    const auto frame = pass_->ResolveFrame(ctx_, config, frame_inputs);
+    const auto frame = SubmitCommands("Vortex Exposure Frame",
+      [&](graphics::CommandRecorder& recorder) -> auto {
+        return pass_->ResolveFrame(ctx_, recorder, config, frame_inputs);
+      });
     ASSERT_NE(frame, nullptr);
     ASSERT_TRUE(RecordShared(meter, config).executed);
     const auto product = postprocess::ExposurePass::HdrProduct {
@@ -271,13 +290,19 @@ NOLINT_TEST_F(ExposureGpuTest, ProducerChecksKeepDivergentLaneFailures)
       .transmittance = true,
       .consumer_rgb_gain = 0x1p60F,
     };
-    ASSERT_TRUE(pass_->GatherFilterGradients(ctx_, frame, product));
-    ASSERT_TRUE(pass_->EvaluateFp16Products(ctx_, frame, config,
-      std::span {
-        &product,
-        1U,
-      },
-      {}));
+    ASSERT_TRUE(SubmitCommands("Vortex Exposure Filter Gradients",
+      [&](graphics::CommandRecorder& recorder) -> auto {
+        return pass_->GatherFilterGradients(ctx_, recorder, frame, product);
+      }));
+    ASSERT_TRUE(SubmitCommands("Vortex Exposure Suitability",
+      [&](graphics::CommandRecorder& recorder) -> auto {
+        return pass_->EvaluateFp16Products(ctx_, recorder, frame, config,
+          std::span {
+            &product,
+            1U,
+          },
+          {});
+      }));
     const auto report = Read<HdrSuitabilityData>(
       *frame->suitability_buffer, ResourceStates::kShaderResource);
     // Three nonfinite texels are rejected by the maximum scan. Of six finite

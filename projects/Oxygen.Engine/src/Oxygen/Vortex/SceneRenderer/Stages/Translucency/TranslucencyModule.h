@@ -15,6 +15,10 @@ namespace oxygen::graphics {
 class Framebuffer;
 } // namespace oxygen::graphics
 
+namespace oxygen::graphics {
+class CommandRecorder;
+}
+
 namespace oxygen::vortex {
 
 struct RenderContext;
@@ -51,7 +55,8 @@ public:
   TranslucencyModule(TranslucencyModule&&) = delete;
   auto operator=(TranslucencyModule&&) -> TranslucencyModule& = delete;
 
-  OXGN_VRTX_API auto Execute(RenderContext& ctx, SceneTextures& scene_textures)
+  OXGN_VRTX_API auto Execute(RenderContext& ctx,
+    graphics::CommandRecorder& recorder, SceneTextures& scene_textures)
     -> TranslucencyExecutionResult;
 
 private:

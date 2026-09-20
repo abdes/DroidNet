@@ -128,6 +128,7 @@ set(
   "Detail/FormatUtils.h"
   "Detail/PipelineStateCache.cpp"
   "Detail/PipelineStateCache.h"
+  "Detail/PipelineBindingState.h"
   "Detail/SwapChain.h"
   "Detail/SwapChain.cpp"
   "Detail/Types.h"
@@ -196,10 +197,8 @@ target_sources(
     ${OXYGEN_GFX_D3D12_HEADERS}
   PUBLIC
     FILE_SET HEADERS
-      BASE_DIRS
-        "${OXYGEN_SOURCE_DIR}"
-      FILES
-        ${OXYGEN_GFX_D3D12_HEADERS}
+    BASE_DIRS "${OXYGEN_SOURCE_DIR}"
+    FILES ${OXYGEN_GFX_D3D12_HEADERS}
 )
 
 arrange_target_files_for_ide(${META_MODULE_TARGET})
@@ -237,7 +236,8 @@ if(WIN32)
 
   if(OXYGEN_WINPIXEVENTRUNTIME_DIR)
     list(
-      APPEND _oxygen_winpixeventruntime_hint_paths
+      APPEND
+      _oxygen_winpixeventruntime_hint_paths
       "${OXYGEN_WINPIXEVENTRUNTIME_DIR}"
     )
   endif()
@@ -245,12 +245,14 @@ if(WIN32)
   # Repo-local package layout (provisioned by GetPIX.bat/.ps1).
   if(DEFINED OXYGEN_SOURCE_DIR)
     list(
-      APPEND _oxygen_winpixeventruntime_hint_paths
+      APPEND
+      _oxygen_winpixeventruntime_hint_paths
       "${OXYGEN_SOURCE_DIR}/packages/WinPixEventRuntime"
     )
   endif()
   list(
-    APPEND _oxygen_winpixeventruntime_hint_paths
+    APPEND
+    _oxygen_winpixeventruntime_hint_paths
     "${CMAKE_CURRENT_LIST_DIR}/../../../../packages/WinPixEventRuntime"
   )
 
@@ -308,7 +310,8 @@ if(WIN32)
     list(APPEND _oxygen_pix_hint_paths "${OXYGEN_PIX_DIR}")
   endif()
   list(
-    APPEND _oxygen_pix_hint_paths
+    APPEND
+    _oxygen_pix_hint_paths
     "C:/Program Files/Microsoft PIX"
     "C:/Program Files (x86)/Microsoft PIX"
   )
@@ -325,7 +328,8 @@ if(WIN32)
       foreach(_oxygen_pix_version_dir IN LISTS _oxygen_pix_version_dirs)
         if(IS_DIRECTORY "${_oxygen_pix_version_dir}")
           list(
-            APPEND _oxygen_pix_install_hint_paths
+            APPEND
+            _oxygen_pix_install_hint_paths
             "${_oxygen_pix_version_dir}"
           )
         endif()
@@ -432,7 +436,8 @@ if(WIN32)
 
   # Common RenderDoc default install locations on Windows.
   list(
-    APPEND _oxygen_renderdoc_hint_paths
+    APPEND
+    _oxygen_renderdoc_hint_paths
     "C:/Program Files/RenderDoc"
     "C:/Program Files (x86)/RenderDoc"
   )
@@ -444,12 +449,14 @@ if(WIN32)
   # Repo-local package layout (downloaded by GetRenderDoc.bat/.ps1).
   if(DEFINED OXYGEN_SOURCE_DIR)
     list(
-      APPEND _oxygen_renderdoc_hint_paths
+      APPEND
+      _oxygen_renderdoc_hint_paths
       "${OXYGEN_SOURCE_DIR}/packages/RenderDoc"
     )
   endif()
   list(
-    APPEND _oxygen_renderdoc_hint_paths
+    APPEND
+    _oxygen_renderdoc_hint_paths
     "${CMAKE_CURRENT_LIST_DIR}/../../../../packages/RenderDoc"
   )
 
@@ -540,7 +547,8 @@ if(WIN32)
 
   # Common Nsight Aftermath SDK install locations on Windows.
   list(
-    APPEND _oxygen_aftermath_hint_paths
+    APPEND
+    _oxygen_aftermath_hint_paths
     "C:/Program Files/NVIDIA Corporation/Nsight Aftermath SDK"
     "C:/Program Files/NVIDIA Corporation/NVIDIA Nsight Aftermath SDK"
     "C:/Program Files (x86)/NVIDIA Corporation/Nsight Aftermath SDK"
@@ -553,12 +561,14 @@ if(WIN32)
   # Repo-local package layout (downloaded by GetAftermath.bat/.ps1).
   if(DEFINED OXYGEN_SOURCE_DIR)
     list(
-      APPEND _oxygen_aftermath_hint_paths
+      APPEND
+      _oxygen_aftermath_hint_paths
       "${OXYGEN_SOURCE_DIR}/packages/NsightAftermath"
     )
   endif()
   list(
-    APPEND _oxygen_aftermath_hint_paths
+    APPEND
+    _oxygen_aftermath_hint_paths
     "${CMAKE_CURRENT_LIST_DIR}/../../../../packages/NsightAftermath"
   )
 

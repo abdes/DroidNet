@@ -452,7 +452,7 @@ namespace {
     auto edges = std::vector<std::vector<std::size_t>>(entries.size());
     auto indegree = std::vector<std::size_t>(entries.size(), 0U);
     for (std::size_t consumer_index = 0U; consumer_index < entries.size();
-         ++consumer_index) {
+      ++consumer_index) {
       auto& consumer = entries[consumer_index];
       for (const auto& input : consumer.consumed_aux_outputs) {
         CHECK_F(input.id.get() != 0U,
@@ -485,11 +485,11 @@ namespace {
           consumer.debug_name, input.id.get());
 
         const auto& producer = entries[producer_index];
-        const auto output_it = std::ranges::find_if(
-          producer.produced_aux_outputs,
-          [&input](const CompositionView::AuxOutputDesc& output) {
-            return output.id == input.id;
-          });
+        const auto output_it
+          = std::ranges::find_if(producer.produced_aux_outputs,
+            [&input](const CompositionView::AuxOutputDesc& output) {
+              return output.id == input.id;
+            });
         CHECK_F(output_it != producer.produced_aux_outputs.end());
         CHECK_F(output_it->kind == input.kind,
           "Runtime auxiliary input {} for view '{}' expects kind {} but "
@@ -534,8 +534,7 @@ namespace {
         }
         made_progress = true;
       }
-      CHECK_F(made_progress,
-        "Runtime auxiliary dependencies contain a cycle");
+      CHECK_F(made_progress, "Runtime auxiliary dependencies contain a cycle");
     }
 
     auto ordered_entries = std::vector<RenderContext::ViewExecutionEntry> {};
@@ -1447,7 +1446,8 @@ auto Renderer::RefreshCurrentViewFrameBindings(
 }
 
 auto Renderer::PublishCurrentViewPreSceneFrameBindings(
-  RenderContext& render_context, SceneRenderer& scene_renderer) -> bool
+  RenderContext& render_context, graphics::CommandRecorder& recorder,
+  SceneRenderer& scene_renderer) -> bool
 {
   if (render_context.current_view.view_id == kInvalidViewId) {
     return false;
@@ -1512,8 +1512,9 @@ auto Renderer::PublishCurrentViewPreSceneFrameBindings(
       = publication_state.draw_frame_bindings_publisher->Publish(
         render_context.current_view.view_id, draw_bindings);
   }
-  if (!scene_renderer.PrepareExposureDomain(render_context))
+  if (!scene_renderer.PrepareExposureDomain(render_context, recorder)) {
     return false;
+  }
   view_bindings.frame_exposure_slot = render_context.current_view.frame_exposure
     ? render_context.current_view.frame_exposure->srv_index
     : publication_state.frame_exposure_publisher->Publish(
@@ -2114,12 +2115,12 @@ auto Renderer::PublishRuntimeCompositionView(
   view_context.view = composition_view.view;
   view_context.metadata = {
     .name = std::string(composition_view.name),
-    .purpose = composition_view.view_kind
-        == CompositionView::ViewKind::kCompositionOnly
+    .purpose
+    = composition_view.view_kind == CompositionView::ViewKind::kCompositionOnly
       ? "overlay"
       : "scene",
-    .is_scene_view = composition_view.view_kind
-      != CompositionView::ViewKind::kCompositionOnly,
+    .is_scene_view
+    = composition_view.view_kind != CompositionView::ViewKind::kCompositionOnly,
     .with_atmosphere = composition_view.with_atmosphere,
     .with_height_fog = composition_view.with_height_fog,
     .with_local_fog = composition_view.with_local_fog,
@@ -2495,8 +2496,7 @@ auto Renderer::DetachPublishedRuntimeViewState(const ViewId intent_view_id)
 
 auto Renderer::RemovePublishedRuntimeView(const ViewId intent_view_id) -> void
 {
-  const auto detached
-    = DetachPublishedRuntimeViewState(intent_view_id);
+  const auto detached = DetachPublishedRuntimeViewState(intent_view_id);
   if (detached.published_view_id == kInvalidViewId) {
     return;
   }
@@ -2517,8 +2517,7 @@ auto Renderer::RemovePublishedRuntimeView(const ViewId intent_view_id) -> void
 auto Renderer::RemovePublishedRuntimeView(
   engine::FrameContext& frame_context, const ViewId intent_view_id) -> void
 {
-  const auto detached
-    = DetachPublishedRuntimeViewState(intent_view_id);
+  const auto detached = DetachPublishedRuntimeViewState(intent_view_id);
 
   if (detached.published_view_id == kInvalidViewId) {
     return;
@@ -2570,7 +2569,8 @@ auto Renderer::PruneStalePublishedRuntimeViews(
 {
   const auto current_frame = frame_context.GetFrameSequenceNumber();
   auto stale_intent_ids = std::vector<ViewId> {};
-  auto stale_published_states = std::vector<DetachedPublishedRuntimeViewState> {};
+  auto stale_published_states
+    = std::vector<DetachedPublishedRuntimeViewState> {};
 
   {
     std::unique_lock state_lock(view_state_mutex_);
@@ -3036,8 +3036,8 @@ auto Renderer::PopulateRenderContextViewState(RenderContext& render_context,
       .view_state_handle = ResolvePublishedRuntimeViewStateHandle(view.id),
       .exposure_view_state_handle = {},
       .is_scene_view = view.metadata.is_scene_view,
-      .is_reflection_capture = view.metadata.purpose.find("reflection")
-          != std::string::npos
+      .is_reflection_capture
+      = view.metadata.purpose.find("reflection") != std::string::npos
         || view.metadata.purpose.find("capture") != std::string::npos,
       .with_atmosphere = view.metadata.with_atmosphere,
       .with_height_fog = view.metadata.with_height_fog,
@@ -3069,8 +3069,8 @@ auto Renderer::PopulateRenderContextViewState(RenderContext& render_context,
         if (state.published_view_id != view.id) {
           continue;
         }
-        entry.debug_name = state.debug_name.empty() ? entry.debug_name
-                                                    : state.debug_name;
+        entry.debug_name
+          = state.debug_name.empty() ? entry.debug_name : state.debug_name;
         entry.view_kind = state.view_kind;
         entry.feature_profile = state.feature_profile;
         entry.feature_mask = state.feature_mask;
@@ -3227,13 +3227,13 @@ auto Renderer::BuildViewHistoryFrameBindings(
 {
   static_cast<void>(scene);
   const auto current = internal::PreviousViewHistoryCache::CurrentState {
-      .view_matrix = view.ViewMatrix(),
-      .projection_matrix = view.ProjectionMatrix(),
-      .stable_projection_matrix = view.StableProjectionMatrix(),
-      .inverse_view_projection_matrix = view.InverseViewProjection(),
-      .pixel_jitter = view.PixelJitter(),
-      .viewport = view.Viewport(),
-    };
+    .view_matrix = view.ViewMatrix(),
+    .projection_matrix = view.ProjectionMatrix(),
+    .stable_projection_matrix = view.StableProjectionMatrix(),
+    .inverse_view_projection_matrix = view.InverseViewProjection(),
+    .pixel_jitter = view.PixelJitter(),
+    .viewport = view.Viewport(),
+  };
   const auto snapshot
     = view_state_handle == CompositionView::kInvalidViewStateHandle
     ? previous_view_history_cache_->TouchStateless(current)
@@ -3375,33 +3375,36 @@ auto Renderer::DispatchViewExtensionsOnFamilyAssembled(
   }
 }
 
-auto Renderer::DispatchViewExtensionsOnViewSetup(
-  RenderContext& render_context) -> void
+auto Renderer::DispatchViewExtensionsOnViewSetup(RenderContext& render_context)
+  -> void
 {
   const auto extensions = SnapshotViewExtensions();
-  const auto hook_context = ViewSetupContext { .render_context = render_context };
+  const auto hook_context
+    = ViewSetupContext { .render_context = render_context };
   for (const auto& extension : extensions) {
     extension->OnViewSetup(hook_context);
   }
 }
 
 auto Renderer::DispatchViewExtensionsOnPreRenderViewGpu(
-  RenderContext& render_context) -> void
+  RenderContext& render_context, graphics::CommandRecorder& recorder) -> void
 {
   const auto extensions = SnapshotViewExtensions();
   const auto hook_context
-    = ViewRenderGpuContext { .render_context = render_context };
+    = ViewRenderGpuContext { .render_context = render_context,
+        .recorder = recorder };
   for (const auto& extension : extensions) {
     extension->OnPreRenderViewGpu(hook_context);
   }
 }
 
 auto Renderer::DispatchViewExtensionsOnPostRenderViewGpu(
-  RenderContext& render_context) -> void
+  RenderContext& render_context, graphics::CommandRecorder& recorder) -> void
 {
   const auto extensions = SnapshotViewExtensions();
   const auto hook_context
-    = ViewRenderGpuContext { .render_context = render_context };
+    = ViewRenderGpuContext { .render_context = render_context,
+        .recorder = recorder };
   for (const auto& extension : extensions) {
     extension->OnPostRenderViewGpu(hook_context);
   }
@@ -4194,9 +4197,8 @@ auto Renderer::OffscreenSceneFacade::Validate() const -> ValidationReport
     = pipeline_.has_value() ? *pipeline_ : OffscreenPipelineInput {};
   const auto profile_spec
     = ResolveViewFeatureProfileSpec(pipeline_input.feature_profile);
-  const auto capability_validation
-    = renderer_->ValidateCapabilityRequirements(
-      profile_spec.capability_requirements);
+  const auto capability_validation = renderer_->ValidateCapabilityRequirements(
+    profile_spec.capability_requirements);
   if (!capability_validation.Ok()) {
     report.issues.push_back(ValidationIssue {
       .code = "pipeline.missing_required_capabilities",

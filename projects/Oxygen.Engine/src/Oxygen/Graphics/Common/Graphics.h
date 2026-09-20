@@ -16,6 +16,7 @@
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Composition/ObjectMetadata.h>
 #include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Graphics/Common/CommandRecording.h>
 #include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/Queues.h>
@@ -156,14 +157,12 @@ public:
   [[nodiscard]] virtual OXGN_GFX_API auto CreateSurface(
     std::weak_ptr<platform::Window> window_weak,
     observer_ptr<graphics::CommandQueue> command_queue) const
-    -> std::unique_ptr<graphics::Surface>
-    = 0;
+    -> std::unique_ptr<graphics::Surface> = 0;
 
   [[nodiscard]] virtual OXGN_GFX_API auto CreateSurfaceFromNative(
     void* native_handle,
     observer_ptr<graphics::CommandQueue> command_queue) const
-    -> std::shared_ptr<graphics::Surface>
-    = 0;
+    -> std::shared_ptr<graphics::Surface> = 0;
 
   //! Initialize command queues using the provided queue management strategy.
   /*!
@@ -192,16 +191,11 @@ public:
     const graphics::NativeResource& resource) const
     -> std::optional<graphics::ResourceStates>;
 
+  //! Begins an owned recording; ordinary scope exit submits by default.
   OXGN_GFX_NDAPI virtual auto AcquireCommandRecorder(
     const graphics::QueueKey& queue_key, std::string_view command_list_name,
-    bool immediate_submission = true)
-    -> std::unique_ptr<graphics::CommandRecorder,
-      std::function<void(graphics::CommandRecorder*)>>;
-
-  // Submit any command lists that were recorded with deferred submission. This
-  // will submit them to their associated target queues and call OnSubmitted()
-  // on each command list after successful submission.
-  OXGN_GFX_NDAPI auto SubmitDeferredCommandLists() -> void;
+    graphics::SubmissionPolicy policy
+    = graphics::SubmissionPolicy::kOnScopeExit) -> graphics::CommandRecording;
 
   OXGN_GFX_NDAPI auto AcquireCommandList(
     graphics::QueueRole queue_role, std::string_view command_list_name)
@@ -209,8 +203,7 @@ public:
 
   [[nodiscard]] virtual OXGN_GFX_API auto GetShader(
     const graphics::ShaderRequest& request) const
-    -> std::shared_ptr<graphics::IShaderByteCode>
-    = 0;
+    -> std::shared_ptr<graphics::IShaderByteCode> = 0;
 
   // Bindless global accessors (device-owned)
   virtual auto GetDescriptorAllocator() const
@@ -254,8 +247,7 @@ public:
   OXGN_GFX_API auto ForgetKnownResourceState(
     const graphics::NativeResource& resource) -> void;
 
-  template <typename T>
-  auto ForgetKnownResourceState(const T& resource) -> void
+  template <typename T> auto ForgetKnownResourceState(const T& resource) -> void
   {
     ForgetKnownResourceState(resource.GetNativeResource());
   }
@@ -267,18 +259,16 @@ public:
 
   [[nodiscard]] virtual auto CreateTexture(
     const graphics::TextureDesc& desc) const
-    -> std::shared_ptr<graphics::Texture>
-    = 0;
+    -> std::shared_ptr<graphics::Texture> = 0;
 
   [[nodiscard]] virtual auto CreateTextureFromNativeObject(
     const graphics::TextureDesc& desc,
     const graphics::NativeResource& native) const
-    -> std::shared_ptr<graphics::Texture>
-    = 0;
+    -> std::shared_ptr<graphics::Texture> = 0;
 
   [[nodiscard]] virtual auto CreateBuffer(
-    const graphics::BufferDesc& desc) const -> std::shared_ptr<graphics::Buffer>
-    = 0;
+    const graphics::BufferDesc& desc) const
+    -> std::shared_ptr<graphics::Buffer> = 0;
 
 protected:
   //! Create a command queue for the given role and allocation preference.
@@ -296,8 +286,7 @@ protected:
   */
   [[nodiscard]] virtual auto CreateCommandQueue(
     const graphics::QueueKey& queue_name, graphics::QueueRole role)
-    -> std::shared_ptr<graphics::CommandQueue>
-    = 0;
+    -> std::shared_ptr<graphics::CommandQueue> = 0;
 
   //! Create a new command list for the given queue role (pool support).
   /*!
@@ -310,14 +299,12 @@ protected:
   */
   [[nodiscard]] virtual auto CreateCommandListImpl(
     graphics::QueueRole role, std::string_view command_list_name)
-    -> std::unique_ptr<graphics::CommandList>
-    = 0;
+    -> std::unique_ptr<graphics::CommandList> = 0;
 
   [[nodiscard]] virtual auto CreateCommandRecorder(
     std::shared_ptr<graphics::CommandList> command_list,
     observer_ptr<graphics::CommandQueue> target_queue)
-    -> std::unique_ptr<graphics::CommandRecorder>
-    = 0;
+    -> std::unique_ptr<graphics::CommandRecorder> = 0;
 
   [[nodiscard]] auto Nursery() const -> co::Nursery&
   {

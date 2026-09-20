@@ -34,6 +34,7 @@ struct ViewSetupContext {
 
 struct ViewRenderGpuContext {
   RenderContext& render_context;
+  graphics::CommandRecorder& recorder;
 };
 
 struct PostCompositionContext {

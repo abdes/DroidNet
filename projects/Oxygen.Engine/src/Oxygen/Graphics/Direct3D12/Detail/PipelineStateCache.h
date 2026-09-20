@@ -7,9 +7,12 @@
 #pragma once
 
 #include <concepts>
+#include <string>
 #include <tuple>
 #include <unordered_map>
 #include <utility>
+
+#include <wrl/client.h>
 
 #include <Oxygen/Base/AlwaysFalse.h>
 #include <Oxygen/Composition/Component.h>
@@ -43,13 +46,13 @@ namespace detail {
       dx::IRootSignature* root_signature;
     };
 
-    // Create a root signature from a GraphicsPipelineDesc root bindings
-    OXGN_D3D12_API auto CreateRootSignature(
-      const GraphicsPipelineDesc& desc) const -> dx::IRootSignature*;
+    //! Borrows a root signature owned by this cache for the complete layout.
+    OXGN_D3D12_API auto GetOrCreateRootSignature(
+      const GraphicsPipelineDesc& desc) -> dx::IRootSignature*;
 
-    // Create a root signature from a ComputePipelineDesc root bindings
-    OXGN_D3D12_API auto CreateRootSignature(
-      const ComputePipelineDesc& desc) const -> dx::IRootSignature*;
+    //! Borrows a root signature owned by this cache for the complete layout.
+    OXGN_D3D12_API auto GetOrCreateRootSignature(
+      const ComputePipelineDesc& desc) -> dx::IRootSignature*;
 
     //! Get or create a graphics pipeline state object (PSO) and root
     //! signature pair.
@@ -93,6 +96,7 @@ namespace detail {
     }
 
   private:
+    auto InternRootSignature(ID3DBlob& serialized) -> dx::IRootSignature*;
     // Main pipeline state creation methods
     OXGN_D3D12_API auto GetOrCreateGraphicsPipeline(
       GraphicsPipelineDesc desc, size_t hash) -> Entry;
@@ -110,6 +114,10 @@ namespace detail {
       graphics_pipelines_;
     std::unordered_map<size_t, std::tuple<ComputePipelineDesc, Entry>>
       compute_pipelines_;
+    // The native serialization includes layout, visibility, flags and version.
+    // Equality compares all bytes; a hash collision cannot alias two layouts.
+    std::unordered_map<std::string, Microsoft::WRL::ComPtr<dx::IRootSignature>>
+      root_signatures_;
     Graphics* gfx_;
   };
 

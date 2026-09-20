@@ -35,15 +35,17 @@ NOLINT_TEST_F(SubmitOrderedQueueActionTest,
   EXPECT_EQ(queue.GetCompletedValue(), 0U);
 
   {
-    auto recorder = AcquireDeferredRecorder("deferred-queue-signal");
-    CHECK_NOTNULL_F(recorder.get());
+    auto recorder = AcquireRecorder("deferred-queue-signal",
+      QueueRole::kGraphics, oxygen::graphics::SubmissionPolicy::kExplicit);
+    CHECK_F(static_cast<bool>(recorder));
     recorder->RecordQueueSignal(1);
+    KeepPendingRecording(std::move(recorder));
   }
 
   EXPECT_EQ(queue.GetCurrentValue(), 0U);
   EXPECT_EQ(queue.GetCompletedValue(), 0U);
 
-  SubmitDeferredRecorders();
+  SubmitPendingRecordings();
   queue.Wait(1);
 
   EXPECT_EQ(queue.GetCurrentValue(), 1U);
@@ -57,7 +59,7 @@ NOLINT_TEST_F(SubmitOrderedQueueActionTest,
 
   {
     auto recorder = AcquireRecorder("immediate-queue-signal");
-    CHECK_NOTNULL_F(recorder.get());
+    CHECK_F(static_cast<bool>(recorder));
     recorder->RecordQueueSignal(1);
   }
 
@@ -73,20 +75,24 @@ NOLINT_TEST_F(
   auto& queue = GetD3D12Queue();
 
   {
-    auto recorder = AcquireDeferredRecorder("ordered-signal-first");
-    CHECK_NOTNULL_F(recorder.get());
+    auto recorder = AcquireRecorder("ordered-signal-first",
+      QueueRole::kGraphics, oxygen::graphics::SubmissionPolicy::kExplicit);
+    CHECK_F(static_cast<bool>(recorder));
     recorder->RecordQueueSignal(1);
+    KeepPendingRecording(std::move(recorder));
   }
   {
-    auto recorder = AcquireDeferredRecorder("ordered-signal-second");
-    CHECK_NOTNULL_F(recorder.get());
+    auto recorder = AcquireRecorder("ordered-signal-second",
+      QueueRole::kGraphics, oxygen::graphics::SubmissionPolicy::kExplicit);
+    CHECK_F(static_cast<bool>(recorder));
     recorder->RecordQueueSignal(2);
+    KeepPendingRecording(std::move(recorder));
   }
 
   EXPECT_EQ(queue.GetCurrentValue(), 0U);
   EXPECT_EQ(queue.GetCompletedValue(), 0U);
 
-  SubmitDeferredRecorders();
+  SubmitPendingRecordings();
   queue.Wait(2);
 
   EXPECT_EQ(queue.GetCurrentValue(), 2U);
@@ -99,19 +105,21 @@ NOLINT_TEST_F(
   auto& queue = GetD3D12Queue();
   {
     auto recorder = AcquireRecorder("initial-signal");
-    CHECK_NOTNULL_F(recorder.get());
+    CHECK_F(static_cast<bool>(recorder));
     recorder->RecordQueueSignal(1);
   }
   queue.Wait(1);
 
   {
-    auto recorder = AcquireDeferredRecorder("wait-then-signal");
-    CHECK_NOTNULL_F(recorder.get());
+    auto recorder = AcquireRecorder("wait-then-signal", QueueRole::kGraphics,
+      oxygen::graphics::SubmissionPolicy::kExplicit);
+    CHECK_F(static_cast<bool>(recorder));
     recorder->RecordQueueWait(1);
     recorder->RecordQueueSignal(2);
+    KeepPendingRecording(std::move(recorder));
   }
 
-  SubmitDeferredRecorders();
+  SubmitPendingRecordings();
   queue.Wait(2);
 
   EXPECT_EQ(queue.GetCurrentValue(), 2U);

@@ -408,8 +408,9 @@ struct OcclusionModule::Impl {
     return static_cast<std::uint32_t>(candidate_storage.size());
   }
 
-  auto SubmitCurrent(RenderContext& ctx, Renderer& renderer, Graphics& gfx,
-    const std::uint32_t draw_count, const std::uint32_t candidate_count) -> bool
+  auto RecordCurrent(RenderContext& ctx, graphics::CommandRecorder& recorder,
+    Graphics& gfx, const std::uint32_t draw_count,
+    const std::uint32_t candidate_count) -> bool
   {
     if (candidate_count == 0U || result_buffer == nullptr
       || !result_buffer_uav.IsValid() || candidate_buffer == nullptr
@@ -454,37 +455,28 @@ struct OcclusionModule::Impl {
       pipeline_desc = BuildPipelineDesc();
     }
 
-    const auto queue_key = gfx.QueueKeyFor(graphics::QueueRole::kGraphics);
-    auto recorder
-      = gfx.AcquireCommandRecorder(queue_key, "Vortex Stage5 OcclusionTest");
-    if (!recorder) {
-      return false;
-    }
-    renderer.GetDiagnosticsService().AttachGpuTimelineCollector(
-      *recorder);
-
-    TrackBufferFromKnownOrInitial(*recorder, *result_buffer);
-    recorder->RequireResourceState(
+    TrackBufferFromKnownOrInitial(recorder, *result_buffer);
+    recorder.RequireResourceState(
       *result_buffer, graphics::ResourceStates::kUnorderedAccess);
-    recorder->FlushBarriers();
+    recorder.FlushBarriers();
 
-    recorder->SetPipelineState(*pipeline_desc);
+    recorder.SetPipelineState(*pipeline_desc);
     if (ctx.view_constants != nullptr) {
-      recorder->SetComputeRootConstantBufferView(
+      recorder.SetComputeRootConstantBufferView(
         static_cast<std::uint32_t>(bindless_d3d12::RootParam::kViewConstants),
         ctx.view_constants->GetGPUVirtualAddress());
     }
-    recorder->SetComputeRoot32BitConstant(
+    recorder.SetComputeRoot32BitConstant(
       static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants), 0U,
       0U);
-    recorder->SetComputeRoot32BitConstant(
+    recorder.SetComputeRoot32BitConstant(
       static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants),
       constants_alloc->srv.get(), 1U);
 
-    graphics::GpuEventScope pass_scope(*recorder, "Vortex.Stage5.OcclusionTest",
+    graphics::GpuEventScope pass_scope(recorder, "Vortex.Stage5.OcclusionTest",
       profiling::ProfileGranularity::kDiagnostic,
       profiling::ProfileCategory::kPass);
-    recorder->Dispatch(
+    recorder.Dispatch(
       (candidate_count + (kThreadGroupSize - 1U)) / kThreadGroupSize, 1U, 1U);
 
     auto enqueued = false;
@@ -492,7 +484,7 @@ struct OcclusionModule::Impl {
       const auto readback_size
         = static_cast<std::uint64_t>(candidate_count) * sizeof(std::uint32_t);
       const auto ticket = readback->EnqueueCopy(
-        *recorder, *result_buffer, graphics::BufferRange { 0U, readback_size });
+        recorder, *result_buffer, graphics::BufferRange { 0U, readback_size });
       if (ticket.has_value()) {
         enqueued = true;
         pending_candidate_draw_indices.clear();
@@ -506,7 +498,7 @@ struct OcclusionModule::Impl {
       }
     }
 
-    recorder->RequireResourceStateFinal(
+    recorder.RequireResourceState(
       *result_buffer, graphics::ResourceStates::kCommon);
     stats.submitted_count = candidate_count;
     stats.overflow_visible_count
@@ -534,7 +526,8 @@ auto OcclusionModule::GetConfig() const noexcept -> const OcclusionConfig&
   return config_;
 }
 
-void OcclusionModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
+void OcclusionModule::Execute(RenderContext& ctx,
+  graphics::CommandRecorder& recorder, SceneTextures& scene_textures)
 {
   (void)scene_textures;
 
@@ -588,7 +581,7 @@ void OcclusionModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
   }
 
   const auto readback_enqueued
-    = impl_->SubmitCurrent(ctx, renderer_, *gfx, draw_count, candidate_count);
+    = impl_->RecordCurrent(ctx, recorder, *gfx, draw_count, candidate_count);
   if (!readback_enqueued && !previous_results_valid) {
     impl_->stats.fallback_reason
       = OcclusionFallbackReason::kReadbackUnavailable;

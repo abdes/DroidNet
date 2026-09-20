@@ -469,8 +469,8 @@ template <typename T>
 concept PipelineDescType = IsGraphicPipelineDesc<T> || IsComputePipelineDesc<T>;
 
 template <PipelineDescType PipelineDesc>
-auto CreateRootSignature(const PipelineDesc& desc, const Graphics* gfx)
-  -> dx::IRootSignature*
+auto SerializeRootSignature(const PipelineDesc& desc)
+  -> Microsoft::WRL::ComPtr<ID3DBlob>
 {
   using oxygen::graphics::DescriptorTableBinding;
   using oxygen::graphics::DirectBufferBinding;
@@ -603,12 +603,7 @@ auto CreateRootSignature(const PipelineDesc& desc, const Graphics* gfx)
     throw std::runtime_error(error_msg);
   }
 
-  dx::IRootSignature* root_sig { nullptr };
-  auto* device = gfx->GetCurrentDevice();
-  ThrowOnFailed(device->CreateRootSignature(0, sig_blob->GetBufferPointer(),
-                  sig_blob->GetBufferSize(), IID_PPV_ARGS(&root_sig)),
-    "Failed to create root signature");
-  return root_sig;
+  return sig_blob;
 }
 
 } // namespace
@@ -626,11 +621,9 @@ PipelineStateCache::~PipelineStateCache()
   for (auto& entry_tuple : graphics_pipelines_ | std::views::values) {
     [[maybe_unused]] auto& desc = std::get<0>(entry_tuple);
     DLOG_F(2, "pipeline state: {}", desc.GetName());
-    auto& [pipeline_state, root_signature] = std::get<1>(entry_tuple);
+    auto& entry = std::get<1>(entry_tuple);
     DLOG_F(2, " .. pipeline state release");
-    ObjectRelease(pipeline_state);
-    DLOG_F(2, " .. root signature release");
-    ObjectRelease(root_signature);
+    ObjectRelease(entry.pipeline_state);
   }
   DLOG_F(2, "graphics pipelines cleared");
   graphics_pipelines_.clear();
@@ -638,26 +631,52 @@ PipelineStateCache::~PipelineStateCache()
   for (auto& entry_tuple : compute_pipelines_ | std::views::values) {
     [[maybe_unused]] auto& desc = std::get<0>(entry_tuple);
     DLOG_F(2, "pipeline state: {}", desc.GetName());
-    auto& [pipeline_state, root_signature] = std::get<1>(entry_tuple);
+    auto& entry = std::get<1>(entry_tuple);
     DLOG_F(2, " .. pipeline state release");
-    ObjectRelease(pipeline_state);
-    DLOG_F(2, " .. root signature release");
-    ObjectRelease(root_signature);
+    ObjectRelease(entry.pipeline_state);
   }
   DLOG_F(2, "compute pipelines cleared");
   compute_pipelines_.clear();
+  root_signatures_.clear();
 }
 
-auto PipelineStateCache::CreateRootSignature(
-  const GraphicsPipelineDesc& desc) const -> dx::IRootSignature*
+auto PipelineStateCache::GetOrCreateRootSignature(
+  const GraphicsPipelineDesc& desc) -> dx::IRootSignature*
 {
-  return ::CreateRootSignature(desc, gfx_);
+  const auto serialized = SerializeRootSignature(desc);
+  return InternRootSignature(*serialized.Get());
 }
 
-auto PipelineStateCache::CreateRootSignature(
-  const ComputePipelineDesc& desc) const -> dx::IRootSignature*
+auto PipelineStateCache::GetOrCreateRootSignature(
+  const ComputePipelineDesc& desc) -> dx::IRootSignature*
 {
-  return ::CreateRootSignature(desc, gfx_);
+  const auto serialized = SerializeRootSignature(desc);
+  return InternRootSignature(*serialized.Get());
+}
+
+auto PipelineStateCache::InternRootSignature(ID3DBlob& serialized)
+  -> dx::IRootSignature*
+{
+  // The D3D serializer supplies the canonical native bytes. Retain the full
+  // key so equality, rather than a hash alone, determines compatibility.
+  auto key
+    = std::string(static_cast<const char*>(serialized.GetBufferPointer()),
+      serialized.GetBufferSize());
+  if (const auto found = root_signatures_.find(key);
+    found != root_signatures_.end()) {
+    return found->second.Get();
+  }
+  Microsoft::WRL::ComPtr<dx::IRootSignature> signature;
+  ThrowOnFailed(gfx_->GetCurrentDevice()->CreateRootSignature(0,
+                  serialized.GetBufferPointer(), serialized.GetBufferSize(),
+                  IID_PPV_ARGS(signature.GetAddressOf())),
+    "Failed to create root signature");
+  NameObject(
+    signature.Get(), std::string_view { "Oxygen Shared Root Signature" });
+  const auto [entry, inserted]
+    = root_signatures_.emplace(std::move(key), std::move(signature));
+  static_cast<void>(inserted);
+  return entry->second.Get();
 }
 
 //! Get or create a graphics pipeline state object and root signature.
@@ -675,24 +694,18 @@ auto PipelineStateCache::GetOrCreateGraphicsPipeline(
     return entry;
   }
 
-  // Create the root signature (RAII to avoid leaks on failure).
-  Microsoft::WRL::ComPtr<dx::IRootSignature> root_signature;
-  root_signature.Attach(CreateRootSignature(desc));
-  if (!root_signature) {
+  auto* root_signature = GetOrCreateRootSignature(desc);
+  if (root_signature == nullptr) {
     throw std::runtime_error(
       "failed to create bindless root signature for graphics pipeline");
   }
-  auto rs_name = desc.GetName() + "_BindlessRS";
-  NameObject(root_signature.Get(), rs_name);
-  DLOG_F(2, "new root signature: 0x{:04X} ({})",
-    reinterpret_cast<std::uintptr_t>(root_signature.Get()), rs_name);
 
   // Create new pipeline state
   Microsoft::WRL::ComPtr<dx::IPipelineState> pso;
 
   // 2. Translate GraphicsPipelineDesc to D3D12_GRAPHICS_PIPELINE_STATE_DESC
   D3D12_GRAPHICS_PIPELINE_STATE_DESC pso_desc = {};
-  pso_desc.pRootSignature = root_signature.Get();
+  pso_desc.pRootSignature = root_signature;
 
   // Set shader stages
   if (desc.VertexShader()) {
@@ -762,7 +775,7 @@ auto PipelineStateCache::GetOrCreateGraphicsPipeline(
 
   Entry entry {
     .pipeline_state = pso.Detach(),
-    .root_signature = root_signature.Detach(),
+    .root_signature = root_signature,
   };
   graphics_pipelines_.emplace(hash, std::make_tuple(std::move(desc), entry));
   return entry;
@@ -778,10 +791,8 @@ auto PipelineStateCache::GetOrCreateComputePipeline(
     return entry;
   }
 
-  // Create the root signature (RAII to avoid leaks on failure).
-  Microsoft::WRL::ComPtr<dx::IRootSignature> root_signature;
-  root_signature.Attach(CreateRootSignature(desc));
-  if (!root_signature) {
+  auto* root_signature = GetOrCreateRootSignature(desc);
+  if (root_signature == nullptr) {
     throw std::runtime_error(
       "failed to create bindless root signature for compute pipeline");
   }
@@ -790,7 +801,7 @@ auto PipelineStateCache::GetOrCreateComputePipeline(
 
   // 2. Create the compute pipeline state object
   D3D12_COMPUTE_PIPELINE_STATE_DESC pso_desc = {};
-  pso_desc.pRootSignature = root_signature.Get();
+  pso_desc.pRootSignature = root_signature;
 
   // Set compute shader
   const auto& compute_shader_desc = desc.ComputeShader();
@@ -809,7 +820,7 @@ auto PipelineStateCache::GetOrCreateComputePipeline(
 
   Entry entry {
     .pipeline_state = pso.Detach(),
-    .root_signature = root_signature.Detach(),
+    .root_signature = root_signature,
   };
   compute_pipelines_.emplace(hash, std::make_tuple(std::move(desc), entry));
   return entry;

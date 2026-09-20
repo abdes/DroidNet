@@ -10,6 +10,10 @@
 
 #include <Oxygen/Vortex/api_export.h>
 
+namespace oxygen::graphics {
+class CommandRecorder;
+}
+
 namespace oxygen::vortex {
 
 struct RenderContext;
@@ -18,30 +22,31 @@ class SceneTextures;
 
 namespace environment {
 
-class FogPass {
-public:
-  struct RecordState {
-    bool requested { false };
-    bool executed { false };
-    std::uint32_t draw_count { 0U };
-    bool bound_scene_color { false };
-    bool sampled_scene_depth { false };
+  class FogPass {
+  public:
+    struct RecordState {
+      bool requested { false };
+      bool executed { false };
+      std::uint32_t draw_count { 0U };
+      bool bound_scene_color { false };
+      bool sampled_scene_depth { false };
+    };
+
+    OXGN_VRTX_API explicit FogPass(Renderer& renderer);
+    OXGN_VRTX_API ~FogPass();
+
+    FogPass(const FogPass&) = delete;
+    auto operator=(const FogPass&) -> FogPass& = delete;
+    FogPass(FogPass&&) = delete;
+    auto operator=(FogPass&&) -> FogPass& = delete;
+
+    [[nodiscard]] OXGN_VRTX_API auto Record(RenderContext& ctx,
+      graphics::CommandRecorder& recorder,
+      const SceneTextures& scene_textures) const -> RecordState;
+
+  private:
+    Renderer& renderer_;
   };
-
-  OXGN_VRTX_API explicit FogPass(Renderer& renderer);
-  OXGN_VRTX_API ~FogPass();
-
-  FogPass(const FogPass&) = delete;
-  auto operator=(const FogPass&) -> FogPass& = delete;
-  FogPass(FogPass&&) = delete;
-  auto operator=(FogPass&&) -> FogPass& = delete;
-
-  [[nodiscard]] OXGN_VRTX_API auto Record(
-    RenderContext& ctx, const SceneTextures& scene_textures) const -> RecordState;
-
-private:
-  Renderer& renderer_;
-};
 
 } // namespace environment
 } // namespace oxygen::vortex

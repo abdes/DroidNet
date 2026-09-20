@@ -66,9 +66,8 @@ namespace {
     return result;
   }
 
-  auto VolumetricFogTemporalRandom(
-    const std::uint32_t frame_number, const bool jitter_enabled) noexcept
-    -> glm::vec4
+  auto VolumetricFogTemporalRandom(const std::uint32_t frame_number,
+    const bool jitter_enabled) noexcept -> glm::vec4
   {
     if (!jitter_enabled) {
       return { 0.5F, 0.5F, 0.5F, 0.0F };
@@ -230,8 +229,8 @@ namespace {
     const float near_plane_m, const float far_plane_m,
     const std::uint32_t grid_size_z) -> glm::vec3
   {
-    const auto near_plane = static_cast<double>(
-      std::max(near_plane_m, start_distance_m));
+    const auto near_plane
+      = static_cast<double>(std::max(near_plane_m, start_distance_m));
     const auto slice_count = static_cast<double>(std::max(grid_size_z, 1U));
     const auto depth_distribution
       = static_cast<double>(kUeVolumetricFogDepthDistributionScale);
@@ -241,12 +240,11 @@ namespace {
       std::max(far_plane_m, static_cast<float>(near_with_offset + 1.0)));
     const auto far_minus_near = std::max(far_plane - near_with_offset, 1.0e-6);
     const auto depth_exp = std::exp2(slice_count / depth_distribution);
-    const auto offset = (far_plane - near_with_offset * depth_exp)
-      / far_minus_near;
+    const auto offset
+      = (far_plane - near_with_offset * depth_exp) / far_minus_near;
     const auto scale = (1.0 - offset) / near_with_offset;
 
-    return glm::vec3 { static_cast<float>(scale),
-      static_cast<float>(offset),
+    return glm::vec3 { static_cast<float>(scale), static_cast<float>(offset),
       kUeVolumetricFogDepthDistributionScale };
   }
 
@@ -318,6 +316,7 @@ auto VolumetricFogPass::GridExtent(const ResolvedView& view) -> glm::uvec3
 }
 
 auto VolumetricFogPass::Record(RenderContext& ctx,
+  graphics::CommandRecorder& recorder,
   const internal::StableAtmosphereState& stable_state,
   const ShaderVisibleIndex distant_sky_light_lut_srv,
   const internal::LocalFogVolumeState::ViewProducts* local_fog_products)
@@ -330,7 +329,8 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
       && ctx.current_view.resolved_view != nullptr,
   };
   if (!state.requested
-    || !renderer_.HasCapability(RendererCapabilityFamily::kEnvironmentLighting)) {
+    || !renderer_.HasCapability(
+      RendererCapabilityFamily::kEnvironmentLighting)) {
     RemoveViewState(ctx.current_view.view_id);
     return state;
   }
@@ -395,9 +395,9 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
   });
 
   auto& allocator = gfx->GetDescriptorAllocator();
-  auto srv_handle = allocator.AllocateBindless(
-    bindless::generated::kTexturesDomain,
-    graphics::ResourceViewType::kTexture_SRV);
+  auto srv_handle
+    = allocator.AllocateBindless(bindless::generated::kTexturesDomain,
+      graphics::ResourceViewType::kTexture_SRV);
   if (!srv_handle.IsValid()) {
     throw std::runtime_error(
       "VolumetricFogPass: failed to allocate SRV descriptor");
@@ -407,9 +407,9 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
     MakeTextureViewDesc(graphics::ResourceViewType::kTexture_SRV,
       texture->GetDescriptor().format));
 
-  auto uav_handle = allocator.AllocateBindless(
-    bindless::generated::kTexturesDomain,
-    graphics::ResourceViewType::kTexture_UAV);
+  auto uav_handle
+    = allocator.AllocateBindless(bindless::generated::kTexturesDomain,
+      graphics::ResourceViewType::kTexture_UAV);
   if (!uav_handle.IsValid()) {
     throw std::runtime_error(
       "VolumetricFogPass: failed to allocate UAV descriptor");
@@ -423,13 +423,13 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
   const auto& sky_light = stable_state.view_products.sky_light;
   const auto start_distance = std::max(volumetric.start_distance, 0.0F);
   const auto fallback_distance = ctx.current_view.resolved_view != nullptr
-    ? std::max(ctx.current_view.resolved_view->FarPlane(),
-        start_distance + 1.0F)
+    ? std::max(
+        ctx.current_view.resolved_view->FarPlane(), start_distance + 1.0F)
     : kDefaultVolumetricDistanceMeters;
-  const auto end_distance = std::max(
-    volumetric.distance > start_distance ? volumetric.distance
-                                         : fallback_distance,
-    start_distance + 1.0F);
+  const auto end_distance
+    = std::max(volumetric.distance > start_distance ? volumetric.distance
+                                                    : fallback_distance,
+      start_distance + 1.0F);
   const auto height_fog_media_requested = height_fog.enabled
     && height_fog.enable_height_fog
     && (height_fog.fog_density > 0.0F || height_fog.second_fog_density > 0.0F);
@@ -458,14 +458,14 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
     = std::max(volumetric.near_fade_in_distance, 0.0F);
   constants.grid.global_extinction_scale
     = std::max(volumetric.extinction_scale, 0.0F);
-  const auto grid_z_params = CalculateUeGridZParams(start_distance,
-    resolved_view.NearPlane(), end_distance, depth);
+  const auto grid_z_params = CalculateUeGridZParams(
+    start_distance, resolved_view.NearPlane(), end_distance, depth);
   const auto temporal_reprojection_enabled
     = renderer_.GetVolumetricFogTemporalReprojectionEnabled()
     && ctx.current_view.view_state_handle
       != CompositionView::kInvalidViewStateHandle;
-  const auto temporal_jitter_enabled
-    = temporal_reprojection_enabled && renderer_.GetVolumetricFogJitterEnabled();
+  const auto temporal_jitter_enabled = temporal_reprojection_enabled
+    && renderer_.GetVolumetricFogJitterEnabled();
   const auto history_miss_supersample_count
     = std::min(renderer_.GetVolumetricFogHistoryMissSupersampleCount(),
       kUeVolumetricFogMaxHistoryMissSamples);
@@ -474,12 +474,16 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
     const auto sample_frame = ctx.frame_sequence.get() > sample_index
       ? static_cast<std::uint32_t>(ctx.frame_sequence.get() - sample_index)
       : 0U;
-    const auto jitter = VolumetricFogTemporalRandom(
-      sample_frame, temporal_jitter_enabled);
-    constants.temporal_history1.frame_jitter_offsets[sample_index][0] = jitter.x;
-    constants.temporal_history1.frame_jitter_offsets[sample_index][1] = jitter.y;
-    constants.temporal_history1.frame_jitter_offsets[sample_index][2] = jitter.z;
-    constants.temporal_history1.frame_jitter_offsets[sample_index][3] = jitter.w;
+    const auto jitter
+      = VolumetricFogTemporalRandom(sample_frame, temporal_jitter_enabled);
+    constants.temporal_history1.frame_jitter_offsets[sample_index][0]
+      = jitter.x;
+    constants.temporal_history1.frame_jitter_offsets[sample_index][1]
+      = jitter.y;
+    constants.temporal_history1.frame_jitter_offsets[sample_index][2]
+      = jitter.z;
+    constants.temporal_history1.frame_jitter_offsets[sample_index][3]
+      = jitter.w;
   }
   HistoryEntry transient_history;
   if (!temporal_reprojection_enabled) {
@@ -568,7 +572,8 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
     constants.sky_light1.tint_rgb[0] = sky_light.tint_rgb.x;
     constants.sky_light1.tint_rgb[1] = sky_light.tint_rgb.y;
     constants.sky_light1.tint_rgb[2] = sky_light.tint_rgb.z;
-    constants.sky_light1.intensity_mul = std::max(sky_light.intensity_mul, 0.0F);
+    constants.sky_light1.intensity_mul
+      = std::max(sky_light.intensity_mul, 0.0F);
   }
   const auto local_fog_ready = renderer_.GetLocalFogRenderIntoVolumetricFog()
     && local_fog_products != nullptr && local_fog_products->prepared
@@ -610,55 +615,49 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
     return state;
   }
 
-  const auto queue_key = gfx->QueueKeyFor(graphics::QueueRole::kGraphics);
-  auto recorder
-    = gfx->AcquireCommandRecorder(queue_key, "EnvironmentLightingService VolumetricFog");
-  if (!recorder) {
-    return state;
-  }
-  renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(
-    *recorder);
-
   if (ctx.current_view.frame_exposure) {
     const auto& status
       = *ctx.current_view.frame_exposure->current_state->status_buffer;
-    if (!recorder->AdoptKnownResourceState(status)) {
-      recorder->BeginTrackingResourceState(
+    if (!recorder.IsResourceTracked(status)
+      && !recorder.AdoptKnownResourceState(status)) {
+      recorder.BeginTrackingResourceState(
         status, graphics::ResourceStates::kCommon, false);
     }
-    recorder->RequireResourceState(
+    recorder.RequireResourceState(
       status, graphics::ResourceStates::kUnorderedAccess);
   }
-  TrackTextureFromKnownOrInitial(*recorder, *texture);
-  recorder->RequireResourceState(
+  TrackTextureFromKnownOrInitial(recorder, *texture);
+  recorder.RequireResourceState(
     *texture, graphics::ResourceStates::kUnorderedAccess);
   if (history_matches && history_entry.frame_exposure) {
     const auto& previous_p = *history_entry.frame_exposure->buffer;
-    if (!recorder->AdoptKnownResourceState(previous_p)) {
-      recorder->BeginTrackingResourceState(
+    if (!recorder.IsResourceTracked(previous_p)
+      && !recorder.AdoptKnownResourceState(previous_p)) {
+      recorder.BeginTrackingResourceState(
         previous_p, graphics::ResourceStates::kShaderResource, false);
     }
-    recorder->RequireResourceState(
+    recorder.RequireResourceState(
       previous_p, graphics::ResourceStates::kShaderResource);
     const auto& previous_errors
       = *history_entry.frame_exposure->current_state->status_buffer;
-    if (!recorder->AdoptKnownResourceState(previous_errors)) {
-      recorder->BeginTrackingResourceState(
+    if (!recorder.IsResourceTracked(previous_errors)
+      && !recorder.AdoptKnownResourceState(previous_errors)) {
+      recorder.BeginTrackingResourceState(
         previous_errors, graphics::ResourceStates::kCommon, false);
     }
-    recorder->RequireResourceState(
+    recorder.RequireResourceState(
       previous_errors, graphics::ResourceStates::kShaderResource);
   }
-  recorder->FlushBarriers();
+  recorder.FlushBarriers();
 
-  recorder->SetPipelineState(BuildPipelineDesc());
-  recorder->SetComputeRootConstantBufferView(
+  recorder.SetPipelineState(BuildPipelineDesc());
+  recorder.SetComputeRootConstantBufferView(
     static_cast<std::uint32_t>(bindless_d3d12::RootParam::kViewConstants),
     ctx.view_constants->GetGPUVirtualAddress());
-  recorder->SetComputeRoot32BitConstant(
+  recorder.SetComputeRoot32BitConstant(
     static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants), 0U,
     0U);
-  recorder->SetComputeRoot32BitConstant(
+  recorder.SetComputeRoot32BitConstant(
     static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants),
     constants_alloc->srv.get(), 1U);
 
@@ -669,18 +668,12 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
   const auto dispatch_z
     = (depth + (kThreadGroupSizeZ - 1U)) / kThreadGroupSizeZ;
   {
-    graphics::GpuEventScope pass_scope(*recorder,
-      "Vortex.Stage14.VolumetricFog",
+    graphics::GpuEventScope pass_scope(recorder, "Vortex.Stage14.VolumetricFog",
       profiling::ProfileGranularity::kTelemetry,
       profiling::ProfileCategory::kPass);
-    recorder->Dispatch(dispatch_x, dispatch_y, dispatch_z);
-    recorder->RequireResourceStateFinal(
+    recorder.Dispatch(dispatch_x, dispatch_y, dispatch_z);
+    recorder.RequireResourceState(
       *texture, graphics::ResourceStates::kShaderResource);
-  }
-  const auto recording = recorder->GetCommandListForInspection();
-  recorder.reset();
-  if (!recording || !recording->IsSubmitted()) {
-    return state;
   }
 
   state.executed = true;
@@ -708,7 +701,8 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
     = constants.temporal_history0.enabled != 0U;
   state.temporal_history_reset = temporal_reprojection_enabled
     && !state.temporal_history_reprojection_executed;
-  state.local_fog_injection_requested = renderer_.GetLocalFogRenderIntoVolumetricFog()
+  state.local_fog_injection_requested
+    = renderer_.GetLocalFogRenderIntoVolumetricFog()
     && local_fog_products != nullptr && local_fog_products->prepared;
   state.local_fog_injection_executed = local_fog_ready;
   state.local_fog_instance_count
@@ -717,23 +711,33 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
   state.grid_z_params[1] = grid_z_params.y;
   state.grid_z_params[2] = grid_z_params.z;
   if (temporal_reprojection_enabled) {
-    if (history_entry.texture != nullptr) {
-      live_textures_.push_back(history_entry.texture);
-    }
-    // History and publication share the retained wrapper, so a live history
-    // reader keeps this texture out of the pool's available UAV outputs.
-    history_entry.texture = texture;
-    history_entry.frame_exposure = ctx.current_view.frame_exposure;
-    history_entry.srv = integrated_srv;
-    history_entry.width = width;
-    history_entry.height = height;
-    history_entry.depth = depth;
-    history_entry.start_distance_m = start_distance;
-    history_entry.end_distance_m = end_distance;
-    history_entry.grid_z_params[0] = grid_z_params.x;
-    history_entry.grid_z_params[1] = grid_z_params.y;
-    history_entry.grid_z_params[2] = grid_z_params.z;
-    history_entry.valid = true;
+    const auto next_history = HistoryEntry {
+      .texture = texture,
+      .frame_exposure = ctx.current_view.frame_exposure,
+      .srv = integrated_srv,
+      .width = width,
+      .height = height,
+      .depth = depth,
+      .start_distance_m = start_distance,
+      .end_distance_m = end_distance,
+      .grid_z_params = { grid_z_params.x, grid_z_params.y, grid_z_params.z },
+      .valid = true,
+    };
+    recorder.OnSubmission(
+      [this, view_id = ctx.current_view.view_id, next_history](
+        const graphics::SubmissionOutcome outcome) -> void {
+        if (outcome != graphics::SubmissionOutcome::kSubmitted) {
+          return;
+        }
+        const auto found = history_by_view_.find(view_id);
+        if (found == history_by_view_.end()) {
+          return;
+        }
+        if (found->second.texture) {
+          live_textures_.push_back(found->second.texture);
+        }
+        found->second = next_history;
+      });
   } else {
     live_textures_.push_back(texture);
   }

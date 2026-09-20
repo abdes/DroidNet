@@ -20,6 +20,10 @@ namespace oxygen::graphics {
 class Texture;
 }
 
+namespace oxygen::graphics {
+class CommandRecorder;
+}
+
 namespace oxygen::vortex {
 
 struct RenderContext;
@@ -68,7 +72,7 @@ namespace environment {
       frame::SequenceNumber sequence, frame::Slot slot) -> void;
     OXGN_VRTX_API auto RemoveViewState(ViewId view_id) -> void;
     [[nodiscard]] OXGN_VRTX_API auto Record(RenderContext& ctx,
-      const EnvironmentViewData& view_data,
+      graphics::CommandRecorder& recorder, const EnvironmentViewData& view_data,
       const internal::StableAtmosphereState& stable_state,
       const internal::AtmosphereLutCache& cache) -> RecordState;
 

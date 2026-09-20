@@ -120,7 +120,11 @@ NOLINT_TEST_F(ExposureGpuTest,
       = vortex::testing::RendererPublicationProbe::GetPostProcessService(
         *owner);
     service->SetResolvedConfig(SharedConfig(settings));
-    ASSERT_NE(service->PrepareFrameExposure(ctx, false), nullptr);
+    ASSERT_NE(SubmitCommands("Vortex Exposure Frame",
+                [&](graphics::CommandRecorder& recorder) -> auto {
+                  return service->PrepareFrameExposure(ctx, recorder, false);
+                }),
+      nullptr);
   };
   renderer_->RegisterViewExtension(extension);
   unsigned sequence = 0U;
@@ -772,8 +776,11 @@ NOLINT_TEST_F(ExposureGpuTest, SkyProducerPreservesThinBrightScattering)
           };
           auto exposure_inputs = postprocess::ExposurePass::FrameInputs {};
           exposure_inputs.use_fp32 = false;
-          const auto exposure
-            = pass_->ResolveFrame(ctx_, exposure_config, exposure_inputs);
+          const auto exposure = SubmitCommands("Vortex Exposure Frame",
+            [&](graphics::CommandRecorder& recorder) -> auto {
+              return pass_->ResolveFrame(
+                ctx_, recorder, exposure_config, exposure_inputs);
+            });
           ASSERT_NE(exposure, nullptr);
           ctx_.current_view.frame_exposure = exposure;
           auto bindings = ViewFrameBindings {};
@@ -797,8 +804,11 @@ NOLINT_TEST_F(ExposureGpuTest, SkyProducerPreservesThinBrightScattering)
           }
           ASSERT_TRUE(transmittance.Record(ctx_, stable, cache).executed);
           ASSERT_TRUE(multiple.Record(ctx_, stable, cache).executed);
-          const auto produced
-            = sky.Record(ctx_, environment_view, stable, cache);
+          const auto produced = SubmitCommands("Vortex test",
+            [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
+              return sky.Record(
+                ctx_, recorder, environment_view, stable, cache);
+            });
           ASSERT_TRUE(produced.executed);
           const auto pixels = ReadFloatTexture(*produced.texture);
           // Row zero is exactly zenith. Constant-density, single Rayleigh

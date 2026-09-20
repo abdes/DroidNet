@@ -6,6 +6,7 @@
 
 #include <Windows.h>
 
+#include <algorithm>
 #include <cstring>
 #include <fstream>
 #include <limits>
@@ -48,9 +49,18 @@ auto ExposureCpuTiming::OnScopeBegin(
   const profiling::CpuProfileScopeDesc& desc) noexcept -> bool
 {
   const auto label = std::string_view { desc.label };
+  // Charge the entire shared view owner to exposure. Moving acquisition and
+  // submission outside the pass scopes must not remove them from attribution.
+  const bool view_recording = (label == "Graphics.AcquireCommandRecorder"
+                                || label == "Graphics.FinalizeCommandRecorder")
+    && std::ranges::any_of(desc.variables, [](const auto& variable) -> bool {
+         return variable.key != nullptr
+           && std::string_view(variable.key.get()) == "recording"
+           && variable.value == "Vortex View";
+       });
   const bool exposure = (label.starts_with("Vortex.PostProcess.")
                           && label != "Vortex.PostProcess.Execute")
-    || label == "Vortex.SceneRenderer.PrepareExposureDomain";
+    || label == "Vortex.SceneRenderer.PrepareExposureDomain" || view_recording;
   const bool wait = exposure_depth_ != 0U && label == "D3D12.FenceWait";
   const bool detail = detailed_ && exposure_depth_ != 0U
     && (label.starts_with("Graphics.") || label.starts_with("D3D12."));

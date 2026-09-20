@@ -172,7 +172,8 @@ namespace {
   auto RequireKnownPersistentState(graphics::CommandRecorder& recorder,
     const graphics::Texture& texture) -> void
   {
-    if (!recorder.AdoptKnownResourceState(texture)) {
+    if (!recorder.IsResourceTracked(texture)
+      && !recorder.AdoptKnownResourceState(texture)) {
       auto initial = texture.GetDescriptor().initial_state;
       if (initial == graphics::ResourceStates::kUnknown
         || initial == graphics::ResourceStates::kUndefined) {
@@ -180,7 +181,7 @@ namespace {
           ? graphics::ResourceStates::kRenderTarget
           : graphics::ResourceStates::kShaderResource;
       }
-      recorder.BeginTrackingResourceState(texture, initial);
+      recorder.BeginTrackingResourceState(texture, initial, false);
     }
   }
 
@@ -366,8 +367,8 @@ namespace {
     return mode == ShaderDebugMode::kIblOnly;
   }
 
-  [[nodiscard]] auto ShouldDrawStaticSkyLightDiffuse(
-    const ShaderDebugMode mode) -> bool
+  [[nodiscard]] auto ShouldDrawStaticSkyLightDiffuse(const ShaderDebugMode mode)
+    -> bool
   {
     using enum ShaderDebugMode;
     switch (mode) {
@@ -575,7 +576,7 @@ DeferredLightPass::~DeferredLightPass()
 }
 
 auto DeferredLightPass::Record(RenderContext& ctx,
-  const SceneTextures& scene_textures,
+  graphics::CommandRecorder& recorder, const SceneTextures& scene_textures,
   const internal::DeferredLightPacketSet& packets,
   const ShadowFrameBindings* directional_shadow_bindings,
   const graphics::Texture* directional_shadow_surface,
@@ -587,8 +588,7 @@ auto DeferredLightPass::Record(RenderContext& ctx,
   if (ctx.view_constants == nullptr) {
     return state;
   }
-  const auto wants_static_sky_light
-    = static_sky_light_available
+  const auto wants_static_sky_light = static_sky_light_available
     && ShouldDrawStaticSkyLightDiffuse(ctx.shader_debug_mode);
   if (!packets.directional.has_value() && packets.local_lights.empty()
     && !wants_static_sky_light) {
@@ -676,8 +676,7 @@ auto DeferredLightPass::Record(RenderContext& ctx,
     });
     ++state.directional_draw_count;
   }
-  const auto skip_local_lights
-    = skip_direct_lighting
+  const auto skip_local_lights = skip_direct_lighting
     || ShouldSkipLocalLightsForDirectionalDebug(ctx.shader_debug_mode);
   if (!skip_local_lights) {
     for (const auto& packet : packets.local_lights) {
@@ -831,64 +830,61 @@ auto DeferredLightPass::Record(RenderContext& ctx,
     pass_constants_indices.push_back(deferred_light_constants_indices_[i]);
   }
 
-  const auto queue_key = gfx->QueueKeyFor(graphics::QueueRole::kGraphics);
-  auto recorder = gfx->AcquireCommandRecorder(
-    queue_key, "LightingService DeferredLighting");
-  if (!recorder) {
-    return state;
-  }
-  renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(
-    *recorder);
-  graphics::GpuEventScope stage_scope(*recorder,
+  graphics::GpuEventScope stage_scope(recorder,
     "Vortex.Stage12.DeferredLighting",
     profiling::ProfileGranularity::kTelemetry,
     profiling::ProfileCategory::kPass);
 
-  RequireKnownPersistentState(*recorder, scene_textures.GetSceneColor());
-  RequireKnownPersistentState(*recorder, scene_textures.GetSceneDepth());
-  RequireKnownPersistentState(*recorder, scene_textures.GetGBufferNormal());
-  RequireKnownPersistentState(*recorder, scene_textures.GetGBufferMaterial());
-  RequireKnownPersistentState(*recorder, scene_textures.GetGBufferBaseColor());
-  RequireKnownPersistentState(*recorder, scene_textures.GetGBufferCustomData());
+  RequireKnownPersistentState(recorder, scene_textures.GetSceneColor());
+  RequireKnownPersistentState(recorder, scene_textures.GetSceneDepth());
+  RequireKnownPersistentState(recorder, scene_textures.GetGBufferNormal());
+  RequireKnownPersistentState(recorder, scene_textures.GetGBufferMaterial());
+  RequireKnownPersistentState(recorder, scene_textures.GetGBufferBaseColor());
+  RequireKnownPersistentState(recorder, scene_textures.GetGBufferCustomData());
   if (const auto& frame = ctx.current_view.frame_exposure) {
     const auto& status = *frame->current_state->status_buffer;
-    if (!recorder->IsResourceTracked(status)
-      && !recorder->AdoptKnownResourceState(status))
-      recorder->BeginTrackingResourceState(
+    if (!recorder.IsResourceTracked(status)
+      && !recorder.AdoptKnownResourceState(status)) {
+      recorder.BeginTrackingResourceState(
         status, graphics::ResourceStates::kCommon, false);
-    recorder->RequireResourceState(
+    }
+    recorder.RequireResourceState(
       status, graphics::ResourceStates::kUnorderedAccess);
   }
   if (directional_shadow_surface != nullptr
     && state.consumed_directional_shadow_product) {
-    if (!recorder->AdoptKnownResourceState(*directional_shadow_surface)) {
+    if (!recorder.IsResourceTracked(*directional_shadow_surface)
+      && !recorder.AdoptKnownResourceState(*directional_shadow_surface)) {
       auto initial = directional_shadow_surface->GetDescriptor().initial_state;
       if (initial == graphics::ResourceStates::kUnknown
         || initial == graphics::ResourceStates::kUndefined) {
         initial = graphics::ResourceStates::kShaderResource;
       }
-      recorder->BeginTrackingResourceState(
-        *directional_shadow_surface, initial);
+      recorder.BeginTrackingResourceState(
+        *directional_shadow_surface, initial, false);
     }
   }
   if (spot_shadow_surface != nullptr && state.consumed_spot_shadow_product) {
-    if (!recorder->AdoptKnownResourceState(*spot_shadow_surface)) {
+    if (!recorder.IsResourceTracked(*spot_shadow_surface)
+      && !recorder.AdoptKnownResourceState(*spot_shadow_surface)) {
       auto initial = spot_shadow_surface->GetDescriptor().initial_state;
       if (initial == graphics::ResourceStates::kUnknown
         || initial == graphics::ResourceStates::kUndefined) {
         initial = graphics::ResourceStates::kShaderResource;
       }
-      recorder->BeginTrackingResourceState(*spot_shadow_surface, initial);
+      recorder.BeginTrackingResourceState(*spot_shadow_surface, initial, false);
     }
   }
   if (point_shadow_surface != nullptr && state.consumed_point_shadow_product) {
-    if (!recorder->AdoptKnownResourceState(*point_shadow_surface)) {
+    if (!recorder.IsResourceTracked(*point_shadow_surface)
+      && !recorder.AdoptKnownResourceState(*point_shadow_surface)) {
       auto initial = point_shadow_surface->GetDescriptor().initial_state;
       if (initial == graphics::ResourceStates::kUnknown
         || initial == graphics::ResourceStates::kUndefined) {
         initial = graphics::ResourceStates::kShaderResource;
       }
-      recorder->BeginTrackingResourceState(*point_shadow_surface, initial);
+      recorder.BeginTrackingResourceState(
+        *point_shadow_surface, initial, false);
     }
   }
 
@@ -898,10 +894,10 @@ auto DeferredLightPass::Record(RenderContext& ctx,
     = static_cast<std::uint32_t>(bindless_d3d12::RootParam::kViewConstants);
   const auto reverse_z = IsReverseZ(ctx);
   const auto bind_common_root_parameters = [&](const ShaderVisibleIndex index) {
-    recorder->SetGraphicsRootConstantBufferView(
+    recorder.SetGraphicsRootConstantBufferView(
       view_constants_param, ctx.view_constants->GetGPUVirtualAddress());
-    recorder->SetGraphicsRoot32BitConstant(root_constants_param, 0U, 0U);
-    recorder->SetGraphicsRoot32BitConstant(
+    recorder.SetGraphicsRoot32BitConstant(root_constants_param, 0U, 0U);
+    recorder.SetGraphicsRoot32BitConstant(
       root_constants_param, index.get(), 1U);
   };
 
@@ -911,7 +907,7 @@ auto DeferredLightPass::Record(RenderContext& ctx,
 
     if (draw.kind == DeferredLightKind::kDirectional
       || draw.kind == DeferredLightKind::kStaticSkyLight) {
-      graphics::GpuEventScope light_scope(*recorder,
+      graphics::GpuEventScope light_scope(recorder,
         draw.kind == DeferredLightKind::kDirectional
           ? "Vortex.Stage12.DirectionalLight"
           : "Vortex.Stage12.StaticSkyLight",
@@ -920,23 +916,23 @@ auto DeferredLightPass::Record(RenderContext& ctx,
       if (draw.kind == DeferredLightKind::kDirectional
         && directional_shadow_surface != nullptr
         && state.consumed_directional_shadow_product) {
-        recorder->RequireResourceState(*directional_shadow_surface,
+        recorder.RequireResourceState(*directional_shadow_surface,
           graphics::ResourceStates::kShaderResource);
       }
-      recorder->RequireResourceState(scene_textures.GetSceneColor(),
+      recorder.RequireResourceState(scene_textures.GetSceneColor(),
         graphics::ResourceStates::kRenderTarget);
-      recorder->FlushBarriers();
-      recorder->BindFrameBuffer(*directional_framebuffer_);
-      SetViewportAndScissor(*recorder, ctx, scene_textures);
-      recorder->SetPipelineState(BuildDeferredDirectionalPipelineDesc(
+      recorder.FlushBarriers();
+      recorder.BindFrameBuffer(*directional_framebuffer_);
+      SetViewportAndScissor(recorder, ctx, scene_textures);
+      recorder.SetPipelineState(BuildDeferredDirectionalPipelineDesc(
         scene_textures, ctx.shader_debug_mode));
       bind_common_root_parameters(pass_index);
-      recorder->Draw(3U, 1U, 0U, 0U);
+      recorder.Draw(3U, 1U, 0U, 0U);
       state.accumulated_into_scene_color = true;
       continue;
     }
 
-    graphics::GpuEventScope local_scope(*recorder,
+    graphics::GpuEventScope local_scope(recorder,
       draw.kind == DeferredLightKind::kPoint ? "Vortex.Stage12.PointLight"
                                              : "Vortex.Stage12.SpotLight",
       profiling::ProfileGranularity::kDiagnostic,
@@ -944,27 +940,28 @@ auto DeferredLightPass::Record(RenderContext& ctx,
     CHECK_NOTNULL_F(local_framebuffer_.get(),
       "DeferredLightPass: local framebuffer must exist before local-light "
       "draws");
-    recorder->RequireResourceState(
+    recorder.RequireResourceState(
       scene_textures.GetSceneDepth(), graphics::ResourceStates::kDepthRead);
-    recorder->RequireResourceState(
+    recorder.RequireResourceState(
       scene_textures.GetSceneColor(), graphics::ResourceStates::kRenderTarget);
     if (draw.kind == DeferredLightKind::kSpot && spot_shadow_surface != nullptr
       && state.consumed_spot_shadow_product) {
-      recorder->RequireResourceState(
+      recorder.RequireResourceState(
         *spot_shadow_surface, graphics::ResourceStates::kShaderResource);
     }
-    if (draw.kind == DeferredLightKind::kPoint && point_shadow_surface != nullptr
+    if (draw.kind == DeferredLightKind::kPoint
+      && point_shadow_surface != nullptr
       && state.consumed_point_shadow_product) {
-      recorder->RequireResourceState(
+      recorder.RequireResourceState(
         *point_shadow_surface, graphics::ResourceStates::kShaderResource);
     }
-    recorder->FlushBarriers();
-    recorder->BindFrameBuffer(*local_framebuffer_);
-    SetViewportAndScissor(*recorder, ctx, scene_textures);
-    recorder->SetPipelineState(BuildDeferredLocalPipelineDesc(
+    recorder.FlushBarriers();
+    recorder.BindFrameBuffer(*local_framebuffer_);
+    SetViewportAndScissor(recorder, ctx, scene_textures);
+    recorder.SetPipelineState(BuildDeferredLocalPipelineDesc(
       scene_textures, draw.kind, reverse_z, draw.draw_mode));
     bind_common_root_parameters(pass_index);
-    recorder->Draw(draw.geometry_vertex_count, 1U, 0U, 0U);
+    recorder.Draw(draw.geometry_vertex_count, 1U, 0U, 0U);
     ++state.local_light_draw_count;
     if (draw.draw_mode == DeferredLocalLightDrawMode::kCameraInsideVolume) {
       ++state.camera_inside_local_light_count;
@@ -979,29 +976,29 @@ auto DeferredLightPass::Record(RenderContext& ctx,
     state.accumulated_into_scene_color = true;
   }
 
-  recorder->RequireResourceStateFinal(
+  recorder.RequireResourceState(
     scene_textures.GetSceneColor(), graphics::ResourceStates::kRenderTarget);
-  recorder->RequireResourceStateFinal(
+  recorder.RequireResourceState(
     scene_textures.GetSceneDepth(), graphics::ResourceStates::kDepthRead);
-  recorder->RequireResourceStateFinal(scene_textures.GetGBufferNormal(),
+  recorder.RequireResourceState(scene_textures.GetGBufferNormal(),
     graphics::ResourceStates::kShaderResource);
-  recorder->RequireResourceStateFinal(scene_textures.GetGBufferMaterial(),
+  recorder.RequireResourceState(scene_textures.GetGBufferMaterial(),
     graphics::ResourceStates::kShaderResource);
-  recorder->RequireResourceStateFinal(scene_textures.GetGBufferBaseColor(),
+  recorder.RequireResourceState(scene_textures.GetGBufferBaseColor(),
     graphics::ResourceStates::kShaderResource);
-  recorder->RequireResourceStateFinal(scene_textures.GetGBufferCustomData(),
+  recorder.RequireResourceState(scene_textures.GetGBufferCustomData(),
     graphics::ResourceStates::kShaderResource);
   if (directional_shadow_surface != nullptr
     && state.consumed_directional_shadow_product) {
-    recorder->RequireResourceStateFinal(
+    recorder.RequireResourceState(
       *directional_shadow_surface, graphics::ResourceStates::kShaderResource);
   }
   if (spot_shadow_surface != nullptr && state.consumed_spot_shadow_product) {
-    recorder->RequireResourceStateFinal(
+    recorder.RequireResourceState(
       *spot_shadow_surface, graphics::ResourceStates::kShaderResource);
   }
   if (point_shadow_surface != nullptr && state.consumed_point_shadow_product) {
-    recorder->RequireResourceStateFinal(
+    recorder.RequireResourceState(
       *point_shadow_surface, graphics::ResourceStates::kShaderResource);
   }
 

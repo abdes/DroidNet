@@ -15,6 +15,7 @@
 #include <Oxygen/Graphics/Common/Detail/Barriers.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
+#include <Oxygen/Graphics/Common/Internal/Commander.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/Surface.h>
@@ -252,8 +253,10 @@ public:
 //! Simple CommandQueue that simulates signalling/completion for tests.
 class FakeCommandQueue final : public CommandQueue {
 public:
-  explicit FakeCommandQueue(const std::string_view name, const QueueRole role)
+  explicit FakeCommandQueue(const std::string_view name, const QueueRole role,
+    const observer_ptr<const bool> submission_failure = {})
     : CommandQueue(name)
+    , submission_failure_(submission_failure)
     , role_(role)
   {
   }
@@ -294,6 +297,9 @@ public:
   }
   auto Submit(std::shared_ptr<CommandList> command_list) -> void override
   {
+    if (submission_failure_ && *submission_failure_) {
+      throw std::runtime_error("Injected queue submission failure");
+    }
     auto known_states = std::vector<KnownResourceState> {};
     for (const auto& state : command_list->TakeRecordedResourceStates()) {
       known_states.push_back({
@@ -324,6 +330,7 @@ private:
     }
   }
 
+  observer_ptr<const bool> submission_failure_;
   QueueRole role_ {
     QueueRole::kGraphics,
   };
@@ -450,6 +457,23 @@ public:
     , clear_framebuffer_log_(clear_framebuffer_log)
     , indirect_log_(indirect_log)
   {
+  }
+
+  void SetRecordingFailureFlag(observer_ptr<const bool> flag) noexcept
+  {
+    recording_failure_ = flag;
+  }
+
+  auto End() noexcept -> std::shared_ptr<CommandList> override
+  {
+    auto completed = CommandRecorder::End();
+    if (recording_failure_ && *recording_failure_) {
+      if (completed) {
+        completed->OnFailed();
+      }
+      return {};
+    }
+    return completed;
   }
 
   // No-op API
@@ -655,6 +679,7 @@ protected:
   }
 
 private:
+  observer_ptr<const bool> recording_failure_;
   std::optional<graphics::RasterizerStateDesc> current_rasterizer_;
   std::string current_pipeline_name_;
   BufferCommandLog* buffer_log_ {
@@ -1242,39 +1267,21 @@ public:
   }
   auto FlushCommandQueues() -> void override { }
   auto AcquireCommandRecorder(const QueueKey& queue_key,
-    std::string_view command_list_name, bool /*immediate_submission*/)
-    -> std::unique_ptr<CommandRecorder,
-      std::function<void(CommandRecorder*)>> override
+    std::string_view command_list_name,
+    graphics::SubmissionPolicy policy
+    = graphics::SubmissionPolicy::kOnScopeExit)
+    -> graphics::CommandRecording override
   {
-    auto q = GetCommandQueue(queue_key);
-    auto cl = std::make_shared<FakeCommandList>(
-      command_list_name, q ? q->GetQueueRole() : QueueRole::kGraphics);
-    auto recorder = std::make_unique<FakeCommandRecorder>(cl, q, &buffer_log_,
-      &texture_log_, &graphics_pipeline_log_, &compute_pipeline_log_,
-      &texture_copy_log_, &root_cbv_log_, &draw_log_, &dispatch_log_,
-      &clear_framebuffer_log_, &indirect_log_);
-    recorder->Begin();
-    return {
-      recorder.release(),
-      [this, q](CommandRecorder* p) -> void {
-        const std::unique_ptr<CommandRecorder> owned_recorder {
-          p,
-        };
-        if (owned_recorder != nullptr) {
-          auto completed = owned_recorder->End();
-          if (completed != nullptr && q != nullptr) {
-            if (fail_recording_) {
-              completed->OnFailed();
-            } else if (!fail_submission_) {
-              q->Submit(completed);
-              completed->OnSubmitted();
-              GetDeferredReclaimer().RegisterDeferredAction(
-                [completed] -> void { completed->OnExecuted(); });
-            }
-          }
-        }
-      },
-    };
+    auto queue = GetCommandQueue(queue_key);
+    auto list = std::make_shared<FakeCommandList>(
+      command_list_name, queue ? queue->GetQueueRole() : QueueRole::kGraphics);
+    auto recorder = std::make_unique<FakeCommandRecorder>(list, queue,
+      &buffer_log_, &texture_log_, &graphics_pipeline_log_,
+      &compute_pipeline_log_, &texture_copy_log_, &root_cbv_log_, &draw_log_,
+      &dispatch_log_, &clear_framebuffer_log_, &indirect_log_);
+    recorder->SetRecordingFailureFlag(make_observer(&fail_recording_));
+    return GetComponent<graphics::internal::Commander>().PrepareCommandRecorder(
+      std::move(recorder), policy);
   }
 
   BufferCommandLog buffer_log_ {};
@@ -1314,7 +1321,8 @@ protected:
       return found->second;
     }
     const auto* const name = role == QueueRole::kTransfer ? "CopyQ" : "GfxQ";
-    return std::make_shared<FakeCommandQueue>(name, role);
+    return std::make_shared<FakeCommandQueue>(
+      name, role, make_observer(&fail_submission_));
   }
   [[nodiscard]] auto CreateCommandListImpl(
     QueueRole /*role*/, std::string_view /*command_list_name*/)

@@ -92,7 +92,7 @@ protected:
     upload->Update(bytes.data(), bytes.size(), 0);
 
     auto recorder = AcquireRecorder(std::string(debug_name) + "Init");
-    CHECK_NOTNULL_F(recorder.get());
+    CHECK_F(static_cast<bool>(recorder));
     EnsureTracked(*recorder, upload, ResourceStates::kGenericRead);
     EnsureTracked(*recorder, device, ResourceStates::kCommon);
     recorder->RequireResourceState(*upload, ResourceStates::kCopySource);
@@ -135,7 +135,7 @@ protected:
     };
 
     auto recorder = AcquireRecorder(std::string(debug_name) + "Init");
-    CHECK_NOTNULL_F(recorder.get());
+    CHECK_F(static_cast<bool>(recorder));
     EnsureTracked(*recorder, upload, ResourceStates::kGenericRead);
     EnsureTracked(*recorder, texture, ResourceStates::kCommon);
     recorder->RequireResourceState(*upload, ResourceStates::kCopySource);
@@ -166,7 +166,7 @@ protected:
     CHECK_NOTNULL_F(framebuffer.get());
 
     auto recorder = AcquireRecorder(std::string(debug_name) + "Clear");
-    CHECK_NOTNULL_F(recorder.get());
+    CHECK_F(static_cast<bool>(recorder));
     recorder->BeginTrackingResourceState(*texture, ResourceStates::kCommon);
     recorder->RequireResourceState(*texture, ResourceStates::kRenderTarget);
     recorder->FlushBarriers();

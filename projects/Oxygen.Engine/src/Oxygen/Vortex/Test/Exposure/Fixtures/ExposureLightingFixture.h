@@ -47,6 +47,7 @@ protected:
     std::function<void(
       const RenderContext&, const SceneTextureExtractRef&, unsigned)>
       inspect;
+    std::function<void()> after_submit;
   };
 
   auto SetUp() -> void override;

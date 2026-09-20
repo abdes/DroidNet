@@ -143,7 +143,7 @@ NOLINT_TEST_F(ExposureGpuTest, QueuedHzbBuildsKeepTheirOwnDepthPyramids)
     ctx_.current_view.view_state_handle = CompositionView::ViewStateHandle {
       14000U + view,
     };
-    module.Execute(ctx_, *textures.at(view));
+    module.Execute(ctx_, *AcquireRecorder("Test HZB"), *textures.at(view));
     outputs.push_back(module.GetCurrentOutput());
     ASSERT_TRUE(outputs.back().available);
   }
@@ -343,23 +343,31 @@ NOLINT_TEST_F(
       auto* owner = vortex::testing::RendererPublicationProbe::GetSceneRenderer(
         *renderer);
       const auto id = hook.render_context.current_view.view_id;
-      exposure[id] = hook.render_context.current_view.frame_exposure;
-      textures[id]
-        = vortex::testing::RendererPublicationProbe::EnvironmentTextures(
-          *owner, id);
-      slots[id].clear();
-      for (const auto& texture : textures[id]) {
-        const auto slot
-          = renderer->GetGraphics()
-              ->GetResourceRegistry()
-              .FindShaderVisibleIndex(*texture,
-                TextureViewDescription {
-                  .format = texture->GetDescriptor().format,
-                  .dimension = texture->GetDescriptor().texture_type,
-                });
-        CHECK_F(slot.has_value());
-        slots[id].push_back(*slot);
-      }
+      hook.recorder.OnSubmission(
+        [this, owner, id,
+          frame_exposure = hook.render_context.current_view.frame_exposure](
+          const graphics::SubmissionOutcome outcome) -> void {
+          if (outcome != graphics::SubmissionOutcome::kSubmitted) {
+            return;
+          }
+          exposure[id] = frame_exposure;
+          textures[id]
+            = vortex::testing::RendererPublicationProbe::EnvironmentTextures(
+              *owner, id);
+          slots[id].clear();
+          for (const auto& texture : textures[id]) {
+            const auto slot
+              = renderer->GetGraphics()
+                  ->GetResourceRegistry()
+                  .FindShaderVisibleIndex(*texture,
+                    TextureViewDescription {
+                      .format = texture->GetDescriptor().format,
+                      .dimension = texture->GetDescriptor().texture_type,
+                    });
+            CHECK_F(slot.has_value());
+            slots[id].push_back(*slot);
+          }
+        });
     }
   };
   auto capture = std::make_shared<Capture>(*renderer_);
@@ -599,21 +607,15 @@ NOLINT_TEST_F(
     frame::Slot {
       1U,
     });
-  FailureBackend().fail_recorder_name
-    = "EnvironmentLightingService AtmosphereSkyViewLut";
-  ASSERT_TRUE(render(0U));
+  const auto previous = capture->exposure.at(ViewId { 111U });
+  FailureBackend().fail_recorder_name = "Vortex View";
+  EXPECT_FALSE(render(0U));
   FailureBackend().fail_recorder_name.clear();
-  const auto& missing = capture->exposure.at(ViewId {
-    111U,
-  });
-  const auto report = Read<HdrSuitabilityData>(
-    *missing->suitability_buffer, ResourceStates::kShaderResource);
-  EXPECT_EQ(report.expected_products, required);
-  EXPECT_EQ(report.checked_products, required & ~(1U << 4U));
-  const auto status = Read<ExposureCompletedStatus>(
-    *missing->current_state->status_buffer, ResourceStates::kCopySource);
-  EXPECT_NE(status.first_failure_kind & 16U, 0U);
-  EXPECT_EQ(status.fp16_eligible_streak, 0U);
+  EXPECT_EQ(capture->exposure.at(ViewId { 111U }), previous);
+  const auto unchanged = Read<ExposureStateData>(
+    *previous->current_state->buffer, ResourceStates::kShaderResource);
+  EXPECT_EQ(unchanged.frame_sequence, stable_state.frame_sequence);
+  EXPECT_EQ(unchanged.displayed_scale, stable_state.displayed_scale);
   renderer_->OnFrameEnd(observer_ptr {
     &frame,
   });

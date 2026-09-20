@@ -918,7 +918,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
     .mode = oxygen::vortex::DepthPrePassMode::kOpaqueAndMasked,
     .write_velocity = true,
   });
-  depth_prepass.Execute(context, scene_textures);
+  depth_prepass.Execute(context, *graphics_->AcquireCommandRecorder(graphics_->QueueKeyFor(oxygen::graphics::QueueRole::kGraphics), "Test stage"), scene_textures);
 
   ASSERT_EQ(graphics_->draw_log_.draws.size(), 1U);
   EXPECT_EQ(graphics_->draw_log_.draws.front().vertex_num, 3U);
@@ -1154,7 +1154,7 @@ NOLINT_TEST_F(
     .render_mode = oxygen::vortex::RenderMode::kSolid,
   });
 
-  const auto result = base_pass.Execute(context, scene_textures);
+  const auto result = base_pass.Execute(context, *graphics_->AcquireCommandRecorder(graphics_->QueueKeyFor(oxygen::graphics::QueueRole::kGraphics), "Test stage"), scene_textures);
 
   EXPECT_FALSE(result.published_base_pass_products);
   EXPECT_TRUE(result.completed_velocity_for_dynamic_geometry);
@@ -1224,7 +1224,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest, BasePassWireframeRunsInForwardMode)
     .render_mode = oxygen::vortex::RenderMode::kWireframe,
   });
 
-  const auto result = base_pass.Execute(context, scene_textures);
+  const auto result = base_pass.Execute(context, *graphics_->AcquireCommandRecorder(graphics_->QueueKeyFor(oxygen::graphics::QueueRole::kGraphics), "Test stage"), scene_textures);
 
   EXPECT_FALSE(result.published_base_pass_products);
   EXPECT_TRUE(result.completed_velocity_for_dynamic_geometry);
@@ -1281,7 +1281,7 @@ NOLINT_TEST_F(
     .shading_mode = ShadingMode::kDeferred,
   });
 
-  const auto result = base_pass.Execute(context, scene_textures);
+  const auto result = base_pass.Execute(context, *graphics_->AcquireCommandRecorder(graphics_->QueueKeyFor(oxygen::graphics::QueueRole::kGraphics), "Test stage"), scene_textures);
 
   EXPECT_TRUE(result.published_base_pass_products);
   EXPECT_TRUE(result.completed_velocity_for_dynamic_geometry);
@@ -1389,7 +1389,10 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
     .shading_mode = ShadingMode::kDeferred,
   });
 
-  const auto result = base_pass->Execute(context, scene_textures);
+  const auto result = base_pass->Execute(context,
+    *graphics_->AcquireCommandRecorder(
+      graphics_->QueueKeyFor(oxygen::graphics::QueueRole::kGraphics), "Test stage"),
+    scene_textures);
 
   EXPECT_TRUE(result.published_base_pass_products);
   EXPECT_TRUE(result.completed_velocity_for_dynamic_geometry);
@@ -1481,7 +1484,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
     .shading_mode = ShadingMode::kDeferred,
   });
 
-  const auto result = base_pass.Execute(context, scene_textures);
+  const auto result = base_pass.Execute(context, *graphics_->AcquireCommandRecorder(graphics_->QueueKeyFor(oxygen::graphics::QueueRole::kGraphics), "Test stage"), scene_textures);
 
   EXPECT_FALSE(result.published_base_pass_products);
   EXPECT_FALSE(result.completed_velocity_for_dynamic_geometry);
@@ -3032,7 +3035,7 @@ NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
     = oxygen::observer_ptr<const ResolvedView> {
         &reverse_z_view,
       };
-  auto result = module.Execute(context, scene_textures);
+  auto result = module.Execute(context, *graphics->AcquireCommandRecorder(graphics->QueueKeyFor(oxygen::graphics::QueueRole::kGraphics), "Test stage"), scene_textures);
   EXPECT_TRUE(result.executed);
 
   const auto forward_z_view = MakePerspectiveResolvedView(64.0F, 64.0F, false);
@@ -3040,14 +3043,14 @@ NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
     = oxygen::observer_ptr<const ResolvedView> {
         &forward_z_view,
       };
-  result = module.Execute(context, scene_textures);
+  result = module.Execute(context, *graphics->AcquireCommandRecorder(graphics->QueueKeyFor(oxygen::graphics::QueueRole::kGraphics), "Test stage"), scene_textures);
   EXPECT_TRUE(result.executed);
 
   context.current_view.resolved_view
     = oxygen::observer_ptr<const ResolvedView> {
         &reverse_z_view,
       };
-  result = module.Execute(context, scene_textures);
+  result = module.Execute(context, *graphics->AcquireCommandRecorder(graphics->QueueKeyFor(oxygen::graphics::QueueRole::kGraphics), "Test stage"), scene_textures);
   EXPECT_TRUE(result.executed);
 
   const auto& binds = graphics->graphics_pipeline_log_.binds;
@@ -3130,7 +3133,7 @@ NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
     .shading_mode = ShadingMode::kDeferred,
   });
 
-  base_pass.Execute(context, scene_textures);
+  base_pass.Execute(context, *graphics->AcquireCommandRecorder(graphics->QueueKeyFor(oxygen::graphics::QueueRole::kGraphics), "Test stage"), scene_textures);
 
   EXPECT_EQ(std::ranges::count_if(graphics->graphics_pipeline_log_.binds,
               [](const auto& bind) -> bool {
@@ -3191,7 +3194,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
         .render_mode = oxygen::vortex::RenderMode::kSolid,
       });
       EXPECT_EQ(
-        base_pass.Execute(context, scene_textures).draw_count, draws.size());
+        base_pass.Execute(context, *graphics_->AcquireCommandRecorder(graphics_->QueueKeyFor(oxygen::graphics::QueueRole::kGraphics), "Test stage"), scene_textures).draw_count, draws.size());
       oxygen::vortex::testing::ExpectRasterStateDraws(
         graphics_->draw_log_.draws, "Vortex.BasePass.");
     }
@@ -3205,7 +3208,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
         .mode = oxygen::vortex::DepthPrePassMode::kOpaqueAndMasked,
         .write_velocity = write_velocity,
       });
-      depth_pass.Execute(context, scene_textures);
+      depth_pass.Execute(context, *graphics_->AcquireCommandRecorder(graphics_->QueueKeyFor(oxygen::graphics::QueueRole::kGraphics), "Test stage"), scene_textures);
       oxygen::vortex::testing::ExpectRasterStateDraws(
         graphics_->draw_log_.draws, "Vortex.DepthPrepass.");
     }
@@ -3275,7 +3278,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
           &frame,
         };
     graphics_->draw_log_.draws.clear();
-    const auto result = base_pass.Execute(context, scene_textures);
+    const auto result = base_pass.Execute(context, *graphics_->AcquireCommandRecorder(graphics_->QueueKeyFor(oxygen::graphics::QueueRole::kGraphics), "Test stage"), scene_textures);
     EXPECT_TRUE(result.wrote_velocity_target);
     oxygen::vortex::testing::ExpectRasterStateDraws(
       graphics_->draw_log_.draws, "Vortex.BasePass.VelocityAux.");
@@ -3320,7 +3323,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
           &view,
         };
     graphics_->draw_log_.draws.clear();
-    EXPECT_TRUE(translucency.Execute(context, scene_textures).executed);
+    EXPECT_TRUE(translucency.Execute(context, *graphics_->AcquireCommandRecorder(graphics_->QueueKeyFor(oxygen::graphics::QueueRole::kGraphics), "Test stage"), scene_textures).executed);
     oxygen::vortex::testing::ExpectRasterStateDraws(
       graphics_->draw_log_.draws, "Vortex.Translucency.");
   }
@@ -3426,27 +3429,27 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   context.frame_sequence = oxygen::frame::SequenceNumber {
     1U,
   };
-  module.Execute(context, textures);
+  module.Execute(context, *graphics_->AcquireCommandRecorder(graphics_->QueueKeyFor(oxygen::graphics::QueueRole::kGraphics), "Test stage"), textures);
   EXPECT_FALSE(module.GetPreviousOutput().available);
   module.OnFrameStart();
   context.frame_sequence = oxygen::frame::SequenceNumber {
     2U,
   };
-  module.Execute(context, textures);
+  module.Execute(context, *graphics_->AcquireCommandRecorder(graphics_->QueueKeyFor(oxygen::graphics::QueueRole::kGraphics), "Test stage"), textures);
   EXPECT_TRUE(module.GetPreviousOutput().available);
   module.OnFrameStart();
   context.frame_sequence = oxygen::frame::SequenceNumber {
     3U,
   };
   context.current_view.history_discontinuity = true;
-  module.Execute(context, textures);
+  module.Execute(context, *graphics_->AcquireCommandRecorder(graphics_->QueueKeyFor(oxygen::graphics::QueueRole::kGraphics), "Test stage"), textures);
   EXPECT_FALSE(module.GetPreviousOutput().available);
   module.OnFrameStart();
   context.frame_sequence = oxygen::frame::SequenceNumber {
     4U,
   };
   context.current_view.history_discontinuity = false;
-  module.Execute(context, textures);
+  module.Execute(context, *graphics_->AcquireCommandRecorder(graphics_->QueueKeyFor(oxygen::graphics::QueueRole::kGraphics), "Test stage"), textures);
   EXPECT_TRUE(module.GetPreviousOutput().available);
 }
 
@@ -3484,7 +3487,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
     context.current_view.view_id = ViewId {
       800U + (frame * 2U),
     };
-    module.Execute(context, first);
+    module.Execute(context, *graphics_->AcquireCommandRecorder(graphics_->QueueKeyFor(oxygen::graphics::QueueRole::kGraphics), "Test stage"), first);
     ASSERT_FALSE(graphics_->buffer_view_log_.events.empty());
     if (frame < 3U) {
       for (const auto& event : graphics_->buffer_view_log_.events) {
@@ -3502,7 +3505,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
     context.current_view.view_id = ViewId {
       801U + (frame * 2U),
     };
-    module.Execute(context, second);
+    module.Execute(context, *graphics_->AcquireCommandRecorder(graphics_->QueueKeyFor(oxygen::graphics::QueueRole::kGraphics), "Test stage"), second);
     for (const auto& snapshot : snapshots) {
       if (frame == 3U && snapshot.slot == 0U) {
         continue;
@@ -3546,7 +3549,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
     context.frame_sequence = oxygen::frame::SequenceNumber {
       1U,
     };
-    module.Execute(context, textures);
+    module.Execute(context, *graphics_->AcquireCommandRecorder(graphics_->QueueKeyFor(oxygen::graphics::QueueRole::kGraphics), "Test stage"), textures);
     const auto output = module.GetCurrentOutput();
     ASSERT_TRUE(output.available);
     ASSERT_NE(output.closest_texture, nullptr);
@@ -3558,7 +3561,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
       context.frame_sequence = oxygen::frame::SequenceNumber {
         2U,
       };
-      module.Execute(context, textures);
+      module.Execute(context, *graphics_->AcquireCommandRecorder(graphics_->QueueKeyFor(oxygen::graphics::QueueRole::kGraphics), "Test stage"), textures);
       EXPECT_TRUE(module.GetPreviousOutput().available);
       module.RemoveViewState(first_view_id_);
       EXPECT_FALSE(module.GetCurrentOutput().available);

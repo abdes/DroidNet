@@ -72,25 +72,13 @@ public:
   bool fail_next_frame_recorder {
     false,
   };
-  bool fail_next_fallback_recorder {
-    false,
-  };
   bool fail_status_recorder {
     false,
   };
   std::string fail_recorder_name;
-  bool defer_tonemap_recorders {
-    false,
-  };
-  std::vector<std::shared_ptr<const graphics::CommandList>>
-    deferred_tonemap_recordings;
-  bool fail_next_suitability_recorder {
-    false,
-  };
-  auto AcquireCommandRecorder(
-    const graphics::QueueKey& queue, std::string_view name, bool immediate)
-    -> std::unique_ptr<graphics::CommandRecorder,
-      std::function<void(graphics::CommandRecorder*)>> override;
+  auto AcquireCommandRecorder(const graphics::QueueKey& queue,
+    std::string_view name, graphics::SubmissionPolicy policy)
+    -> graphics::CommandRecording override;
 };
 
 } // namespace oxygen::vortex::testing::exposure

@@ -47,6 +47,10 @@ namespace graphics {
 } // namespace graphics
 } // namespace oxygen
 
+namespace oxygen::graphics {
+class CommandRecorder;
+}
+
 namespace oxygen::vortex {
 
 struct RenderContext;
@@ -201,7 +205,8 @@ public:
     frame::Slot slot, std::optional<glm::uvec2> frame_extent);
   OXGN_VRTX_API void OnPreRender(const engine::FrameContext& frame);
   OXGN_VRTX_API void PrimePreparedViews(RenderContext& ctx);
-  OXGN_VRTX_API auto PrepareExposureDomain(RenderContext& ctx) -> bool;
+  OXGN_VRTX_API auto PrepareExposureDomain(
+    RenderContext& ctx, graphics::CommandRecorder& recorder) -> bool;
   OXGN_VRTX_API void PrimePreparedView(RenderContext& ctx);
   OXGN_VRTX_API void RenderViewFamily(RenderContext& ctx);
   OXGN_VRTX_API auto OnRender(RenderContext& ctx) -> bool;
@@ -276,7 +281,8 @@ private:
   OXGN_VRTX_NDAPI auto BuildSceneTextureLeaseKey(const RenderContext& ctx) const
     -> SceneTextureLeaseKey;
   OXGN_VRTX_API void BindPreparedView(RenderContext& ctx);
-  OXGN_VRTX_API void RenderCurrentView(RenderContext& ctx);
+  OXGN_VRTX_API auto RenderCurrentView(
+    RenderContext& ctx, graphics::CommandRecorder& recorder) -> bool;
   OXGN_VRTX_API auto EnsureArtifactTexture(RenderContext& ctx,
     ExtractArtifact& artifact, std::string_view debug_name,
     const graphics::Texture& source, std::optional<Format> format = {})
@@ -287,13 +293,16 @@ private:
     const graphics::TextureViewDescription& desc) -> std::uint32_t;
   OXGN_VRTX_NDAPI auto ResolveShadingModeForCurrentView(
     const RenderContext& ctx) const -> ShadingMode;
-  OXGN_VRTX_API auto RenderDebugVisualization(
-    RenderContext& ctx, const SceneTextures& scene_textures) -> bool;
-  OXGN_VRTX_API void RenderDeferredLighting(
-    RenderContext& ctx, const SceneTextures& scene_textures);
+  OXGN_VRTX_API auto RenderDebugVisualization(RenderContext& ctx,
+    graphics::CommandRecorder& recorder, const SceneTextures& scene_textures)
+    -> bool;
+  OXGN_VRTX_API void RenderDeferredLighting(RenderContext& ctx,
+    graphics::CommandRecorder& recorder, const SceneTextures& scene_textures);
   OXGN_VRTX_API void ResolveSceneColor(RenderContext& ctx,
+    graphics::CommandRecorder& recorder,
     const PostProcessService::PreparedExposure* prepared = nullptr);
-  OXGN_VRTX_API void PostRenderCleanup(RenderContext& ctx);
+  OXGN_VRTX_API void PostRenderCleanup(
+    RenderContext& ctx, graphics::CommandRecorder& recorder);
 
   Renderer& renderer_;
   Graphics& gfx_;

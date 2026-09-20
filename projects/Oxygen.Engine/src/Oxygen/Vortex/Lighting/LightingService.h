@@ -16,6 +16,10 @@
 #include <Oxygen/Vortex/Types/ShadowFrameBindings.h>
 #include <Oxygen/Vortex/api_export.h>
 
+namespace oxygen::graphics {
+class CommandRecorder;
+}
+
 namespace oxygen::vortex {
 
 struct RenderContext;
@@ -23,12 +27,12 @@ class Renderer;
 class SceneTextures;
 
 namespace lighting {
-class DeferredLightPass;
-namespace internal {
-class DeferredLightPacketBuilder;
-class ForwardLightPublisher;
-class LightGridBuilder;
-} // namespace internal
+  class DeferredLightPass;
+  namespace internal {
+    class DeferredLightPacketBuilder;
+    class ForwardLightPublisher;
+    class LightGridBuilder;
+  } // namespace internal
 } // namespace lighting
 
 class LightingService {
@@ -87,7 +91,7 @@ public:
     frame::SequenceNumber sequence, frame::Slot slot) -> void;
   OXGN_VRTX_API auto BuildLightGrid(const FrameLightingInputs& inputs) -> void;
   OXGN_VRTX_API auto RenderDeferredLighting(RenderContext& ctx,
-    const SceneTextures& scene_textures,
+    graphics::CommandRecorder& recorder, const SceneTextures& scene_textures,
     const FrameLightSelection& frame_light_set,
     const ShadowFrameBindings* directional_shadow_bindings,
     const graphics::Texture* directional_shadow_surface,
@@ -95,17 +99,17 @@ public:
     const graphics::Texture* point_shadow_surface,
     bool static_sky_light_available) -> void;
 
-  [[nodiscard]] OXGN_VRTX_API auto InspectForwardLightBindings(ViewId view_id) const
-    -> const LightingFrameBindings*;
-  [[nodiscard]] OXGN_VRTX_API auto ResolveLightingFrameSlot(ViewId view_id) const
-    -> ShaderVisibleIndex;
+  [[nodiscard]] OXGN_VRTX_API auto InspectForwardLightBindings(
+    ViewId view_id) const -> const LightingFrameBindings*;
+  [[nodiscard]] OXGN_VRTX_API auto ResolveLightingFrameSlot(
+    ViewId view_id) const -> ShaderVisibleIndex;
   [[nodiscard]] OXGN_VRTX_NDAPI auto GetLastGridBuildState() const noexcept
     -> const GridBuildState&
   {
     return last_grid_build_state_;
   }
-  [[nodiscard]] OXGN_VRTX_NDAPI auto GetLastDeferredLightingState() const noexcept
-    -> const DeferredLightingState&
+  [[nodiscard]] OXGN_VRTX_NDAPI auto
+  GetLastDeferredLightingState() const noexcept -> const DeferredLightingState&
   {
     return last_deferred_lighting_state_;
   }

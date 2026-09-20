@@ -11,6 +11,7 @@
 #include <cstring>
 #include <span>
 #include <stdexcept>
+#include <unordered_set>
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
@@ -25,11 +26,11 @@
 #include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Texture.h>
-#include <Oxygen/Profiling/CpuProfileScope.h>
-#include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
+#include <Oxygen/Profiling/CpuProfileScope.h>
+#include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Vortex/Environment/SceneBackground.h>
 #include <Oxygen/Vortex/Internal/PerViewStructuredPublisher.h>
 #include <Oxygen/Vortex/Internal/ViewportClamp.h>
@@ -47,6 +48,21 @@ namespace {
 
   constexpr std::uint32_t kHistogramWordCount = 264U;
   constexpr std::uint32_t kHistogramGridLimit = 512U;
+  constexpr std::uint32_t kTextureThreadGroupExtent = 8U;
+
+  //! A discarded writer invalidates only the certificate it attempted.
+  void RecordCertificate(graphics::CommandRecorder& recorder,
+    std::unordered_set<const FrameExposureResources*>& certificates,
+    const FrameExposureResources& frame)
+  {
+    recorder.OnSubmission([&certificates, frame = &frame](
+                            const graphics::SubmissionOutcome outcome) -> void {
+      if (outcome == graphics::SubmissionOutcome::kDiscarded) {
+        certificates.erase(frame);
+      }
+    });
+    certificates.insert(&frame);
+  }
   auto RangeTypeToViewType(const bindless_d3d12::RangeType type)
     -> graphics::ResourceViewType
   {
@@ -91,7 +107,7 @@ namespace {
       "ExposurePass: cannot track '{}' without a known or declared initial "
       "state",
       texture.GetName());
-    recorder.BeginTrackingResourceState(texture, initial);
+    recorder.BeginTrackingResourceState(texture, initial, false);
   }
 
   auto IsSceneRangeInputValid(const graphics::Texture& source,
@@ -306,11 +322,11 @@ auto ExposurePass::OnFrameStart(
   frame_states_[slot.get()].clear();
   frame_bindings_[slot.get()].clear();
   resolved_frames_.clear();
-  submitted_suitability_.clear();
-  submitted_conversion_.clear();
-  submitted_composition_input_.clear();
-  submitted_opaque_ap_error_.clear();
-  submitted_filter_gradients_.clear();
+  recorded_suitability_.clear();
+  recorded_conversion_.clear();
+  recorded_composition_input_.clear();
+  recorded_opaque_ap_error_.clear();
+  recorded_filter_gradients_.clear();
   prior_states_.clear();
   bootstrap_states_.clear();
   // Retired frame records must not keep state/history leases out of the reuse
@@ -472,15 +488,15 @@ auto ExposurePass::AcquireFrame(const bool fp32_only)
 }
 
 auto ExposurePass::ResolveFrame(RenderContext& ctx,
-                                const ResolvedPostProcessConfig& config,
-                                const FrameInputs& inputs) -> FrameLease
+  graphics::CommandRecorder& recorder, const ResolvedPostProcessConfig& config,
+  const FrameInputs& inputs) -> FrameLease
 {
   profiling::CpuProfileScope cpu_scope(
     "Vortex.PostProcess.Exposure.FrameResolve",
     profiling::ProfileCategory::kPass,
     profiling::Vars(profiling::Var("view", ctx.current_view.view_id.get())));
   CHECK_F(!inputs.transition
-          || inputs.transition->target == ctx.current_view.view_state_handle);
+    || inputs.transition->target == ctx.current_view.view_state_handle);
   CHECK_F(!inputs.preserve_fp32_candidate_p || inputs.use_fp32);
   CHECK_F(!inputs.fp32_only
     || (inputs.use_fp32 && !inputs.preserve_fp32_candidate_p
@@ -492,9 +508,9 @@ auto ExposurePass::ResolveFrame(RenderContext& ctx,
   EnsurePipelines();
   PreparePublishers(ctx);
   const auto key = std::pair { ctx.current_view.view_id,
-                               ctx.current_view.view_state_handle };
+    ctx.current_view.view_state_handle };
   if (const auto found = resolved_frames_.find(key);
-      found != resolved_frames_.end()) {
+    found != resolved_frames_.end()) {
     return found->second;
   }
   const bool sharing
@@ -503,8 +519,8 @@ auto ExposurePass::ResolveFrame(RenderContext& ctx,
     = sharing ? inputs.source->handle : ctx.current_view.view_state_handle;
   const auto lifetime = sharing ? inputs.source->lifetime : inputs.lifetime;
   CHECK_F(!sharing
-          || (owner != CompositionView::kInvalidViewStateHandle
-              && owner != ctx.current_view.view_state_handle));
+    || (owner != CompositionView::kInvalidViewStateHandle
+      && owner != ctx.current_view.view_state_handle));
   auto frame = AcquireFrame(inputs.fp32_only);
   frame->current_state = AcquireState();
   frame->current_state->owner_lifetime = inputs.lifetime;
@@ -514,17 +530,17 @@ auto ExposurePass::ResolveFrame(RenderContext& ctx,
   if (!config.Settings().temporary_unit_exposure) {
     const auto own = prior_states_.find(ctx.current_view.view_state_handle);
     if (own != prior_states_.end()
-        && own->second->owner_lifetime == inputs.lifetime
-        && own->second->borrowed_from == frame->current_state->borrowed_from
-        && own->second->borrowed_lifetime
-          == frame->current_state->borrowed_lifetime) {
+      && own->second->owner_lifetime == inputs.lifetime
+      && own->second->borrowed_from == frame->current_state->borrowed_from
+      && own->second->borrowed_lifetime
+        == frame->current_state->borrowed_lifetime) {
       frame->precision_history = own->second;
     }
   }
   if (!config.Settings().temporary_unit_exposure) {
     if (const auto prior = prior_states_.find(owner);
-        prior != prior_states_.end()
-        && prior->second->owner_lifetime == lifetime) {
+      prior != prior_states_.end()
+      && prior->second->owner_lifetime == lifetime) {
       frame->selected_history = prior->second;
     }
   }
@@ -532,19 +548,19 @@ auto ExposurePass::ResolveFrame(RenderContext& ctx,
   if (sharing && !frame->selected_history) {
     source_fallback = true;
     if (const auto prior = bootstrap_states_.find(owner);
-        prior != bootstrap_states_.end()
-        && prior->second->owner_lifetime == lifetime) {
+      prior != bootstrap_states_.end()
+      && prior->second->owner_lifetime == lifetime) {
       frame->selected_history = prior->second;
     } else {
       frame->selected_history
-        = RecordState(ctx, inputs.source->config,
-                      Inputs { .metering_available = false,
-                               .transition = inputs.source->transition,
-                               .rejection = inputs.source->rejection,
-                               .lifetime = lifetime },
-                      {}, {}, true);
+        = RecordState(ctx, recorder, inputs.source->config,
+          Inputs { .metering_available = false,
+            .transition = inputs.source->transition,
+            .rejection = inputs.source->rejection,
+            .lifetime = lifetime },
+          {}, {}, true);
       if (frame->selected_history) {
-        bootstrap_states_.insert_or_assign(owner, frame->selected_history);
+        CacheBootstrap(recorder, owner, frame->selected_history);
       }
     }
     if (!frame->selected_history) {
@@ -556,48 +572,41 @@ auto ExposurePass::ResolveFrame(RenderContext& ctx,
     frame->qualified_candidate = inputs.qualified_candidate;
   }
   frame_bindings_[ctx.frame_slot.get()].push_back(frame);
-  auto recorder = gfx->AcquireCommandRecorder(
-    gfx->QueueKeyFor(graphics::QueueRole::kGraphics), "Vortex Exposure Frame");
-  if (!recorder) {
-    return {};
-  }
-  renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(*recorder);
-  const auto recording = recorder->GetCommandListForInspection();
   {
-    graphics::GpuEventScope phase_scope(
-      *recorder, "Vortex.PostProcess.Exposure.FrameResolve",
+    graphics::GpuEventScope phase_scope(recorder,
+      "Vortex.PostProcess.Exposure.FrameResolve",
       profiling::ProfileGranularity::kTelemetry,
       profiling::ProfileCategory::kCompute,
       profiling::Vars(profiling::Var("view", ctx.current_view.view_id.get())));
     const auto track
       = [&](const graphics::Buffer& buffer, graphics::ResourceStates state) {
-          if (!recorder->IsResourceTracked(buffer)
-              && !recorder->AdoptKnownResourceState(buffer)) {
-            recorder->BeginTrackingResourceState(
+          if (!recorder.IsResourceTracked(buffer)
+            && !recorder.AdoptKnownResourceState(buffer)) {
+            recorder.BeginTrackingResourceState(
               buffer, graphics::ResourceStates::kCommon, false);
           }
-          recorder->RequireResourceState(buffer, state);
+          recorder.RequireResourceState(buffer, state);
         };
     track(*frame->buffer, graphics::ResourceStates::kUnorderedAccess);
     track(*frame->current_state->status_buffer,
-          graphics::ResourceStates::kUnorderedAccess);
+      graphics::ResourceStates::kUnorderedAccess);
     track(*frame->current_state->buffer,
-          graphics::ResourceStates::kUnorderedAccess);
+      graphics::ResourceStates::kUnorderedAccess);
     if (frame->selected_history) {
       track(*frame->selected_history->buffer,
-            graphics::ResourceStates::kShaderResource);
+        graphics::ResourceStates::kShaderResource);
     }
     if (frame->qualified_candidate) {
       track(*frame->qualified_candidate->buffer,
-            graphics::ResourceStates::kShaderResource);
+        graphics::ResourceStates::kShaderResource);
     }
     const auto& resolved = config.Exposure();
     auto seed = std::optional<float> {};
     if (!sharing && !inputs.rejection && inputs.transition
-        && inputs.transition->seed_ev
-        && inputs.transition->policy == ExposureTransitionPolicy::kSeedFromEv100
-        && resolved.authored.enabled
-        && resolved.authored.mode == engine::ExposureMode::kAuto) {
+      && inputs.transition->seed_ev
+      && inputs.transition->policy == ExposureTransitionPolicy::kSeedFromEv100
+      && resolved.authored.enabled
+      && resolved.authored.mode == engine::ExposureMode::kAuto) {
       const auto resolved_seed = scene::ResolveExposureSeedLogGain(
         resolved, *inputs.transition->seed_ev);
       if (resolved_seed) {
@@ -625,44 +634,53 @@ auto ExposurePass::ResolveFrame(RenderContext& ctx,
       .flags = flags,
       .controls = (seed.has_value() ? 1U : 0U)
         | (resolved.authored.enabled
-               && resolved.authored.mode == engine::ExposureMode::kAuto
-               && resolved.authored.target_luminance == 0.0F
-             ? 2U
-             : 0U)
+              && resolved.authored.mode == engine::ExposureMode::kAuto
+              && resolved.authored.target_luminance == 0.0F
+            ? 2U
+            : 0U)
         | (inputs.preserve_fp32_candidate_p ? 4U : 0U),
       .current_state_srv = frame->current_state->srv_index.get(),
       .status_uav = frame->current_state->status_uav_index.get(),
     };
-    const auto slot = frame_constants_publisher_->Publish(
-      ctx.current_view.view_id,
-      std::bit_cast<std::array<std::uint32_t, 12U>>(constants));
+    const auto slot
+      = frame_constants_publisher_->Publish(ctx.current_view.view_id,
+        std::bit_cast<std::array<std::uint32_t, 12U>>(constants));
     CHECK_F(slot.IsValid());
-    recorder->FlushBarriers();
-    recorder->SetPipelineState(*frame_pipeline_);
-    recorder->SetComputeRoot32BitConstant(
+    recorder.FlushBarriers();
+    recorder.SetPipelineState(*frame_pipeline_);
+    recorder.SetComputeRoot32BitConstant(
       static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants), 0U,
       0U);
-    recorder->SetComputeRoot32BitConstant(
+    recorder.SetComputeRoot32BitConstant(
       static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants),
       slot.get(), 1U);
-    recorder->Dispatch(1U, 1U, 1U);
-    recorder->RequireResourceStateFinal(
+    recorder.Dispatch(1U, 1U, 1U);
+    recorder.RequireResourceState(
       *frame->buffer, graphics::ResourceStates::kShaderResource);
-    recorder->RequireResourceStateFinal(
+    recorder.RequireResourceState(
       *frame->current_state->buffer, graphics::ResourceStates::kShaderResource);
   }
-  recorder.reset();
-  if (!recording || !recording->IsSubmitted()) {
-    return {};
-  }
+  recorder.OnSubmission(
+    [this, key, frame](const graphics::SubmissionOutcome outcome) -> void {
+      if (outcome == graphics::SubmissionOutcome::kDiscarded) {
+        const auto found = resolved_frames_.find(key);
+        if (found != resolved_frames_.end() && found->second == frame) {
+          resolved_frames_.erase(found);
+        }
+        recorded_suitability_.erase(frame.get());
+        recorded_conversion_.erase(frame.get());
+        recorded_composition_input_.erase(frame.get());
+        recorded_opaque_ap_error_.erase(frame.get());
+        recorded_filter_gradients_.erase(frame.get());
+      }
+    });
   resolved_frames_.emplace(key, frame);
   return frame;
 }
 
 auto ExposurePass::RestoreFrameFallback(RenderContext& ctx,
-                                        const ResolvedPostProcessConfig& config,
-                                        const FrameResources& frame,
-                                        StateLease fallback) -> bool
+  graphics::CommandRecorder& recorder, const ResolvedPostProcessConfig& config,
+  const FrameResources& frame, StateLease fallback) -> bool
 {
   profiling::CpuProfileScope cpu_scope(
     "Vortex.PostProcess.Exposure.FrameFallback",
@@ -675,32 +693,24 @@ auto ExposurePass::RestoreFrameFallback(RenderContext& ctx,
   if (!gfx) {
     return false;
   }
-  auto recorder = gfx->AcquireCommandRecorder(
-    gfx->QueueKeyFor(graphics::QueueRole::kGraphics),
-    "Vortex Exposure Fallback");
-  if (!recorder) {
-    return false;
-  }
-  renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(*recorder);
-  const auto recording = recorder->GetCommandListForInspection();
   {
-    graphics::GpuEventScope phase_scope(
-      *recorder, "Vortex.PostProcess.Exposure.FrameFallback",
+    graphics::GpuEventScope phase_scope(recorder,
+      "Vortex.PostProcess.Exposure.FrameFallback",
       profiling::ProfileGranularity::kTelemetry,
       profiling::ProfileCategory::kCompute,
       profiling::Vars(profiling::Var("view", ctx.current_view.view_id.get())));
     const auto track
       = [&](const graphics::Buffer& buffer, graphics::ResourceStates state) {
-          if (!recorder->IsResourceTracked(buffer)
-              && !recorder->AdoptKnownResourceState(buffer)) {
-            recorder->BeginTrackingResourceState(
+          if (!recorder.IsResourceTracked(buffer)
+            && !recorder.AdoptKnownResourceState(buffer)) {
+            recorder.BeginTrackingResourceState(
               buffer, graphics::ResourceStates::kCommon, false);
           }
-          recorder->RequireResourceState(buffer, state);
+          recorder.RequireResourceState(buffer, state);
         };
     track(*fallback->buffer, graphics::ResourceStates::kShaderResource);
-    track(*frame.current_state->buffer,
-          graphics::ResourceStates::kUnorderedAccess);
+    track(
+      *frame.current_state->buffer, graphics::ResourceStates::kUnorderedAccess);
     const auto& settings = config.Exposure().authored;
     const auto constants = ExposureFrameConstants {
       .current_state_uav = frame.current_state->uav_index.get(),
@@ -711,53 +721,56 @@ auto ExposurePass::RestoreFrameFallback(RenderContext& ctx,
         ? 2U
         : 0U,
     };
-    const auto slot = frame_constants_publisher_->Publish(
-      ctx.current_view.view_id,
-      std::bit_cast<std::array<std::uint32_t, 12U>>(constants));
+    const auto slot
+      = frame_constants_publisher_->Publish(ctx.current_view.view_id,
+        std::bit_cast<std::array<std::uint32_t, 12U>>(constants));
     CHECK_F(slot.IsValid());
-    recorder->FlushBarriers();
-    recorder->SetPipelineState(*fallback_pipeline_);
-    recorder->SetComputeRoot32BitConstant(
+    recorder.FlushBarriers();
+    recorder.SetPipelineState(*fallback_pipeline_);
+    recorder.SetComputeRoot32BitConstant(
       static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants), 0U,
       0U);
-    recorder->SetComputeRoot32BitConstant(
+    recorder.SetComputeRoot32BitConstant(
       static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants),
       slot.get(), 1U);
-    recorder->Dispatch(1U, 1U, 1U);
-    recorder->RequireResourceStateFinal(
+    recorder.Dispatch(1U, 1U, 1U);
+    recorder.RequireResourceState(
       *frame.current_state->buffer, graphics::ResourceStates::kShaderResource);
   }
-  recorder.reset();
   frame_states_[ctx.frame_slot.get()].push_back(std::move(fallback));
-  return recording && recording->IsSubmitted();
+  return true;
 }
 
 auto ExposurePass::CapturePreEnvironmentRange(RenderContext& ctx,
-  const FrameLease& frame, const graphics::Texture& source,
-  const ShaderVisibleIndex source_srv) -> bool
+  graphics::CommandRecorder& recorder, const FrameLease& frame,
+  const graphics::Texture& source, const ShaderVisibleIndex source_srv) -> bool
 {
-  return RecordSceneRange(ctx, frame, source, source_srv, true);
+  return RecordSceneRange(ctx, recorder, frame, source, source_srv, true);
 }
 
 auto ExposurePass::CheckSceneColorRange(RenderContext& ctx,
-  const FrameLease& frame, const graphics::Texture& source,
-  const ShaderVisibleIndex source_srv) -> bool
+  graphics::CommandRecorder& recorder, const FrameLease& frame,
+  const graphics::Texture& source, const ShaderVisibleIndex source_srv) -> bool
 {
-  return RecordSceneRange(ctx, frame, source, source_srv, false);
+  return RecordSceneRange(ctx, recorder, frame, source, source_srv, false);
 }
 
-auto ExposurePass::RecordSceneRange(RenderContext& ctx, const FrameLease& frame,
-                                    const graphics::Texture& source,
-                                    const ShaderVisibleIndex source_srv,
-                                    const bool capture_opaque_input) -> bool
+auto ExposurePass::RecordSceneRange(RenderContext& ctx,
+  graphics::CommandRecorder& recorder, const FrameLease& frame,
+  const graphics::Texture& source, const ShaderVisibleIndex source_srv,
+  const bool capture_opaque_input) -> bool
 {
-  profiling::CpuProfileScope cpu_scope(
-    "Vortex.PostProcess.Exposure.SceneRange", profiling::ProfileCategory::kPass,
+  if (frame) {
+    TrackFrameRecording(recorder, *frame);
+  }
+
+  profiling::CpuProfileScope cpu_scope("Vortex.PostProcess.Exposure.SceneRange",
+    profiling::ProfileCategory::kPass,
     profiling::Vars(profiling::Var("view", ctx.current_view.view_id.get())));
   CHECK_NOTNULL_F(frame.get());
   if (capture_opaque_input) {
-    submitted_composition_input_.erase(frame.get());
-    submitted_opaque_ap_error_.erase(frame.get());
+    recorded_composition_input_.erase(frame.get());
+    recorded_opaque_ap_error_.erase(frame.get());
   }
   if (!IsSceneRangeInputValid(source, source_srv)) {
     return false;
@@ -768,23 +781,12 @@ auto ExposurePass::RecordSceneRange(RenderContext& ctx, const FrameLease& frame,
   }
   PreparePublishers(ctx);
   EnsurePipelines();
-  auto recorder = gfx->AcquireCommandRecorder(
-    gfx->QueueKeyFor(graphics::QueueRole::kGraphics),
-    capture_opaque_input ? "Vortex Exposure PreEnvironment Range"
-                         : "Vortex Exposure Final Scene Range");
-  if (!recorder) {
-    return false;
-  }
-  renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(*recorder);
-  const auto recording = recorder->GetCommandListForInspection();
   RecordSceneRangeCommands(
-    ctx, *recorder, *frame, source, source_srv, capture_opaque_input);
-  recorder.reset();
-  const bool submitted = recording && recording->IsSubmitted();
-  if (submitted && capture_opaque_input) {
-    submitted_composition_input_.insert(frame.get());
+    ctx, recorder, *frame, source, source_srv, capture_opaque_input);
+  if (capture_opaque_input) {
+    RecordCertificate(recorder, recorded_composition_input_, *frame);
   }
-  return submitted;
+  return true;
 }
 
 auto ExposurePass::RecordSceneRangeCommands(RenderContext& ctx,
@@ -827,29 +829,38 @@ auto ExposurePass::RecordSceneRangeCommands(RenderContext& ctx,
     recorder.RequireResourceState(
       status, graphics::ResourceStates::kUnorderedAccess);
     recorder.FlushBarriers();
-    recorder.SetPipelineState(*suitability_pipelines_[index]);
+    recorder.SetPipelineState(*suitability_pipelines_.at(index));
     recorder.SetComputeRoot32BitConstant(
       static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants), 0U,
       0U);
     recorder.SetComputeRoot32BitConstant(
       static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants),
       slot.get(), 1U);
-    recorder.Dispatch(index == 0U ? 1U : (desc.width + 7U) / 8U,
-      index == 0U ? 1U : (desc.height + 7U) / 8U, 1U);
+    recorder.Dispatch(index == 0U
+        ? 1U
+        : (desc.width + kTextureThreadGroupExtent - 1U)
+          / kTextureThreadGroupExtent,
+      index == 0U ? 1U
+                  : (desc.height + kTextureThreadGroupExtent - 1U)
+          / kTextureThreadGroupExtent,
+      1U);
   }
 }
 
 auto ExposurePass::PropagateOpaqueApError(RenderContext& ctx,
-                                          const FrameLease& frame,
-                                          const float scattering_strength)
-  -> bool
+  graphics::CommandRecorder& recorder, const FrameLease& frame,
+  const float scattering_strength) -> bool
 {
+  if (frame) {
+    TrackFrameRecording(recorder, *frame);
+  }
+
   profiling::CpuProfileScope cpu_scope(
     "Vortex.PostProcess.Exposure.OpaqueApError",
     profiling::ProfileCategory::kPass,
     profiling::Vars(profiling::Var("view", ctx.current_view.view_id.get())));
   CHECK_NOTNULL_F(frame.get());
-  submitted_opaque_ap_error_.erase(frame.get());
+  recorded_opaque_ap_error_.erase(frame.get());
   if (!HasPreEnvironmentRange(frame)) {
     return false;
   }
@@ -859,33 +870,27 @@ auto ExposurePass::PropagateOpaqueApError(RenderContext& ctx,
   }
   PreparePublishers(ctx);
   EnsurePipelines();
-  auto recorder = gfx->AcquireCommandRecorder(
-    gfx->QueueKeyFor(graphics::QueueRole::kGraphics),
-    "Vortex Exposure Opaque AP Error");
-  if (!recorder) {
-    return false;
-  }
-  renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(*recorder);
-  const auto recording = recorder->GetCommandListForInspection();
   {
-    graphics::GpuEventScope phase_scope(
-      *recorder, "Vortex.PostProcess.Exposure.OpaqueApError",
+    graphics::GpuEventScope phase_scope(recorder,
+      "Vortex.PostProcess.Exposure.OpaqueApError",
       profiling::ProfileGranularity::kTelemetry,
       profiling::ProfileCategory::kCompute,
       profiling::Vars(profiling::Var("view", ctx.current_view.view_id.get())));
     auto& status = *frame->current_state->status_buffer;
-    if (!recorder->AdoptKnownResourceState(status)) {
-      recorder->BeginTrackingResourceState(
+    if (!recorder.IsResourceTracked(status)
+      && !recorder.AdoptKnownResourceState(status)) {
+      recorder.BeginTrackingResourceState(
         status, graphics::ResourceStates::kCommon, false);
     }
-    if (!recorder->AdoptKnownResourceState(*frame->buffer)) {
-      recorder->BeginTrackingResourceState(
+    if (!recorder.IsResourceTracked(*frame->buffer)
+      && !recorder.AdoptKnownResourceState(*frame->buffer)) {
+      recorder.BeginTrackingResourceState(
         *frame->buffer, graphics::ResourceStates::kCommon, false);
     }
-    recorder->RequireResourceState(status,
-                                   graphics::ResourceStates::kUnorderedAccess);
-    recorder->RequireResourceState(*frame->buffer,
-                                   graphics::ResourceStates::kShaderResource);
+    recorder.RequireResourceState(
+      status, graphics::ResourceStates::kUnorderedAccess);
+    recorder.RequireResourceState(
+      *frame->buffer, graphics::ResourceStates::kShaderResource);
     auto constants = std::array<std::uint32_t, 32U> {};
     constants[0] = frame->current_state->status_uav_index.get();
     constants[2] = frame->srv_index.get();
@@ -894,22 +899,20 @@ auto ExposurePass::PropagateOpaqueApError(RenderContext& ctx,
     const auto slot = suitability_constants_publisher_->Publish(
       ctx.current_view.view_id, constants);
     CHECK_F(slot.IsValid());
-    recorder->FlushBarriers();
-    recorder->SetPipelineState(*suitability_pipelines_[2]);
-    recorder->SetComputeRoot32BitConstant(
+    recorder.FlushBarriers();
+    recorder.SetPipelineState(*suitability_pipelines_.at(2));
+    recorder.SetComputeRoot32BitConstant(
       static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants), 0U,
       0U);
-    recorder->SetComputeRoot32BitConstant(
+    recorder.SetComputeRoot32BitConstant(
       static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants),
       slot.get(), 1U);
-    recorder->Dispatch(1U, 1U, 1U);
+    recorder.Dispatch(1U, 1U, 1U);
   }
-  recorder.reset();
-  const bool submitted = recording && recording->IsSubmitted();
-  if (submitted) {
-    submitted_opaque_ap_error_.insert(frame.get());
+  {
+    RecordCertificate(recorder, recorded_opaque_ap_error_, *frame);
   }
-  return submitted;
+  return true;
 }
 
 auto ExposurePass::HasFilterGradients(
@@ -918,16 +921,20 @@ auto ExposurePass::HasFilterGradients(
   if (!frame || (product != 5U && product != 6U && product != 10U)) {
     return false;
   }
-  const auto found = submitted_filter_gradients_.find(frame.get());
+  const auto found = recorded_filter_gradients_.find(frame.get());
   const auto index = product == 5U ? 0U : product == 6U ? 1U : 2U;
-  return found != submitted_filter_gradients_.end()
+  return found != recorded_filter_gradients_.end()
     && found->second[index].texture != nullptr;
 }
 
 auto ExposurePass::GatherFilterGradients(RenderContext& ctx,
-                                         const FrameLease& frame,
-                                         const HdrProduct& product) -> bool
+  graphics::CommandRecorder& recorder, const FrameLease& frame,
+  const HdrProduct& product) -> bool
 {
+  if (frame) {
+    TrackFrameRecording(recorder, *frame);
+  }
+
   profiling::CpuProfileScope cpu_scope(
     "Vortex.PostProcess.Exposure.FilterGradients",
     profiling::ProfileCategory::kPass,
@@ -937,19 +944,20 @@ auto ExposurePass::GatherFilterGradients(RenderContext& ctx,
     return false;
   }
   const auto index = product.id == 5U ? 0U : product.id == 6U ? 1U : 2U;
-  submitted_filter_gradients_[frame.get()][index] = {};
+  recorded_filter_gradients_.try_emplace(frame.get()).first->second.at(index)
+    = {};
   if (!product.texture || !product.srv.IsValid()) {
     return false;
   }
   const auto& desc = product.texture->GetDescriptor();
   if ((desc.format != Format::kRGBA32Float
-       && desc.format != Format::kRGBA16Float)
-      || (desc.texture_type != TextureType::kTexture2D
-          && desc.texture_type != TextureType::kTexture3D)
-      || desc.sample_count != 1U || desc.width == 0U || desc.height == 0U
-      || desc.depth == 0U
-      || std::uint64_t(desc.width) * desc.height * desc.depth
-        > std::numeric_limits<std::uint32_t>::max()) {
+        && desc.format != Format::kRGBA16Float)
+    || (desc.texture_type != TextureType::kTexture2D
+      && desc.texture_type != TextureType::kTexture3D)
+    || desc.sample_count != 1U || desc.width == 0U || desc.height == 0U
+    || desc.depth == 0U
+    || std::uint64_t(desc.width) * desc.height * desc.depth
+      > std::numeric_limits<std::uint32_t>::max()) {
     return false;
   }
   auto gfx = renderer_.GetGraphics();
@@ -958,34 +966,28 @@ auto ExposurePass::GatherFilterGradients(RenderContext& ctx,
   }
   PreparePublishers(ctx);
   EnsurePipelines();
-  auto recorder = gfx->AcquireCommandRecorder(
-    gfx->QueueKeyFor(graphics::QueueRole::kGraphics),
-    "Vortex Exposure Filter Gradients");
-  if (!recorder) {
-    return false;
-  }
-  renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(*recorder);
-  const auto recording = recorder->GetCommandListForInspection();
   {
-    graphics::GpuEventScope phase_scope(
-      *recorder, "Vortex.PostProcess.Exposure.FilterGradients",
+    graphics::GpuEventScope phase_scope(recorder,
+      "Vortex.PostProcess.Exposure.FilterGradients",
       profiling::ProfileGranularity::kTelemetry,
       profiling::ProfileCategory::kCompute,
       profiling::Vars(profiling::Var("view", ctx.current_view.view_id.get())));
     auto& status = *frame->current_state->status_buffer;
-    if (!recorder->AdoptKnownResourceState(status)) {
-      recorder->BeginTrackingResourceState(
+    if (!recorder.IsResourceTracked(status)
+      && !recorder.AdoptKnownResourceState(status)) {
+      recorder.BeginTrackingResourceState(
         status, graphics::ResourceStates::kCommon, false);
     }
-    if (!recorder->AdoptKnownResourceState(*frame->buffer)) {
-      recorder->BeginTrackingResourceState(
+    if (!recorder.IsResourceTracked(*frame->buffer)
+      && !recorder.AdoptKnownResourceState(*frame->buffer)) {
+      recorder.BeginTrackingResourceState(
         *frame->buffer, graphics::ResourceStates::kCommon, false);
     }
-    TrackTextureFromKnownOrInitial(*recorder, *product.texture);
-    recorder->RequireResourceState(*product.texture,
-                                   graphics::ResourceStates::kShaderResource);
-    recorder->RequireResourceState(*frame->buffer,
-                                   graphics::ResourceStates::kShaderResource);
+    TrackTextureFromKnownOrInitial(recorder, *product.texture);
+    recorder.RequireResourceState(
+      *product.texture, graphics::ResourceStates::kShaderResource);
+    recorder.RequireResourceState(
+      *frame->buffer, graphics::ResourceStates::kShaderResource);
     auto constants = std::array<std::uint32_t, 32U> {};
     constants[0] = frame->current_state->status_uav_index.get();
     constants[1] = product.srv.get();
@@ -1000,35 +1002,49 @@ auto ExposurePass::GatherFilterGradients(RenderContext& ctx,
       ctx.current_view.view_id, constants);
     CHECK_F(slot.IsValid());
     for (unsigned pipeline = 0U; pipeline < 2U; ++pipeline) {
-      recorder->RequireResourceState(
+      recorder.RequireResourceState(
         status, graphics::ResourceStates::kUnorderedAccess);
-      recorder->FlushBarriers();
-      recorder->SetPipelineState(*suitability_pipelines_[pipeline]);
-      recorder->SetComputeRoot32BitConstant(
+      recorder.FlushBarriers();
+      recorder.SetPipelineState(*suitability_pipelines_.at(pipeline));
+      recorder.SetComputeRoot32BitConstant(
         static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants),
         0U, 0U);
-      recorder->SetComputeRoot32BitConstant(
+      recorder.SetComputeRoot32BitConstant(
         static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants),
         slot.get(), 1U);
-      recorder->Dispatch(pipeline == 0U ? 1U : (desc.width + 7U) / 8U,
-                         pipeline == 0U ? 1U : (desc.height + 7U) / 8U,
-                         pipeline == 0U ? 1U : desc.depth);
+      recorder.Dispatch(pipeline == 0U
+          ? 1U
+          : (desc.width + kTextureThreadGroupExtent - 1U)
+            / kTextureThreadGroupExtent,
+        pipeline == 0U ? 1U
+                       : (desc.height + kTextureThreadGroupExtent - 1U)
+            / kTextureThreadGroupExtent,
+        pipeline == 0U ? 1U : desc.depth);
     }
   }
-  recorder.reset();
-  const bool submitted = recording && recording->IsSubmitted();
-  if (submitted) {
-    submitted_filter_gradients_[frame.get()][index] = product;
-  }
-  return submitted;
+  recorder.OnSubmission([this, frame = frame.get(), index](
+                          const graphics::SubmissionOutcome outcome) -> void {
+    if (outcome == graphics::SubmissionOutcome::kDiscarded) {
+      const auto found = recorded_filter_gradients_.find(frame);
+      if (found != recorded_filter_gradients_.end()) {
+        found->second.at(index) = {};
+      }
+    }
+  });
+  recorded_filter_gradients_.at(frame.get()).at(index) = product;
+  return true;
 }
 
-auto ExposurePass::EvaluateFp16Products(
-  RenderContext& ctx, const FrameLease& frame,
+auto ExposurePass::EvaluateFp16Products(RenderContext& ctx,
+  graphics::CommandRecorder& recorder, const FrameLease& frame,
   const ResolvedPostProcessConfig& config,
   const std::span<const HdrProduct> products, const Inputs& metering,
   const SuitabilityScale scale) -> bool
 {
+  if (frame) {
+    TrackFrameRecording(recorder, *frame);
+  }
+
   profiling::CpuProfileScope cpu_scope(
     "Vortex.PostProcess.Exposure.QualifyProducts",
     profiling::ProfileCategory::kPass,
@@ -1048,9 +1064,9 @@ auto ExposurePass::EvaluateFp16Products(
   const auto report_srv
     = current_scale ? frame->conversion_srv : frame->suitability_srv;
   if (current_scale) {
-    submitted_conversion_.erase(frame.get());
+    recorded_conversion_.erase(frame.get());
   } else {
-    submitted_suitability_.erase(frame.get());
+    recorded_suitability_.erase(frame.get());
   }
   std::uint32_t expected_mask = 0U;
   std::uint64_t texels = 0U;
@@ -1060,8 +1076,8 @@ auto ExposurePass::EvaluateFp16Products(
     CHECK_F((expected_mask & bit) == 0U);
     expected_mask |= bit;
     CHECK_F(std::isfinite(product.error_budget_share)
-            && product.error_budget_share > 0.0F
-            && product.error_budget_share <= 1.0F);
+      && product.error_budget_share > 0.0F
+      && product.error_budget_share <= 1.0F);
     CHECK_F(!product.composed_error || product.id == 11U);
     if (!product.texture || !product.srv.IsValid()) {
       continue;
@@ -1070,76 +1086,66 @@ auto ExposurePass::EvaluateFp16Products(
     // Normal-mode intermediates carry their pre-store enclosure in the frame's
     // status record. Sampling their typed half texture is valid only for these
     // bound-producing products; SceneColor remains an FP32 accumulation.
-    CHECK_F(
-      desc.format == Format::kRGBA32Float
+    CHECK_F(desc.format == Format::kRGBA32Float
       || (desc.format == Format::kRGBA16Float
-          && (product.id == 5U || product.id == 6U || product.id == 10U)));
+        && (product.id == 5U || product.id == 6U || product.id == 10U)));
     CHECK_F(desc.texture_type == TextureType::kTexture2D
-            || desc.texture_type == TextureType::kTexture3D);
+      || desc.texture_type == TextureType::kTexture3D);
     CHECK_F(!product.metering || desc.texture_type == TextureType::kTexture2D);
     texels += std::uint64_t(desc.width) * desc.height * desc.depth;
   }
   CHECK_LE_F(texels, std::numeric_limits<std::uint32_t>::max());
-  auto recorder = gfx->AcquireCommandRecorder(
-    gfx->QueueKeyFor(graphics::QueueRole::kGraphics),
-    "Vortex Exposure Suitability");
-  if (!recorder) {
-    return false;
-  }
-  renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(*recorder);
-  const auto recording = recorder->GetCommandListForInspection();
   {
-    graphics::GpuEventScope phase_scope(
-      *recorder, "Vortex.PostProcess.Exposure.QualifyProducts",
+    graphics::GpuEventScope phase_scope(recorder,
+      "Vortex.PostProcess.Exposure.QualifyProducts",
       profiling::ProfileGranularity::kTelemetry,
       profiling::ProfileCategory::kCompute,
       profiling::Vars(profiling::Var("view", ctx.current_view.view_id.get())));
     const auto track
       = [&](const graphics::Buffer& buffer, graphics::ResourceStates state) {
-          if (!recorder->IsResourceTracked(buffer)
-              && !recorder->AdoptKnownResourceState(buffer)) {
-            recorder->BeginTrackingResourceState(
+          if (!recorder.IsResourceTracked(buffer)
+            && !recorder.AdoptKnownResourceState(buffer)) {
+            recorder.BeginTrackingResourceState(
               buffer, graphics::ResourceStates::kCommon, false);
           }
-          recorder->RequireResourceState(buffer, state);
+          recorder.RequireResourceState(buffer, state);
         };
     track(*frame->buffer, graphics::ResourceStates::kShaderResource);
-    track(*frame->current_state->buffer,
-          graphics::ResourceStates::kShaderResource);
+    track(
+      *frame->current_state->buffer, graphics::ResourceStates::kShaderResource);
     track(*frame->current_state->status_buffer,
-          graphics::ResourceStates::kShaderResource);
+      graphics::ResourceStates::kShaderResource);
     track(*report_buffer, graphics::ResourceStates::kUnorderedAccess);
     if (metering.metering_mask) {
-      TrackTextureFromKnownOrInitial(*recorder, *metering.metering_mask);
-      recorder->RequireResourceState(*metering.metering_mask,
-                                     graphics::ResourceStates::kShaderResource);
+      TrackTextureFromKnownOrInitial(recorder, *metering.metering_mask);
+      recorder.RequireResourceState(
+        *metering.metering_mask, graphics::ResourceStates::kShaderResource);
     }
     if (metering.scene_composition
-        && metering.scene_composition->opaque_depth) {
-      TrackTextureFromKnownOrInitial(*recorder,
-                                     *metering.scene_composition->opaque_depth);
-      recorder->RequireResourceState(*metering.scene_composition->opaque_depth,
-                                     graphics::ResourceStates::kShaderResource);
+      && metering.scene_composition->opaque_depth) {
+      TrackTextureFromKnownOrInitial(
+        recorder, *metering.scene_composition->opaque_depth);
+      recorder.RequireResourceState(*metering.scene_composition->opaque_depth,
+        graphics::ResourceStates::kShaderResource);
     }
     const auto background
       = environment::ResolveSceneBackground(ctx).value_or(Vec3 { 0.0F });
     const auto dispatch = [&](const unsigned pipeline,
-                              const HdrProduct* product,
-                              const std::uint32_t additional_flags = 0U) {
+                            const HdrProduct* product,
+                            const std::uint32_t additional_flags = 0U) {
       constexpr std::array<std::string_view, 4> names {
         "Vortex.PostProcess.Exposure.ClearSuitability",
         "Vortex.PostProcess.Exposure.GatherSuitabilityMaximum",
         "Vortex.PostProcess.Exposure.SelectSuitabilityCandidate",
         "Vortex.PostProcess.Exposure.CheckSuitabilityProduct"
       };
-      graphics::GpuEventScope product_scope(
-        *recorder, names.at(pipeline),
+      graphics::GpuEventScope product_scope(recorder, names.at(pipeline),
         profiling::ProfileGranularity::kTelemetry,
         profiling::ProfileCategory::kCompute,
         profiling::Vars(profiling::Var("view", ctx.current_view.view_id.get()),
-                        profiling::Var("product", product ? product->id : 0U),
-                        profiling::Var("flags", additional_flags),
-                        profiling::Var("current_scale", current_scale)));
+          profiling::Var("product", product ? product->id : 0U),
+          profiling::Var("flags", additional_flags),
+          profiling::Var("current_scale", current_scale)));
       const bool candidate_bounds = (additional_flags & 512U) != 0U;
       const bool fused_point_check = (additional_flags & 4096U) != 0U;
       const bool publish_point_failure = (additional_flags & 8192U) != 0U;
@@ -1147,8 +1153,8 @@ auto ExposurePass::EvaluateFp16Products(
                                 : graphics::TextureDesc {};
       bool opaque_depth_usable = false;
       if (product && product->id == 11U && metering.scene_composition
-          && metering.scene_composition->opaque_depth
-          && metering.scene_composition->opaque_depth_srv.IsValid()) {
+        && metering.scene_composition->opaque_depth
+        && metering.scene_composition->opaque_depth_srv.IsValid()) {
         const auto& depth
           = metering.scene_composition->opaque_depth->GetDescriptor();
         opaque_depth_usable = depth.texture_type == TextureType::kTexture2D
@@ -1158,25 +1164,21 @@ auto ExposurePass::EvaluateFp16Products(
       const auto rectangle = product && product->metering
         ? MeteringRectangle(ctx, desc)
         : Scissors { .right = static_cast<std::int32_t>(desc.width),
-                     .bottom = static_cast<std::int32_t>(desc.height) };
+            .bottom = static_cast<std::int32_t>(desc.height) };
       const auto flags = product ? (product->metering ? 1U : 0U)
           | (product->coverage ? 2U : 0U) | (product->transmittance ? 4U : 0U)
           | (product->composed_error ? 256U : 0U)
           | (desc.texture_type == TextureType::kTexture3D ? 8U : 0U)
                                  : 0U;
-      const auto constants = std::array<std::uint32_t, 32U> {
-        candidate_bounds ? frame->current_state->status_uav_index.get()
-                         : report_uav.get(),
+      const auto constants = std::array<std::uint32_t, 32U> { candidate_bounds
+          ? frame->current_state->status_uav_index.get()
+          : report_uav.get(),
         product ? product->srv.get() : kInvalidShaderVisibleIndex.get(),
-        frame->srv_index.get(),
-        frame->current_state->srv_index.get(),
-        desc.width,
-        desc.height,
-        desc.depth,
+        frame->srv_index.get(), frame->current_state->srv_index.get(),
+        desc.width, desc.height, desc.depth,
         flags | (scale == SuitabilityScale::kCurrentFrame ? 16U : 0U)
           | additional_flags,
-        product ? product->id : 0U,
-        expected_mask,
+        product ? product->id : 0U, expected_mask,
         metering.metering_mask_srv.get(),
         static_cast<std::uint32_t>(config.Exposure().authored.metering_mode),
         static_cast<std::uint32_t>(rectangle.left),
@@ -1187,14 +1189,14 @@ auto ExposurePass::EvaluateFp16Products(
           std::max(0, rectangle.bottom - rectangle.top)),
         std::bit_cast<std::uint32_t>(
           config.Exposure().authored.spot_meter_radius),
-        std::bit_cast<std::uint32_t>(product ? product->error_budget_share
-                                             : 1.0F),
+        std::bit_cast<std::uint32_t>(
+          product ? product->error_budget_share : 1.0F),
         std::bit_cast<std::uint32_t>(
           config.Exposure().authored.min_log_luminance),
         std::bit_cast<std::uint32_t>(
           config.Exposure().authored.black_influence),
-        std::bit_cast<std::uint32_t>(product ? product->consumer_rgb_gain
-                                             : 1.0F),
+        std::bit_cast<std::uint32_t>(
+          product ? product->consumer_rgb_gain : 1.0F),
         fused_point_check ? kInvalidShaderVisibleIndex.get()
                           : frame->current_state->status_srv_index.get(),
         candidate_bounds
@@ -1213,31 +1215,33 @@ auto ExposurePass::EvaluateFp16Products(
         metering.scene_composition && metering.scene_composition->reverse_z
           ? 1U
           : 0U,
-        opaque_depth_usable ? 1U : 0U
-      };
+        opaque_depth_usable ? 1U : 0U };
       const auto slot = suitability_constants_publisher_->Publish(
         ctx.current_view.view_id, constants);
       CHECK_F(slot.IsValid());
-      recorder->RequireResourceState(
-        *report_buffer,
+      recorder.RequireResourceState(*report_buffer,
         candidate_bounds && !fused_point_check
           ? graphics::ResourceStates::kShaderResource
           : graphics::ResourceStates::kUnorderedAccess);
-      recorder->RequireResourceState(
-        *frame->current_state->status_buffer,
+      recorder.RequireResourceState(*frame->current_state->status_buffer,
         candidate_bounds ? graphics::ResourceStates::kUnorderedAccess
                          : graphics::ResourceStates::kShaderResource);
-      recorder->FlushBarriers();
-      recorder->SetPipelineState(*suitability_pipelines_[pipeline]);
-      recorder->SetComputeRoot32BitConstant(
+      recorder.FlushBarriers();
+      recorder.SetPipelineState(*suitability_pipelines_.at(pipeline));
+      recorder.SetComputeRoot32BitConstant(
         static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants),
         0U, 0U);
-      recorder->SetComputeRoot32BitConstant(
+      recorder.SetComputeRoot32BitConstant(
         static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants),
         slot.get(), 1U);
       const bool scan_product = product && !publish_point_failure;
-      recorder->Dispatch(scan_product ? (desc.width + 7U) / 8U : 1U,
-        scan_product ? (desc.height + 7U) / 8U : 1U,
+      recorder.Dispatch(scan_product
+          ? (desc.width + kTextureThreadGroupExtent - 1U)
+            / kTextureThreadGroupExtent
+          : 1U,
+        scan_product ? (desc.height + kTextureThreadGroupExtent - 1U)
+            / kTextureThreadGroupExtent
+                     : 1U,
         scan_product && desc.texture_type == TextureType::kTexture3D
           ? desc.depth
           : 1U);
@@ -1250,14 +1254,14 @@ auto ExposurePass::EvaluateFp16Products(
       if (!product.texture || !product.srv.IsValid()) {
         continue;
       }
-      TrackTextureFromKnownOrInitial(*recorder, *product.texture);
-      recorder->RequireResourceState(*product.texture,
-                                     graphics::ResourceStates::kShaderResource);
+      TrackTextureFromKnownOrInitial(recorder, *product.texture);
+      recorder.RequireResourceState(
+        *product.texture, graphics::ResourceStates::kShaderResource);
       bool reuse_maximum = false;
       if (!current_scale && product.transmittance
-          && (product.id == 6U || product.id == 10U)) {
-        const auto gradients = submitted_filter_gradients_.find(frame.get());
-        if (gradients != submitted_filter_gradients_.end()) {
+        && (product.id == 6U || product.id == 10U)) {
+        const auto gradients = recorded_filter_gradients_.find(frame.get());
+        if (gradients != recorded_filter_gradients_.end()) {
           const auto& recorded = gradients->second[product.id == 6U ? 1U : 2U];
           reuse_maximum = recorded.texture == product.texture
             && recorded.srv == product.srv && recorded.transmittance;
@@ -1271,7 +1275,7 @@ auto ExposurePass::EvaluateFp16Products(
       dispatch(0U, nullptr, 512U);
       for (const auto& product : products) {
         if (product.texture && product.srv.IsValid()
-            && (product.id == 5U || product.id == 6U || product.id == 10U)) {
+          && (product.id == 5U || product.id == 6U || product.id == 10U)) {
           const bool fuse_point_check = (product.id == 6U || product.id == 10U)
             && product.transmittance && !product.metering && !product.coverage
             && !product.composed_error;
@@ -1293,9 +1297,9 @@ auto ExposurePass::EvaluateFp16Products(
       constants[20] = std::bit_cast<std::uint32_t>(1.0F);
       const auto& composition = *metering.scene_composition;
       const auto operations = 16ULL
-        * (std::min<std::uint64_t>(composition.translucent_triangles,
-                                   0xffffffffU)
-           + composition.local_fog_instances + 8ULL);
+        * (std::min<std::uint64_t>(
+             composition.translucent_triangles, 0xffffffffU)
+          + composition.local_fog_instances + 8ULL);
       constants[21] = static_cast<std::uint32_t>(
         std::min<std::uint64_t>(operations, 0xffffffffU));
       constants[22] = expected_mask;
@@ -1324,20 +1328,19 @@ auto ExposurePass::EvaluateFp16Products(
       const auto slot = suitability_constants_publisher_->Publish(
         ctx.current_view.view_id, constants);
       CHECK_F(slot.IsValid());
-      recorder->RequireResourceState(*report_buffer,
-                                     graphics::ResourceStates::kShaderResource);
-      recorder->RequireResourceState(
-        *frame->current_state->status_buffer,
+      recorder.RequireResourceState(
+        *report_buffer, graphics::ResourceStates::kShaderResource);
+      recorder.RequireResourceState(*frame->current_state->status_buffer,
         graphics::ResourceStates::kUnorderedAccess);
-      recorder->FlushBarriers();
-      recorder->SetPipelineState(*suitability_pipelines_[2U]);
-      recorder->SetComputeRoot32BitConstant(
+      recorder.FlushBarriers();
+      recorder.SetPipelineState(*suitability_pipelines_.at(2U));
+      recorder.SetComputeRoot32BitConstant(
         static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants),
         0U, 0U);
-      recorder->SetComputeRoot32BitConstant(
+      recorder.SetComputeRoot32BitConstant(
         static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants),
         slot.get(), 1U);
-      recorder->Dispatch(1U, 1U, 1U);
+      recorder.Dispatch(1U, 1U, 1U);
     }
     for (const auto& product : products) {
       if (product.texture && product.srv.IsValid()) {
@@ -1348,30 +1351,29 @@ auto ExposurePass::EvaluateFp16Products(
         dispatch(3U, &product, fused ? 8192U : 0U);
       }
     }
-    recorder->RequireResourceStateFinal(
+    recorder.RequireResourceState(
       *report_buffer, graphics::ResourceStates::kShaderResource);
   }
-  recorder.reset();
-  if (!recording || !recording->IsSubmitted()) {
-    return false;
-  }
   if (!current_scale) {
-    submitted_suitability_.insert(frame.get());
+    RecordCertificate(recorder, recorded_suitability_, *frame);
   }
   return true;
 }
 
 auto ExposurePass::FinalizeFp16Suitability(RenderContext& ctx,
-                                           const FrameLease& frame,
-                                           const EligibilityInputs& inputs)
-  -> bool
+  graphics::CommandRecorder& recorder, const FrameLease& frame,
+  const EligibilityInputs& inputs) -> bool
 {
+  if (frame) {
+    TrackFrameRecording(recorder, *frame);
+  }
+
   profiling::CpuProfileScope cpu_scope(
     "Vortex.PostProcess.Exposure.FinalizeSuitability",
     profiling::ProfileCategory::kPass,
     profiling::Vars(profiling::Var("view", ctx.current_view.view_id.get())));
   CHECK_F(inputs.product_layout_revision != 0U && inputs.expected_products != 0U
-          && (inputs.expected_products & 0x80000000U) == 0U);
+    && (inputs.expected_products & 0x80000000U) == 0U);
   auto gfx = renderer_.GetGraphics();
   if (!gfx) {
     return false;
@@ -1380,52 +1382,44 @@ auto ExposurePass::FinalizeFp16Suitability(RenderContext& ctx,
   const auto current = resolved_frames_.find(
     { ctx.current_view.view_id, ctx.current_view.view_state_handle });
   if (!frame || current == resolved_frames_.end() || current->second != frame
-      || !submitted_suitability_.contains(frame.get())) {
+    || !recorded_suitability_.contains(frame.get())) {
     return false;
   }
   EnsurePipelines();
-  auto recorder = gfx->AcquireCommandRecorder(
-    gfx->QueueKeyFor(graphics::QueueRole::kGraphics),
-    "Vortex FP16 Eligibility");
-  if (!recorder) {
-    return false;
-  }
-  renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(*recorder);
-  const auto recording = recorder->GetCommandListForInspection();
   {
-    graphics::GpuEventScope phase_scope(
-      *recorder, "Vortex.PostProcess.Exposure.FinalizeSuitability",
+    graphics::GpuEventScope phase_scope(recorder,
+      "Vortex.PostProcess.Exposure.FinalizeSuitability",
       profiling::ProfileGranularity::kTelemetry,
       profiling::ProfileCategory::kCompute,
       profiling::Vars(profiling::Var("view", ctx.current_view.view_id.get())));
     const auto track
       = [&](const graphics::Buffer& buffer, graphics::ResourceStates state) {
-          if (!recorder->AdoptKnownResourceState(buffer)) {
-            recorder->BeginTrackingResourceState(
+          if (!recorder.IsResourceTracked(buffer)
+            && !recorder.AdoptKnownResourceState(buffer)) {
+            recorder.BeginTrackingResourceState(
               buffer, graphics::ResourceStates::kCommon, false);
           }
-          recorder->RequireResourceState(buffer, state);
+          recorder.RequireResourceState(buffer, state);
         };
     track(*frame->buffer, graphics::ResourceStates::kShaderResource);
-    track(*frame->suitability_buffer,
-          graphics::ResourceStates::kShaderResource);
-    const bool converted = submitted_conversion_.contains(frame.get());
+    track(
+      *frame->suitability_buffer, graphics::ResourceStates::kShaderResource);
+    const bool converted = recorded_conversion_.contains(frame.get());
     if (converted) {
-      track(*frame->conversion_buffer,
-            graphics::ResourceStates::kShaderResource);
+      track(
+        *frame->conversion_buffer, graphics::ResourceStates::kShaderResource);
     }
     track(*frame->current_state->buffer,
-          graphics::ResourceStates::kUnorderedAccess);
+      graphics::ResourceStates::kUnorderedAccess);
     track(*frame->current_state->status_buffer,
-          graphics::ResourceStates::kUnorderedAccess);
+      graphics::ResourceStates::kUnorderedAccess);
     if (frame->precision_history) {
       track(*frame->precision_history->buffer,
-            graphics::ResourceStates::kShaderResource);
+        graphics::ResourceStates::kShaderResource);
     }
     const auto words = [](const std::uint64_t value) {
       return std::array<std::uint32_t, 2> { static_cast<std::uint32_t>(value),
-                                            static_cast<std::uint32_t>(
-                                              value >> 32U) };
+        static_cast<std::uint32_t>(value >> 32U) };
     };
     const auto layout = words(inputs.product_layout_revision);
     const auto sequence = words(ctx.frame_sequence.get());
@@ -1435,52 +1429,48 @@ auto ExposurePass::FinalizeFp16Suitability(RenderContext& ctx,
       frame->precision_history ? frame->precision_history->srv_index.get()
                                : kInvalidShaderVisibleIndex.get(),
       frame->current_state->status_uav_index.get(),
-      frame->suitability_srv.get(),
-      layout[0],
-      layout[1],
+      frame->suitability_srv.get(), layout[0], layout[1],
       inputs.expected_products,
       (ctx.current_view.view_state_handle
-           != CompositionView::kInvalidViewStateHandle
-         ? 1U
-         : 0U)
+            != CompositionView::kInvalidViewStateHandle
+          ? 1U
+          : 0U)
         | (inputs.invalidate_previous ? 2U : 0U),
-      frame->srv_index.get(),
-      sequence[0],
-      sequence[1],
+      frame->srv_index.get(), sequence[0], sequence[1],
       converted ? frame->conversion_srv.get()
                 : kInvalidShaderVisibleIndex.get(),
-      lifetime[0],
-      lifetime[1],
-      0U,
-      0U
+      lifetime[0], lifetime[1], 0U, 0U
     };
     const auto slot
       = constants_publisher_->Publish(ctx.current_view.view_id, constants);
     CHECK_F(slot.IsValid());
-    recorder->FlushBarriers();
-    recorder->SetPipelineState(*eligibility_pipeline_);
-    recorder->SetComputeRoot32BitConstant(
+    recorder.FlushBarriers();
+    recorder.SetPipelineState(*eligibility_pipeline_);
+    recorder.SetComputeRoot32BitConstant(
       static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants), 0U,
       0U);
-    recorder->SetComputeRoot32BitConstant(
+    recorder.SetComputeRoot32BitConstant(
       static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants),
       slot.get(), 1U);
-    recorder->Dispatch(1U, 1U, 1U);
-    recorder->RequireResourceStateFinal(
+    recorder.Dispatch(1U, 1U, 1U);
+    recorder.RequireResourceState(
       *frame->current_state->buffer, graphics::ResourceStates::kShaderResource);
-    recorder->RequireResourceStateFinal(*frame->current_state->status_buffer,
-                                        graphics::ResourceStates::kCopySource);
+    recorder.RequireResourceState(*frame->current_state->status_buffer,
+      graphics::ResourceStates::kCopySource);
   }
-  recorder.reset();
-  return recording && recording->IsSubmitted();
+  return true;
 }
 
-auto ExposurePass::ConvertCheckedSceneColor(
-  RenderContext& ctx, const FrameLease& frame,
+auto ExposurePass::ConvertCheckedSceneColor(RenderContext& ctx,
+  graphics::CommandRecorder& recorder, const FrameLease& frame,
   const ResolvedPostProcessConfig& config, const Inputs& inputs,
   graphics::Texture& destination, const ShaderVisibleIndex destination_uav)
   -> bool
 {
+  if (frame) {
+    TrackFrameRecording(recorder, *frame);
+  }
+
   profiling::CpuProfileScope cpu_scope(
     "Vortex.PostProcess.Exposure.ConvertSceneColor",
     profiling::ProfileCategory::kPass,
@@ -1490,86 +1480,136 @@ auto ExposurePass::ConvertCheckedSceneColor(
   const auto& source_desc = inputs.scene_signal->GetDescriptor();
   const auto& target_desc = destination.GetDescriptor();
   CHECK_F(source_desc.format == Format::kRGBA32Float
-          && target_desc.format == Format::kRGBA16Float
-          && source_desc.texture_type == TextureType::kTexture2D
-          && target_desc.texture_type == TextureType::kTexture2D
-          && source_desc.sample_count == 1U && target_desc.sample_count == 1U
-          && source_desc.array_size == 1U && target_desc.array_size == 1U
-          && source_desc.mip_levels == 1U && target_desc.mip_levels == 1U
-          && source_desc.depth == 1U && target_desc.depth == 1U
-          && source_desc.width == target_desc.width
-          && source_desc.height == target_desc.height && target_desc.is_uav);
-  const std::array products { HdrProduct {
-    .texture = inputs.scene_signal,
+    && target_desc.format == Format::kRGBA16Float
+    && source_desc.texture_type == TextureType::kTexture2D
+    && target_desc.texture_type == TextureType::kTexture2D
+    && source_desc.sample_count == 1U && target_desc.sample_count == 1U
+    && source_desc.array_size == 1U && target_desc.array_size == 1U
+    && source_desc.mip_levels == 1U && target_desc.mip_levels == 1U
+    && source_desc.depth == 1U && target_desc.depth == 1U
+    && source_desc.width == target_desc.width
+    && source_desc.height == target_desc.height && target_desc.is_uav);
+  const std::array products { HdrProduct { .texture = inputs.scene_signal,
     .srv = inputs.scene_signal_srv,
     .id = 11U,
     .metering = true,
     .coverage = environment::ResolveSceneBackground(ctx).has_value(),
     .composed_error = inputs.composition_products != 0U } };
-  if (!EvaluateFp16Products(ctx, frame, config, products, inputs,
-                            SuitabilityScale::kCurrentFrame)) {
+  if (!EvaluateFp16Products(ctx, recorder, frame, config, products, inputs,
+        SuitabilityScale::kCurrentFrame)) {
     return false;
   }
-  const auto gfx = renderer_.GetGraphics();
-  auto recorder = gfx->AcquireCommandRecorder(
-    gfx->QueueKeyFor(graphics::QueueRole::kGraphics),
-    "Vortex Checked SceneColor Conversion");
-  if (!recorder) {
-    return false;
-  }
-  renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(*recorder);
-  const auto recording = recorder->GetCommandListForInspection();
   {
-    graphics::GpuEventScope phase_scope(
-      *recorder, "Vortex.PostProcess.Exposure.ConvertSceneColor",
+    graphics::GpuEventScope phase_scope(recorder,
+      "Vortex.PostProcess.Exposure.ConvertSceneColor",
       profiling::ProfileGranularity::kTelemetry,
       profiling::ProfileCategory::kCompute,
       profiling::Vars(profiling::Var("view", ctx.current_view.view_id.get())));
-    TrackTextureFromKnownOrInitial(*recorder, *inputs.scene_signal);
-    TrackTextureFromKnownOrInitial(*recorder, destination);
-    CHECK_F(recorder->AdoptKnownResourceState(*frame->conversion_buffer));
-    recorder->RequireResourceState(*inputs.scene_signal,
-                                   graphics::ResourceStates::kShaderResource);
-    recorder->RequireResourceState(*frame->conversion_buffer,
-                                   graphics::ResourceStates::kShaderResource);
-    recorder->RequireResourceState(destination,
-                                   graphics::ResourceStates::kUnorderedAccess);
+    TrackTextureFromKnownOrInitial(recorder, *inputs.scene_signal);
+    TrackTextureFromKnownOrInitial(recorder, destination);
+    CHECK_F(recorder.IsResourceTracked(*frame->conversion_buffer)
+      || recorder.AdoptKnownResourceState(*frame->conversion_buffer));
+    recorder.RequireResourceState(
+      *inputs.scene_signal, graphics::ResourceStates::kShaderResource);
+    recorder.RequireResourceState(
+      *frame->conversion_buffer, graphics::ResourceStates::kShaderResource);
+    recorder.RequireResourceState(
+      destination, graphics::ResourceStates::kUnorderedAccess);
     const std::array<std::uint32_t, 8U> constants {
-      inputs.scene_signal_srv.get(),
-      destination_uav.get(),
-      frame->conversion_srv.get(),
-      source_desc.width,
-      source_desc.height,
-      0U,
-      0U,
-      0U
+      inputs.scene_signal_srv.get(), destination_uav.get(),
+      frame->conversion_srv.get(), source_desc.width, source_desc.height, 0U,
+      0U, 0U
     };
     const auto slot = conversion_constants_publisher_->Publish(
       ctx.current_view.view_id, constants);
     CHECK_F(slot.IsValid());
-    recorder->FlushBarriers();
-    recorder->SetPipelineState(*convert_pipeline_);
-    recorder->SetComputeRoot32BitConstant(
+    recorder.FlushBarriers();
+    recorder.SetPipelineState(*convert_pipeline_);
+    recorder.SetComputeRoot32BitConstant(
       static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants), 0U,
       0U);
-    recorder->SetComputeRoot32BitConstant(
+    recorder.SetComputeRoot32BitConstant(
       static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants),
       slot.get(), 1U);
-    recorder->Dispatch((source_desc.width + 7U) / 8U,
-                       (source_desc.height + 7U) / 8U, 1U);
-    recorder->RequireResourceStateFinal(
+    recorder.Dispatch(
+      (source_desc.width + 7U) / 8U, (source_desc.height + 7U) / 8U, 1U);
+    recorder.RequireResourceState(
       destination, graphics::ResourceStates::kShaderResource);
   }
-  recorder.reset();
-  if (!recording || !recording->IsSubmitted()) {
-    return false;
-  }
-  submitted_conversion_.insert(frame.get());
+  RecordCertificate(recorder, recorded_conversion_, *frame);
   return true;
 }
 
+void ExposurePass::TrackFrameRecording(
+  graphics::CommandRecorder& recorder, const FrameResources& frame)
+{
+  if (const auto found = pending_frame_recorders_.find(&frame);
+    found != pending_frame_recorders_.end()) {
+    CHECK_F(found->second == &recorder,
+      "Exposure certificates cannot have competing pending writers");
+    return;
+  }
+  recorder.OnSubmission(
+    [this, frame = &frame, owner = &recorder](
+      const graphics::SubmissionOutcome /*outcome*/) -> void {
+      const auto found = pending_frame_recorders_.find(frame);
+      if (found == pending_frame_recorders_.end() || found->second != owner) {
+        return;
+      }
+      pending_frame_recorders_.erase(found);
+    });
+  pending_frame_recorders_.emplace(&frame, &recorder);
+}
+
+void ExposurePass::CacheBootstrap(graphics::CommandRecorder& recorder,
+  const CompositionView::ViewStateHandle handle, StateLease state)
+{
+  recorder.OnSubmission(
+    [this, handle, state](const graphics::SubmissionOutcome outcome) -> void {
+      if (outcome == graphics::SubmissionOutcome::kDiscarded) {
+        const auto found = bootstrap_states_.find(handle);
+        if (found != bootstrap_states_.end() && found->second == state) {
+          bootstrap_states_.erase(found);
+        }
+      }
+    });
+  bootstrap_states_.insert_or_assign(handle, std::move(state));
+}
+
+auto ExposurePass::PendingHistory(graphics::CommandRecorder& recorder,
+  const CompositionView::ViewStateHandle handle) -> PerViewExposureState&
+{
+  if (const auto pending = pending_view_states_.find(handle);
+    pending != pending_view_states_.end()) {
+    CHECK_F(pending->second.recorder == &recorder,
+      "Exposure history cannot have competing pending writers");
+    return pending->second.state;
+  }
+  recorder.OnSubmission([this, handle, owner = &recorder](
+                          const graphics::SubmissionOutcome outcome) -> void {
+    const auto pending = pending_view_states_.find(handle);
+    if (pending == pending_view_states_.end()
+      || pending->second.recorder != owner) {
+      return;
+    }
+    auto state = pending_view_states_.extract(pending);
+    if (!state.empty() && outcome == graphics::SubmissionOutcome::kSubmitted) {
+      exposure_states_.insert_or_assign(
+        handle, std::move(state.mapped().state));
+    }
+  });
+  const auto committed = exposure_states_.find(handle);
+  auto [pending, inserted] = pending_view_states_.emplace(handle,
+    PendingViewState { .recorder = &recorder,
+      .state = committed == exposure_states_.end() ? PerViewExposureState {}
+                                                   : committed->second });
+  CHECK_F(inserted);
+  return pending->second.state;
+}
+
 auto ExposurePass::Execute(RenderContext& ctx,
-  const ResolvedPostProcessConfig& config, const Inputs& inputs) -> Result
+  graphics::CommandRecorder& recorder, const ResolvedPostProcessConfig& config,
+  const Inputs& inputs) -> Result
 {
   const auto& resolved = config.Exposure();
   const bool sharing
@@ -1602,7 +1642,7 @@ auto ExposurePass::Execute(RenderContext& ctx,
   auto* view = config.Settings().temporary_unit_exposure
       || handle == CompositionView::kInvalidViewStateHandle
     ? nullptr
-    : &exposure_states_[handle];
+    : &PendingHistory(recorder, handle);
   if (view && view->latest && view->latest->owner_lifetime != inputs.lifetime) {
     view->latest.reset();
     view->submitted_frame.reset();
@@ -1632,7 +1672,7 @@ auto ExposurePass::Execute(RenderContext& ctx,
     // independent.
     if (inputs.require_scene_range
       && (!result.frame || !inputs.scene_signal
-        || !RecordSceneRange(ctx, result.frame, *inputs.scene_signal,
+        || !RecordSceneRange(ctx, recorder, result.frame, *inputs.scene_signal,
           inputs.scene_signal_srv, false))) {
       result.solve_failed = true;
       return result;
@@ -1661,14 +1701,14 @@ auto ExposurePass::Execute(RenderContext& ctx,
       && initial->second->owner_lifetime == inputs.source->lifetime) {
       borrowed = initial->second;
     } else {
-      borrowed = RecordState(ctx, inputs.source->config,
+      borrowed = RecordState(ctx, recorder, inputs.source->config,
         Inputs { .metering_available = false,
           .transition = inputs.source->transition,
           .rejection = inputs.source->rejection,
           .lifetime = inputs.source->lifetime },
         {}, {}, true);
       if (borrowed)
-        bootstrap_states_.insert_or_assign(inputs.source->handle, borrowed);
+        CacheBootstrap(recorder, inputs.source->handle, borrowed);
     }
     if (!borrowed) {
       // Submission failure cannot substitute the consumer's own history.
@@ -1691,7 +1731,7 @@ auto ExposurePass::Execute(RenderContext& ctx,
     if (selected) {
       continuity = selected->state;
       if (!continuity) {
-        continuity = RecordState(ctx, selected->source.config,
+        continuity = RecordState(ctx, recorder, selected->source.config,
           Inputs { .metering_available = false,
             .transition = selected->source.transition,
             .rejection = selected->source.rejection,
@@ -1706,7 +1746,7 @@ auto ExposurePass::Execute(RenderContext& ctx,
     } else if (loss.fallback) {
       continuity = loss.fallback;
     } else {
-      continuity = RecordState(ctx, loss.source.config,
+      continuity = RecordState(ctx, recorder, loss.source.config,
         Inputs { .metering_available = false,
           .transition = loss.source.transition,
           .rejection = loss.source.rejection,
@@ -1726,7 +1766,7 @@ auto ExposurePass::Execute(RenderContext& ctx,
     solve_inputs.frame_exposure = result.frame.get();
     reserved = result.frame->current_state;
   }
-  auto state = RecordState(ctx, config, solve_inputs, previous,
+  auto state = RecordState(ctx, recorder, config, solve_inputs, previous,
     continuity ? continuity : borrowed, false, static_cast<bool>(continuity),
     reserved);
   if (!state) {
@@ -1735,8 +1775,10 @@ auto ExposurePass::Execute(RenderContext& ctx,
       : sharing                      ? borrowed
                                      : previous;
     if (result.frame && !sharing) {
-      if (RestoreFrameFallback(ctx, config, *result.frame, fallback))
+      if (RestoreFrameFallback(
+            ctx, recorder, config, *result.frame, fallback)) {
         publish_result(result.frame->current_state, false);
+      }
     } else {
       publish_result(fallback, false);
     }
@@ -1754,12 +1796,10 @@ auto ExposurePass::Execute(RenderContext& ctx,
 }
 
 auto ExposurePass::RecordState(RenderContext& ctx,
-                               const ResolvedPostProcessConfig& config,
-                               const Inputs& inputs, StateLease previous,
-                               StateLease borrowed, const bool bootstrap,
-                               const bool source_loss,
-                               std::shared_ptr<StateResources> reserved)
-  -> StateLease
+  graphics::CommandRecorder& recorder, const ResolvedPostProcessConfig& config,
+  const Inputs& inputs, StateLease previous, StateLease borrowed,
+  const bool bootstrap, const bool source_loss,
+  std::shared_ptr<StateResources> reserved) -> StateLease
 {
   profiling::CpuProfileScope cpu_scope(
     "Vortex.PostProcess.Exposure.MeterAndAdapt",
@@ -1795,11 +1835,11 @@ auto ExposurePass::RecordState(RenderContext& ctx,
   targets.key_count
     = static_cast<std::uint32_t>(resolved.auto_log_targets.size());
   targets.flags = (resolved.authored.min_ev == resolved.authored.max_ev
-                     ? ExposureTargetData::kLocked
-                     : 0U)
+                      ? ExposureTargetData::kLocked
+                      : 0U)
     | (resolved.authored.target_luminance == 0.0F
-         ? ExposureTargetData::kZeroTarget
-         : 0U);
+        ? ExposureTargetData::kZeroTarget
+        : 0U);
   targets.initial_log_gain = resolved.initial_log_gain;
   targets.dark_log_gain = resolved.dark_log_gain;
   std::ranges::copy(resolved.auto_log_targets, targets.keys.begin());
@@ -1808,27 +1848,20 @@ auto ExposurePass::RecordState(RenderContext& ctx,
   if (!targets_srv.IsValid()) {
     return {};
   }
-  auto recorder = gfx->AcquireCommandRecorder(
-    gfx->QueueKeyFor(graphics::QueueRole::kGraphics), "Vortex Exposure");
-  if (!recorder) {
-    return {};
-  }
-  renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(*recorder);
-  const auto recording = recorder->GetCommandListForInspection();
   if (inputs.require_scene_range) {
-    RecordSceneRangeCommands(ctx, *recorder, *inputs.frame_exposure,
+    RecordSceneRangeCommands(ctx, recorder, *inputs.frame_exposure,
       *inputs.scene_signal, inputs.scene_signal_srv, false);
   }
   {
-    graphics::GpuEventScope phase_scope(
-      *recorder, "Vortex.PostProcess.Exposure.MeterAndAdapt",
+    graphics::GpuEventScope phase_scope(recorder,
+      "Vortex.PostProcess.Exposure.MeterAndAdapt",
       profiling::ProfileGranularity::kTelemetry,
       profiling::ProfileCategory::kCompute,
       profiling::Vars(profiling::Var("view", ctx.current_view.view_id.get())));
     const auto track_buffer = [&](const graphics::Buffer& buffer) {
-      if (!recorder->IsResourceTracked(buffer)
-          && !recorder->AdoptKnownResourceState(buffer)) {
-        recorder->BeginTrackingResourceState(
+      if (!recorder.IsResourceTracked(buffer)
+        && !recorder.AdoptKnownResourceState(buffer)) {
+        recorder.BeginTrackingResourceState(
           buffer, graphics::ResourceStates::kCommon, false);
       }
     };
@@ -1836,100 +1869,95 @@ auto ExposurePass::RecordState(RenderContext& ctx,
     track_buffer(*state->status_buffer);
     if (inputs.frame_exposure) {
       track_buffer(*inputs.frame_exposure->buffer);
-      recorder->RequireResourceState(*inputs.frame_exposure->buffer,
-                                     graphics::ResourceStates::kShaderResource);
+      recorder.RequireResourceState(*inputs.frame_exposure->buffer,
+        graphics::ResourceStates::kShaderResource);
     }
-    recorder->RequireResourceState(*state->status_buffer,
-                                   graphics::ResourceStates::kUnorderedAccess);
-    recorder->RequireResourceState(*state->buffer,
-                                   graphics::ResourceStates::kUnorderedAccess);
+    recorder.RequireResourceState(
+      *state->status_buffer, graphics::ResourceStates::kUnorderedAccess);
+    recorder.RequireResourceState(
+      *state->buffer, graphics::ResourceStates::kUnorderedAccess);
     if (previous) {
       track_buffer(*previous->buffer);
-      recorder->RequireResourceState(*previous->buffer,
-                                     graphics::ResourceStates::kShaderResource);
+      recorder.RequireResourceState(
+        *previous->buffer, graphics::ResourceStates::kShaderResource);
     }
     if (borrowed) {
       track_buffer(*borrowed->buffer);
-      recorder->RequireResourceState(*borrowed->buffer,
-                                     graphics::ResourceStates::kShaderResource);
+      recorder.RequireResourceState(
+        *borrowed->buffer, graphics::ResourceStates::kShaderResource);
     }
     if (automatic) {
-      graphics::GpuEventScope histogram_scope(
-        *recorder, "Vortex.PostProcess.Exposure.Histogram",
+      graphics::GpuEventScope histogram_scope(recorder,
+        "Vortex.PostProcess.Exposure.Histogram",
         profiling::ProfileGranularity::kTelemetry,
         profiling::ProfileCategory::kCompute,
         profiling::Vars(
           profiling::Var("view", ctx.current_view.view_id.get())));
       track_buffer(*state->histogram_buffer);
-      recorder->RequireResourceState(
+      recorder.RequireResourceState(
         *state->histogram_buffer, graphics::ResourceStates::kUnorderedAccess);
-      recorder->FlushBarriers();
+      recorder.FlushBarriers();
       const auto histogram_constants
         = PublishHistogramConstants(ctx, inputs, config, *state);
       const auto bind_histogram_constants = [&]() {
-        recorder->SetComputeRoot32BitConstant(
+        recorder.SetComputeRoot32BitConstant(
           static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants),
           0U, 0U);
-        recorder->SetComputeRoot32BitConstant(
+        recorder.SetComputeRoot32BitConstant(
           static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants),
           histogram_constants.get(), 1U);
       };
-      recorder->SetPipelineState(*clear_pipeline_);
+      recorder.SetPipelineState(*clear_pipeline_);
       bind_histogram_constants();
-      recorder->Dispatch(1U, 1U, 1U);
+      recorder.Dispatch(1U, 1U, 1U);
       if (inputs.metering_available && inputs.scene_signal
         && inputs.scene_signal_srv.IsValid()) {
         CHECK_F(std::isfinite(inputs.one_over_pre_exposure)
           && inputs.one_over_pre_exposure > 0.0F);
         CHECK_F((inputs.metering_mask != nullptr)
           == inputs.metering_mask_srv.IsValid());
-        TrackTextureFromKnownOrInitial(*recorder, *inputs.scene_signal);
-        recorder->RequireResourceState(
+        TrackTextureFromKnownOrInitial(recorder, *inputs.scene_signal);
+        recorder.RequireResourceState(
           *inputs.scene_signal, graphics::ResourceStates::kShaderResource);
         if (inputs.metering_mask) {
-          TrackTextureFromKnownOrInitial(*recorder, *inputs.metering_mask);
-          recorder->RequireResourceState(
+          TrackTextureFromKnownOrInitial(recorder, *inputs.metering_mask);
+          recorder.RequireResourceState(
             *inputs.metering_mask, graphics::ResourceStates::kShaderResource);
         }
-        recorder->RequireResourceState(
+        recorder.RequireResourceState(
           *state->histogram_buffer, graphics::ResourceStates::kUnorderedAccess);
-        recorder->FlushBarriers();
-        recorder->SetPipelineState(*histogram_pipeline_);
+        recorder.FlushBarriers();
+        recorder.SetPipelineState(*histogram_pipeline_);
         bind_histogram_constants();
         const auto& desc = inputs.scene_signal->GetDescriptor();
-        recorder->Dispatch(
+        recorder.Dispatch(
           (std::min(desc.width, kHistogramGridLimit) + 15U) / 16U,
           (std::min(desc.height, kHistogramGridLimit) + 15U) / 16U, 1U);
       }
-      recorder->RequireResourceState(
+      recorder.RequireResourceState(
         *state->histogram_buffer, graphics::ResourceStates::kUnorderedAccess);
     }
-    recorder->FlushBarriers();
+    recorder.FlushBarriers();
     {
-      graphics::GpuEventScope solve_scope(
-        *recorder, "Vortex.PostProcess.Exposure.Solve",
+      graphics::GpuEventScope solve_scope(recorder,
+        "Vortex.PostProcess.Exposure.Solve",
         profiling::ProfileGranularity::kTelemetry,
         profiling::ProfileCategory::kPass);
-      recorder->SetPipelineState(*average_pipeline_);
-      UpdateAverageConstants(
-        ctx, *recorder, config, *state, targets_srv,
+      recorder.SetPipelineState(*average_pipeline_);
+      UpdateAverageConstants(ctx, recorder, config, *state, targets_srv,
         previous ? previous->srv_index : kInvalidShaderVisibleIndex, inputs,
         borrowed ? borrowed->srv_index : kInvalidShaderVisibleIndex, bootstrap,
         automatic, source_loss);
-      recorder->Dispatch(1U, 1U, 1U);
+      recorder.Dispatch(1U, 1U, 1U);
     }
-    recorder->RequireResourceStateFinal(
+    recorder.RequireResourceState(
       *state->buffer, graphics::ResourceStates::kShaderResource);
-    recorder->RequireResourceStateFinal(*state->status_buffer,
-                                        graphics::ResourceStates::kCopySource);
+    recorder.RequireResourceState(
+      *state->status_buffer, graphics::ResourceStates::kCopySource);
     if (automatic) {
-      recorder->RequireResourceStateFinal(*state->histogram_buffer,
-                                          graphics::ResourceStates::kCommon);
+      recorder.RequireResourceState(
+        *state->histogram_buffer, graphics::ResourceStates::kCommon);
     }
-  }
-  recorder.reset();
-  if (!recording || !recording->IsSubmitted()) {
-    return {};
   }
   return state;
 }
@@ -1958,6 +1986,7 @@ auto ExposurePass::PreserveRemovedSource(
 auto ExposurePass::RemoveViewState(CompositionView::ViewStateHandle handle)
   -> void
 {
+  pending_view_states_.erase(handle);
   exposure_states_.erase(handle);
   // Prior-frame readers may still need a removed owner's pinned state.
 }
@@ -1972,10 +2001,12 @@ auto ExposurePass::EnsurePipelines() -> void
       "ConvertQualifiedSceneColor", "Vortex.Exposure.CheckedSceneColor");
   constexpr std::array names { "ClearSuitability", "GatherSuitabilityMaximum",
     "SelectSuitabilityCandidate", "CheckSuitabilityProduct" };
-  for (std::size_t index = 0; index < names.size(); ++index)
-    if (!suitability_pipelines_[index])
-      suitability_pipelines_[index]
-        = BuildExposurePipeline(names[index], names[index]);
+  for (std::size_t index = 0; index < names.size(); ++index) {
+    if (!suitability_pipelines_.at(index)) {
+      suitability_pipelines_.at(index)
+        = BuildExposurePipeline(names.at(index), names.at(index));
+    }
+  }
   if (!fallback_pipeline_) {
     fallback_pipeline_ = BuildExposurePipeline(
       "VortexExposureFallbackCS", "Vortex.PostProcess.Exposure.Fallback");

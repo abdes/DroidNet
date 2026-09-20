@@ -125,7 +125,11 @@ NOLINT_TEST_F(ExposureGpuTest,
     config.bloom_intensity = 0.0F;
     service.SetResolvedConfig(service.BuildPassConfig(
       config, ctx_.current_view.view_id, ctx_.current_view.view_state_handle));
-    ASSERT_NE(service.PrepareFrameExposure(ctx_, true), nullptr);
+    ASSERT_NE(SubmitCommands("Vortex Exposure Frame",
+                [&](graphics::CommandRecorder& recorder) -> auto {
+                  return service.PrepareFrameExposure(ctx_, recorder, true);
+                }),
+      nullptr);
     const auto accumulation = Uniform(.25F, 4U, 4U);
     const auto resolved = Uniform(.5F, 4U, 4U);
     auto& recorder_names = FailureBackend().recorder_names;
@@ -134,8 +138,11 @@ NOLINT_TEST_F(ExposureGpuTest,
     prepared_inputs.scene_signal = accumulation.texture.get();
     prepared_inputs.scene_signal_srv = accumulation.srv;
     prepared_inputs.require_scene_range = true;
-    const auto prepared = service.PrepareSceneExposure(
-      ctx_.current_view.view_id, ctx_, prepared_inputs);
+    const auto prepared = SubmitCommands(
+      "Vortex Exposure", [&](graphics::CommandRecorder& recorder) -> auto {
+        return service.PrepareSceneExposure(
+          ctx_.current_view.view_id, ctx_, recorder, prepared_inputs);
+      });
     if (!prepared.has_value()) {
       FAIL() << "Expected prepared to contain a value";
     }
@@ -166,7 +173,7 @@ NOLINT_TEST_F(ExposureGpuTest,
       })));
     EXPECT_EQ(std::count(recorder_names.begin(), recorder_names.end(),
                 "Vortex Exposure"),
-      1);
+      2);
     EXPECT_EQ(std::count(recorder_names.begin(), recorder_names.end(),
                 "Vortex Exposure Final Scene Range"),
       0);
@@ -204,8 +211,10 @@ NOLINT_TEST_F(ExposureGpuTest,
         static_cast<unsigned>(sequence_ % 3U),
       };
       service.OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
-      ctx_.current_view.frame_exposure
-        = service.PrepareFrameExposure(ctx_, true);
+      ctx_.current_view.frame_exposure = SubmitCommands("Vortex Exposure Frame",
+        [&](graphics::CommandRecorder& recorder) -> auto {
+          return service.PrepareFrameExposure(ctx_, recorder, true);
+        });
       ASSERT_NE(ctx_.current_view.frame_exposure, nullptr);
     };
     auto inputs = PostProcessService::Inputs {};
@@ -213,8 +222,11 @@ NOLINT_TEST_F(ExposureGpuTest,
     inputs.scene_signal_srv = signal.srv;
     inputs.require_scene_range = true;
     ASSERT_NO_FATAL_FAILURE(start_frame());
-    const auto initial
-      = service.PrepareSceneExposure(ctx_.current_view.view_id, ctx_, inputs);
+    const auto initial = SubmitCommands(
+      "Vortex Exposure", [&](graphics::CommandRecorder& recorder) -> auto {
+        return service.PrepareSceneExposure(
+          ctx_.current_view.view_id, ctx_, recorder, inputs);
+      });
     ASSERT_TRUE(initial.has_value());
     const auto retained = ReadState(initial->exposure);
     EXPECT_NEAR(retained.displayed_scale, .72F, 2e-5F);
@@ -227,15 +239,19 @@ NOLINT_TEST_F(ExposureGpuTest,
     auto& backend = FailureBackend();
     backend.recorder_names.clear();
     backend.fail_next_exposure_recorder = true;
-    backend.fail_next_fallback_recorder = true;
-    EXPECT_FALSE(
-      service.PrepareSceneExposure(ctx_.current_view.view_id, ctx_, inputs)
-        .has_value());
+    EXPECT_FALSE(SubmitCommands(
+      "Vortex Exposure", [&](graphics::CommandRecorder& recorder) -> auto {
+        return service.PrepareSceneExposure(
+          ctx_.current_view.view_id, ctx_, recorder, inputs);
+      }).has_value());
     EXPECT_EQ(
       InspectRequiredTransition(ctx_.current_view.view_state_handle).phase,
       ExposureTransitionPhase::kQueued);
-    const auto retry
-      = service.PrepareSceneExposure(ctx_.current_view.view_id, ctx_, inputs);
+    const auto retry = SubmitCommands(
+      "Vortex Exposure", [&](graphics::CommandRecorder& recorder) -> auto {
+        return service.PrepareSceneExposure(
+          ctx_.current_view.view_id, ctx_, recorder, inputs);
+      });
     ASSERT_TRUE(retry.has_value());
     EXPECT_FALSE(retry->exposure.solve_failed);
     const auto solved = ReadState(retry->exposure);
@@ -253,12 +269,17 @@ NOLINT_TEST_F(ExposureGpuTest,
     repeated_inputs.scene_signal = invalid.texture.get();
     repeated_inputs.scene_signal_srv = invalid.srv;
     backend.fail_recorder_name = "Vortex Exposure Final Scene Range";
-    EXPECT_FALSE(service
-        .PrepareSceneExposure(ctx_.current_view.view_id, ctx_, repeated_inputs)
-        .has_value());
+    EXPECT_FALSE(SubmitCommands("Vortex Exposure Final Scene Range",
+      [&](graphics::CommandRecorder& recorder) -> auto {
+        return service.PrepareSceneExposure(
+          ctx_.current_view.view_id, ctx_, recorder, repeated_inputs);
+      }).has_value());
     backend.fail_recorder_name.clear();
-    const auto reused = service.PrepareSceneExposure(
-      ctx_.current_view.view_id, ctx_, repeated_inputs);
+    const auto reused = SubmitCommands(
+      "Vortex Exposure", [&](graphics::CommandRecorder& recorder) -> auto {
+        return service.PrepareSceneExposure(
+          ctx_.current_view.view_id, ctx_, recorder, repeated_inputs);
+      });
     ASSERT_TRUE(reused.has_value());
     EXPECT_FALSE(reused->exposure.executed);
     EXPECT_EQ(reused->exposure.state, retry->exposure.state);
@@ -273,8 +294,11 @@ NOLINT_TEST_F(ExposureGpuTest,
       seed->generation);
     inputs.scene_signal = invalid.texture.get();
     inputs.scene_signal_srv = invalid.srv;
-    const auto rejected_meter
-      = service.PrepareSceneExposure(ctx_.current_view.view_id, ctx_, inputs);
+    const auto rejected_meter = SubmitCommands(
+      "Vortex Exposure", [&](graphics::CommandRecorder& recorder) -> auto {
+        return service.PrepareSceneExposure(
+          ctx_.current_view.view_id, ctx_, recorder, inputs);
+      });
     ASSERT_TRUE(rejected_meter.has_value());
     const auto protected_state = ReadState(rejected_meter->exposure);
     EXPECT_FLOAT_EQ(protected_state.displayed_scale, .125F);
@@ -290,8 +314,8 @@ NOLINT_TEST_F(ExposureGpuTest,
   }
 }
 
-NOLINT_TEST_F(ExposureGpuTest,
-  FailedPreparationCannotReuseAnotherViewsSuccessfulOutputStatus)
+NOLINT_TEST_F(
+  ExposureGpuTest, UnavailableRecordingDoesNotFabricateCurrentViewResult)
 {
   auto service = PostProcessService(*renderer_);
   const auto signal = Uniform(.25F, 4U, 4U);
@@ -316,18 +340,25 @@ NOLINT_TEST_F(ExposureGpuTest,
   ctx_.current_view.view_state_handle = CompositionView::ViewStateHandle {
     92U,
   };
-  ASSERT_NE(service.PrepareFrameExposure(ctx_, true), nullptr);
+  ASSERT_NE(SubmitCommands("Vortex Exposure Frame",
+              [&](graphics::CommandRecorder& recorder) -> auto {
+                return service.PrepareFrameExposure(ctx_, recorder, true);
+              }),
+    nullptr);
   auto& backend = FailureBackend();
   backend.fail_next_exposure_recorder = true;
-  backend.fail_next_fallback_recorder = true;
   auto prepared_inputs = PostProcessService::Inputs {};
   prepared_inputs.scene_signal = signal.texture.get();
   prepared_inputs.scene_signal_srv = signal.srv;
-  const auto prepared = service.PrepareSceneExposure(
-    ctx_.current_view.view_id, ctx_, prepared_inputs);
+  const auto prepared = SubmitCommands(
+    "Vortex Exposure", [&](graphics::CommandRecorder& recorder) -> auto {
+      return service.PrepareSceneExposure(
+        ctx_.current_view.view_id, ctx_, recorder, prepared_inputs);
+    });
   EXPECT_FALSE(prepared.has_value());
-  EXPECT_FALSE(service.GetLastExecutionState().wrote_visible_output);
-  EXPECT_EQ(service.GetLastExecutionState().view_id, ctx_.current_view.view_id);
+  // The owner failed before this view could record. The last execution still
+  // describes the successful sibling and cannot stand in for this result.
+  EXPECT_NE(service.GetLastExecutionState().view_id, ctx_.current_view.view_id);
 }
 
 } // namespace oxygen::vortex::testing::exposure

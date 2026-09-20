@@ -11,6 +11,10 @@
 #include <Oxygen/Vortex/Environment/Passes/SkyPass.h>
 #include <Oxygen/Vortex/api_export.h>
 
+namespace oxygen::graphics {
+class CommandRecorder;
+}
+
 namespace oxygen::vortex {
 
 struct RenderContext;
@@ -19,24 +23,25 @@ class SceneTextures;
 
 namespace environment {
 
-class SkyRenderer {
-public:
-  using RenderState = SkyPass::RecordState;
+  class SkyRenderer {
+  public:
+    using RenderState = SkyPass::RecordState;
 
-  OXGN_VRTX_API explicit SkyRenderer(Renderer& renderer);
-  OXGN_VRTX_API ~SkyRenderer();
+    OXGN_VRTX_API explicit SkyRenderer(Renderer& renderer);
+    OXGN_VRTX_API ~SkyRenderer();
 
-  SkyRenderer(const SkyRenderer&) = delete;
-  auto operator=(const SkyRenderer&) -> SkyRenderer& = delete;
-  SkyRenderer(SkyRenderer&&) = delete;
-  auto operator=(SkyRenderer&&) -> SkyRenderer& = delete;
+    SkyRenderer(const SkyRenderer&) = delete;
+    auto operator=(const SkyRenderer&) -> SkyRenderer& = delete;
+    SkyRenderer(SkyRenderer&&) = delete;
+    auto operator=(SkyRenderer&&) -> SkyRenderer& = delete;
 
-  [[nodiscard]] OXGN_VRTX_API auto Render(
-    RenderContext& ctx, const SceneTextures& scene_textures) const -> RenderState;
+    [[nodiscard]] OXGN_VRTX_API auto Render(RenderContext& ctx,
+      graphics::CommandRecorder& recorder,
+      const SceneTextures& scene_textures) const -> RenderState;
 
-private:
-  std::unique_ptr<SkyPass> pass_;
-};
+  private:
+    std::unique_ptr<SkyPass> pass_;
+  };
 
 } // namespace environment
 } // namespace oxygen::vortex

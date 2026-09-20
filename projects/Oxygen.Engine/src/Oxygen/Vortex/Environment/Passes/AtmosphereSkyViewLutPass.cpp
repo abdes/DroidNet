@@ -216,7 +216,7 @@ auto AtmosphereSkyViewLutPass::RemoveViewState(const ViewId view_id) -> void
 }
 
 auto AtmosphereSkyViewLutPass::Record(RenderContext& ctx,
-  const EnvironmentViewData& view_data,
+  graphics::CommandRecorder& recorder, const EnvironmentViewData& view_data,
   const internal::StableAtmosphereState& stable_state,
   const internal::AtmosphereLutCache& cache) -> RecordState
 {
@@ -289,9 +289,9 @@ auto AtmosphereSkyViewLutPass::Record(RenderContext& ctx,
   });
 
   auto& allocator = gfx->GetDescriptorAllocator();
-  auto srv_handle = allocator.AllocateBindless(
-    bindless::generated::kTexturesDomain,
-    graphics::ResourceViewType::kTexture_SRV);
+  auto srv_handle
+    = allocator.AllocateBindless(bindless::generated::kTexturesDomain,
+      graphics::ResourceViewType::kTexture_SRV);
   if (!srv_handle.IsValid()) {
     throw std::runtime_error(
       "AtmosphereSkyViewLutPass: failed to allocate SRV descriptor");
@@ -301,9 +301,9 @@ auto AtmosphereSkyViewLutPass::Record(RenderContext& ctx,
     MakeTextureViewDesc(graphics::ResourceViewType::kTexture_SRV,
       texture->GetDescriptor().format));
 
-  auto uav_handle = allocator.AllocateBindless(
-    bindless::generated::kTexturesDomain,
-    graphics::ResourceViewType::kTexture_UAV);
+  auto uav_handle
+    = allocator.AllocateBindless(bindless::generated::kTexturesDomain,
+      graphics::ResourceViewType::kTexture_UAV);
   if (!uav_handle.IsValid()) {
     throw std::runtime_error(
       "AtmosphereSkyViewLutPass: failed to allocate UAV descriptor");
@@ -379,9 +379,8 @@ auto AtmosphereSkyViewLutPass::Record(RenderContext& ctx,
     atmosphere.mie_absorption_rgb * engine::atmos::kSkyUnitToM);
   SetVec4(constants.ozone_absorption_per_km_rgb,
     atmosphere.ozone_absorption_rgb * engine::atmos::kSkyUnitToM);
-  constants.ozone_density_layer0[0]
-    = engine::atmos::MetersToSkyUnit(
-      atmosphere.ozone_density_profile.layers[0].width_m);
+  constants.ozone_density_layer0[0] = engine::atmos::MetersToSkyUnit(
+    atmosphere.ozone_density_profile.layers[0].width_m);
   constants.ozone_density_layer0[1]
     = atmosphere.ozone_density_profile.layers[0].exp_term;
   constants.ozone_density_layer0[2]
@@ -389,9 +388,8 @@ auto AtmosphereSkyViewLutPass::Record(RenderContext& ctx,
     * engine::atmos::kSkyUnitToM;
   constants.ozone_density_layer0[3]
     = atmosphere.ozone_density_profile.layers[0].constant_term;
-  constants.ozone_density_layer1[0]
-    = engine::atmos::MetersToSkyUnit(
-      atmosphere.ozone_density_profile.layers[1].width_m);
+  constants.ozone_density_layer1[0] = engine::atmos::MetersToSkyUnit(
+    atmosphere.ozone_density_profile.layers[1].width_m);
   constants.ozone_density_layer1[1]
     = atmosphere.ozone_density_profile.layers[1].exp_term;
   constants.ozone_density_layer1[2]
@@ -434,38 +432,30 @@ auto AtmosphereSkyViewLutPass::Record(RenderContext& ctx,
     return state;
   }
 
-  const auto queue_key = gfx->QueueKeyFor(graphics::QueueRole::kGraphics);
-  auto recorder = gfx->AcquireCommandRecorder(
-    queue_key, "EnvironmentLightingService AtmosphereSkyViewLut");
-  if (!recorder) {
-    return state;
-  }
-  renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(
-    *recorder);
-
   if (ctx.current_view.frame_exposure) {
     const auto& status
       = *ctx.current_view.frame_exposure->current_state->status_buffer;
-    if (!recorder->AdoptKnownResourceState(status)) {
-      recorder->BeginTrackingResourceState(
+    if (!recorder.IsResourceTracked(status)
+      && !recorder.AdoptKnownResourceState(status)) {
+      recorder.BeginTrackingResourceState(
         status, graphics::ResourceStates::kCommon, false);
     }
-    recorder->RequireResourceState(
+    recorder.RequireResourceState(
       status, graphics::ResourceStates::kUnorderedAccess);
   }
-  TrackTextureFromKnownOrInitial(*recorder, *texture);
-  recorder->RequireResourceState(
+  TrackTextureFromKnownOrInitial(recorder, *texture);
+  recorder.RequireResourceState(
     *texture, graphics::ResourceStates::kUnorderedAccess);
-  recorder->FlushBarriers();
+  recorder.FlushBarriers();
 
-  recorder->SetPipelineState(BuildPipelineDesc());
-  recorder->SetComputeRootConstantBufferView(
+  recorder.SetPipelineState(BuildPipelineDesc());
+  recorder.SetComputeRootConstantBufferView(
     static_cast<std::uint32_t>(bindless_d3d12::RootParam::kViewConstants),
     ctx.view_constants->GetGPUVirtualAddress());
-  recorder->SetComputeRoot32BitConstant(
+  recorder.SetComputeRoot32BitConstant(
     static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants), 0U,
     0U);
-  recorder->SetComputeRoot32BitConstant(
+  recorder.SetComputeRoot32BitConstant(
     static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants),
     constants_alloc->srv.get(), 1U);
 
@@ -474,18 +464,13 @@ auto AtmosphereSkyViewLutPass::Record(RenderContext& ctx,
   const auto dispatch_y
     = (height + (kThreadGroupSizeY - 1U)) / kThreadGroupSizeY;
   {
-    graphics::GpuEventScope pass_scope(*recorder,
+    graphics::GpuEventScope pass_scope(recorder,
       "Vortex.Environment.AtmosphereSkyViewLut",
       profiling::ProfileGranularity::kTelemetry,
       profiling::ProfileCategory::kPass);
-    recorder->Dispatch(dispatch_x, dispatch_y, 1U);
-    recorder->RequireResourceStateFinal(
+    recorder.Dispatch(dispatch_x, dispatch_y, 1U);
+    recorder.RequireResourceState(
       *texture, graphics::ResourceStates::kShaderResource);
-  }
-  const auto recording = recorder->GetCommandListForInspection();
-  recorder.reset();
-  if (!recording || !recording->IsSubmitted()) {
-    return state;
   }
 
   live_textures_.push_back(texture);

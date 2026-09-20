@@ -130,7 +130,7 @@ protected:
     };
 
     auto recorder = AcquireRecorder(std::string(debug_name) + "Init");
-    CHECK_NOTNULL_F(recorder.get());
+    CHECK_F(static_cast<bool>(recorder));
     EnsureTracked(*recorder, upload, ResourceStates::kGenericRead);
     EnsureTracked(*recorder, texture, ResourceStates::kCommon);
     recorder->RequireResourceState(*upload, ResourceStates::kCopySource);
@@ -161,7 +161,7 @@ protected:
     CHECK_NOTNULL_F(framebuffer.get());
 
     auto recorder = AcquireRecorder(std::string(debug_name) + "Clear");
-    CHECK_NOTNULL_F(recorder.get());
+    CHECK_F(static_cast<bool>(recorder));
     recorder->BeginTrackingResourceState(*texture, ResourceStates::kCommon);
     recorder->RequireResourceState(*texture, ResourceStates::kRenderTarget);
     recorder->FlushBarriers();
@@ -178,15 +178,18 @@ protected:
     const std::shared_ptr<Texture>& source, TextureReadbackRequest request,
     std::string_view command_list_name,
     const QueueRole role = QueueRole::kGraphics,
-    const bool immediate_submission = true) -> ReadbackTicket
+    const oxygen::graphics::SubmissionPolicy policy
+    = oxygen::graphics::SubmissionPolicy::kOnScopeExit) -> ReadbackTicket
   {
-    auto recorder
-      = AcquireRecorder(command_list_name, role, immediate_submission);
-    CHECK_NOTNULL_F(recorder.get());
+    auto recorder = AcquireRecorder(command_list_name, role, policy);
+    CHECK_F(static_cast<bool>(recorder));
     EnsureTracked(*recorder, source, ResourceStates::kCommon);
 
     const auto ticket = readback->EnqueueCopy(*recorder, *source, request);
     CHECK_F(ticket.has_value(), "Texture readback enqueue failed");
+    if (policy == oxygen::graphics::SubmissionPolicy::kExplicit) {
+      KeepPendingRecording(std::move(recorder));
+    }
     return *ticket;
   }
 };
@@ -243,7 +246,8 @@ NOLINT_TEST_F(TextureReadbackSubmissionTest, EnqueueCopyReturnsPendingTicket)
     TextureReadbackRequest {
       .src_slice = { .x = 1, .y = 1, .width = 2, .height = 2 },
     },
-    "texture-readback-pending", QueueRole::kGraphics, false);
+    "texture-readback-pending", QueueRole::kGraphics,
+    oxygen::graphics::SubmissionPolicy::kExplicit);
 
   EXPECT_EQ(readback->GetState(), ReadbackState::kPending);
   ASSERT_TRUE(readback->Ticket().has_value());
@@ -272,7 +276,8 @@ NOLINT_TEST_F(
     TextureReadbackRequest {
       .src_slice = { .x = 0, .y = 0, .width = 2, .height = 2 },
     },
-    "texture-readback-not-ready", QueueRole::kGraphics, false);
+    "texture-readback-not-ready", QueueRole::kGraphics,
+    oxygen::graphics::SubmissionPolicy::kExplicit);
 
   const auto ready = readback->IsReady();
   ASSERT_TRUE(ready.has_value());
@@ -299,11 +304,12 @@ NOLINT_TEST_F(TextureReadbackSubmissionTest, SecondEnqueueWhilePendingFails)
     TextureReadbackRequest {
       .src_slice = { .x = 0, .y = 0, .width = 2, .height = 2 },
     },
-    "texture-readback-first-enqueue", QueueRole::kGraphics, false);
+    "texture-readback-first-enqueue", QueueRole::kGraphics,
+    oxygen::graphics::SubmissionPolicy::kExplicit);
 
-  auto recorder = AcquireRecorder(
-    "texture-readback-second-enqueue", QueueRole::kGraphics, false);
-  CHECK_NOTNULL_F(recorder.get());
+  auto recorder = AcquireRecorder("texture-readback-second-enqueue",
+    QueueRole::kGraphics, oxygen::graphics::SubmissionPolicy::kExplicit);
+  CHECK_F(static_cast<bool>(recorder));
   EnsureTracked(*recorder, texture, ResourceStates::kCommon);
 
   const auto second = readback->EnqueueCopy(*recorder, *texture,
@@ -362,7 +368,8 @@ NOLINT_TEST_F(TextureReadbackMappingTest, TryMapFailsWhilePending)
     TextureReadbackRequest {
       .src_slice = { .x = 0, .y = 0, .width = 2, .height = 2 },
     },
-    "texture-readback-pending-map", QueueRole::kGraphics, false);
+    "texture-readback-pending-map", QueueRole::kGraphics,
+    oxygen::graphics::SubmissionPolicy::kExplicit);
 
   const auto mapped = readback->TryMap();
   ASSERT_FALSE(mapped.has_value());
@@ -615,9 +622,9 @@ NOLINT_TEST_F(TextureReadbackValidationTest, MixedAspectMaskIsRejected)
     texture_desc, upload_bytes, "mixed-aspect-texture");
   auto readback = CreateTextureReadback("mixed-aspect-readback");
 
-  auto recorder = AcquireRecorder(
-    "texture-readback-mixed-aspect", QueueRole::kGraphics, false);
-  CHECK_NOTNULL_F(recorder.get());
+  auto recorder = AcquireRecorder("texture-readback-mixed-aspect",
+    QueueRole::kGraphics, oxygen::graphics::SubmissionPolicy::kExplicit);
+  CHECK_F(static_cast<bool>(recorder));
   EnsureTracked(*recorder, texture, ResourceStates::kCommon);
 
   const auto ticket = readback->EnqueueCopy(*recorder, *texture,
@@ -643,9 +650,9 @@ NOLINT_TEST_F(
     texture_desc, upload_bytes, "depth-aspect-texture");
   auto readback = CreateTextureReadback("depth-aspect-readback");
 
-  auto recorder = AcquireRecorder(
-    "texture-readback-depth-aspect", QueueRole::kGraphics, false);
-  CHECK_NOTNULL_F(recorder.get());
+  auto recorder = AcquireRecorder("texture-readback-depth-aspect",
+    QueueRole::kGraphics, oxygen::graphics::SubmissionPolicy::kExplicit);
+  CHECK_F(static_cast<bool>(recorder));
   EnsureTracked(*recorder, texture, ResourceStates::kCommon);
 
   const auto ticket = readback->EnqueueCopy(*recorder, *texture,
@@ -661,9 +668,9 @@ NOLINT_TEST_F(TextureReadbackValidationTest,
     Color { 1.0F, 0.0F, 0.0F, 1.0F }, "msaa-disallow-texture");
   auto readback = CreateTextureReadback("msaa-disallow-readback");
 
-  auto recorder = AcquireRecorder(
-    "texture-readback-msaa-disallow", QueueRole::kGraphics, false);
-  CHECK_NOTNULL_F(recorder.get());
+  auto recorder = AcquireRecorder("texture-readback-msaa-disallow",
+    QueueRole::kGraphics, oxygen::graphics::SubmissionPolicy::kExplicit);
+  CHECK_F(static_cast<bool>(recorder));
   EnsureTracked(*recorder, texture, ResourceStates::kCommon);
 
   const auto ticket = readback->EnqueueCopy(*recorder, *texture,
@@ -688,9 +695,9 @@ NOLINT_TEST_F(
     texture_desc, upload_bytes, "cancel-texture");
   auto readback = CreateTextureReadback("cancel-readback");
 
-  const auto ticket
-    = EnqueueReadback(readback, texture, TextureReadbackRequest {},
-      "texture-readback-cancel", QueueRole::kGraphics, false);
+  const auto ticket = EnqueueReadback(readback, texture,
+    TextureReadbackRequest {}, "texture-readback-cancel", QueueRole::kGraphics,
+    oxygen::graphics::SubmissionPolicy::kExplicit);
 
   const auto cancelled = CancelReadback(ticket);
   ASSERT_TRUE(cancelled.has_value());
@@ -767,7 +774,7 @@ NOLINT_TEST_F(TextureReadbackLifecycleTest,
 
   {
     auto recorder = AcquireRecorder("texture-readback-cleanup-msaa");
-    CHECK_NOTNULL_F(recorder.get());
+    CHECK_F(static_cast<bool>(recorder));
     recorder->BeginTrackingResourceState(*texture, ResourceStates::kCommon);
 
     const auto ticket = readback->EnqueueCopy(*recorder, *texture,
@@ -883,7 +890,7 @@ NOLINT_TEST_F(TextureReadbackManagerTest,
 }
 
 NOLINT_TEST_F(TextureReadbackFrameLifecycleTest,
-  OnFrameStartRetiresCompletedTicketWhileMappedBytesStayValid)
+  OnFrameStartPreservesOwnedTicketAndMappedBytes)
 {
   GetReadbackManager()->OnFrameStart(oxygen::frame::Slot { 0 });
 
@@ -926,11 +933,14 @@ NOLINT_TEST_F(TextureReadbackFrameLifecycleTest,
     (std::vector<uint8_t> { 31U, 21U, 91U, 112U, 32U, 22U, 91U, 113U }));
 
   const auto awaited = AwaitReadback(ticket);
-  ASSERT_FALSE(awaited.has_value());
-  EXPECT_EQ(awaited.error(), ReadbackError::kTicketNotFound);
+  ASSERT_TRUE(awaited.has_value());
 
   mapped = MappedTextureReadback {};
   EXPECT_EQ(readback->GetState(), ReadbackState::kReady);
+  readback.reset();
+  const auto released = AwaitReadback(ticket);
+  ASSERT_FALSE(released.has_value());
+  EXPECT_EQ(released.error(), ReadbackError::kTicketNotFound);
 }
 
 NOLINT_TEST_F(TextureReadbackCoroutineTest,
@@ -1049,7 +1059,8 @@ NOLINT_TEST_F(TextureReadbackShutdownTest,
     TextureReadbackRequest {
       .src_slice = { .x = 0, .y = 0, .width = 2, .height = 2 },
     },
-    "texture-readback-shutdown-pending", QueueRole::kGraphics, false);
+    "texture-readback-shutdown-pending", QueueRole::kGraphics,
+    oxygen::graphics::SubmissionPolicy::kExplicit);
 
   const auto shutdown_result
     = GetReadbackManager()->Shutdown(std::chrono::milliseconds { 0 });

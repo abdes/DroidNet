@@ -55,6 +55,7 @@ set(
   "CommandList.h"
   "CommandQueue.h"
   "CommandRecorder.h"
+  "CommandRecording.h"
   "Concepts.h"
   "Constants.h"
   "DeferredObjectRelease.h"
@@ -111,6 +112,7 @@ set(
   "CommandList.cpp"
   "CommandQueue.cpp"
   "CommandRecorder.cpp"
+  "CommandRecording.cpp"
   "DescriptorHandle.cpp"
   "Detail/Barriers.cpp"
   "Detail/FixedDescriptorSegment.cpp"
@@ -147,10 +149,8 @@ target_sources(
     ${OXYGEN_GFX_COMMON_HEADERS}
   PUBLIC
     FILE_SET HEADERS
-      BASE_DIRS
-        "${OXYGEN_SOURCE_DIR}"
-      FILES
-        ${OXYGEN_GFX_COMMON_HEADERS}
+    BASE_DIRS "${OXYGEN_SOURCE_DIR}"
+    FILES ${OXYGEN_GFX_COMMON_HEADERS}
 )
 
 arrange_target_files_for_ide(${META_MODULE_TARGET})

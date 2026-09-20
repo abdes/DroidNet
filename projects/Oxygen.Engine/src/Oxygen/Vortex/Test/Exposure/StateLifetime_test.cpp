@@ -56,7 +56,10 @@ NOLINT_TEST_F(ExposureGpuTest,
   ctx_.frame_sequence = frame::SequenceNumber {
     1U,
   };
-  const auto first = pass_->Execute(ctx_, config, {});
+  const auto first = SubmitCommands(
+    "Vortex Exposure", [&](graphics::CommandRecorder& recorder) -> auto {
+      return pass_->Execute(ctx_, recorder, config, {});
+    });
   ASSERT_TRUE(first.executed);
   ctx_.current_view.view_state_handle = CompositionView::ViewStateHandle {
     2U,
@@ -66,7 +69,10 @@ NOLINT_TEST_F(ExposureGpuTest,
   };
   settings.manual_ev = 8.0F;
   config = SharedConfig(settings);
-  const auto second = pass_->Execute(ctx_, config, {});
+  const auto second = SubmitCommands(
+    "Vortex Exposure", [&](graphics::CommandRecorder& recorder) -> auto {
+      return pass_->Execute(ctx_, recorder, config, {});
+    });
   ASSERT_TRUE(second.executed);
   EXPECT_NE(first.exposure_buffer, second.exposure_buffer);
   EXPECT_EQ(Read<ExposureStateData>(
@@ -77,7 +83,10 @@ NOLINT_TEST_F(ExposureGpuTest,
               *second.exposure_buffer, ResourceStates::kShaderResource)
               .displayed_scale,
     0x1p-8F);
-  const auto duplicate = pass_->Execute(ctx_, config, {});
+  const auto duplicate = SubmitCommands(
+    "Vortex Exposure", [&](graphics::CommandRecorder& recorder) -> auto {
+      return pass_->Execute(ctx_, recorder, config, {});
+    });
   EXPECT_FALSE(duplicate.executed);
   EXPECT_EQ(duplicate.state, second.state);
 }

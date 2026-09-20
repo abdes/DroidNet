@@ -12,6 +12,7 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -24,6 +25,7 @@
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
+#include <Oxygen/Graphics/Common/Test/CommandRecordingTestSupport.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/FenceValue.h>
 #include <Oxygen/Graphics/Common/Types/QueueRole.h>
@@ -43,8 +45,16 @@ namespace oxygen::graphics::d3d12::testing {
 */
 class OffscreenTestFixture : public ::testing::Test {
 protected:
-  using RecorderPtr = std::unique_ptr<graphics::CommandRecorder,
-    std::function<void(graphics::CommandRecorder*)>>;
+  using Recording = graphics::CommandRecording;
+
+  //! Runs one test operation and returns its result only after submission.
+  template <typename Operation>
+  auto SubmitCommands(const std::string_view name, Operation&& operation)
+    -> std::invoke_result_t<Operation, graphics::CommandRecorder&>
+  {
+    return graphics::testing::SubmitCommands(
+      Backend(), name, std::forward<Operation>(operation));
+  }
 
   auto SetUp() -> void override
   {
@@ -79,6 +89,7 @@ protected:
 
   auto TearDown() -> void override
   {
+    pending_recordings_.clear();
     CleanupTrackedResources();
 
     if (graphics_ != nullptr) {
@@ -164,22 +175,24 @@ protected:
 
   auto AcquireRecorder(std::string_view command_list_name,
     const graphics::QueueRole role = graphics::QueueRole::kGraphics,
-    const bool immediate_submission = true) -> RecorderPtr
+    const graphics::SubmissionPolicy policy
+    = graphics::SubmissionPolicy::kOnScopeExit) -> Recording
   {
     return Backend().AcquireCommandRecorder(
-      QueueKeyFor(role), command_list_name, immediate_submission);
+      QueueKeyFor(role), command_list_name, policy);
   }
 
-  auto AcquireDeferredRecorder(std::string_view command_list_name,
-    const graphics::QueueRole role = graphics::QueueRole::kGraphics)
-    -> RecorderPtr
+  void KeepPendingRecording(Recording recording)
   {
-    return AcquireRecorder(command_list_name, role, false);
+    pending_recordings_.push_back(std::move(recording));
   }
 
-  auto SubmitDeferredRecorders() -> void
+  void SubmitPendingRecordings()
   {
-    Backend().SubmitDeferredCommandLists();
+    for (auto& recording : pending_recordings_) {
+      CHECK_F(recording.Submit());
+    }
+    pending_recordings_.clear();
   }
 
   [[nodiscard]] auto SignalQueue(const graphics::QueueRole role
@@ -396,6 +409,7 @@ private:
   std::unique_ptr<oxygen::graphics::QueuesStrategy> queue_strategy_ {};
   mutable std::vector<std::shared_ptr<graphics::Buffer>> buffers_ {};
   mutable std::vector<std::shared_ptr<graphics::Texture>> textures_ {};
+  std::vector<Recording> pending_recordings_;
   std::string backend_config_json_ {};
   std::string path_finder_config_json_ {};
 };

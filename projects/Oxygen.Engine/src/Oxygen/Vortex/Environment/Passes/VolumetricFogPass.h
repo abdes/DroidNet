@@ -26,6 +26,10 @@ namespace oxygen {
 class ResolvedView;
 }
 
+namespace oxygen::graphics {
+class CommandRecorder;
+}
+
 namespace oxygen::vortex {
 namespace internal {
   class RetainedTexturePool;
@@ -97,6 +101,7 @@ namespace environment {
       frame::SequenceNumber sequence, frame::Slot slot) -> void;
     OXGN_VRTX_API auto RemoveViewState(ViewId view_id) -> void;
     [[nodiscard]] OXGN_VRTX_API auto Record(RenderContext& ctx,
+      graphics::CommandRecorder& recorder,
       const internal::StableAtmosphereState& stable_state,
       ShaderVisibleIndex distant_sky_light_lut_srv,
       const internal::LocalFogVolumeState::ViewProducts* local_fog_products

@@ -83,8 +83,7 @@ NOLINT_TEST_F(ExposureLightingGpuTest,
     ASSERT_TRUE(seed.has_value());
     Probe::ExposureStatusJobs held;
     bool hold = true;
-    probe->inspect = [&](const RenderContext&, const SceneTextureExtractRef&,
-                       unsigned) -> void {
+    probe->after_submit = [&]() -> void {
       if (hold) {
         held = Probe::TakeExposureStatuses(service, handle);
       }
@@ -110,7 +109,7 @@ NOLINT_TEST_F(ExposureLightingGpuTest,
       ExposureTransitionPhase::kApplied);
     EXPECT_EQ(
       InspectRequiredTransition(handle).applied_generation, seed->generation);
-    probe->inspect = {};
+    probe->after_submit = {};
   }
 }
 

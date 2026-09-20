@@ -30,17 +30,28 @@ NOLINT_TEST_F(
   ctx_.frame_sequence = frame::SequenceNumber {
     1U,
   };
-  const auto first = pass_->ResolveFrame(ctx_, SharedConfig(settings), {});
+  const auto first = SubmitCommands(
+    "Vortex Exposure Frame", [&](graphics::CommandRecorder& recorder) -> auto {
+      return pass_->ResolveFrame(ctx_, recorder, SharedConfig(settings), {});
+    });
   ASSERT_NE(first, nullptr);
   settings.manual_ev = 4.0F;
-  EXPECT_EQ(pass_->ResolveFrame(ctx_, SharedConfig(settings), {}), first);
+  EXPECT_EQ(SubmitCommands("Vortex Exposure Frame",
+              [&](graphics::CommandRecorder& recorder) -> auto {
+                return pass_->ResolveFrame(
+                  ctx_, recorder, SharedConfig(settings), {});
+              }),
+    first);
   ctx_.frame_sequence = frame::SequenceNumber {
     2U,
   };
   ctx_.frame_slot = frame::Slot {
     1U,
   };
-  const auto second = pass_->ResolveFrame(ctx_, SharedConfig(settings), {});
+  const auto second = SubmitCommands(
+    "Vortex Exposure Frame", [&](graphics::CommandRecorder& recorder) -> auto {
+      return pass_->ResolveFrame(ctx_, recorder, SharedConfig(settings), {});
+    });
   ASSERT_NE(second, nullptr);
   EXPECT_NE(first->buffer, second->buffer);
   const auto a
@@ -72,7 +83,10 @@ NOLINT_TEST_F(
   ctx_.frame_sequence = frame::SequenceNumber {
     ++sequence_,
   };
-  const auto resolved = pass_->ResolveFrame(ctx_, SharedConfig(settings), {});
+  const auto resolved = SubmitCommands(
+    "Vortex Exposure Frame", [&](graphics::CommandRecorder& recorder) -> auto {
+      return pass_->ResolveFrame(ctx_, recorder, SharedConfig(settings), {});
+    });
   ASSERT_NE(resolved, nullptr);
   const auto frame = Read<FrameExposureData>(
     *resolved->buffer, ResourceStates::kShaderResource);
@@ -82,7 +96,10 @@ NOLINT_TEST_F(
   ctx_.current_view.view_state_handle = CompositionView::ViewStateHandle {
     20U,
   };
-  const auto fresh = pass_->ResolveFrame(ctx_, SharedConfig(settings), {});
+  const auto fresh = SubmitCommands(
+    "Vortex Exposure Frame", [&](graphics::CommandRecorder& recorder) -> auto {
+      return pass_->ResolveFrame(ctx_, recorder, SharedConfig(settings), {});
+    });
   ASSERT_NE(fresh, nullptr);
   const auto bootstrap
     = Read<FrameExposureData>(*fresh->buffer, ResourceStates::kShaderResource);
@@ -124,7 +141,10 @@ NOLINT_TEST_F(
   auto borrowed_inputs = postprocess::ExposurePass::FrameInputs {};
   borrowed_inputs.use_fp32 = false;
   borrowed_inputs.source = &source;
-  const auto borrowed = pass_->ResolveFrame(ctx_, config, borrowed_inputs);
+  const auto borrowed = SubmitCommands(
+    "Vortex Exposure Frame", [&](graphics::CommandRecorder& recorder) -> auto {
+      return pass_->ResolveFrame(ctx_, recorder, config, borrowed_inputs);
+    });
   ASSERT_NE(borrowed, nullptr);
   const auto domain = Read<FrameExposureData>(
     *borrowed->buffer, ResourceStates::kShaderResource);
@@ -164,8 +184,11 @@ NOLINT_TEST_F(ExposureGpuTest, FrameResolveBorrowsPriorRootAndTagsRootFallback)
   };
   auto borrowed_inputs = postprocess::ExposurePass::FrameInputs {};
   borrowed_inputs.source = &source;
-  const auto borrowed
-    = pass_->ResolveFrame(ctx_, SharedConfig(), borrowed_inputs);
+  const auto borrowed = SubmitCommands(
+    "Vortex Exposure Frame", [&](graphics::CommandRecorder& recorder) -> auto {
+      return pass_->ResolveFrame(
+        ctx_, recorder, SharedConfig(), borrowed_inputs);
+    });
   ASSERT_NE(borrowed, nullptr);
   const auto frame = Read<FrameExposureData>(
     *borrowed->buffer, ResourceStates::kShaderResource);
@@ -181,8 +204,11 @@ NOLINT_TEST_F(ExposureGpuTest, FrameResolveBorrowsPriorRootAndTagsRootFallback)
   source.config = SharedConfig(settings);
   auto fallback_inputs = postprocess::ExposurePass::FrameInputs {};
   fallback_inputs.source = &source;
-  const auto fallback
-    = pass_->ResolveFrame(ctx_, SharedConfig(), fallback_inputs);
+  const auto fallback = SubmitCommands(
+    "Vortex Exposure Frame", [&](graphics::CommandRecorder& recorder) -> auto {
+      return pass_->ResolveFrame(
+        ctx_, recorder, SharedConfig(), fallback_inputs);
+    });
   ASSERT_NE(fallback, nullptr);
   const auto fallback_frame = Read<FrameExposureData>(
     *fallback->buffer, ResourceStates::kShaderResource);
@@ -211,14 +237,21 @@ NOLINT_TEST_F(ExposureGpuTest,
     auto exposure_inputs = postprocess::ExposurePass::FrameInputs {};
     exposure_inputs.transition = *seed;
     exposure_inputs.lifetime = seed->lifetime;
-    EXPECT_EQ(
-      pass_->ResolveFrame(ctx_, SharedConfig(), exposure_inputs), nullptr);
+    EXPECT_EQ(SubmitCommands("Vortex Exposure Frame",
+                [&](graphics::CommandRecorder& recorder) -> auto {
+                  return pass_->ResolveFrame(
+                    ctx_, recorder, SharedConfig(), exposure_inputs);
+                }),
+      nullptr);
   }
   auto resolved_inputs = postprocess::ExposurePass::FrameInputs {};
   resolved_inputs.transition = *seed;
   resolved_inputs.lifetime = seed->lifetime;
-  const auto resolved
-    = pass_->ResolveFrame(ctx_, SharedConfig(), resolved_inputs);
+  const auto resolved = SubmitCommands(
+    "Vortex Exposure Frame", [&](graphics::CommandRecorder& recorder) -> auto {
+      return pass_->ResolveFrame(
+        ctx_, recorder, SharedConfig(), resolved_inputs);
+    });
   ASSERT_NE(resolved, nullptr);
   EXPECT_EQ(
     Read<FrameExposureData>(*resolved->buffer, ResourceStates::kShaderResource)
@@ -237,7 +270,10 @@ NOLINT_TEST_F(ExposureGpuTest,
   fp32_inputs.use_fp32 = true;
   fp32_inputs.transition = *seed;
   fp32_inputs.lifetime = seed->lifetime;
-  const auto fp32 = pass_->ResolveFrame(ctx_, SharedConfig(), fp32_inputs);
+  const auto fp32 = SubmitCommands(
+    "Vortex Exposure Frame", [&](graphics::CommandRecorder& recorder) -> auto {
+      return pass_->ResolveFrame(ctx_, recorder, SharedConfig(), fp32_inputs);
+    });
   ASSERT_NE(fp32, nullptr);
   EXPECT_EQ(
     Read<FrameExposureData>(*fp32->buffer, ResourceStates::kShaderResource)
@@ -248,7 +284,10 @@ NOLINT_TEST_F(ExposureGpuTest,
   };
   auto diagnostic = SharedConfig();
   diagnostic = diagnostic.WithDiagnosticOverride(true);
-  const auto unit = pass_->ResolveFrame(ctx_, diagnostic, {});
+  const auto unit = SubmitCommands(
+    "Vortex Exposure Frame", [&](graphics::CommandRecorder& recorder) -> auto {
+      return pass_->ResolveFrame(ctx_, recorder, diagnostic, {});
+    });
   ASSERT_NE(unit, nullptr);
   const auto unit_frame
     = Read<FrameExposureData>(*unit->buffer, ResourceStates::kShaderResource);
@@ -264,7 +303,10 @@ NOLINT_TEST_F(ExposureGpuTest,
   ctx_.frame_sequence = frame::SequenceNumber {
     1U,
   };
-  const auto seed = pass_->ResolveFrame(ctx_, SharedConfig(settings), {});
+  const auto seed = SubmitCommands(
+    "Vortex Exposure Frame", [&](graphics::CommandRecorder& recorder) -> auto {
+      return pass_->ResolveFrame(ctx_, recorder, SharedConfig(settings), {});
+    });
   ASSERT_NE(seed, nullptr);
   auto candidate = ExposureStateData {};
   candidate.flags = 1U | 256U;
@@ -292,8 +334,11 @@ NOLINT_TEST_F(ExposureGpuTest,
   };
   auto resolved_inputs = postprocess::ExposurePass::FrameInputs {};
   resolved_inputs.qualified_candidate = seed->current_state;
-  const auto resolved
-    = pass_->ResolveFrame(ctx_, SharedConfig(settings), resolved_inputs);
+  const auto resolved = SubmitCommands(
+    "Vortex Exposure Frame", [&](graphics::CommandRecorder& recorder) -> auto {
+      return pass_->ResolveFrame(
+        ctx_, recorder, SharedConfig(settings), resolved_inputs);
+    });
   ASSERT_NE(resolved, nullptr);
   const auto frame = Read<FrameExposureData>(
     *resolved->buffer, ResourceStates::kShaderResource);
@@ -305,8 +350,11 @@ NOLINT_TEST_F(ExposureGpuTest,
   };
   auto invalid_inputs = postprocess::ExposurePass::FrameInputs {};
   invalid_inputs.qualified_candidate = resolved->current_state;
-  const auto invalid
-    = pass_->ResolveFrame(ctx_, SharedConfig(settings), invalid_inputs);
+  const auto invalid = SubmitCommands(
+    "Vortex Exposure Frame", [&](graphics::CommandRecorder& recorder) -> auto {
+      return pass_->ResolveFrame(
+        ctx_, recorder, SharedConfig(settings), invalid_inputs);
+    });
   ASSERT_NE(invalid, nullptr);
   const auto invalid_frame = Read<FrameExposureData>(
     *invalid->buffer, ResourceStates::kShaderResource);
@@ -327,7 +375,10 @@ NOLINT_TEST_F(
     ctx_.frame_sequence = frame::SequenceNumber {
       ++sequence_,
     };
-    const auto resolved = pass_->ResolveFrame(ctx_, SharedConfig(settings), {});
+    const auto resolved = SubmitCommands("Vortex Exposure Frame",
+      [&](graphics::CommandRecorder& recorder) -> auto {
+        return pass_->ResolveFrame(ctx_, recorder, SharedConfig(settings), {});
+      });
     ASSERT_NE(resolved, nullptr);
     const auto frame = Read<FrameExposureData>(
       *resolved->buffer, ResourceStates::kShaderResource);
@@ -338,8 +389,11 @@ NOLINT_TEST_F(
   ctx_.frame_sequence = frame::SequenceNumber {
     ++sequence_,
   };
-  const auto camera
-    = pass_->ResolveFrame(ctx_, SharedConfig(settings, 16.0F), {});
+  const auto camera = SubmitCommands(
+    "Vortex Exposure Frame", [&](graphics::CommandRecorder& recorder) -> auto {
+      return pass_->ResolveFrame(
+        ctx_, recorder, SharedConfig(settings, 16.0F), {});
+    });
   ASSERT_NE(camera, nullptr);
   EXPECT_EQ(
     Read<FrameExposureData>(*camera->buffer, ResourceStates::kShaderResource)
@@ -349,8 +403,11 @@ NOLINT_TEST_F(
   ctx_.frame_sequence = frame::SequenceNumber {
     ++sequence_,
   };
-  const auto disabled
-    = pass_->ResolveFrame(ctx_, SharedConfig(settings, 16.0F), {});
+  const auto disabled = SubmitCommands(
+    "Vortex Exposure Frame", [&](graphics::CommandRecorder& recorder) -> auto {
+      return pass_->ResolveFrame(
+        ctx_, recorder, SharedConfig(settings, 16.0F), {});
+    });
   ASSERT_NE(disabled, nullptr);
   EXPECT_EQ(
     Read<FrameExposureData>(*disabled->buffer, ResourceStates::kShaderResource)
@@ -373,7 +430,10 @@ NOLINT_TEST_F(
     settings.manual_ev = ev;
     auto pixel_options = ServicePixelOptions {};
     pixel_options.before_execute = [&] -> void {
-      frame = service.PrepareFrameExposure(ctx_, false);
+      frame = SubmitCommands("Vortex Exposure Frame",
+        [&](graphics::CommandRecorder& recorder) -> auto {
+          return service.PrepareFrameExposure(ctx_, recorder, false);
+        });
       ASSERT_NE(frame, nullptr);
     };
     const auto pixel = ServicePixel(
@@ -405,7 +465,10 @@ NOLINT_TEST_F(ExposureGpuTest,
   auto settings = scene::ExposureSettings {};
   postprocess::ExposurePass::FrameLease frame;
   const auto prepare = [&] -> void {
-    frame = service.PrepareFrameExposure(ctx_, false);
+    frame = SubmitCommands("Vortex Exposure Frame",
+      [&](graphics::CommandRecorder& recorder) -> auto {
+        return service.PrepareFrameExposure(ctx_, recorder, false);
+      });
     ASSERT_NE(frame, nullptr);
   };
   {
@@ -447,11 +510,15 @@ NOLINT_TEST_F(ExposureGpuTest,
   }
 }
 
-NOLINT_TEST_F(ExposureGpuTest,
-  FrameDomainFailedSeedKeepsPriorDisplayedGainAndPendingRequest)
+NOLINT_TEST_F(
+  ExposureGpuTest, FrameDomainDiscardedSeedKeepsPriorHistoryAndPendingRequest)
 {
   auto service = PostProcessService(*renderer_);
   EXPECT_NEAR(ServicePixel(service, Uniform(.25F, 4U, 4U)), .18F, 2e-5F);
+  const auto previous
+    = vortex::testing::RendererPublicationProbe::ExposureStateForView(
+      service, ctx_.current_view.view_state_handle);
+  ASSERT_NE(previous, nullptr);
   const auto request
     = renderer_->QueueExposureTransition(ctx_.current_view.view_state_handle,
       ExposureTransitionPolicy::kSeedFromEv100, 12.0F);
@@ -461,21 +528,27 @@ NOLINT_TEST_F(ExposureGpuTest,
   postprocess::ExposurePass::FrameLease frame;
   auto pixel_options = ServicePixelOptions {};
   pixel_options.before_execute = [&] -> void {
-    frame = service.PrepareFrameExposure(ctx_, false);
+    frame = SubmitCommands("Vortex Exposure Frame",
+      [&](graphics::CommandRecorder& recorder) -> auto {
+        return service.PrepareFrameExposure(ctx_, recorder, false);
+      });
     ASSERT_NE(frame, nullptr);
     FailureBackend().fail_next_exposure_recorder = true;
   };
   const auto pixel
     = ServicePixel(service, Uniform(.25F / 4096.0F, 4U, 4U), {}, pixel_options);
   ASSERT_NE(frame, nullptr);
-  EXPECT_NEAR(pixel, .18F, 2e-5F);
+  EXPECT_TRUE(std::isnan(pixel));
+  EXPECT_EQ(vortex::testing::RendererPublicationProbe::ExposureStateForView(
+              service, ctx_.current_view.view_state_handle),
+    previous);
   EXPECT_EQ(
     Read<FrameExposureData>(*frame->buffer, ResourceStates::kShaderResource)
       .pre_exposure,
     0x1p-12F);
-  EXPECT_NEAR(Read<ExposureStateData>(
-                *frame->current_state->buffer, ResourceStates::kShaderResource)
-                .displayed_scale,
+  EXPECT_NEAR(
+    Read<ExposureStateData>(*previous->buffer, ResourceStates::kShaderResource)
+      .displayed_scale,
     .72F, 2e-5F);
   EXPECT_EQ(InspectRequiredTransition(request->target).phase,
     ExposureTransitionPhase::kQueued);
@@ -528,7 +601,10 @@ NOLINT_TEST_F(ExposureGpuTest,
   {
     auto pixel_options = ServicePixelOptions {};
     pixel_options.before_execute = [&] -> void {
-      frame = service.PrepareFrameExposure(ctx_, false);
+      frame = SubmitCommands("Vortex Exposure Frame",
+        [&](graphics::CommandRecorder& recorder) -> auto {
+          return service.PrepareFrameExposure(ctx_, recorder, false);
+        });
       ASSERT_NE(frame, nullptr);
     };
     EXPECT_NEAR(
@@ -543,23 +619,31 @@ NOLINT_TEST_F(ExposureGpuTest,
     0x1p-4F);
 }
 
-NOLINT_TEST_F(ExposureGpuTest, FrameDomainFailedSolveStillHonorsZeroTarget)
+NOLINT_TEST_F(ExposureGpuTest, FrameDomainDiscardedZeroTargetKeepsPriorHistory)
 {
   auto service = PostProcessService(*renderer_);
   ServicePixel(service, Uniform(.25F, 4U, 4U));
+  const auto previous
+    = vortex::testing::RendererPublicationProbe::ExposureStateForView(
+      service, ctx_.current_view.view_state_handle);
   auto settings = scene::ExposureSettings {};
   settings.target_luminance = 0.0F;
   postprocess::ExposurePass::FrameLease frame;
   {
     auto pixel_options = ServicePixelOptions {};
     pixel_options.before_execute = [&] -> void {
-      frame = service.PrepareFrameExposure(ctx_, false);
+      frame = SubmitCommands("Vortex Exposure Frame",
+        [&](graphics::CommandRecorder& recorder) -> auto {
+          return service.PrepareFrameExposure(ctx_, recorder, false);
+        });
       ASSERT_NE(frame, nullptr);
       FailureBackend().fail_next_exposure_recorder = true;
     };
-    EXPECT_EQ(
-      ServicePixel(service, Uniform(.18F, 4U, 4U), settings, pixel_options),
-      0.0F);
+    EXPECT_TRUE(std::isnan(
+      ServicePixel(service, Uniform(.18F, 4U, 4U), settings, pixel_options)));
+    EXPECT_EQ(vortex::testing::RendererPublicationProbe::ExposureStateForView(
+                service, ctx_.current_view.view_state_handle),
+      previous);
   }
   ASSERT_NE(frame, nullptr);
   const auto current = Read<ExposureStateData>(
@@ -568,8 +652,8 @@ NOLINT_TEST_F(ExposureGpuTest, FrameDomainFailedSolveStillHonorsZeroTarget)
   EXPECT_GT(current.latent_scale, 0.0F);
 }
 
-NOLINT_TEST_F(ExposureGpuTest,
-  FrameDomainFailedSourceLossRetainsLatestBorrowInReservedState)
+NOLINT_TEST_F(
+  ExposureGpuTest, FrameDomainDiscardedSourceLossRetainsLastSubmittedBorrow)
 {
   auto& service = OwnedExposureService();
   auto publication = engine::FrameContext {};
@@ -606,15 +690,18 @@ NOLINT_TEST_F(ExposureGpuTest,
         50U,
       };
   const auto fail_copy = [&] -> void {
-    ASSERT_NE(service.PrepareFrameExposure(ctx_, false), nullptr);
+    ASSERT_NE(SubmitCommands("Vortex Exposure Frame",
+                [&](graphics::CommandRecorder& recorder) -> auto {
+                  return service.PrepareFrameExposure(ctx_, recorder, false);
+                }),
+      nullptr);
     FailureBackend().fail_next_exposure_recorder = true;
   };
   {
     auto pixel_options = ServicePixelOptions {};
     pixel_options.before_execute = fail_copy;
-    EXPECT_NEAR(
-      ServicePixel(service, Uniform(.25F / 256.0F, 4U, 4U), {}, pixel_options),
-      .25F / 256.0F, 2e-7F);
+    EXPECT_TRUE(std::isnan(ServicePixel(
+      service, Uniform(.25F / 256.0F, 4U, 4U), {}, pixel_options)));
   }
   renderer_->RemovePublishedRuntimeView(publication,
     ViewId {
@@ -626,18 +713,17 @@ NOLINT_TEST_F(ExposureGpuTest,
   {
     auto pixel_options = ServicePixelOptions {};
     pixel_options.before_execute = [&] -> void {
-      frame = service.PrepareFrameExposure(ctx_, true);
+      frame = SubmitCommands("Vortex Exposure Frame",
+        [&](graphics::CommandRecorder& recorder) -> auto {
+          return service.PrepareFrameExposure(ctx_, recorder, true);
+        });
       ASSERT_NE(frame, nullptr);
       FailureBackend().fail_next_exposure_recorder = true;
     };
-    EXPECT_NEAR(ServicePixel(service, Uniform(.25F, 4U, 4U), {}, pixel_options),
-      .25F / 256.0F, 2e-7F);
+    EXPECT_TRUE(std::isnan(
+      ServicePixel(service, Uniform(.25F, 4U, 4U), {}, pixel_options)));
   }
   ASSERT_NE(frame, nullptr);
-  EXPECT_EQ(Read<ExposureStateData>(
-              *frame->current_state->buffer, ResourceStates::kShaderResource)
-              .displayed_scale,
-    0x1p-8F);
   EXPECT_EQ(vortex::testing::RendererPublicationProbe::ExposureStateForView(
               service, consumer_handle),
     old);
@@ -647,7 +733,7 @@ NOLINT_TEST_F(ExposureGpuTest,
     0x1p-4F);
 }
 
-NOLINT_TEST_F(ExposureGpuTest, FrameDomainSkipsTonemapWhenFallbackCannotSubmit)
+NOLINT_TEST_F(ExposureGpuTest, FrameDomainAbortedRecordingSkipsTonemap)
 {
   auto service = PostProcessService(*renderer_);
   ServicePixel(service, Uniform(.25F, 4U, 4U));
@@ -657,15 +743,18 @@ NOLINT_TEST_F(ExposureGpuTest, FrameDomainSkipsTonemapWhenFallbackCannotSubmit)
   {
     auto pixel_options = ServicePixelOptions {};
     pixel_options.before_execute = [&] -> void {
-      ASSERT_NE(service.PrepareFrameExposure(ctx_, false), nullptr);
+      ASSERT_NE(SubmitCommands("Vortex Exposure Frame",
+                  [&](graphics::CommandRecorder& recorder) -> auto {
+                    return service.PrepareFrameExposure(ctx_, recorder, false);
+                  }),
+        nullptr);
       auto& backend = FailureBackend();
       backend.fail_next_exposure_recorder = true;
-      backend.fail_next_fallback_recorder = true;
     };
-    static_cast<void>(
-      ServicePixel(service, Uniform(.18F, 4U, 4U), {}, pixel_options));
+    EXPECT_TRUE(std::isnan(
+      ServicePixel(service, Uniform(.18F, 4U, 4U), {}, pixel_options)));
   }
-  EXPECT_TRUE(service.GetLastExecutionState().tonemap_requested);
+  EXPECT_FALSE(service.GetLastExecutionState().tonemap_requested);
   EXPECT_FALSE(service.GetLastExecutionState().tonemap_executed);
   EXPECT_FALSE(service.GetLastExecutionState().wrote_visible_output);
   EXPECT_EQ(vortex::testing::RendererPublicationProbe::ExposureStateForView(

@@ -200,7 +200,11 @@ NOLINT_TEST_F(
       = vortex::testing::RendererPublicationProbe::GetPostProcessService(
         *owner);
     service->SetResolvedConfig(SharedConfig(settings));
-    ASSERT_NE(service->PrepareFrameExposure(ctx, false), nullptr);
+    ASSERT_NE(SubmitCommands("Vortex Exposure Frame",
+                [&](graphics::CommandRecorder& recorder) -> auto {
+                  return service->PrepareFrameExposure(ctx, recorder, false);
+                }),
+      nullptr);
   };
 
   renderer_->RegisterViewExtension(probe);

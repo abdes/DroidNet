@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <Oxygen/Graphics/Common/Test/CommandRecordingTestSupport.h>
 #include <Oxygen/Testing/GTest.h>
 
 #include <array>
@@ -1208,7 +1209,10 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
     scene.get(),
   };
 
-  const auto slot = service.PublishEnvironmentBindings(ctx);
+  const auto slot = oxygen::graphics::testing::SubmitCommands(*graphics_,
+    "Vortex test", [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
+      return service.PublishEnvironmentBindings(ctx, recorder);
+    });
 
   ASSERT_NE(slot, kInvalidShaderVisibleIndex);
   const auto* static_data = service.InspectEnvironmentStaticData(ViewId {
@@ -1265,7 +1269,10 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
     scene.get(),
   };
 
-  const auto slot = service.PublishEnvironmentBindings(ctx);
+  const auto slot = oxygen::graphics::testing::SubmitCommands(*graphics_,
+    "Vortex test", [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
+      return service.PublishEnvironmentBindings(ctx, recorder);
+    });
 
   ASSERT_NE(slot, kInvalidShaderVisibleIndex);
   const auto* static_data = service.InspectEnvironmentStaticData(ViewId {
@@ -1309,7 +1316,10 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
     scene.get(),
   };
 
-  const auto slot = service.PublishEnvironmentBindings(ctx);
+  const auto slot = oxygen::graphics::testing::SubmitCommands(*graphics_,
+    "Vortex test", [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
+      return service.PublishEnvironmentBindings(ctx, recorder);
+    });
 
   ASSERT_NE(slot, kInvalidShaderVisibleIndex);
   const auto* static_data = service.InspectEnvironmentStaticData(ViewId {
@@ -1356,7 +1366,10 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
     scene.get(),
   };
 
-  service.RenderSkyAndFog(ctx, scene_textures);
+  oxygen::graphics::testing::SubmitCommands(*graphics_, "Vortex test",
+    [&](oxygen::graphics::CommandRecorder& recorder) -> void {
+      service.RenderSkyAndFog(ctx, recorder, scene_textures);
+    });
 
   const auto& stage15 = service.GetLastStage15State();
   EXPECT_EQ(stage15.sky_draw_count, 1U);
@@ -1422,7 +1435,10 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
     scene.get(),
   };
 
-  static_cast<void>(service.PublishEnvironmentBindings(ctx));
+  static_cast<void>(oxygen::graphics::testing::SubmitCommands(*graphics_,
+    "Vortex test", [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
+      return service.PublishEnvironmentBindings(ctx, recorder);
+    }));
 
   const auto* view_data = service.InspectEnvironmentViewData(ViewId {
     20U,
@@ -1518,8 +1534,14 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
     scene.get(),
   };
 
-  static_cast<void>(service.PublishEnvironmentBindings(ctx_x));
-  static_cast<void>(service.PublishEnvironmentBindings(ctx_up));
+  static_cast<void>(service.PublishEnvironmentBindings(ctx_x,
+    *graphics_->AcquireCommandRecorder(
+      graphics_->QueueKeyFor(oxygen::graphics::QueueRole::kGraphics),
+      "Test environment", oxygen::graphics::SubmissionPolicy::kOnScopeExit)));
+  static_cast<void>(service.PublishEnvironmentBindings(ctx_up,
+    *graphics_->AcquireCommandRecorder(
+      graphics_->QueueKeyFor(oxygen::graphics::QueueRole::kGraphics),
+      "Test environment", oxygen::graphics::SubmissionPolicy::kOnScopeExit)));
 
   const auto* view_data_x = service.InspectEnvironmentViewData(ViewId {
     201U,
@@ -1596,7 +1618,10 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
     scene.get(),
   };
 
-  static_cast<void>(service.PublishEnvironmentBindings(ctx));
+  static_cast<void>(oxygen::graphics::testing::SubmitCommands(*graphics_,
+    "Vortex test", [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
+      return service.PublishEnvironmentBindings(ctx, recorder);
+    }));
 
   const auto& light_state = service.InspectAtmosphereLightState();
   const auto& atmosphere_state = service.InspectAtmosphereState();
@@ -1724,7 +1749,10 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
     scene.get(),
   };
 
-  static_cast<void>(service.PublishEnvironmentBindings(ctx));
+  static_cast<void>(oxygen::graphics::testing::SubmitCommands(*graphics_,
+    "Vortex test", [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
+      return service.PublishEnvironmentBindings(ctx, recorder);
+    }));
 
   const auto& light_state = service.InspectAtmosphereLightState();
   ASSERT_TRUE(light_state.atmosphere_lights.at(0).enabled);
@@ -1795,7 +1823,10 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
     scene.get(),
   };
 
-  static_cast<void>(service.PublishEnvironmentBindings(ctx));
+  static_cast<void>(oxygen::graphics::testing::SubmitCommands(*graphics_,
+    "Vortex test", [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
+      return service.PublishEnvironmentBindings(ctx, recorder);
+    }));
 
   const auto& light_state = service.InspectAtmosphereLightState();
 
@@ -1857,7 +1888,10 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
     scene.get(),
   };
 
-  static_cast<void>(service.PublishEnvironmentBindings(ctx));
+  static_cast<void>(oxygen::graphics::testing::SubmitCommands(*graphics_,
+    "Vortex test", [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
+      return service.PublishEnvironmentBindings(ctx, recorder);
+    }));
 
   const auto& light_state = service.InspectAtmosphereLightState();
   auto traversal_order = std::vector<oxygen::scene::NodeHandle> {};
@@ -1936,7 +1970,10 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
     scene.get(),
   };
 
-  static_cast<void>(service.PublishEnvironmentBindings(ctx));
+  static_cast<void>(oxygen::graphics::testing::SubmitCommands(*graphics_,
+    "Vortex test", [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
+      return service.PublishEnvironmentBindings(ctx, recorder);
+    }));
 
   const auto& light_state = service.InspectAtmosphereLightState();
   EXPECT_TRUE(light_state.atmosphere_lights.at(0).enabled);
@@ -1984,7 +2021,10 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
     scene.get(),
   };
 
-  static_cast<void>(service.PublishEnvironmentBindings(ctx));
+  static_cast<void>(oxygen::graphics::testing::SubmitCommands(*graphics_,
+    "Vortex test", [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
+      return service.PublishEnvironmentBindings(ctx, recorder);
+    }));
   const auto base_light_revision
     = service.InspectAtmosphereLightState().revision;
   const auto base_atmosphere_revision
@@ -2002,7 +2042,10 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
     .AddComponent<oxygen::scene::environment::LocalFogVolume>();
   scene->Update();
 
-  static_cast<void>(service.PublishEnvironmentBindings(ctx));
+  static_cast<void>(oxygen::graphics::testing::SubmitCommands(*graphics_,
+    "Vortex test", [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
+      return service.PublishEnvironmentBindings(ctx, recorder);
+    }));
   EXPECT_EQ(
     service.InspectAtmosphereLightState().revision, base_light_revision);
   EXPECT_EQ(service.InspectAtmosphereState().atmosphere_revision,
@@ -2016,7 +2059,10 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   }
   primary_light->get().SetUsePerPixelAtmosphereTransmittance(true);
 
-  static_cast<void>(service.PublishEnvironmentBindings(ctx));
+  static_cast<void>(oxygen::graphics::testing::SubmitCommands(*graphics_,
+    "Vortex test", [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
+      return service.PublishEnvironmentBindings(ctx, recorder);
+    }));
   const auto light_changed_revision
     = service.InspectAtmosphereLightState().revision;
   const auto stable_changed_revision
@@ -2032,7 +2078,10 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   ASSERT_NE(atmosphere.get(), nullptr);
   atmosphere->SetTraceSampleCountScale(2.0F);
 
-  static_cast<void>(service.PublishEnvironmentBindings(ctx));
+  static_cast<void>(oxygen::graphics::testing::SubmitCommands(*graphics_,
+    "Vortex test", [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
+      return service.PublishEnvironmentBindings(ctx, recorder);
+    }));
   EXPECT_GT(service.InspectAtmosphereState().atmosphere_revision,
     base_atmosphere_revision);
   EXPECT_GT(
@@ -2062,7 +2111,10 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
     },
     resolved_view, composition_view);
 
-  const auto slot = service.PublishEnvironmentBindings(ctx);
+  const auto slot = oxygen::graphics::testing::SubmitCommands(*graphics_,
+    "Vortex test", [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
+      return service.PublishEnvironmentBindings(ctx, recorder);
+    });
   ASSERT_NE(slot, kInvalidShaderVisibleIndex);
   const auto* bindings = service.InspectBindings(ViewId {
     11U,
@@ -2123,7 +2175,10 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   graphics_->dispatch_log_.dispatches.clear();
   graphics_->compute_pipeline_log_.binds.clear();
 
-  const auto slot = service.PublishEnvironmentBindings(ctx);
+  const auto slot = oxygen::graphics::testing::SubmitCommands(*graphics_,
+    "Vortex test", [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
+      return service.PublishEnvironmentBindings(ctx, recorder);
+    });
 
   ASSERT_NE(slot, kInvalidShaderVisibleIndex);
   const auto* bindings = service.InspectBindings(ViewId {
@@ -2319,7 +2374,10 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   });
   ASSERT_NE(ctx.view_constants, nullptr);
 
-  static_cast<void>(service.PublishEnvironmentBindings(ctx));
+  static_cast<void>(oxygen::graphics::testing::SubmitCommands(*graphics_,
+    "Vortex test", [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
+      return service.PublishEnvironmentBindings(ctx, recorder);
+    }));
 
   const auto* bindings = service.InspectBindings(ViewId {
     118U,
@@ -2436,7 +2494,10 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   });
   ASSERT_NE(ctx.view_constants, nullptr);
 
-  static_cast<void>(service.PublishEnvironmentBindings(ctx));
+  static_cast<void>(oxygen::graphics::testing::SubmitCommands(*graphics_,
+    "Vortex test", [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
+      return service.PublishEnvironmentBindings(ctx, recorder);
+    }));
 
   const auto* view_data = service.InspectEnvironmentViewData(ViewId {
     119U,
@@ -2492,7 +2553,10 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
     scene.get(),
   };
 
-  static_cast<void>(service.PublishEnvironmentBindings(ctx));
+  static_cast<void>(oxygen::graphics::testing::SubmitCommands(*graphics_,
+    "Vortex test", [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
+      return service.PublishEnvironmentBindings(ctx, recorder);
+    }));
 
   const auto* view_data = service.InspectEnvironmentViewData(ViewId {
     119U,
@@ -2558,7 +2622,10 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   ASSERT_NE(ctx.view_constants, nullptr);
 
   graphics_->dispatch_log_.dispatches.clear();
-  static_cast<void>(service.PublishEnvironmentBindings(ctx));
+  static_cast<void>(oxygen::graphics::testing::SubmitCommands(*graphics_,
+    "Vortex test", [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
+      return service.PublishEnvironmentBindings(ctx, recorder);
+    }));
   EXPECT_EQ(graphics_->dispatch_log_.dispatches.size(), 5U);
   auto first_generation = service.GetLastViewProductGenerationState();
   EXPECT_TRUE(first_generation.atmosphere_lut_cache_valid);
@@ -2568,7 +2635,10 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   EXPECT_TRUE(first_generation.distant_sky_light_lut_executed);
 
   graphics_->dispatch_log_.dispatches.clear();
-  static_cast<void>(service.PublishEnvironmentBindings(ctx));
+  static_cast<void>(oxygen::graphics::testing::SubmitCommands(*graphics_,
+    "Vortex test", [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
+      return service.PublishEnvironmentBindings(ctx, recorder);
+    }));
   EXPECT_EQ(graphics_->dispatch_log_.dispatches.size(), 2U);
   auto second_generation = service.GetLastViewProductGenerationState();
   EXPECT_TRUE(second_generation.atmosphere_lut_cache_valid);
@@ -2591,7 +2661,10 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   scene->Update();
 
   graphics_->dispatch_log_.dispatches.clear();
-  static_cast<void>(service.PublishEnvironmentBindings(ctx));
+  static_cast<void>(oxygen::graphics::testing::SubmitCommands(*graphics_,
+    "Vortex test", [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
+      return service.PublishEnvironmentBindings(ctx, recorder);
+    }));
   EXPECT_EQ(graphics_->dispatch_log_.dispatches.size(), 5U);
   const auto third_generation = service.GetLastViewProductGenerationState();
   EXPECT_TRUE(third_generation.transmittance_lut_executed);
@@ -2638,7 +2711,10 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   graphics_->draw_log_.draws.clear();
   graphics_->graphics_pipeline_log_.binds.clear();
 
-  service.RenderSkyAndFog(ctx, scene_textures);
+  oxygen::graphics::testing::SubmitCommands(*graphics_, "Vortex test",
+    [&](oxygen::graphics::CommandRecorder& recorder) -> void {
+      service.RenderSkyAndFog(ctx, recorder, scene_textures);
+    });
 
   const auto& stage15 = service.GetLastStage15State();
   EXPECT_TRUE(stage15.requested);
@@ -2695,7 +2771,10 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
 
   graphics_->graphics_pipeline_log_.binds.clear();
 
-  service.RenderSkyAndFog(ctx, scene_textures);
+  oxygen::graphics::testing::SubmitCommands(*graphics_, "Vortex test",
+    [&](oxygen::graphics::CommandRecorder& recorder) -> void {
+      service.RenderSkyAndFog(ctx, recorder, scene_textures);
+    });
 
   const auto has_pipeline
     = [this](const std::string_view pipeline_name,
@@ -2808,7 +2887,10 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
     scene.get(),
   };
 
-  const auto slot = service.PublishEnvironmentBindings(ctx);
+  const auto slot = oxygen::graphics::testing::SubmitCommands(*graphics_,
+    "Vortex test", [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
+      return service.PublishEnvironmentBindings(ctx, recorder);
+    });
 
   ASSERT_NE(slot, kInvalidShaderVisibleIndex);
   const auto* static_data = service.InspectEnvironmentStaticData(ViewId {
@@ -2892,7 +2974,10 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
     scene.get(),
   };
 
-  static_cast<void>(service.PublishEnvironmentBindings(ctx));
+  static_cast<void>(oxygen::graphics::testing::SubmitCommands(*graphics_,
+    "Vortex test", [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
+      return service.PublishEnvironmentBindings(ctx, recorder);
+    }));
 
   const auto* static_data = service.InspectEnvironmentStaticData(ViewId {
     31U,
@@ -2947,7 +3032,10 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
     scene.get(),
   };
 
-  static_cast<void>(service.PublishEnvironmentBindings(ctx));
+  static_cast<void>(oxygen::graphics::testing::SubmitCommands(*graphics_,
+    "Vortex test", [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
+      return service.PublishEnvironmentBindings(ctx, recorder);
+    }));
 
   const auto* static_data = service.InspectEnvironmentStaticData(ViewId {
     32U,
@@ -2990,7 +3078,10 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
     },
     resolved_view, composition_view);
 
-  const auto slot = service.PublishEnvironmentBindings(ctx);
+  const auto slot = oxygen::graphics::testing::SubmitCommands(*graphics_,
+    "Vortex test", [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
+      return service.PublishEnvironmentBindings(ctx, recorder);
+    });
 
   ASSERT_NE(slot, kInvalidShaderVisibleIndex);
   const auto* bindings = service.InspectBindings(ViewId {
@@ -3036,7 +3127,10 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
     scene.get(),
   };
 
-  const auto slot = service.PublishEnvironmentBindings(ctx);
+  const auto slot = oxygen::graphics::testing::SubmitCommands(*graphics_,
+    "Vortex test", [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
+      return service.PublishEnvironmentBindings(ctx, recorder);
+    });
 
   ASSERT_NE(slot, kInvalidShaderVisibleIndex);
   const auto* bindings = service.InspectBindings(ViewId {
@@ -3142,7 +3236,10 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
     scene.get(),
   };
 
-  const auto slot = service.PublishEnvironmentBindings(ctx);
+  const auto slot = oxygen::graphics::testing::SubmitCommands(*graphics_,
+    "Vortex test", [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
+      return service.PublishEnvironmentBindings(ctx, recorder);
+    });
 
   ASSERT_NE(slot, kInvalidShaderVisibleIndex);
   const auto* bindings = service.InspectBindings(ViewId {
@@ -3203,7 +3300,10 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
     scene.get(),
   };
 
-  const auto slot = service.PublishEnvironmentBindings(ctx);
+  const auto slot = oxygen::graphics::testing::SubmitCommands(*graphics_,
+    "Vortex test", [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
+      return service.PublishEnvironmentBindings(ctx, recorder);
+    });
 
   ASSERT_NE(slot, kInvalidShaderVisibleIndex);
   const auto* bindings = service.InspectBindings(ViewId {
@@ -3305,7 +3405,10 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
 
   graphics_->dispatch_log_.dispatches.clear();
 
-  const auto slot = service.PublishEnvironmentBindings(ctx);
+  const auto slot = oxygen::graphics::testing::SubmitCommands(*graphics_,
+    "Vortex test", [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
+      return service.PublishEnvironmentBindings(ctx, recorder);
+    });
 
   ASSERT_NE(slot, kInvalidShaderVisibleIndex);
   const auto* bindings = service.InspectBindings(ViewId {
@@ -3441,7 +3544,10 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   });
   ASSERT_NE(ctx.view_constants, nullptr);
 
-  const auto slot = service.PublishEnvironmentBindings(ctx);
+  const auto slot = oxygen::graphics::testing::SubmitCommands(*graphics_,
+    "Vortex test", [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
+      return service.PublishEnvironmentBindings(ctx, recorder);
+    });
 
   ASSERT_NE(slot, kInvalidShaderVisibleIndex);
   const auto* bindings = service.InspectBindings(ViewId {
@@ -3564,8 +3670,11 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
     oxygen::frame::Slot {
       2U,
     });
-  ASSERT_NE(
-    service.PublishEnvironmentBindings(ctx), kInvalidShaderVisibleIndex);
+  ASSERT_NE(oxygen::graphics::testing::SubmitCommands(*graphics_, "Vortex test",
+              [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
+                return service.PublishEnvironmentBindings(ctx, recorder);
+              }),
+    kInvalidShaderVisibleIndex);
   auto first_generation = service.GetLastViewProductGenerationState();
   EXPECT_TRUE(first_generation.volumetric_fog_temporal_history_requested);
   EXPECT_FALSE(
@@ -3579,8 +3688,11 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
     oxygen::frame::Slot {
       0U,
     });
-  ASSERT_NE(
-    service.PublishEnvironmentBindings(ctx), kInvalidShaderVisibleIndex);
+  ASSERT_NE(oxygen::graphics::testing::SubmitCommands(*graphics_, "Vortex test",
+              [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
+                return service.PublishEnvironmentBindings(ctx, recorder);
+              }),
+    kInvalidShaderVisibleIndex);
   const auto& second_generation = service.GetLastViewProductGenerationState();
   EXPECT_TRUE(second_generation.volumetric_fog_temporal_history_requested);
   EXPECT_TRUE(
@@ -3594,8 +3706,11 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
     oxygen::frame::Slot {
       1U,
     });
-  ASSERT_NE(
-    service.PublishEnvironmentBindings(ctx), kInvalidShaderVisibleIndex);
+  ASSERT_NE(oxygen::graphics::testing::SubmitCommands(*graphics_, "Vortex test",
+              [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
+                return service.PublishEnvironmentBindings(ctx, recorder);
+              }),
+    kInvalidShaderVisibleIndex);
   EXPECT_TRUE(service.GetLastViewProductGenerationState()
       .volumetric_fog_temporal_history_reset);
   EXPECT_FALSE(service.GetLastViewProductGenerationState()
@@ -3608,8 +3723,11 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
     oxygen::frame::Slot {
       2U,
     });
-  ASSERT_NE(
-    service.PublishEnvironmentBindings(ctx), kInvalidShaderVisibleIndex);
+  ASSERT_NE(oxygen::graphics::testing::SubmitCommands(*graphics_, "Vortex test",
+              [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
+                return service.PublishEnvironmentBindings(ctx, recorder);
+              }),
+    kInvalidShaderVisibleIndex);
   EXPECT_TRUE(service.GetLastViewProductGenerationState()
       .volumetric_fog_temporal_history_reprojection_executed);
 }
@@ -3711,9 +3829,12 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
 
   graphics_->dispatch_log_.dispatches.clear();
 
-  const auto slot
-    = service.PublishEnvironmentBindings(ctx, kInvalidShaderVisibleIndex,
-      kInvalidShaderVisibleIndex, false, &scene_textures);
+  const auto slot = oxygen::graphics::testing::SubmitCommands(*graphics_,
+    "Vortex test", [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
+      return service.PublishEnvironmentBindings(ctx, recorder,
+        kInvalidShaderVisibleIndex, kInvalidShaderVisibleIndex, false,
+        &scene_textures);
+    });
 
   ASSERT_NE(slot, kInvalidShaderVisibleIndex);
   const auto& generation = service.GetLastViewProductGenerationState();
@@ -3777,7 +3898,10 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   graphics_->dispatch_log_.dispatches.clear();
   graphics_->indirect_log_.draws.clear();
 
-  service.RenderSkyAndFog(ctx, scene_textures);
+  oxygen::graphics::testing::SubmitCommands(*graphics_, "Vortex test",
+    [&](oxygen::graphics::CommandRecorder& recorder) -> void {
+      service.RenderSkyAndFog(ctx, recorder, scene_textures);
+    });
 
   const auto& stage14 = service.GetLastStage14State();
   EXPECT_TRUE(stage14.requested);
@@ -3846,7 +3970,10 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
     ctx.scene = oxygen::observer_ptr {
       scene.get(),
     };
-    service.RenderSkyAndFog(ctx, textures);
+    oxygen::graphics::testing::SubmitCommands(*graphics_, "Vortex test",
+      [&](oxygen::graphics::CommandRecorder& recorder) -> void {
+        service.RenderSkyAndFog(ctx, recorder, textures);
+      });
     ASSERT_TRUE(service.GetLastStage15State().local_fog_executed);
     const auto current_count = live_descriptors();
     if (previous_count) {
@@ -3909,7 +4036,10 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
 
   graphics_->dispatch_log_.dispatches.clear();
 
-  service.RenderSkyAndFog(ctx, scene_textures);
+  oxygen::graphics::testing::SubmitCommands(*graphics_, "Vortex test",
+    [&](oxygen::graphics::CommandRecorder& recorder) -> void {
+      service.RenderSkyAndFog(ctx, recorder, scene_textures);
+    });
 
   const auto& stage14 = service.GetLastStage14State();
   EXPECT_TRUE(stage14.local_fog_requested);
@@ -3957,7 +4087,10 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
 
   graphics_->dispatch_log_.dispatches.clear();
 
-  service.RenderSkyAndFog(ctx, scene_textures);
+  oxygen::graphics::testing::SubmitCommands(*graphics_, "Vortex test",
+    [&](oxygen::graphics::CommandRecorder& recorder) -> void {
+      service.RenderSkyAndFog(ctx, recorder, scene_textures);
+    });
 
   const auto& stage14 = service.GetLastStage14State();
   EXPECT_TRUE(stage14.requested);
@@ -4014,7 +4147,10 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
 
   graphics_->dispatch_log_.dispatches.clear();
 
-  service.RenderSkyAndFog(ctx, scene_textures);
+  oxygen::graphics::testing::SubmitCommands(*graphics_, "Vortex test",
+    [&](oxygen::graphics::CommandRecorder& recorder) -> void {
+      service.RenderSkyAndFog(ctx, recorder, scene_textures);
+    });
 
   const auto& stage14 = service.GetLastStage14State();
   EXPECT_TRUE(stage14.local_fog_requested);
@@ -4068,7 +4204,10 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   graphics_->dispatch_log_.dispatches.clear();
   graphics_->indirect_log_.draws.clear();
 
-  service.RenderSkyAndFog(ctx, scene_textures);
+  oxygen::graphics::testing::SubmitCommands(*graphics_, "Vortex test",
+    [&](oxygen::graphics::CommandRecorder& recorder) -> void {
+      service.RenderSkyAndFog(ctx, recorder, scene_textures);
+    });
 
   const auto& stage14 = service.GetLastStage14State();
   EXPECT_FALSE(stage14.requested);
@@ -4144,7 +4283,11 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
       });
     graphics_->srv_view_log_.events.clear();
     ASSERT_NE(
-      service.PublishEnvironmentBindings(ctx), kInvalidShaderVisibleIndex);
+      oxygen::graphics::testing::SubmitCommands(*graphics_, "Vortex test",
+        [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
+          return service.PublishEnvironmentBindings(ctx, recorder);
+        }),
+      kInvalidShaderVisibleIndex);
     unsigned radiance_views = 0U;
     for (const auto& event : graphics_->srv_view_log_.events) {
       const auto& desc = event.texture->GetDescriptor();
@@ -4351,7 +4494,10 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
       sequence % 3U,
     };
     service.OnFrameStart(ctx.frame_sequence, ctx.frame_slot);
-    static_cast<void>(service.PublishEnvironmentBindings(ctx));
+    static_cast<void>(oxygen::graphics::testing::SubmitCommands(*graphics_,
+      "Vortex test", [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
+        return service.PublishEnvironmentBindings(ctx, recorder);
+      }));
     return service.InspectViewRadianceResources(view.id);
   };
   const auto* first = publish(1U);
@@ -4369,12 +4515,7 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
     graphics_->SetFailRecording(recording);
     graphics_->SetFailSubmission(!recording);
     const auto* failed = publish(recording ? 3U : 2U);
-    ASSERT_NE(failed, nullptr);
-    EXPECT_TRUE(failed->atmosphere_required);
-    EXPECT_TRUE(failed->volumetric_fog_required);
-    EXPECT_EQ(failed->sky_view, nullptr);
-    EXPECT_EQ(failed->aerial_perspective, nullptr);
-    EXPECT_EQ(failed->volumetric_fog, nullptr);
+    EXPECT_EQ(failed, nullptr);
     graphics_->SetFailRecording(false);
     graphics_->SetFailSubmission(false);
   }

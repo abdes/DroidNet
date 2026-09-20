@@ -20,7 +20,8 @@ LightingService::LightingService(Renderer& renderer)
   : renderer_(renderer)
   , light_grid_builder_(
       std::make_unique<lighting::internal::LightGridBuilder>(renderer))
-  , publisher_(std::make_unique<lighting::internal::ForwardLightPublisher>(renderer))
+  , publisher_(
+      std::make_unique<lighting::internal::ForwardLightPublisher>(renderer))
   , deferred_packets_(
       std::make_unique<lighting::internal::DeferredLightPacketBuilder>())
   , deferred_pass_(std::make_unique<lighting::DeferredLightPass>(renderer))
@@ -61,7 +62,7 @@ auto LightingService::BuildLightGrid(const FrameLightingInputs& inputs) -> void
 }
 
 auto LightingService::RenderDeferredLighting(RenderContext& ctx,
-  const SceneTextures& scene_textures,
+  graphics::CommandRecorder& recorder, const SceneTextures& scene_textures,
   const FrameLightSelection& frame_light_set,
   const ShadowFrameBindings* directional_shadow_bindings,
   const graphics::Texture* directional_shadow_surface,
@@ -70,9 +71,9 @@ auto LightingService::RenderDeferredLighting(RenderContext& ctx,
   const bool static_sky_light_available) -> void
 {
   const auto packets = deferred_packets_->Build(frame_light_set);
-  const auto pass_state = deferred_pass_->Record(ctx, scene_textures, packets,
-    directional_shadow_bindings, directional_shadow_surface, spot_shadow_surface,
-    point_shadow_surface, static_sky_light_available);
+  const auto pass_state = deferred_pass_->Record(ctx, recorder, scene_textures,
+    packets, directional_shadow_bindings, directional_shadow_surface,
+    spot_shadow_surface, point_shadow_surface, static_sky_light_available);
   last_deferred_lighting_state_ = {
     .consumed_packets = pass_state.consumed_packets,
     .accumulated_into_scene_color = pass_state.accumulated_into_scene_color,

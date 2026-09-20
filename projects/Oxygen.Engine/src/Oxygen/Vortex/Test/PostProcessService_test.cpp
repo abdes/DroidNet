@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <Oxygen/Graphics/Common/Test/CommandRecordingTestSupport.h>
 #include <Oxygen/Testing/GTest.h>
 
 #include <cstring>
@@ -28,6 +29,7 @@
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
 #include <Oxygen/Vortex/Test/Fakes/AssetLoader.h>
 #include <Oxygen/Vortex/Test/Fakes/Graphics.h>
+#include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
 #include <Oxygen/Vortex/Upload/UploadCoordinator.h>
 
 namespace oxygen::vortex::internal {
@@ -179,6 +181,70 @@ protected:
   std::shared_ptr<Renderer> renderer_;
 };
 
+//! Discarding a frame recording releases its same-frame resolve cache entry.
+NOLINT_TEST_F(PostProcessServiceBehaviorTest, DiscardedFrameResolveAllowsRetry)
+{
+  // Arrange
+  auto pass = oxygen::vortex::postprocess::ExposurePass(*renderer_);
+  const auto config = *ResolvedPostProcessConfig::Resolve(PostProcessConfig {});
+  auto context = RenderContext {};
+  context.frame_slot = oxygen::frame::Slot { 0U };
+  context.frame_sequence = oxygen::frame::SequenceNumber { 1U };
+  context.current_view.view_id = ViewId { 1U };
+  const auto queue
+    = graphics_->QueueKeyFor(oxygen::graphics::QueueRole::kGraphics);
+  auto recording = graphics_->AcquireCommandRecorder(
+    queue, "Discarded frame", oxygen::graphics::SubmissionPolicy::kExplicit);
+  const auto discarded = pass.ResolveFrame(context, *recording, config, {});
+  ASSERT_NE(discarded, nullptr);
+
+  // Act
+  recording.Discard();
+  const auto retry = oxygen::graphics::testing::SubmitCommands(*graphics_,
+    "Retry frame", [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
+      return pass.ResolveFrame(context, recorder, config, {});
+    });
+
+  // Assert
+  ASSERT_NE(retry, nullptr);
+  EXPECT_NE(retry, discarded);
+}
+
+//! A discarded later range writer cannot leave a certificate on a valid frame.
+NOLINT_TEST_F(
+  PostProcessServiceBehaviorTest, DiscardedRangeInvalidatesCertificate)
+{
+  // Arrange
+  auto pass = oxygen::vortex::postprocess::ExposurePass(*renderer_);
+  const auto config = *ResolvedPostProcessConfig::Resolve(PostProcessConfig {});
+  auto context = RenderContext {};
+  context.frame_slot = oxygen::frame::Slot { 0U };
+  context.frame_sequence = oxygen::frame::SequenceNumber { 1U };
+  context.current_view.view_id = ViewId { 1U };
+  const auto frame = oxygen::graphics::testing::SubmitCommands(*graphics_,
+    "Frame", [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
+      return pass.ResolveFrame(context, recorder, config, {});
+    });
+  ASSERT_NE(frame, nullptr);
+  const auto source = graphics_->CreateTexture({ .width = 1U,
+    .height = 1U,
+    .format = Format::kRGBA32Float,
+    .initial_state = oxygen::graphics::ResourceStates::kCommon });
+  const auto queue
+    = graphics_->QueueKeyFor(oxygen::graphics::QueueRole::kGraphics);
+  auto recording = graphics_->AcquireCommandRecorder(
+    queue, "Discarded range", oxygen::graphics::SubmissionPolicy::kExplicit);
+  ASSERT_TRUE(pass.CapturePreEnvironmentRange(
+    context, *recording, frame, *source, oxygen::ShaderVisibleIndex { 1U }));
+  ASSERT_TRUE(pass.HasPreEnvironmentRange(frame));
+
+  // Act
+  recording.Discard();
+
+  // Assert
+  EXPECT_FALSE(pass.HasPreEnvironmentRange(frame));
+}
+
 NOLINT_TEST_F(PostProcessServiceBehaviorTest, ReadModifyApplyUsesEditedExposure)
 {
   auto service = PostProcessService(*renderer_);
@@ -210,7 +276,11 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest, ReadModifyApplyUsesEditedExposure)
   inputs.scene_signal_srv = oxygen::ShaderVisibleIndex {
     301U,
   };
-  service.Execute(context.current_view.view_id, context, textures, inputs);
+  static_cast<void>(oxygen::graphics::testing::SubmitCommands(*graphics_,
+    "Vortex test", [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
+      return service.Record(
+        context.current_view.view_id, context, recorder, inputs);
+    }));
   const auto* bindings = service.InspectBindings(context.current_view.view_id);
   ASSERT_NE(bindings, nullptr);
   EXPECT_EQ(bindings->enable_auto_exposure, 0U);
@@ -289,8 +359,11 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
   inputs.scene_velocity_srv = oxygen::ShaderVisibleIndex {
     303U,
   };
-  service.Execute(
-    context.current_view.view_id, context, scene_textures, inputs);
+  static_cast<void>(oxygen::graphics::testing::SubmitCommands(*graphics_,
+    "Vortex test", [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
+      return service.Record(
+        context.current_view.view_id, context, recorder, inputs);
+    }));
 
   const auto& state = service.GetLastExecutionState();
   ASSERT_NE(service.InspectBindings(context.current_view.view_id), nullptr);
@@ -361,8 +434,11 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
   inputs.scene_velocity_srv = oxygen::ShaderVisibleIndex {
     403U,
   };
-  service.Execute(
-    context.current_view.view_id, context, scene_textures, inputs);
+  static_cast<void>(oxygen::graphics::testing::SubmitCommands(*graphics_,
+    "Vortex test", [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
+      return service.Record(
+        context.current_view.view_id, context, recorder, inputs);
+    }));
 
   const auto* bindings = service.InspectBindings(context.current_view.view_id);
   ASSERT_NE(bindings, nullptr);
@@ -426,8 +502,11 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
     inputs.scene_depth_srv = oxygen::ShaderVisibleIndex {
       502U,
     };
-    service.Execute(
-      context.current_view.view_id, context, scene_textures, inputs);
+    static_cast<void>(oxygen::graphics::testing::SubmitCommands(*graphics_,
+      "Vortex test", [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
+        return service.Record(
+          context.current_view.view_id, context, recorder, inputs);
+      }));
 
     const auto& state = service.GetLastExecutionState();
     ASSERT_TRUE(state.tonemap_executed);
@@ -775,7 +854,11 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
     301U,
   };
   graphics_->dispatch_log_.dispatches.clear();
-  service.Execute(context.current_view.view_id, context, textures, inputs);
+  static_cast<void>(oxygen::graphics::testing::SubmitCommands(*graphics_,
+    "Vortex test", [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
+      return service.Record(
+        context.current_view.view_id, context, recorder, inputs);
+    }));
   EXPECT_EQ(graphics_->dispatch_log_.dispatches.size(),
     2U); // clear + invalid/locked solve
   context.frame_sequence = oxygen::frame::SequenceNumber {
@@ -792,7 +875,11 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
                       .resolved.authored;
   service.SetConfig(config);
   graphics_->dispatch_log_.dispatches.clear();
-  service.Execute(context.current_view.view_id, context, textures, inputs);
+  static_cast<void>(oxygen::graphics::testing::SubmitCommands(*graphics_,
+    "Vortex test", [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
+      return service.Record(
+        context.current_view.view_id, context, recorder, inputs);
+    }));
   EXPECT_EQ(graphics_->dispatch_log_.dispatches.size(), 3U);
 }
 
@@ -887,7 +974,11 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
   inputs.scene_signal_srv = oxygen::ShaderVisibleIndex {
     301U,
   };
-  service.Execute(context.current_view.view_id, context, textures, inputs);
+  static_cast<void>(oxygen::graphics::testing::SubmitCommands(*graphics_,
+    "Vortex test", [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
+      return service.Record(
+        context.current_view.view_id, context, recorder, inputs);
+    }));
   loader.EmitTextureEviction(
     requested.metering_mask, oxygen::content::EvictionReason::kRefCountZero);
   requested.metering_mask = {};
@@ -1094,7 +1185,10 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
     = oxygen::vortex::CompositionView::ViewStateHandle {
         1U,
       };
-  auto previous = pass.Execute(context, config, {});
+  auto previous = oxygen::graphics::testing::SubmitCommands(*graphics_,
+    "Vortex test", [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
+      return pass.Execute(context, recorder, config, {});
+    });
   ASSERT_TRUE(previous.executed);
   for (bool recording_failure : {
          false,
@@ -1105,15 +1199,28 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
     };
     graphics_->SetFailSubmission(!recording_failure);
     graphics_->SetFailRecording(recording_failure);
-    const auto failed = pass.Execute(context, config, {});
+    const auto failed = oxygen::graphics::testing::SubmitCommands(*graphics_,
+      "Vortex test", [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
+        return pass.Execute(context, recorder, config, {});
+      });
     EXPECT_FALSE(failed.executed);
-    EXPECT_EQ(failed.state, previous.state);
+    EXPECT_EQ(failed.state, nullptr);
+    EXPECT_EQ(
+      oxygen::vortex::testing::RendererPublicationProbe::ExposureStateForView(
+        pass, context.current_view.view_state_handle),
+      previous.state);
     graphics_->SetFailSubmission(false);
     graphics_->SetFailRecording(false);
-    const auto retry = pass.Execute(context, config, {});
+    const auto retry = oxygen::graphics::testing::SubmitCommands(*graphics_,
+      "Vortex test", [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
+        return pass.Execute(context, recorder, config, {});
+      });
     EXPECT_TRUE(retry.executed);
     EXPECT_NE(retry.state, failed.state);
-    const auto duplicate = pass.Execute(context, config, {});
+    const auto duplicate = oxygen::graphics::testing::SubmitCommands(*graphics_,
+      "Vortex test", [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
+        return pass.Execute(context, recorder, config, {});
+      });
     EXPECT_FALSE(duplicate.executed);
     EXPECT_EQ(duplicate.state, retry.state);
     previous = retry;
@@ -1312,7 +1419,10 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
   context.frame_sequence = oxygen::frame::SequenceNumber {
     1U,
   };
-  const auto independent = pass.Execute(context, config, {});
+  const auto independent = oxygen::graphics::testing::SubmitCommands(*graphics_,
+    "Vortex test", [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
+      return pass.Execute(context, recorder, config, {});
+    });
   ASSERT_TRUE(independent.executed);
   settings.mode = oxygen::engine::ExposureMode::kAuto;
   const auto source_config
@@ -1342,16 +1452,28 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
     context.frame_sequence = oxygen::frame::SequenceNumber {
       context.frame_sequence.get() + 1U,
     };
+    const auto committed_before
+      = oxygen::vortex::testing::RendererPublicationProbe::ExposureStateForView(
+        pass, context.current_view.view_state_handle);
     graphics_->SetFailRecording(recording);
     graphics_->SetFailSubmission(!recording);
-    const auto failed = pass.Execute(context, config, source_inputs);
+    const auto failed = oxygen::graphics::testing::SubmitCommands(*graphics_,
+      "Vortex test", [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
+        return pass.Execute(context, recorder, config, source_inputs);
+      });
     EXPECT_FALSE(failed.executed);
     EXPECT_EQ(failed.state, nullptr);
     EXPECT_EQ(failed.exposure_buffer, nullptr);
-    EXPECT_EQ(failed.exposure_value, 0x1p-8F);
+    EXPECT_EQ(
+      oxygen::vortex::testing::RendererPublicationProbe::ExposureStateForView(
+        pass, context.current_view.view_state_handle),
+      committed_before);
     graphics_->SetFailRecording(false);
     graphics_->SetFailSubmission(false);
-    const auto retry = pass.Execute(context, config, source_inputs);
+    const auto retry = oxygen::graphics::testing::SubmitCommands(*graphics_,
+      "Vortex test", [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
+        return pass.Execute(context, recorder, config, source_inputs);
+      });
     EXPECT_TRUE(retry.executed);
     EXPECT_TRUE(retry.borrowed_exposure);
     EXPECT_NE(retry.state, independent.state);

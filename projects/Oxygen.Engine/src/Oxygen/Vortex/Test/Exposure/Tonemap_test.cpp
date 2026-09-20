@@ -70,7 +70,10 @@ NOLINT_TEST_F(ExposureGpuTest, ExternalBloomUsesFrameDomainAndHonorsDisable)
           config.gamma = 1;
           service.SetResolvedConfig(service.BuildPassConfig(config,
             ctx_.current_view.view_id, ctx_.current_view.view_state_handle));
-          const auto frame = service.PrepareFrameExposure(ctx_, fp32);
+          const auto frame = SubmitCommands("Vortex Exposure Frame",
+            [&](graphics::CommandRecorder& recorder) -> auto {
+              return service.PrepareFrameExposure(ctx_, recorder, fp32);
+            });
           ASSERT_NE(frame, nullptr);
           const double s = std::exp2(-static_cast<double>(ev));
           const double p = fp32 ? 1 : s;
@@ -93,8 +96,11 @@ NOLINT_TEST_F(ExposureGpuTest, ExternalBloomUsesFrameDomainAndHonorsDisable)
             };
             exposure_inputs.scene_signal_srv = source.srv;
             exposure_inputs.bloom_texture_srv = bloom.srv;
-            service.Execute(
-              ctx_.current_view.view_id, ctx_, textures, exposure_inputs);
+            SubmitCommands("Vortex PostProcess",
+              [&](graphics::CommandRecorder& recorder) -> auto {
+                return service.Record(
+                  ctx_.current_view.view_id, ctx_, recorder, exposure_inputs);
+              });
           }
           ASSERT_TRUE(service.GetLastExecutionState().tonemap_executed);
           EXPECT_EQ(service.GetLastExecutionState().bloom_requested, enabled);
@@ -127,7 +133,11 @@ NOLINT_TEST_F(
        }) {
     auto pixel_options = ServicePixelOptions {};
     pixel_options.before_execute = [&] -> void {
-      ASSERT_NE(service.PrepareFrameExposure(ctx_, true), nullptr);
+      ASSERT_NE(SubmitCommands("Vortex Exposure Frame",
+                  [&](graphics::CommandRecorder& recorder) -> auto {
+                    return service.PrepareFrameExposure(ctx_, recorder, true);
+                  }),
+        nullptr);
     };
     pixel_options.tone_mapper = mapper;
     const auto pixel = ServicePixel(
@@ -168,7 +178,12 @@ NOLINT_TEST_F(
       }
       auto pixel_options = ServicePixelOptions {};
       pixel_options.before_execute = [&] -> void {
-        ASSERT_NE(service.PrepareFrameExposure(ctx_, false), nullptr);
+        ASSERT_NE(SubmitCommands("Vortex Exposure Frame",
+                    [&](graphics::CommandRecorder& recorder) -> auto {
+                      return service.PrepareFrameExposure(
+                        ctx_, recorder, false);
+                    }),
+          nullptr);
       };
       pixel_options.tone_mapper = mapper;
       const auto pixel = ServicePixel(service,
