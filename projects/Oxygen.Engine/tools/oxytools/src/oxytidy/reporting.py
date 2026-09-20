@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from oxytools.presentation import LABEL_WIDTH, heading, outcome, quantity
 from rich import box
 from rich.console import Console, Group, RenderableType
 from rich.panel import Panel
@@ -31,9 +32,15 @@ class Reporter:
         self.task = None
         self._pending: list[RenderableType] = []
         self._buffered = False
+        self.verbose = True
 
     def path(self, path: Path, *, exclude: str | None = None) -> str:
         path = path.resolve()
+        if not self.verbose:
+            root = self.aliases.get("@project")
+            if root and path.is_relative_to(root):
+                return path.relative_to(root).as_posix()
+            return path.as_posix()
         for name, root in sorted(
             self.aliases.items(), key=lambda item: len(str(item[1])), reverse=True
         ):
@@ -48,16 +55,24 @@ class Reporter:
 
     def compact(self, text: str) -> str:
         # Presentation only: compilation paths and report data remain untouched.
+        aliases = (
+            self.aliases
+            if self.verbose
+            else {"": self.aliases["@project"]}
+            if "@project" in self.aliases
+            else {}
+        )
         for name, root in sorted(
-            self.aliases.items(), key=lambda item: len(str(item[1])), reverse=True
+            aliases.items(), key=lambda item: len(str(item[1])), reverse=True
         ):
             for prefix in {str(root), root.as_posix()}:
-                text = text.replace(prefix + "\\", name + "/").replace(
-                    prefix + "/", name + "/"
+                replacement = name + "/" if name else ""
+                text = text.replace(prefix + "\\", replacement).replace(
+                    prefix + "/", replacement
                 )
                 text = re.sub(
                     re.escape(prefix) + r"""(?=$|[\s"'),:])""",
-                    lambda _, name=name: name,
+                    lambda _, name=name: name or ".",
                     text,
                 )
         return text
@@ -83,8 +98,24 @@ class Reporter:
         self.rows(rows)
 
     def rows(self, rows: list[tuple[str, str | Path | Text]]) -> None:
+        if not self.verbose and not self.console.is_terminal:
+            for label, value in rows:
+                value = (
+                    self.path(value)
+                    if isinstance(value, Path)
+                    else self.compact(str(value))
+                )
+                line = Text(f"{label:<{LABEL_WIDTH}}  ", style="dim")
+                line.append(value)
+                if self._buffered:
+                    self._pending.append(line)
+                else:
+                    self.console.print(line, soft_wrap=True)
+            return
         table = Table.grid(padding=(0, 2), expand=False)
-        table.add_column(style="dim", width=16, no_wrap=True)
+        table.add_column(
+            style="dim", width=16 if self.verbose else LABEL_WIDTH, no_wrap=True
+        )
         table.add_column(overflow="fold")
         for label, value in rows:
             if isinstance(value, Path):
@@ -94,8 +125,19 @@ class Reporter:
             table.add_row(label, value)
         self._emit(table)
 
+    def detail_rows(self, rows: list[tuple[str, str | Path | Text]]) -> None:
+        if self.verbose:
+            self.rows(rows)
+
+    def detail_section(
+        self, title: str, rows: list[tuple[str, str | Path | Text]]
+    ) -> None:
+        if self.verbose:
+            self.section(title, rows)
+
     def start(self, summary: dict) -> None:
         options = summary["options"]
+        self.verbose = options.get("verbose", False)
         project = Path(summary["project_root"])
         package = Path(summary["tool_package"])
         tool = next(
@@ -114,20 +156,44 @@ class Reporter:
             if options["fix"]
             else "export fixes"
             if options["export_fixes"]
-            else "report only"
+            else "analyze"
         )
-        title = Text("oxytidy", style="bold cyan")
-        title.append(f"  {mode}  |  {options['configuration']}", style="dim")
-        self.console.print(title)
+        scope = (
+            ", ".join(options["paths"]) if options["paths"] else "all project sources"
+        )
+        context = f"{options['configuration']} | tests {'included' if options['include_tests'] else 'excluded'}"
+        heading(self.console, "oxytidy", mode, scope, context)
         self._buffered = True
+        if not self.verbose:
+            rows = []
+            if (
+                summary["project_root_selection"] != "automatic checkout discovery"
+                or Path(summary["working_directory"]).resolve() != project
+            ):
+                rows.append(("Project", Text(project.as_posix(), style="cyan")))
+            for label, value in (
+                ("Checks", options["checks"]),
+                ("Build dir", options["build_dir"]),
+                ("Tidy config", options["config_file"]),
+                (
+                    "Clangd",
+                    options["clangd_file"]
+                    if options["clangd_file"] != ".clangd"
+                    else None,
+                ),
+                ("Context cap", options["max_files"]),
+                (
+                    "Fail on",
+                    options["fail_on"] if options["fail_on"] != "none" else None,
+                ),
+                ("Export", options["export_fixes"]),
+            ):
+                if value:
+                    rows.append((label, str(value)))
+            self.rows(rows)
+            return
         self.rows(
             [
-                (
-                    "Scope",
-                    ", ".join(options["paths"])
-                    if options["paths"]
-                    else "all project sources",
-                ),
                 (
                     "Run",
                     f"{options['jobs']} workers | tests {'included' if options['include_tests'] else 'excluded'} | fail-on {options['fail_on']}",
@@ -168,9 +234,12 @@ class Reporter:
         )
 
     def ownership(self, policy: Path, reason: str) -> None:
-        self.rows([("Ownership", policy), ("Policy choice", reason)])
+        if self.verbose or reason != "target checkout policy":
+            self.rows([("Ownership", policy), ("Policy choice", reason)])
 
     def tool(self, name: str, path: str, version: str) -> None:
+        if not self.verbose:
+            return
         version_line = next(
             (
                 line.strip()
@@ -182,6 +251,8 @@ class Reporter:
         self.rows([(name, Path(path)), ("Version", version_line)])
 
     def configuration(self, source: Path, files: list[Path], snapshot: Path) -> None:
+        if not self.verbose:
+            return
         rows: list[tuple[str, str | Path | Text]] = [("Source", source)]
         rows.extend(
             ("Config" if i == 0 else "Parent config", path)
@@ -211,7 +282,7 @@ class Reporter:
         )
         self.task = self.progress.add_task(phase, total=total, failures=0)
         self.progress.start()
-        if not animated:
+        if not animated and self.verbose:
             self.message(f"\n{phase}  {total} context(s)", "bold")
 
     def advance(self, *, failed: bool = False) -> None:
@@ -226,10 +297,11 @@ class Reporter:
             task = self.progress.tasks[self.task]
             self.progress.stop()
             self.progress = None
-            self.message(
-                f"{task.description}  {int(task.completed)}/{int(task.total)} contexts | {task.fields['failures']} failed | {task.elapsed or 0:.1f}s",
-                "dim",
-            )
+            parts = [f"{int(task.completed)}/{int(task.total)} contexts"]
+            if task.fields["failures"]:
+                parts.append(f"{task.fields['failures']} failed")
+            parts.append(f"{task.elapsed or 0:.1f}s")
+            self.message(f"{task.description}  " + " | ".join(parts), "dim")
 
     def diagnostics(self, records: list[dict]) -> None:
         # Use Rich's lifecycle to pause the live display while emitting a batch
@@ -357,25 +429,24 @@ class Reporter:
                 "cancelled": "Cancelled - results are partial",
             }
             self.console.print()
-            self.console.print(
-                Text(
-                    labels[status],
-                    style="bold green" if status == "clean" else "bold yellow",
-                )
-            )
             counts = summary["counts"]
-            self.rows(
-                [
-                    (
-                        "Findings",
-                        f"{counts['unique_findings']} unique | {counts['levels'].get('warning', 0)} warnings | {counts['levels'].get('error', 0)} errors",
-                    ),
-                    (
-                        "Contexts",
-                        f"{counts['executed']} executed | {counts['reused']} reused | {summary['elapsed_seconds']:.1f}s",
-                    ),
-                ]
+            details = [
+                quantity(value, level)
+                for level, value in counts["levels"].items()
+                if value
+            ]
+            details.append(quantity(counts["executed"] + counts["reused"], "context"))
+            if counts["reused"]:
+                details.append(f"{counts['reused']} reused")
+            details.append(f"{summary['elapsed_seconds']:.1f}s")
+            style = (
+                "green"
+                if status == "clean"
+                else "red"
+                if status == "incomplete"
+                else "yellow"
             )
+            outcome(self.console, labels[status], details, style)
         headers = summary.get("unreached_headers", [])
         if headers:
             reason = (
@@ -390,10 +461,5 @@ class Reporter:
                     ("Reason", reason),
                 ],
             )
-            self.rows([("Header", Path(path)) for path in headers[:10]])
-            if len(headers) > 10:
-                self.message(
-                    f"{len(headers) - 10} further headers are listed in the report.",
-                    "dim",
-                )
+            self.rows([("Header", Path(path)) for path in headers])
         self.rows([("Report", Path(summary["run_dir"]) / "summary.json")])

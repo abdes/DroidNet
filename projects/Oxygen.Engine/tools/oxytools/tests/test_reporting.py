@@ -11,7 +11,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from oxytidy.reporting import Reporter
-from oxytidy.workflow import parse_args
+from oxytidy.workflow import main, parse_args
 from rich.cells import cell_len
 from rich.console import Console
 
@@ -45,6 +45,7 @@ class ReportingTests(unittest.TestCase):
                 console = Console(file=stream, width=width, force_terminal=False)
                 reporter = Reporter(console)
                 summary = self.summary()
+                summary["options"]["verbose"] = True
                 reporter.start(summary)
                 reporter.ownership(
                     self.root / ".oxytools.json", "target checkout policy"
@@ -79,6 +80,109 @@ class ReportingTests(unittest.TestCase):
         self.assertFalse(
             any(code in {*range(30, 39), *range(90, 98)} for code in codes)
         )
+
+    def test_default_startup_omits_detail_but_retains_actionable_overrides(self):
+        stream = io.StringIO()
+        reporter = Reporter(Console(file=stream, width=100, force_terminal=False))
+        summary = self.summary()
+        summary["options"]["checks"] = "-*,misc-include-cleaner"
+        reporter.start(summary)
+        reporter.ownership(self.root / ".oxytools.json", "target checkout policy")
+        reporter.tool(
+            "clang-tidy", "C:/LLVM/clang-tidy.exe", "clang-tidy version 22.1.8"
+        )
+        reporter.configuration(
+            self.root / "file.cpp", [self.root / ".clang-tidy"], self.root / "snapshot"
+        )
+        reporter.flush_context()
+        text = stream.getvalue()
+        self.assertIn("oxytidy  analyze", text)
+        self.assertIn("src/Oxygen/Base", text)
+        self.assertIn("misc-include-cleaner", text)
+        self.assertNotIn("Paths", text)
+        self.assertNotIn("Python", text)
+        self.assertNotIn("Snapshot", text)
+        self.assertNotIn("clang-tidy.exe", text)
+
+    def test_default_setup_failure_is_visible_without_verbose_context(self):
+        stream = io.StringIO()
+        reporter = Reporter(Console(file=stream, width=80, force_terminal=False))
+        summary = self.summary()
+        reporter.start(summary)
+        reporter.finish(summary)
+        text = stream.getvalue()
+        self.assertIn("Setup failed", text)
+        self.assertIn("--clangd-file", text)
+        self.assertIn("Analysis did not start", text)
+        self.assertNotIn("0 unique", text)
+        self.assertNotIn("Python", text)
+
+    def test_default_ownership_fallback_remains_visible(self):
+        stream = io.StringIO()
+        reporter = Reporter(Console(file=stream, force_terminal=False))
+        reporter.start(self.summary())
+        reporter.ownership(
+            self.root / "tool/.oxytools.json",
+            "tool/run-location fallback; target policy absent",
+        )
+        reporter.flush_context()
+        self.assertIn("fallback", stream.getvalue())
+        self.assertIn("tool/.oxytools.json", stream.getvalue())
+
+    def test_every_unreached_header_is_shown_in_every_output_mode(self):
+        headers = [self.root / f"src/header_{i:02}.h" for i in range(20)]
+        for verbose in (False, True):
+            for summary_only in (False, True):
+                with self.subTest(verbose=verbose, summary_only=summary_only):
+                    stream = io.StringIO()
+                    reporter = Reporter(
+                        Console(file=stream, width=120, force_terminal=False)
+                    )
+                    summary = self.summary()
+                    summary.pop("error")
+                    summary.update(
+                        status="no_analysis",
+                        unreached_headers=list(map(str, headers)),
+                        header_discovery_complete=True,
+                    )
+                    summary["options"].update(
+                        verbose=verbose, summary_only=summary_only
+                    )
+                    reporter.start(summary)
+                    reporter.finish(summary)
+                    output = stream.getvalue()
+                    for header in headers:
+                        self.assertIn(header.name, output)
+                    self.assertIn("20 project header", output)
+                    self.assertNotIn("further headers", output)
+
+    def test_workflow_prints_every_analysis_gap(self):
+        gaps = [
+            {
+                "file": str(self.root / f"src/missing_{i:02}.cpp"),
+                "reason": "No matching compile command",
+            }
+            for i in range(12)
+        ]
+
+        def incomplete_run(args, root, runner, run_dir, summary):
+            summary.update(status="incomplete", coverage_gaps=gaps)
+            return 2
+
+        stream = io.StringIO()
+        console = Console(file=stream, width=120, force_terminal=False)
+        with (
+            patch("oxytidy.workflow.run", side_effect=incomplete_run),
+            patch("oxytidy.execution.Reporter", return_value=Reporter(console)),
+        ):
+            code = main(["src", "--summary-only"], root=self.root)
+        self.assertEqual(code, 2)
+        for gap in gaps:
+            self.assertIn(Path(gap["file"]).name, stream.getvalue())
+        self.assertEqual(
+            stream.getvalue().count("No matching compile command"), len(gaps)
+        )
+        self.assertNotIn("further gaps", stream.getvalue())
 
     def test_redirected_progress_has_no_animation_or_stdout_leak(self):
         errors, output = io.StringIO(), io.StringIO()

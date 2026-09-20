@@ -125,14 +125,14 @@ For example, from the engine checkout containing this tool:
   src/Oxygen/Base --include-tests
 ```
 
-The console command and `python -m oxytidy` accept the same options. Every run prints its Python interpreter/environment, tool location, working
-and target directories, root-selection reason, ownership-selection reason,
-configuration files, database selection, compile flag adjustments, LLVM paths
-and versions, scope, modes, limits, and output/cache paths. Unique clang-tidy
-configuration discovery chains and effective snapshots are printed during
-preparation. `--summary-only` hides findings, not this trace. Selected paths and
-selection reasons are also recorded in `summary.json`. Compilation database
-paths are never rewritten or remapped.
+The console command and `python -m oxytidy` accept the same options. Default output
+shows mode, scope, build configuration, test inclusion, meaningful overrides,
+phase completion, findings, and coverage gaps. Ownership fallbacks remain visible.
+`--verbose` adds Python/environment and tool locations, configuration discovery,
+compile adjustments, LLVM versions, and artifact/cache details. `--summary-only`
+hides individual findings independently of verbosity. Detailed provenance remains
+available in `summary.json` and per-invocation artifacts in both modes.
+Compilation database paths are never rewritten or remapped.
 
 Use `--clang-tidy-bin`, `--clang-scan-deps-bin`, and `--clang-format-bin` to select
 executables. Companion tools are also discovered beside clang-tidy. `--help`
@@ -260,13 +260,16 @@ The output follows the [CLI Guidelines](https://clig.dev/#output):
 - Interactive terminals get Rich's progress and styled panels. Redirected output
   has no animation or terminal control codes. Rich handles `NO_COLOR` and terminal
   capabilities. No prompt is required.
-- Important paths are retained without repeatedly expanding the same prefix.
-  The Paths section defines `@project`, `@tool` when different, `@python`, and
-  `@run`. Subsequent paths use those aliases. `~` denotes the user's home.
+- Default terminal paths are project-relative. `--verbose` defines `@project`,
+  `@tool` when different, `@python`, and `@run` aliases in a Paths section.
   Paths wrap instead of being truncated, and JSON artifacts retain full paths.
-- Selection reasons remain visible. `--summary-only` suppresses individual
-  diagnostics, not the compact run context. The console shows at most ten
-  coverage gaps; the report retains all of them.
+- `--summary-only` suppresses individual diagnostics, not failures or coverage
+  gaps. Every unreached header and every analysis gap is listed directly in the
+  terminal, with no truncation in either verbosity mode. These are results needed
+  to judge coverage, not optional startup detail. JSON retains the same lists.
+- Both tools share the same header and outcome styling. Routine zero counters
+  are omitted. Full configuration and execution traces remain available through
+  `--verbose` and the run artifacts.
 
 ## Results and execution
 

@@ -91,10 +91,10 @@ class SetupReportingTests(Fixture):
         ):
             code = main(["--project-root", str(target), "src"], root=self.root)
         self.assertEqual(code, 2)
-        self.assertIn("@project/.oxytools.json", output.getvalue())
+        self.assertIn(".oxytools.json", output.getvalue())
         self.assertIn("tool/run-location fallback", output.getvalue())
         self.assertIn(".oxytools.json", output.getvalue())
-        self.assertIn("@project/.clangd", output.getvalue())
+        self.assertIn(".clangd", output.getvalue())
         self.assertFalse((target / ".oxytools.json").exists())
 
     def test_ownership_precedence_does_not_hide_invalid_explicit_or_target_policy(self):
@@ -127,7 +127,7 @@ class SetupReportingTests(Fixture):
             contextlib.redirect_stdout(io.StringIO()) as output,
             contextlib.redirect_stderr(output),
         ):
-            code = main(["src/a.cpp", *arguments], root=self.root)
+            code = main(["src/a.cpp", "--verbose", *arguments], root=self.root)
         summary = json.loads(
             next((self.root / "out/clang-tidy").glob("*/summary.json")).read_text()
         )
@@ -742,6 +742,7 @@ class LLVMTests(Fixture):
             "src/a.h",
             "--fail-on",
             "warning",
+            "--verbose",
             implicit_root=self.root / "not-the-target",
         )
         self.assertEqual(code, 1, report)
@@ -761,7 +762,7 @@ class LLVMTests(Fixture):
             "clang-scan-deps",
             "@run",
             "Cache",
-            "report only",
+            "analyze",
             "Check configuration",
             "Source mapping",
         ):
