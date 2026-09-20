@@ -41,49 +41,73 @@ auto MakeFrameWithMetadata(std::span<const DrawMetadata> metadata)
 NOLINT_TEST(AcceptedDrawViewTest, PreparedSceneFrameExposesTypedDrawMetadata)
 {
   auto metadata = std::array {
-    MakeDrawMetadata(11U, PassMask { PassMaskBit::kOpaque }),
-    MakeDrawMetadata(22U, PassMask { PassMaskBit::kMasked }),
+    MakeDrawMetadata(11U,
+      PassMask {
+        PassMaskBit::kOpaque,
+      }),
+    MakeDrawMetadata(22U,
+      PassMask {
+        PassMaskBit::kMasked,
+      }),
   };
   const auto frame = MakeFrameWithMetadata(metadata);
 
   const auto typed_metadata = frame.GetDrawMetadata();
 
   ASSERT_EQ(typed_metadata.size(), metadata.size());
-  EXPECT_EQ(typed_metadata[0].first_index, 11U);
-  EXPECT_EQ(typed_metadata[1].first_index, 22U);
-  EXPECT_EQ(typed_metadata[0].flags, PassMask(PassMaskBit::kOpaque));
-  EXPECT_EQ(typed_metadata[1].flags, PassMask(PassMaskBit::kMasked));
+  EXPECT_THAT(typed_metadata,
+    ::testing::ElementsAre(::testing::Field(&DrawMetadata::first_index, 11U),
+      ::testing::Field(&DrawMetadata::first_index, 22U)));
+  EXPECT_THAT(typed_metadata,
+    ::testing::ElementsAre(
+      ::testing::Field(&DrawMetadata::flags, PassMask(PassMaskBit::kOpaque)),
+      ::testing::Field(&DrawMetadata::flags, PassMask(PassMaskBit::kMasked))));
 }
 
 NOLINT_TEST(AcceptedDrawViewTest, PartitionedIterationSkipsRejectedPartitions)
 {
   auto metadata = std::array {
-    MakeDrawMetadata(10U, PassMask { PassMaskBit::kTransparent }),
-    MakeDrawMetadata(20U, PassMask { PassMaskBit::kOpaque }),
-    MakeDrawMetadata(30U, PassMask { PassMaskBit::kOpaque }),
-    MakeDrawMetadata(40U, PassMask { PassMaskBit::kUi }),
-    MakeDrawMetadata(50U, PassMask { PassMaskBit::kMasked }),
+    MakeDrawMetadata(10U,
+      PassMask {
+        PassMaskBit::kTransparent,
+      }),
+    MakeDrawMetadata(20U,
+      PassMask {
+        PassMaskBit::kOpaque,
+      }),
+    MakeDrawMetadata(30U,
+      PassMask {
+        PassMaskBit::kOpaque,
+      }),
+    MakeDrawMetadata(40U,
+      PassMask {
+        PassMaskBit::kUi,
+      }),
+    MakeDrawMetadata(50U,
+      PassMask {
+        PassMaskBit::kMasked,
+      }),
   };
   auto frame = MakeFrameWithMetadata(metadata);
 
   const auto partitions = std::array {
     PreparedSceneFrame::PartitionRange {
-      .pass_mask = PassMask { PassMaskBit::kTransparent },
+      .pass_mask = PassMask { PassMaskBit::kTransparent, },
       .begin = 0U,
       .end = 1U,
     },
     PreparedSceneFrame::PartitionRange {
-      .pass_mask = PassMask { PassMaskBit::kOpaque },
+      .pass_mask = PassMask { PassMaskBit::kOpaque, },
       .begin = 1U,
       .end = 3U,
     },
     PreparedSceneFrame::PartitionRange {
-      .pass_mask = PassMask { PassMaskBit::kUi },
+      .pass_mask = PassMask { PassMaskBit::kUi, },
       .begin = 3U,
       .end = 4U,
     },
     PreparedSceneFrame::PartitionRange {
-      .pass_mask = PassMask { PassMaskBit::kMasked },
+      .pass_mask = PassMask { PassMaskBit::kMasked, },
       .begin = 4U,
       .end = 10U,
     },
@@ -108,17 +132,32 @@ NOLINT_TEST(AcceptedDrawViewTest, PartitionedIterationSkipsRejectedPartitions)
 NOLINT_TEST(AcceptedDrawViewTest, FlatIterationFiltersByDrawFlags)
 {
   auto metadata = std::array {
-    MakeDrawMetadata(10U, PassMask { PassMaskBit::kTransparent }),
-    MakeDrawMetadata(20U, PassMask { PassMaskBit::kMasked }),
-    MakeDrawMetadata(
-      30U, PassMask { PassMaskBit::kOpaque, PassMaskBit::kMainViewVisible }),
-    MakeDrawMetadata(40U, PassMask { PassMaskBit::kUi }),
+    MakeDrawMetadata(10U,
+      PassMask {
+        PassMaskBit::kTransparent,
+      }),
+    MakeDrawMetadata(20U,
+      PassMask {
+        PassMaskBit::kMasked,
+      }),
+    MakeDrawMetadata(30U,
+      PassMask {
+        PassMaskBit::kOpaque,
+        PassMaskBit::kMainViewVisible,
+      }),
+    MakeDrawMetadata(40U,
+      PassMask {
+        PassMaskBit::kUi,
+      }),
   };
   const auto frame = MakeFrameWithMetadata(metadata);
 
   auto accepted_indices = std::vector<std::uint32_t> {};
-  for (const auto accepted_draw : AcceptedDrawView(
-         frame, PassMask { PassMaskBit::kOpaque, PassMaskBit::kMasked })) {
+  for (const auto accepted_draw : AcceptedDrawView(frame,
+         PassMask {
+           PassMaskBit::kOpaque,
+           PassMaskBit::kMasked,
+         })) {
     accepted_indices.push_back(accepted_draw.draw_index);
   }
 
@@ -129,8 +168,10 @@ NOLINT_TEST(AcceptedDrawViewTest, EmptyMetadataYieldsNoAcceptedDraws)
 {
   const auto frame = PreparedSceneFrame {};
 
-  const auto accepted_draws
-    = AcceptedDrawView(frame, PassMask { PassMaskBit::kOpaque });
+  const auto accepted_draws = AcceptedDrawView(frame,
+    PassMask {
+      PassMaskBit::kOpaque,
+    });
 
   EXPECT_TRUE(accepted_draws.empty());
   EXPECT_EQ(accepted_draws.begin(), accepted_draws.end());

@@ -51,11 +51,10 @@ auto MakeInputs() -> FramePlanBuilder::Inputs
   return FramePlanBuilder::Inputs {
     .frame_settings = {},
     .pending_auto_exposure_reset = std::nullopt,
-    .tone_map_pass_config = observer_ptr { &tone_map_config },
-    .shader_pass_config = observer_ptr { &shader_pass_config },
-    .resolve_published_view_id = [](const ViewId id) {
-      return ViewId { id.get() + 1000U };
-    },
+    .tone_map_pass_config = observer_ptr { &tone_map_config, },
+    .shader_pass_config = observer_ptr { &shader_pass_config, },
+    .resolve_published_view_id
+    = [](const ViewId id) -> ViewId { return ViewId { id.get() + 1000U, }; },
   };
 }
 
@@ -69,13 +68,14 @@ void PrepareView(CompositionViewImpl& view_impl, const CompositionView& desc,
 auto MakeSceneView(const ViewId id, const std::string_view name)
   -> CompositionView
 {
-  auto view = CompositionView::ForScene(id, MakeView(), oxygen::scene::SceneNode {});
+  auto view
+    = CompositionView::ForScene(id, MakeView(), oxygen::scene::SceneNode {});
   view.name = name;
   return view;
 }
 
-void BuildPackets(FramePlanBuilder& builder,
-  std::span<CompositionViewImpl* const> views)
+void BuildPackets(
+  FramePlanBuilder& builder, std::span<CompositionViewImpl* const> views)
 {
   builder.BuildFrameViewPackets(
     observer_ptr<oxygen::scene::Scene> {}, views, MakeInputs());
@@ -84,9 +84,13 @@ void BuildPackets(FramePlanBuilder& builder,
 TEST(AuxiliaryDependencyGraphTest, MissingRequiredProducerFailsBeforeGpuWork)
 {
   auto graphics = std::make_shared<FakeGraphics>();
-  auto consumer = MakeSceneView(ViewId { 1U }, "Consumer");
+  auto consumer = MakeSceneView(
+    ViewId {
+      1U,
+    },
+    "Consumer");
   consumer.consumed_aux_outputs.push_back(CompositionView::AuxInputDesc {
-    .id = CompositionView::AuxOutputId { 7U },
+    .id = CompositionView::AuxOutputId { 7U, },
     .kind = CompositionView::AuxOutputKind::kColorTexture,
     .required = true,
   });
@@ -95,23 +99,35 @@ TEST(AuxiliaryDependencyGraphTest, MissingRequiredProducerFailsBeforeGpuWork)
   PrepareView(consumer_impl, consumer, *graphics);
 
   FramePlanBuilder builder;
-  std::array views { &consumer_impl };
+  std::array views {
+    &consumer_impl,
+  };
   EXPECT_THROW(BuildPackets(builder,
                  std::span<CompositionViewImpl* const> {
-                   views.data(), views.size() }),
+                   views.data(),
+                   views.size(),
+                 }),
     std::runtime_error);
 }
 
 TEST(AuxiliaryDependencyGraphTest, DuplicateProducerFailsBeforeGpuWork)
 {
   auto graphics = std::make_shared<FakeGraphics>();
-  auto first = MakeSceneView(ViewId { 2U }, "FirstProducer");
+  auto first = MakeSceneView(
+    ViewId {
+      2U,
+    },
+    "FirstProducer");
   first.produced_aux_outputs.push_back(CompositionView::AuxOutputDesc {
-    .id = CompositionView::AuxOutputId { 9U },
+    .id = CompositionView::AuxOutputId { 9U, },
     .kind = CompositionView::AuxOutputKind::kColorTexture,
     .debug_name = "First.Color",
   });
-  auto second = MakeSceneView(ViewId { 3U }, "SecondProducer");
+  auto second = MakeSceneView(
+    ViewId {
+      3U,
+    },
+    "SecondProducer");
   second.produced_aux_outputs = first.produced_aux_outputs;
 
   CompositionViewImpl first_impl;
@@ -120,19 +136,28 @@ TEST(AuxiliaryDependencyGraphTest, DuplicateProducerFailsBeforeGpuWork)
   PrepareView(second_impl, second, *graphics);
 
   FramePlanBuilder builder;
-  std::array views { &first_impl, &second_impl };
+  std::array views {
+    &first_impl,
+    &second_impl,
+  };
   EXPECT_THROW(BuildPackets(builder,
                  std::span<CompositionViewImpl* const> {
-                   views.data(), views.size() }),
+                   views.data(),
+                   views.size(),
+                 }),
     std::runtime_error);
 }
 
 TEST(AuxiliaryDependencyGraphTest, OptionalMissingProducerPublishesTypedInvalid)
 {
   auto graphics = std::make_shared<FakeGraphics>();
-  auto consumer = MakeSceneView(ViewId { 4U }, "OptionalConsumer");
+  auto consumer = MakeSceneView(
+    ViewId {
+      4U,
+    },
+    "OptionalConsumer");
   consumer.consumed_aux_outputs.push_back(CompositionView::AuxInputDesc {
-    .id = CompositionView::AuxOutputId { 11U },
+    .id = CompositionView::AuxOutputId { 11U, },
     .kind = CompositionView::AuxOutputKind::kDepthTexture,
     .required = false,
   });
@@ -141,31 +166,45 @@ TEST(AuxiliaryDependencyGraphTest, OptionalMissingProducerPublishesTypedInvalid)
   PrepareView(consumer_impl, consumer, *graphics);
 
   FramePlanBuilder builder;
-  std::array views { &consumer_impl };
+  std::array views {
+    &consumer_impl,
+  };
   BuildPackets(builder,
-    std::span<CompositionViewImpl* const> { views.data(), views.size() });
+    std::span<CompositionViewImpl* const> {
+      views.data(),
+      views.size(),
+    });
 
   ASSERT_EQ(builder.GetFrameViewPackets().size(), 1U);
-  const auto& resolved = builder.GetFrameViewPackets()[0].ResolvedAuxInputs();
+  const auto& resolved
+    = builder.GetFrameViewPackets().at(0).ResolvedAuxInputs();
   ASSERT_EQ(resolved.size(), 1U);
-  EXPECT_FALSE(resolved[0].valid);
-  EXPECT_EQ(resolved[0].kind, CompositionView::AuxOutputKind::kDepthTexture);
-  EXPECT_EQ(resolved[0].producer_view_id, oxygen::kInvalidViewId);
+  EXPECT_FALSE(resolved.at(0).valid);
+  EXPECT_EQ(resolved.at(0).kind, CompositionView::AuxOutputKind::kDepthTexture);
+  EXPECT_EQ(resolved.at(0).producer_view_id, oxygen::kInvalidViewId);
 }
 
 TEST(AuxiliaryDependencyGraphTest, ProducerOrdersBeforeConsumer)
 {
   auto graphics = std::make_shared<FakeGraphics>();
-  auto consumer = MakeSceneView(ViewId { 5U }, "Consumer");
+  auto consumer = MakeSceneView(
+    ViewId {
+      5U,
+    },
+    "Consumer");
   consumer.consumed_aux_outputs.push_back(CompositionView::AuxInputDesc {
-    .id = CompositionView::AuxOutputId { 13U },
+    .id = CompositionView::AuxOutputId { 13U, },
     .kind = CompositionView::AuxOutputKind::kColorTexture,
     .required = true,
   });
-  auto producer = MakeSceneView(ViewId { 6U }, "Producer");
+  auto producer = MakeSceneView(
+    ViewId {
+      6U,
+    },
+    "Producer");
   producer.view_kind = CompositionView::ViewKind::kAuxiliary;
   producer.produced_aux_outputs.push_back(CompositionView::AuxOutputDesc {
-    .id = CompositionView::AuxOutputId { 13U },
+    .id = CompositionView::AuxOutputId { 13U, },
     .kind = CompositionView::AuxOutputKind::kColorTexture,
     .debug_name = "Producer.Color",
   });
@@ -176,33 +215,55 @@ TEST(AuxiliaryDependencyGraphTest, ProducerOrdersBeforeConsumer)
   PrepareView(producer_impl, producer, *graphics);
 
   FramePlanBuilder builder;
-  std::array views { &consumer_impl, &producer_impl };
+  std::array views {
+    &consumer_impl,
+    &producer_impl,
+  };
   BuildPackets(builder,
-    std::span<CompositionViewImpl* const> { views.data(), views.size() });
+    std::span<CompositionViewImpl* const> {
+      views.data(),
+      views.size(),
+    });
 
   ASSERT_EQ(builder.GetFrameViewPackets().size(), 2U);
-  EXPECT_EQ(builder.GetFrameViewPackets()[0].PublishedViewId(),
-    ViewId { 1006U });
-  EXPECT_EQ(builder.GetFrameViewPackets()[1].PublishedViewId(),
-    ViewId { 1005U });
-  const auto& resolved = builder.GetFrameViewPackets()[1].ResolvedAuxInputs();
+  EXPECT_EQ(builder.GetFrameViewPackets().at(0).PublishedViewId(),
+    (ViewId {
+      1006U,
+    }));
+  EXPECT_EQ(builder.GetFrameViewPackets().at(1).PublishedViewId(),
+    (ViewId {
+      1005U,
+    }));
+  const auto& resolved
+    = builder.GetFrameViewPackets().at(1).ResolvedAuxInputs();
   ASSERT_EQ(resolved.size(), 1U);
-  EXPECT_TRUE(resolved[0].valid);
-  EXPECT_EQ(resolved[0].producer_view_id, ViewId { 1006U });
+  EXPECT_TRUE(resolved.at(0).valid);
+  EXPECT_EQ(resolved.at(0).producer_view_id,
+    (ViewId {
+      1006U,
+    }));
 }
 
 TEST(AuxiliaryDependencyGraphTest, KindMismatchFailsBeforeGpuWork)
 {
   auto graphics = std::make_shared<FakeGraphics>();
-  auto producer = MakeSceneView(ViewId { 7U }, "Producer");
+  auto producer = MakeSceneView(
+    ViewId {
+      7U,
+    },
+    "Producer");
   producer.produced_aux_outputs.push_back(CompositionView::AuxOutputDesc {
-    .id = CompositionView::AuxOutputId { 15U },
+    .id = CompositionView::AuxOutputId { 15U, },
     .kind = CompositionView::AuxOutputKind::kColorTexture,
     .debug_name = "Producer.Color",
   });
-  auto consumer = MakeSceneView(ViewId { 8U }, "Consumer");
+  auto consumer = MakeSceneView(
+    ViewId {
+      8U,
+    },
+    "Consumer");
   consumer.consumed_aux_outputs.push_back(CompositionView::AuxInputDesc {
-    .id = CompositionView::AuxOutputId { 15U },
+    .id = CompositionView::AuxOutputId { 15U, },
     .kind = CompositionView::AuxOutputKind::kDepthTexture,
     .required = true,
   });
@@ -213,36 +274,49 @@ TEST(AuxiliaryDependencyGraphTest, KindMismatchFailsBeforeGpuWork)
   PrepareView(consumer_impl, consumer, *graphics);
 
   FramePlanBuilder builder;
-  std::array views { &producer_impl, &consumer_impl };
+  std::array views {
+    &producer_impl,
+    &consumer_impl,
+  };
   EXPECT_THROW(BuildPackets(builder,
                  std::span<CompositionViewImpl* const> {
-                   views.data(), views.size() }),
+                   views.data(),
+                   views.size(),
+                 }),
     std::runtime_error);
 }
 
 TEST(AuxiliaryDependencyGraphTest, CycleIsRejected)
 {
   auto graphics = std::make_shared<FakeGraphics>();
-  auto first = MakeSceneView(ViewId { 9U }, "First");
+  auto first = MakeSceneView(
+    ViewId {
+      9U,
+    },
+    "First");
   first.produced_aux_outputs.push_back(CompositionView::AuxOutputDesc {
-    .id = CompositionView::AuxOutputId { 17U },
+    .id = CompositionView::AuxOutputId { 17U, },
     .kind = CompositionView::AuxOutputKind::kColorTexture,
     .debug_name = "First.Color",
   });
   first.consumed_aux_outputs.push_back(CompositionView::AuxInputDesc {
-    .id = CompositionView::AuxOutputId { 19U },
+    .id = CompositionView::AuxOutputId { 19U, },
     .kind = CompositionView::AuxOutputKind::kColorTexture,
     .required = true,
   });
 
-  auto second = MakeSceneView(ViewId { 10U }, "Second");
+  auto second = MakeSceneView(
+    ViewId {
+      10U,
+    },
+    "Second");
   second.produced_aux_outputs.push_back(CompositionView::AuxOutputDesc {
-    .id = CompositionView::AuxOutputId { 19U },
+    .id = CompositionView::AuxOutputId { 19U, },
     .kind = CompositionView::AuxOutputKind::kColorTexture,
     .debug_name = "Second.Color",
   });
   second.consumed_aux_outputs.push_back(CompositionView::AuxInputDesc {
-    .id = CompositionView::AuxOutputId { 17U },
+    .id = CompositionView::AuxOutputId { 17U, },
     .kind = CompositionView::AuxOutputKind::kColorTexture,
     .required = true,
   });
@@ -253,10 +327,15 @@ TEST(AuxiliaryDependencyGraphTest, CycleIsRejected)
   PrepareView(second_impl, second, *graphics);
 
   FramePlanBuilder builder;
-  std::array views { &first_impl, &second_impl };
+  std::array views {
+    &first_impl,
+    &second_impl,
+  };
   EXPECT_THROW(BuildPackets(builder,
                  std::span<CompositionViewImpl* const> {
-                   views.data(), views.size() }),
+                   views.data(),
+                   views.size(),
+                 }),
     std::runtime_error);
 }
 

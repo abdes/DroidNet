@@ -17,7 +17,9 @@
 
 namespace oxygen::vortex::testing::exposure {
 
-using namespace oxygen::graphics;
+using graphics::Framebuffer;
+using graphics::FramebufferDesc;
+using graphics::ResourceStates;
 
 ExposureAllocationScenario::ExposureAllocationScenario(
   ExposureLightingGpuTest& fixture, bool temporal)
@@ -47,16 +49,20 @@ auto ExposureAllocationScenario::Run() -> void
 }
 
 auto ExposureAllocationScenario::ReadEnvironment(
-  const char* name, const char* fallback) -> std::string
+  const char* name, std::string_view fallback) -> std::string
 {
   char* text = nullptr;
   std::size_t size = 0U;
-  if (_dupenv_s(&text, &size, name) != 0 || !text) {
-    return std::string { fallback };
+  if (_dupenv_s(&text, &size, name) != 0 || (text == nullptr)) {
+    return std::string {
+      fallback,
+    };
   }
   const auto owned
     = std::unique_ptr<char, decltype(&std::free)>(text, &std::free);
-  return std::string { owned.get() };
+  return std::string {
+    owned.get(),
+  };
 }
 
 auto ExposureAllocationScenario::SetUp() -> void
@@ -65,9 +71,9 @@ auto ExposureAllocationScenario::SetUp() -> void
     = ReadEnvironment("OXYGEN_EXPOSURE_TIMING_WIDTH", "1920");
   width_ = 0U;
   const auto parsed = std::from_chars(
-    width_text.data(), width_text.data() + width_text.size(), width_);
+    width_text.data(), std::to_address(width_text.end()), width_);
   ASSERT_EQ(parsed.ec, std::errc {});
-  ASSERT_EQ(parsed.ptr, width_text.data() + width_text.size());
+  ASSERT_EQ(parsed.ptr, std::to_address(width_text.end()));
   ASSERT_TRUE(width_ == 1920U || width_ == 3840U);
   precision_
     = ReadEnvironment("OXYGEN_EXPOSURE_BASELINE_PRECISION", "production");
@@ -77,17 +83,40 @@ auto ExposureAllocationScenario::SetUp() -> void
   fixture_.verify_manual_p = false;
   fixture_.renderer_->GetDiagnosticsService().SetHdrFp32ReferenceEnabled(
     fp32_reference_);
-  fixture_.view.viewport = { .width = float(width_), .height = float(height_) };
-  fixture_.camera.GetCameraAs<scene::PerspectiveCamera>()->get().SetViewport(
-    fixture_.view.viewport);
+  fixture_.view.viewport = {
+    .width = static_cast<float>(width_),
+    .height = static_cast<float>(height_),
+  };
+  const auto camera_lens
+    = fixture_.camera.GetCameraAs<scene::PerspectiveCamera>();
+  if (!camera_lens.has_value()) {
+    FAIL() << "Expected a perspective camera";
+  }
+  camera_lens->get().SetViewport(fixture_.view.viewport);
   fixture_.SetSurface(data::MaterialDomain::kOpaque, .25F);
   auto& sky = fixture_.scene->GetEnvironment()
                 ->AddSystem<scene::environment::SkyAtmosphere>();
   sky.SetEnabled(true);
-  sky.SetRayleighScatteringRgb({ 0, 0, 0 });
-  sky.SetMieScatteringRgb({ 0, 0, 0 });
-  sky.SetMieAbsorptionRgb({ 0, 0, 0 });
-  sky.SetOzoneAbsorptionRgb({ 0, 0, 0 });
+  sky.SetRayleighScatteringRgb({
+    0,
+    0,
+    0,
+  });
+  sky.SetMieScatteringRgb({
+    0,
+    0,
+    0,
+  });
+  sky.SetMieAbsorptionRgb({
+    0,
+    0,
+    0,
+  });
+  sky.SetOzoneAbsorptionRgb({
+    0,
+    0,
+    0,
+  });
   auto& fog
     = fixture_.scene->GetEnvironment()->AddSystem<scene::environment::Fog>();
   fog.SetEnabled(true);
@@ -103,14 +132,14 @@ auto ExposureAllocationScenario::SetUp() -> void
   ASSERT_EQ(
     fixture_.fixture_console.Execute("vtx.volumetric_fog.jitter false").status,
     console::ExecutionStatus::kOk);
-  fixture_.probe->prepare = [](RenderContext& context) {
+  fixture_.probe->prepare = [](RenderContext& context) -> void {
     context.current_view.with_atmosphere = true;
     context.current_view.with_height_fog = true;
   };
   fixture_.scene->Update();
   fixture_.scene->SyncObservers();
 
-  backend_ = &static_cast<ExposureFailureGraphics&>(fixture_.Backend());
+  backend_ = &fixture_.FailureBackend();
   backend_->tracked_textures.clear();
   backend_->tracked_buffers.clear();
   backend_->peak_texture_bytes = backend_->peak_hdr_bytes = 0U;
@@ -125,50 +154,81 @@ auto ExposureAllocationScenario::SetUp() -> void
 
   cleanup_armed_ = true;
   for (unsigned index = 0U; index < 2U; ++index) {
-    outputs_[index]
-      = fixture_.Backend().CreateTexture({ .width = width_ >> index,
-        .height = height_ >> index,
-        .format = Format::kRGBA32Float,
-        .debug_name = "LifecycleAccounting.Output" + std::to_string(index),
-        .is_render_target = true,
-        .initial_state = ResourceStates::kCommon });
-    ASSERT_NE(outputs_[index], nullptr);
-    fixture_.Backend().GetResourceRegistry().Register(outputs_[index]);
-    targets_[index] = fixture_.Backend().CreateFramebuffer(
-      FramebufferDesc {}.AddColorAttachment(outputs_[index]));
-    consumer_outputs_[index] = fixture_.Backend().CreateTexture({ .width = 1U,
+    outputs_.at(index) = fixture_.Backend().CreateTexture({
+      .width = width_ >> index,
+      .height = height_ >> index,
+      .format = Format::kRGBA32Float,
+      .debug_name = "LifecycleAccounting.Output" + std::to_string(index),
+      .is_render_target = true,
+      .initial_state = ResourceStates::kCommon,
+    });
+    ASSERT_NE(outputs_.at(index), nullptr);
+    fixture_.Backend().GetResourceRegistry().Register(outputs_.at(index));
+    targets_.at(index) = fixture_.Backend().CreateFramebuffer(
+      FramebufferDesc {}.AddColorAttachment(outputs_.at(index)));
+    consumer_outputs_.at(index) = fixture_.Backend().CreateTexture({
+      .width = 1U,
       .height = 1U,
       .format = Format::kRGBA32Float,
       .debug_name
       = "LifecycleAccounting.DelayedConsumer" + std::to_string(index),
       .is_render_target = true,
-      .initial_state = ResourceStates::kCommon });
-    ASSERT_NE(consumer_outputs_[index], nullptr);
-    fixture_.Backend().GetResourceRegistry().Register(consumer_outputs_[index]);
-    consumer_targets_[index] = fixture_.Backend().CreateFramebuffer(
-      FramebufferDesc {}.AddColorAttachment(consumer_outputs_[index]));
+      .initial_state = ResourceStates::kCommon,
+    });
+    ASSERT_NE(consumer_outputs_.at(index), nullptr);
+    fixture_.Backend().GetResourceRegistry().Register(
+      consumer_outputs_.at(index));
+    consumer_targets_.at(index) = fixture_.Backend().CreateFramebuffer(
+      FramebufferDesc {}.AddColorAttachment(consumer_outputs_.at(index)));
   }
 
-  fixture_.probe->inspect = [&](const RenderContext& context,
-                              const SceneTextureExtractRef& color,
-                              unsigned draws) {
+  fixture_.probe->inspect
+    = [&](const RenderContext& context, const SceneTextureExtractRef& color,
+        unsigned draws) -> void {
     const auto* owner
       = vortex::testing::RendererPublicationProbe::GetSceneRenderer(
         *fixture_.renderer_);
     CHECK_NOTNULL_F(owner);
     const auto& extracts = owner->GetSceneTextureExtracts();
     current_.insert_or_assign(context.current_view.view_state_handle,
-      ViewRecord { context.current_view.view_id, color,
-        { extracts.resolved_scene_depth, extracts.prev_scene_depth }, draws });
-    frames_.push_back({ { "sequence", context.frame_sequence.get() },
-      { "phase", backend_->accounting_phase },
-      { "view", context.current_view.view_id.get() },
-      { "handle", context.current_view.view_state_handle.get() },
-      { "format",
-        static_cast<unsigned>(color.texture->GetDescriptor().format) },
-      { "width", color.texture->GetDescriptor().width },
-      { "height", color.texture->GetDescriptor().height },
-      { "draws", draws } });
+      ViewRecord { .id = context.current_view.view_id,
+        .color = color,
+        .depths = { extracts.resolved_scene_depth, extracts.prev_scene_depth, },
+        .draws = draws, });
+    frames_.push_back({
+      {
+        "sequence",
+        context.frame_sequence.get(),
+      },
+      {
+        "phase",
+        backend_->accounting_phase,
+      },
+      {
+        "view",
+        context.current_view.view_id.get(),
+      },
+      {
+        "handle",
+        context.current_view.view_state_handle.get(),
+      },
+      {
+        "format",
+        static_cast<unsigned>(color.texture->GetDescriptor().format),
+      },
+      {
+        "width",
+        color.texture->GetDescriptor().width,
+      },
+      {
+        "height",
+        color.texture->GetDescriptor().height,
+      },
+      {
+        "draws",
+        draws,
+      },
+    });
   };
 }
 
@@ -189,7 +249,10 @@ auto ExposureAllocationScenario::CleanUp() noexcept -> void
   fixture_.probe->exposure.reset();
   targets_ = {};
   consumer_targets_ = {};
-  for (auto* collection : { &outputs_, &consumer_outputs_ }) {
+  for (auto* collection : {
+         &outputs_,
+         &consumer_outputs_,
+       }) {
     for (auto& texture : *collection) {
       if (texture) {
         fixture_.Backend().GetResourceRegistry().UnRegisterResource(*texture);

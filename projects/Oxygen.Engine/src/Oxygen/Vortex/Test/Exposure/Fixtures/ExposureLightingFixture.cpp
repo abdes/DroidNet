@@ -31,7 +31,10 @@
 
 namespace oxygen::vortex::testing::exposure {
 
-using namespace oxygen::graphics;
+using graphics::Framebuffer;
+using graphics::FramebufferDesc;
+using graphics::ResourceStates;
+using graphics::Texture;
 
 auto ExposureLightingGpuTest::AdditionalCapabilities() const -> CapabilitySet
 {
@@ -71,10 +74,12 @@ auto ExposureLightingGpuTest::Probe::OnPostRenderViewGpu(
       if (draw.draw_index >= prepared->GetDrawMetadata().size()) {
         continue;
       }
-      const auto material
-        = prepared->GetDrawMetadata()[draw.draw_index].material_handle;
+      const auto material = prepared->GetDrawMetadata()
+                              .subspan(draw.draw_index, 1)
+                              .front()
+                              .material_handle;
       const auto item = std::ranges::find_if(
-        prepared->render_items, [material](const auto& value) {
+        prepared->render_items, [material](const auto& value) -> auto {
           return value.material_handle.get() == material;
         });
       ASSERT_NE(item, prepared->render_items.end());
@@ -104,11 +109,15 @@ auto ExposureLightingGpuTest::SetUp() -> void
   owned_test_engine_
     = std::make_unique<::testing::NiceMock<ExposureTestEngine>>();
   ON_CALL(*owned_test_engine_, GetAssetLoader())
-    .WillByDefault(::testing::Return(
-      observer_ptr<content::IAssetLoader> { owned_asset_loader_.get() }));
-  ASSERT_TRUE(renderer_->OnAttached(
-    observer_ptr<IAsyncEngine> { owned_test_engine_.get() }));
-  renderer_->RegisterConsoleBindings(observer_ptr { &fixture_console });
+    .WillByDefault(::testing::Return(observer_ptr<content::IAssetLoader> {
+      owned_asset_loader_.get(),
+    }));
+  ASSERT_TRUE(renderer_->OnAttached(observer_ptr<IAsyncEngine> {
+    owned_test_engine_.get(),
+  }));
+  renderer_->RegisterConsoleBindings(observer_ptr {
+    &fixture_console,
+  });
   ASSERT_EQ(fixture_console.Execute("vtx.occlusion.enable false").status,
     console::ExecutionStatus::kOk);
   scene = std::make_shared<scene::Scene>("Lighting producer domain", 8U);
@@ -126,30 +135,54 @@ auto ExposureLightingGpuTest::SetUp() -> void
   camera = scene->CreateNode("Camera");
   auto lens = std::make_unique<scene::PerspectiveCamera>();
   view = View {};
-  view.viewport = { .width = 1, .height = 1 };
+  view.viewport = {
+    .width = 1,
+    .height = 1,
+  };
   lens->SetViewport(view.viewport);
   ASSERT_TRUE(camera.AttachCamera(std::move(lens)));
   mesh_node = scene->CreateNode("Radiance triangle");
   std::vector<data::Vertex> vertices(3);
-  const std::array positions { glm::vec3 { -2, -2, -1 },
-    glm::vec3 { 2, -2, -1 }, glm::vec3 { 0, 2, -1 } };
+  const std::array positions {
+    glm::vec3 {
+      -2,
+      -2,
+      -1,
+    },
+    glm::vec3 {
+      2,
+      -2,
+      -1,
+    },
+    glm::vec3 {
+      0,
+      2,
+      -1,
+    },
+  };
   for (unsigned i = 0; i < 3; ++i) {
-    vertices[i] = { .position = positions[i],
-      .normal = { 0, 0, 1 },
-      .texcoord = { .5F, .5F },
-      .tangent = { 1, 0, 0 },
-      .bitangent = { 0, 1, 0 },
-      .color = { 1, 1, 1, 1 } };
+    vertices.at(i) = { .position = positions.at(i),
+      .normal = { 0, 0, 1, },
+      .texcoord = { .5F, .5F, },
+      .tangent = { 1, 0, 0, },
+      .bitangent = { 0, 1, 0, },
+      .color = { 1, 1, 1, 1, }, };
   }
   std::shared_ptr<data::Mesh> mesh
     = data::MeshBuilder()
         .WithVertices(vertices)
-        .WithIndices(std::vector<std::uint32_t> { 0, 1, 2 })
+        .WithIndices(std::vector<std::uint32_t> {
+          0,
+          1,
+          2,
+        })
         .BeginSubMesh("Radiance", data::MaterialAsset::CreateDefault())
-        .WithMeshView({ .first_index = 0,
+        .WithMeshView({
+          .first_index = 0,
           .index_count = 3,
           .first_vertex = 0,
-          .vertex_count = 3 })
+          .vertex_count = 3,
+        })
         .EndSubMesh()
         .Build();
   data::pak::geometry::GeometryAssetDesc geometry_desc {};
@@ -159,16 +192,21 @@ auto ExposureLightingGpuTest::SetUp() -> void
   geometry_desc.bounding_box_min[2] = geometry_desc.bounding_box_max[2] = -1;
   mesh_node.GetRenderable().SetGeometry(std::make_shared<data::GeometryAsset>(
     data::AssetKey::FromVirtualPath("/Test/Exposure/Domain.ogeo"),
-    geometry_desc, std::vector<std::shared_ptr<data::Mesh>> { mesh }));
-  auto output = CreateRegisteredTexture({ .width = 1,
+    geometry_desc,
+    std::vector<std::shared_ptr<data::Mesh>> {
+      mesh,
+    }));
+  auto output = CreateRegisteredTexture({
+    .width = 1,
     .height = 1,
     .format = Format::kRGBA32Float,
     .is_render_target = true,
-    .initial_state = ResourceStates::kCommon });
+    .initial_state = ResourceStates::kCommon,
+  });
   framebuffer = Backend().CreateFramebuffer(
     FramebufferDesc {}.AddColorAttachment(output));
   probe = std::make_shared<Probe>(*renderer_);
-  probe->prepare = [&](RenderContext& ctx) {
+  probe->prepare = [&](RenderContext& ctx) -> void {
     ctx.current_view.depth_prepass_mode = depth_mode;
     auto* owner
       = vortex::testing::RendererPublicationProbe::GetSceneRenderer(*renderer_);
@@ -180,7 +218,9 @@ auto ExposureLightingGpuTest::SetUp() -> void
   };
 
   renderer_->RegisterViewExtension(probe);
-  frame.SetScene(observer_ptr { scene.get() });
+  frame.SetScene(observer_ptr {
+    scene.get(),
+  });
 }
 
 auto ExposureLightingGpuTest::MakeEmissiveMaterial(float value)
@@ -194,13 +234,21 @@ auto ExposureLightingGpuTest::MakeEmissiveMaterial(float value)
   desc.alignment = 256;
   const auto key = owned_asset_loader_->MintSyntheticTextureKey();
   desc.content_hash = key.get();
-  const Pixel pixel { value, value, value, 1 };
+  const Pixel pixel {
+    value,
+    value,
+    value,
+    1,
+  };
   std::vector<std::uint8_t> bytes(sizeof(pixel));
   std::memcpy(bytes.data(), pixel.data(), sizeof(pixel));
-  const std::array layouts { data::pak::render::SubresourceLayout {
-    .offset_bytes = 0,
-    .row_pitch_bytes = sizeof(pixel),
-    .size_bytes = sizeof(pixel) } };
+  const std::array layouts {
+    data::pak::render::SubresourceLayout {
+      .offset_bytes = 0,
+      .row_pitch_bytes = sizeof(pixel),
+      .size_bytes = sizeof(pixel),
+    },
+  };
   auto payload
     = vortex::testing::detail::BuildV4TexturePayload(desc, layouts, bytes);
   desc.size_bytes = static_cast<std::uint32_t>(payload.size());
@@ -210,14 +258,20 @@ auto ExposureLightingGpuTest::MakeEmissiveMaterial(float value)
   authored.flags = data::pak::render::kMaterialFlag_DoubleSided;
   authored.base_color[3] = 1;
   authored.normal_scale = 1;
-  authored.roughness = data::Unorm16 { 1 };
-  authored.ambient_occlusion = data::Unorm16 { 1 };
+  authored.roughness = data::Unorm16 {
+    1,
+  };
+  authored.ambient_occlusion = data::Unorm16 {
+    1,
+  };
   authored.uv_scale[0] = authored.uv_scale[1] = 1;
   for (auto& component : authored.emissive_factor) {
-    component = data::HalfFloat { 1.0F };
+    component = data::HalfFloat {
+      1.0F,
+    };
   }
   std::vector<content::ResourceKey> keys(6);
-  keys[5] = key;
+  keys.at(5) = key;
   return std::make_shared<data::MaterialAsset>(
     data::AssetKey::FromVirtualPath(
       "/Test/Exposure/Wide" + std::to_string(key.get()) + ".omat"),
@@ -230,20 +284,21 @@ auto ExposureLightingGpuTest::UniformReferenceGain(float luminance) const
   // Independent one-pixel, full-percentile histogram oracle. Both adjacent
   // bins retain their rounded share of the fixed 4095 sample mass.
   if (luminance <= std::exp2(settings.min_log_luminance)) {
-    return std::exp2(-double(settings.min_ev) + settings.compensation_ev)
+    return std::exp2(
+             -static_cast<double>(settings.min_ev) + settings.compensation_ev)
       * (settings.target_luminance / .18) * (settings.key / 12.5);
   }
-  const double bin
-    = std::clamp((std::log2(double(luminance)) - settings.min_log_luminance)
-          / settings.log_luminance_range,
-        0.0, 1.0)
+  const double bin = std::clamp((std::log2(static_cast<double>(luminance))
+                                  - settings.min_log_luminance)
+                         / settings.log_luminance_range,
+                       0.0, 1.0)
     * 255;
   const double lower = std::floor(bin);
-  const double upper_mass = std::floor((bin - lower) * 4095 + .5);
+  const double upper_mass = std::floor(((bin - lower) * 4095) + .5);
   const double measured_log = settings.min_log_luminance
-    + (lower + upper_mass / 4095) * settings.log_luminance_range / 255;
+    + ((lower + (upper_mass / 4095)) * settings.log_luminance_range / 255);
   const double ev = std::clamp(measured_log - std::log2(.18),
-    double(settings.min_ev), double(settings.max_ev));
+    static_cast<double>(settings.min_ev), static_cast<double>(settings.max_ev));
   return std::exp2(-ev + settings.compensation_ev)
     * (settings.target_luminance / .18) * (settings.key / 12.5);
 }
@@ -270,23 +325,27 @@ auto ExposureLightingGpuTest::ExpectSurfaceExposure(float luminance,
     const auto hdr = ReadFloatTexture(reference);
     ASSERT_EQ(hdr.size(), 1U);
     for (unsigned c = 0; c < 3; ++c) {
-      EXPECT_NEAR(double(hdr[0][c]) / domain.pre_exposure, luminance,
-        double(luminance) * 2e-5 + 0x1p-120);
+      EXPECT_NEAR(static_cast<double>(hdr.at(0).at(c)) / domain.pre_exposure,
+        luminance, (static_cast<double>(luminance) * 2e-5) + 0x1p-120);
     }
   }
   const auto mapped = ReadFloatTexture(
     *framebuffer->GetDescriptor().color_attachments.front().texture);
   ASSERT_EQ(mapped.size(), 1U);
   const double expected = std::clamp(
-    std::clamp(double(luminance) * expected_gain, 0.0, 1.0) - .5 / 255, 0.0,
-    1.0);
+    std::clamp(static_cast<double>(luminance) * expected_gain, 0.0, 1.0)
+      - (.5 / 255),
+    0.0, 1.0);
   for (unsigned c = 0; c < 3; ++c) {
-    EXPECT_NEAR(mapped[0][c], expected, 2e-4);
+    EXPECT_NEAR(mapped.at(0).at(c), expected, 2e-4);
   }
-  EXPECT_EQ(mapped[0][3], 1);
+  EXPECT_EQ(mapped.at(0).at(3), 1);
 }
 
 auto ExposureLightingGpuTest::ReferenceAdaptedGain(
+  // The independent adaptation equation takes previous gain, target gain,
+  // then elapsed seconds.
+  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
   double previous, double target, double seconds) const -> double
 {
   const double q = std::log2(previous);
@@ -299,10 +358,10 @@ auto ExposureLightingGpuTest::ReferenceAdaptedGain(
   }
   const double distance = settings.transition_distance;
   const double crossing = std::max(radius - distance, 0.0) / speed;
-  const double remaining = seconds <= crossing ? radius - speed * seconds
+  const double remaining = seconds <= crossing ? radius - (speed * seconds)
                                                : std::min(radius, distance)
       * std::exp(-speed * (seconds - crossing) / distance);
-  return std::exp2(destination - (destination > q ? 1 : -1) * remaining);
+  return std::exp2(destination - ((destination > q ? 1 : -1) * remaining));
 }
 
 auto ExposureLightingGpuTest::SetSurface(
@@ -316,15 +375,24 @@ auto ExposureLightingGpuTest::SetSurface(
     desc.flags |= data::pak::render::kMaterialFlag_AlphaTest;
   }
   desc.base_color[0] = desc.base_color[1] = desc.base_color[2] = 1;
-  desc.base_color[3] = rejected_mask                ? 0
-    : domain == data::MaterialDomain::kAlphaBlended ? .5F
-                                                    : 1.0F;
+  if (rejected_mask) {
+    desc.base_color[3] = 0.0F;
+  } else {
+    desc.base_color[3]
+      = domain == data::MaterialDomain::kAlphaBlended ? .5F : 1.0F;
+  }
   for (auto& value : desc.emissive_factor) {
-    value = data::HalfFloat { emission };
+    value = data::HalfFloat {
+      emission,
+    };
   }
   desc.normal_scale = 1;
-  desc.roughness = data::Unorm16 { 1 };
-  desc.ambient_occlusion = data::Unorm16 { 1 };
+  desc.roughness = data::Unorm16 {
+    1,
+  };
+  desc.ambient_occlusion = data::Unorm16 {
+    1,
+  };
   desc.uv_scale[0] = desc.uv_scale[1] = 1;
   mesh_node.GetRenderable().SetMaterialOverride(0, 0,
     std::make_shared<data::MaterialAsset>(
@@ -335,12 +403,16 @@ auto ExposureLightingGpuTest::SetSurface(
 }
 
 auto ExposureLightingGpuTest::RenderSurface(
+  // This fixture call consistently orders rendering path, EV, then frame count.
+  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
   bool forward, float ev, unsigned frames) -> void
 {
   auto timing = engine::ModuleTimingData {};
   timing.game_delta_time = time::CanonicalDuration {
     std::chrono::duration_cast<std::chrono::nanoseconds>(
-      std::chrono::duration<double> { frame_delta_seconds })
+      std::chrono::duration<double> {
+        frame_delta_seconds,
+      }),
   };
   frame.SetModuleTimingData(timing, engine::internal::EngineTagFactory::Get());
   probe->color.reset();
@@ -352,33 +424,50 @@ auto ExposureLightingGpuTest::RenderSurface(
   scene->Update();
   scene->SyncObservers();
   for (unsigned warmup = 0; warmup < frames; ++warmup) {
-    const auto slot = frame::Slot { sequence % 3 };
-    Backend().BeginFrame(frame::SequenceNumber { sequence + 1 }, slot);
+    const auto slot = frame::Slot {
+      sequence % 3,
+    };
+    Backend().BeginFrame(
+      frame::SequenceNumber {
+        sequence + 1,
+      },
+      slot);
     frame.SetFrameSlot(slot, engine::internal::EngineTagFactory::Get());
-    frame.SetFrameSequenceNumber(frame::SequenceNumber { ++sequence },
+    frame.SetFrameSequenceNumber(
+      frame::SequenceNumber {
+        ++sequence,
+      },
       engine::internal::EngineTagFactory::Get());
-    renderer_->OnFrameStart(observer_ptr { &frame });
+    renderer_->OnFrameStart(observer_ptr {
+      &frame,
+    });
     auto facade = renderer_->ForOffscreenScene();
     facade.SetFrameSession({ .frame_slot = slot,
-      .frame_sequence = frame::SequenceNumber { sequence },
-      .delta_time_seconds = frame_delta_seconds });
-    facade.SetSceneSource({ .scene = observer_ptr { scene.get() } });
+      .frame_sequence = frame::SequenceNumber { sequence, },
+      .delta_time_seconds = frame_delta_seconds, });
+    facade.SetSceneSource({ .scene = observer_ptr { scene.get(), }, });
     facade.SetViewIntent(Renderer::OffscreenSceneViewInput::FromCamera(
-      "Lighting", ViewId { surface_view_id }, view, camera)
+      "Lighting", ViewId { surface_view_id, }, view, camera)
         .SetViewStateHandle(persistent_surface_state
-            ? CompositionView::ViewStateHandle { surface_view_id }
+            ? CompositionView::ViewStateHandle { surface_view_id, }
             : CompositionView::kInvalidViewStateHandle)
         .SetExposureSourceViewId(surface_source_id)
         .SetExposureOverride(surface_exposure_override));
     facade.SetOutputTarget(
-      { .framebuffer = observer_ptr { framebuffer.get() } });
+      { .framebuffer = observer_ptr { framebuffer.get(), }, });
     facade.SetPipeline(forward ? Renderer::OffscreenPipelineInput::Forward()
                                : Renderer::OffscreenPipelineInput::Deferred());
     auto session = facade.Finalize();
     ASSERT_TRUE(session.has_value());
     ASSERT_TRUE(session->ExecuteInsideFrame(frame));
-    renderer_->OnFrameEnd(observer_ptr { &frame });
-    Backend().EndFrame(frame::SequenceNumber { sequence }, slot);
+    renderer_->OnFrameEnd(observer_ptr {
+      &frame,
+    });
+    Backend().EndFrame(
+      frame::SequenceNumber {
+        sequence,
+      },
+      slot);
     WaitForQueueIdle();
   }
   ASSERT_EQ(probe->draws, expected_draws);
@@ -398,35 +487,67 @@ auto ExposureLightingGpuTest::RenderPublishedSurface(bool forward) -> void
   auto timing = engine::ModuleTimingData {};
   timing.game_delta_time = time::CanonicalDuration {
     std::chrono::duration_cast<std::chrono::nanoseconds>(
-      std::chrono::duration<double> { frame_delta_seconds })
+      std::chrono::duration<double> {
+        frame_delta_seconds,
+      }),
   };
   frame.SetModuleTimingData(timing, engine::internal::EngineTagFactory::Get());
-  frame.SetScene(observer_ptr { scene.get() });
-  const auto slot = frame::Slot { sequence % 3U };
-  Backend().BeginFrame(frame::SequenceNumber { ++sequence }, slot);
+  frame.SetScene(observer_ptr {
+    scene.get(),
+  });
+  const auto slot = frame::Slot {
+    sequence % 3U,
+  };
+  Backend().BeginFrame(
+    frame::SequenceNumber {
+      ++sequence,
+    },
+    slot);
   frame.SetFrameSlot(slot, engine::internal::EngineTagFactory::Get());
-  frame.SetFrameSequenceNumber(frame::SequenceNumber { sequence },
+  frame.SetFrameSequenceNumber(
+    frame::SequenceNumber {
+      sequence,
+    },
     engine::internal::EngineTagFactory::Get());
-  renderer_->OnFrameStart(observer_ptr { &frame });
-  auto input
-    = CompositionView::ForScene(ViewId { surface_view_id }, view, camera);
-  input.view_state_handle
-    = CompositionView::ViewStateHandle { surface_view_id };
+  renderer_->OnFrameStart(observer_ptr {
+    &frame,
+  });
+  auto input = CompositionView::ForScene(
+    ViewId {
+      surface_view_id,
+    },
+    view, camera);
+  input.view_state_handle = CompositionView::ViewStateHandle {
+    surface_view_id,
+  };
   input.exposure_source_view_id = surface_source_id;
   input.render_settings.exposure = settings;
   ASSERT_NE(renderer_->PublishRuntimeCompositionView(frame,
               { .composition_view = input,
-                .render_target = observer_ptr { framebuffer.get() },
-                .composite_source = observer_ptr { framebuffer.get() } },
+                .render_target = observer_ptr { framebuffer.get(), },
+                .composite_source = observer_ptr { framebuffer.get(), }, },
               forward ? ShadingMode::kForward : ShadingMode::kDeferred),
     kInvalidViewId);
   auto loop = co::testing::TestEventLoop {};
+  // co::Run completes synchronously before this closure and its captured
+  // fixture state leave scope.
+  // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
   co::Run(loop, [&]() -> co::Co<void> {
-    co_await renderer_->OnPreRender(observer_ptr { &frame });
-    co_await renderer_->OnRender(observer_ptr { &frame });
+    co_await renderer_->OnPreRender(observer_ptr {
+      &frame,
+    });
+    co_await renderer_->OnRender(observer_ptr {
+      &frame,
+    });
   });
-  renderer_->OnFrameEnd(observer_ptr { &frame });
-  Backend().EndFrame(frame::SequenceNumber { sequence }, slot);
+  renderer_->OnFrameEnd(observer_ptr {
+    &frame,
+  });
+  Backend().EndFrame(
+    frame::SequenceNumber {
+      sequence,
+    },
+    slot);
   WaitForQueueIdle();
   ASSERT_EQ(probe->draws, expected_draws);
   ASSERT_NE(probe->exposure, nullptr);

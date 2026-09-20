@@ -7,6 +7,7 @@
 #include <Oxygen/Testing/GTest.h>
 
 #include <algorithm>
+#include <ranges>
 #include <string>
 
 #include <Oxygen/Content/ResourceKey.h>
@@ -39,10 +40,9 @@ using oxygen::vortex::testing::TextureBinderTest;
 [[nodiscard]] auto LastSrvViewTextureForIndex(const FakeGraphics& gfx,
   const uint32_t index) -> const oxygen::graphics::Texture*
 {
-  for (auto it = gfx.srv_view_log_.events.rbegin();
-    it != gfx.srv_view_log_.events.rend(); ++it) {
-    if (it->index == index) {
-      return it->texture;
+  for (auto& event : std::views::reverse(gfx.srv_view_log_.events)) {
+    if (event.index == index) {
+      return event.texture;
     }
   }
   return nullptr;
@@ -51,11 +51,10 @@ using oxygen::vortex::testing::TextureBinderTest;
 [[nodiscard]] auto FindLastTextureByDebugName(const FakeGraphics& gfx,
   const std::string_view debug_name) -> const oxygen::graphics::Texture*
 {
-  for (auto it = gfx.srv_view_log_.events.rbegin();
-    it != gfx.srv_view_log_.events.rend(); ++it) {
-    if (it->texture != nullptr
-      && GetTextureDebugName(it->texture) == debug_name) {
-      return it->texture;
+  for (auto& event : std::views::reverse(gfx.srv_view_log_.events)) {
+    if (event.texture != nullptr
+      && GetTextureDebugName(event.texture) == debug_name) {
+      return event.texture;
     }
   }
   return nullptr;
@@ -204,7 +203,8 @@ NOLINT_TEST_F(TextureBinderBasicTest, CacheHit_DoesNotRecreateView)
 /*! TextureBinder owns global error/placeholder textures. Their registry entries
     must be released before Graphics teardown, otherwise ResourceRegistry keeps
     lingering resources alive at process exit. */
-NOLINT_TEST_F(TextureBinderBasicTest, Teardown_ReleasesSharedFallbackDescriptors)
+NOLINT_TEST_F(
+  TextureBinderBasicTest, Teardown_ReleasesSharedFallbackDescriptors)
 {
   ASSERT_EQ(AllocatedSrvCount(), 2U);
 

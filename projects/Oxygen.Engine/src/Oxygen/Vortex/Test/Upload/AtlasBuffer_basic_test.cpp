@@ -35,7 +35,7 @@ NOLINT_TEST(AtlasBuffer, AllocateFreeRecycle)
   oxygen::vortex::testing::FakeGraphics gfx; // fake backend
   oxygen::observer_ptr<oxygen::Graphics> gfx_ptr(&gfx);
   AtlasBuffer atlas(gfx_ptr, kStride, "TestAtlas");
-  auto ensure = atlas.EnsureCapacity(kInitialCapacity, 0.f);
+  auto ensure = atlas.EnsureCapacity(kInitialCapacity, 0.F);
   ASSERT_TRUE(ensure.has_value());
 
   std::vector<ElementRef> refs;
@@ -51,10 +51,15 @@ NOLINT_TEST(AtlasBuffer, AllocateFreeRecycle)
 
   // Release all slots
   for (const auto& ref : refs) {
-    atlas.Release(ref, Slot { 0 });
+    atlas.Release(ref,
+      Slot {
+        0,
+      });
   }
   // Recycle retirees (simulate frame advance for slot 0)
-  atlas.OnFrameStart(Slot { 0 });
+  atlas.OnFrameStart(Slot {
+    0,
+  });
 
   // Act: allocate again after recycle
   for (std::uint32_t i = 0; i < kInitialCapacity; ++i) {
@@ -65,7 +70,7 @@ NOLINT_TEST(AtlasBuffer, AllocateFreeRecycle)
   // Basic stat sanity
   auto stats = atlas.GetStats();
   EXPECT_EQ(stats.capacity_elements, kInitialCapacity);
-  EXPECT_EQ(stats.free_list_size, 0u);
+  EXPECT_EQ(stats.free_list_size, 0U);
 }
 
 //! EnsureCapacity growth path
@@ -84,7 +89,7 @@ NOLINT_TEST(AtlasBuffer, EnsureCapacityGrowth)
   AtlasBuffer atlas(gfx_ptr, kStride, "GrowthAtlas");
 
   // Act + Assert: initial ensure -> created
-  auto ensure_created = atlas.EnsureCapacity(kInitial, 0.f);
+  auto ensure_created = atlas.EnsureCapacity(kInitial, 0.F);
   ASSERT_TRUE(ensure_created.has_value());
   EXPECT_EQ(*ensure_created, EnsureBufferResult::kCreated);
   EXPECT_GE(atlas.CapacityElements(), kInitial);
@@ -97,7 +102,7 @@ NOLINT_TEST(AtlasBuffer, EnsureCapacityGrowth)
   const auto idx1 = atlas.GetElementIndex(a1.value());
 
   // Second ensure with larger min -> resized
-  auto ensure_resized = atlas.EnsureCapacity(kLarger, 0.f);
+  auto ensure_resized = atlas.EnsureCapacity(kLarger, 0.F);
   ASSERT_TRUE(ensure_resized.has_value());
   EXPECT_EQ(*ensure_resized, EnsureBufferResult::kResized);
   EXPECT_GE(atlas.CapacityElements(), kLarger);
@@ -110,7 +115,7 @@ NOLINT_TEST(AtlasBuffer, EnsureCapacityGrowth)
   // Stats sanity
   auto stats = atlas.GetStats();
   EXPECT_GE(stats.capacity_elements, kLarger);
-  EXPECT_EQ(stats.ensure_calls, 2u);
+  EXPECT_EQ(stats.ensure_calls, 2U);
 }
 
 //! Allocation exhaustion error path
@@ -126,7 +131,7 @@ NOLINT_TEST(AtlasBuffer, AllocationExhaustionError)
   oxygen::vortex::testing::FakeGraphics gfx;
   oxygen::observer_ptr<oxygen::Graphics> gfx_ptr(&gfx);
   AtlasBuffer atlas(gfx_ptr, kStride, "ExhaustAtlas");
-  ASSERT_TRUE(atlas.EnsureCapacity(kCap, 0.f).has_value());
+  ASSERT_TRUE(atlas.EnsureCapacity(kCap, 0.F).has_value());
 
   // Act
   auto a0 = atlas.Allocate();
@@ -153,18 +158,26 @@ NOLINT_TEST(AtlasBuffer, FreeListReuse)
   oxygen::vortex::testing::FakeGraphics gfx;
   oxygen::observer_ptr<oxygen::Graphics> gfx_ptr(&gfx);
   AtlasBuffer atlas(gfx_ptr, kStride, "ReuseAtlas");
-  ASSERT_TRUE(atlas.EnsureCapacity(kCap, 0.f).has_value());
+  ASSERT_TRUE(atlas.EnsureCapacity(kCap, 0.F).has_value());
   std::array<ElementRef, kCap> refs {};
   for (std::uint32_t i = 0; i < kCap; ++i) {
     auto a = atlas.Allocate();
     ASSERT_TRUE(a.has_value());
-    refs[i] = a.value();
+    refs.at(i) = a.value();
   }
 
   // Act: release indices 1 then 3 (out of allocation order)
-  atlas.Release(refs[1], Slot { 0 });
-  atlas.Release(refs[3], Slot { 0 });
-  atlas.OnFrameStart(Slot { 0 }); // recycle
+  atlas.Release(refs.at(1),
+    Slot {
+      0,
+    });
+  atlas.Release(refs.at(3),
+    Slot {
+      0,
+    });
+  atlas.OnFrameStart(Slot {
+    0,
+  }); // recycle
 
   // Allocate twice: collect indices and confirm they match the released set
   auto r0 = atlas.Allocate();
@@ -173,8 +186,8 @@ NOLINT_TEST(AtlasBuffer, FreeListReuse)
   ASSERT_TRUE(r1.has_value());
   const auto got0 = atlas.GetElementIndex(r0.value());
   const auto got1 = atlas.GetElementIndex(r1.value());
-  const auto rel_a = atlas.GetElementIndex(refs[1]);
-  const auto rel_b = atlas.GetElementIndex(refs[3]);
+  const auto rel_a = atlas.GetElementIndex(refs.at(1));
+  const auto rel_b = atlas.GetElementIndex(refs.at(3));
   // Order agnostic check
   const bool match_direct = (got0 == rel_a && got1 == rel_b);
   const bool match_swap = (got0 == rel_b && got1 == rel_a);
@@ -193,7 +206,7 @@ NOLINT_TEST(AtlasBuffer, MakeUploadDescValidation)
   oxygen::vortex::testing::FakeGraphics gfx;
   oxygen::observer_ptr<oxygen::Graphics> gfx_ptr(&gfx);
   AtlasBuffer atlas(gfx_ptr, kStride, "DescAtlas");
-  ASSERT_TRUE(atlas.EnsureCapacity(4, 0.f).has_value());
+  ASSERT_TRUE(atlas.EnsureCapacity(4, 0.F).has_value());
   auto alloc = atlas.Allocate();
   ASSERT_TRUE(alloc.has_value());
   const auto elem_index = atlas.GetElementIndex(alloc.value());
@@ -232,7 +245,7 @@ NOLINT_TEST(AtlasBuffer, MakeUploadDescForIndexErrors)
   EXPECT_EQ(pre.error(), std::make_error_code(std::errc::invalid_argument));
 
   // Ensure capacity 2
-  ASSERT_TRUE(atlas.EnsureCapacity(2, 0.f).has_value());
+  ASSERT_TRUE(atlas.EnsureCapacity(2, 0.F).has_value());
   // Out of range
   auto oor = atlas.MakeUploadDescForIndex(5, kStride);
   ASSERT_FALSE(oor.has_value());
@@ -255,22 +268,30 @@ NOLINT_TEST(AtlasBuffer, MultiFrameRetireRecycling)
   oxygen::vortex::testing::FakeGraphics gfx;
   oxygen::observer_ptr<oxygen::Graphics> gfx_ptr(&gfx);
   AtlasBuffer atlas(gfx_ptr, kStride, "RetireAtlas");
-  ASSERT_TRUE(atlas.EnsureCapacity(5, 0.f).has_value());
+  ASSERT_TRUE(atlas.EnsureCapacity(5, 0.F).has_value());
   std::array<ElementRef, 5> refs {};
   for (std::uint32_t i = 0; i < 5; ++i) {
     auto a = atlas.Allocate();
     ASSERT_TRUE(a.has_value());
-    refs[i] = a.value();
+    refs.at(i) = a.value();
   }
-  const auto idx_slot0 = atlas.GetElementIndex(refs[1]);
-  const auto idx_slot1 = atlas.GetElementIndex(refs[2]);
+  const auto idx_slot0 = atlas.GetElementIndex(refs.at(1));
+  const auto idx_slot1 = atlas.GetElementIndex(refs.at(2));
 
   // Release into different slots
-  atlas.Release(refs[1], Slot { 0 });
-  atlas.Release(refs[2], Slot { 1 });
+  atlas.Release(refs.at(1),
+    Slot {
+      0,
+    });
+  atlas.Release(refs.at(2),
+    Slot {
+      1,
+    });
 
   // Act + Assert: recycle slot 1 first -> only idx_slot1 available
-  atlas.OnFrameStart(Slot { 1 });
+  atlas.OnFrameStart(Slot {
+    1,
+  });
   auto r1 = atlas.Allocate();
   ASSERT_TRUE(r1.has_value());
   EXPECT_EQ(atlas.GetElementIndex(r1.value()), idx_slot1);
@@ -281,7 +302,9 @@ NOLINT_TEST(AtlasBuffer, MultiFrameRetireRecycling)
   ASSERT_FALSE(fresh_fail.has_value());
 
   // Now recycle slot 0 and expect idx_slot0
-  atlas.OnFrameStart(Slot { 0 });
+  atlas.OnFrameStart(Slot {
+    0,
+  });
   auto r0 = atlas.Allocate();
   ASSERT_TRUE(r0.has_value());
   EXPECT_EQ(atlas.GetElementIndex(r0.value()), idx_slot0);
@@ -296,8 +319,8 @@ NOLINT_TEST(AtlasBuffer, MultiCountAllocationUnsupported)
   // Arrange
   oxygen::vortex::testing::FakeGraphics gfx;
   oxygen::observer_ptr<oxygen::Graphics> gfx_ptr(&gfx);
-  AtlasBuffer atlas(gfx_ptr, 8u, "CountAtlas");
-  ASSERT_TRUE(atlas.EnsureCapacity(4, 0.f).has_value());
+  AtlasBuffer atlas(gfx_ptr, 8U, "CountAtlas");
+  ASSERT_TRUE(atlas.EnsureCapacity(4, 0.F).has_value());
 
   // Act
   auto alloc = atlas.Allocate(2);
@@ -322,27 +345,27 @@ NOLINT_TEST(AtlasBuffer, EnsureCapacityUnchanged)
   AtlasBuffer atlas(gfx_ptr, kStride, "UnchangedAtlas");
 
   // Act
-  auto first = atlas.EnsureCapacity(kCap, 0.f);
+  auto first = atlas.EnsureCapacity(kCap, 0.F);
   ASSERT_TRUE(first.has_value());
   EXPECT_EQ(*first, EnsureBufferResult::kCreated);
-  auto unchanged1 = atlas.EnsureCapacity(6, 0.f);
+  auto unchanged1 = atlas.EnsureCapacity(6, 0.F);
   ASSERT_TRUE(unchanged1.has_value());
   EXPECT_EQ(*unchanged1, EnsureBufferResult::kUnchanged);
-  auto unchanged2 = atlas.EnsureCapacity(kCap, 0.f);
+  auto unchanged2 = atlas.EnsureCapacity(kCap, 0.F);
   ASSERT_TRUE(unchanged2.has_value());
   EXPECT_EQ(*unchanged2, EnsureBufferResult::kUnchanged);
 
   // Assert: capacity did not shrink and stats reflect 3 ensure calls
   EXPECT_EQ(atlas.CapacityElements(), kCap);
   auto stats = atlas.GetStats();
-  EXPECT_EQ(stats.ensure_calls, 3u);
+  EXPECT_EQ(stats.ensure_calls, 3U);
 }
 
 //! Destroying an atlas after growth must not hang while deferred releases drain
 //! during Graphics teardown.
 NOLINT_TEST(AtlasBuffer, DestroyAfterGrowthDoesNotHangAtShutdown)
 {
-  auto run_teardown = []() {
+  auto run_teardown = []() -> void {
     auto gfx = std::make_shared<oxygen::vortex::testing::FakeGraphics>();
     oxygen::observer_ptr<oxygen::Graphics> gfx_ptr(gfx.get());
 

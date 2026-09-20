@@ -27,9 +27,14 @@ protected:
   auto TearDown() -> void override { }
 
   auto Gfx() -> auto& { return *gfx_; }
-  auto GfxPtr() const { return observer_ptr { gfx_.get() }; }
+  [[nodiscard]] auto GfxPtr() const
+  {
+    return observer_ptr {
+      gfx_.get(),
+    };
+  }
 
-  auto Uploader(UploadPolicy policy = DefaultUploadPolicy())
+  auto Uploader(const UploadPolicy& policy = DefaultUploadPolicy())
     -> UploadCoordinator&
   {
     if (!uploader_) {
@@ -43,7 +48,10 @@ protected:
 
   // Const overload to allow const helpers to read staging stats without
   // mutating test fixtures.
-  auto Staging() const -> const StagingProvider& { return *staging_provider_; }
+  [[nodiscard]] auto Staging() const -> const StagingProvider&
+  {
+    return *staging_provider_;
+  }
 
   auto SimulateFrameStart(frame::Slot slot) -> void
   {

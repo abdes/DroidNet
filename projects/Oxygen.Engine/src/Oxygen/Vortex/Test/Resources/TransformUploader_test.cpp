@@ -8,6 +8,7 @@
 #include <memory>
 
 #include <glm/glm.hpp>
+#include <glm/gtc/matrix_access.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
 #include <Oxygen/Testing/GTest.h>
@@ -62,17 +63,32 @@ protected:
     gfx_->CreateCommandQueues(SingleQueueStrategy());
 
     uploader_ = std::make_unique<UploadCoordinator>(
-      observer_ptr { gfx_.get() }, DefaultUploadPolicy());
+      observer_ptr {
+        gfx_.get(),
+      },
+      DefaultUploadPolicy());
 
-    staging_provider_
-      = uploader_->CreateRingBufferStaging(oxygen::frame::SlotCount { 1 }, 4);
+    staging_provider_ = uploader_->CreateRingBufferStaging(
+      oxygen::frame::SlotCount {
+        1,
+      },
+      4);
 
-    inline_transfers_ = std::make_unique<InlineTransfersCoordinator>(
-      observer_ptr { gfx_.get() });
+    inline_transfers_
+      = std::make_unique<InlineTransfersCoordinator>(observer_ptr {
+        gfx_.get(),
+      });
 
     transform_uploader_ = std::make_unique<TransformUploader>(
-      observer_ptr { gfx_.get() }, observer_ptr { staging_provider_.get() },
-      observer_ptr { inline_transfers_.get() });
+      observer_ptr {
+        gfx_.get(),
+      },
+      observer_ptr {
+        staging_provider_.get(),
+      },
+      observer_ptr {
+        inline_transfers_.get(),
+      });
   }
 
   [[nodiscard]] auto TransformUploaderRef() const -> TransformUploader&
@@ -97,10 +113,17 @@ NOLINT_TEST_F(
   TransformUploaderBasicTest, GetOrAllocateNewTransformReturnsValidHandle)
 {
   // Arrange
-  constexpr auto transform = glm::mat4 { 1.0F };
+  constexpr auto transform = glm::mat4 {
+    1.0F,
+  };
   auto& uploader = TransformUploaderRef();
-  uploader.OnFrameStart(
-    RendererTagFactory::Get(), SequenceNumber { 0 }, Slot { 0 });
+  uploader.OnFrameStart(RendererTagFactory::Get(),
+    SequenceNumber {
+      0,
+    },
+    Slot {
+      0,
+    });
 
   // Act
   const auto handle = uploader.GetOrAllocate(transform);
@@ -114,11 +137,21 @@ NOLINT_TEST_F(TransformUploaderBasicTest,
   GetOrAllocateMultipleTransformsProducesDifferentHandles)
 {
   // Arrange
-  constexpr auto t1 = glm::mat4 { 1.0F };
-  const auto t2 = glm::scale(t1, glm::vec3 { 2.0F });
+  constexpr auto t1 = glm::mat4 {
+    1.0F,
+  };
+  const auto t2 = glm::scale(t1,
+    glm::vec3 {
+      2.0F,
+    });
   auto& uploader = TransformUploaderRef();
-  uploader.OnFrameStart(
-    RendererTagFactory::Get(), SequenceNumber { 0 }, Slot { 0 });
+  uploader.OnFrameStart(RendererTagFactory::Get(),
+    SequenceNumber {
+      0,
+    },
+    Slot {
+      0,
+    });
 
   // Act
   const auto h1 = uploader.GetOrAllocate(t1);
@@ -134,18 +167,35 @@ NOLINT_TEST_F(TransformUploaderBasicTest,
   GetOrAllocateSlotReuseSamePositionSameHandleAcrossFrames)
 {
   // Arrange
-  constexpr auto t1 = glm::mat4 { 1.0F };
-  constexpr auto t2 = glm::translate(t1, glm::vec3 { 1.0F, 2.0F, 3.0F });
+  constexpr auto t1 = glm::mat4 {
+    1.0F,
+  };
+  constexpr auto t2 = glm::translate(t1,
+    glm::vec3 {
+      1.0F,
+      2.0F,
+      3.0F,
+    });
   auto& uploader = TransformUploaderRef();
 
   // Act - Frame 1: allocate t1 at position 0
-  uploader.OnFrameStart(
-    RendererTagFactory::Get(), SequenceNumber { 0 }, Slot { 0 });
+  uploader.OnFrameStart(RendererTagFactory::Get(),
+    SequenceNumber {
+      0,
+    },
+    Slot {
+      0,
+    });
   const auto h1_frame1 = uploader.GetOrAllocate(t1);
 
   // Act - Frame 2: allocate t2 at position 0 (should reuse slot)
-  uploader.OnFrameStart(
-    RendererTagFactory::Get(), SequenceNumber { 1 }, Slot { 0 });
+  uploader.OnFrameStart(RendererTagFactory::Get(),
+    SequenceNumber {
+      1,
+    },
+    Slot {
+      0,
+    });
   const auto h1_frame2 = uploader.GetOrAllocate(t2);
 
   // Assert: same position gets same handle across frames
@@ -157,25 +207,32 @@ NOLINT_TEST_F(
   TransformUploaderBasicTest, ComputeNormalMatrixIdentityMatrixReturnsIdentity)
 {
   // Arrange
-  constexpr auto identity = glm::mat4 { 1.0F };
+  constexpr auto identity = glm::mat4 {
+    1.0F,
+  };
   auto& uploader = TransformUploaderRef();
-  uploader.OnFrameStart(
-    RendererTagFactory::Get(), SequenceNumber { 0 }, Slot { 0 });
+  uploader.OnFrameStart(RendererTagFactory::Get(),
+    SequenceNumber {
+      0,
+    },
+    Slot {
+      0,
+    });
 
   // Act
   uploader.GetOrAllocate(identity);
   const auto normals = uploader.GetNormalMatrices();
 
   // Assert
-  EXPECT_EQ(normals.size(), 1);
+  ASSERT_EQ(normals.size(), 1);
   const auto& normal_mat = normals.front();
-  for (int c = 0; c < 4; ++c) {
-    for (int r = 0; r < 4; ++r) {
-      const float expected = (c == r) ? 1.0F : 0.0F;
-      // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
-      EXPECT_FLOAT_EQ(normal_mat[c][r], expected)
-        << "Mismatch at [" << c << "][" << r << "]";
-    }
+  for (int column = 0; column < 4; ++column) {
+    SCOPED_TRACE(column);
+    const auto actual = glm::column(normal_mat, column);
+    EXPECT_FLOAT_EQ(actual.x, column == 0 ? 1.0F : 0.0F);
+    EXPECT_FLOAT_EQ(actual.y, column == 1 ? 1.0F : 0.0F);
+    EXPECT_FLOAT_EQ(actual.z, column == 2 ? 1.0F : 0.0F);
+    EXPECT_FLOAT_EQ(actual.w, column == 3 ? 1.0F : 0.0F);
   }
 }
 
@@ -184,28 +241,42 @@ NOLINT_TEST_F(TransformUploaderBasicTest,
   ComputeNormalMatrixPureRotationReturnsRotationMatrix)
 {
   // Arrange
-  constexpr auto identity = glm::mat4 { 1.0F };
-  const auto world = glm::rotate(
-    identity, glm::radians(37.0F), glm::vec3 { 0.0F, 0.0F, 1.0F });
+  constexpr auto identity = glm::mat4 {
+    1.0F,
+  };
+  const auto world = glm::rotate(identity, glm::radians(37.0F),
+    glm::vec3 {
+      0.0F,
+      0.0F,
+      1.0F,
+    });
   auto& uploader = TransformUploaderRef();
-  uploader.OnFrameStart(
-    RendererTagFactory::Get(), SequenceNumber { 0 }, Slot { 0 });
+  uploader.OnFrameStart(RendererTagFactory::Get(),
+    SequenceNumber {
+      0,
+    },
+    Slot {
+      0,
+    });
 
   // Act
   uploader.GetOrAllocate(world);
   const auto normals = uploader.GetNormalMatrices();
 
   // Assert
-  EXPECT_EQ(normals.size(), 1);
+  ASSERT_EQ(normals.size(), 1);
   const auto& normal_mat = normals.front();
 
-  const glm::mat3 expected_3x3 = glm::mat3 { world };
-  for (int c = 0; c < 3; ++c) {
-    for (int r = 0; r < 3; ++r) {
-      // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
-      EXPECT_FLOAT_EQ(normal_mat[c][r], expected_3x3[c][r])
-        << "Mismatch at [" << c << "][" << r << "]";
-    }
+  const glm::mat3 expected_3x3 = glm::mat3 {
+    world,
+  };
+  for (int column = 0; column < 3; ++column) {
+    SCOPED_TRACE(column);
+    const auto actual = glm::column(normal_mat, column);
+    const auto expected = glm::column(expected_3x3, column);
+    EXPECT_FLOAT_EQ(actual.x, expected.x);
+    EXPECT_FLOAT_EQ(actual.y, expected.y);
+    EXPECT_FLOAT_EQ(actual.z, expected.z);
   }
 }
 
@@ -214,33 +285,52 @@ NOLINT_TEST_F(TransformUploaderBasicTest,
   ComputeNormalMatrixRotationNonUniformScaleMatchesInverseTranspose)
 {
   // Arrange
-  constexpr auto identity = glm::mat4 { 1.0F };
-  const auto rot = glm::rotate(
-    identity, glm::radians(25.0F), glm::vec3 { 0.0F, 1.0F, 0.0F });
-  const auto scl = glm::scale(identity, glm::vec3 { 2.0F, 1.0F, 0.5F });
+  constexpr auto identity = glm::mat4 {
+    1.0F,
+  };
+  const auto rot = glm::rotate(identity, glm::radians(25.0F),
+    glm::vec3 {
+      0.0F,
+      1.0F,
+      0.0F,
+    });
+  const auto scl = glm::scale(identity,
+    glm::vec3 {
+      2.0F,
+      1.0F,
+      0.5F,
+    });
   const auto world = rot * scl;
   auto& uploader = TransformUploaderRef();
-  uploader.OnFrameStart(
-    RendererTagFactory::Get(), SequenceNumber { 0 }, Slot { 0 });
+  uploader.OnFrameStart(RendererTagFactory::Get(),
+    SequenceNumber {
+      0,
+    },
+    Slot {
+      0,
+    });
 
   // Act
   uploader.GetOrAllocate(world);
   const auto normals = uploader.GetNormalMatrices();
 
   // Assert
-  EXPECT_EQ(normals.size(), 1);
+  ASSERT_EQ(normals.size(), 1);
   const auto& normal_mat = normals.front();
 
-  const glm::mat3 upper_3x3 { world };
+  const glm::mat3 upper_3x3 {
+    world,
+  };
   const glm::mat3 expected_3x3 = glm::transpose(glm::inverse(upper_3x3));
 
   constexpr float kEps = 1e-5F;
-  for (int c = 0; c < 3; ++c) {
-    for (int r = 0; r < 3; ++r) {
-      // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
-      EXPECT_NEAR(normal_mat[c][r], expected_3x3[c][r], kEps)
-        << "Mismatch at [" << c << "][" << r << "]";
-    }
+  for (int column = 0; column < 3; ++column) {
+    SCOPED_TRACE(column);
+    const auto actual = glm::column(normal_mat, column);
+    const auto expected = glm::column(expected_3x3, column);
+    EXPECT_NEAR(actual.x, expected.x, kEps);
+    EXPECT_NEAR(actual.y, expected.y, kEps);
+    EXPECT_NEAR(actual.z, expected.z, kEps);
   }
 }
 
@@ -249,10 +339,17 @@ NOLINT_TEST_F(TransformUploaderBasicTest,
   EnsureFrameResourcesAllocatesBuffersReturnsValidSrvIndices)
 {
   // Arrange
-  constexpr auto transform = glm::mat4 { 1.0F };
+  constexpr auto transform = glm::mat4 {
+    1.0F,
+  };
   auto& uploader = TransformUploaderRef();
-  uploader.OnFrameStart(
-    RendererTagFactory::Get(), SequenceNumber { 0 }, Slot { 0 });
+  uploader.OnFrameStart(RendererTagFactory::Get(),
+    SequenceNumber {
+      0,
+    },
+    Slot {
+      0,
+    });
   uploader.GetOrAllocate(transform);
 
   // Act
@@ -271,28 +368,55 @@ NOLINT_TEST_F(TransformUploaderBasicTest,
   AllocatingAfterPublicationCreatesFreshTransformSnapshots)
 {
   auto& uploader = TransformUploaderRef();
-  const auto snapshot = [&] {
-    return std::array { uploader.GetWorldsSrvIndex(),
-      uploader.GetPreviousWorldsSrvIndex(), uploader.GetNormalsSrvIndex() };
+  const auto snapshot = [&]() -> std::array<oxygen::ShaderVisibleIndex, 3> {
+    return std::array {
+      uploader.GetWorldsSrvIndex(),
+      uploader.GetPreviousWorldsSrvIndex(),
+      uploader.GetNormalsSrvIndex(),
+    };
   };
   for (unsigned frame = 0; frame < 2; ++frame) {
-    uploader.OnFrameStart(
-      RendererTagFactory::Get(), SequenceNumber { frame }, Slot { 0 });
-    const auto first = uploader.GetOrAllocate(glm::mat4 { 1 });
+    uploader.OnFrameStart(RendererTagFactory::Get(),
+      SequenceNumber {
+        frame,
+      },
+      Slot {
+        0,
+      });
+    const auto first = uploader.GetOrAllocate(glm::mat4 {
+      1,
+    });
     const auto original = snapshot();
-    const auto moved = glm::translate(glm::mat4 { 1 }, glm::vec3 { 20, 0, 0 });
-    const auto second = uploader.GetOrAllocate(moved, glm::mat4 { 1 });
+    const auto moved = glm::translate(
+      glm::mat4 {
+        1,
+      },
+      glm::vec3 {
+        20,
+        0,
+        0,
+      });
+    const auto second = uploader.GetOrAllocate(moved,
+      glm::mat4 {
+        1,
+      });
     const auto expanded = snapshot();
     for (unsigned index = 0; index < original.size(); ++index) {
-      EXPECT_TRUE(original[index].IsValid());
-      EXPECT_TRUE(expanded[index].IsValid());
-      EXPECT_NE(original[index], expanded[index]);
+      EXPECT_TRUE(original.at(index).IsValid());
+      EXPECT_TRUE(expanded.at(index).IsValid());
+      EXPECT_NE(original.at(index), expanded.at(index));
     }
     EXPECT_TRUE(uploader.IsHandleValid(first));
     EXPECT_TRUE(uploader.IsHandleValid(second));
-    EXPECT_EQ(uploader.GetWorldMatrices()[second.get()], moved);
-    EXPECT_EQ(
-      uploader.GetPreviousWorldMatrices()[second.get()], glm::mat4 { 1 });
+    const auto worlds = uploader.GetWorldMatrices();
+    const auto previous_worlds = uploader.GetPreviousWorldMatrices();
+    ASSERT_LT(second.get(), worlds.size());
+    ASSERT_LT(second.get(), previous_worlds.size());
+    EXPECT_EQ(worlds.subspan(second.get(), 1U).front(), moved);
+    EXPECT_EQ(previous_worlds.subspan(second.get(), 1U).front(),
+      (glm::mat4 {
+        1,
+      }));
     uploader.EnsureFrameResources();
     EXPECT_EQ(snapshot(), expanded);
   }
@@ -304,11 +428,23 @@ NOLINT_TEST_F(TransformUploaderBasicTest,
   GetWorldMatricesAfterAllocationReturnsAllocatedTransforms)
 {
   // Arrange
-  constexpr auto t1 = glm::mat4 { 1.0F };
-  const auto t2 = glm::scale(t1, glm::vec3 { 2.0F, 3.0F, 4.0F });
+  constexpr auto t1 = glm::mat4 {
+    1.0F,
+  };
+  const auto t2 = glm::scale(t1,
+    glm::vec3 {
+      2.0F,
+      3.0F,
+      4.0F,
+    });
   auto& uploader = TransformUploaderRef();
-  uploader.OnFrameStart(
-    RendererTagFactory::Get(), SequenceNumber { 0 }, Slot { 0 });
+  uploader.OnFrameStart(RendererTagFactory::Get(),
+    SequenceNumber {
+      0,
+    },
+    Slot {
+      0,
+    });
 
   // Act
   uploader.GetOrAllocate(t1);
@@ -316,11 +452,9 @@ NOLINT_TEST_F(TransformUploaderBasicTest,
   const auto matrices = uploader.GetWorldMatrices();
 
   // Assert
-  EXPECT_EQ(matrices.size(), 2);
-  EXPECT_EQ(
-    matrices[0], t1); // NOLINT(*-pro-bounds-avoid-unchecked-container-access)
-  EXPECT_EQ(
-    matrices[1], t2); // NOLINT(*-pro-bounds-avoid-unchecked-container-access)
+  ASSERT_EQ(matrices.size(), 2);
+  EXPECT_EQ(matrices.front(), t1);
+  EXPECT_EQ(matrices.back(), t2);
 }
 
 // -- Frame lifecycle and statistics tests -------------------------------------
@@ -332,21 +466,36 @@ NOLINT_TEST_F(TransformUploaderFrameLifecycleTest,
   OnFrameStartResetsCursorAllowsSlotReuseNextFrame)
 {
   // Arrange
-  constexpr auto t1 = glm::mat4 { 1.0F };
-  const auto t2 = glm::scale(t1, glm::vec3 { 2.0F });
+  constexpr auto t1 = glm::mat4 {
+    1.0F,
+  };
+  const auto t2 = glm::scale(t1,
+    glm::vec3 {
+      2.0F,
+    });
   auto& uploader = TransformUploaderRef();
 
   // Act & Assert - Frame 1
-  uploader.OnFrameStart(
-    RendererTagFactory::Get(), SequenceNumber { 0 }, Slot { 0 });
+  uploader.OnFrameStart(RendererTagFactory::Get(),
+    SequenceNumber {
+      0,
+    },
+    Slot {
+      0,
+    });
   const auto h1 = uploader.GetOrAllocate(t1);
   const auto h2 = uploader.GetOrAllocate(t2);
   EXPECT_NE(h1, h2);
   EXPECT_EQ(uploader.GetWorldMatrices().size(), 2);
 
   // Act & Assert - Frame 2: allocate 3 transforms (should reuse first 2 slots)
-  uploader.OnFrameStart(
-    RendererTagFactory::Get(), SequenceNumber { 1 }, Slot { 0 });
+  uploader.OnFrameStart(RendererTagFactory::Get(),
+    SequenceNumber {
+      1,
+    },
+    Slot {
+      0,
+    });
   const auto h3 = uploader.GetOrAllocate(t1);
   const auto h4 = uploader.GetOrAllocate(t2);
   const auto h5 = uploader.GetOrAllocate(t1);
@@ -365,19 +514,39 @@ NOLINT_TEST_F(TransformUploaderFrameLifecycleTest,
   auto& uploader = TransformUploaderRef();
 
   // Act & Assert - Frame 0: 2 transforms
-  uploader.OnFrameStart(
-    RendererTagFactory::Get(), SequenceNumber { 0 }, Slot { 0 });
-  uploader.GetOrAllocate(glm::mat4 { 1.0F });
-  uploader.GetOrAllocate(glm::mat4 { 1.0F });
+  uploader.OnFrameStart(RendererTagFactory::Get(),
+    SequenceNumber {
+      0,
+    },
+    Slot {
+      0,
+    });
+  uploader.GetOrAllocate(glm::mat4 {
+    1.0F,
+  });
+  uploader.GetOrAllocate(glm::mat4 {
+    1.0F,
+  });
   size_t size_frame0 = uploader.GetWorldMatrices().size();
 
   // Act & Assert - Frame 1: allocate 3 transforms (exceeds frame 0 count)
   // to force growth beyond the existing 2 slots
-  uploader.OnFrameStart(
-    RendererTagFactory::Get(), SequenceNumber { 1 }, Slot { 0 });
-  uploader.GetOrAllocate(glm::mat4 { 1.0F });
-  uploader.GetOrAllocate(glm::mat4 { 1.0F });
-  uploader.GetOrAllocate(glm::mat4 { 1.0F });
+  uploader.OnFrameStart(RendererTagFactory::Get(),
+    SequenceNumber {
+      1,
+    },
+    Slot {
+      0,
+    });
+  uploader.GetOrAllocate(glm::mat4 {
+    1.0F,
+  });
+  uploader.GetOrAllocate(glm::mat4 {
+    1.0F,
+  });
+  uploader.GetOrAllocate(glm::mat4 {
+    1.0F,
+  });
   size_t size_frame1 = uploader.GetWorldMatrices().size();
 
   // Assert: count grows monotonically
@@ -391,17 +560,38 @@ NOLINT_TEST_F(TransformUploaderFrameLifecycleTest,
 {
   auto& uploader = TransformUploaderRef();
 
-  uploader.OnFrameStart(
-    RendererTagFactory::Get(), SequenceNumber { 0 }, Slot { 0 });
-  const auto h0 = uploader.GetOrAllocate(glm::mat4 { 1.0F });
+  uploader.OnFrameStart(RendererTagFactory::Get(),
+    SequenceNumber {
+      0,
+    },
+    Slot {
+      0,
+    });
+  const auto h0 = uploader.GetOrAllocate(glm::mat4 {
+    1.0F,
+  });
 
-  uploader.OnFrameStart(
-    RendererTagFactory::Get(), SequenceNumber { 1 }, Slot { 1 });
-  const auto h1 = uploader.GetOrAllocate(glm::mat4 { 1.0F });
+  uploader.OnFrameStart(RendererTagFactory::Get(),
+    SequenceNumber {
+      1,
+    },
+    Slot {
+      1,
+    });
+  const auto h1 = uploader.GetOrAllocate(glm::mat4 {
+    1.0F,
+  });
 
-  uploader.OnFrameStart(
-    RendererTagFactory::Get(), SequenceNumber { 2 }, Slot { 2 });
-  const auto h2 = uploader.GetOrAllocate(glm::mat4 { 1.0F });
+  uploader.OnFrameStart(RendererTagFactory::Get(),
+    SequenceNumber {
+      2,
+    },
+    Slot {
+      2,
+    });
+  const auto h2 = uploader.GetOrAllocate(glm::mat4 {
+    1.0F,
+  });
 
   EXPECT_EQ(h0, h1);
   EXPECT_EQ(h1, h2);
@@ -417,8 +607,13 @@ NOLINT_TEST_F(TransformUploaderEdgeCaseTest,
 {
   // Arrange
   auto& uploader = TransformUploaderRef();
-  uploader.OnFrameStart(
-    RendererTagFactory::Get(), SequenceNumber { 0 }, Slot { 0 });
+  uploader.OnFrameStart(RendererTagFactory::Get(),
+    SequenceNumber {
+      0,
+    },
+    Slot {
+      0,
+    });
 
   // Act & Assert: no allocations, EnsureFrameResources should return early
   NOLINT_EXPECT_NO_THROW(uploader.EnsureFrameResources());
@@ -432,13 +627,23 @@ NOLINT_TEST_F(
   // Arrange
   constexpr int count = 100;
   auto& uploader = TransformUploaderRef();
-  uploader.OnFrameStart(
-    RendererTagFactory::Get(), SequenceNumber { 0 }, Slot { 0 });
+  uploader.OnFrameStart(RendererTagFactory::Get(),
+    SequenceNumber {
+      0,
+    },
+    Slot {
+      0,
+    });
 
   // Act
   for (int i = 0; i < count; ++i) {
-    const auto t
-      = glm::translate(glm::mat4 { 1.0F }, glm::vec3 { static_cast<float>(i) });
+    const auto t = glm::translate(
+      glm::mat4 {
+        1.0F,
+      },
+      glm::vec3 {
+        static_cast<float>(i),
+      });
     const auto h = uploader.GetOrAllocate(t);
     // Assert each handle is valid
     EXPECT_TRUE(uploader.IsHandleValid(h));
@@ -455,23 +660,42 @@ NOLINT_TEST_F(
 {
   // Arrange
   auto& uploader = TransformUploaderRef();
-  uploader.OnFrameStart(
-    RendererTagFactory::Get(), SequenceNumber { 0 }, Slot { 0 });
-  uploader.GetOrAllocate(glm::mat4 { 1.0F });
+  uploader.OnFrameStart(RendererTagFactory::Get(),
+    SequenceNumber {
+      0,
+    },
+    Slot {
+      0,
+    });
+  uploader.GetOrAllocate(glm::mat4 {
+    1.0F,
+  });
 
   // Act & Assert
   constexpr auto valid_handle = oxygen::vortex::sceneprep::TransformHandle {
-    oxygen::vortex::sceneprep::TransformHandle::Index { 0U },
-    oxygen::vortex::sceneprep::TransformHandle::Generation { 1U },
+    oxygen::vortex::sceneprep::TransformHandle::Index {
+      0U,
+    },
+    oxygen::vortex::sceneprep::TransformHandle::Generation {
+      1U,
+    },
   };
   constexpr auto invalid_handle = oxygen::vortex::sceneprep::TransformHandle {
-    oxygen::vortex::sceneprep::TransformHandle::Index { 999U },
-    oxygen::vortex::sceneprep::TransformHandle::Generation { 1U },
+    oxygen::vortex::sceneprep::TransformHandle::Index {
+      999U,
+    },
+    oxygen::vortex::sceneprep::TransformHandle::Generation {
+      1U,
+    },
   };
   constexpr auto stale_generation_handle
     = oxygen::vortex::sceneprep::TransformHandle {
-        oxygen::vortex::sceneprep::TransformHandle::Index { 0U },
-        oxygen::vortex::sceneprep::TransformHandle::Generation { 99U },
+        oxygen::vortex::sceneprep::TransformHandle::Index {
+          0U,
+        },
+        oxygen::vortex::sceneprep::TransformHandle::Generation {
+          99U,
+        },
       };
   EXPECT_TRUE(uploader.IsHandleValid(valid_handle));
   EXPECT_FALSE(uploader.IsHandleValid(invalid_handle));
@@ -488,9 +712,16 @@ NOLINT_TEST_F(TransformUploaderBufferTest,
 {
   // Arrange
   auto& uploader = TransformUploaderRef();
-  uploader.OnFrameStart(
-    RendererTagFactory::Get(), SequenceNumber { 0 }, Slot { 0 });
-  uploader.GetOrAllocate(glm::mat4 { 1.0F });
+  uploader.OnFrameStart(RendererTagFactory::Get(),
+    SequenceNumber {
+      0,
+    },
+    Slot {
+      0,
+    });
+  uploader.GetOrAllocate(glm::mat4 {
+    1.0F,
+  });
 
   // Act: access SRV from const context
   [[maybe_unused]] const auto srv = uploader.GetWorldsSrvIndex();
@@ -505,9 +736,16 @@ NOLINT_TEST_F(TransformUploaderBufferTest,
 {
   // Arrange
   auto& uploader = TransformUploaderRef();
-  uploader.OnFrameStart(
-    RendererTagFactory::Get(), SequenceNumber { 0 }, Slot { 0 });
-  uploader.GetOrAllocate(glm::mat4 { 1.0F });
+  uploader.OnFrameStart(RendererTagFactory::Get(),
+    SequenceNumber {
+      0,
+    },
+    Slot {
+      0,
+    });
+  uploader.GetOrAllocate(glm::mat4 {
+    1.0F,
+  });
 
   // Act: access SRV from const context
   [[maybe_unused]] const auto srv = uploader.GetNormalsSrvIndex();
@@ -525,16 +763,30 @@ NOLINT_TEST_F(TransformUploaderBufferTest,
   auto& uploader = TransformUploaderRef();
 
   // Act & Assert - Frame 0: allocate 1 transform
-  uploader.OnFrameStart(
-    RendererTagFactory::Get(), SequenceNumber { 0 }, Slot { 0 });
-  const auto h0 = uploader.GetOrAllocate(glm::mat4 { 1.0F });
+  uploader.OnFrameStart(RendererTagFactory::Get(),
+    SequenceNumber {
+      0,
+    },
+    Slot {
+      0,
+    });
+  const auto h0 = uploader.GetOrAllocate(glm::mat4 {
+    1.0F,
+  });
   uploader.EnsureFrameResources();
   const size_t size_frame0 = uploader.GetWorldMatrices().size();
 
   // Act & Assert - Frame 1: allocate 1 transform at same position (reuses slot)
-  uploader.OnFrameStart(
-    RendererTagFactory::Get(), SequenceNumber { 1 }, Slot { 0 });
-  const auto h1 = uploader.GetOrAllocate(glm::mat4 { 1.0F });
+  uploader.OnFrameStart(RendererTagFactory::Get(),
+    SequenceNumber {
+      1,
+    },
+    Slot {
+      0,
+    });
+  const auto h1 = uploader.GetOrAllocate(glm::mat4 {
+    1.0F,
+  });
   uploader.EnsureFrameResources();
   const size_t size_frame1 = uploader.GetWorldMatrices().size();
 

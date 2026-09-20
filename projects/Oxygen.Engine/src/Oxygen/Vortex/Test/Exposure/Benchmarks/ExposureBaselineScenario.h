@@ -25,6 +25,9 @@ public:
   ExposureBaselineScenario(const ExposureBaselineScenario&) = delete;
   auto operator=(const ExposureBaselineScenario&)
     -> ExposureBaselineScenario& = delete;
+  ExposureBaselineScenario(ExposureBaselineScenario&&) = delete;
+  auto operator=(ExposureBaselineScenario&&)
+    -> ExposureBaselineScenario& = delete;
   auto Run() -> void;
 
 private:
@@ -63,7 +66,7 @@ private:
     "vtx.sky_atmosphere.aerial_perspective_lut.depth_km 96.0",
     "vtx.sky_atmosphere.aerial_perspective_lut.sample_count_max_per_slice 2.0",
     "vtx.volumetric_fog.history_miss_supersample_count 4",
-    "vtx.volumetric_fog.directional_shadows true"
+    "vtx.volumetric_fog.directional_shadows true",
   };
 
   static constexpr auto simulation_dt_ns = 16'666'667;

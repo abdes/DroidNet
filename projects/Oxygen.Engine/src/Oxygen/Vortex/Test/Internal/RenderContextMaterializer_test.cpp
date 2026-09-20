@@ -76,7 +76,9 @@ protected:
     auto color = graphics_->CreateTexture(color_desc);
 
     auto fb_desc = FramebufferDesc {};
-    fb_desc.AddColorAttachment({ .texture = color });
+    fb_desc.AddColorAttachment({
+      .texture = color,
+    });
     return graphics_->CreateFramebuffer(fb_desc);
   }
 
@@ -92,7 +94,7 @@ protected:
       .max_depth = 1.0F,
     };
     return ResolvedViewInput {
-      .view_id = ViewId { 41U },
+      .view_id = ViewId { 41U, },
       .value = oxygen::ResolvedView(params),
     };
   }
@@ -104,7 +106,7 @@ protected:
     }
 
     return SinglePassHarnessStaging {
-      .frame_session = FrameSessionInput { .frame_slot = oxygen::frame::Slot { 0U } },
+      .frame_session = FrameSessionInput { .frame_slot = oxygen::frame::Slot { 0U, }, },
       .output_target
       = OutputTargetInput {
           .framebuffer = oxygen::observer_ptr<Framebuffer>(framebuffer_.get()),
@@ -168,21 +170,32 @@ NOLINT_TEST_F(RenderContextMaterializerTest,
 {
   auto staging = MakeValidStaging();
   staging.frame_session = FrameSessionInput {
-    .frame_slot = oxygen::frame::Slot { 2U },
-    .frame_sequence = oxygen::frame::SequenceNumber { 9U },
+    .frame_slot = oxygen::frame::Slot { 2U, },
+    .frame_sequence = oxygen::frame::SequenceNumber { 9U, },
     .delta_time_seconds = 1.0F / 30.0F,
   };
 
   auto materializer = RenderContextMaterializer(*renderer_);
   auto result = materializer.MaterializeSinglePass(staging);
 
-  ASSERT_TRUE(result.has_value());
+  if (!result.has_value()) {
+
+    FAIL() << "Expected result to have a value";
+  }
   const auto& render_context = result->GetRenderContext();
   ASSERT_NE(render_context.pass_target.get(), nullptr);
-  EXPECT_EQ(render_context.frame_slot, oxygen::frame::Slot { 2U });
-  EXPECT_EQ(
-    render_context.frame_sequence, oxygen::frame::SequenceNumber { 9U });
-  EXPECT_EQ(render_context.current_view.view_id, ViewId { 41U });
+  EXPECT_EQ(render_context.frame_slot,
+    (oxygen::frame::Slot {
+      2U,
+    }));
+  EXPECT_EQ(render_context.frame_sequence,
+    (oxygen::frame::SequenceNumber {
+      9U,
+    }));
+  EXPECT_EQ(render_context.current_view.view_id,
+    (ViewId {
+      41U,
+    }));
   EXPECT_NE(render_context.current_view.resolved_view.get(), nullptr);
   EXPECT_NE(render_context.current_view.prepared_frame.get(), nullptr);
 }
@@ -193,16 +206,22 @@ NOLINT_TEST_F(RenderContextMaterializerTest,
   auto staging = MakeValidStaging();
   staging.resolved_view.reset();
   staging.core_shader_inputs = CoreShaderInputsInput {
-    .view_id = ViewId { 77U },
+    .view_id = ViewId { 77U, },
     .value = oxygen::vortex::ViewConstants {},
   };
 
   auto materializer = RenderContextMaterializer(*renderer_);
   auto result = materializer.MaterializeSinglePass(staging);
 
-  ASSERT_TRUE(result.has_value());
+  if (!result.has_value()) {
+
+    FAIL() << "Expected result to have a value";
+  }
   const auto& render_context = result->GetRenderContext();
-  EXPECT_EQ(render_context.current_view.view_id, ViewId { 77U });
+  EXPECT_EQ(render_context.current_view.view_id,
+    (ViewId {
+      77U,
+    }));
   EXPECT_NE(render_context.view_constants.get(), nullptr);
 }
 

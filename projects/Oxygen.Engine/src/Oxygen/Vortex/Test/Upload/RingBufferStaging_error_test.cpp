@@ -19,10 +19,16 @@ namespace {
 
 constexpr uint32_t kTestAlignment = 256U;
 constexpr float kTestSlack = 0.5F;
-constexpr SizeBytes kTestAllocationSize { 64 };
-constexpr SizeBytes kSmallAllocationSize { 32 };
+constexpr SizeBytes kTestAllocationSize {
+  64,
+};
+constexpr SizeBytes kSmallAllocationSize {
+  32,
+};
 constexpr uint32_t kSmallTestAlignment = 64U;
-constexpr SizeBytes kGrowthPadding { 128 };
+constexpr SizeBytes kGrowthPadding {
+  128,
+};
 
 // Error and death fixture
 class RingBufferStagingErrorTest
@@ -39,7 +45,10 @@ NOLINT_TEST_F(RingBufferStagingErrorTest, CreateBuffer_Throws_ReturnsError)
   // Recreate uploader/provider after changing gfx behaviour
   auto& uploader = Uploader();
   auto provider = uploader.CreateRingBufferStaging(
-    SlotCount { 1 }, kTestAlignment, kTestSlack);
+    SlotCount {
+      1,
+    },
+    kTestAlignment, kTestSlack);
   SetStagingProvider(provider);
   ASSERT_NE(provider, nullptr);
 
@@ -62,7 +71,10 @@ NOLINT_TEST_F(RingBufferStagingErrorTest, Map_ReturnsNull_ReturnsError)
   // Recreate uploader/provider after changing gfx behaviour
   auto& uploader = Uploader();
   auto provider = uploader.CreateRingBufferStaging(
-    SlotCount { 1 }, kTestAlignment, kTestSlack);
+    SlotCount {
+      1,
+    },
+    kTestAlignment, kTestSlack);
   SetStagingProvider(provider);
   ASSERT_NE(provider, nullptr);
 
@@ -80,15 +92,20 @@ NOLINT_TEST_F(RingBufferStagingErrorTest, Map_ReturnsNull_ReturnsError)
 */
 NOLINT_TEST(RingBufferStaging, DestroyWithoutAllocationDoesNotCrash)
 {
-  auto run_teardown = []() {
+  auto run_teardown = []() -> void {
     auto gfx = std::make_shared<oxygen::vortex::testing::FakeGraphics>();
     gfx->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());
 
     auto uploader = std::make_unique<oxygen::vortex::upload::UploadCoordinator>(
-      oxygen::observer_ptr<oxygen::Graphics> { gfx.get() },
+      oxygen::observer_ptr<oxygen::Graphics> {
+        gfx.get(),
+      },
       oxygen::vortex::upload::DefaultUploadPolicy());
     auto provider = uploader->CreateRingBufferStaging(
-      SlotCount { 1 }, kTestAlignment, kTestSlack, "RingBufferStaging.NoAlloc");
+      SlotCount {
+        1,
+      },
+      kTestAlignment, kTestSlack, "RingBufferStaging.NoAlloc");
 
     provider.reset();
     uploader.reset();
@@ -104,17 +121,21 @@ NOLINT_TEST(RingBufferStaging, DestroyWithoutAllocationDoesNotCrash)
 */
 NOLINT_TEST(RingBufferStaging, DestroyAfterFailedAllocationDoesNotCrash)
 {
-  auto run_teardown = []() {
+  auto run_teardown = []() -> void {
     auto gfx = std::make_shared<oxygen::vortex::testing::FakeGraphics>();
     gfx->SetThrowOnCreateBuffer(true);
     gfx->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());
 
     auto uploader = std::make_unique<oxygen::vortex::upload::UploadCoordinator>(
-      oxygen::observer_ptr<oxygen::Graphics> { gfx.get() },
+      oxygen::observer_ptr<oxygen::Graphics> {
+        gfx.get(),
+      },
       oxygen::vortex::upload::DefaultUploadPolicy());
     auto provider = uploader->CreateRingBufferStaging(
-      SlotCount { 1 }, kTestAlignment, kTestSlack,
-      "RingBufferStaging.FailAlloc");
+      SlotCount {
+        1,
+      },
+      kTestAlignment, kTestSlack, "RingBufferStaging.FailAlloc");
 
     const auto alloc = provider->Allocate(kTestAllocationSize, "fail-alloc");
     EXPECT_FALSE(alloc.has_value());
@@ -140,8 +161,14 @@ NOLINT_TEST_F(RingBufferStagingErrorTest, Allocation_Construct_Invalid_Deaths)
   EXPECT_DEATH(
     {
       // Create a bogus Allocation by invoking constructor with nullptr buffer
-      oxygen::vortex::upload::StagingProvider::Allocation(
-        nullptr, oxygen::OffsetBytes { 0 }, oxygen::SizeBytes { 1 }, nullptr);
+      oxygen::vortex::upload::StagingProvider::Allocation(nullptr,
+        oxygen::OffsetBytes {
+          0,
+        },
+        oxygen::SizeBytes {
+          1,
+        },
+        nullptr);
     },
     "");
 }
@@ -157,14 +184,19 @@ NOLINT_TEST_F(RingBufferStagingEdgeTest, EnsureCapacity_GrowsBuffer)
 {
   auto& uploader = Uploader();
   auto provider = uploader.CreateRingBufferStaging(
-    SlotCount { 1 }, kSmallTestAlignment, kTestSlack);
+    SlotCount {
+      1,
+    },
+    kSmallTestAlignment, kTestSlack);
   ASSERT_NE(provider, nullptr);
   SetStagingProvider(provider);
 
   // Arrange: small allocation to initialize
   auto a1 = provider->Allocate(kSmallAllocationSize, "init");
   ASSERT_TRUE(a1.has_value());
-  const SizeBytes before_size { provider->GetStats().current_buffer_size };
+  const SizeBytes before_size {
+    provider->GetStats().current_buffer_size,
+  };
 
   // Act: allocate a larger size to force growth
   auto a2 = provider->Allocate(before_size + kGrowthPadding, "grow");

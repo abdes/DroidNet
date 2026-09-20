@@ -7,6 +7,7 @@
 #include <Oxygen/Testing/GTest.h>
 
 #include <algorithm>
+#include <ranges>
 #include <string>
 
 #include <Oxygen/Vortex/RendererTag.h>
@@ -50,10 +51,9 @@ using oxygen::vortex::testing::TextureBinderTest;
 [[nodiscard]] auto LastSrvViewTextureForIndex(const FakeGraphics& gfx,
   const uint32_t index) -> const oxygen::graphics::Texture*
 {
-  for (auto it = gfx.srv_view_log_.events.rbegin();
-    it != gfx.srv_view_log_.events.rend(); ++it) {
-    if (it->index == index) {
-      return it->texture;
+  for (auto& event : std::views::reverse(gfx.srv_view_log_.events)) {
+    if (event.index == index) {
+      return event.texture;
     }
   }
   return nullptr;
@@ -254,7 +254,9 @@ NOLINT_TEST_F(
   Loader().PreloadCookedTexture(key, std::span(payload.data(), payload.size()));
 
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+    oxygen::frame::Slot {
+      1,
+    });
 
   Gfx().srv_view_log_.events.clear();
 

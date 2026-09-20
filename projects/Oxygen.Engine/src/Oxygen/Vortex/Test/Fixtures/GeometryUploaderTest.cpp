@@ -38,19 +38,34 @@ auto GeometryUploaderTest::SetUp() -> void
   gfx_->CreateCommandQueues(SingleQueueStrategy());
 
   uploader_ = std::make_unique<vortex::upload::UploadCoordinator>(
-    observer_ptr { gfx_.get() }, vortex::upload::DefaultUploadPolicy());
+    observer_ptr {
+      gfx_.get(),
+    },
+    vortex::upload::DefaultUploadPolicy());
 
-  staging_provider_
-    = uploader_->CreateRingBufferStaging(frame::SlotCount { 2 }, 4);
+  staging_provider_ = uploader_->CreateRingBufferStaging(
+    frame::SlotCount {
+      2,
+    },
+    4);
 
   default_material_ = DefaultMaterial();
 
   asset_loader_ = std::make_unique<FakeAssetLoader>();
 
   geo_uploader_ = std::make_unique<resources::GeometryUploader>(
-    observer_ptr { gfx_.get() }, observer_ptr { uploader_.get() },
-    observer_ptr { staging_provider_.get() },
-    observer_ptr { asset_loader_.get() });
+    observer_ptr {
+      gfx_.get(),
+    },
+    observer_ptr {
+      uploader_.get(),
+    },
+    observer_ptr {
+      staging_provider_.get(),
+    },
+    observer_ptr {
+      asset_loader_.get(),
+    });
 }
 
 auto GeometryUploaderTest::TearDown() -> void
@@ -115,32 +130,36 @@ auto GeometryUploaderTest::MakeValidTriangleMesh(std::string_view name,
 {
   const auto vertices = std::vector<data::Vertex> {
     data::Vertex {
-      .position = glm::vec3 { 0.0F, 0.0F, 0.0F },
-      .normal = glm::vec3 { 0.0F, 0.0F, 1.0F },
-      .texcoord = glm::vec2 { 0.0F, 0.0F },
-      .tangent = glm::vec3 { 1.0F, 0.0F, 0.0F },
-      .bitangent = glm::vec3 { 0.0F, 1.0F, 0.0F },
-      .color = glm::vec4 { 1.0F, 1.0F, 1.0F, 1.0F },
+      .position = glm::vec3 { 0.0F, 0.0F, 0.0F, },
+      .normal = glm::vec3 { 0.0F, 0.0F, 1.0F, },
+      .texcoord = glm::vec2 { 0.0F, 0.0F, },
+      .tangent = glm::vec3 { 1.0F, 0.0F, 0.0F, },
+      .bitangent = glm::vec3 { 0.0F, 1.0F, 0.0F, },
+      .color = glm::vec4 { 1.0F, 1.0F, 1.0F, 1.0F, },
     },
     data::Vertex {
-      .position = glm::vec3 { 1.0F, 0.0F, 0.0F },
-      .normal = glm::vec3 { 0.0F, 0.0F, 1.0F },
-      .texcoord = glm::vec2 { 1.0F, 0.0F },
-      .tangent = glm::vec3 { 1.0F, 0.0F, 0.0F },
-      .bitangent = glm::vec3 { 0.0F, 1.0F, 0.0F },
-      .color = glm::vec4 { 1.0F, 1.0F, 1.0F, 1.0F },
+      .position = glm::vec3 { 1.0F, 0.0F, 0.0F, },
+      .normal = glm::vec3 { 0.0F, 0.0F, 1.0F, },
+      .texcoord = glm::vec2 { 1.0F, 0.0F, },
+      .tangent = glm::vec3 { 1.0F, 0.0F, 0.0F, },
+      .bitangent = glm::vec3 { 0.0F, 1.0F, 0.0F, },
+      .color = glm::vec4 { 1.0F, 1.0F, 1.0F, 1.0F, },
     },
     data::Vertex {
-      .position = glm::vec3 { 0.0F, 1.0F, 0.0F },
-      .normal = glm::vec3 { 0.0F, 0.0F, 1.0F },
-      .texcoord = glm::vec2 { 0.0F, 1.0F },
-      .tangent = glm::vec3 { 1.0F, 0.0F, 0.0F },
-      .bitangent = glm::vec3 { 0.0F, 1.0F, 0.0F },
-      .color = glm::vec4 { 1.0F, 1.0F, 1.0F, 1.0F },
+      .position = glm::vec3 { 0.0F, 1.0F, 0.0F, },
+      .normal = glm::vec3 { 0.0F, 0.0F, 1.0F, },
+      .texcoord = glm::vec2 { 0.0F, 1.0F, },
+      .tangent = glm::vec3 { 1.0F, 0.0F, 0.0F, },
+      .bitangent = glm::vec3 { 0.0F, 1.0F, 0.0F, },
+      .color = glm::vec4 { 1.0F, 1.0F, 1.0F, 1.0F, },
     },
   };
 
-  const auto indices = std::vector<std::uint32_t> { 0U, 1U, 2U };
+  const auto indices = std::vector<std::uint32_t> {
+    0U,
+    1U,
+    2U,
+  };
 
   auto builder = data::MeshBuilder(0, name).WithVertices(vertices);
   if (indexed) {
@@ -162,16 +181,9 @@ auto GeometryUploaderTest::MakeValidTriangleMesh(std::string_view name,
                 .EndSubMesh()
                 .Build();
 
-  return std::shared_ptr<const data::Mesh>(std::move(mesh));
-}
-
-auto GeometryUploaderTest::MakeInvalidMesh_NoVertices(
-  std::string_view name) const -> std::shared_ptr<const data::Mesh>
-{
-  // Mesh/MeshBuilder enforce non-empty vertex buffers at construction time.
-  // Use a non-finite vertex field to produce an invalid mesh instance which
-  // still respects Mesh invariants.
-  return MakeInvalidMesh_NonFiniteVertex(name);
+  return {
+    std::move(mesh),
+  };
 }
 
 auto GeometryUploaderTest::MakeInvalidMesh_NonFiniteVertex(
@@ -179,35 +191,39 @@ auto GeometryUploaderTest::MakeInvalidMesh_NonFiniteVertex(
 {
   auto vertices = std::vector<data::Vertex> {
     data::Vertex {
-      .position = glm::vec3 { 0.0F, 0.0F, 0.0F },
-      .normal = glm::vec3 { 0.0F, 0.0F, 1.0F },
-      .texcoord = glm::vec2 { 0.0F, 0.0F },
-      .tangent = glm::vec3 { 1.0F, 0.0F, 0.0F },
-      .bitangent = glm::vec3 { 0.0F, 1.0F, 0.0F },
-      .color = glm::vec4 { 1.0F, 1.0F, 1.0F, 1.0F },
+      .position = glm::vec3 { 0.0F, 0.0F, 0.0F, },
+      .normal = glm::vec3 { 0.0F, 0.0F, 1.0F, },
+      .texcoord = glm::vec2 { 0.0F, 0.0F, },
+      .tangent = glm::vec3 { 1.0F, 0.0F, 0.0F, },
+      .bitangent = glm::vec3 { 0.0F, 1.0F, 0.0F, },
+      .color = glm::vec4 { 1.0F, 1.0F, 1.0F, 1.0F, },
     },
     data::Vertex {
-      .position = glm::vec3 { 1.0F, 0.0F, 0.0F },
-      .normal = glm::vec3 { 0.0F, 0.0F, 1.0F },
-      .texcoord = glm::vec2 { 1.0F, 0.0F },
-      .tangent = glm::vec3 { 1.0F, 0.0F, 0.0F },
-      .bitangent = glm::vec3 { 0.0F, 1.0F, 0.0F },
-      .color = glm::vec4 { 1.0F, 1.0F, 1.0F, 1.0F },
+      .position = glm::vec3 { 1.0F, 0.0F, 0.0F, },
+      .normal = glm::vec3 { 0.0F, 0.0F, 1.0F, },
+      .texcoord = glm::vec2 { 1.0F, 0.0F, },
+      .tangent = glm::vec3 { 1.0F, 0.0F, 0.0F, },
+      .bitangent = glm::vec3 { 0.0F, 1.0F, 0.0F, },
+      .color = glm::vec4 { 1.0F, 1.0F, 1.0F, 1.0F, },
     },
     data::Vertex {
-      .position = glm::vec3 { 0.0F, 1.0F, 0.0F },
-      .normal = glm::vec3 { 0.0F, 0.0F, 1.0F },
-      .texcoord = glm::vec2 { 0.0F, 1.0F },
-      .tangent = glm::vec3 { 1.0F, 0.0F, 0.0F },
-      .bitangent = glm::vec3 { 0.0F, 1.0F, 0.0F },
-      .color = glm::vec4 { 1.0F, 1.0F, 1.0F, 1.0F },
+      .position = glm::vec3 { 0.0F, 1.0F, 0.0F, },
+      .normal = glm::vec3 { 0.0F, 0.0F, 1.0F, },
+      .texcoord = glm::vec2 { 0.0F, 1.0F, },
+      .tangent = glm::vec3 { 1.0F, 0.0F, 0.0F, },
+      .bitangent = glm::vec3 { 0.0F, 1.0F, 0.0F, },
+      .color = glm::vec4 { 1.0F, 1.0F, 1.0F, 1.0F, },
     },
   };
 
   // Introduce invalid data.
-  vertices[0].position.x = std::numeric_limits<float>::quiet_NaN();
+  vertices.front().position.x = std::numeric_limits<float>::quiet_NaN();
 
-  const auto indices = std::vector<std::uint32_t> { 0U, 1U, 2U };
+  const auto indices = std::vector<std::uint32_t> {
+    0U,
+    1U,
+    2U,
+  };
 
   auto builder
     = data::MeshBuilder(0, name).WithVertices(vertices).WithIndices(indices);
@@ -224,7 +240,9 @@ auto GeometryUploaderTest::MakeInvalidMesh_NonFiniteVertex(
                 .EndSubMesh()
                 .Build();
 
-  return std::shared_ptr<const data::Mesh>(std::move(mesh));
+  return {
+    std::move(mesh),
+  };
 }
 
 } // namespace oxygen::vortex::testing

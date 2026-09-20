@@ -4,11 +4,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdint>
-#include <cstring>
 #include <limits>
+#include <span>
 
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
@@ -23,7 +24,7 @@
 
 namespace oxygen::vortex::testing::exposure {
 
-using namespace oxygen::graphics;
+using graphics::ResourceStates;
 
 NOLINT_TEST_F(
   ExposureGpuTest, Fp32ReferencePreservesQualifiedCandidateAndExposureHistory)
@@ -31,7 +32,9 @@ NOLINT_TEST_F(
   auto settings = scene::ExposureSettings {};
   const auto config = SharedConfig(settings, {}, 71U);
   const auto signal = Uniform(.25F);
-  ctx_.frame_sequence = frame::SequenceNumber { 1U };
+  ctx_.frame_sequence = frame::SequenceNumber {
+    1U,
+  };
   const auto previous = RecordShared(signal, config);
   ASSERT_TRUE(previous.executed);
   auto candidate = ReadState(previous);
@@ -40,7 +43,9 @@ NOLINT_TEST_F(
   candidate.flags |= 256U;
   candidate.fp16_candidate_pre_exposure = .125F;
   candidate.fp16_eligible_streak = 2U;
-  auto upload = CreateUploadBuffer(SizeBytes { sizeof(candidate) });
+  auto upload = CreateUploadBuffer(SizeBytes {
+    sizeof(candidate),
+  });
   upload->Update(&candidate, sizeof(candidate), 0U);
   {
     auto recorder = AcquireRecorder("FP32 reference qualified candidate");
@@ -54,11 +59,14 @@ NOLINT_TEST_F(
     recorder->RequireResourceStateFinal(
       *previous.state->buffer, ResourceStates::kShaderResource);
   }
-  ctx_.frame_sequence = frame::SequenceNumber { 2U };
-  const auto resolved = pass_->ResolveFrame(ctx_, config,
-    { .use_fp32 = true,
-      .preserve_fp32_candidate_p = true,
-      .qualified_candidate = previous.state });
+  ctx_.frame_sequence = frame::SequenceNumber {
+    2U,
+  };
+  auto resolved_inputs = postprocess::ExposurePass::FrameInputs {};
+  resolved_inputs.use_fp32 = true;
+  resolved_inputs.preserve_fp32_candidate_p = true;
+  resolved_inputs.qualified_candidate = previous.state;
+  const auto resolved = pass_->ResolveFrame(ctx_, config, resolved_inputs);
   ASSERT_NE(resolved, nullptr);
   EXPECT_EQ(resolved->selected_history, previous.state);
   const auto domain = Read<FrameExposureData>(
@@ -70,21 +78,50 @@ NOLINT_TEST_F(
     domain.global_exposure_state_slot, resolved->current_state->srv_index);
   const auto prepared = Read<ExposureStateData>(
     *resolved->current_state->buffer, ResourceStates::kShaderResource);
-  EXPECT_EQ(std::memcmp(&candidate, &prepared, 24U), 0);
+  EXPECT_TRUE(std::ranges::equal(std::as_bytes(std::span {
+                                                 &candidate,
+                                                 1,
+                                               })
+                                   .first(24U),
+    std::as_bytes(std::span {
+                    &prepared,
+                    1,
+                  })
+      .first(24U)));
   EXPECT_EQ(prepared.settings_revision, candidate.settings_revision);
   EXPECT_EQ(prepared.requested_generation, candidate.requested_generation);
   EXPECT_EQ(prepared.applied_generation, candidate.applied_generation);
   const auto retained = ReadState(previous);
-  EXPECT_EQ(std::memcmp(&candidate, &retained, sizeof(candidate)), 0);
+  EXPECT_TRUE(std::ranges::equal(std::as_bytes(std::span {
+                                   &candidate,
+                                   1,
+                                 }),
+    std::as_bytes(std::span {
+      &retained,
+      1,
+    })));
   // Execute meters the pinned frame domain, so its input already contains P.
   const auto result = RecordShared(Uniform(.25F * .125F), config);
   ASSERT_TRUE(result.executed);
   const auto solved = ReadState(result);
-  EXPECT_EQ(std::memcmp(&candidate, &solved, 24U), 0);
+  EXPECT_TRUE(std::ranges::equal(std::as_bytes(std::span {
+                                                 &candidate,
+                                                 1,
+                                               })
+                                   .first(24U),
+    std::as_bytes(std::span {
+                    &solved,
+                    1,
+                  })
+      .first(24U)));
   EXPECT_EQ(solved.settings_revision, candidate.settings_revision);
   EXPECT_EQ(solved.requested_generation, candidate.requested_generation);
   EXPECT_EQ(solved.applied_generation, candidate.applied_generation);
-  EXPECT_EQ(solved.frame_sequence, (std::array<std::uint32_t, 2> { 2U, 0U }));
+  EXPECT_EQ(solved.frame_sequence,
+    (std::array<std::uint32_t, 2> {
+      2U,
+      0U,
+    }));
 }
 
 NOLINT_TEST_F(
@@ -94,7 +131,9 @@ NOLINT_TEST_F(
   settings.mode = engine::ExposureMode::kManual;
   settings.manual_ev = 4.0F;
   const auto config = SharedConfig(settings);
-  ctx_.frame_sequence = frame::SequenceNumber { ++sequence_ };
+  ctx_.frame_sequence = frame::SequenceNumber {
+    ++sequence_,
+  };
   const auto previous = RecordShared(Uniform(.25F), config);
   ASSERT_TRUE(previous.executed);
   const auto original = ReadState(previous);
@@ -108,18 +147,96 @@ NOLINT_TEST_F(
     bool missing_source;
   };
   const std::array cases {
-    Case { "absent", .125F, 2U, true, true, false, false },
-    Case { "not eligible", .125F, 2U, false, false, false, false },
-    Case { "one eligible frame", .125F, 1U, true, false, false, false },
-    Case { "zero", 0, 2U, true, false, false, false },
-    Case { "below supported P", 0x1p-33F, 2U, true, false, false, false },
-    Case { "above supported P", 0x1p33F, 2U, true, false, false, false },
-    Case { "NaN", std::numeric_limits<float>::quiet_NaN(), 2U, true, false,
-      false, false },
-    Case { "infinite", std::numeric_limits<float>::infinity(), 2U, true, false,
-      false, false },
-    Case { "diagnostic wins", .125F, 2U, true, false, true, false },
-    Case { "missing source wins", .125F, 2U, true, false, false, true },
+    Case {
+      .name = "absent",
+      .candidate_p = .125F,
+      .streak = 2U,
+      .eligible = true,
+      .absent = true,
+      .diagnostic = false,
+      .missing_source = false,
+    },
+    Case {
+      .name = "not eligible",
+      .candidate_p = .125F,
+      .streak = 2U,
+      .eligible = false,
+      .absent = false,
+      .diagnostic = false,
+      .missing_source = false,
+    },
+    Case {
+      .name = "one eligible frame",
+      .candidate_p = .125F,
+      .streak = 1U,
+      .eligible = true,
+      .absent = false,
+      .diagnostic = false,
+      .missing_source = false,
+    },
+    Case {
+      .name = "zero",
+      .candidate_p = 0,
+      .streak = 2U,
+      .eligible = true,
+      .absent = false,
+      .diagnostic = false,
+      .missing_source = false,
+    },
+    Case {
+      .name = "below supported P",
+      .candidate_p = 0x1p-33F,
+      .streak = 2U,
+      .eligible = true,
+      .absent = false,
+      .diagnostic = false,
+      .missing_source = false,
+    },
+    Case {
+      .name = "above supported P",
+      .candidate_p = 0x1p33F,
+      .streak = 2U,
+      .eligible = true,
+      .absent = false,
+      .diagnostic = false,
+      .missing_source = false,
+    },
+    Case {
+      .name = "NaN",
+      .candidate_p = std::numeric_limits<float>::quiet_NaN(),
+      .streak = 2U,
+      .eligible = true,
+      .absent = false,
+      .diagnostic = false,
+      .missing_source = false,
+    },
+    Case {
+      .name = "infinite",
+      .candidate_p = std::numeric_limits<float>::infinity(),
+      .streak = 2U,
+      .eligible = true,
+      .absent = false,
+      .diagnostic = false,
+      .missing_source = false,
+    },
+    Case {
+      .name = "diagnostic wins",
+      .candidate_p = .125F,
+      .streak = 2U,
+      .eligible = true,
+      .absent = false,
+      .diagnostic = true,
+      .missing_source = false,
+    },
+    Case {
+      .name = "missing source wins",
+      .candidate_p = .125F,
+      .streak = 2U,
+      .eligible = true,
+      .absent = false,
+      .diagnostic = false,
+      .missing_source = true,
+    },
   };
   for (const auto& test_case : cases) {
     SCOPED_TRACE(test_case.name);
@@ -128,7 +245,9 @@ NOLINT_TEST_F(
       = test_case.eligible ? original.flags | 256U : original.flags & ~256U;
     candidate.fp16_candidate_pre_exposure = test_case.candidate_p;
     candidate.fp16_eligible_streak = test_case.streak;
-    auto upload = CreateUploadBuffer(SizeBytes { sizeof(candidate) });
+    auto upload = CreateUploadBuffer(SizeBytes {
+      sizeof(candidate),
+    });
     upload->Update(&candidate, sizeof(candidate), 0U);
     {
       auto recorder = AcquireRecorder("FP32 reference fallback candidate");
@@ -142,16 +261,23 @@ NOLINT_TEST_F(
       recorder->RequireResourceStateFinal(
         *previous.state->buffer, ResourceStates::kShaderResource);
     }
-    const auto source = postprocess::ExposurePass::Source {
-      .handle = CompositionView::ViewStateHandle { 900U }, .config = config
+    auto source = postprocess::ExposurePass::Source {};
+    source.handle = CompositionView::ViewStateHandle {
+      900U,
     };
-    ctx_.frame_sequence = frame::SequenceNumber { ++sequence_ };
+    source.config = config;
+    ctx_.frame_sequence = frame::SequenceNumber {
+      ++sequence_,
+    };
+    auto resolved_inputs = postprocess::ExposurePass::FrameInputs {};
+    resolved_inputs.use_fp32 = true;
+    resolved_inputs.preserve_fp32_candidate_p = true;
+    resolved_inputs.qualified_candidate
+      = test_case.absent ? nullptr : previous.state;
+    resolved_inputs.source = test_case.missing_source ? &source : nullptr;
     const auto resolved = pass_->ResolveFrame(ctx_,
       test_case.diagnostic ? config.WithDiagnosticOverride(true) : config,
-      { .use_fp32 = true,
-        .preserve_fp32_candidate_p = true,
-        .qualified_candidate = test_case.absent ? nullptr : previous.state,
-        .source = test_case.missing_source ? &source : nullptr });
+      resolved_inputs);
     ASSERT_NE(resolved, nullptr);
     const auto domain = Read<FrameExposureData>(
       *resolved->buffer, ResourceStates::kShaderResource);
@@ -165,7 +291,14 @@ NOLINT_TEST_F(
       *resolved->current_state->buffer, ResourceStates::kShaderResource);
     EXPECT_EQ(state.displayed_scale, test_case.diagnostic ? 1.0F : 0x1p-4F);
     const auto retained = ReadState(previous);
-    EXPECT_EQ(std::memcmp(&candidate, &retained, sizeof(candidate)), 0);
+    EXPECT_TRUE(std::ranges::equal(std::as_bytes(std::span {
+                                     &candidate,
+                                     1,
+                                   }),
+      std::as_bytes(std::span {
+        &retained,
+        1,
+      })));
   }
 }
 
@@ -173,7 +306,7 @@ NOLINT_TEST_F(
   ExposureLightingGpuTest, Fp32ReferenceSwitchPreservesSceneExposureAndHistory)
 {
   verify_manual_p = false;
-  probe->prepare = [](RenderContext&) { };
+  probe->prepare = [](RenderContext&) -> void { };
   settings.mode = engine::ExposureMode::kAuto;
   settings.low_percentile = 0.0F;
   settings.high_percentile = 1.0F;
@@ -182,9 +315,9 @@ NOLINT_TEST_F(
   ASSERT_FALSE(diagnostics.IsHdrFp32ReferenceEnabled());
   SceneTextureExtractRef current;
   unsigned current_draws = 0U;
-  probe->inspect = [&](const RenderContext& context,
-                     const SceneTextureExtractRef& color,
-                     const unsigned draws) {
+  probe->inspect
+    = [&](const RenderContext& context, const SceneTextureExtractRef& color,
+        const unsigned draws) -> void {
     current_draws = draws;
     EXPECT_FLOAT_EQ(context.delta_time, frame_delta_seconds);
     const auto* owner
@@ -193,14 +326,21 @@ NOLINT_TEST_F(
       Format::kRGBA32Float);
     current = color;
   };
-  for (const bool forward : { false, true }) {
+  for (const bool forward : {
+         false,
+         true,
+       }) {
     SCOPED_TRACE(::testing::Message() << "forward=" << forward);
     surface_view_id = forward ? 9301U : 9300U;
     frame_delta_seconds = 0.0F;
-    const auto handle = CompositionView::ViewStateHandle { surface_view_id };
+    const auto handle = CompositionView::ViewStateHandle {
+      surface_view_id,
+    };
     const auto seed = renderer_->QueueExposureTransition(
       handle, ExposureTransitionPolicy::kSeedFromEv100, 3.0F);
-    ASSERT_TRUE(seed.has_value());
+    if (!seed.has_value()) {
+      FAIL() << "Expected seed to contain a value";
+    }
     ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0, 8));
     ASSERT_EQ(current_draws, 1U);
     ASSERT_TRUE(current.valid);
@@ -219,18 +359,21 @@ NOLINT_TEST_F(
     EXPECT_EQ(before.latent_scale, .125F);
     EXPECT_NE(before.target_scale, before.displayed_scale);
     EXPECT_EQ(before.requested_generation, before.applied_generation);
-    EXPECT_EQ(before.applied_generation[0], seed->generation);
-    EXPECT_NEAR(std::log2(double(before.target_scale)),
+    EXPECT_EQ(before.applied_generation.at(0), seed->generation);
+    EXPECT_NEAR(std::log2(static_cast<double>(before.target_scale)),
       std::log2(UniformReferenceGain(.25F)), 4e-4);
     const auto output_texture
       = framebuffer->GetDescriptor().color_attachments.front().texture;
     const auto before_output = ReadFloatTexture(*output_texture);
     ASSERT_EQ(before_output.size(), 1U);
-    constexpr auto expected_output = .25F * .125F - .5F / 255.0F;
+    constexpr auto expected_output = (.25F * .125F) - (.5F / 255.0F);
     for (unsigned channel = 0U; channel < 3U; ++channel) {
-      EXPECT_NEAR(before_output[0][channel], expected_output, 2e-4F);
+      EXPECT_NEAR(before_output.at(0).at(channel), expected_output, 2e-4F);
     }
-    for (const bool reference : { true, false }) {
+    for (const bool reference : {
+           true,
+           false,
+         }) {
       SCOPED_TRACE(::testing::Message() << "reference=" << reference);
       diagnostics.SetHdrFp32ReferenceEnabled(reference);
       EXPECT_EQ(diagnostics.IsHdrFp32ReferenceEnabled(), reference);
@@ -269,10 +412,11 @@ NOLINT_TEST_F(
       const auto output = ReadFloatTexture(*output_texture);
       ASSERT_EQ(output.size(), 1U);
       for (unsigned channel = 0U; channel < 3U; ++channel) {
-        EXPECT_NEAR(
-          pixels[0][channel] / domain.pre_exposure, .25F, .005F * .25F + 2e-5F);
-        EXPECT_NEAR(output[0][channel], expected_output, 2e-4F);
-        EXPECT_NEAR(output[0][channel], before_output[0][channel], 1.0F / 255);
+        EXPECT_NEAR(pixels.at(0).at(channel) / domain.pre_exposure, .25F,
+          (.005F * .25F) + 2e-5F);
+        EXPECT_NEAR(output.at(0).at(channel), expected_output, 2e-4F);
+        EXPECT_NEAR(output.at(0).at(channel), before_output.at(0).at(channel),
+          1.0F / 255);
       }
     }
     frame_delta_seconds = .25F;
@@ -283,13 +427,16 @@ NOLINT_TEST_F(
         ResourceStates::kShaderResource);
     const auto expected_gain
       = ReferenceAdaptedGain(.125, UniformReferenceGain(.25F), .25);
-    EXPECT_NEAR(std::log2(double(adapted.displayed_scale)),
+    EXPECT_NEAR(std::log2(static_cast<double>(adapted.displayed_scale)),
       std::log2(expected_gain), 4e-4);
     EXPECT_GT(adapted.displayed_scale, .125F);
     EXPECT_EQ(adapted.applied_generation, before.applied_generation);
     EXPECT_EQ(adapted.requested_generation, before.requested_generation);
-    EXPECT_TRUE(
-      renderer_->ReleaseOffscreenViewState(ViewId { surface_view_id }, handle));
+    EXPECT_TRUE(renderer_->ReleaseOffscreenViewState(
+      ViewId {
+        surface_view_id,
+      },
+      handle));
     current = {};
   }
   probe->inspect = {};

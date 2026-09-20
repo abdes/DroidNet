@@ -77,7 +77,7 @@ NOLINT_TEST_F(
     .subresources = {},
     .data = oxygen::vortex::upload::UploadTextureSourceView {
       .subresources = std::vector<oxygen::vortex::upload::UploadTextureSourceSubresource> {
-        { std::span<const std::byte>(data.data(), data.size()), static_cast<uint32_t>(row_pitch), static_cast<uint32_t>(slice_pitch) }
+        { .bytes=std::span<const std::byte>(data.data(), data.size()), .row_pitch=static_cast<uint32_t>(row_pitch), .slice_pitch=static_cast<uint32_t>(slice_pitch), },
       },
     },
   };
@@ -97,24 +97,26 @@ NOLINT_TEST_F(
   ASSERT_TRUE(log.copy_called);
   ASSERT_NE(log.dst, nullptr);
   EXPECT_EQ(log.dst, tex.get());
-  ASSERT_EQ(log.regions.size(), 1u);
+  ASSERT_EQ(log.regions.size(), 1U);
 
   const auto& r = log.regions.front();
   EXPECT_EQ(r.buffer_row_pitch, row_pitch);
   EXPECT_EQ(r.buffer_slice_pitch, slice_pitch);
-  EXPECT_EQ(r.buffer_offset % 512u, 0u);
-  EXPECT_EQ(r.dst_slice.mip_level, 0u);
-  EXPECT_EQ(r.dst_slice.array_slice, 0u);
+  EXPECT_EQ(r.buffer_offset % 512U, 0U);
+  EXPECT_EQ(r.dst_slice.mip_level, 0U);
+  EXPECT_EQ(r.dst_slice.array_slice, 0U);
 
   // Simulate frame advance to complete fences
-  SimulateFrameStart(frame::Slot { 1 });
+  SimulateFrameStart(frame::Slot {
+    1,
+  });
 
   auto complete_result = uploader.IsComplete(ticket);
   ASSERT_TRUE(complete_result.has_value()) << "IsComplete failed";
   EXPECT_TRUE(complete_result.value());
   auto res = uploader.TryGetResult(ticket);
   if (!res.has_value()) {
-    FAIL() << "expected a value";
+    FAIL() << "Expected completed upload result";
   }
   EXPECT_EQ(res->bytes_uploaded, total);
 }
@@ -172,18 +174,20 @@ NOLINT_TEST_F(UploadCoordinatorTest, Texture3D_FullUpload_ProducerFails_NoCopy)
   EXPECT_FALSE(log.copy_called);
 
   // Simulate frame advance to complete fences
-  SimulateFrameStart(frame::Slot { 1 });
+  SimulateFrameStart(frame::Slot {
+    1,
+  });
 
   auto complete_result = uploader.IsComplete(ticket);
   ASSERT_TRUE(complete_result.has_value()) << "IsComplete failed";
   ASSERT_TRUE(complete_result.value());
   auto res = uploader.TryGetResult(ticket);
   if (!res.has_value()) {
-    FAIL() << "expected a value";
+    FAIL() << "Expected completed upload result";
   }
   EXPECT_FALSE(res->success);
   EXPECT_EQ(res->error, oxygen::vortex::upload::UploadError::kProducerFailed);
-  EXPECT_EQ(res->bytes_uploaded, 0u);
+  EXPECT_EQ(res->bytes_uploaded, 0U);
 }
 
 } // namespace

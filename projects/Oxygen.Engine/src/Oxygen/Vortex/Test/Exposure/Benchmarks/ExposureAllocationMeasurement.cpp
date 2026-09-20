@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <bit>
+#include <cstddef>
 #include <cstring>
 #include <limits>
 #include <numeric>
@@ -16,37 +17,75 @@
 
 namespace oxygen::vortex::testing::exposure {
 
-using namespace oxygen::graphics;
+using graphics::BufferMemory;
+using graphics::BufferUsage;
+using graphics::DescriptorVisibility;
+using graphics::ResourceStates;
+using graphics::ResourceViewType;
+using graphics::TextureSubResourceSet;
+using graphics::TextureViewDescription;
 
 auto ExposureAllocationScenario::Snapshot(const std::string& phase)
   -> nlohmann::json
 {
   auto record = backend_->MeasureTrackedPlacement();
-  record["phase"] = phase;
-  record["sequence"] = fixture_.sequence;
-  record["slot"] = fixture_.frame.GetFrameSlot().get();
-  record["views"] = nlohmann::json::array();
-  record["retained_extracts"]
-    = std::count_if(retained_.begin(), retained_.end(),
-      [](const auto& item) { return item.color.retained_texture != nullptr; });
-  record["retained_depth_aliases"] = std::accumulate(retained_.begin(),
-    retained_.end(), 0U, [](unsigned count, const auto& item) {
+  const auto retained_extracts = std::count_if(
+    retained_.begin(), retained_.end(), [](const auto& item) -> auto {
+      return item.color.retained_texture != nullptr;
+    });
+  const auto retained_depth_aliases = std::accumulate(retained_.begin(),
+    retained_.end(), 0U, [](unsigned count, const auto& item) -> auto {
       return count
         + static_cast<unsigned>(std::count_if(item.depths.begin(),
-          item.depths.end(),
-          [](const auto& depth) { return depth.retained_texture != nullptr; }));
+          item.depths.end(), [](const auto& depth) -> auto {
+            return depth.retained_texture != nullptr;
+          }));
     });
+  record.update({
+    {
+      "phase",
+      phase,
+    },
+    {
+      "sequence",
+      fixture_.sequence,
+    },
+    {
+      "slot",
+      fixture_.frame.GetFrameSlot().get(),
+    },
+    {
+      "views",
+      nlohmann::json::array(),
+    },
+    {
+      "retained_extracts",
+      retained_extracts,
+    },
+    {
+      "retained_depth_aliases",
+      retained_depth_aliases,
+    },
+  });
   const auto* owner
     = vortex::testing::RendererPublicationProbe::GetSceneRenderer(
       *fixture_.renderer_);
-  if (owner) {
+  if (owner != nullptr) {
     const auto [families, leased]
       = vortex::testing::RendererPublicationProbe::SceneTexturePoolCounts(
         *owner);
-    record["pool_families"] = families;
-    record["leased_families"] = leased;
+    record.update({
+      {
+        "pool_families",
+        families,
+      },
+      {
+        "leased_families",
+        leased,
+      },
+    });
   }
-  WithoutDiagnostics([&] {
+  WithoutDiagnostics([&] -> void {
     for (const auto& [handle, item] : current_) {
       const auto& exposure = item.color.exposure;
       CHECK_NOTNULL_F(exposure.get());
@@ -58,23 +97,52 @@ auto ExposureAllocationScenario::Snapshot(const std::string& phase)
         *exposure->current_state->status_buffer, ResourceStates::kCopySource);
       const auto report = fixture_.Read<HdrSuitabilityData>(
         *exposure->suitability_buffer, ResourceStates::kShaderResource);
-      record["views"].push_back({ { "handle", handle.get() },
-        { "view", item.id.get() }, { "draws", item.draws },
-        { "format",
-          static_cast<unsigned>(item.color.texture->GetDescriptor().format) },
-        { "P", domain.pre_exposure }, { "gain", state.displayed_scale },
-        { "lifetime", exposure->current_state->owner_lifetime },
-        { "state_words",
-          std::bit_cast<std::array<std::uint32_t, sizeof(state) / 4U>>(state) },
-        { "frame_words",
-          std::bit_cast<std::array<std::uint32_t, sizeof(domain) / 4U>>(
-            domain) },
-        { "status_words",
-          std::bit_cast<std::array<std::uint32_t, sizeof(status) / 4U>>(
-            status) },
-        { "suitability_words",
-          std::bit_cast<std::array<std::uint32_t, sizeof(report) / 4U>>(
-            report) } });
+      record.at("views").push_back({
+        {
+          "handle",
+          handle.get(),
+        },
+        {
+          "view",
+          item.id.get(),
+        },
+        {
+          "draws",
+          item.draws,
+        },
+        {
+          "format",
+          static_cast<unsigned>(item.color.texture->GetDescriptor().format),
+        },
+        {
+          "P",
+          domain.pre_exposure,
+        },
+        {
+          "gain",
+          state.displayed_scale,
+        },
+        {
+          "lifetime",
+          exposure->current_state->owner_lifetime,
+        },
+        {
+          "state_words",
+          std::bit_cast<std::array<std::uint32_t, sizeof(state) / 4U>>(state),
+        },
+        {
+          "frame_words",
+          std::bit_cast<std::array<std::uint32_t, sizeof(domain) / 4U>>(domain),
+        },
+        {
+          "status_words",
+          std::bit_cast<std::array<std::uint32_t, sizeof(status) / 4U>>(status),
+        },
+        {
+          "suitability_words",
+          std::bit_cast<std::array<std::uint32_t, sizeof(report) / 4U>>(report),
+        },
+      });
     }
   });
   phases_.push_back(record);
@@ -86,11 +154,13 @@ auto ExposureAllocationScenario::Srv(const graphics::Texture& texture)
 {
   const auto index
     = fixture_.Backend().GetResourceRegistry().FindShaderVisibleIndex(texture,
-      TextureViewDescription { .view_type = ResourceViewType::kTexture_SRV,
+      TextureViewDescription {
+        .view_type = ResourceViewType::kTexture_SRV,
         .visibility = DescriptorVisibility::kShaderVisible,
         .format = texture.GetDescriptor().format,
         .dimension = texture.GetDescriptor().texture_type,
-        .sub_resources = TextureSubResourceSet::EntireTexture() });
+        .sub_resources = TextureSubResourceSet::EntireTexture(),
+      });
   CHECK_F(index.has_value());
   return *index;
 }
@@ -99,7 +169,10 @@ auto ExposureAllocationScenario::Population(const nlohmann::json& snapshot)
   -> std::vector<std::string>
 {
   std::vector<std::string> rows;
-  for (const auto* kind : { "textures", "buffers" }) {
+  for (const auto* kind : {
+         "textures",
+         "buffers",
+       }) {
     for (auto row : snapshot.at(kind)) {
       row.erase("id");
       row.erase("registered");
@@ -113,7 +186,7 @@ auto ExposureAllocationScenario::Population(const nlohmann::json& snapshot)
 auto ExposureAllocationScenario::EnsureDepthReadback(
   unsigned index, const graphics::Texture& depth) -> void
 {
-  auto& readback = depth_readbacks_[index];
+  auto& readback = depth_readbacks_.at(index);
   if (readback.buffer) {
     ASSERT_EQ(readback.footprint.Footprint.Width, depth.GetDescriptor().width);
     ASSERT_EQ(
@@ -131,20 +204,22 @@ auto ExposureAllocationScenario::EnsureDepthReadback(
   ASSERT_NE(bytes, (std::numeric_limits<UINT64>::max)());
   constexpr UINT64 alignment = D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT;
   readback.alias_stride = (bytes + alignment - 1U) & ~(alignment - 1U);
-  readback.buffer = fixture_.Backend().CreateBuffer(
-    { .size_bytes = 2U * readback.alias_stride,
-      .usage = BufferUsage::kNone,
-      .memory = BufferMemory::kReadBack,
-      .debug_name
-      = "LifecycleAccounting.DepthReadback" + std::to_string(index) });
+  readback.buffer = fixture_.Backend().CreateBuffer({
+    .size_bytes = 2U * readback.alias_stride,
+    .usage = BufferUsage::kNone,
+    .memory = BufferMemory::kReadBack,
+    .debug_name = "LifecycleAccounting.DepthReadback" + std::to_string(index),
+  });
   ASSERT_NE(readback.buffer, nullptr);
   fixture_.Backend().GetResourceRegistry().Register(readback.buffer);
 }
 
 auto ExposureAllocationScenario::CopyDepth(graphics::CommandRecorder& recorder,
-  const graphics::Texture& depth, unsigned index, unsigned alias) -> void
+  const graphics::Texture& depth, DepthLocation location) -> void
 {
-  const auto& readback = depth_readbacks_[index];
+  const auto [index, alias] = location;
+  const auto& readback = depth_readbacks_.at(index);
+  CHECK_LT_F(alias, 2U);
   CHECK_NOTNULL_F(readback.buffer.get());
   if (!recorder.IsResourceTracked(depth)) {
     CHECK_F(recorder.AdoptKnownResourceState(depth));
@@ -168,30 +243,42 @@ auto ExposureAllocationScenario::CopyDepth(graphics::CommandRecorder& recorder,
   destination.PlacedFootprint = readback.footprint;
   destination.PlacedFootprint.Offset += alias * readback.alias_stride;
   const auto recording = recorder.GetCommandListForInspection();
+  CHECK_NOTNULL_F(recording.get());
+  // The fixture creates only D3D12 command lists; this build has RTTI disabled.
   const auto* native
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
     = static_cast<const graphics::d3d12::CommandList*>(recording.get());
   native->GetCommandList()->CopyTextureRegion(
     &destination, 0U, 0U, 0U, &source, nullptr);
 }
 
-auto ExposureAllocationScenario::DepthSample(unsigned index, unsigned alias)
+auto ExposureAllocationScenario::DepthSample(DepthLocation location)
   -> std::uint32_t
 {
-  const auto& readback = depth_readbacks_[index];
+  const auto [index, alias] = location;
+  const auto& readback = depth_readbacks_.at(index);
+  CHECK_LT_F(alias, 2U);
   const auto width = readback.footprint.Footprint.Width;
+  CHECK_GT_F(width, 0U);
   CHECK_EQ_F(readback.row_bytes % width, 0U);
   const auto stride = readback.row_bytes / width;
   CHECK_GE_F(stride, sizeof(std::uint32_t));
   const auto* bytes = static_cast<const std::byte*>(readback.buffer->Map());
   CHECK_NOTNULL_F(bytes);
+  auto unmap = ScopeGuard([&]() noexcept -> void { readback.buffer->UnMap(); });
+  const auto mapped = std::span {
+    bytes,
+    static_cast<std::size_t>(readback.buffer->GetSize()),
+  };
+  const auto offset = readback.footprint.Offset
+    + (alias * readback.alias_stride)
+    + ((static_cast<std::size_t>(readback.footprint.Footprint.Height) / 2U)
+      * readback.footprint.Footprint.RowPitch)
+    + ((width / 2U) * stride);
+  CHECK_LE_F(offset, mapped.size());
+  CHECK_GE_F(mapped.size() - offset, sizeof(std::uint32_t));
   std::uint32_t bits = 0U;
-  std::memcpy(&bits,
-    bytes + readback.footprint.Offset + alias * readback.alias_stride
-      + (readback.footprint.Footprint.Height / 2U)
-        * readback.footprint.Footprint.RowPitch
-      + (width / 2U) * stride,
-    sizeof(bits));
-  readback.buffer->UnMap();
+  std::memcpy(&bits, mapped.subspan(offset, sizeof(bits)).data(), sizeof(bits));
   return bits;
 }
 

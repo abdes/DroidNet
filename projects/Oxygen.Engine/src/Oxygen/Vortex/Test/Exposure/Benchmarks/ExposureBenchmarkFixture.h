@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include <cstdint>
+
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureLightingFixture.h>
 
 namespace oxygen::vortex::testing::exposure {
@@ -16,8 +18,12 @@ class ExposureProfilingOverheadTest : public ExposureLightingGpuTest {
   friend class ExposureBaselineScenario;
 
 protected:
-  enum class BaselineRecipe { kControlled, kMixed, kIndoorOutdoor };
-  auto MeasureReleaseBaseline(BaselineRecipe recipe) -> void;
+  enum class BaselineRecipe : std::uint8_t {
+    kControlled,
+    kMixed,
+    kIndoorOutdoor
+  };
+  auto MeasureReleaseBaseline(BaselineRecipe kind) -> void;
   auto BackendConfigJson() const -> std::string override;
   auto AdditionalCapabilities() const -> CapabilitySet override;
 };

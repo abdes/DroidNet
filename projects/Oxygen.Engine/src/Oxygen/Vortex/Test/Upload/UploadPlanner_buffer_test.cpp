@@ -34,13 +34,19 @@ public:
     , desc_(std::move(d))
   {
   }
+  // Buffer requires a string-bearing descriptor returned by value under
+  // noexcept. NOLINTNEXTLINE(bugprone-exception-escape)
   auto GetDescriptor() const noexcept -> oxygen::graphics::BufferDesc override
   {
     return desc_;
   }
   auto GetNativeResource() const -> oxygen::graphics::NativeResource override
   {
-    return { const_cast<DummyBuffer*>(this), ClassTypeId() };
+
+    return {
+      this,
+      ClassTypeId(),
+    };
   }
 
   auto Update(const void* /*data*/, uint64_t /*size*/, uint64_t /*offset*/)
@@ -77,23 +83,23 @@ protected:
   }
   auto DoUnMap() noexcept -> void override { }
   [[nodiscard]] auto CreateConstantBufferView(
-    const oxygen::graphics::DescriptorAllocationHandle&,
-    const oxygen::graphics::BufferRange&) const
+    const oxygen::graphics::DescriptorAllocationHandle& /*view_handle*/,
+    const oxygen::graphics::BufferRange& /*range*/) const
     -> oxygen::graphics::NativeView override
   {
     return {};
   }
   [[nodiscard]] auto CreateShaderResourceView(
-    const oxygen::graphics::DescriptorAllocationHandle&, oxygen::Format,
-    oxygen::graphics::BufferRange, uint32_t) const
-    -> oxygen::graphics::NativeView override
+    const oxygen::graphics::DescriptorAllocationHandle& /*view_handle*/,
+    oxygen::Format /*format*/, oxygen::graphics::BufferRange /*range*/,
+    uint32_t /*stride*/) const -> oxygen::graphics::NativeView override
   {
     return {};
   }
   [[nodiscard]] auto CreateUnorderedAccessView(
-    const oxygen::graphics::DescriptorAllocationHandle&, oxygen::Format,
-    oxygen::graphics::BufferRange, uint32_t) const
-    -> oxygen::graphics::NativeView override
+    const oxygen::graphics::DescriptorAllocationHandle& /*view_handle*/,
+    oxygen::Format /*format*/, oxygen::graphics::BufferRange /*range*/,
+    uint32_t /*stride*/) const -> oxygen::graphics::NativeView override
   {
     return {};
   }
@@ -119,13 +125,15 @@ protected:
     UploadRequest r;
     r.kind = UploadKind::kBuffer;
     r.desc = UploadBufferDesc {
-      .dst = dst, .size_bytes = size_bytes, .dst_offset = dst_offset
+      .dst = dst,
+      .size_bytes = size_bytes,
+      .dst_offset = dst_offset,
     };
     return r;
   }
 
   // Convenience helper to create a dummy buffer with given size (default 4096).
-  static auto MakeDummyBuffer(const uint64_t size_bytes = 4096ull)
+  static auto MakeDummyBuffer(const uint64_t size_bytes = 4096ULL)
     -> std::shared_ptr<DummyBuffer>
   {
     oxygen::graphics::BufferDesc bd;
@@ -133,7 +141,7 @@ protected:
     return std::make_shared<DummyBuffer>(bd);
   }
 
-  auto UploadQueueKey() const
+  [[nodiscard]] auto UploadQueueKey() const
   {
     return oxygen::graphics::QueueKey("universal");
   }
@@ -154,7 +162,7 @@ NOLINT_TEST_F(UploadPlannerBufferTest, BufferOptimize_EmptyPlanReturnsEmpty)
 
   // Assert: empty plan preserved
   EXPECT_TRUE(uploads.empty());
-  EXPECT_EQ(total_bytes, 0u);
+  EXPECT_EQ(total_bytes, 0U);
 }
 
 //! PlanBuffers should pack buffer uploads and align staging offsets.
@@ -175,24 +183,24 @@ NOLINT_TEST_F(UploadPlannerBufferTest, BufferPlan_PackingAndAlignment)
   // Assert
   ASSERT_TRUE(exp_plan.has_value());
   const auto& plan = exp_plan.value();
-  ASSERT_EQ(plan.uploads.size(), 2u);
+  ASSERT_EQ(plan.uploads.size(), 2U);
 
-  const auto& it0 = plan.uploads[0];
-  const auto& it1 = plan.uploads[1];
+  const auto& it0 = plan.uploads.at(0);
+  const auto& it1 = plan.uploads.at(1);
 
   // src offsets must be aligned to policy (buffer_copy_alignment)
   EXPECT_EQ(it0.region.src_offset
       % UploadPolicy(UploadQueueKey()).alignment.buffer_copy_alignment.get(),
-    0u);
+    0U);
   EXPECT_EQ(it1.region.src_offset
       % UploadPolicy(UploadQueueKey()).alignment.buffer_copy_alignment.get(),
-    0u);
+    0U);
 
   // Regions preserve dst offsets and sizes
-  EXPECT_EQ(it0.region.dst_offset, 0u);
-  EXPECT_EQ(it0.region.size, 100u);
-  EXPECT_EQ(it1.region.dst_offset, 100u);
-  EXPECT_EQ(it1.region.size, 200u);
+  EXPECT_EQ(it0.region.dst_offset, 0U);
+  EXPECT_EQ(it0.region.size, 100U);
+  EXPECT_EQ(it1.region.dst_offset, 100U);
+  EXPECT_EQ(it1.region.size, 200U);
 
   // total_bytes should be at least src_offset + size of last
   EXPECT_GE(plan.total_bytes, it1.region.src_offset + it1.region.size);
@@ -224,11 +232,11 @@ NOLINT_TEST_F(UploadPlannerBufferTest, BufferOptimize_CoalesceContiguous)
   const auto& uploads = optimized.uploads;
 
   // Expect coalesced into single upload
-  ASSERT_EQ(uploads.size(), 1u);
-  const auto& [region, request_indices] = uploads[0];
-  EXPECT_EQ(region.dst_offset, 0u);
-  EXPECT_EQ(region.size, 512u);
-  EXPECT_EQ(request_indices.size(), 2u);
+  ASSERT_EQ(uploads.size(), 1U);
+  const auto& [region, request_indices] = uploads.at(0);
+  EXPECT_EQ(region.dst_offset, 0U);
+  EXPECT_EQ(region.size, 512U);
+  ASSERT_EQ(request_indices.size(), 2U);
 }
 
 //! Do not merge when source staging offsets are non-contiguous.
@@ -250,10 +258,12 @@ NOLINT_TEST_F(UploadPlannerBufferTest, BufferOptimize_NonContiguousSrcNotMerged)
   // Manually perturb plan to create non-contiguous src offsets while dst is
   // contiguous
   auto changed = plan.value();
+  ASSERT_EQ(changed.uploads.size(), 2U);
   // introduce a gap: set second src_offset to first.src_offset + first.size +
   // 512
-  changed.uploads[1].region.src_offset = changed.uploads[0].region.src_offset
-    + changed.uploads[0].region.size + 512;
+  changed.uploads.at(1).region.src_offset
+    = changed.uploads.at(0).region.src_offset
+    + changed.uploads.at(0).region.size + 512;
 
   const auto opt = UploadPlanner::OptimizeBuffers(
     requests, changed, UploadPolicy(UploadQueueKey()));
@@ -261,7 +271,7 @@ NOLINT_TEST_F(UploadPlannerBufferTest, BufferOptimize_NonContiguousSrcNotMerged)
   const auto& [uploads, total_bytes] = opt.value();
 
   // Should NOT merge because src are non-contiguous
-  EXPECT_EQ(uploads.size(), 2u);
+  ASSERT_EQ(uploads.size(), 2U);
 }
 
 //! Do not merge when destination offsets are non-contiguous even if source
@@ -287,7 +297,7 @@ NOLINT_TEST_F(UploadPlannerBufferTest, BufferOptimize_NonContiguousDstNotMerged)
   const auto& [uploads, total_bytes] = opt.value();
 
   // Should NOT merge because dst offsets are not contiguous
-  EXPECT_EQ(uploads.size(), 2u);
+  ASSERT_EQ(uploads.size(), 2U);
 }
 
 //! Do not merge regions that target different destination buffers.
@@ -312,7 +322,7 @@ NOLINT_TEST_F(
   const auto& [uploads, total_bytes] = opt.value();
 
   // Should NOT merge because destinations differ
-  EXPECT_EQ(uploads.size(), 2u);
+  ASSERT_EQ(uploads.size(), 2U);
 }
 
 //! Chain-merge aligned, contiguous requests into a single upload and preserve
@@ -339,11 +349,11 @@ NOLINT_TEST_F(UploadPlannerBufferTest, BufferOptimize_ChainMergeThreeRequests)
   const auto& [uploads, total_bytes] = opt.value();
 
   // Assert: all three requests coalesced into a single upload
-  ASSERT_EQ(uploads.size(), 1u);
-  const auto& [region, request_indices] = uploads[0];
-  EXPECT_EQ(region.dst_offset, 0u);
-  EXPECT_EQ(region.size, 512u * 3u);
-  EXPECT_EQ(request_indices.size(), 3u);
+  ASSERT_EQ(uploads.size(), 1U);
+  const auto& [region, request_indices] = uploads.at(0);
+  EXPECT_EQ(region.dst_offset, 0U);
+  EXPECT_EQ(region.size, 512U * 3U);
+  ASSERT_EQ(request_indices.size(), 3U);
   // total_bytes preserved
   EXPECT_EQ(total_bytes, plan->total_bytes);
 }
@@ -375,15 +385,15 @@ NOLINT_TEST_F(UploadPlannerBufferTest,
   const auto& [uploads, total_bytes] = opt.value();
 
   // Assert: all three coalesced into one upload
-  ASSERT_EQ(uploads.size(), 1u);
-  const auto& [region, request_indices] = uploads[0];
-  ASSERT_EQ(request_indices.size(), 3u);
+  ASSERT_EQ(uploads.size(), 1U);
+  const auto& [region, request_indices] = uploads.at(0);
+  ASSERT_EQ(request_indices.size(), 3U);
 
   // Because PlanBuffers sorts by dst_offset ascending, the representative
   // ordering inside request_indices should be {2,1,0} (original indices)
-  EXPECT_EQ(request_indices[0], 2u);
-  EXPECT_EQ(request_indices[1], 1u);
-  EXPECT_EQ(request_indices[2], 0u);
+  EXPECT_EQ(request_indices.at(0), 2U);
+  EXPECT_EQ(request_indices.at(1), 1U);
+  EXPECT_EQ(request_indices.at(2), 0U);
 }
 
 //! When inputs are already ordered by dst, merged request_indices should
@@ -409,12 +419,12 @@ NOLINT_TEST_F(UploadPlannerBufferTest,
   const auto& [uploads, total_bytes] = opt.value();
 
   // Assert: merged and request_indices preserve the original index order
-  ASSERT_EQ(uploads.size(), 1u);
-  const auto& [region, request_indices] = uploads[0];
-  ASSERT_EQ(request_indices.size(), 3u);
-  EXPECT_EQ(request_indices[0], 0u);
-  EXPECT_EQ(request_indices[1], 1u);
-  EXPECT_EQ(request_indices[2], 2u);
+  ASSERT_EQ(uploads.size(), 1U);
+  const auto& [region, request_indices] = uploads.at(0);
+  ASSERT_EQ(request_indices.size(), 3U);
+  EXPECT_EQ(request_indices.at(0), 0U);
+  EXPECT_EQ(request_indices.at(1), 1U);
+  EXPECT_EQ(request_indices.at(2), 2U);
 }
 
 //! Ensure merged uploads never mix requests from different destination buffers.
@@ -445,15 +455,23 @@ NOLINT_TEST_F(UploadPlannerBufferTest,
   // Because PlanBuffers sorts by destination pointer then offset, the exact
   // order of uploads in the plan can place buf2 between buf1 groups; ensure
   // that no merged upload contains indices from different buffers.
+  ASSERT_FALSE(uploads.empty());
+  std::size_t represented_requests = 0;
   for (const auto& [region, request_indices] : uploads) {
-    // Each request_indices should all reference the same dst buffer
+    // Every submitted request must remain represented by a non-empty group.
+    ASSERT_FALSE(request_indices.empty());
+    represented_requests += request_indices.size();
     const auto rep_idx = request_indices.front();
-    const auto& rep_desc = std::get<UploadBufferDesc>(requests[rep_idx].desc);
+    ASSERT_LT(rep_idx, requests.size());
+    const auto& rep_desc
+      = std::get<UploadBufferDesc>(requests.at(rep_idx).desc);
     for (const auto idx : request_indices) {
-      const auto& desc = std::get<UploadBufferDesc>(requests[idx].desc);
+      ASSERT_LT(idx, requests.size());
+      const auto& desc = std::get<UploadBufferDesc>(requests.at(idx).desc);
       EXPECT_EQ(desc.dst.get(), rep_desc.dst.get());
     }
   }
+  EXPECT_EQ(represented_requests, requests.size());
 }
 
 //! Partial merges should form groups and preserve request_indices ordering
@@ -482,18 +500,19 @@ NOLINT_TEST_F(
   const auto& [uploads, total_bytes] = opt.value();
 
   // Expect two merged uploads: one for indices {0,1} and one for {2,3}
-  ASSERT_EQ(uploads.size(), 2u);
+  ASSERT_EQ(uploads.size(), 2U);
 
   // Find which upload contains idx 0 and which contains idx 2 and assert
   // groupings
-  bool found01 = false, found23 = false;
+  bool found01 = false;
+  bool found23 = false;
   for (const auto& [region, request_indices] : uploads) {
-    if (request_indices.size() == 2 && request_indices[0] == 0u
-      && request_indices[1] == 1u) {
+    if (request_indices.size() == 2 && request_indices.at(0) == 0U
+      && request_indices.at(1) == 1U) {
       found01 = true;
     }
-    if (request_indices.size() == 2 && request_indices[0] == 2u
-      && request_indices[1] == 3u) {
+    if (request_indices.size() == 2 && request_indices.at(0) == 2U
+      && request_indices.at(1) == 3U) {
       found23 = true;
     }
   }
@@ -522,8 +541,8 @@ NOLINT_TEST_F(UploadPlannerBufferEdgeTest, BufferPlan_ZeroLengthIgnored)
   ASSERT_TRUE(plan.has_value());
 
   // Expect only the non-zero request to be planned
-  EXPECT_EQ(plan->uploads.size(), 1u);
-  EXPECT_EQ(plan->uploads[0].region.size, 128u);
+  ASSERT_EQ(plan->uploads.size(), 1U);
+  EXPECT_EQ(plan->uploads.at(0).region.size, 128U);
 }
 
 //! PlanBuffers: non-empty span with all invalid requests returns error.
@@ -534,8 +553,11 @@ NOLINT_TEST_F(UploadPlannerBufferEdgeTest, BufferPlan_AllInvalid_ReturnsError)
   // Invalid: null dst and zero size
   UploadRequest r0;
   r0.kind = UploadKind::kBuffer;
-  r0.desc
-    = UploadBufferDesc { .dst = nullptr, .size_bytes = 0, .dst_offset = 0 };
+  r0.desc = UploadBufferDesc {
+    .dst = nullptr,
+    .size_bytes = 0,
+    .dst_offset = 0,
+  };
   requests.emplace_back(std::move(r0));
   // Invalid: kind mismatch (e.g., texture) also considered invalid for
   // PlanBuffers
@@ -569,13 +591,13 @@ NOLINT_TEST_F(
   ASSERT_TRUE(plan.has_value());
 
   // dst_offset in the planned region must match requested dst_offset
-  ASSERT_EQ(plan->uploads.size(), 1u);
-  EXPECT_EQ(plan->uploads[0].region.dst_offset, 7u);
+  ASSERT_EQ(plan->uploads.size(), 1U);
+  EXPECT_EQ(plan->uploads.at(0).region.dst_offset, 7U);
 
   // But src_offset must respect staging alignment policy
-  EXPECT_EQ(plan->uploads[0].region.src_offset
+  EXPECT_EQ(plan->uploads.at(0).region.src_offset
       % UploadPolicy(UploadQueueKey()).alignment.buffer_copy_alignment.get(),
-    0u);
+    0U);
 }
 
 } // namespace

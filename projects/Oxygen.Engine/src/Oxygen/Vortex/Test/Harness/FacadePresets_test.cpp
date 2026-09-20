@@ -70,7 +70,9 @@ protected:
     auto color = graphics_->CreateTexture(color_desc);
 
     auto fb_desc = FramebufferDesc {};
-    fb_desc.AddColorAttachment({ .texture = color });
+    fb_desc.AddColorAttachment({
+      .texture = color,
+    });
     return graphics_->CreateFramebuffer(fb_desc);
   }
 
@@ -87,7 +89,7 @@ protected:
       .max_depth = 1.0F,
     };
     return Renderer::ResolvedViewInput {
-      .view_id = ViewId { 91U },
+      .view_id = ViewId { 91U, },
       .value = oxygen::ResolvedView(params),
     };
   }
@@ -117,14 +119,18 @@ NOLINT_TEST_F(
   auto facade
     = oxygen::vortex::harness::single_pass::presets::ForFullscreenGraphicsPass(
       *renderer_,
-      Renderer::FrameSessionInput { .frame_slot = oxygen::frame::Slot { 0U } },
-      oxygen::observer_ptr<Framebuffer> { framebuffer_.get() },
-      ViewId { 5U });
+      Renderer::FrameSessionInput { .frame_slot = oxygen::frame::Slot { 0U, }, },
+      oxygen::observer_ptr<Framebuffer> { framebuffer_.get(), }, ViewId { 5U, });
 
   EXPECT_TRUE(facade.CanFinalize());
   auto result = facade.Finalize();
-  ASSERT_TRUE(result.has_value());
-  EXPECT_EQ(result->GetRenderContext().current_view.view_id, ViewId { 5U });
+  if (!result.has_value()) {
+    FAIL() << "Expected result to have a value";
+  }
+  EXPECT_EQ(result->GetRenderContext().current_view.view_id,
+    (ViewId {
+      5U,
+    }));
 }
 
 NOLINT_TEST_F(FacadePresetsTest,
@@ -132,14 +138,19 @@ NOLINT_TEST_F(FacadePresetsTest,
 {
   auto facade = oxygen::vortex::harness::single_pass::presets::
     ForPreparedSceneGraphicsPass(*renderer_,
-      Renderer::FrameSessionInput { .frame_slot = oxygen::frame::Slot { 0U } },
-      oxygen::observer_ptr<Framebuffer> { framebuffer_.get() },
+      Renderer::FrameSessionInput { .frame_slot = oxygen::frame::Slot { 0U, }, },
+      oxygen::observer_ptr<Framebuffer> { framebuffer_.get(), },
       MakeResolvedViewInput(), MakePreparedFrameInput());
 
   EXPECT_TRUE(facade.CanFinalize());
   auto result = facade.Finalize();
-  ASSERT_TRUE(result.has_value());
-  EXPECT_EQ(result->GetRenderContext().current_view.view_id, ViewId { 91U });
+  if (!result.has_value()) {
+    FAIL() << "Expected result to have a value";
+  }
+  EXPECT_EQ(result->GetRenderContext().current_view.view_id,
+    (ViewId {
+      91U,
+    }));
 }
 
 NOLINT_TEST_F(FacadePresetsTest, RenderGraphPresetFinalizesWithCallerGraph)
@@ -147,18 +158,29 @@ NOLINT_TEST_F(FacadePresetsTest, RenderGraphPresetFinalizesWithCallerGraph)
   auto facade
     = oxygen::vortex::harness::render_graph::presets::ForSingleViewGraph(
       *renderer_,
-      Renderer::FrameSessionInput { .frame_slot = oxygen::frame::Slot { 0U } },
-      oxygen::observer_ptr<Framebuffer> { framebuffer_.get() },
+      Renderer::FrameSessionInput { .frame_slot = oxygen::frame::Slot { 0U, }, },
+      oxygen::observer_ptr<Framebuffer> { framebuffer_.get(), },
       MakeResolvedViewInput(),
+      // The caller synchronously runs or awaits this coroutine before its frame
+      // context goes out of scope.
+      // NOLINTNEXTLINE(cppcoreguidelines-avoid-reference-coroutine-parameters)
       [](ViewId, const oxygen::vortex::RenderContext&,
+        // The caller synchronously runs or awaits this coroutine before its
+        // frame context goes out of scope.
+        // NOLINTNEXTLINE(cppcoreguidelines-avoid-reference-coroutine-parameters)
         oxygen::graphics::CommandRecorder&) -> oxygen::co::Co<void> {
         co_return;
       });
 
   EXPECT_TRUE(facade.CanFinalize());
   auto result = facade.Finalize();
-  ASSERT_TRUE(result.has_value());
-  EXPECT_EQ(result->GetViewId(), ViewId { 91U });
+  if (!result.has_value()) {
+    FAIL() << "Expected result to have a value";
+  }
+  EXPECT_EQ(result->GetViewId(),
+    (ViewId {
+      91U,
+    }));
 }
 
 NOLINT_TEST_F(FacadePresetsTest,
@@ -167,46 +189,59 @@ NOLINT_TEST_F(FacadePresetsTest,
   auto facade = oxygen::vortex::harness::single_pass::presets::
     ForPreparedSceneGraphicsPass(*renderer_,
       Renderer::FrameSessionInput {
-        .frame_slot = oxygen::frame::Slot { 2U },
-        .frame_sequence = oxygen::frame::SequenceNumber { 19U },
+        .frame_slot = oxygen::frame::Slot { 2U, },
+        .frame_sequence = oxygen::frame::SequenceNumber { 19U, },
       },
-      oxygen::observer_ptr<Framebuffer> { framebuffer_.get() },
+      oxygen::observer_ptr<Framebuffer> { framebuffer_.get(), },
       MakeResolvedViewInput(), MakePreparedFrameInput(),
       Renderer::CoreShaderInputsInput {
-        .view_id = ViewId { 91U },
+        .view_id = ViewId { 91U, },
         .value = oxygen::vortex::ViewConstants {},
       });
 
   EXPECT_TRUE(facade.CanFinalize());
   auto result = facade.Finalize();
-  ASSERT_TRUE(result.has_value());
+  if (!result.has_value()) {
+    FAIL() << "Expected result to have a value";
+  }
   const auto& render_context = result->GetRenderContext();
-  EXPECT_EQ(render_context.current_view.view_id, ViewId { 91U });
+  EXPECT_EQ(render_context.current_view.view_id,
+    (ViewId {
+      91U,
+    }));
   EXPECT_NE(render_context.current_view.prepared_frame.get(), nullptr);
   EXPECT_NE(render_context.view_constants.get(), nullptr);
 }
 
-NOLINT_TEST_F(FacadePresetsTest,
-  RenderGraphPresetExecutesAgainstPreparedSceneSubstrate)
+NOLINT_TEST_F(
+  FacadePresetsTest, RenderGraphPresetExecutesAgainstPreparedSceneSubstrate)
 {
   auto executed = false;
-  auto facade = oxygen::vortex::harness::render_graph::presets::
-    ForSingleViewGraph(*renderer_,
+  auto facade
+    = oxygen::vortex::harness::render_graph::presets::ForSingleViewGraph(
+      *renderer_,
       Renderer::FrameSessionInput {
-        .frame_slot = oxygen::frame::Slot { 2U },
-        .frame_sequence = oxygen::frame::SequenceNumber { 23U },
+        .frame_slot = oxygen::frame::Slot { 2U, },
+        .frame_sequence = oxygen::frame::SequenceNumber { 23U, },
       },
-      oxygen::observer_ptr<Framebuffer> { framebuffer_.get() },
+      oxygen::observer_ptr<Framebuffer> { framebuffer_.get(), },
       MakeResolvedViewInput(), MakePreparedFrameInput(),
       Renderer::CoreShaderInputsInput {
-        .view_id = ViewId { 91U },
+        .view_id = ViewId { 91U, },
         .value = oxygen::vortex::ViewConstants {},
       },
+      // Synchronous execution finishes while the session-owned closure and its
+      // captured test locals are alive. The caller synchronously runs or awaits
+      // this coroutine before its frame context goes out of scope.
+      // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines,cppcoreguidelines-avoid-reference-coroutine-parameters)
       [&executed](ViewId view_id, const RenderContext& context,
+        // The caller synchronously runs or awaits this coroutine before its
+        // frame context goes out of scope.
+        // NOLINTNEXTLINE(cppcoreguidelines-avoid-reference-coroutine-parameters)
         oxygen::graphics::CommandRecorder&) -> oxygen::co::Co<void> {
         executed = true;
-        EXPECT_EQ(view_id, ViewId { 91U });
-        EXPECT_EQ(context.current_view.view_id, ViewId { 91U });
+        EXPECT_EQ(view_id, (ViewId { 91U, }));
+        EXPECT_EQ(context.current_view.view_id, (ViewId { 91U, }));
         EXPECT_NE(context.current_view.prepared_frame.get(), nullptr);
         EXPECT_NE(context.view_constants.get(), nullptr);
         co_return;
@@ -214,13 +249,18 @@ NOLINT_TEST_F(FacadePresetsTest,
 
   EXPECT_TRUE(facade.CanFinalize());
   auto result = facade.Finalize();
-  ASSERT_TRUE(result.has_value());
+  if (!result.has_value()) {
+    FAIL() << "Expected result to have a value";
+  }
 
   auto recorder = AcquireRecorder("FacadePresetsTest.PreparedSceneGraph");
   ASSERT_NE(recorder, nullptr);
 
   auto loop = oxygen::co::testing::TestEventLoop {};
   oxygen::co::Run(loop,
+    // Synchronous execution finishes while the session-owned closure and its
+    // captured test locals are alive.
+    // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
     [&]() -> oxygen::co::Co<void> { co_await result->Execute(*recorder); });
 
   EXPECT_TRUE(executed);
@@ -231,16 +271,19 @@ NOLINT_TEST_F(FacadePresetsTest,
 {
   auto facade = oxygen::vortex::harness::single_pass::presets::
     ForPreparedSceneGraphicsPass(*renderer_,
-      Renderer::FrameSessionInput { .frame_slot = oxygen::frame::Slot { 0U } },
-      oxygen::observer_ptr<Framebuffer> { framebuffer_.get() },
+      Renderer::FrameSessionInput { .frame_slot = oxygen::frame::Slot { 0U, }, },
+      oxygen::observer_ptr<Framebuffer> { framebuffer_.get(), },
       MakeResolvedViewInput(), MakePreparedFrameInput());
 
   auto validation = facade.Validate();
   EXPECT_TRUE(validation.Ok());
 
   auto result = facade.Finalize();
-  ASSERT_TRUE(result.has_value());
-  EXPECT_EQ(result->GetRenderContext().current_view.composition_view.get(), nullptr);
+  if (!result.has_value()) {
+    FAIL() << "Expected result to have a value";
+  }
+  EXPECT_EQ(
+    result->GetRenderContext().current_view.composition_view.get(), nullptr);
 }
 
 } // namespace

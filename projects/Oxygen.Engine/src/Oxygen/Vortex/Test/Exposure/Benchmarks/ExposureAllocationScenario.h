@@ -11,6 +11,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -34,20 +35,36 @@ public:
   ExposureAllocationScenario(const ExposureAllocationScenario&) = delete;
   auto operator=(const ExposureAllocationScenario&)
     -> ExposureAllocationScenario& = delete;
+  ExposureAllocationScenario(ExposureAllocationScenario&&) = delete;
+  auto operator=(ExposureAllocationScenario&&)
+    -> ExposureAllocationScenario& = delete;
   auto Run() -> void;
 
 private:
+  struct DepthLocation {
+    unsigned view_index {};
+    unsigned alias {};
+  };
+  struct FrameRecipe {
+    unsigned view_count {};
+    unsigned layout {};
+    float ev {};
+  };
   struct DepthReadback {
     std::shared_ptr<graphics::Buffer> buffer;
     D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint {};
-    UINT64 row_bytes { 0U };
-    UINT64 alias_stride { 0U };
+    UINT64 row_bytes {
+      0U,
+    };
+    UINT64 alias_stride {
+      0U,
+    };
   };
   struct ViewRecord {
-    ViewId id;
+    ViewId id {};
     SceneTextureExtractRef color;
     std::array<SceneTextureExtractRef, 2> depths;
-    unsigned draws;
+    unsigned draws {};
   };
 
   // Non-owning lifetime observations plus the deliberately queued depth
@@ -67,7 +84,7 @@ private:
     std::shared_ptr<const graphics::CommandList> depth_recording;
   };
 
-  static auto ReadEnvironment(const char* name, const char* fallback)
+  static auto ReadEnvironment(const char* name, std::string_view fallback)
     -> std::string;
   auto SetUp() -> void;
   auto CleanUp() noexcept -> void;
@@ -88,8 +105,7 @@ private:
 
   auto WriteReport() -> void;
   auto Snapshot(const std::string& phase) -> nlohmann::json;
-  auto RenderFrame(unsigned view_count, unsigned layout, float ev,
-    const std::string& phase) -> void;
+  auto RenderFrame(FrameRecipe recipe, const std::string& phase) -> void;
   auto RemoveViews() -> void;
   auto Srv(const graphics::Texture& texture) -> ShaderVisibleIndex;
   static auto Population(const nlohmann::json& snapshot)
@@ -97,35 +113,45 @@ private:
   auto EnsureDepthReadback(unsigned index, const graphics::Texture& depth)
     -> void;
   auto CopyDepth(graphics::CommandRecorder& recorder,
-    const graphics::Texture& depth, unsigned index, unsigned alias) -> void;
-  auto DepthSample(unsigned index, unsigned alias) -> std::uint32_t;
+    const graphics::Texture& depth, DepthLocation location) -> void;
+  auto DepthSample(DepthLocation location) -> std::uint32_t;
 
   template <typename Action> auto WithoutDiagnostics(Action&& action)
   {
     const bool tracked = std::exchange(backend_->track_resources, false);
     const bool accounted
       = std::exchange(backend_->account_texture_allocations, false);
-    auto restore = ScopeGuard([&]() noexcept {
+    auto restore = ScopeGuard([&]() noexcept -> void {
       backend_->track_resources = tracked;
       backend_->account_texture_allocations = accounted;
     });
-    return action();
+    return std::forward<Action>(action)();
   }
 
   ExposureLightingGpuTest& fixture_;
   bool temporal_;
-  std::uint32_t width_ { 0U };
-  std::uint32_t height_ { 0U };
+  std::uint32_t width_ {
+    0U,
+  };
+  std::uint32_t height_ {
+    0U,
+  };
   std::string precision_;
-  bool fp32_reference_ { false };
-  ExposureFailureGraphics* backend_ { nullptr };
+  bool fp32_reference_ {
+    false,
+  };
+  ExposureFailureGraphics* backend_ {
+    nullptr,
+  };
   std::array<std::shared_ptr<graphics::Texture>, 2> outputs_;
   std::array<std::shared_ptr<graphics::Framebuffer>, 2> targets_;
   std::array<std::shared_ptr<graphics::Texture>, 2> consumer_outputs_;
   std::array<std::shared_ptr<graphics::Framebuffer>, 2> consumer_targets_;
   std::array<DepthReadback, 2> depth_readbacks_;
   std::optional<postprocess::TonemapPass> consumer_;
-  bool cleanup_armed_ { false };
+  bool cleanup_armed_ {
+    false,
+  };
   std::unordered_map<CompositionView::ViewStateHandle, ViewRecord> current_;
   std::array<ViewRecord, 2> retained_;
   nlohmann::json phases_ = nlohmann::json::array();

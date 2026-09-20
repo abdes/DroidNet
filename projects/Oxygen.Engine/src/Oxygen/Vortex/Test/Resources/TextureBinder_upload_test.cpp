@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <limits>
+#include <ranges>
 #include <string>
 
 #include <Oxygen/Testing/GTest.h>
@@ -52,10 +53,9 @@ using oxygen::vortex::testing::TextureBinderTest;
 [[nodiscard]] auto LastSrvViewTextureForIndex(const FakeGraphics& gfx,
   const uint32_t index) -> const oxygen::graphics::Texture*
 {
-  for (auto it = gfx.srv_view_log_.events.rbegin();
-    it != gfx.srv_view_log_.events.rend(); ++it) {
-    if (it->index == index) {
-      return it->texture;
+  for (auto& event : std::views::reverse(gfx.srv_view_log_.events)) {
+    if (event.index == index) {
+      return event.texture;
     }
   }
   return nullptr;
@@ -84,10 +84,10 @@ protected:
     -> oxygen::vortex::resources::TextureBinder::UploadLimits override
   {
     return oxygen::vortex::resources::TextureBinder::UploadLimits {
-      512U,
-      1024U,
-      256U,
-      2U,
+      .max_upload_bytes_per_frame = 512U,
+      .max_pending_upload_bytes = 1024U,
+      .deferred_retry_low_watermark_bytes = 256U,
+      .max_deferred_retries_per_frame = 2U,
     };
   }
 };
@@ -108,7 +108,9 @@ NOLINT_TEST_F(TextureBinderUploadTest, RepointOccursOnlyAfterCompletion)
     = Loader().PreloadCookedTexture(std::span(payload.data(), payload.size()));
 
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+    oxygen::frame::Slot {
+      1,
+    });
 
   const auto expected_placeholder_name = MakePlaceholderDebugName(key);
 
@@ -135,7 +137,9 @@ NOLINT_TEST_F(TextureBinderUploadTest, RepointOccursOnlyAfterCompletion)
   // Simulate that the transfer queue has NOT completed yet.
   q->Signal(0);
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 2 });
+    oxygen::frame::Slot {
+      2,
+    });
 
   // Act: binder frame start should not observe completion -> no repoint.
   TexBinder().OnFrameStart();
@@ -146,9 +150,11 @@ NOLINT_TEST_F(TextureBinderUploadTest, RepointOccursOnlyAfterCompletion)
 
   // Now simulate completion by advancing the queue's completed fence beyond
   // any possible registered upload fence.
-  q->Signal((std::numeric_limits<std::uint64_t>::max)());
+  q->Signal(std::numeric_limits<std::uint64_t>::max());
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 3 });
+    oxygen::frame::Slot {
+      3,
+    });
 
   // Act: binder should now observe completion and repoint.
   TexBinder().OnFrameStart();
@@ -178,7 +184,9 @@ NOLINT_TEST_F(TextureBinderUploadTest, CompletionNotObservedWithoutOnFrameStart)
     = Loader().PreloadCookedTexture(std::span(payload.data(), payload.size()));
 
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+    oxygen::frame::Slot {
+      1,
+    });
 
   Gfx().srv_view_log_.events.clear();
   const auto index = TexBinder().GetOrAllocate(key);
@@ -196,9 +204,11 @@ NOLINT_TEST_F(TextureBinderUploadTest, CompletionNotObservedWithoutOnFrameStart)
   ASSERT_GE(creations_after_allocate, 1U);
 
   // Simulate completion but do NOT call TexBinder().OnFrameStart().
-  q->Signal((std::numeric_limits<std::uint64_t>::max)());
+  q->Signal(std::numeric_limits<std::uint64_t>::max());
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 2 });
+    oxygen::frame::Slot {
+      2,
+    });
 
   // Act
   (void)TexBinder().GetOrAllocate(key);
@@ -219,7 +229,9 @@ NOLINT_TEST_F(TextureBinderUploadTest, CompletionNotObservedWithoutOnFrameStart)
   // one frame with the ticket present.
   TexBinder().OnFrameStart();
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 3 });
+    oxygen::frame::Slot {
+      3,
+    });
   TexBinder().OnFrameStart();
 
   // Assert: repoint occurs once draining happens.
@@ -249,7 +261,9 @@ NOLINT_TEST_F(
     = Loader().PreloadCookedTexture(std::span(payload.data(), payload.size()));
 
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+    oxygen::frame::Slot {
+      1,
+    });
 
   auto q
     = GfxPtr()->GetCommandQueue(oxygen::graphics::SingleQueueStrategy().KeyFor(
@@ -276,12 +290,16 @@ NOLINT_TEST_F(
     MakePlaceholderDebugName(normal_key));
 
   // Drive completion and drain.
-  q->Signal((std::numeric_limits<std::uint64_t>::max)());
+  q->Signal(std::numeric_limits<std::uint64_t>::max());
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 2 });
+    oxygen::frame::Slot {
+      2,
+    });
   TexBinder().OnFrameStart();
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 3 });
+    oxygen::frame::Slot {
+      3,
+    });
   TexBinder().OnFrameStart();
 
   // Assert: normal key repoints once.
@@ -309,7 +327,9 @@ NOLINT_TEST_F(TextureBinderUploadTest, TightPackedPayload_UploadsAndRepoints)
     = Loader().PreloadCookedTexture(std::span(payload.data(), payload.size()));
 
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+    oxygen::frame::Slot {
+      1,
+    });
 
   auto q
     = GfxPtr()->GetCommandQueue(oxygen::graphics::SingleQueueStrategy().KeyFor(
@@ -331,12 +351,16 @@ NOLINT_TEST_F(TextureBinderUploadTest, TightPackedPayload_UploadsAndRepoints)
   EXPECT_EQ(GetTextureDebugName(texture_before), expected_placeholder_name);
 
   // Drive completion and drain.
-  q->Signal((std::numeric_limits<std::uint64_t>::max)());
+  q->Signal(std::numeric_limits<std::uint64_t>::max());
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 2 });
+    oxygen::frame::Slot {
+      2,
+    });
   TexBinder().OnFrameStart();
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 3 });
+    oxygen::frame::Slot {
+      3,
+    });
   TexBinder().OnFrameStart();
 
   // Assert: repointed once and not to the error texture.
@@ -360,7 +384,9 @@ NOLINT_TEST_F(TextureBinderUploadTest, Bc7MipChain_UploadsAndRepoints)
     = Loader().PreloadCookedTexture(std::span(payload.data(), payload.size()));
 
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+    oxygen::frame::Slot {
+      1,
+    });
 
   auto q
     = GfxPtr()->GetCommandQueue(oxygen::graphics::SingleQueueStrategy().KeyFor(
@@ -382,12 +408,16 @@ NOLINT_TEST_F(TextureBinderUploadTest, Bc7MipChain_UploadsAndRepoints)
   EXPECT_EQ(GetTextureDebugName(texture_before), expected_placeholder_name);
 
   // Drive completion and drain.
-  q->Signal((std::numeric_limits<std::uint64_t>::max)());
+  q->Signal(std::numeric_limits<std::uint64_t>::max());
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 2 });
+    oxygen::frame::Slot {
+      2,
+    });
   TexBinder().OnFrameStart();
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 3 });
+    oxygen::frame::Slot {
+      3,
+    });
   TexBinder().OnFrameStart();
 
   // Assert: repointed once and not to the error texture.
@@ -410,7 +440,9 @@ NOLINT_TEST_F(TextureBinderUploadTest, ReservedKeysDoNotAllocateAndDoNotRepoint)
   const auto before = AllocatedSrvCount();
 
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+    oxygen::frame::Slot {
+      1,
+    });
 
   auto q
     = GfxPtr()->GetCommandQueue(oxygen::graphics::SingleQueueStrategy().KeyFor(
@@ -448,9 +480,11 @@ NOLINT_TEST_F(TextureBinderUploadTest, ReservedKeysDoNotAllocateAndDoNotRepoint)
   EXPECT_EQ(GetTextureDebugName(placeholder_texture_before), "FallbackTexture");
 
   // Drive completion and drain.
-  q->Signal((std::numeric_limits<std::uint64_t>::max)());
+  q->Signal(std::numeric_limits<std::uint64_t>::max());
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 2 });
+    oxygen::frame::Slot {
+      2,
+    });
   TexBinder().OnFrameStart();
 
   // Assert: no repoint for reserved keys.
@@ -490,7 +524,9 @@ NOLINT_TEST_F(
     Loader(), std::span(payload.data(), payload.size()), key_count);
 
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+    oxygen::frame::Slot {
+      1,
+    });
 
   for (const auto key : keys) {
     (void)TexBinder().GetOrAllocate(key);
@@ -525,7 +561,9 @@ NOLINT_TEST_F(TextureBinderBacklogTest,
   ASSERT_NE(q, nullptr);
 
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+    oxygen::frame::Slot {
+      1,
+    });
 
   for (const auto key : keys) {
     (void)TexBinder().GetOrAllocate(key);
@@ -533,13 +571,17 @@ NOLINT_TEST_F(TextureBinderBacklogTest,
 
   for (std::uint32_t slot = 2U; slot < 6U; ++slot) {
     Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-      oxygen::frame::Slot { slot });
+      oxygen::frame::Slot {
+        slot,
+      });
     TexBinder().OnFrameStart();
-    q->Signal((std::numeric_limits<std::uint64_t>::max)());
+    q->Signal(std::numeric_limits<std::uint64_t>::max());
   }
 
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 6U });
+    oxygen::frame::Slot {
+      6U,
+    });
   TexBinder().OnFrameStart();
 
   for (const auto key : keys) {

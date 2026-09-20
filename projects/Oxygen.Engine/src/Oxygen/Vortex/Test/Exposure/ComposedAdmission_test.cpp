@@ -19,7 +19,7 @@
 
 namespace oxygen::vortex::testing::exposure {
 
-using namespace oxygen::graphics;
+using graphics::ResourceStates;
 
 NOLINT_TEST_F(ExposureGpuTest, SceneDisplayAdmissionChecksGammaAndBackground)
 {
@@ -32,25 +32,97 @@ NOLINT_TEST_F(ExposureGpuTest, SceneDisplayAdmissionChecksGammaAndBackground)
     bool background;
     float background_value;
     std::uint32_t failure;
-    engine::ToneMapper mapper { engine::ToneMapper::kNone };
+    engine::ToneMapper mapper;
   };
   const std::array cases {
     Case {
-      "gamma reveals below-float-budget loss", 8e-6F, 1, 2.2F, 0, false, 0, 4 },
+      .name = "gamma reveals below-float-budget loss",
+      .radiance = 8e-6F,
+      .alpha = 1,
+      .gamma = 2.2F,
+      .alpha_error = 0,
+      .background = false,
+      .background_value = 0,
+      .failure = 4,
+      .mapper = engine::ToneMapper::kNone,
+    },
     Case {
-      "linear display keeps loss insignificant", 8e-6F, 1, 1, 0, false, 0, 0 },
-    Case { "white background exposes coverage error", 0, .5F, 2.2F, .1F, true,
-      1, 4 },
-    Case { "black image does not require unused coverage", 0, .5F, 2.2F, .1F,
-      true, 0, 0 },
+      .name = "linear display keeps loss insignificant",
+      .radiance = 8e-6F,
+      .alpha = 1,
+      .gamma = 1,
+      .alpha_error = 0,
+      .background = false,
+      .background_value = 0,
+      .failure = 0,
+      .mapper = engine::ToneMapper::kNone,
+    },
     Case {
-      "half coverage changes dark background", 0, .9987F, 2.2F, 0, true, 1, 4 },
-    Case { "ACES toe hides tiny radiance", 8e-6F, 1, 2.2F, 0, false, 0, 0,
-      engine::ToneMapper::kAcesFitted },
-    Case { "Filmic exposes tiny radiance", 8e-6F, 1, 2.2F, 0, false, 0, 4,
-      engine::ToneMapper::kFilmic },
-    Case { "Reinhard exposes tiny radiance", 8e-6F, 1, 2.2F, 0, false, 0, 4,
-      engine::ToneMapper::kReinhard },
+      .name = "white background exposes coverage error",
+      .radiance = 0,
+      .alpha = .5F,
+      .gamma = 2.2F,
+      .alpha_error = .1F,
+      .background = true,
+      .background_value = 1,
+      .failure = 4,
+      .mapper = engine::ToneMapper::kNone,
+    },
+    Case {
+      .name = "black image does not require unused coverage",
+      .radiance = 0,
+      .alpha = .5F,
+      .gamma = 2.2F,
+      .alpha_error = .1F,
+      .background = true,
+      .background_value = 0,
+      .failure = 0,
+      .mapper = engine::ToneMapper::kNone,
+    },
+    Case {
+      .name = "half coverage changes dark background",
+      .radiance = 0,
+      .alpha = .9987F,
+      .gamma = 2.2F,
+      .alpha_error = 0,
+      .background = true,
+      .background_value = 1,
+      .failure = 4,
+      .mapper = engine::ToneMapper::kNone,
+    },
+    Case {
+      .name = "ACES toe hides tiny radiance",
+      .radiance = 8e-6F,
+      .alpha = 1,
+      .gamma = 2.2F,
+      .alpha_error = 0,
+      .background = false,
+      .background_value = 0,
+      .failure = 0,
+      .mapper = engine::ToneMapper::kAcesFitted,
+    },
+    Case {
+      .name = "Filmic exposes tiny radiance",
+      .radiance = 8e-6F,
+      .alpha = 1,
+      .gamma = 2.2F,
+      .alpha_error = 0,
+      .background = false,
+      .background_value = 0,
+      .failure = 4,
+      .mapper = engine::ToneMapper::kFilmic,
+    },
+    Case {
+      .name = "Reinhard exposes tiny radiance",
+      .radiance = 8e-6F,
+      .alpha = 1,
+      .gamma = 2.2F,
+      .alpha_error = 0,
+      .background = false,
+      .background_value = 0,
+      .failure = 4,
+      .mapper = engine::ToneMapper::kReinhard,
+    },
   };
   const auto capture = BeginOptionalCapture();
   for (const auto& test : cases) {
@@ -60,34 +132,54 @@ NOLINT_TEST_F(ExposureGpuTest, SceneDisplayAdmissionChecksGammaAndBackground)
     auto& background
       = scene.GetEnvironment()->AddSystem<scene::environment::Background>();
     background.SetEnabled(test.background);
-    background.SetColorRgb(
-      { test.background_value, test.background_value, test.background_value });
-    ctx_.scene = observer_ptr { &scene };
+    background.SetColorRgb({
+      test.background_value,
+      test.background_value,
+      test.background_value,
+    });
+    ctx_.scene = observer_ptr {
+      &scene,
+    };
     auto settings = scene::ExposureSettings {};
     settings.mode = engine::ExposureMode::kManual;
     settings.key = 12.5F;
     settings.manual_ev = 0.0F;
-    const auto resolved
-      = ResolvedPostProcessConfig::Resolve({ .exposure = settings,
-        .tone_mapper = test.mapper,
-        .enable_bloom = false,
-        .gamma = test.gamma });
-    ASSERT_TRUE(resolved.has_value());
-    const std::array<Pixel, 1> pixels { Pixel {
-      test.radiance, test.radiance, test.radiance, test.alpha } };
+    const auto resolved = ResolvedPostProcessConfig::Resolve({
+      .exposure = settings,
+      .tone_mapper = test.mapper,
+      .enable_bloom = false,
+      .gamma = test.gamma,
+    });
+    if (!resolved.has_value()) {
+      FAIL() << "Expected resolved to contain a value";
+    }
+    const std::array<Pixel, 1> pixels {
+      Pixel {
+        test.radiance,
+        test.radiance,
+        test.radiance,
+        test.alpha,
+      },
+    };
     const auto signal = MakeSignal(1U, 1U, pixels);
     const auto anchor = Uniform(0x1p33F);
-    ctx_.frame_sequence = frame::SequenceNumber { ++sequence_ };
-    const auto frame
-      = pass_->ResolveFrame(ctx_, *resolved, { .use_fp32 = true });
+    ctx_.frame_sequence = frame::SequenceNumber {
+      ++sequence_,
+    };
+    auto frame_inputs = postprocess::ExposurePass::FrameInputs {};
+    frame_inputs.use_fp32 = true;
+    const auto frame = pass_->ResolveFrame(ctx_, *resolved, frame_inputs);
     ASSERT_NE(frame, nullptr);
     ASSERT_TRUE(RecordShared(signal, *resolved).executed);
-    const auto error
-      = HdrSceneErrorData { .candidate_coverage_absolute = test.alpha_error,
-          .candidate_pre_exposure = 0x1p-20F,
-          .checked_products = (1U << 10U) | 1U,
-          .flags = 3U };
-    auto upload = CreateUploadBuffer(SizeBytes { sizeof(error) });
+    const auto error = HdrSceneErrorData {
+      .candidate_coverage_absolute = test.alpha_error,
+      .candidate_pre_exposure = 0x1p-20F,
+      .checked_products = (1U << 10U) | 1U,
+      .flags = 3U,
+    };
+    auto upload = CreateUploadBuffer(SizeBytes {
+      sizeof(error),
+    });
     upload->Update(&error, sizeof(error), 0U);
     {
       auto recorder = AcquireRecorder("Display admission certificate");
@@ -105,12 +197,17 @@ NOLINT_TEST_F(ExposureGpuTest, SceneDisplayAdmissionChecksGammaAndBackground)
     }
     const std::array products {
       postprocess::ExposurePass::HdrProduct {
-        .texture = anchor.texture.get(), .srv = anchor.srv, .id = 1U },
-      postprocess::ExposurePass::HdrProduct { .texture = signal.texture.get(),
+        .texture = anchor.texture.get(),
+        .srv = anchor.srv,
+        .id = 1U,
+      },
+      postprocess::ExposurePass::HdrProduct {
+        .texture = signal.texture.get(),
         .srv = signal.srv,
         .id = 11U,
         .coverage = test.background,
-        .composed_error = true }
+        .composed_error = true,
+      },
     };
     ASSERT_TRUE(
       pass_->EvaluateFp16Products(ctx_, frame, *resolved, products, {}));
@@ -131,13 +228,26 @@ NOLINT_TEST_F(
 {
   constexpr auto scene_bit = 1U << 10U;
   struct Case {
-    const char* name;
-    Pixel pixel;
+    const char* name {};
+    Pixel pixel {
+      1,
+      1,
+      1,
+      1,
+    };
     HdrSceneErrorData error;
-    std::uint32_t failure;
-    bool metering { true };
-    bool current_store { false };
-    std::uint32_t required_products { 0U };
+    std::uint32_t failure {
+      0U,
+    };
+    bool metering {
+      true,
+    };
+    bool current_store {
+      false,
+    };
+    std::uint32_t required_products {
+      0U,
+    };
   };
   const auto complete = HdrSceneErrorData {
     .candidate_pre_exposure = 1.0F,
@@ -169,29 +279,71 @@ NOLINT_TEST_F(
   current_only.candidate_pre_exposure = 2.0F;
   auto current_retained = current_only;
   current_retained.current_rgb_absolute = .01F;
-  const std::array cases {
-    Case { "exact", { 1, 1, 1, 1 }, complete, 0 },
-    Case { "upstream candidate differs", { 1, 1, 1, 1 }, candidate_error, 12 },
-    Case { "retained reference differs", { 1, 1, 1, 1 }, retained_error, 12 },
-    Case { "insignificant candidate", { 1, 1, 1, 1 }, tiny_error, 0 },
-    // The bounded runtime display check cannot certify this wide coverage
-    // interval. Retain both its unresolved-image and definite mass failures.
-    Case { "coverage changes mass and exceeds the cheap enclosure",
-      { .5F, .5F, .5F, .5F }, coverage_error, 12 },
-    Case { "dark cutoff crossed", { 0x1p-12F, 0x1p-12F, 0x1p-12F, 1 },
-      dark_error, 8 },
-    Case { "zero weight skips normalization", { 0, 0, 0, 0 }, complete, 0 },
-    Case { "another candidate", { 1, 1, 1, 1 }, stale, 16 },
-    Case { "missing candidate", { 1, 1, 1, 1 }, missing, 16 },
-    Case { "incomplete product mask", { 1, 1, 1, 1 }, incomplete, 16 },
-    Case { "invalid coefficient", { 1, 1, 1, 1 }, invalid, 16 },
-    Case { "current resolve ignores prospective fields", { 1, 1, 1, 1 },
-      current_only, 0, true, true, scene_bit | (1U << 9U) },
-    Case { "current resolve requires all producers", { 1, 1, 1, 1 }, complete,
-      16, true, true, scene_bit | (1U << 9U) },
-    Case { "current resolve preserves retained errors", { 1, 1, 1, 1 },
-      current_retained, 12, true, true, scene_bit | (1U << 9U) },
+  std::array<Case, 14> cases {};
+  for (auto& test_case : cases) {
+    test_case.error = complete;
+  }
+  cases.at(0).name = "exact";
+  cases.at(1).name = "upstream candidate differs";
+  cases.at(1).error = candidate_error;
+  cases.at(1).failure = 12;
+  cases.at(2).name = "retained reference differs";
+  cases.at(2).error = retained_error;
+  cases.at(2).failure = 12;
+  cases.at(3).name = "insignificant candidate";
+  cases.at(3).error = tiny_error;
+  // The bounded runtime display check cannot certify this wide coverage
+  // interval. Retain both its unresolved-image and definite mass failures.
+  cases.at(4).name = "coverage changes mass and exceeds the cheap enclosure";
+  cases.at(4).pixel = {
+    .5F,
+    .5F,
+    .5F,
+    .5F,
   };
+  cases.at(4).error = coverage_error;
+  cases.at(4).failure = 12;
+  cases.at(5).name = "dark cutoff crossed";
+  cases.at(5).pixel = {
+    0x1p-12F,
+    0x1p-12F,
+    0x1p-12F,
+    1,
+  };
+  cases.at(5).error = dark_error;
+  cases.at(5).failure = 8;
+  cases.at(6).name = "zero weight skips normalization";
+  cases.at(6).pixel = {
+    0,
+    0,
+    0,
+    0,
+  };
+  cases.at(7).name = "another candidate";
+  cases.at(7).error = stale;
+  cases.at(7).failure = 16;
+  cases.at(8).name = "missing candidate";
+  cases.at(8).error = missing;
+  cases.at(8).failure = 16;
+  cases.at(9).name = "incomplete product mask";
+  cases.at(9).error = incomplete;
+  cases.at(9).failure = 16;
+  cases.at(10).name = "invalid coefficient";
+  cases.at(10).error = invalid;
+  cases.at(10).failure = 16;
+  cases.at(11).name = "current resolve ignores prospective fields";
+  cases.at(11).error = current_only;
+  cases.at(11).current_store = true;
+  cases.at(11).required_products = scene_bit | (1U << 9U);
+  cases.at(12).name = "current resolve requires all producers";
+  cases.at(12).failure = 16;
+  cases.at(12).current_store = true;
+  cases.at(12).required_products = scene_bit | (1U << 9U);
+  cases.at(13).name = "current resolve preserves retained errors";
+  cases.at(13).error = current_retained;
+  cases.at(13).failure = 12;
+  cases.at(13).current_store = true;
+  cases.at(13).required_products = scene_bit | (1U << 9U);
   auto settings = scene::ExposureSettings {};
   settings.mode = engine::ExposureMode::kManual;
   settings.key = 12.5F;
@@ -201,16 +353,30 @@ NOLINT_TEST_F(
   for (const auto& test : cases) {
     SCOPED_TRACE(test.name);
     // An exact 8192 anchor fixes candidate P=1 independently of the case.
-    const std::array pixels { test.pixel, Pixel { 8192, 8192, 8192, 1 } };
+    const std::array pixels {
+      test.pixel,
+      Pixel {
+        8192,
+        8192,
+        8192,
+        1,
+      },
+    };
     const auto signal = MakeSignal(2U, 1U, pixels);
-    ctx_.frame_sequence = frame::SequenceNumber { ++sequence_ };
-    const auto frame = pass_->ResolveFrame(ctx_, config, { .use_fp32 = true });
+    ctx_.frame_sequence = frame::SequenceNumber {
+      ++sequence_,
+    };
+    auto frame_inputs = postprocess::ExposurePass::FrameInputs {};
+    frame_inputs.use_fp32 = true;
+    const auto frame = pass_->ResolveFrame(ctx_, config, frame_inputs);
     ASSERT_NE(frame, nullptr);
     ASSERT_TRUE(RecordShared(signal, config).executed);
     const auto cleared = Read<ExposureStatusStorage>(
       *frame->current_state->status_buffer, ResourceStates::kCopySource);
     EXPECT_EQ(cleared.scene_error.flags, 0U);
-    auto upload = CreateUploadBuffer(SizeBytes { sizeof(test.error) });
+    auto upload = CreateUploadBuffer(SizeBytes {
+      sizeof(test.error),
+    });
     upload->Update(&test.error, sizeof(test.error), 0U);
     {
       auto recorder = AcquireRecorder("Composed admission fixture");
@@ -226,18 +392,25 @@ NOLINT_TEST_F(
       recorder->RequireResourceStateFinal(
         *frame->current_state->status_buffer, ResourceStates::kShaderResource);
     }
-    const std::array products { postprocess::ExposurePass::HdrProduct {
-      .texture = signal.texture.get(),
-      .srv = signal.srv,
-      .id = 11U,
-      .metering = test.metering,
-      .coverage = true,
-      .composed_error = true } };
-    ASSERT_TRUE(pass_->EvaluateFp16Products(ctx_, frame, config, products,
-      { .composition_products = test.required_products },
-      test.current_store
-        ? postprocess::ExposurePass::SuitabilityScale::kCurrentFrame
-        : postprocess::ExposurePass::SuitabilityScale::kCandidate));
+    const std::array products {
+      postprocess::ExposurePass::HdrProduct {
+        .texture = signal.texture.get(),
+        .srv = signal.srv,
+        .id = 11U,
+        .metering = test.metering,
+        .coverage = true,
+        .composed_error = true,
+      },
+    };
+    {
+      auto exposure_inputs = postprocess::ExposurePass::Inputs {};
+      exposure_inputs.composition_products = test.required_products;
+      ASSERT_TRUE(pass_->EvaluateFp16Products(ctx_, frame, config, products,
+        exposure_inputs,
+        test.current_store
+          ? postprocess::ExposurePass::SuitabilityScale::kCurrentFrame
+          : postprocess::ExposurePass::SuitabilityScale::kCandidate));
+    }
     const auto report = Read<HdrSuitabilityData>(
       *(test.current_store ? frame->conversion_buffer
                            : frame->suitability_buffer),
@@ -249,9 +422,11 @@ NOLINT_TEST_F(
       continue;
     }
     ASSERT_TRUE(pass_->FinalizeFp16Suitability(ctx_, frame,
-      { .product_layout_revision = 1U,
+      {
+        .product_layout_revision = 1U,
         .expected_products = scene_bit,
-        .invalidate_previous = true }));
+        .invalidate_previous = true,
+      }));
     const auto status = Read<ExposureStatusStorage>(
       *frame->current_state->status_buffer, ResourceStates::kUnorderedAccess);
     EXPECT_EQ(
@@ -275,24 +450,141 @@ NOLINT_TEST_F(ExposureGpuTest, ComposedCoverageRequiresValidOpaqueDepth)
     bool admitted;
   };
   const std::array cases {
-    Case { "reverse opaque", .5F, true, true, 2U, 1, true },
-    Case { "forward opaque", .5F, false, true, 2U, 1, true },
-    Case { "reverse near", 1, true, true, 2U, 1, true },
-    Case { "forward near", 0, false, true, 2U, 1, true },
-    Case { "reverse far", 0, true, true, 2U, 1, false },
-    Case { "forward far", 1, false, true, 2U, 1, false },
-    Case { "uncertain horizon", .0005F, true, true, 2U, 1, false },
-    Case { "no depth", .5F, true, false, 2U, 1, false },
-    Case { "partial coverage", .5F, true, true, 2U, .5F, false },
-    Case { "mismatched depth", .5F, false, true, 1U, 1, false },
-    Case { "negative depth", -.1F, true, true, 2U, 1, false },
-    Case { "depth above one", 1.1F, false, true, 2U, 1, false },
-    Case { "NaN depth", std::numeric_limits<float>::quiet_NaN(), true, true, 2U,
-      1, false },
-    Case { "infinite depth", std::numeric_limits<float>::infinity(), false,
-      true, 2U, 1, false },
-    Case { "negative subnormal depth", std::bit_cast<float>(0x80000001U), false,
-      true, 2U, 1, false },
+    Case {
+      .name = "reverse opaque",
+      .depth = .5F,
+      .reverse = true,
+      .supplied = true,
+      .width = 2U,
+      .alpha = 1,
+      .admitted = true,
+    },
+    Case {
+      .name = "forward opaque",
+      .depth = .5F,
+      .reverse = false,
+      .supplied = true,
+      .width = 2U,
+      .alpha = 1,
+      .admitted = true,
+    },
+    Case {
+      .name = "reverse near",
+      .depth = 1,
+      .reverse = true,
+      .supplied = true,
+      .width = 2U,
+      .alpha = 1,
+      .admitted = true,
+    },
+    Case {
+      .name = "forward near",
+      .depth = 0,
+      .reverse = false,
+      .supplied = true,
+      .width = 2U,
+      .alpha = 1,
+      .admitted = true,
+    },
+    Case {
+      .name = "reverse far",
+      .depth = 0,
+      .reverse = true,
+      .supplied = true,
+      .width = 2U,
+      .alpha = 1,
+      .admitted = false,
+    },
+    Case {
+      .name = "forward far",
+      .depth = 1,
+      .reverse = false,
+      .supplied = true,
+      .width = 2U,
+      .alpha = 1,
+      .admitted = false,
+    },
+    Case {
+      .name = "uncertain horizon",
+      .depth = .0005F,
+      .reverse = true,
+      .supplied = true,
+      .width = 2U,
+      .alpha = 1,
+      .admitted = false,
+    },
+    Case {
+      .name = "no depth",
+      .depth = .5F,
+      .reverse = true,
+      .supplied = false,
+      .width = 2U,
+      .alpha = 1,
+      .admitted = false,
+    },
+    Case {
+      .name = "partial coverage",
+      .depth = .5F,
+      .reverse = true,
+      .supplied = true,
+      .width = 2U,
+      .alpha = .5F,
+      .admitted = false,
+    },
+    Case {
+      .name = "mismatched depth",
+      .depth = .5F,
+      .reverse = false,
+      .supplied = true,
+      .width = 1U,
+      .alpha = 1,
+      .admitted = false,
+    },
+    Case {
+      .name = "negative depth",
+      .depth = -.1F,
+      .reverse = true,
+      .supplied = true,
+      .width = 2U,
+      .alpha = 1,
+      .admitted = false,
+    },
+    Case {
+      .name = "depth above one",
+      .depth = 1.1F,
+      .reverse = false,
+      .supplied = true,
+      .width = 2U,
+      .alpha = 1,
+      .admitted = false,
+    },
+    Case {
+      .name = "NaN depth",
+      .depth = std::numeric_limits<float>::quiet_NaN(),
+      .reverse = true,
+      .supplied = true,
+      .width = 2U,
+      .alpha = 1,
+      .admitted = false,
+    },
+    Case {
+      .name = "infinite depth",
+      .depth = std::numeric_limits<float>::infinity(),
+      .reverse = false,
+      .supplied = true,
+      .width = 2U,
+      .alpha = 1,
+      .admitted = false,
+    },
+    Case {
+      .name = "negative subnormal depth",
+      .depth = std::bit_cast<float>(0x80000001U),
+      .reverse = false,
+      .supplied = true,
+      .width = 2U,
+      .alpha = 1,
+      .admitted = false,
+    },
   };
   auto settings = scene::ExposureSettings {};
   settings.mode = engine::ExposureMode::kManual;
@@ -302,12 +594,28 @@ NOLINT_TEST_F(ExposureGpuTest, ComposedCoverageRequiresValidOpaqueDepth)
   const auto capture = BeginOptionalCapture();
   for (const auto& test : cases) {
     SCOPED_TRACE(test.name);
-    const std::array pixels { Pixel { .5F, .5F, .5F, test.alpha },
-      Pixel { 8192, 8192, 8192, 1 } };
+    const std::array pixels {
+      Pixel {
+        .5F,
+        .5F,
+        .5F,
+        test.alpha,
+      },
+      Pixel {
+        8192,
+        8192,
+        8192,
+        1,
+      },
+    };
     const auto signal = MakeSignal(2U, 1U, pixels);
     const auto depth = Uniform(test.depth, test.width, 1U);
-    ctx_.frame_sequence = frame::SequenceNumber { ++sequence_ };
-    const auto frame = pass_->ResolveFrame(ctx_, config, { .use_fp32 = true });
+    ctx_.frame_sequence = frame::SequenceNumber {
+      ++sequence_,
+    };
+    auto frame_inputs = postprocess::ExposurePass::FrameInputs {};
+    frame_inputs.use_fp32 = true;
+    const auto frame = pass_->ResolveFrame(ctx_, config, frame_inputs);
     ASSERT_NE(frame, nullptr);
     ASSERT_TRUE(RecordShared(signal, config).executed);
     const auto error = HdrSceneErrorData {
@@ -316,7 +624,9 @@ NOLINT_TEST_F(ExposureGpuTest, ComposedCoverageRequiresValidOpaqueDepth)
       .checked_products = 1U << 10U,
       .flags = 1U,
     };
-    auto upload = CreateUploadBuffer(SizeBytes { sizeof(error) });
+    auto upload = CreateUploadBuffer(SizeBytes {
+      sizeof(error),
+    });
     upload->Update(&error, sizeof(error), 0U);
     {
       auto recorder = AcquireRecorder("Opaque coverage fixture");
@@ -332,22 +642,29 @@ NOLINT_TEST_F(ExposureGpuTest, ComposedCoverageRequiresValidOpaqueDepth)
       recorder->RequireResourceStateFinal(
         *frame->current_state->status_buffer, ResourceStates::kShaderResource);
     }
-    const std::array products { postprocess::ExposurePass::HdrProduct {
-      .texture = signal.texture.get(),
-      .srv = signal.srv,
-      .id = 11U,
-      .metering = true,
-      .coverage = true,
-      .composed_error = true } };
+    const std::array products {
+      postprocess::ExposurePass::HdrProduct {
+        .texture = signal.texture.get(),
+        .srv = signal.srv,
+        .id = 11U,
+        .metering = true,
+        .coverage = true,
+        .composed_error = true,
+      },
+    };
     const auto composition = postprocess::ExposurePass::SceneComposition {
       .opaque_depth = test.supplied ? depth.texture.get() : nullptr,
       .opaque_depth_srv
       = test.supplied ? depth.srv : kInvalidShaderVisibleIndex,
       .reverse_z = test.reverse,
     };
-    ASSERT_TRUE(pass_->EvaluateFp16Products(ctx_, frame, config, products,
-      { .scene_composition = composition },
-      postprocess::ExposurePass::SuitabilityScale::kCurrentFrame));
+    {
+      auto exposure_inputs = postprocess::ExposurePass::Inputs {};
+      exposure_inputs.scene_composition = composition;
+      ASSERT_TRUE(pass_->EvaluateFp16Products(ctx_, frame, config, products,
+        exposure_inputs,
+        postprocess::ExposurePass::SuitabilityScale::kCurrentFrame));
+    }
     const auto result = Read<HdrSuitabilityData>(
       *frame->conversion_buffer, ResourceStates::kShaderResource);
     EXPECT_EQ(result.failure_flags == 0U, test.admitted);

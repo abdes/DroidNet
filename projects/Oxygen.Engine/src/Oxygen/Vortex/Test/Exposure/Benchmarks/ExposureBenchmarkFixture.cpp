@@ -10,8 +10,6 @@
 
 namespace oxygen::vortex::testing::exposure {
 
-using namespace oxygen::graphics;
-
 auto ExposureProfilingOverheadTest::BackendConfigJson() const -> std::string
 {
   return R"({"enable_debug_layer":false})";

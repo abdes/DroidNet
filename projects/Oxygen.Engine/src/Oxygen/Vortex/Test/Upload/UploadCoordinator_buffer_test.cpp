@@ -4,8 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <cstring>
-#include <map>
 #include <memory>
 #include <vector>
 
@@ -52,7 +52,7 @@ NOLINT_TEST_F(UploadCoordinatorTest, BufferUpload_MockedPath_Completes)
 
   std::array<std::byte, 64> data {};
   for (size_t i = 0; i < data.size(); ++i) {
-    data[i] = static_cast<std::byte>(i);
+    data.at(i) = static_cast<std::byte>(i);
   }
 
   UploadRequest req {
@@ -66,7 +66,7 @@ NOLINT_TEST_F(UploadCoordinatorTest, BufferUpload_MockedPath_Completes)
     },
     .subresources = {},
     .data = UploadDataView { .bytes
-      = std::span<const std::byte>(data.data(), data.size()) },
+      = std::span<const std::byte>(data.data(), data.size()), },
   };
 
   auto& uploader = Uploader();
@@ -80,13 +80,15 @@ NOLINT_TEST_F(UploadCoordinatorTest, BufferUpload_MockedPath_Completes)
   const auto& log = GfxPtr()->buffer_log_;
   ASSERT_TRUE(log.copy_called);
   EXPECT_EQ(log.copy_dst, dst.get());
-  EXPECT_EQ(log.copy_dst_offset, 128u);
+  EXPECT_EQ(log.copy_dst_offset, 128U);
   ASSERT_NE(log.copy_src, nullptr);
-  EXPECT_EQ(log.copy_src_offset, 0u);
-  EXPECT_EQ(log.copy_size, 64u);
+  EXPECT_EQ(log.copy_src_offset, 0U);
+  EXPECT_EQ(log.copy_size, 64U);
 
   // Simulate frame advance to complete fences
-  SimulateFrameStart(frame::Slot { 1 });
+  SimulateFrameStart(frame::Slot {
+    1,
+  });
 
   // Ticket completion
   auto complete_result = uploader.IsComplete(ticket);
@@ -94,9 +96,9 @@ NOLINT_TEST_F(UploadCoordinatorTest, BufferUpload_MockedPath_Completes)
   EXPECT_TRUE(complete_result.value());
   auto res = uploader.TryGetResult(ticket);
   if (!res.has_value()) {
-    FAIL() << "expected a value";
+    FAIL() << "Expected completed upload result";
   }
-  ASSERT_TRUE(res->bytes_uploaded == 64U);
+  EXPECT_EQ(res->bytes_uploaded, 64U);
 
   // Cleanup: process deferred releases to avoid reclaimer warnings
   GfxPtr()->Flush();
@@ -119,8 +121,10 @@ NOLINT_TEST_F(UploadCoordinatorTest, BufferUpload_WithProducer_Completes)
   std::move_only_function<bool(std::span<std::byte>)> producer
     = [&producer_ran](std::span<std::byte> out) -> bool {
     producer_ran = true;
-    for (size_t i = 0; i < out.size(); ++i) {
-      out[i] = static_cast<std::byte>(i & 0xFF);
+    std::size_t index = 0;
+    for (auto& value : out) {
+      value = static_cast<std::byte>(index & 0xFFU);
+      ++index;
     }
     return true;
   };
@@ -150,23 +154,25 @@ NOLINT_TEST_F(UploadCoordinatorTest, BufferUpload_WithProducer_Completes)
   const auto& log = GfxPtr()->buffer_log_;
   ASSERT_TRUE(log.copy_called);
   EXPECT_EQ(log.copy_dst, dst.get());
-  EXPECT_EQ(log.copy_dst_offset, 64u);
+  EXPECT_EQ(log.copy_dst_offset, 64U);
   ASSERT_NE(log.copy_src, nullptr);
-  EXPECT_EQ(log.copy_src_offset % 256u, 0u); // staging base alignment
+  EXPECT_EQ(log.copy_src_offset % 256U, 0U); // staging base alignment
   EXPECT_EQ(log.copy_size, size);
 
   // Simulate frame advance to complete fences
-  SimulateFrameStart(frame::Slot { 1 });
+  SimulateFrameStart(frame::Slot {
+    1,
+  });
 
   auto complete_result = uploader.IsComplete(ticket);
   ASSERT_TRUE(complete_result.has_value()) << "IsComplete failed";
   EXPECT_TRUE(complete_result.value());
   auto res = uploader.TryGetResult(ticket);
   if (!res.has_value()) {
-    FAIL() << "expected a value";
+    FAIL() << "Expected completed upload result";
   }
   ASSERT_TRUE(res->success);
-  ASSERT_TRUE(res->bytes_uploaded == size);
+  EXPECT_EQ(res->bytes_uploaded, size);
 
   GfxPtr()->Flush();
 }
@@ -185,7 +191,7 @@ NOLINT_TEST_F(UploadCoordinatorTest, BufferSubmitMany_CoalescesAndCompletes)
 
   std::array<std::byte, 64> data_a {};
   for (size_t i = 0; i < data_a.size(); ++i) {
-    data_a[i] = static_cast<std::byte>(i);
+    data_a.at(i) = static_cast<std::byte>(i);
   }
   std::array<std::byte, 80> data_b {};
   for (auto& i : data_b) {
@@ -204,7 +210,7 @@ NOLINT_TEST_F(UploadCoordinatorTest, BufferSubmitMany_CoalescesAndCompletes)
     },
     .subresources = {},
     .data = UploadDataView {
-      .bytes = std::span<const std::byte>(data_a.data(), data_a.size()) },
+      .bytes = std::span<const std::byte>(data_a.data(), data_a.size()), },
   };
 
   UploadRequest rb { .kind = UploadKind::kBuffer,
@@ -218,7 +224,7 @@ NOLINT_TEST_F(UploadCoordinatorTest, BufferSubmitMany_CoalescesAndCompletes)
     },
     .subresources = {},
     .data = UploadDataView {
-      .bytes = std::span<const std::byte>(data_b.data(), data_b.size()) } };
+      .bytes = std::span<const std::byte>(data_b.data(), data_b.size()), }, };
 
   auto& uploader = Uploader();
 
@@ -234,37 +240,39 @@ NOLINT_TEST_F(UploadCoordinatorTest, BufferSubmitMany_CoalescesAndCompletes)
   const auto& tickets = tickets_result.value();
 
   // Simulate frame advance to complete fences
-  SimulateFrameStart(frame::Slot { 1 });
+  SimulateFrameStart(frame::Slot {
+    1,
+  });
 
   // Assert: two tickets, both complete with expected byte counts
-  ASSERT_EQ(tickets.size(), 2u);
+  ASSERT_EQ(tickets.size(), 2U);
   for (const auto& t : tickets) {
     auto complete_result = uploader.IsComplete(t);
     ASSERT_TRUE(complete_result.has_value()) << "IsComplete failed";
     EXPECT_TRUE(complete_result.value());
   }
-  auto res_a = uploader.TryGetResult(tickets[0]);
-  auto res_b = uploader.TryGetResult(tickets[1]);
+  auto res_a = uploader.TryGetResult(tickets.at(0));
+  auto res_b = uploader.TryGetResult(tickets.at(1));
   if (!res_a.has_value()) {
-    FAIL() << "expected a value";
+    FAIL() << "Expected completed upload result";
   }
-  ASSERT_TRUE(res_a->bytes_uploaded == 64u);
+  EXPECT_EQ(res_a->bytes_uploaded, 64U);
   if (!res_b.has_value()) {
-    FAIL() << "expected a value";
+    FAIL() << "Expected completed upload result";
   }
-  ASSERT_TRUE(res_b->bytes_uploaded == 80u);
+  EXPECT_EQ(res_b->bytes_uploaded, 80U);
 
   // Assert: two copy events recorded with alignment between src offsets
   const auto& log = GfxPtr()->buffer_log_;
-  ASSERT_GE(log.copies.size(), 2u);
-  const auto& e0 = log.copies[0];
-  const auto& e1 = log.copies[1];
+  ASSERT_GE(log.copies.size(), 2U);
+  const auto& e0 = log.copies.at(0);
+  const auto& e1 = log.copies.at(1);
   EXPECT_EQ(e0.dst, dst_a.get());
-  EXPECT_EQ(e0.dst_offset, 0u);
-  EXPECT_EQ(e0.size, 64u);
+  EXPECT_EQ(e0.dst_offset, 0U);
+  EXPECT_EQ(e0.size, 64U);
   EXPECT_EQ(e1.dst, dst_b.get());
-  EXPECT_EQ(e1.dst_offset, 256u);
-  EXPECT_EQ(e1.size, 80u);
+  EXPECT_EQ(e1.dst_offset, 256U);
+  EXPECT_EQ(e1.size, 80U);
 
   // Cleanup
   GfxPtr()->Flush();
@@ -345,39 +353,41 @@ NOLINT_TEST_F(
   EXPECT_TRUE(prod_b_ran);
 
   // Simulate frame advance to complete fences
-  SimulateFrameStart(frame::Slot { 1 });
+  SimulateFrameStart(frame::Slot {
+    1,
+  });
 
   // Assert tickets complete
-  ASSERT_EQ(tickets.size(), 2u);
-  auto complete_result_0 = uploader.IsComplete(tickets[0]);
+  ASSERT_EQ(tickets.size(), 2U);
+  auto complete_result_0 = uploader.IsComplete(tickets.at(0));
   ASSERT_TRUE(complete_result_0.has_value()) << "IsComplete failed";
   EXPECT_TRUE(complete_result_0.value());
-  auto complete_result_1 = uploader.IsComplete(tickets[1]);
+  auto complete_result_1 = uploader.IsComplete(tickets.at(1));
   ASSERT_TRUE(complete_result_1.has_value()) << "IsComplete failed";
   EXPECT_TRUE(complete_result_1.value());
-  auto res_a = uploader.TryGetResult(tickets[0]);
-  auto res_b = uploader.TryGetResult(tickets[1]);
+  auto res_a = uploader.TryGetResult(tickets.at(0));
+  auto res_b = uploader.TryGetResult(tickets.at(1));
   if (!res_a.has_value()) {
-    FAIL() << "expected a value";
+    FAIL() << "Expected completed upload result";
   }
   EXPECT_TRUE(res_a->bytes_uploaded == size_a);
   if (!res_b.has_value()) {
-    FAIL() << "expected a value";
+    FAIL() << "Expected completed upload result";
   }
-  ASSERT_TRUE(res_b.has_value() && res_b->bytes_uploaded == size_b);
+  EXPECT_EQ(res_b->bytes_uploaded, size_b);
 
   // Assert copy log: two events, aligned src offsets
   const auto& log = GfxPtr()->buffer_log_;
-  ASSERT_GE(log.copies.size(), 2u);
-  const auto& e0 = log.copies[0];
-  const auto& e1 = log.copies[1];
+  ASSERT_GE(log.copies.size(), 2U);
+  const auto& e0 = log.copies.at(0);
+  const auto& e1 = log.copies.at(1);
   EXPECT_EQ(e0.dst, dst_a.get());
-  EXPECT_EQ(e0.dst_offset, 0u);
+  EXPECT_EQ(e0.dst_offset, 0U);
   EXPECT_EQ(e0.size, size_a);
   EXPECT_EQ(e1.dst, dst_b.get());
-  EXPECT_EQ(e1.dst_offset, 256u);
+  EXPECT_EQ(e1.dst_offset, 256U);
   EXPECT_EQ(e1.size, size_b);
-  EXPECT_EQ(e0.src_offset % 256u, 0u);
+  EXPECT_EQ(e0.src_offset % 256U, 0U);
 
   GfxPtr()->Flush();
 }
@@ -423,18 +433,20 @@ NOLINT_TEST_F(UploadCoordinatorTest, BufferUpload_WithProducer_Fails_NoCopy)
   EXPECT_FALSE(log.copy_called);
 
   // Simulate frame advance to complete fences (even for failed uploads)
-  SimulateFrameStart(frame::Slot { 1 });
+  SimulateFrameStart(frame::Slot {
+    1,
+  });
 
   auto complete_result = uploader.IsComplete(ticket);
   ASSERT_TRUE(complete_result.has_value()) << "IsComplete failed";
   ASSERT_TRUE(complete_result.value());
   auto res = uploader.TryGetResult(ticket);
   if (!res.has_value()) {
-    FAIL() << "expected a value";
+    FAIL() << "Expected completed upload result";
   }
   EXPECT_FALSE(res->success);
   EXPECT_EQ(res->error, oxygen::vortex::upload::UploadError::kProducerFailed);
-  EXPECT_EQ(res->bytes_uploaded, 0u);
+  EXPECT_EQ(res->bytes_uploaded, 0U);
 
   GfxPtr()->Flush();
 }
@@ -476,7 +488,7 @@ NOLINT_TEST_F(
       .dst_offset = 0,
     },
     .subresources = {},
-    .data = std::move(pa) };
+    .data = std::move(pa), };
   UploadRequest rb {
     .kind = UploadKind::kBuffer,
     .priority = {},
@@ -507,28 +519,30 @@ NOLINT_TEST_F(
 
   // Copy log should contain two copies (filler path for the failed producer)
   const auto& log = GfxPtr()->buffer_log_;
-  ASSERT_EQ(log.copies.size(), 2u);
-  EXPECT_EQ(log.copies[0].dst, dst_a.get());
-  EXPECT_EQ(log.copies[1].dst, dst_b.get());
+  ASSERT_EQ(log.copies.size(), 2U);
+  EXPECT_EQ(log.copies.at(0).dst, dst_a.get());
+  EXPECT_EQ(log.copies.at(1).dst, dst_b.get());
 
   // Simulate frame advance to complete fences
-  SimulateFrameStart(frame::Slot { 1 });
+  SimulateFrameStart(frame::Slot {
+    1,
+  });
 
-  ASSERT_EQ(tickets.size(), 2u);
-  auto complete_result_0 = uploader.IsComplete(tickets[0]);
+  ASSERT_EQ(tickets.size(), 2U);
+  auto complete_result_0 = uploader.IsComplete(tickets.at(0));
   ASSERT_TRUE(complete_result_0.has_value()) << "IsComplete failed";
   ASSERT_TRUE(complete_result_0.value());
-  auto complete_result_1 = uploader.IsComplete(tickets[1]);
+  auto complete_result_1 = uploader.IsComplete(tickets.at(1));
   ASSERT_TRUE(complete_result_1.has_value()) << "IsComplete failed";
   ASSERT_TRUE(complete_result_1.value());
-  auto r0 = uploader.TryGetResult(tickets[0]);
-  auto r1 = uploader.TryGetResult(tickets[1]);
+  auto r0 = uploader.TryGetResult(tickets.at(0));
+  auto r1 = uploader.TryGetResult(tickets.at(1));
   if (!r0.has_value()) {
-    FAIL() << "expected a value";
+    FAIL() << "Expected completed upload result";
   }
   ASSERT_TRUE(r0->success);
   if (!r1.has_value()) {
-    FAIL() << "expected a value";
+    FAIL() << "Expected completed upload result";
   }
   ASSERT_TRUE(r1->success);
   GfxPtr()->Flush();
@@ -550,8 +564,14 @@ NOLINT_TEST_F(UploadCoordinatorTest, BufferSubmitMany_SameDst_Merges)
   // aligned so planner can assign contiguous src offsets.
   std::array<std::byte, 256> data_a {};
   std::array<std::byte, 128> data_b {};
-  std::fill(data_a.begin(), data_a.end(), std::byte { 0xAB });
-  std::fill(data_b.begin(), data_b.end(), std::byte { 0xCD });
+  std::ranges::fill(data_a,
+    std::byte {
+      0xAB,
+    });
+  std::ranges::fill(data_b,
+    std::byte {
+      0xCD,
+    });
 
   oxygen::vortex::upload::UploadRequest ra {
     .kind = oxygen::vortex::upload::UploadKind::kBuffer,
@@ -564,7 +584,7 @@ NOLINT_TEST_F(UploadCoordinatorTest, BufferSubmitMany_SameDst_Merges)
     },
     .subresources = {},
     .data = oxygen::vortex::upload::UploadDataView {
-      .bytes = std::span<const std::byte>(data_a.data(), data_a.size()) },
+      .bytes = std::span<const std::byte>(data_a.data(), data_a.size()), },
   };
 
   oxygen::vortex::upload::UploadRequest rb {
@@ -578,7 +598,7 @@ NOLINT_TEST_F(UploadCoordinatorTest, BufferSubmitMany_SameDst_Merges)
     },
     .subresources = {},
     .data = oxygen::vortex::upload::UploadDataView {
-      .bytes = std::span<const std::byte>(data_b.data(), data_b.size()) },
+      .bytes = std::span<const std::byte>(data_b.data(), data_b.size()), },
   };
 
   auto& uploader = Uploader();
@@ -594,16 +614,16 @@ NOLINT_TEST_F(UploadCoordinatorTest, BufferSubmitMany_SameDst_Merges)
 
   // Expect a single CopyBuffer due to merge
   const auto& log = GfxPtr()->buffer_log_;
-  ASSERT_GE(log.copies.size(), 1u);
+  ASSERT_GE(log.copies.size(), 1U);
   // Depending on batching, there should be exactly 1 for same destination
   // contiguous regions; assert last two entries share the dst and form a
   // single merged size.
   // Our mock logs each CopyBuffer call; we expect 1 here.
-  ASSERT_EQ(log.copies.size(), 1u);
-  const auto& e = log.copies[0];
+  ASSERT_EQ(log.copies.size(), 1U);
+  const auto& e = log.copies.at(0);
   EXPECT_EQ(e.dst, dst.get());
-  EXPECT_EQ(e.dst_offset, 0u);
-  EXPECT_EQ(e.size, 384u); // 256 + 128 merged
+  EXPECT_EQ(e.dst_offset, 0U);
+  EXPECT_EQ(e.size, 384U); // 256 + 128 merged
 
   GfxPtr()->Flush();
 }

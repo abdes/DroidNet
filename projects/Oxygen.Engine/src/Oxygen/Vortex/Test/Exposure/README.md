@@ -27,8 +27,11 @@ helper when setup or ownership logic obscures an assertion; reuse existing
 helpers before adding another. Keep independent numerical oracles independent
 of the production implementation.
 
-Use braces for control statements, descriptive names and explicit resource
-lifetimes. Keep test data, assertions and tolerances easy to review. Do not
+Use braces for control statements, trailing commas in non-empty braced
+initializer lists, descriptive names and explicit resource lifetimes. Normally
+construct defaulted input records and assign the fields needed by the test. Fix
+actionable clang-tidy findings; retain only specific, locally documented
+exceptions. Keep test data, assertions and tolerances easy to review. Do not
 include implementation `.cpp` files, create an umbrella implementation header,
 or combine unrelated domains to reduce the file count.
 

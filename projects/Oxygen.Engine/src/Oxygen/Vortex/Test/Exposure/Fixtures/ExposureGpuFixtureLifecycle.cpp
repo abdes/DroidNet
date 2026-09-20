@@ -8,6 +8,7 @@
 
 #include <array>
 #include <cmath>
+#include <cstddef>
 #include <cstring>
 #include <map>
 
@@ -29,7 +30,11 @@
 
 namespace oxygen::vortex::testing::exposure {
 
-using namespace oxygen::graphics;
+using graphics::Framebuffer;
+using graphics::FramebufferDesc;
+using graphics::ResourceStates;
+using graphics::Texture;
+using graphics::TextureDesc;
 
 auto ExposureGpuTest::CheckOffscreenSharing(const bool inside_frame) -> void
 {
@@ -46,7 +51,10 @@ auto ExposureGpuTest::CheckOffscreenSharing(const bool inside_frame) -> void
   auto camera = scene->CreateNode("Camera");
   auto lens = std::make_unique<scene::PerspectiveCamera>();
   auto view = View {};
-  view.viewport = { .width = 4.0F, .height = 4.0F };
+  view.viewport = {
+    .width = 4.0F,
+    .height = 4.0F,
+  };
   lens->SetViewport(view.viewport);
   ASSERT_TRUE(camera.AttachCamera(std::move(lens)));
   scene->Update();
@@ -55,29 +63,53 @@ auto ExposureGpuTest::CheckOffscreenSharing(const bool inside_frame) -> void
   settings.mode = engine::ExposureMode::kManual;
   settings.key = 12.5F;
   settings.manual_ev = 4.0F;
-  const auto root = PublishExposureOwner(
-    frame, ViewId { 800U }, CompositionView::ViewStateHandle { 90U }, settings);
+  const auto root = PublishExposureOwner(frame,
+    ViewId {
+      800U,
+    },
+    CompositionView::ViewStateHandle {
+      90U,
+    },
+    settings);
   ASSERT_NE(root, kInvalidViewId);
-  ASSERT_NE(root, ViewId { 800U });
-  PublishExposureOwner(frame, ViewId { 801U },
-    CompositionView::ViewStateHandle { 91U }, settings, ViewId { 800U });
-  auto output = CreateRegisteredTexture(TextureDesc { .width = 4U,
+  ASSERT_NE(root,
+    (ViewId {
+      800U,
+    }));
+  PublishExposureOwner(frame,
+    ViewId {
+      801U,
+    },
+    CompositionView::ViewStateHandle {
+      91U,
+    },
+    settings,
+    ViewId {
+      800U,
+    });
+  auto output = CreateRegisteredTexture(TextureDesc {
+    .width = 4U,
     .height = 4U,
     .format = Format::kRGBA32Float,
     .is_render_target = true,
-    .initial_state = ResourceStates::kCommon });
+    .initial_state = ResourceStates::kCommon,
+  });
   auto framebuffer = Backend().CreateFramebuffer(
     FramebufferDesc {}.AddColorAttachment(output));
   auto input = Renderer::OffscreenSceneViewInput::FromCamera(
     "Offscreen", root, view, camera);
-  input.SetExposureSourceViewId(ViewId { 801U });
-  input.SetViewStateHandle(CompositionView::ViewStateHandle { 92U });
+  input.SetExposureSourceViewId(ViewId {
+    801U,
+  });
+  input.SetViewStateHandle(CompositionView::ViewStateHandle {
+    92U,
+  });
   auto facade = renderer_->ForOffscreenScene();
-  facade.SetFrameSession({ .frame_slot = frame::Slot { 0U },
-    .frame_sequence = frame::SequenceNumber { 1U },
-    .delta_time_seconds = 0.0F });
-  facade.SetSceneSource({ .scene = observer_ptr { scene.get() } });
-  facade.SetOutputTarget({ .framebuffer = observer_ptr { framebuffer.get() } });
+  facade.SetFrameSession({ .frame_slot = frame::Slot { 0U, },
+    .frame_sequence = frame::SequenceNumber { 1U, },
+    .delta_time_seconds = 0.0F, });
+  facade.SetSceneSource({ .scene = observer_ptr { scene.get(), }, });
+  facade.SetOutputTarget({ .framebuffer = observer_ptr { framebuffer.get(), }, });
   facade.SetViewIntent(input);
   for (const auto& issue : facade.Validate().issues) {
     ADD_FAILURE() << issue.code << ": " << issue.message;
@@ -100,8 +132,10 @@ auto ExposureGpuTest::CheckOffscreenSharing(const bool inside_frame) -> void
   EXPECT_TRUE(service->GetLastExecutionState().tonemap_executed);
   EXPECT_FALSE(service->GetLastExecutionState().auto_exposure_requested);
   const auto states
-    = vortex::testing::RendererPublicationProbe::FrameExposureStates(
-      *service, frame::Slot { 0U });
+    = vortex::testing::RendererPublicationProbe::FrameExposureStates(*service,
+      frame::Slot {
+        0U,
+      });
   ASSERT_GE(states.size(), 2U);
   const auto state = Read<ExposureStateData>(
     *states.back()->buffer, ResourceStates::kShaderResource);
@@ -113,40 +147,64 @@ auto ExposureGpuTest::CheckOffscreenSharing(const bool inside_frame) -> void
   // Rejected borrowers must neither replace the source image history nor
   // consume its queued request, including ownership changes after Finalize.
   ctx_.current_view.view_id = root;
-  ctx_.current_view.view_state_handle
-    = CompositionView::ViewStateHandle { 90U };
+  ctx_.current_view.view_state_handle = CompositionView::ViewStateHandle {
+    90U,
+  };
   EXPECT_NEAR(ServicePixel(*service, Uniform(.25F, 4U, 4U), settings),
     .25F / 16.0F, 2e-5F);
   const auto source_state
-    = vortex::testing::RendererPublicationProbe::ExposureStateForView(
-      *service, CompositionView::ViewStateHandle { 90U });
+    = vortex::testing::RendererPublicationProbe::ExposureStateForView(*service,
+      CompositionView::ViewStateHandle {
+        90U,
+      });
   ASSERT_NE(source_state, nullptr);
   const auto request = renderer_->QueueExposureTransition(
-    CompositionView::ViewStateHandle { 90U },
+    CompositionView::ViewStateHandle {
+      90U,
+    },
     ExposureTransitionPolicy::kPreserve);
   ASSERT_TRUE(request.has_value());
-  for (const auto handle : { CompositionView::kInvalidViewStateHandle,
-         CompositionView::ViewStateHandle { 90U },
-         CompositionView::ViewStateHandle { 91U } }) {
+  for (const auto handle : {
+         CompositionView::kInvalidViewStateHandle,
+         CompositionView::ViewStateHandle {
+           90U,
+         },
+         CompositionView::ViewStateHandle {
+           91U,
+         },
+       }) {
     input.SetViewStateHandle(handle);
     facade.SetViewIntent(input);
     EXPECT_FALSE(facade.Finalize().has_value());
   }
-  ASSERT_NE(PublishExposureOwner(frame, ViewId { 802U },
-              CompositionView::ViewStateHandle { 92U }, settings),
+  ASSERT_NE(PublishExposureOwner(frame,
+              ViewId {
+                802U,
+              },
+              CompositionView::ViewStateHandle {
+                92U,
+              },
+              settings),
     kInvalidViewId);
   session->ExecuteNow();
   session->ExecuteInsideFrame(frame);
-  EXPECT_EQ(vortex::testing::RendererPublicationProbe::ExposureStateForView(
-              *service, CompositionView::ViewStateHandle { 90U }),
+  EXPECT_EQ(
+    vortex::testing::RendererPublicationProbe::ExposureStateForView(*service,
+      CompositionView::ViewStateHandle {
+        90U,
+      }),
     source_state);
   EXPECT_EQ(Read<ExposureStateData>(
               *source_state->buffer, ResourceStates::kShaderResource)
               .displayed_scale,
     0x1p-4F);
-  const auto status = renderer_->InspectExposureTransition(
-    CompositionView::ViewStateHandle { 90U });
-  ASSERT_TRUE(status.has_value());
+  const auto status
+    = renderer_->InspectExposureTransition(CompositionView::ViewStateHandle {
+      90U,
+    });
+  if (!status.has_value()) {
+    FAIL() << "Expected the queued exposure transition";
+  }
   EXPECT_EQ(status->request, *request);
   EXPECT_EQ(status->phase, ExposureTransitionPhase::kQueued);
   FlushBackend();
@@ -177,27 +235,46 @@ auto ExposureGpuTest::CheckSceneExposureRetry(
   auto camera = scene->CreateNode("Camera");
   auto lens = std::make_unique<scene::PerspectiveCamera>();
   auto view = View {};
-  view.viewport = { .width = 4.0F, .height = 4.0F };
+  view.viewport = {
+    .width = 4.0F,
+    .height = 4.0F,
+  };
   lens->SetViewport(view.viewport);
   ASSERT_TRUE(camera.AttachCamera(std::move(lens)));
   scene->Update();
-  auto output = CreateRegisteredTexture({ .width = 4U,
+  auto output = CreateRegisteredTexture({
+    .width = 4U,
     .height = 4U,
     .format = Format::kRGBA32Float,
     .is_shader_resource = true,
     .is_render_target = true,
-    .initial_state = ResourceStates::kCommon });
+    .initial_state = ResourceStates::kCommon,
+  });
   auto framebuffer = Backend().CreateFramebuffer(
     FramebufferDesc {}.AddColorAttachment(output));
-  const Pixel sentinel { .125F, .25F, .5F, 1.0F };
+  const Pixel sentinel {
+    .125F,
+    .25F,
+    .5F,
+    1.0F,
+  };
   std::array<std::byte, 1024U> bytes {};
   for (unsigned y = 0U; y < 4U; ++y) {
     for (unsigned x = 0U; x < 4U; ++x) {
-      std::memcpy(bytes.data() + y * 256U + x * sizeof(Pixel), sentinel.data(),
-        sizeof(Pixel));
+      const auto offset
+        = (static_cast<std::size_t>(y) * 256U) + (x * sizeof(Pixel));
+      std::memcpy(
+        std::span {
+          bytes,
+        }
+          .subspan(offset, sizeof(Pixel))
+          .data(),
+        sentinel.data(), sizeof(Pixel));
     }
   }
-  auto upload = CreateUploadBuffer(SizeBytes { bytes.size() });
+  auto upload = CreateUploadBuffer(SizeBytes {
+    bytes.size(),
+  });
   upload->Update(bytes.data(), bytes.size(), 0U);
   {
     auto recorder = AcquireRecorder("Prior offscreen output");
@@ -209,12 +286,12 @@ auto ExposureGpuTest::CheckSceneExposureRetry(
       { .buffer_offset = 0U,
         .buffer_row_pitch = 256U,
         .buffer_slice_pitch = 1024U,
-        .dst_slice = { .width = 4U, .height = 4U, .depth = 1U } },
+        .dst_slice = { .width = 4U, .height = 4U, .depth = 1U, }, },
       *output);
     recorder->RequireResourceStateFinal(
       *output, ResourceStates::kShaderResource);
   }
-  const auto read_pixel = [&]() {
+  const auto read_pixel = [&]() -> Pixel {
     auto readback
       = GetReadbackManager()->CreateTextureReadback("Offscreen retry pixel");
     {
@@ -223,7 +300,7 @@ auto ExposureGpuTest::CheckSceneExposureRetry(
       CHECK_F(readback
           ->EnqueueCopy(*recorder, *output,
             { .src_slice
-              = { .x = 1U, .y = 0U, .width = 1U, .height = 1U, .depth = 1U } })
+              = { .x = 1U, .y = 0U, .width = 1U, .height = 1U, .depth = 1U, }, })
           .has_value());
     }
     const auto mapped = readback->MapNow();
@@ -232,47 +309,70 @@ auto ExposureGpuTest::CheckSceneExposureRetry(
     std::memcpy(pixel.data(), mapped->Data(), sizeof(pixel));
     return pixel;
   };
-  const auto handle = CompositionView::ViewStateHandle { 7000U };
+  const auto handle = CompositionView::ViewStateHandle {
+    7000U,
+  };
   auto seed = renderer_->QueueExposureTransition(
     handle, ExposureTransitionPolicy::kSeedFromEv100, 8.0F);
   ASSERT_TRUE(seed.has_value());
-  auto input = Renderer::OffscreenSceneViewInput::FromCamera(
-    "Retry", ViewId { 7000U }, view, camera);
+  auto input = Renderer::OffscreenSceneViewInput::FromCamera("Retry",
+    ViewId {
+      7000U,
+    },
+    view, camera);
   input.SetViewStateHandle(handle);
-  auto successful_input = Renderer::OffscreenSceneViewInput::FromCamera(
-    "Successful sibling", ViewId { 6999U }, view, camera);
-  successful_input.SetViewStateHandle(
-    CompositionView::ViewStateHandle { 6999U });
+  auto successful_input
+    = Renderer::OffscreenSceneViewInput::FromCamera("Successful sibling",
+      ViewId {
+        6999U,
+      },
+      view, camera);
+  successful_input.SetViewStateHandle(CompositionView::ViewStateHandle {
+    6999U,
+  });
   auto successful_output = CreateRegisteredTexture(output->GetDescriptor());
   auto successful_target = Backend().CreateFramebuffer(
     FramebufferDesc {}.AddColorAttachment(successful_output));
   auto frame = engine::FrameContext {};
-  frame.SetScene(observer_ptr { scene.get() });
-  auto invoke = [&](const unsigned sequence, const bool sibling = false) {
+  frame.SetScene(observer_ptr {
+    scene.get(),
+  });
+  auto invoke
+    = [&](const unsigned sequence, const bool sibling = false) -> bool {
     auto facade = renderer_->ForOffscreenScene();
-    facade.SetFrameSession({ .frame_slot = frame::Slot { sequence - 1U },
-      .frame_sequence = frame::SequenceNumber { sequence },
-      .delta_time_seconds = 0.0F });
-    facade.SetSceneSource({ .scene = observer_ptr { scene.get() } });
+    facade.SetFrameSession({ .frame_slot = frame::Slot { sequence - 1U, },
+      .frame_sequence = frame::SequenceNumber { sequence, },
+      .delta_time_seconds = 0.0F, });
+    facade.SetSceneSource({ .scene = observer_ptr { scene.get(), }, });
     facade.SetViewIntent(sibling ? successful_input : input);
     facade.SetOutputTarget(
       { .framebuffer = observer_ptr {
-          sibling ? successful_target.get() : framebuffer.get() } });
+          sibling ? successful_target.get() : framebuffer.get(), }, });
     auto session = facade.Finalize();
     CHECK_F(session.has_value());
     if (!inside_frame) {
       return session->ExecuteNow();
     }
-    frame.SetFrameSequenceNumber(frame::SequenceNumber { sequence },
+    frame.SetFrameSequenceNumber(
+      frame::SequenceNumber {
+        sequence,
+      },
       engine::internal::EngineTagFactory::Get());
     frame.SetFrameSlot(
-      frame::Slot { sequence - 1U }, engine::internal::EngineTagFactory::Get());
-    renderer_->OnFrameStart(observer_ptr { &frame });
+      frame::Slot {
+        sequence - 1U,
+      },
+      engine::internal::EngineTagFactory::Get());
+    renderer_->OnFrameStart(observer_ptr {
+      &frame,
+    });
     const auto result = session->ExecuteInsideFrame(frame);
-    renderer_->OnFrameEnd(observer_ptr { &frame });
+    renderer_->OnFrameEnd(observer_ptr {
+      &frame,
+    });
     return result;
   };
-  auto& backend = static_cast<ExposureFailureGraphics&>(Backend());
+  auto& backend = FailureBackend();
   auto prior_output = sentinel;
   if (late_failure) {
     ASSERT_TRUE(invoke(1U));
@@ -296,8 +396,8 @@ auto ExposureGpuTest::CheckSceneExposureRetry(
     EXPECT_EQ(name.find("ResolveSceneColor"), std::string::npos);
   }
   EXPECT_EQ(read_pixel(), prior_output);
-  EXPECT_EQ(renderer_->InspectExposureTransition(handle)->phase,
-    ExposureTransitionPhase::kQueued);
+  EXPECT_EQ(
+    InspectRequiredTransition(handle).phase, ExposureTransitionPhase::kQueued);
   auto* scene_renderer
     = vortex::testing::RendererPublicationProbe::GetSceneRenderer(*renderer_);
   ASSERT_NE(scene_renderer, nullptr);
@@ -309,14 +409,14 @@ auto ExposureGpuTest::CheckSceneExposureRetry(
   ASSERT_NE(service, nullptr);
   EXPECT_FALSE(service->GetLastExecutionState().wrote_visible_output);
   EXPECT_TRUE(invoke(late_failure ? 3U : 2U));
-  EXPECT_EQ(read_pixel()[0], 0.0F);
+  EXPECT_EQ(read_pixel().at(0), 0.0F);
   const auto state
     = vortex::testing::RendererPublicationProbe::ExposureStateForView(
       *service, handle);
   ASSERT_NE(state, nullptr);
   const auto solved
     = Read<ExposureStateData>(*state->buffer, ResourceStates::kShaderResource);
-  EXPECT_EQ(solved.applied_generation[0], seed->generation);
+  EXPECT_EQ(solved.applied_generation.at(0), seed->generation);
   EXPECT_EQ(solved.displayed_scale, 0x1p-8F);
   FlushBackend();
 }
@@ -324,7 +424,7 @@ auto ExposureGpuTest::CheckSceneExposureRetry(
 auto ExposureGpuTest::CheckFogViewRetirement(
   const bool persistent, const bool temporal) -> void
 {
-  auto& tracked = static_cast<ExposureFailureGraphics&>(Backend());
+  auto& tracked = FailureBackend();
   tracked.track_resources = true;
   pass_.reset();
   renderer_->OnShutdown();
@@ -337,7 +437,9 @@ auto ExposureGpuTest::CheckFogViewRetirement(
       | RendererCapabilityFamily::kEnvironmentLighting
       | RendererCapabilityFamily::kFinalOutputComposition);
   console::Console console;
-  renderer_->RegisterConsoleBindings(observer_ptr { &console });
+  renderer_->RegisterConsoleBindings(observer_ptr {
+    &console,
+  });
   ASSERT_EQ(
     console
       .Execute(temporal ? "vtx.volumetric_fog.temporal_reprojection true"
@@ -353,23 +455,35 @@ auto ExposureGpuTest::CheckFogViewRetirement(
   fog.SetExtinctionSigmaTPerMeter(.01F);
   fog.SetHeightFalloffPerMeter(0.0F);
   fog.SetVolumetricFogDistance(1000.0F);
-  fog.SetVolumetricFogEmissive({ .1F, .2F, .3F });
+  fog.SetVolumetricFogEmissive({
+    .1F,
+    .2F,
+    .3F,
+  });
   auto camera = scene->CreateNode("Camera");
   auto lens = std::make_unique<scene::PerspectiveCamera>();
   auto view = View {};
-  view.viewport = { .width = 4.0F, .height = 4.0F };
+  view.viewport = {
+    .width = 4.0F,
+    .height = 4.0F,
+  };
   lens->SetViewport(view.viewport);
   ASSERT_TRUE(camera.AttachCamera(std::move(lens)));
   scene->Update();
-  auto color = CreateRegisteredTexture({ .width = 4U,
+  auto color = CreateRegisteredTexture({
+    .width = 4U,
     .height = 4U,
     .format = Format::kRGBA32Float,
     .is_shader_resource = true,
     .is_render_target = true,
-    .initial_state = ResourceStates::kCommon });
+    .initial_state = ResourceStates::kCommon,
+  });
   auto target
     = Backend().CreateFramebuffer(FramebufferDesc {}.AddColorAttachment(color));
   struct Capture final : IViewExtension {
+    // The local probe borrows its enclosing renderer; it is never reassigned
+    // and is destroyed first.
+    // NOLINTNEXTLINE(cppcoreguidelines-avoid-const-or-ref-data-members)
     Renderer& renderer;
     std::vector<std::shared_ptr<Texture>> textures;
     explicit Capture(Renderer& value)
@@ -391,45 +505,64 @@ auto ExposureGpuTest::CheckFogViewRetirement(
   auto capture = std::make_shared<Capture>(*renderer_);
   renderer_->RegisterViewExtension(capture);
   auto frame = engine::FrameContext {};
-  frame.SetScene(observer_ptr { scene.get() });
+  frame.SetScene(observer_ptr {
+    scene.get(),
+  });
   std::optional<std::size_t> baseline_resources;
   std::uint64_t sequence = 0U;
   auto& registry = Backend().GetResourceRegistry();
   auto& reclaimer = Backend().GetDeferredReclaimer();
   for (unsigned iteration = 0U; iteration < 8U; ++iteration) {
     SCOPED_TRACE(iteration);
-    const auto slot = frame::Slot { 0U };
+    const auto slot = frame::Slot {
+      0U,
+    };
     reclaimer.OnBeginFrame(slot);
-    frame.SetFrameSequenceNumber(frame::SequenceNumber { ++sequence },
+    frame.SetFrameSequenceNumber(
+      frame::SequenceNumber {
+        ++sequence,
+      },
       engine::internal::EngineTagFactory::Get());
     frame.SetFrameSlot(slot, engine::internal::EngineTagFactory::Get());
-    renderer_->OnFrameStart(observer_ptr { &frame });
-    const auto intent = ViewId { 12000U + iteration };
+    renderer_->OnFrameStart(observer_ptr {
+      &frame,
+    });
+    const auto intent = ViewId {
+      12000U + iteration,
+    };
     ViewId published = intent;
     if (persistent) {
       auto input = CompositionView::ForScene(intent, view, camera);
-      input.view_state_handle
-        = CompositionView::ViewStateHandle { intent.get() };
+      input.view_state_handle = CompositionView::ViewStateHandle {
+        intent.get(),
+      };
       input.with_height_fog = true;
       published = renderer_->PublishRuntimeCompositionView(frame,
         { .composition_view = input,
-          .render_target = observer_ptr { target.get() } });
+          .render_target = observer_ptr { target.get(), }, });
       ASSERT_NE(published, kInvalidViewId);
       auto loop = co::testing::TestEventLoop {};
+      // co::Run completes synchronously before this closure and its captured
+      // fixture state leave scope.
+      // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
       co::Run(loop, [&]() -> co::Co<void> {
-        co_await renderer_->OnPreRender(observer_ptr { &frame });
-        co_await renderer_->OnRender(observer_ptr { &frame });
+        co_await renderer_->OnPreRender(observer_ptr {
+          &frame,
+        });
+        co_await renderer_->OnRender(observer_ptr {
+          &frame,
+        });
       });
     } else {
       auto input = Renderer::OffscreenSceneViewInput::FromCamera(
         "Stateless fog", intent, view, camera);
       auto facade = renderer_->ForOffscreenScene();
       facade.SetFrameSession({ .frame_slot = slot,
-        .frame_sequence = frame::SequenceNumber { sequence },
-        .delta_time_seconds = 0.0F });
-      facade.SetSceneSource({ .scene = observer_ptr { scene.get() } });
+        .frame_sequence = frame::SequenceNumber { sequence, },
+        .delta_time_seconds = 0.0F, });
+      facade.SetSceneSource({ .scene = observer_ptr { scene.get(), }, });
       facade.SetViewIntent(input);
-      facade.SetOutputTarget({ .framebuffer = observer_ptr { target.get() } });
+      facade.SetOutputTarget({ .framebuffer = observer_ptr { target.get(), }, });
       auto session = facade.Finalize();
       ASSERT_TRUE(session.has_value());
       ASSERT_TRUE(session->ExecuteInsideFrame(frame));
@@ -467,32 +600,44 @@ auto ExposureGpuTest::CheckFogViewRetirement(
       ASSERT_TRUE(readback
           ->EnqueueCopy(*recorder, *texture,
             { .src_slice
-              = { .z = 16U, .width = 1U, .height = 1U, .depth = 1U } })
+              = { .z = 16U, .width = 1U, .height = 1U, .depth = 1U, }, })
           .has_value());
     }
     const auto mapped = readback->MapNow();
     ASSERT_TRUE(mapped.has_value());
     Pixel voxel {};
     std::memcpy(voxel.data(), mapped->Data(), sizeof(voxel));
-    EXPECT_GT(voxel[0], 0.0F);
-    EXPECT_TRUE(std::isfinite(voxel[0]));
-    renderer_->OnFrameEnd(observer_ptr { &frame });
+    EXPECT_GT(voxel.at(0), 0.0F);
+    EXPECT_TRUE(std::isfinite(voxel.at(0)));
+    renderer_->OnFrameEnd(observer_ptr {
+      &frame,
+    });
     capture->textures.clear();
     WaitForQueueIdle();
     for (unsigned retire = 0U; retire < frame::kFramesInFlight.get();
       ++retire) {
-      const auto retired_slot = frame::Slot { retire };
+      const auto retired_slot = frame::Slot {
+        retire,
+      };
       owner->OnStandaloneFrameStart(
-        frame::SequenceNumber { ++sequence }, retired_slot, std::nullopt);
+        frame::SequenceNumber {
+          ++sequence,
+        },
+        retired_slot, std::nullopt);
       reclaimer.OnBeginFrame(retired_slot);
     }
     EXPECT_TRUE(registry.Contains(*texture));
     texture.reset();
     for (unsigned retire = 0U; retire < frame::kFramesInFlight.get();
       ++retire) {
-      const auto retired_slot = frame::Slot { retire };
+      const auto retired_slot = frame::Slot {
+        retire,
+      };
       owner->OnStandaloneFrameStart(
-        frame::SequenceNumber { ++sequence }, retired_slot, std::nullopt);
+        frame::SequenceNumber {
+          ++sequence,
+        },
+        retired_slot, std::nullopt);
       reclaimer.OnBeginFrame(retired_slot);
     }
     EXPECT_FALSE(registry.Contains(*underlying));
@@ -512,13 +657,13 @@ auto ExposureGpuTest::CheckFogViewRetirement(
     }
     if (baseline_resources && resources != *baseline_resources) {
       std::map<std::string, unsigned> names;
-      for (auto weak : tracked.tracked_buffers) {
+      for (const auto& weak : tracked.tracked_buffers) {
         if (auto resource = weak.lock();
           resource && registry.Contains(*resource)) {
           ++names[std::string(resource->GetName())];
         }
       }
-      for (auto weak : tracked.tracked_textures) {
+      for (const auto& weak : tracked.tracked_textures) {
         if (auto resource = weak.lock();
           resource && registry.Contains(*resource)) {
           ++names[std::string(resource->GetName())];

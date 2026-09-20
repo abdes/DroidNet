@@ -35,8 +35,11 @@ auto UploadCoordinatorTest::SetUp() -> void
 
   gfx_ = std::make_shared<FakeGraphics>();
   gfx_->CreateCommandQueues(SingleQueueStrategy());
-  staging_provider_
-    = Uploader().CreateRingBufferStaging(frame::SlotCount { 1 }, 4, 0.5f);
+  staging_provider_ = Uploader().CreateRingBufferStaging(
+    frame::SlotCount {
+      1,
+    },
+    4, 0.5F);
 }
 
 } // namespace oxygen::vortex::upload::testing

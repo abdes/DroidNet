@@ -37,11 +37,19 @@ class RingBufferStagingTest
 NOLINT_TEST_F(RingBufferStagingTest, ZeroSize_ReturnsError)
 {
   // Arrange
-  auto provider = MakeRingBuffer(SlotCount { 1 }, 256u, 0.5f);
+  auto provider = MakeRingBuffer(
+    SlotCount {
+      1,
+    },
+    256U, 0.5F);
   ASSERT_NE(provider, nullptr);
 
   // Act
-  auto alloc = provider->Allocate(SizeBytes { 0 }, "zero");
+  auto alloc = provider->Allocate(
+    SizeBytes {
+      0,
+    },
+    "zero");
 
   // Assert
   ASSERT_FALSE(alloc.has_value());
@@ -53,20 +61,28 @@ NOLINT_TEST_F(RingBufferStagingTest, ZeroSize_ReturnsError)
 */
 NOLINT_TEST_F(RingBufferStagingTest, Allocate_ReturnsAlignedAllocation)
 {
-  auto provider = MakeRingBuffer(SlotCount { 1 }, 256u, 0.5f);
+  auto provider = MakeRingBuffer(
+    SlotCount {
+      1,
+    },
+    256U, 0.5F);
   ASSERT_NE(provider, nullptr);
 
   // Arrange
-  const uint64_t requested = 100u;
+  const uint64_t requested = 100U;
 
   // Act
-  auto alloc = provider->Allocate(SizeBytes { requested }, "alloc-test");
+  auto alloc = provider->Allocate(
+    SizeBytes {
+      requested,
+    },
+    "alloc-test");
 
   // Assert
   ASSERT_TRUE(alloc.has_value());
   const auto& a = *alloc;
   // Offset must respect alignment
-  EXPECT_EQ(a.Offset().get() % 256u, 0u);
+  EXPECT_EQ(a.Offset().get() % 256U, 0U);
   // Size reported should be the requested size (not the aligned amount)
   EXPECT_EQ(a.Size().get(), requested);
   // Buffer backing must be valid
@@ -78,15 +94,23 @@ NOLINT_TEST_F(RingBufferStagingTest, Allocate_ReturnsAlignedAllocation)
 */
 NOLINT_TEST_F(RingBufferStagingTest, Allocate_UpdatesTelemetry)
 {
-  auto provider = MakeRingBuffer(SlotCount { 1 }, 256u, 0.5f);
+  auto provider = MakeRingBuffer(
+    SlotCount {
+      1,
+    },
+    256U, 0.5F);
   ASSERT_NE(provider, nullptr);
 
   // Arrange
-  const uint64_t requested = 100u;
+  const uint64_t requested = 100U;
   const auto stats_before = provider->GetStats();
 
   // Act
-  auto alloc = provider->Allocate(SizeBytes { requested }, "alloc-test");
+  auto alloc = provider->Allocate(
+    SizeBytes {
+      requested,
+    },
+    "alloc-test");
 
   // Assert
   ASSERT_TRUE(alloc.has_value());
@@ -114,33 +138,49 @@ NOLINT_TEST_F(RingBufferStagingTest, Allocate_UpdatesTelemetry)
 NOLINT_TEST_F(RingBufferStagingTest, PartitionIsolation)
 {
   // Use 2 partitions with small alignment so we can reason about offsets.
-  auto provider = MakeRingBuffer(SlotCount { 2 }, 16u, 0.5f);
+  auto provider = MakeRingBuffer(
+    SlotCount {
+      2,
+    },
+    16U, 0.5F);
   ASSERT_NE(provider, nullptr);
   // Arrange
   // Activate partition 0 and allocate (route via uploader to ensure correct
   // tag)
-  SimulateFrameStart(Slot { 0 });
+  SimulateStagingFrameStart(Slot {
+    0,
+  });
 
   // Act
-  auto a0 = provider->Allocate(SizeBytes { 64 }, "p0-a");
+  auto a0 = provider->Allocate(
+    SizeBytes {
+      64,
+    },
+    "p0-a");
   ASSERT_TRUE(a0.has_value());
   const auto off0 = a0->Offset().get();
 
   // Arrange (partition 1)
   // Activate partition 1 and allocate (route via uploader to ensure correct
   // tag)
-  SimulateFrameStart(Slot { 1 });
+  SimulateStagingFrameStart(Slot {
+    1,
+  });
 
   // Act (partition 1)
-  auto a1 = provider->Allocate(SizeBytes { 64 }, "p1-a");
+  auto a1 = provider->Allocate(
+    SizeBytes {
+      64,
+    },
+    "p1-a");
   ASSERT_TRUE(a1.has_value());
   const auto off1 = a1->Offset().get();
 
   // Assert
   // Different partitions must not overlap: compute partition size from stats
   const auto total_size = provider->GetStats().current_buffer_size;
-  ASSERT_GT(total_size, 0u);
-  const uint64_t per_partition = total_size / 2u;
+  ASSERT_GT(total_size, 0U);
+  const uint64_t per_partition = total_size / 2U;
   const auto idx0 = off0 / per_partition;
   const auto idx1 = off1 / per_partition;
   EXPECT_NE(idx0, idx1);
@@ -151,24 +191,34 @@ NOLINT_TEST_F(RingBufferStagingTest, PartitionIsolation)
 */
 NOLINT_TEST_F(RingBufferStagingTest, FrameStart_ResetsCounters)
 {
-  auto provider = MakeRingBuffer(SlotCount { 1 }, 64u, 0.5f);
+  auto provider = MakeRingBuffer(
+    SlotCount {
+      1,
+    },
+    64U, 0.5F);
   ASSERT_NE(provider, nullptr);
   // Arrange
   // Allocate one entry
-  auto a = provider->Allocate(SizeBytes { 32 }, "cnt-a");
+  auto a = provider->Allocate(
+    SizeBytes {
+      32,
+    },
+    "cnt-a");
   ASSERT_TRUE(a.has_value());
 
   // Assert (pre-condition)
   const auto& stats_before = provider->GetStats();
-  EXPECT_GE(stats_before.allocations_this_frame, 1u);
+  EXPECT_GE(stats_before.allocations_this_frame, 1U);
 
   // Act
   // OnFrameStart should reset allocations_this_frame (route via uploader)
-  SimulateFrameStart(Slot { 1 });
+  SimulateStagingFrameStart(Slot {
+    1,
+  });
 
   // Assert (post-condition)
   const auto& stats_after = provider->GetStats();
-  EXPECT_EQ(stats_after.allocations_this_frame, 0u);
+  EXPECT_EQ(stats_after.allocations_this_frame, 0U);
 }
 
 /*!
@@ -179,24 +229,36 @@ NOLINT_TEST_F(RingBufferStagingTest, FrameStart_ResetsCounters)
 NOLINT_TEST_F(RingBufferStagingTest, AvgAllocationSize_UpdatedByEMA)
 {
   // Arrange
-  auto provider = MakeRingBuffer(SlotCount { 1 }, 256u, 0.5f);
+  auto provider = MakeRingBuffer(
+    SlotCount {
+      1,
+    },
+    256U, 0.5F);
   ASSERT_NE(provider, nullptr);
 
-  const uint64_t first = 100u;
-  const uint64_t second = 200u;
+  const uint64_t first = 100U;
+  const uint64_t second = 200U;
 
   const auto before = CaptureStats();
 
   // Act
-  auto a1 = provider->Allocate(SizeBytes { first }, "ema-1");
+  auto a1 = provider->Allocate(
+    SizeBytes {
+      first,
+    },
+    "ema-1");
   ASSERT_TRUE(a1.has_value());
-  auto a2 = provider->Allocate(SizeBytes { second }, "ema-2");
+  auto a2 = provider->Allocate(
+    SizeBytes {
+      second,
+    },
+    "ema-2");
   ASSERT_TRUE(a2.has_value());
 
   // Assert
   const auto after = CaptureStats();
   // avg should be between latest sample and previous average, sanity check
-  EXPECT_GT(after.avg_allocation_size, 0u);
+  EXPECT_GT(after.avg_allocation_size, 0U);
   // Ensure total allocations increased by 2
   EXPECT_GE(after.total_allocations, before.total_allocations + 2);
 }
@@ -211,27 +273,39 @@ NOLINT_TEST_F(RingBufferStagingTest, EnsureCapacity_UnMapOnGrowth)
   // Arrange
   // Start with small per-partition capacity so the second allocation forces
   // a growth and buffer remap.
-  auto provider = MakeRingBuffer(SlotCount { 1 }, 16u, 0.5f);
+  auto provider = MakeRingBuffer(
+    SlotCount {
+      1,
+    },
+    16U, 0.5F);
   ASSERT_NE(provider, nullptr);
 
   // Make an initial small allocation so the provider creates and maps the
   // backing buffer. This ensures UnMap() will have something to unmap when
   // growth occurs.
-  auto init = provider->Allocate(SizeBytes { 8 }, "init");
+  auto init = provider->Allocate(
+    SizeBytes {
+      8,
+    },
+    "init");
   ASSERT_TRUE(init.has_value());
 
   const auto stats_before = CaptureStats();
 
   // Act
   // Allocate bigger than current capacity per partition to trigger growth
-  auto a = provider->Allocate(SizeBytes { 64 }, "grow-test");
+  auto a = provider->Allocate(
+    SizeBytes {
+      stats_before.current_buffer_size + 1U,
+    },
+    "grow-test");
   ASSERT_TRUE(a.has_value());
 
   // Assert
   const auto stats_after = CaptureStats();
-  // Relaxed checks: ensure buffer size did not decrease and allocation
-  // succeeded. Exact growth behavior is implementation-specific.
-  EXPECT_GE(stats_after.current_buffer_size, stats_before.current_buffer_size);
+  EXPECT_GT(stats_after.current_buffer_size, stats_before.current_buffer_size);
+  EXPECT_EQ(stats_after.unmap_calls, stats_before.unmap_calls + 1U);
+  EXPECT_EQ(stats_after.map_calls, stats_before.map_calls + 1U);
 }
 
 /*!
@@ -240,19 +314,27 @@ NOLINT_TEST_F(RingBufferStagingTest, EnsureCapacity_UnMapOnGrowth)
 */
 NOLINT_TEST_F(RingBufferStagingTest, ExplicitTrimShrinksGrownBuffer)
 {
-  auto provider = MakeRingBuffer(SlotCount { 1 }, 64u, 0.5f);
+  auto provider = MakeRingBuffer(
+    SlotCount {
+      1,
+    },
+    64U, 0.5F);
   ASSERT_NE(provider, nullptr);
 
-  const auto large_request = SizeBytes { 12ULL * 1024ULL * 1024ULL };
+  const auto large_request = SizeBytes {
+    12ULL * 1024ULL * 1024ULL,
+  };
   {
     auto alloc = provider->Allocate(large_request, "grow-for-trim");
     ASSERT_TRUE(alloc.has_value());
   }
 
   const auto grown_stats = provider->GetStats();
-  ASSERT_GT(grown_stats.current_buffer_size, 0u);
+  ASSERT_GT(grown_stats.current_buffer_size, 0U);
 
-  SimulateFrameStart(Slot { 0 });
+  SimulateStagingFrameStart(Slot {
+    0,
+  });
 
   const bool trimmed = Uploader().TrimStagingProvider(
     *provider, "RingBufferStaging.ExplicitTrim");
@@ -274,12 +356,22 @@ NOLINT_TEST_F(RingBufferStagingTest, ExplicitTrimShrinksGrownBuffer)
 NOLINT_TEST_F(RingBufferStagingTest, RetireCompleted_PreventsPartitionReuse)
 {
   // Arrange: use two partitions so we can cycle
-  auto provider = MakeRingBuffer(SlotCount { 2 }, 16u, 0.5f);
+  auto provider = MakeRingBuffer(
+    SlotCount {
+      2,
+    },
+    16U, 0.5F);
   ASSERT_NE(provider, nullptr);
 
   // Activate partition 0 and allocate
-  SimulateFrameStart(Slot { 0 });
-  auto a0 = provider->Allocate(SizeBytes { 32 }, "p0");
+  SimulateStagingFrameStart(Slot {
+    0,
+  });
+  auto a0 = provider->Allocate(
+    SizeBytes {
+      32,
+    },
+    "p0");
   ASSERT_TRUE(a0.has_value());
 
   // Simulate GPU completion by retiring with an advancing fence
@@ -288,12 +380,20 @@ NOLINT_TEST_F(RingBufferStagingTest, RetireCompleted_PreventsPartitionReuse)
   // value to bump retire_count_)
   provider->RetireCompleted(
     oxygen::vortex::upload::internal::UploaderTagFactory::Get(),
-    oxygen::graphics::FenceValue { 1 });
+    oxygen::graphics::FenceValue {
+      1,
+    });
 
   // Now cycle to partition 0 again and allocate; this should not trigger a
   // reuse warning
-  SimulateFrameStart(Slot { 0 });
-  auto a1 = provider->Allocate(SizeBytes { 16 }, "p0-2");
+  SimulateStagingFrameStart(Slot {
+    0,
+  });
+  auto a1 = provider->Allocate(
+    SizeBytes {
+      16,
+    },
+    "p0-2");
   ASSERT_TRUE(a1.has_value());
 }
 
@@ -303,30 +403,42 @@ NOLINT_TEST_F(RingBufferStagingTest, RetireCompleted_PreventsPartitionReuse)
 */
 NOLINT_TEST_F(RingBufferStagingTest, UnMap_Idempotent)
 {
-  auto provider = MakeRingBuffer(SlotCount { 1 }, 64u, 0.5f);
+  auto provider = MakeRingBuffer(
+    SlotCount {
+      1,
+    },
+    64U, 0.5F);
   ASSERT_NE(provider, nullptr);
 
   // Ensure some mapping happened
-  auto a = provider->Allocate(SizeBytes { 32 }, "map-test");
+  auto a = provider->Allocate(
+    SizeBytes {
+      32,
+    },
+    "map-test");
   ASSERT_TRUE(a.has_value());
 
   const auto before = CaptureStats();
 
-  // UnMap via growth path: force growth to trigger UnMap, then call UnMap again
-  auto a2 = provider->Allocate(SizeBytes { 256 }, "force-grow");
-  // allocation may or may not succeed depending on growth policy; ensure we at
-  // least attempted
-  (void)a2;
+  // Each replacement must unmap exactly the previous backing buffer once.
+  auto first_growth = provider->Allocate(
+    SizeBytes {
+      before.current_buffer_size + 1U,
+    },
+    "force-grow");
+  ASSERT_TRUE(first_growth.has_value());
+  const auto after_first_growth = CaptureStats();
+  EXPECT_EQ(after_first_growth.unmap_calls, before.unmap_calls + 1U);
 
-  // Explicitly call UnMap (it's protected in implementation; we rely on
-  // destructor path and growth path to exercise it). We instead validate that
-  // repeated growths don't cause negative/unexpected unmap counts: perform
-  // another large allocation to force another growth
-  auto a3 = provider->Allocate(SizeBytes { 512 }, "force-grow-2");
-  (void)a3;
-
+  auto second_growth = provider->Allocate(
+    SizeBytes {
+      after_first_growth.current_buffer_size + 1U,
+    },
+    "force-grow-2");
+  ASSERT_TRUE(second_growth.has_value());
   const auto after = CaptureStats();
-  EXPECT_GE(after.unmap_calls, before.unmap_calls);
+  EXPECT_EQ(after.unmap_calls, before.unmap_calls + 2U);
+  EXPECT_EQ(after.map_calls, before.map_calls + 2U);
 }
 
 /*!
@@ -337,22 +449,33 @@ NOLINT_TEST_F(RingBufferStagingTest, UnMap_Idempotent)
 */
 NOLINT_TEST(RingBufferStaging, DeferredReleaseAfterGrowthDoesNotHangAtShutdown)
 {
-  auto run_teardown = []() {
+  auto run_teardown = []() -> void {
     auto gfx = std::make_shared<oxygen::vortex::testing::FakeGraphics>();
     gfx->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());
 
     auto uploader = std::make_unique<oxygen::vortex::upload::UploadCoordinator>(
-      oxygen::observer_ptr<oxygen::Graphics> { gfx.get() },
+      oxygen::observer_ptr<oxygen::Graphics> {
+        gfx.get(),
+      },
       oxygen::vortex::upload::DefaultUploadPolicy());
-    auto provider
-      = uploader->CreateRingBufferStaging(oxygen::frame::SlotCount { 1 }, 16U,
-        0.5F, "RingBufferStaging.ShutdownRegression");
+    auto provider = uploader->CreateRingBufferStaging(
+      oxygen::frame::SlotCount {
+        1,
+      },
+      16U, 0.5F, "RingBufferStaging.ShutdownRegression");
 
-    auto initial = provider->Allocate(SizeBytes { 8 }, "initial");
+    auto initial = provider->Allocate(
+      SizeBytes {
+        8,
+      },
+      "initial");
     ASSERT_TRUE(initial.has_value());
 
     auto grown = provider->Allocate(
-      SizeBytes { 12ULL * 1024ULL * 1024ULL }, "force-growth");
+      SizeBytes {
+        12ULL * 1024ULL * 1024ULL,
+      },
+      "force-growth");
     ASSERT_TRUE(grown.has_value());
 
     provider.reset();

@@ -13,6 +13,7 @@
 #include <Oxygen/Vortex/Upload/UploadPolicy.h>
 
 #include <memory>
+#include <utility>
 #include <vector>
 
 using oxygen::vortex::upload::UploadBufferDesc;
@@ -30,19 +31,24 @@ namespace {
 // helpers in other tests but kept local to avoid fixture creation.
 class LocalDummyBuffer : public oxygen::graphics::Buffer {
 public:
-  explicit LocalDummyBuffer(const oxygen::graphics::BufferDesc& d)
+  explicit LocalDummyBuffer(oxygen::graphics::BufferDesc d)
     : Buffer("LocalDummyBuf")
-    , desc_(d)
+    , desc_(std::move(d))
   {
   }
+  // Buffer requires a string-bearing descriptor returned by value under
+  // noexcept. NOLINTNEXTLINE(bugprone-exception-escape)
   auto GetDescriptor() const noexcept -> oxygen::graphics::BufferDesc override
   {
     return desc_;
   }
   auto GetNativeResource() const -> oxygen::graphics::NativeResource override
   {
-    return oxygen::graphics::NativeResource(
-      const_cast<LocalDummyBuffer*>(this), ClassTypeId());
+
+    return {
+      this,
+      ClassTypeId(),
+    };
   }
 
 protected:
@@ -80,23 +86,23 @@ protected:
   }
   auto DoUnMap() noexcept -> void override { }
   [[nodiscard]] auto CreateConstantBufferView(
-    const oxygen::graphics::DescriptorAllocationHandle&,
-    const oxygen::graphics::BufferRange&) const
+    const oxygen::graphics::DescriptorAllocationHandle& /*view_handle*/,
+    const oxygen::graphics::BufferRange& /*range*/) const
     -> oxygen::graphics::NativeView override
   {
     return {};
   }
   [[nodiscard]] auto CreateShaderResourceView(
-    const oxygen::graphics::DescriptorAllocationHandle&, oxygen::Format,
-    oxygen::graphics::BufferRange, uint32_t) const
-    -> oxygen::graphics::NativeView override
+    const oxygen::graphics::DescriptorAllocationHandle& /*view_handle*/,
+    oxygen::Format /*format*/, oxygen::graphics::BufferRange /*range*/,
+    uint32_t /*stride*/) const -> oxygen::graphics::NativeView override
   {
     return {};
   }
   [[nodiscard]] auto CreateUnorderedAccessView(
-    const oxygen::graphics::DescriptorAllocationHandle&, oxygen::Format,
-    oxygen::graphics::BufferRange, uint32_t) const
-    -> oxygen::graphics::NativeView override
+    const oxygen::graphics::DescriptorAllocationHandle& /*view_handle*/,
+    oxygen::Format /*format*/, oxygen::graphics::BufferRange /*range*/,
+    uint32_t /*stride*/) const -> oxygen::graphics::NativeView override
   {
     return {};
   }
@@ -108,9 +114,9 @@ private:
 // Minimal dummy texture for a tiny set of texture-plan tests.
 class LocalDummyTexture : public oxygen::graphics::Texture {
 public:
-  explicit LocalDummyTexture(const oxygen::graphics::TextureDesc& d)
+  explicit LocalDummyTexture(oxygen::graphics::TextureDesc d)
     : Texture("LocalDummyTex")
-    , desc_(d)
+    , desc_(std::move(d))
   {
   }
   auto GetDescriptor() const -> const oxygen::graphics::TextureDesc& override
@@ -119,36 +125,43 @@ public:
   }
   auto GetNativeResource() const -> oxygen::graphics::NativeResource override
   {
-    return oxygen::graphics::NativeResource(
-      const_cast<LocalDummyTexture*>(this), ClassTypeId());
+
+    return {
+      this,
+      ClassTypeId(),
+    };
   }
 
 protected:
   [[nodiscard]] auto CreateShaderResourceView(
-    const oxygen::graphics::DescriptorAllocationHandle&, oxygen::Format,
-    oxygen::TextureType, oxygen::graphics::TextureSubResourceSet) const
+    const oxygen::graphics::DescriptorAllocationHandle& /*view_handle*/,
+    oxygen::Format /*format*/, oxygen::TextureType /*dimension*/,
+    oxygen::graphics::TextureSubResourceSet /*sub_resources*/) const
     -> oxygen::graphics::NativeView override
   {
     return {};
   }
   [[nodiscard]] auto CreateUnorderedAccessView(
-    const oxygen::graphics::DescriptorAllocationHandle&, oxygen::Format,
-    oxygen::TextureType, oxygen::graphics::TextureSubResourceSet) const
+    const oxygen::graphics::DescriptorAllocationHandle& /*view_handle*/,
+    oxygen::Format /*format*/, oxygen::TextureType /*dimension*/,
+    oxygen::graphics::TextureSubResourceSet /*sub_resources*/) const
     -> oxygen::graphics::NativeView override
   {
     return {};
   }
   [[nodiscard]] auto CreateRenderTargetView(
-    const oxygen::graphics::DescriptorAllocationHandle&, oxygen::Format,
-    oxygen::graphics::TextureSubResourceSet) const
+    const oxygen::graphics::DescriptorAllocationHandle& /*view_handle*/,
+    oxygen::Format /*format*/,
+    oxygen::graphics::TextureSubResourceSet /*sub_resources*/) const
     -> oxygen::graphics::NativeView override
   {
     return {};
   }
   [[nodiscard]] auto CreateDepthStencilView(
-    const oxygen::graphics::DescriptorAllocationHandle&, oxygen::Format,
-    oxygen::graphics::TextureSubResourceSet, bool) const
-    -> oxygen::graphics::NativeView override
+    const oxygen::graphics::DescriptorAllocationHandle& /*view_handle*/,
+    oxygen::Format /*format*/,
+    oxygen::graphics::TextureSubResourceSet /*sub_resources*/,
+    bool /*is_read_only*/) const -> oxygen::graphics::NativeView override
   {
     return {};
   }
@@ -168,7 +181,7 @@ NOLINT_TEST(UploadPlannerBasicTest, BufferPlan_EmptyRequestsReturnsEmptyPlan)
   ASSERT_TRUE(plan.has_value());
   const auto& p = plan.value();
   EXPECT_TRUE(p.uploads.empty());
-  EXPECT_EQ(p.total_bytes, 0u);
+  EXPECT_EQ(p.total_bytes, 0U);
 }
 
 //! PlanBuffers: requests for the same dst buffer must be ordered by dst
@@ -184,11 +197,18 @@ NOLINT_TEST(UploadPlannerBasicTest, BufferPlan_SortsByDstOffset)
   std::vector<UploadRequest> reqs;
   UploadRequest r1;
   r1.kind = UploadKind::kBuffer;
-  r1.desc
-    = UploadBufferDesc { .dst = buf, .size_bytes = 128, .dst_offset = 128 };
+  r1.desc = UploadBufferDesc {
+    .dst = buf,
+    .size_bytes = 128,
+    .dst_offset = 128,
+  };
   UploadRequest r0;
   r0.kind = UploadKind::kBuffer;
-  r0.desc = UploadBufferDesc { .dst = buf, .size_bytes = 64, .dst_offset = 0 };
+  r0.desc = UploadBufferDesc {
+    .dst = buf,
+    .size_bytes = 64,
+    .dst_offset = 0,
+  };
   // Insert r1 then r0
   reqs.emplace_back(std::move(r1));
   reqs.emplace_back(std::move(r0));
@@ -197,11 +217,11 @@ NOLINT_TEST(UploadPlannerBasicTest, BufferPlan_SortsByDstOffset)
     reqs, oxygen::vortex::upload::DefaultUploadPolicy());
   ASSERT_TRUE(plan.has_value());
   const auto& p = plan.value();
-  ASSERT_EQ(p.uploads.size(), 2u);
+  ASSERT_EQ(p.uploads.size(), 2U);
 
   // Verify the resulting uploads are ordered by dst_offset ascending
-  EXPECT_EQ(p.uploads[0].region.dst_offset, 0u);
-  EXPECT_EQ(p.uploads[1].region.dst_offset, 128u);
+  EXPECT_EQ(p.uploads.at(0).region.dst_offset, 0U);
+  EXPECT_EQ(p.uploads.at(1).region.dst_offset, 128U);
 }
 
 //! Texture: when subresources are provided but all are invalid/skipped,
@@ -227,9 +247,15 @@ NOLINT_TEST(
 
   // Provide a subresource that's out-of-range (mip >= mip_levels)
   std::vector<UploadSubresource> subs {
-    UploadSubresource { .mip = 5, .array_slice = 0 },
+    UploadSubresource {
+      .mip = 5,
+      .array_slice = 0,
+    },
     // Also out-of-range array slice
-    UploadSubresource { .mip = 0, .array_slice = 3 },
+    UploadSubresource {
+      .mip = 0,
+      .array_slice = 3,
+    },
   };
 
   const auto exp_plan = UploadPlanner::PlanTexture2D(

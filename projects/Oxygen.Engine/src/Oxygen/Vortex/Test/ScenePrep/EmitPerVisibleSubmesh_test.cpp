@@ -63,7 +63,8 @@ using oxygen::vortex::sceneprep::SubMeshVisibilityFilter;
 using oxygen::vortex::upload::StagingProvider;
 using oxygen::vortex::upload::internal::UploaderTagFactory;
 
-using namespace oxygen::vortex::sceneprep::testing;
+using oxygen::vortex::sceneprep::testing::MakeGeometryWithLods;
+using oxygen::vortex::sceneprep::testing::ScenePrepTestFixture;
 
 namespace oxygen::content {
 class AssetLoader;
@@ -81,9 +82,14 @@ protected:
     gfx_ = std::make_shared<oxygen::vortex::testing::FakeGraphics>();
     gfx_->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());
     uploader_ = std::make_unique<oxygen::vortex::upload::UploadCoordinator>(
-      observer_ptr { gfx_.get() });
+      observer_ptr {
+        gfx_.get(),
+      });
     staging_provider_ = uploader_->CreateRingBufferStaging(
-      oxygen::frame::SlotCount { 1 }, 4, 0.5f);
+      oxygen::frame::SlotCount {
+        1,
+      },
+      4, 0.5F);
 
     // Create resource managers and give ownership to ScenePrepState so
     // Extractors can rely on a non-null material binder during tests.
@@ -91,33 +97,71 @@ protected:
       = std::make_unique<oxygen::vortex::testing::FakeAssetLoader>();
     auto geom_uploader
       = std::make_unique<oxygen::vortex::resources::GeometryUploader>(
-        observer_ptr { gfx_.get() }, observer_ptr { uploader_.get() },
-        observer_ptr { staging_provider_.get() },
-        observer_ptr { geometry_loader_.get() });
+        observer_ptr {
+          gfx_.get(),
+        },
+        observer_ptr {
+          uploader_.get(),
+        },
+        observer_ptr {
+          staging_provider_.get(),
+        },
+        observer_ptr {
+          geometry_loader_.get(),
+        });
     // We need an InlineTransfersCoordinator instance for the TransformUploader
     // API; the uploader expects an observer_ptr to the inline transfers
     // coordinator.
     inline_transfers_
       = std::make_unique<oxygen::vortex::upload::InlineTransfersCoordinator>(
-        observer_ptr { gfx_.get() });
+        observer_ptr {
+          gfx_.get(),
+        });
 
     auto transform_uploader
       = std::make_unique<oxygen::vortex::resources::TransformUploader>(
-        observer_ptr { gfx_.get() }, observer_ptr { staging_provider_.get() },
-        observer_ptr { inline_transfers_.get() });
+        observer_ptr {
+          gfx_.get(),
+        },
+        observer_ptr {
+          staging_provider_.get(),
+        },
+        observer_ptr {
+          inline_transfers_.get(),
+        });
     texture_loader_
       = std::make_unique<oxygen::vortex::testing::FakeAssetLoader>();
     texture_binder_
       = std::make_unique<oxygen::vortex::resources::TextureBinder>(
-        observer_ptr { gfx_.get() }, observer_ptr { staging_provider_.get() },
-        observer_ptr { uploader_.get() },
-        observer_ptr { texture_loader_.get() });
+        observer_ptr {
+          gfx_.get(),
+        },
+        observer_ptr {
+          staging_provider_.get(),
+        },
+        observer_ptr {
+          uploader_.get(),
+        },
+        observer_ptr {
+          texture_loader_.get(),
+        });
     auto material_binder
       = std::make_unique<oxygen::vortex::resources::MaterialBinder>(
-        observer_ptr { gfx_.get() }, observer_ptr { uploader_.get() },
-        observer_ptr { staging_provider_.get() },
-        observer_ptr { texture_binder_.get() },
-        observer_ptr { texture_loader_.get() });
+        observer_ptr {
+          gfx_.get(),
+        },
+        observer_ptr {
+          uploader_.get(),
+        },
+        observer_ptr {
+          staging_provider_.get(),
+        },
+        observer_ptr {
+          texture_binder_.get(),
+        },
+        observer_ptr {
+          texture_loader_.get(),
+        });
 
     return std::make_unique<ScenePrepState>(std::move(geom_uploader),
       std::move(transform_uploader), std::move(material_binder));
@@ -144,23 +188,50 @@ protected:
 // Death: dropped item
 NOLINT_TEST_F(EmitPerVisibleSubmeshTest, DroppedItem_Death)
 {
+  EmplaceContextWithView();
   Proto().MarkDropped();
-  NOLINT_EXPECT_DEATH(EmitPerVisibleSubmesh(Context(), State(), Proto()), ".*");
+  NOLINT_EXPECT_DEATH(
+    EmitPerVisibleSubmesh(Context(), State(), Proto()), "IsDropped");
 }
 
 // Death: no resolved mesh
 NOLINT_TEST_F(EmitPerVisibleSubmeshTest, NoResolvedMesh_Death)
 {
-  // Ensure geometry/visibility seeded but skip MeshResolver
+  // Reach the resolved-mesh guard with a valid context and geometry.
+  EmplaceContextWithView();
+  SetGeometry(MakeGeometryWithLods(1,
+    {
+      -1,
+      -1,
+      -1,
+    },
+    {
+      1,
+      1,
+      1,
+    }));
   SeedVisibilityAndTransform();
-  NOLINT_EXPECT_DEATH(EmitPerVisibleSubmesh(Context(), State(), Proto()), ".*");
+  ASSERT_NE(Proto().Geometry(), nullptr);
+  ASSERT_EQ(Proto().ResolvedMesh(), nullptr);
+  NOLINT_EXPECT_DEATH(
+    EmitPerVisibleSubmesh(Context(), State(), Proto()), "ResolvedMesh");
 }
 
 // Empty visible list -> emits nothing
 NOLINT_TEST_F(EmitPerVisibleSubmeshTest, EmptyVisibleList_NoEmission)
 {
   // Arrange: resolve mesh but clear visible list
-  const auto geom = MakeGeometryWithLods(2, { -1, -1, -1 }, { 1, 1, 1 });
+  const auto geom = MakeGeometryWithLods(2,
+    {
+      -1,
+      -1,
+      -1,
+    },
+    {
+      1,
+      1,
+      1,
+    });
   SetGeometry(geom);
   SeedVisibilityAndTransform();
   // Ensure a valid view/context is available for MeshResolver
@@ -180,10 +251,22 @@ NOLINT_TEST_F(EmitPerVisibleSubmeshTest, EmptyVisibleList_NoEmission)
 NOLINT_TEST_F(EmitPerVisibleSubmeshTest,
   ReverseWindingUsesInheritedWorldTransformAndCancelsTwoReflections)
 {
-  const auto geometry = MakeGeometryWithLods(1, { -1, -1, -1 }, { 1, 1, 1 });
+  const auto geometry = MakeGeometryWithLods(1,
+    {
+      -1,
+      -1,
+      -1,
+    },
+    {
+      1,
+      1,
+      1,
+    });
   SetGeometry(geometry);
   auto child = scene_->CreateChildNode(Node(), "MirroredChild");
-  ASSERT_TRUE(child.has_value());
+  if (!child.has_value()) {
+    FAIL() << "Expected child to have a value";
+  }
   child->GetRenderable().SetGeometry(geometry);
   EmplaceContextWithView();
 
@@ -193,10 +276,18 @@ NOLINT_TEST_F(EmitPerVisibleSubmeshTest,
     bool reverse_winding;
   };
   const auto cases = std::vector<TransformCase> {
-    { { -2.0F, 1.0F, 1.0F }, { 1.0F, 1.0F, 1.0F }, true },
-    { { -2.0F, 1.0F, 1.0F }, { -1.0F, 1.0F, 1.0F }, false },
-    { { 2.0F, 1.0F, 1.0F }, { -1.0F, 1.0F, 1.0F }, true },
-    { { -2.0F, -1.0F, 1.0F }, { 1.0F, 1.0F, 1.0F }, false },
+    { .parent_scale = { -2.0F, 1.0F, 1.0F, },
+      .child_scale = { 1.0F, 1.0F, 1.0F, },
+      .reverse_winding = true, },
+    { .parent_scale = { -2.0F, 1.0F, 1.0F, },
+      .child_scale = { -1.0F, 1.0F, 1.0F, },
+      .reverse_winding = false, },
+    { .parent_scale = { 2.0F, 1.0F, 1.0F, },
+      .child_scale = { -1.0F, 1.0F, 1.0F, },
+      .reverse_winding = true, },
+    { .parent_scale = { -2.0F, -1.0F, 1.0F, },
+      .child_scale = { 1.0F, 1.0F, 1.0F, },
+      .reverse_winding = false, },
   };
   for (const auto& test_case : cases) {
     Node().GetTransform().SetLocalTransform(glm::vec3(0.0F),
@@ -204,11 +295,17 @@ NOLINT_TEST_F(EmitPerVisibleSubmeshTest,
     child->GetTransform().SetLocalTransform(glm::vec3(0.0F),
       glm::quat(1.0F, 0.0F, 0.0F, 0.0F), test_case.child_scale);
     UpdateScene();
-    auto item = RenderItemProto(child->GetImpl()->get());
+    const auto child_impl = child->GetImpl();
+    if (!child_impl.has_value()) {
+      FAIL() << "Expected child_impl to have a value";
+    }
+    auto item = RenderItemProto(child_impl->get());
     oxygen::vortex::sceneprep::ExtractionPreFilter(Context(), State(), item);
     ASSERT_FALSE(item.IsDropped());
     item.ResolveMesh(geometry->MeshAt(0U), 0U);
-    item.SetVisibleSubmeshes({ 0U });
+    item.SetVisibleSubmeshes({
+      0U,
+    });
     const auto before = State().CollectedCount();
     EmitPerVisibleSubmesh(Context(), State(), item);
     ASSERT_EQ(State().CollectedCount(), before + 1U);
@@ -216,106 +313,5 @@ NOLINT_TEST_F(EmitPerVisibleSubmeshTest,
       test_case.reverse_winding);
   }
 }
-
-// These are complex integration tests - disabled for now
-#if 0
-// Emit one item per visible submesh with correct properties
-NOLINT_TEST_F(EmitPerVisibleSubmeshTest, EmitsAllVisible_WithExpectedFields)
-{
-  // Arrange: geometry with 3 submeshes, all visible
-  const auto geom = MakeGeometryWithSubmeshes(3);
-  SetGeometry(geom);
-  SeedVisibilityAndTransform();
-  MeshResolver(Context(), State(), Proto());
-  SubMeshVisibilityFilter(Context(), State(), Proto());
-
-  // Act
-  EmitPerVisibleSubmesh(Context(), State(), Proto());
-
-  // Assert
-  const auto& items = State().CollectedItems();
-  ASSERT_EQ(items.size(), 3u);
-  for (size_t i = 0; i < items.size(); ++i) {
-    EXPECT_EQ(items[i].lod_index, Proto().ResolvedMeshIndex());
-    EXPECT_EQ(items[i].submesh_index, i);
-    EXPECT_EQ(items[i].geometry.get(), Proto().Geometry().get());
-    EXPECT_EQ(items[i].world_bounding_sphere,
-      Node().GetRenderable().GetWorldBoundingSphere());
-    EXPECT_EQ(items[i].cast_shadows, Proto().CastsShadows());
-    EXPECT_EQ(items[i].receive_shadows, Proto().ReceivesShadows());
-  }
-}
-
-// Material override takes precedence over mesh submesh material
-NOLINT_TEST_F(EmitPerVisibleSubmeshTest, MaterialOverride_TakesPrecedence)
-{
-  // Arrange: 2 submeshes; override submesh 1
-  const auto geom = MakeGeometryWithSubmeshes(2);
-  SetGeometry(geom);
-  SeedVisibilityAndTransform();
-  MeshResolver(Context(), State(), Proto());
-  SubMeshVisibilityFilter(Context(), State(), Proto());
-
-  const auto lod = Proto().ResolvedMeshIndex();
-  const auto override_mat = MaterialAsset::CreateDefault();
-  Node().GetRenderable().SetMaterialOverride(lod, 1, override_mat);
-
-  // Act
-  EmitPerVisibleSubmesh(Context(), State(), Proto());
-
-  // Assert: find submesh 1 item and check material ptr
-  const auto& items = State().CollectedItems();
-  const auto it = std::ranges::find_if(
-    items, [](const auto& r) { return r.submesh_index == 1u; });
-  ASSERT_NE(it, items.end());
-  EXPECT_EQ(it->material, override_mat);
-}
-
-// No override -> mesh submesh material is used
-NOLINT_TEST_F(EmitPerVisibleSubmeshTest, MeshMaterial_UsedWhenNoOverride)
-{
-  // Arrange: 2 submeshes; no overrides
-  const auto geom = MakeGeometryWithSubmeshes(2);
-  SetGeometry(geom);
-  SeedVisibilityAndTransform();
-  MeshResolver(Context(), State(), Proto());
-  SubMeshVisibilityFilter(Context(), State(), Proto());
-
-  // The mesh's submesh material is the one attached in the builder
-  const auto mesh_material = Proto().ResolvedMesh()->SubMeshes()[0].Material();
-
-  // Act
-  EmitPerVisibleSubmesh(Context(), State(), Proto());
-
-  // Assert: find submesh 0 item and check material ptr equals mesh material
-  const auto& items = State().CollectedItems();
-  const auto it = std::ranges::find_if(
-    items, [](const auto& r) { return r.submesh_index == 0u; });
-  ASSERT_NE(it, items.end());
-  EXPECT_EQ(it->material, mesh_material);
-}
-
-// Masked out submesh should not be emitted
-NOLINT_TEST_F(EmitPerVisibleSubmeshTest, MaskedOutSubmesh_NotEmitted)
-{
-  const auto geom = MakeGeometryWithSubmeshes(3);
-  SetGeometry(geom);
-  SeedVisibilityAndTransform();
-  MeshResolver(Context(), State(), Proto());
-
-  // Hide submesh 1, keep others visible
-  const auto lod = Proto().ResolvedMeshIndex();
-  Node().GetRenderable().SetSubmeshVisible(lod, 1, false);
-
-  SubMeshVisibilityFilter(Context(), State(), Proto());
-  EmitPerVisibleSubmesh(Context(), State(), Proto());
-
-  // Expect only 0 and 2 emitted
-  const auto& items = State().CollectedItems();
-  ASSERT_EQ(items.size(), 2u);
-  EXPECT_EQ(items[0].submesh_index, 0u);
-  EXPECT_EQ(items[1].submesh_index, 2u);
-}
-#endif // 0 - DISABLED
 
 } // namespace

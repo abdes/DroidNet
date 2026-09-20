@@ -4,6 +4,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
+#include <iterator>
+#include <stdexcept>
+
 #include <Oxygen/Vortex/RendererTag.h>
 #include <Oxygen/Vortex/Upload/UploadCoordinator.h>
 #include <Oxygen/Vortex/Upload/UploaderTag.h>
@@ -26,6 +30,29 @@ auto RendererTagFactory::Get() noexcept -> RendererTag
 
 namespace oxygen::vortex::testing {
 
+auto MaterialBinderTest::MakeMaterial(const MaterialRecipe& recipe)
+  -> std::shared_ptr<const data::MaterialAsset>
+{
+  data::pak::render::MaterialAssetDesc desc {};
+  desc.base_color_texture = data::pak::core::ResourceIndexT {
+    recipe.raw_base_color_index,
+  };
+  desc.normal_texture = data::pak::core::ResourceIndexT {
+    recipe.raw_normal_index,
+  };
+  std::ranges::copy(recipe.base_color, std::begin(desc.base_color));
+  std::ranges::copy(recipe.uv_scale, std::begin(desc.uv_scale));
+  std::ranges::copy(recipe.uv_offset, std::begin(desc.uv_offset));
+  desc.uv_rotation_radians = recipe.uv_rotation_radians;
+  desc.uv_set = recipe.uv_set;
+  return std::make_shared<data::MaterialAsset>(data::AssetKey {}, desc,
+    std::vector<data::ShaderReference> {},
+    std::vector {
+      recipe.base_color_key,
+      recipe.normal_key,
+    });
+}
+
 auto MaterialBinderTest::SetUp() -> void
 {
   using graphics::SingleQueueStrategy;
@@ -34,10 +61,16 @@ auto MaterialBinderTest::SetUp() -> void
   gfx_->CreateCommandQueues(SingleQueueStrategy());
 
   uploader_ = std::make_unique<vortex::upload::UploadCoordinator>(
-    observer_ptr { gfx_.get() }, vortex::upload::DefaultUploadPolicy());
+    observer_ptr {
+      gfx_.get(),
+    },
+    vortex::upload::DefaultUploadPolicy());
 
-  staging_provider_
-    = uploader_->CreateRingBufferStaging(frame::SlotCount { 1 }, 4);
+  staging_provider_ = uploader_->CreateRingBufferStaging(
+    frame::SlotCount {
+      1,
+    },
+    4);
 
   texture_binder_ = std::make_unique<FakeTextureBinder>();
 
@@ -49,17 +82,28 @@ auto MaterialBinderTest::SetUp() -> void
   asset_loader_ = std::make_unique<FakeAssetLoader>();
 
   material_binder_ = std::make_unique<resources::MaterialBinder>(
-    observer_ptr { gfx_.get() }, observer_ptr { uploader_.get() },
-    observer_ptr { staging_provider_.get() },
-    observer_ptr { texture_binder_.get() },
-    observer_ptr { asset_loader_.get() });
+    observer_ptr {
+      gfx_.get(),
+    },
+    observer_ptr {
+      uploader_.get(),
+    },
+    observer_ptr {
+      staging_provider_.get(),
+    },
+    observer_ptr {
+      texture_binder_.get(),
+    },
+    observer_ptr {
+      asset_loader_.get(),
+    });
 }
 
 auto MaterialBinderTest::TearDown() -> void
 {
   material_binder_.reset();
   texture_binder_.reset();
-  texture_descriptor_allocator_.release();
+  texture_descriptor_allocator_.reset();
   asset_loader_.reset();
   staging_provider_.reset();
   uploader_.reset();
@@ -96,6 +140,28 @@ auto MaterialBinderTest::TexBinder() const -> resources::IResourceBinder&
 auto MaterialBinderTest::MatBinder() const -> resources::MaterialBinder&
 {
   return *material_binder_;
+}
+
+auto MaterialBinderTest::MaterialConstants(
+  sceneprep::MaterialHandle handle) const -> const MaterialShadingConstants&
+{
+  const auto constants = MatBinder().GetMaterialShadingConstants();
+  const auto index = static_cast<std::size_t>(handle.get());
+  if (!MatBinder().IsHandleValid(handle) || index >= constants.size()) {
+    throw std::out_of_range("Material handle has no shading constants");
+  }
+  return *std::next(constants.begin(), static_cast<std::ptrdiff_t>(index));
+}
+
+auto MaterialBinderTest::GridConstants(sceneprep::MaterialHandle handle) const
+  -> const ProceduralGridMaterialConstants&
+{
+  const auto constants = MatBinder().GetProceduralGridMaterialConstants();
+  const auto index = static_cast<std::size_t>(handle.get());
+  if (!MatBinder().IsHandleValid(handle) || index >= constants.size()) {
+    throw std::out_of_range("Material handle has no grid constants");
+  }
+  return *std::next(constants.begin(), static_cast<std::ptrdiff_t>(index));
 }
 
 auto MaterialBinderTest::AllocatedTextureSrvCount() const -> uint32_t
@@ -141,7 +207,9 @@ auto MaterialBinderTest::GetPlaceholderIndexForKey(
   if (texture_binder_) {
     return texture_binder_->GetOrAllocate(key);
   }
-  return ShaderVisibleIndex { 0U };
+  return ShaderVisibleIndex {
+    0U,
+  };
 }
 
 void MaterialBinderTest::SetTextureBinderAllocateOnRequest(bool v) const

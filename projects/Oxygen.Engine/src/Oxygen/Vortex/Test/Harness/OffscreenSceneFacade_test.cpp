@@ -77,14 +77,15 @@ protected:
       = graphics_->QueueKeyFor(QueueRole::kGraphics).get();
     const auto capabilities = CapabilitySet {
       RendererCapabilityFamily::kScenePreparation
-      | RendererCapabilityFamily::kDeferredShading
-      | RendererCapabilityFamily::kLightingData
-      | RendererCapabilityFamily::kFinalOutputComposition
+        | RendererCapabilityFamily::kDeferredShading
+        | RendererCapabilityFamily::kLightingData
+        | RendererCapabilityFamily::kFinalOutputComposition,
     };
-    renderer_ = { new Renderer(
-                    std::weak_ptr<Graphics>(graphics_), std::move(config),
-                    capabilities),
-      DestroyRenderer };
+    renderer_ = {
+      new Renderer(
+        std::weak_ptr<Graphics>(graphics_), std::move(config), capabilities),
+      DestroyRenderer,
+    };
     framebuffer_ = MakeFramebuffer();
     scene_ = std::make_shared<Scene>("OffscreenSceneFacadeTest", 16U);
     camera_ = MakeCameraNode(*scene_);
@@ -105,7 +106,9 @@ protected:
     auto color = graphics_->CreateTexture(color_desc);
 
     auto fb_desc = FramebufferDesc {};
-    fb_desc.AddColorAttachment({ .texture = color });
+    fb_desc.AddColorAttachment({
+      .texture = color,
+    });
     return graphics_->CreateFramebuffer(fb_desc);
   }
 
@@ -139,33 +142,40 @@ protected:
   [[nodiscard]] auto MakeFrameSession() const -> Renderer::FrameSessionInput
   {
     return Renderer::FrameSessionInput {
-      .frame_slot = oxygen::frame::Slot { 1U },
-      .frame_sequence = oxygen::frame::SequenceNumber { 17U },
+      .frame_slot = oxygen::frame::Slot { 1U, },
+      .frame_sequence = oxygen::frame::SequenceNumber { 17U, },
       .delta_time_seconds = 1.0F / 60.0F,
-      .scene = oxygen::observer_ptr<Scene> { scene_.get() },
+      .scene = oxygen::observer_ptr<Scene> { scene_.get(), },
     };
   }
 
   [[nodiscard]] auto MakeOutputTarget() const -> Renderer::OutputTargetInput
   {
     return Renderer::OutputTargetInput {
-      .framebuffer = oxygen::observer_ptr<Framebuffer> { framebuffer_.get() },
+      .framebuffer = oxygen::observer_ptr<Framebuffer> { framebuffer_.get(), },
     };
   }
 
-  std::shared_ptr<FakeGraphics> graphics_ {};
-  std::shared_ptr<Framebuffer> framebuffer_ {};
-  std::shared_ptr<Scene> scene_ {};
+  std::shared_ptr<FakeGraphics> graphics_;
+  std::shared_ptr<Framebuffer> framebuffer_;
+  std::shared_ptr<Scene> scene_;
   oxygen::scene::SceneNode camera_ {};
-  std::shared_ptr<Renderer> renderer_ {};
+  std::shared_ptr<Renderer> renderer_;
 };
 
 NOLINT_TEST_F(OffscreenSceneFacadeTest, ViewInputCopiesAndMovesOwnTheirNames)
 {
   using Input = Renderer::OffscreenSceneViewInput;
-  for (const auto& name : { std::string("Short"), std::string(160, 'N') }) {
+  for (const auto& name : {
+         std::string("Short"),
+         std::string(160, 'N'),
+       }) {
     SCOPED_TRACE(name);
-    auto source = Input::FromCamera(name, ViewId { 42U }, MakeView(), camera_);
+    auto source = Input::FromCamera(name,
+      ViewId {
+        42U,
+      },
+      MakeView(), camera_);
     auto copy = Input(source);
     auto assigned = Input {};
     assigned = source;
@@ -175,16 +185,28 @@ NOLINT_TEST_F(OffscreenSceneFacadeTest, ViewInputCopiesAndMovesOwnTheirNames)
     auto moved = Input(std::move(copy));
     auto move_assigned = Input {};
     move_assigned = std::move(assigned);
+    // The test deliberately inspects the supported moved-from view to verify it
+    // no longer aliases the destination name.
+    // NOLINTNEXTLINE(bugprone-use-after-move)
     EXPECT_NE(moved.ViewIntent().name.data(), copy.ViewIntent().name.data());
     EXPECT_NE(move_assigned.ViewIntent().name.data(),
+      // The test deliberately inspects the supported moved-from view to verify
+      // it no longer aliases the destination name.
+      // NOLINTNEXTLINE(bugprone-use-after-move)
       assigned.ViewIntent().name.data());
     source = Input {};
     copy = Input {};
     assigned = Input {};
     EXPECT_EQ(moved.ViewIntent().name, name);
     EXPECT_EQ(move_assigned.ViewIntent().name, name);
-    EXPECT_EQ(moved.ViewIntent().id, ViewId { 42U });
-    EXPECT_EQ(move_assigned.ViewIntent().id, ViewId { 42U });
+    EXPECT_EQ(moved.ViewIntent().id,
+      (ViewId {
+        42U,
+      }));
+    EXPECT_EQ(move_assigned.ViewIntent().id,
+      (ViewId {
+        42U,
+      }));
   }
 }
 
@@ -207,44 +229,73 @@ NOLINT_TEST_F(OffscreenSceneFacadeTest,
   auto capture = std::make_shared<Capture>();
   renderer_->RegisterViewExtension(capture);
   const auto name = std::string(160, 'N');
-  for (const bool override_enabled : { true, false }) {
-    auto result = [&] {
+  for (const bool override_enabled : {
+         true,
+         false,
+       }) {
+    auto result
+      = [&] -> oxygen::Result<Renderer::ValidatedOffscreenSceneSession,
+              Renderer::ValidationReport> {
       auto facade = renderer_->ForOffscreenScene();
       facade.SetFrameSession(MakeFrameSession());
-      facade.SetSceneSource({ .scene = oxygen::observer_ptr { scene_.get() } });
+      facade.SetSceneSource({ .scene = oxygen::observer_ptr { scene_.get(), }, });
       facade.SetOutputTarget(MakeOutputTarget());
       auto exposure = oxygen::scene::ExposureSettings {};
       exposure.manual_ev = 4;
       exposure.speed_down = .5F;
-      auto input = Renderer::OffscreenSceneViewInput::FromCamera(
-        name, ViewId { 42U }, MakeView(), camera_)
+      auto input = Renderer::OffscreenSceneViewInput::FromCamera(name,
+        ViewId {
+          42U,
+        },
+        MakeView(), camera_)
                      .SetExposureOverride(exposure);
-      if (!override_enabled)
+      if (!override_enabled) {
         input.SetExposureOverride(std::nullopt);
+      }
       facade.SetViewIntent(input);
       return facade.Finalize();
     }();
-    ASSERT_TRUE(result.has_value());
+    if (!result.has_value()) {
+      FAIL() << "Expected result to have a value";
+    }
     auto session = std::move(result).value();
     ASSERT_TRUE(session.ExecuteNow());
     auto frame = oxygen::engine::FrameContext {};
-    frame.SetScene(oxygen::observer_ptr { scene_.get() });
-    frame.SetFrameSequenceNumber(oxygen::frame::SequenceNumber { 18U },
+    frame.SetScene(oxygen::observer_ptr {
+      scene_.get(),
+    });
+    frame.SetFrameSequenceNumber(
+      oxygen::frame::SequenceNumber {
+        18U,
+      },
       oxygen::engine::internal::EngineTagFactory::Get());
-    frame.SetFrameSlot(oxygen::frame::Slot { 2U },
+    frame.SetFrameSlot(
+      oxygen::frame::Slot {
+        2U,
+      },
       oxygen::engine::internal::EngineTagFactory::Get());
-    renderer_->OnFrameStart(oxygen::observer_ptr { &frame });
+    renderer_->OnFrameStart(oxygen::observer_ptr {
+      &frame,
+    });
     ASSERT_TRUE(session.ExecuteInsideFrame(frame));
-    renderer_->OnFrameEnd(oxygen::observer_ptr { &frame });
+    renderer_->OnFrameEnd(oxygen::observer_ptr {
+      &frame,
+    });
   }
   ASSERT_EQ(capture->names.size(), 4U);
   ASSERT_EQ(capture->exposures.size(), 4U);
   for (unsigned i = 0; i < 4; ++i) {
-    EXPECT_EQ(capture->names[i], name);
-    ASSERT_EQ(capture->exposures[i].has_value(), i < 2);
+    EXPECT_EQ(capture->names.at(i), name);
+    const auto& exposure = capture->exposures.at(i);
     if (i < 2) {
-      EXPECT_EQ(capture->exposures[i]->manual_ev, 4);
-      EXPECT_EQ(capture->exposures[i]->speed_down, .5F);
+      if (!exposure.has_value()) {
+        FAIL()
+          << "Expected the first two views to keep their exposure override";
+      }
+      EXPECT_EQ(exposure->manual_ev, 4);
+      EXPECT_EQ(exposure->speed_down, .5F);
+    } else {
+      ASSERT_FALSE(exposure.has_value());
     }
   }
 }
@@ -263,25 +314,47 @@ NOLINT_TEST_F(OffscreenSceneFacadeTest, BothExecutionPathsPreserveLocalScissor)
   auto capture = std::make_shared<Capture>();
   renderer_->RegisterViewExtension(capture);
   auto view = MakeView();
-  view.scissor = { .left = 8, .top = 12, .right = 48, .bottom = 52 };
+  view.scissor = {
+    .left = 8,
+    .top = 12,
+    .right = 48,
+    .bottom = 52,
+  };
   auto facade = renderer_->ForOffscreenScene();
   facade.SetFrameSession(MakeFrameSession());
-  facade.SetSceneSource({ .scene = oxygen::observer_ptr { scene_.get() } });
+  facade.SetSceneSource({ .scene = oxygen::observer_ptr { scene_.get(), }, });
   facade.SetOutputTarget(MakeOutputTarget());
-  facade.SetViewIntent(Renderer::OffscreenSceneViewInput::FromCamera(
-    "Inset", ViewId { 42U }, view, camera_));
+  facade.SetViewIntent(Renderer::OffscreenSceneViewInput::FromCamera("Inset",
+    ViewId {
+      42U,
+    },
+    view, camera_));
   auto session = facade.Finalize();
-  ASSERT_TRUE(session.has_value());
+  if (!session.has_value()) {
+    FAIL() << "Expected session to have a value";
+  }
   ASSERT_TRUE(session->ExecuteNow());
   auto frame = oxygen::engine::FrameContext {};
-  frame.SetScene(oxygen::observer_ptr { scene_.get() });
-  frame.SetFrameSequenceNumber(oxygen::frame::SequenceNumber { 18U },
+  frame.SetScene(oxygen::observer_ptr {
+    scene_.get(),
+  });
+  frame.SetFrameSequenceNumber(
+    oxygen::frame::SequenceNumber {
+      18U,
+    },
     oxygen::engine::internal::EngineTagFactory::Get());
-  frame.SetFrameSlot(oxygen::frame::Slot { 2U },
+  frame.SetFrameSlot(
+    oxygen::frame::Slot {
+      2U,
+    },
     oxygen::engine::internal::EngineTagFactory::Get());
-  renderer_->OnFrameStart(oxygen::observer_ptr { &frame });
+  renderer_->OnFrameStart(oxygen::observer_ptr {
+    &frame,
+  });
   ASSERT_TRUE(session->ExecuteInsideFrame(frame));
-  renderer_->OnFrameEnd(oxygen::observer_ptr { &frame });
+  renderer_->OnFrameEnd(oxygen::observer_ptr {
+    &frame,
+  });
   ASSERT_EQ(capture->scissors.size(), 2U);
   for (const auto& scissor : capture->scissors) {
     EXPECT_EQ(scissor.left, 8);
@@ -296,7 +369,7 @@ NOLINT_TEST_F(OffscreenSceneFacadeTest, ValidateRejectsInvalidViewId)
   auto facade = renderer_->ForOffscreenScene();
   facade.SetFrameSession(MakeFrameSession());
   facade.SetSceneSource(Renderer::SceneSourceInput {
-    .scene = oxygen::observer_ptr<Scene> { scene_.get() },
+    .scene = oxygen::observer_ptr<Scene> { scene_.get(), },
   });
   facade.SetViewIntent(Renderer::OffscreenSceneViewInput::FromCamera(
     "InvalidOffscreen", oxygen::kInvalidViewId, MakeView(), camera_));
@@ -305,7 +378,7 @@ NOLINT_TEST_F(OffscreenSceneFacadeTest, ValidateRejectsInvalidViewId)
   const auto report = facade.Validate();
 
   ASSERT_FALSE(report.Ok());
-  EXPECT_TRUE(std::ranges::any_of(report.issues, [](const auto& issue) {
+  EXPECT_TRUE(std::ranges::any_of(report.issues, [](const auto& issue) -> auto {
     return issue.code == "view_intent.invalid_id";
   }));
 }
@@ -330,19 +403,23 @@ NOLINT_TEST_F(OffscreenSceneFacadeTest, ValidateRejectsFramebufferWithoutColor)
   auto facade = renderer_->ForOffscreenScene();
   facade.SetFrameSession(MakeFrameSession());
   facade.SetSceneSource(Renderer::SceneSourceInput {
-    .scene = oxygen::observer_ptr<Scene> { scene_.get() },
+    .scene = oxygen::observer_ptr<Scene> { scene_.get(), },
   });
-  facade.SetViewIntent(Renderer::OffscreenSceneViewInput::FromCamera(
-    "NoColorTarget", ViewId { 46U }, MakeView(), camera_));
+  facade.SetViewIntent(
+    Renderer::OffscreenSceneViewInput::FromCamera("NoColorTarget",
+      ViewId {
+        46U,
+      },
+      MakeView(), camera_));
   facade.SetOutputTarget(Renderer::OutputTargetInput {
     .framebuffer
-    = oxygen::observer_ptr<Framebuffer> { framebuffer_without_color.get() },
+    = oxygen::observer_ptr<Framebuffer> { framebuffer_without_color.get(), },
   });
 
   const auto report = facade.Validate();
 
   ASSERT_FALSE(report.Ok());
-  EXPECT_TRUE(std::ranges::any_of(report.issues, [](const auto& issue) {
+  EXPECT_TRUE(std::ranges::any_of(report.issues, [](const auto& issue) -> auto {
     return issue.code == "output_target.invalid_framebuffer";
   }));
 }
@@ -350,17 +427,34 @@ NOLINT_TEST_F(OffscreenSceneFacadeTest, ValidateRejectsFramebufferWithoutColor)
 NOLINT_TEST_F(OffscreenSceneFacadeTest, PresetsFinalizeWithRenderableViewIds)
 {
   auto preview = oxygen::vortex::offscreen::scene::presets::ForPreview(
-    *renderer_, MakeFrameSession(), oxygen::observer_ptr<Scene> { scene_.get() },
-    camera_, oxygen::observer_ptr<Framebuffer> { framebuffer_.get() });
+    *renderer_, MakeFrameSession(),
+    oxygen::observer_ptr<Scene> {
+      scene_.get(),
+    },
+    camera_,
+    oxygen::observer_ptr<Framebuffer> {
+      framebuffer_.get(),
+    });
   auto capture = oxygen::vortex::offscreen::scene::presets::ForCapture(
-    *renderer_, MakeFrameSession(), oxygen::observer_ptr<Scene> { scene_.get() },
-    camera_, oxygen::observer_ptr<Framebuffer> { framebuffer_.get() });
+    *renderer_, MakeFrameSession(),
+    oxygen::observer_ptr<Scene> {
+      scene_.get(),
+    },
+    camera_,
+    oxygen::observer_ptr<Framebuffer> {
+      framebuffer_.get(),
+    });
 
   auto preview_session = preview.Finalize();
   auto capture_session = capture.Finalize();
 
-  ASSERT_TRUE(preview_session.has_value());
-  ASSERT_TRUE(capture_session.has_value());
+  if (!preview_session.has_value()) {
+
+    FAIL() << "Expected preview_session to have a value";
+  }
+  if (!capture_session.has_value()) {
+    FAIL() << "Expected capture_session to have a value";
+  }
   EXPECT_NE(preview_session->GetViewId(), oxygen::kInvalidViewId);
   EXPECT_NE(capture_session->GetViewId(), oxygen::kInvalidViewId);
   EXPECT_NE(preview_session->GetViewId(), capture_session->GetViewId());
@@ -371,15 +465,22 @@ NOLINT_TEST_F(OffscreenSceneFacadeTest, PipelineDefaultsToDeferred)
   auto facade = renderer_->ForOffscreenScene();
   facade.SetFrameSession(MakeFrameSession());
   facade.SetSceneSource(Renderer::SceneSourceInput {
-    .scene = oxygen::observer_ptr<Scene> { scene_.get() },
+    .scene = oxygen::observer_ptr<Scene> { scene_.get(), },
   });
-  facade.SetViewIntent(Renderer::OffscreenSceneViewInput::FromCamera(
-    "DefaultPipeline", ViewId { 43U }, MakeView(), camera_));
+  facade.SetViewIntent(
+    Renderer::OffscreenSceneViewInput::FromCamera("DefaultPipeline",
+      ViewId {
+        43U,
+      },
+      MakeView(), camera_));
   facade.SetOutputTarget(MakeOutputTarget());
 
   auto session = facade.Finalize();
 
-  ASSERT_TRUE(session.has_value());
+  if (!session.has_value()) {
+
+    FAIL() << "Expected session to have a value";
+  }
   EXPECT_EQ(session->GetPipelineShadingMode(), ShadingMode::kDeferred);
 }
 
@@ -388,16 +489,23 @@ NOLINT_TEST_F(OffscreenSceneFacadeTest, PipelineCanSelectForward)
   auto facade = renderer_->ForOffscreenScene();
   facade.SetFrameSession(MakeFrameSession());
   facade.SetSceneSource(Renderer::SceneSourceInput {
-    .scene = oxygen::observer_ptr<Scene> { scene_.get() },
+    .scene = oxygen::observer_ptr<Scene> { scene_.get(), },
   });
-  facade.SetViewIntent(Renderer::OffscreenSceneViewInput::FromCamera(
-    "ForwardPipeline", ViewId { 44U }, MakeView(), camera_));
+  facade.SetViewIntent(
+    Renderer::OffscreenSceneViewInput::FromCamera("ForwardPipeline",
+      ViewId {
+        44U,
+      },
+      MakeView(), camera_));
   facade.SetOutputTarget(MakeOutputTarget());
   facade.SetPipeline(Renderer::OffscreenPipelineInput::Forward());
 
   auto session = facade.Finalize();
 
-  ASSERT_TRUE(session.has_value());
+  if (!session.has_value()) {
+
+    FAIL() << "Expected session to have a value";
+  }
   EXPECT_EQ(session->GetPipelineShadingMode(), ShadingMode::kForward);
 }
 
@@ -406,10 +514,14 @@ NOLINT_TEST_F(OffscreenSceneFacadeTest, PipelineCarriesFeatureProfile)
   auto facade = renderer_->ForOffscreenScene();
   facade.SetFrameSession(MakeFrameSession());
   facade.SetSceneSource(Renderer::SceneSourceInput {
-    .scene = oxygen::observer_ptr<Scene> { scene_.get() },
+    .scene = oxygen::observer_ptr<Scene> { scene_.get(), },
   });
-  facade.SetViewIntent(Renderer::OffscreenSceneViewInput::FromCamera(
-    "NoEnvironmentPipeline", ViewId { 47U }, MakeView(), camera_));
+  facade.SetViewIntent(
+    Renderer::OffscreenSceneViewInput::FromCamera("NoEnvironmentPipeline",
+      ViewId {
+        47U,
+      },
+      MakeView(), camera_));
   facade.SetOutputTarget(MakeOutputTarget());
   facade.SetPipeline(Renderer::OffscreenPipelineInput {
     .feature_profile = CompositionView::ViewFeatureProfile::kNoEnvironment,
@@ -417,7 +529,10 @@ NOLINT_TEST_F(OffscreenSceneFacadeTest, PipelineCarriesFeatureProfile)
 
   auto session = facade.Finalize();
 
-  ASSERT_TRUE(session.has_value());
+  if (!session.has_value()) {
+
+    FAIL() << "Expected session to have a value";
+  }
   EXPECT_EQ(session->GetPipelineFeatureProfile(),
     CompositionView::ViewFeatureProfile::kNoEnvironment);
 }
@@ -439,17 +554,21 @@ NOLINT_TEST_F(
   auto facade = limited_renderer->ForOffscreenScene();
   facade.SetFrameSession(MakeFrameSession());
   facade.SetSceneSource(Renderer::SceneSourceInput {
-    .scene = oxygen::observer_ptr<Scene> { scene_.get() },
+    .scene = oxygen::observer_ptr<Scene> { scene_.get(), },
   });
-  facade.SetViewIntent(Renderer::OffscreenSceneViewInput::FromCamera(
-    "ShadowOnlyPipeline", ViewId { 48U }, MakeView(), camera_));
+  facade.SetViewIntent(
+    Renderer::OffscreenSceneViewInput::FromCamera("ShadowOnlyPipeline",
+      ViewId {
+        48U,
+      },
+      MakeView(), camera_));
   facade.SetOutputTarget(MakeOutputTarget());
   facade.SetPipeline(Renderer::OffscreenPipelineInput::ShadowOnly());
 
   const auto report = facade.Validate();
 
   ASSERT_FALSE(report.Ok());
-  EXPECT_TRUE(std::ranges::any_of(report.issues, [](const auto& issue) {
+  EXPECT_TRUE(std::ranges::any_of(report.issues, [](const auto& issue) -> auto {
     return issue.code == "pipeline.missing_required_capabilities";
   }));
 }
@@ -459,17 +578,26 @@ NOLINT_TEST_F(OffscreenSceneFacadeTest, ExecuteRendersIntoOutputTarget)
   auto facade = renderer_->ForOffscreenScene();
   facade.SetFrameSession(MakeFrameSession());
   facade.SetSceneSource(Renderer::SceneSourceInput {
-    .scene = oxygen::observer_ptr<Scene> { scene_.get() },
+    .scene = oxygen::observer_ptr<Scene> { scene_.get(), },
   });
-  facade.SetViewIntent(Renderer::OffscreenSceneViewInput::FromCamera(
-    "OffscreenExecute", ViewId { 42U }, MakeView(), camera_));
+  facade.SetViewIntent(
+    Renderer::OffscreenSceneViewInput::FromCamera("OffscreenExecute",
+      ViewId {
+        42U,
+      },
+      MakeView(), camera_));
   facade.SetOutputTarget(MakeOutputTarget());
 
   auto session = facade.Finalize();
-  ASSERT_TRUE(session.has_value());
+  if (!session.has_value()) {
+    FAIL() << "Expected session to have a value";
+  }
 
   auto loop = oxygen::co::testing::TestEventLoop {};
   oxygen::co::Run(
+    // Synchronous execution finishes while the session-owned closure and its
+    // captured test locals are alive.
+    // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
     loop, [&]() -> oxygen::co::Co<void> { co_await session->Execute(); });
 
   EXPECT_FALSE(graphics_->draw_log_.draws.empty());
@@ -479,7 +607,9 @@ NOLINT_TEST_F(OffscreenSceneFacadeTest, ExecuteRendersIntoOutputTarget)
   ASSERT_NE(queue.get(), nullptr);
   const auto final_state
     = queue->TryGetKnownResourceState(color_texture.GetNativeResource());
-  ASSERT_TRUE(final_state.has_value());
+  if (!final_state.has_value()) {
+    FAIL() << "Expected final_state to have a value";
+  }
   EXPECT_EQ(*final_state, ResourceStates::kShaderResource);
 }
 
@@ -488,18 +618,27 @@ NOLINT_TEST_F(OffscreenSceneFacadeTest, ExecuteAcceptsForwardPipeline)
   auto facade = renderer_->ForOffscreenScene();
   facade.SetFrameSession(MakeFrameSession());
   facade.SetSceneSource(Renderer::SceneSourceInput {
-    .scene = oxygen::observer_ptr<Scene> { scene_.get() },
+    .scene = oxygen::observer_ptr<Scene> { scene_.get(), },
   });
-  facade.SetViewIntent(Renderer::OffscreenSceneViewInput::FromCamera(
-    "ForwardExecute", ViewId { 45U }, MakeView(), camera_));
+  facade.SetViewIntent(
+    Renderer::OffscreenSceneViewInput::FromCamera("ForwardExecute",
+      ViewId {
+        45U,
+      },
+      MakeView(), camera_));
   facade.SetOutputTarget(MakeOutputTarget());
   facade.SetPipeline(Renderer::OffscreenPipelineInput::Forward());
 
   auto session = facade.Finalize();
-  ASSERT_TRUE(session.has_value());
+  if (!session.has_value()) {
+    FAIL() << "Expected session to have a value";
+  }
 
   auto loop = oxygen::co::testing::TestEventLoop {};
   oxygen::co::Run(
+    // Synchronous execution finishes while the session-owned closure and its
+    // captured test locals are alive.
+    // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
     loop, [&]() -> oxygen::co::Co<void> { co_await session->Execute(); });
 
   EXPECT_FALSE(graphics_->draw_log_.draws.empty());
@@ -512,9 +651,13 @@ NOLINT_TEST_F(OffscreenSceneFacadeTest, PausedFrameSessionCanFinalize)
   auto facade = renderer_->ForOffscreenScene();
   facade.SetFrameSession(frame);
   facade.SetSceneSource(Renderer::SceneSourceInput {
-    .scene = oxygen::observer_ptr<Scene> { scene_.get() } });
-  facade.SetViewIntent(Renderer::OffscreenSceneViewInput::FromCamera(
-    "PausedOffscreen", ViewId { 51U }, MakeView(), camera_));
+    .scene = oxygen::observer_ptr<Scene> { scene_.get(), }, });
+  facade.SetViewIntent(
+    Renderer::OffscreenSceneViewInput::FromCamera("PausedOffscreen",
+      ViewId {
+        51U,
+      },
+      MakeView(), camera_));
   facade.SetOutputTarget(MakeOutputTarget());
   EXPECT_TRUE(facade.Validate().Ok());
   EXPECT_TRUE(facade.Finalize().has_value());
@@ -525,25 +668,38 @@ NOLINT_TEST_F(
 {
   auto facade = renderer_->ForOffscreenScene();
   facade.SetFrameSession(MakeFrameSession());
-  facade.SetSceneSource({ .scene = oxygen::observer_ptr { scene_.get() } });
+  facade.SetSceneSource({ .scene = oxygen::observer_ptr { scene_.get(), }, });
   facade.SetOutputTarget(MakeOutputTarget());
-  auto input = Renderer::OffscreenSceneViewInput::FromCamera(
-    "SharedOffscreen", ViewId { 42U }, MakeView(), camera_);
-  input.SetExposureSourceViewId(ViewId { 800U });
-  input.SetViewStateHandle(CompositionView::ViewStateHandle { 92U });
+  auto input = Renderer::OffscreenSceneViewInput::FromCamera("SharedOffscreen",
+    ViewId {
+      42U,
+    },
+    MakeView(), camera_);
+  input.SetExposureSourceViewId(ViewId {
+    800U,
+  });
+  input.SetViewStateHandle(CompositionView::ViewStateHandle {
+    92U,
+  });
   facade.SetViewIntent(input);
   EXPECT_FALSE(facade.Finalize().has_value());
   auto frame = oxygen::engine::FrameContext {};
-  auto source = CompositionView::ForScene(ViewId { 800U }, MakeView(), camera_);
+  auto source = CompositionView::ForScene(
+    ViewId {
+      800U,
+    },
+    MakeView(), camera_);
   ASSERT_NE(renderer_->PublishRuntimeCompositionView(frame,
               { .composition_view = source,
-                .render_target = oxygen::observer_ptr { framebuffer_.get() } }),
+                .render_target = oxygen::observer_ptr { framebuffer_.get(), }, }),
     oxygen::kInvalidViewId);
   EXPECT_FALSE(facade.Finalize().has_value());
-  source.view_state_handle = CompositionView::ViewStateHandle { 90U };
+  source.view_state_handle = CompositionView::ViewStateHandle {
+    90U,
+  };
   ASSERT_NE(renderer_->PublishRuntimeCompositionView(frame,
               { .composition_view = source,
-                .render_target = oxygen::observer_ptr { framebuffer_.get() } }),
+                .render_target = oxygen::observer_ptr { framebuffer_.get(), }, }),
     oxygen::kInvalidViewId);
   input.SetViewStateHandle(CompositionView::kInvalidViewStateHandle);
   facade.SetViewIntent(input);
@@ -552,30 +708,42 @@ NOLINT_TEST_F(
   const auto queued
     = renderer_->QueueExposureTransition(source.view_state_handle,
       oxygen::vortex::ExposureTransitionPolicy::kPreserve);
-  ASSERT_TRUE(queued.has_value());
+  if (!queued.has_value()) {
+    FAIL() << "Expected queued to have a value";
+  }
   input.SetViewStateHandle(source.view_state_handle);
   facade.SetViewIntent(input);
   EXPECT_FALSE(facade.Finalize().has_value());
   auto other = source;
-  other.id = ViewId { 802U };
-  other.view_state_handle = CompositionView::ViewStateHandle { 91U };
+  other.id = ViewId {
+    802U,
+  };
+  other.view_state_handle = CompositionView::ViewStateHandle {
+    91U,
+  };
   ASSERT_NE(renderer_->PublishRuntimeCompositionView(frame,
               { .composition_view = other,
-                .render_target = oxygen::observer_ptr { framebuffer_.get() } }),
+                .render_target = oxygen::observer_ptr { framebuffer_.get(), }, }),
     oxygen::kInvalidViewId);
   input.SetViewStateHandle(other.view_state_handle);
   facade.SetViewIntent(input);
   EXPECT_FALSE(facade.Finalize().has_value());
+  const auto transition
+    = renderer_->InspectExposureTransition(source.view_state_handle);
+  if (!transition.has_value()) {
+    FAIL() << "Expected transition to have a value";
+  }
+  EXPECT_EQ(transition->request, *queued);
   EXPECT_EQ(
-    renderer_->InspectExposureTransition(source.view_state_handle)->request,
-    *queued);
-  EXPECT_EQ(
-    renderer_->InspectExposureTransition(source.view_state_handle)->phase,
-    oxygen::vortex::ExposureTransitionPhase::kQueued);
-  input.SetViewStateHandle(CompositionView::ViewStateHandle { 92U });
+    transition->phase, oxygen::vortex::ExposureTransitionPhase::kQueued);
+  input.SetViewStateHandle(CompositionView::ViewStateHandle {
+    92U,
+  });
   facade.SetViewIntent(input);
   auto session = facade.Finalize();
-  ASSERT_TRUE(session.has_value());
+  if (!session.has_value()) {
+    FAIL() << "Expected session to have a value";
+  }
   renderer_->RemovePublishedRuntimeView(frame, source.id);
   EXPECT_FALSE(facade.Finalize().has_value());
   graphics_->draw_log_.draws.clear();

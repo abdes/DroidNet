@@ -36,11 +36,11 @@ using oxygen::vortex::testing::MaterialBinderTest;
   auto asset_key_bytes
     = std::array<std::uint8_t, oxygen::data::AssetKey::kSizeBytes> {};
   const auto bits = std::bit_cast<std::uint32_t>(base_color_r);
-  asset_key_bytes[0] = static_cast<std::uint8_t>((bits >> 0U) & 0xFFU);
-  asset_key_bytes[1] = static_cast<std::uint8_t>((bits >> 8U) & 0xFFU);
-  asset_key_bytes[2] = static_cast<std::uint8_t>((bits >> 16U) & 0xFFU);
-  asset_key_bytes[3] = static_cast<std::uint8_t>((bits >> 24U) & 0xFFU);
-  asset_key_bytes[15] = 0x4DU;
+  asset_key_bytes.at(0) = static_cast<std::uint8_t>((bits >> 0U) & 0xFFU);
+  asset_key_bytes.at(1) = static_cast<std::uint8_t>((bits >> 8U) & 0xFFU);
+  asset_key_bytes.at(2) = static_cast<std::uint8_t>((bits >> 16U) & 0xFFU);
+  asset_key_bytes.at(3) = static_cast<std::uint8_t>((bits >> 24U) & 0xFFU);
+  asset_key_bytes.at(15) = 0x4DU;
   const auto asset_key = oxygen::data::AssetKey::FromBytes(asset_key_bytes);
 
   MaterialAssetDesc desc {};
@@ -59,15 +59,19 @@ class MaterialBinderEdgeTest : public MaterialBinderTest { };
 //! Atlas resizes must force a full re-upload of existing material constants.
 NOLINT_TEST_F(MaterialBinderEdgeTest, ResizingAtlasReuploadsAllMaterials)
 {
-  auto* fake_gfx = static_cast<FakeGraphics*>(GfxPtr().get());
+  auto* fake_gfx = &Gfx();
   ASSERT_NE(fake_gfx, nullptr);
 
-  const auto OnFrameStart = [&](const std::uint32_t slot) {
+  const auto OnFrameStart = [&](const std::uint32_t slot) -> void {
     Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-      oxygen::frame::Slot { slot });
+      oxygen::frame::Slot {
+        slot,
+      });
     MatBinder().OnFrameStart(
       oxygen::vortex::internal::RendererTagFactory::Get(),
-      oxygen::frame::Slot { slot });
+      oxygen::frame::Slot {
+        slot,
+      });
   };
 
   // Arrange: allocate and upload a baseline set of materials.
@@ -76,7 +80,8 @@ NOLINT_TEST_F(MaterialBinderEdgeTest, ResizingAtlasReuploadsAllMaterials)
   constexpr std::uint32_t kInitialCount = 8U;
   for (std::uint32_t i = 0U; i < kInitialCount; ++i) {
     oxygen::vortex::sceneprep::MaterialRef ref;
-    ref.resolved_asset = MakeSolidMaterial(0.1F + static_cast<float>(i) * 0.1F);
+    ref.resolved_asset
+      = MakeSolidMaterial(0.1F + (static_cast<float>(i) * 0.1F));
     ref.source_asset_key = ref.resolved_asset->GetAssetKey();
     ref.resolved_asset_key = ref.resolved_asset->GetAssetKey();
     const auto h = MatBinder().GetOrAllocate(ref);
@@ -113,7 +118,7 @@ NOLINT_TEST_F(MaterialBinderEdgeTest, ResizingAtlasReuploadsAllMaterials)
   for (std::uint32_t i = 0U; i < kAdditionalCount; ++i) {
     oxygen::vortex::sceneprep::MaterialRef ref;
     ref.resolved_asset
-      = MakeSolidMaterial(2.0F + static_cast<float>(i) * (1.0F / 1024.0F));
+      = MakeSolidMaterial(2.0F + (static_cast<float>(i) * (1.0F / 1024.0F)));
     ref.source_asset_key = ref.resolved_asset->GetAssetKey();
     ref.resolved_asset_key = ref.resolved_asset->GetAssetKey();
     const auto h = MatBinder().GetOrAllocate(ref);
@@ -130,7 +135,7 @@ NOLINT_TEST_F(MaterialBinderEdgeTest, ResizingAtlasReuploadsAllMaterials)
   ASSERT_TRUE(fake_gfx->buffer_log_.copy_called);
   ASSERT_FALSE(fake_gfx->buffer_log_.copies.empty());
 
-  std::size_t min_dst_offset = (std::numeric_limits<std::size_t>::max)();
+  std::size_t min_dst_offset = std::numeric_limits<std::size_t>::max();
   for (const auto& e : fake_gfx->buffer_log_.copies) {
     min_dst_offset = (std::min)(min_dst_offset, e.dst_offset);
   }
@@ -142,9 +147,13 @@ NOLINT_TEST_F(MaterialBinderEdgeTest, NoTexturesSkipsTextureBinder)
 {
   // Arrange
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+    oxygen::frame::Slot {
+      1,
+    });
   MatBinder().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+    oxygen::frame::Slot {
+      1,
+    });
 
   const auto calls_before = TexBinderGetOrAllocateTotalCalls();
 
@@ -160,10 +169,7 @@ NOLINT_TEST_F(MaterialBinderEdgeTest, NoTexturesSkipsTextureBinder)
   ASSERT_TRUE(MatBinder().IsHandleValid(h));
   EXPECT_EQ(TexBinderGetOrAllocateTotalCalls(), calls_before);
 
-  const auto constants
-    = MatBinder()
-        // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
-        .GetMaterialShadingConstants()[static_cast<std::size_t>(h.get())];
+  const auto constants = MaterialConstants(h);
 
   const auto u_invalid = oxygen::kInvalidShaderVisibleIndex;
   EXPECT_EQ(constants.base_color_texture_index, u_invalid);

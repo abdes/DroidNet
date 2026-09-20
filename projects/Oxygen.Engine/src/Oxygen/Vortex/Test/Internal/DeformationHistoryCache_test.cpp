@@ -42,14 +42,18 @@ NOLINT_TEST(DeformationHistoryCacheTest,
 {
   auto scene = std::make_shared<scene::Scene>("DeformationHistoryCache", 16U);
   auto node = scene->CreateNode("NodeA");
-  const auto geometry_key = AssetKey::FromVirtualPath("/Tests/Vortex/GeoA.ogeo");
+  const auto geometry_key
+    = AssetKey::FromVirtualPath("/Tests/Vortex/GeoA.ogeo");
   auto cache = DeformationHistoryCache {};
 
   const auto current_a = MaterialWpoPublication {
     .contract_hash = 11U,
     .capability_flags = 1U,
   };
-  cache.BeginFrame(1U, observer_ptr<const scene::Scene> { scene.get() });
+  cache.BeginFrame(1U,
+    observer_ptr<const scene::Scene> {
+      scene.get(),
+    });
   const auto first = cache.TouchCurrentMaterialWpo(
     MakeIdentity(node.GetHandle(), geometry_key,
       VelocityProducerFamily::kMaterialWpo, current_a.contract_hash),
@@ -62,7 +66,10 @@ NOLINT_TEST(DeformationHistoryCacheTest,
     .contract_hash = 11U,
     .capability_flags = 3U,
   };
-  cache.BeginFrame(2U, observer_ptr<const scene::Scene> { scene.get() });
+  cache.BeginFrame(2U,
+    observer_ptr<const scene::Scene> {
+      scene.get(),
+    });
   const auto second = cache.TouchCurrentMaterialWpo(
     MakeIdentity(node.GetHandle(), geometry_key,
       VelocityProducerFamily::kMaterialWpo, current_b.contract_hash),
@@ -76,20 +83,27 @@ NOLINT_TEST(DeformationHistoryCacheTest, ContractChangeInvalidatesHistory)
 {
   auto scene = std::make_shared<scene::Scene>("ContractChange", 16U);
   auto node = scene->CreateNode("NodeA");
-  const auto geometry_key = AssetKey::FromVirtualPath("/Tests/Vortex/GeoC.ogeo");
+  const auto geometry_key
+    = AssetKey::FromVirtualPath("/Tests/Vortex/GeoC.ogeo");
   auto cache = DeformationHistoryCache {};
 
-  cache.BeginFrame(1U, observer_ptr<const scene::Scene> { scene.get() });
-  static_cast<void>(cache.TouchCurrentMaterialWpo(
-    MakeIdentity(node.GetHandle(), geometry_key,
-      VelocityProducerFamily::kMaterialWpo, 11U),
-    MaterialWpoPublication {
-      .contract_hash = 11U,
-      .capability_flags = 1U,
-    }));
+  cache.BeginFrame(1U,
+    observer_ptr<const scene::Scene> {
+      scene.get(),
+    });
+  static_cast<void>(
+    cache.TouchCurrentMaterialWpo(MakeIdentity(node.GetHandle(), geometry_key,
+                                    VelocityProducerFamily::kMaterialWpo, 11U),
+      MaterialWpoPublication {
+        .contract_hash = 11U,
+        .capability_flags = 1U,
+      }));
   cache.EndFrame();
 
-  cache.BeginFrame(2U, observer_ptr<const scene::Scene> { scene.get() });
+  cache.BeginFrame(2U,
+    observer_ptr<const scene::Scene> {
+      scene.get(),
+    });
   const auto changed = cache.TouchCurrentMaterialWpo(
     MakeIdentity(node.GetHandle(), geometry_key,
       VelocityProducerFamily::kMaterialWpo, 22U),
@@ -107,13 +121,17 @@ NOLINT_TEST(DeformationHistoryCacheTest, SceneSwitchInvalidatesPriorHistory)
   auto scene_b = std::make_shared<scene::Scene>("SceneB", 16U);
   auto node_a = scene_a->CreateNode("NodeA");
   auto cache = DeformationHistoryCache {};
-  const auto geometry_key = AssetKey::FromVirtualPath("/Tests/Vortex/GeoB.ogeo");
+  const auto geometry_key
+    = AssetKey::FromVirtualPath("/Tests/Vortex/GeoB.ogeo");
 
   const auto status_a = MotionVectorStatusPublication {
     .contract_hash = 33U,
     .capability_flags = 5U,
   };
-  cache.BeginFrame(1U, observer_ptr<const scene::Scene> { scene_a.get() });
+  cache.BeginFrame(1U,
+    observer_ptr<const scene::Scene> {
+      scene_a.get(),
+    });
   static_cast<void>(cache.TouchCurrentMotionVectorStatus(
     MakeIdentity(node_a.GetHandle(), geometry_key,
       VelocityProducerFamily::kMotionVectorStatus, status_a.contract_hash),
@@ -124,7 +142,10 @@ NOLINT_TEST(DeformationHistoryCacheTest, SceneSwitchInvalidatesPriorHistory)
     .contract_hash = 44U,
     .capability_flags = 7U,
   };
-  cache.BeginFrame(2U, observer_ptr<const scene::Scene> { scene_b.get() });
+  cache.BeginFrame(2U,
+    observer_ptr<const scene::Scene> {
+      scene_b.get(),
+    });
   const auto second = cache.TouchCurrentMotionVectorStatus(
     MakeIdentity(node_a.GetHandle(), geometry_key,
       VelocityProducerFamily::kMotionVectorStatus, status_b.contract_hash),

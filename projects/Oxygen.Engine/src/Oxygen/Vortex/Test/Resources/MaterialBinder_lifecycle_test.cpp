@@ -22,46 +22,34 @@ namespace {
 using oxygen::content::ResourceKey;
 using oxygen::vortex::testing::MaterialBinderTest;
 
-[[nodiscard]] auto MakeMaterial(ResourceKey base_color_key,
-  ResourceKey normal_key, uint32_t raw_base_color_index,
-  uint32_t raw_normal_index)
-  -> std::shared_ptr<const oxygen::data::MaterialAsset>
-{
-  using oxygen::data::pak::render::MaterialAssetDesc;
-
-  MaterialAssetDesc desc {};
-  desc.base_color_texture
-    = oxygen::data::pak::core::ResourceIndexT { raw_base_color_index };
-  desc.normal_texture
-    = oxygen::data::pak::core::ResourceIndexT { raw_normal_index };
-
-  desc.base_color[0] = 0.2F;
-  desc.base_color[1] = 0.3F;
-  desc.base_color[2] = 0.4F;
-  desc.base_color[3] = 1.0F;
-
-  return std::make_shared<oxygen::data::MaterialAsset>(
-    oxygen::data::AssetKey {}, desc,
-    std::vector<oxygen::data::ShaderReference> {},
-    std::vector { base_color_key, normal_key });
-}
-
 class MaterialBinderLifecycleTest : public MaterialBinderTest { };
 
 //! Material handles for identical materials remain stable across frames.
 NOLINT_TEST_F(MaterialBinderLifecycleTest, HandlesStableAcrossFrames)
 {
-  const ResourceKey base_color_key { 6001U };
-  const ResourceKey normal_key { 6002U };
+  const ResourceKey base_color_key {
+    6001U,
+  };
+  const ResourceKey normal_key {
+    6002U,
+  };
 
   // Frame 1
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+    oxygen::frame::Slot {
+      1,
+    });
   MatBinder().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+    oxygen::frame::Slot {
+      1,
+    });
 
   oxygen::vortex::sceneprep::MaterialRef ref;
-  ref.resolved_asset = MakeMaterial(base_color_key, normal_key, 1U, 2U);
+  ref.resolved_asset = MakeMaterial({ .base_color_key = base_color_key,
+    .normal_key = normal_key,
+    .raw_base_color_index = 1U,
+    .raw_normal_index = 2U,
+    .base_color = { 0.2F, 0.3F, 0.4F, 1.0F, }, });
   ref.source_asset_key = ref.resolved_asset->GetAssetKey();
   ref.resolved_asset_key = ref.resolved_asset->GetAssetKey();
 
@@ -70,9 +58,13 @@ NOLINT_TEST_F(MaterialBinderLifecycleTest, HandlesStableAcrossFrames)
 
   // Frame 2 (new slot) - identical material should resolve to same handle
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 2 });
+    oxygen::frame::Slot {
+      2,
+    });
   MatBinder().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 2 });
+    oxygen::frame::Slot {
+      2,
+    });
 
   const auto handle1 = MatBinder().GetOrAllocate(ref);
   ASSERT_TRUE(MatBinder().IsHandleValid(handle1));
@@ -83,25 +75,45 @@ NOLINT_TEST_F(MaterialBinderLifecycleTest, HandlesStableAcrossFrames)
 //! Material handles remain stable when encounter order changes across frames.
 NOLINT_TEST_F(MaterialBinderLifecycleTest, HandlesStableAcrossFramesWithReorder)
 {
-  const ResourceKey base_color_key_a { 7101U };
-  const ResourceKey normal_key_a { 7102U };
-  const ResourceKey base_color_key_b { 7201U };
-  const ResourceKey normal_key_b { 7202U };
+  const ResourceKey base_color_key_a {
+    7101U,
+  };
+  const ResourceKey normal_key_a {
+    7102U,
+  };
+  const ResourceKey base_color_key_b {
+    7201U,
+  };
+  const ResourceKey normal_key_b {
+    7202U,
+  };
 
   oxygen::vortex::sceneprep::MaterialRef a;
-  a.resolved_asset = MakeMaterial(base_color_key_a, normal_key_a, 1U, 2U);
+  a.resolved_asset = MakeMaterial({ .base_color_key = base_color_key_a,
+    .normal_key = normal_key_a,
+    .raw_base_color_index = 1U,
+    .raw_normal_index = 2U,
+    .base_color = { 0.2F, 0.3F, 0.4F, 1.0F, }, });
   a.source_asset_key = a.resolved_asset->GetAssetKey();
   a.resolved_asset_key = a.resolved_asset->GetAssetKey();
   oxygen::vortex::sceneprep::MaterialRef b;
-  b.resolved_asset = MakeMaterial(base_color_key_b, normal_key_b, 3U, 4U);
+  b.resolved_asset = MakeMaterial({ .base_color_key = base_color_key_b,
+    .normal_key = normal_key_b,
+    .raw_base_color_index = 3U,
+    .raw_normal_index = 4U,
+    .base_color = { 0.2F, 0.3F, 0.4F, 1.0F, }, });
   b.source_asset_key = b.resolved_asset->GetAssetKey();
   b.resolved_asset_key = b.resolved_asset->GetAssetKey();
 
   // Frame 1: A then B
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+    oxygen::frame::Slot {
+      1,
+    });
   MatBinder().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+    oxygen::frame::Slot {
+      1,
+    });
 
   const auto ha1 = MatBinder().GetOrAllocate(a);
   const auto hb1 = MatBinder().GetOrAllocate(b);
@@ -110,9 +122,13 @@ NOLINT_TEST_F(MaterialBinderLifecycleTest, HandlesStableAcrossFramesWithReorder)
 
   // Frame 2: B then A (reordered)
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 2 });
+    oxygen::frame::Slot {
+      2,
+    });
   MatBinder().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 2 });
+    oxygen::frame::Slot {
+      2,
+    });
 
   const auto hb2 = MatBinder().GetOrAllocate(b);
   const auto ha2 = MatBinder().GetOrAllocate(a);
@@ -127,38 +143,55 @@ NOLINT_TEST_F(MaterialBinderLifecycleTest, HandlesStableAcrossFramesWithReorder)
 NOLINT_TEST_F(
   MaterialBinderLifecycleTest, AllocationOrderDoesNotChangeConstants)
 {
-  const ResourceKey base_color_key { 8001U };
-  const ResourceKey normal_key { 8002U };
+  const ResourceKey base_color_key {
+    8001U,
+  };
+  const ResourceKey normal_key {
+    8002U,
+  };
 
   // Case A: allocate textures first, then material
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+    oxygen::frame::Slot {
+      1,
+    });
   MatBinder().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+    oxygen::frame::Slot {
+      1,
+    });
 
   const auto texBaseA = TexBinder().GetOrAllocate(base_color_key).get();
   const auto texNormalA = TexBinder().GetOrAllocate(normal_key).get();
 
   oxygen::vortex::sceneprep::MaterialRef mA;
-  mA.resolved_asset = MakeMaterial(base_color_key, normal_key, 111U, 222U);
+  mA.resolved_asset = MakeMaterial({ .base_color_key = base_color_key,
+    .normal_key = normal_key,
+    .raw_base_color_index = 111U,
+    .raw_normal_index = 222U,
+    .base_color = { 0.2F, 0.3F, 0.4F, 1.0F, }, });
   mA.source_asset_key = mA.resolved_asset->GetAssetKey();
   mA.resolved_asset_key = mA.resolved_asset->GetAssetKey();
   const auto handleA = MatBinder().GetOrAllocate(mA);
   ASSERT_TRUE(MatBinder().IsHandleValid(handleA));
 
-  const auto constantsA
-    = MatBinder()
-        // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
-        .GetMaterialShadingConstants()[static_cast<std::size_t>(handleA.get())];
+  const auto constantsA = MaterialConstants(handleA);
 
   // Case B: new slot, allocate material first, then textures
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 2 });
+    oxygen::frame::Slot {
+      2,
+    });
   MatBinder().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 2 });
+    oxygen::frame::Slot {
+      2,
+    });
 
   oxygen::vortex::sceneprep::MaterialRef mB;
-  mB.resolved_asset = MakeMaterial(base_color_key, normal_key, 111U, 222U);
+  mB.resolved_asset = MakeMaterial({ .base_color_key = base_color_key,
+    .normal_key = normal_key,
+    .raw_base_color_index = 111U,
+    .raw_normal_index = 222U,
+    .base_color = { 0.2F, 0.3F, 0.4F, 1.0F, }, });
   mB.source_asset_key = mB.resolved_asset->GetAssetKey();
   mB.resolved_asset_key = mB.resolved_asset->GetAssetKey();
   const auto handleB = MatBinder().GetOrAllocate(mB);
@@ -167,10 +200,7 @@ NOLINT_TEST_F(
   const auto texBaseB = TexBinder().GetOrAllocate(base_color_key).get();
   const auto texNormalB = TexBinder().GetOrAllocate(normal_key).get();
 
-  const auto constantsB
-    = MatBinder()
-        // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
-        .GetMaterialShadingConstants()[static_cast<std::size_t>(handleB.get())];
+  const auto constantsB = MaterialConstants(handleB);
 
   EXPECT_EQ(
     constantsA.base_color_texture_index, constantsB.base_color_texture_index);
@@ -183,31 +213,37 @@ NOLINT_TEST_F(
 //! effects.
 NOLINT_TEST_F(MaterialBinderLifecycleTest, EnsureFrameResourcesIdempotent)
 {
-  const ResourceKey base_color_key { 62001U };
-  const ResourceKey normal_key { 62002U };
+  const ResourceKey base_color_key {
+    62001U,
+  };
+  const ResourceKey normal_key {
+    62002U,
+  };
 
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+    oxygen::frame::Slot {
+      1,
+    });
   MatBinder().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+    oxygen::frame::Slot {
+      1,
+    });
 
   oxygen::vortex::sceneprep::MaterialRef ref;
-  ref.resolved_asset = MakeMaterial(base_color_key, normal_key, 5U, 6U);
+  ref.resolved_asset = MakeMaterial({ .base_color_key = base_color_key,
+    .normal_key = normal_key,
+    .raw_base_color_index = 5U,
+    .raw_normal_index = 6U,
+    .base_color = { 0.2F, 0.3F, 0.4F, 1.0F, }, });
   ref.source_asset_key = ref.resolved_asset->GetAssetKey();
   ref.resolved_asset_key = ref.resolved_asset->GetAssetKey();
   const auto h = MatBinder().GetOrAllocate(ref);
   ASSERT_TRUE(MatBinder().IsHandleValid(h));
 
   MatBinder().EnsureFrameResources();
-  const auto constantsA
-    // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
-    = MatBinder()
-        .GetMaterialShadingConstants()[static_cast<std::size_t>(h.get())];
+  const auto constantsA = MaterialConstants(h);
   MatBinder().EnsureFrameResources();
-  const auto constantsB
-    // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
-    = MatBinder()
-        .GetMaterialShadingConstants()[static_cast<std::size_t>(h.get())];
+  const auto constantsB = MaterialConstants(h);
 
   EXPECT_EQ(
     constantsA.base_color_texture_index, constantsB.base_color_texture_index);
@@ -218,15 +254,27 @@ NOLINT_TEST_F(MaterialBinderLifecycleTest, EnsureFrameResourcesIdempotent)
 //! change.
 NOLINT_TEST_F(MaterialBinderLifecycleTest, UpdateMaterialInPlace)
 {
-  const ResourceKey base_color_key { 63001U };
-  const ResourceKey normal_key { 63002U };
+  const ResourceKey base_color_key {
+    63001U,
+  };
+  const ResourceKey normal_key {
+    63002U,
+  };
 
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+    oxygen::frame::Slot {
+      1,
+    });
   MatBinder().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+    oxygen::frame::Slot {
+      1,
+    });
 
-  auto a = MakeMaterial(base_color_key, normal_key, 1U, 2U);
+  auto a = MakeMaterial({ .base_color_key = base_color_key,
+    .normal_key = normal_key,
+    .raw_base_color_index = 1U,
+    .raw_normal_index = 2U,
+    .base_color = { 0.2F, 0.3F, 0.4F, 1.0F, }, });
   oxygen::vortex::sceneprep::MaterialRef ra;
   ra.resolved_asset = a;
   ra.source_asset_key = ra.resolved_asset->GetAssetKey();
@@ -235,21 +283,23 @@ NOLINT_TEST_F(MaterialBinderLifecycleTest, UpdateMaterialInPlace)
   const auto h = MatBinder().GetOrAllocate(ra);
   ASSERT_TRUE(MatBinder().IsHandleValid(h));
 
-  const auto before
-    // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
-    = MatBinder()
-        .GetMaterialShadingConstants()[static_cast<std::size_t>(h.get())];
+  const auto before = MaterialConstants(h);
 
   // New material uses different texture keys
-  const ResourceKey new_base { 63011U };
-  const ResourceKey new_normal { 63012U };
-  auto b = MakeMaterial(new_base, new_normal, 11U, 12U);
+  const ResourceKey new_base {
+    63011U,
+  };
+  const ResourceKey new_normal {
+    63012U,
+  };
+  auto b = MakeMaterial({ .base_color_key = new_base,
+    .normal_key = new_normal,
+    .raw_base_color_index = 11U,
+    .raw_normal_index = 12U,
+    .base_color = { 0.2F, 0.3F, 0.4F, 1.0F, }, });
 
   MatBinder().Update(h, b);
-  const auto after
-    // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
-    = MatBinder()
-        .GetMaterialShadingConstants()[static_cast<std::size_t>(h.get())];
+  const auto after = MaterialConstants(h);
 
   EXPECT_NE(before.base_color_texture_index, after.base_color_texture_index);
   EXPECT_NE(before.normal_texture_index, after.normal_texture_index);
@@ -258,16 +308,28 @@ NOLINT_TEST_F(MaterialBinderLifecycleTest, UpdateMaterialInPlace)
 //! Evicting a material invalidates its existing handle on the next frame.
 NOLINT_TEST_F(MaterialBinderLifecycleTest, EvictionInvalidatesHandle)
 {
-  const ResourceKey base_color_key { 70001U };
-  const ResourceKey normal_key { 70002U };
+  const ResourceKey base_color_key {
+    70001U,
+  };
+  const ResourceKey normal_key {
+    70002U,
+  };
 
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+    oxygen::frame::Slot {
+      1,
+    });
   MatBinder().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+    oxygen::frame::Slot {
+      1,
+    });
 
   oxygen::vortex::sceneprep::MaterialRef ref;
-  ref.resolved_asset = MakeMaterial(base_color_key, normal_key, 31U, 32U);
+  ref.resolved_asset = MakeMaterial({ .base_color_key = base_color_key,
+    .normal_key = normal_key,
+    .raw_base_color_index = 31U,
+    .raw_normal_index = 32U,
+    .base_color = { 0.2F, 0.3F, 0.4F, 1.0F, }, });
   ref.source_asset_key = ref.resolved_asset->GetAssetKey();
   ref.resolved_asset_key = ref.resolved_asset->GetAssetKey();
 
@@ -278,9 +340,13 @@ NOLINT_TEST_F(MaterialBinderLifecycleTest, EvictionInvalidatesHandle)
     ref.resolved_asset->GetAssetKey(), oxygen::content::EvictionReason::kClear);
 
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 2 });
+    oxygen::frame::Slot {
+      2,
+    });
   MatBinder().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 2 });
+    oxygen::frame::Slot {
+      2,
+    });
 
   EXPECT_FALSE(MatBinder().IsHandleValid(old_handle));
 }
@@ -288,16 +354,28 @@ NOLINT_TEST_F(MaterialBinderLifecycleTest, EvictionInvalidatesHandle)
 //! Evicted material slots are reclaimed and reused with bumped generation.
 NOLINT_TEST_F(MaterialBinderLifecycleTest, EvictedSlotReuseBumpsGeneration)
 {
-  const ResourceKey base_color_key { 71001U };
-  const ResourceKey normal_key { 71002U };
+  const ResourceKey base_color_key {
+    71001U,
+  };
+  const ResourceKey normal_key {
+    71002U,
+  };
 
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+    oxygen::frame::Slot {
+      1,
+    });
   MatBinder().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+    oxygen::frame::Slot {
+      1,
+    });
 
   oxygen::vortex::sceneprep::MaterialRef ref;
-  ref.resolved_asset = MakeMaterial(base_color_key, normal_key, 41U, 42U);
+  ref.resolved_asset = MakeMaterial({ .base_color_key = base_color_key,
+    .normal_key = normal_key,
+    .raw_base_color_index = 41U,
+    .raw_normal_index = 42U,
+    .base_color = { 0.2F, 0.3F, 0.4F, 1.0F, }, });
   ref.source_asset_key = ref.resolved_asset->GetAssetKey();
   ref.resolved_asset_key = ref.resolved_asset->GetAssetKey();
 
@@ -308,16 +386,24 @@ NOLINT_TEST_F(MaterialBinderLifecycleTest, EvictedSlotReuseBumpsGeneration)
     ref.resolved_asset->GetAssetKey(), oxygen::content::EvictionReason::kClear);
 
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 2 });
+    oxygen::frame::Slot {
+      2,
+    });
   MatBinder().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 2 });
+    oxygen::frame::Slot {
+      2,
+    });
   EXPECT_FALSE(MatBinder().IsHandleValid(old_handle));
 
   // Reclaim deferred releases (same slot cycle) before allocating again.
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 2 });
+    oxygen::frame::Slot {
+      2,
+    });
   MatBinder().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 2 });
+    oxygen::frame::Slot {
+      2,
+    });
 
   const auto new_handle = MatBinder().GetOrAllocate(ref);
   EXPECT_TRUE(MatBinder().IsHandleValid(new_handle));
@@ -328,22 +414,42 @@ NOLINT_TEST_F(MaterialBinderLifecycleTest, EvictedSlotReuseBumpsGeneration)
 //! Updating a handle to an existing key does not steal canonical mapping.
 NOLINT_TEST_F(MaterialBinderLifecycleTest, UpdateDoesNotChangeCanonicalHandle)
 {
-  const ResourceKey base_color_key_a { 7401U };
-  const ResourceKey normal_key_a { 7402U };
-  const ResourceKey base_color_key_b { 7501U };
-  const ResourceKey normal_key_b { 7502U };
+  const ResourceKey base_color_key_a {
+    7401U,
+  };
+  const ResourceKey normal_key_a {
+    7402U,
+  };
+  const ResourceKey base_color_key_b {
+    7501U,
+  };
+  const ResourceKey normal_key_b {
+    7502U,
+  };
 
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+    oxygen::frame::Slot {
+      1,
+    });
   MatBinder().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+    oxygen::frame::Slot {
+      1,
+    });
 
   oxygen::vortex::sceneprep::MaterialRef a;
-  a.resolved_asset = MakeMaterial(base_color_key_a, normal_key_a, 1U, 2U);
+  a.resolved_asset = MakeMaterial({ .base_color_key = base_color_key_a,
+    .normal_key = normal_key_a,
+    .raw_base_color_index = 1U,
+    .raw_normal_index = 2U,
+    .base_color = { 0.2F, 0.3F, 0.4F, 1.0F, }, });
   a.source_asset_key = a.resolved_asset->GetAssetKey();
   a.resolved_asset_key = a.resolved_asset->GetAssetKey();
   oxygen::vortex::sceneprep::MaterialRef b;
-  b.resolved_asset = MakeMaterial(base_color_key_b, normal_key_b, 3U, 4U);
+  b.resolved_asset = MakeMaterial({ .base_color_key = base_color_key_b,
+    .normal_key = normal_key_b,
+    .raw_base_color_index = 3U,
+    .raw_normal_index = 4U,
+    .base_color = { 0.2F, 0.3F, 0.4F, 1.0F, }, });
   b.source_asset_key = b.resolved_asset->GetAssetKey();
   b.resolved_asset_key = b.resolved_asset->GetAssetKey();
 
@@ -361,11 +467,8 @@ NOLINT_TEST_F(MaterialBinderLifecycleTest, UpdateDoesNotChangeCanonicalHandle)
 
   // hb remains valid and now points at A constants (duplicate content handle).
   ASSERT_TRUE(MatBinder().IsHandleValid(hb));
-  const auto all = MatBinder().GetMaterialShadingConstants();
-  // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
-  const auto ca = all[static_cast<std::size_t>(ha.get())];
-  // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
-  const auto cb = all[static_cast<std::size_t>(hb.get())];
+  const auto ca = MaterialConstants(ha);
+  const auto cb = MaterialConstants(hb);
   EXPECT_EQ(ca.base_color_texture_index, cb.base_color_texture_index);
   EXPECT_EQ(ca.normal_texture_index, cb.normal_texture_index);
 }
@@ -375,16 +478,28 @@ NOLINT_TEST_F(MaterialBinderLifecycleTest, UpdateDoesNotChangeCanonicalHandle)
 NOLINT_TEST_F(
   MaterialBinderLifecycleTest, TeardownAfterEnsureFrameResourcesDoesNotHang)
 {
-  const ResourceKey base_color_key { 7601U };
-  const ResourceKey normal_key { 7602U };
+  const ResourceKey base_color_key {
+    7601U,
+  };
+  const ResourceKey normal_key {
+    7602U,
+  };
 
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+    oxygen::frame::Slot {
+      1,
+    });
   MatBinder().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+    oxygen::frame::Slot {
+      1,
+    });
 
   oxygen::vortex::sceneprep::MaterialRef ref;
-  ref.resolved_asset = MakeMaterial(base_color_key, normal_key, 7U, 8U);
+  ref.resolved_asset = MakeMaterial({ .base_color_key = base_color_key,
+    .normal_key = normal_key,
+    .raw_base_color_index = 7U,
+    .raw_normal_index = 8U,
+    .base_color = { 0.2F, 0.3F, 0.4F, 1.0F, }, });
   ref.source_asset_key = ref.resolved_asset->GetAssetKey();
   ref.resolved_asset_key = ref.resolved_asset->GetAssetKey();
 

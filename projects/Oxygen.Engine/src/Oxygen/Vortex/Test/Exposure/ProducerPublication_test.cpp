@@ -8,9 +8,7 @@
 #include <array>
 #include <bit>
 #include <cmath>
-#include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <limits>
 #include <span>
 
@@ -21,7 +19,7 @@
 
 namespace oxygen::vortex::testing::exposure {
 
-using namespace oxygen::graphics;
+using graphics::ResourceStates;
 
 NOLINT_TEST_F(ExposureGpuTest, ProducerChecksPreserveOrderedFailuresAndCounts)
 {
@@ -31,45 +29,82 @@ NOLINT_TEST_F(ExposureGpuTest, ProducerChecksPreserveOrderedFailuresAndCounts)
   settings.key = 12.5F;
   const auto config = SharedConfig(settings);
   const auto meter = Uniform(.25F);
-  const std::array<Pixel, 1> finite { Pixel { .25F, .5F, 2.0F, .5F } };
-  const std::array<Pixel, 1> nonfinite { Pixel {
-    .25F, .5F, 2.0F, std::numeric_limits<float>::quiet_NaN() } };
+  const std::array<Pixel, 1> finite {
+    Pixel {
+      .25F,
+      .5F,
+      2.0F,
+      .5F,
+    },
+  };
+  const std::array<Pixel, 1> nonfinite {
+    Pixel {
+      .25F,
+      .5F,
+      2.0F,
+      std::numeric_limits<float>::quiet_NaN(),
+    },
+  };
   const auto scene = MakeSignal(9U, 1U, finite);
   constexpr auto expected_products = (1U << 5U) | (1U << 9U) | (1U << 10U);
-  const auto failure_bit
-    = [](const unsigned id) { return id == 11U ? 1U : (id == 6U ? 2U : 4U); };
-  for (const auto format : { Format::kRGBA32Float, Format::kRGBA16Float }) {
+  const auto failure_bit = [](const unsigned id) -> unsigned int {
+    if (id == 11U) {
+      return 1U;
+    }
+    if (id == 6U) {
+      return 2U;
+    }
+    return 4U;
+  };
+  for (const auto format : {
+         Format::kRGBA32Float,
+         Format::kRGBA16Float,
+       }) {
     const auto producer = MakeSignal(9U, 3U, finite, 2U, format);
     const auto invalid = MakeSignal(9U, 3U, nonfinite, 2U, format);
-    auto order = std::array { 6U, 10U, 11U };
-    do {
-      for (const unsigned invalid_product : { 0U, 6U, 10U }) {
+    auto order = std::array {
+      6U,
+      10U,
+      11U,
+    };
+    for (bool has_order = true; has_order;
+      has_order = std::ranges::next_permutation(order).found) {
+      for (const unsigned invalid_product : {
+             0U,
+             6U,
+             10U,
+           }) {
         const auto first_mask = invalid_product == 0U ? 0U : 7U;
         for (unsigned mask = first_mask; mask < 8U; ++mask) {
           SCOPED_TRACE(::testing::Message()
-            << "format=" << static_cast<unsigned>(format)
-            << " order=" << order[0] << ',' << order[1] << ',' << order[2]
+            << "format=" << static_cast<unsigned>(format) << " order="
+            << order.at(0) << ',' << order.at(1) << ',' << order.at(2)
             << " invalid=" << invalid_product << " gain-mask=" << mask);
-          ctx_.frame_sequence = frame::SequenceNumber { ++sequence_ };
-          const auto frame
-            = pass_->ResolveFrame(ctx_, config, { .use_fp32 = true });
+          ctx_.frame_sequence = frame::SequenceNumber {
+            ++sequence_,
+          };
+          auto frame_inputs = postprocess::ExposurePass::FrameInputs {};
+          frame_inputs.use_fp32 = true;
+          const auto frame = pass_->ResolveFrame(ctx_, config, frame_inputs);
           ASSERT_NE(frame, nullptr);
           ASSERT_TRUE(RecordShared(meter, config).executed);
           std::array<postprocess::ExposurePass::HdrProduct, 3> products;
           auto expected_first = invalid_product;
           auto expected_rejected = invalid_product == 0U ? 0U : 54U;
           for (unsigned index = 0U; index < order.size(); ++index) {
-            const auto id = order[index];
-            const auto& signal = id == 11U
-              ? scene
-              : (id == invalid_product ? invalid : producer);
+            const auto id = order.at(index);
+            const auto& producer_signal
+              = id == invalid_product ? invalid : producer;
+            const auto& signal = id == 11U ? scene : producer_signal;
             const auto bad_gain = (mask & failure_bit(id)) != 0U;
-            products[index] = { .texture = signal.texture.get(),
+            products.at(index) = {
+              .texture = signal.texture.get(),
               .srv = signal.srv,
               .id = id,
               .transmittance = id != 11U,
               .consumer_rgb_gain
-              = bad_gain ? std::numeric_limits<float>::quiet_NaN() : 1.0F };
+              = bad_gain ? std::numeric_limits<float>::quiet_NaN() : 1.0F,
+            };
             if (id != invalid_product && bad_gain) {
               expected_rejected += id == 11U ? 9U : 54U;
               if (expected_first == 0U) {
@@ -78,7 +113,7 @@ NOLINT_TEST_F(ExposureGpuTest, ProducerChecksPreserveOrderedFailuresAndCounts)
             }
             if (id != 11U) {
               ASSERT_TRUE(
-                pass_->GatherFilterGradients(ctx_, frame, products[index]));
+                pass_->GatherFilterGradients(ctx_, frame, products.at(index)));
             }
           }
           ASSERT_TRUE(
@@ -101,15 +136,21 @@ NOLINT_TEST_F(ExposureGpuTest, ProducerChecksPreserveOrderedFailuresAndCounts)
           const auto status
             = Read<ExposureStatusStorage>(*frame->current_state->status_buffer,
               ResourceStates::kShaderResource);
-          for (const auto id : { 6U, 10U }) {
-            const auto& bound = status.candidate_errors[id == 6U ? 1U : 2U];
+          for (const auto id : {
+                 6U,
+                 10U,
+               }) {
+            const auto& bound = status.candidate_errors.at(id == 6U ? 1U : 2U);
             if (id == invalid_product) {
               EXPECT_TRUE(std::isinf(bound.rgb_absolute));
               EXPECT_TRUE(std::isinf(bound.transmittance_absolute));
             } else {
-              for (const auto value : { bound.rgb_relative, bound.rgb_absolute,
+              for (const auto value : {
+                     bound.rgb_relative,
+                     bound.rgb_absolute,
                      bound.transmittance_relative,
-                     bound.transmittance_absolute }) {
+                     bound.transmittance_absolute,
+                   }) {
                 EXPECT_TRUE(std::isfinite(value));
                 EXPECT_GE(value, 0.0F);
                 EXPECT_LE(value, 2e-5F);
@@ -118,7 +159,7 @@ NOLINT_TEST_F(ExposureGpuTest, ProducerChecksPreserveOrderedFailuresAndCounts)
           }
         }
       }
-    } while (std::next_permutation(order.begin(), order.end()));
+    }
   }
 }
 
@@ -130,22 +171,33 @@ NOLINT_TEST_F(ExposureGpuTest, CurrentScaleProducerChecksKeepOrderedFailures)
   const auto config = SharedConfig(settings);
   const auto meter = Uniform(.25F);
   const auto signal = Uniform(.5F, 9U, 1U);
-  for (const bool reverse : { false, true }) {
-    ctx_.frame_sequence = frame::SequenceNumber { ++sequence_ };
-    const auto frame = pass_->ResolveFrame(ctx_, config, { .use_fp32 = true });
+  for (const bool reverse : {
+         false,
+         true,
+       }) {
+    ctx_.frame_sequence = frame::SequenceNumber {
+      ++sequence_,
+    };
+    auto frame_inputs = postprocess::ExposurePass::FrameInputs {};
+    frame_inputs.use_fp32 = true;
+    const auto frame = pass_->ResolveFrame(ctx_, config, frame_inputs);
     ASSERT_NE(frame, nullptr);
     ASSERT_TRUE(RecordShared(meter, config).executed);
     auto products = std::array {
-      postprocess::ExposurePass::HdrProduct { .texture = signal.texture.get(),
+      postprocess::ExposurePass::HdrProduct {
+        .texture = signal.texture.get(),
         .srv = signal.srv,
         .id = 6U,
         .transmittance = true,
-        .consumer_rgb_gain = std::numeric_limits<float>::quiet_NaN() },
-      postprocess::ExposurePass::HdrProduct { .texture = signal.texture.get(),
+        .consumer_rgb_gain = std::numeric_limits<float>::quiet_NaN(),
+      },
+      postprocess::ExposurePass::HdrProduct {
+        .texture = signal.texture.get(),
         .srv = signal.srv,
         .id = 10U,
         .transmittance = true,
-        .consumer_rgb_gain = std::numeric_limits<float>::quiet_NaN() }
+        .consumer_rgb_gain = std::numeric_limits<float>::quiet_NaN(),
+      },
     };
     if (reverse) {
       std::ranges::reverse(products);
@@ -175,28 +227,57 @@ NOLINT_TEST_F(ExposureGpuTest, ProducerChecksKeepDivergentLaneFailures)
   const auto config = SharedConfig(settings);
   const auto meter = Uniform(.25F);
   auto pixels = std::array<Pixel, 9> {};
-  pixels.fill(Pixel { .25F, .5F, 2.0F, .5F });
-  for (const auto index : { 1U, 3U }) {
-    pixels[index] = { 0x1p-64F, 0.0F, 0.0F, .5F };
+  pixels.fill(Pixel {
+    .25F,
+    .5F,
+    2.0F,
+    .5F,
+  });
+  for (const auto index : {
+         1U,
+         3U,
+       }) {
+    pixels.at(index) = {
+      0x1p-64F,
+      0.0F,
+      0.0F,
+      .5F,
+    };
   }
-  for (const auto index : { 2U, 5U, 8U }) {
-    pixels[index][3] = std::numeric_limits<float>::quiet_NaN();
+  for (const auto index : {
+         2U,
+         5U,
+         8U,
+       }) {
+    pixels.at(index).at(3) = std::numeric_limits<float>::quiet_NaN();
   }
   const auto signal = MakeSignal(9U, 1U, pixels);
-  for (const auto id : { 6U, 10U }) {
-    ctx_.frame_sequence = frame::SequenceNumber { ++sequence_ };
-    const auto frame = pass_->ResolveFrame(ctx_, config, { .use_fp32 = true });
+  for (const auto id : {
+         6U,
+         10U,
+       }) {
+    ctx_.frame_sequence = frame::SequenceNumber {
+      ++sequence_,
+    };
+    auto frame_inputs = postprocess::ExposurePass::FrameInputs {};
+    frame_inputs.use_fp32 = true;
+    const auto frame = pass_->ResolveFrame(ctx_, config, frame_inputs);
     ASSERT_NE(frame, nullptr);
     ASSERT_TRUE(RecordShared(meter, config).executed);
-    const auto product
-      = postprocess::ExposurePass::HdrProduct { .texture = signal.texture.get(),
-          .srv = signal.srv,
-          .id = id,
-          .transmittance = true,
-          .consumer_rgb_gain = 0x1p60F };
+    const auto product = postprocess::ExposurePass::HdrProduct {
+      .texture = signal.texture.get(),
+      .srv = signal.srv,
+      .id = id,
+      .transmittance = true,
+      .consumer_rgb_gain = 0x1p60F,
+    };
     ASSERT_TRUE(pass_->GatherFilterGradients(ctx_, frame, product));
-    ASSERT_TRUE(pass_->EvaluateFp16Products(
-      ctx_, frame, config, std::span { &product, 1U }, {}));
+    ASSERT_TRUE(pass_->EvaluateFp16Products(ctx_, frame, config,
+      std::span {
+        &product,
+        1U,
+      },
+      {}));
     const auto report = Read<HdrSuitabilityData>(
       *frame->suitability_buffer, ResourceStates::kShaderResource);
     // Three nonfinite texels are rejected by the maximum scan. Of six finite
@@ -225,53 +306,113 @@ NOLINT_TEST_F(ExposureGpuTest, ProducerStoreBoundsMatchSerialUnsignedMax)
   const auto infinity = std::numeric_limits<float>::infinity();
   const auto nan = std::numeric_limits<float>::quiet_NaN();
   const std::array samples {
-    Sample { { 0, 0, 0, 0 }, { 0, 0, 0, 0 }, { 0, 0, 0, 0 } },
     Sample {
-      { -0.0F, 0, -0.0F, 0 }, { -0.0F, 0, -0.0F, 0 }, { -0.0F, 0, -0.0F, 0 } },
-    Sample { { tiny, tiny, tiny, .5F }, { tiny, tiny, tiny, .5F },
-      { tiny, tiny, tiny, .5F } },
-    Sample { { 1.0F / 3.0F, .125F, 3.75F, .375F },
-      { 1.0F / 3.0F, .125F, 3.75F, .375F },
-      { 1.0F / 3.0F, .125F, 3.75F, .375F } },
-    Sample { { 2, 1, .5F, .5F }, { 1.875F, .875F, .25F, .375F },
-      { 2.125F, 1.25F, .75F, .625F } },
-    Sample { { 16, 8, 4, .75F }, { 15, 7, 3, .5F }, { 17, 9, 5, 1 } },
-    Sample { { 0x1p-24F, 0x1p-14F, .125F, 1 }, { 0x1p-24F, 0x1p-14F, .125F, 1 },
-      { 0x1p-24F, 0x1p-14F, .125F, 1 } },
-    Sample { { 1e-20F, 1e-12F, 1e-4F, .875F }, { 0, 0, 0, .5F },
-      { 2e-20F, 2e-12F, 2e-4F, 1 } },
+      .value = { 0, 0, 0, 0, }, .low = { 0, 0, 0, 0, }, .high = { 0, 0, 0, 0, }, },
+    Sample { .value = { -0.0F, 0, -0.0F, 0, },
+      .low = { -0.0F, 0, -0.0F, 0, },
+      .high = { -0.0F, 0, -0.0F, 0, }, },
+    Sample { .value = { tiny, tiny, tiny, .5F, },
+      .low = { tiny, tiny, tiny, .5F, },
+      .high = { tiny, tiny, tiny, .5F, }, },
+    Sample { .value = { 1.0F / 3.0F, .125F, 3.75F, .375F, },
+      .low = { 1.0F / 3.0F, .125F, 3.75F, .375F, },
+      .high = { 1.0F / 3.0F, .125F, 3.75F, .375F, }, },
+    Sample { .value = { 2, 1, .5F, .5F, },
+      .low = { 1.875F, .875F, .25F, .375F, },
+      .high = { 2.125F, 1.25F, .75F, .625F, }, },
+    Sample { .value = { 16, 8, 4, .75F, },
+      .low = { 15, 7, 3, .5F, },
+      .high = { 17, 9, 5, 1, }, },
+    Sample { .value = { 0x1p-24F, 0x1p-14F, .125F, 1, },
+      .low = { 0x1p-24F, 0x1p-14F, .125F, 1, },
+      .high = { 0x1p-24F, 0x1p-14F, .125F, 1, }, },
+    Sample { .value = { 1e-20F, 1e-12F, 1e-4F, .875F, },
+      .low = { 0, 0, 0, .5F, },
+      .high = { 2e-20F, 2e-12F, 2e-4F, 1, }, },
   };
-  enum class Pattern { kFull, kPartial, kSparse, kInvalidSparse, kZero };
+  enum class Pattern : std::uint8_t {
+    kFull,
+    kPartial,
+    kSparse,
+    kInvalidSparse,
+    kZero
+  };
   unsigned cases = 0U;
   unsigned wave_width = 0U;
-  for (const unsigned product : { 5U, 6U, 10U }) {
-    for (const unsigned fp16 : { 0U, 1U }) {
-      for (const auto pattern : { Pattern::kFull, Pattern::kPartial,
-             Pattern::kSparse, Pattern::kInvalidSparse, Pattern::kZero }) {
+  for (const unsigned product : {
+         5U,
+         6U,
+         10U,
+       }) {
+    for (const unsigned fp16 : {
+           0U,
+           1U,
+         }) {
+      for (const auto pattern : {
+             Pattern::kFull,
+             Pattern::kPartial,
+             Pattern::kSparse,
+             Pattern::kInvalidSparse,
+             Pattern::kZero,
+           }) {
         SCOPED_TRACE(::testing::Message()
           << "product=" << product << " fp16=" << fp16
           << " pattern=" << static_cast<unsigned>(pattern));
         constexpr unsigned lanes = 64U;
-        const auto index = product == 5U ? 0U : product == 6U ? 1U : 2U;
-        std::array<Words, 4U + lanes * 4U> inputs {};
-        inputs[0] = { product, fp16, std::bit_cast<std::uint32_t>(8.0F), 0U };
-        std::array<Words, 3> expected { Words { 0x3d000000U, 0x3b800000U, 1U,
-                                          0x3e000000U },
-          Words { 0x3c000000U, 0x3b000000U, 2U, 0x3d800000U },
-          Words { 0x3b000000U, 0x3a800000U, 3U, 0x3d000000U } };
-        expected[index] = {};
+        unsigned index = 2U;
+        if (product == 5U) {
+          index = 0U;
+        } else if (product == 6U) {
+          index = 1U;
+        }
+        std::array<Words, 4U + (lanes * 4U)> inputs {};
+        inputs.at(0) = {
+          product,
+          fp16,
+          std::bit_cast<std::uint32_t>(8.0F),
+          0U,
+        };
+        std::array<Words, 3> expected {
+          Words {
+            0x3d000000U,
+            0x3b800000U,
+            1U,
+            0x3e000000U,
+          },
+          Words {
+            0x3c000000U,
+            0x3b000000U,
+            2U,
+            0x3d800000U,
+          },
+          Words {
+            0x3b000000U,
+            0x3a800000U,
+            3U,
+            0x3d000000U,
+          },
+        };
+        expected.at(index) = {};
         if (pattern == Pattern::kPartial) {
-          expected[index] = { std::bit_cast<std::uint32_t>(.75F),
-            std::bit_cast<std::uint32_t>(.25F), 0U,
-            std::bit_cast<std::uint32_t>(.125F) };
+          expected.at(index) = {
+            std::bit_cast<std::uint32_t>(.75F),
+            std::bit_cast<std::uint32_t>(.25F),
+            0U,
+            std::bit_cast<std::uint32_t>(.125F),
+          };
         } else if (pattern == Pattern::kZero) {
-          expected[index] = { 0x80000000U, 1U, 0x7f800000U, 0x3e800000U };
+          expected.at(index) = {
+            0x80000000U,
+            1U,
+            0x7f800000U,
+            0x3e800000U,
+          };
         }
         for (unsigned peer = 0U; peer < expected.size(); ++peer) {
-          inputs[1U + peer] = expected[peer];
+          inputs.at(1U + peer) = expected.at(peer);
         }
         for (unsigned lane = 0U; lane < lanes; ++lane) {
-          auto sample = samples[lane % samples.size()];
+          auto sample = samples.at(lane % samples.size());
           unsigned control = 1U;
           if (pattern == Pattern::kPartial) {
             control = lane < 37U ? 1U : 0U;
@@ -281,42 +422,55 @@ NOLINT_TEST_F(ExposureGpuTest, ProducerStoreBoundsMatchSerialUnsignedMax)
             control = lane % 9U == 4U ? 1U : 0U;
             switch (lane % 4U) {
             case 0U: {
-              sample.value[0] = nan;
+              sample.value.at(0) = nan;
               break;
             }
             case 1U: {
-              sample.value[3] = infinity;
+              sample.value.at(3) = infinity;
               break;
             }
             case 2U: {
-              sample.low[1] = -infinity;
+              sample.low.at(1) = -infinity;
               break;
             }
             default: {
-              sample.high[2] = nan;
+              sample.high.at(2) = nan;
               break;
             }
             }
           } else if (pattern == Pattern::kZero) {
-            sample = samples[1U];
+            sample = samples.at(1U);
             control = 3U;
           }
           if (control == 0U) {
             // Inactive invalid coefficients must not join the reduction.
-            sample.value = { nan, infinity, -infinity, nan };
+            sample.value = {
+              nan,
+              infinity,
+              -infinity,
+              nan,
+            };
           }
-          const auto base = 4U + lane * 4U;
-          inputs[base] = std::bit_cast<Words>(sample.value);
-          inputs[base + 1U] = std::bit_cast<Words>(sample.low);
-          inputs[base + 2U] = std::bit_cast<Words>(sample.high);
-          inputs[base + 3U] = { control, 0U, 0U, 0U };
+          const auto base = 4U + (lane * 4U);
+          inputs.at(base) = std::bit_cast<Words>(sample.value);
+          inputs.at(base + 1U) = std::bit_cast<Words>(sample.low);
+          inputs.at(base + 2U) = std::bit_cast<Words>(sample.high);
+          inputs.at(base + 3U) = {
+            control,
+            0U,
+            0U,
+            0U,
+          };
         }
-        const auto result = RunToneProbe(
-          std::as_bytes(std::span { inputs }), lanes, 16384U, false);
+        const auto result = RunToneProbe(std::as_bytes(std::span {
+                                           inputs,
+                                         }),
+          lanes, 16384U, false);
         ASSERT_EQ(result.size(), lanes);
-        const auto word = [&](const unsigned offset) {
+        const auto word = [&](const unsigned offset) -> unsigned int {
           return std::bit_cast<std::array<std::uint32_t, 8>>(
-            result[offset / 32U])[(offset % 32U) / 4U];
+            result.at(offset / 32U))
+            .at((offset % 32U) / 4U);
         };
         const auto observed_wave_width = word(0U);
         ASSERT_GT(observed_wave_width, 0U);
@@ -330,19 +484,20 @@ NOLINT_TEST_F(ExposureGpuTest, ProducerStoreBoundsMatchSerialUnsignedMax)
         EXPECT_EQ(word(12U), fp16);
         unsigned active_count = 0U;
         for (unsigned lane = 0U; lane < lanes; ++lane) {
-          const auto wave_lane = word(1152U + lane * 8U);
+          const auto wave_lane = word(1152U + (lane * 8U));
           ASSERT_LT(wave_lane, wave_width);
-          const auto control = inputs[4U + lane * 4U + 3U][0];
+          const auto control = inputs.at(4U + (lane * 4U) + 3U).at(0);
           const bool active
             = (control & 1U) != 0U && ((control & 2U) == 0U || wave_lane != 0U);
-          EXPECT_EQ(word(1156U + lane * 8U), active ? 1U : 0U);
+          EXPECT_EQ(word(1156U + (lane * 8U)), active ? 1U : 0U);
           if (active) {
             ++active_count;
             for (unsigned component = 0U; component < 4U; ++component) {
-              const auto coefficient = word(128U + lane * 16U + component * 4U);
+              const auto coefficient
+                = word(128U + (lane * 16U) + (component * 4U));
               // Independent serial reduction: no GPU reduction helper here.
-              expected[index][component]
-                = std::max(expected[index][component], coefficient);
+              expected.at(index).at(component)
+                = std::max(expected.at(index).at(component), coefficient);
               if (pattern == Pattern::kZero) {
                 EXPECT_EQ(coefficient, 0U);
               }
@@ -355,16 +510,20 @@ NOLINT_TEST_F(ExposureGpuTest, ProducerStoreBoundsMatchSerialUnsignedMax)
         }
         for (unsigned peer = 0U; peer < expected.size(); ++peer) {
           for (unsigned component = 0U; component < 4U; ++component) {
-            EXPECT_EQ(word(80U + peer * 16U + component * 4U),
-              expected[peer][component]);
+            EXPECT_EQ(word(80U + (peer * 16U) + (component * 4U)),
+              expected.at(peer).at(component));
           }
         }
-        const std::array canaries { 0x13579bdfU, 0x2468ace0U, 0x55aa55aaU,
-          0xaa55aa55U };
+        const std::array canaries {
+          0x13579bdfU,
+          0x2468ace0U,
+          0x55aa55aaU,
+          0xaa55aa55U,
+        };
         for (unsigned region = 0U; region < canaries.size(); ++region) {
           for (unsigned component = 0U; component < 4U; ++component) {
-            EXPECT_EQ(
-              word(16U + region * 16U + component * 4U), canaries[region]);
+            EXPECT_EQ(word(16U + (region * 16U) + (component * 4U)),
+              canaries.at(region));
           }
         }
         ++cases;

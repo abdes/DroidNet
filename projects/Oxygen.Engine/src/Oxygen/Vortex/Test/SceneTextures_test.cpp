@@ -19,16 +19,16 @@ using oxygen::Format;
 using oxygen::vortex::GBufferIndex;
 using oxygen::vortex::SceneTextureAspectView;
 using oxygen::vortex::SceneTextureBindings;
-using oxygen::vortex::SceneTextureSetupMode;
 using oxygen::vortex::SceneTextures;
 using oxygen::vortex::SceneTexturesConfig;
+using oxygen::vortex::SceneTextureSetupMode;
 using oxygen::vortex::ViewFrameBindings;
 using oxygen::vortex::testing::FakeGraphics;
 
 auto MakeConfig() -> SceneTexturesConfig
 {
   return SceneTexturesConfig {
-    .extent = { 160, 90 },
+    .extent = { 160, 90, },
     .enable_velocity = true,
     .enable_custom_depth = false,
     .gbuffer_count = 4,
@@ -58,10 +58,10 @@ TEST(SceneTexturesContractTest, AllocatesTheExactPhase2Subset)
   EXPECT_EQ(scene_textures.GetExtent().x, config.extent.x);
   EXPECT_EQ(scene_textures.GetExtent().y, config.extent.y);
 
-  ExpectTexture(
-    scene_textures.GetSceneColor(), Format::kRGBA16Float, config.extent, "SceneColor");
-  ExpectTexture(
-    scene_textures.GetSceneDepth(), Format::kDepth32Stencil8, config.extent, "SceneDepth");
+  ExpectTexture(scene_textures.GetSceneColor(), Format::kRGBA16Float,
+    config.extent, "SceneColor");
+  ExpectTexture(scene_textures.GetSceneDepth(), Format::kDepth32Stencil8,
+    config.extent, "SceneDepth");
   EXPECT_TRUE(scene_textures.GetSceneDepth().GetDescriptor().is_render_target);
   ExpectTexture(scene_textures.GetPartialDepth(), Format::kR32Float,
     config.extent, "PartialDepth");
@@ -75,8 +75,8 @@ TEST(SceneTexturesContractTest, AllocatesTheExactPhase2Subset)
     config.extent, "GBufferCustomData");
 
   ASSERT_NE(scene_textures.GetVelocity(), nullptr);
-  ExpectTexture(*scene_textures.GetVelocity(), Format::kRG16Float, config.extent,
-    "Velocity");
+  ExpectTexture(*scene_textures.GetVelocity(), Format::kRG16Float,
+    config.extent, "Velocity");
   EXPECT_TRUE(scene_textures.GetVelocity()->GetDescriptor().is_uav);
   EXPECT_EQ(scene_textures.GetCustomDepth(), nullptr);
 
@@ -105,13 +105,20 @@ TEST(SceneTexturesContractTest, ResizeReallocatesTheProductFamily)
 
   auto* old_scene_color = &scene_textures.GetSceneColor();
 
-  scene_textures.Resize({ 320, 180 });
+  scene_textures.Resize({
+    320,
+    180,
+  });
 
   EXPECT_EQ(scene_textures.GetExtent().x, 320U);
   EXPECT_EQ(scene_textures.GetExtent().y, 180U);
   EXPECT_NE(&scene_textures.GetSceneColor(), old_scene_color);
   ExpectTexture(scene_textures.GetGBufferNormal(), Format::kR10G10B10A2UNorm,
-    glm::uvec2 { 320U, 180U }, "GBufferNormal");
+    glm::uvec2 {
+      320U,
+      180U,
+    },
+    "GBufferNormal");
 }
 
 TEST(SceneTexturesContractTest, RejectsInvalidConfig)
@@ -119,12 +126,20 @@ TEST(SceneTexturesContractTest, RejectsInvalidConfig)
   FakeGraphics graphics;
 
   auto zero_extent = MakeConfig();
-  zero_extent.extent = { 0, 90 };
-  EXPECT_THROW(SceneTextures unused(graphics, zero_extent), std::invalid_argument);
+  zero_extent.extent = {
+    0,
+    90,
+  };
+  EXPECT_THROW(
+    SceneTextures unused(graphics, zero_extent), std::invalid_argument);
 
   auto zero_height = MakeConfig();
-  zero_height.extent = { 160, 0 };
-  EXPECT_THROW(SceneTextures unused(graphics, zero_height), std::invalid_argument);
+  zero_height.extent = {
+    160,
+    0,
+  };
+  EXPECT_THROW(
+    SceneTextures unused(graphics, zero_height), std::invalid_argument);
 
   auto wrong_gbuffer_count = MakeConfig();
   wrong_gbuffer_count.gbuffer_count = 3;
@@ -132,8 +147,8 @@ TEST(SceneTexturesContractTest, RejectsInvalidConfig)
     SceneTextures unused(graphics, wrong_gbuffer_count), std::invalid_argument);
 
   wrong_gbuffer_count.gbuffer_count = 5;
-  EXPECT_THROW(
-    SceneTextures unused_again(graphics, wrong_gbuffer_count), std::invalid_argument);
+  EXPECT_THROW(SceneTextures unused_again(graphics, wrong_gbuffer_count),
+    std::invalid_argument);
 }
 
 TEST(SceneTexturesContractTest,
@@ -149,7 +164,8 @@ TEST(SceneTexturesContractTest,
 
   EXPECT_EQ(scene_textures.GetVelocity(), nullptr);
   ASSERT_NE(scene_textures.GetCustomDepth(), nullptr);
-  EXPECT_TRUE(scene_textures.GetCustomDepth()->GetDescriptor().is_render_target);
+  EXPECT_TRUE(
+    scene_textures.GetCustomDepth()->GetDescriptor().is_render_target);
 
   const auto custom_stencil = scene_textures.GetCustomStencil();
   EXPECT_TRUE(custom_stencil.IsValid());
@@ -177,23 +193,30 @@ TEST(SceneTextureSetupModeContractTest, FlagsComposeWithoutAdHocSequencing)
   EXPECT_FALSE(setup_mode.IsSet(SceneTextureSetupMode::Flag::kSceneVelocity));
 }
 
-TEST(SceneTextureBindingsContractTest, ReservesFutureGBufferSlotsInThePublishedAbi)
+TEST(
+  SceneTextureBindingsContractTest, ReservesFutureGBufferSlotsInThePublishedAbi)
 {
   SceneTextureBindings bindings {};
 
   EXPECT_EQ(bindings.gbuffer_srvs.size(),
     static_cast<std::size_t>(GBufferIndex::kCount));
-  EXPECT_EQ(bindings.gbuffer_srvs[static_cast<std::size_t>(GBufferIndex::kNormal)],
+  EXPECT_EQ(
+    bindings.gbuffer_srvs.at(static_cast<std::size_t>(GBufferIndex::kNormal)),
     SceneTextureBindings::kInvalidIndex);
-  EXPECT_EQ(bindings.gbuffer_srvs[static_cast<std::size_t>(GBufferIndex::kMaterial)],
+  EXPECT_EQ(
+    bindings.gbuffer_srvs.at(static_cast<std::size_t>(GBufferIndex::kMaterial)),
     SceneTextureBindings::kInvalidIndex);
-  EXPECT_EQ(bindings.gbuffer_srvs[static_cast<std::size_t>(GBufferIndex::kBaseColor)],
+  EXPECT_EQ(bindings.gbuffer_srvs.at(
+              static_cast<std::size_t>(GBufferIndex::kBaseColor)),
     SceneTextureBindings::kInvalidIndex);
-  EXPECT_EQ(bindings.gbuffer_srvs[static_cast<std::size_t>(GBufferIndex::kCustomData)],
+  EXPECT_EQ(bindings.gbuffer_srvs.at(
+              static_cast<std::size_t>(GBufferIndex::kCustomData)),
     SceneTextureBindings::kInvalidIndex);
-  EXPECT_EQ(bindings.gbuffer_srvs[static_cast<std::size_t>(GBufferIndex::kShadowFactors)],
+  EXPECT_EQ(bindings.gbuffer_srvs.at(
+              static_cast<std::size_t>(GBufferIndex::kShadowFactors)),
     SceneTextureBindings::kInvalidIndex);
-  EXPECT_EQ(bindings.gbuffer_srvs[static_cast<std::size_t>(GBufferIndex::kWorldTangent)],
+  EXPECT_EQ(bindings.gbuffer_srvs.at(
+              static_cast<std::size_t>(GBufferIndex::kWorldTangent)),
     SceneTextureBindings::kInvalidIndex);
 }
 

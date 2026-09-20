@@ -8,8 +8,6 @@
 
 namespace oxygen::vortex::testing::exposure {
 
-using namespace oxygen::graphics;
-
 auto ExposureLightingGpuTest::MeasureHdrAllocationAccounting(bool temporal)
   -> void
 {

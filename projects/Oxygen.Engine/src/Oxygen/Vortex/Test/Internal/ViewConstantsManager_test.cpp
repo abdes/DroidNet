@@ -28,7 +28,9 @@ protected:
   {
     graphics_ = std::make_shared<FakeGraphics>();
     manager_ = std::make_unique<ViewConstantsManager>(
-      oxygen::observer_ptr { graphics_.get() },
+      oxygen::observer_ptr {
+        graphics_.get(),
+      },
       static_cast<std::uint32_t>(sizeof(ViewConstants::GpuData)));
   }
 
@@ -47,19 +49,32 @@ protected:
     return info.buffer;
   }
 
-  std::shared_ptr<FakeGraphics> graphics_ {};
-  std::unique_ptr<ViewConstantsManager> manager_ {};
+  std::shared_ptr<FakeGraphics> graphics_;
+  std::unique_ptr<ViewConstantsManager> manager_;
 };
 
 NOLINT_TEST_F(ViewConstantsManagerTest,
   RemoveViewReleasesTrackedBuffersAcrossSlotsAndPreservesOtherViews)
 {
-  const auto view_a = ViewId { 101U };
-  const auto view_b = ViewId { 202U };
+  const auto view_a = ViewId {
+    101U,
+  };
+  const auto view_b = ViewId {
+    202U,
+  };
 
-  const auto buffer_a_slot0 = WriteSnapshot(view_a, Slot { 0U });
-  const auto buffer_b_slot0 = WriteSnapshot(view_b, Slot { 0U });
-  const auto buffer_a_slot1 = WriteSnapshot(view_a, Slot { 1U });
+  const auto buffer_a_slot0 = WriteSnapshot(view_a,
+    Slot {
+      0U,
+    });
+  const auto buffer_b_slot0 = WriteSnapshot(view_b,
+    Slot {
+      0U,
+    });
+  const auto buffer_a_slot1 = WriteSnapshot(view_a,
+    Slot {
+      1U,
+    });
 
   ASSERT_NE(buffer_a_slot0, nullptr);
   ASSERT_NE(buffer_b_slot0, nullptr);
@@ -70,12 +85,18 @@ NOLINT_TEST_F(ViewConstantsManagerTest,
 
   EXPECT_EQ(manager_->GetTrackedBufferCount(), 1U);
 
-  const auto buffer_b_slot0_again = WriteSnapshot(view_b, Slot { 0U });
+  const auto buffer_b_slot0_again = WriteSnapshot(view_b,
+    Slot {
+      0U,
+    });
   ASSERT_NE(buffer_b_slot0_again, nullptr);
   EXPECT_EQ(buffer_b_slot0_again.get(), buffer_b_slot0.get());
   EXPECT_EQ(manager_->GetTrackedBufferCount(), 1U);
 
-  const auto buffer_a_slot0_again = WriteSnapshot(view_a, Slot { 0U });
+  const auto buffer_a_slot0_again = WriteSnapshot(view_a,
+    Slot {
+      0U,
+    });
   ASSERT_NE(buffer_a_slot0_again, nullptr);
   EXPECT_NE(buffer_a_slot0_again.get(), buffer_a_slot0.get());
   EXPECT_EQ(manager_->GetTrackedBufferCount(), 2U);
@@ -84,15 +105,25 @@ NOLINT_TEST_F(ViewConstantsManagerTest,
 NOLINT_TEST_F(
   ViewConstantsManagerTest, RemoveViewIgnoresUnknownViewWithoutChangingState)
 {
-  const auto tracked_view = ViewId { 303U };
-  const auto buffer = WriteSnapshot(tracked_view, Slot { 0U });
+  const auto tracked_view = ViewId {
+    303U,
+  };
+  const auto buffer = WriteSnapshot(tracked_view,
+    Slot {
+      0U,
+    });
   ASSERT_NE(buffer, nullptr);
   ASSERT_EQ(manager_->GetTrackedBufferCount(), 1U);
 
-  manager_->RemoveView(ViewId { 404U });
+  manager_->RemoveView(ViewId {
+    404U,
+  });
 
   EXPECT_EQ(manager_->GetTrackedBufferCount(), 1U);
-  const auto buffer_again = WriteSnapshot(tracked_view, Slot { 0U });
+  const auto buffer_again = WriteSnapshot(tracked_view,
+    Slot {
+      0U,
+    });
   ASSERT_NE(buffer_again, nullptr);
   EXPECT_EQ(buffer_again.get(), buffer.get());
 }

@@ -48,13 +48,15 @@ NOLINT_TEST(RenderItemProtoTest, ConstructorWithoutRenderable_Throws)
 /*!
  When the node contains a RenderableComponent, RenderItemProto construction must
  succeed. The test validates accessible facades on the proto and the default LOD
- policy flags. It avoids dereferencing transform matrices to remain
- implementation-agnostic.
+ policy flags. It verifies that the transform facade exposes the node-owned
+ matrix.
 */
 NOLINT_TEST(RenderItemProtoTest, ConstructorWithRenderable_Succeeds)
 {
   // Arrange
-  const NodeWithRenderable node("WithRenderable");
+  NodeWithRenderable node("WithRenderable");
+  node.GetComponent<scn_detail::TransformComponent>()
+    .UpdateWorldTransformAsRoot();
 
   // Act
   RenderItemProto proto(node);
@@ -63,9 +65,9 @@ NOLINT_TEST(RenderItemProtoTest, ConstructorWithRenderable_Succeeds)
   EXPECT_FALSE(proto.Renderable().UsesDistancePolicy());
   EXPECT_FALSE(proto.Renderable().UsesScreenSpaceErrorPolicy());
 
-  // Transform facade exists (don’t dereference world matrix in tests).
-  auto* tf = &proto.Transform();
-  EXPECT_NE(tf, nullptr);
+  // Both facades must refer to the same node-owned transform.
+  EXPECT_EQ(&proto.Transform().GetWorldMatrix(),
+    &node.GetComponent<scn_detail::TransformComponent>().GetWorldMatrix());
 }
 
 //! Visible submeshes roundtrip through SetVisibleSubmeshes/VisibleSubmeshes.
@@ -79,7 +81,11 @@ NOLINT_TEST(RenderItemProtoTest, VisibleSubmeshes_Roundtrip)
   // Arrange
   const NodeWithRenderable node("WithRenderable");
   RenderItemProto proto(node);
-  const std::vector visible { 2u, 5u, 7u };
+  const std::vector visible {
+    2U,
+    5U,
+    7U,
+  };
 
   // Act
   proto.SetVisibleSubmeshes(visible);
@@ -87,9 +93,7 @@ NOLINT_TEST(RenderItemProtoTest, VisibleSubmeshes_Roundtrip)
   // Assert
   const auto span = proto.VisibleSubmeshes();
   ASSERT_EQ(span.size(), visible.size());
-  for (size_t i = 0; i < visible.size(); ++i) {
-    EXPECT_EQ(span[i], visible[i]);
-  }
+  EXPECT_THAT(span, ::testing::ElementsAreArray(visible));
 }
 
 //! ResolvedMeshIndex uses default 0 then reflects the last resolved LOD.
@@ -106,14 +110,14 @@ NOLINT_TEST(RenderItemProtoTest, ResolvedMeshIndex_DefaultAndUpdated)
   RenderItemProto proto(node);
 
   // Assert default
-  EXPECT_EQ(proto.ResolvedMeshIndex(), 0u);
+  EXPECT_EQ(proto.ResolvedMeshIndex(), 0U);
   EXPECT_FALSE(static_cast<bool>(proto.ResolvedMesh()));
 
   // Act: set a new lod with a null mesh pointer (allowed for proto state)
-  proto.ResolveMesh(std::shared_ptr<const oxygen::data::Mesh> {}, 3u);
+  proto.ResolveMesh(std::shared_ptr<const oxygen::data::Mesh> {}, 3U);
 
   // Assert updated
-  EXPECT_EQ(proto.ResolvedMeshIndex(), 3u);
+  EXPECT_EQ(proto.ResolvedMeshIndex(), 3U);
   EXPECT_FALSE(static_cast<bool>(proto.ResolvedMesh()));
 }
 

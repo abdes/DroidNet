@@ -24,9 +24,11 @@
 #include <string>
 #include <unordered_map>
 
+#include <atomic>
 #include <functional>
 #include <map>
 #include <memory>
+#include <utility>
 #include <vector>
 
 namespace oxygen::vortex::testing {
@@ -47,18 +49,40 @@ using graphics::TimestampQueryProvider;
 
 //! Logs buffer copy commands captured by the fake command recorder.
 struct BufferCommandLog {
-  bool copy_called { false };
-  Buffer* copy_dst { nullptr };
-  size_t copy_dst_offset { 0 };
-  const Buffer* copy_src { nullptr };
-  size_t copy_src_offset { 0 };
-  size_t copy_size { 0 };
+  bool copy_called {
+    false,
+  };
+  Buffer* copy_dst {
+    nullptr,
+  };
+  size_t copy_dst_offset {
+    0,
+  };
+  const Buffer* copy_src {
+    nullptr,
+  };
+  size_t copy_src_offset {
+    0,
+  };
+  size_t copy_size {
+    0,
+  };
   struct CopyEvent {
-    Buffer* dst { nullptr };
-    size_t dst_offset { 0 };
-    const Buffer* src { nullptr };
-    size_t src_offset { 0 };
-    size_t size { 0 };
+    Buffer* dst {
+      nullptr,
+    };
+    size_t dst_offset {
+      0,
+    };
+    const Buffer* src {
+      nullptr,
+    };
+    size_t src_offset {
+      0,
+    };
+    size_t size {
+      0,
+    };
   };
   std::vector<CopyEvent> copies;
 };
@@ -73,16 +97,26 @@ struct BufferViewCreationLog {
 };
 //! Logs buffer->texture copy regions captured by the fake command recorder.
 struct TextureCommandLog {
-  bool copy_called { false };
-  const Buffer* src { nullptr };
-  Texture* dst { nullptr };
+  bool copy_called {
+    false,
+  };
+  const Buffer* src {
+    nullptr,
+  };
+  Texture* dst {
+    nullptr,
+  };
   std::vector<TextureUploadRegion> regions;
 };
 
 struct TextureToTextureCopyLog {
   struct Event {
-    const Texture* src { nullptr };
-    Texture* dst { nullptr };
+    const Texture* src {
+      nullptr,
+    };
+    Texture* dst {
+      nullptr,
+    };
   };
   std::vector<Event> copies;
 };
@@ -105,18 +139,30 @@ struct ComputePipelineCommandLog {
 //! Logs graphics root CBV bindings captured by the fake command recorder.
 struct RootConstantBufferViewLog {
   struct Event {
-    uint32_t root_parameter_index { 0U };
-    uint64_t buffer_gpu_address { 0U };
+    uint32_t root_parameter_index {
+      0U,
+    };
+    uint64_t buffer_gpu_address {
+      0U,
+    };
   };
   std::vector<Event> binds;
 };
 
 struct DrawCommandLog {
   struct Event {
-    uint32_t vertex_num { 0U };
-    uint32_t instances_num { 0U };
-    uint32_t vertex_offset { 0U };
-    uint32_t instance_offset { 0U };
+    uint32_t vertex_num {
+      0U,
+    };
+    uint32_t instances_num {
+      0U,
+    };
+    uint32_t vertex_offset {
+      0U,
+    };
+    uint32_t instance_offset {
+      0U,
+    };
     std::optional<graphics::RasterizerStateDesc> rasterizer;
     std::string pipeline_name;
   };
@@ -125,26 +171,42 @@ struct DrawCommandLog {
 
 struct DispatchCommandLog {
   struct Event {
-    uint32_t thread_group_count_x { 0U };
-    uint32_t thread_group_count_y { 0U };
-    uint32_t thread_group_count_z { 0U };
+    uint32_t thread_group_count_x {
+      0U,
+    };
+    uint32_t thread_group_count_y {
+      0U,
+    };
+    uint32_t thread_group_count_z {
+      0U,
+    };
   };
   std::vector<Event> dispatches;
 };
 
 struct ClearFramebufferLog {
   struct Event {
-    std::size_t color_attachment_count { 0U };
-    bool has_depth_attachment { false };
-    bool depth_clear_requested { false };
-    bool stencil_clear_requested { false };
+    std::size_t color_attachment_count {
+      0U,
+    };
+    bool has_depth_attachment {
+      false,
+    };
+    bool depth_clear_requested {
+      false,
+    };
+    bool stencil_clear_requested {
+      false,
+    };
   };
   std::vector<Event> clears;
 };
 
 struct IndirectCommandLog {
   struct Event {
-    const Buffer* argument_buffer { nullptr };
+    const Buffer* argument_buffer {
+      nullptr,
+    };
     CommandRecorder::IndirectCommandDesc command_desc {};
     CommandRecorder::IndirectExecutionDesc execution_desc {};
   };
@@ -165,9 +227,15 @@ struct IndirectCommandLog {
 */
 struct SrvViewCreationLog {
   struct Event {
-    uint32_t index { 0 };
-    const Texture* texture { nullptr };
-    Format view_format { Format::kUnknown };
+    uint32_t index {
+      0,
+    };
+    const Texture* texture {
+      nullptr,
+    };
+    Format view_format {
+      Format::kUnknown,
+    };
   };
   std::vector<Event> events;
 };
@@ -192,15 +260,17 @@ public:
   auto Signal(const uint64_t value) const -> void override
   {
     current_ = value;
-    if (auto_complete_)
+    if (auto_complete_) {
       completed_ = value;
+    }
   }
   [[nodiscard]] auto Signal() const -> uint64_t override
   {
-    ++current_;
-    if (auto_complete_)
-      completed_ = current_;
-    return current_;
+    const auto value = ++current_;
+    if (auto_complete_) {
+      completed_ = value;
+    }
+    return value;
   }
   auto Wait(uint64_t /*value*/, std::chrono::milliseconds /*timeout*/) const
     -> void override
@@ -226,7 +296,10 @@ public:
   {
     auto known_states = std::vector<KnownResourceState> {};
     for (const auto& state : command_list->TakeRecordedResourceStates()) {
-      known_states.push_back({ .resource = state.resource, .state = state.state });
+      known_states.push_back({
+        .resource = state.resource,
+        .state = state.state,
+      });
     }
     AdoptKnownResourceStates(known_states);
   }
@@ -246,15 +319,26 @@ private:
   auto SignalImmediate(const uint64_t value) const -> void override
   {
     current_ = value;
-    if (auto_complete_)
+    if (auto_complete_) {
       completed_ = value;
+    }
   }
 
-  QueueRole role_ { QueueRole::kGraphics };
-  mutable uint64_t current_ { 0 };
-  mutable uint64_t completed_ { 0 };
-  bool auto_complete_ { true };
-  uint64_t timestamp_frequency_hz_ { 1'000'000U };
+  QueueRole role_ {
+    QueueRole::kGraphics,
+  };
+  mutable std::atomic<uint64_t> current_ {
+    0,
+  };
+  mutable std::atomic<uint64_t> completed_ {
+    0,
+  };
+  bool auto_complete_ {
+    true,
+  };
+  uint64_t timestamp_frequency_hz_ {
+    1'000'000U,
+  };
 };
 
 class FakeTimestampQueryProvider final : public TimestampQueryProvider {
@@ -276,25 +360,26 @@ public:
     return static_cast<uint32_t>(ticks_.size());
   }
 
-  auto WriteTimestamp(CommandRecorder&, const uint32_t query_slot)
+  auto WriteTimestamp(CommandRecorder& /*recorder*/, const uint32_t query_slot)
     -> bool override
   {
     if (query_slot >= ticks_.size()) {
       return false;
     }
     ++write_count_;
-    ticks_[query_slot] = next_tick_;
+    ticks_.at(query_slot) = next_tick_;
     next_tick_ += 100U;
     return true;
   }
 
-  auto RecordResolve(CommandRecorder&, const uint32_t used_query_slots,
-    const uint32_t first_query_slot = 0U)
+  auto RecordResolve(CommandRecorder& /*recorder*/,
+    const uint32_t used_query_slots, const uint32_t first_query_slot)
     -> bool override
   {
     if (first_query_slot > ticks_.size()
-      || used_query_slots > ticks_.size() - first_query_slot)
+      || used_query_slots > ticks_.size() - first_query_slot) {
       return false;
+    }
     ++resolve_count_;
     last_resolved_query_count_ = used_query_slots;
     return resolve_succeeds_;
@@ -322,12 +407,22 @@ public:
   }
 
 private:
-  std::vector<uint64_t> ticks_ {};
-  uint64_t next_tick_ { 1000U };
-  uint32_t write_count_ { 0U };
-  uint32_t resolve_count_ { 0U };
-  uint32_t last_resolved_query_count_ { 0U };
-  bool resolve_succeeds_ { true };
+  std::vector<uint64_t> ticks_;
+  uint64_t next_tick_ {
+    1000U,
+  };
+  uint32_t write_count_ {
+    0U,
+  };
+  uint32_t resolve_count_ {
+    0U,
+  };
+  uint32_t last_resolved_query_count_ {
+    0U,
+  };
+  bool resolve_succeeds_ {
+    true,
+  };
 };
 
 //! CommandRecorder that records buffer and texture copy operations for
@@ -341,7 +436,8 @@ public:
     TextureToTextureCopyLog* texture_copy_log,
     RootConstantBufferViewLog* root_cbv_log, DrawCommandLog* draw_log,
     DispatchCommandLog* dispatch_log,
-    ClearFramebufferLog* clear_framebuffer_log, IndirectCommandLog* indirect_log)
+    ClearFramebufferLog* clear_framebuffer_log,
+    IndirectCommandLog* indirect_log)
     : CommandRecorder(std::move(command_list), target_queue)
     , buffer_log_(buffer_log)
     , texture_log_(texture_log)
@@ -366,15 +462,17 @@ public:
     current_rasterizer_ = desc.RasterizerState();
     current_pipeline_name_ = desc.GetName();
     if (pipeline_log_ != nullptr) {
-      pipeline_log_->binds.push_back(
-        GraphicsPipelineCommandLog::Event { .desc = std::move(desc) });
+      pipeline_log_->binds.push_back(GraphicsPipelineCommandLog::Event {
+        .desc = std::move(desc),
+      });
     }
   }
   auto SetPipelineState(graphics::ComputePipelineDesc desc) -> void override
   {
     if (compute_pipeline_log_ != nullptr) {
-      compute_pipeline_log_->binds.push_back(
-        ComputePipelineCommandLog::Event { .desc = std::move(desc) });
+      compute_pipeline_log_->binds.push_back(ComputePipelineCommandLog::Event {
+        .desc = std::move(desc),
+      });
     }
   }
   auto SetGraphicsRootConstantBufferView(const uint32_t root_parameter_index,
@@ -421,9 +519,8 @@ public:
       });
     }
   }
-  auto Dispatch(uint32_t thread_group_count_x,
-    uint32_t thread_group_count_y, uint32_t thread_group_count_z)
-    -> void override
+  auto Dispatch(uint32_t thread_group_count_x, uint32_t thread_group_count_y,
+    uint32_t thread_group_count_z) -> void override
   {
     if (dispatch_log_ != nullptr) {
       dispatch_log_->dispatches.push_back(DispatchCommandLog::Event {
@@ -498,11 +595,13 @@ public:
     buffer_log_->copy_src = &src;
     buffer_log_->copy_src_offset = src_offset;
     buffer_log_->copy_size = size;
-    buffer_log_->copies.push_back(BufferCommandLog::CopyEvent { .dst = &dst,
+    buffer_log_->copies.push_back(BufferCommandLog::CopyEvent {
+      .dst = &dst,
       .dst_offset = dst_offset,
       .src = &src,
       .src_offset = src_offset,
-      .size = size });
+      .size = size,
+    });
   }
   auto CopyBufferToTexture(const Buffer& src, const TextureUploadRegion& region,
     Texture& dst) -> void override
@@ -513,7 +612,9 @@ public:
     texture_log_->copy_called = true;
     texture_log_->src = &src;
     texture_log_->dst = &dst;
-    texture_log_->regions = { region };
+    texture_log_->regions = {
+      region,
+    };
   }
   auto CopyBufferToTexture(const Buffer& src,
     std::span<const TextureUploadRegion> regions, Texture& dst) -> void override
@@ -540,8 +641,10 @@ public:
     -> void override
   {
     if (texture_copy_log_ != nullptr) {
-      texture_copy_log_->copies.push_back(
-        TextureToTextureCopyLog::Event { .src = &src, .dst = &dst });
+      texture_copy_log_->copies.push_back(TextureToTextureCopyLog::Event {
+        .src = &src,
+        .dst = &dst,
+      });
     }
   }
 
@@ -554,16 +657,36 @@ protected:
 private:
   std::optional<graphics::RasterizerStateDesc> current_rasterizer_;
   std::string current_pipeline_name_;
-  BufferCommandLog* buffer_log_ { nullptr };
-  TextureCommandLog* texture_log_ { nullptr };
-  GraphicsPipelineCommandLog* pipeline_log_ { nullptr };
-  ComputePipelineCommandLog* compute_pipeline_log_ { nullptr };
-  TextureToTextureCopyLog* texture_copy_log_ { nullptr };
-  RootConstantBufferViewLog* root_cbv_log_ { nullptr };
-  DrawCommandLog* draw_log_ { nullptr };
-  DispatchCommandLog* dispatch_log_ { nullptr };
-  ClearFramebufferLog* clear_framebuffer_log_ { nullptr };
-  IndirectCommandLog* indirect_log_ { nullptr };
+  BufferCommandLog* buffer_log_ {
+    nullptr,
+  };
+  TextureCommandLog* texture_log_ {
+    nullptr,
+  };
+  GraphicsPipelineCommandLog* pipeline_log_ {
+    nullptr,
+  };
+  ComputePipelineCommandLog* compute_pipeline_log_ {
+    nullptr,
+  };
+  TextureToTextureCopyLog* texture_copy_log_ {
+    nullptr,
+  };
+  RootConstantBufferViewLog* root_cbv_log_ {
+    nullptr,
+  };
+  DrawCommandLog* draw_log_ {
+    nullptr,
+  };
+  DispatchCommandLog* dispatch_log_ {
+    nullptr,
+  };
+  ClearFramebufferLog* clear_framebuffer_log_ {
+    nullptr,
+  };
+  IndirectCommandLog* indirect_log_ {
+    nullptr,
+  };
 };
 
 // Minimal in-memory descriptor allocator for tests
@@ -571,6 +694,8 @@ class MiniDescriptorAllocator final : public graphics::DescriptorAllocator {
 public:
   MiniDescriptorAllocator() = default;
   ~MiniDescriptorAllocator() override = default;
+  OXYGEN_MAKE_NON_COPYABLE(MiniDescriptorAllocator)
+  OXYGEN_MAKE_NON_MOVABLE(MiniDescriptorAllocator)
 
   auto AllocateRaw(const graphics::ResourceViewType view_type,
     const graphics::DescriptorVisibility visibility)
@@ -580,7 +705,10 @@ public:
     auto& state = domains_[key];
     const auto index = state.next_index++;
     return CreateRawDescriptorHandle(
-      bindless::HeapIndex { index }, view_type, visibility);
+      bindless::HeapIndex {
+        index,
+      },
+      view_type, visibility);
   }
 
   auto AllocateBindless(const bindless::DomainToken domain,
@@ -622,7 +750,9 @@ public:
     graphics::DescriptorVisibility /*visibility*/) const
     -> bindless::Count override
   {
-    return bindless::Count { 1'000'000 }; // ample room
+    return bindless::Count {
+      1'000'000,
+    }; // ample room
   }
 
   [[nodiscard]] auto GetDomainBaseIndex(bindless::DomainToken domain) const
@@ -630,8 +760,8 @@ public:
   {
     const auto* const desc = bindless::generated::TryGetDomainDesc(domain);
     return desc != nullptr
-      ? bindless::ShaderVisibleIndex { desc->shader_index_base }
-      : bindless::ShaderVisibleIndex { 0U };
+      ? bindless::ShaderVisibleIndex { desc->shader_index_base, }
+      : bindless::ShaderVisibleIndex { 0U, };
   }
 
   [[nodiscard]] auto ReserveRaw(const graphics::ResourceViewType view_type,
@@ -645,7 +775,9 @@ public:
     auto& state = domains_[key];
     const auto base = state.next_index;
     state.next_index += count.get();
-    return bindless::HeapIndex { base };
+    return bindless::HeapIndex {
+      base,
+    };
   }
 
   [[nodiscard]] auto Contains(
@@ -673,7 +805,9 @@ public:
         }
       }
     }
-    return bindless::Count { total };
+    return bindless::Count {
+      total,
+    };
   }
 
   [[nodiscard]] auto GetShaderVisibleIndex(
@@ -685,23 +819,27 @@ public:
         = bindless::generated::TryGetDomainDesc(handle.GetDomain());
       return desc != nullptr
         ? bindless::ShaderVisibleIndex { desc->shader_index_base
-            + handle.GetLocalSlot() }
+            + handle.GetLocalSlot(), }
         : oxygen::kInvalidShaderVisibleIndex;
     }
     constexpr uint32_t kRawHeapStride = 4096U;
-    const auto raw_base = handle.GetViewType() == graphics::ResourceViewType::kSampler
+    const auto raw_base
+      = handle.GetViewType() == graphics::ResourceViewType::kSampler
       ? bindless::generated::kSamplersCapacity
       : (bindless::generated::kTexturesShaderIndexBase
           + bindless::generated::kTexturesCapacity
           + (static_cast<uint32_t>(handle.GetViewType()) * kRawHeapStride));
-    return bindless::ShaderVisibleIndex { raw_base
-      + handle.GetBindlessHandle().get() };
+    return bindless::ShaderVisibleIndex {
+      raw_base + handle.GetBindlessHandle().get(),
+    };
   }
 
 private:
   struct DomainState {
-    uint32_t next_index { 0 };
-    std::unordered_map<graphics::ResourceViewType, uint32_t> active_counts {};
+    uint32_t next_index {
+      0,
+    };
+    std::unordered_map<graphics::ResourceViewType, uint32_t> active_counts;
   };
   using DomainKey = uint64_t;
   static constexpr auto Key(graphics::ResourceViewType vt,
@@ -716,19 +854,30 @@ private:
 
 //! Fake Graphics implementation providing staging buffers, queues and recorders
 //! for upload tests.
-class FakeGraphics final : public Graphics {
+namespace detail {
+  // Base classes are destroyed in reverse declaration order. Keep the allocator
+  // alive until Graphics has released its registry-owned descriptor handles.
+  class FakeGraphicsAllocatorOwner {
+  protected:
+    mutable std::unique_ptr<MiniDescriptorAllocator> descriptor_allocator_ {
+      std::make_unique<MiniDescriptorAllocator>(),
+    };
+  };
+} // namespace detail
+
+class FakeGraphics final : private detail::FakeGraphicsAllocatorOwner,
+                           public Graphics {
 public:
   FakeGraphics()
     : Graphics("FakeGraphics")
   {
   }
+  OXYGEN_MAKE_NON_COPYABLE(FakeGraphics)
+  OXYGEN_MAKE_NON_MOVABLE(FakeGraphics)
+
   ~FakeGraphics() override
   {
     GetDeferredReclaimer().ProcessAllDeferredReleases();
-    // ResourceRegistry lives in the Graphics base and may still release view
-    // handles during base destruction. Leak the tiny test allocator so those
-    // handles never observe a dangling allocator pointer.
-    (void)descriptor_allocator_.release();
   }
   // Test-only failure injection hooks
   void SetFailMap(const bool v) { fail_map_ = v; }
@@ -740,15 +889,11 @@ public:
   {
     return *descriptor_allocator_;
   }
-  auto GetDescriptorAllocator() -> graphics::DescriptorAllocator&
-  {
-    return *descriptor_allocator_;
-  }
+  using Graphics::GetDescriptorAllocator;
   [[nodiscard]] auto GetTimestampQueryProvider() const
     -> observer_ptr<TimestampQueryProvider> override
   {
-    return observer_ptr<TimestampQueryProvider>(
-      const_cast<FakeTimestampQueryProvider*>(&timestamp_query_provider_));
+    return observer_ptr<TimestampQueryProvider>((&timestamp_query_provider_));
   }
   [[nodiscard]] auto GetTimestampQueryProvider() -> FakeTimestampQueryProvider&
   {
@@ -779,10 +924,10 @@ public:
     class FakeTexture final : public Texture {
       OXYGEN_TYPED(FakeTexture)
     public:
-      FakeTexture(const std::string_view name, const TextureDesc& desc,
+      FakeTexture(const std::string_view name, TextureDesc desc,
         SrvViewCreationLog* srv_view_log)
         : Texture(name)
-        , desc_(desc)
+        , desc_(std::move(desc))
         , srv_view_log_(srv_view_log)
       {
       }
@@ -795,7 +940,11 @@ public:
       [[nodiscard]] auto GetNativeResource() const
         -> graphics::NativeResource override
       {
-        return { const_cast<FakeTexture*>(this), Texture::ClassTypeId() };
+
+        return {
+          this,
+          Texture::ClassTypeId(),
+        };
       }
 
     protected:
@@ -817,11 +966,14 @@ public:
             .view_format = format,
           });
         }
-        const auto raw_view_id
-          = (static_cast<uint64_t>(static_cast<uint32_t>(view_handle.GetViewType()))
-              << 32U)
+        const auto raw_view_id = (static_cast<uint64_t>(static_cast<uint32_t>(
+                                    view_handle.GetViewType()))
+                                   << 32U)
           | static_cast<uint64_t>(view_handle.GetBindlessHandle().get() + 1U);
-        return { raw_view_id, Texture::ClassTypeId() };
+        return {
+          raw_view_id,
+          Texture::ClassTypeId(),
+        };
       }
       [[nodiscard]] auto CreateUnorderedAccessView(
         const graphics::DescriptorAllocationHandle& view_handle,
@@ -829,11 +981,14 @@ public:
         graphics::TextureSubResourceSet /*sub_resources*/) const
         -> graphics::NativeView override
       {
-        const auto raw_view_id
-          = (static_cast<uint64_t>(static_cast<uint32_t>(view_handle.GetViewType()))
-              << 32U)
+        const auto raw_view_id = (static_cast<uint64_t>(static_cast<uint32_t>(
+                                    view_handle.GetViewType()))
+                                   << 32U)
           | static_cast<uint64_t>(view_handle.GetBindlessHandle().get() + 1U);
-        return { raw_view_id, Texture::ClassTypeId() };
+        return {
+          raw_view_id,
+          Texture::ClassTypeId(),
+        };
       }
       [[nodiscard]] auto CreateRenderTargetView(
         const graphics::DescriptorAllocationHandle& view_handle,
@@ -841,27 +996,35 @@ public:
         graphics::TextureSubResourceSet /*sub_resources*/) const
         -> graphics::NativeView override
       {
-        const auto raw_view_id
-          = (static_cast<uint64_t>(static_cast<uint32_t>(view_handle.GetViewType()))
-              << 32U)
+        const auto raw_view_id = (static_cast<uint64_t>(static_cast<uint32_t>(
+                                    view_handle.GetViewType()))
+                                   << 32U)
           | static_cast<uint64_t>(view_handle.GetBindlessHandle().get() + 1U);
-        return { raw_view_id, Texture::ClassTypeId() };
+        return {
+          raw_view_id,
+          Texture::ClassTypeId(),
+        };
       }
       [[nodiscard]] auto CreateDepthStencilView(
         const graphics::DescriptorAllocationHandle& view_handle,
         Format /*format*/, graphics::TextureSubResourceSet /*sub_resources*/,
         bool /*is_read_only*/) const -> graphics::NativeView override
       {
-        const auto raw_view_id
-          = (static_cast<uint64_t>(static_cast<uint32_t>(view_handle.GetViewType()))
-              << 32U)
+        const auto raw_view_id = (static_cast<uint64_t>(static_cast<uint32_t>(
+                                    view_handle.GetViewType()))
+                                   << 32U)
           | static_cast<uint64_t>(view_handle.GetBindlessHandle().get() + 1U);
-        return { raw_view_id, Texture::ClassTypeId() };
+        return {
+          raw_view_id,
+          Texture::ClassTypeId(),
+        };
       }
 
     private:
       TextureDesc desc_ {};
-      SrvViewCreationLog* srv_view_log_ { nullptr };
+      SrvViewCreationLog* srv_view_log_ {
+        nullptr,
+      };
     };
 
     return std::make_shared<FakeTexture>("FakeTexture", desc, &srv_view_log_);
@@ -893,6 +1056,8 @@ public:
         desc_.usage = usage;
         desc_.memory = memory;
       }
+      // Buffer requires a string-bearing descriptor returned by value under
+      // noexcept. NOLINTNEXTLINE(bugprone-exception-escape)
       [[nodiscard]] auto GetDescriptor() const noexcept -> BufferDesc override
       {
         return desc_;
@@ -900,13 +1065,23 @@ public:
       [[nodiscard]] auto GetNativeResource() const
         -> graphics::NativeResource override
       {
-        return { const_cast<FakeBuffer*>(this), Buffer::ClassTypeId() };
+
+        return {
+          this,
+          Buffer::ClassTypeId(),
+        };
       }
       auto Update(const void* data, const uint64_t size, const uint64_t offset)
         -> void override
       {
-        if (offset + size <= storage_.size()) {
-          std::memcpy(storage_.data() + offset, data, size);
+        if (offset <= storage_.size() && size <= storage_.size() - offset) {
+          std::memcpy(
+            std::span {
+              storage_,
+            }
+              .subspan(offset)
+              .data(),
+            data, size);
         }
       }
       [[nodiscard]] auto GetSize() const noexcept -> uint64_t override
@@ -927,6 +1102,9 @@ public:
       }
       [[nodiscard]] auto GetGPUVirtualAddress() const -> uint64_t override
       {
+        // Use object identity as an opaque fake GPU address, never
+        // dereferenced.
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
         return static_cast<uint64_t>(reinterpret_cast<std::uintptr_t>(this));
       }
 
@@ -954,46 +1132,63 @@ public:
         const graphics::BufferRange& range) const
         -> graphics::NativeView override
       {
-        if (srv_log_ && mapped_ && range.offset_bytes <= storage_.size()
+        if ((srv_log_ != nullptr) && mapped_
+          && range.offset_bytes <= storage_.size()
           && range.size_bytes <= storage_.size() - range.offset_bytes) {
           srv_log_->events.push_back({ .slot
             = view_handle.GetAllocator()->GetShaderVisibleIndex(view_handle),
-            .data = storage_.data() + range.offset_bytes,
+            .data = std::span { storage_, }.subspan(range.offset_bytes).data(),
             .size = static_cast<std::size_t>(range.size_bytes),
-            .stride = 0U });
+            .stride = 0U, });
         }
-        return { this, Buffer::ClassTypeId() };
+        return {
+          this,
+          Buffer::ClassTypeId(),
+        };
       }
       [[nodiscard]] auto CreateShaderResourceView(
         const graphics::DescriptorAllocationHandle& view_handle,
         Format /*format*/, graphics::BufferRange range, uint32_t stride) const
         -> graphics::NativeView override
       {
-        if (srv_log_ && mapped_ && range.offset_bytes <= storage_.size()
+        if ((srv_log_ != nullptr) && mapped_
+          && range.offset_bytes <= storage_.size()
           && range.size_bytes <= storage_.size() - range.offset_bytes) {
           srv_log_->events.push_back({
             .slot
             = view_handle.GetAllocator()->GetShaderVisibleIndex(view_handle),
-            .data = storage_.data() + range.offset_bytes,
+            .data = std::span { storage_, }.subspan(range.offset_bytes).data(),
             .size = static_cast<std::size_t>(range.size_bytes),
             .stride = stride,
           });
         }
-        return { this, Buffer::ClassTypeId() };
+        return {
+          this,
+          Buffer::ClassTypeId(),
+        };
       }
       [[nodiscard]] auto CreateUnorderedAccessView(
         const graphics::DescriptorAllocationHandle& /*view_handle*/,
         Format /*format*/, graphics::BufferRange /*range*/,
         uint32_t /*stride*/) const -> graphics::NativeView override
       {
-        return { this, Buffer::ClassTypeId() };
+        return {
+          this,
+          Buffer::ClassTypeId(),
+        };
       }
 
     private:
       BufferDesc desc_ {};
-      bool mapped_ { false };
-      bool map_should_fail_ { false };
-      BufferViewCreationLog* srv_log_ { nullptr };
+      bool mapped_ {
+        false,
+      };
+      bool map_should_fail_ {
+        false,
+      };
+      BufferViewCreationLog* srv_log_ {
+        nullptr,
+      };
       std::vector<std::byte> storage_;
     };
     return std::make_shared<FakeBuffer>("Staging", desc.size_bytes, desc.usage,
@@ -1054,27 +1249,32 @@ public:
     auto q = GetCommandQueue(queue_key);
     auto cl = std::make_shared<FakeCommandList>(
       command_list_name, q ? q->GetQueueRole() : QueueRole::kGraphics);
-    auto* raw = new FakeCommandRecorder(cl, q, &buffer_log_, &texture_log_,
-      &graphics_pipeline_log_, &compute_pipeline_log_, &texture_copy_log_,
-      &root_cbv_log_, &draw_log_, &dispatch_log_, &clear_framebuffer_log_,
-      &indirect_log_);
-    raw->Begin();
-    return { raw, [this, q](CommandRecorder* p) -> void {
-              if (p != nullptr) {
-                auto completed = p->End();
-                if (completed != nullptr && q != nullptr) {
-                  if (fail_recording_) {
-                    completed->OnFailed();
-                  } else if (!fail_submission_) {
-                    q->Submit(completed);
-                    completed->OnSubmitted();
-                    GetDeferredReclaimer().RegisterDeferredAction(
-                      [completed] { completed->OnExecuted(); });
-                  }
-                }
-                delete p;
-              }
-            } };
+    auto recorder = std::make_unique<FakeCommandRecorder>(cl, q, &buffer_log_,
+      &texture_log_, &graphics_pipeline_log_, &compute_pipeline_log_,
+      &texture_copy_log_, &root_cbv_log_, &draw_log_, &dispatch_log_,
+      &clear_framebuffer_log_, &indirect_log_);
+    recorder->Begin();
+    return {
+      recorder.release(),
+      [this, q](CommandRecorder* p) -> void {
+        const std::unique_ptr<CommandRecorder> owned_recorder {
+          p,
+        };
+        if (owned_recorder != nullptr) {
+          auto completed = owned_recorder->End();
+          if (completed != nullptr && q != nullptr) {
+            if (fail_recording_) {
+              completed->OnFailed();
+            } else if (!fail_submission_) {
+              q->Submit(completed);
+              completed->OnSubmitted();
+              GetDeferredReclaimer().RegisterDeferredAction(
+                [completed] -> void { completed->OnExecuted(); });
+            }
+          }
+        }
+      },
+    };
   }
 
   BufferCommandLog buffer_log_ {};
@@ -1090,16 +1290,21 @@ public:
   IndirectCommandLog indirect_log_ {};
   mutable SrvViewCreationLog srv_view_log_ {};
   std::map<QueueKey, std::shared_ptr<CommandQueue>> queues_;
-  std::unique_ptr<graphics::QueuesStrategy> queue_strategy_ {};
-  mutable std::unique_ptr<MiniDescriptorAllocator> descriptor_allocator_ {
-    std::make_unique<MiniDescriptorAllocator>()
-  };
+  std::unique_ptr<graphics::QueuesStrategy> queue_strategy_;
   mutable FakeTimestampQueryProvider timestamp_query_provider_ {};
   // Test injection flags (mutable to allow const CreateBuffer)
-  bool fail_submission_ { false };
-  bool fail_recording_ { false };
-  mutable bool fail_map_ { false };
-  mutable bool throw_on_create_buffer_ { false };
+  bool fail_submission_ {
+    false,
+  };
+  bool fail_recording_ {
+    false,
+  };
+  mutable bool fail_map_ {
+    false,
+  };
+  mutable bool throw_on_create_buffer_ {
+    false,
+  };
 
 protected:
   [[nodiscard]] auto CreateCommandQueue(const QueueKey& queue_name,
@@ -1108,7 +1313,7 @@ protected:
     if (const auto found = queues_.find(queue_name); found != queues_.end()) {
       return found->second;
     }
-    const auto name = role == QueueRole::kTransfer ? "CopyQ" : "GfxQ";
+    const auto* const name = role == QueueRole::kTransfer ? "CopyQ" : "GfxQ";
     return std::make_shared<FakeCommandQueue>(name, role);
   }
   [[nodiscard]] auto CreateCommandListImpl(

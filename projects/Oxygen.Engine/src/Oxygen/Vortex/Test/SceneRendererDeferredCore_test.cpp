@@ -6,6 +6,7 @@
 
 #include <Oxygen/Testing/GTest.h>
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstring>
@@ -15,6 +16,7 @@
 #include <set>
 #include <span>
 #include <string>
+#include <vector>
 
 #include <glm/geometric.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -88,12 +90,31 @@ using oxygen::vortex::ViewFrameBindings;
 using oxygen::vortex::testing::FakeGraphics;
 using oxygen::vortex::testing::RendererPublicationProbe;
 
-auto TriangleWindsOutwardFromOrigin(
-  const glm::vec4& a, const glm::vec4& b, const glm::vec4& c) -> bool
+template <typename DrawCommand>
+auto DrawIndices(const std::span<const DrawCommand> commands)
+  -> std::vector<std::uint32_t>
 {
-  const auto p0 = glm::vec3 { a };
-  const auto p1 = glm::vec3 { b };
-  const auto p2 = glm::vec3 { c };
+  auto indices = std::vector<std::uint32_t> {};
+  indices.reserve(commands.size());
+  for (const auto& command : commands) {
+    indices.push_back(command.draw_index);
+  }
+  return indices;
+}
+
+auto TriangleWindsOutwardFromOrigin(const std::array<glm::vec4, 3>& triangle)
+  -> bool
+{
+  const auto& [a, b, c] = triangle;
+  const auto p0 = glm::vec3 {
+    a,
+  };
+  const auto p1 = glm::vec3 {
+    b,
+  };
+  const auto p2 = glm::vec3 {
+    c,
+  };
   const auto normal = glm::cross(p1 - p0, p2 - p0);
   const auto center = (p0 + p1 + p2) / 3.0F;
   return glm::dot(normal, center) > 0.0F;
@@ -103,8 +124,8 @@ auto FindDiagnosticsPass(
   const oxygen::vortex::DiagnosticsFrameSnapshot& snapshot,
   const std::string_view name) -> const oxygen::vortex::DiagnosticsPassRecord*
 {
-  const auto iter = std::ranges::find_if(
-    snapshot.passes, [name](const auto& pass) { return pass.name == name; });
+  const auto iter = std::ranges::find_if(snapshot.passes,
+    [name](const auto& pass) -> auto { return pass.name == name; });
   return iter == snapshot.passes.end() ? nullptr : &*iter;
 }
 
@@ -114,7 +135,7 @@ auto FindDiagnosticsProduct(
   -> const oxygen::vortex::DiagnosticsProductRecord*
 {
   const auto iter = std::ranges::find_if(snapshot.products,
-    [name](const auto& product) { return product.name == name; });
+    [name](const auto& product) -> auto { return product.name == name; });
   return iter == snapshot.products.end() ? nullptr : &*iter;
 }
 
@@ -133,9 +154,11 @@ auto MakeRenderer(const std::shared_ptr<FakeGraphics>& graphics,
 {
   auto config = RendererConfig {};
   config.upload_queue_key = graphics->QueueKeyFor(QueueRole::kGraphics).get();
-  return { new Renderer(std::weak_ptr<Graphics>(graphics), std::move(config),
-             capabilities),
-    DestroyRenderer };
+  return {
+    new Renderer(
+      std::weak_ptr<Graphics>(graphics), std::move(config), capabilities),
+    DestroyRenderer,
+  };
 }
 
 auto MakeSceneView(const ViewId view_id, const float width, const float height)
@@ -226,7 +249,7 @@ protected:
     renderer_ = MakeRenderer(graphics_);
 
     auto scene_config = SceneTexturesConfig {
-      .extent = { 64U, 64U },
+      .extent = { 64U, 64U, },
       .enable_velocity = true,
       .enable_custom_depth = true,
       .gbuffer_count = 4U,
@@ -242,7 +265,9 @@ protected:
     });
 
     scene_ = std::make_shared<Scene>("SceneRendererDeferredCoreTest", 16U);
-    frame_context_.SetScene(oxygen::observer_ptr<Scene> { scene_.get() });
+    frame_context_.SetScene(oxygen::observer_ptr<Scene> {
+      scene_.get(),
+    });
     static_cast<void>(
       frame_context_.RegisterView(MakeSceneView(first_view_id_, 64.0F, 64.0F)));
     static_cast<void>(frame_context_.RegisterView(
@@ -262,7 +287,7 @@ protected:
     scene_renderer_.reset();
     renderer_ = MakeRenderer(graphics_, capabilities);
     auto scene_config = SceneTexturesConfig {
-      .extent = { 64U, 64U },
+      .extent = { 64U, 64U, },
       .enable_velocity = true,
       .enable_custom_depth = true,
       .gbuffer_count = 4U,
@@ -310,40 +335,50 @@ protected:
     UpdateSceneTransforms();
 
     auto published_bindings = ViewFrameBindings {};
-    published_bindings.scene_texture_frame_slot
-      = oxygen::ShaderVisibleIndex { 9001U };
-    scene_renderer_->PublishViewFrameBindings(
-      active_view_id, published_bindings, oxygen::ShaderVisibleIndex { 9002U });
+    published_bindings.scene_texture_frame_slot = oxygen::ShaderVisibleIndex {
+      9001U,
+    };
+    scene_renderer_->PublishViewFrameBindings(active_view_id,
+      published_bindings,
+      oxygen::ShaderVisibleIndex {
+        9002U,
+      });
 
     auto context = RenderContext {};
-    context.scene = oxygen::observer_ptr<Scene> { scene_.get() };
-    context.frame_slot = oxygen::frame::Slot { 1U };
-    context.frame_sequence = oxygen::frame::SequenceNumber { 1U };
+    context.scene = oxygen::observer_ptr<Scene> {
+      scene_.get(),
+    };
+    context.frame_slot = oxygen::frame::Slot {
+      1U,
+    };
+    context.frame_sequence = oxygen::frame::SequenceNumber {
+      1U,
+    };
     context.active_view_index = active_view_id == first_view_id_
-      ? std::size_t { 0U }
-      : std::size_t { 1U };
-    context.frame_views.push_back({
-      .view_id = first_view_id_,
-      .is_scene_view = true,
-      .composition_view = {},
-      .shading_mode_override = {},
-      .resolved_view
-      = oxygen::observer_ptr<const ResolvedView> { &first_resolved_view_ },
-      .primary_target = {},
-    });
-    context.frame_views.push_back({
-      .view_id = second_view_id_,
-      .is_scene_view = true,
-      .composition_view = {},
-      .shading_mode_override = {},
-      .resolved_view
-      = oxygen::observer_ptr<const ResolvedView> { &second_resolved_view_ },
-      .primary_target = {},
-    });
+      ? std::size_t { 0U, }
+      : std::size_t { 1U, };
+    {
+      auto& view_entry = context.frame_views.emplace_back();
+      view_entry.view_id = first_view_id_;
+      view_entry.is_scene_view = true;
+      view_entry.resolved_view = oxygen::observer_ptr<const ResolvedView> {
+        &first_resolved_view_,
+      };
+    }
+    {
+      auto& view_entry = context.frame_views.emplace_back();
+      view_entry.view_id = second_view_id_;
+      view_entry.is_scene_view = true;
+      view_entry.resolved_view = oxygen::observer_ptr<const ResolvedView> {
+        &second_resolved_view_,
+      };
+    }
     context.current_view.view_id = active_view_id;
     context.current_view.exposure_view_id = active_view_id;
     context.current_view.resolved_view
-      = oxygen::observer_ptr<const ResolvedView> { &active_view };
+      = oxygen::observer_ptr<const ResolvedView> {
+          &active_view,
+        };
     context.current_view.feature_profile = feature_profile;
     context.current_view.feature_mask
       = oxygen::vortex::ResolveViewFeatureProfileSpec(feature_profile)
@@ -365,7 +400,11 @@ protected:
     auto light = std::make_unique<DirectionalLight>();
     light->Common().affects_world = true;
     light->Common().casts_shadows = true;
-    light->Common().color_rgb = { 1.0F, 0.95F, 0.8F };
+    light->Common().color_rgb = {
+      1.0F,
+      0.95F,
+      0.8F,
+    };
     light->SetIntensityLux(1500.0F);
     light->SetEnvironmentContribution(true);
     light->SetIsSunLight(true);
@@ -379,7 +418,11 @@ protected:
   {
     auto node = scene_->CreateNode(std::string(name));
     auto light = std::make_unique<PointLight>();
-    light->Common().color_rgb = { 0.4F, 0.7F, 1.0F };
+    light->Common().color_rgb = {
+      0.4F,
+      0.7F,
+      1.0F,
+    };
     light->SetRange(6.0F);
     light->SetLuminousFluxLm(1200.0F);
     EXPECT_TRUE(node.AttachLight(std::move(light)));
@@ -391,7 +434,11 @@ protected:
   {
     auto node = scene_->CreateNode(std::string(name));
     auto light = std::make_unique<SpotLight>();
-    light->Common().color_rgb = { 1.0F, 0.6F, 0.3F };
+    light->Common().color_rgb = {
+      1.0F,
+      0.6F,
+      0.3F,
+    };
     light->SetRange(8.0F);
     light->SetLuminousFluxLm(900.0F);
     light->SetInnerConeAngleRadians(0.35F);
@@ -409,8 +456,12 @@ protected:
   FrameContext frame_context_;
   ResolvedView first_resolved_view_ = MakeResolvedView(64.0F, 64.0F);
   ResolvedView second_resolved_view_ = MakeResolvedView(96.0F, 54.0F);
-  const ViewId first_view_id_ { 101U };
-  const ViewId second_view_id_ { 202U };
+  const ViewId first_view_id_ {
+    101U,
+  };
+  const ViewId second_view_id_ {
+    202U,
+  };
 };
 
 NOLINT_TEST_F(SceneRendererDeferredCoreTest,
@@ -449,7 +500,9 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   ResolvedArtifactDescriptorsRetireAfterLastConsumerAndFence)
 {
   auto& reclaimer = graphics_->GetDeferredReclaimer();
-  reclaimer.OnBeginFrame(oxygen::frame::Slot { 1U });
+  reclaimer.OnBeginFrame(oxygen::frame::Slot {
+    1U,
+  });
   static_cast<void>(RenderForView(first_view_id_, first_resolved_view_));
   auto first = scene_renderer_->GetResolvedSceneColorTexture();
   ASSERT_NE(first, nullptr);
@@ -474,18 +527,26 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   EXPECT_NE(scene_renderer_->GetResolvedSceneColorTexture(), first);
   EXPECT_TRUE(registry.Contains(*first));
   EXPECT_EQ(registry.FindShaderVisibleIndex(*first, desc), slot);
-  reclaimer.OnBeginFrame(oxygen::frame::Slot { 2U });
+  reclaimer.OnBeginFrame(oxygen::frame::Slot {
+    2U,
+  });
   EXPECT_EQ(registry.FindShaderVisibleIndex(*first, desc), slot);
-  reclaimer.OnBeginFrame(oxygen::frame::Slot { 1U });
+  reclaimer.OnBeginFrame(oxygen::frame::Slot {
+    1U,
+  });
   EXPECT_TRUE(registry.Contains(*first));
   EXPECT_EQ(registry.FindShaderVisibleIndex(*first, desc), slot);
   // Observe the underlying resource without retaining the extraction wrapper.
   const auto resource = first->shared_from_this();
   first.reset();
   EXPECT_TRUE(registry.Contains(*resource));
-  reclaimer.OnBeginFrame(oxygen::frame::Slot { 2U });
+  reclaimer.OnBeginFrame(oxygen::frame::Slot {
+    2U,
+  });
   EXPECT_TRUE(registry.Contains(*resource));
-  reclaimer.OnBeginFrame(oxygen::frame::Slot { 1U });
+  reclaimer.OnBeginFrame(oxygen::frame::Slot {
+    1U,
+  });
   EXPECT_FALSE(registry.Contains(*resource));
   EXPECT_FALSE(registry.FindShaderVisibleIndex(*resource, desc).has_value());
 }
@@ -495,13 +556,15 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
 {
   auto& reclaimer = graphics_->GetDeferredReclaimer();
   auto& registry = graphics_->GetResourceRegistry();
-  reclaimer.OnBeginFrame(oxygen::frame::Slot { 1U });
+  reclaimer.OnBeginFrame(oxygen::frame::Slot {
+    1U,
+  });
   std::array<oxygen::vortex::SceneTextureExtractRef, 2> resolved;
   std::array<oxygen::vortex::SceneTextureExtractRef, 2> previous;
   std::array<std::shared_ptr<oxygen::graphics::Texture>, 2> resources;
   std::array<oxygen::graphics::TextureViewDescription, 2> descriptions;
-  std::array<oxygen::ShaderVisibleIndex, 2> slots;
-  std::array<glm::uvec2, 2> extents;
+  std::array<oxygen::ShaderVisibleIndex, 2> slots {};
+  std::array<glm::uvec2, 2> extents {};
   for (unsigned index = 0U; index < resolved.size(); ++index) {
     if (index == 0U) {
       static_cast<void>(RenderForView(first_view_id_, first_resolved_view_));
@@ -509,87 +572,113 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
       static_cast<void>(RenderForView(second_view_id_, second_resolved_view_));
     }
     const auto& extracts = scene_renderer_->GetSceneTextureExtracts();
-    resolved[index] = extracts.resolved_scene_depth;
-    previous[index] = extracts.prev_scene_depth;
-    ASSERT_TRUE(resolved[index].valid && previous[index].valid);
-    ASSERT_NE(resolved[index].texture, nullptr);
-    ASSERT_NE(resolved[index].retained_texture, nullptr);
-    ASSERT_EQ(previous[index].texture, resolved[index].texture);
+    resolved.at(index) = extracts.resolved_scene_depth;
+    previous.at(index) = extracts.prev_scene_depth;
+    ASSERT_TRUE(resolved.at(index).valid && previous.at(index).valid);
+    ASSERT_NE(resolved.at(index).texture, nullptr);
+    ASSERT_NE(resolved.at(index).retained_texture, nullptr);
+    ASSERT_EQ(previous.at(index).texture, resolved.at(index).texture);
     ASSERT_EQ(
-      previous[index].retained_texture, resolved[index].retained_texture);
-    EXPECT_FALSE(previous[index].retained_texture.owner_before(
-      resolved[index].retained_texture));
-    EXPECT_FALSE(resolved[index].retained_texture.owner_before(
-      previous[index].retained_texture));
-    EXPECT_NE(resolved[index].texture,
+      previous.at(index).retained_texture, resolved.at(index).retained_texture);
+    EXPECT_FALSE(previous.at(index).retained_texture.owner_before(
+      resolved.at(index).retained_texture));
+    EXPECT_FALSE(resolved.at(index).retained_texture.owner_before(
+      previous.at(index).retained_texture));
+    EXPECT_NE(resolved.at(index).texture,
       &scene_renderer_->GetSceneTextures().GetSceneDepth());
-    resources[index] = resolved[index].texture->shared_from_this();
-    const auto& texture_desc = resources[index]->GetDescriptor();
-    extents[index] = { texture_desc.width, texture_desc.height };
-    descriptions[index]
-      = { .view_type = oxygen::graphics::ResourceViewType::kTexture_SRV,
-          .visibility = oxygen::graphics::DescriptorVisibility::kShaderVisible,
-          .format = texture_desc.format,
-          .dimension = texture_desc.texture_type,
-          .sub_resources
-          = oxygen::graphics::TextureSubResourceSet::EntireTexture() };
-    auto slot
-      = registry.FindShaderVisibleIndex(*resources[index], descriptions[index]);
+    resources.at(index) = resolved.at(index).texture->shared_from_this();
+    const auto& texture_desc = resources.at(index)->GetDescriptor();
+    extents.at(index) = {
+      texture_desc.width,
+      texture_desc.height,
+    };
+    descriptions.at(index) = {
+      .view_type = oxygen::graphics::ResourceViewType::kTexture_SRV,
+      .visibility = oxygen::graphics::DescriptorVisibility::kShaderVisible,
+      .format = texture_desc.format,
+      .dimension = texture_desc.texture_type,
+      .sub_resources = oxygen::graphics::TextureSubResourceSet::EntireTexture(),
+    };
+    auto slot = registry.FindShaderVisibleIndex(
+      *resources.at(index), descriptions.at(index));
     if (!slot) {
       auto handle = graphics_->GetDescriptorAllocator().AllocateRaw(
-        descriptions[index].view_type, descriptions[index].visibility);
+        descriptions.at(index).view_type, descriptions.at(index).visibility);
       ASSERT_TRUE(handle.IsValid());
       slot = graphics_->GetDescriptorAllocator().GetShaderVisibleIndex(handle);
       ASSERT_TRUE(registry
           .RegisterView(
-            *resources[index], std::move(handle), descriptions[index])
+            *resources.at(index), std::move(handle), descriptions.at(index))
           ->IsValid());
     }
-    slots[index] = *slot;
+    slots.at(index) = *slot;
   }
-  EXPECT_NE(resources[0], resources[1]);
+  EXPECT_NE(resources.at(0), resources.at(1));
 
-  reclaimer.OnBeginFrame(oxygen::frame::Slot { 2U });
-  scene_renderer_->OnStandaloneFrameStart(oxygen::frame::SequenceNumber { 2U },
-    oxygen::frame::Slot { 2U }, glm::uvec2 { 128U, 72U });
+  reclaimer.OnBeginFrame(oxygen::frame::Slot {
+    2U,
+  });
+  scene_renderer_->OnStandaloneFrameStart(
+    oxygen::frame::SequenceNumber {
+      2U,
+    },
+    oxygen::frame::Slot {
+      2U,
+    },
+    glm::uvec2 {
+      128U,
+      72U,
+    });
   EXPECT_EQ(scene_renderer_->GetSceneTextures().GetExtent(),
-    (glm::uvec2 { 128U, 72U }));
+    (glm::uvec2 {
+      128U,
+      72U,
+    }));
   scene_renderer_.reset();
   for (unsigned index = 0U; index < resolved.size(); ++index) {
     SCOPED_TRACE(index);
-    const auto& texture = *resources[index];
-    EXPECT_EQ(texture.GetDescriptor().width, extents[index].x);
-    EXPECT_EQ(texture.GetDescriptor().height, extents[index].y);
+    const auto& texture = *resources.at(index);
+    EXPECT_EQ(texture.GetDescriptor().width, extents.at(index).x);
+    EXPECT_EQ(texture.GetDescriptor().height, extents.at(index).y);
     EXPECT_TRUE(registry.Contains(texture));
-    EXPECT_EQ(registry.FindShaderVisibleIndex(texture, descriptions[index]),
-      slots[index]);
+    EXPECT_EQ(registry.FindShaderVisibleIndex(texture, descriptions.at(index)),
+      slots.at(index));
     const auto owner = std::weak_ptr<const oxygen::graphics::Texture>(
-      resolved[index].retained_texture);
+      resolved.at(index).retained_texture);
     if (index == 0U) {
-      resolved[index] = {};
+      resolved.at(index) = {};
     } else {
-      previous[index] = {};
+      previous.at(index) = {};
     }
     EXPECT_FALSE(owner.expired());
-    reclaimer.OnBeginFrame(oxygen::frame::Slot { 1U });
-    reclaimer.OnBeginFrame(oxygen::frame::Slot { 2U });
+    reclaimer.OnBeginFrame(oxygen::frame::Slot {
+      1U,
+    });
+    reclaimer.OnBeginFrame(oxygen::frame::Slot {
+      2U,
+    });
     EXPECT_TRUE(registry.Contains(texture));
-    EXPECT_EQ(registry.FindShaderVisibleIndex(texture, descriptions[index]),
-      slots[index]);
+    EXPECT_EQ(registry.FindShaderVisibleIndex(texture, descriptions.at(index)),
+      slots.at(index));
 
     // The observed underlying resource does not own the extraction wrapper.
     // Its final reader releases in slot2; another slot cannot retire it.
-    resolved[index] = {};
-    previous[index] = {};
+    resolved.at(index) = {};
+    previous.at(index) = {};
     EXPECT_TRUE(owner.expired());
     EXPECT_TRUE(registry.Contains(texture));
-    reclaimer.OnBeginFrame(oxygen::frame::Slot { 1U });
+    reclaimer.OnBeginFrame(oxygen::frame::Slot {
+      1U,
+    });
     EXPECT_TRUE(registry.Contains(texture));
-    EXPECT_EQ(registry.FindShaderVisibleIndex(texture, descriptions[index]),
-      slots[index]);
-    reclaimer.OnBeginFrame(oxygen::frame::Slot { 2U });
+    EXPECT_EQ(registry.FindShaderVisibleIndex(texture, descriptions.at(index)),
+      slots.at(index));
+    reclaimer.OnBeginFrame(oxygen::frame::Slot {
+      2U,
+    });
     EXPECT_FALSE(registry.Contains(texture));
-    EXPECT_FALSE(registry.FindShaderVisibleIndex(texture, descriptions[index])
+    EXPECT_FALSE(
+      registry.FindShaderVisibleIndex(texture, descriptions.at(index))
         .has_value());
   }
 }
@@ -601,22 +690,32 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   UpdateSceneTransforms();
 
   auto context = RenderContext {};
-  context.scene = oxygen::observer_ptr<Scene> { scene_.get() };
-  context.frame_slot = oxygen::frame::Slot { 1U };
-  context.frame_sequence = oxygen::frame::SequenceNumber { 1U };
+  context.scene = oxygen::observer_ptr<Scene> {
+    scene_.get(),
+  };
+  context.frame_slot = oxygen::frame::Slot {
+    1U,
+  };
+  context.frame_sequence = oxygen::frame::SequenceNumber {
+    1U,
+  };
   context.view_constants = view_constants_buffer_;
-  context.frame_views.push_back({
-    .view_id = first_view_id_,
-    .is_scene_view = true,
-    .resolved_view
-    = oxygen::observer_ptr<const ResolvedView> { &first_resolved_view_ },
-  });
-  context.frame_views.push_back({
-    .view_id = second_view_id_,
-    .is_scene_view = true,
-    .resolved_view
-    = oxygen::observer_ptr<const ResolvedView> { &second_resolved_view_ },
-  });
+  {
+    auto& view_entry = context.frame_views.emplace_back();
+    view_entry.view_id = first_view_id_;
+    view_entry.is_scene_view = true;
+    view_entry.resolved_view = oxygen::observer_ptr<const ResolvedView> {
+      &first_resolved_view_,
+    };
+  }
+  {
+    auto& view_entry = context.frame_views.emplace_back();
+    view_entry.view_id = second_view_id_;
+    view_entry.is_scene_view = true;
+    view_entry.resolved_view = oxygen::observer_ptr<const ResolvedView> {
+      &second_resolved_view_,
+    };
+  }
 
   scene_renderer_->RenderViewFamily(context);
 
@@ -635,26 +734,37 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   UpdateSceneTransforms();
 
   auto context = RenderContext {};
-  context.scene = oxygen::observer_ptr<Scene> { scene_.get() };
-  context.frame_slot = oxygen::frame::Slot { 1U };
-  context.frame_sequence = oxygen::frame::SequenceNumber { 1U };
+  context.scene = oxygen::observer_ptr<Scene> {
+    scene_.get(),
+  };
+  context.frame_slot = oxygen::frame::Slot {
+    1U,
+  };
+  context.frame_sequence = oxygen::frame::SequenceNumber {
+    1U,
+  };
   context.view_constants = view_constants_buffer_;
-  context.frame_views.push_back({
-    .view_id = first_view_id_,
-    .is_scene_view = true,
-    .resolved_view
-    = oxygen::observer_ptr<const ResolvedView> { &first_resolved_view_ },
-  });
-  context.frame_views.push_back({
-    .view_id = second_view_id_,
-    .is_scene_view = true,
-    .feature_profile = oxygen::vortex::CompositionView::ViewFeatureProfile::kNoShadowing,
-    .feature_mask = oxygen::vortex::ResolveViewFeatureProfileSpec(
+  {
+    auto& view_entry = context.frame_views.emplace_back();
+    view_entry.view_id = first_view_id_;
+    view_entry.is_scene_view = true;
+    view_entry.resolved_view = oxygen::observer_ptr<const ResolvedView> {
+      &first_resolved_view_,
+    };
+  }
+  {
+    auto& view_entry = context.frame_views.emplace_back();
+    view_entry.view_id = second_view_id_;
+    view_entry.is_scene_view = true;
+    view_entry.feature_profile
+      = oxygen::vortex::CompositionView::ViewFeatureProfile::kNoShadowing;
+    view_entry.feature_mask = oxygen::vortex::ResolveViewFeatureProfileSpec(
       oxygen::vortex::CompositionView::ViewFeatureProfile::kNoShadowing)
-                      .feature_mask,
-    .resolved_view
-    = oxygen::observer_ptr<const ResolvedView> { &second_resolved_view_ },
-  });
+                                .feature_mask;
+    view_entry.resolved_view = oxygen::observer_ptr<const ResolvedView> {
+      &second_resolved_view_,
+    };
+  }
 
   scene_renderer_->RenderViewFamily(context);
 
@@ -673,23 +783,32 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   scene_renderer_->OnFrameStart(frame_context_);
 
   auto context = RenderContext {};
-  context.scene = oxygen::observer_ptr<Scene> { scene_.get() };
-  context.frame_slot = oxygen::frame::Slot { 1U };
-  context.frame_sequence = oxygen::frame::SequenceNumber { 1U };
-  context.active_view_index = std::size_t { 0U };
-  context.frame_views.push_back({
-    .view_id = first_view_id_,
-    .is_scene_view = true,
-    .composition_view = {},
-    .shading_mode_override = {},
-    .resolved_view
-    = oxygen::observer_ptr<const ResolvedView> { &first_resolved_view_ },
-    .primary_target = {},
-  });
+  context.scene = oxygen::observer_ptr<Scene> {
+    scene_.get(),
+  };
+  context.frame_slot = oxygen::frame::Slot {
+    1U,
+  };
+  context.frame_sequence = oxygen::frame::SequenceNumber {
+    1U,
+  };
+  context.active_view_index = std::size_t {
+    0U,
+  };
+  {
+    auto& view_entry = context.frame_views.emplace_back();
+    view_entry.view_id = first_view_id_;
+    view_entry.is_scene_view = true;
+    view_entry.resolved_view = oxygen::observer_ptr<const ResolvedView> {
+      &first_resolved_view_,
+    };
+  }
   context.current_view.view_id = first_view_id_;
   context.current_view.exposure_view_id = first_view_id_;
   context.current_view.resolved_view
-    = oxygen::observer_ptr<const ResolvedView> { &first_resolved_view_ };
+    = oxygen::observer_ptr<const ResolvedView> {
+        &first_resolved_view_,
+      };
   context.current_view.depth_prepass_mode
     = oxygen::vortex::DepthPrePassMode::kDisabled;
 
@@ -752,7 +871,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   DepthPrepassRecordsRealDrawWorkFromPreparedMetadata)
 {
   auto scene_config = SceneTexturesConfig {
-    .extent = { 64U, 64U },
+    .extent = { 64U, 64U, },
     .enable_velocity = true,
     .enable_custom_depth = false,
     .gbuffer_count = 4U,
@@ -766,20 +885,25 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   draw_metadata.front().is_indexed = 0U;
   draw_metadata.front().instance_count = 1U;
   draw_metadata.front().vertex_count = 3U;
-  draw_metadata.front().flags
-    = oxygen::vortex::PassMask { oxygen::vortex::PassMaskBit::kOpaque };
+  draw_metadata.front().flags = oxygen::vortex::PassMask {
+    oxygen::vortex::PassMaskBit::kOpaque,
+  };
 
   auto prepared_frame = oxygen::vortex::PreparedSceneFrame {};
   prepared_frame.draw_metadata_bytes = std::as_bytes(std::span(draw_metadata));
 
   auto context = RenderContext {};
-  context.frame_slot = oxygen::frame::Slot { 1U };
+  context.frame_slot = oxygen::frame::Slot {
+    1U,
+  };
   context.current_view.prepared_frame
     = oxygen::observer_ptr<const oxygen::vortex::PreparedSceneFrame> {
         &prepared_frame,
       };
   context.current_view.resolved_view
-    = oxygen::observer_ptr<const ResolvedView> { &first_resolved_view_ };
+    = oxygen::observer_ptr<const ResolvedView> {
+        &first_resolved_view_,
+      };
   context.view_constants = graphics_->CreateBuffer({
     .size_bytes = 1024U,
     .usage = oxygen::graphics::BufferUsage::kConstant,
@@ -811,7 +935,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
 {
   auto scene_renderer = SceneRenderer(*renderer_, *graphics_,
     SceneTexturesConfig {
-      .extent = { 64U, 64U },
+      .extent = { 64U, 64U, },
       .enable_velocity = true,
       .enable_custom_depth = true,
       .gbuffer_count = 4U,
@@ -838,13 +962,21 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
     bindings.velocity_srv, oxygen::vortex::SceneTextureBindings::kInvalidIndex);
 
   auto stage10_context = RenderContext {};
-  stage10_context.scene = oxygen::observer_ptr<Scene> { scene_.get() };
-  stage10_context.frame_slot = oxygen::frame::Slot { 1U };
-  stage10_context.frame_sequence = oxygen::frame::SequenceNumber { 1U };
+  stage10_context.scene = oxygen::observer_ptr<Scene> {
+    scene_.get(),
+  };
+  stage10_context.frame_slot = oxygen::frame::Slot {
+    1U,
+  };
+  stage10_context.frame_sequence = oxygen::frame::SequenceNumber {
+    1U,
+  };
   stage10_context.current_view.view_id = first_view_id_;
   stage10_context.current_view.exposure_view_id = first_view_id_;
   stage10_context.current_view.resolved_view
-    = oxygen::observer_ptr<const ResolvedView> { &first_resolved_view_ };
+    = oxygen::observer_ptr<const ResolvedView> {
+        &first_resolved_view_,
+      };
   stage10_context.view_constants = view_constants_buffer_;
   scene_renderer.PublishDeferredBasePassSceneTextures(stage10_context);
 
@@ -856,14 +988,14 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   for (std::size_t i = 0;
     i < static_cast<std::size_t>(oxygen::vortex::GBufferIndex::kActiveCount);
     ++i) {
-    EXPECT_NE(bindings.gbuffer_srvs[i],
+    EXPECT_NE(bindings.gbuffer_srvs.at(i),
       oxygen::vortex::SceneTextureBindings::kInvalidIndex);
   }
-  EXPECT_EQ(bindings.gbuffer_srvs[static_cast<std::size_t>(
-              oxygen::vortex::GBufferIndex::kShadowFactors)],
+  EXPECT_EQ(bindings.gbuffer_srvs.at(static_cast<std::size_t>(
+              oxygen::vortex::GBufferIndex::kShadowFactors)),
     oxygen::vortex::SceneTextureBindings::kInvalidIndex);
-  EXPECT_EQ(bindings.gbuffer_srvs[static_cast<std::size_t>(
-              oxygen::vortex::GBufferIndex::kWorldTangent)],
+  EXPECT_EQ(bindings.gbuffer_srvs.at(static_cast<std::size_t>(
+              oxygen::vortex::GBufferIndex::kWorldTangent)),
     oxygen::vortex::SceneTextureBindings::kInvalidIndex);
   EXPECT_NE(
     bindings.stencil_srv, oxygen::vortex::SceneTextureBindings::kInvalidIndex);
@@ -874,7 +1006,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
 {
   auto scene_renderer = SceneRenderer(*renderer_, *graphics_,
     SceneTexturesConfig {
-      .extent = { 64U, 64U },
+      .extent = { 64U, 64U, },
       .enable_velocity = false,
       .enable_custom_depth = true,
       .gbuffer_count = 4U,
@@ -907,23 +1039,32 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   scene_renderer_->OnFrameStart(frame_context_);
 
   auto context = RenderContext {};
-  context.scene = oxygen::observer_ptr<Scene> { scene_.get() };
-  context.frame_slot = oxygen::frame::Slot { 1U };
-  context.frame_sequence = oxygen::frame::SequenceNumber { 1U };
-  context.active_view_index = std::size_t { 0U };
-  context.frame_views.push_back({
-    .view_id = first_view_id_,
-    .is_scene_view = true,
-    .composition_view = {},
-    .shading_mode_override = {},
-    .resolved_view
-    = oxygen::observer_ptr<const ResolvedView> { &first_resolved_view_ },
-    .primary_target = {},
-  });
+  context.scene = oxygen::observer_ptr<Scene> {
+    scene_.get(),
+  };
+  context.frame_slot = oxygen::frame::Slot {
+    1U,
+  };
+  context.frame_sequence = oxygen::frame::SequenceNumber {
+    1U,
+  };
+  context.active_view_index = std::size_t {
+    0U,
+  };
+  {
+    auto& view_entry = context.frame_views.emplace_back();
+    view_entry.view_id = first_view_id_;
+    view_entry.is_scene_view = true;
+    view_entry.resolved_view = oxygen::observer_ptr<const ResolvedView> {
+      &first_resolved_view_,
+    };
+  }
   context.current_view.view_id = first_view_id_;
   context.current_view.exposure_view_id = first_view_id_;
   context.current_view.resolved_view
-    = oxygen::observer_ptr<const ResolvedView> { &first_resolved_view_ };
+    = oxygen::observer_ptr<const ResolvedView> {
+        &first_resolved_view_,
+      };
   context.current_view.shading_mode_override = ShadingMode::kForward;
   context.view_constants = graphics_->CreateBuffer({
     .size_bytes = 1024U,
@@ -932,10 +1073,13 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
     .debug_name = "SceneRendererDeferredCoreTest.ForwardModeViewConstants",
   });
   auto published_bindings = ViewFrameBindings {};
-  published_bindings.scene_texture_frame_slot
-    = oxygen::ShaderVisibleIndex { 9001U };
-  scene_renderer_->PublishViewFrameBindings(
-    first_view_id_, published_bindings, oxygen::ShaderVisibleIndex { 9002U });
+  published_bindings.scene_texture_frame_slot = oxygen::ShaderVisibleIndex {
+    9001U,
+  };
+  scene_renderer_->PublishViewFrameBindings(first_view_id_, published_bindings,
+    oxygen::ShaderVisibleIndex {
+      9002U,
+    });
 
   scene_renderer_->OnRender(context);
 
@@ -961,7 +1105,7 @@ NOLINT_TEST_F(
   SceneRendererDeferredCoreTest, BasePassSolidForwardWritesSceneColor)
 {
   auto scene_config = SceneTexturesConfig {
-    .extent = { 64U, 64U },
+    .extent = { 64U, 64U, },
     .enable_velocity = true,
     .enable_custom_depth = false,
     .gbuffer_count = 4U,
@@ -974,20 +1118,25 @@ NOLINT_TEST_F(
   draw_metadata.front().is_indexed = 0U;
   draw_metadata.front().vertex_count = 3U;
   draw_metadata.front().instance_count = 1U;
-  draw_metadata.front().flags
-    = oxygen::vortex::PassMask { oxygen::vortex::PassMaskBit::kOpaque };
+  draw_metadata.front().flags = oxygen::vortex::PassMask {
+    oxygen::vortex::PassMaskBit::kOpaque,
+  };
 
   auto prepared_frame = oxygen::vortex::PreparedSceneFrame {};
   prepared_frame.draw_metadata_bytes = std::as_bytes(std::span(draw_metadata));
 
   auto context = RenderContext {};
-  context.frame_slot = oxygen::frame::Slot { 1U };
+  context.frame_slot = oxygen::frame::Slot {
+    1U,
+  };
   context.current_view.prepared_frame
     = oxygen::observer_ptr<const oxygen::vortex::PreparedSceneFrame> {
         &prepared_frame,
       };
   context.current_view.resolved_view
-    = oxygen::observer_ptr<const ResolvedView> { &first_resolved_view_ };
+    = oxygen::observer_ptr<const ResolvedView> {
+        &first_resolved_view_,
+      };
   context.view_constants = graphics_->CreateBuffer({
     .size_bytes = 1024U,
     .usage = oxygen::graphics::BufferUsage::kConstant,
@@ -1026,7 +1175,7 @@ NOLINT_TEST_F(
 NOLINT_TEST_F(SceneRendererDeferredCoreTest, BasePassWireframeRunsInForwardMode)
 {
   auto scene_config = SceneTexturesConfig {
-    .extent = { 64U, 64U },
+    .extent = { 64U, 64U, },
     .enable_velocity = false,
     .enable_custom_depth = false,
     .gbuffer_count = 4U,
@@ -1039,20 +1188,25 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest, BasePassWireframeRunsInForwardMode)
   draw_metadata.front().is_indexed = 0U;
   draw_metadata.front().vertex_count = 3U;
   draw_metadata.front().instance_count = 1U;
-  draw_metadata.front().flags
-    = oxygen::vortex::PassMask { oxygen::vortex::PassMaskBit::kOpaque };
+  draw_metadata.front().flags = oxygen::vortex::PassMask {
+    oxygen::vortex::PassMaskBit::kOpaque,
+  };
 
   auto prepared_frame = oxygen::vortex::PreparedSceneFrame {};
   prepared_frame.draw_metadata_bytes = std::as_bytes(std::span(draw_metadata));
 
   auto context = RenderContext {};
-  context.frame_slot = oxygen::frame::Slot { 1U };
+  context.frame_slot = oxygen::frame::Slot {
+    1U,
+  };
   context.current_view.prepared_frame
     = oxygen::observer_ptr<const oxygen::vortex::PreparedSceneFrame> {
         &prepared_frame,
       };
   context.current_view.resolved_view
-    = oxygen::observer_ptr<const ResolvedView> { &first_resolved_view_ };
+    = oxygen::observer_ptr<const ResolvedView> {
+        &first_resolved_view_,
+      };
   context.view_constants = graphics_->CreateBuffer({
     .size_bytes = 1024U,
     .usage = oxygen::graphics::BufferUsage::kConstant,
@@ -1088,7 +1242,7 @@ NOLINT_TEST_F(
   SceneRendererDeferredCoreTest, BasePassCompletesVelocityForDynamicGeometry)
 {
   auto scene_config = SceneTexturesConfig {
-    .extent = { 64U, 64U },
+    .extent = { 64U, 64U, },
     .enable_velocity = true,
     .enable_custom_depth = false,
     .gbuffer_count = 4U,
@@ -1107,7 +1261,9 @@ NOLINT_TEST_F(
       render_items.data(), render_items.size());
 
   auto context = RenderContext {};
-  context.frame_slot = oxygen::frame::Slot { 1U };
+  context.frame_slot = oxygen::frame::Slot {
+    1U,
+  };
   context.current_view.prepared_frame
     = oxygen::observer_ptr<const oxygen::vortex::PreparedSceneFrame> {
         &prepared_frame,
@@ -1137,7 +1293,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   BasePassVelocityAuxiliaryChainPreservesDepthAndRetiresIntermediates)
 {
   auto scene_config = SceneTexturesConfig {
-    .extent = { 64U, 64U },
+    .extent = { 64U, 64U, },
     .enable_velocity = true,
     .enable_custom_depth = false,
     .gbuffer_count = 4U,
@@ -1145,7 +1301,9 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   };
   auto base_pass = std::make_unique<oxygen::vortex::BasePassModule>(
     *renderer_, scene_config);
-  graphics_->GetDeferredReclaimer().OnBeginFrame(oxygen::frame::Slot { 1U });
+  graphics_->GetDeferredReclaimer().OnBeginFrame(oxygen::frame::Slot {
+    1U,
+  });
   auto scene_textures = oxygen::vortex::SceneTextures(*graphics_, scene_config);
 
   auto render_items
@@ -1172,7 +1330,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
             MotionPublicationCapabilityBits::kUsesMotionVectorWorldOffset)
         | static_cast<std::uint32_t>(
           oxygen::vortex::MotionPublicationCapabilityBits::kHasRuntimePayload),
-      .parameter_block0 = { 0.1F, 0.0F, 0.0F, 0.0F },
+      .parameter_block0 = { 0.1F, 0.0F, 0.0F, 0.0F, },
     },
   };
   auto previous_status = current_status;
@@ -1205,7 +1363,9 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
       velocity_metadata.data(), velocity_metadata.size());
 
   auto context = RenderContext {};
-  context.frame_slot = oxygen::frame::Slot { 1U };
+  context.frame_slot = oxygen::frame::Slot {
+    1U,
+  };
   context.current_view.prepared_frame
     = oxygen::observer_ptr<const oxygen::vortex::PreparedSceneFrame> {
         &prepared_frame,
@@ -1261,35 +1421,42 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   std::array<oxygen::graphics::TextureViewDescription, 2> descriptions;
   std::array<std::optional<oxygen::ShaderVisibleIndex>, 2> descriptors;
   for (std::size_t i = 0; i < intermediates.size(); ++i) {
-    ASSERT_NE(intermediates[i], nullptr);
-    descriptions[i] = {
+    ASSERT_NE(intermediates.at(i), nullptr);
+    descriptions.at(i) = {
       .view_type = oxygen::graphics::ResourceViewType::kTexture_SRV,
       .visibility = oxygen::graphics::DescriptorVisibility::kShaderVisible,
-      .format = intermediates[i]->GetDescriptor().format,
-      .dimension = intermediates[i]->GetDescriptor().texture_type,
+      .format = intermediates.at(i)->GetDescriptor().format,
+      .dimension = intermediates.at(i)->GetDescriptor().texture_type,
       .sub_resources = oxygen::graphics::TextureSubResourceSet::EntireTexture(),
     };
-    descriptors[i]
-      = registry.FindShaderVisibleIndex(*intermediates[i], descriptions[i]);
-    ASSERT_TRUE(descriptors[i].has_value());
+    descriptors.at(i) = registry.FindShaderVisibleIndex(
+      *intermediates.at(i), descriptions.at(i));
+    if (!descriptors.at(i).has_value()) {
+      FAIL() << "Expected descriptors.at(i) to have a value";
+    }
   }
   base_pass.reset();
-  graphics_->GetDeferredReclaimer().OnBeginFrame(oxygen::frame::Slot { 2U });
+  graphics_->GetDeferredReclaimer().OnBeginFrame(oxygen::frame::Slot {
+    2U,
+  });
   for (std::size_t i = 0; i < intermediates.size(); ++i) {
     EXPECT_EQ(
-      registry.FindShaderVisibleIndex(*intermediates[i], descriptions[i]),
-      descriptors[i]);
+      registry.FindShaderVisibleIndex(*intermediates.at(i), descriptions.at(i)),
+      descriptors.at(i));
   }
-  graphics_->GetDeferredReclaimer().OnBeginFrame(oxygen::frame::Slot { 1U });
-  for (const auto& texture : intermediates)
+  graphics_->GetDeferredReclaimer().OnBeginFrame(oxygen::frame::Slot {
+    1U,
+  });
+  for (const auto& texture : intermediates) {
     EXPECT_FALSE(registry.Contains(*texture));
+  }
 }
 
 NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   BasePassRequiresPreparedFrameBeforePublishingProducts)
 {
   auto scene_config = SceneTexturesConfig {
-    .extent = { 64U, 64U },
+    .extent = { 64U, 64U, },
     .enable_velocity = true,
     .enable_custom_depth = false,
     .gbuffer_count = 4U,
@@ -1298,7 +1465,9 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   auto base_pass = oxygen::vortex::BasePassModule(*renderer_, scene_config);
   auto scene_textures = oxygen::vortex::SceneTextures(*graphics_, scene_config);
   auto context = RenderContext {};
-  context.frame_slot = oxygen::frame::Slot { 1U };
+  context.frame_slot = oxygen::frame::Slot {
+    1U,
+  };
   context.view_constants = graphics_->CreateBuffer({
     .size_bytes = 1024U,
     .usage = oxygen::graphics::BufferUsage::kConstant,
@@ -1326,8 +1495,12 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   static_cast<void>(AddDirectionalLight("DebugKeyLight"));
 
   struct DebugCase {
-    ShaderDebugMode mode { ShaderDebugMode::kDisabled };
-    const char* pipeline_name { nullptr };
+    ShaderDebugMode mode {
+      ShaderDebugMode::kDisabled,
+    };
+    const char* pipeline_name {
+      nullptr,
+    };
   };
 
   const auto cases = std::array<DebugCase, 6U> {
@@ -1399,7 +1572,7 @@ NOLINT_TEST_F(
     scene_renderer_->GetPublishedViewFrameBindings().scene_texture_frame_slot);
   EXPECT_EQ(state.consumed_scene_depth_srv, bindings.scene_depth_srv);
   for (std::size_t i = 0; i < state.consumed_gbuffer_srvs.size(); ++i) {
-    EXPECT_EQ(state.consumed_gbuffer_srvs[i], bindings.gbuffer_srvs[i]);
+    EXPECT_EQ(state.consumed_gbuffer_srvs.at(i), bindings.gbuffer_srvs.at(i));
   }
   EXPECT_EQ(graphics_->draw_log_.draws.size(), 1U);
   EXPECT_TRUE(std::ranges::any_of(
@@ -1430,12 +1603,19 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
 {
   auto sun = AddDirectionalLight("Sun");
   auto sun_light = sun.GetLightAs<DirectionalLight>();
-  ASSERT_TRUE(sun_light.has_value());
+  if (!sun_light.has_value()) {
+    FAIL() << "Expected sun_light to have a value";
+  }
   auto& csm = sun_light->get().CascadedShadows();
   csm.cascade_count = 3U;
   csm.split_mode = oxygen::scene::DirectionalCsmSplitMode::kManualDistances;
   csm.max_shadow_distance = 96.0F;
-  csm.cascade_distances = { 12.0F, 36.0F, 96.0F, 160.0F };
+  csm.cascade_distances = {
+    12.0F,
+    36.0F,
+    96.0F,
+    160.0F,
+  };
   csm.transition_fraction = 0.2F;
   csm.distance_fadeout_fraction = 0.25F;
   sun_light->get().Common().shadow.bias = 0.001F;
@@ -1448,7 +1628,9 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
 
   const auto& selection
     = RendererPublicationProbe::GetFrameLightSelection(*scene_renderer_);
-  ASSERT_TRUE(selection.directional_light.has_value());
+  if (!selection.directional_light.has_value()) {
+    FAIL() << "Expected selection.directional_light to have a value";
+  }
   EXPECT_NEAR(selection.directional_light->direction.x, 0.0F, 1.0e-5F);
   EXPECT_NEAR(selection.directional_light->direction.y, 0.0F, 1.0e-5F);
   EXPECT_NEAR(selection.directional_light->direction.z, -1.0F, 1.0e-5F);
@@ -1463,7 +1645,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   EXPECT_EQ(selection.directional_light->cascade_split_mode,
     oxygen::vortex::FrameDirectionalCsmSplitMode::kManualDistances);
   EXPECT_FLOAT_EQ(selection.directional_light->max_shadow_distance, 96.0F);
-  EXPECT_FLOAT_EQ(selection.directional_light->cascade_distances[1], 36.0F);
+  EXPECT_FLOAT_EQ(selection.directional_light->cascade_distances.at(1), 36.0F);
   EXPECT_FLOAT_EQ(selection.directional_light->transition_fraction, 0.2F);
   EXPECT_FLOAT_EQ(
     selection.directional_light->distance_fadeout_fraction, 0.25F);
@@ -1476,7 +1658,9 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
 {
   auto fill = AddDirectionalLight("Fill");
   auto fill_light = fill.GetLightAs<DirectionalLight>();
-  ASSERT_TRUE(fill_light.has_value());
+  if (!fill_light.has_value()) {
+    FAIL() << "Expected fill_light to have a value";
+  }
   fill_light->get().Common().affects_world = true;
   fill_light->get().SetEnvironmentContribution(false);
   fill_light->get().SetIsSunLight(false);
@@ -1485,7 +1669,9 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
 
   auto sun = AddDirectionalLight("Sun");
   auto sun_light = sun.GetLightAs<DirectionalLight>();
-  ASSERT_TRUE(sun_light.has_value());
+  if (!sun_light.has_value()) {
+    FAIL() << "Expected sun_light to have a value";
+  }
   sun_light->get().Common().affects_world = true;
   sun_light->get().SetEnvironmentContribution(true);
   sun_light->get().SetIsSunLight(true);
@@ -1497,7 +1683,9 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
 
   const auto& selection
     = RendererPublicationProbe::GetFrameLightSelection(*scene_renderer_);
-  ASSERT_TRUE(selection.directional_light.has_value());
+  if (!selection.directional_light.has_value()) {
+    FAIL() << "Expected selection.directional_light to have a value";
+  }
   EXPECT_NEAR(selection.directional_light->direction.x, 0.0F, 1.0e-5F);
   EXPECT_NEAR(selection.directional_light->direction.y, 0.0F, 1.0e-5F);
   EXPECT_NEAR(selection.directional_light->direction.z, -1.0F, 1.0e-5F);
@@ -1704,8 +1892,9 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   static_cast<void>(AddDirectionalLight("DiagnosticsOnlySun"));
   renderer_->GetDiagnosticsService().SetEnabledFeatures(
     oxygen::vortex::DiagnosticsFeature::kFrameLedger);
-  renderer_->GetDiagnosticsService().BeginFrame(
-    oxygen::frame::SequenceNumber { 77U });
+  renderer_->GetDiagnosticsService().BeginFrame(oxygen::frame::SequenceNumber {
+    77U,
+  });
 
   const auto context = RenderForView(first_view_id_, first_resolved_view_,
     ShaderDebugMode::kDisabled,
@@ -1755,8 +1944,10 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
     = FindDiagnosticsPass(snapshot, "Vortex.FeatureVariant.DiagnosticsOnly");
   ASSERT_NE(diagnostics_pass, nullptr);
   EXPECT_TRUE(diagnostics_pass->executed);
-  EXPECT_TRUE(std::ranges::contains(
-    diagnostics_pass->outputs, std::string { "Vortex.DiagnosticsLedger" }));
+  EXPECT_TRUE(std::ranges::contains(diagnostics_pass->outputs,
+    std::string {
+      "Vortex.DiagnosticsLedger",
+    }));
   const auto* diagnostics_product
     = FindDiagnosticsProduct(snapshot, "Vortex.DiagnosticsLedger");
   ASSERT_NE(diagnostics_product, nullptr);
@@ -1808,7 +1999,9 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
 {
   auto spot = AddSpotLight("SpotKey");
   auto spot_light = spot.GetLightAs<SpotLight>();
-  ASSERT_TRUE(spot_light.has_value());
+  if (!spot_light.has_value()) {
+    FAIL() << "Expected spot_light to have a value";
+  }
   spot_light->get().Common().casts_shadows = true;
   spot_light->get().Common().shadow.bias = 0.5F;
   spot_light->get().Common().shadow.normal_bias = 0.03F;
@@ -1834,7 +2027,9 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
 {
   auto point = AddPointLight("PointKey");
   auto point_light = point.GetLightAs<PointLight>();
-  ASSERT_TRUE(point_light.has_value());
+  if (!point_light.has_value()) {
+    FAIL() << "Expected point_light to have a value";
+  }
   point_light->get().Common().casts_shadows = true;
   point_light->get().Common().shadow.bias = 0.5F;
   point_light->get().Common().shadow.normal_bias = 0.03F;
@@ -1861,8 +2056,16 @@ NOLINT_TEST_F(
   const auto outside_view = MakePerspectiveResolvedView(64.0F, 64.0F);
   auto point = AddPointLight("PointFill");
   auto spot = AddSpotLight("SpotRim");
-  point.GetTransform().SetLocalPosition({ 0.0F, 20.0F, 0.0F });
-  spot.GetTransform().SetLocalPosition({ 0.0F, 20.0F, 0.0F });
+  point.GetTransform().SetLocalPosition({
+    0.0F,
+    20.0F,
+    0.0F,
+  });
+  spot.GetTransform().SetLocalPosition({
+    0.0F,
+    20.0F,
+    0.0F,
+  });
   UpdateSceneTransforms();
 
   graphics_->draw_log_.draws.clear();
@@ -1950,34 +2153,61 @@ NOLINT_TEST_F(
   std::vector<Snapshot> snapshots;
   std::set<std::uint32_t> indices;
   for (unsigned frame = 0U; frame < 4U; ++frame) {
-    context.frame_sequence = oxygen::frame::SequenceNumber { 100U + frame };
-    context.frame_slot = oxygen::frame::Slot { frame % 3U };
+    context.frame_sequence = oxygen::frame::SequenceNumber {
+      100U + frame,
+    };
+    context.frame_slot = oxygen::frame::Slot {
+      frame % 3U,
+    };
     for (unsigned local_view = 0U; local_view < 4U; ++local_view) {
-      const auto index = frame * 4U + local_view;
+      const auto index = (frame * 4U) + local_view;
       auto params = ResolvedView::Params {};
-      params.view_config.viewport
-        = ViewPort { .width = 64.0F, .height = 64.0F };
-      params.view_matrix = glm::rotate(glm::mat4 { 1.0F },
-        static_cast<float>(index) * .1F, glm::vec3 { 0.0F, 0.0F, 1.0F });
-      params.proj_matrix = glm::mat4 { 1.0F };
+      params.view_config.viewport = ViewPort {
+        .width = 64.0F,
+        .height = 64.0F,
+      };
+      params.view_matrix = glm::rotate(
+        glm::mat4 {
+          1.0F,
+        },
+        static_cast<float>(index) * .1F,
+        glm::vec3 {
+          0.0F,
+          0.0F,
+          1.0F,
+        });
+      params.proj_matrix = glm::mat4 {
+        1.0F,
+      };
       const auto view = ResolvedView(params);
-      context.current_view.view_id = ViewId { 900U + local_view };
-      context.current_view.resolved_view = oxygen::observer_ptr { &view };
-      context.wireframe_color
-        = { static_cast<float>(index) / 16.0F, .25F, .5F, 1.0F };
+      context.current_view.view_id = ViewId {
+        900U + local_view,
+      };
+      context.current_view.resolved_view = oxygen::observer_ptr {
+        &view,
+      };
+      context.wireframe_color = {
+        static_cast<float>(index) / 16.0F,
+        .25F,
+        .5F,
+        1.0F,
+      };
       const std::array published {
         RendererPublicationProbe::PublishGroundGridConstants(grid, context),
         RendererPublicationProbe::PublishWireframeConstants(
           wireframe, *graphics_, context, index % 2U != 0U),
       };
       for (unsigned kind = 0U; kind < published.size(); ++kind) {
-        const auto descriptor = published[kind];
+        const auto descriptor = published.at(kind);
         ASSERT_TRUE(descriptor.IsValid());
-        if (frame < 3U)
+        if (frame < 3U) {
           EXPECT_TRUE(indices.insert(descriptor.get()).second);
+        }
         const auto& events = graphics_->buffer_view_log_.events;
-        const auto found = std::find_if(events.rbegin(), events.rend(),
-          [descriptor](const auto& event) { return event.slot == descriptor; });
+        const auto found = std::ranges::find_if(
+          std::views::reverse(events), [descriptor](const auto& event) -> auto {
+            return event.slot == descriptor;
+          });
         ASSERT_NE(found, events.rend());
         EXPECT_EQ(found->stride, kind == 0U ? 208U : 32U);
         float first_value = 0;
@@ -1987,16 +2217,21 @@ NOLINT_TEST_F(
                      : static_cast<float>(index) / 16.0F,
           1e-6F);
         if (local_view == 0U && frame < 3U) {
-          snapshots.push_back({ frame, found->data,
-            std::vector<std::byte>(found->data, found->data + found->size) });
+          const auto bytes = std::span(found->data, found->size);
+          snapshots.push_back({
+            .slot = frame,
+            .data = found->data,
+            .expected = std::vector<std::byte>(bytes.begin(), bytes.end()),
+          });
         }
       }
     }
     for (const auto& snapshot : snapshots) {
       // Frame-slot zero has retired when the fourth frame starts. Slots one
       // and two must still retain their exact submitted bytes after reuse.
-      if (frame == 3U && snapshot.slot == 0U)
+      if (frame == 3U && snapshot.slot == 0U) {
         continue;
+      }
       EXPECT_TRUE(std::equal(
         snapshot.expected.begin(), snapshot.expected.end(), snapshot.data));
     }
@@ -2012,8 +2247,11 @@ NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
   ASSERT_FALSE(vertices.empty());
   ASSERT_EQ(vertices.size() % 3U, 0U);
   for (std::size_t i = 0; i < vertices.size(); i += 3U) {
-    EXPECT_TRUE(TriangleWindsOutwardFromOrigin(
-      vertices[i], vertices[i + 1U], vertices[i + 2U]))
+    EXPECT_TRUE(TriangleWindsOutwardFromOrigin({
+      vertices.at(i),
+      vertices.at(i + 1U),
+      vertices.at(i + 2U),
+    }))
       << "triangle " << (i / 3U);
   }
 }
@@ -2081,13 +2319,30 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   std::set<std::uint32_t> slots;
   for (unsigned index = 0U; index < 12U; ++index) {
     auto params = ResolvedView::Params {};
-    params.view_config.viewport = ViewPort { .width = 64.0F, .height = 64.0F };
-    params.view_matrix = glm::rotate(glm::mat4 { 1.0F },
-      static_cast<float>(index) * .1F, glm::vec3 { 0.0F, 0.0F, 1.0F });
-    params.proj_matrix = glm::mat4 { 1.0F };
-    const auto view = ResolvedView(std::move(params));
-    context.current_view.view_id = ViewId { 800U + index };
-    context.current_view.resolved_view = oxygen::observer_ptr { &view };
+    params.view_config.viewport = ViewPort {
+      .width = 64.0F,
+      .height = 64.0F,
+    };
+    params.view_matrix = glm::rotate(
+      glm::mat4 {
+        1.0F,
+      },
+      static_cast<float>(index) * .1F,
+      glm::vec3 {
+        0.0F,
+        0.0F,
+        1.0F,
+      });
+    params.proj_matrix = glm::mat4 {
+      1.0F,
+    };
+    const auto view = ResolvedView(params);
+    context.current_view.view_id = ViewId {
+      800U + index,
+    };
+    context.current_view.resolved_view = oxygen::observer_ptr {
+      &view,
+    };
     const auto slot
       = RendererPublicationProbe::PublishGroundGridConstants(grid, context);
     ASSERT_TRUE(slot.IsValid());
@@ -2138,16 +2393,21 @@ NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
   for (auto& metadata : draw_metadata) {
     metadata.vertex_count = 3U;
     metadata.instance_count = 1U;
-    metadata.flags
-      = oxygen::vortex::PassMask { oxygen::vortex::PassMaskBit::kOpaque };
+    metadata.flags = oxygen::vortex::PassMask {
+      oxygen::vortex::PassMaskBit::kOpaque,
+    };
   }
 
   auto prepared_frame = oxygen::vortex::PreparedSceneFrame {};
   prepared_frame.draw_metadata_bytes = std::as_bytes(std::span(draw_metadata));
 
-  auto visibility = std::array<std::uint8_t, 3> { 1U, 0U, 1U };
+  auto visibility = std::array<std::uint8_t, 3> {
+    1U,
+    0U,
+    1U,
+  };
   const auto occlusion_results = oxygen::vortex::OcclusionFrameResults {
-    .visible_by_draw = std::span<const std::uint8_t> { visibility },
+    .visible_by_draw = std::span<const std::uint8_t> { visibility, },
     .draw_count = static_cast<std::uint32_t>(visibility.size()),
     .valid = true,
     .fallback_reason = oxygen::vortex::OcclusionFallbackReason::kNone,
@@ -2158,8 +2418,7 @@ NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
 
   const auto draw_commands = mesh_processor.GetDrawCommands();
   ASSERT_EQ(draw_commands.size(), 2U);
-  EXPECT_EQ(draw_commands[0].draw_index, 0U);
-  EXPECT_EQ(draw_commands[1].draw_index, 2U);
+  EXPECT_THAT(DrawIndices(draw_commands), ::testing::ElementsAre(0U, 2U));
   EXPECT_EQ(mesh_processor.GetOcclusionCulledDrawCount(), 1U);
 
   const auto invalid_results = oxygen::vortex::MakeInvalidOcclusionFrameResults(
@@ -2179,18 +2438,30 @@ NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
   auto mesh_processor = oxygen::vortex::DepthPrepassMeshProcessor(*renderer);
 
   auto draw_metadata = std::array<oxygen::vortex::DrawMetadata, 2> {};
-  draw_metadata[0].vertex_count = 3U;
-  draw_metadata[0].instance_count = 1U;
-  draw_metadata[0].flags
-    = oxygen::vortex::PassMask { oxygen::vortex::PassMaskBit::kOpaque };
-  draw_metadata[1].vertex_count = 3U;
-  draw_metadata[1].instance_count = 1U;
-  draw_metadata[1].flags
-    = oxygen::vortex::PassMask { oxygen::vortex::PassMaskBit::kOpaque };
+  draw_metadata.at(0).vertex_count = 3U;
+  draw_metadata.at(0).instance_count = 1U;
+  draw_metadata.at(0).flags = oxygen::vortex::PassMask {
+    oxygen::vortex::PassMaskBit::kOpaque,
+  };
+  draw_metadata.at(1).vertex_count = 3U;
+  draw_metadata.at(1).instance_count = 1U;
+  draw_metadata.at(1).flags = oxygen::vortex::PassMask {
+    oxygen::vortex::PassMaskBit::kOpaque,
+  };
 
   auto draw_bounds = std::array<glm::vec4, 2> {
-    glm::vec4 { 0.0F, 0.0F, -8.0F, 0.5F },
-    glm::vec4 { 0.0F, 0.0F, -2.0F, 0.5F },
+    glm::vec4 {
+      0.0F,
+      0.0F,
+      -8.0F,
+      0.5F,
+    },
+    glm::vec4 {
+      0.0F,
+      0.0F,
+      -2.0F,
+      0.5F,
+    },
   };
 
   auto prepared_frame = oxygen::vortex::PreparedSceneFrame {};
@@ -2202,8 +2473,7 @@ NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
 
   const auto draw_commands = mesh_processor.GetDrawCommands();
   ASSERT_EQ(draw_commands.size(), 2U);
-  EXPECT_EQ(draw_commands[0].draw_index, 1U);
-  EXPECT_EQ(draw_commands[1].draw_index, 0U);
+  EXPECT_THAT(DrawIndices(draw_commands), ::testing::ElementsAre(1U, 0U));
 }
 
 NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
@@ -2219,20 +2489,44 @@ NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
     metadata.vertex_count = 3U;
     metadata.instance_count = 1U;
   }
-  draw_metadata[0].flags
-    = oxygen::vortex::PassMask { oxygen::vortex::PassMaskBit::kOpaque };
-  draw_metadata[1].flags
-    = oxygen::vortex::PassMask { oxygen::vortex::PassMaskBit::kMasked };
-  draw_metadata[2].flags
-    = oxygen::vortex::PassMask { oxygen::vortex::PassMaskBit::kOpaque };
-  draw_metadata[3].flags
-    = oxygen::vortex::PassMask { oxygen::vortex::PassMaskBit::kMasked };
+  draw_metadata.at(0).flags = oxygen::vortex::PassMask {
+    oxygen::vortex::PassMaskBit::kOpaque,
+  };
+  draw_metadata.at(1).flags = oxygen::vortex::PassMask {
+    oxygen::vortex::PassMaskBit::kMasked,
+  };
+  draw_metadata.at(2).flags = oxygen::vortex::PassMask {
+    oxygen::vortex::PassMaskBit::kOpaque,
+  };
+  draw_metadata.at(3).flags = oxygen::vortex::PassMask {
+    oxygen::vortex::PassMaskBit::kMasked,
+  };
 
   auto draw_bounds = std::array<glm::vec4, 4> {
-    glm::vec4 { 0.0F, 0.0F, -8.0F, 0.5F }, // opaque far
-    glm::vec4 { 0.0F, 0.0F, -1.0F, 0.5F }, // masked near
-    glm::vec4 { 0.0F, 0.0F, -2.0F, 0.5F }, // opaque near
-    glm::vec4 { 0.0F, 0.0F, -6.0F, 0.5F }, // masked far
+    glm::vec4 {
+      0.0F,
+      0.0F,
+      -8.0F,
+      0.5F,
+    }, // opaque far
+    glm::vec4 {
+      0.0F,
+      0.0F,
+      -1.0F,
+      0.5F,
+    }, // masked near
+    glm::vec4 {
+      0.0F,
+      0.0F,
+      -2.0F,
+      0.5F,
+    }, // opaque near
+    glm::vec4 {
+      0.0F,
+      0.0F,
+      -6.0F,
+      0.5F,
+    }, // masked far
   };
 
   auto prepared_frame = oxygen::vortex::PreparedSceneFrame {};
@@ -2244,10 +2538,8 @@ NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
 
   const auto draw_commands = mesh_processor.GetDrawCommands();
   ASSERT_EQ(draw_commands.size(), 4U);
-  EXPECT_EQ(draw_commands[0].draw_index, 2U);
-  EXPECT_EQ(draw_commands[1].draw_index, 0U);
-  EXPECT_EQ(draw_commands[2].draw_index, 1U);
-  EXPECT_EQ(draw_commands[3].draw_index, 3U);
+  EXPECT_THAT(
+    DrawIndices(draw_commands), ::testing::ElementsAre(2U, 0U, 1U, 3U));
 }
 
 NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
@@ -2262,13 +2554,24 @@ NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
   for (auto& metadata : draw_metadata) {
     metadata.vertex_count = 3U;
     metadata.instance_count = 1U;
-    metadata.flags
-      = oxygen::vortex::PassMask { oxygen::vortex::PassMaskBit::kOpaque };
+    metadata.flags = oxygen::vortex::PassMask {
+      oxygen::vortex::PassMaskBit::kOpaque,
+    };
   }
 
   auto draw_bounds = std::array<glm::vec4, 2> {
-    glm::vec4 { 0.0F, 0.0F, -4.0F, 0.5F },
-    glm::vec4 { 0.0F, 0.0F, -4.0F, 0.5F },
+    glm::vec4 {
+      0.0F,
+      0.0F,
+      -4.0F,
+      0.5F,
+    },
+    glm::vec4 {
+      0.0F,
+      0.0F,
+      -4.0F,
+      0.5F,
+    },
   };
 
   auto prepared_frame = oxygen::vortex::PreparedSceneFrame {};
@@ -2280,8 +2583,7 @@ NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
 
   const auto draw_commands = mesh_processor.GetDrawCommands();
   ASSERT_EQ(draw_commands.size(), 2U);
-  EXPECT_EQ(draw_commands[0].draw_index, 0U);
-  EXPECT_EQ(draw_commands[1].draw_index, 1U);
+  EXPECT_THAT(DrawIndices(draw_commands), ::testing::ElementsAre(0U, 1U));
 }
 
 NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
@@ -2296,13 +2598,24 @@ NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
   for (auto& metadata : draw_metadata) {
     metadata.vertex_count = 3U;
     metadata.instance_count = 1U;
-    metadata.flags
-      = oxygen::vortex::PassMask { oxygen::vortex::PassMaskBit::kOpaque };
+    metadata.flags = oxygen::vortex::PassMask {
+      oxygen::vortex::PassMaskBit::kOpaque,
+    };
   }
 
   auto draw_bounds = std::array<glm::vec4, 2> {
-    glm::vec4 { 3.0F, 0.0F, -6.0F, 2.0F },
-    glm::vec4 { 0.0F, 0.0F, -2.0F, 0.5F },
+    glm::vec4 {
+      3.0F,
+      0.0F,
+      -6.0F,
+      2.0F,
+    },
+    glm::vec4 {
+      0.0F,
+      0.0F,
+      -2.0F,
+      0.5F,
+    },
   };
 
   auto prepared_frame = oxygen::vortex::PreparedSceneFrame {};
@@ -2314,8 +2627,7 @@ NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
 
   const auto draw_commands = mesh_processor.GetDrawCommands();
   ASSERT_EQ(draw_commands.size(), 2U);
-  EXPECT_EQ(draw_commands[0].draw_index, 1U);
-  EXPECT_EQ(draw_commands[1].draw_index, 0U);
+  EXPECT_THAT(DrawIndices(draw_commands), ::testing::ElementsAre(1U, 0U));
 }
 
 NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
@@ -2332,27 +2644,47 @@ NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
     metadata.instance_count = 1U;
     metadata.material_handle = 1U;
   }
-  draw_metadata[0].flags = oxygen::vortex::PassMask {
+  draw_metadata.at(0).flags = oxygen::vortex::PassMask {
     oxygen::vortex::PassMaskBit::kTransparent,
     oxygen::vortex::PassMaskBit::kMainViewVisible,
   };
-  draw_metadata[1].flags = oxygen::vortex::PassMask {
+  draw_metadata.at(1).flags = oxygen::vortex::PassMask {
     oxygen::vortex::PassMaskBit::kOpaque,
     oxygen::vortex::PassMaskBit::kMainViewVisible,
   };
-  draw_metadata[2].flags = oxygen::vortex::PassMask {
+  draw_metadata.at(2).flags = oxygen::vortex::PassMask {
     oxygen::vortex::PassMaskBit::kTransparent,
   };
-  draw_metadata[3].flags = oxygen::vortex::PassMask {
+  draw_metadata.at(3).flags = oxygen::vortex::PassMask {
     oxygen::vortex::PassMaskBit::kMasked,
     oxygen::vortex::PassMaskBit::kMainViewVisible,
   };
 
   auto draw_bounds = std::array<glm::vec4, 4> {
-    glm::vec4 { 0.0F, 0.0F, -3.0F, 0.5F },
-    glm::vec4 { 0.0F, 0.0F, -4.0F, 0.5F },
-    glm::vec4 { 0.0F, 0.0F, -5.0F, 0.5F },
-    glm::vec4 { 0.0F, 0.0F, -6.0F, 0.5F },
+    glm::vec4 {
+      0.0F,
+      0.0F,
+      -3.0F,
+      0.5F,
+    },
+    glm::vec4 {
+      0.0F,
+      0.0F,
+      -4.0F,
+      0.5F,
+    },
+    glm::vec4 {
+      0.0F,
+      0.0F,
+      -5.0F,
+      0.5F,
+    },
+    glm::vec4 {
+      0.0F,
+      0.0F,
+      -6.0F,
+      0.5F,
+    },
   };
 
   auto prepared_frame = oxygen::vortex::PreparedSceneFrame {};
@@ -2387,9 +2719,24 @@ NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
   }
 
   auto draw_bounds = std::array<glm::vec4, 3> {
-    glm::vec4 { 0.0F, 0.0F, -2.0F, 0.5F },
-    glm::vec4 { 0.0F, 0.0F, -9.0F, 0.5F },
-    glm::vec4 { 0.0F, 0.0F, -5.0F, 0.5F },
+    glm::vec4 {
+      0.0F,
+      0.0F,
+      -2.0F,
+      0.5F,
+    },
+    glm::vec4 {
+      0.0F,
+      0.0F,
+      -9.0F,
+      0.5F,
+    },
+    glm::vec4 {
+      0.0F,
+      0.0F,
+      -5.0F,
+      0.5F,
+    },
   };
 
   auto prepared_frame = oxygen::vortex::PreparedSceneFrame {};
@@ -2401,9 +2748,7 @@ NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
 
   const auto draw_commands = mesh_processor.GetDrawCommands();
   ASSERT_EQ(draw_commands.size(), 3U);
-  EXPECT_EQ(draw_commands[0].draw_index, 1U);
-  EXPECT_EQ(draw_commands[1].draw_index, 2U);
-  EXPECT_EQ(draw_commands[2].draw_index, 0U);
+  EXPECT_THAT(DrawIndices(draw_commands), ::testing::ElementsAre(1U, 2U, 0U));
 }
 
 NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
@@ -2426,8 +2771,18 @@ NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
   }
 
   auto draw_bounds = std::array<glm::vec4, 2> {
-    glm::vec4 { 0.0F, 0.0F, -4.0F, 0.5F },
-    glm::vec4 { 0.0F, 0.0F, -4.0F, 0.5F },
+    glm::vec4 {
+      0.0F,
+      0.0F,
+      -4.0F,
+      0.5F,
+    },
+    glm::vec4 {
+      0.0F,
+      0.0F,
+      -4.0F,
+      0.5F,
+    },
   };
 
   auto prepared_frame = oxygen::vortex::PreparedSceneFrame {};
@@ -2439,8 +2794,7 @@ NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
 
   const auto draw_commands = mesh_processor.GetDrawCommands();
   ASSERT_EQ(draw_commands.size(), 2U);
-  EXPECT_EQ(draw_commands[0].draw_index, 0U);
-  EXPECT_EQ(draw_commands[1].draw_index, 1U);
+  EXPECT_THAT(DrawIndices(draw_commands), ::testing::ElementsAre(0U, 1U));
 }
 
 NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
@@ -2463,20 +2817,39 @@ NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
   }
 
   auto sparse_draw_bounds = std::array<glm::vec4, 1> {
-    glm::vec4 { 0.0F, 0.0F, -2.0F, 0.5F },
+    glm::vec4 {
+      0.0F,
+      0.0F,
+      -2.0F,
+      0.5F,
+    },
   };
   auto render_items
     = std::array<oxygen::vortex::sceneprep::RenderItemData, 2> {};
   const auto valid_material_handle = oxygen::vortex::sceneprep::MaterialHandle {
-    oxygen::vortex::sceneprep::MaterialHandle::Index { 1U },
-    oxygen::vortex::sceneprep::MaterialHandle::Generation { 1U },
+    oxygen::vortex::sceneprep::MaterialHandle::Index {
+      1U,
+    },
+    oxygen::vortex::sceneprep::MaterialHandle::Generation {
+      1U,
+    },
   };
-  render_items[0].material_handle = valid_material_handle;
-  render_items[0].world_bounding_sphere = glm::vec4 { 0.0F, 0.0F, -2.0F, 0.5F };
-  render_items[0].sort_distance2 = 4.0F;
-  render_items[1].material_handle = valid_material_handle;
-  render_items[1].world_bounding_sphere = glm::vec4 { 0.0F, 0.0F, -8.0F, 0.5F };
-  render_items[1].sort_distance2 = 64.0F;
+  render_items.at(0).material_handle = valid_material_handle;
+  render_items.at(0).world_bounding_sphere = glm::vec4 {
+    0.0F,
+    0.0F,
+    -2.0F,
+    0.5F,
+  };
+  render_items.at(0).sort_distance2 = 4.0F;
+  render_items.at(1).material_handle = valid_material_handle;
+  render_items.at(1).world_bounding_sphere = glm::vec4 {
+    0.0F,
+    0.0F,
+    -8.0F,
+    0.5F,
+  };
+  render_items.at(1).sort_distance2 = 64.0F;
 
   auto prepared_frame = oxygen::vortex::PreparedSceneFrame {};
   prepared_frame.draw_metadata_bytes = std::as_bytes(std::span(draw_metadata));
@@ -2488,8 +2861,7 @@ NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
 
   const auto draw_commands = mesh_processor.GetDrawCommands();
   ASSERT_EQ(draw_commands.size(), 2U);
-  EXPECT_EQ(draw_commands[0].draw_index, 1U);
-  EXPECT_EQ(draw_commands[1].draw_index, 0U);
+  EXPECT_THAT(DrawIndices(draw_commands), ::testing::ElementsAre(1U, 0U));
 }
 
 NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
@@ -2512,8 +2884,18 @@ NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
   }
 
   auto draw_bounds = std::array<glm::vec4, 2> {
-    glm::vec4 { 0.0F, 0.0F, -4.0F, 10.0F },
-    glm::vec4 { 0.0F, 0.0F, -8.0F, 0.0F },
+    glm::vec4 {
+      0.0F,
+      0.0F,
+      -4.0F,
+      10.0F,
+    },
+    glm::vec4 {
+      0.0F,
+      0.0F,
+      -8.0F,
+      0.0F,
+    },
   };
 
   auto prepared_frame = oxygen::vortex::PreparedSceneFrame {};
@@ -2524,15 +2906,13 @@ NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
   mesh_processor.BuildDrawCommands(prepared_frame, &perspective_view);
   auto draw_commands = mesh_processor.GetDrawCommands();
   ASSERT_EQ(draw_commands.size(), 2U);
-  EXPECT_EQ(draw_commands[0].draw_index, 0U);
-  EXPECT_EQ(draw_commands[1].draw_index, 1U);
+  EXPECT_THAT(DrawIndices(draw_commands), ::testing::ElementsAre(0U, 1U));
 
   const auto orthographic_view = MakeOrthographicResolvedView(64.0F, 64.0F);
   mesh_processor.BuildDrawCommands(prepared_frame, &orthographic_view);
   draw_commands = mesh_processor.GetDrawCommands();
   ASSERT_EQ(draw_commands.size(), 2U);
-  EXPECT_EQ(draw_commands[0].draw_index, 1U);
-  EXPECT_EQ(draw_commands[1].draw_index, 0U);
+  EXPECT_THAT(DrawIndices(draw_commands), ::testing::ElementsAre(1U, 0U));
 }
 
 NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
@@ -2552,18 +2932,38 @@ NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
       oxygen::vortex::PassMaskBit::kMainViewVisible,
     };
   }
-  draw_metadata[0].vertex_count = 3U;
-  draw_metadata[1].vertex_count = 0U;
-  draw_metadata[2].is_indexed = 1U;
-  draw_metadata[2].index_count = 0U;
-  draw_metadata[3].vertex_count = 3U;
-  draw_metadata[3].material_handle = 0U;
+  draw_metadata.at(0).vertex_count = 3U;
+  draw_metadata.at(1).vertex_count = 0U;
+  draw_metadata.at(2).is_indexed = 1U;
+  draw_metadata.at(2).index_count = 0U;
+  draw_metadata.at(3).vertex_count = 3U;
+  draw_metadata.at(3).material_handle = 0U;
 
   auto draw_bounds = std::array<glm::vec4, 4> {
-    glm::vec4 { 0.0F, 0.0F, -4.0F, 0.5F },
-    glm::vec4 { 0.0F, 0.0F, -5.0F, 0.5F },
-    glm::vec4 { 0.0F, 0.0F, -6.0F, 0.5F },
-    glm::vec4 { 0.0F, 0.0F, -7.0F, 0.5F },
+    glm::vec4 {
+      0.0F,
+      0.0F,
+      -4.0F,
+      0.5F,
+    },
+    glm::vec4 {
+      0.0F,
+      0.0F,
+      -5.0F,
+      0.5F,
+    },
+    glm::vec4 {
+      0.0F,
+      0.0F,
+      -6.0F,
+      0.5F,
+    },
+    glm::vec4 {
+      0.0F,
+      0.0F,
+      -7.0F,
+      0.5F,
+    },
   };
 
   auto prepared_frame = oxygen::vortex::PreparedSceneFrame {};
@@ -2575,7 +2975,7 @@ NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
 
   const auto draw_commands = mesh_processor.GetDrawCommands();
   ASSERT_EQ(draw_commands.size(), 1U);
-  EXPECT_EQ(draw_commands[0].draw_index, 0U);
+  EXPECT_THAT(DrawIndices(draw_commands), ::testing::ElementsAre(0U));
 }
 
 NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
@@ -2588,7 +2988,7 @@ NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
   auto module = oxygen::vortex::TranslucencyModule(*renderer);
   auto scene_textures = oxygen::vortex::SceneTextures(*graphics,
     SceneTexturesConfig {
-      .extent = { 64U, 64U },
+      .extent = { 64U, 64U, },
       .enable_velocity = true,
       .enable_custom_depth = false,
       .gbuffer_count = 4U,
@@ -2596,15 +2996,20 @@ NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
     });
 
   auto draw_metadata = std::array<oxygen::vortex::DrawMetadata, 1> {};
-  draw_metadata[0].vertex_count = 3U;
-  draw_metadata[0].instance_count = 1U;
-  draw_metadata[0].material_handle = 1U;
-  draw_metadata[0].flags = oxygen::vortex::PassMask {
+  draw_metadata.at(0).vertex_count = 3U;
+  draw_metadata.at(0).instance_count = 1U;
+  draw_metadata.at(0).material_handle = 1U;
+  draw_metadata.at(0).flags = oxygen::vortex::PassMask {
     oxygen::vortex::PassMaskBit::kTransparent,
     oxygen::vortex::PassMaskBit::kMainViewVisible,
   };
   auto draw_bounds = std::array<glm::vec4, 1> {
-    glm::vec4 { 0.0F, 0.0F, -4.0F, 0.5F },
+    glm::vec4 {
+      0.0F,
+      0.0F,
+      -4.0F,
+      0.5F,
+    },
   };
   auto prepared_frame = oxygen::vortex::PreparedSceneFrame {};
   prepared_frame.draw_metadata_bytes = std::as_bytes(std::span(draw_metadata));
@@ -2624,33 +3029,39 @@ NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
 
   const auto reverse_z_view = MakePerspectiveResolvedView(64.0F, 64.0F, true);
   context.current_view.resolved_view
-    = oxygen::observer_ptr<const ResolvedView> { &reverse_z_view };
+    = oxygen::observer_ptr<const ResolvedView> {
+        &reverse_z_view,
+      };
   auto result = module.Execute(context, scene_textures);
   EXPECT_TRUE(result.executed);
 
   const auto forward_z_view = MakePerspectiveResolvedView(64.0F, 64.0F, false);
   context.current_view.resolved_view
-    = oxygen::observer_ptr<const ResolvedView> { &forward_z_view };
+    = oxygen::observer_ptr<const ResolvedView> {
+        &forward_z_view,
+      };
   result = module.Execute(context, scene_textures);
   EXPECT_TRUE(result.executed);
 
   context.current_view.resolved_view
-    = oxygen::observer_ptr<const ResolvedView> { &reverse_z_view };
+    = oxygen::observer_ptr<const ResolvedView> {
+        &reverse_z_view,
+      };
   result = module.Execute(context, scene_textures);
   EXPECT_TRUE(result.executed);
 
   const auto& binds = graphics->graphics_pipeline_log_.binds;
   ASSERT_EQ(binds.size(), 3U);
-  EXPECT_EQ(binds[0].desc.DepthStencilState().depth_func,
+  EXPECT_EQ(binds.at(0).desc.DepthStencilState().depth_func,
     oxygen::graphics::CompareOp::kGreaterOrEqual);
-  EXPECT_EQ(binds[1].desc.DepthStencilState().depth_func,
+  EXPECT_EQ(binds.at(1).desc.DepthStencilState().depth_func,
     oxygen::graphics::CompareOp::kLessOrEqual);
-  EXPECT_EQ(binds[2].desc.DepthStencilState().depth_func,
+  EXPECT_EQ(binds.at(2).desc.DepthStencilState().depth_func,
     oxygen::graphics::CompareOp::kGreaterOrEqual);
 
   const auto hasher = std::hash<oxygen::graphics::GraphicsPipelineDesc> {};
-  EXPECT_EQ(hasher(binds[0].desc), hasher(binds[2].desc));
-  EXPECT_NE(hasher(binds[0].desc), hasher(binds[1].desc));
+  EXPECT_EQ(hasher(binds.at(0).desc), hasher(binds.at(2).desc));
+  EXPECT_NE(hasher(binds.at(0).desc), hasher(binds.at(1).desc));
 }
 
 NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
@@ -2662,7 +3073,7 @@ NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
 
   auto base_pass = oxygen::vortex::BasePassModule(*renderer,
     SceneTexturesConfig {
-      .extent = { 64U, 64U },
+      .extent = { 64U, 64U, },
       .enable_velocity = true,
       .enable_custom_depth = false,
       .gbuffer_count = 4U,
@@ -2670,7 +3081,7 @@ NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
     });
   auto scene_textures = oxygen::vortex::SceneTextures(*graphics,
     SceneTexturesConfig {
-      .extent = { 64U, 64U },
+      .extent = { 64U, 64U, },
       .enable_velocity = true,
       .enable_custom_depth = false,
       .gbuffer_count = 4U,
@@ -2699,7 +3110,9 @@ NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
       draw_metadata.data(), draw_metadata.size()));
 
   auto context = RenderContext {};
-  context.frame_slot = oxygen::frame::Slot { 1U };
+  context.frame_slot = oxygen::frame::Slot {
+    1U,
+  };
   context.current_view.prepared_frame
     = oxygen::observer_ptr<const oxygen::vortex::PreparedSceneFrame> {
         &prepared_frame,
@@ -2730,7 +3143,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   BaseAndDepthPassesBindSidednessAndHandednessForEveryDraw)
 {
   const auto config = SceneTexturesConfig {
-    .extent = { 64U, 64U },
+    .extent = { 64U, 64U, },
     .enable_velocity = true,
     .enable_custom_depth = false,
     .gbuffer_count = 4U,
@@ -2740,27 +3153,35 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   auto base_pass = oxygen::vortex::BasePassModule(*renderer_, config);
   auto depth_pass = oxygen::vortex::DepthPrepassModule(*renderer_, config);
   auto context = RenderContext {};
-  context.frame_slot = oxygen::frame::Slot { 1U };
+  context.frame_slot = oxygen::frame::Slot {
+    1U,
+  };
   context.current_view.resolved_view
-    = oxygen::observer_ptr<const ResolvedView> { &first_resolved_view_ };
+    = oxygen::observer_ptr<const ResolvedView> {
+        &first_resolved_view_,
+      };
   context.view_constants = graphics_->CreateBuffer({
     .size_bytes = 1024U,
     .usage = oxygen::graphics::BufferUsage::kConstant,
     .memory = oxygen::graphics::BufferMemory::kUpload,
     .debug_name = "RasterState.ViewConstants",
   });
-  for (const auto kind : { oxygen::vortex::PassMaskBit::kOpaque,
-         oxygen::vortex::PassMaskBit::kMasked }) {
+  for (const auto kind : {
+         oxygen::vortex::PassMaskBit::kOpaque,
+         oxygen::vortex::PassMaskBit::kMasked,
+       }) {
     SCOPED_TRACE(static_cast<std::uint32_t>(kind));
     auto draws = oxygen::vortex::testing::MakeRasterStateDraws(kind);
     auto frame = oxygen::vortex::PreparedSceneFrame {};
     frame.draw_metadata_bytes = std::as_bytes(std::span(draws));
     context.current_view.prepared_frame
       = oxygen::observer_ptr<const oxygen::vortex::PreparedSceneFrame> {
-          &frame
+          &frame,
         };
-    for (const auto shading :
-      { ShadingMode::kForward, ShadingMode::kDeferred }) {
+    for (const auto shading : {
+           ShadingMode::kForward,
+           ShadingMode::kDeferred,
+         }) {
       SCOPED_TRACE(static_cast<int>(shading));
       graphics_->draw_log_.draws.clear();
       base_pass.SetConfig(oxygen::vortex::BasePassConfig {
@@ -2774,7 +3195,10 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
       oxygen::vortex::testing::ExpectRasterStateDraws(
         graphics_->draw_log_.draws, "Vortex.BasePass.");
     }
-    for (const auto write_velocity : { false, true }) {
+    for (const auto write_velocity : {
+           false,
+           true,
+         }) {
       SCOPED_TRACE(write_velocity);
       graphics_->draw_log_.draws.clear();
       depth_pass.SetConfig(oxygen::vortex::DepthPrepassConfig {
@@ -2792,7 +3216,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   AuxiliaryVelocityBindsSidednessAndHandednessForEveryDraw)
 {
   const auto config = SceneTexturesConfig {
-    .extent = { 64U, 64U },
+    .extent = { 64U, 64U, },
     .enable_velocity = true,
     .enable_custom_depth = false,
     .gbuffer_count = 4U,
@@ -2808,7 +3232,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
             MotionPublicationCapabilityBits::kUsesMotionVectorWorldOffset)
         | static_cast<std::uint32_t>(
           oxygen::vortex::MotionPublicationCapabilityBits::kHasRuntimePayload),
-      .parameter_block0 = { 0.1F, 0.0F, 0.0F, 0.0F },
+      .parameter_block0 = { 0.1F, 0.0F, 0.0F, 0.0F, },
     },
   };
   auto velocity = std::array<oxygen::vortex::VelocityDrawMetadata, 5> {};
@@ -2822,7 +3246,9 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
           VelocityDrawPublicationFlagBits::kPreviousMotionVectorStatusValid);
   }
   auto context = RenderContext {};
-  context.frame_slot = oxygen::frame::Slot { 1U };
+  context.frame_slot = oxygen::frame::Slot {
+    1U,
+  };
   context.view_constants = graphics_->CreateBuffer({
     .size_bytes = 1024U,
     .usage = oxygen::graphics::BufferUsage::kConstant,
@@ -2834,8 +3260,10 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
     .early_z_pass_done = true,
     .shading_mode = ShadingMode::kDeferred,
   });
-  for (const auto kind : { oxygen::vortex::PassMaskBit::kOpaque,
-         oxygen::vortex::PassMaskBit::kMasked }) {
+  for (const auto kind : {
+         oxygen::vortex::PassMaskBit::kOpaque,
+         oxygen::vortex::PassMaskBit::kMasked,
+       }) {
     auto draws = oxygen::vortex::testing::MakeRasterStateDraws(kind);
     auto frame = oxygen::vortex::PreparedSceneFrame {};
     frame.draw_metadata_bytes = std::as_bytes(std::span(draws));
@@ -2844,7 +3272,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
     frame.velocity_draw_metadata = std::span(velocity);
     context.current_view.prepared_frame
       = oxygen::observer_ptr<const oxygen::vortex::PreparedSceneFrame> {
-          &frame
+          &frame,
         };
     graphics_->draw_log_.draws.clear();
     const auto result = base_pass.Execute(context, scene_textures);
@@ -2858,7 +3286,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   TranslucencyBindsSidednessAndHandednessForEveryDraw)
 {
   const auto config = SceneTexturesConfig {
-    .extent = { 64U, 64U },
+    .extent = { 64U, 64U, },
     .enable_velocity = true,
     .enable_custom_depth = false,
     .gbuffer_count = 4U,
@@ -2872,17 +3300,25 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   frame.draw_metadata_bytes = std::as_bytes(std::span(draws));
   auto context = RenderContext {};
   context.current_view.prepared_frame
-    = oxygen::observer_ptr<const oxygen::vortex::PreparedSceneFrame> { &frame };
+    = oxygen::observer_ptr<const oxygen::vortex::PreparedSceneFrame> {
+        &frame,
+      };
   context.view_constants = graphics_->CreateBuffer({
     .size_bytes = 1024U,
     .usage = oxygen::graphics::BufferUsage::kConstant,
     .memory = oxygen::graphics::BufferMemory::kUpload,
     .debug_name = "RasterState.TranslucencyConstants",
   });
-  for (const auto reverse_z : { true, false, true }) {
+  for (const auto reverse_z : {
+         true,
+         false,
+         true,
+       }) {
     const auto view = MakePerspectiveResolvedView(64.0F, 64.0F, reverse_z);
     context.current_view.resolved_view
-      = oxygen::observer_ptr<const ResolvedView> { &view };
+      = oxygen::observer_ptr<const ResolvedView> {
+          &view,
+        };
     graphics_->draw_log_.draws.clear();
     EXPECT_TRUE(translucency.Execute(context, scene_textures).executed);
     oxygen::vortex::testing::ExpectRasterStateDraws(
@@ -2899,7 +3335,7 @@ NOLINT_TEST(SceneRendererDeferredCoreCapabilityTest,
     = MakeRenderer(graphics, RendererCapabilityFamily::kScenePreparation);
   auto scene_renderer = std::make_unique<SceneRenderer>(*renderer, *graphics,
     SceneTexturesConfig {
-      .extent = { 64U, 64U },
+      .extent = { 64U, 64U, },
       .enable_velocity = true,
       .enable_custom_depth = true,
       .gbuffer_count = 4U,
@@ -2909,31 +3345,51 @@ NOLINT_TEST(SceneRendererDeferredCoreCapabilityTest,
   auto scene
     = std::make_shared<Scene>("SceneRendererDeferredCoreCapabilityTest", 16U);
   auto frame_context = FrameContext {};
-  frame_context.SetScene(oxygen::observer_ptr<Scene> { scene.get() });
-  static_cast<void>(
-    frame_context.RegisterView(MakeSceneView(ViewId { 11U }, 64.0F, 64.0F)));
+  frame_context.SetScene(oxygen::observer_ptr<Scene> {
+    scene.get(),
+  });
+  static_cast<void>(frame_context.RegisterView(MakeSceneView(
+    ViewId {
+      11U,
+    },
+    64.0F, 64.0F)));
 
   scene_renderer->OnFrameStart(frame_context);
 
   auto resolved_view = MakeResolvedView(64.0F, 64.0F);
   auto context = RenderContext {};
-  context.scene = oxygen::observer_ptr<Scene> { scene.get() };
-  context.frame_slot = oxygen::frame::Slot { 1U };
-  context.frame_sequence = oxygen::frame::SequenceNumber { 1U };
-  context.active_view_index = std::size_t { 0U };
-  context.frame_views.push_back({
-    .view_id = ViewId { 11U },
-    .is_scene_view = true,
-    .composition_view = {},
-    .shading_mode_override = {},
-    .resolved_view
-    = oxygen::observer_ptr<const ResolvedView> { &resolved_view },
-    .primary_target = {},
-  });
-  context.current_view.view_id = ViewId { 11U };
-  context.current_view.exposure_view_id = ViewId { 11U };
+  context.scene = oxygen::observer_ptr<Scene> {
+    scene.get(),
+  };
+  context.frame_slot = oxygen::frame::Slot {
+    1U,
+  };
+  context.frame_sequence = oxygen::frame::SequenceNumber {
+    1U,
+  };
+  context.active_view_index = std::size_t {
+    0U,
+  };
+  {
+    auto& view_entry = context.frame_views.emplace_back();
+    view_entry.view_id = ViewId {
+      11U,
+    };
+    view_entry.is_scene_view = true;
+    view_entry.resolved_view = oxygen::observer_ptr<const ResolvedView> {
+      &resolved_view,
+    };
+  }
+  context.current_view.view_id = ViewId {
+    11U,
+  };
+  context.current_view.exposure_view_id = ViewId {
+    11U,
+  };
   context.current_view.resolved_view
-    = oxygen::observer_ptr<const ResolvedView> { &resolved_view };
+    = oxygen::observer_ptr<const ResolvedView> {
+        &resolved_view,
+      };
 
   scene_renderer->OnRender(context);
 
@@ -2952,30 +3408,43 @@ NOLINT_TEST(SceneRendererDeferredCoreCapabilityTest,
 NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   ViewDiscontinuityInvalidatesPreviousHzbForOneFrame)
 {
-  const auto config = SceneTexturesConfig { .extent = { 64U, 64U } };
+  const auto config = SceneTexturesConfig { .extent = { 64U, 64U, }, };
   auto module = oxygen::vortex::ScreenHzbModule(*renderer_, config);
   auto textures = oxygen::vortex::SceneTextures(*graphics_, config);
   auto context = RenderContext {};
   context.current_view.view_id = first_view_id_;
-  context.current_view.view_state_handle
-    = CompositionView::ViewStateHandle { first_view_id_.get() };
-  context.current_view.screen_hzb_request
-    = { .current_furthest = true, .publish_previous_furthest = true };
-  context.frame_slot = oxygen::frame::Slot { 0U };
-  context.frame_sequence = oxygen::frame::SequenceNumber { 1U };
+  context.current_view.view_state_handle = CompositionView::ViewStateHandle {
+    first_view_id_.get(),
+  };
+  context.current_view.screen_hzb_request = {
+    .current_furthest = true,
+    .publish_previous_furthest = true,
+  };
+  context.frame_slot = oxygen::frame::Slot {
+    0U,
+  };
+  context.frame_sequence = oxygen::frame::SequenceNumber {
+    1U,
+  };
   module.Execute(context, textures);
   EXPECT_FALSE(module.GetPreviousOutput().available);
   module.OnFrameStart();
-  context.frame_sequence = oxygen::frame::SequenceNumber { 2U };
+  context.frame_sequence = oxygen::frame::SequenceNumber {
+    2U,
+  };
   module.Execute(context, textures);
   EXPECT_TRUE(module.GetPreviousOutput().available);
   module.OnFrameStart();
-  context.frame_sequence = oxygen::frame::SequenceNumber { 3U };
+  context.frame_sequence = oxygen::frame::SequenceNumber {
+    3U,
+  };
   context.current_view.history_discontinuity = true;
   module.Execute(context, textures);
   EXPECT_FALSE(module.GetPreviousOutput().available);
   module.OnFrameStart();
-  context.frame_sequence = oxygen::frame::SequenceNumber { 4U };
+  context.frame_sequence = oxygen::frame::SequenceNumber {
+    4U,
+  };
   context.current_view.history_discontinuity = false;
   module.Execute(context, textures);
   EXPECT_TRUE(module.GetPreviousOutput().available);
@@ -2988,9 +3457,9 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   auto module
     = oxygen::vortex::ScreenHzbModule(*renderer_, SceneTexturesConfig {});
   auto first = oxygen::vortex::SceneTextures(
-    *graphics_, SceneTexturesConfig { .extent = { 64U, 64U } });
+    *graphics_, SceneTexturesConfig { .extent = { 64U, 64U, }, });
   auto second = oxygen::vortex::SceneTextures(
-    *graphics_, SceneTexturesConfig { .extent = { 32U, 16U } });
+    *graphics_, SceneTexturesConfig { .extent = { 32U, 16U, }, });
   struct Snapshot {
     unsigned slot;
     const std::byte* data;
@@ -2998,31 +3467,46 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   };
   std::vector<Snapshot> snapshots;
   for (unsigned frame = 0U; frame < 4U; ++frame) {
-    context.frame_sequence = oxygen::frame::SequenceNumber { 100U + frame };
-    context.frame_slot = oxygen::frame::Slot { frame % 3U };
+    context.frame_sequence = oxygen::frame::SequenceNumber {
+      100U + frame,
+    };
+    context.frame_slot = oxygen::frame::Slot {
+      frame % 3U,
+    };
     context.current_view.resolved_view = {};
     context.current_view.view_state_handle = {};
-    context.current_view.screen_hzb_request
-      = { .current_furthest = true, .current_closest = true };
+    context.current_view.screen_hzb_request = {
+      .current_furthest = true,
+      .current_closest = true,
+    };
     graphics_->buffer_view_log_.events.clear();
     module.OnFrameStart();
-    context.current_view.view_id = ViewId { 800U + frame * 2U };
+    context.current_view.view_id = ViewId {
+      800U + (frame * 2U),
+    };
     module.Execute(context, first);
     ASSERT_FALSE(graphics_->buffer_view_log_.events.empty());
     if (frame < 3U) {
       for (const auto& event : graphics_->buffer_view_log_.events) {
         ASSERT_GE(event.size, 48U);
-        Snapshot snapshot { frame, event.data, {} };
+        Snapshot snapshot {
+          .slot = frame,
+          .data = event.data,
+          .bytes = {},
+        };
         std::memcpy(snapshot.bytes.data(), event.data, snapshot.bytes.size());
         snapshots.push_back(snapshot);
       }
     }
     module.OnFrameStart();
-    context.current_view.view_id = ViewId { 801U + frame * 2U };
+    context.current_view.view_id = ViewId {
+      801U + (frame * 2U),
+    };
     module.Execute(context, second);
     for (const auto& snapshot : snapshots) {
-      if (frame == 3U && snapshot.slot == 0U)
+      if (frame == 3U && snapshot.slot == 0U) {
         continue;
+      }
       EXPECT_EQ(std::memcmp(
                   snapshot.bytes.data(), snapshot.data, snapshot.bytes.size()),
         0)
@@ -3034,23 +3518,34 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
 NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   HzbViewRetirementKeepsCurrentOutputsUntilTheGpuSlotRetires)
 {
-  for (const bool persistent : { true, false }) {
+  for (const bool persistent : {
+         true,
+         false,
+       }) {
     SCOPED_TRACE(persistent);
     auto& reclaimer = graphics_->GetDeferredReclaimer();
-    reclaimer.OnBeginFrame(oxygen::frame::Slot { 1U });
-    const auto config = SceneTexturesConfig { .extent = { 64U, 64U } };
+    reclaimer.OnBeginFrame(oxygen::frame::Slot {
+      1U,
+    });
+    const auto config = SceneTexturesConfig { .extent = { 64U, 64U, }, };
     auto module = oxygen::vortex::ScreenHzbModule(*renderer_, config);
     auto textures = oxygen::vortex::SceneTextures(*graphics_, config);
     auto context = RenderContext {};
     context.current_view.view_id = first_view_id_;
     context.current_view.view_state_handle = persistent
-      ? CompositionView::ViewStateHandle { first_view_id_.get() }
+      ? CompositionView::ViewStateHandle { first_view_id_.get(), }
       : CompositionView::kInvalidViewStateHandle;
-    context.current_view.screen_hzb_request = { .current_furthest = true,
+    context.current_view.screen_hzb_request = {
+      .current_furthest = true,
       .current_closest = true,
-      .publish_previous_furthest = true };
-    context.frame_slot = oxygen::frame::Slot { 1U };
-    context.frame_sequence = oxygen::frame::SequenceNumber { 1U };
+      .publish_previous_furthest = true,
+    };
+    context.frame_slot = oxygen::frame::Slot {
+      1U,
+    };
+    context.frame_sequence = oxygen::frame::SequenceNumber {
+      1U,
+    };
     module.Execute(context, textures);
     const auto output = module.GetCurrentOutput();
     ASSERT_TRUE(output.available);
@@ -3060,7 +3555,9 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
     const auto before_retirement = registry.GetRegisteredResourceCount();
     if (persistent) {
       module.OnFrameStart();
-      context.frame_sequence = oxygen::frame::SequenceNumber { 2U };
+      context.frame_sequence = oxygen::frame::SequenceNumber {
+        2U,
+      };
       module.Execute(context, textures);
       EXPECT_TRUE(module.GetPreviousOutput().available);
       module.RemoveViewState(first_view_id_);
@@ -3071,9 +3568,13 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
     }
     EXPECT_TRUE(registry.Contains(*output.closest_texture));
     EXPECT_TRUE(registry.Contains(*output.furthest_texture));
-    reclaimer.OnBeginFrame(oxygen::frame::Slot { 2U });
+    reclaimer.OnBeginFrame(oxygen::frame::Slot {
+      2U,
+    });
     EXPECT_TRUE(registry.Contains(*output.closest_texture));
-    reclaimer.OnBeginFrame(oxygen::frame::Slot { 1U });
+    reclaimer.OnBeginFrame(oxygen::frame::Slot {
+      1U,
+    });
     EXPECT_FALSE(registry.Contains(*output.closest_texture));
     EXPECT_FALSE(registry.Contains(*output.furthest_texture));
     EXPECT_EQ(registry.GetRegisteredResourceCount(), before_retirement - 8U);
@@ -3087,8 +3588,8 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   Fp32SceneFamilyPublishesMatchingPipelineAndResolvedArtifact)
 {
   scene_renderer_ = std::make_unique<SceneRenderer>(*renderer_, *graphics_,
-    SceneTexturesConfig { .extent = { 64U, 64U },
-      .scene_color_format = oxygen::Format::kRGBA32Float },
+    SceneTexturesConfig { .extent = { 64U, 64U, },
+      .scene_color_format = oxygen::Format::kRGBA32Float, },
     ShadingMode::kDeferred);
   static_cast<void>(AddDirectionalLight("Fp32Sun"));
   const auto context = RenderForView(first_view_id_, first_resolved_view_);
@@ -3100,7 +3601,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   EXPECT_EQ(extracts.resolved_scene_color.texture->GetDescriptor().format,
     oxygen::Format::kRGBA32Float);
   EXPECT_TRUE(std::ranges::any_of(
-    graphics_->graphics_pipeline_log_.binds, [](const auto& bind) {
+    graphics_->graphics_pipeline_log_.binds, [](const auto& bind) -> auto {
       const auto& formats = bind.desc.FramebufferLayout().color_target_formats;
       return !formats.empty()
         && formats.front() == oxygen::Format::kRGBA32Float;

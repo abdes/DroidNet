@@ -31,7 +31,9 @@ TEST(SceneCameraViewResolverTest, UsesViewportOverrideWhenProvided)
   ASSERT_TRUE(camera_node.AttachCamera(std::make_unique<PerspectiveCamera>()));
 
   auto camera_ref = camera_node.GetCameraAs<PerspectiveCamera>();
-  ASSERT_TRUE(camera_ref.has_value());
+  if (!camera_ref.has_value()) {
+    FAIL() << "Expected camera_ref to have a value";
+  }
 
   auto& camera = camera_ref->get();
   camera.SetFieldOfView(glm::radians(60.0F));
@@ -61,7 +63,9 @@ TEST(SceneCameraViewResolverTest, UsesViewportOverrideWhenProvided)
     [camera_node](const ViewId&) -> SceneNode { return camera_node; },
     override_viewport);
 
-  const auto resolved = resolver(ViewId { 7U });
+  const auto resolved = resolver(ViewId {
+    7U,
+  });
 
   EXPECT_FLOAT_EQ(resolved.Viewport().width, override_viewport.width);
   EXPECT_FLOAT_EQ(resolved.Viewport().height, override_viewport.height);
@@ -77,19 +81,29 @@ TEST(SceneCameraViewResolverTest, PreservesScissorWithNonzeroViewportOrigin)
   auto camera = scene->CreateNode("camera");
   ASSERT_TRUE(camera.AttachCamera(std::make_unique<PerspectiveCamera>()));
   const auto viewport = ViewPort {
-    .top_left_x = 120.0F, .top_left_y = 80.0F, .width = 640.0F, .height = 360.0F
+    .top_left_x = 120.0F,
+    .top_left_y = 80.0F,
+    .width = 640.0F,
+    .height = 360.0F,
   };
-  const auto inset
-    = oxygen::Scissors { .left = 136, .top = 104, .right = 728, .bottom = 400 };
-  const auto lookup = [camera](const ViewId&) { return camera; };
+  const auto inset = oxygen::Scissors {
+    .left = 136,
+    .top = 104,
+    .right = 728,
+    .bottom = 400,
+  };
+  const auto lookup = [camera](const ViewId&) -> SceneNode { return camera; };
   const auto resolved
-    = SceneCameraViewResolver(lookup, viewport, inset)(ViewId { 3U });
+    = SceneCameraViewResolver(lookup, viewport, inset)(ViewId {
+      3U,
+    });
   EXPECT_EQ(resolved.Scissor().left, 136);
   EXPECT_EQ(resolved.Scissor().top, 104);
   EXPECT_EQ(resolved.Scissor().right, 728);
   EXPECT_EQ(resolved.Scissor().bottom, 400);
-  const auto defaulted
-    = SceneCameraViewResolver(lookup, viewport)(ViewId { 3U });
+  const auto defaulted = SceneCameraViewResolver(lookup, viewport)(ViewId {
+    3U,
+  });
   EXPECT_EQ(defaulted.Scissor().left, 120);
   EXPECT_EQ(defaulted.Scissor().top, 80);
   EXPECT_EQ(defaulted.Scissor().right, 760);
@@ -102,13 +116,22 @@ TEST(SceneCameraViewResolverTest, RootCameraCanResolveWithoutSceneUpdate)
   auto camera_node = scene->CreateNode("camera");
   ASSERT_TRUE(camera_node.AttachCamera(std::make_unique<PerspectiveCamera>()));
 
-  camera_node.GetTransform().SetLocalPosition(
-    oxygen::Vec3 { 1.0F, -6.0F, 3.0F });
+  camera_node.GetTransform().SetLocalPosition(oxygen::Vec3 {
+    1.0F,
+    -6.0F,
+    3.0F,
+  });
   camera_node.GetTransform().SetLocalRotation(
-    glm::quat(glm::radians(oxygen::Vec3 { -20.0F, 0.0F, 0.0F })));
+    glm::quat(glm::radians(oxygen::Vec3 {
+      -20.0F,
+      0.0F,
+      0.0F,
+    })));
 
   auto camera_ref = camera_node.GetCameraAs<PerspectiveCamera>();
-  ASSERT_TRUE(camera_ref.has_value());
+  if (!camera_ref.has_value()) {
+    FAIL() << "Expected camera_ref to have a value";
+  }
 
   auto& camera = camera_ref->get();
   camera.SetFieldOfView(glm::radians(45.0F));
@@ -127,7 +150,9 @@ TEST(SceneCameraViewResolverTest, RootCameraCanResolveWithoutSceneUpdate)
   const auto resolver = SceneCameraViewResolver(
     [camera_node](const ViewId&) -> SceneNode { return camera_node; });
 
-  const auto resolved = resolver(ViewId { 11U });
+  const auto resolved = resolver(ViewId {
+    11U,
+  });
 
   EXPECT_EQ(resolved.CameraPosition(), oxygen::Vec3(1.0F, -6.0F, 3.0F));
   EXPECT_FLOAT_EQ(resolved.Viewport().width, 1280.0F);

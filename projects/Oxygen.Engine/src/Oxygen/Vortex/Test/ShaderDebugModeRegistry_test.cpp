@@ -62,7 +62,7 @@ constexpr auto kAllShaderDebugModes = std::array {
 {
   for (const auto& shader : d3d12::kEngineShaders) {
     for (std::size_t i = 0; i < shader.define_count; ++i) {
-      if (shader.defines[i] == define) {
+      if (shader.defines.at(i) == define) {
         return true;
       }
     }
@@ -70,15 +70,20 @@ constexpr auto kAllShaderDebugModes = std::array {
   return false;
 }
 
-[[nodiscard]] auto CatalogContainsDefineForPath(
-  std::string_view define, std::string_view path) -> bool
+struct ShaderSelection {
+  std::string_view define;
+  std::string_view path;
+};
+
+[[nodiscard]] auto CatalogContainsDefineForPath(const ShaderSelection selection)
+  -> bool
 {
   for (const auto& shader : d3d12::kEngineShaders) {
-    if (shader.path != path) {
+    if (shader.path != selection.path) {
       continue;
     }
     for (std::size_t i = 0; i < shader.define_count; ++i) {
-      if (shader.defines[i] == define) {
+      if (shader.defines.at(i) == selection.define) {
         return true;
       }
     }
@@ -137,15 +142,21 @@ NOLINT_TEST(ShaderDebugModeRegistryTest, DebugPathMatchesCatalogShaderFamily)
 
     switch (info.path) {
     case DiagnosticsDebugPath::kForwardMeshVariant:
-      EXPECT_TRUE(CatalogContainsDefineForPath(info.shader_define,
-                    "Vortex/Stages/Translucency/ForwardMesh_PS.hlsl")
-        || CatalogContainsDefineForPath(info.shader_define,
-          "Vortex/Stages/Translucency/ForwardDebug_PS.hlsl"))
+      EXPECT_TRUE(CatalogContainsDefineForPath({
+                    .define = info.shader_define,
+                    .path = "Vortex/Stages/Translucency/ForwardMesh_PS.hlsl",
+                  })
+        || CatalogContainsDefineForPath({
+          .define = info.shader_define,
+          .path = "Vortex/Stages/Translucency/ForwardDebug_PS.hlsl",
+        }))
         << info.canonical_name << " define=" << info.shader_define;
       break;
     case DiagnosticsDebugPath::kDeferredFullscreen:
-      EXPECT_TRUE(CatalogContainsDefineForPath(
-        info.shader_define, "Vortex/Stages/BasePass/BasePassDebugView.hlsl"))
+      EXPECT_TRUE(CatalogContainsDefineForPath({
+        .define = info.shader_define,
+        .path = "Vortex/Stages/BasePass/BasePassDebugView.hlsl",
+      }))
         << info.canonical_name << " define=" << info.shader_define;
       break;
     case DiagnosticsDebugPath::kNone:
@@ -154,8 +165,10 @@ NOLINT_TEST(ShaderDebugModeRegistryTest, DebugPathMatchesCatalogShaderFamily)
                     << " has a shader define but no catalog-backed debug path";
       break;
     case DiagnosticsDebugPath::kServicePass:
-      EXPECT_TRUE(CatalogContainsDefineForPath(info.shader_define,
-        "Vortex/Services/Lighting/DeferredLightDirectional.hlsl"))
+      EXPECT_TRUE(CatalogContainsDefineForPath({
+        .define = info.shader_define,
+        .path = "Vortex/Services/Lighting/DeferredLightDirectional.hlsl",
+      }))
         << info.canonical_name << " define=" << info.shader_define;
       break;
     }
@@ -164,15 +177,16 @@ NOLINT_TEST(ShaderDebugModeRegistryTest, DebugPathMatchesCatalogShaderFamily)
 
 NOLINT_TEST(ShaderDebugModeRegistryTest, CanonicalToolNamesStayStable)
 {
-  EXPECT_EQ(FindShaderDebugModeInfo(ShaderDebugMode::kDirectionalShadowMask)
-              ->canonical_name,
-    "directional-shadow-mask");
-  EXPECT_EQ(
-    FindShaderDebugModeInfo(ShaderDebugMode::kSceneDepthLinear)->canonical_name,
-    "scene-depth-linear");
-  EXPECT_EQ(
-    FindShaderDebugModeInfo(ShaderDebugMode::kBaseColor)->canonical_name,
-    "base-color");
+  const auto expect_name
+    = [](const ShaderDebugMode mode, const std::string_view expected) -> void {
+    const auto* info = FindShaderDebugModeInfo(mode);
+    ASSERT_NE(info, nullptr);
+    EXPECT_EQ(info->canonical_name, expected);
+  };
+  expect_name(
+    ShaderDebugMode::kDirectionalShadowMask, "directional-shadow-mask");
+  expect_name(ShaderDebugMode::kSceneDepthLinear, "scene-depth-linear");
+  expect_name(ShaderDebugMode::kBaseColor, "base-color");
 }
 
 NOLINT_TEST(ShaderDebugModeRegistryTest, HelperClassificationMatchesRegistry)
@@ -238,8 +252,10 @@ NOLINT_TEST(ShaderDebugModeRegistryTest, DocumentsKnownUnwiredIblNoBrdfLutMode)
 NOLINT_TEST(
   ShaderDebugModeRegistryTest, StaticSkyLightDiffuseDebugModesUseServicePass)
 {
-  for (const auto mode :
-    { ShaderDebugMode::kIblOnly, ShaderDebugMode::kDirectPlusIbl }) {
+  for (const auto mode : {
+         ShaderDebugMode::kIblOnly,
+         ShaderDebugMode::kDirectPlusIbl,
+       }) {
     const auto* info = FindShaderDebugModeInfo(mode);
     ASSERT_NE(info, nullptr);
     EXPECT_TRUE(info->supported) << info->canonical_name;
@@ -248,8 +264,10 @@ NOLINT_TEST(
     EXPECT_TRUE(info->requires_scene_depth) << info->canonical_name;
     EXPECT_TRUE(info->requires_gbuffer) << info->canonical_name;
     EXPECT_TRUE(info->requires_lighting_products) << info->canonical_name;
-    EXPECT_TRUE(CatalogContainsDefineForPath(info->shader_define,
-      "Vortex/Services/Lighting/DeferredLightDirectional.hlsl"))
+    EXPECT_TRUE(CatalogContainsDefineForPath({
+      .define = info->shader_define,
+      .path = "Vortex/Services/Lighting/DeferredLightDirectional.hlsl",
+    }))
       << info->canonical_name;
   }
 }

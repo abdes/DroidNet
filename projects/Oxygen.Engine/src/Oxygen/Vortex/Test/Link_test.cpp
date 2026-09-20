@@ -40,9 +40,15 @@ using oxygen::vortex::testing::FakeGraphics;
 
 auto RunFrameHooks(Renderer& renderer, FrameContext& frame_context) -> void
 {
-  frame_context.SetFrameSlot(oxygen::frame::Slot { 0U },
+  frame_context.SetFrameSlot(
+    oxygen::frame::Slot {
+      0U,
+    },
     oxygen::engine::internal::EngineTagFactory::Get());
-  frame_context.SetFrameSequenceNumber(oxygen::frame::SequenceNumber { 1U },
+  frame_context.SetFrameSequenceNumber(
+    oxygen::frame::SequenceNumber {
+      1U,
+    },
     oxygen::engine::internal::EngineTagFactory::Get());
   frame_context.SetModuleTimingData(
     oxygen::engine::ModuleTimingData {
@@ -56,11 +62,16 @@ auto RunFrameHooks(Renderer& renderer, FrameContext& frame_context) -> void
     },
     oxygen::engine::internal::EngineTagFactory::Get());
 
-  const auto frame = observer_ptr<FrameContext> { &frame_context };
+  const auto frame = observer_ptr<FrameContext> {
+    &frame_context,
+  };
 
   renderer.OnFrameStart(frame);
 
   auto loop = oxygen::co::testing::TestEventLoop {};
+  // Synchronous execution finishes while the session-owned closure and its
+  // captured test locals are alive.
+  // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
   oxygen::co::Run(loop, [&]() -> oxygen::co::Co<void> {
     co_await renderer.OnTransformPropagation(frame);
     co_await renderer.OnPreRender(frame);
@@ -73,6 +84,9 @@ auto RunFrameHooks(Renderer& renderer, FrameContext& frame_context) -> void
 
 } // namespace
 
+// Both standard and nonstandard exceptions are caught here; coroutine
+// cancellation is handled by catch (...).
+// NOLINTNEXTLINE(bugprone-exception-escape)
 auto main() -> int
 {
   try {
