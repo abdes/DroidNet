@@ -67,8 +67,8 @@ remain in their owning LLDs; detailed commands, results and historical checkpoin
 remain in the linked local manifests and Git history.
 
 **Resume entry point:** read [Current work](#31-current-work) first. That section
-owns the active checkpoint and any execution hold. The joint EX051-13A/B correction is implemented, validated and measured;
-active CPU budget/scaling qualification remains in EX051-13. Use the
+owns the active checkpoint and any execution hold. Slice 5.1 is closed at the user-accepted measured CPU cost; further CPU
+optimization is deferred to a later milestone. Use the
 [current checkpoint](lld/post-process-service.md#approved-ex051-13ab-joint-cpu-correction). Existing manifests describe
 historical checkpoints; their old `remaining` lists do not reopen closed items.
 
@@ -86,7 +86,7 @@ Slices 6-10, including the complete LightBench delivery; the package is not comp
 | 3 — Metering and adaptation | validated | Controlled-input histogram, curve, masks and hybrid adaptation; scene acceptance remains slice 5. | [Metering](../../out/build-ninja/analysis/vortex/exposure-lightbench/metering/evidence-manifest.json) |
 | 4 — GPU lifecycle and sharing | validated | Controlled-input/public-event gate, including offscreen routing. Real-scene resource lifetime is tracked in slice 5. | [Lifecycle](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/discontinuity-manifest.json), [offscreen sharing](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/offscreen-sharing-manifest.json) |
 | 5 — HDR migration and recovery | validated | Numerical, lifecycle and native layout/interaction correctness qualified in Debug and Release. Collected Release costs motivate the separate, still-open performance gate in Slice 5.1. | [Detailed items](#32-slice-5-work-items) |
-| 5.1 — Exposure performance | in_progress | Format/policy, independent SceneColor ownership, bounded CPU work, integration and final GPU matrix are complete. Joint 13A/B is accepted; active CPU budget/scaling qualification and final closeout remain. | [Current work](#31-current-work), [tasks and benchmark matrix](#321-slice-51-performance-qualification-and-correction) |
+| 5.1 — Exposure performance | validated | Closed 2026-09-21: format/policy, independent SceneColor ownership, CPU corrections, correctness and final GPU acceptance complete. User accepts measured CPU cost; further CPU optimization is deferred to a later milestone. | [Current work](#31-current-work), [final CPU decision](lld/post-process-service.md#approved-ex051-13ab-joint-cpu-correction) |
 | 5.2 — Exposure code quality | planned | Plan approved on 2026-09-19. Execution follows 5.1; EX052-03 covers the concrete diagnostic inventory and suite design. Preserve numerical coverage and performance. | [Tasks and gates](#322-slice-52-code-quality-and-test-structure) |
 | 6 — Authoring and persistence | planned | Native physical-camera persistence and texture-resource-index mask contracts are approved; complete source/cook/load/script/editor/DemoShell round-trip remains. | [Detailed items](#33-slice-6-work-items) |
 | 7 — Light units | planned | Directional, point and spot numerical/visual calibration across forward and deferred paths remains. | [Detailed items](#34-slice-7-work-items) |
@@ -96,7 +96,12 @@ Slices 6-10, including the complete LightBench delivery; the package is not comp
 
 ### 3.1 Current work
 
-**Performance closeout (2026-09-21): 13A/B accepted; measured CPU target fails, direction decision pending.**
+**Slice 5.1 closed (2026-09-21).** The user accepts the measured CPU cost for
+current delivery and defers further optimization to a later milestone.
+EX051-13/14/GATE are validated with that explicit disposition. Original CPU
+limits remain future optimization targets, not current pass claims; broader
+CPU/scaling qualification accompanies the deferred work. Slice 5.2 is unblocked
+but has not started.
 The joint correction passes 589 Debug and 403 Release owning checks; 89-TU
 clang-tidy finds zero diagnostics on changed code. One new 7,200-frame I02
 1080p Tracy capture, compared with the existing baseline, reduces exposure
@@ -132,9 +137,9 @@ pass 122 focused Debug checks (97 CPU, 25 native). The
 [policy checkpoint](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/production-policy/checkpoint-manifest.json)
 records exact commands and 648 unchanged frozen inputs. Bounded 11 work is now
 validated below. 12 now passes 371 normal Release checks using existing
-coverage and retained Debug evidence; 13–14/GATE remain open.
-The final GPU matrix and event scripts are complete; active CPU/scaling
-qualification remains in 13. Historical manifests do not reopen closed items.
+coverage and retained Debug evidence; 13–14/GATE are now closed with the accepted CPU disposition.
+The final GPU matrix and event scripts are complete; the accepted CPU
+disposition closes 13. Historical manifests do not reopen closed items.
 
 **Complete: corrected quality review of every file under
 `src/Oxygen/Vortex/Test` (2026-09-20).** Scope: 156 files, comprising 129 C++
@@ -225,7 +230,7 @@ current status, including decisions that supersede older manifest limitations.
 
 ### 3.2.1 Slice 5.1 performance qualification and correction
 
-**Slice status: in_progress. Scope revised 2026-09-20. Execution state: [Current work](#31-current-work).**
+**Slice status: validated, closed 2026-09-21 with user-accepted measured CPU cost. Execution state: [Current work](#31-current-work).**
 
 #### Delivery order and ownership
 
@@ -239,14 +244,14 @@ with its own correctness checks, measured result and accept/reject decision.
 Only 13 owns the final repeated performance matrix. GATE evaluates that evidence.
 A completed or rejected experiment does not wait for 13 to close.
 
-**Next action:** obtain the user's direction after the measured CPU decision.
-13A/B is validated and committed as `22cea346b`. Saved Tracy context switches
-establish active I02 1080p p95/p99 of **0.514935/0.625473 ms**, improved
-**27.0%/29.6%** but above the unchanged **0.15/0.30 ms** targets. Either agree a
-further correction scope, with API review before coding, or explicitly revise
-the target. No production correction or 4K capture starts before that decision.
-The completed 48-run GPU matrix, event scripts, output comparisons, presentation
-and copy attribution remain closed. No baseline or quality rebuild is needed.
+**Closeout:** 13A/B is validated and committed as `22cea346b`. Saved Tracy
+context switches establish active I02 1080p p95/p99 of
+**0.514935/0.625473 ms**, improved **27.0%/29.6%**. The user explicitly accepts
+that measured cost and defers further optimization to a later milestone.
+EX051-13/14/GATE are closed. The completed GPU matrix, event scripts, outputs,
+presentation and copy attribution remain accepted. No more collection or
+production optimization is scheduled in Slice 5.1; do not reopen historical
+remaining-work lists.
 
 Use the existing renderer, profiling APIs, native workloads and GPU status
 reports. Keep FP32 lighting accumulation, exposure equations, current-frame range
@@ -497,11 +502,11 @@ existing presented-output path. Do not rerun this matrix at intermediate items.
 | EX051-11A | Adjacent exposure recorder ownership / PostProcess + ExposurePass | validated | 11 attribution | Final range and histogram/solve share one successful submission; reused same-frame solves retain an independent current range check. Owning Debug: 228 native + 88 CPU pass (latest unique outcomes); two diagnostic/lifecycle fixture failures diagnosed, corrected and preserved. Matched Release I02: all 6,000 frames use six submissions instead of eight; elapsed CPU p95/p99 0.762/0.902 -> 0.646/0.760 ms, all five cycle p95 ranges disjoint. GPU phase counts, memory and zero steady churn preserved; four endpoint pairs pass. All 1,011 frozen inputs unchanged. Accept candidate; active-only CPU/global budgets remain open. [Decision](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/cpu-attribution/recorder/decision-table.json), [checkpoint](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/cpu-attribution/checkpoint-manifest.json). |
 | EX051-11B | Exposure constant and descriptor publication / ExposurePass + existing upload owner | validated | 11A decision | Accepted for clarity and reduced resource work under the user-directed criterion: publish one immutable histogram record per view, explicitly rebind for clear/accumulation; four publications become two in every sampled frame, removing two staging allocations and descriptor lookup/create operations plus 128 payload-write bytes per two-view frame. No persistent storage or lifetime change; GPU placement unchanged. Total elapsed CPU p95/p99 0.640/0.804 -> 0.664/0.775 ms, overlapping cycle ranges: no total CPU gain demonstrated. All 228 Debug cases and four endpoint pairs pass; GPU phase counts and six submissions preserved. Valid baseline/candidate freezes pass; invalid initial baseline retained. [Decision](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/cpu-attribution/publication/decision-table.json), [checkpoint](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/cpu-attribution/checkpoint-manifest.json). |
 | EX051-12 | Integrated correctness / existing owners | validated | 04, 09, 10A, 11 | Existing numerical/mask/range/history, transitions/sharing/stale status, independent color/fences and combined recording/constant reuse coverage mapped in the owner. Reused accepted Debug and unchanged Scene/settings/shader-catalog evidence; no new test or repeated old campaign. Missing normal Release (Tracy off) gate passes 371/371 enabled checks: 143 CPU + 228 native, no failures/errors/skips; 979 frozen inputs unchanged. Eight disabled benchmarks unrun. [Coverage](lld/post-process-service.md#ex051-12-integration-coverage), [checkpoint](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/integration12/checkpoint-manifest.json). Final performance remains13/GATE. |
-| EX051-13 | Final performance acceptance / rendering owner | in_progress | 12 | GPU collection/analysis complete: 48 valid runs, 296,100 steady frames; 981 frozen inputs unchanged; three passing fixed I02 event scripts, 64 passing output pairs, zero steady creation churn and one passing presentation check. All 1080p whole-frame and attributed exposure/scaling targets pass; frozen-source/scope audit closes copy attribution. CPU observer and ETW accounting are implemented: 7 Debug + 7 Release checks, one production smoke and a scheduler probe pass with 1,033 inputs unchanged. 13A/B correction is now accepted with one matched 7,200-frame 1080p Tracy capture and 403 Release owning checks. Saved Tracy scheduler data proves active p95/p99 0.514935/0.625473 ms: 27.0%/29.6% better, but both unchanged targets fail. Remaining: user direction on further correction scope versus explicit target revision, then required scaling qualification. [Results and closure work](lld/post-process-service.md#ex051-13-final-collection-and-gate-disposition), [checkpoint](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/acceptance13/checkpoint-manifest.json). |
-| EX051-14 | Owner and evidence closeout | in_progress | 13 | Existing results, decisions, implementation commits, raw evidence index and Slice 5.2 handoff are reconciled, including accepted 13A/B and closed copy attribution. Active 1080p result is incorporated and its target failure is explicit. Await the user's direction, finish the resulting scaling/gate disposition, then commit final slice closure. No budget exception is assumed. |
-| EX051-13A | Shared recording ownership / SceneRenderer + PostProcess + participating Vortex stages | validated | 13 CPU diagnosis | Approved move-only recording owner and borrowed stage API migration complete; successful submission commits history/status/cache publication, discard/failure preserves prior history and permits retry. Superseded deferred-queue API removed; default scope-exit submission remains ergonomic. C4456 and shared depth/HZB handoff corrected. Owning checks: 589 Debug and 403 Release pass; changed-code clang-tidy clean across 89 TUs. Matched 7,200-frame I02 Tracy comparison: exposure recordings 6->2, all render-thread recordings 40->10, elapsed CPU p95/p99 0.708597/0.901528->0.515917/0.630422 ms; six cycle ranges disjoint. Four output pairs, identical GPU work/placement, zero churn and 1,030 unchanged capture inputs. Accept joint A/B correction; active CPU/scaling remains 13. [Decision and checkpoint](lld/post-process-service.md#approved-ex051-13ab-joint-cpu-correction). |
+| EX051-13 | Final performance acceptance / rendering owner | validated | 12 | Final GPU matrix: 48 runs/296,100 steady frames, 981 unchanged inputs; all 1080p whole-frame and attributed exposure/scaling GPU targets pass. Three I02 event scripts, 64 output pairs, zero steady churn, presentation and copy attribution pass. Joint 13A/B adds one matched 7,200-frame Tracy capture: active CPU p95/p99 0.705693/0.888333->0.514935/0.625473 ms, 27.0%/29.6% better; 403 Release owning checks pass. User explicitly accepts this CPU cost on 2026-09-21 and defers further optimization/broader CPU qualification to a later milestone; original CPU targets are not claimed met. [Accepted disposition](lld/post-process-service.md#approved-ex051-13ab-joint-cpu-correction), [checkpoint](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/acceptance13/checkpoint-manifest.json). |
+| EX051-14 | Owner and evidence closeout | validated | 13 | Existing owner, tracker, plan, performance report and checkpoint reconcile final measurements, implementation commit 22cea346b, raw paths/hashes and the explicit CPU acceptance. Further optimization is recorded under the later-milestone follow-up below. Slice 5.2 is unblocked and retains its own agreement gate; it has not started. |
+| EX051-13A | Shared recording ownership / SceneRenderer + PostProcess + participating Vortex stages | validated | 13 CPU diagnosis | Approved move-only recording owner and borrowed stage API migration complete; successful submission commits history/status/cache publication, discard/failure preserves prior history and permits retry. Superseded deferred-queue API removed; default scope-exit submission remains ergonomic. C4456 and shared depth/HZB handoff corrected. Owning checks: 589 Debug and 403 Release pass; changed-code clang-tidy clean across 89 TUs. Matched 7,200-frame I02 Tracy comparison: exposure recordings 6->2, all render-thread recordings 40->10, elapsed CPU p95/p99 0.708597/0.901528->0.515917/0.630422 ms; six cycle ranges disjoint. Four output pairs, identical GPU work/placement, zero churn and 1,030 unchanged capture inputs. Accept joint A/B correction; active CPU disposition is closed by the user acceptance in 13. [Decision and checkpoint](lld/post-process-service.md#approved-ex051-13ab-joint-cpu-correction). |
 | EX051-13B | Root-signature and binding reuse / Graphics D3D12 | validated | 13 CPU diagnosis | Compatible complete layouts/flags share root-signature ownership; descriptor heaps/root tables reuse valid bindings and invalidate on real changes or recorder reset. Required PSO/root arguments and shader ABI preserved. Layout/flags/lifetime and five invalidation/reset checks pass within owning gates; 89-TU changed-code clang-tidy clean. In the joint matched candidate, nested compute-binding p95/p99 falls 0.070302/0.096123->0.061307/0.076787 ms with 12 calls per frame preserved. This attribution is nested, not an isolated B-only result. Accept with 13A; numerical/GPU/resource checks pass. [Decision and checkpoint](lld/post-process-service.md#approved-ex051-13ab-joint-cpu-correction). |
-| EX051-GATE | Slice acceptance | in_progress | 12, 13, 14 | Numerical/integration, 48-run GPU collection, whole-frame targets, explicit exposure/scaling, transitions, resource stability and presentation are qualified. Copy attribution and 13A/B measured benefit are qualified. Active 1080p CPU has a measured target failure; resolve the requested direction decision and scaling gate before unblocking Slice 5.2. |
+| EX051-GATE | Slice acceptance | validated | 12, 13, 14 | Closed 2026-09-21. Numerical/integration, native GPU/frame/scaling targets, transitions, resource stability, presentation and copy attribution are qualified. 13A/B has measured benefit and passes owning Debug/Release checks. User acceptance of measured CPU cost explicitly disposes the remaining CPU gate; future CPU optimization is deferred without claiming the original CPU targets passed. |
 
 #### Checkpoint and evidence rules
 
@@ -521,6 +526,12 @@ existing presented-output path. Do not rerun this matrix at intermediate items.
    input paths/hashes. One checkpoint manifest links commands, revisions, raw
    results and the decision. Do not embed raw native payloads again in audits or
    summaries. Preserve existing evidence and failed-run records.
+
+#### Deferred CPU optimization — later milestone
+
+| Follow-up | Status | Retained scope and evidence |
+| --- | --- | --- |
+| Active exposure CPU reduction and broader scaling qualification | deferred by user, 2026-09-21 | Start from implementation `22cea346b` and its accepted I02 1080p active mean/p95/p99 of 0.371156/0.514935/0.625473 ms. Preserve original one-view 0.10/0.20-ms and two-view 0.15/0.30-ms targets plus the 4K scaling criterion as future optimization goals. Scope/design and any API migration require review before coding. This is not part of Slice 5.2's behavior-preserving quality work, and does not reopen Slice 5.1. Reuse the saved Tracy capture, CPU comparison, GPU matrix and owning checks; schedule additional qualification only with that milestone. |
 
 ### 3.2.2 Slice 5.2 code quality and test structure
 
