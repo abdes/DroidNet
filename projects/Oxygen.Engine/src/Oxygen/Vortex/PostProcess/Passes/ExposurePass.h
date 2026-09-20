@@ -108,6 +108,8 @@ public:
     float one_over_pre_exposure { 1.0F };
     const FrameResources* frame_exposure { nullptr };
     bool metering_available { true };
+    //! Record the final FP32 range guard in the same submission as this solve.
+    bool require_scene_range { false };
     std::optional<ExposureTransitionToken> transition;
     const Source* source { nullptr };
     std::optional<ExposureTransitionError> rejection;
@@ -247,6 +249,10 @@ private:
   auto RecordSceneRange(RenderContext& ctx, const FrameLease& frame,
     const graphics::Texture& source, ShaderVisibleIndex source_srv,
     bool capture_opaque_input) -> bool;
+  auto RecordSceneRangeCommands(RenderContext& ctx,
+    graphics::CommandRecorder& recorder, const FrameResources& frame,
+    const graphics::Texture& source, ShaderVisibleIndex source_srv,
+    bool capture_opaque_input) -> void;
   friend struct ::oxygen::vortex::testing::RendererPublicationProbe;
   struct PerViewExposureState {
     StateLease latest;

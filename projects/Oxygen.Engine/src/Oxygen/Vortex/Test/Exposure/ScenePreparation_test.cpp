@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <limits>
 #include <span>
 
 #include <Oxygen/Vortex/PostProcess/PostProcessService.h>
@@ -132,6 +133,7 @@ NOLINT_TEST_F(ExposureGpuTest,
     auto prepared_inputs = PostProcessService::Inputs {};
     prepared_inputs.scene_signal = accumulation.texture.get();
     prepared_inputs.scene_signal_srv = accumulation.srv;
+    prepared_inputs.require_scene_range = true;
     const auto prepared = service.PrepareSceneExposure(
       ctx_.current_view.view_id, ctx_, prepared_inputs);
     if (!prepared.has_value()) {
@@ -165,6 +167,126 @@ NOLINT_TEST_F(ExposureGpuTest,
     EXPECT_EQ(std::count(recorder_names.begin(), recorder_names.end(),
                 "Vortex Exposure"),
       1);
+    EXPECT_EQ(std::count(recorder_names.begin(), recorder_names.end(),
+                "Vortex Exposure Final Scene Range"),
+      0);
+  }
+}
+
+NOLINT_TEST_F(ExposureGpuTest,
+  CombinedSceneRangePreservesSeedRetryInvalidMeterAndRetainedState)
+{
+  const auto signal = Uniform(.25F, 4U, 4U);
+  const auto invalid = Uniform(std::numeric_limits<float>::infinity(), 4U, 4U);
+  for (const bool fp32_only : {
+         false,
+         true,
+       }) {
+    SCOPED_TRACE(fp32_only);
+    auto service = PostProcessService(*renderer_);
+    auto config = PostProcessConfig {};
+    config.exposure.key = 12.5F;
+    service.SetConfig(config);
+    ctx_.current_view.view_id = ViewId {
+      fp32_only ? 94U : 93U,
+    };
+    ctx_.current_view.view_state_handle = CompositionView::ViewStateHandle {
+      fp32_only ? 94U : 93U,
+    };
+    ctx_.current_view.hdr_fp32_only = fp32_only;
+    ctx_.delta_time = 0.0F;
+    const auto start_frame = [&]() -> void {
+      WaitForQueueIdle();
+      ctx_.frame_sequence = frame::SequenceNumber {
+        ++sequence_,
+      };
+      ctx_.frame_slot = frame::Slot {
+        static_cast<unsigned>(sequence_ % 3U),
+      };
+      service.OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
+      ctx_.current_view.frame_exposure
+        = service.PrepareFrameExposure(ctx_, true);
+      ASSERT_NE(ctx_.current_view.frame_exposure, nullptr);
+    };
+    auto inputs = PostProcessService::Inputs {};
+    inputs.scene_signal = signal.texture.get();
+    inputs.scene_signal_srv = signal.srv;
+    inputs.require_scene_range = true;
+    ASSERT_NO_FATAL_FAILURE(start_frame());
+    const auto initial
+      = service.PrepareSceneExposure(ctx_.current_view.view_id, ctx_, inputs);
+    ASSERT_TRUE(initial.has_value());
+    const auto retained = ReadState(initial->exposure);
+    EXPECT_NEAR(retained.displayed_scale, .72F, 2e-5F);
+
+    const auto seed
+      = renderer_->QueueExposureTransition(ctx_.current_view.view_state_handle,
+        ExposureTransitionPolicy::kSeedFromEv100, 3.0F);
+    ASSERT_TRUE(seed.has_value());
+    ASSERT_NO_FATAL_FAILURE(start_frame());
+    auto& backend = FailureBackend();
+    backend.recorder_names.clear();
+    backend.fail_next_exposure_recorder = true;
+    backend.fail_next_fallback_recorder = true;
+    EXPECT_FALSE(
+      service.PrepareSceneExposure(ctx_.current_view.view_id, ctx_, inputs)
+        .has_value());
+    EXPECT_EQ(
+      InspectRequiredTransition(ctx_.current_view.view_state_handle).phase,
+      ExposureTransitionPhase::kQueued);
+    const auto retry
+      = service.PrepareSceneExposure(ctx_.current_view.view_id, ctx_, inputs);
+    ASSERT_TRUE(retry.has_value());
+    EXPECT_FALSE(retry->exposure.solve_failed);
+    const auto solved = ReadState(retry->exposure);
+    EXPECT_FLOAT_EQ(solved.displayed_scale, .125F);
+    EXPECT_EQ(solved.applied_generation.at(0), seed->generation);
+    EXPECT_EQ(std::count(backend.recorder_names.begin(),
+                backend.recorder_names.end(), "Vortex Exposure"),
+      2);
+    EXPECT_EQ(
+      std::count(backend.recorder_names.begin(), backend.recorder_names.end(),
+        "Vortex Exposure Final Scene Range"),
+      0);
+
+    auto repeated_inputs = inputs;
+    repeated_inputs.scene_signal = invalid.texture.get();
+    repeated_inputs.scene_signal_srv = invalid.srv;
+    backend.fail_recorder_name = "Vortex Exposure Final Scene Range";
+    EXPECT_FALSE(service
+        .PrepareSceneExposure(ctx_.current_view.view_id, ctx_, repeated_inputs)
+        .has_value());
+    backend.fail_recorder_name.clear();
+    const auto reused = service.PrepareSceneExposure(
+      ctx_.current_view.view_id, ctx_, repeated_inputs);
+    ASSERT_TRUE(reused.has_value());
+    EXPECT_FALSE(reused->exposure.executed);
+    EXPECT_EQ(reused->exposure.state, retry->exposure.state);
+    const auto reused_status = Read<ExposureCompletedStatus>(
+      *reused->exposure.state->status_buffer, ResourceStates::kUnorderedAccess);
+    EXPECT_NE(reused_status.flags & 16U, 0U);
+    EXPECT_FLOAT_EQ(ReadState(reused->exposure).displayed_scale, .125F);
+
+    ASSERT_NO_FATAL_FAILURE(start_frame());
+    EXPECT_EQ(InspectRequiredTransition(ctx_.current_view.view_state_handle)
+                .applied_generation,
+      seed->generation);
+    inputs.scene_signal = invalid.texture.get();
+    inputs.scene_signal_srv = invalid.srv;
+    const auto rejected_meter
+      = service.PrepareSceneExposure(ctx_.current_view.view_id, ctx_, inputs);
+    ASSERT_TRUE(rejected_meter.has_value());
+    const auto protected_state = ReadState(rejected_meter->exposure);
+    EXPECT_FLOAT_EQ(protected_state.displayed_scale, .125F);
+    EXPECT_EQ(protected_state.flags & 12U, 0U);
+    const auto status = Read<ExposureCompletedStatus>(
+      *rejected_meter->exposure.state->status_buffer,
+      ResourceStates::kCopySource);
+    EXPECT_NE(status.flags & 16U, 0U);
+    const auto still_retained = ReadState(initial->exposure);
+    EXPECT_EQ(still_retained.displayed_scale, retained.displayed_scale);
+    EXPECT_EQ(still_retained.applied_generation, retained.applied_generation);
+    ctx_.current_view.frame_exposure.reset();
   }
 }
 

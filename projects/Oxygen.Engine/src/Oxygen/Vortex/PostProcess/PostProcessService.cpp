@@ -562,8 +562,7 @@ auto PostProcessService::PrepareSceneExposure(const ViewId view_id,
     ? &CaptureSharedExposureSource(ctx, ctx.current_view.exposure_view_id,
                                    source_handle)
     : nullptr;
-  const auto exposure = exposure_pass_->Execute(
-    ctx, effective_config,
+  const auto exposure = exposure_pass_->Execute(ctx, effective_config,
     postprocess::ExposurePass::Inputs {
       .scene_signal = inputs.scene_signal,
       .scene_signal_srv = inputs.scene_signal_srv,
@@ -571,6 +570,7 @@ auto PostProcessService::PrepareSceneExposure(const ViewId view_id,
       .metering_mask_srv = mask ? mask->srv : kInvalidShaderVisibleIndex,
       .metering_available
       = !initial_mask_unavailable && !requested_mask_missing,
+      .require_scene_range = inputs.require_scene_range,
       .transition = !effective_config.Settings().temporary_unit_exposure
         ? transition
         : std::nullopt,

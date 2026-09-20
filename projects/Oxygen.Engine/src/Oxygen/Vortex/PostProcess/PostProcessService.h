@@ -74,6 +74,8 @@ public:
     const graphics::Texture* scene_fallback { nullptr };
     ShaderVisibleIndex scene_fallback_srv { kInvalidShaderVisibleIndex };
     postprocess::ExposurePass::FrameLease checked_resolution;
+    //! Guard final FP32 accumulation before metering in the same submission.
+    bool require_scene_range { false };
   };
 
   struct ExecutionState {
