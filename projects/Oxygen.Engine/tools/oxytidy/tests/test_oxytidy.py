@@ -167,6 +167,55 @@ class SetupReportingTests(Fixture):
 
 
 class CompilationTests(Fixture):
+    def test_configuration_filter_precedes_response_expansion(self):
+        for representation in ("arguments", "command"):
+            for metadata in ("definition", "output"):
+                with self.subTest(representation=representation, metadata=metadata):
+                    entries = self.database(["src/a.cpp", "src/a.cpp"])
+                    response = self.write("debug.rsp", "-DSELECTED=1")
+                    entries[0]["arguments"].append("@debug.rsp")
+                    entries[1]["arguments"].append("@missing-release.rsp")
+                    if metadata == "definition":
+                        # The explicit configuration overrides the output path.
+                        entries[1]["arguments"].append('-DCMAKE_INTDIR="Release"')
+                    else:
+                        entries[1]["output"] = "Release/a.obj"
+                    if representation == "command":
+                        for entry in entries:
+                            entry["arguments"][0] = "clang++"
+                            entry["command"] = " ".join(entry.pop("arguments"))
+                    database = self.write("compile_commands.json", json.dumps(entries))
+                    contexts = read_database(
+                        database, ClangdConfig(self.root, (), ()), "Debug"
+                    )
+                    self.assertEqual(len(contexts), 1)
+                    self.assertIn("-DSELECTED=1", contexts[0].arguments)
+                    self.assertEqual(
+                        dict(contexts[0].response_inputs), fingerprint([response])
+                    )
+
+    def test_configuration_can_be_discovered_inside_response_file(self):
+        entries = self.database(["src/a.cpp", "src/a.cpp"])
+        for entry, name in zip(entries, ("Debug", "Release")):
+            entry.pop("output")
+            self.write(f"{name}.rsp", f"-DCMAKE_INTDIR={name}")
+            entry["arguments"].append(f"@{name}.rsp")
+        database = self.write("compile_commands.json", json.dumps(entries))
+        contexts = read_database(database, ClangdConfig(self.root, (), ()), "Debug")
+        self.assertEqual(len(contexts), 1)
+        self.assertIn("-DCMAKE_INTDIR=Debug", contexts[0].arguments)
+
+    def test_required_response_files_still_fail_when_missing(self):
+        entries = self.database(["src/a.cpp"])
+        entries[0]["arguments"].append("@missing.rsp")
+        database = self.write("compile_commands.json", json.dumps(entries))
+        for configuration in ("Debug", None):
+            with (
+                self.subTest(configuration=configuration),
+                self.assertRaises(FileNotFoundError),
+            ):
+                read_database(database, ClangdConfig(self.root, (), ()), configuration)
+
     def test_scope_filter_precedes_response_expansion_and_configuration_checks(self):
         self.write("src/module/a.cpp", "int x;\n")
         entries = self.database(["src/module/a.cpp", "src/elsewhere/b.cpp"])

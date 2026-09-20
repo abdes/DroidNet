@@ -5,6 +5,7 @@ Checks: >
     bugprone-*,
     cppcoreguidelines-*,
     google-*,
+    misc-include-cleaner,
     modernize-*,
     performance-*,
     portability-*,
