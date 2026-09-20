@@ -8,11 +8,11 @@ all dependencies and configuration are properly set up. This script is designed 
 use in CI/CD pipelines and developer workflows where only building (not running) is required.
 
 The script follows the standardized build workflow:
-1. Check if out/build exists -> if not, run Conan install with platform-specific profiles
+1. Require an initialized build tree; initialize dependencies separately with generate-builds.
 2. Check if CMake is configured -> if not, run CMake configure preset
 3. Build the target using appropriate CMake preset or direct cmake command
 
-Uses the default out/build tree unless -BuildTree is specified.
+Uses the default out/build-ninja tree unless -BuildTree is specified.
 
 .PARAMETER Target
 The name of the target to build. This must match a CMake target name defined
@@ -22,7 +22,7 @@ Supports intelligent fuzzy matching:
 - Exact match: "oxygen-base" matches exactly
 - Substring match: "base" matches "oxygen-base"
 - Component match: "gr-common" matches "oxygen-graphics-common"
-- Abbreviation match: "asyncsim" matches "oxygen-asyncengine-simulator"
+- Abbreviation match: "async" matches "oxygen-examples-async"
 - Interactive selection: "graphics" shows menu of graphics-related targets
 
 If multiple targets match, an interactive selection menu will be displayed.
@@ -35,9 +35,9 @@ use platform-specific Conan profiles and CMake presets based on this configurati
 Optional build tree name or path to use instead of the default tree.
 Examples: "build-tracy-ninja", "build-vs", "out/build-tracy-ninja".
 
-Debug builds use ASAN-enabled profiles for better debugging; **sanitized builds
+ASAN is selected explicitly with -Sanitized; **sanitized builds
 are always Debug and you must not pass `-Config` together with `-Sanitized`.**
-Release builds use optimized profiles without debugging overhead.
+Regular Debug builds do not implicitly enable ASAN.
 
 .PARAMETER DryRun
 Show what would be executed without actually running it. Displays all commands
@@ -50,12 +50,12 @@ select ASan presets (e.g., `windows-asan`). Do not pass `-Config` together with
 `-Sanitized`.
 
 .EXAMPLE
-oxybuild.ps1 oxygen-asyncengine-simulator
-Build the oxygen-asyncengine-simulator target using default Debug configuration.
+oxybuild.ps1 oxygen-examples-async
+Build the oxygen-examples-async target using default Debug configuration.
 
 .EXAMPLE
-oxybuild.ps1 asyncsim
-Build the oxygen-asyncengine-simulator target using fuzzy matching abbreviation.
+oxybuild.ps1 async
+Build the oxygen-examples-async target using fuzzy matching abbreviation.
 
 .EXAMPLE
 oxybuild.ps1 gr-common -Config Release
@@ -74,21 +74,18 @@ oxybuild.ps1 my-target -Config Release
 Build using Release configuration with optimized Conan profile.
 
 .EXAMPLE
-oxybuild.ps1 oxygen-renderer -BuildTree build-tracy-ninja
-Build the oxygen-renderer target using out/build-tracy-ninja.
+oxybuild.ps1 oxygen-vortex -BuildTree build-tracy-ninja
+Build the oxygen-vortex target using out/build-tracy-ninja.
 
 .NOTES
 Build System Integration:
-- Uses standardized out/build directory for all builds
+- Defaults to out/build-ninja; -Sanitized selects out/build-asan-ninja
 - Requires the build root to be initialized (use tools\generate-builds.bat); this script will NOT run Conan automatically
 - Uses platform-specific CMake presets: "windows", "linux", "mac"
 - Runs CMake configure automatically if build system is not configured
 - Falls back to direct cmake --build commands if no presets are found
 
-Platform-Specific Profiles:
-- Windows: Debug -> windows-msvc-asan.ini, Release -> windows-msvc.ini
-- Linux: Debug -> linux-gcc-asan.ini, Release -> linux-clang.ini
-- macOS: Debug -> macos-clang-asan.ini, Release -> macos-clang.ini
+Compiler profiles and dependency deployment are selected when initializing the build tree.
 
 Target Validation:
 - Uses CMake File API codemodel to validate target existence when available

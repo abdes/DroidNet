@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-Run a built target using oxy-common helpers.
+Run a built target using the shared Oxygen CLI helpers.
 
 .DESCRIPTION
 Builds and runs the specified target executable using CMake presets when available.
@@ -24,7 +24,7 @@ Supports intelligent fuzzy matching:
 - Exact match: "oxygen-base" matches exactly
 - Substring match: "base" matches "oxygen-base"
 - Component match: "gr-common" matches "oxygen-graphics-common"
-- Abbreviation match: "asyncsim" matches "oxygen-asyncengine-simulator"
+- Abbreviation match: "async" matches "oxygen-examples-async"
 - Interactive selection: "graphics" shows menu of graphics-related targets
 
 If multiple targets match, an interactive selection menu will be displayed.
@@ -47,12 +47,12 @@ Show what would be executed without actually running it. Displays the build comm
 and final execution command without performing any actions.
 
 .EXAMPLE
-oxyrun.ps1 oxygen-asyncengine-simulator
-Run the oxygen-asyncengine-simulator target without arguments.
+oxyrun.ps1 oxygen-examples-async
+Run the oxygen-examples-async target without arguments.
 
 .EXAMPLE
-oxyrun.ps1 asyncsim
-Run the oxygen-asyncengine-simulator target using fuzzy matching abbreviation.
+oxyrun.ps1 async
+Run the oxygen-examples-async target using fuzzy matching abbreviation.
 
 .EXAMPLE
 oxyrun.ps1 gr-d3d -- --help
@@ -63,15 +63,15 @@ oxyrun.ps1 base
 Display interactive menu to select from oxygen-base and other base-related targets.
 
 .EXAMPLE
-oxyrun.ps1 oxygen-asyncengine-simulator -DryRun
+oxyrun.ps1 oxygen-examples-async -DryRun
 Show what would be executed for the target without actually running it.
 
 .EXAMPLE
-oxyrun.ps1 oxygen-asyncengine-simulator -- -f 1 --verbose
+oxyrun.ps1 oxygen-examples-async -- -f 1 --verbose
 Run the target and pass "-f 1 --verbose" as arguments to the executable.
 
 .EXAMPLE
-oxyrun.ps1 oxygen-asyncengine-simulator -Config Release -NoBuild -- --help
+oxyrun.ps1 oxygen-examples-async -Config Release -NoBuild -- --help
 Skip building, use Release configuration, and run the target with --help argument.
 
 .EXAMPLE

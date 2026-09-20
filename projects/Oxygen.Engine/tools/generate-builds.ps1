@@ -9,7 +9,7 @@ Generate both Ninja and Visual Studio build trees with a single command.
 The script performs dual Conan installations (Debug & Release) for both trees
 to ensure all multi-config metadata is available.
 
-.PARAMETER Profile
+.PARAMETER BuildProfile
 Required positional path to the Conan profile used for both host and build.
 
 .PARAMETER Build
@@ -31,7 +31,7 @@ Generate Tracy (profiler enabled) build trees instead of standard builds.
 Show this help message and exit.
 
 .EXAMPLE
-.\tools\generate-builds.ps1 -ProfileHost profiles/windows-msvc-asan.ini
+.\tools\generate-builds.ps1 -BuildProfile profiles/windows-msvc-asan.ini
 
 .EXAMPLE
 .\tools\generate-builds.ps1 -Help
