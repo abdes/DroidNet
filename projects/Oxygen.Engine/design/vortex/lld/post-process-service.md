@@ -987,33 +987,71 @@ a matching recorded baseline. The approved C01 steady-memory increases remain
 | Acceptance evidence | Recorded result |
 | --- | --- |
 | Whole-frame 1080p targets | All 24 runs pass GPU p95/p99 and uncapped wall p99 targets; worst wall p99 is 12.035 ms. |
-| Explicit exposure dispatches and 4K scaling | All 48 runs pass their explicit-dispatch budgets; all 24 corresponding 4K comparisons pass scaling. Resolve/copy attribution is qualified below. |
+| Attributed exposure GPU work and 4K scaling | All 48 runs pass; all 24 corresponding 4K comparisons pass scaling. Exposure status copies are included. Stage-21 ordinary output snapshots are reported separately, as established below. |
 | Warm transitions | Three full I02 scripts pass; worst per-operation additional GPU p99, including the entire resolve scope, is 0.392 ms against 1.30 ms. Startup is separate: 60 frames per run. |
 | Correctness/output | All native checks and exports pass. All 64 same-cell endpoint comparisons pass unchanged float and UNorm8 budgets; maximum float difference 7.75e-7, maximum gain difference 9.83e-7 stops. |
 | Resource stability | Zero steady texture/buffer creation churn in every run. Placement snapshots and accepted 10/10A lifecycle evidence are retained. No new lifecycle campaign. |
 | Presentation | One 180-frame VortexBasic launch with target 60 fps and VSync passes. Its captured EV14 output has gain 2^-14 and pre-storage RGB 0.25; replay numerical checks and visual inspection pass. This is not a measured monitor-refresh-rate claim. |
 
-**Gate disposition is required for two qualification gaps.** No exception has
-yet been approved, and no target is silently widened:
+**Closure work:** the final harness omitted exposure-only CPU accounting. The
+earlier proposal to treat missing CPU/copy evidence as qualification exceptions
+is withdrawn. Budgets remain unchanged:
 
 1. Active exposure CPU p95/p99 and 4K CPU scaling are not established by the
    whole-renderer CPU CSV or the instrumented elapsed owner intervals. The
    latter include driver/scheduling time and do not demonstrate the original
    0.15/0.30-ms two-view active-CPU limits.
-2. `ResolveSceneColor` times both color snapshots and ordinary depth copies.
-   Explicit exposure passes; including the entire resolve as a conservative
-   upper bound exceeds the 1080p exposure p95 threshold in 14 runs across
-   M01/M02/M04/I01/I02. Exact exposure-related copy attribution is therefore
-   unproven. The whole resolve scope is reported separately; it is neither
-   silently omitted nor presented as exact exposure work.
+2. **Copy attribution closed by source and recorded scopes.** Stage 21 publishes
+   ordinary resolved-color and resolved-depth snapshots for Stage 22/23 even
+   when `PreparedExposure` is absent. In production FP32, both copies remain
+   that renderer handoff work. Exposure-specific checked conversion has its own
+   `Exposure.ConvertSceneColor` scope and is absent in every recorded window.
+   Exposure status copies have an `Exposure.StatusReadback` scope: all 21 recorded
+   instances are already included in the exposure interval unions. The source
+   audit matches the frozen implementation hashes and covers all 48 steady runs
+   plus their startup/event windows. Therefore the existing exposure union is
+   the attributed production metric; `ResolveSceneColor` remains separately
+   reported ordinary renderer work. Adding it exceeds the exposure-only budget
+   in 14 runs because it adds unrelated output snapshots, not because exposure
+   copies were omitted. See the
+   [ownership audit](../../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/acceptance13/copy-ownership-audit.json).
 
-The concrete proposed closeout is to accept this slice with those two explicitly
-recorded qualification exceptions: retain the demonstrated whole-frame envelope,
-explicit-dispatch/scaling, transition, correctness and resource results, without
-claiming that the active-only CPU or stricter copy-inclusive sub-budgets passed.
-This requires the owner's decision. The user prohibited benchmark reruns; none
-are scheduled. Without that disposition, 13/GATE remain open and the Slice 5.2
-handoff is prepared but not unblocked.
+The user subsequently authorized creating/running the benchmark needed to close
+the gap. Use the normal optimized Release build with Tracy disabled. Observe the
+existing exposure CPU scopes without changing their ownership, and intersect
+their per-frame union with Windows scheduler running intervals. Include driver
+CPU work; report off-CPU time and explicit fence waits separately. Capture QPC
+timestamps and thread/frame identities so scheduler and owner records share one
+clock. Keep trace buffers bounded and reject dropped events or incomplete scopes.
+
+Start with I02 at 1080p and 4K. Verify accounting and diagnose an actual target
+failure before expanding to the remaining recipes and repetitions. The original
+CPU limits and eight-recipe/two-resolution coverage remain authoritative. Use
+the existing serial validation agent, frozen native batches and sampling rules.
+The completed production GPU matrix, events, correctness and presentation are
+reused; supplemental GPU output is not a replacement performance campaign.
+Resolve Stage-21 copy attribution by source ownership and recorded scope/format
+evidence. No production correction or target exception is implicit in this
+measurement authorization. Close 13/14/GATE when the resulting evidence meets
+their exits.
+
+The measurement implementation adds `ScopedCpuScopeObserver` to the existing
+CPU profiling coordinator without changing `CpuProfileScope` layout or Tracy/PIX
+behavior. The opt-in baseline control `OXYGEN_EXPOSURE_BASELINE_CPU=1` preallocates
+owner records before timing, preserves the established 11 owner selection and
+exports QPC/frame/thread identities. `AnalyzeExposureCpu.py` intersects those
+unions with scheduler running intervals, including driver execution, and reports
+blocked/descheduled and explicit fence intervals separately. No profiling cost
+is subtracted from the result. The collector rejects overflow, incomplete scopes,
+missing frame/scheduler coverage and lost ETW events.
+
+Measurement checks pass: seven Debug and seven Release observer/profile tests,
+one Debug production smoke, and four synthetic interval/scheduling checks. An
+80.635-ms scheduler probe resolves 80.622 ms blocked and 0.013 ms active with
+matching 10-MHz QPC clocks and zero lost events/buffers; all 1,033 frozen inputs
+remain equal. Raw checks and commands live in the existing
+[CPU evidence directory](../../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/acceptance13/cpu/).
+This qualifies accounting; workload CPU budgets still require the new collection.
 
 The [performance report](../../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/acceptance13/performance-report.md),
 [per-run decision table](../../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/acceptance13/decision-table.json)

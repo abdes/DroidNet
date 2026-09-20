@@ -12,6 +12,7 @@
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Vortex/Shadows/ShadowService.h>
 #include <Oxygen/Vortex/Test/Exposure/Benchmarks/ExposureBaselineScenario.h>
+#include <Oxygen/Vortex/Test/Exposure/Benchmarks/ExposureCpuTiming.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestTags.h>
 #include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
 
@@ -150,6 +151,11 @@ auto ExposureBaselineScenario::RenderFrame(const bool start_recording,
   const auto frame_sequence = frame::SequenceNumber {
     ++fixture_.sequence,
   };
+  std::optional<profiling::ScopedCpuScopeObserver> cpu_observer;
+  if (recording_cpu_owners) {
+    cpu_timing->BeginFrame(fixture_.sequence);
+    cpu_observer.emplace(*cpu_timing);
+  }
   fixture_.Backend().BeginFrame(frame_sequence, slot);
   const auto after_frame_start = Clock::now();
   fixture_.frame.SetFrameSlot(slot, engine::internal::EngineTagFactory::Get());
@@ -303,6 +309,10 @@ auto ExposureBaselineScenario::MeasureFrames() -> void
   samples.clear();
   samples.reserve(sample_count);
   require_ready = true;
+  if (measure_cpu_owners) {
+    cpu_timing = std::make_unique<ExposureCpuTiming>(sample_count);
+    recording_cpu_owners = true;
+  }
   const auto sample_start = Clock::now();
   auto previous_end = sample_start;
   for (unsigned index = 0U; index < sample_count; ++index) {
@@ -314,6 +324,7 @@ auto ExposureBaselineScenario::MeasureFrames() -> void
   }
   sample_seconds
     = std::chrono::duration<double>(Clock::now() - sample_start).count();
+  recording_cpu_owners = false;
   after = Snapshot();
 }
 

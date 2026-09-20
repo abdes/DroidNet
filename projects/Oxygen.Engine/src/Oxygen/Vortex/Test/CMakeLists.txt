@@ -499,6 +499,8 @@ if(WIN32)
       "Exposure/Benchmarks/ExposureBaselineResults.cpp"
       "Exposure/Benchmarks/ExposureBaselineScenario.h"
       "Exposure/Benchmarks/ExposureBaselineSetup.cpp"
+      "Exposure/Benchmarks/ExposureCpuTiming.cpp"
+      "Exposure/Benchmarks/ExposureCpuTiming.h"
       "Exposure/Benchmarks/ExposureBenchmarkFixture.cpp"
       "Exposure/Benchmarks/ExposureBenchmarkFixture.h"
       "Exposure/Benchmarks/ExposureKernel_bench.cpp"

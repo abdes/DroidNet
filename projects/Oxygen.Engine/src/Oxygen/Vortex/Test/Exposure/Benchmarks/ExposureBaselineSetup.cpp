@@ -16,6 +16,7 @@
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Vortex/Test/Exposure/Benchmarks/ExposureBaselineScenario.h>
+#include <Oxygen/Vortex/Test/Exposure/Benchmarks/ExposureCpuTiming.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestTags.h>
 #include <Oxygen/Vortex/Test/Fixtures/ExposureBenchmarkScene.h>
 
@@ -97,6 +98,9 @@ auto ExposureBaselineScenario::ReadOptions() -> void
     = option("OXYGEN_EXPOSURE_BASELINE_ACCEPTANCE", "0");
   ASSERT_TRUE(acceptance_text == "0" || acceptance_text == "1");
   acceptance = acceptance_text == "1" && !warmup_only;
+  const auto cpu_text = option("OXYGEN_EXPOSURE_BASELINE_CPU", "0");
+  ASSERT_TRUE(cpu_text == "0" || cpu_text == "1");
+  measure_cpu_owners = cpu_text == "1" && !warmup_only;
   ASSERT_FALSE(acceptance && precision != "production");
   ASSERT_FALSE(automatic_sample_count && !acceptance);
   const auto measured_frames = warmup_only || automatic_sample_count

@@ -11,6 +11,7 @@
 
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Vortex/Test/Exposure/Benchmarks/ExposureBaselineScenario.h>
+#include <Oxygen/Vortex/Test/Exposure/Benchmarks/ExposureCpuTiming.h>
 
 namespace oxygen::vortex::testing::exposure {
 
@@ -266,6 +267,9 @@ auto ExposureBaselineScenario::WriteAndValidateResults() -> void
     { "adapter_luid_low", adapter.LowPart, },
     { "adapter_luid_high", adapter.HighPart, },
     { "cpu_samples", cpu_path.filename().string(), },
+    { "cpu_owner_timing", cpu_timing
+        ? cpu_timing->Save(directory / (stem + ".cpu-owners.csv"))
+        : nlohmann::json(nullptr) },
     { "gpu_samples", gpu_path.filename().string(), },
     { "gpu_complete", gpu.at("complete"), },
     { "gpu_timing_valid", gpu.at("timing_valid"), },

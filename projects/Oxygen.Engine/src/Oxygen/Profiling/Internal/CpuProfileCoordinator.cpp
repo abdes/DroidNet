@@ -7,7 +7,10 @@
 #include <Oxygen/Profiling/Internal/CpuProfileCoordinator.h>
 
 #include <cstring>
+#include <exception>
+#include <stdexcept>
 
+#include <Oxygen/Profiling/CpuScopeObserver.h>
 #include <Oxygen/Profiling/ProfileScope.h>
 #include <Oxygen/Tracy/Cpu.h>
 
@@ -15,49 +18,80 @@
 #  include <pix3.h>
 #endif
 
-namespace oxygen::profiling::internal {
+namespace oxygen::profiling {
 namespace {
   constexpr uint8_t kCpuScopeFlagPixActive = 1U << 0U;
   constexpr uint8_t kCpuScopeFlagTracyActive = 1U << 1U;
+  constexpr uint8_t kCpuScopeFlagObserverActive = 1U << 2U;
+  thread_local CpuScopeObserver* cpu_observer = nullptr;
+  thread_local std::size_t observed_scope_depth = 0U;
 } // namespace
 
-auto BeginCpuScope(const CpuProfileScopeDesc& desc,
-  const std::source_location callsite) -> CpuScopeState
+ScopedCpuScopeObserver::ScopedCpuScopeObserver(CpuScopeObserver& observer)
+  : observer_(observer)
 {
-  CpuScopeState state {};
+  if (cpu_observer != nullptr) {
+    throw std::logic_error("A CPU scope observer is already registered");
+  }
+  cpu_observer = &observer_;
+}
+
+ScopedCpuScopeObserver::~ScopedCpuScopeObserver()
+{
+  if (cpu_observer != &observer_ || observed_scope_depth != 0U) {
+    std::terminate();
+  }
+  cpu_observer = nullptr;
+}
+
+namespace internal {
+  auto BeginCpuScope(const CpuProfileScopeDesc& desc,
+    const std::source_location callsite) -> CpuScopeState
+  {
+    CpuScopeState state {};
+    if (cpu_observer != nullptr && cpu_observer->OnScopeBegin(desc)) {
+      ++observed_scope_depth;
+      state.flags |= kCpuScopeFlagObserverActive;
+    }
 
 #if defined(OXYGEN_WITH_TRACY)
-  const auto effective_color = desc.color.IsSpecified()
-    ? desc.color
-    : DefaultProfileColor(desc.category);
-  if (oxygen::tracy::cpu::BeginZone(std::span { state.tracy_zone_state },
-        callsite, desc.label, effective_color.Rgb24())) {
-    state.flags |= kCpuScopeFlagTracyActive;
-  }
+    const auto effective_color = desc.color.IsSpecified()
+      ? desc.color
+      : DefaultProfileColor(desc.category);
+    if (oxygen::tracy::cpu::BeginZone(std::span { state.tracy_zone_state },
+          callsite, desc.label, effective_color.Rgb24())) {
+      state.flags |= kCpuScopeFlagTracyActive;
+    }
 #endif
 
 #if defined(USE_PIX) && __has_include(<pix3.h>)
-  const auto formatted_name = FormatScopeName(desc);
-  PIXBeginEvent(0U, "%s", formatted_name.c_str());
-  state.flags |= kCpuScopeFlagPixActive;
+    const auto formatted_name = FormatScopeName(desc);
+    PIXBeginEvent(0U, "%s", formatted_name.c_str());
+    state.flags |= kCpuScopeFlagPixActive;
 #endif
 
-  return state;
-}
-
-auto EndCpuScope(const CpuScopeState& state) -> void
-{
-#if defined(USE_PIX) && __has_include(<pix3.h>)
-  if ((state.flags & kCpuScopeFlagPixActive) != 0U) {
-    PIXEndEvent();
+    return state;
   }
+
+  auto EndCpuScope(const CpuScopeState& state) -> void
+  {
+#if defined(USE_PIX) && __has_include(<pix3.h>)
+    if ((state.flags & kCpuScopeFlagPixActive) != 0U) {
+      PIXEndEvent();
+    }
 #endif
 
 #if defined(OXYGEN_WITH_TRACY)
-  if ((state.flags & kCpuScopeFlagTracyActive) != 0U) {
-    oxygen::tracy::cpu::EndZone(std::span { state.tracy_zone_state });
-  }
+    if ((state.flags & kCpuScopeFlagTracyActive) != 0U) {
+      oxygen::tracy::cpu::EndZone(std::span { state.tracy_zone_state });
+    }
 #endif
-}
 
-} // namespace oxygen::profiling::internal
+    if ((state.flags & kCpuScopeFlagObserverActive) != 0U) {
+      cpu_observer->OnScopeEnd();
+      --observed_scope_depth;
+    }
+  }
+
+} // namespace internal
+} // namespace oxygen::profiling
