@@ -27,6 +27,94 @@ namespace oxygen::vortex::testing::exposure {
 using graphics::ResourceStates;
 
 NOLINT_TEST_F(
+  ExposureLightingGpuTest, ProductionPrecisionRemainsFp32WithoutAdmission)
+{
+  verify_manual_p = false;
+  probe->prepare = [](RenderContext&) -> void { };
+  renderer_->GetDiagnosticsService().SetHdrPrecisionControl(
+    HdrPrecisionControl::kProduction);
+  SetSurface(data::MaterialDomain::kOpaque, .25F);
+  ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0, 8));
+  auto& backend = FailureBackend();
+  backend.recorder_names.clear();
+  ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0, 4));
+  const auto domain = Read<FrameExposureData>(
+    *probe->exposure->buffer, ResourceStates::kShaderResource);
+  EXPECT_EQ(domain.flags, 17U);
+  EXPECT_EQ(domain.pre_exposure, 1.0F);
+  EXPECT_EQ(probe->color->GetDescriptor().format, Format::kRGBA32Float);
+  EXPECT_EQ(probe->exposure->qualified_candidate, nullptr);
+  EXPECT_EQ(probe->exposure->suitability_buffer, nullptr);
+  EXPECT_EQ(probe->exposure->conversion_buffer, nullptr);
+  EXPECT_TRUE(
+    std::ranges::none_of(backend.recorder_names, [](const auto& name) -> bool {
+      return name.contains("Suitability") || name.contains("Gradient")
+        || name == "Exposure status readback";
+    }));
+}
+
+NOLINT_TEST_F(ExposureLightingGpuTest,
+  PrecisionControlChangeRejectsOldAcknowledgementAndPreservesSeed)
+{
+  using Probe = vortex::testing::RendererPublicationProbe;
+  verify_manual_p = false;
+  probe->prepare = [](RenderContext&) -> void { };
+  settings.mode = engine::ExposureMode::kAuto;
+  frame_delta_seconds = 0.0F;
+  SetSurface(data::MaterialDomain::kOpaque, .25F);
+  ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0, 5));
+  auto& service = OwnedExposureService();
+  auto& diagnostics = renderer_->GetDiagnosticsService();
+  for (const bool from_production : {
+         true,
+         false,
+       }) {
+    const auto from = from_production ? HdrPrecisionControl::kProduction
+                                      : HdrPrecisionControl::kQualified;
+    const auto to = from_production ? HdrPrecisionControl::kQualified
+                                    : HdrPrecisionControl::kProduction;
+    diagnostics.SetHdrPrecisionControl(from);
+    surface_view_id = from_production ? 9500U : 9501U;
+    const auto handle = CompositionView::ViewStateHandle {
+      surface_view_id,
+    };
+    const auto seed = renderer_->QueueExposureTransition(
+      handle, ExposureTransitionPolicy::kSeedFromEv100, 3.0F);
+    ASSERT_TRUE(seed.has_value());
+    Probe::ExposureStatusJobs held;
+    bool hold = true;
+    probe->inspect = [&](const RenderContext&, const SceneTextureExtractRef&,
+                       unsigned) -> void {
+      if (hold) {
+        held = Probe::TakeExposureStatuses(service, handle);
+      }
+    };
+    ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0, 1));
+    ASSERT_EQ(held.size(), 1U);
+    EXPECT_EQ(InspectRequiredTransition(handle).phase,
+      ExposureTransitionPhase::kQueued);
+    diagnostics.SetHdrPrecisionControl(to);
+    Probe::RestoreExposureStatuses(service, handle, std::move(held));
+    ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0, 1));
+    EXPECT_EQ(InspectRequiredTransition(handle).phase,
+      ExposureTransitionPhase::kQueued);
+    const auto state = Read<ExposureStateData>(
+      *probe->exposure->current_state->buffer, ResourceStates::kShaderResource);
+    EXPECT_FLOAT_EQ(state.displayed_scale, .125F);
+    EXPECT_EQ(state.applied_generation.at(0), seed->generation);
+    ASSERT_EQ(held.size(), 1U);
+    hold = false;
+    Probe::RestoreExposureStatuses(service, handle, std::move(held));
+    ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0, 1));
+    EXPECT_EQ(InspectRequiredTransition(handle).phase,
+      ExposureTransitionPhase::kApplied);
+    EXPECT_EQ(
+      InspectRequiredTransition(handle).applied_generation, seed->generation);
+    probe->inspect = {};
+  }
+}
+
+NOLINT_TEST_F(
   ExposureLightingGpuTest, Fp32OnlySwitchPreservesGainAndEventsWithoutAdmission)
 {
   verify_manual_p = false;
@@ -50,7 +138,7 @@ NOLINT_TEST_F(
     const auto handle = CompositionView::ViewStateHandle {
       surface_view_id,
     };
-    diagnostics.SetHdrPrecisionControl(HdrPrecisionControl::kProduction);
+    diagnostics.SetHdrPrecisionControl(HdrPrecisionControl::kQualified);
     const auto seed = renderer_->QueueExposureTransition(
       handle, ExposureTransitionPolicy::kSeedFromEv100, 3.0F);
     ASSERT_TRUE(seed.has_value());
@@ -113,7 +201,7 @@ NOLINT_TEST_F(
           || name == "Exposure status readback";
       }));
 
-    diagnostics.SetHdrPrecisionControl(HdrPrecisionControl::kProduction);
+    diagnostics.SetHdrPrecisionControl(HdrPrecisionControl::kQualified);
     ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0, 1));
     EXPECT_EQ(current.exposure->qualified_candidate, nullptr);
     EXPECT_EQ(current.texture->GetDescriptor().format, Format::kRGBA32Float);
@@ -282,7 +370,7 @@ NOLINT_TEST_F(ExposureLightingGpuTest,
     EXPECT_EQ(error.transmittance_relative, 0.0F);
     EXPECT_EQ(error.transmittance_absolute, 0.0F);
   }
-  diagnostics.SetHdrPrecisionControl(HdrPrecisionControl::kProduction);
+  diagnostics.SetHdrPrecisionControl(HdrPrecisionControl::kQualified);
   ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0, 1));
   EXPECT_TRUE(history_reset);
   diagnostics.SetHdrPrecisionControl(HdrPrecisionControl::kFp32Only);

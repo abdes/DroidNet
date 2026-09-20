@@ -7,6 +7,7 @@
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsService.h>
 
 #include <exception>
+#include <limits>
 #include <string>
 #include <utility>
 
@@ -108,9 +109,8 @@ auto DiagnosticsService::FindShaderDebugMode(
 
 auto DiagnosticsService::SetHdrFp32ReferenceEnabled(const bool enabled) -> void
 {
-  std::scoped_lock lock(mutex_);
-  hdr_precision_control_ = enabled ? HdrPrecisionControl::kFp32Reference
-                                   : HdrPrecisionControl::kProduction;
+  SetHdrPrecisionControl(enabled ? HdrPrecisionControl::kFp32Reference
+                                 : HdrPrecisionControl::kProduction);
 }
 
 auto DiagnosticsService::IsHdrFp32ReferenceEnabled() const -> bool
@@ -123,6 +123,11 @@ auto DiagnosticsService::SetHdrPrecisionControl(
   const HdrPrecisionControl control) -> void
 {
   std::scoped_lock lock(mutex_);
+  if (hdr_precision_control_ != control) {
+    CHECK_NE_F(hdr_precision_control_revision_,
+      (std::numeric_limits<std::uint64_t>::max)());
+    ++hdr_precision_control_revision_;
+  }
   hdr_precision_control_ = control;
 }
 
@@ -130,6 +135,12 @@ auto DiagnosticsService::GetHdrPrecisionControl() const -> HdrPrecisionControl
 {
   std::scoped_lock lock(mutex_);
   return hdr_precision_control_;
+}
+
+auto DiagnosticsService::GetHdrPrecisionControlRevision() const -> std::uint64_t
+{
+  std::scoped_lock lock(mutex_);
+  return hdr_precision_control_revision_;
 }
 
 auto DiagnosticsService::AttachGpuTimelineCollector(

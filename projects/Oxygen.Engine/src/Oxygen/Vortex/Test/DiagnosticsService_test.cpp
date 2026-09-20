@@ -41,6 +41,25 @@ using oxygen::vortex::testing::FakeGraphics;
 constexpr auto kDiagnosticsCapability
   = RendererCapabilityFamily::kDiagnosticsAndProfiling;
 
+TEST(DiagnosticsServiceTest, ProductionPrecisionDefaultAndControlRevisions)
+{
+  using oxygen::vortex::HdrPrecisionControl;
+  DiagnosticsService service(kDiagnosticsCapability);
+  EXPECT_EQ(service.GetHdrPrecisionControl(), HdrPrecisionControl::kProduction);
+  EXPECT_EQ(service.GetHdrPrecisionControlRevision(), 0U);
+  service.SetHdrPrecisionControl(HdrPrecisionControl::kProduction);
+  EXPECT_EQ(service.GetHdrPrecisionControlRevision(), 0U);
+  service.SetHdrPrecisionControl(HdrPrecisionControl::kQualified);
+  EXPECT_EQ(service.GetHdrPrecisionControlRevision(), 1U);
+  service.SetHdrFp32ReferenceEnabled(true);
+  EXPECT_EQ(
+    service.GetHdrPrecisionControl(), HdrPrecisionControl::kFp32Reference);
+  EXPECT_EQ(service.GetHdrPrecisionControlRevision(), 2U);
+  service.SetHdrFp32ReferenceEnabled(false);
+  EXPECT_EQ(service.GetHdrPrecisionControl(), HdrPrecisionControl::kProduction);
+  EXPECT_EQ(service.GetHdrPrecisionControlRevision(), 3U);
+}
+
 auto MakeConfig(FakeGraphics& graphics) -> RendererConfig
 {
   auto config = RendererConfig {};

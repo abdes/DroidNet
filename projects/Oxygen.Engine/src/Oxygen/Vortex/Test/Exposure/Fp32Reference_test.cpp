@@ -375,7 +375,9 @@ NOLINT_TEST_F(
            false,
          }) {
       SCOPED_TRACE(::testing::Message() << "reference=" << reference);
-      diagnostics.SetHdrFp32ReferenceEnabled(reference);
+      diagnostics.SetHdrPrecisionControl(reference
+          ? HdrPrecisionControl::kFp32Reference
+          : HdrPrecisionControl::kQualified);
       EXPECT_EQ(diagnostics.IsHdrFp32ReferenceEnabled(), reference);
       ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0, 1));
       ASSERT_EQ(current_draws, 1U);
