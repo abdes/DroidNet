@@ -24,10 +24,10 @@ integration. Python owns the only CLI; shell launchers forward its arguments unc
 
 ## Python project and launchers
 
-The tool is a standard Python project in `tools/oxytidy`:
+The tool is a standard Python project in `tools/oxytools`:
 
 ```text
-tools/oxytidy/
+tools/oxytools/
   pyproject.toml       # metadata, dependencies, console entry point
   uv.lock             # optional reproducible dependency resolution for development
   src/oxytidy/        # application package and python -m entry point
@@ -62,7 +62,7 @@ leading dashes are preserved. Quote shell metacharacters as usual.
 For installation without the wrapper, use your chosen interpreter directly:
 
 ```powershell
-python -m pip install -e tools/oxytidy
+python -m pip install -e tools/oxytools
 python -m oxytidy src/Oxygen/Base --include-tests
 # The console command has the same CLI when its scripts directory is on PATH.
 oxytidy src/Oxygen/Base --include-tests
@@ -146,7 +146,7 @@ an implicit default.
 
 ## Ownership and coverage
 
-The shared [repository ownership policy](../README.md#repository-ownership-policy),
+The shared [repository ownership policy](../../README.md#repository-ownership-policy),
 `.oxytools.json`, owns the authored project roots (`src/Oxygen`, `Examples`) and
 vendored exclusions. Update it when adding embedded third-party code. Bundled
 sigslot, NamedType internals, loguru implementation, cgltf, stb, and ImGui backends
@@ -344,9 +344,9 @@ The entry point delegates to internal `oxytidy` modules for compilation, ownersh
 execution, analysis/cache, diagnostics, replacements, and orchestration.
 
 ```powershell
-python -m unittest discover -s projects/Oxygen.Engine/tools/oxytidy/tests -v
-uvx ruff check projects/Oxygen.Engine/tools/oxytidy
-uvx ruff format --check projects/Oxygen.Engine/tools/oxytidy
+python -m unittest discover -s projects/Oxygen.Engine/tools/oxytools/tests -v
+uvx ruff check projects/Oxygen.Engine/tools/oxytools
+uvx ruff format --check projects/Oxygen.Engine/tools/oxytools
 ```
 
 Integration tests discover LLVM on PATH or in the standard Windows installation.

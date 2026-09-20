@@ -33,7 +33,7 @@ if (-not $uv) {
     exit 2
 }
 
-$project = Join-Path $PSScriptRoot '../oxytidy'
+$project = Join-Path $PSScriptRoot '../oxytools'
 $PSNativeCommandArgumentPassing = 'Standard'
 $PSNativeCommandUseErrorActionPreference = $false
 # An explicit executable targets that interpreter, never a discovered .venv.

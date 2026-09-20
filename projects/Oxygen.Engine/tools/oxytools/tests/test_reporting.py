@@ -27,7 +27,7 @@ class ReportingTests(unittest.TestCase):
             "options": vars(parse_args(["src/Oxygen/Base", "--include-tests"])),
             "project_root": str(self.root),
             "project_root_selection": "explicit --project-root",
-            "tool_package": str(self.root / "tools/oxytidy/src/oxytidy"),
+            "tool_package": str(self.root / "tools/oxytools/src/oxytidy"),
             "python_prefix": sys.prefix,
             "python_interpreter": sys.executable,
             "working_directory": str(self.root),

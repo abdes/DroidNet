@@ -3,9 +3,9 @@ requires = ["setuptools>=77,<83"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "oxygen-oxytidy"
+name = "oxygen-tools"
 version = "0.1.0"
-description = "Scoped clang-tidy analysis and coordinated fixes for Oxygen Engine"
+description = "Scoped C++ analysis for Oxygen Engine"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = ["PyYAML>=6.0.2,<7", "jsonschema>=4.23,<5", "rich>=13.9,<15", "rich-argparse>=1.6,<2"]

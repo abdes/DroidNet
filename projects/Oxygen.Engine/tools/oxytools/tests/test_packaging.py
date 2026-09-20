@@ -11,8 +11,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from oxytidy.common import ToolError
 from oxytidy.workflow import engine_root
+from oxytools.common import ToolError
 
 PROJECT = Path(__file__).resolve().parents[1]
 ENGINE = PROJECT.parent.parent

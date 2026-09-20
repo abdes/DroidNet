@@ -2,36 +2,19 @@
 
 from __future__ import annotations
 
-import fnmatch
-import json
 import re
 from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
 
-from .common import ToolError, absolute, display, path_key, validate, within
-from .compilation import HEADERS, SOURCES
+from oxytools.common import ToolError, absolute, path_key, within
+from oxytools.ownership import Ownership
 
-OWNERSHIP_SCHEMA = {
-    "type": "object",
-    "additionalProperties": False,
-    "required": ["project_roots", "exclude"],
-    "properties": {
-        "project_roots": {
-            "type": "array",
-            "minItems": 1,
-            "items": {"type": "string", "minLength": 1},
-        },
-        "exclude": {"type": "array", "items": {"type": "string"}},
-    },
-}
+from .compilation import HEADERS, SOURCES
 
 
 @dataclass
-class Scope:
-    root: Path
-    project_roots: list[Path]
-    excludes: list[str]
+class Scope(Ownership):
     roots: list[Path]
     include_tests: bool
 
@@ -45,27 +28,14 @@ class Scope:
         *,
         ownership_file: Path | None = None,
     ) -> Scope:
-        manifest = (
-            ownership_file if ownership_file is not None else root / ".oxytools.json"
-        )
-        if not manifest.is_file():
-            raise ToolError(
-                f"Missing project ownership configuration: {manifest}\n"
-                "Select the intended checkout with --project-root PATH or provide "
-                "an existing policy explicitly with --ownership-file PATH. "
-                "Policy paths are resolved against the target project root."
-            )
-        data = json.loads(manifest.read_text(encoding="utf-8-sig"))
-        validate(data, OWNERSHIP_SCHEMA, str(manifest))
-        projects = [absolute(path, root) for path in data["project_roots"]]
-        if any(not within(path, root) for path in projects):
-            raise ToolError("Project roots must remain inside the engine directory")
+        policy = Ownership.load(root, ownership_file)
+        projects = policy.project_roots
         roots = (
             [path for path in projects if path.is_dir()]
             if all_project
             else [absolute(path, root) for path in paths]
         )
-        scope = cls(root, projects, data["exclude"], roots, include_tests)
+        scope = cls(root, projects, policy.excludes, roots, include_tests)
         for path in roots:
             if not path.exists():
                 raise ToolError(f"Missing scope path: {path}")
@@ -82,13 +52,6 @@ class Scope:
                     f"Directory contains no configured project roots: {path}"
                 )
         return scope
-
-    def owned(self, path: Path) -> bool:
-        path = path.resolve()
-        if not any(within(path, project) for project in self.project_roots):
-            return False
-        name = display(path, self.root)
-        return not any(fnmatch.fnmatchcase(name, pattern) for pattern in self.excludes)
 
     def eligible(self, path: Path) -> bool:
         return self.owned(path) and (

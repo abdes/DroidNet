@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import sys
 
+from oxytools.common import ToolError
 from rich.console import Console
 
-from .common import ToolError
 from .reporting import Reporter
 from .workflow import main as run
 
