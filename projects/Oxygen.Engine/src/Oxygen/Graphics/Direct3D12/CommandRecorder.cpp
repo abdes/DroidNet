@@ -31,6 +31,7 @@
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
 #include <Oxygen/Graphics/Direct3D12/Texture.h>
 #include <Oxygen/Graphics/common/Framebuffer.h>
+#include <Oxygen/Profiling/CpuProfileScope.h>
 #include <Oxygen/Tracy/D3D12.h>
 
 #if __has_include(<pix3.h>)
@@ -576,6 +577,8 @@ auto CommandRecorder::SetPipelineState(GraphicsPipelineDesc desc) -> void
 
 auto CommandRecorder::SetPipelineState(ComputePipelineDesc desc) -> void
 {
+  oxygen::profiling::CpuProfileScope cpu_scope(
+    "D3D12.BindComputePipeline", oxygen::profiling::ProfileCategory::kGeneral);
   auto graphics = graphics_weak_.lock();
   DCHECK_F(graphics != nullptr, "Graphics backend is no longer valid");
 
