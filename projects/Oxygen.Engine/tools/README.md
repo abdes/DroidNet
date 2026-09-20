@@ -1,9 +1,18 @@
 # Oxygen developer tools
 
+## Commands and references
+
+- [CLI launchers](cli/README.md): build/run commands, analysis, formatting, and
+  the engine terminal profile.
+- [Shared Python tools](oxytools/README.md): installation and verification for
+  oxytidy and oxyformat.
+- [CMake presets](presets/README.md): preset files and generated dependencies.
+- [Codemod](codemod/README.md): rename tooling with patch output.
+
 ## Repository ownership policy
 
-The engine root's `.oxytools.json` defines first-party file ownership for developer
-tools. It contains two required fields:
+The engine root's `.oxytools.json` defines first-party file ownership for
+`oxytidy` and `oxyformat`. It contains two required fields:
 
 - `project_roots`: nonempty array of directory paths, resolved against the target
   engine root. Resolved paths must remain inside that root.
