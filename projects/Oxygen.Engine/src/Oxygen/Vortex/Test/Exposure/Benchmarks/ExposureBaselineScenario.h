@@ -17,6 +17,8 @@
 #include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
 namespace oxygen::vortex::testing::exposure {
 
+class ExposureCpuTiming;
+
 // Owns one benchmark execution; timed rendering is separate from evidence I/O.
 class ExposureBaselineScenario final {
 public:
@@ -112,6 +114,9 @@ private:
   bool warmup_only {};
   bool automatic_sample_count {};
   bool acceptance {};
+  bool measure_cpu_owners {};
+  bool recording_cpu_owners {};
+  std::unique_ptr<ExposureCpuTiming> cpu_timing;
   bool event_cycle {};
   bool capture_event {};
   bool temporal {};

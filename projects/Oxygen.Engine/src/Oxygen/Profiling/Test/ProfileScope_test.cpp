@@ -5,12 +5,67 @@
 //===----------------------------------------------------------------------===//
 
 #include <gtest/gtest.h>
+#include <stdexcept>
+#include <thread>
 
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Profiling/CpuProfileScope.h>
+#include <Oxygen/Profiling/CpuScopeObserver.h>
 #include <Oxygen/Profiling/ProfileScope.h>
 
 namespace oxygen::profiling {
 namespace {
+
+  class RecordingObserver final : public CpuScopeObserver {
+  public:
+    std::vector<std::string> events;
+    auto OnScopeBegin(const CpuProfileScopeDesc& desc) noexcept -> bool override
+    {
+      if (desc.label == "ignored") {
+        return false;
+      }
+      events.push_back(desc.label);
+      return true;
+    }
+    auto OnScopeEnd() noexcept -> void override { events.emplace_back("end"); }
+  };
+
+  TEST(ProfileScope, ObserverPairsSelectedNestedScopesAndDetaches)
+  {
+    RecordingObserver observer;
+    {
+      ScopedCpuScopeObserver registration(observer);
+      CpuProfileScope outer("outer");
+      CpuProfileScope ignored("ignored");
+      CpuProfileScope inner("inner");
+    }
+    CpuProfileScope detached("detached");
+    EXPECT_EQ(observer.events,
+      (std::vector<std::string> { "outer", "inner", "end", "end" }));
+  }
+
+  TEST(ProfileScope, ObserverRegistrationIsThreadLocal)
+  {
+    RecordingObserver observer;
+    ScopedCpuScopeObserver registration(observer);
+    std::thread worker([] { CpuProfileScope unrelated("other thread"); });
+    worker.join();
+    EXPECT_TRUE(observer.events.empty());
+  }
+
+  TEST(ProfileScope, ObserverRejectsNestedRegistrationWithoutLosingOwner)
+  {
+    RecordingObserver observer;
+    RecordingObserver other;
+    ScopedCpuScopeObserver registration(observer);
+    EXPECT_THROW(ScopedCpuScopeObserver nested(other), std::logic_error);
+    {
+      CpuProfileScope scope("still registered");
+    }
+    EXPECT_EQ(observer.events,
+      (std::vector<std::string> { "still registered", "end" }));
+    EXPECT_TRUE(other.events.empty());
+  }
 
   TEST(ProfileScope, VarsFormatsNumbersAndStrings)
   {

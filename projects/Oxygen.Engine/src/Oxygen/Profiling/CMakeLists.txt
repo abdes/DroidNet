@@ -33,19 +33,22 @@ if(WIN32)
 
   if(OXYGEN_WINPIXEVENTRUNTIME_DIR)
     list(
-      APPEND _oxygen_winpixeventruntime_hint_paths
+      APPEND
+      _oxygen_winpixeventruntime_hint_paths
       "${OXYGEN_WINPIXEVENTRUNTIME_DIR}"
     )
   endif()
 
   if(DEFINED OXYGEN_SOURCE_DIR)
     list(
-      APPEND _oxygen_winpixeventruntime_hint_paths
+      APPEND
+      _oxygen_winpixeventruntime_hint_paths
       "${OXYGEN_SOURCE_DIR}/packages/WinPixEventRuntime"
     )
   endif()
   list(
-    APPEND _oxygen_winpixeventruntime_hint_paths
+    APPEND
+    _oxygen_winpixeventruntime_hint_paths
     "${CMAKE_CURRENT_LIST_DIR}/../../../../packages/WinPixEventRuntime"
   )
 
@@ -147,6 +150,7 @@ set(
   OXYGEN_PROFILING_CPU_HEADERS
   "api_export.h"
   "CpuProfileScope.h"
+  "CpuScopeObserver.h"
   "Internal/CpuProfileCoordinator.h"
   "Internal/ScopeNameFormatter.h"
   "ProfileScope.h"
@@ -167,20 +171,16 @@ target_sources(
     ${OXYGEN_PROFILING_CPU_HEADERS}
   PUBLIC
     FILE_SET HEADERS
-      BASE_DIRS
-        "${OXYGEN_SOURCE_DIR}"
-      FILES
-        ${OXYGEN_PROFILING_CPU_HEADERS}
+    BASE_DIRS "${OXYGEN_SOURCE_DIR}"
+    FILES ${OXYGEN_PROFILING_CPU_HEADERS}
 )
 
 target_sources(
   ${META_MODULE_TARGET}-gpu
   INTERFACE
     FILE_SET HEADERS
-      BASE_DIRS
-        "${OXYGEN_SOURCE_DIR}"
-      FILES
-        ${OXYGEN_PROFILING_GPU_HEADERS}
+    BASE_DIRS "${OXYGEN_SOURCE_DIR}"
+    FILES ${OXYGEN_PROFILING_GPU_HEADERS}
 )
 
 target_compile_features(${META_MODULE_TARGET}-cpu PUBLIC cxx_std_23)

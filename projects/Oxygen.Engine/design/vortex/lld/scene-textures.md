@@ -798,6 +798,16 @@ format changes and frame-slot reuse cannot replace those inputs. After submissio
 the existing GPU-frame reclaimer protects resources until the consumer fence
 retires, even when the final extraction owner has been released.
 
+For EX051-13 GPU attribution, the unconditional FP32 color snapshot and depth
+snapshot are ordinary renderer output handoffs: `ResolveSceneColor` creates them
+even without a prepared exposure. They remain separately reported under
+`Vortex.ResolveSceneColor`. Exposure-specific checked narrowing is instead timed
+by `Vortex.PostProcess.Exposure.ConvertSceneColor`; it does not execute in the
+approved FP32 production mode. Status readback copies are timed under
+`Vortex.PostProcess.Exposure.StatusReadback` and included in the exposure union.
+The final source/scope audit in the PostProcess owner establishes this boundary
+without changing a budget or rerunning the completed GPU matrix.
+
 `ResolvedSceneDepth` and `PrevSceneDepth` are two read-only handoffs of the same
 immutable stage-21 snapshot. Stage 23 copies the complete extraction reference,
 including its retained ownership, instead of allocating and copying another
