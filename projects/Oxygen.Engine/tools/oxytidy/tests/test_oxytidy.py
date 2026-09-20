@@ -37,7 +37,7 @@ class Fixture(unittest.TestCase):
         self.root = Path(self.temporary.name)
         self.addCleanup(self.temporary.cleanup)
         self.write(
-            ".oxytidy.json",
+            ".oxytools.json",
             json.dumps({"project_roots": ["src"], "exclude": ["src/vendor/**"]}),
         )
         self.write(".clangd", "CompileFlags:\n  CompilationDatabase: .\n")
@@ -91,11 +91,11 @@ class SetupReportingTests(Fixture):
         ):
             code = main(["--project-root", str(target), "src"], root=self.root)
         self.assertEqual(code, 2)
-        self.assertIn("@project/.oxytidy.json", output.getvalue())
+        self.assertIn("@project/.oxytools.json", output.getvalue())
         self.assertIn("tool/run-location fallback", output.getvalue())
-        self.assertIn(".oxytidy.json", output.getvalue())
+        self.assertIn(".oxytools.json", output.getvalue())
         self.assertIn("@project/.clangd", output.getvalue())
-        self.assertFalse((target / ".oxytidy.json").exists())
+        self.assertFalse((target / ".oxytools.json").exists())
 
     def test_ownership_precedence_does_not_hide_invalid_explicit_or_target_policy(self):
         missing_explicit = self.root / "missing.json"
@@ -104,10 +104,10 @@ class SetupReportingTests(Fixture):
                 select_ownership_file(self.root, str(missing_explicit)),
                 (missing_explicit, "explicit --ownership-file"),
             )
-            (self.root / ".oxytidy.json").write_text("not JSON", encoding="utf-8")
+            (self.root / ".oxytools.json").write_text("not JSON", encoding="utf-8")
             self.assertEqual(
                 select_ownership_file(self.root, None),
-                (self.root / ".oxytidy.json", "target checkout policy"),
+                (self.root / ".oxytools.json", "target checkout policy"),
             )
         fallback.assert_not_called()
 
@@ -117,7 +117,7 @@ class SetupReportingTests(Fixture):
             "oxytidy.workflow.engine_root", side_effect=ToolError("unavailable")
         ):
             path, reason = select_ownership_file(target, None)
-        self.assertEqual(path, target / ".oxytidy.json")
+        self.assertEqual(path, target / ".oxytools.json")
         self.assertIn("no tool/run-location policy", reason)
         self.assertFalse(target.exists())
 
@@ -770,9 +770,9 @@ class LLVMTests(Fixture):
     def test_explicit_ownership_policy_applies_to_target_root(self):
         self.source_pair()
         policy = self.write(
-            "policy/ownership.json", (self.root / ".oxytidy.json").read_text()
+            "policy/ownership.json", (self.root / ".oxytools.json").read_text()
         )
-        (self.root / ".oxytidy.json").unlink()
+        (self.root / ".oxytools.json").unlink()
         code, report = self.invoke(
             "--project-root",
             str(self.root),
@@ -784,7 +784,7 @@ class LLVMTests(Fixture):
         self.assertEqual(code, 0, report)
         self.assertEqual(report["ownership_file"], str(policy))
         self.assertEqual(report["counts"]["unique_findings"], 1)
-        self.assertFalse((self.root / ".oxytidy.json").exists())
+        self.assertFalse((self.root / ".oxytools.json").exists())
 
     def test_project_root_does_not_remap_foreign_database_entries(self):
         self.source_pair()
@@ -803,9 +803,9 @@ class LLVMTests(Fixture):
         self.source_pair()
         tool_root = self.root / "tool-checkout"
         self.write(
-            "tool-checkout/.oxytidy.json", (self.root / ".oxytidy.json").read_text()
+            "tool-checkout/.oxytools.json", (self.root / ".oxytools.json").read_text()
         )
-        (self.root / ".oxytidy.json").unlink()
+        (self.root / ".oxytools.json").unlink()
         with patch("oxytidy.workflow.engine_root", return_value=tool_root):
             code, report = self.invoke("--project-root", str(self.root), "src/a.h")
         self.assertEqual(code, 0, report)
@@ -814,10 +814,10 @@ class LLVMTests(Fixture):
         self.assertEqual(
             report["compilation_database"], str(self.root / "compile_commands.json")
         )
-        self.assertEqual(report["ownership_file"], str(tool_root / ".oxytidy.json"))
+        self.assertEqual(report["ownership_file"], str(tool_root / ".oxytools.json"))
         self.assertIn("fallback", report["ownership_selection"])
         self.assertIn("fallback", self.last_output)
-        self.assertFalse((self.root / ".oxytidy.json").exists())
+        self.assertFalse((self.root / ".oxytools.json").exists())
 
     def test_header_only_warning_and_fix_verification(self):
         self.source_pair()

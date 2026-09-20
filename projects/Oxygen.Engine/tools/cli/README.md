@@ -168,8 +168,8 @@ forwards arguments unchanged. `--fix` applies validated fixes and verifies them;
 
 See [the complete oxytidy reference](../oxytidy/README.md).
 
-`--project-root PATH` selects another engine checkout. Its ownership policy takes
-precedence over the tool checkout's fallback policy; `--ownership-file PATH`
+`--project-root PATH` selects another engine checkout. Its shared `.oxytools.json`
+ownership policy takes precedence over the tool checkout's fallback policy; `--ownership-file PATH`
 explicitly overrides both. The chosen paths and reasons are printed. Build
 configuration and compilation database source paths are never substituted.
 

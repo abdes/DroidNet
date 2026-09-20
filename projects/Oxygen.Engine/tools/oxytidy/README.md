@@ -104,8 +104,8 @@ actual files, not worktree files against a different checkout's database.
 Ownership policy selection follows this order:
 
 1. Explicit `--ownership-file PATH` (relative to the caller's directory).
-2. `<project-root>/.oxytidy.json`, if present.
-3. The tool checkout's `.oxytidy.json`, using normal tool/run-location discovery.
+2. `<project-root>/.oxytools.json`, if present.
+3. The tool checkout's `.oxytools.json`, using normal tool/run-location discovery.
 
 The third choice supports older target checkouts that do not yet contain the
 policy. The fallback path and the missing target policy are printed explicitly.
@@ -146,7 +146,8 @@ an implicit default.
 
 ## Ownership and coverage
 
-`.oxytidy.json` owns the authored project roots (`src/Oxygen`, `Examples`) and
+The shared [repository ownership policy](../README.md#repository-ownership-policy),
+`.oxytools.json`, owns the authored project roots (`src/Oxygen`, `Examples`) and
 vendored exclusions. Update it when adding embedded third-party code. Bundled
 sigslot, NamedType internals, loguru implementation, cgltf, stb, and ImGui backends
 are excluded, as are conventional vendor/external directories.

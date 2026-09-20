@@ -46,7 +46,7 @@ class Scope:
         ownership_file: Path | None = None,
     ) -> Scope:
         manifest = (
-            ownership_file if ownership_file is not None else root / ".oxytidy.json"
+            ownership_file if ownership_file is not None else root / ".oxytools.json"
         )
         if not manifest.is_file():
             raise ToolError(

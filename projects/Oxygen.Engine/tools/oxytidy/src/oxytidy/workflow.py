@@ -76,7 +76,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help="Project ownership JSON, relative to the current directory; otherwise use the target checkout policy, then the tool/run-location policy",
     )
     scope_options.add_argument(
-        "--all", action="store_true", help="Analyze all project roots in .oxytidy.json"
+        "--all", action="store_true", help="Analyze all project roots in .oxytools.json"
     )
     build_options.add_argument(
         "--configuration",
@@ -261,11 +261,11 @@ def select_ownership_file(root: Path, explicit: str | None) -> tuple[Path, str]:
     """Only absent target policies fall back; invalid policies still fail."""
     if explicit:
         return Path(explicit).resolve(), "explicit --ownership-file"
-    target = root / ".oxytidy.json"
+    target = root / ".oxytools.json"
     if target.exists():
         return target, "target checkout policy"
     try:
-        fallback = engine_root() / ".oxytidy.json"
+        fallback = engine_root() / ".oxytools.json"
     except ToolError:
         return target, "target policy missing; no tool/run-location policy found"
     return fallback, f"tool/run-location fallback; target policy absent: {target}"
@@ -681,10 +681,10 @@ def engine_root() -> Path:
     """Prefer the editable source checkout, then a wheel user's working tree."""
     for start in (Path(__file__).resolve().parent, Path.cwd()):
         for candidate in (start, *start.parents):
-            if (candidate / ".oxytidy.json").is_file():
+            if (candidate / ".oxytools.json").is_file():
                 return candidate
     raise ToolError(
-        "Cannot find Oxygen Engine (.oxytidy.json). Install this checkout in editable mode or run from an engine checkout."
+        "Cannot find Oxygen Engine (.oxytools.json). Install this checkout in editable mode or run from an engine checkout."
     )
 
 
