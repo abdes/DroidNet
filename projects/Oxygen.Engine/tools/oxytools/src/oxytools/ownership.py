@@ -55,3 +55,16 @@ class Ownership:
             return False
         name = display(path, self.root)
         return not any(fnmatch.fnmatchcase(name, pattern) for pattern in self.excludes)
+
+    def may_contain_owned_files(self, directory: Path) -> bool:
+        """Prune only exclusions that cover a whole subtree, never file globs."""
+        directory = directory.resolve()
+        if any(root.is_relative_to(directory) for root in self.project_roots):
+            return True
+        if not any(directory.is_relative_to(root) for root in self.project_roots):
+            return False
+        name = display(directory, self.root) + "/"
+        return not any(
+            pattern.endswith("/**") and fnmatch.fnmatchcase(name, pattern)
+            for pattern in self.excludes
+        )

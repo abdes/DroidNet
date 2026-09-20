@@ -38,6 +38,12 @@ exit status, implementation details, and verification commands.
 Core functionality module providing CMake File API integration, preset
 management, and fuzzy matching capabilities.
 
+### `oxyformat.ps1` - Required C++ Formatting
+
+Checks files, recursive directories, or all owned C++ sources against the root
+`.clang-format`. `--fix` formats eagerly; tests are included. No build is needed.
+See [the oxyformat reference](../oxytools/docs/oxyformat.md).
+
 ## Key Features
 
 ### 🎯 **Intelligent Fuzzy Matching**
@@ -159,6 +165,17 @@ oxybuild.ps1 [-Target] <string> [-BuildDir <string>] [-Config <string>] [-DryRun
 - `Config` - Build configuration (default: "Debug")
 - `DryRun` - Show commands without executing them
 
+### `oxyformat.ps1`
+
+Supply C++ files, recursive directories, or `--all`. Checking is the default;
+`--fix` applies the required root `.clang-format` style. Tests are included and
+shared `.oxytools.json` exclusions apply. LLVM 22.x is required; no build is
+needed. The launcher uses the active venv or Python on PATH and never installs
+dependencies during a run. Install the shared `tools/oxytools` package once.
+
+See [the oxyformat reference](../oxytools/docs/oxyformat.md) for exit codes,
+failure handling and performance measurements.
+
 ### `oxytidy.ps1`
 
 Supply explicit source/header paths, directories, or `--all`. Use `--help` for
@@ -227,7 +244,8 @@ Unlike the build/run tools, oxytidy requires an existing configured build.
 
 ## Requirements
 
-- **PowerShell 7.0+** (cross-platform); oxytidy requires **7.3+** and **uv**
+- **PowerShell 7.0+** (cross-platform); oxytidy and oxyformat require **7.3+**.
+  Oxytidy's installation launcher also requires **uv**.
 - **CMake 3.15+** (for File API v1 support)
 - **Visual Studio 2022** (Windows builds)
 - **CMakePresets.json** (recommended for preset support)

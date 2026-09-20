@@ -4,8 +4,12 @@ import os
 import tempfile
 from pathlib import Path
 
+from .common import ToolError
 
-def atomic_write(path: Path, content: bytes, mode: int) -> None:
+
+def atomic_write(
+    path: Path, content: bytes, mode: int, *, expected: bytes | None = None
+) -> None:
     descriptor, name = tempfile.mkstemp(prefix=".oxytools-", dir=path.parent)
     temporary = Path(name)
     try:
@@ -14,6 +18,8 @@ def atomic_write(path: Path, content: bytes, mode: int) -> None:
             stream.flush()
             os.fsync(stream.fileno())
         temporary.chmod(mode)
+        if expected is not None and path.read_bytes() != expected:
+            raise ToolError(f"Contents changed before replacement: {path}")
         os.replace(temporary, path)
     finally:
         temporary.unlink(missing_ok=True)
