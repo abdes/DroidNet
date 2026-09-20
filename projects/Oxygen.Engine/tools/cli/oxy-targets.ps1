@@ -28,7 +28,7 @@
 .NOTES
     File Name   : oxy-targets.ps1
     Author      : Oxygen Engine Project
-    Requires    : PowerShell 7.0+, CMake 3.15+ (for File API v1), Conan 2.0+
+    Requires    : PowerShell 7.0+, CMake 3.29+, initialized Conan dependencies
     Dependencies: CMakePresets.json, CMake File API replies, Conan profiles
 
 .LINK
@@ -1118,12 +1118,12 @@ function Find-BuildPreset($buildRoot, $Config, [switch]$Sanitized) {
 
 .NOTES
     Workflow:
-    1. Check if out/build exists -> if not, run Conan install and configure
+    1. Require the selected build root; dependency installation is a separate step
     2. Check if CMake is configured -> if not, run CMake configure
     3. If configure ran, resolve target name using CMake File API
     4. Build the target using appropriate preset or direct cmake command
 
-    Always uses the standard out/build directory. Custom build directories are not supported.
+    Defaults to out/build-ninja, or out/build-asan-ninja with -Sanitized. -BuildTree overrides the default.
     Target resolution happens automatically when CMake configure runs during this function.
 #>
 function Invoke-BuildForTarget($Target, $Config, [switch]$DryRun, [switch]$Sanitized, [string]$BuildTree) {

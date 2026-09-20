@@ -1,363 +1,148 @@
-# Oxygen Engine CLI Tools
+# Oxygen Engine CLI tools
 
-Professional command-line utilities for building and running CMake targets in
-the Oxygen Engine project.
+Run these commands from the Oxygen.Engine directory. The build/run scripts use
+that working directory to resolve build trees and runtime dependencies.
 
-## Overview
+| Command     | Purpose                                  | Prerequisites                                                        |
+| ----------- | ---------------------------------------- | -------------------------------------------------------------------- |
+| `oxybuild`  | Build a CMake target                     | Initialized build tree, CMake 3.29+, configured compiler environment |
+| `oxyrun`    | Build and run an executable target       | Same as `oxybuild`; `-NoBuild` uses an existing executable           |
+| `oxytidy`   | Analyze selected C++ sources and headers | Python 3.10+, uv, compatible LLVM tools, compilation database        |
+| `oxyformat` | Check or format owned C++ files          | Python 3.10+, shared tools installed, clang-format 22.x              |
 
-The Oxygen Engine CLI tools provide an intuitive interface for developers to
-build and execute CMake targets with advanced features including intelligent
-fuzzy matching, preset integration, and robust artifact discovery. These tools
-streamline the development workflow by automatically handling CMake
-configuration, build processes, and target execution.
+The PowerShell launchers for oxytidy and oxyformat require PowerShell 7.3+.
+`oxy-targets.ps1` contains the shared CMake target-discovery and build helpers;
+it is not a separate command to run.
 
-## Tools
+## Load the commands
 
-### `oxyrun.ps1` - Build and Run Targets
-
-Builds and executes CMake targets with intelligent target name resolution and
-argument forwarding.
-
-### `oxybuild.ps1` - Build Targets
-
-Builds CMake targets without execution, optimized for CI/CD workflows and
-development automation.
-
-### `oxytidy.ps1` - Scoped Parallel clang-tidy
-
-Analyzes explicit project files, headers, directories, or all authored project
-roots. Supports compiler-based header coverage, structured diagnostics,
-coordinated autofix, and incremental analysis. Third-party and system headers
-are dependencies only. Report-only is the default.
-
-See [Oxygen clang-tidy workflow](../oxytools/docs/oxytidy.md) for setup, scope semantics, all options,
-exit status, implementation details, and verification commands.
-
-### `oxy-targets.ps1` - Shared Library
-
-Core functionality module providing CMake File API integration, preset
-management, and fuzzy matching capabilities.
-
-### `oxyformat.ps1` - Required C++ Formatting
-
-Checks files, recursive directories, or all owned C++ sources against the root
-`.clang-format`. `--fix` formats eagerly; tests are included. No build is needed.
-See [the oxyformat reference](../oxytools/docs/oxyformat.md).
-
-## Key Features
-
-### 🎯 **Intelligent Fuzzy Matching**
-
-Never type long target names again! The tools support sophisticated pattern
-matching with enhanced algorithms:
-
-- **Exact Match**: `oxygen-base` matches exactly
-- **Substring Match**: `base` → `oxygen-base`
-- **Component Match**: `gr-common` → `oxygen-graphics-common`
-- **Advanced Abbreviation Match**: `oxsct` → `Oxygen.Scene.LinkTest`
-  - Uses dynamic pattern lengths based on target complexity
-  - Matches characters anywhere in target names, not just word boundaries
-  - Intelligent character distribution across segments
-- **Interactive Selection**: `graphics` shows menu of all graphics-related targets
-
-#### Enhanced Pattern Generation
-
-The fuzzy matching now uses intelligent algorithms:
-
-- **Dynamic Pattern Length**: 2-6 characters based on number of segments for optimal specificity
-- **Smart Character Distribution**: Calculates optimal characters per segment (e.g., 4 chars ÷ 2 segments = 2 chars each)
-- **Sequential Matching**: Patterns like `lish` for `LightCulling_shader` (Li + sh)
-- **Non-Boundary Matching**: `oxsct` matches `Ox`ygen.`Sc`ene.Link`T`est anywhere in the name
-
-### 🔧 **CMake Integration**
-
-- Automatic detection and use of CMake presets (`windows-debug`, `linux-release`, etc.)
-- CMake File API integration for robust target discovery
-- Automatic configure preset execution when needed
-- Cross-platform build support (Windows, Linux, macOS)
-
-### 🚀 **Developer Experience**
-
-- Argument forwarding to target executables using `--`
-- Dry-run mode to preview commands without execution
-- Comprehensive logging with color-coded output
-- Graceful fallback when CMake replies are unavailable
-
-## Quick Start
-
-### Basic Usage
+Use the existing engine profile to define all four aliases:
 
 ```powershell
-# Build and run with fuzzy matching
-oxyrun asyncsim                    # Matches oxygen-asyncengine-simulator
-oxybuild gr-common                 # Matches oxygen-graphics-common
-
-# Interactive selection for multiple matches
-oxyrun base                        # Shows menu: oxygen-base, oxygen-base_dox, etc.
-
-# Pass arguments to the target executable
-oxyrun asyncsim -- --frames 10 --verbose
-
-# Build only (no execution)
-oxybuild oxygen-graphics-direct3d12
-
-# Skip build and run existing binary
-oxyrun asyncsim -NoBuild -- --help
+. ./.vscode/default-profile.ps1
+Get-Alias oxybuild, oxyrun, oxytidy, oxyformat
 ```
 
-### Advanced Usage
+The aliases invoke the scripts in `tools/cli` directly. Alternatively, use a
+script path such as `./tools/cli/oxybuild.ps1 oxygen-base`.
+
+The profile does not select a compiler toolchain or activate a Python environment.
+Start from your configured developer shell and activate your chosen environment
+when needed. See the [shared Python tools setup](../oxytools/README.md).
+
+## Build and run
+
+Initialize the build tree separately using `tools/generate-builds.ps1` or its
+batch launcher; use `./tools/generate-builds.ps1 -Help` for its arguments. The
+build/run commands do not install Conan dependencies automatically. They can
+configure an initialized tree when CMake File API replies are missing.
 
 ```powershell
-# Use specific configuration
-oxyrun asyncsim -Config Release
-
-# Custom build directory
-oxybuild my-target -BuildDir "custom/build"
-
-# Dry run to see what would be executed
-oxyrun gr-d3d -DryRun
-oxybuild base -DryRun
-
-# Run clang-tidy on Vortex using repo defaults
-oxytidy src/Oxygen/Vortex --summary-only
-
-# Inspect the exact translation units that would run
-oxytidy src/Oxygen/Vortex --list-files
-
-# Smoke-test a single translation unit
-oxytidy src/Oxygen/Vortex/ScenePrep/ScenePrepPipeline.cpp --max-files 1
-
-# Combine options
-oxyrun asyncsim -Config Release -NoBuild -- --benchmark
+oxybuild oxygen-base
+oxybuild oxygen-graphics-common -Config Release
+oxyrun oxygen-examples-async
+oxyrun oxygen-examples-async -NoBuild -- --help
+oxybuild oxygen-base -BuildTree build-tracy-ninja
+oxybuild oxygen-base -Sanitized
+oxybuild oxygen-base -DryRun
 ```
 
-## Command Reference
+Arguments after `--` are forwarded to the executable by `oxyrun`.
+`-DryRun` displays commands without building or running the target.
 
-### `oxyrun.ps1`
+| Parameter    | Behavior                                                |
+| ------------ | ------------------------------------------------------- |
+| `Target`     | Required target name or search pattern                  |
+| `-Config`    | Build configuration; defaults to `Debug`                |
+| `-BuildTree` | Build tree name or path; defaults to `out/build-ninja`  |
+| `-Sanitized` | Select the Debug-only ASan tree, `out/build-asan-ninja` |
+| `-NoBuild`   | Skip building; available only on `oxyrun`               |
+| `-DryRun`    | Show the commands instead of executing the build/run    |
 
-**Syntax:**
+Do not combine `-Sanitized` with `-Config`, even `-Config Debug`.
+`-BuildTree build-tracy-ninja` resolves beneath `out/`;
+`-BuildTree out/build-tracy-ninja` and absolute paths are also accepted.
+An explicit build tree takes precedence over the default tree selection.
+
+Target discovery uses CMake File API replies. Exact names are preferable in
+scripts. Interactive use also supports substring, component, and abbreviation
+matching; ambiguous matches produce a selection menu. Available matches depend
+on the configured targets, so short patterns are not stable aliases.
+
+The helpers select a matching build preset when available and otherwise invoke
+`cmake --build` directly. Executable discovery uses codemodel artifacts and
+fallback searches in the configured build/runtime directories. Build failures
+propagate a nonzero exit code.
+
+## Analyze and format
 
 ```powershell
-oxyrun.ps1 [-Target] <string> [-BuildDir <string>] [-Config <string>] [-NoBuild] [-DryRun] [-- <args...>]
+oxytidy src/Oxygen/Base --summary-only
+oxytidy src/Oxygen/Base --list-files
+oxytidy src/Oxygen/Base/Sha256.cpp --fail-on warning
+oxyformat src/Oxygen/Base
+oxyformat src/Oxygen/Base --fix
 ```
 
-**Parameters:**
+- [Oxytidy reference](../oxytools/docs/oxytidy.md): compilation contexts, header
+  coverage, configuration selection, coordinated fixes, and incremental reuse.
+- [Oxyformat reference](../oxytools/docs/oxyformat.md): required style, file
+  selection, independent formatting, and the checking pre-commit hook.
 
-- `Target` - Target name or pattern (supports fuzzy matching)
-- `BuildDir` - Build directory path (default: "out/build")
-- `Config` - Build configuration (default: "Debug")
-- `NoBuild` - Skip build step and run existing binary
-- `DryRun` - Show commands without executing them
-- `args...` - Arguments to forward to the target executable (after `--`)
+Both use `.oxytools.json` for ownership and exclusions. Oxytidy excludes tests
+unless `--include-tests` is supplied; oxyformat includes them by default.
+Oxytidy's launcher checks/installs the shared package into the selected Python.
+Oxyformat's launcher uses already installed dependencies and performs no package
+installation during a run. Formatting does not require a build tree.
 
-### `oxybuild.ps1`
+## VS Code terminals
 
-**Syntax:**
-
-```powershell
-oxybuild.ps1 [-Target] <string> [-BuildDir <string>] [-Config <string>] [-DryRun]
-```
-
-**Parameters:**
-
-- `Target` - Target name or pattern (supports fuzzy matching)
-- `BuildDir` - Build directory path (default: "out/build")
-- `Config` - Build configuration (default: "Debug")
-- `DryRun` - Show commands without executing them
-
-### `oxyformat.ps1`
-
-Supply C++ files, recursive directories, or `--all`. Checking is the default;
-`--fix` applies the required root `.clang-format` style. Tests are included and
-shared `.oxytools.json` exclusions apply. LLVM 22.x is required; no build is
-needed. The launcher uses the active venv or Python on PATH and never installs
-dependencies during a run. Install the shared `tools/oxytools` package once.
-
-See [the oxyformat reference](../oxytools/docs/oxyformat.md) for exit codes,
-failure handling, performance measurements, and the checking pre-commit hook.
-
-### `oxytidy.ps1`
-
-Supply explicit source/header paths, directories, or `--all`. Use `--help` for
-the Python CLI. The launcher installs into the active venv or default Python as needed and
-forwards arguments unchanged. `--fix` applies validated fixes and verifies them;
-`--export-fixes` writes a reviewable plan. Report-only is the default.
-
-See [the complete oxytidy reference](../oxytools/docs/oxytidy.md).
-
-`--project-root PATH` selects another engine checkout. Its shared `.oxytools.json`
-ownership policy takes precedence over the tool checkout's fallback policy; `--ownership-file PATH`
-explicitly overrides both. The chosen paths and reasons are printed. Build
-configuration and compilation database source paths are never substituted.
-
-## Fuzzy Matching Examples
-
-| Input Pattern | Matches | Description |
-|---------------|---------|-------------|
-| `base` | `oxygen-base` | Substring matching |
-| `lish` | `LightCulling_shader` | Sequential character matching (Li + sh) |
-| `oxsct` | `Oxygen.Scene.LinkTest` | Non-boundary abbreviation (Ox + Sc + T) |
-| `ogcpf` | `Oxygen.Graphics.Common.DeferredReclaimer.Tests` | 5-char pattern for 5 segments |
-| `gr-common` | `oxygen-graphics-common` | Component matching |
-| `asyncsim` | `oxygen-asyncengine-simulator` | Traditional abbreviation matching |
-| `graphics` | *Interactive menu* | Multiple matches |
-
-## Technical Details
-
-### CMake File API Integration
-
-The tools leverage CMake's File API (v1) to discover targets and artifacts:
-
-- Reads codemodel replies from `.cmake/api/v1/reply/`
-- Automatically generates File API queries when needed
-- Robust fallback mechanisms for incomplete build directories
-
-### Preset Support
-
-Automatically detects and uses CMake presets:
-
-- Configure presets: `windows`, `linux`, `mac`
-- Build presets: `windows-debug`, `windows-release`, etc.
-- Falls back to direct `cmake --build` when presets unavailable
-
-### Artifact Discovery
-
-Smart executable discovery with multiple strategies:
-
-- CMake File API target reply files (primary)
-- Runtime output directory scanning (fallback)
-- Build directory pattern matching (final fallback)
-- Windows executable extensions: `.exe`, `.bat`, `.cmd`, `.com`
-
-### Scoped clang-tidy workflow
-
-See [oxytidy documentation](../oxytools/docs/oxytidy.md) for compilation adaptation, project ownership,
-header coverage, execution, replacement application, and incremental validity.
-Unlike the build/run tools, oxytidy requires an existing configured build.
-
-### Error Handling
-
-- Comprehensive validation with clear error messages
-- Exit code preservation for CI/CD integration
-- Graceful degradation when CMake metadata unavailable
-- User-friendly interactive prompts
-
-## Requirements
-
-- **PowerShell 7.0+** (cross-platform); oxytidy and oxyformat require **7.3+**.
-  Oxytidy's installation launcher also requires **uv**.
-- **CMake 3.15+** (for File API v1 support)
-- **Visual Studio 2022** (Windows builds)
-- **CMakePresets.json** (recommended for preset support)
-
-## VS Code Integration Setup
-
-### Create VS Code Profile Script (`tools/cli/default-profile.ps1`)
-
-```powershell
-# Oxygen Engine VS Code Terminal Profile
-Import-Module "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\Tools\Microsoft.VisualStudio.DevShell.dll"
-Enter-VsDevShell c190ff26 -SkipAutomaticLocation -DevCmdArguments "-arch=x64 -host_arch=x64"
-if ($env:TERM_PROGRAM -eq "vscode") { . "$(code --locate-shell-integration-path pwsh)" }
-
-# Activate Python virtual environment if it exists
-$venvActivateScript = "F:\projects\.venv\Scripts\activate.ps1"
-if (Test-Path $venvActivateScript) {
-    . $venvActivateScript
-}
-
-# Helper function to add Oxygen CLI tools to PATH
-function Add-OxygenTools {
-    $engineRoot = "F:\projects\DroidNet\projects\Oxygen.Engine"
-    $oxygenCliPath = Join-Path $engineRoot "tools\cli"
-    if (Test-Path $oxygenCliPath) {
-        $env:PATH = "$oxygenCliPath;$env:PATH"
-        Write-Host "Added Oxygen CLI tools to PATH: $oxygenCliPath" -ForegroundColor Green
-    }
-}
-
-# Simple aliases for reliable argument passing
-Set-Alias -Name oxyrun -Value "F:\projects\DroidNet\projects\Oxygen.Engine\tools\cli\oxyrun.ps1"
-Set-Alias -Name oxybuild -Value "F:\projects\DroidNet\projects\Oxygen.Engine\tools\cli\oxybuild.ps1"
-
-### Configure VS Code Settings** (`.vscode/settings.json`)
+When Oxygen.Engine is the opened workspace folder, add a terminal profile to
+`.vscode/settings.json` using the existing script:
 
 ```json
 {
-    "terminal.integrated.profiles.windows": {
-        "PowerShell": {
-            "source": "PowerShell",
-            "args": ["-NoProfile"]
-        },
-        "pwsh": {
-            "source": "pwsh.exe",
-            "args": ["-NoProfile", "-File", "./tools/cli/default-profile.ps1"]
-        }
-    },
-    "terminal.integrated.defaultProfile.windows": "pwsh"
+  "terminal.integrated.profiles.windows": {
+    "Oxygen PowerShell": {
+      "path": "pwsh.exe",
+      "args": [
+        "-NoExit",
+        "-File",
+        "${workspaceFolder}/.vscode/default-profile.ps1"
+      ]
+    }
+  },
+  "terminal.integrated.defaultProfile.windows": "Oxygen PowerShell"
 }
 ```
 
-### Usage After Setup
+If VS Code opens the DroidNet monorepo root instead, use
+`${workspaceFolder}/projects/Oxygen.Engine/.vscode/default-profile.ps1` and change
+the terminal's working directory to `projects/Oxygen.Engine` before build/run
+commands. The profile discovers the engine from its own location and also loads
+VS Code shell integration when applicable.
 
-Once configured, you can use the tools directly in any VS Code terminal:
+To refresh aliases in an existing engine terminal, dot-source the same profile
+again. Reloading `$PROFILE` is only equivalent if your personal profile sources
+this engine profile. For access outside VS Code, add a dot-source command for
+this checkout's profile to your personal PowerShell profile; avoid copying its
+alias definitions into another script.
 
-```powershell
-# Direct command access (no .ps1 extension needed)
-oxyrun asyncsim                    # Build and run oxygen-asyncengine-simulator
-oxybuild gr-common                 # Build oxygen-graphics-common
-oxyrun base                        # Interactive target selection
+## Troubleshooting
 
-# All original functionality works
-oxyrun asyncsim -NoBuild -- --frames 10
-oxybuild gr-d3d -Config Release -DryRun
-```
+- Missing command: reload the engine profile or invoke `./tools/cli/<name>.ps1`.
+- Missing build tree: initialize it first; the wrappers do not run Conan.
+- Unexpected target: use its complete CMake target name and the intended
+  `-BuildTree`/`-Config`.
+- Missing executable with `-NoBuild`: build that target and configuration first.
+- Missing Python dependency: install the shared package in the interpreter
+  selected by the active environment or PATH.
 
-### Troubleshooting Profile Setup
-
-If commands aren't found after setup:
-
-```powershell
-# Check if aliases are loaded
-Get-Alias oxyrun
-Get-Alias oxybuild
-
-# Reload the profile if needed
-. $PROFILE
-
-# Use full paths as fallback
-& "F:\projects\DroidNet\projects\Oxygen.Engine\tools\cli\oxyrun.ps1" asyncsim -- -f 1 -v 1
-```
-
-**Note**: The aliases provide direct access to the scripts with no intermediate
-argument processing, ensuring reliable parameter passing.
-
-### Alternative Setup (System-wide)
-
-For system-wide access outside VS Code:
+For the scripts' parameter help and shared target resolver:
 
 ```powershell
-# Add to your PowerShell profile ($PROFILE)
-$env:PATH += ";F:\projects\DroidNet\projects\Oxygen.Engine\tools\cli"
-
-# Or create aliases
-Set-Alias oxyrun "F:\projects\DroidNet\projects\Oxygen.Engine\tools\cli\oxyrun.ps1"
-Set-Alias oxybuild "F:\projects\DroidNet\projects\Oxygen.Engine\tools\cli\oxybuild.ps1"
-```
-
-## Contributing
-
-The CLI tools follow PowerShell best practices:
-
-- Comment-based help for all functions
-- Comprehensive parameter validation
-- Modular design with shared functionality in `oxy-targets.ps1`
-- Extensive logging for debugging and transparency
-
-For detailed API documentation, use PowerShell's built-in help:
-
-```powershell
-Get-Help oxyrun.ps1 -Full
-Get-Help oxybuild.ps1 -Examples
+Get-Help ./tools/cli/oxybuild.ps1 -Full
+Get-Help ./tools/cli/oxyrun.ps1 -Examples
+. ./tools/cli/oxy-targets.ps1
 Get-Help Resolve-TargetName -Detailed
 ```
