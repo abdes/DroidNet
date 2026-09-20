@@ -116,8 +116,15 @@ NOLINT_TEST_F(
       auto cfg = PostProcessConfig {};
       cfg.exposure = *hook.render_context.current_view.exposure_override;
       service->SetConfig(cfg);
+      const auto gfx = renderer->GetGraphics();
+      auto recording = gfx->AcquireCommandRecorder(
+        gfx->QueueKeyFor(graphics::QueueRole::kGraphics),
+        "Vortex Exposure Frame");
+      ASSERT_TRUE(recording);
       ASSERT_NE(
-        service->PrepareFrameExposure(hook.render_context, false), nullptr);
+        service->PrepareFrameExposure(hook.render_context, *recording, false),
+        nullptr);
+      ASSERT_TRUE(recording.Submit());
     }
   };
   renderer_->RegisterViewExtension(
@@ -314,7 +321,10 @@ NOLINT_TEST_F(
     };
     auto frame_inputs = postprocess::ExposurePass::FrameInputs {};
     frame_inputs.use_fp32 = false;
-    const auto frame = pass_->ResolveFrame(ctx_, config, frame_inputs);
+    const auto frame = SubmitCommands("Vortex Exposure Frame",
+      [&](graphics::CommandRecorder& recorder) -> auto {
+        return pass_->ResolveFrame(ctx_, recorder, config, frame_inputs);
+      });
     ASSERT_NE(frame, nullptr);
     ctx_.current_view.frame_exposure = frame;
     auto environment_static = EnvironmentStaticData {};
@@ -382,7 +392,10 @@ NOLINT_TEST_F(
         },
         0.0F);
     }
-    ASSERT_TRUE(compose.Record(ctx_, textures).executed);
+    ASSERT_TRUE(SubmitCommands(
+      "Vortex test", [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
+        return compose.Record(ctx_, recorder, textures);
+      }).executed);
     const auto pixels = ReadFloatTexture(textures.GetSceneColor());
     const auto input = Read<ExposureStatusStorage>(
       *frame->current_state->status_buffer, ResourceStates::kUnorderedAccess)
@@ -542,7 +555,10 @@ NOLINT_TEST_F(ExposureGpuTest, FogCompositionClampsViewportAndDepthEdges)
           },
           0.0F);
       }
-      ASSERT_TRUE(compose.Record(ctx_, textures).executed);
+      ASSERT_TRUE(SubmitCommands("Vortex test",
+        [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
+          return compose.Record(ctx_, recorder, textures);
+        }).executed);
       const auto result = ReadFloatTexture(textures.GetSceneColor());
       const double z = std::clamp(
         (2 * std::sqrt(std::clamp(static_cast<double>(distance), 0.0, 1.0)))
@@ -796,7 +812,10 @@ NOLINT_TEST_F(ExposureGpuTest, DeferredApPreservesInscatterAtLowAndZeroOpacity)
             BufferUsage::kConstant);
           constants->Update(&view, sizeof(view), 0U);
           ctx_.view_constants = constants;
-          ASSERT_TRUE(compose.Record(ctx_, textures).executed);
+          ASSERT_TRUE(SubmitCommands("Vortex test",
+            [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
+              return compose.Record(ctx_, recorder, textures);
+            }).executed);
           auto readback
             = GetReadbackManager()->CreateTextureReadback("AP composed pixel");
           {

@@ -11,6 +11,10 @@
 #include <cstddef>
 #include <cstring>
 #include <map>
+#include <stdexcept>
+#include <utility>
+
+#include <Oxygen/Base/ScopeGuard.h>
 
 #include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Console/Console.h>
@@ -366,12 +370,25 @@ auto ExposureGpuTest::CheckSceneExposureRetry(
     renderer_->OnFrameStart(observer_ptr {
       &frame,
     });
-    const auto result = session->ExecuteInsideFrame(frame);
-    renderer_->OnFrameEnd(observer_ptr {
-      &frame,
+    const auto finish_frame = ScopeGuard([&]() noexcept -> void {
+      renderer_->OnFrameEnd(observer_ptr { &frame });
     });
-    return result;
+    return session->ExecuteInsideFrame(frame);
   };
+  struct AbortRecordedView final : IViewExtension {
+    void Arm() noexcept { armed_ = true; }
+    void OnPostRenderViewGpu(const ViewRenderGpuContext& /*context*/) override
+    {
+      if (std::exchange(armed_, false)) {
+        throw std::runtime_error("Injected view recording failure");
+      }
+    }
+
+  private:
+    bool armed_ { false };
+  };
+  auto abort = std::make_shared<AbortRecordedView>();
+  renderer_->RegisterViewExtension(abort);
   auto& backend = FailureBackend();
   auto prior_output = sentinel;
   if (late_failure) {
@@ -383,10 +400,14 @@ auto ExposureGpuTest::CheckSceneExposureRetry(
     ASSERT_TRUE(invoke(2U, true));
   }
   backend.recorder_names.clear();
-  backend.fail_next_frame_recorder = !late_failure;
-  backend.fail_next_exposure_recorder = late_failure;
-  backend.fail_next_fallback_recorder = late_failure;
-  EXPECT_FALSE(invoke(late_failure ? 2U : 1U));
+  if (late_failure) {
+    abort->Arm();
+    EXPECT_THROW(invoke(2U), std::runtime_error);
+  } else {
+    backend.fail_recorder_name = "Vortex View";
+    EXPECT_FALSE(invoke(1U));
+    backend.fail_recorder_name.clear();
+  }
   for (const auto& name : backend.recorder_names) {
     if (!late_failure) {
       EXPECT_EQ(name.find("BasePass"), std::string::npos);
@@ -498,8 +519,15 @@ auto ExposureGpuTest::CheckFogViewRetirement(
     {
       auto* owner
         = vortex::testing::RendererPublicationProbe::GetSceneRenderer(renderer);
-      textures = vortex::testing::RendererPublicationProbe::EnvironmentTextures(
-        *owner, hook.render_context.current_view.view_id);
+      hook.recorder.OnSubmission(
+        [this, owner, view_id = hook.render_context.current_view.view_id](
+          const graphics::SubmissionOutcome outcome) -> void {
+          if (outcome == graphics::SubmissionOutcome::kSubmitted) {
+            textures
+              = vortex::testing::RendererPublicationProbe::EnvironmentTextures(
+                *owner, view_id);
+          }
+        });
     }
   };
   auto capture = std::make_shared<Capture>(*renderer_);

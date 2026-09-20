@@ -238,14 +238,12 @@ auto ExposureAllocationScenario::SetUp() -> void
 
 auto ExposureAllocationScenario::CleanUp() noexcept -> void
 {
-  // These readers were declared after the original scope guard, so release
-  // them before executing its deferred-submission and output cleanup.
+  // Discard unsubmitted consumers before releasing their retained inputs.
+  pending_consumers_.clear();
+  pending_tonemap_lists_.clear();
   retained_ = {};
   current_.clear();
-  backend_->defer_tonemap_recorders = false;
-  fixture_.Backend().SubmitDeferredCommandLists();
   fixture_.WaitForQueueIdle();
-  backend_->deferred_tonemap_recordings.clear();
   backend_->account_texture_allocations = false;
   backend_->track_resources = false;
   fixture_.probe->inspect = {};

@@ -90,6 +90,19 @@ public:
   OXYGEN_MAKE_NON_MOVABLE(ExposureGpuTest)
 
 protected:
+  //! Keeps direct pass checks on the renderer's existing GPU timeline.
+  template <typename Operation>
+  auto SubmitCommands(const std::string_view name, Operation&& operation)
+    -> std::invoke_result_t<Operation, graphics::CommandRecorder&>
+  {
+    return graphics::testing::SubmitCommands(Backend(), name,
+      [&](graphics::CommandRecorder& recorder)
+        -> std::invoke_result_t<Operation, graphics::CommandRecorder&> {
+        renderer_->GetDiagnosticsService().AttachGpuTimelineCollector(recorder);
+        return std::invoke(std::forward<Operation>(operation), recorder);
+      });
+  }
+
   static auto MappedTextureBytes(const graphics::MappedTextureReadback& mapped,
     std::size_t texel_bytes) -> std::span<const std::byte>;
   auto FailureBackend() -> ExposureFailureGraphics&;

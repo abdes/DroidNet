@@ -229,7 +229,8 @@ namespace {
   auto RequireKnownPersistentState(
     graphics::CommandRecorder& recorder, graphics::Texture& texture) -> void
   {
-    CHECK_F(recorder.AdoptKnownResourceState(texture),
+    CHECK_F(recorder.IsResourceTracked(texture)
+        || recorder.AdoptKnownResourceState(texture),
       "SceneRenderer: missing authoritative incoming state for '{}'",
       texture.GetName());
   }
@@ -274,7 +275,7 @@ namespace {
         && initial != graphics::ResourceStates::kUndefined,
       "SceneRenderer: auxiliary texture '{}' must have a known state",
       texture.GetDescriptor().debug_name);
-    recorder.BeginTrackingResourceState(texture, initial);
+    recorder.BeginTrackingResourceState(texture, initial, false);
   }
 
   auto BuildAuxiliaryConsumerViewport(const graphics::Texture& target)
@@ -1738,7 +1739,8 @@ auto SceneRenderer::DescribeExposureProductLayout(const RenderContext& ctx)
   return layout;
 }
 
-auto SceneRenderer::PrepareExposureDomain(RenderContext& ctx) -> bool
+auto SceneRenderer::PrepareExposureDomain(
+  RenderContext& ctx, graphics::CommandRecorder& recorder) -> bool
 {
   profiling::CpuProfileScope cpu_scope(
     "Vortex.SceneRenderer.PrepareExposureDomain",
@@ -1791,7 +1793,7 @@ auto SceneRenderer::PrepareExposureDomain(RenderContext& ctx) -> bool
     ? Format::kRGBA16Float
     : Format::kRGBA32Float;
   ctx.current_view.frame_exposure = post_process_->PrepareFrameExposure(
-    ctx, fp32_reference || !candidate, candidate, fp32_reference);
+    ctx, recorder, fp32_reference || !candidate, candidate, fp32_reference);
   return ctx.current_view.frame_exposure != nullptr;
 }
 
@@ -1867,17 +1869,34 @@ void SceneRenderer::RenderViewFamily(RenderContext& ctx)
     BindPreparedView(ctx);
     ResetPerViewSceneProducts();
     renderer_.DispatchViewExtensionsOnViewSetup(ctx);
-    if (!renderer_.PublishCurrentViewPreSceneFrameBindings(ctx, *this))
+    auto recording = gfx_.AcquireCommandRecorder(
+      gfx_.QueueKeyFor(graphics::QueueRole::kGraphics), "Vortex View",
+      graphics::SubmissionPolicy::kExplicit);
+    if (!recording) {
       continue;
-    renderer_.DispatchViewExtensionsOnPreRenderViewGpu(ctx);
-    RenderCurrentView(ctx);
-    if (post_process_
-      && ctx.current_view.feature_mask.Has(
-        CompositionView::ViewFeatureMask::kSceneLighting)
-      && !post_process_->GetLastExecutionState().wrote_visible_output)
+    }
+    auto& recorder = *recording;
+    renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(recorder);
+    recorder.OnSubmission(
+      [this](const graphics::SubmissionOutcome outcome) -> void {
+        if (outcome == graphics::SubmissionOutcome::kDiscarded) {
+          ResetPerViewSceneProducts();
+        }
+      });
+    if (!renderer_.PublishCurrentViewPreSceneFrameBindings(
+          ctx, recorder, *this)) {
       continue;
+    }
+    renderer_.DispatchViewExtensionsOnPreRenderViewGpu(ctx, recorder);
+    if (!RenderCurrentView(ctx, recorder)) {
+      continue;
+    }
     renderer_.PublishCurrentViewPostSceneFrameBindings(ctx, *this);
-    renderer_.DispatchViewExtensionsOnPostRenderViewGpu(ctx);
+    renderer_.DispatchViewExtensionsOnPostRenderViewGpu(ctx, recorder);
+    if (!recording.Submit()) {
+      ResetPerViewSceneProducts();
+      continue;
+    }
     ctx.frame_views[view_index].rendered = true;
     ++rendered_scene_view_count;
 
@@ -1920,28 +1939,29 @@ void SceneRenderer::RenderViewFamily(RenderContext& ctx)
         entry.view_id.get());
 
       const auto queue_key = gfx_.QueueKeyFor(graphics::QueueRole::kGraphics);
-      auto recorder = gfx_.AcquireCommandRecorder(
+      auto auxiliary_recording = gfx_.AcquireCommandRecorder(
         queue_key, "Vortex Auxiliary View Consumption");
-      CHECK_F(static_cast<bool>(recorder),
+      CHECK_F(static_cast<bool>(auxiliary_recording),
         "SceneRenderer: failed to acquire auxiliary consumption recorder");
-      renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(*recorder);
-      graphics::GpuEventScope consume_scope(*recorder, "Vortex.AuxView.Consume",
-        profiling::ProfileGranularity::kTelemetry,
+      renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(
+        *auxiliary_recording);
+      graphics::GpuEventScope consume_scope(*auxiliary_recording,
+        "Vortex.AuxView.Consume", profiling::ProfileGranularity::kTelemetry,
         profiling::ProfileCategory::kPass,
         profiling::Vars(profiling::Var("aux_id", input.input.id.get()),
           profiling::Var("producer_view", input.producer_view_id.get()),
           profiling::Var("consumer_view", entry.view_id.get()),
           profiling::Var("debug_name", input.debug_name)));
       auto& source = *product_it->second.texture;
-      TrackAuxiliaryColorTexture(gfx_, *recorder, source);
-      TrackAuxiliaryColorTexture(gfx_, *recorder, *target);
-      CopyAuxiliaryTextureToRegion(
-        *recorder, source, *target, BuildAuxiliaryConsumerViewport(*target));
-      recorder->RequireResourceStateFinal(
+      TrackAuxiliaryColorTexture(gfx_, *auxiliary_recording, source);
+      TrackAuxiliaryColorTexture(gfx_, *auxiliary_recording, *target);
+      CopyAuxiliaryTextureToRegion(*auxiliary_recording, source, *target,
+        BuildAuxiliaryConsumerViewport(*target));
+      auxiliary_recording->RequireResourceStateFinal(
         source, graphics::ResourceStates::kRenderTarget);
-      recorder->RequireResourceStateFinal(
+      auxiliary_recording->RequireResourceStateFinal(
         *target, graphics::ResourceStates::kRenderTarget);
-      recorder->FlushBarriers();
+      auxiliary_recording->FlushBarriers();
       LOG_F(INFO,
         "Vortex.AuxView.Consume frame={} aux_id={} producer_view={} "
         "consumer_view={} texture='{}' target='{}'",
@@ -1970,17 +1990,34 @@ auto SceneRenderer::OnRender(RenderContext& ctx) -> bool
     return std::ranges::any_of(
       ctx.frame_views, [](const auto& view) { return view.rendered; });
   }
-  if (post_process_ && !ctx.current_view.frame_exposure
-    && !renderer_.PublishCurrentViewPreSceneFrameBindings(ctx, *this))
+  auto recording = gfx_.AcquireCommandRecorder(
+    gfx_.QueueKeyFor(graphics::QueueRole::kGraphics), "Vortex View",
+    graphics::SubmissionPolicy::kExplicit);
+  if (!recording) {
     return false;
-  RenderCurrentView(ctx);
-  return !post_process_
-    || !ctx.current_view.feature_mask.Has(
-      CompositionView::ViewFeatureMask::kSceneLighting)
-    || post_process_->GetLastExecutionState().wrote_visible_output;
+  }
+  auto& recorder = *recording;
+  renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(recorder);
+  recorder.OnSubmission(
+    [this](const graphics::SubmissionOutcome outcome) -> void {
+      if (outcome == graphics::SubmissionOutcome::kDiscarded) {
+        ResetPerViewSceneProducts();
+      }
+    });
+  if (post_process_ && !ctx.current_view.frame_exposure
+    && !renderer_.PublishCurrentViewPreSceneFrameBindings(
+      ctx, recorder, *this)) {
+    return false;
+  }
+  if (!RenderCurrentView(ctx, recorder) || !recording.Submit()) {
+    ResetPerViewSceneProducts();
+    return false;
+  }
+  return true;
 }
 
-void SceneRenderer::RenderCurrentView(RenderContext& ctx)
+auto SceneRenderer::RenderCurrentView(
+  RenderContext& ctx, graphics::CommandRecorder& recorder) -> bool
 {
   deferred_lighting_state_ = {};
   auto& scene_textures = ActiveSceneTextures();
@@ -2117,7 +2154,7 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
       .mode = ctx.current_view.depth_prepass_mode,
       .write_velocity = scene_textures.GetVelocity() != nullptr,
     });
-    depth_prepass_->Execute(ctx, scene_textures);
+    depth_prepass_->Execute(ctx, recorder, scene_textures);
     ctx.current_view.depth_prepass_completeness
       = depth_prepass_->GetCompleteness();
     ctx.current_view.scene_depth_product_valid
@@ -2173,7 +2210,7 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
   ctx.current_view.screen_hzb_has_previous = false;
   ctx.current_view.occlusion_results.reset(nullptr);
   if (screen_hzb_ != nullptr && ctx.current_view.CanBuildScreenHzb()) {
-    screen_hzb_->Execute(ctx, scene_textures);
+    screen_hzb_->Execute(ctx, recorder, scene_textures);
     const auto& screen_hzb_output = screen_hzb_->GetCurrentOutput();
     published_screen_hzb_bindings_ = screen_hzb_output.bindings;
     if (screen_hzb_output.closest_texture != nullptr) {
@@ -2235,7 +2272,7 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
       .enabled = renderer_.GetOcclusionEnabled(),
       .max_candidate_count = renderer_.GetOcclusionMaxCandidateCount(),
     });
-    occlusion_->Execute(ctx, scene_textures);
+    occlusion_->Execute(ctx, recorder, scene_textures);
     const auto& occlusion_stats = occlusion_->GetStats();
     RecordDiagnosticsPass(renderer_,
       DiagnosticsPassRecord {
@@ -2289,7 +2326,7 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
     const auto enable_static_sky_light_ambient_bridge
       = shading_mode == ShadingMode::kDeferred;
     published_view_frame_bindings_.environment_frame_slot
-      = environment_->PublishEnvironmentBindings(ctx,
+      = environment_->PublishEnvironmentBindings(ctx, recorder,
         kInvalidShaderVisibleIndex, kInvalidShaderVisibleIndex,
         enable_static_sky_light_ambient_bridge, &scene_textures);
     environment_lighting_state_.published_environment_frame_slot
@@ -2329,7 +2366,8 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
       .shading_mode = shading_mode,
       .render_mode = ctx.render_mode,
     });
-    const auto base_pass_result = base_pass_->Execute(ctx, scene_textures);
+    const auto base_pass_result
+      = base_pass_->Execute(ctx, recorder, scene_textures);
     base_pass_published = base_pass_result.published_base_pass_products;
     base_pass_wrote_scene_color = base_pass_result.wrote_scene_color;
     base_pass_draw_count = base_pass_result.draw_count;
@@ -2409,11 +2447,11 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
 
   // Stage 12: Deferred direct lighting
   const auto rendered_debug_visualization = wants_scene_lighting
-    ? RenderDebugVisualization(ctx, scene_textures)
+    ? RenderDebugVisualization(ctx, recorder, scene_textures)
     : false;
   if (!rendered_debug_visualization) {
     if (wants_scene_lighting) {
-      RenderDeferredLighting(ctx, scene_textures);
+      RenderDeferredLighting(ctx, recorder, scene_textures);
     }
   }
   const auto deferred_lighting_executed = rendered_debug_visualization
@@ -2442,12 +2480,12 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
     auto& source = scene_textures.GetSceneColor();
     const auto source_srv = ShaderVisibleIndex { RegisterSceneTextureView(
       source, MakeSrvDesc(source, source.GetDescriptor().format)) };
-    static_cast<void>(
-      post_process_->CapturePreEnvironmentRange(ctx, source, source_srv));
+    static_cast<void>(post_process_->CapturePreEnvironmentRange(
+      ctx, recorder, source, source_srv));
   }
   if (environment_ != nullptr && wants_environment && !wireframe_only
     && !IsNonIblDebugMode(ctx.shader_debug_mode)) {
-    environment_->RenderSkyAndFog(ctx, scene_textures);
+    environment_->RenderSkyAndFog(ctx, recorder, scene_textures);
     const auto& stage14_state = environment_->GetLastStage14State();
     environment_lighting_state_.stage14_requested = stage14_state.requested;
     environment_lighting_state_.stage14_local_fog_requested
@@ -2573,7 +2611,7 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
   auto translucency_result = TranslucencyExecutionResult {};
   if (translucency_ != nullptr && wants_translucency && !wireframe_only
     && !IsNonIblDebugMode(ctx.shader_debug_mode)) {
-    translucency_result = translucency_->Execute(ctx, scene_textures);
+    translucency_result = translucency_->Execute(ctx, recorder, scene_textures);
   }
   RecordDiagnosticsPass(renderer_,
     DiagnosticsPassRecord {
@@ -2605,8 +2643,8 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
     if (base_pass_ == nullptr || !wants_scene_lighting || wireframe_only
       || ctx.render_mode != RenderMode::kOverlayWireframe)
       return;
-    const auto overlay_draws
-      = base_pass_->ExecuteWireframeOverlay(ctx, scene_textures, target);
+    const auto overlay_draws = base_pass_->ExecuteWireframeOverlay(
+      ctx, recorder, scene_textures, target);
     RecordDiagnosticsPass(renderer_,
       DiagnosticsPassRecord {
         .name = "Vortex.Stage20.WireframeOverlay",
@@ -2673,13 +2711,13 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
         { .product_layout_revision = layout.revision,
           .expected_products = expected_products }));
     }
-    prepared_exposure
-      = post_process_->PrepareSceneExposure(ctx.current_view.view_id, ctx,
-        { .scene_signal = accumulated,
-          .scene_signal_srv = accumulated_srv,
-          .require_scene_range = true });
+    prepared_exposure = post_process_->PrepareSceneExposure(
+      ctx.current_view.view_id, ctx, recorder,
+      { .scene_signal = accumulated,
+        .scene_signal_srv = accumulated_srv,
+        .require_scene_range = true });
     if (!prepared_exposure)
-      return;
+      return false;
   }
 
   // Certify current/candidate consumer error before checked narrowing.
@@ -2692,7 +2730,7 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
       = environment_ && environment_->GetLastStage15State().local_fog_executed
       ? environment_->GetLastStage14State().local_fog_instance_count
       : 0U;
-    static_cast<void>(post_process_->PrepareScenePrecision(ctx,
+    static_cast<void>(post_process_->PrepareScenePrecision(ctx, recorder,
       *prepared_exposure, precision_products,
       postprocess::ExposurePass::SceneComposition { .opaque_depth = depth,
         .opaque_depth_srv = depth_srv,
@@ -2703,11 +2741,12 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
 
   // Stage 21: Resolve scene color
   if (wants_resolve) {
-    ResolveSceneColor(ctx, prepared_exposure ? &*prepared_exposure : nullptr);
+    ResolveSceneColor(
+      ctx, recorder, prepared_exposure ? &*prepared_exposure : nullptr);
   }
   if (prepared_exposure && !precision_products.empty()) {
     static_cast<void>(
-      post_process_->FinalizeScenePrecision(ctx, *prepared_exposure));
+      post_process_->FinalizeScenePrecision(ctx, recorder, *prepared_exposure));
   }
   RecordDiagnosticsPass(renderer_,
     DiagnosticsPassRecord {
@@ -2786,10 +2825,9 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
         ? ctx.current_view.frame_exposure
         : nullptr,
     };
-    post_process_->Execute(ctx.current_view.view_id, ctx, scene_textures,
-      post_process_inputs, &*prepared_exposure);
-    if (!post_process_->GetLastExecutionState().wrote_visible_output)
-      return;
+    if (!post_process_->Record(ctx.current_view.view_id, ctx, recorder,
+          post_process_inputs, &*prepared_exposure))
+      return false;
     published_view_frame_bindings_.post_process_frame_slot
       = post_process_->ResolveBindingSlot(ctx.current_view.view_id);
     RecordDiagnosticsPass(renderer_,
@@ -2814,7 +2852,7 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
   // Stage 20: Ground grid
   if (ground_grid_pass_ != nullptr && wants_scene_lighting && !wireframe_only) {
     static_cast<void>(ground_grid_pass_->Record(
-      ctx, scene_textures, ResolveViewOutputTarget(ctx)));
+      ctx, recorder, scene_textures, ResolveViewOutputTarget(ctx)));
     RecordDiagnosticsPass(renderer_,
       DiagnosticsPassRecord {
         .name = "Vortex.Stage20.GroundGrid",
@@ -2826,7 +2864,8 @@ void SceneRenderer::RenderCurrentView(RenderContext& ctx)
   }
 
   // Stage 23: Post-render cleanup / extraction
-  PostRenderCleanup(ctx);
+  PostRenderCleanup(ctx, recorder);
+  return true;
 }
 
 void SceneRenderer::OnCompositing(RenderContext& /*ctx*/)
@@ -3298,8 +3337,9 @@ auto SceneRenderer::ResolveShadingModeForCurrentView(
   return default_shading_mode_;
 }
 
-auto SceneRenderer::RenderDebugVisualization(
-  RenderContext& ctx, const SceneTextures& scene_textures) -> bool
+auto SceneRenderer::RenderDebugVisualization(RenderContext& ctx,
+  graphics::CommandRecorder& recorder, const SceneTextures& scene_textures)
+  -> bool
 {
   const auto mode = ctx.shader_debug_mode;
   if (!IsDeferredDebugVisualizationMode(mode)) {
@@ -3345,81 +3385,72 @@ auto SceneRenderer::RenderDebugVisualization(
       BuildDebugVisualizationFramebuffer(scene_textures));
   }
 
-  const auto queue_key = gfx_.QueueKeyFor(graphics::QueueRole::kGraphics);
-  auto recorder
-    = gfx_.AcquireCommandRecorder(queue_key, "Vortex DebugVisualization");
-  if (!recorder) {
-    return false;
-  }
-  renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(*recorder);
-
-  graphics::GpuEventScope debug_scope(*recorder,
+  graphics::GpuEventScope debug_scope(recorder,
     fmt::format(
       "Vortex.DebugVisualization.{}", GetDeferredDebugVisualizationName(mode)),
     profiling::ProfileGranularity::kDiagnostic,
     profiling::ProfileCategory::kPass);
 
-  RequireKnownPersistentState(*recorder, scene_textures.GetSceneColor());
+  RequireKnownPersistentState(recorder, scene_textures.GetSceneColor());
   if (requires_scene_depth) {
-    RequireKnownPersistentState(*recorder, scene_textures.GetSceneDepth());
+    RequireKnownPersistentState(recorder, scene_textures.GetSceneDepth());
   }
   if (requires_gbuffer) {
-    RequireKnownPersistentState(*recorder, scene_textures.GetGBufferNormal());
-    RequireKnownPersistentState(*recorder, scene_textures.GetGBufferMaterial());
+    RequireKnownPersistentState(recorder, scene_textures.GetGBufferNormal());
+    RequireKnownPersistentState(recorder, scene_textures.GetGBufferMaterial());
+    RequireKnownPersistentState(recorder, scene_textures.GetGBufferBaseColor());
     RequireKnownPersistentState(
-      *recorder, scene_textures.GetGBufferBaseColor());
-    RequireKnownPersistentState(
-      *recorder, scene_textures.GetGBufferCustomData());
+      recorder, scene_textures.GetGBufferCustomData());
   }
 
-  recorder->RequireResourceState(
+  recorder.RequireResourceState(
     scene_textures.GetSceneColor(), graphics::ResourceStates::kRenderTarget);
   if (requires_scene_depth) {
-    recorder->RequireResourceState(
+    recorder.RequireResourceState(
       scene_textures.GetSceneDepth(), graphics::ResourceStates::kDepthRead);
   }
   if (requires_gbuffer) {
-    recorder->RequireResourceState(scene_textures.GetGBufferNormal(),
+    recorder.RequireResourceState(scene_textures.GetGBufferNormal(),
       graphics::ResourceStates::kShaderResource);
-    recorder->RequireResourceState(scene_textures.GetGBufferMaterial(),
+    recorder.RequireResourceState(scene_textures.GetGBufferMaterial(),
       graphics::ResourceStates::kShaderResource);
-    recorder->RequireResourceState(scene_textures.GetGBufferBaseColor(),
+    recorder.RequireResourceState(scene_textures.GetGBufferBaseColor(),
       graphics::ResourceStates::kShaderResource);
-    recorder->RequireResourceState(scene_textures.GetGBufferCustomData(),
+    recorder.RequireResourceState(scene_textures.GetGBufferCustomData(),
       graphics::ResourceStates::kShaderResource);
   }
-  recorder->FlushBarriers();
-  recorder->BindFrameBuffer(*debug_visualization_framebuffer_);
-  SetViewportAndScissor(*recorder, ctx, scene_textures);
-  recorder->SetPipelineState(
+  recorder.FlushBarriers();
+  recorder.BindFrameBuffer(*debug_visualization_framebuffer_);
+  SetViewportAndScissor(recorder, ctx, scene_textures);
+  recorder.SetPipelineState(
     BuildDebugVisualizationPipelineDesc(scene_textures, mode));
-  recorder->SetGraphicsRootConstantBufferView(
+  recorder.SetGraphicsRootConstantBufferView(
     static_cast<std::uint32_t>(bindless_d3d12::RootParam::kViewConstants),
     ctx.view_constants->GetGPUVirtualAddress());
-  recorder->Draw(3U, 1U, 0U, 0U);
+  recorder.Draw(3U, 1U, 0U, 0U);
 
-  recorder->RequireResourceStateFinal(
+  recorder.RequireResourceState(
     scene_textures.GetSceneColor(), graphics::ResourceStates::kRenderTarget);
   if (requires_scene_depth) {
-    recorder->RequireResourceStateFinal(
+    recorder.RequireResourceState(
       scene_textures.GetSceneDepth(), graphics::ResourceStates::kDepthRead);
   }
   if (requires_gbuffer) {
-    recorder->RequireResourceStateFinal(scene_textures.GetGBufferNormal(),
+    recorder.RequireResourceState(scene_textures.GetGBufferNormal(),
       graphics::ResourceStates::kShaderResource);
-    recorder->RequireResourceStateFinal(scene_textures.GetGBufferMaterial(),
+    recorder.RequireResourceState(scene_textures.GetGBufferMaterial(),
       graphics::ResourceStates::kShaderResource);
-    recorder->RequireResourceStateFinal(scene_textures.GetGBufferBaseColor(),
+    recorder.RequireResourceState(scene_textures.GetGBufferBaseColor(),
       graphics::ResourceStates::kShaderResource);
-    recorder->RequireResourceStateFinal(scene_textures.GetGBufferCustomData(),
+    recorder.RequireResourceState(scene_textures.GetGBufferCustomData(),
       graphics::ResourceStates::kShaderResource);
   }
 
   return true;
 }
 
-void SceneRenderer::RenderDeferredLighting(
-  RenderContext& ctx, const SceneTextures& scene_textures)
+void SceneRenderer::RenderDeferredLighting(RenderContext& ctx,
+  graphics::CommandRecorder& recorder, const SceneTextures& scene_textures)
 {
   deferred_lighting_state_ = {};
   deferred_lighting_state_.published_view_id = published_view_id_;
@@ -3477,7 +3508,8 @@ void SceneRenderer::RenderDeferredLighting(
   const auto* point_shadow_surface = shadows_ != nullptr
     ? shadows_->InspectPointShadowSurface(ctx.current_view.view_id)
     : nullptr;
-  lighting_->RenderDeferredLighting(ctx, scene_textures, frame_light_selection_,
+  lighting_->RenderDeferredLighting(ctx, recorder, scene_textures,
+    frame_light_selection_,
     shadow_bindings != nullptr ? &shadow_bindings->bindings : nullptr,
     shadow_surface, spot_shadow_surface, point_shadow_surface,
     environment_lighting_state_.ambient_bridge_published);

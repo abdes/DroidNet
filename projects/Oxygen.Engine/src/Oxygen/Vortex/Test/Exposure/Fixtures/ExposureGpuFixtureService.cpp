@@ -54,7 +54,10 @@ auto ExposureGpuTest::Run(const Signal& signal,
   inputs.one_over_pre_exposure = inverse_p;
   inputs.metering_available = metering_available;
   inputs.transition = transition;
-  const auto result = pass_->Execute(ctx_, config, inputs);
+  const auto result = SubmitCommands(
+    "Vortex Exposure", [&](graphics::CommandRecorder& recorder) -> auto {
+      return pass_->Execute(ctx_, recorder, config, inputs);
+    });
   CHECK_F(result.executed);
   last_state_ = result.state;
   auto snapshot = Snapshot {
@@ -105,10 +108,9 @@ auto ExposureGpuTest::ServicePixel(PostProcessService& service,
   auto output = CreateRegisteredTexture(output_desc);
   auto framebuffer = Backend().CreateFramebuffer(
     FramebufferDesc {}.AddColorAttachment(output));
-  auto textures
-    = SceneTextures(Backend(), SceneTexturesConfig { .extent = { 4U, 4U, }, });
-  service.Execute(ctx_.current_view.view_id, ctx_, textures,
-    {
+  const bool submitted = SubmitCommands(
+    "Vortex Exposure", [&](graphics::CommandRecorder& recorder) -> auto {
+      return service.Record(ctx_.current_view.view_id, ctx_, recorder, {
       .scene_signal = signal.texture.get(),
       .post_target = observer_ptr<const Framebuffer> { framebuffer.get(), },
       .scene_signal_srv = signal.srv,
@@ -122,9 +124,9 @@ auto ExposureGpuTest::ServicePixel(PostProcessService& service,
         ? options.fallback->srv
         : kInvalidShaderVisibleIndex,
       .checked_resolution = std::move(options.checked_resolution),
-    },
-    options.prepared);
-  if (!service.GetLastExecutionState().tonemap_executed) {
+    }, options.prepared);
+    });
+  if (!submitted || !service.GetLastExecutionState().tonemap_executed) {
     return std::numeric_limits<float>::quiet_NaN();
   }
   auto readback
@@ -157,7 +159,10 @@ auto ExposureGpuTest::Qualify(const Signal& signal, bool meter,
   };
   auto frame_inputs = postprocess::ExposurePass::FrameInputs {};
   frame_inputs.use_fp32 = true;
-  const auto frame = pass_->ResolveFrame(ctx_, config, frame_inputs);
+  const auto frame = SubmitCommands(
+    "Vortex Exposure Frame", [&](graphics::CommandRecorder& recorder) -> auto {
+      return pass_->ResolveFrame(ctx_, recorder, config, frame_inputs);
+    });
   CHECK_NOTNULL_F(frame.get());
   CHECK_F(RecordShared(signal, config).executed);
   const std::array products {
@@ -173,7 +178,11 @@ auto ExposureGpuTest::Qualify(const Signal& signal, bool meter,
   metering.metering_mask = (mask != nullptr) ? mask->texture.get() : nullptr;
   metering.metering_mask_srv
     = (mask != nullptr) ? mask->srv : kInvalidShaderVisibleIndex;
-  CHECK_F(pass_->EvaluateFp16Products(ctx_, frame, config, products, metering));
+  CHECK_F(SubmitCommands("Vortex Exposure Suitability",
+    [&](graphics::CommandRecorder& recorder) -> auto {
+      return pass_->EvaluateFp16Products(
+        ctx_, recorder, frame, config, products, metering);
+    }));
   return Read<HdrSuitabilityData>(
     *frame->suitability_buffer, ResourceStates::kShaderResource);
 }
@@ -198,7 +207,10 @@ auto ExposureGpuTest::EligibilityStep(const Signal& signal,
   frame_inputs.source = source;
   frame_inputs.transition = transition;
   frame_inputs.lifetime = lifetime;
-  const auto frame = pass_->ResolveFrame(ctx_, config, frame_inputs);
+  const auto frame = SubmitCommands(
+    "Vortex Exposure Frame", [&](graphics::CommandRecorder& recorder) -> auto {
+      return pass_->ResolveFrame(ctx_, recorder, config, frame_inputs);
+    });
   CHECK_NOTNULL_F(frame.get());
   auto inputs = postprocess::ExposurePass::Inputs {};
   inputs.scene_signal = signal.texture.get();
@@ -207,15 +219,21 @@ auto ExposureGpuTest::EligibilityStep(const Signal& signal,
   inputs.transition = transition;
   inputs.source = source;
   inputs.lifetime = lifetime;
-  const auto solved = pass_->Execute(ctx_, config, inputs);
+  const auto solved = SubmitCommands(
+    "Vortex Exposure", [&](graphics::CommandRecorder& recorder) -> auto {
+      return pass_->Execute(ctx_, recorder, config, inputs);
+    });
   CHECK_F(solved.executed);
   const auto before = ReadState(solved);
   EXPECT_EQ(before.flags & 256U, 0U);
   EXPECT_EQ(before.fp16_eligible_streak, 0U);
-  EXPECT_FALSE(pass_->FinalizeFp16Suitability(ctx_, frame,
-    {
-      .product_layout_revision = layout,
-      .expected_products = expected,
+  EXPECT_FALSE(SubmitCommands("Vortex FP16 Eligibility",
+    [&](graphics::CommandRecorder& recorder) -> auto {
+      return pass_->FinalizeFp16Suitability(ctx_, recorder, frame,
+        {
+          .product_layout_revision = layout,
+          .expected_products = expected,
+        });
     }));
   const std::array products {
     postprocess::ExposurePass::HdrProduct {
@@ -228,12 +246,19 @@ auto ExposureGpuTest::EligibilityStep(const Signal& signal,
   const auto capture = capture_eligibility
     ? BeginOptionalCapture()
     : observer_ptr<FrameCaptureController> {};
-  CHECK_F(pass_->EvaluateFp16Products(ctx_, frame, config, products, {}));
-  CHECK_F(pass_->FinalizeFp16Suitability(ctx_, frame,
-    {
-      .product_layout_revision = layout,
-      .expected_products = expected,
-      .invalidate_previous = invalidate_previous,
+  CHECK_F(SubmitCommands("Vortex Exposure Suitability",
+    [&](graphics::CommandRecorder& recorder) -> auto {
+      return pass_->EvaluateFp16Products(
+        ctx_, recorder, frame, config, products, {});
+    }));
+  CHECK_F(SubmitCommands("Vortex FP16 Eligibility",
+    [&](graphics::CommandRecorder& recorder) -> auto {
+      return pass_->FinalizeFp16Suitability(ctx_, recorder, frame,
+        {
+          .product_layout_revision = layout,
+          .expected_products = expected,
+          .invalidate_previous = invalidate_previous,
+        });
     }));
   if (capture) {
     EXPECT_TRUE(capture->EndCapture());
@@ -261,11 +286,14 @@ auto ExposureGpuTest::EligibilityStep(const Signal& signal,
     static_cast<std::uint32_t>(lifetime >> 32U));
   EXPECT_EQ(status.reserved, 0U);
   EXPECT_EQ(status.flags & 4U, state.fp16_eligible_streak >= 2U ? 4U : 0U);
-  CHECK_F(pass_->FinalizeFp16Suitability(ctx_, frame,
-    {
-      .product_layout_revision = layout,
-      .expected_products = expected,
-      .invalidate_previous = invalidate_previous,
+  CHECK_F(SubmitCommands("Vortex FP16 Eligibility",
+    [&](graphics::CommandRecorder& recorder) -> auto {
+      return pass_->FinalizeFp16Suitability(ctx_, recorder, frame,
+        {
+          .product_layout_revision = layout,
+          .expected_products = expected,
+          .invalidate_previous = invalidate_previous,
+        });
     }));
   const auto duplicate = ReadState(solved);
   using StateBytes = std::array<std::byte, sizeof(ExposureStateData)>;
@@ -335,7 +363,10 @@ auto ExposureGpuTest::RecordShared(const Signal& signal,
   inputs.transition = token;
   inputs.source = source;
   inputs.lifetime = lifetime;
-  return pass_->Execute(ctx_, config, inputs);
+  return SubmitCommands(
+    "Vortex Exposure", [&](graphics::CommandRecorder& recorder) -> auto {
+      return pass_->Execute(ctx_, recorder, config, inputs);
+    });
 }
 
 auto ExposureGpuTest::ReadState(const postprocess::ExposurePass::Result& result)

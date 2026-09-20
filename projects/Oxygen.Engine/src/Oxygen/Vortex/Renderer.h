@@ -725,10 +725,9 @@ public:
   GetAerialPerspectiveLutDepthKm() const noexcept -> float;
   [[nodiscard]] OXGN_VRTX_API auto
   GetAerialPerspectiveLutSampleCountMaxPerSlice() const noexcept -> float;
-  [[nodiscard]] OXGN_VRTX_API auto GetOcclusionEnabled() const noexcept
-    -> bool;
-  [[nodiscard]] OXGN_VRTX_API auto GetOcclusionMaxCandidateCount()
-    const noexcept -> std::uint32_t;
+  [[nodiscard]] OXGN_VRTX_API auto GetOcclusionEnabled() const noexcept -> bool;
+  [[nodiscard]] OXGN_VRTX_API auto
+  GetOcclusionMaxCandidateCount() const noexcept -> std::uint32_t;
   OXGN_VRTX_NDAPI auto GetStagingProvider() -> upload::StagingProvider&;
   OXGN_VRTX_NDAPI auto GetInlineTransfersCoordinator()
     -> upload::InlineTransfersCoordinator&;
@@ -864,7 +863,8 @@ private:
     ViewId published_view_id) const noexcept
     -> CompositionView::ViewFeatureProfile;
   [[nodiscard]] auto ResolvePublishedRuntimeViewStateHandle(
-    ViewId published_view_id) const noexcept -> CompositionView::ViewStateHandle;
+    ViewId published_view_id) const noexcept
+    -> CompositionView::ViewStateHandle;
   auto UpdateViewConstantsFromView(const ResolvedView& view) -> void;
   [[nodiscard]] auto BuildViewHistoryFrameBindings(
     CompositionView::ViewStateHandle view_state_handle,
@@ -883,8 +883,8 @@ private:
     ShaderVisibleIndex view_frame_bindings_slot) -> void;
   auto RefreshCurrentViewFrameBindings(
     RenderContext& render_context, SceneRenderer& scene_renderer) -> void;
-  auto PublishCurrentViewPreSceneFrameBindings(
-    RenderContext& render_context, SceneRenderer& scene_renderer) -> bool;
+  auto PublishCurrentViewPreSceneFrameBindings(RenderContext& render_context,
+    graphics::CommandRecorder& recorder, SceneRenderer& scene_renderer) -> bool;
   auto PublishCurrentViewPostSceneFrameBindings(
     RenderContext& render_context, SceneRenderer& scene_renderer) -> void;
   auto ResetPublicationState() -> void;
@@ -909,13 +909,12 @@ private:
   [[nodiscard]] auto SnapshotViewExtensions() const
     -> std::vector<ViewExtensionPtr>;
   auto DispatchViewExtensionsOnFamilyAssembled(
-    engine::FrameContext& frame_context, RenderContext& render_context)
-    -> void;
+    engine::FrameContext& frame_context, RenderContext& render_context) -> void;
   auto DispatchViewExtensionsOnViewSetup(RenderContext& render_context) -> void;
-  auto DispatchViewExtensionsOnPreRenderViewGpu(RenderContext& render_context)
-    -> void;
-  auto DispatchViewExtensionsOnPostRenderViewGpu(RenderContext& render_context)
-    -> void;
+  auto DispatchViewExtensionsOnPreRenderViewGpu(
+    RenderContext& render_context, graphics::CommandRecorder& recorder) -> void;
+  auto DispatchViewExtensionsOnPostRenderViewGpu(
+    RenderContext& render_context, graphics::CommandRecorder& recorder) -> void;
   auto DispatchViewExtensionsOnPostComposition(
     engine::FrameContext& frame_context,
     CompositionView::SurfaceRouteId surface_id, graphics::Framebuffer& target,

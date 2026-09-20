@@ -953,9 +953,7 @@ TEST(CompositionPlannerTest, OnOverlayCallbackProducesTypedScreenOverlay)
       8U,
     }));
 
-  auto recorder = graphics->AcquireCommandRecorder(
-    graphics->QueueKeyFor(oxygen::graphics::QueueRole::kGraphics),
-    "CompositionPlannerOverlayTest", false);
+  auto recorder = graphics->AcquireCommandRecorder(graphics->QueueKeyFor(oxygen::graphics::QueueRole::kGraphics), "CompositionPlannerOverlayTest", oxygen::graphics::SubmissionPolicy::kExplicit);
   ASSERT_TRUE(static_cast<bool>(recorder));
   submission.surface_overlays.at(0).record(*recorder);
   EXPECT_TRUE(overlay_called);

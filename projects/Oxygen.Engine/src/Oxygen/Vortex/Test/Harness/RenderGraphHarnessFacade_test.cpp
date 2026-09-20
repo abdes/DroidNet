@@ -102,8 +102,7 @@ protected:
 
   [[nodiscard]] auto AcquireRecorder(std::string_view name) const
   {
-    return graphics_->AcquireCommandRecorder(
-      graphics_->QueueKeyFor(QueueRole::kGraphics), name, false);
+    return graphics_->AcquireCommandRecorder(graphics_->QueueKeyFor(QueueRole::kGraphics), name, oxygen::graphics::SubmissionPolicy::kExplicit);
   }
 
   std::shared_ptr<FakeGraphics> graphics_;
@@ -236,7 +235,7 @@ NOLINT_TEST_F(RenderGraphHarnessFacadeTest,
   }
 
   auto recorder = AcquireRecorder("RenderGraphHarnessFacade.Execute");
-  ASSERT_NE(recorder, nullptr);
+  ASSERT_TRUE(recorder);
 
   auto loop = oxygen::co::testing::TestEventLoop {};
   oxygen::co::Run(loop,
@@ -279,7 +278,7 @@ NOLINT_TEST_F(RenderGraphHarnessFacadeTest, ExecuteAllowsMultipleRuns)
   }
 
   auto recorder = AcquireRecorder("RenderGraphHarnessFacade.MultiRun");
-  ASSERT_NE(recorder, nullptr);
+  ASSERT_TRUE(recorder);
 
   auto loop = oxygen::co::testing::TestEventLoop {};
   // Synchronous execution finishes while the session-owned closure and its
@@ -382,7 +381,7 @@ NOLINT_TEST_F(RenderGraphHarnessFacadeTest,
   }
 
   auto recorder = AcquireRecorder("RenderGraphHarnessFacade.MigratedSubstrate");
-  ASSERT_NE(recorder, nullptr);
+  ASSERT_TRUE(recorder);
 
   auto loop = oxygen::co::testing::TestEventLoop {};
   oxygen::co::Run(loop,

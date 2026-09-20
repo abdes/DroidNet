@@ -82,12 +82,18 @@ NOLINT_TEST_F(ExposureGpuTest, DISABLED_ProducerRangeAndCanonicalTiming)
     };
     auto frame_inputs = postprocess::ExposurePass::FrameInputs {};
     frame_inputs.use_fp32 = true;
-    const auto frame = pass_->ResolveFrame(ctx_, resolved, frame_inputs);
+    const auto frame = SubmitCommands("Vortex Exposure Frame",
+      [&](graphics::CommandRecorder& recorder) -> auto {
+        return pass_->ResolveFrame(ctx_, recorder, resolved, frame_inputs);
+      });
     ASSERT_NE(frame, nullptr);
     for (unsigned iteration = 0; iteration < 3; ++iteration) {
       measure("final_range", width, height, iteration, [&]() -> void {
-        ASSERT_TRUE(pass_->CheckSceneColorRange(
-          ctx_, frame, *signal.texture, signal.srv));
+        ASSERT_TRUE(SubmitCommands("Vortex Exposure Final Scene Range",
+          [&](graphics::CommandRecorder& recorder) -> auto {
+            return pass_->CheckSceneColorRange(
+              ctx_, recorder, frame, *signal.texture, signal.srv);
+          }));
       });
     }
     const auto status = Read<ExposureCompletedStatus>(
@@ -280,7 +286,10 @@ NOLINT_TEST_F(ExposureGpuTest, DISABLED_ComposedAdmissionFullResolutionTiming)
       auto signal = MakeSignal(view_width, view_height, pixel);
       auto frame_inputs = postprocess::ExposurePass::FrameInputs {};
       frame_inputs.use_fp32 = true;
-      const auto frame = pass_->ResolveFrame(ctx_, *resolved, frame_inputs);
+      const auto frame = SubmitCommands("Vortex Exposure Frame",
+        [&](graphics::CommandRecorder& recorder) -> auto {
+          return pass_->ResolveFrame(ctx_, recorder, *resolved, frame_inputs);
+        });
       ASSERT_NE(frame, nullptr);
       ASSERT_TRUE(RecordShared(signal, *resolved).executed);
       auto error = HdrSceneErrorData {};
@@ -340,8 +349,11 @@ NOLINT_TEST_F(ExposureGpuTest, DISABLED_ComposedAdmissionFullResolutionTiming)
           anchor_product,
           scene_product,
         };
-        ASSERT_TRUE(pass_->EvaluateFp16Products(
-          ctx_, view.frame, *resolved, products, {}));
+        ASSERT_TRUE(SubmitCommands("Vortex Exposure Suitability",
+          [&](graphics::CommandRecorder& recorder) -> auto {
+            return pass_->EvaluateFp16Products(
+              ctx_, recorder, view.frame, *resolved, products, {});
+          }));
       }
       {
         auto recorder = AcquireRecorder("Admission native timing end");

@@ -285,6 +285,7 @@ protected:
       .WillRepeatedly([this](UINT /*node_mask*/, const void* blob_data,
                         const SIZE_T blob_length, REFIID /*riid*/,
                         void** ppv_root_signature) -> HRESULT {
+        ++root_signature_creations_;
         // Capture the blob for validation
         blob_capture_.CaptureBlob(blob_data, blob_length);
 
@@ -323,6 +324,17 @@ protected:
       = std::make_shared<PipelineStateCache>(mock_graphics_.get());
   }
 
+  void TearDown() override
+  {
+    pipeline_cache_.reset();
+    mock_graphics_.reset();
+  }
+
+  auto RootSignatureCreations() const noexcept -> std::size_t
+  {
+    return root_signature_creations_;
+  }
+
   std::shared_ptr<oxygen::graphics::IShaderByteCode> dummy_bytecode_
     = std::make_shared<oxygen::graphics::ShaderByteCode<std::vector<uint32_t>>>(
       std::vector<uint32_t> { 0xDEADBEEF, 0xCAFEBABE, 0x12345678, 0x0BADF00D });
@@ -331,10 +343,13 @@ protected:
   std::shared_ptr<MockGraphics> mock_graphics_;
   std::shared_ptr<PipelineStateCache> pipeline_cache_;
 
+private:
   // Mock objects for D3D12 interfaces
   MockDevice mock_device_;
   MockRootSignature mock_root_signature_;
   MockPipelineState mock_pipeline_state_;
+
+  std::size_t root_signature_creations_ {};
 };
 
 } // anonymous namespace
@@ -379,7 +394,7 @@ NOLINT_TEST_F(PipelineStateCacheTest, GraphicsPipeline_BindlessCbvSrvTable)
 
   // Create root signature
   dx::IRootSignature* root_sig
-    = pipeline_cache_->CreateRootSignature(pipeline_desc);
+    = pipeline_cache_->GetOrCreateRootSignature(pipeline_desc);
 
   // Validate that root signature was created successfully
   EXPECT_NE(root_sig,
@@ -430,7 +445,7 @@ NOLINT_TEST_F(PipelineStateCacheTest, GraphicsPipeline_DirectCbvSrvTable)
               .Build();
 
   dx::IRootSignature* root_sig
-    = pipeline_cache_->CreateRootSignature(pipeline_desc);
+    = pipeline_cache_->GetOrCreateRootSignature(pipeline_desc);
   EXPECT_NE(root_sig, nullptr);
   EXPECT_TRUE(blob_capture_.blob_captured);
 
@@ -464,7 +479,7 @@ NOLINT_TEST_F(PipelineStateCacheTest, GraphicsPipeline_PushConstantsOnly)
               .Build();
 
   dx::IRootSignature* root_sig
-    = pipeline_cache_->CreateRootSignature(pipeline_desc);
+    = pipeline_cache_->GetOrCreateRootSignature(pipeline_desc);
   EXPECT_NE(root_sig, nullptr);
   EXPECT_TRUE(blob_capture_.blob_captured);
 
@@ -502,7 +517,7 @@ NOLINT_TEST_F(PipelineStateCacheTest, GraphicsPipeline_SamplerTable)
               .Build();
 
   dx::IRootSignature* root_sig
-    = pipeline_cache_->CreateRootSignature(pipeline_desc);
+    = pipeline_cache_->GetOrCreateRootSignature(pipeline_desc);
   EXPECT_NE(root_sig, nullptr);
   EXPECT_TRUE(blob_capture_.blob_captured);
 
@@ -544,7 +559,7 @@ NOLINT_TEST_F(PipelineStateCacheTest, ComputePipeline_BindlessCbvSrv)
               .Build();
 
   dx::IRootSignature* root_sig
-    = pipeline_cache_->CreateRootSignature(pipeline_desc);
+    = pipeline_cache_->GetOrCreateRootSignature(pipeline_desc);
   EXPECT_NE(root_sig, nullptr);
   EXPECT_TRUE(blob_capture_.blob_captured);
 
@@ -599,7 +614,7 @@ NOLINT_TEST_F(PipelineStateCacheTest, GraphicsPipeline_MixedParameters)
               .Build();
 
   dx::IRootSignature* root_sig
-    = pipeline_cache_->CreateRootSignature(pipeline_desc);
+    = pipeline_cache_->GetOrCreateRootSignature(pipeline_desc);
 
   EXPECT_NE(root_sig, nullptr);
   EXPECT_TRUE(blob_capture_.blob_captured);
@@ -649,7 +664,7 @@ NOLINT_TEST_F(PipelineStateCacheTest, ShaderVisibilityMapping)
               .Build();
 
   dx::IRootSignature* root_sig
-    = pipeline_cache_->CreateRootSignature(pipeline_desc);
+    = pipeline_cache_->GetOrCreateRootSignature(pipeline_desc);
 
   EXPECT_NE(root_sig, nullptr);
   EXPECT_TRUE(blob_capture_.blob_captured);
@@ -688,7 +703,7 @@ NOLINT_TEST_F(PipelineStateCacheTest, RegisterSpaceMapping)
               .Build();
 
   dx::IRootSignature* root_sig
-    = pipeline_cache_->CreateRootSignature(pipeline_desc);
+    = pipeline_cache_->GetOrCreateRootSignature(pipeline_desc);
 
   EXPECT_NE(root_sig, nullptr);
   EXPECT_TRUE(blob_capture_.blob_captured);
@@ -714,7 +729,7 @@ NOLINT_TEST_F(PipelineStateCacheTest, InvalidRootParameterIndex)
 
   // Should succeed with valid pipeline
   dx::IRootSignature* root_sig
-    = pipeline_cache_->CreateRootSignature(pipeline_desc);
+    = pipeline_cache_->GetOrCreateRootSignature(pipeline_desc);
   EXPECT_NE(root_sig, nullptr);
 }
 
@@ -762,3 +777,104 @@ NOLINT_TEST_F(PipelineStateCacheTest, CachingBehavior)
   // Should not have created new root signature blob
   EXPECT_FALSE(blob_capture_.blob_captured);
 }
+
+namespace {
+
+//! Shader identity does not duplicate an otherwise identical root signature.
+NOLINT_TEST_F(PipelineStateCacheTest, ComputeShadersShareTheirRootLayout)
+{
+  // Arrange
+  const auto make_pipeline
+    = [](const std::string_view entry_point) -> ComputePipelineDesc {
+    return ComputePipelineDesc::Builder {}
+      .SetComputeShader({ .stage = ShaderType::kCompute,
+        .source_path = "shared_layout",
+        .entry_point = std::string(entry_point) })
+      .AddRootBinding(RootBindingDesc {
+        .binding_slot_desc = { .register_index = 2, .register_space = 0 },
+        .visibility = ShaderStageFlags::kCompute,
+        .data = PushConstantsBinding { .size = 2 },
+      })
+      .Build();
+  };
+  const auto first = make_pipeline("First");
+  const auto second = make_pipeline("Second");
+
+  // Act
+  const auto* first_signature
+    = pipeline_cache_->GetOrCreateRootSignature(first);
+  const auto* second_signature
+    = pipeline_cache_->GetOrCreateRootSignature(second);
+
+  // Assert
+  EXPECT_EQ(first_signature, second_signature);
+  EXPECT_EQ(RootSignatureCreations(), 1U);
+}
+
+//! Root-constant capacity participates in complete native layout identity.
+NOLINT_TEST_F(
+  PipelineStateCacheTest, DifferentRootLayoutsDoNotShareCacheEntries)
+{
+  // Arrange
+  const auto make_pipeline = [](const uint32_t count) -> ComputePipelineDesc {
+    return ComputePipelineDesc::Builder {}
+      .SetComputeShader({ .stage = ShaderType::kCompute,
+        .source_path = "layout",
+        .entry_point = "Main" })
+      .AddRootBinding(RootBindingDesc {
+        .binding_slot_desc = { .register_index = 2, .register_space = 0 },
+        .visibility = ShaderStageFlags::kCompute,
+        .data = PushConstantsBinding { .size = count },
+      })
+      .Build();
+  };
+
+  // Act
+  static_cast<void>(
+    pipeline_cache_->GetOrCreateRootSignature(make_pipeline(2)));
+  static_cast<void>(
+    pipeline_cache_->GetOrCreateRootSignature(make_pipeline(4)));
+  static_cast<void>(
+    pipeline_cache_->GetOrCreateRootSignature(make_pipeline(2)));
+
+  // Assert
+  EXPECT_EQ(RootSignatureCreations(), 2U);
+}
+
+//! Graphics input-assembler flags cannot alias the compute layout entry.
+NOLINT_TEST_F(
+  PipelineStateCacheTest, NativeFlagsParticipateInRootSignatureIdentity)
+{
+  // Arrange
+  const auto binding = RootBindingDesc {
+    .binding_slot_desc = { .register_index = 2, .register_space = 0 },
+    .visibility = ShaderStageFlags::kAll,
+    .data = PushConstantsBinding { .size = 2 },
+  };
+  const auto compute = ComputePipelineDesc::Builder {}
+                         .SetComputeShader({ .stage = ShaderType::kCompute,
+                           .source_path = "flags",
+                           .entry_point = "Main" })
+                         .AddRootBinding(binding)
+                         .Build();
+  const auto graphics = GraphicsPipelineDesc::Builder {}
+                          .SetVertexShader({ .stage = ShaderType::kVertex,
+                            .source_path = "flags",
+                            .entry_point = "Main" })
+                          .SetPixelShader({ .stage = ShaderType::kPixel,
+                            .source_path = "flags",
+                            .entry_point = "PixelMain" })
+                          .SetFramebufferLayout(
+                            { .color_target_formats = { Format::kRGBA8UNorm } })
+                          .AddRootBinding(binding)
+                          .Build();
+
+  // Act
+  static_cast<void>(pipeline_cache_->GetOrCreateRootSignature(compute));
+  static_cast<void>(pipeline_cache_->GetOrCreateRootSignature(graphics));
+
+  // Assert
+  EXPECT_EQ(RootSignatureCreations(), 2U);
+}
+
+} // namespace

@@ -25,6 +25,10 @@ class Buffer;
 class Framebuffer;
 } // namespace oxygen::graphics
 
+namespace oxygen::graphics {
+class CommandRecorder;
+}
+
 namespace oxygen::vortex {
 
 struct RenderContext;
@@ -55,10 +59,9 @@ public:
   GroundGridPass(GroundGridPass&&) = delete;
   auto operator=(GroundGridPass&&) -> GroundGridPass& = delete;
 
-  [[nodiscard]] OXGN_VRTX_API auto Record(
-    RenderContext& ctx, const SceneTextures& scene_textures,
-    observer_ptr<const graphics::Framebuffer> target = {})
-    -> RecordState;
+  [[nodiscard]] OXGN_VRTX_API auto Record(RenderContext& ctx,
+    graphics::CommandRecorder& recorder, const SceneTextures& scene_textures,
+    observer_ptr<const graphics::Framebuffer> target = {}) -> RecordState;
 
 private:
   friend struct testing::RendererPublicationProbe;

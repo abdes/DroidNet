@@ -4,60 +4,64 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Vortex/Renderer.h>
-#include <Oxygen/Profiling/GpuEventScope.h>
-#include <Oxygen/Vortex/SceneRenderer/SceneRenderer.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
+#include <Oxygen/Profiling/GpuEventScope.h>
+#include <Oxygen/Vortex/Renderer.h>
+#include <Oxygen/Vortex/SceneRenderer/SceneRenderer.h>
 
 namespace oxygen::vortex {
 
 namespace {
 
-auto TrackTextureFromKnownOrInitial(graphics::CommandRecorder& recorder,
-  const graphics::Texture& texture) -> void
-{
-  if (recorder.IsResourceTracked(texture)) {
-    return;
+  auto TrackTextureFromKnownOrInitial(graphics::CommandRecorder& recorder,
+    const graphics::Texture& texture) -> void
+  {
+    if (recorder.IsResourceTracked(texture)) {
+      return;
+    }
+    if (recorder.AdoptKnownResourceState(texture)) {
+      return;
+    }
+
+    const auto initial = texture.GetDescriptor().initial_state;
+    CHECK_F(initial != graphics::ResourceStates::kUnknown
+        && initial != graphics::ResourceStates::kUndefined,
+      "SceneRenderer: cannot extract '{}' without a known or declared initial "
+      "state",
+      texture.GetName());
+    recorder.BeginTrackingResourceState(texture, initial, false);
   }
-  if (recorder.AdoptKnownResourceState(texture)) {
-    return;
+
+  auto CopyTextureIntoArtifact(graphics::CommandRecorder& recorder,
+    const graphics::Texture& source, graphics::Texture& artifact,
+    const graphics::ResourceStates source_final_state) -> void
+  {
+    TrackTextureFromKnownOrInitial(recorder, source);
+    TrackTextureFromKnownOrInitial(recorder, artifact);
+
+    recorder.RequireResourceState(
+      source, graphics::ResourceStates::kCopySource);
+    recorder.RequireResourceState(
+      artifact, graphics::ResourceStates::kCopyDest);
+    recorder.FlushBarriers();
+
+    recorder.CopyTexture(source, graphics::TextureSlice {},
+      graphics::TextureSubResourceSet::EntireTexture(), artifact,
+      graphics::TextureSlice {},
+      graphics::TextureSubResourceSet::EntireTexture());
+
+    recorder.RequireResourceState(source, source_final_state);
+    recorder.RequireResourceState(
+      artifact, graphics::ResourceStates::kShaderResource);
   }
-
-  const auto initial = texture.GetDescriptor().initial_state;
-  CHECK_F(initial != graphics::ResourceStates::kUnknown
-      && initial != graphics::ResourceStates::kUndefined,
-    "SceneRenderer: cannot extract '{}' without a known or declared initial "
-    "state",
-    texture.GetName());
-  recorder.BeginTrackingResourceState(texture, initial);
-}
-
-auto CopyTextureIntoArtifact(graphics::CommandRecorder& recorder,
-  const graphics::Texture& source, graphics::Texture& artifact,
-  const graphics::ResourceStates source_final_state) -> void
-{
-  TrackTextureFromKnownOrInitial(recorder, source);
-  TrackTextureFromKnownOrInitial(recorder, artifact);
-
-  recorder.RequireResourceState(source, graphics::ResourceStates::kCopySource);
-  recorder.RequireResourceState(artifact, graphics::ResourceStates::kCopyDest);
-  recorder.FlushBarriers();
-
-  recorder.CopyTexture(source, graphics::TextureSlice {},
-    graphics::TextureSubResourceSet::EntireTexture(), artifact,
-    graphics::TextureSlice {}, graphics::TextureSubResourceSet::EntireTexture());
-
-  recorder.RequireResourceStateFinal(source, source_final_state);
-  recorder.RequireResourceStateFinal(
-    artifact, graphics::ResourceStates::kShaderResource);
-}
 
 } // namespace
 
 // Stage 23 extraction/handoff owner: PostRenderCleanup is the only retained
 // seam allowed to publish PrevSceneDepth and snapshot PrevVelocity for their
 // handoff after Stage 22 completes.
-void SceneRenderer::PostRenderCleanup(RenderContext& ctx)
+void SceneRenderer::PostRenderCleanup(
+  RenderContext& ctx, graphics::CommandRecorder& recorder)
 {
   // Both consumers read the same immutable Stage 21 snapshot. Retain its
   // ownership wrapper so either reader can outlive the view and the other
@@ -94,13 +98,6 @@ void SceneRenderer::PostRenderCleanup(RenderContext& ctx)
     return;
   }
 
-  const auto queue_key = gfx_.QueueKeyFor(graphics::QueueRole::kGraphics);
-  auto recorder_ptr
-    = gfx_.AcquireCommandRecorder(queue_key, "Vortex PostRenderCleanup");
-  CHECK_F(static_cast<bool>(recorder_ptr),
-    "SceneRenderer: failed to acquire a recorder for Stage 23 extraction");
-  renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(*recorder_ptr);
-  auto& recorder = *recorder_ptr;
   graphics::GpuEventScope scope(recorder, "Vortex.PostRenderCleanup",
     profiling::ProfileGranularity::kTelemetry,
     profiling::ProfileCategory::kPass);

@@ -17,6 +17,7 @@
 #include <Oxygen/Graphics/Common/CommandList.h>
 #include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
+#include <Oxygen/Graphics/Common/CommandRecording.h>
 #include <Oxygen/Graphics/Common/Detail/Barriers.h>
 #include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
@@ -276,30 +277,7 @@ public:
   MOCK_METHOD(void, OnExecuted, (), (override));
 };
 
-// TestCommander class that allows dependency injection for testing
-class TestCommander final : public oxygen::graphics::internal::Commander {
-public:
-  explicit TestCommander(DeferredReclaimer& reclaimer)
-    : injected_reclaimer_(&reclaimer)
-  {
-    // Immediately set the reclaimer_ to our injected instance
-    reclaimer_ = oxygen::observer_ptr<DeferredReclaimer>(injected_reclaimer_);
-  }
-
-protected:
-  auto UpdateDependencies(const std::function<Component&(oxygen::TypeId)>&
-    /*get_component*/) noexcept -> void override
-  {
-    // Override to inject our real DeferredReclaimer for testing
-    // Instead of calling the parent's UpdateDependencies, we directly
-    // set the reclaimer_ pointer to our injected instance
-    reclaimer_ = oxygen::observer_ptr<DeferredReclaimer>(injected_reclaimer_);
-  }
-
-private:
-  // Store pointer to the real DeferredReclaimer we want to inject
-  DeferredReclaimer* injected_reclaimer_;
-};
+using TestCommander = oxygen::graphics::internal::Commander;
 
 //=== Common Test Infrastructure ===------------------------------------------//
 
@@ -340,7 +318,14 @@ protected:
     -> std::shared_ptr<MockCommandList>
   {
 
-    return std::make_shared<NiceMock<MockCommandList>>(name);
+    auto list = std::make_shared<NiceMock<MockCommandList>>(name);
+    ON_CALL(*list, OnSubmitted()).WillByDefault([list = list.get()] -> void {
+      list->CommandList::OnSubmitted();
+    });
+    ON_CALL(*list, OnExecuted()).WillByDefault([list = list.get()] -> void {
+      list->CommandList::OnExecuted();
+    });
+    return list;
   }
 
   //! Factory method to create a mock command recorder with standard setup
@@ -355,7 +340,14 @@ protected:
     recorder = std::make_unique<NiceMock<MockCommandRecorder>>(
       std::move(command_list), obs_queue);
 
-    ON_CALL(*recorder, Begin()).WillByDefault(Return());
+    ON_CALL(*recorder, Begin())
+      .WillByDefault([pointer = recorder.get()]() -> void {
+        pointer->CommandRecorder::Begin();
+      });
+    ON_CALL(*recorder, End())
+      .WillByDefault([pointer = recorder.get()]() -> CommandListPtr {
+        return pointer->CommandRecorder::End();
+      });
 
     return recorder;
   }
@@ -389,938 +381,264 @@ protected:
   // NOLINTEND(cppcoreguidelines-non-private-member-variables-in-classes)
 };
 
-//=== Submission Test Fixtures ===--------------------------------------------//
+using oxygen::graphics::CommandRecording;
+using oxygen::graphics::SubmissionOutcome;
+using oxygen::graphics::SubmissionPolicy;
 
-//! Base fixture for submission-related tests using nice mocks
-class SubmissionTestBase : public CommanderTestBase {
-  // Inherits all functionality from CommanderTestBase with nice mocks
-};
-
-//=== Immediate Submission Test Cases ===-------------------------------------//
-
-// Immediate-submission fixture: same setup but used to mark tests that
-// exercise immediate submission semantics.
-class ImmediateSubmissionTest : public SubmissionTestBase { };
-
-//! Immediate path: GIVEN a recorder in immediate mode WHEN its deleter runs
-//! THEN the command list is ended, submitted once to its target queue, and
-//! OnSubmitted() is invoked immediately (execution completion deferred).
-NOLINT_TEST_F(
-  ImmediateSubmissionTest, ImmediateSubmission_CallsSubmitImmediately)
+//! Normal scope exit submits once and retains native work until retirement.
+NOLINT_TEST_F(CommanderTestBase, ScopeExitSubmitsAndRetiresAfterTheFrame)
 {
+  // Arrange
+  auto list = CreateMockCommandList("automatic");
+  auto recorder = CreateMockCommandRecorder(list, secondary_q);
+  EXPECT_CALL(*secondary_q, Submit(testing::A<CommandListPtr>())).Times(1);
+  EXPECT_CALL(*list, OnSubmitted()).Times(1);
+  EXPECT_CALL(*list, OnExecuted()).Times(0);
 
-  // Create mock command list and recorder using factory methods
-  auto mock_list = CreateMockCommandList("immediate-list");
-  auto mock_recorder = CreateMockCommandRecorder(mock_list, secondary_q);
+  // Act
+  {
+    auto recording = commander->PrepareCommandRecorder(
+      std::move(recorder), SubmissionPolicy::kOnScopeExit);
+    EXPECT_TRUE(recording);
+    EXPECT_TRUE(list->IsRecording());
+  }
 
-  // Set up expectations
-  EXPECT_CALL(*mock_recorder, End()).WillOnce(Return(mock_list));
+  // Assert
+  EXPECT_TRUE(list->IsSubmitted());
+  testing::Mock::VerifyAndClearExpectations(list.get());
+  EXPECT_CALL(*list, OnExecuted()).Times(1);
+  SimulateFrameCompletion();
+  EXPECT_TRUE(list->IsFree());
+}
+
+//! Explicit recordings remain unsubmitted until their retained owner submits.
+NOLINT_TEST_F(
+  CommanderTestBase, ExplicitSubmissionPublishesAfterNativeAcceptance)
+{
+  // Arrange
+  auto list = CreateMockCommandList("explicit");
+  auto recorder = CreateMockCommandRecorder(list, secondary_q);
+  std::optional<SubmissionOutcome> publication;
   EXPECT_CALL(*secondary_q, Submit(testing::A<CommandListPtr>()))
-    .WillOnce(Return());
-  EXPECT_CALL(*mock_list, OnSubmitted()).Times(1);
+    .WillOnce(
+      [&](const auto&) -> void { EXPECT_FALSE(publication.has_value()); });
+  auto recording = commander->PrepareCommandRecorder(
+    std::move(recorder), SubmissionPolicy::kExplicit);
+  recording->OnSubmission(
+    [&](const auto result) -> void { publication = result; });
 
+  // Act
+  EXPECT_FALSE(list->IsSubmitted());
+  const auto submitted = recording.Submit();
+
+  // Assert
+  EXPECT_TRUE(submitted);
+  EXPECT_FALSE(recording);
+  EXPECT_TRUE(list->IsSubmitted());
+  EXPECT_EQ(publication, SubmissionOutcome::kSubmitted);
+}
+
+//! Destruction of an unsubmitted explicit recording cancels its publication.
+NOLINT_TEST_F(CommanderTestBase, ExplicitScopeExitDiscards)
+{
+  // Arrange
+  auto list = CreateMockCommandList("discard");
+  auto recorder = CreateMockCommandRecorder(list, secondary_q);
+  std::optional<SubmissionOutcome> publication;
+  EXPECT_CALL(*secondary_q, Submit(testing::A<CommandListPtr>())).Times(0);
+
+  // Act
   {
-    // Use TestCommander for immediate submission
-    auto deleter = commander->PrepareCommandRecorder(
-      std::move(mock_recorder), mock_list, true);
-    // When deleter goes out of scope, immediate submission happens
+    auto recording = commander->PrepareCommandRecorder(
+      std::move(recorder), SubmissionPolicy::kExplicit);
+    recording->OnSubmission(
+      [&](const auto result) -> void { publication = result; });
   }
 
-  // Process any deferred releases
-  SimulateFrameCompletion();
+  // Assert
+  EXPECT_TRUE(list->IsFree());
+  EXPECT_EQ(publication, SubmissionOutcome::kDiscarded);
 }
 
-//! Edge case: immediate submission of an otherwise "empty" recorder (no
-//! commands recorded) SHOULD still end & submit the list and invoke
-//! OnSubmitted(), proving the pathway does not special-case emptiness.
-NOLINT_TEST_F(ImmediateSubmissionTest, EmptyList_ImmediateStillSubmits)
+//! Exception unwinding cancels automatic recordings instead of submitting them.
+NOLINT_TEST_F(CommanderTestBase, UnwindingDiscardsAutomaticRecording)
 {
+  // Arrange
+  auto list = CreateMockCommandList("unwind");
+  auto recorder = CreateMockCommandRecorder(list, secondary_q);
+  std::optional<SubmissionOutcome> publication;
+  EXPECT_CALL(*secondary_q, Submit(testing::A<CommandListPtr>())).Times(0);
 
-  auto mock_list = CreateMockCommandList("empty-list");
-  auto mock_recorder = CreateMockCommandRecorder(mock_list, secondary_q);
+  // Act
+  const auto work = [&]() -> void {
+    auto recording = commander->PrepareCommandRecorder(
+      std::move(recorder), SubmissionPolicy::kOnScopeExit);
+    recording->OnSubmission(
+      [&](const auto result) -> void { publication = result; });
+    throw std::runtime_error("recording failed");
+  };
+  NOLINT_EXPECT_THROW(work(), std::runtime_error);
 
-  // Set up expectations for empty list submission
-  EXPECT_CALL(*mock_recorder, End()).WillOnce(Return(mock_list));
-  EXPECT_CALL(*secondary_q, Submit(testing::A<CommandListPtr>()))
-    .WillOnce(Return());
-  EXPECT_CALL(*mock_list, OnSubmitted()).Times(1);
+  // Assert
+  EXPECT_EQ(publication, SubmissionOutcome::kDiscarded);
+  EXPECT_TRUE(list->IsFree());
+}
 
+//! Explicit submission disarms automatic scope-exit submission and callbacks.
+NOLINT_TEST_F(CommanderTestBase, SubmissionAndPublicationResolveExactlyOnce)
+{
+  // Arrange
+  auto list = CreateMockCommandList("once");
+  auto recorder = CreateMockCommandRecorder(list, secondary_q);
+  auto calls = 0;
+  EXPECT_CALL(*secondary_q, Submit(testing::A<CommandListPtr>())).Times(1);
+
+  // Act
   {
-    // Use TestCommander for immediate submission of empty list
-    auto deleter = commander->PrepareCommandRecorder(
-      std::move(mock_recorder), mock_list, true);
-    // Empty recorder - no commands recorded, but still submitted immediately
-  }
-
-  // Process any deferred releases
-  SimulateFrameCompletion();
-}
-
-//! Immediate path OnExecuted: GIVEN an immediate submission WHEN we process
-//! deferred releases THEN OnSubmitted fires once at submit time and OnExecuted
-//! fires exactly once later (idempotent reprocessing safe).
-NOLINT_TEST_F(ImmediateSubmissionTest, ImmediateSubmission_OnExecutedFiresOnce)
-{
-  auto mock_list = CreateMockCommandList("immediate-onexecuted");
-  auto mock_recorder = CreateMockCommandRecorder(mock_list, secondary_q);
-
-  testing::Sequence seq; // Enforce ordering: OnSubmitted before OnExecuted
-  EXPECT_CALL(*mock_recorder, End()).WillOnce(Return(mock_list));
-  EXPECT_CALL(*secondary_q, Submit(testing::A<CommandListPtr>()))
-    .WillOnce(Return());
-  EXPECT_CALL(*mock_list, OnSubmitted()).Times(1).InSequence(seq);
-  EXPECT_CALL(*mock_list, OnExecuted()).Times(1).InSequence(seq);
-
-  {
-    auto deleter = commander->PrepareCommandRecorder(
-      std::move(mock_recorder), mock_list, true);
-  } // immediate submit happens
-
-  // Not processed yet -> OnExecuted should not have fired (ordering ensures)
-  // Process deferred releases to trigger OnExecuted
-  SimulateFrameCompletion();
-
-  // Second processing pass should NOT call OnExecuted again (Times(1) enforces)
-  SimulateFrameCompletion();
-}
-
-//=== Deferred Submission Test Cases ===--------------------------------------//
-
-// Deferred-submission fixture: uses the base setup and defaults to deferred
-class DeferredSubmissionTest : public SubmissionTestBase { };
-
-//! Deferred lifecycle: recorder destruction in deferred mode MUST NOT submit;
-//! only an explicit SubmitDeferredCommandLists() groups & submits later.
-NOLINT_TEST_F(DeferredSubmissionTest, DeferredLifecycle_WaitsForSubmitCall)
-{
-  auto mock_list = CreateMockCommandList("deferred-list");
-  auto mock_recorder = CreateMockCommandRecorder(mock_list, secondary_q);
-
-  // Set up expectations - Submit should be called when we explicitly submit
-  EXPECT_CALL(*mock_recorder, End()).WillOnce(Return(mock_list));
-  EXPECT_CALL(*secondary_q, Submit(testing::A<CommandListSpan>()))
-    .WillOnce(Return());
-
-  {
-    // Use TestCommander for deferred submission
-    auto deleter = commander->PrepareCommandRecorder(
-      std::move(mock_recorder), mock_list, false);
-    // Deferred recorder - commands are not submitted until explicit call
-  }
-
-  // Submit all deferred command lists
-  commander->SubmitDeferredCommandLists();
-
-  // Process any deferred releases
-  SimulateFrameCompletion();
-}
-
-//! Batching: multiple deferred recorders targeting same queue SHOULD be
-//! coalesced into one Submit(span) call preserving per-list OnSubmitted.
-NOLINT_TEST_F(DeferredSubmissionTest, MultipleLists_SubmittedTogether)
-{
-  auto list_a = CreateMockCommandList("batch-a");
-  auto list_b = CreateMockCommandList("batch-b");
-  auto recorder_a = CreateMockCommandRecorder(list_a, secondary_q);
-  auto recorder_b = CreateMockCommandRecorder(list_b, secondary_q);
-
-  // Set up expectations for batched submission
-  EXPECT_CALL(*recorder_a, End()).WillOnce(Return(list_a));
-  EXPECT_CALL(*recorder_b, End()).WillOnce(Return(list_b));
-  EXPECT_CALL(*secondary_q, Submit(testing::A<CommandListSpan>()))
-    .WillOnce(Return());
-
-  {
-    auto deleter_a
-      = commander->PrepareCommandRecorder(std::move(recorder_a), list_a, false);
-    auto deleter_b
-      = commander->PrepareCommandRecorder(std::move(recorder_b), list_b, false);
-  }
-
-  // Submit all deferred command lists (should batch together)
-  commander->SubmitDeferredCommandLists();
-
-  // Process any deferred releases
-  SimulateFrameCompletion();
-}
-
-//! Idempotence: calling SubmitDeferredCommandLists() with an empty backlog
-//! SHOULD be a no-op and remain safe when invoked repeatedly.
-NOLINT_TEST_F(DeferredSubmissionTest, SubmitDeferred_Idempotent)
-{
-  // Should not crash or throw when called with no pending lists
-  commander->SubmitDeferredCommandLists();
-  commander->SubmitDeferredCommandLists(); // Second call should be safe
-}
-
-//! Mixed modes: an immediate list and a deferred list on the same queue—
-//! immediate one submits right away; deferred waits until the batch submit.
-NOLINT_TEST_F(DeferredSubmissionTest, ImmediateAndDeferred_WorkTogether)
-{
-  auto list_def = CreateMockCommandList("deferred");
-  auto list_imm = CreateMockCommandList("immediate");
-  auto recorder_def = CreateMockCommandRecorder(list_def, secondary_q);
-  auto recorder_imm = CreateMockCommandRecorder(list_imm, secondary_q);
-
-  // Set up expectations
-  EXPECT_CALL(*recorder_def, End()).WillOnce(Return(list_def));
-  EXPECT_CALL(*recorder_imm, End()).WillOnce(Return(list_imm));
-  EXPECT_CALL(*secondary_q, Submit(testing::A<CommandListPtr>()))
-    .WillOnce(Return()); // Immediate submission
-  EXPECT_CALL(*secondary_q, Submit(testing::A<CommandListSpan>()))
-    .WillOnce(Return()); // Deferred submission
-  EXPECT_CALL(*list_imm, OnSubmitted()).Times(1);
-  EXPECT_CALL(*list_def, OnSubmitted()).Times(1);
-
-  {
-    // Create deferred first, then immediate (immediate submits on destruction)
-    auto deleter_def = commander->PrepareCommandRecorder(
-      std::move(recorder_def), list_def, false);
-    auto deleter_imm = commander->PrepareCommandRecorder(
-      std::move(recorder_imm), list_imm, true);
-  }
-
-  // Submit deferred lists
-  commander->SubmitDeferredCommandLists();
-
-  // Process any deferred releases
-  SimulateFrameCompletion();
-}
-
-//! Deferred path OnExecuted: GIVEN deferred lists WHEN we submit and process
-//! releases THEN each list receives OnSubmitted once and OnExecuted once, with
-//! ordering preserved per list.
-NOLINT_TEST_F(DeferredSubmissionTest, DeferredSubmission_OnExecutedFiresOnce)
-{
-  auto list_a = CreateMockCommandList("deferred-a-onexecuted");
-  auto list_b = CreateMockCommandList("deferred-b-onexecuted");
-  auto recorder_a = CreateMockCommandRecorder(list_a, secondary_q);
-  auto recorder_b = CreateMockCommandRecorder(list_b, secondary_q);
-
-  testing::Sequence seq_a;
-  testing::Sequence seq_b;
-  EXPECT_CALL(*recorder_a, End()).WillOnce(Return(list_a));
-  EXPECT_CALL(*recorder_b, End()).WillOnce(Return(list_b));
-  EXPECT_CALL(*secondary_q, Submit(testing::A<CommandListSpan>()))
-    .WillOnce(Return());
-  EXPECT_CALL(*list_a, OnSubmitted()).Times(1).InSequence(seq_a);
-  EXPECT_CALL(*list_a, OnExecuted()).Times(1).InSequence(seq_a);
-  EXPECT_CALL(*list_b, OnSubmitted()).Times(1).InSequence(seq_b);
-  EXPECT_CALL(*list_b, OnExecuted()).Times(1).InSequence(seq_b);
-
-  {
-    auto deleter_a
-      = commander->PrepareCommandRecorder(std::move(recorder_a), list_a, false);
-    auto deleter_b
-      = commander->PrepareCommandRecorder(std::move(recorder_b), list_b, false);
-  }
-
-  commander->SubmitDeferredCommandLists();
-  SimulateFrameCompletion();
-  SimulateFrameCompletion(); // Idempotency check
-}
-
-//! Uneven multi-queue batch: GIVEN two lists on primary queue and one on
-//! secondary WHEN deferred submission occurs THEN two Submit(span) calls (one
-//! per queue) and each valid list gets OnSubmitted & OnExecuted exactly once.
-NOLINT_TEST_F(DeferredSubmissionTest, DeferredSubmission_UnevenMultiQueueBatch)
-{
-  auto list_p1 = CreateMockCommandList("primary-1");
-  auto list_p2 = CreateMockCommandList("primary-2");
-  auto list_s = CreateMockCommandList("secondary-1");
-  auto rec_p1 = CreateMockCommandRecorder(list_p1, primary_q);
-  auto rec_p2 = CreateMockCommandRecorder(list_p2, primary_q);
-  auto rec_s = CreateMockCommandRecorder(list_s, secondary_q);
-
-  testing::Sequence seq_p1;
-  testing::Sequence seq_p2;
-  testing::Sequence seq_s;
-  EXPECT_CALL(*rec_p1, End()).WillOnce(Return(list_p1));
-  EXPECT_CALL(*rec_p2, End()).WillOnce(Return(list_p2));
-  EXPECT_CALL(*rec_s, End()).WillOnce(Return(list_s));
-  EXPECT_CALL(*primary_q, Submit(testing::A<CommandListSpan>()))
-    .WillOnce(Return());
-  EXPECT_CALL(*secondary_q, Submit(testing::A<CommandListSpan>()))
-    .WillOnce(Return());
-  EXPECT_CALL(*list_p1, OnSubmitted()).Times(1).InSequence(seq_p1);
-  EXPECT_CALL(*list_p1, OnExecuted()).Times(1).InSequence(seq_p1);
-  EXPECT_CALL(*list_p2, OnSubmitted()).Times(1).InSequence(seq_p2);
-  EXPECT_CALL(*list_p2, OnExecuted()).Times(1).InSequence(seq_p2);
-  EXPECT_CALL(*list_s, OnSubmitted()).Times(1).InSequence(seq_s);
-  EXPECT_CALL(*list_s, OnExecuted()).Times(1).InSequence(seq_s);
-
-  {
-    auto d1
-      = commander->PrepareCommandRecorder(std::move(rec_p1), list_p1, false);
-    auto d2
-      = commander->PrepareCommandRecorder(std::move(rec_p2), list_p2, false);
-    auto d3
-      = commander->PrepareCommandRecorder(std::move(rec_s), list_s, false);
-  }
-
-  commander->SubmitDeferredCommandLists();
-  SimulateFrameCompletion();
-  SimulateFrameCompletion(); // Ensure no duplicate OnExecuted
-}
-
-//! Mixed valid + null in deferred batch: GIVEN one recorder whose End() returns
-//! nullptr and another valid WHEN submitting THEN only the valid list is
-//! submitted and receives OnSubmitted/OnExecuted.
-NOLINT_TEST_F(DeferredSubmissionTest, DeferredSubmission_NullListSkipped)
-{
-  auto valid_list = CreateMockCommandList("valid-list");
-  auto valid_rec = CreateMockCommandRecorder(valid_list, secondary_q);
-  auto null_list = CreateMockCommandList("null-list-placeholder");
-  auto null_rec = CreateMockCommandRecorder(null_list, secondary_q);
-
-  // Force one recorder to produce nullptr
-  EXPECT_CALL(*null_rec, End()).WillOnce(Return(nullptr));
-  EXPECT_CALL(*valid_rec, End()).WillOnce(Return(valid_list));
-  EXPECT_CALL(*secondary_q, Submit(testing::A<CommandListSpan>()))
-    .WillOnce(Return());
-  EXPECT_CALL(*valid_list, OnSubmitted()).Times(1);
-  EXPECT_CALL(*valid_list, OnExecuted()).Times(1);
-  EXPECT_CALL(*null_list, OnSubmitted()).Times(0);
-  EXPECT_CALL(*null_list, OnExecuted()).Times(0);
-
-  {
-    auto d_null = commander->PrepareCommandRecorder(
-      std::move(null_rec), null_list, false);
-    auto d_valid = commander->PrepareCommandRecorder(
-      std::move(valid_rec), valid_list, false);
-  }
-
-  commander->SubmitDeferredCommandLists();
-  SimulateFrameCompletion();
-}
-
-//! OnExecuted idempotency: GIVEN a submitted list WHEN processing deferred
-//! releases multiple times THEN OnExecuted is invoked only once.
-NOLINT_TEST_F(DeferredSubmissionTest, OnExecuted_IdempotentAcrossFrames)
-{
-  auto list_a = CreateMockCommandList("idempotent-list");
-  auto rec_a = CreateMockCommandRecorder(list_a, secondary_q);
-
-  EXPECT_CALL(*rec_a, End()).WillOnce(Return(list_a));
-  EXPECT_CALL(*secondary_q, Submit(testing::A<CommandListSpan>()))
-    .WillOnce(Return());
-  EXPECT_CALL(*list_a, OnSubmitted()).Times(1);
-  EXPECT_CALL(*list_a, OnExecuted()).Times(1);
-
-  {
-    auto d = commander->PrepareCommandRecorder(std::move(rec_a), list_a, false);
-  }
-
-  commander->SubmitDeferredCommandLists();
-  // First processing triggers OnExecuted
-  SimulateFrameCompletion();
-  // Subsequent processing should not retrigger
-  SimulateFrameCompletion();
-  SimulateFrameCompletion();
-}
-
-//=== Commander Error Testing with Mocks ===----------------------------------//
-
-//! Test fixture for testing Commander error scenarios with strict mocks
-class CommanderErrorTest : public CommanderTestBase {
-protected:
-  auto SetUp() -> void override
-  {
-    // Use strict mocks for precise error testing
-    CommanderTestBase::SetUp();
-
-    // Create additional mocked dependencies for error testing
-    mock_command_list = CreateMockCommandList("test-list");
-    mock_recorder = CreateMockCommandRecorder(mock_command_list, primary_q);
-
-    // Set up default behaviors specific to error tests
-    ON_CALL(*primary_q, GetQueueRole()).WillByDefault(Return(Role::kGraphics));
-  }
-
-  // Convenience accessors for error test-specific members
-  // Test fixture state is intentionally shared with derived test cases.
-  // NOLINTBEGIN(cppcoreguidelines-non-private-member-variables-in-classes)
-  std::shared_ptr<MockCommandList> mock_command_list;
-  std::unique_ptr<MockCommandRecorder> mock_recorder;
-  // NOLINTEND(cppcoreguidelines-non-private-member-variables-in-classes)
-};
-
-//! Deferred failure: GIVEN a deferred list WHEN queue->Submit(span) throws
-//! THEN Commander aggregates errors and rethrows, with no OnSubmitted().
-NOLINT_TEST_F(CommanderErrorTest, DeferredSubmission_QueueFailure_Throws)
-{
-  EXPECT_CALL(*mock_recorder, End()).WillOnce(Return(mock_command_list));
-  EXPECT_CALL(*mock_command_list, OnSubmitted()).Times(0);
-
-  {
-    auto deleter = commander->PrepareCommandRecorder(
-      std::move(mock_recorder), mock_command_list, false);
-  }
-
-  EXPECT_CALL(*primary_q, Submit(testing::A<CommandListSpan>()))
-    .WillOnce(Throw(std::runtime_error("Queue submission failed")));
-
-  NOLINT_EXPECT_THROW(
-    commander->SubmitDeferredCommandLists(), std::runtime_error);
-}
-
-//! Immediate failure: GIVEN immediate mode WHEN queue submission throws
-//! THEN exception is swallowed (logged) and no lifecycle callbacks fire.
-NOLINT_TEST_F(
-  CommanderErrorTest, ImmediateSubmission_QueueFailure_LoggedNotThrown)
-{
-  EXPECT_CALL(*mock_recorder, End()).WillOnce(Return(mock_command_list));
-
-  EXPECT_CALL(*primary_q, Submit(testing::A<CommandListPtr>()))
-    .WillOnce(Throw(std::runtime_error("Immediate queue submission failed")));
-  EXPECT_CALL(*mock_command_list, OnSubmitted()).Times(0);
-  EXPECT_CALL(*mock_command_list, OnExecuted()).Times(0);
-
-  NOLINT_EXPECT_NO_THROW({
-    auto deleter = commander->PrepareCommandRecorder(
-      std::move(mock_recorder), mock_command_list, true);
-  });
-
-  // Ensure no deferred OnExecuted sneaks in
-  SimulateFrameCompletion();
-}
-
-//! Immediate End() nullptr: recorder produces no list => no Submit, no
-//! callbacks, proves defensive handling of null product.
-NOLINT_TEST_F(CommanderErrorTest, ImmediateSubmission_EndReturnsNull_NoSubmit)
-{
-  EXPECT_CALL(*mock_recorder, End()).WillOnce(Return(nullptr));
-  EXPECT_CALL(*primary_q, Submit(testing::A<CommandListPtr>())).Times(0);
-  EXPECT_CALL(*mock_command_list, OnSubmitted()).Times(0);
-  EXPECT_CALL(*mock_command_list, OnExecuted()).Times(0);
-  NOLINT_EXPECT_NO_THROW({
-    auto deleter = commander->PrepareCommandRecorder(
-      std::move(mock_recorder), mock_command_list, true);
-  });
-  SimulateFrameCompletion();
-}
-
-//! Immediate End() exception: End() throws pre-submit => error logged and
-//! no Submit/OnSubmitted/OnExecuted invocations occur.
-NOLINT_TEST_F(CommanderErrorTest, ImmediateSubmission_EndThrows_NoSubmit)
-{
-  EXPECT_CALL(*mock_recorder, End()).WillOnce(Return(nullptr));
-  EXPECT_CALL(*primary_q, Submit(testing::A<CommandListPtr>())).Times(0);
-  EXPECT_CALL(*mock_command_list, OnSubmitted()).Times(0);
-  EXPECT_CALL(*mock_command_list, OnExecuted()).Times(0);
-  NOLINT_EXPECT_NO_THROW({
-    auto deleter = commander->PrepareCommandRecorder(
-      std::move(mock_recorder), mock_command_list, true);
-  });
-  SimulateFrameCompletion();
-}
-
-//! Deferred End() exception: End() throws (deferred path) => destruction
-//! absorbs error, nothing queued, no Submit attempt.
-NOLINT_TEST_F(CommanderErrorTest, RecorderEnd_Failure_LoggedNotThrown)
-{
-  EXPECT_CALL(*mock_recorder, End()).WillOnce(Return(nullptr));
-
-  NOLINT_EXPECT_NO_THROW({
-    auto deleter = commander->PrepareCommandRecorder(
-      std::move(mock_recorder), mock_command_list, false);
-  });
-}
-
-//! Deferred End() nullptr: End() returns nullptr => entry skipped, no
-//! submission later, no callbacks.
-NOLINT_TEST_F(CommanderErrorTest, NoRecordedList_HandledGracefully)
-{
-  EXPECT_CALL(*mock_recorder, End()).WillOnce(Return(nullptr));
-
-  NOLINT_EXPECT_NO_THROW({
-    auto deleter = commander->PrepareCommandRecorder(
-      std::move(mock_recorder), mock_command_list, false);
-  });
-}
-
-//! API contract: null recorder argument MUST trigger death check.
-NOLINT_TEST_F(CommanderErrorTest, NullRecorder_TriggersDeathTest)
-{
-  NOLINT_EXPECT_DEATH(
-    {
-      auto deleter
-        = commander->PrepareCommandRecorder(nullptr, mock_command_list, false);
-    },
-    "CHECK FAILED.*recorder != nullptr");
-}
-
-//! API contract: null command list argument MUST trigger death check.
-NOLINT_TEST_F(CommanderErrorTest, NullCommandList_TriggersDeathTest)
-{
-  NOLINT_EXPECT_DEATH(
-    {
-      auto deleter = commander->PrepareCommandRecorder(
-        std::move(mock_recorder), nullptr, false);
-    },
-    "CHECK FAILED.*command_list != nullptr");
-}
-
-//! Deferred multi-list failure: batching two lists on one queue that throws
-//! should yield aggregated error and zero OnSubmitted().
-NOLINT_TEST_F(
-  CommanderErrorTest, MultipleDeferredLists_PartialFailure_HandledProperly)
-{
-  EXPECT_CALL(*mock_recorder, End()).WillOnce(Return(mock_command_list));
-  EXPECT_CALL(*mock_command_list, OnSubmitted()).Times(0);
-
-  {
-    auto deleter1 = commander->PrepareCommandRecorder(
-      std::move(mock_recorder), mock_command_list, false);
-  }
-
-  auto list2 = CreateMockCommandList("list-2");
-  auto recorder2 = CreateMockCommandRecorder(list2, primary_q);
-
-  EXPECT_CALL(*recorder2, End()).WillOnce(Return(list2));
-  EXPECT_CALL(*list2, OnSubmitted()).Times(0);
-
-  {
-    auto deleter2
-      = commander->PrepareCommandRecorder(std::move(recorder2), list2, false);
-  }
-
-  EXPECT_CALL(*primary_q, Submit(testing::A<CommandListSpan>()))
-    .WillOnce(Throw(std::runtime_error("Queue submission failed")));
-
-  NOLINT_EXPECT_THROW(
-    commander->SubmitDeferredCommandLists(), std::runtime_error);
-}
-
-//! Recovery: after a failed deferred submission, new deferred list on other
-//! queue still submits successfully proving internal state reset.
-NOLINT_TEST_F(CommanderErrorTest, ErrorRecovery_SubsequentSubmissions_Work)
-{
-  EXPECT_CALL(*mock_recorder, End()).WillOnce(Return(mock_command_list));
-  EXPECT_CALL(*mock_command_list, OnSubmitted())
-    .Times(0); // first submission fails
-
-  {
-    auto deleter = commander->PrepareCommandRecorder(
-      std::move(mock_recorder), mock_command_list, false);
-  }
-
-  EXPECT_CALL(*primary_q, Submit(testing::A<CommandListSpan>()))
-    .WillOnce(Throw(std::runtime_error("First submission failed")));
-
-  NOLINT_EXPECT_THROW(
-    commander->SubmitDeferredCommandLists(), std::runtime_error);
-
-  auto recovery_list = CreateMockCommandList("recovery-list");
-  auto recovery_recorder
-    = CreateMockCommandRecorder(recovery_list, secondary_q);
-
-  EXPECT_CALL(*recovery_recorder, End()).WillOnce(Return(recovery_list));
-
-  EXPECT_CALL(*secondary_q, Submit(testing::A<CommandListSpan>()))
-    .WillOnce(Return());
-  EXPECT_CALL(*recovery_list, OnSubmitted()).Times(1);
-
-  {
-    auto deleter = commander->PrepareCommandRecorder(
-      std::move(recovery_recorder), recovery_list, false);
-  }
-
-  NOLINT_EXPECT_NO_THROW(commander->SubmitDeferredCommandLists());
-}
-
-//=== Comprehensive Commander Queue Error Testing ===-------------------------//
-
-//! Immediate multi-queue: two independent immediate submissions on two
-//! queues should each submit & invoke OnSubmitted() once.
-NOLINT_TEST_F(
-  CommanderErrorTest, SuccessiveImmediateSubmissions_DifferentQueues_AllSucceed)
-{
-  // Use fixture-provided  secondary_q instead of creating a new one
-  auto list2 = CreateMockCommandList("list-2");
-  auto recorder2 = CreateMockCommandRecorder(list2, secondary_q);
-
-  EXPECT_CALL(*mock_recorder, End()).WillOnce(Return(mock_command_list));
-  EXPECT_CALL(*recorder2, End()).WillOnce(Return(list2));
-
-  EXPECT_CALL(*primary_q, Submit(testing::A<CommandListPtr>()))
-    .WillOnce(Return());
-  EXPECT_CALL(*secondary_q, Submit(testing::A<CommandListPtr>()))
-    .WillOnce(Return());
-  EXPECT_CALL(*mock_command_list, OnSubmitted()).Times(1);
-  EXPECT_CALL(*list2, OnSubmitted()).Times(1);
-
-  NOLINT_EXPECT_NO_THROW({
-    auto deleter1 = commander->PrepareCommandRecorder(
-      std::move(mock_recorder), mock_command_list, true);
-  });
-
-  NOLINT_EXPECT_NO_THROW({
-    auto deleter2
-      = commander->PrepareCommandRecorder(std::move(recorder2), list2, true);
-  });
-}
-
-//! Immediate retry same queue: first immediate submit throws, second list on
-//! same queue still succeeds showing deleter resilience.
-NOLINT_TEST_F(
-  CommanderErrorTest, ImmediateSubmission_SameQueueAfterFailure_Works)
-{
-  auto list1 = CreateMockCommandList("fail-list");
-  auto recorder1 = CreateMockCommandRecorder(list1, primary_q);
-  EXPECT_CALL(*recorder1, End()).WillOnce(Return(list1));
-
-  EXPECT_CALL(*primary_q, Submit(testing::A<CommandListPtr>()))
-    .WillOnce(Throw(std::runtime_error("First submission failed")))
-    .WillOnce(Return());
-  EXPECT_CALL(*list1, OnSubmitted()).Times(0); // failed immediate submit
-
-  NOLINT_EXPECT_NO_THROW({
-    auto deleter1
-      = commander->PrepareCommandRecorder(std::move(recorder1), list1, true);
-  });
-
-  auto list2 = CreateMockCommandList("success-list");
-  EXPECT_CALL(*list2, OnSubmitted()).Times(1);
-  auto recorder2 = CreateMockCommandRecorder(list2, primary_q);
-  EXPECT_CALL(*recorder2, End()).WillOnce(Return(list2));
-
-  NOLINT_EXPECT_NO_THROW({
-    auto deleter2
-      = commander->PrepareCommandRecorder(std::move(recorder2), list2, true);
-  });
-}
-
-//! Immediate retry different queue: failure on primary queue does not taint
-//! subsequent immediate submission on a different queue.
-NOLINT_TEST_F(
-  CommanderErrorTest, ImmediateSubmission_DifferentQueueAfterFailure_Works)
-{
-  auto list1 = CreateMockCommandList("fail-list");
-  auto recorder1 = CreateMockCommandRecorder(list1, primary_q);
-  EXPECT_CALL(*recorder1, End()).WillOnce(Return(list1));
-
-  EXPECT_CALL(*primary_q, Submit(testing::A<CommandListPtr>()))
-    .WillOnce(Throw(std::runtime_error("First submission failed")));
-  EXPECT_CALL(*list1, OnSubmitted()).Times(0);
-
-  NOLINT_EXPECT_NO_THROW({
-    auto deleter1
-      = commander->PrepareCommandRecorder(std::move(recorder1), list1, true);
-  });
-
-  // Use fixture-provided  secondary_q instead of creating a new one
-  auto list2 = CreateMockCommandList("success-list");
-  auto recorder2 = CreateMockCommandRecorder(list2, secondary_q);
-
-  EXPECT_CALL(*recorder2, End()).WillOnce(Return(list2));
-  EXPECT_CALL(*secondary_q, Submit(testing::A<CommandListPtr>()))
-    .WillOnce(Return());
-  EXPECT_CALL(*list2, OnSubmitted()).Times(1);
-
-  NOLINT_EXPECT_NO_THROW({
-    auto deleter2
-      = commander->PrepareCommandRecorder(std::move(recorder2), list2, true);
-  });
-}
-
-//! Deferred multi-queue success: lists targeting two queues produce two
-//! Submit(span) calls, each list OnSubmitted() exactly once.
-NOLINT_TEST_F(
-  CommanderErrorTest, DeferredSubmissions_TwoDifferentQueues_AllSuccessful)
-{
-  // NOTE: Submission order between queues is not guaranteed; grouping logic
-  // iterates map keyed by queue pointer. Tests assert per-queue effects only.
-  // Create second queue and related mocks using factory method
-  auto list2 = CreateMockCommandList("list-2");
-  auto recorder2 = CreateMockCommandRecorder(list2, secondary_q);
-
-  EXPECT_CALL(*mock_recorder, End()).WillOnce(Return(mock_command_list));
-  EXPECT_CALL(*recorder2, End()).WillOnce(Return(list2));
-
-  {
-    auto deleter1 = commander->PrepareCommandRecorder(
-      std::move(mock_recorder), mock_command_list, false);
-    auto deleter2
-      = commander->PrepareCommandRecorder(std::move(recorder2), list2, false);
-  }
-
-  EXPECT_CALL(*primary_q, Submit(testing::A<CommandListSpan>()))
-    .WillOnce(Return());
-  EXPECT_CALL(*secondary_q, Submit(testing::A<CommandListSpan>()))
-    .WillOnce(Return());
-
-  EXPECT_CALL(*mock_command_list, OnSubmitted()).WillOnce(Return());
-  EXPECT_CALL(*list2, OnSubmitted()).WillOnce(Return());
-
-  NOLINT_EXPECT_NO_THROW(commander->SubmitDeferredCommandLists());
-}
-
-//! Deferred partial failure (first fails): failing queue lists skipped for
-//! OnSubmitted(); succeeding queue lists still marked submitted.
-NOLINT_TEST_F(CommanderErrorTest,
-  DeferredSubmissions_TwoDifferentQueues_FirstFailsSecondSucceeds)
-{
-  auto list2 = CreateMockCommandList("list-2");
-  auto recorder2 = CreateMockCommandRecorder(list2, secondary_q);
-
-  EXPECT_CALL(*mock_recorder, End()).WillOnce(Return(mock_command_list));
-  EXPECT_CALL(*recorder2, End()).WillOnce(Return(list2));
-
-  {
-    auto deleter1 = commander->PrepareCommandRecorder(
-      std::move(mock_recorder), mock_command_list, false);
-    auto deleter2
-      = commander->PrepareCommandRecorder(std::move(recorder2), list2, false);
-  }
-
-  EXPECT_CALL(*primary_q, Submit(testing::A<CommandListSpan>()))
-    .WillOnce(Throw(std::runtime_error("First queue failed")));
-  EXPECT_CALL(*secondary_q, Submit(testing::A<CommandListSpan>()))
-    .WillOnce(Return());
-
-  EXPECT_CALL(*list2, OnSubmitted()).Times(1);
-  EXPECT_CALL(*mock_command_list, OnSubmitted()).Times(0);
-
-  NOLINT_EXPECT_THROW(
-    commander->SubmitDeferredCommandLists(), std::runtime_error);
-}
-
-//! Deferred partial failure (second fails): first queue succeeds (lists
-//! OnSubmitted()), second queue failure triggers aggregated throw.
-NOLINT_TEST_F(CommanderErrorTest,
-  DeferredSubmissions_TwoDifferentQueues_FirstSucceedsSecondFails)
-{
-  auto list2 = CreateMockCommandList("list-2");
-  auto recorder2 = CreateMockCommandRecorder(list2, secondary_q);
-
-  EXPECT_CALL(*mock_recorder, End()).WillOnce(Return(mock_command_list));
-  EXPECT_CALL(*recorder2, End()).WillOnce(Return(list2));
-
-  {
-    auto deleter1 = commander->PrepareCommandRecorder(
-      std::move(mock_recorder), mock_command_list, false);
-    auto deleter2
-      = commander->PrepareCommandRecorder(std::move(recorder2), list2, false);
-  }
-
-  EXPECT_CALL(*primary_q, Submit(testing::A<CommandListSpan>()))
-    .WillOnce(Return());
-  EXPECT_CALL(*secondary_q, Submit(testing::A<CommandListSpan>()))
-    .WillOnce(Throw(std::runtime_error("Second queue failed")));
-
-  EXPECT_CALL(*mock_command_list, OnSubmitted()).Times(1);
-  EXPECT_CALL(*list2, OnSubmitted()).Times(0);
-
-  NOLINT_EXPECT_THROW(
-    commander->SubmitDeferredCommandLists(), std::runtime_error);
-}
-
-//! Deferred dual failure: both queues throw; all lists produce error entries
-//! and no OnSubmitted() calls occur.
-NOLINT_TEST_F(
-  CommanderErrorTest, DeferredSubmissions_TwoDifferentQueues_BothFail)
-{
-  auto list2 = CreateMockCommandList("list-2");
-  auto recorder2 = CreateMockCommandRecorder(list2, secondary_q);
-
-  EXPECT_CALL(*mock_recorder, End()).WillOnce(Return(mock_command_list));
-  EXPECT_CALL(*recorder2, End()).WillOnce(Return(list2));
-
-  {
-    auto deleter1 = commander->PrepareCommandRecorder(
-      std::move(mock_recorder), mock_command_list, false);
-    auto deleter2
-      = commander->PrepareCommandRecorder(std::move(recorder2), list2, false);
-  }
-
-  EXPECT_CALL(*primary_q, Submit(testing::A<CommandListSpan>()))
-    .WillOnce(Throw(std::runtime_error("First queue failed")));
-  EXPECT_CALL(*secondary_q, Submit(testing::A<CommandListSpan>()))
-    .WillOnce(Throw(std::runtime_error("Second queue failed")));
-
-  EXPECT_CALL(*mock_command_list, OnSubmitted()).Times(0);
-  EXPECT_CALL(*list2, OnSubmitted()).Times(0);
-
-  NOLINT_EXPECT_THROW(
-    commander->SubmitDeferredCommandLists(), std::runtime_error);
-}
-
-//! Logging (deferred failure): verifies error lines contain list name and
-//! propagated queue exception text, and throw occurs after logging.
-NOLINT_TEST_F(CommanderErrorTest, DeferredSubmission_ErrorLogging_VerifyFormat)
-{
-  EXPECT_CALL(*mock_recorder, End()).WillOnce(Return(mock_command_list));
-
-  {
-    auto deleter = commander->PrepareCommandRecorder(
-      std::move(mock_recorder), mock_command_list, false);
-  }
-
-  EXPECT_CALL(*primary_q, Submit(testing::A<CommandListSpan>()))
-    .WillOnce(Throw(std::runtime_error("Queue submission failed")));
-
-  const oxygen::testing::ScopedLogCapture capture(
-    "TestCapture", loguru::Verbosity_ERROR);
-
-  NOLINT_EXPECT_THROW(
-    commander->SubmitDeferredCommandLists(), std::runtime_error);
-
-  EXPECT_TRUE(capture.Contains("Queue submission failed"));
-}
-
-//! Logging (immediate failure): verifies immediate path logs formatted
-//! failure line and retains original exception text without rethrow.
-NOLINT_TEST_F(CommanderErrorTest, ImmediateSubmission_ErrorLogging_VerifyFormat)
-{
-  EXPECT_CALL(*mock_recorder, End()).WillOnce(Return(mock_command_list));
-
-  EXPECT_CALL(*primary_q, Submit(testing::A<CommandListPtr>()))
-    .WillOnce(Throw(std::runtime_error("Immediate queue submission failed")));
-
-  const oxygen::testing::ScopedLogCapture capture(
-    "TestCapture", loguru::Verbosity_ERROR);
-
-  NOLINT_EXPECT_NO_THROW({
-    auto deleter = commander->PrepareCommandRecorder(
-      std::move(mock_recorder), mock_command_list, true);
-  });
-
-  EXPECT_TRUE(capture.Contains("-failed- 'test-list' :"));
-  EXPECT_TRUE(capture.Contains("Immediate queue submission failed"));
-}
-
-//=== Concurrency Test Cases ===----------------------------------------------//
-
-// Concurrency fixture: uses the base setup for testing thread safety
-class ConcurrencyTest : public SubmissionTestBase { };
-
-//! Concurrency: multiple threads racing to call SubmitDeferredCommandLists()
-//! should result in exactly one actual Submit(span) and no exceptions.
-NOLINT_TEST_F(ConcurrencyTest, ConcurrentSubmission_ThreadSafe)
-{
-  // Arrange: Create command recorders to simulate submission workload
-  auto mock_list_a = CreateMockCommandList("concurrent-a");
-  auto mock_recorder_a = CreateMockCommandRecorder(mock_list_a, secondary_q);
-  auto mock_list_b = CreateMockCommandList("concurrent-b");
-  auto mock_recorder_b = CreateMockCommandRecorder(mock_list_b, secondary_q);
-  EXPECT_CALL(*mock_recorder_a, End()).WillOnce(Return(mock_list_a));
-  EXPECT_CALL(*mock_recorder_b, End()).WillOnce(Return(mock_list_b));
-  EXPECT_CALL(*secondary_q, Submit(testing::A<CommandListSpan>())).Times(1);
-  EXPECT_CALL(*mock_list_a, OnSubmitted()).Times(1);
-  EXPECT_CALL(*mock_list_b, OnSubmitted()).Times(1);
-
-  {
-    auto deleter_a = commander->PrepareCommandRecorder(
-      std::move(mock_recorder_a), mock_list_a, false);
-    auto deleter_b = commander->PrepareCommandRecorder(
-      std::move(mock_recorder_b), mock_list_b, false);
-  }
-
-  std::vector<std::thread> threads;
-  std::atomic<int> submission_count { 0 };
-
-  // Act: Run concurrent submissions
-  threads.reserve(3);
-  for (int i = 0; i < 3; ++i) {
-    threads.emplace_back([this, &submission_count]() -> void {
-      try {
-        commander->SubmitDeferredCommandLists();
-        submission_count.fetch_add(1);
-      } catch (const std::exception& e) {
-        FAIL() << "Concurrent submission threw: " << e.what();
-      }
+    auto recording = commander->PrepareCommandRecorder(
+      std::move(recorder), SubmissionPolicy::kOnScopeExit);
+    recording->OnSubmission([&](const auto result) -> void {
+      EXPECT_EQ(result, SubmissionOutcome::kSubmitted);
+      ++calls;
     });
+    EXPECT_TRUE(recording.Submit());
+    EXPECT_TRUE(recording.Submit());
+    recording.Discard();
   }
 
-  for (auto& t : threads) {
-    t.join();
-  }
-
-  // Assert: All submissions completed successfully
-  EXPECT_EQ(submission_count.load(), 3);
-
-  // Process any deferred work
-  real_reclaimer->ProcessAllDeferredReleases();
+  // Assert
+  EXPECT_EQ(calls, 1);
 }
 
-auto MakeStatefulRecorder(CommandListPtr list, MockCommandQueue& queue)
-  -> std::unique_ptr<NiceMock<MockCommandRecorder>>
+//! Explicit discard prevents later submission through either policy.
+NOLINT_TEST_F(CommanderTestBase, DiscardIsIdempotentAndPreventsSubmission)
 {
-  auto recorder = std::make_unique<NiceMock<MockCommandRecorder>>(
-    std::move(list), oxygen::observer_ptr<CommandQueue> { &queue });
-  auto* raw = recorder.get();
-  ON_CALL(*recorder, Begin()).WillByDefault([raw] {
-    raw->oxygen::graphics::CommandRecorder::Begin();
+  // Arrange
+  auto list = CreateMockCommandList("discard once");
+  auto recorder = CreateMockCommandRecorder(list, secondary_q);
+  auto calls = 0;
+  EXPECT_CALL(*secondary_q, Submit(testing::A<CommandListPtr>())).Times(0);
+  auto recording = commander->PrepareCommandRecorder(
+    std::move(recorder), SubmissionPolicy::kOnScopeExit);
+  recording->OnSubmission([&](const auto result) -> void {
+    EXPECT_EQ(result, SubmissionOutcome::kDiscarded);
+    ++calls;
   });
-  ON_CALL(*recorder, End()).WillByDefault([raw] {
-    return raw->oxygen::graphics::CommandRecorder::End();
-  });
-  return recorder;
+
+  // Act
+  recording.Discard();
+  recording.Discard();
+
+  // Assert
+  EXPECT_FALSE(recording.Submit());
+  EXPECT_EQ(calls, 1);
+  EXPECT_TRUE(list->IsFree());
 }
 
-NOLINT_TEST_F(
-  CommanderTestBase, RecordingInspectionDistinguishesSubmissionFailure)
+//! Closing failure never submits or commits publication and does not retry End.
+NOLINT_TEST_F(CommanderTestBase, CloseFailureDiscardsWithoutRetry)
 {
-  for (bool failure : { false, true }) {
-    auto list = std::make_shared<CommandList>("inspection", Role::kGraphics);
-    auto recorder = commander->PrepareCommandRecorder(
-      MakeStatefulRecorder(list, *primary_q), list, true);
-    const auto observed = recorder->GetCommandListForInspection();
-    ASSERT_NE(observed, nullptr);
-    EXPECT_TRUE(observed->IsRecording());
-    if (failure) {
-      EXPECT_CALL(*primary_q, Submit(testing::A<CommandListPtr>()))
-        .WillOnce(Throw(std::runtime_error("injected submission failure")));
-    } else {
-      EXPECT_CALL(*primary_q, Submit(testing::A<CommandListPtr>())).Times(1);
-    }
-    recorder.reset();
-    EXPECT_EQ(observed->IsSubmitted(), !failure);
-    EXPECT_EQ(observed->IsClosed(), failure);
-    SimulateFrameCompletion();
-  }
+  // Arrange
+  auto list = CreateMockCommandList("close failure");
+  auto recorder = CreateMockCommandRecorder(list, secondary_q);
+  EXPECT_CALL(*recorder, End()).Times(1).WillOnce(Return(nullptr));
+  EXPECT_CALL(*secondary_q, Submit(testing::A<CommandListPtr>())).Times(0);
+  std::optional<SubmissionOutcome> publication;
+  auto recording = commander->PrepareCommandRecorder(
+    std::move(recorder), SubmissionPolicy::kExplicit);
+  recording->OnSubmission(
+    [&](const auto result) -> void { publication = result; });
+
+  // Act
+  const auto submitted = recording.Submit();
+
+  // Assert
+  EXPECT_FALSE(submitted);
+  EXPECT_EQ(publication, SubmissionOutcome::kDiscarded);
+  EXPECT_TRUE(list->IsFree());
 }
 
-class FailingCloseCommandList final : public CommandList {
-public:
-  FailingCloseCommandList()
-    : CommandList("failing-close", Role::kGraphics)
-  {
-  }
-  auto OnEndRecording() -> void override
-  {
-    throw std::runtime_error("injected recording failure");
-  }
-};
-
-NOLINT_TEST_F(CommanderTestBase, RecordingInspectionRejectsFailedClose)
+//! Queue failure never acknowledges a recording as submitted.
+NOLINT_TEST_F(CommanderTestBase, QueueFailureDiscardsPublication)
 {
-  auto list = std::make_shared<FailingCloseCommandList>();
-  auto recorder = commander->PrepareCommandRecorder(
-    MakeStatefulRecorder(list, *primary_q), list, true);
-  const auto observed = recorder->GetCommandListForInspection();
-  EXPECT_CALL(*primary_q, Submit(testing::A<CommandListPtr>())).Times(0);
-  recorder.reset();
-  EXPECT_FALSE(observed->IsSubmitted());
-  EXPECT_TRUE(observed->IsFree());
-}
+  // Arrange
+  auto list = CreateMockCommandList("queue failure");
+  auto recorder = CreateMockCommandRecorder(list, secondary_q);
+  EXPECT_CALL(*secondary_q, Submit(testing::A<CommandListPtr>()))
+    .WillOnce(Throw(std::runtime_error("queue failure")));
+  EXPECT_CALL(*list, OnSubmitted()).Times(0);
+  EXPECT_CALL(*list, OnExecuted()).Times(0);
+  std::optional<SubmissionOutcome> publication;
+  auto recording = commander->PrepareCommandRecorder(
+    std::move(recorder), SubmissionPolicy::kExplicit);
+  recording->OnSubmission(
+    [&](const auto result) -> void { publication = result; });
 
-NOLINT_TEST_F(
-  CommanderTestBase, DeferredRecordingIsNotSubmittedUntilQueueSubmission)
-{
-  auto list
-    = std::make_shared<CommandList>("deferred-inspection", Role::kGraphics);
-  auto recorder = commander->PrepareCommandRecorder(
-    MakeStatefulRecorder(list, *primary_q), list, false);
-  const auto observed = recorder->GetCommandListForInspection();
-  recorder.reset();
-  EXPECT_FALSE(observed->IsSubmitted());
-  EXPECT_TRUE(observed->IsClosed());
-  EXPECT_CALL(*primary_q, Submit(testing::A<CommandListSpan>())).Times(1);
-  commander->SubmitDeferredCommandLists();
-  EXPECT_TRUE(observed->IsSubmitted());
+  // Act
+  const auto submitted = recording.Submit();
   SimulateFrameCompletion();
+
+  // Assert
+  EXPECT_FALSE(submitted);
+  EXPECT_EQ(publication, SubmissionOutcome::kDiscarded);
+  EXPECT_TRUE(list->IsFree());
+}
+
+//! Moving a recording transfers its single submission obligation.
+NOLINT_TEST_F(CommanderTestBase, MoveTransfersOwnershipWithoutEarlySubmission)
+{
+  // Arrange
+  auto list = CreateMockCommandList("move");
+  auto recorder = CreateMockCommandRecorder(list, secondary_q);
+  EXPECT_CALL(*secondary_q, Submit(testing::A<CommandListPtr>())).Times(1);
+  auto first = commander->PrepareCommandRecorder(
+    std::move(recorder), SubmissionPolicy::kExplicit);
+
+  // Act
+  auto second = std::move(first);
+
+  // Assert
+  EXPECT_TRUE(second);
+  EXPECT_TRUE(second.Submit());
+}
+
+//! Empty recording values are inert and safe to move or discard.
+NOLINT_TEST_F(CommanderTestBase, EmptyRecordingIsInert)
+{
+  // Arrange
+  auto recording = CommandRecording {};
+
+  // Act
+  recording.Discard();
+  auto moved = std::move(recording);
+
+  // Assert
+  EXPECT_FALSE(moved);
+  EXPECT_FALSE(moved.Submit());
+}
+
+//! A failed publication observer cannot suppress subsequent observers.
+NOLINT_TEST_F(CommanderTestBase, PublicationObserversResolveIndependently)
+{
+  // Arrange
+  auto list = CreateMockCommandList("observers");
+  auto recorder = CreateMockCommandRecorder(list, secondary_q);
+  auto called = false;
+  auto recording = commander->PrepareCommandRecorder(
+    std::move(recorder), SubmissionPolicy::kExplicit);
+  recording->OnSubmission(
+    [](const auto) -> void { throw std::runtime_error("observer"); });
+  recording->OnSubmission([&](const auto result) -> void {
+    EXPECT_EQ(result, SubmissionOutcome::kSubmitted);
+    called = true;
+  });
+
+  // Act
+  const auto submitted = recording.Submit();
+
+  // Assert
+  EXPECT_TRUE(submitted);
+  EXPECT_TRUE(called);
 }
 
 } // namespace

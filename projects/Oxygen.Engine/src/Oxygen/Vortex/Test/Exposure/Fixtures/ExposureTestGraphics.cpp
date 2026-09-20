@@ -411,59 +411,25 @@ auto ExposureFailureGraphics::CreateTexture(const TextureDesc& desc) const
 }
 
 auto ExposureFailureGraphics::AcquireCommandRecorder(
-  const graphics::QueueKey& queue, std::string_view name, bool immediate)
-  -> std::unique_ptr<graphics::CommandRecorder,
-    std::function<void(graphics::CommandRecorder*)>>
+  const graphics::QueueKey& queue, std::string_view name,
+  const graphics::SubmissionPolicy policy) -> graphics::CommandRecording
 {
   recorder_names.emplace_back(name);
   if (!fail_recorder_name.empty() && name == fail_recorder_name) {
-    return {
-      nullptr,
-      [](graphics::CommandRecorder*) -> void { },
-    };
+    return {};
   }
   if (fail_status_recorder && name == "Exposure status readback") {
-    return {
-      nullptr,
-      [](graphics::CommandRecorder*) -> void { },
-    };
-  }
-  if (fail_next_suitability_recorder && name == "Vortex Exposure Suitability") {
-    fail_next_suitability_recorder = false;
-    return {
-      nullptr,
-      [](graphics::CommandRecorder*) -> void { },
-    };
-  }
-  if (fail_next_fallback_recorder && name == "Vortex Exposure Fallback") {
-    fail_next_fallback_recorder = false;
-    return {
-      nullptr,
-      [](graphics::CommandRecorder*) -> void { },
-    };
+    return {};
   }
   if (fail_next_frame_recorder && name == "Vortex Exposure Frame") {
     fail_next_frame_recorder = false;
-    return {
-      nullptr,
-      [](graphics::CommandRecorder*) -> void { },
-    };
+    return {};
   }
   if (fail_next_exposure_recorder && name == "Vortex Exposure") {
     fail_next_exposure_recorder = false;
-    return {
-      nullptr,
-      [](graphics::CommandRecorder*) -> void { },
-    };
+    return {};
   }
-  const bool defer = defer_tonemap_recorders && name == "Vortex PostProcess";
-  auto recorder = graphics::d3d12::Graphics::AcquireCommandRecorder(
-    queue, name, immediate && !defer);
-  if (defer && recorder) {
-    deferred_tonemap_recordings.push_back(
-      recorder->GetCommandListForInspection());
-  }
-  return recorder;
+  return graphics::d3d12::Graphics::AcquireCommandRecorder(queue, name, policy);
 }
 
 } // namespace oxygen::vortex::testing::exposure

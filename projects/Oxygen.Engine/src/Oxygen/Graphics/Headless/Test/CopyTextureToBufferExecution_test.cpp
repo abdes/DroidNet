@@ -197,9 +197,8 @@ NOLINT_TEST(CopyTextureToBufferExecution,
 
   const auto completion_value = harness.NextCompletionValue();
   {
-    auto recorder = graphics.AcquireCommandRecorder(
-      harness.GetQueueKey(), "copy-texture-to-buffer", true);
-    ASSERT_NE(recorder, nullptr);
+    auto recorder = graphics.AcquireCommandRecorder(harness.GetQueueKey(), "copy-texture-to-buffer");
+    ASSERT_TRUE(recorder);
     recorder->CopyTextureToBuffer(*buffer, *texture, region);
     recorder->RecordQueueSignal(completion_value);
   }
@@ -274,9 +273,8 @@ NOLINT_TEST(CopyTextureToBufferExecution,
 
   const auto completion_value = harness.NextCompletionValue();
   {
-    auto recorder = graphics.AcquireCommandRecorder(
-      harness.GetQueueKey(), "copy-texture-to-buffer", true);
-    ASSERT_NE(recorder, nullptr);
+    auto recorder = graphics.AcquireCommandRecorder(harness.GetQueueKey(), "copy-texture-to-buffer");
+    ASSERT_TRUE(recorder);
     recorder->CopyTextureToBuffer(*buffer, *texture, region);
     recorder->RecordQueueSignal(completion_value);
   }

@@ -310,8 +310,7 @@ CommandRecorder::CommandRecorder(std::weak_ptr<Graphics> graphics_weak,
 auto CommandRecorder::Begin() -> void
 {
   Base::Begin();
-  current_graphics_root_signature_ = nullptr;
-  current_compute_root_signature_ = nullptr;
+  binding_state_.Reset();
   graphics_pipeline_hash_ = 0U;
   compute_pipeline_hash_ = 0U;
 }
@@ -330,38 +329,36 @@ constexpr UINT kRootIndex_Sampler_Table
   = static_cast<UINT>(bindless_d3d12::RootParam::kSamplerTable);
 } // namespace
 
-auto CommandRecorder::SetupDescriptorHeaps(
-  const std::span<const detail::ShaderVisibleHeapInfo> heaps) const -> void
+void CommandRecorder::SetupDescriptorHeaps(
+  const std::span<const detail::ShaderVisibleHeapInfo> heaps)
 {
-  auto* d3d12_command_list = GetConcreteCommandList().GetCommandList();
-  DCHECK_NOTNULL_F(d3d12_command_list);
-
-  std::vector<ID3D12DescriptorHeap*> heaps_to_set;
-  // Collect all unique heaps first to call SetDescriptorHeaps once.
-  for (const auto& heap_info : heaps) {
-    bool found = false;
-    for (const ID3D12DescriptorHeap* existing_heap : heaps_to_set) {
-      if (existing_heap == heap_info.heap) {
-        found = true;
-        break;
-      }
-    }
-    if (!found) {
-      heaps_to_set.push_back(heap_info.heap);
+  std::array<ID3D12DescriptorHeap*, 2> requested {};
+  for (const auto& info : heaps) {
+    CHECK_F(info.heap_type == D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV
+        || info.heap_type == D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER,
+      "Only shader-visible resource and sampler heaps can be bound");
+    auto& selected = requested.at(static_cast<std::size_t>(info.heap_type));
+    CHECK_F(selected == nullptr || selected == info.heap,
+      "A recording cannot bind two distinct heaps of the same type");
+    selected = info.heap;
+  }
+  std::array<ID3D12DescriptorHeap*, 2> native_heaps {};
+  auto count = UINT { 0U };
+  for (auto* heap : requested) {
+    if (heap != nullptr) {
+      native_heaps.at(count++) = heap;
     }
   }
-
-  if (!heaps_to_set.empty()) {
-    DLOG_F(2, "recorder: set {} descriptor heaps for command list: {}",
-      heaps_to_set.size(), GetConcreteCommandList().GetName());
-    d3d12_command_list->SetDescriptorHeaps(
-      static_cast<UINT>(heaps_to_set.size()), heaps_to_set.data());
+  if (count == 0U || !binding_state_.ChangeHeaps(requested)) {
+    return;
   }
+  GetConcreteCommandList().GetCommandList()->SetDescriptorHeaps(
+    count, native_heaps.data());
 }
 
-auto CommandRecorder::SetupDescriptorTables(
+void CommandRecorder::SetupDescriptorTables(
   const std::span<const detail::ShaderVisibleHeapInfo> heaps,
-  const bool is_compute) const -> void
+  const bool is_compute)
 {
   // Modern bindless approach: bind root descriptor tables for heaps that have
   // been bound previously via SetupDescriptorHeaps(). The command list must
@@ -381,8 +378,12 @@ auto CommandRecorder::SetupDescriptorTables(
   DCHECK_F(is_compute || queue_role == QueueRole::kGraphics,
     "Graphics root tables require a Graphics queue command list");
 
-  auto set_table = [d3d12_command_list, is_compute](const UINT root_index,
-                     const D3D12_GPU_DESCRIPTOR_HANDLE gpu_handle) {
+  auto set_table = [this, d3d12_command_list, is_compute](const UINT root_index,
+                     const D3D12_GPU_DESCRIPTOR_HANDLE gpu_handle) -> void {
+    if (!binding_state_.ChangeDescriptorTable(
+          root_index, gpu_handle.ptr, is_compute)) {
+      return;
+    }
     if (is_compute) {
       d3d12_command_list->SetComputeRootDescriptorTable(root_index, gpu_handle);
     } else {
@@ -509,11 +510,11 @@ auto CommandRecorder::ExecuteIndirect(const graphics::Buffer& argument_buffer,
   size_t pipeline_hash = 0U;
   switch (command_desc.kind) {
   case IndirectCommandKind::kDraw:
-    current_root_signature = current_graphics_root_signature_;
+    current_root_signature = binding_state_.RootSignature(false);
     pipeline_hash = graphics_pipeline_hash_;
     break;
   case IndirectCommandKind::kDispatch:
-    current_root_signature = current_compute_root_signature_;
+    current_root_signature = binding_state_.RootSignature(true);
     pipeline_hash = compute_pipeline_hash_;
     break;
   }
@@ -545,7 +546,6 @@ auto CommandRecorder::SetPipelineState(GraphicsPipelineDesc desc) -> void
   auto graphics = graphics_weak_.lock();
   DCHECK_F(graphics != nullptr, "Graphics backend is no longer valid");
 
-  const auto debug_name = desc.GetName(); // Save before moving desc
   const auto primitive_topology = desc.PrimitiveTopology();
   graphics_pipeline_hash_ = std::hash<GraphicsPipelineDesc> {}(desc);
 
@@ -565,10 +565,11 @@ auto CommandRecorder::SetPipelineState(GraphicsPipelineDesc desc) -> void
   // expect directly-indexed shader-visible heaps (D3D12 requirement). Bind
   // heaps first, set the root signature, then bind root descriptor tables.
   SetupDescriptorHeaps(allocator.GetShaderVisibleHeaps());
-  d3d12_command_list->SetGraphicsRootSignature(root_signature);
+  if (binding_state_.ChangeRootSignature(root_signature, false)) {
+    d3d12_command_list->SetGraphicsRootSignature(root_signature);
+  }
   SetupDescriptorTables(
     allocator.GetShaderVisibleHeaps(), /*is_compute=*/false);
-  current_graphics_root_signature_ = root_signature;
 
   d3d12_command_list->IASetPrimitiveTopology(
     ConvertPrimitiveTopology(primitive_topology));
@@ -582,7 +583,6 @@ auto CommandRecorder::SetPipelineState(ComputePipelineDesc desc) -> void
   auto graphics = graphics_weak_.lock();
   DCHECK_F(graphics != nullptr, "Graphics backend is no longer valid");
 
-  const auto debug_name = desc.GetName(); // Save before moving desc
   compute_pipeline_hash_ = std::hash<ComputePipelineDesc> {}(desc);
 
   auto [pipeline_state, root_signature] = graphics->GetOrCreateComputePipeline(
@@ -601,9 +601,10 @@ auto CommandRecorder::SetPipelineState(ComputePipelineDesc desc) -> void
   // which may depend on directly-indexed sampler/SRV heaps. Bind heaps, set
   // root signature, then bind root descriptor tables.
   SetupDescriptorHeaps(allocator.GetShaderVisibleHeaps());
-  d3d12_command_list->SetComputeRootSignature(root_signature);
+  if (binding_state_.ChangeRootSignature(root_signature, true)) {
+    d3d12_command_list->SetComputeRootSignature(root_signature);
+  }
   SetupDescriptorTables(allocator.GetShaderVisibleHeaps(), /*is_compute=*/true);
-  current_compute_root_signature_ = root_signature;
 
   d3d12_command_list->SetPipelineState(pipeline_state);
 }

@@ -93,7 +93,7 @@ protected:
 
     {
       auto recorder = AcquireRecorder(std::string(debug_name) + "Init", role);
-      CHECK_NOTNULL_F(recorder.get());
+      CHECK_F(static_cast<bool>(recorder));
       EnsureTracked(*recorder, upload, ResourceStates::kGenericRead);
       EnsureTracked(*recorder, device, ResourceStates::kCommon);
       recorder->RequireResourceState(*upload, ResourceStates::kCopySource);
@@ -119,15 +119,18 @@ protected:
     std::string_view command_list_name,
     const oxygen::graphics::QueueRole role
     = oxygen::graphics::QueueRole::kGraphics,
-    const bool immediate_submission = true) -> ReadbackTicket
+    const oxygen::graphics::SubmissionPolicy policy
+    = oxygen::graphics::SubmissionPolicy::kOnScopeExit) -> ReadbackTicket
   {
-    auto recorder
-      = AcquireRecorder(command_list_name, role, immediate_submission);
-    CHECK_NOTNULL_F(recorder.get());
+    auto recorder = AcquireRecorder(command_list_name, role, policy);
+    CHECK_F(static_cast<bool>(recorder));
     EnsureTracked(*recorder, source, ResourceStates::kCopyDest);
 
     const auto ticket = readback->EnqueueCopy(*recorder, *source, range);
     CHECK_F(ticket.has_value(), "Buffer readback enqueue failed");
+    if (policy == oxygen::graphics::SubmissionPolicy::kExplicit) {
+      KeepPendingRecording(std::move(recorder));
+    }
     return *ticket;
   }
 
@@ -207,7 +210,7 @@ protected:
     {
       auto recorder = AcquireRecorder(std::string(debug_name) + "Init",
         oxygen::graphics::QueueRole::kGraphics);
-      CHECK_NOTNULL_F(recorder.get());
+      CHECK_F(static_cast<bool>(recorder));
       EnsureTracked(*recorder, upload, ResourceStates::kGenericRead);
       EnsureTracked(*recorder, device, ResourceStates::kCommon);
       recorder->RequireResourceState(*upload, ResourceStates::kCopySource);
@@ -257,7 +260,8 @@ NOLINT_TEST_F(BufferReadbackSubmissionTest, EnqueueCopyReturnsPendingTicket)
   auto readback = CreateBufferReadback("pending-readback");
 
   const auto ticket = EnqueueReadback(readback, source, BufferRange { 8, 16 },
-    "buffer-readback-pending", oxygen::graphics::QueueRole::kGraphics, false);
+    "buffer-readback-pending", oxygen::graphics::QueueRole::kGraphics,
+    oxygen::graphics::SubmissionPolicy::kExplicit);
 
   EXPECT_EQ(readback->GetState(), ReadbackState::kPending);
   ASSERT_TRUE(readback->Ticket().has_value());
@@ -275,8 +279,9 @@ NOLINT_TEST_F(
   auto readback = CreateBufferReadback("invalid-range-readback");
 
   auto recorder = AcquireRecorder("buffer-readback-invalid-range",
-    oxygen::graphics::QueueRole::kGraphics, false);
-  CHECK_NOTNULL_F(recorder.get());
+    oxygen::graphics::QueueRole::kGraphics,
+    oxygen::graphics::SubmissionPolicy::kExplicit);
+  CHECK_F(static_cast<bool>(recorder));
   EnsureTracked(*recorder, source, ResourceStates::kCopyDest);
 
   const auto ticket
@@ -294,7 +299,8 @@ NOLINT_TEST_F(BufferReadbackSubmissionTest, IsReadyIsFalseBeforeFenceCompletion)
   auto readback = CreateBufferReadback("not-ready-readback");
 
   EnqueueReadback(readback, source, BufferRange { 4, 20 },
-    "buffer-readback-not-ready", oxygen::graphics::QueueRole::kGraphics, false);
+    "buffer-readback-not-ready", oxygen::graphics::QueueRole::kGraphics,
+    oxygen::graphics::SubmissionPolicy::kExplicit);
 
   const auto ready = readback->IsReady();
   ASSERT_TRUE(ready.has_value());
@@ -311,11 +317,12 @@ NOLINT_TEST_F(BufferReadbackSubmissionTest, SecondEnqueueWhilePendingFails)
 
   EnqueueReadback(readback, source, BufferRange { 0, 16 },
     "buffer-readback-first-enqueue", oxygen::graphics::QueueRole::kGraphics,
-    false);
+    oxygen::graphics::SubmissionPolicy::kExplicit);
 
   auto recorder = AcquireRecorder("buffer-readback-second-enqueue",
-    oxygen::graphics::QueueRole::kGraphics, false);
-  CHECK_NOTNULL_F(recorder.get());
+    oxygen::graphics::QueueRole::kGraphics,
+    oxygen::graphics::SubmissionPolicy::kExplicit);
+  CHECK_F(static_cast<bool>(recorder));
   EnsureTracked(*recorder, source, ResourceStates::kCopyDest);
 
   const auto second
@@ -349,7 +356,7 @@ NOLINT_TEST_F(BufferReadbackMappingTest, TryMapFailsWhilePending)
 
   EnqueueReadback(readback, source, BufferRange { 6, 18 },
     "buffer-readback-pending-map", oxygen::graphics::QueueRole::kGraphics,
-    false);
+    oxygen::graphics::SubmissionPolicy::kExplicit);
 
   const auto mapped = readback->TryMap();
   ASSERT_FALSE(mapped.has_value());
@@ -457,7 +464,7 @@ NOLINT_TEST_F(
 
   const auto ticket = EnqueueReadback(readback, source, BufferRange { 0, 24 },
     "buffer-readback-cancel-pending", oxygen::graphics::QueueRole::kGraphics,
-    false);
+    oxygen::graphics::SubmissionPolicy::kExplicit);
 
   const auto cancelled = readback->Cancel();
   ASSERT_TRUE(cancelled.has_value());
@@ -532,7 +539,7 @@ NOLINT_TEST_F(
 
   EnqueueReadback(readback, source, BufferRange { 3, 17 },
     "buffer-readback-reset-cancel", oxygen::graphics::QueueRole::kGraphics,
-    false);
+    oxygen::graphics::SubmissionPolicy::kExplicit);
   const auto cancelled = readback->Cancel();
   ASSERT_TRUE(cancelled.has_value());
   EXPECT_TRUE(*cancelled);
@@ -675,14 +682,15 @@ NOLINT_TEST_F(BufferReadbackReuseTest,
   ASSERT_FALSE(idle.has_value());
   EXPECT_EQ(idle.error(), ReadbackError::kNotReady);
   const auto ticket = EnqueueReadback(readback, source, { 5, 24 },
-    "reuse-state-pending", oxygen::graphics::QueueRole::kGraphics, false);
+    "reuse-state-pending", oxygen::graphics::QueueRole::kGraphics,
+    oxygen::graphics::SubmissionPolicy::kExplicit);
   const auto pending = readback->ResetForReuse();
   ASSERT_FALSE(pending.has_value());
   EXPECT_EQ(pending.error(), ReadbackError::kAlreadyPending);
   ASSERT_TRUE(readback->Ticket().has_value());
   EXPECT_EQ(readback->Ticket()->id, ticket.id);
   EXPECT_EQ(readback->GetState(), ReadbackState::kPending);
-  SubmitDeferredRecorders();
+  SubmitPendingRecordings();
   {
     auto mapped = readback->MapNow();
     ASSERT_TRUE(mapped.has_value());
@@ -698,9 +706,9 @@ NOLINT_TEST_F(BufferReadbackReuseTest,
 
   auto cancelled_source
     = CreateInitializedDeviceBuffer(bytes, "reuse-cancel-source");
-  const auto cancelled_ticket
-    = EnqueueReadback(readback, cancelled_source, { 9, 12 },
-      "reuse-state-cancel", oxygen::graphics::QueueRole::kGraphics, false);
+  const auto cancelled_ticket = EnqueueReadback(readback, cancelled_source,
+    { 9, 12 }, "reuse-state-cancel", oxygen::graphics::QueueRole::kGraphics,
+    oxygen::graphics::SubmissionPolicy::kExplicit);
   const auto cancellation = readback->Cancel();
   ASSERT_TRUE(cancellation.has_value());
   ASSERT_TRUE(*cancellation);
@@ -710,7 +718,7 @@ NOLINT_TEST_F(BufferReadbackReuseTest,
   EXPECT_EQ(readback->GetState(), ReadbackState::kCancelled);
   ASSERT_TRUE(readback->Ticket().has_value());
   EXPECT_EQ(readback->Ticket()->id, cancelled_ticket.id);
-  SubmitDeferredRecorders();
+  SubmitPendingRecordings();
   WaitForQueueIdle();
 }
 
@@ -766,7 +774,7 @@ NOLINT_TEST_F(BufferReadbackManagerTest,
 
   const auto ticket = EnqueueReadback(readback, source, BufferRange { 8, 20 },
     "buffer-readback-await-deadlock", oxygen::graphics::QueueRole::kGraphics,
-    false);
+    oxygen::graphics::SubmissionPolicy::kExplicit);
 
   ScopedLogCapture capture { "D3D12ReadbackAwaitWouldDeadlock",
     loguru::Verbosity_WARNING };
@@ -795,7 +803,7 @@ NOLINT_TEST_F(BufferReadbackManagerTest,
 
   const auto ticket = EnqueueReadback(readback, source, BufferRange { 6, 18 },
     "buffer-readback-await-shutdown", oxygen::graphics::QueueRole::kGraphics,
-    false);
+    oxygen::graphics::SubmissionPolicy::kExplicit);
 
   const auto shutdown_result
     = GetReadbackManager()->Shutdown(std::chrono::milliseconds { 0 });
@@ -816,7 +824,7 @@ NOLINT_TEST_F(BufferReadbackManagerTest,
 }
 
 NOLINT_TEST_F(BufferReadbackFrameLifecycleTest,
-  OnFrameStartRetiresCompletedTicketWhileMappedBytesStayValid)
+  OnFrameStartPreservesOwnedTicketAndMappedBytes)
 {
   GetReadbackManager()->OnFrameStart(oxygen::frame::Slot { 0 });
 
@@ -838,11 +846,14 @@ NOLINT_TEST_F(BufferReadbackFrameLifecycleTest,
   EXPECT_EQ(CopyMappedBytes(*mapped), SliceBytes(source_bytes, 12, 20));
 
   const auto awaited = AwaitReadback(ticket);
-  ASSERT_FALSE(awaited.has_value());
-  EXPECT_EQ(awaited.error(), ReadbackError::kTicketNotFound);
+  ASSERT_TRUE(awaited.has_value());
 
   mapped = MappedBufferReadback {};
   EXPECT_EQ(readback->GetState(), ReadbackState::kReady);
+  ASSERT_TRUE(readback->ResetForReuse().has_value());
+  const auto released = AwaitReadback(ticket);
+  ASSERT_FALSE(released.has_value());
+  EXPECT_EQ(released.error(), ReadbackError::kTicketNotFound);
 }
 
 NOLINT_TEST_F(BufferReadbackCoroutineTest,
@@ -913,7 +924,7 @@ NOLINT_TEST_F(BufferReadbackShutdownTest,
 
   EnqueueReadback(readback, source, BufferRange { 4, 20 },
     "buffer-readback-shutdown-pending", oxygen::graphics::QueueRole::kGraphics,
-    false);
+    oxygen::graphics::SubmissionPolicy::kExplicit);
 
   const auto shutdown_result
     = GetReadbackManager()->Shutdown(std::chrono::milliseconds { 0 });
@@ -931,9 +942,10 @@ NOLINT_TEST_F(
 
   std::expected<ReadbackTicket, ReadbackError> ticket;
   {
-    auto recorder = AcquireRecorder(
-      "buffer-readback-transfer", oxygen::graphics::QueueRole::kTransfer, true);
-    CHECK_NOTNULL_F(recorder.get());
+    auto recorder = AcquireRecorder("buffer-readback-transfer",
+      oxygen::graphics::QueueRole::kTransfer,
+      oxygen::graphics::SubmissionPolicy::kOnScopeExit);
+    CHECK_F(static_cast<bool>(recorder));
     EnsureTracked(*recorder, source, ResourceStates::kCopyDest);
 
     ticket = readback->EnqueueCopy(*recorder, *source, BufferRange { 6, 14 });

@@ -35,6 +35,10 @@ class Texture;
 class GpuBufferReadback;
 } // namespace oxygen::graphics
 
+namespace oxygen::graphics {
+class CommandRecorder;
+}
+
 namespace oxygen::vortex {
 
 struct RenderContext;
@@ -45,13 +49,13 @@ namespace testing {
 }
 
 namespace internal {
-template <typename Payload> class PerViewStructuredPublisher;
+  template <typename Payload> class PerViewStructuredPublisher;
 } // namespace internal
 
 namespace postprocess {
-class BloomPass;
-class ExposurePass;
-class TonemapPass;
+  class BloomPass;
+  class ExposurePass;
+  class TonemapPass;
 } // namespace postprocess
 
 class PostProcessService {
@@ -149,13 +153,14 @@ public:
     -> const postprocess::ExposurePass::Source&;
   OXGN_VRTX_API auto CaptureRegisteredExposureControls(const RenderContext& ctx)
     -> void;
-  [[nodiscard]] OXGN_VRTX_API auto BuildBindings(
-    const Inputs& inputs) const -> PostProcessFrameBindings;
-  OXGN_VRTX_API auto PublishBindings(
-    ViewId view_id, const PostProcessFrameBindings& bindings) -> ShaderVisibleIndex;
-  //! Resolve before writing pre-exposed radiance; Execute consumes this binding.
+  [[nodiscard]] OXGN_VRTX_API auto BuildBindings(const Inputs& inputs) const
+    -> PostProcessFrameBindings;
+  OXGN_VRTX_API auto PublishBindings(ViewId view_id,
+    const PostProcessFrameBindings& bindings) -> ShaderVisibleIndex;
+  //! Resolve before writing pre-exposed radiance; Execute consumes this
+  //! binding.
   [[nodiscard]] OXGN_VRTX_API auto PrepareFrameExposure(RenderContext& ctx,
-    bool use_fp32,
+    graphics::CommandRecorder& recorder, bool use_fp32,
     postprocess::ExposurePass::StateLease qualified_candidate = {},
     bool preserve_fp32_candidate_p = false)
     -> postprocess::ExposurePass::FrameLease;
@@ -172,21 +177,23 @@ public:
   };
   //! Observe unattenuated opaque input using the current immutable frame lease.
   [[nodiscard]] OXGN_VRTX_API auto CapturePreEnvironmentRange(
-    RenderContext& ctx, const graphics::Texture& source,
-    ShaderVisibleIndex source_srv) -> bool;
-  [[nodiscard]] OXGN_VRTX_API auto CheckSceneColorRange(RenderContext& ctx,
+    RenderContext& ctx, graphics::CommandRecorder& recorder,
     const graphics::Texture& source, ShaderVisibleIndex source_srv) -> bool;
+  [[nodiscard]] OXGN_VRTX_API auto CheckSceneColorRange(RenderContext& ctx,
+    graphics::CommandRecorder& recorder, const graphics::Texture& source,
+    ShaderVisibleIndex source_srv) -> bool;
   //! Solve from the accumulated scene signal before checked color resolution.
   //! The returned record pins the result/config for this view and logical
   //! frame.
-  [[nodiscard]] OXGN_VRTX_API auto PrepareSceneExposure(
-    ViewId view_id, RenderContext& ctx, const Inputs& inputs)
-    -> std::optional<PreparedExposure>;
+  [[nodiscard]] OXGN_VRTX_API auto PrepareSceneExposure(ViewId view_id,
+    RenderContext& ctx, graphics::CommandRecorder& recorder,
+    const Inputs& inputs) -> std::optional<PreparedExposure>;
   //! Check/narrow using the prepared final gain and accepted metering policy.
   //! A submitted check still requires GPU rejection handling by the consumer.
   [[nodiscard]] OXGN_VRTX_API auto ConvertSceneColor(RenderContext& ctx,
-    const PreparedExposure& prepared, const Inputs& inputs,
-    graphics::Texture& destination, ShaderVisibleIndex destination_uav) -> bool;
+    graphics::CommandRecorder& recorder, const PreparedExposure& prepared,
+    const Inputs& inputs, graphics::Texture& destination,
+    ShaderVisibleIndex destination_uav) -> bool;
   //! Configure the current view's required products before frame preparation.
   //! Returns only a matching completed GPU candidate; numerical P stays on GPU.
   [[nodiscard]] OXGN_VRTX_API auto SelectPrecisionCandidate(RenderContext& ctx,
@@ -194,16 +201,19 @@ public:
     -> postprocess::ExposurePass::StateLease;
   //! Generate current/candidate certificates before any checked conversion.
   [[nodiscard]] OXGN_VRTX_API auto PrepareScenePrecision(RenderContext& ctx,
-    const PreparedExposure& prepared,
+    graphics::CommandRecorder& recorder, const PreparedExposure& prepared,
     std::span<const postprocess::ExposurePass::HdrProduct> products,
     std::optional<postprocess::ExposurePass::SceneComposition> composition
     = std::nullopt) -> bool;
-  //! Finalize after checked conversion, then copy one combined completed status.
+  //! Finalize after checked conversion, then copy one combined completed
+  //! status.
   [[nodiscard]] OXGN_VRTX_API auto FinalizeScenePrecision(RenderContext& ctx,
-    const PreparedExposure& prepared) -> bool;
-  OXGN_VRTX_API auto Execute(ViewId view_id, RenderContext& ctx,
-    const SceneTextures& scene_textures, const Inputs& inputs,
-    const PreparedExposure* prepared_exposure = nullptr) -> void;
+    graphics::CommandRecorder& recorder, const PreparedExposure& prepared)
+    -> bool;
+  //! Records visible output; execution state publishes after submission.
+  [[nodiscard]] OXGN_VRTX_API auto Record(ViewId view_id, RenderContext& ctx,
+    graphics::CommandRecorder& recorder, const Inputs& inputs,
+    const PreparedExposure* prepared_exposure = nullptr) -> bool;
   OXGN_VRTX_API auto RemoveViewState(ViewId view_id,
     CompositionView::ViewStateHandle view_state_handle
     = CompositionView::kInvalidViewStateHandle) -> void;
@@ -300,18 +310,18 @@ private:
     std::vector<std::shared_ptr<graphics::GpuBufferReadback>> available;
   };
   struct PendingExposureStatus {
-    std::shared_ptr<Graphics> readback_graphics;
-    postprocess::ExposurePass::StateLease state;
-    std::shared_ptr<graphics::GpuBufferReadback> readback;
-    std::weak_ptr<ExposureReadbackPool> reuse_pool;
-    std::optional<ExposureTransitionToken> token;
-    CompositionView::ViewStateHandle handle;
-    std::uint64_t lifetime;
-    std::uint64_t frame_sequence;
-    std::uint64_t settings_revision;
+    std::shared_ptr<Graphics> readback_graphics {};
+    postprocess::ExposurePass::StateLease state {};
+    std::shared_ptr<graphics::GpuBufferReadback> readback {};
+    std::weak_ptr<ExposureReadbackPool> reuse_pool {};
+    std::optional<ExposureTransitionToken> token {};
+    CompositionView::ViewStateHandle handle {};
+    std::uint64_t lifetime { 0U };
+    std::uint64_t frame_sequence { 0U };
+    std::uint64_t settings_revision { 0U };
     std::uint64_t control_revision { 0U };
-    std::optional<std::uint64_t> precision_epoch;
-    std::optional<PrecisionTicket> precision;
+    std::optional<std::uint64_t> precision_epoch {};
+    std::optional<PrecisionTicket> precision {};
   };
   std::unordered_map<CompositionView::ViewStateHandle,
     std::deque<PendingExposureStatus>>
@@ -323,6 +333,8 @@ private:
     reusable_exposure_status_;
   auto IsExposureStatusNeeded(const PendingExposureStatus& job) const -> bool;
   auto IsPrecisionStatusNeeded(const PendingExposureStatus& job) const -> bool;
+  void PublishExposureStatusOnSubmission(
+    graphics::CommandRecorder& recorder, PendingExposureStatus job);
   auto QueueExposureStatus(PendingExposureStatus job) -> void;
   auto InvalidatePrecision(CompositionView::ViewStateHandle handle) -> void;
   auto CurrentExposureGeneration(CompositionView::ViewStateHandle handle,
@@ -331,9 +343,10 @@ private:
   auto TryEnqueueExposureStatus(PendingExposureStatus job) -> bool;
   auto RecycleExposureStatus(PendingExposureStatus& job) -> void;
   auto PollExposureStatus() -> void;
-  OXGN_VRTX_API auto EnqueueExposureStatus(const ExposureTransitionToken& token,
-    postprocess::ExposurePass::StateLease state, const RenderContext& ctx,
-    std::uint64_t settings_revision) -> void;
+  OXGN_VRTX_API void EnqueueExposureStatus(graphics::CommandRecorder& recorder,
+    const ExposureTransitionToken& token,
+    postprocess::ExposurePass::StateLease state, frame::SequenceNumber sequence,
+    std::uint64_t settings_revision);
 
   auto EnsurePublishResources() -> bool;
   auto EnsureMaskBinder() -> resources::TextureBinder*;
@@ -352,7 +365,8 @@ private:
   ExposureSettingsState transient_exposure_settings_ {};
   frame::SequenceNumber current_sequence_ { 0U };
   frame::Slot current_slot_ { frame::kInvalidSlot };
-  std::unique_ptr<internal::PerViewStructuredPublisher<PostProcessFrameBindings>>
+  std::unique_ptr<
+    internal::PerViewStructuredPublisher<PostProcessFrameBindings>>
     bindings_publisher_ {};
   std::unordered_map<ViewId, PublishedView> published_views_ {};
   ExecutionState last_execution_state_ {};

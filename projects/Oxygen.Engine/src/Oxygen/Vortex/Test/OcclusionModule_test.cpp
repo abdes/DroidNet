@@ -134,7 +134,7 @@ NOLINT_TEST(OcclusionModuleTest, DisabledStagePublishesInvalidVisibleFallback)
   };
   auto ctx = RenderContext {};
 
-  module.Execute(ctx, *fixture.scene_textures);
+  module.Execute(ctx, *fixture.graphics->AcquireCommandRecorder(fixture.graphics->QueueKeyFor(oxygen::graphics::QueueRole::kGraphics), "Test stage"), *fixture.scene_textures);
 
   ASSERT_NE(ctx.current_view.occlusion_results.get(), nullptr);
   EXPECT_FALSE(ctx.current_view.occlusion_results->valid);
@@ -154,7 +154,7 @@ NOLINT_TEST(OcclusionModuleTest, EnabledStageWithoutPreparedFrameStaysInvalid)
   };
   auto ctx = RenderContext {};
 
-  module.Execute(ctx, *fixture.scene_textures);
+  module.Execute(ctx, *fixture.graphics->AcquireCommandRecorder(fixture.graphics->QueueKeyFor(oxygen::graphics::QueueRole::kGraphics), "Test stage"), *fixture.scene_textures);
 
   ASSERT_NE(ctx.current_view.occlusion_results.get(), nullptr);
   EXPECT_FALSE(ctx.current_view.occlusion_results->valid);
@@ -179,7 +179,7 @@ NOLINT_TEST(OcclusionModuleTest, MissingCurrentFurthestHzbPublishesAllVisible)
         &prepared_frame,
       };
 
-  module.Execute(ctx, *fixture.scene_textures);
+  module.Execute(ctx, *fixture.graphics->AcquireCommandRecorder(fixture.graphics->QueueKeyFor(oxygen::graphics::QueueRole::kGraphics), "Test stage"), *fixture.scene_textures);
 
   const auto& results = module.GetCurrentResults();
   EXPECT_TRUE(results.valid);
@@ -259,7 +259,7 @@ NOLINT_TEST(OcclusionModuleTest,
     123U,
   };
 
-  module.Execute(ctx, *fixture.scene_textures);
+  module.Execute(ctx, *fixture.graphics->AcquireCommandRecorder(fixture.graphics->QueueKeyFor(oxygen::graphics::QueueRole::kGraphics), "Test stage"), *fixture.scene_textures);
 
   const auto& results = module.GetCurrentResults();
   EXPECT_TRUE(results.valid);

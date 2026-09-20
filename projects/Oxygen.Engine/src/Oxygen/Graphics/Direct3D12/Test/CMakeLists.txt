@@ -57,7 +57,12 @@ m_gtest_program(
     "HeapAllocationStrategy_test.cpp"
 )
 m_gtest_program(DescriptorSegment SOURCES "DescriptorSegment_test.cpp")
-m_gtest_program(PipelineStateCache SOURCES "PipelineStateCache_test.cpp")
+m_gtest_program(
+  PipelineStateCache
+  SOURCES
+    "PipelineStateCache_test.cpp"
+    "PipelineBindingState_test.cpp"
+)
 gtest_program(
   "Oxygen.Graphics.Direct3D12.ShaderBakeCatalog.Tests"
   SOURCES

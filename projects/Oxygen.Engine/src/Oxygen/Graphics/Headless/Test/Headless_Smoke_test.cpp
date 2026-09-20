@@ -173,7 +173,7 @@ NOLINT_TEST_F(HeadlessSmokeTest, TypicalUsage)
 
   // Acquire the recorder and perform recording inside a scope. When the
   // recorder goes out of scope the headless custom deleter will End(),
-  // Submit() and call OnSubmitted() (immediate_submission=true).
+  // Submit() and call OnSubmitted() on successful scope exit.
   // Use virtual GetCommandQueue so backends can override lookup/fallback
   // behavior (for example, falling back to a QueueManager). This keeps the
   // higher-level contract clean and allows backend-specific policies.
@@ -186,9 +186,8 @@ NOLINT_TEST_F(HeadlessSmokeTest, TypicalUsage)
   const auto before_value = queue->GetCurrentValue();
   const auto completion_value = before_value + 1;
   {
-    auto recorder = headless->AcquireCommandRecorder(
-      q_key, cmd_list_name, /*immediate_submission=*/true);
-    ASSERT_NE(recorder, nullptr);
+    auto recorder = headless->AcquireCommandRecorder(q_key, cmd_list_name);
+    ASSERT_TRUE(recorder);
 
     // Track initial states for both resources: register them with the
     // device registry and begin tracking. Factories return shared pointers,

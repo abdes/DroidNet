@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/HalfFloat.h>
@@ -89,6 +90,14 @@ auto ExposureLightingGpuTest::Probe::OnPostRenderViewGpu(
   }
   if (inspect) {
     inspect(hook.render_context, extracted, draws);
+  }
+  if (after_submit) {
+    hook.recorder.OnSubmission(
+      [this](const graphics::SubmissionOutcome outcome) -> void {
+        if (outcome == graphics::SubmissionOutcome::kSubmitted) {
+          after_submit();
+        }
+      });
   }
 }
 
@@ -220,7 +229,11 @@ auto ExposureLightingGpuTest::SetUp() -> void
       = vortex::testing::RendererPublicationProbe::GetPostProcessService(
         *owner);
     service->SetResolvedConfig(SharedConfig(settings));
-    ASSERT_NE(service->PrepareFrameExposure(ctx, false), nullptr);
+    ASSERT_NE(SubmitCommands("Vortex Exposure Frame",
+                [&](graphics::CommandRecorder& recorder) -> auto {
+                  return service->PrepareFrameExposure(ctx, recorder, false);
+                }),
+      nullptr);
   };
 
   renderer_->RegisterViewExtension(probe);
@@ -447,33 +460,32 @@ auto ExposureLightingGpuTest::RenderSurface(
     renderer_->OnFrameStart(observer_ptr {
       &frame,
     });
-    auto facade = renderer_->ForOffscreenScene();
-    facade.SetFrameSession({ .frame_slot = slot,
+    {
+      const auto finish_frame = ScopeGuard([&]() noexcept -> void {
+        renderer_->OnFrameEnd(observer_ptr { &frame });
+        Backend().EndFrame(frame::SequenceNumber { sequence }, slot);
+      });
+      auto facade = renderer_->ForOffscreenScene();
+      facade.SetFrameSession({ .frame_slot = slot,
       .frame_sequence = frame::SequenceNumber { sequence, },
       .delta_time_seconds = frame_delta_seconds, });
-    facade.SetSceneSource({ .scene = observer_ptr { scene.get(), }, });
-    facade.SetViewIntent(Renderer::OffscreenSceneViewInput::FromCamera(
+      facade.SetSceneSource({ .scene = observer_ptr { scene.get(), }, });
+      facade.SetViewIntent(Renderer::OffscreenSceneViewInput::FromCamera(
       "Lighting", ViewId { surface_view_id, }, view, camera)
         .SetViewStateHandle(persistent_surface_state
             ? CompositionView::ViewStateHandle { surface_view_id, }
             : CompositionView::kInvalidViewStateHandle)
         .SetExposureSourceViewId(surface_source_id)
         .SetExposureOverride(surface_exposure_override));
-    facade.SetOutputTarget(
+      facade.SetOutputTarget(
       { .framebuffer = observer_ptr { framebuffer.get(), }, });
-    facade.SetPipeline(forward ? Renderer::OffscreenPipelineInput::Forward()
-                               : Renderer::OffscreenPipelineInput::Deferred());
-    auto session = facade.Finalize();
-    ASSERT_TRUE(session.has_value());
-    ASSERT_TRUE(session->ExecuteInsideFrame(frame));
-    renderer_->OnFrameEnd(observer_ptr {
-      &frame,
-    });
-    Backend().EndFrame(
-      frame::SequenceNumber {
-        sequence,
-      },
-      slot);
+      facade.SetPipeline(forward
+          ? Renderer::OffscreenPipelineInput::Forward()
+          : Renderer::OffscreenPipelineInput::Deferred());
+      auto session = facade.Finalize();
+      ASSERT_TRUE(session.has_value());
+      ASSERT_TRUE(session->ExecuteInsideFrame(frame));
+    }
     WaitForQueueIdle();
   }
   ASSERT_EQ(probe->draws, expected_draws);

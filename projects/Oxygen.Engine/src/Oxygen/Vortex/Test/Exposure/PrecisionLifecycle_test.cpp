@@ -292,7 +292,10 @@ NOLINT_TEST_F(
   };
   auto unsolved_inputs = postprocess::ExposurePass::FrameInputs {};
   unsolved_inputs.use_fp32 = true;
-  const auto unsolved = pass_->ResolveFrame(ctx_, config, unsolved_inputs);
+  const auto unsolved = SubmitCommands(
+    "Vortex Exposure Frame", [&](graphics::CommandRecorder& recorder) -> auto {
+      return pass_->ResolveFrame(ctx_, recorder, config, unsolved_inputs);
+    });
   ASSERT_NE(unsolved, nullptr);
   const std::array products {
     postprocess::ExposurePass::HdrProduct {
@@ -301,12 +304,18 @@ NOLINT_TEST_F(
       .id = 11U,
     },
   };
-  ASSERT_TRUE(
-    pass_->EvaluateFp16Products(ctx_, unsolved, config, products, {}));
-  ASSERT_TRUE(pass_->FinalizeFp16Suitability(ctx_, unsolved,
-    {
-      .product_layout_revision = 7U,
-      .expected_products = 1024U,
+  ASSERT_TRUE(SubmitCommands("Vortex Exposure Suitability",
+    [&](graphics::CommandRecorder& recorder) -> auto {
+      return pass_->EvaluateFp16Products(
+        ctx_, recorder, unsolved, config, products, {});
+    }));
+  ASSERT_TRUE(SubmitCommands("Vortex FP16 Eligibility",
+    [&](graphics::CommandRecorder& recorder) -> auto {
+      return pass_->FinalizeFp16Suitability(ctx_, recorder, unsolved,
+        {
+          .product_layout_revision = 7U,
+          .expected_products = 1024U,
+        });
     }));
   const auto status = Read<ExposureCompletedStatus>(
     *unsolved->current_state->status_buffer, ResourceStates::kCopySource);
@@ -348,12 +357,19 @@ NOLINT_TEST_F(ExposureGpuTest,
     const auto candidate = service.SelectPrecisionCandidate(ctx_, requirements);
     EXPECT_EQ(candidate != nullptr, expected_candidate) << sequence_;
     EXPECT_EQ(service.SelectPrecisionCandidate(ctx_, requirements), candidate);
-    EXPECT_NE(service.PrepareFrameExposure(ctx_, true), nullptr);
+    EXPECT_NE(SubmitCommands("Vortex Exposure Frame",
+                [&](graphics::CommandRecorder& recorder) -> auto {
+                  return service.PrepareFrameExposure(ctx_, recorder, true);
+                }),
+      nullptr);
     auto prepared_inputs = PostProcessService::Inputs {};
     prepared_inputs.scene_signal = signal.texture.get();
     prepared_inputs.scene_signal_srv = signal.srv;
-    const auto prepared = service.PrepareSceneExposure(
-      ctx_.current_view.view_id, ctx_, prepared_inputs);
+    const auto prepared = SubmitCommands(
+      "Vortex Exposure", [&](graphics::CommandRecorder& recorder) -> auto {
+        return service.PrepareSceneExposure(
+          ctx_.current_view.view_id, ctx_, recorder, prepared_inputs);
+      });
     CHECK_F(prepared.has_value());
     const std::array products {
       postprocess::ExposurePass::HdrProduct {
@@ -363,12 +379,27 @@ NOLINT_TEST_F(ExposureGpuTest,
         .metering = true,
       },
     };
-    EXPECT_EQ((service.PrepareScenePrecision(ctx_, *prepared, products)
-                && service.FinalizeScenePrecision(ctx_, *prepared)),
+    EXPECT_EQ((SubmitCommands("Vortex Exposure Suitability",
+                 [&](graphics::CommandRecorder& recorder) -> auto {
+                   return service.PrepareScenePrecision(
+                     ctx_, recorder, *prepared, products);
+                 })
+                && SubmitCommands("Vortex FP16 Eligibility",
+                  [&](graphics::CommandRecorder& recorder) -> auto {
+                    return service.FinalizeScenePrecision(
+                      ctx_, recorder, *prepared);
+                  })),
       !diagnostic);
     if (!diagnostic) {
-      EXPECT_TRUE((service.PrepareScenePrecision(ctx_, *prepared, products)
-        && service.FinalizeScenePrecision(ctx_, *prepared)));
+      EXPECT_TRUE((SubmitCommands("Vortex Exposure Suitability",
+                     [&](graphics::CommandRecorder& recorder) -> auto {
+                       return service.PrepareScenePrecision(
+                         ctx_, recorder, *prepared, products);
+                     })
+        && SubmitCommands("Vortex FP16 Eligibility",
+          [&](graphics::CommandRecorder& recorder) -> auto {
+            return service.FinalizeScenePrecision(ctx_, recorder, *prepared);
+          })));
       EXPECT_EQ(
         ReadState(prepared->exposure).fp16_eligible_streak, expected_streak);
     }
@@ -439,12 +470,19 @@ NOLINT_TEST_F(
   };
   for (unsigned i = 0U; i < 6U; ++i) {
     EXPECT_EQ(begin(), nullptr);
-    ASSERT_NE(service.PrepareFrameExposure(ctx_, true), nullptr);
+    ASSERT_NE(SubmitCommands("Vortex Exposure Frame",
+                [&](graphics::CommandRecorder& recorder) -> auto {
+                  return service.PrepareFrameExposure(ctx_, recorder, true);
+                }),
+      nullptr);
     auto prepared_inputs = PostProcessService::Inputs {};
     prepared_inputs.scene_signal = signal.texture.get();
     prepared_inputs.scene_signal_srv = signal.srv;
-    const auto prepared = service.PrepareSceneExposure(
-      ctx_.current_view.view_id, ctx_, prepared_inputs);
+    const auto prepared = SubmitCommands(
+      "Vortex Exposure", [&](graphics::CommandRecorder& recorder) -> auto {
+        return service.PrepareSceneExposure(
+          ctx_.current_view.view_id, ctx_, recorder, prepared_inputs);
+      });
     if (!prepared.has_value()) {
       FAIL() << "Expected prepared to contain a value";
     }
@@ -456,8 +494,15 @@ NOLINT_TEST_F(
         .metering = true,
       },
     };
-    ASSERT_TRUE((service.PrepareScenePrecision(ctx_, *prepared, products)
-      && service.FinalizeScenePrecision(ctx_, *prepared)));
+    ASSERT_TRUE((SubmitCommands("Vortex Exposure Suitability",
+                   [&](graphics::CommandRecorder& recorder) -> auto {
+                     return service.PrepareScenePrecision(
+                       ctx_, recorder, *prepared, products);
+                   })
+      && SubmitCommands("Vortex FP16 Eligibility",
+        [&](graphics::CommandRecorder& recorder) -> auto {
+          return service.FinalizeScenePrecision(ctx_, recorder, *prepared);
+        })));
     const auto counts
       = vortex::testing::RendererPublicationProbe::ExposureStatusCounts(
         service, ctx_.current_view.view_state_handle);
@@ -510,12 +555,19 @@ NOLINT_TEST_F(ExposureGpuTest,
   };
   for (unsigned i = 0U; i < 3U; ++i) {
     EXPECT_EQ(begin(), nullptr);
-    ASSERT_NE(service.PrepareFrameExposure(ctx_, true), nullptr);
+    ASSERT_NE(SubmitCommands("Vortex Exposure Frame",
+                [&](graphics::CommandRecorder& recorder) -> auto {
+                  return service.PrepareFrameExposure(ctx_, recorder, true);
+                }),
+      nullptr);
     auto prepared_inputs = PostProcessService::Inputs {};
     prepared_inputs.scene_signal = signal.texture.get();
     prepared_inputs.scene_signal_srv = signal.srv;
-    const auto prepared = service.PrepareSceneExposure(
-      ctx_.current_view.view_id, ctx_, prepared_inputs);
+    const auto prepared = SubmitCommands(
+      "Vortex Exposure", [&](graphics::CommandRecorder& recorder) -> auto {
+        return service.PrepareSceneExposure(
+          ctx_.current_view.view_id, ctx_, recorder, prepared_inputs);
+      });
     if (!prepared.has_value()) {
       FAIL() << "Expected prepared to contain a value";
     }
@@ -527,10 +579,16 @@ NOLINT_TEST_F(ExposureGpuTest,
         .metering = true,
       },
     };
-    backend.fail_next_suitability_recorder = i == 2U;
-    EXPECT_EQ((service.PrepareScenePrecision(ctx_, *prepared, products)
-                && service.FinalizeScenePrecision(ctx_, *prepared)),
-      i != 2U);
+    auto recording = AcquireRecorder("Precision qualification",
+      graphics::QueueRole::kGraphics, graphics::SubmissionPolicy::kExplicit);
+    ASSERT_TRUE(
+      service.PrepareScenePrecision(ctx_, *recording, *prepared, products));
+    ASSERT_TRUE(service.FinalizeScenePrecision(ctx_, *recording, *prepared));
+    if (i == 2U) {
+      recording.Discard();
+    } else {
+      ASSERT_TRUE(recording.Submit());
+    }
   }
   backend.fail_status_recorder = false;
   EXPECT_EQ(begin(), nullptr);
@@ -539,7 +597,7 @@ NOLINT_TEST_F(ExposureGpuTest,
 }
 
 NOLINT_TEST_F(ExposureGpuTest,
-  FailedSolveFallbackRestartsPrecisionWithoutRejectingSuccessfulReuse)
+  DiscardedSolveRestartsPrecisionWithoutRejectingSuccessfulReuse)
 {
   auto service = PostProcessService(*renderer_);
   auto config = PostProcessConfig {};
@@ -573,32 +631,41 @@ NOLINT_TEST_F(ExposureGpuTest,
     service.OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
     return service.SelectPrecisionCandidate(ctx_, requirements);
   };
-  const auto finish
-    = [&](std::uint32_t streak, bool fail, bool reuse) -> ExposureStateData {
-    SCOPED_TRACE(sequence_);
-    CHECK_NOTNULL_F(service.PrepareFrameExposure(ctx_, true).get());
-    backend.fail_next_exposure_recorder = fail;
-    const auto prepared
-      = service.PrepareSceneExposure(ctx_.current_view.view_id, ctx_, inputs);
+  const auto finish = [&](const std::uint32_t streak, const bool fail,
+                        const bool reuse) -> ExposureStateData {
+    const auto previous
+      = vortex::testing::RendererPublicationProbe::ExposureStateForView(
+        service, ctx_.current_view.view_state_handle);
+    auto recording = AcquireRecorder("Precision view",
+      graphics::QueueRole::kGraphics, graphics::SubmissionPolicy::kExplicit);
+    CHECK_NOTNULL_F(service.PrepareFrameExposure(ctx_, *recording, true).get());
+    const auto prepared = service.PrepareSceneExposure(
+      ctx_.current_view.view_id, ctx_, *recording, inputs);
     CHECK_F(prepared.has_value());
-    EXPECT_EQ(prepared->exposure.executed, !fail);
+    EXPECT_TRUE(prepared->exposure.executed);
     CHECK_NOTNULL_F(prepared->exposure.state.get());
     if (reuse) {
-      const auto reused
-        = service.PrepareSceneExposure(ctx_.current_view.view_id, ctx_, inputs);
+      const auto reused = service.PrepareSceneExposure(
+        ctx_.current_view.view_id, ctx_, *recording, inputs);
       CHECK_F(reused.has_value());
       EXPECT_FALSE(reused->exposure.executed);
       EXPECT_EQ(reused->exposure.state, prepared->exposure.state);
-      EXPECT_TRUE((service.PrepareScenePrecision(ctx_, *reused, products)
-        && service.FinalizeScenePrecision(ctx_, *reused)));
     }
-    EXPECT_EQ((service.PrepareScenePrecision(ctx_, *prepared, products)
-                && service.FinalizeScenePrecision(ctx_, *prepared)),
-      !fail);
+    CHECK_F(
+      service.PrepareScenePrecision(ctx_, *recording, *prepared, products));
+    CHECK_F(service.FinalizeScenePrecision(ctx_, *recording, *prepared));
+    if (fail) {
+      recording.Discard();
+      EXPECT_EQ(vortex::testing::RendererPublicationProbe::ExposureStateForView(
+                  service, ctx_.current_view.view_state_handle),
+        previous);
+      CHECK_NOTNULL_F(previous.get());
+      return Read<ExposureStateData>(
+        *previous->buffer, ResourceStates::kShaderResource);
+    }
+    CHECK_F(recording.Submit());
     const auto state = ReadState(prepared->exposure);
-    if (!fail) {
-      EXPECT_EQ(state.fp16_eligible_streak, streak);
-    }
+    EXPECT_EQ(state.fp16_eligible_streak, streak);
     return state;
   };
   EXPECT_EQ(begin(), nullptr);

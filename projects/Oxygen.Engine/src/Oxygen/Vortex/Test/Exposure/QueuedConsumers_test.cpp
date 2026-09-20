@@ -252,7 +252,8 @@ NOLINT_TEST_F(ExposureLightingGpuTest,
   const auto completion = SignalQueue();
   std::array<DepthCopy, 2> copies;
   {
-    auto recorder = AcquireDeferredRecorder("Retained depth alias consumers");
+    auto recorder = AcquireRecorder("Retained depth alias consumers",
+      graphics::QueueRole::kGraphics, graphics::SubmissionPolicy::kExplicit);
     for (unsigned index = 0U; index < copies.size(); ++index) {
       copies.at(index) = copy_depth(*recorder, *retained.at(index).texture);
     }
@@ -260,6 +261,7 @@ NOLINT_TEST_F(ExposureLightingGpuTest,
     recorder->RequireResourceStateFinal(
       *retained.at(0).texture, ResourceStates::kShaderResource);
     recorder->RecordQueueSignal(completion.get());
+    KeepPendingRecording(std::move(recorder));
   }
   // Deferred submission proves the consumers have not executed when the last
   // extract wrappers disappear. GPU-safe retirement must keep their source.
@@ -267,7 +269,7 @@ NOLINT_TEST_F(ExposureLightingGpuTest,
   EXPECT_TRUE(extract_lifetime.expired());
   EXPECT_FALSE(resource_lifetime.expired());
   EXPECT_LT(GetQueue()->GetCompletedValue(), completion.get());
-  SubmitDeferredRecorders();
+  SubmitPendingRecordings();
   renderer_->OnFrameEnd(observer_ptr {
     &frame,
   });
@@ -460,9 +462,11 @@ NOLINT_TEST_F(ExposureLightingGpuTest,
     result_inputs.conversion_report_srv = (fallback != nullptr)
       ? exposure->conversion_srv
       : kInvalidShaderVisibleIndex;
-    const auto result = consumer.Record(
-      consume_context, owner->GetSceneTextures(), result_inputs);
-    ASSERT_TRUE(result.executed);
+    auto recording = AcquireRecorder("Retained tonemap consumer");
+    ASSERT_TRUE(recording);
+    const auto result
+      = consumer.Record(consume_context, *recording, result_inputs);
+    ASSERT_TRUE(result.recorded);
   }
   // Release the last extraction owners after submission, before the frame's
   // fence completes. All consumers are queued before any readback waits.

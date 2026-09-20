@@ -30,8 +30,7 @@ steps, important invariants, and practical tips to build a working backend.
   `CommandQueue`/`CommandList`/`CommandRecorder`, concrete
   `Buffer`/`Texture`/`Sampler` implementations, a `DescriptorAllocator` and
   `ResourceRegistry` integration, a working `Commander` component for command
-  coordination, that can record & submit GPU work with both immediate and
-  deferred submission modes.
+  coordination, with scope-exit or explicit submission policy.
 - Success criteria: the backend compiles, creates a `Graphics` instance, creates
   resources, records commands via `CommandRecorder` with flexible submission
   modes, submits work to `CommandQueue` and presents (for surface-backed
@@ -51,7 +50,7 @@ Implement concrete, backend-specific subclasses for at least the following
     `CreateTextureFromNativeObject()`, `CreateBuffer()`, `CreateCommandQueue()`,
     `CreateCommandListImpl()`, `CreateCommandRecorder()`.
   - The `Commander` component is automatically added and handles command
-    recording coordination and deferred submission.
+    recording ownership and fence retirement.
 
 - `CommandQueue` (`src/.../CommandQueue.h`)
   - Implement signaling, waiting, GPU-side signal/waits, `Submit()` overloads
@@ -63,8 +62,8 @@ Implement concrete, backend-specific subclasses for at least the following
     recording API and must translate the engine's commands (`SetPipelineState`,
     `Draw`, `Dispatch`, `SetViewport`, `BindFrameBuffer`, resource barriers,
     etc.) into native API calls. Implement `ExecuteBarriers()`.
-  - Command recorders now support flexible submission modes (immediate vs
-    deferred) managed by the `Commander` component.
+  - `CommandRecording` owns scope-exit or explicit submission; passes borrow
+    its recorder.
 
 - `DescriptorAllocator` (`src/.../DescriptorAllocator.h`) and allocation
   strategy
@@ -171,85 +170,54 @@ base indices.
   - return an error/throw, or
   - expand a software-backed table that emulates larger index spaces.
 
-## Commander Component and Command Coordination
+## Recording ownership and submission
 
-The `Commander` component is a central addition to the graphics backend
-architecture that manages command recording coordination and submission
-strategies.
-
-### Key Features
-
-- **Automatic Integration**: The `Commander` component is automatically added to
-  the `Graphics` composition during construction. No manual setup required.
-- **Flexible Submission Modes**: Supports both immediate and deferred command
-  submission through `AcquireCommandRecorder()`.
-- **Resource Lifecycle Management**: Integrates with `DeferredReclaimer` to
-  ensure proper command list lifecycle transitions and resource cleanup.
-- **Thread-Safe Coordination**: Provides thread-safe management of pending
-  command submissions across multiple threads.
-
-### New Graphics APIs
-
-Backend implementations must provide the following new APIs:
-
-#### `AcquireCommandRecorder()`
+`Graphics::AcquireCommandRecorder` returns a move-only `CommandRecording`.
+The internal `Commander` factory binds its lifetime to the device's
+`DeferredReclaimer`; each recording owns its own submission decision.
 
 ```cpp
-virtual auto AcquireCommandRecorder(
-  observer_ptr<graphics::CommandQueue> queue,
-  std::shared_ptr<graphics::CommandList> command_list,
-  bool immediate_submission = true)
--> std::unique_ptr<graphics::CommandRecorder,
-   std::function<void(graphics::CommandRecorder*)>>;
+auto recording = graphics.AcquireCommandRecorder(queue_key, "Upload");
+recording->CopyBuffer(destination, 0, source, 0, size);
+// Normal scope exit submits the recording.
 ```
 
-Creates a command recorder with automatic submission coordination:
-
-- **Immediate mode** (`immediate_submission = true`): Commands are submitted to
-  the GPU immediately when the recorder is destroyed.
-- **Deferred mode** (`immediate_submission = false`): Commands are batched and
-  submitted later via `SubmitDeferredCommandLists()`.
-
-#### `SubmitDeferredCommandLists()`
+Use `SubmissionPolicy::kExplicit` when a rendering owner records several passes
+and chooses the submission point:
 
 ```cpp
-auto SubmitDeferredCommandLists() -> void;
+auto recording = graphics.AcquireCommandRecorder(
+  queue_key, "View", SubmissionPolicy::kExplicit);
+RecordDepth(*recording);
+RecordLighting(*recording);
+if (!recording.Submit()) {
+  // Keep the prior committed output/history.
+}
 ```
 
-Submits all pending deferred command lists to their respective queues. Provides
-efficient batching for scenarios where multiple command lists need coordinated
-submission.
+The value exposes `operator*`, `operator->`, an explicit validity conversion,
+`Submit()` and `Discard()`. `Submit()` reports actual submission success;
+submission is distinct from GPU completion. Both operations resolve once.
+An explicit recording discarded by scope exit never submits. Exception
+unwinding discards under either policy, and destruction does not throw.
+The graphics device and its reclaimer must outlive every recording.
 
-#### `CreateCommandRecorder()` (Pure Virtual)
+Passes borrow `CommandRecorder&`. A pass's output can feed later commands in the
+same recording. Commit CPU history or reusable cache readiness through
+`CommandRecorder::OnSubmission`; handle `kDiscarded` without publishing success.
+Callbacks own their captures and must outlive any borrowed objects they use.
+Command-list retirement remains fence-driven through `DeferredReclaimer`.
 
-```cpp
-virtual auto CreateCommandRecorder(
-  std::shared_ptr<graphics::CommandList> command_list,
-  observer_ptr<graphics::CommandQueue> target_queue)
--> std::unique_ptr<graphics::CommandRecorder> = 0;
-```
+A pass handoff uses ordinary `RequireResourceState` transitions. Calling
+`RequireResourceStateFinal` makes that state permanent for the remaining command
+list, so it belongs at a true recording endpoint. Initialize shared tracking
+without automatic initial-state restoration when the owner must retain the last
+consumer's state at submission.
 
-Backend factory method that creates a native command recorder. The `Commander`
-component wraps this with appropriate lifecycle management.
-
-### Usage Patterns
-
-- Use **immediate submission** for simple command sequences that should execute
-  right away.
-- Use **deferred submission** when you need to batch multiple command lists for
-  optimized submission or when coordinating complex multi-queue operations.
-- Call `SubmitDeferredCommandLists()` at frame boundaries or other strategic
-  points to flush pending work.
-
-### Implementation Notes
-
-- The `Commander` relies on `DeferredReclaimer` for proper resource lifecycle
-  management, ensuring `OnExecuted()` callbacks are called at appropriate frame
-  boundaries.
-- Backends should focus on implementing `CreateCommandRecorder()` rather than
-  managing submission logic directly.
-- The component handles all synchronization and error handling for command
-  submission coordination.
+Backends implement `CreateCommandRecorder(command_list, target_queue)` to return
+an unstarted native recorder. The common factory begins it and returns its owner.
+Callers migrate pointer-specific access and destruction-based submission to the
+value API. There is no hidden pending-submission queue or flush-all operation.
 
 ## Optional / advanced
 
@@ -286,15 +254,14 @@ component wraps this with appropriate lifecycle management.
   registry may ask you to recreate views in-place; keep descriptor slots stable.
 - `CommandRecorder` implementations must be thread-safe where specified by the
   engine (the recorder is typically used by a single render thread but created
-  on the render controller's thread). Follow the `SubmissionMode` semantics.
+  on the render controller's thread). Follow the `SubmissionPolicy` semantics.
 - `Framebuffer` must provide native RTV/DSV lists compatible with the pipeline's
   `FramebufferInfo`.
 - The `Commander` component manages command recorder lifecycle and submission
   coordination automatically. Backend implementations should focus on the
   `CreateCommandRecorder()` factory method rather than manual submission logic.
-- Command recorders support both immediate and deferred submission modes.
-  Backends must implement `CreateCommandRecorder()` to return recorders that
-  work with the `Commander`'s submission coordination.
+- `CommandRecording` handles submission and discard consistently for every
+  backend. Backends implement only the native recording factory and commands.
 
 ## Practical tips and gotchas
 
@@ -315,13 +282,8 @@ component wraps this with appropriate lifecycle management.
 - Debugging: provide helpful debug-name support for native objects (use the name
   from `ObjectMetadata`), and validate descriptor and view compatibility early
   with asserts.
-- Command submission modes: the new `AcquireCommandRecorder()` API supports both
-  immediate and deferred submission. Use immediate mode for simple command
-  sequences and deferred mode when you need to batch multiple command lists for
-  optimized submission.
-- Commander integration: the `Commander` component automatically handles command
-  recorder lifecycle and deferred submission coordination. Don't manually manage
-  command list submission unless you have specific requirements.
+- Use the default scope-exit policy for short operations and an explicit owner
+  for shared recordings. Close pass scopes before calling `Submit()`.
 
 ## Build / integration checklist
 
@@ -335,8 +297,7 @@ component wraps this with appropriate lifecycle management.
   backend-specific command recorders that work with the `Commander` component's
   submission coordination.
 - The `Commander` component is automatically added to the `Graphics` composition
-  and handles command recording lifecycle and deferred submission. No manual
-  setup required.
+  and connects recording owners to fence retirement. No manual setup required.
 - Register your backend in the engine loader so tests/examples can instantiate
   it using config.
 

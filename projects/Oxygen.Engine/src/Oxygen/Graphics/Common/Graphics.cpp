@@ -20,6 +20,7 @@
 #include <Oxygen/Console/Console.h>
 #include <Oxygen/Graphics/Common/CommandList.h>
 #include <Oxygen/Graphics/Common/CommandQueue.h>
+#include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/FrameCaptureController.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
@@ -234,7 +235,7 @@ Graphics::Graphics(const std::string_view name)
   // DeferredReclaimer must be created before Commander because Commander
   // depends on oxygen::graphics::detail::DeferredReclaimer.
   AddComponent<DeferredReclaimerComponent>();
-  AddComponent<Commander>();
+  AddComponent<Commander>(GetDeferredReclaimer());
 }
 
 Graphics::~Graphics()
@@ -599,12 +600,12 @@ auto Graphics::GetCommandQueue(const graphics::QueueRole role) const
 }
 
 auto Graphics::AcquireCommandRecorder(const graphics::QueueKey& queue_key,
-  const std::string_view command_list_name, const bool immediate_submission)
-  -> std::unique_ptr<graphics::CommandRecorder,
-    std::function<void(graphics::CommandRecorder*)>>
+  const std::string_view command_list_name,
+  const graphics::SubmissionPolicy policy) -> graphics::CommandRecording
 {
-  profiling::CpuProfileScope cpu_scope(
-    "Graphics.AcquireCommandRecorder", profiling::ProfileCategory::kGeneral);
+  profiling::CpuProfileScope cpu_scope("Graphics.AcquireCommandRecorder",
+    profiling::ProfileCategory::kGeneral,
+    profiling::Vars(profiling::Var("recording", command_list_name)));
   // Get the command queue from the queue key
   auto queue = GetCommandQueue(queue_key);
   DCHECK_NOTNULL_F(
@@ -615,17 +616,10 @@ auto Graphics::AcquireCommandRecorder(const graphics::QueueKey& queue_key,
     = AcquireCommandList(queue->GetQueueRole(), command_list_name);
   DCHECK_NOTNULL_F(command_list, "Failed to acquire command list");
 
-  // Create backend recorder and forward to the Commander component which will
-  // wrap it with the appropriate deleter behavior.
+  // The returned value owns recording completion and submission policy.
   auto recorder = CreateCommandRecorder(command_list, queue);
   auto& cmdr = GetComponent<Commander>();
-  return cmdr.PrepareCommandRecorder(
-    std::move(recorder), std::move(command_list), immediate_submission);
-}
-
-auto Graphics::SubmitDeferredCommandLists() -> void
-{
-  GetComponent<Commander>().SubmitDeferredCommandLists();
+  return cmdr.PrepareCommandRecorder(std::move(recorder), policy);
 }
 
 auto Graphics::AcquireCommandList(
@@ -690,8 +684,9 @@ auto Graphics::ForgetKnownResourceState(
   }
 
   auto& qm = GetComponent<QueueManager>();
-  qm.ForEachQueue(
-    [&](graphics::CommandQueue& queue) { queue.ForgetKnownResourceState(resource); });
+  qm.ForEachQueue([&](graphics::CommandQueue& queue) {
+    queue.ForgetKnownResourceState(resource);
+  });
 }
 
 auto Graphics::GetTimestampQueryProvider() const

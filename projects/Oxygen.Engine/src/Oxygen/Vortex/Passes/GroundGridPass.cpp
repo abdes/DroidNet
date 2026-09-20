@@ -148,12 +148,11 @@ namespace {
       || initial == graphics::ResourceStates::kUndefined) {
       initial = graphics::ResourceStates::kCommon;
     }
-    recorder.BeginTrackingResourceState(texture, initial);
+    recorder.BeginTrackingResourceState(texture, initial, false);
   }
 
   auto BuildGroundGridFramebuffer(const graphics::Framebuffer& target,
-    const SceneTextures& scene_textures)
-    -> graphics::FramebufferDesc
+    const SceneTextures& scene_textures) -> graphics::FramebufferDesc
   {
     auto desc = graphics::FramebufferDesc {};
     CHECK_F(!target.GetDescriptor().color_attachments.empty()
@@ -199,8 +198,7 @@ namespace {
   }
 
   auto BuildGroundGridPipelineDesc(const SceneTextures& scene_textures,
-    const graphics::Framebuffer& target)
-    -> graphics::GraphicsPipelineDesc
+    const graphics::Framebuffer& target) -> graphics::GraphicsPipelineDesc
   {
     auto root_bindings = BuildVortexRootBindings();
     const auto alpha_blend = graphics::BlendTargetDesc {
@@ -216,11 +214,11 @@ namespace {
     CHECK_F(!target.GetDescriptor().color_attachments.empty()
         && target.GetDescriptor().color_attachments.front().texture != nullptr,
       "GroundGridPass: target framebuffer requires a color attachment");
-    const auto& target_color_desc
-      = target.GetDescriptor().color_attachments.front().texture->GetDescriptor();
+    const auto& target_color_desc = target.GetDescriptor()
+                                      .color_attachments.front()
+                                      .texture->GetDescriptor();
     auto pixel_defines = std::vector<graphics::ShaderDefine> {};
-    if (graphics::detail::IsHdr(
-          target_color_desc.format)) {
+    if (graphics::detail::IsHdr(target_color_desc.format)) {
       pixel_defines.push_back({ .name = "OXYGEN_HDR_OUTPUT", .value = "1" });
     }
     return graphics::GraphicsPipelineDesc::Builder {}
@@ -271,15 +269,14 @@ GroundGridPass::GroundGridPass(Renderer& renderer)
 
 GroundGridPass::~GroundGridPass() = default;
 
-auto GroundGridPass::Record(
-  RenderContext& ctx, const SceneTextures& scene_textures,
+auto GroundGridPass::Record(RenderContext& ctx,
+  graphics::CommandRecorder& recorder, const SceneTextures& scene_textures,
   const observer_ptr<const graphics::Framebuffer> target) -> RecordState
 {
   const auto& config = renderer_.GetGroundGridConfig();
   auto state = RecordState {
     .requested = config.enabled && ctx.current_view.view_id != kInvalidViewId
-      && ctx.current_view.resolved_view != nullptr
-      && target != nullptr,
+      && ctx.current_view.resolved_view != nullptr && target != nullptr,
   };
   if (!state.requested) {
     return state;
@@ -296,46 +293,38 @@ auto GroundGridPass::Record(
     return state;
   }
 
-  const auto queue_key = gfx->QueueKeyFor(graphics::QueueRole::kGraphics);
-  auto recorder = gfx->AcquireCommandRecorder(queue_key, "Vortex GroundGrid");
-  if (!recorder) {
-    gfx->RegisterDeferredRelease(std::move(framebuffer));
-    return state;
-  }
-  renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(
-    *recorder);
-
-  graphics::GpuEventScope pass_scope(*recorder, "Vortex.Stage20.GroundGrid",
+  graphics::GpuEventScope pass_scope(recorder, "Vortex.Stage20.GroundGrid",
     profiling::ProfileGranularity::kDiagnostic,
     profiling::ProfileCategory::kPass);
   auto& target_color
     = *target->GetDescriptor().color_attachments.front().texture;
-  TrackTextureFromKnownOrInitial(*recorder, target_color);
-  TrackTextureFromKnownOrInitial(*recorder, scene_textures.GetSceneDepth());
-  recorder->RequireResourceState(
+  TrackTextureFromKnownOrInitial(recorder, target_color);
+  TrackTextureFromKnownOrInitial(recorder, scene_textures.GetSceneDepth());
+  recorder.RequireResourceState(
     target_color, graphics::ResourceStates::kRenderTarget);
-  recorder->RequireResourceState(
+  recorder.RequireResourceState(
     scene_textures.GetSceneDepth(), graphics::ResourceStates::kDepthRead);
-  recorder->FlushBarriers();
-  recorder->BindFrameBuffer(*framebuffer);
-  SetViewportAndScissor(*recorder, ctx, scene_textures);
-  recorder->SetPipelineState(BuildGroundGridPipelineDesc(scene_textures, *target));
+  recorder.FlushBarriers();
+  recorder.BindFrameBuffer(*framebuffer);
+  SetViewportAndScissor(recorder, ctx, scene_textures);
+  recorder.SetPipelineState(
+    BuildGroundGridPipelineDesc(scene_textures, *target));
   if (ctx.view_constants != nullptr) {
-    recorder->SetGraphicsRootConstantBufferView(
+    recorder.SetGraphicsRootConstantBufferView(
       static_cast<std::uint32_t>(bindless_d3d12::RootParam::kViewConstants),
       ctx.view_constants->GetGPUVirtualAddress());
   }
   const auto pass_constants_index = UpdatePassConstants(ctx);
-  recorder->SetGraphicsRoot32BitConstant(
+  recorder.SetGraphicsRoot32BitConstant(
     static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants), 0U,
     0U);
-  recorder->SetGraphicsRoot32BitConstant(
+  recorder.SetGraphicsRoot32BitConstant(
     static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants),
     pass_constants_index.get(), 1U);
-  recorder->Draw(3U, 1U, 0U, 0U);
-  recorder->RequireResourceStateFinal(
+  recorder.Draw(3U, 1U, 0U, 0U);
+  recorder.RequireResourceState(
     target_color, graphics::ResourceStates::kRenderTarget);
-  recorder->RequireResourceStateFinal(
+  recorder.RequireResourceState(
     scene_textures.GetSceneDepth(), graphics::ResourceStates::kDepthRead);
   gfx->RegisterDeferredRelease(std::move(framebuffer));
 
@@ -408,7 +397,8 @@ auto GroundGridPass::ComputeGridOffset(
     }
     return wrapped;
   };
-  auto shortest_wrapped_delta = [period](double current, double target) -> double {
+  auto shortest_wrapped_delta
+    = [period](double current, double target) -> double {
     auto delta = target - current;
     if (delta > period * 0.5) {
       delta -= period;

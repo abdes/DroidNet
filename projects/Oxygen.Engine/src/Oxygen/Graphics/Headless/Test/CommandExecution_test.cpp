@@ -111,9 +111,8 @@ NOLINT_TEST(ResourceBarrierExecution, AppliesObservedState)
   const auto before_value = queue->GetCurrentValue();
   const auto completion_value = before_value + 1;
   {
-    auto recorder = headless->AcquireCommandRecorder(
-      q_key, cmd_list_name, /*immediate_submission=*/true);
-    ASSERT_NE(recorder, nullptr);
+    auto recorder = headless->AcquireCommandRecorder(q_key, cmd_list_name);
+    ASSERT_TRUE(recorder);
 
     // Register and begin tracking the buffer with the recorder.
     headless->GetResourceRegistry().Register(buffer);

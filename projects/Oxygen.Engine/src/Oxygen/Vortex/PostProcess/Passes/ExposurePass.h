@@ -76,276 +76,311 @@ namespace postprocess {
     ShaderVisibleIndex conversion_srv { kInvalidShaderVisibleIndex };
     ShaderVisibleIndex conversion_uav { kInvalidShaderVisibleIndex };
   };
-class ExposurePass {
-public:
-  using StateResources = ExposureStateResources;
-  using StateLease = std::shared_ptr<const StateResources>;
-  using FrameResources = FrameExposureResources;
-  using FrameLease = std::shared_ptr<const FrameResources>;
+  class ExposurePass {
+  public:
+    using StateResources = ExposureStateResources;
+    using StateLease = std::shared_ptr<const StateResources>;
+    using FrameResources = FrameExposureResources;
+    using FrameLease = std::shared_ptr<const FrameResources>;
 
-  struct Source {
-    CompositionView::ViewStateHandle handle;
-    ResolvedPostProcessConfig config;
-    std::optional<ExposureTransitionToken> transition;
-    std::optional<ExposureTransitionError> rejection;
-    std::uint64_t lifetime { 0U };
-  };
+    struct Source {
+      CompositionView::ViewStateHandle handle;
+      ResolvedPostProcessConfig config;
+      std::optional<ExposureTransitionToken> transition;
+      std::optional<ExposureTransitionError> rejection;
+      std::uint64_t lifetime { 0U };
+    };
 
-  struct SceneComposition {
-    const graphics::Texture* opaque_depth { nullptr };
-    ShaderVisibleIndex opaque_depth_srv { kInvalidShaderVisibleIndex };
-    std::uint64_t translucent_triangles { 0U };
-    std::uint32_t local_fog_instances { 0U };
-    bool reverse_z { true };
-  };
+    struct SceneComposition {
+      const graphics::Texture* opaque_depth { nullptr };
+      ShaderVisibleIndex opaque_depth_srv { kInvalidShaderVisibleIndex };
+      std::uint64_t translucent_triangles { 0U };
+      std::uint32_t local_fog_instances { 0U };
+      bool reverse_z { true };
+    };
 
-  struct Inputs {
-    const graphics::Texture* scene_signal { nullptr };
-    ShaderVisibleIndex scene_signal_srv { kInvalidShaderVisibleIndex };
-    const graphics::Texture* metering_mask { nullptr };
-    ShaderVisibleIndex metering_mask_srv { kInvalidShaderVisibleIndex };
-    //! Scale of the supplied signal; scene-referred fixtures use one.
-    float one_over_pre_exposure { 1.0F };
-    const FrameResources* frame_exposure { nullptr };
-    bool metering_available { true };
-    //! Record the final FP32 range guard in the same submission as this solve.
-    bool require_scene_range { false };
-    std::optional<ExposureTransitionToken> transition;
-    const Source* source { nullptr };
-    std::optional<ExposureTransitionError> rejection;
-    std::uint64_t lifetime { 0U };
-    //! Nonzero for a scene resolve requiring these composed upstream products.
-    std::uint32_t composition_products { 0U };
-    //! Generate a real consumer certificate; absent for uploaded fixtures.
-    std::optional<SceneComposition> scene_composition;
-  };
+    struct Inputs {
+      const graphics::Texture* scene_signal { nullptr };
+      ShaderVisibleIndex scene_signal_srv { kInvalidShaderVisibleIndex };
+      const graphics::Texture* metering_mask { nullptr };
+      ShaderVisibleIndex metering_mask_srv { kInvalidShaderVisibleIndex };
+      //! Scale of the supplied signal; scene-referred fixtures use one.
+      float one_over_pre_exposure { 1.0F };
+      const FrameResources* frame_exposure { nullptr };
+      bool metering_available { true };
+      //! Record the final FP32 range guard in the same submission as this
+      //! solve.
+      bool require_scene_range { false };
+      std::optional<ExposureTransitionToken> transition;
+      const Source* source { nullptr };
+      std::optional<ExposureTransitionError> rejection;
+      std::uint64_t lifetime { 0U };
+      //! Nonzero for a scene resolve requiring these composed upstream
+      //! products.
+      std::uint32_t composition_products { 0U };
+      //! Generate a real consumer certificate; absent for uploaded fixtures.
+      std::optional<SceneComposition> scene_composition;
+    };
 
-  struct Result {
-    StateLease state;
-    FrameLease frame;
-    bool requested { false };
-    bool executed { false };
-    //! An attempted current solve failed; a usable fallback may still exist.
-    bool solve_failed { false };
-    bool used_fixed_exposure { false };
-    bool borrowed_exposure { false };
-    float exposure_value { 1.0F };
-    const graphics::Buffer* exposure_buffer { nullptr };
-    const graphics::Buffer* histogram_buffer { nullptr };
-    ShaderVisibleIndex exposure_buffer_srv { kInvalidShaderVisibleIndex };
-    ShaderVisibleIndex exposure_buffer_uav { kInvalidShaderVisibleIndex };
-  };
-
-  struct FrameInputs {
-    bool use_fp32 { false };
-    bool fp32_only { false };
-    //! Format-only reference: retain a valid candidate P in FP32 storage.
-    //! An absent/invalid candidate still uses ordinary recovery P = 1.
-    bool preserve_fp32_candidate_p { false };
-    StateLease qualified_candidate;
-    const Source* source { nullptr };
-    std::optional<ExposureTransitionToken> transition;
-    std::optional<ExposureTransitionError> rejection;
-    std::uint64_t lifetime { 0U };
-  };
-
-  struct HdrProduct {
-    const graphics::Texture* texture { nullptr };
-    ShaderVisibleIndex srv { kInvalidShaderVisibleIndex };
-    std::uint32_t id { 0U };
-    bool metering { false };
-    bool coverage { false };
-    bool transmittance { false };
-    float error_budget_share { 1.0F };
-    //! Known RGB amplification after storage; transmittance is not scaled.
-    float consumer_rgb_gain { 1.0F };
-    //! Require this frame's whole-scene reference/candidate certificate.
-    bool composed_error { false };
-  };
-
-  //! Capture the absolute RGB maximum before environment attenuation (in P
-  //! units).
-  [[nodiscard]] OXGN_VRTX_API auto CapturePreEnvironmentRange(
-    RenderContext& ctx, const FrameLease& frame,
-    const graphics::Texture& source, ShaderVisibleIndex source_srv) -> bool;
-  //! Check final accumulation before metering, preserving earlier opaque
-  //! inputs.
-  [[nodiscard]] OXGN_VRTX_API auto CheckSceneColorRange(RenderContext& ctx,
-    const FrameLease& frame, const graphics::Texture& source,
-    ShaderVisibleIndex source_srv) -> bool;
-  //! Submission identity is authoritative if a repeated attempt fails.
-  [[nodiscard]] auto HasPreEnvironmentRange(const FrameLease& frame) const
-    -> bool
-  {
-    return frame && submitted_composition_input_.contains(frame.get());
-  }
-
-  //! Propagate only retained AP store error through the opaque radiance
-  //! transfer.
-  //! True means submitted; inspect the GPU record for well-formed inputs.
-  [[nodiscard]] OXGN_VRTX_API auto PropagateOpaqueApError(RenderContext& ctx,
-    const FrameLease& frame, float scattering_strength) -> bool;
-  [[nodiscard]] auto HasOpaqueApError(const FrameLease& frame) const -> bool
-  {
-    return frame && submitted_opaque_ap_error_.contains(frame.get());
-  }
-
-  //! Gather reference neighbor differences for a filtered sky/AP/fog product.
-  //! True means submitted; GPU flags must also show complete valid inputs.
-  [[nodiscard]] OXGN_VRTX_API auto GatherFilterGradients(RenderContext& ctx,
-    const FrameLease& frame, const HdrProduct& product) -> bool;
-  [[nodiscard]] OXGN_VRTX_API auto HasFilterGradients(
-    const FrameLease& frame, std::uint32_t product) const -> bool;
-
-  //! Evaluate FP32 reference products without granting normal-mode admission.
-  enum class SuitabilityScale { kCandidate, kCurrentFrame };
-  [[nodiscard]] OXGN_VRTX_API auto EvaluateFp16Products(RenderContext& ctx,
-    const FrameLease& frame, const ResolvedPostProcessConfig& config,
-    std::span<const HdrProduct> products, const Inputs& metering,
-    SuitabilityScale scale = SuitabilityScale::kCandidate) -> bool;
-  struct EligibilityInputs {
-    std::uint64_t product_layout_revision { 0U };
-    std::uint32_t expected_products { 0U };
-    bool invalidate_previous { false };
-  };
-  //! Publish bounded GPU eligibility after a submitted complete product check.
-  [[nodiscard]] OXGN_VRTX_API auto FinalizeFp16Suitability(RenderContext& ctx,
-    const FrameLease& frame, const EligibilityInputs& inputs) -> bool;
-
-  //! Check the current frame's FP32 SceneColor before writing its FP16 resolve.
-  //! Call after the exposure solve. True means submitted, not suitable: the GPU
-  //! suitability report gates all destination writes. A rejected destination
-  //! remains untouched and must not be published as valid or sampled
-  //! downstream.
-  [[nodiscard]] OXGN_VRTX_API auto ConvertCheckedSceneColor(RenderContext& ctx,
-    const FrameLease& frame, const ResolvedPostProcessConfig& config,
-    const Inputs& inputs, graphics::Texture& destination,
-    ShaderVisibleIndex destination_uav) -> bool;
-
-  OXGN_VRTX_API explicit ExposurePass(Renderer& renderer);
-  OXGN_VRTX_API ~ExposurePass();
-
-  ExposurePass(const ExposurePass&) = delete;
-  auto operator=(const ExposurePass&) -> ExposurePass& = delete;
-  ExposurePass(ExposurePass&&) = delete;
-  auto operator=(ExposurePass&&) -> ExposurePass& = delete;
-
-  [[nodiscard]] OXGN_VRTX_API auto Execute(RenderContext& ctx,
-    const ResolvedPostProcessConfig& config, const Inputs& inputs) -> Result;
-  //! GPU-only numerical resolve; publication must precede dependent HDR work.
-  [[nodiscard]] OXGN_VRTX_API auto ResolveFrame(RenderContext& ctx,
-    const ResolvedPostProcessConfig& config, const FrameInputs& inputs)
-    -> FrameLease;
-  OXGN_VRTX_API auto OnFrameStart(
-    frame::SequenceNumber sequence, frame::Slot slot) -> void;
-  OXGN_VRTX_API auto RemoveViewState(
-    CompositionView::ViewStateHandle view_state_handle) -> void;
-  OXGN_VRTX_API auto PreserveRemovedSource(
-    std::shared_ptr<const ExposureSourceLoss> loss, const Source& source,
-    CompositionView::ViewStateHandle only_consumer
-    = CompositionView::kInvalidViewStateHandle) -> void;
-
-private:
-  auto RecordSceneRange(RenderContext& ctx, const FrameLease& frame,
-    const graphics::Texture& source, ShaderVisibleIndex source_srv,
-    bool capture_opaque_input) -> bool;
-  auto RecordSceneRangeCommands(RenderContext& ctx,
-    graphics::CommandRecorder& recorder, const FrameResources& frame,
-    const graphics::Texture& source, ShaderVisibleIndex source_srv,
-    bool capture_opaque_input) -> void;
-  friend struct ::oxygen::vortex::testing::RendererPublicationProbe;
-  struct PerViewExposureState {
-    StateLease latest;
-    std::optional<frame::SequenceNumber> submitted_frame;
-    struct BorrowSelection {
+    struct Result {
       StateLease state;
-      Source source;
-      std::uint64_t consumer_lifetime;
+      FrameLease frame;
+      bool requested { false };
+      //! A solve was recorded; successful owner submission commits its history.
+      bool executed { false };
+      //! An attempted current solve failed; a usable fallback may still exist.
+      bool solve_failed { false };
+      bool used_fixed_exposure { false };
+      bool borrowed_exposure { false };
+      float exposure_value { 1.0F };
+      const graphics::Buffer* exposure_buffer { nullptr };
+      const graphics::Buffer* histogram_buffer { nullptr };
+      ShaderVisibleIndex exposure_buffer_srv { kInvalidShaderVisibleIndex };
+      ShaderVisibleIndex exposure_buffer_uav { kInvalidShaderVisibleIndex };
     };
-    std::optional<BorrowSelection> selected_borrow;
-    struct PendingSourceLoss {
-      std::shared_ptr<const ExposureSourceLoss> event;
-      Source source;
-      StateLease fallback;
-      std::uint64_t consumer_lifetime;
+
+    struct FrameInputs {
+      bool use_fp32 { false };
+      bool fp32_only { false };
+      //! Format-only reference: retain a valid candidate P in FP32 storage.
+      //! An absent/invalid candidate still uses ordinary recovery P = 1.
+      bool preserve_fp32_candidate_p { false };
+      StateLease qualified_candidate;
+      const Source* source { nullptr };
+      std::optional<ExposureTransitionToken> transition;
+      std::optional<ExposureTransitionError> rejection;
+      std::uint64_t lifetime { 0U };
     };
-    std::optional<PendingSourceLoss> source_loss;
+
+    struct HdrProduct {
+      const graphics::Texture* texture { nullptr };
+      ShaderVisibleIndex srv { kInvalidShaderVisibleIndex };
+      std::uint32_t id { 0U };
+      bool metering { false };
+      bool coverage { false };
+      bool transmittance { false };
+      float error_budget_share { 1.0F };
+      //! Known RGB amplification after storage; transmittance is not scaled.
+      float consumer_rgb_gain { 1.0F };
+      //! Require this frame's whole-scene reference/candidate certificate.
+      bool composed_error { false };
+    };
+
+    //! Capture the absolute RGB maximum before environment attenuation (in P
+    //! units).
+    [[nodiscard]] OXGN_VRTX_API auto CapturePreEnvironmentRange(
+      RenderContext& ctx, graphics::CommandRecorder& recorder,
+      const FrameLease& frame, const graphics::Texture& source,
+      ShaderVisibleIndex source_srv) -> bool;
+    //! Check final accumulation before metering, preserving earlier opaque
+    //! inputs.
+    [[nodiscard]] OXGN_VRTX_API auto CheckSceneColorRange(RenderContext& ctx,
+      graphics::CommandRecorder& recorder, const FrameLease& frame,
+      const graphics::Texture& source, ShaderVisibleIndex source_srv) -> bool;
+    //! Recorded certificates are cleared if their recording is discarded.
+    [[nodiscard]] auto HasPreEnvironmentRange(const FrameLease& frame) const
+      -> bool
+    {
+      return frame && recorded_composition_input_.contains(frame.get());
+    }
+
+    //! Propagate only retained AP store error through the opaque radiance
+    //! transfer.
+    //! True means recorded; inspect the GPU record after successful submission.
+    [[nodiscard]] OXGN_VRTX_API auto PropagateOpaqueApError(RenderContext& ctx,
+      graphics::CommandRecorder& recorder, const FrameLease& frame,
+      float scattering_strength) -> bool;
+    [[nodiscard]] auto HasOpaqueApError(const FrameLease& frame) const -> bool
+    {
+      return frame && recorded_opaque_ap_error_.contains(frame.get());
+    }
+
+    //! Gather reference neighbor differences for a filtered sky/AP/fog product.
+    //! True means recorded; GPU flags must also show complete valid inputs.
+    [[nodiscard]] OXGN_VRTX_API auto GatherFilterGradients(RenderContext& ctx,
+      graphics::CommandRecorder& recorder, const FrameLease& frame,
+      const HdrProduct& product) -> bool;
+    [[nodiscard]] OXGN_VRTX_API auto HasFilterGradients(
+      const FrameLease& frame, std::uint32_t product) const -> bool;
+
+    //! Evaluate FP32 reference products without granting normal-mode admission.
+    enum class SuitabilityScale { kCandidate, kCurrentFrame };
+    [[nodiscard]] OXGN_VRTX_API auto EvaluateFp16Products(RenderContext& ctx,
+      graphics::CommandRecorder& recorder, const FrameLease& frame,
+      const ResolvedPostProcessConfig& config,
+      std::span<const HdrProduct> products, const Inputs& metering,
+      SuitabilityScale scale = SuitabilityScale::kCandidate) -> bool;
+    struct EligibilityInputs {
+      std::uint64_t product_layout_revision { 0U };
+      std::uint32_t expected_products { 0U };
+      bool invalidate_previous { false };
+    };
+    //! Publish bounded GPU eligibility after a recorded complete product
+    //! check.
+    [[nodiscard]] OXGN_VRTX_API auto FinalizeFp16Suitability(RenderContext& ctx,
+      graphics::CommandRecorder& recorder, const FrameLease& frame,
+      const EligibilityInputs& inputs) -> bool;
+
+    //! Check the current frame's FP32 SceneColor before writing its FP16
+    //! resolve. Call after the exposure solve. True means recorded, not
+    //! suitable: the GPU suitability report gates all destination writes. A
+    //! rejected destination remains untouched and must not be published as
+    //! valid or sampled downstream.
+    [[nodiscard]] OXGN_VRTX_API auto ConvertCheckedSceneColor(
+      RenderContext& ctx, graphics::CommandRecorder& recorder,
+      const FrameLease& frame, const ResolvedPostProcessConfig& config,
+      const Inputs& inputs, graphics::Texture& destination,
+      ShaderVisibleIndex destination_uav) -> bool;
+
+    OXGN_VRTX_API explicit ExposurePass(Renderer& renderer);
+    OXGN_VRTX_API ~ExposurePass();
+
+    ExposurePass(const ExposurePass&) = delete;
+    auto operator=(const ExposurePass&) -> ExposurePass& = delete;
+    ExposurePass(ExposurePass&&) = delete;
+    auto operator=(ExposurePass&&) -> ExposurePass& = delete;
+
+    [[nodiscard]] OXGN_VRTX_API auto Execute(RenderContext& ctx,
+      graphics::CommandRecorder& recorder,
+      const ResolvedPostProcessConfig& config, const Inputs& inputs) -> Result;
+    //! GPU-only numerical resolve; publication must precede dependent HDR work.
+    [[nodiscard]] OXGN_VRTX_API auto ResolveFrame(RenderContext& ctx,
+      graphics::CommandRecorder& recorder,
+      const ResolvedPostProcessConfig& config, const FrameInputs& inputs)
+      -> FrameLease;
+    OXGN_VRTX_API auto OnFrameStart(
+      frame::SequenceNumber sequence, frame::Slot slot) -> void;
+    OXGN_VRTX_API auto RemoveViewState(
+      CompositionView::ViewStateHandle view_state_handle) -> void;
+    OXGN_VRTX_API auto PreserveRemovedSource(
+      std::shared_ptr<const ExposureSourceLoss> loss, const Source& source,
+      CompositionView::ViewStateHandle only_consumer
+      = CompositionView::kInvalidViewStateHandle) -> void;
+
+  private:
+    auto RecordSceneRange(RenderContext& ctx,
+      graphics::CommandRecorder& recorder, const FrameLease& frame,
+      const graphics::Texture& source, ShaderVisibleIndex source_srv,
+      bool capture_opaque_input) -> bool;
+    auto RecordSceneRangeCommands(RenderContext& ctx,
+      graphics::CommandRecorder& recorder, const FrameResources& frame,
+      const graphics::Texture& source, ShaderVisibleIndex source_srv,
+      bool capture_opaque_input) -> void;
+    friend struct ::oxygen::vortex::testing::RendererPublicationProbe;
+    struct PerViewExposureState {
+      StateLease latest;
+      std::optional<frame::SequenceNumber> submitted_frame;
+      struct BorrowSelection {
+        StateLease state;
+        Source source;
+        std::uint64_t consumer_lifetime;
+      };
+      std::optional<BorrowSelection> selected_borrow;
+      struct PendingSourceLoss {
+        std::shared_ptr<const ExposureSourceLoss> event;
+        Source source;
+        StateLease fallback;
+        std::uint64_t consumer_lifetime;
+      };
+      std::optional<PendingSourceLoss> source_loss;
+    };
+
+    struct PendingViewState {
+      const graphics::CommandRecorder* recorder;
+      PerViewExposureState state;
+    };
+
+    //! Retains a same-frame bootstrap and removes it on discarded work.
+    void CacheBootstrap(graphics::CommandRecorder& recorder,
+      CompositionView::ViewStateHandle handle, StateLease state);
+
+    //! Stages history changes until this recording resolves successfully.
+    auto PendingHistory(graphics::CommandRecorder& recorder,
+      CompositionView::ViewStateHandle handle) -> PerViewExposureState&;
+    //! Tracks the exclusive frame writer until its recording resolves.
+    void TrackFrameRecording(
+      graphics::CommandRecorder& recorder, const FrameResources& frame);
+
+    auto EnsurePipelines() -> void;
+    auto PreparePublishers(RenderContext& ctx) -> void;
+    auto AcquireFrame(bool fp32_only) -> std::shared_ptr<FrameResources>;
+    auto RestoreFrameFallback(RenderContext& ctx,
+      graphics::CommandRecorder& recorder,
+      const ResolvedPostProcessConfig& config, const FrameResources& frame,
+      StateLease fallback) -> bool;
+    auto RecordState(RenderContext& ctx, graphics::CommandRecorder& recorder,
+      const ResolvedPostProcessConfig& config, const Inputs& inputs,
+      StateLease previous, StateLease borrowed, bool bootstrap = false,
+      bool source_loss = false, std::shared_ptr<StateResources> reserved = {})
+      -> StateLease;
+    auto AcquireState() -> std::shared_ptr<StateResources>;
+    auto EnsureHistogramBuffer(StateResources& state) -> void;
+    auto PublishHistogramConstants(RenderContext& ctx, const Inputs& inputs,
+      const ResolvedPostProcessConfig& config, const StateResources& state)
+      -> ShaderVisibleIndex;
+    auto UpdateAverageConstants(RenderContext& ctx,
+      graphics::CommandRecorder& recorder,
+      const ResolvedPostProcessConfig& config, const StateResources& state,
+      ShaderVisibleIndex targets_srv, ShaderVisibleIndex previous_srv,
+      const Inputs& inputs, ShaderVisibleIndex borrowed_srv, bool bootstrap,
+      bool metering, bool source_loss) -> void;
+    auto ReleaseExposureResources() -> void;
+
+    Renderer& renderer_;
+    std::unique_ptr<::oxygen::vortex::internal::PerViewStructuredPublisher<
+      ExposureTargetData>>
+      target_publisher_;
+    std::optional<frame::SequenceNumber> target_frame_;
+    std::unique_ptr<::oxygen::vortex::internal::PerViewStructuredPublisher<
+      std::array<std::uint32_t, 16U>>>
+      constants_publisher_;
+    std::unique_ptr<::oxygen::vortex::internal::PerViewStructuredPublisher<
+      std::array<std::uint32_t, 28U>>>
+      average_constants_publisher_;
+    std::optional<graphics::ComputePipelineDesc> clear_pipeline_ {};
+    std::optional<graphics::ComputePipelineDesc> histogram_pipeline_ {};
+    std::optional<graphics::ComputePipelineDesc> average_pipeline_ {};
+    std::optional<graphics::ComputePipelineDesc> frame_pipeline_ {};
+    std::optional<graphics::ComputePipelineDesc> fallback_pipeline_ {};
+    std::optional<graphics::ComputePipelineDesc> convert_pipeline_ {};
+    std::optional<graphics::ComputePipelineDesc> eligibility_pipeline_ {};
+    std::array<std::optional<graphics::ComputePipelineDesc>, 4>
+      suitability_pipelines_;
+    std::unique_ptr<::oxygen::vortex::internal::PerViewStructuredPublisher<
+      std::array<std::uint32_t, 32U>>>
+      suitability_constants_publisher_;
+    std::unique_ptr<::oxygen::vortex::internal::PerViewStructuredPublisher<
+      std::array<std::uint32_t, 8U>>>
+      conversion_constants_publisher_;
+    std::unique_ptr<::oxygen::vortex::internal::PerViewStructuredPublisher<
+      std::array<std::uint32_t, 12U>>>
+      frame_constants_publisher_;
+    std::vector<std::shared_ptr<FrameResources>> frame_pool_;
+    std::map<std::pair<ViewId, CompositionView::ViewStateHandle>, FrameLease>
+      resolved_frames_;
+    std::unordered_set<const FrameResources*> recorded_suitability_;
+    std::unordered_set<const FrameResources*> recorded_conversion_;
+    std::unordered_set<const FrameResources*> recorded_composition_input_;
+    std::unordered_set<const FrameResources*> recorded_opaque_ap_error_;
+    // Current-frame producer identity for the recorded gradient certificate.
+    std::unordered_map<const FrameResources*, std::array<HdrProduct, 3U>>
+      recorded_filter_gradients_;
+    std::array<std::vector<FrameLease>, frame::kFramesInFlight.get()>
+      frame_bindings_;
+    std::vector<std::shared_ptr<StateResources>> state_pool_;
+    std::array<std::vector<StateLease>, frame::kFramesInFlight.get()>
+      frame_states_;
+    std::unordered_map<CompositionView::ViewStateHandle, StateLease>
+      prior_states_;
+    std::unordered_map<CompositionView::ViewStateHandle, StateLease>
+      bootstrap_states_;
+    std::unordered_map<CompositionView::ViewStateHandle, PerViewExposureState>
+      exposure_states_ {};
+    std::unordered_map<CompositionView::ViewStateHandle, PendingViewState>
+      pending_view_states_;
+    std::unordered_map<const FrameResources*, const graphics::CommandRecorder*>
+      pending_frame_recorders_;
   };
-
-  auto EnsurePipelines() -> void;
-  auto PreparePublishers(RenderContext& ctx) -> void;
-  auto AcquireFrame(bool fp32_only) -> std::shared_ptr<FrameResources>;
-  auto RestoreFrameFallback(RenderContext& ctx,
-    const ResolvedPostProcessConfig& config, const FrameResources& frame,
-    StateLease fallback) -> bool;
-  auto RecordState(RenderContext& ctx, const ResolvedPostProcessConfig& config,
-    const Inputs& inputs, StateLease previous, StateLease borrowed,
-    bool bootstrap = false, bool source_loss = false,
-    std::shared_ptr<StateResources> reserved = {}) -> StateLease;
-  auto AcquireState() -> std::shared_ptr<StateResources>;
-  auto EnsureHistogramBuffer(StateResources& state) -> void;
-  auto PublishHistogramConstants(RenderContext& ctx, const Inputs& inputs,
-    const ResolvedPostProcessConfig& config, const StateResources& state)
-    -> ShaderVisibleIndex;
-  auto UpdateAverageConstants(RenderContext& ctx,
-    graphics::CommandRecorder& recorder,
-    const ResolvedPostProcessConfig& config, const StateResources& state,
-    ShaderVisibleIndex targets_srv, ShaderVisibleIndex previous_srv,
-    const Inputs& inputs, ShaderVisibleIndex borrowed_srv, bool bootstrap,
-    bool metering, bool source_loss) -> void;
-  auto ReleaseExposureResources() -> void;
-
-  Renderer& renderer_;
-  std::unique_ptr<::oxygen::vortex::internal::PerViewStructuredPublisher<
-    ExposureTargetData>>
-    target_publisher_;
-  std::optional<frame::SequenceNumber> target_frame_;
-  std::unique_ptr<::oxygen::vortex::internal::PerViewStructuredPublisher<
-    std::array<std::uint32_t, 16U>>>
-    constants_publisher_;
-  std::unique_ptr<::oxygen::vortex::internal::PerViewStructuredPublisher<
-    std::array<std::uint32_t, 28U>>>
-    average_constants_publisher_;
-  std::optional<graphics::ComputePipelineDesc> clear_pipeline_ {};
-  std::optional<graphics::ComputePipelineDesc> histogram_pipeline_ {};
-  std::optional<graphics::ComputePipelineDesc> average_pipeline_ {};
-  std::optional<graphics::ComputePipelineDesc> frame_pipeline_ {};
-  std::optional<graphics::ComputePipelineDesc> fallback_pipeline_ {};
-  std::optional<graphics::ComputePipelineDesc> convert_pipeline_ {};
-  std::optional<graphics::ComputePipelineDesc> eligibility_pipeline_ {};
-  std::array<std::optional<graphics::ComputePipelineDesc>, 4>
-    suitability_pipelines_;
-  std::unique_ptr<::oxygen::vortex::internal::PerViewStructuredPublisher<
-    std::array<std::uint32_t, 32U>>>
-    suitability_constants_publisher_;
-  std::unique_ptr<::oxygen::vortex::internal::PerViewStructuredPublisher<
-    std::array<std::uint32_t, 8U>>>
-    conversion_constants_publisher_;
-  std::unique_ptr<::oxygen::vortex::internal::PerViewStructuredPublisher<
-    std::array<std::uint32_t, 12U>>>
-    frame_constants_publisher_;
-  std::vector<std::shared_ptr<FrameResources>> frame_pool_;
-  std::map<std::pair<ViewId, CompositionView::ViewStateHandle>, FrameLease>
-    resolved_frames_;
-  std::unordered_set<const FrameResources*> submitted_suitability_;
-  std::unordered_set<const FrameResources*> submitted_conversion_;
-  std::unordered_set<const FrameResources*> submitted_composition_input_;
-  std::unordered_set<const FrameResources*> submitted_opaque_ap_error_;
-  // Current-frame producer identity for the submitted gradient certificate.
-  std::unordered_map<const FrameResources*, std::array<HdrProduct, 3U>>
-    submitted_filter_gradients_;
-  std::array<std::vector<FrameLease>, frame::kFramesInFlight.get()>
-    frame_bindings_;
-  std::vector<std::shared_ptr<StateResources>> state_pool_;
-  std::array<std::vector<StateLease>, frame::kFramesInFlight.get()>
-    frame_states_;
-  std::unordered_map<CompositionView::ViewStateHandle, StateLease>
-    prior_states_;
-  std::unordered_map<CompositionView::ViewStateHandle, StateLease>
-    bootstrap_states_;
-  std::unordered_map<CompositionView::ViewStateHandle, PerViewExposureState>
-    exposure_states_ {};
-};
 
 } // namespace postprocess
 

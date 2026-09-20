@@ -8,6 +8,8 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <source_location>
@@ -38,6 +40,12 @@
 #include <Oxygen/Profiling/ProfileScope.h>
 
 namespace oxygen::graphics {
+
+//! Outcome of recording submission, distinct from GPU execution completion.
+enum class SubmissionOutcome : uint8_t {
+  kSubmitted,
+  kDiscarded,
+};
 
 namespace detail {
   class ResourceStateTracker;
@@ -83,11 +91,10 @@ public:
     = 0;
 
   virtual auto EndScope(
-    CommandRecorder& recorder, GpuProfileCollectorState& state) -> void
-    = 0;
+    CommandRecorder& recorder, GpuProfileCollectorState& state) -> void = 0;
 
-  virtual auto AbortScope(CommandRecorder& recorder,
-    GpuProfileCollectorState& state) -> void
+  virtual auto AbortScope(
+    CommandRecorder& recorder, GpuProfileCollectorState& state) -> void
   {
     EndScope(recorder, state);
   }
@@ -142,6 +149,10 @@ public:
   OXYGEN_MAKE_NON_MOVABLE(CommandRecorder)
 
   [[nodiscard]] auto GetTargetQueue() const { return target_queue_; }
+
+  //! Registers CPU publication to resolve once submission succeeds or discards.
+  OXGN_GFX_API void OnSubmission(
+    std::move_only_function<void(SubmissionOutcome)> callback);
 
   //! Retain this recording's command list for immediate submission inspection.
   /*!
@@ -240,26 +251,21 @@ public:
   //=== Direct Binding ===--------------------------------------------------//
 
   virtual auto SetGraphicsRootConstantBufferView(
-    uint32_t root_parameter_index, uint64_t buffer_gpu_address) -> void
-    = 0;
+    uint32_t root_parameter_index, uint64_t buffer_gpu_address) -> void = 0;
 
   virtual auto SetComputeRootConstantBufferView(
-    uint32_t root_parameter_index, uint64_t buffer_gpu_address) -> void
-    = 0;
+    uint32_t root_parameter_index, uint64_t buffer_gpu_address) -> void = 0;
 
   virtual auto SetGraphicsRoot32BitConstant(uint32_t root_parameter_index,
-    uint32_t src_data, uint32_t dest_offset_in_32bit_values) -> void
-    = 0;
+    uint32_t src_data, uint32_t dest_offset_in_32bit_values) -> void = 0;
 
   virtual auto SetComputeRoot32BitConstant(uint32_t root_parameter_index,
-    uint32_t src_data, uint32_t dest_offset_in_32bit_values) -> void
-    = 0;
+    uint32_t src_data, uint32_t dest_offset_in_32bit_values) -> void = 0;
 
   //=== Render State ===----------------------------------------------------//
 
   virtual auto SetRenderTargets(
-    std::span<NativeView> rtvs, std::optional<NativeView> dsv) -> void
-    = 0;
+    std::span<NativeView> rtvs, std::optional<NativeView> dsv) -> void = 0;
 
   virtual auto SetViewport(const ViewPort& viewport) -> void = 0;
   virtual auto SetScissors(const Scissors& scissors) -> void = 0;
@@ -268,12 +274,10 @@ public:
 
   // Pure bindless - Only Draw should be used, no DrawIndexed
   virtual auto Draw(uint32_t vertex_num, uint32_t instances_num,
-    uint32_t vertex_offset, uint32_t instance_offset) -> void
-    = 0;
+    uint32_t vertex_offset, uint32_t instance_offset) -> void = 0;
 
   virtual auto Dispatch(uint32_t thread_group_count_x,
-    uint32_t thread_group_count_y, uint32_t thread_group_count_z) -> void
-    = 0;
+    uint32_t thread_group_count_y, uint32_t thread_group_count_z) -> void = 0;
 
   //! Issues one indirect draw command using the default draw layout.
   /*!
@@ -313,13 +317,11 @@ public:
   */
   virtual auto ExecuteIndirect(const Buffer& argument_buffer,
     const IndirectCommandDesc& command_desc,
-    const IndirectExecutionDesc& execution_desc) -> void
-    = 0;
+    const IndirectExecutionDesc& execution_desc) -> void = 0;
 
   virtual auto SetVertexBuffers(uint32_t num,
     const std::shared_ptr<Buffer>* vertex_buffers,
-    const uint32_t* strides) const -> void
-    = 0;
+    const uint32_t* strides) const -> void = 0;
   virtual auto BindIndexBuffer(const Buffer& buffer, Format format) -> void = 0;
 
   //=== Framebuffer and Resource Operations ===-----------------------------//
@@ -345,8 +347,7 @@ public:
    */
   virtual auto ClearDepthStencilView(const Texture& texture,
     const NativeView& dsv, ClearFlags clear_flags, float depth, uint8_t stencil)
-    -> void
-    = 0;
+    -> void = 0;
 
   //! Clears one or more rectangles within a depth-stencil view.
   /*!
@@ -388,29 +389,24 @@ public:
     std::optional<std::vector<std::optional<Color>>> color_clear_values
     = std::nullopt,
     std::optional<float> depth_clear_value = std::nullopt,
-    std::optional<uint8_t> stencil_clear_value = std::nullopt) -> void
-    = 0;
+    std::optional<uint8_t> stencil_clear_value = std::nullopt) -> void = 0;
 
   virtual auto CopyBuffer(Buffer& dst, size_t dst_offset, const Buffer& src,
-    size_t src_offset, size_t size) -> void
-    = 0;
+    size_t src_offset, size_t size) -> void = 0;
 
   // Copies from a (staging) buffer into a texture region. The region(s) are
   // described by TextureUploadRegion which references a buffer offset, pitches
   // and a destination TextureSlice / TextureSubResourceSet.
-  virtual auto CopyBufferToTexture(
-    const Buffer& src, const TextureUploadRegion& region, Texture& dst) -> void
-    = 0;
+  virtual auto CopyBufferToTexture(const Buffer& src,
+    const TextureUploadRegion& region, Texture& dst) -> void = 0;
 
   virtual auto CopyBufferToTexture(const Buffer& src,
-    std::span<const TextureUploadRegion> regions, Texture& dst) -> void
-    = 0;
+    std::span<const TextureUploadRegion> regions, Texture& dst) -> void = 0;
 
   // Copies from a texture region into a linear buffer. The region describes a
   // source texture slice and the destination buffer offset / pitches.
   virtual auto CopyTextureToBuffer(Buffer& dst, const Texture& src,
-    const TextureBufferCopyRegion& region) -> void
-    = 0;
+    const TextureBufferCopyRegion& region) -> void = 0;
 
   //! Copies a region from one texture to another.
   /*!
@@ -431,8 +427,7 @@ public:
   virtual auto CopyTexture(const Texture& src, const TextureSlice& src_slice,
     const TextureSubResourceSet& src_subresources, Texture& dst,
     const TextureSlice& dst_slice,
-    const TextureSubResourceSet& dst_subresources) -> void
-    = 0;
+    const TextureSubResourceSet& dst_subresources) -> void = 0;
 
   //=== Resource State Management and Barriers (Templates) ===--------------//
 
@@ -475,8 +470,8 @@ public:
   }
 
   template <Trackable T>
-  [[nodiscard]] auto AdoptKnownResourceState(const T& resource,
-    const bool keep_initial_state = false) -> bool
+  [[nodiscard]] auto AdoptKnownResourceState(
+    const T& resource, const bool keep_initial_state = false) -> bool
   {
     if (target_queue_ == nullptr) {
       return false;
@@ -599,10 +594,12 @@ protected:
    barriers and issues the appropriate commands to the GPU to execute them.
   */
   virtual auto ExecuteBarriers(std::span<const detail::Barrier> barriers)
-    -> void
-    = 0;
+    -> void = 0;
 
 private:
+  friend class CommandRecording;
+  void ResolveSubmission(SubmissionOutcome outcome) noexcept;
+
   enum class ScopeCloseKind : uint8_t {
     kEnd,
     kAbort,
@@ -667,6 +664,9 @@ private:
   std::unique_ptr<detail::ResourceStateTracker> resource_state_tracker_;
   std::vector<ScopeRecord> scope_records_ {};
   std::vector<uint32_t> scope_stack_ {};
+  std::vector<std::move_only_function<void(SubmissionOutcome)>>
+    submission_callbacks_ {};
+  std::optional<SubmissionOutcome> submission_outcome_;
 };
 
 } // namespace oxygen::graphics

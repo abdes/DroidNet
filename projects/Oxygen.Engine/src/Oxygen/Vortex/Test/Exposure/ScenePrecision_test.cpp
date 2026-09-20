@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <memory>
 #include <print>
+#include <stdexcept>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -671,9 +672,13 @@ NOLINT_TEST_F(
     unsigned draws;
   };
   std::vector<Record> records;
+  bool abort_recording = false;
   probe->inspect
     = [&](const RenderContext& ctx, const SceneTextureExtractRef& color,
         unsigned draws) -> void {
+    if (std::exchange(abort_recording, false)) {
+      throw std::runtime_error("Injected checked view discard");
+    }
     auto* owner
       = vortex::testing::RendererPublicationProbe::GetSceneRenderer(*renderer_);
     records.push_back({
@@ -738,13 +743,10 @@ NOLINT_TEST_F(
   if (capture) {
     EXPECT_TRUE(capture->EndCapture());
   }
-  auto& backend = FailureBackend();
-  backend.fail_recorder_name = "Vortex Checked SceneColor Conversion";
-  ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 2, 1));
-  backend.fail_recorder_name.clear();
-  EXPECT_EQ(
-    records.back().color.texture->GetDescriptor().format, Format::kRGBA32Float);
-  EXPECT_EQ(records.back().color.fallback, nullptr);
+  const auto submitted_count = records.size();
+  abort_recording = true;
+  EXPECT_THROW(RenderSurface(false, 2, 1), std::runtime_error);
+  EXPECT_EQ(records.size(), submitted_count);
   ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 2, 1));
   EXPECT_EQ(
     records.back().color.texture->GetDescriptor().format, Format::kRGBA32Float);

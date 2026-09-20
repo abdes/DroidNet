@@ -139,6 +139,7 @@ protected:
 
   void TearDown() override
   {
+    pending_recordings_.clear();
     if (graphics_ != nullptr) {
       graphics_->Flush();
       buffer_readbacks_.clear();
@@ -215,12 +216,13 @@ protected:
     return readback;
   }
 
-  auto AcquireRecorder(
-    std::string_view command_list_name, const bool immediate_submission = true)
+  auto AcquireRecorder(std::string_view command_list_name,
+    const oxygen::graphics::SubmissionPolicy policy
+    = oxygen::graphics::SubmissionPolicy::kOnScopeExit)
   {
     return graphics_->AcquireCommandRecorder(
       graphics_->QueueKeyFor(oxygen::graphics::QueueRole::kGraphics),
-      command_list_name, immediate_submission);
+      command_list_name, policy);
   }
 
   auto WaitForQueueIdle() -> void
@@ -233,35 +235,54 @@ protected:
 
   auto EnqueueBufferReadback(std::shared_ptr<GpuBufferReadback> readback,
     const std::shared_ptr<Buffer>& source, const BufferRange range,
-    std::string_view command_list_name, const bool immediate_submission = true)
-    -> ReadbackTicket
+    std::string_view command_list_name,
+    const oxygen::graphics::SubmissionPolicy policy
+    = oxygen::graphics::SubmissionPolicy::kOnScopeExit) -> ReadbackTicket
   {
-    auto recorder = AcquireRecorder(command_list_name, immediate_submission);
-    CHECK_NOTNULL_F(recorder.get());
+    auto recorder = AcquireRecorder(command_list_name, policy);
+    CHECK_F(static_cast<bool>(recorder));
     recorder->BeginTrackingResourceState(
       *source, ResourceStates::kCommon, true);
 
     const auto ticket = readback->EnqueueCopy(*recorder, *source, range);
     CHECK_F(ticket.has_value(), "Headless buffer readback enqueue failed");
+    if (policy == oxygen::graphics::SubmissionPolicy::kExplicit) {
+      KeepPendingRecording(std::move(recorder));
+    }
     return *ticket;
   }
 
   auto EnqueueTextureReadback(std::shared_ptr<GpuTextureReadback> readback,
     const std::shared_ptr<Texture>& source, TextureReadbackRequest request,
-    std::string_view command_list_name, const bool immediate_submission = true)
-    -> ReadbackTicket
+    std::string_view command_list_name,
+    const oxygen::graphics::SubmissionPolicy policy
+    = oxygen::graphics::SubmissionPolicy::kOnScopeExit) -> ReadbackTicket
   {
-    auto recorder = AcquireRecorder(command_list_name, immediate_submission);
-    CHECK_NOTNULL_F(recorder.get());
+    auto recorder = AcquireRecorder(command_list_name, policy);
+    CHECK_F(static_cast<bool>(recorder));
     recorder->BeginTrackingResourceState(
       *source, ResourceStates::kCommon, true);
 
     const auto ticket = readback->EnqueueCopy(*recorder, *source, request);
     CHECK_F(ticket.has_value(), "Headless texture readback enqueue failed");
+    if (policy == oxygen::graphics::SubmissionPolicy::kExplicit) {
+      KeepPendingRecording(std::move(recorder));
+    }
     return *ticket;
   }
 
-  auto SubmitDeferred() -> void { graphics_->SubmitDeferredCommandLists(); }
+  void KeepPendingRecording(oxygen::graphics::CommandRecording recording)
+  {
+    pending_recordings_.push_back(std::move(recording));
+  }
+
+  void SubmitPendingRecordings()
+  {
+    for (auto& recording : pending_recordings_) {
+      CHECK_F(recording.Submit());
+    }
+    pending_recordings_.clear();
+  }
 
   auto Registry() -> oxygen::graphics::ResourceRegistry&
   {
@@ -271,6 +292,7 @@ protected:
 
 private:
   oxygen::graphics::GraphicsModuleApi* module_api_ { nullptr };
+  std::vector<oxygen::graphics::CommandRecording> pending_recordings_;
   void* backend_ { nullptr };
   Graphics* graphics_ { nullptr };
   oxygen::observer_ptr<oxygen::graphics::ReadbackManager> readback_manager_ {};
@@ -320,12 +342,14 @@ NOLINT_TEST_F(BufferReadbackSubmissionTest, SecondEnqueueWhilePendingIsRejected)
     = CreateBufferWithBytes(MakePatternBytes(64, 0x36), "pending-twice");
   auto readback = CreateBufferReadback();
 
-  const auto first_ticket = EnqueueBufferReadback(
-    readback, source, BufferRange { 8, 24 }, "buffer-pending-twice", false);
+  const auto first_ticket
+    = EnqueueBufferReadback(readback, source, BufferRange { 8, 24 },
+      "buffer-pending-twice", oxygen::graphics::SubmissionPolicy::kExplicit);
   EXPECT_GT(first_ticket.id.get(), 0U);
 
-  auto recorder = AcquireRecorder("buffer-pending-twice-reject", false);
-  ASSERT_NE(recorder, nullptr);
+  auto recorder = AcquireRecorder("buffer-pending-twice-reject",
+    oxygen::graphics::SubmissionPolicy::kExplicit);
+  ASSERT_TRUE(recorder);
   recorder->BeginTrackingResourceState(*source, ResourceStates::kCommon, true);
 
   const auto second_ticket
@@ -344,14 +368,14 @@ NOLINT_TEST_F(BufferReadbackSubmissionTest, IsReadyIsFalseBeforeDeferredSubmit)
     = CreateBufferWithBytes(MakePatternBytes(48, 0x44), "deferred-source");
   auto readback = CreateBufferReadback();
 
-  EnqueueBufferReadback(
-    readback, source, BufferRange { 4, 20 }, "buffer-deferred-ready", false);
+  EnqueueBufferReadback(readback, source, BufferRange { 4, 20 },
+    "buffer-deferred-ready", oxygen::graphics::SubmissionPolicy::kExplicit);
 
   const auto ready = readback->IsReady();
   ASSERT_TRUE(ready.has_value());
   EXPECT_FALSE(*ready);
 
-  SubmitDeferred();
+  SubmitPendingRecordings();
   WaitForQueueIdle();
 
   const auto ready_after_submit = readback->IsReady();
@@ -366,7 +390,7 @@ NOLINT_TEST_F(BufferReadbackValidationTest, InvalidBufferRangeIsRejected)
   auto readback = CreateBufferReadback();
 
   auto recorder = AcquireRecorder("buffer-invalid-range");
-  ASSERT_NE(recorder, nullptr);
+  ASSERT_TRUE(recorder);
   recorder->BeginTrackingResourceState(*source, ResourceStates::kCommon, true);
 
   const auto ticket
@@ -395,8 +419,8 @@ NOLINT_TEST_F(
     = CreateBufferWithBytes(MakePatternBytes(40, 0x61), "cancel-source");
   auto readback = CreateBufferReadback();
 
-  EnqueueBufferReadback(
-    readback, source, BufferRange { 0, 16 }, "buffer-cancel", false);
+  EnqueueBufferReadback(readback, source, BufferRange { 0, 16 },
+    "buffer-cancel", oxygen::graphics::SubmissionPolicy::kExplicit);
 
   const auto cancelled = readback->Cancel();
   ASSERT_TRUE(cancelled.has_value());
@@ -435,8 +459,8 @@ NOLINT_TEST_F(BufferReadbackLifecycleTest, ResetAfterCancellationReturnsToIdle)
     = CreateBufferWithBytes(MakePatternBytes(28, 0x84), "reset-cancel");
   auto readback = CreateBufferReadback();
 
-  EnqueueBufferReadback(
-    readback, source, BufferRange { 0, 12 }, "buffer-reset-cancel", false);
+  EnqueueBufferReadback(readback, source, BufferRange { 0, 12 },
+    "buffer-reset-cancel", oxygen::graphics::SubmissionPolicy::kExplicit);
   const auto cancelled = readback->Cancel();
   ASSERT_TRUE(cancelled.has_value());
   ASSERT_TRUE(*cancelled);
@@ -534,15 +558,15 @@ NOLINT_TEST_F(BufferReadbackLifecycleTest,
   const auto idle = readback->ResetForReuse();
   ASSERT_FALSE(idle.has_value());
   EXPECT_EQ(idle.error(), ReadbackError::kNotReady);
-  const auto ticket = EnqueueBufferReadback(
-    readback, source, { 5, 24 }, "reuse-state-pending", false);
+  const auto ticket = EnqueueBufferReadback(readback, source, { 5, 24 },
+    "reuse-state-pending", oxygen::graphics::SubmissionPolicy::kExplicit);
   const auto pending = readback->ResetForReuse();
   ASSERT_FALSE(pending.has_value());
   EXPECT_EQ(pending.error(), ReadbackError::kAlreadyPending);
   ASSERT_TRUE(readback->Ticket().has_value());
   EXPECT_EQ(readback->Ticket()->id, ticket.id);
   EXPECT_EQ(readback->GetState(), ReadbackState::kPending);
-  SubmitDeferred();
+  SubmitPendingRecordings();
   {
     auto mapped = readback->MapNow();
     ASSERT_TRUE(mapped.has_value());
@@ -554,8 +578,9 @@ NOLINT_TEST_F(BufferReadbackLifecycleTest,
     EXPECT_EQ(readback->GetState(), ReadbackState::kMapped);
   }
   ASSERT_TRUE(readback->ResetForReuse().has_value());
-  const auto cancelled_ticket = EnqueueBufferReadback(
-    readback, source, { 9, 12 }, "reuse-state-cancel", false);
+  const auto cancelled_ticket
+    = EnqueueBufferReadback(readback, source, { 9, 12 }, "reuse-state-cancel",
+      oxygen::graphics::SubmissionPolicy::kExplicit);
   const auto cancellation = readback->Cancel();
   ASSERT_TRUE(cancellation.has_value());
   ASSERT_TRUE(*cancellation);
@@ -565,7 +590,7 @@ NOLINT_TEST_F(BufferReadbackLifecycleTest,
   EXPECT_EQ(readback->GetState(), ReadbackState::kCancelled);
   ASSERT_TRUE(readback->Ticket().has_value());
   EXPECT_EQ(readback->Ticket()->id, cancelled_ticket.id);
-  SubmitDeferred();
+  SubmitPendingRecordings();
   WaitForQueueIdle();
 }
 
@@ -751,7 +776,7 @@ NOLINT_TEST_F(TextureReadbackValidationTest, MixedAspectMaskIsRejected)
   auto readback = CreateTextureReadback();
 
   auto recorder = AcquireRecorder("texture-invalid-aspects");
-  ASSERT_NE(recorder, nullptr);
+  ASSERT_TRUE(recorder);
   recorder->BeginTrackingResourceState(*source, ResourceStates::kCommon, true);
 
   const auto ticket = readback->EnqueueCopy(*recorder, *source,
@@ -923,8 +948,9 @@ NOLINT_TEST_F(ReadbackShutdownTest,
     = CreateBufferWithBytes(MakePatternBytes(40, 0xC1), "shutdown-source");
   auto readback = CreateBufferReadback();
 
-  const auto ticket = EnqueueBufferReadback(
-    readback, source, BufferRange { 4, 20 }, "buffer-shutdown", false);
+  const auto ticket
+    = EnqueueBufferReadback(readback, source, BufferRange { 4, 20 },
+      "buffer-shutdown", oxygen::graphics::SubmissionPolicy::kExplicit);
 
   const auto shutdown_result
     = GetReadbackManager()->Shutdown(std::chrono::milliseconds { 0 });
@@ -944,8 +970,9 @@ NOLINT_TEST_F(ReadbackAwaitGuardTest,
     MakePatternBytes(40, 0xD1), "await-deadlock-source");
   auto readback = CreateBufferReadback("await-deadlock-readback");
 
-  const auto ticket = EnqueueBufferReadback(
-    readback, source, BufferRange { 4, 20 }, "buffer-await-deadlock", false);
+  const auto ticket
+    = EnqueueBufferReadback(readback, source, BufferRange { 4, 20 },
+      "buffer-await-deadlock", oxygen::graphics::SubmissionPolicy::kExplicit);
 
   ScopedLogCapture capture { "HeadlessReadbackAwaitWouldDeadlock",
     loguru::Verbosity_WARNING };
@@ -971,8 +998,9 @@ NOLINT_TEST_F(ReadbackAwaitGuardTest,
     MakePatternBytes(44, 0xE1), "await-shutdown-source");
   auto readback = CreateBufferReadback("await-shutdown-readback");
 
-  const auto ticket = EnqueueBufferReadback(
-    readback, source, BufferRange { 6, 18 }, "buffer-await-shutdown", false);
+  const auto ticket
+    = EnqueueBufferReadback(readback, source, BufferRange { 6, 18 },
+      "buffer-await-shutdown", oxygen::graphics::SubmissionPolicy::kExplicit);
 
   const auto shutdown_result
     = GetReadbackManager()->Shutdown(std::chrono::milliseconds { 0 });

@@ -18,6 +18,10 @@ namespace oxygen::graphics {
 class Texture;
 }
 
+namespace oxygen::graphics {
+class CommandRecorder;
+}
+
 namespace oxygen::vortex {
 
 struct RenderContext;
@@ -43,7 +47,8 @@ public:
   ScreenHzbModule(ScreenHzbModule&&) = delete;
   auto operator=(ScreenHzbModule&&) -> ScreenHzbModule& = delete;
 
-  OXGN_VRTX_API void Execute(RenderContext& ctx, SceneTextures& scene_textures);
+  OXGN_VRTX_API void Execute(RenderContext& ctx,
+    graphics::CommandRecorder& recorder, SceneTextures& scene_textures);
   OXGN_VRTX_API void OnFrameStart();
   OXGN_VRTX_API void RemoveViewState(ViewId view_id);
   [[nodiscard]] OXGN_VRTX_API auto GetCurrentOutput() const -> const Output&;

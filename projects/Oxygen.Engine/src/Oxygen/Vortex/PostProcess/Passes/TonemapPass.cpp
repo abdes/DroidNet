@@ -135,7 +135,7 @@ namespace {
       "TonemapPass: cannot track '{}' without a known or declared initial "
       "state",
       texture.GetName());
-    recorder.BeginTrackingResourceState(texture, initial);
+    recorder.BeginTrackingResourceState(texture, initial, false);
   }
 
   auto TrackBufferAsShaderReadable(
@@ -233,11 +233,9 @@ TonemapPass::TonemapPass(Renderer& renderer)
 TonemapPass::~TonemapPass() = default;
 
 auto TonemapPass::Record(RenderContext& ctx,
-  const SceneTextures& scene_textures, const Inputs& inputs) -> ExecutionState
+  graphics::CommandRecorder& recorder, const Inputs& inputs) -> RecordingState
 {
-  static_cast<void>(scene_textures);
-
-  auto state = ExecutionState {
+  auto state = RecordingState {
     .requested
     = inputs.scene_signal != nullptr && inputs.post_target != nullptr,
   };
@@ -245,11 +243,6 @@ auto TonemapPass::Record(RenderContext& ctx,
     return state;
   }
 
-  auto gfx = renderer_.GetGraphics();
-  if (gfx == nullptr || inputs.post_target == nullptr
-    || inputs.scene_signal == nullptr) {
-    return state;
-  }
   CHECK_F(!inputs.post_target->GetDescriptor().color_attachments.empty()
       && inputs.post_target->GetDescriptor().color_attachments.front().texture
         != nullptr,
@@ -257,15 +250,9 @@ auto TonemapPass::Record(RenderContext& ctx,
 
   auto& target_color
     = *inputs.post_target->GetDescriptor().color_attachments.front().texture;
-  const auto queue_key = gfx->QueueKeyFor(graphics::QueueRole::kGraphics);
-  auto recorder = gfx->AcquireCommandRecorder(queue_key, "Vortex PostProcess");
-  if (!recorder) {
-    return state;
-  }
-  renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(
-    *recorder);
+  renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(recorder);
 
-  TrackTextureFromKnownOrInitial(*recorder, *inputs.scene_signal);
+  TrackTextureFromKnownOrInitial(recorder, *inputs.scene_signal);
   const bool checked_resolve = inputs.conversion_report != nullptr;
   CHECK_F(checked_resolve == inputs.conversion_report_srv.IsValid()
     && checked_resolve == (inputs.scene_fallback != nullptr)
@@ -276,54 +263,54 @@ auto TonemapPass::Record(RenderContext& ctx,
     CHECK_F(source.format == Format::kRGBA16Float
       && fallback.format == Format::kRGBA32Float
       && source.width == fallback.width && source.height == fallback.height);
-    TrackTextureFromKnownOrInitial(*recorder, *inputs.scene_fallback);
-    TrackBufferAsShaderReadable(*recorder, *inputs.conversion_report);
-    recorder->RequireResourceState(
+    TrackTextureFromKnownOrInitial(recorder, *inputs.scene_fallback);
+    TrackBufferAsShaderReadable(recorder, *inputs.conversion_report);
+    recorder.RequireResourceState(
       *inputs.scene_fallback, graphics::ResourceStates::kShaderResource);
-    recorder->RequireResourceState(
+    recorder.RequireResourceState(
       *inputs.conversion_report, graphics::ResourceStates::kShaderResource);
   }
-  TrackTextureFromKnownOrInitial(*recorder, target_color);
+  TrackTextureFromKnownOrInitial(recorder, target_color);
   if (inputs.exposure_buffer != nullptr) {
-    TrackBufferAsShaderReadable(*recorder, *inputs.exposure_buffer);
+    TrackBufferAsShaderReadable(recorder, *inputs.exposure_buffer);
   }
-  recorder->RequireResourceState(
+  recorder.RequireResourceState(
     *inputs.scene_signal, graphics::ResourceStates::kShaderResource);
   if (inputs.exposure_buffer != nullptr) {
-    recorder->RequireResourceState(
+    recorder.RequireResourceState(
       *inputs.exposure_buffer, graphics::ResourceStates::kShaderResource);
   }
   CHECK_F((inputs.frame_exposure_buffer != nullptr)
     == inputs.frame_exposure_srv.IsValid());
   if (inputs.frame_exposure_buffer) {
-    TrackBufferAsShaderReadable(*recorder, *inputs.frame_exposure_buffer);
-    recorder->RequireResourceState(
+    TrackBufferAsShaderReadable(recorder, *inputs.frame_exposure_buffer);
+    recorder.RequireResourceState(
       *inputs.frame_exposure_buffer, graphics::ResourceStates::kShaderResource);
   }
-  recorder->RequireResourceState(
+  recorder.RequireResourceState(
     target_color, graphics::ResourceStates::kRenderTarget);
-  recorder->FlushBarriers();
-  recorder->BindFrameBuffer(*inputs.post_target);
-  SetViewportAndScissor(*recorder, ctx, *inputs.post_target);
-  graphics::GpuEventScope pass_scope(*recorder, "Vortex.PostProcess.Tonemap",
+  recorder.FlushBarriers();
+  recorder.BindFrameBuffer(*inputs.post_target);
+  SetViewportAndScissor(recorder, ctx, *inputs.post_target);
+  graphics::GpuEventScope pass_scope(recorder, "Vortex.PostProcess.Tonemap",
     profiling::ProfileGranularity::kTelemetry,
     profiling::ProfileCategory::kPass);
-  recorder->SetPipelineState(BuildTonemapPipelineDesc(*inputs.post_target));
+  recorder.SetPipelineState(BuildTonemapPipelineDesc(*inputs.post_target));
   const auto pass_constants_index = UpdatePassConstants(ctx, inputs);
-  recorder->SetGraphicsRoot32BitConstant(
+  recorder.SetGraphicsRoot32BitConstant(
     static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants), 0U,
     0U);
-  recorder->SetGraphicsRoot32BitConstant(
+  recorder.SetGraphicsRoot32BitConstant(
     static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants),
     pass_constants_index.get(), 1U);
-  recorder->Draw(3U, 1U, 0U, 0U);
-  recorder->RequireResourceStateFinal(
+  recorder.Draw(3U, 1U, 0U, 0U);
+  recorder.RequireResourceState(
     *inputs.scene_signal, graphics::ResourceStates::kShaderResource);
-  recorder->RequireResourceStateFinal(
+  recorder.RequireResourceState(
     target_color, graphics::ResourceStates::kRenderTarget);
 
-  state.executed = true;
-  state.wrote_visible_output = true;
+  state.recorded = true;
+  state.writes_visible_output = true;
   return state;
 }
 

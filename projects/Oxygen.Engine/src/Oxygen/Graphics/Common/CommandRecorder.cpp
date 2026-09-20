@@ -72,8 +72,45 @@ CommandRecorder::CommandRecorder(std::shared_ptr<CommandList> command_list,
 // forward-declared in the header
 CommandRecorder::~CommandRecorder()
 {
+  ResolveSubmission(SubmissionOutcome::kDiscarded);
   DrainActiveProfileScopes(ScopeCloseKind::kAbort);
   DLOG_F(2, "recorder destroyed");
+}
+
+/*!
+ Callbacks own their captures and must not borrow stack objects that disappear
+ before submission. Successful submission is reported after native acceptance;
+ this is not a GPU-completion notification. One failing callback does not
+ prevent other observers from resolving their publication or retained resources.
+*/
+void CommandRecorder::OnSubmission(
+  std::move_only_function<void(SubmissionOutcome)> callback)
+{
+  CHECK_F(static_cast<bool>(callback), "Submission callback must be callable");
+  if (submission_outcome_) {
+    callback(*submission_outcome_);
+  } else {
+    submission_callbacks_.push_back(std::move(callback));
+  }
+}
+
+void CommandRecorder::ResolveSubmission(
+  const SubmissionOutcome outcome) noexcept
+{
+  if (submission_outcome_) {
+    return;
+  }
+  submission_outcome_ = outcome;
+  auto callbacks = std::move(submission_callbacks_);
+  for (auto& callback : callbacks) {
+    try {
+      callback(outcome);
+    } catch (const std::exception& error) {
+      LOG_F(ERROR, "Command submission callback failed: {}", error.what());
+    } catch (...) {
+      LOG_F(ERROR, "Command submission callback failed with an unknown error");
+    }
+  }
 }
 
 void CommandRecorder::Begin()
@@ -100,7 +137,8 @@ auto CommandRecorder::End() noexcept -> std::shared_ptr<CommandList>
     resource_state_tracker_->OnCommandListClosed();
     FlushBarriers();
     auto recorded_states = std::vector<CommandList::RecordedResourceState> {};
-    const auto tracker_states = resource_state_tracker_->SnapshotTrackedStates();
+    const auto tracker_states
+      = resource_state_tracker_->SnapshotTrackedStates();
     recorded_states.reserve(tracker_states.size());
     for (const auto& tracker_state : tracker_states) {
       recorded_states.push_back(
@@ -215,7 +253,8 @@ auto CommandRecorder::BeginProfileScope(
     native_labels.BeginScope(*this, info, record.native_label_state);
 
     if (record.telemetry_collector != nullptr) {
-      record.telemetry_collector->BeginScope(*this, info, record.telemetry_state);
+      record.telemetry_collector->BeginScope(
+        *this, info, record.telemetry_state);
     }
 
     if (record.trace_collector != nullptr) {
@@ -235,7 +274,8 @@ auto CommandRecorder::BeginProfileScope(
     try {
       CloseScopeRecord(record, ScopeCloseKind::kAbort);
     } catch (const std::exception& e) {
-      LOG_F(ERROR, "Failed to abort partially opened GPU profile scope '{}': {}",
+      LOG_F(ERROR,
+        "Failed to abort partially opened GPU profile scope '{}': {}",
         record.base_label, e.what());
     } catch (...) {
       LOG_F(ERROR,
@@ -286,23 +326,24 @@ auto CommandRecorder::CloseScopeRecord(
   }
 
   std::exception_ptr first_failure {};
-  const auto close_collector = [&](const observer_ptr<IGpuProfileCollector> collector,
-                                 GpuProfileCollectorState& state) {
-    if (collector == nullptr) {
-      return;
-    }
-    try {
-      if (close_kind == ScopeCloseKind::kAbort) {
-        collector->AbortScope(*this, state);
-      } else {
-        collector->EndScope(*this, state);
-      }
-    } catch (...) {
-      if (first_failure == nullptr) {
-        first_failure = std::current_exception();
-      }
-    }
-  };
+  const auto close_collector
+    = [&](const observer_ptr<IGpuProfileCollector> collector,
+        GpuProfileCollectorState& state) {
+        if (collector == nullptr) {
+          return;
+        }
+        try {
+          if (close_kind == ScopeCloseKind::kAbort) {
+            collector->AbortScope(*this, state);
+          } else {
+            collector->EndScope(*this, state);
+          }
+        } catch (...) {
+          if (first_failure == nullptr) {
+            first_failure = std::current_exception();
+          }
+        }
+      };
 
   close_collector(record.trace_collector, record.trace_state);
   close_collector(record.telemetry_collector, record.telemetry_state);
@@ -339,8 +380,8 @@ auto CommandRecorder::DrainActiveProfileScopes(
     try {
       CloseScopeRecord(record, close_kind);
     } catch (const std::exception& e) {
-      LOG_F(ERROR, "Failed to drain GPU profile scope '{}': {}", record.base_label,
-        e.what());
+      LOG_F(ERROR, "Failed to drain GPU profile scope '{}': {}",
+        record.base_label, e.what());
     } catch (...) {
       LOG_F(ERROR, "Failed to drain GPU profile scope '{}': unknown exception",
         record.base_label);
@@ -373,9 +414,8 @@ void CommandRecorder::DoBeginTrackingResourceState(const Buffer& resource,
 void CommandRecorder::DoAdoptKnownResourceState(const Buffer& resource,
   const ResourceStates current_state, const bool keep_initial_state)
 {
-  DLOG_F(4, "buffer: adopt known state `{}` current={}{}",
-    resource.GetName(), current_state,
-    keep_initial_state ? " (preserve it)" : "");
+  DLOG_F(4, "buffer: adopt known state `{}` current={}{}", resource.GetName(),
+    current_state, keep_initial_state ? " (preserve it)" : "");
   resource_state_tracker_->AdoptResourceState(
     resource, current_state, keep_initial_state);
 }
@@ -428,9 +468,8 @@ void CommandRecorder::DoBeginTrackingResourceState(const Texture& resource,
 void CommandRecorder::DoAdoptKnownResourceState(const Texture& resource,
   const ResourceStates current_state, const bool keep_initial_state)
 {
-  DLOG_F(4, "texture: adopt known state `{}` current={}{}",
-    resource.GetName(), current_state,
-    keep_initial_state ? " (preserve it)" : "");
+  DLOG_F(4, "texture: adopt known state `{}` current={}{}", resource.GetName(),
+    current_state, keep_initial_state ? " (preserve it)" : "");
   resource_state_tracker_->AdoptResourceState(
     resource, current_state, keep_initial_state);
 }

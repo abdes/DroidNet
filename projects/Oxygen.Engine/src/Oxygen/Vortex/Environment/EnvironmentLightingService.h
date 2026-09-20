@@ -26,6 +26,10 @@ namespace oxygen::scene {
 class Scene;
 }
 
+namespace oxygen::graphics {
+class CommandRecorder;
+}
+
 namespace oxygen::vortex {
 namespace testing {
   struct RendererPublicationProbe;
@@ -63,7 +67,7 @@ namespace environment {
 } // namespace environment
 
 namespace resources {
-class TextureBinder;
+  class TextureBinder;
 } // namespace resources
 
 class EnvironmentLightingService {
@@ -283,12 +287,14 @@ public:
     const environment::EnvironmentViewProducts& view_products,
     bool enable_ambient_bridge) const -> EnvironmentFrameBindings;
   OXGN_VRTX_API auto PublishEnvironmentBindings(RenderContext& ctx,
+    graphics::CommandRecorder& recorder,
     ShaderVisibleIndex environment_static_slot = kInvalidShaderVisibleIndex,
     ShaderVisibleIndex environment_view_slot = kInvalidShaderVisibleIndex,
     bool enable_ambient_bridge = false,
     const SceneTextures* scene_textures = nullptr) -> ShaderVisibleIndex;
-  OXGN_VRTX_API auto RenderSkyAndFog(
-    RenderContext& ctx, const SceneTextures& scene_textures) -> void;
+  OXGN_VRTX_API auto RenderSkyAndFog(RenderContext& ctx,
+    graphics::CommandRecorder& recorder, const SceneTextures& scene_textures)
+    -> void;
 
   [[nodiscard]] OXGN_VRTX_API auto InspectBindings(ViewId view_id) const
     -> const EnvironmentFrameBindings*;
@@ -352,7 +358,7 @@ private:
   auto EnsurePublishResources() -> bool;
   auto EnsureSkyTextureBinder() -> resources::TextureBinder*;
   auto PrepareLocalFogForStage14(RenderContext& ctx,
-    const SceneTextures& scene_textures)
+    graphics::CommandRecorder& recorder, const SceneTextures& scene_textures)
     -> const environment::internal::LocalFogVolumeState::ViewProducts&;
   [[nodiscard]] OXGN_VRTX_API auto BuildEnvironmentStaticData(
     const RenderContext& ctx,

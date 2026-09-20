@@ -6,13 +6,16 @@
 
 #pragma once
 
+#include <array>
 #include <memory>
+#include <optional>
 #include <span>
 
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/Types/ClearFlags.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/Graphics/Direct3D12/CommandList.h>
+#include <Oxygen/Graphics/Direct3D12/Detail/PipelineBindingState.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/Types.h>
 #include <Oxygen/Graphics/Direct3D12/api_export.h>
 
@@ -154,8 +157,8 @@ public:
 
   //! Bind shader-visible descriptor heaps to the underlying D3D12 command
   //! list. This sets up descriptor heaps only (no root-table binding).
-  auto SetupDescriptorHeaps(
-    std::span<const detail::ShaderVisibleHeapInfo> heaps) const -> void;
+  void SetupDescriptorHeaps(
+    std::span<const detail::ShaderVisibleHeapInfo> heaps);
 
   //! Binds root descriptor tables (SetGraphicsRootDescriptorTable /
   //! SetComputeRootDescriptorTable) for the previously bound heaps. This
@@ -164,9 +167,8 @@ public:
   //! @param heaps The shader-visible heaps to bind.
   //! @param is_compute If true, uses SetComputeRootDescriptorTable; otherwise
   //!                   uses SetGraphicsRootDescriptorTable.
-  auto SetupDescriptorTables(
-    std::span<const detail::ShaderVisibleHeapInfo> heaps, bool is_compute) const
-    -> void;
+  void SetupDescriptorTables(
+    std::span<const detail::ShaderVisibleHeapInfo> heaps, bool is_compute);
 
 protected:
   auto ExecuteBarriers(std::span<const graphics::detail::Barrier> barriers)
@@ -176,8 +178,7 @@ private:
   [[nodiscard]] auto GetConcreteCommandList() const -> CommandList&;
 
   std::weak_ptr<Graphics> graphics_weak_;
-  ID3D12RootSignature* current_graphics_root_signature_ { nullptr };
-  ID3D12RootSignature* current_compute_root_signature_ { nullptr };
+  detail::PipelineBindingState binding_state_;
 
   size_t graphics_pipeline_hash_ = 0;
   size_t compute_pipeline_hash_ = 0;

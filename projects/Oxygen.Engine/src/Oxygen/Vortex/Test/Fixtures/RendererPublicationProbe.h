@@ -36,7 +36,10 @@ struct RendererPublicationProbe {
   {
     renderer.scene_texture_extracts_.resolved_scene_depth = std::move(resolved);
     auto context = RenderContext {};
-    renderer.PostRenderCleanup(context);
+    auto recording = renderer.gfx_.AcquireCommandRecorder(
+      renderer.gfx_.QueueKeyFor(graphics::QueueRole::kGraphics),
+      "Test cleanup");
+    renderer.PostRenderCleanup(context, *recording);
   }
 
   static auto SceneTexturePoolCounts(const SceneRenderer& renderer)
@@ -186,13 +189,26 @@ struct RendererPublicationProbe {
       ? nullptr
       : found->second.latest;
   }
+  static auto ExposureStateForView(const postprocess::ExposurePass& pass,
+    const CompositionView::ViewStateHandle handle)
+    -> postprocess::ExposurePass::StateLease
+  {
+    const auto found = pass.exposure_states_.find(handle);
+    return found == pass.exposure_states_.end() ? nullptr
+                                                : found->second.latest;
+  }
+
   static auto EnqueueExposureStatus(PostProcessService& service,
     const ExposureTransitionToken& token,
     postprocess::ExposurePass::StateLease state, const RenderContext& ctx,
     std::uint64_t settings_revision) -> void
   {
-    service.EnqueueExposureStatus(
-      token, std::move(state), ctx, settings_revision);
+    const auto gfx = service.renderer_.GetGraphics();
+    auto recording = gfx->AcquireCommandRecorder(
+      gfx->QueueKeyFor(graphics::QueueRole::kGraphics),
+      "Exposure status request");
+    service.EnqueueExposureStatus(*recording, token, std::move(state),
+      ctx.frame_sequence, settings_revision);
   }
 
   static auto ExposureStatusCounts(

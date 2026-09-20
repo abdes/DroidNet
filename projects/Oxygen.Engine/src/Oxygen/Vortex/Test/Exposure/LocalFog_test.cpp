@@ -323,8 +323,11 @@ NOLINT_TEST_F(ExposureGpuTest, LocalFogInjectionMatchesMixedMediumIntegral)
       settings.manual_ev = ev;
       auto exposure_inputs = postprocess::ExposurePass::FrameInputs {};
       exposure_inputs.use_fp32 = false;
-      const auto exposure
-        = pass_->ResolveFrame(ctx_, SharedConfig(settings), exposure_inputs);
+      const auto exposure = SubmitCommands("Vortex Exposure Frame",
+        [&](graphics::CommandRecorder& recorder) -> auto {
+          return pass_->ResolveFrame(
+            ctx_, recorder, SharedConfig(settings), exposure_inputs);
+        });
       ASSERT_NE(exposure, nullptr);
       auto bindings = ViewFrameBindings {};
       bindings.frame_exposure_slot = exposure->srv_index;
@@ -843,7 +846,10 @@ NOLINT_TEST_F(ExposureGpuTest, AuthoredLocalFogPreservesRadiometryThroughUpload)
     };
     auto frame_inputs = postprocess::ExposurePass::FrameInputs {};
     frame_inputs.use_fp32 = true;
-    const auto frame = pass_->ResolveFrame(ctx_, config, frame_inputs);
+    const auto frame = SubmitCommands("Vortex Exposure Frame",
+      [&](graphics::CommandRecorder& recorder) -> auto {
+        return pass_->ResolveFrame(ctx_, recorder, config, frame_inputs);
+      });
     ASSERT_NE(frame, nullptr);
     ctx_.current_view.frame_exposure = frame;
     auto bindings = ViewFrameBindings {};
@@ -908,7 +914,10 @@ NOLINT_TEST_F(ExposureGpuTest, AuthoredLocalFogPreservesRadiometryThroughUpload)
     if (value.emission == 131072) {
       capture = BeginOptionalCapture();
     }
-    ASSERT_TRUE(compose.Record(ctx_, textures, products).executed);
+    ASSERT_TRUE(SubmitCommands(
+      "Vortex test", [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
+        return compose.Record(ctx_, recorder, textures, products);
+      }).executed);
     if (capture) {
       EXPECT_TRUE(capture->EndCapture());
     }

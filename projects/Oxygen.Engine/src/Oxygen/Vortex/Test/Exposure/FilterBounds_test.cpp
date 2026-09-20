@@ -96,7 +96,10 @@ NOLINT_TEST_F(ExposureGpuTest, FilterGradientsEncloseReferenceNeighborsAndRetry)
         ctx_.frame_sequence = frame::SequenceNumber {
           ++sequence_,
         };
-        const auto frame = pass_->ResolveFrame(ctx_, config, {});
+        const auto frame = SubmitCommands("Vortex Exposure Frame",
+          [&](graphics::CommandRecorder& recorder) -> auto {
+            return pass_->ResolveFrame(ctx_, recorder, config, {});
+          });
         ASSERT_NE(frame, nullptr);
         auto upload = CreateUploadBuffer(SizeBytes {
           sizeof(bounds),
@@ -128,7 +131,10 @@ NOLINT_TEST_F(ExposureGpuTest, FilterGradientsEncloseReferenceNeighborsAndRetry)
           .id = id,
           .transmittance = transmission,
         };
-        ASSERT_TRUE(pass_->GatherFilterGradients(ctx_, frame, product));
+        ASSERT_TRUE(SubmitCommands("Vortex Exposure Filter Gradients",
+          [&](graphics::CommandRecorder& recorder) -> auto {
+            return pass_->GatherFilterGradients(ctx_, recorder, frame, product);
+          }));
         EXPECT_TRUE(pass_->HasFilterGradients(frame, id));
         const auto after = read_status();
         EXPECT_TRUE(std::ranges::equal(std::as_bytes(std::span {
@@ -231,13 +237,19 @@ NOLINT_TEST_F(ExposureGpuTest, FilterGradientsEncloseReferenceNeighborsAndRetry)
         ctx_.current_view.view_state_handle = CompositionView::ViewStateHandle {
           2U,
         };
-        const auto other = pass_->ResolveFrame(ctx_, config, {});
-        ASSERT_TRUE(pass_->GatherFilterGradients(ctx_, other,
-          {
-            .texture = constant.texture.get(),
-            .srv = constant.srv,
-            .id = id,
-            .transmittance = transmission,
+        const auto other = SubmitCommands("Vortex Exposure Frame",
+          [&](graphics::CommandRecorder& recorder) -> auto {
+            return pass_->ResolveFrame(ctx_, recorder, config, {});
+          });
+        ASSERT_TRUE(SubmitCommands("Vortex Exposure Filter Gradients",
+          [&](graphics::CommandRecorder& recorder) -> auto {
+            return pass_->GatherFilterGradients(ctx_, recorder, other,
+              {
+                .texture = constant.texture.get(),
+                .srv = constant.srv,
+                .id = id,
+                .transmittance = transmission,
+              });
           }));
         const auto retained_status = read_status();
         EXPECT_TRUE(std::ranges::equal(std::as_bytes(std::span {
@@ -255,20 +267,29 @@ NOLINT_TEST_F(ExposureGpuTest, FilterGradientsEncloseReferenceNeighborsAndRetry)
           1U,
         };
         product.srv = kInvalidShaderVisibleIndex;
-        EXPECT_FALSE(pass_->GatherFilterGradients(ctx_, frame, product));
+        EXPECT_FALSE(SubmitCommands("Vortex Exposure Filter Gradients",
+          [&](graphics::CommandRecorder& recorder) -> auto {
+            return pass_->GatherFilterGradients(ctx_, recorder, frame, product);
+          }));
         EXPECT_FALSE(pass_->HasFilterGradients(frame, id));
         product.srv = signal.srv;
         auto& backend = FailureBackend();
         backend.fail_recorder_name = "Vortex Exposure Filter Gradients";
-        EXPECT_FALSE(pass_->GatherFilterGradients(ctx_, frame, product));
+        EXPECT_FALSE(SubmitCommands("Vortex Exposure Filter Gradients",
+          [&](graphics::CommandRecorder& recorder) -> auto {
+            return pass_->GatherFilterGradients(ctx_, recorder, frame, product);
+          }));
         EXPECT_FALSE(pass_->HasFilterGradients(frame, id));
         backend.fail_recorder_name.clear();
-        ASSERT_TRUE(pass_->GatherFilterGradients(ctx_, frame,
-          {
-            .texture = constant.texture.get(),
-            .srv = constant.srv,
-            .id = id,
-            .transmittance = transmission,
+        ASSERT_TRUE(SubmitCommands("Vortex Exposure Filter Gradients",
+          [&](graphics::CommandRecorder& recorder) -> auto {
+            return pass_->GatherFilterGradients(ctx_, recorder, frame,
+              {
+                .texture = constant.texture.get(),
+                .srv = constant.srv,
+                .id = id,
+                .transmittance = transmission,
+              });
           }));
         EXPECT_TRUE(pass_->HasFilterGradients(frame, id));
         const auto retried = read_status().filter_gradients.at(record_index);
@@ -407,7 +428,10 @@ NOLINT_TEST_F(
     ctx_.frame_sequence = frame::SequenceNumber {
       ++sequence_,
     };
-    const auto frame = pass_->ResolveFrame(ctx_, SharedConfig(settings), {});
+    const auto frame = SubmitCommands("Vortex Exposure Frame",
+      [&](graphics::CommandRecorder& recorder) -> auto {
+        return pass_->ResolveFrame(ctx_, recorder, SharedConfig(settings), {});
+      });
     ASSERT_NE(frame, nullptr);
     auto upload = CreateUploadBuffer(SizeBytes {
       sizeof(test.bounds),
@@ -426,12 +450,15 @@ NOLINT_TEST_F(
       recorder->RequireResourceStateFinal(
         *frame->current_state->status_buffer, ResourceStates::kUnorderedAccess);
     }
-    ASSERT_TRUE(pass_->GatherFilterGradients(ctx_, frame,
-      {
-        .texture = signal.texture.get(),
-        .srv = signal.srv,
-        .id = id,
-        .transmittance = test.transmission,
+    ASSERT_TRUE(SubmitCommands("Vortex Exposure Filter Gradients",
+      [&](graphics::CommandRecorder& recorder) -> auto {
+        return pass_->GatherFilterGradients(ctx_, recorder, frame,
+          {
+            .texture = signal.texture.get(),
+            .srv = signal.srv,
+            .id = id,
+            .transmittance = test.transmission,
+          });
       }));
     const auto result = Read<ExposureStatusStorage>(
       *frame->current_state->status_buffer, ResourceStates::kUnorderedAccess)

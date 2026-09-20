@@ -13,6 +13,10 @@
 #include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/Types/OcclusionStats.h>
 #include <Oxygen/Vortex/api_export.h>
 
+namespace oxygen::graphics {
+class CommandRecorder;
+}
+
 namespace oxygen::vortex {
 
 struct RenderContext;
@@ -32,7 +36,8 @@ public:
   [[nodiscard]] OXGN_VRTX_API auto GetConfig() const noexcept
     -> const OcclusionConfig&;
 
-  OXGN_VRTX_API void Execute(RenderContext& ctx, SceneTextures& scene_textures);
+  OXGN_VRTX_API void Execute(RenderContext& ctx,
+    graphics::CommandRecorder& recorder, SceneTextures& scene_textures);
 
   [[nodiscard]] OXGN_VRTX_API auto GetCurrentResults() const noexcept
     -> const OcclusionFrameResults&;

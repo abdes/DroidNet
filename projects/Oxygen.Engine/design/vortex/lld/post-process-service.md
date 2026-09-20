@@ -1106,10 +1106,76 @@ changes and migration, removal of superseded entry points, and no compatibility
 wrappers or parallel legacy implementations. Unrelated Oxygen submission sites
 need not adopt batching.
 
+The reviewed and approved ownership API is one move-only `CommandRecording`
+returned by `Graphics::AcquireCommandRecorder`. `SubmissionPolicy::kOnScopeExit`
+is the ergonomic default; `kExplicit` lets the rendering owner control its
+submission point. `Submit()` reports actual success and `Discard()` cancels;
+both resolve once. Unwinding discards under either policy. Destruction is
+non-throwing, reports errors and never submits twice. Existing `auto` and borrowed
+recorder use stays natural; explicit old pointer types, submission through
+`reset()`, the boolean policy and the hidden deferred queue are migrated and
+removed. Passes use submission-outcome callbacks for committed CPU publication.
+New code must follow repository C++/documentation/test standards and pass the
+applicable clang-tidy checks without new warnings.
+
 | Item | Implementation contract | Verification and stopping condition |
 | --- | --- | --- |
 | EX051-13A | SceneRenderer owns recording across the participating Vortex stages. Passes record through explicit recorder references rather than independently acquiring/submitting micro command lists. Keep frame resolve before its scene consumers, pre-environment range before environment work, and final range/metering after accumulation. Recorded resources may feed later commands in the same recording; CPU history publication, transition submission and reusable cache readiness commit only after actual submission. Abort/failure discards pending publication and preserves prior history. Existing immutable readers and GPU-fence retirement remain authoritative. | Focused command lifecycle/state-order tests, recording/submission failure and retry, once-per-frame solve, source sharing, producer history and queued-consumer cases. Compile affected Debug/Release paths and run owning gates. Use Tracy to verify actual recorder/submission counts and measured CPU benefit, with unchanged numerical/GPU phase work and resource stability. A count reduction is not itself a timing acceptance result. |
 | EX051-13B | Intern root signatures by complete binding layout and D3D12 flags, not by shader/PSO identity alone. Share their ownership safely across PSOs. Reuse unchanged descriptor heaps, root signatures and root tables; invalidate on real heap/signature changes and reset at recording begin. Keep required PSO changes and root-argument writes. Avoid temporary heap-list allocation. Root-constant capacity, generated bindings and shader ABI do not change. | Prove compatible layouts share a root signature and incompatible layouts/flags do not; verify lifetime, compute/graphics switching, heap changes, recorder reset and indirect-command compatibility. Existing native output checks must pass. Attribute binding reduction separately from 13A, without adding overlapping timings or claiming the entire binding category can be removed. |
+
+Implementation checkpoint: the shared SceneRenderer view owner and borrowed
+stage APIs compile in Debug and Release. The permanent-state handoff regression
+reported by MultiView was corrected: pass handoffs now use ordinary transitions,
+while the command tracker retains its permanent-state invariant. The user
+confirmed the demo correction; it is not rerun by this task. The auxiliary
+recording local was renamed and C4456 is absent from both builds.
+
+The final owning checks pass: **589 unique Debug checks** across 20 executables
+and **403 Release checks** across the five affected Vortex owners, including
+228 native exposure checks. Release ran the existing Tracy-enabled measurement
+binaries; its 1,034 frozen inputs were unchanged. All eight disabled benchmarks
+remained unrun in that correctness batch. Failed/discarded recording, committed
+history, range-certificate retry, queued consumers and producer publication are
+covered. Final clang-tidy analyzed 89 translation units with zero diagnostics
+on changed code, zero parse failures and no new warning suppressions. Existing
+unmodified-code diagnostics remain in the full logs for Slice 5.2.
+
+**Measured decision (2026-09-21): accept the joint correction.** One new I02
+1080p Release run was compared with the existing Tracy baseline: 7,200 steady
+frames each, identical controls, logging OFF, GPU timestamps enabled and the
+custom CPU observer disabled. All 1,030 candidate input hashes stayed unchanged.
+Existing Tracy zones conservatively charge the complete shared view acquisition
+and finalization to exposure; nested intervals are counted once. No new runtime
+timer or repeated baseline was needed.
+
+| Elapsed CPU/frame metric | Previous baseline | Joint candidate | Reduction |
+| --- | ---: | ---: | ---: |
+| Exposure mean | 0.483860 ms | 0.371625 ms | 23.2% |
+| Exposure p95 | 0.708597 ms | 0.515917 ms | 27.2% |
+| Exposure p99 | 0.901528 ms | 0.630422 ms | 30.1% |
+| Attributed acquisition p95 | 0.107153 ms | 0.069161 ms | 35.5% |
+| Attributed finalization/submission p95 | 0.247008 ms | 0.130787 ms | 47.1% |
+| Nested compute binding p95 | 0.070302 ms | 0.061307 ms | 12.8% |
+| Whole-frame recording/submission p95 | 5.193100 ms | 3.958400 ms | 23.8% |
+| Whole-frame wall p95 | 7.660300 ms | 7.167600 ms | 6.4% |
+
+Exposure recordings fall from six to two and all render-thread recordings from
+40 to 10 in every measured frame. Compute binding calls remain 12 per frame;
+reuse reduces work inside those calls. The nested rows are separate attribution
+views, not additive percentile savings or isolated A/B experiments. All six
+candidate cycle p95 values (0.481372–0.572314 ms) are below all six baseline
+values (0.624460–0.764024 ms). GPU frame p95 improves 6.717440 to 6.436864 ms.
+GPU phase counts and placement are identical, with zero steady buffer/texture
+creation. All four endpoint pairs pass: displayed gain is exact, maximum float
+error is 5.9604645e-8 and quantized output is identical.
+
+The [decision table](../../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/cpu-corrections13/decision-table.json)
+and [checkpoint](../../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/cpu-corrections13/checkpoint-manifest.json)
+reference raw inputs by path/hash and preserve failed intermediate diagnoses.
+This closes 13A/B's implementation and measured-benefit decisions. The remaining
+13/GATE work is active exposure CPU budget and resolution-scaling qualification;
+the elapsed figures above include scheduler/driver stalls. No budget exception
+has been approved, and the completed GPU matrix is not repeated.
 
 The reference diagnosis is 27.1% native submission, 16.7% acquisition, 7.6%
 finalization outside native submission, and 9.8% compute binding. A hypothetical

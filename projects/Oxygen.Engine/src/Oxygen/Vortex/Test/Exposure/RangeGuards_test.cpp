@@ -83,7 +83,10 @@ NOLINT_TEST_F(
   };
   auto frame_inputs = postprocess::ExposurePass::FrameInputs {};
   frame_inputs.use_fp32 = false;
-  const auto frame = pass_->ResolveFrame(ctx_, config, frame_inputs);
+  const auto frame = SubmitCommands(
+    "Vortex Exposure Frame", [&](graphics::CommandRecorder& recorder) -> auto {
+      return pass_->ResolveFrame(ctx_, recorder, config, frame_inputs);
+    });
   ASSERT_NE(frame, nullptr);
   EXPECT_EQ(
     Read<FrameExposureData>(*frame->buffer, ResourceStates::kShaderResource)
@@ -123,8 +126,11 @@ NOLINT_TEST_F(
   }
   const auto before = Read<ExposureStatusStorage>(
     *frame->current_state->status_buffer, ResourceStates::kUnorderedAccess);
-  ASSERT_TRUE(pass_->CapturePreEnvironmentRange(
-    ctx_, frame, *signal.texture, signal.srv));
+  ASSERT_TRUE(SubmitCommands("Vortex Exposure PreEnvironment Range",
+    [&](graphics::CommandRecorder& recorder) -> auto {
+      return pass_->CapturePreEnvironmentRange(
+        ctx_, recorder, frame, *signal.texture, signal.srv);
+    }));
   EXPECT_TRUE(pass_->HasPreEnvironmentRange(frame));
   const auto first = Read<ExposureStatusStorage>(
     *frame->current_state->status_buffer, ResourceStates::kUnorderedAccess);
@@ -159,10 +165,16 @@ NOLINT_TEST_F(
   };
   auto other_inputs = postprocess::ExposurePass::FrameInputs {};
   other_inputs.use_fp32 = true;
-  const auto other = pass_->ResolveFrame(ctx_, config, other_inputs);
+  const auto other = SubmitCommands(
+    "Vortex Exposure Frame", [&](graphics::CommandRecorder& recorder) -> auto {
+      return pass_->ResolveFrame(ctx_, recorder, config, other_inputs);
+    });
   ASSERT_NE(other, nullptr);
-  ASSERT_TRUE(pass_->CapturePreEnvironmentRange(
-    ctx_, other, *smaller.texture, smaller.srv));
+  ASSERT_TRUE(SubmitCommands("Vortex Exposure PreEnvironment Range",
+    [&](graphics::CommandRecorder& recorder) -> auto {
+      return pass_->CapturePreEnvironmentRange(
+        ctx_, recorder, other, *smaller.texture, smaller.srv);
+    }));
   const auto second = Read<ExposureStatusStorage>(
     *other->current_state->status_buffer, ResourceStates::kUnorderedAccess);
   EXPECT_EQ(second.composition_input.maximum_pre_exposed_rgb, .25F);
@@ -179,14 +191,17 @@ NOLINT_TEST_F(
   ctx_.current_view.view_state_handle = CompositionView::ViewStateHandle {
     1U,
   };
-  auto& backend = FailureBackend();
-  backend.fail_recorder_name = "Vortex Exposure PreEnvironment Range";
-  EXPECT_FALSE(pass_->CapturePreEnvironmentRange(
-    ctx_, frame, *smaller.texture, smaller.srv));
-  EXPECT_FALSE(pass_->HasPreEnvironmentRange(frame));
-  backend.fail_recorder_name.clear();
+  auto recording = AcquireRecorder("Discarded pre-environment range",
+    graphics::QueueRole::kGraphics, graphics::SubmissionPolicy::kExplicit);
   ASSERT_TRUE(pass_->CapturePreEnvironmentRange(
-    ctx_, frame, *smaller.texture, smaller.srv));
+    ctx_, *recording, frame, *smaller.texture, smaller.srv));
+  recording.Discard();
+  EXPECT_FALSE(pass_->HasPreEnvironmentRange(frame));
+  ASSERT_TRUE(SubmitCommands("Vortex Exposure PreEnvironment Range",
+    [&](graphics::CommandRecorder& recorder) -> auto {
+      return pass_->CapturePreEnvironmentRange(
+        ctx_, recorder, frame, *smaller.texture, smaller.srv);
+    }));
   const auto retry = Read<ExposureStatusStorage>(
     *frame->current_state->status_buffer, ResourceStates::kUnorderedAccess);
   EXPECT_EQ(retry.composition_input.maximum_pre_exposed_rgb, .25F);
@@ -210,11 +225,18 @@ NOLINT_TEST_F(
       .id = 11U,
     },
   };
-  ASSERT_TRUE(pass_->EvaluateFp16Products(ctx_, frame, config, products, {}));
-  ASSERT_TRUE(pass_->FinalizeFp16Suitability(ctx_, frame,
-    {
-      .product_layout_revision = 1U,
-      .expected_products = 1U << 10U,
+  ASSERT_TRUE(SubmitCommands("Vortex Exposure Suitability",
+    [&](graphics::CommandRecorder& recorder) -> auto {
+      return pass_->EvaluateFp16Products(
+        ctx_, recorder, frame, config, products, {});
+    }));
+  ASSERT_TRUE(SubmitCommands("Vortex FP16 Eligibility",
+    [&](graphics::CommandRecorder& recorder) -> auto {
+      return pass_->FinalizeFp16Suitability(ctx_, recorder, frame,
+        {
+          .product_layout_revision = 1U,
+          .expected_products = 1U << 10U,
+        });
     }));
   const auto finalized = Read<ExposureStatusStorage>(
     *frame->current_state->status_buffer, ResourceStates::kUnorderedAccess);
@@ -226,8 +248,11 @@ NOLINT_TEST_F(
       &finalized.composition_input,
       1,
     })));
-  EXPECT_FALSE(pass_->CapturePreEnvironmentRange(
-    ctx_, frame, *smaller.texture, kInvalidShaderVisibleIndex));
+  EXPECT_FALSE(SubmitCommands("Vortex Exposure PreEnvironment Range",
+    [&](graphics::CommandRecorder& recorder) -> auto {
+      return pass_->CapturePreEnvironmentRange(
+        ctx_, recorder, frame, *smaller.texture, kInvalidShaderVisibleIndex);
+    }));
   EXPECT_FALSE(pass_->HasPreEnvironmentRange(frame));
   if (capture) {
     EXPECT_TRUE(capture->EndCapture());
@@ -249,10 +274,16 @@ NOLINT_TEST_F(ExposureGpuTest, PreEnvironmentRangePreservesSignedTinyInputs)
     };
     auto frame_inputs = postprocess::ExposurePass::FrameInputs {};
     frame_inputs.use_fp32 = true;
-    const auto frame = pass_->ResolveFrame(ctx_, config, frame_inputs);
+    const auto frame = SubmitCommands("Vortex Exposure Frame",
+      [&](graphics::CommandRecorder& recorder) -> auto {
+        return pass_->ResolveFrame(ctx_, recorder, config, frame_inputs);
+      });
     ASSERT_NE(frame, nullptr);
-    ASSERT_TRUE(pass_->CapturePreEnvironmentRange(
-      ctx_, frame, *signal.texture, signal.srv));
+    ASSERT_TRUE(SubmitCommands("Vortex Exposure PreEnvironment Range",
+      [&](graphics::CommandRecorder& recorder) -> auto {
+        return pass_->CapturePreEnvironmentRange(
+          ctx_, recorder, frame, *signal.texture, signal.srv);
+      }));
     const auto status = Read<ExposureStatusStorage>(
       *frame->current_state->status_buffer, ResourceStates::kUnorderedAccess);
     EXPECT_EQ(std::bit_cast<std::uint32_t>(
@@ -284,10 +315,16 @@ NOLINT_TEST_F(ExposureGpuTest, PreEnvironmentRangeReportsNonfiniteInput)
     };
     auto frame_inputs = postprocess::ExposurePass::FrameInputs {};
     frame_inputs.use_fp32 = true;
-    const auto frame = pass_->ResolveFrame(ctx_, config, frame_inputs);
+    const auto frame = SubmitCommands("Vortex Exposure Frame",
+      [&](graphics::CommandRecorder& recorder) -> auto {
+        return pass_->ResolveFrame(ctx_, recorder, config, frame_inputs);
+      });
     ASSERT_NE(frame, nullptr);
-    ASSERT_TRUE(pass_->CapturePreEnvironmentRange(
-      ctx_, frame, *signal.texture, signal.srv));
+    ASSERT_TRUE(SubmitCommands("Vortex Exposure PreEnvironment Range",
+      [&](graphics::CommandRecorder& recorder) -> auto {
+        return pass_->CapturePreEnvironmentRange(
+          ctx_, recorder, frame, *signal.texture, signal.srv);
+      }));
     const auto status = Read<ExposureStatusStorage>(
       *frame->current_state->status_buffer, ResourceStates::kUnorderedAccess);
     EXPECT_EQ(status.composition_input.maximum_pre_exposed_rgb, 4.0F);
@@ -328,16 +365,25 @@ NOLINT_TEST_F(
   };
   auto frame_inputs = postprocess::ExposurePass::FrameInputs {};
   frame_inputs.use_fp32 = true;
-  const auto frame = pass_->ResolveFrame(ctx_, config, frame_inputs);
+  const auto frame = SubmitCommands(
+    "Vortex Exposure Frame", [&](graphics::CommandRecorder& recorder) -> auto {
+      return pass_->ResolveFrame(ctx_, recorder, config, frame_inputs);
+    });
   ASSERT_NE(frame, nullptr);
   const auto opaque = Uniform(.5F, 4U, 4U);
-  ASSERT_TRUE(pass_->CapturePreEnvironmentRange(
-    ctx_, frame, *opaque.texture, opaque.srv));
+  ASSERT_TRUE(SubmitCommands("Vortex Exposure PreEnvironment Range",
+    [&](graphics::CommandRecorder& recorder) -> auto {
+      return pass_->CapturePreEnvironmentRange(
+        ctx_, recorder, frame, *opaque.texture, opaque.srv);
+    }));
   const auto before = Read<ExposureStatusStorage>(
     *frame->current_state->status_buffer, ResourceStates::kUnorderedAccess);
   const auto unsupported = Uniform(0x1p33F, 4U, 4U);
-  ASSERT_TRUE(pass_->CheckSceneColorRange(
-    ctx_, frame, *unsupported.texture, unsupported.srv));
+  ASSERT_TRUE(SubmitCommands("Vortex Exposure Final Scene Range",
+    [&](graphics::CommandRecorder& recorder) -> auto {
+      return pass_->CheckSceneColorRange(
+        ctx_, recorder, frame, *unsupported.texture, unsupported.srv);
+    }));
   const auto after = Read<ExposureStatusStorage>(
     *frame->current_state->status_buffer, ResourceStates::kUnorderedAccess);
   EXPECT_TRUE(std::ranges::equal(std::as_bytes(std::span {
@@ -491,7 +537,6 @@ NOLINT_TEST_F(ExposureGpuTest,
   if (!transition.has_value()) {
     FAIL() << "Expected transition to contain a value";
   }
-  auto& backend = FailureBackend();
   for (unsigned step = 0; step < 5; ++step) {
     SCOPED_TRACE(step);
     WaitForQueueIdle();
@@ -504,40 +549,67 @@ NOLINT_TEST_F(ExposureGpuTest,
     service.OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
     const auto candidate = service.SelectPrecisionCandidate(ctx_, requirements);
     EXPECT_EQ(candidate != nullptr, step == 2U || step == 4U);
-    ctx_.current_view.frame_exposure = service.PrepareFrameExposure(ctx_, true);
+    ctx_.current_view.frame_exposure = SubmitCommands("Vortex Exposure Frame",
+      [&](graphics::CommandRecorder& recorder) -> auto {
+        return service.PrepareFrameExposure(ctx_, recorder, true);
+      });
     ASSERT_NE(ctx_.current_view.frame_exposure, nullptr);
     auto prepared_inputs = PostProcessService::Inputs {};
     prepared_inputs.scene_signal = signal.texture.get();
     prepared_inputs.scene_signal_srv = signal.srv;
-    auto prepared = service.PrepareSceneExposure(
-      ctx_.current_view.view_id, ctx_, prepared_inputs);
+    auto prepared = SubmitCommands(
+      "Vortex Exposure", [&](graphics::CommandRecorder& recorder) -> auto {
+        return service.PrepareSceneExposure(
+          ctx_.current_view.view_id, ctx_, recorder, prepared_inputs);
+      });
     if (!prepared.has_value()) {
       FAIL() << "Expected prepared to contain a value";
     }
     const auto before = ReadState(prepared->exposure);
     if (step == 2U) {
-      backend.fail_recorder_name = "Vortex Exposure Final Scene Range";
-      EXPECT_FALSE(
-        service.CheckSceneColorRange(ctx_, *signal.texture, signal.srv));
-      backend.fail_recorder_name.clear();
+      auto recording = AcquireRecorder("Discarded final range",
+        graphics::QueueRole::kGraphics, graphics::SubmissionPolicy::kExplicit);
+      ASSERT_TRUE(service.CheckSceneColorRange(
+        ctx_, *recording, *signal.texture, signal.srv));
+      recording.Discard();
       EXPECT_EQ(service.SelectPrecisionCandidate(ctx_, requirements), nullptr);
-      EXPECT_FALSE(service.PrepareScenePrecision(ctx_, *prepared, products));
-      EXPECT_FALSE(service.FinalizeScenePrecision(ctx_, *prepared));
-      ASSERT_TRUE(
-        service.CheckSceneColorRange(ctx_, *signal.texture, signal.srv));
+      EXPECT_FALSE(SubmitCommands("Vortex Exposure Suitability",
+        [&](graphics::CommandRecorder& recorder) -> auto {
+          return service.PrepareScenePrecision(
+            ctx_, recorder, *prepared, products);
+        }));
+      EXPECT_FALSE(SubmitCommands("Vortex FP16 Eligibility",
+        [&](graphics::CommandRecorder& recorder) -> auto {
+          return service.FinalizeScenePrecision(ctx_, recorder, *prepared);
+        }));
+      ASSERT_TRUE(SubmitCommands("Vortex Exposure Final Scene Range",
+        [&](graphics::CommandRecorder& recorder) -> auto {
+          return service.CheckSceneColorRange(
+            ctx_, recorder, *signal.texture, signal.srv);
+        }));
       {
         auto scene_inputs = PostProcessService::Inputs {};
         scene_inputs.scene_signal = signal.texture.get();
         scene_inputs.scene_signal_srv = signal.srv;
-        prepared = service.PrepareSceneExposure(
-          ctx_.current_view.view_id, ctx_, scene_inputs);
+        prepared = SubmitCommands(
+          "Vortex Exposure", [&](graphics::CommandRecorder& recorder) -> auto {
+            return service.PrepareSceneExposure(
+              ctx_.current_view.view_id, ctx_, recorder, scene_inputs);
+          });
       }
       if (!prepared.has_value()) {
         FAIL() << "Expected prepared to contain a value";
       }
     }
-    ASSERT_TRUE(service.PrepareScenePrecision(ctx_, *prepared, products));
-    ASSERT_TRUE(service.FinalizeScenePrecision(ctx_, *prepared));
+    ASSERT_TRUE(SubmitCommands("Vortex Exposure Suitability",
+      [&](graphics::CommandRecorder& recorder) -> auto {
+        return service.PrepareScenePrecision(
+          ctx_, recorder, *prepared, products);
+      }));
+    ASSERT_TRUE(SubmitCommands("Vortex FP16 Eligibility",
+      [&](graphics::CommandRecorder& recorder) -> auto {
+        return service.FinalizeScenePrecision(ctx_, recorder, *prepared);
+      }));
     const auto after = ReadState(prepared->exposure);
     EXPECT_EQ(after.displayed_scale, before.displayed_scale);
     EXPECT_EQ(after.latent_scale, before.latent_scale);
@@ -636,7 +708,8 @@ NOLINT_TEST_F(
       const auto old_format = ctx.current_view.hdr_color_format;
       ctx.current_view.hdr_color_format = Format::kRGBA16Float;
       half_producer.OnFrameStart(ctx.frame_sequence, ctx.frame_slot);
-      static_cast<void>(half_producer.PublishEnvironmentBindings(ctx));
+      static_cast<void>(
+        half_producer.PublishEnvironmentBindings(ctx, hook.recorder));
       const auto* resources
         = half_producer.InspectViewRadianceResources(ctx.current_view.view_id);
       CHECK_NOTNULL_F(resources);

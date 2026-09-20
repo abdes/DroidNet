@@ -428,8 +428,11 @@ NOLINT_TEST_F(ExposureGpuTest,
   ctx_.current_view.view_state_handle = consumer_handle;
   ctx_.current_view.exposure_view_id = root;
   ctx_.current_view.exposure_view_state_handle = source_handle;
+  const auto previous_selection
+    = vortex::testing::RendererPublicationProbe::SelectedBorrowForView(
+      service, consumer_handle);
   FailureBackend().fail_next_exposure_recorder = true;
-  EXPECT_NEAR(ServicePixel(service, signal), .25F / 256.0F, 2e-5F);
+  EXPECT_TRUE(std::isnan(ServicePixel(service, signal)));
   EXPECT_EQ(vortex::testing::RendererPublicationProbe::ExposureStateForView(
               service, consumer_handle),
     old);
@@ -437,11 +440,11 @@ NOLINT_TEST_F(ExposureGpuTest,
     = vortex::testing::RendererPublicationProbe::SelectedBorrowForView(
       service, consumer_handle);
   ASSERT_NE(selected, nullptr);
-  EXPECT_NE(selected, old);
+  EXPECT_EQ(selected, previous_selection);
   EXPECT_EQ(
     Read<ExposureStateData>(*selected->buffer, ResourceStates::kShaderResource)
-      .applied_generation.at(0),
-    4U);
+      .displayed_scale,
+    0x1p-4F);
   renderer_->RemovePublishedRuntimeView(frame,
     ViewId {
       50U,
@@ -452,25 +455,25 @@ NOLINT_TEST_F(ExposureGpuTest,
     auto pixel_options = ServicePixelOptions {};
     pixel_options.delta_time_seconds = 1.0F;
     EXPECT_NEAR(
-      ServicePixel(service, signal, {}, pixel_options), .25F / 256.0F, 2e-5F);
+      ServicePixel(service, signal, {}, pixel_options), .25F / 16.0F, 2e-5F);
   }
   const auto state
     = vortex::testing::RendererPublicationProbe::ExposureStateForView(
       service, consumer_handle);
   const auto continuity
     = Read<ExposureStateData>(*state->buffer, ResourceStates::kShaderResource);
-  EXPECT_EQ(continuity.displayed_scale, 0x1p-8F);
-  EXPECT_EQ(continuity.latent_scale, 0x1p-8F);
+  EXPECT_EQ(continuity.displayed_scale, 0x1p-4F);
+  EXPECT_EQ(continuity.latent_scale, 0x1p-4F);
   EXPECT_EQ(continuity.applied_generation.at(0), 1U);
   EXPECT_EQ(
     Read<ExposureStateData>(*selected->buffer, ResourceStates::kShaderResource)
       .displayed_scale,
-    0x1p-8F);
+    0x1p-4F);
   {
     auto pixel_options = ServicePixelOptions {};
     pixel_options.delta_time_seconds = 1.0F;
     EXPECT_NEAR(
-      ServicePixel(service, signal, {}, pixel_options), .25F / 128.0F, 2e-5F);
+      ServicePixel(service, signal, {}, pixel_options), .25F / 8.0F, 2e-5F);
   }
 }
 

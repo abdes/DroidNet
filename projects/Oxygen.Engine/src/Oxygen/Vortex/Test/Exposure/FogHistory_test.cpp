@@ -603,9 +603,11 @@ NOLINT_TEST_F(ExposureGpuTest,
       ctx.current_view.hdr_color_format
         = use_half ? Format::kRGBA16Float : Format::kRGBA32Float;
       producer.OnFrameStart(ctx.frame_sequence, ctx.frame_slot);
-      static_cast<void>(producer.PublishEnvironmentBindings(ctx));
+      static_cast<void>(
+        producer.PublishEnvironmentBindings(ctx, hook.recorder));
       if (ctx.frame_sequence.get() == 1U) {
-        static_cast<void>(producer.PublishEnvironmentBindings(ctx));
+        static_cast<void>(
+          producer.PublishEnvironmentBindings(ctx, hook.recorder));
         EXPECT_FALSE(producer.GetLastViewProductGenerationState()
             .volumetric_fog_temporal_history_reprojection_executed);
       }
@@ -619,10 +621,17 @@ NOLINT_TEST_F(ExposureGpuTest,
     {
       auto* owner = vortex::testing::RendererPublicationProbe::GetSceneRenderer(
         *renderer);
-      reference = vortex::testing::RendererPublicationProbe::FogHistory(
-        *owner, hook.render_context.current_view.view_id)
-                    .first;
-      frame = hook.render_context.current_view.frame_exposure;
+      hook.recorder.OnSubmission(
+        [this, owner, view_id = hook.render_context.current_view.view_id,
+          exposure = hook.render_context.current_view.frame_exposure](
+          const graphics::SubmissionOutcome outcome) -> void {
+          if (outcome == graphics::SubmissionOutcome::kSubmitted) {
+            reference = vortex::testing::RendererPublicationProbe::FogHistory(
+              *owner, view_id)
+                          .first;
+            frame = exposure;
+          }
+        });
     }
   };
   auto probe = std::make_shared<Probe>(*renderer_);

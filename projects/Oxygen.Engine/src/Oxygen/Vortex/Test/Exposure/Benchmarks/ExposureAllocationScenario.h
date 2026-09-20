@@ -149,6 +149,9 @@ private:
   std::array<std::shared_ptr<graphics::Framebuffer>, 2> consumer_targets_;
   std::array<DepthReadback, 2> depth_readbacks_;
   std::optional<postprocess::TonemapPass> consumer_;
+  std::vector<graphics::CommandRecording> pending_consumers_;
+  std::vector<std::shared_ptr<const graphics::CommandList>>
+    pending_tonemap_lists_;
   bool cleanup_armed_ {
     false,
   };

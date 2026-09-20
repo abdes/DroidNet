@@ -53,7 +53,7 @@ auto MakeGraphics() -> std::unique_ptr<FakeGraphics>
 auto AcquireTelemetryRecorder(FakeGraphics& graphics, std::string_view name)
 {
   auto recorder = graphics.AcquireCommandRecorder(
-    graphics.QueueKeyFor(QueueRole::kGraphics), name, true);
+    graphics.QueueKeyFor(QueueRole::kGraphics), name);
   return recorder;
 }
 
@@ -443,7 +443,7 @@ TEST(GpuTimelineProfilerTest, DelayedFramesKeepIndependentTimestampStorage)
         oxygen::profiling::ProfileGranularity::kTelemetry);
       graphics->GetTimestampQueryProvider().SetNextTick(sequence * 1100U);
     }
-    recorder.reset();
+    static_cast<void>(recorder.Submit());
     profiler.OnFrameRecordTailResolve();
     EXPECT_TRUE(sink->frames.empty());
   }
@@ -495,7 +495,7 @@ TEST(GpuTimelineProfilerTest, CaptureBacklogReportsMissingFrameWithoutOverwrite)
       oxygen::graphics::GpuEventScope scope(
         *recorder, "Scope", oxygen::profiling::ProfileGranularity::kTelemetry);
     }
-    recorder.reset();
+    static_cast<void>(recorder.Submit());
     profiler.OnFrameRecordTailResolve();
   }
   EXPECT_EQ(
@@ -544,7 +544,7 @@ TEST(GpuTimelineProfilerTest, CapacityGrowthPreservesPendingCaptures)
     oxygen::graphics::GpuEventScope scope(
       *recorder, "Original", oxygen::profiling::ProfileGranularity::kTelemetry);
   }
-  recorder.reset();
+  static_cast<void>(recorder.Submit());
   profiler.OnFrameRecordTailResolve();
   const auto old_capacity = graphics->GetTimestampQueryProvider().GetCapacity();
   profiler.SetMaxScopesPerFrame(8U);
@@ -591,7 +591,7 @@ TEST(GpuTimelineProfilerTest, FailedResolvePublishesInvalidTiming)
     oxygen::graphics::GpuEventScope scope(
       *recorder, "Scope", oxygen::profiling::ProfileGranularity::kTelemetry);
   }
-  recorder.reset();
+  static_cast<void>(recorder.Submit());
   profiler.OnFrameRecordTailResolve();
   profiler.OnFrameStart(oxygen::frame::SequenceNumber {
     2U,
@@ -642,7 +642,7 @@ TEST(GpuTimelineProfilerTest, RecordingRetainsInvalidFramesInExactWindow)
       oxygen::graphics::GpuEventScope scope(*recorder, "OverflowScope",
         oxygen::profiling::ProfileGranularity::kTelemetry);
     }
-    recorder.reset();
+    static_cast<void>(recorder.Submit());
     profiler.OnFrameRecordTailResolve();
   }
   auto stream = std::ifstream(path);
@@ -806,7 +806,7 @@ TEST(GpuTimelineProfilerTest, RecordingShutdownMarksMissingFramesIncomplete)
       oxygen::graphics::GpuEventScope scope(
         *recorder, "Scope", oxygen::profiling::ProfileGranularity::kTelemetry);
     }
-    recorder.reset();
+    static_cast<void>(recorder.Submit());
     profiler.OnFrameRecordTailResolve();
     profiler.OnFrameStart(oxygen::frame::SequenceNumber {
       2U,

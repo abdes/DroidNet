@@ -168,7 +168,10 @@ NOLINT_TEST_F(ExposureGpuTest, SceneDisplayAdmissionChecksGammaAndBackground)
     };
     auto frame_inputs = postprocess::ExposurePass::FrameInputs {};
     frame_inputs.use_fp32 = true;
-    const auto frame = pass_->ResolveFrame(ctx_, *resolved, frame_inputs);
+    const auto frame = SubmitCommands("Vortex Exposure Frame",
+      [&](graphics::CommandRecorder& recorder) -> auto {
+        return pass_->ResolveFrame(ctx_, recorder, *resolved, frame_inputs);
+      });
     ASSERT_NE(frame, nullptr);
     ASSERT_TRUE(RecordShared(signal, *resolved).executed);
     const auto error = HdrSceneErrorData {
@@ -209,8 +212,11 @@ NOLINT_TEST_F(ExposureGpuTest, SceneDisplayAdmissionChecksGammaAndBackground)
         .composed_error = true,
       },
     };
-    ASSERT_TRUE(
-      pass_->EvaluateFp16Products(ctx_, frame, *resolved, products, {}));
+    ASSERT_TRUE(SubmitCommands("Vortex Exposure Suitability",
+      [&](graphics::CommandRecorder& recorder) -> auto {
+        return pass_->EvaluateFp16Products(
+          ctx_, recorder, frame, *resolved, products, {});
+      }));
     const auto report = Read<HdrSuitabilityData>(
       *frame->suitability_buffer, ResourceStates::kShaderResource);
     EXPECT_EQ(report.candidate_pre_exposure, 0x1p-20F);
@@ -368,7 +374,10 @@ NOLINT_TEST_F(
     };
     auto frame_inputs = postprocess::ExposurePass::FrameInputs {};
     frame_inputs.use_fp32 = true;
-    const auto frame = pass_->ResolveFrame(ctx_, config, frame_inputs);
+    const auto frame = SubmitCommands("Vortex Exposure Frame",
+      [&](graphics::CommandRecorder& recorder) -> auto {
+        return pass_->ResolveFrame(ctx_, recorder, config, frame_inputs);
+      });
     ASSERT_NE(frame, nullptr);
     ASSERT_TRUE(RecordShared(signal, config).executed);
     const auto cleared = Read<ExposureStatusStorage>(
@@ -405,11 +414,14 @@ NOLINT_TEST_F(
     {
       auto exposure_inputs = postprocess::ExposurePass::Inputs {};
       exposure_inputs.composition_products = test.required_products;
-      ASSERT_TRUE(pass_->EvaluateFp16Products(ctx_, frame, config, products,
-        exposure_inputs,
-        test.current_store
-          ? postprocess::ExposurePass::SuitabilityScale::kCurrentFrame
-          : postprocess::ExposurePass::SuitabilityScale::kCandidate));
+      ASSERT_TRUE(SubmitCommands("Vortex Exposure Suitability",
+        [&](graphics::CommandRecorder& recorder) -> auto {
+          return pass_->EvaluateFp16Products(ctx_, recorder, frame, config,
+            products, exposure_inputs,
+            test.current_store
+              ? postprocess::ExposurePass::SuitabilityScale::kCurrentFrame
+              : postprocess::ExposurePass::SuitabilityScale::kCandidate);
+        }));
     }
     const auto report = Read<HdrSuitabilityData>(
       *(test.current_store ? frame->conversion_buffer
@@ -421,11 +433,14 @@ NOLINT_TEST_F(
     if (test.current_store) {
       continue;
     }
-    ASSERT_TRUE(pass_->FinalizeFp16Suitability(ctx_, frame,
-      {
-        .product_layout_revision = 1U,
-        .expected_products = scene_bit,
-        .invalidate_previous = true,
+    ASSERT_TRUE(SubmitCommands("Vortex FP16 Eligibility",
+      [&](graphics::CommandRecorder& recorder) -> auto {
+        return pass_->FinalizeFp16Suitability(ctx_, recorder, frame,
+          {
+            .product_layout_revision = 1U,
+            .expected_products = scene_bit,
+            .invalidate_previous = true,
+          });
       }));
     const auto status = Read<ExposureStatusStorage>(
       *frame->current_state->status_buffer, ResourceStates::kUnorderedAccess);
@@ -615,7 +630,10 @@ NOLINT_TEST_F(ExposureGpuTest, ComposedCoverageRequiresValidOpaqueDepth)
     };
     auto frame_inputs = postprocess::ExposurePass::FrameInputs {};
     frame_inputs.use_fp32 = true;
-    const auto frame = pass_->ResolveFrame(ctx_, config, frame_inputs);
+    const auto frame = SubmitCommands("Vortex Exposure Frame",
+      [&](graphics::CommandRecorder& recorder) -> auto {
+        return pass_->ResolveFrame(ctx_, recorder, config, frame_inputs);
+      });
     ASSERT_NE(frame, nullptr);
     ASSERT_TRUE(RecordShared(signal, config).executed);
     const auto error = HdrSceneErrorData {
@@ -661,9 +679,12 @@ NOLINT_TEST_F(ExposureGpuTest, ComposedCoverageRequiresValidOpaqueDepth)
     {
       auto exposure_inputs = postprocess::ExposurePass::Inputs {};
       exposure_inputs.scene_composition = composition;
-      ASSERT_TRUE(pass_->EvaluateFp16Products(ctx_, frame, config, products,
-        exposure_inputs,
-        postprocess::ExposurePass::SuitabilityScale::kCurrentFrame));
+      ASSERT_TRUE(SubmitCommands("Vortex Exposure Suitability",
+        [&](graphics::CommandRecorder& recorder) -> auto {
+          return pass_->EvaluateFp16Products(ctx_, recorder, frame, config,
+            products, exposure_inputs,
+            postprocess::ExposurePass::SuitabilityScale::kCurrentFrame);
+        }));
     }
     const auto result = Read<HdrSuitabilityData>(
       *frame->conversion_buffer, ResourceStates::kShaderResource);

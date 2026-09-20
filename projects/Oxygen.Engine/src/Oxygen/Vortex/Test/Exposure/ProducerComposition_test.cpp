@@ -32,12 +32,18 @@ NOLINT_TEST_F(ExposureGpuTest, OpaqueApErrorInvalidatesWhenInputCaptureChanges)
   ctx_.frame_sequence = frame::SequenceNumber {
     ++sequence_,
   };
-  const auto frame = pass_->ResolveFrame(ctx_, SharedConfig(settings), {});
+  const auto frame = SubmitCommands(
+    "Vortex Exposure Frame", [&](graphics::CommandRecorder& recorder) -> auto {
+      return pass_->ResolveFrame(ctx_, recorder, SharedConfig(settings), {});
+    });
   ASSERT_NE(frame, nullptr);
   const auto small_source = Uniform(1.0F);
   const auto large = Uniform(100.0F);
-  ASSERT_TRUE(pass_->CapturePreEnvironmentRange(
-    ctx_, frame, *small_source.texture, small_source.srv));
+  ASSERT_TRUE(SubmitCommands("Vortex Exposure PreEnvironment Range",
+    [&](graphics::CommandRecorder& recorder) -> auto {
+      return pass_->CapturePreEnvironmentRange(
+        ctx_, recorder, frame, *small_source.texture, small_source.srv);
+    }));
   const HdrErrorBoundsData bounds {
     .transmittance_absolute = .125F,
   };
@@ -65,14 +71,23 @@ NOLINT_TEST_F(ExposureGpuTest, OpaqueApErrorInvalidatesWhenInputCaptureChanges)
       *frame->current_state->status_buffer, ResourceStates::kUnorderedAccess)
       .opaque_ap_error;
   };
-  ASSERT_TRUE(pass_->PropagateOpaqueApError(ctx_, frame, 1.0F));
+  ASSERT_TRUE(SubmitCommands("Vortex Exposure Opaque AP Error",
+    [&](graphics::CommandRecorder& recorder) -> auto {
+      return pass_->PropagateOpaqueApError(ctx_, recorder, frame, 1.0F);
+    }));
   ASSERT_TRUE(pass_->HasOpaqueApError(frame));
   EXPECT_GE(read_bound().rgb_absolute, .125F);
-  ASSERT_TRUE(
-    pass_->CapturePreEnvironmentRange(ctx_, frame, *large.texture, large.srv));
+  ASSERT_TRUE(SubmitCommands("Vortex Exposure PreEnvironment Range",
+    [&](graphics::CommandRecorder& recorder) -> auto {
+      return pass_->CapturePreEnvironmentRange(
+        ctx_, recorder, frame, *large.texture, large.srv);
+    }));
   EXPECT_FALSE(pass_->HasOpaqueApError(frame));
   EXPECT_EQ(read_bound().valid, 0U);
-  ASSERT_TRUE(pass_->PropagateOpaqueApError(ctx_, frame, 1.0F));
+  ASSERT_TRUE(SubmitCommands("Vortex Exposure Opaque AP Error",
+    [&](graphics::CommandRecorder& recorder) -> auto {
+      return pass_->PropagateOpaqueApError(ctx_, recorder, frame, 1.0F);
+    }));
   EXPECT_GE(read_bound().rgb_absolute, 12.5F);
 
   for (const bool invalid_srv : {
@@ -80,22 +95,30 @@ NOLINT_TEST_F(ExposureGpuTest, OpaqueApErrorInvalidatesWhenInputCaptureChanges)
          false,
        }) {
     SCOPED_TRACE(invalid_srv);
-    auto& backend = FailureBackend();
-    if (!invalid_srv) {
-      backend.fail_recorder_name = "Vortex Exposure PreEnvironment Range";
-    }
-    EXPECT_FALSE(
-      pass_->CapturePreEnvironmentRange(ctx_, frame, *small_source.texture,
-        invalid_srv ? kInvalidShaderVisibleIndex : small_source.srv));
-    backend.fail_recorder_name.clear();
+    auto recording = AcquireRecorder("Discarded input range",
+      graphics::QueueRole::kGraphics, graphics::SubmissionPolicy::kExplicit);
+    EXPECT_EQ(pass_->CapturePreEnvironmentRange(ctx_, *recording, frame,
+                *small_source.texture,
+                invalid_srv ? kInvalidShaderVisibleIndex : small_source.srv),
+      !invalid_srv);
+    recording.Discard();
     EXPECT_FALSE(pass_->HasPreEnvironmentRange(frame));
     EXPECT_FALSE(pass_->HasOpaqueApError(frame));
-    EXPECT_FALSE(pass_->PropagateOpaqueApError(ctx_, frame, 1.0F));
-    ASSERT_TRUE(pass_->CapturePreEnvironmentRange(
-      ctx_, frame, *small_source.texture, small_source.srv));
+    EXPECT_FALSE(SubmitCommands("Vortex Exposure Opaque AP Error",
+      [&](graphics::CommandRecorder& recorder) -> auto {
+        return pass_->PropagateOpaqueApError(ctx_, recorder, frame, 1.0F);
+      }));
+    ASSERT_TRUE(SubmitCommands("Vortex Exposure PreEnvironment Range",
+      [&](graphics::CommandRecorder& recorder) -> auto {
+        return pass_->CapturePreEnvironmentRange(
+          ctx_, recorder, frame, *small_source.texture, small_source.srv);
+      }));
     EXPECT_FALSE(pass_->HasOpaqueApError(frame));
     EXPECT_EQ(read_bound().valid, 0U);
-    ASSERT_TRUE(pass_->PropagateOpaqueApError(ctx_, frame, 1.0F));
+    ASSERT_TRUE(SubmitCommands("Vortex Exposure Opaque AP Error",
+      [&](graphics::CommandRecorder& recorder) -> auto {
+        return pass_->PropagateOpaqueApError(ctx_, recorder, frame, 1.0F);
+      }));
     EXPECT_TRUE(pass_->HasOpaqueApError(frame));
     EXPECT_GE(read_bound().rgb_absolute, .125F);
     EXPECT_LT(read_bound().rgb_absolute, .126F);
@@ -192,12 +215,21 @@ NOLINT_TEST_F(ExposureGpuTest, OpaqueApErrorUsesInputPeakAndActualGain)
     ctx_.frame_sequence = frame::SequenceNumber {
       ++sequence_,
     };
-    const auto frame = pass_->ResolveFrame(ctx_, SharedConfig(settings), {});
+    const auto frame = SubmitCommands("Vortex Exposure Frame",
+      [&](graphics::CommandRecorder& recorder) -> auto {
+        return pass_->ResolveFrame(ctx_, recorder, SharedConfig(settings), {});
+      });
     ASSERT_NE(frame, nullptr);
-    EXPECT_FALSE(pass_->PropagateOpaqueApError(ctx_, frame, test.gain));
+    EXPECT_FALSE(SubmitCommands("Vortex Exposure Opaque AP Error",
+      [&](graphics::CommandRecorder& recorder) -> auto {
+        return pass_->PropagateOpaqueApError(ctx_, recorder, frame, test.gain);
+      }));
     const auto source = Uniform(test.peak);
-    ASSERT_TRUE(pass_->CapturePreEnvironmentRange(
-      ctx_, frame, *source.texture, source.srv));
+    ASSERT_TRUE(SubmitCommands("Vortex Exposure PreEnvironment Range",
+      [&](graphics::CommandRecorder& recorder) -> auto {
+        return pass_->CapturePreEnvironmentRange(
+          ctx_, recorder, frame, *source.texture, source.srv);
+      }));
     auto upload = CreateUploadBuffer(SizeBytes {
       sizeof(test.bounds),
     });
@@ -219,7 +251,10 @@ NOLINT_TEST_F(ExposureGpuTest, OpaqueApErrorUsesInputPeakAndActualGain)
     }
     const auto before = Read<ExposureStatusStorage>(
       *frame->current_state->status_buffer, ResourceStates::kUnorderedAccess);
-    ASSERT_TRUE(pass_->PropagateOpaqueApError(ctx_, frame, test.gain));
+    ASSERT_TRUE(SubmitCommands("Vortex Exposure Opaque AP Error",
+      [&](graphics::CommandRecorder& recorder) -> auto {
+        return pass_->PropagateOpaqueApError(ctx_, recorder, frame, test.gain);
+      }));
     EXPECT_TRUE(pass_->HasOpaqueApError(frame));
     const auto after = Read<ExposureStatusStorage>(
       *frame->current_state->status_buffer, ResourceStates::kUnorderedAccess);
@@ -278,12 +313,16 @@ NOLINT_TEST_F(ExposureGpuTest, OpaqueApErrorUsesInputPeakAndActualGain)
     if (absolute == 0) {
       EXPECT_EQ(actual.rgb_absolute, 0.0F);
     }
-    auto& backend = FailureBackend();
-    backend.fail_recorder_name = "Vortex Exposure Opaque AP Error";
-    EXPECT_FALSE(pass_->PropagateOpaqueApError(ctx_, frame, test.gain));
+    auto recording = AcquireRecorder("Discarded AP transport",
+      graphics::QueueRole::kGraphics, graphics::SubmissionPolicy::kExplicit);
+    ASSERT_TRUE(
+      pass_->PropagateOpaqueApError(ctx_, *recording, frame, test.gain));
+    recording.Discard();
     EXPECT_FALSE(pass_->HasOpaqueApError(frame));
-    backend.fail_recorder_name.clear();
-    ASSERT_TRUE(pass_->PropagateOpaqueApError(ctx_, frame, test.gain));
+    ASSERT_TRUE(SubmitCommands("Vortex Exposure Opaque AP Error",
+      [&](graphics::CommandRecorder& recorder) -> auto {
+        return pass_->PropagateOpaqueApError(ctx_, recorder, frame, test.gain);
+      }));
     EXPECT_TRUE(pass_->HasOpaqueApError(frame));
   }
   if (capture) {
@@ -337,7 +376,10 @@ NOLINT_TEST_F(
   };
   auto frame_inputs = postprocess::ExposurePass::FrameInputs {};
   frame_inputs.use_fp32 = true;
-  const auto frame = pass_->ResolveFrame(ctx_, config, frame_inputs);
+  const auto frame = SubmitCommands(
+    "Vortex Exposure Frame", [&](graphics::CommandRecorder& recorder) -> auto {
+      return pass_->ResolveFrame(ctx_, recorder, config, frame_inputs);
+    });
   ASSERT_NE(frame, nullptr);
   ASSERT_TRUE(RecordShared(anchor, config).executed);
   const std::array products {
@@ -398,7 +440,11 @@ NOLINT_TEST_F(
       recorder->RequireResourceStateFinal(
         *frame->current_state->status_buffer, ResourceStates::kShaderResource);
     }
-    ASSERT_TRUE(pass_->EvaluateFp16Products(ctx_, frame, config, products, {}));
+    ASSERT_TRUE(SubmitCommands("Vortex Exposure Suitability",
+      [&](graphics::CommandRecorder& recorder) -> auto {
+        return pass_->EvaluateFp16Products(
+          ctx_, recorder, frame, config, products, {});
+      }));
     const auto report = Read<HdrSuitabilityData>(
       *frame->suitability_buffer, ResourceStates::kShaderResource);
     EXPECT_EQ(report.candidate_pre_exposure, 1.0F);

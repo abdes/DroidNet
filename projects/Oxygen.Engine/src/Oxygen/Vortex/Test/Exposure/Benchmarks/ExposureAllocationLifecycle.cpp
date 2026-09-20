@@ -267,19 +267,14 @@ auto ExposureAllocationScenario::QueueConsumers(
   if (!consumer_.has_value()) {
     FAIL() << "Expected the retained-consumer pass to be initialized";
   }
-  backend_->deferred_tonemap_recordings.clear();
+  pending_consumers_.clear();
+  pending_tonemap_lists_.clear();
   {
-    backend_->defer_tonemap_recorders = true;
-    auto restore = ScopeGuard(
-      [&]() noexcept -> void { backend_->defer_tonemap_recorders = false; });
     auto consume_context = RenderContext {};
     consume_context.frame_sequence = frame::SequenceNumber {
       fixture_.sequence,
     };
     consume_context.frame_slot = fixture_.frame.GetFrameSlot();
-    auto* owner = vortex::testing::RendererPublicationProbe::GetSceneRenderer(
-      *fixture_.renderer_);
-    ASSERT_NE(owner, nullptr);
     for (unsigned index = 0U; index < 2U; ++index) {
       const auto& source = retained_.at(index).color;
       ASSERT_NE(source.exposure, nullptr);
@@ -311,15 +306,20 @@ auto ExposureAllocationScenario::QueueConsumers(
         = has_fallback ? exposure->conversion_buffer.get() : nullptr;
       inputs.conversion_report_srv
         = has_fallback ? exposure->conversion_srv : kInvalidShaderVisibleIndex;
+      auto recording = fixture_.AcquireRecorder("Vortex PostProcess",
+        graphics::QueueRole::kGraphics, graphics::SubmissionPolicy::kExplicit);
+      ASSERT_TRUE(recording);
       ASSERT_TRUE(
-        consumer.Record(consume_context, owner->GetSceneTextures(), inputs)
-          .executed);
+        consumer.Record(consume_context, *recording, inputs).recorded);
+      pending_tonemap_lists_.push_back(
+        recording->GetCommandListForInspection());
+      pending_consumers_.push_back(std::move(recording));
     }
   }
-  ASSERT_EQ(backend_->deferred_tonemap_recordings.size(), 2U);
+  ASSERT_EQ(pending_tonemap_lists_.size(), 2U);
   {
-    auto recorder
-      = fixture_.AcquireDeferredRecorder("Lifecycle retained depth aliases");
+    auto recorder = fixture_.AcquireRecorder("Lifecycle retained depth aliases",
+      graphics::QueueRole::kGraphics, graphics::SubmissionPolicy::kExplicit);
     for (unsigned index = 0U; index < 2U; ++index) {
       for (unsigned alias = 0U; alias < 2U; ++alias) {
         CopyDepth(*recorder, *retained_.at(index).depths.at(alias).texture,
@@ -333,10 +333,11 @@ auto ExposureAllocationScenario::QueueConsumers(
         ResourceStates::kShaderResource);
     }
     observation.depth_recording = recorder->GetCommandListForInspection();
+    pending_consumers_.push_back(std::move(recorder));
   }
   ASSERT_NE(observation.depth_recording, nullptr);
   ASSERT_FALSE(observation.depth_recording->IsSubmitted());
-  for (const auto& recording : backend_->deferred_tonemap_recordings) {
+  for (const auto& recording : pending_tonemap_lists_) {
     ASSERT_FALSE(recording->IsSubmitted());
   }
 }
@@ -354,7 +355,7 @@ auto ExposureAllocationScenario::RemoveAndReadd(
     },
     prefix + "readded"));
   ASSERT_FALSE(observation.depth_recording->IsSubmitted());
-  for (const auto& recording : backend_->deferred_tonemap_recordings) {
+  for (const auto& recording : pending_tonemap_lists_) {
     ASSERT_FALSE(recording->IsSubmitted());
   }
   for (unsigned index = 0U; index < 2U; ++index) {
@@ -389,9 +390,11 @@ auto ExposureAllocationScenario::ReleaseAndSubmit(
 {
   const auto completion = fixture_.SignalQueue();
   {
-    auto recorder = fixture_.AcquireDeferredRecorder(
-      "Lifecycle retained consumer completion");
+    auto recorder
+      = fixture_.AcquireRecorder("Lifecycle retained consumer completion",
+        graphics::QueueRole::kGraphics, graphics::SubmissionPolicy::kExplicit);
     recorder->RecordQueueSignal(completion.get());
+    pending_consumers_.push_back(std::move(recorder));
   }
   EXPECT_LT(fixture_.GetQueue()->GetCompletedValue(), completion.get());
   retained_ = {};
@@ -426,9 +429,12 @@ auto ExposureAllocationScenario::ReleaseAndSubmit(
   });
   phases_.push_back(std::move(pending_snapshot));
   EXPECT_LT(fixture_.GetQueue()->GetCompletedValue(), completion.get());
-  fixture_.Backend().SubmitDeferredCommandLists();
+  for (auto& recording : pending_consumers_) {
+    ASSERT_TRUE(recording.Submit());
+  }
+  pending_consumers_.clear();
   ASSERT_TRUE(observation.depth_recording->IsSubmitted());
-  for (const auto& recording : backend_->deferred_tonemap_recordings) {
+  for (const auto& recording : pending_tonemap_lists_) {
     ASSERT_TRUE(recording->IsSubmitted());
   }
   fixture_.WaitForQueue(completion);
@@ -555,7 +561,8 @@ auto ExposureAllocationScenario::VerifyConsumers(
 auto ExposureAllocationScenario::RetireCycle(const unsigned cycle,
   const std::string& prefix, CycleObservation& observation) -> void
 {
-  backend_->deferred_tonemap_recordings.clear();
+  pending_consumers_.clear();
+  pending_tonemap_lists_.clear();
   RemoveViews();
   static_cast<void>(Snapshot(prefix + "released_before_fence"));
   for (unsigned drain = 0U; drain < 2U * frame::kFramesInFlight.get();
