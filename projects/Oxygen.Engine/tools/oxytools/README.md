@@ -3,7 +3,7 @@
 One Python distribution provides `oxytidy` and `oxyformat`, with shared ownership,
 validation, and file-writing code. Python 3.10+ is required.
 
-Install once in your chosen interpreter:
+From the Oxygen.Engine directory, install once in your chosen interpreter:
 
 ```powershell
 $toolPython = python -c "import sys; print(sys.executable)"
@@ -22,13 +22,24 @@ names remain `oxytidy` and `oxyformat`.
 Console entry points and `python -m oxytidy` / `python -m oxyformat` share the same
 CLI implementations. `tools/cli` contains PowerShell convenience launchers.
 
-Run tests from a working directory on the same drive as the system temporary
-directory (some existing oxytidy fixtures exercise relative checkout paths):
+## Verification
+
+Start in the Oxygen.Engine directory and keep an absolute path to the package.
+Run tests from the system temporary directory: some fixtures exercise relative
+paths and therefore require the working directory and temporary files to be on
+the same drive. Use a system temporary directory outside any engine checkout.
 
 ```powershell
-python -m unittest discover -s <engine>/tools/oxytools/tests -v
-uvx ruff check tools/oxytools
-uvx ruff format --check tools/oxytools
+$engineRoot = (Resolve-Path .).Path
+$toolsRoot = Join-Path $engineRoot 'tools/oxytools'
+Push-Location ([System.IO.Path]::GetTempPath())
+try {
+    python -m unittest discover -s (Join-Path $toolsRoot 'tests') -v
+} finally {
+    Pop-Location
+}
+uvx ruff check $toolsRoot
+uvx ruff format --check $toolsRoot
 ```
 
 Real hook tests require the `pre-commit` development dependency. If it is installed

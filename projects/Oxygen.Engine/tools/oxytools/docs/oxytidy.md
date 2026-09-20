@@ -24,13 +24,15 @@ integration. Python owns the only CLI; shell launchers forward its arguments unc
 
 ## Python project and launchers
 
-The tool is a standard Python project in `tools/oxytools`:
+Oxytidy is part of the shared `oxygen-tools` Python distribution in `tools/oxytools`:
 
 ```text
 tools/oxytools/
   pyproject.toml       # metadata, dependencies, console entry point
   uv.lock             # optional reproducible dependency resolution for development
-  src/oxytidy/        # application package and python -m entry point
+  src/oxytidy/        # analysis command
+  src/oxyformat/      # formatting command
+  src/oxytools/       # shared helpers
   tests/
 ```
 
@@ -109,7 +111,7 @@ Ownership policy selection follows this order:
 
 The third choice supports older target checkouts that do not yet contain the
 policy. The fallback path and the missing target policy are printed explicitly.
-Paths *inside* every policy resolve against the selected project root. No policy
+Paths _inside_ every policy resolve against the selected project root. No policy
 is copied into the target checkout. An invalid target policy or a missing/invalid
 explicit override fails; fallback applies only when the target policy is absent.
 If no policy is available, supply `--ownership-file` explicitly.
@@ -156,12 +158,12 @@ Third-party/system headers and generated build outputs remain compiler
 dependencies; they are not analysis targets or editable files. Canonical paths
 are checked against ownership and explicit scope after resolving symlinks.
 
-| Selection | Coverage and reported findings |
-| --- | --- |
-| Source file | Its compilation contexts; findings in that file |
-| Header | Consumers beneath its containing directory; findings in that header |
-| Directory | Translation units beneath that directory; findings in its sources/headers |
-| `--all` | All configured authored project roots |
+| Selection   | Coverage and reported findings                                            |
+| ----------- | ------------------------------------------------------------------------- |
+| Source file | Its compilation contexts; findings in that file                           |
+| Header      | Consumers beneath its containing directory; findings in that header       |
+| Directory   | Translation units beneath that directory; findings in its sources/headers |
+| `--all`     | All configured authored project roots                                     |
 
 Test path components are excluded, case-insensitively, from selection, requested
 headers, reporting, and fixes unless `--include-tests` is supplied.
@@ -171,7 +173,7 @@ translation units under those directories. Source-file inputs admit only those
 files. Standalone headers use their containing directory as the discovery
 boundary, without widening the reporting/edit scope. Multiple inputs combine
 these boundaries; `--all` explicitly selects all owned project roots. Boundaries
-are printed and recorded before discovery. No downstream or project-wide
+are recorded before discovery and printed with `--verbose`. No downstream or project-wide
 consumer search is performed implicitly.
 
 Fresh compiler dependency output determines which requested headers these
@@ -249,8 +251,6 @@ Argument parsing remains Python's standard `argparse`. Maintained
 layout, colors, tables, error panels, and
 [progress displays](https://rich.readthedocs.io/en/stable/progress.html).
 There is no custom ANSI renderer, terminal-width calculator, or progress engine.
-Typer/Click were considered; this single-command application's existing argument
-contract does not need a parser migration to improve its presentation.
 
 The output follows the [CLI Guidelines](https://clig.dev/#output):
 
@@ -273,12 +273,12 @@ The output follows the [CLI Guidelines](https://clig.dev/#output):
 
 ## Results and execution
 
-| Exit | Meaning |
-| --- | --- |
-| 0 | Successful analysis/listing, or no analyzable header consumers in scope |
-| 1 | Findings meeting the explicit `--fail-on warning` or `error` policy |
-| 2 | Invalid input, failure, timeout, coverage gap, or rejected fix batch |
-| 130 | Cancelled |
+| Exit | Meaning                                                                                                                  |
+| ---- | ------------------------------------------------------------------------------------------------------------------------ |
+| 0    | Successful analysis/listing, or no analyzable header consumers in scope                                                  |
+| 1    | Findings fail `--fail-on warning`/`error`, or clang-tidy reports a configured `WarningsAsErrors` policy failure          |
+| 2    | Invalid input, execution failure, timeout, incomplete analysis (such as missing compile commands), or rejected fix batch |
+| 130  | Cancelled                                                                                                                |
 
 The summary distinguishes `setup_failed`, `clean`, `findings`, `incomplete`,
 `cancelled`, `listed`, and `no_analysis`. Setup failures identify the missing prerequisite, its
@@ -317,7 +317,8 @@ analysis block application. Each diagnostic's replacements are skipped as a
 unit if any edit crosses scope. Skipped/unfixable findings retain reasons.
 
 UTF-8 bytes, BOM, existing line endings, and permission bits are preserved.
-Other source encodings remain report-only. Writes are atomic per file. Failed
+Other source encodings can be analyzed, but an attempted autofix on an unsupported
+encoding rejects the replacement batch. Writes are atomic per file. Failed
 application rolls back written files unless concurrent edits or I/O failures
 prevent restoration, which is reported. Optional formatting uses `.clang-format`
 and changed ranges. After edits, affected caches are invalidated and all selected
@@ -335,22 +336,20 @@ matching transitive file contents, effective configuration, compile arguments,
 LLVM identities, relevant environment, and tool code. No timestamp-only validity
 decisions are used. Scope and failure policy are evaluated on each run. Failed
 or cancelled invocations are never cached. `--force` bypasses reuse and
-`--cache-dir` relocates it. Reused/executed counts are always reported.
+`--cache-dir` relocates it. The console reports the total context count and any
+nonzero reuse count; `summary.json` records executed and reused counts separately.
 Cache envelopes and nested diagnostics are validated before reuse. Invalid cache
 entries are reported and recomputed; they cannot crash report rendering.
 
 ## Implementation and verification
 
-Install this checkout in your selected Python before running the tests.
+Use the [shared verification instructions](../README.md#verification) to install
+this checkout, select a suitable working directory, and run tests and linting.
+The same suite covers both commands and the shared helpers.
 
-The entry point delegates to internal `oxytidy` modules for compilation, ownership,
-execution, analysis/cache, diagnostics, replacements, and orchestration.
-
-```powershell
-python -m unittest discover -s projects/Oxygen.Engine/tools/oxytools/tests -v
-uvx ruff check projects/Oxygen.Engine/tools/oxytools
-uvx ruff format --check projects/Oxygen.Engine/tools/oxytools
-```
+The `oxytidy` modules own compilation adaptation, analysis/cache, diagnostics,
+replacement planning, and orchestration. The `oxytools` package owns shared
+ownership validation, file writes, process ownership, and presentation primitives.
 
 Integration tests discover LLVM on PATH or in the standard Windows installation.
 `OXYTIDY_TEST_LLVM` selects another clang-tidy executable. Tests explicitly skip
@@ -361,7 +360,3 @@ basename collisions, compilation contexts, coverage gaps, compile failures,
 export/format modes, cache invalidation, YAML/responses, fix conflicts and changed
 contents, rollback, failure policies, worker failures, process-tree cancellation,
 and PowerShell argument/exit forwarding.
-
-A Windows smoke run also analyzed ModuleAnchor.cpp and Sha256.cpp using adapted
-MSVC Ninja database entries against the isolated checkout. This was a focused
-tool smoke test, not an engine-wide lint pass. No engine build was required.
