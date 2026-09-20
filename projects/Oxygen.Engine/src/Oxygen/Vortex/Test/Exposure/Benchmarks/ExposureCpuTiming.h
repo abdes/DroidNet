@@ -20,7 +20,7 @@ namespace oxygen::vortex::testing::exposure {
 //! Raw QPC intervals are intersected with ETW scheduler data after collection.
 class ExposureCpuTiming final : public profiling::CpuScopeObserver {
 public:
-  explicit ExposureCpuTiming(unsigned frames);
+  explicit ExposureCpuTiming(unsigned frames, bool detailed);
   auto BeginFrame(unsigned sequence) -> void;
   auto Save(const std::filesystem::path& path) const -> nlohmann::json;
   auto OnScopeBegin(const profiling::CpuProfileScopeDesc& desc) noexcept
@@ -28,16 +28,17 @@ public:
   auto OnScopeEnd() noexcept -> void override;
 
 private:
+  enum class Kind { kExposure, kFenceWait, kDetail };
   struct Record {
     std::int64_t begin {};
     std::int64_t end {};
     unsigned frame {};
-    bool wait {};
+    Kind kind {};
     std::array<char, 128> label {};
   };
   struct OpenScope {
     std::size_t record {};
-    bool wait {};
+    bool exposure {};
   };
   std::vector<Record> records_;
   std::array<OpenScope, 128> stack_ {};
@@ -48,6 +49,7 @@ private:
   unsigned thread_ {};
   unsigned frame_ {};
   bool invalid_ {};
+  bool detailed_ {};
 };
 
 } // namespace oxygen::vortex::testing::exposure

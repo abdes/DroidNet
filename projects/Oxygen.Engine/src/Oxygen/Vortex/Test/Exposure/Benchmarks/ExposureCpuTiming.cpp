@@ -24,14 +24,15 @@ namespace {
   }
 } // namespace
 
-ExposureCpuTiming::ExposureCpuTiming(const unsigned frames)
+ExposureCpuTiming::ExposureCpuTiming(const unsigned frames, const bool detailed)
   : process_(GetCurrentProcessId())
   , thread_(GetCurrentThreadId())
+  , detailed_(detailed)
 {
   LARGE_INTEGER frequency {};
   QueryPerformanceFrequency(&frequency);
   frequency_ = frequency.QuadPart;
-  records_.reserve(static_cast<std::size_t>(frames) * 64U);
+  records_.reserve(static_cast<std::size_t>(frames) * (detailed ? 128U : 64U));
 }
 
 auto ExposureCpuTiming::BeginFrame(const unsigned sequence) -> void
@@ -51,7 +52,9 @@ auto ExposureCpuTiming::OnScopeBegin(
                           && label != "Vortex.PostProcess.Execute")
     || label == "Vortex.SceneRenderer.PrepareExposureDomain";
   const bool wait = exposure_depth_ != 0U && label == "D3D12.FenceWait";
-  if (!exposure && !wait) {
+  const bool detail = detailed_ && exposure_depth_ != 0U
+    && (label.starts_with("Graphics.") || label.starts_with("D3D12."));
+  if (!exposure && !wait && !detail) {
     return false;
   }
   if (stack_depth_ == stack_.size()) {
@@ -59,7 +62,7 @@ auto ExposureCpuTiming::OnScopeBegin(
     return false;
   }
   auto record = kNoRecord;
-  if (wait || exposure_depth_ == 0U) {
+  if (detailed_ || wait || exposure_depth_ == 0U) {
     if (records_.size() == records_.capacity()
       || label.size() >= Record {}.label.size()
       || label.find_first_of(",\r\n\"") != std::string_view::npos) {
@@ -68,13 +71,15 @@ auto ExposureCpuTiming::OnScopeBegin(
       record = records_.size();
       auto& value = records_.emplace_back();
       value.frame = frame_;
-      value.wait = wait;
+      value.kind = wait         ? Kind::kFenceWait
+        : exposure_depth_ == 0U ? Kind::kExposure
+                                : Kind::kDetail;
       std::memcpy(value.label.data(), label.data(), label.size());
       value.begin = Timestamp();
     }
   }
-  stack_[stack_depth_++] = { record, wait };
-  if (!wait) {
+  stack_[stack_depth_++] = { record, exposure };
+  if (exposure) {
     ++exposure_depth_;
   }
   return true;
@@ -86,7 +91,7 @@ auto ExposureCpuTiming::OnScopeEnd() noexcept -> void
   if (scope.record != kNoRecord) {
     records_[scope.record].end = Timestamp();
   }
-  if (!scope.wait) {
+  if (scope.exposure) {
     --exposure_depth_;
   }
 }
@@ -104,9 +109,12 @@ auto ExposureCpuTiming::Save(const std::filesystem::path& path) const
     if (record.end < record.begin) {
       throw std::runtime_error("Incomplete CPU timing interval");
     }
-    output << record.frame << ',' << thread_ << ','
-           << (record.wait ? "fence_wait" : "exposure") << ',' << record.begin
-           << ',' << record.end << ',' << record.label.data() << '\n';
+    const auto kind = record.kind == Kind::kExposure ? "exposure"
+      : record.kind == Kind::kFenceWait              ? "fence_wait"
+                                                     : "detail";
+    output << record.frame << ',' << thread_ << ',' << kind << ','
+           << record.begin << ',' << record.end << ',' << record.label.data()
+           << '\n';
   }
   output.close();
   if (!output.good()) {
@@ -115,7 +123,7 @@ auto ExposureCpuTiming::Save(const std::filesystem::path& path) const
   return { { "path", path.filename().string() },
     { "qpc_frequency", frequency_ }, { "process_id", process_ },
     { "thread_id", thread_ }, { "records", records_.size() },
-    { "complete", true } };
+    { "complete", true }, { "detailed", detailed_ } };
 }
 
 } // namespace oxygen::vortex::testing::exposure
