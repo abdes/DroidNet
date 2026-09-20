@@ -7,7 +7,7 @@
 - [Shared Python tools](oxytools/README.md): installation and verification for
   oxytidy and oxyformat.
 - [CMake presets](presets/README.md): preset files and generated dependencies.
-- [Codemod](codemod/README.md): rename tooling with patch output.
+- [Codemod](oxytools/docs/codemod.md): rename tooling with patch output.
 
 ## Repository ownership policy
 
@@ -32,10 +32,11 @@ Oxytidy reads this shared policy for ownership validation and checkout discovery
 Its explicit ownership override and target/tool-checkout policy precedence are
 documented in [the oxytidy reference](oxytools/docs/oxytidy.md#select-another-engine-checkout).
 
-The [shared Python distribution](oxytools/README.md) provides both `oxytidy` and
-`oxyformat`. Ownership validation, atomic file writes, and Windows process
-ownership are implemented once in its `oxytools` package. Analysis and formatting
-remain independent command implementations.
+The [shared Python distribution](oxytools/README.md) provides `oxytidy`, `oxyformat`, and
+optional `codemod`. Ownership validation, atomic file writes, and Windows process
+ownership are implemented once in its `oxytools` package. Analysis, formatting, and rename planning
+remain independent command implementations. Codemod uses its explicit root and
+Gitignore/glob selection; `.oxytools.json` ownership applies to oxytidy and oxyformat.
 
 The shared file replaces `.oxytidy.json`; the old filename is no longer discovered
 automatically. Existing custom policies can still be selected explicitly through
