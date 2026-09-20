@@ -261,6 +261,38 @@ struct RendererPublicationProbe {
       std::make_move_iterator(jobs.end()));
   }
 
+  struct ExposureStatusDelivery {
+    ExposureStatusJobs pending;
+    std::optional<PostProcessService::PendingExposureStatus> deferred;
+  };
+
+  // Hide both queues across polling without giving a deferred retry an empty
+  // pending queue to allocate into. Restore before recording to retain
+  // capacity.
+  static auto TakeExposureStatusDelivery(PostProcessService& service,
+    CompositionView::ViewStateHandle handle) -> ExposureStatusDelivery
+  {
+    auto delivery = ExposureStatusDelivery {
+      .pending = TakeExposureStatuses(service, handle),
+    };
+    auto entry = service.deferred_exposure_status_.extract(handle);
+    if (!entry.empty()) {
+      delivery.deferred = std::move(entry.mapped());
+    }
+    return delivery;
+  }
+
+  static auto RestoreExposureStatusDelivery(PostProcessService& service,
+    CompositionView::ViewStateHandle handle, ExposureStatusDelivery delivery)
+    -> void
+  {
+    RestoreExposureStatuses(service, handle, std::move(delivery.pending));
+    if (delivery.deferred) {
+      service.deferred_exposure_status_.insert_or_assign(
+        handle, std::move(*delivery.deferred));
+    }
+  }
+
   static auto GetPostProcessService(SceneRenderer& renderer)
     -> PostProcessService*
   {

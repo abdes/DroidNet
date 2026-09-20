@@ -994,10 +994,14 @@ untimed checkpoints after collection.
 | 900–905; 906 | Queue `kSeedFromEv100, 14.5F` on main. Hold status delivery for six frames with existing `RendererPublicationProbe::TakeExposureStatuses`; restore held jobs with `RestoreExposureStatuses` before frame 906 | GPU seed/adaptation proceeds while CPU acknowledgement is delayed; no stale precision authorization, unbounded retry allocation or CPU wait. |
 
 Acknowledgement delay is test transport control, not a new public rendering API.
-Held jobs are hidden across CPU polling, then restored before submission on
-frames 900–905 to preserve the existing three-job queue capacity. Frame 906
-restores delivery before polling. The script does not create extra retry
-capacity by leaving the service queue empty throughout each held frame.
+Held pending and deferred jobs are hidden across CPU polling, then restored
+before submission on frames 900–905 to preserve the existing three-job queue
+and single deferred slot. Frame 906 restores delivery before polling. The first
+I02 attempt exposed a harness error: hiding only pending jobs let polling enqueue
+a deferred retry before restoration, exceeding the test's bound at frame 904.
+The preserved failure is corrected in the test transport; production queues are
+unchanged. The script does not create extra retry capacity by leaving either
+queue available to polling while its retained counterpart is held externally.
 Reuse the seam in
 [`SceneDelayedStatusCannotAuthorizeStalePrecision`](../../../src/Oxygen/Vortex/Test/Exposure/ScenePrecision_test.cpp).
 Public transition definitions are in

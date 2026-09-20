@@ -161,12 +161,12 @@ auto ExposureBaselineScenario::RenderFrame(const bool start_recording,
     auto* service
       = vortex::testing::RendererPublicationProbe::GetPostProcessService(
         *owner);
-    vortex::testing::RendererPublicationProbe::RestoreExposureStatuses(*service,
+    vortex::testing::RendererPublicationProbe::RestoreExposureStatusDelivery(*service,
       CompositionView::ViewStateHandle {
         500U,
       },
       std::move(held_statuses));
-    held_statuses.clear();
+    held_statuses = {};
   }
   if (moving) {
     UpdatePath(sample_frame);
@@ -182,13 +182,13 @@ auto ExposureBaselineScenario::RenderFrame(const bool start_recording,
       auto* service
         = vortex::testing::RendererPublicationProbe::GetPostProcessService(
           *owner);
-      vortex::testing::RendererPublicationProbe::RestoreExposureStatuses(
+      vortex::testing::RendererPublicationProbe::RestoreExposureStatusDelivery(
         *service,
         CompositionView::ViewStateHandle {
           500U,
         },
         std::move(held_statuses));
-      held_statuses.clear();
+      held_statuses = {};
     }
   }
   if (start_recording) {
