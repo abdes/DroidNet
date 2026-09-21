@@ -7,7 +7,7 @@ Status: `in_progress` — current slice state and evidence are maintained in the
 are updated there; this plan owns the requirements and gates.
 
 Date: 2026-09-16
-Updated: 2026-09-21 — Slices 5.1 and 5.2 closed; Slice 6 remains separately authorized work.
+Updated: 2026-09-21 — Slices 1-6, including 5.1 and 5.2, are closed; EX07 is next and planned.
 
 Paths are relative to `projects/Oxygen.Engine` unless identified as
 repository-root paths.
@@ -34,9 +34,9 @@ For a fresh start or resume, read the tracker's
 [Current work](../IMPLEMENTATION_STATUS.md#31-current-work) for the active
 checkpoint and execution state. Its
 [remaining performance order](../IMPLEMENTATION_STATUS.md#delivery-order-and-ownership)
-is complete. Slices 5.1 and 5.2 closed on 2026-09-21. Slice 6 remains planned
-and separately authorized. Do not restart completed items from historical
-milestone or manifest instructions.
+is complete. Slices 1-6, including 5.1 and 5.2, are closed. EX07 is the next
+planned slice; implementation has not started. Do not restart completed items
+from historical milestone or manifest instructions.
 
 The [exposure reference companion](../lld/exposure-improvement-plan.md) contains
 UE source pointers and Oxygen's implementation choices. This document owns
@@ -99,7 +99,7 @@ The implementation slices then consume those written contracts.
 | Metering/adaptation (3) | CPU oracle and known-distribution GPU fixture                             | Sampling, conserved weights and time integration    |
 | Lifecycle (4)           | Owner-only state update and generation tests using controlled float input | Senior review of ownership and GPU lifetime         |
 | HDR integration (5)     | Frame binding plus opaque/emissive pre-exposure invariant test            | Senior review of domains, formats and barriers      |
-| Persistence (6)         | One old-record/new-record round-trip test                                 | Record layout and resource-reference compatibility  |
+| Persistence (6)         | Current-record round-trip and old-version rejection                       | Record layout and resource-reference integrity      |
 | Light units (7)         | Point flux conversion and inverse-square test                             | Physical units and shared forward/deferred behavior |
 | Measurements (8)        | One known-float region readback                                           | GPU identity, lifetime and error budget             |
 | Bench/runner (9-10)     | Neutral Reference recipe and deterministic reset                          | UI clarity and reproducibility                      |
@@ -603,10 +603,11 @@ defaults explicitly named while using one normalization/validation function.
 
 Round-trip through source schemas, cooker, versioned packed environment records,
 loader hydration, scripting, relevant managed/editor adapters, and DemoShell.
-Older records receive deterministic defaults for new fields. Preserve existing
-enum ordinals and authored values; reject malformed coupled settings atomically.
-Version packed layouts and use record-size/version handling rather than
-reinterpreting older bytes. Runtime transition generations and GPU history are
+The user requires a strict scene-v6 cutover: all producers and consumers migrate
+together. Reject older sources/assets with an actionable migration/re-cook error;
+retain no compatibility decoder, fallback hydration, legacy layout or migration
+shim. Preserve enum ordinals and authored values; reject malformed coupled
+settings atomically. Validate the one current packed layout and its version. Runtime transition generations and GPU history are
 not serialized.
 
 Masks use an authored texture path, cooked source-local texture indices, PAK
@@ -800,7 +801,7 @@ the owning module; use the existing native fixture and capture tools for GPU tes
 | 3     | `Vortex/PostProcess/Types/PostProcessConfig.h`, `PostProcess/Passes/ExposurePass.*`; shader `Services/PostProcess/Exposure.hlsl`                                                                     | Known two-bin distribution and hybrid trajectory                                                     |
 | 4     | `Vortex/CompositionView.h`, `Internal/ViewLifecycleService.*`, `PostProcess/PostProcessService.*`, `ExposurePass.*`                                                                                  | One source update and idempotent event generation                                                    |
 | 5     | `Vortex/Types/ExposureStateData.h`, `Types/ViewFrameBindings.h`, `SceneRenderer/SceneTextures.*`, `Stages/InitViews/InitViewsModule.cpp`; shader families in section 4.4                             | Opaque/emissive output invariant under a change of P                                                 |
-| 6     | `Scene/Environment/PostProcessVolume.h`, `Data/PakFormat_world.h`, `Data/PakFormatSerioLoaders.h`, cooker schemas, `Scripting/Bindings/Packs/Scene/SceneEnvironmentBindings.cpp`, DemoShell services | One new record and one old record resolve correctly                                                  |
+| 6     | `Scene/Environment/PostProcessVolume.h`, `Data/PakFormat_world.h`, `Data/PakFormatSerioLoaders.h`, cooker schemas, `Scripting/Bindings/Packs/Scene/SceneEnvironmentBindings.cpp`, DemoShell services | Current records round-trip; obsolete records are rejected                                            |
 | 7     | `Vortex/Lighting/Internal/DeferredLightPacketBuilder.cpp`; shader `Services/Lighting/DeferredLightingCommon.hlsli` and `ForwardDirectLighting.hlsli`                                                 | Point flux and spot angular integral match independent values                                        |
 | 8     | `Vortex/Diagnostics/DiagnosticsService.*`, `SceneRenderer/SceneTextures.*` and existing extraction/readback owners                                                                                   | Known float region readback has the correct frame/view                                               |
 | 9-10  | `Examples/LightBench/LightScene.*`, `MainModule.*`, `LightBenchPanel.*`, `main_impl.cpp`; `Examples/MultiView/MainModule.*`, `SceneBootstrapper.*`, `main_impl.cpp`; `tools/vortex/`                 | LightBench reset/batch inputs match; every MultiView lit pane passes image/exposure isolation checks |
@@ -1021,27 +1022,154 @@ remain closed.
 
 **Gate:** the agreed residual fixes are resolved, changed code is tidy-clean,
 necessary affected checks pass, and existing contracts and accepted performance
-are preserved. Slice 6 starts only after this bounded gate and separate work
-authorization. That next slice has not started.
+are preserved.
 
 ### Slice 6 - Finish authoring, serialization and configuration isolation
 
+**Closed 2026-09-21.** Source/cook/package/load/script/editor integration, strict
+current-format cutover, C++20 editor boundary and rendered DemoShell acceptance
+are qualified. The [item tracker](../IMPLEMENTATION_STATUS.md#33-slice-6-work-items)
+and [local evidence](../../../out/build-ninja/analysis/vortex/exposure-lightbench/slice6/slice6-progress.json)
+record validation. The TexturedCube assignment/panel-refresh regression is
+unit-tested and confirmed fixed by the user's rebuilt-app test. Console commands
+and ImGui Test Engine support remain a separate future slice.
+
 - Include native aperture/shutter/ISO source/cook/load persistence, as
   approved on 2026-09-16. Scene-v6 perspective/orthographic records are 32/40
-  bytes; v5 20/28-byte records hydrate 11/125/100 defaults. Existing editor
+  bytes. Older source/asset versions are rejected; new cameras default to
+  11/125/100. Existing editor
   adapters preserve the fields; physical-camera editor controls stay deferred.
 - Update source JSON schemas, scene component/config types, versioned packed
   records, cooker, loader, scripting and existing editor/native adapters.
 - Round-trip mask resource references, curve keys, black influence, D and
-  every existing exposure field; preserve enum ordinals and old-record defaults.
+  every existing exposure field; preserve enum ordinals and current authoring defaults.
 - Add async mask residency/error behavior and atomic settings revision changes.
 - Update DemoShell controls and labels; expose requested/effective exposure
   separately and show resource/metering failures.
 - Add the LightBench experiment-owned activation policy so saved settings
   cannot override its camera, scene or post-process recipe.
 
+#### Repository-wide strict format cutover
+
+**User direction, 2026-09-21: no backward compatibility or retained legacy code.**
+This supersedes the original v5-hydration contract. Scene descriptor sources and
+cooked scene assets use v6 only. Do not retain v5 readers, default-hydration
+branches, alternate record types or compatibility shims. Obsolete inputs fail
+with concise, actionable migration/re-cook diagnostics.
+
+Synchronize all affected producers and consumers before closure: native packed
+records and Serio code, cooker/PAK dependency remapping, Content and SceneAsset
+loaders, PakGen/PakDump/Inspector and their schemas, scripts/fixture generators,
+managed/editor/scripting adapters, every example/demo and shipped scene source.
+Regenerate affected current-format generated/golden assets through their owning
+tools. Retain old-version byte samples only as rejection tests, never acceptance
+fixtures or a supported read path. Verify each affected surface against the new
+layout and record the checks; a successful engine build alone cannot close this
+repository-wide requirement.
+
+PakGen source specifications use v7 only; obsolete v6 acceptance and older
+version aliases are removed. Scene payloads use v6 independently of the PAK
+container/specification version. The editor dependency snapshot and manifest
+flow must include authored metering-mask texture descriptors and their image
+sources, so masks cannot disappear between scene save and native cooking.
+
+PAK inputs use the same resource/dependency planning path as loose sources.
+Directory-only projection is not a supported repacking path. Use bounded source-file slices for current resource tables and
+payloads, retain script parameter ownership, and remap source-local references
+after final placement. Reserve index zero when patch filtering removes an
+input's null record. Qualify loose-to-PAK-to-PAK mask preservation and multiple
+input sources; do not emit a successful package with missing resource regions.
+Script parameter payloads must follow the same owner/slot order as patch slot
+records, even when source offsets use a different physical order. The public
+PakGen file APIs must validate the supplied specification version without
+replacing it before validation. Current descriptor versions are material 2,
+geometry 1 and scene 6, matching their native definitions.
+
+#### Approved editor SDK boundary repair
+
+The user approved repairing engine public headers on 2026-09-21 after the
+installed compiler confirmed that C++/CLI cannot consume C++23 declarations.
+Use the existing typed `oxygen::Result` for public exposure validation results.
+Expose submission callbacks through a C++20-compatible, move-only owning callback
+with inline storage; preserve exactly-once submission/discard behavior and
+exception isolation. Lift published environment diagnostics out of the private
+SceneRenderer definition so Renderer clients do not include retained-pool internals.
+No C++/CLI language-mode workaround, shared-ownership conversion, legacy overload
+or warning suppression is permitted. Qualify lifetime behavior with the existing
+submission tests and the installed editor build.
+
+#### Scripting exposure transport
+
+Post-process `get`/`set` round-trip every authored exposure scalar and ordered
+curve key. `set` validates one complete candidate and rejects it without partial
+mutation. It returns `false, reason` and logs one warning for an invalid edit.
+ManualCamera defers camera-dependent gain validation to the active view.
+The runtime `auto_exposure_metering_mask` field carries the existing uint64
+ResourceKey as a decimal string (`"0"` clears it), preserving all identity bits
+across Luau's numeric boundary. This is a runtime handle representation, not a
+persisted GPU descriptor or asset UUID. Source descriptors continue to author a
+texture virtual path, and cooked scenes continue to store a source-local index.
+
+LightBench startup must author its camera pose, post-process state and a usable
+reference light explicitly. Experiment-owned activation cannot depend on saved
+camera/environment state to make the reference cards visible. Its scene-control
+panel follows the same transient ownership policy. This establishes a stable
+initial scene; it does not implement or qualify the later experiment registry.
+LightBench must publish a persistent main-view state, using the existing
+RenderScene lifetime pattern: retire the old publication when the scene/camera
+owner changes and at shutdown. A stateless view cannot support the authoring
+panel's accepted-state reporting or temporal automatic adaptation.
+
+#### DemoShell user scenarios and implementation quality
+
+The acceptance run also qualifies ordinary demo startup at warning verbosity.
+Demo applications resolve hot-reload scripts from their existing example content
+root. Missing optional profiling CVars and valid scenes without a directional
+sun are verbose diagnostics, not warnings. Explicit source failures remain
+warnings/errors; no console feature or Test Engine integration is added here.
+
+The user requires a scenario-driven logic and UI review for EX06-08/09, not
+mechanical exposure of persistence fields. Review the existing native panel and
+activation/settings owners together, using fresh rendered evidence for visual
+claims. Keep the existing DemoShell design language and reduce cognitive load.
+
+- Open an authored scene: make the current mode, effective behavior and ownership
+  understandable without repeating the same values in several places.
+- Change mode or exposure: show relevant controls and units, give predictable
+  feedback, and preserve valid settings while a coupled edit is invalid.
+- Request a mask: distinguish pending, accepted and failed resources; explain
+  which settings remain active and provide a clear recovery action.
+- Switch scenes or return to an ordinary demo: apply the correct scene/user
+  ownership policy without stale overrides or unexpected resets.
+- Activate or reset an experiment: apply the complete recipe coherently, keep
+  unrelated personal preferences, and make reset scope clear.
+- Assign textures, import another texture and switch panels: keep source-qualified
+  assignments reloadable, and avoid cache invalidation for an unchanged browser
+  refresh. Same-path external-file extent updates refresh metadata; conflicting
+  file mappings retain their collision policy.
+- Run a batch: preserve personal settings and avoid requiring UI intervention.
+
+Use progressive disclosure for advanced controls such as transition distance,
+consistent alignment/spacing, and precise labels. Verify keyboard interaction,
+focus, narrow panel layouts, disabled controls and error/status presentation in
+the actual UI; do not infer visual usability solely from source code.
+
+Use named constants for meaningful limits, shared defaults and wire contracts,
+not incidental literals. Apply schema validation where expressible and canonical
+validation for coupled/runtime constraints. Reject nonfinite/out-of-range values,
+invalid enum values and malformed packed boundaries before partial application.
+Any new enum follows repository naming, underlying-type and ADL `to_string`
+pretty-printing conventions, including unknown-value behavior.
+
+Log meaningful actions/state changes at INFO, recoverable rejections at WARNING,
+and failures at ERROR. Include concise asset/view/revision, field and reason
+context, and whether prior accepted state was retained. Reuse existing diagnostic
+owners; avoid per-frame repetition, logs for each drag sample, duplicate logging
+across layers, and serialized settings dumps.
+
 **Gate:** source -> cook -> load -> runtime and save/reload retain identical
-resolved settings. Old assets load deterministically. Batch runs do not mutate
+resolved settings. Every affected tool and demo uses the new format; obsolete
+versions/layouts are rejected without compatibility code. Batch runs do not mutate
 personal settings.
 
 ### Slice 7 - Complete the reference lighting unit chain
@@ -1121,7 +1249,7 @@ required cases block package completion.
 | Lifecycle                    | First valid frame; seed frame and out-of-meter-range seeds; cuts; changed settings; manual/auto; zero target precedence/restoration; invalid meter; retries; view destruction; device recovery; stateless Auto |
 | Sharing                      | Both render orders; contrasting views; source startup/inactivity/reset; source destruction and consumer-owned fallback transition; cycle rejection; multiple frames in flight                                  |
 | HDR domains                  | P invariance; FP32 bootstrap and delayed/stale status acknowledgment; bright/dark endpoints; opaque, emissive, forward, translucency, sky/AP/fog, bloom, capture and reused histories                          |
-| Authoring                    | Schema boundaries; old/new packed records; cook/load/save/reload; mask pending/failure; curve round-trip; experiment-owned activation                                                                          |
+| Authoring                    | Schema boundaries; current packed records and obsolete-format rejection; cook/load/save/reload; mask pending/failure; curve round-trip; experiment-owned activation                                            |
 | Calibration                  | Directional lux; point inverse square; spot flux normalization; near-field finite behavior; range/cone edges; production BRDF                                                                                  |
 | Instruments                  | Known float signals; actual consumed gain; stale results; invalid regions; zero disabled cost                                                                                                                  |
 | LightBench visual benchmark  | All seven experiments, clean startup, full reset, saved experiments, identical interactive/batch inputs, readable native output and correct interactive exposure behavior                                      |
@@ -1241,7 +1369,7 @@ serve the specified behavior without adopting UE's legacy compatibility paths.
 - [ ] All lifecycle and shared/stateless policies are implemented and tested.
 - [ ] Every active HDR path uses frame-pinned P and final S/P consistently.
 - [ ] Bootstrap and numerical recovery preserve valid bright/dark metering signals.
-- [ ] Authored fields round-trip through all active persistence surfaces.
+- [x] Authored fields round-trip through all active persistence surfaces (EX06).
 - [ ] Directional, point and spot reference units and material expectations pass.
 - [ ] LightBench is a properly repaired, visually useful exposure benchmark;
       all seven experiments pass numerical, interactive and visual acceptance.
