@@ -15,6 +15,7 @@
 namespace oxygen::physics::jolt {
 
 auto GetBackendName() noexcept -> std::string_view;
-auto CreatePhysicsSystem() -> PhysicsResult<std::unique_ptr<system::IPhysicsSystem>>;
+auto CreatePhysicsSystem()
+  -> PhysicsResult<std::unique_ptr<system::IPhysicsSystem>>;
 
 } // namespace oxygen::physics::jolt

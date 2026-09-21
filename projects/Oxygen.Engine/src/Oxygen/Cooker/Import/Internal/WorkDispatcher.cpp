@@ -90,8 +90,7 @@ namespace {
     [[nodiscard]] virtual auto HasReady() const -> bool = 0;
 
     [[nodiscard]] virtual auto NextReady(const KindAvailability& availability)
-      -> std::optional<PlanItemId>
-      = 0;
+      -> std::optional<PlanItemId> = 0;
   };
 
   //! Round-robin submission strategy that skips full kinds.

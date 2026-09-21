@@ -478,8 +478,7 @@ namespace {
       storage.partitions.assign(partitions.begin(), partitions.end());
       prepared_frame.partitions = storage.partitions;
 
-      const auto draw_bounding_spheres
-        = draw_emitter->GetDrawBoundingSpheres();
+      const auto draw_bounding_spheres = draw_emitter->GetDrawBoundingSpheres();
       storage.draw_bounding_spheres.assign(
         draw_bounding_spheres.begin(), draw_bounding_spheres.end());
       prepared_frame.draw_bounding_spheres = storage.draw_bounding_spheres;

@@ -25,14 +25,14 @@ auto DiagnosticsConfig::Default() noexcept -> DiagnosticsConfig
   };
 #else
   return DiagnosticsConfig {
-    .default_features = DiagnosticsFeature::kFrameLedger
-      | DiagnosticsFeature::kShaderDebugModes,
+    .default_features
+    = DiagnosticsFeature::kFrameLedger | DiagnosticsFeature::kShaderDebugModes,
   };
 #endif
 }
 
-DiagnosticsService::DiagnosticsService(const CapabilitySet renderer_capabilities,
-  const DiagnosticsConfig config)
+DiagnosticsService::DiagnosticsService(
+  const CapabilitySet renderer_capabilities, const DiagnosticsConfig config)
   : renderer_capabilities_(renderer_capabilities)
   , requested_features_(config.default_features)
   , enabled_features_(ComputeEffectiveFeatures())
@@ -80,8 +80,8 @@ auto DiagnosticsService::GetEnabledFeatures() const -> DiagnosticsFeatureSet
   return enabled_features_;
 }
 
-auto DiagnosticsService::SetShaderDebugMode(
-  const ShaderDebugMode mode) noexcept -> void
+auto DiagnosticsService::SetShaderDebugMode(const ShaderDebugMode mode) noexcept
+  -> void
 {
   std::scoped_lock lock(mutex_);
   shader_debug_mode_ = mode;
@@ -234,16 +234,17 @@ auto DiagnosticsService::SyncGpuTimelineDiagnostics() -> void
   RefreshLedgerState();
 }
 
-auto DiagnosticsService::ExportCaptureManifest(const std::filesystem::path& path,
+auto DiagnosticsService::ExportCaptureManifest(
+  const std::filesystem::path& path,
   const DiagnosticsCaptureManifestOptions& options) -> bool
 {
   try {
     WriteDiagnosticsCaptureManifest(path, GetLatestSnapshot(), options);
     return true;
   } catch (const std::exception& ex) {
-    auto issue = MakeDiagnosticsIssue(
-      DiagnosticsIssueCode::kManifestWriteFailed, DiagnosticsSeverity::kError,
-      ex.what());
+    auto issue
+      = MakeDiagnosticsIssue(DiagnosticsIssueCode::kManifestWriteFailed,
+        DiagnosticsSeverity::kError, ex.what());
     issue.product_name = "Vortex.DiagnosticsCaptureManifest";
     ReportIssue(std::move(issue));
     return false;
@@ -302,8 +303,8 @@ auto DiagnosticsService::GetLatestSnapshot() const -> DiagnosticsFrameSnapshot
 auto DiagnosticsService::ComputeEffectiveFeatures() const noexcept
   -> DiagnosticsFeatureSet
 {
-  if (!HasAllCapabilities(
-        renderer_capabilities_, RendererCapabilityFamily::kDiagnosticsAndProfiling)) {
+  if (!HasAllCapabilities(renderer_capabilities_,
+        RendererCapabilityFamily::kDiagnosticsAndProfiling)) {
     return DiagnosticsFeature::kNone;
   }
   return requested_features_;

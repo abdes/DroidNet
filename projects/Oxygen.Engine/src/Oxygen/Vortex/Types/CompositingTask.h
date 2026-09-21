@@ -74,9 +74,8 @@ struct CompositingTask {
     };
   }
 
-  [[nodiscard]] static auto MakeBlend(
-    ViewId view_id, ViewPort viewport, float alpha, std::string debug_name = {})
-    -> CompositingTask
+  [[nodiscard]] static auto MakeBlend(ViewId view_id, ViewPort viewport,
+    float alpha, std::string debug_name = {}) -> CompositingTask
   {
     return CompositingTask {
       .type = CompositingTaskType::kBlend,

@@ -211,10 +211,9 @@ auto UploadTracker::OnFrameStart(UploaderTag /*tag*/, frame::Slot slot) -> void
     // Frame-slot recycling removes entries created in the recycled slot.
     // Notify waiting threads if anything was erased so they can observe
     // TicketNotFound instead of blocking on stale predicates.
-    erased = std::erase_if(entries_,
-      [slot](const auto& pair) -> bool {
-        return pair.second.creation_slot == slot;
-      });
+    erased = std::erase_if(entries_, [slot](const auto& pair) -> bool {
+      return pair.second.creation_slot == slot;
+    });
   }
   if (erased != 0U) {
     cv_.notify_all();

@@ -17,35 +17,35 @@ namespace oxygen::vortex {
 class Renderer;
 
 namespace postprocess::internal {
-class BloomChain;
+  class BloomChain;
 } // namespace postprocess::internal
 
 namespace postprocess {
 
-class BloomPass {
-public:
-  struct Result {
-    bool requested { false };
-    bool executed { false };
-    ShaderVisibleIndex bloom_texture_srv { kInvalidShaderVisibleIndex };
+  class BloomPass {
+  public:
+    struct Result {
+      bool requested { false };
+      bool executed { false };
+      ShaderVisibleIndex bloom_texture_srv { kInvalidShaderVisibleIndex };
+    };
+
+    OXGN_VRTX_API explicit BloomPass(Renderer& renderer);
+    OXGN_VRTX_API ~BloomPass();
+
+    BloomPass(const BloomPass&) = delete;
+    auto operator=(const BloomPass&) -> BloomPass& = delete;
+    BloomPass(BloomPass&&) = delete;
+    auto operator=(BloomPass&&) -> BloomPass& = delete;
+
+    [[nodiscard]] OXGN_VRTX_API auto Execute(
+      const ResolvedPostProcessConfig& config,
+      const PostProcessFrameBindings& bindings) const -> Result;
+
+  private:
+    Renderer& renderer_;
+    std::unique_ptr<internal::BloomChain> bloom_chain_;
   };
-
-  OXGN_VRTX_API explicit BloomPass(Renderer& renderer);
-  OXGN_VRTX_API ~BloomPass();
-
-  BloomPass(const BloomPass&) = delete;
-  auto operator=(const BloomPass&) -> BloomPass& = delete;
-  BloomPass(BloomPass&&) = delete;
-  auto operator=(BloomPass&&) -> BloomPass& = delete;
-
-  [[nodiscard]] OXGN_VRTX_API auto Execute(
-    const ResolvedPostProcessConfig& config,
-    const PostProcessFrameBindings& bindings) const -> Result;
-
-private:
-  Renderer& renderer_;
-  std::unique_ptr<internal::BloomChain> bloom_chain_;
-};
 
 } // namespace postprocess
 

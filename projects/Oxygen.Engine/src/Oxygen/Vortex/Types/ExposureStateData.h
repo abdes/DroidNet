@@ -173,7 +173,8 @@ static_assert(offsetof(ExposureStatusStorage, scene_error) == 256U);
 static_assert(offsetof(ExposureStatusStorage, candidate_errors) == 304U);
 static_assert(sizeof(HdrConsumerInputData) == 16U);
 static_assert(offsetof(ExposureStatusStorage, consumer_inputs) == 352U);
-static_assert(offsetof(ExposureStatusStorage, product_reference_rgb_max) == 368U);
+static_assert(
+  offsetof(ExposureStatusStorage, product_reference_rgb_max) == 368U);
 static_assert(sizeof(ExposureStatusStorage) == 384U);
 static_assert(std::is_standard_layout_v<ExposureStatusStorage>);
 

@@ -41,7 +41,7 @@ TransformUploader::TransformUploader(const observer_ptr<Graphics> gfx,
         return bindless::HeapIndex { frame_write_count_ };
       },
       [](oxygen::nexus::DomainKey /*domain*/,
-        bindless::HeapIndex /*index*/) -> void {},
+        bindless::HeapIndex /*index*/) -> void { },
       slot_reclaimer_)
   , worlds_buffer_(gfx_, *staging_provider_,
       static_cast<std::uint32_t>(sizeof(glm::mat4)), inline_transfers_,
@@ -108,9 +108,8 @@ auto TransformUploader::GetOrAllocate(const glm::mat4& transform)
   return GetOrAllocate(transform, transform);
 }
 
-auto TransformUploader::GetOrAllocate(
-  const glm::mat4& transform, const glm::mat4& previous_transform)
-  -> vortex::sceneprep::TransformHandle
+auto TransformUploader::GetOrAllocate(const glm::mat4& transform,
+  const glm::mat4& previous_transform) -> vortex::sceneprep::TransformHandle
 {
   DCHECK_F(transforms::IsFinite(transform),
     "GetOrAllocate received non-finite matrix");
@@ -208,8 +207,8 @@ auto TransformUploader::EnsureFrameResources() -> void
     return;
   }
   if (!pw_alloc.TryWriteRange(std::span { previous_transforms_ })) {
-    LOG_F(ERROR,
-      "Failed to write previous world transforms into transient buffer");
+    LOG_F(
+      ERROR, "Failed to write previous world transforms into transient buffer");
     return;
   }
   if (!n_alloc.TryWriteRange(std::span { normal_matrices_ })) {

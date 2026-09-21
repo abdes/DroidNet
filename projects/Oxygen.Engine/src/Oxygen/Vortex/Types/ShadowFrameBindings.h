@@ -12,21 +12,20 @@
 
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Constants.h>
-#include <glm/vec4.hpp>
 #include <Oxygen/Vortex/Shadows/Types/PointShadowBinding.h>
 #include <Oxygen/Vortex/Shadows/Types/ShadowCascadeBinding.h>
 #include <Oxygen/Vortex/Shadows/Types/SpotShadowBinding.h>
+#include <glm/vec4.hpp>
 
 namespace oxygen::vortex {
 
-inline constexpr std::uint32_t kShadowTechniqueDirectionalConventional
-  = 1U << 0U;
+inline constexpr std::uint32_t kShadowTechniqueDirectionalConventional = 1U
+  << 0U;
 inline constexpr std::uint32_t kShadowTechniqueSpotConventional = 1U << 1U;
 inline constexpr std::uint32_t kShadowTechniquePointConventional = 1U << 2U;
-inline constexpr std::uint32_t kShadowSamplingContractTexture2DArray
-  = 1U << 0U;
-inline constexpr std::uint32_t kShadowSamplingContractTextureCubeArray
-  = 1U << 1U;
+inline constexpr std::uint32_t kShadowSamplingContractTexture2DArray = 1U << 0U;
+inline constexpr std::uint32_t kShadowSamplingContractTextureCubeArray = 1U
+  << 1U;
 
 //! Bindless directional conventional-shadow routing payload for one view.
 struct alignas(packing::kShaderDataFieldAlignment) ShadowFrameBindings {

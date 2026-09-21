@@ -20,8 +20,8 @@ auto GeneratePointLightProxySphereVertices() -> std::vector<glm::vec4>
 
   const auto ring_vertex
     = [](const std::uint32_t ring, const std::uint32_t slice) -> glm::vec4 {
-    const auto phi = std::numbers::pi_v<float> * static_cast<float>(ring)
-      / static_cast<float>(kStacks);
+    const auto phi = std::numbers::pi_v<float>
+      * static_cast<float>(ring) / static_cast<float>(kStacks);
     const auto theta
       = kTwoPi * static_cast<float>(slice) / static_cast<float>(kSlices);
     const auto sin_phi = std::sin(phi);

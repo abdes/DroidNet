@@ -43,9 +43,8 @@ struct CompositionView {
 
   using ViewStateHandle = NamedType<uint64_t, struct ViewStateHandleTag,
     Comparable, Hashable, Printable>;
-  static constexpr ViewStateHandle kInvalidViewStateHandle {
-    (std::numeric_limits<ViewStateHandle::UnderlyingType>::max)()
-  };
+  static constexpr ViewStateHandle kInvalidViewStateHandle { (
+    std::numeric_limits<ViewStateHandle::UnderlyingType>::max)() };
 
   struct ViewRenderSettings {
     std::optional<RenderMode> render_mode;
@@ -142,8 +141,8 @@ struct CompositionView {
     std::function<void(graphics::CommandRecorder&)> record {};
   };
 
-  using AuxOutputId = NamedType<uint64_t, struct AuxOutputIdTag,
-    Comparable, Hashable, Printable>;
+  using AuxOutputId = NamedType<uint64_t, struct AuxOutputIdTag, Comparable,
+    Hashable, Printable>;
 
   enum class AuxOutputKind : std::uint8_t {
     kColorTexture,

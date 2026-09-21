@@ -26,101 +26,102 @@ namespace oxygen::vortex::environment {
 
 namespace {
 
-namespace bindless_d3d12 = oxygen::bindless::generated::d3d12;
+  namespace bindless_d3d12 = oxygen::bindless::generated::d3d12;
 
-constexpr std::uint32_t kThreadGroupSizeX = 8U;
-constexpr std::uint32_t kThreadGroupSizeY = 8U;
+  constexpr std::uint32_t kThreadGroupSizeX = 8U;
+  constexpr std::uint32_t kThreadGroupSizeY = 8U;
 
-auto RangeTypeToViewType(const bindless_d3d12::RangeType type)
-  -> graphics::ResourceViewType
-{
-  using graphics::ResourceViewType;
-  switch (type) {
-  case bindless_d3d12::RangeType::SRV:
-    return ResourceViewType::kRawBuffer_SRV;
-  case bindless_d3d12::RangeType::Sampler:
-    return ResourceViewType::kSampler;
-  case bindless_d3d12::RangeType::UAV:
-    return ResourceViewType::kRawBuffer_UAV;
-  default:
-    return ResourceViewType::kNone;
+  auto RangeTypeToViewType(const bindless_d3d12::RangeType type)
+    -> graphics::ResourceViewType
+  {
+    using graphics::ResourceViewType;
+    switch (type) {
+    case bindless_d3d12::RangeType::SRV:
+      return ResourceViewType::kRawBuffer_SRV;
+    case bindless_d3d12::RangeType::Sampler:
+      return ResourceViewType::kSampler;
+    case bindless_d3d12::RangeType::UAV:
+      return ResourceViewType::kRawBuffer_UAV;
+    default:
+      return ResourceViewType::kNone;
+    }
   }
-}
 
-auto BuildVortexRootBindings() -> std::vector<graphics::RootBindingItem>
-{
-  std::vector<graphics::RootBindingItem> bindings;
-  bindings.reserve(bindless_d3d12::kRootParamTableCount);
+  auto BuildVortexRootBindings() -> std::vector<graphics::RootBindingItem>
+  {
+    std::vector<graphics::RootBindingItem> bindings;
+    bindings.reserve(bindless_d3d12::kRootParamTableCount);
 
-  for (std::uint32_t index = 0; index < bindless_d3d12::kRootParamTableCount;
-    ++index) {
-    const auto& desc = bindless_d3d12::kRootParamTable.at(index);
-    graphics::RootBindingDesc binding {};
-    binding.binding_slot_desc.register_index = desc.shader_register;
-    binding.binding_slot_desc.register_space = desc.register_space;
-    binding.visibility = graphics::ShaderStageFlags::kAll;
+    for (std::uint32_t index = 0; index < bindless_d3d12::kRootParamTableCount;
+      ++index) {
+      const auto& desc = bindless_d3d12::kRootParamTable.at(index);
+      graphics::RootBindingDesc binding {};
+      binding.binding_slot_desc.register_index = desc.shader_register;
+      binding.binding_slot_desc.register_space = desc.register_space;
+      binding.visibility = graphics::ShaderStageFlags::kAll;
 
-    switch (desc.kind) {
-    case bindless_d3d12::RootParamKind::DescriptorTable: {
-      graphics::DescriptorTableBinding table {};
-      if (desc.ranges_count > 0U && desc.ranges.data() != nullptr) {
-        const auto& range = desc.ranges.front();
-        table.view_type = RangeTypeToViewType(
-          static_cast<bindless_d3d12::RangeType>(range.range_type));
-        table.base_index = range.base_register;
-        table.count
-          = range.num_descriptors
+      switch (desc.kind) {
+      case bindless_d3d12::RootParamKind::DescriptorTable: {
+        graphics::DescriptorTableBinding table {};
+        if (desc.ranges_count > 0U && desc.ranges.data() != nullptr) {
+          const auto& range = desc.ranges.front();
+          table.view_type = RangeTypeToViewType(
+            static_cast<bindless_d3d12::RangeType>(range.range_type));
+          table.base_index = range.base_register;
+          table.count = range.num_descriptors
               == (std::numeric_limits<std::uint32_t>::max)()
             ? (std::numeric_limits<std::uint32_t>::max)()
             : range.num_descriptors;
+        }
+        binding.data = table;
+        break;
       }
-      binding.data = table;
-      break;
+      case bindless_d3d12::RootParamKind::CBV:
+        binding.data = graphics::DirectBufferBinding {};
+        break;
+      case bindless_d3d12::RootParamKind::RootConstants:
+        binding.data
+          = graphics::PushConstantsBinding { .size = desc.constants_count };
+        break;
+      }
+
+      bindings.emplace_back(binding);
     }
-    case bindless_d3d12::RootParamKind::CBV:
-      binding.data = graphics::DirectBufferBinding {};
-      break;
-    case bindless_d3d12::RootParamKind::RootConstants:
-      binding.data
-        = graphics::PushConstantsBinding { .size = desc.constants_count };
-      break;
+
+    return bindings;
+  }
+
+  auto BuildPipelineDesc() -> graphics::ComputePipelineDesc
+  {
+    auto root_bindings = BuildVortexRootBindings();
+    return graphics::ComputePipelineDesc::Builder {}
+      .SetComputeShader(graphics::ShaderRequest {
+        .stage = ShaderType::kCompute,
+        .source_path
+        = "Vortex/Services/Environment/AtmosphereTransmittanceLut.hlsl",
+        .entry_point = "VortexAtmosphereTransmittanceLutCS",
+      })
+      .SetRootBindings(std::span<const graphics::RootBindingItem>(
+        root_bindings.data(), root_bindings.size()))
+      .SetDebugName("Vortex.Environment.AtmosphereTransmittanceLut")
+      .Build();
+  }
+
+  auto TrackTextureFromKnownOrInitial(graphics::CommandRecorder& recorder,
+    const graphics::Texture& texture) -> void
+  {
+    if (recorder.IsResourceTracked(texture)
+      || recorder.AdoptKnownResourceState(texture)) {
+      return;
     }
 
-    bindings.emplace_back(binding);
+    auto initial = texture.GetDescriptor().initial_state;
+    if (initial == graphics::ResourceStates::kUnknown
+      || initial == graphics::ResourceStates::kUndefined) {
+      initial = graphics::ResourceStates::kCommon;
+    }
+    recorder.BeginTrackingResourceState(texture, initial, true);
   }
-
-  return bindings;
-}
-
-auto BuildPipelineDesc() -> graphics::ComputePipelineDesc
-{
-  auto root_bindings = BuildVortexRootBindings();
-  return graphics::ComputePipelineDesc::Builder {}
-    .SetComputeShader(graphics::ShaderRequest {
-      .stage = ShaderType::kCompute,
-      .source_path = "Vortex/Services/Environment/AtmosphereTransmittanceLut.hlsl",
-      .entry_point = "VortexAtmosphereTransmittanceLutCS",
-    })
-    .SetRootBindings(std::span<const graphics::RootBindingItem>(
-      root_bindings.data(), root_bindings.size()))
-    .SetDebugName("Vortex.Environment.AtmosphereTransmittanceLut")
-    .Build();
-}
-
-auto TrackTextureFromKnownOrInitial(graphics::CommandRecorder& recorder,
-  const graphics::Texture& texture) -> void
-{
-  if (recorder.IsResourceTracked(texture) || recorder.AdoptKnownResourceState(texture)) {
-    return;
-  }
-
-  auto initial = texture.GetDescriptor().initial_state;
-  if (initial == graphics::ResourceStates::kUnknown
-    || initial == graphics::ResourceStates::kUndefined) {
-    initial = graphics::ResourceStates::kCommon;
-  }
-  recorder.BeginTrackingResourceState(texture, initial, true);
-}
 
 } // namespace
 
@@ -222,7 +223,8 @@ auto AtmosphereTransmittanceLutPass::Record(RenderContext& ctx,
     },
   };
   auto constants_alloc = pass_constants_buffer_.Allocate(1U);
-  if (!constants_alloc.has_value() || !constants_alloc->TryWriteObject(constants)) {
+  if (!constants_alloc.has_value()
+    || !constants_alloc->TryWriteObject(constants)) {
     return state;
   }
 
@@ -232,18 +234,18 @@ auto AtmosphereTransmittanceLutPass::Record(RenderContext& ctx,
   if (!recorder) {
     return state;
   }
-  renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(
-    *recorder);
+  renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(*recorder);
 
   const auto& texture = *cache.GetTransmittanceTexture();
   TrackTextureFromKnownOrInitial(*recorder, texture);
-  recorder->RequireResourceState(texture, graphics::ResourceStates::kUnorderedAccess);
+  recorder->RequireResourceState(
+    texture, graphics::ResourceStates::kUnorderedAccess);
   recorder->FlushBarriers();
 
   recorder->SetPipelineState(BuildPipelineDesc());
   recorder->SetComputeRoot32BitConstant(
-    static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants),
-    0U, 0U);
+    static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants), 0U,
+    0U);
   recorder->SetComputeRoot32BitConstant(
     static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants),
     constants_alloc->srv.get(), 1U);
@@ -252,10 +254,10 @@ auto AtmosphereTransmittanceLutPass::Record(RenderContext& ctx,
     "Vortex.Environment.AtmosphereTransmittanceLut",
     profiling::ProfileGranularity::kTelemetry,
     profiling::ProfileCategory::kPass);
-  const auto dispatch_x = (constants.output_width + (kThreadGroupSizeX - 1U))
-    / kThreadGroupSizeX;
-  const auto dispatch_y = (constants.output_height + (kThreadGroupSizeY - 1U))
-    / kThreadGroupSizeY;
+  const auto dispatch_x
+    = (constants.output_width + (kThreadGroupSizeX - 1U)) / kThreadGroupSizeX;
+  const auto dispatch_y
+    = (constants.output_height + (kThreadGroupSizeY - 1U)) / kThreadGroupSizeY;
   recorder->Dispatch(dispatch_x, dispatch_y, 1U);
   recorder->RequireResourceStateFinal(
     texture, graphics::ResourceStates::kShaderResource);

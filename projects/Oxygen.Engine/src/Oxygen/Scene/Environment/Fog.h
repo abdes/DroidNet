@@ -185,19 +185,18 @@ public:
   {
     fog_inscattering_luminance_ = rgb;
   }
-  [[nodiscard]] auto GetFogInscatteringLuminance() const noexcept
-    -> const Vec3&
+  [[nodiscard]] auto GetFogInscatteringLuminance() const noexcept -> const Vec3&
   {
     return fog_inscattering_luminance_;
   }
 
-  auto SetSkyAtmosphereAmbientContributionColorScale(
-    const Vec3& rgb) noexcept -> void
+  auto SetSkyAtmosphereAmbientContributionColorScale(const Vec3& rgb) noexcept
+    -> void
   {
     sky_atmosphere_ambient_contribution_color_scale_ = rgb;
   }
-  [[nodiscard]] auto GetSkyAtmosphereAmbientContributionColorScale() const
-    noexcept -> const Vec3&
+  [[nodiscard]] auto
+  GetSkyAtmosphereAmbientContributionColorScale() const noexcept -> const Vec3&
   {
     return sky_atmosphere_ambient_contribution_color_scale_;
   }
@@ -231,24 +230,24 @@ public:
     return inscattering_texture_tint_;
   }
 
-  auto SetFullyDirectionalInscatteringColorDistance(
-    const float value) noexcept -> void
+  auto SetFullyDirectionalInscatteringColorDistance(const float value) noexcept
+    -> void
   {
     fully_directional_inscattering_color_distance_ = value;
   }
-  [[nodiscard]] auto GetFullyDirectionalInscatteringColorDistance() const
-    noexcept -> float
+  [[nodiscard]] auto
+  GetFullyDirectionalInscatteringColorDistance() const noexcept -> float
   {
     return fully_directional_inscattering_color_distance_;
   }
 
-  auto SetNonDirectionalInscatteringColorDistance(
-    const float value) noexcept -> void
+  auto SetNonDirectionalInscatteringColorDistance(const float value) noexcept
+    -> void
   {
     non_directional_inscattering_color_distance_ = value;
   }
-  [[nodiscard]] auto GetNonDirectionalInscatteringColorDistance() const
-    noexcept -> float
+  [[nodiscard]] auto GetNonDirectionalInscatteringColorDistance() const noexcept
+    -> float
   {
     return non_directional_inscattering_color_distance_;
   }
@@ -401,19 +400,19 @@ public:
   {
     volumetric_fog_static_lighting_scattering_intensity_ = value;
   }
-  [[nodiscard]] auto GetVolumetricFogStaticLightingScatteringIntensity() const
-    noexcept -> float
+  [[nodiscard]] auto
+  GetVolumetricFogStaticLightingScatteringIntensity() const noexcept -> float
   {
     return volumetric_fog_static_lighting_scattering_intensity_;
   }
 
-  auto SetOverrideLightColorsWithFogInscatteringColors(const bool value)
-    noexcept -> void
+  auto SetOverrideLightColorsWithFogInscatteringColors(
+    const bool value) noexcept -> void
   {
     override_light_colors_with_fog_inscattering_colors_ = value;
   }
-  [[nodiscard]] auto GetOverrideLightColorsWithFogInscatteringColors() const
-    noexcept -> bool
+  [[nodiscard]] auto
+  GetOverrideLightColorsWithFogInscatteringColors() const noexcept -> bool
   {
     return override_light_colors_with_fog_inscattering_colors_;
   }

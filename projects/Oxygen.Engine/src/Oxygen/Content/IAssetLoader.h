@@ -212,8 +212,7 @@ public:
   //! Decode a texture resource from caller-provided cooked bytes.
   virtual void StartLoadTexture(
     CookedResourceData<data::TextureResource> cooked,
-    TextureCallback on_complete)
-    = 0;
+    TextureCallback on_complete) = 0;
   virtual void StartLoadTexture(
     CookedResourceData<data::TextureResource> cooked, LoadRequest request,
     TextureCallback on_complete)
@@ -232,9 +231,8 @@ public:
   }
 
   //! Decode a buffer resource from caller-provided cooked bytes.
-  virtual void StartLoadBuffer(
-    CookedResourceData<data::BufferResource> cooked, BufferCallback on_complete)
-    = 0;
+  virtual void StartLoadBuffer(CookedResourceData<data::BufferResource> cooked,
+    BufferCallback on_complete) = 0;
   virtual void StartLoadBuffer(CookedResourceData<data::BufferResource> cooked,
     LoadRequest request, BufferCallback on_complete)
   {
@@ -244,8 +242,7 @@ public:
 
   //! Begin loading a material asset and invoke `on_complete` on completion.
   virtual void StartLoadMaterialAsset(
-    const data::AssetKey& key, MaterialCallback on_complete)
-    = 0;
+    const data::AssetKey& key, MaterialCallback on_complete) = 0;
   virtual void StartLoadMaterialAsset(const data::AssetKey& key,
     LoadRequest request, MaterialCallback on_complete)
   {
@@ -255,8 +252,7 @@ public:
 
   //! Begin loading a geometry asset and invoke `on_complete` on completion.
   virtual void StartLoadGeometryAsset(
-    const data::AssetKey& key, GeometryCallback on_complete)
-    = 0;
+    const data::AssetKey& key, GeometryCallback on_complete) = 0;
   virtual void StartLoadGeometryAsset(const data::AssetKey& key,
     LoadRequest request, GeometryCallback on_complete)
   {
@@ -266,8 +262,7 @@ public:
 
   //! Begin loading a scene asset and invoke `on_complete` on completion.
   virtual void StartLoadScene(
-    const data::AssetKey& key, SceneCallback on_complete)
-    = 0;
+    const data::AssetKey& key, SceneCallback on_complete) = 0;
   virtual void StartLoadScene(
     const data::AssetKey& key, LoadRequest request, SceneCallback on_complete)
   {
@@ -278,8 +273,7 @@ public:
   //! Begin loading a physics scene sidecar and invoke `on_complete` on
   //! completion.
   virtual void StartLoadPhysicsSceneAsset(
-    const data::AssetKey& key, PhysicsSceneCallback on_complete)
-    = 0;
+    const data::AssetKey& key, PhysicsSceneCallback on_complete) = 0;
   virtual void StartLoadPhysicsSceneAsset(const data::AssetKey& key,
     LoadRequest request, PhysicsSceneCallback on_complete)
   {
@@ -288,8 +282,7 @@ public:
   }
   //! Begin loading a physics resource and invoke `on_complete` on completion.
   virtual void StartLoadPhysicsResource(
-    ResourceKey key, PhysicsResourceCallback on_complete)
-    = 0;
+    ResourceKey key, PhysicsResourceCallback on_complete) = 0;
   virtual void StartLoadPhysicsResource(
     ResourceKey key, LoadRequest request, PhysicsResourceCallback on_complete)
   {
@@ -299,8 +292,7 @@ public:
 
   //! Begin loading a script asset and invoke `on_complete` on completion.
   virtual void StartLoadScriptAsset(
-    const data::AssetKey& key, ScriptCallback on_complete)
-    = 0;
+    const data::AssetKey& key, ScriptCallback on_complete) = 0;
   virtual void StartLoadScriptAsset(
     const data::AssetKey& key, LoadRequest request, ScriptCallback on_complete)
   {
@@ -335,153 +327,126 @@ public:
 
   //! Read back active runtime residency policy.
   [[nodiscard]] virtual auto GetResidencyPolicy() const noexcept
-    -> ResidencyPolicy
-    = 0;
+    -> ResidencyPolicy = 0;
 
   //! Query runtime residency state from the active cache.
   [[nodiscard]] virtual auto QueryResidencyPolicyState() const
-    -> ResidencyPolicyState
-    = 0;
+    -> ResidencyPolicyState = 0;
 
   //! Enumerate scene entries available from currently mounted sources.
   [[nodiscard]] virtual auto EnumerateMountedScenes() const
-    -> std::vector<MountedSceneEntry>
-    = 0;
+    -> std::vector<MountedSceneEntry> = 0;
 
   //! Enumerate input mapping-context entries from currently mounted sources.
   [[nodiscard]] virtual auto EnumerateMountedInputContexts() const
-    -> std::vector<MountedInputContextEntry>
-    = 0;
+    -> std::vector<MountedInputContextEntry> = 0;
 
   //! Enumerate mounted content sources.
   [[nodiscard]] virtual auto EnumerateMountedSources() const
-    -> std::vector<MountedSourceEntry>
-    = 0;
+    -> std::vector<MountedSourceEntry> = 0;
 
   //! Register content-owned commands/CVars (`cntt.*`).
   virtual auto RegisterConsoleBindings(
-    observer_ptr<console::Console> console) noexcept -> void
-    = 0;
+    observer_ptr<console::Console> console) noexcept -> void = 0;
 
   //! Apply content runtime CVar values at the engine-defined sync point.
   virtual auto ApplyConsoleCVars(const console::Console& console) -> void = 0;
 
   //! Get cached resource without triggering a load.
   [[nodiscard]] virtual auto GetTexture(ResourceKey key) const noexcept
-    -> std::shared_ptr<data::TextureResource>
-    = 0;
+    -> std::shared_ptr<data::TextureResource> = 0;
 
   //! Get cached resource without triggering a load.
   [[nodiscard]] virtual auto GetBuffer(ResourceKey key) const noexcept
-    -> std::shared_ptr<data::BufferResource>
-    = 0;
+    -> std::shared_ptr<data::BufferResource> = 0;
 
   //! Get cached asset without triggering a load.
   [[nodiscard]] virtual auto GetMaterialAsset(
     const data::AssetKey& key) const noexcept
-    -> std::shared_ptr<data::MaterialAsset>
-    = 0;
+    -> std::shared_ptr<data::MaterialAsset> = 0;
 
   //! Get cached asset without triggering a load.
   [[nodiscard]] virtual auto GetGeometryAsset(
     const data::AssetKey& key) const noexcept
-    -> std::shared_ptr<data::GeometryAsset>
-    = 0;
+    -> std::shared_ptr<data::GeometryAsset> = 0;
 
   //! Get cached asset without triggering a load.
   [[nodiscard]] virtual auto GetScriptAsset(
     const data::AssetKey& key) const noexcept
-    -> std::shared_ptr<data::ScriptAsset>
-    = 0;
+    -> std::shared_ptr<data::ScriptAsset> = 0;
   //! Get cached script resource without triggering a load.
   [[nodiscard]] virtual auto GetScriptResource(ResourceKey key) const noexcept
-    -> std::shared_ptr<data::ScriptResource>
-    = 0;
+    -> std::shared_ptr<data::ScriptResource> = 0;
   //! Async script resource load.
   virtual auto LoadScriptResourceAsync(ResourceKey key)
-    -> co::Co<std::shared_ptr<data::ScriptResource>>
-    = 0;
+    -> co::Co<std::shared_ptr<data::ScriptResource>> = 0;
   //! Build script resource key from a loaded asset's source and table index.
   [[nodiscard]] virtual auto MakeScriptResourceKeyForAsset(
     const data::AssetKey& context_asset_key,
     data::pak::core::ResourceIndexT resource_index) const noexcept
-    -> std::optional<ResourceKey>
-    = 0;
+    -> std::optional<ResourceKey> = 0;
   //! Read a script resource by table index from the context asset's source.
   [[nodiscard]] virtual auto ReadScriptResourceForAsset(
     const data::AssetKey& context_asset_key,
     data::pak::core::ResourceIndexT resource_index) const
-    -> std::shared_ptr<const data::ScriptResource>
-    = 0;
+    -> std::shared_ptr<const data::ScriptResource> = 0;
 
   //! Get cached physics scene sidecar asset without triggering a load.
   [[nodiscard]] virtual auto GetPhysicsSceneAsset(
     const data::AssetKey& key) const noexcept
-    -> std::shared_ptr<data::PhysicsSceneAsset>
-    = 0;
+    -> std::shared_ptr<data::PhysicsSceneAsset> = 0;
   //! Get cached physics resource without triggering a load.
   [[nodiscard]] virtual auto GetPhysicsResource(ResourceKey key) const noexcept
-    -> std::shared_ptr<data::PhysicsResource>
-    = 0;
+    -> std::shared_ptr<data::PhysicsResource> = 0;
   //! Async physics resource load.
   virtual auto LoadPhysicsResourceAsync(ResourceKey key)
-    -> co::Co<std::shared_ptr<data::PhysicsResource>>
-    = 0;
+    -> co::Co<std::shared_ptr<data::PhysicsResource>> = 0;
   //! Build physics resource key from source identity and table index.
   [[nodiscard]] virtual auto MakePhysicsResourceKey(data::SourceKey source_key,
     data::pak::core::ResourceIndexT resource_index) const noexcept
-    -> std::optional<ResourceKey>
-    = 0;
+    -> std::optional<ResourceKey> = 0;
   //! Build physics resource key from a loaded asset's source and table index.
   [[nodiscard]] virtual auto MakePhysicsResourceKeyForAsset(
     const data::AssetKey& context_asset_key,
     data::pak::core::ResourceIndexT resource_index) const noexcept
-    -> std::optional<ResourceKey>
-    = 0;
+    -> std::optional<ResourceKey> = 0;
   //! Build physics resource key from a loaded asset's source and resource
   //! asset key.
   [[nodiscard]] virtual auto MakePhysicsResourceKeyForAsset(
     const data::AssetKey& context_asset_key,
     const data::AssetKey& resource_asset_key) const noexcept
-    -> std::optional<ResourceKey>
-    = 0;
+    -> std::optional<ResourceKey> = 0;
   //! Read a collision shape descriptor by asset key in the context asset's
   //! source.
   [[nodiscard]] virtual auto ReadCollisionShapeAssetDescForAsset(
     const data::AssetKey& context_asset_key,
     const data::AssetKey& shape_asset_key) const
-    -> std::optional<data::pak::physics::CollisionShapeAssetDesc>
-    = 0;
+    -> std::optional<data::pak::physics::CollisionShapeAssetDesc> = 0;
   //! Read a physics material descriptor by asset key in the context asset's
   //! source.
   [[nodiscard]] virtual auto ReadPhysicsMaterialAssetDescForAsset(
     const data::AssetKey& context_asset_key,
     const data::AssetKey& material_asset_key) const
-    -> std::optional<data::pak::physics::PhysicsMaterialAssetDesc>
-    = 0;
+    -> std::optional<data::pak::physics::PhysicsMaterialAssetDesc> = 0;
   //! Find a physics scene sidecar in the same source that targets `scene_key`.
   [[nodiscard]] virtual auto FindPhysicsSidecarAssetKeyForScene(
-    const data::AssetKey& scene_key) const -> std::optional<data::AssetKey>
-    = 0;
+    const data::AssetKey& scene_key) const -> std::optional<data::AssetKey> = 0;
 
   //! Get cached input action asset without triggering a load.
   [[nodiscard]] virtual auto GetInputActionAsset(
     const data::AssetKey& key) const noexcept
-    -> std::shared_ptr<data::InputActionAsset>
-    = 0;
+    -> std::shared_ptr<data::InputActionAsset> = 0;
 
   //! Get cached input mapping context asset without triggering a load.
   [[nodiscard]] virtual auto GetInputMappingContextAsset(
     const data::AssetKey& key) const noexcept
-    -> std::shared_ptr<data::InputMappingContextAsset>
-    = 0;
+    -> std::shared_ptr<data::InputMappingContextAsset> = 0;
 
   //! Hydrate script slots for one scripting component from the scene source.
   [[nodiscard]] virtual auto GetHydratedScriptSlots(
     const data::SceneAsset& scene_asset,
     const data::pak::scripting::ScriptingComponentRecord& component) const
-    -> std::vector<HydratedScriptSlot>
-    = 0;
+    -> std::vector<HydratedScriptSlot> = 0;
 
   //! Check whether a texture resource is cached.
   [[nodiscard]] virtual auto HasTexture(ResourceKey key) const noexcept -> bool
@@ -493,33 +458,27 @@ public:
 
   //! Check whether a material asset is cached.
   [[nodiscard]] virtual auto HasMaterialAsset(
-    const data::AssetKey& key) const noexcept -> bool
-    = 0;
+    const data::AssetKey& key) const noexcept -> bool = 0;
 
   //! Check whether a geometry asset is cached.
   [[nodiscard]] virtual auto HasGeometryAsset(
-    const data::AssetKey& key) const noexcept -> bool
-    = 0;
+    const data::AssetKey& key) const noexcept -> bool = 0;
 
   //! Check whether a script asset is cached.
   [[nodiscard]] virtual auto HasScriptAsset(
-    const data::AssetKey& key) const noexcept -> bool
-    = 0;
+    const data::AssetKey& key) const noexcept -> bool = 0;
 
   //! Check whether a physics scene sidecar asset is cached.
   [[nodiscard]] virtual auto HasPhysicsSceneAsset(
-    const data::AssetKey& key) const noexcept -> bool
-    = 0;
+    const data::AssetKey& key) const noexcept -> bool = 0;
 
   //! Check whether an input action asset is cached.
   [[nodiscard]] virtual auto HasInputActionAsset(
-    const data::AssetKey& key) const noexcept -> bool
-    = 0;
+    const data::AssetKey& key) const noexcept -> bool = 0;
 
   //! Check whether an input mapping context asset is cached.
   [[nodiscard]] virtual auto HasInputMappingContextAsset(
-    const data::AssetKey& key) const noexcept -> bool
-    = 0;
+    const data::AssetKey& key) const noexcept -> bool = 0;
 
   //! Release (check in) a resource usage.
   virtual auto ReleaseResource(ResourceKey key) -> bool = 0;
@@ -541,8 +500,7 @@ public:
 
   //! Subscribe to eviction notifications for a resource or asset type.
   virtual auto SubscribeResourceEvictions(
-    TypeId resource_type, EvictionHandler handler) -> EvictionSubscription
-    = 0;
+    TypeId resource_type, EvictionHandler handler) -> EvictionSubscription = 0;
 
   //=== Hot Reloading ===-----------------------------------------------------//
 
@@ -557,8 +515,7 @@ public:
 
   //! Subscribe to script reload events.
   virtual auto SubscribeScriptReload(ScriptReloadCallback callback)
-    -> EvictionSubscription
-    = 0;
+    -> EvictionSubscription = 0;
 
   //! Mint a synthetic texture key suitable for buffer-driven workflows.
   [[nodiscard]] virtual auto MintSyntheticTextureKey() -> ResourceKey = 0;
@@ -568,8 +525,7 @@ public:
 
 protected:
   virtual void UnsubscribeResourceEvictions(
-    TypeId resource_type, uint64_t id) noexcept
-    = 0;
+    TypeId resource_type, uint64_t id) noexcept = 0;
 
   [[nodiscard]] auto MakeEvictionSubscription(TypeId resource_type, uint64_t id,
     observer_ptr<IAssetLoader> owner, const std::shared_ptr<int>& alive_token)

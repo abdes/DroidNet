@@ -45,24 +45,20 @@ public:
   OXYGEN_MAKE_NON_COPYABLE(IAggregateApi)
   OXYGEN_MAKE_NON_MOVABLE(IAggregateApi)
 
-  virtual auto CreateAggregate(WorldId world_id) -> PhysicsResult<AggregateId>
-    = 0;
+  virtual auto CreateAggregate(WorldId world_id)
+    -> PhysicsResult<AggregateId> = 0;
   virtual auto DestroyAggregate(WorldId world_id, AggregateId aggregate_id)
-    -> PhysicsResult<void>
-    = 0;
+    -> PhysicsResult<void> = 0;
 
   virtual auto AddMemberBody(WorldId world_id, AggregateId aggregate_id,
-    BodyId body_id) -> PhysicsResult<void>
-    = 0;
+    BodyId body_id) -> PhysicsResult<void> = 0;
   virtual auto RemoveMemberBody(WorldId world_id, AggregateId aggregate_id,
-    BodyId body_id) -> PhysicsResult<void>
-    = 0;
+    BodyId body_id) -> PhysicsResult<void> = 0;
 
   virtual auto GetMemberBodies(WorldId world_id, AggregateId aggregate_id,
-    std::span<BodyId> out_body_ids) const -> PhysicsResult<size_t>
-    = 0;
-  virtual auto FlushStructuralChanges(WorldId world_id) -> PhysicsResult<size_t>
-    = 0;
+    std::span<BodyId> out_body_ids) const -> PhysicsResult<size_t> = 0;
+  virtual auto FlushStructuralChanges(WorldId world_id)
+    -> PhysicsResult<size_t> = 0;
 };
 
 } // namespace oxygen::physics::system

@@ -15,9 +15,9 @@
 #include <unordered_map>
 #include <vector>
 
+#include <Oxygen/Base/Hash.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Base/Hash.h>
 #include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Data/AssetKey.h>
@@ -34,8 +34,7 @@ struct RuntimeMaterialMotionKey {
   std::uint32_t submesh_index { 0U };
 
   [[nodiscard]] constexpr auto operator==(
-    const RuntimeMaterialMotionKey&) const noexcept -> bool
-    = default;
+    const RuntimeMaterialMotionKey&) const noexcept -> bool = default;
 };
 
 struct RuntimeMaterialMotionKeyHash {
@@ -170,8 +169,9 @@ public:
 
 private:
   [[nodiscard]] auto FindMaterialMotionInput(
-    observer_ptr<const scene::Scene> scene, const RuntimeMaterialMotionKey& key)
-    const -> std::optional<RuntimeMaterialMotionInputState>;
+    observer_ptr<const scene::Scene> scene,
+    const RuntimeMaterialMotionKey& key) const
+    -> std::optional<RuntimeMaterialMotionInputState>;
   auto PublishSnapshotForScene(
     const scene::Scene& scene, frame::SequenceNumber frame_sequence) -> void;
 
@@ -181,8 +181,8 @@ private:
     published_snapshots_ {};
   mutable std::shared_mutex runtime_material_inputs_mutex_;
   std::unordered_map<const scene::Scene*,
-    std::unordered_map<RuntimeMaterialMotionKey, RuntimeMaterialMotionInputState,
-      RuntimeMaterialMotionKeyHash>>
+    std::unordered_map<RuntimeMaterialMotionKey,
+      RuntimeMaterialMotionInputState, RuntimeMaterialMotionKeyHash>>
     runtime_material_inputs_ {};
 };
 

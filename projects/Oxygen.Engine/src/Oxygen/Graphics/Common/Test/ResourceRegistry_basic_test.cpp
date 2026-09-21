@@ -386,7 +386,8 @@ NOLINT_TEST_F(ResourceRegistryErrorTest, RegisterView_InvalidHandle_Death)
 NOLINT_TEST_F(ResourceRegistryErrorTest, Register_DoubleRegister_Death)
 {
   EXPECT_TRUE(registry_->Contains(*resource1_));
-  NOLINT_EXPECT_DEATH(registry_->Register(resource1_), ".*already registered.*");
+  NOLINT_EXPECT_DEATH(
+    registry_->Register(resource1_), ".*already registered.*");
 }
 
 NOLINT_TEST_F(ResourceRegistryBasicTest, AcquireRegistration_ReportsOwnership)
@@ -398,7 +399,8 @@ NOLINT_TEST_F(ResourceRegistryBasicTest, AcquireRegistration_ReportsOwnership)
   registry_->UnRegisterResource(*extra_resource);
 }
 
-NOLINT_TEST_F(ResourceRegistryBasicTest, AcquireViewRegistration_ReportsOwnership)
+NOLINT_TEST_F(
+  ResourceRegistryBasicTest, AcquireViewRegistration_ReportsOwnership)
 {
   constexpr TestViewDesc desc {
     .view_type = ResourceViewType::kConstantBuffer,
@@ -744,8 +746,8 @@ NOLINT_TEST_F(
   }
 }
 
-NOLINT_TEST_F(ResourceRegistryConcurrencyTest,
-  AcquireRegistration_IsAtomicAcrossThreads)
+NOLINT_TEST_F(
+  ResourceRegistryConcurrencyTest, AcquireRegistration_IsAtomicAcrossThreads)
 {
   constexpr int num_threads = 8;
   auto shared_resource = std::make_shared<FakeResource>();
@@ -805,7 +807,8 @@ NOLINT_TEST_F(ResourceRegistryConcurrencyTest,
       while (!start_flag.load()) {
         std::this_thread::yield();
       }
-      auto handle = allocators[index]->AllocateRaw(desc.view_type, desc.visibility);
+      auto handle
+        = allocators[index]->AllocateRaw(desc.view_type, desc.visibility);
       ASSERT_TRUE(handle.IsValid());
       auto acquired = registry_->AcquireViewRegistration(
         *resource1_, std::move(handle), desc);

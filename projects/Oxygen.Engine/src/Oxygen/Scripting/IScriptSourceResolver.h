@@ -48,8 +48,7 @@ public:
   OXYGEN_MAKE_NON_MOVABLE(IScriptSourceResolver)
 
   [[nodiscard]] virtual auto Resolve(const ResolveRequest& request) const
-    -> ResolveResult
-    = 0;
+    -> ResolveResult = 0;
 };
 
 } // namespace oxygen::scripting

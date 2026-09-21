@@ -20,14 +20,11 @@ public:
   virtual auto ClearMutations() -> void = 0;
 
   virtual auto CollectScriptSlotActivated(
-    const NodeHandle& node_handle, ScriptSlotIndex slot_index) -> void
-    = 0;
+    const NodeHandle& node_handle, ScriptSlotIndex slot_index) -> void = 0;
   virtual auto CollectScriptSlotChanged(
-    const NodeHandle& node_handle, ScriptSlotIndex slot_index) -> void
-    = 0;
+    const NodeHandle& node_handle, ScriptSlotIndex slot_index) -> void = 0;
   virtual auto CollectScriptSlotDeactivated(
-    const NodeHandle& node_handle, ScriptSlotIndex slot_index) -> void
-    = 0;
+    const NodeHandle& node_handle, ScriptSlotIndex slot_index) -> void = 0;
 
   virtual auto CollectLightChanged(const NodeHandle& node_handle) -> void = 0;
   virtual auto CollectCameraChanged(const NodeHandle& node_handle) -> void = 0;

@@ -416,21 +416,18 @@ protected:
   OXGN_GFX_NDAPI virtual auto CreateShaderResourceView(
     const DescriptorAllocationHandle& view_handle, Format format,
     TextureType dimension, TextureSubResourceSet sub_resources) const
-    -> NativeView
-    = 0;
+    -> NativeView = 0;
 
   //! Gets an unordered access view for the texture.
   OXGN_GFX_NDAPI virtual auto CreateUnorderedAccessView(
     const DescriptorAllocationHandle& view_handle, Format format,
     TextureType dimension, TextureSubResourceSet sub_resources) const
-    -> NativeView
-    = 0;
+    -> NativeView = 0;
 
   //! Gets a render target view for the texture.
   OXGN_GFX_NDAPI virtual auto CreateRenderTargetView(
     const DescriptorAllocationHandle& view_handle, Format format,
-    TextureSubResourceSet sub_resources) const -> NativeView
-    = 0;
+    TextureSubResourceSet sub_resources) const -> NativeView = 0;
 
   //! Gets a depth stencil view for the texture.
   OXGN_GFX_NDAPI virtual auto CreateDepthStencilView(

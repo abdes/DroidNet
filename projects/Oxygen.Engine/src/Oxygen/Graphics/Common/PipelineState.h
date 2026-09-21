@@ -710,8 +710,7 @@ public:
 
     // Validate framebuffer layout
     const auto& [color_target_formats, depth_stencil_format, sample_count,
-      sample_quality]
-      = desc_.framebuffer_layout_;
+      sample_quality] = desc_.framebuffer_layout_;
     if (color_target_formats.empty() && !depth_stencil_format) {
       throw std::runtime_error("GraphicsPipelineDesc requires at least one "
                                "render target format or depth/stencil format");

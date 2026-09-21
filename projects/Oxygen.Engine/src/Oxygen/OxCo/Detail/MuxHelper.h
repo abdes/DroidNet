@@ -29,8 +29,8 @@ template <class MuxT, class Aw> class MuxHelper : public ProxyFrame {
 public:
   enum class State : uint8_t {
     kNotStarted = 0, // before await_suspend()
-    kCancellationPending
-    = 1, // kNotStarted + await_early_cancel() returned false
+    kCancellationPending = 1, // kNotStarted + await_early_cancel() returned
+                              // false
     kRunning = 2, // after await_suspend()
     kCancelling = 3, // kRunning + await_cancel() returned false
     kCancelled = 4, // cancellation confirmed

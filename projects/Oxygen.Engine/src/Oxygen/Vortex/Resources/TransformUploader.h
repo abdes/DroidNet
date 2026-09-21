@@ -116,9 +116,8 @@ public:
   //! Get or allocate a handle for the given transform matrix
   OXGN_VRTX_API auto GetOrAllocate(const glm::mat4& transform)
     -> vortex::sceneprep::TransformHandle;
-  OXGN_VRTX_API auto GetOrAllocate(
-    const glm::mat4& transform, const glm::mat4& previous_transform)
-    -> vortex::sceneprep::TransformHandle;
+  OXGN_VRTX_API auto GetOrAllocate(const glm::mat4& transform,
+    const glm::mat4& previous_transform) -> vortex::sceneprep::TransformHandle;
 
   //! Check if a handle is valid
   OXGN_VRTX_NDAPI auto IsHandleValid(

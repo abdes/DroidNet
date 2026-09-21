@@ -92,7 +92,8 @@ namespace {
           target.view.scissor.top, target.view.scissor.bottom - offset_y);
       }
     }
-    target.with_height_fog = source.camera.has_value() && source.with_height_fog;
+    target.with_height_fog
+      = source.camera.has_value() && source.with_height_fog;
     target.with_local_fog = source.camera.has_value() && source.with_local_fog;
     target.shading_mode = source.camera.has_value()
       ? std::optional<vortex::ShadingMode> { source.shading_mode.value_or(
@@ -261,14 +262,12 @@ auto DemoModuleBase::ReleaseInactiveRuntimeViews(
   }
 }
 
-auto DemoModuleBase::EnsureSceneFramebuffer(
-  const ViewId view_id, const uint32_t width, const uint32_t height)
-  -> RuntimeSceneTarget*
+auto DemoModuleBase::EnsureSceneFramebuffer(const ViewId view_id,
+  const uint32_t width, const uint32_t height) -> RuntimeSceneTarget*
 {
   if (auto it = scene_targets_.find(view_id); it != scene_targets_.end()
     && it->second.scene_framebuffer && it->second.composite_framebuffer
-    && it->second.width == width
-    && it->second.height == height) {
+    && it->second.width == width && it->second.height == height) {
     return &it->second;
   }
 
@@ -315,13 +314,16 @@ auto DemoModuleBase::EnsureSceneFramebuffer(
 
   auto composite_texture = gfx->CreateTexture(composite_desc);
   CHECK_F(static_cast<bool>(composite_texture),
-    "Failed to create Vortex runtime composite texture for view {}", view_id.get());
+    "Failed to create Vortex runtime composite texture for view {}",
+    view_id.get());
 
   auto composite_desc_fb = graphics::FramebufferDesc {};
-  composite_desc_fb.AddColorAttachment({ .texture = std::move(composite_texture) });
+  composite_desc_fb.AddColorAttachment(
+    { .texture = std::move(composite_texture) });
   auto composite_framebuffer = gfx->CreateFramebuffer(composite_desc_fb);
   CHECK_F(static_cast<bool>(composite_framebuffer),
-    "Failed to create Vortex runtime composite framebuffer for view {}", view_id.get());
+    "Failed to create Vortex runtime composite framebuffer for view {}",
+    view_id.get());
 
   scene_targets_[view_id] = RuntimeSceneTarget {
     .scene_framebuffer = framebuffer,
@@ -397,7 +399,8 @@ auto DemoModuleBase::OnPublishViews(observer_ptr<engine::FrameContext> context)
       vortex::Renderer::RuntimeViewPublishInput {
         .composition_view = std::move(vortex_view),
         .render_target = observer_ptr { target->scene_framebuffer.get() },
-        .composite_source = observer_ptr { target->composite_framebuffer.get() },
+        .composite_source
+        = observer_ptr { target->composite_framebuffer.get() },
       });
 
     if (primary_scene_view == &view_intent) {

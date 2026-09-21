@@ -134,11 +134,9 @@ public:
   // Modern C++ standard spaceship comparison.
   // Facilitates correct time-ordered lexical sorting (RFC Sec 6.11).
   [[nodiscard]] friend constexpr std::strong_ordering operator<=>(
-    const Uuid&, const Uuid&) noexcept
-    = default;
+    const Uuid&, const Uuid&) noexcept = default;
   [[nodiscard]] friend constexpr bool operator==(
-    const Uuid&, const Uuid&) noexcept
-    = default;
+    const Uuid&, const Uuid&) noexcept = default;
 
 private:
   //! Constructs a UUID from already-validated canonical bytes.

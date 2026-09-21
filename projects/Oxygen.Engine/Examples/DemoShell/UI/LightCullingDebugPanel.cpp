@@ -70,7 +70,8 @@ void LightingPanel::DrawVisualizationModes()
       || !info.supported) {
       continue;
     }
-    if (ImGui::RadioButton(info.display_name.data(), current_mode == info.mode)) {
+    if (ImGui::RadioButton(
+          info.display_name.data(), current_mode == info.mode)) {
       vm_->SetVisualizationMode(info.mode);
     }
   }

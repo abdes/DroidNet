@@ -91,8 +91,7 @@ public:
     @return Aligned row pitch in bytes
   */
   [[nodiscard]] virtual auto AlignRowPitchBytes(
-    uint32_t row_bytes) const noexcept -> uint32_t
-    = 0;
+    uint32_t row_bytes) const noexcept -> uint32_t = 0;
 
   //! Align subresource offset to the required boundary.
   /*!
@@ -100,8 +99,7 @@ public:
     @return Aligned offset in bytes
   */
   [[nodiscard]] virtual auto AlignSubresourceOffset(
-    uint64_t offset) const noexcept -> uint64_t
-    = 0;
+    uint64_t offset) const noexcept -> uint64_t = 0;
 
 protected:
   ITexturePackingPolicy() = default;

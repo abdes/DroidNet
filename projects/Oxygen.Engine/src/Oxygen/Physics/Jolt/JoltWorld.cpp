@@ -160,8 +160,7 @@ struct SoftBodyContactKey final {
   bool is_sensor { false };
 
   [[nodiscard]] auto operator==(const SoftBodyContactKey&) const noexcept
-    -> bool
-    = default;
+    -> bool = default;
 };
 
 struct SoftBodyContactKeyHash final {

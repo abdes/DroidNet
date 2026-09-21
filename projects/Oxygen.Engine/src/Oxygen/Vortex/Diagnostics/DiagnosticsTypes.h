@@ -113,8 +113,7 @@ struct DiagnosticsFrameSnapshot {
   std::vector<DiagnosticsIssue> issues;
 };
 
-[[nodiscard]] constexpr auto HasAnyFeature(
-  const DiagnosticsFeatureSet features,
+[[nodiscard]] constexpr auto HasAnyFeature(const DiagnosticsFeatureSet features,
   const DiagnosticsFeatureSet requested) noexcept -> bool
 {
   using Underlying = std::underlying_type_t<DiagnosticsFeatureSet>;
@@ -150,8 +149,8 @@ struct DiagnosticsFrameSnapshot {
   return "__Unknown__";
 }
 
-[[nodiscard]] constexpr auto to_string(
-  const DiagnosticsIssueCode code) noexcept -> std::string_view
+[[nodiscard]] constexpr auto to_string(const DiagnosticsIssueCode code) noexcept
+  -> std::string_view
 {
   switch (code) {
   case DiagnosticsIssueCode::kFeatureUnavailable:
@@ -172,8 +171,8 @@ struct DiagnosticsFrameSnapshot {
   return "__Unknown__";
 }
 
-[[nodiscard]] constexpr auto to_string(
-  const DiagnosticsPassKind kind) noexcept -> std::string_view
+[[nodiscard]] constexpr auto to_string(const DiagnosticsPassKind kind) noexcept
+  -> std::string_view
 {
   switch (kind) {
   case DiagnosticsPassKind::kCpuOnly:
@@ -190,8 +189,8 @@ struct DiagnosticsFrameSnapshot {
   return "__Unknown__";
 }
 
-[[nodiscard]] constexpr auto to_string(
-  const DiagnosticsDebugPath path) noexcept -> std::string_view
+[[nodiscard]] constexpr auto to_string(const DiagnosticsDebugPath path) noexcept
+  -> std::string_view
 {
   switch (path) {
   case DiagnosticsDebugPath::kNone:
@@ -208,8 +207,7 @@ struct DiagnosticsFrameSnapshot {
   return "__Unknown__";
 }
 
-[[nodiscard]] OXGN_VRTX_API auto MakeDiagnosticsIssue(
-  DiagnosticsIssueCode code, DiagnosticsSeverity severity, std::string message)
-  -> DiagnosticsIssue;
+[[nodiscard]] OXGN_VRTX_API auto MakeDiagnosticsIssue(DiagnosticsIssueCode code,
+  DiagnosticsSeverity severity, std::string message) -> DiagnosticsIssue;
 
 } // namespace oxygen::vortex

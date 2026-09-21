@@ -21,12 +21,13 @@ using oxygen::profiling::Vars;
 
 TEST(TracyCpuCache, ReusesSourceLocationForRepeatedStableName)
 {
-  const auto baseline = oxygen::tracy::cpu::CachedSourceLocationCountForTesting();
+  const auto baseline
+    = oxygen::tracy::cpu::CachedSourceLocationCountForTesting();
   auto storage = std::array<std::byte, 16> {};
 
   for (int i = 0; i < 64; ++i) {
-    ASSERT_TRUE(oxygen::tracy::cpu::BeginZone(
-      std::span { storage }, std::source_location::current(), "StableScope", 0));
+    ASSERT_TRUE(oxygen::tracy::cpu::BeginZone(std::span { storage },
+      std::source_location::current(), "StableScope", 0));
     oxygen::tracy::cpu::EndZone(std::span { storage });
   }
 
@@ -36,7 +37,8 @@ TEST(TracyCpuCache, ReusesSourceLocationForRepeatedStableName)
 
 TEST(TracyCpuCache, CpuProfileVariablesDoNotGrowSourceLocationCache)
 {
-  const auto baseline = oxygen::tracy::cpu::CachedSourceLocationCountForTesting();
+  const auto baseline
+    = oxygen::tracy::cpu::CachedSourceLocationCountForTesting();
 
   for (int i = 0; i < 64; ++i) {
     CpuProfileScope scope("Profiling.VariableScope", ProfileCategory::kGeneral,

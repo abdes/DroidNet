@@ -33,14 +33,11 @@ public:
   OXYGEN_MAKE_NON_MOVABLE(IJointApi)
 
   virtual auto CreateJoint(WorldId world_id, const joint::JointDesc& desc)
-    -> PhysicsResult<JointId>
-    = 0;
+    -> PhysicsResult<JointId> = 0;
   virtual auto DestroyJoint(WorldId world_id, JointId joint_id)
-    -> PhysicsResult<void>
-    = 0;
+    -> PhysicsResult<void> = 0;
   virtual auto SetJointEnabled(WorldId world_id, JointId joint_id, bool enabled)
-    -> PhysicsResult<void>
-    = 0;
+    -> PhysicsResult<void> = 0;
 };
 
 } // namespace oxygen::physics::system

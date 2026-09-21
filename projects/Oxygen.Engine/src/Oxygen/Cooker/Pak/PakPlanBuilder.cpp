@@ -1042,8 +1042,7 @@ auto RewriteSceneScriptingComponentRanges(
 {
   if (descriptor_bytes.size() < sizeof(world::SceneAssetDesc)) {
     AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
-      pak::PakBuildPhase::kPlanning,
-      "pak.plan.patch_scene_descriptor_invalid",
+      pak::PakBuildPhase::kPlanning, "pak.plan.patch_scene_descriptor_invalid",
       "Patched scene descriptor is invalid or too small for scripting rewrite.",
       descriptor_path);
     return false;
@@ -1054,8 +1053,7 @@ auto RewriteSceneScriptingComponentRanges(
   if (header.asset_type != static_cast<uint8_t>(data::AssetType::kScene)
     || header.version != world::kSceneAssetVersion) {
     AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
-      pak::PakBuildPhase::kPlanning,
-      "pak.plan.patch_scene_descriptor_invalid",
+      pak::PakBuildPhase::kPlanning, "pak.plan.patch_scene_descriptor_invalid",
       "Patched scene descriptor header is invalid for scripting rewrite.",
       descriptor_path);
     return false;
@@ -1067,8 +1065,7 @@ auto RewriteSceneScriptingComponentRanges(
 
   const auto directory_offset = scene_desc.component_table_directory_offset;
   const auto directory_count = scene_desc.component_table_count;
-  const auto directory_size
-    = static_cast<uint64_t>(directory_count)
+  const auto directory_size = static_cast<uint64_t>(directory_count)
     * sizeof(world::SceneComponentTableDesc);
   if (directory_offset > descriptor_bytes.size()
     || directory_size > descriptor_bytes.size() - directory_offset) {
@@ -1085,8 +1082,8 @@ auto RewriteSceneScriptingComponentRanges(
     const auto entry_offset = static_cast<size_t>(directory_offset)
       + (static_cast<size_t>(i) * sizeof(world::SceneComponentTableDesc));
     auto entry = world::SceneComponentTableDesc {};
-    std::memcpy(std::addressof(entry),
-      descriptor_bytes.data() + entry_offset, sizeof(entry));
+    std::memcpy(std::addressof(entry), descriptor_bytes.data() + entry_offset,
+      sizeof(entry));
 
     if (entry.component_type
       != static_cast<uint32_t>(data::ComponentType::kScripting)) {
@@ -1116,7 +1113,7 @@ auto RewriteSceneScriptingComponentRanges(
     }
 
     for (uint32_t record_index = 0; record_index < entry.table.count;
-         ++record_index) {
+      ++record_index) {
       const auto record_offset = static_cast<size_t>(table_offset)
         + (static_cast<size_t>(record_index)
           * sizeof(script::ScriptingComponentRecord));
@@ -1158,9 +1155,8 @@ auto RewriteSceneScriptingComponentRanges(
       }
 
       record.slot_start_index = rewritten_start;
-      std::memcpy(
-        descriptor_bytes.data() + record_offset, std::addressof(record),
-        sizeof(record));
+      std::memcpy(descriptor_bytes.data() + record_offset,
+        std::addressof(record), sizeof(record));
       rewrote_any = true;
     }
   }
@@ -2719,8 +2715,8 @@ auto RewritePatchOwnedSceneDescriptors(PlanningState& state) -> void
       return lhs.source_slot_index < rhs.source_slot_index;
     });
 
-  auto rewritten_slot_indices
-    = std::unordered_map<data::AssetKey, std::unordered_map<uint32_t, uint32_t>> {};
+  auto rewritten_slot_indices = std::unordered_map<data::AssetKey,
+    std::unordered_map<uint32_t, uint32_t>> {};
   auto next_slot_index = uint32_t { 0U };
   for (const auto& owned_slot : owned_slots) {
     rewritten_slot_indices[owned_slot.asset_key].emplace(
@@ -2740,8 +2736,8 @@ auto RewritePatchOwnedSceneDescriptors(PlanningState& state) -> void
     auto descriptor_bytes
       = ReadLooseDescriptorBytes(asset, state.output.diagnostics);
     if (!descriptor_bytes.has_value()) {
-      AddDiagnostic(state.output.diagnostics, pak::PakDiagnosticSeverity::kError,
-        pak::PakBuildPhase::kPlanning,
+      AddDiagnostic(state.output.diagnostics,
+        pak::PakDiagnosticSeverity::kError, pak::PakBuildPhase::kPlanning,
         "pak.plan.patch_scene_descriptor_read_failed",
         "Failed to read scene descriptor bytes for patch-local script slot "
         "rewrite.",
@@ -2755,8 +2751,8 @@ auto RewritePatchOwnedSceneDescriptors(PlanningState& state) -> void
       continue;
     }
 
-    asset.descriptor_digest = oxygen::base::ComputeSha256(
-      std::span<const std::byte>(
+    asset.descriptor_digest
+      = oxygen::base::ComputeSha256(std::span<const std::byte>(
         descriptor_bytes->data(), descriptor_bytes->size()));
     asset.descriptor_source_offset = 0U;
     asset.descriptor_size = descriptor_bytes->size();

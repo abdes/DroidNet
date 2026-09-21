@@ -135,8 +135,7 @@ auto EnsureBufferAndSrv(Graphics& gfx,
     // Ensure the old buffer is kept alive until the GPU is done with it.
     gfx.GetDeferredReclaimer().RegisterDeferredRelease(buffer);
 
-    registry.Replace(
-      *buffer, new_buffer,
+    registry.Replace(*buffer, new_buffer,
       [&](const graphics::BufferViewDescription&)
         -> std::optional<graphics::BufferViewDescription> {
         return { view_desc };

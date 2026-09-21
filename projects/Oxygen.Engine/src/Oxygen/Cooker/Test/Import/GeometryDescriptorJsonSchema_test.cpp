@@ -271,13 +271,14 @@ NOLINT_TEST(GeometryDescriptorJsonSchemaTest, AcceptsCapsuleParameterBounds)
   }
 }
 
-NOLINT_TEST(GeometryDescriptorJsonSchemaTest, RejectsUnrepresentablePrimitiveParameters)
+NOLINT_TEST(
+  GeometryDescriptorJsonSchemaTest, RejectsUnrepresentablePrimitiveParameters)
 {
   const auto schema = LoadJsonFile(SchemaFile(FindRepoRoot()));
   ASSERT_TRUE(schema.has_value());
   constexpr auto kTooManySegments = uint64_t { 1 } << 32U;
-  constexpr auto kTooLargeDimension =
-    static_cast<double>(std::numeric_limits<float>::max()) * 2.0;
+  constexpr auto kTooLargeDimension
+    = static_cast<double>(std::numeric_limits<float>::max()) * 2.0;
   struct Case {
     std::string_view generator;
     json parameters;

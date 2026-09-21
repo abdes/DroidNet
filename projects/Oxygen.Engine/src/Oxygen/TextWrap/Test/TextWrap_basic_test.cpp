@@ -57,8 +57,7 @@ namespace {
   TEST_P(LongStringTest, Fill)
   {
     const auto& [width, trim_lines, initial_indent, subsequent_indents,
-      expected]
-      = GetParam();
+      expected] = GetParam();
     auto builder = oxygen::wrap::MakeWrapper();
     builder.Width(width);
     if (trim_lines) {

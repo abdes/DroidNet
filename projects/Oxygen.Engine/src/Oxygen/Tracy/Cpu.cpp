@@ -44,12 +44,11 @@ namespace {
     }
   };
 
-  auto SourceLocationCache()
-    -> std::unordered_map<SourceLocationKey, ___tracy_source_location_data,
-      SourceLocationKeyHash>&
+  auto SourceLocationCache() -> std::unordered_map<SourceLocationKey,
+    ___tracy_source_location_data, SourceLocationKeyHash>&
   {
-    static auto cache = std::unordered_map<SourceLocationKey, ___tracy_source_location_data,
-      SourceLocationKeyHash> {};
+    static auto cache = std::unordered_map<SourceLocationKey,
+      ___tracy_source_location_data, SourceLocationKeyHash> {};
     return cache;
   }
 

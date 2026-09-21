@@ -15,8 +15,8 @@
 #include <Oxygen/Graphics/Direct3D12/CommandQueue.h>
 #include <Oxygen/Graphics/Direct3D12/CommandRecorder.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
-#include <Oxygen/Graphics/Direct3D12/Texture.h>
 #include <Oxygen/Graphics/Direct3D12/ImGui/imgui_impl_dx12.h>
+#include <Oxygen/Graphics/Direct3D12/Texture.h>
 
 #include <imgui.h>
 
@@ -277,8 +277,8 @@ auto D3D12ImGuiGraphicsBackend::Render(graphics::CommandRecorder& recorder)
 }
 
 auto D3D12ImGuiGraphicsBackend::RegisterOrUpdateTexture(
-  const std::string_view key,
-  const std::shared_ptr<graphics::Texture>& texture) -> std::uintptr_t
+  const std::string_view key, const std::shared_ptr<graphics::Texture>& texture)
+  -> std::uintptr_t
 {
   if (!initialized_ || !texture || !init_info_ || imgui_srv_heap_ == nullptr) {
     return 0U;
@@ -297,10 +297,12 @@ auto D3D12ImGuiGraphicsBackend::RegisterOrUpdateTexture(
     }
 
     entry.descriptor_index = *slot;
-    entry.imgui_cpu_handle = imgui_srv_heap_->GetCPUDescriptorHandleForHeapStart();
+    entry.imgui_cpu_handle
+      = imgui_srv_heap_->GetCPUDescriptorHandleForHeapStart();
     entry.imgui_cpu_handle.ptr
       += static_cast<SIZE_T>(*slot) * imgui_descriptor_increment_;
-    entry.imgui_gpu_handle = imgui_srv_heap_->GetGPUDescriptorHandleForHeapStart();
+    entry.imgui_gpu_handle
+      = imgui_srv_heap_->GetGPUDescriptorHandleForHeapStart();
     entry.imgui_gpu_handle.ptr
       += static_cast<UINT64>(*slot) * imgui_descriptor_increment_;
   }
@@ -312,8 +314,8 @@ auto D3D12ImGuiGraphicsBackend::RegisterOrUpdateTexture(
     auto* d3d_texture = static_cast<Texture*>(texture.get());
 
     auto cpu_handle = entry.imgui_cpu_handle;
-    d3d_texture->CreateShaderResourceView(cpu_handle, srv_desc.format,
-      srv_desc.dimension, srv_desc.sub_resources);
+    d3d_texture->CreateShaderResourceView(
+      cpu_handle, srv_desc.format, srv_desc.dimension, srv_desc.sub_resources);
 
     entry.texture = texture;
   }

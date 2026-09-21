@@ -51,8 +51,7 @@ public:
   OXYGEN_MAKE_NON_MOVABLE(IAsyncEngine)
 
   [[nodiscard]] virtual auto GetAssetLoader() const noexcept
-    -> observer_ptr<content::IAssetLoader>
-    = 0;
+    -> observer_ptr<content::IAssetLoader> = 0;
 
   [[nodiscard]] virtual auto GetScriptCompilationService() noexcept
     -> scripting::IScriptCompilationService& = 0;
@@ -62,11 +61,9 @@ public:
   [[nodiscard]] virtual auto GetPathFinder() const noexcept
     -> const ::oxygen::PathFinder& = 0;
   [[nodiscard]] virtual auto GetGraphics() const noexcept
-    -> std::weak_ptr<::oxygen::Graphics>
-    = 0;
+    -> std::weak_ptr<::oxygen::Graphics> = 0;
   [[nodiscard]] virtual auto GetPlatformShared() const noexcept
-    -> std::shared_ptr<::oxygen::Platform>
-    = 0;
+    -> std::shared_ptr<::oxygen::Platform> = 0;
 
   [[nodiscard]] virtual auto GetEngineConfig() const noexcept
     -> const ::oxygen::EngineConfig& = 0;
@@ -82,13 +79,11 @@ public:
   using ModuleSubscription = ::oxygen::engine::ModuleManager::Subscription;
   virtual auto SubscribeModuleAttached(
     ::oxygen::engine::ModuleAttachedCallback cb, bool replay_existing = false)
-    -> ModuleSubscription
-    = 0;
+    -> ModuleSubscription = 0;
 
   [[nodiscard]] virtual auto GetModuleByType(
     oxygen::TypeId type_id) const noexcept
-    -> std::optional<std::reference_wrapper<engine::EngineModule>>
-    = 0;
+    -> std::optional<std::reference_wrapper<engine::EngineModule>> = 0;
 
   template <oxygen::IsTyped ModuleT>
   [[nodiscard]] auto GetModule() const noexcept

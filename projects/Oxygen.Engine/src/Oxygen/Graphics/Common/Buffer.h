@@ -185,8 +185,7 @@ public:
       \param offset Byte offset in the buffer to update.
   */
   virtual auto Update(const void* data, uint64_t size, uint64_t offset = 0)
-    -> void
-    = 0;
+    -> void = 0;
 
   //! Returns the size of the buffer in bytes.
   [[nodiscard]] virtual auto GetSize() const noexcept -> uint64_t = 0;
@@ -232,20 +231,17 @@ protected:
    */
   [[nodiscard]] virtual auto CreateConstantBufferView(
     const DescriptorAllocationHandle& view_handle,
-    const BufferRange& range = {}) const -> NativeView
-    = 0;
+    const BufferRange& range = {}) const -> NativeView = 0;
 
   //! Returns a shader resource view (SRV) for this buffer.
   [[nodiscard]] virtual auto CreateShaderResourceView(
     const DescriptorAllocationHandle& view_handle, Format format,
-    BufferRange range = {}, uint32_t stride = 0) const -> NativeView
-    = 0;
+    BufferRange range = {}, uint32_t stride = 0) const -> NativeView = 0;
 
   //! Returns an unordered access view (UAV) for this buffer.
   [[nodiscard]] virtual auto CreateUnorderedAccessView(
     const DescriptorAllocationHandle& view_handle, Format format,
-    BufferRange range = {}, uint32_t stride = 0) const -> NativeView
-    = 0;
+    BufferRange range = {}, uint32_t stride = 0) const -> NativeView = 0;
 };
 
 // Ensure Buffer satisfies ResourceWithViews

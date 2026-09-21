@@ -140,7 +140,7 @@ public:
 // NOLINTBEGIN(*-avoid-reference-coroutine-parameters)
 #define OXCO_WITH_NURSERY(arg_name)                                            \
   co_yield ::oxygen::co::Nursery::Factory {}                                   \
-    % [&](::oxygen::co::Nursery & arg_name)                                    \
+    % [&](::oxygen::co::Nursery& arg_name)                                     \
         ->::oxygen::co::Co<::oxygen::co::detail::NurseryBodyRetVal>
   // NOLINTEND(*-avoid-reference-coroutine-parameters)
   // NOLINTEND(*-avoid-capturing-lambda-coroutines)

@@ -104,7 +104,9 @@ protected:
 
   [[nodiscard]] auto AcquireRecorder(std::string_view name) const
   {
-    return graphics_->AcquireCommandRecorder(graphics_->QueueKeyFor(QueueRole::kGraphics), name, oxygen::graphics::SubmissionPolicy::kExplicit);
+    return graphics_->AcquireCommandRecorder(
+      graphics_->QueueKeyFor(QueueRole::kGraphics), name,
+      oxygen::graphics::SubmissionPolicy::kExplicit);
   }
 
   std::shared_ptr<FakeGraphics> graphics_;

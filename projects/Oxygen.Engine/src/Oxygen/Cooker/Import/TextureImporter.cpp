@@ -1585,8 +1585,7 @@ TextureImportBuilder::TextureImportBuilder()
 }
 
 TextureImportBuilder::TextureImportBuilder(
-  TextureImportBuilder&& other) noexcept
-  = default;
+  TextureImportBuilder&& other) noexcept = default;
 
 auto TextureImportBuilder::operator=(TextureImportBuilder&& other) noexcept
   -> TextureImportBuilder& = default;

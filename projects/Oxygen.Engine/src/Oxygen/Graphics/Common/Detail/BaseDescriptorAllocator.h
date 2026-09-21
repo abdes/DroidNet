@@ -441,8 +441,7 @@ protected:
   */
   virtual auto CreateHeapSegment(bindless::Capacity capacity,
     bindless::HeapIndex base_index, ResourceViewType view_type,
-    DescriptorVisibility visibility) -> std::unique_ptr<DescriptorSegment>
-    = 0;
+    DescriptorVisibility visibility) -> std::unique_ptr<DescriptorSegment> = 0;
 
   //! Gets the initial capacity for a specific view type and visibility.
   /*!

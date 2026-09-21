@@ -36,26 +36,20 @@ public:
   OXYGEN_MAKE_NON_MOVABLE(IAreaApi)
 
   virtual auto CreateArea(WorldId world_id, const area::AreaDesc& desc)
-    -> PhysicsResult<AreaId>
-    = 0;
+    -> PhysicsResult<AreaId> = 0;
   virtual auto DestroyArea(WorldId world_id, AreaId area_id)
-    -> PhysicsResult<void>
-    = 0;
+    -> PhysicsResult<void> = 0;
 
   virtual auto GetAreaPosition(WorldId world_id, AreaId area_id) const
-    -> PhysicsResult<Vec3>
-    = 0;
+    -> PhysicsResult<Vec3> = 0;
   virtual auto GetAreaRotation(WorldId world_id, AreaId area_id) const
-    -> PhysicsResult<Quat>
-    = 0;
+    -> PhysicsResult<Quat> = 0;
   virtual auto SetAreaPose(WorldId world_id, AreaId area_id,
-    const Vec3& position, const Quat& rotation) -> PhysicsResult<void>
-    = 0;
+    const Vec3& position, const Quat& rotation) -> PhysicsResult<void> = 0;
 
   virtual auto AddAreaShape(WorldId world_id, AreaId area_id, ShapeId shape_id,
     const Vec3& local_position, const Quat& local_rotation)
-    -> PhysicsResult<ShapeInstanceId>
-    = 0;
+    -> PhysicsResult<ShapeInstanceId> = 0;
 
   /*!
    Removal contract:
@@ -64,8 +58,7 @@ public:
      `area_id`.
   */
   virtual auto RemoveAreaShape(WorldId world_id, AreaId area_id,
-    ShapeInstanceId shape_instance_id) -> PhysicsResult<void>
-    = 0;
+    ShapeInstanceId shape_instance_id) -> PhysicsResult<void> = 0;
 };
 
 } // namespace oxygen::physics::system

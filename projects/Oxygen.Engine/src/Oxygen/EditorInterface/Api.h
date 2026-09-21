@@ -45,10 +45,11 @@ OXGN_EI_API auto CreateEngine(const EditorEngineConfig& config)
 OXGN_EI_API auto CreateEngine(const EngineConfig& config)
   -> std::unique_ptr<EngineContext>;
 OXGN_EI_API auto RunEngine(std::shared_ptr<EngineContext> ctx) -> void;
-//! Run the loop and acknowledge completed platform, graphics, and module startup.
-//! The callback runs on the engine thread after startup module registration.
-OXGN_EI_API auto RunEngine(std::shared_ptr<EngineContext> ctx,
-  std::function<void()> on_started) -> void;
+//! Run the loop and acknowledge completed platform, graphics, and module
+//! startup. The callback runs on the engine thread after startup module
+//! registration.
+OXGN_EI_API auto RunEngine(
+  std::shared_ptr<EngineContext> ctx, std::function<void()> on_started) -> void;
 //! Request loop shutdown; safe to repeat or race with native loop teardown.
 //! A null context or a context whose engine has exited is a no-op.
 OXGN_EI_API auto StopEngine(std::shared_ptr<EngineContext> ctx) -> void;

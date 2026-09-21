@@ -210,8 +210,7 @@ void ViewLifecycleService::SyncActiveViews(engine::FrameContext& /*context*/,
   }
 
   std::stable_sort(state_->sorted_views.begin(), state_->sorted_views.end(),
-    [](const CompositionViewImpl* a,
-      const CompositionViewImpl* b) -> bool {
+    [](const CompositionViewImpl* a, const CompositionViewImpl* b) -> bool {
       if (a->GetDescriptor().z_order != b->GetDescriptor().z_order) {
         return a->GetDescriptor().z_order < b->GetDescriptor().z_order;
       }
@@ -275,10 +274,10 @@ void ViewLifecycleService::PublishViews(engine::FrameContext& context)
     auto view_ctx = build_view_context(*view, kInvalidViewId);
     const auto previous_published_view_id
       = resolve_published_view_(view->GetDescriptor().id);
-    const auto published_view_id = upsert_published_view_(
-      context, view->GetDescriptor().id, std::move(view_ctx),
-      view->GetDescriptor().shading_mode,
-      view->GetDescriptor().view_state_handle);
+    const auto published_view_id
+      = upsert_published_view_(context, view->GetDescriptor().id,
+        std::move(view_ctx), view->GetDescriptor().shading_mode,
+        view->GetDescriptor().view_state_handle);
     if (previous_published_view_id == kInvalidViewId) {
       LOG_F(INFO,
         "Registered View '{}' (IntentID: {}) with Engine "
@@ -321,9 +320,8 @@ void ViewLifecycleService::PublishViews(engine::FrameContext& context)
 
     auto resolved_view_ctx
       = build_view_context(*view, resolved_exposure_view_id);
-    upsert_published_view_(
-      context, view->GetDescriptor().id, std::move(resolved_view_ctx),
-      view->GetDescriptor().shading_mode,
+    upsert_published_view_(context, view->GetDescriptor().id,
+      std::move(resolved_view_ctx), view->GetDescriptor().shading_mode,
       view->GetDescriptor().view_state_handle);
   }
 }

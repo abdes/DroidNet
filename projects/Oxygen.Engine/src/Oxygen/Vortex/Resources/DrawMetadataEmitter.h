@@ -176,8 +176,7 @@ private:
     scene::NodeHandle node_handle {};
 
     [[nodiscard]] constexpr auto operator==(const BatchingKey&) const noexcept
-      -> bool
-      = default;
+      -> bool = default;
   };
 
   //! Hash functor for BatchingKey.

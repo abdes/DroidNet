@@ -153,8 +153,7 @@ public:
   */
   [[nodiscard]] virtual auto Write(const std::filesystem::path& path,
     std::span<const std::byte> data, WriteOptions options)
-    -> co::Co<Result<uint64_t, FileErrorInfo>>
-    = 0;
+    -> co::Co<Result<uint64_t, FileErrorInfo>> = 0;
 
   //! Write data to file asynchronously with callback notification.
   /*!
@@ -185,8 +184,7 @@ public:
   */
   virtual void WriteAsync(const std::filesystem::path& path,
     std::span<const std::byte> data, WriteOptions options,
-    WriteCompletionCallback callback)
-    = 0;
+    WriteCompletionCallback callback) = 0;
 
   //! Write data at a specific byte offset, waiting for completion.
   /*!
@@ -210,8 +208,7 @@ public:
   */
   [[nodiscard]] virtual auto WriteAt(const std::filesystem::path& path,
     uint64_t offset, std::span<const std::byte> data, WriteOptions options)
-    -> co::Co<Result<uint64_t, FileErrorInfo>>
-    = 0;
+    -> co::Co<Result<uint64_t, FileErrorInfo>> = 0;
 
   //! Write data at a specific byte offset asynchronously.
   /*!
@@ -225,8 +222,7 @@ public:
   */
   virtual void WriteAtAsync(const std::filesystem::path& path, uint64_t offset,
     std::span<const std::byte> data, WriteOptions options,
-    WriteCompletionCallback callback)
-    = 0;
+    WriteCompletionCallback callback) = 0;
 
   //! Wait for all pending async operations to complete.
   /*!

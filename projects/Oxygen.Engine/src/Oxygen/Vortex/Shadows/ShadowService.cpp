@@ -35,11 +35,11 @@ auto ShadowService::EnsurePublishResources() -> bool
     return false;
   }
 
-  bindings_publisher_
-    = std::make_unique<internal::PerViewStructuredPublisher<ShadowFrameBindings>>(
-      observer_ptr { gfx.get() }, renderer_.GetStagingProvider(),
-      observer_ptr { &renderer_.GetInlineTransfersCoordinator() },
-      "ShadowFrameBindings");
+  bindings_publisher_ = std::make_unique<
+    internal::PerViewStructuredPublisher<ShadowFrameBindings>>(
+    observer_ptr { gfx.get() }, renderer_.GetStagingProvider(),
+    observer_ptr { &renderer_.GetInlineTransfersCoordinator() },
+    "ShadowFrameBindings");
   return true;
 }
 
@@ -59,8 +59,8 @@ auto ShadowService::OnFrameStart(
   }
 }
 
-auto ShadowService::PublishShadowBindings(
-  const ViewId view_id, const ShadowFrameBindings& bindings) -> ShaderVisibleIndex
+auto ShadowService::PublishShadowBindings(const ViewId view_id,
+  const ShadowFrameBindings& bindings) -> ShaderVisibleIndex
 {
   if (!EnsurePublishResources()) {
     return kInvalidShaderVisibleIndex;
@@ -79,15 +79,15 @@ auto ShadowService::RenderShadowDepths(const FrameShadowInputs& inputs) -> void
   last_render_state_.rendered_point_shadow_count = 0U;
   last_render_state_.rendered_draw_count = 0U;
   last_render_state_.shadow_caster_draw_count = 0U;
-  last_render_state_.selection_epoch
-    = inputs.frame_light_set != nullptr ? inputs.frame_light_set->selection_epoch
-                                        : 0U;
+  last_render_state_.selection_epoch = inputs.frame_light_set != nullptr
+    ? inputs.frame_light_set->selection_epoch
+    : 0U;
 
   const auto* directional_light = inputs.frame_light_set != nullptr
       && inputs.frame_light_set->directional_light.has_value()
       && inputs.frame_light_set->directional_light->cascade_count > 0U
       && (inputs.frame_light_set->directional_light->shadow_flags
-          & kDirectionalLightShadowFlagCastsShadows)
+           & kDirectionalLightShadowFlagCastsShadows)
         != 0U
     ? &*inputs.frame_light_set->directional_light
     : nullptr;
@@ -118,7 +118,8 @@ auto ShadowService::RenderShadowDepths(const FrameShadowInputs& inputs) -> void
         view_input, std::span(inputs.frame_light_set->local_lights));
       view_data.bindings.spot_shadow_surface_handle
         = spot_state.bindings.spot_shadow_surface_handle;
-      view_data.bindings.spot_shadow_count = spot_state.bindings.spot_shadow_count;
+      view_data.bindings.spot_shadow_count
+        = spot_state.bindings.spot_shadow_count;
       view_data.bindings.technique_flags |= spot_state.bindings.technique_flags;
       view_data.bindings.sampling_contract_flags
         |= spot_state.bindings.sampling_contract_flags;
@@ -126,8 +127,8 @@ auto ShadowService::RenderShadowDepths(const FrameShadowInputs& inputs) -> void
       spot_shadow_surface = spot_state.shadow_surface;
       rendered_spot_shadow_count = spot_state.rendered_shadow_count;
       rendered_draw_count += spot_state.rendered_draw_count;
-      shadow_caster_draw_count = (std::max)(
-        shadow_caster_draw_count, spot_state.shadow_caster_draw_count);
+      shadow_caster_draw_count = (std::max)(shadow_caster_draw_count,
+        spot_state.shadow_caster_draw_count);
 
       const auto point_state = cascade_shadow_pass_->RenderPointView(
         view_input, std::span(inputs.frame_light_set->local_lights));
@@ -135,18 +136,20 @@ auto ShadowService::RenderShadowDepths(const FrameShadowInputs& inputs) -> void
         = point_state.bindings.point_shadow_surface_handle;
       view_data.bindings.point_shadow_count
         = point_state.bindings.point_shadow_count;
-      view_data.bindings.technique_flags |= point_state.bindings.technique_flags;
+      view_data.bindings.technique_flags
+        |= point_state.bindings.technique_flags;
       view_data.bindings.sampling_contract_flags
         |= point_state.bindings.sampling_contract_flags;
       view_data.bindings.point_shadows = point_state.bindings.point_shadows;
       point_shadow_surface = point_state.shadow_surface;
       rendered_point_shadow_count += point_state.rendered_shadow_count;
       rendered_draw_count += point_state.rendered_draw_count;
-      shadow_caster_draw_count = (std::max)(
-        shadow_caster_draw_count, point_state.shadow_caster_draw_count);
+      shadow_caster_draw_count = (std::max)(shadow_caster_draw_count,
+        point_state.shadow_caster_draw_count);
     }
 
-    const auto slot = PublishShadowBindings(view_input.view_id, view_data.bindings);
+    const auto slot
+      = PublishShadowBindings(view_input.view_id, view_data.bindings);
     published_views_.insert_or_assign(view_input.view_id,
       PublishedView {
         .slot = slot,
@@ -200,15 +203,17 @@ auto ShadowService::InspectPointShadowSurface(const ViewId view_id) const
   -> const graphics::Texture*
 {
   const auto it = published_views_.find(view_id);
-  return it != published_views_.end() ? it->second.point_surface.get() : nullptr;
+  return it != published_views_.end() ? it->second.point_surface.get()
+                                      : nullptr;
 }
 
 auto ShadowService::ResolveShadowFrameSlot(const ViewId view_id) const
   -> ShaderVisibleIndex
 {
   const auto it = published_views_.find(view_id);
-  return it != published_views_.end() ? it->second.slot
-                                      : ShaderVisibleIndex { kInvalidShaderVisibleIndex };
+  return it != published_views_.end()
+    ? it->second.slot
+    : ShaderVisibleIndex { kInvalidShaderVisibleIndex };
 }
 
 } // namespace oxygen::vortex

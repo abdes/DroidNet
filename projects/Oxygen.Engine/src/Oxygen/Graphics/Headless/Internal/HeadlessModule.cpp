@@ -23,9 +23,8 @@ OXGN_HDLS_API auto CreateBackendImpl(
 {
   LOG_F(INFO, "Headless backend CreateBackend called");
   // Create and store the shared instance. For phase 1 we ignore config.
-  g_headless_instance
-    = std::make_shared<oxygen::graphics::headless::Graphics>(
-      config, path_finder_config);
+  g_headless_instance = std::make_shared<oxygen::graphics::headless::Graphics>(
+    config, path_finder_config);
   return g_headless_instance.get();
 }
 

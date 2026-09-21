@@ -62,8 +62,7 @@ public:
    May throw an exception if the view type or visibility is not recognized.
   */
   [[nodiscard]] virtual auto GetHeapKey(ResourceViewType view_type,
-    DescriptorVisibility visibility) const -> std::string
-    = 0;
+    DescriptorVisibility visibility) const -> std::string = 0;
 
   //! Returns the heap description for a given heap key.
   /*!
@@ -74,8 +73,7 @@ public:
 
   //! Returns the base index for a heap (default 0 for backward compatibility).
   [[nodiscard]] virtual auto GetHeapBaseIndex(ResourceViewType view_type,
-    DescriptorVisibility visibility) const -> bindless::HeapIndex
-    = 0;
+    DescriptorVisibility visibility) const -> bindless::HeapIndex = 0;
 };
 
 //! Default heap mapping strategy: one heap per (view type, visibility) pair,
@@ -260,8 +258,7 @@ public:
    \return A handle to the allocated descriptor.
   */
   virtual auto AllocateRaw(ResourceViewType view_type,
-    DescriptorVisibility visibility) -> RawDescriptorHandle
-    = 0;
+    DescriptorVisibility visibility) -> RawDescriptorHandle = 0;
 
   //! Allocates a bindless descriptor from the specified generated domain.
   /*!
@@ -270,9 +267,8 @@ public:
    \return A bindless handle carrying both semantic domain ownership and a
            stable backend slot identity.
   */
-  virtual auto AllocateBindless(
-    bindless::DomainToken domain, ResourceViewType view_type) -> BindlessHandle
-    = 0;
+  virtual auto AllocateBindless(bindless::DomainToken domain,
+    ResourceViewType view_type) -> BindlessHandle = 0;
 
   //! Releases a previously allocated descriptor.
   /*!
@@ -291,8 +287,7 @@ public:
    shader-visible.
   */
   virtual auto CopyDescriptor(const DescriptorAllocationHandle& source,
-    const DescriptorAllocationHandle& destination) -> void
-    = 0;
+    const DescriptorAllocationHandle& destination) -> void = 0;
 
   //! Returns the number of descriptors remaining of a specific view type in a
   //! specific visibility.
@@ -303,8 +298,7 @@ public:
   */
   [[nodiscard]] virtual auto GetRemainingDescriptorsCount(
     ResourceViewType view_type, DescriptorVisibility visibility) const
-    -> bindless::Count
-    = 0;
+    -> bindless::Count = 0;
 
   //! Returns the generated shader-visible base index for a semantic bindless
   //! domain.
@@ -319,8 +313,7 @@ public:
    * domain's global base index.
   */
   [[nodiscard]] virtual auto GetDomainBaseIndex(
-    bindless::DomainToken domain) const -> bindless::ShaderVisibleIndex
-    = 0;
+    bindless::DomainToken domain) const -> bindless::ShaderVisibleIndex = 0;
 
   //! Attempts to reserve capacity in an explicit raw descriptor class and
   //! returns its base index.
@@ -343,8 +336,7 @@ public:
   */
   [[nodiscard]] virtual auto ReserveRaw(ResourceViewType view_type,
     DescriptorVisibility visibility, bindless::Count count)
-    -> std::optional<bindless::HeapIndex>
-    = 0;
+    -> std::optional<bindless::HeapIndex> = 0;
 
   //! Checks if this allocator owns the given descriptor handle.
   /*!
@@ -352,8 +344,7 @@ public:
    \return True if this allocator owns the handle, false otherwise.
   */
   [[nodiscard]] virtual auto Contains(
-    const DescriptorAllocationHandle& handle) const -> bool
-    = 0;
+    const DescriptorAllocationHandle& handle) const -> bool = 0;
 
   //! Returns the number of allocated descriptors of a specific view type in a
   //! specific visibility.
@@ -364,8 +355,7 @@ public:
   */
   [[nodiscard]] virtual auto GetAllocatedDescriptorsCount(
     ResourceViewType view_type, DescriptorVisibility visibility) const
-    -> bindless::Count
-    = 0;
+    -> bindless::Count = 0;
 
   //! Returns the shader-visible bindless index for a descriptor allocated by
   //! this allocator.
@@ -385,8 +375,7 @@ public:
   */
   [[nodiscard]] virtual auto GetShaderVisibleIndex(
     const DescriptorAllocationHandle& handle) const noexcept
-    -> bindless::ShaderVisibleIndex
-    = 0;
+    -> bindless::ShaderVisibleIndex = 0;
 
 protected:
   //! Protected method to create a descriptor handle instance. Provided for

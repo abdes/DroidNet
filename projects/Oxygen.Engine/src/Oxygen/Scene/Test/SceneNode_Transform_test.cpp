@@ -166,16 +166,15 @@ NOLINT_TEST_F(
   TRACE_GCHECK_F(ExpectTransformValues(node, new_pos, new_scale), "new");
 }
 
-NOLINT_TEST_F(SceneNodeTransformTest,
-  LookAt_AlignsOxygenForwardMinusYTowardTarget)
+NOLINT_TEST_F(
+  SceneNodeTransformTest, LookAt_AlignsOxygenForwardMinusYTowardTarget)
 {
   auto node = scene_->CreateNode("LookAtNode");
   auto transform = node.GetTransform();
   const auto impl = node.GetImpl();
   ASSERT_TRUE(impl.has_value());
 
-  ASSERT_TRUE(
-    transform.SetLocalPosition(::oxygen::Vec3 { 0.0F, 0.0F, 0.0F }));
+  ASSERT_TRUE(transform.SetLocalPosition(::oxygen::Vec3 { 0.0F, 0.0F, 0.0F }));
   impl->get().UpdateTransforms(*scene_);
   ASSERT_TRUE(transform.LookAt(::oxygen::Vec3 { 0.0F, -10.0F, 0.0F }));
   impl->get().UpdateTransforms(*scene_);

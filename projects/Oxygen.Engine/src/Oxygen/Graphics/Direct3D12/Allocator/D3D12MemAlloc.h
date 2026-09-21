@@ -1555,16 +1555,14 @@ enum VIRTUAL_ALLOCATION_FLAGS {
   VIRTUAL_ALLOCATION_FLAG_UPPER_ADDRESS = ALLOCATION_FLAG_UPPER_ADDRESS,
 
   /// %Allocation strategy that tries to minimize memory usage.
-  VIRTUAL_ALLOCATION_FLAG_STRATEGY_MIN_MEMORY
-  = ALLOCATION_FLAG_STRATEGY_MIN_MEMORY,
+  VIRTUAL_ALLOCATION_FLAG_STRATEGY_MIN_MEMORY = ALLOCATION_FLAG_STRATEGY_MIN_MEMORY,
   /// %Allocation strategy that tries to minimize allocation time.
   VIRTUAL_ALLOCATION_FLAG_STRATEGY_MIN_TIME = ALLOCATION_FLAG_STRATEGY_MIN_TIME,
   /** %Allocation strategy that chooses always the lowest offset in available
   space. This is not the most efficient strategy but achieves highly packed
   data.
   */
-  VIRTUAL_ALLOCATION_FLAG_STRATEGY_MIN_OFFSET
-  = ALLOCATION_FLAG_STRATEGY_MIN_OFFSET,
+  VIRTUAL_ALLOCATION_FLAG_STRATEGY_MIN_OFFSET = ALLOCATION_FLAG_STRATEGY_MIN_OFFSET,
   /** \brief A bit mask to extract only `STRATEGY` bits from entire set of
   flags.
 

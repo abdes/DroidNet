@@ -86,8 +86,7 @@ FramebufferImpl::FramebufferImpl(
       return;
     }
     CleanupFramebufferRegistrations(*gfx, resource_registry, textures_,
-      owns_resource_registration_, owned_descriptor_handles_,
-      rtvs_, dsv_);
+      owns_resource_registration_, owned_descriptor_handles_, rtvs_, dsv_);
   });
 
   for (const auto& attachment : desc_.color_attachments) {
@@ -100,7 +99,8 @@ FramebufferImpl::FramebufferImpl(
       "FramebufferImpl {}: height mismatch between attachments",
       texture->GetName());
 
-    const bool owns_registration = resource_registry.AcquireRegistration(texture);
+    const bool owns_registration
+      = resource_registry.AcquireRegistration(texture);
 
     const auto view_desc = TextureViewDescription {
       .view_type = ResourceViewType::kTexture_RTV,
@@ -141,7 +141,8 @@ FramebufferImpl::FramebufferImpl(
       "FramebufferImpl {}: height mismatch between attachments",
       texture->GetName());
 
-    const bool owns_registration = resource_registry.AcquireRegistration(texture);
+    const bool owns_registration
+      = resource_registry.AcquireRegistration(texture);
 
     const auto view_desc = TextureViewDescription {
       .view_type = ResourceViewType::kTexture_DSV,

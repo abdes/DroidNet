@@ -57,18 +57,33 @@ public:
   {
   }
 
-  auto Signal(uint64_t value) const -> void override { current_ = completed_ = value; }
+  auto Signal(uint64_t value) const -> void override
+  {
+    current_ = completed_ = value;
+  }
   [[nodiscard]] auto Signal() const -> uint64_t override { return ++current_; }
   auto Wait(uint64_t, std::chrono::milliseconds) const -> void override { }
   auto Wait(uint64_t) const -> void override { }
-  [[nodiscard]] auto GetCompletedValue() const -> uint64_t override { return completed_; }
-  [[nodiscard]] auto GetCurrentValue() const -> uint64_t override { return current_; }
+  [[nodiscard]] auto GetCompletedValue() const -> uint64_t override
+  {
+    return completed_;
+  }
+  [[nodiscard]] auto GetCurrentValue() const -> uint64_t override
+  {
+    return current_;
+  }
   auto Submit(std::shared_ptr<CommandList>) -> void override { }
   auto Submit(std::span<std::shared_ptr<CommandList>>) -> void override { }
-  [[nodiscard]] auto GetQueueRole() const -> QueueRole override { return QueueRole::kGraphics; }
+  [[nodiscard]] auto GetQueueRole() const -> QueueRole override
+  {
+    return QueueRole::kGraphics;
+  }
 
 protected:
-  auto SignalImmediate(uint64_t value) const -> void override { current_ = completed_ = value; }
+  auto SignalImmediate(uint64_t value) const -> void override
+  {
+    current_ = completed_ = value;
+  }
 
 private:
   mutable uint64_t current_ { 0U };
@@ -78,18 +93,32 @@ private:
 class TestRecorder final : public CommandRecorder {
 public:
   TestRecorder()
-    : CommandRecorder(
-        std::make_shared<TestCommandList>("Recorder"), observer_ptr<CommandQueue>(&queue_))
+    : CommandRecorder(std::make_shared<TestCommandList>("Recorder"),
+        observer_ptr<CommandQueue>(&queue_))
   {
   }
 
-  auto SetPipelineState(oxygen::graphics::GraphicsPipelineDesc) -> void override { }
-  auto SetPipelineState(oxygen::graphics::ComputePipelineDesc) -> void override { }
-  auto SetGraphicsRootConstantBufferView(uint32_t, uint64_t) -> void override { }
+  auto SetPipelineState(oxygen::graphics::GraphicsPipelineDesc) -> void override
+  {
+  }
+  auto SetPipelineState(oxygen::graphics::ComputePipelineDesc) -> void override
+  {
+  }
+  auto SetGraphicsRootConstantBufferView(uint32_t, uint64_t) -> void override {
+  }
   auto SetComputeRootConstantBufferView(uint32_t, uint64_t) -> void override { }
-  auto SetGraphicsRoot32BitConstant(uint32_t, uint32_t, uint32_t) -> void override { }
-  auto SetComputeRoot32BitConstant(uint32_t, uint32_t, uint32_t) -> void override { }
-  auto SetRenderTargets(std::span<NativeView>, std::optional<NativeView>) -> void override { }
+  auto SetGraphicsRoot32BitConstant(uint32_t, uint32_t, uint32_t)
+    -> void override
+  {
+  }
+  auto SetComputeRoot32BitConstant(uint32_t, uint32_t, uint32_t)
+    -> void override
+  {
+  }
+  auto SetRenderTargets(std::span<NativeView>, std::optional<NativeView>)
+    -> void override
+  {
+  }
   auto SetViewport(const oxygen::ViewPort&) -> void override { }
   auto SetScissors(const oxygen::Scissors&) -> void override { }
   auto Draw(uint32_t, uint32_t, uint32_t, uint32_t) -> void override { }
@@ -98,15 +127,14 @@ public:
     const IndirectExecutionDesc&) -> void override
   {
   }
-  auto SetVertexBuffers(
-    uint32_t, const std::shared_ptr<Buffer>*, const uint32_t*) const -> void override
+  auto SetVertexBuffers(uint32_t, const std::shared_ptr<Buffer>*,
+    const uint32_t*) const -> void override
   {
   }
   auto BindIndexBuffer(const Buffer&, oxygen::Format) -> void override { }
   auto BindFrameBuffer(const Framebuffer&) -> void override { }
-  auto ClearDepthStencilView(
-    const Texture&, const NativeView&, oxygen::graphics::ClearFlags, float, uint8_t)
-    -> void override
+  auto ClearDepthStencilView(const Texture&, const NativeView&,
+    oxygen::graphics::ClearFlags, float, uint8_t) -> void override
   {
   }
   auto ClearFramebuffer(const Framebuffer&,
@@ -114,18 +142,21 @@ public:
     std::optional<float>, std::optional<uint8_t>) -> void override
   {
   }
-  auto CopyBuffer(Buffer&, size_t, const Buffer&, size_t, size_t) -> void override { }
-  auto CopyBufferToTexture(const Buffer&, const oxygen::graphics::TextureUploadRegion&,
-    Texture&) -> void override
-  {
-  }
-  auto CopyBufferToTexture(
-    const Buffer&, std::span<const oxygen::graphics::TextureUploadRegion>, Texture&)
+  auto CopyBuffer(Buffer&, size_t, const Buffer&, size_t, size_t)
     -> void override
   {
   }
-  auto CopyTextureToBuffer(
-    Buffer&, const Texture&, const oxygen::graphics::TextureBufferCopyRegion&) -> void override
+  auto CopyBufferToTexture(const Buffer&,
+    const oxygen::graphics::TextureUploadRegion&, Texture&) -> void override
+  {
+  }
+  auto CopyBufferToTexture(const Buffer&,
+    std::span<const oxygen::graphics::TextureUploadRegion>, Texture&)
+    -> void override
+  {
+  }
+  auto CopyTextureToBuffer(Buffer&, const Texture&,
+    const oxygen::graphics::TextureBufferCopyRegion&) -> void override
   {
   }
   auto CopyTexture(const Texture&, const oxygen::graphics::TextureSlice&,
@@ -136,7 +167,10 @@ public:
   }
 
 protected:
-  auto ExecuteBarriers(std::span<const oxygen::graphics::detail::Barrier>) -> void override { }
+  auto ExecuteBarriers(std::span<const oxygen::graphics::detail::Barrier>)
+    -> void override
+  {
+  }
 
 private:
   TestQueue queue_ {};
@@ -159,7 +193,8 @@ public:
     }
   }
 
-  auto EndScope(CommandRecorder&, GpuProfileCollectorState& state) -> void override
+  auto EndScope(CommandRecorder&, GpuProfileCollectorState& state)
+    -> void override
   {
     if ((state.flags & kCollectorActiveFlag) == 0U) {
       return;
@@ -168,7 +203,8 @@ public:
     state.flags = 0U;
   }
 
-  auto AbortScope(CommandRecorder&, GpuProfileCollectorState& state) -> void override
+  auto AbortScope(CommandRecorder&, GpuProfileCollectorState& state)
+    -> void override
   {
     if ((state.flags & kCollectorActiveFlag) == 0U) {
       return;
@@ -191,7 +227,8 @@ TEST(CommandRecorderProfileScopeDrain, EndAbortsOpenCollectors)
   auto recorder = TestRecorder {};
   auto telemetry = CountingCollector {};
   auto trace = CountingCollector {};
-  recorder.SetTelemetryCollector(observer_ptr<IGpuProfileCollector>(&telemetry));
+  recorder.SetTelemetryCollector(
+    observer_ptr<IGpuProfileCollector>(&telemetry));
   recorder.SetTraceCollector(observer_ptr<IGpuProfileCollector>(&trace));
 
   recorder.Begin();
@@ -215,7 +252,8 @@ TEST(CommandRecorderProfileScopeDrain, DestructorAbortsOpenCollectors)
 
   {
     auto recorder = TestRecorder {};
-    recorder.SetTelemetryCollector(observer_ptr<IGpuProfileCollector>(&telemetry));
+    recorder.SetTelemetryCollector(
+      observer_ptr<IGpuProfileCollector>(&telemetry));
     recorder.SetTraceCollector(observer_ptr<IGpuProfileCollector>(&trace));
     recorder.Begin();
     static_cast<void>(recorder.BeginProfileScope(MakeScopeDesc()));
@@ -258,7 +296,8 @@ TEST(CommandRecorderProfileScopeDrain, BeginFailureAbortsOpenedCollectors)
   auto trace = CountingCollector {};
   trace.throw_after_activate = true;
 
-  recorder.SetTelemetryCollector(observer_ptr<IGpuProfileCollector>(&telemetry));
+  recorder.SetTelemetryCollector(
+    observer_ptr<IGpuProfileCollector>(&telemetry));
   recorder.SetTraceCollector(observer_ptr<IGpuProfileCollector>(&trace));
   recorder.Begin();
 

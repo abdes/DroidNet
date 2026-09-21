@@ -105,8 +105,9 @@ namespace {
 
     const auto strings = std::string("\0Root\0FogNode\0", 14);
     const auto nodes_bytes = sizeof(root) + sizeof(fog_node);
-    desc.scene_strings.offset = static_cast<data::pak::core::StringTableOffsetT>(
-      desc.nodes.offset + nodes_bytes);
+    desc.scene_strings.offset
+      = static_cast<data::pak::core::StringTableOffsetT>(
+        desc.nodes.offset + nodes_bytes);
     desc.scene_strings.size
       = static_cast<data::pak::core::StringTableSizeT>(strings.size());
     desc.component_table_directory_offset
@@ -184,8 +185,7 @@ namespace {
     return bytes;
   }
 
-  auto BuildSceneDescriptorBytesWithDirectionalLight()
-    -> std::vector<std::byte>
+  auto BuildSceneDescriptorBytesWithDirectionalLight() -> std::vector<std::byte>
   {
     auto desc = pakw::SceneAssetDesc {};
     desc.header.asset_type = static_cast<uint8_t>(data::AssetType::kScene);
@@ -204,8 +204,9 @@ namespace {
 
     const auto strings = std::string("\0Root\0SunNode\0", 14);
     const auto nodes_bytes = sizeof(root) + sizeof(sun_node);
-    desc.scene_strings.offset = static_cast<data::pak::core::StringTableOffsetT>(
-      desc.nodes.offset + nodes_bytes);
+    desc.scene_strings.offset
+      = static_cast<data::pak::core::StringTableOffsetT>(
+        desc.nodes.offset + nodes_bytes);
     desc.scene_strings.size
       = static_cast<data::pak::core::StringTableSizeT>(strings.size());
     desc.component_table_directory_offset
@@ -234,8 +235,8 @@ namespace {
     directional.cascade_distances[2] = 2200.0F;
     directional.cascade_distances[3] = 4200.0F;
     directional.distribution_exponent = 2.5F;
-    directional.split_mode = static_cast<uint8_t>(
-      scene::DirectionalCsmSplitMode::kManualDistances);
+    directional.split_mode
+      = static_cast<uint8_t>(scene::DirectionalCsmSplitMode::kManualDistances);
     directional.max_shadow_distance = 4200.0F;
     directional.transition_fraction = 0.12F;
     directional.distance_fadeout_fraction = 0.18F;
@@ -281,8 +282,9 @@ namespace {
 
     const auto strings = std::string("\0Root\0MeshNode\0", 15);
     const auto nodes_bytes = sizeof(root) + sizeof(mesh_node);
-    desc.scene_strings.offset = static_cast<data::pak::core::StringTableOffsetT>(
-      desc.nodes.offset + nodes_bytes);
+    desc.scene_strings.offset
+      = static_cast<data::pak::core::StringTableOffsetT>(
+        desc.nodes.offset + nodes_bytes);
     desc.scene_strings.size
       = static_cast<data::pak::core::StringTableSizeT>(strings.size());
     desc.component_table_directory_offset
@@ -322,7 +324,8 @@ namespace {
     return bytes;
   }
 
-  auto BuildSingleSubmeshGeometry(std::shared_ptr<const data::MaterialAsset> mat)
+  auto BuildSingleSubmeshGeometry(
+    std::shared_ptr<const data::MaterialAsset> mat)
     -> std::shared_ptr<data::GeometryAsset>
   {
     using data::GeometryAsset;
@@ -442,16 +445,14 @@ namespace {
       sidecars_.insert_or_assign(sidecar_key, std::move(sidecar));
     }
 
-    auto PutGeometry(
-      const data::AssetKey& key, std::shared_ptr<data::GeometryAsset> geometry)
-      -> void
+    auto PutGeometry(const data::AssetKey& key,
+      std::shared_ptr<data::GeometryAsset> geometry) -> void
     {
       geometries_.insert_or_assign(key, std::move(geometry));
     }
 
-    auto PutMaterial(
-      const data::AssetKey& key, std::shared_ptr<data::MaterialAsset> material)
-      -> void
+    auto PutMaterial(const data::AssetKey& key,
+      std::shared_ptr<data::MaterialAsset> material) -> void
     {
       materials_.insert_or_assign(key, std::move(material));
     }
@@ -1069,8 +1070,8 @@ NOLINT_TEST(SceneLoaderServicePhase4Test,
   EXPECT_FLOAT_EQ(csm.distance_fadeout_fraction, 0.18F);
 }
 
-NOLINT_TEST(SceneLoaderServicePhase4Test,
-  BuildSceneAsyncHydratesLocalFogVolumeComponents)
+NOLINT_TEST(
+  SceneLoaderServicePhase4Test, BuildSceneAsyncHydratesLocalFogVolumeComponents)
 {
   auto loader = SceneLoaderTestAssetLoader {};
   const auto scene_key

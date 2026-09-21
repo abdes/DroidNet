@@ -97,9 +97,8 @@ namespace oxygen::vortex::harness::single_pass::presets {
   Renderer::CoreShaderInputsInput core_shader_inputs)
   -> Renderer::SinglePassHarnessFacade
 {
-  auto facade = ForPreparedSceneGraphicsPass(
-    renderer, std::move(frame_session), framebuffer, std::move(resolved_view),
-    std::move(prepared_frame));
+  auto facade = ForPreparedSceneGraphicsPass(renderer, std::move(frame_session),
+    framebuffer, std::move(resolved_view), std::move(prepared_frame));
   facade.SetCoreShaderInputs(std::move(core_shader_inputs));
   return facade;
 }
@@ -130,9 +129,8 @@ namespace oxygen::vortex::harness::render_graph::presets {
   Renderer::PreparedFrameInput prepared_frame,
   Renderer::RenderGraphHarnessInput graph) -> Renderer::RenderGraphHarnessFacade
 {
-  auto facade = ForSingleViewGraph(
-    renderer, std::move(frame_session), framebuffer, std::move(resolved_view),
-    std::move(graph));
+  auto facade = ForSingleViewGraph(renderer, std::move(frame_session),
+    framebuffer, std::move(resolved_view), std::move(graph));
   facade.SetPreparedFrame(std::move(prepared_frame));
   return facade;
 }

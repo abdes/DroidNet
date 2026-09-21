@@ -62,14 +62,12 @@ public:
   virtual ~FrameCaptureController() = default;
 
   [[nodiscard]] virtual auto GetProviderName() const noexcept
-    -> std::string_view
-    = 0;
+    -> std::string_view = 0;
   [[nodiscard]] virtual auto IsAvailable() const noexcept -> bool = 0;
   [[nodiscard]] virtual auto IsCapturing() const noexcept -> bool = 0;
   [[nodiscard]] virtual auto DescribeState() const -> std::string = 0;
   [[nodiscard]] virtual auto GetSupportedFeatures() const noexcept
-    -> FrameCaptureFeature
-    = 0;
+    -> FrameCaptureFeature = 0;
 
   [[nodiscard]] auto SupportsFeature(
     const FrameCaptureFeature feature) const noexcept -> bool
@@ -141,11 +139,9 @@ public:
   }
 
   virtual auto OnBeginFrame(
-    frame::SequenceNumber frame_number, frame::Slot frame_slot) -> void
-    = 0;
+    frame::SequenceNumber frame_number, frame::Slot frame_slot) -> void = 0;
   virtual auto OnEndFrame(
-    frame::SequenceNumber frame_number, frame::Slot frame_slot) -> void
-    = 0;
+    frame::SequenceNumber frame_number, frame::Slot frame_slot) -> void = 0;
   virtual auto OnPresentSurface(observer_ptr<Surface> surface) -> void = 0;
 
 protected:

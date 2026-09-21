@@ -21,10 +21,10 @@ namespace oxygen::vortex::lighting::internal {
 
 namespace {
 
-struct ClusterLightRange {
-  std::uint32_t light_list_offset { 0U };
-  std::uint32_t light_count { 0U };
-};
+  struct ClusterLightRange {
+    std::uint32_t light_list_offset { 0U };
+    std::uint32_t light_count { 0U };
+  };
 
 } // namespace
 
@@ -48,24 +48,26 @@ auto ForwardLightPublisher::EnsurePublishResources() -> bool
   }
 
   auto& staging = renderer_.GetStagingProvider();
-  auto inline_transfers = observer_ptr { &renderer_.GetInlineTransfersCoordinator() };
+  auto inline_transfers
+    = observer_ptr { &renderer_.GetInlineTransfersCoordinator() };
   if (lighting_bindings_publisher_ == nullptr) {
     lighting_bindings_publisher_
       = std::make_unique<::oxygen::vortex::internal::PerViewStructuredPublisher<
-        LightingFrameBindings>>(
-        observer_ptr { gfx.get() }, staging, inline_transfers, "LightingFrameBindings");
+        LightingFrameBindings>>(observer_ptr { gfx.get() }, staging,
+        inline_transfers, "LightingFrameBindings");
   }
   if (local_light_buffer_ == nullptr) {
     local_light_buffer_ = std::make_unique<upload::TransientStructuredBuffer>(
       observer_ptr { gfx.get() }, staging,
-      static_cast<std::uint32_t>(sizeof(ForwardLocalLightRecord)), inline_transfers,
-      "LightingService.LocalLights");
+      static_cast<std::uint32_t>(sizeof(ForwardLocalLightRecord)),
+      inline_transfers, "LightingService.LocalLights");
   }
   if (light_view_data_buffer_ == nullptr) {
-    light_view_data_buffer_ = std::make_unique<upload::TransientStructuredBuffer>(
-      observer_ptr { gfx.get() }, staging,
-      static_cast<std::uint32_t>(sizeof(std::uint32_t)), inline_transfers,
-      "LightingService.LightViewData");
+    light_view_data_buffer_
+      = std::make_unique<upload::TransientStructuredBuffer>(
+        observer_ptr { gfx.get() }, staging,
+        static_cast<std::uint32_t>(sizeof(std::uint32_t)), inline_transfers,
+        "LightingService.LightViewData");
   }
   if (grid_metadata_buffer_ == nullptr) {
     grid_metadata_buffer_ = std::make_unique<upload::TransientStructuredBuffer>(
@@ -74,17 +76,18 @@ auto ForwardLightPublisher::EnsurePublishResources() -> bool
       "LightingService.GridMetadata");
   }
   if (grid_indirection_buffer_ == nullptr) {
-    grid_indirection_buffer_ = std::make_unique<upload::TransientStructuredBuffer>(
-      observer_ptr { gfx.get() }, staging,
-      static_cast<std::uint32_t>(sizeof(ClusterLightRange)), inline_transfers,
-      "LightingService.GridIndirection");
+    grid_indirection_buffer_
+      = std::make_unique<upload::TransientStructuredBuffer>(
+        observer_ptr { gfx.get() }, staging,
+        static_cast<std::uint32_t>(sizeof(ClusterLightRange)), inline_transfers,
+        "LightingService.GridIndirection");
   }
   if (directional_light_indices_buffer_ == nullptr) {
     directional_light_indices_buffer_
       = std::make_unique<upload::TransientStructuredBuffer>(
         observer_ptr { gfx.get() }, staging,
-        static_cast<std::uint32_t>(sizeof(std::uint32_t)),
-        inline_transfers, "LightingService.DirectionalIndices");
+        static_cast<std::uint32_t>(sizeof(std::uint32_t)), inline_transfers,
+        "LightingService.DirectionalIndices");
   }
   return true;
 }
@@ -107,18 +110,21 @@ auto ForwardLightPublisher::OnFrameStart(
   directional_light_indices_buffer_->OnFrameStart(sequence, slot);
 }
 
-auto ForwardLightPublisher::Publish(const BuiltLightGridFrame& built_frame) -> void
+auto ForwardLightPublisher::Publish(const BuiltLightGridFrame& built_frame)
+  -> void
 {
   published_views_.clear();
   if (!EnsurePublishResources()) {
     return;
   }
 
-  auto local_light_buffer_srv = ShaderVisibleIndex { kInvalidShaderVisibleIndex };
+  auto local_light_buffer_srv
+    = ShaderVisibleIndex { kInvalidShaderVisibleIndex };
   if (!built_frame.local_light_records.empty()) {
     if (auto allocation = local_light_buffer_->Allocate(
           static_cast<std::uint32_t>(built_frame.local_light_records.size()));
-      allocation && allocation->TryWriteRange(
+      allocation
+      && allocation->TryWriteRange(
         std::span(built_frame.local_light_records))) {
       local_light_buffer_srv = allocation->srv;
     }
@@ -138,7 +144,8 @@ auto ForwardLightPublisher::Publish(const BuiltLightGridFrame& built_frame) -> v
     for (std::uint32_t i = 0; i < bindings.local_light_count; ++i) {
       light_indices[i] = i;
     }
-    if (auto light_view_alloc = light_view_data_buffer_->Allocate(light_list_size);
+    if (auto light_view_alloc
+      = light_view_data_buffer_->Allocate(light_list_size);
       light_view_alloc
       && light_view_alloc->TryWriteRange(std::span(light_indices))) {
       bindings.light_view_data_srv = light_view_alloc->srv;
@@ -158,7 +165,8 @@ auto ForwardLightPublisher::Publish(const BuiltLightGridFrame& built_frame) -> v
 
     if (!built_frame.directional_light_indices.empty()) {
       if (auto directional_alloc = directional_light_indices_buffer_->Allocate(
-            static_cast<std::uint32_t>(built_frame.directional_light_indices.size()));
+            static_cast<std::uint32_t>(
+              built_frame.directional_light_indices.size()));
         directional_alloc
         && directional_alloc->TryWriteRange(
           std::span(built_frame.directional_light_indices))) {
@@ -168,8 +176,8 @@ auto ForwardLightPublisher::Publish(const BuiltLightGridFrame& built_frame) -> v
 
     const auto slot
       = lighting_bindings_publisher_->Publish(view.view_id, bindings);
-    published_views_.insert_or_assign(
-      view.view_id, PublishedLightingView { .slot = slot, .bindings = bindings });
+    published_views_.insert_or_assign(view.view_id,
+      PublishedLightingView { .slot = slot, .bindings = bindings });
   }
 }
 
@@ -184,8 +192,9 @@ auto ForwardLightPublisher::ResolveBindingSlot(const ViewId view_id) const
   -> ShaderVisibleIndex
 {
   const auto it = published_views_.find(view_id);
-  return it != published_views_.end() ? it->second.slot
-                                      : ShaderVisibleIndex { kInvalidShaderVisibleIndex };
+  return it != published_views_.end()
+    ? it->second.slot
+    : ShaderVisibleIndex { kInvalidShaderVisibleIndex };
 }
 
 } // namespace oxygen::vortex::lighting::internal

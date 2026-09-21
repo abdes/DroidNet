@@ -10,7 +10,7 @@
 // `kNoResourceIndex` is assumed to be zero across Pak/runtime integration.
 
 #ifndef OXDAT_RESOURCE_INDEX_CONSTANT
-#  define OXDAT_RESOURCE_INDEX_CONSTANT(name, value) \
+#  define OXDAT_RESOURCE_INDEX_CONSTANT(name, value)                           \
     constexpr ResourceIndexT name { value };
 #endif
 

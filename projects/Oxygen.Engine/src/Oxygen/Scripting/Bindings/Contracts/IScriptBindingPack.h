@@ -25,8 +25,7 @@ public:
   [[nodiscard]] virtual auto Name() const noexcept -> std::string_view = 0;
 
   [[nodiscard]] virtual auto Register(
-    const ScriptBindingPackContext& context) const -> bool
-    = 0;
+    const ScriptBindingPackContext& context) const -> bool = 0;
 };
 
 using ScriptBindingPackPtr = std::shared_ptr<const IScriptBindingPack>;

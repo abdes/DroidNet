@@ -1077,11 +1077,10 @@ auto GeometryUploader::Impl::RetireCompletedUploads() -> void
   std::size_t completed_count = 0;
   std::size_t error_count = 0;
 
-  auto retire_one = [&](auto& entry,
-                        std::optional<vortex::upload::UploadTicket>& ticket_opt,
-                        ShaderVisibleIndex& published,
-                        ShaderVisibleIndex& pending,
-                        std::uint64_t& pending_generation) -> void {
+  auto retire_one
+    = [&](auto& entry, std::optional<vortex::upload::UploadTicket>& ticket_opt,
+        ShaderVisibleIndex& published, ShaderVisibleIndex& pending,
+        std::uint64_t& pending_generation) -> void {
     if (!ticket_opt.has_value()) {
       return;
     }

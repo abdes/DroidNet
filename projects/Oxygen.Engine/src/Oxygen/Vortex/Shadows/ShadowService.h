@@ -21,11 +21,11 @@ namespace oxygen::vortex {
 class Renderer;
 
 namespace internal {
-template <typename Payload> class PerViewStructuredPublisher;
+  template <typename Payload> class PerViewStructuredPublisher;
 } // namespace internal
 
 namespace shadows {
-class CascadeShadowPass;
+  class CascadeShadowPass;
 } // namespace shadows
 
 class ShadowService {
@@ -55,16 +55,17 @@ public:
 
   OXGN_VRTX_API auto OnFrameStart(
     frame::SequenceNumber sequence, frame::Slot slot) -> void;
-  OXGN_VRTX_API auto RenderShadowDepths(const FrameShadowInputs& inputs) -> void;
+  OXGN_VRTX_API auto RenderShadowDepths(const FrameShadowInputs& inputs)
+    -> void;
 
   [[nodiscard]] OXGN_VRTX_API auto InspectShadowData(ViewId view_id) const
     -> const DirectionalShadowFrameData*;
   [[nodiscard]] OXGN_VRTX_API auto InspectShadowSurface(ViewId view_id) const
     -> const graphics::Texture*;
-  [[nodiscard]] OXGN_VRTX_API auto InspectSpotShadowSurface(ViewId view_id) const
-    -> const graphics::Texture*;
-  [[nodiscard]] OXGN_VRTX_API auto InspectPointShadowSurface(ViewId view_id) const
-    -> const graphics::Texture*;
+  [[nodiscard]] OXGN_VRTX_API auto InspectSpotShadowSurface(
+    ViewId view_id) const -> const graphics::Texture*;
+  [[nodiscard]] OXGN_VRTX_API auto InspectPointShadowSurface(
+    ViewId view_id) const -> const graphics::Texture*;
   [[nodiscard]] OXGN_VRTX_API auto ResolveShadowFrameSlot(ViewId view_id) const
     -> ShaderVisibleIndex;
   [[nodiscard]] OXGN_VRTX_NDAPI auto HasVsm() const -> bool { return false; }

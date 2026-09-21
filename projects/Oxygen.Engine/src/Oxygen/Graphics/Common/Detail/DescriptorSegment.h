@@ -85,8 +85,7 @@ public:
 
   //! Returns the number of descriptors currently available in this segment.
   [[nodiscard]] virtual auto GetAvailableCount() const noexcept
-    -> bindless::Count
-    = 0;
+    -> bindless::Count = 0;
 
   //! Checks if the segment is empty (i.e., no allocated descriptors).
   [[nodiscard]] auto IsEmpty() const noexcept
@@ -107,13 +106,11 @@ public:
 
   //! Returns the visibility of this segment.
   [[nodiscard]] virtual auto GetVisibility() const noexcept
-    -> DescriptorVisibility
-    = 0;
+    -> DescriptorVisibility = 0;
 
   //! Returns the base index of this segment.
   [[nodiscard]] virtual auto GetBaseIndex() const noexcept
-    -> bindless::HeapIndex
-    = 0;
+    -> bindless::HeapIndex = 0;
 
   //! Returns the capacity of this segment.
   [[nodiscard]] virtual auto GetCapacity() const noexcept -> bindless::Capacity
@@ -122,8 +119,7 @@ public:
   //! Returns the current size (number of allocated descriptors) of this
   //! segment.
   [[nodiscard]] virtual auto GetAllocatedCount() const noexcept
-    -> bindless::Count
-    = 0;
+    -> bindless::Count = 0;
 
   // //! Returns the shader-visible (local) index for a descriptor handle within
   // //! this segment.

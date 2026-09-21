@@ -117,8 +117,7 @@ public:
   */
   [[nodiscard]] virtual auto ReadFile(
     const std::filesystem::path& path, ReadOptions options = {})
-    -> co::Co<Result<std::vector<std::byte>, FileErrorInfo>>
-    = 0;
+    -> co::Co<Result<std::vector<std::byte>, FileErrorInfo>> = 0;
 
   //! Get file metadata without reading contents.
   /*!
@@ -132,8 +131,7 @@ public:
    - `kAccessDenied` if stat permission is denied.
   */
   [[nodiscard]] virtual auto GetFileInfo(const std::filesystem::path& path)
-    -> co::Co<Result<FileInfo, FileErrorInfo>>
-    = 0;
+    -> co::Co<Result<FileInfo, FileErrorInfo>> = 0;
 
   //! Check if a file exists.
   /*!
@@ -144,8 +142,7 @@ public:
    An error is only returned if the existence check itself fails.
   */
   [[nodiscard]] virtual auto Exists(const std::filesystem::path& path)
-    -> co::Co<Result<bool, FileErrorInfo>>
-    = 0;
+    -> co::Co<Result<bool, FileErrorInfo>> = 0;
 };
 
 // Forward declaration

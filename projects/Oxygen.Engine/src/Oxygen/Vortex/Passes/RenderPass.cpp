@@ -260,8 +260,8 @@ auto RenderPass::EmitDrawRange(CommandRecorder& recorder,
 
     try {
       BindDrawIndexConstant(recorder, draw_index);
-      recorder.Draw(
-        metadata.is_indexed != 0U ? metadata.index_count : metadata.vertex_count,
+      recorder.Draw(metadata.is_indexed != 0U ? metadata.index_count
+                                              : metadata.vertex_count,
         metadata.instance_count, 0, 0);
       ++emitted_count;
     } catch (const std::exception& ex) {

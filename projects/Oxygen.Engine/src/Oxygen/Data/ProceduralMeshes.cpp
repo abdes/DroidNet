@@ -85,13 +85,16 @@ auto HandleCapsuleMesh(std::span<const std::byte> param_blob)
 {
   // Optional parameters must be a prefix of complete uint32/float32 fields.
   constexpr auto kFieldSize = sizeof(uint32_t);
-  constexpr auto kParameterSize = (2U * sizeof(uint32_t)) + (2U * sizeof(float));
+  constexpr auto kParameterSize
+    = (2U * sizeof(uint32_t)) + (2U * sizeof(float));
   static_assert(sizeof(float) == kFieldSize);
-  if (param_blob.size() > kParameterSize || param_blob.size() % kFieldSize != 0U) {
+  if (param_blob.size() > kParameterSize
+    || param_blob.size() % kFieldSize != 0U) {
     return std::nullopt;
   }
   auto parameters = std::make_tuple(recipe::kCapsuleHemisphereSegments,
-    recipe::kCapsuleRadialSegments, recipe::kCapsuleHeight, recipe::kCapsuleRadius);
+    recipe::kCapsuleRadialSegments, recipe::kCapsuleHeight,
+    recipe::kCapsuleRadius);
   oxygen::serio::ReadOnlyMemoryStream stream(param_blob);
   oxygen::serio::Reader<oxygen::serio::ReadOnlyMemoryStream> reader(stream);
   auto remaining = param_blob.size();
@@ -102,7 +105,8 @@ auto HandleCapsuleMesh(std::span<const std::byte> param_blob)
         if (remaining == 0U || !valid) {
           return;
         }
-        const auto value = reader.Read<std::remove_reference_t<decltype(field)>>();
+        const auto value
+          = reader.Read<std::remove_reference_t<decltype(field)>>();
         if (!value) {
           valid = false;
           return;

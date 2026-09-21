@@ -38,8 +38,7 @@ auto to_string(const DiagnosticsFeatureSet features) -> std::string
   append_feature(DiagnosticsFeature::kShaderDebugModes, "ShaderDebugModes");
   append_feature(DiagnosticsFeature::kImGuiPanels, "ImGuiPanels");
   append_feature(DiagnosticsFeature::kCaptureManifest, "CaptureManifest");
-  append_feature(
-    DiagnosticsFeature::kGpuDebugPrimitives, "GpuDebugPrimitives");
+  append_feature(DiagnosticsFeature::kGpuDebugPrimitives, "GpuDebugPrimitives");
 
   if (checked != features) {
     if (!result.empty()) {

@@ -404,8 +404,7 @@ auto IblProcessor::RefreshStaticSkyLightProducts(
     refreshed.refreshed = true;
   }
 
-  const auto cache_has_valid_products =
-    !key_changed
+  const auto cache_has_valid_products = !key_changed
     && cache.products.status == StaticSkyLightProductStatus::kValidCurrentKey
     && cache.products.processed_cubemap_srv.IsValid()
     && cache.products.diffuse_irradiance_sh_srv.IsValid()

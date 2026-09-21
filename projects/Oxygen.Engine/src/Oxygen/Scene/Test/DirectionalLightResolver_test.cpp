@@ -52,7 +52,8 @@ protected:
   std::shared_ptr<Scene> scene_;
 };
 
-NOLINT_TEST_F(DirectionalLightResolverTest, ResolveReturnsEmptyWhenSceneHasNoDirectionalLights)
+NOLINT_TEST_F(DirectionalLightResolverTest,
+  ResolveReturnsEmptyWhenSceneHasNoDirectionalLights)
 {
   auto& resolver = scene_->GetDirectionalLightResolver();
   EXPECT_TRUE(resolver.IsValid());
@@ -69,12 +70,12 @@ NOLINT_TEST_F(DirectionalLightResolverTest, ResolveReturnsEmptyWhenSceneHasNoDir
 NOLINT_TEST_F(DirectionalLightResolverTest,
   ResolvePrimarySlotPrefersExplicitPrimaryOverFallbackSun)
 {
-  static_cast<void>(AddDirectionalLight("Fill", false, false,
-    AtmosphereLightSlot::kNone,
-    glm::angleAxis(+oxygen::math::HalfPi, oxygen::space::move::Right)));
-  static_cast<void>(AddDirectionalLight("Sun", true, true,
-    AtmosphereLightSlot::kNone,
-    glm::angleAxis(-oxygen::math::HalfPi, oxygen::space::move::Right)));
+  static_cast<void>(
+    AddDirectionalLight("Fill", false, false, AtmosphereLightSlot::kNone,
+      glm::angleAxis(+oxygen::math::HalfPi, oxygen::space::move::Right)));
+  static_cast<void>(
+    AddDirectionalLight("Sun", true, true, AtmosphereLightSlot::kNone,
+      glm::angleAxis(-oxygen::math::HalfPi, oxygen::space::move::Right)));
   const auto primary = AddDirectionalLight("ExplicitPrimary", true, false,
     AtmosphereLightSlot::kPrimary,
     glm::angleAxis(+oxygen::math::HalfPi, oxygen::space::move::Up));
@@ -88,12 +89,12 @@ NOLINT_TEST_F(DirectionalLightResolverTest,
 NOLINT_TEST_F(DirectionalLightResolverTest,
   ResolveSecondarySlotUsesOnlyExplicitSecondaryBinding)
 {
-  const auto sun = AddDirectionalLight("Sun", true, true,
-    AtmosphereLightSlot::kNone,
-    glm::angleAxis(-oxygen::math::HalfPi, oxygen::space::move::Right));
-  const auto moon = AddDirectionalLight("Moon", true, false,
-    AtmosphereLightSlot::kSecondary,
-    glm::angleAxis(+oxygen::math::HalfPi, oxygen::space::move::Up));
+  const auto sun
+    = AddDirectionalLight("Sun", true, true, AtmosphereLightSlot::kNone,
+      glm::angleAxis(-oxygen::math::HalfPi, oxygen::space::move::Right));
+  const auto moon
+    = AddDirectionalLight("Moon", true, false, AtmosphereLightSlot::kSecondary,
+      glm::angleAxis(+oxygen::math::HalfPi, oxygen::space::move::Up));
 
   auto& resolver = scene_->GetDirectionalLightResolver();
   ASSERT_TRUE(resolver.ResolvePrimarySun().has_value());
@@ -106,12 +107,12 @@ NOLINT_TEST_F(DirectionalLightResolverTest,
 NOLINT_TEST_F(DirectionalLightResolverTest,
   ResolveLeavesSecondaryUnboundWhenNoExplicitSecondaryExists)
 {
-  const auto sun = AddDirectionalLight("Sun", true, true,
-    AtmosphereLightSlot::kNone,
-    glm::angleAxis(-oxygen::math::HalfPi, oxygen::space::move::Right));
-  static_cast<void>(AddDirectionalLight("Moon", true, false,
-    AtmosphereLightSlot::kNone,
-    glm::angleAxis(+oxygen::math::HalfPi, oxygen::space::move::Up)));
+  const auto sun
+    = AddDirectionalLight("Sun", true, true, AtmosphereLightSlot::kNone,
+      glm::angleAxis(-oxygen::math::HalfPi, oxygen::space::move::Right));
+  static_cast<void>(
+    AddDirectionalLight("Moon", true, false, AtmosphereLightSlot::kNone,
+      glm::angleAxis(+oxygen::math::HalfPi, oxygen::space::move::Up)));
 
   auto& resolver = scene_->GetDirectionalLightResolver();
   ASSERT_TRUE(resolver.ResolvePrimarySun().has_value());
@@ -123,12 +124,12 @@ NOLINT_TEST_F(DirectionalLightResolverTest,
 NOLINT_TEST_F(DirectionalLightResolverTest,
   ResolveTracksFirstWinsConflictMetadataForExplicitPrimaryClaims)
 {
-  static_cast<void>(AddDirectionalLight("PrimaryA", true, false,
-    AtmosphereLightSlot::kPrimary,
-    glm::angleAxis(+oxygen::math::HalfPi, oxygen::space::move::Up)));
-  static_cast<void>(AddDirectionalLight("PrimaryB", true, true,
-    AtmosphereLightSlot::kPrimary,
-    glm::angleAxis(-oxygen::math::HalfPi, oxygen::space::move::Right)));
+  static_cast<void>(
+    AddDirectionalLight("PrimaryA", true, false, AtmosphereLightSlot::kPrimary,
+      glm::angleAxis(+oxygen::math::HalfPi, oxygen::space::move::Up)));
+  static_cast<void>(
+    AddDirectionalLight("PrimaryB", true, true, AtmosphereLightSlot::kPrimary,
+      glm::angleAxis(-oxygen::math::HalfPi, oxygen::space::move::Right)));
 
   auto& resolver = scene_->GetDirectionalLightResolver();
   ASSERT_TRUE(resolver.ResolvePrimarySun().has_value());
@@ -138,11 +139,12 @@ NOLINT_TEST_F(DirectionalLightResolverTest,
     [](const oxygen::scene::ResolvedDirectionalLightView& entry) {
       return entry.Light().GetEnvironmentContribution()
         && entry.Light().GetAtmosphereLightSlot()
-          == oxygen::scene::AtmosphereLightSlot::kPrimary;
+        == oxygen::scene::AtmosphereLightSlot::kPrimary;
     });
   ASSERT_NE(first_primary, resolved_directional_lights.end());
 
-  EXPECT_EQ(resolver.ResolvePrimarySun()->NodeHandle(), first_primary->NodeHandle());
+  EXPECT_EQ(
+    resolver.ResolvePrimarySun()->NodeHandle(), first_primary->NodeHandle());
   EXPECT_EQ(atmosphere_lights.conflict_count, 1U);
   EXPECT_EQ(atmosphere_lights.first_conflict_slot, 0U);
   EXPECT_TRUE(atmosphere_lights.explicit_slot_claims[0]);
@@ -152,9 +154,9 @@ NOLINT_TEST_F(DirectionalLightResolverTest,
 NOLINT_TEST_F(DirectionalLightResolverTest,
   ValidateThrowsWhenSunLightLacksEnvironmentContribution)
 {
-  static_cast<void>(AddDirectionalLight("BadSun", false, true,
-    AtmosphereLightSlot::kNone,
-    glm::angleAxis(-oxygen::math::HalfPi, oxygen::space::move::Right)));
+  static_cast<void>(
+    AddDirectionalLight("BadSun", false, true, AtmosphereLightSlot::kNone,
+      glm::angleAxis(-oxygen::math::HalfPi, oxygen::space::move::Right)));
 
   EXPECT_THROW(scene_->GetDirectionalLightResolver().Validate(),
     DirectionalLightContractError);
@@ -163,29 +165,29 @@ NOLINT_TEST_F(DirectionalLightResolverTest,
 NOLINT_TEST_F(DirectionalLightResolverTest,
   ValidateThrowsWhenMoreThanTwoEnvironmentContributingLightsExist)
 {
-  static_cast<void>(AddDirectionalLight("Sun", true, true,
-    AtmosphereLightSlot::kNone,
-    glm::angleAxis(-oxygen::math::HalfPi, oxygen::space::move::Right)));
-  static_cast<void>(AddDirectionalLight("Moon", true, false,
-    AtmosphereLightSlot::kNone,
-    glm::angleAxis(+oxygen::math::HalfPi, oxygen::space::move::Up)));
-  static_cast<void>(AddDirectionalLight("ThirdEnv", true, false,
-    AtmosphereLightSlot::kNone,
-    glm::angleAxis(+oxygen::math::HalfPi, oxygen::space::move::Left)));
+  static_cast<void>(
+    AddDirectionalLight("Sun", true, true, AtmosphereLightSlot::kNone,
+      glm::angleAxis(-oxygen::math::HalfPi, oxygen::space::move::Right)));
+  static_cast<void>(
+    AddDirectionalLight("Moon", true, false, AtmosphereLightSlot::kNone,
+      glm::angleAxis(+oxygen::math::HalfPi, oxygen::space::move::Up)));
+  static_cast<void>(
+    AddDirectionalLight("ThirdEnv", true, false, AtmosphereLightSlot::kNone,
+      glm::angleAxis(+oxygen::math::HalfPi, oxygen::space::move::Left)));
 
   EXPECT_THROW(scene_->GetDirectionalLightResolver().Validate(),
     DirectionalLightContractError);
 }
 
-NOLINT_TEST_F(DirectionalLightResolverTest,
-  ValidateThrowsWhenMoreThanOneSunLightExists)
+NOLINT_TEST_F(
+  DirectionalLightResolverTest, ValidateThrowsWhenMoreThanOneSunLightExists)
 {
-  static_cast<void>(AddDirectionalLight("SunA", true, true,
-    AtmosphereLightSlot::kNone,
-    glm::angleAxis(-oxygen::math::HalfPi, oxygen::space::move::Right)));
-  static_cast<void>(AddDirectionalLight("SunB", true, true,
-    AtmosphereLightSlot::kNone,
-    glm::angleAxis(+oxygen::math::HalfPi, oxygen::space::move::Right)));
+  static_cast<void>(
+    AddDirectionalLight("SunA", true, true, AtmosphereLightSlot::kNone,
+      glm::angleAxis(-oxygen::math::HalfPi, oxygen::space::move::Right)));
+  static_cast<void>(
+    AddDirectionalLight("SunB", true, true, AtmosphereLightSlot::kNone,
+      glm::angleAxis(+oxygen::math::HalfPi, oxygen::space::move::Right)));
 
   EXPECT_THROW(scene_->GetDirectionalLightResolver().Validate(),
     DirectionalLightContractError);

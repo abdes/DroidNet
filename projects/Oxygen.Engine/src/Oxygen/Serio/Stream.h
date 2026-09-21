@@ -80,15 +80,14 @@ public:
   OXYGEN_DEFAULT_MOVABLE(AnyInputStream)
 
   [[nodiscard]] virtual auto Read(std::byte* data, size_t size) noexcept
-    -> Result<void>
-    = 0;
+    -> Result<void> = 0;
   [[nodiscard]] virtual auto Size() const noexcept -> Result<size_t> = 0;
   [[nodiscard]] virtual auto Position() const noexcept -> Result<size_t> = 0;
   [[nodiscard]] virtual auto Seek(size_t pos) noexcept -> Result<void> = 0;
-  [[nodiscard]] virtual auto Backward(size_t offset) noexcept -> Result<void>
-    = 0;
-  [[nodiscard]] virtual auto Forward(size_t offset) noexcept -> Result<void>
-    = 0;
+  [[nodiscard]] virtual auto Backward(size_t offset) noexcept
+    -> Result<void> = 0;
+  [[nodiscard]] virtual auto Forward(size_t offset) noexcept
+    -> Result<void> = 0;
   [[nodiscard]] virtual auto SeekEnd() noexcept -> Result<void> = 0;
   virtual auto Reset() noexcept -> void = 0;
 };
@@ -103,19 +102,17 @@ public:
   OXYGEN_DEFAULT_MOVABLE(AnyOutputStream)
 
   [[nodiscard]] virtual auto Write(const std::byte* data, size_t size) noexcept
-    -> Result<void>
-    = 0;
+    -> Result<void> = 0;
   [[nodiscard]] virtual auto Write(std::span<const std::byte> data) noexcept
-    -> Result<void>
-    = 0;
+    -> Result<void> = 0;
   [[nodiscard]] virtual auto Flush() noexcept -> Result<void> = 0;
   [[nodiscard]] virtual auto Size() const noexcept -> Result<size_t> = 0;
   [[nodiscard]] virtual auto Position() const noexcept -> Result<size_t> = 0;
   [[nodiscard]] virtual auto Seek(size_t pos) noexcept -> Result<void> = 0;
-  [[nodiscard]] virtual auto Backward(size_t offset) noexcept -> Result<void>
-    = 0;
-  [[nodiscard]] virtual auto Forward(size_t offset) noexcept -> Result<void>
-    = 0;
+  [[nodiscard]] virtual auto Backward(size_t offset) noexcept
+    -> Result<void> = 0;
+  [[nodiscard]] virtual auto Forward(size_t offset) noexcept
+    -> Result<void> = 0;
   [[nodiscard]] virtual auto SeekEnd() noexcept -> Result<void> = 0;
   virtual auto Reset() noexcept -> void = 0;
 };
@@ -155,14 +152,11 @@ public:
   OXYGEN_DEFAULT_MOVABLE(AnyStream)
 
   [[nodiscard]] auto Read(std::byte* data, size_t size) noexcept
-    -> Result<void> override
-    = 0;
+    -> Result<void> override = 0;
   [[nodiscard]] auto Write(const std::byte* data, size_t size) noexcept
-    -> Result<void> override
-    = 0;
+    -> Result<void> override = 0;
   [[nodiscard]] auto Write(std::span<const std::byte> data) noexcept
-    -> Result<void> override
-    = 0;
+    -> Result<void> override = 0;
   [[nodiscard]] auto Flush() noexcept -> Result<void> override = 0;
 
   [[nodiscard]] auto Size() const noexcept -> Result<size_t> override = 0;

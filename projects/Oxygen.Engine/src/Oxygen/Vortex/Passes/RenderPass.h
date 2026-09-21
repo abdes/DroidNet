@@ -67,8 +67,7 @@ protected:
   virtual auto OnPrepareResources(graphics::CommandRecorder& recorder) -> void
     = 0;
   virtual auto DoPrepareResources(graphics::CommandRecorder& recorder)
-    -> co::Co<>
-    = 0;
+    -> co::Co<> = 0;
   virtual auto OnExecute(graphics::CommandRecorder& recorder) -> void = 0;
   virtual auto DoExecute(graphics::CommandRecorder& recorder) -> co::Co<> = 0;
 

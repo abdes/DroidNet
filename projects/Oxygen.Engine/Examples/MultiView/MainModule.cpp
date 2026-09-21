@@ -463,38 +463,39 @@ auto MainModule::UpdateCameras(const platform::window::ExtentT& extent) -> void
   const float proof_cell_aspect = extent.height > 0
     ? static_cast<float>(extent.width) / static_cast<float>(extent.height)
     : 1.0F;
-  const auto configure_camera = [](scene::SceneNode& node,
-                                  const glm::vec3& position,
-                                  const glm::vec3& target,
-                                  const float fov_degrees,
-                                  const float aspect_ratio) {
-    if (!node.IsAlive()) {
-      return;
-    }
-    const auto cam_opt = node.GetCameraAs<scene::PerspectiveCamera>();
-    if (!cam_opt) {
-      return;
-    }
+  const auto configure_camera =
+    [](scene::SceneNode& node, const glm::vec3& position,
+      const glm::vec3& target, const float fov_degrees,
+      const float aspect_ratio) {
+      if (!node.IsAlive()) {
+        return;
+      }
+      const auto cam_opt = node.GetCameraAs<scene::PerspectiveCamera>();
+      if (!cam_opt) {
+        return;
+      }
 
-    auto& cam = cam_opt->get();
-    const glm::mat4 view_mat = glm::lookAt(position, target, space::move::Up);
-    node.GetTransform().SetLocalPosition(position);
-    node.GetTransform().SetLocalRotation(glm::quat_cast(glm::inverse(view_mat)));
-    cam.SetFieldOfView(glm::radians(fov_degrees));
-    cam.SetAspectRatio(aspect_ratio);
-    cam.SetNearPlane(0.05F);
-    cam.SetFarPlane(160.0F);
-  };
+      auto& cam = cam_opt->get();
+      const glm::mat4 view_mat = glm::lookAt(position, target, space::move::Up);
+      node.GetTransform().SetLocalPosition(position);
+      node.GetTransform().SetLocalRotation(
+        glm::quat_cast(glm::inverse(view_mat)));
+      cam.SetFieldOfView(glm::radians(fov_degrees));
+      cam.SetAspectRatio(aspect_ratio);
+      cam.SetNearPlane(0.05F);
+      cam.SetFarPlane(160.0F);
+    };
 
   if (config_.feature_variant_proof_layout) {
     constexpr float kMargin = 16.0F;
     constexpr float kGap = 12.0F;
     const float cell_w = std::max(1.0F,
-      std::floor((static_cast<float>(extent.width) - (2.0F * kMargin)
-        - (2.0F * kGap)) / 3.0F));
+      std::floor(
+        (static_cast<float>(extent.width) - (2.0F * kMargin) - (2.0F * kGap))
+        / 3.0F));
     const float cell_h = std::max(1.0F,
-      std::floor((static_cast<float>(extent.height) - (2.0F * kMargin)
-        - kGap) / 2.0F));
+      std::floor(
+        (static_cast<float>(extent.height) - (2.0F * kMargin) - kGap) / 2.0F));
     const float cell_aspect = cell_w / cell_h;
     configure_camera(main_camera_node_, glm::vec3(0.0F, 0.0F, 5.0F),
       glm::vec3(0.0F, 0.0F, -2.0F), 42.0F, cell_aspect);
@@ -518,11 +519,11 @@ auto MainModule::UpdateCameras(const platform::window::ExtentT& extent) -> void
   }
 
   const auto configure_offscreen_camera = [](scene::SceneNode& node,
-                                           const glm::vec3& position,
-                                           const glm::vec3& target,
-                                           const float fov_degrees,
-                                           const uint32_t width,
-                                           const uint32_t height) {
+                                            const glm::vec3& position,
+                                            const glm::vec3& target,
+                                            const float fov_degrees,
+                                            const uint32_t width,
+                                            const uint32_t height) {
     if (!node.IsAlive()) {
       return;
     }
@@ -534,7 +535,8 @@ auto MainModule::UpdateCameras(const platform::window::ExtentT& extent) -> void
     auto& cam = cam_opt->get();
     const glm::mat4 view_mat = glm::lookAt(position, target, space::move::Up);
     node.GetTransform().SetLocalPosition(position);
-    node.GetTransform().SetLocalRotation(glm::quat_cast(glm::inverse(view_mat)));
+    node.GetTransform().SetLocalRotation(
+      glm::quat_cast(glm::inverse(view_mat)));
     cam.SetFieldOfView(glm::radians(fov_degrees));
     cam.SetAspectRatio(static_cast<float>(width) / static_cast<float>(height));
     cam.SetNearPlane(0.05F);
@@ -707,7 +709,8 @@ auto MainModule::EnsureOffscreenProofProduct(OffscreenProofProduct& product,
     return false;
   }
 
-  if (product.framebuffer && product.width == width && product.height == height) {
+  if (product.framebuffer && product.width == width
+    && product.height == height) {
     return true;
   }
 
@@ -750,12 +753,12 @@ auto MainModule::RenderOffscreenProofProducts(engine::FrameContext& context)
     return;
   }
 
-  const bool preview_ready = EnsureOffscreenProofProduct(offscreen_preview_,
-    kOffscreenPreviewWidth, kOffscreenPreviewHeight,
-    "M06B.OffscreenPreview.Deferred.Color");
-  const bool capture_ready = EnsureOffscreenProofProduct(offscreen_capture_,
-    kOffscreenCaptureWidth, kOffscreenCaptureHeight,
-    "M06B.OffscreenCapture.Forward.Color");
+  const bool preview_ready
+    = EnsureOffscreenProofProduct(offscreen_preview_, kOffscreenPreviewWidth,
+      kOffscreenPreviewHeight, "M06B.OffscreenPreview.Deferred.Color");
+  const bool capture_ready
+    = EnsureOffscreenProofProduct(offscreen_capture_, kOffscreenCaptureWidth,
+      kOffscreenCaptureHeight, "M06B.OffscreenCapture.Forward.Color");
   if (!preview_ready || !capture_ready) {
     LOG_F(WARNING, "[MultiView] M06B offscreen proof targets are not ready");
     return;
@@ -766,8 +769,8 @@ auto MainModule::RenderOffscreenProofProducts(engine::FrameContext& context)
   const auto frame_session = vortex::Renderer::FrameSessionInput {
     .frame_slot = context.GetFrameSlot(),
     .frame_sequence = context.GetFrameSequenceNumber(),
-    .delta_time_seconds = std::max(
-      delta_seconds, time::SimulationClock::kMinDeltaTimeSeconds),
+    .delta_time_seconds
+    = std::max(delta_seconds, time::SimulationClock::kMinDeltaTimeSeconds),
     .scene = observer_ptr<scene::Scene> { active_scene_.operator->() },
   };
 
@@ -825,8 +828,8 @@ auto MainModule::RenderOffscreenProofProducts(engine::FrameContext& context)
 
     auto session = facade.Finalize();
     if (!session.has_value()) {
-      LOG_F(WARNING, "[MultiView] M06B offscreen proof {} finalize failed",
-        name);
+      LOG_F(
+        WARNING, "[MultiView] M06B offscreen proof {} finalize failed", name);
       return;
     }
 
@@ -865,11 +868,13 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
     const auto staged_scene = shell.GetStagedScene();
     CHECK_NOTNULL_F(staged_scene, "MultiView staged scene is null");
 
-    main_camera_node_ = CreatePerspectiveCameraNode(*staged_scene, "MainCamera");
+    main_camera_node_
+      = CreatePerspectiveCameraNode(*staged_scene, "MainCamera");
     pip_camera_node_ = CreatePerspectiveCameraNode(*staged_scene, "PipCamera");
     if (config_.proof_layout || config_.aux_proof_layout
       || config_.feature_variant_proof_layout) {
-      top_camera_node_ = CreatePerspectiveCameraNode(*staged_scene, "TopCamera");
+      top_camera_node_
+        = CreatePerspectiveCameraNode(*staged_scene, "TopCamera");
       debug_camera_node_
         = CreatePerspectiveCameraNode(*staged_scene, "DebugCamera");
       shadow_camera_node_
@@ -1008,9 +1013,8 @@ auto MainModule::DrawFeatureVariantProofOverlay() -> void
   constexpr float kHeaderHeight = 30.0F;
   const float sw = static_cast<float>(extent.width);
   const float sh = static_cast<float>(extent.height);
-  const float cell_w
-    = std::max(1.0F, std::floor((sw - (2.0F * kMargin) - (2.0F * kGap))
-        / 3.0F));
+  const float cell_w = std::max(
+    1.0F, std::floor((sw - (2.0F * kMargin) - (2.0F * kGap)) / 3.0F));
   const float cell_h
     = std::max(1.0F, std::floor((sh - (2.0F * kMargin) - kGap) / 2.0F));
 
@@ -1019,18 +1023,14 @@ auto MainModule::DrawFeatureVariantProofOverlay() -> void
     ImU32 color;
   };
   const std::array labels {
-    Label { "M06C Depth-only | BLACK expected",
-      IM_COL32(76, 120, 190, 235) },
-    Label { "M06C Shadow-only | BLACK expected",
-      IM_COL32(90, 80, 62, 235) },
-    Label { "M06C No environment | no sky/fog",
-      IM_COL32(150, 82, 80, 235) },
-    Label { "M06C No shadowing | no shadows",
-      IM_COL32(70, 125, 92, 235) },
-    Label { "M06C No volumetrics | no volume fog",
-      IM_COL32(115, 88, 150, 235) },
-    Label { "M06C Diagnostics-only | BLACK expected",
-      IM_COL32(95, 95, 95, 235) },
+    Label { "M06C Depth-only | BLACK expected", IM_COL32(76, 120, 190, 235) },
+    Label { "M06C Shadow-only | BLACK expected", IM_COL32(90, 80, 62, 235) },
+    Label { "M06C No environment | no sky/fog", IM_COL32(150, 82, 80, 235) },
+    Label { "M06C No shadowing | no shadows", IM_COL32(70, 125, 92, 235) },
+    Label {
+      "M06C No volumetrics | no volume fog", IM_COL32(115, 88, 150, 235) },
+    Label {
+      "M06C Diagnostics-only | BLACK expected", IM_COL32(95, 95, 95, 235) },
   };
 
   auto* draw_list = ImGui::GetForegroundDrawList();
@@ -1039,10 +1039,8 @@ auto MainModule::DrawFeatureVariantProofOverlay() -> void
   }
 
   for (std::size_t index = 0U; index < labels.size(); ++index) {
-    const float x = kMargin
-      + static_cast<float>(index % 3U) * (cell_w + kGap);
-    const float y = kMargin
-      + static_cast<float>(index / 3U) * (cell_h + kGap);
+    const float x = kMargin + static_cast<float>(index % 3U) * (cell_w + kGap);
+    const float y = kMargin + static_cast<float>(index / 3U) * (cell_h + kGap);
     const ImVec2 rect_min { x, y };
     const ImVec2 rect_max { x + cell_w, y + kHeaderHeight };
     draw_list->AddRectFilled(rect_min, rect_max, labels[index].color, 0.0F);
@@ -1425,16 +1423,15 @@ auto MainModule::BuildComposition(oxygen::engine::FrameContext& context,
   if (config_.feature_variant_proof_layout) {
     constexpr float kMargin = 16.0F;
     constexpr float kGap = 12.0F;
-    const float cell_w
-      = std::max(1.0F, std::floor((sw - (2.0F * kMargin) - (2.0F * kGap))
-          / 3.0F));
+    const float cell_w = std::max(
+      1.0F, std::floor((sw - (2.0F * kMargin) - (2.0F * kGap)) / 3.0F));
     const float cell_h
       = std::max(1.0F, std::floor((sh - (2.0F * kMargin) - kGap) / 2.0F));
     const auto make_view = [cell_w, cell_h](const std::size_t index) -> View {
-      const float x = kMargin
-        + static_cast<float>(index % 3U) * (cell_w + kGap);
-      const float y = kMargin
-        + static_cast<float>(index / 3U) * (cell_h + kGap);
+      const float x
+        = kMargin + static_cast<float>(index % 3U) * (cell_w + kGap);
+      const float y
+        = kMargin + static_cast<float>(index / 3U) * (cell_h + kGap);
       View view {};
       view.viewport = ViewPort {
         .top_left_x = x,
@@ -1452,20 +1449,20 @@ auto MainModule::BuildComposition(oxygen::engine::FrameContext& context,
       };
       return view;
     };
-    const auto configure_variant =
-      [](vortex::CompositionView& view,
-        const vortex::CompositionView::ViewFeatureProfile profile,
-        const graphics::Color clear_color) {
-        const auto spec = vortex::ResolveViewFeatureProfileSpec(profile);
-        view.feature_profile = profile;
-        view.feature_mask = spec.feature_mask;
-        view.with_atmosphere = true;
-        view.with_height_fog = true;
-        view.clear_color = clear_color;
-      };
+    const auto configure_variant
+      = [](vortex::CompositionView& view,
+          const vortex::CompositionView::ViewFeatureProfile profile,
+          const graphics::Color clear_color) {
+          const auto spec = vortex::ResolveViewFeatureProfileSpec(profile);
+          view.feature_profile = profile;
+          view.feature_mask = spec.feature_mask;
+          view.with_atmosphere = true;
+          view.with_height_fog = true;
+          view.clear_color = clear_color;
+        };
 
-    auto depth_only = vortex::CompositionView::ForScene(main_view_id_,
-      make_view(0U), main_camera_node_);
+    auto depth_only = vortex::CompositionView::ForScene(
+      main_view_id_, make_view(0U), main_camera_node_);
     depth_only.name = "M06C.DepthOnly";
     configure_variant(depth_only,
       vortex::CompositionView::ViewFeatureProfile::kDepthOnly,
@@ -1473,32 +1470,32 @@ auto MainModule::BuildComposition(oxygen::engine::FrameContext& context,
     shell.OnMainViewReady(context, depth_only);
     views.push_back(std::move(depth_only));
 
-    auto shadow_only = vortex::CompositionView::ForScene(shadow_view_id_,
-      make_view(1U), shadow_camera_node_);
+    auto shadow_only = vortex::CompositionView::ForScene(
+      shadow_view_id_, make_view(1U), shadow_camera_node_);
     shadow_only.name = "M06C.ShadowOnly";
     configure_variant(shadow_only,
       vortex::CompositionView::ViewFeatureProfile::kShadowOnly,
       graphics::Color { 0.10F, 0.08F, 0.04F, 1.0F });
     views.push_back(std::move(shadow_only));
 
-    auto no_environment = vortex::CompositionView::ForScene(pip_view_id_,
-      make_view(2U), pip_camera_node_);
+    auto no_environment = vortex::CompositionView::ForScene(
+      pip_view_id_, make_view(2U), pip_camera_node_);
     no_environment.name = "M06C.NoEnvironment";
     configure_variant(no_environment,
       vortex::CompositionView::ViewFeatureProfile::kNoEnvironment,
       graphics::Color { 0.16F, 0.06F, 0.05F, 1.0F });
     views.push_back(std::move(no_environment));
 
-    auto no_shadowing = vortex::CompositionView::ForScene(debug_view_id_,
-      make_view(3U), debug_camera_node_);
+    auto no_shadowing = vortex::CompositionView::ForScene(
+      debug_view_id_, make_view(3U), debug_camera_node_);
     no_shadowing.name = "M06C.NoShadowing";
     configure_variant(no_shadowing,
       vortex::CompositionView::ViewFeatureProfile::kNoShadowing,
       graphics::Color { 0.04F, 0.12F, 0.08F, 1.0F });
     views.push_back(std::move(no_shadowing));
 
-    auto no_volumetrics = vortex::CompositionView::ForScene(top_view_id_,
-      make_view(4U), top_camera_node_);
+    auto no_volumetrics = vortex::CompositionView::ForScene(
+      top_view_id_, make_view(4U), top_camera_node_);
     no_volumetrics.name = "M06C.NoVolumetrics";
     configure_variant(no_volumetrics,
       vortex::CompositionView::ViewFeatureProfile::kNoVolumetrics,
@@ -1541,8 +1538,7 @@ auto MainModule::BuildComposition(oxygen::engine::FrameContext& context,
 
     const auto imgui_view_id = this->GetOrCreateViewId("ImGuiView");
     views.push_back(vortex::CompositionView::ForImGui(
-      imgui_view_id, overlay_view,
-      [](graphics::CommandRecorder&) { }));
+      imgui_view_id, overlay_view, [](graphics::CommandRecorder&) { }));
     return;
   }
 
@@ -1569,8 +1565,8 @@ auto MainModule::BuildComposition(oxygen::engine::FrameContext& context,
       return view;
     };
 
-    auto consumer_comp = vortex::CompositionView::ForScene(main_view_id_,
-      make_view(0.0F, 0.0F, half_w, half_h), main_camera_node_);
+    auto consumer_comp = vortex::CompositionView::ForScene(
+      main_view_id_, make_view(0.0F, 0.0F, half_w, half_h), main_camera_node_);
     consumer_comp.name = "M06A.AuxConsumer.Main";
     consumer_comp.with_atmosphere = true;
     consumer_comp.with_height_fog = true;
@@ -1611,8 +1607,7 @@ auto MainModule::BuildComposition(oxygen::engine::FrameContext& context,
     views.push_back(std::move(top_comp));
 
     auto shadow_comp = vortex::CompositionView::ForScene(shadow_view_id_,
-      make_view(half_w, half_h, sw - half_w, sh - half_h),
-      shadow_camera_node_);
+      make_view(half_w, half_h, sw - half_w, sh - half_h), shadow_camera_node_);
     shadow_comp.name = "M06A.AuxProof.DirectionalShadowMask";
     shadow_comp.render_settings.shader_debug_mode
       = vortex::ShaderDebugMode::kDirectionalShadowMask;
@@ -1625,9 +1620,8 @@ auto MainModule::BuildComposition(oxygen::engine::FrameContext& context,
     views.push_back(std::move(shadow_comp));
 
     const auto imgui_view_id = this->GetOrCreateViewId("ImGuiView");
-    views.push_back(vortex::CompositionView::ForImGui(
-      imgui_view_id, make_view(0.0F, 0.0F, sw, sh),
-      [](graphics::CommandRecorder&) { }));
+    views.push_back(vortex::CompositionView::ForImGui(imgui_view_id,
+      make_view(0.0F, 0.0F, sw, sh), [](graphics::CommandRecorder&) { }));
     return;
   }
 
@@ -1654,17 +1648,18 @@ auto MainModule::BuildComposition(oxygen::engine::FrameContext& context,
       return view;
     };
 
-    auto lit_comp = vortex::CompositionView::ForScene(main_view_id_,
-      make_view(0.0F, 0.0F, half_w, half_h), main_camera_node_);
+    auto lit_comp = vortex::CompositionView::ForScene(
+      main_view_id_, make_view(0.0F, 0.0F, half_w, half_h), main_camera_node_);
     lit_comp.name = "M06A.LitPerspective";
     lit_comp.with_atmosphere = true;
     lit_comp.with_height_fog = true;
     lit_comp.clear_color = graphics::Color { 0.05F, 0.11F, 0.20F, 1.0F };
-    lit_comp.produced_aux_outputs.push_back(vortex::CompositionView::AuxOutputDesc {
-      .id = vortex::CompositionView::AuxOutputId { 6001U },
-      .kind = vortex::CompositionView::AuxOutputKind::kColorTexture,
-      .debug_name = "M06A.LitPerspective.Color",
-    });
+    lit_comp.produced_aux_outputs.push_back(
+      vortex::CompositionView::AuxOutputDesc {
+        .id = vortex::CompositionView::AuxOutputId { 6001U },
+        .kind = vortex::CompositionView::AuxOutputKind::kColorTexture,
+        .debug_name = "M06A.LitPerspective.Color",
+      });
     shell.OnMainViewReady(context, lit_comp);
     views.push_back(std::move(lit_comp));
 
@@ -1684,17 +1679,17 @@ auto MainModule::BuildComposition(oxygen::engine::FrameContext& context,
     debug_comp.name = "M06A.WorldNormals";
     debug_comp.render_settings.shader_debug_mode
       = vortex::ShaderDebugMode::kWorldNormals;
-    debug_comp.consumed_aux_outputs.push_back(vortex::CompositionView::AuxInputDesc {
-      .id = vortex::CompositionView::AuxOutputId { 6001U },
-      .kind = vortex::CompositionView::AuxOutputKind::kColorTexture,
-      .required = true,
-    });
+    debug_comp.consumed_aux_outputs.push_back(
+      vortex::CompositionView::AuxInputDesc {
+        .id = vortex::CompositionView::AuxOutputId { 6001U },
+        .kind = vortex::CompositionView::AuxOutputKind::kColorTexture,
+        .required = true,
+      });
     debug_comp.clear_color = graphics::Color { 0.10F, 0.04F, 0.10F, 1.0F };
     views.push_back(std::move(debug_comp));
 
     auto shadow_comp = vortex::CompositionView::ForScene(shadow_view_id_,
-      make_view(half_w, half_h, sw - half_w, sh - half_h),
-      shadow_camera_node_);
+      make_view(half_w, half_h, sw - half_w, sh - half_h), shadow_camera_node_);
     shadow_comp.name = "M06A.DirectionalShadowMask";
     shadow_comp.render_settings.shader_debug_mode
       = vortex::ShaderDebugMode::kDirectionalShadowMask;
@@ -1707,9 +1702,8 @@ auto MainModule::BuildComposition(oxygen::engine::FrameContext& context,
     views.push_back(std::move(shadow_comp));
 
     const auto imgui_view_id = this->GetOrCreateViewId("ImGuiView");
-    views.push_back(vortex::CompositionView::ForImGui(
-      imgui_view_id, make_view(0.0F, 0.0F, sw, sh),
-      [](graphics::CommandRecorder&) { }));
+    views.push_back(vortex::CompositionView::ForImGui(imgui_view_id,
+      make_view(0.0F, 0.0F, sw, sh), [](graphics::CommandRecorder&) { }));
     return;
   }
 

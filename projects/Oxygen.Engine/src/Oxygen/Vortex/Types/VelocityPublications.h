@@ -31,15 +31,14 @@ enum class MotionPublicationCapabilityBits : std::uint32_t {
 };
 
 [[nodiscard]] constexpr auto HasAnyMotionPublicationCapability(
-  const std::uint32_t flags, const MotionPublicationCapabilityBits bits) noexcept
-  -> bool
+  const std::uint32_t flags,
+  const MotionPublicationCapabilityBits bits) noexcept -> bool
 {
   return (flags & static_cast<std::uint32_t>(bits)) != 0U;
 }
 
-constexpr std::uint32_t kInvalidVelocityPublicationIndex {
-  (std::numeric_limits<std::uint32_t>::max)()
-};
+constexpr std::uint32_t kInvalidVelocityPublicationIndex { (
+  std::numeric_limits<std::uint32_t>::max)() };
 
 enum class VelocityDrawPublicationFlagBits : std::uint32_t {
   kCurrentSkinnedPoseValid = 1U << 0U,
@@ -55,8 +54,8 @@ enum class VelocityDrawPublicationFlagBits : std::uint32_t {
 };
 
 [[nodiscard]] constexpr auto HasAnyVelocityDrawPublicationFlag(
-  const std::uint32_t flags, const VelocityDrawPublicationFlagBits bits) noexcept
-  -> bool
+  const std::uint32_t flags,
+  const VelocityDrawPublicationFlagBits bits) noexcept -> bool
 {
   return (flags & static_cast<std::uint32_t>(bits)) != 0U;
 }
@@ -86,7 +85,7 @@ struct alignas(packing::kShaderDataFieldAlignment) MaterialWpoPublication {
 static_assert(sizeof(MaterialWpoPublication) == 32U);
 
 struct alignas(packing::kShaderDataFieldAlignment)
-MotionVectorStatusPublication {
+  MotionVectorStatusPublication {
   std::uint64_t contract_hash { 0U };
   std::uint32_t capability_flags { 0U };
   std::uint32_t reserved0 { 0U };
@@ -96,11 +95,15 @@ static_assert(sizeof(MotionVectorStatusPublication) == 32U);
 
 struct alignas(packing::kShaderDataFieldAlignment) VelocityDrawMetadata {
   std::uint32_t current_skinned_pose_index { kInvalidVelocityPublicationIndex };
-  std::uint32_t previous_skinned_pose_index { kInvalidVelocityPublicationIndex };
+  std::uint32_t previous_skinned_pose_index {
+    kInvalidVelocityPublicationIndex
+  };
   std::uint32_t current_morph_index { kInvalidVelocityPublicationIndex };
   std::uint32_t previous_morph_index { kInvalidVelocityPublicationIndex };
   std::uint32_t current_material_wpo_index { kInvalidVelocityPublicationIndex };
-  std::uint32_t previous_material_wpo_index { kInvalidVelocityPublicationIndex };
+  std::uint32_t previous_material_wpo_index {
+    kInvalidVelocityPublicationIndex
+  };
   std::uint32_t current_motion_vector_status_index {
     kInvalidVelocityPublicationIndex
   };

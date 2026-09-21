@@ -22,8 +22,8 @@ namespace oxygen::scenesync {
 
 namespace {
 
-  auto AppendNodeHierarchy(const scene::SceneNode& root,
-    std::vector<scene::SceneNode>& nodes) -> void
+  auto AppendNodeHierarchy(
+    const scene::SceneNode& root, std::vector<scene::SceneNode>& nodes) -> void
   {
     auto stack = std::vector<scene::SceneNode> {};
     stack.push_back(root);
@@ -55,7 +55,8 @@ namespace {
     }
   }
 
-  auto CollectSceneNodes(const scene::Scene& scene) -> std::vector<scene::SceneNode>
+  auto CollectSceneNodes(const scene::Scene& scene)
+    -> std::vector<scene::SceneNode>
   {
     auto nodes = std::vector<scene::SceneNode> {};
     const auto roots = scene.GetRootNodes();
@@ -211,8 +212,8 @@ auto RuntimeMotionProducerModule::UpsertMaterialMotionInput(
 }
 
 auto RuntimeMotionProducerModule::RemoveMaterialMotionInput(
-  const observer_ptr<const scene::Scene> scene, const RuntimeMaterialMotionKey& key)
-  -> void
+  const observer_ptr<const scene::Scene> scene,
+  const RuntimeMaterialMotionKey& key) -> void
 {
   if (scene == nullptr) {
     return;
@@ -230,8 +231,9 @@ auto RuntimeMotionProducerModule::RemoveMaterialMotionInput(
 }
 
 auto RuntimeMotionProducerModule::FindMaterialMotionInput(
-  const observer_ptr<const scene::Scene> scene, const RuntimeMaterialMotionKey& key)
-  const -> std::optional<RuntimeMaterialMotionInputState>
+  const observer_ptr<const scene::Scene> scene,
+  const RuntimeMaterialMotionKey& key) const
+  -> std::optional<RuntimeMaterialMotionInputState>
 {
   if (scene == nullptr) {
     return std::nullopt;
@@ -319,7 +321,8 @@ auto RuntimeMotionProducerModule::PublishSnapshotForScene(
     }
   }
 
-  snapshot.material_motion_index.reserve(snapshot.material_motion_states.size());
+  snapshot.material_motion_index.reserve(
+    snapshot.material_motion_states.size());
   for (std::size_t index = 0U; index < snapshot.material_motion_states.size();
     ++index) {
     snapshot.material_motion_index.emplace(

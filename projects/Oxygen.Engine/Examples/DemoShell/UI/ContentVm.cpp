@@ -681,13 +681,13 @@ auto ContentVm::PrunePersistedMountedSource(
   }
 
   const auto normalized_target = NormalizePathForKey(path);
-  auto remove_matching_path = [&normalized_target](
-                               std::vector<std::filesystem::path>& paths)
-    -> bool {
+  auto remove_matching_path
+    = [&normalized_target](std::vector<std::filesystem::path>& paths) -> bool {
     const auto original_size = paths.size();
-    std::erase_if(paths, [&normalized_target](const std::filesystem::path& entry) {
-      return NormalizePathForKey(entry) == normalized_target;
-    });
+    std::erase_if(
+      paths, [&normalized_target](const std::filesystem::path& entry) {
+        return NormalizePathForKey(entry) == normalized_target;
+      });
     return paths.size() != original_size;
   };
 
@@ -840,7 +840,8 @@ auto ContentVm::PruneActiveSceneSelectionForSource(
     return;
   }
 
-  if (NormalizePathForKey(selection->source_path) != NormalizePathForKey(path)) {
+  if (NormalizePathForKey(selection->source_path)
+    != NormalizePathForKey(path)) {
     return;
   }
 

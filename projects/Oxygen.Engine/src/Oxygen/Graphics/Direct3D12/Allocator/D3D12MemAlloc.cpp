@@ -2951,8 +2951,7 @@ public:
   virtual bool IsEmpty() const = 0;
 
   virtual void GetAllocationInfo(
-    AllocHandle allocHandle, VIRTUAL_ALLOCATION_INFO& outInfo) const
-    = 0;
+    AllocHandle allocHandle, VIRTUAL_ALLOCATION_INFO& outInfo) const = 0;
 
   // Tries to find a place for suballocation with given parameters inside this
   // block. If succeeded, fills pAllocationRequest and returns true. If failed,
@@ -2964,8 +2963,7 @@ public:
   // Makes actual allocation based on request. Request must already be checked
   // and valid.
   virtual void Alloc(
-    const AllocationRequest& request, UINT64 allocSize, void* PrivateData)
-    = 0;
+    const AllocationRequest& request, UINT64 allocSize, void* PrivateData) = 0;
 
   virtual void Free(AllocHandle allocHandle) = 0;
   // Frees all allocations.
@@ -2978,8 +2976,7 @@ public:
   virtual UINT64 GetNextFreeRegionSize(AllocHandle alloc) const = 0;
   virtual void* GetAllocationPrivateData(AllocHandle allocHandle) const = 0;
   virtual void SetAllocationPrivateData(
-    AllocHandle allocHandle, void* privateData)
-    = 0;
+    AllocHandle allocHandle, void* privateData) = 0;
 
   virtual void AddStatistics(Statistics& inoutStats) const = 0;
   virtual void AddDetailedStatistics(DetailedStatistics& inoutStats) const = 0;

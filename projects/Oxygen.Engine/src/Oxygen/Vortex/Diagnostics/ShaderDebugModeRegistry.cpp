@@ -14,7 +14,8 @@ namespace {
 
   constexpr auto kDeferredCapabilities
     = RendererCapabilityFamily::kDeferredShading;
-  constexpr auto kLightingCapabilities = RendererCapabilityFamily::kLightingData;
+  constexpr auto kLightingCapabilities
+    = RendererCapabilityFamily::kLightingData;
   constexpr auto kShadowCapabilities = RendererCapabilityFamily::kShadowing;
   constexpr auto kIblUnavailableReason
     = "IBL debug views are disabled until Oxygen has a real deferred IBL "
@@ -271,7 +272,8 @@ namespace {
 
 } // namespace
 
-auto EnumerateShaderDebugModes() noexcept -> std::span<const ShaderDebugModeInfo>
+auto EnumerateShaderDebugModes() noexcept
+  -> std::span<const ShaderDebugModeInfo>
 {
   return kShaderDebugModeRegistry;
 }

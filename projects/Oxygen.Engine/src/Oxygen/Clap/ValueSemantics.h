@@ -94,8 +94,7 @@ public:
    * value exists.
    */
   virtual auto ApplyDefault(
-    std::any& value_store, std::string& value_as_text) const -> bool
-    = 0;
+    std::any& value_store, std::string& value_as_text) const -> bool = 0;
 
   /**
    * \brief Assign the implicit value to 'value_store'.
@@ -109,8 +108,7 @@ public:
    * implicit value exists.
    */
   virtual auto ApplyImplicit(
-    std::any& value_store, std::string& value_as_text) const -> bool
-    = 0;
+    std::any& value_store, std::string& value_as_text) const -> bool = 0;
 
   /**
    * \brief Parse a token to extract from it a value for an option.
@@ -128,8 +126,7 @@ public:
    * specified by the command line (e.g. a positional argument).
    */
   virtual auto Parse(std::any& value_store, const std::string& token) const
-    -> bool
-    = 0;
+    -> bool = 0;
 
   //! Returns a human-readable expected type name for diagnostics.
   [[nodiscard]] virtual auto ExpectedTypeName() const -> std::string = 0;

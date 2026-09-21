@@ -47,8 +47,8 @@ public:
   auto operator=(TranslucencyMeshProcessor&&)
     -> TranslucencyMeshProcessor& = delete;
 
-  OXGN_VRTX_API void BuildDrawCommands(
-    const PreparedSceneFrame& prepared_scene, const ResolvedView* resolved_view);
+  OXGN_VRTX_API void BuildDrawCommands(const PreparedSceneFrame& prepared_scene,
+    const ResolvedView* resolved_view);
 
   [[nodiscard]] OXGN_VRTX_API auto GetDrawCommands() const
     -> std::span<const TranslucencyDrawCommand>;

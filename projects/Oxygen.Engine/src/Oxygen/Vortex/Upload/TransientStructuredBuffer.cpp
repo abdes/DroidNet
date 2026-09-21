@@ -168,7 +168,8 @@ auto TransientStructuredBuffer::Allocate(std::uint32_t element_count)
       out.sequence = current_frame_;
       out.slot = current_slot_;
       LOG_F(1,
-        "TransientStructuredBuffer::Allocate reused slot={} bytes={} srv_index={} "
+        "TransientStructuredBuffer::Allocate reused slot={} bytes={} "
+        "srv_index={} "
         "ptr={}",
         slot_index, size_bytes, out.srv.get(), fmt::ptr(out.mapped_ptr));
       return out;
@@ -181,7 +182,8 @@ auto TransientStructuredBuffer::Allocate(std::uint32_t element_count)
     if (!handle.IsValid()) {
       LOG_F(ERROR, "Descriptor allocation for transient upload buffer failed!");
       slot.allocation.reset();
-      return std::unexpected(make_error_code(UploadError::kResourceAllocFailed));
+      return std::unexpected(
+        make_error_code(UploadError::kResourceAllocFailed));
     }
 
     // Register view and append a per-slot allocation record so multiple

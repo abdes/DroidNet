@@ -44,12 +44,11 @@ namespace {
     }
   };
 
-  auto SourceLocationCache()
-    -> std::unordered_map<SourceLocationKey, ::tracy::SourceLocationData,
-      SourceLocationKeyHash>&
+  auto SourceLocationCache() -> std::unordered_map<SourceLocationKey,
+    ::tracy::SourceLocationData, SourceLocationKeyHash>&
   {
-    static auto cache = std::unordered_map<SourceLocationKey, ::tracy::SourceLocationData,
-      SourceLocationKeyHash> {};
+    static auto cache = std::unordered_map<SourceLocationKey,
+      ::tracy::SourceLocationData, SourceLocationKeyHash> {};
     return cache;
   }
 
@@ -59,9 +58,8 @@ namespace {
     return mutex;
   }
 
-  auto GetOrCreateSourceLocation(
-    const std::source_location callsite, const std::string_view stable_name)
-    -> const ::tracy::SourceLocationData*
+  auto GetOrCreateSourceLocation(const std::source_location callsite,
+    const std::string_view stable_name) -> const ::tracy::SourceLocationData*
   {
     auto key = SourceLocationKey {
       .line = static_cast<uint32_t>(callsite.line()),

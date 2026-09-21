@@ -110,8 +110,8 @@ NOLINT_TEST(SceneFlagRecordTest, RejectsInvalidNodeReferencesWithoutStringTable)
     auto node = world::NodeRecord {};
     node.parent_index = parent;
     node.scene_name_offset = name;
-    std::memcpy(bytes.data() + sizeof(world::SceneAssetDesc), &node,
-      sizeof(node));
+    std::memcpy(
+      bytes.data() + sizeof(world::SceneAssetDesc), &node, sizeof(node));
     EXPECT_THROW((oxygen::data::SceneAsset(oxygen::data::AssetKey {}, bytes)),
       std::runtime_error);
     auto stream = oxygen::serio::MemoryStream(std::span<std::byte>(bytes));

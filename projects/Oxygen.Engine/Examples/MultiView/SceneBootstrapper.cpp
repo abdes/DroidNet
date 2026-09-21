@@ -235,8 +235,7 @@ auto SceneBootstrapper::ApplyConsumerVisualProof(const VisualFogMode fog_mode)
     node->get().AddComponent<scene::environment::LocalFogVolume>();
     visual_local_fog_node_.GetTransform().SetLocalPosition(
       { -1.75F, -0.25F, 0.3F });
-    visual_local_fog_node_.GetTransform().SetLocalScale(
-      { 0.45F, 0.45F, 0.3F });
+    visual_local_fog_node_.GetTransform().SetLocalScale({ 0.45F, 0.45F, 0.3F });
   }
   auto& local = visual_local_fog_node_.GetImpl()
                   ->get()

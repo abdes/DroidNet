@@ -45,8 +45,7 @@ public:
   [[nodiscard]] virtual auto GetTypeName() const noexcept -> std::string_view
     = 0;
   [[nodiscard]] virtual auto GetTypeNamePretty() const noexcept
-    -> std::string_view
-    = 0;
+    -> std::string_view = 0;
 };
 
 } // namespace oxygen

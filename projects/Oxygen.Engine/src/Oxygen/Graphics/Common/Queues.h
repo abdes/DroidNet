@@ -112,13 +112,12 @@ public:
   virtual ~QueuesStrategy() = default;
 
   //! Clone the concrete strategy for polymorphic copying.
-  [[nodiscard]] virtual auto Clone() const -> std::unique_ptr<QueuesStrategy>
-    = 0;
+  [[nodiscard]] virtual auto Clone() const
+    -> std::unique_ptr<QueuesStrategy> = 0;
 
   //! Return the list of QueueSpecification entries defined by this strategy.
   [[nodiscard]] virtual auto Specifications() const
-    -> std::vector<QueueSpecification>
-    = 0;
+    -> std::vector<QueueSpecification> = 0;
 
   //! Canonical name to request for graphics submissions.
   [[nodiscard]] virtual auto KeyFor(QueueRole role) const -> QueueKey = 0;

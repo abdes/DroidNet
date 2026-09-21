@@ -25,8 +25,7 @@ NOLINT_TEST(DemoShellPanelConfig,
   config.lighting = true;
   config.ground_grid = true;
 
-  const auto runtime_config
-    = ui::MakeRuntimePanelConfig(config, false);
+  const auto runtime_config = ui::MakeRuntimePanelConfig(config, false);
 
   EXPECT_FALSE(runtime_config.lighting);
   EXPECT_TRUE(runtime_config.ground_grid);

@@ -29,12 +29,10 @@ public:
 
   virtual auto Process(const ScriptSlotMutation& mutation,
     const ResolveScriptSlotFn& resolve_slot,
-    const NotifyObserversFn& notify_observers) -> void
-    = 0;
+    const NotifyObserversFn& notify_observers) -> void = 0;
 
   virtual auto QueueTrackedSlotDeactivations(
-    IMutationCollector& mutation_collector) const -> void
-    = 0;
+    IMutationCollector& mutation_collector) const -> void = 0;
 };
 
 [[nodiscard]] auto CreateScriptSlotMutationProcessor()

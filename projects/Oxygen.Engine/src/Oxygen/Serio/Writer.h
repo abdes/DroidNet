@@ -41,8 +41,7 @@ public:
   OXYGEN_DEFAULT_MOVABLE(AnyWriter)
 
   [[nodiscard]] virtual auto WriteBlob(std::span<const std::byte> blob) noexcept
-    -> Result<void>
-    = 0;
+    -> Result<void> = 0;
 
   [[nodiscard]] auto WriteSequenceSize(const limits::SequenceSizeType size,
     const limits::SequenceSizeType max) noexcept -> Result<void>
@@ -57,11 +56,10 @@ public:
 
   [[nodiscard]] virtual auto Position() const noexcept -> Result<size_t> = 0;
 
-  [[nodiscard]] virtual auto AlignTo(size_t alignment) noexcept -> Result<void>
-    = 0;
+  [[nodiscard]] virtual auto AlignTo(size_t alignment) noexcept
+    -> Result<void> = 0;
   [[nodiscard]] virtual auto ScopedAlignment(uint16_t alignment) noexcept(false)
-    -> AlignmentGuard
-    = 0;
+    -> AlignmentGuard = 0;
 
   [[nodiscard]] virtual auto Flush() noexcept -> Result<void> = 0;
 

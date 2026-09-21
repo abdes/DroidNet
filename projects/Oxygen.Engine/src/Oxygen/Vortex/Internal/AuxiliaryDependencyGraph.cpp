@@ -40,8 +40,8 @@ auto AuxiliaryDependencyGraph::Build(std::span<const FrameViewPacket> packets)
   plan.resolved_inputs_by_packet.resize(packets.size());
   plan.ordered_packet_indices.reserve(packets.size());
 
-  auto producers
-    = std::unordered_map<CompositionView::AuxOutputId, Producer, AuxOutputIdHash> {};
+  auto producers = std::unordered_map<CompositionView::AuxOutputId, Producer,
+    AuxOutputIdHash> {};
   for (std::size_t packet_index = 0; packet_index < packets.size();
     ++packet_index) {
     const auto& packet = packets[packet_index];
@@ -92,8 +92,8 @@ auto AuxiliaryDependencyGraph::Build(std::span<const FrameViewPacket> packets)
             .producer_view_id = kInvalidViewId,
             .producer_packet_index = 0U,
             .valid = false,
-            .debug_name = fmt::format("Vortex.Aux[{}].Invalid.Optional",
-              input.id.get()),
+            .debug_name
+            = fmt::format("Vortex.Aux[{}].Invalid.Optional", input.id.get()),
           });
         continue;
       }
@@ -117,8 +117,8 @@ auto AuxiliaryDependencyGraph::Build(std::span<const FrameViewPacket> packets)
           .producer_packet_index
           = static_cast<std::uint32_t>(producer.packet_index),
           .valid = true,
-          .debug_name = fmt::format("Vortex.Aux[{}].{}",
-            input.id.get(), producer.desc.debug_name),
+          .debug_name = fmt::format(
+            "Vortex.Aux[{}].{}", input.id.get(), producer.desc.debug_name),
         });
 
       if (producer.packet_index != consumer_index) {

@@ -25,8 +25,8 @@ public:
   ShadowCasterCulling(ShadowCasterCulling&&) = delete;
   auto operator=(ShadowCasterCulling&&) -> ShadowCasterCulling& = delete;
 
-  OXGN_VRTX_API auto BuildDrawCommands(
-    const PreparedSceneFrame& prepared_scene) -> void;
+  OXGN_VRTX_API auto BuildDrawCommands(const PreparedSceneFrame& prepared_scene)
+    -> void;
   [[nodiscard]] OXGN_VRTX_API auto GetDrawCommands() const
     -> std::span<const DrawCommand>;
 

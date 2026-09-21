@@ -365,8 +365,7 @@ auto SerializeManifestToJson(const data::PatchManifest& manifest) -> std::string
     { "deleted", std::move(deleted) },
     { "compatibility_envelope",
       ordered_json {
-        { "required_base_source_keys",
-          std::move(required_base_source_keys) },
+        { "required_base_source_keys", std::move(required_base_source_keys) },
         { "required_base_content_versions",
           std::move(required_base_content_versions) },
         { "required_base_catalog_digests",
@@ -379,9 +378,11 @@ auto SerializeManifestToJson(const data::PatchManifest& manifest) -> std::string
         { "require_exact_base_set",
           manifest.compatibility_policy_snapshot.require_exact_base_set },
         { "require_content_version_match",
-          manifest.compatibility_policy_snapshot.require_content_version_match },
+          manifest.compatibility_policy_snapshot
+            .require_content_version_match },
         { "require_base_source_key_match",
-          manifest.compatibility_policy_snapshot.require_base_source_key_match },
+          manifest.compatibility_policy_snapshot
+            .require_base_source_key_match },
         { "require_catalog_digest_match",
           manifest.compatibility_policy_snapshot.require_catalog_digest_match },
       } },

@@ -37,23 +37,18 @@ public:
   OXYGEN_MAKE_NON_MOVABLE(IVehicleApi)
 
   virtual auto CreateVehicle(WorldId world_id, const vehicle::VehicleDesc& desc)
-    -> PhysicsResult<AggregateId>
-    = 0;
+    -> PhysicsResult<AggregateId> = 0;
   virtual auto DestroyVehicle(WorldId world_id, AggregateId vehicle_id)
-    -> PhysicsResult<void>
-    = 0;
+    -> PhysicsResult<void> = 0;
 
   virtual auto SetControlInput(WorldId world_id, AggregateId vehicle_id,
-    const vehicle::VehicleControlInput& input) -> PhysicsResult<void>
-    = 0;
+    const vehicle::VehicleControlInput& input) -> PhysicsResult<void> = 0;
   virtual auto GetState(WorldId world_id, AggregateId vehicle_id) const
-    -> PhysicsResult<vehicle::VehicleState>
-    = 0;
+    -> PhysicsResult<vehicle::VehicleState> = 0;
   virtual auto GetAuthority(WorldId world_id, AggregateId vehicle_id) const
-    -> PhysicsResult<aggregate::AggregateAuthority>
-    = 0;
-  virtual auto FlushStructuralChanges(WorldId world_id) -> PhysicsResult<size_t>
-    = 0;
+    -> PhysicsResult<aggregate::AggregateAuthority> = 0;
+  virtual auto FlushStructuralChanges(WorldId world_id)
+    -> PhysicsResult<size_t> = 0;
 };
 
 } // namespace oxygen::physics::system

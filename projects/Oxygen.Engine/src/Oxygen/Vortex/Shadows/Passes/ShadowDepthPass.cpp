@@ -34,183 +34,183 @@ namespace oxygen::vortex::shadows {
 
 namespace {
 
-namespace bindless_d3d12 = oxygen::bindless::generated::d3d12;
+  namespace bindless_d3d12 = oxygen::bindless::generated::d3d12;
 
-constexpr float kUeCsmShadowSlopeScaleDepthBias = 3.0F;
-constexpr float kUeDefaultUserShadowSlopeBias = 0.5F;
-constexpr float kUeShadowMaxSlopeScaleDepthBias = 1.0F;
+  constexpr float kUeCsmShadowSlopeScaleDepthBias = 3.0F;
+  constexpr float kUeDefaultUserShadowSlopeBias = 0.5F;
+  constexpr float kUeShadowMaxSlopeScaleDepthBias = 1.0F;
 
-struct alignas(packing::kShaderDataFieldAlignment) ShadowPassConstants {
-  glm::mat4 light_view_projection { 1.0F };
-  glm::vec4 shadow_bias_parameters { 0.0F };
-  glm::vec4 light_direction_to_source { 0.0F, -1.0F, 0.0F, 0.0F };
-  glm::vec4 light_position_and_inv_range { 0.0F };
-  std::uint32_t draw_metadata_slot { kInvalidShaderVisibleIndex.get() };
-  std::uint32_t current_worlds_slot { kInvalidShaderVisibleIndex.get() };
-  std::uint32_t instance_data_slot { kInvalidShaderVisibleIndex.get() };
-  std::uint32_t _padding0 { 0U };
-};
+  struct alignas(packing::kShaderDataFieldAlignment) ShadowPassConstants {
+    glm::mat4 light_view_projection { 1.0F };
+    glm::vec4 shadow_bias_parameters { 0.0F };
+    glm::vec4 light_direction_to_source { 0.0F, -1.0F, 0.0F, 0.0F };
+    glm::vec4 light_position_and_inv_range { 0.0F };
+    std::uint32_t draw_metadata_slot { kInvalidShaderVisibleIndex.get() };
+    std::uint32_t current_worlds_slot { kInvalidShaderVisibleIndex.get() };
+    std::uint32_t instance_data_slot { kInvalidShaderVisibleIndex.get() };
+    std::uint32_t _padding0 { 0U };
+  };
 
-static_assert(sizeof(ShadowPassConstants) == 128U);
-static_assert(offsetof(ShadowPassConstants, light_view_projection) == 0U);
-static_assert(offsetof(ShadowPassConstants, shadow_bias_parameters) == 64U);
-static_assert(
-  offsetof(ShadowPassConstants, light_direction_to_source) == 80U);
-static_assert(
-  offsetof(ShadowPassConstants, light_position_and_inv_range) == 96U);
-static_assert(offsetof(ShadowPassConstants, draw_metadata_slot) == 112U);
-constexpr std::uint32_t kShadowPassConstantsStride
-  = sizeof(ShadowPassConstants);
+  static_assert(sizeof(ShadowPassConstants) == 128U);
+  static_assert(offsetof(ShadowPassConstants, light_view_projection) == 0U);
+  static_assert(offsetof(ShadowPassConstants, shadow_bias_parameters) == 64U);
+  static_assert(
+    offsetof(ShadowPassConstants, light_direction_to_source) == 80U);
+  static_assert(
+    offsetof(ShadowPassConstants, light_position_and_inv_range) == 96U);
+  static_assert(offsetof(ShadowPassConstants, draw_metadata_slot) == 112U);
+  constexpr std::uint32_t kShadowPassConstantsStride
+    = sizeof(ShadowPassConstants);
 
-auto RangeTypeToViewType(const bindless_d3d12::RangeType type)
-  -> graphics::ResourceViewType
-{
-  using graphics::ResourceViewType;
+  auto RangeTypeToViewType(const bindless_d3d12::RangeType type)
+    -> graphics::ResourceViewType
+  {
+    using graphics::ResourceViewType;
 
-  switch (type) {
-  case bindless_d3d12::RangeType::SRV:
-    return ResourceViewType::kRawBuffer_SRV;
-  case bindless_d3d12::RangeType::Sampler:
-    return ResourceViewType::kSampler;
-  case bindless_d3d12::RangeType::UAV:
-    return ResourceViewType::kRawBuffer_UAV;
-  default:
-    return ResourceViewType::kNone;
+    switch (type) {
+    case bindless_d3d12::RangeType::SRV:
+      return ResourceViewType::kRawBuffer_SRV;
+    case bindless_d3d12::RangeType::Sampler:
+      return ResourceViewType::kSampler;
+    case bindless_d3d12::RangeType::UAV:
+      return ResourceViewType::kRawBuffer_UAV;
+    default:
+      return ResourceViewType::kNone;
+    }
   }
-}
 
-auto BuildVortexRootBindings() -> std::vector<graphics::RootBindingItem>
-{
-  std::vector<graphics::RootBindingItem> bindings;
-  bindings.reserve(bindless_d3d12::kRootParamTableCount);
+  auto BuildVortexRootBindings() -> std::vector<graphics::RootBindingItem>
+  {
+    std::vector<graphics::RootBindingItem> bindings;
+    bindings.reserve(bindless_d3d12::kRootParamTableCount);
 
-  for (std::uint32_t index = 0; index < bindless_d3d12::kRootParamTableCount;
-    ++index) {
-    const auto& desc = bindless_d3d12::kRootParamTable.at(index);
-    auto binding = graphics::RootBindingDesc {};
-    binding.binding_slot_desc.register_index = desc.shader_register;
-    binding.binding_slot_desc.register_space = desc.register_space;
-    binding.visibility = graphics::ShaderStageFlags::kAll;
+    for (std::uint32_t index = 0; index < bindless_d3d12::kRootParamTableCount;
+      ++index) {
+      const auto& desc = bindless_d3d12::kRootParamTable.at(index);
+      auto binding = graphics::RootBindingDesc {};
+      binding.binding_slot_desc.register_index = desc.shader_register;
+      binding.binding_slot_desc.register_space = desc.register_space;
+      binding.visibility = graphics::ShaderStageFlags::kAll;
 
-    switch (desc.kind) {
-    case bindless_d3d12::RootParamKind::DescriptorTable: {
-      auto table = graphics::DescriptorTableBinding {};
-      if (desc.ranges_count > 0U && desc.ranges.data() != nullptr) {
-        const auto& range = desc.ranges.front();
-        table.view_type = RangeTypeToViewType(
-          static_cast<bindless_d3d12::RangeType>(range.range_type));
-        table.base_index = range.base_register;
-        table.count = range.num_descriptors
-            == (std::numeric_limits<std::uint32_t>::max)()
-          ? (std::numeric_limits<std::uint32_t>::max)()
-          : range.num_descriptors;
+      switch (desc.kind) {
+      case bindless_d3d12::RootParamKind::DescriptorTable: {
+        auto table = graphics::DescriptorTableBinding {};
+        if (desc.ranges_count > 0U && desc.ranges.data() != nullptr) {
+          const auto& range = desc.ranges.front();
+          table.view_type = RangeTypeToViewType(
+            static_cast<bindless_d3d12::RangeType>(range.range_type));
+          table.base_index = range.base_register;
+          table.count = range.num_descriptors
+              == (std::numeric_limits<std::uint32_t>::max)()
+            ? (std::numeric_limits<std::uint32_t>::max)()
+            : range.num_descriptors;
+        }
+        binding.data = table;
+        break;
       }
-      binding.data = table;
-      break;
+      case bindless_d3d12::RootParamKind::CBV:
+        binding.data = graphics::DirectBufferBinding {};
+        break;
+      case bindless_d3d12::RootParamKind::RootConstants:
+        binding.data
+          = graphics::PushConstantsBinding { .size = desc.constants_count };
+        break;
+      }
+
+      bindings.emplace_back(binding);
     }
-    case bindless_d3d12::RootParamKind::CBV:
-      binding.data = graphics::DirectBufferBinding {};
-      break;
-    case bindless_d3d12::RootParamKind::RootConstants:
-      binding.data
-        = graphics::PushConstantsBinding { .size = desc.constants_count };
-      break;
+
+    return bindings;
+  }
+
+  auto AddBooleanDefine(const bool enabled, std::string_view name,
+    std::vector<graphics::ShaderDefine>& defines) -> void
+  {
+    if (enabled) {
+      defines.push_back(
+        graphics::ShaderDefine { .name = std::string(name), .value = "1" });
+    }
+  }
+
+  auto AdoptOrBeginPersistentState(graphics::CommandRecorder& recorder,
+    const graphics::Texture& texture) -> void
+  {
+    if (!recorder.AdoptKnownResourceState(texture)) {
+      auto initial = texture.GetDescriptor().initial_state;
+      if (initial == graphics::ResourceStates::kUnknown
+        || initial == graphics::ResourceStates::kUndefined) {
+        initial = graphics::ResourceStates::kDepthWrite;
+      }
+      recorder.BeginTrackingResourceState(texture, initial);
+    }
+  }
+
+  auto BuildShadowPipelineDesc(const graphics::Texture& shadow_surface,
+    const internal::MeshRasterState raster_state)
+    -> graphics::GraphicsPipelineDesc
+  {
+    auto root_bindings = BuildVortexRootBindings();
+    auto defines = std::vector<graphics::ShaderDefine> {};
+    AddBooleanDefine(raster_state.alpha_test, "ALPHA_TEST", defines);
+
+    return graphics::GraphicsPipelineDesc::Builder {}
+      .SetVertexShader(graphics::ShaderRequest {
+        .stage = ShaderType::kVertex,
+        .source_path = "Vortex/Services/Shadows/DirectionalShadowDepth.hlsl",
+        .entry_point = "VortexShadowDepthVS",
+        .defines = defines,
+      })
+      .SetPixelShader(graphics::ShaderRequest {
+        .stage = ShaderType::kPixel,
+        .source_path = "Vortex/Services/Shadows/DirectionalShadowDepth.hlsl",
+        .entry_point = "VortexShadowDepthMaskedPS",
+        .defines = defines,
+      })
+      .SetPrimitiveTopology(graphics::PrimitiveType::kTriangleList)
+      .SetRasterizerState(raster_state.Rasterizer())
+      .SetDepthStencilState(graphics::DepthStencilStateDesc {
+        .depth_test_enable = true,
+        .depth_write_enable = true,
+        .depth_func = graphics::CompareOp::kGreaterOrEqual,
+        .stencil_enable = false,
+      })
+      .SetFramebufferLayout(graphics::FramebufferLayoutDesc {
+        .depth_stencil_format = shadow_surface.GetDescriptor().format,
+        .sample_count = shadow_surface.GetDescriptor().sample_count,
+        .sample_quality = shadow_surface.GetDescriptor().sample_quality,
+      })
+      .SetRootBindings(std::span<const graphics::RootBindingItem>(
+        root_bindings.data(), root_bindings.size()))
+      .SetDebugName(raster_state.alpha_test ? "Vortex.ShadowDepth.Masked"
+                                            : "Vortex.ShadowDepth.Opaque")
+      .Build();
+  }
+
+  auto ResolveRasterState(const PreparedSceneFrame& prepared_scene,
+    const DrawCommand& draw_command) -> internal::MeshRasterState
+  {
+    return internal::ResolveMeshRasterState(
+      prepared_scene.GetDrawMetadata(), draw_command.draw_index);
+  }
+
+  auto EnsureDepthStencilViewForCascade(Graphics& gfx,
+    std::vector<graphics::NativeView>& dsvs, graphics::Texture& shadow_surface,
+    const std::uint32_t cascade_index) -> graphics::NativeView
+  {
+    if (dsvs.size() <= cascade_index) {
+      dsvs.resize(cascade_index + 1U);
+    }
+    if (dsvs[cascade_index]->IsValid()) {
+      return dsvs[cascade_index];
     }
 
-    bindings.emplace_back(binding);
-  }
+    auto& registry = gfx.GetResourceRegistry();
+    CHECK_F(registry.Contains(shadow_surface),
+      "ShadowDepthPass: shadow surface '{}' must be registered before DSV "
+      "lookup",
+      shadow_surface.GetName());
 
-  return bindings;
-}
-
-auto AddBooleanDefine(const bool enabled, std::string_view name,
-  std::vector<graphics::ShaderDefine>& defines) -> void
-{
-  if (enabled) {
-    defines.push_back(
-      graphics::ShaderDefine { .name = std::string(name), .value = "1" });
-  }
-}
-
-auto AdoptOrBeginPersistentState(graphics::CommandRecorder& recorder,
-  const graphics::Texture& texture) -> void
-{
-  if (!recorder.AdoptKnownResourceState(texture)) {
-    auto initial = texture.GetDescriptor().initial_state;
-    if (initial == graphics::ResourceStates::kUnknown
-      || initial == graphics::ResourceStates::kUndefined) {
-      initial = graphics::ResourceStates::kDepthWrite;
-    }
-    recorder.BeginTrackingResourceState(texture, initial);
-  }
-}
-
-auto BuildShadowPipelineDesc(const graphics::Texture& shadow_surface,
-  const internal::MeshRasterState raster_state)
-  -> graphics::GraphicsPipelineDesc
-{
-  auto root_bindings = BuildVortexRootBindings();
-  auto defines = std::vector<graphics::ShaderDefine> {};
-  AddBooleanDefine(raster_state.alpha_test, "ALPHA_TEST", defines);
-
-  return graphics::GraphicsPipelineDesc::Builder {}
-    .SetVertexShader(graphics::ShaderRequest {
-      .stage = ShaderType::kVertex,
-      .source_path = "Vortex/Services/Shadows/DirectionalShadowDepth.hlsl",
-      .entry_point = "VortexShadowDepthVS",
-      .defines = defines,
-    })
-    .SetPixelShader(graphics::ShaderRequest {
-      .stage = ShaderType::kPixel,
-      .source_path = "Vortex/Services/Shadows/DirectionalShadowDepth.hlsl",
-      .entry_point = "VortexShadowDepthMaskedPS",
-      .defines = defines,
-    })
-    .SetPrimitiveTopology(graphics::PrimitiveType::kTriangleList)
-    .SetRasterizerState(raster_state.Rasterizer())
-    .SetDepthStencilState(graphics::DepthStencilStateDesc {
-      .depth_test_enable = true,
-      .depth_write_enable = true,
-      .depth_func = graphics::CompareOp::kGreaterOrEqual,
-      .stencil_enable = false,
-    })
-    .SetFramebufferLayout(graphics::FramebufferLayoutDesc {
-      .depth_stencil_format = shadow_surface.GetDescriptor().format,
-      .sample_count = shadow_surface.GetDescriptor().sample_count,
-      .sample_quality = shadow_surface.GetDescriptor().sample_quality,
-    })
-    .SetRootBindings(std::span<const graphics::RootBindingItem>(
-      root_bindings.data(), root_bindings.size()))
-    .SetDebugName(raster_state.alpha_test ? "Vortex.ShadowDepth.Masked"
-                                          : "Vortex.ShadowDepth.Opaque")
-    .Build();
-}
-
-auto ResolveRasterState(const PreparedSceneFrame& prepared_scene,
-  const DrawCommand& draw_command) -> internal::MeshRasterState
-{
-  return internal::ResolveMeshRasterState(
-    prepared_scene.GetDrawMetadata(), draw_command.draw_index);
-}
-
-auto EnsureDepthStencilViewForCascade(Graphics& gfx,
-  std::vector<graphics::NativeView>& dsvs, graphics::Texture& shadow_surface,
-  const std::uint32_t cascade_index) -> graphics::NativeView
-{
-  if (dsvs.size() <= cascade_index) {
-    dsvs.resize(cascade_index + 1U);
-  }
-  if (dsvs[cascade_index]->IsValid()) {
-    return dsvs[cascade_index];
-  }
-
-  auto& registry = gfx.GetResourceRegistry();
-  CHECK_F(registry.Contains(shadow_surface),
-    "ShadowDepthPass: shadow surface '{}' must be registered before DSV "
-    "lookup",
-    shadow_surface.GetName());
-
-  const auto dsv_desc = graphics::TextureViewDescription {
+    const auto dsv_desc = graphics::TextureViewDescription {
   .view_type = graphics::ResourceViewType::kTexture_DSV,
   .visibility = graphics::DescriptorVisibility::kCpuOnly,
   .format = shadow_surface.GetDescriptor().format,
@@ -224,27 +224,27 @@ auto EnsureDepthStencilViewForCascade(Graphics& gfx,
   .is_read_only_dsv = false,
 };
 
-  if (const auto existing = registry.Find(shadow_surface, dsv_desc);
-    existing->IsValid()) {
-    dsvs[cascade_index] = existing;
-    return existing;
-  }
+    if (const auto existing = registry.Find(shadow_surface, dsv_desc);
+      existing->IsValid()) {
+      dsvs[cascade_index] = existing;
+      return existing;
+    }
 
-  auto& allocator = gfx.GetDescriptorAllocator();
-  auto handle
-    = allocator.AllocateRaw(graphics::ResourceViewType::kTexture_DSV,
-      graphics::DescriptorVisibility::kCpuOnly);
-  CHECK_F(handle.IsValid(),
-    "ShadowDepthPass: failed to allocate a DSV for shadow cascade {}",
-    cascade_index);
-  const auto dsv
-    = registry.RegisterView(shadow_surface, std::move(handle), dsv_desc);
-  CHECK_F(dsv->IsValid(),
-    "ShadowDepthPass: failed to register a DSV for shadow cascade {}",
-    cascade_index);
-  dsvs[cascade_index] = dsv;
-  return dsv;
-}
+    auto& allocator = gfx.GetDescriptorAllocator();
+    auto handle
+      = allocator.AllocateRaw(graphics::ResourceViewType::kTexture_DSV,
+        graphics::DescriptorVisibility::kCpuOnly);
+    CHECK_F(handle.IsValid(),
+      "ShadowDepthPass: failed to allocate a DSV for shadow cascade {}",
+      cascade_index);
+    const auto dsv
+      = registry.RegisterView(shadow_surface, std::move(handle), dsv_desc);
+    CHECK_F(dsv->IsValid(),
+      "ShadowDepthPass: failed to register a DSV for shadow cascade {}",
+      cascade_index);
+    dsvs[cascade_index] = dsv;
+    return dsv;
+  }
 
 } // namespace
 
@@ -358,8 +358,7 @@ auto ShadowDepthPass::RecordSlices(const PreparedViewShadowInput& view_input,
   if (!recorder) {
     return last_render_state_;
   }
-  renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(
-    *recorder);
+  renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(*recorder);
 
   graphics::GpuEventScope stage_scope(*recorder, "Vortex.Stage8.ShadowDepths",
     profiling::ProfileGranularity::kTelemetry,

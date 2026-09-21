@@ -36,14 +36,11 @@ public:
   OXYGEN_MAKE_NON_MOVABLE(IQueryApi)
 
   virtual auto Raycast(WorldId world_id, const query::RaycastDesc& desc) const
-    -> PhysicsResult<query::OptionalRaycastHit>
-    = 0;
+    -> PhysicsResult<query::OptionalRaycastHit> = 0;
   virtual auto Sweep(WorldId world_id, const query::SweepDesc& desc,
-    std::span<query::SweepHit> out_hits) const -> PhysicsResult<size_t>
-    = 0;
+    std::span<query::SweepHit> out_hits) const -> PhysicsResult<size_t> = 0;
   virtual auto Overlap(WorldId world_id, const query::OverlapDesc& desc,
-    std::span<uint64_t> out_user_data) const -> PhysicsResult<size_t>
-    = 0;
+    std::span<uint64_t> out_user_data) const -> PhysicsResult<size_t> = 0;
 };
 
 } // namespace oxygen::physics::system

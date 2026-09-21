@@ -27,8 +27,8 @@ public:
   [[nodiscard]] OXGN_VRTX_API auto BuildDirectionalFrameData(
     const PreparedViewShadowInput& view_input,
     const FrameDirectionalLightSelection& directional_light,
-    const ConventionalShadowTargetAllocator::DirectionalAllocation& allocation) const
-    -> DirectionalShadowFrameData;
+    const ConventionalShadowTargetAllocator::DirectionalAllocation& allocation)
+    const -> DirectionalShadowFrameData;
 };
 
 } // namespace oxygen::vortex::shadows::internal

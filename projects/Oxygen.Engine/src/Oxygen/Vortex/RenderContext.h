@@ -55,7 +55,7 @@ class RenderPass;
 class SceneRenderer;
 
 namespace internal {
-class PerViewScope;
+  class PerViewScope;
 } // namespace internal
 
 template <typename... Ts> struct PassTypeList {

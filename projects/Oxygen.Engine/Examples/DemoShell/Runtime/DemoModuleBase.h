@@ -72,8 +72,7 @@ public:
 protected:
   //! Hook: derived demos create and configure the DemoShell instance.
   virtual auto OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
-    -> std::unique_ptr<DemoShell>
-    = 0;
+    -> std::unique_ptr<DemoShell> = 0;
 
   //! Access the owned DemoShell instance (must be initialized).
   auto GetShell() -> DemoShell&;
@@ -95,8 +94,7 @@ protected:
 
   //! Hook: derived demos may add texture-backed composition layers after their
   //! scene layers have been collected.
-  virtual auto AppendRuntimeCompositionLayers(
-    engine::FrameContext& /*context*/,
+  virtual auto AppendRuntimeCompositionLayers(engine::FrameContext& /*context*/,
     vortex::Renderer::RuntimeCompositionInput& /*input*/) -> void
   {
   }

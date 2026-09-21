@@ -217,17 +217,16 @@ auto oxygen::data::pak::scripting::to_string(
   auto checked = Flags::kNone;
 
   [[maybe_unused]]
-  auto check_and_append
-    = [&](const Flags flag, const char* name) {
-        if ((value & flag) == flag) {
-          if (!first) {
-            result += " | ";
-          }
-          result += name;
-          first = false;
-          checked |= flag;
-        }
-      };
+  auto check_and_append = [&](const Flags flag, const char* name) {
+    if ((value & flag) == flag) {
+      if (!first) {
+        result += " | ";
+      }
+      result += name;
+      first = false;
+      checked |= flag;
+    }
+  };
 
   check_and_append(Flags::kAllowExternalSource, "AllowExternalSource");
   DCHECK_EQ_F(
@@ -251,17 +250,16 @@ auto oxygen::data::pak::scripting::to_string(
   auto checked = Flags::kNone;
 
   [[maybe_unused]]
-  auto check_and_append
-    = [&](const Flags flag, const char* name) {
-        if ((value & flag) == flag) {
-          if (!first) {
-            result += " | ";
-          }
-          result += name;
-          first = false;
-          checked |= flag;
-        }
-      };
+  auto check_and_append = [&](const Flags flag, const char* name) {
+    if ((value & flag) == flag) {
+      if (!first) {
+        result += " | ";
+      }
+      result += name;
+      first = false;
+      checked |= flag;
+    }
+  };
 
   // Add new flag names here when ScriptingComponentFlags grows.
   DCHECK_EQ_F(checked, value,
@@ -285,17 +283,16 @@ auto oxygen::data::pak::scripting::to_string(
   auto checked = Flags::kNone;
 
   [[maybe_unused]]
-  auto check_and_append
-    = [&](const Flags flag, const char* name) {
-        if ((value & flag) == flag) {
-          if (!first) {
-            result += " | ";
-          }
-          result += name;
-          first = false;
-          checked |= flag;
-        }
-      };
+  auto check_and_append = [&](const Flags flag, const char* name) {
+    if ((value & flag) == flag) {
+      if (!first) {
+        result += " | ";
+      }
+      result += name;
+      first = false;
+      checked |= flag;
+    }
+  };
 
   // Add new flag names here when ScriptSlotFlags grows.
   DCHECK_EQ_F(

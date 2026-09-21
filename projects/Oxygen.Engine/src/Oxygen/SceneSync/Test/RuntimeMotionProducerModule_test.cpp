@@ -71,19 +71,18 @@ namespace {
       return {};
     }
 
-    auto mesh
-      = d::MeshBuilder(0, geometry_name)
-          .WithVertices(cube->first)
-          .WithIndices(cube->second)
-          .BeginSubMesh("full", std::move(material))
-          .WithMeshView(pak::geometry::MeshViewDesc {
-            .first_index = 0U,
-            .index_count = static_cast<uint32_t>(cube->second.size()),
-            .first_vertex = 0U,
-            .vertex_count = static_cast<uint32_t>(cube->first.size()),
-          })
-          .EndSubMesh()
-          .Build();
+    auto mesh = d::MeshBuilder(0, geometry_name)
+                  .WithVertices(cube->first)
+                  .WithIndices(cube->second)
+                  .BeginSubMesh("full", std::move(material))
+                  .WithMeshView(pak::geometry::MeshViewDesc {
+                    .first_index = 0U,
+                    .index_count = static_cast<uint32_t>(cube->second.size()),
+                    .first_vertex = 0U,
+                    .vertex_count = static_cast<uint32_t>(cube->first.size()),
+                  })
+                  .EndSubMesh()
+                  .Build();
 
     pak::geometry::GeometryAssetDesc desc {};
     desc.lod_count = 1U;
@@ -113,7 +112,8 @@ namespace {
 
     co::testing::TestEventLoop loop {};
     co::Run(loop, [&]() -> co::Co<> {
-      co_await module.OnPublishViews(observer_ptr<engine::FrameContext> { &frame });
+      co_await module.OnPublishViews(
+        observer_ptr<engine::FrameContext> { &frame });
       co_return;
     });
   }
@@ -182,7 +182,8 @@ NOLINT_TEST(RuntimeMotionProducerModuleTest,
 NOLINT_TEST(RuntimeMotionProducerModuleTest,
   MaterialMotionKeyStaysStableAcrossMaterialOverrideChanges)
 {
-  auto scene = std::make_shared<scene::Scene>("RuntimeMotionOverrideScene", 16U);
+  auto scene
+    = std::make_shared<scene::Scene>("RuntimeMotionOverrideScene", 16U);
   auto initial_material = MakeSolidColorMaterial("material_initial", 0.15F);
   auto override_material = MakeSolidColorMaterial("material_override", 0.85F);
   auto geometry = BuildSingleSubmeshGeometry("cube_override", initial_material);
@@ -215,7 +216,8 @@ NOLINT_TEST(RuntimeMotionProducerModuleTest,
 
   const auto& state = after->material_motion_states.front();
   EXPECT_EQ(state.key, before_key);
-  EXPECT_EQ(state.resolved_material_asset_key, override_material->GetAssetKey());
+  EXPECT_EQ(
+    state.resolved_material_asset_key, override_material->GetAssetKey());
   EXPECT_NE(state.contract_hash, before_hash);
 }
 

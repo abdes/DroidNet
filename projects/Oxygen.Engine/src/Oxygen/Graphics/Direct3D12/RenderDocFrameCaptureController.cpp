@@ -374,7 +374,8 @@ private:
         capture_mode_ = CaptureMode::kNone;
         configured_capture_started_ = false;
         configured_capture_pending_end_ = false;
-        status_message_ = "configured capture completed before next frame begin";
+        status_message_
+          = "configured capture completed before next frame begin";
         LOG_F(INFO,
           "RenderDoc configured capture completed before next frame begin");
       }
@@ -446,7 +447,8 @@ private:
       configured_capture_frames_remaining_ = 0;
       configured_capture_started_ = false;
       configured_capture_pending_end_ = false;
-      status_message_ = "RenderDoc configured capture was not active at present";
+      status_message_
+        = "RenderDoc configured capture was not active at present";
       LOG_F(WARNING, "RenderDoc configured capture was not active at present");
       return;
     }
@@ -458,7 +460,8 @@ private:
 
     configured_capture_pending_end_ = true;
     status_message_ = "configured capture awaiting close on next frame begin";
-    LOG_F(INFO, "RenderDoc configured capture awaiting close on next frame begin");
+    LOG_F(
+      INFO, "RenderDoc configured capture awaiting close on next frame begin");
   }
 
   auto Initialize() -> void

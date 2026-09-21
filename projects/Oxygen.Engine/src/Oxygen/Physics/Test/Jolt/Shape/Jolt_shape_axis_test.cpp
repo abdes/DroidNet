@@ -87,8 +87,8 @@ NOLINT_TEST_F(JoltShapeAxisTest, CapsuleMatchesRenderMeshBoundsAndSurface)
     if (!mesh.has_value()) {
       FAIL() << "The capsule recipe must generate a render mesh.";
     }
-    const auto shape = backend::MakeShape(CapsuleShape {
-      .radius = radius, .half_height = half_height - radius });
+    const auto shape = backend::MakeShape(
+      CapsuleShape { .radius = radius, .half_height = half_height - radius });
     ASSERT_TRUE(shape.has_value());
 
     auto mesh_min = Vec3 { std::numeric_limits<float>::max() };

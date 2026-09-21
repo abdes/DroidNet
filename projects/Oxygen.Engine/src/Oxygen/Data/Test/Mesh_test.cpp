@@ -171,7 +171,8 @@ NOLINT_TEST_F(
     builder.WithVertices(vertices).WithIndices(indices);
     if (with_descriptor) {
       auto desc = oxygen::data::pak::geometry::MeshDesc {};
-      desc.mesh_type = static_cast<uint8_t>(oxygen::data::MeshType::kProcedural);
+      desc.mesh_type
+        = static_cast<uint8_t>(oxygen::data::MeshType::kProcedural);
       builder.WithDescriptor(desc);
     }
     const auto mesh

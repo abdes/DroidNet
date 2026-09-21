@@ -220,8 +220,8 @@ namespace {
     ASSERT_EQ(inspection.Assets().size(), 1U);
     EXPECT_EQ(inspection.Assets().front().key, native_key);
     EXPECT_EQ(inspection.Assets().front().virtual_path, virtual_path);
-    EXPECT_EQ(inspection.Assets().front().descriptor_relpath,
-      descriptor_relpath);
+    EXPECT_EQ(
+      inspection.Assets().front().descriptor_relpath, descriptor_relpath);
     EXPECT_EQ(inspection.Assets().front().descriptor_size, 2U);
   }
 
@@ -259,8 +259,8 @@ namespace {
       FAIL() << "Expected virtual path collision.";
     } catch (const std::runtime_error& ex) {
       const std::string message = ex.what();
-      EXPECT_NE(message.find("Conflicting virtual path mapping"),
-        std::string::npos);
+      EXPECT_NE(
+        message.find("Conflicting virtual path mapping"), std::string::npos);
       EXPECT_NE(message.find("WriteAssetDescriptor"), std::string::npos);
       EXPECT_NE(message.find("incoming_key="), std::string::npos);
       EXPECT_NE(message.find("existing_key="), std::string::npos);
@@ -852,8 +852,8 @@ namespace {
       FAIL() << "Expected virtual path collision.";
     } catch (const std::runtime_error& ex) {
       const std::string message = ex.what();
-      EXPECT_NE(message.find("Conflicting virtual path mapping"),
-        std::string::npos);
+      EXPECT_NE(
+        message.find("Conflicting virtual path mapping"), std::string::npos);
       EXPECT_NE(message.find("WriteAssetDescriptor"), std::string::npos);
       EXPECT_NE(message.find("existing_descriptor='Materials/A.omat'"),
         std::string::npos);

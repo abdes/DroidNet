@@ -197,9 +197,8 @@ public:
   }
 
   //! Sets the histogram luminance window used by auto exposure.
-  auto SetAutoExposureHistogramWindow(
-    const float min_log_luminance, const float log_luminance_range) noexcept
-    -> void
+  auto SetAutoExposureHistogramWindow(const float min_log_luminance,
+    const float log_luminance_range) noexcept -> void
   {
     exposure_.min_log_luminance = min_log_luminance;
     exposure_.log_luminance_range = log_luminance_range;
@@ -212,8 +211,7 @@ public:
   }
 
   //! Gets the log2 luminance range used by auto exposure.
-  [[nodiscard]] auto GetAutoExposureLogLuminanceRange() const noexcept
-    -> float
+  [[nodiscard]] auto GetAutoExposureLogLuminanceRange() const noexcept -> float
   {
     return exposure_.log_luminance_range;
   }

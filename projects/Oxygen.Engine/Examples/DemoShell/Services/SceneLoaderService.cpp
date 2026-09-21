@@ -1006,8 +1006,8 @@ auto SceneLoaderService::BuildCollisionShapeFromDescriptor(
     const float radius = shape_desc.shape_params.capsule.radius;
     const float half_height = shape_desc.shape_params.capsule.half_height;
     ensure_no_cooked_ref();
-    if (!std::isfinite(radius) || !std::isfinite(half_height)
-      || radius <= 0.0F || half_height < 0.0F) {
+    if (!std::isfinite(radius) || !std::isfinite(half_height) || radius <= 0.0F
+      || half_height < 0.0F) {
       throw std::runtime_error(
         std::string("OXY-SHAPE-008: invalid capsule params in ")
         + std::string(binding_kind)
@@ -2629,25 +2629,25 @@ void SceneLoaderService::AttachRenderables(const data::SceneAsset& asset)
 {
   using data::pak::world::RenderableRecord;
 
-  const auto ApplyMaterialOverride =
-    [](scene::SceneNode::Renderable renderable,
-      std::shared_ptr<const data::GeometryAsset> geometry,
-      std::shared_ptr<const data::MaterialAsset> material) {
-      if (!geometry || !material) {
-        return;
-      }
-      const auto meshes = geometry->Meshes();
-      for (std::size_t lod = 0; lod < meshes.size(); ++lod) {
-        const auto& mesh = meshes[lod];
-        if (!mesh) {
-          continue;
+  const auto ApplyMaterialOverride
+    = [](scene::SceneNode::Renderable renderable,
+        std::shared_ptr<const data::GeometryAsset> geometry,
+        std::shared_ptr<const data::MaterialAsset> material) {
+        if (!geometry || !material) {
+          return;
         }
-        const auto submeshes = mesh->SubMeshes();
-        for (std::size_t submesh = 0; submesh < submeshes.size(); ++submesh) {
-          renderable.SetMaterialOverride(lod, submesh, material);
+        const auto meshes = geometry->Meshes();
+        for (std::size_t lod = 0; lod < meshes.size(); ++lod) {
+          const auto& mesh = meshes[lod];
+          if (!mesh) {
+            continue;
+          }
+          const auto submeshes = mesh->SubMeshes();
+          for (std::size_t submesh = 0; submesh < submeshes.size(); ++submesh) {
+            renderable.SetMaterialOverride(lod, submesh, material);
+          }
         }
-      }
-    };
+      };
 
   const auto renderables = asset.GetComponents<RenderableRecord>();
   int valid_renderables = 0;

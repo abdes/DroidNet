@@ -63,16 +63,13 @@ public:
   virtual ~IArtifactFileSystem() = default;
 
   [[nodiscard]] virtual auto Exists(const std::filesystem::path& path) const
-    -> bool
-    = 0;
+    -> bool = 0;
   virtual auto CreateDirectories(const std::filesystem::path& path)
-    -> std::error_code
-    = 0;
+    -> std::error_code = 0;
   virtual auto RemoveFile(const std::filesystem::path& path) -> std::error_code
     = 0;
   virtual auto Rename(const std::filesystem::path& from,
-    const std::filesystem::path& to) -> std::error_code
-    = 0;
+    const std::filesystem::path& to) -> std::error_code = 0;
 };
 
 class RealArtifactFileSystem final : public IArtifactFileSystem {

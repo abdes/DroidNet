@@ -30,8 +30,7 @@ struct RenderMotionIdentityKey {
   std::uint64_t contract_hash { 0U };
 
   [[nodiscard]] constexpr auto operator==(
-    const RenderMotionIdentityKey&) const noexcept -> bool
-    = default;
+    const RenderMotionIdentityKey&) const noexcept -> bool = default;
 };
 
 struct RenderMotionIdentityKeyHash {

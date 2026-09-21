@@ -70,8 +70,7 @@ public:
 
 protected:
   virtual auto CollectImpl(std::optional<ScenePrepContext> ctx,
-    ScenePrepState& state, RenderItemProto& item) -> void
-    = 0;
+    ScenePrepState& state, RenderItemProto& item) -> void = 0;
 
   virtual auto FinalizeImpl(ScenePrepState& state) -> void = 0;
 

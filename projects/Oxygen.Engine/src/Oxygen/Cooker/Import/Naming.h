@@ -87,8 +87,7 @@ public:
 
   //! Optionally returns a replacement name for an imported object.
   [[nodiscard]] virtual auto Rename(std::string_view authored_name,
-    const NamingContext& context) const -> std::optional<std::string>
-    = 0;
+    const NamingContext& context) const -> std::optional<std::string> = 0;
 };
 
 //! Naming strategy that never renames anything.

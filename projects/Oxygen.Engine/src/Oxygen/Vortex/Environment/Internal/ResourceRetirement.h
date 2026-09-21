@@ -16,8 +16,8 @@ namespace oxygen::vortex::environment::internal {
 
 //! Retire a resource and its shader-visible descriptors at the same GPU fence.
 template <typename Resource>
-auto RetireEnvironmentResource(Graphics& graphics,
-  std::shared_ptr<Resource>& resource) -> void
+auto RetireEnvironmentResource(
+  Graphics& graphics, std::shared_ptr<Resource>& resource) -> void
 {
   if (!resource)
     return;
