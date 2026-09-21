@@ -74,27 +74,50 @@ Important baseline facts:
 
 ### Global exposure, LightBench and MultiView
 
-The active [exposure package](plan/exposure-and-lightbench-correction.md) retains
-its ten original slices and inserts Slice 5.1 performance qualification and
-Slice 5.2 code quality before Slice 6. Delivery order is contracts; canonical
-settings/fixed gain; metering/adaptation; lifecycle/sharing; HDR migration and
-native MultiView; **5.1 performance; 5.2 quality**; persistence/configuration;
-physical lights; independent instruments; interactive demos; final acceptance.
+The [exposure package](plan/exposure-and-lightbench-correction.md) delivers a
+predictable global-exposure engine, a calibrated interactive LightBench and
+visually correct MultiView, with repeatable independent measurements.
 
-Status: `in_progress`. Slices 1-6, including inserted Slices 5.1 and 5.2,
-are validated. EX06 closes strict scene-v6/PakGen-v7 authoring and persistence,
-source-qualified mask transport, the C++20 editor boundary, DemoShell UX and
-configuration isolation. The [tracker](IMPLEMENTATION_STATUS.md#33-slice-6-work-items)
-owns the closure evidence. The accepted Slice 5.1 CPU operating point remains
-closed; further CPU optimization belongs to a later milestone.
+**Validated foundation:** EX01-06, including EX051 performance and EX052 quality.
+EX06 closed current-format persistence across engine/tooling/editor/examples,
+the public C++20 boundary, DemoShell UX and configuration isolation. Further
+optimization beyond the accepted EX051 CPU cost remains a later milestone.
 
-**Next: EX07 — Complete the reference lighting unit chain.** Slices 7-10 still
-own physical-light/material calibration, independent instrumentation, complete
-LightBench/MultiView delivery and package acceptance. Post-processing console
-commands and ImGui Test Engine support are deferred to a separate future slice.
-Implementation must pass each slice gate before the next. FP16 eligibility is
-per-view and separate from exposure validity; retained FP32 does not reset
-adaptation. Prior VTX-M03/M06 closure is not this package's acceptance evidence.
+**Remaining delivery:**
+
+| Order  | Observable result                                                                                                                |
+| ------ | -------------------------------------------------------------------------------------------------------------------------------- |
+| EX07   | Physical direct-light calibration plus qualified/improved many-light culling, shaders, shadows, submission and resource scaling. |
+| EX08   | Calibrated Neutral Reference with trustworthy measurements, complete reset/save/load and the first interactive/batch report.     |
+| EX08.1 | Post-processing console commands use the same validated controls and report asynchronous outcomes.                               |
+| EX08.2 | Native ImGui tests exercise the actual edit/focus/mask/reset/panel workflows, including the EX06 regressions.                    |
+| EX09A  | Point Falloff and Spot Distribution experiments.                                                                                 |
+| EX09B  | Fixed Exposure experiment with exact EV reference outputs.                                                                       |
+| EX09C  | Adaptation and Lifecycle experiments with controlled time and event expectations.                                                |
+| EX09D  | Mixed HDR Domain experiment preserving required signals and appearance.                                                          |
+| EX09E  | Existing MultiView proofs integrated into usable controls, qualified measurements and the validation runner.                     |
+| EX10   | Complete final-build acceptance report, working commands and reconciled operating docs.                                          |
+
+EX07 includes the [many-light qualification plan](plan/EX07-lighting-correctness-and-scalability.md):
+review and repair existing defects, improve the production path, then qualify
+correctness and performance together. Necessary dependency repairs belong to EX07.
+1,024 mixed local lights are the primary workload; 4,096, dense overlap, 4K and
+multiple views qualify scaling. Shadowed subsets have explicit capacity and
+separate cost. Order: contracts -> references/instruments -> correctness repairs
+-> qualified baselines/budgets -> scalable optimization -> final validation.
+Only correct workloads enter the baseline; numeric improvement/regression/noise
+thresholds are frozen before candidate runs. No performance capability is claimed yet.
+
+Each delivery step includes its numerical, interaction and relevant native visual
+checks. Automation grows with the experiments; EX10 is integration/closure.
+The [detailed gates](plan/exposure-and-lightbench-correction.md#8-ordered-implementation-slices)
+own scope and measurable criteria. The [tracker](IMPLEMENTATION_STATUS.md#31-current-work)
+owns current status. **Next is EX07; implementation has not started.**
+
+Retain the accepted FP32/P=1 production policy; varying P/FP16 qualification stays
+explicit diagnostic coverage. Reuse valid EX05 MultiView and EX06 authoring evidence;
+rerun cases when their inputs or relevant implementation change. Prior VTX-M03/M06
+closure does not substitute for this package's final integration evidence.
 
 ### ED-M08 — V0.1 canonical authoring and rendering
 

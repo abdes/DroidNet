@@ -7,40 +7,79 @@ Status: `in_progress` — current slice state and evidence are maintained in the
 are updated there; this plan owns the requirements and gates.
 
 Date: 2026-09-16
-Updated: 2026-09-21 — Slices 1-6, including 5.1 and 5.2, are closed; EX07 is next and planned.
+Updated: 2026-09-22 — remaining delivery refined after EX06; EX07 is next and planned.
 
 Paths are relative to `projects/Oxygen.Engine` unless identified as
 repository-root paths.
 
 ## 1. Delivery scope and sequence
 
-Deliver a complete desktop global-exposure system, a serious LightBench visual
-exposure benchmark, and a visually correct MultiView demo in this work package.
-LightBench and MultiView are primary acceptance deliverables. Implement fixed/manual-camera exposure, histogram
-metering, hybrid adaptation, masks and compensation curves, view lifecycle,
-shared exposure, unified pre-exposure, authoring round-trip, diagnostics, and
-automated qualification. Required light-unit corrections for the bench are
-included.
+Deliver a desktop global-exposure system whose behavior developers can predict,
+author, inspect and reproduce. The finished package has three observable results:
 
-Execute the slices in section 8 in order, including 5 -> 5.1 -> 5.2 -> 6.
-Engine correctness slices use native fixtures and RenderDoc before the bench
-instrumentation is available. Performance acceptance uses Oxygen's built-in
-profiling and native Release execution. Each slice includes its tests and
-owning-document updates. The user approved the inserted plan and authorized
-Slice 5.1 execution on 2026-09-19. Slice 5.2 completed its approved finite
-residual batch and separately approved blocking Release include repair.
+1. **Production rendering:** physically defined lights and the implemented exposure
+   system produce the specified values through forward and deferred rendering.
+2. **LightBench:** launch a readable calibrated reference, select one of seven
+   experiments, see expected and measured results, edit it, and reset to a known
+   state. Run the same definition unattended and obtain a trustworthy report.
+3. **MultiView:** ordinary lit main/PiP and proof layouts remain visually correct;
+   exposure is independent unless sharing is explicit, including during changes
+   to cameras, layouts and view lifetimes.
 
-For a fresh start or resume, read the tracker's
-[Current work](../IMPLEMENTATION_STATUS.md#31-current-work) for the active
-checkpoint and execution state. Its
-[remaining performance order](../IMPLEMENTATION_STATUS.md#delivery-order-and-ownership)
-is complete. Slices 1-6, including 5.1 and 5.2, are closed. EX07 is the next
-planned slice; implementation has not started. Do not restart completed items
-from historical milestone or manifest instructions.
+The exposure engine, HDR/lifecycle contracts, performance disposition and authoring
+are already validated in Slices 1-6, including 5.1 and 5.2. Remaining work completes
+physical calibration and the maintained applications/instruments that demonstrate
+those contracts. EX07 now also owns many-light correctness/performance and targeted
+lighting improvements. It does not reopen the completed exposure optimization cycle.
+
+### Remaining delivery at a glance
+
+Execute **EX07 -> EX08 -> EX08.1 -> EX08.2 -> EX09A -> EX09B -> EX09C -> EX09D -> EX09E -> EX10**.
+EX09A-E divide the original large Slice 9; existing requirement IDs remain stable.
+All are planned. Each step ships its focused tests, usable controls, batch case
+and documentation together; EX10 integrates already working delivery.
+
+| Step                                               | What the user can do when it closes                                                                                    | Concrete completion evidence                                                                                                                                                |
+| -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| EX07 — Correct and scalable lighting               | Use physically correct lights and large supported light sets in both rendering families.                               | Independent calibration, conservative culling/overflow tests and measured CPU/GPU/memory qualification; [detailed EX07 plan](EX07-lighting-correctness-and-scalability.md). |
+| EX08 — Use one trustworthy reference               | Launch Neutral Reference; inspect three cards, expected/measured values, reset and explicitly save/load an experiment. | Qualified instruments; readable native image; identical interactive/batch recipe; one schema-valid report.                                                                  |
+| EX08.1 — Drive post-processing through the console | Inspect/edit settings and trigger transitions through Oxygen's integrated console.                                     | Commands use the same validated services, report requested/accepted state and reject invalid/stale targets atomically.                                                      |
+| EX08.2 — Automate the actual ImGui controls        | Run repeatable UI regression tests without coordinate scripts.                                                         | Native tests cover edits, focus, curves, masks, reset and panel navigation, with failure artifacts.                                                                         |
+| EX09A — Inspect point and spot lighting            | Change prescribed distance or cone angle and understand the visible falloff.                                           | Point Falloff and Spot Distribution pass their numerical sweeps and native visual checks.                                                                                   |
+| EX09B — Verify fixed exposure                      | See how EV, camera settings, key and compensation change known HDR input.                                              | Fixed Exposure produces 0.25/0.125/0.0625 for EV14/15/16 before output encoding.                                                                                            |
+| EX09C — Understand transitions                     | Play/restart bright/dark steps and lifecycle events and inspect the response over time.                                | Adaptation and Lifecycle pass timestamped trajectories, event-frame checks and interactive reset.                                                                           |
+| EX09D — Verify mixed HDR content                   | Change numerical pre-exposure while the scene's intended appearance remains stable.                                    | HDR Domain passes product comparisons, bright/dark recovery and inspected native output.                                                                                    |
+| EX09E — Trust multiple views                       | Use lit PiP and existing proof layouts with independent or explicitly shared exposure.                                 | Existing proofs integrated with qualified measurements; every lit pane and required interaction passes.                                                                     |
+| EX10 — Reproduce package acceptance                | Run documented acceptance commands and identify any failed case from the report.                                       | All requirements mapped to valid evidence, final integration passing, operating docs complete.                                                                              |
+
+The detailed scope and exit gate for each step are in section 8. The
+[tracker](../IMPLEMENTATION_STATUS.md#31-current-work) owns current execution
+state; historical manifest `remaining` lists do not reopen closed slices.
+
+### Reuse the delivered foundation
+
+| Delivered and retained                                                                                             | Actual remaining gap                                                                            |
+| ------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------- |
+| Canonical settings, fixed/camera/Auto/disabled state, masks, curves and hybrid response (EX02-04)                  | Present those behaviors as reproducible LightBench experiments.                                 |
+| Frame-pinned HDR domains, recovery and native MultiView proofs (EX05)                                              | Integrate instruments and final demo operation; repair only demonstrated regressions.           |
+| Accepted production precision/performance and focused quality work (EX051/052)                                     | Preserve their decisions; perform affected regression checks, not a new optimization campaign.  |
+| Strict current-format persistence, scripting/editor transport, public C++20 boundary and DemoShell controls (EX06) | Versioned complete experiment recipes and independent verdicts.                                 |
+| Experiment-owned activation, camera framing and settings isolation (EX06)                                          | Whole-recipe Reset/Load/Save and a calibrated directional Neutral Reference.                    |
+| MultiView exposure CLI, scenario fixtures and analyzers (EX05)                                                     | One report/runner integration and any remaining user-facing controls; reuse existing sequences. |
+
+Production remains the accepted FP32/P=1 policy. Varying P and qualified half
+storage are explicit diagnostic coverage, not a plan to restore automatic FP16
+admission. The accepted CPU cost remains closed; further optimization is deferred.
+The EX06 console and ImGui Test Engine deferrals now have explicit planned
+slices EX08.1 and EX08.2. They follow the first working benchmark so they can use
+its controller and reports, and precede the remaining experiments so new scenarios
+can gain UI regression coverage as they land. EX06 stays closed; native numerical
+fixtures remain independently runnable.
 
 The [exposure reference companion](../lld/exposure-improvement-plan.md) contains
 UE source pointers and Oxygen's implementation choices. This document owns
-the delivery sequence and acceptance criteria.
+delivery scope and gates; the [LightBench specification](../../renderer-core/lightbench.md)
+owns experiment definitions and presentation.
 
 ### Included features
 
@@ -56,6 +95,12 @@ the delivery sequence and acceptance criteria.
 | LightBench exposure benchmark | Properly repaired demo, readable reference scenes, complete exposure experiments, independent numerical expectations, repeatable interaction/reset and visual qualification |
 | MultiView visual correctness  | Main/PiP, multi-camera, auxiliary and offscreen layouts render correctly with independent or explicitly shared exposure; exposure and multiview changes preserve each other |
 | Qualification                 | GPU measurements, native gameplay scenarios, multiview tests, numerical and visual results                                                                                  |
+
+EX07 owns review, correction, optimization and qualification of many-light
+rendering: eligibility/culling, active shaders, deferred submission/overdraw,
+shadow integration, resource scaling and necessary cross-module dependencies. Its
+[bounded workload and gate](EX07-lighting-correctness-and-scalability.md) are part
+of EX07 completion, not a later optional benchmark.
 
 ### Design limits
 
@@ -84,63 +129,49 @@ by the features above.
 - Calibrate the existing directional, point and spot models. Add no light-type
   selector, alternative BRDF, generic curve editor or general benchmark framework.
 
-### Working through the plan
+### Working through the remaining plan
 
-Slice 1 is the rendering lead's contract checkpoint: freeze exact GPU/asset
-layouts, the numerical domain and the HDR product-format inventory, distinguishing
-specified limits from hardware-tested limits. The
-[checkpoint report](exposure-contract-checkpoint.md) records source and compiler
-evidence, decisions and the remaining gate.
-The implementation slices then consume those written contracts.
+Begin with a runnable case and its independent expectation, then implement only
+what that case needs. EX07 uses existing native fixtures/readbacks. EX08 qualifies
+the reusable instrument before enabling Neutral Reference verdicts. Subsequent
+experiments reuse that instrument, controller, schema and report.
 
-| Work                    | First patch                                                               | Review focus                                        |
-| ----------------------- | ------------------------------------------------------------------------- | --------------------------------------------------- |
-| Settings and math (2)   | Independent EV14 regression and removal of fixed gain floor               | Numeric bounds and compatibility                    |
-| Metering/adaptation (3) | CPU oracle and known-distribution GPU fixture                             | Sampling, conserved weights and time integration    |
-| Lifecycle (4)           | Owner-only state update and generation tests using controlled float input | Senior review of ownership and GPU lifetime         |
-| HDR integration (5)     | Frame binding plus opaque/emissive pre-exposure invariant test            | Senior review of domains, formats and barriers      |
-| Persistence (6)         | Current-record round-trip and old-version rejection                       | Record layout and resource-reference integrity      |
-| Light units (7)         | Point flux conversion and inverse-square test                             | Physical units and shared forward/deferred behavior |
-| Measurements (8)        | One known-float region readback                                           | GPU identity, lifetime and error budget             |
-| Bench/runner (9-10)     | Neutral Reference recipe and deterministic reset                          | UI clarity and reproducibility                      |
+Close each step with code, focused tests, native inspection where applicable and
+its documented command. Check affected code with Oxygen formatting/oxytidy; do
+not suppress clang-tidy diagnostics merely to close a gate. Preserve public C++20
+boundaries, enum printing, complete-candidate validation and concise diagnostics.
+Each demo launch must state the scenario and expected visible result in advance.
+Record unexpected warnings/errors as failures; identify intentional negative-test
+diagnostics in the case definition. Section 9 defines how to reuse evidence and
+avoid repeated validation.
 
-For each first patch, add its focused test, implement that behavior, and run
-the named slice gate before expanding to the remaining cases. Use the file map
-in section 8 to locate the owner. Review GPU bindings, barriers and lifetime
-changes before integrating another rendering family.
+## 2. Current gaps and implementation owners
 
-## 2. Baseline defects and implementation owners
+The original fixed-gain floor, histogram/adaptation, sharing, pre-exposure,
+serialization and settings-isolation defects are closed by EX02-06. Their
+requirements remain in sections 3-5 and the completed slice records.
 
-- `Core/Types/PostProcess.h` has a coherent EV conversion, but
-  `ExposurePass::Execute` floors fixed exposure at `1e-4`. At key 12.5 and
-  zero compensation, EV14 is approximately 0.712288 stops too bright.
-- Auto history starts from the inactive manual EV. DemoShell's
-  `ResetAutoExposure(initial_ev)` is empty.
-- A borrowed exposure handle can be updated using the borrowing view's image.
-- Adaptation uses `1 - exp(-k * dt)` despite EV/s authoring labels.
-- The histogram assigns each sample to one bin. Full-resolution weighted
-  32-bit accumulation can overflow at 8K.
-- The pre-scene exposure scalar and Stage 22 exposure result are separate.
-  Atmosphere LUTs, sky/AP, forward shading and deferred shading use different
-  exposure-domain conventions.
-- Legal zero auto-target input is replaced by positive runtime floors.
-- Saved DemoShell camera/post-process settings can overwrite scene settings.
-- LightBench presets change visibility rather than a complete experiment.
-  Its point light is tangent to the cards, its saved spot configuration misses
-  gray/white centers, and no directional reference light is created.
-- The deferred local-light path passes authored lumens through as intensity,
-  with `1/(d*d + 1)` attenuation. Calibrated point/spot tests require the
-  unit conversion and distance behavior specified in section 6.
+Source review after EX06 identifies these remaining delivery gaps:
 
-Primary implementation areas:
+- `DeferredLightPacketBuilder` still forwards local-light intensity directly;
+  `DeferredLightingCommon.hlsli` still uses `1/(d*d + 1)`. EX07 must complete
+  the physical contract across both consumers, not calibrate a demo around it.
+- `LightScene::ApplyScenePreset` changes object visibility. It is not a complete
+  experiment controller, and there is no calibrated directional Neutral Reference.
+  EX06's camera/isolation changes are retained as prerequisites.
+- `Renderer::InspectExposureSettings` exposes accepted settings and bounded
+  asynchronous status. It is not a same-frame GPU luminance/consumed-gain instrument.
+- MultiView already has scripted exposure cases and capture/assertion tools.
+  The reusable measurement/report integration is missing; those cases need no
+  second implementation.
+- The LightBench experiment specification exists, but its controller, operating
+  README and package validation runner are not delivered.
 
-- `src/Oxygen/Core/Types/PostProcess.h`
-- `src/Oxygen/Scene/Camera/CameraExposure.h`
-- `src/Oxygen/Scene/Environment/PostProcessVolume.h`
-- `src/Oxygen/Vortex/CompositionView.h`, `Internal/ViewLifecycleService.*`
-- `src/Oxygen/Vortex/SceneRenderer/`, `PostProcess/`, `Types/ViewColorData.h`
-- `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/`
-- `Examples/DemoShell/Services/` and `Examples/LightBench/`
+Primary owners are `Vortex/Lighting`, the forward/deferred lighting shaders,
+`Vortex/Diagnostics` and existing extraction/readback services,
+`Examples/LightBench`, `Examples/MultiView` and `tools/vortex`. Use the file map
+in section 8. Keep experiment semantics in LightBench and rendering measurements
+in Vortex; do not duplicate runtime exposure or physical-light logic in the UI.
 
 ## 3. Exposure equations and state
 
@@ -617,6 +648,36 @@ layer or new texture asset type is introduced.
 
 ## 6. Calibrated light and material reference
 
+### Directional-light authority
+
+The established Oxygen contract is scene-owned directional lights with explicit
+assignment to up to two atmospheric slots. Primary/Secondary identify slots,
+not mandatory Sun/Moon types: the pair may represent two suns or a sun and moon.
+An unassigned directional light still provides direct surface illumination.
+Atmospheric assignment does not replace the light or create a second source.
+Each assigned source retains its identity; a lone Secondary is not promoted to
+Primary. The [editor rendering contract](editor-v01-rendering-contract.md#3-independent-directional-array-and-atmosphere-assignments)
+owns the canonical scene/rendering representation and assignment validation.
+
+Demo convenience is explicit and separate: when requested, a demo may infer a
+sun from an existing scene directional light, or inject a preview directional
+light into the scene. These actions must respect explicit scene assignments.
+The production renderer neither silently elects a sun nor creates a fallback
+light. A preview source follows ordinary scene-light lifetime and contribution
+rules; it is not a hidden rendering path.
+
+EX07 qualification must cover an unassigned directional light, each atmospheric
+slot independently, and both assigned sources together, with predictable direct
+contributions in both rendering families. Isolate atmospheric transport for the
+photometric reference; this does not remove or reinterpret authored assignments.
+Current primary-only publication is an implementation gap against this agreed
+contract that EX07 must repair and validate. Follow the existing directional-array
+design and update its owners together; a primary-sun-only fixture cannot qualify
+the complete directional case.
+Full scattering and shadow-quality acceptance remain with their owning work.
+
+### Physical reference
+
 Finish the physical unit chain needed by the shipped neutral, point and spot
 experiments in this package:
 
@@ -688,10 +749,10 @@ A staged experiment application owns geometry, materials, lights, environment,
 camera, rendering features, exposure/output settings and measurement regions.
 Publish them coherently at a frame boundary and issue the relevant transition.
 
-`force_environment_override = false` alone is insufficient:
-`DemoShell::OnSceneActivated` also reapplies saved camera/post-process values.
-Add an explicit experiment-owned activation policy across these services.
-Other demos retain their existing persistence behavior.
+EX06 supplies `SceneActivationPolicy::kExperimentOwned` across the relevant
+DemoShell services. Reuse that policy and its tests. Whole-recipe application,
+revision changes and reset are the remaining controller work. Other demos retain
+their existing persistence behavior.
 
 Persist window/panel preferences separately. Saved modified experiments load
 explicitly. Reset restores all reference inputs. Migrate the shipped indoor
@@ -765,8 +826,8 @@ cells for depth-only, shadow-only and diagnostics-only profiles; unexpected
 black lit views fail. ImGui, display backgrounds and fixed bars remain independent
 of scene exposure.
 
-Add a bounded scripted exposure-proof mode to MultiView's existing configuration
-and CLI. Use `MainModule::UpdateComposition` for view settings/transitions,
+Reuse the bounded exposure-proof modes already implemented in MultiView's
+configuration and CLI. Use `MainModule::UpdateComposition` for view settings/transitions,
 `UpdateCameras` for framing/resize, and `RenderOffscreenProofProducts` for visible
 forward/deferred products. Reuse producer-owned view-state handles and the
 renderer measurement facility.
@@ -795,16 +856,16 @@ The shader root below is
 `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex`. Keep unit/oracle tests next to
 the owning module; use the existing native fixture and capture tools for GPU tests.
 
-| Slice | Start in these files                                                                                                                                                                                 | First observable check                                                                               |
-| ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| 2     | `Core/Types/PostProcess.h`, `Vortex/PostProcess/Passes/ExposurePass.cpp`, `Vortex/Test/PostProcessService_test.cpp` under `src/Oxygen/`                                                              | EV14 reaches the tonemap constant unchanged                                                          |
-| 3     | `Vortex/PostProcess/Types/PostProcessConfig.h`, `PostProcess/Passes/ExposurePass.*`; shader `Services/PostProcess/Exposure.hlsl`                                                                     | Known two-bin distribution and hybrid trajectory                                                     |
-| 4     | `Vortex/CompositionView.h`, `Internal/ViewLifecycleService.*`, `PostProcess/PostProcessService.*`, `ExposurePass.*`                                                                                  | One source update and idempotent event generation                                                    |
-| 5     | `Vortex/Types/ExposureStateData.h`, `Types/ViewFrameBindings.h`, `SceneRenderer/SceneTextures.*`, `Stages/InitViews/InitViewsModule.cpp`; shader families in section 4.4                             | Opaque/emissive output invariant under a change of P                                                 |
-| 6     | `Scene/Environment/PostProcessVolume.h`, `Data/PakFormat_world.h`, `Data/PakFormatSerioLoaders.h`, cooker schemas, `Scripting/Bindings/Packs/Scene/SceneEnvironmentBindings.cpp`, DemoShell services | Current records round-trip; obsolete records are rejected                                            |
-| 7     | `Vortex/Lighting/Internal/DeferredLightPacketBuilder.cpp`; shader `Services/Lighting/DeferredLightingCommon.hlsli` and `ForwardDirectLighting.hlsli`                                                 | Point flux and spot angular integral match independent values                                        |
-| 8     | `Vortex/Diagnostics/DiagnosticsService.*`, `SceneRenderer/SceneTextures.*` and existing extraction/readback owners                                                                                   | Known float region readback has the correct frame/view                                               |
-| 9-10  | `Examples/LightBench/LightScene.*`, `MainModule.*`, `LightBenchPanel.*`, `main_impl.cpp`; `Examples/MultiView/MainModule.*`, `SceneBootstrapper.*`, `main_impl.cpp`; `tools/vortex/`                 | LightBench reset/batch inputs match; every MultiView lit pane passes image/exposure isolation checks |
+| Slice    | Start in these files                                                                                                                                                                                 | First observable check                                                                       |
+| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| 2        | `Core/Types/PostProcess.h`, `Vortex/PostProcess/Passes/ExposurePass.cpp`, `Vortex/Test/PostProcessService_test.cpp` under `src/Oxygen/`                                                              | EV14 reaches the tonemap constant unchanged                                                  |
+| 3        | `Vortex/PostProcess/Types/PostProcessConfig.h`, `PostProcess/Passes/ExposurePass.*`; shader `Services/PostProcess/Exposure.hlsl`                                                                     | Known two-bin distribution and hybrid trajectory                                             |
+| 4        | `Vortex/CompositionView.h`, `Internal/ViewLifecycleService.*`, `PostProcess/PostProcessService.*`, `ExposurePass.*`                                                                                  | One source update and idempotent event generation                                            |
+| 5        | `Vortex/Types/ExposureStateData.h`, `Types/ViewFrameBindings.h`, `SceneRenderer/SceneTextures.*`, `Stages/InitViews/InitViewsModule.cpp`; shader families in section 4.4                             | Opaque/emissive output invariant under a change of P                                         |
+| 6        | `Scene/Environment/PostProcessVolume.h`, `Data/PakFormat_world.h`, `Data/PakFormatSerioLoaders.h`, cooker schemas, `Scripting/Bindings/Packs/Scene/SceneEnvironmentBindings.cpp`, DemoShell services | Current records round-trip; obsolete records are rejected                                    |
+| 7        | `Vortex/Lighting/Internal/DeferredLightPacketBuilder.cpp`; shader `Services/Lighting/DeferredLightingCommon.hlsli` and `ForwardDirectLighting.hlsli`                                                 | Point flux and spot angular integral match independent values                                |
+| 8        | `Vortex/Diagnostics/DiagnosticsService.*`, existing extraction/readback owners; `Examples/LightBench/` and `tools/vortex/`                                                                           | Qualified known-float probe, then a measured Neutral Reference that resets and runs in batch |
+| 9A-E, 10 | `Examples/LightBench/LightScene.*`, `MainModule.*`, `LightBenchPanel.*`; `Examples/MultiView/MainModule.*`, `SceneBootstrapper.*`, `main_impl.cpp`; `tools/vortex/`                                  | One additional experiment family per step; reuse MultiView proofs and aggregate reports      |
 
 Unqualified paths in the table's engine rows are under `src/Oxygen/`; shortened
 paths after a `Vortex/` entry stay within that module. Avoid creating duplicate
@@ -1031,8 +1092,8 @@ current-format cutover, C++20 editor boundary and rendered DemoShell acceptance
 are qualified. The [item tracker](../IMPLEMENTATION_STATUS.md#33-slice-6-work-items)
 and [local evidence](../../../out/build-ninja/analysis/vortex/exposure-lightbench/slice6/slice6-progress.json)
 record validation. The TexturedCube assignment/panel-refresh regression is
-unit-tested and confirmed fixed by the user's rebuilt-app test. Console commands
-and ImGui Test Engine support remain a separate future slice.
+unit-tested and confirmed fixed by the user's rebuilt-app test. Its deferred console
+and ImGui Test Engine work is now scheduled separately in EX08.1 and EX08.2.
 
 - Include native aperture/shutter/ISO source/cook/load persistence, as
   approved on 2026-09-16. Scene-v6 perspective/orthographic records are 32/40
@@ -1174,86 +1235,346 @@ personal settings.
 
 ### Slice 7 - Complete the reference lighting unit chain
 
-- Correct common point/spot flux-to-intensity conversion and inverse-square
-  distance behavior, including smooth-cone normalization and finite near field.
-- Apply the shared physical contract to active forward/deferred consumers.
-- Verify neutral directional, point and spot units against an independent
-  integration/reference calculation; include range fade and cone boundaries.
-- Establish the production material and color-space mapping used by every
-  bench oracle, including packed specular, normal and albedo values.
+**Outcome:** physically correct directional/point/spot illumination and qualified,
+improved rendering of large supported light sets.
+**Dependency:** closed EX06. **Tracked by:** EX07-01–14/GATE.
 
-**Gate:** all three required light experiments have numerical expectations
-and passing unit/BRDF contracts. Required calibration is not left as a dependency
-for a separate workstream.
+EX07 owns correctness and performance of the complete agreed lighting path,
+including pre-existing defects and necessary dependency repairs. Review the path,
+correct discrepancies, optimize measured costs and validate the final result.
+An existing implementation limitation is repair work, not a completion exemption.
 
-### Slice 8 - Implement and qualify measurement instrumentation
+The [EX07 correctness/scalability plan](EX07-lighting-correctness-and-scalability.md)
+owns workload definitions, cost attribution, capacity/overflow behavior and
+performance acceptance. Execute six steps: **A contracts -> B references and
+instruments -> C correctness repair -> D qualified baseline/budgets -> E scalable
+culling and optimization -> F final validation**. Its directional cases retain the explicit dual-source
+contract in section 6. These checkpoints all belong to EX07 before EX08 begins.
 
-- Implement the diagnostics contracts in section 7.3 using existing extraction
-  and asynchronous readback facilities.
-- Validate known GPU signals, pre-exposure conversion, actual consumed gain,
-  zero samples, partial coverage and invalid/nonfinite data.
-- Verify frame/view/experiment association under delayed readbacks and changes.
-- Verify zero disabled-path GPU work and bounded enabled-path resources.
+- Implement section 6's shared point/spot conversion, distance/range falloff,
+  cone normalization, hard-cone limit and invalid-cone rejection. Directional
+  lux and receiver cosine must pass the same complete unit-chain review.
+- Cover active forward and deferred consumers; freeze working color space and
+  the actual packed material/production BRDF interpretation in the independent
+  oracle. Include white-source reference values and separate tint behavior.
+- Use existing native scene fixtures and readbacks for a directional card,
+  point distances and spot angles. Freeze the numeric case inputs and tolerances
+  before accepting captures. The production helper cannot serve as its own oracle.
+- Review affected authored examples/fixtures when corrected intensity changes
+  their appearance. Record intentional physical recalibration; never compensate
+  with a hidden exposure offset or preserve old behavior through a compatibility path.
 
-**Gate:** instrumentation matches independent known inputs before it reports
-bench verdicts.
+**Calibration gate (EX07C):** directional, point and spot rendered probes in both families meet
+the PBR packed-material/BRDF budget (2% relative + 2e-5 absolute). Independent spot
+integration recovers authored flux; point ratios include known range fade.
+Zero/near separation, at/beyond range, inner/outer and equal-angle cones have
+explicit finite/zero/invalid expectations. Inspect the lit calibration fixtures
+and run affected light/shader tests. EX08 consumes these qualified references.
 
-### Slice 9 - Finish LightBench and MultiView visual behavior
+**Full EX07 gate:** also pass the many-light culling/reference-image, overflow,
+shader/shadow association, multi-view, resource-lifetime and editor-input cases.
+Freeze and meet the native performance budgets; deliver measured improvements
+and explicit supported limits. Primary workload: 1,024 mixed local lights at
+1080p; 4,096 lights, dense overlap and 4K qualify scaling. Shadowed subsets are
+measured separately. Benchmarks remain opt-in executables under `Benchmarks`,
+separate from correctness tests. Use existing fixtures/profiling; EX07 does not
+depend on EX08's future reusable measurement API or EX08.1/8.2 automation.
 
-- Implement schema-validated experiments from section 7.1 through one controller.
-- Stage/reset complete configurations and temporal state; supply a clear,
-  consistently framed Neutral Reference at startup.
-- Implement focused controls, useful overlays, measurements and explicit verdicts.
-- Repair LightBench's visual scene composition and exercise every experiment
-  interactively against section 7.4, including its exposure-transition sequences.
-- Convert the indoor preset and provide explicit saved-experiment loading.
-- Extend MultiView's existing controls/fixtures for independent and shared
-  exposure, per-view overrides, and lifecycle sequences. Fix affected demo
-  framing, composition and exposure behavior until section 7.5 passes visually.
-- Create `Examples/LightBench/README.md` with actual launch/run/reset/save
-  instructions, supported tests and interpretation.
-- Update `Examples/MultiView/README.md` with the exposure scenarios, expected
-  shared latency, intentional black cells and repeatable visual-check commands.
+### Slice 8 - Deliver a measured Neutral Reference
 
-**Gate:** LightBench works as a readable, interactive exposure benchmark with
-reproducible reset. MultiView's ordinary and proof layouts pass the visual and
-exposure-isolation scenarios. Capture both applications' native presented output.
+**Outcome:** one complete LightBench experiment works interactively and in batch.
+**Dependency:** EX07. **Tracked by:** EX08-01–06/GATE plus existing
+EX09-01–03/10–11/14 and EX10-01–02/06 for the initial experiment.
 
-### Slice 10 - Automate the same experiments and close the package
+Build this as one narrow end-to-end path, with two internal checkpoints:
 
-- Add deterministic experiment selection and batch execution using the
-  interactive controller/definitions and existing capture CLI.
-- Implement `tools/vortex/Run-LightBenchValidation.ps1` and a schema-validated
-  result report; include native game-facing and multiview lifecycle cases.
-- Extend the existing MultiView proof tools with per-view exposure/image
-  comparisons and scripted interactions from section 7.5. Include their result
-  manifests in the package's acceptance report.
-  Extend `Run-VortexMultiViewValidation.ps1`, its existing analyzer/assertions
-  and result schema; structural stage-count checks remain alongside the new
-  visual and exposure checks.
-- Record resolved parameters, experiment/version/revision, build/shader identity,
-  device/backend, actual dt, frames, validity, tolerances, measurements and captures.
-- Run the entire acceptance matrix and update the owning docs and status.
+1. **Qualify the instrument.** Implement section 7.3 through existing diagnostics,
+   extraction and readback owners. Known float input and consumed-gain probes
+   must meet the PBR 2e-5 relative + 2^-120 absolute budget before lighting verdicts
+   are enabled. Test P recovery, true black versus absent samples, coverage,
+   nonfinite data, stale view/revision results and delayed readback lifetime.
+   Verify zero added dispatches/readback allocations when disabled and bounded
+   in-flight resources when enabled. Reuse EX06 settings/status diagnostics;
+   do not present those as measured GPU gain.
+2. **Ship Neutral Reference.** Use the existing LightBench specification's three
+   cards (0.18/0.9/0.02), 1000-lux white directional key and production materials.
+   Resolve exposure independently from EX07's oracle. Supply one versioned,
+   schema-validated recipe/controller with complete staged apply and reset.
 
-**Gate:** every required feature and experiment passes. Failed or unsupported
-required cases block package completion.
+The delivered workflow is Launch -> inspect -> edit -> Reset; explicit Save/Load
+round-trips a modified recipe. Reuse EX06's activation/persistence isolation.
+Convert the shipped indoor preset to the current experiment format without a
+legacy reader or overwriting personal files. Show experiment, expected/measured
+values, units and verdict; collapse unrelated controls. Pending results have no
+current verdict; Modified and Invalid cannot masquerade as a reference Pass.
+
+Add experiment selection and bounded batch execution now, using the same
+controller and asset-readiness barrier as the UI. Implement the first case of
+`Run-LightBenchValidation.ps1` and its versioned result schema. Record recipe,
+build/shader/device identity, timestep, frame/view/revision, validity, tolerances,
+measurements and captures. Add actual commands to `Examples/LightBench/README.md`.
+Console commands and ImGui Test Engine integration follow in their own slices;
+this first batch case uses the native controller/CLI directly.
+
+**Exit gate:** all three inset card regions meet the production BRDF budget and
+the specification's >=95% foreground coverage rule; wrong/occluded/late samples
+cannot yield Pass. Clean launch and reset are readable at 1080p, 1440p and a
+resized window. Reset reproduces resolved inputs and declared temporal policy;
+saved reload preserves authored values. Interactive and batch resolved recipe
+hashes match, and measurements match the same oracle within declared budgets.
+One native batch run emits a schema-valid report and a failing comparison yields
+a failing result/exit status. Other experiments remain explicitly unimplemented.
+
+### Slice 8.1 - Post-processing console controls
+
+**Outcome:** developers can exercise post-processing from Oxygen's existing ImGui
+console and automation execution source, with reliable feedback.
+**Dependency:** EX08. **Tracked by:** EX081-01–04/GATE. This is the concrete
+follow-up deferred during EX06, not a new console subsystem.
+
+- Add a documented command namespace to the existing Console registry with help,
+  completion and existing development/source policies. Cover settings/status
+  inspection; complete validated exposure edits (including camera inputs, mask,
+  curve, tone mapper and gamma); seed/remeter transitions; and experiment
+  selection/reset through the appropriate owners. Settle command spelling at
+  implementation without creating duplicate CVars for canonical settings.
+- Keep general post-process commands on the engine/settings boundary and
+  experiment selection/reset on LightBench's controller. Reuse DemoShell's
+  accepted-candidate path; apply changes on the owning thread at its normal
+  boundary. Do not write renderer internals or GPU state from command handlers.
+- Make the target view/owner explicit. Report queued/applied/rejected state,
+  settings revision and transition token where applicable. Distinguish requested,
+  accepted and measured values; a queued asynchronous mask is not immediate success.
+- Test valid edits, unknown enums/fields, nonfinite/out-of-range values, missing
+  masks, invalid curves, lost/recreated views, seed/cut ordering and shutdown
+  unregistration. Use the existing `CommandSource::kAutomation` execution path
+  for scripts; add no remote service, general console framework or persistence bypass.
+
+**Exit gate:** one documented console sequence selects/resets Neutral Reference,
+changes mode/EV, issues a seed/remeter request and inspects its eventual result.
+Equivalent UI and console requests produce the same accepted revision/settings
+and measured output; invalid requests make no partial changes. Pending/failure
+diagnostics are concise and attributable. Both native execution and the integrated
+console UI are exercised; numerical tests remain independently runnable.
+
+### Slice 8.2 - ImGui interaction regression automation
+
+**Outcome:** a repeatable native test run drives the real DemoShell/LightBench
+widgets and produces actionable failure evidence.
+**Dependency:** EX08 (scheduled after EX08.1). **Tracked by:** EX082-01–04/GATE.
+This closes the ImGui automation deferral from EX06.
+
+- Pin a Test Engine revision compatible with the repository's ImGui dependency
+  (currently 1.92.5); verify its license applicability before adding it. Follow
+  upstream [setup](https://github.com/ocornut/imgui_test_engine/wiki/Setting-Up)
+  and [license](https://github.com/ocornut/imgui_test_engine#licenses), without
+  assuming the test engine has the same license as Dear ImGui.
+- Provide an opt-in UI-test build target/configuration. Its ImGui library and
+  consumers must use consistent test-hook configuration. Integrate context/frame/
+  presentation/shutdown hooks with the existing ImGui owner. Production SDK and
+  normal demo builds remain free of the test-engine dependency and test payload.
+- Address real widgets by stable IDs/paths and inject UI input. Cover numeric
+  typing/Enter/Tab/focus commit/Escape/drag, mode selection, curve Apply/Discard,
+  mask pending/failure/recovery, experiment Reset/Load/Save and switching panels.
+  Add the TexturedCube Wood/cube, Marble/sphere, panel-return regression with
+  isolated assets/settings. Console calls may establish setup but cannot replace
+  clicking or typing for an interaction assertion.
+- Use bounded state/readiness waits, not arbitrary sleeps or fixed screen
+  coordinates. Integrate pass/fail/timeout and failure captures into the existing
+  reports; prove a deliberate assertion failure returns a failing process result.
+  See upstream [result export](https://github.com/ocornut/imgui_test_engine/wiki/Exporting-Results).
+
+**Exit gate:** the named EX06 workflows pass in the actual rendered applications,
+including 1080p, 1440p and resized layouts; one intentional failure demonstrates
+usable diagnostics. A normal build still runs without test-engine components.
+Tests run without altering personal settings. Subsequent experiment slices add
+only their new interactions to this suite. Human inspection still judges framing,
+readability and rendered lighting; automated widget assertions do not establish
+visual or photometric correctness by themselves.
+
+### Slice 9 - Complete the experiment set and MultiView delivery
+
+EX09 is a delivery group, closed only after the five steps below. Each adds its
+case definitions, oracle comparisons, relevant UI, batch execution and README
+instructions to EX08's working path. Extend EX08.1 commands only for new operations
+and EX08.2 tests for new interactions. No second controller or separate automated
+scene implementation is permitted. Shared schema/controller/UI/report work moved
+to EX08 retains its original tracking IDs.
+
+#### EX09A - Point Falloff and Spot Distribution
+
+**Outcome:** the user can see and measure distance/cone behavior.
+**Dependency:** EX08.2. **Tracked by:** EX09-07–08, with EX09-10/12/14 coverage.
+
+Place the point on the receiver normal and aim the spot at its receiver. Use
+prescribed distances and angular sweeps from EX07, with helpful distance/normal/
+cone overlays. Keep materials, camera and exposure fixed during comparisons.
+
+**Exit gate:** both experiments pass independent point intensity/range-fade and
+spot angular/flux expectations within the frozen budgets, with clearly visible
+illuminated receivers. Reset restores all inputs; UI edits mark the recipe
+Modified. Both cases pass the same batch controller and native layout checks.
+Reuse EX07's singularity/invalid-input tests; rerun them only for affected code.
+
+#### EX09B - Fixed Exposure
+
+**Outcome:** EV and camera controls have an immediately understandable response.
+**Dependency:** EX09A. **Tracked by:** EX09-04, with EX09-10/12/14 coverage.
+
+Use known HDR input 4096 with tone mapper None and gamma 1. Include Manual,
+ManualCamera, key/compensation and disabled cases. Show authored EV/camera inputs,
+actual consumed gain and expected linear output with explicit units/domains.
+
+**Exit gate:** EV14/15/16 produce 0.25/0.125/0.0625 before dither/encoding; +1 EV
+halves gain, +1 compensation doubles it, and the physical camera agrees with
+the canonical EV equation. Disabled has unit displayed gain. GPU probes meet
+the fixed-gain budget; displayed pixels meet the output-encoding budget. Invalid
+edits preserve the last accepted state, supported-limit probes remain valid,
+and Reset/Load/Save/batch preserve the experiment's inputs.
+
+#### EX09C - Adaptation and Lifecycle
+
+**Outcome:** the user can play and restart reproducible bright/dark transitions
+and understand how seeds, cuts, modes and pause affect them.
+**Dependency:** EX09B. **Tracked by:** EX09-05–06 and EX10-03, with EX09-10/12/14.
+
+Add a single scripted-time sequence path and a focused response plot with target,
+actual gain and event markers; keep detailed lifecycle variants in advanced
+controls or documented batch cases. Use existing public transitions and native
+fixtures for game-facing callers, source loss, stateless views and recovery.
+No artificial UI is needed solely to force a device/resource failure.
+
+**Exit gate:** both light-step directions, transition-distance crossing and
+30/60/120 Hz plus irregular schedules agree at equal elapsed time within 5e-4 EV,
+without overshoot. Pause, zero speed and long frames follow the contract.
+Mask/profile/curve variants match the metering oracle. Startup, event-frame seed
+(including out-of-meter-range), cuts, mode changes, zero target/restoration,
+sharing/source loss, stateless and recovery cases have exact expected event
+generations and timing. Delayed/stale results cannot overwrite a newer verdict.
+Restart/reset reproduces inputs and time zero. Native inspection shows both
+transition directions without unintended flashes or black frames; intentional
+zero-target black is declared. Batch and non-DemoShell fixture evidence cover
+the same contracts without duplicating the implementation.
+
+#### EX09D - HDR Domain
+
+**Outcome:** mixed rendering content keeps its intended appearance across
+numerical exposure-domain changes, startup and recovery.
+**Dependency:** EX09C. **Tracked by:** EX09-09, with EX09-10/12/14 coverage.
+
+Reuse EX05's qualified mixed opaque/emissive/forward/translucent/sky/AP/fog
+fixtures, endpoints and history checks as the experiment's basis. Expose a focused
+diagnostic comparison of P with fixed scene and intended output. Production
+continues to use the accepted FP32/P=1 policy; half eligibility and return are
+tested only under the explicit qualified diagnostic control.
+
+**Exit gate:** required float products satisfy P invariance (0.5% relative +
+2e-5 absolute), displayed UNorm8 comparisons respect the one-code-value budget,
+and no producer loses required bright/dark signals before metering. First frame,
+range/recovery, delayed acknowledgment and reused fog/radiance histories match
+their established policies. Native capture shows the intended mixed content,
+stable presentation and truthful diagnostics. Reuse prior internal matrices
+where their inputs and relevant implementation identities remain valid.
+
+#### EX09E - MultiView operational acceptance
+
+**Outcome:** ordinary main/PiP and existing proof layouts work as a coherent
+application with trustworthy per-view exposure diagnostics.
+**Dependency:** EX09D. **Tracked by:** EX09-13/15 and EX10-04–05.
+
+Integrate EX08's instruments into existing MultiView exposure scenarios, CLI,
+`Run-VortexMultiViewValidation.ps1`, analyzers/assertions and result schema.
+Preserve structural checks and reuse the existing interaction sequences.
+Provide/document the controls needed to select independent/shared exposure and
+understand the owner and one-frame sharing delay; avoid a second bench UI.
+
+**Exit gate:** section 7.5's complete scenario/layout matrix is accounted for.
+Ordinary lit PiP, standard, auxiliary, offscreen and feature layouts show every
+required lit pane; intentional BLACK expected cells remain labelled. Standalone
+and family outputs agree for equivalent inputs within established budgets;
+independent edits stay isolated and sharing follows the previous-owner-frame
+contract. Reorder/resize/camera/mode/hide/recreate/cut/source-loss interactions
+retain correct images, histories and UI. Inspect the native composite separately.
+The existing runner emits integrated measurements/captures and pass/fail results;
+the README contains reproducible commands. Rerun only invalidated EX05 proofs
+plus the new integrated flow, not the entire historical capture campaign.
+
+**EX09 group gate:** all seven experiments and MultiView satisfy their per-step
+numerical, interaction and visual gates. EX09-12 records the seven-experiment
+visual coverage at 1080p, 1440p and resized dimensions as each experiment lands;
+it is not an instruction to recapture every unchanged scene again.
+
+### Slice 10 - Close integrated package acceptance
+
+**Outcome:** one documented acceptance entry point produces a complete, auditable
+result for this package. **Dependency:** EX09 group gate.
+**Tracked by:** EX10-07–08/GATE, aggregating EX10-01–06 delivered with EX08/09.
+
+- Complete `Run-LightBenchValidation.ps1 -Suite acceptance` as the orchestrator
+  of the existing seven experiment cases, native game-facing fixtures and the
+  extended MultiView runner. Use their shared report/provenance contract.
+- Map every section 9 row to a passing current result or explicitly reusable
+  prior evidence. A required failed, unsupported, missing or invalid case blocks
+  completion. Verify a deliberately corrupted result fails the checker.
+- Run the final integrated commands on the final Debug and Release build/shader
+  identities; carry forward unchanged per-slice visual/mathematical evidence.
+  Correctness captures use the debug layer. Any timing measurement uses native
+  optimized Release without capture/debug validation overhead.
+- Reconcile PBR/runtime/diagnostics/LightBench contracts, both application
+  READMEs, this plan and the concise tracker. Preserve the accepted EX051 CPU
+  disposition and include the delivered EX08.1/EX08.2 operating instructions.
+
+**Exit gate:** the acceptance report covers every required matrix row and all
+seven experiments plus MultiView, with zero unexplained failures or warning/error
+logs. Every advertised command works. All implementation/test/doc changes are
+accounted for; there is no remaining product feature hidden in the closeout step.
 
 ## 9. Acceptance matrix and execution
 
-| Area                         | Required cases                                                                                                                                                                                                 |
-| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Fixed exposure               | EV14/15/16 and supported limits; keys/compensation; invalid input; disabled; CPU/HLSL propagation                                                                                                              |
-| Metering                     | Known distributions; two-bin weight conservation; percentiles; masks/profiles; partial coverage; mixed/all black; zero mask; nonfinite samples; tiny and 8K outputs                                            |
-| Curves                       | Empty, single key, endpoints, interpolation, out-of-range clamp, malformed keys, raw-EV input independent of adapted gain                                                                                      |
-| Adaptation                   | Both directions; linear/exponential crossing; 30/60/120 Hz and irregular dt at equal elapsed time; pause; zero speed; long dt; no overshoot                                                                    |
-| Lifecycle                    | First valid frame; seed frame and out-of-meter-range seeds; cuts; changed settings; manual/auto; zero target precedence/restoration; invalid meter; retries; view destruction; device recovery; stateless Auto |
-| Sharing                      | Both render orders; contrasting views; source startup/inactivity/reset; source destruction and consumer-owned fallback transition; cycle rejection; multiple frames in flight                                  |
-| HDR domains                  | P invariance; FP32 bootstrap and delayed/stale status acknowledgment; bright/dark endpoints; opaque, emissive, forward, translucency, sky/AP/fog, bloom, capture and reused histories                          |
-| Authoring                    | Schema boundaries; current packed records and obsolete-format rejection; cook/load/save/reload; mask pending/failure; curve round-trip; experiment-owned activation                                            |
-| Calibration                  | Directional lux; point inverse square; spot flux normalization; near-field finite behavior; range/cone edges; production BRDF                                                                                  |
-| Instruments                  | Known float signals; actual consumed gain; stale results; invalid regions; zero disabled cost                                                                                                                  |
-| LightBench visual benchmark  | All seven experiments, clean startup, full reset, saved experiments, identical interactive/batch inputs, readable native output and correct interactive exposure behavior                                      |
-| MultiView visual integration | Ordinary lit main/PiP plus standard, auxiliary, offscreen and feature layouts; standalone/family equivalence, per-view isolation, intentional sharing, resize/reorder/lifecycle, stable UI/backgrounds         |
+### Validate the change once; retain valid evidence
+
+The matrix is a coverage requirement, not an instruction to repeat every earlier
+test/capture in every slice. Each result records its case/recipe, relevant source,
+shader and asset identities, configuration, backend, oracle and tolerance revision.
+Declare the affected rows before running validation. Reuse prior results only
+when their inputs and relevant implementations are unchanged; rerun affected
+cases after a change or failure, including shared shader/helper consumers.
+
+New per-slice tests and native visual checks close with that slice. EX10 runs the
+integrated final-build workflows once per required configuration and references
+valid detailed evidence. It does not repeat the EX051 performance matrix, EX052
+quality review, EX06 migration campaign or every historical RenderDoc capture.
+If a change invalidates one of those contracts, identify and test that affected
+scope explicitly. No blind full-repository test loop or repeated successful run.
+
+Freeze tolerances before results, using the
+[PBR budgets](../../renderer-core/physically-based-rendering.md#acceptance-budgets)
+and [LightBench coverage rules](../../renderer-core/lightbench.md#independent-measurement).
+GPU values, derived CPU values and displayed pixels have distinct comparisons.
+Never widen a budget to accept a failing result.
+
+### Required coverage
+
+EX07's [many-light matrix](EX07-lighting-correctness-and-scalability.md#deterministic-workload-envelope)
+extends the physical calibration rows below. EX10 carries its qualified results
+forward, rerunning affected cases only when relevant changes invalidate them.
+
+| Area                               | Required cases                                                                                                                                                                                                    |
+| ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Fixed exposure                     | EV14/15/16 and supported limits; keys/compensation; invalid input; disabled; CPU/HLSL propagation                                                                                                                 |
+| Metering                           | Known distributions; two-bin weight conservation; percentiles; masks/profiles; partial coverage; mixed/all black; zero mask; nonfinite samples; tiny and 8K outputs                                               |
+| Curves                             | Empty, single key, endpoints, interpolation, out-of-range clamp, malformed keys, raw-EV input independent of adapted gain                                                                                         |
+| Adaptation                         | Both directions; linear/exponential crossing; 30/60/120 Hz and irregular dt at equal elapsed time; pause; zero speed; long dt; no overshoot                                                                       |
+| Lifecycle                          | First valid frame; seed frame and out-of-meter-range seeds; cuts; changed settings; manual/auto; zero target precedence/restoration; invalid meter; retries; view destruction; device recovery; stateless Auto    |
+| Sharing                            | Both render orders; contrasting views; source startup/inactivity/reset; source destruction and consumer-owned fallback transition; cycle rejection; multiple frames in flight                                     |
+| HDR domains                        | P invariance; FP32 bootstrap and delayed/stale status acknowledgment; bright/dark endpoints; opaque, emissive, forward, translucency, sky/AP/fog, bloom, capture and reused histories                             |
+| Authoring                          | Schema boundaries; current packed records and obsolete-format rejection; cook/load/save/reload; mask pending/failure; curve round-trip; experiment-owned activation                                               |
+| Calibration                        | Directional lux; point inverse square; spot flux normalization; near-field finite behavior; range/cone edges; production BRDF                                                                                     |
+| Many-light correctness/performance | Conservative culling/reference equivalence; dense/overflow/capacity behavior; shared shader response; shadow identity; mutation/lifetime/multi-view; CPU/GPU/memory scaling and measured improvements under EX07. |
+| Console and UI automation          | Shared command/UI validation, explicit targets and async outcomes; actual widget edit/focus/mask/reset/panel workflows; isolated state; failing exit/report/capture on error                                      |
+| Instruments                        | Known float signals; actual consumed gain; stale results; invalid regions; zero disabled cost                                                                                                                     |
+| LightBench visual benchmark        | All seven experiments, clean startup, full reset, saved experiments, identical interactive/batch inputs, readable native output and correct interactive exposure behavior                                         |
+| MultiView visual integration       | Ordinary lit main/PiP plus standard, auxiliary, offscreen and feature layouts; standalone/family equivalence, per-view isolation, intentional sharing, resize/reorder/lifecycle, stable UI/backgrounds            |
 
 ### Numerical comparisons
 
@@ -1284,7 +1605,8 @@ Register focused schema/cooker/loader, public lifecycle, light-unit and bench
 tests in their owning suites as the slices are implemented. Record exact new
 targets/filters here and rebuild them before execution.
 
-Run native D3D12 with the debug layer for GPU-output and timing behavior.
+Run native D3D12 with the debug layer for correctness and GPU-output inspection.
+Timing uses optimized native Release with capture/debug validation disabled.
 Existing multiview regression:
 
 ```powershell
@@ -1312,7 +1634,8 @@ ctest --preset test-debug -R 'ExposureSettings|PostProcessService|SceneRendererD
 ./tools/shadows/Invoke-RenderDocUiAnalysis.ps1 -CapturePath out/build-ninja/analysis/vortex/exposure-lightbench/metering/locked-meter_capture.rdc -UiScriptPath tools/vortex/AnalyzeRenderDocExposureMeter.py -PassName Auto160 -ReportPath out/build-ninja/analysis/vortex/exposure-lightbench/metering/locked-meter-analysis.txt -AnalysisTimeoutSeconds 60
 ```
 
-Slice 10 implements the acceptance runner interface:
+EX08 implements the runner for Neutral Reference; EX09A-E add their cases.
+EX10 closes its complete acceptance interface (planned, not yet available):
 
 ```powershell
 ./tools/vortex/Run-LightBenchValidation.ps1 -Suite acceptance -Output out/build-ninja/analysis/vortex/exposure-lightbench/acceptance
@@ -1338,8 +1661,9 @@ in the PostProcessService LLD, and one experiment specification for LightBench.
 - [Diagnostics LLD](../lld/diagnostics-service.md): reusable measurement interface.
 - `ARCHITECTURE.md`, `init-views.md`, shader/environment/lighting LLDs: update
   affected ownership, domains and publications.
-- New documents: `design/renderer-core/lightbench.md` and
-  `Examples/LightBench/README.md`.
+- [Existing LightBench specification](../../renderer-core/lightbench.md):
+  experiment/controller/measurement semantics. Create and maintain
+  `Examples/LightBench/README.md` from EX08 onward.
 - `Examples/MultiView/README.md` and multiview validation tools: visual exposure
   scenarios, per-view comparisons and reproducible interaction sequences.
 - Repository-root editor authoring/API documents: new authored fields and
@@ -1364,16 +1688,22 @@ serve the specified behavior without adopting UE's legacy compatibility paths.
 
 ## 11. Completion criteria
 
-- [ ] Fixed/manual-camera/Auto/disabled exposure use one consistent state contract.
-- [ ] Hybrid EV/s adaptation, masks, curves, black handling and zero target work.
-- [ ] All lifecycle and shared/stateless policies are implemented and tested.
-- [ ] Every active HDR path uses frame-pinned P and final S/P consistently.
-- [ ] Bootstrap and numerical recovery preserve valid bright/dark metering signals.
+Checked foundations are validated by EX02-06 in the tracker. Remaining unchecked
+items are delivered by the steps above; they do not reopen those foundations.
+Package closure remains dependent on final integrated evidence.
+
+- [x] Fixed/manual-camera/Auto/disabled exposure use one consistent state contract.
+- [x] Hybrid EV/s adaptation, masks, curves, black handling and zero target work.
+- [x] All lifecycle and shared/stateless policies are implemented and tested.
+- [x] Every active HDR path uses frame-pinned P and final S/P consistently.
+- [x] Bootstrap and numerical recovery preserve valid bright/dark metering signals.
 - [x] Authored fields round-trip through all active persistence surfaces (EX06).
 - [ ] Directional, point and spot reference units and material expectations pass.
+- [ ] EX07 many-light correctness, supported capacities and measured performance/improvement gates pass.
 - [ ] LightBench is a properly repaired, visually useful exposure benchmark;
       all seven experiments pass numerical, interactive and visual acceptance.
 - [ ] MultiView succeeds visually in ordinary and proof layouts; multiple views
       do not break exposure, and exposure changes do not break rendering/composition.
 - [ ] Independent measurements and the complete acceptance matrix pass.
+- [ ] Post-processing console controls and native ImGui interaction automation pass (EX08.1/EX08.2).
 - [ ] Owning documents and operational instructions describe the implemented behavior.

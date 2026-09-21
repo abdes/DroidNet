@@ -1,9 +1,39 @@
 # LightBench exposure benchmark
 
-Status: specified; implementation and native visual qualification remain open.
+Status: experiment delivery remains planned. EX06 delivered settings isolation
+and startup prerequisites; the calibrated controller/instruments are still open.
 The [delivery plan](../vortex/plan/exposure-and-lightbench-correction.md) owns
 slice order and acceptance. [PBR](physically-based-rendering.md) owns equations
 and frozen precision budgets. This document owns experiments and presentation.
+
+## Delivery outcomes
+
+The engine's exposure foundation is validated. Remaining LightBench work makes
+it a usable reference with independent expected/measured values, reproducible
+reset and the same experiment in interactive and batch execution.
+
+| Delivery step | Experiments or workflow delivered                                                                                              |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| EX07          | Qualified physical references and many-light correctness/performance; existing native fixtures and separate opt-in benchmarks. |
+| EX08          | Neutral Reference, qualified instrument, complete recipe/reset/save/load, initial batch report and operating README.           |
+| EX08.1        | Console inspection/edits/transitions through existing validated owners.                                                        |
+| EX08.2        | Actual ImGui interaction regression tests with isolated state and failure artifacts.                                           |
+| EX09A         | Point Falloff and Spot Distribution.                                                                                           |
+| EX09B         | Fixed Exposure.                                                                                                                |
+| EX09C         | Adaptation and Lifecycle.                                                                                                      |
+| EX09D         | HDR Domain.                                                                                                                    |
+| EX09E         | Existing MultiView scenario/measurement/runner integration.                                                                    |
+| EX10          | Final integrated package evidence and documentation.                                                                           |
+
+Every experiment arrives with its controls, batch case, numerical gate and native
+visual check. Reuse the same controller/report and valid previous proof. The
+[delivery plan](../vortex/plan/exposure-and-lightbench-correction.md#8-ordered-implementation-slices)
+owns exact gates; this document remains the experiment/presentation contract.
+
+EX07's [many-light workload suite](../vortex/plan/EX07-lighting-correctness-and-scalability.md)
+qualifies production scalability before this controller is available. It retains
+its own correctness fixtures and benchmark executable; it does not add an eighth
+LightBench experiment or delay its baseline until EX08 instruments exist.
 
 ## One experiment controller
 
@@ -30,15 +60,15 @@ No runtime resource slots, GPU state or view handles are serialized.
 
 ## Seven experiments
 
-| ID                | Initial configuration                                                                                                                                         | Sequence and evidence                                                                                                                                                                                     |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| neutral-reference | Three nonmetallic gray/white/black cards; neutral white directional key on visible side; fixed camera, controlled environment, explicit tone/output transform | Default launch/reset; full production BRDF oracle for decoded packed normals, albedo, roughness and fixed specular=0.5; readable full-card framing                                                        |
-| fixed-exposure    | Known constant HDR foreground 4096; key 12.5, compensation 0, None, gamma 1                                                                                   | EV14/15/16 -> 0.25/0.125/0.0625 before dither; sweep supported gain bounds, keys and compensation; disabled -> unit gain                                                                                  |
-| adaptation        | Known uniform and structured luminance distributions, Auto and controlled game dt                                                                             | Both step directions; 30/60/120 Hz and irregular schedules at equal time; pause/zero speed/long frame; mask/profile/curve variants and linear/exponential crossing                                        |
-| lifecycle         | Public game-facing view handles/events and controlled scene signal                                                                                            | Startup, seed event frame including out-of-meter-range EV, cuts, Manual/Auto, zero target/restoration, pause, sharing/source loss, stateless and recovery; delayed/stale status                           |
-| point-falloff     | White point on receiver normal, camera on visible side; fixed material/exposure; distances far above 1 mm and inside range                                    | Prescribed distances and known range fade; independent flux-to-candela and production BRDF; zero separation, near-field and range-edge fixtures                                                           |
-| spot-distribution | White spot aimed at receiver centre; receiver shows inner/outer cones clearly                                                                                 | Angular sweep, hard-cone limit, finite cone boundaries; independent numerical solid-angle integration verifies total flux                                                                                 |
-| hdr-domain        | Bright/dark required signals plus opaque, forward, translucent, sky and fog content                                                                           | Vary numerical P without changing scene/output; startup and recovery; sustained excessive-range FP32, reduced-range return, insignificant-signal case; inspect upstream writes and fog history conversion |
+| ID                | Initial configuration                                                                                                                                         | Sequence and evidence                                                                                                                                                                                                                                                 |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| neutral-reference | Three nonmetallic gray/white/black cards; neutral white directional key on visible side; fixed camera, controlled environment, explicit tone/output transform | Default launch/reset; full production BRDF oracle for decoded packed normals, albedo, roughness and fixed specular=0.5; readable full-card framing                                                                                                                    |
+| fixed-exposure    | Known constant HDR foreground 4096; key 12.5, compensation 0, None, gamma 1                                                                                   | EV14/15/16 -> 0.25/0.125/0.0625 before dither; sweep supported gain bounds, keys and compensation; disabled -> unit gain                                                                                                                                              |
+| adaptation        | Known uniform and structured luminance distributions, Auto and controlled game dt                                                                             | Both step directions; 30/60/120 Hz and irregular schedules at equal time; pause/zero speed/long frame; mask/profile/curve variants and linear/exponential crossing                                                                                                    |
+| lifecycle         | Public game-facing view handles/events and controlled scene signal                                                                                            | Startup, seed event frame including out-of-meter-range EV, cuts, Manual/Auto, zero target/restoration, pause, sharing/source loss, stateless and recovery; delayed/stale status                                                                                       |
+| point-falloff     | White point on receiver normal, camera on visible side; fixed material/exposure; distances far above 1 mm and inside range                                    | Prescribed distances and known range fade; independent flux-to-candela and production BRDF; zero separation, near-field and range-edge fixtures                                                                                                                       |
+| spot-distribution | White spot aimed at receiver centre; receiver shows inner/outer cones clearly                                                                                 | Angular sweep, hard-cone limit, finite cone boundaries; independent numerical solid-angle integration verifies total flux                                                                                                                                             |
+| hdr-domain        | Bright/dark required signals plus opaque, forward, translucent, sky and fog content                                                                           | Vary numerical P without changing scene/output; startup and recovery; sustained excessive-range FP32; reduced-range eligibility/return under the explicit qualified diagnostic control; insignificant-signal case; inspect upstream writes and fog history conversion |
 
 Neutral Reference uses known linear card albedos (0.18, 0.9, 0.02), metalness 0,
 roughness 1, no texture or normal-map ambiguity, and a neutral 1000-lux
@@ -61,11 +91,27 @@ influence, histogram window, precision status) are collapsed. Show requested and
 effective settings separately when residency/validation delays application.
 Do not label adapted gain as measured luminance. Debug overrides are visible.
 
+Before a current measurement is available, show progress/pending without a verdict.
 States: Pass (all valid comparisons passed), Fail (valid comparison outside
 budget), Modified (recipe differs from reference), Invalid (measurement or
 required resource unavailable). Optional unsupported capabilities may have a
 diagnostic; required experiments cannot complete as Unsupported. Do not reuse
 late values after experiment reset/change as a current verdict.
+
+## Console and UI automation ownership
+
+EX08.1 commands reuse the existing Oxygen console and validated settings,
+transition and experiment owners. Console edits and UI edits must converge on
+the same accepted state. Explicit view targets and asynchronous outcome/revision
+reporting are required; commands never write GPU state directly.
+
+EX08.2 adds an opt-in ImGui Test Engine configuration and tests the actual widgets.
+Use stable item paths, bounded readiness waits and isolated assets/preferences.
+Exercise keyboard commit/cancel/focus, dragging, curves, mask failure/recovery,
+reset/save/load and panel navigation; console setup cannot substitute for those
+interactions. New experiments extend this suite as they land. Keep human visual
+inspection for readability/composition and independent GPU probes for numerical
+correctness. Dependency/configuration/license prerequisites belong to that slice.
 
 ## Independent measurement
 
