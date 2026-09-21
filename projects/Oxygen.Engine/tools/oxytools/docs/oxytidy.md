@@ -386,8 +386,22 @@ overwritten. LLVM YAML exports remain available per context in both modes.
 detect newly resolved includes, including `__has_include` changes. Reuse requires
 matching transitive file contents, effective configuration, compile arguments,
 LLVM identities, relevant environment, and tool code. No timestamp-only validity
-decisions are used. Scope and failure policy are evaluated on each run. Failed
-or cancelled invocations are never cached. `--force` bypasses reuse and
+decisions are used. Scope and failure policy are evaluated on each run.
+
+Use `--incremental` on the fixing run as well as its reruns:
+
+```powershell
+oxytidy src/Oxygen/Base/SomeFile.cpp --fix --format --incremental
+```
+
+After actual fixes, verification always executes freshly. Its successful result
+is then cached against the post-fix source and freshly discovered dependencies.
+The next unchanged incremental run reuses that verified analysis, including any
+remaining diagnostics; the current `--fail-on` policy still applies. Verification
+failures, cancellation and inputs changing during analysis are not cached.
+Dependency discovery still runs on reruns; this does not cache or skip discovery.
+
+Failed or cancelled invocations are never cached. `--force` bypasses reuse and
 `--cache-dir` relocates it. The console reports the total context count and any
 nonzero reuse count; `summary.json` records executed and reused counts separately.
 Cache envelopes and nested diagnostics are validated before reuse. Invalid cache
