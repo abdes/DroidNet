@@ -12,7 +12,7 @@
 
 #include <nlohmann/json.hpp>
 
-#include <Oxygen/Vortex/Test/Exposure/Benchmarks/ExposureBenchmarkFixture.h>
+#include <Oxygen/Vortex/Benchmarks/ExposureBenchmarkFixture.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestGraphics.h>
 #include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
 namespace oxygen::vortex::testing::exposure {

@@ -1,7 +1,9 @@
 # Native exposure tests
 
-These sources build the existing `Oxygen.Vortex.ExposureGpu.Tests` executable.
-Test suite names, command-line filters and opt-in benchmark names are preserved.
+These sources build the `Oxygen.Vortex.Exposure.Tests` correctness executable.
+Performance workloads live in [Vortex/Benchmarks](../../Benchmarks/README.md)
+and build `Oxygen.Vortex.Exposure.Benchmarks`. Test suite names and filters are
+preserved across the separation.
 
 ## Layout
 
@@ -15,9 +17,9 @@ Test suite names, command-line filters and opt-in benchmark names are preserved.
 - `Fixtures/ExposureTestGraphics.*` contains the test backend, fault injection
   and allocation observations. `ExposureTestEngine.h` contains the engine mock;
   `ExposureTestTags.*` owns private-token test access.
-- `Benchmarks/` contains the eight existing disabled, opt-in experiments.
-  Timing and allocation accounting have separate implementations. Allocation
-  setup, measurement and lifecycle sequencing are separate responsibilities.
+- `oxygen-vortex-exposure-test-support` compiles these fixture implementations
+  once per configuration and supplies them to both executables. It owns the
+  workspace definition and the separate tone-bounds shader-probe dependency.
 
 ## Editing rules
 
@@ -41,10 +43,10 @@ or combine unrelated domains to reduce the file count.
 Ordinary correctness tests run without enabling disabled tests:
 
 ```powershell
-cmake --build out/build-ninja --config Debug --target Oxygen.Vortex.ExposureGpu.Tests --parallel 12
-./out/build-ninja/bin/Debug/Oxygen.Vortex.ExposureGpu.Tests.exe --gtest_filter=-*DISABLED_*
+cmake --build out/build-ninja --config Debug --target Oxygen.Vortex.Exposure.Tests --parallel 12
+./out/build-ninja/bin/Debug/Oxygen.Vortex.Exposure.Tests.exe --gtest_filter=-*DISABLED_*
 ```
 
-Run GPU cases serially. Performance and memory experiments remain disabled by
-default and require their existing explicit filters and environment settings.
-Do not run them as part of a structural test-source change.
+Run GPU cases serially. The correctness executable contains no benchmark cases.
+Performance and memory experiments remain disabled by default in their own
+executable and require their existing explicit filters and environment settings.

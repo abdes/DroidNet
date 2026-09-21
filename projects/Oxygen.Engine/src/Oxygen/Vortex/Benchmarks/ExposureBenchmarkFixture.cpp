@@ -12,9 +12,9 @@
 #include <tuple>
 
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Vortex/Benchmarks/ExposureBaselineScenario.h>
+#include <Oxygen/Vortex/Benchmarks/ExposureBenchmarkFixture.h>
 #include <Oxygen/Vortex/RendererCapability.h>
-#include <Oxygen/Vortex/Test/Exposure/Benchmarks/ExposureBaselineScenario.h>
-#include <Oxygen/Vortex/Test/Exposure/Benchmarks/ExposureBenchmarkFixture.h>
 
 namespace oxygen::vortex::testing::exposure {
 

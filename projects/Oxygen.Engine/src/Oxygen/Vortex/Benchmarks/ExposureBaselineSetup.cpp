@@ -28,14 +28,14 @@
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Vortex/Benchmarks/ExposureBaselineScenario.h>
+#include <Oxygen/Vortex/Benchmarks/ExposureBenchmarkFixture.h>
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsService.h>
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsTypes.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
-#include <Oxygen/Vortex/Test/Exposure/Benchmarks/ExposureBaselineScenario.h>
-#include <Oxygen/Vortex/Test/Exposure/Benchmarks/ExposureBenchmarkFixture.h>
 // Completes the unique_ptr pointee for the out-of-line constructor/destructor.
-#include <Oxygen/Vortex/Test/Exposure/Benchmarks/ExposureCpuTiming.h> // IWYU pragma: keep
+#include <Oxygen/Vortex/Benchmarks/ExposureCpuTiming.h> // IWYU pragma: keep
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestTags.h>
 #include <Oxygen/Vortex/Test/Fixtures/ExposureBenchmarkScene.h>
 

@@ -28,9 +28,9 @@
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Vortex/Benchmarks/ExposureAllocationScenario.h>
 #include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/PostProcess/Passes/TonemapPass.h>
-#include <Oxygen/Vortex/Test/Exposure/Benchmarks/ExposureAllocationScenario.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestTags.h>
 #include <Oxygen/Vortex/Types/ExposureTransition.h>
 

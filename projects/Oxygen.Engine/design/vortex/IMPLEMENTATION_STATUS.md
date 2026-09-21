@@ -99,6 +99,23 @@ Slices 6-10, including the complete LightBench delivery; the package is not comp
 
 ### 3.1 Current work
 
+**Benchmark executable separation (2026-09-21): validated.** The user-requested
+follow-up moves all 17 benchmark source/header files to
+`src/Oxygen/Vortex/Benchmarks`. The targets are `Oxygen.Vortex.Exposure.Tests`
+and `Oxygen.Vortex.Exposure.Benchmarks`; eight native fixture translation units
+compile once per configuration in `oxygen-vortex-exposure-test-support`.
+[Build and discovery evidence](../../out/build-ninja/analysis/vortex/exposure-benchmark-split/checkpoint-manifest.json)
+confirms Debug/Release builds and the exact partition of the original 236 case
+names into 228 correctness cases and eight disabled benchmarks, with no overlap
+or omission. CTest uses the final target names and retains disabled benchmark
+registration. A fixture/shader-probe smoke case passes in both configurations;
+default benchmark invocations execute zero workloads. All moved code preserves
+its tokens except include paths/formatting. No timed workload or full correctness
+suite was rerun for this structural change. The [benchmark README](../../src/Oxygen/Vortex/Benchmarks/README.md)
+owns current commands. This explicit follow-up supersedes the earlier instruction
+to keep benchmarks in the correctness executable; EX052 runtime evidence remains
+historical and is not reopened.
+
 **Slice 5.2 closed (2026-09-21).** The approved residual fixes are committed in
 `9ff39edcc`; the separately approved Release include repair is `dc9ef824e`.
 EX052-02/04/10/12/GATE are validated. The [slice result](#322-slice-52-code-quality-and-test-structure)
@@ -446,17 +463,17 @@ aggregate; do not replace a failed run with a pooled percentile.
 | I02                                      |     2 | Auto          | Forward  | On           | Same indoor/outdoor entry point and scene                                                                                          |
 
 **EX051-03 executable inventory.** All entries are in
-[`ExposurePerformance_bench.cpp`](../../src/Oxygen/Vortex/Test/Exposure/Benchmarks/ExposurePerformance_bench.cpp)
-and run from `out/build-ninja/bin/Release/Oxygen.Vortex.ExposureGpu.Tests.exe`
+[`ExposurePerformance_bench.cpp`](../../src/Oxygen/Vortex/Benchmarks/ExposurePerformance_bench.cpp)
+and run from `out/build-ninja/bin/Release/Oxygen.Vortex.Exposure.Benchmarks.exe`
 with `--gtest_also_run_disabled_tests --gtest_filter=<entry-point>`.
-[`ExposureBaselineSetup.cpp`](../../src/Oxygen/Vortex/Test/Exposure/Benchmarks/ExposureBaselineSetup.cpp)
+[`ExposureBaselineSetup.cpp`](../../src/Oxygen/Vortex/Benchmarks/ExposureBaselineSetup.cpp)
 owns the selectors, view count, path and temporal settings. Set width to 1920 or
 3840, precision to the item-required control, frames to the paired sample count,
 and run ID to a unique name using the five environment variables listed in 05.
 `fp32-only` is implemented and qualified in 04.
 
 Common controls in
-[`ExposureBaselineScenario.h`](../../src/Oxygen/Vortex/Test/Exposure/Benchmarks/ExposureBaselineScenario.h):
+[`ExposureBaselineScenario.h`](../../src/Oxygen/Vortex/Benchmarks/ExposureBaselineScenario.h):
 16,666,667 ns simulation dt, three frame slots, Average metering, key 12.5,
 None tone mapper, gamma 1, jitter off, AP width 64/depth 32/range 96 km/two
 samples per slice, fog history-miss supersampling 4 and directional shadows on.
@@ -469,7 +486,7 @@ The indoor fixture enables the shadowing capability; the other two do not.
 [`PopulateMixedExposureBenchmarkScene`](../../src/Oxygen/Vortex/Test/Fixtures/ExposureBenchmarkScene.h)
 owns procedural asset identities, five opaque/emissive/masked/translucent/ground
 surfaces, lights and nonzero atmosphere/fog. I01/I02 add the existing enclosure.
-[`ExposureBaselineRendering.cpp`](../../src/Oxygen/Vortex/Test/Exposure/Benchmarks/ExposureBaselineRendering.cpp)
+[`ExposureBaselineRendering.cpp`](../../src/Oxygen/Vortex/Benchmarks/ExposureBaselineRendering.cpp)
 owns the 1,200-frame path: 300 exterior hold, 300 smoothstep entry, 300 interior
 hold, 300 smoothstep exit; secondary phase is +600. Its warmup already enforces
 300 frames/10 seconds (whole 1,200-frame cycles for I01/I02). Asset readiness,
@@ -596,7 +613,7 @@ The user approved these bounded groups before implementation:
 | Local cast/initializer/return and private nodiscard diagnostics                      | Apply local modern C++ corrections without changing public interfaces or ownership.                                                                                                                  | Scoped tidy and affected compilation; reuse valid behavioral proof for non-semantic changes.                                                                                                    |
 
 The user additionally approved the one-file Release include repair in
-`Test/Exposure/Benchmarks/ExposureOverhead_bench.cpp` after the required build
+`Benchmarks/ExposureOverhead_bench.cpp` (then under `Test/Exposure`) after the required build
 exposed missing types/functions in its NDEBUG-only body. Restore direct headers
 under the same guard; keep behavior, test identities and its existing disabled
 status. Use Release-configured oxytidy and incremental Release compilation.

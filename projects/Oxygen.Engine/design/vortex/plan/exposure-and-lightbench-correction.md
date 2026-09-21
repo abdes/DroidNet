@@ -1175,10 +1175,10 @@ pass; it does not qualify full scene/HDR migration):
 
 ```powershell
 python tools/vortex/exposure_reference.py
-cmake --build out/build-ninja --config Debug --target Oxygen.Vortex.ExposureGpu.Tests oxygen-graphics-direct3d12 --parallel 4
-./out/build-ninja/bin/Debug/Oxygen.Vortex.ExposureGpu.Tests.exe
-cmake --build out/build-ninja --config Release --target Oxygen.Vortex.ExposureGpu.Tests oxygen-graphics-direct3d12 --parallel 4
-./out/build-ninja/bin/Release/Oxygen.Vortex.ExposureGpu.Tests.exe
+cmake --build out/build-ninja --config Debug --target Oxygen.Vortex.Exposure.Tests oxygen-graphics-direct3d12 --parallel 4
+./out/build-ninja/bin/Debug/Oxygen.Vortex.Exposure.Tests.exe
+cmake --build out/build-ninja --config Release --target Oxygen.Vortex.Exposure.Tests oxygen-graphics-direct3d12 --parallel 4
+./out/build-ninja/bin/Release/Oxygen.Vortex.Exposure.Tests.exe
 ctest --preset test-debug -R 'ExposureSettings|PostProcessService|SceneRendererDeferredCore|RuntimeViewPublication|ShaderBakeCatalog' --output-on-failure
 ./out/build-ninja/bin/Debug/Oxygen.Examples.VortexBasic.exe --validation-scene exposure-locked --validation-exposure-ev=160 --frames 20 --fps 10 --vsync false --debug-layer true --capture-provider renderdoc --capture-load search --capture-from-frame 10 --capture-frame-count 1 --capture-output out/build-ninja/analysis/vortex/exposure-lightbench/metering/locked-meter -v=-1
 ./tools/shadows/Invoke-RenderDocUiAnalysis.ps1 -CapturePath out/build-ninja/analysis/vortex/exposure-lightbench/metering/locked-meter_capture.rdc -UiScriptPath tools/vortex/AnalyzeRenderDocExposureMeter.py -PassName Auto160 -ReportPath out/build-ninja/analysis/vortex/exposure-lightbench/metering/locked-meter-analysis.txt -AnalysisTimeoutSeconds 60

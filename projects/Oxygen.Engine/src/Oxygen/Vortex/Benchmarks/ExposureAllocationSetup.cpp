@@ -24,10 +24,10 @@
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Vortex/Benchmarks/ExposureAllocationScenario.h>
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsService.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
-#include <Oxygen/Vortex/Test/Exposure/Benchmarks/ExposureAllocationScenario.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureLightingFixture.h>
 #include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
 
