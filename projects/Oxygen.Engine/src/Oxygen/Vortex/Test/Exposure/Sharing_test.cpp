@@ -412,8 +412,11 @@ NOLINT_TEST_F(
   ctx_.current_view.view_state_handle = handle;
   EXPECT_NEAR(
     ServicePixel(service, Uniform(.25F, 4U, 4U), settings), .18F, 2e-5F);
-  EXPECT_EQ(renderer_->RetryExposureTransition(*token),
-    ExposureTransitionPhase::kSuperseded);
+  {
+    const auto retry = renderer_->RetryExposureTransition(*token);
+    ASSERT_TRUE(retry.has_value());
+    EXPECT_EQ(*retry, ExposureTransitionPhase::kSuperseded);
+  }
 }
 
 NOLINT_TEST_F(

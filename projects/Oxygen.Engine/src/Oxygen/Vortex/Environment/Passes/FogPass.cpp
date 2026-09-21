@@ -25,6 +25,7 @@
 #include <Oxygen/Profiling/ProfileScope.h>
 #include <Oxygen/Scene/Environment/Fog.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
+#include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Vortex/Environment/Passes/FogPass.h>
 #include <Oxygen/Vortex/Internal/ViewportClamp.h>
 #include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>

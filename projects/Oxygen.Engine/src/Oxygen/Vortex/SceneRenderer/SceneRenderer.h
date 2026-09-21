@@ -23,7 +23,6 @@
 #include <Oxygen/Scene/Light/DirectionalLightResolver.h>
 #include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/Environment/Types/EnvironmentAmbientBridgeBindings.h>
-#include <Oxygen/Vortex/Internal/RetainedTexturePool.h>
 #include <Oxygen/Vortex/Lighting/Types/FrameLightingInputs.h>
 #include <Oxygen/Vortex/PostProcess/PostProcessService.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextureLeasePool.h>
@@ -31,6 +30,7 @@
 #include <Oxygen/Vortex/SceneRenderer/ShadingMode.h>
 #include <Oxygen/Vortex/ShaderDebugMode.h>
 #include <Oxygen/Vortex/Shadows/Types/FrameShadowInputs.h>
+#include <Oxygen/Vortex/Types/EnvironmentLightingState.h>
 #include <Oxygen/Vortex/Types/FrameLightSelection.h>
 #include <Oxygen/Vortex/Types/ScreenHzbFrameBindings.h>
 #include <Oxygen/Vortex/Types/ViewFrameBindings.h>
@@ -52,6 +52,10 @@ class CommandRecorder;
 }
 
 namespace oxygen::vortex {
+
+namespace internal {
+  class RetainedTexturePool;
+}
 
 struct RenderContext;
 class Renderer;
@@ -132,65 +136,6 @@ public:
     ShaderVisibleIndex point_shadow_surface_srv { kInvalidShaderVisibleIndex };
   };
 
-  struct EnvironmentLightingState {
-    bool published_bindings { false };
-    bool owned_by_environment_service { false };
-    bool stage14_requested { false };
-    bool stage14_local_fog_requested { false };
-    bool stage14_local_fog_executed { false };
-    bool stage14_local_fog_hzb_consumed { false };
-    bool stage14_local_fog_hzb_unavailable { false };
-    bool stage14_local_fog_buffer_ready { false };
-    bool stage14_local_fog_skipped { false };
-    std::uint32_t stage14_local_fog_instance_count { 0U };
-    std::uint32_t stage14_local_fog_dispatch_count_x { 0U };
-    std::uint32_t stage14_local_fog_dispatch_count_y { 0U };
-    std::uint32_t stage14_local_fog_dispatch_count_z { 0U };
-    bool stage14_volumetric_fog_requested { false };
-    bool stage14_volumetric_fog_executed { false };
-    bool stage14_integrated_light_scattering_valid { false };
-    ShaderVisibleIndex stage14_integrated_light_scattering_srv {
-      kInvalidShaderVisibleIndex
-    };
-    std::uint32_t stage14_volumetric_fog_grid_width { 0U };
-    std::uint32_t stage14_volumetric_fog_grid_height { 0U };
-    std::uint32_t stage14_volumetric_fog_grid_depth { 0U };
-    std::uint32_t stage14_volumetric_fog_dispatch_count_x { 0U };
-    std::uint32_t stage14_volumetric_fog_dispatch_count_y { 0U };
-    std::uint32_t stage14_volumetric_fog_dispatch_count_z { 0U };
-    bool stage14_volumetric_fog_height_fog_media_requested { false };
-    bool stage14_volumetric_fog_height_fog_media_executed { false };
-    bool stage14_volumetric_fog_sky_light_injection_requested { false };
-    bool stage14_volumetric_fog_sky_light_injection_executed { false };
-    bool stage14_volumetric_fog_temporal_history_requested { false };
-    bool stage14_volumetric_fog_temporal_history_reprojection_executed {
-      false,
-    };
-    bool stage14_volumetric_fog_temporal_history_reset { false };
-    bool stage14_volumetric_fog_local_fog_injection_requested { false };
-    bool stage14_volumetric_fog_local_fog_injection_executed { false };
-    std::uint32_t stage14_volumetric_fog_local_fog_instance_count { 0U };
-    bool stage15_requested { false };
-    bool sky_requested { false };
-    bool sky_executed { false };
-    std::uint32_t sky_draw_count { 0U };
-    bool atmosphere_requested { false };
-    bool atmosphere_executed { false };
-    std::uint32_t atmosphere_draw_count { 0U };
-    bool fog_requested { false };
-    bool fog_executed { false };
-    std::uint32_t fog_draw_count { 0U };
-    std::uint32_t total_draw_count { 0U };
-    bool ambient_bridge_published { false };
-    std::uint32_t probe_revision { 0U };
-    ShaderVisibleIndex published_environment_frame_slot {
-      kInvalidShaderVisibleIndex
-    };
-    ShaderVisibleIndex ambient_bridge_irradiance_srv {
-      kInvalidShaderVisibleIndex
-    };
-  };
-
   OXGN_VRTX_API explicit SceneRenderer(Renderer& renderer, Graphics& gfx,
     SceneTexturesConfig config, ShadingMode default_shading_mode);
   OXGN_VRTX_API ~SceneRenderer();
@@ -266,6 +211,12 @@ private:
     -> ExposureProductLayout;
 
   struct ExtractArtifact {
+    ExtractArtifact();
+    ~ExtractArtifact();
+    ExtractArtifact(const ExtractArtifact&) = delete;
+    auto operator=(const ExtractArtifact&) -> ExtractArtifact& = delete;
+    ExtractArtifact(ExtractArtifact&&) noexcept;
+    auto operator=(ExtractArtifact&&) noexcept -> ExtractArtifact&;
     std::shared_ptr<graphics::Texture> texture;
     std::unique_ptr<internal::RetainedTexturePool> pool;
   };
@@ -310,7 +261,7 @@ private:
   ScreenHzbFrameBindings published_screen_hzb_bindings_ {};
   SceneTextures scene_textures_;
   SceneTextureLeasePool scene_texture_pool_;
-  internal::RetainedTexturePool scene_color_pool_;
+  std::unique_ptr<internal::RetainedTexturePool> scene_color_pool_;
   SceneTextures* active_scene_textures_ { nullptr };
   SceneTextures* inspected_scene_textures_ { nullptr };
   SceneTextureSetupMode setup_mode_ {};

@@ -55,6 +55,7 @@ set(
   "CommandList.h"
   "CommandQueue.h"
   "CommandRecorder.h"
+  "SubmissionCallback.h"
   "CommandRecording.h"
   "Concepts.h"
   "Constants.h"

@@ -7,6 +7,7 @@
 #pragma once
 
 #include <array>
+#include <concepts>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -16,6 +17,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include <Oxygen/Base/AlwaysFalse.h>
@@ -31,6 +33,7 @@
 #include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
+#include <Oxygen/Graphics/Common/SubmissionCallback.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/ClearFlags.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
@@ -40,12 +43,6 @@
 #include <Oxygen/Profiling/ProfileScope.h>
 
 namespace oxygen::graphics {
-
-//! Outcome of recording submission, distinct from GPU execution completion.
-enum class SubmissionOutcome : uint8_t {
-  kSubmitted,
-  kDiscarded,
-};
 
 namespace detail {
   class ResourceStateTracker;
@@ -151,8 +148,12 @@ public:
   [[nodiscard]] auto GetTargetQueue() const { return target_queue_; }
 
   //! Registers CPU publication to resolve once submission succeeds or discards.
-  OXGN_GFX_API void OnSubmission(
-    std::move_only_function<void(SubmissionOutcome)> callback);
+  template <typename Callable>
+    requires std::constructible_from<SubmissionCallback, Callable&&>
+  void OnSubmission(Callable&& callback)
+  {
+    RegisterSubmission(SubmissionCallback(std::forward<Callable>(callback)));
+  }
 
   //! Retain this recording's command list for immediate submission inspection.
   /*!
@@ -598,6 +599,7 @@ protected:
 
 private:
   friend class CommandRecording;
+  OXGN_GFX_API void RegisterSubmission(SubmissionCallback callback);
   void ResolveSubmission(SubmissionOutcome outcome) noexcept;
 
   enum class ScopeCloseKind : uint8_t {
@@ -664,8 +666,7 @@ private:
   std::unique_ptr<detail::ResourceStateTracker> resource_state_tracker_;
   std::vector<ScopeRecord> scope_records_ {};
   std::vector<uint32_t> scope_stack_ {};
-  std::vector<std::move_only_function<void(SubmissionOutcome)>>
-    submission_callbacks_ {};
+  std::vector<SubmissionCallback> submission_callbacks_ {};
   std::optional<SubmissionOutcome> submission_outcome_;
 };
 

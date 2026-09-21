@@ -83,8 +83,7 @@ CommandRecorder::~CommandRecorder()
  this is not a GPU-completion notification. One failing callback does not
  prevent other observers from resolving their publication or retained resources.
 */
-void CommandRecorder::OnSubmission(
-  std::move_only_function<void(SubmissionOutcome)> callback)
+void CommandRecorder::RegisterSubmission(SubmissionCallback callback)
 {
   CHECK_F(static_cast<bool>(callback), "Submission callback must be callable");
   if (submission_outcome_) {

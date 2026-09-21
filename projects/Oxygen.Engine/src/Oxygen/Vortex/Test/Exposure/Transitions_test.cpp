@@ -565,8 +565,11 @@ NOLINT_TEST_F(
     EXPECT_EQ(gpu.requested_generation.at(0), token->generation);
     EXPECT_EQ(gpu.applied_generation.at(0), 0U);
     EXPECT_NE(gpu.flags & (1U << 12U), 0U);
-    EXPECT_EQ(renderer_->RetryExposureTransition(*token),
-      ExposureTransitionPhase::kRejected);
+    {
+      const auto retry = renderer_->RetryExposureTransition(*token);
+      ASSERT_TRUE(retry.has_value());
+      EXPECT_EQ(*retry, ExposureTransitionPhase::kRejected);
+    }
   }
 }
 

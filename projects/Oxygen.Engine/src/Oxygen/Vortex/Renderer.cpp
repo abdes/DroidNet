@@ -630,10 +630,10 @@ namespace {
 auto Renderer::QueueExposureTransition(
   const CompositionView::ViewStateHandle target,
   const ExposureTransitionPolicy policy, const std::optional<float> seed_ev)
-  -> std::expected<ExposureTransitionToken, ExposureTransitionError>
+  -> Result<ExposureTransitionToken, ExposureTransitionError>
 {
   if (const auto error = ValidateTransitionSyntax(target, policy, seed_ev)) {
-    return std::unexpected(*error);
+    return ::oxygen::Err(*error);
   }
   std::unique_lock lock(view_state_mutex_);
   return IssueExposureTransitionLocked(target, policy, seed_ev, false);
@@ -642,10 +642,10 @@ auto Renderer::QueueExposureTransition(
 auto Renderer::IssueExposureTransitionLocked(
   CompositionView::ViewStateHandle target, ExposureTransitionPolicy policy,
   std::optional<float> seed_ev, bool implicit)
-  -> std::expected<ExposureTransitionToken, ExposureTransitionError>
+  -> Result<ExposureTransitionToken, ExposureTransitionError>
 {
   if (shutdown_called_) {
-    return std::unexpected(ExposureTransitionError::kRendererUnavailable);
+    return ::oxygen::Err(ExposureTransitionError::kRendererUnavailable);
   }
   auto [it, inserted] = exposure_transitions_.try_emplace(target);
   auto& entry = it->second;
@@ -653,12 +653,12 @@ auto Renderer::IssueExposureTransitionLocked(
     const auto lifetime = AllocateExposureLifetime();
     if (!lifetime) {
       exposure_transitions_.erase(it);
-      return std::unexpected(ExposureTransitionError::kGenerationExhausted);
+      return ::oxygen::Err(ExposureTransitionError::kGenerationExhausted);
     }
     entry.lifetime = *lifetime;
   }
   if (entry.generation == (std::numeric_limits<std::uint64_t>::max)()) {
-    return std::unexpected(ExposureTransitionError::kGenerationExhausted);
+    return ::oxygen::Err(ExposureTransitionError::kGenerationExhausted);
   }
   const auto token = ExposureTransitionToken {
     .target = target,
@@ -673,23 +673,22 @@ auto Renderer::IssueExposureTransitionLocked(
     .applied_generation = applied,
   };
   entry.implicit_request = implicit;
-  return token;
+  return ::oxygen::Ok(token);
 }
 
-auto Renderer::NotifyViewDiscontinuity(
-  CompositionView::ViewStateHandle target, const ViewDiscontinuity reason)
-  -> std::expected<void, ExposureTransitionError>
+auto Renderer::NotifyViewDiscontinuity(CompositionView::ViewStateHandle target,
+  const ViewDiscontinuity reason) -> Result<void, ExposureTransitionError>
 {
   if (target == CompositionView::kInvalidViewStateHandle) {
-    return std::unexpected(ExposureTransitionError::kInvalidTarget);
+    return ::oxygen::Err(ExposureTransitionError::kInvalidTarget);
   }
   if (static_cast<unsigned>(reason)
     > static_cast<unsigned>(ViewDiscontinuity::kDeviceRecovery)) {
-    return std::unexpected(ExposureTransitionError::kInvalidDiscontinuity);
+    return ::oxygen::Err(ExposureTransitionError::kInvalidDiscontinuity);
   }
   std::unique_lock lock(view_state_mutex_);
   if (shutdown_called_) {
-    return std::unexpected(ExposureTransitionError::kRendererUnavailable);
+    return ::oxygen::Err(ExposureTransitionError::kRendererUnavailable);
   }
   EnsureExposureLifetimeLocked(target);
   exposure_transitions_.at(target).pending_discontinuities |= 1U
@@ -823,30 +822,30 @@ auto Renderer::EnsureExposureLifetimeLocked(
 }
 
 auto Renderer::RetryExposureTransition(const ExposureTransitionToken& token)
-  -> std::expected<ExposureTransitionPhase, ExposureTransitionError>
+  -> Result<ExposureTransitionPhase, ExposureTransitionError>
 {
   if (const auto error
     = ValidateTransitionSyntax(token.target, token.policy, token.seed_ev)) {
-    return std::unexpected(*error);
+    return ::oxygen::Err(*error);
   }
   std::shared_lock lock(view_state_mutex_);
   if (shutdown_called_) {
-    return std::unexpected(ExposureTransitionError::kRendererUnavailable);
+    return ::oxygen::Err(ExposureTransitionError::kRendererUnavailable);
   }
   const auto found = exposure_transitions_.find(token.target);
   if (found == exposure_transitions_.end() || !found->second.status
     || token.lifetime != found->second.lifetime || token.generation == 0U
     || token.generation > found->second.generation) {
-    return std::unexpected(ExposureTransitionError::kUnknownToken);
+    return ::oxygen::Err(ExposureTransitionError::kUnknownToken);
   }
   const auto& status = *found->second.status;
   if (token.generation < status.request.generation) {
-    return ExposureTransitionPhase::kSuperseded;
+    return ::oxygen::Ok(ExposureTransitionPhase::kSuperseded);
   }
   if (status.request != token) {
-    return std::unexpected(ExposureTransitionError::kConflictingToken);
+    return ::oxygen::Err(ExposureTransitionError::kConflictingToken);
   }
-  return status.phase;
+  return ::oxygen::Ok(status.phase);
 }
 
 auto Renderer::InspectExposureTransition(
@@ -1705,11 +1704,11 @@ auto Renderer::GetDiagnosticsService() const noexcept
 }
 
 auto Renderer::GetLastEnvironmentLightingState() const noexcept
-  -> SceneRenderer::EnvironmentLightingState
+  -> EnvironmentLightingState
 {
   return scene_renderer_ != nullptr
     ? scene_renderer_->GetLastEnvironmentLightingState()
-    : SceneRenderer::EnvironmentLightingState {};
+    : EnvironmentLightingState {};
 }
 
 auto Renderer::OnFrameStart(observer_ptr<engine::FrameContext> context) -> void

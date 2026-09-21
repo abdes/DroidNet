@@ -9,7 +9,10 @@
 #include <cmath>
 #include <initializer_list>
 #include <limits>
+#include <utility>
 
+#include <Oxygen/Base/Result.h>
+#include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Scene/ExposureSettings.h>
 
 namespace oxygen::scene {
@@ -17,7 +20,6 @@ namespace {
 
   constexpr double kMinLogGain = -32.0;
   constexpr double kMaxLogGain = 32.0;
-  constexpr std::size_t kMaxCurveKeys = 64U;
   constexpr double kMiddleGrey = engine::kExposureMiddleGrey;
 
   // Preserve small terms when large authored compensation values cancel.
@@ -65,13 +67,13 @@ namespace {
 
 auto ResolveExposureSettings(
   const ExposureSettings& settings, const std::optional<float> camera_ev)
-  -> std::expected<ResolvedExposureSettings, ExposureSettingsError>
+  -> Result<ResolvedExposureSettings, ExposureSettingsError>
 {
   using Error = ExposureSettingsError;
   if (settings.mode != engine::ExposureMode::kManual
     && settings.mode != engine::ExposureMode::kManualCamera
     && settings.mode != engine::ExposureMode::kAuto) {
-    return std::unexpected(Error::kUnknownMode);
+    return ::oxygen::Err(Error::kUnknownMode);
   }
   const auto scalars
     = std::array { settings.manual_ev, settings.compensation_ev, settings.key,
@@ -82,47 +84,49 @@ auto ResolveExposureSettings(
         settings.black_influence, settings.transition_distance };
   if (!std::ranges::all_of(
         scalars, [](const float value) { return std::isfinite(value); })) {
-    return std::unexpected(Error::kNonFinite);
+    return ::oxygen::Err(Error::kNonFinite);
   }
   if (settings.key <= 0.0F) {
-    return std::unexpected(Error::kNonPositiveKey);
+    return ::oxygen::Err(Error::kNonPositiveKey);
   }
   if (settings.min_ev > settings.max_ev) {
-    return std::unexpected(Error::kInvalidEvRange);
+    return ::oxygen::Err(Error::kInvalidEvRange);
   }
   const double window_min = settings.min_log_luminance;
   const double window_max = window_min + settings.log_luminance_range;
   if (settings.log_luminance_range <= 0.0F
-    || !std::isfinite(1.0F / settings.log_luminance_range) || window_min < -24.0
-    || window_max > 32.0) {
-    return std::unexpected(Error::kInvalidHistogramWindow);
+    || !std::isfinite(1.0F / settings.log_luminance_range)
+    || window_min < engine::kMinExposureLogLuminance
+    || window_max > engine::kMaxExposureLogLuminance) {
+    return ::oxygen::Err(Error::kInvalidHistogramWindow);
   }
   if (settings.low_percentile < 0.0F || settings.high_percentile > 1.0F
     || settings.low_percentile >= settings.high_percentile) {
-    return std::unexpected(Error::kInvalidPercentiles);
+    return ::oxygen::Err(Error::kInvalidPercentiles);
   }
   if (settings.speed_up < 0.0F || settings.speed_down < 0.0F
     || settings.target_luminance < 0.0F) {
-    return std::unexpected(Error::kNegativeRateOrTarget);
+    return ::oxygen::Err(Error::kNegativeRateOrTarget);
   }
   if ((settings.metering_mode != engine::MeteringMode::kAverage
         && settings.metering_mode != engine::MeteringMode::kCenterWeighted
         && settings.metering_mode != engine::MeteringMode::kSpot)
     || settings.spot_meter_radius < 0.0F || settings.black_influence < 0.0F
     || settings.black_influence > 1.0F) {
-    return std::unexpected(Error::kInvalidProfile);
+    return ::oxygen::Err(Error::kInvalidProfile);
   }
   if (settings.transition_distance <= 0.0F) {
-    return std::unexpected(Error::kInvalidTransitionDistance);
+    return ::oxygen::Err(Error::kInvalidTransitionDistance);
   }
-  if (settings.compensation_curve.size() > kMaxCurveKeys) {
-    return std::unexpected(Error::kInvalidCurve);
+  if (settings.compensation_curve.size()
+    > engine::kMaxExposureCompensationCurveKeys) {
+    return ::oxygen::Err(Error::kInvalidCurve);
   }
   double previous_ev = -std::numeric_limits<double>::infinity();
   for (const auto& key : settings.compensation_curve) {
     if (!std::isfinite(key.metered_ev) || !std::isfinite(key.compensation_ev)
       || key.metered_ev <= previous_ev) {
-      return std::unexpected(Error::kInvalidCurve);
+      return ::oxygen::Err(Error::kInvalidCurve);
     }
     previous_ev = key.metered_ev;
   }
@@ -132,12 +136,12 @@ auto ResolveExposureSettings(
     .authored = settings,
   };
   if (!settings.enabled) {
-    return result;
+    return ::oxygen::Ok(std::move(result));
   }
   if (settings.mode != engine::ExposureMode::kAuto) {
     if (settings.mode == engine::ExposureMode::kManualCamera
       && !camera_ev.has_value()) {
-      return std::unexpected(Error::kMissingCameraEv);
+      return ::oxygen::Err(Error::kMissingCameraEv);
     }
     const double ev = settings.mode == engine::ExposureMode::kManualCamera
       ? *camera_ev
@@ -148,10 +152,10 @@ auto ResolveExposureSettings(
     const double log_gain
       = (static_cast<double>(settings.compensation_ev) - ev) + log_key;
     if (!SupportedGain(log_gain)) {
-      return std::unexpected(Error::kUnsupportedGain);
+      return ::oxygen::Err(Error::kUnsupportedGain);
     }
     result.fixed_scale = static_cast<float>(std::exp2(log_gain));
-    return result;
+    return ::oxygen::Ok(std::move(result));
   }
 
   const auto target_at = [&](const double raw_ev) {
@@ -169,36 +173,38 @@ auto ResolveExposureSettings(
     = [&](const double ev) { return SupportedGain(target_at(ev)); };
   const double initial_ev = std::clamp(0.0F, settings.min_ev, settings.max_ev);
   if (!valid_target(settings.min_ev) || !valid_target(initial_ev)) {
-    return std::unexpected(Error::kUnsupportedGain);
+    return ::oxygen::Err(Error::kUnsupportedGain);
   }
   result.initial_log_gain = static_cast<float>(target_at(initial_ev));
   result.dark_log_gain = static_cast<float>(target_at(settings.min_ev));
   if (settings.min_ev == settings.max_ev) {
     if (!valid_target(settings.min_ev)) {
-      return std::unexpected(Error::kUnsupportedGain);
+      return ::oxygen::Err(Error::kUnsupportedGain);
     }
     result.auto_log_targets.push_back(
       { settings.min_ev, result.dark_log_gain });
-    return result;
+    return ::oxygen::Ok(std::move(result));
   }
-  const double raw_min = -24.0 - std::log2(kMiddleGrey);
-  const double raw_max = 32.0 - std::log2(kMiddleGrey);
+  const double raw_min
+    = engine::kMinExposureLogLuminance - std::log2(kMiddleGrey);
+  const double raw_max
+    = engine::kMaxExposureLogLuminance - std::log2(kMiddleGrey);
   // Extrema of curve(raw_ev)-clamp(raw_ev) occur only at these breakpoints.
   if (!valid_target(raw_min) || !valid_target(raw_max)
     || !valid_target(settings.min_ev)
     || !valid_target(std::clamp(0.0F, settings.min_ev, settings.max_ev))) {
-    return std::unexpected(Error::kUnsupportedGain);
+    return ::oxygen::Err(Error::kUnsupportedGain);
   }
   for (const double ev : { static_cast<double>(settings.min_ev),
          static_cast<double>(settings.max_ev) }) {
     if (ev > raw_min && ev < raw_max && !valid_target(ev)) {
-      return std::unexpected(Error::kUnsupportedGain);
+      return ::oxygen::Err(Error::kUnsupportedGain);
     }
   }
   for (const auto& key : settings.compensation_curve) {
     if (key.metered_ev > raw_min && key.metered_ev < raw_max
       && !valid_target(key.metered_ev)) {
-      return std::unexpected(Error::kUnsupportedGain);
+      return ::oxygen::Err(Error::kUnsupportedGain);
     }
   }
   // Normalize the complete target function before float32 GPU consumption.
@@ -222,22 +228,22 @@ auto ResolveExposureSettings(
   for (const float ev : positions) {
     const double gain = target_at(ev);
     if (!SupportedGain(gain)) {
-      return std::unexpected(Error::kUnsupportedGain);
+      return ::oxygen::Err(Error::kUnsupportedGain);
     }
     result.auto_log_targets.push_back({ ev, static_cast<float>(gain) });
   }
-  return result;
+  return ::oxygen::Ok(std::move(result));
 }
 
 auto ResolveExposureSeedLogGain(const ResolvedExposureSettings& resolved,
-  const float seed_ev) -> std::expected<float, ExposureSettingsError>
+  const float seed_ev) -> Result<float, ExposureSettingsError>
 {
   const auto& settings = resolved.authored;
   if (!settings.enabled || settings.mode != engine::ExposureMode::kAuto) {
-    return std::unexpected(ExposureSettingsError::kSeedRequiresAuto);
+    return ::oxygen::Err(ExposureSettingsError::kSeedRequiresAuto);
   }
   if (!std::isfinite(seed_ev)) {
-    return std::unexpected(ExposureSettingsError::kNonFinite);
+    return ::oxygen::Err(ExposureSettingsError::kNonFinite);
   }
   // Explicit seeds are not metered targets: do not clamp their EV or form
   // 0.18*exp2(EV). Opposing authored terms must cancel before float upload.
@@ -248,9 +254,9 @@ auto ResolveExposureSeedLogGain(const ResolvedExposureSettings& resolved,
       ? std::log2(static_cast<double>(settings.target_luminance) / kMiddleGrey)
       : 0.0 });
   if (!SupportedGain(log_gain)) {
-    return std::unexpected(ExposureSettingsError::kUnsupportedGain);
+    return ::oxygen::Err(ExposureSettingsError::kUnsupportedGain);
   }
-  return static_cast<float>(log_gain);
+  return ::oxygen::Ok(static_cast<float>(log_gain));
 }
 
 auto to_string(const ExposureSettingsError error) noexcept -> std::string_view

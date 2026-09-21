@@ -13,6 +13,7 @@
 #include <nlohmann/json.hpp>
 
 #include <Oxygen/Vortex/Benchmarks/ExposureBenchmarkFixture.h>
+#include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestGraphics.h>
 #include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
 namespace oxygen::vortex::testing::exposure {

@@ -34,9 +34,9 @@
 #include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/RendererCapability.h>
-#include <Oxygen/Vortex/SceneRenderer/SceneRenderer.h>
 #include <Oxygen/Vortex/ShaderDebugMode.h>
 #include <Oxygen/Vortex/Types/CompositingTask.h>
+#include <Oxygen/Vortex/Types/EnvironmentLightingState.h>
 #include <Oxygen/Vortex/Types/ExposureTransition.h>
 #include <Oxygen/Vortex/Types/GroundGridConfig.h>
 #include <Oxygen/Vortex/Types/ViewConstants.h>
@@ -560,11 +560,11 @@ public:
   [[nodiscard]] OXGN_VRTX_API auto QueueExposureTransition(
     CompositionView::ViewStateHandle target, ExposureTransitionPolicy policy,
     std::optional<float> seed_ev = {})
-    -> std::expected<ExposureTransitionToken, ExposureTransitionError>;
+    -> Result<ExposureTransitionToken, ExposureTransitionError>;
   //! Resubmit an issued identity without resetting its generation or outcome.
   [[nodiscard]] OXGN_VRTX_API auto RetryExposureTransition(
     const ExposureTransitionToken& token)
-    -> std::expected<ExposureTransitionPhase, ExposureTransitionError>;
+    -> Result<ExposureTransitionPhase, ExposureTransitionError>;
   [[nodiscard]] OXGN_VRTX_API auto InspectExposureTransition(
     CompositionView::ViewStateHandle target) const
     -> std::optional<ExposureTransitionStatus>;
@@ -576,7 +576,7 @@ public:
   //! can override its default policy; borrowing views never reset their source.
   [[nodiscard]] OXGN_VRTX_API auto NotifyViewDiscontinuity(
     CompositionView::ViewStateHandle target, ViewDiscontinuity reason)
-    -> std::expected<void, ExposureTransitionError>;
+    -> Result<void, ExposureTransitionError>;
 
   OXGN_VRTX_API auto RegisterViewRenderGraph(
     ViewId view_id, RenderGraphFactory factory, ResolvedView view) -> void;
@@ -688,8 +688,7 @@ public:
     return ground_grid_config_;
   }
   [[nodiscard]] OXGN_VRTX_API auto
-  GetLastEnvironmentLightingState() const noexcept
-    -> SceneRenderer::EnvironmentLightingState;
+  GetLastEnvironmentLightingState() const noexcept -> EnvironmentLightingState;
 
   OXGN_VRTX_API auto IsViewReady(ViewId view_id) const -> bool;
   OXGN_VRTX_API auto SetImGuiWindowId(platform::WindowIdType window_id) -> void;
@@ -762,8 +761,7 @@ private:
     frame::SequenceNumber frame) -> std::optional<ExposureTransitionToken>;
   auto IssueExposureTransitionLocked(CompositionView::ViewStateHandle target,
     ExposureTransitionPolicy policy, std::optional<float> seed_ev,
-    bool implicit)
-    -> std::expected<ExposureTransitionToken, ExposureTransitionError>;
+    bool implicit) -> Result<ExposureTransitionToken, ExposureTransitionError>;
   auto PrepareExposureTransition(CompositionView::ViewStateHandle target,
     ExposureTransitionPolicy policy, frame::SequenceNumber frame,
     bool suppressed) -> void;
