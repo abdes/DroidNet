@@ -1145,7 +1145,9 @@ remained unrun in that correctness batch. Failed/discarded recording, committed
 history, range-certificate retry, queued consumers and producer publication are
 covered. Final clang-tidy analyzed 89 translation units with zero diagnostics
 on changed code, zero parse failures and no new warning suppressions. Existing
-unmodified-code diagnostics remain in the full logs for Slice 5.2.
+unmodified-code diagnostics remain in the full logs as input to the
+[bounded 5.2 fix selection](../IMPLEMENTATION_STATUS.md#322-slice-52-code-quality-and-test-structure);
+they are not an automatic backlog requiring a full-owner cleanup.
 
 **Measured decision (2026-09-21): accept the joint correction.** One new I02
 1080p Release run was compared with the existing Tracy baseline: 7,200 steady

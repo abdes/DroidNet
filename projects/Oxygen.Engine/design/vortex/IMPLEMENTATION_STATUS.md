@@ -21,7 +21,9 @@ its implementation evidence, validation evidence, and remaining work.
    evidence and remaining gate. A validated component does not close its slice.
 7. Batch coherent implementation work and use focused Debug tests between
    checkpoints. Run the broader owning Debug gate for item closure; reserve
-   Release validation for slice closure, as requested on 2026-09-18.
+   Release validation for slice closure, as requested on 2026-09-18. For the
+   revised Slice 5.2, its impact-based validation table below replaces automatic
+   broad gates at each item; reuse applicable passing evidence.
 8. Keep a TODO at each deferred exposure code boundary, naming the owning item
    or plan and the concrete work required before activating that path.
 9. For subsequent broad native gates, freeze the checkpoint and binary/shader/
@@ -38,12 +40,13 @@ its implementation evidence, validation evidence, and remaining work.
 11. Execute the inserted slices in order: 5 -> 5.1 performance -> 5.2 code
     quality -> 6. Resume from **Current work**, which owns the active checkpoint
     and execution state. Follow the remaining order in section 3.2.1 rather than
-    restarting at EX051-01. Slice 5.2 retains its diagnostic-inventory/design
-    agreement gate before quality edits.
-12. Slice 5.2 requires an agreed diagnostic inventory and restructuring design
-    before quality edits. Fix warnings; justify every retained suppression.
-    Keep mathematical, performance and structural changes in distinct coherent
-    checkpoints, each independently buildable and validated before its commit.
+    restarting at EX051-01. Slice 5.2 requires agreement on its concrete residual
+    fix list and validation selection before code changes.
+12. Slice 5.2 reuses completed diagnostics, restructuring and validation. Agree
+    only the remaining fixes and any necessary API/ownership change; do not
+    repeat a general restructuring-design exercise. Fix warnings at their cause,
+    justify narrow exceptions, and keep each coherent increment buildable.
+    Further performance optimization belongs to the deferred later milestone.
 
 ## 2. Status Vocabulary
 
@@ -87,7 +90,7 @@ Slices 6-10, including the complete LightBench delivery; the package is not comp
 | 4 — GPU lifecycle and sharing | validated | Controlled-input/public-event gate, including offscreen routing. Real-scene resource lifetime is tracked in slice 5. | [Lifecycle](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/discontinuity-manifest.json), [offscreen sharing](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/offscreen-sharing-manifest.json) |
 | 5 — HDR migration and recovery | validated | Numerical, lifecycle and native layout/interaction correctness qualified in Debug and Release. Collected Release costs motivate the separate, still-open performance gate in Slice 5.1. | [Detailed items](#32-slice-5-work-items) |
 | 5.1 — Exposure performance | validated | Closed 2026-09-21: format/policy, independent SceneColor ownership, CPU corrections, correctness and final GPU acceptance complete. User accepts measured CPU cost; further CPU optimization is deferred to a later milestone. | [Current work](#31-current-work), [final CPU decision](lld/post-process-service.md#approved-ex051-13ab-joint-cpu-correction) |
-| 5.2 — Exposure code quality | planned | Plan approved on 2026-09-19. Execution follows 5.1; EX052-03 covers the concrete diagnostic inventory and suite design. Preserve numerical coverage and performance. | [Tasks and gates](#322-slice-52-code-quality-and-test-structure) |
+| 5.2 — Focused exposure quality | planned | Revised 2026-09-21: reuse completed test decomposition/review and 5.1 proof. Four remaining steps: agree residual fixes, implement them, validate affected code once, close out. No automatic suite restructuring or performance campaign. | [Bounded scope and validation](#322-slice-52-code-quality-and-test-structure) |
 | 6 — Authoring and persistence | planned | Native physical-camera persistence and texture-resource-index mask contracts are approved; complete source/cook/load/script/editor/DemoShell round-trip remains. | [Detailed items](#33-slice-6-work-items) |
 | 7 — Light units | planned | Directional, point and spot numerical/visual calibration across forward and deferred paths remains. | [Detailed items](#34-slice-7-work-items) |
 | 8 — Measurements | planned | Implement instrumentation and qualify it against independent inputs. | [Detailed items](#35-slice-8-work-items) |
@@ -95,6 +98,14 @@ Slices 6-10, including the complete LightBench delivery; the package is not comp
 | 10 — Automation and acceptance | planned | Run the same experiments through automation, close every acceptance gate and reconcile owner documents. | [Detailed items](#37-slice-10-work-items) |
 
 ### 3.1 Current work
+
+**Slice 5.2 plan revision (2026-09-21): documentation only.** The user requires
+remaining work with concrete value and minimal repeated validation. The revised
+[5.2 scope](#322-slice-52-code-quality-and-test-structure) removes completed
+fixture extraction, scenario splitting and test-quality review from active work.
+Next implementation step is EX052-02's small agreed fix list, derived from
+existing reports; code changes have not started. This revision runs no build,
+clang-tidy, native test or benchmark.
 
 **Slice 5.1 closed (2026-09-21).** The user accepts the measured CPU cost for
 current delivery and defers further optimization to a later milestone.
@@ -180,7 +191,7 @@ reports, `build-final-all-debug.log`, `build-final-exposure-release.log`,
 `correctness-final-cpu/result.json`, and
 `correctness-final-exposure/result.json`. Failed intermediate and superseded
 suppression-based results remain separate. This closes the requested test review;
-the broader Slice 5.2 engine-quality scope remains pending EX051-GATE.
+Slice 5.2 now covers only the residual production-owner fixes agreed below.
 
 ### 3.2 Slice 5 work items
 
@@ -535,89 +546,125 @@ existing presented-output path. Do not rerun this matrix at intermediate items.
 
 ### 3.2.2 Slice 5.2 code quality and test structure
 
-**Slice status: planned; plan approved on 2026-09-19.** Execution follows
-EX051-GATE. The later EX052-03 discussion covers the actual diagnostic inventory
-and concrete restructuring design before quality edits.
-IDs EX052-* belong to Slice 5.2. This slice changes code quality and ownership
-structure while preserving the final Slice 5.1 behavior, ABI and measured costs.
-No Slice 6 feature work is included.
+**Slice status: planned; scope narrowed at the user's request on 2026-09-21.**
+Slice 5.1 is closed. This is a bounded residual-quality pass, not another test
+reorganization or performance project. Execution is **02 -> 04 -> 10 -> 12/GATE**.
+Agree the finite fix list before code changes; the plan revision itself does not
+start implementation.
 
-#### Scope and established tools
+#### Completed work to reuse
 
-Start from the exact Slice 5/5.1 change manifest: exposure/PostProcess,
-SceneRenderer/SceneTextures and relevant Environment, Graphics, Data/cooker,
-example, test and analysis-tool changes. Follow actual callers and shared
-fixtures, but exclude unrelated engine-wide cleanup. HLSL and Python quality
-need appropriate review; clang-tidy does not validate them.
+| Delivered work | Existing source/evidence | Consequence for 5.2 |
+| --- | --- | --- |
+| Native fixture extraction and scenario decomposition | `2c696c522`; [current layout and ownership](../../src/Oxygen/Vortex/Test/Exposure/README.md), `Test/Exposure/Fixtures`, `Benchmarks` and the existing ExposureGpu CMake target | EX052-05/06 are already delivered. Keep the current fixture owners, executable, filters and opt-in workloads. Do not split or merge them again. |
+| Complete Vortex test-quality review | `4f359ce2d`; [corrected review](../../out/clang-tidy/vortex-test-quality/quality-summary-corrected.json) and [file ledger](../../out/clang-tidy/vortex-test-quality/review-ledger.json): 156 files, 129 TUs plus 21 headers, zero diagnostics at that checkpoint, 876 Debug checks plus LinkTest | No repeat directory-wide test review, initializer sweep, suppression campaign or 47-target baseline run. Check subsequent changes against the later evidence below. |
+| Recording/binding API and caller migration | `22cea346b`; [checkpoint](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/cpu-corrections13/checkpoint-manifest.json): 589 Debug and 403 Release owning checks; 89-TU analysis with zero diagnostics on changed code | Reuse lifecycle, failure/retry, publication, binding and queued-reader coverage. No new API migration or owning-suite run merely because 5.2 starts. This is changed-code cleanliness, not a claim that every existing owner file is warning-free. |
+| Accepted performance and output baseline | [final 5.1 checkpoint](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/acceptance13/checkpoint-manifest.json) and [CPU decision](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/cpu-corrections13/decision-table.json) | Preserve the user-accepted operating point. Do not reopen CPU targets, repeat the 48-run matrix, H1-H5/R091, overhead campaign or MultiView captures. |
 
-Use tools/cli/oxytidy.ps1 (oxytidy.py), the real compile database and repository
-.clangd adjustments. The wrapper is analysis-only; review and apply fixes in
-bounded batches. Include test translation units explicitly. Preserve the parent
-.clang-tidy and Test/.clang-tidy policies; inventory existing exclusions rather
-than treating suppressed checks as a clean result. Record compiler/tool versions,
-scope, effective checks, translation-unit count, diagnostic count and parse
-failures. No compiled input, skipped unit or external parse failure may silently
-become a passing analysis result.
+#### Remaining scope and admission rule
 
-Fix warnings at their cause. New or retained NOLINT/check exclusions need the
-exact diagnostic, location, reason the code must remain, alternatives considered
-and a narrow documented scope. Do not disable a warning family, broaden filters,
-cast away a real problem or add blanket suppressions to obtain a zero count.
-Existing justified test-value exceptions can remain with recorded rationale.
-Clang-tidy suggestions that affect semantics require a correctness review.
+Start with **ExposurePass and PostProcessService implementation/header pairs**.
+The existing [89-TU report](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/cpu-corrections13/tidy-final/summary.json)
+is the input; its raw logs already report 232 and 61 diagnostics respectively in
+the two implementation files. These are untriaged findings, not 293 proven bugs
+or an instruction to rewrite both files. The report's 1,733 diagnostics across
+all encountered files are not the 5.2 backlog.
 
-The initial read-only inventory counted 14,095 lines/211 declared tests in
-ExposureGpu_test.cpp, including four opt-in timing/allocation tests. These are
-historical baseline counts. On 2026-09-20 the user explicitly advanced the
-exposure-test decomposition: the frozen inventory is 228 tests (220 ordinary
-and eight opt-in), preserved under `Test/Exposure/`. This does not
-authorize unrelated Slice 5.2 cleanup.
-PostProcessService, deferred-core and offscreen suites also need scoped review.
-Use responsibility boundaries, not arbitrary file-size or file-count quotas.
+For each proposed fix, record one short entry: **live location/diagnostic,
+concrete defect or maintenance benefit, intended change, affected tests, and
+stopping condition**. Confirm that the current code still contains the issue.
+Use the existing source hashes, compile settings and reports to identify stale
+or missing evidence; refresh only affected TUs, not the entire historical scope.
+Group repeated instances of the same fix within an owner. There is no separate
+baseline-capture, broad inventory or general design phase.
 
-Proposed native-suite structure to agree in EX052-03:
+Admit work that fixes a confirmed correctness/lifetime problem, an actionable
+compiler/tidy finding in the agreed code, or duplication/control flow that
+obscures an actual invariant or error path. File length, warning count and a
+preferred layout alone do not justify a refactor. Any helper extraction must
+simplify the agreed fix; it is not an independent deliverable. Do not manufacture
+one-use constants or layers merely to move a warning elsewhere.
 
-- Shared fixture/resource setup owns backend, renderer, upload/readback,
-  frame/queue and capture lifetime once; explicit per-test reset remains.
-- Independent numeric references remain distinct from production algorithms.
-- Coherent groups cover metering/adaptation; lifecycle/sharing; producer domains;
-  precision/conversion/recovery/queued consumers; and scene/offscreen/composition.
-- Profiling/allocation workloads retain their explicit opt-in execution.
-- Prefer multiple translation units under the existing test target initially.
-  Introduce separate executables only for demonstrated ownership/runtime benefit.
-  Preserve filter names, discovery, capture scripts and isolation, or provide
-  an explicit reviewed old-to-new test identity map.
-- Treat /bigobj as a compiler capacity option, not a hidden warning. Reassess it
-  after splitting; retain or remove it based on actual supported-build evidence.
+Related SceneRenderer, SceneTextures, Environment, Graphics, test or tooling
+files enter only when a named finding in an exposure contract needs that change.
+Agree additions before editing. No directory-wide cleanup of these domains, no
+blanket PostProcess/deferred/offscreen test review, no generic fixture framework,
+no unconditional HLSL/Python audit, and no `/bigobj` removal experiment. Preserve
+existing numerical oracles, test identities, shader/root ABI, resource ownership
+and accepted runtime behavior. Further CPU optimization and Slice 6 features
+remain outside this slice. Proposed API/ownership changes require the user's
+review of the actual interface and caller migration before coding; no wrappers
+or parallel legacy APIs.
 
-#### Tasks, dependencies and proof
+Use the established `tools/cli/oxytidy.ps1` / `oxytidy.py` workflow, with the
+explicit build directory and real compile database. Keep repository checks and
+filters unchanged. Fix changed/added code without clang-tidy warnings; do not
+hide parse failures or add blanket suppressions. A vital narrow exception needs
+its exact diagnostic, location, justification and rejected alternatives. Existing
+out-of-scope diagnostics remain recorded, not silently described as fixed.
 
-Evidence belongs in slice52 under the existing analysis root. Preserve the
-Slice 5.1 source/runtime/performance baseline for non-regression comparisons.
+#### Validation follows the change
 
-| ID | Work item / owner | Status | Depends on | Required delivery and exit evidence |
+Choose tests when agreeing the fix, before editing. Existing results remain
+applicable only after checking relevant production/test dependencies, build
+configuration, compiler flags and shader inputs for changes. Reuse unchanged
+proof by reference; do not rehash/copy every historical payload or invent a new
+validation framework.
+
+| Change | Smallest verification | Closure requirement |
+| --- | --- | --- |
+| Documentation/comments/formatting only | Existing hooks and diff review; check references when edited | No C++ build, native test, discovery or performance run. |
+| Local non-semantic C++ cleanup | Scoped tidy and compile the affected target; review that types, evaluation order, ownership and generated work are preserved | No new regression test or automatic full suite. Reuse applicable correctness/performance proof. |
+| Executable logic, error path or resource lifetime | Existing named Debug cases exercising the affected path and relevant failure/retry boundary; add a regression only for a real uncovered defect | Compile affected Release paths once and run the corresponding affected Release cases on final inputs. Expand only if the dependency/call-path review shows broader impact. |
+| Shared fixture, widely used owner/header or caller contract | Compile actual consumers; select every affected case. Run discovery comparison only if registration, identity or target wiring changes | An entire owning executable is justified when its shared setup/contract affects all its cases. Run it once per required configuration on the final checkpoint, not once per edit or task. |
+| Hot-path work, allocations, synchronization, shader-visible data or image output could change | First determine whether the proposal belongs to the deferred performance milestone or needs separate approval | If retained in 5.2, agree the affected recipe/output check up front. Reuse a comparable accepted baseline and collect only the required candidate at closure; a fresh pair needs a concrete comparability reason. No matrix, overhead campaign or automatic visual/demo run. |
+
+Batch a coherent owner change before building. Run tidy early on that changed
+scope, then focused Debug checks; fix failures from their evidence and rerun only
+the affected checks. At closure, use the **union of affected cases once per
+required configuration**, minus results already valid for the final relevant
+inputs. Item completion, a commit, or a documentation edit does not invalidate a
+passing result. A later source/configuration change invalidates only dependent
+results. Do not automatically rerun 876, 589, 403 or all 228 exposure cases.
+A failure may justify expansion; record the reason rather than starting another
+full campaign. Native jobs remain serial and logging OFF.
+
+If a broad native batch is actually justified, use one execution-only validation
+subagent with exact commands, controls, input identities and expected outputs.
+Freeze runtime inputs and do read-only review or draft notes while it runs; no
+concurrent builds, GPU work, commits or stash/restore. No subagent or frozen-run
+manifest is needed for documentation or a short local check.
+
+Performance preservation means the accepted 5.1 operating point, including the
+explicit CPU disposition, not meeting the original unachieved CPU targets.
+For a justified matched comparison, investigate p95 growth above
+`max(0.05 ms, 5% of baseline)` or material p99/memory regression; follow the
+existing bounded sampling/retry protocol. Reuse numerical and visual evidence
+when the change cannot affect their output. No benchmark is an automatic 5.2
+deliverable.
+
+#### Remaining tasks
+
+| ID | Work item | Status | Depends on | Delivery and stopping condition |
 | --- | --- | --- | --- | --- |
-| EX052-01 | Freeze quality scope and baseline / rendering + test owners | planned | EX051-GATE | Record exact changed/related files, API/ABI contracts, all discovered test identities/parameters, enabled/opt-in counts and native performance baseline. Identify unrelated files explicitly; no implementation edits yet. |
-| EX052-02 | Actual diagnostics inventory / C++ owners | planned | 01 | Run scoped oxytidy with current compilation inputs and tests included. Classify actionable correctness/lifetime, performance, API/style and external-tool issues. Inventory existing suppressions and uncovered headers/TUs. Preserve raw logs and a unique diagnostic ledger; do not infer warning counts from file size. |
-| EX052-03 | Agree restructuring design / user + rendering/test owners | planned | 01, 02 | Present fixture ownership, proposed file/target groups, independent oracle boundary, test identity mapping, intended runtime simplifications and suppression decisions. Obtain the user's agreement before any quality edit. Keep changes behavior-preserving and avoid a new generic test/exposure framework. |
-| EX052-04 | Correctness and lifetime diagnostics / C++ owners | planned | 03 | Fix verified clang-tidy defects in coherent owner batches. Add a meaningful regression for real behavior defects; if a fix changes the accepted contract, reopen the relevant owner decision. Keep mechanical changes separate from algorithm fixes. Run focused Debug checks per batch. |
-| EX052-05 | Extract shared native fixture ownership / native test owner | planned | 03, 04 | Separate backend/resource/frame/capture helpers with explicit ownership and reset. Keep one source of fixture behavior, deterministic cleanup and no mutable process-global state. Prove old tests still discover and pass before moving scenario groups. |
-| EX052-06 | Split scenario translation units / native test owner | planned | 05 | Move the agreed coherent groups, preserving test/filter identity and data vectors. Wire every TU into CMake/discovery. Keep independent references independent, preserve both renderer paths and all opt-in tests. Verify no dropped, duplicated, disabled or newly order-dependent coverage. |
-| EX052-07 | Remaining owner/test/tool structure / relevant owners | planned | 03, 06 | Apply agreed bounded simplifications to PostProcess/ExposurePass, deferred/offscreen fixtures and touched evidence tooling. Remove duplication only where ownership/contracts match; keep C++/HLSL layout and state transitions explicit. Audit oracle self-validation and malformed/empty report handling. |
-| EX052-08 | Readability and remaining tidy fixes / C++ owners | planned | 04-07 | Resolve remaining actionable diagnostics; make names, helpers, constness and interfaces clear without burying domain values behind meaningless constants. Review every retained narrow suppression. Do not expand .clang-tidy exclusions to conceal unresolved diagnostics. |
-| EX052-09 | Build/discovery/tooling integrity / build + test owners | planned | 06-08 | Regenerate actual build/discovery inputs and confirm existing scripts and test filters work. Reassess /bigobj with real MSVC builds. Inventory before/after identities including disabled/parameterized tests and shader probes; update wrappers only when needed. No arbitrary suite merges/splits or duplicated shader builds. |
-| EX052-10 | Final diagnostic and owning correctness gates / test owners | planned | 09 | Rerun scoped tidy and relevant compiler checks on final code: zero unresolved actionable in-scope diagnostics, only explicitly justified narrow exceptions, no hidden parse failures. Run broader owning Debug suites, then owning Release at slice closure. Require explicit coverage parity and no newly suppressed/skipped cases. |
-| EX052-11 | Performance and visual non-regression / rendering owner | planned | 10 | Reuse the frozen native Release workloads and valid profiling protocol. Every 5.1 absolute budget still passes; investigate p95 cost growth exceeding max(0.05 ms, 5% of baseline), or a material p99/memory regression beyond repeatability. Inspect representative native output and relevant lifecycle captures when affected. Do not redo unrelated captures without a reason. |
-| EX052-12 | Final owner/status reconciliation and commit / rendering owner | planned | 11 | Record file/fixture ownership, test identity map, exact diagnostic disposition, suppression rationale, test/performance evidence and final hashes. Update all affected rows and operating commands. Commit the complete quality increment before any authorized Slice 6 work. |
-| EX052-GATE | Code-quality acceptance | planned | 01-12 | Agreed restructuring delivered; actionable tidy/compiler issues fixed, exceptions justified, tests/callers/ABI and independent oracles preserved, Debug/Release gates pass, Slice 5.1 performance retained and documents current. No quality or scope gap may be relabeled complete to start Slice 6. |
+| EX052-02 | Agree the residual fix list | planned | Closed EX051-GATE | Reconcile existing findings against the two starting owners and their current inputs. Present only live, useful fixes, necessary additional files/API decisions and selected checks. Obtain agreement once for that finite batch; no full rescan or fresh native baseline. Stop when the list is agreed, including an explicitly justified empty list. |
+| EX052-04 | Implement agreed fixes | planned | 02 | Fix only that list in coherent owner increments. Keep changed code tidy-clean and preserve contracts/callers/oracles. Focused checks follow the table above. Finish and commit each usable increment; no speculative cleanup, new performance algorithm or scaffolding-only commit. |
+| EX052-10 | Validate the final affected code | planned | 04 | Reconcile scoped diagnostics and the union of actually affected checks, reusing valid results. Cover required Release-only paths. Discovery, broad suites, benchmarks and visuals run only when their stated trigger applies; record a non-triggered requirement as reused/not needed, not as executed. No unresolved agreed defect or hidden parse failure. |
+| EX052-12 | Close the residual-quality pass | planned | 10 | Update this tracker and affected owner docs with fixes, exact checks/reused evidence, any justified exception and final commit. Use one concise result record with raw references; no duplicate payloads or new dashboard. |
+| EX052-GATE | Focused quality acceptance | planned | 02, 04, 10, 12 | The agreed residual list is resolved, changed code is clean, necessary affected checks pass and accepted behavior/performance are preserved. No-op closure requires current-source confirmation and applicable existing proof; it does not require inventing edits or runs. Slice 6 remains separately authorized work. |
 
-Commit boundaries: actionable diagnostic fixes by owner; usable shared fixtures
-with their migrated callers; each coherent scenario group plus CMake/discovery;
-then final owner/tooling closure. Avoid scaffolding-only or arbitrary file-count
-commits. Each commit must build and preserve test discovery. Focused Debug checks
-cover intermediate moves; owning Debug closes each coherent item. Final Release
-and performance non-regression close the slice. Do not combine these mechanical
-commits with new performance algorithms or Slice 6 functionality.
+#### Disposition of the original task IDs
+
+| Original ID | Status | Revised disposition |
+| --- | --- | --- |
+| EX052-01 | superseded | Baseline/scope reuse is part of 02; existing 5.1 and test-quality records replace a new freeze campaign. |
+| EX052-03 | superseded | Concrete fix/API agreement is part of 02. No separate suite-restructuring proposal. |
+| EX052-05 | validated | Shared native fixture owners already delivered in `2c696c522`, hardened in `4f359ce2d`, and qualified again where affected by `22cea346b`; evidence above. |
+| EX052-06 | validated | Scenario and benchmark TUs already split and wired to the existing target; current native gate is 228 enabled cases, eight opt-in cases disabled. No repeat decomposition. |
+| EX052-07 | superseded | A structural/tooling change is allowed only as a necessary part of an agreed 04 fix; no general audit deliverable. |
+| EX052-08 | superseded | Useful readability/tidy changes belong to 04's finite fix list, not a second cleanup pass. |
+| EX052-09 | superseded | Compile/discovery work is conditional in 10; no automatic regeneration, wrapper rewrite or `/bigobj` experiment. |
+| EX052-11 | superseded | Performance/output preservation is conditional in 10; no separate timing or visual campaign. |
 
 ### 3.3 Slice 6 work items
 
@@ -722,7 +769,7 @@ reading tool logs or reconstructing Git history.
 | --- | --- |
 | Slice 5: early P; full 4.4 migration; S/P; formats; range/recovery; scene lifecycle; MultiView; gate | EX05-01; EX05-04–09/18; EX05-03; EX05-02/17; EX05-10–16/19–21; EX05-22–25; EX05-26–30; EX05-GATE |
 | Slice 5.1: native profiling; workloads/FP32-only baseline; format decision; precision policy; SceneColor ownership; final acceptance | EX051-01–07; EX051-09/10/10A/11; EX051-12–14; EX051-GATE; EX051-08 merged into 09 |
-| Slice 5.2: diagnostic inventory/design; fixes; fixture/suite structure; coverage/tidy/build/performance parity; closure | EX052-01–03; EX052-04–09; EX052-10–12; EX052-GATE |
+| Slice 5.2: residual fix agreement; bounded fixes; affected validation; closure; reused decomposition | EX052-02; EX052-04; EX052-10/12/GATE; EX052-05/06 already validated; other original IDs superseded |
 | Slice 6: camera persistence; authoring surfaces; full round-trip; mask runtime; DemoShell; activation policy; gate | EX06-01; EX06-02–05; EX06-06; EX06-07; EX06-08; EX06-09; EX06-GATE |
 | Slice 7: point/spot; shared consumers; independent calibration; material mapping; gate | EX07-02–03; EX07-04; EX07-01/06; EX07-05; EX07-GATE |
 | Slice 8: diagnostics; known inputs; identity; disabled/enabled cost; gate | EX08-01–03; EX08-06; EX08-04; EX08-05; EX08-GATE |
