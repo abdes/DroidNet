@@ -23,6 +23,7 @@ from oxytools.common import (
     write_json,
 )
 from oxytools.compilation import HEADERS, parse_clangd, read_database
+from oxytools.includes import prepare_includes
 from oxytools.llvm import require_version
 from rich_argparse import RichHelpFormatter
 
@@ -180,7 +181,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     fix_options.add_argument(
         "--format",
         action="store_true",
-        help="Format changed ranges using project .clang-format; requires --fix",
+        help="Format changed ranges and include blocks using project .clang-format; requires --fix",
     )
     execution_options.add_argument(
         "--incremental",
@@ -503,7 +504,9 @@ def run(args, root: Path, runner: Runner, run_dir: Path, summary: dict) -> int:
     for item in prepared:
         for path, expected in item.snapshot.items():
             if path in snapshot and snapshot[path] != expected:
-                raise ToolError(f"Dependency changed during discovery: {path}")
+                raise ToolError(
+                    f"Dependency changed during discovery: {Path(path).resolve()}"
+                )
             snapshot[path] = expected
     summary["analysis_snapshot"] = snapshot
     seen = set()
@@ -582,6 +585,11 @@ def run(args, root: Path, runner: Runner, run_dir: Path, summary: dict) -> int:
                 "Analyzed inputs changed; replacement batch was not applied"
             )
         edits, skipped = plan_fixes(diagnostics, scope, snapshot)
+        if args.fix and formatter:
+            for path in inputs:
+                key = path_key(path)
+                if key in snapshot:
+                    edits.setdefault(key, [])
         summary["fixes"] = {"proposed": edits, "skipped": skipped, "applied_files": []}
         write_json(run_dir / "replacement-plan.json", summary["fixes"])
         if args.export_fixes:
@@ -594,11 +602,17 @@ def run(args, root: Path, runner: Runner, run_dir: Path, summary: dict) -> int:
             def format_ranges(
                 path: Path, content: bytes, ranges: list[tuple[int, int]]
             ) -> bytes:
+                content, include_ranges = prepare_includes(content)
+                ranges = sorted(set(ranges + include_ranges))
+                if not ranges:
+                    return content
                 command = [
                     formatter,
                     f"--assume-filename={path}",
                     "--style=file",
                     "--fallback-style=none",
+                    "--fail-on-incomplete-format",
+                    "--Werror",
                 ]
                 for offset, length in ranges:
                     command.extend(
@@ -617,7 +631,6 @@ def run(args, root: Path, runner: Runner, run_dir: Path, summary: dict) -> int:
                     f"Formatting {path}",
                 ).encode("utf-8")
 
-            analyzer.invalidate(prepared)
             applied = apply_fixes(
                 edits,
                 snapshot,
@@ -626,6 +639,10 @@ def run(args, root: Path, runner: Runner, run_dir: Path, summary: dict) -> int:
             )
             summary["fixes"]["applied_files"] = applied
             write_json(run_dir / "replacement-plan.json", summary["fixes"])
+            if not applied:
+                summary["status"] = status
+                return code
+            analyzer.invalidate(prepared)
             verification = []
             runner.reporter.start_phase("Verify dependencies", len(prepared))
             summary["phase"] = "verification"

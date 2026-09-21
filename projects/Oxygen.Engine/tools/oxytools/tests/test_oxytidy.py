@@ -385,6 +385,31 @@ class ScopeAndFixTests(Fixture):
         self.assertEqual(edits, {})
         self.assertEqual(len(skipped), 1)
 
+    def test_fix_errors_preserve_real_path_case(self):
+        header = self.write("src/MixedCase.h", "abc\n")
+        snapshot = fingerprint([header])
+        edits = [self.edit(path="src/MixedCase.h", text=text) for text in ("x", "y")]
+        if os.name == "nt":
+            for edit in edits:
+                edit["file"] = edit["file"].lower()
+        with self.assertRaises(ToolError) as conflict:
+            plan_fixes([self.diagnostic(edits)], self.scope("src"), snapshot)
+        self.assertIn(str(header.resolve()), str(conflict.exception))
+        self.assertIn("Conflicting replacements", str(conflict.exception))
+        planned, _ = plan_fixes(
+            [self.diagnostic(edits[:1])], self.scope("src"), snapshot
+        )
+
+        def concurrent_edit(path, content, _ranges):
+            path.write_text("user changes\n")
+            return content
+
+        with self.assertRaises(ToolError) as changed:
+            apply_fixes(planned, snapshot, formatter=concurrent_edit)
+        self.assertIn(str(header.resolve()), str(changed.exception))
+        self.assertIn("Contents changed while preparing fixes", str(changed.exception))
+        self.assertEqual(header.read_text(), "user changes\n")
+
     def test_conflicts_and_changed_contents_prevent_batch(self):
         header = self.write("src/a.h", "abc\n")
         snapshot = fingerprint([header])
@@ -402,6 +427,232 @@ class ScopeAndFixTests(Fixture):
             apply_fixes(edits, snapshot)
         self.assertEqual(header.read_text(), "user changes\n")
 
+    def test_include_insertions_at_one_offset_are_merged_deterministically(self):
+        header = self.write("src/a.h", "// header\nint value;\n")
+        original = header.read_bytes()
+        offset = len(b"// header\n")
+        snapshot = fingerprint([header])
+        records = [
+            self.diagnostic(
+                [self.edit(offset=offset, length=0, text="#include <vector>\n")]
+            ),
+            self.diagnostic(
+                [
+                    self.edit(
+                        offset=offset,
+                        length=0,
+                        text='#include "owned.h"\n#include <string>\n',
+                    )
+                ]
+            ),
+            self.diagnostic(
+                [self.edit(offset=offset, length=0, text="#include <string>\r\n")]
+            ),
+        ]
+        forward, skipped = plan_fixes(records, self.scope("src"), snapshot)
+        reverse, _ = plan_fixes(list(reversed(records)), self.scope("src"), snapshot)
+        self.assertEqual(forward, reverse)
+        self.assertEqual(skipped, [])
+        self.assertEqual(len(forward[path_key(header)]), 1)
+        apply_fixes(forward, snapshot)
+        self.assertEqual(
+            header.read_bytes(),
+            b'// header\n#include "owned.h"\n#include <string>\n'
+            b"#include <vector>\nint value;\n",
+        )
+        self.assertEqual(records[0]["replacements"][0]["text"], "#include <vector>\n")
+        self.assertTrue(header.read_bytes().endswith(original[offset:]))
+
+    def test_include_merge_preserves_bom_crlf_and_distinct_insertion_points(self):
+        original = b"\xef\xbb\xbf// header\r\nint value;\r\n"
+        header = self.write("src/a.h", original.decode("utf-8"))
+        header.write_bytes(original)
+        snapshot = fingerprint([header])
+        records = [
+            self.diagnostic(
+                [self.edit(offset=3, length=0, text=f"#include <{name}>\n")]
+            )
+            for name in ("vector", "string")
+        ]
+        records.append(
+            self.diagnostic(
+                [self.edit(offset=len(original), length=0, text="#include <string>\n")]
+            )
+        )
+        edits, _ = plan_fixes(records, self.scope("src"), snapshot)
+        apply_fixes(edits, snapshot)
+        self.assertEqual(
+            header.read_bytes(),
+            b"\xef\xbb\xbf#include <string>\r\n#include <vector>\r\n"
+            b"// header\r\nint value;\r\n#include <string>\r\n",
+        )
+
+    def test_new_oxygen_includes_use_angle_brackets_without_formatting(self):
+        header = self.write("src/a.h", "int value;\n")
+        records = [
+            self.diagnostic([self.edit(length=0, text=text)])
+            for text in (
+                '#include "Oxygen/Alpha.h"\n',
+                "#include <Oxygen/Alpha.h>\n",
+            )
+        ]
+        edits, _ = plan_fixes(records, self.scope("src"), fingerprint([header]))
+        self.assertEqual(len(edits[path_key(header)]), 1)
+        self.assertEqual(
+            edits[path_key(header)][0]["text"], "#include <Oxygen/Alpha.h>\n"
+        )
+
+    def test_include_deletion_and_insertions_become_one_replacement(self):
+        for newline, bom in [(b"\n", b""), (b"\r\n", b"\xef\xbb\xbf")]:
+            with self.subTest(newline=newline, bom=bom):
+                prefix = bom + b"// header" + newline
+                old = b"#include <glm/glm.hpp>" + newline
+                tail = b"int value;" + newline
+                header = self.write("src/a.h", "")
+                header.write_bytes(prefix + old + tail)
+                snapshot = fingerprint([header])
+                records = [
+                    self.diagnostic(
+                        [self.edit(offset=len(prefix), length=len(old), text="")]
+                    ),
+                    self.diagnostic(
+                        [
+                            self.edit(
+                                offset=len(prefix),
+                                length=0,
+                                text="#include <glm/ext/vector_float3.hpp>\n",
+                            )
+                        ]
+                    ),
+                    self.diagnostic(
+                        [
+                            self.edit(
+                                offset=len(prefix), length=0, text="#include <string>\n"
+                            )
+                        ]
+                    ),
+                ]
+                edits, _ = plan_fixes(records, self.scope("src"), snapshot)
+                reversed_edits, _ = plan_fixes(
+                    list(reversed(records)), self.scope("src"), snapshot
+                )
+                self.assertEqual(edits, reversed_edits)
+                self.assertEqual(len(edits[path_key(header)]), 1)
+                self.assertEqual(edits[path_key(header)][0]["length"], len(old))
+                apply_fixes(edits, snapshot)
+                self.assertEqual(
+                    header.read_bytes(),
+                    prefix
+                    + b"#include <glm/ext/vector_float3.hpp>"
+                    + newline
+                    + b"#include <string>"
+                    + newline
+                    + tail,
+                )
+
+    def test_only_complete_real_include_deletions_can_merge(self):
+        cases = [
+            ("int value;\n", 0, len("int value;\n")),
+            ("#include <old.h>\n", 0, len("#include <old.h>")),
+            (
+                "#include <old.h>\nint value;\n",
+                0,
+                len("#include <old.h>\nint value;\n"),
+            ),
+            ("/*\n#include <old.h>\n*/\n", 3, len("#include <old.h>\n")),
+            (
+                'auto text = R"x(\n#include <old.h>\n)x";\n',
+                len('auto text = R"x(\n'),
+                len("#include <old.h>\n"),
+            ),
+        ]
+        for source, offset, length in cases:
+            with self.subTest(source=source, length=length):
+                header = self.write("src/a.h", source)
+                with self.assertRaisesRegex(ToolError, "Conflicting replacements"):
+                    plan_fixes(
+                        [
+                            self.diagnostic(
+                                [
+                                    self.edit(offset=offset, length=length, text=""),
+                                    self.edit(
+                                        offset=offset,
+                                        length=0,
+                                        text="#include <new.h>\n",
+                                    ),
+                                ]
+                            )
+                        ],
+                        self.scope("src"),
+                        fingerprint([header]),
+                    )
+
+    def test_changed_source_blocks_include_deletion_planning(self):
+        header = self.write("src/a.h", "#include <old.h>\n")
+        snapshot = fingerprint([header])
+        self.write("src/a.h", "#include <new.h>\n")
+        with self.assertRaisesRegex(ToolError, "Contents changed since analysis"):
+            plan_fixes(
+                [
+                    self.diagnostic(
+                        [
+                            self.edit(length=len("#include <old.h>\n"), text=""),
+                            self.edit(length=0, text="#include <replacement.h>\n"),
+                        ]
+                    )
+                ],
+                self.scope("src"),
+                snapshot,
+            )
+
+    def test_ambiguous_same_offset_edits_remain_conflicts(self):
+        header = self.write("src/a.h", "int value;\n")
+        snapshot = fingerprint([header])
+        include = self.edit(length=0, text="#include <string>\n")
+        for text, length in (
+            ("other tokens", 0),
+            ("#include SOME_HEADER\n", 0),
+            ("#include <vector>\n#define FEATURE 1\n", 0),
+            ("#include <vector>", 0),
+            ("\n#include <vector>\n", 0),
+            ("#include <vector>\n", 1),
+        ):
+            with self.subTest(text=text, length=length):
+                with self.assertRaisesRegex(ToolError, "Conflicting replacements"):
+                    plan_fixes(
+                        [
+                            self.diagnostic(
+                                [include, self.edit(text=text, length=length)]
+                            )
+                        ],
+                        self.scope("src"),
+                        snapshot,
+                    )
+        with self.assertRaisesRegex(ToolError, "Conflicting replacements"):
+            plan_fixes(
+                [
+                    self.diagnostic(
+                        [
+                            self.edit(length=5),
+                            self.edit(offset=3, length=0, text=include["text"]),
+                        ]
+                    )
+                ],
+                self.scope("src"),
+                snapshot,
+            )
+
+    def test_different_context_include_fixes_still_block_application(self):
+        header = self.write("src/a.h", "int value;\n")
+        first = self.edit(length=0, text="#include <string>\n")
+        second = self.edit(length=0, text="#include <vector>\n")
+        record = self.diagnostic([first])
+        record["replacement_sets"] = [[first], [second]]
+        with self.assertRaisesRegex(
+            ToolError, "Compilation contexts propose different"
+        ):
+            plan_fixes([record], self.scope("src"), fingerprint([header]))
+
     def test_apply_preserves_bom_and_line_endings(self):
         content = b"\xef\xbb\xbfabc\r\n"
         edited, _ = replaced_bytes(
@@ -410,6 +661,19 @@ class ScopeAndFixTests(Fixture):
         self.assertEqual(edited, b"\xef\xbb\xbfxyz\r\nmore\r\n")
         with self.assertRaises(ToolError):
             replaced_bytes(b"\xff\xfea\x00", [])
+
+    def test_apply_preserves_filename_case(self):
+        header = self.write("src/MixedCase.h", "abc\n")
+        snapshot = fingerprint([header])
+        edits, _ = plan_fixes(
+            [self.diagnostic([self.edit(path="src/MixedCase.h")])],
+            self.scope("src"),
+            snapshot,
+        )
+        apply_fixes(edits, snapshot)
+        self.assertEqual(
+            [path.name for path in header.parent.iterdir()], ["MixedCase.h"]
+        )
 
     def test_file_batch_rolls_back_on_io_failure(self):
         first = self.write("src/a.h", "abc\n")
@@ -643,6 +907,83 @@ class LLVMTests(Fixture):
         self.write("src/a.h", "inline int f() { return 1; }\n")
         self.write("src/a.cpp", '#include "a.h"\nint main() { return f(); }\n')
         self.database(["src/a.cpp"])
+
+    def test_missing_includes_at_same_offset_are_fixed_and_verified(self):
+        self.write(
+            "src/umbrella.h",
+            "#pragma once\n#include <string>\n#include <vector>\n"
+            "struct Anchor { int value; };\n",
+        )
+        source = self.write(
+            "src/probe.cpp",
+            '#include "umbrella.h"\n'
+            "std::vector<std::string> compute(Anchor) { return {}; }\n",
+        )
+        self.write(".clang-tidy", 'Checks: "-*,misc-include-cleaner"\n')
+        self.database(["src/probe.cpp"])
+        code, report = self.invoke("src/probe.cpp", "--fix")
+        self.assertEqual(code, 0, report)
+        self.assertEqual(report["counts"]["unique_findings"], 0)
+        text = source.read_text()
+        self.assertEqual(text.count("#include <string>"), 1)
+        self.assertEqual(text.count("#include <vector>"), 1)
+        self.assertIn('#include "umbrella.h"', text)
+        self.assertEqual(len(report["fixes"]["proposed"][path_key(source)]), 1)
+
+    def test_unused_include_replaced_by_missing_include_at_same_offset(self):
+        self.write(
+            "src/umbrella.h", "#pragma once\n#include <string>\nstruct Anchor {};\n"
+        )
+        source = self.write(
+            "src/probe.cpp",
+            '#include <vector>\n#include "umbrella.h"\nstd::string compute(Anchor) { return {}; }\n',
+        )
+        self.write(".clang-tidy", 'Checks: "-*,misc-include-cleaner"\n')
+        self.database(["src/probe.cpp"])
+        code, report = self.invoke("src/probe.cpp", "--fix")
+        self.assertEqual(code, 0, report)
+        self.assertEqual(report["counts"]["unique_findings"], 0)
+        self.assertNotIn("#include <vector>", source.read_text())
+        self.assertEqual(source.read_text().count("#include <string>"), 1)
+        edits = report["fixes"]["proposed"][path_key(source)]
+        self.assertEqual(len(edits), 1)
+        self.assertEqual(edits[0]["offset"], 0)
+        self.assertEqual(edits[0]["length"], len("#include <vector>\n"))
+
+    def test_format_groups_includes_without_tidy_fixes_and_is_idempotent(self):
+        self.write("src/Oxygen/Zeta.h", "#pragma once\nstruct Zeta {};\n")
+        self.write("src/Oxygen/Alpha.h", "#pragma once\nstruct Alpha {};\n")
+        self.write("src/thirdparty.h", "#pragma once\nstruct External {};\n")
+        source = self.write(
+            "src/Zeta.cpp",
+            '#include "Oxygen/Zeta.h"\n#include <vector>\n'
+            '#include "Oxygen/Alpha.h"\n#include "thirdparty.h"\n'
+            "#include <string>\n\n"
+            "auto compute(Zeta, Alpha, External) -> std::vector<std::string> { return {}; }\n",
+        )
+        engine = Path(__file__).resolve().parents[3]
+        self.write(".clang-format", (engine / ".clang-format").read_text())
+        self.write(".clang-tidy", 'Checks: "-*,misc-include-cleaner"\n')
+        self.database(["src/Zeta.cpp"], arguments=["-I", str(self.root / "src")])
+        code, report = self.invoke("src/Zeta.cpp", "--fix", "--format")
+        self.assertEqual(code, 0, report)
+        self.assertEqual(report["results"][0]["diagnostics"], [])
+        self.assertEqual(report["counts"]["unique_findings"], 0)
+        self.assertTrue(
+            source.read_text().startswith(
+                '#include <string>\n#include <vector>\n\n#include "thirdparty.h"\n\n'
+                "#include <Oxygen/Alpha.h>\n#include <Oxygen/Zeta.h>\n"
+            ),
+            source.read_text(),
+        )
+        before = source.read_bytes()
+        modified = source.stat().st_mtime_ns
+        code, second = self.invoke("src/Zeta.cpp", "--fix", "--format")
+        self.assertEqual(code, 0, second)
+        self.assertEqual(second["fixes"]["applied_files"], [])
+        self.assertNotIn("verification", second)
+        self.assertEqual(source.read_bytes(), before)
+        self.assertEqual(source.stat().st_mtime_ns, modified)
 
     def test_configuration_response_files_are_expanded_and_invalidate_reuse(self):
         self.write(

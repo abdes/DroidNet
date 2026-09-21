@@ -80,9 +80,14 @@ propagate a nonzero exit code.
 oxytidy src/Oxygen/Base --summary-only
 oxytidy src/Oxygen/Base --list-files
 oxytidy src/Oxygen/Base/Sha256.cpp --fail-on warning
+oxytidy src/Oxygen/Base/Sha256.cpp --checks="-*,misc-include-cleaner"
 oxyformat src/Oxygen/Base
 oxyformat src/Oxygen/Base --fix
 ```
+
+Use `--checks="-*,CHECK-NAME"` to run only one tidy check. See
+[single-check analysis and fixes](../oxytools/docs/oxytidy.md#run-only-one-check)
+for examples; omitting `-*,` keeps the configured checks enabled.
 
 - [Oxytidy reference](../oxytools/docs/oxytidy.md): compilation contexts, header
   coverage, configuration selection, coordinated fixes, and incremental reuse.

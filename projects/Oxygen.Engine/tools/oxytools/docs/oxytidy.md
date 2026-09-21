@@ -94,6 +94,35 @@ oxytidy src/Oxygen/Base/Sha256.h --fix --format
 oxytidy src/Oxygen/Base/Sha256.cpp --fail-on warning --timeout 60
 ```
 
+### Run only one check
+
+Prefix the check selection with `-*,` to disable the configured checks before
+enabling the one you want. For example, report only include-cleaner findings:
+
+```powershell
+oxytidy .\src\Oxygen\Vortex\Diagnostics\DiagnosticsCaptureManifest.cpp `
+  --checks="-*,misc-include-cleaner"
+```
+
+To apply that check's available fixes, format the affected ranges/include blocks,
+and reuse valid analysis on subsequent runs:
+
+```powershell
+oxytidy .\src\Oxygen\Vortex\Diagnostics\DiagnosticsCaptureManifest.cpp `
+  --checks="-*,misc-include-cleaner" --fix --format --incremental
+```
+
+Replace `misc-include-cleaner` with another check name. A comma-separated list
+can select a small group, for example
+`--checks="-*,bugprone-use-after-move,bugprone-unchecked-optional-access"`.
+Add `--include-tests` when selecting test files or their consumers.
+
+Without the `-*,` prefix, `--checks` appends to the `.clang-tidy` selection rather
+than replacing it. Compiler errors remain visible, and the compilation database
+and dependency discovery are still required. Changing the check selection changes
+the analysis cache key; unchanged reruns can reuse results for that selection.
+`--format` is a separate formatting step, not an additional tidy check.
+
 ### Select another engine checkout
 
 `--project-root PATH` selects the engine checkout to analyze independently of
@@ -312,8 +341,16 @@ diagnostics, and fixes. Post-fix verification retains separate artifacts.
 ## Coordinated fixes
 
 Parallel workers export replacements and never perform in-place fixes. The
-complete batch is validated before editing. Identical edits are deduplicated;
-overlaps, conflicting contexts, changed analyzed contents, and incomplete
+complete batch is validated before editing. Identical edits are deduplicated.
+Zero-length insertions at the same offset are combined only when every insertion
+contains complete literal `#include` lines. Duplicate lines are removed and the
+remaining lines are sorted deterministically. Newly inserted `Oxygen/...` headers
+use angle brackets even without `--format`. An insertion can also be combined
+with one deletion at the same offset when the analyzed source bytes verify that
+the deletion covers complete literal include directives. This supports replacing
+an unused umbrella header with its required direct header. Include-looking text
+inside comments/strings, partial deletions, and edits to code are not merged.
+Macro includes, mixed text edits, overlaps, conflicting contexts, changed analyzed contents, and incomplete
 analysis block application. Each diagnostic's replacements are skipped as a
 unit if any edit crosses scope. Skipped/unfixable findings retain reasons.
 
@@ -321,9 +358,23 @@ UTF-8 bytes, BOM, existing line endings, and permission bits are preserved.
 Other source encodings can be analyzed, but an attempted autofix on an unsupported
 encoding rejects the replacement batch. Writes are atomic per file. Failed
 application rolls back written files unless concurrent edits or I/O failures
-prevent restoration, which is reported. Optional formatting uses `.clang-format`
-and changed ranges. After edits, affected caches are invalidated and all selected
-contexts are freshly scanned/analyzed. Verification determines the final result.
+prevent restoration, which is reported. With `--fix --format`, the formatter
+normalizes Oxygen include spelling and formats complete include blocks in the
+analyzed edit scope, together with changed ranges. This also runs when clang-tidy
+has no automatic replacements, so existing include spelling/order can be fixed.
+The root style groups standard headers, external/platform headers and Oxygen
+headers, alphabetically within each group. Unchanged files are not rewritten
+and do not trigger another analysis. After actual edits, affected caches are
+invalidated and selected contexts are freshly scanned/analyzed. Verification
+determines the final result.
+
+For order-sensitive headers, use the standard `// clang-format off` / `on`
+markers documented under [order-sensitive include blocks](oxyformat.md#order-sensitive-include-blocks).
+They protect formatting, include sorting and existing Oxygen include spelling
+inside the block during `--fix --format`; they do not disable diagnostics or
+other clang-tidy fixes. Add `// IWYU pragma: keep` to each intentional prerequisite
+include that include-cleaner must retain. The two annotations serve different
+purposes and may be used together. No custom suppression syntax is needed.
 
 `--export-fixes PATH` writes a reviewable JSON plan with replacements, skipped
 reasons, and content hashes, without editing sources. Existing exports are not

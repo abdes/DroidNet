@@ -221,6 +221,15 @@ class WriteTests(Fixture):
 
 @unittest.skipUnless(LLVM, "clang-format 23 is required")
 class LLVMTests(Fixture):
+    def test_oxygen_include_spelling_is_checked_and_fixed(self):
+        path = self.write("src/a.cpp", '#include "Oxygen/Alpha.h"\n')
+        code, _, _ = self.invoke("src/a.cpp")
+        self.assertEqual(code, 1)
+        self.assertEqual(path.read_text(), '#include "Oxygen/Alpha.h"\n')
+        code, _, error = self.invoke("src/a.cpp", "--fix")
+        self.assertEqual(code, 0, error)
+        self.assertEqual(path.read_text(), "#include <Oxygen/Alpha.h>\n")
+
     def test_check_fix_check_and_idempotence(self):
         path = self.write("src/a.cpp", "int  main( ){return  0;}\n")
         original = path.read_bytes()
