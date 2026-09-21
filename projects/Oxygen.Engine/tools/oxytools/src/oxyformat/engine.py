@@ -15,6 +15,7 @@ from pathlib import Path
 
 from oxytools.common import ToolError, yaml_documents
 from oxytools.files import atomic_write
+from oxytools.includes import prepare_includes
 from oxytools.llvm import REQUIRED_LLVM_MAJOR, require_version
 from oxytools.process import WindowsJob
 
@@ -153,6 +154,7 @@ class Formatter:
             # contract is UTF-8, optionally with a BOM, without transcoding.
             original.decode("utf-8-sig")
             mode = stat.S_IMODE(path.stat().st_mode)
+            normalized, _ = prepare_includes(original)
             formatted = self.processes.run(
                 [
                     self.binary,
@@ -161,7 +163,7 @@ class Formatter:
                     "--fail-on-incomplete-format",
                     "--Werror",
                 ],
-                original,
+                normalized,
             )
             if self.processes.cancelled.is_set():
                 raise Cancelled("Cancelled before writing")

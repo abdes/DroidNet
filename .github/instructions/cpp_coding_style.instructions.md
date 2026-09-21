@@ -11,6 +11,8 @@ applyTo: "**/*.cpp;**/*.h"
 - Use `#pragma once` for include guards in all headers.
 - Prefix all standard library types and functions with `std::`, except for <cstdint> types.
 - Use `#include <...>` syntax for all includes.
+- Group includes as standard C/C++ library, third-party/platform, then Oxygen, separated by one blank line. Sort each group alphabetically, case-sensitive. Keep the source file's matching Oxygen header in the Oxygen group.
+- Protect order-sensitive include blocks with standard `// clang-format off` / `// clang-format on` markers and a brief reason. Use `// IWYU pragma: keep` on intentional prerequisite headers that include-cleaner must retain; formatting markers do not disable clang-tidy analysis or include removal.
 - Use designated initializers for struct initialization whenever possible.
 - Use trailing commas in multiline initializer lists and enum definitions; omit them in single-line constructs.
 - All new files must start with the BSD license preamble:

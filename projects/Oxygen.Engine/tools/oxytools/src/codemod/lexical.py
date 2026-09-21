@@ -6,10 +6,7 @@ import re
 from collections.abc import Iterator
 
 from oxytools.common import ToolError
-
-REGIONS = re.compile(
-    r'\b[0-9][\w.\']*|//[^\r\n]*|/\*[\s\S]*?\*/|(?:u8|u|U|L)?R"(?P<delimiter>[^ ()\\\t\r\n]{0,16})\([\s\S]*?\)(?P=delimiter)"|"(?:\\[\s\S]|[^"\\])*"|\'(?:\\[\s\S]|[^\'\\])*\''
-)
+from oxytools.lexical import REGIONS
 
 
 def spans(

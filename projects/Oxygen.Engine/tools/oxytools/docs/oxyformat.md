@@ -44,6 +44,54 @@ mode. Source-level clang-format off/on directives remain effective.
 Clang-format 23.x is required. No build tree or compilation database is needed.
 The selected root style is validated once and snapshotted for the run.
 
+## Include policy
+
+Oxygen includes use `<Oxygen/...>`. The shared include prepass normalizes real
+quoted Oxygen directives before clang-format runs, including check-only mode.
+Comments, strings, raw strings, continued macros and clang-format off/on regions
+are preserved. Other include spellings are unchanged.
+
+The root style regroups includes as standard C/C++ headers, external/platform
+headers, then Oxygen headers, with one blank line between nonempty categories
+and case-sensitive alphabetical order within each. The standard-header list is
+explicit; an extensionless third-party header is not assumed to be standard.
+The source's matching Oxygen header stays in the Oxygen category. Conditional
+preprocessor boundaries remain intact.
+
+### Order-sensitive include blocks
+
+Use Clang's standard formatting markers when platform headers require a specific
+order. Include a short reason and re-enable formatting immediately after the block:
+
+```cpp
+// clang-format off: Windows SDK headers require this order.
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#include <Windows.h>
+// clang-format on
+```
+
+Both oxyformat and oxytidy's `--fix --format` step preserve formatting and include
+order inside the block. The shared Oxygen include-spelling prepass also respects
+these markers. `/* clang-format off */` and `/* clang-format on */` are supported
+as well. These are standard Clang annotations, not tool-specific directives.
+
+Formatting markers do not disable clang-tidy analysis or its other fixes. If an
+include is intentionally required for ordering, macros or another indirect
+prerequisite, mark that particular include to prevent include-cleaner removing it:
+
+```cpp
+#include <winsock2.h> // IWYU pragma: keep
+```
+
+Use both annotations when a block needs stable order and its prerequisite headers
+must be retained. `IWYU pragma: keep` alone does not prevent sorting; formatting
+markers alone do not prevent unused-include removal. Keep each exception limited
+to the required block or header.
+
+References: [Clang formatting markers](https://releases.llvm.org/23.1.0/tools/clang/docs/ClangFormatStyleOptions.html#disabling-formatting-on-a-piece-of-code)
+and [Include Cleaner annotations](https://clangd.llvm.org/design/include-cleaner#iwyu-pragmas).
+
 ## Results and failures
 
 Checking is read-only. `--fix` formats independent files eagerly and continues
