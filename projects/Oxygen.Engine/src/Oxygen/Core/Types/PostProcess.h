@@ -7,6 +7,7 @@
 #pragma once
 
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <string_view>
 
@@ -16,6 +17,16 @@ namespace oxygen::engine {
 
 inline constexpr float kExposureCalibrationKey = 12.5F;
 inline constexpr float kExposureMiddleGrey = 0.18F;
+
+//! Physical-camera defaults shared by runtime settings and scene authoring.
+inline constexpr float kDefaultCameraApertureF = 11.0F;
+inline constexpr float kDefaultCameraShutterRate = 125.0F;
+inline constexpr float kDefaultCameraIso = 100.0F;
+inline constexpr std::size_t kMaxExposureCompensationCurveKeys = 64U;
+inline constexpr float kDefaultExposureTransitionDistance = 1.5F;
+inline constexpr float kMinExposureLogLuminance = -24.0F;
+inline constexpr float kMaxExposureLogLuminance = 32.0F;
+inline constexpr float kMinDisplayGamma = 0.001F;
 
 [[nodiscard]] inline auto ExposureBiasScale(
   const float compensation_ev, const float exposure_key) noexcept -> float

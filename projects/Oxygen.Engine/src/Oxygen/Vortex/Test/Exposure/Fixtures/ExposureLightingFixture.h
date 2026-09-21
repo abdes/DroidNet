@@ -16,6 +16,7 @@
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Vortex/RendererCapability.h>
+#include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureGpuFixture.h>
 #include <Oxygen/Vortex/ViewExtension.h>
 

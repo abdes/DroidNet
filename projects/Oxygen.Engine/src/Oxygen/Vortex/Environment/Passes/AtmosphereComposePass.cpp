@@ -25,6 +25,7 @@
 #include <Oxygen/Profiling/ProfileScope.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
+#include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/Environment/Passes/AtmosphereComposePass.h>
 #include <Oxygen/Vortex/Internal/ViewportClamp.h>

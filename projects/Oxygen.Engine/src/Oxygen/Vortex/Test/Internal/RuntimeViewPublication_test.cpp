@@ -32,6 +32,7 @@
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Scene/Environment/PostProcessVolume.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
+#include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/Internal/PerViewScope.h>
@@ -565,8 +566,16 @@ NOLINT_TEST_F(RuntimeViewPublicationTest,
   }
   EXPECT_EQ(first->generation, 1U);
   EXPECT_NE(first->lifetime, 0U);
-  EXPECT_EQ(renderer_->RetryExposureTransition(*first), Phase::kQueued);
-  EXPECT_EQ(renderer_->RetryExposureTransition(*first), Phase::kQueued);
+  {
+    const auto retry = renderer_->RetryExposureTransition(*first);
+    ASSERT_TRUE(retry.has_value());
+    EXPECT_EQ(*retry, Phase::kQueued);
+  }
+  {
+    const auto retry = renderer_->RetryExposureTransition(*first);
+    ASSERT_TRUE(retry.has_value());
+    EXPECT_EQ(*retry, Phase::kQueued);
+  }
   const auto next = renderer_->QueueExposureTransition(
     Handle {
       1U,
@@ -577,7 +586,11 @@ NOLINT_TEST_F(RuntimeViewPublicationTest,
   }
   EXPECT_EQ(next->generation, 2U);
   EXPECT_EQ(next->lifetime, first->lifetime);
-  EXPECT_EQ(renderer_->RetryExposureTransition(*first), Phase::kSuperseded);
+  {
+    const auto retry = renderer_->RetryExposureTransition(*first);
+    ASSERT_TRUE(retry.has_value());
+    EXPECT_EQ(*retry, Phase::kSuperseded);
+  }
   const auto status = renderer_->InspectExposureTransition(Handle {
     1U,
   });
@@ -1267,8 +1280,11 @@ NOLINT_TEST_F(
     FAIL() << "Expected transition to have a value";
   }
   EXPECT_EQ(transition->request, *token);
-  EXPECT_EQ(renderer_->RetryExposureTransition(*token),
-    oxygen::vortex::ExposureTransitionPhase::kQueued);
+  {
+    const auto retry = renderer_->RetryExposureTransition(*token);
+    ASSERT_TRUE(retry.has_value());
+    EXPECT_EQ(*retry, oxygen::vortex::ExposureTransitionPhase::kQueued);
+  }
 }
 
 NOLINT_TEST_F(RuntimeViewPublicationTest,

@@ -1627,13 +1627,21 @@ namespace {
 
 } // namespace
 
+SceneRenderer::ExtractArtifact::ExtractArtifact() = default;
+SceneRenderer::ExtractArtifact::~ExtractArtifact() = default;
+SceneRenderer::ExtractArtifact::ExtractArtifact(ExtractArtifact&&) noexcept
+  = default;
+auto SceneRenderer::ExtractArtifact::operator=(ExtractArtifact&&) noexcept
+  -> ExtractArtifact& = default;
+
 SceneRenderer::SceneRenderer(Renderer& renderer, Graphics& gfx,
   const SceneTexturesConfig config, const ShadingMode default_shading_mode)
   : renderer_(renderer)
   , gfx_(gfx)
   , scene_textures_(gfx, InitialExposureSceneConfig(renderer, config))
   , scene_texture_pool_(gfx, InitialExposureSceneConfig(renderer, config))
-  , scene_color_pool_(renderer.GetGraphics())
+  , scene_color_pool_(
+      std::make_unique<internal::RetainedTexturePool>(renderer.GetGraphics()))
   , active_scene_textures_(&scene_textures_)
   , inspected_scene_textures_(&scene_textures_)
   , default_shading_mode_(default_shading_mode)
@@ -1699,7 +1707,7 @@ void SceneRenderer::BeginFrame(const frame::SequenceNumber sequence,
   setup_mode_.Reset();
   scene_texture_bindings_.Invalidate();
   ResetExtractArtifacts();
-  scene_color_pool_.OnFrameStart(sequence);
+  scene_color_pool_->OnFrameStart(sequence);
   for (auto* artifact : {
          &resolved_scene_color_artifact_,
          &resolved_scene_depth_artifact_,
@@ -1929,7 +1937,7 @@ void SceneRenderer::RenderViewFamily(RenderContext& ctx)
     color_config.extent = lease_key.extent;
     color_config.scene_color_format = lease_key.scene_color_format;
     color_config.msaa_sample_count = lease_key.msaa_sample_count;
-    auto color = scene_color_pool_.Acquire(ctx.current_view.view_id,
+    auto color = scene_color_pool_->Acquire(ctx.current_view.view_id,
       SceneTextures::SceneColorDescriptor(color_config),
       ctx.current_view.view_state_handle
         != CompositionView::kInvalidViewStateHandle);
@@ -2992,7 +3000,7 @@ void SceneRenderer::RemoveViewState(const ViewId view_id,
 {
   InvalidatePublishedViewFrameBindings();
   exposure_product_layouts_.erase(view_state_handle);
-  scene_color_pool_.RemoveView(view_id);
+  scene_color_pool_->RemoveView(view_id);
   for (auto* artifact : {
          &resolved_scene_color_artifact_,
          &resolved_scene_depth_artifact_,

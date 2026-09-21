@@ -6,10 +6,10 @@
 
 #pragma once
 
-#include <expected>
 #include <optional>
 #include <utility>
 
+#include <Oxygen/Base/Result.h>
 #include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Scene/ExposureSettings.h>
 
@@ -39,14 +39,14 @@ public:
 
   [[nodiscard]] static auto Resolve(const PostProcessConfig& config,
     std::optional<float> camera_ev = {}, std::uint64_t revision = 0U)
-    -> std::expected<ResolvedPostProcessConfig, scene::ExposureSettingsError>
+    -> Result<ResolvedPostProcessConfig, scene::ExposureSettingsError>
   {
     auto exposure = scene::ResolveExposureSettings(config.exposure, camera_ev);
     if (!exposure) {
-      return std::unexpected(exposure.error());
+      return ::oxygen::Err(exposure.error());
     }
-    return ResolvedPostProcessConfig(
-      config, std::move(*exposure), revision, camera_ev);
+    return ::oxygen::Ok(ResolvedPostProcessConfig(
+      config, std::move(*exposure), revision, camera_ev));
   }
 
   [[nodiscard]] auto Settings() const noexcept -> const PostProcessConfig&

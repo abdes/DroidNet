@@ -25,6 +25,7 @@
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Result.h>
 #include <Oxygen/Core/Bindless/Generated.BindlessAbi.h>
 #include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
 #include <Oxygen/Core/Bindless/Types.h>
@@ -2489,7 +2490,8 @@ auto ExposurePass::UpdateAverageConstants(RenderContext& ctx,
       && inputs.transition->policy == ExposureTransitionPolicy::kSeedFromEv100
       && inputs.transition->seed_ev
     ? scene::ResolveExposureSeedLogGain(resolved, *inputs.transition->seed_ev)
-    : std::expected<float, scene::ExposureSettingsError> { 0.0F };
+    : ::oxygen::Result<float, scene::ExposureSettingsError> { ::oxygen::Ok(
+        0.0F) };
   const auto generation
     = inputs.transition && !config.Settings().temporary_unit_exposure
     ? inputs.transition->generation

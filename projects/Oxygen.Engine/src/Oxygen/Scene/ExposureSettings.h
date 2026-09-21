@@ -7,11 +7,11 @@
 #pragma once
 
 #include <cstdint>
-#include <expected>
 #include <optional>
 #include <string_view>
 #include <vector>
 
+#include <Oxygen/Base/Result.h>
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Scene/api_export.h>
@@ -50,7 +50,7 @@ struct ExposureSettings {
   float target_luminance { 0.18F };
   float spot_meter_radius { 0.2F };
   float black_influence { 0.0F };
-  float transition_distance { 1.5F };
+  float transition_distance { engine::kDefaultExposureTransitionDistance };
   content::ResourceKey metering_mask {};
   std::vector<ExposureCompensationKey> compensation_curve {};
 
@@ -99,7 +99,7 @@ struct ResolvedExposureSettings {
 */
 [[nodiscard]] OXGN_SCN_API auto ResolveExposureSettings(
   const ExposureSettings& settings, std::optional<float> camera_ev = {})
-  -> std::expected<ResolvedExposureSettings, ExposureSettingsError>;
+  -> Result<ResolvedExposureSettings, ExposureSettingsError>;
 
 //! Resolve the positive latent log gain of an explicit EV100 seed.
 /*!
@@ -110,7 +110,7 @@ struct ResolvedExposureSettings {
 */
 [[nodiscard]] OXGN_SCN_API auto ResolveExposureSeedLogGain(
   const ResolvedExposureSettings& settings, float seed_ev)
-  -> std::expected<float, ExposureSettingsError>;
+  -> Result<float, ExposureSettingsError>;
 
 [[nodiscard]] OXGN_SCN_API auto to_string(ExposureSettingsError error) noexcept
   -> std::string_view;

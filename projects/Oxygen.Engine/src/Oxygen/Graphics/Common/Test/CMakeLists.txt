@@ -101,5 +101,10 @@ m_gtest_program(GraphicsLifecycle SOURCES "GraphicsLifecycle_test.cpp")
 m_gtest_program(DeferredReclaimer SOURCES "DeferredReclaimer_test.cpp")
 m_gtest_program(CommandListPool SOURCES "CommandListPool_test.cpp")
 m_gtest_program(Queues SOURCES "QueuesStrategy_test.cpp")
-m_gtest_program(Commander SOURCES "Commander_test.cpp")
+m_gtest_program(
+  Commander
+  SOURCES
+    "Commander_test.cpp"
+    "SubmissionCallback_test.cpp"
+)
 m_gtest_program(ProfileScopeDrain SOURCES "ProfilingScopeDrain_test.cpp")
