@@ -81,21 +81,17 @@ settings/fixed gain; metering/adaptation; lifecycle/sharing; HDR migration and
 native MultiView; **5.1 performance; 5.2 quality**; persistence/configuration;
 physical lights; independent instruments; interactive demos; final acceptance.
 
-Status: `in_progress`. Slices 1-5 have numerical/integration qualification;
-Slice 5.1 closed on 2026-09-21 at the user-accepted measured CPU cost. Further
-CPU optimization belongs to a later milestone. Slice 5.2 also closed on
-2026-09-21: the approved residual owner fixes and blocking Release include repair
-are committed, scoped changed code is tidy-clean, 65 cases pass in each build
-configuration, and one matched I02 run preserves the accepted operating point.
-Fixture decomposition, broader test review and the completed performance matrix
-were reused. The tracker's [Current work](IMPLEMENTATION_STATUS.md#31-current-work)
-and [5.2 result](IMPLEMENTATION_STATUS.md#322-slice-52-code-quality-and-test-structure)
-own the exact checks, excluded diagnostics and evidence. Slice 6 is next and
-requires separate authorization.
-Slices 6-10, including the full LightBench delivery, are still
-required. Earlier incremental test counts and proofs remain in the tracker's
-linked manifests and Git history; the
-[contract checkpoint](plan/exposure-contract-checkpoint.md) owns Slice 1 decisions.
+Status: `in_progress`. Slices 1-6, including inserted Slices 5.1 and 5.2,
+are validated. EX06 closes strict scene-v6/PakGen-v7 authoring and persistence,
+source-qualified mask transport, the C++20 editor boundary, DemoShell UX and
+configuration isolation. The [tracker](IMPLEMENTATION_STATUS.md#33-slice-6-work-items)
+owns the closure evidence. The accepted Slice 5.1 CPU operating point remains
+closed; further CPU optimization belongs to a later milestone.
+
+**Next: EX07 — Complete the reference lighting unit chain.** Slices 7-10 still
+own physical-light/material calibration, independent instrumentation, complete
+LightBench/MultiView delivery and package acceptance. Post-processing console
+commands and ImGui Test Engine support are deferred to a separate future slice.
 Implementation must pass each slice gate before the next. FP16 eligibility is
 per-view and separate from exposure validity; retained FP32 does not reset
 adaptation. Prior VTX-M03/M06 closure is not this package's acceptance evidence.

@@ -91,7 +91,7 @@ Slices 6-10, including the complete LightBench delivery; the package is not comp
 | 5 — HDR migration and recovery  | validated | Numerical, lifecycle and native layout/interaction correctness qualified in Debug and Release. Collected Release costs motivate the separate, still-open performance gate in Slice 5.1.                                        | [Detailed items](#32-slice-5-work-items)                                                                                                                                                                                                                                                                                                                        |
 | 5.1 — Exposure performance      | validated | Closed 2026-09-21: format/policy, independent SceneColor ownership, CPU corrections, correctness and final GPU acceptance complete. User accepts measured CPU cost; further CPU optimization is deferred to a later milestone. | [Current work](#31-current-work), [final CPU decision](lld/post-process-service.md#approved-ex051-13ab-joint-cpu-correction)                                                                                                                                                                                                                                    |
 | 5.2 — Focused exposure quality  | validated | Approved residual owner fixes and Release include repair committed; 65 Debug and 65 Release cases pass, scoped changed code is tidy-clean, and one matched I02 preservation run passes.                                        | [Bounded scope and result](#322-slice-52-code-quality-and-test-structure)                                                                                                                                                                                                                                                                                       |
-| 6 — Authoring and persistence   | planned   | Native physical-camera persistence and texture-resource-index mask contracts are approved; complete source/cook/load/script/editor/DemoShell round-trip remains.                                                               | [Detailed items](#33-slice-6-work-items)                                                                                                                                                                                                                                                                                                                        |
+| 6 — Authoring and persistence   | validated | Strict source/cook/load/script/editor migration, C++20 editor boundary, PAK repacking, rendered UI acceptance and configuration isolation closed.                                                                              | [Detailed items](#33-slice-6-work-items), [acceptance evidence](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice6/slice6-progress.json)                                                                                                                                                                                                          |
 | 7 — Light units                 | planned   | Directional, point and spot numerical/visual calibration across forward and deferred paths remains.                                                                                                                            | [Detailed items](#34-slice-7-work-items)                                                                                                                                                                                                                                                                                                                        |
 | 8 — Measurements                | planned   | Implement instrumentation and qualify it against independent inputs.                                                                                                                                                           | [Detailed items](#35-slice-8-work-items)                                                                                                                                                                                                                                                                                                                        |
 | 9 — LightBench and MultiView    | planned   | Complete all seven experiments and final integrated native operation. MultiView layout/interaction proofs are qualified in Slice 5; final package acceptance remains.                                                          | [Detailed items](#36-slice-9-work-items)                                                                                                                                                                                                                                                                                                                        |
@@ -99,115 +99,16 @@ Slices 6-10, including the complete LightBench delivery; the package is not comp
 
 ### 3.1 Current work
 
-**Benchmark executable separation (2026-09-21): validated.** The user-requested
-follow-up moves all 17 benchmark source/header files to
-`src/Oxygen/Vortex/Benchmarks`. The targets are `Oxygen.Vortex.Exposure.Tests`
-and `Oxygen.Vortex.Exposure.Benchmarks`; eight native fixture translation units
-compile once per configuration in `oxygen-vortex-exposure-test-support`.
-[Build and discovery evidence](../../out/build-ninja/analysis/vortex/exposure-benchmark-split/checkpoint-manifest.json)
-confirms Debug/Release builds and the exact partition of the original 236 case
-names into 228 correctness cases and eight disabled benchmarks, with no overlap
-or omission. CTest uses the final target names and retains disabled benchmark
-registration. A fixture/shader-probe smoke case passes in both configurations;
-default benchmark invocations execute zero workloads. All moved code preserves
-its tokens except include paths/formatting. No timed workload or full correctness
-suite was rerun for this structural change. The [benchmark README](../../src/Oxygen/Vortex/Benchmarks/README.md)
-owns current commands. This explicit follow-up supersedes the earlier instruction
-to keep benchmarks in the correctness executable; EX052 runtime evidence remains
-historical and is not reopened.
+**EX06 is closed and validated (2026-09-21).** Authoring, persistence,
+configuration isolation, the C++20 editor boundary and DemoShell acceptance are
+complete. The TexturedCube panel-refresh regression is covered by automated
+tests and the user's successful rebuilt-app test. See the
+[EX06 result and evidence](#33-slice-6-work-items).
 
-**Slice 5.2 closed (2026-09-21).** The approved residual fixes are committed in
-`9ff39edcc`; the separately approved Release include repair is `dc9ef824e`.
-EX052-02/04/10/12/GATE are validated. The [slice result](#322-slice-52-code-quality-and-test-structure)
-and [checkpoint](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice52/checkpoint-manifest.json)
-record scoped quality findings, 65 passing cases in each configuration, the
-single matched preservation run and reused evidence. Slice 6 is next in the
-package and remains planned, requiring separate authorization.
-
-**Slice 5.1 closed (2026-09-21).** The user accepts the measured CPU cost for
-current delivery and defers further optimization to a later milestone.
-EX051-13/14/GATE are validated with that explicit disposition. Original CPU
-limits remain future optimization targets, not current pass claims; broader
-CPU/scaling qualification accompanies the deferred work. Slice 5.2 is also closed under its own evidence below.
-The joint correction passes 589 Debug and 403 Release owning checks; 89-TU
-clang-tidy finds zero diagnostics on changed code. One new 7,200-frame I02
-1080p Tracy capture, compared with the existing baseline, reduces exposure
-elapsed CPU p95/p99 by 27.2%/30.1% and whole-frame recording/submission p95 by
-23.8%. All six cycle ranges are disjoint, four endpoint pairs pass, GPU work
-and placement are unchanged, and all 1,030 capture input hashes match. See the
-[measured decision](lld/post-process-service.md#approved-ex051-13ab-joint-cpu-correction).
-No baseline, final GPU matrix or MultiView run was repeated.
-
-Prior completed checkpoints follow. The eight
-existing workload entry points, fixed controls, public event operations and
-bounded event script are mapped below. The SceneTextures owner inventory links
-the existing descriptor and lifecycle reports; no build or native run was needed
-or performed for this documentation-only item. Independent color ownership
-passes 56 focused Debug checks, including queued consumers and the specified 4K
-temporal-off lifecycle case. Final engine placement peak is 3747.207 MiB; all
-three retained-resize cycles keep identical attachment populations, and all
-retired family leases reach zero. The superseded double-retirement drafts and
-their diagnosis remain in the [10A checkpoint](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/color-ownership/checkpoint-manifest.json).
-EX051-04 is validated: 109 focused Debug checks (latest unique outcomes), 13
-Release checks and both 234-module shader builds pass. Its
-[checkpoint](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/fp32-only/checkpoint-manifest.json)
-preserves the corrected temporal-test observation failure and exact frozen
-inputs. EX051-05's four pairs now pass: eight timed runs, 60,000 sampled frames,
-ten endpoint comparisons, zero steady allocation churn and no repeats. FP32-only
-reduces graphics-queue frame p95 by 25–50%; admitted half saves memory only in C01.
-See the [decision table](#ex051-05-results-and-decision) and
-[checkpoint](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/decision05/checkpoint-manifest.json).
-The user approved the [concrete 09 policy](lld/post-process-service.md#agreed-ex051-09-precision-policy)
-and C01 memory tradeoff on 2026-09-20. FP32 production, explicit `qualified`
-diagnostics and stale-control acknowledgement rejection are implemented and
-pass 122 focused Debug checks (97 CPU, 25 native). The
-[policy checkpoint](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/production-policy/checkpoint-manifest.json)
-records exact commands and 648 unchanged frozen inputs. Bounded 11 work is now
-validated below. 12 now passes 371 normal Release checks using existing
-coverage and retained Debug evidence; 13–14/GATE are now closed with the accepted CPU disposition.
-The final GPU matrix and event scripts are complete; the accepted CPU
-disposition closes 13. Historical manifests do not reopen closed items.
-
-**Complete: corrected quality review of every file under
-`src/Oxygen/Vortex/Test` (2026-09-20).** Scope: 156 files, comprising 129 C++
-translation units, 21 headers and six non-C++ files. The earlier result based on
-broad warning suppressions is superseded by this validated correction.
-
-The rejected optional-access, unchecked-indexing, constant-array-indexing,
-arithmetic-precedence, pointer-arithmetic and missing-field suppressions are
-removed. Code now uses checked access, explicit guards, spans/range algorithms,
-explicit arithmetic grouping, and normally constructed input records. Retained
-exceptions are local to the specific interface, framework or lifetime constraint
-and document that constraint; generic suppression boilerplate is removed.
-
-Every non-empty braced initializer in the **139 C++ files modified since review
-baseline `34819517`** has a trailing comma. This includes earlier committed
-changes. Clang syntax/token analysis verifies complete coverage and protects
-typed temporaries inside GoogleTest macro arguments. Final reparse inventories
-have zero missing commas and zero unresolved manual cases.
-
-| Reviewed group                               | C++ units | Headers | Final clang-tidy |
-| -------------------------------------------- | --------- | ------- | ---------------- |
-| Exposure cases                               | 32        | 0       | 0 diagnostics    |
-| Rendering and scene preparation              | 41        | 1       | 0 diagnostics    |
-| Resources, upload, shared fixtures and fakes | 37        | 12      | 0 diagnostics    |
-| Exposure fixtures and benchmarks             | 19        | 8       | 0 diagnostics    |
-
-**Validation:** all 47 Vortex targets build in Debug; the Release exposure target
-also builds, including guarded benchmark code. All 47 Debug executables pass:
-**876 tests** (656 CPU and 220 native GPU), zero failures/errors/skips, plus the
-link test. Eight disabled benchmarks remain unexecuted. Numerical tolerances,
-test identities and benchmark workloads are preserved. Both reported emission
-death tests pass with valid context and specific intended-failure matchers.
-Clang-format, markdownlint and `git diff --check` pass.
-
-**Evidence:** `out/clang-tidy/vortex-test-quality/quality-summary-corrected.json`,
-`review-ledger.json`, `initializer-style-final.json`, per-lane current-source
-reports, `build-final-all-debug.log`, `build-final-exposure-release.log`,
-`correctness-final-cpu/result.json`, and
-`correctness-final-exposure/result.json`. Failed intermediate and superseded
-suppression-based results remain separate. This closes the requested test review;
-Slice 5.2 now covers only the residual production-owner fixes agreed below.
+**Next planned work: EX07 — Complete the reference lighting unit chain.**
+Its [scope and gate](plan/exposure-and-lightbench-correction.md#slice-7---complete-the-reference-lighting-unit-chain)
+are unchanged; implementation has not started. Post-processing console commands
+and ImGui Test Engine support remain a separate future slice.
 
 ### 3.2 Slice 5 work items
 
@@ -597,7 +498,14 @@ resource counts/placement match; all four endpoint files are byte-identical.
 All 1,030 frozen inputs remain unchanged. This establishes preservation, not an
 attributed optimization gain; original CPU goals remain deferred. The existing
 48-run matrix, overhead campaign, fixture decomposition and broader test review
-were reused, not repeated. Slice 6 remains separately authorized work.
+were reused, not repeated. Slice 6 is closed in [EX06](#33-slice-6-work-items).
+
+Correctness and benchmarks use separate executables:
+`Oxygen.Vortex.Exposure.Tests` and `Oxygen.Vortex.Exposure.Benchmarks`.
+The [benchmark README](../../src/Oxygen/Vortex/Benchmarks/README.md) owns usage;
+[split evidence](../../out/build-ninja/analysis/vortex/exposure-benchmark-split/checkpoint-manifest.json)
+and the [Vortex test quality result](../../out/clang-tidy/vortex-test-quality/quality-summary-corrected.json)
+retain the completed structural and test-review qualification.
 
 **EX052-02 approved batch.** Starting source `e779d08bf` superseded the old
 diagnostic locations. The scoped oxytidy refresh reports 166 warnings in the two
@@ -726,7 +634,7 @@ deliverable.
 | EX052-04   | Implement agreed fixes           | validated | 02                | Implemented and committed as 9ff39edcc and dc9ef824e. Explicit record/descriptor initialization, checked access, named unchanged shader controls/layouts and direct Release dependencies; no public signature/ABI or warning-policy change.         |
 | EX052-10   | Validate the final affected code | validated | 04                | Scoped changed code is clean; 65 Debug and 65 Release selected checks pass. One matched I02 candidate preserves accepted CPU/GPU cost, resources and four byte-identical endpoints. Exact evidence and reuse decisions are in the checkpoint above. |
 | EX052-12   | Close the residual-quality pass  | validated | 10                | Tracker, package plan, main plan and PostProcess owner are reconciled to the single checkpoint and raw references. Implementation and documentation closeout commits are recorded in that checkpoint.                                               |
-| EX052-GATE | Focused quality acceptance       | validated | 02, 04, 10, 12    | All agreed fixes are resolved and necessary validation passes. Existing behavior and accepted operating point are preserved; explicitly excluded diagnostics remain recorded. Slice 6 is not started.                                               |
+| EX052-GATE | Focused quality acceptance       | validated | 02, 04, 10, 12    | All agreed fixes are resolved and necessary validation passes. Existing behavior and accepted operating point are preserved; explicitly excluded diagnostics remain recorded.                                                                       |
 
 #### Disposition of the original task IDs
 
@@ -743,22 +651,28 @@ deliverable.
 
 ### 3.3 Slice 6 work items
 
-**Slice status: planned. Depends on EX051-GATE and EX052-GATE.
-Persistence/authoring integration has not started.**
-Approved contracts are requirements, not completed implementation.
+**Slice status: validated; EX06-GATE closed 2026-09-21.**
 
-| ID        | Work item                                           | Status    | Exact remaining delivery                                                                                                                                                                                                                                                               |
-| --------- | --------------------------------------------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| EX06-01   | Native physical-camera persistence                  | planned   | Source/cook/load aperture, shutter and ISO; scene-v6 perspective/orthographic 32/40-byte records; v5 20/28-byte defaults f/11, 125/s, ISO100. Keep the existing editor UI.                                                                                                             |
-| EX06-02   | Exposure source schemas and component/config parity | planned   | Carry all authored exposure fields through JSON schemas and native component/config boundaries; existing canonical runtime types are a prerequisite, not completion of this integration.                                                                                               |
-| EX06-03   | Versioned packed exposure record                    | planned   | Implement the approved 144-byte prefix, mask resource index at 116, reserved 120–131, curve count at 132 and keys at 144; preserve enum ordinals/defaults.                                                                                                                             |
-| EX06-04   | Cooker, package remapping and loader                | planned   | Texture path to source-local index, PAK index remapping and runtime ResourceKey hydration; curve and scalar cook/load support.                                                                                                                                                         |
-| EX06-05   | Scripting and existing editor/native adapters       | planned   | Round-trip the same canonical fields and physical-camera values through existing adapters; no new physical-camera editor controls.                                                                                                                                                     |
-| EX06-06   | Old/new source-cook-load-save/reload tests          | planned   | Verify every field, mask, curve, black influence and D, resolved-setting equality, old-record defaults and malformed boundaries.                                                                                                                                                       |
-| EX06-07   | Runtime asynchronous mask acceptance prerequisite   | validated | Pending/resident/failed masks and atomic accepted revisions already exist from runtime work, including direct SetConfig loading. Persistence round-trip remains EX06-04/06. [Evidence](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/review-r028-manifest.json). |
-| EX06-08   | DemoShell controls and status                       | planned   | Correct controls/labels; expose requested versus effective settings and resource/metering failures.                                                                                                                                                                                    |
-| EX06-09   | Experiment-owned activation policy                  | planned   | Prevent saved camera/scene/post-process reapplication from overriding a LightBench recipe while preserving other demos' behavior and personal settings.                                                                                                                                |
-| EX06-GATE | Authoring/persistence/isolation gate                | planned   | Identical resolved settings across the full round-trip, deterministic legacy loading and no personal-settings mutation during batch execution.                                                                                                                                         |
+| ID        | Delivered result                                                                  | Status    |
+| --------- | --------------------------------------------------------------------------------- | --------- |
+| EX06-01   | Native physical-camera persistence and existing editor adapters                   | validated |
+| EX06-02   | Canonical exposure schemas and complete-candidate validation                      | validated |
+| EX06-03   | Current packed exposure record and bounded curve serialization                    | validated |
+| EX06-04   | Source-qualified texture identity, cooker/package remapping and loaders           | validated |
+| EX06-05   | Scripting and C++20-compatible editor/native transport                            | validated |
+| EX06-06   | Current-format round-trip, tooling/fixture migration and obsolete-input rejection | validated |
+| EX06-07   | Asynchronous mask loading, atomic acceptance and GPU upload handoff               | validated |
+| EX06-08   | DemoShell controls/status, rendered UX and reloadable demo texture assignments    | validated |
+| EX06-09   | LightBench experiment ownership and personal-settings isolation                   | validated |
+| EX06-GATE | Authoring, persistence, migration and isolation acceptance                        | validated |
+
+**Evidence:** [slice acceptance](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice6/slice6-progress.json),
+[native validation index](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice6/slice6-validation-index.json),
+[TexturedCube regression and user confirmation](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice6/texturedcube-regression.json).
+The [plan](plan/exposure-and-lightbench-correction.md#slice-6---finish-authoring-serialization-and-configuration-isolation)
+retains the wire/API contracts and
+[UX requirements](plan/exposure-and-lightbench-correction.md#demoshell-user-scenarios-and-implementation-quality).
+No EX06 delivery item remains open.
 
 ### 3.4 Slice 7 work items
 
@@ -767,7 +681,7 @@ Approved contracts are requirements, not completed implementation.
 | ID        | Work item                                   | Status  | Exact remaining delivery                                                                                                                                                 |
 | --------- | ------------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | EX07-01   | Directional reference calibration           | planned | Verify the white directional reference against the actual production BRDF/material and exposure equations.                                                               |
-| EX07-02   | Point units and distance behavior           | planned | Flux/(4*pi), inverse-square attenuation, smooth range fade, 0.001 m numerical floor and zero-separation handling.                                                        |
+| EX07-02   | Point units and distance behavior           | planned | Flux/(4\*pi), inverse-square attenuation, smooth range fade, 0.001 m numerical floor and zero-separation handling.                                                       |
 | EX07-03   | Spot normalization                          | planned | Smooth-cone solid-angle normalization, hard-cone limit, zero-angle rejection and angular/range boundary tests.                                                           |
 | EX07-04   | Shared forward/deferred consumers           | planned | Apply the same light-unit helpers and receiver-cosine convention to both active rendering families.                                                                      |
 | EX07-05   | Production material/color-space oracle      | planned | Freeze packed albedo, normal, dielectric specular and color-space interpretation; use an independent reference calculation rather than treating roughness as Lambertian. |
