@@ -153,6 +153,13 @@ namespace postprocess {
     };
 
     struct HdrProduct {
+      // Exposure.hlsl product identities. These are wire values, not array
+      // indices.
+      static constexpr std::uint32_t kSkyView = 5U;
+      static constexpr std::uint32_t kCameraAerialPerspective = 6U;
+      static constexpr std::uint32_t kVolumetricFog = 10U;
+      static constexpr std::uint32_t kSceneColor = 11U;
+
       const graphics::Texture* texture { nullptr };
       ShaderVisibleIndex srv { kInvalidShaderVisibleIndex };
       std::uint32_t id { 0U };
@@ -258,6 +265,9 @@ namespace postprocess {
       = CompositionView::kInvalidViewStateHandle) -> void;
 
   private:
+    static constexpr std::size_t kAverageConstantWordCount = 28U;
+    static constexpr std::size_t kFrameConstantWordCount = 12U;
+
     auto RecordSceneRange(RenderContext& ctx,
       graphics::CommandRecorder& recorder, const FrameLease& frame,
       const graphics::Texture& source, ShaderVisibleIndex source_srv,
@@ -286,7 +296,7 @@ namespace postprocess {
     };
 
     struct PendingViewState {
-      const graphics::CommandRecorder* recorder;
+      const graphics::CommandRecorder* recorder { nullptr };
       PerViewExposureState state;
     };
 
@@ -335,7 +345,7 @@ namespace postprocess {
       std::array<std::uint32_t, 16U>>>
       constants_publisher_;
     std::unique_ptr<::oxygen::vortex::internal::PerViewStructuredPublisher<
-      std::array<std::uint32_t, 28U>>>
+      std::array<std::uint32_t, kAverageConstantWordCount>>>
       average_constants_publisher_;
     std::optional<graphics::ComputePipelineDesc> clear_pipeline_;
     std::optional<graphics::ComputePipelineDesc> histogram_pipeline_;
@@ -353,7 +363,7 @@ namespace postprocess {
       std::array<std::uint32_t, 8U>>>
       conversion_constants_publisher_;
     std::unique_ptr<::oxygen::vortex::internal::PerViewStructuredPublisher<
-      std::array<std::uint32_t, 12U>>>
+      std::array<std::uint32_t, kFrameConstantWordCount>>>
       frame_constants_publisher_;
     std::vector<std::shared_ptr<FrameResources>> frame_pool_;
     std::map<std::pair<ViewId, CompositionView::ViewStateHandle>, FrameLease>
