@@ -4,12 +4,42 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #ifdef NDEBUG
+#  include <array>
+#  include <chrono>
+#  include <filesystem>
+#  include <fstream>
+#  include <memory>
+#  include <ratio>
+#  include <string>
 #  include <tuple>
+#  include <vector>
+
+#  include <nlohmann/json.hpp>
+#  include <nlohmann/json_fwd.hpp>
+
+#  include <Oxygen/Base/Logging.h>
+#  include <Oxygen/Base/ObserverPtr.h>
+#  include <Oxygen/Console/Command.h>
+#  include <Oxygen/Core/Types/Format.h>
+#  include <Oxygen/Core/Types/View.h>
+#  include <Oxygen/Data/MaterialDomain.h>
+#  include <Oxygen/OxCo/Co.h>
+#  include <Oxygen/OxCo/Run.h>
+#  include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
+#  include <Oxygen/Scene/Camera/Perspective.h>
+#  include <Oxygen/Scene/Environment/Fog.h>
+#  include <Oxygen/Scene/Environment/SceneEnvironment.h>
+#  include <Oxygen/Scene/Environment/SkyAtmosphere.h>
+#  include <Oxygen/Vortex/CompositionView.h>
+#  include <Oxygen/Vortex/Diagnostics/DiagnosticsTypes.h>
+#  include <Oxygen/Vortex/RenderContext.h>
+#  include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
+#  include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestTags.h>
 #endif
 
 #include <Oxygen/Graphics/Common/Framebuffer.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/Test/Exposure/Benchmarks/ExposureBenchmarkFixture.h>
 

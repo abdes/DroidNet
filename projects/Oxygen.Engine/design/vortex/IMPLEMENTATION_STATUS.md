@@ -106,11 +106,14 @@ with no changed-code warnings or added suppressions. The 15 unchanged residuals
 and their dispositions are in the [quality result](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice52/quality-result.json).
 The selected 10 service and 55 native exposure Debug cases pass, as do the
 10 Release service cases. Both production owners compile in Debug and Release.
-Release exposure linking is blocked by missing direct headers in the existing
-Release-only `ExposureOverhead_bench.cpp` body, removed by `e779d08bf`. A one-file
-include repair is awaiting scope agreement; its original failed build log is
-retained in `slice52/build-release.log`. The 55 Release exposure cases and single
-matched I02 preservation check remain open. EX052-GATE is not yet closed.
+The user approved the blocking include repair in
+`ExposureOverhead_bench.cpp`: Release-only direct dependencies removed by
+`e779d08bf` are restored, the benchmark body is unchanged, and Release links.
+The original failed build log is retained in `slice52/build-release.log`; the
+successful incremental build is `slice52/build-release-include-repair.log`.
+The same 55 Release exposure cases now pass. All 65 selected cases pass in
+each configuration, without rerunning the successful earlier checks. The single
+matched I02 preservation check remains open. EX052-GATE is not yet closed.
 
 **Slice 5.1 closed (2026-09-21).** The user accepts the measured CPU cost for
 current delivery and defers further optimization to a later milestone.
@@ -569,6 +572,14 @@ The user approved these bounded groups before implementation:
 | Array and optional access in both owners                                             | Use compile-time element access for fixed words and checked access for runtime frame/product indices and required pipeline/seed values. Preserve valid-path values, ordering and lifetime retention. | Existing frame-slot retirement, filter-gradient retry, precision/producer ordering, seed and source-loss cases in Debug/Release. Stop when selected accesses are safe and diagnostics resolved. |
 | Repeated shader control values in ExposurePass and product identities in both owners | Name the existing controls and identities without changing their numerical values, constant-buffer layout or shaders.                                                                                | Source-to-shader value review plus affected gradient, composition, admission and conversion cases. Stop at equivalent payloads and dispatches.                                                  |
 | Local cast/initializer/return and private nodiscard diagnostics                      | Apply local modern C++ corrections without changing public interfaces or ownership.                                                                                                                  | Scoped tidy and affected compilation; reuse valid behavioral proof for non-semantic changes.                                                                                                    |
+
+The user additionally approved the one-file Release include repair in
+`Test/Exposure/Benchmarks/ExposureOverhead_bench.cpp` after the required build
+exposed missing types/functions in its NDEBUG-only body. Restore direct headers
+under the same guard; keep behavior, test identities and its existing disabled
+status. Use Release-configured oxytidy and incremental Release compilation.
+Existing Debug and Release service checks remain applicable to this include-only
+change. The original failed build and the successful retry are both retained.
 
 Public enum sizes, lease-copy optimization and literal ABI assertions remain
 outside this approved batch. Record their residual diagnostics; do not suppress
