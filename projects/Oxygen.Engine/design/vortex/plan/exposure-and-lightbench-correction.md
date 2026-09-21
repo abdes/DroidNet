@@ -7,7 +7,7 @@ Status: `in_progress` — current slice state and evidence are maintained in the
 are updated there; this plan owns the requirements and gates.
 
 Date: 2026-09-16
-Updated: 2026-09-21 — Slice 5.1 closed at the user-accepted measured CPU cost; further CPU optimization deferred.
+Updated: 2026-09-21 — Slice 5.1 closed; Slice 5.2 narrowed to residual fixes and impact-based validation.
 
 Paths are relative to `projects/Oxygen.Engine` unless identified as
 repository-root paths.
@@ -27,8 +27,8 @@ Engine correctness slices use native fixtures and RenderDoc before the bench
 instrumentation is available. Performance acceptance uses Oxygen's built-in
 profiling and native Release execution. Each slice includes its tests and
 owning-document updates. The user approved the inserted plan and authorized
-Slice 5.1 execution on 2026-09-19. Slice 5.2 retains its diagnostic-inventory and
-restructuring-design agreement gate before quality edits.
+Slice 5.1 execution on 2026-09-19. Slice 5.2 now requires agreement only on the
+finite residual fix list and necessary API changes before quality edits.
 
 For a fresh start or resume, read the tracker's
 [Current work](../IMPLEMENTATION_STATUS.md#31-current-work) for the active
@@ -972,24 +972,49 @@ remain future goals, not passed results. Broader CPU/scaling qualification
 belongs to that deferred work. No further benchmark or production correction
 is required in Slice 5.1.
 
-### Slice 5.2 - Improve exposure code quality and test structure
+### Slice 5.2 - Close remaining exposure quality issues
 
-The authoritative task breakdown, suppression policy, proposed suite boundaries
-and proof requirements are in
+**Scope revised 2026-09-21 at the user's request.** The authoritative residual
+scope, reused evidence and change-specific checks are in
 [IMPLEMENTATION_STATUS.md, Slice 5.2](../IMPLEMENTATION_STATUS.md#322-slice-52-code-quality-and-test-structure).
 
-- Complete Slice 5.1 first; agree the actual diagnostic inventory and structure
-  with the user before quality editing starts.
-- Fix scoped clang-tidy issues using repository configuration; justify narrow
-  exceptions without hiding warning families or skipped translation units.
-- Separate shared fixtures and coherent scenario groups while preserving test
-  identity/discovery, independent oracles, native ownership and opt-in workloads.
-- Keep restructuring behavior-preserving and verify the accepted performance
-  baseline in Release after the owning correctness gates.
+1. **EX052-02 — Agree residual fixes.** Reuse the existing diagnostics and
+   accepted source/test/performance checkpoints. Start with ExposurePass and
+   PostProcessService; add another file only for a named exposure finding.
+   Agree a finite list with concrete benefit, proposed change and affected checks.
+   Refresh only stale/missing analysis; no new general inventory or baseline run.
+2. **EX052-04 — Fix that list.** Keep changes coherent, warning-free and within
+   existing contracts. A necessary API/ownership change requires interface and
+   migration review before coding. Add tests only for real uncovered defects.
+3. **EX052-10 — Validate affected code.** Use focused Debug checks while editing.
+   At closure, compile the affected Release paths and run the union of required
+   affected cases, reusing results still valid for final inputs. A full owning
+   executable runs only when the shared change affects all its cases, once per
+   required configuration. No automatic engine-wide or repeated per-item gates.
+4. **EX052-12/GATE — Close.** Record the result and reused evidence, update owners
+   and commit. An empty justified fix list closes through applicable existing
+   proof; do not invent work to fill the slice.
 
-**Gate:** EX052-GATE passes with justified diagnostic disposition, complete
-coverage mapping, independently buildable commits and no numerical/performance
-regression. Both inserted slices must close before Slice 6 starts.
+Native fixture extraction/scenario splitting (`2c696c522`), the complete Vortex
+test-quality review (`4f359ce2d`), and recording/binding migration with 589 Debug
+and 403 Release checks (`22cea346b`) are completed inputs. EX052-05/06 are already
+validated; the other redundant setup/restructuring/check tasks are merged into
+the four steps above. Do not repeat those deliveries, sweep every test again,
+change targets for cosmetic reasons, or experiment with `/bigobj` without a
+real build problem. Preserve independent numerical oracles and existing filters.
+
+No benchmark or visual campaign is mandatory for 5.2. Test-only and non-semantic
+quality edits reuse accepted performance/output evidence. Changes that can alter
+hot-path work, lifetime, synchronization, shader data or output need an explicit
+impact decision and only the relevant matched check. The accepted CPU cost is
+preserved; its original tighter targets and further optimization stay in the
+later milestone. The 48-run GPU matrix and previous overhead/lifecycle campaigns
+remain closed.
+
+**Gate:** the agreed residual fixes are resolved, changed code is tidy-clean,
+necessary affected checks pass, and existing contracts and accepted performance
+are preserved. Slice 6 starts only after this bounded gate and separate work
+authorization. This plan revision does not start implementation.
 
 ### Slice 6 - Finish authoring, serialization and configuration isolation
 

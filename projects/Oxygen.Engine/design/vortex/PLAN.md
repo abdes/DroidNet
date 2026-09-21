@@ -82,19 +82,17 @@ native MultiView; **5.1 performance; 5.2 quality**; persistence/configuration;
 physical lights; independent instruments; interactive demos; final acceptance.
 
 Status: `in_progress`. Slices 1-5 have numerical/integration qualification;
-native 1080p/60 performance acceptance remains open in Slice 5.1. Slice 5.2
-then fixes scoped clang-tidy issues and restructures tests while preserving
-behavior and performance. Both task breakdowns, budgets and current evidence
-are maintained in [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md#3-exposure-delivery-status).
-The user approved the plan and authorized Slice 5.1 execution on 2026-09-19.
-The 2026-09-20 performance revision closes the delivered H1-H5/R091 checkpoints.
-Resume at the tracker's Current work checkpoint. Remaining performance order:
-EX051-03 documentation-only inventory, 10A SceneColor ownership, 04 FP32-only baseline,
-05 four-pair format decision, 09 precision policy, 11 CPU attribution and 12-14
-integration/acceptance. EX051-08 is merged into 09. Follow the tracker's
-[Current work](IMPLEMENTATION_STATUS.md#31-current-work) and
-[bounded task scopes](IMPLEMENTATION_STATUS.md#321-slice-51-performance-qualification-and-correction).
-Quality edits retain the EX052-03 agreement gate.
+Slice 5.1 closed on 2026-09-21 at the user-accepted measured CPU cost. Further
+CPU optimization belongs to a later milestone. Slice 5.2 is now a focused
+residual-quality pass: agree remaining useful fixes, implement them, validate
+affected code and close. Its fixture extraction, native test splitting and broad
+test-quality review are already delivered and are not repeated. Existing passing
+checks are reused; broad suites, benchmarks and visual runs require a concrete
+change-impact reason. No new implementation starts with this plan revision.
+Follow the tracker's [Current work](IMPLEMENTATION_STATUS.md#31-current-work) and
+[revised 5.2 scope](IMPLEMENTATION_STATUS.md#322-slice-52-code-quality-and-test-structure).
+EX052-02 owns agreement on the actual residual fixes and any proposed API change;
+the former standalone EX052-03 design task is merged into it.
 Slices 6-10, including the full LightBench delivery, are still
 required. Earlier incremental test counts and proofs remain in the tracker's
 linked manifests and Git history; the
