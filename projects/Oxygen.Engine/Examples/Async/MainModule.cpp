@@ -43,9 +43,9 @@
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Scene/Environment/SkyLight.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
-#include <Oxygen/Scene/SceneFlags.h>
 #include <Oxygen/Scene/Light/SpotLight.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Scene/SceneFlags.h>
 #include <Oxygen/Scene/Types/RenderablePolicies.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/SceneCameraViewResolver.h>
@@ -377,9 +377,9 @@ auto BuildGroundPlaneAsset() -> std::shared_ptr<oxygen::data::GeometryAsset>
     .color = { 1, 1, 1, 1 } });
 
   std::vector<uint32_t> indices { 0, 2, 1, 2, 3, 1 };
-  const auto material = MakeSolidColorMaterial(
-    "GroundMat", { 0.48F, 0.50F, 0.46F, 1.0F },
-    oxygen::data::MaterialDomain::kOpaque, true, 0.0F, 0.92F);
+  const auto material
+    = MakeSolidColorMaterial("GroundMat", { 0.48F, 0.50F, 0.46F, 1.0F },
+      oxygen::data::MaterialDomain::kOpaque, true, 0.0F, 0.92F);
 
   auto mesh = MeshBuilder(0, "GroundPlane")
                 .WithVertices(vertices)
@@ -825,8 +825,8 @@ auto MainModule::OnPublishViews(observer_ptr<engine::FrameContext> context)
   view_ctx.composite_source = observer_ptr { scene_fb_.get() };
   shell.OnRuntimeMainViewReady(main_view_id_, main_camera_, main_viewport);
 
-  renderer->UpsertPublishedRuntimeView(
-    *context, main_view_id_, std::move(view_ctx), vortex::ShadingMode::kDeferred);
+  renderer->UpsertPublishedRuntimeView(*context, main_view_id_,
+    std::move(view_ctx), vortex::ShadingMode::kDeferred);
   const auto published_view_id
     = renderer->ResolvePublishedRuntimeViewId(main_view_id_);
   if (published_view_id != kInvalidViewId) {
@@ -844,8 +844,8 @@ auto MainModule::OnPublishViews(observer_ptr<engine::FrameContext> context)
     auto surface = app_window_->GetSurface().lock();
     if (target_fb && surface) {
       if (published_view_id == kInvalidViewId) {
-        TrackFrameAction(
-          "Publish views skipped composition registration - published view unavailable");
+        TrackFrameAction("Publish views skipped composition registration - "
+                         "published view unavailable");
         TrackPhaseEnd();
         co_return;
       }
@@ -1018,10 +1018,8 @@ auto MainModule::EnsureExampleScene() -> void
     const auto domain = is_transparent ? data::MaterialDomain::kAlphaBlended
                                        : data::MaterialDomain::kOpaque;
     const glm::vec4 color(rgb.x, rgb.y, rgb.z, alpha);
-    const float roughness
-      = 0.08F + (0.84F * static_cast<float>(i % 4) / 3.0F);
-    const float metalness
-      = static_cast<float>((i / 4) % 4) / 3.0F;
+    const float roughness = 0.08F + (0.84F * static_cast<float>(i % 4) / 3.0F);
+    const float metalness = static_cast<float>((i / 4) % 4) / 3.0F;
     const auto mat = MakeSolidColorMaterial(
       mat_name.c_str(), color, domain, false, metalness, roughness);
     // Apply override for submesh index 0 across all LODs so switching LOD
@@ -1083,10 +1081,11 @@ auto MainModule::EnsureExampleEnvironment(scene::Scene& scene) -> void
     return;
   }
 
-  auto& atmosphere = environment->AddSystem<scene::environment::SkyAtmosphere>();
+  auto& atmosphere
+    = environment->AddSystem<scene::environment::SkyAtmosphere>();
   atmosphere.SetEnabled(true);
-  atmosphere.SetTransformMode(scene::environment::
-      SkyAtmosphereTransformMode::kPlanetTopAtAbsoluteWorldOrigin);
+  atmosphere.SetTransformMode(scene::environment::SkyAtmosphereTransformMode::
+      kPlanetTopAtAbsoluteWorldOrigin);
   atmosphere.SetRenderInMainPass(true);
   atmosphere.SetPlanetRadiusMeters(engine::atmos::kDefaultPlanetRadiusM);
   atmosphere.SetAtmosphereHeightMeters(
@@ -1104,8 +1103,7 @@ auto MainModule::EnsureExampleEnvironment(scene::Scene& scene) -> void
   atmosphere.SetOzoneDensityProfile(engine::atmos::kDefaultOzoneDensityProfile);
   atmosphere.SetMultiScatteringFactor(1.0F);
   atmosphere.SetSkyLuminanceFactorRgb({ 1.0F, 1.0F, 1.0F });
-  atmosphere.SetSkyAndAerialPerspectiveLuminanceFactorRgb(
-    { 1.0F, 1.0F, 1.0F });
+  atmosphere.SetSkyAndAerialPerspectiveLuminanceFactorRgb({ 1.0F, 1.0F, 1.0F });
   atmosphere.SetSunDiskEnabled(true);
   atmosphere.SetAerialPerspectiveDistanceScale(1.0F);
   atmosphere.SetAerialPerspectiveStartDepthMeters(30.0F);
@@ -1358,8 +1356,8 @@ auto MainModule::EnsureSceneFramebuffer(
   auto framebuffer_desc = graphics::FramebufferDesc {};
   framebuffer_desc.AddColorAttachment({ .texture = std::move(color_texture) });
   scene_fb_ = gfx->CreateFramebuffer(framebuffer_desc);
-  CHECK_F(static_cast<bool>(scene_fb_),
-    "Failed to create Async scene framebuffer");
+  CHECK_F(
+    static_cast<bool>(scene_fb_), "Failed to create Async scene framebuffer");
 
   scene_fb_width_ = width;
   scene_fb_height_ = height;

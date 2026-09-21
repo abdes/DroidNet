@@ -23,8 +23,10 @@ struct EnvironmentEvaluationParameters {
 
 static_assert(sizeof(EnvironmentEvaluationParameters) == 16);
 static_assert(alignof(EnvironmentEvaluationParameters) == 4);
-static_assert(offsetof(EnvironmentEvaluationParameters, ambient_intensity) == 0);
-static_assert(offsetof(EnvironmentEvaluationParameters, average_brightness) == 4);
+static_assert(
+  offsetof(EnvironmentEvaluationParameters, ambient_intensity) == 0);
+static_assert(
+  offsetof(EnvironmentEvaluationParameters, average_brightness) == 4);
 static_assert(offsetof(EnvironmentEvaluationParameters, blend_fraction) == 8);
 static_assert(offsetof(EnvironmentEvaluationParameters, flags) == 12);
 

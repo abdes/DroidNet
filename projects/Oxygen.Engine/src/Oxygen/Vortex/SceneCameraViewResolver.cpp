@@ -18,19 +18,19 @@
 namespace oxygen::vortex {
 namespace {
 
-constexpr float kDefaultNearPlane = 0.1F;
-constexpr float kDefaultFarPlane = 1000.0F;
-constexpr std::size_t kOrthographicFarExtentIndex = 5U;
+  constexpr float kDefaultNearPlane = 0.1F;
+  constexpr float kDefaultFarPlane = 1000.0F;
+  constexpr std::size_t kOrthographicFarExtentIndex = 5U;
 
-auto ResolveDefaultScissor(const ViewPort& viewport) -> Scissors
-{
-  return {
-    .left = static_cast<int32_t>(viewport.top_left_x),
-    .top = static_cast<int32_t>(viewport.top_left_y),
-    .right = static_cast<int32_t>(viewport.top_left_x + viewport.width),
-    .bottom = static_cast<int32_t>(viewport.top_left_y + viewport.height),
-  };
-}
+  auto ResolveDefaultScissor(const ViewPort& viewport) -> Scissors
+  {
+    return {
+      .left = static_cast<int32_t>(viewport.top_left_x),
+      .top = static_cast<int32_t>(viewport.top_left_y),
+      .right = static_cast<int32_t>(viewport.top_left_x + viewport.width),
+      .bottom = static_cast<int32_t>(viewport.top_left_y + viewport.height),
+    };
+  }
 
 } // namespace
 

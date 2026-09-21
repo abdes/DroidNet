@@ -21,44 +21,45 @@ class Renderer;
 
 namespace lighting::internal {
 
-struct BuiltLightGridView {
-  ViewId view_id { kInvalidViewId };
-  LightingFrameBindings bindings {};
-  LightGridMetadata metadata {};
-};
+  struct BuiltLightGridView {
+    ViewId view_id { kInvalidViewId };
+    LightingFrameBindings bindings {};
+    LightGridMetadata metadata {};
+  };
 
-struct BuiltLightGridFrame {
-  std::vector<ForwardLocalLightRecord> local_light_records {};
-  std::vector<std::uint32_t> directional_light_indices {};
-  std::vector<BuiltLightGridView> per_view {};
-  std::uint64_t selection_epoch { 0U };
-};
-
-class LightGridBuilder {
-public:
-  struct BuildStats {
-    frame::SequenceNumber frame_sequence { 0U };
-    frame::Slot frame_slot { frame::kInvalidSlot };
-    std::uint32_t build_count { 0U };
-    std::uint32_t published_view_count { 0U };
-    std::uint32_t directional_light_count { 0U };
-    std::uint32_t local_light_count { 0U };
+  struct BuiltLightGridFrame {
+    std::vector<ForwardLocalLightRecord> local_light_records {};
+    std::vector<std::uint32_t> directional_light_indices {};
+    std::vector<BuiltLightGridView> per_view {};
     std::uint64_t selection_epoch { 0U };
   };
 
-  explicit LightGridBuilder(Renderer& renderer);
+  class LightGridBuilder {
+  public:
+    struct BuildStats {
+      frame::SequenceNumber frame_sequence { 0U };
+      frame::Slot frame_slot { frame::kInvalidSlot };
+      std::uint32_t build_count { 0U };
+      std::uint32_t published_view_count { 0U };
+      std::uint32_t directional_light_count { 0U };
+      std::uint32_t local_light_count { 0U };
+      std::uint64_t selection_epoch { 0U };
+    };
 
-  auto OnFrameStart(frame::SequenceNumber sequence, frame::Slot slot) -> void;
-  [[nodiscard]] auto Build(const FrameLightingInputs& inputs) -> BuiltLightGridFrame;
-  [[nodiscard]] auto GetLastBuildStats() const noexcept -> const BuildStats&
-  {
-    return last_build_stats_;
-  }
+    explicit LightGridBuilder(Renderer& renderer);
 
-private:
-  Renderer& renderer_;
-  BuildStats last_build_stats_ {};
-};
+    auto OnFrameStart(frame::SequenceNumber sequence, frame::Slot slot) -> void;
+    [[nodiscard]] auto Build(const FrameLightingInputs& inputs)
+      -> BuiltLightGridFrame;
+    [[nodiscard]] auto GetLastBuildStats() const noexcept -> const BuildStats&
+    {
+      return last_build_stats_;
+    }
+
+  private:
+    Renderer& renderer_;
+    BuildStats last_build_stats_ {};
+  };
 
 } // namespace lighting::internal
 

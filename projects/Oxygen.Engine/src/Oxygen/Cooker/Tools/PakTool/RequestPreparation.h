@@ -34,17 +34,13 @@ public:
   virtual ~IRequestPreparationFileSystem() = default;
 
   [[nodiscard]] virtual auto Exists(const std::filesystem::path& path) const
-    -> bool
-    = 0;
+    -> bool = 0;
   [[nodiscard]] virtual auto IsDirectory(
-    const std::filesystem::path& path) const -> bool
-    = 0;
+    const std::filesystem::path& path) const -> bool = 0;
   [[nodiscard]] virtual auto IsRegularFile(
-    const std::filesystem::path& path) const -> bool
-    = 0;
+    const std::filesystem::path& path) const -> bool = 0;
   virtual auto CreateDirectories(const std::filesystem::path& path)
-    -> std::error_code
-    = 0;
+    -> std::error_code = 0;
 };
 
 class RealRequestPreparationFileSystem final

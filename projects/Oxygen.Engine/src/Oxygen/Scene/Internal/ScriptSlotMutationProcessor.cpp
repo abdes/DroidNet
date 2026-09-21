@@ -37,8 +37,7 @@ namespace {
     uint64_t content_hash { 0 };
 
     [[nodiscard]] auto operator==(const ScriptSlotSignature&) const noexcept
-      -> bool
-      = default;
+      -> bool = default;
   };
 
   [[nodiscard]] auto IsScriptSlotActive(const ScriptingComponent::Slot& slot)

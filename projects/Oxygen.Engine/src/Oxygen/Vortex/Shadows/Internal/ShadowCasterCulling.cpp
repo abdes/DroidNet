@@ -20,7 +20,7 @@ auto ShadowCasterCulling::BuildDrawCommands(
   const auto metadata = prepared_scene.GetDrawMetadata();
   draw_commands_.reserve(metadata.size());
   for (std::uint32_t draw_index = 0U; draw_index < metadata.size();
-       ++draw_index) {
+    ++draw_index) {
     const auto& draw = metadata[draw_index];
     if (!draw.flags.IsSet(PassMaskBit::kShadowCaster)) {
       continue;
@@ -28,7 +28,8 @@ auto ShadowCasterCulling::BuildDrawCommands(
 
     draw_commands_.push_back(DrawCommand {
       .draw_index = draw_index,
-      .index_count = draw.is_indexed != 0U ? draw.index_count : draw.vertex_count,
+      .index_count
+      = draw.is_indexed != 0U ? draw.index_count : draw.vertex_count,
       .instance_count = (std::max)(draw.instance_count, 1U),
       .start_index = draw.first_index,
       .base_vertex = draw.base_vertex,
@@ -38,7 +39,8 @@ auto ShadowCasterCulling::BuildDrawCommands(
   }
 }
 
-auto ShadowCasterCulling::GetDrawCommands() const -> std::span<const DrawCommand>
+auto ShadowCasterCulling::GetDrawCommands() const
+  -> std::span<const DrawCommand>
 {
   return draw_commands_;
 }

@@ -62,16 +62,11 @@ constexpr float kFloorCollisionTopZ
 // Oxygen is +Z up. Keep the visible floor just above the UE-style atmosphere
 // planet-top boundary at Z=0 so per-pixel sun transmittance is not occluded.
 constexpr float kFloorVisualClearanceAboveAtmosphereM = 0.02F;
-constexpr oxygen::Vec3 kFloorVisualCenterWs {
-  kFloorCollisionCenterWs.x,
+constexpr oxygen::Vec3 kFloorVisualCenterWs { kFloorCollisionCenterWs.x,
   kFloorCollisionCenterWs.y,
-  kFloorCollisionTopZ + kFloorVisualClearanceAboveAtmosphereM
-};
-constexpr oxygen::Vec3 kFloorVisualScale {
-  kFloorCollisionSize.x,
-  kFloorCollisionSize.y,
-  1.0F
-};
+  kFloorCollisionTopZ + kFloorVisualClearanceAboveAtmosphereM };
+constexpr oxygen::Vec3 kFloorVisualScale { kFloorCollisionSize.x,
+  kFloorCollisionSize.y, 1.0F };
 constexpr oxygen::Vec3 kRampPosition { 0.0F, -6.5F, 4.6F };
 constexpr oxygen::Vec3 kRampScale { 3.6F, 15.0F, 0.05F };
 constexpr oxygen::Vec3 kRampRailScale { 0.35F, 15.0F, 0.8F };
@@ -650,9 +645,9 @@ auto MainModule::BuildProceduralScene() -> bool
   flippers_.clear();
   player_body_.reset();
 
-  const auto floor_node = SpawnRenderableNode("Floor", floor_geometry_,
-    kFloorVisualCenterWs, glm::quat { 1.0F, 0.0F, 0.0F, 0.0F },
-    kFloorVisualScale);
+  const auto floor_node
+    = SpawnRenderableNode("Floor", floor_geometry_, kFloorVisualCenterWs,
+      glm::quat { 1.0F, 0.0F, 0.0F, 0.0F }, kFloorVisualScale);
   static_nodes_.push_back(floor_node);
 
   const auto ramp_rotation = MakeXRotationQuat(kRampPitchRad);
@@ -811,20 +806,20 @@ auto MainModule::InitializePhysicsScenario() -> bool
     desc.type = physics::body::BodyType::kStatic;
     desc.flags = physics::body::BodyFlags::kNone;
     if (is_floor) {
-      desc.shape
-        = physics::BoxShape { .extents = 0.5F * kFloorCollisionSize };
+      desc.shape = physics::BoxShape { .extents = 0.5F * kFloorCollisionSize };
     } else if (is_sphere) {
       desc.shape = physics::SphereShape { .radius = 0.5F * scale.x };
     } else {
       desc.shape = physics::BoxShape { .extents = 0.5F * scale };
     }
-    desc.initial_position = is_floor ? kFloorCollisionCenterWs
-                                     : node.GetTransform().GetLocalPosition()
-                                         .value_or(Vec3 { 0.0F, 0.0F, 0.0F });
-    desc.initial_rotation = is_floor ? Quat { 1.0F, 0.0F, 0.0F, 0.0F }
-                                     : node.GetTransform().GetLocalRotation()
-                                         .value_or(Quat {
-                                           1.0F, 0.0F, 0.0F, 0.0F });
+    desc.initial_position = is_floor
+      ? kFloorCollisionCenterWs
+      : node.GetTransform().GetLocalPosition().value_or(
+          Vec3 { 0.0F, 0.0F, 0.0F });
+    desc.initial_rotation = is_floor
+      ? Quat { 1.0F, 0.0F, 0.0F, 0.0F }
+      : node.GetTransform().GetLocalRotation().value_or(
+          Quat { 1.0F, 0.0F, 0.0F, 0.0F });
     desc.friction = is_ramp_surface ? 0.14F : (is_sphere ? 0.80F : 0.88F);
     desc.restitution = is_sphere ? 0.03F : 0.02F;
 

@@ -20,17 +20,17 @@ namespace oxygen {
 class Graphics;
 class Platform;
 namespace graphics {
-class Framebuffer;
-class Texture;
-namespace imgui {
-  class ImGuiGraphicsBackend;
-} // namespace imgui
+  class Framebuffer;
+  class Texture;
+  namespace imgui {
+    class ImGuiGraphicsBackend;
+  } // namespace imgui
 } // namespace graphics
 namespace platform::imgui {
-class ImGuiSdl3Backend;
+  class ImGuiSdl3Backend;
 } // namespace platform::imgui
 namespace vortex {
-class Renderer;
+  class Renderer;
 }
 } // namespace oxygen
 
@@ -70,9 +70,8 @@ public:
 
 private:
   auto ApplyDefaultStyleAndFonts() -> void;
-  [[nodiscard]] auto EnsureOverlayFramebuffer(
-    observer_ptr<Graphics> gfx, std::uint32_t width, std::uint32_t height)
-    -> bool;
+  [[nodiscard]] auto EnsureOverlayFramebuffer(observer_ptr<Graphics> gfx,
+    std::uint32_t width, std::uint32_t height) -> bool;
   auto ClearOverlayFramebuffer() noexcept -> void;
 
   std::shared_ptr<Platform> platform_ {};

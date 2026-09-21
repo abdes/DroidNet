@@ -42,22 +42,18 @@ public:
   OXYGEN_MAKE_NON_MOVABLE(IWorldApi)
 
   virtual auto CreateWorld(const world::WorldDesc& desc)
-    -> PhysicsResult<WorldId>
-    = 0;
+    -> PhysicsResult<WorldId> = 0;
   virtual auto DestroyWorld(WorldId world_id) -> PhysicsResult<void> = 0;
   virtual auto Step(WorldId world_id, float delta_time, int max_sub_steps,
-    float fixed_dt_seconds) -> PhysicsResult<void>
-    = 0;
+    float fixed_dt_seconds) -> PhysicsResult<void> = 0;
 
   virtual auto GetActiveBodyTransforms(
     WorldId world_id, std::span<ActiveBodyTransform> out_transforms) const
-    -> PhysicsResult<size_t>
-    = 0;
+    -> PhysicsResult<size_t> = 0;
 
   virtual auto GetGravity(WorldId world_id) const -> PhysicsResult<Vec3> = 0;
   virtual auto SetGravity(WorldId world_id, const Vec3& gravity)
-    -> PhysicsResult<void>
-    = 0;
+    -> PhysicsResult<void> = 0;
 };
 
 } // namespace oxygen::physics::system

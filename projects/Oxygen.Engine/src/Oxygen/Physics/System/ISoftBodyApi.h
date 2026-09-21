@@ -36,23 +36,18 @@ public:
   OXYGEN_MAKE_NON_MOVABLE(ISoftBodyApi)
 
   virtual auto CreateSoftBody(WorldId world_id,
-    const softbody::SoftBodyDesc& desc) -> PhysicsResult<AggregateId>
-    = 0;
+    const softbody::SoftBodyDesc& desc) -> PhysicsResult<AggregateId> = 0;
   virtual auto DestroySoftBody(WorldId world_id, AggregateId soft_body_id)
-    -> PhysicsResult<void>
-    = 0;
+    -> PhysicsResult<void> = 0;
 
   virtual auto SetMaterialParams(WorldId world_id, AggregateId soft_body_id,
-    const softbody::SoftBodyMaterialParams& params) -> PhysicsResult<void>
-    = 0;
+    const softbody::SoftBodyMaterialParams& params) -> PhysicsResult<void> = 0;
   virtual auto GetState(WorldId world_id, AggregateId soft_body_id) const
-    -> PhysicsResult<softbody::SoftBodyState>
-    = 0;
+    -> PhysicsResult<softbody::SoftBodyState> = 0;
   virtual auto GetAuthority(WorldId world_id, AggregateId soft_body_id) const
-    -> PhysicsResult<aggregate::AggregateAuthority>
-    = 0;
-  virtual auto FlushStructuralChanges(WorldId world_id) -> PhysicsResult<size_t>
-    = 0;
+    -> PhysicsResult<aggregate::AggregateAuthority> = 0;
+  virtual auto FlushStructuralChanges(WorldId world_id)
+    -> PhysicsResult<size_t> = 0;
 };
 
 } // namespace oxygen::physics::system

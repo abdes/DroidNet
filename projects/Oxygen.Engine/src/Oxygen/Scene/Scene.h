@@ -37,8 +37,8 @@ enum class SceneMutationMask : uint32_t {
   // Not coalesced; each destroy record is delivered.
   kNodeDestroyed = 1u << 6u,
   kAllScriptSlotMutations = (1u << 0u) | (1u << 1u) | (1u << 2u),
-  kAllMutations
-  = kAllScriptSlotMutations | (1u << 3u) | (1u << 4u) | (1u << 5u) | (1u << 6u),
+  kAllMutations = kAllScriptSlotMutations | (1u << 3u) | (1u << 4u) | (1u << 5u)
+    | (1u << 6u),
 };
 
 constexpr auto operator|(const SceneMutationMask lhs,

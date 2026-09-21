@@ -49,19 +49,16 @@ struct TextureLayoutStrategy {
 
   // Compute number of bytes used by a single mip level in one array slice.
   [[nodiscard]] virtual auto ComputeMipSizeBytes(
-    const TextureDesc& desc, uint32_t mip) const -> uint32_t
-    = 0;
+    const TextureDesc& desc, uint32_t mip) const -> uint32_t = 0;
 
   // Compute total bytes used by all mips in a single array slice.
   [[nodiscard]] virtual auto ComputeTotalBytesPerArraySlice(
-    const TextureDesc& desc) const -> uint32_t
-    = 0;
+    const TextureDesc& desc) const -> uint32_t = 0;
 
   // Compute byte offset to the start of the specified mip within the
   // specified array slice.
   [[nodiscard]] virtual auto ComputeSliceMipBaseOffset(const TextureDesc& desc,
-    uint32_t array_slice, uint32_t mip) const -> uint32_t
-    = 0;
+    uint32_t array_slice, uint32_t mip) const -> uint32_t = 0;
 };
 
 //! Headless CPU-backed Texture (detailed)

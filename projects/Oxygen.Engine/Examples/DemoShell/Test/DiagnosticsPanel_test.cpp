@@ -118,9 +118,10 @@ NOLINT_TEST_F(DiagnosticsPanelTest, DrawContentsWithVortexRendererBound)
   panel.DrawContents();
   ImGui::Render();
 
-  EXPECT_EQ(settings_service.GetDebugMode(), engine::ShaderDebugMode::kDisabled);
   EXPECT_EQ(
-    settings_service.GetEffectiveDebugMode(), engine::ShaderDebugMode::kDisabled);
+    settings_service.GetDebugMode(), engine::ShaderDebugMode::kDisabled);
+  EXPECT_EQ(settings_service.GetEffectiveDebugMode(),
+    engine::ShaderDebugMode::kDisabled);
 }
 
 } // namespace oxygen::examples::testing

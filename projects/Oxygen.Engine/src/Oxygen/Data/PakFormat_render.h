@@ -200,8 +200,8 @@ enum class TexturePackingPolicyId : uint8_t {
 enum class TexturePayloadFlags : uint8_t {
   kNone = 0,
   kPremultipliedAlpha = (1 << 0), //!< Alpha is premultiplied
-  kTailMipsUncompressed
-  = (1 << 1), //!< Tail mips stored uncompressed (reserved)
+  kTailMipsUncompressed = (
+    1 << 1), //!< Tail mips stored uncompressed (reserved)
   // Bits 2-7 reserved for future use.
 };
 

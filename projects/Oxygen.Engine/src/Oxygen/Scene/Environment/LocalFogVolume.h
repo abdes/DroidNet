@@ -108,7 +108,8 @@ private:
   static constexpr int kMinSortPriority = -127;
   static constexpr int kMaxSortPriority = 127;
 
-  [[nodiscard]] static auto ClampNonNegative(const float value) noexcept -> float
+  [[nodiscard]] static auto ClampNonNegative(const float value) noexcept
+    -> float
   {
     return std::max(value, 0.0F);
   }

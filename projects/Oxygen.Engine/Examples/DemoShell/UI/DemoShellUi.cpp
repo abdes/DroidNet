@@ -39,6 +39,8 @@
 #include "DemoShell/UI/ContentLoaderPanel.h"
 #include "DemoShell/UI/ContentVm.h"
 #include "DemoShell/UI/DemoShellUi.h"
+#include "DemoShell/UI/DiagnosticsPanel.h"
+#include "DemoShell/UI/DiagnosticsVm.h"
 #include "DemoShell/UI/EnvironmentDebugPanel.h"
 #include "DemoShell/UI/EnvironmentVm.h"
 #include "DemoShell/UI/GridPanel.h"
@@ -48,8 +50,6 @@
 #include "DemoShell/UI/PanelSideBar.h"
 #include "DemoShell/UI/PostProcessPanel.h"
 #include "DemoShell/UI/PostProcessVm.h"
-#include "DemoShell/UI/DiagnosticsPanel.h"
-#include "DemoShell/UI/DiagnosticsVm.h"
 #include "DemoShell/UI/SidePanel.h"
 #include "DemoShell/UI/StatsOverlay.h"
 #include "DemoShell/UI/UiSettingsPanel.h"
@@ -483,8 +483,8 @@ auto DemoShellUi::Draw(observer_ptr<engine::FrameContext> fc) -> void
     if (impl_->panel_registry->RegisterPanel(impl_->diagnostics_panel)) {
       LOG_F(INFO, "Registered Diagnostics panel for the Vortex runtime");
     } else {
-      LOG_F(WARNING,
-        "Failed to register Diagnostics panel for the Vortex runtime");
+      LOG_F(
+        WARNING, "Failed to register Diagnostics panel for the Vortex runtime");
       impl_->diagnostics_panel.reset();
       impl_->diagnostics_vm.reset();
     }

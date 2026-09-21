@@ -34,12 +34,10 @@ public:
   OXYGEN_MAKE_NON_MOVABLE(IShapeApi)
 
   virtual auto CreateShape(const shape::ShapeDesc& desc)
-    -> PhysicsResult<ShapeId>
-    = 0;
+    -> PhysicsResult<ShapeId> = 0;
 
   virtual auto GetShapeDesc(ShapeId shape_id) const
-    -> PhysicsResult<shape::ShapeDesc>
-    = 0;
+    -> PhysicsResult<shape::ShapeDesc> = 0;
 
   /*!
    Destroy contract:

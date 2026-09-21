@@ -25,14 +25,14 @@ namespace oxygen::vortex::shadows {
 
 namespace {
 
-constexpr auto kPointShadowFaceDirections = std::array {
-  glm::vec3 { 1.0F, 0.0F, 0.0F },
-  glm::vec3 { -1.0F, 0.0F, 0.0F },
-  glm::vec3 { 0.0F, 1.0F, 0.0F },
-  glm::vec3 { 0.0F, -1.0F, 0.0F },
-  glm::vec3 { 0.0F, 0.0F, 1.0F },
-  glm::vec3 { 0.0F, 0.0F, -1.0F },
-};
+  constexpr auto kPointShadowFaceDirections = std::array {
+    glm::vec3 { 1.0F, 0.0F, 0.0F },
+    glm::vec3 { -1.0F, 0.0F, 0.0F },
+    glm::vec3 { 0.0F, 1.0F, 0.0F },
+    glm::vec3 { 0.0F, -1.0F, 0.0F },
+    glm::vec3 { 0.0F, 0.0F, 1.0F },
+    glm::vec3 { 0.0F, 0.0F, -1.0F },
+  };
 
 } // namespace
 
@@ -59,7 +59,8 @@ auto CascadeShadowPass::OnFrameStart(
 
 auto CascadeShadowPass::RenderDirectionalView(
   const PreparedViewShadowInput& view_input,
-  const FrameDirectionalLightSelection& directional_light) -> ViewShadowPassState
+  const FrameDirectionalLightSelection& directional_light)
+  -> ViewShadowPassState
 {
   auto state = ViewShadowPassState {};
   const auto allocation = allocator_->AcquireDirectionalSurface(
@@ -95,7 +96,8 @@ auto CascadeShadowPass::RenderSpotView(
     if (light.kind == LocalLightKind::kSpot
       && (light.flags & kLocalLightFlagCastsShadows) != 0U) {
       ++shadowed_spot_count;
-      resolution_hint = (std::max)(resolution_hint, light.shadow_resolution_hint);
+      resolution_hint
+        = (std::max)(resolution_hint, light.shadow_resolution_hint);
     }
   }
   if (shadowed_spot_count == 0U) {
@@ -104,8 +106,8 @@ auto CascadeShadowPass::RenderSpotView(
 
   const auto allocation
     = allocator_->AcquireSpotSurface(shadowed_spot_count, resolution_hint);
-  state.bindings = spot_setup_->BuildSpotFrameBindings(
-    view_input, local_lights, allocation);
+  state.bindings
+    = spot_setup_->BuildSpotFrameBindings(view_input, local_lights, allocation);
   state.shadow_surface = allocation.surface;
 
   if (view_input.prepared_scene != nullptr) {
@@ -117,14 +119,14 @@ auto CascadeShadowPass::RenderSpotView(
   auto depth_slices = std::vector<ShadowDepthPass::DepthSlice> {};
   depth_slices.reserve(state.bindings.spot_shadow_count);
   for (std::uint32_t spot_index = 0U;
-       spot_index < state.bindings.spot_shadow_count; ++spot_index) {
+    spot_index < state.bindings.spot_shadow_count; ++spot_index) {
     const auto& spot = state.bindings.spot_shadows[spot_index];
     depth_slices.push_back(ShadowDepthPass::DepthSlice {
       .light_view_projection = spot.light_view_projection,
-      .shadow_bias_parameters = glm::vec4(spot.direction_and_bias.w,
-        spot.sampling_metadata1.z, 1.0F, 0.0F),
-      .light_direction_to_source = glm::vec4(
-        glm::vec3(spot.direction_and_bias), 0.0F),
+      .shadow_bias_parameters = glm::vec4(
+        spot.direction_and_bias.w, spot.sampling_metadata1.z, 1.0F, 0.0F),
+      .light_direction_to_source
+      = glm::vec4(glm::vec3(spot.direction_and_bias), 0.0F),
       .light_position_and_inv_range = spot.position_and_inv_range,
       .target_slice = spot_index,
     });
@@ -151,7 +153,8 @@ auto CascadeShadowPass::RenderPointView(
     if (light.kind == LocalLightKind::kPoint
       && (light.flags & kLocalLightFlagCastsShadows) != 0U) {
       ++shadowed_point_count;
-      resolution_hint = (std::max)(resolution_hint, light.shadow_resolution_hint);
+      resolution_hint
+        = (std::max)(resolution_hint, light.shadow_resolution_hint);
     }
   }
   if (shadowed_point_count == 0U) {
@@ -173,18 +176,17 @@ auto CascadeShadowPass::RenderPointView(
   auto depth_slices = std::vector<ShadowDepthPass::DepthSlice> {};
   depth_slices.reserve(state.bindings.point_shadow_count * 6U);
   for (std::uint32_t point_index = 0U;
-       point_index < state.bindings.point_shadow_count; ++point_index) {
+    point_index < state.bindings.point_shadow_count; ++point_index) {
     const auto& point = state.bindings.point_shadows[point_index];
     for (std::uint32_t face_index = 0U; face_index < 6U; ++face_index) {
       depth_slices.push_back(ShadowDepthPass::DepthSlice {
-        .light_view_projection
-        = point.face_light_view_projection[face_index],
+        .light_view_projection = point.face_light_view_projection[face_index],
         .shadow_bias_parameters = glm::vec4(point.sampling_metadata0.w,
           point.sampling_metadata1.y, point.sampling_metadata1.z, 0.0F),
         .light_direction_to_source
         = glm::vec4(kPointShadowFaceDirections[face_index], 0.0F),
-        .light_position_and_inv_range = glm::vec4(
-          glm::vec3(point.position_and_inv_range),
+        .light_position_and_inv_range
+        = glm::vec4(glm::vec3(point.position_and_inv_range),
           point.position_and_inv_range.w),
         .target_slice = point_index * 6U + face_index,
       });

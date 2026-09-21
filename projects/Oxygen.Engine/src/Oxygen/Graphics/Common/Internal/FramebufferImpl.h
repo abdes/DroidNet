@@ -9,8 +9,8 @@
 #include <memory>
 #include <span>
 
-#include <Oxygen/Graphics/Common/DescriptorAllocationHandle.h>
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Graphics/Common/DescriptorAllocationHandle.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
 

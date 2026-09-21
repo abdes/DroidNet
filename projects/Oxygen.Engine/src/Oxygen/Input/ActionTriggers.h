@@ -117,8 +117,7 @@ protected:
     kOngoing,
   };
   virtual auto DoUpdateState(const ActionValue& action_value,
-    oxygen::time::CanonicalDuration delta_time) -> bool
-    = 0;
+    oxygen::time::CanonicalDuration delta_time) -> bool = 0;
 
   void SetTriggerState(State state)
   {

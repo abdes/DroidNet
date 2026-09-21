@@ -250,8 +250,7 @@ class ResourceTableDumper {
 public:
   virtual ~ResourceTableDumper() = default;
   virtual auto DumpAsync(const PakFile& pak, DumpContext& ctx,
-    AssetLoader& asset_loader) const -> oxygen::co::Co<>
-    = 0;
+    AssetLoader& asset_loader) const -> oxygen::co::Co<> = 0;
 };
 
 class BufferResourceTableDumper : public ResourceTableDumper {

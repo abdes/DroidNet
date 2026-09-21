@@ -76,25 +76,20 @@ public:
   OXYGEN_MAKE_NON_MOVABLE(IScriptCompilationService)
 
   [[nodiscard]] virtual auto RegisterCompiler(
-    std::shared_ptr<const IScriptCompiler> compiler) -> bool
-    = 0;
+    std::shared_ptr<const IScriptCompiler> compiler) -> bool = 0;
   [[nodiscard]] virtual auto UnregisterCompiler(
-    data::pak::scripting::ScriptLanguage language) -> bool
-    = 0;
+    data::pak::scripting::ScriptLanguage language) -> bool = 0;
   [[nodiscard]] virtual auto HasCompiler(
-    data::pak::scripting::ScriptLanguage language) const -> bool
-    = 0;
+    data::pak::scripting::ScriptLanguage language) const -> bool = 0;
 
-  [[nodiscard]] virtual auto CompileAsync(Request request) -> co::Co<Result>
-    = 0;
+  [[nodiscard]] virtual auto CompileAsync(Request request)
+    -> co::Co<Result> = 0;
   [[nodiscard]] virtual auto InFlightCount() const -> size_t = 0;
   [[nodiscard]] virtual auto Subscribe(CompileKey compile_key,
-    CompletionSubscriber subscriber) -> SubscriptionHandle
-    = 0;
+    CompletionSubscriber subscriber) -> SubscriptionHandle = 0;
   virtual auto Unsubscribe(const SubscriptionHandle& handle) -> bool = 0;
   [[nodiscard]] virtual auto AcquireForSlot(
-    Request request, SlotAcquireCallbacks callbacks) -> SlotAcquireHandle
-    = 0;
+    Request request, SlotAcquireCallbacks callbacks) -> SlotAcquireHandle = 0;
 
   virtual auto OnFrameStart(engine::EngineTag) -> void = 0;
 

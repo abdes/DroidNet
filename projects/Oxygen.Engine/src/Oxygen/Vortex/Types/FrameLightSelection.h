@@ -15,14 +15,14 @@
 
 namespace oxygen::vortex {
 
-inline constexpr std::uint32_t
-  kDirectionalLightAtmosphereModeFlagAuthority = 1U << 0U;
+inline constexpr std::uint32_t kDirectionalLightAtmosphereModeFlagAuthority = 1U
+  << 0U;
 inline constexpr std::uint32_t
   kDirectionalLightAtmosphereModeFlagPerPixelTransmittance = 1U << 1U;
 inline constexpr std::uint32_t
   kDirectionalLightAtmosphereModeFlagHasBakedGroundTransmittance = 1U << 2U;
-inline constexpr std::uint32_t kDirectionalLightShadowFlagCastsShadows
-  = 1U << 0U;
+inline constexpr std::uint32_t kDirectionalLightShadowFlagCastsShadows = 1U
+  << 0U;
 inline constexpr std::uint32_t kFrameDirectionalLightMaxCascades = 4U;
 inline constexpr std::uint32_t kLocalLightFlagCastsShadows = 1U << 0U;
 
@@ -61,9 +61,8 @@ struct FrameDirectionalLightSelection {
     FrameDirectionalCsmSplitMode::kGenerated
   };
   float max_shadow_distance { 160.0F };
-  std::array<float, kFrameDirectionalLightMaxCascades> cascade_distances {
-    8.0F, 24.0F, 64.0F, 160.0F
-  };
+  std::array<float, kFrameDirectionalLightMaxCascades> cascade_distances { 8.0F,
+    24.0F, 64.0F, 160.0F };
   float distribution_exponent { 3.0F };
 
   float transition_fraction { 0.1F };

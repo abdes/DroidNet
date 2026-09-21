@@ -241,8 +241,8 @@ NOLINT_TEST_F(
 
   const auto manifest_text = ReadFileText(request.output_manifest_path);
   EXPECT_NE(manifest_text.find("\n  \"created\": []"), std::string::npos);
-  EXPECT_NE(manifest_text.find("\n  \"compatibility_envelope\": {"),
-    std::string::npos);
+  EXPECT_NE(
+    manifest_text.find("\n  \"compatibility_envelope\": {"), std::string::npos);
 }
 
 NOLINT_TEST_F(PakManifestTest, PatchModeFailsWhenManifestCannotBeWritten)

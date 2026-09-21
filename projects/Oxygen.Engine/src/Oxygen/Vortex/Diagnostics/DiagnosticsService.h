@@ -7,18 +7,18 @@
 #pragma once
 
 #include <filesystem>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <span>
-#include <memory>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsCaptureManifest.h>
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsFrameLedger.h>
-#include <Oxygen/Vortex/Diagnostics/ShaderDebugModeRegistry.h>
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsTypes.h>
+#include <Oxygen/Vortex/Diagnostics/ShaderDebugModeRegistry.h>
 #include <Oxygen/Vortex/RendererCapability.h>
 #include <Oxygen/Vortex/api_export.h>
 
@@ -49,8 +49,7 @@ enum class HdrPrecisionControl : std::uint8_t {
 
 class DiagnosticsService {
 public:
-  OXGN_VRTX_API explicit DiagnosticsService(
-    CapabilitySet renderer_capabilities,
+  OXGN_VRTX_API explicit DiagnosticsService(CapabilitySet renderer_capabilities,
     DiagnosticsConfig config = DiagnosticsConfig::Default());
   OXGN_VRTX_API ~DiagnosticsService();
 
@@ -96,11 +95,12 @@ public:
     -> void;
   OXGN_VRTX_API auto SetGpuTimelineRetainLatestFrame(bool retain_latest_frame)
     -> void;
-  OXGN_VRTX_API auto RequestGpuTimelineExport(
-    const std::filesystem::path& path) -> void;
+  OXGN_VRTX_API auto RequestGpuTimelineExport(const std::filesystem::path& path)
+    -> void;
   //! Record an exact frame-sequence window starting at the current frame.
   //! Requires enabled collection; only one recording may be active. Invalid
-  //! samples remain in the JSON report; shutdown marks partial output incomplete.
+  //! samples remain in the JSON report; shutdown marks partial output
+  //! incomplete.
   [[nodiscard]] OXGN_VRTX_API auto RequestGpuTimelineRecording(
     const std::filesystem::path& path, std::uint32_t frame_count) -> bool;
   //! Attach this renderer's collector to a graphics-queue pass recorder.
@@ -142,7 +142,9 @@ private:
   DiagnosticsFeatureSet requested_features_ { DiagnosticsFeature::kNone };
   DiagnosticsFeatureSet enabled_features_ { DiagnosticsFeature::kNone };
   ShaderDebugMode shader_debug_mode_ { ShaderDebugMode::kDisabled };
-  observer_ptr<internal::GpuTimelineProfiler> gpu_timeline_profiler_ { nullptr };
+  observer_ptr<internal::GpuTimelineProfiler> gpu_timeline_profiler_ {
+    nullptr
+  };
   bool gpu_timeline_enabled_requested_ { false };
   HdrPrecisionControl hdr_precision_control_ {
     HdrPrecisionControl::kProduction

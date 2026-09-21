@@ -29,6 +29,7 @@ static_assert(offsetof(SpotShadowBinding, position_and_inv_range) == 64U);
 static_assert(offsetof(SpotShadowBinding, direction_and_bias) == 80U);
 static_assert(offsetof(SpotShadowBinding, sampling_metadata0) == 96U);
 static_assert(offsetof(SpotShadowBinding, sampling_metadata1) == 112U);
-static_assert(sizeof(SpotShadowBinding) % packing::kShaderDataFieldAlignment == 0U);
+static_assert(
+  sizeof(SpotShadowBinding) % packing::kShaderDataFieldAlignment == 0U);
 
 } // namespace oxygen::vortex

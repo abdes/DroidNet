@@ -535,8 +535,7 @@ auto MeasurePayloadSourceSlice(const PakPayloadSourceSlicePlan& input)
     return uint64_t { 0U };
   }
   if (!input.inline_bytes.empty()) {
-    const auto inline_size
-      = static_cast<uint64_t>(input.inline_bytes.size());
+    const auto inline_size = static_cast<uint64_t>(input.inline_bytes.size());
     if (input.source_offset > inline_size) {
       return std::nullopt;
     }
@@ -593,8 +592,8 @@ auto StorePayloadSourceSlice(const PakPayloadSourceSlicePlan& input,
   if (!input.inline_bytes.empty()) {
     const auto start = static_cast<size_t>(input.source_offset);
     const auto count = static_cast<size_t>(*measured);
-    const auto bytes = std::span<const std::byte>(input.inline_bytes)
-                         .subspan(start, count);
+    const auto bytes
+      = std::span<const std::byte>(input.inline_bytes).subspan(start, count);
     out_bytes.insert(out_bytes.end(), bytes.begin(), bytes.end());
     return out_bytes.size() == count;
   }

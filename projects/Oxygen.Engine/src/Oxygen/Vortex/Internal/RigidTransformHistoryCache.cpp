@@ -22,7 +22,8 @@ auto RigidTransformHistoryCache::TouchCurrent(
 
   const auto snapshot = Snapshot {
     .current_world = current_world,
-    .previous_world = entry.previous_valid ? entry.previous_world : current_world,
+    .previous_world
+    = entry.previous_valid ? entry.previous_world : current_world,
     .previous_valid = entry.previous_valid,
   };
 

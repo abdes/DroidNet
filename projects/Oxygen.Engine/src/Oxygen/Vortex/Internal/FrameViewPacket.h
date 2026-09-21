@@ -39,8 +39,8 @@ struct AuxiliaryResolvedInput {
 class FrameViewPacket {
 public:
   FrameViewPacket(observer_ptr<const CompositionViewImpl> view,
-    ViewId published_view_id, CompositionView::ViewStateHandle view_state_handle,
-    ViewRenderPlan plan);
+    ViewId published_view_id,
+    CompositionView::ViewStateHandle view_state_handle, ViewRenderPlan plan);
   ~FrameViewPacket() = default;
   OXYGEN_DEFAULT_COPYABLE(FrameViewPacket)
   OXYGEN_DEFAULT_MOVABLE(FrameViewPacket)

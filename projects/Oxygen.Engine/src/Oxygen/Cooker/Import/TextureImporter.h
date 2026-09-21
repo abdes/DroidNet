@@ -546,7 +546,8 @@ OXGN_COOK_NDAPI auto ImportCubeMapFromLayoutImage(
   const ITexturePackingPolicy& policy)
   -> Result<TextureImportResult, TextureImportError>;
 
-//! Import a cube map from a layout image with explicit layout and custom descriptor.
+//! Import a cube map from a layout image with explicit layout and custom
+//! descriptor.
 OXGN_COOK_NDAPI auto ImportCubeMapFromLayoutImage(
   const std::filesystem::path& path, CubeMapImageLayout layout,
   const TextureImportDesc& desc, const ITexturePackingPolicy& policy)

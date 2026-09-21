@@ -244,7 +244,7 @@ public:
 
   template <Awaitable First>
     requires(std::invocable<ThenFn, AwaitableReturnType<First>&>
-      || std::invocable<ThenFn, AwaitableReturnType<First> &&>
+      || std::invocable<ThenFn, AwaitableReturnType<First>&&>
       || std::invocable<ThenFn>)
   // NOLINTNEXTLINE(*-rvalue-reference-param-not-moved) perfect forwarding
   friend auto operator|(First&& first, SequenceBuilder&& builder)

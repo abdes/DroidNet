@@ -20,9 +20,8 @@ namespace {
 
   constexpr auto kViewportEpsilon = 0.5F;
 
-  auto ResolveRouteDestination(
-    const CompositionView::ViewSurfaceRoute& route, const FrameViewPacket& packet)
-    -> ViewPort
+  auto ResolveRouteDestination(const CompositionView::ViewSurfaceRoute& route,
+    const FrameViewPacket& packet) -> ViewPort
   {
     if (route.destination.IsValid()) {
       return route.destination;
@@ -37,9 +36,9 @@ namespace {
     return std::abs(viewport.top_left_x) <= kViewportEpsilon
       && std::abs(viewport.top_left_y) <= kViewportEpsilon
       && std::abs(viewport.width - static_cast<float>(desc.width))
-        <= kViewportEpsilon
+      <= kViewportEpsilon
       && std::abs(viewport.height - static_cast<float>(desc.height))
-        <= kViewportEpsilon;
+      <= kViewportEpsilon;
   }
 
 } // namespace
@@ -55,31 +54,30 @@ void CompositionPlanner::PlanCompositingTasks()
   planned_layers_.reserve(frame_view_packets.size());
   for (const auto& packet : frame_view_packets) {
     const auto& desc = packet.View().GetDescriptor();
-    const auto append_surface_overlay
-      = [this, &packet,
-          &desc](const CompositionView::ViewSurfaceRoute& route,
-          const CompositionView::OverlayBatch& overlay) {
-          if (overlay.lane != CompositionView::OverlayLane::kViewScreen
-            && overlay.lane != CompositionView::OverlayLane::kSurfaceScreen) {
-            return;
-          }
-          auto batch = overlay;
-          batch.target = CompositionView::OverlayTarget::kSurface;
-          batch.surface_id = route.surface_id;
-          if (batch.view_id == kInvalidViewId) {
-            batch.view_id = packet.PublishedViewId();
-          }
-          if (batch.debug_name.empty()) {
-            batch.debug_name = fmt::format("Vortex.Surface[{}].Overlay[{}:{}]",
-              route.surface_id.get(), desc.name, packet.PublishedViewId().get());
-          }
-          planned_surface_overlays_.push_back(SurfaceOverlayPlan {
-            .surface_id = route.surface_id,
-            .batch = std::move(batch),
-            .z_order = desc.z_order,
-            .submission_order = packet.View().GetSubmissionOrder(),
-          });
-        };
+    const auto append_surface_overlay =
+      [this, &packet, &desc](const CompositionView::ViewSurfaceRoute& route,
+        const CompositionView::OverlayBatch& overlay) {
+        if (overlay.lane != CompositionView::OverlayLane::kViewScreen
+          && overlay.lane != CompositionView::OverlayLane::kSurfaceScreen) {
+          return;
+        }
+        auto batch = overlay;
+        batch.target = CompositionView::OverlayTarget::kSurface;
+        batch.surface_id = route.surface_id;
+        if (batch.view_id == kInvalidViewId) {
+          batch.view_id = packet.PublishedViewId();
+        }
+        if (batch.debug_name.empty()) {
+          batch.debug_name = fmt::format("Vortex.Surface[{}].Overlay[{}:{}]",
+            route.surface_id.get(), desc.name, packet.PublishedViewId().get());
+        }
+        planned_surface_overlays_.push_back(SurfaceOverlayPlan {
+          .surface_id = route.surface_id,
+          .batch = std::move(batch),
+          .z_order = desc.z_order,
+          .submission_order = packet.View().GetSubmissionOrder(),
+        });
+      };
     const auto append_surface_overlays
       = [&packet, &append_surface_overlay](
           const CompositionView::ViewSurfaceRoute& route) {
@@ -181,8 +179,8 @@ auto CompositionPlanner::BuildCompositionSubmission(
 
   oxygen::vortex::CompositionSubmission submission;
   submission.surface_id = surface_id;
-  submission.debug_name = fmt::format("Vortex.Surface[{}].Composite",
-    surface_id.get());
+  submission.debug_name
+    = fmt::format("Vortex.Surface[{}].Composite", surface_id.get());
   submission.composite_target = std::move(final_output);
   submission.tasks.reserve(planned_layers_.size());
 
@@ -190,7 +188,7 @@ auto CompositionPlanner::BuildCompositionSubmission(
   const auto can_fast_copy_layer = [&target](const auto& layer) {
     return layer.opacity >= 1.0F && layer.source_texture
       && layer.source_texture->GetDescriptor().format
-        == target.GetDescriptor().format
+      == target.GetDescriptor().format
       && ViewportCoversTarget(layer.destination, target);
   };
   for (const auto& layer : planned_layers_) {
@@ -205,9 +203,9 @@ auto CompositionPlanner::BuildCompositionSubmission(
       continue;
     }
 
-    submission.tasks.push_back(CompositingTask::MakeTextureBlend(
-      layer.source_texture, layer.destination, layer.opacity,
-      layer.debug_name));
+    submission.tasks.push_back(
+      CompositingTask::MakeTextureBlend(layer.source_texture, layer.destination,
+        layer.opacity, layer.debug_name));
   }
   for (const auto& overlay : planned_surface_overlays_) {
     if (overlay.surface_id == surface_id) {

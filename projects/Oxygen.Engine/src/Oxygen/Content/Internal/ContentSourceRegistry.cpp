@@ -13,31 +13,34 @@ namespace oxygen::content::internal {
 
 namespace {
 
-auto FindSourceKeyConflict(const std::vector<std::unique_ptr<IContentSource>>& sources,
-  const std::vector<uint16_t>& source_ids, const data::SourceKey source_key,
-  const std::string_view mount_identity) -> std::optional<ContentSourceRegistry::MountResult::SourceKeyConflict>
-{
-  if (source_key.IsNil()) {
+  auto FindSourceKeyConflict(
+    const std::vector<std::unique_ptr<IContentSource>>& sources,
+    const std::vector<uint16_t>& source_ids, const data::SourceKey source_key,
+    const std::string_view mount_identity)
+    -> std::optional<ContentSourceRegistry::MountResult::SourceKeyConflict>
+  {
+    if (source_key.IsNil()) {
+      return std::nullopt;
+    }
+
+    for (size_t source_index = 0; source_index < sources.size();
+      ++source_index) {
+      const auto& existing = sources[source_index];
+      if (!existing || existing->GetSourceKey() != source_key) {
+        continue;
+      }
+      if (existing->DebugName() == mount_identity) {
+        continue;
+      }
+      return ContentSourceRegistry::MountResult::SourceKeyConflict {
+        .source_key = source_key,
+        .existing_source_id = source_ids.at(source_index),
+        .existing_mount_identity = std::string(existing->DebugName()),
+      };
+    }
+
     return std::nullopt;
   }
-
-  for (size_t source_index = 0; source_index < sources.size(); ++source_index) {
-    const auto& existing = sources[source_index];
-    if (!existing || existing->GetSourceKey() != source_key) {
-      continue;
-    }
-    if (existing->DebugName() == mount_identity) {
-      continue;
-    }
-    return ContentSourceRegistry::MountResult::SourceKeyConflict {
-      .source_key = source_key,
-      .existing_source_id = source_ids.at(source_index),
-      .existing_mount_identity = std::string(existing->DebugName()),
-    };
-  }
-
-  return std::nullopt;
-}
 
 } // namespace
 

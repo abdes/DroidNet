@@ -26,15 +26,15 @@ class SceneTextures;
 class PostProcessService;
 
 namespace sceneprep {
-class ScenePrepPipeline;
+  class ScenePrepPipeline;
 } // namespace sceneprep
 
 namespace resources {
-class TextureBinder;
+  class TextureBinder;
 } // namespace resources
 
 namespace upload {
-class TransientStructuredBuffer;
+  class TransientStructuredBuffer;
 } // namespace upload
 
 class InitViewsModule {
@@ -80,17 +80,22 @@ private:
   Renderer& renderer_;
   observer_ptr<PostProcessService> post_process_;
   std::unique_ptr<resources::TextureBinder> texture_binder_ {};
-  std::unique_ptr<upload::TransientStructuredBuffer> current_skinned_pose_buffer_;
-  std::unique_ptr<upload::TransientStructuredBuffer> previous_skinned_pose_buffer_;
+  std::unique_ptr<upload::TransientStructuredBuffer>
+    current_skinned_pose_buffer_;
+  std::unique_ptr<upload::TransientStructuredBuffer>
+    previous_skinned_pose_buffer_;
   std::unique_ptr<upload::TransientStructuredBuffer> current_morph_buffer_;
   std::unique_ptr<upload::TransientStructuredBuffer> previous_morph_buffer_;
-  std::unique_ptr<upload::TransientStructuredBuffer> current_material_wpo_buffer_;
-  std::unique_ptr<upload::TransientStructuredBuffer> previous_material_wpo_buffer_;
+  std::unique_ptr<upload::TransientStructuredBuffer>
+    current_material_wpo_buffer_;
+  std::unique_ptr<upload::TransientStructuredBuffer>
+    previous_material_wpo_buffer_;
   std::unique_ptr<upload::TransientStructuredBuffer>
     current_motion_vector_status_buffer_;
   std::unique_ptr<upload::TransientStructuredBuffer>
     previous_motion_vector_status_buffer_;
-  std::unique_ptr<upload::TransientStructuredBuffer> velocity_draw_metadata_buffer_;
+  std::unique_ptr<upload::TransientStructuredBuffer>
+    velocity_draw_metadata_buffer_;
   std::unique_ptr<sceneprep::ScenePrepPipeline> scene_prep_;
   sceneprep::ScenePrepState scene_prep_state_ {};
   std::unordered_map<ViewId, PreparedSceneViewStorage> prepared_views_;

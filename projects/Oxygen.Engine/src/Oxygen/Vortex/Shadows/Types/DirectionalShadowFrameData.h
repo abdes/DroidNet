@@ -15,8 +15,8 @@
 
 namespace oxygen::vortex {
 
-inline constexpr std::uint32_t kDirectionalShadowStorageDedicatedArray
-  = 1U << 0U;
+inline constexpr std::uint32_t kDirectionalShadowStorageDedicatedArray = 1U
+  << 0U;
 
 struct alignas(packing::kShaderDataFieldAlignment) DirectionalShadowFrameData {
   ShadowFrameBindings bindings {};

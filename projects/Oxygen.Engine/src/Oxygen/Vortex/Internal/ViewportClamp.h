@@ -55,8 +55,7 @@ inline auto ClampViewportToExtent(const ViewPort& viewport,
   clamped.top_left_x = std::clamp(clamped.top_left_x, 0.0F, max_x);
   clamped.top_left_y = std::clamp(clamped.top_left_y, 0.0F, max_y);
   clamped.width = std::clamp(clamped.width, 0.0F, max_x - clamped.top_left_x);
-  clamped.height
-    = std::clamp(clamped.height, 0.0F, max_y - clamped.top_left_y);
+  clamped.height = std::clamp(clamped.height, 0.0F, max_y - clamped.top_left_y);
   if (!clamped.IsValid()) {
     return FullViewportForExtent(width, height);
   }
@@ -94,8 +93,8 @@ inline auto ResolveClampedViewportState(const ViewPort& viewport,
   const auto clamped_viewport = ClampViewportToExtent(viewport, width, height);
   return {
     .viewport = clamped_viewport,
-    .scissors = ClampScissorsToExtent(
-      scissors, clamped_viewport, width, height),
+    .scissors
+    = ClampScissorsToExtent(scissors, clamped_viewport, width, height),
   };
 }
 

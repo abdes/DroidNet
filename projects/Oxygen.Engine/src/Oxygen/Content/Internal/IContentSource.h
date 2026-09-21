@@ -57,39 +57,31 @@ public:
 
   [[nodiscard]] virtual auto DebugName() const noexcept -> std::string_view = 0;
   [[nodiscard]] virtual auto SourcePath() const noexcept
-    -> std::filesystem::path
-    = 0;
+    -> std::filesystem::path = 0;
 
   [[nodiscard]] virtual auto GetSourceKey() const noexcept -> data::SourceKey
     = 0;
 
   [[nodiscard]] virtual auto HasAsset(const data::AssetKey& key) const noexcept
-    -> bool
-    = 0;
+    -> bool = 0;
   [[nodiscard]] virtual auto GetAssetCount() const noexcept -> size_t = 0;
   [[nodiscard]] virtual auto GetAssetKeyByIndex(uint32_t index) const noexcept
-    -> std::optional<data::AssetKey>
-    = 0;
+    -> std::optional<data::AssetKey> = 0;
 
   [[nodiscard]] virtual auto CreateAssetDescriptorReader(
-    const data::AssetKey& key) const -> std::unique_ptr<serio::AnyReader>
-    = 0;
+    const data::AssetKey& key) const -> std::unique_ptr<serio::AnyReader> = 0;
 
   [[nodiscard]] virtual auto CreateBufferTableReader() const
-    -> std::unique_ptr<serio::AnyReader>
-    = 0;
+    -> std::unique_ptr<serio::AnyReader> = 0;
 
   [[nodiscard]] virtual auto CreateTextureTableReader() const
-    -> std::unique_ptr<serio::AnyReader>
-    = 0;
+    -> std::unique_ptr<serio::AnyReader> = 0;
 
   [[nodiscard]] virtual auto CreateScriptTableReader() const
-    -> std::unique_ptr<serio::AnyReader>
-    = 0;
+    -> std::unique_ptr<serio::AnyReader> = 0;
 
   [[nodiscard]] virtual auto CreatePhysicsTableReader() const
-    -> std::unique_ptr<serio::AnyReader>
-    = 0;
+    -> std::unique_ptr<serio::AnyReader> = 0;
 
   [[nodiscard]] virtual auto GetBufferTable() const noexcept
     -> const ResourceTable<data::BufferResource>* = 0;
@@ -104,35 +96,29 @@ public:
     -> const ResourceTable<data::PhysicsResource>* = 0;
 
   [[nodiscard]] virtual auto CreateBufferDataReader() const
-    -> std::unique_ptr<serio::AnyReader>
-    = 0;
+    -> std::unique_ptr<serio::AnyReader> = 0;
 
   [[nodiscard]] virtual auto CreateTextureDataReader() const
-    -> std::unique_ptr<serio::AnyReader>
-    = 0;
+    -> std::unique_ptr<serio::AnyReader> = 0;
 
   [[nodiscard]] virtual auto CreateScriptDataReader() const
-    -> std::unique_ptr<serio::AnyReader>
-    = 0;
+    -> std::unique_ptr<serio::AnyReader> = 0;
 
   [[nodiscard]] virtual auto CreatePhysicsDataReader() const
-    -> std::unique_ptr<serio::AnyReader>
-    = 0;
+    -> std::unique_ptr<serio::AnyReader> = 0;
 
   [[nodiscard]] virtual auto ScriptSlotCount() const noexcept -> uint32_t = 0;
 
-  [[nodiscard]] virtual auto ReadScriptSlotRecords(uint32_t start_index,
-    uint32_t count) const -> std::vector<data::pak::scripting::ScriptSlotRecord>
-    = 0;
+  [[nodiscard]] virtual auto ReadScriptSlotRecords(
+    uint32_t start_index, uint32_t count) const
+    -> std::vector<data::pak::scripting::ScriptSlotRecord> = 0;
 
   [[nodiscard]] virtual auto ReadScriptParamRecords(
     data::pak::core::OffsetT absolute_offset, uint32_t count) const
-    -> std::vector<data::pak::scripting::ScriptParamRecord>
-    = 0;
+    -> std::vector<data::pak::scripting::ScriptParamRecord> = 0;
 
   [[nodiscard]] virtual auto ResolveVirtualPath(
-    const data::AssetKey& key) const noexcept -> std::optional<std::string>
-    = 0;
+    const data::AssetKey& key) const noexcept -> std::optional<std::string> = 0;
 };
 
 } // namespace oxygen::content::internal

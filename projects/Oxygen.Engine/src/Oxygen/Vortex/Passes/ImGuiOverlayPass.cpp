@@ -19,24 +19,24 @@ namespace oxygen::vortex {
 
 namespace {
 
-auto TrackTextureFromKnownOrInitial(graphics::CommandRecorder& recorder,
-  const graphics::Texture& texture) -> void
-{
-  if (recorder.IsResourceTracked(texture)) {
-    return;
-  }
-  if (recorder.AdoptKnownResourceState(texture)) {
-    return;
-  }
+  auto TrackTextureFromKnownOrInitial(graphics::CommandRecorder& recorder,
+    const graphics::Texture& texture) -> void
+  {
+    if (recorder.IsResourceTracked(texture)) {
+      return;
+    }
+    if (recorder.AdoptKnownResourceState(texture)) {
+      return;
+    }
 
-  const auto initial = texture.GetDescriptor().initial_state;
-  CHECK_F(initial != graphics::ResourceStates::kUnknown
-      && initial != graphics::ResourceStates::kUndefined,
-    "ImGuiOverlayPass: cannot track '{}' without a known or declared initial "
-    "state",
-    texture.GetName());
-  recorder.BeginTrackingResourceState(texture, initial);
-}
+    const auto initial = texture.GetDescriptor().initial_state;
+    CHECK_F(initial != graphics::ResourceStates::kUnknown
+        && initial != graphics::ResourceStates::kUndefined,
+      "ImGuiOverlayPass: cannot track '{}' without a known or declared initial "
+      "state",
+      texture.GetName());
+    recorder.BeginTrackingResourceState(texture, initial);
+  }
 
 } // namespace
 
@@ -64,8 +64,7 @@ auto ImGuiOverlayPass::Record(const Inputs& inputs) const -> bool
   if (!recorder) {
     return false;
   }
-  renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(
-    *recorder);
+  renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(*recorder);
 
   TrackTextureFromKnownOrInitial(*recorder, *inputs.color_texture);
   recorder->RequireResourceState(

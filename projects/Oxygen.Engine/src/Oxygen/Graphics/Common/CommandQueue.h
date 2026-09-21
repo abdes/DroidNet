@@ -64,8 +64,7 @@ public:
     expected value.
   */
   virtual auto Wait(uint64_t value, std::chrono::milliseconds timeout) const
-    -> void
-    = 0;
+    -> void = 0;
 
   //! Wait for as long as it takes, for the counter to reach or exceed the
   //! specified value, on the CPU side.
@@ -87,8 +86,7 @@ public:
 
   virtual auto Submit(std::shared_ptr<CommandList> command_list) -> void = 0;
   virtual auto Submit(std::span<std::shared_ptr<CommandList>> command_lists)
-    -> void
-    = 0;
+    -> void = 0;
 
   //! Advance backend-owned profiling frame state before a new engine frame.
   /*!

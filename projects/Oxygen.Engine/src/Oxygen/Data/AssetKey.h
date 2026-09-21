@@ -73,11 +73,9 @@ public:
   [[nodiscard]] constexpr auto end() const noexcept { return bytes_.end(); }
 
   [[nodiscard]] friend constexpr std::strong_ordering operator<=>(
-    const AssetKey&, const AssetKey&) noexcept
-    = default;
+    const AssetKey&, const AssetKey&) noexcept = default;
   [[nodiscard]] friend constexpr bool operator==(
-    const AssetKey&, const AssetKey&) noexcept
-    = default;
+    const AssetKey&, const AssetKey&) noexcept = default;
 
 private:
   constexpr explicit AssetKey(const ByteArray& bytes) noexcept

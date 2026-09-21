@@ -173,7 +173,8 @@ private:
   std::vector<EventObservation> observations;
   std::vector<EventCheckpoint> checkpoints;
   EventCheckpoint current_checkpoint;
-  vortex::testing::RendererPublicationProbe::ExposureStatusDelivery held_statuses;
+  vortex::testing::RendererPublicationProbe::ExposureStatusDelivery
+    held_statuses;
   nlohmann::json event_operations = nlohmann::json::array();
   nlohmann::json acceptance_windows = nlohmann::json::object();
 };

@@ -40,9 +40,9 @@ OXGN_DATA_NDAPI auto MakeSphereMeshAsset(
 
 //! Creates a centred Z-axis capsule with outward winding and smooth normals.
 //! Height includes both hemispheres; height == 2*radius produces a sphere.
-//! The matching Physics capsule uses cylindrical half_height = height/2 - radius.
-//! Defaults are 2 m total height and 1 m diameter. Dimensions must be finite
-//! and positive; hemisphere/radial segments must be in [1,64]/[3,256].
+//! The matching Physics capsule uses cylindrical half_height = height/2 -
+//! radius. Defaults are 2 m total height and 1 m diameter. Dimensions must be
+//! finite and positive; hemisphere/radial segments must be in [1,64]/[3,256].
 //! Rejects dimensions whose sampled surface collapses in float32 storage.
 OXGN_DATA_NDAPI auto MakeCapsuleMeshAsset(
   unsigned int hemisphere_segments = procedural::kCapsuleHemisphereSegments,

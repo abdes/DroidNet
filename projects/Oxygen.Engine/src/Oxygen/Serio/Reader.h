@@ -49,11 +49,9 @@ public:
   OXYGEN_DEFAULT_MOVABLE(AnyReader)
 
   [[nodiscard]] virtual auto ReadBlob(size_t size) noexcept
-    -> Result<std::vector<std::byte>>
-    = 0;
+    -> Result<std::vector<std::byte>> = 0;
   [[nodiscard]] virtual auto ReadBlobInto(std::span<std::byte> buffer) noexcept
-    -> Result<void>
-    = 0;
+    -> Result<void> = 0;
 
   [[nodiscard]] auto ReadSequenceSize(limits::SequenceSizeType& size,
     limits::SequenceSizeType max_size) noexcept -> Result<void>
@@ -70,14 +68,13 @@ public:
 
   [[nodiscard]] virtual auto Position() noexcept -> Result<size_t> = 0;
 
-  [[nodiscard]] virtual auto AlignTo(size_t alignment) noexcept -> Result<void>
-    = 0;
+  [[nodiscard]] virtual auto AlignTo(size_t alignment) noexcept
+    -> Result<void> = 0;
   [[nodiscard]] virtual auto ScopedAlignment(uint16_t alignment) noexcept(false)
-    -> AlignmentGuard
-    = 0;
+    -> AlignmentGuard = 0;
 
-  [[nodiscard]] virtual auto Forward(size_t num_bytes) noexcept -> Result<void>
-    = 0;
+  [[nodiscard]] virtual auto Forward(size_t num_bytes) noexcept
+    -> Result<void> = 0;
   [[nodiscard]] virtual auto Seek(size_t pos) noexcept -> Result<void> = 0;
 
   template <typename T> [[nodiscard]] auto Read() noexcept -> Result<T>

@@ -53,9 +53,8 @@ NOLINT_TEST(
   struct Action { // NOLINT(cppcoreguidelines-special-member-functions)
     virtual ~Action() = default;
     // NOLINT
-    virtual auto Execute(
-      Machine& machine, FirstState& state, const TestEvent& event) -> Status
-      = 0;
+    virtual auto Execute(Machine& machine, FirstState& state,
+      const TestEvent& event) -> Status = 0;
   };
 
   struct TestAction {
@@ -132,9 +131,8 @@ NOLINT_TEST(StateMachine, MachineHandleEventCatchesUnhandledExceptions)
   // by mocking the TestAction class.
   struct Action { // NOLINT(cppcoreguidelines-special-member-functions)
     virtual ~Action() = default;
-    virtual auto Execute(
-      Machine& machine, FirstState& state, const TestEvent& event) -> Status
-      = 0;
+    virtual auto Execute(Machine& machine, FirstState& state,
+      const TestEvent& event) -> Status = 0;
   };
 
   struct TestAction {

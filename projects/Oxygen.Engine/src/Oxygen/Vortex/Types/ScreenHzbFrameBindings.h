@@ -14,10 +14,10 @@
 namespace oxygen::vortex {
 
 inline constexpr std::uint32_t kScreenHzbFrameBindingsFlagAvailable = 1U << 0U;
-inline constexpr std::uint32_t kScreenHzbFrameBindingsFlagFurthestValid
-  = 1U << 1U;
-inline constexpr std::uint32_t kScreenHzbFrameBindingsFlagClosestValid
-  = 1U << 2U;
+inline constexpr std::uint32_t kScreenHzbFrameBindingsFlagFurthestValid = 1U
+  << 1U;
+inline constexpr std::uint32_t kScreenHzbFrameBindingsFlagClosestValid = 1U
+  << 2U;
 
 struct alignas(16) ScreenHzbFrameBindings {
   ShaderVisibleIndex closest_srv { kInvalidShaderVisibleIndex };

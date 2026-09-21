@@ -65,8 +65,8 @@ auto CommandQueue::TryGetTimestampFrequency(uint64_t& /*out_hz*/) const -> bool
 
 auto CommandQueue::BeginProfilingFrame() const -> void { }
 
-auto CommandQueue::TryGetKnownResourceState(const NativeResource& resource) const
-  -> std::optional<ResourceStates>
+auto CommandQueue::TryGetKnownResourceState(
+  const NativeResource& resource) const -> std::optional<ResourceStates>
 {
   std::lock_guard lock(known_resource_states_mutex_);
   if (const auto it = known_resource_states_.find(resource);
@@ -85,8 +85,7 @@ auto CommandQueue::AdoptKnownResourceStates(
 
   std::lock_guard lock(known_resource_states_mutex_);
   for (const auto& state : states) {
-    if (!state.resource->IsValid()
-      || state.state == ResourceStates::kUnknown) {
+    if (!state.resource->IsValid() || state.state == ResourceStates::kUnknown) {
       continue;
     }
     known_resource_states_[state.resource] = state.state;

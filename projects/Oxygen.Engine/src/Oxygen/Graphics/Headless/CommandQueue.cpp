@@ -23,20 +23,20 @@ namespace oxygen::graphics::headless {
 
 namespace {
 
-using QueueStateEntry = oxygen::graphics::CommandQueue::KnownResourceState;
+  using QueueStateEntry = oxygen::graphics::CommandQueue::KnownResourceState;
 
-auto ToKnownStates(
-  std::vector<oxygen::graphics::CommandList::RecordedResourceState>&& states)
-  -> std::vector<QueueStateEntry>
-{
-  auto known_states = std::vector<QueueStateEntry> {};
-  known_states.reserve(states.size());
-  for (const auto& state : states) {
-    known_states.push_back(
-      { .resource = state.resource, .state = state.state });
+  auto ToKnownStates(
+    std::vector<oxygen::graphics::CommandList::RecordedResourceState>&& states)
+    -> std::vector<QueueStateEntry>
+  {
+    auto known_states = std::vector<QueueStateEntry> {};
+    known_states.reserve(states.size());
+    for (const auto& state : states) {
+      known_states.push_back(
+        { .resource = state.resource, .state = state.state });
+    }
+    return known_states;
   }
-  return known_states;
-}
 
 } // namespace
 

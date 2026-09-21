@@ -33,16 +33,13 @@ public:
   OXYGEN_MAKE_NON_MOVABLE(ICharacterApi)
 
   virtual auto CreateCharacter(WorldId world_id,
-    const character::CharacterDesc& desc) -> PhysicsResult<CharacterId>
-    = 0;
+    const character::CharacterDesc& desc) -> PhysicsResult<CharacterId> = 0;
   virtual auto DestroyCharacter(WorldId world_id, CharacterId character_id)
-    -> PhysicsResult<void>
-    = 0;
+    -> PhysicsResult<void> = 0;
 
   virtual auto MoveCharacter(WorldId world_id, CharacterId character_id,
     const character::CharacterMoveInput& input, float delta_time)
-    -> PhysicsResult<character::CharacterMoveResult>
-    = 0;
+    -> PhysicsResult<character::CharacterMoveResult> = 0;
 };
 
 } // namespace oxygen::physics::system

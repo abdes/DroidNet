@@ -125,8 +125,8 @@ auto ImGuiRuntime::SetWindowId(const platform::WindowIdType window_id) -> void
           }
         });
   } catch (const std::exception& ex) {
-    LOG_F(ERROR,
-      "Vortex ImGui runtime failed to bind window {}: {}", window_id, ex.what());
+    LOG_F(ERROR, "Vortex ImGui runtime failed to bind window {}: {}", window_id,
+      ex.what());
     platform_backend_.reset();
   }
 }
@@ -185,11 +185,13 @@ auto ImGuiRuntime::RenderOverlay(Renderer& renderer,
   }
 
   const auto& fb_desc = composite_target->GetDescriptor();
-  if (fb_desc.color_attachments.empty() || !fb_desc.color_attachments[0].texture) {
+  if (fb_desc.color_attachments.empty()
+    || !fb_desc.color_attachments[0].texture) {
     return std::nullopt;
   }
 
-  const auto& target_desc = fb_desc.color_attachments[0].texture->GetDescriptor();
+  const auto& target_desc
+    = fb_desc.color_attachments[0].texture->GetDescriptor();
   if (!EnsureOverlayFramebuffer(
         observer_ptr { gfx.get() }, target_desc.width, target_desc.height)) {
     return std::nullopt;
@@ -244,8 +246,7 @@ auto ImGuiRuntime::ApplyDefaultStyleAndFonts() -> void
   ImFontConfig fa_config {};
   fa_config.MergeMode = true;
   fa_config.PixelSnapH = true;
-  io.Fonts->AddFontFromMemoryCompressedTTF(
-    styles::FontAwesome_compressed_data,
+  io.Fonts->AddFontFromMemoryCompressedTTF(styles::FontAwesome_compressed_data,
     static_cast<int>(styles::FontAwesome_compressed_size), kDefaultFontSize,
     &fa_config, fa_ranges);
 
@@ -274,9 +275,8 @@ auto ImGuiRuntime::ApplyDefaultStyleAndFonts() -> void
   IM_ASSERT(oxygen_icon_font != nullptr);
 }
 
-auto ImGuiRuntime::EnsureOverlayFramebuffer(
-  const observer_ptr<Graphics> gfx, const std::uint32_t width,
-  const std::uint32_t height) -> bool
+auto ImGuiRuntime::EnsureOverlayFramebuffer(const observer_ptr<Graphics> gfx,
+  const std::uint32_t width, const std::uint32_t height) -> bool
 {
   if (gfx == nullptr || width == 0U || height == 0U) {
     return false;

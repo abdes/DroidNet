@@ -71,7 +71,8 @@ NOLINT_TEST_F(
 
   ASSERT_TRUE(resolved.has_value());
   EXPECT_EQ(resolved->absolute_path, first_file.lexically_normal());
-  EXPECT_EQ(resolved->fingerprint.path, "includes-first/Vortex/Shared/Math.hlsli");
+  EXPECT_EQ(
+    resolved->fingerprint.path, "includes-first/Vortex/Shared/Math.hlsli");
 }
 
 NOLINT_TEST_F(ShaderBakeDependenciesTest,
@@ -113,8 +114,10 @@ NOLINT_TEST(
   });
 
   ASSERT_EQ(recorder.Dependencies().size(), 2U);
-  EXPECT_EQ(recorder.Dependencies()[0].path, "Shaders/Vortex/Shared/Math.hlsli");
-  EXPECT_EQ(recorder.Dependencies()[1].path, "Shaders/Vortex/Shared/Lighting.hlsli");
+  EXPECT_EQ(
+    recorder.Dependencies()[0].path, "Shaders/Vortex/Shared/Math.hlsli");
+  EXPECT_EQ(
+    recorder.Dependencies()[1].path, "Shaders/Vortex/Shared/Lighting.hlsli");
 }
 
 NOLINT_TEST_F(ShaderBakeDependenciesTest, ResolveTrackedIncludeFailsWhenMissing)

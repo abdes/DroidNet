@@ -1287,8 +1287,7 @@ NOLINT_TEST_F(PakWriterTest, StoresResourceAndDescriptorPayloadBytesFromSources)
   const auto descriptor_payload = MakePatternBytes(
     kDescriptorPayloadStart, static_cast<size_t>(kAssetDescriptorSize));
   ASSERT_TRUE(WriteAllBytesToFile(texture_source_path, texture_payload));
-  ASSERT_TRUE(
-    WriteAllBytesToFile(texture_descriptor_path, texture_descriptor));
+  ASSERT_TRUE(WriteAllBytesToFile(texture_descriptor_path, texture_descriptor));
   ASSERT_TRUE(WriteAllBytesToFile(descriptor_source_path, descriptor_payload));
 
   const auto asset_key = MakeAssetKey(static_cast<uint8_t>(0x3D));
@@ -1532,7 +1531,8 @@ NOLINT_TEST_F(PakWriterTest, WriterZeroFillsPlannedPaddingAndTrailingGaps)
       .size_bytes = kTextureDataSize,
     },
   };
-  const auto descriptor_source_path = Root() / "writer_zero_fill_texture_desc.bin";
+  const auto descriptor_source_path
+    = Root() / "writer_zero_fill_texture_desc.bin";
   const auto descriptor_bytes = std::vector<std::byte>(
     sizeof(core::TextureResourceDesc), std::byte { 0 });
   ASSERT_TRUE(WriteAllBytesToFile(descriptor_source_path, descriptor_bytes));

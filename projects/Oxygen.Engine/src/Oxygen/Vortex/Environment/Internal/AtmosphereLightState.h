@@ -24,13 +24,16 @@ struct ResolvedAtmosphereLightState {
     source_nodes {};
   std::array<std::uint32_t, environment::kAtmosphereLightSlotCount>
     source_cascade_counts {};
-  std::array<bool, environment::kAtmosphereLightSlotCount> explicit_slot_claims {
-    false,
-    false,
-  };
+  std::array<bool, environment::kAtmosphereLightSlotCount>
+    explicit_slot_claims {
+      false,
+      false,
+    };
   std::uint32_t active_light_count { 0U };
   std::uint32_t conflict_count { 0U };
-  std::uint32_t first_conflict_slot { environment::kInvalidAtmosphereLightSlot };
+  std::uint32_t first_conflict_slot {
+    environment::kInvalidAtmosphereLightSlot
+  };
   std::uint32_t shadow_authority_slot {
     environment::kInvalidAtmosphereLightSlot
   };

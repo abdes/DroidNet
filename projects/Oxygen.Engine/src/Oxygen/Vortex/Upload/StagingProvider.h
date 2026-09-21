@@ -141,8 +141,7 @@ public:
 
   //! Allocate a persistently mapped upload region of at least 'size' bytes.
   virtual auto Allocate(SizeBytes size, std::string_view debug_name)
-    -> std::expected<Allocation, UploadError>
-    = 0;
+    -> std::expected<Allocation, UploadError> = 0;
 
   //! Retire allocations whose GPU fence has completed (for recycling).
   virtual auto RetireCompleted(UploaderTag, FenceValue completed) -> void = 0;

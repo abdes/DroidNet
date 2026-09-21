@@ -92,11 +92,9 @@ namespace detail {
       class IControlFunctions {
       public:
         [[nodiscard]] virtual auto Cancel(void* aw, Handle h) const noexcept
-          -> bool
-          = 0;
+          -> bool = 0;
         [[nodiscard]] virtual auto MustResume(const void* aw) const noexcept
-          -> bool
-          = 0;
+          -> bool = 0;
 
       protected:
         IControlFunctions() = default;

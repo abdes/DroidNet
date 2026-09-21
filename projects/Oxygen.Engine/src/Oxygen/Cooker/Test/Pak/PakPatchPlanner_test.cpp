@@ -152,9 +152,9 @@ auto EmptyDigest() -> base::Sha256Digest
   return kEmptyDigest;
 }
 
-auto BuildSceneDescriptorWithScriptingSlots(
-  const std::string_view name, const uint32_t first_slot,
-  const uint32_t second_slot) -> std::vector<std::byte>
+auto BuildSceneDescriptorWithScriptingSlots(const std::string_view name,
+  const uint32_t first_slot, const uint32_t second_slot)
+  -> std::vector<std::byte>
 {
   auto desc = world::SceneAssetDesc {};
   desc.header.asset_type = static_cast<uint8_t>(data::AssetType::kScene);
@@ -164,18 +164,17 @@ auto BuildSceneDescriptorWithScriptingSlots(
   std::memcpy(desc.header.name, name.data(), name_bytes);
   desc.header.name[name_bytes] = '\0';
 
-  const auto nodes_offset = static_cast<uint64_t>(sizeof(world::SceneAssetDesc));
+  const auto nodes_offset
+    = static_cast<uint64_t>(sizeof(world::SceneAssetDesc));
   desc.nodes.offset = nodes_offset;
   desc.nodes.count = 1U;
   desc.nodes.entry_size = sizeof(world::NodeRecord);
 
-  const auto strings_offset
-    = nodes_offset + sizeof(world::NodeRecord);
+  const auto strings_offset = nodes_offset + sizeof(world::NodeRecord);
   desc.scene_strings.offset = static_cast<uint32_t>(strings_offset);
   desc.scene_strings.size = 1U;
 
-  const auto component_dir_offset
-    = strings_offset + desc.scene_strings.size;
+  const auto component_dir_offset = strings_offset + desc.scene_strings.size;
   desc.component_table_directory_offset = component_dir_offset;
   desc.component_table_count = 1U;
 
@@ -982,8 +981,8 @@ NOLINT_TEST_F(PakPatchPlannerTest,
     std::span<const AssetSpec>(assets.data(), assets.size()),
     std::span<const FileSpec>(files.data(), files.size()), 0x83U));
 
-  const auto base_catalog = MakeBaseCatalog(
-    std::span<const data::PakCatalogEntry> {});
+  const auto base_catalog
+    = MakeBaseCatalog(std::span<const data::PakCatalogEntry> {});
   const auto request = MakePatchRequest(Root() / "scene_patch.pak",
     { CookedSource {
       .kind = CookedSourceKind::kLooseCooked, .path = patch_source } },

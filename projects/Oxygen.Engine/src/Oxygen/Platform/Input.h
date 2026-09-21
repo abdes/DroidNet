@@ -165,8 +165,8 @@ enum class Key : uint8_t {
 };
 
 enum class MouseButton : uint8_t {
-  kNone
-  = 0, // Unsupported mouse button that should never be transmitted in an event.
+  kNone = 0, // Unsupported mouse button that should never be transmitted in an
+             // event.
 
   kLeft = 1 << 0,
   kRight = 1 << 1,

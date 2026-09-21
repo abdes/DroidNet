@@ -15,8 +15,7 @@ namespace oxygen::vortex {
 
 auto DiagnosticsFrameLedger::UpdateState(const ShaderDebugMode debug_mode,
   const DiagnosticsFeatureSet requested_features,
-  const DiagnosticsFeatureSet enabled_features,
-  const bool gpu_timeline_enabled,
+  const DiagnosticsFeatureSet enabled_features, const bool gpu_timeline_enabled,
   const bool gpu_timeline_frame_available) -> void
 {
   debug_mode_ = debug_mode;
@@ -67,8 +66,8 @@ auto DiagnosticsFrameLedger::ReportIssue(DiagnosticsIssue issue) -> void
   ClampIssueContext(issue);
   issue.occurrences = std::max(issue.occurrences, 1U);
 
-  const auto existing = std::ranges::find_if(frame_snapshot_.issues,
-    [&issue](const DiagnosticsIssue& candidate) {
+  const auto existing = std::ranges::find_if(
+    frame_snapshot_.issues, [&issue](const DiagnosticsIssue& candidate) {
       return SameIssue(candidate, issue);
     });
   if (existing != frame_snapshot_.issues.end()) {
@@ -116,8 +115,8 @@ auto DiagnosticsFrameLedger::GetCurrentSnapshot() const
   return frame_snapshot_;
 }
 
-auto DiagnosticsFrameLedger::SameIssue(const DiagnosticsIssue& lhs,
-  const DiagnosticsIssue& rhs) noexcept -> bool
+auto DiagnosticsFrameLedger::SameIssue(
+  const DiagnosticsIssue& lhs, const DiagnosticsIssue& rhs) noexcept -> bool
 {
   return lhs.code == rhs.code && lhs.view_name == rhs.view_name
     && lhs.pass_name == rhs.pass_name && lhs.product_name == rhs.product_name;
@@ -138,8 +137,8 @@ auto DiagnosticsFrameLedger::ClampString(std::string& value) -> void
   }
 }
 
-auto DiagnosticsFrameLedger::ApplyState(DiagnosticsFrameSnapshot& snapshot) const
-  -> void
+auto DiagnosticsFrameLedger::ApplyState(
+  DiagnosticsFrameSnapshot& snapshot) const -> void
 {
   snapshot.active_shader_debug_mode = debug_mode_;
   snapshot.requested_features = requested_features_;

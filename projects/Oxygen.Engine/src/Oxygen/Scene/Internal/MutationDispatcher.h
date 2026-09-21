@@ -62,8 +62,7 @@ public:
    - Coalesced mutations dispatch after drain, in first-seen-key order.
   */
   virtual auto Dispatch(IMutationCollector& mutation_collector,
-    const DispatchContext& context) -> void
-    = 0;
+    const DispatchContext& context) -> void = 0;
   [[nodiscard]] virtual auto GetCounters() const noexcept -> Counters = 0;
 };
 

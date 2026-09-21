@@ -254,8 +254,7 @@ public:
     -> const FramebufferInfo& = 0;
 
   OXGN_GFX_NDAPI virtual auto GetRenderTargetViews() const
-    -> std::span<const NativeView>
-    = 0;
+    -> std::span<const NativeView> = 0;
 
   OXGN_GFX_NDAPI virtual auto GetDepthStencilView() const -> NativeView = 0;
 };

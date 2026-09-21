@@ -43,8 +43,8 @@ namespace {
     state.explicit_slot_claims[slot_index] = explicit_slot_claim;
   }
 
-  auto HashResolvedState(
-    const ResolvedAtmosphereLightState& state) -> std::uint64_t
+  auto HashResolvedState(const ResolvedAtmosphereLightState& state)
+    -> std::uint64_t
   {
     auto seed = std::uint64_t { 0U };
     seed = HashCombineU64(seed, state.active_light_count);
@@ -54,11 +54,12 @@ namespace {
     seed = HashCombineU64(
       seed, static_cast<std::uint64_t>(state.shadow_authority_slot0_only));
 
-    for (std::size_t index = 0; index < state.atmosphere_lights.size(); ++index) {
+    for (std::size_t index = 0; index < state.atmosphere_lights.size();
+      ++index) {
       const auto& light = state.atmosphere_lights[index];
       seed = HashCombineU64(seed, static_cast<std::uint64_t>(light.enabled));
-      seed = HashCombineU64(seed,
-        static_cast<std::uint64_t>(light.use_per_pixel_transmittance));
+      seed = HashCombineU64(
+        seed, static_cast<std::uint64_t>(light.use_per_pixel_transmittance));
       seed = HashCombineU64(seed, light.slot_index);
       seed = HashCombineU64(seed, FloatBits(light.direction_to_light_ws.x));
       seed = HashCombineU64(seed, FloatBits(light.direction_to_light_ws.y));
@@ -68,12 +69,12 @@ namespace {
       seed = HashCombineU64(seed, FloatBits(light.illuminance_rgb_lux.y));
       seed = HashCombineU64(seed, FloatBits(light.illuminance_rgb_lux.z));
       seed = HashCombineU64(seed, FloatBits(light.illuminance_lux));
-      seed = HashCombineU64(
-        seed, FloatBits(light.transmittance_toward_sun_rgb.x));
-      seed = HashCombineU64(
-        seed, FloatBits(light.transmittance_toward_sun_rgb.y));
-      seed = HashCombineU64(
-        seed, FloatBits(light.transmittance_toward_sun_rgb.z));
+      seed
+        = HashCombineU64(seed, FloatBits(light.transmittance_toward_sun_rgb.x));
+      seed
+        = HashCombineU64(seed, FloatBits(light.transmittance_toward_sun_rgb.y));
+      seed
+        = HashCombineU64(seed, FloatBits(light.transmittance_toward_sun_rgb.z));
       seed = HashCombineU64(seed, light.direct_light_authority_flags);
       seed = HashCombineU64(seed, FloatBits(light.disk_luminance_scale_rgba.x));
       seed = HashCombineU64(seed, FloatBits(light.disk_luminance_scale_rgba.y));
@@ -85,8 +86,8 @@ namespace {
       seed = HashCombineU64(seed,
         static_cast<std::uint64_t>(state.source_nodes[index].GetSceneId()));
       seed = HashCombineU64(seed, state.source_cascade_counts[index]);
-      seed = HashCombineU64(seed,
-        static_cast<std::uint64_t>(state.explicit_slot_claims[index]));
+      seed = HashCombineU64(
+        seed, static_cast<std::uint64_t>(state.explicit_slot_claims[index]));
     }
 
     return seed;
@@ -105,7 +106,7 @@ auto AtmosphereLightState::Update(const scene::Scene& scene_ref) -> bool
   const auto& resolved_atmosphere_lights = resolver.ResolveAtmosphereLights();
 
   for (std::uint32_t slot_index = 0U;
-       slot_index < environment::kAtmosphereLightSlotCount; ++slot_index) {
+    slot_index < environment::kAtmosphereLightSlotCount; ++slot_index) {
     if (!resolved_atmosphere_lights.slots[slot_index].has_value()) {
       continue;
     }

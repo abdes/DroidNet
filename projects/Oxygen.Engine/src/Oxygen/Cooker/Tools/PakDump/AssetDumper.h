@@ -31,8 +31,7 @@ public:
   virtual auto DumpAsync(const oxygen::content::PakFile& pak,
     const oxygen::data::pak::core::AssetDirectoryEntry& entry, DumpContext& ctx,
     size_t idx, oxygen::content::AssetLoader& asset_loader) const
-    -> oxygen::co::Co<>
-    = 0;
+    -> oxygen::co::Co<> = 0;
 };
 
 } // namespace oxygen::content::pakdump

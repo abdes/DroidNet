@@ -42,11 +42,9 @@ public:
   OXYGEN_MAKE_NON_MOVABLE(IEventApi)
 
   virtual auto GetPendingEventCount(WorldId world_id) const
-    -> PhysicsResult<size_t>
-    = 0;
+    -> PhysicsResult<size_t> = 0;
   virtual auto DrainEvents(WorldId world_id,
-    std::span<events::PhysicsEvent> out_events) -> PhysicsResult<size_t>
-    = 0;
+    std::span<events::PhysicsEvent> out_events) -> PhysicsResult<size_t> = 0;
 };
 
 } // namespace oxygen::physics::system

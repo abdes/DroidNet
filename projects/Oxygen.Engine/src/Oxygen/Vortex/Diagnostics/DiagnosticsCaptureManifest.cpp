@@ -58,8 +58,8 @@ namespace {
     return out;
   }
 
-  auto WriteStringArray(std::ostream& out, const std::vector<std::string>& values)
-    -> void
+  auto WriteStringArray(
+    std::ostream& out, const std::vector<std::string>& values) -> void
   {
     out << "[";
     for (std::size_t i = 0; i < values.size(); ++i) {
@@ -68,14 +68,13 @@ namespace {
     out << "]";
   }
 
-  auto WritePass(std::ostream& out, const DiagnosticsPassRecord& pass)
-    -> void
+  auto WritePass(std::ostream& out, const DiagnosticsPassRecord& pass) -> void
   {
     out << "{\n";
     Indent(out, 4) << "\"name\": " << Quote(pass.name) << ",\n";
     Indent(out, 4) << "\"kind\": " << Quote(to_string(pass.kind)) << ",\n";
-    Indent(out, 4) << "\"executed\": "
-                   << (pass.executed ? "true" : "false") << ",\n";
+    Indent(out, 4) << "\"executed\": " << (pass.executed ? "true" : "false")
+                   << ",\n";
     Indent(out, 4) << "\"inputs\": ";
     WriteStringArray(out, pass.inputs);
     out << ",\n";
@@ -101,10 +100,10 @@ namespace {
       && !std::string_view { product.descriptor }.starts_with("bindless:");
     out << "{\n";
     Indent(out, 4) << "\"name\": " << Quote(product.name) << ",\n";
-    Indent(out, 4) << "\"producer_pass\": "
-                   << Quote(product.producer_pass) << ",\n";
-    Indent(out, 4) << "\"resource_name\": "
-                   << Quote(product.resource_name) << ",\n";
+    Indent(out, 4) << "\"producer_pass\": " << Quote(product.producer_pass)
+                   << ",\n";
+    Indent(out, 4) << "\"resource_name\": " << Quote(product.resource_name)
+                   << ",\n";
     if (export_descriptor) {
       Indent(out, 4) << "\"descriptor\": " << Quote(product.descriptor)
                      << ",\n";
@@ -141,8 +140,8 @@ auto BuildDiagnosticsCaptureManifestJson(
 {
   auto out = std::ostringstream {};
   out << "{\n";
-  Indent(out, 1) << "\"schema\": "
-                 << Quote(kDiagnosticsCaptureManifestSchema) << ",\n";
+  Indent(out, 1) << "\"schema\": " << Quote(kDiagnosticsCaptureManifestSchema)
+                 << ",\n";
   Indent(out, 1) << "\"version\": 1,\n";
   Indent(out, 1) << "\"frame\": {\n";
   Indent(out, 2) << "\"index\": " << snapshot.frame_index.get() << ",\n";
@@ -154,8 +153,7 @@ auto BuildDiagnosticsCaptureManifestJson(
   Indent(out, 2) << "\"enabled_features\": "
                  << Quote(to_string(snapshot.enabled_features)) << ",\n";
   Indent(out, 2) << "\"gpu_timeline_enabled\": "
-                 << (snapshot.gpu_timeline_enabled ? "true" : "false")
-                 << ",\n";
+                 << (snapshot.gpu_timeline_enabled ? "true" : "false") << ",\n";
   Indent(out, 2) << "\"gpu_timeline_frame_available\": "
                  << (snapshot.gpu_timeline_frame_available ? "true" : "false")
                  << ",\n";

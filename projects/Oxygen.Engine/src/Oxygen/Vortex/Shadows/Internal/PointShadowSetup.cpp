@@ -19,45 +19,47 @@
 namespace oxygen::vortex::shadows::internal {
 namespace {
 
-constexpr float kMinPointNearPlane = 0.1F;
-constexpr float kMinPointRange = 0.1F;
-constexpr float kUePointLightShadowDepthBias = 3.0F;
-constexpr float kUePointLightShadowSlopeDepthBias = 3.0F;
-constexpr float kUeMaxUserShadowBias = 10.0F;
+  constexpr float kMinPointNearPlane = 0.1F;
+  constexpr float kMinPointRange = 0.1F;
+  constexpr float kUePointLightShadowDepthBias = 3.0F;
+  constexpr float kUePointLightShadowSlopeDepthBias = 3.0F;
+  constexpr float kUeMaxUserShadowBias = 10.0F;
 
-constexpr auto kPointFaceDirections = std::array {
-  glm::vec3 { 1.0F, 0.0F, 0.0F },
-  glm::vec3 { -1.0F, 0.0F, 0.0F },
-  glm::vec3 { 0.0F, 1.0F, 0.0F },
-  glm::vec3 { 0.0F, -1.0F, 0.0F },
-  glm::vec3 { 0.0F, 0.0F, 1.0F },
-  glm::vec3 { 0.0F, 0.0F, -1.0F },
-};
+  constexpr auto kPointFaceDirections = std::array {
+    glm::vec3 { 1.0F, 0.0F, 0.0F },
+    glm::vec3 { -1.0F, 0.0F, 0.0F },
+    glm::vec3 { 0.0F, 1.0F, 0.0F },
+    glm::vec3 { 0.0F, -1.0F, 0.0F },
+    glm::vec3 { 0.0F, 0.0F, 1.0F },
+    glm::vec3 { 0.0F, 0.0F, -1.0F },
+  };
 
-constexpr auto kPointFaceUps = std::array {
-  glm::vec3 { 0.0F, 0.0F, 1.0F },
-  glm::vec3 { 0.0F, 0.0F, 1.0F },
-  glm::vec3 { 0.0F, 0.0F, 1.0F },
-  glm::vec3 { 0.0F, 0.0F, 1.0F },
-  glm::vec3 { 0.0F, -1.0F, 0.0F },
-  glm::vec3 { 0.0F, 1.0F, 0.0F },
-};
+  constexpr auto kPointFaceUps = std::array {
+    glm::vec3 { 0.0F, 0.0F, 1.0F },
+    glm::vec3 { 0.0F, 0.0F, 1.0F },
+    glm::vec3 { 0.0F, 0.0F, 1.0F },
+    glm::vec3 { 0.0F, 0.0F, 1.0F },
+    glm::vec3 { 0.0F, -1.0F, 0.0F },
+    glm::vec3 { 0.0F, 1.0F, 0.0F },
+  };
 
-[[nodiscard]] auto ComputePointDepthBias(const FrameLocalLightSelection& light,
-  const float depth_span, const std::uint32_t resolution) -> float
-{
-  if (!std::isfinite(light.shadow_bias) || light.shadow_bias <= 0.0F) {
-    return 0.0F;
+  [[nodiscard]] auto ComputePointDepthBias(
+    const FrameLocalLightSelection& light, const float depth_span,
+    const std::uint32_t resolution) -> float
+  {
+    if (!std::isfinite(light.shadow_bias) || light.shadow_bias <= 0.0F) {
+      return 0.0F;
+    }
+
+    const auto safe_depth_span = (std::max)(depth_span, kMinPointRange);
+    const auto safe_resolution = (std::max)(resolution, 1U);
+    const auto user_bias
+      = std::clamp(light.shadow_bias, 0.0F, kUeMaxUserShadowBias);
+    const auto bias = kUePointLightShadowDepthBias * 512.0F
+      / (safe_depth_span * static_cast<float>(safe_resolution)) * 2.0F
+      * user_bias;
+    return std::clamp(bias, 0.0F, 0.1F);
   }
-
-  const auto safe_depth_span = (std::max)(depth_span, kMinPointRange);
-  const auto safe_resolution = (std::max)(resolution, 1U);
-  const auto user_bias = std::clamp(light.shadow_bias, 0.0F, kUeMaxUserShadowBias);
-  const auto bias = kUePointLightShadowDepthBias * 512.0F
-    / (safe_depth_span * static_cast<float>(safe_resolution))
-    * 2.0F * user_bias;
-  return std::clamp(bias, 0.0F, 0.1F);
-}
 
 } // namespace
 
@@ -68,7 +70,8 @@ auto PointShadowSetup::BuildPointFrameBindings(
   -> ShadowFrameBindings
 {
   auto bindings = ShadowFrameBindings {};
-  if (!allocation.surface_srv.IsValid() || view_input.resolved_view == nullptr) {
+  if (!allocation.surface_srv.IsValid()
+    || view_input.resolved_view == nullptr) {
     return bindings;
   }
 
@@ -97,12 +100,12 @@ auto PointShadowSetup::BuildPointFrameBindings(
     const auto depth_span = range - kMinPointNearPlane;
     const auto depth_bias
       = ComputePointDepthBias(light, depth_span, allocation.resolution.x);
-    const auto world_texel_size
-      = (2.0F * range) / static_cast<float>((std::max)(allocation.resolution.x, 1U));
+    const auto world_texel_size = (2.0F * range)
+      / static_cast<float>((std::max)(allocation.resolution.x, 1U));
 
     auto& point = bindings.point_shadows[point_shadow_index];
-    for (std::size_t face_index = 0U;
-         face_index < kPointFaceDirections.size(); ++face_index) {
+    for (std::size_t face_index = 0U; face_index < kPointFaceDirections.size();
+      ++face_index) {
       const auto view = glm::lookAtRH(light.position,
         light.position + kPointFaceDirections[face_index],
         kPointFaceUps[face_index]);
@@ -112,9 +115,9 @@ auto PointShadowSetup::BuildPointFrameBindings(
       = glm::vec4(light.position, range > 0.0F ? 1.0F / range : 0.0F);
     point.sampling_metadata0 = glm::vec4(static_cast<float>(point_shadow_index),
       inverse_resolution, world_texel_size, depth_bias);
-    point.sampling_metadata1 = glm::vec4(
-      (std::max)(light.shadow_normal_bias, 0.0F),
-      depth_bias * kUePointLightShadowSlopeDepthBias, 1.0F, 0.0F);
+    point.sampling_metadata1
+      = glm::vec4((std::max)(light.shadow_normal_bias, 0.0F),
+        depth_bias * kUePointLightShadowSlopeDepthBias, 1.0F, 0.0F);
     ++point_shadow_index;
   }
 

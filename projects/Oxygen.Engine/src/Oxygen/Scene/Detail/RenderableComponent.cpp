@@ -242,9 +242,8 @@ static inline auto TransformPoint(
   return glm::vec3(m * glm::vec4(p, 1.0f));
 }
 
-static inline auto SphereFromBounds(
-  const glm::vec3& bounds_min, const glm::vec3& bounds_max) noexcept
-  -> glm::vec4
+static inline auto SphereFromBounds(const glm::vec3& bounds_min,
+  const glm::vec3& bounds_max) noexcept -> glm::vec4
 {
   const auto center = 0.5f * (bounds_min + bounds_max);
   const auto radius = 0.5f * glm::length(bounds_max - bounds_min);

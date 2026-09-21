@@ -199,10 +199,9 @@ namespace {
       && lhs.size == rhs.size;
   }
 
-  [[nodiscard]] auto BuildVirtualPathCollisionMessage(
-    std::string_view context, const StoredAsset& incoming,
-    const data::AssetKey& existing_key, const StoredAsset* existing)
-    -> std::string
+  [[nodiscard]] auto BuildVirtualPathCollisionMessage(std::string_view context,
+    const StoredAsset& incoming, const data::AssetKey& existing_key,
+    const StoredAsset* existing) -> std::string
   {
     auto message = std::string(
       "Conflicting virtual path mapping in loose cooked container");
@@ -370,7 +369,8 @@ struct LooseCookedWriter::Impl final {
   auto HandleVirtualPathCollision(
     const StoredAsset& incoming, std::string_view context) -> bool
   {
-    const auto existing_key_it = key_by_virtual_path_.find(incoming.virtual_path);
+    const auto existing_key_it
+      = key_by_virtual_path_.find(incoming.virtual_path);
     if (existing_key_it == key_by_virtual_path_.end()) {
       return true;
     }

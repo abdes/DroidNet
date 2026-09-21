@@ -48,74 +48,55 @@ public:
   OXYGEN_MAKE_NON_MOVABLE(IBodyApi)
 
   virtual auto CreateBody(WorldId world_id, const body::BodyDesc& desc)
-    -> PhysicsResult<BodyId>
-    = 0;
+    -> PhysicsResult<BodyId> = 0;
   virtual auto DestroyBody(WorldId world_id, BodyId body_id)
-    -> PhysicsResult<void>
-    = 0;
+    -> PhysicsResult<void> = 0;
 
   virtual auto GetBodyPosition(WorldId world_id, BodyId body_id) const
-    -> PhysicsResult<Vec3>
-    = 0;
+    -> PhysicsResult<Vec3> = 0;
   virtual auto GetBodyRotation(WorldId world_id, BodyId body_id) const
-    -> PhysicsResult<Quat>
-    = 0;
+    -> PhysicsResult<Quat> = 0;
   virtual auto SetBodyPosition(WorldId world_id, BodyId body_id,
-    const Vec3& position) -> PhysicsResult<void>
-    = 0;
+    const Vec3& position) -> PhysicsResult<void> = 0;
   virtual auto SetBodyRotation(WorldId world_id, BodyId body_id,
-    const Quat& rotation) -> PhysicsResult<void>
-    = 0;
+    const Quat& rotation) -> PhysicsResult<void> = 0;
   virtual auto SetBodyPose(WorldId world_id, BodyId body_id,
-    const Vec3& position, const Quat& rotation) -> PhysicsResult<void>
-    = 0;
+    const Vec3& position, const Quat& rotation) -> PhysicsResult<void> = 0;
   virtual auto GetBodyPoses(WorldId world_id, std::span<const BodyId> body_ids,
     std::span<Vec3> out_positions, std::span<Quat> out_rotations) const
-    -> PhysicsResult<size_t>
-    = 0;
+    -> PhysicsResult<size_t> = 0;
 
   virtual auto GetLinearVelocity(WorldId world_id, BodyId body_id) const
-    -> PhysicsResult<Vec3>
-    = 0;
+    -> PhysicsResult<Vec3> = 0;
   virtual auto GetAngularVelocity(WorldId world_id, BodyId body_id) const
-    -> PhysicsResult<Vec3>
-    = 0;
+    -> PhysicsResult<Vec3> = 0;
   virtual auto SetLinearVelocity(WorldId world_id, BodyId body_id,
-    const Vec3& velocity) -> PhysicsResult<void>
-    = 0;
+    const Vec3& velocity) -> PhysicsResult<void> = 0;
   virtual auto SetAngularVelocity(WorldId world_id, BodyId body_id,
-    const Vec3& velocity) -> PhysicsResult<void>
-    = 0;
+    const Vec3& velocity) -> PhysicsResult<void> = 0;
 
   virtual auto AddForce(WorldId world_id, BodyId body_id, const Vec3& force)
-    -> PhysicsResult<void>
-    = 0;
+    -> PhysicsResult<void> = 0;
   virtual auto AddImpulse(WorldId world_id, BodyId body_id, const Vec3& impulse)
-    -> PhysicsResult<void>
-    = 0;
+    -> PhysicsResult<void> = 0;
   virtual auto AddTorque(WorldId world_id, BodyId body_id, const Vec3& torque)
-    -> PhysicsResult<void>
-    = 0;
+    -> PhysicsResult<void> = 0;
 
   virtual auto MoveKinematic(WorldId world_id, BodyId body_id,
     const Vec3& target_position, const Quat& target_rotation, float delta_time)
-    -> PhysicsResult<void>
-    = 0;
+    -> PhysicsResult<void> = 0;
   virtual auto MoveKinematicBatch(WorldId world_id,
     std::span<const BodyId> body_ids, std::span<const Vec3> target_positions,
     std::span<const Quat> target_rotations, float delta_time)
-    -> PhysicsResult<size_t>
-    = 0;
+    -> PhysicsResult<size_t> = 0;
 
   virtual auto AddBodyShape(WorldId world_id, BodyId body_id, ShapeId shape_id,
     const Vec3& local_position, const Quat& local_rotation)
-    -> PhysicsResult<ShapeInstanceId>
-    = 0;
+    -> PhysicsResult<ShapeInstanceId> = 0;
   virtual auto RemoveBodyShape(WorldId world_id, BodyId body_id,
-    ShapeInstanceId shape_instance_id) -> PhysicsResult<void>
-    = 0;
-  virtual auto FlushStructuralChanges(WorldId world_id) -> PhysicsResult<size_t>
-    = 0;
+    ShapeInstanceId shape_instance_id) -> PhysicsResult<void> = 0;
+  virtual auto FlushStructuralChanges(WorldId world_id)
+    -> PhysicsResult<size_t> = 0;
 };
 
 } // namespace oxygen::physics::system

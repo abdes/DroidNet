@@ -79,8 +79,7 @@ public:
      returned index must remain stable, but what it references may change.
   */
   [[nodiscard]] virtual auto GetOrAllocate(const content::ResourceKey& key)
-    -> ShaderVisibleIndex
-    = 0;
+    -> ShaderVisibleIndex = 0;
 
   //! Returns whether a resolved resource is ready for shader sampling.
   /*!

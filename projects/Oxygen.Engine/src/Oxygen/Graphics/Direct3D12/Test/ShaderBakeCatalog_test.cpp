@@ -113,15 +113,18 @@ NOLINT_TEST(ShaderBakeCatalogTest,
   EngineCatalogUsesVortexEnvironmentShadersAndNoLegacyAtmosphereCatalogEntries)
 {
   const auto has_path = [](std::string_view path) {
-    return std::ranges::any_of(kEngineShaders, [path](const ShaderEntry& entry) {
-      return entry.path == path;
-    });
+    return std::ranges::any_of(kEngineShaders,
+      [path](const ShaderEntry& entry) { return entry.path == path; });
   };
 
-  EXPECT_TRUE(has_path("Vortex/Services/Environment/AtmosphereTransmittanceLut.hlsl"));
-  EXPECT_TRUE(has_path("Vortex/Services/Environment/AtmosphereSkyViewLut.hlsl"));
-  EXPECT_TRUE(has_path("Vortex/Services/Environment/AtmosphereMultiScatteringLut.hlsl"));
-  EXPECT_TRUE(has_path("Vortex/Services/Environment/AtmosphereCameraAerialPerspective.hlsl"));
+  EXPECT_TRUE(
+    has_path("Vortex/Services/Environment/AtmosphereTransmittanceLut.hlsl"));
+  EXPECT_TRUE(
+    has_path("Vortex/Services/Environment/AtmosphereSkyViewLut.hlsl"));
+  EXPECT_TRUE(
+    has_path("Vortex/Services/Environment/AtmosphereMultiScatteringLut.hlsl"));
+  EXPECT_TRUE(has_path(
+    "Vortex/Services/Environment/AtmosphereCameraAerialPerspective.hlsl"));
   EXPECT_TRUE(has_path("Vortex/Services/Environment/VolumetricFog.hlsl"));
 
   EXPECT_FALSE(has_path("Atmosphere/TransmittanceLut_CS.hlsl"));

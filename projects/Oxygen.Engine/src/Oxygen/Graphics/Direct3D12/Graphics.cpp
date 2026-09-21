@@ -255,7 +255,8 @@ protected:
       // Current contracts:
       // - SamplerDescriptorHeap[0] = default linear wrap sampler
       // - SamplerDescriptorHeap[1] = shadow comparison sampler
-      // - SamplerDescriptorHeap[2] = point clamp sampler for depth/GBuffer reads
+      // - SamplerDescriptorHeap[2] = point clamp sampler for depth/GBuffer
+      // reads
       // - SamplerDescriptorHeap[3] = linear clamp sampler for atmosphere LUTs
       //
       // Keep this ordering stable. The atmosphere shaders hardcode sampler slot

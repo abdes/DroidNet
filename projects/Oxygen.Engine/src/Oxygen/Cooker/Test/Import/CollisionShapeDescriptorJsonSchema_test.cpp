@@ -169,7 +169,8 @@ NOLINT_TEST(
   EXPECT_FALSE(ValidateSchema(*schema, doc, errors));
 }
 
-//! Verifies non-analytic shape descriptors are valid without extra payload fields.
+//! Verifies non-analytic shape descriptors are valid without extra payload
+//! fields.
 NOLINT_TEST(CollisionShapeDescriptorJsonSchemaTest,
   AcceptsPayloadBackedShapeWithoutUnknownField)
 {
@@ -188,7 +189,8 @@ NOLINT_TEST(CollisionShapeDescriptorJsonSchemaTest,
   EXPECT_TRUE(ValidateSchema(*schema, doc, errors)) << errors;
 }
 
-//! Verifies unknown payload fields are rejected for primitive shape descriptors.
+//! Verifies unknown payload fields are rejected for primitive shape
+//! descriptors.
 NOLINT_TEST(CollisionShapeDescriptorJsonSchemaTest,
   RejectsUnknownPayloadFieldForPrimitiveShape)
 {

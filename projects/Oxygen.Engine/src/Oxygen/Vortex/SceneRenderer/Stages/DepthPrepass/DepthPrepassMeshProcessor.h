@@ -43,8 +43,7 @@ public:
   auto operator=(DepthPrepassMeshProcessor&&)
     -> DepthPrepassMeshProcessor& = delete;
 
-  OXGN_VRTX_API void BuildDrawCommands(
-    const PreparedSceneFrame& prepared_scene,
+  OXGN_VRTX_API void BuildDrawCommands(const PreparedSceneFrame& prepared_scene,
     const ResolvedView* resolved_view, bool include_masked);
 
   [[nodiscard]] OXGN_VRTX_API auto GetDrawCommands() const

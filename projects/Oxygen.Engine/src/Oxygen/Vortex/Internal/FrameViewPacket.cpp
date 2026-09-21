@@ -36,7 +36,8 @@ FrameViewPacket::FrameViewPacket(observer_ptr<const CompositionViewImpl> view,
   if (descriptor.on_overlay) {
     if (!std::ranges::contains(
           overlay_policy_.lanes, CompositionView::OverlayLane::kViewScreen)) {
-      overlay_policy_.lanes.push_back(CompositionView::OverlayLane::kViewScreen);
+      overlay_policy_.lanes.push_back(
+        CompositionView::OverlayLane::kViewScreen);
     }
     overlay_batches_.push_back(CompositionView::OverlayBatch {
       .lane = CompositionView::OverlayLane::kViewScreen,
@@ -54,8 +55,8 @@ FrameViewPacket::FrameViewPacket(observer_ptr<const CompositionViewImpl> view,
       && lane != CompositionView::OverlayLane::kWorldForeground) {
       continue;
     }
-    const auto exists = std::ranges::any_of(overlay_batches_,
-      [lane](const CompositionView::OverlayBatch& batch) {
+    const auto exists = std::ranges::any_of(
+      overlay_batches_, [lane](const CompositionView::OverlayBatch& batch) {
         return batch.lane == lane;
       });
     if (exists) {

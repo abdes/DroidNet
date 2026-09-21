@@ -81,8 +81,7 @@ struct SubresourceId {
 
   //! Equality comparison.
   [[nodiscard]] auto operator==(const SubresourceId& other) const noexcept
-    -> bool
-    = default;
+    -> bool = default;
 };
 
 //! A single source file mapped to a subresource.

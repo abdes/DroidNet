@@ -17,10 +17,10 @@
 #include <Oxygen/Scene/Detail/Scene_safecall_impl.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Internal/IMutationCollector.h>
-#include <Oxygen/Scene/Light/DirectionalLightResolver.h>
 #include <Oxygen/Scene/Internal/MutationCollector.h>
 #include <Oxygen/Scene/Internal/MutationDispatcher.h>
 #include <Oxygen/Scene/Internal/ScriptSlotMutationProcessor.h>
+#include <Oxygen/Scene/Light/DirectionalLightResolver.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneQuery.h>
 #include <Oxygen/Scene/SceneTraversal.h>
@@ -139,8 +139,7 @@ auto Scene::GetName() const noexcept -> std::string_view
   return GetComponent<ObjectMetadata>().GetName();
 }
 
-auto Scene::GetDirectionalLightResolver() noexcept
-  -> DirectionalLightResolver&
+auto Scene::GetDirectionalLightResolver() noexcept -> DirectionalLightResolver&
 {
   DCHECK_NOTNULL_F(directional_light_resolver_.get());
   return *directional_light_resolver_;

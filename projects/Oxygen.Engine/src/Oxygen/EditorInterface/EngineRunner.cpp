@@ -7,9 +7,9 @@
 #include <exception>
 #include <memory>
 #include <mutex>
-#include <utility>
 #include <stdexcept>
 #include <thread>
+#include <utility>
 
 #if defined(_WIN32)
 #  include <Windows.h>
@@ -34,7 +34,8 @@
 
 namespace {
 
-// Protect the editor API's engine owner while stop/config calls overlap loop exit.
+// Protect the editor API's engine owner while stop/config calls overlap loop
+// exit.
 std::mutex engine_owner_mutex;
 
 //! Event loop tick: drives the engine's asio context (if supplied) and
@@ -105,8 +106,7 @@ auto RegisterEngineModules(oxygen::engine::interop::EngineContext& ctx) -> void
 }
 
 auto AsyncMain(oxygen::engine::interop::EngineContext& ctx,
-  const std::function<void()>& on_started)
-  -> oxygen::co::Co<int>
+  const std::function<void()>& on_started) -> oxygen::co::Co<int>
 {
   using namespace oxygen;
 
@@ -148,7 +148,8 @@ auto AsyncMain(oxygen::engine::interop::EngineContext& ctx,
 
 namespace oxygen::engine::interop {
 
-auto CreateEngine(const EditorEngineConfig& config) -> std::unique_ptr<EngineContext>
+auto CreateEngine(const EditorEngineConfig& config)
+  -> std::unique_ptr<EngineContext>
 {
   // Pre-allocate static error messages when we are handling critical failures
   constexpr std::string_view kUnhandledException
@@ -186,14 +187,13 @@ auto CreateEngine(const EditorEngineConfig& config) -> std::unique_ptr<EngineCon
 
     ctx->renderer_config = config.renderer;
     if (ctx->renderer_config.upload_queue_key.empty()) {
-      ctx->renderer_config.upload_queue_key =
-        ctx->queue_strategy.KeyFor(graphics::QueueRole::kTransfer).get();
+      ctx->renderer_config.upload_queue_key
+        = ctx->queue_strategy.KeyFor(graphics::QueueRole::kTransfer).get();
     }
 
     // Create the async engine
-    ctx->engine
-      = std::make_shared<AsyncEngine>(ctx->platform, ctx->gfx_weak,
-        config.engine);
+    ctx->engine = std::make_shared<AsyncEngine>(
+      ctx->platform, ctx->gfx_weak, config.engine);
 
     return ctx;
   } catch (const std::exception& ex) {
@@ -230,8 +230,8 @@ auto RunEngine(std::shared_ptr<EngineContext> ctx) -> void
   RunEngine(std::move(ctx), {});
 }
 
-auto RunEngine(std::shared_ptr<EngineContext> ctx,
-  std::function<void()> on_started) -> void
+auto RunEngine(
+  std::shared_ptr<EngineContext> ctx, std::function<void()> on_started) -> void
 {
   const auto rc = co::Run(*ctx, AsyncMain(*ctx, on_started));
 

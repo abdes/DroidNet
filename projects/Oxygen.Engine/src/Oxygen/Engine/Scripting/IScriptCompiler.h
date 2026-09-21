@@ -38,8 +38,7 @@ public:
   OXYGEN_MAKE_NON_MOVABLE(IScriptCompiler)
 
   [[nodiscard]] virtual auto Language() const noexcept
-    -> data::pak::scripting::ScriptLanguage
-    = 0;
+    -> data::pak::scripting::ScriptLanguage = 0;
 
   [[nodiscard]] virtual auto Compile(ScriptSourceBlob source,
     core::meta::scripting::ScriptCompileMode mode) const -> ScriptCompileResult

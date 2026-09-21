@@ -11,29 +11,26 @@
 
 #include <Oxygen/Core/Bindless/Types.h>
 
-#include <Oxygen/Vortex/Environment/Types/AtmosphereModel.h>
 #include <Oxygen/Vortex/Environment/Types/AtmosphereLightModel.h>
+#include <Oxygen/Vortex/Environment/Types/AtmosphereModel.h>
 #include <Oxygen/Vortex/Environment/Types/HeightFogModel.h>
 #include <Oxygen/Vortex/Environment/Types/SkyLightEnvironmentModel.h>
 #include <Oxygen/Vortex/Environment/Types/VolumetricFogModel.h>
 
 namespace oxygen::vortex::environment {
 
-inline constexpr std::uint32_t kEnvironmentViewProductFlagSkyLightAuthoredEnabled
-  = 1U << 0U;
-inline constexpr std::uint32_t kEnvironmentViewProductFlagSkyLightIblValid
-  = 1U << 1U;
+inline constexpr std::uint32_t
+  kEnvironmentViewProductFlagSkyLightAuthoredEnabled = 1U << 0U;
+inline constexpr std::uint32_t kEnvironmentViewProductFlagSkyLightIblValid = 1U
+  << 1U;
 inline constexpr std::uint32_t kEnvironmentViewProductFlagSkyLightIblUnavailable
   = 1U << 2U;
 inline constexpr std::uint32_t
-  kEnvironmentViewProductFlagVolumetricFogAuthoredEnabled
-  = 1U << 3U;
+  kEnvironmentViewProductFlagVolumetricFogAuthoredEnabled = 1U << 3U;
 inline constexpr std::uint32_t
-  kEnvironmentViewProductFlagIntegratedLightScatteringValid
-  = 1U << 4U;
+  kEnvironmentViewProductFlagIntegratedLightScatteringValid = 1U << 4U;
 inline constexpr std::uint32_t
-  kEnvironmentViewProductFlagIntegratedLightScatteringUnavailable
-  = 1U << 5U;
+  kEnvironmentViewProductFlagIntegratedLightScatteringUnavailable = 1U << 5U;
 
 struct EnvironmentViewProducts {
   AtmosphereModel atmosphere {};
@@ -51,7 +48,9 @@ struct EnvironmentViewProducts {
   ShaderVisibleIndex transmittance_lut_srv { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex multi_scattering_lut_srv { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex sky_view_lut_srv { kInvalidShaderVisibleIndex };
-  ShaderVisibleIndex camera_aerial_perspective_srv { kInvalidShaderVisibleIndex };
+  ShaderVisibleIndex camera_aerial_perspective_srv {
+    kInvalidShaderVisibleIndex
+  };
   ShaderVisibleIndex distant_sky_light_lut_srv { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex integrated_light_scattering_srv {
     kInvalidShaderVisibleIndex

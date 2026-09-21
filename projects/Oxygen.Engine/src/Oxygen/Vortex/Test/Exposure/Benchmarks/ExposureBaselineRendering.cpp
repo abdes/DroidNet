@@ -167,7 +167,8 @@ auto ExposureBaselineScenario::RenderFrame(const bool start_recording,
     auto* service
       = vortex::testing::RendererPublicationProbe::GetPostProcessService(
         *owner);
-    vortex::testing::RendererPublicationProbe::RestoreExposureStatusDelivery(*service,
+    vortex::testing::RendererPublicationProbe::RestoreExposureStatusDelivery(
+      *service,
       CompositionView::ViewStateHandle {
         500U,
       },
@@ -310,7 +311,8 @@ auto ExposureBaselineScenario::MeasureFrames() -> void
   samples.reserve(sample_count);
   require_ready = true;
   if (measure_cpu_owners) {
-    cpu_timing = std::make_unique<ExposureCpuTiming>(sample_count, measure_cpu_details);
+    cpu_timing
+      = std::make_unique<ExposureCpuTiming>(sample_count, measure_cpu_details);
     recording_cpu_owners = true;
   }
   const auto sample_start = Clock::now();

@@ -348,8 +348,7 @@ void TranslateDepthStencilState(
     = ConvertStencilOp(desc.back_face.stencil_depth_fail_op);
   d3d_desc.BackFace.StencilPassOp
     = ConvertStencilOp(desc.back_face.stencil_pass_op);
-  d3d_desc.BackFace.StencilFunc
-    = ConvertCompareOp(desc.back_face.stencil_func);
+  d3d_desc.BackFace.StencilFunc = ConvertCompareOp(desc.back_face.stencil_func);
 }
 
 void TranslateBlendState(

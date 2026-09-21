@@ -35,7 +35,8 @@ struct ViewFeatureProfileSpec {
 }
 
 [[nodiscard]] constexpr auto ToString(
-  const CompositionView::ViewFeatureProfile profile) noexcept -> std::string_view
+  const CompositionView::ViewFeatureProfile profile) noexcept
+  -> std::string_view
 {
   using Profile = CompositionView::ViewFeatureProfile;
   switch (profile) {

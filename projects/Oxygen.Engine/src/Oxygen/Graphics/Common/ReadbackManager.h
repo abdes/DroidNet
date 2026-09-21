@@ -32,21 +32,18 @@ public:
   OXYGEN_MAKE_NON_MOVABLE(GpuBufferReadback)
 
   virtual auto EnqueueCopy(CommandRecorder& recorder, const Buffer& source,
-    BufferRange range = {}) -> std::expected<ReadbackTicket, ReadbackError>
-    = 0;
+    BufferRange range = {}) -> std::expected<ReadbackTicket, ReadbackError> = 0;
 
   [[nodiscard]] virtual auto GetState() const noexcept -> ReadbackState = 0;
   [[nodiscard]] virtual auto Ticket() const noexcept
-    -> std::optional<ReadbackTicket>
-    = 0;
+    -> std::optional<ReadbackTicket> = 0;
   [[nodiscard]] virtual auto IsReady() const
-    -> std::expected<bool, ReadbackError>
-    = 0;
+    -> std::expected<bool, ReadbackError> = 0;
 
-  virtual auto TryMap() -> std::expected<MappedBufferReadback, ReadbackError>
-    = 0;
-  virtual auto MapNow() -> std::expected<MappedBufferReadback, ReadbackError>
-    = 0;
+  virtual auto TryMap()
+    -> std::expected<MappedBufferReadback, ReadbackError> = 0;
+  virtual auto MapNow()
+    -> std::expected<MappedBufferReadback, ReadbackError> = 0;
 
   virtual auto Cancel() -> std::expected<bool, ReadbackError> = 0;
   virtual auto Reset() -> void = 0;
@@ -76,21 +73,18 @@ public:
 
   virtual auto EnqueueCopy(CommandRecorder& recorder, const Texture& source,
     TextureReadbackRequest request = {})
-    -> std::expected<ReadbackTicket, ReadbackError>
-    = 0;
+    -> std::expected<ReadbackTicket, ReadbackError> = 0;
 
   [[nodiscard]] virtual auto GetState() const noexcept -> ReadbackState = 0;
   [[nodiscard]] virtual auto Ticket() const noexcept
-    -> std::optional<ReadbackTicket>
-    = 0;
+    -> std::optional<ReadbackTicket> = 0;
   [[nodiscard]] virtual auto IsReady() const
-    -> std::expected<bool, ReadbackError>
-    = 0;
+    -> std::expected<bool, ReadbackError> = 0;
 
-  virtual auto TryMap() -> std::expected<MappedTextureReadback, ReadbackError>
-    = 0;
-  virtual auto MapNow() -> std::expected<MappedTextureReadback, ReadbackError>
-    = 0;
+  virtual auto TryMap()
+    -> std::expected<MappedTextureReadback, ReadbackError> = 0;
+  virtual auto MapNow()
+    -> std::expected<MappedTextureReadback, ReadbackError> = 0;
 
   virtual auto Cancel() -> std::expected<bool, ReadbackError> = 0;
   virtual auto Reset() -> void = 0;
@@ -105,40 +99,31 @@ public:
   OXYGEN_MAKE_NON_MOVABLE(ReadbackManager)
 
   [[nodiscard]] virtual auto CreateBufferReadback(std::string_view debug_name)
-    -> std::shared_ptr<GpuBufferReadback>
-    = 0;
+    -> std::shared_ptr<GpuBufferReadback> = 0;
   [[nodiscard]] virtual auto CreateTextureReadback(std::string_view debug_name)
-    -> std::shared_ptr<GpuTextureReadback>
-    = 0;
+    -> std::shared_ptr<GpuTextureReadback> = 0;
 
   virtual auto Await(ReadbackTicket ticket)
-    -> std::expected<ReadbackResult, ReadbackError>
-    = 0;
+    -> std::expected<ReadbackResult, ReadbackError> = 0;
   virtual auto AwaitAsync(ReadbackTicket ticket) -> co::Co<void> = 0;
   virtual auto Cancel(ReadbackTicket ticket)
-    -> std::expected<bool, ReadbackError>
-    = 0;
+    -> std::expected<bool, ReadbackError> = 0;
 
   virtual auto ReadBufferNow(const Buffer& source, BufferRange range = {})
-    -> std::expected<std::vector<std::byte>, ReadbackError>
-    = 0;
+    -> std::expected<std::vector<std::byte>, ReadbackError> = 0;
   virtual auto ReadTextureNow(const Texture& source,
     TextureReadbackRequest request = {}, bool tightly_pack = true)
-    -> std::expected<OwnedTextureReadbackData, ReadbackError>
-    = 0;
+    -> std::expected<OwnedTextureReadbackData, ReadbackError> = 0;
 
   virtual auto CreateReadbackTextureSurface(const TextureDesc& desc)
-    -> std::expected<std::shared_ptr<Texture>, ReadbackError>
-    = 0;
+    -> std::expected<std::shared_ptr<Texture>, ReadbackError> = 0;
   virtual auto MapReadbackTextureSurface(Texture& surface, TextureSlice slice)
-    -> std::expected<ReadbackSurfaceMapping, ReadbackError>
-    = 0;
+    -> std::expected<ReadbackSurfaceMapping, ReadbackError> = 0;
   virtual auto UnmapReadbackTextureSurface(Texture& surface) -> void = 0;
 
   virtual auto OnFrameStart(frame::Slot slot) -> void = 0;
   virtual auto Shutdown(std::chrono::milliseconds timeout)
-    -> std::expected<void, ReadbackError>
-    = 0;
+    -> std::expected<void, ReadbackError> = 0;
 };
 
 } // namespace oxygen::graphics

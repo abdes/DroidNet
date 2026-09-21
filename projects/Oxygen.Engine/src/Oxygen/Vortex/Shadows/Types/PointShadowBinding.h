@@ -23,12 +23,14 @@ struct alignas(packing::kShaderDataFieldAlignment) PointShadowBinding {
   glm::vec4 _padding0 { 0.0F };
 };
 
-static_assert(alignof(PointShadowBinding) == packing::kShaderDataFieldAlignment);
+static_assert(
+  alignof(PointShadowBinding) == packing::kShaderDataFieldAlignment);
 static_assert(sizeof(PointShadowBinding) == 448U);
 static_assert(offsetof(PointShadowBinding, face_light_view_projection) == 0U);
 static_assert(offsetof(PointShadowBinding, position_and_inv_range) == 384U);
 static_assert(offsetof(PointShadowBinding, sampling_metadata0) == 400U);
 static_assert(offsetof(PointShadowBinding, sampling_metadata1) == 416U);
-static_assert(sizeof(PointShadowBinding) % packing::kShaderDataFieldAlignment == 0U);
+static_assert(
+  sizeof(PointShadowBinding) % packing::kShaderDataFieldAlignment == 0U);
 
 } // namespace oxygen::vortex

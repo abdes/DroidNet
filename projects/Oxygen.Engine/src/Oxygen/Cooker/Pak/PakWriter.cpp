@@ -326,9 +326,8 @@ auto FindScriptParamBaseOffset(
 auto ScriptSlotsRequireParamRegion(
   const std::span<const pak::PakScriptSlotPlan> slots) -> bool
 {
-  return std::ranges::any_of(slots, [](const pak::PakScriptSlotPlan& slot) {
-    return slot.params_count > 0U;
-  });
+  return std::ranges::any_of(slots,
+    [](const pak::PakScriptSlotPlan& slot) { return slot.params_count > 0U; });
 }
 
 auto BuildFooter(WriterState& state) -> std::optional<core::PakFooter>

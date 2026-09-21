@@ -32,9 +32,8 @@ public:
 
   virtual void OnFrameStart(const engine::FrameContext& context) = 0;
   virtual void OnSceneActivated(scene::Scene& scene) = 0;
-  virtual void OnMainViewReady(
-    const engine::FrameContext& context, const vortex::CompositionView& view)
-    = 0;
+  virtual void OnMainViewReady(const engine::FrameContext& context,
+    const vortex::CompositionView& view) = 0;
 
   [[nodiscard]] virtual auto GetEpoch() const noexcept -> std::uint64_t = 0;
 };

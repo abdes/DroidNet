@@ -25,8 +25,8 @@ enum class ShaderStageFlags : uint32_t { // NOLINT(performance-enum-size)
 
   //! @{
   //! Graphics.
-  kAmplification
-  = OXYGEN_FLAG(0), //!< Amplification Shader stage (mesh pipeline).
+  kAmplification = OXYGEN_FLAG(
+    0), //!< Amplification Shader stage (mesh pipeline).
   kMesh = OXYGEN_FLAG(1), //!< Mesh Shader stage (mesh pipeline).
   kVertex = OXYGEN_FLAG(2), //!< Vertex Shader stage.
   kHull = OXYGEN_FLAG(3), //!< Hull (Tessellation Control) Shader stage.

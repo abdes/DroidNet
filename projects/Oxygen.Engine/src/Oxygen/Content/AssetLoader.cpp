@@ -2983,7 +2983,7 @@ auto AssetLoader::LoadSceneAssetAsyncImpl(const data::AssetKey& key,
   };
 
   const auto decode_and_publish = [this, key, source_id, hash_key, request,
-    publish_scene_renderable_dependencies,
+                                    publish_scene_renderable_dependencies,
                                     publish_scene_script_dependencies]()
     -> co::Co<std::shared_ptr<data::SceneAsset>> {
     try {

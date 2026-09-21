@@ -33,18 +33,15 @@ public:
 
   //! Maps a detailed collision layer to a broader phase layer.
   virtual auto GetBroadPhaseLayer(CollisionLayer layer) const noexcept
-    -> BroadPhaseLayer
-    = 0;
+    -> BroadPhaseLayer = 0;
 
   //! Determines if two detailed layers should collide.
   virtual auto ShouldCollide(
-    CollisionLayer layer1, CollisionLayer layer2) const noexcept -> bool
-    = 0;
+    CollisionLayer layer1, CollisionLayer layer2) const noexcept -> bool = 0;
 
   //! Determines if a detailed layer should collide with a broad phase layer.
   virtual auto ShouldCollide(
-    CollisionLayer layer1, BroadPhaseLayer bp_layer) const noexcept -> bool
-    = 0;
+    CollisionLayer layer1, BroadPhaseLayer bp_layer) const noexcept -> bool = 0;
 };
 
 } // namespace oxygen::physics

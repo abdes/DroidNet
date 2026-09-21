@@ -437,10 +437,10 @@ auto UploadPlanner::PlanTexture2D(const UploadTextureDesc& desc,
   }
 
   std::ranges::sort(planned, [](const Planned& a, const Planned& b) -> bool {
-      const auto ak = std::tuple { a.sr.array_slice, a.sr.mip, a.sr.y, a.sr.x };
-      const auto bk = std::tuple { b.sr.array_slice, b.sr.mip, b.sr.y, b.sr.x };
-      return ak < bk;
-    });
+    const auto ak = std::tuple { a.sr.array_slice, a.sr.mip, a.sr.y, a.sr.x };
+    const auto bk = std::tuple { b.sr.array_slice, b.sr.mip, b.sr.y, b.sr.x };
+    return ak < bk;
+  });
 
   std::vector<TextureUploadRegion> regions;
   std::vector<std::size_t> source_indices;
@@ -670,7 +670,8 @@ auto UploadPlanner::PlanTexture3D(const UploadTextureDesc& desc,
     return std::unexpected(UploadError::kInvalidRequest);
   }
 
-  std::ranges::sort(planned, [](const Planned3D& a, const Planned3D& b) -> bool {
+  std::ranges::sort(
+    planned, [](const Planned3D& a, const Planned3D& b) -> bool {
       const auto ak
         = std::tuple { a.sr.array_slice, a.sr.mip, a.sr.z, a.sr.y, a.sr.x };
       const auto bk

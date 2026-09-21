@@ -4,8 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Vortex/Environment/EnvironmentLightingService.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
+#include <Oxygen/Vortex/Environment/EnvironmentLightingService.h>
 
 #include <algorithm>
 #include <cmath>

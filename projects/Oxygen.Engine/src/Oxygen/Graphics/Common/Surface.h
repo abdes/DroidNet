@@ -65,8 +65,8 @@ public:
 
   virtual auto GetCurrentBackBufferIndex() const -> uint32_t = 0;
   virtual auto GetCurrentBackBuffer() const -> std::shared_ptr<Texture> = 0;
-  virtual auto GetBackBuffer(uint32_t index) const -> std::shared_ptr<Texture>
-    = 0;
+  virtual auto GetBackBuffer(uint32_t index) const
+    -> std::shared_ptr<Texture> = 0;
 
   //! Present the current frame if the surface supports it.
   virtual auto Present() const -> void = 0;

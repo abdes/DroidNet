@@ -220,13 +220,13 @@ public:
     return sky_luminance_factor_rgb_;
   }
 
-  auto SetSkyAndAerialPerspectiveLuminanceFactorRgb(
-    const Vec3& rgb) noexcept -> void
+  auto SetSkyAndAerialPerspectiveLuminanceFactorRgb(const Vec3& rgb) noexcept
+    -> void
   {
     sky_and_aerial_perspective_luminance_factor_rgb_ = rgb;
   }
-  [[nodiscard]] auto GetSkyAndAerialPerspectiveLuminanceFactorRgb() const
-    noexcept -> const Vec3&
+  [[nodiscard]] auto
+  GetSkyAndAerialPerspectiveLuminanceFactorRgb() const noexcept -> const Vec3&
   {
     return sky_and_aerial_perspective_luminance_factor_rgb_;
   }
