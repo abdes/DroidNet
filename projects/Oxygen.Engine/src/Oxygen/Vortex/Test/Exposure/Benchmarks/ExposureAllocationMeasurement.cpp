@@ -5,15 +5,36 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <array>
 #include <bit>
 #include <cstddef>
+#include <cstdint>
 #include <cstring>
 #include <limits>
 #include <numeric>
+#include <span>
+#include <string>
+#include <vector>
 
+#include <basetsd.h>
+#include <d3d12.h>
+#include <minwindef.h>
+#include <nlohmann/json_fwd.hpp>
+
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ScopeGuard.h>
+#include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Graphics/Common/Buffer.h>
+#include <Oxygen/Graphics/Common/CommandRecorder.h>
+#include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Graphics/Direct3D12/CommandList.h>
+#include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/Test/Exposure/Benchmarks/ExposureAllocationScenario.h>
 #include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
+#include <Oxygen/Vortex/Types/ExposureStateData.h>
 
 namespace oxygen::vortex::testing::exposure {
 
@@ -270,7 +291,7 @@ auto ExposureAllocationScenario::DepthSample(DepthLocation location)
   CHECK_GE_F(stride, sizeof(std::uint32_t));
   const auto* bytes = static_cast<const std::byte*>(readback.buffer->Map());
   CHECK_NOTNULL_F(bytes);
-  auto unmap = ScopeGuard([&]() noexcept -> void { readback.buffer->UnMap(); });
+  auto unmap = ScopeGuard([&] noexcept -> void { readback.buffer->UnMap(); });
   const auto mapped = std::span {
     bytes,
     static_cast<std::size_t>(readback.buffer->GetSize()),

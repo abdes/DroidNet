@@ -4,10 +4,17 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Testing/GTest.h>
+#include <cstdint>
+#include <memory>
+#include <tuple>
 
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Scene/Types/NodeHandle.h>
+#include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/Internal/DeformationHistoryCache.h>
+#include <Oxygen/Vortex/Types/VelocityPublications.h>
 
 namespace {
 
@@ -91,13 +98,13 @@ NOLINT_TEST(DeformationHistoryCacheTest, ContractChangeInvalidatesHistory)
     observer_ptr<const scene::Scene> {
       scene.get(),
     });
-  static_cast<void>(
-    cache.TouchCurrentMaterialWpo(MakeIdentity(node.GetHandle(), geometry_key,
-                                    VelocityProducerFamily::kMaterialWpo, 11U),
-      MaterialWpoPublication {
-        .contract_hash = 11U,
-        .capability_flags = 1U,
-      }));
+  std::ignore = cache.TouchCurrentMaterialWpo(
+    MakeIdentity(node.GetHandle(), geometry_key,
+      VelocityProducerFamily::kMaterialWpo, 11U),
+    MaterialWpoPublication {
+      .contract_hash = 11U,
+      .capability_flags = 1U,
+    });
   cache.EndFrame();
 
   cache.BeginFrame(2U,
@@ -132,10 +139,10 @@ NOLINT_TEST(DeformationHistoryCacheTest, SceneSwitchInvalidatesPriorHistory)
     observer_ptr<const scene::Scene> {
       scene_a.get(),
     });
-  static_cast<void>(cache.TouchCurrentMotionVectorStatus(
+  std::ignore = cache.TouchCurrentMotionVectorStatus(
     MakeIdentity(node_a.GetHandle(), geometry_key,
       VelocityProducerFamily::kMotionVectorStatus, status_a.contract_hash),
-    status_a));
+    status_a);
   cache.EndFrame();
 
   const auto status_b = MotionVectorStatusPublication {

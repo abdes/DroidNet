@@ -94,8 +94,8 @@ namespace environment::internal {
     frame::Slot current_slot_ { frame::kInvalidSlot };
     upload::TransientStructuredBuffer instance_buffer_;
     upload::TransientStructuredBuffer instance_culling_buffer_;
-    std::vector<LocalFogVolumeGpuInstance> cpu_instances_ {};
-    std::vector<LocalFogVolumeCullingInstance> cpu_culling_instances_ {};
+    std::vector<LocalFogVolumeGpuInstance> cpu_instances_;
+    std::vector<LocalFogVolumeCullingInstance> cpu_culling_instances_;
     ViewProducts current_products_ {};
   };
 

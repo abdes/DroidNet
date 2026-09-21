@@ -4,11 +4,19 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
+#include <memory>
+#include <stdexcept>
+#include <tuple>
+
+#include <glm/ext/vector_uint2.hpp>
+
+#include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Testing/GTest.h>
-
 #include <Oxygen/Vortex/Internal/RetainedTexturePool.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextureLeasePool.h>
+#include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
 #include <Oxygen/Vortex/Test/Fakes/Graphics.h>
 
 namespace {
@@ -75,7 +83,7 @@ TEST(SceneTextureLeasePoolTest, ExhaustionIsExplicitPerKey)
 
   auto lease = pool.Acquire(key);
 
-  EXPECT_THROW(static_cast<void>(pool.Acquire(key)), std::runtime_error);
+  EXPECT_THROW(std::ignore = pool.Acquire(key), std::runtime_error);
 }
 
 TEST(SceneTextureLeasePoolTest, QueueAffinityParticipatesInTheKey)

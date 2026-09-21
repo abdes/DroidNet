@@ -5,13 +5,21 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <cstdint>
+#include <exception>
 #include <memory>
+#include <optional>
 #include <string_view>
+#include <utility>
 
+#include <__msvc_string_view.hpp>
 #include <imgui.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/TextureType.h>
+#include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/ImGui/ImGuiGraphicsBackend.h>
@@ -24,6 +32,7 @@
 #include <Oxygen/ImGui/Styles/Spectrum.h>
 #include <Oxygen/Platform/ImGui/ImGuiSdl3Backend.h>
 #include <Oxygen/Platform/Platform.h>
+#include <Oxygen/Platform/Types.h>
 #include <Oxygen/Vortex/Internal/ImGuiRuntime.h>
 #include <Oxygen/Vortex/Passes/ImGuiOverlayPass.h>
 #include <Oxygen/Vortex/Renderer.h>
@@ -119,7 +128,8 @@ auto ImGuiRuntime::SetWindowId(const platform::WindowIdType window_id) -> void
       platform_, window_id, graphics_backend_->GetImGuiContext());
     platform_window_destroy_handler_token_
       = platform_->RegisterWindowAboutToBeDestroyedHandler(
-        [this, window_id](const platform::WindowIdType closing_window_id) {
+        [this, window_id](
+          const platform::WindowIdType closing_window_id) -> void {
           if (closing_window_id == window_id) {
             SetWindowId(platform::kInvalidWindowId);
           }

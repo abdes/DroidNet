@@ -58,7 +58,7 @@ private:
 
   std::uint64_t current_frame_ { 0U };
   const scene::Scene* current_scene_ { nullptr };
-  std::unordered_map<CompositionView::ViewStateHandle, Entry> entries_ {};
+  std::unordered_map<CompositionView::ViewStateHandle, Entry> entries_;
 };
 
 } // namespace oxygen::vortex::internal

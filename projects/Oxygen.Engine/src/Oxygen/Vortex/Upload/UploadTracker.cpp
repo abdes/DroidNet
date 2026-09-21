@@ -5,8 +5,20 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <cstddef>
+#include <cstdint>
+#include <expected>
+#include <mutex>
+#include <optional>
+#include <span>
+#include <string_view>
+#include <vector>
 
+#include <Oxygen/OxCo/Value.h>
+#include <Oxygen/Vortex/Upload/Errors.h>
+#include <Oxygen/Vortex/Upload/Types.h>
 #include <Oxygen/Vortex/Upload/UploadTracker.h>
+#include <Oxygen/Vortex/Upload/UploaderTag.h>
 
 namespace oxygen::vortex::upload {
 
@@ -99,7 +111,7 @@ auto UploadTracker::Await(const TicketId id)
     return std::unexpected(UploadError::kTicketNotFound);
   }
 
-  cv_.wait(lk, [&]() noexcept -> bool {
+  cv_.wait(lk, [&] noexcept -> bool {
     const auto current = entries_.find(id);
     return current == entries_.end() || current->second.completed;
   });
@@ -123,7 +135,7 @@ auto UploadTracker::AwaitAll(const std::span<const UploadTicket> tickets)
     }
   }
 
-  cv_.wait(lk, [&]() noexcept -> bool {
+  cv_.wait(lk, [&] noexcept -> bool {
     bool all_completed = true;
     for (const auto& t : tickets) {
       const auto current = entries_.find(t.id);

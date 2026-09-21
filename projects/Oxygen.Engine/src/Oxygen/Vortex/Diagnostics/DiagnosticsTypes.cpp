@@ -4,10 +4,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Vortex/Diagnostics/DiagnosticsTypes.h>
-
 #include <string>
 #include <utility>
+
+#include <Oxygen/Vortex/Diagnostics/DiagnosticsTypes.h>
 
 namespace oxygen::vortex {
 
@@ -22,16 +22,16 @@ auto to_string(const DiagnosticsFeatureSet features) -> std::string
   bool first = true;
 
   const auto append_feature
-    = [&](const DiagnosticsFeature feature, const char* name) {
-        if (HasAllFeatures(features, feature)) {
-          if (!first) {
-            result += " | ";
-          }
-          result += name;
-          checked |= feature;
-          first = false;
-        }
-      };
+    = [&](const DiagnosticsFeature feature, const char* name) -> void {
+    if (HasAllFeatures(features, feature)) {
+      if (!first) {
+        result += " | ";
+      }
+      result += name;
+      checked |= feature;
+      first = false;
+    }
+  };
 
   append_feature(DiagnosticsFeature::kFrameLedger, "FrameLedger");
   append_feature(DiagnosticsFeature::kGpuTimeline, "GpuTimeline");

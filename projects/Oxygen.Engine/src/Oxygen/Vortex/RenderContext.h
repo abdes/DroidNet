@@ -100,11 +100,11 @@ struct RenderContext {
   struct AuxiliaryResolvedInput {
     CompositionView::AuxInputDesc input {};
     CompositionView::AuxOutputKind kind {
-      CompositionView::AuxOutputKind::kColorTexture
+      CompositionView::AuxOutputKind::kColorTexture,
     };
     oxygen::ViewId producer_view_id { kInvalidViewId };
     bool valid { false };
-    std::string debug_name {};
+    std::string debug_name;
   };
 
   struct ViewExecutionEntry {
@@ -121,15 +121,15 @@ struct RenderContext {
     bool with_atmosphere { false };
     bool with_height_fog { false };
     bool with_local_fog { false };
-    std::string debug_name {};
+    std::string debug_name;
     CompositionView::ViewKind view_kind { CompositionView::ViewKind::kPrimary };
     CompositionView::ViewFeatureProfile feature_profile {
-      CompositionView::ViewFeatureProfile::kDefault
+      CompositionView::ViewFeatureProfile::kDefault,
     };
     CompositionView::ViewFeatureMask feature_mask {};
-    std::vector<CompositionView::AuxOutputDesc> produced_aux_outputs {};
-    std::vector<CompositionView::AuxInputDesc> consumed_aux_outputs {};
-    std::vector<AuxiliaryResolvedInput> resolved_aux_inputs {};
+    std::vector<CompositionView::AuxOutputDesc> produced_aux_outputs;
+    std::vector<CompositionView::AuxInputDesc> consumed_aux_outputs;
+    std::vector<AuxiliaryResolvedInput> resolved_aux_inputs;
     observer_ptr<const CompositionView> composition_view;
     std::optional<ShadingMode> shading_mode_override;
     std::optional<RenderMode> render_mode_override;
@@ -169,17 +169,17 @@ struct RenderContext {
     };
     observer_ptr<const CompositionView> composition_view;
     CompositionView::ViewFeatureProfile feature_profile {
-      CompositionView::ViewFeatureProfile::kDefault
+      CompositionView::ViewFeatureProfile::kDefault,
     };
     CompositionView::ViewFeatureMask feature_mask {};
     std::optional<ShadingMode> shading_mode_override;
     observer_ptr<const oxygen::ResolvedView> resolved_view;
     observer_ptr<const struct PreparedSceneFrame> prepared_frame;
     mutable DepthPrePassMode depth_prepass_mode {
-      DepthPrePassMode::kOpaqueAndMasked
+      DepthPrePassMode::kOpaqueAndMasked,
     };
     mutable DepthPrePassCompleteness depth_prepass_completeness {
-      DepthPrePassCompleteness::kIncomplete
+      DepthPrePassCompleteness::kIncomplete,
     };
     ScreenHzbRequest screen_hzb_request {};
     bool scene_depth_product_valid { false };
@@ -232,7 +232,7 @@ struct RenderContext {
   };
 
   ViewSpecific current_view {};
-  std::vector<ViewExecutionEntry> frame_views {};
+  std::vector<ViewExecutionEntry> frame_views;
   std::size_t active_view_index { std::numeric_limits<std::size_t>::max() };
   frame::Slot frame_slot { frame::kInvalidSlot };
   frame::SequenceNumber frame_sequence { 0 };

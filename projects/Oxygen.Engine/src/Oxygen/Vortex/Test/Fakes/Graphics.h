@@ -6,6 +6,16 @@
 
 #pragma once
 
+#include <atomic>
+#include <functional>
+#include <map>
+#include <memory>
+#include <optional>
+#include <string>
+#include <unordered_map>
+#include <utility>
+#include <vector>
+
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandList.h>
@@ -21,16 +31,6 @@
 #include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/TimestampQueryProvider.h>
-#include <optional>
-#include <string>
-#include <unordered_map>
-
-#include <atomic>
-#include <functional>
-#include <map>
-#include <memory>
-#include <utility>
-#include <vector>
 
 namespace oxygen::vortex::testing {
 

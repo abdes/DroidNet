@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
@@ -13,38 +14,60 @@
 #include <limits>
 #include <memory>
 #include <numbers>
+#include <stdlib.h>
 #include <string>
+#include <tuple>
 #include <utility>
 #include <vector>
 
 #include <glm/gtc/matrix_access.hpp>
 
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Config/RendererConfig.h>
+#include <Oxygen/Console/Command.h>
 #include <Oxygen/Console/Console.h>
+#include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
 #include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/PostProcess.h>
+#include <Oxygen/Core/Types/ShaderType.h>
+#include <Oxygen/Core/Types/TextureType.h>
+#include <Oxygen/Graphics/Common/Buffer.h>
+#include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/FrameCaptureController.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
+#include <Oxygen/Graphics/Common/Shaders.h>
+#include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Environment/Fog.h>
 #include <Oxygen/Scene/Environment/PostProcessVolume.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkySphere.h>
+#include <Oxygen/Scene/ExposureSettings.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsService.h>
+#include <Oxygen/Vortex/Environment/EnvironmentLightingService.h>
 #include <Oxygen/Vortex/Environment/Passes/FogPass.h>
 #include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
 #include <Oxygen/Vortex/Renderer.h>
+#include <Oxygen/Vortex/RendererCapability.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureGpuFixture.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestTags.h>
 #include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
+#include <Oxygen/Vortex/Types/ExposureStateData.h>
 #include <Oxygen/Vortex/Types/ViewConstants.h>
 #include <Oxygen/Vortex/Types/ViewFrameBindings.h>
 #include <Oxygen/Vortex/Types/ViewHistoryFrameBindings.h>
 #include <Oxygen/Vortex/ViewExtension.h>
-#include <cmath>
 
 namespace oxygen::vortex::testing::exposure {
 
@@ -274,10 +297,12 @@ NOLINT_TEST_F(
           = std::clamp(std::log2(static_cast<double>(depth)) / 2, 0.0, 1.0);
         const double z = std::clamp((2 * w) - .5, 0.0, 1.0);
         const std::array expected = rejected
-          ? std::array<double, 4> { 0, 0, 0, 1, }
+          ? std::array<double, 4> { 0, 0, 0, 1 }
           : std::array<double, 4> {
               std::clamp(2 * static_cast<double>(uv.x) - .5, 0.0, 1.0),
-              std::clamp(2 * static_cast<double>(uv.y) - .5, 0.0, 1.0), z, 1 - z,
+              std::clamp(2 * static_cast<double>(uv.y) - .5, 0.0, 1.0),
+              z,
+              1 - z,
             };
         for (const auto& actual : ReadFloatTexture(*output)) {
           for (unsigned c = 0; c < 4; ++c) {
@@ -426,14 +451,18 @@ NOLINT_TEST_F(ExposureGpuTest, FogStableCellsPreserveHistoryAndHomogeneousMedia)
               .near_fade_in_distance_m = fade_distance,
               .global_extinction_scale = 1.0F,
             };
-            params.grid_z = { .grid_z_params = { 1.0F, 0.0F, 1.0F, },
-              .shadowed_directional_light0_enabled = 0.0F, };
+            params.grid_z = {
+              .grid_z_params = { 1.0F, 0.0F, 1.0F },
+              .shadowed_directional_light0_enabled = 0.0F,
+            };
             params.height_fog0.primary_density = density;
             params.height_fog1.match_height_fog_factor = 1.0F;
             params.height_fog1.enabled = 1U;
-            params.media1 = { .emissive_rgb
-              = { 2 * emission_scale, 3 * emission_scale, 4 * emission_scale, },
-              .static_lighting_scattering_intensity = 1.0F, };
+            params.media1 = {
+              .emissive_rgb
+              = { 2 * emission_scale, 3 * emission_scale, 4 * emission_scale },
+              .static_lighting_scattering_intensity = 1.0F,
+            };
             unsigned history_flags = 0U;
             if (reuse_history) {
               history_flags = format == Format::kRGBA16Float ? 3U : 1U;
@@ -603,11 +632,9 @@ NOLINT_TEST_F(ExposureGpuTest,
       ctx.current_view.hdr_color_format
         = use_half ? Format::kRGBA16Float : Format::kRGBA32Float;
       producer.OnFrameStart(ctx.frame_sequence, ctx.frame_slot);
-      static_cast<void>(
-        producer.PublishEnvironmentBindings(ctx, hook.recorder));
+      std::ignore = producer.PublishEnvironmentBindings(ctx, hook.recorder);
       if (ctx.frame_sequence.get() == 1U) {
-        static_cast<void>(
-          producer.PublishEnvironmentBindings(ctx, hook.recorder));
+        std::ignore = producer.PublishEnvironmentBindings(ctx, hook.recorder);
         EXPECT_FALSE(producer.GetLastViewProductGenerationState()
             .volumetric_fog_temporal_history_reprojection_executed);
       }
@@ -760,9 +787,13 @@ NOLINT_TEST_F(ExposureGpuTest,
     facade.SetFrameSession({ .frame_slot = slot,
       .frame_sequence = frame::SequenceNumber { step, },
       .delta_time_seconds = 0.0F, });
-    facade.SetSceneSource({ .scene = observer_ptr { scene.get(), }, });
+    facade.SetSceneSource({ .scene = observer_ptr {
+                              scene.get(),
+                            } });
     facade.SetViewIntent(input);
-    facade.SetOutputTarget({ .framebuffer = observer_ptr { target.get(), }, });
+    facade.SetOutputTarget({ .framebuffer = observer_ptr {
+                               target.get(),
+                             } });
     auto session = facade.Finalize();
     if (!session.has_value()) {
       FAIL() << "Expected session to contain a value";

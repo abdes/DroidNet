@@ -4,21 +4,38 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Graphics/Common/Test/CommandRecordingTestSupport.h>
-#include <Oxygen/Testing/GTest.h>
-
+#include <algorithm>
+#include <cmath>
+#include <cstdint>
 #include <cstring>
 #include <limits>
 #include <memory>
+#include <span>
 #include <string_view>
+#include <tuple>
 #include <type_traits>
+#include <utility>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Config/RendererConfig.h>
+#include <Oxygen/Content/EvictionEvents.h>
+#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/PostProcess.h>
+#include <Oxygen/Core/Types/TextureType.h>
+#include <Oxygen/Core/Types/View.h>
+#include <Oxygen/Data/PakFormat_core.h>
+#include <Oxygen/Graphics/Common/CommandRecording.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Queues.h>
+#include <Oxygen/Graphics/Common/Test/CommandRecordingTestSupport.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/QueueRole.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/Scene/ExposureSettings.h>
+#include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/PostProcess/PostProcessService.h>
 #include <Oxygen/Vortex/PostProcess/Types/PostProcessConfig.h>
 #include <Oxygen/Vortex/PostProcess/Types/PostProcessFrameBindings.h>
@@ -26,10 +43,13 @@
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererCapability.h>
 #include <Oxygen/Vortex/RendererTag.h>
+#include <Oxygen/Vortex/Resources/TextureBinder.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
 #include <Oxygen/Vortex/Test/Fakes/AssetLoader.h>
 #include <Oxygen/Vortex/Test/Fakes/Graphics.h>
 #include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
+#include <Oxygen/Vortex/Test/Fixtures/TextureBinderPayloads.h>
+#include <Oxygen/Vortex/Types/ExposureTransition.h>
 #include <Oxygen/Vortex/Upload/UploadCoordinator.h>
 
 namespace oxygen::vortex::internal {
@@ -226,10 +246,12 @@ NOLINT_TEST_F(
       return pass.ResolveFrame(context, recorder, config, {});
     });
   ASSERT_NE(frame, nullptr);
-  const auto source = graphics_->CreateTexture({ .width = 1U,
+  const auto source = graphics_->CreateTexture({
+    .width = 1U,
     .height = 1U,
     .format = Format::kRGBA32Float,
-    .initial_state = oxygen::graphics::ResourceStates::kCommon });
+    .initial_state = oxygen::graphics::ResourceStates::kCommon,
+  });
   const auto queue
     = graphics_->QueueKeyFor(oxygen::graphics::QueueRole::kGraphics);
   auto recording = graphics_->AcquireCommandRecorder(
@@ -270,17 +292,17 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest, ReadModifyApplyUsesEditedExposure)
   };
   service.OnFrameStart(context.frame_sequence, context.frame_slot);
   auto textures
-    = SceneTextures(*graphics_, SceneTexturesConfig { .extent = { 4U, 4U, }, });
+    = SceneTextures(*graphics_, SceneTexturesConfig { .extent = { 4U, 4U } });
   auto inputs = PostProcessService::Inputs {};
   inputs.scene_signal = &textures.GetSceneColor();
   inputs.scene_signal_srv = oxygen::ShaderVisibleIndex {
     301U,
   };
-  static_cast<void>(oxygen::graphics::testing::SubmitCommands(*graphics_,
+  std::ignore = oxygen::graphics::testing::SubmitCommands(*graphics_,
     "Vortex test", [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
       return service.Record(
         context.current_view.view_id, context, recorder, inputs);
-    }));
+    });
   const auto* bindings = service.InspectBindings(context.current_view.view_id);
   ASSERT_NE(bindings, nullptr);
   EXPECT_EQ(bindings->enable_auto_exposure, 0U);
@@ -320,7 +342,7 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
   auto service = PostProcessService(*renderer_);
   auto scene_textures = SceneTextures(*graphics_,
     SceneTexturesConfig {
-      .extent = { 64U, 64U, },
+      .extent = { 64U, 64U },
       .enable_velocity = true,
       .enable_custom_depth = false,
       .gbuffer_count = 4U,
@@ -359,11 +381,11 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
   inputs.scene_velocity_srv = oxygen::ShaderVisibleIndex {
     303U,
   };
-  static_cast<void>(oxygen::graphics::testing::SubmitCommands(*graphics_,
+  std::ignore = oxygen::graphics::testing::SubmitCommands(*graphics_,
     "Vortex test", [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
       return service.Record(
         context.current_view.view_id, context, recorder, inputs);
-    }));
+    });
 
   const auto& state = service.GetLastExecutionState();
   ASSERT_NE(service.InspectBindings(context.current_view.view_id), nullptr);
@@ -397,7 +419,7 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
 
   auto scene_textures = SceneTextures(*graphics_,
     SceneTexturesConfig {
-      .extent = { 64U, 64U, },
+      .extent = { 64U, 64U },
       .enable_velocity = true,
       .enable_custom_depth = false,
       .gbuffer_count = 4U,
@@ -434,11 +456,11 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
   inputs.scene_velocity_srv = oxygen::ShaderVisibleIndex {
     403U,
   };
-  static_cast<void>(oxygen::graphics::testing::SubmitCommands(*graphics_,
+  std::ignore = oxygen::graphics::testing::SubmitCommands(*graphics_,
     "Vortex test", [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
       return service.Record(
         context.current_view.view_id, context, recorder, inputs);
-    }));
+    });
 
   const auto* bindings = service.InspectBindings(context.current_view.view_id);
   ASSERT_NE(bindings, nullptr);
@@ -452,7 +474,7 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
   auto service = PostProcessService(*renderer_);
   auto scene_textures = SceneTextures(*graphics_,
     SceneTexturesConfig {
-      .extent = { 64U, 64U, },
+      .extent = { 64U, 64U },
       .enable_velocity = false,
       .enable_custom_depth = false,
       .gbuffer_count = 4U,
@@ -502,11 +524,11 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
     inputs.scene_depth_srv = oxygen::ShaderVisibleIndex {
       502U,
     };
-    static_cast<void>(oxygen::graphics::testing::SubmitCommands(*graphics_,
+    std::ignore = oxygen::graphics::testing::SubmitCommands(*graphics_,
       "Vortex test", [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
         return service.Record(
           context.current_view.view_id, context, recorder, inputs);
-      }));
+      });
 
     const auto& state = service.GetLastExecutionState();
     ASSERT_TRUE(state.tonemap_executed);
@@ -606,11 +628,11 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
   requested.mode = oxygen::engine::ExposureMode::kManual;
   requested.key = 12.5F;
   requested.manual_ev = 14.0F;
-  static_cast<void>(service.ResolveViewExposureSettings(
+  std::ignore = service.ResolveViewExposureSettings(
     View::ViewStateHandle {
       1U,
     },
-    requested));
+    requested);
   EXPECT_EQ(service
               .ResolveViewExposureSettings(
                 View::ViewStateHandle {
@@ -847,18 +869,18 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
   };
   service.SetConfig(config);
   auto textures
-    = SceneTextures(*graphics_, SceneTexturesConfig { .extent = { 64U, 64U, }, });
+    = SceneTextures(*graphics_, SceneTexturesConfig { .extent = { 64U, 64U } });
   auto inputs = PostProcessService::Inputs {};
   inputs.scene_signal = &textures.GetSceneColor();
   inputs.scene_signal_srv = oxygen::ShaderVisibleIndex {
     301U,
   };
   graphics_->dispatch_log_.dispatches.clear();
-  static_cast<void>(oxygen::graphics::testing::SubmitCommands(*graphics_,
+  std::ignore = oxygen::graphics::testing::SubmitCommands(*graphics_,
     "Vortex test", [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
       return service.Record(
         context.current_view.view_id, context, recorder, inputs);
-    }));
+    });
   EXPECT_EQ(graphics_->dispatch_log_.dispatches.size(),
     2U); // clear + invalid/locked solve
   context.frame_sequence = oxygen::frame::SequenceNumber {
@@ -875,11 +897,11 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
                       .resolved.authored;
   service.SetConfig(config);
   graphics_->dispatch_log_.dispatches.clear();
-  static_cast<void>(oxygen::graphics::testing::SubmitCommands(*graphics_,
+  std::ignore = oxygen::graphics::testing::SubmitCommands(*graphics_,
     "Vortex test", [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
       return service.Record(
         context.current_view.view_id, context, recorder, inputs);
-    }));
+    });
   EXPECT_EQ(graphics_->dispatch_log_.dispatches.size(), 3U);
 }
 
@@ -908,11 +930,11 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
     = oxygen::vortex::testing::MakeCookedTexture1x1Rgba8Payload();
   auto requested = oxygen::scene::ExposureSettings {};
   requested.metering_mask = loader.PreloadCookedTexture(std::span(payload));
-  static_cast<void>(service.ResolveViewExposureSettings(
+  std::ignore = service.ResolveViewExposureSettings(
     Handle {
       1U,
     },
-    requested));
+    requested);
   auto queue = graphics_->GetCommandQueue(
     oxygen::graphics::SingleQueueStrategy().KeyFor(QueueRole::kTransfer));
   ASSERT_NE(queue, nullptr);
@@ -968,25 +990,25 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
     2U,
   };
   auto textures
-    = SceneTextures(*graphics_, SceneTexturesConfig { .extent = { 64U, 64U, }, });
+    = SceneTextures(*graphics_, SceneTexturesConfig { .extent = { 64U, 64U } });
   auto inputs = PostProcessService::Inputs {};
   inputs.scene_signal = &textures.GetSceneColor();
   inputs.scene_signal_srv = oxygen::ShaderVisibleIndex {
     301U,
   };
-  static_cast<void>(oxygen::graphics::testing::SubmitCommands(*graphics_,
+  std::ignore = oxygen::graphics::testing::SubmitCommands(*graphics_,
     "Vortex test", [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
       return service.Record(
         context.current_view.view_id, context, recorder, inputs);
-    }));
+    });
   loader.EmitTextureEviction(
     requested.metering_mask, oxygen::content::EvictionReason::kRefCountZero);
   requested.metering_mask = {};
-  static_cast<void>(service.ResolveViewExposureSettings(
+  std::ignore = service.ResolveViewExposureSettings(
     Handle {
       1U,
     },
-    requested));
+    requested);
   EXPECT_FALSE(frame_lease.expired());
   service.RemoveViewState(
     ViewId {
@@ -1053,8 +1075,7 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
       auto requested = oxygen::scene::ExposureSettings {};
       requested.key = 12.5F;
       if (previous) {
-        static_cast<void>(
-          service.ResolveViewExposureSettings(handle, requested));
+        std::ignore = service.ResolveViewExposureSettings(handle, requested);
       }
       requested.metering_mask = loader.MintSyntheticTextureKey();
       EXPECT_EQ(
@@ -1121,11 +1142,11 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
   std::memcpy(payload.data(), &descriptor, sizeof(descriptor));
   requested.metering_mask = loader.PreloadCookedTexture(std::span(payload));
   requested.compensation_ev = 2.0F;
-  static_cast<void>(service.ResolveViewExposureSettings(
+  std::ignore = service.ResolveViewExposureSettings(
     Handle {
       1U,
     },
-    requested));
+    requested);
   auto queue = graphics_->GetCommandQueue(
     oxygen::graphics::SingleQueueStrategy().KeyFor(QueueRole::kTransfer));
   ASSERT_NE(queue, nullptr);

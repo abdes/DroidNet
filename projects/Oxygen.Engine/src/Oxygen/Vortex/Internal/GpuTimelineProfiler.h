@@ -157,16 +157,16 @@ private:
   bool retain_latest_frame_ { false };
   uint32_t max_scopes_per_frame_ { 4096U };
   uint32_t query_stride_ { 0U };
-  std::vector<uint32_t> scope_stack_ {};
+  std::vector<uint32_t> scope_stack_;
   GpuFrameCapture frame_capture_ {};
-  std::unique_ptr<graphics::GpuProfileCollectorState> frame_scope_state_ {};
-  std::deque<GpuFrameCapture> pending_frames_ {};
-  std::vector<GpuFrameCapture> reusable_captures_ {};
-  std::unordered_map<std::string, uint64_t> interned_names_ {};
-  std::vector<std::shared_ptr<GpuTimelineSink>> sinks_ {};
-  std::weak_ptr<GpuTimelineSink> recording_sink_ {};
+  std::unique_ptr<graphics::GpuProfileCollectorState> frame_scope_state_;
+  std::deque<GpuFrameCapture> pending_frames_;
+  std::vector<GpuFrameCapture> reusable_captures_;
+  std::unordered_map<std::string, uint64_t> interned_names_;
+  std::vector<std::shared_ptr<GpuTimelineSink>> sinks_;
+  std::weak_ptr<GpuTimelineSink> recording_sink_;
   mutable std::mutex published_frame_mutex_;
-  std::optional<GpuTimelineFrame> last_published_frame_ {};
+  std::optional<GpuTimelineFrame> last_published_frame_;
 };
 
 } // namespace oxygen::vortex::internal

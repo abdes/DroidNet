@@ -28,12 +28,12 @@ class CompositionViewImpl;
 struct AuxiliaryResolvedInput {
   CompositionView::AuxInputDesc input {};
   CompositionView::AuxOutputKind kind {
-    CompositionView::AuxOutputKind::kColorTexture
+    CompositionView::AuxOutputKind::kColorTexture,
   };
   ViewId producer_view_id { kInvalidViewId };
   std::uint32_t producer_packet_index { 0U };
   bool valid { false };
-  std::string debug_name {};
+  std::string debug_name;
 };
 
 class FrameViewPacket {
@@ -127,15 +127,15 @@ private:
   };
   CompositionView::ViewKind view_kind_ { CompositionView::ViewKind::kPrimary };
   CompositionView::ViewFeatureProfile feature_profile_ {
-    CompositionView::ViewFeatureProfile::kDefault
+    CompositionView::ViewFeatureProfile::kDefault,
   };
   CompositionView::ViewFeatureMask feature_mask_ {};
-  std::vector<CompositionView::ViewSurfaceRoute> surface_routes_ {};
+  std::vector<CompositionView::ViewSurfaceRoute> surface_routes_;
   CompositionView::OverlayPolicy overlay_policy_ {};
-  std::vector<CompositionView::OverlayBatch> overlay_batches_ {};
-  std::vector<CompositionView::AuxOutputDesc> produced_aux_outputs_ {};
-  std::vector<CompositionView::AuxInputDesc> consumed_aux_outputs_ {};
-  std::vector<AuxiliaryResolvedInput> resolved_aux_inputs_ {};
+  std::vector<CompositionView::OverlayBatch> overlay_batches_;
+  std::vector<CompositionView::AuxOutputDesc> produced_aux_outputs_;
+  std::vector<CompositionView::AuxInputDesc> consumed_aux_outputs_;
+  std::vector<AuxiliaryResolvedInput> resolved_aux_inputs_;
   ViewRenderPlan plan_;
 };
 

@@ -4,13 +4,24 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <stdexcept>
 #include <string>
+#include <tuple>
+#include <utility>
+
+#include <glm/ext/vector_uint2.hpp>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Detail/FormatUtils.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
+#include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
+#include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
 
 namespace oxygen::vortex {
@@ -230,7 +241,7 @@ void SceneTextures::RebuildWithGBuffers()
   // promotion, binding regeneration, and downstream publication.
   for (std::size_t i = 0; i < kActiveGBufferCount; ++i) {
     const auto index = static_cast<GBufferIndex>(i);
-    static_cast<void>(RequireTexture(gbuffers_.at(i), GBufferName(index)));
+    std::ignore = RequireTexture(gbuffers_.at(i), GBufferName(index));
   }
 }
 

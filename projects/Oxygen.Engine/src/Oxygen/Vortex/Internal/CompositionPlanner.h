@@ -44,15 +44,15 @@ private:
       CompositionView::kDefaultSurfaceRoute
     };
     ViewId source_view_id { kInvalidViewId };
-    std::shared_ptr<graphics::Texture> source_texture {};
+    std::shared_ptr<graphics::Texture> source_texture;
     ViewPort destination {};
     CompositionView::SurfaceRouteBlendMode blend_mode {
-      CompositionView::SurfaceRouteBlendMode::kAlphaBlend
+      CompositionView::SurfaceRouteBlendMode::kAlphaBlend,
     };
-    CompositionView::ZOrder z_order {};
+    CompositionView::ZOrder z_order;
     std::uint32_t submission_order { 0U };
     float opacity { 1.0F };
-    std::string debug_name {};
+    std::string debug_name;
   };
 
   struct SurfaceOverlayPlan {
@@ -60,7 +60,7 @@ private:
       CompositionView::kDefaultSurfaceRoute
     };
     CompositionView::OverlayBatch batch {};
-    CompositionView::ZOrder z_order {};
+    CompositionView::ZOrder z_order;
     std::uint32_t submission_order { 0U };
   };
 

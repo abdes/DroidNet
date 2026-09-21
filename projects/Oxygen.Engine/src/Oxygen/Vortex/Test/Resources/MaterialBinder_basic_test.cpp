@@ -6,19 +6,22 @@
 
 #include <algorithm>
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
-
-#include <Oxygen/Testing/GTest.h>
+#include <vector>
 
 #include <Oxygen/Content/ResourceKey.h>
+#include <Oxygen/Data/HalfFloat.h>
 #include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/Data/MaterialDomain.h>
+#include <Oxygen/Data/PakFormat_render.h>
+#include <Oxygen/Data/ShaderReference.h>
+#include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/RendererTag.h>
 #include <Oxygen/Vortex/ScenePrep/MaterialRef.h>
-#include <Oxygen/Vortex/Types/MaterialShadingConstants.h>
-#include <Oxygen/Vortex/Upload/UploadCoordinator.h>
-
 #include <Oxygen/Vortex/Test/Fixtures/MaterialBinderTest.h>
+#include <Oxygen/Vortex/Upload/UploadCoordinator.h>
 
 namespace {
 

@@ -4,17 +4,21 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Testing/GTest.h>
-
-#include <Oxygen/Graphics/Common/Buffer.h>
-#include <Oxygen/Graphics/Common/Texture.h>
-#include <Oxygen/Vortex/Upload/Types.h>
-#include <Oxygen/Vortex/Upload/UploadPlanner.h>
-#include <Oxygen/Vortex/Upload/UploadPolicy.h>
-
+#include <cstdint>
 #include <memory>
 #include <utility>
 #include <vector>
+
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/TextureType.h>
+#include <Oxygen/Graphics/Common/Buffer.h>
+#include <Oxygen/Graphics/Common/NativeObject.h>
+#include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Vortex/Upload/Errors.h>
+#include <Oxygen/Vortex/Upload/Types.h>
+#include <Oxygen/Vortex/Upload/UploadPlanner.h>
+#include <Oxygen/Vortex/Upload/UploadPolicy.h>
 
 using oxygen::vortex::upload::UploadBufferDesc;
 using oxygen::vortex::upload::UploadError;

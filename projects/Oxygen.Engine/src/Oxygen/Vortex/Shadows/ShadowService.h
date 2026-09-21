@@ -79,9 +79,9 @@ private:
   struct PublishedView {
     ShaderVisibleIndex slot { kInvalidShaderVisibleIndex };
     DirectionalShadowFrameData data {};
-    std::shared_ptr<graphics::Texture> surface {};
-    std::shared_ptr<graphics::Texture> spot_surface {};
-    std::shared_ptr<graphics::Texture> point_surface {};
+    std::shared_ptr<graphics::Texture> surface;
+    std::shared_ptr<graphics::Texture> spot_surface;
+    std::shared_ptr<graphics::Texture> point_surface;
   };
 
   auto EnsurePublishResources() -> bool;
@@ -93,9 +93,9 @@ private:
   frame::Slot current_slot_ { frame::kInvalidSlot };
   RenderState last_render_state_ {};
   std::unique_ptr<internal::PerViewStructuredPublisher<ShadowFrameBindings>>
-    bindings_publisher_ {};
-  std::unordered_map<ViewId, PublishedView> published_views_ {};
-  std::unique_ptr<shadows::CascadeShadowPass> cascade_shadow_pass_ {};
+    bindings_publisher_;
+  std::unordered_map<ViewId, PublishedView> published_views_;
+  std::unique_ptr<shadows::CascadeShadowPass> cascade_shadow_pass_;
 };
 
 } // namespace oxygen::vortex

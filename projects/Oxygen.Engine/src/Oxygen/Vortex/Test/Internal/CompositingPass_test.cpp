@@ -6,9 +6,8 @@
 
 #include <limits>
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Testing/ScopedLogCapture.h>
 #include <Oxygen/Vortex/Internal/CompositingAlphaSanitizer.h>
 

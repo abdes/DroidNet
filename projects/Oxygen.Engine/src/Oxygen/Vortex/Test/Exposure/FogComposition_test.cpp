@@ -19,12 +19,28 @@
 
 #include <glm/gtc/matrix_access.hpp>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Config/RendererConfig.h>
+#include <Oxygen/Console/Command.h>
 #include <Oxygen/Console/Console.h>
+#include <Oxygen/Core/Bindless/Generated.BindlessAbi.h>
+#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/PostProcess.h>
+#include <Oxygen/Core/Types/TextureType.h>
+#include <Oxygen/Core/Types/View.h>
+#include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
+#include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/Color.h>
+#include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
+#include <Oxygen/Graphics/Common/Types/QueueRole.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
+#include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
@@ -32,11 +48,15 @@
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/Environment/Passes/AtmosphereComposePass.h>
 #include <Oxygen/Vortex/Environment/Passes/FogPass.h>
 #include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
 #include <Oxygen/Vortex/PostProcess/PostProcessService.h>
+#include <Oxygen/Vortex/PostProcess/Types/PostProcessConfig.h>
 #include <Oxygen/Vortex/Renderer.h>
+#include <Oxygen/Vortex/RendererCapability.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureGpuFixture.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestTags.h>
@@ -44,6 +64,7 @@
 #include <Oxygen/Vortex/Types/EnvironmentFrameBindings.h>
 #include <Oxygen/Vortex/Types/EnvironmentStaticData.h>
 #include <Oxygen/Vortex/Types/EnvironmentViewData.h>
+#include <Oxygen/Vortex/Types/ExposureStateData.h>
 #include <Oxygen/Vortex/Types/ViewConstants.h>
 #include <Oxygen/Vortex/Types/ViewFrameBindings.h>
 #include <Oxygen/Vortex/ViewExtension.h>
@@ -189,7 +210,7 @@ NOLINT_TEST_F(
     // Run waits for completion, so the closure and captured locals outlive the
     // coroutine.
     // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
-    co::Run(loop, [&]() -> co::Co<void> {
+    co::Run(loop, [&] -> co::Co<void> {
       co_await renderer_->OnPreRender(observer_ptr {
         &frame,
       });
@@ -281,9 +302,11 @@ NOLINT_TEST_F(
   };
   ctx_.current_view.with_height_fog = true;
   auto textures = SceneTextures(Backend(),
-    { .extent = { 8U, 8U, },
+    {
+      .extent = { 8U, 8U },
       .enable_velocity = false,
-      .scene_color_format = Format::kRGBA32Float, });
+      .scene_color_format = Format::kRGBA32Float,
+    });
   auto framebuffer = Backend().CreateFramebuffer(FramebufferDesc {}
       .AddColorAttachment(textures.GetSceneColorResource())
       .SetDepthAttachment({
@@ -443,9 +466,11 @@ NOLINT_TEST_F(ExposureGpuTest, FogCompositionClampsViewportAndDepthEdges)
   };
   ctx_.current_view.with_height_fog = true;
   auto textures = SceneTextures(Backend(),
-    { .extent = { 8U, 8U, },
+    {
+      .extent = { 8U, 8U },
       .enable_velocity = false,
-      .scene_color_format = Format::kRGBA32Float, });
+      .scene_color_format = Format::kRGBA32Float,
+    });
   auto framebuffer = Backend().CreateFramebuffer(FramebufferDesc {}
       .AddColorAttachment(textures.GetSceneColorResource())
       .SetDepthAttachment({
@@ -606,9 +631,11 @@ NOLINT_TEST_F(ExposureGpuTest, DeferredApPreservesInscatterAtLowAndZeroOpacity)
   };
   ctx_.current_view.with_atmosphere = true;
   auto textures = SceneTextures(Backend(),
-    { .extent = { 4U, 4U, },
+    {
+      .extent = { 4U, 4U },
       .enable_velocity = false,
-      .scene_color_format = Format::kRGBA32Float, });
+      .scene_color_format = Format::kRGBA32Float,
+    });
   auto framebuffer
     = Backend().CreateFramebuffer(FramebufferDesc {}.SetDepthAttachment({
       .texture = textures.GetSceneDepthResource(),
@@ -643,8 +670,9 @@ NOLINT_TEST_F(ExposureGpuTest, DeferredApPreservesInscatterAtLowAndZeroOpacity)
     registry.RegisterView(*buffer, std::move(handle),
       BufferViewDescription {
         .view_type = ResourceViewType::kStructuredBuffer_SRV,
-        .range = { 0U, sizeof(T), },
-        .stride = sizeof(T), });
+        .range = { 0U, sizeof(T) },
+        .stride = sizeof(T),
+      });
     return index;
   };
   auto scene_bindings = SceneTextureBindings {};
@@ -776,15 +804,19 @@ NOLINT_TEST_F(ExposureGpuTest, DeferredApPreservesInscatterAtLowAndZeroOpacity)
               textures.GetSceneDepth(), ResourceStates::kDepthWrite);
             recorder->FlushBarriers();
             recorder->CopyBufferToTexture(*upload,
-              { .buffer_row_pitch = 256U,
+              {
+                .buffer_row_pitch = 256U,
                 .buffer_slice_pitch = 256U,
-                .dst_slice = { .width = 1U, .height = 1U, .depth = 1U, }, },
+                .dst_slice = { .width = 1U, .height = 1U, .depth = 1U },
+              },
               *volume);
             recorder->CopyBufferToTexture(*upload,
-              { .buffer_offset = 512U,
+              {
+                .buffer_offset = 512U,
                 .buffer_row_pitch = 256U,
                 .buffer_slice_pitch = 1024U,
-                .dst_slice = { .width = 4U, .height = 4U, .depth = 1U, }, },
+                .dst_slice = { .width = 4U, .height = 4U, .depth = 1U },
+              },
               textures.GetSceneColor());
             recorder->ClearFramebuffer(*framebuffer, std::nullopt, 0.0F);
             recorder->RequireResourceStateFinal(

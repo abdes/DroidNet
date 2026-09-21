@@ -6,19 +6,24 @@
 
 #include <cmath>
 #include <cstdint>
+#include <span>
 
 #include <fmt/format.h>
+#include <glm/ext/matrix_float3x3.hpp>
+#include <glm/ext/matrix_float4x4.hpp>
+#include <glm/matrix.hpp>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/Bindless/Generated.BindlessAbi.h>
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Transforms/IsFinite.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
+#include <Oxygen/Nexus/Types/Domain.h>
 #include <Oxygen/Vortex/RendererTag.h>
 #include <Oxygen/Vortex/Resources/TransformUploader.h>
 #include <Oxygen/Vortex/ScenePrep/Handles.h>
-#include <Oxygen/Vortex/Upload/StagingProvider.h>
 #include <Oxygen/Vortex/Upload/TransientStructuredBuffer.h>
 
 namespace oxygen::vortex::resources {
@@ -144,7 +149,8 @@ auto TransformUploader::GetOrAllocate(const glm::mat4& transform,
   const auto handle = vortex::sceneprep::TransformHandle {
     vortex::sceneprep::TransformHandle::Index { index },
     vortex::sceneprep::TransformHandle::Generation {
-      versioned_handle.GenerationValue() },
+      versioned_handle.GenerationValue(),
+    },
   };
   return handle;
 }

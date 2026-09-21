@@ -4,12 +4,18 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Testing/GTest.h>
+#include <cstdint>
+#include <memory>
 
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/Types/ByteUnits.h>
 #include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/Test/Fixtures/RingBufferStagingFixture.h>
+#include <Oxygen/Vortex/Upload/Errors.h>
 #include <Oxygen/Vortex/Upload/StagingProvider.h>
 #include <Oxygen/Vortex/Upload/UploadCoordinator.h>
+#include <Oxygen/Vortex/Upload/UploadPolicy.h>
 #include <Oxygen/Vortex/Upload/UploaderTag.h>
 
 using oxygen::SizeBytes;
@@ -449,7 +455,7 @@ NOLINT_TEST_F(RingBufferStagingTest, UnMap_Idempotent)
 */
 NOLINT_TEST(RingBufferStaging, DeferredReleaseAfterGrowthDoesNotHangAtShutdown)
 {
-  auto run_teardown = []() -> void {
+  auto run_teardown = [] -> void {
     auto gfx = std::make_shared<oxygen::vortex::testing::FakeGraphics>();
     gfx->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());
 

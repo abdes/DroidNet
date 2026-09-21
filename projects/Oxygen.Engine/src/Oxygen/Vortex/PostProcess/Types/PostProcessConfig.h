@@ -42,8 +42,9 @@ public:
     -> std::expected<ResolvedPostProcessConfig, scene::ExposureSettingsError>
   {
     auto exposure = scene::ResolveExposureSettings(config.exposure, camera_ev);
-    if (!exposure)
+    if (!exposure) {
       return std::unexpected(exposure.error());
+    }
     return ResolvedPostProcessConfig(
       config, std::move(*exposure), revision, camera_ev);
   }

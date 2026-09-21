@@ -4,18 +4,17 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <cstdint>
 #include <memory>
 
-#include <Oxygen/Testing/GTest.h>
-
+#include <Oxygen/Content/EvictionEvents.h>
 #include <Oxygen/Content/ResourceKey.h>
+#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/RendererTag.h>
 #include <Oxygen/Vortex/ScenePrep/MaterialRef.h>
-#include <Oxygen/Vortex/Upload/UploadCoordinator.h>
-
 #include <Oxygen/Vortex/Test/Fixtures/MaterialBinderTest.h>
+#include <Oxygen/Vortex/Upload/UploadCoordinator.h>
 
 namespace {
 
@@ -45,11 +44,13 @@ NOLINT_TEST_F(MaterialBinderLifecycleTest, HandlesStableAcrossFrames)
     });
 
   oxygen::vortex::sceneprep::MaterialRef ref;
-  ref.resolved_asset = MakeMaterial({ .base_color_key = base_color_key,
+  ref.resolved_asset = MakeMaterial({
+    .base_color_key = base_color_key,
     .normal_key = normal_key,
     .raw_base_color_index = 1U,
     .raw_normal_index = 2U,
-    .base_color = { 0.2F, 0.3F, 0.4F, 1.0F, }, });
+    .base_color = { 0.2F, 0.3F, 0.4F, 1.0F },
+  });
   ref.source_asset_key = ref.resolved_asset->GetAssetKey();
   ref.resolved_asset_key = ref.resolved_asset->GetAssetKey();
 
@@ -89,19 +90,23 @@ NOLINT_TEST_F(MaterialBinderLifecycleTest, HandlesStableAcrossFramesWithReorder)
   };
 
   oxygen::vortex::sceneprep::MaterialRef a;
-  a.resolved_asset = MakeMaterial({ .base_color_key = base_color_key_a,
+  a.resolved_asset = MakeMaterial({
+    .base_color_key = base_color_key_a,
     .normal_key = normal_key_a,
     .raw_base_color_index = 1U,
     .raw_normal_index = 2U,
-    .base_color = { 0.2F, 0.3F, 0.4F, 1.0F, }, });
+    .base_color = { 0.2F, 0.3F, 0.4F, 1.0F },
+  });
   a.source_asset_key = a.resolved_asset->GetAssetKey();
   a.resolved_asset_key = a.resolved_asset->GetAssetKey();
   oxygen::vortex::sceneprep::MaterialRef b;
-  b.resolved_asset = MakeMaterial({ .base_color_key = base_color_key_b,
+  b.resolved_asset = MakeMaterial({
+    .base_color_key = base_color_key_b,
     .normal_key = normal_key_b,
     .raw_base_color_index = 3U,
     .raw_normal_index = 4U,
-    .base_color = { 0.2F, 0.3F, 0.4F, 1.0F, }, });
+    .base_color = { 0.2F, 0.3F, 0.4F, 1.0F },
+  });
   b.source_asset_key = b.resolved_asset->GetAssetKey();
   b.resolved_asset_key = b.resolved_asset->GetAssetKey();
 
@@ -164,11 +169,13 @@ NOLINT_TEST_F(
   const auto texNormalA = TexBinder().GetOrAllocate(normal_key).get();
 
   oxygen::vortex::sceneprep::MaterialRef mA;
-  mA.resolved_asset = MakeMaterial({ .base_color_key = base_color_key,
+  mA.resolved_asset = MakeMaterial({
+    .base_color_key = base_color_key,
     .normal_key = normal_key,
     .raw_base_color_index = 111U,
     .raw_normal_index = 222U,
-    .base_color = { 0.2F, 0.3F, 0.4F, 1.0F, }, });
+    .base_color = { 0.2F, 0.3F, 0.4F, 1.0F },
+  });
   mA.source_asset_key = mA.resolved_asset->GetAssetKey();
   mA.resolved_asset_key = mA.resolved_asset->GetAssetKey();
   const auto handleA = MatBinder().GetOrAllocate(mA);
@@ -187,11 +194,13 @@ NOLINT_TEST_F(
     });
 
   oxygen::vortex::sceneprep::MaterialRef mB;
-  mB.resolved_asset = MakeMaterial({ .base_color_key = base_color_key,
+  mB.resolved_asset = MakeMaterial({
+    .base_color_key = base_color_key,
     .normal_key = normal_key,
     .raw_base_color_index = 111U,
     .raw_normal_index = 222U,
-    .base_color = { 0.2F, 0.3F, 0.4F, 1.0F, }, });
+    .base_color = { 0.2F, 0.3F, 0.4F, 1.0F },
+  });
   mB.source_asset_key = mB.resolved_asset->GetAssetKey();
   mB.resolved_asset_key = mB.resolved_asset->GetAssetKey();
   const auto handleB = MatBinder().GetOrAllocate(mB);
@@ -230,11 +239,13 @@ NOLINT_TEST_F(MaterialBinderLifecycleTest, EnsureFrameResourcesIdempotent)
     });
 
   oxygen::vortex::sceneprep::MaterialRef ref;
-  ref.resolved_asset = MakeMaterial({ .base_color_key = base_color_key,
+  ref.resolved_asset = MakeMaterial({
+    .base_color_key = base_color_key,
     .normal_key = normal_key,
     .raw_base_color_index = 5U,
     .raw_normal_index = 6U,
-    .base_color = { 0.2F, 0.3F, 0.4F, 1.0F, }, });
+    .base_color = { 0.2F, 0.3F, 0.4F, 1.0F },
+  });
   ref.source_asset_key = ref.resolved_asset->GetAssetKey();
   ref.resolved_asset_key = ref.resolved_asset->GetAssetKey();
   const auto h = MatBinder().GetOrAllocate(ref);
@@ -270,11 +281,13 @@ NOLINT_TEST_F(MaterialBinderLifecycleTest, UpdateMaterialInPlace)
       1,
     });
 
-  auto a = MakeMaterial({ .base_color_key = base_color_key,
+  auto a = MakeMaterial({
+    .base_color_key = base_color_key,
     .normal_key = normal_key,
     .raw_base_color_index = 1U,
     .raw_normal_index = 2U,
-    .base_color = { 0.2F, 0.3F, 0.4F, 1.0F, }, });
+    .base_color = { 0.2F, 0.3F, 0.4F, 1.0F },
+  });
   oxygen::vortex::sceneprep::MaterialRef ra;
   ra.resolved_asset = a;
   ra.source_asset_key = ra.resolved_asset->GetAssetKey();
@@ -292,11 +305,13 @@ NOLINT_TEST_F(MaterialBinderLifecycleTest, UpdateMaterialInPlace)
   const ResourceKey new_normal {
     63012U,
   };
-  auto b = MakeMaterial({ .base_color_key = new_base,
+  auto b = MakeMaterial({
+    .base_color_key = new_base,
     .normal_key = new_normal,
     .raw_base_color_index = 11U,
     .raw_normal_index = 12U,
-    .base_color = { 0.2F, 0.3F, 0.4F, 1.0F, }, });
+    .base_color = { 0.2F, 0.3F, 0.4F, 1.0F },
+  });
 
   MatBinder().Update(h, b);
   const auto after = MaterialConstants(h);
@@ -325,11 +340,13 @@ NOLINT_TEST_F(MaterialBinderLifecycleTest, EvictionInvalidatesHandle)
     });
 
   oxygen::vortex::sceneprep::MaterialRef ref;
-  ref.resolved_asset = MakeMaterial({ .base_color_key = base_color_key,
+  ref.resolved_asset = MakeMaterial({
+    .base_color_key = base_color_key,
     .normal_key = normal_key,
     .raw_base_color_index = 31U,
     .raw_normal_index = 32U,
-    .base_color = { 0.2F, 0.3F, 0.4F, 1.0F, }, });
+    .base_color = { 0.2F, 0.3F, 0.4F, 1.0F },
+  });
   ref.source_asset_key = ref.resolved_asset->GetAssetKey();
   ref.resolved_asset_key = ref.resolved_asset->GetAssetKey();
 
@@ -371,11 +388,13 @@ NOLINT_TEST_F(MaterialBinderLifecycleTest, EvictedSlotReuseBumpsGeneration)
     });
 
   oxygen::vortex::sceneprep::MaterialRef ref;
-  ref.resolved_asset = MakeMaterial({ .base_color_key = base_color_key,
+  ref.resolved_asset = MakeMaterial({
+    .base_color_key = base_color_key,
     .normal_key = normal_key,
     .raw_base_color_index = 41U,
     .raw_normal_index = 42U,
-    .base_color = { 0.2F, 0.3F, 0.4F, 1.0F, }, });
+    .base_color = { 0.2F, 0.3F, 0.4F, 1.0F },
+  });
   ref.source_asset_key = ref.resolved_asset->GetAssetKey();
   ref.resolved_asset_key = ref.resolved_asset->GetAssetKey();
 
@@ -437,19 +456,23 @@ NOLINT_TEST_F(MaterialBinderLifecycleTest, UpdateDoesNotChangeCanonicalHandle)
     });
 
   oxygen::vortex::sceneprep::MaterialRef a;
-  a.resolved_asset = MakeMaterial({ .base_color_key = base_color_key_a,
+  a.resolved_asset = MakeMaterial({
+    .base_color_key = base_color_key_a,
     .normal_key = normal_key_a,
     .raw_base_color_index = 1U,
     .raw_normal_index = 2U,
-    .base_color = { 0.2F, 0.3F, 0.4F, 1.0F, }, });
+    .base_color = { 0.2F, 0.3F, 0.4F, 1.0F },
+  });
   a.source_asset_key = a.resolved_asset->GetAssetKey();
   a.resolved_asset_key = a.resolved_asset->GetAssetKey();
   oxygen::vortex::sceneprep::MaterialRef b;
-  b.resolved_asset = MakeMaterial({ .base_color_key = base_color_key_b,
+  b.resolved_asset = MakeMaterial({
+    .base_color_key = base_color_key_b,
     .normal_key = normal_key_b,
     .raw_base_color_index = 3U,
     .raw_normal_index = 4U,
-    .base_color = { 0.2F, 0.3F, 0.4F, 1.0F, }, });
+    .base_color = { 0.2F, 0.3F, 0.4F, 1.0F },
+  });
   b.source_asset_key = b.resolved_asset->GetAssetKey();
   b.resolved_asset_key = b.resolved_asset->GetAssetKey();
 
@@ -495,11 +518,13 @@ NOLINT_TEST_F(
     });
 
   oxygen::vortex::sceneprep::MaterialRef ref;
-  ref.resolved_asset = MakeMaterial({ .base_color_key = base_color_key,
+  ref.resolved_asset = MakeMaterial({
+    .base_color_key = base_color_key,
     .normal_key = normal_key,
     .raw_base_color_index = 7U,
     .raw_normal_index = 8U,
-    .base_color = { 0.2F, 0.3F, 0.4F, 1.0F, }, });
+    .base_color = { 0.2F, 0.3F, 0.4F, 1.0F },
+  });
   ref.source_asset_key = ref.resolved_asset->GetAssetKey();
   ref.resolved_asset_key = ref.resolved_asset->GetAssetKey();
 

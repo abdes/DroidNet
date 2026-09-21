@@ -28,10 +28,10 @@ struct alignas(packing::kShaderDataFieldAlignment) EnvironmentViewData {
   float sky_view_lut_slice { 0.0F };
   float planet_to_sun_cos_zenith { 0.0F };
   float aerial_perspective_distance_scale {
-    engine::atmos::kDefaultAerialPerspectiveDistanceScale
+    engine::atmos::kDefaultAerialPerspectiveDistanceScale,
   };
   float aerial_scattering_strength {
-    engine::atmos::kDefaultAerialScatteringStrength
+    engine::atmos::kDefaultAerialScatteringStrength,
   };
   glm::vec4 planet_center_ws_pad {
     0.0F,

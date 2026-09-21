@@ -65,14 +65,14 @@ namespace environment {
     struct alignas(16) PassConstants {
       std::uint32_t instance_buffer_slot { kInvalidShaderVisibleIndex.get() };
       std::uint32_t instance_culling_buffer_slot {
-        kInvalidShaderVisibleIndex.get()
+        kInvalidShaderVisibleIndex.get(),
       };
       std::uint32_t tile_data_texture_slot { kInvalidShaderVisibleIndex.get() };
       std::uint32_t occupied_tile_buffer_slot {
-        kInvalidShaderVisibleIndex.get()
+        kInvalidShaderVisibleIndex.get(),
       };
       std::uint32_t indirect_args_buffer_slot {
-        kInvalidShaderVisibleIndex.get()
+        kInvalidShaderVisibleIndex.get(),
       };
       std::uint32_t instance_count { 0U };
       std::uint32_t tile_resolution_x { 0U };
@@ -98,11 +98,11 @@ namespace environment {
     auto EnsureOccupiedTileDrawBuffers(std::uint32_t tile_count) -> bool;
 
     Renderer& renderer_;
-    std::optional<upload::TransientStructuredBuffer> pass_constants_buffer_ {};
-    std::shared_ptr<graphics::Texture> tile_data_texture_ {};
-    std::shared_ptr<graphics::Buffer> occupied_tile_buffer_ {};
-    std::shared_ptr<graphics::Buffer> indirect_args_buffer_ {};
-    std::shared_ptr<graphics::Buffer> indirect_count_clear_buffer_ {};
+    std::optional<upload::TransientStructuredBuffer> pass_constants_buffer_;
+    std::shared_ptr<graphics::Texture> tile_data_texture_;
+    std::shared_ptr<graphics::Buffer> occupied_tile_buffer_;
+    std::shared_ptr<graphics::Buffer> indirect_args_buffer_;
+    std::shared_ptr<graphics::Buffer> indirect_count_clear_buffer_;
     ShaderVisibleIndex tile_data_texture_uav_ { kInvalidShaderVisibleIndex };
     ShaderVisibleIndex tile_data_texture_srv_ { kInvalidShaderVisibleIndex };
     ShaderVisibleIndex occupied_tile_buffer_uav_ { kInvalidShaderVisibleIndex };
@@ -112,8 +112,8 @@ namespace environment {
     std::uint32_t tile_data_resolution_y_ { 0U };
     std::uint32_t tile_data_slice_count_ { 0U };
     std::uint32_t occupied_tile_capacity_ { 0U };
-    std::vector<std::shared_ptr<graphics::Texture>> retired_textures_ {};
-    std::vector<std::shared_ptr<graphics::Buffer>> retired_buffers_ {};
+    std::vector<std::shared_ptr<graphics::Texture>> retired_textures_;
+    std::vector<std::shared_ptr<graphics::Buffer>> retired_buffers_;
   };
 
 } // namespace environment

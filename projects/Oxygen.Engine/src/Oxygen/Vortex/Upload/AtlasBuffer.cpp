@@ -5,9 +5,21 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <cstdint>
+#include <expected>
+#include <string>
+#include <system_error>
+#include <utility>
 
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
+#include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Vortex/Upload/AtlasBuffer.h>
+#include <Oxygen/Vortex/Upload/Types.h>
+#include <Oxygen/Vortex/Upload/UploadHelpers.h>
 
 namespace oxygen::vortex::upload {
 

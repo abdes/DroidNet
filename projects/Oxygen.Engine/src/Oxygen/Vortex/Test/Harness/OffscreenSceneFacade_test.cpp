@@ -4,29 +4,43 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <memory>
-#include <ranges>
+#include <optional>
 #include <string>
 #include <utility>
+#include <vector>
 
-#include <Oxygen/Testing/GTest.h>
-
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/Result.h>
 #include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/Scissors.h>
+#include <Oxygen/Core/Types/TextureType.h>
+#include <Oxygen/Core/Types/View.h>
+#include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/QueueRole.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
+#include <Oxygen/Scene/ExposureSettings.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/FacadePresets.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererCapability.h>
+#include <Oxygen/Vortex/SceneRenderer/ShadingMode.h>
 #include <Oxygen/Vortex/Test/Fakes/Graphics.h>
+#include <Oxygen/Vortex/Types/ExposureTransition.h>
 #include <Oxygen/Vortex/ViewExtension.h>
-#include <Oxygen/Vortex/ViewFeatureProfile.h>
 
 namespace oxygen::engine::internal {
 struct EngineTagFactory {
@@ -238,7 +252,9 @@ NOLINT_TEST_F(OffscreenSceneFacadeTest,
               Renderer::ValidationReport> {
       auto facade = renderer_->ForOffscreenScene();
       facade.SetFrameSession(MakeFrameSession());
-      facade.SetSceneSource({ .scene = oxygen::observer_ptr { scene_.get(), }, });
+      facade.SetSceneSource({ .scene = oxygen::observer_ptr {
+                                scene_.get(),
+                              } });
       facade.SetOutputTarget(MakeOutputTarget());
       auto exposure = oxygen::scene::ExposureSettings {};
       exposure.manual_ev = 4;
@@ -322,7 +338,9 @@ NOLINT_TEST_F(OffscreenSceneFacadeTest, BothExecutionPathsPreserveLocalScissor)
   };
   auto facade = renderer_->ForOffscreenScene();
   facade.SetFrameSession(MakeFrameSession());
-  facade.SetSceneSource({ .scene = oxygen::observer_ptr { scene_.get(), }, });
+  facade.SetSceneSource({ .scene = oxygen::observer_ptr {
+                            scene_.get(),
+                          } });
   facade.SetOutputTarget(MakeOutputTarget());
   facade.SetViewIntent(Renderer::OffscreenSceneViewInput::FromCamera("Inset",
     ViewId {
@@ -598,7 +616,7 @@ NOLINT_TEST_F(OffscreenSceneFacadeTest, ExecuteRendersIntoOutputTarget)
     // Synchronous execution finishes while the session-owned closure and its
     // captured test locals are alive.
     // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
-    loop, [&]() -> oxygen::co::Co<void> { co_await session->Execute(); });
+    loop, [&] -> oxygen::co::Co<void> { co_await session->Execute(); });
 
   EXPECT_FALSE(graphics_->draw_log_.draws.empty());
   const auto& color_texture
@@ -639,7 +657,7 @@ NOLINT_TEST_F(OffscreenSceneFacadeTest, ExecuteAcceptsForwardPipeline)
     // Synchronous execution finishes while the session-owned closure and its
     // captured test locals are alive.
     // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
-    loop, [&]() -> oxygen::co::Co<void> { co_await session->Execute(); });
+    loop, [&] -> oxygen::co::Co<void> { co_await session->Execute(); });
 
   EXPECT_FALSE(graphics_->draw_log_.draws.empty());
 }
@@ -668,7 +686,9 @@ NOLINT_TEST_F(
 {
   auto facade = renderer_->ForOffscreenScene();
   facade.SetFrameSession(MakeFrameSession());
-  facade.SetSceneSource({ .scene = oxygen::observer_ptr { scene_.get(), }, });
+  facade.SetSceneSource({ .scene = oxygen::observer_ptr {
+                            scene_.get(),
+                          } });
   facade.SetOutputTarget(MakeOutputTarget());
   auto input = Renderer::OffscreenSceneViewInput::FromCamera("SharedOffscreen",
     ViewId {

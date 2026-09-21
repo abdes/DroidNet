@@ -6,13 +6,14 @@
 
 #include <array>
 #include <memory>
+#include <optional>
 #include <span>
 #include <stdexcept>
 #include <string_view>
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/Types/View.h>
+#include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/Internal/CompositionViewImpl.h>
 #include <Oxygen/Vortex/SceneRenderer/Internal/FramePlanBuilder.h>

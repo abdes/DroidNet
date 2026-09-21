@@ -5,9 +5,9 @@
 //===----------------------------------------------------------------------===//
 
 #include <Oxygen/Core/Bindless/Types.h>
-#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/ScenePrep/GeometryRef.h>
-
 #include <Oxygen/Vortex/Test/Fixtures/GeometryUploaderTest.h>
 
 namespace {

@@ -5,28 +5,42 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <chrono>
 #include <cstddef>
+#include <cstdint>
 #include <cstring>
 #include <limits>
 #include <span>
 #include <unordered_map>
+#include <vector>
 
 #include <fmt/format.h>
+#include <glm/common.hpp>
+#include <glm/ext/vector_float3.hpp>
+#include <glm/ext/vector_float4.hpp>
+#include <glm/geometric.hpp>
 
 #include <Oxygen/Base/Hash.h>
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/Bindless/Generated.BindlessAbi.h>
+#include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/Data/MaterialDomain.h>
+#include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
-#include <Oxygen/Graphics/Common/ResourceRegistry.h>
-#include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
-#include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
+#include <Oxygen/Nexus/Types/Domain.h>
 #include <Oxygen/Vortex/PreparedSceneFrame.h>
+#include <Oxygen/Vortex/RendererTag.h>
 #include <Oxygen/Vortex/Resources/DrawMetadataEmitter.h>
 #include <Oxygen/Vortex/Resources/GeometryUploader.h>
 #include <Oxygen/Vortex/Resources/MaterialBinder.h>
+#include <Oxygen/Vortex/ScenePrep/Handles.h>
 #include <Oxygen/Vortex/ScenePrep/RenderItemData.h>
 #include <Oxygen/Vortex/Types/DrawMetadata.h>
+#include <Oxygen/Vortex/Types/PassMask.h>
 #include <Oxygen/Vortex/Upload/TransientStructuredBuffer.h>
 
 namespace {

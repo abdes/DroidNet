@@ -147,10 +147,10 @@ private:
   };
   bool gpu_timeline_enabled_requested_ { false };
   HdrPrecisionControl hdr_precision_control_ {
-    HdrPrecisionControl::kProduction
+    HdrPrecisionControl::kProduction,
   };
   std::uint64_t hdr_precision_control_revision_ { 0U };
-  DiagnosticsFrameLedger frame_ledger_ {};
+  DiagnosticsFrameLedger frame_ledger_;
 };
 
 } // namespace oxygen::vortex

@@ -4,15 +4,17 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Vortex/Environment/Internal/AtmosphereLightState.h>
-
 #include <bit>
+#include <cstddef>
+#include <cstdint>
 
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Scene/Light/DirectionalLightResolver.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Vortex/Environment/Internal/AtmosphereLightState.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereLightTranslation.h>
+#include <Oxygen/Vortex/Environment/Types/AtmosphereLightModel.h>
 
 namespace oxygen::vortex::environment::internal {
 
@@ -100,7 +102,7 @@ auto AtmosphereLightState::Update(const scene::Scene& scene_ref) -> bool
   resolver.Validate();
   auto next = ResolvedAtmosphereLightState {};
   const auto environment = scene_ref.GetEnvironment();
-  const auto atmosphere = environment != nullptr
+  const auto* const atmosphere = environment != nullptr
     ? environment->TryGetSystem<scene::environment::SkyAtmosphere>().get()
     : nullptr;
   const auto& resolved_atmosphere_lights = resolver.ResolveAtmosphereLights();

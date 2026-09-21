@@ -4,38 +4,36 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <algorithm>
 #include <memory>
 #include <optional>
+#include <utility>
 #include <vector>
 
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtc/quaternion.hpp>
-
-#include <Oxygen/Testing/GTest.h>
-
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
+#include <Oxygen/Scene/Types/Flags.h>
+#include <Oxygen/Scene/Types/RenderablePolicies.h>
+#include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/Resources/GeometryUploader.h>
 #include <Oxygen/Vortex/Resources/MaterialBinder.h>
 #include <Oxygen/Vortex/Resources/TextureBinder.h>
 #include <Oxygen/Vortex/Resources/TransformUploader.h>
 #include <Oxygen/Vortex/ScenePrep/Extractors.h>
 #include <Oxygen/Vortex/ScenePrep/RenderItemProto.h>
+#include <Oxygen/Vortex/ScenePrep/ScenePrepContext.h>
 #include <Oxygen/Vortex/ScenePrep/ScenePrepState.h>
+#include <Oxygen/Vortex/Test/Fakes/AssetLoader.h>
+#include <Oxygen/Vortex/Test/Fakes/Graphics.h>
+#include <Oxygen/Vortex/Test/Fixtures/ScenePrepTestFixture.h>
+#include <Oxygen/Vortex/Test/ScenePrep/ScenePrepHelpers.h>
 #include <Oxygen/Vortex/Upload/InlineTransfersCoordinator.h>
 #include <Oxygen/Vortex/Upload/UploadCoordinator.h>
 #include <Oxygen/Vortex/Upload/UploaderTag.h>
-
-#include <Oxygen/Vortex/Test/Fakes/Graphics.h>
-#include <Oxygen/Vortex/Test/Fixtures/ScenePrepTestFixture.h>
-#include <Oxygen/Vortex/Test/Fixtures/TextureBinderTest.h>
-#include <Oxygen/Vortex/Test/ScenePrep/ScenePrepHelpers.h>
 
 namespace oxygen::vortex::upload::internal {
 auto UploaderTagFactory::Get() noexcept -> UploaderTag
@@ -276,18 +274,26 @@ NOLINT_TEST_F(EmitPerVisibleSubmeshTest,
     bool reverse_winding;
   };
   const auto cases = std::vector<TransformCase> {
-    { .parent_scale = { -2.0F, 1.0F, 1.0F, },
-      .child_scale = { 1.0F, 1.0F, 1.0F, },
-      .reverse_winding = true, },
-    { .parent_scale = { -2.0F, 1.0F, 1.0F, },
-      .child_scale = { -1.0F, 1.0F, 1.0F, },
-      .reverse_winding = false, },
-    { .parent_scale = { 2.0F, 1.0F, 1.0F, },
-      .child_scale = { -1.0F, 1.0F, 1.0F, },
-      .reverse_winding = true, },
-    { .parent_scale = { -2.0F, -1.0F, 1.0F, },
-      .child_scale = { 1.0F, 1.0F, 1.0F, },
-      .reverse_winding = false, },
+    {
+      .parent_scale = { -2.0F, 1.0F, 1.0F },
+      .child_scale = { 1.0F, 1.0F, 1.0F },
+      .reverse_winding = true,
+    },
+    {
+      .parent_scale = { -2.0F, 1.0F, 1.0F },
+      .child_scale = { -1.0F, 1.0F, 1.0F },
+      .reverse_winding = false,
+    },
+    {
+      .parent_scale = { 2.0F, 1.0F, 1.0F },
+      .child_scale = { -1.0F, 1.0F, 1.0F },
+      .reverse_winding = true,
+    },
+    {
+      .parent_scale = { -2.0F, -1.0F, 1.0F },
+      .child_scale = { 1.0F, 1.0F, 1.0F },
+      .reverse_winding = false,
+    },
   };
   for (const auto& test_case : cases) {
     Node().GetTransform().SetLocalTransform(glm::vec3(0.0F),

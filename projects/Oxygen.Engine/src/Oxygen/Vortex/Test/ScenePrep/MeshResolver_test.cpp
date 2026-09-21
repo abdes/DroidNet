@@ -4,24 +4,20 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <memory>
-
-#include <glm/glm.hpp>
 #include <glm/gtc/matrix_access.hpp>
-#include <glm/gtc/quaternion.hpp>
-
-#include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
+#include <Oxygen/Scene/Types/Flags.h>
+#include <Oxygen/Scene/Types/RenderablePolicies.h>
+#include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/ScenePrep/Extractors.h>
 #include <Oxygen/Vortex/ScenePrep/RenderItemProto.h>
 #include <Oxygen/Vortex/ScenePrep/ScenePrepState.h>
 #include <Oxygen/Vortex/ScenePrep/Types.h>
-
 #include <Oxygen/Vortex/Test/Fixtures/ScenePrepTestFixture.h>
 #include <Oxygen/Vortex/Test/ScenePrep/ScenePrepHelpers.h>
 
@@ -172,8 +168,10 @@ NOLINT_TEST_F(MeshResolverTest, DistancePolicy_Near_SelectsFineLOD)
     });
   SetGeometry(geom);
   SeedVisibilityAndTransform();
-  const DistancePolicy dp { .thresholds = { 2.0F, 10.0F, },
-    .hysteresis_ratio = 0.1F, };
+  const DistancePolicy dp {
+    .thresholds = { 2.0F, 10.0F },
+    .hysteresis_ratio = 0.1F,
+  };
   Node().GetRenderable().SetLodPolicy(dp);
 
   // Place camera at the world-sphere center to get distance ~ 0
@@ -205,8 +203,10 @@ NOLINT_TEST_F(MeshResolverTest, DistancePolicy_Far_SelectsCoarseLOD)
     });
   SetGeometry(geom);
   SeedVisibilityAndTransform();
-  const DistancePolicy dp { .thresholds = { 2.0F, 10.0F, },
-    .hysteresis_ratio = 0.1F, };
+  const DistancePolicy dp {
+    .thresholds = { 2.0F, 10.0F },
+    .hysteresis_ratio = 0.1F,
+  };
   Node().GetRenderable().SetLodPolicy(dp);
 
   // Far camera to make normalized distance >> thresholds
@@ -239,8 +239,10 @@ NOLINT_TEST_F(MeshResolverTest, ScreenSpaceErrorPolicy_NearHighSSE_SelectsFine)
     });
   SetGeometry(geom);
   SeedVisibilityAndTransform();
-  const ScreenSpaceErrorPolicy sp { .enter_finer_sse = { 50.0F, 25.0F, },
-    .exit_coarser_sse = { 40.0F, 20.0F, }, };
+  const ScreenSpaceErrorPolicy sp {
+    .enter_finer_sse = { 50.0F, 25.0F },
+    .exit_coarser_sse = { 40.0F, 20.0F },
+  };
   Node().GetRenderable().SetLodPolicy(sp);
 
   // Camera ~ at center -> z ~= 0 -> clamped to 1e-6 -> very large SSE
@@ -271,8 +273,10 @@ NOLINT_TEST_F(MeshResolverTest, ScreenSpaceErrorPolicy_FarLowSSE_SelectsCoarse)
     });
   SetGeometry(geom);
   SeedVisibilityAndTransform();
-  const ScreenSpaceErrorPolicy sp { .enter_finer_sse = { 50.0F, 25.0F, },
-    .exit_coarser_sse = { 40.0F, 20.0F, }, };
+  const ScreenSpaceErrorPolicy sp {
+    .enter_finer_sse = { 50.0F, 25.0F },
+    .exit_coarser_sse = { 40.0F, 20.0F },
+  };
   Node().GetRenderable().SetLodPolicy(sp);
 
   // Far camera -> small sse -> coarser LOD
@@ -308,8 +312,10 @@ NOLINT_TEST_F(MeshResolverTest, ScreenSpaceErrorPolicy_NoFocal_FallbackLOD0)
     });
   SetGeometry(geom);
   SeedVisibilityAndTransform();
-  const ScreenSpaceErrorPolicy sp { .enter_finer_sse = { 10.0F, 5.0F, },
-    .exit_coarser_sse = { 8.0F, 4.0F, }, };
+  const ScreenSpaceErrorPolicy sp {
+    .enter_finer_sse = { 10.0F, 5.0F },
+    .exit_coarser_sse = { 8.0F, 4.0F },
+  };
   Node().GetRenderable().SetLodPolicy(sp);
   const auto center = glm::vec3(glm::column(WorldMatrix(), 3));
   ConfigureView(center + glm::vec3(10.0F, 0.0F, 0.0F), /*height*/ 0.0F);

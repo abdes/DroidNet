@@ -45,16 +45,14 @@ namespace lighting::internal {
     frame::Slot current_slot_ { frame::kInvalidSlot };
     std::unique_ptr<::oxygen::vortex::internal::PerViewStructuredPublisher<
       LightingFrameBindings>>
-      lighting_bindings_publisher_ {};
-    std::unique_ptr<upload::TransientStructuredBuffer> local_light_buffer_ {};
+      lighting_bindings_publisher_;
+    std::unique_ptr<upload::TransientStructuredBuffer> local_light_buffer_;
+    std::unique_ptr<upload::TransientStructuredBuffer> light_view_data_buffer_;
+    std::unique_ptr<upload::TransientStructuredBuffer> grid_metadata_buffer_;
+    std::unique_ptr<upload::TransientStructuredBuffer> grid_indirection_buffer_;
     std::unique_ptr<upload::TransientStructuredBuffer>
-      light_view_data_buffer_ {};
-    std::unique_ptr<upload::TransientStructuredBuffer> grid_metadata_buffer_ {};
-    std::unique_ptr<upload::TransientStructuredBuffer>
-      grid_indirection_buffer_ {};
-    std::unique_ptr<upload::TransientStructuredBuffer>
-      directional_light_indices_buffer_ {};
-    std::unordered_map<ViewId, PublishedLightingView> published_views_ {};
+      directional_light_indices_buffer_;
+    std::unordered_map<ViewId, PublishedLightingView> published_views_;
   };
 
 } // namespace lighting::internal

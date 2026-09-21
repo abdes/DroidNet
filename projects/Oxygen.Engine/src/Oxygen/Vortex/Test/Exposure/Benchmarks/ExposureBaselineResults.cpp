@@ -5,14 +5,26 @@
 //===----------------------------------------------------------------------===//
 
 #include <cmath>
+#include <cstddef>
+#include <filesystem>
 #include <fstream>
 #include <iomanip>
+#include <ios>
+#include <string>
+#include <tuple>
 #include <unordered_set>
 
+#include <glm/trigonometric.hpp>
+
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/Test/Exposure/Benchmarks/ExposureBaselineScenario.h>
 #include <Oxygen/Vortex/Test/Exposure/Benchmarks/ExposureCpuTiming.h>
+#include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureGpuFixture.h>
+#include <Oxygen/Vortex/Types/ExposureStateData.h>
 
 namespace oxygen::vortex::testing::exposure {
 
@@ -176,7 +188,7 @@ auto ExposureBaselineScenario::CaptureEndpoints() -> void
   if (moving) {
     for (unsigned path_frame = 1U; path_frame <= 600U; ++path_frame) {
       capture_endpoint = path_frame == 600U;
-      static_cast<void>(RenderFrame(false, path_frame));
+      std::ignore = RenderFrame(false, path_frame);
     }
     SaveEndpoint(600U);
   }
@@ -215,6 +227,13 @@ auto ExposureBaselineScenario::WriteAndValidateResults() -> void
   ASSERT_TRUE(gpu_stream.is_open());
   const auto gpu = nlohmann::json::parse(gpu_stream);
   const auto adapter = backend.GetCurrentDevice()->GetAdapterLuid();
+  const auto* const certified_precision_scope = fp32_reference
+    ? "Format-only FP32 control; certification remains enabled"
+    : "Production admission; certification remains enabled";
+  const auto* const precision_scope = fp32_only
+    ? "FP32-only control; P=1, exposure and range protection active, no FP16 "
+      "admission"
+    : certified_precision_scope;
   const char* recipe
     = "Emissive triangle 0.25, vacuum atmosphere, zero-extinction fog";
   if (moving) {
@@ -222,75 +241,107 @@ auto ExposureBaselineScenario::WriteAndValidateResults() -> void
   } else if (mixed_scene) {
     recipe = "MultiView mixed exposure";
   }
-  const auto manifest = nlohmann::json { { "schema_version", 1, },
-    { "workload", workload, }, { "run_id", run_id, },
-    { "configuration", "Release", }, { "width", width, }, { "height", height, },
-    { "view_count", view_count, }, { "prepared_draw_counts", warm_draw_counts, },
-    { "secondary_width", view_count == 2U ? width / 2U : 0U, },
-    { "secondary_height", view_count == 2U ? height / 2U : 0U, },
-    { "view_ids",
-      view_count == 2U ? std::vector { 500, 501, } : std::vector { 500, }, },
-    { "view_state_handles",
-      view_count == 2U ? std::vector { 500, 501, } : std::vector { 500, }, },
-    { "shading", forward ? "Forward" : "Deferred", },
-    { "exposure",
-      { { "mode",
+  const auto manifest = nlohmann::json {
+    { "schema_version", 1 },
+    { "workload", workload },
+    { "run_id", run_id },
+    { "configuration", "Release" },
+    { "width", width },
+    { "height", height },
+    { "view_count", view_count },
+    { "prepared_draw_counts", warm_draw_counts },
+    { "secondary_width", view_count == 2U ? width / 2U : 0U },
+    { "secondary_height", view_count == 2U ? height / 2U : 0U },
+    {
+      "view_ids",
+      view_count == 2U ? std::vector { 500, 501 } : std::vector { 500 },
+    },
+    {
+      "view_state_handles",
+      view_count == 2U ? std::vector { 500, 501 } : std::vector { 500 },
+    },
+    { "shading", forward ? "Forward" : "Deferred" },
+    {
+      "exposure",
+      {
+        {
+          "mode",
           fixture_.settings.mode == engine::ExposureMode::kAuto ? "Auto"
-                                                                : "Manual", },
-        { "manual_ev", fixture_.settings.manual_ev, },
-        { "key", fixture_.settings.key, }, { "metering", "Average", },
-        { "min_ev", fixture_.settings.min_ev, },
-        { "max_ev", fixture_.settings.max_ev, },
-        { "speed_up", fixture_.settings.speed_up, },
-        { "speed_down", fixture_.settings.speed_down, }, }, },
-    { "precision", precision, },
-    { "precision_scope",
-      fp32_only ? "FP32-only control; P=1, exposure and range protection active, no FP16 admission"
-      : fp32_reference ? "Format-only FP32 control; certification remains enabled"
-                     : "Production admission; certification remains enabled", },
-    { "recipe", recipe, },
-    { "camera_path",
+                                                                : "Manual",
+        },
+        { "manual_ev", fixture_.settings.manual_ev },
+        { "key", fixture_.settings.key },
+        { "metering", "Average" },
+        { "min_ev", fixture_.settings.min_ev },
+        { "max_ev", fixture_.settings.max_ev },
+        { "speed_up", fixture_.settings.speed_up },
+        { "speed_down", fixture_.settings.speed_down },
+      },
+    },
+    { "precision", precision },
+    { "precision_scope", precision_scope },
+    { "recipe", recipe },
+    {
+      "camera_path",
       moving ? "1200 frames: 300 exterior hold, 300 smoothstep entry, 300 "
                "interior hold, 300 smoothstep exit; secondary phase +600"
-             : "Static", },
-    { "camera_aspect",
-      mixed_scene ? static_cast<double>(width) / height : 1.0, },
-    { "camera_fov_radians",
-      mixed_scene ? static_cast<double>(glm::radians(45.0F)) : 1.0, },
-    { "tone_mapper", "None", }, { "display_gamma", 1, },
-    { "quality_commands", quality_commands, }, { "temporal_fog", temporal, },
-    { "jitter", false, }, { "simulation_dt_ns", simulation_dt_ns, },
-    { "frame_slots", 3, }, { "warmup_frames", warm_frames, },
-    { "warmup_seconds", warm_seconds, }, { "sample_count", sample_count, },
-    { "sample_seconds", sample_seconds, },
-    { "first_frame_seq", samples.front().frame_sequence, },
-    { "last_frame_seq", samples.back().frame_sequence, },
-    { "adapter_luid_low", adapter.LowPart, },
-    { "adapter_luid_high", adapter.HighPart, },
-    { "cpu_samples", cpu_path.filename().string(), },
+             : "Static",
+    },
+    {
+      "camera_aspect",
+      mixed_scene ? static_cast<double>(width) / height : 1.0,
+    },
+    {
+      "camera_fov_radians",
+      mixed_scene ? static_cast<double>(glm::radians(45.0F)) : 1.0,
+    },
+    { "tone_mapper", "None" },
+    { "display_gamma", 1 },
+    { "quality_commands", quality_commands },
+    { "temporal_fog", temporal },
+    { "jitter", false },
+    { "simulation_dt_ns", simulation_dt_ns },
+    { "frame_slots", 3 },
+    { "warmup_frames", warm_frames },
+    { "warmup_seconds", warm_seconds },
+    { "sample_count", sample_count },
+    { "sample_seconds", sample_seconds },
+    { "first_frame_seq", samples.front().frame_sequence },
+    { "last_frame_seq", samples.back().frame_sequence },
+    { "adapter_luid_low", adapter.LowPart },
+    { "adapter_luid_high", adapter.HighPart },
+    { "cpu_samples", cpu_path.filename().string() },
     { "logging_verbosity", loguru::g_global_verbosity },
-    { "cpu_owner_timing", cpu_timing
-        ? cpu_timing->Save(directory / (stem + ".cpu-owners.csv"))
-        : nlohmann::json(nullptr) },
-    { "gpu_samples", gpu_path.filename().string(), },
-    { "gpu_complete", gpu.at("complete"), },
-    { "gpu_timing_valid", gpu.at("timing_valid"), },
-    { "resources_before", before, }, { "resources_after", after, },
-    { "resource_scope",
+    {
+      "cpu_owner_timing",
+      cpu_timing ? cpu_timing->Save(directory / (stem + ".cpu-owners.csv"))
+                 : nlohmann::json(nullptr),
+    },
+    { "gpu_samples", gpu_path.filename().string() },
+    { "gpu_complete", gpu.at("complete") },
+    { "gpu_timing_valid", gpu.at("timing_valid") },
+    { "resources_before", before },
+    { "resources_after", after },
+    {
+      "resource_scope",
       "Resources created after fixture setup, including "
       "outputs; native placement requirements, not committed heap residency. "
-      "No retained extracts beyond normal renderer/probe ownership.", },
-    { "finalization_frame_seq", finalization.frame_sequence, },
-    { "finalization_wall_ms", finalization.wall_ms, },
-    { "untimed_endpoint_images", endpoints, },
-    { "acceptance_windows", acceptance_windows, },
-    { "scope",
+      "No retained extracts beyond normal renderer/probe ownership.",
+    },
+    { "finalization_frame_seq", finalization.frame_sequence },
+    { "finalization_wall_ms", finalization.wall_ms },
+    { "untimed_endpoint_images", endpoints },
+    { "acceptance_windows", acceptance_windows },
+    {
+      "scope",
       "Native offscreen workload; no presented FPS claim. "
       "Frame-start duration includes backend waits; submission is a "
       "CPU/driver/recording span, not pure active CPU time. Correctness "
       "readbacks and explicit drains are absent from measured frames. "
       "Source/binary/shader hashes and clock/thermal samples belong to the "
-      "external frozen-checkpoint runner.", }, };
+      "external frozen-checkpoint runner.",
+    },
+  };
   auto output = std::ofstream(manifest_path, std::ios::binary);
   ASSERT_TRUE(output.is_open());
   output << manifest.dump(2) << '\n';

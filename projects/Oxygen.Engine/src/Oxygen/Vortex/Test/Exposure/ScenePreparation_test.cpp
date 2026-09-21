@@ -9,12 +9,20 @@
 #include <limits>
 #include <span>
 
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/PostProcess.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/Scene/ExposureSettings.h>
+#include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/PostProcess/PostProcessService.h>
+#include <Oxygen/Vortex/PostProcess/Types/PostProcessConfig.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureGpuFixture.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestGraphics.h>
 #include <Oxygen/Vortex/Types/ExposureStateData.h>
+#include <Oxygen/Vortex/Types/ExposureTransition.h>
 
 namespace oxygen::vortex::testing::exposure {
 
@@ -24,7 +32,7 @@ NOLINT_TEST_F(
   ExposureGpuTest, Fp32SceneColorPreservesWideRangeRadianceAndCoverage)
 {
   auto textures = SceneTextures(Backend(),
-    { .extent = { 1U, 1U, }, .scene_color_format = Format::kRGBA32Float, });
+    { .extent = { 1U, 1U }, .scene_color_format = Format::kRGBA32Float });
   const auto& color = textures.GetSceneColorResource();
   ASSERT_EQ(color->GetDescriptor().format, Format::kRGBA32Float);
   const Pixel expected {
@@ -47,10 +55,12 @@ NOLINT_TEST_F(
     recorder->RequireResourceState(*color, ResourceStates::kCopyDest);
     recorder->FlushBarriers();
     recorder->CopyBufferToTexture(*upload,
-      { .buffer_offset = 0U,
+      {
+        .buffer_offset = 0U,
         .buffer_row_pitch = 256U,
         .buffer_slice_pitch = 256U,
-        .dst_slice = { .width = 1U, .height = 1U, .depth = 1U, }, },
+        .dst_slice = { .width = 1U, .height = 1U, .depth = 1U },
+      },
       *color);
     recorder->RequireResourceStateFinal(
       *color, ResourceStates::kShaderResource);
@@ -202,7 +212,7 @@ NOLINT_TEST_F(ExposureGpuTest,
     };
     ctx_.current_view.hdr_fp32_only = fp32_only;
     ctx_.delta_time = 0.0F;
-    const auto start_frame = [&]() -> void {
+    const auto start_frame = [&] -> void {
       WaitForQueueIdle();
       ctx_.frame_sequence = frame::SequenceNumber {
         ++sequence_,

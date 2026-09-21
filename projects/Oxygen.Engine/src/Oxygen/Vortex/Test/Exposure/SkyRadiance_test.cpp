@@ -19,16 +19,26 @@
 #include <utility>
 #include <vector>
 
+#include <d3d12.h>
+#include <dxgiformat.h>
+#include <glm/geometric.hpp>
+
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Config/RendererConfig.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Data/HalfFloat.h>
+#include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/FrameCaptureController.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Environment/PostProcessVolume.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
-#include <Oxygen/Scene/Environment/SkyLight.h>
 #include <Oxygen/Scene/Environment/SkySphere.h>
+#include <Oxygen/Scene/ExposureSettings.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereLutCache.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereState.h>
 #include <Oxygen/Vortex/Environment/Passes/AtmosphereMultiScatteringLutPass.h>
@@ -39,10 +49,12 @@
 #include <Oxygen/Vortex/PostProcess/PostProcessService.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
+#include <Oxygen/Vortex/RendererCapability.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureGpuFixture.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestGraphics.h>
 #include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
 #include <Oxygen/Vortex/Types/EnvironmentViewData.h>
+#include <Oxygen/Vortex/Types/ExposureStateData.h>
 #include <Oxygen/Vortex/Types/ViewConstants.h>
 #include <Oxygen/Vortex/Types/ViewFrameBindings.h>
 #include <Oxygen/Vortex/ViewExtension.h>
@@ -162,9 +174,12 @@ NOLINT_TEST_F(ExposureGpuTest,
         { .frame_slot = frame::Slot { (sequence - 1U) % 3U, },
           .frame_sequence = frame::SequenceNumber { sequence, },
           .delta_time_seconds = 0.0F, });
-      facade.SetSceneSource({ .scene = observer_ptr { scene.get(), }, });
-      facade.SetOutputTarget(
-        { .framebuffer = observer_ptr { framebuffer.get(), }, });
+      facade.SetSceneSource({ .scene = observer_ptr {
+                                scene.get(),
+                              } });
+      facade.SetOutputTarget({ .framebuffer = observer_ptr {
+                                 framebuffer.get(),
+                               } });
       facade.SetViewIntent(input);
       auto session = facade.Finalize();
       if (!session.has_value()) {
@@ -372,12 +387,14 @@ NOLINT_TEST_F(
     recorder->RequireResourceState(*texture, ResourceStates::kCopyDest);
     recorder->FlushBarriers();
     recorder->CopyBufferToTexture(*upload,
-      { .buffer_offset = 0U,
+      {
+        .buffer_offset = 0U,
         .buffer_row_pitch = static_cast<std::uint64_t>(desc.width) * 16U,
         .buffer_slice_pitch
         = static_cast<std::uint64_t>(desc.width) * desc.height * 16U,
         .dst_slice
-        = { .width = desc.width, .height = desc.height, .depth = 1U, }, },
+        = { .width = desc.width, .height = desc.height, .depth = 1U },
+      },
       *texture);
     recorder->RequireResourceStateFinal(
       *texture, ResourceStates::kShaderResource);

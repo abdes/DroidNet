@@ -63,7 +63,7 @@ private:
   Renderer& renderer_;
   std::unique_ptr<TranslucencyMeshProcessor> mesh_processor_;
   std::unique_ptr<TranslucencyPipelineCache> pipeline_cache_;
-  std::shared_ptr<oxygen::graphics::Framebuffer> framebuffer_ {};
+  std::shared_ptr<oxygen::graphics::Framebuffer> framebuffer_;
 };
 
 } // namespace oxygen::vortex

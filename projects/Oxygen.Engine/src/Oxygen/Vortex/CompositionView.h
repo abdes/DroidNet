@@ -137,8 +137,8 @@ struct CompositionView {
     ViewId view_id { kInvalidViewId };
     SurfaceRouteId surface_id { kDefaultSurfaceRoute };
     std::int32_t priority { 0 };
-    std::string debug_name {};
-    std::function<void(graphics::CommandRecorder&)> record {};
+    std::string debug_name;
+    std::function<void(graphics::CommandRecorder&)> record;
   };
 
   using AuxOutputId = NamedType<uint64_t, struct AuxOutputIdTag, Comparable,
@@ -267,16 +267,16 @@ struct CompositionView {
 
   //! Surface routing placeholders. Empty means route to the default surface
   //! using the view viewport.
-  std::vector<ViewSurfaceRoute> surface_routes {};
+  std::vector<ViewSurfaceRoute> surface_routes;
 
   //! Overlay lane policy placeholder. Existing on_overlay is treated as a
   //! compatibility producer for the view-screen lane.
   OverlayPolicy overlay_policy {};
-  std::vector<OverlayBatch> overlay_batches {};
+  std::vector<OverlayBatch> overlay_batches;
 
   //! Auxiliary IO placeholders; dependency resolution lands in slice F.
-  std::vector<AuxOutputDesc> produced_aux_outputs {};
-  std::vector<AuxInputDesc> consumed_aux_outputs {};
+  std::vector<AuxOutputDesc> produced_aux_outputs;
+  std::vector<AuxInputDesc> consumed_aux_outputs;
 
   //! Override to force wireframe rendering for this specific view.
   bool force_wireframe { false };

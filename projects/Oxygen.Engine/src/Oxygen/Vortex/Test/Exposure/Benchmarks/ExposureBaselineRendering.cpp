@@ -4,12 +4,35 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
+#include <chrono>
 #include <cmath>
+#include <cstdint>
+#include <memory>
+#include <optional>
 #include <unordered_set>
+#include <utility>
 
+#include <d3d12.h>
+#include <glm/ext/matrix_transform.hpp>
+#include <glm/gtc/quaternion.hpp>
+#include <glm/matrix.hpp>
+
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Constants.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/View.h>
+#include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
+#include <Oxygen/Profiling/CpuScopeObserver.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Vortex/CompositionView.h>
+#include <Oxygen/Vortex/RenderContext.h>
+#include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
+#include <Oxygen/Vortex/SceneRenderer/ShadingMode.h>
 #include <Oxygen/Vortex/Shadows/ShadowService.h>
 #include <Oxygen/Vortex/Test/Exposure/Benchmarks/ExposureBaselineScenario.h>
 #include <Oxygen/Vortex/Test/Exposure/Benchmarks/ExposureCpuTiming.h>
@@ -233,7 +256,7 @@ auto ExposureBaselineScenario::RenderFrame(const bool start_recording,
   auto loop = co::testing::TestEventLoop {};
   // Run completes synchronously before the closure or captures are destroyed.
   // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
-  co::Run(loop, [&]() -> co::Co<void> {
+  co::Run(loop, [&] -> co::Co<void> {
     co_await fixture_.renderer_->OnPreRender(observer_ptr {
       &fixture_.frame,
     });

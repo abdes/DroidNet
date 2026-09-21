@@ -4,12 +4,19 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Vortex/Environment/Passes/IblProbePass.h>
-
 #include <bit>
 #include <cmath>
+#include <cstdint>
 
+#include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Data/TextureResource.h>
+#include <Oxygen/Vortex/Environment/Passes/IblProbePass.h>
+#include <Oxygen/Vortex/Environment/Types/EnvironmentProbeBindings.h>
+#include <Oxygen/Vortex/Environment/Types/EnvironmentProbeState.h>
+#include <Oxygen/Vortex/Environment/Types/SkyLightEnvironmentModel.h>
+#include <Oxygen/Vortex/Environment/Types/StaticSkyLightProducts.h>
 
 namespace oxygen::vortex::environment {
 

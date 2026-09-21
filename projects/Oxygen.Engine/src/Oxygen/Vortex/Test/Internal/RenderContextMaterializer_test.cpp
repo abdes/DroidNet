@@ -5,12 +5,20 @@
 //===----------------------------------------------------------------------===//
 
 #include <memory>
+#include <optional>
+#include <utility>
 
-#include <Oxygen/Testing/GTest.h>
-
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Config/RendererConfig.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/ResolvedView.h>
+#include <Oxygen/Core/Types/TextureType.h>
+#include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/QueueRole.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/Internal/RenderContextMaterializer.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/Test/Fakes/Graphics.h>
@@ -106,7 +114,7 @@ protected:
     }
 
     return SinglePassHarnessStaging {
-      .frame_session = FrameSessionInput { .frame_slot = oxygen::frame::Slot { 0U, }, },
+      .frame_session = FrameSessionInput { .frame_slot = oxygen::frame::Slot { 0U, } },
       .output_target
       = OutputTargetInput {
           .framebuffer = oxygen::observer_ptr<Framebuffer>(framebuffer_.get()),

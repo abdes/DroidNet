@@ -20,7 +20,7 @@ namespace oxygen::vortex::environment::internal {
 struct StableAtmosphereState {
   environment::EnvironmentViewProducts view_products {};
   std::uint32_t conventional_shadow_authority_slot {
-    environment::kInvalidAtmosphereLightSlot
+    environment::kInvalidAtmosphereLightSlot,
   };
   std::uint32_t conventional_shadow_cascade_count { 0U };
   bool conventional_shadow_authority_slot0_only { true };

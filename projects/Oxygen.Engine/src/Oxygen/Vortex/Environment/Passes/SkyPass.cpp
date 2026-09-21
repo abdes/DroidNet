@@ -4,23 +4,30 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Vortex/Environment/Passes/SkyPass.h>
-#include <Oxygen/Vortex/Environment/SceneBackground.h>
-
+#include <cstdint>
 #include <limits>
+#include <span>
+#include <utility>
 #include <vector>
 
 #include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
+#include <Oxygen/Core/Types/ShaderType.h>
+#include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
+#include <Oxygen/Graphics/Common/Shaders.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
+#include <Oxygen/Profiling/ProfileScope.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Scene/Environment/SkySphere.h>
+#include <Oxygen/Vortex/Environment/Passes/SkyPass.h>
+#include <Oxygen/Vortex/Environment/SceneBackground.h>
 #include <Oxygen/Vortex/Internal/ViewportClamp.h>
 #include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
 #include <Oxygen/Vortex/RenderContext.h>
@@ -204,7 +211,7 @@ namespace {
     if (env == nullptr) {
       return false;
     }
-    const auto atmosphere_active = [&ctx, env]() {
+    const auto atmosphere_active = [&ctx, env] -> bool {
       const auto atmosphere
         = env->TryGetSystem<scene::environment::SkyAtmosphere>();
       return atmosphere != nullptr && atmosphere->IsEnabled()

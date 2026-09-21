@@ -4,11 +4,15 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Testing/GTest.h>
+#include <cstddef>
+#include <stdexcept>
+#include <tuple>
 
-#include <glm/vec2.hpp>
+#include <glm/ext/vector_uint2.hpp>
 
 #include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
 #include <Oxygen/Vortex/Test/Fakes/Graphics.h>
 #include <Oxygen/Vortex/Types/ViewFrameBindings.h>
@@ -28,7 +32,7 @@ using oxygen::vortex::testing::FakeGraphics;
 auto MakeConfig() -> SceneTexturesConfig
 {
   return SceneTexturesConfig {
-    .extent = { 160, 90, },
+    .extent = { 160, 90 },
     .enable_velocity = true,
     .enable_custom_depth = false,
     .gbuffer_count = 4,
@@ -91,10 +95,10 @@ TEST(SceneTexturesContractTest, AllocatesTheExactPhase2Subset)
   EXPECT_EQ(custom_stencil.aspect, SceneTextureAspectView::Aspect::kStencil);
 
   EXPECT_DEATH_IF_SUPPORTED(
-    static_cast<void>(scene_textures.GetGBuffer(GBufferIndex::kShadowFactors)),
+    std::ignore = scene_textures.GetGBuffer(GBufferIndex::kShadowFactors),
     "GBufferShadowFactors");
   EXPECT_DEATH_IF_SUPPORTED(
-    static_cast<void>(scene_textures.GetGBuffer(GBufferIndex::kWorldTangent)),
+    std::ignore = scene_textures.GetGBuffer(GBufferIndex::kWorldTangent),
     "GBufferWorldTangent");
 }
 

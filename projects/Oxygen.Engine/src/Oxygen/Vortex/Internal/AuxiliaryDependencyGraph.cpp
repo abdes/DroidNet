@@ -4,15 +4,22 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
+#include <cstdint>
 #include <deque>
+#include <span>
 #include <stdexcept>
 #include <unordered_map>
 #include <utility>
+#include <vector>
 
 #include <fmt/format.h>
 
+#include <Oxygen/Core/Types/View.h>
+#include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/Internal/AuxiliaryDependencyGraph.h>
 #include <Oxygen/Vortex/Internal/CompositionViewImpl.h>
+#include <Oxygen/Vortex/Internal/FrameViewPacket.h>
 
 namespace oxygen::vortex::internal {
 

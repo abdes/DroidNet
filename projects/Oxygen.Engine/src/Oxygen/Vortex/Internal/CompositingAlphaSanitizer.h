@@ -48,8 +48,8 @@ private:
                               : std::string { debug_name };
   }
 
-  std::unordered_set<std::string> invalid_alpha_keys_ {};
-  std::unordered_set<std::string> clamped_alpha_keys_ {};
+  std::unordered_set<std::string> invalid_alpha_keys_;
+  std::unordered_set<std::string> clamped_alpha_keys_;
 };
 
 [[nodiscard]] inline auto SanitizeCompositingAlpha(std::string_view debug_name,

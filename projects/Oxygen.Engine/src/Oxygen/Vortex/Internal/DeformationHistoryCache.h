@@ -20,12 +20,12 @@
 namespace oxygen::vortex::internal {
 
 struct RenderMotionIdentityKey {
-  scene::NodeHandle node_handle {};
-  data::AssetKey geometry_asset_key {};
+  scene::NodeHandle node_handle;
+  data::AssetKey geometry_asset_key;
   std::uint32_t lod_index { 0U };
   std::uint32_t submesh_index { 0U };
   VelocityProducerFamily producer_family {
-    VelocityProducerFamily::kMaterialWpo
+    VelocityProducerFamily::kMaterialWpo,
   };
   std::uint64_t contract_hash { 0U };
 
@@ -94,10 +94,10 @@ private:
   const scene::Scene* current_scene_ { nullptr };
   std::unordered_map<RenderMotionIdentityKey, Entry<MaterialWpoPublication>,
     RenderMotionIdentityKeyHash>
-    material_wpo_entries_ {};
+    material_wpo_entries_;
   std::unordered_map<RenderMotionIdentityKey,
     Entry<MotionVectorStatusPublication>, RenderMotionIdentityKeyHash>
-    motion_vector_status_entries_ {};
+    motion_vector_status_entries_;
 };
 
 } // namespace oxygen::vortex::internal

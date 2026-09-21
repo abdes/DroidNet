@@ -6,8 +6,15 @@
 
 #include <chrono>
 #include <fstream>
+#include <ios>
+#include <ratio>
+#include <string>
+#include <tuple>
 
+#include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Vortex/RendererCapability.h>
 #include <Oxygen/Vortex/Test/Exposure/Benchmarks/ExposureBaselineScenario.h>
+#include <Oxygen/Vortex/Test/Exposure/Benchmarks/ExposureBenchmarkFixture.h>
 
 namespace oxygen::vortex::testing::exposure {
 
@@ -33,7 +40,7 @@ auto ExposureProfilingOverheadTest::MeasureReleaseBaseline(
   const BaselineRecipe kind) -> void
 {
 #ifndef NDEBUG
-  static_cast<void>(kind);
+  std::ignore = kind;
   FAIL() << "This performance measurement requires Release.";
 #else
   auto scenario = ExposureBaselineScenario(*this, kind);

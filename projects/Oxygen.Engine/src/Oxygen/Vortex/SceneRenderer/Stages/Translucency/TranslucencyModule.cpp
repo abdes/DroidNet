@@ -10,11 +10,14 @@
 #include <memory>
 #include <optional>
 #include <span>
+#include <utility>
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
+#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
@@ -22,7 +25,9 @@
 #include <Oxygen/Graphics/Common/Shaders.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
+#include <Oxygen/Profiling/ProfileScope.h>
 #include <Oxygen/Vortex/Internal/MeshRasterState.h>
 #include <Oxygen/Vortex/Internal/ViewportClamp.h>
 #include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
@@ -54,8 +59,8 @@ struct TranslucencyPipelineCacheEntry {
 struct TranslucencyPipelineCache {
   TranslucencyPipelineCache();
 
-  std::vector<graphics::RootBindingItem> root_bindings {};
-  std::vector<TranslucencyPipelineCacheEntry> entries {};
+  std::vector<graphics::RootBindingItem> root_bindings;
+  std::vector<TranslucencyPipelineCacheEntry> entries;
 };
 
 namespace {
@@ -248,7 +253,7 @@ namespace {
     const auto key
       = MakePipelineCacheKey(scene_textures, reverse_z, raster_state);
     const auto found = std::ranges::find_if(
-      cache.entries, [&](const TranslucencyPipelineCacheEntry& entry) {
+      cache.entries, [&](const TranslucencyPipelineCacheEntry& entry) -> bool {
         return entry.key == key;
       });
     if (found != cache.entries.end()) {

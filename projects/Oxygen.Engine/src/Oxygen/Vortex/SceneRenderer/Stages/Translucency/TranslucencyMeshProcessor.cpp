@@ -6,9 +6,12 @@
 
 #include <algorithm>
 #include <cmath>
-#include <limits>
+#include <cstdint>
 #include <optional>
+#include <span>
 #include <vector>
+
+#include <glm/ext/vector_float4.hpp>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Bindless/Types.h>

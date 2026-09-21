@@ -92,7 +92,7 @@ private:
   std::optional<ScenePrepContext> ctx_;
   observer_ptr<ScenePrepState> prep_state_;
   const scene::Scene* active_scene_ { nullptr };
-  std::optional<frame::SequenceNumber> active_frame_sequence_ {};
+  std::optional<frame::SequenceNumber> active_frame_sequence_;
   bool frame_collection_ready_ { false };
   PreparedViewSource prepared_view_source_ { PreparedViewSource::kNone };
   FailureStats failure_stats_ {};
@@ -142,15 +142,16 @@ public:
     if constexpr (CollectionCfg::has_pre_filter) {
       if (!seeded_from_frame_cache) {
         if (!run_stage("pre_filter",
-              [&]() { collection_.pre_filter(*ctx, state, item); })) {
+              [&] -> auto { collection_.pre_filter(*ctx, state, item); })) {
           return;
         }
       }
     }
     if constexpr (CollectionCfg::has_transform_resolve) {
       if (!item.GetTransformHandle().IsValid()) {
-        if (!run_stage("transform_resolve",
-              [&]() { collection_.transform_resolve(*ctx, state, item); })) {
+        if (!run_stage("transform_resolve", [&] -> auto {
+              collection_.transform_resolve(*ctx, state, item);
+            })) {
           return;
         }
       }
@@ -158,15 +159,16 @@ public:
     if constexpr (CollectionCfg::has_mesh_resolver) {
       if (ctx && ctx->HasView()) {
         if (!run_stage("mesh_resolver",
-              [&]() { collection_.mesh_resolver(*ctx, state, item); })) {
+              [&] -> auto { collection_.mesh_resolver(*ctx, state, item); })) {
           return;
         }
       }
     }
     if constexpr (CollectionCfg::has_visibility_filter) {
       if (ctx && ctx->HasView()) {
-        if (!run_stage("visibility_filter",
-              [&]() { collection_.visibility_filter(*ctx, state, item); })) {
+        if (!run_stage("visibility_filter", [&] -> auto {
+              collection_.visibility_filter(*ctx, state, item);
+            })) {
           return;
         }
       }
@@ -177,8 +179,8 @@ public:
 
     if constexpr (CollectionCfg::has_producer) {
       if (ctx && ctx->HasView()) {
-        if (!run_stage(
-              "producer", [&]() { collection_.producer(*ctx, state, item); })) {
+        if (!run_stage("producer",
+              [&] -> auto { collection_.producer(*ctx, state, item); })) {
           return;
         }
       }

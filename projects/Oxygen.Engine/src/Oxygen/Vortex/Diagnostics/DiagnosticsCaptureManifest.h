@@ -19,7 +19,7 @@ inline constexpr auto kDiagnosticsCaptureManifestSchema
   = "vortex.diagnostics.capture-manifest.v1";
 
 struct DiagnosticsCaptureManifestOptions {
-  std::optional<std::filesystem::path> gpu_timeline_export_path {};
+  std::optional<std::filesystem::path> gpu_timeline_export_path;
 };
 
 [[nodiscard]] OXGN_VRTX_API auto BuildDiagnosticsCaptureManifestJson(

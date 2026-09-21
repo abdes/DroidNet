@@ -5,11 +5,13 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <deque>
 #include <exception>
 #include <iomanip>
+#include <ios>
 #include <limits>
 #include <memory>
 #include <mutex>
@@ -30,10 +32,12 @@
 #include <Oxygen/Content/EvictionEvents.h>
 #include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Content/ResourceKey.h>
+#include <Oxygen/Core/Bindless/Generated.BindlessAbi.h>
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Detail/FormatUtils.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
+#include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
@@ -567,7 +571,7 @@ private:
     bool is_placeholder { true };
     bool load_failed { false };
     bool evicted { false };
-    std::weak_ptr<const ReadyTexture> resident_lease {};
+    std::weak_ptr<const ReadyTexture> resident_lease;
 
     std::optional<vortex::upload::UploadTicket> pending_ticket;
     std::optional<graphics::TextureViewDescription> pending_view_desc;
@@ -577,7 +581,7 @@ private:
     std::shared_ptr<graphics::Texture> placeholder_texture;
 
     content::EvictionReason last_eviction_reason {
-      content::EvictionReason::kRefCountZero
+      content::EvictionReason::kRefCountZero,
     };
 
     ShaderVisibleIndex srv_index { kInvalidShaderVisibleIndex };
@@ -1370,9 +1374,12 @@ auto TextureBinder::Impl::CreatePlaceholderTexture(
       return nullptr;
     }
 
-    constexpr std::array white_pixel_data { static_cast<std::byte>(0xFF),
-      static_cast<std::byte>(0xFF), static_cast<std::byte>(0xFF),
-      static_cast<std::byte>(0xFF) };
+    constexpr std::array white_pixel_data {
+      static_cast<std::byte>(0xFF),
+      static_cast<std::byte>(0xFF),
+      static_cast<std::byte>(0xFF),
+      static_cast<std::byte>(0xFF),
+    };
     SubmitTextureData(texture, white_pixel_data, "TextureBinder.Placeholder");
 
     return texture;

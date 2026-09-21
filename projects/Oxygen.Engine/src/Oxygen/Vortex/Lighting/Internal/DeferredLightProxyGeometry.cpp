@@ -4,11 +4,14 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Vortex/Lighting/Internal/DeferredLightProxyGeometry.h>
-
 #include <cmath>
 #include <cstdint>
 #include <numbers>
+#include <vector>
+
+#include <glm/ext/vector_float4.hpp>
+
+#include <Oxygen/Vortex/Lighting/Internal/DeferredLightProxyGeometry.h>
 
 namespace oxygen::vortex::lighting::internal {
 

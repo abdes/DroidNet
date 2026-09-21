@@ -6,7 +6,6 @@
 
 #pragma once
 
-#include <glm/gtc/matrix_access.hpp>
 #include <memory>
 #include <optional>
 #include <stdexcept>
@@ -14,10 +13,9 @@
 #include <vector>
 
 #include <glm/glm.hpp>
+#include <glm/gtc/matrix_access.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
-
-#include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Core/Types/View.h>
@@ -25,6 +23,7 @@
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
+#include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/ScenePrep/RenderItemProto.h>
 #include <Oxygen/Vortex/ScenePrep/ScenePrepContext.h>
 #include <Oxygen/Vortex/ScenePrep/ScenePrepState.h>

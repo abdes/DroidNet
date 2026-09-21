@@ -30,7 +30,7 @@ struct OcclusionFrameResults {
   std::uint32_t draw_count { 0U };
   bool valid { false };
   OcclusionFallbackReason fallback_reason {
-    OcclusionFallbackReason::kStageDisabled
+    OcclusionFallbackReason::kStageDisabled,
   };
 
   [[nodiscard]] constexpr auto IsDrawVisible(
@@ -49,7 +49,7 @@ struct OcclusionStats {
   std::uint32_t occluded_count { 0U };
   std::uint32_t overflow_visible_count { 0U };
   OcclusionFallbackReason fallback_reason {
-    OcclusionFallbackReason::kStageDisabled
+    OcclusionFallbackReason::kStageDisabled,
   };
   bool current_furthest_hzb_available { false };
   bool previous_results_valid { false };

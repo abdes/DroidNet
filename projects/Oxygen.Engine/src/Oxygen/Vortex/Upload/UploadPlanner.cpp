@@ -5,14 +5,28 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <cstddef>
+#include <cstdint>
+#include <expected>
+#include <memory>
 #include <optional>
+#include <span>
 #include <tuple>
 #include <unordered_map>
+#include <utility>
+#include <variant>
+#include <vector>
+
+#include <fmt/format.h>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Detail/FormatUtils.h>
+#include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Vortex/Upload/Errors.h>
+#include <Oxygen/Vortex/Upload/Types.h>
 #include <Oxygen/Vortex/Upload/UploadPlanner.h>
+#include <Oxygen/Vortex/Upload/UploadPolicy.h>
 
 using oxygen::graphics::TextureUploadRegion;
 using oxygen::graphics::detail::FormatInfo;

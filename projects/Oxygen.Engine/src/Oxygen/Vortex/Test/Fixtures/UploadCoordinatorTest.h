@@ -9,7 +9,6 @@
 #include <memory>
 
 #include <Oxygen/Testing/GTest.h>
-
 #include <Oxygen/Vortex/RendererTag.h>
 #include <Oxygen/Vortex/Test/Fakes/Graphics.h>
 #include <Oxygen/Vortex/Upload/StagingProvider.h>

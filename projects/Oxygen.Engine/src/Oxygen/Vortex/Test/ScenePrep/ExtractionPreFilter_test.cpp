@@ -4,24 +4,18 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <memory>
-
-#include <glm/glm.hpp>
-
-#include <Oxygen/Testing/GTest.h>
-
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
+#include <Oxygen/Scene/Types/Flags.h>
+#include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/ScenePrep/Extractors.h>
 #include <Oxygen/Vortex/ScenePrep/RenderItemProto.h>
 #include <Oxygen/Vortex/ScenePrep/ScenePrepState.h>
 #include <Oxygen/Vortex/ScenePrep/Types.h>
-
 #include <Oxygen/Vortex/Test/Fixtures/ScenePrepTestFixture.h>
-#include <Oxygen/Vortex/Test/ScenePrep/ScenePrepHelpers.h>
 
 using oxygen::View;
 

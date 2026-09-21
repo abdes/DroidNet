@@ -56,7 +56,7 @@ public:
 
 private:
   Renderer& renderer_;
-  std::vector<BasePassDrawCommand> draw_commands_ {};
+  std::vector<BasePassDrawCommand> draw_commands_;
   std::uint32_t occlusion_culled_draw_count_ { 0U };
 };
 

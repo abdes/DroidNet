@@ -5,9 +5,12 @@
 //===----------------------------------------------------------------------===//
 
 #include <memory>
+#include <tuple>
 
 #include <Oxygen/Vortex/PostProcess/Internal/BloomChain.h>
 #include <Oxygen/Vortex/PostProcess/Passes/BloomPass.h>
+#include <Oxygen/Vortex/PostProcess/Types/PostProcessConfig.h>
+#include <Oxygen/Vortex/PostProcess/Types/PostProcessFrameBindings.h>
 
 namespace oxygen::vortex::postprocess {
 
@@ -22,9 +25,10 @@ BloomPass::~BloomPass() = default;
 auto BloomPass::Execute(const ResolvedPostProcessConfig& config,
   const PostProcessFrameBindings& bindings) const -> Result
 {
-  static_cast<void>(renderer_);
-  if (!config.Settings().enable_bloom)
+  std::ignore = renderer_;
+  if (!config.Settings().enable_bloom) {
     return {};
+  }
   const auto output = bloom_chain_->ResolveOutput(bindings);
   return {
     .requested = true,

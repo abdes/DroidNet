@@ -6,25 +6,29 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <glm/glm.hpp>
 #include <memory>
+#include <stdexcept>
 #include <utility>
 
-#include <Oxygen/Testing/GTest.h>
-#include <Oxygen/Testing/ScopedLogCapture.h>
+#include <glm/ext/vector_float3.hpp>
 
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
+#include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/ScopedLogCapture.h>
 #include <Oxygen/Vortex/ScenePrep/CollectionConfig.h>
-#include <Oxygen/Vortex/ScenePrep/Extractors.h>
 #include <Oxygen/Vortex/ScenePrep/FinalizationConfig.h>
-#include <Oxygen/Vortex/ScenePrep/Finalizers.h>
 #include <Oxygen/Vortex/ScenePrep/MaterialRef.h>
+#include <Oxygen/Vortex/ScenePrep/RenderItemData.h>
+#include <Oxygen/Vortex/ScenePrep/RenderItemProto.h>
+#include <Oxygen/Vortex/ScenePrep/ScenePrepContext.h>
 #include <Oxygen/Vortex/ScenePrep/ScenePrepPipeline.h>
-
+#include <Oxygen/Vortex/ScenePrep/ScenePrepState.h>
 #include <Oxygen/Vortex/Test/ScenePrep/ScenePrepHelpers.h>
 
 namespace sceneprep = oxygen::vortex::sceneprep;

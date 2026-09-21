@@ -6,11 +6,13 @@
 
 // assertions; setup loops stay within their sized containers.
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <string>
 
+#include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsFrameLedger.h>
+#include <Oxygen/Vortex/Diagnostics/DiagnosticsTypes.h>
+#include <Oxygen/Vortex/ShaderDebugMode.h>
 
 namespace {
 

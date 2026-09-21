@@ -4,32 +4,65 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
+#include <array>
+#include <chrono>
+#include <cmath>
+#include <cstdint>
+#include <cstring>
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
+
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Config/RendererConfig.h>
+#include <Oxygen/Console/Command.h>
+#include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/PostProcess.h>
+#include <Oxygen/Core/Types/TextureType.h>
+#include <Oxygen/Core/Types/View.h>
+#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/HalfFloat.h>
 #include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/Data/MaterialDomain.h>
+#include <Oxygen/Data/PakFormat_core.h>
+#include <Oxygen/Data/PakFormat_geometry.h>
+#include <Oxygen/Data/PakFormat_render.h>
+#include <Oxygen/Data/ShaderReference.h>
 #include <Oxygen/Data/TextureResource.h>
+#include <Oxygen/Data/Vertex.h>
 #include <Oxygen/Engine/IAsyncEngine.h>
+#include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
+#include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Environment/PostProcessVolume.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
+#include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsService.h>
 #include <Oxygen/Vortex/PreparedSceneFrame.h>
+#include <Oxygen/Vortex/RendererCapability.h>
+#include <Oxygen/Vortex/SceneRenderer/ShadingMode.h>
+#include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureGpuFixture.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureLightingFixture.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestEngine.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestTags.h>
 #include <Oxygen/Vortex/Test/Fakes/AssetLoader.h>
 #include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
 #include <Oxygen/Vortex/Test/Fixtures/TextureBinderPayloads.h>
-#include <algorithm>
-#include <array>
-#include <chrono>
-#include <cmath>
-#include <cstring>
+#include <Oxygen/Vortex/Types/DrawMetadata.h>
+#include <Oxygen/Vortex/Types/ExposureStateData.h>
+#include <Oxygen/Vortex/ViewExtension.h>
 
 namespace oxygen::vortex::testing::exposure {
 
@@ -176,12 +209,14 @@ auto ExposureLightingGpuTest::SetUp() -> void
     },
   };
   for (unsigned i = 0; i < 3; ++i) {
-    vertices.at(i) = { .position = positions.at(i),
-      .normal = { 0, 0, 1, },
-      .texcoord = { .5F, .5F, },
-      .tangent = { 1, 0, 0, },
-      .bitangent = { 0, 1, 0, },
-      .color = { 1, 1, 1, 1, }, };
+    vertices.at(i) = {
+      .position = positions.at(i),
+      .normal = { 0, 0, 1 },
+      .texcoord = { .5F, .5F },
+      .tangent = { 1, 0, 0 },
+      .bitangent = { 0, 1, 0 },
+      .color = { 1, 1, 1, 1 },
+    };
   }
   std::shared_ptr<data::Mesh> mesh
     = data::MeshBuilder()
@@ -461,7 +496,7 @@ auto ExposureLightingGpuTest::RenderSurface(
       &frame,
     });
     {
-      const auto finish_frame = ScopeGuard([&]() noexcept -> void {
+      const auto finish_frame = ScopeGuard([&] noexcept -> void {
         renderer_->OnFrameEnd(observer_ptr { &frame });
         Backend().EndFrame(frame::SequenceNumber { sequence }, slot);
       });
@@ -469,7 +504,9 @@ auto ExposureLightingGpuTest::RenderSurface(
       facade.SetFrameSession({ .frame_slot = slot,
       .frame_sequence = frame::SequenceNumber { sequence, },
       .delta_time_seconds = frame_delta_seconds, });
-      facade.SetSceneSource({ .scene = observer_ptr { scene.get(), }, });
+      facade.SetSceneSource({ .scene = observer_ptr {
+                                scene.get(),
+                              } });
       facade.SetViewIntent(Renderer::OffscreenSceneViewInput::FromCamera(
       "Lighting", ViewId { surface_view_id, }, view, camera)
         .SetViewStateHandle(persistent_surface_state
@@ -477,8 +514,9 @@ auto ExposureLightingGpuTest::RenderSurface(
             : CompositionView::kInvalidViewStateHandle)
         .SetExposureSourceViewId(surface_source_id)
         .SetExposureOverride(surface_exposure_override));
-      facade.SetOutputTarget(
-      { .framebuffer = observer_ptr { framebuffer.get(), }, });
+      facade.SetOutputTarget({ .framebuffer = observer_ptr {
+                                 framebuffer.get(),
+                               } });
       facade.SetPipeline(forward
           ? Renderer::OffscreenPipelineInput::Forward()
           : Renderer::OffscreenPipelineInput::Deferred());
@@ -550,7 +588,7 @@ auto ExposureLightingGpuTest::RenderPublishedSurface(bool forward) -> void
   // co::Run completes synchronously before this closure and its captured
   // fixture state leave scope.
   // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
-  co::Run(loop, [&]() -> co::Co<void> {
+  co::Run(loop, [&] -> co::Co<void> {
     co_await renderer_->OnPreRender(observer_ptr {
       &frame,
     });

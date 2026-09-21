@@ -4,14 +4,19 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <algorithm>
+#include <cstddef>
+#include <cstdint>
 #include <ranges>
+#include <span>
 #include <string>
+#include <string_view>
 
+#include <Oxygen/Content/ResourceKey.h>
+#include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/RendererTag.h>
-
+#include <Oxygen/Vortex/Test/Fakes/Graphics.h>
 #include <Oxygen/Vortex/Test/Fixtures/TextureBinderPayloads.h>
 #include <Oxygen/Vortex/Test/Fixtures/TextureBinderTest.h>
 

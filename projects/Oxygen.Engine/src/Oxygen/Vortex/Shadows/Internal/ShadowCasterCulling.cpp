@@ -4,10 +4,13 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Vortex/Shadows/Internal/ShadowCasterCulling.h>
-
 #include <algorithm>
+#include <cstdint>
+#include <span>
 
+#include <Oxygen/Vortex/PreparedSceneFrame.h>
+#include <Oxygen/Vortex/SceneRenderer/Stages/DepthPrepass/DepthPrepassMeshProcessor.h>
+#include <Oxygen/Vortex/Shadows/Internal/ShadowCasterCulling.h>
 #include <Oxygen/Vortex/Types/PassMask.h>
 
 namespace oxygen::vortex::shadows::internal {

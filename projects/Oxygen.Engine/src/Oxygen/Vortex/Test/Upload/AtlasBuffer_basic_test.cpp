@@ -4,13 +4,15 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <array>
 #include <cstdint>
+#include <memory>
 #include <system_error>
 #include <vector>
 
-#include <Oxygen/Testing/GTest.h>
-
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/Test/Fakes/Graphics.h>
 #include <Oxygen/Vortex/Upload/AtlasBuffer.h>
 #include <Oxygen/Vortex/Upload/Types.h>
@@ -365,7 +367,7 @@ NOLINT_TEST(AtlasBuffer, EnsureCapacityUnchanged)
 //! during Graphics teardown.
 NOLINT_TEST(AtlasBuffer, DestroyAfterGrowthDoesNotHangAtShutdown)
 {
-  auto run_teardown = []() -> void {
+  auto run_teardown = [] -> void {
     auto gfx = std::make_shared<oxygen::vortex::testing::FakeGraphics>();
     oxygen::observer_ptr<oxygen::Graphics> gfx_ptr(gfx.get());
 

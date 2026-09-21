@@ -8,20 +8,11 @@
 
 #include <type_traits>
 
+#include <Oxygen/Base/Compilers.h>
 #include <Oxygen/Vortex/ScenePrep/Concepts.h>
-#include <Oxygen/Vortex/ScenePrep/RenderItemData.h>
-#include <Oxygen/Vortex/ScenePrep/ScenePrepState.h>
-#include <Oxygen/Vortex/ScenePrep/Types.h>
+#include <Oxygen/Vortex/ScenePrep/Finalizers.h>
 
 namespace oxygen::vortex::sceneprep {
-
-auto GeometryUploadFinalizer(const ScenePrepState& state) -> void;
-auto TransformUploadFinalizer(const ScenePrepState& state) -> void;
-auto MaterialUploadFinalizer(const ScenePrepState& state) -> void;
-auto DrawMetadataEmitFinalizer(
-  const ScenePrepState& state, const RenderItemData& item) -> void;
-auto DrawMetadataSortAndPartitionFinalizer(const ScenePrepState& state) -> void;
-auto DrawMetadataUploadFinalizer(const ScenePrepState& state) -> void;
 
 //! Configuration for the Finalization phase (draw preparation).
 template < // clang-format off
@@ -35,7 +26,7 @@ template < // clang-format off
 struct FinalizationConfig {
   struct DummyStage_ {
     template <typename... Args>
-    constexpr void operator()(Args&&...) const noexcept
+    constexpr void operator()(Args&&... /*args*/) const noexcept
     {
     }
   };
@@ -43,12 +34,12 @@ struct FinalizationConfig {
   using StageOrDummy = std::conditional_t<std::is_void_v<T>, DummyStage_, T>;
 
   // Essential stages (use `void` to omit)
-  [[no_unique_address]] StageOrDummy<DrawMetadataEmitFT> draw_md_emit {};
-  [[no_unique_address]] StageOrDummy<DrawMetadataSortFT> draw_md_sort {};
-  [[no_unique_address]] StageOrDummy<GeometryUploadFT> geometry_upload {};
-  [[no_unique_address]] StageOrDummy<TransformUploadFT> transform_upload {};
-  [[no_unique_address]] StageOrDummy<MaterialUploadFT> material_upload {};
-  [[no_unique_address]] StageOrDummy<DrawMetadataUploadFT> draw_md_upload {};
+  OXYGEN_NO_UNIQUE_ADDRESS StageOrDummy<DrawMetadataEmitFT> draw_md_emit {};
+  OXYGEN_NO_UNIQUE_ADDRESS StageOrDummy<DrawMetadataSortFT> draw_md_sort {};
+  OXYGEN_NO_UNIQUE_ADDRESS StageOrDummy<GeometryUploadFT> geometry_upload {};
+  OXYGEN_NO_UNIQUE_ADDRESS StageOrDummy<TransformUploadFT> transform_upload {};
+  OXYGEN_NO_UNIQUE_ADDRESS StageOrDummy<MaterialUploadFT> material_upload {};
+  OXYGEN_NO_UNIQUE_ADDRESS StageOrDummy<DrawMetadataUploadFT> draw_md_upload {};
 
   // Presence checks for `if constexpr`
   // clang-format off

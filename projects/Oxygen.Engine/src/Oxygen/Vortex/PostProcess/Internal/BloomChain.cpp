@@ -4,7 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Vortex/PostProcess/Internal/BloomChain.h>
+#include <Oxygen/Vortex/PostProcess/Types/PostProcessFrameBindings.h>
 
 namespace oxygen::vortex::postprocess::internal {
 

@@ -4,7 +4,15 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstdint>
+#include <span>
+#include <utility>
+#include <vector>
+
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/Types/PostProcess.h>
+#include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Scene/Environment/SkySphere.h>
@@ -12,7 +20,12 @@
 #include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/Internal/AuxiliaryDependencyGraph.h>
 #include <Oxygen/Vortex/Internal/CompositionViewImpl.h>
+#include <Oxygen/Vortex/Internal/FrameViewPacket.h>
+#include <Oxygen/Vortex/RenderMode.h>
+#include <Oxygen/Vortex/SceneRenderer/DepthPrePassPolicy.h>
 #include <Oxygen/Vortex/SceneRenderer/Internal/FramePlanBuilder.h>
+#include <Oxygen/Vortex/SceneRenderer/Internal/ViewRenderPlan.h>
+#include <Oxygen/Vortex/ShaderDebugMode.h>
 
 namespace oxygen::vortex::internal {
 

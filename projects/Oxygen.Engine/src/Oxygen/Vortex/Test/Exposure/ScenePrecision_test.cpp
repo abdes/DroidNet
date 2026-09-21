@@ -15,24 +15,34 @@
 #include <utility>
 #include <vector>
 
+#include <glm/ext/vector_uint3.hpp>
+
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Console/Command.h>
 #include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Core/Types/PostProcess.h>
+#include <Oxygen/Core/Types/TextureType.h>
+#include <Oxygen/Data/MaterialDomain.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Scene/Environment/Fog.h>
 #include <Oxygen/Scene/Environment/PostProcessVolume.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
 #include <Oxygen/Vortex/PostProcess/PostProcessService.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
-#include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureGpuFixture.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureLightingFixture.h>
-#include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestGraphics.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestTags.h>
 #include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
 #include <Oxygen/Vortex/Types/ExposureStateData.h>
+#include <Oxygen/Vortex/Types/ExposureTransition.h>
 
 namespace oxygen::vortex::testing::exposure {
 
@@ -60,7 +70,7 @@ NOLINT_TEST_F(ExposureLightingGpuTest,
 
   // Only normal frame-slot synchronization drives completion. No queue-idle
   // waits, mapped image inspection or explicit status polling drive reuse.
-  const auto render_frame = [&]() -> void {
+  const auto render_frame = [&] -> void {
     const auto slot = frame::Slot {
       sequence % frame::kFramesInFlight.get(),
     };
@@ -82,7 +92,9 @@ NOLINT_TEST_F(ExposureLightingGpuTest,
     facade.SetFrameSession({ .frame_slot = slot,
       .frame_sequence = frame::SequenceNumber { sequence, },
       .delta_time_seconds = 0.0F, });
-    facade.SetSceneSource({ .scene = observer_ptr { scene.get(), }, });
+    facade.SetSceneSource({ .scene = observer_ptr {
+                              scene.get(),
+                            } });
     facade.SetViewIntent(
       Renderer::OffscreenSceneViewInput::FromCamera("Status readback reuse",
         ViewId {
@@ -90,8 +102,9 @@ NOLINT_TEST_F(ExposureLightingGpuTest,
         },
         view, camera)
         .SetViewStateHandle(handle));
-    facade.SetOutputTarget(
-      { .framebuffer = observer_ptr { framebuffer.get(), }, });
+    facade.SetOutputTarget({ .framebuffer = observer_ptr {
+                               framebuffer.get(),
+                             } });
     facade.SetPipeline(Renderer::OffscreenPipelineInput::Forward());
     auto session = facade.Finalize();
     if (!session.has_value()) {
@@ -460,16 +473,24 @@ NOLINT_TEST_F(ExposureLightingGpuTest,
     glm::uvec3 extent;
   };
   const std::array changes {
-    Change { .command = "vtx.sky_atmosphere.aerial_perspective_lut.width 16",
-      .extent = { 16, 16, 32, }, },
-    Change { .command = "vtx.sky_atmosphere.aerial_perspective_lut.width 128",
-      .extent = { 128, 128, 32, }, },
-    Change { .command
+    Change {
+      .command = "vtx.sky_atmosphere.aerial_perspective_lut.width 16",
+      .extent = { 16, 16, 32 },
+    },
+    Change {
+      .command = "vtx.sky_atmosphere.aerial_perspective_lut.width 128",
+      .extent = { 128, 128, 32 },
+    },
+    Change {
+      .command
       = "vtx.sky_atmosphere.aerial_perspective_lut.depth_resolution 16",
-      .extent = { 128, 128, 16, }, },
-    Change { .command
+      .extent = { 128, 128, 16 },
+    },
+    Change {
+      .command
       = "vtx.sky_atmosphere.aerial_perspective_lut.depth_resolution 64",
-      .extent = { 128, 128, 64, }, },
+      .extent = { 128, 128, 64 },
+    },
   };
   unsigned cases = 0;
   for (const auto& change : changes) {

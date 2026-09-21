@@ -4,9 +4,14 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Testing/GTest.h>
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
 
+#include <Oxygen/Scene/Detail/RenderableComponent.h>
 #include <Oxygen/Scene/SceneNodeImpl.h>
+#include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/ScenePrep/RenderItemProto.h>
 
 using oxygen::vortex::sceneprep::RenderItemProto;

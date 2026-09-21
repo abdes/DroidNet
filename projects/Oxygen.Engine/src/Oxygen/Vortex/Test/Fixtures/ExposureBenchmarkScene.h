@@ -173,7 +173,7 @@ struct MixedExposureBenchmarkScene {
     node.GetRenderable().SetGeometry(std::make_shared<data::GeometryAsset>(
       data::AssetKey::FromVirtualPath("/Engine/Examples/MultiView/Geometry/"
         + std::string { name, } + ".ogeo"),
-      desc, std::vector<std::shared_ptr<data::Mesh>> { std::move(mesh), }));
+      desc, std::vector<std::shared_ptr<data::Mesh>> { std::move(mesh) }));
     const auto flags_ref = node.GetFlags();
     CHECK_F(flags_ref.has_value());
     auto& flags = flags_ref->get();

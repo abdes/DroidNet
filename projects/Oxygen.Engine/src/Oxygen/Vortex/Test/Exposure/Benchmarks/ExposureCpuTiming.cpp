@@ -4,14 +4,24 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Windows.h>
-
 #include <algorithm>
+#include <cstdint>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
+#include <ios>
 #include <limits>
 #include <stdexcept>
+#include <string_view>
 
+// Initializes Windows SDK architecture and prerequisite types for API headers.
+#include <Windows.h> // IWYU pragma: keep
+#include <nlohmann/json_fwd.hpp>
+#include <processthreadsapi.h>
+#include <profileapi.h>
+#include <winnt.h>
+
+#include <Oxygen/Profiling/ProfileScope.h>
 #include <Oxygen/Vortex/Test/Exposure/Benchmarks/ExposureCpuTiming.h>
 
 namespace oxygen::vortex::testing::exposure {
@@ -81,9 +91,9 @@ auto ExposureCpuTiming::OnScopeBegin(
       record = records_.size();
       auto& value = records_.emplace_back();
       value.frame = frame_;
-      value.kind = wait         ? Kind::kFenceWait
-        : exposure_depth_ == 0U ? Kind::kExposure
-                                : Kind::kDetail;
+      const auto scope_kind
+        = exposure_depth_ == 0U ? Kind::kExposure : Kind::kDetail;
+      value.kind = wait ? Kind::kFenceWait : scope_kind;
       std::memcpy(value.label.data(), label.data(), label.size());
       value.begin = Timestamp();
     }
@@ -119,9 +129,10 @@ auto ExposureCpuTiming::Save(const std::filesystem::path& path) const
     if (record.end < record.begin) {
       throw std::runtime_error("Incomplete CPU timing interval");
     }
-    const auto kind = record.kind == Kind::kExposure ? "exposure"
-      : record.kind == Kind::kFenceWait              ? "fence_wait"
-                                                     : "detail";
+    const auto* const non_exposure_kind
+      = record.kind == Kind::kFenceWait ? "fence_wait" : "detail";
+    const auto* const kind
+      = record.kind == Kind::kExposure ? "exposure" : non_exposure_kind;
     output << record.frame << ',' << thread_ << ',' << kind << ','
            << record.begin << ',' << record.end << ',' << record.label.data()
            << '\n';
@@ -130,10 +141,15 @@ auto ExposureCpuTiming::Save(const std::filesystem::path& path) const
   if (!output.good()) {
     throw std::runtime_error("Could not write CPU timing evidence");
   }
-  return { { "path", path.filename().string() },
-    { "qpc_frequency", frequency_ }, { "process_id", process_ },
-    { "thread_id", thread_ }, { "records", records_.size() },
-    { "complete", true }, { "detailed", detailed_ } };
+  return {
+    { "path", path.filename().string() },
+    { "qpc_frequency", frequency_ },
+    { "process_id", process_ },
+    { "thread_id", thread_ },
+    { "records", records_.size() },
+    { "complete", true },
+    { "detailed", detailed_ },
+  };
 }
 
 } // namespace oxygen::vortex::testing::exposure

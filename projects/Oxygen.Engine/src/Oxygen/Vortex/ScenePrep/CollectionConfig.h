@@ -10,21 +10,9 @@
 
 #include <Oxygen/Base/Compilers.h>
 #include <Oxygen/Vortex/ScenePrep/Concepts.h>
-#include <Oxygen/Vortex/ScenePrep/RenderItemProto.h>
-#include <Oxygen/Vortex/ScenePrep/Types.h>
+#include <Oxygen/Vortex/ScenePrep/Extractors.h>
 
 namespace oxygen::vortex::sceneprep {
-
-auto ExtractionPreFilter(const ScenePrepContext& ctx, ScenePrepState& state,
-  RenderItemProto& item) noexcept -> void;
-auto TransformResolveStage(const ScenePrepContext& ctx,
-  const ScenePrepState& state, RenderItemProto& item) noexcept -> void;
-auto MeshResolver(const ScenePrepContext& ctx, ScenePrepState& state,
-  RenderItemProto& item) noexcept -> void;
-auto SubMeshVisibilityFilter(const ScenePrepContext& ctx, ScenePrepState& state,
-  RenderItemProto& item) noexcept -> void;
-auto EmitPerVisibleSubmesh(const ScenePrepContext& ctx, ScenePrepState& state,
-  RenderItemProto& item) noexcept -> void;
 
 //! Configuration for the Collection phase (scene traversal/extraction).
 /*!

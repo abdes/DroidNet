@@ -4,12 +4,19 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Testing/GTest.h>
+#include <cstdint>
+#include <memory>
 
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/Types/ByteUnits.h>
 #include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Graphics/Common/Graphics.h>
+#include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/Test/Fakes/Graphics.h>
 #include <Oxygen/Vortex/Test/Fixtures/UploadCoordinatorTest.h>
+#include <Oxygen/Vortex/Upload/Errors.h>
 #include <Oxygen/Vortex/Upload/StagingProvider.h>
+#include <Oxygen/Vortex/Upload/UploadPolicy.h>
 
 using oxygen::SizeBytes;
 using oxygen::frame::SlotCount;
@@ -92,7 +99,7 @@ NOLINT_TEST_F(RingBufferStagingErrorTest, Map_ReturnsNull_ReturnsError)
 */
 NOLINT_TEST(RingBufferStaging, DestroyWithoutAllocationDoesNotCrash)
 {
-  auto run_teardown = []() -> void {
+  auto run_teardown = [] -> void {
     auto gfx = std::make_shared<oxygen::vortex::testing::FakeGraphics>();
     gfx->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());
 
@@ -121,7 +128,7 @@ NOLINT_TEST(RingBufferStaging, DestroyWithoutAllocationDoesNotCrash)
 */
 NOLINT_TEST(RingBufferStaging, DestroyAfterFailedAllocationDoesNotCrash)
 {
-  auto run_teardown = []() -> void {
+  auto run_teardown = [] -> void {
     auto gfx = std::make_shared<oxygen::vortex::testing::FakeGraphics>();
     gfx->SetThrowOnCreateBuffer(true);
     gfx->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());

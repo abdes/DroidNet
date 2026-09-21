@@ -4,8 +4,18 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <optional>
+
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
+#include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
+#include <Oxygen/Profiling/ProfileScope.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneRenderer.h>
@@ -70,7 +80,7 @@ void SceneRenderer::ResolveSceneColor(RenderContext& ctx,
     = setup_mode_.IsSet(SceneTextureSetupMode::Flag::kSceneColor)
     && scene_texture_bindings_.scene_color_srv
       != SceneTextureBindings::kInvalidIndex;
-  const bool narrow = scene_color_ready && prepared
+  const bool narrow = scene_color_ready && (prepared != nullptr)
     && ctx.current_view.hdr_color_format == Format::kRGBA16Float
     && active_scene_texture_lease_;
   graphics::Texture* resolved_color = nullptr;
@@ -111,14 +121,18 @@ void SceneRenderer::ResolveSceneColor(RenderContext& ctx,
     && scene_texture_extracts_.resolved_scene_color.texture != nullptr) {
     auto& target = *scene_texture_extracts_.resolved_scene_color.texture;
     const auto uav = ShaderVisibleIndex { RegisterSceneTextureView(target,
-      { .view_type = graphics::ResourceViewType::kTexture_UAV,
+      {
+        .view_type = graphics::ResourceViewType::kTexture_UAV,
         .visibility = graphics::DescriptorVisibility::kShaderVisible,
         .format = target.GetDescriptor().format,
-        .dimension = TextureType::kTexture2D }) };
+        .dimension = TextureType::kTexture2D,
+      }) };
     converted = post_process_->ConvertSceneColor(ctx, recorder, *prepared,
-      { .scene_signal = scene_textures.GetSceneColorResource().get(),
+      {
+        .scene_signal = scene_textures.GetSceneColorResource().get(),
         .scene_signal_srv
-        = ShaderVisibleIndex { scene_texture_bindings_.scene_color_srv } },
+        = ShaderVisibleIndex { scene_texture_bindings_.scene_color_srv },
+      },
       target, uav);
     if (converted) {
       scene_texture_extracts_.resolved_scene_color.fallback

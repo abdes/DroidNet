@@ -4,8 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Vortex/Environment/Internal/SkyRenderer.h>
+#include <memory>
 
+#include <Oxygen/Vortex/Environment/Internal/SkyRenderer.h>
 #include <Oxygen/Vortex/Environment/Passes/SkyPass.h>
 
 namespace oxygen::vortex::environment {

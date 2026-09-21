@@ -5,10 +5,14 @@
 //===----------------------------------------------------------------------===//
 
 #include <array>
+#include <cstddef>
+#include <cstdint>
 #include <unordered_set>
 #include <vector>
 
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/ScenePrep/GeometryRef.h>
 #include <Oxygen/Vortex/ScenePrep/Handles.h>
 #include <Oxygen/Vortex/Test/Fixtures/GeometryUploaderTest.h>

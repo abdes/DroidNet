@@ -4,12 +4,14 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Vortex/Diagnostics/DiagnosticsFrameLedger.h>
-
 #include <algorithm>
 #include <utility>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Vortex/Diagnostics/DiagnosticsFrameLedger.h>
+#include <Oxygen/Vortex/Diagnostics/DiagnosticsTypes.h>
+#include <Oxygen/Vortex/ShaderDebugMode.h>
 
 namespace oxygen::vortex {
 
@@ -66,8 +68,8 @@ auto DiagnosticsFrameLedger::ReportIssue(DiagnosticsIssue issue) -> void
   ClampIssueContext(issue);
   issue.occurrences = std::max(issue.occurrences, 1U);
 
-  const auto existing = std::ranges::find_if(
-    frame_snapshot_.issues, [&issue](const DiagnosticsIssue& candidate) {
+  const auto existing = std::ranges::find_if(frame_snapshot_.issues,
+    [&issue](const DiagnosticsIssue& candidate) -> bool {
       return SameIssue(candidate, issue);
     });
   if (existing != frame_snapshot_.issues.end()) {

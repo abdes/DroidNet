@@ -5,27 +5,44 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <chrono>
+#include <cstddef>
+#include <cstdint>
 #include <cstring>
 #include <expected>
 #include <functional>
+#include <iterator>
+#include <memory>
 #include <span>
 #include <thread>
 #include <utility>
 #include <variant>
 #include <vector>
 
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Detail/FormatUtils.h>
 #include <Oxygen/Core/Types/ByteUnits.h>
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Queues.h>
+#include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/QueueRole.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Value.h>
+#include <Oxygen/Vortex/RendererTag.h>
+#include <Oxygen/Vortex/Upload/Errors.h>
 #include <Oxygen/Vortex/Upload/RingBufferStaging.h>
 #include <Oxygen/Vortex/Upload/StagingProvider.h>
+#include <Oxygen/Vortex/Upload/Types.h>
 #include <Oxygen/Vortex/Upload/UploadCoordinator.h>
 #include <Oxygen/Vortex/Upload/UploadPlanner.h>
+#include <Oxygen/Vortex/Upload/UploadPolicy.h>
+#include <Oxygen/Vortex/Upload/UploadTracker.h>
 #include <Oxygen/Vortex/Upload/UploaderTag.h>
 
 namespace oxygen::vortex::upload::internal {
@@ -921,7 +938,7 @@ auto UploadCoordinator::RecordBufferRun(const BufferUploadPlan& optimized,
       staging.Offset().get() + it.region.src_offset, it.region.size);
 
     const bool is_last = (idx2 + 1 == optimized.uploads.size());
-    const bool next_diff = !is_last && [&]() -> bool {
+    const bool next_diff = !is_last && [&] -> bool {
       const auto& next_it = optimized.uploads[idx2 + 1];
       const auto next_rep = next_it.request_indices.front();
       const auto& next_r = run[next_rep];

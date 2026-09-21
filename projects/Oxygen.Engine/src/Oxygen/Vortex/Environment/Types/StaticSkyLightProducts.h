@@ -62,7 +62,7 @@ struct StaticSkyLightProducts {
   float average_brightness { 0.0F };
   StaticSkyLightProductStatus status { StaticSkyLightProductStatus::kDisabled };
   StaticSkyLightUnavailableReason unavailable_reason {
-    StaticSkyLightUnavailableReason::kNone
+    StaticSkyLightUnavailableReason::kNone,
   };
 };
 

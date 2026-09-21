@@ -16,29 +16,50 @@
 #include <utility>
 #include <vector>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Config/RendererConfig.h>
+#include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Cooker/Import/Internal/TextureCooker.h>
 #include <Oxygen/Cooker/Import/ScratchImage.h>
+#include <Oxygen/Cooker/Import/TextureImportDesc.h>
+#include <Oxygen/Cooker/Import/TextureImportTypes.h>
 #include <Oxygen/Cooker/Import/TexturePackingPolicy.h>
+#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/Types/ColorSpace.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/PostProcess.h>
+#include <Oxygen/Core/Types/TextureType.h>
+#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/HalfFloat.h>
 #include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/Data/MaterialDomain.h>
+#include <Oxygen/Data/PakFormat_core.h>
+#include <Oxygen/Data/PakFormat_geometry.h>
+#include <Oxygen/Data/PakFormat_render.h>
+#include <Oxygen/Data/ShaderReference.h>
 #include <Oxygen/Data/TextureResource.h>
+#include <Oxygen/Data/Vertex.h>
 #include <Oxygen/Engine/IAsyncEngine.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Environment/PostProcessVolume.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
-#include <Oxygen/Scene/Environment/SkyLight.h>
+#include <Oxygen/Scene/ExposureSettings.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Vortex/Environment/EnvironmentLightingService.h>
 #include <Oxygen/Vortex/Environment/Internal/IblProcessor.h>
+#include <Oxygen/Vortex/Environment/Types/SkyLightEnvironmentModel.h>
 #include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
 #include <Oxygen/Vortex/PostProcess/PostProcessService.h>
 #include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
+#include <Oxygen/Vortex/RendererCapability.h>
 #include <Oxygen/Vortex/RendererTag.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureGpuFixture.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestEngine.h>
@@ -47,6 +68,8 @@
 #include <Oxygen/Vortex/Test/Fakes/AssetLoader.h>
 #include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
 #include <Oxygen/Vortex/Test/Fixtures/TextureBinderPayloads.h>
+#include <Oxygen/Vortex/Types/DrawMetadata.h>
+#include <Oxygen/Vortex/Types/ExposureStateData.h>
 #include <Oxygen/Vortex/Upload/UploadCoordinator.h>
 #include <Oxygen/Vortex/ViewExtension.h>
 
@@ -119,12 +142,14 @@ NOLINT_TEST_F(
     },
   };
   for (unsigned i = 0; i < 3; ++i) {
-    vertices.at(i) = { .position = positions.at(i),
-      .normal = { 0, 0, 1, },
-      .texcoord = { .5F, .5F, },
-      .tangent = { 1, 0, 0, },
-      .bitangent = { 0, 1, 0, },
-      .color = { 1, 1, 1, 1, }, };
+    vertices.at(i) = {
+      .position = positions.at(i),
+      .normal = { 0, 0, 1 },
+      .texcoord = { .5F, .5F },
+      .tangent = { 1, 0, 0 },
+      .bitangent = { 0, 1, 0 },
+      .color = { 1, 1, 1, 1 },
+    };
   }
   std::shared_ptr<data::Mesh> mesh
     = data::MeshBuilder()
@@ -465,7 +490,9 @@ NOLINT_TEST_F(
               facade.SetFrameSession({ .frame_slot = slot,
                 .frame_sequence = frame::SequenceNumber { sequence, },
                 .delta_time_seconds = 0, });
-              facade.SetSceneSource({ .scene = observer_ptr { scene.get(), }, });
+              facade.SetSceneSource({ .scene = observer_ptr {
+                                        scene.get(),
+                                      } });
               facade.SetViewIntent(
                 Renderer::OffscreenSceneViewInput::FromCamera("Domain",
                   ViewId {
@@ -475,8 +502,9 @@ NOLINT_TEST_F(
                   .SetViewStateHandle(CompositionView::ViewStateHandle {
                     100U,
                   }));
-              facade.SetOutputTarget(
-                { .framebuffer = observer_ptr { framebuffer.get(), }, });
+              facade.SetOutputTarget({ .framebuffer = observer_ptr {
+                                         framebuffer.get(),
+                                       } });
               facade.SetPipeline(forward
                   ? Renderer::OffscreenPipelineInput::Forward()
                   : Renderer::OffscreenPipelineInput::Deferred());

@@ -24,21 +24,21 @@ namespace shadows::internal {
   class ConventionalShadowTargetAllocator {
   public:
     struct DirectionalAllocation {
-      std::shared_ptr<graphics::Texture> surface {};
+      std::shared_ptr<graphics::Texture> surface;
       ShaderVisibleIndex surface_srv { kInvalidShaderVisibleIndex };
       glm::uvec2 resolution { 0U, 0U };
       std::uint32_t cascade_count { 0U };
     };
 
     struct SpotAllocation {
-      std::shared_ptr<graphics::Texture> surface {};
+      std::shared_ptr<graphics::Texture> surface;
       ShaderVisibleIndex surface_srv { kInvalidShaderVisibleIndex };
       glm::uvec2 resolution { 0U, 0U };
       std::uint32_t shadow_count { 0U };
     };
 
     struct PointAllocation {
-      std::shared_ptr<graphics::Texture> surface {};
+      std::shared_ptr<graphics::Texture> surface;
       ShaderVisibleIndex surface_srv { kInvalidShaderVisibleIndex };
       glm::uvec2 resolution { 0U, 0U };
       std::uint32_t shadow_count { 0U };
@@ -80,15 +80,15 @@ namespace shadows::internal {
     auto RegisterPointSurfaceSrv() -> ShaderVisibleIndex;
 
     Renderer& renderer_;
-    std::shared_ptr<graphics::Texture> directional_surface_ {};
+    std::shared_ptr<graphics::Texture> directional_surface_;
     ShaderVisibleIndex directional_surface_srv_ { kInvalidShaderVisibleIndex };
     glm::uvec2 directional_resolution_ { 0U, 0U };
     std::uint32_t directional_array_size_ { 0U };
-    std::shared_ptr<graphics::Texture> spot_surface_ {};
+    std::shared_ptr<graphics::Texture> spot_surface_;
     ShaderVisibleIndex spot_surface_srv_ { kInvalidShaderVisibleIndex };
     glm::uvec2 spot_resolution_ { 0U, 0U };
     std::uint32_t spot_array_size_ { 0U };
-    std::shared_ptr<graphics::Texture> point_surface_ {};
+    std::shared_ptr<graphics::Texture> point_surface_;
     ShaderVisibleIndex point_surface_srv_ { kInvalidShaderVisibleIndex };
     glm::uvec2 point_resolution_ { 0U, 0U };
     std::uint32_t point_shadow_count_ { 0U };

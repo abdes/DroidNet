@@ -45,7 +45,7 @@ struct BlendTask {
 
 //! Alpha-blended composition of a texture into the target framebuffer.
 struct TextureBlendTask {
-  std::shared_ptr<graphics::Texture> source_texture {};
+  std::shared_ptr<graphics::Texture> source_texture;
   ViewPort viewport {};
   float alpha { 1.0F };
 };
@@ -58,7 +58,7 @@ struct TaaTask {
 //! A compositing task with a stable enum tag and payload slots.
 struct CompositingTask {
   CompositingTaskType type { CompositingTaskType::kCopy };
-  std::string debug_name {};
+  std::string debug_name;
   CopyTask copy {};
   BlendTask blend {};
   TextureBlendTask texture_blend {};
@@ -112,10 +112,10 @@ struct CompositionSubmission {
   CompositionView::SurfaceRouteId surface_id {
     CompositionView::kDefaultSurfaceRoute
   };
-  std::string debug_name {};
-  std::shared_ptr<graphics::Framebuffer> composite_target {};
-  CompositingTaskList tasks {};
-  SurfaceOverlayBatchList surface_overlays {};
+  std::string debug_name;
+  std::shared_ptr<graphics::Framebuffer> composite_target;
+  CompositingTaskList tasks;
+  SurfaceOverlayBatchList surface_overlays;
 };
 
 } // namespace oxygen::vortex

@@ -5,12 +5,15 @@
 //===----------------------------------------------------------------------===//
 
 #include <array>
+#include <cstdint>
+#include <span>
 #include <vector>
 
 #include <Oxygen/Testing/GTest.h>
-
 #include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/Types/AcceptedDrawView.h>
+#include <Oxygen/Vortex/Types/DrawMetadata.h>
+#include <Oxygen/Vortex/Types/PassMask.h>
 
 namespace {
 
@@ -92,22 +95,22 @@ NOLINT_TEST(AcceptedDrawViewTest, PartitionedIterationSkipsRejectedPartitions)
 
   const auto partitions = std::array {
     PreparedSceneFrame::PartitionRange {
-      .pass_mask = PassMask { PassMaskBit::kTransparent, },
+      .pass_mask = PassMask { PassMaskBit::kTransparent },
       .begin = 0U,
       .end = 1U,
     },
     PreparedSceneFrame::PartitionRange {
-      .pass_mask = PassMask { PassMaskBit::kOpaque, },
+      .pass_mask = PassMask { PassMaskBit::kOpaque },
       .begin = 1U,
       .end = 3U,
     },
     PreparedSceneFrame::PartitionRange {
-      .pass_mask = PassMask { PassMaskBit::kUi, },
+      .pass_mask = PassMask { PassMaskBit::kUi },
       .begin = 3U,
       .end = 4U,
     },
     PreparedSceneFrame::PartitionRange {
-      .pass_mask = PassMask { PassMaskBit::kMasked, },
+      .pass_mask = PassMask { PassMaskBit::kMasked },
       .begin = 4U,
       .end = 10U,
     },

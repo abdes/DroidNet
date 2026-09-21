@@ -14,10 +14,18 @@
 #include <span>
 #include <vector>
 
+#include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/PostProcess.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/Scene/ExposureSettings.h>
+#include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
 #include <Oxygen/Vortex/PostProcess/PostProcessService.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureGpuFixture.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestGraphics.h>
+#include <Oxygen/Vortex/Types/ExposureStateData.h>
 
 namespace oxygen::vortex::testing::exposure {
 
@@ -79,7 +87,7 @@ NOLINT_TEST_F(ExposureGpuTest, FilterGradientsEncloseReferenceNeighborsAndRetry)
           }
         }
         const auto signal = MakeSignal(width, height, pixels, depth, format);
-        const auto id = std::array { 5U, 6U, 10U, }.at(case_index++ % 3U);
+        const auto id = std::array { 5U, 6U, 10U }.at(case_index++ % 3U);
         unsigned record_index = 2U;
         if (id == 5U) {
           record_index = 0U;
@@ -186,7 +194,7 @@ NOLINT_TEST_F(ExposureGpuTest, FilterGradientsEncloseReferenceNeighborsAndRetry)
                   continue;
                 }
                 const auto stride
-                  = std::array { 1U, width, width * height, }.at(axis);
+                  = std::array { 1U, width, width * height }.at(axis);
                 const auto neighbor = index + stride;
                 for (unsigned c = 0; c < (transmission ? 4U : 3U); ++c) {
                   const auto a = interval(pixels.at(index).at(c), c);

@@ -4,8 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Vortex/Environment/Internal/AtmosphereRenderer.h>
+#include <memory>
 
+#include <Oxygen/Vortex/Environment/Internal/AtmosphereRenderer.h>
 #include <Oxygen/Vortex/Environment/Passes/AtmosphereComposePass.h>
 
 namespace oxygen::vortex::environment {

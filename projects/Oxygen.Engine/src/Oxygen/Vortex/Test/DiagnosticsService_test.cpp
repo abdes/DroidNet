@@ -6,15 +6,19 @@
 
 // assertions; setup loops stay within their sized containers.
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <memory>
 
 #include <Oxygen/Config/RendererConfig.h>
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Queues.h>
+#include <Oxygen/Graphics/Common/Types/QueueRole.h>
+#include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsService.h>
+#include <Oxygen/Vortex/Diagnostics/DiagnosticsTypes.h>
 #include <Oxygen/Vortex/Renderer.h>
+#include <Oxygen/Vortex/RendererCapability.h>
+#include <Oxygen/Vortex/ShaderDebugMode.h>
 #include <Oxygen/Vortex/Test/Fakes/Graphics.h>
 
 namespace {
@@ -141,7 +145,7 @@ NOLINT_TEST(DiagnosticsServiceTest, FrameLedgerRecordsFactsWhenEnabled)
     .kind = DiagnosticsPassKind::kGraphics,
     .executed = true,
     .inputs = {},
-    .outputs = { "Vortex.DirectionalShadowSurface", },
+    .outputs = { "Vortex.DirectionalShadowSurface" },
     .missing_inputs = {},
     .gpu_duration_ms = {},
   });

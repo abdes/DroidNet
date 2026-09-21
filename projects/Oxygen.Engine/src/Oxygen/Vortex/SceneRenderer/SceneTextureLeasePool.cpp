@@ -5,14 +5,19 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
-#include <iterator>
+#include <cstddef>
+#include <cstdint>
+#include <memory>
 #include <stdexcept>
 #include <utility>
 
 #include <fmt/format.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Graphics/Common/Graphics.h>
+#include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextureLeasePool.h>
+#include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
 
 namespace oxygen::vortex {
 
@@ -93,7 +98,7 @@ void SceneTextureLease::Retire(Graphics& gfx)
   // The pool may be destroyed before this frame retires. A weak token neither
   // calls a destroyed pool nor creates a Graphics ownership cycle via color.
   gfx.GetDeferredReclaimer().RegisterDeferredAction(
-    [entry = std::weak_ptr<SceneTextureLeaseStorage>(storage_)] {
+    [entry = std::weak_ptr<SceneTextureLeaseStorage>(storage_)] -> void {
       if (const auto storage = entry.lock()) {
         storage->retired = true;
       }
@@ -121,7 +126,7 @@ auto SceneTextureLeasePool::Acquire(const SceneTextureLeaseKey& key,
   SceneTextures::ValidateConfig(BuildConfig(key));
 
   const auto reusable
-    = std::ranges::find_if(entries_, [&key](const auto& entry) {
+    = std::ranges::find_if(entries_, [&key](const auto& entry) -> auto {
         return entry.use_count() == 1 && entry->retired && entry->key == key;
       });
   if (reusable != entries_.end()) {
@@ -160,7 +165,7 @@ auto SceneTextureLeasePool::GetAllocationCount() const noexcept -> std::size_t
 auto SceneTextureLeasePool::GetLiveLeaseCount() const noexcept -> std::size_t
 {
   return static_cast<std::size_t>(
-    std::ranges::count_if(entries_, [](const auto& entry) {
+    std::ranges::count_if(entries_, [](const auto& entry) -> auto {
       return entry.use_count() > 1 || !entry->retired;
     }));
 }
@@ -169,7 +174,7 @@ auto SceneTextureLeasePool::GetLeaseCountForKey(
   const SceneTextureLeaseKey& key) const noexcept -> std::size_t
 {
   return static_cast<std::size_t>(std::ranges::count_if(
-    entries_, [&key](const auto& entry) { return entry->key == key; }));
+    entries_, [&key](const auto& entry) -> auto { return entry->key == key; }));
 }
 
 auto SceneTextureLeasePool::GetMaxLiveLeasesPerKey() const noexcept
@@ -195,7 +200,7 @@ auto SceneTextureLeasePool::CountLiveLeasesForKey(
   const SceneTextureLeaseKey& key) const noexcept -> std::size_t
 {
   return static_cast<std::size_t>(
-    std::ranges::count_if(entries_, [&key](const auto& entry) {
+    std::ranges::count_if(entries_, [&key](const auto& entry) -> auto {
       return (entry.use_count() > 1 || !entry->retired) && entry->key == key;
     }));
 }

@@ -21,7 +21,7 @@ protected:
   enum class BaselineRecipe : std::uint8_t {
     kControlled,
     kMixed,
-    kIndoorOutdoor
+    kIndoorOutdoor,
   };
   auto MeasureReleaseBaseline(BaselineRecipe kind) -> void;
   auto BackendConfigJson() const -> std::string override;

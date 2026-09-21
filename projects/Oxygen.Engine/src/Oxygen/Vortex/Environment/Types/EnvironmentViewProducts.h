@@ -10,7 +10,6 @@
 #include <cstdint>
 
 #include <Oxygen/Core/Bindless/Types.h>
-
 #include <Oxygen/Vortex/Environment/Types/AtmosphereLightModel.h>
 #include <Oxygen/Vortex/Environment/Types/AtmosphereModel.h>
 #include <Oxygen/Vortex/Environment/Types/HeightFogModel.h>
@@ -40,7 +39,7 @@ struct EnvironmentViewProducts {
   VolumetricFogModel volumetric_fog {};
   std::uint32_t atmosphere_light_count { 0U };
   std::uint32_t conventional_shadow_authority_slot {
-    kInvalidAtmosphereLightSlot
+    kInvalidAtmosphereLightSlot,
   };
   std::uint32_t flags { 0U };
   std::uint32_t reserved0 { 0U };

@@ -4,15 +4,17 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <memory>
 
+#include <glm/ext/quaternion_float.hpp>
 #include <glm/trigonometric.hpp>
 
+#include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Scene/SceneNode.h>
+#include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/SceneCameraViewResolver.h>
 
 namespace {

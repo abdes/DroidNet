@@ -6,10 +6,10 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Bindless/Types.h>
-#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Vortex/Resources/GeometryUploader.h>
 #include <Oxygen/Vortex/ScenePrep/GeometryRef.h>
 #include <Oxygen/Vortex/ScenePrep/Handles.h>
-
 #include <Oxygen/Vortex/Test/Fixtures/GeometryUploaderTest.h>
 
 namespace {

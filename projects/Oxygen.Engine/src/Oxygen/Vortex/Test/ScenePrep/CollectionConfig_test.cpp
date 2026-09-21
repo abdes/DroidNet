@@ -4,10 +4,11 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Testing/GTest.h>
+#include <type_traits>
 
+#include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/ScenePrep/CollectionConfig.h>
-#include <Oxygen/Vortex/ScenePrep/Extractors.h>
+#include <Oxygen/Vortex/ScenePrep/Concepts.h>
 
 namespace {
 

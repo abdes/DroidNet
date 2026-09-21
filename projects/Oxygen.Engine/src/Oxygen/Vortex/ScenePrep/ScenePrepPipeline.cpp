@@ -4,10 +4,27 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <exception>
+#include <optional>
+#include <string>
+#include <string_view>
+#include <tuple>
+
+#include <fmt/format.h>
+
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
+#include <Oxygen/Scene/Detail/RenderableComponent.h>
+#include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Scene/SceneNodeImpl.h>
 #include <Oxygen/Scene/SceneTraversal.h>
+#include <Oxygen/Scene/Types/Traversal.h>
+#include <Oxygen/Vortex/ScenePrep/RenderItemProto.h>
+#include <Oxygen/Vortex/ScenePrep/ScenePrepContext.h>
 #include <Oxygen/Vortex/ScenePrep/ScenePrepPipeline.h>
+#include <Oxygen/Vortex/ScenePrep/ScenePrepState.h>
 
 namespace oxygen::vortex::sceneprep {
 
@@ -69,7 +86,7 @@ auto ScenePrepPipeline::BeginFrameCollection(const scene::Scene& scene,
   state.ReserveCapacityForItems(items.size());
 
   auto traversal = scene::SceneTraversal(scene.shared_from_this());
-  static_cast<void>(traversal.Traverse(
+  std::ignore = traversal.Traverse(
     [&](const auto& visited, bool /*dry_run*/) -> scene::VisitResult {
       const auto& node_impl = *visited.node_impl;
       if (!node_impl
@@ -98,7 +115,7 @@ auto ScenePrepPipeline::BeginFrameCollection(const scene::Scene& scene,
         RecordCollectionFailure("node_collect", ctx_, &node_impl, ex);
       }
       return scene::VisitResult::kContinue;
-    }));
+    });
 }
 
 auto ScenePrepPipeline::PrepareView(const scene::Scene& scene,
@@ -167,7 +184,7 @@ auto ScenePrepPipeline::CollectSingleView(const scene::Scene& scene,
   state.ReserveCapacityForItems(items.size());
 
   auto traversal = scene::SceneTraversal(scene.shared_from_this());
-  static_cast<void>(traversal.Traverse(
+  std::ignore = traversal.Traverse(
     [&](const auto& visited, bool /*dry_run*/) -> scene::VisitResult {
       const auto& node_impl = *visited.node_impl;
       if (!node_impl
@@ -182,7 +199,7 @@ auto ScenePrepPipeline::CollectSingleView(const scene::Scene& scene,
         RecordCollectionFailure("node_collect", ctx_, &node_impl, ex);
       }
       return scene::VisitResult::kContinue;
-    }));
+    });
 }
 
 auto ScenePrepPipeline::FinalizeView(ScenePrepState& state) -> void

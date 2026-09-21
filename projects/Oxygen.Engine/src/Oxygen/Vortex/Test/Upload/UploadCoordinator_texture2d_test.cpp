@@ -4,26 +4,26 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <algorithm>
+#include <cstddef>
+#include <cstdint>
 #include <cstring>
-#include <map>
+#include <functional>
 #include <memory>
+#include <span>
+#include <utility>
 #include <vector>
 
-#include <Oxygen/Testing/GTest.h>
-
+#include <Oxygen/Core/Types/ByteUnits.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/Frame.h>
-#include <Oxygen/Graphics/Common/Buffer.h>
-#include <Oxygen/Graphics/Common/CommandList.h>
-#include <Oxygen/Graphics/Common/CommandQueue.h>
-#include <Oxygen/Graphics/Common/CommandRecorder.h>
-#include <Oxygen/Graphics/Common/Detail/Barriers.h>
+#include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/Test/Fakes/Graphics.h>
 #include <Oxygen/Vortex/Test/Fixtures/UploadCoordinatorTest.h>
+#include <Oxygen/Vortex/Upload/Errors.h>
 #include <Oxygen/Vortex/Upload/Types.h>
 #include <Oxygen/Vortex/Upload/UploadCoordinator.h>
 
@@ -80,7 +80,7 @@ NOLINT_TEST_F(
     .subresources = {},
     .data = UploadTextureSourceView {
       .subresources = std::vector<UploadTextureSourceSubresource> {
-        { .bytes=std::span<const std::byte>(data.data(), data.size()), .row_pitch=static_cast<uint32_t>(512), .slice_pitch=static_cast<uint32_t>(32768), },
+        { .bytes=std::span<const std::byte>(data.data(), data.size()), .row_pitch=static_cast<uint32_t>(512), .slice_pitch=static_cast<uint32_t>(32768) },
       },
     },
   };
@@ -164,13 +164,13 @@ NOLINT_TEST_F(
       .format = oxygen::Format::kRGBA8UNorm,
     },
     .subresources = std::vector<oxygen::vortex::upload::UploadSubresource> {
-      { .mip = 0, .array_slice = 0, .x = 0, .y = 0, .z = 0, .width = 0, .height = 0, .depth = 0, },
-      { .mip = 1, .array_slice = 0, .x = 0, .y = 0, .z = 0, .width = 0, .height = 0, .depth = 0, },
+      { .mip = 0, .array_slice = 0, .x = 0, .y = 0, .z = 0, .width = 0, .height = 0, .depth = 0 },
+      { .mip = 1, .array_slice = 0, .x = 0, .y = 0, .z = 0, .width = 0, .height = 0, .depth = 0 },
     },
     .data = UploadTextureSourceView {
       .subresources = std::vector<UploadTextureSourceSubresource> {
-        { .bytes=std::span<const std::byte>(data.data(), static_cast<std::size_t>(8192)), .row_pitch=static_cast<uint32_t>(256), .slice_pitch=static_cast<uint32_t>(8192), },
-        { .bytes=std::span<const std::byte>(data).subspan(8192, 4096), .row_pitch=static_cast<uint32_t>(256), .slice_pitch=static_cast<uint32_t>(4096), },
+        { .bytes=std::span<const std::byte>(data.data(), static_cast<std::size_t>(8192)), .row_pitch=static_cast<uint32_t>(256), .slice_pitch=static_cast<uint32_t>(8192) },
+        { .bytes=std::span<const std::byte>(data).subspan(8192, 4096), .row_pitch=static_cast<uint32_t>(256), .slice_pitch=static_cast<uint32_t>(4096) },
       },
     },
   };

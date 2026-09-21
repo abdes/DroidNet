@@ -6,13 +6,29 @@
 
 #include <charconv>
 #include <cstdlib>
+#include <memory>
+#include <stdlib.h>
+#include <string>
+#include <string_view>
+#include <system_error>
+#include <utility>
 
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Console/Command.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Data/MaterialDomain.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Environment/Fog.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
+#include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Vortex/Diagnostics/DiagnosticsService.h>
+#include <Oxygen/Vortex/RenderContext.h>
+#include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
 #include <Oxygen/Vortex/Test/Exposure/Benchmarks/ExposureAllocationScenario.h>
+#include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureLightingFixture.h>
 #include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
 
 namespace oxygen::vortex::testing::exposure {
@@ -82,11 +98,17 @@ auto ExposureAllocationScenario::SetUp() -> void
   fp32_reference_ = precision_ == "fp32";
   height_ = width_ * 9U / 16U;
   fixture_.verify_manual_p = false;
+  const auto format_precision = precision_ == "fp32-only"
+    ? HdrPrecisionControl::kFp32Only
+    : HdrPrecisionControl::kProduction;
+  const auto admission_precision = precision_ == "qualified"
+    ? HdrPrecisionControl::kQualified
+    : format_precision;
+  const auto precision_control = fp32_reference_
+    ? HdrPrecisionControl::kFp32Reference
+    : admission_precision;
   fixture_.renderer_->GetDiagnosticsService().SetHdrPrecisionControl(
-    fp32_reference_               ? HdrPrecisionControl::kFp32Reference
-      : precision_ == "qualified" ? HdrPrecisionControl::kQualified
-      : precision_ == "fp32-only" ? HdrPrecisionControl::kFp32Only
-                                  : HdrPrecisionControl::kProduction);
+    precision_control);
   fixture_.view.viewport = {
     .width = static_cast<float>(width_),
     .height = static_cast<float>(height_),
@@ -195,10 +217,12 @@ auto ExposureAllocationScenario::SetUp() -> void
     CHECK_NOTNULL_F(owner);
     const auto& extracts = owner->GetSceneTextureExtracts();
     current_.insert_or_assign(context.current_view.view_state_handle,
-      ViewRecord { .id = context.current_view.view_id,
+      ViewRecord {
+        .id = context.current_view.view_id,
         .color = color,
-        .depths = { extracts.resolved_scene_depth, extracts.prev_scene_depth, },
-        .draws = draws, });
+        .depths = { extracts.resolved_scene_depth, extracts.prev_scene_depth },
+        .draws = draws,
+      });
     frames_.push_back({
       {
         "sequence",

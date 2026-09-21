@@ -28,9 +28,9 @@ namespace lighting::internal {
   };
 
   struct BuiltLightGridFrame {
-    std::vector<ForwardLocalLightRecord> local_light_records {};
-    std::vector<std::uint32_t> directional_light_indices {};
-    std::vector<BuiltLightGridView> per_view {};
+    std::vector<ForwardLocalLightRecord> local_light_records;
+    std::vector<std::uint32_t> directional_light_indices;
+    std::vector<BuiltLightGridView> per_view;
     std::uint64_t selection_epoch { 0U };
   };
 

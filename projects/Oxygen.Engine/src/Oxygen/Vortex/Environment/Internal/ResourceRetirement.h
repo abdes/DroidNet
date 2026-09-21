@@ -19,13 +19,15 @@ template <typename Resource>
 auto RetireEnvironmentResource(
   Graphics& graphics, std::shared_ptr<Resource>& resource) -> void
 {
-  if (!resource)
+  if (!resource) {
     return;
+  }
   auto* registry = &graphics.GetResourceRegistry();
   graphics.GetDeferredReclaimer().RegisterDeferredAction(
-    [registry, resource = std::move(resource)]() mutable {
-      if (registry->Contains(*resource))
+    [registry, resource = std::move(resource)] mutable -> auto {
+      if (registry->Contains(*resource)) {
         registry->UnRegisterResource(*resource);
+      }
       resource.reset();
     });
 }

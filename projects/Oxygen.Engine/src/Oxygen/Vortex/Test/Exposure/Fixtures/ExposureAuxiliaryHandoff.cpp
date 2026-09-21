@@ -5,26 +5,25 @@
 //===----------------------------------------------------------------------===//
 
 #include <array>
+#include <memory>
+#include <unordered_map>
 
-#include <Oxygen/Config/RendererConfig.h>
-#include <Oxygen/Data/GeometryAsset.h>
-#include <Oxygen/Data/HalfFloat.h>
-#include <Oxygen/Data/MaterialAsset.h>
-#include <Oxygen/Data/TextureResource.h>
-#include <Oxygen/Engine/IAsyncEngine.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/View.h>
+#include <Oxygen/Data/MaterialDomain.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
+#include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
-#include <Oxygen/Scene/Camera/Perspective.h>
-#include <Oxygen/Scene/Environment/PostProcessVolume.h>
-#include <Oxygen/Scene/Environment/SceneEnvironment.h>
-#include <Oxygen/Vortex/PreparedSceneFrame.h>
+#include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Vortex/CompositionView.h>
+#include <Oxygen/Vortex/RenderContext.h>
+#include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureLightingFixture.h>
-#include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestEngine.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestTags.h>
-#include <Oxygen/Vortex/Test/Fakes/AssetLoader.h>
-#include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
-#include <Oxygen/Vortex/Test/Fixtures/TextureBinderPayloads.h>
 
 namespace oxygen::vortex::testing::exposure {
 
@@ -93,8 +92,8 @@ auto ExposureLightingGpuTest::QualifyMixedPrecisionAuxiliaryHandoff(
     renderer_->OnFrameStart(observer_ptr {
       &frame,
     });
-    const auto order = iteration % 2 == 0 ? std::array { 1U, 2U, 0U, }
-                                          : std::array { 2U, 1U, 0U, };
+    const auto order = iteration % 2 == 0 ? std::array { 1U, 2U, 0U }
+                                          : std::array { 2U, 1U, 0U };
     for (const auto index : order) {
       auto input = CompositionView::ForScene(
         ViewId {
@@ -136,7 +135,7 @@ auto ExposureLightingGpuTest::QualifyMixedPrecisionAuxiliaryHandoff(
     // co::Run completes synchronously before this closure and its captured
     // fixture state leave scope.
     // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
-    co::Run(loop, [&]() -> co::Co<void> {
+    co::Run(loop, [&] -> co::Co<void> {
       co_await renderer_->OnPreRender(observer_ptr {
         &frame,
       });

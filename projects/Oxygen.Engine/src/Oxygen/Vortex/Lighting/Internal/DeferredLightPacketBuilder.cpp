@@ -5,13 +5,21 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <cmath>
 
+#include <glm/ext/matrix_float4x4.hpp>
 #include <glm/ext/matrix_transform.hpp>
+#include <glm/ext/quaternion_float.hpp>
+#include <glm/ext/quaternion_trigonometric.hpp>
+#include <glm/ext/vector_float3.hpp>
+#include <glm/geometric.hpp>
 #include <glm/gtc/quaternion.hpp>
 
+#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Constants.h>
-
 #include <Oxygen/Vortex/Lighting/Internal/DeferredLightPacketBuilder.h>
+#include <Oxygen/Vortex/Lighting/Types/DirectionalLightForwardData.h>
+#include <Oxygen/Vortex/Types/FrameLightSelection.h>
 
 namespace oxygen::vortex::lighting::internal {
 
@@ -96,6 +104,11 @@ auto DeferredLightPacketBuilder::Build(
       && (light.flags & kLocalLightFlagCastsShadows) != 0U;
     const auto casts_point_shadow = light.kind == LocalLightKind::kPoint
       && (light.flags & kLocalLightFlagCastsShadows) != 0U;
+    const auto point_shadow_or_invalid = casts_point_shadow
+      ? point_shadow_index
+      : kInvalidShaderVisibleIndex.get();
+    const auto shadow_index
+      = casts_spot_shadow ? spot_shadow_index : point_shadow_or_invalid;
     packets.local_lights.push_back(DeferredLightPacket {
       .kind = light.kind,
       .light_position_and_radius = glm::vec4(light.position, light.range),
@@ -105,10 +118,7 @@ auto DeferredLightPacketBuilder::Build(
       .spot_angles
       = glm::vec4(light.inner_cone_cos, light.outer_cone_cos, 0.0F, 0.0F),
       .light_world_matrix = BuildLightWorldMatrix(light),
-      .shadow_index = casts_spot_shadow
-        ? spot_shadow_index
-        : (casts_point_shadow ? point_shadow_index
-                              : kInvalidShaderVisibleIndex.get()),
+      .shadow_index = shadow_index,
       .shadow_flags = light.flags,
     });
     if (casts_spot_shadow) {

@@ -7,13 +7,18 @@
 #include <array>
 #include <bit>
 #include <cstdint>
+#include <memory>
 #include <unordered_map>
 #include <utility>
 
+#include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/QueueRole.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Vortex/Internal/RetainedTexturePool.h>
 
 namespace oxygen::vortex::internal {
@@ -116,13 +121,13 @@ auto RetainedTexturePool::Acquire(const ViewId view_id,
   // would create a cycle through the Graphics owner captured by its deleter.
   auto retained = std::shared_ptr<graphics::Texture>(texture.get(),
     [graphics, texture, eligibility = std::weak_ptr<ViewEntry>(entry)](
-      graphics::Texture*) mutable {
+      graphics::Texture*) mutable -> void {
       // Weak wrapper observers may retain the deleter's control block after
       // this call. Keep Graphics alive only through scheduling retirement.
       auto retained_graphics = std::move(graphics);
       auto* owner = retained_graphics.get();
       owner->GetDeferredReclaimer().RegisterDeferredAction(
-        [owner, texture = std::move(texture), eligibility]() mutable {
+        [owner, texture = std::move(texture), eligibility] mutable -> void {
           const auto state
             = owner->TryGetKnownResourceState(texture->GetNativeResource());
           auto& registry = owner->GetResourceRegistry();
@@ -142,8 +147,12 @@ auto RetainedTexturePool::Acquire(const ViewId view_id,
     });
   graphics->GetResourceRegistry().Register(texture);
   if (idle.state != graphics::ResourceStates::kUnknown) {
-    const std::array states { graphics::CommandQueue::KnownResourceState {
-      .resource = texture->GetNativeResource(), .state = idle.state } };
+    const std::array states {
+      graphics::CommandQueue::KnownResourceState {
+        .resource = texture->GetNativeResource(),
+        .state = idle.state,
+      },
+    };
     queue->AdoptKnownResourceStates(states);
   }
   return retained;
@@ -153,7 +162,7 @@ auto RetainedTexturePool::OnFrameStart(const frame::SequenceNumber sequence)
   -> void
 {
   impl_->sequence = sequence;
-  std::erase_if(impl_->views, [sequence](const auto& item) {
+  std::erase_if(impl_->views, [sequence](const auto& item) -> auto {
     const auto last_seen = item.second->last_seen.get();
     return last_seen > sequence.get() || sequence.get() - last_seen > 1U;
   });

@@ -6,9 +6,10 @@
 
 #include <memory>
 
+#include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Vortex/RendererTag.h>
+#include <Oxygen/Vortex/Test/Fakes/Graphics.h>
 #include <Oxygen/Vortex/Test/Fixtures/UploadCoordinatorTest.h>
-#include <Oxygen/Vortex/Upload/StagingProvider.h>
 #include <Oxygen/Vortex/Upload/UploaderTag.h>
 
 namespace oxygen::vortex::upload::internal {

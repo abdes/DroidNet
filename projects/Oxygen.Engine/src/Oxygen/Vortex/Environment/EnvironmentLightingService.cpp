@@ -4,22 +4,34 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Graphics/Common/CommandRecorder.h>
-#include <Oxygen/Vortex/Environment/EnvironmentLightingService.h>
-
 #include <algorithm>
+#include <array>
 #include <cmath>
+#include <cstddef>
+#include <cstdint>
 #include <memory>
+#include <tuple>
 
+#include <glm/ext/vector_float3.hpp>
+#include <glm/ext/vector_float4.hpp>
 #include <glm/geometric.hpp>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/IAssetLoader.h>
+#include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Constants.h>
+#include <Oxygen/Core/Types/Atmosphere.h>
+#include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Core/Types/TextureType.h>
+#include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Data/TextureResource.h>
+#include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Scene/Environment/SkySphere.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Vortex/Environment/EnvironmentLightingService.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereLightState.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereLutCache.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereRenderer.h>
@@ -36,12 +48,21 @@
 #include <Oxygen/Vortex/Environment/Passes/LocalFogVolumeComposePass.h>
 #include <Oxygen/Vortex/Environment/Passes/LocalFogVolumeTiledCullingPass.h>
 #include <Oxygen/Vortex/Environment/Passes/VolumetricFogPass.h>
+#include <Oxygen/Vortex/Environment/Types/AtmosphereLightModel.h>
+#include <Oxygen/Vortex/Environment/Types/AtmosphereModel.h>
 #include <Oxygen/Vortex/Environment/Types/EnvironmentAmbientBridgeBindings.h>
 #include <Oxygen/Vortex/Environment/Types/EnvironmentEvaluationParameters.h>
+#include <Oxygen/Vortex/Environment/Types/EnvironmentProbeBindings.h>
+#include <Oxygen/Vortex/Environment/Types/EnvironmentProbeState.h>
+#include <Oxygen/Vortex/Environment/Types/EnvironmentViewProducts.h>
+#include <Oxygen/Vortex/Environment/Types/StaticSkyLightProducts.h>
 #include <Oxygen/Vortex/Internal/PerViewStructuredPublisher.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/Resources/TextureBinder.h>
+#include <Oxygen/Vortex/Types/EnvironmentFrameBindings.h>
+#include <Oxygen/Vortex/Types/EnvironmentStaticData.h>
+#include <Oxygen/Vortex/Types/EnvironmentViewData.h>
 
 namespace oxygen::vortex {
 
@@ -847,8 +868,11 @@ auto EnvironmentLightingService::BuildEnvironmentStaticData(
   data.atmosphere.multi_scattering_factor = atmo.multi_scattering_factor;
   data.atmosphere.aerial_perspective_distance_scale
     = atmo.aerial_perspective_distance_scale;
-  data.atmosphere.ground_albedo_rgb = { atmo.ground_albedo_rgb.x,
-    atmo.ground_albedo_rgb.y, atmo.ground_albedo_rgb.z };
+  data.atmosphere.ground_albedo_rgb = {
+    atmo.ground_albedo_rgb.x,
+    atmo.ground_albedo_rgb.y,
+    atmo.ground_albedo_rgb.z,
+  };
   data.atmosphere.sun_disk_angular_radius_radians
     = primary_sun_disk_angular_radius_radians;
   data.atmosphere.sun_disk_luminance_scale_rgb = {
@@ -871,8 +895,11 @@ auto EnvironmentLightingService::BuildEnvironmentStaticData(
   };
   data.atmosphere.rayleigh_scale_height_km
     = engine::atmos::MetersToSkyUnit(atmo.rayleigh_scale_height_m);
-  data.atmosphere.mie_scattering_per_km_rgb = { mie_scattering_per_km.x,
-    mie_scattering_per_km.y, mie_scattering_per_km.z };
+  data.atmosphere.mie_scattering_per_km_rgb = {
+    mie_scattering_per_km.x,
+    mie_scattering_per_km.y,
+    mie_scattering_per_km.z,
+  };
   data.atmosphere.mie_scale_height_km
     = engine::atmos::MetersToSkyUnit(atmo.mie_scale_height_m);
   data.atmosphere.mie_extinction_per_km_rgb = {
@@ -1035,9 +1062,10 @@ auto EnvironmentLightingService::DescribeViewRadianceLayout(
       = std::fmax(authored.atmosphere.aerial_scattering_strength, 0.0F);
   }
   if (ctx.current_view.with_height_fog && authored.volumetric_fog.enabled
-    && CurrentViewWantsVolumetrics(ctx) && ctx.current_view.resolved_view)
+    && CurrentViewWantsVolumetrics(ctx) && ctx.current_view.resolved_view) {
     result.volumetric_fog = environment::VolumetricFogPass::GridExtent(
       *ctx.current_view.resolved_view);
+  }
   return result;
 }
 
@@ -1549,9 +1577,9 @@ auto EnvironmentLightingService::RefreshStableAtmosphereState(
     return;
   }
 
-  static_cast<void>(atmosphere_light_state_->Update(*scene));
-  static_cast<void>(
-    atmosphere_state_->Update(*scene, atmosphere_light_state_->GetState()));
+  std::ignore = atmosphere_light_state_->Update(*scene);
+  std::ignore
+    = atmosphere_state_->Update(*scene, atmosphere_light_state_->GetState());
 }
 
 } // namespace oxygen::vortex

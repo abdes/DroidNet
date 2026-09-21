@@ -6,12 +6,21 @@
 
 #include <limits>
 #include <memory>
+#include <utility>
 
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Core/FrameContext.h>
-#include <Oxygen/Testing/GTest.h>
-
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/ResolvedView.h>
+#include <Oxygen/Core/Types/TextureType.h>
+#include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/QueueRole.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/Test/Fakes/Graphics.h>
 
@@ -230,8 +239,7 @@ NOLINT_TEST_F(SinglePassHarnessFacadeTest,
   facade.SetOutputTarget(MakeOutputTarget());
   facade.SetResolvedView(MakeResolvedViewInput());
   facade.SetPreparedFrame(Renderer::PreparedFrameInput {
-    .value = oxygen::vortex::PreparedSceneFrame {},
-  });
+    .value = oxygen::vortex::PreparedSceneFrame {} });
   facade.SetCoreShaderInputs(Renderer::CoreShaderInputsInput {
     .view_id = ViewId { 51U, },
     .value = oxygen::vortex::ViewConstants {},

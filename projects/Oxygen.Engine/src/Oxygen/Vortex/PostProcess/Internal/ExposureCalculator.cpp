@@ -4,9 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <algorithm>
-
 #include <Oxygen/Vortex/PostProcess/Internal/ExposureCalculator.h>
+#include <Oxygen/Vortex/PostProcess/Types/PostProcessConfig.h>
 
 namespace oxygen::vortex::postprocess::internal {
 

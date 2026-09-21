@@ -4,10 +4,21 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
+#include <string>
+#include <tuple>
+#include <utility>
+
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Core/Types/View.h>
+#include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
+#include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Vortex/Internal/ViewConstantsManager.h>
-#include <Oxygen/Vortex/Types/ViewConstants.h>
 
 namespace oxygen::vortex::internal {
 
@@ -25,7 +36,7 @@ ViewConstantsManager::ViewConstantsManager(
 ViewConstantsManager::~ViewConstantsManager()
 {
   for (auto& [key, info] : buffers_) {
-    static_cast<void>(key);
+    std::ignore = key;
     ReleaseBuffer(info);
   }
   buffers_.clear();
@@ -147,7 +158,7 @@ auto ViewConstantsManager::ReleaseBuffer(BufferInfo& info) -> void
 
   auto& reclaimer = gfx_->GetDeferredReclaimer();
   reclaimer.RegisterDeferredAction(
-    [buffer = std::move(buffer)]() mutable -> void { buffer.reset(); });
+    [buffer = std::move(buffer)] mutable -> void { buffer.reset(); });
 }
 
 } // namespace oxygen::vortex::internal

@@ -4,24 +4,29 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <memory>
 #include <optional>
+#include <tuple>
+#include <utility>
 
+#include "Fakes/Graphics.h"
+
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/Types/View.h>
+#include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Queues.h>
+#include <Oxygen/Graphics/Common/Types/QueueRole.h>
+#include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererCapability.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneRenderBuilder.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneRenderer.h>
-
-#include "Fakes/Graphics.h"
+#include <Oxygen/Vortex/SceneRenderer/ShadingMode.h>
 
 namespace {
 
@@ -321,12 +326,9 @@ NOLINT_TEST(SceneRendererShellProofSurfaceTest,
       });
   auto frame_context = oxygen::engine::FrameContext {};
 
-  static_cast<void>(
-    frame_context.RegisterView(MakeFrameView(48.0F, 48.0F, false)));
-  static_cast<void>(
-    frame_context.RegisterView(MakeFrameView(64.0F, 64.0F, true)));
-  static_cast<void>(
-    frame_context.RegisterView(MakeFrameView(320.0F, 180.0F, true)));
+  std::ignore = frame_context.RegisterView(MakeFrameView(48.0F, 48.0F, false));
+  std::ignore = frame_context.RegisterView(MakeFrameView(64.0F, 64.0F, true));
+  std::ignore = frame_context.RegisterView(MakeFrameView(320.0F, 180.0F, true));
 
   ASSERT_NE(scene_renderer, nullptr);
   scene_renderer->OnFrameStart(frame_context);

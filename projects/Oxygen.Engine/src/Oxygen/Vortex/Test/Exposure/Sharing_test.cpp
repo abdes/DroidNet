@@ -6,13 +6,24 @@
 
 #include <cmath>
 #include <optional>
+#include <tuple>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/PostProcess.h>
+#include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
+#include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/Scene/ExposureSettings.h>
+#include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
 #include <Oxygen/Vortex/PostProcess/PostProcessService.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureGpuFixture.h>
+#include <Oxygen/Vortex/Types/ExposureTransition.h>
 
 namespace oxygen::vortex::testing::exposure {
 
@@ -234,14 +245,14 @@ NOLINT_TEST_F(
     source.key = 12.5F;
     source.mode = engine::ExposureMode::kManual;
     source.manual_ev = 4.0F;
-    static_cast<void>(service.CaptureViewExposureSettings(
+    std::ignore = service.CaptureViewExposureSettings(
       ViewId {
         1U,
       },
       CompositionView::ViewStateHandle {
         1U,
       },
-      source));
+      source);
   };
   const auto pixel = ServicePixel(service, signal, {}, pixel_options);
   EXPECT_NEAR(pixel, .25F / 16.0F, 2e-5F);

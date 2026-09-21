@@ -5,27 +5,39 @@
 //===----------------------------------------------------------------------===//
 
 #include <array>
+#include <cstdint>
 #include <memory>
-
-#include <Oxygen/Testing/GTest.h>
+#include <optional>
+#include <span>
+#include <utility>
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/ResourceKey.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Core/Types/View.h>
+#include <Oxygen/Graphics/Common/CommandRecording.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/QueueRole.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Scene/Environment/SkySphere.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/Internal/CompositionPlanner.h>
 #include <Oxygen/Vortex/Internal/CompositionViewImpl.h>
+#include <Oxygen/Vortex/RenderMode.h>
+#include <Oxygen/Vortex/SceneRenderer/DepthPrePassPolicy.h>
 #include <Oxygen/Vortex/SceneRenderer/Internal/FramePlanBuilder.h>
-#include <Oxygen/Vortex/SceneRenderer/Internal/ShaderDebugMode.h>
 #include <Oxygen/Vortex/SceneRenderer/Internal/ShaderPassConfig.h>
 #include <Oxygen/Vortex/SceneRenderer/Internal/ToneMapPassConfig.h>
+#include <Oxygen/Vortex/SceneRenderer/Internal/ViewRenderPlan.h>
+#include <Oxygen/Vortex/ShaderDebugMode.h>
 #include <Oxygen/Vortex/Test/Fakes/Graphics.h>
+#include <Oxygen/Vortex/Types/CompositingTask.h>
 #include <Oxygen/Vortex/ViewFeatureProfile.h>
 
 namespace {

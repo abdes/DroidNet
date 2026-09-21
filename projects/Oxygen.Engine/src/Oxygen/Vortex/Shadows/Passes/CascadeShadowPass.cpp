@@ -4,22 +4,24 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Vortex/Shadows/Passes/CascadeShadowPass.h>
-
 #include <algorithm>
 #include <array>
+#include <cstdint>
+#include <memory>
+#include <span>
 #include <vector>
 
-#include <glm/vec3.hpp>
-#include <glm/vec4.hpp>
-
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/Shadows/Internal/CascadeShadowSetup.h>
 #include <Oxygen/Vortex/Shadows/Internal/ConventionalShadowTargetAllocator.h>
 #include <Oxygen/Vortex/Shadows/Internal/PointShadowSetup.h>
 #include <Oxygen/Vortex/Shadows/Internal/ShadowCasterCulling.h>
 #include <Oxygen/Vortex/Shadows/Internal/SpotShadowSetup.h>
+#include <Oxygen/Vortex/Shadows/Passes/CascadeShadowPass.h>
 #include <Oxygen/Vortex/Shadows/Passes/ShadowDepthPass.h>
+#include <Oxygen/Vortex/Shadows/Types/FrameShadowInputs.h>
+#include <Oxygen/Vortex/Types/FrameLightSelection.h>
 
 namespace oxygen::vortex::shadows {
 

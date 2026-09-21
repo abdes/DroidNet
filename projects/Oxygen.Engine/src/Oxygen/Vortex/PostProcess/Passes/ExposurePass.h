@@ -337,13 +337,13 @@ namespace postprocess {
     std::unique_ptr<::oxygen::vortex::internal::PerViewStructuredPublisher<
       std::array<std::uint32_t, 28U>>>
       average_constants_publisher_;
-    std::optional<graphics::ComputePipelineDesc> clear_pipeline_ {};
-    std::optional<graphics::ComputePipelineDesc> histogram_pipeline_ {};
-    std::optional<graphics::ComputePipelineDesc> average_pipeline_ {};
-    std::optional<graphics::ComputePipelineDesc> frame_pipeline_ {};
-    std::optional<graphics::ComputePipelineDesc> fallback_pipeline_ {};
-    std::optional<graphics::ComputePipelineDesc> convert_pipeline_ {};
-    std::optional<graphics::ComputePipelineDesc> eligibility_pipeline_ {};
+    std::optional<graphics::ComputePipelineDesc> clear_pipeline_;
+    std::optional<graphics::ComputePipelineDesc> histogram_pipeline_;
+    std::optional<graphics::ComputePipelineDesc> average_pipeline_;
+    std::optional<graphics::ComputePipelineDesc> frame_pipeline_;
+    std::optional<graphics::ComputePipelineDesc> fallback_pipeline_;
+    std::optional<graphics::ComputePipelineDesc> convert_pipeline_;
+    std::optional<graphics::ComputePipelineDesc> eligibility_pipeline_;
     std::array<std::optional<graphics::ComputePipelineDesc>, 4>
       suitability_pipelines_;
     std::unique_ptr<::oxygen::vortex::internal::PerViewStructuredPublisher<
@@ -375,7 +375,7 @@ namespace postprocess {
     std::unordered_map<CompositionView::ViewStateHandle, StateLease>
       bootstrap_states_;
     std::unordered_map<CompositionView::ViewStateHandle, PerViewExposureState>
-      exposure_states_ {};
+      exposure_states_;
     std::unordered_map<CompositionView::ViewStateHandle, PendingViewState>
       pending_view_states_;
     std::unordered_map<const FrameResources*, const graphics::CommandRecorder*>

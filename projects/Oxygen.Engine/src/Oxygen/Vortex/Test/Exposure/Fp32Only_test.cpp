@@ -5,13 +5,19 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
-#include <cmath>
 #include <limits>
+#include <utility>
 
+#include <Oxygen/Console/Command.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/PostProcess.h>
+#include <Oxygen/Data/MaterialDomain.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Scene/Environment/Fog.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
+#include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsService.h>
 #include <Oxygen/Vortex/PostProcess/PostProcessService.h>
 #include <Oxygen/Vortex/RenderContext.h>
@@ -21,6 +27,7 @@
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestGraphics.h>
 #include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
 #include <Oxygen/Vortex/Types/ExposureStateData.h>
+#include <Oxygen/Vortex/Types/ExposureTransition.h>
 
 namespace oxygen::vortex::testing::exposure {
 
@@ -83,7 +90,7 @@ NOLINT_TEST_F(ExposureLightingGpuTest,
     ASSERT_TRUE(seed.has_value());
     Probe::ExposureStatusJobs held;
     bool hold = true;
-    probe->after_submit = [&]() -> void {
+    probe->after_submit = [&] -> void {
       if (hold) {
         held = Probe::TakeExposureStatuses(service, handle);
       }

@@ -37,7 +37,7 @@ enum class StaticSkyLightProcessFailure : std::uint8_t {
 struct StaticSkyLightCpuProducts {
   std::array<glm::vec4, kStaticSkyLightDiffuseShElementCount>
     diffuse_irradiance_sh {};
-  std::vector<glm::vec4> processed_rgba {};
+  std::vector<glm::vec4> processed_rgba;
   std::uint32_t output_face_size { 0U };
   std::uint32_t mip_count { 0U };
   float source_radiance_scale { 1.0F };

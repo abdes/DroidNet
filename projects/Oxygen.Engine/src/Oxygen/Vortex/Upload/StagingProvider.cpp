@@ -4,7 +4,13 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
+#include <memory>
+#include <utility>
+
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Core/Types/ByteUnits.h>
+#include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Vortex/Upload/StagingProvider.h>
 
 namespace oxygen::vortex::upload {

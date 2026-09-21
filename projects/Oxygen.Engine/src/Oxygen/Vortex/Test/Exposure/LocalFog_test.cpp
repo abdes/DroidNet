@@ -19,29 +19,47 @@
 
 #include <glm/gtc/matrix_access.hpp>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Config/RendererConfig.h>
+#include <Oxygen/Console/Command.h>
 #include <Oxygen/Console/Console.h>
+#include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
+#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
+#include <Oxygen/Core/Types/ShaderType.h>
+#include <Oxygen/Core/Types/TextureType.h>
+#include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/FrameCaptureController.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
+#include <Oxygen/Graphics/Common/Shaders.h>
+#include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/Color.h>
+#include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
-#include <Oxygen/Scene/Environment/Fog.h>
 #include <Oxygen/Scene/Environment/LocalFogVolume.h>
+#include <Oxygen/Scene/ExposureSettings.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/Environment/Internal/LocalFogVolumeState.h>
 #include <Oxygen/Vortex/Environment/Passes/FogPass.h>
 #include <Oxygen/Vortex/Environment/Passes/LocalFogVolumeComposePass.h>
 #include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
 #include <Oxygen/Vortex/PostProcess/PostProcessService.h>
 #include <Oxygen/Vortex/Renderer.h>
+#include <Oxygen/Vortex/RendererCapability.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureGpuFixture.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestTags.h>
 #include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
+#include <Oxygen/Vortex/Types/ExposureStateData.h>
 #include <Oxygen/Vortex/Types/ViewConstants.h>
 #include <Oxygen/Vortex/Types/ViewFrameBindings.h>
 
@@ -86,9 +104,7 @@ NOLINT_TEST_F(ExposureGpuTest, LocalFogInjectionMatchesMixedMediumIntegral)
     .2F,
   });
   fog_scene->Update();
-  auto resolved = ResolvedView {
-    ResolvedView::Params {},
-  };
+  auto resolved = ResolvedView { ResolvedView::Params {} };
   ctx_.scene = observer_ptr {
     fog_scene.get(),
   };
@@ -129,9 +145,11 @@ NOLINT_TEST_F(ExposureGpuTest, LocalFogInjectionMatchesMixedMediumIntegral)
     recorder->RequireResourceState(*tiles, ResourceStates::kCopyDest);
     recorder->FlushBarriers();
     recorder->CopyBufferToTexture(*tile_upload,
-      { .buffer_row_pitch = 256,
+      {
+        .buffer_row_pitch = 256,
         .buffer_slice_pitch = 256,
-        .dst_slice = { .width = 1, .height = 1, .depth = 1, }, },
+        .dst_slice = { .width = 1, .height = 1, .depth = 1 },
+      },
       *tiles);
     recorder->RequireResourceStateFinal(
       *tiles, ResourceStates::kShaderResource);
@@ -365,8 +383,10 @@ NOLINT_TEST_F(ExposureGpuTest, LocalFogInjectionMatchesMixedMediumIntegral)
         .near_fade_in_distance_m = 0,
         .global_extinction_scale = 1,
       };
-      params.grid_z = { .grid_z_params = { 1, 0, 1, },
-        .shadowed_directional_light0_enabled = 0, };
+      params.grid_z = {
+        .grid_z_params = { 1, 0, 1 },
+        .shadowed_directional_light0_enabled = 0,
+      };
       params.height_fog0.primary_density = test.global_density;
       params.height_fog1.match_height_fog_factor = 1;
       params.height_fog1.enabled = 1;
@@ -374,9 +394,11 @@ NOLINT_TEST_F(ExposureGpuTest, LocalFogInjectionMatchesMixedMediumIntegral)
         = { .albedo_rgb = { test.scattering ? 1.0F : 0.0F,
               test.scattering ? 1.0F : 0.0F, test.scattering ? 1.0F : 0.0F, },
             .scattering_distribution = 0, };
-      params.media1 = { .emissive_rgb
-        = { test.global_emission, test.global_emission, test.global_emission, },
-        .static_lighting_scattering_intensity = 1, };
+      params.media1 = {
+        .emissive_rgb
+        = { test.global_emission, test.global_emission, test.global_emission },
+        .static_lighting_scattering_intensity = 1,
+      };
       params.local_fog0 = {
         .instance_buffer_slot = products.instance_buffer_slot.get(),
         .tile_data_texture_slot = tile_slot.get(),
@@ -549,9 +571,11 @@ NOLINT_TEST_F(ExposureGpuTest, AuthoredLocalFogPreservesRadiometryThroughUpload)
   auto state = environment::internal::LocalFogVolumeState(*renderer_);
   auto compose = environment::LocalFogVolumeComposePass(*renderer_);
   auto textures = SceneTextures(Backend(),
-    { .extent = { 1U, 1U, },
+    {
+      .extent = { 1U, 1U },
       .enable_velocity = false,
-      .scene_color_format = Format::kRGBA32Float, });
+      .scene_color_format = Format::kRGBA32Float,
+    });
   auto framebuffer = Backend().CreateFramebuffer(FramebufferDesc {}
       .AddColorAttachment(textures.GetSceneColorResource())
       .SetDepthAttachment({
@@ -580,10 +604,12 @@ NOLINT_TEST_F(ExposureGpuTest, AuthoredLocalFogPreservesRadiometryThroughUpload)
     recorder->RequireResourceState(*tiles, ResourceStates::kCopyDest);
     recorder->FlushBarriers();
     recorder->CopyBufferToTexture(*tile_upload,
-      { .buffer_offset = 0U,
+      {
+        .buffer_offset = 0U,
         .buffer_row_pitch = 256U,
         .buffer_slice_pitch = 256U,
-        .dst_slice = { .width = 1, .height = 1, .depth = 1, }, },
+        .dst_slice = { .width = 1, .height = 1, .depth = 1 },
+      },
       *tiles);
     recorder->RequireResourceStateFinal(
       *tiles, ResourceStates::kShaderResource);

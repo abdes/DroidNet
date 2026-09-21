@@ -33,7 +33,7 @@ class Graphics;
 namespace oxygen::vortex::internal {
 
 struct CompositingPassConfig {
-  std::shared_ptr<graphics::Texture> source_texture {};
+  std::shared_ptr<graphics::Texture> source_texture;
   ViewPort viewport {};
   float alpha { 1.0F };
   std::string debug_name { "CompositingPass" };
@@ -61,7 +61,7 @@ private:
     = static_cast<size_t>(frame::kFramesInFlight.get());
 
   struct PassConstantsChunk {
-    std::shared_ptr<graphics::Buffer> buffer {};
+    std::shared_ptr<graphics::Buffer> buffer;
     std::byte* mapped_ptr { nullptr };
     std::array<ShaderVisibleIndex, kPassConstantsChunkSlots> indices {};
     uint32_t used_slots { 0u };
@@ -69,7 +69,7 @@ private:
 
   struct FramePassConstantsState {
     frame::SequenceNumber frame_sequence { frame::kInvalidSequenceNumber };
-    std::vector<PassConstantsChunk> chunks {};
+    std::vector<PassConstantsChunk> chunks;
   };
 
   auto ReleasePassConstantsBuffer() -> void;
@@ -93,7 +93,7 @@ private:
     -> ShaderVisibleIndex;
   auto UpdatePassConstants(ShaderVisibleIndex source_texture_index) -> void;
 
-  std::shared_ptr<Config> config_ {};
+  std::shared_ptr<Config> config_;
   observer_ptr<Graphics> graphics_ { nullptr };
   std::array<FramePassConstantsState, kFrameSlotCount>
     pass_constants_frames_ {};

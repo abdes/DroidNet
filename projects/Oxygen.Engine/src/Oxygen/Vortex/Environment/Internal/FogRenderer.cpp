@@ -4,8 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Vortex/Environment/Internal/FogRenderer.h>
+#include <memory>
 
+#include <Oxygen/Vortex/Environment/Internal/FogRenderer.h>
 #include <Oxygen/Vortex/Environment/Passes/FogPass.h>
 
 namespace oxygen::vortex::environment {

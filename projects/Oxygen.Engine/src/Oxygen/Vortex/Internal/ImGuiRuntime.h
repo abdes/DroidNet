@@ -39,7 +39,7 @@ namespace oxygen::vortex::internal {
 class ImGuiRuntime {
 public:
   struct OverlayComposition {
-    std::shared_ptr<graphics::Texture> texture {};
+    std::shared_ptr<graphics::Texture> texture;
     ViewPort viewport {};
   };
 
@@ -74,15 +74,15 @@ private:
     std::uint32_t width, std::uint32_t height) -> bool;
   auto ClearOverlayFramebuffer() noexcept -> void;
 
-  std::shared_ptr<Platform> platform_ {};
-  std::shared_ptr<graphics::imgui::ImGuiGraphicsBackend> graphics_backend_ {};
-  std::unique_ptr<platform::imgui::ImGuiSdl3Backend> platform_backend_ {};
+  std::shared_ptr<Platform> platform_;
+  std::shared_ptr<graphics::imgui::ImGuiGraphicsBackend> graphics_backend_;
+  std::unique_ptr<platform::imgui::ImGuiSdl3Backend> platform_backend_;
   platform::WindowIdType window_id_ { platform::kInvalidWindowId };
   std::size_t platform_window_destroy_handler_token_ { 0U };
   bool initialized_ { false };
   bool frame_started_ { false };
-  std::shared_ptr<graphics::Texture> overlay_texture_ {};
-  std::shared_ptr<graphics::Framebuffer> overlay_framebuffer_ {};
+  std::shared_ptr<graphics::Texture> overlay_texture_;
+  std::shared_ptr<graphics::Framebuffer> overlay_framebuffer_;
   std::uint32_t overlay_width_ { 0U };
   std::uint32_t overlay_height_ { 0U };
 };

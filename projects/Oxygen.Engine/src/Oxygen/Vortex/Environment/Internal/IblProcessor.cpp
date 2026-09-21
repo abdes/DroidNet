@@ -4,16 +4,24 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Vortex/Environment/Internal/IblProcessor.h>
-
+#include <algorithm>
 #include <array>
+#include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <span>
+#include <tuple>
+#include <utility>
 #include <vector>
 
-#include <Oxygen/Base/Logging.h>
+#include <glm/ext/vector_float4.hpp>
+
 #include <Oxygen/Content/IAssetLoader.h>
+#include <Oxygen/Core/Bindless/Generated.BindlessAbi.h>
+#include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Data/HalfFloat.h>
 #include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
@@ -22,11 +30,16 @@
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
+#include <Oxygen/Graphics/Common/Types/ResourceAccessMode.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
+#include <Oxygen/Vortex/Environment/Internal/IblProcessor.h>
 #include <Oxygen/Vortex/Environment/Internal/ResourceRetirement.h>
 #include <Oxygen/Vortex/Environment/Internal/StaticSkyLightProcessor.h>
 #include <Oxygen/Vortex/Environment/Passes/IblProbePass.h>
+#include <Oxygen/Vortex/Environment/Types/EnvironmentProbeState.h>
+#include <Oxygen/Vortex/Environment/Types/SkyLightEnvironmentModel.h>
+#include <Oxygen/Vortex/Environment/Types/StaticSkyLightProducts.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/Upload/Types.h>
 #include <Oxygen/Vortex/Upload/UploadCoordinator.h>
@@ -87,10 +100,10 @@ namespace {
 struct IblProcessor::StaticSkyLightProductCache {
   StaticSkyLightProductKey key {};
   StaticSkyLightProducts products {};
-  std::shared_ptr<graphics::Texture> processed_cubemap {};
-  std::shared_ptr<graphics::Buffer> diffuse_sh_buffer {};
-  std::optional<upload::UploadTicket> processed_cubemap_upload {};
-  std::optional<upload::UploadTicket> diffuse_sh_upload {};
+  std::shared_ptr<graphics::Texture> processed_cubemap;
+  std::shared_ptr<graphics::Buffer> diffuse_sh_buffer;
+  std::optional<upload::UploadTicket> processed_cubemap_upload;
+  std::optional<upload::UploadTicket> diffuse_sh_upload;
   bool has_submitted_current_key { false };
   double half_storage_gain_limit { 0.0 };
   Format processed_format { Format::kRGBA16Float };
@@ -109,7 +122,7 @@ auto IblProcessor::RefreshPersistentProbes(
   const EnvironmentProbeState& current_state,
   const bool environment_source_changed) -> RefreshState
 {
-  static_cast<void>(renderer_);
+  std::ignore = renderer_;
   const auto refreshed
     = probe_pass_->Refresh(current_state, environment_source_changed);
   return {
@@ -131,7 +144,7 @@ auto IblProcessor::RefreshStaticSkyLightProducts(
       source_cubemap = asset_loader->GetTexture(sky_light.cubemap_resource);
       if (source_cubemap == nullptr) {
         asset_loader->StartLoadTexture(sky_light.cubemap_resource,
-          [](std::shared_ptr<data::TextureResource>) { });
+          [](std::shared_ptr<data::TextureResource>) -> void { });
         source_cubemap = asset_loader->GetTexture(sky_light.cubemap_resource);
       }
     }

@@ -10,7 +10,6 @@
 #include <memory>
 
 #include <Oxygen/Core/Types/View.h>
-
 #include <Oxygen/Vortex/Types/ScreenHzbFrameBindings.h>
 #include <Oxygen/Vortex/api_export.h>
 
@@ -32,8 +31,8 @@ class SceneTextures;
 class ScreenHzbModule {
 public:
   struct Output {
-    std::shared_ptr<const graphics::Texture> closest_texture {};
-    std::shared_ptr<const graphics::Texture> furthest_texture {};
+    std::shared_ptr<const graphics::Texture> closest_texture;
+    std::shared_ptr<const graphics::Texture> furthest_texture;
     ScreenHzbFrameBindings bindings {};
     bool available { false };
   };

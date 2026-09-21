@@ -6,17 +6,25 @@
 
 #include <algorithm>
 #include <array>
-#include <cmath>
+#include <cstddef>
+#include <cstdint>
 #include <cstring>
+#include <memory>
+#include <optional>
 #include <span>
 #include <stdexcept>
+#include <string_view>
 #include <utility>
 
 #include <fmt/format.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/Scissors.h>
+#include <Oxygen/Core/Types/ShaderType.h>
+#include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
@@ -24,11 +32,15 @@
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
+#include <Oxygen/Graphics/Common/Shaders.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
+#include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Vortex/Internal/CompositingAlphaSanitizer.h>
 #include <Oxygen/Vortex/Internal/CompositingPass.h>
+#include <Oxygen/Vortex/Passes/GraphicsRenderPass.h>
 #include <Oxygen/Vortex/RenderContext.h>
 
 namespace oxygen::vortex::internal {

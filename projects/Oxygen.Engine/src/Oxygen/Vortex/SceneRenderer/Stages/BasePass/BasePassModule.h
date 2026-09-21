@@ -98,20 +98,20 @@ private:
   std::unique_ptr<internal::PerViewStructuredPublisher<std::array<float, 8>>>
     wireframe_constants_publisher_;
   std::optional<frame::SequenceNumber> wireframe_constants_frame_;
-  std::shared_ptr<oxygen::graphics::Framebuffer> framebuffer_ {};
-  std::shared_ptr<oxygen::graphics::Framebuffer> color_clear_framebuffer_ {};
-  std::shared_ptr<oxygen::graphics::Framebuffer> forward_framebuffer_ {};
-  std::shared_ptr<oxygen::graphics::Framebuffer> range_framebuffer_ {};
-  std::shared_ptr<oxygen::graphics::Framebuffer> forward_range_framebuffer_ {};
+  std::shared_ptr<oxygen::graphics::Framebuffer> framebuffer_;
+  std::shared_ptr<oxygen::graphics::Framebuffer> color_clear_framebuffer_;
+  std::shared_ptr<oxygen::graphics::Framebuffer> forward_framebuffer_;
+  std::shared_ptr<oxygen::graphics::Framebuffer> range_framebuffer_;
+  std::shared_ptr<oxygen::graphics::Framebuffer> forward_range_framebuffer_;
   std::shared_ptr<oxygen::graphics::Framebuffer>
-    forward_color_clear_framebuffer_ {};
-  std::shared_ptr<oxygen::graphics::Framebuffer> wireframe_framebuffer_ {};
-  std::shared_ptr<oxygen::graphics::Texture> velocity_base_copy_ {};
+    forward_color_clear_framebuffer_;
+  std::shared_ptr<oxygen::graphics::Framebuffer> wireframe_framebuffer_;
+  std::shared_ptr<oxygen::graphics::Texture> velocity_base_copy_;
   std::shared_ptr<oxygen::graphics::Texture>
-    velocity_motion_vector_world_offset_ {};
-  std::shared_ptr<oxygen::graphics::Framebuffer> velocity_aux_framebuffer_ {};
+    velocity_motion_vector_world_offset_;
+  std::shared_ptr<oxygen::graphics::Framebuffer> velocity_aux_framebuffer_;
   std::shared_ptr<oxygen::graphics::Framebuffer>
-    velocity_aux_color_clear_framebuffer_ {};
+    velocity_aux_color_clear_framebuffer_;
 };
 
 } // namespace oxygen::vortex
