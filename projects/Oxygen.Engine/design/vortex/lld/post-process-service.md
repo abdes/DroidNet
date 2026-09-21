@@ -1275,6 +1275,31 @@ EX051-10. EX051-12 maps changed contracts to focused owning checks; EX051-13
 alone wires and measures this combined script. Startup belongs to a separate
 window, never to the warm transition distribution.
 
+## Slice 5.2 residual-quality checkpoint
+
+**Validated 2026-09-21; implementation `9ff39edcc`, include repair `dc9ef824e`.**
+The [tracker result](../IMPLEMENTATION_STATUS.md#322-slice-52-code-quality-and-test-structure)
+and [checkpoint](../../../out/build-ninja/analysis/vortex/exposure-lightbench/slice52/checkpoint-manifest.json)
+own the selected checks, raw evidence and excluded diagnostics.
+
+ExposurePass constructs suitability and composition constants through named
+local records matching the existing HLSL word order. Both remain 128 bytes and
+publish through the existing raw-word publisher; size and shared interpretation
+offsets are asserted. Product identities and control bits retain their wire
+values. Fixed low/high identity words use compile-time element access; runtime
+frame/product indices and required pipeline descriptors are checked before use.
+The service validates an optional seed locally and explicitly initializes
+partial input/status records and prepared ownership identities. Public function
+signatures, GPU/shader layouts, submission publication, lifetime retention and
+independent numerical oracles are preserved.
+
+The approved Release-only benchmark repair restores direct includes without
+changing its body or enabled/disabled identity. Changed code has no clang-tidy
+warnings or added suppressions. The affected 65 cases pass in each configuration;
+one matched I02 run preserves the accepted operating point and byte-identical
+endpoint output. Broader completed gates are reused; this quality pass does not
+claim the deferred CPU optimization targets or begin Slice 6.
+
 ## Post chain and qualification
 
 Owner exposure solves from FP32 accumulation before Stage 21 optionally resolves
