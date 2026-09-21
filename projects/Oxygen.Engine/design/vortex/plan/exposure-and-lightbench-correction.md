@@ -7,7 +7,7 @@ Status: `in_progress` — current slice state and evidence are maintained in the
 are updated there; this plan owns the requirements and gates.
 
 Date: 2026-09-16
-Updated: 2026-09-21 — Slice 5.1 closed; Slice 5.2 narrowed to residual fixes and impact-based validation.
+Updated: 2026-09-21 — Slices 5.1 and 5.2 closed; Slice 6 remains separately authorized work.
 
 Paths are relative to `projects/Oxygen.Engine` unless identified as
 repository-root paths.
@@ -27,16 +27,16 @@ Engine correctness slices use native fixtures and RenderDoc before the bench
 instrumentation is available. Performance acceptance uses Oxygen's built-in
 profiling and native Release execution. Each slice includes its tests and
 owning-document updates. The user approved the inserted plan and authorized
-Slice 5.1 execution on 2026-09-19. Slice 5.2 now requires agreement only on the
-finite residual fix list and necessary API changes before quality edits.
+Slice 5.1 execution on 2026-09-19. Slice 5.2 completed its approved finite
+residual batch and separately approved blocking Release include repair.
 
 For a fresh start or resume, read the tracker's
 [Current work](../IMPLEMENTATION_STATUS.md#31-current-work) for the active
 checkpoint and execution state. Its
 [remaining performance order](../IMPLEMENTATION_STATUS.md#delivery-order-and-ownership)
-is complete. Slice 5.1 closed on 2026-09-21; Slice 5.2 is unblocked but not
-started. Do not restart completed items from historical milestone or manifest
-instructions.
+is complete. Slices 5.1 and 5.2 closed on 2026-09-21. Slice 6 remains planned
+and separately authorized. Do not restart completed items from historical
+milestone or manifest instructions.
 
 The [exposure reference companion](../lld/exposure-improvement-plan.md) contains
 UE source pointers and Oxygen's implementation choices. This document owns
@@ -974,6 +974,14 @@ is required in Slice 5.1.
 
 ### Slice 5.2 - Close remaining exposure quality issues
 
+**Validated 2026-09-21.** The approved residual batch and Release include repair
+are committed as `9ff39edcc` and `dc9ef824e`. Scoped changed code is tidy-clean;
+65 selected Debug and 65 Release cases pass. A single matched I02 run confirms
+performance/resource preservation and four byte-identical endpoint images.
+The [checkpoint](../../../out/build-ninja/analysis/vortex/exposure-lightbench/slice52/checkpoint-manifest.json)
+records raw references, retained diagnostics and reused evidence. No new warning
+suppression was added. The following requirements governed the completed pass.
+
 **Scope revised 2026-09-21 at the user's request.** The authoritative residual
 scope, reused evidence and change-specific checks are in
 [IMPLEMENTATION_STATUS.md, Slice 5.2](../IMPLEMENTATION_STATUS.md#322-slice-52-code-quality-and-test-structure).
@@ -1014,7 +1022,7 @@ remain closed.
 **Gate:** the agreed residual fixes are resolved, changed code is tidy-clean,
 necessary affected checks pass, and existing contracts and accepted performance
 are preserved. Slice 6 starts only after this bounded gate and separate work
-authorization. This plan revision does not start implementation.
+authorization. That next slice has not started.
 
 ### Slice 6 - Finish authoring, serialization and configuration isolation
 

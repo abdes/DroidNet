@@ -83,16 +83,15 @@ physical lights; independent instruments; interactive demos; final acceptance.
 
 Status: `in_progress`. Slices 1-5 have numerical/integration qualification;
 Slice 5.1 closed on 2026-09-21 at the user-accepted measured CPU cost. Further
-CPU optimization belongs to a later milestone. Slice 5.2 is now a focused
-residual-quality pass: agree remaining useful fixes, implement them, validate
-affected code and close. Its fixture extraction, native test splitting and broad
-test-quality review are already delivered and are not repeated. Existing passing
-checks are reused; broad suites, benchmarks and visual runs require a concrete
-change-impact reason. No new implementation starts with this plan revision.
-Follow the tracker's [Current work](IMPLEMENTATION_STATUS.md#31-current-work) and
-[revised 5.2 scope](IMPLEMENTATION_STATUS.md#322-slice-52-code-quality-and-test-structure).
-EX052-02 owns agreement on the actual residual fixes and any proposed API change;
-the former standalone EX052-03 design task is merged into it.
+CPU optimization belongs to a later milestone. Slice 5.2 also closed on
+2026-09-21: the approved residual owner fixes and blocking Release include repair
+are committed, scoped changed code is tidy-clean, 65 cases pass in each build
+configuration, and one matched I02 run preserves the accepted operating point.
+Fixture decomposition, broader test review and the completed performance matrix
+were reused. The tracker's [Current work](IMPLEMENTATION_STATUS.md#31-current-work)
+and [5.2 result](IMPLEMENTATION_STATUS.md#322-slice-52-code-quality-and-test-structure)
+own the exact checks, excluded diagnostics and evidence. Slice 6 is next and
+requires separate authorization.
 Slices 6-10, including the full LightBench delivery, are still
 required. Earlier incremental test counts and proofs remain in the tracker's
 linked manifests and Git history; the
