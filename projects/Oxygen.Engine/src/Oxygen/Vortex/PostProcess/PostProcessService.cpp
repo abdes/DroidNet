@@ -54,6 +54,7 @@
 #include <Oxygen/Vortex/Resources/TextureBinder.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
 #include <Oxygen/Vortex/ShaderDebugMode.h>
+#include <Oxygen/Vortex/Types/ExposureSettingsStatus.h>
 #include <Oxygen/Vortex/Types/ExposureStateData.h>
 #include <Oxygen/Vortex/Types/ExposureTransition.h>
 
@@ -184,6 +185,34 @@ auto PostProcessService::BuildPassConfig(const PostProcessConfig& config,
   return { config, accepted.resolved, accepted.revision, accepted.camera_ev };
 }
 
+auto PostProcessService::InspectExposureSettings(
+  const CompositionView::ViewStateHandle handle) const
+  -> std::optional<ExposureSettingsStatus>
+{
+  const auto found = exposure_settings_.find(handle);
+  if (found == exposure_settings_.end()) {
+    return std::nullopt;
+  }
+  const auto& state = found->second;
+  const bool current_observation = state.observed_frame != 0U
+    && state.observed_control_revision
+      == renderer_.GetDiagnosticsService().GetHdrPrecisionControlRevision();
+  return ExposureSettingsStatus {
+    .active_settings = state.revision != 0U
+      ? std::optional { state.resolved.authored }
+      : std::nullopt,
+    .active_camera_ev = state.camera_ev,
+    .revision = state.revision,
+    .settings_error = state.last_error,
+    .mask_status = state.mask_status,
+    .requested_mask = state.requested_mask,
+    .mask_error = state.mask_error,
+    .metering_input_failed
+    = current_observation ? state.metering_input_failed : std::nullopt,
+    .observed_frame = current_observation ? state.observed_frame : 0U,
+  };
+}
+
 auto PostProcessService::ResolveViewExposureSettings(
   const CompositionView::ViewStateHandle handle,
   const scene::ExposureSettings& requested,
@@ -285,6 +314,8 @@ auto PostProcessService::ResolveViewExposureSettings(
     || state->resolved.fixed_scale != candidate->fixed_scale) {
     state->resolved = *candidate;
     ++state->revision;
+    state->metering_input_failed.reset();
+    state->observed_frame = 0U;
   }
   state->camera_ev = camera_ev;
   state->last_error.reset();
@@ -1443,6 +1474,17 @@ auto PostProcessService::PollExposureStatus() -> void
               != job.precision->layout_revision)) {
           return true; // A complete stale packet cannot become valid by
                        // retrying.
+        }
+        if (const auto found = exposure_settings_.find(job.handle);
+          found != exposure_settings_.end()
+          && found->second.lifetime == job.lifetime
+          && found->second.revision == job.settings_revision
+          && found->second.observed_frame < job.frame_sequence) {
+          constexpr uint32_t kMeteringInputFailed = 1U << 4U;
+          found->second.metering_input_failed
+            = (status.flags & kMeteringInputFailed) != 0U;
+          found->second.observed_frame = job.frame_sequence;
+          found->second.observed_control_revision = job.control_revision;
         }
         std::optional<ExposureTransitionError> rejection;
         if ((status.flags & 8U) != 0U) {

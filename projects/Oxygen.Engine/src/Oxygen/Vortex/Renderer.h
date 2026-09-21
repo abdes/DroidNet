@@ -37,6 +37,7 @@
 #include <Oxygen/Vortex/ShaderDebugMode.h>
 #include <Oxygen/Vortex/Types/CompositingTask.h>
 #include <Oxygen/Vortex/Types/EnvironmentLightingState.h>
+#include <Oxygen/Vortex/Types/ExposureSettingsStatus.h>
 #include <Oxygen/Vortex/Types/ExposureTransition.h>
 #include <Oxygen/Vortex/Types/GroundGridConfig.h>
 #include <Oxygen/Vortex/Types/ViewConstants.h>
@@ -553,6 +554,13 @@ public:
     -> co::Co<> override;
   OXGN_VRTX_API auto OnFrameEnd(observer_ptr<engine::FrameContext> context)
     -> void override;
+
+  //! Read accepted exposure settings and existing asynchronous diagnostics for
+  //! a published runtime view. Call on the engine frame thread. Shared views
+  //! report their source owner. Resolve an intent ID with
+  //! ResolvePublishedRuntimeViewId before querying.
+  [[nodiscard]] OXGN_VRTX_API auto InspectExposureSettings(ViewId view_id) const
+    -> std::optional<ExposureSettingsStatus>;
 
   //! Queue runtime exposure intent. The renderer allocates the generation.
   //! A producer may queue before first rendering its persistent state handle.

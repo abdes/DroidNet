@@ -66,6 +66,7 @@ set(
   "Runtime/AppWindow.h"
   "Runtime/DemoAppContext.h"
   "Runtime/MainViewContract.h"
+  "Runtime/SceneActivationPolicy.h"
   "Runtime/RendererUiTypes.h"
   "Runtime/DemoModuleBase.h"
   "Runtime/PathNormalization.h"

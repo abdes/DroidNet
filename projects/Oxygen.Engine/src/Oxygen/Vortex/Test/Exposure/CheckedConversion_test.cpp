@@ -1070,8 +1070,8 @@ NOLINT_TEST_F(
         ctx_.current_view.view_state_handle, requested);
     EXPECT_EQ(captured.revision, 0U);
     EXPECT_EQ(captured.mask_status,
-      pending ? PostProcessService::ExposureMaskStatus::kPending
-              : PostProcessService::ExposureMaskStatus::kFailed);
+      pending ? oxygen::vortex::ExposureMaskStatus::kPending
+              : oxygen::vortex::ExposureMaskStatus::kFailed);
     auto config = PostProcessConfig {};
     service.SetResolvedConfig(service.BuildPassConfig(
       config, ctx_.current_view.view_id, ctx_.current_view.view_state_handle));

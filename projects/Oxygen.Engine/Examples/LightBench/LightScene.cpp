@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 
+#include "LightBench/LightScene.h"
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 
@@ -21,10 +22,10 @@
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
 #include <Oxygen/Data/ShaderReference.h>
+#include <Oxygen/Scene/Environment/PostProcessVolume.h>
+#include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Light/PointLight.h>
 #include <Oxygen/Scene/Light/SpotLight.h>
-
-#include "LightBench/LightScene.h"
 
 namespace oxygen::examples::light_bench {
 
@@ -78,7 +79,12 @@ LightScene::LightScene(std::string_view name)
 auto LightScene::CreateScene() -> std::unique_ptr<scene::Scene>
 {
   constexpr size_t kDefaultSceneCapacity = 128;
-  return std::make_unique<scene::Scene>(name_, kDefaultSceneCapacity);
+  auto result = std::make_unique<scene::Scene>(name_, kDefaultSceneCapacity);
+  auto environment = std::make_unique<scene::SceneEnvironment>();
+  static_cast<void>(
+    environment->AddSystem<scene::environment::PostProcessVolume>());
+  result->SetEnvironment(std::move(environment));
+  return result;
 }
 
 void LightScene::SetScene(observer_ptr<scene::Scene> scene)

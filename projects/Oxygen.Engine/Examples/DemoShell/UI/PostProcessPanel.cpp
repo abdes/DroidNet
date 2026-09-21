@@ -4,15 +4,28 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
+#include <array>
 #include <cmath>
+#include <cstddef>
+#include <iterator>
+#include <limits>
+#include <optional>
 #include <string>
+#include <string_view>
+#include <vector>
 
+#include "DemoShell/Runtime/SceneActivationPolicy.h"
+#include "DemoShell/UI/PostProcessPanel.h"
+#include "DemoShell/UI/PostProcessVm.h"
 #include <imgui.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/ImGui/Icons/IconsOxygenIcons.h>
-
-#include "DemoShell/UI/PostProcessPanel.h"
+#include <Oxygen/Scene/ExposureSettings.h>
+#include <Oxygen/Vortex/Types/ExposureSettingsStatus.h>
 
 // NOLINTBEGIN(cppcoreguidelines-pro-type-vararg)
 
@@ -31,19 +44,20 @@ auto PostProcessPanel::GetName() const noexcept -> std::string_view
 
 auto PostProcessPanel::GetPreferredWidth() const noexcept -> float
 {
-  return 320.0F;
+  constexpr float kPreferredPanelWidth = 360.0F;
+  return kPreferredPanelWidth;
 }
 
 auto PostProcessPanel::GetIcon() const noexcept -> std::string_view
 {
-  // Reusing Rendering icon as it fits best among available icons
-  static const std::string kPostProcessIcon
-    = std::string(imgui::icons::kIconHdrTonemap) + "##PostProcess";
-  return kPostProcessIcon;
+  return imgui::icons::kIconHdrTonemap;
 }
 
 auto PostProcessPanel::DrawContents() -> void
 {
+  const auto scene_scope = std::to_string(vm_->GetSceneRevision());
+  ImGui::PushID(scene_scope.c_str());
+  ImGui::PushTextWrapPos(0.0F);
   if (ImGui::CollapsingHeader("Exposure", ImGuiTreeNodeFlags_DefaultOpen)) {
     DrawExposureSection();
   }
@@ -51,272 +65,580 @@ auto PostProcessPanel::DrawContents() -> void
   if (ImGui::CollapsingHeader("Tonemapping", ImGuiTreeNodeFlags_DefaultOpen)) {
     DrawTonemappingSection();
   }
+  ImGui::PopTextWrapPos();
+  ImGui::PopID();
 }
+
+namespace {
+  constexpr float kPercentScale = 100.0F;
+
+  struct FloatDragOptions {
+    float step {};
+    float minimum {};
+    float maximum {};
+    const char* format { "%.3g" };
+  };
+
+  // Mouse-drag ranges are ergonomic defaults. Typed values are validated by
+  // the settings service against the complete exposure contract.
+  constexpr auto kEvDrag
+    = FloatDragOptions { .step = 0.1F, .minimum = -16.0F, .maximum = 24.0F };
+  constexpr auto kApertureDrag
+    = FloatDragOptions { .step = 0.1F, .minimum = 0.1F, .maximum = 64.0F };
+  constexpr auto kShutterDrag
+    = FloatDragOptions { .step = 1.0F, .minimum = 1.0F, .maximum = 8000.0F };
+  constexpr auto kIsoDrag
+    = FloatDragOptions { .step = 10.0F, .minimum = 1.0F, .maximum = 12800.0F };
+  constexpr auto kCompensationDrag
+    = FloatDragOptions { .step = 0.1F, .minimum = -10.0F, .maximum = 10.0F };
+  constexpr auto kAdaptationRateDrag
+    = FloatDragOptions { .step = 0.1F, .minimum = 0.0F, .maximum = 20.0F };
+  constexpr auto kSpotRadiusDrag
+    = FloatDragOptions { .step = 0.005F, .minimum = 0.0F, .maximum = 1.0F };
+  constexpr auto kCalibrationDrag
+    = FloatDragOptions { .step = 0.1F, .minimum = 0.1F, .maximum = 25.0F };
+  constexpr auto kLuminanceDrag
+    = FloatDragOptions { .step = 0.01F, .minimum = 0.0F, .maximum = 1.0F };
+  constexpr auto kPercentDrag = FloatDragOptions {
+    .step = 1.0F,
+    .minimum = 0.0F,
+    .maximum = kPercentScale,
+    .format = "%.1f",
+  };
+  constexpr auto kTransitionDrag
+    = FloatDragOptions { .step = 0.1F, .minimum = 0.01F, .maximum = 10.0F };
+  constexpr auto kGammaDrag = FloatDragOptions {
+    .step = 0.05F,
+    .minimum = engine::kMinDisplayGamma,
+    .maximum = 3.0F,
+  };
+
+  template <size_t Count, typename Draw>
+  auto NumericControl(
+    const char* id, std::array<float, Count>& values, const Draw& draw) -> bool
+  {
+    ImGui::PushID(id);
+    auto* storage = ImGui::GetStateStorage();
+    const auto editing_id = ImGui::GetID("editing");
+    const bool was_editing = storage->GetBool(editing_id);
+    auto draft = values;
+    for (size_t index = 0; index < Count; ++index) {
+      ImGui::PushID(static_cast<int>(index));
+      if (was_editing) {
+        draft.at(index)
+          = storage->GetFloat(ImGui::GetID("draft"), values.at(index));
+      }
+      ImGui::PopID();
+    }
+
+    const bool changed = draw(draft);
+    const bool editing = ImGui::IsItemActive() && ImGui::GetIO().WantTextInput;
+    const bool cancelled = was_editing && ImGui::IsKeyPressed(ImGuiKey_Escape);
+    storage->SetBool(editing_id, editing && !cancelled);
+    for (size_t index = 0; index < Count; ++index) {
+      ImGui::PushID(static_cast<int>(index));
+      storage->SetFloat(ImGui::GetID("draft"), draft.at(index));
+      ImGui::PopID();
+    }
+    ImGui::PopID();
+
+    // Preserve text drafts across frames so Tab and focus loss commit the
+    // same value as Enter. Escape cancels; pointer drags still update live.
+    if (editing || cancelled || (!changed && !was_editing) || draft == values) {
+      return false;
+    }
+    values = draft;
+    return true;
+  }
+
+  auto FloatControl(const char* label, float& value,
+    const FloatDragOptions& options, const char* help) -> bool
+  {
+    ImGui::PushID(label);
+    ImGui::TextUnformatted(label);
+    if (ImGui::IsItemHovered()) {
+      ImGui::SetTooltip("%s", help);
+    }
+    ImGui::SetNextItemWidth(-1.0F);
+    auto values = std::array { value };
+    const bool changed
+      = NumericControl("value", values, [&options](auto& draft) -> bool {
+          return ImGui::DragFloat("##value", &draft.front(), options.step,
+            options.minimum, options.maximum, options.format);
+        });
+    value = values.front();
+    if (ImGui::IsItemHovered()) {
+      ImGui::SetTooltip("%s", help);
+    }
+    ImGui::PopID();
+    return changed;
+  }
+
+  auto ExposureModeLabel(const engine::ExposureMode mode) -> const char*
+  {
+    switch (mode) {
+    case engine::ExposureMode::kManual:
+      return "Manual EV100";
+    case engine::ExposureMode::kManualCamera:
+      return "Physical camera";
+    case engine::ExposureMode::kAuto:
+      return "Automatic";
+    }
+    return "Unknown";
+  }
+
+  auto CurveIsOrdered(const std::vector<scene::ExposureCompensationKey>& keys)
+    -> bool
+  {
+    auto previous = -std::numeric_limits<float>::infinity();
+    for (const auto& key : keys) {
+      if (!std::isfinite(key.metered_ev) || !std::isfinite(key.compensation_ev)
+        || key.metered_ev <= previous) {
+        return false;
+      }
+      previous = key.metered_ev;
+    }
+    return true;
+  }
+
+  auto DrawCurvePreview(const std::vector<scene::ExposureCompensationKey>& keys)
+    -> void
+  {
+    if (keys.empty()) {
+      return;
+    }
+    const auto size = ImVec2(
+      ImGui::GetContentRegionAvail().x, ImGui::GetFrameHeight() * 4.0F);
+    ImGui::InvisibleButton("Curve preview", size);
+    const auto minimum = ImGui::GetItemRectMin();
+    const auto maximum = ImGui::GetItemRectMax();
+    auto* draw = ImGui::GetWindowDrawList();
+    draw->AddRectFilled(minimum, maximum, ImGui::GetColorU32(ImGuiCol_FrameBg),
+      ImGui::GetStyle().FrameRounding);
+    const auto padding = ImGui::GetStyle().FramePadding;
+    if (!CurveIsOrdered(keys)) {
+      draw->AddText(ImVec2(minimum.x + padding.x, minimum.y + padding.y),
+        ImGui::GetColorU32(ImGuiCol_TextDisabled), "Preview unavailable");
+      return;
+    }
+    double min_ev = keys.front().metered_ev;
+    double max_ev = keys.back().metered_ev;
+    constexpr double kConstantCurvePaddingFraction = 0.1;
+    if (min_ev == max_ev) {
+      const double margin
+        = (std::max)(1.0, std::abs(min_ev) * kConstantCurvePaddingFraction);
+      min_ev -= margin;
+      max_ev += margin;
+    }
+    auto min_compensation = static_cast<double>(keys.front().compensation_ev);
+    auto max_compensation = min_compensation;
+    for (const auto& key : keys) {
+      min_compensation = (std::min)(min_compensation,
+        static_cast<double>(key.compensation_ev));
+      max_compensation = (std::max)(max_compensation,
+        static_cast<double>(key.compensation_ev));
+    }
+    if (min_compensation == max_compensation) {
+      const double margin = (std::max)(1.0,
+        std::abs(min_compensation) * kConstantCurvePaddingFraction);
+      min_compensation -= margin;
+      max_compensation += margin;
+    }
+    const auto point
+      = [&](const scene::ExposureCompensationKey& key) -> ImVec2 {
+      const auto x = static_cast<float>(
+        (static_cast<double>(key.metered_ev) - min_ev) / (max_ev - min_ev));
+      const auto y = static_cast<float>(
+        (static_cast<double>(key.compensation_ev) - min_compensation)
+        / (max_compensation - min_compensation));
+      return { minimum.x + padding.x + (x * (size.x - (2.0F * padding.x))),
+        maximum.y - padding.y - (y * (size.y - (2.0F * padding.y))) };
+    };
+    auto previous = ImVec2(minimum.x + padding.x, point(keys.front()).y);
+    for (const auto& key : keys) {
+      const auto current = point(key);
+      draw->AddLine(
+        previous, current, ImGui::GetColorU32(ImGuiCol_PlotLines), 2.0F);
+      constexpr float kCurveMarkerRadius = 3.0F;
+      draw->AddCircleFilled(
+        current, kCurveMarkerRadius, ImGui::GetColorU32(ImGuiCol_PlotLines));
+      previous = current;
+    }
+    draw->AddLine(previous, ImVec2(maximum.x - padding.x, previous.y),
+      ImGui::GetColorU32(ImGuiCol_PlotLines), 2.0F);
+    if (ImGui::IsItemHovered()) {
+      ImGui::SetTooltip("Authored compensation curve\nHorizontal: metered "
+                        "EV100\nVertical: added compensation (EV)");
+    }
+  }
+} // namespace
 
 void PostProcessPanel::DrawExposureSection()
 {
-  using engine::ExposureMode;
-
-  bool exposure_enabled = vm_->GetExposureEnabled();
-  if (ImGui::Checkbox("Enabled##Exposure", &exposure_enabled)) {
-    vm_->SetExposureEnabled(exposure_enabled);
+  const auto status = vm_->GetExposureStatus();
+  const bool experiment_owned = vm_->GetSceneActivationPolicy()
+    == SceneActivationPolicy::kExperimentOwned;
+  ImGui::TextDisabled("%s",
+    experiment_owned ? "Experiment controls - changes are temporary"
+                     : "Demo controls - changes are saved");
+  const bool externally_owned
+    = status && (status->uses_view_override || status->shared_source);
+  if (externally_owned) {
+    ImGui::TextWrapped("%s",
+      status->shared_source
+        ? "Exposure follows another view. Edit its source view."
+        : "Exposure is controlled by this view's override.");
   }
-  if (ImGui::IsItemHovered()) {
-    ImGui::SetTooltip("Master switch for exposure control.");
+  ImGui::BeginDisabled(externally_owned);
+  bool enabled = vm_->GetExposureEnabled();
+  if (ImGui::Checkbox("Enable exposure", &enabled)) {
+    vm_->SetExposureEnabled(enabled);
   }
-
-  if (!exposure_enabled) {
-    ImGui::BeginDisabled();
-  }
-
-  auto mode_preview = "Manual (EV)";
-  ExposureMode current_mode = vm_->GetExposureMode();
-  if (current_mode == ExposureMode::kAuto) {
-    mode_preview = "Automatic";
-  } else if (current_mode == ExposureMode::kManualCamera) {
-    mode_preview = "Manual (Camera)";
-  }
-
-  if (ImGui::BeginCombo("Mode##Exposure", mode_preview)) {
-    if (ImGui::Selectable(
-          "Manual (EV)", current_mode == ExposureMode::kManual)) {
-      vm_->SetExposureMode(ExposureMode::kManual);
-    }
-    if (ImGui::Selectable(
-          "Manual (Camera)", current_mode == ExposureMode::kManualCamera)) {
-      vm_->SetExposureMode(ExposureMode::kManualCamera);
-    }
-    if (ImGui::Selectable("Automatic", current_mode == ExposureMode::kAuto)) {
-      vm_->SetExposureMode(ExposureMode::kAuto);
+  ImGui::BeginDisabled(!enabled);
+  auto mode = vm_->GetExposureMode();
+  ImGui::SetNextItemWidth(-1.0F);
+  if (ImGui::BeginCombo("##Exposure mode", ExposureModeLabel(mode))) {
+    for (const auto candidate : {
+           engine::ExposureMode::kManual,
+           engine::ExposureMode::kManualCamera,
+           engine::ExposureMode::kAuto,
+         }) {
+      if (ImGui::Selectable(ExposureModeLabel(candidate), mode == candidate)) {
+        vm_->SetExposureMode(candidate);
+        mode = vm_->GetExposureMode();
+      }
     }
     ImGui::EndCombo();
   }
-  if (ImGui::IsItemHovered()) {
-    ImGui::SetTooltip("Select exposure control mode.");
-  }
-
-  if (current_mode == ExposureMode::kManual) {
-    float ev = vm_->GetManualExposureEv();
-    // Range roughly covering starlight to bright sunlight
-    if (ImGui::DragFloat(
-          "Manual Exposure (EV100)", &ev, 0.01F, -16.0F, 24.0F, "%.2f")) {
-      ev = std::round(ev * 100.0F) / 100.0F;
-      ev = std::clamp(ev, -16.0F, 24.0F);
+  if (mode == engine::ExposureMode::kManual) {
+    auto ev = vm_->GetManualExposureEv();
+    if (FloatControl(
+          "EV100", ev, kEvDrag, "Increasing EV100 by one halves exposure.")) {
       vm_->SetManualExposureEv(ev);
     }
-    if (ImGui::IsItemHovered()) {
-      ImGui::SetTooltip(
-        "Scene luminance in Exposure Values (EV100). Higher values represent "
-        "brighter light sources (e.g., 15 for sun), resulting in a darker "
-        "image "
-        "to maintain balance.");
-    }
-  }
-
-  if (current_mode == ExposureMode::kManualCamera) {
-    float aperture = vm_->GetManualCameraAperture();
-    if (ImGui::DragFloat("Aperture (f/)", &aperture, 0.1F, 1.4F, 32.0F)) {
+  } else if (mode == engine::ExposureMode::kManualCamera) {
+    const bool has_camera = vm_->HasActiveCamera();
+    ImGui::BeginDisabled(!has_camera);
+    auto aperture = vm_->GetManualCameraAperture();
+    auto shutter = vm_->GetManualCameraShutterRate();
+    auto iso = vm_->GetManualCameraIso();
+    if (FloatControl("Aperture (f-number)", aperture, kApertureDrag,
+          "A smaller f-number increases exposure.")) {
       vm_->SetManualCameraAperture(aperture);
     }
-    if (ImGui::IsItemHovered()) {
-      ImGui::SetTooltip("Camera lens aperture (f-number).");
+    if (FloatControl("Shutter rate (1/s)", shutter, kShutterDrag,
+          "125 means a shutter time of 1/125 second.")) {
+      vm_->SetManualCameraShutterRate(shutter);
     }
-
-    float shutter_rate = vm_->GetManualCameraShutterRate();
-    if (ImGui::DragFloat("Shutter (1/s)", &shutter_rate, 1.0F, 1.0F, 8000.0F)) {
-      vm_->SetManualCameraShutterRate(shutter_rate);
-    }
-    if (ImGui::IsItemHovered()) {
-      ImGui::SetTooltip("Camera shutter speed denominator (1/x seconds).");
-    }
-
-    float iso = vm_->GetManualCameraIso();
-    if (ImGui::DragFloat("ISO", &iso, 10.0F, 100.0F, 6400.0F)) {
+    if (FloatControl("ISO", iso, kIsoDrag, "Higher ISO increases exposure.")) {
       vm_->SetManualCameraIso(iso);
     }
-    if (ImGui::IsItemHovered()) {
-      ImGui::SetTooltip("Camera ISO sensitivity.");
-    }
-
-    const float computed_ev = vm_->GetManualCameraEv();
-    ImGui::Text("Computed EV: %.2f", computed_ev);
-  }
-
-  ImGui::SeparatorText("Global");
-
-  float comp = vm_->GetExposureCompensation();
-  if (ImGui::DragFloat("Compensation (EV)", &comp, 0.1F, -10.0F, 10.0F)) {
-    vm_->SetExposureCompensation(comp);
-  }
-  if (ImGui::IsItemHovered()) {
-    ImGui::SetTooltip(
-      "Exposure compensation in EV stops. Applied by the Vortex Stage 22 "
-      "path in both fixed and auto modes.");
-  }
-
-  float exposure_key = vm_->GetExposureKey();
-  if (ImGui::DragFloat("Exposure Key", &exposure_key, 0.1F, 0.1F, 25.0F)) {
-    vm_->SetExposureKey(exposure_key);
-  }
-  if (ImGui::IsItemHovered()) {
-    ImGui::SetTooltip(
-      "Display-key scale applied after exposure calibration. Higher values "
-      "brighten the final result in both fixed and auto modes.");
-  }
-
-  if (current_mode == ExposureMode::kAuto) {
-    ImGui::SeparatorText("Auto Exposure");
-
-    if (ImGui::Button("Reset Defaults")) {
-      vm_->ResetAutoExposureDefaults();
-    }
-    if (ImGui::IsItemHovered()) {
-      ImGui::SetTooltip("Reset only auto-exposure settings to defaults.");
-    }
-
-    float min_ev = vm_->GetAutoExposureMinEv();
-    if (ImGui::DragFloat("Minimum EV", &min_ev, 0.1F, -16.0F, 24.0F, "%.1f")) {
-      vm_->SetAutoExposureMinEv(min_ev);
-    }
-    if (ImGui::IsItemHovered()) {
-      ImGui::SetTooltip(
-        "Lower EV clamp for the auto-exposure solve. Prevents the scene from "
-        "adapting below this brightness.");
-    }
-
-    float max_ev = vm_->GetAutoExposureMaxEv();
-    if (ImGui::DragFloat("Maximum EV", &max_ev, 0.1F, -16.0F, 24.0F, "%.1f")) {
-      vm_->SetAutoExposureMaxEv(max_ev);
-    }
-    if (ImGui::IsItemHovered()) {
-      ImGui::SetTooltip(
-        "Upper EV clamp for the auto-exposure solve. Prevents the scene from "
-        "adapting above this brightness.");
-    }
-
-    float speed_up = vm_->GetAutoExposureAdaptationSpeedUp();
-    if (ImGui::DragFloat(
-          "Adapt Speed Up", &speed_up, 0.1F, 0.1F, 20.0F, "%.1f EV/s")) {
-      vm_->SetAutoExposureAdaptationSpeedUp(speed_up);
-    }
-    if (ImGui::IsItemHovered()) {
-      ImGui::SetTooltip(
-        "Speed of adaptation when transitioning from dark to bright.");
-    }
-
-    float speed_down = vm_->GetAutoExposureAdaptationSpeedDown();
-    if (ImGui::DragFloat(
-          "Adapt Speed Down", &speed_down, 0.1F, 0.1F, 20.0F, "%.1f EV/s")) {
-      vm_->SetAutoExposureAdaptationSpeedDown(speed_down);
-    }
-    if (ImGui::IsItemHovered()) {
-      ImGui::SetTooltip(
-        "Speed of adaptation when transitioning from bright to dark.");
-    }
-
-    float low_pct = vm_->GetAutoExposureLowPercentile();
-    if (ImGui::SliderFloat("Low Percentile", &low_pct, 0.0F, 1.0F)) {
-      vm_->SetAutoExposureLowPercentile(low_pct);
-    }
-    if (ImGui::IsItemHovered()) {
-      ImGui::SetTooltip(
-        "Lower bound of histogram percentile for average luminance.");
-    }
-
-    float high_pct = vm_->GetAutoExposureHighPercentile();
-    if (ImGui::SliderFloat("High Percentile", &high_pct, 0.0F, 1.0F)) {
-      vm_->SetAutoExposureHighPercentile(high_pct);
-    }
-    if (ImGui::IsItemHovered()) {
-      ImGui::SetTooltip(
-        "Upper bound of histogram percentile for average luminance.");
-    }
-
-    float min_log = vm_->GetAutoExposureMinLogLuminance();
-    if (ImGui::DragFloat("Min Log Lum", &min_log, 0.1F, -16.0F, 0.0F)) {
-      vm_->SetAutoExposureMinLogLuminance(min_log);
-    }
-    if (ImGui::IsItemHovered()) {
-      ImGui::SetTooltip(
-        "Minimum luminance (log2) considered for auto exposure.");
-    }
-
-    float range_log = vm_->GetAutoExposureLogLuminanceRange();
-    if (ImGui::DragFloat("Log Lum Range", &range_log, 0.1F, 1.0F, 32.0F)) {
-      vm_->SetAutoExposureLogLuminanceRange(range_log);
-    }
-    if (ImGui::IsItemHovered()) {
-      ImGui::SetTooltip(
-        "Dynamic range (in stops) of the auto exposure histogram.");
-    }
-
-    float target_lum = vm_->GetAutoExposureTargetLuminance();
-    if (ImGui::DragFloat("Target Lum", &target_lum, 0.01F, 0.01F, 1.0F)) {
-      vm_->SetAutoExposureTargetLuminance(target_lum);
-    }
-    if (ImGui::IsItemHovered()) {
-      ImGui::SetTooltip("Target average luminance (middle gray) to aim for.");
-    }
-
-    engine::MeteringMode metering = vm_->GetAutoExposureMeteringMode();
-    auto metering_str = "Average";
-    if (metering == engine::MeteringMode::kCenterWeighted) {
-      metering_str = "Center Weighted";
-    } else if (metering == engine::MeteringMode::kSpot) {
-      metering_str = "Spot";
-    }
-
-    if (ImGui::BeginCombo("Metering", metering_str)) {
-      if (ImGui::Selectable(
-            "Average", metering == engine::MeteringMode::kAverage)) {
-        vm_->SetAutoExposureMeteringMode(engine::MeteringMode::kAverage);
-      }
-      if (ImGui::Selectable("Center Weighted",
-            metering == engine::MeteringMode::kCenterWeighted)) {
-        vm_->SetAutoExposureMeteringMode(engine::MeteringMode::kCenterWeighted);
-      }
-      if (ImGui::Selectable("Spot", metering == engine::MeteringMode::kSpot)) {
-        vm_->SetAutoExposureMeteringMode(engine::MeteringMode::kSpot);
-      }
-      ImGui::EndCombo();
-    }
-    if (ImGui::IsItemHovered()) {
-      ImGui::SetTooltip("Weighting method for calculating average luminance.");
-    }
-
-    float spot_radius = vm_->GetAutoExposureSpotMeterRadius();
-    const bool spot_metering_active = metering == engine::MeteringMode::kSpot;
-    if (!spot_metering_active) {
-      ImGui::BeginDisabled();
-    }
-    if (ImGui::DragFloat("Spot Radius", &spot_radius, 0.005F, 0.01F, 1.0F)) {
-      vm_->SetAutoExposureSpotMeterRadius(spot_radius);
-    }
-    if (!spot_metering_active) {
-      ImGui::EndDisabled();
-    }
-    if (ImGui::IsItemHovered()) {
-      ImGui::SetTooltip(
-        "Spot metering radius in normalized screen-space distance. Used only "
-        "when Metering is set to Spot.");
-    }
-  }
-
-  if (exposure_enabled) {
-    if (current_mode == ExposureMode::kAuto) {
-      ImGui::TextUnformatted(
-        "Exposure is computed by the Vortex Stage 22 auto-exposure solver.");
+    ImGui::EndDisabled();
+    if (has_camera) {
+      ImGui::Text("Camera EV100: %.2f", vm_->GetManualCameraEv());
     } else {
-      ImGui::TextUnformatted(
-        "Exposure is applied by the Vortex Stage 22 fixed-exposure path.");
+      ImGui::TextWrapped("Select an active camera to use physical exposure.");
+    }
+  }
+  auto compensation = vm_->GetExposureCompensation();
+  if (FloatControl("Compensation (EV)", compensation, kCompensationDrag,
+        "Positive compensation brightens the image. +1 EV doubles exposure.")) {
+    vm_->SetExposureCompensation(compensation);
+  }
+  if (mode == engine::ExposureMode::kAuto) {
+    DrawAutoExposureControls();
+  }
+  if (ImGui::TreeNode("Advanced exposure")) {
+    DrawAdvancedExposureControls();
+    ImGui::TreePop();
+  }
+  ImGui::EndDisabled();
+  ImGui::EndDisabled();
+  DrawExposureStatus(status);
+}
+
+void PostProcessPanel::DrawAutoExposureControls()
+{
+  auto minimum = vm_->GetAutoExposureMinEv();
+  auto maximum = vm_->GetAutoExposureMaxEv();
+  ImGui::TextUnformatted("Metering limits (EV100)");
+  ImGui::SetNextItemWidth(-1.0F);
+  auto limits = std::array { minimum, maximum };
+  if (NumericControl("EV limits", limits, [](auto& draft) -> bool {
+        return ImGui::DragFloatRange2("##value", &draft.front(), &draft.back(),
+          kEvDrag.step, kEvDrag.minimum, kEvDrag.maximum, "Min %.2f",
+          "Max %.2f");
+      })) {
+    vm_->SetAutoExposureRange(
+      { .minimum = limits.front(), .maximum = limits.back() });
+  }
+  if (minimum == maximum) {
+    ImGui::TextDisabled("Locked to a fixed metered EV100");
+  }
+  auto speed_up = vm_->GetAutoExposureAdaptationSpeedUp();
+  auto speed_down = vm_->GetAutoExposureAdaptationSpeedDown();
+  if (FloatControl("To bright scenes (EV/s)", speed_up, kAdaptationRateDrag,
+        "Speed when moving from dark to bright scenes. Zero holds exposure in "
+        "this direction.")) {
+    vm_->SetAutoExposureAdaptationSpeedUp(speed_up);
+  }
+  if (FloatControl("To dark scenes (EV/s)", speed_down, kAdaptationRateDrag,
+        "Speed when moving from bright to dark scenes. Zero holds exposure in "
+        "this direction.")) {
+    vm_->SetAutoExposureAdaptationSpeedDown(speed_down);
+  }
+  auto metering = vm_->GetAutoExposureMeteringMode();
+  ImGui::TextUnformatted("Metering");
+  ImGui::SetNextItemWidth(-1.0F);
+  const auto preview = std::string(engine::to_string(metering));
+  if (ImGui::BeginCombo("##Metering", preview.c_str())) {
+    for (const auto candidate : {
+           engine::MeteringMode::kAverage,
+           engine::MeteringMode::kCenterWeighted,
+           engine::MeteringMode::kSpot,
+         }) {
+      const auto label = std::string(engine::to_string(candidate));
+      if (ImGui::Selectable(label.c_str(), metering == candidate)) {
+        vm_->SetAutoExposureMeteringMode(candidate);
+        metering = candidate;
+      }
+    }
+    ImGui::EndCombo();
+  }
+  if (metering == engine::MeteringMode::kSpot) {
+    auto radius = vm_->GetAutoExposureSpotMeterRadius();
+    if (FloatControl("Spot radius", radius, kSpotRadiusDrag,
+          "Radius in normalized image coordinates. Zero selects only exact "
+          "center samples.")) {
+      vm_->SetAutoExposureSpotMeterRadius(radius);
+    }
+  }
+}
+
+void PostProcessPanel::DrawAdvancedExposureControls()
+{
+  auto key = vm_->GetExposureKey();
+  if (FloatControl("Calibration key", key, kCalibrationDrag,
+        "Display calibration multiplier. The calibrated reference is 12.5.")) {
+    vm_->SetExposureKey(key);
+  }
+  if (vm_->GetExposureMode() != engine::ExposureMode::kAuto) {
+    return;
+  }
+  auto requested = vm_->GetExposureSettings();
+  auto low = requested.low_percentile * kPercentScale;
+  auto high = requested.high_percentile * kPercentScale;
+  ImGui::TextUnformatted("Histogram percentiles (%)");
+  ImGui::SetNextItemWidth(-1.0F);
+  auto percentiles = std::array { low, high };
+  if (NumericControl("Percentiles", percentiles, [](auto& draft) -> bool {
+        return ImGui::DragFloatRange2("##value", &draft.front(), &draft.back(),
+          0.5F, 0.0F, kPercentScale, "Low %.1f", "High %.1f");
+      })) {
+    vm_->SetAutoExposurePercentiles({
+      .minimum = percentiles.front() / kPercentScale,
+      .maximum = percentiles.back() / kPercentScale,
+    });
+  }
+  auto minimum = requested.min_log_luminance;
+  auto maximum = requested.min_log_luminance + requested.log_luminance_range;
+  ImGui::TextUnformatted("Histogram bounds (log2 luminance)");
+  ImGui::SetNextItemWidth(-1.0F);
+  auto histogram_bounds = std::array { minimum, maximum };
+  if (NumericControl(
+        "Histogram bounds", histogram_bounds, [](auto& draft) -> bool {
+          return ImGui::DragFloatRange2("##value", &draft.front(),
+            &draft.back(), kEvDrag.step, engine::kMinExposureLogLuminance,
+            engine::kMaxExposureLogLuminance, "Min %.1f", "Max %.1f");
+        })) {
+    vm_->SetAutoExposureHistogramWindow({
+      .minimum = histogram_bounds.front(),
+      .maximum = histogram_bounds.back(),
+    });
+  }
+  auto target = requested.target_luminance;
+  if (FloatControl("Target luminance", target, kLuminanceDrag,
+        "Reference luminance for automatic exposure. Zero intentionally "
+        "produces zero exposure.")) {
+    vm_->SetAutoExposureTargetLuminance(target);
+  }
+  auto black = requested.black_influence * kPercentScale;
+  if (FloatControl("Black-pixel influence (%)", black, kPercentDrag,
+        "Weight given to black samples. Zero excludes them; 100 gives them "
+        "full weight.")) {
+    vm_->SetAutoExposureBlackInfluence(black / kPercentScale);
+  }
+  auto distance = requested.transition_distance;
+  if (FloatControl("Adaptation transition (EV)", distance, kTransitionDrag,
+        "Distance from the target where adaptation changes from a constant "
+        "rate to a smooth approach. Must be positive.")) {
+    vm_->SetAutoExposureTransitionDistance(distance);
+  }
+  if (vm_->HasSceneMeteringMask()) {
+    bool use_mask = vm_->GetUseSceneMeteringMask();
+    if (ImGui::Checkbox("Use scene mask", &use_mask)) {
+      vm_->SetUseSceneMeteringMask(use_mask);
     }
   } else {
-    ImGui::TextUnformatted(
-      "Exposure is disabled. Stage 22 uses a neutral multiplier of 1.0.");
+    ImGui::TextDisabled("No metering mask assigned by the scene");
   }
+  if (ImGui::TreeNode("Compensation curve")) {
+    DrawCompensationCurve(requested);
+    ImGui::TreePop();
+  }
+  if (ImGui::Button("Reset auto controls")) {
+    vm_->ResetAutoExposureDefaults();
+    curve_dirty_ = false;
+  }
+  if (ImGui::IsItemHovered()) {
+    ImGui::SetTooltip("Reset auto controls only. Mode, compensation, "
+                      "calibration and camera settings are preserved.");
+  }
+}
 
-  if (!exposure_enabled) {
-    ImGui::EndDisabled();
+void PostProcessPanel::DrawCompensationCurve(
+  const scene::ExposureSettings& requested)
+{
+  const auto scene_revision = vm_->GetSceneRevision();
+  const auto epoch = vm_->GetEpoch();
+  if (!curve_initialized_ || scene_revision != curve_scene_revision_
+    || (!curve_dirty_ && epoch != curve_epoch_)) {
+    curve_draft_ = requested.compensation_curve;
+    curve_scene_revision_ = scene_revision;
+    curve_epoch_ = epoch;
+    curve_initialized_ = true;
+    curve_dirty_ = false;
+  }
+  ImGui::TextWrapped("Metered EV100 determines the added compensation. Empty "
+                     "means no additional compensation.");
+  DrawCurvePreview(curve_draft_);
+  if (ImGui::BeginTable("Curve keys", 3, ImGuiTableFlags_SizingStretchSame)) {
+    ImGui::TableSetupColumn("EV100", ImGuiTableColumnFlags_WidthStretch, 1.0F);
+    ImGui::TableSetupColumn(
+      "Added EV", ImGuiTableColumnFlags_WidthStretch, 1.0F);
+    ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed);
+    ImGui::TableHeadersRow();
+    auto remove = std::optional<size_t> {};
+    for (size_t index = 0; index < curve_draft_.size(); ++index) {
+      auto& point = curve_draft_.at(index);
+      ImGui::PushID(static_cast<int>(index));
+      ImGui::TableNextRow();
+      ImGui::TableNextColumn();
+      ImGui::SetNextItemWidth(-1.0F);
+      curve_dirty_
+        |= ImGui::InputFloat("##EV100", &point.metered_ev, 0.0F, 0.0F, "%.4g");
+      ImGui::TableNextColumn();
+      ImGui::SetNextItemWidth(-1.0F);
+      curve_dirty_ |= ImGui::InputFloat(
+        "##Added EV", &point.compensation_ev, 0.0F, 0.0F, "%.4g");
+      ImGui::TableNextColumn();
+      if (ImGui::SmallButton("Remove")) {
+        remove = index;
+      }
+      ImGui::PopID();
+    }
+    ImGui::EndTable();
+    if (remove) {
+      curve_draft_.erase(
+        std::next(curve_draft_.begin(), static_cast<std::ptrdiff_t>(*remove)));
+      curve_dirty_ = true;
+    }
+  }
+  const auto next_ev
+    = curve_draft_.empty() ? 0.0F : curve_draft_.back().metered_ev + 1.0F;
+  const bool can_add
+    = curve_draft_.size() < engine::kMaxExposureCompensationCurveKeys
+    && std::isfinite(next_ev)
+    && (curve_draft_.empty() || next_ev > curve_draft_.back().metered_ev);
+  ImGui::BeginDisabled(!can_add);
+  if (ImGui::Button("Add key")) {
+    curve_draft_.push_back({ .metered_ev = next_ev, .compensation_ev = 0.0F });
+    curve_dirty_ = true;
+  }
+  ImGui::EndDisabled();
+  ImGui::SameLine();
+  const bool finite_keys
+    = std::ranges::all_of(curve_draft_, [](const auto& point) -> bool {
+        return std::isfinite(point.metered_ev)
+          && std::isfinite(point.compensation_ev);
+      });
+  ImGui::BeginDisabled(!finite_keys || curve_draft_.size() < 2U);
+  if (ImGui::Button("Sort by EV100")) {
+    std::ranges::sort(
+      curve_draft_, {}, &scene::ExposureCompensationKey::metered_ev);
+    curve_dirty_ = true;
+  }
+  ImGui::EndDisabled();
+  if (!CurveIsOrdered(curve_draft_)) {
+    ImGui::TextWrapped(
+      "Keys must be finite and ordered by EV100, with no duplicates.");
+  }
+  ImGui::BeginDisabled(!curve_dirty_ || !CurveIsOrdered(curve_draft_));
+  if (ImGui::Button("Apply curve")
+    && vm_->SetExposureCompensationCurve(curve_draft_)) {
+    curve_dirty_ = false;
+    curve_epoch_ = vm_->GetEpoch();
+  }
+  ImGui::EndDisabled();
+  ImGui::SameLine();
+  ImGui::BeginDisabled(!curve_dirty_);
+  if (ImGui::Button("Discard edits")) {
+    curve_draft_ = vm_->GetExposureSettings().compensation_curve;
+    curve_dirty_ = false;
+    curve_epoch_ = vm_->GetEpoch();
+  }
+  ImGui::EndDisabled();
+}
+
+void PostProcessPanel::DrawExposureStatus(
+  const std::optional<vortex::ExposureSettingsStatus>& status)
+{
+  const auto error = vm_->GetValidationError();
+  if (!error.empty()) {
+    ImGui::TextWrapped("Edit not applied: %s", error.c_str());
+  }
+  if (!status) {
+    ImGui::TextDisabled("Waiting for a rendered view");
+    return;
+  }
+  if (status->settings_error) {
+    const auto reason = scene::to_string(*status->settings_error);
+    ImGui::TextWrapped("Renderer rejected the request: %.*s",
+      static_cast<int>(reason.size()), reason.data());
+  }
+  if (status->mask_status == vortex::ExposureMaskStatus::kPending) {
+    ImGui::TextWrapped("%s",
+      status->active_settings
+        ? "Loading metering mask. Previous accepted settings remain in use."
+        : "Loading metering mask before applying these settings.");
+  } else if (status->mask_status == vortex::ExposureMaskStatus::kFailed) {
+    ImGui::TextWrapped("Metering mask unavailable: %s. Disable the mask or "
+                       "reload the scene after fixing the texture.",
+      status->mask_error.c_str());
+    if (ImGui::Button("Disable mask")) {
+      vm_->SetUseSceneMeteringMask(false);
+    }
+  }
+  if (status->active_settings) {
+    const auto& active = *status->active_settings;
+    if (active != vm_->GetExposureSettings()) {
+      ImGui::Text("Accepted mode: %s",
+        active.enabled ? ExposureModeLabel(active.mode) : "Exposure off");
+      if (active.enabled && active.mode == engine::ExposureMode::kManual) {
+        ImGui::Text("Accepted EV100: %.2f", active.manual_ev);
+      }
+      ImGui::Text("Accepted compensation: %+.2f EV", active.compensation_ev);
+    } else if (!status->settings_error
+      && status->mask_status != vortex::ExposureMaskStatus::kPending
+      && status->mask_status != vortex::ExposureMaskStatus::kFailed) {
+      ImGui::TextDisabled("Active settings accepted");
+    }
+  } else {
+    ImGui::TextWrapped("No settings revision has been accepted yet.");
+  }
+  if (status->metering_input_failed.value_or(false)) {
+    ImGui::TextWrapped(
+      "Metering input failed validation. The last valid exposure is retained.");
   }
 }
 
@@ -326,7 +648,7 @@ void PostProcessPanel::DrawTonemappingSection()
 
   ToneMapper current_mode
     = vm_->GetTonemappingEnabled() ? vm_->GetToneMapper() : ToneMapper::kNone;
-  auto mode_str = "Unknown";
+  const auto* mode_str = "Unknown";
   switch (current_mode) {
   case ToneMapper::kAcesFitted:
     mode_str = "ACES";
@@ -342,7 +664,9 @@ void PostProcessPanel::DrawTonemappingSection()
     break;
   }
 
-  if (ImGui::BeginCombo("Tone Curve", mode_str)) {
+  ImGui::TextUnformatted("Tone curve");
+  ImGui::SetNextItemWidth(-1.0F);
+  if (ImGui::BeginCombo("##Tone curve", mode_str)) {
     if (ImGui::Selectable("None", current_mode == ToneMapper::kNone)) {
       vm_->SetTonemappingEnabled(false);
     }
@@ -361,22 +685,15 @@ void PostProcessPanel::DrawTonemappingSection()
     ImGui::EndCombo();
   }
   if (ImGui::IsItemHovered()) {
-    ImGui::SetTooltip(
-      "Select the Stage 22 tone curve. 'None' keeps the pass active but uses "
-      "the neutral curve path.");
+    ImGui::SetTooltip("Choose how HDR brightness maps to the display. None "
+                      "leaves the tone curve neutral.");
   }
 
   float gamma = vm_->GetGamma();
-  if (ImGui::DragFloat("Display Gamma", &gamma, 0.05F, 1.0F, 3.0F, "%.2f")) {
+  if (FloatControl("Display gamma", gamma, kGammaDrag,
+        "Display gamma applied after the selected tone curve.")) {
     vm_->SetGamma(gamma);
   }
-  if (ImGui::IsItemHovered()) {
-    ImGui::SetTooltip(
-      "Display gamma applied after the selected tonemap operator.");
-  }
-
-  ImGui::TextUnformatted(
-    "Tonemapping is always applied by the Vortex Stage 22 post-process pass.");
 }
 
 } // namespace oxygen::examples::ui

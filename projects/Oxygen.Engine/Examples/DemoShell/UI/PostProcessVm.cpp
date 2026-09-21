@@ -4,9 +4,21 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Base/Logging.h>
+#include <cstdint>
+#include <mutex>
+#include <optional>
+#include <span>
+#include <string>
 
+#include "DemoShell/Runtime/SceneActivationPolicy.h"
+#include "DemoShell/Services/PostProcessSettingsService.h"
 #include "DemoShell/UI/PostProcessVm.h"
+
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/Types/PostProcess.h>
+#include <Oxygen/Scene/ExposureSettings.h>
+#include <Oxygen/Vortex/Types/ExposureSettingsStatus.h>
 
 namespace oxygen::examples::ui {
 
@@ -55,11 +67,103 @@ auto PostProcessVm::IsStale() const -> bool
   return service_ && service_->GetEpoch() != epoch_;
 }
 
+auto PostProcessVm::GetExposureSettings() -> scene::ExposureSettings
+{
+  std::scoped_lock lock(mutex_);
+  return service_->GetExposureSettings();
+}
+auto PostProcessVm::TrySetExposureSettings(
+  const scene::ExposureSettings& settings) -> bool
+{
+  std::scoped_lock lock(mutex_);
+  const bool accepted = service_->TrySetExposureSettings(settings);
+  Refresh();
+  return accepted;
+}
+auto PostProcessVm::SetExposureCompensationCurve(
+  const std::span<const scene::ExposureCompensationKey> keys) -> bool
+{
+  std::scoped_lock lock(mutex_);
+  const bool accepted = service_->SetExposureCompensationCurve(keys);
+  Refresh();
+  return accepted;
+}
+auto PostProcessVm::SetAutoExposureBlackInfluence(const float value) -> void
+{
+  std::scoped_lock lock(mutex_);
+  service_->SetAutoExposureBlackInfluence(value);
+  Refresh();
+}
+auto PostProcessVm::SetAutoExposureTransitionDistance(const float value) -> void
+{
+  std::scoped_lock lock(mutex_);
+  service_->SetAutoExposureTransitionDistance(value);
+  Refresh();
+}
+auto PostProcessVm::GetExposureStatus()
+  -> std::optional<vortex::ExposureSettingsStatus>
+{
+  std::scoped_lock lock(mutex_);
+  return service_->GetExposureStatus();
+}
+auto PostProcessVm::GetValidationError() -> std::string
+{
+  std::scoped_lock lock(mutex_);
+  return std::string(service_->GetValidationError());
+}
+auto PostProcessVm::GetSceneActivationPolicy() -> SceneActivationPolicy
+{
+  return service_->GetSceneActivationPolicy();
+}
+auto PostProcessVm::GetEpoch() -> std::uint64_t { return service_->GetEpoch(); }
+auto PostProcessVm::GetSceneRevision() -> std::uint64_t
+{
+  return service_->GetSceneRevision();
+}
+auto PostProcessVm::HasActiveCamera() -> bool
+{
+  return service_->HasActiveCamera();
+}
+auto PostProcessVm::HasSceneMeteringMask() -> bool
+{
+  return service_->HasSceneMeteringMask();
+}
+auto PostProcessVm::GetUseSceneMeteringMask() -> bool
+{
+  return service_->GetUseSceneMeteringMask();
+}
+auto PostProcessVm::SetUseSceneMeteringMask(const bool enabled) -> void
+{
+  std::scoped_lock lock(mutex_);
+  service_->SetUseSceneMeteringMask(enabled);
+  Refresh();
+}
+auto PostProcessVm::SetAutoExposureRange(const ExposureRange bounds) -> void
+{
+  std::scoped_lock lock(mutex_);
+  service_->SetAutoExposureRange(bounds);
+  Refresh();
+}
+auto PostProcessVm::SetAutoExposurePercentiles(const ExposureRange bounds)
+  -> void
+{
+  std::scoped_lock lock(mutex_);
+  service_->SetAutoExposurePercentiles(bounds);
+  Refresh();
+}
+auto PostProcessVm::SetAutoExposureHistogramWindow(const ExposureRange bounds)
+  -> void
+{
+  std::scoped_lock lock(mutex_);
+  service_->SetAutoExposureHistogramWindow(bounds);
+  Refresh();
+}
+
 // Exposure
 
 auto PostProcessVm::GetExposureEnabled() -> bool
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   if (IsStale()) {
     Refresh();
   }
@@ -68,7 +172,7 @@ auto PostProcessVm::GetExposureEnabled() -> bool
 
 auto PostProcessVm::SetExposureEnabled(bool enabled) -> void
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   if (service_) {
     service_->SetExposureEnabled(enabled);
     Refresh();
@@ -77,7 +181,7 @@ auto PostProcessVm::SetExposureEnabled(bool enabled) -> void
 
 auto PostProcessVm::GetExposureMode() -> engine::ExposureMode
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   if (IsStale()) {
     Refresh();
   }
@@ -86,7 +190,7 @@ auto PostProcessVm::GetExposureMode() -> engine::ExposureMode
 
 auto PostProcessVm::SetExposureMode(engine::ExposureMode mode) -> void
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   if (service_) {
     service_->SetExposureMode(mode);
     Refresh();
@@ -95,7 +199,7 @@ auto PostProcessVm::SetExposureMode(engine::ExposureMode mode) -> void
 
 auto PostProcessVm::GetManualExposureEv() -> float
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   if (IsStale()) {
     Refresh();
   }
@@ -104,7 +208,7 @@ auto PostProcessVm::GetManualExposureEv() -> float
 
 auto PostProcessVm::SetManualExposureEv(float ev) -> void
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   if (service_) {
     service_->SetManualExposureEv(ev);
     Refresh();
@@ -113,7 +217,7 @@ auto PostProcessVm::SetManualExposureEv(float ev) -> void
 
 auto PostProcessVm::GetManualCameraAperture() -> float
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   if (IsStale()) {
     Refresh();
   }
@@ -122,7 +226,7 @@ auto PostProcessVm::GetManualCameraAperture() -> float
 
 auto PostProcessVm::SetManualCameraAperture(float aperture) -> void
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   if (service_) {
     service_->SetManualCameraAperture(aperture);
     Refresh();
@@ -131,7 +235,7 @@ auto PostProcessVm::SetManualCameraAperture(float aperture) -> void
 
 auto PostProcessVm::GetManualCameraShutterRate() -> float
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   if (IsStale()) {
     Refresh();
   }
@@ -140,7 +244,7 @@ auto PostProcessVm::GetManualCameraShutterRate() -> float
 
 auto PostProcessVm::SetManualCameraShutterRate(float shutter_rate) -> void
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   if (service_) {
     service_->SetManualCameraShutterRate(shutter_rate);
     Refresh();
@@ -149,7 +253,7 @@ auto PostProcessVm::SetManualCameraShutterRate(float shutter_rate) -> void
 
 auto PostProcessVm::GetManualCameraIso() -> float
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   if (IsStale()) {
     Refresh();
   }
@@ -158,7 +262,7 @@ auto PostProcessVm::GetManualCameraIso() -> float
 
 auto PostProcessVm::SetManualCameraIso(float iso) -> void
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   if (service_) {
     service_->SetManualCameraIso(iso);
     Refresh();
@@ -167,7 +271,7 @@ auto PostProcessVm::SetManualCameraIso(float iso) -> void
 
 auto PostProcessVm::GetManualCameraEv() -> float
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   if (IsStale()) {
     Refresh();
   }
@@ -179,7 +283,7 @@ auto PostProcessVm::GetManualCameraEv() -> float
 
 auto PostProcessVm::GetExposureCompensation() -> float
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   if (IsStale()) {
     Refresh();
   }
@@ -188,7 +292,7 @@ auto PostProcessVm::GetExposureCompensation() -> float
 
 auto PostProcessVm::SetExposureCompensation(float stops) -> void
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   if (service_) {
     service_->SetExposureCompensation(stops);
     Refresh();
@@ -197,7 +301,7 @@ auto PostProcessVm::SetExposureCompensation(float stops) -> void
 
 auto PostProcessVm::GetExposureKey() -> float
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   if (IsStale()) {
     Refresh();
   }
@@ -206,7 +310,7 @@ auto PostProcessVm::GetExposureKey() -> float
 
 auto PostProcessVm::SetExposureKey(float exposure_key) -> void
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   if (service_) {
     service_->SetExposureKey(exposure_key);
     Refresh();
@@ -217,7 +321,7 @@ auto PostProcessVm::SetExposureKey(float exposure_key) -> void
 
 auto PostProcessVm::GetAutoExposureAdaptationSpeedUp() -> float
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   if (IsStale()) {
     Refresh();
   }
@@ -226,7 +330,7 @@ auto PostProcessVm::GetAutoExposureAdaptationSpeedUp() -> float
 
 auto PostProcessVm::SetAutoExposureAdaptationSpeedUp(float speed) -> void
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   if (service_) {
     service_->SetAutoExposureAdaptationSpeedUp(speed);
     Refresh();
@@ -235,7 +339,7 @@ auto PostProcessVm::SetAutoExposureAdaptationSpeedUp(float speed) -> void
 
 auto PostProcessVm::GetAutoExposureAdaptationSpeedDown() -> float
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   if (IsStale()) {
     Refresh();
   }
@@ -244,7 +348,7 @@ auto PostProcessVm::GetAutoExposureAdaptationSpeedDown() -> float
 
 auto PostProcessVm::SetAutoExposureAdaptationSpeedDown(float speed) -> void
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   if (service_) {
     service_->SetAutoExposureAdaptationSpeedDown(speed);
     Refresh();
@@ -253,7 +357,7 @@ auto PostProcessVm::SetAutoExposureAdaptationSpeedDown(float speed) -> void
 
 auto PostProcessVm::GetAutoExposureLowPercentile() -> float
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   if (IsStale()) {
     Refresh();
   }
@@ -262,7 +366,7 @@ auto PostProcessVm::GetAutoExposureLowPercentile() -> float
 
 auto PostProcessVm::SetAutoExposureLowPercentile(float percentile) -> void
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   if (service_) {
     service_->SetAutoExposureLowPercentile(percentile);
     Refresh();
@@ -271,7 +375,7 @@ auto PostProcessVm::SetAutoExposureLowPercentile(float percentile) -> void
 
 auto PostProcessVm::GetAutoExposureHighPercentile() -> float
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   if (IsStale()) {
     Refresh();
   }
@@ -280,7 +384,7 @@ auto PostProcessVm::GetAutoExposureHighPercentile() -> float
 
 auto PostProcessVm::SetAutoExposureHighPercentile(float percentile) -> void
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   if (service_) {
     service_->SetAutoExposureHighPercentile(percentile);
     Refresh();
@@ -289,7 +393,7 @@ auto PostProcessVm::SetAutoExposureHighPercentile(float percentile) -> void
 
 auto PostProcessVm::GetAutoExposureMinEv() -> float
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   if (IsStale()) {
     Refresh();
   }
@@ -298,7 +402,7 @@ auto PostProcessVm::GetAutoExposureMinEv() -> float
 
 auto PostProcessVm::SetAutoExposureMinEv(float min_ev) -> void
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   if (service_) {
     service_->SetAutoExposureMinEv(min_ev);
     Refresh();
@@ -307,7 +411,7 @@ auto PostProcessVm::SetAutoExposureMinEv(float min_ev) -> void
 
 auto PostProcessVm::GetAutoExposureMaxEv() -> float
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   if (IsStale()) {
     Refresh();
   }
@@ -316,7 +420,7 @@ auto PostProcessVm::GetAutoExposureMaxEv() -> float
 
 auto PostProcessVm::SetAutoExposureMaxEv(float max_ev) -> void
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   if (service_) {
     service_->SetAutoExposureMaxEv(max_ev);
     Refresh();
@@ -325,7 +429,7 @@ auto PostProcessVm::SetAutoExposureMaxEv(float max_ev) -> void
 
 auto PostProcessVm::GetAutoExposureMinLogLuminance() -> float
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   if (IsStale()) {
     Refresh();
   }
@@ -334,7 +438,7 @@ auto PostProcessVm::GetAutoExposureMinLogLuminance() -> float
 
 auto PostProcessVm::SetAutoExposureMinLogLuminance(float min_log_lum) -> void
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   if (service_) {
     service_->SetAutoExposureMinLogLuminance(min_log_lum);
     Refresh();
@@ -343,7 +447,7 @@ auto PostProcessVm::SetAutoExposureMinLogLuminance(float min_log_lum) -> void
 
 auto PostProcessVm::GetAutoExposureLogLuminanceRange() -> float
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   if (IsStale()) {
     Refresh();
   }
@@ -352,7 +456,7 @@ auto PostProcessVm::GetAutoExposureLogLuminanceRange() -> float
 
 auto PostProcessVm::SetAutoExposureLogLuminanceRange(float range) -> void
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   if (service_) {
     service_->SetAutoExposureLogLuminanceRange(range);
     Refresh();
@@ -361,7 +465,7 @@ auto PostProcessVm::SetAutoExposureLogLuminanceRange(float range) -> void
 
 auto PostProcessVm::GetAutoExposureTargetLuminance() -> float
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   if (IsStale()) {
     Refresh();
   }
@@ -370,7 +474,7 @@ auto PostProcessVm::GetAutoExposureTargetLuminance() -> float
 
 auto PostProcessVm::SetAutoExposureTargetLuminance(float target_lum) -> void
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   if (service_) {
     service_->SetAutoExposureTargetLuminance(target_lum);
     Refresh();
@@ -379,7 +483,7 @@ auto PostProcessVm::SetAutoExposureTargetLuminance(float target_lum) -> void
 
 auto PostProcessVm::GetAutoExposureSpotMeterRadius() -> float
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   if (IsStale()) {
     Refresh();
   }
@@ -388,7 +492,7 @@ auto PostProcessVm::GetAutoExposureSpotMeterRadius() -> float
 
 auto PostProcessVm::SetAutoExposureSpotMeterRadius(float radius) -> void
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   if (service_) {
     service_->SetAutoExposureSpotMeterRadius(radius);
     Refresh();
@@ -397,7 +501,7 @@ auto PostProcessVm::SetAutoExposureSpotMeterRadius(float radius) -> void
 
 auto PostProcessVm::GetAutoExposureMeteringMode() -> engine::MeteringMode
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   if (IsStale()) {
     Refresh();
   }
@@ -407,7 +511,7 @@ auto PostProcessVm::GetAutoExposureMeteringMode() -> engine::MeteringMode
 auto PostProcessVm::SetAutoExposureMeteringMode(engine::MeteringMode mode)
   -> void
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   if (service_) {
     service_->SetAutoExposureMeteringMode(mode);
     Refresh();
@@ -418,7 +522,7 @@ auto PostProcessVm::SetAutoExposureMeteringMode(engine::MeteringMode mode)
 
 auto PostProcessVm::GetTonemappingEnabled() -> bool
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   if (IsStale()) {
     Refresh();
   }
@@ -427,7 +531,7 @@ auto PostProcessVm::GetTonemappingEnabled() -> bool
 
 auto PostProcessVm::SetTonemappingEnabled(bool enabled) -> void
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   if (service_) {
     service_->SetTonemappingEnabled(enabled);
     Refresh();
@@ -436,7 +540,7 @@ auto PostProcessVm::SetTonemappingEnabled(bool enabled) -> void
 
 auto PostProcessVm::GetToneMapper() -> engine::ToneMapper
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   if (IsStale()) {
     Refresh();
   }
@@ -445,7 +549,7 @@ auto PostProcessVm::GetToneMapper() -> engine::ToneMapper
 
 auto PostProcessVm::SetToneMapper(engine::ToneMapper mode) -> void
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   if (service_) {
     service_->SetToneMapper(mode);
     Refresh();
@@ -454,7 +558,7 @@ auto PostProcessVm::SetToneMapper(engine::ToneMapper mode) -> void
 
 auto PostProcessVm::GetGamma() -> float
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   if (IsStale()) {
     Refresh();
   }
@@ -463,7 +567,7 @@ auto PostProcessVm::GetGamma() -> float
 
 auto PostProcessVm::SetGamma(float gamma) -> void
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   if (service_) {
     service_->SetGamma(gamma);
     Refresh();
@@ -472,7 +576,7 @@ auto PostProcessVm::SetGamma(float gamma) -> void
 
 auto PostProcessVm::ResetToDefaults() -> void
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   if (service_) {
     service_->ResetToDefaults();
     Refresh();
@@ -481,7 +585,7 @@ auto PostProcessVm::ResetToDefaults() -> void
 
 auto PostProcessVm::ResetAutoExposureDefaults() -> void
 {
-  std::lock_guard lock(mutex_);
+  std::scoped_lock lock(mutex_);
   if (service_) {
     service_->ResetAutoExposureDefaults();
     Refresh();

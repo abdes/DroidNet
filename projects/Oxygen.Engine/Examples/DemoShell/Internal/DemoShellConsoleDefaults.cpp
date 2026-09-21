@@ -4,9 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "DemoShell/Internal/DemoShellConsoleDefaults.h"
-
 #include <string_view>
+
+#include "DemoShell/Internal/DemoShellConsoleDefaults.h"
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Console/Command.h>
@@ -25,8 +25,7 @@ namespace {
     const bool value) -> void
   {
     if (console.FindCVar(cvar_name) == nullptr) {
-      LOG_F(
-        WARNING, "DemoShell: '{}' is unavailable; default skipped", cvar_name);
+      LOG_F(1, "DemoShell: '{}' is unavailable; default skipped", cvar_name);
       return;
     }
     startup_plan.Set(

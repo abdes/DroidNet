@@ -867,6 +867,13 @@ auto EnvironmentSettingsService::SetRuntimeConfig(
   const bool scene_changed
     = force_scene_rebind_ || (config_.scene.get() != config.scene.get());
   config_ = config;
+  if (config_.activation_policy == SceneActivationPolicy::kExperimentOwned) {
+    config_.force_environment_override = false;
+    config_.restore_environment_profile = false;
+    config_.initial_environment_profile.reset();
+    config_.startup_skybox_path.clear();
+    config_.initial_preview_sun_enabled = false;
+  }
   force_scene_rebind_ = false;
 
   if (!preview_setting_initialized_ && config_.initial_preview_sun_enabled) {
@@ -3378,8 +3385,7 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
         "(source=scene, casts_shadows=true, environment_contribution=true)",
         sun_light_node_.GetName());
     } else {
-      LOG_F(WARNING,
-        "no resolved scene sun is currently available in scene '{}'",
+      LOG_F(1, "no resolved scene sun is currently available in scene '{}'",
         scene_name);
     }
   }
@@ -4125,6 +4131,10 @@ auto EnvironmentSettingsService::PersistSettingsIfDirty() -> void
 
 auto EnvironmentSettingsService::LoadSettings(const bool custom_only) -> void
 {
+  if (config_.activation_policy == SceneActivationPolicy::kExperimentOwned) {
+    settings_loaded_ = true;
+    return;
+  }
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
   const float loaded_schema_version
@@ -4463,6 +4473,9 @@ auto EnvironmentSettingsService::LoadSettings(const bool custom_only) -> void
 
 auto EnvironmentSettingsService::SaveSettings() const -> void
 {
+  if (config_.activation_policy == SceneActivationPolicy::kExperimentOwned) {
+    return;
+  }
   if (transient_profile_) {
     return;
   }
@@ -4765,7 +4778,7 @@ auto EnvironmentSettingsService::BindSceneSun(const bool adopt_scene_values)
     return;
   }
 
-  LOG_F(WARNING, "scene '{}' has no resolved sun directional light",
+  LOG_F(1, "scene '{}' has no resolved sun directional light",
     config_.scene->GetName());
 }
 

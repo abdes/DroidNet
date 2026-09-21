@@ -5,14 +5,14 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <stdexcept>
 #include <string>
-
-#include <imgui.h>
-
-#include <Oxygen/ImGui/Icons/IconsOxygenIcons.h>
 
 #include "DemoShell/Services/SettingsService.h"
 #include "LightBench/LightBenchPanel.h"
+#include <imgui.h>
+
+#include <Oxygen/ImGui/Icons/IconsOxygenIcons.h>
 
 namespace oxygen::examples::light_bench {
 
@@ -22,10 +22,16 @@ namespace {
   constexpr Vec3 kAxisColorZ { 0.2F, 0.4F, 1.0F };
 } // namespace
 
-LightBenchPanel::LightBenchPanel(observer_ptr<LightScene> light_scene)
-  : light_scene_(light_scene)
+LightBenchPanel::LightBenchPanel(observer_ptr<LightScene> light_scene,
+  const SceneActivationPolicy activation_policy)
+  : activation_policy_(activation_policy)
+  , light_scene_(light_scene)
   , icon_(std::string(imgui::icons::kIconDemoPanel) + "##LightBench")
 {
+  if (activation_policy_ != SceneActivationPolicy::kRestorePreferences
+    && activation_policy_ != SceneActivationPolicy::kExperimentOwned) {
+    throw std::invalid_argument("Unknown scene activation policy");
+  }
   LoadSettings();
 }
 
@@ -274,6 +280,10 @@ auto LightBenchPanel::DrawSpotLightControls() -> void
 
 auto LightBenchPanel::LoadSettings() -> void
 {
+  if (activation_policy_ == SceneActivationPolicy::kExperimentOwned) {
+    settings_loaded_ = true;
+    return;
+  }
   if (settings_loaded_) {
     return;
   }
@@ -365,6 +375,10 @@ auto LightBenchPanel::LoadSettings() -> void
 
 auto LightBenchPanel::SaveSettings() -> void
 {
+  if (activation_policy_ == SceneActivationPolicy::kExperimentOwned) {
+    pending_changes_ = false;
+    return;
+  }
   if (!pending_changes_) {
     return;
   }

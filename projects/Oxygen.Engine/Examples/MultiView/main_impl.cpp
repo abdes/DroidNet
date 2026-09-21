@@ -18,6 +18,12 @@
 #include <thread>
 #include <vector>
 
+#include "Common/DemoCli.h"
+#include "Common/FrameCaptureCliOptions.h"
+#include "DemoShell/Runtime/DemoAppContext.h"
+#include "DemoShell/Services/SettingsService.h"
+#include "MultiView/CompositingMode.h"
+#include "MultiView/MainModule.h"
 #include <SDL3/SDL.h>
 #include <asio/signal_set.hpp>
 
@@ -46,13 +52,6 @@
 #include <Oxygen/Platform/Platform.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererCapability.h>
-
-#include "Common/DemoCli.h"
-#include "Common/FrameCaptureCliOptions.h"
-#include "DemoShell/Runtime/DemoAppContext.h"
-#include "DemoShell/Services/SettingsService.h"
-#include "MultiView/CompositingMode.h"
-#include "MultiView/MainModule.h"
 
 using namespace std::chrono_literals;
 
@@ -502,7 +501,10 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
           .parent_path();
 
     const auto path_finder_config
-      = o::PathFinderConfig::Create().WithWorkspaceRoot(workspace_root).Build();
+      = o::PathFinderConfig::Create()
+          .WithWorkspaceRoot(workspace_root)
+          .WithScriptSourceRoots({ workspace_root / "Examples" / "Content" })
+          .Build();
     const auto frame_capture_config
       = oxygen::examples::cli::BuildFrameCaptureConfig(capture_cli, headless);
     const o::GraphicsConfig gfx_config {

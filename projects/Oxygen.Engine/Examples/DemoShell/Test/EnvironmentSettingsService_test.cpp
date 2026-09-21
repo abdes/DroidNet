@@ -524,18 +524,18 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
 }
 
 NOLINT_TEST_F(EnvironmentSettingsServiceTest,
-  OnSceneActivatedWarnsWhenNoResolvedSceneSunExistsInNonEmptyScene)
+  OnSceneActivatedDoesNotWarnForValidSceneWithoutSun)
 {
   auto scene = MakeScene("DemoShell.NonEmptySceneWithoutSun");
   auto marker = scene->CreateNode("Marker");
   ASSERT_TRUE(marker.IsAlive());
 
   oxygen::testing::ScopedLogCapture capture(
-    "EnvironmentSettingsService.NonEmpty", loguru::Verbosity_9);
+    "EnvironmentSettingsService.NonEmpty", loguru::Verbosity_WARNING);
 
   service_.OnSceneActivated(*scene);
 
-  EXPECT_TRUE(capture.Contains("no resolved sun directional light"));
+  EXPECT_FALSE(capture.Contains("no resolved sun directional light"));
 }
 
 NOLINT_TEST_F(EnvironmentSettingsServiceTest,
