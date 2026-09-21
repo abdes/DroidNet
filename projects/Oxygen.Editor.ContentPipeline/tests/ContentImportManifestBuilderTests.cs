@@ -12,6 +12,25 @@ namespace Oxygen.Editor.ContentPipeline.Tests;
 [TestClass]
 public sealed class ContentImportManifestBuilderTests
 {
+    /// <summary>Scene exposure masks cook before the scene, in its own texture descriptor namespace.</summary>
+    [TestMethod]
+    public void BuildSceneManifestIncludesMeteringMaskDependency()
+    {
+        using var workspace = new TempWorkspace();
+        var scope = CreateScope(workspace);
+        var texture = new ContentCookInput(new Uri("asset:///Content/Textures/Meter.otex.json"),
+            ContentCookAssetKind.Texture, "Content", "Content/Textures/Meter.otex.json",
+            Path.Combine(workspace.Root, "Content", "Textures", "Meter.otex.json"),
+            "/Content/Textures/Meter.otex", ContentCookInputRole.Dependency);
+        var scene = new SceneDescriptorGenerationResult(new Uri("asset:///Content/Scenes/Main.oscene.json"),
+            Path.Combine(workspace.Root, ".pipeline", "Scenes", "Main.oscene.json"),
+            "/Content/Scenes/Main.oscene", [texture], Diagnostics: []);
+        var manifest = new ContentImportManifestBuilder().BuildSceneManifest(scope, scene);
+        _ = manifest.Jobs.Select(static job => job.Type).Should().Equal("texture-descriptor", "scene-descriptor");
+        _ = manifest.Jobs[0].Layout!.TextureDescriptorsDirectory.Should().Be("Textures");
+        _ = manifest.Jobs[1].DependsOn.Should().Equal(manifest.Jobs[0].Id);
+    }
+
     [TestMethod]
     public void BuildSceneManifest_ShouldOrderDependenciesBeforeSceneAndUseNativeJobTypes()
     {

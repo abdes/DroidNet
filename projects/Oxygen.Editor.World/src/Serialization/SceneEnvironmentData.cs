@@ -3,12 +3,14 @@
 // SPDX-License-Identifier: MIT
 
 using System.Numerics;
+using System.Text.Json.Serialization;
 
 namespace Oxygen.Editor.World.Serialization;
 
 /// <summary>
 /// Scene-level environment authoring data.
 /// </summary>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record SceneEnvironmentData
 {
     /// <summary>
@@ -25,26 +27,6 @@ public sealed record SceneEnvironmentData
     /// Gets the scene node identity bound as the sun light, or null when no sun is bound.
     /// </summary>
     public Guid? SunNodeId { get; init; }
-
-    /// <summary>
-    /// Gets the exposure mode.
-    /// </summary>
-    public ExposureMode ExposureMode { get; init; } = ExposureMode.Manual;
-
-    /// <summary>
-    /// Gets manual exposure in EV100, used when <see cref="ExposureMode"/> is <see cref="ExposureMode.Manual"/>.
-    /// </summary>
-    public float ManualExposureEv { get; init; } = 13.0f;
-
-    /// <summary>
-    /// Gets exposure compensation in EV stops.
-    /// </summary>
-    public float ExposureCompensation { get; init; }
-
-    /// <summary>
-    /// Gets the tone mapping mode.
-    /// </summary>
-    public ToneMappingMode ToneMapping { get; init; } = ToneMappingMode.AcesFitted;
 
     /// <summary>
     /// Gets authored post-process parameters mirrored from Oxygen's native PostProcessVolume.

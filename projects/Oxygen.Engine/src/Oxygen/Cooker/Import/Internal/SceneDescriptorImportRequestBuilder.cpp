@@ -5,11 +5,12 @@
 //===----------------------------------------------------------------------===//
 
 #include <filesystem>
-#include <nlohmann/json-schema.hpp>
-#include <nlohmann/json.hpp>
 #include <optional>
 #include <string>
 #include <string_view>
+
+#include <nlohmann/json-schema.hpp>
+#include <nlohmann/json.hpp>
 
 #include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/DescriptorDocument.h>
@@ -79,7 +80,7 @@ auto BuildSceneDescriptorRequest(const SceneDescriptorImportSettings& settings,
   const auto version_it = descriptor_doc->find("version");
   const auto invalid_version = version_it == descriptor_doc->end()
     || !version_it->is_number_unsigned()
-    || version_it->get<uint32_t>() != data::pak::world::kSceneAssetVersion;
+    || version_it->get<uint64_t>() != data::pak::world::kSceneAssetVersion;
   if (invalid_version) {
     error_stream << "ERROR [scene.descriptor.recook_required]: "
                  << "Scene descriptor version "

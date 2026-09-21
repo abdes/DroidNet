@@ -14,6 +14,7 @@ namespace Oxygen.Editor.World.Serialization;
 [JsonSerializable(typeof(SceneEnvironmentData))]
 [JsonSerializable(typeof(SkyAtmosphereEnvironmentData))]
 [JsonSerializable(typeof(PostProcessEnvironmentData))]
+[JsonSerializable(typeof(ExposureCompensationKeyData))]
 [JsonSerializable(typeof(SceneNodeData))]
 [JsonSerializable(typeof(ComponentData))]
 [JsonSerializable(typeof(ExplorerEntryData))]

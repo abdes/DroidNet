@@ -84,7 +84,14 @@ public sealed partial class SceneEngineSyncTests
         creationCompletion.SetResult(Accepted(request));
         _ = (await syncing.ConfigureAwait(false)).Should().BeTrue();
 
-        _ = fixture.Requests.Select(value => value.Command).OfType<RuntimeSetProperties>().Should().BeEmpty();
+        // Initial projection preserves the frozen physical-camera recipe;
+        // the queued field-of-view edit must still be discarded on removal.
+        var projected = fixture.Requests.Select(value => value.Command).OfType<RuntimeSetProperties>().Should().ContainSingle().Subject;
+        _ = projected.Entries.Select(value => value.FieldId).Should().Equal(
+            (ushort)PerspectiveCameraField.ApertureF,
+            (ushort)PerspectiveCameraField.ShutterRate,
+            (ushort)PerspectiveCameraField.Iso);
+        _ = projected.Entries.Select(value => value.Value).Should().Equal(camera.ApertureF, camera.ShutterRate, camera.Iso);
         _ = fixture.Requests.Select(value => value.Command).OfType<RuntimeDetachCamera>().Should().ContainSingle();
         _ = fixture.Sync.GetPendingPropertySyncCount(scene.Id).Should().Be(0);
     }

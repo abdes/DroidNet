@@ -12,14 +12,15 @@
 #include <exception>
 #include <filesystem>
 #include <memory>
-#include <nlohmann/json-schema.hpp>
-#include <nlohmann/json.hpp>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <unordered_map>
 #include <utility>
 #include <vector>
+
+#include <nlohmann/json-schema.hpp>
+#include <nlohmann/json.hpp>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
@@ -30,12 +31,22 @@
 #include <Oxygen/Cooker/Import/Internal/Jobs/SceneDescriptorImportJob.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/ScenePipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/TextureReferenceResolver.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
+#include <Oxygen/Core/Detail/FormatUtils.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/PakFormatSerioWriters.h>
+#include <Oxygen/Data/PakFormat_core.h>
+#include <Oxygen/Data/PakFormat_world.h>
+#include <Oxygen/Scene/ExposureSettings.h>
+#include <Oxygen/Serio/MemoryStream.h>
+#include <Oxygen/Serio/Writer.h>
 
 namespace oxygen::content::import::detail {
 
@@ -205,7 +216,7 @@ namespace {
     const auto version_it = descriptor_doc.find("version");
     const auto invalid_version = version_it == descriptor_doc.end()
       || !version_it->is_number_unsigned()
-      || version_it->get<uint32_t>() != data::pak::world::kSceneAssetVersion;
+      || version_it->get<uint64_t>() != data::pak::world::kSceneAssetVersion;
     if (!invalid_version) {
       return true;
     }
@@ -567,8 +578,9 @@ namespace {
     };
   }
 
-  auto BuildPostProcessSystemRecord(const json& source)
-    -> SceneEnvironmentSystem
+  auto BuildPostProcessSystemRecord(SceneDescriptorExecutionContext& context,
+    const json& source, const data::pak::core::ResourceIndexT mask_index)
+    -> std::optional<SceneEnvironmentSystem>
   {
     auto record = data::pak::world::PostProcessVolumeEnvironmentRecord {};
     record.enabled = source.value("enabled", true) ? 1U : 0U;
@@ -619,10 +631,84 @@ namespace {
     record.vignette_intensity
       = source.value("vignette_intensity", record.vignette_intensity);
     record.display_gamma = source.value("display_gamma", record.display_gamma);
+    record.auto_exposure_black_influence = source.value(
+      "auto_exposure_black_influence", record.auto_exposure_black_influence);
+    record.auto_exposure_transition_distance_ev
+      = source.value("auto_exposure_transition_distance_ev",
+        record.auto_exposure_transition_distance_ev);
+    record.auto_exposure_metering_mask = mask_index;
+    auto settings = scene::ExposureSettings {
+      .enabled = record.exposure_enabled != 0U,
+      .mode = record.exposure_mode,
+      .manual_ev = record.manual_exposure_ev,
+      .compensation_ev = record.exposure_compensation_ev,
+      .key = record.exposure_key,
+      .min_ev = record.auto_exposure_min_ev,
+      .max_ev = record.auto_exposure_max_ev,
+      .speed_up = record.auto_exposure_speed_up,
+      .speed_down = record.auto_exposure_speed_down,
+      .metering_mode = record.auto_exposure_metering_mode,
+      .low_percentile = record.auto_exposure_low_percentile,
+      .high_percentile = record.auto_exposure_high_percentile,
+      .min_log_luminance = record.auto_exposure_min_log_luminance,
+      .log_luminance_range = record.auto_exposure_log_luminance_range,
+      .target_luminance = record.auto_exposure_target_luminance,
+      .spot_meter_radius = record.auto_exposure_spot_meter_radius,
+      .black_influence = record.auto_exposure_black_influence,
+      .transition_distance = record.auto_exposure_transition_distance_ev,
+    };
+    if (const auto curve = source.find("auto_exposure_compensation_curve");
+      curve != source.end()) {
+      for (const auto& key : *curve) {
+        settings.compensation_curve.push_back({
+          .metered_ev = key.at("metered_ev").get<float>(),
+          .compensation_ev = key.at("compensation_ev").get<float>(),
+        });
+      }
+    }
+    const auto resolved = scene::ResolveExposureSettings(settings);
+    // The authored record has no selected view/camera. Validate gain again
+    // with the actual camera EV when the runtime activates ManualCamera.
+    if (!resolved
+      && resolved.error() != scene::ExposureSettingsError::kMissingCameraEv) {
+      AddDiagnostic(context.session, context.request, ImportSeverity::kError,
+        "scene.descriptor.exposure_invalid",
+        "Exposure settings rejected: "
+          + std::string(scene::to_string(resolved.error())),
+        "environment.post_process_volume");
+      return std::nullopt;
+    }
+    record.curve_key_count
+      = static_cast<uint32_t>(settings.compensation_curve.size());
+    record.header.record_size = static_cast<uint32_t>(sizeof(record)
+      + (settings.compensation_curve.size()
+        * sizeof(data::pak::world::ExposureCompensationKeyRecord)));
+    serio::MemoryStream stream;
+    serio::Writer writer(stream);
+    const auto packed = writer.ScopedAlignment(1);
+    if (!serio::Store(writer, record)) {
+      AddDiagnostic(context.session, context.request, ImportSeverity::kError,
+        "scene.descriptor.post_process_invalid",
+        "Post-process values or record boundaries are invalid",
+        "environment.post_process_volume");
+      return std::nullopt;
+    }
+    for (const auto& key : settings.compensation_curve) {
+      if (!writer.Write(data::pak::world::ExposureCompensationKeyRecord {
+            .metered_ev = key.metered_ev,
+            .compensation_ev = key.compensation_ev })) {
+        AddDiagnostic(context.session, context.request, ImportSeverity::kError,
+          "scene.descriptor.exposure_curve_write_failed",
+          "Could not serialize exposure compensation curve",
+          "environment.post_process_volume.auto_exposure_compensation_curve");
+        return std::nullopt;
+      }
+    }
+    const auto bytes = stream.Data();
     return SceneEnvironmentSystem {
       .system_type = static_cast<uint32_t>(
         data::pak::world::EnvironmentComponentType::kPostProcessVolume),
-      .record_bytes = PackRecordBytes(record),
+      .record_bytes = { bytes.begin(), bytes.end() },
     };
   }
 
@@ -855,7 +941,9 @@ namespace {
   }
 
   auto PrepareSceneDescriptor(SceneDescriptorExecutionContext& context,
-    const json& descriptor_doc) -> std::optional<PreparedSceneDescriptor>
+    const json& descriptor_doc,
+    const data::pak::core::ResourceIndexT mask_index)
+    -> std::optional<PreparedSceneDescriptor>
   {
     auto prepared = PreparedSceneDescriptor {
       .scene_name = descriptor_doc.at("name").get<std::string>(),
@@ -1004,6 +1092,10 @@ namespace {
           if (camera_doc.contains("far_plane")) {
             camera.far_plane = camera_doc.at("far_plane").get<float>();
           }
+          camera.aperture_f = camera_doc.value("aperture_f", camera.aperture_f);
+          camera.shutter_rate
+            = camera_doc.value("shutter_rate", camera.shutter_rate);
+          camera.iso = camera_doc.value("iso", camera.iso);
           prepared.build.perspective_cameras.push_back(camera);
         }
       }
@@ -1043,6 +1135,10 @@ namespace {
           if (camera_doc.contains("far_plane")) {
             camera.far_plane = camera_doc.at("far_plane").get<float>();
           }
+          camera.aperture_f = camera_doc.value("aperture_f", camera.aperture_f);
+          camera.shutter_rate
+            = camera_doc.value("shutter_rate", camera.shutter_rate);
+          camera.iso = camera_doc.value("iso", camera.iso);
           prepared.build.orthographic_cameras.push_back(camera);
         }
       }
@@ -1218,8 +1314,12 @@ namespace {
     if (descriptor_doc.contains("environment")) {
       const auto& environment_doc = descriptor_doc.at("environment");
       if (environment_doc.contains("post_process_volume")) {
-        prepared.environment_systems.push_back(BuildPostProcessSystemRecord(
-          environment_doc.at("post_process_volume")));
+        const auto record = BuildPostProcessSystemRecord(
+          context, environment_doc.at("post_process_volume"), mask_index);
+        if (!record) {
+          return std::nullopt;
+        }
+        prepared.environment_systems.push_back(*record);
       }
       if (environment_doc.contains("background")) {
         prepared.environment_systems.push_back(
@@ -1411,7 +1511,66 @@ auto SceneDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
   };
   LoadMountedInspections(context);
 
-  const auto prepared_opt = PrepareSceneDescriptor(context, descriptor_doc);
+  auto mask_index = data::pak::core::kNoResourceIndex;
+  const auto mask_pointer = json::json_pointer(
+    "/environment/post_process_volume/auto_exposure_metering_mask");
+  if (descriptor_doc.contains(mask_pointer)) {
+    const auto path = descriptor_doc.at(mask_pointer).get<std::string>();
+    const auto reader = FileReader();
+    if (!reader) {
+      AddDiagnostic(session, Request(), ImportSeverity::kError,
+        "scene.descriptor.mask_reader_unavailable",
+        "Texture descriptor reader is unavailable",
+        "environment.post_process_volume.auto_exposure_metering_mask");
+      co_return co_await FinalizeWithTelemetry(session);
+    }
+    const auto reference = co_await internal::ResolveTextureReference(
+      observer_ptr { &session }, observer_ptr { &Request() }, reader,
+      { .virtual_path = path,
+        .object_path
+        = "environment.post_process_volume.auto_exposure_metering_mask",
+        .diagnostic_prefix = "scene.descriptor." });
+    if (!reference) {
+      co_return co_await FinalizeWithTelemetry(session);
+    }
+    auto source_error = std::error_code {};
+    const bool local_source = std::filesystem::equivalent(
+      reference->cooked_root, session.CookedRoot(), source_error);
+    if (source_error || !local_source
+      || reference->index == data::pak::core::kNoResourceIndex) {
+      AddDiagnostic(session, Request(), ImportSeverity::kError,
+        "scene.descriptor.mask_source_invalid",
+        "Metering mask must reference a texture cooked into the scene's own "
+        "source",
+        "environment.post_process_volume.auto_exposure_metering_mask");
+      co_return co_await FinalizeWithTelemetry(session);
+    }
+    const auto& desc = reference->descriptor;
+    const auto format = static_cast<Format>(desc.format);
+    if (format == Format::kUnknown || format > Format::kMaxFormat
+      || desc.texture_type != static_cast<uint8_t>(TextureType::kTexture2D)
+      || desc.width == 0U || desc.height == 0U || desc.depth != 1U
+      || desc.array_layers != 1U) {
+      AddDiagnostic(session, Request(), ImportSeverity::kError,
+        "scene.descriptor.mask_format_invalid",
+        "Metering mask requires a valid linear 2D color texture",
+        "environment.post_process_volume.auto_exposure_metering_mask");
+      co_return co_await FinalizeWithTelemetry(session);
+    }
+    const auto& info = graphics::detail::GetFormatInfo(format);
+    if (info.is_srgb || info.has_depth || info.has_stencil || !info.has_red
+      || info.kind == graphics::detail::FormatKind::kInteger) {
+      AddDiagnostic(session, Request(), ImportSeverity::kError,
+        "scene.descriptor.mask_format_invalid",
+        "Metering mask requires a linear non-integer color format with a red "
+        "channel",
+        "environment.post_process_volume.auto_exposure_metering_mask");
+      co_return co_await FinalizeWithTelemetry(session);
+    }
+    mask_index = reference->index;
+  }
+  const auto prepared_opt
+    = PrepareSceneDescriptor(context, descriptor_doc, mask_index);
   if (!prepared_opt.has_value()) {
     ReportPhaseProgress(
       ImportPhase::kFailed, 1.0F, "Scene descriptor build failed");

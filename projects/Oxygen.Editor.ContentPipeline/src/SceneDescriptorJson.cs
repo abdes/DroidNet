@@ -63,7 +63,10 @@ internal sealed record NativePerspectiveCamera(
     [property: JsonPropertyName("fov_y")] float FieldOfViewY,
     [property: JsonPropertyName("aspect_ratio")] float AspectRatio,
     [property: JsonPropertyName("near_plane")] float NearPlane,
-    [property: JsonPropertyName("far_plane")] float FarPlane);
+    [property: JsonPropertyName("far_plane")] float FarPlane,
+    [property: JsonPropertyName("aperture_f")] float ApertureF,
+    [property: JsonPropertyName("shutter_rate")] float ShutterRate,
+    [property: JsonPropertyName("iso")] float Iso);
 
 internal sealed record NativeLights(
     [property: JsonPropertyName("directional")] IReadOnlyList<NativeDirectionalLight>? Directional,
@@ -130,12 +133,20 @@ internal sealed record NativePostProcessEnvironment(
     [property: JsonPropertyName("auto_exposure_log_luminance_range")] float AutoExposureLogLuminanceRange,
     [property: JsonPropertyName("auto_exposure_target_luminance")] float AutoExposureTargetLuminance,
     [property: JsonPropertyName("auto_exposure_spot_meter_radius")] float AutoExposureSpotMeterRadius,
+    [property: JsonPropertyName("auto_exposure_black_influence")] float AutoExposureBlackInfluence,
+    [property: JsonPropertyName("auto_exposure_transition_distance_ev")] float AutoExposureTransitionDistanceEv,
+    [property: JsonPropertyName("auto_exposure_metering_mask")] string? AutoExposureMeteringMask,
+    [property: JsonPropertyName("auto_exposure_compensation_curve")] IReadOnlyList<NativeExposureCompensationKey> AutoExposureCompensationCurve,
     [property: JsonPropertyName("bloom_intensity")] float BloomIntensity,
     [property: JsonPropertyName("bloom_threshold")] float BloomThreshold,
     [property: JsonPropertyName("saturation")] float Saturation,
     [property: JsonPropertyName("contrast")] float Contrast,
     [property: JsonPropertyName("vignette_intensity")] float VignetteIntensity,
     [property: JsonPropertyName("display_gamma")] float DisplayGamma);
+
+internal sealed record NativeExposureCompensationKey(
+    [property: JsonPropertyName("metered_ev")] float MeteredEv,
+    [property: JsonPropertyName("compensation_ev")] float CompensationEv);
 
 internal sealed record NativeSkyAtmosphereEnvironment(
     [property: JsonPropertyName("enabled")] bool Enabled,

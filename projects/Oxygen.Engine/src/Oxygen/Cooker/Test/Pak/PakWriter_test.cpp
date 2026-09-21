@@ -4,8 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <algorithm>
 #include <array>
 #include <cstddef>
@@ -18,6 +16,8 @@
 #include <utility>
 #include <vector>
 
+#include "PakTestSupport.h"
+
 #include <Oxygen/Content/PakFile.h>
 #include <Oxygen/Cooker/Pak/PakPlanBuilder.h>
 #include <Oxygen/Cooker/Pak/PakWriter.h>
@@ -29,8 +29,7 @@
 #include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Serio/FileStream.h>
 #include <Oxygen/Serio/Reader.h>
-
-#include "PakTestSupport.h"
+#include <Oxygen/Testing/GTest.h>
 
 namespace {
 namespace content = oxygen::content;
@@ -387,7 +386,7 @@ NOLINT_TEST_F(
 
   const auto action_desc_bytes = MakePatternBytes(0x31U, 48U);
   const auto context_desc_bytes = MakePatternBytes(0x41U, 64U);
-  const auto scene_desc_bytes = MakePatternBytes(0x51U, 32U);
+  const auto scene_desc_bytes = paktest::MakeEmptySceneDescriptor();
 
   ASSERT_TRUE(paktest::WriteFileBytes(source / action_desc_rel,
     std::span<const std::byte>(
@@ -410,6 +409,7 @@ NOLINT_TEST_F(
       .virtual_path = "/Game/Input/Move.oiact",
       .descriptor_size = static_cast<uint64_t>(action_desc_bytes.size()),
       .descriptor_sha = paktest::MakeDigest(0x61U),
+      .descriptor_payload = action_desc_bytes,
     },
     paktest::AssetSpec {
       .key = context_key,
@@ -418,6 +418,7 @@ NOLINT_TEST_F(
       .virtual_path = "/Game/Input/Gameplay.oimap",
       .descriptor_size = static_cast<uint64_t>(context_desc_bytes.size()),
       .descriptor_sha = paktest::MakeDigest(0x62U),
+      .descriptor_payload = context_desc_bytes,
     },
     paktest::AssetSpec {
       .key = scene_key,
@@ -426,6 +427,7 @@ NOLINT_TEST_F(
       .virtual_path = "/Game/Scenes/Main.oscene",
       .descriptor_size = static_cast<uint64_t>(scene_desc_bytes.size()),
       .descriptor_sha = paktest::MakeDigest(0x63U),
+      .descriptor_payload = scene_desc_bytes,
     },
   };
   ASSERT_TRUE(paktest::WriteLooseIndex(source,
@@ -532,6 +534,7 @@ NOLINT_TEST_F(
       .virtual_path = "/Game/Scenes/Main.opscene",
       .descriptor_size = static_cast<uint64_t>(physics_desc_bytes.size()),
       .descriptor_sha = paktest::MakeDigest(0xA1U),
+      .descriptor_payload = physics_desc_bytes,
     },
   };
   ASSERT_TRUE(paktest::WriteLooseIndex(source,

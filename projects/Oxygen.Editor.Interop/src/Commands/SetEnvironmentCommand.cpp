@@ -11,6 +11,8 @@
 #include <memory>
 #include <cmath>
 #include <stdexcept>
+#include <string>
+#include <Oxygen/Scene/ExposureSettings.h>
 
 #include <Commands/SetEnvironmentCommand.h>
 #include <Commands/SetBackgroundColorCommand.h>
@@ -38,34 +40,34 @@ auto EnsureSystem(oxygen::scene::SceneEnvironment& environment) -> T*
   return system.get();
 }
 
-auto MapExposureMode(const int value) noexcept -> oxygen::engine::ExposureMode
+auto MapExposureMode(const int value) -> oxygen::engine::ExposureMode
 {
   switch (value) {
   case 0: return oxygen::engine::ExposureMode::kManual;
   case 1: return oxygen::engine::ExposureMode::kManualCamera;
-  case 2:
-  default: return oxygen::engine::ExposureMode::kAuto;
+  case 2: return oxygen::engine::ExposureMode::kAuto;
+  default: throw std::invalid_argument("Unknown exposure mode");
   }
 }
 
-auto MapMeteringMode(const int value) noexcept -> oxygen::engine::MeteringMode
+auto MapMeteringMode(const int value) -> oxygen::engine::MeteringMode
 {
   switch (value) {
   case 1: return oxygen::engine::MeteringMode::kCenterWeighted;
   case 2: return oxygen::engine::MeteringMode::kSpot;
-  case 0:
-  default: return oxygen::engine::MeteringMode::kAverage;
+  case 0: return oxygen::engine::MeteringMode::kAverage;
+  default: throw std::invalid_argument("Unknown exposure metering mode");
   }
 }
 
-auto MapToneMapper(const int value) noexcept -> oxygen::engine::ToneMapper
+auto MapToneMapper(const int value) -> oxygen::engine::ToneMapper
 {
   switch (value) {
   case 0: return oxygen::engine::ToneMapper::kNone;
   case 2: return oxygen::engine::ToneMapper::kFilmic;
   case 3: return oxygen::engine::ToneMapper::kReinhard;
-  case 1:
-  default: return oxygen::engine::ToneMapper::kAcesFitted;
+  case 1: return oxygen::engine::ToneMapper::kAcesFitted;
+  default: throw std::invalid_argument("Unknown tone mapper");
   }
 }
 
@@ -160,8 +162,50 @@ auto ApplySkyLight(oxygen::scene::SceneEnvironment& environment) -> void
   sky_light->SetAffectReflections(true);
 }
 
+auto ResolvePostProcessExposure(const oxygen::interop::module::PostProcessParams& params)
+  -> oxygen::scene::ExposureSettings
+{
+  auto exposure = oxygen::scene::ExposureSettings {};
+  exposure.enabled = params.exposure_enabled;
+  exposure.mode = MapExposureMode(params.exposure_mode);
+  exposure.metering_mode = MapMeteringMode(params.auto_exposure_metering_mode);
+  exposure.key = params.exposure_key;
+  exposure.manual_ev = params.manual_exposure_ev;
+  exposure.compensation_ev = params.exposure_compensation_ev;
+  exposure.min_ev = params.auto_exposure_min_ev;
+  exposure.max_ev = params.auto_exposure_max_ev;
+  exposure.speed_up = params.auto_exposure_speed_up;
+  exposure.speed_down = params.auto_exposure_speed_down;
+  exposure.low_percentile = params.auto_exposure_low_percentile;
+  exposure.high_percentile = params.auto_exposure_high_percentile;
+  exposure.min_log_luminance = params.auto_exposure_min_log_luminance;
+  exposure.log_luminance_range = params.auto_exposure_log_luminance_range;
+  exposure.target_luminance = params.auto_exposure_target_luminance;
+  exposure.spot_meter_radius = params.auto_exposure_spot_meter_radius;
+  exposure.black_influence = params.auto_exposure_black_influence;
+  exposure.transition_distance = params.auto_exposure_transition_distance_ev;
+  exposure.compensation_curve = params.auto_exposure_compensation_curve;
+  const auto resolved = oxygen::scene::ResolveExposureSettings(exposure);
+  if (!resolved && resolved.error() != oxygen::scene::ExposureSettingsError::kMissingCameraEv) {
+    throw std::invalid_argument("Exposure edit rejected: "
+      + std::string(oxygen::scene::to_string(resolved.error())));
+  }
+  static_cast<void>(MapToneMapper(params.tone_mapper));
+  for (const auto value : { params.bloom_intensity, params.bloom_threshold,
+    params.saturation, params.contrast, params.vignette_intensity, params.display_gamma }) {
+    if (!std::isfinite(value) || value < 0.0F) {
+      throw std::invalid_argument("Post-process values must be finite and nonnegative");
+    }
+  }
+  if (params.vignette_intensity > 1.0F || params.display_gamma < oxygen::engine::kMinDisplayGamma) {
+    throw std::invalid_argument("Post-process vignette or display gamma is outside its valid range");
+  }
+  return exposure;
+}
+
 auto ApplyPostProcess(oxygen::scene::SceneEnvironment& environment,
-  const oxygen::interop::module::PostProcessParams& params) -> void
+  const oxygen::interop::module::PostProcessParams& params,
+  const oxygen::scene::ExposureSettings& exposure) -> void
 {
   namespace env = oxygen::scene::environment;
 
@@ -171,26 +215,7 @@ auto ApplyPostProcess(oxygen::scene::SceneEnvironment& environment,
   }
 
   post_process->SetToneMapper(MapToneMapper(params.tone_mapper));
-  post_process->SetExposureMode(MapExposureMode(params.exposure_mode));
-  post_process->SetExposureEnabled(params.exposure_enabled);
-  post_process->SetExposureCompensationEv(params.exposure_compensation_ev);
-  post_process->SetExposureKey(params.exposure_key);
-  post_process->SetManualExposureEv(params.manual_exposure_ev);
-  post_process->SetAutoExposureRangeEv(
-    params.auto_exposure_min_ev, params.auto_exposure_max_ev);
-  post_process->SetAutoExposureAdaptationSpeeds(
-    params.auto_exposure_speed_up, params.auto_exposure_speed_down);
-  post_process->SetAutoExposureMeteringMode(
-    MapMeteringMode(params.auto_exposure_metering_mode));
-  post_process->SetAutoExposureHistogramPercentiles(
-    params.auto_exposure_low_percentile, params.auto_exposure_high_percentile);
-  post_process->SetAutoExposureHistogramWindow(
-    params.auto_exposure_min_log_luminance,
-    params.auto_exposure_log_luminance_range);
-  post_process->SetAutoExposureTargetLuminance(
-    params.auto_exposure_target_luminance);
-  post_process->SetAutoExposureSpotMeterRadius(
-    params.auto_exposure_spot_meter_radius);
+  post_process->SetExposureSettings(exposure);
   post_process->SetBloomIntensity(params.bloom_intensity);
   post_process->SetBloomThreshold(params.bloom_threshold);
   post_process->SetSaturation(params.saturation);
@@ -277,22 +302,30 @@ namespace oxygen::interop::module {
       return;
     }
 
-    auto* const environment = EnsureEnvironment(*context.Scene);
-    if (environment == nullptr) {
-      return;
+    auto apply = [atmosphere_params = atmosphere_, post_process = post_process_,
+        exposure = ResolvePostProcessExposure(post_process_)]
+        (scene::Scene& scene, content::ResourceKey mask) mutable {
+      auto* const environment = EnsureEnvironment(scene);
+      auto* const atmosphere
+        = EnsureSkyAtmosphereWhenEnabled(*environment, atmosphere_params.enabled);
+      if (atmosphere != nullptr) {
+        ApplySkyAtmosphere(*atmosphere, atmosphere_params);
+      }
+      exposure.metering_mask = mask;
+      ApplySkyLight(*environment);
+      ApplyPostProcess(*environment, post_process, exposure);
+      EnsureDisabledFog(*environment);
+      scene.Update(false);
+    };
+    if (context.AssetRequests) {
+      context.AssetRequests->SetExposureMask(*context.Scene,
+        post_process_.auto_exposure_metering_mask, std::move(apply),
+        std::move(failure_callback_), std::move(success_callback_));
+    } else if (post_process_.auto_exposure_metering_mask) {
+      throw std::logic_error("Exposure mask requires scene asset request state");
+    } else {
+      apply(*context.Scene, {});
     }
-
-    auto* const atmosphere
-      = EnsureSkyAtmosphereWhenEnabled(*environment, atmosphere_.enabled);
-    if (atmosphere != nullptr) {
-      ApplySkyAtmosphere(*atmosphere, atmosphere_);
-    }
-
-    ApplySkyLight(*environment);
-    ApplyPostProcess(*environment, post_process_);
-    EnsureDisabledFog(*environment);
-
-    context.Scene->Update(false);
   }
 
 } // namespace oxygen::interop::module

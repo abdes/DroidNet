@@ -43,7 +43,6 @@ public sealed partial class ContentPipelineServiceTests
         workspace.Scene.RootNodes.Add(node);
         workspace.Scene.SetEnvironment(new SceneEnvironmentData
         {
-            ExposureMode = ExposureMode.Auto,
             PostProcess = new PostProcessEnvironmentData { ExposureMode = ExposureMode.Auto },
         });
         await workspace.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
@@ -81,7 +80,6 @@ public sealed partial class ContentPipelineServiceTests
 
         workspace.Scene.SetEnvironment(new SceneEnvironmentData
         {
-            ExposureMode = ExposureMode.Auto,
             PostProcess = new PostProcessEnvironmentData { ExposureMode = ExposureMode.Auto },
         });
         await workspace.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);

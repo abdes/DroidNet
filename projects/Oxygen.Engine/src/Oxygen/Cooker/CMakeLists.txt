@@ -233,6 +233,8 @@ set(
   "Import/Internal/Utils/DescriptorDocument.h"
   "Import/Internal/Utils/ImportSettingsUtils.h"
   "Import/Internal/Utils/JsonSchemaValidation.h"
+  "Import/Internal/Utils/TextureReferenceResolver.cpp"
+  "Import/Internal/Utils/TextureReferenceResolver.h"
   "Import/Internal/Utils/StringUtils.h"
   "Import/Internal/Utils/VirtualPathResolution.h"
   "Import/Internal/WindowsFileReader.h"
@@ -360,10 +362,8 @@ target_sources(
     ${OXYGEN_COOKER_HEADERS}
   PUBLIC
     FILE_SET HEADERS
-      BASE_DIRS
-        "${OXYGEN_SOURCE_DIR}"
-      FILES
-        ${OXYGEN_COOKER_HEADERS}
+    BASE_DIRS "${OXYGEN_SOURCE_DIR}"
+    FILES ${OXYGEN_COOKER_HEADERS}
 )
 
 arrange_target_files_for_ide(${META_MODULE_TARGET})
@@ -399,6 +399,7 @@ target_link_libraries(
     oxygen::data
     oxygen::content
   PRIVATE
+    oxygen::scene
     oxygen::physics
     glm::glm
     spng::spng_static

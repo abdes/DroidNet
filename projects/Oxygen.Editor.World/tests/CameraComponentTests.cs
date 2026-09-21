@@ -26,7 +26,7 @@ public class CameraComponentTests
     [TestMethod]
     public void PerspectiveCamera_Hydrate_Dehydrate_RoundTrip()
     {
-        var cam = new PerspectiveCamera { Name = "MainCam", NearPlane = 0.3f, FarPlane = 500f, FieldOfView = 45f, AspectRatio = 4f / 3f };
+        var cam = new PerspectiveCamera { Name = "MainCam", NearPlane = 0.3f, FarPlane = 500f, FieldOfView = 45f, AspectRatio = 4f / 3f, ApertureF = 2.8f, ShutterRate = 250f, Iso = 400f };
 
         var dto = cam.Dehydrate();
 
@@ -45,12 +45,15 @@ public class CameraComponentTests
         _ = recreated.FarPlane.Should().Be(500f);
         _ = recreated.FieldOfView.Should().Be(45f);
         _ = recreated.AspectRatio.Should().Be(4f / 3f);
+        _ = recreated.ApertureF.Should().Be(2.8f);
+        _ = recreated.ShutterRate.Should().Be(250f);
+        _ = recreated.Iso.Should().Be(400f);
     }
 
     [TestMethod]
     public void OrthographicCamera_Hydrate_Dehydrate_RoundTrip()
     {
-        var cam = new OrthographicCamera { Name = "OrthoCam", NearPlane = 0.5f, FarPlane = 200f, OrthographicSize = 20f };
+        var cam = new OrthographicCamera { Name = "OrthoCam", NearPlane = 0.5f, FarPlane = 200f, OrthographicSize = 20f, ApertureF = 8f, ShutterRate = 60f, Iso = 200f };
 
         var dto = cam.Dehydrate();
 
@@ -65,5 +68,28 @@ public class CameraComponentTests
         _ = recreated.Should().NotBeNull();
         _ = recreated!.Name.Should().Be("OrthoCam");
         _ = recreated.OrthographicSize.Should().Be(20f);
+        _ = recreated.ApertureF.Should().Be(8f);
+        _ = recreated.ShutterRate.Should().Be(60f);
+        _ = recreated.Iso.Should().Be(200f);
+    }
+    [TestMethod]
+    [DataRow(0f)]
+    [DataRow(-1f)]
+    [DataRow(float.NaN)]
+    [DataRow(float.PositiveInfinity)]
+    public void PhysicalExposure_RejectsInvalidValuesWithoutMutation(float invalid)
+    {
+        foreach (CameraComponent camera in new CameraComponent[] { new PerspectiveCamera { Name = "Perspective" }, new OrthographicCamera { Name = "Ortho" } })
+        {
+            Action changeAperture = () => camera.ApertureF = invalid;
+            Action changeShutter = () => camera.ShutterRate = invalid;
+            Action changeIso = () => camera.Iso = invalid;
+            _ = changeAperture.Should().Throw<ArgumentOutOfRangeException>();
+            _ = changeShutter.Should().Throw<ArgumentOutOfRangeException>();
+            _ = changeIso.Should().Throw<ArgumentOutOfRangeException>();
+            _ = camera.ApertureF.Should().Be(11f);
+            _ = camera.ShutterRate.Should().Be(125f);
+            _ = camera.Iso.Should().Be(100f);
+        }
     }
 }

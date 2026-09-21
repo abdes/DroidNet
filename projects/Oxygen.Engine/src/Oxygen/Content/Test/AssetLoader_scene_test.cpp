@@ -12,7 +12,8 @@
 #include <string>
 #include <vector>
 
-#include <Oxygen/Testing/GTest.h>
+#include "./AssetLoader_test.h"
+#include "Fixtures/LooseCookedTestLayout.h"
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/AssetLoader.h>
@@ -33,9 +34,7 @@
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
-
-#include "./AssetLoader_test.h"
-#include "Fixtures/LooseCookedTestLayout.h"
+#include <Oxygen/Testing/GTest.h>
 
 using ::testing::NotNull;
 
@@ -538,6 +537,7 @@ NOLINT_TEST_F(AssetLoaderSceneTest,
     AssetLoader loader(Tag::Get(), config);
 
     loader.RegisterLoader(oxygen::content::loaders::LoadSceneAsset);
+    loader.RegisterLoader(oxygen::content::loaders::LoadTextureResource);
 
     OXCO_WITH_NURSERY(n) // NOLINT(*-avoid-reference-coroutine-parameters)
     {
@@ -611,7 +611,34 @@ NOLINT_TEST_F(AssetLoaderSceneTest,
           static_cast<uint32_t>(oxygen::data::pak::world::
               EnvironmentComponentType::kPostProcessVolume));
         EXPECT_EQ(ppv->header.record_size,
-          sizeof(oxygen::data::pak::world::PostProcessVolumeEnvironmentRecord));
+          sizeof(oxygen::data::pak::world::PostProcessVolumeEnvironmentRecord)
+            + (2U
+              * sizeof(
+                oxygen::data::pak::world::ExposureCompensationKeyRecord)));
+        EXPECT_FLOAT_EQ(ppv->auto_exposure_black_influence, 0.25F);
+        EXPECT_FLOAT_EQ(ppv->auto_exposure_transition_distance_ev, 2.5F);
+        EXPECT_EQ(scene->GetPostProcessCompensationCurve().size(), 2U);
+        const auto mask = loader.MakeTextureResourceKeyForAsset(
+          scene_key, ppv->auto_exposure_metering_mask);
+        EXPECT_TRUE(mask.has_value());
+        if (mask) {
+          const auto texture
+            = co_await loader.LoadResourceAsync<oxygen::data::TextureResource>(
+              *mask);
+          EXPECT_THAT(texture, NotNull());
+        }
+        EXPECT_FALSE(loader
+            .MakeTextureResourceKeyForAsset(
+              scene_key, oxygen::data::pak::core::kNoResourceIndex)
+            .has_value());
+        EXPECT_FALSE(loader
+            .MakeTextureResourceKeyForAsset(
+              scene_key, oxygen::data::pak::core::ResourceIndexT { 999U })
+            .has_value());
+        EXPECT_FALSE(loader
+            .MakeTextureResourceKeyForAsset(
+              oxygen::data::AssetKey {}, ppv->auto_exposure_metering_mask)
+            .has_value());
       }
 
       loader.Stop();

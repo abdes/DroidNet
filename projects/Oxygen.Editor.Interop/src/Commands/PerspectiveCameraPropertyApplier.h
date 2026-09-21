@@ -10,6 +10,7 @@
 #include <cmath>
 #include <cstdint>
 #include <span>
+#include <string_view>
 
 #include <Commands/IComponentPropertyApplier.h>
 #include <Commands/PropertyKeys.h>
@@ -24,8 +25,27 @@ namespace oxygen::interop::module {
     kAspectRatio = 1,
     kNearPlane = 2,
     kFarPlane = 3,
+    kApertureF = 4,
+    kShutterRate = 5,
+    kIso = 6,
     kCount,
   };
+
+  [[nodiscard]] inline auto to_string(const PerspectiveCameraField field) noexcept
+    -> std::string_view
+  {
+    switch (field) {
+    case PerspectiveCameraField::kFieldOfViewYRadians: return "FieldOfViewYRadians";
+    case PerspectiveCameraField::kAspectRatio: return "AspectRatio";
+    case PerspectiveCameraField::kNearPlane: return "NearPlane";
+    case PerspectiveCameraField::kFarPlane: return "FarPlane";
+    case PerspectiveCameraField::kApertureF: return "ApertureF";
+    case PerspectiveCameraField::kShutterRate: return "ShutterRate";
+    case PerspectiveCameraField::kIso: return "Iso";
+    case PerspectiveCameraField::kCount: break;
+    }
+    return "__NotSupported__";
+  }
 
   //! Applies §5.3 property entries to `oxygen::scene::PerspectiveCamera`.
   class PerspectiveCameraPropertyApplier final
@@ -78,6 +98,26 @@ namespace oxygen::interop::module {
             camera.SetFarPlane(entry.value);
           }
           break;
+        case PerspectiveCameraField::kApertureF:
+        case PerspectiveCameraField::kShutterRate:
+        case PerspectiveCameraField::kIso: {
+          const auto field = static_cast<PerspectiveCameraField>(entry.field);
+          if (entry.value <= 0.0F) {
+            LOG_F(WARNING, "Camera exposure edit rejected: {} must be positive (received {})",
+              to_string(field), entry.value);
+            break;
+          }
+          auto exposure = camera.Exposure();
+          if (field == PerspectiveCameraField::kApertureF) {
+            exposure.aperture_f = entry.value;
+          } else if (field == PerspectiveCameraField::kShutterRate) {
+            exposure.shutter_rate = entry.value;
+          } else {
+            exposure.iso = entry.value;
+          }
+          camera.SetExposure(exposure);
+          break;
+        }
         default:
           LOG_F(WARNING,
             "PerspectiveCameraPropertyApplier skipped unknown field id {}",

@@ -729,7 +729,7 @@ public sealed partial class SceneEngineSync(
         return await revertSync(cancellationToken).ConfigureAwait(false);
     }
 
-    private static RuntimeSetEnvironment BuildEnvironmentCommand(SceneEnvironmentData environment)
+    private static RuntimeSetEnvironment BuildEnvironmentCommand(Scene scene, SceneEnvironmentData environment)
     {
         var sky = environment.SkyAtmosphere ?? new SkyAtmosphereEnvironmentData();
         var post = environment.PostProcess ?? new PostProcessEnvironmentData();
@@ -764,12 +764,36 @@ public sealed partial class SceneEngineSync(
                 post.AutoExposureLogLuminanceRange,
                 post.AutoExposureTargetLuminance,
                 post.AutoExposureSpotMeterRadius,
+                post.AutoExposureBlackInfluence,
+                post.AutoExposureTransitionDistanceEv,
+                post.AutoExposureCompensationCurve.Select(static key => new RuntimeExposureCompensationKey(key.MeteredEv, key.CompensationEv)).ToImmutableArray(),
+                CreateExposureMaskReference(scene, post.AutoExposureMeteringMask),
                 post.BloomIntensity,
                 post.BloomThreshold,
                 post.Saturation,
                 post.Contrast,
                 post.VignetteIntensity,
                 post.DisplayGamma);
+    }
+
+    private static RuntimeTextureReference? CreateExposureMaskReference(Scene scene, Uri? mask)
+    {
+        if (mask is null)
+        {
+            return null;
+        }
+
+        var path = ContentPipeline.ContentPipelinePaths.ToNativeDescriptorPath(mask, ".otex");
+        var separator = path.IndexOf('/', 1);
+        if (separator <= 1 || scene.Project.ProjectInfo.Location is not { } projectRoot
+            || !Path.IsPathFullyQualified(projectRoot))
+        {
+            throw new InvalidOperationException("An exposure mask requires a saved project and a source mount.");
+        }
+
+        return new(mask,
+            ContentPipeline.ContentPipelinePaths.GetCookedMountRoot(projectRoot, path[1..separator]),
+            path[(separator + 1)..]);
     }
 
     private async Task<bool> SyncSceneCoreAsync(Scene scene, bool skipIfCurrent, CancellationToken cancellationToken)
@@ -919,7 +943,7 @@ public sealed partial class SceneEngineSync(
             return false;
         }
 
-        world.Execute(BuildEnvironmentCommand(scene.Environment));
+        world.Execute(BuildEnvironmentCommand(scene, scene.Environment));
         world.Execute(new RuntimeSetBackgroundColor(scene.Environment.BackgroundColor));
         lock (this.documentGate)
         {
@@ -1058,7 +1082,7 @@ public sealed partial class SceneEngineSync(
             SceneOperationKinds.EditEnvironment,
             LiveSyncDiagnosticCodes.EnvironmentRejected,
             LiveSyncDiagnosticCodes.EnvironmentFailed,
-            world => world.Execute(BuildEnvironmentCommand(environment)),
+            world => world.Execute(BuildEnvironmentCommand(scene, environment)),
             cancellationToken,
             dispatchOverride);
     }
@@ -1307,6 +1331,12 @@ public sealed partial class SceneEngineSync(
                     perspective.AspectRatio,
                     perspective.NearPlane,
                     perspective.FarPlane));
+                world.Execute(new RuntimeSetProperties(node.Id,
+                [
+                    new((ushort)EngineComponentId.PerspectiveCamera, (ushort)PerspectiveCameraField.ApertureF, perspective.ApertureF),
+                    new((ushort)EngineComponentId.PerspectiveCamera, (ushort)PerspectiveCameraField.ShutterRate, perspective.ShutterRate),
+                    new((ushort)EngineComponentId.PerspectiveCamera, (ushort)PerspectiveCameraField.Iso, perspective.Iso),
+                ]));
                 break;
 
             default:

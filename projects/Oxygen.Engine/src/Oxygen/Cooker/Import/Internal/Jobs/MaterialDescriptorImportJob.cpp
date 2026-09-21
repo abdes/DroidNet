@@ -5,17 +5,15 @@
 //===----------------------------------------------------------------------===//
 
 #include <array>
-#include <cctype>
 #include <chrono>
-#include <cstring>
 #include <filesystem>
-#include <nlohmann/json-schema.hpp>
-#include <nlohmann/json.hpp>
 #include <optional>
 #include <string>
 #include <string_view>
-#include <type_traits>
 #include <vector>
+
+#include <nlohmann/json-schema.hpp>
+#include <nlohmann/json.hpp>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
@@ -27,7 +25,7 @@
 #include <Oxygen/Cooker/Import/Internal/Jobs/MaterialDescriptorImportJob.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/MaterialPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
-#include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/TextureReferenceResolver.h>
 #include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/MaterialDomain.h>
@@ -66,21 +64,6 @@ namespace {
     TextureSlotBindingEntry {
       "thickness", &MaterialTextureBindings::thickness },
   };
-
-  constexpr uint16_t kSidecarDescriptorVersion = 1;
-
-#pragma pack(push, 1)
-  struct TextureSidecarFile final {
-    char magic[4] = { 'O', 'T', 'E', 'X' };
-    uint16_t version = kSidecarDescriptorVersion;
-    uint16_t reserved = 0;
-    data::pak::core::ResourceIndexT resource_index
-      = data::pak::core::kNoResourceIndex;
-    data::pak::core::TextureResourceDesc descriptor {};
-  };
-#pragma pack(pop)
-
-  static_assert(std::is_trivially_copyable_v<TextureSidecarFile>);
 
   auto GetMaterialDescriptorValidator() -> json_validator&
   {
@@ -133,178 +116,6 @@ namespace {
         AddDiagnostic(session, request, ImportSeverity::kError,
           std::string(code), message, object_path);
       });
-  }
-
-  auto ParseTextureSidecar(std::span<const std::byte> bytes,
-    TextureSidecarFile& file, std::string& error_message) -> bool
-  {
-    if (bytes.size() < sizeof(TextureSidecarFile)) {
-      error_message = "Texture descriptor file is truncated";
-      return false;
-    }
-
-    std::memcpy(&file, bytes.data(), sizeof(TextureSidecarFile));
-    if (std::memcmp(file.magic, "OTEX", 4) != 0) {
-      error_message = "Texture descriptor has invalid magic";
-      return false;
-    }
-    if (file.version != kSidecarDescriptorVersion) {
-      error_message = "Texture descriptor has unsupported version";
-      return false;
-    }
-    return true;
-  }
-
-  auto ToLowerAscii(std::string value) -> std::string
-  {
-    for (auto& ch : value) {
-      ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
-    }
-    return value;
-  }
-
-  auto IsHexString(const std::string_view text) -> bool
-  {
-    if (text.empty()) {
-      return false;
-    }
-    for (const auto ch : text) {
-      if (!std::isxdigit(static_cast<unsigned char>(ch))) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  auto ResolveHashedTextureDescriptorPath(
-    const std::filesystem::path& plain_path,
-    std::filesystem::path& resolved_path, std::string& error_message) -> bool
-  {
-    constexpr size_t kHashHexLength = 16;
-
-    const auto parent = plain_path.parent_path();
-    if (!std::filesystem::exists(parent)
-      || !std::filesystem::is_directory(parent)) {
-      return false;
-    }
-
-    const auto ext = ToLowerAscii(plain_path.extension().string());
-    if (ext != ".otex") {
-      return false;
-    }
-
-    const auto plain_stem = plain_path.stem().string();
-    if (plain_stem.empty()) {
-      return false;
-    }
-
-    std::vector<std::filesystem::path> matches;
-    const auto expected_prefix = ToLowerAscii(plain_stem) + "_";
-
-    for (const auto& entry : std::filesystem::directory_iterator(parent)) {
-      if (!entry.is_regular_file()) {
-        continue;
-      }
-      const auto candidate = entry.path();
-      if (ToLowerAscii(candidate.extension().string()) != ".otex") {
-        continue;
-      }
-
-      const auto candidate_stem = candidate.stem().string();
-      const auto candidate_lower = ToLowerAscii(candidate_stem);
-      if (!candidate_lower.starts_with(expected_prefix)) {
-        continue;
-      }
-      const auto suffix = candidate_lower.substr(expected_prefix.size());
-      if (suffix.size() != kHashHexLength || !IsHexString(suffix)) {
-        continue;
-      }
-      matches.push_back(candidate);
-    }
-
-    if (matches.empty()) {
-      return false;
-    }
-    if (matches.size() > 1U) {
-      error_message = "Multiple hashed texture descriptors match virtual path";
-      return false;
-    }
-
-    resolved_path = std::move(matches.front());
-    return true;
-  }
-
-  auto ResolveTextureIndexFromVirtualPath(ImportSession& session,
-    const ImportRequest& request, IAsyncFileReader& reader,
-    std::string_view virtual_path, std::string object_path)
-    -> co::Co<std::optional<uint32_t>>
-  {
-    if (!internal::IsCanonicalVirtualPath(virtual_path)) {
-      AddDiagnostic(session, request, ImportSeverity::kError,
-        "material.descriptor.texture_virtual_path_invalid",
-        "Texture reference virtual_path must be canonical",
-        std::move(object_path));
-      co_return std::nullopt;
-    }
-
-    auto relpath = std::string {};
-    if (!internal::TryVirtualPathToRelPath(request, virtual_path, relpath)) {
-      AddDiagnostic(session, request, ImportSeverity::kError,
-        "material.descriptor.texture_virtual_path_unmounted",
-        "Texture reference virtual_path is outside mounted cooked roots",
-        std::move(object_path));
-      co_return std::nullopt;
-    }
-
-    auto mounted_roots = internal::BuildMountedCookedRoots(request);
-
-    for (auto it = mounted_roots.rbegin(); it != mounted_roots.rend(); ++it) {
-      auto descriptor_path = *it / std::filesystem::path(relpath);
-      if (!std::filesystem::exists(descriptor_path)) {
-        auto alias_resolve_error = std::string {};
-        auto resolved_hashed = std::filesystem::path {};
-        if (!ResolveHashedTextureDescriptorPath(
-              descriptor_path, resolved_hashed, alias_resolve_error)) {
-          if (!alias_resolve_error.empty()) {
-            AddDiagnostic(session, request, ImportSeverity::kError,
-              "material.descriptor.texture_descriptor_ambiguous",
-              alias_resolve_error + ": " + descriptor_path.string(),
-              object_path);
-            co_return std::nullopt;
-          }
-          continue;
-        }
-        descriptor_path = std::move(resolved_hashed);
-      }
-
-      const auto read_result = co_await reader.ReadFile(descriptor_path);
-      if (!read_result.has_value()) {
-        AddDiagnostic(session, request, ImportSeverity::kError,
-          "material.descriptor.texture_descriptor_read_failed",
-          "Failed reading texture descriptor: "
-            + read_result.error().ToString(),
-          object_path);
-        co_return std::nullopt;
-      }
-
-      auto sidecar = TextureSidecarFile {};
-      auto parse_error = std::string {};
-      if (!ParseTextureSidecar(read_result.value(), sidecar, parse_error)) {
-        AddDiagnostic(session, request, ImportSeverity::kError,
-          "material.descriptor.texture_descriptor_invalid", parse_error,
-          object_path);
-        co_return std::nullopt;
-      }
-
-      co_return sidecar.resource_index.get();
-    }
-
-    AddDiagnostic(session, request, ImportSeverity::kError,
-      "material.descriptor.texture_descriptor_missing",
-      "Texture descriptor virtual_path was not found: "
-        + std::string(virtual_path),
-      std::move(object_path));
-    co_return std::nullopt;
   }
 
   auto ParseMaterialDomain(const std::string_view domain)
@@ -668,8 +479,12 @@ auto MaterialDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
       parse_failed = true;
       co_return;
     }
-    const auto resolved_index = co_await ResolveTextureIndexFromVirtualPath(
-      session, Request(), *reader, virtual_path, object_path);
+    const auto resolved_index
+      = co_await internal::ResolveTextureReference(observer_ptr { &session },
+        observer_ptr { &Request() }, observer_ptr { reader },
+        { .virtual_path = virtual_path,
+          .object_path = object_path,
+          .diagnostic_prefix = "material.descriptor." });
     if (!resolved_index.has_value()) {
       parse_failed = true;
       co_return;
@@ -677,7 +492,7 @@ auto MaterialDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
 
     binding.assigned = true;
     binding.source_id = virtual_path;
-    binding.index = *resolved_index;
+    binding.index = resolved_index->index.get();
 
     if (binding_doc.contains("uv_set")) {
       binding.uv_set = binding_doc.at("uv_set").get<uint8_t>();

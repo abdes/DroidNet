@@ -11,7 +11,7 @@ from pakgen.packing.constants import ASSET_HEADER_SIZE
 def _spec_with_input_assets() -> dict:
     return {
         "source_identity": "01a0a760-49b1-73b4-b0e2-1d74db502a8a",
-        "version": 6,
+        "version": 7,
         "content_version": 1,
         "buffers": [],
         "textures": [],

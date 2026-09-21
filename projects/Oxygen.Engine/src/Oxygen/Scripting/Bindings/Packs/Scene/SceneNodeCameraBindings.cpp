@@ -5,7 +5,10 @@
 //===----------------------------------------------------------------------===//
 
 #include <array>
+#include <cmath>
+#include <limits>
 #include <memory>
+#include <utility>
 
 #include <lua.h>
 #include <lualib.h>
@@ -94,21 +97,31 @@ namespace {
   auto TryReadExposure(
     lua_State* state, const int table_index, scene::CameraExposure& out) -> bool
   {
+    if (lua_type(state, table_index) != LUA_TTABLE) {
+      return false;
+    }
     bool any = false;
-    float v = 0.0F;
-    if (TryGetNumberField(state, table_index, "aperture_f", v)) {
-      out.aperture_f = v;
+    for (const auto& [name, member] : std::array {
+           std::pair { "aperture_f", &scene::CameraExposure::aperture_f },
+           std::pair { "shutter_rate", &scene::CameraExposure::shutter_rate },
+           std::pair { "iso", &scene::CameraExposure::iso },
+         }) {
+      lua_getfield(state, table_index, name);
+      const auto type = lua_type(state, -1);
+      if (type == LUA_TNIL) {
+        lua_pop(state, 1);
+        continue;
+      }
+      const auto number = type == LUA_TNUMBER ? lua_tonumber(state, -1) : 0.0;
+      lua_pop(state, 1);
+      if (!std::isfinite(number) || number <= 0.0
+        || number > std::numeric_limits<float>::max()) {
+        return false;
+      }
+      out.*member = static_cast<float>(number);
       any = true;
     }
-    if (TryGetNumberField(state, table_index, "shutter_rate", v)) {
-      out.shutter_rate = v;
-      any = true;
-    }
-    if (TryGetNumberField(state, table_index, "iso", v)) {
-      out.iso = v;
-      any = true;
-    }
-    return any;
+    return any && std::isfinite(out.GetEv());
   }
 
   auto SceneNodeCamera(lua_State* state) -> int

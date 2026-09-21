@@ -17,22 +17,20 @@
 #include <utility>
 #include <vector>
 
-#include <Oxygen/Base/Macros.h>
-#include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Scene/Scene.h>
-#include <Oxygen/Scene/SceneNode.h>
-
+#include "DemoShell/Services/DomainService.h"
+#include "DemoShell/Services/EnvironmentSceneSnapshot.h"
+#include "DemoShell/Services/PreviewSunController.h"
 #include <glm/vec3.hpp>
 
+#include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Core/Types/Atmosphere.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Light/LightCommon.h>
-
-#include "DemoShell/Services/DomainService.h"
-#include "DemoShell/Services/EnvironmentSceneSnapshot.h"
-#include "DemoShell/Services/PreviewSunController.h"
+#include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Scene/SceneNode.h>
 
 namespace oxygen {
 namespace vortex {
@@ -90,8 +88,8 @@ public:
   OXYGEN_MAKE_NON_MOVABLE(EnvironmentSettingsService)
 
   //! Hydrate runtime environment systems from a scene asset.
-  static auto HydrateEnvironment(scene::SceneEnvironment& target,
-    const data::SceneAsset& source_asset) -> void;
+  static void HydrateEnvironment(scene::SceneEnvironment& target,
+    const data::SceneAsset& source_asset, content::ResourceKey metering_mask);
 
   //! Updates the runtime configuration used for applying settings.
   virtual auto SetRuntimeConfig(const EnvironmentRuntimeConfig& config) -> void;

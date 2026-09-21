@@ -17,6 +17,7 @@ from ..packing.source_identity import source_identity_bytes
 
 from ..packing.constants import (
     ASSET_NAME_MAX_LENGTH,
+    CURRENT_ASSET_VERSIONS,
     MAX_RESOURCES_PER_TYPE,
     MAX_ASSETS_TOTAL,
     MAX_TEXTURE_DIMENSION,
@@ -30,7 +31,6 @@ from ..packing.constants import (
     MAX_MESH_VIEWS_PER_SUBMESH,
     VALID_MESH_TYPES,
     YAML_SCHEMA_VERSION_CURRENT,
-    YAML_SCHEMA_VERSION_MIN,
     SCENE_ASSET_VERSION_CURRENT,
 )
 
@@ -92,37 +92,13 @@ def _schema_phase(spec: Dict[str, Any]) -> List[ValidationErrorRecord]:
 
     # Validate schema version first
     version = spec.get("version", YAML_SCHEMA_VERSION_CURRENT)
-    if not isinstance(version, int) or version < YAML_SCHEMA_VERSION_MIN:
+    if type(version) is not int or version != YAML_SCHEMA_VERSION_CURRENT:
         _err(
             errors,
             "E_VERSION",
-            f"Schema version must be >= {YAML_SCHEMA_VERSION_MIN}",
+            f"Schema version {YAML_SCHEMA_VERSION_CURRENT} is required; migrate the PakGen specification",
             "version",
         )
-    elif version > YAML_SCHEMA_VERSION_CURRENT:
-        _err(
-            errors,
-            "E_VERSION_FUTURE",
-            f"Schema version {version} not supported (max: {YAML_SCHEMA_VERSION_CURRENT})",
-            "version",
-        )
-
-    # Check for 'generate' directive usage with version < 4
-    assets_list = spec.get("assets", [])
-    if isinstance(assets_list, list) and version < 4:
-        has_generate = any(
-            isinstance(node, dict) and node.get("generate") is not None
-            for asset in assets_list
-            if isinstance(asset, dict)
-            for node in (asset.get("nodes") or [])
-        )
-        if has_generate:
-            _err(
-                errors,
-                "W_VERSION_MISMATCH",
-                "Using 'generate' directive requires version >= 4; update to 'version: 4'",
-                "version",
-            )
 
     # Top-level required keys (version allowed default)
     for key in ["buffers", "textures", "audios"]:
@@ -132,6 +108,17 @@ def _schema_phase(spec: Dict[str, Any]) -> List[ValidationErrorRecord]:
     assets_list = spec.get("assets", [])
     if not isinstance(assets_list, list):
         _err(errors, "E_TYPE", "'assets' must be a list", "assets")
+    if isinstance(assets_list, list):
+        for index, asset in enumerate(assets_list):
+            if not isinstance(asset, dict):
+                continue
+            required = CURRENT_ASSET_VERSIONS.get(asset.get("type"))
+            if required is None:
+                continue
+            asset_version = asset.get("version", required)
+            if type(asset_version) is not int or asset_version != required:
+                _err(errors, "E_VERSION", f"{asset.get('type')} descriptor version {required} is required; re-cook content", f"assets[{index}].version")
+
     # Resource entries basic checks
     for rtype in ["buffer", "texture", "audio", "script"]:
         plural = rtype + "s"

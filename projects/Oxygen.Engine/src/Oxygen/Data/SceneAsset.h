@@ -106,7 +106,9 @@ public:
   //! block.
   struct EnvironmentSystemRecordView {
     pak::world::SceneEnvironmentSystemRecordHeader header {};
-    std::span<const std::byte> bytes {};
+    //! Byte offset relative to the beginning of this scene descriptor.
+    size_t record_offset { 0U };
+    std::span<const std::byte> bytes;
   };
 
   //! Constructs a SceneAsset from a raw data blob.
@@ -217,6 +219,13 @@ public:
 
   OXGN_DATA_NDAPI auto TryGetPostProcessVolumeEnvironment() const
     -> std::optional<pak::world::PostProcessVolumeEnvironmentRecord>;
+
+  //! Curve keys decoded from the current post-process record's bounded tail.
+  [[nodiscard]] auto GetPostProcessCompensationCurve() const noexcept
+    -> std::span<const pak::world::ExposureCompensationKeyRecord>
+  {
+    return post_process_curve_;
+  }
 
   //! Returns the authored display background when present.
   OXGN_DATA_NDAPI auto TryGetBackgroundEnvironment() const
@@ -353,6 +362,9 @@ private:
   bool has_environment_block_ { false };
   pak::world::SceneEnvironmentBlockHeader environment_block_header_ {};
   std::vector<EnvironmentSystemRecordView> environment_system_records_;
+  std::optional<pak::world::PostProcessVolumeEnvironmentRecord>
+    post_process_record_;
+  std::vector<pak::world::ExposureCompensationKeyRecord> post_process_curve_;
 
   // Decoded component tables, keyed by ComponentType.
   mutable std::unordered_map<ComponentType, std::any> component_cache_ {};

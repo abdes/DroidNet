@@ -86,7 +86,7 @@ public sealed partial class InspectorControlTests
         _ = sun.AddComponent(new DirectionalLightComponent { Name = "Sun", CastsShadows = true, CascadeCount = 4 });
         sun.Components.OfType<TransformComponent>().Single().LocalRotation = DirectionalLightComponent.DefaultLocalRotation;
         scene.RootNodes.Add(sun);
-        scene.Hydrate(scene.Dehydrate() with { Environment = scene.Environment with { SunNodeId = sun.Id, ManualExposureEv = 9.7f, PostProcess = scene.Environment.PostProcess with { ManualExposureEv = 9.7f } } });
+        scene.Hydrate(scene.Dehydrate() with { Environment = scene.Environment with { SunNodeId = sun.Id, PostProcess = scene.Environment.PostProcess with { ManualExposureEv = 9.7f } } });
         _ = scene.RootNodes.SelectMany(static node => node.Descendants().Prepend(node)).Should().HaveCount(100).And.OnlyContain(static node => node.IsActive && node.IsVisible);
     }
 

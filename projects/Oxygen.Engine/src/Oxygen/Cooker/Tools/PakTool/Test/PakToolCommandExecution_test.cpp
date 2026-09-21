@@ -7,8 +7,9 @@
 #include <atomic>
 #include <filesystem>
 #include <fstream>
-#include <process.h>
 #include <string_view>
+
+#include <process.h>
 
 #include <Oxygen/Cooker/Pak/PakCatalogIo.h>
 #include <Oxygen/Cooker/Tools/PakTool/CommandExecution.h>
@@ -198,15 +199,14 @@ NOLINT_TEST_F(PakToolCommandExecutionTest,
     = Root() / "release" / "game_failure.manifest.json";
   options.output.diagnostics_file
     = Root() / "release" / "game_failure.report.json";
-  options.request.fail_on_warnings = true;
+  WriteTextFile(seed_options.request.output_pak, "corrupt-pak-source");
 
   WriteTextFile(options.request.output_pak, "pak-old");
   WriteTextFile(options.request.catalog_output, "catalog-old");
   WriteTextFile(options.build.manifest_output, "manifest-old");
 
   const auto result = ExecutePakToolCommand(BuildMode::kFull, "build",
-    "Oxygen.Cooker.PakTool build --fail-on-warnings", kToolVersion, options,
-    prep_fs, artifact_fs);
+    "Oxygen.Cooker.PakTool build", kToolVersion, options, prep_fs, artifact_fs);
 
   EXPECT_EQ(result.exit_code, PakToolExitCode::kBuildFailure)
     << result.error_code << ": " << result.error_message;

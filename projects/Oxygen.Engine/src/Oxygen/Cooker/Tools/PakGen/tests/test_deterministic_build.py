@@ -4,7 +4,7 @@ from pakgen.api import BuildOptions, build_pak
 
 SPEC_CONTENT = {
     "source_identity": "01a0a760-4983-7570-90aa-d14b59ac4ab8",
-    "version": 6,
+    "version": 7,
     "content_version": 1,
     "buffers": [],
     "textures": [],

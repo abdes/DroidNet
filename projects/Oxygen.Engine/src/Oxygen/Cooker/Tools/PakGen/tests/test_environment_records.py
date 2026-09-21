@@ -1,4 +1,4 @@
-"""Golden scene-v4 environment record layouts, independent of the writer helpers."""
+"""Golden scene-v6 environment record layouts, independent of the writer helpers."""
 
 import struct
 
@@ -49,9 +49,9 @@ def test_complete_environment_record_layout(tone, exposure, metering):
             }
         }
     )
-    assert SCENE_ASSET_VERSION_CURRENT == 5
-    assert struct.unpack_from("<II", data) == (136, 2)
-    assert struct.unpack_from("<III", data, 8) == (5, 104, 1)
+    assert SCENE_ASSET_VERSION_CURRENT == 6
+    assert struct.unpack_from("<II", data) == (176, 2)
+    assert struct.unpack_from("<III", data, 8) == (5, 144, 1)
     assert struct.unpack_from("<II", data, 20) == (tone, exposure)
     assert struct.unpack_from("<f", data, 28)[0] == pytest.approx(1.25)
     assert struct.unpack_from("<f", data, 72)[0] == pytest.approx(8.75)
@@ -74,5 +74,5 @@ def test_complete_environment_record_layout(tone, exposure, metering):
     assert struct.unpack_from("<f", data, 108)[0] == pytest.approx(2.4)
     assert struct.unpack_from("<I", data, 68)[0] == 0
     assert struct.unpack_from("<I", data, 80)[0] == metering
-    assert struct.unpack_from("<III", data, 112) == (6, 24, 1)
-    assert struct.unpack_from("<3f", data, 124) == pytest.approx((0.05, 0.25, 0.75))
+    assert struct.unpack_from("<III", data, 152) == (6, 24, 1)
+    assert struct.unpack_from("<3f", data, 164) == pytest.approx((0.05, 0.25, 0.75))

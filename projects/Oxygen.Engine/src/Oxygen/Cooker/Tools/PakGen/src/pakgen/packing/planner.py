@@ -638,7 +638,7 @@ def collect_resources(
                     physics_sentinel_spec: Dict[str, Any] = {
                         "name": sentinel_name,
                         "format": 0,
-                        "content_hash": 0,
+                        "content_hash": bytes(32),
                     }
                     data_blobs[rtype].insert(0, b"")
                     desc_fields[rtype].insert(0, physics_sentinel_spec)
@@ -1655,6 +1655,7 @@ def compute_pak_plan(
             material_name_to_key=material_name_to_key,
             script_name_to_key=script_name_to_key,
             scripting_slot_base_index=0,
+            texture_indices=build_plan.resources.index_map.get("texture", {}),
         )
 
         sname = ""

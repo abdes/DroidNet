@@ -13,6 +13,8 @@
 #include <utility>
 #include <vector>
 
+#include "Mocks/MockStream.h"
+
 #include <Oxygen/Content/DescriptorDependencies.h>
 #include <Oxygen/Content/Internal/DependencyCollector.h>
 #include <Oxygen/Content/LoaderContext.h>
@@ -20,12 +22,11 @@
 #include <Oxygen/Content/SourceToken.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/PakFormatSerioWriters.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
 #include <Oxygen/Serio/Writer.h>
 #include <Oxygen/Testing/GTest.h>
-
-#include "Mocks/MockStream.h"
 
 using oxygen::content::loaders::LoadSceneAsset;
 
@@ -134,6 +135,98 @@ NOLINT_TEST(SceneFlagRecordTest, RejectsRetiredSceneVersionFour)
   context.desc_reader = &reader;
   context.parse_only = true;
   EXPECT_THROW(LoadSceneAsset(context), std::runtime_error);
+}
+
+auto MakeExposureScene() -> std::vector<std::byte>
+{
+  namespace world = oxygen::data::pak::world;
+  auto descriptor = world::SceneAssetDesc {};
+  descriptor.header.asset_type
+    = static_cast<uint8_t>(oxygen::data::AssetType::kScene);
+  descriptor.header.version = world::kSceneAssetVersion;
+  auto post = world::PostProcessVolumeEnvironmentRecord {};
+  post.curve_key_count = 2U;
+  post.header.record_size
+    = sizeof(post) + 2U * sizeof(world::ExposureCompensationKeyRecord);
+  post.auto_exposure_black_influence = 0.35F;
+  post.auto_exposure_transition_distance_ev = 2.25F;
+  post.auto_exposure_metering_mask
+    = oxygen::data::pak::core::ResourceIndexT { 7U };
+  const auto environment = world::SceneEnvironmentBlockHeader {
+    .byte_size
+    = sizeof(world::SceneEnvironmentBlockHeader) + post.header.record_size,
+    .systems_count = 1U,
+  };
+  oxygen::serio::MemoryStream stream;
+  oxygen::serio::Writer writer(stream);
+  const auto packed = writer.ScopedAlignment(1);
+  if (!writer.Write(descriptor) || !writer.Write(environment)
+    || !writer.Write(post)
+    || !writer.Write(world::ExposureCompensationKeyRecord { -4.0F, 1.0F })
+    || !writer.Write(world::ExposureCompensationKeyRecord { 12.0F, -0.5F })) {
+    throw std::runtime_error("Could not write scene exposure test fixture");
+  }
+  const auto bytes = stream.Data();
+  return { bytes.begin(), bytes.end() };
+}
+
+NOLINT_TEST(SceneExposureRecordTest, PreservesCurrentPrefixAndVariableCurve)
+{
+  const auto bytes = MakeExposureScene();
+  const auto scene = oxygen::data::SceneAsset(oxygen::data::AssetKey {}, bytes);
+  const auto post = scene.TryGetPostProcessVolumeEnvironment();
+  ASSERT_TRUE(post.has_value());
+  EXPECT_EQ(post->header.record_size, 160U);
+  EXPECT_EQ(post->auto_exposure_metering_mask.get(), 7U);
+  EXPECT_FLOAT_EQ(post->auto_exposure_black_influence, 0.35F);
+  EXPECT_FLOAT_EQ(post->auto_exposure_transition_distance_ev, 2.25F);
+  const auto keys = scene.GetPostProcessCompensationCurve();
+  ASSERT_EQ(keys.size(), 2U);
+  EXPECT_FLOAT_EQ(keys[0].metered_ev, -4.0F);
+  EXPECT_FLOAT_EQ(keys[0].compensation_ev, 1.0F);
+  EXPECT_FLOAT_EQ(keys[1].metered_ev, 12.0F);
+  EXPECT_FLOAT_EQ(keys[1].compensation_ev, -0.5F);
+}
+
+NOLINT_TEST(SceneExposureRecordTest, RejectsObsoleteAndMalformedLayouts)
+{
+  namespace world = oxygen::data::pak::world;
+  using Record = world::PostProcessVolumeEnvironmentRecord;
+  constexpr auto kRecordStart = sizeof(world::SceneAssetDesc)
+    + sizeof(world::SceneEnvironmentBlockHeader);
+  // These are independent wire offsets: the retired prefix, unsupported
+  // extension, mismatched/over-limit counts, and each reserved word.
+  for (const auto [offset, value] :
+    std::array { std::pair { 4U, 104U }, std::pair { 104U, 0U },
+      std::pair { 104U, 2U }, std::pair { 132U, 1U }, std::pair { 132U, 65U },
+      std::pair { 120U, 1U }, std::pair { 124U, 1U }, std::pair { 128U, 1U },
+      std::pair { 136U, 1U }, std::pair { 140U, 1U } }) {
+    SCOPED_TRACE(offset);
+    auto bytes = MakeExposureScene();
+    oxygen::serio::MemoryStream stream { std::span<std::byte>(bytes) };
+    oxygen::serio::Writer writer(stream);
+    const auto packed = writer.ScopedAlignment(1);
+    ASSERT_TRUE(stream.Seek(kRecordStart + offset));
+    ASSERT_TRUE(writer.Write(value));
+    EXPECT_THROW((oxygen::data::SceneAsset(oxygen::data::AssetKey {}, bytes)),
+      std::runtime_error);
+  }
+  auto bytes = MakeExposureScene();
+  oxygen::serio::MemoryStream stream { std::span<std::byte>(bytes) };
+  oxygen::serio::Writer writer(stream);
+  const auto packed = writer.ScopedAlignment(1);
+  ASSERT_TRUE(stream.Seek(kRecordStart + sizeof(Record)
+    + sizeof(world::ExposureCompensationKeyRecord)));
+  ASSERT_TRUE(writer.Write(-4.0F));
+  EXPECT_THROW((oxygen::data::SceneAsset(oxygen::data::AssetKey {}, bytes)),
+    std::runtime_error);
+}
+
+NOLINT_TEST(SceneExposureRecordTest, RejectsSceneVersionFive)
+{
+  auto bytes = MakeSceneWithFlagRecord(0U, 0U, 5U);
+  EXPECT_THROW((oxygen::data::SceneAsset(oxygen::data::AssetKey {}, bytes)),
+    std::runtime_error);
 }
 
 class SceneLoaderTest : public testing::Test {

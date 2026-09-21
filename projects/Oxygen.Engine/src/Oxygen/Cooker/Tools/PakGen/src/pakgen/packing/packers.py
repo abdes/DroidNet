@@ -6,6 +6,7 @@ All functions are side-effect free and validate sizes.
 from __future__ import annotations
 
 import hashlib
+import math
 import struct
 from pathlib import Path
 from typing import Any, Dict, Sequence, List, Callable, Tuple
@@ -14,6 +15,7 @@ from .constants import (
     MAGIC,
     FOOTER_MAGIC,
     ASSET_HEADER_SIZE,
+    CURRENT_ASSET_VERSIONS,
     ASSET_KEY_SIZE,
     ASSET_TYPE_MAP,
     MATERIAL_DESC_SIZE,
@@ -27,6 +29,14 @@ from .constants import (
     MESH_VIEW_DESC_SIZE,
     SHADER_REF_DESC_SIZE,
     SCENE_ASSET_VERSION_CURRENT,
+    SCENE_PERSPECTIVE_CAMERA_RECORD_SIZE,
+    SCENE_ORTHOGRAPHIC_CAMERA_RECORD_SIZE,
+    POST_PROCESS_PREFIX_SIZE,
+    EXPOSURE_EXTENSION_VERSION,
+    EXPOSURE_MAX_CURVE_KEYS,
+    DEFAULT_CAMERA_APERTURE_F,
+    DEFAULT_CAMERA_SHUTTER_RATE,
+    DEFAULT_CAMERA_ISO,
     SCENE_NODE_RECORD_SIZE,
     PHYSICS_RESOURCE_DESC_SIZE,
     PHYSICS_MATERIAL_ASSET_DESC_SIZE,
@@ -139,9 +149,6 @@ def _normalize_sha256_digest(value: Any, *, field: str) -> bytes:
             return bytes.fromhex(cleaned)
         except ValueError as exc:
             raise PakError("E_TYPE", f"{field} hex is invalid") from exc
-    if isinstance(value, int):
-        # Integer form is interpreted as legacy low 64-bit prefix.
-        return struct.pack("<Q", value & 0xFFFFFFFFFFFFFFFF) + (b"\x00" * 24)
     if value is None:
         return b"\x00" * 32
     raise PakError(
@@ -154,10 +161,15 @@ def pack_asset_header(asset_dict: Dict[str, Any]) -> bytes:
     name = asset_dict.get("name", "")
     type_name = asset_dict.get("type")
     asset_type = ASSET_TYPE_MAP.get(type_name, 0)
-    version = asset_dict.get("version", 1)
+    required_version = CURRENT_ASSET_VERSIONS.get(type_name, 1)
+    version = asset_dict.get("version", required_version)
+    if type_name in CURRENT_ASSET_VERSIONS and (
+        type(version) is not int or version != required_version
+    ):
+        raise PakError("E_VERSION", f"{type_name} descriptor version {required_version} is required; re-cook content")
     streaming_priority = asset_dict.get("streaming_priority", 0)
     content_hash = _normalize_sha256_digest(
-        asset_dict.get("content_hash", 0), field="AssetHeader.content_hash"
+        asset_dict.get("content_hash"), field="AssetHeader.content_hash"
     )
     variant_flags = asset_dict.get("variant_flags", 0)
     name_bytes = pack_name_string(name, 64)
@@ -713,51 +725,153 @@ def _pack_sky_sphere_environment_record(spec: Dict[str, Any]) -> bytes:
     return out
 
 
-def _pack_post_process_volume_environment_record(spec: Dict[str, Any]) -> bytes:
-    enabled = _u32_bool(spec.get("enabled"), 1)
-    tone_mapper = int(spec.get("tone_mapper", 1))
-    exposure_mode = int(spec.get("exposure_mode", 2))
-    exposure_comp = _f(spec.get("exposure_compensation_ev"), 0.0)
-    ae_min = _f(spec.get("auto_exposure_min_ev"), -6.0)
-    ae_max = _f(spec.get("auto_exposure_max_ev"), 16.0)
-    ae_up = _f(spec.get("auto_exposure_speed_up"), 3.0)
-    ae_down = _f(spec.get("auto_exposure_speed_down"), 1.0)
-    bloom_intensity = _f(spec.get("bloom_intensity"), 0.0)
-    bloom_threshold = _f(spec.get("bloom_threshold"), 1.0)
-    saturation = _f(spec.get("saturation"), 1.0)
-    contrast = _f(spec.get("contrast"), 1.0)
-    vignette = _f(spec.get("vignette_intensity"), 0.0)
+def _finite_f32(value: Any, field: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise PakError("E_TYPE", f"{field} must be numeric")
+    try:
+        number = struct.unpack("<f", struct.pack("<f", value))[0]
+    except (OverflowError, struct.error) as error:
+        raise PakError("E_RANGE", f"{field} must fit finite float32") from error
+    if not math.isfinite(number):
+        raise PakError("E_RANGE", f"{field} must be finite")
+    return number
 
-    record_size = 104
-    out = (
-        _pack_env_record_header(_ENV_SYSTEM_POST_PROCESS_VOLUME, record_size)
-        + struct.pack("<I", int(enabled))
-        + struct.pack("<II", tone_mapper, exposure_mode)
-        + struct.pack("<f", exposure_comp)
-        + struct.pack("<ffff", ae_min, ae_max, ae_up, ae_down)
-        + struct.pack("<ff", bloom_intensity, bloom_threshold)
-        + struct.pack("<fff", saturation, contrast, vignette)
-        + struct.pack(
-            "<IffI6ff",
-            _u32_bool(spec.get("exposure_enabled"), 1),
-            _f(spec.get("exposure_key"), 10.0),
-            _f(spec.get("manual_exposure_ev"), 9.7),
-            int(spec.get("auto_exposure_metering_mode", 0)),
-            _f(spec.get("auto_exposure_low_percentile"), 0.1),
-            _f(spec.get("auto_exposure_high_percentile"), 0.9),
-            _f(spec.get("auto_exposure_min_log_luminance"), -12.0),
-            _f(spec.get("auto_exposure_log_luminance_range"), 25.0),
-            _f(spec.get("auto_exposure_target_luminance"), 0.18),
-            _f(spec.get("auto_exposure_spot_meter_radius"), 0.2),
-            _f(spec.get("display_gamma"), 2.2),
-        )
-    )
-    if len(out) != record_size:
-        raise PakError(
-            "E_SIZE",
-            f"PostProcessVolumeEnvironmentRecord size mismatch: {len(out)}",
-        )
-    return out
+
+def _camera_exposure_values(camera: Dict[str, Any]) -> tuple[float, float, float]:
+    values = tuple(_finite_f32(camera.get(field, default), f"camera.{field}")
+                   for field, default in (("aperture_f", DEFAULT_CAMERA_APERTURE_F),
+                                          ("shutter_rate", DEFAULT_CAMERA_SHUTTER_RATE),
+                                          ("iso", DEFAULT_CAMERA_ISO)))
+    if any(value <= 0 for value in values):
+        raise PakError("E_RANGE", "Camera aperture, shutter rate and ISO must be positive")
+    return values
+
+
+def _pack_post_process_volume_environment_record(
+    spec: Dict[str, Any], texture_indices: Dict[str, int] | None = None
+) -> bytes:
+    defaults = {
+        "exposure_compensation_ev": 0.0, "auto_exposure_min_ev": -6.0,
+        "auto_exposure_max_ev": 16.0, "auto_exposure_speed_up": 3.0,
+        "auto_exposure_speed_down": 1.0, "bloom_intensity": 0.0,
+        "bloom_threshold": 1.0, "saturation": 1.0, "contrast": 1.0,
+        "vignette_intensity": 0.0, "exposure_key": 10.0, "manual_exposure_ev": 9.7,
+        "auto_exposure_low_percentile": 0.1, "auto_exposure_high_percentile": 0.9,
+        "auto_exposure_min_log_luminance": -12.0, "auto_exposure_log_luminance_range": 25.0,
+        "auto_exposure_target_luminance": 0.18, "auto_exposure_spot_meter_radius": 0.2,
+        "display_gamma": 2.2, "auto_exposure_black_influence": 0.0,
+        "auto_exposure_transition_distance_ev": 1.5,
+    }
+    values = {field: _finite_f32(spec.get(field, default), f"post_process.{field}")
+              for field, default in defaults.items()}
+    enums = {}
+    for field, default, maximum in (("tone_mapper", 1, 3), ("exposure_mode", 2, 2),
+                                     ("auto_exposure_metering_mode", 0, 2)):
+        value = spec.get(field, default)
+        if type(value) is not int or not 0 <= value <= maximum:
+            raise PakError("E_ENUM", f"Unsupported {field}: {value!r}")
+        enums[field] = value
+    booleans = {}
+    for field in ("enabled", "exposure_enabled"):
+        value = spec.get(field, True)
+        if type(value) not in (bool, int) or value not in (0, 1):
+            raise PakError("E_TYPE", f"{field} must be a boolean")
+        booleans[field] = int(value)
+    for field in ("auto_exposure_speed_up", "auto_exposure_speed_down",
+                  "auto_exposure_target_luminance", "auto_exposure_spot_meter_radius",
+                  "bloom_intensity", "bloom_threshold", "saturation", "contrast"):
+        if values[field] < 0:
+            raise PakError("E_RANGE", f"{field} must be nonnegative")
+    for field in ("exposure_key", "auto_exposure_transition_distance_ev"):
+        if values[field] <= 0:
+            raise PakError("E_RANGE", f"{field} must be positive")
+    for field in ("auto_exposure_black_influence", "vignette_intensity"):
+        if not 0 <= values[field] <= 1:
+            raise PakError("E_RANGE", f"{field} must be in [0, 1]")
+    if values["display_gamma"] < _finite_f32(0.001, "minimum display gamma"):
+        raise PakError("E_RANGE", "display_gamma must be at least 0.001")
+    if values["auto_exposure_min_ev"] > values["auto_exposure_max_ev"]:
+        raise PakError("E_RANGE", "Exposure minimum EV must not exceed maximum EV")
+    if not 0 <= values["auto_exposure_low_percentile"] < values["auto_exposure_high_percentile"] <= 1:
+        raise PakError("E_RANGE", "Exposure percentiles must satisfy 0 <= low < high <= 1")
+    window = values["auto_exposure_log_luminance_range"]
+    if window <= 0 or values["auto_exposure_min_log_luminance"] < -24 or values["auto_exposure_min_log_luminance"] + window > 32:
+        raise PakError("E_RANGE", "Exposure histogram window is outside [-24, 32]")
+    _finite_f32(1.0 / window, "inverse exposure histogram range")
+    authored_curve = spec.get("auto_exposure_compensation_curve", [])
+    if not isinstance(authored_curve, list) or len(authored_curve) > EXPOSURE_MAX_CURVE_KEYS:
+        raise PakError("E_RANGE", "Exposure curve must contain at most 64 keys")
+    curve = []
+    for key in authored_curve:
+        if not isinstance(key, dict) or set(key) != {"metered_ev", "compensation_ev"}:
+            raise PakError("E_FIELD", "Exposure curve keys require metered_ev and compensation_ev")
+        ev = _finite_f32(key["metered_ev"], "curve.metered_ev")
+        compensation = _finite_f32(key["compensation_ev"], "curve.compensation_ev")
+        if curve and ev <= curve[-1][0]:
+            raise PakError("E_RANGE", "Exposure curve EV keys must be strictly increasing after float32 encoding")
+        curve.append((ev, compensation))
+    # Match the canonical authored gain domain. ManualCamera's gain requires
+    # the actual runtime camera; no synthetic camera EV is substituted here.
+    def curve_value(ev: float) -> float:
+        if not curve:
+            return 0.0
+        if ev <= curve[0][0]:
+            return curve[0][1]
+        for (left_ev, left_gain), (right_ev, right_gain) in zip(curve, curve[1:]):
+            if ev <= right_ev:
+                alpha = (ev - left_ev) / (right_ev - left_ev)
+                return left_gain + (right_gain - left_gain) * alpha
+        return curve[-1][1]
+
+    def require_supported_gain(gain: float) -> None:
+        if not math.isfinite(gain) or not -32.0 <= gain <= 32.0:
+            raise PakError("E_RANGE", "Exposure settings require an unsupported gain outside [-32, 32] log2 stops")
+
+    if booleans["exposure_enabled"]:
+        log_key = math.log2(values["exposure_key"] / 12.5)
+        if enums["exposure_mode"] == 0:
+            require_supported_gain(values["exposure_compensation_ev"] - values["manual_exposure_ev"] + log_key)
+        elif enums["exposure_mode"] == 2:
+            minimum, maximum = values["auto_exposure_min_ev"], values["auto_exposure_max_ev"]
+            grey = _finite_f32(0.18, "exposure middle grey")
+            target = values["auto_exposure_target_luminance"]
+            target_term = math.log2(target / grey) if target > 0 else 0.0
+            raw_min, raw_max = -24.0 - math.log2(grey), 32.0 - math.log2(grey)
+            positions = [minimum, min(maximum, max(minimum, 0.0))]
+            if minimum != maximum:
+                positions.extend([raw_min, raw_max])
+                positions.extend(ev for ev in [minimum, maximum] + [key[0] for key in curve]
+                                 if raw_min < ev < raw_max)
+            for ev in positions:
+                require_supported_gain(math.fsum([values["exposure_compensation_ev"], curve_value(ev),
+                    -min(maximum, max(minimum, ev)), log_key, target_term]))
+
+    mask = spec.get("auto_exposure_metering_mask", 0)
+    if mask == 0 and type(mask) is int:
+        mask_index = 0
+    else:
+        mapping = texture_indices or {}
+        mask_index = mapping.get(mask) if isinstance(mask, str) else mask
+        if type(mask_index) is not int or not 0 < mask_index < (1 << 32) or mask_index not in mapping.values():
+            raise PakError("E_REF", f"Unknown exposure metering mask: {mask!r}")
+    record_size = POST_PROCESS_PREFIX_SIZE + len(curve) * struct.calcsize("<2f")
+    prefix_fields = ("exposure_compensation_ev", "auto_exposure_min_ev", "auto_exposure_max_ev",
+                     "auto_exposure_speed_up", "auto_exposure_speed_down", "bloom_intensity",
+                     "bloom_threshold", "saturation", "contrast", "vignette_intensity")
+    out = (_pack_env_record_header(_ENV_SYSTEM_POST_PROCESS_VOLUME, record_size)
+           + struct.pack("<3I", booleans["enabled"], enums["tone_mapper"], enums["exposure_mode"])
+           + struct.pack("<10f", *(values[field] for field in prefix_fields))
+           + struct.pack("<I2fI7f", booleans["exposure_enabled"], values["exposure_key"],
+                         values["manual_exposure_ev"], enums["auto_exposure_metering_mode"],
+                         *(values[field] for field in ("auto_exposure_low_percentile", "auto_exposure_high_percentile",
+                             "auto_exposure_min_log_luminance", "auto_exposure_log_luminance_range",
+                             "auto_exposure_target_luminance", "auto_exposure_spot_meter_radius", "display_gamma")))
+           + struct.pack("<I2fI3II2I", EXPOSURE_EXTENSION_VERSION,
+                         values["auto_exposure_black_influence"], values["auto_exposure_transition_distance_ev"],
+                         mask_index, 0, 0, 0, len(curve), 0, 0))
+    if len(out) != POST_PROCESS_PREFIX_SIZE:
+        raise PakError("E_SIZE", f"Post-process prefix size mismatch: {len(out)}")
+    return out + b"".join(struct.pack("<2f", *key) for key in curve)
 
 
 def _pack_background_environment_record(spec: Dict[str, Any]) -> bytes:
@@ -909,7 +1023,7 @@ def _pack_fog_environment_record(spec: Dict[str, Any]) -> bytes:
     return out
 
 
-def _pack_scene_environment_block(scene: Dict[str, Any]) -> bytes:
+def _pack_scene_environment_block(scene: Dict[str, Any], texture_indices: Dict[str, int] | None = None) -> bytes:
     env = scene.get("environment")
     if env is None:
         env = {}
@@ -933,8 +1047,10 @@ def _pack_scene_environment_block(scene: Dict[str, Any]) -> bytes:
     if isinstance(sky_sphere, dict):
         records.append(_pack_sky_sphere_environment_record(sky_sphere))
     post_process = env.get("post_process_volume")
+    if post_process is not None and not isinstance(post_process, dict):
+        raise PakError("E_TYPE", "scene.environment.post_process_volume must be an object")
     if isinstance(post_process, dict):
-        records.append(_pack_post_process_volume_environment_record(post_process))
+        records.append(_pack_post_process_volume_environment_record(post_process, texture_indices))
     background = env.get("background")
     if isinstance(background, dict):
         records.append(_pack_background_environment_record(background))
@@ -1193,8 +1309,9 @@ def _pack_perspective_camera_record(
     out = (
         struct.pack("<I", int(node_index))
         + struct.pack("<4f", fov_y, aspect_ratio, near_plane, far_plane)
+        + struct.pack("<3f", *_camera_exposure_values(camera))
     )
-    if len(out) != 20:
+    if len(out) != SCENE_PERSPECTIVE_CAMERA_RECORD_SIZE:
         raise PakError(
             "E_SIZE", f"PerspectiveCameraRecord size mismatch: {len(out)}"
         )
@@ -1223,8 +1340,9 @@ def _pack_orthographic_camera_record(
     out = (
         struct.pack("<I", int(node_index))
         + struct.pack("<6f", left, right, bottom, top, near_plane, far_plane)
+        + struct.pack("<3f", *_camera_exposure_values(camera))
     )
-    if len(out) != 28:
+    if len(out) != SCENE_ORTHOGRAPHIC_CAMERA_RECORD_SIZE:
         raise PakError(
             "E_SIZE", f"OrthographicCameraRecord size mismatch: {len(out)}"
         )
@@ -1239,6 +1357,7 @@ def pack_scene_asset_descriptor_and_payload(
     material_name_to_key: Dict[str, bytes] | None = None,
     script_name_to_key: Dict[str, bytes] | None = None,
     scripting_slot_base_index: int = 0,
+    texture_indices: Dict[str, int] | None = None,
 ) -> Tuple[bytes, bytes, List[Dict[str, Any]]]:
     """Pack SceneAssetDesc plus trailing payload.
 
@@ -1266,7 +1385,7 @@ def pack_scene_asset_descriptor_and_payload(
     if len(nodes) == 0:
         raise PakError("E_COUNT", "scene must have at least one node")
 
-    scene_version = scene.get("version")
+    scene_version = scene.get("version", SCENE_ASSET_VERSION_CURRENT)
     if "version" in scene and (
         type(scene_version) is not int
         or scene_version != SCENE_ASSET_VERSION_CURRENT
@@ -1392,7 +1511,7 @@ def pack_scene_asset_descriptor_and_payload(
             (
                 _COMPONENT_TYPE_PERSPECTIVE_CAMERA,
                 len(cameras),
-                20,
+                SCENE_PERSPECTIVE_CAMERA_RECORD_SIZE,
                 camera_records,
             )
         )
@@ -1401,7 +1520,7 @@ def pack_scene_asset_descriptor_and_payload(
             (
                 _COMPONENT_TYPE_ORTHOGRAPHIC_CAMERA,
                 len(ortho_cameras),
-                28,
+                SCENE_ORTHOGRAPHIC_CAMERA_RECORD_SIZE,
                 ortho_camera_records,
             )
         )
@@ -1553,7 +1672,7 @@ def pack_scene_asset_descriptor_and_payload(
         + b"".join(component_data)
     )
 
-    payload_core += _pack_scene_environment_block(scene)
+    payload_core += _pack_scene_environment_block(scene, texture_indices)
 
     params_payload = bytearray()
     params_base = SCENE_DESC_SIZE + len(payload_core)
@@ -1672,7 +1791,6 @@ def pack_material_asset_descriptor(
     resource_index_map: Dict[str, Dict[str, int]],
     *,
     header_builder,
-    shader_refs_builder=None,
 ) -> bytes:
     """Pack fixed MaterialAssetDesc (no trailing shader refs).
 
@@ -2022,24 +2140,9 @@ def pack_physics_resource_descriptor(
         resource_asset_key = _pack_asset_key_bytes(
             resource_asset_key_value, "resource_asset_key"
         )
-    content_hash_raw = resource_spec.get("content_hash", 0)
-    if isinstance(content_hash_raw, (bytes, bytearray)):
-        content_hash = bytes(content_hash_raw)
-        if len(content_hash) != 32:
-            raise PakError("E_SIZE", "Physics content_hash bytes must be 32 bytes")
-    elif isinstance(content_hash_raw, str):
-        cleaned = content_hash_raw.strip()
-        if cleaned.startswith("0x") or cleaned.startswith("0X"):
-            cleaned = cleaned[2:]
-        if len(cleaned) != 64:
-            raise PakError("E_SIZE", "Physics content_hash hex must be 64 characters")
-        try:
-            content_hash = bytes.fromhex(cleaned)
-        except ValueError as exc:
-            raise PakError("E_TYPE", "Physics content_hash hex is invalid") from exc
-    else:
-        hash_prefix = int(content_hash_raw) & 0xFFFFFFFFFFFFFFFF
-        content_hash = struct.pack("<Q", hash_prefix) + (b"\x00" * 24)
+    content_hash = _normalize_sha256_digest(
+        resource_spec.get("content_hash"), field="PhysicsResourceDesc.content_hash"
+    )
     desc = (
         struct.pack("<Q", data_offset)
         + struct.pack("<I", data_size)
@@ -2671,30 +2774,9 @@ def pack_physics_scene_asset_descriptor_and_payload(
     target_scene_key = _pack_asset_key_bytes(
         asset.get("target_scene_key"), "target_scene_key"
     )
-    target_scene_content_hash_raw = asset.get("target_scene_content_hash", 0)
-    if isinstance(target_scene_content_hash_raw, (bytes, bytearray)):
-        target_scene_content_hash = bytes(target_scene_content_hash_raw)
-        if len(target_scene_content_hash) != 32:
-            raise PakError(
-                "E_SIZE", "target_scene_content_hash bytes must be 32 bytes"
-            )
-    elif isinstance(target_scene_content_hash_raw, str):
-        cleaned = target_scene_content_hash_raw.strip()
-        if cleaned.startswith("0x") or cleaned.startswith("0X"):
-            cleaned = cleaned[2:]
-        if len(cleaned) != 64:
-            raise PakError(
-                "E_SIZE", "target_scene_content_hash hex must be 64 characters"
-            )
-        try:
-            target_scene_content_hash = bytes.fromhex(cleaned)
-        except ValueError as exc:
-            raise PakError(
-                "E_TYPE", "target_scene_content_hash hex is invalid"
-            ) from exc
-    else:
-        hash_prefix = int(target_scene_content_hash_raw) & 0xFFFFFFFFFFFFFFFF
-        target_scene_content_hash = struct.pack("<Q", hash_prefix) + (b"\x00" * 24)
+    target_scene_content_hash = _normalize_sha256_digest(
+        asset.get("target_scene_content_hash"), field="target_scene_content_hash"
+    )
     desc = (
         header
         + target_scene_key
@@ -3746,9 +3828,9 @@ def pack_mesh_view_descriptor(mesh_view: Dict[str, Any]) -> bytes:
 
 
 def pack_geometry_asset_descriptor(
-    asset: Dict[str, Any], *, header_builder, lods_builder=None
+    asset: Dict[str, Any], *, header_builder
 ) -> bytes:
-    # Match legacy geometry descriptor layout: header + lod_count + bb_min + bb_max + reserved
+    # Current geometry prefix: header, LOD count, bounds and reserved bytes.
     lods = asset.get("lods", [])
     if "bounding_box_min" in asset or "bounding_box_max" in asset:
         bb_min = _coerce_vec3(asset.get("bounding_box_min"), [0.0, 0.0, 0.0])

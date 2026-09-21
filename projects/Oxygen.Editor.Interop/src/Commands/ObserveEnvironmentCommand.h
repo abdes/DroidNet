@@ -25,6 +25,9 @@ struct EnvironmentObservation {
   bool post_process_exists = false;
   SkyAtmosphereParams atmosphere;
   PostProcessParams post_process;
+  content::ResourceKey metering_mask {};
+  bool metering_mask_pending { false };
+  std::string metering_mask_error;
 };
 
 //! Reads the live scene's authored environment properties in the mutation phase.
@@ -40,6 +43,11 @@ public:
   void Execute(CommandContext& context) override
   {
     EnvironmentObservation result;
+    if (context.AssetRequests) {
+      const auto mask = context.AssetRequests->InspectExposureMask();
+      result.metering_mask_pending = mask.pending;
+      result.metering_mask_error = mask.error;
+    }
     if (context.Scene) {
       const auto environment = context.Scene->GetEnvironment();
       result.exists = environment != nullptr;
@@ -80,6 +88,11 @@ public:
           result.post_process.auto_exposure_log_luminance_range = post->GetAutoExposureLogLuminanceRange();
           result.post_process.auto_exposure_target_luminance = post->GetAutoExposureTargetLuminance();
           result.post_process.auto_exposure_spot_meter_radius = post->GetAutoExposureSpotMeterRadius();
+          const auto& exposure = post->GetExposureSettings();
+          result.metering_mask = exposure.metering_mask;
+          result.post_process.auto_exposure_black_influence = exposure.black_influence;
+          result.post_process.auto_exposure_transition_distance_ev = exposure.transition_distance;
+          result.post_process.auto_exposure_compensation_curve = exposure.compensation_curve;
           result.post_process.bloom_intensity = post->GetBloomIntensity();
           result.post_process.bloom_threshold = post->GetBloomThreshold();
           result.post_process.saturation = post->GetSaturation();

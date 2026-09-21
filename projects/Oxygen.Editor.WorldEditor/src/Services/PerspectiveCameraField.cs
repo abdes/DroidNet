@@ -21,4 +21,13 @@ public enum PerspectiveCameraField
 
     /// <summary>Far clipping plane, in meters.</summary>
     FarPlane = 3,
+
+    /// <summary>Physical aperture as an f-number.</summary>
+    ApertureF = 4,
+
+    /// <summary>Shutter rate in reciprocal seconds.</summary>
+    ShutterRate = 5,
+
+    /// <summary>ISO sensor sensitivity.</summary>
+    Iso = 6,
 }

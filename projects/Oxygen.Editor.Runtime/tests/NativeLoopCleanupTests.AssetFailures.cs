@@ -20,7 +20,7 @@ public sealed partial class NativeLoopCleanupTests
         => this.RunNativeCommandsAsync(_ => Task.CompletedTask);
 
     [SuppressMessage("Reliability", "CA2025:Ensure tasks using IDisposable instances complete before the instances are disposed", Justification = "Finally stops and awaits the native loop and dispatcher cleanup before disposing native owners.")]
-    private async Task RunNativeCommandsAsync(Func<RuntimeCommandDispatcher, Task> check)
+    private async Task RunNativeCommandsAsync(Func<RuntimeCommandDispatcher, Task> check, IReadOnlyList<string>? cookedRoots = null)
     {
         var ui = new QueuedContext();
         var previous = SynchronizationContext.Current;
@@ -50,7 +50,7 @@ public sealed partial class NativeLoopCleanupTests
             {
                 await runner.WaitForEngineReadyAsync().WaitAsync(TimeSpan.FromSeconds(10), this.TestContext.CancellationToken).ConfigureAwait(false);
                 var transport = new NativeRuntimeCommandTransport(context);
-                transport.ClearCookedRoots();
+                await transport.ReplaceCookedRootsAsync(cookedRoots ?? []).ConfigureAwait(false);
                 _ = commands.BeginRun(transport, loop);
                 await check(commands).ConfigureAwait(false);
             }

@@ -5,6 +5,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using System.Text;
+using System.Text.Json;
 using AwesomeAssertions;
 using Moq;
 using Oxygen.Editor.World.Serialization;
@@ -48,7 +49,7 @@ public class SceneTests
         const string json = """
             {
               "Id": "11111111-1111-1111-1111-111111111111",
-              "Name": "Legacy Scene",
+              "Name": "Default Scene",
               "RootNodes": []
             }
             """;
@@ -59,6 +60,41 @@ public class SceneTests
         var scene = await serializer.DeserializeAsync(stream).ConfigureAwait(false);
 
         _ = scene.Environment.Should().Be(new SceneEnvironmentData());
+    }
+
+    [TestMethod]
+    public async Task Deserialize_ObsoleteFlatExposure_IsRejected()
+    {
+        const string json = """
+            {
+              "Id": "11111111-1111-1111-1111-111111111111",
+              "Name": "Obsolete Exposure",
+              "RootNodes": [],
+              "Environment": { "ExposureMode": "Auto", "ManualExposureEv": 9.7 }
+            }
+            """;
+        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(json));
+        var serializer = new SceneSerializer(this.ExampleProject);
+        var deserialize = async () => await serializer.DeserializeAsync(stream).ConfigureAwait(false);
+        _ = await deserialize.Should().ThrowAsync<JsonException>().ConfigureAwait(false);
+    }
+
+    [TestMethod]
+    public void Hydrate_PreservesAuthoredExposureWithoutDefaultRewrite()
+    {
+        var exposure = new PostProcessEnvironmentData
+        {
+            ExposureMode = ExposureMode.Auto,
+            ExposureKey = 10.0f,
+            ManualExposureEv = 9.7f,
+        };
+        var scene = Scene.CreateAndHydrate(this.ExampleProject, new SceneData
+        {
+            Id = Guid.NewGuid(),
+            Name = "Authored Exposure",
+            Environment = new SceneEnvironmentData { PostProcess = exposure },
+        });
+        _ = scene.Environment.PostProcess.Should().Be(exposure);
     }
 
     [TestMethod]
@@ -92,10 +128,6 @@ public class SceneTests
         {
             AtmosphereEnabled = false,
             SunNodeId = Guid.Parse("22222222-2222-2222-2222-222222222222"),
-            ExposureMode = ExposureMode.Manual,
-            ManualExposureEv = 4.5f,
-            ExposureCompensation = 1.5f,
-            ToneMapping = ToneMappingMode.Filmic,
             BackgroundColor = new Vector3(0.2f, 0.3f, 0.4f),
             SkyAtmosphere = new SkyAtmosphereEnvironmentData
             {
@@ -124,7 +156,7 @@ public class SceneTests
 
         var restored = await serializer.DeserializeAsync(stream).ConfigureAwait(false);
 
-        _ = restored.Environment.Should().Be(expected);
+        _ = restored.Environment.Should().BeEquivalentTo(expected);
     }
 
     [TestMethod]
@@ -571,6 +603,10 @@ public class SceneTests
             AutoExposureLogLuminanceRange = 20.0f,
             AutoExposureTargetLuminance = 0.25f,
             AutoExposureSpotMeterRadius = 0.4f,
+            AutoExposureBlackInfluence = 0.35f,
+            AutoExposureTransitionDistanceEv = 2.5f,
+            AutoExposureMeteringMask = new Uri("asset:///Game/Textures/Meter.otex.json"),
+            AutoExposureCompensationCurve = [new(-4f, 1f), new(12f, -0.5f)],
             BloomIntensity = 0.7f,
             BloomThreshold = 1.5f,
             Saturation = 0.9f,

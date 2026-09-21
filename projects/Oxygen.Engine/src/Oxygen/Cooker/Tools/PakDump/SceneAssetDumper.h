@@ -15,6 +15,9 @@
 #include <string_view>
 #include <vector>
 
+#include "AssetDumpHelpers.h"
+#include "AssetDumper.h"
+
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Data/ComponentType.h>
@@ -22,9 +25,6 @@
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
-
-#include "AssetDumpHelpers.h"
-#include "AssetDumper.h"
 
 namespace oxygen::content::pakdump {
 
@@ -47,7 +47,6 @@ public:
     using oxygen::data::pak::world::OrthographicCameraRecord;
     using oxygen::data::pak::world::PerspectiveCameraRecord;
     using oxygen::data::pak::world::PointLightRecord;
-    using oxygen::data::pak::world::PostProcessVolumeEnvironmentRecord;
     using oxygen::data::pak::world::RenderableRecord;
     using oxygen::data::pak::world::SceneEnvironmentBlockHeader;
     using oxygen::data::pak::world::SceneEnvironmentSystemRecordHeader;
@@ -478,25 +477,6 @@ public:
         return decoded;
       };
 
-      const auto TryReadPostProcess
-        = [&](const std::span<const std::byte> bytes)
-        -> std::optional<PostProcessVolumeEnvironmentRecord> {
-        if (bytes.size() != sizeof(PostProcessVolumeEnvironmentRecord)) {
-          return std::nullopt;
-        }
-        std::vector<std::byte> buffer;
-        buffer.assign(bytes.begin(), bytes.end());
-        oxygen::serio::MemoryStream stream { std::span<std::byte>(buffer) };
-        oxygen::serio::Reader<oxygen::serio::MemoryStream> reader(stream);
-        auto packed = reader.ScopedAlignment(1);
-        PostProcessVolumeEnvironmentRecord decoded {};
-        const auto res = reader.ReadInto(decoded);
-        if (!res) {
-          return std::nullopt;
-        }
-        return decoded;
-      };
-
       const auto TryReadBackground = [&](const std::span<const std::byte> bytes)
         -> std::optional<BackgroundEnvironmentRecord> {
         if (bytes.size() != sizeof(BackgroundEnvironmentRecord)) {
@@ -734,7 +714,7 @@ public:
         break;
       }
       case EnvironmentComponentType::kPostProcessVolume: {
-        const auto rec = TryReadPostProcess(record.bytes);
+        const auto rec = scene->TryGetPostProcessVolumeEnvironment();
         if (!rec) {
           fmt::print("        (failed to decode)\n");
           break;
@@ -777,6 +757,19 @@ public:
         PrintUtils::Field(
           "Spot Meter Radius", rec->auto_exposure_spot_meter_radius, 10);
         PrintUtils::Field("Display Gamma", rec->display_gamma, 10);
+        PrintUtils::Field(
+          "Black Influence", rec->auto_exposure_black_influence, 10);
+        PrintUtils::Field("Transition Distance (EV)",
+          rec->auto_exposure_transition_distance_ev, 10);
+        PrintUtils::Field("Metering Mask Texture Index",
+          rec->auto_exposure_metering_mask.get(), 10);
+        const auto curve = scene->GetPostProcessCompensationCurve();
+        PrintUtils::Field("Compensation Curve Keys", curve.size(), 10);
+        for (const auto& key : curve) {
+          fmt::print("          EV {}: compensation {} EV\n", key.metered_ev,
+            key.compensation_ev);
+        }
+
         break;
       }
       default:

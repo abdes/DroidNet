@@ -190,9 +190,9 @@ assets:
   - name: "SpaceshipHullMaterial"
     type: "material"
     asset_key: "11111111-1111-1111-1111-111111111111"
-    version: 1
+    version: 2
     streaming_priority: 128
-    content_hash: 0x12345678
+    content_hash: "62a0b4457b8bcff7283cccb5b0c163357487231a35e13665edc43e5709fc8f96"
     variant_flags: 0
 
     # Material properties
@@ -228,9 +228,9 @@ assets:
   - name: "CockpitGlassMaterial"
     type: "material"
     asset_key: "22222222-2222-2222-2222-222222222222"
-    version: 1
+    version: 2
     streaming_priority: 96
-    content_hash: 0x87654321
+    content_hash: "69c60f1e0d396fb653469200c7e895dbdacdc7c676379722daa1ed31aa0a0b3b"
     variant_flags: 0x0002 # Transparent variant
 
     material_domain: 0
@@ -260,9 +260,9 @@ assets:
   - name: "EngineGlowMaterial"
     type: "material"
     asset_key: "33333333-3333-3333-3333-333333333333"
-    version: 1
+    version: 2
     streaming_priority: 192
-    content_hash: 0x11223344
+    content_hash: "97c47930d5d5df7cbac708c9e67df547517548000c574093d275b404b2602f74"
     variant_flags: 0x0004 # Emissive variant
 
     material_domain: 0
@@ -291,9 +291,9 @@ assets:
   - name: "WeaponMaterial"
     type: "material"
     asset_key: "44444444-4444-4444-4444-444444444444"
-    version: 1
+    version: 2
     streaming_priority: 64
-    content_hash: 0xAABBCCDD
+    content_hash: "1b83388855d28a43ca2fefd151c7a065f5239d59f1a8ae01d177da2c73c5b89b"
     variant_flags: 0
 
     material_domain: 0
@@ -327,9 +327,9 @@ assets:
   - name: "SpaceshipGeometry"
     type: "geometry"
     asset_key: "deadbeef-cafe-babe-dead-feeddeadbeef"
-    version: 4
+    version: 1
     streaming_priority: 255
-    content_hash: 0x12345678
+    content_hash: "62a0b4457b8bcff7283cccb5b0c163357487231a35e13665edc43e5709fc8f96"
     variant_flags: 0
     alignment: 256
 

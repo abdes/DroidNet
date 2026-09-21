@@ -5,6 +5,7 @@
 using System.Globalization;
 using System.Numerics;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
@@ -21,8 +22,15 @@ namespace Oxygen.Editor.ContentPipeline;
 /// Generates native Oxygen scene descriptors from editor scene documents.
 /// </summary>
 /// <param name="proceduralGeometryDescriptors">The generated geometry descriptor service.</param>
-public sealed class SceneDescriptorGenerator(IProceduralGeometryDescriptorService proceduralGeometryDescriptors) : ISceneDescriptorGenerator
+public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescriptorService proceduralGeometryDescriptors) : ISceneDescriptorGenerator
 {
+    private const int NativeSceneDescriptorVersion = 6;
+    private const double MaximumExposureLogLuminance = 32;
+    private static readonly Lazy<EditorSchemaCatalog> SceneSchemas = new(() =>
+        EditorSchemaCatalog.LoadFromDirectory(Path.Combine(
+            Path.GetDirectoryName(typeof(EditorSchemaCatalog).Assembly.Location) ?? AppContext.BaseDirectory,
+            "Schemas")));
+
     private readonly IProceduralGeometryDescriptorService proceduralGeometryDescriptors = proceduralGeometryDescriptors
         ?? throw new ArgumentNullException(nameof(proceduralGeometryDescriptors));
 
@@ -95,6 +103,19 @@ public sealed class SceneDescriptorGenerator(IProceduralGeometryDescriptorServic
                 diagnostics);
         }
 
+        var exposureIssue = ValidatePostProcess(scene.Environment.PostProcess);
+        if (exposureIssue is not null)
+        {
+            diagnostics.Add(CreateDiagnostic(
+                operationId,
+                DiagnosticSeverity.Error,
+                ContentPipelineDiagnosticCodes.SceneDescriptorGenerationFailed,
+                exposureIssue,
+                descriptorPath,
+                descriptorVirtualPath));
+            return new(sceneInput.AssetUri, descriptorPath, descriptorVirtualPath, Dependencies: [], diagnostics);
+        }
+
         var generatedGeometryUris = scene.AllNodes
             .SelectMany(static node => node.Components.OfType<GeometryComponent>())
             .Select(static geometry => geometry.Geometry?.Uri)
@@ -116,6 +137,24 @@ public sealed class SceneDescriptorGenerator(IProceduralGeometryDescriptorServic
         var dependencyInputs = new List<ContentCookInput>(generatedGeometryInputs);
         dependencyInputs.AddRange(ResolveGeometryDependencies(scene, scope));
         dependencyInputs.AddRange(ResolveMaterialDependencies(scene, scope));
+        if (scene.Environment.PostProcess.AutoExposureMeteringMask is { } maskUri)
+        {
+            var maskInput = TryResolveAuthoringInput(scope, maskUri);
+            if (maskInput is null || maskInput.Kind != ContentCookAssetKind.Texture
+                || !string.Equals(maskInput.MountName, sceneInput.MountName, StringComparison.Ordinal))
+            {
+                diagnostics.Add(CreateDiagnostic(
+                    operationId,
+                    DiagnosticSeverity.Error,
+                    ContentPipelineDiagnosticCodes.SceneDescriptorGenerationFailed,
+                    "The exposure metering mask must be a texture descriptor in the scene's own content mount.",
+                    descriptorPath,
+                    descriptorVirtualPath));
+                return new(sceneInput.AssetUri, descriptorPath, descriptorVirtualPath, Dependencies: [], diagnostics);
+            }
+
+            dependencyInputs.Add(maskInput);
+        }
 
         foreach (var root in scene.RootNodes)
         {
@@ -129,8 +168,8 @@ public sealed class SceneDescriptorGenerator(IProceduralGeometryDescriptorServic
                 Point: pointLights.Count == 0 ? null : pointLights,
                 Spot: spotLights.Count == 0 ? null : spotLights);
         var descriptor = new NativeSceneDescriptor(
-            Schema: "oxygen.scene-descriptor.v5",
-            Version: 5,
+            Schema: string.Create(CultureInfo.InvariantCulture, $"oxygen.scene-descriptor.v{NativeSceneDescriptorVersion}"),
+            Version: NativeSceneDescriptorVersion,
             Name: ContentPipelinePaths.NormalizeSceneDescriptorName(Path.GetFileName(sceneInput.SourceRelativePath)),
             Nodes: nodes,
             Renderables: renderables.Count == 0 ? null : renderables,
@@ -138,6 +177,35 @@ public sealed class SceneDescriptorGenerator(IProceduralGeometryDescriptorServic
             Lights: lights,
             Environment: CreateEnvironment(scene.Environment),
             References: materialRefs.Count == 0 ? null : new NativeReferences(materialRefs.ToArray(), ExtraAssets: null));
+
+        JsonNode? descriptorJson;
+        try
+        {
+            descriptorJson = JsonSerializer.SerializeToNode(descriptor, SceneDescriptorJson.Options);
+        }
+        catch (ArgumentException error)
+        {
+            diagnostics.Add(CreateDiagnostic(
+                operationId,
+                DiagnosticSeverity.Error,
+                ContentPipelineDiagnosticCodes.SceneDescriptorGenerationFailed,
+                $"Scene descriptor contains an unrepresentable value: {error.Message}",
+                descriptorPath,
+                descriptorVirtualPath));
+            return new(sceneInput.AssetUri, descriptorPath, descriptorVirtualPath, dependencyInputs, diagnostics);
+        }
+
+        if (!SceneSchemas.Value.ValidateAgainstEngine("oxygen.scene-descriptor.schema.json", descriptorJson))
+        {
+            diagnostics.Add(CreateDiagnostic(
+                operationId,
+                DiagnosticSeverity.Error,
+                ContentPipelineDiagnosticCodes.SceneDescriptorGenerationFailed,
+                "Scene descriptor values do not satisfy the current scene schema. Review camera and environment values.",
+                descriptorPath,
+                descriptorVirtualPath));
+            return new(sceneInput.AssetUri, descriptorPath, descriptorVirtualPath, dependencyInputs, diagnostics);
+        }
 
         Directory.CreateDirectory(Path.GetDirectoryName(descriptorPath)!);
         var stream = File.Create(descriptorPath);
@@ -187,10 +255,13 @@ public sealed class SceneDescriptorGenerator(IProceduralGeometryDescriptorServic
             {
                 cameras.Add(new NativePerspectiveCamera(
                     nodeIndex,
-                    camera.FieldOfView,
+                    camera.FieldOfView * (MathF.PI / 180f),
                     camera.AspectRatio,
                     camera.NearPlane,
-                    camera.FarPlane));
+                    camera.FarPlane,
+                    camera.ApertureF,
+                    camera.ShutterRate,
+                    camera.Iso));
             }
 
             foreach (var camera in node.Components.OfType<OrthographicCamera>())
@@ -399,6 +470,56 @@ public sealed class SceneDescriptorGenerator(IProceduralGeometryDescriptorServic
             ? light.IsSunLight && sunNodeId == node.Id
             : light.IsSunLight;
 
+    private static string? ValidateExposureRelationships(PostProcessEnvironmentData exposure)
+    {
+        if (exposure.AutoExposureMinEv > exposure.AutoExposureMaxEv)
+        {
+            return "Auto exposure minimum EV must not exceed maximum EV.";
+        }
+
+        if (exposure.AutoExposureLowPercentile >= exposure.AutoExposureHighPercentile)
+        {
+            return "Auto exposure low percentile must be below the high percentile.";
+        }
+
+        if (exposure.AutoExposureMinLogLuminance + (double)exposure.AutoExposureLogLuminanceRange > MaximumExposureLogLuminance)
+        {
+            return "Auto exposure histogram upper luminance must not exceed 32 EV.";
+        }
+
+        if (exposure.AutoExposureCompensationCurve.IsDefault)
+        {
+            return "Exposure compensation curve must be initialized; use an empty array for no curve.";
+        }
+
+        for (var index = 1; index < exposure.AutoExposureCompensationCurve.Length; index++)
+        {
+            if (exposure.AutoExposureCompensationCurve[index].MeteredEv <= exposure.AutoExposureCompensationCurve[index - 1].MeteredEv)
+            {
+                return "Exposure compensation curve EV keys must be strictly increasing.";
+            }
+        }
+
+        if (exposure.AutoExposureMeteringMask is { } mask)
+        {
+            if (!mask.IsAbsoluteUri)
+            {
+                return "Exposure metering mask must use an absolute asset URI.";
+            }
+
+            try
+            {
+                _ = ContentPipelinePaths.ToNativeDescriptorPath(mask, ".otex");
+            }
+            catch (ArgumentException error)
+            {
+                return $"Invalid exposure metering mask: {error.Message}";
+            }
+        }
+
+        return null;
+    }
+
     private static NativeEnvironment CreateEnvironment(SceneEnvironmentData environment)
         => new(
             CreateSkyAtmosphere(environment.AtmosphereEnabled, environment.SkyAtmosphere ?? new()),
@@ -425,12 +546,20 @@ public sealed class SceneDescriptorGenerator(IProceduralGeometryDescriptorServic
             AutoExposureLogLuminanceRange: authored.AutoExposureLogLuminanceRange,
             AutoExposureTargetLuminance: authored.AutoExposureTargetLuminance,
             AutoExposureSpotMeterRadius: authored.AutoExposureSpotMeterRadius,
+            AutoExposureBlackInfluence: authored.AutoExposureBlackInfluence,
+            AutoExposureTransitionDistanceEv: authored.AutoExposureTransitionDistanceEv,
+            AutoExposureMeteringMask: GetMeteringMaskPath(authored.AutoExposureMeteringMask),
+            AutoExposureCompensationCurve: authored.AutoExposureCompensationCurve
+                .Select(static key => new NativeExposureCompensationKey(key.MeteredEv, key.CompensationEv)).ToArray(),
             BloomIntensity: authored.BloomIntensity,
             BloomThreshold: authored.BloomThreshold,
             Saturation: authored.Saturation,
             Contrast: authored.Contrast,
             VignetteIntensity: authored.VignetteIntensity,
             DisplayGamma: authored.DisplayGamma);
+
+    private static string? GetMeteringMaskPath(Uri? mask)
+        => mask is null ? null : ContentPipelinePaths.ToNativeDescriptorPath(mask, ".otex");
 
     private static NativeSkyAtmosphereEnvironment CreateSkyAtmosphere(bool enabled, SkyAtmosphereEnvironmentData authored)
         => new(

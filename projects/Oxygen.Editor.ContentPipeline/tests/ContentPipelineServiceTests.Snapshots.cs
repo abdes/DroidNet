@@ -99,6 +99,40 @@ public sealed partial class ContentPipelineServiceTests
         _ = (await File.ReadAllTextAsync(Path.Combine(result.InputSnapshot!.InputRoot, source), this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Be(authored);
     }
 
+    /// <summary>Texture jobs consume the captured image even when the source changes during cooking.</summary>
+    /// <param name="absolute">Whether the descriptor references an absolute retained image path.</param>
+    /// <returns>The asynchronous snapshot test.</returns>
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public async Task TextureJobsReadCapturedImagesAfterSourceChanges(bool absolute)
+    {
+        using var workspace = new TempWorkspace();
+        const string source = "Content/Textures/Meter.otex.json";
+        const string image = "Content/Textures/meter.png";
+        workspace.WriteText(image, "saved mask image bytes");
+        workspace.WriteText(source, JsonSerializer.Serialize(new { source = absolute ? Path.Combine(workspace.Root, image) : "meter.png" }));
+        var authored = workspace.ReadText(source);
+        var api = new CapturingEngineContentPipelineApi(new(workspace.Root, Succeeded: true, []), SucceededInspection(workspace))
+        {
+            BeforeImport = async (execution, token) =>
+            {
+                workspace.WriteText(image, "changed live image");
+                var job = execution.Manifest.Jobs.Single(static job => string.Equals(job.Type, "texture-descriptor", StringComparison.Ordinal));
+                var descriptorPath = Path.Combine(execution.InputRoot, job.Source);
+                using var descriptor = JsonDocument.Parse(await File.ReadAllBytesAsync(descriptorPath, token).ConfigureAwait(false));
+                var capturedImage = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(descriptorPath)!, descriptor.RootElement.GetProperty("source").GetString()!));
+                _ = capturedImage.Should().StartWith(execution.InputRoot + Path.DirectorySeparatorChar);
+                _ = (await File.ReadAllTextAsync(capturedImage, token).ConfigureAwait(false)).Should().Be("saved mask image bytes");
+            },
+        };
+        var service = CreateService(workspace, new CapturingSceneDescriptorGenerator(workspace, []), api);
+        var result = await service.CookAssetAsync(new("asset:///" + source), this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = result.Status.Should().Be(OperationStatus.Succeeded, string.Join("; ", result.Diagnostics.Select(static issue => issue.Message)));
+        _ = result.InputsAreCurrent.Should().BeFalse();
+        _ = workspace.ReadText(source).Should().Be(authored);
+    }
+
     /// <summary>Later unsaved edits remain dirty while a captured cook succeeds as a historical result.</summary>
     /// <returns>The asynchronous snapshot test.</returns>
     [TestMethod]

@@ -18,6 +18,7 @@
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/QueueRole.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/RendererTag.h>
 #include <Oxygen/Vortex/Test/Fakes/Graphics.h>
@@ -289,6 +290,8 @@ NOLINT_TEST_F(
   auto accepted = TexBinder().AcquireReadyTexture(key);
   ASSERT_NE(accepted, nullptr);
   EXPECT_EQ(accepted->srv, srv);
+  EXPECT_EQ(accepted->texture->GetDescriptor().initial_state,
+    oxygen::graphics::ResourceStates::kCommon);
   EXPECT_FALSE(TexBinder().HasResourceFailed(key));
   auto in_flight = accepted;
   const auto* texture = accepted->texture.get();

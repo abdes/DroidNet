@@ -6,6 +6,7 @@ from typing import Any
 import json
 
 from .models import PakSpec
+from ..packing.constants import YAML_SCHEMA_VERSION_CURRENT
 from .generators import expand_scene_nodes
 
 try:  # Optional YAML support
@@ -33,7 +34,7 @@ def load_spec(path: str | Path) -> PakSpec:
 def _parse_spec_dict(data: dict[str, Any]) -> PakSpec:
     # Minimal direct mapping; detailed validation to be implemented later.
     spec = PakSpec(
-        version=int(data.get("version", 4)),
+        version=data.get("version", YAML_SCHEMA_VERSION_CURRENT),
         content_version=int(data.get("content_version", 0)),
         source_identity=data.get("source_identity"),
     )

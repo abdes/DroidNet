@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Collections.Immutable;
+
 namespace Oxygen.Editor.World.Serialization;
 
 /// <summary>
@@ -93,6 +95,18 @@ public sealed record PostProcessEnvironmentData
     /// Gets the spot-meter radius used by auto exposure.
     /// </summary>
     public float AutoExposureSpotMeterRadius { get; init; } = 0.2f;
+
+    /// <summary>Gets the influence of dark histogram samples in [0, 1].</summary>
+    public float AutoExposureBlackInfluence { get; init; }
+
+    /// <summary>Gets the hybrid adaptation transition distance in EV stops.</summary>
+    public float AutoExposureTransitionDistanceEv { get; init; } = 1.5f;
+
+    /// <summary>Gets the authored texture descriptor URI, or null for no mask.</summary>
+    public Uri? AutoExposureMeteringMask { get; init; }
+
+    /// <summary>Gets the ordered exposure compensation keys.</summary>
+    public ImmutableArray<ExposureCompensationKeyData> AutoExposureCompensationCurve { get; init; } = [];
 
     /// <summary>
     /// Gets bloom intensity.

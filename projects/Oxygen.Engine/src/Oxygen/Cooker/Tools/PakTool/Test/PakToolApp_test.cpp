@@ -7,10 +7,11 @@
 #include <atomic>
 #include <filesystem>
 #include <fstream>
-#include <process.h>
 #include <sstream>
 #include <system_error>
 #include <vector>
+
+#include <process.h>
 
 #include <Oxygen/Cooker/Tools/PakTool/App.h>
 #include <Oxygen/Cooker/Tools/PakTool/CommandExecution.h>
@@ -205,7 +206,7 @@ NOLINT_TEST_F(PakToolAppTest,
   EXPECT_NE(err.str().find("[RequestValidation]"), std::string::npos);
 }
 
-NOLINT_TEST_F(PakToolAppTest, WarningWithoutFailOnWarningsReturnsSuccess)
+NOLINT_TEST_F(PakToolAppTest, CurrentPakInputPublishesWithoutWarnings)
 {
   const auto seed_pak = SeedPak();
   auto argv = MakeArgv({
@@ -231,14 +232,12 @@ NOLINT_TEST_F(PakToolAppTest, WarningWithoutFailOnWarningsReturnsSuccess)
   const auto exit_code = RunPakToolApp(argv, out, err, prep_fs, artifact_fs);
 
   EXPECT_EQ(exit_code, static_cast<int>(PakToolExitCode::kSuccess));
-  EXPECT_NE(
-    err.str().find("pak.plan.pak_source_regions_projected"), std::string::npos);
+  EXPECT_TRUE(err.str().empty());
   EXPECT_NE(out.str().find("paktool.publication"), std::string::npos);
   EXPECT_NE(out.str().find("\x1b["), std::string::npos);
 }
 
-NOLINT_TEST_F(
-  PakToolAppTest, FailOnWarningsReturnsBuildFailureExitCodeWithErrorDiagnostic)
+NOLINT_TEST_F(PakToolAppTest, CurrentPakInputSucceedsWithFailOnWarnings)
 {
   const auto seed_pak = SeedPak();
   auto argv = MakeArgv({
@@ -264,9 +263,9 @@ NOLINT_TEST_F(
 
   const auto exit_code = RunPakToolApp(argv, out, err, prep_fs, artifact_fs);
 
-  EXPECT_EQ(exit_code, static_cast<int>(PakToolExitCode::kBuildFailure));
-  EXPECT_NE(err.str().find("pak.request.fail_on_warnings"), std::string::npos);
-  EXPECT_NE(out.str().find("build=failed"), std::string::npos);
+  EXPECT_EQ(exit_code, static_cast<int>(PakToolExitCode::kSuccess));
+  EXPECT_TRUE(err.str().empty());
+  EXPECT_NE(out.str().find("paktool.publication"), std::string::npos);
 }
 
 NOLINT_TEST_F(PakToolAppTest, QuietSuppressesNonErrorOutput)

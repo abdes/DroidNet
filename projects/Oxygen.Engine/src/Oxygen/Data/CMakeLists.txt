@@ -80,6 +80,7 @@ set(
   "PakFormat_audio.h"
   "PakFormat_animation.h"
   "PakFormatSerioLoaders.h"
+  "PakFormatSerioWriters.h"
   "PatchManifest.h"
   "PhysicsResource.h"
   "PhysicsSceneAsset.h"
@@ -91,6 +92,7 @@ set(
   "ShaderReference.h"
   "SourceKey.h"
   "TextureResource.h"
+  "TextureResourceDescriptor.h"
   "Unorm16.h"
   "Vertex.h"
 )
@@ -114,6 +116,7 @@ set(
   "ScriptResource.cpp"
   "ShaderReference.cpp"
   "TextureResource.cpp"
+  "TextureResourceDescriptor.cpp"
   "ToStringConverters.cpp"
   "Procedural/ArrowGizmo.cpp"
   "Procedural/Capsule.cpp"

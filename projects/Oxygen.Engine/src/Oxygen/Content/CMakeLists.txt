@@ -56,6 +56,7 @@ set(
   "EvictionEvents.h"
   "VirtualPath.h"
   "VirtualPathResolver.h"
+  "TextureResourceLocator.h"
   "LoaderContext.h"
   "LoaderFunctions.h"
   "OperationCancelledException.h"
@@ -72,6 +73,7 @@ set(
 set(
   OXYGEN_CONTENT_PRIVATE_SOURCES
   "AssetLoader.cpp"
+  "TextureResourceLocator.cpp"
   "DescriptorDependencies.cpp"
   "Internal/AssetIdentityIndex.h"
   "Internal/AssetIdentityIndex.cpp"

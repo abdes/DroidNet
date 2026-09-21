@@ -45,5 +45,5 @@ public partial class OrthographicCamera : CameraComponent
 
     /// <inheritdoc/>
     public override ComponentData Dehydrate()
-        => new OrthographicCameraData { Id = this.Id, Name = this.Name, NearPlane = this.NearPlane, FarPlane = this.FarPlane, OrthographicSize = this.OrthographicSize };
+        => new OrthographicCameraData { Id = this.Id, Name = this.Name, NearPlane = this.NearPlane, FarPlane = this.FarPlane, ApertureF = this.ApertureF, ShutterRate = this.ShutterRate, Iso = this.Iso, OrthographicSize = this.OrthographicSize };
 }

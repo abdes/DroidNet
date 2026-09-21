@@ -9,6 +9,8 @@
 #include <cmath>
 #include <limits>
 
+#include <Oxygen/Core/Types/PostProcess.h>
+
 namespace oxygen::scene {
 
 //! Camera exposure settings expressed as physical camera parameters.
@@ -25,13 +27,13 @@ namespace oxygen::scene {
 */
 struct CameraExposure {
   //! Aperture as f-number (f/stop).
-  float aperture_f = 11.0F;
+  float aperture_f = engine::kDefaultCameraApertureF;
 
   //! Shutter rate in 1/seconds (e.g. 125 for 1/125 s).
-  float shutter_rate = 125.0F;
+  float shutter_rate = engine::kDefaultCameraShutterRate;
 
   //! Sensor ISO sensitivity (e.g. 100, 400).
-  float iso = 100.0F;
+  float iso = engine::kDefaultCameraIso;
 
   //! Computes EV (EV100, ISO 100 reference) for the current exposure settings.
   /*!

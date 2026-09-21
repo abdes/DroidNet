@@ -19,7 +19,7 @@ def _write_minimal_spec(
 ) -> None:
     spec = {
         "source_identity": source_identity,
-        "version": 6,
+        "version": 7,
         "content_version": 1,
         "buffers": [
             {
@@ -129,11 +129,11 @@ def test_deterministic_pak_guid_is_stable_for_normalized_equivalent_specs(
             }
         ],
         "content_version": 1,
-        "version": 6,
+        "version": 7,
     }
     spec_b_dict = {
         "source_identity": "01a0a760-4992-76a2-810f-c6de046ca64b",
-        "version": 6,
+        "version": 7,
         "content_version": 1,
         "buffers": [
             {

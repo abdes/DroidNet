@@ -6,7 +6,9 @@
 
 #pragma once
 
+#include <algorithm>
 #include <array>
+#include <cmath>
 #include <span>
 #include <type_traits>
 
@@ -345,6 +347,15 @@ inline auto Load(AnyReader& reader,
   CHECK_RESULT(reader.ReadInto(record.near_plane));
   CHECK_RESULT(reader.ReadInto(record.far_plane));
 
+  CHECK_RESULT(reader.ReadInto(record.aperture_f));
+  CHECK_RESULT(reader.ReadInto(record.shutter_rate));
+  CHECK_RESULT(reader.ReadInto(record.iso));
+  if (!std::isfinite(record.aperture_f) || record.aperture_f <= 0.0F
+    || !std::isfinite(record.shutter_rate) || record.shutter_rate <= 0.0F
+    || !std::isfinite(record.iso) || record.iso <= 0.0F) {
+    return ::oxygen::Err(std::errc::invalid_argument);
+  }
+
   return {};
 }
 
@@ -360,6 +371,15 @@ inline auto Load(AnyReader& reader,
   CHECK_RESULT(reader.ReadInto(record.top));
   CHECK_RESULT(reader.ReadInto(record.near_plane));
   CHECK_RESULT(reader.ReadInto(record.far_plane));
+
+  CHECK_RESULT(reader.ReadInto(record.aperture_f));
+  CHECK_RESULT(reader.ReadInto(record.shutter_rate));
+  CHECK_RESULT(reader.ReadInto(record.iso));
+  if (!std::isfinite(record.aperture_f) || record.aperture_f <= 0.0F
+    || !std::isfinite(record.shutter_rate) || record.shutter_rate <= 0.0F
+    || !std::isfinite(record.iso) || record.iso <= 0.0F) {
+    return ::oxygen::Err(std::errc::invalid_argument);
+  }
 
   return {};
 }
@@ -628,6 +648,44 @@ inline auto Load(AnyReader& reader,
   CHECK_RESULT(reader.ReadInto(r.auto_exposure_spot_meter_radius));
   CHECK_RESULT(reader.ReadInto(r.display_gamma));
 
+  CHECK_RESULT(reader.ReadInto(r.exposure_extension_version));
+  CHECK_RESULT(reader.ReadInto(r.auto_exposure_black_influence));
+  CHECK_RESULT(reader.ReadInto(r.auto_exposure_transition_distance_ev));
+  CHECK_RESULT(reader.ReadInto(r.auto_exposure_metering_mask));
+  for (auto& value : r.exposure_reserved) {
+    CHECK_RESULT(reader.ReadInto(value));
+  }
+  CHECK_RESULT(reader.ReadInto(r.curve_key_count));
+  for (auto& value : r.curve_reserved) {
+    CHECK_RESULT(reader.ReadInto(value));
+  }
+  const auto reserved_is_zero
+    = [](const uint32_t value) -> bool { return value == 0U; };
+  if (!data::pak::world::HasValidPostProcessVolumeValues(r)
+    || r.exposure_extension_version
+      != data::pak::world::kExposureExtensionVersion
+    || r.curve_key_count > engine::kMaxExposureCompensationCurveKeys
+    || !std::ranges::all_of(r.exposure_reserved, reserved_is_zero)
+    || !std::ranges::all_of(r.curve_reserved, reserved_is_zero)
+    || r.header.record_size
+      != sizeof(r)
+        + (r.curve_key_count
+          * sizeof(data::pak::world::ExposureCompensationKeyRecord))) {
+    return ::oxygen::Err(std::errc::invalid_argument);
+  }
+
+  return {};
+}
+
+inline auto Load(AnyReader& reader,
+  data::pak::world::ExposureCompensationKeyRecord& key) -> Result<void>
+{
+  auto pack = reader.ScopedAlignment(1);
+  CHECK_RESULT(reader.ReadInto(key.metered_ev));
+  CHECK_RESULT(reader.ReadInto(key.compensation_ev));
+  if (!std::isfinite(key.metered_ev) || !std::isfinite(key.compensation_ev)) {
+    return ::oxygen::Err(std::errc::invalid_argument);
+  }
   return {};
 }
 

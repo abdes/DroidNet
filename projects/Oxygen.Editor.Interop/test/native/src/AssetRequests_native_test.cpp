@@ -19,11 +19,15 @@
 #include <Commands/RemoveSceneNodeCommand.h>
 #include <Commands/SetGeometryCommand.h>
 #include <Commands/SetMaterialOverrideCommand.h>
+#include <Commands/SetEnvironmentCommand.h>
 #include <EditorModule/SceneAssetRequests.h>
 #include <EditorModule/ThreadSafeQueue.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
+#include <Oxygen/Data/TextureResource.h>
+#include <Oxygen/Scene/Environment/PostProcessVolume.h>
+#include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
 
@@ -77,6 +81,7 @@ struct Fixture {
   Requests::Material blue = MakeMaterial("/blue");
   std::vector<Requests::GeometryCompletion> geometry_loads;
   std::vector<Requests::MaterialCompletion> material_loads;
+  std::vector<Requests::TextureCompletion> texture_loads;
   std::unordered_map<std::string, Requests::Geometry> geometry_cache;
   std::unordered_map<std::string, Requests::Material> material_cache;
   std::vector<std::string> diagnostics;
@@ -106,7 +111,10 @@ struct Fixture {
           }
         },
         [this](const std::string &message) { diagnostics.push_back(message); },
-        [this](const std::string& uri, bool) { return !unavailable.contains(uri); });
+        [this](const std::string& uri, bool) { return !unavailable.contains(uri); },
+        [this](const oxygen::content::TextureResourceLocator&, Requests::TextureCompletion complete) {
+          texture_loads.push_back(std::move(complete));
+        });
   }
 
   void Execute(EditorCommand &command) {
@@ -863,9 +871,114 @@ void ConfirmedInvalidSlotRequiresNewExplicitAssignment() {
           "explicit assignment reused the rejected request generation");
 }
 
+auto MakeMaskTexture() -> Requests::Texture {
+  using namespace oxygen::data::pak;
+  auto header = render::TexturePayloadHeader {};
+  header.subresource_count = 1U;
+  header.layouts_offset_bytes = sizeof(header);
+  header.data_offset_bytes = sizeof(header) + sizeof(render::SubresourceLayout);
+  header.total_payload_size = header.data_offset_bytes + 4U;
+  const auto layout = render::SubresourceLayout { .offset_bytes = 0U,
+    .row_pitch_bytes = 4U, .size_bytes = 4U };
+  auto bytes = std::vector<uint8_t>(header.total_payload_size, 0U);
+  std::memcpy(bytes.data(), &header, sizeof(header));
+  std::memcpy(bytes.data() + header.layouts_offset_bytes, &layout, sizeof(layout));
+  auto descriptor = core::TextureResourceDesc {};
+  descriptor.size_bytes = header.total_payload_size;
+  descriptor.texture_type = static_cast<uint8_t>(oxygen::TextureType::kTexture2D);
+  descriptor.width = 1U;
+  descriptor.height = 1U;
+  descriptor.depth = 1U;
+  descriptor.array_layers = 1U;
+  descriptor.mip_levels = 1U;
+  descriptor.format = static_cast<uint8_t>(oxygen::Format::kRGBA8UNorm);
+  descriptor.alignment = 256U;
+  return std::make_shared<oxygen::data::TextureResource>(descriptor, std::move(bytes));
+}
+
+void ExposureMaskRequestsAreAtomicAndLatestWins() {
+  Fixture f;
+  const auto texture = MakeMaskTexture();
+  auto failures = 0;
+  auto successes = 0;
+  const auto request = [&](float ev, const char* descriptor) {
+    auto post = PostProcessParams {};
+    post.manual_exposure_ev = ev;
+    if (descriptor) {
+      post.auto_exposure_metering_mask = oxygen::content::TextureResourceLocator {
+        .cooked_root = "C:/Cooked", .descriptor_relative_path = descriptor };
+    }
+    auto command = SetEnvironmentCommand(SkyAtmosphereParams {}, post);
+    command.SetFailureCallback([&](uint64_t, const std::string&) { ++failures; });
+    command.SetSuccessCallback([&](uint64_t) { ++successes; });
+    f.Execute(command);
+  };
+  const auto exposure = [&] {
+    return f.scene->GetEnvironment()
+      ->TryGetSystem<oxygen::scene::environment::PostProcessVolume>()->GetExposureSettings();
+  };
+  request(4.0F, nullptr);
+  request(6.0F, "A.otex");
+  request(8.0F, "B.otex");
+  Require(exposure().manual_ev == 4.0F, "pending mask partially applied exposure");
+  f.texture_loads.at(1)(oxygen::content::ResourceKey { 41U }, texture, {});
+  f.Drain();
+  Require(exposure().manual_ev == 8.0F && exposure().metering_mask.get() == 41U,
+    "latest mask did not apply its complete revision");
+  f.texture_loads.at(0)({}, {}, "obsolete failure");
+  f.Drain();
+  Require(failures == 0 && f.diagnostics.empty(), "obsolete mask failure was reported");
+  request(10.0F, "C.otex");
+  f.texture_loads.at(2)({}, {}, "missing texture");
+  f.Drain();
+  Require(exposure().manual_ev == 8.0F && exposure().metering_mask.get() == 41U,
+    "failed mask replaced the previously accepted revision");
+  Require(failures == 1 && !f.requests->InspectExposureMask().error.empty(),
+    "current mask failure was not observable");
+  f.requests->Refresh(*f.scene);
+  Require(f.requests->IsRefreshPending(), "mask refresh was not tracked");
+  f.texture_loads.at(3)(oxygen::content::ResourceKey { 99U }, texture, {});
+  f.Drain();
+  Require(exposure().manual_ev == 10.0F && exposure().metering_mask.get() == 99U,
+    "mask refresh did not retry the retained authored intent");
+  Require(!f.requests->IsRefreshPending() && f.requests->RefreshError().empty(),
+    "successful mask refresh remained pending or failed");
+  request(12.0F, "D.otex");
+  request(14.0F, nullptr);
+  f.texture_loads.at(4)(oxygen::content::ResourceKey { 101U }, texture, {});
+  f.Drain();
+  Require(exposure().manual_ev == 14.0F && exposure().metering_mask.get() == 0U,
+    "late mask completion undid a clear request");
+  Require(successes == 4, "accepted environment requests were not acknowledged exactly once");
+}
+
+void ExposureMaskRequestsRespectPauseAndSceneLifetime() {
+  Fixture f;
+  const auto texture = MakeMaskTexture();
+  auto applied = 0;
+  const auto locator = oxygen::content::TextureResourceLocator {
+    .cooked_root = "C:/Cooked", .descriptor_relative_path = "Mask.otex" };
+  f.requests->SuspendLoads();
+  f.requests->SetExposureMask(*f.scene, locator,
+    [&](auto&, auto) { ++applied; });
+  Require(f.texture_loads.empty(), "suspended mask request started a load");
+  f.requests->ResumeLoads(*f.scene);
+  Require(f.texture_loads.size() == 1U, "resuming did not start the mask request");
+  auto complete = f.texture_loads.front();
+  f.requests.reset();
+  complete(oxygen::content::ResourceKey { 41U }, texture, {});
+  Require(applied == 0, "mask completion escaped its scene session lifetime");
+}
+
 auto RunScenario(int scenario) -> const char * {
   try {
     switch (scenario) {
+    case 33:
+      ExposureMaskRequestsAreAtomicAndLatestWins();
+      break;
+    case 34:
+      ExposureMaskRequestsRespectPauseAndSceneLifetime();
+      break;
     case 28:
       MaterialRecoversAfterGeometryFailure(true);
       break;
@@ -992,6 +1105,12 @@ private:
   }
 
 public:
+  [TestMethod]
+  void ExposureMaskRevisionIsAtomicAcrossOrderingFailureRefreshAndClear() { Check(33); }
+
+  [TestMethod]
+  void ExposureMaskLoadRespectsPauseAndSceneLifetime() { Check(34); }
+
   [TestMethod]
   void LoadedMaterialRecoversAfterGeometryFailure() { Check(28); }
 

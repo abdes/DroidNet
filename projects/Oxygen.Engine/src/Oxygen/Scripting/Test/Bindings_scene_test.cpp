@@ -4,10 +4,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "ScriptingModule_test_fixture.h"
-
 #include <memory>
 #include <string>
+
+#include "ScriptingModule_test_fixture.h"
 
 #include <Oxygen/Data/ProceduralMeshes.h>
 #include <Oxygen/OxCo/Run.h>
@@ -312,6 +312,55 @@ function on_scene_mutation()
   local p = pp:get()
   if p.tone_mapper ~= "reinhard" then error("tone mapper") end
   if p.exposure_mode ~= "manual" then error("exposure mode") end
+  local settings = {
+    auto_exposure_low_percentile = 0.2,
+    auto_exposure_high_percentile = 0.8,
+    auto_exposure_min_log_luminance = -10,
+    auto_exposure_log_luminance_range = 20,
+    auto_exposure_target_luminance = 0.25,
+    auto_exposure_spot_meter_radius = 0.35,
+    auto_exposure_black_influence = 0.4,
+    auto_exposure_transition_distance_ev = 2.5,
+    auto_exposure_metering_mask = "9007199254740993",
+    auto_exposure_compensation_curve = {
+      {metered_ev = -4, compensation_ev = 1},
+      {metered_ev = 12, compensation_ev = -0.5},
+    },
+    display_gamma = 2.4,
+  }
+  assert(pp:set(settings))
+  p = pp:get()
+  for name, value in pairs(settings) do
+    if type(value) == "number" then
+      assert(math.abs(p[name] - value) < 0.0001, name)
+    end
+  end
+  assert(p.auto_exposure_metering_mask == "9007199254740993")
+  assert(#p.auto_exposure_compensation_curve == 2)
+  assert(p.auto_exposure_compensation_curve[2].compensation_ev == -0.5)
+  assert(pp:set(p), "complete snapshot roundtrip")
+  for _, invalid in ipairs({
+    {tone_mapper = "unknown", manual_exposure_ev = 10},
+    {exposure_mode = "unknown", manual_exposure_ev = 10},
+    {exposure_enabled = 1, manual_exposure_ev = 10},
+    {auto_exposure_low_percentile = 0.9, manual_exposure_ev = 10},
+    {auto_exposure_black_influence = 2, manual_exposure_ev = 10},
+    {auto_exposure_transition_distance_ev = 0, manual_exposure_ev = 10},
+    {auto_exposure_compensation_curve = {{metered_ev = 1, compensation_ev = 0}, {metered_ev = 1, compensation_ev = 1}}},
+    {auto_exposure_compensation_curve = {false}},
+    {auto_exposure_metering_mask = "18446744073709551616"},
+    {auto_exposure_metering_mask = 123},
+    {exposure_key = "12.5"},
+  }) do
+    local ok, reason = pp:set(invalid)
+    assert(not ok and type(reason) == "string")
+    assert(pp:get().manual_exposure_ev == 8, "invalid edit must be atomic")
+    assert(pp:get().auto_exposure_metering_mask == "9007199254740993")
+  end
+  assert(pp:set({auto_exposure_metering_mask = "0", auto_exposure_compensation_curve = {}}))
+  assert(pp:get().auto_exposure_metering_mask == "0")
+  assert(#pp:get().auto_exposure_compensation_curve == 0)
+
 end
 )lua" },
     .chunk_name = ScriptChunkName { "scene_environment_roundtrip" },

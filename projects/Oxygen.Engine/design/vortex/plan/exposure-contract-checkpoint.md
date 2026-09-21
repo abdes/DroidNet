@@ -89,8 +89,10 @@ This promotes that part of `EV01-CAMERA-PHYSICAL-AUTHORING` into slice 6.
 Accepted native extension, preserving the current editor Manual/Auto UI:
 scene version 6 camera records retain their projection prefix, then append
 float32 aperture_f, shutter_rate and iso. Perspective offsets 20/24/28 produce
-32-byte records; orthographic offsets 28/32/36 produce 40-byte records. Version-5
-20/28-byte records receive 11/125/100 defaults. No DOF or motion-blur behavior is
+32-byte records; orthographic offsets 28/32/36 produce 40-byte records. The user
+overrode backward compatibility on 2026-09-21: migrate the entire repository to
+v6 and reject older formats, retaining no legacy reader/hydration code. New
+authoring defaults are 11/125/100. No DOF or motion-blur behavior is
 implied. Camera asset implementation belongs to slice 6; the independent
 runtime mathematics and GPU work does not depend on those storage changes.
 

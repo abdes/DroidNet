@@ -97,7 +97,7 @@ namespace Oxygen::Interop::World {
 
   SetEnvironmentCommand* CommandFactory::CreateSetEnvironment(
     SkyAtmosphereParams atmosphere, PostProcessParams postProcess) {
-    return new SetEnvironmentCommand(atmosphere, postProcess);
+    return new SetEnvironmentCommand(atmosphere, std::move(postProcess));
   }
 
   DetachGeometryCommand*

@@ -14,6 +14,12 @@ public sealed partial class NativeLoopCleanupTests
     public Task EnvironmentObservationReadsEveryAuthoredNativeValue()
         => this.RunNativeCommandsAsync(this.CheckNativeEnvironmentAsync);
 
+    /// <summary>Missing masks retain accepted exposure and report a current scene-scoped failure.</summary>
+    /// <returns>The native engine integration check.</returns>
+    [TestMethod]
+    public Task ExposureMaskFailureRetainsAcceptedRevisionAndClearRecovers()
+        => this.RunNativeCommandsAsync(this.CheckNativeExposureMaskFailureAsync);
+
     private static RuntimeEnvironmentState ObservedEnvironmentValues() => new()
     {
         Exists = true,
@@ -49,6 +55,9 @@ public sealed partial class NativeLoopCleanupTests
         AutoExposureLogLuminanceRange = 20f,
         AutoExposureTargetLuminance = 0.25f,
         AutoExposureSpotMeterRadius = 0.4f,
+        AutoExposureBlackInfluence = 0.35f,
+        AutoExposureTransitionDistanceEv = 2.5f,
+        AutoExposureCompensationCurve = [new(-4f, 1f), new(12f, -0.5f)],
         BloomIntensity = 0.7f,
         BloomThreshold = 1.5f,
         Saturation = 0.9f,
@@ -88,12 +97,61 @@ public sealed partial class NativeLoopCleanupTests
         state.AutoExposureLogLuminanceRange,
         state.AutoExposureTargetLuminance,
         state.AutoExposureSpotMeterRadius,
+        state.AutoExposureBlackInfluence,
+        state.AutoExposureTransitionDistanceEv,
+        state.AutoExposureCompensationCurve,
+        AutoExposureMeteringMask: null,
         state.BloomIntensity,
         state.BloomThreshold,
         state.Saturation,
         state.Contrast,
         state.VignetteIntensity,
         state.DisplayGamma);
+
+    private async Task CheckNativeExposureMaskFailureAsync(RuntimeCommandDispatcher commands)
+    {
+        var target = new RuntimeSceneTarget(commands.RunId, Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+        _ = (await commands.ActivateSceneAsync(Guid.NewGuid(), target, "Mask failure", this.TestContext.CancellationToken).ConfigureAwait(false)).Succeeded.Should().BeTrue();
+        var initial = EnvironmentRequest(ObservedEnvironmentValues());
+        _ = commands.Execute(new RuntimeWorldRequest(Guid.NewGuid(), target, initial), this.TestContext.CancellationToken).Succeeded.Should().BeTrue();
+        var missing = initial with
+        {
+            ManualExposureEv = 8f,
+            AutoExposureMeteringMask = new(
+                new Uri("asset:///Content/Textures/Missing.otex.json"),
+                Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N")),
+                "Textures/Missing.otex"),
+        };
+        var request = new RuntimeWorldRequest(Guid.NewGuid(), target, missing);
+        _ = commands.Execute(request, this.TestContext.CancellationToken).Succeeded.Should().BeTrue();
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(this.TestContext.CancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(5));
+        RuntimeEnvironmentObservation observed;
+        do
+        {
+            observed = await commands.ObserveEnvironmentAsync(Guid.NewGuid(), target, timeout.Token).ConfigureAwait(false);
+            _ = observed.Outcome.Succeeded.Should().BeTrue();
+            if (observed.State!.ExposureMaskError.Length == 0)
+            {
+                await Task.Delay(20, timeout.Token).ConfigureAwait(false);
+            }
+        }
+        while (observed.State!.ExposureMaskError.Length == 0);
+
+        _ = observed.State.ManualExposureEv.Should().Be(initial.ManualExposureEv);
+        _ = observed.State.AutoExposureMeteringMask.Should().Be(0);
+        _ = observed.State.ExposureMaskPending.Should().BeFalse();
+        _ = commands.AssetRequests.Should().ContainSingle().Which.Succeeded.Should().BeFalse();
+        _ = commands.IsCurrentAssetRequest(request).Should().BeTrue();
+        var cleared = initial with { ManualExposureEv = 6f };
+        _ = commands.Execute(new RuntimeWorldRequest(Guid.NewGuid(), target, cleared), timeout.Token).Succeeded.Should().BeTrue();
+        observed = await commands.ObserveEnvironmentAsync(Guid.NewGuid(), target, timeout.Token).ConfigureAwait(false);
+        _ = observed.State!.ManualExposureEv.Should().Be(6f);
+        _ = observed.State.ExposureMaskError.Should().BeEmpty();
+        _ = observed.State.AutoExposureMeteringMask.Should().Be(0);
+        _ = commands.IsCurrentAssetRequest(request).Should().BeFalse();
+        _ = commands.AssetRequests.Should().ContainSingle().Which.Succeeded.Should().BeTrue();
+    }
 
     private async Task CheckNativeEnvironmentAsync(RuntimeCommandDispatcher commands)
     {
@@ -107,10 +165,10 @@ public sealed partial class NativeLoopCleanupTests
         var observed = await commands.ObserveEnvironmentAsync(Guid.NewGuid(), target, this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = observed.Outcome.Succeeded.Should().BeTrue();
-        _ = observed.State.Should().Be(expected);
+        _ = observed.State.Should().BeEquivalentTo(expected, options => options.WithStrictOrdering());
         _ = commands.Execute(new RuntimeWorldRequest(Guid.NewGuid(), target, request with { AtmosphereEnabled = false }), this.TestContext.CancellationToken).Succeeded.Should().BeTrue();
         observed = await commands.ObserveEnvironmentAsync(Guid.NewGuid(), target, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = observed.Outcome.Succeeded.Should().BeTrue();
-        _ = observed.State.Should().Be(expected with { AtmosphereEnabled = false });
+        _ = observed.State.Should().BeEquivalentTo(expected with { AtmosphereEnabled = false }, options => options.WithStrictOrdering());
     }
 }

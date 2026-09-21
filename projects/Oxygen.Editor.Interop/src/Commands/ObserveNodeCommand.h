@@ -106,6 +106,9 @@ private:
       Add(result, ComponentId::kPerspectiveCamera, PerspectiveCameraField::kAspectRatio, value.GetAspectRatio());
       Add(result, ComponentId::kPerspectiveCamera, PerspectiveCameraField::kNearPlane, value.GetNearPlane());
       Add(result, ComponentId::kPerspectiveCamera, PerspectiveCameraField::kFarPlane, value.GetFarPlane());
+      Add(result, ComponentId::kPerspectiveCamera, PerspectiveCameraField::kApertureF, value.Exposure().aperture_f);
+      Add(result, ComponentId::kPerspectiveCamera, PerspectiveCameraField::kShutterRate, value.Exposure().shutter_rate);
+      Add(result, ComponentId::kPerspectiveCamera, PerspectiveCameraField::kIso, value.Exposure().iso);
     }
   }
 

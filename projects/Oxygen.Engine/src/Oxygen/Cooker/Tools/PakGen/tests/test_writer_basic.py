@@ -6,7 +6,7 @@ from pakgen.api import build_pak, BuildOptions
 def test_build_minimal_pak(tmp_path: Path):
     spec = {
         "source_identity": "01a0a760-49b7-7141-9e8a-32b4b129fa63",
-        "version": 6,
+        "version": 7,
         "content_version": 7,
         "buffers": [],
         "textures": [],

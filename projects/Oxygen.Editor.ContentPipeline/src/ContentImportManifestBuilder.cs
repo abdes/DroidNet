@@ -172,6 +172,7 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
             ContentCookAssetKind.Material => layout with { MaterialsDirectory = folder },
             ContentCookAssetKind.Geometry => layout with { GeometryDirectory = folder },
             ContentCookAssetKind.Scene => layout with { ScenesDirectory = folder },
+            ContentCookAssetKind.Texture => layout with { TextureDescriptorsDirectory = folder },
             _ => null,
         };
     }
@@ -182,6 +183,7 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
             ContentCookAssetKind.Material => "material-descriptor",
             ContentCookAssetKind.Geometry => "geometry-descriptor",
             ContentCookAssetKind.Scene => "scene-descriptor",
+            ContentCookAssetKind.Texture => "texture-descriptor",
             _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unsupported manifest job asset kind."),
         };
 
@@ -205,6 +207,7 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
             ContentCookAssetKind.Material => "material",
             ContentCookAssetKind.Geometry => "geometry",
             ContentCookAssetKind.Scene => "scene",
+            ContentCookAssetKind.Texture => "texture",
             _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unsupported manifest job asset kind."),
         };
 

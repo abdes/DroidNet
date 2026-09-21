@@ -7,7 +7,7 @@ from pakgen.api import BuildOptions, build_pak, plan_dry_run
 def write_spec(tmp_path: Path) -> Path:
     spec = {
         "source_identity": "01a0a760-49bc-77d5-9b59-b95720a4dd82",
-        "version": 6,
+        "version": 7,
         "buffers": [
             {"name": "default_empty_buffer", "path": None, "size": 0},
         ],

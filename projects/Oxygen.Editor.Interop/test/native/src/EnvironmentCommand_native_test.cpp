@@ -15,6 +15,7 @@
 
 #include <Commands/AttachLightCommand.h>
 #include <Commands/DirectionalLightPropertyApplier.h>
+#include <Commands/PerspectiveCameraPropertyApplier.h>
 #include <Commands/PropertyApplierRegistry.h>
 #include <Commands/SetPropertiesCommand.h>
 #include <Commands/SetEnvironmentCommand.h>
@@ -92,6 +93,9 @@ struct EnvironmentSnapshot {
   float auto_exposure_log_luminance_range = 0.0F;
   float auto_exposure_target_luminance = 0.0F;
   float auto_exposure_spot_meter_radius = 0.0F;
+  float auto_exposure_black_influence = 0.0F;
+  float auto_exposure_transition_distance_ev = 0.0F;
+  bool exposure_curve_preserved = false;
   float bloom_intensity = 0.0F;
   float bloom_threshold = 0.0F;
   float saturation = 0.0F;
@@ -245,6 +249,14 @@ auto ReadEnvironmentSnapshot(oxygen::scene::Scene& scene) -> EnvironmentSnapshot
       = post->GetAutoExposureTargetLuminance();
     snapshot.auto_exposure_spot_meter_radius
       = post->GetAutoExposureSpotMeterRadius();
+    const auto& exposure = post->GetExposureSettings();
+    snapshot.auto_exposure_black_influence = exposure.black_influence;
+    snapshot.auto_exposure_transition_distance_ev = exposure.transition_distance;
+    snapshot.exposure_curve_preserved = exposure.compensation_curve
+      == std::vector<oxygen::scene::ExposureCompensationKey> {
+        { .metered_ev = -4.0F, .compensation_ev = 1.0F },
+        { .metered_ev = 12.0F, .compensation_ev = -0.5F },
+      };
     snapshot.bloom_intensity = post->GetBloomIntensity();
     snapshot.bloom_threshold = post->GetBloomThreshold();
     snapshot.saturation = post->GetSaturation();
@@ -323,6 +335,12 @@ auto RunEnabledAtmosphereCreatesRuntimeEnvironmentWithAuthoredValues(
     post_process.auto_exposure_log_luminance_range = 20.0F;
     post_process.auto_exposure_target_luminance = 0.25F;
     post_process.auto_exposure_spot_meter_radius = 0.4F;
+    post_process.auto_exposure_black_influence = 0.35F;
+    post_process.auto_exposure_transition_distance_ev = 2.5F;
+    post_process.auto_exposure_compensation_curve = {
+      { .metered_ev = -4.0F, .compensation_ev = 1.0F },
+      { .metered_ev = 12.0F, .compensation_ev = -0.5F },
+    };
     post_process.bloom_intensity = 0.7F;
     post_process.bloom_threshold = 1.5F;
     post_process.saturation = 0.9F;
@@ -578,6 +596,75 @@ void RunBackgroundContract(BackgroundSnapshot& result) {
   });
 }
 
+auto RunExposureEditContracts() -> NativeStatus
+{
+  try {
+    auto scene = CreateTestScene("Exposure edits");
+    auto context = BuildContext(*scene);
+    SkyAtmosphereParams atmosphere {};
+    atmosphere.enabled = false;
+    const PostProcessParams original {};
+    SetEnvironmentCommand(atmosphere, original).Execute(context);
+    const auto volume = scene->GetEnvironment()
+      ->TryGetSystem<oxygen::scene::environment::PostProcessVolume>();
+    const auto before = volume->GetExposureSettings();
+    auto invalid_values = std::vector<PostProcessParams>(5, original);
+    invalid_values[0].auto_exposure_black_influence = 2.0F;
+    invalid_values[1].auto_exposure_transition_distance_ev = 0.0F;
+    invalid_values[2].auto_exposure_compensation_curve = {
+      { .metered_ev = 1.0F, .compensation_ev = 0.0F },
+      { .metered_ev = 1.0F, .compensation_ev = 2.0F },
+    };
+    invalid_values[3].auto_exposure_metering_mode = 99;
+    invalid_values[4].manual_exposure_ev = std::numeric_limits<float>::infinity();
+    for (const auto& invalid : invalid_values) {
+      bool rejected = false;
+      try {
+        SetEnvironmentCommand(atmosphere, invalid).Execute(context);
+      } catch (const std::invalid_argument&) {
+        rejected = true;
+      }
+      if (!rejected || volume->GetExposureSettings() != before) {
+        throw std::runtime_error("Invalid exposure edit was not rejected atomically");
+      }
+    }
+
+    auto camera_node = scene->CreateNode("Camera");
+    if (!camera_node.AttachCamera(std::make_unique<oxygen::scene::PerspectiveCamera>())) {
+      throw std::runtime_error("Failed to attach test camera");
+    }
+    const auto camera = camera_node.GetCameraAs<oxygen::scene::PerspectiveCamera>();
+    PerspectiveCameraPropertyApplier applier;
+    const auto entry = [](PerspectiveCameraField field, float value) {
+      return PropertyEntry { .component = ComponentId::kPerspectiveCamera,
+        .field = static_cast<std::uint16_t>(field), .value = value };
+    };
+    const auto authored = std::vector {
+      entry(PerspectiveCameraField::kApertureF, 8.0F),
+      entry(PerspectiveCameraField::kShutterRate, 60.0F),
+      entry(PerspectiveCameraField::kIso, 200.0F),
+    };
+    applier.Apply(camera_node, authored);
+    for (const float invalid : { 0.0F, -1.0F, std::numeric_limits<float>::infinity(),
+           std::numeric_limits<float>::quiet_NaN() }) {
+      const auto edits = std::vector {
+        entry(PerspectiveCameraField::kApertureF, invalid),
+        entry(PerspectiveCameraField::kShutterRate, invalid),
+        entry(PerspectiveCameraField::kIso, invalid),
+      };
+      applier.Apply(camera_node, edits);
+    }
+    if (!camera || camera->get().Exposure().aperture_f != 8.0F
+      || camera->get().Exposure().shutter_rate != 60.0F
+      || camera->get().Exposure().iso != 200.0F) {
+      throw std::runtime_error("Physical camera values were lost or invalid edits were accepted");
+    }
+    return {};
+  } catch (const std::exception& error) {
+    return NativeFailure(error.what());
+  }
+}
+
 } // namespace
 
 #pragma managed
@@ -604,6 +691,12 @@ namespace InteropTests {
 [TestClass]
 public ref class EnvironmentCommandCliTests {
 public:
+  [TestMethod]
+  void ExposureEditsPreservePhysicalValuesAndRejectInvalidCandidates()
+  {
+    AssertSucceeded(RunExposureEditContracts());
+  }
+
   [TestMethod]
   void SolidBackgroundPreservesColorAndAtmosphereIndependence()
   {
@@ -688,6 +781,9 @@ public:
       0.25F, snapshot.auto_exposure_target_luminance, 0.0001F);
     Assert::AreEqual(
       0.4F, snapshot.auto_exposure_spot_meter_radius, 0.0001F);
+    Assert::AreEqual(0.35F, snapshot.auto_exposure_black_influence, 0.0001F);
+    Assert::AreEqual(2.5F, snapshot.auto_exposure_transition_distance_ev, 0.0001F);
+    Assert::IsTrue(snapshot.exposure_curve_preserved);
     Assert::AreEqual(0.7F, snapshot.bloom_intensity, 0.0001F);
     Assert::AreEqual(1.5F, snapshot.bloom_threshold, 0.0001F);
     Assert::AreEqual(0.9F, snapshot.saturation, 0.0001F);

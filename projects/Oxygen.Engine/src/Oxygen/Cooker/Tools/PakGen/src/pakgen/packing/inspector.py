@@ -1,4 +1,4 @@
-"""Binary PAK inspection utilities (refactored from legacy inspector.py).
+"""Binary inspection utilities for the current PAK format.
 
 Public functions:
 - inspect_pak(path) -> dict
@@ -26,6 +26,8 @@ from .constants import (
     MATERIAL_DESC_SIZE,
     GEOMETRY_DESC_SIZE,
     SCENE_DESC_SIZE,
+    SCENE_ASSET_VERSION_CURRENT,
+    ASSET_TYPE_MAP,
     DIRECTORY_ENTRY_SIZE,
     ASSET_KEY_SIZE,
     FOOTER_SIZE,
@@ -196,6 +198,12 @@ def inspect_pak(path: str | Path) -> Dict[str, Any]:
             asset_type, entry_offset, desc_offset, desc_size = (
                 struct.unpack_from("<BQQI", entry, ASSET_KEY_SIZE)
             )
+            if asset_type == ASSET_TYPE_MAP["scene"]:
+                descriptor = _read_exact(data, desc_offset, desc_size, f"scene {key}")
+                if len(descriptor) < SCENE_DESC_SIZE or descriptor[65] != SCENE_ASSET_VERSION_CURRENT:
+                    raise ValueError(
+                        f"Scene {key} requires descriptor version {SCENE_ASSET_VERSION_CURRENT}; re-cook scene content"
+                    )
             entries.append(
                 {
                     "key": key,

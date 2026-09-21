@@ -21,6 +21,7 @@
 #include <Oxygen/Content/ResidencyPolicy.h>
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Content/ResourceTypeList.h>
+#include <Oxygen/Content/TextureResourceLocator.h>
 #include <Oxygen/Content/api_export.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/BufferResource.h>
@@ -198,6 +199,20 @@ public:
     observer_ptr<IAssetLoader> owner_ { nullptr };
     std::weak_ptr<int> alive_token_;
   };
+
+  //! Resolve a current loose texture descriptor in its explicitly mounted
+  //! source. Missing mounts/descriptors return nullopt; malformed or stale
+  //! descriptors throw. Call on the loader's owning thread before
+  //! StartLoadTexture.
+  [[nodiscard]] virtual auto ResolveTextureResourceKey(
+    const TextureResourceLocator& locator) const
+    -> std::optional<ResourceKey> = 0;
+
+  //! Resolve a nonzero texture index in a loaded asset's owning source.
+  [[nodiscard]] virtual auto MakeTextureResourceKeyForAsset(
+    const data::AssetKey& context_asset_key,
+    data::pak::core::ResourceIndexT resource_index) const noexcept
+    -> std::optional<ResourceKey> = 0;
 
   //! Begin loading a texture resource and invoke `on_complete` on completion.
   virtual void StartLoadTexture(ResourceKey key, TextureCallback on_complete)

@@ -130,45 +130,10 @@ public partial class Scene : GameObject, IPersistent<Serialization.SceneData>
     private static Serialization.SceneEnvironmentData NormalizeEnvironment(Serialization.SceneEnvironmentData? environment)
     {
         environment ??= new();
-        var defaultEnvironment = new Serialization.SceneEnvironmentData();
-        var postProcess = environment.PostProcess;
-        if (postProcess is null ||
-            (postProcess == new Serialization.PostProcessEnvironmentData() &&
-             (environment.ExposureMode != defaultEnvironment.ExposureMode ||
-              Math.Abs(environment.ManualExposureEv - defaultEnvironment.ManualExposureEv) > float.Epsilon ||
-              Math.Abs(environment.ExposureCompensation - defaultEnvironment.ExposureCompensation) > float.Epsilon ||
-              environment.ToneMapping != defaultEnvironment.ToneMapping)))
-        {
-            postProcess = new Serialization.PostProcessEnvironmentData
-            {
-                ExposureMode = environment.ExposureMode,
-                ManualExposureEv = environment.ManualExposureEv,
-                ExposureCompensationEv = environment.ExposureCompensation,
-                ToneMapper = environment.ToneMapping,
-            };
-        }
-
-        if (IsLegacyEditorPostProcessDefault(postProcess))
-        {
-            postProcess = new Serialization.PostProcessEnvironmentData();
-        }
-
         return environment with
         {
             SkyAtmosphere = environment.SkyAtmosphere ?? new(),
-            PostProcess = postProcess,
-            ExposureMode = postProcess.ExposureMode,
-            ManualExposureEv = postProcess.ManualExposureEv,
-            ExposureCompensation = postProcess.ExposureCompensationEv,
-            ToneMapping = postProcess.ToneMapper,
+            PostProcess = environment.PostProcess ?? new(),
         };
     }
-
-    private static bool IsLegacyEditorPostProcessDefault(Serialization.PostProcessEnvironmentData value)
-        => value == new Serialization.PostProcessEnvironmentData
-        {
-            ExposureMode = Serialization.ExposureMode.Auto,
-            ExposureKey = 10.0f,
-            ManualExposureEv = 9.7f,
-        };
 }

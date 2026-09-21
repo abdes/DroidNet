@@ -6,13 +6,15 @@
 
 #pragma once
 
+#include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
-#include <optional>
 
 #include <Oxygen/Base/Compilers.h>
 #include <Oxygen/Base/NoStd.h>
+#include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Data/PakFormat_core.h>
 
 // packed structs intentionally embed unaligned NamedType ResourceIndexT fields
@@ -47,8 +49,7 @@ inline constexpr uint32_t kSceneNodeFlags_Known = kSceneNodeFlags_Inheritable
 //!
 //! @note Scene descriptors include a trailing SceneEnvironment block (empty
 //! allowed).
-[[maybe_unused]] constexpr uint8_t kSceneAssetVersion = 5;
-
+inline constexpr uint8_t kSceneAssetVersion = 6;
 //! Index type for scene node tables.
 using SceneNodeIndexT = uint32_t;
 
@@ -254,20 +255,21 @@ static_assert(sizeof(LocalFogVolumeRecord) == 56);
   - The camera looks down the -Z axis in its local space.
   - FOV is vertical, in radians.
 */
-// TODO(post-v0.1, EV01-CAMERA-PHYSICAL-AUTHORING): Carry physical camera
-// exposure through authoring/cooking/loading. Native CameraExposure already
-// computes EV; these packed records currently carry projection, not
-// aperture/shutter/ISO. Scope:
-// design/vortex/plan/editor-v01-deferred-capabilities.md#ev01-camera-physical-authoring
 struct PerspectiveCameraRecord {
   SceneNodeIndexT node_index = 0; // Index of the owner node
   float fov_y = 0.785398F; // Vertical FOV in radians (~45 deg)
   float aspect_ratio = 1.777778F; // Width / Height (default 16:9)
   float near_plane = 0.1F; // Distance to near clipping plane
   float far_plane = 1000.0F; // Distance to far clipping plane
+  float aperture_f = engine::kDefaultCameraApertureF;
+  float shutter_rate = engine::kDefaultCameraShutterRate;
+  float iso = engine::kDefaultCameraIso;
 };
 #pragma pack(pop)
-static_assert(sizeof(PerspectiveCameraRecord) == 20);
+static_assert(sizeof(PerspectiveCameraRecord) == 32);
+static_assert(offsetof(PerspectiveCameraRecord, aperture_f) == 20);
+static_assert(offsetof(PerspectiveCameraRecord, shutter_rate) == 24);
+static_assert(offsetof(PerspectiveCameraRecord, iso) == 28);
 
 #pragma pack(push, 1)
 
@@ -286,9 +288,15 @@ struct OrthographicCameraRecord {
   float top = 10.0F;
   float near_plane = -100.0F;
   float far_plane = 100.0F;
+  float aperture_f = engine::kDefaultCameraApertureF;
+  float shutter_rate = engine::kDefaultCameraShutterRate;
+  float iso = engine::kDefaultCameraIso;
 };
 #pragma pack(pop)
-static_assert(sizeof(OrthographicCameraRecord) == 28);
+static_assert(sizeof(OrthographicCameraRecord) == 40);
+static_assert(offsetof(OrthographicCameraRecord, aperture_f) == 28);
+static_assert(offsetof(OrthographicCameraRecord, shutter_rate) == 32);
+static_assert(offsetof(OrthographicCameraRecord, iso) == 36);
 
 //=== Scene: Lights and Environment -----------------------------------------//
 
@@ -521,6 +529,16 @@ struct SkySphereEnvironmentRecord {
 static_assert(sizeof(SkySphereEnvironmentRecord) == 64);
 
 //! Packed PostProcessVolume environment record.
+inline constexpr uint32_t kExposureExtensionVersion = 1U;
+
+#pragma pack(push, 1)
+struct ExposureCompensationKeyRecord {
+  float metered_ev { 0.0F };
+  float compensation_ev { 0.0F };
+};
+#pragma pack(pop)
+static_assert(sizeof(ExposureCompensationKeyRecord) == 8U);
+
 #pragma pack(push, 1)
 struct PostProcessVolumeEnvironmentRecord {
   SceneEnvironmentSystemRecordHeader header = {
@@ -559,9 +577,99 @@ struct PostProcessVolumeEnvironmentRecord {
   float auto_exposure_target_luminance = 0.18F;
   float auto_exposure_spot_meter_radius = 0.2F;
   float display_gamma = 2.2F;
+  uint32_t exposure_extension_version = kExposureExtensionVersion;
+  float auto_exposure_black_influence = 0.0F;
+  float auto_exposure_transition_distance_ev
+    = engine::kDefaultExposureTransitionDistance;
+  core::ResourceIndexT auto_exposure_metering_mask;
+  std::array<uint32_t, 3> exposure_reserved {};
+  uint32_t curve_key_count = 0U;
+  std::array<uint32_t, 2> curve_reserved {};
 };
 #pragma pack(pop)
-static_assert(sizeof(PostProcessVolumeEnvironmentRecord) == 104);
+static_assert(sizeof(PostProcessVolumeEnvironmentRecord) == 144U);
+static_assert(
+  offsetof(PostProcessVolumeEnvironmentRecord, exposure_extension_version)
+  == 104U);
+static_assert(
+  offsetof(PostProcessVolumeEnvironmentRecord, auto_exposure_black_influence)
+  == 108U);
+static_assert(offsetof(PostProcessVolumeEnvironmentRecord,
+                auto_exposure_transition_distance_ev)
+  == 112U);
+static_assert(
+  offsetof(PostProcessVolumeEnvironmentRecord, auto_exposure_metering_mask)
+  == 116U);
+static_assert(
+  offsetof(PostProcessVolumeEnvironmentRecord, exposure_reserved) == 120U);
+static_assert(
+  offsetof(PostProcessVolumeEnvironmentRecord, curve_key_count) == 132U);
+static_assert(
+  offsetof(PostProcessVolumeEnvironmentRecord, curve_reserved) == 136U);
+
+//! Validate authored scalar domains before exposing or writing a packed record.
+[[nodiscard]] inline auto HasValidPostProcessVolumeValues(
+  const PostProcessVolumeEnvironmentRecord& record) noexcept -> bool
+{
+  const auto scalars = std::array {
+    record.exposure_compensation_ev,
+    record.auto_exposure_min_ev,
+    record.auto_exposure_max_ev,
+    record.auto_exposure_speed_up,
+    record.auto_exposure_speed_down,
+    record.bloom_intensity,
+    record.bloom_threshold,
+    record.saturation,
+    record.contrast,
+    record.vignette_intensity,
+    record.exposure_key,
+    record.manual_exposure_ev,
+    record.auto_exposure_low_percentile,
+    record.auto_exposure_high_percentile,
+    record.auto_exposure_min_log_luminance,
+    record.auto_exposure_log_luminance_range,
+    record.auto_exposure_target_luminance,
+    record.auto_exposure_spot_meter_radius,
+    record.display_gamma,
+    record.auto_exposure_black_influence,
+    record.auto_exposure_transition_distance_ev,
+  };
+  if (!std::ranges::all_of(scalars,
+        [](const float value) -> bool { return std::isfinite(value); })) {
+    return false;
+  }
+  const double histogram_end
+    = static_cast<double>(record.auto_exposure_min_log_luminance)
+    + record.auto_exposure_log_luminance_range;
+  return record.header.system_type
+    == nostd::to_underlying(EnvironmentComponentType::kPostProcessVolume)
+    && record.enabled <= 1U && record.exposure_enabled <= 1U
+    && record.tone_mapper <= engine::ToneMapper::kReinhard
+    && record.exposure_mode <= engine::ExposureMode::kAuto
+    && record.auto_exposure_metering_mode <= engine::MeteringMode::kSpot
+    && record.exposure_key > 0.0F
+    && record.auto_exposure_min_ev <= record.auto_exposure_max_ev
+    && record.auto_exposure_speed_up >= 0.0F
+    && record.auto_exposure_speed_down >= 0.0F
+    && record.auto_exposure_low_percentile >= 0.0F
+    && record.auto_exposure_high_percentile <= 1.0F
+    && record.auto_exposure_low_percentile
+    < record.auto_exposure_high_percentile
+    && record.auto_exposure_min_log_luminance
+    >= engine::kMinExposureLogLuminance
+    && record.auto_exposure_log_luminance_range > 0.0F
+    && std::isfinite(1.0F / record.auto_exposure_log_luminance_range)
+    && histogram_end <= engine::kMaxExposureLogLuminance
+    && record.auto_exposure_target_luminance >= 0.0F
+    && record.auto_exposure_spot_meter_radius >= 0.0F
+    && record.auto_exposure_black_influence >= 0.0F
+    && record.auto_exposure_black_influence <= 1.0F
+    && record.auto_exposure_transition_distance_ev > 0.0F
+    && record.bloom_intensity >= 0.0F && record.bloom_threshold >= 0.0F
+    && record.saturation >= 0.0F && record.contrast >= 0.0F
+    && record.vignette_intensity >= 0.0F && record.vignette_intensity <= 1.0F
+    && record.display_gamma >= engine::kMinDisplayGamma;
+}
 
 //! Packed display background, in linear SDR RGB without lighting contribution.
 #pragma pack(push, 1)
@@ -577,7 +685,7 @@ struct BackgroundEnvironmentRecord {
 #pragma pack(pop)
 static_assert(sizeof(BackgroundEnvironmentRecord) == 24);
 
-//! Known SceneEnvironment record tags and their exact packed sizes.
+//! Known SceneEnvironment record tags and packed prefix sizes.
 struct EnvironmentRecordSizeEntry {
   uint32_t system_type = 0;
   size_t record_size = 0;
@@ -617,15 +725,27 @@ inline constexpr std::array kKnownEnvironmentRecordSizes {
   },
 };
 
-[[nodiscard]] inline constexpr auto ExpectedEnvironmentRecordSize(
-  const uint32_t system_type) noexcept -> std::optional<size_t>
+//! Validate the current record length, including the bounded exposure-curve
+//! tail.
+[[nodiscard]] constexpr auto IsValidEnvironmentRecordSize(
+  const uint32_t system_type, const uint32_t record_size) noexcept -> bool
 {
+  if (system_type
+    == nostd::to_underlying(EnvironmentComponentType::kPostProcessVolume)) {
+    constexpr auto kPrefixSize = sizeof(PostProcessVolumeEnvironmentRecord);
+    constexpr auto kKeySize = sizeof(ExposureCompensationKeyRecord);
+    return record_size >= kPrefixSize
+      && record_size
+      <= kPrefixSize + (engine::kMaxExposureCompensationCurveKeys * kKeySize)
+      && (record_size - kPrefixSize) % kKeySize == 0U;
+  }
   for (const auto& entry : kKnownEnvironmentRecordSizes) {
     if (entry.system_type == system_type) {
-      return entry.record_size;
+      return record_size == entry.record_size;
     }
   }
-  return std::nullopt;
+  // Unknown system records retain the envelope's existing skip semantics.
+  return true;
 }
 
 //! Common shadow settings packed into light component records.

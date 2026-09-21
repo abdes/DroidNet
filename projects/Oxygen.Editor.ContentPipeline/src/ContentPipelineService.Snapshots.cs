@@ -46,6 +46,36 @@ public sealed partial class ContentPipelineService
             TaskContinuationOptions.ExecuteSynchronously,
             TaskScheduler.Default).Unwrap();
 
+    private static async Task<PreparedInput> PrepareCapturedTextureAsync(ContentCookScope scope, ContentCookInput input, CancellationToken cancellationToken)
+    {
+        var snapshot = scope.Snapshot ?? throw new InvalidOperationException("Texture preparation requires captured input.");
+        var bytes = await File.ReadAllTextAsync(input.SourceAbsolutePath, cancellationToken).ConfigureAwait(false);
+        var descriptor = JsonNode.Parse(bytes) ?? throw new InvalidDataException("The captured texture descriptor is empty.");
+        var relative = Path.Combine(".pipeline", "Textures", input.SourceRelativePath).Replace('\\', '/');
+        var output = Path.Combine(scope.InputRoot, relative);
+        var originalDirectory = Path.GetDirectoryName(Path.Combine(scope.Project.ProjectRoot, input.SourceRelativePath))!;
+        descriptor["source"] = CapturedPath(descriptor["source"]!.GetValue<string>());
+        if (descriptor["sources"] is JsonArray sources)
+        {
+            foreach (var source in sources)
+            {
+                source!["file"] = CapturedPath(source["file"]!.GetValue<string>());
+            }
+        }
+
+        Directory.CreateDirectory(Path.GetDirectoryName(output)!);
+        await File.WriteAllTextAsync(output, descriptor.ToJsonString(), cancellationToken).ConfigureAwait(false);
+        return new(input with { SourceRelativePath = relative, SourceAbsolutePath = output }, Diagnostics: []);
+
+        string CapturedPath(string source)
+        {
+            var originalPath = Path.GetFullPath(Path.IsPathRooted(source) ? source : Path.Combine(originalDirectory, source));
+            var captured = snapshot.Inputs.FirstOrDefault(file => !file.IsAbsent && string.Equals(file.SourcePath, originalPath, StringComparison.OrdinalIgnoreCase))
+                ?? throw new InvalidDataException($"Texture image '{source}' was not included in the captured dependency set.");
+            return Path.GetRelativePath(Path.GetDirectoryName(output)!, Path.Combine(snapshot.InputRoot, captured.RelativePath)).Replace('\\', '/');
+        }
+    }
+
     private static async Task<PreparedInput> PrepareCapturedGeometryAsync(ContentCookScope scope, ContentCookInput input, CancellationToken cancellationToken)
     {
         var snapshot = scope.Snapshot ?? throw new InvalidOperationException("Geometry preparation requires captured input.");

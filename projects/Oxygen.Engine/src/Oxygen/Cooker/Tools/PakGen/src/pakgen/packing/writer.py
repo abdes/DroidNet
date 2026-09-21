@@ -251,6 +251,7 @@ def _prepare_scene_script_slots(
             material_name_to_key=material_name_to_key,
             script_name_to_key=script_name_to_key,
             scripting_slot_base_index=global_slot_base,
+            texture_indices=build.resources.index_map.get("texture", {}),
         )
         cache[idx] = (base_desc, payload, slot_infos)
         for slot_info in slot_infos:
@@ -318,12 +319,6 @@ def _write_assets_and_directory_from_plan(
     # Builders mirror legacy writer; kept local for clarity.
     def header_builder(asset_dict):
         return pack_asset_header(asset_dict)
-
-    # Retained parameter for legacy API; shader reference records are now
-    # always packed explicitly after the fixed descriptor using
-    # pack_shader_reference_entries(), so this builder is a no-op.
-    def shader_refs_builder(_shader_refs):  # noqa: D401 - simple
-        return b""
 
     # Simple material assets list for submesh packing (name/key tuples)
     simple_material_assets = []
@@ -469,7 +464,6 @@ def _write_assets_and_directory_from_plan(
                     raw_spec,
                     build.resources.index_map,
                     header_builder=header_builder,
-                    shader_refs_builder=shader_refs_builder,
                 )
             except Exception as exc:  # pragma: no cover
                 logger.error("Skipping material: %s", exc)
