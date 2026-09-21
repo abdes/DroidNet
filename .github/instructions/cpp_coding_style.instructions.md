@@ -1,6 +1,7 @@
 ---
-applyTo: '**/*.cpp;**/*.h'
+applyTo: "**/*.cpp;**/*.h"
 ---
+
 # C++ CODING STYLE INSTRUCTIONS
 
 ## GENERAL RULES
@@ -11,7 +12,7 @@ applyTo: '**/*.cpp;**/*.h'
 - Prefix all standard library types and functions with `std::`, except for <cstdint> types.
 - Use `#include <...>` syntax for all includes.
 - Use designated initializers for struct initialization whenever possible.
-- Use trailing commas in aggregate initializations (e.g., structs, arrays, enums) when applicable.
+- Use trailing commas in multiline initializer lists and enum definitions; omit them in single-line constructs.
 - All new files must start with the BSD license preamble:
   //===----------------------------------------------------------------------===//
   // Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
@@ -57,6 +58,7 @@ applyTo: '**/*.cpp;**/*.h'
   - Over-engineering simple numeric operations
 
 ## Binary serialization / deserialization
+
 - Rule: For any binary serialization/deserialization in Oxygen, use oxygen::serio
   (Reader/Writer/Stream/MemoryStream/FileStream and Store/Load ADL). Do NOT use raw memcpy, pointer arithmetic, or
   manual byte packing unless explicitly requested for a proven hot path.

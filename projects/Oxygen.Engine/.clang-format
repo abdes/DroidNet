@@ -126,6 +126,9 @@ DerivePointerAlignment: false
 DisableFormat:   false
 EmptyLineAfterAccessModifier: Never
 EmptyLineBeforeAccessModifier: LogicalBlock
+# C++ trailing-comma policy is enforced by clang-tidy: remove on single
+# lines, append on multiple lines. clang-format cannot distinguish these.
+EnumTrailingComma: Leave
 ExperimentalAutoDetectBinPacking: false
 FixNamespaceComments: false
 ForEachMacros:
@@ -161,6 +164,7 @@ IndentWidth:     2
 IndentWrappedFunctionNames: false
 InsertBraces:    false
 InsertNewlineAtEOF: false
+# This option is JavaScript-only; C++ initializer lists are handled by clang-tidy.
 InsertTrailingCommas: None
 IntegerLiteralSeparator:
   Binary:          0
