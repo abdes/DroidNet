@@ -27,8 +27,9 @@ helper when setup or ownership logic obscures an assertion; reuse existing
 helpers before adding another. Keep independent numerical oracles independent
 of the production implementation.
 
-Use braces for control statements, trailing commas in non-empty braced
-initializer lists, descriptive names and explicit resource lifetimes. Normally
+Use braces for control statements, trailing commas in multiline enum definitions
+and initializer lists, no trailing commas in single-line constructs, descriptive
+names and explicit resource lifetimes. Normally
 construct defaulted input records and assign the fields needed by the test. Fix
 actionable clang-tidy findings; retain only specific, locally documented
 exceptions. Keep test data, assertions and tolerances easy to review. Do not

@@ -10,6 +10,7 @@ Checks: >
     performance-*,
     portability-*,
     readability-*,
+    -performance-faster-string-find,
     -portability-avoid-pragma-once,
     -google-readability-todo,
     -clang-diagnostic-format-security,
@@ -20,6 +21,12 @@ Checks: >
     -cppcoreguidelines-pro-type-union-access
 
 CheckOptions:
+  - key: cppcoreguidelines-rvalue-reference-param-not-moved.AllowImplicitMove
+    value: true
+  - key: readability-trailing-comma.SingleLineCommaPolicy
+    value: Remove
+  - key: readability-trailing-comma.MultiLineCommaPolicy
+    value: Append
   - key: cppcoreguidelines-avoid-do-while.IgnoreMacros
     value: true
 
