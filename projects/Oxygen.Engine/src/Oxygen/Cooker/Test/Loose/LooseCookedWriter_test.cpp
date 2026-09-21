@@ -8,16 +8,17 @@
 #include <array>
 #include <cstdint>
 #include <filesystem>
+#include <ios>
 #include <string>
 #include <vector>
-
-#include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Serio/FileStream.h>
+#include <Oxygen/Testing/GTest.h>
 
 // NOLINTBEGIN(*-magic-numbers)
 
@@ -922,6 +923,39 @@ namespace {
   }
 
 } // namespace
+
+NOLINT_TEST(LooseCookedWriterTest,
+  ExternalAppendRefreshesMetadataWithoutCollisionOrStaleWriterRollback)
+{
+  const auto root = MakeTempCookedRoot("external_append_refresh");
+  const auto initial = std::array { std::byte { 1U } };
+  {
+    auto writer = LooseCookedWriter(root);
+    writer.WriteFile(FileKind::kBuffersData, "buffers.data", initial);
+    writer.WriteFile(FileKind::kBuffersTable, "buffers.table", initial);
+    static_cast<void>(writer.Finish());
+  }
+  auto stale_writer = LooseCookedWriter(root);
+  auto refreshed_writer = LooseCookedWriter(root);
+  refreshed_writer.SetCollisionPolicy(CollisionPolicy::kError);
+  {
+    auto stream = serio::FileStream<>(
+      root / "buffers.data", std::ios::out | std::ios::trunc);
+    const auto appended = std::array { std::byte { 1U }, std::byte { 2U } };
+    ASSERT_TRUE(stream.Write(appended));
+    ASSERT_TRUE(stream.Flush());
+  }
+  refreshed_writer.RegisterExternalFile(FileKind::kBuffersData, "buffers.data");
+  EXPECT_EQ(refreshed_writer.Finish().collision_summary.file_collisions, 0U);
+  EXPECT_EQ(stale_writer.Finish().collision_summary.file_collisions, 0U);
+  Inspection inspection;
+  inspection.LoadFromRoot(root);
+  const auto files = inspection.Files();
+  const auto data = std::ranges::find(
+    files, FileKind::kBuffersData, &Inspection::FileEntry::kind);
+  ASSERT_NE(data, files.end());
+  EXPECT_EQ(data->size, 2U);
+}
 
 } // namespace oxygen::content::testing
 

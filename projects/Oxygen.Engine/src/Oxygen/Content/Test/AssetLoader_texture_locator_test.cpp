@@ -153,4 +153,29 @@ namespace {
   }
 
 } // namespace
+NOLINT_TEST_F(
+  AssetLoaderBasicTest, TextureSourceIdentityRemainsReloadableAfterRefresh)
+{
+  const auto root = temp_dir_ / "source";
+  static_cast<void>(WriteSource(root, { .identity = 1U, .width = 1U }));
+  asset_loader_->AddLooseCookedRoot(root);
+  const auto source = asset_loader_->EnumerateMountedSources().front();
+  const auto key = asset_loader_->MakeTextureResourceKey(
+    source.source_key, data::pak::core::ResourceIndexT { 1U });
+  ASSERT_TRUE(key);
+  EXPECT_EQ(key,
+    asset_loader_->ResolveTextureResourceKey({ root, "Textures/Meter.otex" }));
+  EXPECT_FALSE(asset_loader_->MakeTextureResourceKey(
+    source.source_key, data::pak::core::ResourceIndexT { 0U }));
+  EXPECT_FALSE(asset_loader_->MakeTextureResourceKey(
+    source.source_key, data::pak::core::ResourceIndexT { 2U }));
+  asset_loader_->AddLooseCookedRoot(root);
+  EXPECT_EQ(key,
+    asset_loader_->MakeTextureResourceKey(
+      source.source_key, data::pak::core::ResourceIndexT { 1U }));
+  asset_loader_->ClearMounts();
+  EXPECT_FALSE(asset_loader_->MakeTextureResourceKey(
+    source.source_key, data::pak::core::ResourceIndexT { 1U }));
+}
+
 } // namespace oxygen::content::testing

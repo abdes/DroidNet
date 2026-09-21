@@ -208,6 +208,13 @@ public:
     const TextureResourceLocator& locator) const
     -> std::optional<ResourceKey> = 0;
 
+  //! Resolve a nonzero texture index in a uniquely mounted source. Missing,
+  //! ambiguous sources and out-of-range indices return nullopt. The resulting
+  //! identity remains reloadable after that source is refreshed.
+  [[nodiscard]] virtual auto MakeTextureResourceKey(data::SourceKey source_key,
+    data::pak::core::ResourceIndexT resource_index) const
+    -> std::optional<ResourceKey> = 0;
+
   //! Resolve a nonzero texture index in a loaded asset's owning source.
   [[nodiscard]] virtual auto MakeTextureResourceKeyForAsset(
     const data::AssetKey& context_asset_key,

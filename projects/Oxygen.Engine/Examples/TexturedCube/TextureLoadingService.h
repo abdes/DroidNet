@@ -10,18 +10,21 @@
 #include <filesystem>
 #include <functional>
 #include <mutex>
+#include <optional>
 #include <span>
 #include <string>
 #include <unordered_set>
 #include <vector>
 
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/SourceKey.h>
 
 namespace oxygen::data {
 class TextureResource;
@@ -160,9 +163,6 @@ public:
   auto GetTextureMetadataJson(uint64_t hash) const -> std::string;
 
 private:
-  auto PinSyntheticTexture(oxygen::content::ResourceKey key) -> bool;
-  auto ReleasePinnedTextures() noexcept -> void;
-
   void LoadTexturesJson();
   void SaveTexturesJson();
 
@@ -192,7 +192,9 @@ private:
   std::filesystem::path textures_data_path_ {};
   std::vector<oxygen::data::pak::core::TextureResourceDesc> texture_table_ {};
   std::vector<CookedTextureEntry> cooked_entries_ {};
-  std::vector<oxygen::content::ResourceKey> pinned_texture_keys_ {};
+  data::SourceKey cooked_source_key_ {};
+  std::filesystem::path mounted_root_;
+  std::optional<base::Sha256Digest> mounted_fingerprint_;
 };
 
 } // namespace oxygen::examples::textured_cube

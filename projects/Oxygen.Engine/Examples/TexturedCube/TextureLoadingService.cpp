@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <cstdint>
 #include <cstring>
@@ -12,14 +13,18 @@
 #include <fstream>
 #include <memory>
 #include <optional>
+#include <span>
 #include <unordered_set>
 #include <utility>
 
+#include "TexturedCube/TextureLoadingService.h"
 #include <fmt/format.h>
 #include <nlohmann/json.hpp>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Content/IAssetLoader.h>
+#include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/TextureImportTypes.h>
@@ -28,8 +33,6 @@
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/TextureResource.h>
-
-#include "TexturedCube/TextureLoadingService.h"
 
 namespace {
 
@@ -183,11 +186,7 @@ TextureLoadingService::TextureLoadingService(
  @note If the service is still running, it is stopped here to satisfy the
        AsyncImportService contract.
 */
-TextureLoadingService::~TextureLoadingService()
-{
-  import_service_.Stop();
-  ReleasePinnedTextures();
-}
+TextureLoadingService::~TextureLoadingService() { import_service_.Stop(); }
 
 auto TextureLoadingService::SubmitImport(const ImportSettings& settings) -> bool
 {
@@ -402,13 +401,6 @@ auto TextureLoadingService::RefreshCookedTextureEntries(
     }
     normalized_root = normalized_root.lexically_normal();
 
-    // Keep asset loader mount state synchronized with the same cooked root that
-    // feeds the browser table/data inspection so texture/material browsing and
-    // loading operate from one source of truth.
-    if (asset_loader_) {
-      asset_loader_->AddLooseCookedRoot(normalized_root);
-    }
-
     Inspection inspection;
     inspection.LoadFromRoot(normalized_root);
 
@@ -426,6 +418,33 @@ auto TextureLoadingService::RefreshCookedTextureEntries(
 
     textures_table_path_ = normalized_root / *table_rel;
     textures_data_path_ = normalized_root / *data_rel;
+
+    // Refreshing a mounted root invalidates content. Merely reopening this
+    // panel must not perform that operation; inspect small metadata files to
+    // distinguish a changed import from an unchanged browser refresh.
+    const auto digests = std::array {
+      base::ComputeFileSha256(normalized_root / "container.index.bin"),
+      base::ComputeFileSha256(textures_table_path_),
+    };
+    const auto fingerprint
+      = base::ComputeSha256(std::as_bytes(std::span(digests)));
+    if (asset_loader_) {
+      const auto mounts = asset_loader_->EnumerateMountedSources();
+      const bool mounted = std::ranges::any_of(
+        mounts, [&normalized_root](const auto& source) -> bool {
+          return source.source_kind
+            == content::IAssetLoader::ContentSourceKind::kLooseCooked
+            && std::filesystem::weakly_canonical(source.source_path)
+            == normalized_root;
+        });
+      if (!mounted || mounted_root_ != normalized_root || !mounted_fingerprint_
+        || *mounted_fingerprint_ != fingerprint) {
+        asset_loader_->AddLooseCookedRoot(normalized_root);
+        mounted_root_ = normalized_root;
+        mounted_fingerprint_ = fingerprint;
+      }
+    }
+    cooked_source_key_ = inspection.Guid();
 
     // If root changed, reload metadata
     if (normalized_root != cooked_root_) {
@@ -609,7 +628,7 @@ auto TextureLoadingService::RefreshCookedTextureEntries(
       SaveTexturesJson();
     }
 
-    for (std::uint32_t i = 0; i < texture_table_.size(); ++i) {
+    for (std::uint32_t i = 1U; i < texture_table_.size(); ++i) {
       const auto& desc = texture_table_[i];
       std::string name;
 
@@ -662,133 +681,54 @@ auto TextureLoadingService::GetCookedTextureEntries() const
 auto TextureLoadingService::StartLoadCookedTexture(
   const std::uint32_t entry_index, LoadCallback on_complete) -> void
 {
-  LoadResult result;
-
+  auto fail = [&on_complete](std::string message) -> void {
+    if (on_complete) {
+      auto result = LoadResult {};
+      result.status_message = std::move(message);
+      on_complete(std::move(result));
+    }
+  };
   if (!asset_loader_) {
-    result.status_message = "AssetLoader unavailable";
-    if (on_complete) {
-      on_complete(std::move(result));
-    }
+    fail("AssetLoader unavailable");
     return;
   }
-
-  if (entry_index >= texture_table_.size()) {
-    result.status_message = "Texture index out of range";
-    if (on_complete) {
-      on_complete(std::move(result));
-    }
+  if (entry_index == 0U || entry_index >= texture_table_.size()) {
+    fail("Select a nonzero texture index within the cooked table");
     return;
   }
-
-  if (textures_data_path_.empty()) {
-    result.status_message = "textures.data is not available";
-    if (on_complete) {
-      on_complete(std::move(result));
-    }
+  std::optional<content::ResourceKey> key;
+  try {
+    key = asset_loader_->MakeTextureResourceKey(
+      cooked_source_key_, data::pak::core::ResourceIndexT { entry_index });
+  } catch (const std::exception& error) {
+    fail(error.what());
     return;
   }
-
-  auto desc = texture_table_[entry_index];
-  std::ifstream data_stream(textures_data_path_, std::ios::binary);
-  if (!data_stream) {
-    result.status_message = "Failed to open textures.data";
-    if (on_complete) {
-      on_complete(std::move(result));
-    }
+  if (!key) {
+    fail("Cooked texture source or index is no longer available; refresh the "
+         "browser");
     return;
   }
-
-  data_stream.seekg(
-    static_cast<std::streamoff>(desc.data_offset), std::ios::beg);
-  if (!data_stream) {
-    result.status_message = "Failed to seek textures.data";
-    if (on_complete) {
-      on_complete(std::move(result));
-    }
-    return;
-  }
-
-  std::vector<std::uint8_t> payload(desc.size_bytes);
-  data_stream.read(reinterpret_cast<char*>(payload.data()),
-    static_cast<std::streamsize>(payload.size()));
-  if (!data_stream) {
-    result.status_message = "Failed to read texture payload";
-    if (on_complete) {
-      on_complete(std::move(result));
-    }
-    return;
-  }
-
-  desc.data_offset = static_cast<oxygen::data::pak::core::OffsetT>(
-    sizeof(PakTextureResourceDesc));
-
-  auto packed = std::make_shared<std::vector<std::uint8_t>>();
-  packed->resize(sizeof(PakTextureResourceDesc) + payload.size());
-  std::memcpy(packed->data(), &desc, sizeof(PakTextureResourceDesc));
-  std::memcpy(packed->data() + sizeof(PakTextureResourceDesc), payload.data(),
-    payload.size());
-
-  const auto resource_key = asset_loader_->MintSyntheticTextureKey();
-
-  asset_loader_->StartLoadTexture(
-    oxygen::content::CookedResourceData<oxygen::data::TextureResource> {
-      .key = resource_key,
-      .bytes = std::span<const std::uint8_t>(packed->data(), packed->size()),
-    },
-    [this, on_complete = std::move(on_complete), packed,
-      width = static_cast<int>(desc.width),
-      height = static_cast<int>(desc.height),
-      texture_type = static_cast<TextureType>(desc.texture_type), resource_key](
-      std::shared_ptr<oxygen::data::TextureResource> tex) mutable {
-      LoadResult callback_result;
-      callback_result.resource_key = resource_key;
-      callback_result.width = width;
-      callback_result.height = height;
-      callback_result.texture_type = texture_type;
-
-      if (!tex) {
-        callback_result.status_message = "Texture upload failed";
-      } else if (!PinSyntheticTexture(resource_key)) {
-        callback_result.status_message
-          = "Loaded texture but could not pin synthetic resource";
+  // The loader owns decoding and source identity. Unlike synthetic cache-only
+  // keys, this key can reload its resource after an import invalidates caches.
+  asset_loader_->StartLoadTexture(*key,
+    [on_complete = std::move(on_complete), key = *key](
+      const std::shared_ptr<data::TextureResource>& texture) mutable -> void {
+      auto result = LoadResult {};
+      result.resource_key = key;
+      if (texture) {
+        result.success = true;
+        result.width = static_cast<int>(texture->GetWidth());
+        result.height = static_cast<int>(texture->GetHeight());
+        result.texture_type = texture->GetTextureType();
+        result.status_message = "Loaded cooked texture";
       } else {
-        callback_result.success = true;
-        callback_result.status_message = "Loaded cooked texture";
+        result.status_message = "Cooked texture could not be loaded";
       }
-
       if (on_complete) {
-        on_complete(std::move(callback_result));
+        on_complete(std::move(result));
       }
     });
-}
-
-auto TextureLoadingService::PinSyntheticTexture(
-  oxygen::content::ResourceKey key) -> bool
-{
-  if (!asset_loader_ || key == oxygen::content::ResourceKey { 0U }) {
-    return false;
-  }
-  if (std::ranges::find(pinned_texture_keys_, key)
-    != pinned_texture_keys_.end()) {
-    return true;
-  }
-  if (!asset_loader_->PinResource(key)) {
-    return false;
-  }
-  pinned_texture_keys_.push_back(key);
-  return true;
-}
-
-auto TextureLoadingService::ReleasePinnedTextures() noexcept -> void
-{
-  if (!asset_loader_) {
-    pinned_texture_keys_.clear();
-    return;
-  }
-  for (const auto key : pinned_texture_keys_) {
-    static_cast<void>(asset_loader_->UnpinResource(key));
-  }
-  pinned_texture_keys_.clear();
 }
 
 void TextureLoadingService::LoadTexturesJson()
