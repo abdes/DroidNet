@@ -126,7 +126,7 @@ bake/catalog validation and record the exact command and result.
   and direct `ShaderBake update`; the direct run reported
   `expanded_requests=182`, `dirty_requests=0`, `clean_requests=182`, and
   `stale_requests=0`.
-2026-04-26 runtime/capture closure evidence:
+  2026-04-26 runtime/capture closure evidence:
 
 - Added focused height-fog RenderDoc proof tooling:
   `tools/vortex/AnalyzeRenderDocVortexHeightFog.py`,

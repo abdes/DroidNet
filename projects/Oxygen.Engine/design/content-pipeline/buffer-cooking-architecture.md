@@ -14,7 +14,7 @@ Current implementation status snapshot:
    `BuildBufferContainerRequest`, and `AsyncImportService` routing for
    `buffer_container` payload presence.
 2. Implemented: JSON-descriptor-driven batch import path (`type:
-   "buffer-container"`) with schema validation at both request-build time and
+"buffer-container"`) with schema validation at both request-build time and
    per-entry validation in `BufferImportSubmitter`.
 3. Implemented: `BufferPipeline` compute-only async pipeline (optional SHA-256
    content hashing only; no format conversion, no compression).
@@ -93,21 +93,21 @@ Out of scope:
 
 The following facts were confirmed during the documentation pass:
 
-| Fact | Evidence |
-| --- | --- |
-| Buffer import is descriptor-only (no CLI command) | No `BufferCommand.cpp` in `ImportTool`; routing is discriminant-based, not format-based |
-| Route discriminant is payload presence | `src/Oxygen/Cooker/Import/AsyncImportService.cpp` (`const bool is_buffer_container_request = request.buffer_container.has_value()`) |
-| Payload field is top-level on `ImportRequest` | `src/Oxygen/Cooker/Import/ImportRequest.h` (`std::optional<BufferContainerPayload> buffer_container`) — same top-level payload pattern as material/geometry descriptors |
-| Manifest job type exists | `src/Oxygen/Cooker/Import/ImportManifest.cpp` (`if (job_type == "buffer-container")`) |
-| Schema is embedded | `src/Oxygen/Cooker/Import/Internal/ImportManifest_schema.h` (`kBufferContainerSchema`) |
-| Per-entry validation (not job-level re-validation) | `BufferImportSubmitter.cpp` (`ValidateBufferChunkSchema` per entry; job only re-parses JSON, no schema re-validate) |
-| Binary format lives in core, not render | `src/Oxygen/Data/PakFormat_core.h` (`BufferResourceDesc`, `static_assert(sizeof(...))==32)`) |
-| Loose cooked layout for buffers | `src/Oxygen/Cooker/Loose/LooseCookedLayout.h` (`kBufferDescriptorExtension = ".obuf"`, `BufferDescriptorRelPath()`, `BufferVirtualPath()`, `buffers_table_file_name`, `buffers_data_file_name`) |
-| Sidecar binary format defined | `src/Oxygen/Cooker/Import/Internal/Utils/BufferDescriptorSidecar.h` (`SerializeBufferDescriptorSidecar`, `ParsedBufferDescriptorSidecar`) |
-| Runtime loader exists | `src/Oxygen/Content/Loaders/BufferLoader.h` (`LoadBufferResource`) |
-| `BufferImportSubmitter` is reusable | `src/Oxygen/Cooker/Import/Internal/Jobs/BufferImportSubmitter.h` (not a member of `BufferContainerImportJob`; used standalone and by scene imports) |
-| Pipeline does only content hashing | `src/Oxygen/Cooker/Import/Internal/Pipelines/BufferPipeline.h` (comment: "does not perform any I/O and does not assign resource indices") |
-| JSON schema shipped | `src/Oxygen/Cooker/Import/Schemas/oxygen.buffer-container.schema.json` |
+| Fact                                               | Evidence                                                                                                                                                                                        |
+| -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Buffer import is descriptor-only (no CLI command)  | No `BufferCommand.cpp` in `ImportTool`; routing is discriminant-based, not format-based                                                                                                         |
+| Route discriminant is payload presence             | `src/Oxygen/Cooker/Import/AsyncImportService.cpp` (`const bool is_buffer_container_request = request.buffer_container.has_value()`)                                                             |
+| Payload field is top-level on `ImportRequest`      | `src/Oxygen/Cooker/Import/ImportRequest.h` (`std::optional<BufferContainerPayload> buffer_container`) — same top-level payload pattern as material/geometry descriptors                         |
+| Manifest job type exists                           | `src/Oxygen/Cooker/Import/ImportManifest.cpp` (`if (job_type == "buffer-container")`)                                                                                                           |
+| Schema is embedded                                 | `src/Oxygen/Cooker/Import/Internal/ImportManifest_schema.h` (`kBufferContainerSchema`)                                                                                                          |
+| Per-entry validation (not job-level re-validation) | `BufferImportSubmitter.cpp` (`ValidateBufferChunkSchema` per entry; job only re-parses JSON, no schema re-validate)                                                                             |
+| Binary format lives in core, not render            | `src/Oxygen/Data/PakFormat_core.h` (`BufferResourceDesc`, `static_assert(sizeof(...))==32)`)                                                                                                    |
+| Loose cooked layout for buffers                    | `src/Oxygen/Cooker/Loose/LooseCookedLayout.h` (`kBufferDescriptorExtension = ".obuf"`, `BufferDescriptorRelPath()`, `BufferVirtualPath()`, `buffers_table_file_name`, `buffers_data_file_name`) |
+| Sidecar binary format defined                      | `src/Oxygen/Cooker/Import/Internal/Utils/BufferDescriptorSidecar.h` (`SerializeBufferDescriptorSidecar`, `ParsedBufferDescriptorSidecar`)                                                       |
+| Runtime loader exists                              | `src/Oxygen/Content/Loaders/BufferLoader.h` (`LoadBufferResource`)                                                                                                                              |
+| `BufferImportSubmitter` is reusable                | `src/Oxygen/Cooker/Import/Internal/Jobs/BufferImportSubmitter.h` (not a member of `BufferContainerImportJob`; used standalone and by scene imports)                                             |
+| Pipeline does only content hashing                 | `src/Oxygen/Cooker/Import/Internal/Pipelines/BufferPipeline.h` (comment: "does not perform any I/O and does not assign resource indices")                                                       |
+| JSON schema shipped                                | `src/Oxygen/Cooker/Import/Schemas/oxygen.buffer-container.schema.json`                                                                                                                          |
 
 ## 4. Decision
 
@@ -229,8 +229,8 @@ Architectural split:
      `request.buffer_container.normalized_descriptor_json`.
    - note: The presence of `request.buffer_container` is the route discriminant
      that bypasses all format detection in `AsyncImportService`. This field is a
-      **top-level optional on `ImportRequest`** (not nested inside `ImportOptions`,
-      same pattern used by descriptor payloads like `request.material_descriptor`).
+     **top-level optional on `ImportRequest`** (not nested inside `ImportOptions`,
+     same pattern used by descriptor payloads like `request.material_descriptor`).
 
 **Job:**
 
@@ -264,7 +264,7 @@ Architectural split:
         against `BufferResourceDesc::size_bytes`.
      5. Submits `BufferPipeline::WorkItem` per entry.
      - Returns: `Submission { submitted_count, descriptor_relpath_by_source_id,
-       descriptor_views_by_source_id }`.
+descriptor_views_by_source_id }`.
    - `CollectAndEmit(pipeline, submission)`:
      1. Per submitted item: `pipeline.Collect()` → `WorkResult`.
      2. Calls `session.BufferEmitter().Emit(cooked, source_id)` →
@@ -272,7 +272,7 @@ Architectural split:
      3. Looks up `BufferResourceDesc` from `BufferEmitter::TryGetDescriptor`.
      4. Detects deduplication virtual path conflicts.
      5. Calls `session.ResourceDescriptorEmitter().EmitBufferAtRelPath(relpath,
-        emitted_index, descriptor, views)` → writes `.obuf` sidecar.
+emitted_index, descriptor, views)` → writes `.obuf` sidecar.
 
 **Pipeline:**
 
@@ -435,12 +435,12 @@ JSON Schema draft-07, `additionalProperties: false` at all levels.
 
 #### 7.2.1 Top-Level Field Contract
 
-| Field | Required | Type | Description |
-| --- | --- | --- | --- |
-| `$schema` | No | `string` | Points to shipped JSON Schema for editor integration |
-| `name` | No | identifier | Human-readable container name |
-| `content_hashing` | No | `bool` | Override global content hashing toggle |
-| `buffers` | **Yes** | array (≥1) | Array of buffer descriptor entries (Section 7.2.2) |
+| Field             | Required | Type       | Description                                          |
+| ----------------- | -------- | ---------- | ---------------------------------------------------- |
+| `$schema`         | No       | `string`   | Points to shipped JSON Schema for editor integration |
+| `name`            | No       | identifier | Human-readable container name                        |
+| `content_hashing` | No       | `bool`     | Override global content hashing toggle               |
+| `buffers`         | **Yes**  | array (≥1) | Array of buffer descriptor entries (Section 7.2.2)   |
 
 Canonical example:
 
@@ -481,16 +481,16 @@ Canonical example:
 
 #### 7.2.2 `buffer_descriptor` Entry Fields
 
-| Field | Required | Type | Description |
-| --- | --- | --- | --- |
-| `source` | **Yes** | `string` | Path to binary source file (absolute or relative to descriptor) |
-| `virtual_path` | **Yes** | canonical `.obuf` path | Unique virtual path for this buffer (must end in `.obuf`; canonical format) |
-| `usage_flags` | No | `uint` ≥0 | Buffer usage hints bitfield (Section 7.2.3) |
-| `element_stride` | No | `uint` ≥0 | Stride of each element in bytes; 0 when `element_format` is set |
-| `element_format` | No | `uint8` [0,255] | Format enum value (0 = raw/structured; nonzero = typed) |
-| `alignment` | No | `uint` ≥1 | Required GPU upload alignment; default 16 |
-| `content_hash` | No | `uint64` | Pre-computed content hash; if 0 and hashing enabled, pipeline computes it |
-| `views` | No | array (≥1) | Named sub-range views (Section 7.2.4) |
+| Field            | Required | Type                   | Description                                                                 |
+| ---------------- | -------- | ---------------------- | --------------------------------------------------------------------------- |
+| `source`         | **Yes**  | `string`               | Path to binary source file (absolute or relative to descriptor)             |
+| `virtual_path`   | **Yes**  | canonical `.obuf` path | Unique virtual path for this buffer (must end in `.obuf`; canonical format) |
+| `usage_flags`    | No       | `uint` ≥0              | Buffer usage hints bitfield (Section 7.2.3)                                 |
+| `element_stride` | No       | `uint` ≥0              | Stride of each element in bytes; 0 when `element_format` is set             |
+| `element_format` | No       | `uint8` [0,255]        | Format enum value (0 = raw/structured; nonzero = typed)                     |
+| `alignment`      | No       | `uint` ≥1              | Required GPU upload alignment; default 16                                   |
+| `content_hash`   | No       | `uint64`               | Pre-computed content hash; if 0 and hashing enabled, pipeline computes it   |
+| `views`          | No       | array (≥1)             | Named sub-range views (Section 7.2.4)                                       |
 
 Schema mutual-exclusion rules:
 
@@ -500,18 +500,18 @@ Schema mutual-exclusion rules:
 
 #### 7.2.3 `usage_flags` Values
 
-| Bit | Value | Role |
-| --- | --- | --- |
-| 0 | `0x01` | Vertex buffer — vertex input source |
-| 1 | `0x02` | Index buffer — index input source |
-| 2 | `0x04` | Constant buffer — shader constants/uniforms |
-| 3 | `0x08` | Storage buffer — read/write in shaders |
-| 4 | `0x10` | Indirect buffer — indirect draw/dispatch arguments |
-| 5 | `0x20` | CPU Writable — CPU can write to buffer |
-| 6 | `0x40` | CPU Readable — CPU can read from buffer |
-| 7 | `0x80` | Dynamic — frequently updated |
-| 8 | `0x100` | Static — rarely updated |
-| 9 | `0x200` | Immutable — never updated after creation |
+| Bit | Value   | Role                                               |
+| --- | ------- | -------------------------------------------------- |
+| 0   | `0x01`  | Vertex buffer — vertex input source                |
+| 1   | `0x02`  | Index buffer — index input source                  |
+| 2   | `0x04`  | Constant buffer — shader constants/uniforms        |
+| 3   | `0x08`  | Storage buffer — read/write in shaders             |
+| 4   | `0x10`  | Indirect buffer — indirect draw/dispatch arguments |
+| 5   | `0x20`  | CPU Writable — CPU can write to buffer             |
+| 6   | `0x40`  | CPU Readable — CPU can read from buffer            |
+| 7   | `0x80`  | Dynamic — frequently updated                       |
+| 8   | `0x100` | Static — rarely updated                            |
+| 9   | `0x200` | Immutable — never updated after creation           |
 
 Flags 7, 8, and 9 (update frequency) are mutually exclusive; if none are set,
 the engine defaults to Static. Role flags (bits 0–4) and CPU access flags
@@ -534,20 +534,20 @@ the engine defaults to Static. Role flags (bits 0–4) and CPU access flags
 ]
 ```
 
-| Field | Required | Type | Description |
-| --- | --- | --- | --- |
-| `name` | **Yes** | identifier (≤63 chars) | View name for lookup at runtime or by external tools |
-| `byte_offset` | Byte-addressing | `uint` ≥0 | Start offset in bytes |
-| `byte_length` | Byte-addressing | `uint` ≥1 | Length in bytes |
-| `element_offset` | Element-addressing | `uint` ≥0 | Start offset in elements |
-| `element_count` | Element-addressing | `uint` ≥1 | Number of elements |
+| Field            | Required           | Type                   | Description                                          |
+| ---------------- | ------------------ | ---------------------- | ---------------------------------------------------- |
+| `name`           | **Yes**            | identifier (≤63 chars) | View name for lookup at runtime or by external tools |
+| `byte_offset`    | Byte-addressing    | `uint` ≥0              | Start offset in bytes                                |
+| `byte_length`    | Byte-addressing    | `uint` ≥1              | Length in bytes                                      |
+| `element_offset` | Element-addressing | `uint` ≥0              | Start offset in elements                             |
+| `element_count`  | Element-addressing | `uint` ≥1              | Number of elements                                   |
 
 Addressing mode rules:
 
 1. Either `byte_offset` + `byte_length` OR `element_offset` + `element_count`
    must be used — never both on the same view.
 2. `name` must be unique within the `views[]` array.
-3. The name `__all__` is *reserved* — it MUST NOT appear in the descriptor;
+3. The name `__all__` is _reserved_ — it MUST NOT appear in the descriptor;
    it is automatically synthesized as the implicit full-buffer view.
 
 `NormalizeBufferViews` converts element-based views to byte ranges using
@@ -560,8 +560,8 @@ ranges fall within `[0, descriptor.size_bytes)`.
 
 `BufferPipeline` has a single processing step per work item:
 
-| Step | Action |
-| --- | --- |
+| Step         | Action                                                                                                                                                                   |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Content hash | If `Config::with_content_hashing` is enabled and `cooked.content_hash == 0`: offload `SHA-256(cooked.data)` to thread pool; store first 8 bytes in `cooked.content_hash` |
 
 Unlike texture and material pipelines, buffer processing has no format
@@ -600,11 +600,11 @@ static_assert(sizeof(BufferResourceDesc) == 32);
 
 Buffer types:
 
-| `element_format` | `element_stride` | Interpretation |
-| --- | --- | --- |
-| `0` | `1` | Raw byte buffer |
-| `0` | `>1` | Structured buffer (stride = element size) |
-| `>0` | `0` | Typed buffer (format-defined element size) |
+| `element_format` | `element_stride` | Interpretation                             |
+| ---------------- | ---------------- | ------------------------------------------ |
+| `0`              | `1`              | Raw byte buffer                            |
+| `0`              | `>1`             | Structured buffer (stride = element size)  |
+| `>0`             | `0`              | Typed buffer (format-defined element size) |
 
 ### 9.2 `.obuf` Sidecar File Layout
 
@@ -645,12 +645,12 @@ by `BufferEmitter`.
 
 Key layout constants:
 
-| Constant | Value | Role |
-| --- | --- | --- |
-| `kBufferDescriptorExtension` | `".obuf"` | File extension for buffer sidecars |
-| `buffer_descriptors_subdir` | `"Buffers"` | Subfolder under cooked root |
-| `buffers_table_file_name` | `"buffers.table"` | Resource table filename |
-| `buffers_data_file_name` | `"buffers.data"` | Raw payload filename |
+| Constant                     | Value             | Role                               |
+| ---------------------------- | ----------------- | ---------------------------------- |
+| `kBufferDescriptorExtension` | `".obuf"`         | File extension for buffer sidecars |
+| `buffer_descriptors_subdir`  | `"Buffers"`       | Subfolder under cooked root        |
+| `buffers_table_file_name`    | `"buffers.table"` | Resource table filename            |
+| `buffers_data_file_name`     | `"buffers.data"`  | Raw payload filename               |
 
 Virtual path for runtime mounting:
 `BufferVirtualPath(name)` = `<virtual_mount_root>/Buffers/<name>.obuf`
@@ -666,27 +666,27 @@ Buffer import errors are surfaced as diagnostics in `ImportReport` and as
 log messages written to `error_stream`. Error codes follow the pattern
 `buffer.<category>.<key>`:
 
-| Category | Code Pattern | Key Causes |
-| --- | --- | --- |
-| Schema | `buffer.container.schema_validation_failed` | Container or entry JSON fields violate schema |
-| Schema | `buffer.container.schema_validator_failure` | JSON Schema validator internal failure |
-| I/O | `buffer.container.source_read_failed` | Binary source file could not be read |
-| Routing | `buffer.container.request_invalid` | `request.buffer_container` absent in job |
-| Routing | `buffer.container.request_invalid_json` | Embedded normalized JSON cannot be parsed |
-| Validation | `buffer.container.buffers_missing` | `buffers[]` array absent or not an array |
-| Validation | `buffer.container.no_buffers` | All entries failed validation; no valid entries remain |
-| Validation | `buffer.container.no_submissions` | No work items were submitted to pipeline |
-| Validation | `buffer.container.virtual_path_duplicate` | Two entries share the same `virtual_path` |
-| Validation | `buffer.container.virtual_path_unmounted` | `virtual_path` does not start under `virtual_mount_root` |
-| Validation | `buffer.container.source_too_large` | Source file exceeds 4 GiB (`uint32_t::max` bytes) |
-| Views | `buffer.container.view_*` | View addressing errors from `NormalizeBufferViews` |
-| Reader | `buffer.container.reader_unavailable` | `IAsyncFileReader` not injected |
-| Emit | `buffer.container.descriptor_missing` | `BufferEmitter::TryGetDescriptor` returned empty |
-| Emit | `buffer.container.sidecar_emit_failed` | Exception during `.obuf` sidecar write |
-| Emit | `buffer.container.dedup_virtual_path_conflict` | Two different virtual paths hash-deduplicated to same `ResourceIndexT` |
-| Internal | `buffer.container.internal_lookup_failed` | Submission map lookup failed during collection |
-| Cancellation | `buffer.cancelled` | `stop_token` signalled during job execution |
-| Predecessor | `buffer.import.skipped_predecessor_failed` | A `depends_on` job failed |
+| Category     | Code Pattern                                   | Key Causes                                                             |
+| ------------ | ---------------------------------------------- | ---------------------------------------------------------------------- |
+| Schema       | `buffer.container.schema_validation_failed`    | Container or entry JSON fields violate schema                          |
+| Schema       | `buffer.container.schema_validator_failure`    | JSON Schema validator internal failure                                 |
+| I/O          | `buffer.container.source_read_failed`          | Binary source file could not be read                                   |
+| Routing      | `buffer.container.request_invalid`             | `request.buffer_container` absent in job                               |
+| Routing      | `buffer.container.request_invalid_json`        | Embedded normalized JSON cannot be parsed                              |
+| Validation   | `buffer.container.buffers_missing`             | `buffers[]` array absent or not an array                               |
+| Validation   | `buffer.container.no_buffers`                  | All entries failed validation; no valid entries remain                 |
+| Validation   | `buffer.container.no_submissions`              | No work items were submitted to pipeline                               |
+| Validation   | `buffer.container.virtual_path_duplicate`      | Two entries share the same `virtual_path`                              |
+| Validation   | `buffer.container.virtual_path_unmounted`      | `virtual_path` does not start under `virtual_mount_root`               |
+| Validation   | `buffer.container.source_too_large`            | Source file exceeds 4 GiB (`uint32_t::max` bytes)                      |
+| Views        | `buffer.container.view_*`                      | View addressing errors from `NormalizeBufferViews`                     |
+| Reader       | `buffer.container.reader_unavailable`          | `IAsyncFileReader` not injected                                        |
+| Emit         | `buffer.container.descriptor_missing`          | `BufferEmitter::TryGetDescriptor` returned empty                       |
+| Emit         | `buffer.container.sidecar_emit_failed`         | Exception during `.obuf` sidecar write                                 |
+| Emit         | `buffer.container.dedup_virtual_path_conflict` | Two different virtual paths hash-deduplicated to same `ResourceIndexT` |
+| Internal     | `buffer.container.internal_lookup_failed`      | Submission map lookup failed during collection                         |
+| Cancellation | `buffer.cancelled`                             | `stop_token` signalled during job execution                            |
+| Predecessor  | `buffer.import.skipped_predecessor_failed`     | A `depends_on` job failed                                              |
 
 ---
 

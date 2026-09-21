@@ -37,11 +37,11 @@ active or active-in-progress; environment Stage 14/15 work is owned by
 
 ### 1.2 What It Replaces
 
-| Legacy | Vortex |
-| ------ | ------ |
-| `ForwardPipeline` + `RenderingPipeline` | `SceneRenderer` |
-| Pipeline construction in Renderer | `SceneRenderBuilder` |
-| `PipelineFeature`, `PipelineSettings` | Capability-gated service presence |
+| Legacy                                  | Vortex                            |
+| --------------------------------------- | --------------------------------- |
+| `ForwardPipeline` + `RenderingPipeline` | `SceneRenderer`                   |
+| Pipeline construction in Renderer       | `SceneRenderBuilder`              |
+| `PipelineFeature`, `PipelineSettings`   | Capability-gated service presence |
 
 ### 1.3 Architectural Authority
 
@@ -107,14 +107,14 @@ public:
 
 **Capability interpretation (Phase 2 shell):**
 
-| Capability | Effect |
-| ---------- | ------ |
-| `kDeferredShading` | Sets default `ShadingMode::kDeferred` |
-| `kScenePreparation` | Enables InitViews |
-| `kLightingData` | Enables LightingService |
-| `kShadowing` | Enables ShadowService |
-| `kEnvironmentLighting` | Enables EnvironmentLightingService |
-| `kDiagnosticsAndProfiling` | Enables DiagnosticsService |
+| Capability                 | Effect                                |
+| -------------------------- | ------------------------------------- |
+| `kDeferredShading`         | Sets default `ShadingMode::kDeferred` |
+| `kScenePreparation`        | Enables InitViews                     |
+| `kLightingData`            | Enables LightingService               |
+| `kShadowing`               | Enables ShadowService                 |
+| `kEnvironmentLighting`     | Enables EnvironmentLightingService    |
+| `kDiagnosticsAndProfiling` | Enables DiagnosticsService            |
 
 The original Phase 2 shell used null service pointers for every capability.
 Current Vortex phases construct active services for implemented capability
@@ -471,15 +471,15 @@ void Renderer::OnFrameEnd(const FrameContext& frame) {
 
 ### 4.2 Ownership Boundary
 
-| Responsibility | Owner |
-| -------------- | ----- |
-| `SceneRenderer` lifetime | Renderer (via `unique_ptr`) |
-| `SceneTextures` lifetime | SceneRenderer |
-| Frame-phase delegation | Renderer → SceneRenderer |
+| Responsibility                                    | Owner                              |
+| ------------------------------------------------- | ---------------------------------- |
+| `SceneRenderer` lifetime                          | Renderer (via `unique_ptr`)        |
+| `SceneTextures` lifetime                          | SceneRenderer                      |
+| Frame-phase delegation                            | Renderer → SceneRenderer           |
 | Prepared-frame priming before initial publication | Renderer (via `PrimePreparedView`) |
-| Composition planning + execution | Renderer (not SceneRenderer) |
-| View registration | Renderer (not SceneRenderer) |
-| Upload/staging coordination | Renderer (not SceneRenderer) |
+| Composition planning + execution                  | Renderer (not SceneRenderer)       |
+| View registration                                 | Renderer (not SceneRenderer)       |
+| Upload/staging coordination                       | Renderer (not SceneRenderer)       |
 
 ## 5. Data Flow and Dependencies
 

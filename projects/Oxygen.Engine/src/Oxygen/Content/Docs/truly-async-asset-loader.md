@@ -1,4 +1,3 @@
-
 # Async AssetLoader (architecture)
 
 This document describes the shipped architecture for Oxygen’s async-first

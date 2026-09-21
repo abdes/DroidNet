@@ -23,9 +23,7 @@
       "source": "../bottle-on-box/floor.geometry.json",
       "name": "floor",
       "content_hashing": true,
-      "depends_on": [
-        "material.floor_default"
-      ]
+      "depends_on": ["material.floor_default"]
     },
     {
       "id": "geometry.cube",
@@ -33,9 +31,7 @@
       "source": "../bottle-on-box/cube.geometry.json",
       "name": "cube",
       "content_hashing": true,
-      "depends_on": [
-        "material.cube_red"
-      ]
+      "depends_on": ["material.cube_red"]
     },
     {
       "id": "scene.SpotShadowValidation",
@@ -43,10 +39,7 @@
       "source": "./SpotShadowValidation.scene.json",
       "name": "SpotShadowValidation",
       "content_hashing": true,
-      "depends_on": [
-        "geometry.floor",
-        "geometry.cube"
-      ]
+      "depends_on": ["geometry.floor", "geometry.cube"]
     }
   ]
 }

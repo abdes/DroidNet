@@ -1,4 +1,3 @@
-
 # AsyncEngine execution model
 
 This document summarizes the execution patterns implemented by the frame loop in

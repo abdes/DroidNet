@@ -32,10 +32,10 @@ The design draws on four published techniques.
 
 ### 2.1 Cascaded Shadow Maps (CSM)
 
-Reference: Microsoft Learn, *Cascaded Shadow Maps*
+Reference: Microsoft Learn, _Cascaded Shadow Maps_
 (`https://learn.microsoft.com/en-us/windows/win32/dxtecharts/cascaded-shadow-maps`)
 
-Reference: Zhang et al., *Parallel-Split Shadow Maps on Programmable GPUs*,
+Reference: Zhang et al., _Parallel-Split Shadow Maps on Programmable GPUs_,
 GPU Gems 3, Chapter 10
 (`https://developer.nvidia.com/gpugems/gpugems3/part-ii-light-and-shadows/chapter-10-parallel-split-shadow-maps-programmable-gpus`)
 
@@ -61,7 +61,7 @@ Key properties used by Oxygen:
 
 ### 2.2 Sample Distribution Shadow Maps (SDSM)
 
-Reference: Lauritzen, *Sample Distribution Shadow Maps*, Advances in
+Reference: Lauritzen, _Sample Distribution Shadow Maps_, Advances in
 Real-Time Rendering, SIGGRAPH 2010
 (`https://advances.realtimerendering.com/s2010/Lauritzen-SDSM%28SIGGRAPH%202010%20Advanced%20RealTime%20Rendering%20Course%29.pdf`)
 
@@ -85,8 +85,8 @@ Oxygen applies this idea as follows:
 
 ### 2.3 Receiver-Mask-Based Caster Culling
 
-Reference: Bittner et al., *Shadow Caster Culling for Efficient Shadow
-Mapping*, I3D 2011
+Reference: Bittner et al., _Shadow Caster Culling for Efficient Shadow
+Mapping_, I3D 2011
 (`https://www.cg.tuwien.ac.at/research/publications/2011/bittner-2011-scc/`)
 
 The idea: within each cascade's shadow map, not all tiles are occupied by
@@ -107,7 +107,7 @@ The technique works by:
 
 ### 2.4 GPU Hierarchical Visibility
 
-Reference: Hill and Collin, *Practical, Dynamic Visibility for Games*
+Reference: Hill and Collin, _Practical, Dynamic Visibility for Games_
 (`https://blog.selfshadow.com/publications/practical-visibility/`)
 
 GPU-driven visibility testing uses the hierarchical Z-buffer (HZB) and
@@ -377,11 +377,11 @@ Key properties:
 Derives tight per-cascade light-space bounds from the actual distribution of
 visible depth samples (SDSM core). Implemented as three GPU compute dispatches:
 
-| Dispatch | Thread group | Grid | Purpose |
-| - | - | - | - |
-| `CS_Clear` | 64×1×1 | `ceil(jobs/64)` | Initialize raw atomic accumulators |
-| `CS_Analyze` | 8×8×1 | `ceil(W/8) × ceil(H/8)` | Per-pixel: reconstruct world pos, classify into cascade, project into light space, accumulate via atomics |
-| `CS_Finalize` | 64×1×1 | `ceil(jobs/64)` | Decode atomics, compute area/depth ratios, write final analysis |
+| Dispatch      | Thread group | Grid                    | Purpose                                                                                                   |
+| ------------- | ------------ | ----------------------- | --------------------------------------------------------------------------------------------------------- |
+| `CS_Clear`    | 64×1×1       | `ceil(jobs/64)`         | Initialize raw atomic accumulators                                                                        |
+| `CS_Analyze`  | 8×8×1        | `ceil(W/8) × ceil(H/8)` | Per-pixel: reconstruct world pos, classify into cascade, project into light space, accumulate via atomics |
+| `CS_Finalize` | 64×1×1       | `ceil(jobs/64)`         | Decode atomics, compute area/depth ratios, write final analysis                                           |
 
 #### CS_Clear
 
@@ -474,13 +474,13 @@ tile mask captures this sparsity.
 
 Five GPU compute dispatches:
 
-| Dispatch | Thread group | Grid | Purpose |
-| - | - | - | - |
-| `CS_ClearMasks` | 64×1×1 | `ceil(max_entries/64)` | Zero raw, base, hierarchy masks and count buffer |
-| `CS_Analyze` | 8×8×1 | `ceil(W/8) × ceil(H/8)` | Per-pixel: classify into cascade, project to light space, mark raw tile via `InterlockedOr` |
-| `CS_DilateMasks` | 64×1×1 | `ceil(jobs×base_tiles/64)` | Per-tile: read raw mask, apply conservative dilation radius, write base mask, count occupied tiles |
-| `CS_BuildHierarchy` | 64×1×1 | `ceil(jobs×hier_tiles/64)` | Per-hierarchy-tile: OR-reduce base mask tiles, count hierarchy occupied tiles |
-| `CS_Finalize` | 64×1×1 | `ceil(jobs/64)` | Per-job: write `ConventionalShadowReceiverMaskSummary` from analysis + tile counts |
+| Dispatch            | Thread group | Grid                       | Purpose                                                                                            |
+| ------------------- | ------------ | -------------------------- | -------------------------------------------------------------------------------------------------- |
+| `CS_ClearMasks`     | 64×1×1       | `ceil(max_entries/64)`     | Zero raw, base, hierarchy masks and count buffer                                                   |
+| `CS_Analyze`        | 8×8×1        | `ceil(W/8) × ceil(H/8)`    | Per-pixel: classify into cascade, project to light space, mark raw tile via `InterlockedOr`        |
+| `CS_DilateMasks`    | 64×1×1       | `ceil(jobs×base_tiles/64)` | Per-tile: read raw mask, apply conservative dilation radius, write base mask, count occupied tiles |
+| `CS_BuildHierarchy` | 64×1×1       | `ceil(jobs×hier_tiles/64)` | Per-hierarchy-tile: OR-reduce base mask tiles, count hierarchy occupied tiles                      |
+| `CS_Finalize`       | 64×1×1       | `ceil(jobs/64)`            | Per-job: write `ConventionalShadowReceiverMaskSummary` from analysis + tile counts                 |
 
 #### CS_ClearMasks
 
@@ -621,9 +621,9 @@ for counted-indirect raster.
 
 One GPU compute dispatch per partition per frame:
 
-| Dispatch | Thread group | Grid | Purpose |
-| - | - | - | - |
-| `CS` | 64×1×1 | `ceil(record_count/64) × job_count` | Per-(draw, cascade): cull against receiver data, append surviving commands |
+| Dispatch | Thread group | Grid                                | Purpose                                                                    |
+| -------- | ------------ | ----------------------------------- | -------------------------------------------------------------------------- |
+| `CS`     | 64×1×1       | `ceil(record_count/64) × job_count` | Per-(draw, cascade): cull against receiver data, append surviving commands |
 
 The partition index is passed as a root constant. Each dispatch covers all
 draw records within one contiguous partition against all cascade jobs.
@@ -870,21 +870,21 @@ blending, and shadow-range control.
 
 Classic CSM quality-tier budget:
 
-| Oxygen quality tier | Maximum classic CSM resolution |
-| - | - |
-| `Low` | `1024` |
-| `Medium` ("Normal") | `2048` |
-| `High` | `3072` for one dominant directional light, else `2048` |
-| `Ultra` | `4096` for one dominant directional light, else `3072` |
+| Oxygen quality tier | Maximum classic CSM resolution                         |
+| ------------------- | ------------------------------------------------------ |
+| `Low`               | `1024`                                                 |
+| `Medium` ("Normal") | `2048`                                                 |
+| `High`              | `3072` for one dominant directional light, else `2048` |
+| `Ultra`             | `4096` for one dominant directional light, else `3072` |
 
 Authored shadow-resolution hints map to:
 
 | Authored hint | Requested classic CSM resolution |
-| - | - |
-| `Low` | `1024` |
-| `Medium` | `2048` |
-| `High` | `3072` |
-| `Ultra` | `4096` |
+| ------------- | -------------------------------- |
+| `Low`         | `1024`                           |
+| `Medium`      | `2048`                           |
+| `High`        | `3072`                           |
+| `Ultra`       | `4096`                           |
 
 The backend resolves the final classic CSM resolution by taking the authored
 light `resolution_hint` and clamping it to the active `ShadowQualityTier`
@@ -892,16 +892,16 @@ budget.
 
 ### 7.2 Tuning Contract
 
-| Tuning concern | Oxygen contract |
-| - | - |
-| authored max near-CSM distance | `max_shadow_distance` in `CascadedShadowSettings` |
-| runtime scalar on the authored max distance | `rndr.shadow.csm.distance_scale` |
-| authored cascade count | existing `cascade_count`, clamped by `rndr.shadow.csm.max_cascades` |
-| geometric-series bias toward the camera | existing `distribution_exponent`, active in generated-split mode |
-| authored overlap fraction between neighboring cascades | `transition_fraction` |
-| runtime scalar on transition overlap | `rndr.shadow.csm.transition_scale` |
-| fade-out region at the end of CSM coverage | `distance_fadeout_fraction` |
-| global cap for classic CSM resolution | optional `rndr.shadow.csm.max_resolution` |
+| Tuning concern                                         | Oxygen contract                                                     |
+| ------------------------------------------------------ | ------------------------------------------------------------------- |
+| authored max near-CSM distance                         | `max_shadow_distance` in `CascadedShadowSettings`                   |
+| runtime scalar on the authored max distance            | `rndr.shadow.csm.distance_scale`                                    |
+| authored cascade count                                 | existing `cascade_count`, clamped by `rndr.shadow.csm.max_cascades` |
+| geometric-series bias toward the camera                | existing `distribution_exponent`, active in generated-split mode    |
+| authored overlap fraction between neighboring cascades | `transition_fraction`                                               |
+| runtime scalar on transition overlap                   | `rndr.shadow.csm.transition_scale`                                  |
+| fade-out region at the end of CSM coverage             | `distance_fadeout_fraction`                                         |
+| global cap for classic CSM resolution                  | optional `rndr.shadow.csm.max_resolution`                           |
 
 ### 7.3 Authored Model
 
@@ -990,8 +990,8 @@ fade_begin =
   - effective_max_distance * authored.distance_fadeout_fraction
 ```
 
-Transition fraction blends *between cascades*; distance fadeout blends *from
-the last cascade to unshadowed*. These are independent concerns.
+Transition fraction blends _between cascades_; distance fadeout blends _from
+the last cascade to unshadowed_. These are independent concerns.
 
 ### 7.7 C++ Ownership
 
@@ -1049,7 +1049,7 @@ when the tile grid is large (128 × 128).
 
 Symmetric depth-slab culling (reject if caster is outside the receiver depth
 range on either side) is incorrect for shadow casting. A caster in front of
-all receivers can still cast shadows onto them. Only casters fully *behind*
+all receivers can still cast shadows onto them. Only casters fully _behind_
 (farther from the light than) the deepest receiver are guaranteed to produce
 no visible shadow. The one-sided test preserves all legitimate occluders.
 

@@ -79,10 +79,10 @@ This plan follows `.github/instructions/cpp_coding_style.instructions.md` collab
 9. `src/Oxygen/Content/IAssetLoader.h` (add `EnumerateMountedInputContexts` declaration)
 10. `src/Oxygen/Content/AssetLoader.cpp` (implement `EnumerateMountedInputContexts`; remove scene-binding dependency publishing)
 11. `src/Oxygen/Data/InputMappingContextAsset.h` (add `GetDefaultPriority` accessor)
-11. `Examples/DemoShell/Services/SceneLoaderService.cpp` (remove `AttachInputMappings`)
-12. `src/Oxygen/Cooker/Tools/PakDump/SceneAssetDumper.h` (remove `kInputContextBinding` dump)
-13. `src/Oxygen/Cooker/Tools/PakGen/src/pakgen/packing/packers.py` (remove binding record packing)
-14. `src/Oxygen/Cooker/Tools/PakGen/src/pakgen/spec/validator.py` (remove binding validation)
+12. `Examples/DemoShell/Services/SceneLoaderService.cpp` (remove `AttachInputMappings`)
+13. `src/Oxygen/Cooker/Tools/PakDump/SceneAssetDumper.h` (remove `kInputContextBinding` dump)
+14. `src/Oxygen/Cooker/Tools/PakGen/src/pakgen/packing/packers.py` (remove binding record packing)
+15. `src/Oxygen/Cooker/Tools/PakGen/src/pakgen/spec/validator.py` (remove binding validation)
 
 ### Tests
 
@@ -102,16 +102,16 @@ Status values:
 2. `in_progress`
 3. `done`
 
-| Phase | Status | Scope | Exit Gate |
-| --- | --- | --- | --- |
-| P1 | done | Data format + flags | `InputMappingContextAssetDesc` invariants and tests pass |
-| P2 | done | Import contracts (settings/builder/options) | valid input requests built from CLI + manifest |
-| P3 | done | Job/Pipeline implementation | `.oiact` / `.oimap` emitted and indexed |
-| P4 | done | ImportTool and manifest integration | `input` job type with dependency-aware batch scheduling operational |
-| P5 | done | Runtime enumeration + hydration | `EnumerateMountedInputContexts` + `HydrateInputContext` operational; auto-load/auto-activate works without scene bindings |
-| P6 | done | Eradicate scene-binding infrastructure | `InputContextBindingRecord`, `InputContextBindingFlags`, `kInputContextBinding`, all scene-binding code paths fully removed |
-| P7 | done | Compatibility verification | importer/runtime output remains compatible with existing PAK tooling (excluding removed scene-binding records) |
-| P8 | done | Full test and documentation closeout | tests and docs updated for input import/runtime/schema path |
+| Phase | Status | Scope                                       | Exit Gate                                                                                                                   |
+| ----- | ------ | ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| P1    | done   | Data format + flags                         | `InputMappingContextAssetDesc` invariants and tests pass                                                                    |
+| P2    | done   | Import contracts (settings/builder/options) | valid input requests built from CLI + manifest                                                                              |
+| P3    | done   | Job/Pipeline implementation                 | `.oiact` / `.oimap` emitted and indexed                                                                                     |
+| P4    | done   | ImportTool and manifest integration         | `input` job type with dependency-aware batch scheduling operational                                                         |
+| P5    | done   | Runtime enumeration + hydration             | `EnumerateMountedInputContexts` + `HydrateInputContext` operational; auto-load/auto-activate works without scene bindings   |
+| P6    | done   | Eradicate scene-binding infrastructure      | `InputContextBindingRecord`, `InputContextBindingFlags`, `kInputContextBinding`, all scene-binding code paths fully removed |
+| P7    | done   | Compatibility verification                  | importer/runtime output remains compatible with existing PAK tooling (excluding removed scene-binding records)              |
+| P8    | done   | Full test and documentation closeout        | tests and docs updated for input import/runtime/schema path                                                                 |
 
 Status update rule:
 
@@ -186,7 +186,7 @@ Tasks:
 4. Implement strict source JSON parsers for:
    - Primary format: extract shared `actions[]` and iterate `contexts[]`, emitting N action assets + M context assets
    - Standalone action: emit 1 action asset
-   including:
+     including:
    - action declaration parsing and dedup/conflict checking
    - `contexts[]` array iteration with per-context name uniqueness validation
    - action name resolution: resolve `action` string against `actions[]` first, then mounted/inflight content
@@ -484,22 +484,22 @@ Current:
 
 This checklist proves each non-negotiable requirement is satisfied by the design.
 
-| # | Non-Negotiable Requirement | Satisfied By | Verified In |
-| --- | --- | --- | --- |
-| 1 | One manifest job type only: `type: "input"` | spec §7.3 enum adds `"input"` only; schema `job_settings.type` gains one value in `Import/Schemas/oxygen.import-manifest.schema.json` (embedded to generated `ImportManifest_schema.h` at build time) | P4 acceptance #1, P8 task #5 |
-| 2 | One job class only: `InputImportJob` | spec §6.1 #3, impl §2 gate #5; `AsyncImportService` routes all input requests to `InputImportJob` | P3 acceptance #1 |
-| 3 | One pipeline class only: `InputImportPipeline` | spec §6.1 #4, spec §10.2 single-pipeline contract; impl §2 gate #6 | P3 acceptance #1 |
-| 4 | Single pipeline processes mixed batches (standalone action + primary format) | spec §10.2 items 1-4: one pipeline, both document structures, mixed workloads, internal dispatch; one file emits N actions + M contexts | P3 acceptance #4 #7, P8 task #7 |
-| 5 | No input asset properties in manifest job objects | spec §7.3 delta #5 forbidden fields list; manifest whitelist `id/type/source/depends_on` | P4 acceptance #4, P8 task #5 |
-| 6 | Input asset semantics only in source JSON files | spec §7.4 source JSON spec; §7.3 "no asset kind or asset properties stored in manifest job settings" | P3 tasks #3-4, P8 task #7 |
-| 7 | Dependencies explicit via `id` + `depends_on` in manifest | spec §7.3 schema deltas #3; impl P4 tasks #4-5 | P4 acceptance #2, P8 task #6 |
-| 8 | Jobs declare `depends_on` for predecessor jobs that produce referenced actions | spec §7.3 validation invariant #8 (reserved — content-level resolution at parse time); §7.3.1 DAG dispatch | P4 acceptance #2, P3 acceptance #5 |
-| 9 | PakGen/PakDump changes limited to scene-binding removal | spec §12: only `input_context_bindings` infrastructure removed; all other contracts untouched | P7 acceptance #1 |
-| 10 | Manifest input job keys exactly: `id, type, source, depends_on` | spec §7.3 validation invariant #4; impl P4 task #7 | P4 acceptance #4, P8 task #5 |
-| 11 | Rejected keys include `output, name, verbose, content_hashing` + all source fields | spec §7.3 validation invariants #2-3; impl P4 task #7 explicit list | P8 task #5 |
-| 12 | `InputImportJob` orchestrates only; `InputImportPipeline` parses source JSON | spec §10.1 vs §10.2; §7.4.7 parsing ownership | P3 acceptance #1-2 |
-| 13 | Dependency scheduler: unique ids, missing targets, cycles, failure propagation | spec §7.3.1 #2 (4 checks); impl P4 task #5 (4 sub-items + note) | P8 task #6 |
-| 14 | `InputImportKind` NOT in `ImportOptions` | spec §6.2 #1 explicitly states NOT added; §7.1 routing contract #2 | P2 acceptance #3 |
-| 15 | Real JSON Schema shipped for editor integration | spec §7.5 JSON Schema Distribution; §7.4.1 file extension convention | P8 task #11 |
-| 16 | No `kind` discriminator in source files | spec §7.4.3 document structure detection rules; pipeline infers from structure | P3 acceptance #10 |
-| 17 | `trigger` shorthand for common case | spec §7.4.3.3 mapping record contract; trigger resolution rules | P3 acceptance #9, P8 task #8 |
+| #   | Non-Negotiable Requirement                                                         | Satisfied By                                                                                                                                                                                          | Verified In                        |
+| --- | ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
+| 1   | One manifest job type only: `type: "input"`                                        | spec §7.3 enum adds `"input"` only; schema `job_settings.type` gains one value in `Import/Schemas/oxygen.import-manifest.schema.json` (embedded to generated `ImportManifest_schema.h` at build time) | P4 acceptance #1, P8 task #5       |
+| 2   | One job class only: `InputImportJob`                                               | spec §6.1 #3, impl §2 gate #5; `AsyncImportService` routes all input requests to `InputImportJob`                                                                                                     | P3 acceptance #1                   |
+| 3   | One pipeline class only: `InputImportPipeline`                                     | spec §6.1 #4, spec §10.2 single-pipeline contract; impl §2 gate #6                                                                                                                                    | P3 acceptance #1                   |
+| 4   | Single pipeline processes mixed batches (standalone action + primary format)       | spec §10.2 items 1-4: one pipeline, both document structures, mixed workloads, internal dispatch; one file emits N actions + M contexts                                                               | P3 acceptance #4 #7, P8 task #7    |
+| 5   | No input asset properties in manifest job objects                                  | spec §7.3 delta #5 forbidden fields list; manifest whitelist `id/type/source/depends_on`                                                                                                              | P4 acceptance #4, P8 task #5       |
+| 6   | Input asset semantics only in source JSON files                                    | spec §7.4 source JSON spec; §7.3 "no asset kind or asset properties stored in manifest job settings"                                                                                                  | P3 tasks #3-4, P8 task #7          |
+| 7   | Dependencies explicit via `id` + `depends_on` in manifest                          | spec §7.3 schema deltas #3; impl P4 tasks #4-5                                                                                                                                                        | P4 acceptance #2, P8 task #6       |
+| 8   | Jobs declare `depends_on` for predecessor jobs that produce referenced actions     | spec §7.3 validation invariant #8 (reserved — content-level resolution at parse time); §7.3.1 DAG dispatch                                                                                            | P4 acceptance #2, P3 acceptance #5 |
+| 9   | PakGen/PakDump changes limited to scene-binding removal                            | spec §12: only `input_context_bindings` infrastructure removed; all other contracts untouched                                                                                                         | P7 acceptance #1                   |
+| 10  | Manifest input job keys exactly: `id, type, source, depends_on`                    | spec §7.3 validation invariant #4; impl P4 task #7                                                                                                                                                    | P4 acceptance #4, P8 task #5       |
+| 11  | Rejected keys include `output, name, verbose, content_hashing` + all source fields | spec §7.3 validation invariants #2-3; impl P4 task #7 explicit list                                                                                                                                   | P8 task #5                         |
+| 12  | `InputImportJob` orchestrates only; `InputImportPipeline` parses source JSON       | spec §10.1 vs §10.2; §7.4.7 parsing ownership                                                                                                                                                         | P3 acceptance #1-2                 |
+| 13  | Dependency scheduler: unique ids, missing targets, cycles, failure propagation     | spec §7.3.1 #2 (4 checks); impl P4 task #5 (4 sub-items + note)                                                                                                                                       | P8 task #6                         |
+| 14  | `InputImportKind` NOT in `ImportOptions`                                           | spec §6.2 #1 explicitly states NOT added; §7.1 routing contract #2                                                                                                                                    | P2 acceptance #3                   |
+| 15  | Real JSON Schema shipped for editor integration                                    | spec §7.5 JSON Schema Distribution; §7.4.1 file extension convention                                                                                                                                  | P8 task #11                        |
+| 16  | No `kind` discriminator in source files                                            | spec §7.4.3 document structure detection rules; pipeline infers from structure                                                                                                                        | P3 acceptance #10                  |
+| 17  | `trigger` shorthand for common case                                                | spec §7.4.3.3 mapping record contract; trigger resolution rules                                                                                                                                       | P3 acceptance #9, P8 task #8       |

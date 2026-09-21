@@ -61,14 +61,14 @@ Out of scope:
 
 ## 3. Baseline Repository Facts
 
-| Fact | Evidence |
-| --- | --- |
-| Manifest parser recognizes current job types (`texture`, `texture-descriptor`, `material-descriptor`, `buffer-container`, `fbx`, `gltf`, `script`, `script-sidecar`, `physics-sidecar`, `input`) | `src/Oxygen/Cooker/Import/ImportManifest.cpp` |
-| ImportTool commands currently mirror those job types | `src/Oxygen/Cooker/Tools/ImportTool/main.cpp` |
-| C++ Pak path exists and is callable | `src/Oxygen/Cooker/Pak/PakBuilder.h`, `src/Oxygen/Cooker/Pak/PakPlanBuilder.h`, `src/Oxygen/Cooker/Pak/PakWriter.h` |
-| PakGen still exists as tool target | `src/Oxygen/Cooker/Tools/PakGen/CMakeLists.txt` |
-| Schema embedding/install infra exists | `cmake/JsonSchemaHelpers.cmake`, `cmake/GenerateEmbeddedJsonSchemas.cmake`, `src/Oxygen/Cooker/CMakeLists.txt` |
-| Shared schema validation utility exists | `src/Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h` |
+| Fact                                                                                                                                                                                             | Evidence                                                                                                            |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
+| Manifest parser recognizes current job types (`texture`, `texture-descriptor`, `material-descriptor`, `buffer-container`, `fbx`, `gltf`, `script`, `script-sidecar`, `physics-sidecar`, `input`) | `src/Oxygen/Cooker/Import/ImportManifest.cpp`                                                                       |
+| ImportTool commands currently mirror those job types                                                                                                                                             | `src/Oxygen/Cooker/Tools/ImportTool/main.cpp`                                                                       |
+| C++ Pak path exists and is callable                                                                                                                                                              | `src/Oxygen/Cooker/Pak/PakBuilder.h`, `src/Oxygen/Cooker/Pak/PakPlanBuilder.h`, `src/Oxygen/Cooker/Pak/PakWriter.h` |
+| PakGen still exists as tool target                                                                                                                                                               | `src/Oxygen/Cooker/Tools/PakGen/CMakeLists.txt`                                                                     |
+| Schema embedding/install infra exists                                                                                                                                                            | `cmake/JsonSchemaHelpers.cmake`, `cmake/GenerateEmbeddedJsonSchemas.cmake`, `src/Oxygen/Cooker/CMakeLists.txt`      |
+| Shared schema validation utility exists                                                                                                                                                          | `src/Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h`                                                    |
 
 ## 4. Decision
 
@@ -82,12 +82,12 @@ PakGen supersession is done by introducing descriptor-first import domains as pe
 
 ## 5.1 Domain Inventory
 
-| Domain | Manifest `type` | Schema file (module-owned source) | Primary output |
-| --- | --- | --- | --- |
-| Texture descriptor | `texture-descriptor` | `src/Oxygen/Cooker/Import/Schemas/oxygen.texture-descriptor.schema.json` | texture resources (`textures.table`/`textures.data`) |
-| Material descriptor | `material-descriptor` | `src/Oxygen/Cooker/Import/Schemas/oxygen.material-descriptor.schema.json` | `AssetType::kMaterial` descriptor (`.omat`) |
+| Domain              | Manifest `type`       | Schema file (module-owned source)                                         | Primary output                                                                                                                                                                         |
+| ------------------- | --------------------- | ------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Texture descriptor  | `texture-descriptor`  | `src/Oxygen/Cooker/Import/Schemas/oxygen.texture-descriptor.schema.json`  | texture resources (`textures.table`/`textures.data`)                                                                                                                                   |
+| Material descriptor | `material-descriptor` | `src/Oxygen/Cooker/Import/Schemas/oxygen.material-descriptor.schema.json` | `AssetType::kMaterial` descriptor (`.omat`)                                                                                                                                            |
 | Geometry descriptor | `geometry-descriptor` | `src/Oxygen/Cooker/Import/Schemas/oxygen.geometry-descriptor.schema.json` | `AssetType::kGeometry` descriptor (`.ogeo`), referenced buffer resources (`buffers.table`/`buffers.data`), and per-buffer metadata sidecars (`.obuf`) from container-owned `buffers[]` |
-| Scene descriptor | `scene-descriptor` | `src/Oxygen/Cooker/Import/Schemas/oxygen.scene-descriptor.schema.json` | `AssetType::kScene` descriptor (`.oscene`) |
+| Scene descriptor    | `scene-descriptor`    | `src/Oxygen/Cooker/Import/Schemas/oxygen.scene-descriptor.schema.json`    | `AssetType::kScene` descriptor (`.oscene`)                                                                                                                                             |
 
 ## 5.2 Domain Independence Rules
 
@@ -116,10 +116,12 @@ PakGen supersession is done by introducing descriptor-first import domains as pe
 11. Equivalent cross-container buffer definitions are allowed in authoring input, but they must collapse to one cooked buffer resource and one `.obuf` at the canonical `virtual_path`.
 12. Multiple containers may reference the same external `.buffer.bin` file.
 13. Deterministic resolution chain is required:
-   - buffer reference -> canonical buffer virtual path
-   - canonical virtual path -> resolve mounted source -> load `.obuf`
-   - parse `.obuf` -> `resource_index` + `BufferResourceDesc`
-   - use resolved source scope + `resource_index` to read exact `buffers.table` row and payload in `buffers.data`
+
+- buffer reference -> canonical buffer virtual path
+- canonical virtual path -> resolve mounted source -> load `.obuf`
+- parse `.obuf` -> `resource_index` + `BufferResourceDesc`
+- use resolved source scope + `resource_index` to read exact `buffers.table` row and payload in `buffers.data`
+
 14. Cross-container dedupe is mandatory: if two containers resolve to equivalent buffer identity, the cooker emits one `buffers.table` entry, one payload region, and one `.obuf`; all references resolve through that single canonical buffer virtual path.
 
 ## 6. Target Import Architecture

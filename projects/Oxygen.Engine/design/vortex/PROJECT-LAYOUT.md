@@ -19,17 +19,17 @@ Related:
 ## Mandatory Vortex Rule
 
 - For Vortex planning and implementation, `Oxygen.Renderer` is legacy dead
-   code. It is not production, not a reference implementation, not a fallback,
-   and not a simplification path for any Vortex task.
+  code. It is not production, not a reference implementation, not a fallback,
+  and not a simplification path for any Vortex task.
 - Every Vortex task must be designed and implemented as a new Vortex-native
-   system that targets maximum parity with UE5.7, grounded in
-   `F:\Epic Games\UE_5.7\Engine\Source\Runtime` and
-   `F:\Epic Games\UE_5.7\Engine\Shaders`.
+  system that targets maximum parity with UE5.7, grounded in
+  `F:\Epic Games\UE_5.7\Engine\Source\Runtime` and
+  `F:\Epic Games\UE_5.7\Engine\Shaders`.
 - No Vortex task may be marked complete until its parity gate is closed with
-   explicit evidence against the relevant UE5.7 source and shader references.
+  explicit evidence against the relevant UE5.7 source and shader references.
 - If maximum parity cannot yet be achieved, the task remains incomplete until
-   explicit human approval records the accepted gap and the reason the parity
-   gate cannot close.
+  explicit human approval records the accepted gap and the reason the parity
+  gate cannot close.
 
 ## 1. Directory Tree
 
@@ -203,12 +203,12 @@ interfaces, not through internal implementation files.
 
 Each domain sub-directory follows the same template:
 
-| Sub-path | Contents |
-| - | - |
-| `Xxx/XxxService.h` | Public contract: lifecycle methods, accessors |
-| `Xxx/Internal/` | Managers, backends, provider interfaces |
-| `Xxx/Passes/` | Concrete render/compute passes |
-| `Xxx/Types/` | POD structs published via `PerViewStructuredPublisher` |
+| Sub-path           | Contents                                               |
+| ------------------ | ------------------------------------------------------ |
+| `Xxx/XxxService.h` | Public contract: lifecycle methods, accessors          |
+| `Xxx/Internal/`    | Managers, backends, provider interfaces                |
+| `Xxx/Passes/`      | Concrete render/compute passes                         |
+| `Xxx/Types/`       | POD structs published via `PerViewStructuredPublisher` |
 
 The renderer orchestrator owns a `unique_ptr<XxxService>` for each
 capability family that is present in the active `CapabilitySet`. More
@@ -270,12 +270,12 @@ tree above.
 
 ### 4.2 Export Macros
 
-| Macro | Purpose |
-| - | - |
-| `OXGN_VRTX_API` | DLL export/import for public symbols |
-| `OXGN_VRTX_NDAPI` | `[[nodiscard]]` + DLL export/import |
+| Macro               | Purpose                                 |
+| ------------------- | --------------------------------------- |
+| `OXGN_VRTX_API`     | DLL export/import for public symbols    |
+| `OXGN_VRTX_NDAPI`   | `[[nodiscard]]` + DLL export/import     |
 | `OXGN_VRTX_EXPORTS` | Define symbol set by CMake during build |
-| `OXGN_VRTX_STATIC` | Guard for static-library builds |
+| `OXGN_VRTX_STATIC`  | Guard for static-library builds         |
 
 These are defined in `api_export.h`.
 
@@ -455,22 +455,22 @@ The shader root exists to make runtime ownership obvious.
 
 ### 7.3 Current Root-to-Owner Mapping
 
-| Current family/root | Target owner/home |
-| - | - |
-| `Forward/ForwardMesh_*.hlsl`, `Forward/ForwardDebug_PS.hlsl`, `Forward/ForwardWireframe_PS.hlsl`, `Forward/ForwardPbr.hlsli` | `Vortex/Stages/Translucency/` |
-| `Forward/ForwardMaterialEval.hlsli` | `Vortex/Materials/` |
-| `Depth/DepthPrePass.hlsl` | replace with `Vortex/Stages/DepthPrepass/DepthPrepass.hlsl`, then remove old file |
-| `Lighting/LightCulling.hlsl`, `Lighting/ClusterLookup.hlsli` | `Vortex/Services/Lighting/` |
-| `Lighting/IblFiltering.hlsl` | environment-owned family; if retained, move under `Vortex/Services/Environment/`, otherwise remove after parity review |
-| `Compositing/Compositing_*.hlsl` | `Vortex/RendererCore/Compositing/` |
-| `Compositing/ToneMap_*.hlsl`, `Compositing/AutoExposure_*.hlsl` | replace with `Vortex/Services/PostProcess/`, then remove old files |
-| `Renderer/GroundGrid_*.hlsl` | replace with `Vortex/Services/PostProcess/GroundGrid.hlsl`, then remove old files |
-| `Renderer/ScreenHzbBuild.hlsl` | replace with `Vortex/Stages/Occlusion/ScreenHzbBuild.hlsl`, then remove old file |
-| `Renderer/GpuDebug*.hlsl`, `Renderer/Debug*.hlsli` | `Vortex/Services/Diagnostics/` |
-| `Renderer/ConventionalShadow*.hlsl`, `Renderer/ConventionalShadow*.hlsli` | `Vortex/Services/Shadows/Conventional/` if retained, otherwise remove |
-| `Renderer/Vsm/*` | `Vortex/Services/Shadows/Vsm/` if retained, otherwise remove |
-| `Renderer/*.hlsli` draw/view/frame-binding payloads | split into `Vortex/Contracts/`, `Vortex/Shared/`, or the owning stage/service family |
-| `Common/*.hlsli` | move live reusable helpers to `Vortex/Shared/`; remove unused leftovers |
+| Current family/root                                                                                                          | Target owner/home                                                                                                      |
+| ---------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `Forward/ForwardMesh_*.hlsl`, `Forward/ForwardDebug_PS.hlsl`, `Forward/ForwardWireframe_PS.hlsl`, `Forward/ForwardPbr.hlsli` | `Vortex/Stages/Translucency/`                                                                                          |
+| `Forward/ForwardMaterialEval.hlsli`                                                                                          | `Vortex/Materials/`                                                                                                    |
+| `Depth/DepthPrePass.hlsl`                                                                                                    | replace with `Vortex/Stages/DepthPrepass/DepthPrepass.hlsl`, then remove old file                                      |
+| `Lighting/LightCulling.hlsl`, `Lighting/ClusterLookup.hlsli`                                                                 | `Vortex/Services/Lighting/`                                                                                            |
+| `Lighting/IblFiltering.hlsl`                                                                                                 | environment-owned family; if retained, move under `Vortex/Services/Environment/`, otherwise remove after parity review |
+| `Compositing/Compositing_*.hlsl`                                                                                             | `Vortex/RendererCore/Compositing/`                                                                                     |
+| `Compositing/ToneMap_*.hlsl`, `Compositing/AutoExposure_*.hlsl`                                                              | replace with `Vortex/Services/PostProcess/`, then remove old files                                                     |
+| `Renderer/GroundGrid_*.hlsl`                                                                                                 | replace with `Vortex/Services/PostProcess/GroundGrid.hlsl`, then remove old files                                      |
+| `Renderer/ScreenHzbBuild.hlsl`                                                                                               | replace with `Vortex/Stages/Occlusion/ScreenHzbBuild.hlsl`, then remove old file                                       |
+| `Renderer/GpuDebug*.hlsl`, `Renderer/Debug*.hlsli`                                                                           | `Vortex/Services/Diagnostics/`                                                                                         |
+| `Renderer/ConventionalShadow*.hlsl`, `Renderer/ConventionalShadow*.hlsli`                                                    | `Vortex/Services/Shadows/Conventional/` if retained, otherwise remove                                                  |
+| `Renderer/Vsm/*`                                                                                                             | `Vortex/Services/Shadows/Vsm/` if retained, otherwise remove                                                           |
+| `Renderer/*.hlsli` draw/view/frame-binding payloads                                                                          | split into `Vortex/Contracts/`, `Vortex/Shared/`, or the owning stage/service family                                   |
+| `Common/*.hlsli`                                                                                                             | move live reusable helpers to `Vortex/Shared/`; remove unused leftovers                                                |
 
 ### 7.4 Shader-Cleanup Rules
 

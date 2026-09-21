@@ -153,12 +153,12 @@ owned privately by the service.
 
 ### 3.1 Inputs
 
-| Source | Data | Purpose |
-| ------ | ---- | ------- |
-| SceneTextures | GBufferA–D, SceneDepth, SceneColor | Indirect-light evaluation inputs |
-| EnvironmentLightingService | `EnvironmentFrameBindings` | Canonical environment probe / IBL input |
-| LightingService | Published direct-light context as needed | Coordination only; not ownership transfer |
-| Previous frame | Reflection / AO / temporal histories | Stability and reuse |
+| Source                     | Data                                     | Purpose                                   |
+| -------------------------- | ---------------------------------------- | ----------------------------------------- |
+| SceneTextures              | GBufferA–D, SceneDepth, SceneColor       | Indirect-light evaluation inputs          |
+| EnvironmentLightingService | `EnvironmentFrameBindings`               | Canonical environment probe / IBL input   |
+| LightingService            | Published direct-light context as needed | Coordination only; not ownership transfer |
+| Previous frame             | Reflection / AO / temporal histories     | Stability and reuse                       |
 
 ### 3.2 Internal Stage-13 Order
 
@@ -187,20 +187,20 @@ that separation even when it groups the family under one service owner.
 
 ### 3.3 Outputs
 
-| Product | Consumer | Delivery |
-| ------- | -------- | -------- |
-| Indirect-light contribution | SceneColor | Stage-13 accumulation |
-| `ScreenSpaceAO` | SceneTextures or indirect-light bindings | Published downstream product |
-| `IndirectLightingFrameBindings` | Later consumers | Published through `ViewFrameBindings` |
+| Product                         | Consumer                                 | Delivery                              |
+| ------------------------------- | ---------------------------------------- | ------------------------------------- |
+| Indirect-light contribution     | SceneColor                               | Stage-13 accumulation                 |
+| `ScreenSpaceAO`                 | SceneTextures or indirect-light bindings | Published downstream product          |
+| `IndirectLightingFrameBindings` | Later consumers                          | Published through `ViewFrameBindings` |
 
 ## 4. Resource Management
 
-| Resource | Lifetime | Notes |
-| -------- | -------- | ----- |
-| Reflection histories | Persistent per view | Temporal reuse |
-| AO history / intermediate buffers | Persistent per view | Optional depending on chosen technique |
-| Sky-light / indirect environment history | Persistent per view | Needed once the bridge retires |
-| Skylight / indirect PSOs | Persistent | Family-owned |
+| Resource                                 | Lifetime            | Notes                                  |
+| ---------------------------------------- | ------------------- | -------------------------------------- |
+| Reflection histories                     | Persistent per view | Temporal reuse                         |
+| AO history / intermediate buffers        | Persistent per view | Optional depending on chosen technique |
+| Sky-light / indirect environment history | Persistent per view | Needed once the bridge retires         |
+| Skylight / indirect PSOs                 | Persistent          | Family-owned                           |
 
 ### 4.1 History Ownership
 

@@ -7,16 +7,19 @@ Defines module-level phase behavior for rigid, character, and aggregate-ready do
 ## Phase Semantics
 
 1. `kGameplay`
+
 - Accept scene-authored mutation intents.
 - Push kinematic rigid-body transforms.
 - Stage command-authoritative aggregate controls (for example vehicles) for the next `kFixedSimulation` step.
 - Flush deferred structural changes through domain APIs where applicable.
 
 2. `kFixedSimulation`
+
 - Advance backend world simulation only.
 - No direct scene graph transform writes.
 
 3. `kSceneMutation`
+
 - Pull physics-authored transforms/states to scene.
 - Reconcile deferred node lifecycle mutations.
 - Publish physics events mapped to scene handles.
@@ -28,6 +31,7 @@ Defines module-level phase behavior for rigid, character, and aggregate-ready do
 3. Rigid `kDynamic`: physics simulation authority, pulled in `kSceneMutation`.
 4. Character: command-authoritative via `ScenePhysics::MoveCharacter`.
 5. Aggregate domains:
+
 - Articulation: simulation-authoritative by default.
 - Vehicle: command-authoritative control input + simulation integration.
 - Soft-body: simulation-authoritative by default.

@@ -6,10 +6,5 @@
   "material_ref": "/.cooked/Physics/Materials/plastic.opmat",
   "radius": 0.18,
   "half_height": 0.4,
-  "local_rotation": [
-    -0.70710678,
-    0.0,
-    0.0,
-    0.70710678
-  ]
+  "local_rotation": [-0.70710678, 0.0, 0.0, 0.70710678]
 }

@@ -112,10 +112,10 @@ The backend owns:
 
 ### 7.1 Scope Admission Contract
 
-| Scope type | Built-in GPU timing |
-| - | -: |
-| `kTelemetry` | admitted |
-| `kDiagnostic` | rejected |
+| Scope type    | Built-in GPU timing |
+| ------------- | ------------------: |
+| `kTelemetry`  |            admitted |
+| `kDiagnostic` |            rejected |
 
 ### 7.2 Identity Contract
 
@@ -306,12 +306,12 @@ Future backends must preserve:
 
 The built-in GPU timing system is controlled through renderer console variables:
 
-| CVar | Type | Default | Description |
-| - | - | - | - |
-| `rndr.gpu_timestamps` | bool | `false` | Enables or disables built-in GPU timing collection. |
-| `rndr.gpu_timestamps.max_scopes` | uint | `4096` | Maximum telemetry scope slots per frame. Raise if per-frame overflow diagnostics appear. |
-| `rndr.gpu_timestamps.viewer` | bool | `false` | Shows or hides the ImGui GPU timeline viewer panel. |
-| `rndr.gpu_timestamps.export_next_frame` | string | `""` | Path for a one-shot frame export. File extension determines format: `.csv` produces CSV; any other extension (including `.json`) produces JSON. |
+| CVar                                    | Type   | Default | Description                                                                                                                                     |
+| --------------------------------------- | ------ | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `rndr.gpu_timestamps`                   | bool   | `false` | Enables or disables built-in GPU timing collection.                                                                                             |
+| `rndr.gpu_timestamps.max_scopes`        | uint   | `4096`  | Maximum telemetry scope slots per frame. Raise if per-frame overflow diagnostics appear.                                                        |
+| `rndr.gpu_timestamps.viewer`            | bool   | `false` | Shows or hides the ImGui GPU timeline viewer panel.                                                                                             |
+| `rndr.gpu_timestamps.export_next_frame` | string | `""`    | Path for a one-shot frame export. File extension determines format: `.csv` produces CSV; any other extension (including `.json`) produces JSON. |
 
 These controls belong to the built-in GPU timing system, not to Tracy.
 

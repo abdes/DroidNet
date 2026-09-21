@@ -398,7 +398,7 @@ To ensure the physics data remains robust and authoritative, the pipeline from a
 
 ### 8.1 The Storage & Cooking Pipeline
 
-1. **Production (Authoring):** Physics topologies, joints, and collision bounds are authored in DCC tools or Editor. Physics data is *always* natively bound to a hierarchy mapping (nodes).
+1. **Production (Authoring):** Physics topologies, joints, and collision bounds are authored in DCC tools or Editor. Physics data is _always_ natively bound to a hierarchy mapping (nodes).
 2. **Cooking (PakWriter):** The cooker creates the SceneAssetDesc. Concurrently, the physics cooker isolates all physics properties and builds the sidecar PhysicsSceneAssetDesc. Baked binary shapes and constraints are packed into the physics_region and registered in the physics_resource_table. Render geometry is entirely ignored by the physics cooker.
 3. **Loading (Content Module):** PakFile handles decompression and byte-swapping. The Content module reconstructs the SceneAsset object in memory and its PhysicsSceneAsset sidecar, parsing the metadata cleanly.
 
@@ -407,17 +407,23 @@ To ensure the physics data remains robust and authoritative, the pipeline from a
 Once loaded in memory, the transition to active runtime state (Hydration) is orchestrated by three actors:
 
 #### A. Base Scene Hydrator (e.g., SceneLoaderService)
+
 The foundational loader (like DemoShell's SceneLoaderService) reads the baseline SceneAsset to instantiate the SceneNodeImpl hierarchy.
+
 - **Physics Policy:** SceneLoaderService is structurally unaware of physics. Following scene instantiation, a hook or dedicated ScenePhysicsHydrator intercepts the load completion, reads the PhysicsSceneAssetDesc, and resolves the SceneNodeIndexT -> NodeHandle mapping to bind baseline JPH::Body instances using ScenePhysics::AttachRigidBody() and similar facade APIs.
 - **Policy Contract:** Strict mapping. Missing runtime nodes or key mismatches cause hard fail diagnostics as per Section 9.
 
 #### B. C++ Game Modules
+
 Game code acts as the command-authoritative layer that can inject dynamic entities (spawning projectiles, instantiating vehicles) dynamically into an active scene.
+
 - **Physics Policy:** Game Modules instantiate nodes via the Scene API, then manually invoke methods on ScenePhysics (e.g., AttachVehicle, AttachCharacter) feeding customized or procedurally generated PhysicsResourceDesc configurations.
 - **Policy Contract:** Domain separation preserved. The Game Module holds the business logic, the Scene holds the static transforms, and ScenePhysics proxies the JPH state.
 
 #### C. Lua Scripting Layer
+
 Scripts handle dynamic, ad-hoc, or level-specific mutations acting on the exposed Scripting APIs at runtime.
+
 - **Physics Policy:** Scripts cannot deeply author physics topologies natively (you cannot construct a JPH::SoftBody in plain Lua). Instead, Scripts invoke predefined commands or templates (e.g., oxygen.physics.ApplyImpulse(), oxygen.physics.SetDamping()). If a script spawns a prefab, it triggers the same base hydration pipeline (A) for that prefab's sidecar, mapping new handles to the scripted nodes.
 - **Policy Contract:** Scripts are strictly constrained to the API surface. They cannot mutate the offline-cooked source-of-truth metadata, and any runtime mutations are deferred and pushed down in the kGameplay or kSceneMutation phase boundaries.
 
@@ -426,19 +432,23 @@ Scripts handle dynamic, ad-hoc, or level-specific mutations acting on the expose
 Hydration events and mutations must adhere strictly to Oxygen phase boundaries:
 
 1. **Scene build/load phase**:
+
 - Instantiate Scene nodes/components first.
 - Resolve SceneNodeIndexT -> NodeHandle mapping once.
 
 2. **Physics hydration phase (module-owned)**:
+
 - Apply PhysicsSceneAssetDesc records via ScenePhysics/PhysicsModule APIs.
 - No writes to SceneNodeImpl physics members (none should exist).
 
 3. **Runtime phase ownership**:
+
 - kGameplay: stage command intents + flush structural changes (from Scripts & C++ game code).
 - kFixedSimulation: backend step only (Jolt executes).
 - kSceneMutation: pull simulation state to scene (Jolt updates static/spatial hierarchies).
 
 4. **Authority guarantees**:
+
 - Rigid static/kinematic: scene/command authority per contract.
 - Dynamic/soft-body/articulation: simulation authority.
 - Vehicle: command input authority + simulation state ownership.

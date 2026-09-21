@@ -1,11 +1,11 @@
 {
-    "name": "plastic",
-    "content_hashing": true,
-    "virtual_path": "/.cooked/Physics/Materials/plastic.opmat",
-    "static_friction": 0.65,
-    "dynamic_friction": 0.65,
-    "restitution": 0.1,
-    "density": 800.0,
-    "combine_mode_friction": "average",
-    "combine_mode_restitution": "average"
+  "name": "plastic",
+  "content_hashing": true,
+  "virtual_path": "/.cooked/Physics/Materials/plastic.opmat",
+  "static_friction": 0.65,
+  "dynamic_friction": 0.65,
+  "restitution": 0.1,
+  "density": 800.0,
+  "combine_mode_friction": "average",
+  "combine_mode_restitution": "average"
 }

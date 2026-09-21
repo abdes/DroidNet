@@ -460,13 +460,13 @@ Phase-1 rule:
 This is the phase-1 scenario-to-capability commitment that was established in
 the working architecture draft and must be preserved here.
 
-| Scenario facade | Required phase-1 families | Optional/additional families |
-| --- | --- | --- |
-| `ForSinglePassHarness()` | `Renderer Core` | depends on the pass under test; may need none beyond baseline |
-| `ForRenderGraphHarness()` | `Renderer Core` | depends on the supplied graph; no extra family is inherently mandatory |
-| `ForOffscreenScene()` | `Renderer Core`, `Scene Preparation`, `GPU Upload and Asset Binding` | `Lighting Data`, `Shadowing`, `Environment Lighting`, `Final Output Composition`, `Diagnostics and Profiling` |
-| Full runtime | `Renderer Core`, `View Registration and Lifetime`, `GPU Upload and Asset Binding`, `Scene Preparation`, `Final Output Composition` | `Lighting Data`, `Shadowing`, `Environment Lighting`, `Diagnostics and Profiling` |
-| Editor multi-view / multi-surface runtime | `Renderer Core`, `View Registration and Lifetime`, `GPU Upload and Asset Binding`, `Scene Preparation`, `Final Output Composition` | `Lighting Data`, `Shadowing`, `Environment Lighting`, `Diagnostics and Profiling` |
+| Scenario facade                           | Required phase-1 families                                                                                                          | Optional/additional families                                                                                  |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `ForSinglePassHarness()`                  | `Renderer Core`                                                                                                                    | depends on the pass under test; may need none beyond baseline                                                 |
+| `ForRenderGraphHarness()`                 | `Renderer Core`                                                                                                                    | depends on the supplied graph; no extra family is inherently mandatory                                        |
+| `ForOffscreenScene()`                     | `Renderer Core`, `Scene Preparation`, `GPU Upload and Asset Binding`                                                               | `Lighting Data`, `Shadowing`, `Environment Lighting`, `Final Output Composition`, `Diagnostics and Profiling` |
+| Full runtime                              | `Renderer Core`, `View Registration and Lifetime`, `GPU Upload and Asset Binding`, `Scene Preparation`, `Final Output Composition` | `Lighting Data`, `Shadowing`, `Environment Lighting`, `Diagnostics and Profiling`                             |
+| Editor multi-view / multi-surface runtime | `Renderer Core`, `View Registration and Lifetime`, `GPU Upload and Asset Binding`, `Scene Preparation`, `Final Output Composition` | `Lighting Data`, `Shadowing`, `Environment Lighting`, `Diagnostics and Profiling`                             |
 
 This table is architectural rather than exhaustive: it states what each
 scenario fundamentally requires, not every pass-local detail.
@@ -499,12 +499,12 @@ Recommended phase-1 mapping:
   -> explicit override bundle for baseline shader-execution inputs
 - `RenderGraphHarnessInput`
   -> caller-authored graph coroutine matching the render-graph execution
-     signature
+  signature
 - `SceneSourceInput`
   -> scene authority/reference used by offscreen scene rendering
 - `OffscreenSceneViewInput`
   -> offscreen-scene-level view intent, likely close to `CompositionView` but
-     constrained for this scenario
+  constrained for this scenario
 - `OffscreenPipelineInput`
   -> selected pipeline instance or pipeline-construction descriptor
 
@@ -576,7 +576,7 @@ Target semantics:
   = submission-local execution framebuffer
 - `target_surface`
   = runtime/presentation surface context used by the renderer for late
-    execution bookkeeping and presentability integration
+  execution bookkeeping and presentability integration
 
 These are not redundant:
 
@@ -780,6 +780,7 @@ The `Renderer` class changes:
    service call → STEP 3 framebuffer → STEP 4 pipeline graph) is
    pipeline-agnostic and stable for any future pipeline (Deferred,
    Forward+, etc.).
+
 7. **Publication delegation.** In `PublishOptionalFamilyViewBindings`, the
    environment block is replaced by a call to
    `env_service_->PublishForView(...)`. The shadow publication block remains
@@ -789,10 +790,10 @@ The `Renderer` class changes:
 9. **Shutdown delegation.** `OnShutdown` calls `env_service_->Shutdown()`
    before resetting the pointer.
 10. **Public API delegation.** The existing environment bridge methods on
-   `Renderer` become thin one-line forwards to the service for phase 2. A
-   `GetEnvironmentLightingService()` accessor is optional and may be added if
-   it helps future extractions, but pass/pipeline call sites do not need to
-   churn just to complete this refactor.
+    `Renderer` become thin one-line forwards to the service for phase 2. A
+    `GetEnvironmentLightingService()` accessor is optional and may be added if
+    it helps future extractions, but pass/pipeline call sites do not need to
+    churn just to complete this refactor.
 
 ### 11.4 Integration with ForwardPipeline
 

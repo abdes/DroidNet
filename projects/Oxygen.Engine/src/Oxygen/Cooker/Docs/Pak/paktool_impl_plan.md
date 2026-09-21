@@ -880,7 +880,7 @@ Evidence recorded so far:
     its required base catalog digest:
     `793512d9fbeaec463f1b9dea858acc5253de284d7bac7862cd95c615b239aa16`
 - `cubes-patch-2.catalog.json` was emitted successfully with catalog digest:
-    `afdebe5424dc72a3484896a3c61708b2fb011b0cfa6640ab3b584c30e2e8540f`
+  `afdebe5424dc72a3484896a3c61708b2fb011b0cfa6640ab3b584c30e2e8540f`
 - Scenario 3: failure-path publication validation after successful request
   preparation.
 - Isolated validation workspace:

@@ -47,13 +47,13 @@ the new texture import system including:
 
 ## Supported Image Formats
 
-| Format | Type | Description |
-| ------ | ---- | ----------- |
-| PNG | LDR | Standard 8-bit images |
-| JPG | LDR | Compressed 8-bit images |
-| BMP | LDR | Uncompressed 8-bit images |
-| HDR | HDR | Radiance RGBE format (equirectangular panoramas) |
-| EXR | HDR | OpenEXR format (high precision, equirectangular panoramas) |
+| Format | Type | Description                                                |
+| ------ | ---- | ---------------------------------------------------------- |
+| PNG    | LDR  | Standard 8-bit images                                      |
+| JPG    | LDR  | Compressed 8-bit images                                    |
+| BMP    | LDR  | Uncompressed 8-bit images                                  |
+| HDR    | HDR  | Radiance RGBE format (equirectangular panoramas)           |
+| EXR    | HDR  | OpenEXR format (high precision, equirectangular panoramas) |
 
 ## Notes
 

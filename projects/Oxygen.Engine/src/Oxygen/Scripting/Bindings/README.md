@@ -51,13 +51,13 @@ oxygen.scripting.bindings
 
 ### 1.2 Namespace Map
 
-| Pack | Lua namespaces |
-| --- | --- |
-| `Core` | `oxygen.app`, `oxygen.conventions`, `oxygen.events`, `oxygen.hash`, `oxygen.log`, `oxygen.math`, `oxygen.time`, `oxygen.uuid` |
-| `Content` | `oxygen.assets` |
-| `Input` | `oxygen.input` |
+| Pack      | Lua namespaces                                                                                                                 |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `Core`    | `oxygen.app`, `oxygen.conventions`, `oxygen.events`, `oxygen.hash`, `oxygen.log`, `oxygen.math`, `oxygen.time`, `oxygen.uuid`  |
+| `Content` | `oxygen.assets`                                                                                                                |
+| `Input`   | `oxygen.input`                                                                                                                 |
 | `Physics` | `oxygen.physics.body`, `oxygen.physics.character`, `oxygen.physics.query`, `oxygen.physics.events`, `oxygen.physics.constants` |
-| `Scene` | `oxygen.scene` |
+| `Scene`   | `oxygen.scene`                                                                                                                 |
 
 ### 1.3 Registration Flow
 
@@ -86,15 +86,15 @@ The `name` field is recorded in `oxygen.__namespaces` for runtime introspection.
 
 ### 2.1 C++ Side
 
-| Concept | Convention | Example |
-| --- | --- | --- |
-| Pack registration entry point | `CreateXBindingPack()` | `CreateCoreBindingPack()` |
-| Namespace registration function | `RegisterXBindings(state, oxygen_idx)` | `RegisterEventsBindings` |
-| Lua C callback (internal, anonymous ns) | `LuaXVerb` | `LuaEventsOn`, `LuaSceneCreateNode` |
-| Metatable registration | `RegisterXMetatable(state)` | `RegisterSceneNodeMetatable` |
-| Push helper (puts userdata on stack) | `PushX(state, ...)` | `PushSceneNode`, `PushQuat` |
-| Check helper (validates type, returns ptr) | `CheckX(state, idx)` | `CheckSceneNode`, `CheckQuat` |
-| Metatable name constant | `k...Metatable` | `kSceneNodeMetatable = "oxygen.scene.node"` |
+| Concept                                    | Convention                             | Example                                     |
+| ------------------------------------------ | -------------------------------------- | ------------------------------------------- |
+| Pack registration entry point              | `CreateXBindingPack()`                 | `CreateCoreBindingPack()`                   |
+| Namespace registration function            | `RegisterXBindings(state, oxygen_idx)` | `RegisterEventsBindings`                    |
+| Lua C callback (internal, anonymous ns)    | `LuaXVerb`                             | `LuaEventsOn`, `LuaSceneCreateNode`         |
+| Metatable registration                     | `RegisterXMetatable(state)`            | `RegisterSceneNodeMetatable`                |
+| Push helper (puts userdata on stack)       | `PushX(state, ...)`                    | `PushSceneNode`, `PushQuat`                 |
+| Check helper (validates type, returns ptr) | `CheckX(state, idx)`                   | `CheckSceneNode`, `CheckQuat`               |
+| Metatable name constant                    | `k...Metatable`                        | `kSceneNodeMetatable = "oxygen.scene.node"` |
 
 All Lua C callbacks are defined in anonymous namespaces inside the `.cpp` file
 that owns them. They are never `extern`.
@@ -199,12 +199,12 @@ EventRuntime
 
 Choose the representation before writing any C++ code.
 
-| Use **tables** for | Use **userdata** for |
-| --- | --- |
-| Plain value aggregates / option structs | Opaque engine handles (`SceneNode`, `SceneQuery`) |
-| Module singletons (`oxygen.scene`, `oxygen.assets`) | Types with metamethod behaviour (`quat`, `mat4`) |
-| Lightweight connection objects (events connection) | Objects with identity semantics |
-| Simple callback closures | Types owning heap-backed C++ state |
+| Use **tables** for                                  | Use **userdata** for                              |
+| --------------------------------------------------- | ------------------------------------------------- |
+| Plain value aggregates / option structs             | Opaque engine handles (`SceneNode`, `SceneQuery`) |
+| Module singletons (`oxygen.scene`, `oxygen.assets`) | Types with metamethod behaviour (`quat`, `mat4`)  |
+| Lightweight connection objects (events connection)  | Objects with identity semantics                   |
+| Simple callback closures                            | Types owning heap-backed C++ state                |
 
 **Vec3** uses the Luau native vector primitive (`lua_pushvector` / `lua_isvector`
 / `lua_tovector`). Do not wrap it in a table or custom userdata.
@@ -236,11 +236,11 @@ luaL_getmetatable / lua_setmetatable
 
 Current tag allocations:
 
-| Range | Subsystem |
-| --- | --- |
-| 10–12 | Scripting contexts (`kTagBindingContext`, `kTagRuntimeContext`, `kTagEventRuntime`) |
-| 20–22 | Math types (`kTagVec4`, `kTagQuat`, `kTagMat4`) |
-| 30–31 | Scene (`kTagSceneNode`, `kTagSceneQuery`) |
+| Range | Subsystem                                                                               |
+| ----- | --------------------------------------------------------------------------------------- |
+| 10–12 | Scripting contexts (`kTagBindingContext`, `kTagRuntimeContext`, `kTagEventRuntime`)     |
+| 20–22 | Math types (`kTagVec4`, `kTagQuat`, `kTagMat4`)                                         |
+| 30–31 | Scene (`kTagSceneNode`, `kTagSceneQuery`)                                               |
 | 40–42 | Content resources and assets (`kTagTextureResource`, `kTagBufferResource`, `kTagAsset`) |
 
 > **Physics pack uses no tags.** All four physics handle types
@@ -350,17 +350,18 @@ node.world_position = vec   -- luaL_error: "SceneNode property 'world_position' 
 
 Engine pattern:
 
-| Situation | Approach |
-| --- | --- |
-| Programmer contract violation (wrong type, wrong arity, malformed argument shape) | **Hard Lua error** via `luaL_error` / `luaL_argerror` |
+| Situation                                                                                    | Approach                                                                              |
+| -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| Programmer contract violation (wrong type, wrong arity, malformed argument shape)            | **Hard Lua error** via `luaL_error` / `luaL_argerror`                                 |
 | Runtime absence / domain state (missing entity, missing asset, unavailable optional context) | **Soft return** (`nil`/`false`/empty result), with logging where operationally useful |
-| Forbidden operation by rule (phase restriction, reserved names) | **Hard Lua error** |
-| Engine invariant breach / impossible state | **`CHECK_F` (fail-fast)** |
+| Forbidden operation by rule (phase restriction, reserved names)                              | **Hard Lua error**                                                                    |
+| Engine invariant breach / impossible state                                                   | **`CHECK_F` (fail-fast)**                                                             |
 
 Hard errors are intentional and script authors may use `pcall(...)` to assert
 negative paths in tests and validation scripts.
 
 Notes:
+
 - In this codebase/toolchain, `luaL_error(...)` may be seen as returning `void`.
   In Lua C callbacks that return `int`, use:
   `luaL_error(state, "..."); return 0;`
@@ -413,21 +414,21 @@ Before merging a binding change, verify all items:
 The `ScriptingModule` maps engine phases to event phase strings and invokes
 scripts in specific phases. The full lifecycle per frame is:
 
-| Engine phase | Event phase string | Scripts executed | Scene mutation allowed |
-| --- | --- | --- | --- |
-| `OnFrameStart` | `"frame_start"` | Event listeners only | No |
-| `OnFixedSimulation` | `"fixed_simulation"` | `on_fixed_simulation` hook + event listeners | No |
-| `OnGameplay` | `"gameplay"` | `RunSceneScripts` + event listeners | No |
-| `OnSceneMutation` | `"scene_mutation"` | `RunSceneMutationScripts` + event listeners | **Yes** |
-| `OnFrameEnd` | `"frame_end"` | Event listeners only | No |
+| Engine phase        | Event phase string   | Scripts executed                             | Scene mutation allowed |
+| ------------------- | -------------------- | -------------------------------------------- | ---------------------- |
+| `OnFrameStart`      | `"frame_start"`      | Event listeners only                         | No                     |
+| `OnFixedSimulation` | `"fixed_simulation"` | `on_fixed_simulation` hook + event listeners | No                     |
+| `OnGameplay`        | `"gameplay"`         | `RunSceneScripts` + event listeners          | No                     |
+| `OnSceneMutation`   | `"scene_mutation"`   | `RunSceneMutationScripts` + event listeners  | **Yes**                |
+| `OnFrameEnd`        | `"frame_end"`        | Event listeners only                         | No                     |
 
 Scene mutation (create/destroy/reparent nodes) is restricted to the
 `scene_mutation` event phase. All mutating bindings check the current phase
 before proceeding:
 
-| Phase | Mutation allowed |
-| --- | --- |
-| `scene_mutation` | Yes |
+| Phase            | Mutation allowed                           |
+| ---------------- | ------------------------------------------ |
+| `scene_mutation` | Yes                                        |
 | All other phases | No — returns `false`/`nil`, logs `WARNING` |
 
 The check is performed via `GetActiveEventPhase(state)` (from `EventsBindings`).
@@ -504,14 +505,14 @@ For each public function:
 
 Add or extend a `Bindings_x_test.cpp` in `src/Oxygen/Scripting/Test` covering:
 
-| Test category | What to verify |
-| --- | --- |
-| Surface exposure | Namespace exists; expected functions are callable |
-| Happy path | Correct return values under valid conditions |
+| Test category              | What to verify                                                      |
+| -------------------------- | ------------------------------------------------------------------- |
+| Surface exposure           | Namespace exists; expected functions are callable                   |
+| Happy path                 | Correct return values under valid conditions                        |
 | Type/shape contract errors | `luaL_error` is raised for programmer misuse (validate via `pcall`) |
-| Missing context | Returns nil/false or raises error per documented contract |
-| Protected-boundary safety | Internal engine->Lua calls remain protected and stack-balanced |
-| Lifecycle | Disconnect / unref / cleanup is safe to call multiple times |
+| Missing context            | Returns nil/false or raises error per documented contract           |
+| Protected-boundary safety  | Internal engine->Lua calls remain protected and stack-balanced      |
+| Lifecycle                  | Disconnect / unref / cleanup is safe to call multiple times         |
 
 ---
 
@@ -519,33 +520,33 @@ Add or extend a `Bindings_x_test.cpp` in `src/Oxygen/Scripting/Test` covering:
 
 ### Core Plumbing
 
-| File | Purpose |
-| --- | --- |
-| `BindingRegistry.h/.cpp` | `RegisterBindingNamespaces` — constructs the `oxygen` table hierarchy |
-| `LuaBindingCommon.h` | Tag enum, `LuaBindingContext`, context push/get helpers, `PushOxygenSubtable` |
-| `LuaBindingCommon.cpp` | All context implementations, `PushScriptParam`, `PushOxygenSubtable` body |
+| File                             | Purpose                                                                            |
+| -------------------------------- | ---------------------------------------------------------------------------------- |
+| `BindingRegistry.h/.cpp`         | `RegisterBindingNamespaces` — constructs the `oxygen` table hierarchy              |
+| `LuaBindingCommon.h`             | Tag enum, `LuaBindingContext`, context push/get helpers, `PushOxygenSubtable`      |
+| `LuaBindingCommon.cpp`           | All context implementations, `PushScriptParam`, `PushOxygenSubtable` body          |
 | `Contracts/IScriptBindingPack.h` | `IScriptBindingPack` interface, `ScriptBindingPackContext`, `ScriptBindingPackPtr` |
 
 ### Pack Entry Points
 
-| File | Pack |
-| --- | --- |
-| `Packs/Core/CoreBindingPack.cpp` | Core pack entry point — registers 8 namespaces under `oxygen.*` (`app`, `conventions`, `events`, `hash`, `log`, `math`, `time`, `uuid`) |
-| `Packs/Content/ContentBindingPack.cpp` | `oxygen.assets` |
-| `Packs/Input/InputBindingPack.cpp` | `oxygen.input` |
-| `Packs/Physics/PhysicsBindingPack.cpp` | `oxygen.physics.*` — 5 sub-namespaces via single dispatcher |
-| `Packs/Scene/SceneBindingPack.cpp` | `oxygen.scene` |
+| File                                   | Pack                                                                                                                                    |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `Packs/Core/CoreBindingPack.cpp`       | Core pack entry point — registers 8 namespaces under `oxygen.*` (`app`, `conventions`, `events`, `hash`, `log`, `math`, `time`, `uuid`) |
+| `Packs/Content/ContentBindingPack.cpp` | `oxygen.assets`                                                                                                                         |
+| `Packs/Input/InputBindingPack.cpp`     | `oxygen.input`                                                                                                                          |
+| `Packs/Physics/PhysicsBindingPack.cpp` | `oxygen.physics.*` — 5 sub-namespaces via single dispatcher                                                                             |
+| `Packs/Scene/SceneBindingPack.cpp`     | `oxygen.scene`                                                                                                                          |
 
 ### Canonical Examples
 
-| Pattern | File |
-| --- | --- |
-| `lua_ref` lifecycle + event dispatch | `Packs/Core/EventsBindings.cpp` |
-| Tagged userdata + shared layout (`AssetUserdata`) | `Packs/Content/ContentBindingsCommon.cpp`, `ContentUserdataBindings.cpp` |
-| Metatable with property aliases (`__index`/`__newindex`) | `Packs/Scene/SceneNodeBindings.cpp` |
-| Builder-style userdata with mutable scope state | `Packs/Scene/SceneQueryBindings.cpp` |
-| Trivial POD userdata — untagged, no destructor | `Packs/Physics/PhysicsBindingsCommon.cpp` |
-| Multi-sub-namespace pack with single dispatcher | `Packs/Physics/PhysicsBindingPack.cpp` |
+| Pattern                                                  | File                                                                     |
+| -------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `lua_ref` lifecycle + event dispatch                     | `Packs/Core/EventsBindings.cpp`                                          |
+| Tagged userdata + shared layout (`AssetUserdata`)        | `Packs/Content/ContentBindingsCommon.cpp`, `ContentUserdataBindings.cpp` |
+| Metatable with property aliases (`__index`/`__newindex`) | `Packs/Scene/SceneNodeBindings.cpp`                                      |
+| Builder-style userdata with mutable scope state          | `Packs/Scene/SceneQueryBindings.cpp`                                     |
+| Trivial POD userdata — untagged, no destructor           | `Packs/Physics/PhysicsBindingsCommon.cpp`                                |
+| Multi-sub-namespace pack with single dispatcher          | `Packs/Physics/PhysicsBindingPack.cpp`                                   |
 
 ### Tests
 
@@ -556,20 +557,20 @@ group covering all test categories listed in Section 9.
 
 ## 11. Common Pitfalls
 
-| Mistake | Consequence | Correct approach |
-| --- | --- | --- |
-| `__gc` metamethod on userdata | Silently ignored by Luau; every owned C++ object leaks | Use `lua_setuserdatadtor` with a tagged allocator |
-| `lua_newuserdata` for non-trivial type | GC frees memory without calling C++ destructor | Use `lua_newuserdatatagged` + register dtor |
-| `lua_touserdata` without tag check | Type confusion, bad cast, potential crash | Always verify `lua_userdatatag` before casting |
-| Orphaned `lua_ref` | Lua values kept alive indefinitely, potential dangling callbacks | Unref on all exit paths; unref during shutdown |
-| Mixed error semantics in one namespace | Inconsistent API surface for script authors | Pick one strategy (hard error or soft fallback) per namespace |
-| Unbalanced stack | Subsequent API calls read wrong values; hard to diagnose | Count every push/pop; use `lua_gettop` assertions in debug builds |
-| Reusing unstable relative stack indices after pushes/pops | Reads/writes wrong stack slot, latent corruption | Normalize/refresh indices before stack mutations; avoid stale cached indices |
-| Unprotected engine->Lua call | Lua non-local exit crosses C++ frames; undefined behavior risk | Always execute engine->Lua via protected call wrappers |
-| Relying on RAII after `luaL_error` path | Cleanup code may be skipped due to non-local exit | Do not place required cleanup after potential hard-error calls |
-| Namespace registered but not in pack list (or vice versa) | Functions silently absent from `oxygen.*` | Always update both the pack array and the header |
-| Scene mutator without phase gate | Mutations during rendering or read phases; non-deterministic crashes | Copy the `IsMutationAllowedPhase` guard pattern |
-| Calling `RegisterXMetatable` after first `PushX` | `luaL_getmetatable` returns nil; userdata left without metatable | Register metatables at pack registration time, before any push |
+| Mistake                                                   | Consequence                                                          | Correct approach                                                             |
+| --------------------------------------------------------- | -------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| `__gc` metamethod on userdata                             | Silently ignored by Luau; every owned C++ object leaks               | Use `lua_setuserdatadtor` with a tagged allocator                            |
+| `lua_newuserdata` for non-trivial type                    | GC frees memory without calling C++ destructor                       | Use `lua_newuserdatatagged` + register dtor                                  |
+| `lua_touserdata` without tag check                        | Type confusion, bad cast, potential crash                            | Always verify `lua_userdatatag` before casting                               |
+| Orphaned `lua_ref`                                        | Lua values kept alive indefinitely, potential dangling callbacks     | Unref on all exit paths; unref during shutdown                               |
+| Mixed error semantics in one namespace                    | Inconsistent API surface for script authors                          | Pick one strategy (hard error or soft fallback) per namespace                |
+| Unbalanced stack                                          | Subsequent API calls read wrong values; hard to diagnose             | Count every push/pop; use `lua_gettop` assertions in debug builds            |
+| Reusing unstable relative stack indices after pushes/pops | Reads/writes wrong stack slot, latent corruption                     | Normalize/refresh indices before stack mutations; avoid stale cached indices |
+| Unprotected engine->Lua call                              | Lua non-local exit crosses C++ frames; undefined behavior risk       | Always execute engine->Lua via protected call wrappers                       |
+| Relying on RAII after `luaL_error` path                   | Cleanup code may be skipped due to non-local exit                    | Do not place required cleanup after potential hard-error calls               |
+| Namespace registered but not in pack list (or vice versa) | Functions silently absent from `oxygen.*`                            | Always update both the pack array and the header                             |
+| Scene mutator without phase gate                          | Mutations during rendering or read phases; non-deterministic crashes | Copy the `IsMutationAllowedPhase` guard pattern                              |
+| Calling `RegisterXMetatable` after first `PushX`          | `luaL_getmetatable` returns nil; userdata left without metatable     | Register metatables at pack registration time, before any push               |
 
 ---
 

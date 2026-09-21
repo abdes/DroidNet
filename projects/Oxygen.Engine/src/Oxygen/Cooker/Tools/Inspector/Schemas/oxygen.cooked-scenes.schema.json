@@ -14,11 +14,21 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["asset_key", "virtual_path", "descriptor_version", "complete", "nodes"],
+        "required": [
+          "asset_key",
+          "virtual_path",
+          "descriptor_version",
+          "complete",
+          "nodes"
+        ],
         "properties": {
           "asset_key": { "$ref": "#/definitions/key" },
           "virtual_path": { "type": "string", "pattern": "^/" },
-          "descriptor_version": { "type": ["integer", "null"], "minimum": 0, "maximum": 255 },
+          "descriptor_version": {
+            "type": ["integer", "null"],
+            "minimum": 0,
+            "maximum": 255
+          },
           "complete": { "type": "boolean" },
           "diagnostic": { "type": "string", "minLength": 1 },
           "nodes": {
@@ -49,7 +59,10 @@
         "allOf": [
           {
             "if": { "properties": { "complete": { "const": true } } },
-            "then": { "properties": { "descriptor_version": { "type": "integer" } }, "not": { "required": ["diagnostic"] } },
+            "then": {
+              "properties": { "descriptor_version": { "type": "integer" } },
+              "not": { "required": ["diagnostic"] }
+            },
             "else": { "required": ["diagnostic"] }
           }
         ]
@@ -57,6 +70,9 @@
     }
   },
   "definitions": {
-    "key": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" }
+    "key": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    }
   }
 }

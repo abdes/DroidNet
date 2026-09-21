@@ -86,9 +86,7 @@
       "source": "./GeoCityCube.geometry.json",
       "name": "GeoCityCube",
       "content_hashing": true,
-      "depends_on": [
-        "material.MatCityConcreteWarm"
-      ]
+      "depends_on": ["material.MatCityConcreteWarm"]
     },
     {
       "id": "scene.CityEnvironmentValidation",

@@ -157,14 +157,14 @@ Legacy `Oxygen.Renderer` remains forbidden as parity evidence.
 
 ## 7. Contract Truth Table
 
-| Contract | Valid state | Invalid/stale state | Proof surface |
-| --- | --- | --- | --- |
-| Source include seam | Vortex/example code includes Vortex, Graphics, Engine, ImGui, or other approved modules. | Any current Vortex/example source includes `<Oxygen/Renderer/...>` or uses legacy renderer namespaces/types. | Static seam scan and focused builds. |
-| Build graph seam | Required examples and `oxygen::vortex` link without `oxygen-renderer`. | A Vortex or required-example target links legacy renderer directly or transitively. | CMake target scan plus binary dependency inspection where available. |
-| Runtime path | Required examples instantiate/run Vortex renderer paths. | Runtime bootstraps legacy renderer, fallback renderer, or bridge/adaptor. | Runtime logs, CDB audits, proof scripts. |
-| Documentation routing | Current docs point implementation work to Vortex plans/status. Historical docs are marked archive or scoped. | Stale docs present legacy renderer as current production/reference path. | README/status/doc grep and source-to-target coverage check for edited docs. |
-| UI dependency | `oxygen::imgui` usage remains explicitly allowed for panels/overlays. | Validation treats ImGui as legacy renderer or blocks Vortex UI without an actual renderer seam. | Link test/validation rule review. |
-| Status ledger | `PLAN.md` and `IMPLEMENTATION_STATUS.md` name real next work and evidence. | Rows claim closure without proof or leave stale active milestone names. | `git diff --check`, status consistency scan. |
+| Contract              | Valid state                                                                                                  | Invalid/stale state                                                                                          | Proof surface                                                               |
+| --------------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------- |
+| Source include seam   | Vortex/example code includes Vortex, Graphics, Engine, ImGui, or other approved modules.                     | Any current Vortex/example source includes `<Oxygen/Renderer/...>` or uses legacy renderer namespaces/types. | Static seam scan and focused builds.                                        |
+| Build graph seam      | Required examples and `oxygen::vortex` link without `oxygen-renderer`.                                       | A Vortex or required-example target links legacy renderer directly or transitively.                          | CMake target scan plus binary dependency inspection where available.        |
+| Runtime path          | Required examples instantiate/run Vortex renderer paths.                                                     | Runtime bootstraps legacy renderer, fallback renderer, or bridge/adaptor.                                    | Runtime logs, CDB audits, proof scripts.                                    |
+| Documentation routing | Current docs point implementation work to Vortex plans/status. Historical docs are marked archive or scoped. | Stale docs present legacy renderer as current production/reference path.                                     | README/status/doc grep and source-to-target coverage check for edited docs. |
+| UI dependency         | `oxygen::imgui` usage remains explicitly allowed for panels/overlays.                                        | Validation treats ImGui as legacy renderer or blocks Vortex UI without an actual renderer seam.              | Link test/validation rule review.                                           |
+| Status ledger         | `PLAN.md` and `IMPLEMENTATION_STATUS.md` name real next work and evidence.                                   | Rows claim closure without proof or leave stale active milestone names.                                      | `git diff --check`, status consistency scan.                                |
 
 ## 8. Implementation Slices
 
@@ -223,16 +223,16 @@ Evidence:
   namespaces, qualified symbols, and target seams while leaving
   `oxygen::imgui` allowed.
 - `powershell -NoProfile -ExecutionPolicy Bypass -File
-  tools\vortex\Assert-VortexLegacySeams.ps1 -ReportPath
-  out\build-ninja\analysis\vortex\m07-legacy-seams.txt` passed, scanning 547
+tools\vortex\Assert-VortexLegacySeams.ps1 -ReportPath
+out\build-ninja\analysis\vortex\m07-legacy-seams.txt` passed, scanning 547
   current source/build files with no forbidden seams.
 - `cmake --build out\build-ninja --config Debug --target
-  Oxygen.Vortex.LinkTest oxygen-examples-demoshell
-  oxygen-examples-multiview oxygen-examples-texturedcube
-  oxygen-examples-physics --parallel 4` passed after the source cleanup.
+Oxygen.Vortex.LinkTest oxygen-examples-demoshell
+oxygen-examples-multiview oxygen-examples-texturedcube
+oxygen-examples-physics --parallel 4` passed after the source cleanup.
 - `ctest --preset test-debug -R
-  "Oxygen\.Vortex\.LinkTest|Oxygen\.Examples\.DemoShell\.RenderingSettingsService\.Tests|Oxygen\.Examples\.DemoShell\.DiagnosticsPanel\.Tests"
-  --output-on-failure` passed with 3/3 test executables.
+"Oxygen\.Vortex\.LinkTest|Oxygen\.Examples\.DemoShell\.RenderingSettingsService\.Tests|Oxygen\.Examples\.DemoShell\.DiagnosticsPanel\.Tests"
+--output-on-failure` passed with 3/3 test executables.
 
 ### C. Stale Example Source And README Retirement
 
@@ -273,28 +273,28 @@ Evidence so far:
 - `tools/vortex/README.md` now documents the current Vortex Async proof flow
   instead of reference-based parity.
 - `powershell -NoProfile -Command
-  "$null = [scriptblock]::Create((Get-Content -Raw
-  'tools\vortex\Run-AsyncRuntimeValidation.ps1')); $null =
-  [scriptblock]::Create((Get-Content -Raw
-  'tools\vortex\Verify-AsyncRuntimeProof.ps1')); $null =
-  [scriptblock]::Create((Get-Content -Raw
-  'tools\vortex\Assert-AsyncRuntimeProof.ps1'))"` passed PowerShell parse for
+"$null = [scriptblock]::Create((Get-Content -Raw
+'tools\vortex\Run-AsyncRuntimeValidation.ps1')); $null =
+[scriptblock]::Create((Get-Content -Raw
+'tools\vortex\Verify-AsyncRuntimeProof.ps1')); $null =
+[scriptblock]::Create((Get-Content -Raw
+'tools\vortex\Assert-AsyncRuntimeProof.ps1'))"` passed PowerShell parse for
   the edited Async proof scripts.
 - `powershell -NoProfile -ExecutionPolicy Bypass -File
-  tools\vortex\Assert-VortexLegacySeams.ps1 -IncludeTooling -ReportPath
-  out\build-ninja\analysis\vortex\m07-legacy-seams-tooling.txt` passed,
+tools\vortex\Assert-VortexLegacySeams.ps1 -IncludeTooling -ReportPath
+out\build-ninja\analysis\vortex\m07-legacy-seams-tooling.txt` passed,
   scanning 577 source/build/tooling files with no forbidden legacy renderer
   seams.
 - `rg -n
-  "Oxygen\.Renderer|Oxygen/Renderer|legacy/reference|Capture-AsyncLegacyReference|ReferenceRoot|reference baseline|Reference-Based"
-  Examples tools\vortex -g README.md -g "*.ps1" -g
-  "!Assert-VortexLegacySeams.ps1" -S` found no stale current README/tooling
+"Oxygen\.Renderer|Oxygen/Renderer|legacy/reference|Capture-AsyncLegacyReference|ReferenceRoot|reference baseline|Reference-Based"
+Examples tools\vortex -g README.md -g "*.ps1" -g
+"!Assert-VortexLegacySeams.ps1" -S` found no stale current README/tooling
   proof references.
 - `cmake --build out\build-ninja --config Debug --target
-  oxygen-examples-async --parallel 4` passed.
+oxygen-examples-async --parallel 4` passed.
 - `ctest --preset test-debug -R
-  "Oxygen\.Examples\.DemoShell\.AsyncVortexMigrationSurface\.Tests"
-  --output-on-failure` passed, but the executable currently contains 0 tests;
+"Oxygen\.Examples\.DemoShell\.AsyncVortexMigrationSurface\.Tests"
+--output-on-failure` passed, but the executable currently contains 0 tests;
   this is not a closure blocker because the current Async runtime proof wrapper
   now gates the real capture/product/runtime behavior.
 
@@ -348,19 +348,19 @@ Evidence:
 
 - Full registered example build matrix passed:
   `cmake --build out\build-ninja --config Debug --target
-  oxygen-platform-example oxygen-graphics-devicemanager-example
-  oxygen-examples-async oxygen-examples-inputsystem
-  oxygen-examples-lightbench oxygen-examples-texturedcube
-  oxygen-examples-demoshell oxygen-examples-renderscene
-  oxygen-examples-multiview oxygen-examples-physics
-  oxygen-examples-vortexbasic
-  oxygen-oxco-examples-batchexecution-yieldawaiter
-  oxygen-oxco-examples-batchexecution-broadcastchannel
-  oxygen-oxco-examples-batchexecution-repeatableshared --parallel 4`.
+oxygen-platform-example oxygen-graphics-devicemanager-example
+oxygen-examples-async oxygen-examples-inputsystem
+oxygen-examples-lightbench oxygen-examples-texturedcube
+oxygen-examples-demoshell oxygen-examples-renderscene
+oxygen-examples-multiview oxygen-examples-physics
+oxygen-examples-vortexbasic
+oxygen-oxco-examples-batchexecution-yieldawaiter
+oxygen-oxco-examples-batchexecution-broadcastchannel
+oxygen-oxco-examples-batchexecution-repeatableshared --parallel 4`.
 - Short D3D12/debug-layer smoke passed for Async, InputSystem, LightBench,
   TexturedCube, Physics, RenderScene, VortexBasic, and MultiView. Each run
   used `--frames 8 --fps 30 --vsync false --debug-layer --capture-provider
-  off`, exited `0`, and logged `d3d12_errors=0`, `dxgi_errors=0`, and
+off`, exited `0`, and logged `d3d12_errors=0`, `dxgi_errors=0`, and
   `blocking=0` in
   `out\build-ninja\analysis\vortex\m07-demo-smoke\summary.txt`.
 - OxCo batch examples initially exposed an invalid `void MainImpl` entry-point
@@ -384,7 +384,7 @@ Evidence:
   and a non-zero above-atmosphere visual/collision plane.
 - Physics direct-light proof passed with RenderDoc analysis:
   `tools/vortex/ProbeRenderDocPhysicsDirectLighting.py
-  out\build-ninja\analysis\physics\physics-after-scene-cleanup_capture.rdc`
+out\build-ninja\analysis\physics\physics-after-scene-cleanup_capture.rdc`
   wrote
   `out\build-ninja\analysis\physics\physics-after-scene-cleanup-direct-lighting-probe.txt`
   with `analysis_result=success`, `floor_candidate_count=4`,
@@ -392,20 +392,20 @@ Evidence:
   output values around `8680..9160`. The one zero-direct floor sample was
   shadowed, not missing lighting.
 
-| Example target | Scope | M07 proof status |
-| --- | --- | --- |
-| `oxygen-examples-async` | Vortex graphics runtime | Built; fresh 8-frame D3D12/debug-layer smoke passed; current RenderDoc Async proof wrapper retained for closure. |
-| `oxygen-examples-inputsystem` | Vortex graphics runtime | Built; fresh 8-frame D3D12/debug-layer smoke passed. |
-| `oxygen-examples-lightbench` | Vortex graphics runtime | Built; fresh 8-frame D3D12/debug-layer smoke passed. |
-| `oxygen-examples-texturedcube` | Vortex graphics runtime | Built; fresh 8-frame D3D12/debug-layer smoke passed. |
-| `oxygen-examples-demoshell` | Shared example UI/library | Built as dependency and target; runtime covered by dependent demos and focused DemoShell tests. |
-| `oxygen-examples-renderscene` | Vortex graphics runtime | Built; fresh 8-frame D3D12/debug-layer smoke passed. |
-| `oxygen-examples-multiview` | Vortex graphics runtime | Built; fresh 8-frame D3D12/debug-layer smoke passed; deeper M06A/M06B/M06C proof remains the closure reference. |
-| `oxygen-examples-physics` | Vortex graphics runtime plus physics | Built; fresh 8-frame D3D12/debug-layer smoke passed. |
-| `oxygen-examples-vortexbasic` | Vortex graphics runtime | Built; fresh 8-frame D3D12/debug-layer smoke passed; deeper M04-M06 proof remains the closure reference. |
-| `oxygen-platform-example` | Non-Vortex interactive platform/window sample | Built; `--help` exited `0`; no finite-frame runtime CLI exists. |
-| `oxygen-graphics-devicemanager-example` | Non-Vortex D3D12 device-management sample | Built; smoke exited `0`; classified outside Vortex renderer proof because it intentionally exercises device removal. |
-| `oxygen-oxco-examples-batchexecution-*` | Non-Vortex coroutine samples | Built; entry-point return contract fixed; all three smoke runs exited `0`. |
+| Example target                          | Scope                                         | M07 proof status                                                                                                     |
+| --------------------------------------- | --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `oxygen-examples-async`                 | Vortex graphics runtime                       | Built; fresh 8-frame D3D12/debug-layer smoke passed; current RenderDoc Async proof wrapper retained for closure.     |
+| `oxygen-examples-inputsystem`           | Vortex graphics runtime                       | Built; fresh 8-frame D3D12/debug-layer smoke passed.                                                                 |
+| `oxygen-examples-lightbench`            | Vortex graphics runtime                       | Built; fresh 8-frame D3D12/debug-layer smoke passed.                                                                 |
+| `oxygen-examples-texturedcube`          | Vortex graphics runtime                       | Built; fresh 8-frame D3D12/debug-layer smoke passed.                                                                 |
+| `oxygen-examples-demoshell`             | Shared example UI/library                     | Built as dependency and target; runtime covered by dependent demos and focused DemoShell tests.                      |
+| `oxygen-examples-renderscene`           | Vortex graphics runtime                       | Built; fresh 8-frame D3D12/debug-layer smoke passed.                                                                 |
+| `oxygen-examples-multiview`             | Vortex graphics runtime                       | Built; fresh 8-frame D3D12/debug-layer smoke passed; deeper M06A/M06B/M06C proof remains the closure reference.      |
+| `oxygen-examples-physics`               | Vortex graphics runtime plus physics          | Built; fresh 8-frame D3D12/debug-layer smoke passed.                                                                 |
+| `oxygen-examples-vortexbasic`           | Vortex graphics runtime                       | Built; fresh 8-frame D3D12/debug-layer smoke passed; deeper M04-M06 proof remains the closure reference.             |
+| `oxygen-platform-example`               | Non-Vortex interactive platform/window sample | Built; `--help` exited `0`; no finite-frame runtime CLI exists.                                                      |
+| `oxygen-graphics-devicemanager-example` | Non-Vortex D3D12 device-management sample     | Built; smoke exited `0`; classified outside Vortex renderer proof because it intentionally exercises device removal. |
+| `oxygen-oxco-examples-batchexecution-*` | Non-Vortex coroutine samples                  | Built; entry-point return contract fixed; all three smoke runs exited `0`.                                           |
 
 ### E. Production Proof Suite Consolidation
 
@@ -433,28 +433,28 @@ Evidence:
   runtime analyzers.
 - VortexBasic runtime proof passed:
   `powershell -NoProfile -ExecutionPolicy Bypass -File
-  tools\vortex\Run-VortexBasicRuntimeValidation.ps1 -Output
-  out\build-ninja\analysis\vortex\m07-closeout\vortexbasic-runtime -Frame 3
-  -RunFrames 6 -Fps 30 -BuildJobs 4`.
+tools\vortex\Run-VortexBasicRuntimeValidation.ps1 -Output
+out\build-ninja\analysis\vortex\m07-closeout\vortexbasic-runtime -Frame 3
+-RunFrames 6 -Fps 30 -BuildJobs 4`.
 - Async runtime proof passed:
   `powershell -NoProfile -ExecutionPolicy Bypass -File
-  tools\vortex\Run-AsyncRuntimeValidation.ps1 -Output
-  out\build-ninja\analysis\vortex\m07-closeout\async-runtime -Frame 90
-  -RunFrames 94 -Fps 30 -BuildJobs 4`.
+tools\vortex\Run-AsyncRuntimeValidation.ps1 -Output
+out\build-ninja\analysis\vortex\m07-closeout\async-runtime -Frame 90
+-RunFrames 94 -Fps 30 -BuildJobs 4`.
 - MultiView standard and auxiliary proof passed:
   `tools\vortex\Run-VortexMultiViewValidation.ps1 -Output
-  out\build-ninja\analysis\vortex\m07-closeout\multiview-proof -Frame 5
-  -RunFrames 65 -Fps 30 -BuildJobs 4` and the same command with
+out\build-ninja\analysis\vortex\m07-closeout\multiview-proof -Frame 5
+-RunFrames 65 -Fps 30 -BuildJobs 4` and the same command with
   `-AuxProofLayout -Output
-  out\build-ninja\analysis\vortex\m07-closeout\multiview-aux-proof`.
+out\build-ninja\analysis\vortex\m07-closeout\multiview-aux-proof`.
 - Offscreen proof passed:
   `tools\vortex\Run-VortexOffscreenValidation.ps1 -Output
-  out\build-ninja\analysis\vortex\m07-closeout\offscreen-proof -Frame 5
-  -RunFrames 65 -Fps 30 -BuildJobs 4`.
+out\build-ninja\analysis\vortex\m07-closeout\offscreen-proof -Frame 5
+-RunFrames 65 -Fps 30 -BuildJobs 4`.
 - Feature-variant proof passed:
   `tools\vortex\Run-VortexFeatureVariantValidation.ps1 -Output
-  out\build-ninja\analysis\vortex\m07-closeout\feature-variant-proof -Frame 5
-  -RunFrames 65 -Fps 30 -BuildJobs 4`.
+out\build-ninja\analysis\vortex\m07-closeout\feature-variant-proof -Frame 5
+-RunFrames 65 -Fps 30 -BuildJobs 4`.
 - The generated reports under `out\build-ninja\analysis\vortex\m07-closeout`
   include CDB/debug-layer, RenderDoc/scripted analysis, assertion, and
   allocation-churn evidence for the relevant wrappers.
@@ -479,8 +479,8 @@ Evidence:
 
 - Current source/build/tooling seam guard passed:
   `powershell -NoProfile -ExecutionPolicy Bypass -File
-  tools\vortex\Assert-VortexLegacySeams.ps1 -IncludeTooling -ReportPath
-  out\build-ninja\analysis\vortex\m07-closeout\legacy-seams-tooling.txt`,
+tools\vortex\Assert-VortexLegacySeams.ps1 -IncludeTooling -ReportPath
+out\build-ninja\analysis\vortex\m07-closeout\legacy-seams-tooling.txt`,
   scanning 581 files with no forbidden current-source legacy renderer seams.
 - Binary dependency audit passed:
   `out\build-ninja\analysis\vortex\m07-closeout\binary-dependencies.txt`
@@ -548,16 +548,16 @@ Evidence:
 
 - Full focused Vortex/example build passed:
   `cmake --build out\build-ninja --config Debug --target
-  Oxygen.Vortex.LinkTest oxygen-vortex oxygen-examples-async
-  oxygen-examples-inputsystem oxygen-examples-renderscene
-  oxygen-examples-multiview oxygen-examples-vortexbasic
-  oxygen-examples-texturedcube oxygen-examples-physics
-  oxygen-examples-lightbench oxygen-examples-demoshell --parallel 4`.
+Oxygen.Vortex.LinkTest oxygen-vortex oxygen-examples-async
+oxygen-examples-inputsystem oxygen-examples-renderscene
+oxygen-examples-multiview oxygen-examples-vortexbasic
+oxygen-examples-texturedcube oxygen-examples-physics
+oxygen-examples-lightbench oxygen-examples-demoshell --parallel 4`.
 - Focused CTest passed after explicitly rebuilding the stale
   `Oxygen.Vortex.OcclusionModule.Tests` binary:
   `ctest --preset test-debug -R
-  "Oxygen\.Vortex\.(LinkTest|RendererCapability|RendererCompositionQueue|OffscreenSceneFacade|SceneRendererDeferredCore|SceneRendererPublication|EnvironmentLightingService|ShadowService|DiagnosticsService|OcclusionModule)|Oxygen\.Examples\.DemoShell\.(DemoShellPanelConfig|EnvironmentSettingsService|RenderingSettingsService|DiagnosticsPanel)\.Tests"
-  --output-on-failure` passed 14/14.
+"Oxygen\.Vortex\.(LinkTest|RendererCapability|RendererCompositionQueue|OffscreenSceneFacade|SceneRendererDeferredCore|SceneRendererPublication|EnvironmentLightingService|ShadowService|DiagnosticsService|OcclusionModule)|Oxygen\.Examples\.DemoShell\.(DemoShellPanelConfig|EnvironmentSettingsService|RenderingSettingsService|DiagnosticsPanel)\.Tests"
+--output-on-failure` passed 14/14.
 - Static seam guard, current-path doc/source audit, binary dependency audit,
   VortexBasic, Async, MultiView standard/auxiliary, Offscreen, and
   Feature-variant runtime proof wrappers passed with reports under

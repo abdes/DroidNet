@@ -44,12 +44,12 @@ a file-separated method. In Phase 4A it migrates into `LightingService`.
 
 ### 1.2 Stage Position
 
-| Position | Stage | Notes |
-| -------- | ----- | ----- |
-| Predecessor | Stage 10 (RebuildSceneTextures) — GBuffers now SRV-readable | |
-| Predecessors (reserved) | Stage 11 (MatComposite post — stub) | |
-| **This** | **Stage 12 — Deferred Direct Lighting** | |
-| Successor | Stage 13 (IndirectLighting — reserved) | |
+| Position                | Stage                                                       | Notes |
+| ----------------------- | ----------------------------------------------------------- | ----- |
+| Predecessor             | Stage 10 (RebuildSceneTextures) — GBuffers now SRV-readable |       |
+| Predecessors (reserved) | Stage 11 (MatComposite post — stub)                         |       |
+| **This**                | **Stage 12 — Deferred Direct Lighting**                     |       |
+| Successor               | Stage 13 (IndirectLighting — reserved)                      |       |
 
 ### 1.3 Architectural Authority
 
@@ -116,12 +116,12 @@ does not replace the canonical per-light deferred direct-lighting contract.
 
 ### 2.4 Ownership and Lifetime
 
-| Owner | Owned By | Lifetime |
-| ----- | -------- | -------- |
-| Deferred lighting logic | `SceneRenderer` (Phase 3 inline) | Per SceneRenderer |
-| Local-light proxy geometry | Phase 03: shader-generated procedural sphere/cone volumes; Phase 4A: `LightingService` proxy-geometry cache | Phase 03 draw-time generation; Phase 4A persistent |
-| Per-light constants buffer + per-light CBV views | `SceneRenderer` (Phase 03 inline) | Per SceneRenderer allocation, per-frame contents |
-| Per-light PSOs | `SceneRenderer` (Phase 03 inline), later `LightingService` | Persistent |
+| Owner                                            | Owned By                                                                                                    | Lifetime                                           |
+| ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| Deferred lighting logic                          | `SceneRenderer` (Phase 3 inline)                                                                            | Per SceneRenderer                                  |
+| Local-light proxy geometry                       | Phase 03: shader-generated procedural sphere/cone volumes; Phase 4A: `LightingService` proxy-geometry cache | Phase 03 draw-time generation; Phase 4A persistent |
+| Per-light constants buffer + per-light CBV views | `SceneRenderer` (Phase 03 inline)                                                                           | Per SceneRenderer allocation, per-frame contents   |
+| Per-light PSOs                                   | `SceneRenderer` (Phase 03 inline), later `LightingService`                                                  | Persistent                                         |
 
 The key Phase 03 deviation from UE5.7 is explicit and already approved in the
 architecture package: Vortex keeps UE's bounded-volume local-light algorithm,
@@ -135,11 +135,11 @@ scheduled to migrate to `LightingService` in Phase 4A.
 
 ### 3.1 Per-Light Rendering Approach
 
-| Light Type | Geometry | Draw Policy | Notes |
-| ---------- | -------- | ----------- | ----- |
-| Directional | Fullscreen triangle | Fullscreen | One fullscreen draw per directional light |
-| Point | Procedural sphere bounded volume | One-pass bounded volume | Generated from `SV_VertexID`; outside-volume, inside-volume, or non-perspective bounded-volume mode |
-| Spot | Procedural cone bounded volume | One-pass bounded volume | Generated from `SV_VertexID`; outside-volume, inside-volume, or non-perspective bounded-volume mode |
+| Light Type  | Geometry                         | Draw Policy             | Notes                                                                                               |
+| ----------- | -------------------------------- | ----------------------- | --------------------------------------------------------------------------------------------------- |
+| Directional | Fullscreen triangle              | Fullscreen              | One fullscreen draw per directional light                                                           |
+| Point       | Procedural sphere bounded volume | One-pass bounded volume | Generated from `SV_VertexID`; outside-volume, inside-volume, or non-perspective bounded-volume mode |
+| Spot        | Procedural cone bounded volume   | One-pass bounded volume | Generated from `SV_VertexID`; outside-volume, inside-volume, or non-perspective bounded-volume mode |
 
 ### 3.2 Local-Light Volume Modes (Point + Spot)
 
@@ -192,19 +192,19 @@ change stage 12 into a forward-light-grid-driven contract.
 
 ### 4.1 Inputs
 
-| Source | Data | Purpose |
-| ------ | ---- | ------- |
-| Published `SceneTextureBindings` via `ViewFrameBindings` | GBufferNormal/Material/BaseColor/CustomData (SRV) | Material data for BRDF evaluation |
-| Published `SceneTextureBindings` via `ViewFrameBindings` | SceneDepth (SRV) | Position reconstruction |
-| SceneTextures | SceneColor (RTV) | Accumulation target |
-| Scene | Light list (position, color, type, radius, etc.) | Per-light parameters |
-| `ViewConstants.hlsli` globals | `view_matrix`, `projection_matrix`, `camera_position` | View-space transforms and camera data |
-| Root constants | `g_PassConstantsIndex` | Selects the current light's CBV in the bindless heap |
+| Source                                                   | Data                                                  | Purpose                                              |
+| -------------------------------------------------------- | ----------------------------------------------------- | ---------------------------------------------------- |
+| Published `SceneTextureBindings` via `ViewFrameBindings` | GBufferNormal/Material/BaseColor/CustomData (SRV)     | Material data for BRDF evaluation                    |
+| Published `SceneTextureBindings` via `ViewFrameBindings` | SceneDepth (SRV)                                      | Position reconstruction                              |
+| SceneTextures                                            | SceneColor (RTV)                                      | Accumulation target                                  |
+| Scene                                                    | Light list (position, color, type, radius, etc.)      | Per-light parameters                                 |
+| `ViewConstants.hlsli` globals                            | `view_matrix`, `projection_matrix`, `camera_position` | View-space transforms and camera data                |
+| Root constants                                           | `g_PassConstantsIndex`                                | Selects the current light's CBV in the bindless heap |
 
 ### 4.2 Outputs
 
-| Product | Target | Blend Mode |
-| ------- | ------ | ---------- |
+| Product    | Target                         | Blend Mode          |
+| ---------- | ------------------------------ | ------------------- |
 | SceneColor | SceneTextures::GetSceneColor() | Additive (ONE, ONE) |
 
 ### 4.3 SceneTextures State
@@ -420,14 +420,14 @@ ownership rules rather than by convenience.
 
 ### 5.6 Catalog Registration
 
-| Entrypoint | Profile | Notes |
-| ---------- | ------- | ----- |
-| `DeferredLightDirectionalVS` | vs_6_0 | Fullscreen triangle |
-| `DeferredLightDirectionalPS` | ps_6_0 | GBuffer read + BRDF |
-| `DeferredLightPointVS` | vs_6_0 | Procedural sphere volume |
-| `DeferredLightPointPS` | ps_6_0 | GBuffer read + BRDF + attenuation |
-| `DeferredLightSpotVS` | vs_6_0 | Procedural cone volume |
-| `DeferredLightSpotPS` | ps_6_0 | GBuffer read + BRDF + attenuation + angle |
+| Entrypoint                   | Profile | Notes                                     |
+| ---------------------------- | ------- | ----------------------------------------- |
+| `DeferredLightDirectionalVS` | vs_6_0  | Fullscreen triangle                       |
+| `DeferredLightDirectionalPS` | ps_6_0  | GBuffer read + BRDF                       |
+| `DeferredLightPointVS`       | vs_6_0  | Procedural sphere volume                  |
+| `DeferredLightPointPS`       | ps_6_0  | GBuffer read + BRDF + attenuation         |
+| `DeferredLightSpotVS`        | vs_6_0  | Procedural cone volume                    |
+| `DeferredLightSpotPS`        | ps_6_0  | GBuffer read + BRDF + attenuation + angle |
 
 ## 6. Light Volume Geometry
 
@@ -534,11 +534,11 @@ stage 12 is skipped.
 
 ### 9.1 GPU Resources
 
-| Resource | Lifetime | Notes |
-| -------- | -------- | ----- |
-| Procedural light-volume geometry (sphere, cone) | Shader-generated | Temporary Phase 03-only implementation shortcut; scheduled for removal in Phase 4A |
-| Per-light CBV views over `DeferredLightConstants` upload buffer | Per light / per draw | Upload buffer + shader-visible CBV descriptors selected through `g_PassConstantsIndex` |
-| PSOs (directional + point/spot outside/inside/non-perspective variants) | Persistent | Cached by renderer |
+| Resource                                                                | Lifetime             | Notes                                                                                  |
+| ----------------------------------------------------------------------- | -------------------- | -------------------------------------------------------------------------------------- |
+| Procedural light-volume geometry (sphere, cone)                         | Shader-generated     | Temporary Phase 03-only implementation shortcut; scheduled for removal in Phase 4A     |
+| Per-light CBV views over `DeferredLightConstants` upload buffer         | Per light / per draw | Upload buffer + shader-visible CBV descriptors selected through `g_PassConstantsIndex` |
+| PSOs (directional + point/spot outside/inside/non-perspective variants) | Persistent           | Cached by renderer                                                                     |
 
 ### 9.2 Performance Considerations
 

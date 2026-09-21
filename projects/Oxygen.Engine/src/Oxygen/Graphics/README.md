@@ -89,53 +89,53 @@ GPU memory management system.
 
 - **Work Synchronization:**
   - **Fence Management**
-      In Direct3D 12, create an **ID3D12Fence** for each command queue, then
-      signal or wait on specific fence values to coordinate when tasks begin or
-      end. The Coordinator tracks these fence values to ensure that each
-      subsystem’s work completes in the correct order and avoids unintended
-      overlaps.
+    In Direct3D 12, create an **ID3D12Fence** for each command queue, then
+    signal or wait on specific fence values to coordinate when tasks begin or
+    end. The Coordinator tracks these fence values to ensure that each
+    subsystem’s work completes in the correct order and avoids unintended
+    overlaps.
 
   - **Timeline Semaphores**
-      While D3D12 doesn’t provide native timeline semaphores (as Vulkan does),
-      the Coordinator can mimic timeline behavior by incrementing fence values
-      each submission and waiting on specific thresholds. This keeps multi-queue
-      workloads in sync without explicitly tying into resource operations.
+    While D3D12 doesn’t provide native timeline semaphores (as Vulkan does),
+    the Coordinator can mimic timeline behavior by incrementing fence values
+    each submission and waiting on specific thresholds. This keeps multi-queue
+    workloads in sync without explicitly tying into resource operations.
 
 - **Execution Timeline Coordination:**
   - **Global Timeline**
-      Maintain a global counter to represent the last completed segment of work.
-      Each time the Coordinator processes submitted tasks, it updates the fence
-      value and checks if any tasks depend on previous completions.
+    Maintain a global counter to represent the last completed segment of work.
+    Each time the Coordinator processes submitted tasks, it updates the fence
+    value and checks if any tasks depend on previous completions.
   - **Dependency Graph**
-      If a subsystem needs other work to finish first, the Coordinator inserts
-      waits on the relevant fence value. This ensures the correct sequence of
-      steps—for instance, finishing a compute pass before a rendering pass that
-      consumes its results.
+    If a subsystem needs other work to finish first, the Coordinator inserts
+    waits on the relevant fence value. This ensures the correct sequence of
+    steps—for instance, finishing a compute pass before a rendering pass that
+    consumes its results.
 
 - **Periodic Events Management:**
   - **RenderFrameBegin**
-      The Coordinator triggers this event at the start of each frame, notifying
-      subsystems that it’s safe to queue up draw commands, refresh dynamic data,
-      or perform any pre-render setup.
+    The Coordinator triggers this event at the start of each frame, notifying
+    subsystems that it’s safe to queue up draw commands, refresh dynamic data,
+    or perform any pre-render setup.
   - **RenderFrameEnd**
-      Once all rendering for the frame is submitted, the Coordinator signals the
-      *end* event. Higher-level logic may use this signal to handle post-frame
-      operations, like capturing frame stats or triggering GPU-side analytics.
+    Once all rendering for the frame is submitted, the Coordinator signals the
+    _end_ event. Higher-level logic may use this signal to handle post-frame
+    operations, like capturing frame stats or triggering GPU-side analytics.
 
 - **Frame Buffering and Vsync Management:**
   - **Buffer Count Configuration**
-      For double or triple buffering, the Coordinator instructs the swap chain
-      (via `DXGI_SWAP_CHAIN_DESC1::BufferCount`) but doesn’t allocate or manage
-      the buffers itself—that remains with the Renderer module.
+    For double or triple buffering, the Coordinator instructs the swap chain
+    (via `DXGI_SWAP_CHAIN_DESC1::BufferCount`) but doesn’t allocate or manage
+    the buffers itself—that remains with the Renderer module.
   - **In-Flight Frames**
-      The Coordinator tracks fence values associated with each buffer to ensure
-      that the GPU has finished work on a given buffer before reusing it. This
-      prevents overwriting a buffer that’s still in use on the GPU.
+    The Coordinator tracks fence values associated with each buffer to ensure
+    that the GPU has finished work on a given buffer before reusing it. This
+    prevents overwriting a buffer that’s still in use on the GPU.
   - **Vsync Coordination**
-      Vsync is handled by specifying the correct swap chain parameters (e.g.,
-      sync interval for `Present`). The Coordinator ensures the present call
-      respects the selected intervals and that fences are signaled so the engine
-      smoothly proceeds to the next frame without tearing.
+    Vsync is handled by specifying the correct swap chain parameters (e.g.,
+    sync interval for `Present`). The Coordinator ensures the present call
+    respects the selected intervals and that fences are signaled so the engine
+    smoothly proceeds to the next frame without tearing.
 
 #### 📦 Resources
 

@@ -304,26 +304,26 @@ need for a dedicated engine-level deferred destruction phase.
 
 ## 4. Barrier Contract (Core States)
 
-| Barrier | Ensures | Upstream | Downstream |
-|---------|---------|----------|------------|
-| B0 | Stable input snapshot | OS/Input | Network reconciliation |
-| B1 | Server authoritative state applied | NetworkReconciliation | Simulation |
-| B2 | Deterministic physics state | FixedSim | Variable gameplay |
-| B3 | Structural integrity | Gameplay | Transform propagation |
-| B4 | Complete world transforms | Transforms | Parallel tasks |
-| B5 | All parallel outputs ready | Workers | Frame graph build |
-| B6 | Valid command lists & resource states | Recording | GPU submission |
-| B7 | Ready async resources published | Pipelines | Future frame consumers |
+| Barrier | Ensures                               | Upstream              | Downstream             |
+| ------- | ------------------------------------- | --------------------- | ---------------------- |
+| B0      | Stable input snapshot                 | OS/Input              | Network reconciliation |
+| B1      | Server authoritative state applied    | NetworkReconciliation | Simulation             |
+| B2      | Deterministic physics state           | FixedSim              | Variable gameplay      |
+| B3      | Structural integrity                  | Gameplay              | Transform propagation  |
+| B4      | Complete world transforms             | Transforms            | Parallel tasks         |
+| B5      | All parallel outputs ready            | Workers               | Frame graph build      |
+| B6      | Valid command lists & resource states | Recording             | GPU submission         |
+| B7      | Ready async resources published       | Pipelines             | Future frame consumers |
 
 ---
 
 ## 5. Coroutine Lifetime Tiers
 
-| Tier | Scope | Usage | Cancellation |
-|------|-------|-------|--------------|
-| FrameScoped | Single frame | Category B frame tasks | Auto at frame end barrier |
-| MultiFrame Pipeline | Until resource ready or handle destroyed | Category C | Handle generation check / shutdown |
-| Detached Service | Whole session | Category D services | Engine shutdown flush |
+| Tier                | Scope                                    | Usage                  | Cancellation                       |
+| ------------------- | ---------------------------------------- | ---------------------- | ---------------------------------- |
+| FrameScoped         | Single frame                             | Category B frame tasks | Auto at frame end barrier          |
+| MultiFrame Pipeline | Until resource ready or handle destroyed | Category C             | Handle generation check / shutdown |
+| Detached Service    | Whole session                            | Category D services    | Engine shutdown flush              |
 
 Design Rules:
 
@@ -770,20 +770,20 @@ state ParallelTasksComplete {
 
 ### Task Categories by Engine-Subsystem Integration
 
-| Category | Examples | Integration Point | Subsystem Responsibility |
-|----------|----------|-------------------|-------------------------|
-| A Ordered | Input sampling, physics, scene mutations, transforms, frame graph, submission | Strict main thread sequence | **Engine → Subsystem**: Direct calls to foundational APIs |
-| B Parallel (Barrier) | Animation, particles, culling, LOD, light clustering, material prep | Joined at B4 before frame graph | **Module → Subsystem**: Service consumption via snapshots |
-| C Async Multi-Frame | Asset load, shader/PSO build, BLAS/TLAS, GI bake, navmesh | Polled each frame; publish after readiness & generation check | **Subsystem → Engine**: Internal pipelines polled by coordinator |
-| D Detached | Telemetry, logging flush, metrics, editor indexing | Fire-and-forget; graceful shutdown flush | **Service → Engine**: Independent lifecycle, enqueue-only interface |
+| Category             | Examples                                                                      | Integration Point                                             | Subsystem Responsibility                                            |
+| -------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------- |
+| A Ordered            | Input sampling, physics, scene mutations, transforms, frame graph, submission | Strict main thread sequence                                   | **Engine → Subsystem**: Direct calls to foundational APIs           |
+| B Parallel (Barrier) | Animation, particles, culling, LOD, light clustering, material prep           | Joined at B4 before frame graph                               | **Module → Subsystem**: Service consumption via snapshots           |
+| C Async Multi-Frame  | Asset load, shader/PSO build, BLAS/TLAS, GI bake, navmesh                     | Polled each frame; publish after readiness & generation check | **Subsystem → Engine**: Internal pipelines polled by coordinator    |
+| D Detached           | Telemetry, logging flush, metrics, editor indexing                            | Fire-and-forget; graceful shutdown flush                      | **Service → Engine**: Independent lifecycle, enqueue-only interface |
 
 ### Subsystem Ownership Model
 
-| Layer | Examples | Managed By | Access Pattern |
-|-------|----------|------------|----------------|
-| **Foundational** | Graphics Layer, Platform, Scene, Physics, Content | AsyncEngine Coordinator | Direct API calls in ordered phases |
-| **Application** | Render Graph, Gameplay Modules, UI Systems | Module Manager | Service injection via ModuleContext |
-| **Cross-Cutting** | Logging, Telemetry, Diagnostics | Independent Services | Lock-free queues, detached execution |
+| Layer             | Examples                                          | Managed By              | Access Pattern                       |
+| ----------------- | ------------------------------------------------- | ----------------------- | ------------------------------------ |
+| **Foundational**  | Graphics Layer, Platform, Scene, Physics, Content | AsyncEngine Coordinator | Direct API calls in ordered phases   |
+| **Application**   | Render Graph, Gameplay Modules, UI Systems        | Module Manager          | Service injection via ModuleContext  |
+| **Cross-Cutting** | Logging, Telemetry, Diagnostics                   | Independent Services    | Lock-free queues, detached execution |
 
 ---
 
@@ -808,6 +808,7 @@ Subject to the root project license.
 - Initial version: Consolidated async orchestration guidelines & diagrams.
 
 ---
+
 End of document.
 
 ---

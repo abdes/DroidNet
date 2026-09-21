@@ -138,14 +138,14 @@ SkySphere rotation.
 These are renderer constants/internal product policies, not new editor controls.
 Changing the processing revision invalidates products and qualification evidence.
 
-| Product | Concrete contract | Basis |
-| --- | --- | --- |
-| Captured source | 128×128×6, scene-linear RGBA32Float scratch, alpha 1 | 128 is UE's documented default; FP32 scratch prevents premature HDR clipping |
-| Processed cube | 128×128×6 RGBA16Float, all 8 mips down to 1×1 | Existing Oxygen processed format/scale contract; source mip chain for filtering |
-| Diffuse SH | Structured buffer of 8 float4; existing three-band packing in entries 0–6, average brightness in 7 | Current `StaticSkyLightProcessor` and shader evaluator |
-| Specular cube | 128×128×6 RGBA16Float, all 8 mips, GGX prefiltered | Same orientation/range scale as processed cube |
-| BRDF lookup | 128×32 RG16Unorm, one mip, 128 deterministic samples/texel, renderer-lifetime cache | UE 5.7 `SystemTextures.cpp` native baseline; no scene dependency |
-| Generation metadata | One 16-byte structured element: float32 source scale/brightness, uint32 processing flags/revision | GPU-produced scaling/validity without a CPU readback dependency |
+| Product             | Concrete contract                                                                                  | Basis                                                                           |
+| ------------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| Captured source     | 128×128×6, scene-linear RGBA32Float scratch, alpha 1                                               | 128 is UE's documented default; FP32 scratch prevents premature HDR clipping    |
+| Processed cube      | 128×128×6 RGBA16Float, all 8 mips down to 1×1                                                      | Existing Oxygen processed format/scale contract; source mip chain for filtering |
+| Diffuse SH          | Structured buffer of 8 float4; existing three-band packing in entries 0–6, average brightness in 7 | Current `StaticSkyLightProcessor` and shader evaluator                          |
+| Specular cube       | 128×128×6 RGBA16Float, all 8 mips, GGX prefiltered                                                 | Same orientation/range scale as processed cube                                  |
+| BRDF lookup         | 128×32 RG16Unorm, one mip, 128 deterministic samples/texel, renderer-lifetime cache                | UE 5.7 `SystemTextures.cpp` native baseline; no scene dependency                |
+| Generation metadata | One 16-byte structured element: float32 source scale/brightness, uint32 processing flags/revision  | GPU-produced scaling/validity without a CPU readback dependency                 |
 
 Specified-cubemap sources retain existing resolved source size/power-of-two
 selection and HDR source identity. Their specular product has the same face size
@@ -369,19 +369,19 @@ images. Fixed native profile visual review remains mandatory.
 
 ## 6. Implementation map
 
-| Existing file/section | Current statement/path | Required reconciliation |
-| --- | --- | --- |
-| cubemap-processing.md §§1,4.3,5.1,6.1 | CapturedScene unavailable; diffuse-only readiness; specular optional | Keep closed VTX-M08 proof historical; new extension requires full product set for canonical IBL |
-| skybox-static-skylight.md §§2.5,6.4,11 | Static diffuse routed through Lighting; captured/specular deferred | Retain source/sky policy and evidence; supersede Stage 12 placement and captured/specular deferral |
-| indirect-lighting-service.md §§1.3,2.1,5 | Stage 13 reserved; old Services path; optional AO | Activate bounded sky diffuse/specular subset; use current family path; no new AO requirement |
-| environment-service.md §§2.3,10 | Stage 13 future/deferred | Product ownership stays Environment; Stage 13 apply is now mandatory for V0.1 |
-| IblProbePass.cpp:164–171 | Diffuse 0 disables all; CapturedScene unavailable | Independent diffuse/specular gates; supported captured source and explicit ready-zero |
-| IblProcessor.cpp:386–423 | Specular/LUT slots invalid; CPU static-source processing/upload | Reuse valid static machinery; add GPU captured processing and complete common publication |
-| SceneRenderer.cpp:2052,2187; DeferredLightPass.cpp:905 | Ambient bridge enabled; Stage 13 reserved; `Vortex.Stage12.StaticSkyLight` draw | Remove bridge and activate canonical indirect service |
-| Sky.hlsl:329–339 | Irradiance/prefilter entry points are empty | Implement actual owned processors/shared radiance helper; catalog registration alone is no evidence |
-| ForwardMesh_PS.hlsl:92–145 | Linear mip mapping, approximate missing-LUT fallback | Shared canonical IBL helper and matching producer mapping, complete product gate |
-| SkyLight.h:25 | CapturedScene prose includes background | Clarify lighting-sky radiance versus display background with implementation |
-| SkyLight.h / source schema / Interop / DemoShell | Unsupported real-time-capture bool is stored and sometimes forced true | Remove canonical field/API/branch; migrate useful source/settings once and recook under the single change-driven policy |
+| Existing file/section                                  | Current statement/path                                                          | Required reconciliation                                                                                                 |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| cubemap-processing.md §§1,4.3,5.1,6.1                  | CapturedScene unavailable; diffuse-only readiness; specular optional            | Keep closed VTX-M08 proof historical; new extension requires full product set for canonical IBL                         |
+| skybox-static-skylight.md §§2.5,6.4,11                 | Static diffuse routed through Lighting; captured/specular deferred              | Retain source/sky policy and evidence; supersede Stage 12 placement and captured/specular deferral                      |
+| indirect-lighting-service.md §§1.3,2.1,5               | Stage 13 reserved; old Services path; optional AO                               | Activate bounded sky diffuse/specular subset; use current family path; no new AO requirement                            |
+| environment-service.md §§2.3,10                        | Stage 13 future/deferred                                                        | Product ownership stays Environment; Stage 13 apply is now mandatory for V0.1                                           |
+| IblProbePass.cpp:164–171                               | Diffuse 0 disables all; CapturedScene unavailable                               | Independent diffuse/specular gates; supported captured source and explicit ready-zero                                   |
+| IblProcessor.cpp:386–423                               | Specular/LUT slots invalid; CPU static-source processing/upload                 | Reuse valid static machinery; add GPU captured processing and complete common publication                               |
+| SceneRenderer.cpp:2052,2187; DeferredLightPass.cpp:905 | Ambient bridge enabled; Stage 13 reserved; `Vortex.Stage12.StaticSkyLight` draw | Remove bridge and activate canonical indirect service                                                                   |
+| Sky.hlsl:329–339                                       | Irradiance/prefilter entry points are empty                                     | Implement actual owned processors/shared radiance helper; catalog registration alone is no evidence                     |
+| ForwardMesh_PS.hlsl:92–145                             | Linear mip mapping, approximate missing-LUT fallback                            | Shared canonical IBL helper and matching producer mapping, complete product gate                                        |
+| SkyLight.h:25                                          | CapturedScene prose includes background                                         | Clarify lighting-sky radiance versus display background with implementation                                             |
+| SkyLight.h / source schema / Interop / DemoShell       | Unsupported real-time-capture bool is stored and sometimes forced true          | Remove canonical field/API/branch; migrate useful source/settings once and recook under the single change-driven policy |
 
 ## 7. Primary sources and bounded choices
 

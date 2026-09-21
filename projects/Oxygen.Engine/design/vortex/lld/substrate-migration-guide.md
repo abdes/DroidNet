@@ -128,9 +128,9 @@ be updated. Nested namespaces like `oxygen::renderer::detail` become
 
 ### 2.2 Export Macro Changes
 
-| Legacy Macro | Vortex Macro | Purpose |
-| ------------ | ------------ | ------- |
-| `OXGN_RNDR_API` | `OXGN_VRTX_API` | DLL export/import |
+| Legacy Macro      | Vortex Macro      | Purpose                             |
+| ----------------- | ----------------- | ----------------------------------- |
+| `OXGN_RNDR_API`   | `OXGN_VRTX_API`   | DLL export/import                   |
 | `OXGN_RNDR_NDAPI` | `OXGN_VRTX_NDAPI` | `[[nodiscard]]` + DLL export/import |
 
 Per repo style: never export an entire class. Export individual methods only.
@@ -514,7 +514,7 @@ After each step, verify:
 
 1. **Build:** `cmake --build --target Oxygen.Vortex` succeeds
 2. **No legacy leakage:** `rg -g "*.h" -g "*.cpp" "Oxygen/Renderer/"
-   src/Oxygen/Vortex/` returns zero hits (excluding comments/docs)
+src/Oxygen/Vortex/` returns zero hits (excluding comments/docs)
 3. **No reverse dependency:** Legacy `Oxygen.Renderer` does not include any
    `Oxygen/Vortex/` header
 4. **DLL independence:** The built `Oxygen.Vortex` DLL has no runtime

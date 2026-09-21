@@ -162,12 +162,12 @@ truncated generation or ViewStateHandle comparison is permitted.
 
 ### FrameExposureData: 16 bytes
 
-| Offset | Type | Field |
-| --- | --- | --- |
-| 0 | float | pre_exposure |
-| 4 | float | one_over_pre_exposure |
-| 8 | uint | global_exposure_state_slot |
-| 12 | uint | flags |
+| Offset | Type  | Field                      |
+| ------ | ----- | -------------------------- |
+| 0      | float | pre_exposure               |
+| 4      | float | one_over_pre_exposure      |
+| 8      | uint  | global_exposure_state_slot |
+| 12     | uint  | flags                      |
 
 ViewFrameBindings.frame_exposure_slot (byte 12) references this record.
 ViewFrameBindings stays 64 bytes; other slots retain offsets. Publish one
@@ -218,23 +218,23 @@ submit, the service skips tonemapping rather than consuming an invalid state.
 
 ### ExposureStateData: 80 bytes
 
-| Offset | Type | Field / meaning |
-| --- | --- | --- |
-| 0 | float | displayed_scale S (zero allowed) |
-| 4 | float | target_scale (zero allowed) |
-| 8 | float | latent_scale (strictly positive) |
-| 12 | float | latent_target_scale (strictly positive) |
-| 16 | float | raw_metered_luminance |
-| 20 | float | raw_metered_ev |
-| 24 | uint | flags |
-| 28 | uint | fallback_reason |
-| 32 | uint2 | settings_revision |
-| 40 | uint2 | requested_generation |
-| 48 | uint2 | applied_generation |
-| 56 | uint2 | frame_sequence |
-| 64 | float | fp16_candidate_pre_exposure |
-| 68 | uint | fp16_eligible_streak |
-| 72 | uint2 | product_layout_revision |
+| Offset | Type  | Field / meaning                         |
+| ------ | ----- | --------------------------------------- |
+| 0      | float | displayed_scale S (zero allowed)        |
+| 4      | float | target_scale (zero allowed)             |
+| 8      | float | latent_scale (strictly positive)        |
+| 12     | float | latent_target_scale (strictly positive) |
+| 16     | float | raw_metered_luminance                   |
+| 20     | float | raw_metered_ev                          |
+| 24     | uint  | flags                                   |
+| 28     | uint  | fallback_reason                         |
+| 32     | uint2 | settings_revision                       |
+| 40     | uint2 | requested_generation                    |
+| 48     | uint2 | applied_generation                      |
+| 56     | uint2 | frame_sequence                          |
+| 64     | float | fp16_candidate_pre_exposure             |
+| 68     | uint  | fp16_eligible_streak                    |
+| 72     | uint2 | product_layout_revision                 |
 
 State flags: history valid, initialized, meter luminance valid, meter EV valid,
 synthetic dark solve, range failure, displayed-zero target, borrowed continuity,
@@ -250,21 +250,21 @@ remain stored on invalid input; current validity describes the current frame.
 
 ### ExposureCompletedStatus: 80 bytes
 
-| Offset | Type | Field / meaning |
-| --- | --- | --- |
-| 0 | uint2 | view_state_identity |
-| 8 | uint2 | frame_sequence |
-| 16 | uint2 | settings_revision |
-| 24 | uint2 | requested_generation |
-| 32 | uint2 | applied_generation |
-| 40 | uint2 | product_layout_revision |
-| 48 | uint | flags: valid=1, range failure=2, FP16 eligible=4, rejected transition=8, producer failure=16, rejected current conversion=32 |
-| 52 | uint | first_failure_product (zero means none) |
-| 56 | uint | first_failure_kind |
-| 60 | uint | fp16_eligible_streak |
-| 64 | uint2 | candidate_state_generation |
-| 72 | uint | transition rejection reason (0=none, 1=not Auto, 2=unsupported seed) |
-| 76 | uint | reserved, zero |
+| Offset | Type  | Field / meaning                                                                                                              |
+| ------ | ----- | ---------------------------------------------------------------------------------------------------------------------------- |
+| 0      | uint2 | view_state_identity                                                                                                          |
+| 8      | uint2 | frame_sequence                                                                                                               |
+| 16     | uint2 | settings_revision                                                                                                            |
+| 24     | uint2 | requested_generation                                                                                                         |
+| 32     | uint2 | applied_generation                                                                                                           |
+| 40     | uint2 | product_layout_revision                                                                                                      |
+| 48     | uint  | flags: valid=1, range failure=2, FP16 eligible=4, rejected transition=8, producer failure=16, rejected current conversion=32 |
+| 52     | uint  | first_failure_product (zero means none)                                                                                      |
+| 56     | uint  | first_failure_kind                                                                                                           |
+| 60     | uint  | fp16_eligible_streak                                                                                                         |
+| 64     | uint2 | candidate_state_generation                                                                                                   |
+| 72     | uint  | transition rejection reason (0=none, 1=not Auto, 2=unsupported seed)                                                         |
+| 76     | uint  | reserved, zero                                                                                                               |
 
 Status contains identity/eligibility, not a CPU numerical-gain authority. The
 candidate_state_generation references a retained GPU state record. Pin that
@@ -739,12 +739,12 @@ operating trajectories.
 
 **EX051-09 delivery: an explicit precision state/decision table before code.**
 
-| State | Required work | Exit condition |
-| --- | --- | --- |
-| FP32 operation | Normal exposure/rendering, range protection and valid history; no repeated full prospective qualification without an attempt trigger. | The selected policy starts an admission attempt after a named input/event change or bounded retry condition. |
-| Admission attempt | Fresh required-product checks, gradients and candidate/error certificates for the participating frames. | Two actual consecutive eligible frames for the same valid candidate permit FP16; rejection returns to FP32 operation. |
-| Qualified FP16 | Current-frame producer protection, checked SceneColor conversion, correct P/history rebasing and retained FP32 fallback. | Range/conversion failure or a validity-key change selects the existing safe recovery behavior. |
-| Recovery | P=1 and FP32 products; preserve event precedence and valid adaptation. Producer range failure follows the existing remeter contract; conversion-only rejection preserves solved exposure. | A named recovery/retry condition permits a new admission attempt. |
+| State             | Required work                                                                                                                                                                             | Exit condition                                                                                                        |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| FP32 operation    | Normal exposure/rendering, range protection and valid history; no repeated full prospective qualification without an attempt trigger.                                                     | The selected policy starts an admission attempt after a named input/event change or bounded retry condition.          |
+| Admission attempt | Fresh required-product checks, gradients and candidate/error certificates for the participating frames.                                                                                   | Two actual consecutive eligible frames for the same valid candidate permit FP16; rejection returns to FP32 operation. |
+| Qualified FP16    | Current-frame producer protection, checked SceneColor conversion, correct P/history rebasing and retained FP32 fallback.                                                                  | Range/conversion failure or a validity-key change selects the existing safe recovery behavior.                        |
+| Recovery          | P=1 and FP32 products; preserve event precedence and valid adaptation. Producer range failure follows the existing remeter contract; conversion-only rejection preserves solved exposure. | A named recovery/retry condition permits a new admission attempt.                                                     |
 
 The table must list view lifetime, settings/mask/curve revision, exposure event
 generation, source-owner identity, required-product layout, radiance-producing
@@ -774,26 +774,26 @@ path only through an explicit `qualified` diagnostic control. That control
 preserves coverage of the implemented admission/conversion/retained-reader
 contracts; it is not another production optimization experiment.
 
-| State | Concrete work | Exit / retry decision |
-| --- | --- | --- |
-| FP32 operation (production default) | FP32 accumulation, resolved color and per-view sky/AP/fog; P=1; normal GPU-owned exposure, metering, adaptation, masks/curves, sharing, events, temporal reprojection and current range protection. No admission scans, error certificates, conversion reports or eligibility-only status jobs. | Ordinary scene, camera, settings and brightness changes remain FP32. No automatic admission or periodic retry. Only an explicit diagnostic control enters qualification. |
-| Candidate attempt (explicit diagnostic only) | Existing full required-product checks, gradients and fresh candidate/error certificates. `fp32` keeps FP32 storage; `qualified` may admit half. | Two actual consecutive eligible submitted/completed frames with the same valid candidate are required. Missing/failed products or identity/epoch changes reset the streak. Continuous checking occurs only while the explicit diagnostic is requested, as with the existing format diagnostic. |
-| Qualified FP16 (explicit `qualified` diagnostic only) | Preserve existing producer protection, current checked conversion, P/history rebasing, reports and independent FP32 fallback leases. No cached certificate substitutes for current checks. | Range/conversion failure or an invalid identity selects existing FP32 diagnostic recovery. Leaving the diagnostic enters production FP32, invalidates eligibility and rebuilds radiance histories. |
-| Recovery | Production remains FP32/P1. Invalid current metering preserves valid gain/history; fresh valid measurements and authored requests follow existing exposure rules. Device recovery, cuts, seeds, source loss and zero-target precedence remain owned by existing lifecycle code. | No production half retry. Within an explicitly selected diagnostic, retain existing failure handling: producer failure follows the Auto-owner remeter contract; conversion-only rejection preserves solved gain; borrowers cannot reset the source. |
+| State                                                 | Concrete work                                                                                                                                                                                                                                                                                   | Exit / retry decision                                                                                                                                                                                                                                                                          |
+| ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FP32 operation (production default)                   | FP32 accumulation, resolved color and per-view sky/AP/fog; P=1; normal GPU-owned exposure, metering, adaptation, masks/curves, sharing, events, temporal reprojection and current range protection. No admission scans, error certificates, conversion reports or eligibility-only status jobs. | Ordinary scene, camera, settings and brightness changes remain FP32. No automatic admission or periodic retry. Only an explicit diagnostic control enters qualification.                                                                                                                       |
+| Candidate attempt (explicit diagnostic only)          | Existing full required-product checks, gradients and fresh candidate/error certificates. `fp32` keeps FP32 storage; `qualified` may admit half.                                                                                                                                                 | Two actual consecutive eligible submitted/completed frames with the same valid candidate are required. Missing/failed products or identity/epoch changes reset the streak. Continuous checking occurs only while the explicit diagnostic is requested, as with the existing format diagnostic. |
+| Qualified FP16 (explicit `qualified` diagnostic only) | Preserve existing producer protection, current checked conversion, P/history rebasing, reports and independent FP32 fallback leases. No cached certificate substitutes for current checks.                                                                                                      | Range/conversion failure or an invalid identity selects existing FP32 diagnostic recovery. Leaving the diagnostic enters production FP32, invalidates eligibility and rebuilds radiance histories.                                                                                             |
+| Recovery                                              | Production remains FP32/P1. Invalid current metering preserves valid gain/history; fresh valid measurements and authored requests follow existing exposure rules. Device recovery, cuts, seeds, source loss and zero-target precedence remain owned by existing lifecycle code.                 | No production half retry. Within an explicitly selected diagnostic, retain existing failure handling: producer failure follows the Auto-owner remeter contract; conversion-only rejection preserves solved gain; borrowers cannot reset the source.                                            |
 
 This proposal deliberately makes admission and qualified-half states unreachable
 through automatic production behavior. It retains the established diagnostic
 algorithm rather than promising an unmeasured admission cadence or inventing
 scene-change heuristics.
 
-| Validity input / result | Required treatment |
-| --- | --- |
-| View lifetime and source-owner handle/lifetime | No state/status/candidate can cross view removal/recreation or source replacement. Borrowed numerical gain never certifies the borrower's image. |
-| Settings, mask and curve revision; requested/applied exposure generation | Preserve authored intent and GPU gain. Reject stale eligibility and acknowledgements; require a current matching packet before CPU completion. |
-| Precision control/epoch, required-product layout and shader-debug mode | A control revision rejects older status packets before polling can acknowledge them. Crossing between FP32-only and certified operation invalidates eligibility and rebuilds radiance history. The compatible `fp32`/`qualified` format diagnostic keeps its qualified P. Qualification-attempt epochs gate eligibility separately, so a failed certificate cannot erase a valid authored solve. Diagnostic/unit-gain overrides retain precedence. |
-| Radiance-producing inputs | Production has no reusable half certificate. Diagnostics check actual current products each frame; no reused result stands in for changing materials, lights, environment or camera-dependent radiance. |
-| Temporal source texture, stored P and error state | Production uses FP32 history with ordinary RGB rebasing. Diagnostic current/previous error propagation remains fresh and lease-pinned. Incompatible mode/layout/history changes rebuild, never reinterpret, old contents. |
-| Frame P/S and retained consumers | P/S remain GPU-owned and immutable for each submitted frame. Old color, descriptors, state and reports retire only after their readers and fences; 10A's independent color ownership remains intact. |
+| Validity input / result                                                  | Required treatment                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| View lifetime and source-owner handle/lifetime                           | No state/status/candidate can cross view removal/recreation or source replacement. Borrowed numerical gain never certifies the borrower's image.                                                                                                                                                                                                                                                                                                   |
+| Settings, mask and curve revision; requested/applied exposure generation | Preserve authored intent and GPU gain. Reject stale eligibility and acknowledgements; require a current matching packet before CPU completion.                                                                                                                                                                                                                                                                                                     |
+| Precision control/epoch, required-product layout and shader-debug mode   | A control revision rejects older status packets before polling can acknowledge them. Crossing between FP32-only and certified operation invalidates eligibility and rebuilds radiance history. The compatible `fp32`/`qualified` format diagnostic keeps its qualified P. Qualification-attempt epochs gate eligibility separately, so a failed certificate cannot erase a valid authored solve. Diagnostic/unit-gain overrides retain precedence. |
+| Radiance-producing inputs                                                | Production has no reusable half certificate. Diagnostics check actual current products each frame; no reused result stands in for changing materials, lights, environment or camera-dependent radiance.                                                                                                                                                                                                                                            |
+| Temporal source texture, stored P and error state                        | Production uses FP32 history with ordinary RGB rebasing. Diagnostic current/previous error propagation remains fresh and lease-pinned. Incompatible mode/layout/history changes rebuild, never reinterpret, old contents.                                                                                                                                                                                                                          |
+| Frame P/S and retained consumers                                         | P/S remain GPU-owned and immutable for each submitted frame. Old color, descriptors, state and reports retire only after their readers and fences; 10A's independent color ownership remains intact.                                                                                                                                                                                                                                               |
 
 The control/default change and named mode/acknowledgement gap pass 122 focused
 Debug checks: 97 CPU and 25 native. Both directions of a control change reject
@@ -824,15 +824,15 @@ their percentiles must not be added. Backend frame-start waits are outside this
 union. Driver and scheduler time remain included, so these are not active-only
 CPU measurements.
 
-| Interval, two-view I02 at 1080p | p95 ms | p99 ms | Observation |
-| --- | ---: | ---: | --- |
-| Exposure owner union | 0.762 | 0.902 | Active-CPU target 0.15/0.30 ms is not demonstrated. Initial trace was 0.776/0.946 ms. |
-| Recorder acquisition | 0.128 | 0.154 | Eight acquisitions per frame. |
-| Recorder finalization | 0.265 | 0.325 | Includes eight immediate submissions and retirement bookkeeping. |
-| Native `ExecuteCommandLists` | 0.206 | 0.256 | Nested inside finalization; about 25% of aggregate exposure elapsed time. |
-| Compute-pipeline binding | 0.066 | 0.080 | Twelve bindings per frame. |
-| Exposure outside acquisition/finalization/binding | 0.314 | 0.367 | Settings, state/resource tracking, publication, recording and profiling remain in this interval. |
-| Explicit fence wait inside exposure | 0 | 0 | No matching wait interval in any sampled exposure scope. |
+| Interval, two-view I02 at 1080p                   | p95 ms | p99 ms | Observation                                                                                      |
+| ------------------------------------------------- | -----: | -----: | ------------------------------------------------------------------------------------------------ |
+| Exposure owner union                              |  0.762 |  0.902 | Active-CPU target 0.15/0.30 ms is not demonstrated. Initial trace was 0.776/0.946 ms.            |
+| Recorder acquisition                              |  0.128 |  0.154 | Eight acquisitions per frame.                                                                    |
+| Recorder finalization                             |  0.265 |  0.325 | Includes eight immediate submissions and retirement bookkeeping.                                 |
+| Native `ExecuteCommandLists`                      |  0.206 |  0.256 | Nested inside finalization; about 25% of aggregate exposure elapsed time.                        |
+| Compute-pipeline binding                          |  0.066 |  0.080 | Twelve bindings per frame.                                                                       |
+| Exposure outside acquisition/finalization/binding |  0.314 |  0.367 | Settings, state/resource tracking, publication, recording and profiling remain in this interval. |
+| Explicit fence wait inside exposure               |      0 |      0 | No matching wait interval in any sampled exposure scope.                                         |
 
 Subtracting native submission intervals frame by frame still leaves
 0.563/0.662 ms p95/p99. This subtraction is diagnostic, not a replacement metric
@@ -849,10 +849,10 @@ The traces show elapsed costs, not a proven descriptor bottleneck or pure active
 CPU cost. Keep 11 in progress until its measured decision is recorded; final
 budgets remain in 13/GATE.
 
-| Candidate | Concrete ownership/change | Verification and stopping condition |
-| --- | --- | --- |
-| EX051-11A | `SceneRenderer` currently invokes `CheckSceneColorRange` immediately before `PrepareSceneExposure`. Move the final range recording into the enclosing exposure operation. One recorder owns final range, histogram and solve, with one successful submission before state publication. Two-view I02 should fall from eight exposure command lists to six. | Prove exact recorder count and unchanged GPU work/order; focused Debug range/numerical, failure/retry, transition/generation, sharing and queued-reader cases, then owning exposure correctness. Compile affected Release paths and use the existing I02 trace controls for a matched CPU comparison. Retain only with correctness and demonstrated benefit; reject without broadening into other renderer stages if it does not help. |
-| EX051-11B | `RecordState` called `UpdateHistogramConstants` before clear and again before accumulation with the same inputs. Attribute publication, then evaluate publishing one immutable record and binding its index for both dispatches. Evaluate any further constant/descriptor reuse only after its cost and safe ownership are established. | Compare publication/descriptor activity and CPU time; qualify histogram/mask, two-view, mode/event, lifetime and retained-reader behavior. Payloads, shader layouts and output budgets stay identical. For this candidate, the user explicitly directed consideration of clarity, maintainability and resource reductions when timing benefit is small or absent. Report each benefit separately; fewer publications do not establish a frame-time improvement. |
+| Candidate | Concrete ownership/change                                                                                                                                                                                                                                                                                                                                 | Verification and stopping condition                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| EX051-11A | `SceneRenderer` currently invokes `CheckSceneColorRange` immediately before `PrepareSceneExposure`. Move the final range recording into the enclosing exposure operation. One recorder owns final range, histogram and solve, with one successful submission before state publication. Two-view I02 should fall from eight exposure command lists to six. | Prove exact recorder count and unchanged GPU work/order; focused Debug range/numerical, failure/retry, transition/generation, sharing and queued-reader cases, then owning exposure correctness. Compile affected Release paths and use the existing I02 trace controls for a matched CPU comparison. Retain only with correctness and demonstrated benefit; reject without broadening into other renderer stages if it does not help.                          |
+| EX051-11B | `RecordState` called `UpdateHistogramConstants` before clear and again before accumulation with the same inputs. Attribute publication, then evaluate publishing one immutable record and binding its index for both dispatches. Evaluate any further constant/descriptor reuse only after its cost and safe ownership are established.                   | Compare publication/descriptor activity and CPU time; qualify histogram/mask, two-view, mode/event, lifetime and retained-reader behavior. Payloads, shader layouts and output budgets stay identical. For this candidate, the user explicitly directed consideration of clarity, maintainability and resource reductions when timing benefit is small or absent. Report each benefit separately; fewer publications do not establish a frame-time improvement. |
 
 11A keeps frame P/state resolve and pre-environment range as separate submissions:
 intervening rendering work makes them different ordering boundaries. Each GPU
@@ -939,16 +939,16 @@ needed. Current Debug evidence was reused; the missing normal Release gate
 (Tracy off) passed **371/371** enabled checks: 143 CPU and 228 native. All 979
 frozen inputs stayed unchanged; eight disabled benchmarks were not run.
 
-| Changed contract | Existing coverage | Evidence treatment |
-| --- | --- | --- |
-| Production FP32/P1 and explicit certification controls | `Fp32Only_test.cpp`, `Fp32Reference_test.cpp`, DiagnosticsService defaults/revision checks | Reuse current Debug; qualify normal Release. |
-| Numerical gain, histogram, masks, curves and fixed/zero modes | `Metering_test.cpp`, `Masks_test.cpp`, `Transitions_test.cpp`, FP32-only fixed-mode cases | Existing native owner suite covers constant reuse; no new test needed. ExposureSettings equations are unchanged and retain accepted evidence. |
-| Current range and temporal history | `RangeGuards_test.cpp`, `FogHistory_test.cpp`, FP32-only temporal/range case | Both renderer-reconstruction fixture corrections and their original failures are preserved in11A. |
-| Events, sharing and stale packets | `ScenePrecision_test.cpp`, `SourceLoss_test.cpp`, `SceneLifecycle_test.cpp`, precision-control acknowledgement case | Retain accepted delayed-status/lifetime coverage; normal Release owner suite qualifies optimized paths. |
-| Independent SceneColor readers/fences | SceneTextures/RetainedTexturePool owner tests and `QueuedConsumers_test.cpp` | Reuse10A Debug4K lifecycle evidence; qualify missing Release owner checks. No repeated lifecycle benchmark. |
-| Combined final range/solve and same-frame reuse | `CombinedSceneRangePreservesSeedRetryInvalidMeterAndRetainedState`, existing preparation/failure/reuse tests | Current Debug accepted; normal Release adds the missing optimized-build proof. |
-| Runtime/public post-process integration | PostProcessService, SceneRendererDeferredCore, RendererPublicationSplit, DiagnosticsService | Reuse accepted Debug; one normal Release batch. |
-| Shader catalog and layouts | Accepted04 catalog tests and234-module Debug/Release archives | Shader and Scene source roots are unchanged from5f5aa9e85 through8c39ab62b; no catalog/settings rerun. |
+| Changed contract                                              | Existing coverage                                                                                                   | Evidence treatment                                                                                                                            |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Production FP32/P1 and explicit certification controls        | `Fp32Only_test.cpp`, `Fp32Reference_test.cpp`, DiagnosticsService defaults/revision checks                          | Reuse current Debug; qualify normal Release.                                                                                                  |
+| Numerical gain, histogram, masks, curves and fixed/zero modes | `Metering_test.cpp`, `Masks_test.cpp`, `Transitions_test.cpp`, FP32-only fixed-mode cases                           | Existing native owner suite covers constant reuse; no new test needed. ExposureSettings equations are unchanged and retain accepted evidence. |
+| Current range and temporal history                            | `RangeGuards_test.cpp`, `FogHistory_test.cpp`, FP32-only temporal/range case                                        | Both renderer-reconstruction fixture corrections and their original failures are preserved in11A.                                             |
+| Events, sharing and stale packets                             | `ScenePrecision_test.cpp`, `SourceLoss_test.cpp`, `SceneLifecycle_test.cpp`, precision-control acknowledgement case | Retain accepted delayed-status/lifetime coverage; normal Release owner suite qualifies optimized paths.                                       |
+| Independent SceneColor readers/fences                         | SceneTextures/RetainedTexturePool owner tests and `QueuedConsumers_test.cpp`                                        | Reuse10A Debug4K lifecycle evidence; qualify missing Release owner checks. No repeated lifecycle benchmark.                                   |
+| Combined final range/solve and same-frame reuse               | `CombinedSceneRangePreservesSeedRetryInvalidMeterAndRetainedState`, existing preparation/failure/reuse tests        | Current Debug accepted; normal Release adds the missing optimized-build proof.                                                                |
+| Runtime/public post-process integration                       | PostProcessService, SceneRendererDeferredCore, RendererPublicationSplit, DiagnosticsService                         | Reuse accepted Debug; one normal Release batch.                                                                                               |
+| Shader catalog and layouts                                    | Accepted04 catalog tests and234-module Debug/Release archives                                                       | Shader and Scene source roots are unchanged from5f5aa9e85 through8c39ab62b; no catalog/settings rerun.                                        |
 
 The [integration checkpoint](../../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/integration12/checkpoint-manifest.json)
 links exact commands, per-suite results, reused checkpoints and the unchanged
@@ -963,7 +963,6 @@ See [the final CPU decision](#approved-ex051-13ab-joint-cpu-correction).
 The diagnostic sequence below is retained as historical evidence; its earlier
 holds and proposed next steps are superseded by that closeout.
 
-
 The final frozen production matrix is collected: **48 valid runs, 296,100 steady
 frames**, all eight recipes at 1080p/4K with three runs each. Every run has at
 least 1,800 frames and 38.887 seconds of steady data. All 981 frozen inputs stayed
@@ -974,16 +973,16 @@ rerun for analysis or report generation.
 The following values are the worst per-run GPU frame p95/p99 of three runs,
 in milliseconds. They are not pooled percentiles.
 
-| Recipe | 1080p p95 / p99 | 4K p95 / p99 |
-| --- | ---: | ---: |
-| C01 | 3.799 / 5.011 | 7.214 / 8.386 |
-| C02 | 3.826 / 5.061 | 7.236 / 8.773 |
-| M01 | 5.903 / 7.461 | 16.937 / 18.339 |
-| M02 | 8.474 / 10.181 | 22.568 / 24.690 |
-| M03 | 5.919 / 7.181 | 15.267 / 16.668 |
-| M04 | 4.405 / 5.275 | 11.669 / 13.712 |
-| I01 | 5.977 / 6.946 | 17.379 / 18.765 |
-| I02 | 6.411 / 7.779 | 15.163 / 16.990 |
+| Recipe | 1080p p95 / p99 |    4K p95 / p99 |
+| ------ | --------------: | --------------: |
+| C01    |   3.799 / 5.011 |   7.214 / 8.386 |
+| C02    |   3.826 / 5.061 |   7.236 / 8.773 |
+| M01    |   5.903 / 7.461 | 16.937 / 18.339 |
+| M02    |  8.474 / 10.181 | 22.568 / 24.690 |
+| M03    |   5.919 / 7.181 | 15.267 / 16.668 |
+| M04    |   4.405 / 5.275 | 11.669 / 13.712 |
+| I01    |   5.977 / 6.946 | 17.379 / 18.765 |
+| I02    |   6.411 / 7.779 | 15.163 / 16.990 |
 
 Against the matching recorded pre-policy production baselines, conservative
 GPU frame p95 reductions are **54.7% C01/1080p, 55.1% C01/4K, 63.1% C02/1080p
@@ -991,14 +990,14 @@ and 41.8% I02/1080p**. No before/after improvement is claimed for cells without
 a matching recorded baseline. The approved C01 steady-memory increases remain
 106/398.625 MiB at 1080p/4K; C02/I02 decrease by 1.125 MiB.
 
-| Acceptance evidence | Recorded result |
-| --- | --- |
-| Whole-frame 1080p targets | All 24 runs pass GPU p95/p99 and uncapped wall p99 targets; worst wall p99 is 12.035 ms. |
-| Attributed exposure GPU work and 4K scaling | All 48 runs pass; all 24 corresponding 4K comparisons pass scaling. Exposure status copies are included. Stage-21 ordinary output snapshots are reported separately, as established below. |
-| Warm transitions | Three full I02 scripts pass; worst per-operation additional GPU p99, including the entire resolve scope, is 0.392 ms against 1.30 ms. Startup is separate: 60 frames per run. |
-| Correctness/output | All native checks and exports pass. All 64 same-cell endpoint comparisons pass unchanged float and UNorm8 budgets; maximum float difference 7.75e-7, maximum gain difference 9.83e-7 stops. |
-| Resource stability | Zero steady texture/buffer creation churn in every run. Placement snapshots and accepted 10/10A lifecycle evidence are retained. No new lifecycle campaign. |
-| Presentation | One 180-frame VortexBasic launch with target 60 fps and VSync passes. Its captured EV14 output has gain 2^-14 and pre-storage RGB 0.25; replay numerical checks and visual inspection pass. This is not a measured monitor-refresh-rate claim. |
+| Acceptance evidence                         | Recorded result                                                                                                                                                                                                                                |
+| ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Whole-frame 1080p targets                   | All 24 runs pass GPU p95/p99 and uncapped wall p99 targets; worst wall p99 is 12.035 ms.                                                                                                                                                       |
+| Attributed exposure GPU work and 4K scaling | All 48 runs pass; all 24 corresponding 4K comparisons pass scaling. Exposure status copies are included. Stage-21 ordinary output snapshots are reported separately, as established below.                                                     |
+| Warm transitions                            | Three full I02 scripts pass; worst per-operation additional GPU p99, including the entire resolve scope, is 0.392 ms against 1.30 ms. Startup is separate: 60 frames per run.                                                                  |
+| Correctness/output                          | All native checks and exports pass. All 64 same-cell endpoint comparisons pass unchanged float and UNorm8 budgets; maximum float difference 7.75e-7, maximum gain difference 9.83e-7 stops.                                                    |
+| Resource stability                          | Zero steady texture/buffer creation churn in every run. Placement snapshots and accepted 10/10A lifecycle evidence are retained. No new lifecycle campaign.                                                                                    |
+| Presentation                                | One 180-frame VortexBasic launch with target 60 fps and VSync passes. Its captured EV14 output has gain 2^-14 and pre-storage RGB 0.25; replay numerical checks and visual inspection pass. This is not a measured monitor-refresh-rate claim. |
 
 **Closure work:** the final harness omitted exposure-only CPU accounting. The
 earlier proposal to treat missing CPU/copy evidence as qualification exceptions
@@ -1125,10 +1124,10 @@ removed. Passes use submission-outcome callbacks for committed CPU publication.
 New code must follow repository C++/documentation/test standards and pass the
 applicable clang-tidy checks without new warnings.
 
-| Item | Implementation contract | Verification and stopping condition |
-| --- | --- | --- |
+| Item      | Implementation contract                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | Verification and stopping condition                                                                                                                                                                                                                                                                                                                                                                                                           |
+| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | EX051-13A | SceneRenderer owns recording across the participating Vortex stages. Passes record through explicit recorder references rather than independently acquiring/submitting micro command lists. Keep frame resolve before its scene consumers, pre-environment range before environment work, and final range/metering after accumulation. Recorded resources may feed later commands in the same recording; CPU history publication, transition submission and reusable cache readiness commit only after actual submission. Abort/failure discards pending publication and preserves prior history. Existing immutable readers and GPU-fence retirement remain authoritative. | Focused command lifecycle/state-order tests, recording/submission failure and retry, once-per-frame solve, source sharing, producer history and queued-consumer cases. Compile affected Debug/Release paths and run owning gates. Use Tracy to verify actual recorder/submission counts and measured CPU benefit, with unchanged numerical/GPU phase work and resource stability. A count reduction is not itself a timing acceptance result. |
-| EX051-13B | Intern root signatures by complete binding layout and D3D12 flags, not by shader/PSO identity alone. Share their ownership safely across PSOs. Reuse unchanged descriptor heaps, root signatures and root tables; invalidate on real heap/signature changes and reset at recording begin. Keep required PSO changes and root-argument writes. Avoid temporary heap-list allocation. Root-constant capacity, generated bindings and shader ABI do not change. | Prove compatible layouts share a root signature and incompatible layouts/flags do not; verify lifetime, compute/graphics switching, heap changes, recorder reset and indirect-command compatibility. Existing native output checks must pass. Attribute binding reduction separately from 13A, without adding overlapping timings or claiming the entire binding category can be removed. |
+| EX051-13B | Intern root signatures by complete binding layout and D3D12 flags, not by shader/PSO identity alone. Share their ownership safely across PSOs. Reuse unchanged descriptor heaps, root signatures and root tables; invalidate on real heap/signature changes and reset at recording begin. Keep required PSO changes and root-argument writes. Avoid temporary heap-list allocation. Root-constant capacity, generated bindings and shader ABI do not change.                                                                                                                                                                                                                | Prove compatible layouts share a root signature and incompatible layouts/flags do not; verify lifetime, compute/graphics switching, heap changes, recorder reset and indirect-command compatibility. Existing native output checks must pass. Attribute binding reduction separately from 13A, without adding overlapping timings or claiming the entire binding category can be removed.                                                     |
 
 Implementation checkpoint: the shared SceneRenderer view owner and borrowed
 stage APIs compile in Debug and Release. The permanent-state handoff regression
@@ -1157,19 +1156,19 @@ Existing Tracy zones conservatively charge the complete shared view acquisition
 and finalization to exposure; nested intervals are counted once. No new runtime
 timer or repeated baseline was needed.
 
-| Elapsed CPU/frame metric | Previous baseline | Joint candidate | Reduction |
-| --- | ---: | ---: | ---: |
-| Active exposure mean | 0.482794 ms | 0.371156 ms | 23.1% |
-| Active exposure p95 | 0.705693 ms | 0.514935 ms | 27.0% |
-| Active exposure p99 | 0.888333 ms | 0.625473 ms | 29.6% |
-| Elapsed exposure mean | 0.483860 ms | 0.371625 ms | 23.2% |
-| Exposure p95 | 0.708597 ms | 0.515917 ms | 27.2% |
-| Exposure p99 | 0.901528 ms | 0.630422 ms | 30.1% |
-| Attributed acquisition p95 | 0.107153 ms | 0.069161 ms | 35.5% |
-| Attributed finalization/submission p95 | 0.247008 ms | 0.130787 ms | 47.1% |
-| Nested compute binding p95 | 0.070302 ms | 0.061307 ms | 12.8% |
-| Whole-frame recording/submission p95 | 5.193100 ms | 3.958400 ms | 23.8% |
-| Whole-frame wall p95 | 7.660300 ms | 7.167600 ms | 6.4% |
+| Elapsed CPU/frame metric               | Previous baseline | Joint candidate | Reduction |
+| -------------------------------------- | ----------------: | --------------: | --------: |
+| Active exposure mean                   |       0.482794 ms |     0.371156 ms |     23.1% |
+| Active exposure p95                    |       0.705693 ms |     0.514935 ms |     27.0% |
+| Active exposure p99                    |       0.888333 ms |     0.625473 ms |     29.6% |
+| Elapsed exposure mean                  |       0.483860 ms |     0.371625 ms |     23.2% |
+| Exposure p95                           |       0.708597 ms |     0.515917 ms |     27.2% |
+| Exposure p99                           |       0.901528 ms |     0.630422 ms |     30.1% |
+| Attributed acquisition p95             |       0.107153 ms |     0.069161 ms |     35.5% |
+| Attributed finalization/submission p95 |       0.247008 ms |     0.130787 ms |     47.1% |
+| Nested compute binding p95             |       0.070302 ms |     0.061307 ms |     12.8% |
+| Whole-frame recording/submission p95   |       5.193100 ms |     3.958400 ms |     23.8% |
+| Whole-frame wall p95                   |       7.660300 ms |     7.167600 ms |      6.4% |
 
 Exposure recordings fall from six to two and all render-thread recordings from
 40 to 10 in every measured frame. Compute binding calls remain 12 per frame;
@@ -1244,15 +1243,15 @@ Restore baseline inputs at the explicit frames below; include restoration cost
 as its own event. Record actual format/P/history and completion generations at
 untimed checkpoints after collection.
 
-| Event frame(s) | Public operation / existing source seam | Required observation |
-| --- | --- | --- |
-| 60; 120 | `Renderer::QueueExposureTransition(500, kSeedFromEv100, 14.5F)`; then `NotifyViewDiscontinuity(500, kCameraCut)` | Seed owns its frame; cut remeters according to existing precedence; applied generation matches the issued token. |
-| 180; 240 | Publish main `CompositionView::render_settings.exposure` with Manual EV14.5; restore the captured Auto settings through `PublishRuntimeCompositionView` | Immediate manual solve; Manual-to-Auto continuity followed by ordinary adaptation. |
-| 300; 360 | `DirectionalLight::SetIntensityLux(440000)`; restore 110000, then `Scene::Update` / `SyncObservers` before rendering | A fourfold sun step changes the target while valid Auto history adapts; no implicit remeter merely for precision rejection. |
+| Event frame(s)     | Public operation / existing source seam                                                                                                                                                                                                                                            | Required observation                                                                                                                                                                                                                                                                    |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 60; 120            | `Renderer::QueueExposureTransition(500, kSeedFromEv100, 14.5F)`; then `NotifyViewDiscontinuity(500, kCameraCut)`                                                                                                                                                                   | Seed owns its frame; cut remeters according to existing precedence; applied generation matches the issued token.                                                                                                                                                                        |
+| 180; 240           | Publish main `CompositionView::render_settings.exposure` with Manual EV14.5; restore the captured Auto settings through `PublishRuntimeCompositionView`                                                                                                                            | Immediate manual solve; Manual-to-Auto continuity followed by ordinary adaptation.                                                                                                                                                                                                      |
+| 300; 360           | `DirectionalLight::SetIntensityLux(440000)`; restore 110000, then `Scene::Update` / `SyncObservers` before rendering                                                                                                                                                               | A fourfold sun step changes the target while valid Auto history adapts; no implicit remeter merely for precision rejection.                                                                                                                                                             |
 | 420; 480; 540; 600 | Publish secondary `exposure_source_view_id=500`; remove source with `RemovePublishedRuntimeView(frame, 500)` and omit it, preserving the runtime's automatic borrower detachment; republish source and restore the requested sharing; restore secondary source to `kInvalidViewId` | Borrow previous completed source gain; source loss gets consumer-owned fallback; re-add creates a new source lifetime; independent gain resumes without stale acknowledgement. Republishing an absent source is invalid, so the consumer publishes detached while the source is absent. |
-| 660; 720 | Swap the two existing output/view extents and camera viewports via `PublishRuntimeCompositionView`; restore original assignment | Preserve numerical exposure, invalidate incompatible precision/history layout, and retain any old readers until their fences. No third size population. |
-| 780; 840 | Remove secondary using `RemovePublishedRuntimeView(frame, 501)` and omit publication; republish with the same public IDs | New lifetime despite reused ID; old color/state remain immutable for retained consumers. |
-| 900–905; 906 | Queue `kSeedFromEv100, 14.5F` on main. Hold status delivery for six frames with existing `RendererPublicationProbe::TakeExposureStatuses`; restore held jobs with `RestoreExposureStatuses` before frame 906 | GPU seed/adaptation proceeds while CPU acknowledgement is delayed; no stale precision authorization, unbounded retry allocation or CPU wait. |
+| 660; 720           | Swap the two existing output/view extents and camera viewports via `PublishRuntimeCompositionView`; restore original assignment                                                                                                                                                    | Preserve numerical exposure, invalidate incompatible precision/history layout, and retain any old readers until their fences. No third size population.                                                                                                                                 |
+| 780; 840           | Remove secondary using `RemovePublishedRuntimeView(frame, 501)` and omit publication; republish with the same public IDs                                                                                                                                                           | New lifetime despite reused ID; old color/state remain immutable for retained consumers.                                                                                                                                                                                                |
+| 900–905; 906       | Queue `kSeedFromEv100, 14.5F` on main. Hold status delivery for six frames with existing `RendererPublicationProbe::TakeExposureStatuses`; restore held jobs with `RestoreExposureStatuses` before frame 906                                                                       | GPU seed/adaptation proceeds while CPU acknowledgement is delayed; no stale precision authorization, unbounded retry allocation or CPU wait.                                                                                                                                            |
 
 Acknowledgement delay is test transport control, not a new public rendering API.
 Held pending and deferred jobs are hidden across CPU polling, then restored
@@ -1536,11 +1535,11 @@ For a nonnegative reference component `x`, an affine certificate `(r, a)` means
 `abs(x_hat - x) <= r*x + a`, with nonnegative coefficients. The rules below are
 componentwise and apply only when their stated source bounds are established:
 
-| Operation | Propagated certificate |
-| --- | --- |
-| Nonnegative sum `x + y` | `r = max(rx, ry)`, `a = ax + ay` |
-| Common gain `k*x`, `k >= 0` | `r = rx`, `a = k*ax` |
-| Convex interpolation `(1-w)*x + w*y`, `0 <= w <= 1` | `r = max(rx, ry)`, `a = (1-w)*ax + w*ay` |
+| Operation                                                 | Propagated certificate                                       |
+| --------------------------------------------------------- | ------------------------------------------------------------ |
+| Nonnegative sum `x + y`                                   | `r = max(rx, ry)`, `a = ax + ay`                             |
+| Common gain `k*x`, `k >= 0`                               | `r = rx`, `a = k*ax`                                         |
+| Convex interpolation `(1-w)*x + w*y`, `0 <= w <= 1`       | `r = max(rx, ry)`, `a = (1-w)*ax + w*ay`                     |
 | Attenuation `x*t`, `0 <= t <= 1`, justified `0 <= x <= M` | `r = (1+rx)*(1+rt)-1`, `a = ax*(1+rt) + M*at*(1+rx) + ax*at` |
 
 For attenuation, expand `(x+ex)*(t+et)-x*t` and bound all three error terms;
@@ -1623,13 +1622,13 @@ The exact-arithmetic consumer oracle follows the shader and blend state together
 Its interval tests do not establish hardware filtering or blend-rounding
 error. These remain required before GPU admission can use the transfer rules.
 
-| Consumer | Transfer before subsequent stages |
-| --- | --- |
-| AP near fade (`AerialPerspective.hlsli`) | `I = weight*sample.rgb`, `T = 1-weight*(1-sample.a)`; strength scales `I` only |
-| Lit translucent forward AP (`ForwardMesh_PS.hlsl`) | `C = background*T + I`; material coverage is returned separately; runs after Stage 15 |
+| Consumer                                                            | Transfer before subsequent stages                                                                                   |
+| ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| AP near fade (`AerialPerspective.hlsli`)                            | `I = weight*sample.rgb`, `T = 1-weight*(1-sample.a)`; strength scales `I` only                                      |
+| Lit translucent forward AP (`ForwardMesh_PS.hlsl`)                  | `C = background*T + I`; material coverage is returned separately; runs after Stage 15                               |
 | Deferred AP (`AtmosphereCompose.hlsl`, `AtmosphereComposePass.cpp`) | Output `(I, saturate(1-T))`; `One/InvSrcAlpha` RGB blending gives `C = I + background*T`, including at zero opacity |
-| Fog (`Fog.hlsl`, `FogPass.cpp`) | `C = volume.rgb + height.rgb*volume.T + background*height.T*volume.T`; RGB blending uses `One/InvSrcAlpha` |
-| Environment destination coverage | `A_out = 1-T + A_in*T`, with the combined height/volume `T` for fog |
+| Fog (`Fog.hlsl`, `FogPass.cpp`)                                     | `C = volume.rgb + height.rgb*volume.T + background*height.T*volume.T`; RGB blending uses `One/InvSrcAlpha`          |
+| Environment destination coverage                                    | `A_out = 1-T + A_in*T`, with the combined height/volume `T` for fog                                                 |
 
 Deferred and forward AP use the same radiance transfer. No opacity division or
 threshold is needed. Alpha blending remains `One/InvSrcAlpha`, so the correction
@@ -1820,8 +1819,7 @@ copies only the original 80-byte prefix.
 
 The allocation is 384 bytes. The 16 bytes at 128 capture opaque SceneColor before
 sky/AP/fog/translucency: maximum absolute pre-exposed RGB at 128, flags at 132
-(recorded=1, nonfinite=2, negative RGB=4), checked-pixel count at 136 and zero at
-140. The immutable frame P defines these units. The exposure pass reuses its
+(recorded=1, nonfinite=2, negative RGB=4), checked-pixel count at 136 and zero at 140. The immutable frame P defines these units. The exposure pass reuses its
 clear/maximum pipelines with evaluator flag bit 5, reducing one full RGBA32
 input read in 8x8 groups. No new texture or buffer is allocated. Nonfinite input
 uses existing source-failure reporting before metering; negative RGB is recorded

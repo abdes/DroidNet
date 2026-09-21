@@ -170,15 +170,15 @@ determined by the type of token encountered. The main states are:
 
 **Summary Table:**
 
-| State | Purpose | Typical Next State(s) |
-| --- | --- | --- |
-| InitialState | Entry, command/option/positional detection | IdentifyCommand, ParseOptions |
-| IdentifyCommandState | Match command path | ParseOptions, Error, Final |
-| ParseOptionsState | Parse options/positionals | ParseShort/LongOption, DashDash, Final |
-| ParseShortOptionState | Handle short options | ParseOptions, Error |
-| ParseLongOptionState | Handle long options | ParseOptions, Error |
-| DashDashState | Handle `--` (end of options) | ParseOptions, Final |
-| FinalState | End of input, finalize parsing | (none) |
+| State                 | Purpose                                    | Typical Next State(s)                  |
+| --------------------- | ------------------------------------------ | -------------------------------------- |
+| InitialState          | Entry, command/option/positional detection | IdentifyCommand, ParseOptions          |
+| IdentifyCommandState  | Match command path                         | ParseOptions, Error, Final             |
+| ParseOptionsState     | Parse options/positionals                  | ParseShort/LongOption, DashDash, Final |
+| ParseShortOptionState | Handle short options                       | ParseOptions, Error                    |
+| ParseLongOptionState  | Handle long options                        | ParseOptions, Error                    |
+| DashDashState         | Handle `--` (end of options)               | ParseOptions, Final                    |
+| FinalState            | End of input, finalize parsing             | (none)                                 |
 
 ### 3. Value Semantics
 
@@ -284,40 +284,40 @@ required by the project.
 
 ## TODOs and Open Work
 
-| Area/Feature | Status | Description |
-| --- | --- | --- |
-| CLI output width config | ✅ | Auto by default via `WithAutoOutputWidth()`, with `OutputWidth()` taking precedence. |
-| Global CLI options | ✅ | Configurable via `WithGlobalOptions`/`WithGlobalOption`, apply before any command (default or named), listed separately before command options; command options take precedence on conflicts. |
-| Help command (built-in) | ✅ | Built-in `help` command plus `-h/--help` option routing to the active command. |
-| Version command (built-in) | ✅ | Built-in `version` command plus `-v/--version` option on the default command. |
-| StoreTo/Finalize integration tests | ⏳ | Add end-to-end tests that verify `StoreTo`/`CallOnFinalValue` behavior during parsing. |
-| Value type parsers documentation | ✅ | Documented in [Detail/ParseValue.h](Detail/ParseValue.h). |
-| Value type parsers coverage | ✅ | Core numeric, bool, char, string-like, enums, and chrono durations are supported. |
-| Repeatable value parsing tests | ⏳ | Add tests for multiple occurrences and illegal repeats. |
-| Required value parsing tests | ⏳ | Add tests for missing required options/positionals without defaults. |
-| Callback interface refactor | ✅ | Per-value notifier (`CallOnEachValue`) and final notifier (`CallOnFinalValue`) are supported; per-value fires on each parsed occurrence, final fires after parsing/defaults. |
-| Multi-token value support | ⏳ | Support values that span multiple tokens (e.g., `--opt a b`). |
-| Notifiers/store-to finalization | ✅ | Final values are propagated after parsing via `Option::FinalizeValue`. |
-| Error type name reporting | ✅ | Invalid value errors include the expected type name. |
-| OptionValuesMap tests | ✅ | Comprehensive unit tests are present. |
-| Usage footer support | ✅ | CLI usage footer output and tests are implemented. |
-| Multiple command names | ⏳ | Add support and tests for commands with multiple names/aliases. |
-| Consolidate styled wrapping | ✅ | Unified styled text wrapping across CLI, command, and option printers. |
+| Area/Feature                       | Status | Description                                                                                                                                                                                   |
+| ---------------------------------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| CLI output width config            | ✅     | Auto by default via `WithAutoOutputWidth()`, with `OutputWidth()` taking precedence.                                                                                                          |
+| Global CLI options                 | ✅     | Configurable via `WithGlobalOptions`/`WithGlobalOption`, apply before any command (default or named), listed separately before command options; command options take precedence on conflicts. |
+| Help command (built-in)            | ✅     | Built-in `help` command plus `-h/--help` option routing to the active command.                                                                                                                |
+| Version command (built-in)         | ✅     | Built-in `version` command plus `-v/--version` option on the default command.                                                                                                                 |
+| StoreTo/Finalize integration tests | ⏳     | Add end-to-end tests that verify `StoreTo`/`CallOnFinalValue` behavior during parsing.                                                                                                        |
+| Value type parsers documentation   | ✅     | Documented in [Detail/ParseValue.h](Detail/ParseValue.h).                                                                                                                                     |
+| Value type parsers coverage        | ✅     | Core numeric, bool, char, string-like, enums, and chrono durations are supported.                                                                                                             |
+| Repeatable value parsing tests     | ⏳     | Add tests for multiple occurrences and illegal repeats.                                                                                                                                       |
+| Required value parsing tests       | ⏳     | Add tests for missing required options/positionals without defaults.                                                                                                                          |
+| Callback interface refactor        | ✅     | Per-value notifier (`CallOnEachValue`) and final notifier (`CallOnFinalValue`) are supported; per-value fires on each parsed occurrence, final fires after parsing/defaults.                  |
+| Multi-token value support          | ⏳     | Support values that span multiple tokens (e.g., `--opt a b`).                                                                                                                                 |
+| Notifiers/store-to finalization    | ✅     | Final values are propagated after parsing via `Option::FinalizeValue`.                                                                                                                        |
+| Error type name reporting          | ✅     | Invalid value errors include the expected type name.                                                                                                                                          |
+| OptionValuesMap tests              | ✅     | Comprehensive unit tests are present.                                                                                                                                                         |
+| Usage footer support               | ✅     | CLI usage footer output and tests are implemented.                                                                                                                                            |
+| Multiple command names             | ⏳     | Add support and tests for commands with multiple names/aliases.                                                                                                                               |
+| Consolidate styled wrapping        | ✅     | Unified styled text wrapping across CLI, command, and option printers.                                                                                                                        |
 
 ---
 
 ## Future Enhancements
 
-| Priority | Effort | Enhancement | Description |
-| --- | --- | --- | --- |
-| 1 | Medium | Shell completion generation | Generate shell completion scripts (bash, zsh, fish, PowerShell) from the CLI definition. |
-| 2 | Low | Environment variable support | Enable options to be set via environment variables, with clear precedence rules. |
-| 3 | Medium | Config file integration | Allow loading default option values from configuration files (YAML, JSON, INI), merging with CLI arguments. |
-| 4 | High | Rich error reporting & suggestions | Implement typo correction and suggestions for mistyped commands/options. Provide contextual error messages with actionable hints. |
-| 5 | Medium | Advanced validation and constraints | Allow declarative constraints (e.g., mutually exclusive options, required groups, value ranges) with clear error reporting. |
-| 6 | Medium | Interactive mode | Optionally prompt for missing required arguments interactively if not provided on the command line. |
-| 7 | Low | Command/option deprecation | Mark commands or options as deprecated, with warnings and migration hints. |
-| 8 | High | Dynamic option/command registration | Support registering commands and options at runtime (e.g., for plugin systems or extensible tools). |
+| Priority | Effort | Enhancement                         | Description                                                                                                                       |
+| -------- | ------ | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| 1        | Medium | Shell completion generation         | Generate shell completion scripts (bash, zsh, fish, PowerShell) from the CLI definition.                                          |
+| 2        | Low    | Environment variable support        | Enable options to be set via environment variables, with clear precedence rules.                                                  |
+| 3        | Medium | Config file integration             | Allow loading default option values from configuration files (YAML, JSON, INI), merging with CLI arguments.                       |
+| 4        | High   | Rich error reporting & suggestions  | Implement typo correction and suggestions for mistyped commands/options. Provide contextual error messages with actionable hints. |
+| 5        | Medium | Advanced validation and constraints | Allow declarative constraints (e.g., mutually exclusive options, required groups, value ranges) with clear error reporting.       |
+| 6        | Medium | Interactive mode                    | Optionally prompt for missing required arguments interactively if not provided on the command line.                               |
+| 7        | Low    | Command/option deprecation          | Mark commands or options as deprecated, with warnings and migration hints.                                                        |
+| 8        | High   | Dynamic option/command registration | Support registering commands and options at runtime (e.g., for plugin systems or extensible tools).                               |
 
 ---
 

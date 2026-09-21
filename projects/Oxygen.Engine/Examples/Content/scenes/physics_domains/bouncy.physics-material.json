@@ -1,10 +1,10 @@
 {
-    "name": "bouncy",
-    "virtual_path": "/.cooked/Physics/Materials/bouncy.opmat",
-    "static_friction": 0.15,
-    "dynamic_friction": 0.15,
-    "restitution": 0.85,
-    "density": 500.0,
-    "combine_mode_friction": "min",
-    "combine_mode_restitution": "max"
+  "name": "bouncy",
+  "virtual_path": "/.cooked/Physics/Materials/bouncy.opmat",
+  "static_friction": 0.15,
+  "dynamic_friction": 0.15,
+  "restitution": 0.85,
+  "density": 500.0,
+  "combine_mode_friction": "min",
+  "combine_mode_restitution": "max"
 }

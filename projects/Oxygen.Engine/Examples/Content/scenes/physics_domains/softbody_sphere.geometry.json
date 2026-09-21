@@ -1,51 +1,35 @@
 {
-    "name": "softbody_sphere",
-    "bounds": {
-        "min": [
-            -0.5,
-            -0.5,
-            -0.5
-        ],
-        "max": [
-            0.5,
-            0.5,
-            0.5
-        ]
-    },
-    "lods": [
-        {
-            "name": "softbody_sphere_lod0",
-            "mesh_type": "procedural",
-            "bounds": {
-                "min": [
-                    -0.5,
-                    -0.5,
-                    -0.5
-                ],
-                "max": [
-                    0.5,
-                    0.5,
-                    0.5
-                ]
-            },
-            "procedural": {
-                "generator": "IcoSphere",
-                "mesh_name": "SoftBodySphere",
-                "params": {
-                    "subdivision_level": 2
-                }
-            },
-            "submeshes": [
-                {
-                    "name": "softbody_surface",
-                    "material_ref": "/.cooked/Materials/softbody_pink.omat",
-                    "views": [
-                        {
-                            "view_ref": "__all__"
-                        }
-                    ]
-                }
-            ]
+  "name": "softbody_sphere",
+  "bounds": {
+    "min": [-0.5, -0.5, -0.5],
+    "max": [0.5, 0.5, 0.5]
+  },
+  "lods": [
+    {
+      "name": "softbody_sphere_lod0",
+      "mesh_type": "procedural",
+      "bounds": {
+        "min": [-0.5, -0.5, -0.5],
+        "max": [0.5, 0.5, 0.5]
+      },
+      "procedural": {
+        "generator": "IcoSphere",
+        "mesh_name": "SoftBodySphere",
+        "params": {
+          "subdivision_level": 2
         }
-    ]
+      },
+      "submeshes": [
+        {
+          "name": "softbody_surface",
+          "material_ref": "/.cooked/Materials/softbody_pink.omat",
+          "views": [
+            {
+              "view_ref": "__all__"
+            }
+          ]
+        }
+      ]
+    }
+  ]
 }

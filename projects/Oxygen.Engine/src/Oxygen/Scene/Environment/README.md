@@ -1,6 +1,6 @@
 # Scene Environment (Scene-Global)
 
-This folder contains the *scene-global* environment model for Oxygen.
+This folder contains the _scene-global_ environment model for Oxygen.
 
 - `SceneEnvironment` is a standalone `oxygen::Composition` that hosts a
   variable set of environment systems.

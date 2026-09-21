@@ -10,7 +10,7 @@ subsystem. They are defined here once and never re-litigated.
 #### 1 — Asset Identity
 
 Every authored asset has a single, permanent identity expressed as its
-*canonical virtual path* — a source-rooted, slash-delimited UTF-8 string.
+_canonical virtual path_ — a source-rooted, slash-delimited UTF-8 string.
 The virtual path is the source of truth for humans: it is what authors write,
 what version-control tracks, and what tools display. The `VirtualPathResolver`
 maps virtual paths to `AssetKey` values by consulting all mounted sources in
@@ -56,13 +56,13 @@ of all consuming systems undefined.
 Mount roots are not limited to a fixed allowlist: any valid identifier is
 accepted, plus the special core token `/.cooked`.
 
-| Mount root | Source type | Example |
-| --- | --- | --- |
-| `/Engine` | Built-in engine assets (shipped with the engine binary, read-only) | `/Engine/Physics/Materials/Default.opmat` |
-| `/Game` | Project-specific game assets (the primary authoring namespace) | `/Game/Physics/Materials/Rubber.opmat` |
-| `/.cooked` | Active loose cooked output root (`container.index.bin`); used by the editor and cooker tools during development | `/.cooked/Physics/Materials/Rubber.opmat` |
-| `/Pak` | Conventional PAK namespace root; teams often place a package/mount identifier in the next segment | `/Pak/DLC01/Game/Physics/Materials/Lava.opmat` |
-| `/Custom` | User-defined root identifier | `/Custom/Physics/Materials/Rubber.opmat` |
+| Mount root | Source type                                                                                                     | Example                                        |
+| ---------- | --------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| `/Engine`  | Built-in engine assets (shipped with the engine binary, read-only)                                              | `/Engine/Physics/Materials/Default.opmat`      |
+| `/Game`    | Project-specific game assets (the primary authoring namespace)                                                  | `/Game/Physics/Materials/Rubber.opmat`         |
+| `/.cooked` | Active loose cooked output root (`container.index.bin`); used by the editor and cooker tools during development | `/.cooked/Physics/Materials/Rubber.opmat`      |
+| `/Pak`     | Conventional PAK namespace root; teams often place a package/mount identifier in the next segment               | `/Pak/DLC01/Game/Physics/Materials/Lava.opmat` |
+| `/Custom`  | User-defined root identifier                                                                                    | `/Custom/Physics/Materials/Rubber.opmat`       |
 
 Resolution priority: patch PAKs beat base PAKs, base PAKs beat loose cooked
 roots, loose cooked roots beat engine built-ins. When multiple sources map
@@ -92,32 +92,32 @@ different `AssetKey` values, even if their content is identical.
 
 **Naming conventions.**
 
-| Segment | Convention | Examples |
-| --- | --- | --- |
-| `MountRoot` | Identifier `[A-Za-z_][A-Za-z0-9_-]*` or the special token `.cooked` | `/Engine`, `/Game`, `/.cooked`, `/Custom`, `/game` |
-| `Domain` | **PascalCase**, one word, broad functional area that owns the asset class | `Physics`, `Rendering`, `Audio`, `Animation`, `World`, `UI` |
-| `Category` | **PascalCase**, one or two words, logical sub-grouping within the domain | `Materials`, `Shapes`, `Joints`, `Vehicles`, `SoftBodies`, `Characters`, `Scenes` |
-| `Subcategory` | **PascalCase**, optional, for large categories | `Wheeled`, `Tracked`, `Ragdolls` |
-| `AssetName` | **PascalCase**, descriptive noun or noun phrase unique within its category | `Rubber`, `BoulderHull`, `HingeDoor`, `PlayerCapsule` |
-| `TypeSuffix` | **Oxygen descriptor extension** (lowercase, dot-prefixed); determines which descriptor reader handles the file — see table below | `.opmat`, `.ocshape`, `.opscene` |
+| Segment       | Convention                                                                                                                       | Examples                                                                          |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `MountRoot`   | Identifier `[A-Za-z_][A-Za-z0-9_-]*` or the special token `.cooked`                                                              | `/Engine`, `/Game`, `/.cooked`, `/Custom`, `/game`                                |
+| `Domain`      | **PascalCase**, one word, broad functional area that owns the asset class                                                        | `Physics`, `Rendering`, `Audio`, `Animation`, `World`, `UI`                       |
+| `Category`    | **PascalCase**, one or two words, logical sub-grouping within the domain                                                         | `Materials`, `Shapes`, `Joints`, `Vehicles`, `SoftBodies`, `Characters`, `Scenes` |
+| `Subcategory` | **PascalCase**, optional, for large categories                                                                                   | `Wheeled`, `Tracked`, `Ragdolls`                                                  |
+| `AssetName`   | **PascalCase**, descriptive noun or noun phrase unique within its category                                                       | `Rubber`, `BoulderHull`, `HingeDoor`, `PlayerCapsule`                             |
+| `TypeSuffix`  | **Oxygen descriptor extension** (lowercase, dot-prefixed); determines which descriptor reader handles the file — see table below | `.opmat`, `.ocshape`, `.opscene`                                                  |
 
 The type suffix is the Oxygen cooked descriptor extension, not an arbitrary
 convention. The following suffixes are defined by `LooseCookedLayout`:
 
-| Type suffix | Asset class |
-| --- | --- |
-| `.opmat` | Physics material |
-| `.ocshape` | Collision shape |
-| `.opscene` | Physics scene sidecar |
-| `.opres` | Physics backend resource blob |
-| `.oscene` | Scene |
-| `.ogeo` | Geometry |
-| `.omat` | Render material |
-| `.otex` | Texture |
-| `.obuf` | Buffer |
-| `.oscript` | Script |
-| `.oiact` | Input action |
-| `.oimap` | Input mapping context |
+| Type suffix | Asset class                   |
+| ----------- | ----------------------------- |
+| `.opmat`    | Physics material              |
+| `.ocshape`  | Collision shape               |
+| `.opscene`  | Physics scene sidecar         |
+| `.opres`    | Physics backend resource blob |
+| `.oscene`   | Scene                         |
+| `.ogeo`     | Geometry                      |
+| `.omat`     | Render material               |
+| `.otex`     | Texture                       |
+| `.obuf`     | Buffer                        |
+| `.oscript`  | Script                        |
+| `.oiact`    | Input action                  |
+| `.oimap`    | Input mapping context         |
 
 **Examples of valid canonical virtual paths:**
 
@@ -182,12 +182,12 @@ legitimate use of content hashes.
 References between assets use different mechanisms at each layer, and these
 must not be mixed across layers:
 
-| Layer | Reference type | Lifecycle | Breaks when |
-| --- | --- | --- | --- |
-| **L1 Authoring** | Canonical virtual path (human-readable string) | Persistent across sessions | Asset renamed or moved |
-| **L2 Cooked** | `AssetKey` (xxHash3-128 of virtual path) | Persistent — survives cook reruns | Virtual path changes (intentional — a rename is a new asset) |
+| Layer                             | Reference type                                          | Lifecycle                                                          | Breaks when                                                  |
+| --------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------ |
+| **L1 Authoring**                  | Canonical virtual path (human-readable string)          | Persistent across sessions                                         | Asset renamed or moved                                       |
+| **L2 Cooked**                     | `AssetKey` (xxHash3-128 of virtual path)                | Persistent — survives cook reruns                                  | Virtual path changes (intentional — a rename is a new asset) |
 | **L2 Within a sealed collection** | Positional index (`uint32_t` offset into a fixed array) | Valid only within that specific sealed, version-stamped collection | Cook order changes; partial re-cook; identity check mismatch |
-| **L3 Runtime** | Generational handle (see Convention 4) | Session-scoped; never persisted | Session ends |
+| **L3 Runtime**                    | Generational handle (see Convention 4)                  | Session-scoped; never persisted                                    | Session ends                                                 |
 
 Positional indices are the most fragile reference type. They are permitted
 **only within a single sealed, version-stamped collection** and must always be
@@ -220,15 +220,15 @@ container asset catalog are both `AssetKey`-keyed structures.
 The following table documents the per-asset sealed collections that correctly
 use positional indices, and explains why each one is safe:
 
-| # | Collection | What the index addresses | Why it is safe |
-| --- | --- | --- | --- |
-| 1 | **Scene node array** — the flat ordered list of all nodes within one cooked scene asset | Every physics binding record, constraint, and vehicle wheel record addresses a scene node by its ordinal position in this array | ✅ **By design** — a scene is an asset; every time any part of the scene source changes, the entire scene is re-cooked, producing a new node array from scratch |
-| 2 | **Physics scene sidecar** — the complete per-scene mapping of node positions to physics component settings | Per-component-type sub-table offsets are positional within the sidecar blob; scene node indices in every binding record are positional within row 1 | ✅ **By design** — the sidecar is a per-scene asset paired 1:1 with its scene; any change to the scene or to any physics component in it triggers a full re-cook of the sidecar |
-| 3 | **Vehicle wheel topology table** — the array of wheel-to-axle assignments embedded within the sidecar | Each vehicle binding claims a contiguous slice (start + count) in the shared wheel array; each element maps a wheel node to its axle and lateral side | ✅ **By design** — wheel topology lives inside the sidecar; when wheel configuration changes, the vehicle is re-cooked, which re-cooks the sidecar in its entirety |
-| 4 | **Cooked shape blob** — the opaque binary produced by the physics backend's shape cooking API for one shape asset | Within the blob: child shape ordinals in a compound shape, vertex/triangle indices in a mesh shape, height-field row/column addresses, sub-shape ID hierarchies | ✅ **By design** — each shape is an independent asset cooked atomically in one pass; the backend provides no patch API |
-| 5 | **Cooked soft-body topology blob** — the opaque binary encoding the particle constraint graph for one soft-body asset | Within the blob: particle ordinals in edge, volume, dihedral-bend, and tether constraints; pinned-particle list; per-particle material slot ordinal | ✅ **By design** — produced in one pass from the source mesh; any edit triggers a full recook |
-| 6 | **Cooked constraint blob** — the opaque binary encoding the settings for one joint or constraint asset | Within the blob: per-axis parameter arrays (limits, motors, springs); where the constraint references sub-shapes of a compound body, those sub-shape IDs are positional within the companion shape blob (row 4) | ✅ **By design** — produced atomically per asset; if the companion shape blob is re-cooked and its sub-shape ordering changes, this blob must also be re-cooked — a dependency tracking obligation, not a patching problem |
-| 7 | **Cooked vehicle settings blob** — the opaque binary encoding driveline and chassis parameters for one vehicle asset | Within the blob: torque-curve sample arrays, per-gear ratio arrays, per-axle differential and anti-roll-bar parameter arrays | ✅ **By design** — produced atomically per asset; axle or gear count changes require a full recook because the backend provides no partial-update API |
+| #   | Collection                                                                                                            | What the index addresses                                                                                                                                                                                        | Why it is safe                                                                                                                                                                                                             |
+| --- | --------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | **Scene node array** — the flat ordered list of all nodes within one cooked scene asset                               | Every physics binding record, constraint, and vehicle wheel record addresses a scene node by its ordinal position in this array                                                                                 | ✅ **By design** — a scene is an asset; every time any part of the scene source changes, the entire scene is re-cooked, producing a new node array from scratch                                                            |
+| 2   | **Physics scene sidecar** — the complete per-scene mapping of node positions to physics component settings            | Per-component-type sub-table offsets are positional within the sidecar blob; scene node indices in every binding record are positional within row 1                                                             | ✅ **By design** — the sidecar is a per-scene asset paired 1:1 with its scene; any change to the scene or to any physics component in it triggers a full re-cook of the sidecar                                            |
+| 3   | **Vehicle wheel topology table** — the array of wheel-to-axle assignments embedded within the sidecar                 | Each vehicle binding claims a contiguous slice (start + count) in the shared wheel array; each element maps a wheel node to its axle and lateral side                                                           | ✅ **By design** — wheel topology lives inside the sidecar; when wheel configuration changes, the vehicle is re-cooked, which re-cooks the sidecar in its entirety                                                         |
+| 4   | **Cooked shape blob** — the opaque binary produced by the physics backend's shape cooking API for one shape asset     | Within the blob: child shape ordinals in a compound shape, vertex/triangle indices in a mesh shape, height-field row/column addresses, sub-shape ID hierarchies                                                 | ✅ **By design** — each shape is an independent asset cooked atomically in one pass; the backend provides no patch API                                                                                                     |
+| 5   | **Cooked soft-body topology blob** — the opaque binary encoding the particle constraint graph for one soft-body asset | Within the blob: particle ordinals in edge, volume, dihedral-bend, and tether constraints; pinned-particle list; per-particle material slot ordinal                                                             | ✅ **By design** — produced in one pass from the source mesh; any edit triggers a full recook                                                                                                                              |
+| 6   | **Cooked constraint blob** — the opaque binary encoding the settings for one joint or constraint asset                | Within the blob: per-axis parameter arrays (limits, motors, springs); where the constraint references sub-shapes of a compound body, those sub-shape IDs are positional within the companion shape blob (row 4) | ✅ **By design** — produced atomically per asset; if the companion shape blob is re-cooked and its sub-shape ordering changes, this blob must also be re-cooked — a dependency tracking obligation, not a patching problem |
+| 7   | **Cooked vehicle settings blob** — the opaque binary encoding driveline and chassis parameters for one vehicle asset  | Within the blob: torque-curve sample arrays, per-gear ratio arrays, per-axle differential and anti-roll-bar parameter arrays                                                                                    | ✅ **By design** — produced atomically per asset; axle or gear count changes require a full recook because the backend provides no partial-update API                                                                      |
 
 **Cross-collection boundary violations** — the following uses are always wrong
 regardless of version matching:
@@ -246,7 +246,7 @@ regardless of version matching:
 **Contract V-1 — Virtual path and `AssetKey` references carry no version and
 require none.**
 
-A virtual path resolves at load time to the *current* version of the
+A virtual path resolves at load time to the _current_ version of the
 referenced asset — whatever is presently cooked and mounted. The path is an
 eternal name; the binary content behind it varies across cook runs. This is
 correct and intentional:
@@ -266,7 +266,7 @@ matches the one a consumer expected.
 **Contract V-2 — A positional index requires no generation stamp, provided it
 is confined to within its regeneration unit.**
 
-A *regeneration unit* is a set of artifacts always produced together in a
+A _regeneration unit_ is a set of artifacts always produced together in a
 single atomic cook pass. Because all arrays within a unit are produced
 together, no cook run can leave an index stale while the indexed collection
 is updated — the staleness scenario is structurally impossible, not merely
@@ -275,13 +275,13 @@ validation ceremony are needed for within-unit indices.
 
 The regeneration units in the physics pipeline are:
 
-| Regeneration unit | Artifacts produced together | Within-unit positional indices |
-| --- | --- | --- |
-| **Scene package** | Scene asset + its paired physics sidecar (including the wheel topology table embedded in the sidecar) | Scene node indices in all sidecar binding records; wheel slice offsets within the sidecar |
-| **Cooked shape asset** | One cooked shape blob | Child shape ordinals, vertex/triangle indices, height-field addresses, sub-shape IDs — all internal to the blob |
-| **Cooked soft-body asset** | One cooked soft-body topology blob | Particle ordinals in edge, volume, bend, and tether constraints; pinned-particle list; per-particle material slot |
-| **Cooked constraint asset** | One cooked constraint blob | Per-axis parameter arrays internal to the blob |
-| **Cooked vehicle asset** | One cooked vehicle settings blob | Torque-curve, gear-ratio, axle parameter arrays internal to the blob |
+| Regeneration unit           | Artifacts produced together                                                                           | Within-unit positional indices                                                                                    |
+| --------------------------- | ----------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| **Scene package**           | Scene asset + its paired physics sidecar (including the wheel topology table embedded in the sidecar) | Scene node indices in all sidecar binding records; wheel slice offsets within the sidecar                         |
+| **Cooked shape asset**      | One cooked shape blob                                                                                 | Child shape ordinals, vertex/triangle indices, height-field addresses, sub-shape IDs — all internal to the blob   |
+| **Cooked soft-body asset**  | One cooked soft-body topology blob                                                                    | Particle ordinals in edge, volume, bend, and tether constraints; pinned-particle list; per-particle material slot |
+| **Cooked constraint asset** | One cooked constraint blob                                                                            | Per-axis parameter arrays internal to the blob                                                                    |
+| **Cooked vehicle asset**    | One cooked vehicle settings blob                                                                      | Torque-curve, gear-ratio, axle parameter arrays internal to the blob                                              |
 
 **Contract V-3 — Any reference that crosses a regeneration unit boundary must
 use `AssetKey`, never a positional index.**
@@ -313,8 +313,8 @@ Examples of correctly structured cross-unit references:
 #### 3 — Integrity
 
 A content hash is a fingerprint of a specific, sealed artifact. Its sole
-purpose is to answer: *"Has this artifact been altered since it was
-produced?"* It serves integrity verification. It is not an identity. It is
+purpose is to answer: _"Has this artifact been altered since it was
+produced?"_ It serves integrity verification. It is not an identity. It is
 not a reference. It is never stored as the primary key of anything.
 
 **The standardized integrity algorithm for all individual cooked artifacts in Oxygen is
@@ -324,9 +324,9 @@ integrity purposes. Specifically:
 - CRC variants (CRC32, CRC64) are **prohibited** for asset integrity. CRC is an
   error-detection code designed for transmission noise; it can be
   intentionally collided by anyone with modest compute and provides no
-  tamper-evidence whatsoever. *(Note: The monolithic PAK container file itself
+  tamper-evidence whatsoever. _(Note: The monolithic PAK container file itself
   still correctly utilizes CRC32 as a fast file-level checksum; this prohibition
-  applies exclusively to the individual artifacts/assets inside the payload).*
+  applies exclusively to the individual artifacts/assets inside the payload)._
 - MD5 and SHA-1 are **prohibited** for integrity. Both are cryptographically
   broken.
 - xxHash and MurmurHash variants are **not integrity hashes**. They are fast
@@ -349,12 +349,12 @@ the backends themselves control their object lifetimes and there is no
 cross-backend abstraction that dictates a generational packed integer for all
 types. The actual internal representations are:
 
-| Object type | Jolt backend | PhysX backend |
-  | --- | --- | --- |
-  | **Rigid body / soft body** | `BodyID` — Jolt's own generational handle: 23-bit body index + 8-bit sequence number, owned and managed by `BodyInterface`. Staleness is detectable natively; no additional infrastructure needed. | `PxRigidActor*` — raw pointer. Session teardown destroys all objects simultaneously; mid-session staleness (body removed during gameplay) is the owning system's responsibility. |
-  | **Character controller** | `CharacterVirtual*` or `Character*` — ref-counted pointer; no Jolt handle type. Ref-counting prevents dangling access. Sim-membership staleness is the owning system's responsibility. | `PxController*` — raw pointer; same responsibility model as PhysX rigid body. |
-  | **Constraint / joint** | `RefConst<Constraint>` — ref-counted pointer; Jolt provides no constraint handle type. Ref-counting prevents dangling access; the owning system must not use the reference after removing the constraint from the simulation. | `PxJoint*` — raw pointer; owning system's responsibility. |
-  | **Vehicle** | `VehicleConstraint*` — a `Constraint` subclass; same ref-counted pointer model as constraints. | `PxVehicle*` — raw pointer; owning system's responsibility. |
+| Object type                | Jolt backend                                                                                                                                                                                                                  | PhysX backend                                                                                                                                                                    |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Rigid body / soft body** | `BodyID` — Jolt's own generational handle: 23-bit body index + 8-bit sequence number, owned and managed by `BodyInterface`. Staleness is detectable natively; no additional infrastructure needed.                            | `PxRigidActor*` — raw pointer. Session teardown destroys all objects simultaneously; mid-session staleness (body removed during gameplay) is the owning system's responsibility. |
+| **Character controller**   | `CharacterVirtual*` or `Character*` — ref-counted pointer; no Jolt handle type. Ref-counting prevents dangling access. Sim-membership staleness is the owning system's responsibility.                                        | `PxController*` — raw pointer; same responsibility model as PhysX rigid body.                                                                                                    |
+| **Constraint / joint**     | `RefConst<Constraint>` — ref-counted pointer; Jolt provides no constraint handle type. Ref-counting prevents dangling access; the owning system must not use the reference after removing the constraint from the simulation. | `PxJoint*` — raw pointer; owning system's responsibility.                                                                                                                        |
+| **Vehicle**                | `VehicleConstraint*` — a `Constraint` subclass; same ref-counted pointer model as constraints.                                                                                                                                | `PxVehicle*` — raw pointer; owning system's responsibility.                                                                                                                      |
 
 **Shapes are not live session objects.** A cooked shape is an asset,
 identified at L2 by its `AssetKey` and shared across any number of bodies
@@ -401,13 +401,13 @@ is used internally:
 - **L1 — Authoring:** Editable, human-authored source truth. The designer or
   artist works entirely within this layer; nothing here is opaque.
   - **Collision shapes** in authoring space. Each shape carries:
-    - *Type* — one of: Sphere, Capsule, Box, Cylinder, Cone, Convex Hull,
+    - _Type_ — one of: Sphere, Capsule, Box, Cylinder, Cone, Convex Hull,
       Triangle Mesh, Height Field, Plane, World Boundary, or Compound (a
       hierarchy of the above).
-    - *Analytic parameters* — radius, half-extents, half-height, normal and
+    - _Analytic parameters_ — radius, half-extents, half-height, normal and
       distance (plane), height-field resolution and height scale, or
       world-boundary limits, as appropriate for the type.
-    - *Local transform* — position, orientation (quaternion), and uniform or
+    - _Local transform_ — position, orientation (quaternion), and uniform or
       per-axis scale relative to the owning scene node. This is a body-space
       offset, distinct from the scene node's world transform: at hydration the
       two compose (`world_shape = node_world × shape_local`) so the physics
@@ -415,59 +415,59 @@ is used internally:
       the scene node transform — it exists to correct pivot mismatches between
       the visual mesh and the collision volume, and to position each child
       within a compound shape independently.
-    - *Own collision layer* — a single category identifier (integer index or
+    - _Own collision layer_ — a single category identifier (integer index or
       named enum value) declaring which layer this shape belongs to. An object
       belongs to exactly one layer; multi-layer membership is not supported by
       design, as it produces ambiguous collision semantics that the engine
       cannot resolve without author intent.
-    - *Target collision mask* — a bitmask of layer indices this shape tests
+    - _Target collision mask_ — a bitmask of layer indices this shape tests
       collision against. Collision between two shapes A and B fires when
       `(1 << B.layer) & A.mask` is non-zero, and optionally the symmetric
       check on B's mask (engine policy). Asymmetric filtering is intentional:
       a sensor can listen to the Player layer without Player needing to
       reciprocate.
-    - *Sensor flag* — marks the shape as a trigger volume that reports
+    - _Sensor flag_ — marks the shape as a trigger volume that reports
       overlaps without generating contact impulses.
-    - *Material reference* — asset key of the physics material that governs
+    - _Material reference_ — asset key of the physics material that governs
       surface response for this shape.
   - **Physics materials.** Each material carries:
-    - *Static friction* — resistance to initiating slide (coefficient, 0–1+).
-    - *Dynamic friction* — resistance while sliding (coefficient, 0–1+).
-    - *Restitution* — coefficient of bounciness (0 = perfectly inelastic,
+    - _Static friction_ — resistance to initiating slide (coefficient, 0–1+).
+    - _Dynamic friction_ — resistance while sliding (coefficient, 0–1+).
+    - _Restitution_ — coefficient of bounciness (0 = perfectly inelastic,
       1 = perfectly elastic).
-    - *Density* — kg/m³, used to derive mass from shape volume when no
+    - _Density_ — kg/m³, used to derive mass from shape volume when no
       explicit mass is authored.
-    - *Friction combine mode* — how two colliding materials' friction values
+    - _Friction combine mode_ — how two colliding materials' friction values
       are blended: Average, Minimum, Maximum, or Multiply.
-    - *Restitution combine mode* — same four options, applied independently
+    - _Restitution combine mode_ — same four options, applied independently
       to restitution.
   - **Rigid bodies.** Each record carries:
-    - *Body type* — Static (immovable, zero cost), Dynamic (fully simulated),
+    - _Body type_ — Static (immovable, zero cost), Dynamic (fully simulated),
       or Kinematic (script/animation-driven; pushes dynamics, is not pushed).
-    - *Collision detection quality* — Discrete (default, one overlap test per
+    - _Collision detection quality_ — Discrete (default, one overlap test per
       step) or Linear Cast / Continuous (swept test, prevents tunnelling for
       fast-moving bodies).
-    - *Mass* — explicit kg value; 0 means infer from shape volume × density.
-    - *Center-of-mass override* — optional explicit CoM offset from the shape
+    - _Mass_ — explicit kg value; 0 means infer from shape volume × density.
+    - _Center-of-mass override_ — optional explicit CoM offset from the shape
       origin in local space; if absent the backend computes it from geometry.
-    - *Inertia tensor override* — optional diagonal inertia (I_x, I_y, I_z)
+    - _Inertia tensor override_ — optional diagonal inertia (I_x, I_y, I_z)
       in kg·m²; if absent the backend derives it from shape and mass.
-    - *Linear damping* — velocity decay coefficient per second (0 = no drag).
-    - *Angular damping* — angular velocity decay coefficient per second.
-    - *Gravity factor* — scalar multiplier on the scene gravity vector (1 =
+    - _Linear damping_ — velocity decay coefficient per second (0 = no drag).
+    - _Angular damping_ — angular velocity decay coefficient per second.
+    - _Gravity factor_ — scalar multiplier on the scene gravity vector (1 =
       normal, 0 = weightless, negative = anti-gravity).
-    - *Initial activation state* — Awake or Sleeping at spawn time.
-    - *Max linear velocity* — clamp on speed to prevent numerical explosion.
-    - *Max angular velocity* — clamp on spin rate.
-    - *Allowed degrees of freedom* — per-axis locks on linear and angular
+    - _Initial activation state_ — Awake or Sleeping at spawn time.
+    - _Max linear velocity_ — clamp on speed to prevent numerical explosion.
+    - _Max angular velocity_ — clamp on spin rate.
+    - _Allowed degrees of freedom_ — per-axis locks on linear and angular
       motion (e.g., freeze Y translation, freeze Z rotation) without using a
       joint.
-    - *Collision layer* and *collision mask* for body-level filtering.
-    - *Shape reference* — asset key of the collision shape.
-    - *Material reference* — per-body material override; takes precedence over
+    - _Collision layer_ and _collision mask_ for body-level filtering.
+    - _Shape reference_ — asset key of the collision shape.
+    - _Material reference_ — per-body material override; takes precedence over
       the per-shape material when present.
-    - *Sensor flag* — body-level override to make the entire body a trigger.
-    - *Backend-specific scalar fields:*
+    - _Sensor flag_ — body-level override to make the entire body a trigger.
+    - _Backend-specific scalar fields:_
       - Jolt: `mNumVelocityStepsOverride` — per-body velocity solver iteration
         override (0 = use world default); `mNumPositionStepsOverride` — same
         for position iterations.
@@ -480,23 +480,23 @@ is used internally:
     - Shape reference, material reference, collision layer, collision mask,
       and sensor flag. No mass or motion properties.
   - **Character controllers.** Each record carries:
-    - *Shape reference* — typically a capsule or tapered capsule.
-    - *Mass* — used for push forces against dynamic bodies.
-    - *Max slope angle* — steepest walkable surface incline (radians).
-    - *Step height* — maximum upward step the character can traverse without
+    - _Shape reference_ — typically a capsule or tapered capsule.
+    - _Mass_ — used for push forces against dynamic bodies.
+    - _Max slope angle_ — steepest walkable surface incline (radians).
+    - _Step height_ — maximum upward step the character can traverse without
       requiring a jump.
-    - *Step-down distance* — how far the character is snapped to ground before
+    - _Step-down distance_ — how far the character is snapped to ground before
       becoming airborne (for stairs and ramps).
-    - *Max strength* — maximum contact impulse the character can exert on
+    - _Max strength_ — maximum contact impulse the character can exert on
       dynamic obstacles.
-    - *Skin width* — separation margin from surfaces to avoid numerical
+    - _Skin width_ — separation margin from surfaces to avoid numerical
       contact jitter.
-    - *Predictive contact distance* — lookahead distance for speculative
+    - _Predictive contact distance_ — lookahead distance for speculative
       contact generation.
-    - *Collision layer* and *collision mask*.
-    - *Inner shape reference* — optional tighter inner shape for soft contact
+    - _Collision layer_ and _collision mask_.
+    - _Inner shape reference_ — optional tighter inner shape for soft contact
       response (Jolt inner-body pattern).
-    - *Backend-specific scalar fields:*
+    - _Backend-specific scalar fields:_
       - Jolt: `mPenetrationRecoverySpeed` — fraction of penetration depth
         resolved per update (0–1); `mMaxNumHits` — maximum contact manifold
         points retained per update; `mHitReductionCosMaxAngle` — cosine of
@@ -505,7 +505,7 @@ is used internally:
         contacts are generated (replaces Jolt's predictive contact distance at
         the backend level).
   - **Joints (constraints).** Each joint definition carries:
-    - *Constraint type* — one of:
+    - _Constraint type_ — one of:
       - **Fixed (Weld)** — all 6 DOF locked; optionally breakable.
       - **Point / Ball-and-Socket** — 3 translational DOF locked, 3
         rotational DOF free; swing and twist limits optional.
@@ -520,42 +520,42 @@ is used internally:
       - **Six-DOF (Configurable)** — each of the 6 DOF is independently set
         to Locked, Limited (with range), or Free; motors and springs per
         axis; the superset from which all others can be derived.
-    - *Body A* and *Body B* scene node references (B may be `kWorldAnchor`
+    - _Body A_ and _Body B_ scene node references (B may be `kWorldAnchor`
       for a fixed-world attachment). In L1 sidecar JSON this world anchor is
       authored as `node_index_b: "world"` (the `null` form is not part of the
       contract).
-    - *Constraint space* — World (anchor frames in world space) or Local
+    - _Constraint space_ — World (anchor frames in world space) or Local
       (anchor frames in each body's local space; preferred for stability).
-    - *Local frame A* — position and orientation of the constraint anchor
+    - _Local frame A_ — position and orientation of the constraint anchor
       point on body A, in A's local space.
-    - *Local frame B* — same for body B.
-    - *Limits* — per constrained axis: lower bound, upper bound.
-    - *Spring properties* — stiffness (N/m or N·m/rad) and damping ratio for
+    - _Local frame B_ — same for body B.
+    - _Limits_ — per constrained axis: lower bound, upper bound.
+    - _Spring properties_ — stiffness (N/m or N·m/rad) and damping ratio for
       spring-backed limits and position motors.
-    - *Motor settings* — per-axis motor mode (Off, Velocity, Position),
+    - _Motor settings_ — per-axis motor mode (Off, Velocity, Position),
       target velocity or target angle/position, max force or max torque,
       drive frequency and damping ratio for position mode.
-    - *Break threshold* — linear force and angular torque magnitude above
+    - _Break threshold_ — linear force and angular torque magnitude above
       which the constraint is permanently disabled (one-shot breakable joint).
-    - *Collision between connected bodies* — flag to enable or suppress
+    - _Collision between connected bodies_ — flag to enable or suppress
       collision detection between the two joined bodies.
-    - *Priority* (for constraint ordering in the solver).
-    - *Backend-specific scalar fields:*
+    - _Priority_ (for constraint ordering in the solver).
+    - _Backend-specific scalar fields:_
       - Jolt: `mNumVelocityStepsOverride`, `mNumPositionStepsOverride` — per-
         constraint solver iteration overrides (0 = world default).
       - PhysX: `invMassScale0`, `invMassScale1`, `invInertiaScale0`, `invInertiaScale1` — scale applied to the inverse
         mass/inertia of each connected body for this constraint's solve pass.
   - **Vehicles.** Each vehicle definition carries:
-    - *Chassis node reference* — the scene node that represents the dynamic
+    - _Chassis node reference_ — the scene node that represents the dynamic
       rigid body forming the main body.
-    - *Controller type* — Wheeled (independent suspension + differential) or
+    - _Controller type_ — Wheeled (independent suspension + differential) or
       Tracked (left/right track drives).
-    - *Engine settings:*
+    - _Engine settings:_
       - Max torque (N·m).
       - Minimum and maximum RPM.
       - Torque curve — a sampled (RPM, normalized torque) table.
       - Inertia (kg·m²) of the rotating mass.
-    - *Transmission settings:*
+    - _Transmission settings:_
       - Forward gear ratios (one entry per gear).
       - Reverse gear ratios.
       - Final drive ratio (applied after all gears).
@@ -563,43 +563,43 @@ is used internally:
       - Shift-up RPM and shift-down RPM thresholds for automatic mode.
       - Clutch engagement time (seconds).
       - Gear-shift mode — Auto or Manual.
-    - *Differentials* (one or more):
+    - _Differentials_ (one or more):
       - Left wheel index and right wheel index.
       - Differential ratio.
       - Left-to-right torque split (0 = all left, 1 = all right, 0.5 = even).
       - Limited-slip ratio — max/min axle speed ratio before redistributing
         torque to the slower wheel.
       - Engine torque ratio applied to this differential.
-    - *Anti-roll bars* (one or more):
+    - _Anti-roll bars_ (one or more):
       - Left wheel index and right wheel index.
       - Stiffness (N·m/rad).
-    - *Wheels* — ordered array of wheel definitions; every other structure in
+    - _Wheels_ — ordered array of wheel definitions; every other structure in
       this vehicle (differentials, anti-roll bars) references wheels by their
       zero-based index in this array. Each wheel entry carries:
-      - *Scene node reference* — the scene node driven by the suspension and
+      - _Scene node reference_ — the scene node driven by the suspension and
         spin transforms written back after each simulation step.
-      - *Axle index* — which axle this wheel belongs to (front = 0,
+      - _Axle index_ — which axle this wheel belongs to (front = 0,
         rear = 1, additional axles numbered sequentially).
-      - *Side* — Left or Right on the axle.
-      - *Suspension attachment point* — position in chassis local space where
+      - _Side_ — Left or Right on the axle.
+      - _Suspension attachment point_ — position in chassis local space where
         the suspension spring connects to the chassis.
-      - *Suspension direction* — unit vector in chassis local space (typically
+      - _Suspension direction_ — unit vector in chassis local space (typically
         downward) along which the wheel travels.
-      - *Suspension rest length* (m) — unloaded spring length.
-      - *Suspension preload length* (m) — initial spring compression at rest.
-      - *Suspension spring stiffness* (N/m).
-      - *Suspension spring damping* (N·s/m).
-      - *Maximum suspension force* (N).
-      - *Wheel radius* (m) and *width* (m).
-      - *Wheel rotational inertia* (kg·m²).
-      - *Steering axis* — unit vector in chassis local space about which
+      - _Suspension rest length_ (m) — unloaded spring length.
+      - _Suspension preload length_ (m) — initial spring compression at rest.
+      - _Suspension spring stiffness_ (N/m).
+      - _Suspension spring damping_ (N·s/m).
+      - _Maximum suspension force_ (N).
+      - _Wheel radius_ (m) and _width_ (m).
+      - _Wheel rotational inertia_ (kg·m²).
+      - _Steering axis_ — unit vector in chassis local space about which
         steering rotation is applied.
-      - *Maximum steering angle* (radians).
-      - *Max brake torque* (N·m) from service brake.
-      - *Max hand-brake torque* (N·m).
-      - *Longitudinal friction curve* — sampled (slip ratio, friction) table.
-      - *Lateral friction curve* — sampled (slip angle, friction) table.
-      - *Backend-specific:* Jolt `mWheelCastor` — castor angle in radians
+      - _Maximum steering angle_ (radians).
+      - _Max brake torque_ (N·m) from service brake.
+      - _Max hand-brake torque_ (N·m).
+      - _Longitudinal friction curve_ — sampled (slip ratio, friction) table.
+      - _Lateral friction curve_ — sampled (slip angle, friction) table.
+      - _Backend-specific:_ Jolt `mWheelCastor` — castor angle in radians
         affecting self-aligning torque; no PhysX equivalent.
 
       > **At L2 this array is split into two destinations.** The cooker does
@@ -618,77 +618,77 @@ is used internally:
       >   Oxygen treats the result as opaque.
 
   - **Soft bodies.** Each definition carries:
-    - *Source mesh reference* — asset key of the triangle mesh or tetrahedral
+    - _Source mesh reference_ — asset key of the triangle mesh or tetrahedral
       mesh from which the simulation particle graph is derived.
-    - *Edge (stretch) compliance* — XPBD compliance for edge-length
+    - _Edge (stretch) compliance_ — XPBD compliance for edge-length
       constraints; lower = stiffer, resists stretching along edges.
-    - *Shear compliance* — resistance to in-plane shear (cross-edge distance
+    - _Shear compliance_ — resistance to in-plane shear (cross-edge distance
       constraints between diagonally opposite vertices of quads).
-    - *Bend compliance* — resistance to out-of-plane bending; enforced via
+    - _Bend compliance_ — resistance to out-of-plane bending; enforced via
       dihedral angle constraints between adjacent triangle pairs.
-    - *Volume compliance* — stiffness of tetrahedron volume-preservation
+    - _Volume compliance_ — stiffness of tetrahedron volume-preservation
       constraints (XPBD) or Poisson ratio (FEM). Controls
       compressibility.
-    - *Pressure coefficient* — internal gas pressure driving volume expansion;
+    - _Pressure coefficient_ — internal gas pressure driving volume expansion;
       models inflated objects (balls, airbags).
-    - *Tether mode* — topology rule for long-range attachment constraints:
+    - _Tether mode_ — topology rule for long-range attachment constraints:
       None (no tethers), Euclidean (straight-line rest length),
       or Geodesic (surface-distance rest length).
-    - *Tether max-distance multiplier* — slack factor applied to tether rest
+    - _Tether max-distance multiplier_ — slack factor applied to tether rest
       lengths (1.0 = no slack, >1.0 = allows extra stretch before tether
       engages).
-    - *Global damping* — velocity damping applied uniformly to all particles
+    - _Global damping_ — velocity damping applied uniformly to all particles
       each substep.
-    - *Friction* and *restitution* — surface response when the soft body
+    - _Friction_ and _restitution_ — surface response when the soft body
       collides with rigid geometry.
-    - *Vertex radius* — per-particle collision margin (effectively the
+    - _Vertex radius_ — per-particle collision margin (effectively the
       particle's collision sphere radius).
-    - *Pinned vertices* — list of particle indices set to infinite inverse-
+    - _Pinned vertices_ — list of particle indices set to infinite inverse-
       mass; they act as fixed attachment points and are not moved by the
       solver. Used for hanging cloth or anchored ropes.
-    - *Kinematic driven vertices* — list of particle indices whose position is
+    - _Kinematic driven vertices_ — list of particle indices whose position is
       set externally each step (e.g., driven by a bone transform), acting as
       soft anchors that can move.
-    - *Solver iteration count* — number of constraint projection iterations
+    - _Solver iteration count_ — number of constraint projection iterations
       per simulation substep; more = stiffer but costlier.
-    - *Collision mesh reference* — optional separate, coarser collision mesh
+    - _Collision mesh reference_ — optional separate, coarser collision mesh
       for broad-phase queries (FEM backend). If absent, the simulation mesh
       serves as both.
-    - *Self-collision* — flag enabling particle-to-particle collision within
+    - _Self-collision_ — flag enabling particle-to-particle collision within
       the same soft body.
-    - *Backend-specific scalar settings* — authored as named fields per target
+    - _Backend-specific scalar settings_ — authored as named fields per target
       backend; stored at L2 as a discriminated union in the soft-body
       descriptor (not a blob). Only parameters with no engine-neutral
       equivalent are listed here:
       - **Jolt only:**
-        - *Velocity iteration count* — dedicated velocity-phase solver
+        - _Velocity iteration count_ — dedicated velocity-phase solver
           iterations (separate from the position iteration count above; Jolt
           exposes both independently; other backends do not).
-        - *LRA stiffness fraction* — long-range attachment stiffness as a
+        - _LRA stiffness fraction_ — long-range attachment stiffness as a
           fraction of edge stiffness, used when tether mode is Geodesic.
-        - *Skinned constraint enable flag* — whether Jolt's skinned rigging
+        - _Skinned constraint enable flag_ — whether Jolt's skinned rigging
           constraints (bone-driven vertex targets) are active.
       - **PhysX FEM only** (`PxFEMSoftBodyMaterial` properties):
-        - *Young's modulus* (Pa) — elastic stiffness of the FEM material;
+        - _Young's modulus_ (Pa) — elastic stiffness of the FEM material;
           replaces the XPBD compliance model with a physically-based continuum
           constitutive law. Has no equivalent in XPBD engines. L2 field name:
           `youngs_modulus`; PhysX setter: `setYoungsModulus()`.
-        - *Poisson's ratio* (0–0.5) — lateral-to-axial strain ratio
+        - _Poisson's ratio_ (0–0.5) — lateral-to-axial strain ratio
           controlling volume preservation in the FEM material; complements
           Young's modulus. No equivalent in XPBD. L1 JSON field name:
           `poisson_ratio`; L2 struct field name: `poissons` (mirrors
           `PxFEMSoftBodyMaterial::setPoissons()` exactly).
-        - *Dynamic friction* — friction coefficient applied when the soft body
+        - _Dynamic friction_ — friction coefficient applied when the soft body
           contacts rigid geometry. L2 field name: `dynamic_friction`; PhysX
           setter: `setDynamicFriction()`.
   - **Aggregates (groups / islands).** Each definition carries:
-    - *Root node reference* — scene node whose subtree defines group
+    - _Root node reference_ — scene node whose subtree defines group
       membership.
-    - *Max body count* — pre-allocation hint for the backend aggregate
+    - _Max body count_ — pre-allocation hint for the backend aggregate
       structure.
-    - *Self-collision filter* — whether bodies within the aggregate are
+    - _Self-collision filter_ — whether bodies within the aggregate are
       allowed to collide with each other.
-    - *Authority mode* — Simulation (physics engine owns and writes transforms)
+    - _Authority mode_ — Simulation (physics engine owns and writes transforms)
       or Command (external system drives transforms; physics reads them as
       kinematic targets).
 
@@ -700,11 +700,11 @@ is used internally:
   that share the same artifact definitions but differ in output layout:
 
   - **Loose Cooking (development mode)** — the cooker writes cooked artifacts
-    directly to a *LooseCookedLayout* directory tree on the local filesystem.
+    directly to a _LooseCookedLayout_ directory tree on the local filesystem.
     This layout is designed for fast iteration: re-cooking a single asset
     updates only the affected files without invalidating unrelated outputs.
     The layout consists of:
-    - *Index file* (`*.oxlcidx`) — a fixed-header binary catalogue with an
+    - _Index file_ (`*.oxlcidx`) — a fixed-header binary catalogue with an
       `IndexHeader` (magic, schema version, content version, flags), an
       `AssetEntry` table (one entry per cooked asset, carrying the asset key,
       descriptor-relative path, virtual path, asset type tag, and a SHA-256
@@ -712,14 +712,14 @@ is used internally:
       resource/data file, carrying a `FileKind` tag and container-relative
       path). The index is the single authoritative manifest for the layout; the
       runtime and PAK builder both consume it directly.
-    - *Asset descriptor files* — individual binary files, one per cooked
+    - _Asset descriptor files_ — individual binary files, one per cooked
       asset, at the paths recorded in the index `AssetEntry` table. For
       physics these are the `CollisionShapeAssetDesc`, `PhysicsMaterialAssetDesc`,
       `PhysicsSceneAssetDesc`, etc. records written to disk as flat binary.
-    - *Physics resource table file* (`FileKind::kPhysicsTable`) — a flat array
+    - _Physics resource table file_ (`FileKind::kPhysicsTable`) — a flat array
       of `PhysicsResourceDesc` entries — one per opaque backend blob —
       recording the content hash, size, and type tag for each.
-    - *Physics resource data file* (`FileKind::kPhysicsData`) — the
+    - _Physics resource data file_ (`FileKind::kPhysicsData`) — the
       concatenated opaque backend blobs (cooked shape binaries, constraint
       binary streams, soft-body settings) referenced by the table. Offsets in
       each `PhysicsResourceDesc` are absolute from the start of this file.
@@ -766,11 +766,11 @@ is used internally:
 
   The following fixed-layout records carry trailing arrays:
 
-  | Record | Trailing array | Element type |
-  | --- | --- | --- |
+  | Record                             | Trailing array                                                                                                | Element type                       |
+  | ---------------------------------- | ------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
   | Compound analytic shape descriptor | Child shape descriptors (one per sub-shape: shape type, inline params, local transform offset/rotation/scale) | Fixed-size child descriptor struct |
-  | Soft-body binding record | Pinned vertex index list | `uint32` (particle index) |
-  | Soft-body binding record | Kinematic-driven vertex index list | `uint32` (particle index) |
+  | Soft-body binding record           | Pinned vertex index list                                                                                      | `uint32` (particle index)          |
+  | Soft-body binding record           | Kinematic-driven vertex index list                                                                            | `uint32` (particle index)          |
 
   Vehicle wheels do **not** use a trailing array on the vehicle binding
   record. All wheel scene-node records for all vehicles in a scene are stored
@@ -805,16 +805,16 @@ is used internally:
     additionally carries a backend-specific scalar union for fields that have
     no engine-neutral equivalent:
 
-    | Binding record | Backend-specific scalar union (Jolt / PhysX) |
-    | --- | --- |
-    | Rigid body | Jolt: `mNumVelocityStepsOverride`, `mNumPositionStepsOverride` / PhysX: `solverIterationCounts.minVelocityIters`, `solverIterationCounts.minPositionIters`, `maxContactImpulse`, `contactReportThreshold` |
-    | Collider | — |
-    | Character | Jolt: `mPenetrationRecoverySpeed`, `mMaxNumHits`, `mHitReductionCosMaxAngle` / PhysX: `contactOffset` |
-    | Soft body | Jolt: `mNumVelocitySteps`, `mNumPositionSteps`, `mGravityFactor` / PhysX: `youngsModulus`, `poissons`, `dynamicFriction` |
-    | Joint | Jolt: `mNumVelocityStepsOverride`, `mNumPositionStepsOverride` / PhysX: `invMassScale0`, `invMassScale1`, `invInertiaScale0`, `invInertiaScale1` |
-    | Vehicle | — |
-    | Vehicle wheel | Jolt: `mWheelCastor` (castor angle in radians, affecting self-aligning torque) / PhysX: — |
-    | Aggregate | — |
+    | Binding record | Backend-specific scalar union (Jolt / PhysX)                                                                                                                                                              |
+    | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+    | Rigid body     | Jolt: `mNumVelocityStepsOverride`, `mNumPositionStepsOverride` / PhysX: `solverIterationCounts.minVelocityIters`, `solverIterationCounts.minPositionIters`, `maxContactImpulse`, `contactReportThreshold` |
+    | Collider       | —                                                                                                                                                                                                         |
+    | Character      | Jolt: `mPenetrationRecoverySpeed`, `mMaxNumHits`, `mHitReductionCosMaxAngle` / PhysX: `contactOffset`                                                                                                     |
+    | Soft body      | Jolt: `mNumVelocitySteps`, `mNumPositionSteps`, `mGravityFactor` / PhysX: `youngsModulus`, `poissons`, `dynamicFriction`                                                                                  |
+    | Joint          | Jolt: `mNumVelocityStepsOverride`, `mNumPositionStepsOverride` / PhysX: `invMassScale0`, `invMassScale1`, `invInertiaScale0`, `invInertiaScale1`                                                          |
+    | Vehicle        | —                                                                                                                                                                                                         |
+    | Vehicle wheel  | Jolt: `mWheelCastor` (castor angle in radians, affecting self-aligning torque) / PhysX: —                                                                                                                 |
+    | Aggregate      | —                                                                                                                                                                                                         |
 
   **Backend-cooked binary artifacts** (one blob per asset, tagged by format):
 
@@ -850,22 +850,22 @@ is used internally:
   **Side-table emission registry.** Every auxiliary ordered structure in the
   physics pipeline, with its exact physical emission location:
 
-  | # | Side table | Physical location | Located by |
-  | --- | --- | --- | --- |
-  | 1 | **Sidecar component-table directory** | Immediately after the sidecar asset header, at a fixed known offset | Entry count and offset stored in the sidecar asset header |
-  | 2 | **Rigid body binding records** | Flat array of fixed-size records at the byte offset given by directory entry 2 | Directory entry: type tag + byte offset from sidecar start + record count |
-  | 3 | **Collider binding records** | Flat array of fixed-size records at the byte offset given by directory entry 3 | Directory entry |
-  | 4 | **Character binding records** | Flat array of fixed-size records at the byte offset given by directory entry 4 | Directory entry |
-  | 5 | **Soft-body binding records** | Sequence of variable-length record units at the byte offset given by directory entry 5; each unit = fixed header + trailing arrays (rows 6–7) back-to-back | Directory entry gives the start of the sequence; each unit's size = fixed header size + sum of trailing array byte sizes |
-  | 6 | **Soft-body pinned vertex index list** | Trailing array immediately after each soft-body record's fixed header; part of the same record unit | Self-relative `(count, byte_offset)` in the record's fixed header |
-  | 7 | **Soft-body kinematic vertex index list** | Trailing array immediately after the pinned vertex list (rows 6 + 7 are contiguous in memory); part of the same record unit | Self-relative `(count, byte_offset)` in the record's fixed header |
-  | 8 | **Joint binding records** | Flat array of fixed-size records at the byte offset given by directory entry 8 | Directory entry |
-  | 9 | **Vehicle binding records** | Flat array of fixed-size records at the byte offset given by directory entry 9 | Directory entry |
-  | 10 | **Vehicle wheel table** | Flat array of fixed-size wheel records at the byte offset given by directory entry 10; all vehicles' wheels are concatenated here | Directory entry gives the table start; each vehicle binding record (row 9) provides `(wheel_slice_offset, wheel_slice_count)` to locate its slice |
-  | 11 | **Aggregate binding records** | Flat array of fixed-size records at the byte offset given by directory entry 11 | Directory entry |
-  | 12 | **Compound shape child descriptor array** | Trailing array immediately after the compound shape descriptor's fixed header in the shape asset file | Self-relative `(count, byte_offset)` in the descriptor's fixed header |
-  | 13 | **Physics resource descriptor table** | Separate binary file — `FileKind::kPhysicsTable` — one per cooked container; not inside any asset | Loose index `FileRecord` table; PAK catalog |
-  | 14 | **Physics resource data region** | Separate binary file — `FileKind::kPhysicsData` — concatenated backend blobs; not inside any asset | Loose index `FileRecord` table; PAK catalog; each blob located by absolute byte offset + size recorded in its `PhysicsResourceDesc` entry in table 13 |
+  | #   | Side table                                | Physical location                                                                                                                                          | Located by                                                                                                                                            |
+  | --- | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+  | 1   | **Sidecar component-table directory**     | Immediately after the sidecar asset header, at a fixed known offset                                                                                        | Entry count and offset stored in the sidecar asset header                                                                                             |
+  | 2   | **Rigid body binding records**            | Flat array of fixed-size records at the byte offset given by directory entry 2                                                                             | Directory entry: type tag + byte offset from sidecar start + record count                                                                             |
+  | 3   | **Collider binding records**              | Flat array of fixed-size records at the byte offset given by directory entry 3                                                                             | Directory entry                                                                                                                                       |
+  | 4   | **Character binding records**             | Flat array of fixed-size records at the byte offset given by directory entry 4                                                                             | Directory entry                                                                                                                                       |
+  | 5   | **Soft-body binding records**             | Sequence of variable-length record units at the byte offset given by directory entry 5; each unit = fixed header + trailing arrays (rows 6–7) back-to-back | Directory entry gives the start of the sequence; each unit's size = fixed header size + sum of trailing array byte sizes                              |
+  | 6   | **Soft-body pinned vertex index list**    | Trailing array immediately after each soft-body record's fixed header; part of the same record unit                                                        | Self-relative `(count, byte_offset)` in the record's fixed header                                                                                     |
+  | 7   | **Soft-body kinematic vertex index list** | Trailing array immediately after the pinned vertex list (rows 6 + 7 are contiguous in memory); part of the same record unit                                | Self-relative `(count, byte_offset)` in the record's fixed header                                                                                     |
+  | 8   | **Joint binding records**                 | Flat array of fixed-size records at the byte offset given by directory entry 8                                                                             | Directory entry                                                                                                                                       |
+  | 9   | **Vehicle binding records**               | Flat array of fixed-size records at the byte offset given by directory entry 9                                                                             | Directory entry                                                                                                                                       |
+  | 10  | **Vehicle wheel table**                   | Flat array of fixed-size wheel records at the byte offset given by directory entry 10; all vehicles' wheels are concatenated here                          | Directory entry gives the table start; each vehicle binding record (row 9) provides `(wheel_slice_offset, wheel_slice_count)` to locate its slice     |
+  | 11  | **Aggregate binding records**             | Flat array of fixed-size records at the byte offset given by directory entry 11                                                                            | Directory entry                                                                                                                                       |
+  | 12  | **Compound shape child descriptor array** | Trailing array immediately after the compound shape descriptor's fixed header in the shape asset file                                                      | Self-relative `(count, byte_offset)` in the descriptor's fixed header                                                                                 |
+  | 13  | **Physics resource descriptor table**     | Separate binary file — `FileKind::kPhysicsTable` — one per cooked container; not inside any asset                                                          | Loose index `FileRecord` table; PAK catalog                                                                                                           |
+  | 14  | **Physics resource data region**          | Separate binary file — `FileKind::kPhysicsData` — concatenated backend blobs; not inside any asset                                                         | Loose index `FileRecord` table; PAK catalog; each blob located by absolute byte offset + size recorded in its `PhysicsResourceDesc` entry in table 13 |
 
 - **L3 — Hydration:** How cooked resources are instantiated and bound to scene
   nodes in the simulation backend. This is a one-way lift from inert data to
@@ -946,13 +946,13 @@ simulation, exercising every abstraction defined above.
 
 **Cast:**
 
-| Actor | Role |
-| --- | --- |
-| Artist | Works in the engine editor; never touches binary data. |
-| Cooker Tool | Offline CLI that reads an `import-manifest.json` and emits `LooseCookedLayout` artifacts. |
-| Runtime Scene Loader | Loads the loose scene artifact and deserializes the scene graph. |
-| Physics Sidecar Hydrator | Reads the loose physics sidecar artifact and drives L3 instantiation. |
-| Physics Backend | Either **Jolt Physics** or **NVIDIA PhysX** — identical interface, divergent binary paths. |
+| Actor                    | Role                                                                                       |
+| ------------------------ | ------------------------------------------------------------------------------------------ |
+| Artist                   | Works in the engine editor; never touches binary data.                                     |
+| Cooker Tool              | Offline CLI that reads an `import-manifest.json` and emits `LooseCookedLayout` artifacts.  |
+| Runtime Scene Loader     | Loads the loose scene artifact and deserializes the scene graph.                           |
+| Physics Sidecar Hydrator | Reads the loose physics sidecar artifact and drives L3 instantiation.                      |
+| Physics Backend          | Either **Jolt Physics** or **NVIDIA PhysX** — identical interface, divergent binary paths. |
 
 ---
 
@@ -990,20 +990,20 @@ cook jobs and their dependency graph for this scene. It processes the L1 files
 according to the manifest and emits binary artifacts into the
 `LooseCookedLayout`.
 
-*Collision shape:*
+_Collision shape:_
 Because `Sphere` is an analytic primitive, no mesh cooking is required. The
 cooker writes a `CollisionShapeAssetDesc` with `ShapeType::kSphere` and a
 `SphereParams { radius = 0.35 }` inline. This is stored in the loose layout
 as `Physics/Shapes/sphere.ocshape`. No external physics resource blob is
 allocated, so its `cooked_shape_ref` remains invalid (`kNoResourceIndex`).
 
-*Physics material:*
+_Physics material:_
 The cooker writes a `PhysicsMaterialAssetDesc` with `static_friction = 0.8`,
 `dynamic_friction = 0.75`, `restitution = 0.7`, `combine_mode_friction = kMaximum`, and
 `combine_mode_restitution = kMaximum`. This is 128 bytes, fixed layout, no
 binary stream needed. It is emitted as `Physics/Materials/rubber.opmat`.
 
-*Physics sidecar:*
+_Physics sidecar:_
 The cooker computes the sidecar relationships and emits the compiled artifact
 as `Scenes/bouncing_sphere.opscene`. At the head of this file is a
 `PhysicsSceneAssetDesc` whose `target_scene_key` is the `AssetKey` of the
@@ -1015,7 +1015,7 @@ node count of that scene (quick early-reject). A single
 the file, pointing to the sphere's scene node index, and referencing the
 `CollisionShapeAssetDesc` and `PhysicsMaterialAssetDesc` `AssetKey` values.
 
-*Backend divergence at L2:*
+_Backend divergence at L2:_
 For non-analytic shapes (convex hulls, triangle meshes), the cooker must
 produce a backend-specific binary blob: Jolt's cook path calls
 `ConvexHullShapeSettings::Create()` followed by `Shape::SaveBinaryState()`;
@@ -1053,17 +1053,17 @@ The hydrator then iterates the component tables:
    the resource manager, resolving them via the mounted loose container.
 
 2. **Create the physics shape (backend call).**
-   - *Jolt path:* `new SphereShape(0.35f)` — analytic, no binary restore needed.
-   - *PhysX path:* `PxSphereGeometry sphere(0.35f)` → `PxPhysics::createShape(...)`.
-   The `PhysicsMaterialAssetDesc` fields are mapped to the backend material
-   descriptor at this point.
+   - _Jolt path:_ `new SphereShape(0.35f)` — analytic, no binary restore needed.
+   - _PhysX path:_ `PxSphereGeometry sphere(0.35f)` → `PxPhysics::createShape(...)`.
+     The `PhysicsMaterialAssetDesc` fields are mapped to the backend material
+     descriptor at this point.
 
 3. **Create the body.** The hydrator reads `RigidBodyBindingRecord`:
    - node index → world transform from the scene graph.
    - `body_type = kDynamic`, `motion_quality = kContinuous`, `mass = 2.0`,
      `gravity_factor = 1.0`, `linear_damping = 0.05`, `angular_damping = 0.05`.
-   - *Jolt path:* `BodyCreationSettings` is populated; `BodyInterface::CreateAndAddBody()` is called; Jolt returns a `BodyID`.
-   - *PhysX path:* `PxPhysics::createRigidDynamic()` is called with the
+   - _Jolt path:_ `BodyCreationSettings` is populated; `BodyInterface::CreateAndAddBody()` is called; Jolt returns a `BodyID`.
+   - _PhysX path:_ `PxPhysics::createRigidDynamic()` is called with the
      extracted transform; mass properties are set via `PxRigidBodyExt::setMassAndUpdateInertia()`.
 
 4. **Register.** The hydrator stores the mapping `(scene node index → body handle)` in an internal table so the simulation-to-scene-graph sync pass can write physics results back.
@@ -1089,14 +1089,14 @@ physics backend.
 
 **What Scenario I validates:**
 
-| Concern | Where resolved |
-| --- | --- |
-| L1 ↔ L2 fidelity | Cooker reads every L1 field and emits a deterministic binary equivalent. |
-| Backend portability | L2 format tag (`kJoltShapeBinary` / `kPhysXShapeBinary`) is the only divergence point; L3 hydration code branches on it. |
-| Stale-sidecar safety | Identity check: `target_scene_key` (AssetKey — routing) + `target_scene_content_hash` (SHA-256 — version guard) + `target_node_count` (quick reject). |
-| Cooking-order stability | `RigidBodyBindingRecord.node_index` is a stable scene node index; the cooker's deterministic ordering makes it reproducible. |
-| Per-instance override | `RigidBodyBindingRecord` carries all instance-specific values; the shape asset is shared across instances via `AssetKey` lookup. |
-| Analytic vs. mesh divergence | Analytic shapes (sphere, capsule, box) bypass the binary-blob cooking path entirely; `CollisionShapeAssetDesc` stores parameters inline. |
+| Concern                      | Where resolved                                                                                                                                        |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| L1 ↔ L2 fidelity             | Cooker reads every L1 field and emits a deterministic binary equivalent.                                                                              |
+| Backend portability          | L2 format tag (`kJoltShapeBinary` / `kPhysXShapeBinary`) is the only divergence point; L3 hydration code branches on it.                              |
+| Stale-sidecar safety         | Identity check: `target_scene_key` (AssetKey — routing) + `target_scene_content_hash` (SHA-256 — version guard) + `target_node_count` (quick reject). |
+| Cooking-order stability      | `RigidBodyBindingRecord.node_index` is a stable scene node index; the cooker's deterministic ordering makes it reproducible.                          |
+| Per-instance override        | `RigidBodyBindingRecord` carries all instance-specific values; the shape asset is shared across instances via `AssetKey` lookup.                      |
+| Analytic vs. mesh divergence | Analytic shapes (sphere, capsule, box) bypass the binary-blob cooking path entirely; `CollisionShapeAssetDesc` stores parameters inline.              |
 
 ---
 
@@ -1107,12 +1107,12 @@ backend-cooked binary path and both sidecar trailing-array cases.
 
 **Scene actors:**
 
-| Actor | Physics setup | L2 path exercised |
-| --- | --- | --- |
-| Heavy crate | Dynamic body with 6-piece compound convex hull | Non-analytic shape blob ×6 + compound descriptor trailing child array |
-| Hinged door | Dynamic door + static frame, Hinge joint with limits and break threshold | Constraint binary (hinge settings blob) |
-| Cloth flag | Soft-body cloth pinned to a mast at 8 vertices | Soft-body topology binary + binding record trailing pinned-vertex array |
-| Racing car | Wheeled vehicle, 4 wheels, 2-differential drivetrain | Vehicle settings binary + 4 vehicle wheel table entries |
+| Actor       | Physics setup                                                            | L2 path exercised                                                       |
+| ----------- | ------------------------------------------------------------------------ | ----------------------------------------------------------------------- |
+| Heavy crate | Dynamic body with 6-piece compound convex hull                           | Non-analytic shape blob ×6 + compound descriptor trailing child array   |
+| Hinged door | Dynamic door + static frame, Hinge joint with limits and break threshold | Constraint binary (hinge settings blob)                                 |
+| Cloth flag  | Soft-body cloth pinned to a mast at 8 vertices                           | Soft-body topology binary + binding record trailing pinned-vertex array |
+| Racing car  | Wheeled vehicle, 4 wheels, 2-differential drivetrain                     | Vehicle settings binary + 4 vehicle wheel table entries                 |
 
 ---
 
@@ -1133,7 +1133,7 @@ backend-cooked binary path and both sidecar trailing-array cases.
 
 **Step 2 — Cooking (L2) — complex paths:**
 
-*Compound crate shape:*
+_Compound crate shape:_
 The cooker iterates the 6 child convex hull meshes. For each hull:
 
 - **Jolt** — `ConvexHullShapeSettings::Create()` → `Shape::SaveBinaryState()`
@@ -1149,7 +1149,7 @@ carrying the child blob `AssetKey` and local transform — as the **trailing
 child array**. The complete descriptor is emitted to
 `Physics/Shapes/crate.ocshape`.
 
-*Hinge joint:*
+_Hinge joint:_
 
 - **Jolt** — `HingeConstraintSettings` (limits + break torque) serialized via
   `ConstraintSettings::SaveBinaryState()` → one blob in `Physics/Resources/physics.data`,
@@ -1161,7 +1161,7 @@ The joint binding record in the sidecar (`Scenes/complex_scene.opscene`)
 stores the constraint binary `AssetKey`, the door body's scene node index, the
 frame body's node index, and both local frame transforms.
 
-*Cloth flag soft body:*
+_Cloth flag soft body:_
 
 The cooker derives a particle graph from the 20×20 mesh (400 particles, edge
 and dihedral-bend constraints).
@@ -1181,7 +1181,7 @@ plus
 array immediately after the header. `kinematic_vertex_count = 0`; no second
 trailing array is emitted.
 
-*Wheeled vehicle:*
+_Wheeled vehicle:_
 
 The chassis convex hulls are cooked identically to the crate. The vehicle
 settings binary bundles all variable-length arrays (torque curve, gear ratios,
@@ -1226,14 +1226,14 @@ stores `wheel_slice_offset` (index of the first of these 4 entries) and
 
 **What Scenario II validates (additional concerns):**
 
-| Concern | Where resolved |
-| --- | --- |
-| Non-analytic blob cooking | Convex hull mesh → backend cook API → `PhysicsResourceDesc` blob in `Physics/Resources/physics.data`; format tag routes hydration to the correct backend restore call. |
-| Compound trailing child array | `child_count` + `child_array_byte_offset` in fixed header; 6 child descriptors written contiguously after; hydrator's self-relative offset read is the sole navigation mechanism. |
-| Constraint binary cooking | Hinge settings → `SaveBinaryState()` / RepX; joint binding record references the blob by `AssetKey` — a cross-regeneration-unit reference, never a positional index. |
-| Break threshold in blob | Stored inside the backend blob; the owning system detects breakage via backend event callback at runtime — not from the binding record. |
-| Soft-body blob cooking | Full particle graph topology inside the backend blob; Oxygen never reads particle-level fields; only the blob bytes and the `AssetKey` are tracked. |
-| Soft-body trailing array | Pinned vertex list at self-relative `byte_offset`; hydrator uses `(count, byte_offset)` to locate the `uint32[]` and apply inverse-mass zeroing. |
-| Vehicle settings binary | All variable-length arrays (gears, differentials, anti-roll bars, per-wheel physics) bundled in one backend blob; Oxygen never parses their internal structure. |
-| Vehicle wheel table slice | `(wheel_slice_offset, wheel_slice_count)` in the vehicle binding record locates 4 fixed-size topology entries in the shared sidecar wheel table; the vehicle binding record stays fixed-size with no trailing array. |
-| Cross-unit AssetKey reference | Constraint and soft-body binding records reference blob assets from different regeneration units via `AssetKey`; no positional index crosses any unit boundary. |
+| Concern                       | Where resolved                                                                                                                                                                                                       |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Non-analytic blob cooking     | Convex hull mesh → backend cook API → `PhysicsResourceDesc` blob in `Physics/Resources/physics.data`; format tag routes hydration to the correct backend restore call.                                               |
+| Compound trailing child array | `child_count` + `child_array_byte_offset` in fixed header; 6 child descriptors written contiguously after; hydrator's self-relative offset read is the sole navigation mechanism.                                    |
+| Constraint binary cooking     | Hinge settings → `SaveBinaryState()` / RepX; joint binding record references the blob by `AssetKey` — a cross-regeneration-unit reference, never a positional index.                                                 |
+| Break threshold in blob       | Stored inside the backend blob; the owning system detects breakage via backend event callback at runtime — not from the binding record.                                                                              |
+| Soft-body blob cooking        | Full particle graph topology inside the backend blob; Oxygen never reads particle-level fields; only the blob bytes and the `AssetKey` are tracked.                                                                  |
+| Soft-body trailing array      | Pinned vertex list at self-relative `byte_offset`; hydrator uses `(count, byte_offset)` to locate the `uint32[]` and apply inverse-mass zeroing.                                                                     |
+| Vehicle settings binary       | All variable-length arrays (gears, differentials, anti-roll bars, per-wheel physics) bundled in one backend blob; Oxygen never parses their internal structure.                                                      |
+| Vehicle wheel table slice     | `(wheel_slice_offset, wheel_slice_count)` in the vehicle binding record locates 4 fixed-size topology entries in the shared sidecar wheel table; the vehicle binding record stays fixed-size with no trailing array. |
+| Cross-unit AssetKey reference | Constraint and soft-body binding records reference blob assets from different regeneration units via `AssetKey`; no positional index crosses any unit boundary.                                                      |

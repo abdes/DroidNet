@@ -144,10 +144,7 @@
   },
   "file_browser": {
     "select_skybox_image": {
-      "window_size": [
-        700,
-        450
-      ]
+      "window_size": [700, 450]
     }
   },
   "light_culling": {

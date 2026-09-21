@@ -17,14 +17,14 @@ Related:
 ## Mandatory Vortex Rule
 
 - Every Vortex task must be designed and implemented as a new Vortex-native
-   system that targets maximum parity with UE5.7, grounded in
-   `F:\Epic Games\UE_5.7\Engine\Source\Runtime` and
-   `F:\Epic Games\UE_5.7\Engine\Shaders`.
+  system that targets maximum parity with UE5.7, grounded in
+  `F:\Epic Games\UE_5.7\Engine\Source\Runtime` and
+  `F:\Epic Games\UE_5.7\Engine\Shaders`.
 - No Vortex task may be marked complete until its parity gate is closed with
-   explicit evidence against the relevant UE5.7 source and shader references.
+  explicit evidence against the relevant UE5.7 source and shader references.
 - If maximum parity cannot yet be achieved, the task remains incomplete until
-   explicit human approval records the accepted gap and the reason the parity
-   gate cannot close.
+  explicit human approval records the accepted gap and the reason the parity
+  gate cannot close.
 
 ## 1. Problem Statement
 
@@ -94,16 +94,16 @@ not staged replacement of parallel renderer products.
 9. **Incremental build-up.** The initial module compiles and links with zero
    domain systems. Each subsystem is added as a self-contained vertical slice.
 10. **Preserve Oxygen substrate.** Render-graph-as-coroutine model, bindless
-   descriptors, pass base classes, composition infrastructure, facade
-   patterns, and reusable upload/bind subsystems remain core Vortex
-   substrate.
+    descriptors, pass base classes, composition infrastructure, facade
+    patterns, and reusable upload/bind subsystems remain core Vortex
+    substrate.
 11. **Runtime-capable milestone gates.** Meaningful product gates are Vortex
-   runtime slices that execute real engine scenarios, not just compiling
-   shells or placeholder scaffolding.
+    runtime slices that execute real engine scenarios, not just compiling
+    shells or placeholder scaffolding.
 12. **Behavior-preserving runtime validation.** Representative runtime
-   examples should keep their important visible behavior and integrate through
-   stable engine/renderer seams rather than forcing renderer-specific
-   application rewrites.
+    examples should keep their important visible behavior and integrate through
+    stable engine/renderer seams rather than forcing renderer-specific
+    application rewrites.
 13. **Phase-traceable feature activation.** Every major feature family must be
     traceable in the design and plan documents to a specific activation phase,
     current activation state, and intended final target state.
@@ -262,17 +262,17 @@ The Vortex renderer must deliver these architectural outcomes:
 12. **No Forward+-first constraints.** Frame ordering, pass ownership, and
     shader module boundaries are not constrained by Forward+ assumptions.
 13. **Real runtime proof.** `Examples/Async` runs on Vortex as a maintained
-   runtime validation example.
+    runtime validation example.
 14. **Runtime validation without architecture clutter.** The Async runtime
-   path does not depend on long-lived dual-path hacks, duplicated scene logic,
-   or temporary bridge architecture; it uses stable engine/renderer seams
-   suitable for continued use.
+    path does not depend on long-lived dual-path hacks, duplicated scene logic,
+    or temporary bridge architecture; it uses stable engine/renderer seams
+    suitable for continued use.
 15. **Phase-traceable activation.** Design and planning artifacts explicitly map
     each major feature family to a phase, activation status, and final intended
     target state.
 16. **Hermetic renderer separation.** Vortex owns its renderer module,
-   API-contract, and runtime-ownership boundaries without split ownership or
-   compatibility bridges.
+    API-contract, and runtime-ownership boundaries without split ownership or
+    compatibility bridges.
 17. **Phase-1 active scene-texture subset.** The first active `SceneTextures`
     set includes `SceneColor`, `SceneDepth`, `PartialDepth`, `GBufferA-D`,
     `Stencil`, `Velocity`, and `CustomDepth`. `SSAO`,
@@ -314,21 +314,21 @@ The Vortex renderer must deliver these architectural outcomes:
    compiling architectural shells.
 9. `Examples/Async` is the canonical runtime validation example.
 10. Runtime validation must optimize for behavior stability and integration
-   stability over example-local convenience rewrites.
+    stability over example-local convenience rewrites.
 11. A successful runtime example validates renderer usability, but it is not a
-   blanket completion gate for the rest of Vortex.
+    blanket completion gate for the rest of Vortex.
 12. The PRD commits to the full logical desktop `SceneTextures` family early,
     while design/plan artifacts define the phased active subset.
 13. Design and plan documents must maintain explicit phase-by-phase traceability
     for feature activation and final target state.
 14. Vortex API and type shapes are owned by current Vortex architecture and may
-   evolve to satisfy its requirements rather than preserve superseded
-   contracts.
+    evolve to satisfy its requirements rather than preserve superseded
+    contracts.
 15. Vortex must own its renderer boundaries and must not introduce external
-   compatibility layers, bridge ownership, or split renderer products.
+    compatibility layers, bridge ownership, or split renderer products.
 16. Prior engine experience may inform Vortex decisions, but Vortex is
-   authored as an independent renderer architecture shaped by current and
-   future requirements rather than by inherited code shape.
+    authored as an independent renderer architecture shaped by current and
+    future requirements rather than by inherited code shape.
 17. The first active `SceneTextures` subset is
     `SceneColor`, `SceneDepth`, `PartialDepth`, `GBufferA-D`, `Stencil`,
     `Velocity`, and `CustomDepth`.
@@ -374,7 +374,7 @@ The Vortex renderer is successful when:
 14. That example path does not introduce long-lived compatibility clutter,
     duplicated scene logic, or disposable bridge architecture.
 15. Vortex is the supported renderer path; no alternate scene renderer product
-   relaxes any Vortex parity gate.
+    relaxes any Vortex parity gate.
 16. The design and plan package explicitly shows which `SceneTextures`
     attachments and feature families activate in which phase, with the end
     target remaining the full intended desktop feature set.

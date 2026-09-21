@@ -1,12 +1,8 @@
 {
-    "name": "cube_unit",
-    "content_hashing": true,
-    "virtual_path": "/.cooked/Physics/Shapes/cube_unit.ocshape",
-    "shape_type": "box",
-    "material_ref": "/.cooked/Physics/Materials/ground.opmat",
-    "half_extents": [
-        0.5,
-        0.5,
-        0.5
-    ]
+  "name": "cube_unit",
+  "content_hashing": true,
+  "virtual_path": "/.cooked/Physics/Shapes/cube_unit.ocshape",
+  "shape_type": "box",
+  "material_ref": "/.cooked/Physics/Materials/ground.opmat",
+  "half_extents": [0.5, 0.5, 0.5]
 }

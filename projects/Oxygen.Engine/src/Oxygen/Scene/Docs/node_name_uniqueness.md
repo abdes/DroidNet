@@ -11,14 +11,14 @@ identifiers for the scene system.
 
 ### Major Game Engines
 
-| Engine | Unique Names Required? | Primary Identity | Name Usage |
-|--------|----------------------|------------------|------------|
-| **Unity** | ❌ No | `InstanceID` (int) | Debugging, editor display, GameObject.Find() |
-| **Unreal Engine** | ❌ No | `UObject*` pointer + `FName` | Blueprint display, debugging, FindActor() |
-| **Godot** | ❌ No | `ObjectID` (64-bit) | Debugging, get_node() paths, editor |
-| **Bevy ECS** | ❌ No | `Entity` (generational index) | Optional Name component for debugging |
-| **OpenSceneGraph** | ❌ No | Node pointer | Optional for debugging and traversal |
-| **Three.js** | ❌ No | Object reference | Optional for scene.getObjectByName() |
+| Engine             | Unique Names Required? | Primary Identity              | Name Usage                                   |
+| ------------------ | ---------------------- | ----------------------------- | -------------------------------------------- |
+| **Unity**          | ❌ No                  | `InstanceID` (int)            | Debugging, editor display, GameObject.Find() |
+| **Unreal Engine**  | ❌ No                  | `UObject*` pointer + `FName`  | Blueprint display, debugging, FindActor()    |
+| **Godot**          | ❌ No                  | `ObjectID` (64-bit)           | Debugging, get_node() paths, editor          |
+| **Bevy ECS**       | ❌ No                  | `Entity` (generational index) | Optional Name component for debugging        |
+| **OpenSceneGraph** | ❌ No                  | Node pointer                  | Optional for debugging and traversal         |
+| **Three.js**       | ❌ No                  | Object reference              | Optional for scene.getObjectByName()         |
 
 ### Key Findings
 

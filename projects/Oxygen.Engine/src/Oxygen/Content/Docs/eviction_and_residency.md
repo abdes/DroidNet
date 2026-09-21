@@ -228,20 +228,20 @@ contract gaps are closed.
 ### Remaining gaps to close (minimal)
 
 1. **Eviction event payload must carry `ResourceKey` + `TypeId` + reason.**
-  Cache hashes are not sufficient to identify the resource instance.
+   Cache hashes are not sufficient to identify the resource instance.
 
 2. **Renderer-side teardown hooks** must subscribe to eviction notifications
-  and release GPU residency (textures, buffers, descriptors) on the render
-  thread.
+   and release GPU residency (textures, buffers, descriptors) on the render
+   thread.
 
 3. **In-flight completion suppression** to prevent late uploads from
-  re-resurrecting evicted entries.
+   re-resurrecting evicted entries.
 
 4. **Budgeting + LRU trim for eligible entries** (refcount == 0) to keep
-  memory bounded without violating ownership.
+   memory bounded without violating ownership.
 
 5. **Telemetry and diagnostics** to validate correctness while implementing
-  steps 1–4.
+   steps 1–4.
 
 ### Concrete steps (minimal churn)
 
@@ -249,7 +249,7 @@ contract gaps are closed.
    - Extend the cache eviction callback to emit `{ResourceKey, TypeId, reason}`.
    - Emit eviction events on the Content owning thread.
    - Keep `AnyCache` unaware of `ResourceKey`; mapping happens in
-    `AssetLoader`.
+     `AssetLoader`.
    - Add **basic telemetry counters** for evictions and cache hits/misses.
 
    **LLD (step 1)**
@@ -302,7 +302,7 @@ contract gaps are closed.
      - `using EvictionHandler = std::function<void(const EvictionEvent&)>;`
      - `class EvictionSubscription` (move-only; destructor auto-unsubscribes).
      - `virtual auto SubscribeResourceEvictions(TypeId resource_type,
-         EvictionHandler handler) -> EvictionSubscription = 0;`
+  EvictionHandler handler) -> EvictionSubscription = 0;`
    - Naming rationale:
      - **EvictionHandler** signals fire-and-forget callbacks.
      - **EvictionSubscription** communicates RAII ownership.
@@ -469,7 +469,7 @@ contract gaps are closed.
    - Track per-entry `last_access_time` (updated on successful load or cache
      hit).
    - Track per-entry `eligible_since` timestamp when a release call makes an
-     entry *potentially* evictable; eligibility is validated via
+     entry _potentially_ evictable; eligibility is validated via
      `AnyCache::IsCheckedOut()` at trim time.
    - **Implementation location**: store these timestamps in `AssetLoader`
      metadata maps keyed by the cache hash (not inside `AnyCache`).
@@ -505,7 +505,7 @@ contract gaps are closed.
    **API surface**
    - Add `AssetLoader::SetCacheBudget(CacheClass, std::size_t bytes)`.
    - Add `AssetLoader::SetEvictionGracePeriod(CacheClass,
-     std::chrono::seconds)`.
+std::chrono::seconds)`.
    - Add `AssetLoader::TrimCaches()` (explicit call from engine loop).
    - Add `AssetLoader::GetCacheTelemetry(CacheClass)`.
 
@@ -516,7 +516,7 @@ contract gaps are closed.
    - Trim-triggered evictions still report `kRefCountZero` (eligibility cause),
      not a separate budget reason, to keep the event model minimal.
 
-    **Telemetry (usage-driven)**
+   **Telemetry (usage-driven)**
 
    **Usage scenarios**
    - **Live tuning**: verify budgets and grace periods prevent thrash when

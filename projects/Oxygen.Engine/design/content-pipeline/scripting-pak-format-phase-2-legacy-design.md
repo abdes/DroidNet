@@ -49,7 +49,7 @@ reference a global, deduplicated table of script slot instances.
    - The **Fixed-Size** `ScriptSlotRecord` (128 bytes) in the global table.
    - Binds a **Script Asset** (bytecode/source) to a **Parameter Array**
      (instance data).
-   - 5,000 "Orc" entities can all point to the *same* `OrcBehavior` asset key.
+   - 5,000 "Orc" entities can all point to the _same_ `OrcBehavior` asset key.
 
 4. **Script Slot ↔ Parameters (N : 1)**
    - A binary array containing variable overrides (e.g., `Speed = 50.0`).
@@ -134,16 +134,16 @@ space (3 × 16 bytes) to add two new tables and one new region.
 
 **Footer reserved-space accounting:**
 
-| Field                    | Size | v4 offset | v5 offset |
-|:-------------------------|-----:|----------:|----------:|
-| `script_region`          | 16   | —         | 72  |
-| `script_resource_table`  | 16   | —         | 136 |
-| `script_slot_table`      | 16   | —         | 152 |
-| `browse_index_offset`    | 8    | 120       | 168 |
-| `browse_index_size`      | 8    | 128       | 176 |
-| `reserved` (remaining)   | 60   | 108 (reserved=108) | 184 |
-| `pak_crc32`              | 4    | 244       | 244 |
-| `footer_magic`           | 8    | 248       | 248 |
+| Field                   | Size |          v4 offset | v5 offset |
+| :---------------------- | ---: | -----------------: | --------: |
+| `script_region`         |   16 |                  — |        72 |
+| `script_resource_table` |   16 |                  — |       136 |
+| `script_slot_table`     |   16 |                  — |       152 |
+| `browse_index_offset`   |    8 |                120 |       168 |
+| `browse_index_size`     |    8 |                128 |       176 |
+| `reserved` (remaining)  |   60 | 108 (reserved=108) |       184 |
+| `pak_crc32`             |    4 |                244 |       244 |
+| `footer_magic`          |    8 |                248 |       248 |
 
 > **Note:** `v7::PakFooter` MUST remain exactly **256 bytes** for backward
 > compatibility with the "read footer from end-of-file" strategy in
@@ -211,10 +211,10 @@ later format revision).
 
 Before looking at the diagram, here is which type alias is used for what:
 
-| Type Alias | C++ Type | Width | Purpose |
-| :--- | :--- | :--- | :--- |
-| `OffsetT` | `uint64_t` | 8 bytes | **Absolute file offset** from byte 0 of the PAK. Used in `ScriptResourceDesc::data_offset` and `ScriptSlotRecord::params_array_offset`. |
-| `DataBlobSizeT` | `uint32_t` | 4 bytes | **Byte count** of a single data blob. Used in `ScriptResourceDesc::size_bytes`. |
+| Type Alias       | C++ Type   | Width   | Purpose                                                                                                                                                                                                                                                                                                     |
+| :--------------- | :--------- | :------ | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `OffsetT`        | `uint64_t` | 8 bytes | **Absolute file offset** from byte 0 of the PAK. Used in `ScriptResourceDesc::data_offset` and `ScriptSlotRecord::params_array_offset`.                                                                                                                                                                     |
+| `DataBlobSizeT`  | `uint32_t` | 4 bytes | **Byte count** of a single data blob. Used in `ScriptResourceDesc::size_bytes`.                                                                                                                                                                                                                             |
 | `ResourceIndexT` | `uint32_t` | 4 bytes | **Index into a resource table** (NOT a byte offset). `ScriptAssetDesc::bytecode_resource_index` / `source_resource_index` are `ResourceIndexT` values. Given index `i`, the corresponding `ScriptResourceDesc` is at `script_resource_table.offset + i * script_resource_table.entry_size` in the PAK file. |
 
 Key distinction:
@@ -224,7 +224,7 @@ Key distinction:
   the file position of the descriptor struct.
 - **`OffsetT` → absolute file position** ("seek to this byte in the PAK
   file"). Used to locate the actual binary data blob that the descriptor
-  *talks about*.
+  _talks about_.
 - **`DataBlobSizeT` → blob length** ("read this many bytes starting at the
   offset"). Paired with an `OffsetT`.
 
@@ -326,9 +326,9 @@ parameter blobs. Addresses are hypothetical absolutes.
 8. Cast the buffer to `const ScriptParamRecord*`, iterate and resolve parameters by type tag.
 
 > Notice the difference: script **resources** (bytecode/source) are reached
-> through a *ResourceIndexT → table → descriptor → OffsetT → data* chain.
+> through a _ResourceIndexT → table → descriptor → OffsetT → data_ chain.
 > Script **parameters** skip the table indirection and use a direct
-> *OffsetT → array* reference, because parameter records are already fixed-size
+> _OffsetT → array_ reference, because parameter records are already fixed-size
 > and predictable.
 
 #### 2.4.4 Cooker Append Protocol
@@ -346,11 +346,11 @@ first-come order:
    b. Write the raw blob bytes.
    c. Record the byte count as `ScriptResourceDesc::size_bytes`.
    d. Pad the cursor forward to the next 4-byte boundary
-      (`cursor = (cursor + 3) & ~3`).
+   (`cursor = (cursor + 3) & ~3`).
    e. Append the `ScriptResourceDesc` to the resource table (at index ≥ 1).
 4. **For each unique parameter blob:**
    a. Record the current write cursor as
-      `ScriptSlotRecord::params_array_offset`.
+   `ScriptSlotRecord::params_array_offset`.
    b. Write the Serio-serialized `ScriptParamList` bytes.
    c. Record the record count as `ScriptSlotRecord::params_count`.
    d. Pad the cursor forward to the next 4-byte boundary.
@@ -366,18 +366,18 @@ first-come order:
 
 Loaders MUST enforce the following invariants:
 
-| # | Invariant | Error if Violated |
-| :--- | :--- | :--- |
-| V1 | `script_region.offset + script_region.size <= file_size` | Region extends past end of file. |
-| V2 | For every `ScriptResourceDesc`: `data_offset >= script_region.offset` | Data offset before region start. |
-| V3 | For every `ScriptResourceDesc`: `data_offset + size_bytes <= script_region.offset + script_region.size` | Data blob extends past region end. |
-| V4 | For every `ScriptSlotRecord` with `params_count > 0`: `params_array_offset >= script_region.offset` | Param offset before region start. |
-| V5 | For every `ScriptSlotRecord` with `params_count > 0`: `params_array_offset + params_count * 128 <= script_region.offset + script_region.size` | Param array extends past region end. |
-| V6 | `script_resource_table.entry_size == sizeof(ScriptResourceDesc)` (32) | Entry size mismatch. |
-| V7 | `script_slot_table.entry_size == sizeof(ScriptSlotRecord)` (128) | Entry size mismatch. |
-| V8 | All `data_offset` and `params_array_offset` values are 4-byte aligned. | Alignment violation. |
-| V9 | No Resource indices or Param ranges overlap. | Overlapping writes. |
-| V10 | `ScriptResourceDesc` at index 0 MUST be all-zero sentinel. | Index-0 invariant violated. |
+| #   | Invariant                                                                                                                                     | Error if Violated                    |
+| :-- | :-------------------------------------------------------------------------------------------------------------------------------------------- | :----------------------------------- |
+| V1  | `script_region.offset + script_region.size <= file_size`                                                                                      | Region extends past end of file.     |
+| V2  | For every `ScriptResourceDesc`: `data_offset >= script_region.offset`                                                                         | Data offset before region start.     |
+| V3  | For every `ScriptResourceDesc`: `data_offset + size_bytes <= script_region.offset + script_region.size`                                       | Data blob extends past region end.   |
+| V4  | For every `ScriptSlotRecord` with `params_count > 0`: `params_array_offset >= script_region.offset`                                           | Param offset before region start.    |
+| V5  | For every `ScriptSlotRecord` with `params_count > 0`: `params_array_offset + params_count * 128 <= script_region.offset + script_region.size` | Param array extends past region end. |
+| V6  | `script_resource_table.entry_size == sizeof(ScriptResourceDesc)` (32)                                                                         | Entry size mismatch.                 |
+| V7  | `script_slot_table.entry_size == sizeof(ScriptSlotRecord)` (128)                                                                              | Entry size mismatch.                 |
+| V8  | All `data_offset` and `params_array_offset` values are 4-byte aligned.                                                                        | Alignment violation.                 |
+| V9  | No Resource indices or Param ranges overlap.                                                                                                  | Overlapping writes.                  |
+| V10 | `ScriptResourceDesc` at index 0 MUST be all-zero sentinel.                                                                                    | Index-0 invariant violated.          |
 
 ---
 
@@ -538,9 +538,9 @@ enum class ScriptAssetFlags : uint32_t {
 
 **Flag Rationale:**
 
-| Flag | Purpose |
-|:-----|:--------|
-| `kNone` | No additional behavior flags. |
+| Flag                   | Purpose                                                                               |
+| :--------------------- | :------------------------------------------------------------------------------------ |
+| `kNone`                | No additional behavior flags.                                                         |
 | `kAllowExternalSource` | Asset allows fallback to `external_source_path` when embedded payload is unavailable. |
 
 ### 4.2 ScriptAssetDesc (256 bytes)
@@ -744,15 +744,15 @@ enum ordinal. This is enforced by the `Type()` convenience method and by the
 Serio overloads below. The mapping is:
 
 | `ScriptParamType` | Enum Value | `std::variant` Alternative |
-| :--- | :--- | :--- |
-| `kNone` | 0 | `std::monostate` (index 0) |
-| `kBool` | 1 | `bool` (index 1) |
-| `kInt32` | 2 | `int32_t` (index 2) |
-| `kFloat` | 3 | `float` (index 3) |
-| `kString` | 4 | `std::string` (index 4) |
-| `kVec2` | 5 | `Vec2` (index 5) |
-| `kVec3` | 6 | `Vec3` (index 6) |
-| `kVec4` | 7 | `Vec4` (index 7) |
+| :---------------- | :--------- | :------------------------- |
+| `kNone`           | 0          | `std::monostate` (index 0) |
+| `kBool`           | 1          | `bool` (index 1)           |
+| `kInt32`          | 2          | `int32_t` (index 2)        |
+| `kFloat`          | 3          | `float` (index 3)          |
+| `kString`         | 4          | `std::string` (index 4)    |
+| `kVec2`           | 5          | `Vec2` (index 5)           |
+| `kVec3`           | 6          | `Vec3` (index 6)           |
+| `kVec4`           | 7          | `Vec4` (index 7)           |
 
 #### 5.3.3 Binary Layout on Disk (C-Union Array)
 
@@ -778,9 +778,9 @@ To ensure bit-identical results, the Python cooker (`packers.py`) MUST:
 
 1. **Pad parameter keys** with null bytes up to 64 bytes.
 2. **Order parameters alphabetically** by key within the array to ensure
-    stability.
+   stability.
 3. **Strictly use 128-byte alignment** for each `ScriptParamRecord` in the
-    binary stream.
+   binary stream.
 4. **Use little-endian** encoding for all numeric types.
 
 ### 5.5 Parameter Array Location
@@ -847,14 +847,14 @@ enum class ScriptSlotFlags : uint32_t {
 
 **Flag Rationale:**
 
-| Flag | Scope | Purpose |
-|:-----|:------|:--------|
-| `ScriptingComponentFlags::kEnabled` | Component | Fast skip of all slot dispatch on a node without mutating slot records. |
-| `ScriptingComponentFlags::kPauseWithGame` | Component | Node-level pause semantics — avoids per-slot checks. |
-| `ScriptSlotFlags::kEnabled` | Slot | Per-script enable/disable when a node hosts multiple scripts. |
-| `ScriptSlotFlags::kRunOnLoad` | Slot | Deterministic bootstrap hook dispatch during scene hydration. |
-| `ScriptSlotFlags::kRunInEditor` | Slot | Slot-level gating to avoid running gameplay scripts in editor. |
-| `ScriptSlotFlags::kCatchErrors` | Slot | Per-script error isolation (protected-call behavior). |
+| Flag                                      | Scope     | Purpose                                                                 |
+| :---------------------------------------- | :-------- | :---------------------------------------------------------------------- |
+| `ScriptingComponentFlags::kEnabled`       | Component | Fast skip of all slot dispatch on a node without mutating slot records. |
+| `ScriptingComponentFlags::kPauseWithGame` | Component | Node-level pause semantics — avoids per-slot checks.                    |
+| `ScriptSlotFlags::kEnabled`               | Slot      | Per-script enable/disable when a node hosts multiple scripts.           |
+| `ScriptSlotFlags::kRunOnLoad`             | Slot      | Deterministic bootstrap hook dispatch during scene hydration.           |
+| `ScriptSlotFlags::kRunInEditor`           | Slot      | Slot-level gating to avoid running gameplay scripts in editor.          |
+| `ScriptSlotFlags::kCatchErrors`           | Slot      | Per-script error isolation (protected-call behavior).                   |
 
 ### 6.4 ScriptingComponentRecord (16 bytes)
 
@@ -1116,14 +1116,14 @@ When loading a scene:
    a. Attach a `ScriptingComponent` runtime object to the node at `node_index`.
    b. Access the global slots array at `[slot_start_index, +slot_count)`.
    c. For each `ScriptSlotRecord` in that range:
-      - Resolve the `script_asset_key` to a loaded `ScriptAsset`.
-      - If `params_count > 0`:
-        Seek to `params_array_offset` in the PAK (absolute), read
-        `params_count * 128` bytes, translate each `ScriptParamRecord`
-        into a runtime `ScriptParam`.
-      - Instantiate a runtime `ScriptInstance` with the parameters.
-   d. If `ScriptSlotFlags::kRunOnLoad` is set, queue the slot for immediate
-      execution.
+   - Resolve the `script_asset_key` to a loaded `ScriptAsset`.
+   - If `params_count > 0`:
+     Seek to `params_array_offset` in the PAK (absolute), read
+     `params_count * 128` bytes, translate each `ScriptParamRecord`
+     into a runtime `ScriptParam`.
+   - Instantiate a runtime `ScriptInstance` with the parameters.
+     d. If `ScriptSlotFlags::kRunOnLoad` is set, queue the slot for immediate
+     execution.
 
 ### 11.3 Memory Layout at Runtime
 
@@ -1218,56 +1218,56 @@ enum class FileKind : uint16_t {
 
 ### 14.1 Core Data / Schema
 
-| File | Changes |
-|:-----|:--------|
-| `src/Oxygen/Data/PakFormat.h` | Add `v5` namespace. `PakHeader` (version=5), `PakFooter` (script fields), `ScriptLanguage`, `ScriptEncoding`, `ScriptCompression`, `ScriptResourceDesc`, `ScriptAssetFlags`, `ScriptAssetDesc`, `ScriptParamType`, `ScriptParam`, `ScriptParamList`, `ScriptingComponentFlags`, `ScriptingComponentRecord`, `ScriptSlotFlags`, `ScriptSlotRecord`. Update default namespace alias to `v5`. |
-| `src/Oxygen/Data/ComponentType.h` | Add `kScripting = 0x50524353`. |
-| `src/Oxygen/Data/ComponentType.cpp` | Add `to_string` case for `kScripting`. |
-| `src/Oxygen/Data/AssetType.h` | Add `kScript = 4`, update `kMaxAssetType`. |
-| `src/Oxygen/Data/AssetType.cpp` | Add `to_string` case for `kScript`. |
-| `src/Oxygen/Data/PakFormatSerioLoaders.h` | Add `Load` overloads for `ScriptingComponentRecord`, `ScriptSlotRecord`, `ScriptParamType`, `ScriptParam`, `ScriptParamList`. Add `Store` overloads for `ScriptParamType`, `ScriptParam`, `ScriptParamList`. |
-| `src/Oxygen/Data/SceneAsset.h` | Add `ComponentTraits<ScriptingComponentRecord>`. |
-| `src/Oxygen/Data/SceneAsset.cpp` | Add entry-size check for `kScripting` in `ParseAndValidate()`. |
-| `src/Oxygen/Data/LooseCookedIndexFormat.h` | Add `kScriptsTable`, `kScriptsData` to `FileKind`. |
+| File                                       | Changes                                                                                                                                                                                                                                                                                                                                                                                    |
+| :----------------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/Oxygen/Data/PakFormat.h`              | Add `v5` namespace. `PakHeader` (version=5), `PakFooter` (script fields), `ScriptLanguage`, `ScriptEncoding`, `ScriptCompression`, `ScriptResourceDesc`, `ScriptAssetFlags`, `ScriptAssetDesc`, `ScriptParamType`, `ScriptParam`, `ScriptParamList`, `ScriptingComponentFlags`, `ScriptingComponentRecord`, `ScriptSlotFlags`, `ScriptSlotRecord`. Update default namespace alias to `v5`. |
+| `src/Oxygen/Data/ComponentType.h`          | Add `kScripting = 0x50524353`.                                                                                                                                                                                                                                                                                                                                                             |
+| `src/Oxygen/Data/ComponentType.cpp`        | Add `to_string` case for `kScripting`.                                                                                                                                                                                                                                                                                                                                                     |
+| `src/Oxygen/Data/AssetType.h`              | Add `kScript = 4`, update `kMaxAssetType`.                                                                                                                                                                                                                                                                                                                                                 |
+| `src/Oxygen/Data/AssetType.cpp`            | Add `to_string` case for `kScript`.                                                                                                                                                                                                                                                                                                                                                        |
+| `src/Oxygen/Data/PakFormatSerioLoaders.h`  | Add `Load` overloads for `ScriptingComponentRecord`, `ScriptSlotRecord`, `ScriptParamType`, `ScriptParam`, `ScriptParamList`. Add `Store` overloads for `ScriptParamType`, `ScriptParam`, `ScriptParamList`.                                                                                                                                                                               |
+| `src/Oxygen/Data/SceneAsset.h`             | Add `ComponentTraits<ScriptingComponentRecord>`.                                                                                                                                                                                                                                                                                                                                           |
+| `src/Oxygen/Data/SceneAsset.cpp`           | Add entry-size check for `kScripting` in `ParseAndValidate()`.                                                                                                                                                                                                                                                                                                                             |
+| `src/Oxygen/Data/LooseCookedIndexFormat.h` | Add `kScriptsTable`, `kScriptsData` to `FileKind`.                                                                                                                                                                                                                                                                                                                                         |
 
 ### 14.2 Runtime Loading
 
-| File | Changes |
-|:-----|:--------|
-| `src/Oxygen/Content/PakFile.h` | Add script table/region accessors, slot reader methods. |
-| `src/Oxygen/Content/PakFile.cpp` | Handle v5 footer, init script table, implement slot readers. |
+| File                                       | Changes                                                                      |
+| :----------------------------------------- | :--------------------------------------------------------------------------- |
+| `src/Oxygen/Content/PakFile.h`             | Add script table/region accessors, slot reader methods.                      |
+| `src/Oxygen/Content/PakFile.cpp`           | Handle v5 footer, init script table, implement slot readers.                 |
 | `src/Oxygen/Content/Loaders/SceneLoader.h` | Add `kScripting` validation branch. Collect `script_asset_key` dependencies. |
 
 ### 14.3 Tooling
 
-| File | Changes |
-|:-----|:--------|
-| `src/Oxygen/Content/Tools/PakDump/AssetDumpers.h` | Add `ScriptAssetDumper` registration. |
-| `src/Oxygen/Content/Tools/PakDump/ScriptAssetDumper.h` | New: Dump `ScriptAssetDesc` fields. |
+| File                                                   | Changes                                                                                                                                           |
+| :----------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `src/Oxygen/Content/Tools/PakDump/AssetDumpers.h`      | Add `ScriptAssetDumper` registration.                                                                                                             |
+| `src/Oxygen/Content/Tools/PakDump/ScriptAssetDumper.h` | New: Dump `ScriptAssetDesc` fields.                                                                                                               |
 | `src/Oxygen/Content/Tools/PakDump/PakFileDumper.h/cpp` | Dump script region/table summary. Ensure index 0 is labeled `(sentinel/reserved)` and "User Resource Count" is reported correctly as `Total - 1`. |
-| `src/Oxygen/Content/Tools/Inspector/main.cpp` | Update `scripts` command to label index 0 with `*` and provide a legend. |
+| `src/Oxygen/Content/Tools/Inspector/main.cpp`          | Update `scripts` command to label index 0 with `*` and provide a legend.                                                                          |
 
 ### 14.4 Tests
 
-| File | Changes |
-|:-----|:--------|
-| `src/Oxygen/Data/Test/PakFormat_test.cpp` | `static_assert` tests for all new struct sizes. Round-trip Serio tests for `ScriptingComponentRecord`, `ScriptSlotRecord`, `ScriptParam`, `ScriptParamList`. |
-| `src/Oxygen/Content/Tools/PakGen/tests/` | Add **Binary Regression Tests** ensuring the emitted PAK contains a strictly all-zero descriptor at index 0 for scripting resource tables. |
-| `src/Oxygen/Content/Test/SceneLoader_test.cpp` | Test loading a scene with `kScripting` component. Test validation rejection for bad slot ranges. |
+| File                                           | Changes                                                                                                                                                      |
+| :--------------------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/Oxygen/Data/Test/PakFormat_test.cpp`      | `static_assert` tests for all new struct sizes. Round-trip Serio tests for `ScriptingComponentRecord`, `ScriptSlotRecord`, `ScriptParam`, `ScriptParamList`. |
+| `src/Oxygen/Content/Tools/PakGen/tests/`       | Add **Binary Regression Tests** ensuring the emitted PAK contains a strictly all-zero descriptor at index 0 for scripting resource tables.                   |
+| `src/Oxygen/Content/Test/SceneLoader_test.cpp` | Test loading a scene with `kScripting` component. Test validation rejection for bad slot ranges.                                                             |
 
 ---
 
 ## 15. Versioning Summary
 
-| Element | v4 (Current) | v5 (This Spec) |
-|:--------|:-------------|:---------------|
-| `PakHeader::version` | 4 | 5 |
-| `PakFooter` reserved | 108 bytes | 60 bytes (48 consumed) |
-| `PakFooter::script_region` | — | New `ResourceRegion` |
-| `PakFooter::script_resource_table` | — | New `ResourceTable` |
-| `PakFooter::script_slot_table` | — | New `ResourceTable` |
-| `SceneAssetDesc` | 256 bytes (unchanged) | 256 bytes (unchanged) |
-| `kSceneAssetVersion` | 2 | 2 (unchanged) |
-| `ComponentType::kScripting` | — | `0x50524353` |
-| `AssetType::kScript` | — | `4` |
-| Default namespace | `v4` | `v5` |
+| Element                            | v4 (Current)          | v5 (This Spec)         |
+| :--------------------------------- | :-------------------- | :--------------------- |
+| `PakHeader::version`               | 4                     | 5                      |
+| `PakFooter` reserved               | 108 bytes             | 60 bytes (48 consumed) |
+| `PakFooter::script_region`         | —                     | New `ResourceRegion`   |
+| `PakFooter::script_resource_table` | —                     | New `ResourceTable`    |
+| `PakFooter::script_slot_table`     | —                     | New `ResourceTable`    |
+| `SceneAssetDesc`                   | 256 bytes (unchanged) | 256 bytes (unchanged)  |
+| `kSceneAssetVersion`               | 2                     | 2 (unchanged)          |
+| `ComponentType::kScripting`        | —                     | `0x50524353`           |
+| `AssetType::kScript`               | —                     | `4`                    |
+| Default namespace                  | `v4`                  | `v5`                   |

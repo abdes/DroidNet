@@ -41,7 +41,7 @@ In scope:
 1. Standalone texture import via `ImportFormat::kTextureImage` — single source
    image or multi-source assembly (cube maps, texture arrays, 3D textures).
 2. JSON-descriptor-driven imports (`*.texture.json` via `type:
-   "texture-descriptor"`).
+"texture-descriptor"`).
 3. Embedded texture import as a side effect of FBX/glTF scene imports
    (`ImportOptions::TextureTuning`).
 4. Loose-cooked descriptor emission (`.otex`) and resource table emission
@@ -78,17 +78,17 @@ Out of scope:
 
 The following facts were confirmed during the documentation pass:
 
-| Fact | Evidence |
-| --- | --- |
+| Fact                                      | Evidence                                                                                                                                                                                         |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Loose layout supports texture descriptors | `src/Oxygen/Cooker/Loose/LooseCookedLayout.h` (`kTextureDescriptorExtension = ".otex"`, `TextureDescriptorDir()`, `TextureVirtualPath()`, `textures_table_file_name`, `textures_data_file_name`) |
-| Runtime loader for textures exists | `src/Oxygen/Content/Loaders/TextureLoader.h` (`LoadTextureResource`) |
-| Import routing is in place | `src/Oxygen/Cooker/Import/AsyncImportService.cpp` (`case ImportFormat::kTextureImage: make_shared<TextureImportJob>`) |
-| Two manifest job types exist | `src/Oxygen/Cooker/Import/ImportManifest.cpp`: `"texture"` and `"texture-descriptor"` |
-| High-level import API exists | `src/Oxygen/Cooker/Import/TextureImporter.h` (`ImportTexture`, `ImportCubeMap`, `TextureImportBuilder`) |
-| Preset system exists | `src/Oxygen/Cooker/Import/TextureImportPresets.h` (`TexturePreset`, `ApplyPreset`) |
-| Binary format is locked | `src/Oxygen/Data/PakFormat_render.h` (`TextureResourceDesc`, `static_assert(sizeof(..)==40)`) |
-| Embedded import path exists | `src/Oxygen/Cooker/Import/ImportOptions.h` (`ImportOptions::TextureTuning`) |
-| JSON descriptor schema shipped | `src/Oxygen/Cooker/Import/Schemas/oxygen.texture-descriptor.schema.json` |
+| Runtime loader for textures exists        | `src/Oxygen/Content/Loaders/TextureLoader.h` (`LoadTextureResource`)                                                                                                                             |
+| Import routing is in place                | `src/Oxygen/Cooker/Import/AsyncImportService.cpp` (`case ImportFormat::kTextureImage: make_shared<TextureImportJob>`)                                                                            |
+| Two manifest job types exist              | `src/Oxygen/Cooker/Import/ImportManifest.cpp`: `"texture"` and `"texture-descriptor"`                                                                                                            |
+| High-level import API exists              | `src/Oxygen/Cooker/Import/TextureImporter.h` (`ImportTexture`, `ImportCubeMap`, `TextureImportBuilder`)                                                                                          |
+| Preset system exists                      | `src/Oxygen/Cooker/Import/TextureImportPresets.h` (`TexturePreset`, `ApplyPreset`)                                                                                                               |
+| Binary format is locked                   | `src/Oxygen/Data/PakFormat_render.h` (`TextureResourceDesc`, `static_assert(sizeof(..)==40)`)                                                                                                    |
+| Embedded import path exists               | `src/Oxygen/Cooker/Import/ImportOptions.h` (`ImportOptions::TextureTuning`)                                                                                                                      |
+| JSON descriptor schema shipped            | `src/Oxygen/Cooker/Import/Schemas/oxygen.texture-descriptor.schema.json`                                                                                                                         |
 
 ## 4. Decision
 
@@ -244,74 +244,74 @@ Architectural split:
 **Packing Policies:**
 
 1. `oxygen::content::import::ITexturePackingPolicy`
-    - file: `src/Oxygen/Cooker/Import/TexturePackingPolicy.h`
-    - role: interface for backend-specific alignment strategies.
-      Methods: `Id()`, `AlignRowPitchBytes()`, `AlignSubresourceOffset()`.
+   - file: `src/Oxygen/Cooker/Import/TexturePackingPolicy.h`
+   - role: interface for backend-specific alignment strategies.
+     Methods: `Id()`, `AlignRowPitchBytes()`, `AlignSubresourceOffset()`.
 
 2. `oxygen::content::import::D3D12PackingPolicy`
-    - file: `src/Oxygen/Cooker/Import/TexturePackingPolicy.h`
-    - role: D3D12 alignment — row pitch aligned to 256 bytes, subresource
-      offset aligned to 512 bytes. Singleton via `Instance()`.
+   - file: `src/Oxygen/Cooker/Import/TexturePackingPolicy.h`
+   - role: D3D12 alignment — row pitch aligned to 256 bytes, subresource
+     offset aligned to 512 bytes. Singleton via `Instance()`.
 
 3. `oxygen::content::import::TightPackedPolicy`
-    - file: `src/Oxygen/Cooker/Import/TexturePackingPolicy.h`
-    - role: minimal 4-byte alignment for storage efficiency. Singleton via
-      `Instance()`.
+   - file: `src/Oxygen/Cooker/Import/TexturePackingPolicy.h`
+   - role: minimal 4-byte alignment for storage efficiency. Singleton via
+     `Instance()`.
 
 **High-Level Programmatic API:**
 
 1. Free functions in `oxygen::content::import`
-    - file: `src/Oxygen/Cooker/Import/TextureImporter.h`
-    - role: single-call convenience API for common workflows.
-    - functions:
-      - `ImportTexture(path, policy)` — auto-detect preset from filename
-      - `ImportTexture(path, preset, policy)` — explicit preset
-      - `ImportTexture(path, desc, policy)` — full descriptor control
-      - `ImportTexture(data, source_id, preset, policy)` — from memory
-      - `ImportCubeMap(face_paths, preset, policy)` — 6 face files
-      - `ImportCubeMap(base_path, preset, policy)` — auto-discover faces
-      - `ImportCubeMapFromEquirect(path, face_size, preset, policy)` — panorama
-      - `ImportCubeMapFromLayoutImage(path, preset, policy)` — strip/cross
-      - `ImportTextureArray(layer_paths, preset, policy)` — 2D array
-      - `ImportTexture3D(slice_paths, preset, policy)` — volume texture
-      - `LoadTexture(path)` — decode only, no cooking
-      - `CookScratchImage(image, preset, policy)` — cook pre-decoded image
-      - `DetectPresetFromFilename(path)` — filename convention detection
+   - file: `src/Oxygen/Cooker/Import/TextureImporter.h`
+   - role: single-call convenience API for common workflows.
+   - functions:
+     - `ImportTexture(path, policy)` — auto-detect preset from filename
+     - `ImportTexture(path, preset, policy)` — explicit preset
+     - `ImportTexture(path, desc, policy)` — full descriptor control
+     - `ImportTexture(data, source_id, preset, policy)` — from memory
+     - `ImportCubeMap(face_paths, preset, policy)` — 6 face files
+     - `ImportCubeMap(base_path, preset, policy)` — auto-discover faces
+     - `ImportCubeMapFromEquirect(path, face_size, preset, policy)` — panorama
+     - `ImportCubeMapFromLayoutImage(path, preset, policy)` — strip/cross
+     - `ImportTextureArray(layer_paths, preset, policy)` — 2D array
+     - `ImportTexture3D(slice_paths, preset, policy)` — volume texture
+     - `LoadTexture(path)` — decode only, no cooking
+     - `CookScratchImage(image, preset, policy)` — cook pre-decoded image
+     - `DetectPresetFromFilename(path)` — filename convention detection
 
 2. `oxygen::content::import::TextureImportBuilder`
-    - file: `src/Oxygen/Cooker/Import/TextureImporter.h`
-    - role: fluent builder for advanced configuration. Supports
-      `FromFile()`, `FromMemory()`, `AddCubeFace()`, `AddArrayLayer()`,
-      `AddDepthSlice()`, plus all descriptor overrides. Produces result
-      via `Build(policy)`.
+   - file: `src/Oxygen/Cooker/Import/TextureImporter.h`
+   - role: fluent builder for advanced configuration. Supports
+     `FromFile()`, `FromMemory()`, `AddCubeFace()`, `AddArrayLayer()`,
+     `AddDepthSlice()`, plus all descriptor overrides. Produces result
+     via `Build(policy)`.
 
 **Preset System:**
 
 1. `oxygen::content::import::TexturePreset`
-    - file: `src/Oxygen/Cooker/Import/TextureImportPresets.h`
-    - role: enum of named presets covering common material and HDR workflows.
-    - values: `kAlbedo`, `kNormal`, `kRoughness`, `kMetallic`, `kAO`,
-      `kORMPacked`, `kEmissive`, `kUI`, `kHdrEnvironment`, `kHdrLightProbe`,
-      `kData`, `kHeightMap`.
+   - file: `src/Oxygen/Cooker/Import/TextureImportPresets.h`
+   - role: enum of named presets covering common material and HDR workflows.
+   - values: `kAlbedo`, `kNormal`, `kRoughness`, `kMetallic`, `kAO`,
+     `kORMPacked`, `kEmissive`, `kUI`, `kHdrEnvironment`, `kHdrLightProbe`,
+     `kData`, `kHeightMap`.
 
 2. `ApplyPreset(desc, preset)` / `MakeDescFromPreset(preset)`
-    - file: `src/Oxygen/Cooker/Import/TextureImportPresets.h`
-    - role: populate a `TextureImportDesc` with sensible defaults for the
-      given preset. Shape fields (`width`, `height`, `depth`,
-      `array_layers`, `source_id`) are not modified.
+   - file: `src/Oxygen/Cooker/Import/TextureImportPresets.h`
+   - role: populate a `TextureImportDesc` with sensible defaults for the
+     given preset. Shape fields (`width`, `height`, `depth`,
+     `array_layers`, `source_id`) are not modified.
 
 ### 6.2 Runtime Classes
 
 1. `oxygen::content::loaders::LoadTextureResource`
-    - file: `src/Oxygen/Content/Loaders/TextureLoader.h`
-    - role: inline loader function. Reads `TextureResourceDesc` and pixel
-      payload from PAK stream into `data::TextureResource`. Registered
-      with `AssetLoader` as the loader for `kTexture` asset type.
+   - file: `src/Oxygen/Content/Loaders/TextureLoader.h`
+   - role: inline loader function. Reads `TextureResourceDesc` and pixel
+     payload from PAK stream into `data::TextureResource`. Registered
+     with `AssetLoader` as the loader for `kTexture` asset type.
 
 2. `oxygen::data::TextureResource`
-    - file: `src/Oxygen/Data/TextureResource.h`
-    - role: runtime wrapper around `TextureResourceDesc` + pixel payload
-      bytes. Provides dimension, format, and data accessors.
+   - file: `src/Oxygen/Data/TextureResource.h`
+   - role: runtime wrapper around `TextureResourceDesc` + pixel payload
+     bytes. Provides dimension, format, and data accessors.
 
 ### 6.3 Routing
 
@@ -417,34 +417,34 @@ texture <source>
 
 CLI-only optional flags (NOT valid in manifest job objects):
 
-| Flag | Type | Description |
-| --- | --- | --- |
-| `--output` | `string` | Destination cooked root directory |
-| `--name` | `string` | Human-readable job name |
-| `--report` | `string` | Report destination path |
-| `--content-hashing` | `bool` | Enable/disable content hashing |
-| `--intent` | `string` | Texture intent (see Section 7.4.1) |
-| `--color-space` | `string` | Source color space (`srgb` / `linear`) |
-| `--output-format` | `string` | Output pixel format |
-| `--data-format` | `string` | Data format for non-color intents |
-| `--preset` | `string` | Named preset (see Section 7.4.2) |
-| `--mip-policy` | `string` | `none` / `full` / `max` |
-| `--max-mips` | `uint32` | Max mip levels (when `--mip-policy=max`) |
-| `--mip-filter` | `string` | `box` / `kaiser` / `lanczos` |
-| `--bc7-quality` | `string` | `none` / `fast` / `default` / `high` |
-| `--packing-policy` | `string` | `d3d12` / `tight` |
-| `--hdr-handling` | `string` | `error` / `tonemap` / `keep` |
-| `--exposure-ev` | `float` | Exposure EV adjustment before tonemap |
-| `--bake-hdr-to-ldr` | `bool` | Bake HDR to LDR via tonemap |
-| `--cubemap` | `bool` | Import as cubemap |
-| `--equirect-to-cube` | `bool` | Convert equirectangular panorama to cube |
-| `--cube-face-size` | `uint32` | Cubemap face size in pixels |
-| `--cube-layout` | `string` | `auto` / `hstrip` / `vstrip` / `hcross` / `vcross` |
-| `--flip-y` | `bool` | Flip image vertically during decode |
-| `--force-rgba` | `bool` | Force RGBA output during decode |
-| `--flip-normal-green` | `bool` | Flip green channel (normal map convention) |
-| `--renormalize-normals` | `bool` | Renormalize normals in mip levels |
-| `--source` | `string` (repeatable) | Additional source mapping `file:layer:mip:slice` |
+| Flag                    | Type                  | Description                                        |
+| ----------------------- | --------------------- | -------------------------------------------------- |
+| `--output`              | `string`              | Destination cooked root directory                  |
+| `--name`                | `string`              | Human-readable job name                            |
+| `--report`              | `string`              | Report destination path                            |
+| `--content-hashing`     | `bool`                | Enable/disable content hashing                     |
+| `--intent`              | `string`              | Texture intent (see Section 7.4.1)                 |
+| `--color-space`         | `string`              | Source color space (`srgb` / `linear`)             |
+| `--output-format`       | `string`              | Output pixel format                                |
+| `--data-format`         | `string`              | Data format for non-color intents                  |
+| `--preset`              | `string`              | Named preset (see Section 7.4.2)                   |
+| `--mip-policy`          | `string`              | `none` / `full` / `max`                            |
+| `--max-mips`            | `uint32`              | Max mip levels (when `--mip-policy=max`)           |
+| `--mip-filter`          | `string`              | `box` / `kaiser` / `lanczos`                       |
+| `--bc7-quality`         | `string`              | `none` / `fast` / `default` / `high`               |
+| `--packing-policy`      | `string`              | `d3d12` / `tight`                                  |
+| `--hdr-handling`        | `string`              | `error` / `tonemap` / `keep`                       |
+| `--exposure-ev`         | `float`               | Exposure EV adjustment before tonemap              |
+| `--bake-hdr-to-ldr`     | `bool`                | Bake HDR to LDR via tonemap                        |
+| `--cubemap`             | `bool`                | Import as cubemap                                  |
+| `--equirect-to-cube`    | `bool`                | Convert equirectangular panorama to cube           |
+| `--cube-face-size`      | `uint32`              | Cubemap face size in pixels                        |
+| `--cube-layout`         | `string`              | `auto` / `hstrip` / `vstrip` / `hcross` / `vcross` |
+| `--flip-y`              | `bool`                | Flip image vertically during decode                |
+| `--force-rgba`          | `bool`                | Force RGBA output during decode                    |
+| `--flip-normal-green`   | `bool`                | Flip green channel (normal map convention)         |
+| `--renormalize-normals` | `bool`                | Renormalize normals in mip levels                  |
+| `--source`              | `string` (repeatable) | Additional source mapping `file:layer:mip:slice`   |
 
 These flags are consumed by `TextureCommand` to build a `TextureImportSettings`
 struct. They do NOT appear in manifest `jobs[]` entries. Manifest texture jobs
@@ -479,9 +479,7 @@ Fields valid in a `type: "texture"` manifest job:
   "bc7_quality": "default",
   "packing_policy": "d3d12",
   "cubemap": false,
-  "sources": [
-    { "file": "extra_detail.png", "layer": 1, "mip": 0 }
-  ],
+  "sources": [{ "file": "extra_detail.png", "layer": 1, "mip": 0 }],
   "depends_on": ["other.job.id"]
 }
 ```
@@ -542,9 +540,24 @@ Manifest-level defaults reduce per-job verbosity:
     }
   },
   "jobs": [
-    { "id": "albedo",  "type": "texture", "source": "Content/Textures/brick_albedo.png",  "preset": "albedo" },
-    { "id": "normal",  "type": "texture", "source": "Content/Textures/brick_normal.png",  "preset": "normal" },
-    { "id": "roughness","type": "texture", "source": "Content/Textures/brick_roughness.png","preset": "roughness" }
+    {
+      "id": "albedo",
+      "type": "texture",
+      "source": "Content/Textures/brick_albedo.png",
+      "preset": "albedo"
+    },
+    {
+      "id": "normal",
+      "type": "texture",
+      "source": "Content/Textures/brick_normal.png",
+      "preset": "normal"
+    },
+    {
+      "id": "roughness",
+      "type": "texture",
+      "source": "Content/Textures/brick_roughness.png",
+      "preset": "roughness"
+    }
   ]
 }
 ```
@@ -559,20 +572,20 @@ asset pipelines.
 
 #### 7.4.1 Top-Level Field Contract
 
-| Field | Required | Type | Description |
-| --- | --- | --- | --- |
-| `$schema` | No | `string` | Points to shipped JSON Schema for editor integration |
-| `source` | **Yes** | `string` | Path to primary source image |
-| `name` | No | `string` | Human-readable asset name |
-| `content_hashing` | No | `bool` | Override content hashing toggle |
-| `preset` | No | string enum | Named preset (see Section 7.4.2) |
-| `intent` | No | string enum | Texture intent (see Section 7.4.3) |
-| `sources` | No | array | Additional source mappings for multi-source assembly |
-| `decode` | No | object | Decode options (Section 7.4.4) |
-| `mips` | No | object | Mip generation settings (Section 7.4.5) |
-| `output` | No | object | Output format settings (Section 7.4.6) |
-| `hdr` | No | object | HDR handling settings (Section 7.4.7) |
-| `cube` | No | object | Cubemap settings (Section 7.4.8) |
+| Field             | Required | Type        | Description                                          |
+| ----------------- | -------- | ----------- | ---------------------------------------------------- |
+| `$schema`         | No       | `string`    | Points to shipped JSON Schema for editor integration |
+| `source`          | **Yes**  | `string`    | Path to primary source image                         |
+| `name`            | No       | `string`    | Human-readable asset name                            |
+| `content_hashing` | No       | `bool`      | Override content hashing toggle                      |
+| `preset`          | No       | string enum | Named preset (see Section 7.4.2)                     |
+| `intent`          | No       | string enum | Texture intent (see Section 7.4.3)                   |
+| `sources`         | No       | array       | Additional source mappings for multi-source assembly |
+| `decode`          | No       | object      | Decode options (Section 7.4.4)                       |
+| `mips`            | No       | object      | Mip generation settings (Section 7.4.5)              |
+| `output`          | No       | object      | Output format settings (Section 7.4.6)               |
+| `hdr`             | No       | object      | HDR handling settings (Section 7.4.7)                |
+| `cube`            | No       | object      | Cubemap settings (Section 7.4.8)                     |
 
 Canonical example (`brick_albedo.texture.json`):
 
@@ -601,41 +614,41 @@ Top-level validation rules:
 
 #### 7.4.2 Preset Values
 
-| Value | Intent | Output Format | BC7 | Mips |
-| --- | --- | --- | --- | --- |
-| `albedo` / `albedo-srgb` | kAlbedo | kBC7UNormSRGB | kDefault | full, Kaiser |
-| `albedo-linear` | kAlbedo | kBC7UNorm | kDefault | full, Kaiser |
-| `normal` | kNormalTS | kBC7UNorm | kDefault | full, Kaiser, renormalize |
-| `normal-bc7` | kNormalTS | kBC7UNorm | kHigh | full, Kaiser, renormalize |
-| `roughness` | kRoughness | kBC7UNorm | kDefault | full, Kaiser |
-| `metallic` | kMetallic | kBC7UNorm | kDefault | full, Kaiser |
-| `ao` | kAO | kBC7UNorm | kDefault | full, Kaiser |
-| `orm` / `orm-bc7` | kORMPacked | kBC7UNorm | kDefault/High | full, Kaiser |
-| `emissive` | kEmissive | kBC7UNormSRGB | kDefault | full, Kaiser |
-| `ui` | kAlbedo | kBC7UNormSRGB | kDefault | full, Lanczos |
-| `hdr-env` | kHdrEnvironment | kRGBA32Float | kNone | full, Box |
-| `hdr-env-16f` | kHdrEnvironment | kRGBA16Float | kNone | full, Box |
-| `hdr-env-32f` | kHdrEnvironment | kRGBA32Float | kNone | full, Box |
-| `hdr-probe` | kHdrLightProbe | kRGBA16Float | kNone | full, Box |
-| `data` | kData | kRGBA8UNorm | kNone | none |
-| `height` | kHeightMap | kR16UNorm | kNone | full, Kaiser |
+| Value                    | Intent          | Output Format | BC7           | Mips                      |
+| ------------------------ | --------------- | ------------- | ------------- | ------------------------- |
+| `albedo` / `albedo-srgb` | kAlbedo         | kBC7UNormSRGB | kDefault      | full, Kaiser              |
+| `albedo-linear`          | kAlbedo         | kBC7UNorm     | kDefault      | full, Kaiser              |
+| `normal`                 | kNormalTS       | kBC7UNorm     | kDefault      | full, Kaiser, renormalize |
+| `normal-bc7`             | kNormalTS       | kBC7UNorm     | kHigh         | full, Kaiser, renormalize |
+| `roughness`              | kRoughness      | kBC7UNorm     | kDefault      | full, Kaiser              |
+| `metallic`               | kMetallic       | kBC7UNorm     | kDefault      | full, Kaiser              |
+| `ao`                     | kAO             | kBC7UNorm     | kDefault      | full, Kaiser              |
+| `orm` / `orm-bc7`        | kORMPacked      | kBC7UNorm     | kDefault/High | full, Kaiser              |
+| `emissive`               | kEmissive       | kBC7UNormSRGB | kDefault      | full, Kaiser              |
+| `ui`                     | kAlbedo         | kBC7UNormSRGB | kDefault      | full, Lanczos             |
+| `hdr-env`                | kHdrEnvironment | kRGBA32Float  | kNone         | full, Box                 |
+| `hdr-env-16f`            | kHdrEnvironment | kRGBA16Float  | kNone         | full, Box                 |
+| `hdr-env-32f`            | kHdrEnvironment | kRGBA32Float  | kNone         | full, Box                 |
+| `hdr-probe`              | kHdrLightProbe  | kRGBA16Float  | kNone         | full, Box                 |
+| `data`                   | kData           | kRGBA8UNorm   | kNone         | none                      |
+| `height`                 | kHeightMap      | kR16UNorm     | kNone         | full, Kaiser              |
 
 #### 7.4.3 Texture Intent Values
 
-| Value | `TextureIntent` | Notes |
-| --- | --- | --- |
-| `"albedo"` | `kAlbedo` | sRGB input expected |
-| `"normal"` | `kNormalTS` | Linear, XY channels, renormalization |
-| `"roughness"` | `kRoughness` | Linear, single channel |
-| `"metallic"` | `kMetallic` | Linear, single channel |
-| `"ao"` | `kAO` | Linear, single channel |
-| `"emissive"` | `kEmissive` | sRGB or HDR |
-| `"opacity"` | `kOpacity` | Linear, single channel |
-| `"orm"` | `kORMPacked` | R=AO, G=Roughness, B=Metallic |
-| `"hdr_env"` | `kHdrEnvironment` | Linear float, skybox |
-| `"hdr_probe"` | `kHdrLightProbe` | Linear float, IBL |
-| `"data"` | `kData` | Generic, no special handling |
-| `"height"` | `kHeightMap` | Single channel, high precision |
+| Value         | `TextureIntent`   | Notes                                |
+| ------------- | ----------------- | ------------------------------------ |
+| `"albedo"`    | `kAlbedo`         | sRGB input expected                  |
+| `"normal"`    | `kNormalTS`       | Linear, XY channels, renormalization |
+| `"roughness"` | `kRoughness`      | Linear, single channel               |
+| `"metallic"`  | `kMetallic`       | Linear, single channel               |
+| `"ao"`        | `kAO`             | Linear, single channel               |
+| `"emissive"`  | `kEmissive`       | sRGB or HDR                          |
+| `"opacity"`   | `kOpacity`        | Linear, single channel               |
+| `"orm"`       | `kORMPacked`      | R=AO, G=Roughness, B=Metallic        |
+| `"hdr_env"`   | `kHdrEnvironment` | Linear float, skybox                 |
+| `"hdr_probe"` | `kHdrLightProbe`  | Linear float, IBL                    |
+| `"data"`      | `kData`           | Generic, no special handling         |
+| `"height"`    | `kHeightMap`      | Single channel, high precision       |
 
 #### 7.4.4 `decode` Settings
 
@@ -648,12 +661,12 @@ Top-level validation rules:
 }
 ```
 
-| Field | Maps to | Default |
-| --- | --- | --- |
-| `color_space` | `TextureImportDesc::source_color_space` | `"linear"` |
-| `flip_y` | `TextureImportDesc::flip_y_on_decode` | `false` |
-| `force_rgba` | `TextureImportDesc::force_rgba_on_decode` | `true` |
-| `flip_normal_green` | `TextureImportDesc::flip_normal_green` | `false` |
+| Field               | Maps to                                   | Default    |
+| ------------------- | ----------------------------------------- | ---------- |
+| `color_space`       | `TextureImportDesc::source_color_space`   | `"linear"` |
+| `flip_y`            | `TextureImportDesc::flip_y_on_decode`     | `false`    |
+| `force_rgba`        | `TextureImportDesc::force_rgba_on_decode` | `true`     |
+| `flip_normal_green` | `TextureImportDesc::flip_normal_green`    | `false`    |
 
 #### 7.4.5 `mips` Settings
 
@@ -666,13 +679,13 @@ Top-level validation rules:
 }
 ```
 
-| Field | `MipPolicy` / Maps to | Notes |
-| --- | --- | --- |
-| `"none"` | `MipPolicy::kNone` | No mip generation |
-| `"full"` | `MipPolicy::kFullChain` | Full chain to 1×1 |
-| `"max"` | `MipPolicy::kMaxCount` | `max_mips` required |
-| `filter` | `TextureImportDesc::mip_filter` | `box` / `kaiser` / `lanczos` |
-| `renormalize` | `TextureImportDesc::renormalize_normals_in_mips` | Normal maps only |
+| Field         | `MipPolicy` / Maps to                            | Notes                        |
+| ------------- | ------------------------------------------------ | ---------------------------- |
+| `"none"`      | `MipPolicy::kNone`                               | No mip generation            |
+| `"full"`      | `MipPolicy::kFullChain`                          | Full chain to 1×1            |
+| `"max"`       | `MipPolicy::kMaxCount`                           | `max_mips` required          |
+| `filter`      | `TextureImportDesc::mip_filter`                  | `box` / `kaiser` / `lanczos` |
+| `renormalize` | `TextureImportDesc::renormalize_normals_in_mips` | Normal maps only             |
 
 #### 7.4.6 `output` Settings
 
@@ -685,14 +698,14 @@ Top-level validation rules:
 }
 ```
 
-| Format value | `Format` enum | Notes |
-| --- | --- | --- |
-| `"rgba8"` | `kRGBA8UNorm` | Uncompressed LDR |
+| Format value   | `Format` enum     | Notes                  |
+| -------------- | ----------------- | ---------------------- |
+| `"rgba8"`      | `kRGBA8UNorm`     | Uncompressed LDR       |
 | `"rgba8_srgb"` | `kRGBA8UNormSRGB` | Uncompressed LDR, sRGB |
-| `"bc7"` | `kBC7UNorm` | BC7 compressed, linear |
-| `"bc7_srgb"` | `kBC7UNormSRGB` | BC7 compressed, sRGB |
-| `"rgba16f"` | `kRGBA16Float` | Half-precision float |
-| `"rgba32f"` | `kRGBA32Float` | Full-precision float |
+| `"bc7"`        | `kBC7UNorm`       | BC7 compressed, linear |
+| `"bc7_srgb"`   | `kBC7UNormSRGB`   | BC7 compressed, sRGB   |
+| `"rgba16f"`    | `kRGBA16Float`    | Half-precision float   |
+| `"rgba32f"`    | `kRGBA32Float`    | Full-precision float   |
 
 Source RGB is interpreted using `source_color_space`. Color mip chains are
 computed in linear FP32, then encoded and quantized once for `output_format`.
@@ -723,11 +736,11 @@ alignment) or `"tight"` (4-byte alignment for storage efficiency).
 }
 ```
 
-| `handling` value | `HdrHandling` | Behavior |
-| --- | --- | --- |
-| `"error"` | `kError` | Fail if HDR input with LDR output |
-| `"tonemap"` / `"auto"` | `kTonemapAuto` | Automatically tonemap HDR → LDR |
-| `"keep"` / `"float"` | `kKeepFloat` | Override output format to float |
+| `handling` value       | `HdrHandling`  | Behavior                          |
+| ---------------------- | -------------- | --------------------------------- |
+| `"error"`              | `kError`       | Fail if HDR input with LDR output |
+| `"tonemap"` / `"auto"` | `kTonemapAuto` | Automatically tonemap HDR → LDR   |
+| `"keep"` / `"float"`   | `kKeepFloat`   | Override output format to float   |
 
 `exposure_ev` is applied before tonemapping. `bake_hdr` forces the HDR-to-LDR
 bake path explicitly.
@@ -743,22 +756,22 @@ bake path explicitly.
 }
 ```
 
-| Field | Description |
-| --- | --- |
-| `cubemap` | Import as cubemap via multi-source or single-image assembly |
-| `equirect_to_cube` | Convert 2:1 equirectangular panorama to 6-face cube map |
-| `cube_face_size` | Face resolution in pixels (required when `equirect_to_cube` is `true`) |
-| `cube_layout` | Layout hint for layout images: `auto`, `hstrip`, `vstrip`, `hcross`, `vcross` |
+| Field              | Description                                                                   |
+| ------------------ | ----------------------------------------------------------------------------- |
+| `cubemap`          | Import as cubemap via multi-source or single-image assembly                   |
+| `equirect_to_cube` | Convert 2:1 equirectangular panorama to 6-face cube map                       |
+| `cube_face_size`   | Face resolution in pixels (required when `equirect_to_cube` is `true`)        |
+| `cube_layout`      | Layout hint for layout images: `auto`, `hstrip`, `vstrip`, `hcross`, `vcross` |
 
 Supported cube map image layouts:
 
-| Layout | Aspect | Face Arrangement |
-| --- | --- | --- |
-| Horizontal Strip (`hstrip`) | 6:1 | L→R: +X, −X, +Y, −Y, +Z, −Z |
-| Vertical Strip (`vstrip`) | 1:6 | T→B: +X, −X, +Y, −Y, +Z, −Z |
-| Horizontal Cross (`hcross`) | 4:3 | Standard cross |
-| Vertical Cross (`vcross`) | 3:4 | Vertical cross |
-| `auto` | Any | Detected from image dimensions |
+| Layout                      | Aspect | Face Arrangement               |
+| --------------------------- | ------ | ------------------------------ |
+| Horizontal Strip (`hstrip`) | 6:1    | L→R: +X, −X, +Y, −Y, +Z, −Z    |
+| Vertical Strip (`vstrip`)   | 1:6    | T→B: +X, −X, +Y, −Y, +Z, −Z    |
+| Horizontal Cross (`hcross`) | 4:3    | Standard cross                 |
+| Vertical Cross (`vcross`)   | 3:4    | Vertical cross                 |
+| `auto`                      | Any    | Detected from image dimensions |
 
 #### 7.4.9 Multi-Source Assembly (`sources` array)
 
@@ -782,29 +795,29 @@ layer index corresponding to `CubeFace` order (+X=0, −X=1, +Y=2, −Y=3,
 
 `sources` items:
 
-| Field | Type | Description |
-| --- | --- | --- |
-| `file` | `string` | Path to the source image |
+| Field   | Type     | Description                              |
+| ------- | -------- | ---------------------------------------- |
+| `file`  | `string` | Path to the source image                 |
 | `layer` | `uint16` | Array layer or cube face index (0-based) |
-| `mip` | `uint16` | Mip level (0 = highest resolution) |
-| `slice` | `uint16` | Depth slice for 3D textures |
+| `mip`   | `uint16` | Mip level (0 = highest resolution)       |
+| `slice` | `uint16` | Depth slice for 3D textures              |
 
 ### 7.5 Auto-Detection (Filename Conventions)
 
 `DetectPresetFromFilename()` examines filename suffixes to select a preset:
 
-| Suffix Pattern | Detected Preset |
-| --- | --- |
-| `*_albedo.*`, `*_basecolor.*`, `*_diffuse.*`, `*_color.*` | `kAlbedo` |
-| `*_normal.*`, `*_nrm.*` | `kNormal` |
-| `*_roughness.*`, `*_rough.*` | `kRoughness` |
-| `*_metallic.*`, `*_metal.*` | `kMetallic` |
-| `*_ao.*`, `*_occlusion.*` | `kAO` |
-| `*_orm.*` | `kORMPacked` |
-| `*_emissive.*`, `*_emission.*` | `kEmissive` |
-| `*_height.*`, `*_displacement.*`, `*_disp.*`, `*_bump.*` | `kHeightMap` |
-| `.hdr` / `.exr` extension, `*_env.*`, `*_hdri.*` | `kHdrEnvironment` |
-| (no match) | `kData` |
+| Suffix Pattern                                            | Detected Preset   |
+| --------------------------------------------------------- | ----------------- |
+| `*_albedo.*`, `*_basecolor.*`, `*_diffuse.*`, `*_color.*` | `kAlbedo`         |
+| `*_normal.*`, `*_nrm.*`                                   | `kNormal`         |
+| `*_roughness.*`, `*_rough.*`                              | `kRoughness`      |
+| `*_metallic.*`, `*_metal.*`                               | `kMetallic`       |
+| `*_ao.*`, `*_occlusion.*`                                 | `kAO`             |
+| `*_orm.*`                                                 | `kORMPacked`      |
+| `*_emissive.*`, `*_emission.*`                            | `kEmissive`       |
+| `*_height.*`, `*_displacement.*`, `*_disp.*`, `*_bump.*`  | `kHeightMap`      |
+| `.hdr` / `.exr` extension, `*_env.*`, `*_hdri.*`          | `kHdrEnvironment` |
+| (no match)                                                | `kData`           |
 
 ---
 
@@ -814,15 +827,15 @@ The following pipeline stages are exposed in `detail` namespace for unit
 testing. Each stage takes a `ScratchImage` (by value, moved) and returns
 `Result<ScratchImage, TextureImportError>` or a derived type.
 
-| Stage | Function | Input | Output |
-| --- | --- | --- | --- |
-| 1. Decode | `detail::DecodeSource(bytes, desc)` | Raw bytes | Working ScratchImage |
-| 2. Working format | `detail::ConvertToWorkingFormat(image, desc)` | Any decoded format | RGBA8 or RGBA32Float |
-| 3. Content processing | `detail::ApplyContentProcessing(image, desc)` | Working format | Color-space corrected |
-| 4. Mip generation | `detail::GenerateMips(image, desc)` | Single mip | Full/limited mip chain |
-| 5. Output format | `detail::ConvertToOutputFormat(image, desc)` | Working format | Final stored format |
-| 6. Pack | `detail::PackSubresources(image, policy)` | Final format | `vector<byte>` payload |
-| 7. Hash | `detail::ComputeContentHash(payload)` | Payload bytes | `uint64_t` hash |
+| Stage                 | Function                                      | Input              | Output                 |
+| --------------------- | --------------------------------------------- | ------------------ | ---------------------- |
+| 1. Decode             | `detail::DecodeSource(bytes, desc)`           | Raw bytes          | Working ScratchImage   |
+| 2. Working format     | `detail::ConvertToWorkingFormat(image, desc)` | Any decoded format | RGBA8 or RGBA32Float   |
+| 3. Content processing | `detail::ApplyContentProcessing(image, desc)` | Working format     | Color-space corrected  |
+| 4. Mip generation     | `detail::GenerateMips(image, desc)`           | Single mip         | Full/limited mip chain |
+| 5. Output format      | `detail::ConvertToOutputFormat(image, desc)`  | Working format     | Final stored format    |
+| 6. Pack               | `detail::PackSubresources(image, policy)`     | Final format       | `vector<byte>` payload |
+| 7. Hash               | `detail::ComputeContentHash(payload)`         | Payload bytes      | `uint64_t` hash        |
 
 All stages cooperatively check `desc.stop_token` to support cancellation.
 
@@ -894,12 +907,12 @@ runtime knows how to interpret the offsets.
 
 Key layout constants:
 
-| Constant | Value | Role |
-| --- | --- | --- |
-| `kTextureDescriptorExtension` | `".otex"` | File extension for standalone descriptors |
-| `texture_descriptors_subdir` | `"Textures"` | Subfolder under cooked root |
-| `textures_table_file_name` | `"textures.table"` | Resource table filename |
-| `textures_data_file_name` | `"textures.data"` | Pixel payload filename |
+| Constant                      | Value              | Role                                      |
+| ----------------------------- | ------------------ | ----------------------------------------- |
+| `kTextureDescriptorExtension` | `".otex"`          | File extension for standalone descriptors |
+| `texture_descriptors_subdir`  | `"Textures"`       | Subfolder under cooked root               |
+| `textures_table_file_name`    | `"textures.table"` | Resource table filename                   |
+| `textures_data_file_name`     | `"textures.data"`  | Pixel payload filename                    |
 
 Virtual path for runtime mounting:
 `TextureVirtualPath(name)` = `<virtual_mount_root>/Textures/<name>.otex`
@@ -910,14 +923,14 @@ Virtual path for runtime mounting:
 
 `TextureImportError` (uint8_t) groups errors by range:
 
-| Range | Category | Key values |
-| --- | --- | --- |
-| 0 | Success | `kSuccess` |
-| 1–19 | Decode | `kUnsupportedFormat`, `kCorruptedData`, `kDecodeFailed`, `kOutOfMemory` |
-| 20–39 | Validation | `kInvalidDimensions`, `kDimensionMismatch`, `kArrayLayerCountInvalid`, `kDepthInvalidFor2D`, `kInvalidMipPolicy`, `kInvalidOutputFormat`, `kIntentFormatMismatch` |
-| 40–59 | Cook | `kMipGenerationFailed`, `kCompressionFailed`, `kOutputFormatInvalid`, `kHdrRequiresFloatFormat` |
-| 60–79 | I/O | `kFileNotFound`, `kFileReadFailed`, `kWriteFailed` |
-| 80–89 | Cancellation | `kCancelled` |
+| Range | Category     | Key values                                                                                                                                                        |
+| ----- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0     | Success      | `kSuccess`                                                                                                                                                        |
+| 1–19  | Decode       | `kUnsupportedFormat`, `kCorruptedData`, `kDecodeFailed`, `kOutOfMemory`                                                                                           |
+| 20–39 | Validation   | `kInvalidDimensions`, `kDimensionMismatch`, `kArrayLayerCountInvalid`, `kDepthInvalidFor2D`, `kInvalidMipPolicy`, `kInvalidOutputFormat`, `kIntentFormatMismatch` |
+| 40–59 | Cook         | `kMipGenerationFailed`, `kCompressionFailed`, `kOutputFormatInvalid`, `kHdrRequiresFloatFormat`                                                                   |
+| 60–79 | I/O          | `kFileNotFound`, `kFileReadFailed`, `kWriteFailed`                                                                                                                |
+| 80–89 | Cancellation | `kCancelled`                                                                                                                                                      |
 
 Category helper predicates: `IsDecodeError()`, `IsValidationError()`,
 `IsCookError()`, `IsIoError()`.
@@ -958,14 +971,14 @@ Key contracts:
 
 Cube face ordering follows D3D12 / Vulkan convention:
 
-| `CubeFace` | Layer index | Oxygen direction |
-| --- | --- | --- |
-| `kPositiveX` | 0 | +X (Right) |
-| `kNegativeX` | 1 | −X (Left) |
-| `kPositiveY` | 2 | +Y (Forward) |
-| `kNegativeY` | 3 | −Y (Back) |
-| `kPositiveZ` | 4 | +Z (Up) |
-| `kNegativeZ` | 5 | −Z (Down) |
+| `CubeFace`   | Layer index | Oxygen direction |
+| ------------ | ----------- | ---------------- |
+| `kPositiveX` | 0           | +X (Right)       |
+| `kNegativeX` | 1           | −X (Left)        |
+| `kPositiveY` | 2           | +Y (Forward)     |
+| `kNegativeY` | 3           | −Y (Back)        |
+| `kPositiveZ` | 4           | +Z (Up)          |
+| `kNegativeZ` | 5           | −Z (Down)        |
 
 Oxygen uses a **Z-up, right-handed** coordinate system. The face order in
 `TextureSourceSet` and in the pixel payload MUST match this table.

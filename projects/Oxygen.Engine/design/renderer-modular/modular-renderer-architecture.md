@@ -47,12 +47,12 @@ Important current-state signals:
 
 The renderer architecture is intentionally layered.
 
-| Layer | Meaning | Owns | Customization mode |
-| --- | --- | --- | --- |
-| `Renderer` | Structural composition root and execution substrate | capability modules, runtime/session services, frame execution substrate | structural composition and scenario factories |
-| `Pipeline` | Interchangeable policy package | view policy, scenario policy, default pass-config routing, graph construction rules | config data |
-| `RenderGraph` | Concrete coroutine orchestration | ordered/conditional rendering logic for one scenario or view | logic |
-| `RenderPass` | Reusable execution primitive | one rendering/compute operation plus config | config and new pass types |
+| Layer         | Meaning                                             | Owns                                                                                | Customization mode                            |
+| ------------- | --------------------------------------------------- | ----------------------------------------------------------------------------------- | --------------------------------------------- |
+| `Renderer`    | Structural composition root and execution substrate | capability modules, runtime/session services, frame execution substrate             | structural composition and scenario factories |
+| `Pipeline`    | Interchangeable policy package                      | view policy, scenario policy, default pass-config routing, graph construction rules | config data                                   |
+| `RenderGraph` | Concrete coroutine orchestration                    | ordered/conditional rendering logic for one scenario or view                        | logic                                         |
+| `RenderPass`  | Reusable execution primitive                        | one rendering/compute operation plus config                                         | config and new pass types                     |
 
 Working interpretation:
 
@@ -132,18 +132,18 @@ The original working design also carried a concrete current-state inventory.
 That detail is preserved here because it is useful when mapping the architecture
 back onto the existing codebase.
 
-| Current-state bucket | Concrete current ownership signals | Why it matters |
-| --- | --- | --- |
-| Execution/runtime host | `gfx_weak_`, `engine_`, `config_`, `render_context_pool_`, `render_context_`, `frame_seq_num`, `frame_slot_`, `last_frame_dt_seconds_`, `frame_budget_stats_`, `offscreen_frame_used_`, `offscreen_frame_active_` | This is the current execution substrate that maps to phase-1 `Renderer Core`. |
-| View runtime state | `view_registration_mutex_`, `render_graphs_`, `view_state_mutex_`, `view_ready_states_`, `resolved_views_`, `prepared_frames_`, `per_view_storage_`, `per_view_runtime_state_`, `pending_cleanup_mutex_`, `pending_cleanup_` | This is the current raw material for `View Registration and Lifetime`. |
-| Scene-prep path | `scene_prep_`, `scene_prep_state_`, plus the services installed into `ScenePrepState`: `GeometryUploader`, `TransformUploader`, `MaterialBinder`, `DrawMetadataEmitter`, `LightManager` | This is the current mixed ownership area later narrowed into `Scene Preparation`, `GPU Upload and Asset Binding`, and `Lighting Data`. |
-| GPU ingress | `uploader_`, `upload_staging_provider_`, `inline_transfers_`, `inline_staging_provider_`, `texture_binder_`, `asset_loader_` | This becomes the stable `GPU Upload and Asset Binding` family. |
-| Baseline shader publication | `view_const_cpu_`, `view_const_manager_`, `view_frame_bindings_publisher_`, `draw_frame_bindings_publisher_`, `view_color_data_publisher_` | This is why `Renderer Core` includes baseline shader-execution substrate rather than exposing it as a peer optional family. |
-| Optional family publication | `debug_frame_bindings_publisher_`, `lighting_frame_bindings_publisher_`, `shadow_frame_bindings_publisher_`, `vsm_frame_bindings_publisher_`, `environment_view_data_publisher_`, `environment_frame_bindings_publisher_`, `conventional_shadow_draw_record_buffer_` | This is the source of the publication refactor pressure and why there is no top-level `Feature Shader Inputs` family in phase 1. |
-| Lighting/shadow services | `shadow_manager_`, with `LightManager` still indirectly owned through `ScenePrepState` | This is the ownership drift that motivates the split into `Lighting Data` and `Shadowing`. |
-| Environment services | `environment_view_data_publisher_`, `environment_frame_bindings_publisher_`, `brdf_lut_manager_`, `per_view_atmo_luts_`, `ibl_manager_`, `sky_capture_pass_`, `sky_capture_pass_config_`, `sky_atmo_lut_compute_pass_`, `sky_atmo_lut_compute_pass_config_`, `ibl_compute_pass_`, `env_static_manager_`, `last_atmo_generation_`, `last_seen_view_frame_seq_`, `sky_capture_requested_`, atmosphere state | This becomes `Environment Lighting` as a coherent family with internal subfacets. |
-| Composition state | `composition_mutex_`, `composition_submission_`, `composition_surface_`, `compositing_pass_`, `compositing_pass_config_` | This is the current scalar bottleneck replaced by queued multi-submission composition. |
-| Diagnostics state | `gpu_debug_manager_`, `gpu_timeline_profiler_`, `gpu_timeline_panel_`, `imgui_module_subscription_`, `gpu_timeline_panel_drawer_token_`, `console_`, timing/stat accumulators | This remains an optional `Diagnostics and Profiling` family. |
+| Current-state bucket        | Concrete current ownership signals                                                                                                                                                                                                                                                                                                                                                                        | Why it matters                                                                                                                         |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Execution/runtime host      | `gfx_weak_`, `engine_`, `config_`, `render_context_pool_`, `render_context_`, `frame_seq_num`, `frame_slot_`, `last_frame_dt_seconds_`, `frame_budget_stats_`, `offscreen_frame_used_`, `offscreen_frame_active_`                                                                                                                                                                                         | This is the current execution substrate that maps to phase-1 `Renderer Core`.                                                          |
+| View runtime state          | `view_registration_mutex_`, `render_graphs_`, `view_state_mutex_`, `view_ready_states_`, `resolved_views_`, `prepared_frames_`, `per_view_storage_`, `per_view_runtime_state_`, `pending_cleanup_mutex_`, `pending_cleanup_`                                                                                                                                                                              | This is the current raw material for `View Registration and Lifetime`.                                                                 |
+| Scene-prep path             | `scene_prep_`, `scene_prep_state_`, plus the services installed into `ScenePrepState`: `GeometryUploader`, `TransformUploader`, `MaterialBinder`, `DrawMetadataEmitter`, `LightManager`                                                                                                                                                                                                                   | This is the current mixed ownership area later narrowed into `Scene Preparation`, `GPU Upload and Asset Binding`, and `Lighting Data`. |
+| GPU ingress                 | `uploader_`, `upload_staging_provider_`, `inline_transfers_`, `inline_staging_provider_`, `texture_binder_`, `asset_loader_`                                                                                                                                                                                                                                                                              | This becomes the stable `GPU Upload and Asset Binding` family.                                                                         |
+| Baseline shader publication | `view_const_cpu_`, `view_const_manager_`, `view_frame_bindings_publisher_`, `draw_frame_bindings_publisher_`, `view_color_data_publisher_`                                                                                                                                                                                                                                                                | This is why `Renderer Core` includes baseline shader-execution substrate rather than exposing it as a peer optional family.            |
+| Optional family publication | `debug_frame_bindings_publisher_`, `lighting_frame_bindings_publisher_`, `shadow_frame_bindings_publisher_`, `vsm_frame_bindings_publisher_`, `environment_view_data_publisher_`, `environment_frame_bindings_publisher_`, `conventional_shadow_draw_record_buffer_`                                                                                                                                      | This is the source of the publication refactor pressure and why there is no top-level `Feature Shader Inputs` family in phase 1.       |
+| Lighting/shadow services    | `shadow_manager_`, with `LightManager` still indirectly owned through `ScenePrepState`                                                                                                                                                                                                                                                                                                                    | This is the ownership drift that motivates the split into `Lighting Data` and `Shadowing`.                                             |
+| Environment services        | `environment_view_data_publisher_`, `environment_frame_bindings_publisher_`, `brdf_lut_manager_`, `per_view_atmo_luts_`, `ibl_manager_`, `sky_capture_pass_`, `sky_capture_pass_config_`, `sky_atmo_lut_compute_pass_`, `sky_atmo_lut_compute_pass_config_`, `ibl_compute_pass_`, `env_static_manager_`, `last_atmo_generation_`, `last_seen_view_frame_seq_`, `sky_capture_requested_`, atmosphere state | This becomes `Environment Lighting` as a coherent family with internal subfacets.                                                      |
+| Composition state           | `composition_mutex_`, `composition_submission_`, `composition_surface_`, `compositing_pass_`, `compositing_pass_config_`                                                                                                                                                                                                                                                                                  | This is the current scalar bottleneck replaced by queued multi-submission composition.                                                 |
+| Diagnostics state           | `gpu_debug_manager_`, `gpu_timeline_profiler_`, `gpu_timeline_panel_`, `imgui_module_subscription_`, `gpu_timeline_panel_drawer_token_`, `console_`, timing/stat accumulators                                                                                                                                                                                                                             | This remains an optional `Diagnostics and Profiling` family.                                                                           |
 
 Important exclusion:
 
@@ -296,37 +296,37 @@ because:
 
 The concrete member variables that move into `EnvironmentLightingService`:
 
-| Current `Renderer` member | Role |
-| --- | --- |
-| `environment_view_data_publisher_` | Environment view publication |
-| `environment_frame_bindings_publisher_` | Environment frame publication |
-| `brdf_lut_manager_` | Global BRDF LUT management |
-| `per_view_atmo_luts_` | Per-view atmosphere LUT cache |
-| `ibl_manager_` | Image-based lighting computation |
-| `sky_capture_pass_` | Sky capture render pass |
-| `sky_capture_pass_config_` | Sky capture pass configuration |
-| `sky_atmo_lut_compute_pass_` | Atmosphere LUT compute pass |
-| `sky_atmo_lut_compute_pass_config_` | Atmosphere LUT pass configuration |
-| `ibl_compute_pass_` | IBL compute pass |
-| `env_static_manager_` | Static environment data (bindless SRV) |
-| `last_atmo_generation_` | Atmosphere generation tracking |
-| `last_seen_view_frame_seq_` | Per-view frame sequence tracking |
-| `sky_capture_requested_` | Pending sky capture request flag |
-| `atmosphere_blue_noise_enabled_` | Atmosphere debug flag |
-| `atmosphere_debug_flags_` | Atmosphere debug overrides |
+| Current `Renderer` member               | Role                                   |
+| --------------------------------------- | -------------------------------------- |
+| `environment_view_data_publisher_`      | Environment view publication           |
+| `environment_frame_bindings_publisher_` | Environment frame publication          |
+| `brdf_lut_manager_`                     | Global BRDF LUT management             |
+| `per_view_atmo_luts_`                   | Per-view atmosphere LUT cache          |
+| `ibl_manager_`                          | Image-based lighting computation       |
+| `sky_capture_pass_`                     | Sky capture render pass                |
+| `sky_capture_pass_config_`              | Sky capture pass configuration         |
+| `sky_atmo_lut_compute_pass_`            | Atmosphere LUT compute pass            |
+| `sky_atmo_lut_compute_pass_config_`     | Atmosphere LUT pass configuration      |
+| `ibl_compute_pass_`                     | IBL compute pass                       |
+| `env_static_manager_`                   | Static environment data (bindless SRV) |
+| `last_atmo_generation_`                 | Atmosphere generation tracking         |
+| `last_seen_view_frame_seq_`             | Per-view frame sequence tracking       |
+| `sky_capture_requested_`                | Pending sky capture request flag       |
+| `atmosphere_blue_noise_enabled_`        | Atmosphere debug flag                  |
+| `atmosphere_debug_flags_`               | Atmosphere debug overrides             |
 
 The public `Renderer` methods that move to the service or become thin
 delegations:
 
-| Current `Renderer` method | After extraction |
-| --- | --- |
-| `GetEnvironmentStaticDataManager()` | Service method |
-| `GetIblManager()` | Service method |
-| `GetIblComputePass()` | Service method |
-| `GetSkyAtmosphereLutManagerForView()` | Service method |
-| `RequestSkyCapture()` | Service method |
-| `RequestIblRegeneration()` | Service method |
-| `SetAtmosphereBlueNoiseEnabled()` | Service method |
+| Current `Renderer` method                     | After extraction        |
+| --------------------------------------------- | ----------------------- |
+| `GetEnvironmentStaticDataManager()`           | Service method          |
+| `GetIblManager()`                             | Service method          |
+| `GetIblComputePass()`                         | Service method          |
+| `GetSkyAtmosphereLutManagerForView()`         | Service method          |
+| `RequestSkyCapture()`                         | Service method          |
+| `RequestIblRegeneration()`                    | Service method          |
+| `SetAtmosphereBlueNoiseEnabled()`             | Service method          |
 | `GetOrCreateSkyAtmosphereLutManagerForView()` | Internal service method |
 
 Phase-2 bridge rule:
@@ -444,17 +444,17 @@ The important bridged areas are:
 
 ## 6.4 Cluster-by-Cluster Ownership Map
 
-| Capability cluster | Ownership | Working rule |
-| --- | --- | --- |
-| `Renderer Core` | renderer-owned | Core execution substrate and baseline shader-execution substrate |
-| `View Registration and Lifetime` | bridged | pipeline provides intent; renderer owns canonical runtime state/lifetime |
-| `Scene Preparation` | renderer-owned capability, bridged usage | renderer owns reusable service; pipeline decides whether it is used |
-| `GPU Upload and Asset Binding` | renderer-owned | shared reusable infrastructure |
-| `Lighting Data` | renderer-owned capability, bridged usage | renderer owns reusable family; pipeline decides consumption |
-| `Shadowing` | renderer-owned capability, bridged usage | renderer owns shadow products/services; pipeline decides consumption |
-| `Environment Lighting` | renderer-owned capability, bridged usage | same pattern as lighting/shadowing |
-| `Final Output Composition` | bridged | pipeline produces intent/payload; renderer executes late composition |
-| `Diagnostics and Profiling` | renderer-owned capability | reusable engine service with policy toggles |
+| Capability cluster               | Ownership                                | Working rule                                                             |
+| -------------------------------- | ---------------------------------------- | ------------------------------------------------------------------------ |
+| `Renderer Core`                  | renderer-owned                           | Core execution substrate and baseline shader-execution substrate         |
+| `View Registration and Lifetime` | bridged                                  | pipeline provides intent; renderer owns canonical runtime state/lifetime |
+| `Scene Preparation`              | renderer-owned capability, bridged usage | renderer owns reusable service; pipeline decides whether it is used      |
+| `GPU Upload and Asset Binding`   | renderer-owned                           | shared reusable infrastructure                                           |
+| `Lighting Data`                  | renderer-owned capability, bridged usage | renderer owns reusable family; pipeline decides consumption              |
+| `Shadowing`                      | renderer-owned capability, bridged usage | renderer owns shadow products/services; pipeline decides consumption     |
+| `Environment Lighting`           | renderer-owned capability, bridged usage | same pattern as lighting/shadowing                                       |
+| `Final Output Composition`       | bridged                                  | pipeline produces intent/payload; renderer executes late composition     |
+| `Diagnostics and Profiling`      | renderer-owned capability                | reusable engine service with policy toggles                              |
 
 ## 6.5 Boundary Pressure Signals
 
@@ -557,16 +557,16 @@ non-runtime setup.
 
 ## 8.1.1 Injection-Point Matrix
 
-| Injection point | Meaning | Typical producer | Typical consumer |
-| --- | --- | --- | --- |
-| `Frame Context` | engine-owned runtime frame/view/surface/scene context | engine | renderer and pipelines |
-| `Frame Session` | slot, sequence, delta time, session identity | engine or non-runtime caller | renderer/facades |
-| `Scene Source` | scene authority | engine/app/tool | scene-rendering scenarios |
-| `Resolved View` | resolved view/camera state | pipeline/view resolver or caller | renderer/graph/passes |
-| `Prepared Frame` | finalized draw-ready per-view scene data | scene prep or caller | renderer/graph/passes |
-| `Output Target` | framebuffer/surface/render target | engine/app/tool | renderer/graph/passes |
-| `Render Graph Factory` | caller-authored graph coroutine | pipeline or engine dev | renderer |
-| `Pass Config` | per-pass config payload | pipeline, graph, or tool/test caller | render pass |
+| Injection point        | Meaning                                               | Typical producer                     | Typical consumer          |
+| ---------------------- | ----------------------------------------------------- | ------------------------------------ | ------------------------- |
+| `Frame Context`        | engine-owned runtime frame/view/surface/scene context | engine                               | renderer and pipelines    |
+| `Frame Session`        | slot, sequence, delta time, session identity          | engine or non-runtime caller         | renderer/facades          |
+| `Scene Source`         | scene authority                                       | engine/app/tool                      | scene-rendering scenarios |
+| `Resolved View`        | resolved view/camera state                            | pipeline/view resolver or caller     | renderer/graph/passes     |
+| `Prepared Frame`       | finalized draw-ready per-view scene data              | scene prep or caller                 | renderer/graph/passes     |
+| `Output Target`        | framebuffer/surface/render target                     | engine/app/tool                      | renderer/graph/passes     |
+| `Render Graph Factory` | caller-authored graph coroutine                       | pipeline or engine dev               | renderer                  |
+| `Pass Config`          | per-pass config payload                               | pipeline, graph, or tool/test caller | render pass               |
 
 ## 8.2 Change Propagation Heuristic
 

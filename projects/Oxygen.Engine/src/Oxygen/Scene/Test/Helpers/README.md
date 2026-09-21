@@ -16,8 +16,8 @@ patterns, and best practices.
 
 ```json
 {
-  "metadata": { /* Optional template metadata */ },
-  "nodes": [ /* Array of root-level scene nodes */ ]
+  "metadata": {/* Optional template metadata */},
+  "nodes": [/* Array of root-level scene nodes */]
 }
 ```
 
@@ -50,37 +50,37 @@ Transforms are applied in the standard order:
 
 ### Root Object
 
-| Property | Type | Required | Description |
-| -------- | ---- | -------- | ----------- |
-| `nodes` | array | ✓ | Array of root scene nodes |
-| `metadata` | object | ✗ | Optional template metadata |
-| `version` | string | ✗ | Schema version for compatibility |
+| Property   | Type   | Required | Description                      |
+| ---------- | ------ | -------- | -------------------------------- |
+| `nodes`    | array  | ✓        | Array of root scene nodes        |
+| `metadata` | object | ✗        | Optional template metadata       |
+| `version`  | string | ✗        | Schema version for compatibility |
 
 ### SceneNode Object
 
-| Property | Type | Required | Description |
-| -------- | ---- | -------- | ----------- |
-| `name` | string | ✗ | Explicit node name (auto-generated if omitted) |
-| `transform` | object | ✗ | Local transformation data |
-| `flags` | object | ✗ | Node behavior flags |
-| `children` | array | ✗ | Child nodes array |
+| Property    | Type   | Required | Description                                    |
+| ----------- | ------ | -------- | ---------------------------------------------- |
+| `name`      | string | ✗        | Explicit node name (auto-generated if omitted) |
+| `transform` | object | ✗        | Local transformation data                      |
+| `flags`     | object | ✗        | Node behavior flags                            |
+| `children`  | array  | ✗        | Child nodes array                              |
 
 ### Transform Object
 
-| Property | Type | Default | Description |
-| -------- | ---- | ------- | ----------- |
+| Property   | Type      | Default   | Description              |
+| ---------- | --------- | --------- | ------------------------ |
 | `position` | [x, y, z] | [0, 0, 0] | Local position in meters |
-| `rotation` | [x, y, z] | [0, 0, 0] | Euler angles in degrees |
-| `scale` | [x, y, z] | [1, 1, 1] | Scale factors |
+| `rotation` | [x, y, z] | [0, 0, 0] | Euler angles in degrees  |
+| `scale`    | [x, y, z] | [1, 1, 1] | Scale factors            |
 
 ### NodeFlags Object
 
-| Property | Type | Default | Description |
-| -------- | ---- | ------- | ----------- |
-| `visible` | boolean | true | Visibility flag (implemented) |
-| `static` | boolean | false | Static hint (reserved) |
-| `castsShadows` | boolean | true | Shadow casting (reserved) |
-| `receivesShadows` | boolean | true | Shadow receiving (reserved) |
+| Property          | Type    | Default | Description                   |
+| ----------------- | ------- | ------- | ----------------------------- |
+| `visible`         | boolean | true    | Visibility flag (implemented) |
+| `static`          | boolean | false   | Static hint (reserved)        |
+| `castsShadows`    | boolean | true    | Shadow casting (reserved)     |
+| `receivesShadows` | boolean | true    | Shadow receiving (reserved)   |
 
 ## Usage Examples
 

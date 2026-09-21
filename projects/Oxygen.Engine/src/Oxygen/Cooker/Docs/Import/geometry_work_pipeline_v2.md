@@ -9,7 +9,7 @@
 ## Overview
 
 This document specifies the **GeometryPipeline** used by async imports to
-finalize geometry *descriptors* produced by the mesh build stage. The heavy
+finalize geometry _descriptors_ produced by the mesh build stage. The heavy
 mesh cooking (vertex/index expansion, attribute policy application, tangent
 and normal generation, and creation of buffer payloads and raw descriptor
 bytes) is performed by the **MeshBuildPipeline**. The `GeometryPipeline` is a
@@ -43,7 +43,7 @@ under **Concurrency, Ownership, and Lifetime (Definitive)**.
 ### Pipeline vs Emitter Responsibilities
 
 - **MeshBuildPipeline**: performs CPU-bound mesh cooking. It produces cooked
-  buffer payloads and the *initial* geometry descriptor bytes (with
+  buffer payloads and the _initial_ geometry descriptor bytes (with
   placeholder indices) plus a table of per-submesh material patch offsets.
 - **GeometryPipeline**: finalizes the geometry descriptor by patching buffer
   bindings (indices), applying resolved material keys at the recorded byte
@@ -119,7 +119,7 @@ prove the published geometry and scene contracts.
 
 ### WorkItem (GeometryPipeline)
 
-GeometryPipeline receives *finalization* work items produced by the planner
+GeometryPipeline receives _finalization_ work items produced by the planner
 once the mesh has been cooked by `MeshBuildPipeline` and buffer indices have
 been assigned. A GeometryPipeline work item contains the following logical
 fields:
@@ -210,11 +210,11 @@ the bounded input queue. GeometryPipeline workers are lightweight: they call
 
 For each work item the worker performs:
 
-1) Check cancellation; if canceled, report a cancelled `WorkResult` and
+1. Check cancellation; if canceled, report a cancelled `WorkResult` and
    continue.
-2) Invoke `on_started()` (if provided).
-3) Call `FinalizeDescriptorBytes(bindings, cooked.descriptor_bytes,
-   material_patches, diagnostics)` which:
+2. Invoke `on_started()` (if provided).
+3. Call `FinalizeDescriptorBytes(bindings, cooked.descriptor_bytes,
+material_patches, diagnostics)` which:
    - Validates the supplied descriptor bytes and reads the header (`GeometryAssetDesc`).
    - Verifies `lod_count` matches `bindings.size()`.
    - Iterates each `MeshDesc` and, depending on `mesh_type`, patches the
@@ -231,12 +231,12 @@ For each work item the worker performs:
      the descriptor bytes.
    - Returns the finalized bytes or `std::nullopt` on any failure, accumulating
      diagnostics.
-4) If cancellation is requested after finalization started, report cancelled.
-5) Determine `success = finalized.has_value() && diagnostics.empty()`.
-6) Assemble and send a `WorkResult` containing the `source_id`, optional
+4. If cancellation is requested after finalization started, report cancelled.
+5. Determine `success = finalized.has_value() && diagnostics.empty()`.
+6. Assemble and send a `WorkResult` containing the `source_id`, optional
    `cooked` payload (present on success), `finalized_descriptor_bytes`, any
    diagnostics, `telemetry` (e.g., `cook_duration`) and the `success` flag.
-7) Invoke `on_finished()` if provided.
+7. Invoke `on_finished()` if provided.
 
 All errors are reported as `ImportDiagnostic` entries; no exceptions cross
 async boundaries.
@@ -247,31 +247,31 @@ async boundaries.
 
 ### Mesh build (performed by `MeshBuildPipeline`)
 
-1) **LOD validation**
+1. **LOD validation**
    - Validate each LOD for positions/indices and other stream prerequisites.
    - Record diagnostics for missing or invalid streams.
 
-2) **Vertex expansion + coordinate conversion**
+2. **Vertex expansion + coordinate conversion**
    - Build one vertex per index (no vertex dedupe) and apply the required
      coordinate conversion to engine space.
 
-3) **Attribute policy application**
+3. **Attribute policy application**
    - Enforce `normal_policy` and `tangent_policy` and generate attributes as
      required. Emit diagnostics for missing prerequisites.
 
-4) **Material bucketing**
+4. **Material bucketing**
    - Group triangle ranges by material slot and sort buckets by slot index.
 
-5) **Submesh + view layout**
+5. **Submesh + view layout**
    - Construct `SubMeshDesc` and `MeshViewDesc` entries (tight ranges).
 
-6) **Buffer payloads**
+6. **Buffer payloads**
    - Build `CookedBufferPayload`s for vertex/index buffers and optional
      auxiliary buffers (skinning, morph targets, etc.).
    - Compute buffer-level content hashes as part of buffer emission processes
      (outside MeshBuildPipeline when buffers are written).
 
-7) **Geometry descriptor serialization**
+7. **Geometry descriptor serialization**
    - Emit `GeometryAssetDesc` + `MeshDesc[ lod_count ]` + submesh/view tables
      into `descriptor_bytes` (packed alignment = 1).
    - Record absolute byte offsets for each `SubMeshDesc::material_asset_key` so
@@ -279,16 +279,16 @@ async boundaries.
 
 ### Descriptor finalization (performed by `GeometryPipeline`)
 
-1) Validate the supplied `descriptor_bytes` and read `GeometryAssetDesc`.
-2) Verify that the number of `bindings` matches `lod_count`.
-3) For each LOD, read `MeshDesc` and any mesh-type blob; patch the mesh info
+1. Validate the supplied `descriptor_bytes` and read `GeometryAssetDesc`.
+2. Verify that the number of `bindings` matches `lod_count`.
+3. For each LOD, read `MeshDesc` and any mesh-type blob; patch the mesh info
    with resource indices from the corresponding `bindings` entry.
-4) Emit submesh descriptors and mesh views verbatim.
-5) Apply all `material_patches` by writing `data::AssetKey` values at their
+4. Emit submesh descriptors and mesh views verbatim.
+5. Apply all `material_patches` by writing `data::AssetKey` values at their
    recorded absolute offsets. Offsets outside the descriptor range are errors.
-6) Compute `header.content_hash` on `co::ThreadPool` (if enabled) over the
+6. Compute `header.content_hash` on `co::ThreadPool` (if enabled) over the
    complete finalized bytes and write it into the header.
-7) Return the finalized descriptor bytes or an error diagnostic.
+7. Return the finalized descriptor bytes or an error diagnostic.
 
 ---
 
@@ -654,13 +654,13 @@ Pipeline tracks submitted/completed/failed counts and exposes
 
 ## Robustness Rules (Do Not Violate)
 
-1) Pipeline never writes output files.
-2) Pipeline never calls emitters.
-3) Geometry descriptors must be packed with alignment = 1.
-4) Buffer content hashes must be computed for data integrity.
-5) All errors cross boundaries as `ImportDiagnostic`.
-6) Coordinate conversion is applied **once** and only if required by the
-  importer’s declared source space.
+1. Pipeline never writes output files.
+2. Pipeline never calls emitters.
+3. Geometry descriptors must be packed with alignment = 1.
+4. Buffer content hashes must be computed for data integrity.
+5. All errors cross boundaries as `ImportDiagnostic`.
+6. Coordinate conversion is applied **once** and only if required by the
+   importer’s declared source space.
 
 ---
 
@@ -673,10 +673,10 @@ that the source space differs from engine space.
 
 Rules:
 
-1) The importer must provide the **source space** metadata for each mesh.
-2) The pipeline applies at most one conversion, producing final engine space.
-3) No additional “unmapping” or multiple remappings are allowed.
-4) If the importer declares the source space already matches engine space,
+1. The importer must provide the **source space** metadata for each mesh.
+2. The pipeline applies at most one conversion, producing final engine space.
+3. No additional “unmapping” or multiple remappings are allowed.
+4. If the importer declares the source space already matches engine space,
    conversion is a no-op.
 
 This conversion policy is **pluggable** by design. The pipeline exposes a

@@ -93,18 +93,18 @@ ShadowService upgrades.
 
 ### 3.1 Inputs
 
-| Source | Data | Purpose |
-| ------ | ---- | ------- |
-| Scene | Spot-light data | Spot-light shadow setup |
-| Scene | Point-light data | Point-light shadow setup |
-| Views | Per-view frusta / relevance | View-scoped publication |
-| ShadowService baseline | Directional cascade path | Existing conventional-shadow foundation |
+| Source                 | Data                        | Purpose                                 |
+| ---------------------- | --------------------------- | --------------------------------------- |
+| Scene                  | Spot-light data             | Spot-light shadow setup                 |
+| Scene                  | Point-light data            | Point-light shadow setup                |
+| Views                  | Per-view frusta / relevance | View-scoped publication                 |
+| ShadowService baseline | Directional cascade path    | Existing conventional-shadow foundation |
 
 ### 3.2 Outputs
 
-| Product | Consumer | Delivery |
-| ------- | -------- | -------- |
-| Spot-light shadow publications | LightingService Stage 12. Stage 18 translucent local-light shadow consumption is deferred. | `ShadowFrameBindings` through `ViewFrameBindings` |
+| Product                         | Consumer                                                                                   | Delivery                                          |
+| ------------------------------- | ------------------------------------------------------------------------------------------ | ------------------------------------------------- |
+| Spot-light shadow publications  | LightingService Stage 12. Stage 18 translucent local-light shadow consumption is deferred. | `ShadowFrameBindings` through `ViewFrameBindings` |
 | Point-light shadow publications | LightingService Stage 12. Stage 18 translucent local-light shadow consumption is deferred. | `ShadowFrameBindings` through `ViewFrameBindings` |
 
 ## 4. Resource Management
@@ -114,12 +114,12 @@ ShadowService upgrades.
 The design explicitly chose the first point-light conventional storage strategy
 for M05D. The baseline options were:
 
-| Option | Pros | Cons | Vortex Verdict |
-| ------ | ---- | ---- | -------------- |
-| One-pass cubemap depth targets | Closest to UE conventional point-light handling, clean omnidirectional coverage, hardware comparison / filtering story is straightforward | Requires layered cubemap rendering support that Oxygen does not yet have wired through the shadow-depth pass | Future upgrade target |
-| Cube-array six-face conventional targets | Uses the same cube-family storage shape while reusing the existing `ShadowDepthPass::RecordSlices` path | Six face draws instead of UE's one-pass path; deterministic `Texture2DArray` sampling instead of texture-cube compare sampling | **M05D validated baseline** |
-| Atlased six-face conventional targets | Reuses atlas infrastructure, may simplify allocation bookkeeping | Harder to keep clean face ownership, still effectively a cubemap family with more packing complexity | Deferred unless it clearly improves Oxygen resource management |
-| Dual-paraboloid or other compressed representation | Lower target count in some cases | Projection / filtering complexity, less aligned with UE reference path, higher risk of bespoke artifact handling | Rejected unless a future profiling / platform constraint forces it |
+| Option                                             | Pros                                                                                                                                      | Cons                                                                                                                           | Vortex Verdict                                                     |
+| -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------ |
+| One-pass cubemap depth targets                     | Closest to UE conventional point-light handling, clean omnidirectional coverage, hardware comparison / filtering story is straightforward | Requires layered cubemap rendering support that Oxygen does not yet have wired through the shadow-depth pass                   | Future upgrade target                                              |
+| Cube-array six-face conventional targets           | Uses the same cube-family storage shape while reusing the existing `ShadowDepthPass::RecordSlices` path                                   | Six face draws instead of UE's one-pass path; deterministic `Texture2DArray` sampling instead of texture-cube compare sampling | **M05D validated baseline**                                        |
+| Atlased six-face conventional targets              | Reuses atlas infrastructure, may simplify allocation bookkeeping                                                                          | Harder to keep clean face ownership, still effectively a cubemap family with more packing complexity                           | Deferred unless it clearly improves Oxygen resource management     |
+| Dual-paraboloid or other compressed representation | Lower target count in some cases                                                                                                          | Projection / filtering complexity, less aligned with UE reference path, higher risk of bespoke artifact handling               | Rejected unless a future profiling / platform constraint forces it |
 
 Vortex therefore chooses **cube-array six-face conventional targets** as the
 M05D validated baseline. This stays close to UE 5.7's cubemap model without

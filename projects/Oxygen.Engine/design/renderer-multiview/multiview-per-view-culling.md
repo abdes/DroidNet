@@ -98,7 +98,7 @@ The `DrawMetadataEmitter` must be updated to use `TransientStructuredBuffer` ins
 
 ### 4.1. The Barrier Problem
 
-If we upload transforms at Frame Start, we need a resource transition (CopyDest -> ShaderResource) before *any* view reads them.
+If we upload transforms at Frame Start, we need a resource transition (CopyDest -> ShaderResource) before _any_ view reads them.
 
 - **Solution**: The Renderer aggregates tickets.
   - `shared_ticket = Upload(Transforms)`
@@ -111,21 +111,21 @@ This ensures that by the time a View executes, both the shared scene data and it
 
 ## Implementation status
 
-| Component/Feature | Status | Location | Notes |
-|-------------------|--------|----------|-------|
-| **ScenePrepPipeline** | ⚠️ Partial | `src/Oxygen/Renderer/ScenePrep/ScenePrepPipeline.h` | Exists but `Collect()` requires `const View&` (not optional) - needs Mode A/B support |
-| **ScenePrepPipeline::Collect with optional View** | ❌ Missing | N/A | Design requires `Collect(scene, View* = nullptr)` for dual-mode operation |
-| **ScenePrepState** | ✅ Implemented | `src/Oxygen/Renderer/ScenePrep/ScenePrepState.h` | Core state management exists |
-| **GlobalRenderableList** | ❌ Missing | N/A | Caching mechanism for Frame Phase traversal not present |
-| **ScenePrepState::ResetViewData()** | ❌ Missing | N/A | Method to clear per-view data while keeping global list |
-| **DrawMetadataEmitter** | ✅ Implemented | `src/Oxygen/Renderer/Resources/DrawMetadataEmitter.h` | Exists but may need TransientStructuredBuffer migration |
-| **DrawMetadataEmitter using TransientStructuredBuffer** | ⚠️ Partial | N/A | Currently uses AtlasBuffer pattern; needs per-view transient allocation |
-| **TransientStructuredBuffer** | ✅ Implemented | `src/Oxygen/Renderer/Upload/TransientStructuredBuffer.h` | Core component exists and ready |
-| **VisibilityFilter (SubMeshVisibilityFilter)** | ✅ Implemented | `src/Oxygen/Renderer/ScenePrep/Extractors.h` | Frustum culling against View working |
-| **Renderer::RenderView()** | ❌ Missing | N/A | Per-view rendering loop with culling not implemented |
-| **Dual-Mode Pipeline (Frame vs View Phase)** | ❌ Missing | N/A | Context-aware pipeline switching not present |
-| **Per-View Draw Metadata Upload** | ❌ Missing | N/A | View-specific draw command generation not wired up |
-| **Barrier Problem Synchronization** | ❌ Missing | N/A | Shared ticket + view ticket coordination not implemented |
+| Component/Feature                                       | Status         | Location                                                 | Notes                                                                                 |
+| ------------------------------------------------------- | -------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| **ScenePrepPipeline**                                   | ⚠️ Partial     | `src/Oxygen/Renderer/ScenePrep/ScenePrepPipeline.h`      | Exists but `Collect()` requires `const View&` (not optional) - needs Mode A/B support |
+| **ScenePrepPipeline::Collect with optional View**       | ❌ Missing     | N/A                                                      | Design requires `Collect(scene, View* = nullptr)` for dual-mode operation             |
+| **ScenePrepState**                                      | ✅ Implemented | `src/Oxygen/Renderer/ScenePrep/ScenePrepState.h`         | Core state management exists                                                          |
+| **GlobalRenderableList**                                | ❌ Missing     | N/A                                                      | Caching mechanism for Frame Phase traversal not present                               |
+| **ScenePrepState::ResetViewData()**                     | ❌ Missing     | N/A                                                      | Method to clear per-view data while keeping global list                               |
+| **DrawMetadataEmitter**                                 | ✅ Implemented | `src/Oxygen/Renderer/Resources/DrawMetadataEmitter.h`    | Exists but may need TransientStructuredBuffer migration                               |
+| **DrawMetadataEmitter using TransientStructuredBuffer** | ⚠️ Partial     | N/A                                                      | Currently uses AtlasBuffer pattern; needs per-view transient allocation               |
+| **TransientStructuredBuffer**                           | ✅ Implemented | `src/Oxygen/Renderer/Upload/TransientStructuredBuffer.h` | Core component exists and ready                                                       |
+| **VisibilityFilter (SubMeshVisibilityFilter)**          | ✅ Implemented | `src/Oxygen/Renderer/ScenePrep/Extractors.h`             | Frustum culling against View working                                                  |
+| **Renderer::RenderView()**                              | ❌ Missing     | N/A                                                      | Per-view rendering loop with culling not implemented                                  |
+| **Dual-Mode Pipeline (Frame vs View Phase)**            | ❌ Missing     | N/A                                                      | Context-aware pipeline switching not present                                          |
+| **Per-View Draw Metadata Upload**                       | ❌ Missing     | N/A                                                      | View-specific draw command generation not wired up                                    |
+| **Barrier Problem Synchronization**                     | ❌ Missing     | N/A                                                      | Shared ticket + view ticket coordination not implemented                              |
 
 **Summary**: 3/13 components fully implemented, 2/13 partially implemented. Core building blocks exist (TransientStructuredBuffer, SubMeshVisibilityFilter, DrawMetadataEmitter, ScenePrepState) but the dual-mode pipeline architecture and per-view rendering loop are missing. The design requires significant refactoring to support optional View parameter and separate Frame/View phases.
 

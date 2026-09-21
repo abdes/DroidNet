@@ -24,9 +24,7 @@
         "shader_index_base": 1,
         "capacity": 32768,
         "shader_access_class": "buffer_srv",
-        "view_types": [
-          "StructuredBuffer_SRV"
-        ],
+        "view_types": ["StructuredBuffer_SRV"],
         "comment": "Unified global bindless table sized for production large geometry-heavy scenes"
       },
       {
@@ -36,10 +34,7 @@
         "shader_index_base": 32769,
         "capacity": 3047,
         "shader_access_class": "buffer_srv",
-        "view_types": [
-          "StructuredBuffer_SRV",
-          "RawBuffer_SRV"
-        ],
+        "view_types": ["StructuredBuffer_SRV", "RawBuffer_SRV"],
         "comment": "Material and metadata buffer ranges"
       },
       {
@@ -49,9 +44,7 @@
         "shader_index_base": 35816,
         "capacity": 65536,
         "shader_access_class": "texture_srv",
-        "view_types": [
-          "Texture_SRV"
-        ],
+        "view_types": ["Texture_SRV"],
         "comment": "Unified texture bindless range"
       },
       {
@@ -61,9 +54,7 @@
         "shader_index_base": 0,
         "capacity": 256,
         "shader_access_class": "sampler",
-        "view_types": [
-          "Sampler"
-        ],
+        "view_types": ["Sampler"],
         "comment": "Global sampler table"
       }
     ]
@@ -168,26 +159,20 @@
           "id": "BindlessSrvTable",
           "table": "BindlessSRVTable",
           "index": 0,
-          "visibility": [
-            "ALL"
-          ]
+          "visibility": ["ALL"]
         },
         {
           "type": "descriptor_table",
           "id": "SamplerTable",
           "table": "SamplerTable",
           "index": 1,
-          "visibility": [
-            "ALL"
-          ]
+          "visibility": ["ALL"]
         },
         {
           "type": "cbv",
           "id": "ViewConstants",
           "index": 2,
-          "visibility": [
-            "ALL"
-          ],
+          "visibility": ["ALL"],
           "shader_register": "b1",
           "register_space": "space0"
         },
@@ -195,9 +180,7 @@
           "type": "root_constants",
           "id": "RootConstants",
           "index": 3,
-          "visibility": [
-            "ALL"
-          ],
+          "visibility": ["ALL"],
           "shader_register": "b2",
           "register_space": "space0",
           "num_32bit_values": 2
@@ -277,9 +260,7 @@
           "type": "push_constants",
           "id": "RootConstants",
           "size_bytes": 8,
-          "stages": [
-            "ALL"
-          ]
+          "stages": ["ALL"]
         }
       ]
     }

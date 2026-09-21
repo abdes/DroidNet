@@ -70,18 +70,18 @@
 
 ## Implementation status
 
-| Type | Layer | Status | Location | Notes |
-| ---- | ----- | ------ | -------- | ----- |
-| **View** | Application | ✅ Implemented | `src/Oxygen/Core/Types/View.h` | Lightweight view configuration (no matrices); viewport, scissor, jitter |
-| **ResolvedView** | Application | ✅ Implemented | `src/Oxygen/Core/Types/ResolvedView.h` | Immutable view snapshot with matrices, frustum and derived data |
-| **ViewMetadata** | Application | ✅ Implemented | `src/Oxygen/Core/FrameContext.h` | Live fields are `name`, `purpose`, `is_scene_view`, and `with_atmosphere` |
-| **ViewResolver** | Application | ✅ Implemented | `src/Oxygen/Core/Types/ViewResolver.h` | Alias `using ViewResolver = std::function<ResolvedView(const ViewContext&)>` |
-| **ViewId** | FrameContext | ✅ Implemented | `src/Oxygen/Core/Types/View.h` | Strongly typed using NamedType pattern |
-| **SurfaceId** | FrameContext | ✅ Implemented | `src/Oxygen/Core/FrameContext.h` | Strongly typed using NamedType pattern |
-| **ViewOutput** | Renderer / FrameContext | Partial | `src/Oxygen/Core/FrameContext.h`, `src/Oxygen/Renderer/RenderContext.h` | `ViewContext` now carries `render_target` and `composite_source`; renderer also tracks per-view outputs in `RenderContext::view_outputs` during execution |
-| **ViewSpecific struct** | RenderContext | ✅ Implemented | `src/Oxygen/Renderer/RenderContext.h` | Live per-view state: `view_id`, `resolved_view`, `prepared_frame`, `atmo_lut_manager` |
-| **current_view** | RenderContext | ✅ Implemented | `src/Oxygen/Renderer/RenderContext.h` | Active view iteration state for the currently executing view |
-| **view_outputs** | RenderContext | ✅ Implemented | `src/Oxygen/Renderer/RenderContext.h` | Renderer-owned map of `ViewId` to completed per-view framebuffers |
+| Type                    | Layer                   | Status         | Location                                                                | Notes                                                                                                                                                     |
+| ----------------------- | ----------------------- | -------------- | ----------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **View**                | Application             | ✅ Implemented | `src/Oxygen/Core/Types/View.h`                                          | Lightweight view configuration (no matrices); viewport, scissor, jitter                                                                                   |
+| **ResolvedView**        | Application             | ✅ Implemented | `src/Oxygen/Core/Types/ResolvedView.h`                                  | Immutable view snapshot with matrices, frustum and derived data                                                                                           |
+| **ViewMetadata**        | Application             | ✅ Implemented | `src/Oxygen/Core/FrameContext.h`                                        | Live fields are `name`, `purpose`, `is_scene_view`, and `with_atmosphere`                                                                                 |
+| **ViewResolver**        | Application             | ✅ Implemented | `src/Oxygen/Core/Types/ViewResolver.h`                                  | Alias `using ViewResolver = std::function<ResolvedView(const ViewContext&)>`                                                                              |
+| **ViewId**              | FrameContext            | ✅ Implemented | `src/Oxygen/Core/Types/View.h`                                          | Strongly typed using NamedType pattern                                                                                                                    |
+| **SurfaceId**           | FrameContext            | ✅ Implemented | `src/Oxygen/Core/FrameContext.h`                                        | Strongly typed using NamedType pattern                                                                                                                    |
+| **ViewOutput**          | Renderer / FrameContext | Partial        | `src/Oxygen/Core/FrameContext.h`, `src/Oxygen/Renderer/RenderContext.h` | `ViewContext` now carries `render_target` and `composite_source`; renderer also tracks per-view outputs in `RenderContext::view_outputs` during execution |
+| **ViewSpecific struct** | RenderContext           | ✅ Implemented | `src/Oxygen/Renderer/RenderContext.h`                                   | Live per-view state: `view_id`, `resolved_view`, `prepared_frame`, `atmo_lut_manager`                                                                     |
+| **current_view**        | RenderContext           | ✅ Implemented | `src/Oxygen/Renderer/RenderContext.h`                                   | Active view iteration state for the currently executing view                                                                                              |
+| **view_outputs**        | RenderContext           | ✅ Implemented | `src/Oxygen/Renderer/RenderContext.h`                                   | Renderer-owned map of `ViewId` to completed per-view framebuffers                                                                                         |
 
 ---
 

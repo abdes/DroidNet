@@ -83,14 +83,14 @@ Diagnostics disablement is not a single switch hidden behind `NDEBUG`. It is a
 layered policy so the engine stays observable in release investigations without
 shipping accidental GPU work.
 
-| Layer | Mechanism | Owns | Policy |
-| --- | --- | --- | --- |
-| Compile-time availability | Normal Vortex build plus narrow optional macros | Build system | Core diagnostics types, catalog, frame ledger, issue recording, and manifest code are compiled with Vortex. Do not add a broad `OXYGEN_WITH_VORTEX_DIAGNOSTICS` macro for M05A. Optional third-party sinks stay behind their existing macros, such as `OXYGEN_WITH_TRACY`. |
-| Build-profile defaults | `NDEBUG` / non-`NDEBUG` default initializer only | `DiagnosticsConfig` defaults | `NDEBUG` may change the default feature mask and assertion verbosity. It must not remove APIs, enum values, schema fields, or troubleshooting code needed for release captures. |
-| Renderer capability | `RendererCapabilityFamily::kDiagnosticsAndProfiling` | Renderer configuration | If the capability is absent, diagnostics features are clamped off and requests produce `diag.feature-unavailable` issues where an issue channel exists. The service can still expose a disabled snapshot. |
-| Runtime feature mask | `DiagnosticsConfig`, CVars/CLI, and `DiagnosticsService::SetEnabledFeatures` | DiagnosticsService | The effective feature mask controls CPU ledger recording, GPU timeline collection, panels, manifest export, and GPU debug primitives. This is the main on/off switch. |
-| Per-feature trigger | Debug mode, export request, panel registration, GPU primitive request | DiagnosticsService and owning stage | Heavy work runs only when both the feature mask and the specific trigger require it. |
-| Pass execution | Service-owned pass config for diagnostics passes only | DiagnosticsService | Domain pass configs must not grow diagnostics payloads. Diagnostics passes are scheduled only from diagnostics-owned features. |
+| Layer                     | Mechanism                                                                    | Owns                                | Policy                                                                                                                                                                                                                                                                     |
+| ------------------------- | ---------------------------------------------------------------------------- | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Compile-time availability | Normal Vortex build plus narrow optional macros                              | Build system                        | Core diagnostics types, catalog, frame ledger, issue recording, and manifest code are compiled with Vortex. Do not add a broad `OXYGEN_WITH_VORTEX_DIAGNOSTICS` macro for M05A. Optional third-party sinks stay behind their existing macros, such as `OXYGEN_WITH_TRACY`. |
+| Build-profile defaults    | `NDEBUG` / non-`NDEBUG` default initializer only                             | `DiagnosticsConfig` defaults        | `NDEBUG` may change the default feature mask and assertion verbosity. It must not remove APIs, enum values, schema fields, or troubleshooting code needed for release captures.                                                                                            |
+| Renderer capability       | `RendererCapabilityFamily::kDiagnosticsAndProfiling`                         | Renderer configuration              | If the capability is absent, diagnostics features are clamped off and requests produce `diag.feature-unavailable` issues where an issue channel exists. The service can still expose a disabled snapshot.                                                                  |
+| Runtime feature mask      | `DiagnosticsConfig`, CVars/CLI, and `DiagnosticsService::SetEnabledFeatures` | DiagnosticsService                  | The effective feature mask controls CPU ledger recording, GPU timeline collection, panels, manifest export, and GPU debug primitives. This is the main on/off switch.                                                                                                      |
+| Per-feature trigger       | Debug mode, export request, panel registration, GPU primitive request        | DiagnosticsService and owning stage | Heavy work runs only when both the feature mask and the specific trigger require it.                                                                                                                                                                                       |
+| Pass execution            | Service-owned pass config for diagnostics passes only                        | DiagnosticsService                  | Domain pass configs must not grow diagnostics payloads. Diagnostics passes are scheduled only from diagnostics-owned features.                                                                                                                                             |
 
 Default policy:
 
@@ -134,15 +134,15 @@ Rationale:
 DiagnosticsService is a control plane and fact collector. Domain systems remain
 the execution owners:
 
-| Domain | Owner | Diagnostics role |
-| --- | --- | --- |
-| Scene texture allocation | `SceneTextures` / SceneRenderer | report product names, descriptors, availability |
-| Lighting | `LightingService` | report selected lights, debug-mode support, output products |
-| Shadows | `ShadowService` | report shadow maps, cascades, masks, and recoverable issues |
-| Environment/fog | `EnvironmentLightingService` | report atmosphere/fog products and state |
-| Post-process | `PostProcessService` | report inputs, outputs, exposure/tonemap state |
-| ImGui rendering | `ImGuiRuntime` | draw service-registered panels |
-| GPU timing | `GpuTimelineProfiler` | collect and export timeline frames |
+| Domain                   | Owner                           | Diagnostics role                                            |
+| ------------------------ | ------------------------------- | ----------------------------------------------------------- |
+| Scene texture allocation | `SceneTextures` / SceneRenderer | report product names, descriptors, availability             |
+| Lighting                 | `LightingService`               | report selected lights, debug-mode support, output products |
+| Shadows                  | `ShadowService`                 | report shadow maps, cascades, masks, and recoverable issues |
+| Environment/fog          | `EnvironmentLightingService`    | report atmosphere/fog products and state                    |
+| Post-process             | `PostProcessService`            | report inputs, outputs, exposure/tonemap state              |
+| ImGui rendering          | `ImGuiRuntime`                  | draw service-registered panels                              |
+| GPU timing               | `GpuTimelineProfiler`           | collect and export timeline frames                          |
 
 DiagnosticsService can visualize or expose facts. It must not mutate another
 domain's products to make a debug view pass.
@@ -151,13 +151,13 @@ domain's products to make a debug view pass.
 
 The design follows UE5.7 principles rather than UE object structure.
 
-| UE5.7 family | References checked | Principle to adopt | Oxygen adaptation |
-| --- | --- | --- | --- |
-| Debug view modes | `Renderer/Private/DebugViewModeRendering.cpp`; `Shaders/Private/DebugViewModePixelShader.usf` | Debug visualization is a renderer-owned vocabulary with explicit shader support, pass names, and product requirements. | Keep `ShaderDebugMode` as a typed Vortex enum, add runtime registry metadata, and let owning stages execute their debug views. |
-| GPU profiler events | `RHI/Public/GPUProfiler.h`; `RHI/Public/GpuProfilerTrace.h`; `RHI/Public/RHIBreadcrumbs.h`; renderer `RDG_EVENT_SCOPE` and `RDG_GPU_STAT_SCOPE` use | GPU work must have named scopes, frame boundaries, queue context, sink/export paths, and overflow/failure diagnostics. | Reuse `graphics::IGpuProfileCollector`, `CommandRecorder::BeginProfileScope`, and `GpuTimelineProfiler`. Add DiagnosticsService facade and frame correlation. |
-| ShaderPrint | `Renderer/Public/ShaderPrintParameters.h`; `Renderer/Private/ShaderPrint.cpp`; `Shaders/Private/ShaderPrint.ush` | GPU-side debug emission is optional, bounded, per-view, explicitly requested, and rendered later by a diagnostics path. | Treat existing `DebugFrameBindings` and `GpuDebug*.hlsl` as a future bounded GPU primitive slice. Do not block M05A on it. |
-| VisualizeTexture | `Shaders/Private/Tools/VisualizeTexture.usf`; renderer visualize-texture call sites; `TexCreate_HideInVisualizeTexture` | Runtime products should have names, descriptors, and inspectability controls. | M05A records product descriptors and capture names first. A texture viewer can be added later using the same product catalog. |
-| Debug names and breadcrumbs | `RHIDefinitions.h` `FDebugName`; renderer pass/resource names; RHI breadcrumbs | Debug names are part of the product, not comments. | Require stable pass, product, issue, and debug-mode names in snapshots and exports. |
+| UE5.7 family                | References checked                                                                                                                                  | Principle to adopt                                                                                                      | Oxygen adaptation                                                                                                                                             |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Debug view modes            | `Renderer/Private/DebugViewModeRendering.cpp`; `Shaders/Private/DebugViewModePixelShader.usf`                                                       | Debug visualization is a renderer-owned vocabulary with explicit shader support, pass names, and product requirements.  | Keep `ShaderDebugMode` as a typed Vortex enum, add runtime registry metadata, and let owning stages execute their debug views.                                |
+| GPU profiler events         | `RHI/Public/GPUProfiler.h`; `RHI/Public/GpuProfilerTrace.h`; `RHI/Public/RHIBreadcrumbs.h`; renderer `RDG_EVENT_SCOPE` and `RDG_GPU_STAT_SCOPE` use | GPU work must have named scopes, frame boundaries, queue context, sink/export paths, and overflow/failure diagnostics.  | Reuse `graphics::IGpuProfileCollector`, `CommandRecorder::BeginProfileScope`, and `GpuTimelineProfiler`. Add DiagnosticsService facade and frame correlation. |
+| ShaderPrint                 | `Renderer/Public/ShaderPrintParameters.h`; `Renderer/Private/ShaderPrint.cpp`; `Shaders/Private/ShaderPrint.ush`                                    | GPU-side debug emission is optional, bounded, per-view, explicitly requested, and rendered later by a diagnostics path. | Treat existing `DebugFrameBindings` and `GpuDebug*.hlsl` as a future bounded GPU primitive slice. Do not block M05A on it.                                    |
+| VisualizeTexture            | `Shaders/Private/Tools/VisualizeTexture.usf`; renderer visualize-texture call sites; `TexCreate_HideInVisualizeTexture`                             | Runtime products should have names, descriptors, and inspectability controls.                                           | M05A records product descriptors and capture names first. A texture viewer can be added later using the same product catalog.                                 |
+| Debug names and breadcrumbs | `RHIDefinitions.h` `FDebugName`; renderer pass/resource names; RHI breadcrumbs                                                                      | Debug names are part of the product, not comments.                                                                      | Require stable pass, product, issue, and debug-mode names in snapshots and exports.                                                                           |
 
 Oxygen divergences:
 
@@ -174,15 +174,15 @@ Oxygen divergences:
 
 ### 4.1 Valuable Existing Surfaces
 
-| Surface | Current location | Assessment | Required action |
-| --- | --- | --- | --- |
-| GPU timeline profiler | `src/Oxygen/Vortex/Internal/GpuTimelineProfiler.{h,cpp}` | Correct and valuable. It implements `graphics::IGpuProfileCollector`, records nested scopes, detects overflow/incomplete scopes, supports sinks, latest-frame retention, and JSON/CSV export. | Preserve. Expose through DiagnosticsService. Add frame-ledger correlation and service tests. |
-| ImGui runtime | `src/Oxygen/Vortex/Internal/ImGuiRuntime.{h,cpp}` | Correct substrate. It initializes backend state, manages frame lifecycle, renders overlay texture, and returns composition data. | Preserve. Add service-owned panel registry on top. |
-| Shader debug mode enum | `src/Oxygen/Vortex/ShaderDebugMode.h` | Valuable ABI used by Vortex, SceneRenderer, shaders, and DemoShell. Helper functions are real but metadata is incomplete. | Preserve enum values. Add authoritative catalog and tests. |
-| Deferred debug visualization | `SceneRenderer::RenderDebugVisualization` | Real debug output for material/depth/shadow-mask views. Current mode filtering/name helpers are local to SceneRenderer. | Preserve execution in SceneRenderer. Move mode metadata and product requirement truth to the catalog. |
-| GPU debug ABI and shaders | `Types/DebugFrameBindings.h`; `Shaders/Vortex/Services/Diagnostics/*` | Useful assets, not a complete runtime feature. | Mark as asset-only until CPU resources, pass scheduling, EngineShaderCatalog registration, ShaderBake, and runtime proof exist. |
-| DemoShell controls | `Examples/DemoShell/Services/RenderingSettingsService.*`; `Examples/DemoShell/UI/*` | Useful operator controls, but mappings are duplicated. | Convert to debug-mode registry consumers after the registry lands. |
-| External proof tools | `tools/vortex/*`; `tools/shadows/renderdoc_ui_analysis.py` | Essential for capture analysis, debug-layer audits, and validation. | Keep external. Define runtime export contracts they can consume. |
+| Surface                      | Current location                                                                    | Assessment                                                                                                                                                                                    | Required action                                                                                                                 |
+| ---------------------------- | ----------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| GPU timeline profiler        | `src/Oxygen/Vortex/Internal/GpuTimelineProfiler.{h,cpp}`                            | Correct and valuable. It implements `graphics::IGpuProfileCollector`, records nested scopes, detects overflow/incomplete scopes, supports sinks, latest-frame retention, and JSON/CSV export. | Preserve. Expose through DiagnosticsService. Add frame-ledger correlation and service tests.                                    |
+| ImGui runtime                | `src/Oxygen/Vortex/Internal/ImGuiRuntime.{h,cpp}`                                   | Correct substrate. It initializes backend state, manages frame lifecycle, renders overlay texture, and returns composition data.                                                              | Preserve. Add service-owned panel registry on top.                                                                              |
+| Shader debug mode enum       | `src/Oxygen/Vortex/ShaderDebugMode.h`                                               | Valuable ABI used by Vortex, SceneRenderer, shaders, and DemoShell. Helper functions are real but metadata is incomplete.                                                                     | Preserve enum values. Add authoritative catalog and tests.                                                                      |
+| Deferred debug visualization | `SceneRenderer::RenderDebugVisualization`                                           | Real debug output for material/depth/shadow-mask views. Current mode filtering/name helpers are local to SceneRenderer.                                                                       | Preserve execution in SceneRenderer. Move mode metadata and product requirement truth to the catalog.                           |
+| GPU debug ABI and shaders    | `Types/DebugFrameBindings.h`; `Shaders/Vortex/Services/Diagnostics/*`               | Useful assets, not a complete runtime feature.                                                                                                                                                | Mark as asset-only until CPU resources, pass scheduling, EngineShaderCatalog registration, ShaderBake, and runtime proof exist. |
+| DemoShell controls           | `Examples/DemoShell/Services/RenderingSettingsService.*`; `Examples/DemoShell/UI/*` | Useful operator controls, but mappings are duplicated.                                                                                                                                        | Convert to debug-mode registry consumers after the registry lands.                                                              |
+| External proof tools         | `tools/vortex/*`; `tools/shadows/renderdoc_ui_analysis.py`                          | Essential for capture analysis, debug-layer audits, and validation.                                                                                                                           | Keep external. Define runtime export contracts they can consume.                                                                |
 
 ### 4.2 Problems This Design Fixes
 
@@ -228,15 +228,15 @@ src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Services/Diagnostics/
 
 ### 5.2 Core Concepts
 
-| Concept | Purpose |
-| --- | --- |
-| `DiagnosticsService` | Runtime control plane, settings, latest snapshot, panel registry, export requests. |
-| `ShaderDebugModeRegistry` | Runtime source of truth for `ShaderDebugMode` names, families, pass owner, product requirements, shader define, and UI label. This is not the D3D12 shader bake catalog. |
-| `DiagnosticsFrameLedger` | Per-frame facts: views, passes, products, bindings, issues, timeline correlation, and capture labels. |
-| `DiagnosticsFrameSnapshot` | Immutable public copy of the latest ledger plus settings and timeline state. |
-| `DiagnosticsIssue` | Structured warning/error with stable code, severity, frame/view/pass/product context, and operator message. |
-| `DiagnosticsCaptureManifest` | JSON export describing how to inspect a frame with external tools. |
-| `DiagnosticsPanel` | Optional ImGui consumer of snapshots and catalog state. |
+| Concept                      | Purpose                                                                                                                                                                  |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `DiagnosticsService`         | Runtime control plane, settings, latest snapshot, panel registry, export requests.                                                                                       |
+| `ShaderDebugModeRegistry`    | Runtime source of truth for `ShaderDebugMode` names, families, pass owner, product requirements, shader define, and UI label. This is not the D3D12 shader bake catalog. |
+| `DiagnosticsFrameLedger`     | Per-frame facts: views, passes, products, bindings, issues, timeline correlation, and capture labels.                                                                    |
+| `DiagnosticsFrameSnapshot`   | Immutable public copy of the latest ledger plus settings and timeline state.                                                                                             |
+| `DiagnosticsIssue`           | Structured warning/error with stable code, severity, frame/view/pass/product context, and operator message.                                                              |
+| `DiagnosticsCaptureManifest` | JSON export describing how to inspect a frame with external tools.                                                                                                       |
+| `DiagnosticsPanel`           | Optional ImGui consumer of snapshots and catalog state.                                                                                                                  |
 
 ## 6. Public API Contract
 
@@ -498,10 +498,10 @@ Rules:
 
 Positioning relative to `EngineShaderCatalog.h`:
 
-| Artifact | Layer | Purpose | Changes when |
-| --- | --- | --- | --- |
-| `src/Oxygen/Graphics/Direct3D12/Shaders/EngineShaderCatalog.h` | Graphics/D3D12 shader build layer | Declares shader files, entry points, required defines, and permutations to bake into `shaders.bin`. | A shader file, entry point, or permutation variant changes. |
-| `src/Oxygen/Vortex/Diagnostics/ShaderDebugModeRegistry.*` | Vortex runtime diagnostics layer | Describes `ShaderDebugMode` values for UI, CLI/tool names, feature requirements, owning pass path, and optional shader define linkage. | A runtime debug mode is added, renamed, exposed to UI/tools, or changes product/capability requirements. |
+| Artifact                                                       | Layer                             | Purpose                                                                                                                                | Changes when                                                                                             |
+| -------------------------------------------------------------- | --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `src/Oxygen/Graphics/Direct3D12/Shaders/EngineShaderCatalog.h` | Graphics/D3D12 shader build layer | Declares shader files, entry points, required defines, and permutations to bake into `shaders.bin`.                                    | A shader file, entry point, or permutation variant changes.                                              |
+| `src/Oxygen/Vortex/Diagnostics/ShaderDebugModeRegistry.*`      | Vortex runtime diagnostics layer  | Describes `ShaderDebugMode` values for UI, CLI/tool names, feature requirements, owning pass path, and optional shader define linkage. | A runtime debug mode is added, renamed, exposed to UI/tools, or changes product/capability requirements. |
 
 The registry may reference a shader define string that also appears in
 `EngineShaderCatalog.h`, but it must not register shaders, generate shader bake
@@ -724,15 +724,15 @@ Policy:
 
 Initial issue vocabulary should be minimal and tied to implemented behavior:
 
-| Code | Meaning |
-| --- | --- |
-| `diag.feature-unavailable` | A requested diagnostics feature was clamped off by build/runtime capability. |
-| `diag.manifest-write-failed` | A requested capture manifest export failed. |
-| `timeline.query-overflow` | GPU timestamp capacity was exceeded. |
-| `timeline.incomplete-scope` | A GPU timing scope could not produce a complete duration. |
-| `debug-mode.unsupported` | A requested debug mode is not supported by current renderer/capabilities. |
-| `debug-mode.missing-product` | A recoverable debug mode request lacks an input product. |
-| `product.stale` | A published product exists but is not valid for the current frame. |
+| Code                         | Meaning                                                                      |
+| ---------------------------- | ---------------------------------------------------------------------------- |
+| `diag.feature-unavailable`   | A requested diagnostics feature was clamped off by build/runtime capability. |
+| `diag.manifest-write-failed` | A requested capture manifest export failed.                                  |
+| `timeline.query-overflow`    | GPU timestamp capacity was exceeded.                                         |
+| `timeline.incomplete-scope`  | A GPU timing scope could not produce a complete duration.                    |
+| `debug-mode.unsupported`     | A requested debug mode is not supported by current renderer/capabilities.    |
+| `debug-mode.missing-product` | A recoverable debug mode request lacks an input product.                     |
+| `product.stale`              | A published product exists but is not valid for the current frame.           |
 
 Adding a new code requires a concrete consumer in the panel, manifest, or proof
 tooling. Otherwise, use assertions for bugs and normal logs for local progress.

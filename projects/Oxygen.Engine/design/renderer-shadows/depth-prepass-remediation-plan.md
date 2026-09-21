@@ -84,15 +84,18 @@ active phase after DP-2.
 ### Phase DP-0: Fix Measurement And Validation Surface
 
 Problem:
+
 - current RenderDoc pass timing sees `DepthPrePass` markers but no nested work
   in sampled replay-safe captures, so the pass cannot be measured reliably
   through the existing pass-timing script
 
 Goal:
+
 - depth prepass work must be visible and measurable in repo-owned analysis
   artifacts
 
 Implementation work:
+
 - audit marker placement and pass scope naming for `DepthPrePass`
 - ensure renderdoc event scopes cleanly wrap the actual clear and draw work
 - add a focused depth-prepass analysis workflow under
@@ -100,12 +103,14 @@ Implementation work:
 - document the exact capture-and-analysis recipe for steady-state late frames
 
 Validation:
+
 - replay-safe late-frame `Release` captures
 - RenderDoc report showing non-empty depth-prepass work events
 - before/after evidence proving that timing and event counts are stable enough
   to evaluate later optimizations
 
 UE5 closeness check:
+
 - UE5 has measurable depth pass and explicit downstream consequences
 - Oxygen must at least make the pass observable enough to support the same kind
   of design reasoning
@@ -159,14 +164,17 @@ Status: `in_progress`
 ### Phase DP-1: Fix The Viewport/Scissor Contract
 
 Problem:
+
 - `SetViewport()` and `SetScissors()` store overrides but
   `SetupViewPortAndScissors()` ignores them and always binds the full target
 
 Goal:
+
 - the pass must render exactly the intended rectangle, and later passes must
   know what rect is valid
 
 Implementation work:
+
 - honor stored viewport/scissor overrides in `DepthPrePass`
 - define the effective depth rect as part of the pass output contract
 - update any clear behavior that incorrectly assumes full-target coverage
@@ -174,11 +182,13 @@ Implementation work:
 - update the depth-prepass documentation to match the real behavior
 
 Validation:
+
 - unit/integration tests for viewport and scissor honoring
 - RenderDoc evidence from a clipped-rect scenario
 - doc update in `src/Oxygen/Renderer/Docs/passes/depth_pre_pass.md`
 
 UE5 closeness check:
+
 - UE5 reasons about per-view rects explicitly during depth and HZB work
 - Oxygen must stop treating full-target rasterization as the only legal mode
 
@@ -237,13 +247,16 @@ Status: `completed`
 ### Phase DP-2: Introduce A Real Depth Products Contract
 
 Problem:
+
 - `DepthPrePass` effectively publishes only a raw depth texture, and each
   consumer rebuilds SRVs and private assumptions
 
 Goal:
+
 - depth prepass should publish a stable, reusable depth-products package
 
 Implementation work:
+
 - design a `DepthPrePassOutput` or `SceneDepthProducts` object
 - include at minimum:
   - depth texture
@@ -257,11 +270,13 @@ Implementation work:
 - remove duplicated SRV-ownership logic where possible
 
 Validation:
+
 - tests proving shared output correctness
 - code review evidence showing removed duplicate SRV creation paths
 - RenderDoc validation that later passes still bind the correct depth resources
 
 UE5 closeness check:
+
 - UE5 treats scene depth as a first-class renderer product, not a raw texture
   each pass discovers independently
 
@@ -505,12 +520,12 @@ Implementation (7 ordered steps):
 
    Extend the permutation matrix from 4 to 6 variants:
 
-   | Alpha Mode | Sidedness | VS | PS | Buffer |
-   | ---------- | --------- | -- | -- | ------ |
-   | Opaque | Single | `VS_PosOnly` | null | position-only (12B) |
-   | Opaque | Double | `VS_PosOnly` | null | position-only (12B) |
-   | Masked | Single | `VS` | `PS` | full vertex (72B) |
-   | Masked | Double | `VS` | `PS` | full vertex (72B) |
+   | Alpha Mode | Sidedness | VS           | PS   | Buffer              |
+   | ---------- | --------- | ------------ | ---- | ------------------- |
+   | Opaque     | Single    | `VS_PosOnly` | null | position-only (12B) |
+   | Opaque     | Double    | `VS_PosOnly` | null | position-only (12B) |
+   | Masked     | Single    | `VS`         | `PS` | full vertex (72B)   |
+   | Masked     | Double    | `VS`         | `PS` | full vertex (72B)   |
 
    `SelectPipelineStateForPartition()` already branches on `is_masked`;
    the opaque branch returns the position-only variant.
@@ -534,16 +549,16 @@ the multiply chain across compilation units. **No depth-equal risk.**
 
 #### Files touched (complete list)
 
-| File | Sub-phase | Change |
-| ---- | --------- | ------ |
-| `Renderer/Passes/DepthPrePass.cpp` | A + B | null PS for opaque; position-only PSO variants |
-| `Data/Vertex.h` | B | add `PositionVertex` struct |
-| `Data/GeometryAsset.h` | B | add position-only buffer slot in `Mesh` |
-| `Renderer/Resources/GeometryUploader.cpp` | B | create + upload position-only buffer |
-| `Renderer/Types/DrawMetadata.h` | B | add `position_only_buffer_index` field |
-| `Renderer/Upload/DrawMetadataEmitter.cpp` | B | populate new field |
-| `Graphics/Direct3D12/Shaders/Depth/DepthPrePass.hlsl` | B | position-only VS variant |
-| `Graphics/Direct3D12/Shaders/Renderer/DrawMetadata.hlsli` | B | mirror new field |
+| File                                                      | Sub-phase | Change                                         |
+| --------------------------------------------------------- | --------- | ---------------------------------------------- |
+| `Renderer/Passes/DepthPrePass.cpp`                        | A + B     | null PS for opaque; position-only PSO variants |
+| `Data/Vertex.h`                                           | B         | add `PositionVertex` struct                    |
+| `Data/GeometryAsset.h`                                    | B         | add position-only buffer slot in `Mesh`        |
+| `Renderer/Resources/GeometryUploader.cpp`                 | B         | create + upload position-only buffer           |
+| `Renderer/Types/DrawMetadata.h`                           | B         | add `position_only_buffer_index` field         |
+| `Renderer/Upload/DrawMetadataEmitter.cpp`                 | B         | populate new field                             |
+| `Graphics/Direct3D12/Shaders/Depth/DepthPrePass.hlsl`     | B         | position-only VS variant                       |
+| `Graphics/Direct3D12/Shaders/Renderer/DrawMetadata.hlsli` | B         | mirror new field                               |
 
 #### Validation
 
@@ -559,14 +574,14 @@ the multiply chain across compilation units. **No depth-equal risk.**
 
 #### UE5 closeness check
 
-| UE5 concept | Oxygen equivalent |
-| ----------- | ----------------- |
+| UE5 concept                          | Oxygen equivalent                                      |
+| ------------------------------------ | ------------------------------------------------------ |
 | `TDepthOnlyVS<true>` (position-only) | `VS_PosOnly` loading from `position_only_buffer_index` |
-| `TDepthOnlyVS<false>` (full vertex) | existing `VS` with full `VertexData` |
-| `DepthPosOnlyNoPixelPipeline` | opaque single/double PSO: position-only VS + null PS |
-| `DepthNoPixelPipeline` | (not needed separately; opaque path covers this) |
-| `FDepthOnlyPS` only when needed | masked single/double PSO: full VS + alpha-test PS |
-| `FPositionOnlyVertex` | `PositionVertex` (12 bytes) |
+| `TDepthOnlyVS<false>` (full vertex)  | existing `VS` with full `VertexData`                   |
+| `DepthPosOnlyNoPixelPipeline`        | opaque single/double PSO: position-only VS + null PS   |
+| `DepthNoPixelPipeline`               | (not needed separately; opaque path covers this)       |
+| `FDepthOnlyPS` only when needed      | masked single/double PSO: full VS + alpha-test PS      |
+| `FPositionOnlyVertex`                | `PositionVertex` (12 bytes)                            |
 
 #### When to implement
 
@@ -597,13 +612,16 @@ Current consequence:
 ### Phase DP-4: Add A Depth-Prepass Policy Surface
 
 Problem:
+
 - Oxygen always runs the depth pass whenever a depth texture exists, with no
   policy surface comparable to UE5's early-Z modes
 
 Goal:
+
 - the renderer must be able to choose, validate, and reason about prepass mode
 
 Implementation work:
+
 - introduce an explicit policy surface for the modes Oxygen actually supports
   today:
   - `DepthPrePassMode::kDisabled`
@@ -621,6 +639,7 @@ Implementation work:
   parallel legacy paths
 
 Validation:
+
 - `Oxygen.Renderer.CompositionPlanner.Tests`
 - `Oxygen.Renderer.DepthPrePass.Tests`
 - `Oxygen.Renderer.ScreenHzb.Tests`
@@ -629,12 +648,14 @@ Validation:
 - plan/docs updated to record the corrected DP-4 scope
 
 UE5 closeness check:
+
 - Oxygen now matches UE-style separation between planned early-depth mode and
   published early-depth completeness
 - richer UE5 early-Z modes remain future work and are not falsely implied by
   the current API surface
 
 Validation evidence so far:
+
 - mode/completeness surface added in:
   - [src/Oxygen/Renderer/Pipeline/DepthPrePassPolicy.h](H:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Renderer/Pipeline/DepthPrePassPolicy.h)
   - [src/Oxygen/Renderer/Pipeline/Internal/ViewRenderPlan.h](H:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Renderer/Pipeline/Internal/ViewRenderPlan.h)
@@ -654,6 +675,7 @@ Validation evidence so far:
   - `Oxygen.Examples.RenderScene.exe -v=-1 --frames 20 --fps 30 --directional-shadows conventional`
 
 Remaining gap:
+
 - none for DP-4 itself
 
 Status: `completed`
@@ -661,6 +683,7 @@ Status: `completed`
 ### Phase DP-5: Migrate To Reversed-Z
 
 Problem:
+
 - Oxygen uses forward-Z (near=0, far=1) which compounds with the perspective
   hyperbolic distribution to waste float32 precision at the far end
 - every modern production engine (UE5, Unity HDRP, Frostbite, CryEngine,
@@ -682,6 +705,7 @@ presets for `GREATER_EQUAL` in `dx12_utils.h`. The migration surface is
 well-defined.
 
 Goal:
+
 - migrate Oxygen to reversed-Z as the engine-wide depth convention
 
 Impacted systems and required changes:
@@ -726,6 +750,7 @@ Impacted systems and required changes:
   - change: wire passes to use these presets
 
 Implementation work:
+
 - apply projection, clear, compare, HZB, linearization, and metadata changes
   listed above
 - audit any CPU-side culling or debug tooling that assumes forward-Z
@@ -734,6 +759,7 @@ Implementation work:
 - remove dormant forward-Z infrastructure if forward-Z is permanently retired
 
 Validation:
+
 - all existing depth-prepass and VSM tests must pass under the new convention
 - replay-safe `Release` late-frame RenderDoc capture proving correct depth
   clear, compare, and HZB behavior
@@ -744,6 +770,7 @@ Validation:
   distribution change
 
 UE5 closeness check:
+
 - UE5 uses reversed-Z as its only depth convention with `GREATER_EQUAL`
   comparisons, `0.0` clear, and `max()` HZB reduction
 - after this phase, Oxygen's depth convention matches UE5's
@@ -846,6 +873,7 @@ Status: `completed`
 ### Phase DP-6: Rework Downstream Consumers To Exploit Depth Better
 
 Problem:
+
 - later passes consume depth passively instead of exploiting the fact that a
   prepass already happened
 - depth-equal is the primary reason to run a depth prepass at all: without it,
@@ -855,6 +883,7 @@ Problem:
   from DP-4 and the correct depth convention from DP-5
 
 Goal:
+
 - later passes should derive clear, measurable value from the prepass
 - the primary deliverable is depth-equal rendering in `ShaderPass` when the
   prepass is complete, eliminating redundant material evaluations on hidden
@@ -932,6 +961,7 @@ Implementation work:
      these passes should simply not run without complete depth
 
 Validation:
+
 - depth-equal correctness test: render a scene with `ShaderPass` using
   depth-equal and verify that visible opaque fragments match the prepass depth
   while occluded `ShaderPass` fragments fail the equal depth test without
@@ -948,6 +978,7 @@ Validation:
   produce visually identical output
 
 UE5 closeness check:
+
 - UE5's base pass uses depth-equal when `bIsEarlyDepthComplete` is true,
   eliminating redundant shading on all occluded fragments
 - UE5 uses stencil classification during the prepass for deferred lighting
@@ -1000,6 +1031,7 @@ Status: `in_progress`
 ### Phase DP-7: Unify Depth Derivatives And Stop Redundant Work
 
 Problem:
+
 - `ScreenHzbBuildPass` produces only a min (closest) HZB pyramid; no furthest
   (max) HZB exists
 - Oxygen's DP-7 plan/docs overstated UE5-like downstream scene-HZB usage:
@@ -1011,6 +1043,7 @@ Problem:
   would be misleading
 
 Goal:
+
 - produce a canonical dual closest+furthest scene HZB from the depth prepass
   that matches UE's scene-HZB production shape
 - route only verified HZB consumers through that shared contract
@@ -1047,7 +1080,7 @@ Current depth derivative producers and consumers:
   - source: `DepthPrePassOutput` canonical SRV (DP-2 contract)
   - product: `R32Float` min-only mip pyramid, double-buffered per view
   - output contract: `ViewOutput { texture, srv_index, width, height,
-    mip_count, available }`
+mip_count, available }`
   - consumers: `VsmInstanceCulling` (previous-frame HZB occlusion test) only
   - gap: no furthest pyramid and stale single-channel consumer semantics
 
@@ -1126,6 +1159,7 @@ Implementation work:
      declare DP-7 complete
 
 Validation:
+
 - correctness: `ScreenHzbBuildPass` must publish both closest and furthest
   scene HZB products with correct reversed-Z semantics
 - correctness: previous-frame scene-HZB consumers must bind the furthest
@@ -1145,6 +1179,7 @@ Validation:
   unified derivatives contract
 
 UE5 closeness check:
+
 - UE5 builds a dual closest+furthest HZB (`HZBClosest` / `HZBFurthest`) from
   the depth prepass and routes it to occlusion culling, SSR, SSAO, and other
   screen-space consumers
@@ -1195,13 +1230,16 @@ Status: `in_progress`
 ### Phase DP-8: Clean Up Tests, Docs, And Ownership Boundaries
 
 Problem:
+
 - current docs are stale, dedicated tests are thin, and pass registration /
   ownership semantics are messier than they should be
 
 Goal:
+
 - the depth path should be understandable, testable, and cleanly owned
 
 Implementation work:
+
 - add dedicated depth-prepass tests instead of relying only on indirect tests
 - update `depth_pre_pass.md` to the actual architecture
 - clean up ownership/registration semantics if double-registration remains
@@ -1209,11 +1247,13 @@ Implementation work:
   VSM, and shader pass
 
 Validation:
+
 - focused tests for depth-prepass behavior and contracts
 - doc review against actual implementation
 - final audit that this remediation plan is fully reflected in repo docs
 
 UE5 closeness check:
+
 - this phase is only complete when the Oxygen docs accurately describe the
   adopted UE5-inspired structure, not the old simplified one
 

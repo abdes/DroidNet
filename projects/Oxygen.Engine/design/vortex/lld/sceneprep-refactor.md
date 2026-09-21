@@ -83,13 +83,13 @@ This LLD closes those gaps.
 
 ### 2.1 Responsibility Table
 
-| Owner | Responsibilities | Must Not Own |
-| ----- | ---------------- | ------------ |
-| `ScenePrep` substrate | scene traversal, extraction, frame-shared candidate caching, stable-handle resolution support, prepared-scene data assembly support | frame order, view publication policy, downstream per-view iteration, pass execution |
-| `InitViewsModule` | stage-2 orchestration, one frame-shared collection pass, one per-view preparation pass per published view, prepared payload publication | frame-global stage ordering, stage-3/stage-9 draw execution |
-| `SceneRenderer` | stage ordering, current-view iteration for downstream stages | scene traversal internals, ScenePrep cache policy |
-| `Renderer Core` | `RenderContext`, upload infrastructure lifetime/reset, typed publication stack, view lifecycle, composition | scene-policy ownership, scene-stage ordering |
-| downstream stage modules | consume prepared payload for the current view and build draw commands | direct scene traversal, ownership of ScenePrep state, ad hoc scene-prep publication |
+| Owner                    | Responsibilities                                                                                                                        | Must Not Own                                                                        |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `ScenePrep` substrate    | scene traversal, extraction, frame-shared candidate caching, stable-handle resolution support, prepared-scene data assembly support     | frame order, view publication policy, downstream per-view iteration, pass execution |
+| `InitViewsModule`        | stage-2 orchestration, one frame-shared collection pass, one per-view preparation pass per published view, prepared payload publication | frame-global stage ordering, stage-3/stage-9 draw execution                         |
+| `SceneRenderer`          | stage ordering, current-view iteration for downstream stages                                                                            | scene traversal internals, ScenePrep cache policy                                   |
+| `Renderer Core`          | `RenderContext`, upload infrastructure lifetime/reset, typed publication stack, view lifecycle, composition                             | scene-policy ownership, scene-stage ordering                                        |
+| downstream stage modules | consume prepared payload for the current view and build draw commands                                                                   | direct scene traversal, ownership of ScenePrep state, ad hoc scene-prep publication |
 
 ### 2.2 Hard Boundary Rules
 
@@ -323,13 +323,13 @@ The phase split above is binding:
 
 This budget is mandatory for the normal desktop runtime path.
 
-| Operation | Allowed Count |
-| --------- | ------------- |
-| full scene graph traversal for one active scene | exactly 1 per frame |
-| scan over cached filtered candidates | at most 1 per published view |
-| build pass routing / partitions | exactly 1 per published view |
-| full scene graph traversal in stages 3, 9, 18, 22 | 0 |
-| reclassification of material/pass routing from raw scene data in downstream stages | 0 |
+| Operation                                                                          | Allowed Count                |
+| ---------------------------------------------------------------------------------- | ---------------------------- |
+| full scene graph traversal for one active scene                                    | exactly 1 per frame          |
+| scan over cached filtered candidates                                               | at most 1 per published view |
+| build pass routing / partitions                                                    | exactly 1 per published view |
+| full scene graph traversal in stages 3, 9, 18, 22                                  | 0                            |
+| reclassification of material/pass routing from raw scene data in downstream stages | 0                            |
 
 Interpretation:
 

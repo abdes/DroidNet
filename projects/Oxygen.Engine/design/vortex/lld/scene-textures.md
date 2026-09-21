@@ -32,25 +32,25 @@ Paths below are relative to `src/Oxygen`; shader paths begin under
 `Graphics/Direct3D12/Shaders/Vortex/`. Entries describe required migration,
 not completed implementation.
 
-| Product ID / product | Producer and current storage | Consumers / required domain | Format action |
-| --- | --- | --- | --- |
-| 1 SceneColor: base emissive | `Materials/GBufferMaterialOutput.hlsli`, `Vortex/SceneRenderer/SceneTextures.cpp`, RGBA16F at audit baseline | Deferred/forward lighting, fog, resolve, meter, tonemap; write P times scene RGB, preserve coverage | RGBA32F accumulation in both modes |
-| 2 SceneColor: deferred direct | `Services/Lighting/DeferredLight*.hlsl` and `DeferredLightingCommon.hlsli` | Add P-scaled BRDF radiance to product 1; no exposure in photometric light packets | Same SceneColor lease and blend-compatible PSOs |
-| 3 SceneColor: indirect | `Services/Lighting/DeferredShadingCommon.hlsli`, `DeferredLightDirectional.hlsl`, forward environment SH/IBL consumers | Canonical scene-referred IBL converted to P at destination | Same SceneColor; SH remains float buffers |
-| 4 Forward lit/unlit/opaque/masked/translucent | `Stages/Translucency/ForwardMesh_PS.hlsl`, `ForwardDirectLighting.hlsli`, material evaluation | One P on scene radiance; remove old GetExposure division/sRGB branch on HDR path; alpha/coverage unscaled | Same SceneColor and forward PSO formats |
-| 5 Sky view LUT | `Vortex/Environment/Passes/AtmosphereSkyViewLutPass.cpp`, RGBA16F; `Services/Environment/AtmosphereSkyViewLut.hlsl` | `Sky.hlsl`; per-view P plus generation, remove exposure cancellation | Dual texture, SRV/UAV descriptors and allocation keys |
-| 6 Camera aerial perspective | `AtmosphereCameraAerialPerspectivePass.cpp`, RGBA16F 3D; matching shader | `AerialPerspective.hlsli` / scene shading; RGB pre-exposed, transmittance unchanged | Dual 3D texture and binding formats |
-| 7 Sky/background radiance | `Services/Environment/Sky.hlsl`, sky sphere/cubemap sampling | SceneColor, including sun disks; atmosphere/source radiance converted exactly once to destination P | Same SceneColor; display background excluded |
-| 8 Height fog | `Services/Environment/Fog.hlsl` | SceneColor; scale added inscattering by P, retain attenuation | Same SceneColor |
-| 9 Local fog compose | `Services/Environment/LocalFogVolumeCompose.hlsl` | SceneColor; same radiance/attenuation separation | Same SceneColor |
-| 10 Volumetric fog/history | `Vortex/Environment/Passes/VolumetricFogPass.cpp`, RGBA16F 3D; `VolumetricFog.hlsl` | Fog compose and temporal reprojection; RGB carries stored P, alpha is transmittance | Dual current/history 3D textures; convert prior RGB by P_current/P_stored before interpolation |
-| 11 Resolved HDR / composition handoff | `Vortex/SceneRenderer/ResolveSceneColor.cpp`, existing resolved-color artifact; Stage 22 writes caller-owned composite targets | Stage 22 reads resolved HDR; auxiliary/offscreen final-color handoff is display-mapped when post processing runs | Checked conversion from FP32 accumulation to qualified RGBA16F or recovery RGBA32F; bounded post-tonemap targets retain their format |
-| 12 Bloom products | `Vortex/PostProcess/Internal/BloomChain.cpp` currently only forwards an externally supplied SRV; `BloomDownsample.hlsl` / `BloomUpsample.hlsl` exist | Tonemap; threshold scene-referred, RGB in source P, final S/P once | Any allocated radiance chain must inherit source HDR mode; no existing owned chain allocation found in this audit |
-| 13 Static processed sky cubemap | `StaticSkyLightProcessor.cpp`, `IblProcessor.cpp`, normalized RGBA16F plus source_radiance_scale | Sky/IBL consumers restore resource scale; independent of view P/S | Preserve existing normalization; qualify narrowing and select RGBA32F if required source signal cannot fit; upload packing and descriptor must agree |
-| 14 Canonical atmosphere transmittance | `AtmosphereLutCache.cpp`, RGBA32F | All atmosphere integrators; dimensionless | Shared FP32 storage approved for EX05-16; never P-scaled |
-| 15 Canonical multiple scattering | `AtmosphereLutCache.cpp`, RGBA32F; `AtmosphereMultiScatteringLut.hlsl` | Sky-view/AP integrators; unit-illuminance transfer, not exposed radiance | Shared FP32 storage approved for EX05-16; preserve tiny transfers before multiplying physical illuminance |
-| 16 Distant sky / diffuse SH | `AtmosphereLutCache.cpp` float4 buffer; static sky float SH buffer | Environment/lighting; scene-referred with explicit resource normalization where present | FP32 buffers retained, no view-dependent scaling |
-| 17 Diagnostic colors | `BasePassWireframe.hlsl`, `ForwardWireframe_PS.hlsl`, `ForwardDebug_PS.hlsl`, base/debug visualization | Temporary unit-gain output; preserve persistent exposure and pending events | Remove inverse-old-exposure workaround; HDR diagnostic writes use current P, display overlays bypass scene metering |
+| Product ID / product                          | Producer and current storage                                                                                                                         | Consumers / required domain                                                                                      | Format action                                                                                                                                        |
+| --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1 SceneColor: base emissive                   | `Materials/GBufferMaterialOutput.hlsli`, `Vortex/SceneRenderer/SceneTextures.cpp`, RGBA16F at audit baseline                                         | Deferred/forward lighting, fog, resolve, meter, tonemap; write P times scene RGB, preserve coverage              | RGBA32F accumulation in both modes                                                                                                                   |
+| 2 SceneColor: deferred direct                 | `Services/Lighting/DeferredLight*.hlsl` and `DeferredLightingCommon.hlsli`                                                                           | Add P-scaled BRDF radiance to product 1; no exposure in photometric light packets                                | Same SceneColor lease and blend-compatible PSOs                                                                                                      |
+| 3 SceneColor: indirect                        | `Services/Lighting/DeferredShadingCommon.hlsli`, `DeferredLightDirectional.hlsl`, forward environment SH/IBL consumers                               | Canonical scene-referred IBL converted to P at destination                                                       | Same SceneColor; SH remains float buffers                                                                                                            |
+| 4 Forward lit/unlit/opaque/masked/translucent | `Stages/Translucency/ForwardMesh_PS.hlsl`, `ForwardDirectLighting.hlsli`, material evaluation                                                        | One P on scene radiance; remove old GetExposure division/sRGB branch on HDR path; alpha/coverage unscaled        | Same SceneColor and forward PSO formats                                                                                                              |
+| 5 Sky view LUT                                | `Vortex/Environment/Passes/AtmosphereSkyViewLutPass.cpp`, RGBA16F; `Services/Environment/AtmosphereSkyViewLut.hlsl`                                  | `Sky.hlsl`; per-view P plus generation, remove exposure cancellation                                             | Dual texture, SRV/UAV descriptors and allocation keys                                                                                                |
+| 6 Camera aerial perspective                   | `AtmosphereCameraAerialPerspectivePass.cpp`, RGBA16F 3D; matching shader                                                                             | `AerialPerspective.hlsli` / scene shading; RGB pre-exposed, transmittance unchanged                              | Dual 3D texture and binding formats                                                                                                                  |
+| 7 Sky/background radiance                     | `Services/Environment/Sky.hlsl`, sky sphere/cubemap sampling                                                                                         | SceneColor, including sun disks; atmosphere/source radiance converted exactly once to destination P              | Same SceneColor; display background excluded                                                                                                         |
+| 8 Height fog                                  | `Services/Environment/Fog.hlsl`                                                                                                                      | SceneColor; scale added inscattering by P, retain attenuation                                                    | Same SceneColor                                                                                                                                      |
+| 9 Local fog compose                           | `Services/Environment/LocalFogVolumeCompose.hlsl`                                                                                                    | SceneColor; same radiance/attenuation separation                                                                 | Same SceneColor                                                                                                                                      |
+| 10 Volumetric fog/history                     | `Vortex/Environment/Passes/VolumetricFogPass.cpp`, RGBA16F 3D; `VolumetricFog.hlsl`                                                                  | Fog compose and temporal reprojection; RGB carries stored P, alpha is transmittance                              | Dual current/history 3D textures; convert prior RGB by P_current/P_stored before interpolation                                                       |
+| 11 Resolved HDR / composition handoff         | `Vortex/SceneRenderer/ResolveSceneColor.cpp`, existing resolved-color artifact; Stage 22 writes caller-owned composite targets                       | Stage 22 reads resolved HDR; auxiliary/offscreen final-color handoff is display-mapped when post processing runs | Checked conversion from FP32 accumulation to qualified RGBA16F or recovery RGBA32F; bounded post-tonemap targets retain their format                 |
+| 12 Bloom products                             | `Vortex/PostProcess/Internal/BloomChain.cpp` currently only forwards an externally supplied SRV; `BloomDownsample.hlsl` / `BloomUpsample.hlsl` exist | Tonemap; threshold scene-referred, RGB in source P, final S/P once                                               | Any allocated radiance chain must inherit source HDR mode; no existing owned chain allocation found in this audit                                    |
+| 13 Static processed sky cubemap               | `StaticSkyLightProcessor.cpp`, `IblProcessor.cpp`, normalized RGBA16F plus source_radiance_scale                                                     | Sky/IBL consumers restore resource scale; independent of view P/S                                                | Preserve existing normalization; qualify narrowing and select RGBA32F if required source signal cannot fit; upload packing and descriptor must agree |
+| 14 Canonical atmosphere transmittance         | `AtmosphereLutCache.cpp`, RGBA32F                                                                                                                    | All atmosphere integrators; dimensionless                                                                        | Shared FP32 storage approved for EX05-16; never P-scaled                                                                                             |
+| 15 Canonical multiple scattering              | `AtmosphereLutCache.cpp`, RGBA32F; `AtmosphereMultiScatteringLut.hlsl`                                                                               | Sky-view/AP integrators; unit-illuminance transfer, not exposed radiance                                         | Shared FP32 storage approved for EX05-16; preserve tiny transfers before multiplying physical illuminance                                            |
+| 16 Distant sky / diffuse SH                   | `AtmosphereLutCache.cpp` float4 buffer; static sky float SH buffer                                                                                   | Environment/lighting; scene-referred with explicit resource normalization where present                          | FP32 buffers retained, no view-dependent scaling                                                                                                     |
+| 17 Diagnostic colors                          | `BasePassWireframe.hlsl`, `ForwardWireframe_PS.hlsl`, `ForwardDebug_PS.hlsl`, base/debug visualization                                               | Temporary unit-gain output; preserve persistent exposure and pending events                                      | Remove inverse-old-exposure workaround; HDR diagnostic writes use current P, display overlays bypass scene metering                                  |
 
 Read every wildcard family entry against the ShaderBake catalog when migrating;
 cataloged shaders and their CPU dispatches must agree. Static sky processing
@@ -109,14 +109,14 @@ color composition, pre-exposure conversion and aerial perspective. Its light
 evaluation is required to detect cancellation between light contributions; an
 emission-only replay cannot qualify that boundary.
 
-| Products | Range proof |
-| --- | --- |
-| 1, 4 | Cooked typed material/emissive samples through deferred/forward, opaque/masked/translucent paths; exact sRGB decode ownership |
-| 2, 4 | Directional/point/spot lit-surface matrix at P endpoints; independent current-BRDF calculation, including partial coverage and explicit unsupported output |
-| 3, 13, 16 | Static diffuse SH from isotropic cubemaps, including simultaneous 2^-24 and 2^30 components; normalized half/float cubemap upload; distant-sky linearity and dual-source additivity |
-| 5–10, 14–15 | Actual atmosphere/fog producers, tiny canonical transfers, analytic thin scattering for both lights, local composition/injection and history-domain checks |
-| 11, 17 | Whole-image input/final range scans, checked conversion, diagnostic domain and consumer-composition certificates |
-| 12 | External matching-P handoff and disabled behavior are Debug-qualified by EX05-09, including checked scene fallback. Owned filter entries remain inactive placeholders; their thresholds/format/error work is tracked by issue 12. |
+| Products    | Range proof                                                                                                                                                                                                                       |
+| ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1, 4        | Cooked typed material/emissive samples through deferred/forward, opaque/masked/translucent paths; exact sRGB decode ownership                                                                                                     |
+| 2, 4        | Directional/point/spot lit-surface matrix at P endpoints; independent current-BRDF calculation, including partial coverage and explicit unsupported output                                                                        |
+| 3, 13, 16   | Static diffuse SH from isotropic cubemaps, including simultaneous 2^-24 and 2^30 components; normalized half/float cubemap upload; distant-sky linearity and dual-source additivity                                               |
+| 5–10, 14–15 | Actual atmosphere/fog producers, tiny canonical transfers, analytic thin scattering for both lights, local composition/injection and history-domain checks                                                                        |
+| 11, 17      | Whole-image input/final range scans, checked conversion, diagnostic domain and consumer-composition certificates                                                                                                                  |
+| 12          | External matching-P handoff and disabled behavior are Debug-qualified by EX05-09, including checked scene fallback. Owned filter entries remain inactive placeholders; their thresholds/format/error work is tracked by issue 12. |
 
 Distant-sky range checks use unit-light native anchors and the linear transfer
 equation; they do not establish absolute atmosphere-model accuracy. Direct-light
@@ -358,12 +358,12 @@ certificate in this fixture, while the non-temporal control qualifies for FP16.
 The controls therefore vary temporal work as well as format; their difference is
 not an isolated format-only cost.
 
-| Main / second view | Temporal fog / steady HDR mode | Two-view HDR MiB (Debug) | Two-view HDR MiB (Release) | Creation-time peak MiB | Cached after retirement MiB |
-| --- | --- | ---: | ---: | ---: | ---: |
-| 1920x1080 / 960x540 | Off / FP16 | 229.328 | 229.328 | 294.953 | 86.578 |
-| 1920x1080 / 960x540 | On / FP32 retention | 374.453 | 381.703 | 384.016 | 86.578 |
-| 3840x2160 / 1920x1080 | Off / FP16 | 827.328 | 827.328 | 1075.828 | 322.828 |
-| 3840x2160 / 1920x1080 | On / FP32 retention | 1375.641 | 1401.203 | 1410.578 | 322.828 |
+| Main / second view    | Temporal fog / steady HDR mode | Two-view HDR MiB (Debug) | Two-view HDR MiB (Release) | Creation-time peak MiB | Cached after retirement MiB |
+| --------------------- | ------------------------------ | -----------------------: | -------------------------: | ---------------------: | --------------------------: |
+| 1920x1080 / 960x540   | Off / FP16                     |                  229.328 |                    229.328 |                294.953 |                      86.578 |
+| 1920x1080 / 960x540   | On / FP32 retention            |                  374.453 |                    381.703 |                384.016 |                      86.578 |
+| 3840x2160 / 1920x1080 | Off / FP16                     |                  827.328 |                    827.328 |               1075.828 |                     322.828 |
+| 3840x2160 / 1920x1080 | On / FP32 retention            |                 1375.641 |                   1401.203 |               1410.578 |                     322.828 |
 
 All four cases retain two outputs across settings invalidation requiring FP32,
 then release them and cross the actual fence/slot-retirement boundaries. Four cached families
@@ -384,11 +384,11 @@ footprints match Debug; intermediate retained temporal snapshots differ and
 are listed separately above.
 
 | Main resolution / temporal fog | Explicit qualification (ms) | Conversion or copy (ms) | Tonemap (ms) | Fog compute (ms) |
-| --- | ---: | ---: | ---: | ---: |
-| 1080p / Off | 3.273248 | 0.089936 | 0.105456 | 0.189168 |
-| 1080p / On | 3.188288 | 0.091696 | 0.134368 | 2.657600 |
-| 4K / Off | 7.728880 | 0.232096 | 0.375344 | 0.723744 |
-| 4K / On | 9.343680 | 0.322688 | 0.504320 | 10.411648 |
+| ------------------------------ | --------------------------: | ----------------------: | -----------: | ---------------: |
+| 1080p / Off                    |                    3.273248 |                0.089936 |     0.105456 |         0.189168 |
+| 1080p / On                     |                    3.188288 |                0.091696 |     0.134368 |         2.657600 |
+| 4K / Off                       |                    7.728880 |                0.232096 |     0.375344 |         0.723744 |
+| 4K / On                        |                    9.343680 |                0.322688 |     0.504320 |        10.411648 |
 
 These are sums of warm per-event replay medians across both views on the
 captured adapter. Explicit qualification includes clear, maximum gathering,
@@ -410,16 +410,16 @@ Temporal histories participate in C02/M02/M04/I01/I02. I01/I02 additionally
 enable actual shadow rendering. Actual retained generations and placement,
 rather than a fixed multiplier per view, determine the total.
 
-| Population / owner | Descriptor-based expectation | Existing observation / retirement rule |
-| --- | --- | --- |
-| Live scene attachments / `SceneTextures` | FP32 accumulation: 16 bytes/texel; depth, partial depth, four GBuffers and enabled velocity/custom depth retain the formats in section 5.1. Main/secondary dimensions follow the recipe. | Deduplicate native identities; count placement separately from raw texels. Family cache and leased counts are distinct. |
-| Resolved color and queued fallback / `ResolveSceneColor` | 8 bytes/texel for admitted half resolve, 16 for FP32 resolve; a conditional extraction additionally retains original FP32 color and its immutable P/state/report. | EX051-10A removes the measured whole-family fallback retention below. Queued readers and descriptor retirement remain mandatory and are qualified by its checkpoint. |
-| Depth extracts / `ExtractSceneDepth` | Resolved and previous depth can alias one artifact; count one native allocation, not two logical outputs. | H4/H5 and the lifecycle fixture verify both delayed aliases after source-family reuse. |
-| Environment current products and history / environment passes | Sky-view dimensions use the existing quality descriptor; AP is 64 x 64 x 32 for steady recipes. Fog dimensions come from the existing viewport/grid resolver. Qualified radiance uses 8 bytes/texel, FP32 uses 16. | Temporal recipes retain actual previous fog products, stored P and certificates until their readers/fences finish. Reprojection on does not imply half admission. |
-| Shared canonical atmosphere cache | One shared 256 x 64 and one 32 x 32 RGBA32F table: 136 KiB raw per generation. | Count each unique cache generation once across views; include placement alignment and overlapping retired generations. |
+| Population / owner                                              | Descriptor-based expectation                                                                                                                                                                                                                   | Existing observation / retirement rule                                                                                                                                                  |
+| --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Live scene attachments / `SceneTextures`                        | FP32 accumulation: 16 bytes/texel; depth, partial depth, four GBuffers and enabled velocity/custom depth retain the formats in section 5.1. Main/secondary dimensions follow the recipe.                                                       | Deduplicate native identities; count placement separately from raw texels. Family cache and leased counts are distinct.                                                                 |
+| Resolved color and queued fallback / `ResolveSceneColor`        | 8 bytes/texel for admitted half resolve, 16 for FP32 resolve; a conditional extraction additionally retains original FP32 color and its immutable P/state/report.                                                                              | EX051-10A removes the measured whole-family fallback retention below. Queued readers and descriptor retirement remain mandatory and are qualified by its checkpoint.                    |
+| Depth extracts / `ExtractSceneDepth`                            | Resolved and previous depth can alias one artifact; count one native allocation, not two logical outputs.                                                                                                                                      | H4/H5 and the lifecycle fixture verify both delayed aliases after source-family reuse.                                                                                                  |
+| Environment current products and history / environment passes   | Sky-view dimensions use the existing quality descriptor; AP is 64 x 64 x 32 for steady recipes. Fog dimensions come from the existing viewport/grid resolver. Qualified radiance uses 8 bytes/texel, FP32 uses 16.                             | Temporal recipes retain actual previous fog products, stored P and certificates until their readers/fences finish. Reprojection on does not imply half admission.                       |
+| Shared canonical atmosphere cache                               | One shared 256 x 64 and one 32 x 32 RGBA32F table: 136 KiB raw per generation.                                                                                                                                                                 | Count each unique cache generation once across views; include placement alignment and overlapping retired generations.                                                                  |
 | Exposure states, reports and reduction scratch / `ExposurePass` | Histogram allocation is `kHistogramWordCount * sizeof(uint32_t)` when metering needs it; frame/state/status/conversion records and structured constant publishers use their declared buffer descriptors. No full-resolution telemetry texture. | Count actual leased generations and cached buffers, including idle allocations. Status readback reuse is bounded by frame slots; a retained consumer can extend its frame/state leases. |
-| Caller outputs and fixture transport | One full and optional half-size FP32 output; lifecycle fixture also has two 1 x 1 delayed outputs and depth readbacks. | Keep named fixture/transport allocations separate from engine placement; diagnostic inspection is excluded from the creation trace. |
-| Other rendering products | Mixed scene assets, HZB and I01/I02 shadow surfaces use their own descriptors and native identities. | Included when observed after trace start; do not attribute ordinary rendering resources to exposure or call a partial trace total device residency. |
+| Caller outputs and fixture transport                            | One full and optional half-size FP32 output; lifecycle fixture also has two 1 x 1 delayed outputs and depth readbacks.                                                                                                                         | Keep named fixture/transport allocations separate from engine placement; diagnostic inspection is excluded from the creation trace.                                                     |
+| Other rendering products                                        | Mixed scene assets, HZB and I01/I02 shadow surfaces use their own descriptors and native identities.                                                                                                                                           | Included when observed after trace start; do not attribute ordinary rendering resources to exposure or call a partial trace total device residency.                                     |
 
 `ExposureBaselineScenario::Snapshot` supplies untimed before/after native texture
 and buffer placement and creation counts for steady recipes. Zero warm creation
@@ -496,12 +496,12 @@ shared scene attachments under one product family.
 Per ARCHITECTURE.md §7.3.1, `SceneTextures` has four separate architectural
 concerns. This LLD designs each part.
 
-| Contract Part | Class | Owner |
-| ------------- | ----- | ----- |
-| Concrete product family | `SceneTextures` | `SceneRenderer` |
-| Setup state | `SceneTextureSetupMode` | `SceneRenderer` |
-| Shader-facing binding package | `SceneTextureBindings` | Generated from SceneTextures + setup mode |
-| Extracted handoff set | `SceneTextureExtracts` | `SceneRenderer` post-render cleanup |
+| Contract Part                 | Class                   | Owner                                     |
+| ----------------------------- | ----------------------- | ----------------------------------------- |
+| Concrete product family       | `SceneTextures`         | `SceneRenderer`                           |
+| Setup state                   | `SceneTextureSetupMode` | `SceneRenderer`                           |
+| Shader-facing binding package | `SceneTextureBindings`  | Generated from SceneTextures + setup mode |
+| Extracted handoff set         | `SceneTextureExtracts`  | `SceneRenderer` post-render cleanup       |
 
 ## 3. Interface Contracts
 
@@ -685,13 +685,13 @@ stage boundaries. Passes consume the mode; they do not update it.
 
 **Setup milestones (ARCHITECTURE.md §7.3.3):**
 
-| After Stage | Flags Set |
-| ----------- | --------- |
-| 3 (depth prepass) | `kSceneDepth`, `kPartialDepth`, optionally `kSceneVelocity` (partial) |
-| 9 (base pass) | raw `GBuffer*` / `SceneColor` attachments may be written, but they remain unpublished for standard scene-texture consumers |
-| 10 (rebuild) | `SceneColor` + GBuffer-valid published state for deferred consumers |
-| 22 (post-process) | All production products valid |
-| 23 (cleanup) | Extraction set queued |
+| After Stage       | Flags Set                                                                                                                  |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| 3 (depth prepass) | `kSceneDepth`, `kPartialDepth`, optionally `kSceneVelocity` (partial)                                                      |
+| 9 (base pass)     | raw `GBuffer*` / `SceneColor` attachments may be written, but they remain unpublished for standard scene-texture consumers |
+| 10 (rebuild)      | `SceneColor` + GBuffer-valid published state for deferred consumers                                                        |
+| 22 (post-process) | All production products valid                                                                                              |
+| 23 (cleanup)      | Extraction set queued                                                                                                      |
 
 **File:** `SceneRenderer/SceneTextures.h` (same header, separate class)
 
@@ -880,11 +880,11 @@ The pre-10A matched Release lifecycle measurements show the cost of whole-family
 retention. Each case renders two views; the secondary is half the main extent.
 
 | Main resolution / temporal fog | Production engine peak MiB | Format-only FP32 engine peak MiB | Excess production peak MiB |
-| --- | ---: | ---: | ---: |
-| 1080p / off | 978.457 | 733.770 | 244.688 |
-| 1080p / on | 908.957 | 757.832 | 151.125 |
-| 4K / off | 3585.957 | 2684.207 | 901.750 |
-| 4K / on | 3335.457 | 2771.082 | 564.375 |
+| ------------------------------ | -------------------------: | -------------------------------: | -------------------------: |
+| 1080p / off                    |                    978.457 |                          733.770 |                    244.688 |
+| 1080p / on                     |                    908.957 |                          757.832 |                    151.125 |
+| 4K / off                       |                   3585.957 |                         2684.207 |                    901.750 |
+| 4K / on                        |                   3335.457 |                         2771.082 |                    564.375 |
 
 Temporal-off production leaves six cached families after retirement; the FP32
 control leaves two. The extra families occupy 302.25 MiB at 1080p and
@@ -979,30 +979,30 @@ Stage 23 (Cleanup)
 
 ### 4.2 Dependency Direction
 
-| Component | Depends On | Depended On By |
-| --------- | ---------- | -------------- |
-| SceneTextures | Graphics layer (IGraphics, Texture) | SceneRenderer, all stage modules, all services |
-| SceneTextureSetupMode | None | SceneTextureBindings generation, stage/service consumers |
-| SceneTextureBindings | SceneTextures + SetupMode + Graphics (descriptor alloc) | Renderer Core publication helpers → RenderContext/ViewFrameBindings → passes |
-| SceneTextureExtracts | SceneTextures + explicit resolve/copy artifacts | Renderer Core handoff surfaces |
+| Component             | Depends On                                              | Depended On By                                                               |
+| --------------------- | ------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| SceneTextures         | Graphics layer (IGraphics, Texture)                     | SceneRenderer, all stage modules, all services                               |
+| SceneTextureSetupMode | None                                                    | SceneTextureBindings generation, stage/service consumers                     |
+| SceneTextureBindings  | SceneTextures + SetupMode + Graphics (descriptor alloc) | Renderer Core publication helpers → RenderContext/ViewFrameBindings → passes |
+| SceneTextureExtracts  | SceneTextures + explicit resolve/copy artifacts         | Renderer Core handoff surfaces                                               |
 
 ## 5. Resource Management
 
 ### 5.1 GPU Resources
 
-| Product | Format | Size | Lifecycle |
-| ------- | ------ | ---- | --------- |
-| SceneColor accumulation | `R32G32B32A32_FLOAT` in scene rendering | `extent.x × extent.y` | Independent per-view color lease, bound to the active family; readers and GPU fences govern reuse |
-| Resolved HDR | Qualified `R16G16B16A16_FLOAT` or recovery/retained `R32G32B32A32_FLOAT` | `extent.x × extent.y` | Existing resolve artifact; checked conversion and retained FP32 fallback carry frame-pinned exposure metadata |
-| SceneDepth | `D32_FLOAT_S8X24_UINT` | `extent.x × extent.y` | Persistent; carries scene depth + scene stencil family |
-| PartialDepth | `R32_FLOAT` | `extent.x × extent.y` | Persistent |
-| Stencil | Scene/custom stencil family | `extent.x × extent.y` | Routed from the stencil aspect of `SceneDepth`, and from `CustomDepth` when the optional custom path is enabled |
-| GBufferNormal | `R10G10B10A2_UNORM` | `extent.x × extent.y` | Persistent |
-| GBufferMaterial | `R8G8B8A8_UNORM` | `extent.x × extent.y` | Persistent |
-| GBufferBaseColor | `R8G8B8A8_SRGB` | `extent.x × extent.y` | Persistent |
-| GBufferCustomData | `R8G8B8A8_UNORM` | `extent.x × extent.y` | Persistent |
-| Velocity | `R16G16_FLOAT` | `extent.x × extent.y` | Persistent (if enabled) |
-| CustomDepth | `D32_FLOAT_S8X24_UINT` | `extent.x × extent.y` | Persistent (if enabled); carries custom depth + optional custom stencil family |
+| Product                 | Format                                                                   | Size                  | Lifecycle                                                                                                       |
+| ----------------------- | ------------------------------------------------------------------------ | --------------------- | --------------------------------------------------------------------------------------------------------------- |
+| SceneColor accumulation | `R32G32B32A32_FLOAT` in scene rendering                                  | `extent.x × extent.y` | Independent per-view color lease, bound to the active family; readers and GPU fences govern reuse               |
+| Resolved HDR            | Qualified `R16G16B16A16_FLOAT` or recovery/retained `R32G32B32A32_FLOAT` | `extent.x × extent.y` | Existing resolve artifact; checked conversion and retained FP32 fallback carry frame-pinned exposure metadata   |
+| SceneDepth              | `D32_FLOAT_S8X24_UINT`                                                   | `extent.x × extent.y` | Persistent; carries scene depth + scene stencil family                                                          |
+| PartialDepth            | `R32_FLOAT`                                                              | `extent.x × extent.y` | Persistent                                                                                                      |
+| Stencil                 | Scene/custom stencil family                                              | `extent.x × extent.y` | Routed from the stencil aspect of `SceneDepth`, and from `CustomDepth` when the optional custom path is enabled |
+| GBufferNormal           | `R10G10B10A2_UNORM`                                                      | `extent.x × extent.y` | Persistent                                                                                                      |
+| GBufferMaterial         | `R8G8B8A8_UNORM`                                                         | `extent.x × extent.y` | Persistent                                                                                                      |
+| GBufferBaseColor        | `R8G8B8A8_SRGB`                                                          | `extent.x × extent.y` | Persistent                                                                                                      |
+| GBufferCustomData       | `R8G8B8A8_UNORM`                                                         | `extent.x × extent.y` | Persistent                                                                                                      |
+| Velocity                | `R16G16_FLOAT`                                                           | `extent.x × extent.y` | Persistent (if enabled)                                                                                         |
+| CustomDepth             | `D32_FLOAT_S8X24_UINT`                                                   | `extent.x × extent.y` | Persistent (if enabled); carries custom depth + optional custom stencil family                                  |
 
 ### 5.2 Allocation Strategy
 

@@ -30,9 +30,7 @@
       "source": "./floor.geometry.json",
       "name": "floor",
       "content_hashing": true,
-      "depends_on": [
-        "floor.material"
-      ]
+      "depends_on": ["floor.material"]
     },
     {
       "id": "cube.geometry",
@@ -40,9 +38,7 @@
       "source": "./cube.geometry.json",
       "name": "cube",
       "content_hashing": true,
-      "depends_on": [
-        "cube.material"
-      ]
+      "depends_on": ["cube.material"]
     },
     {
       "id": "sphere.geometry",
@@ -50,9 +46,7 @@
       "source": "./sphere.geometry.json",
       "name": "sphere",
       "content_hashing": true,
-      "depends_on": [
-        "sphere.material"
-      ]
+      "depends_on": ["sphere.material"]
     },
     {
       "id": "waterbottle.texture.waterbottle_albedo",
@@ -171,9 +165,7 @@
       "source": "./floor_box.shape.json",
       "name": "floor_shape",
       "content_hashing": true,
-      "depends_on": [
-        "physics.material.ground"
-      ]
+      "depends_on": ["physics.material.ground"]
     },
     {
       "id": "physics.shape.sphere",
@@ -181,9 +173,7 @@
       "source": "./sphere_unit.shape.json",
       "name": "sphere_shape",
       "content_hashing": true,
-      "depends_on": [
-        "physics.material.bouncy_ball"
-      ]
+      "depends_on": ["physics.material.bouncy_ball"]
     },
     {
       "id": "physics.shape.cube",
@@ -191,9 +181,7 @@
       "source": "./cube_unit.shape.json",
       "name": "cube_shape",
       "content_hashing": true,
-      "depends_on": [
-        "physics.material.ground"
-      ]
+      "depends_on": ["physics.material.ground"]
     },
     {
       "id": "physics.shape.waterbottle",
@@ -201,9 +189,7 @@
       "source": "./waterbottle.shape.json",
       "name": "waterbottle_shape",
       "content_hashing": true,
-      "depends_on": [
-        "physics.material.plastic"
-      ]
+      "depends_on": ["physics.material.plastic"]
     }
   ]
 }

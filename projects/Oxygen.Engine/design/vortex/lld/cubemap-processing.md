@@ -238,7 +238,7 @@ VTX-M08 must publish a structured buffer with eight `float4` elements:
 - elements `0..6`: packed three-band diffuse SH coefficients with UE-style
   diffuse convolution coefficients baked into the values
 - element `7`: `{ average_brightness, average_brightness,
-  average_brightness, average_brightness }`
+average_brightness, average_brightness }`
 
 The shader evaluator must match the UE `GetSkySHDiffuse` shape:
 

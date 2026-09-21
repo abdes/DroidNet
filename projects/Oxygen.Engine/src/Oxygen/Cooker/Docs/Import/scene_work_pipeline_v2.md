@@ -246,17 +246,17 @@ public:
 At runtime each worker coroutine processes items from the input channel and
 follows this behavior (implementation notes & diagnostics below):
 
-1) Check cancellation: if `WorkItem.stop_token` is requested the pipeline
+1. Check cancellation: if `WorkItem.stop_token` is requested the pipeline
    sends a cancelled `WorkResult` (diagnostic `import.canceled`) and continues.
-2) Validate adapter presence: if `adapter_owner` or `build_stage` is missing
+2. Validate adapter presence: if `adapter_owner` or `build_stage` is missing
    the pipeline emits `scene.adapter_missing` and fails the item.
-3) Run the adapter scene stage on the `ThreadPool` (`BuildSceneStage`) using
+3. Run the adapter scene stage on the `ThreadPool` (`BuildSceneStage`) using
    the typed adapter via the opaque `build_stage` function pointer. The
    stage is cancellable; the pipeline collects any diagnostics emitted by the
    stage.
-4) If the stage was cancelled the pipeline sends a cancelled result; if the
+4. If the stage was cancelled the pipeline sends a cancelled result; if the
    stage failed without diagnostics the pipeline emits `scene.stage_failed`.
-5) On stage success the pipeline:
+5. On stage success the pipeline:
    - Sorts all component arrays by `node_index`.
    - Builds final scene naming/paths for the asset key (uses
      `request.GetSceneName()` + `request.loose_cooked_layout` to produce
@@ -269,11 +269,11 @@ follows this behavior (implementation notes & diagnostics below):
      the available record bytes); failures emit blocking diagnostics
      (`scene.environment.*`).
    - Writer failures produce `scene.serialize_failed` diagnostics.
-6) If serialization succeeded and `Config::with_content_hashing` is true
+6. If serialization succeeded and `Config::with_content_hashing` is true
    the pipeline computes the `content_hash` on the `ThreadPool` (cancellable)
    and patches `SceneAssetDesc.header.content_hash` when the computed hash is
    non-zero.
-7) The worker constructs a `WorkResult` with collected diagnostics and
+7. The worker constructs a `WorkResult` with collected diagnostics and
    `ImportWorkItemTelemetry` (cook duration) and sends it to the output
    channel. If `WorkItem.on_finished` is provided it is invoked after work
    completes.
@@ -429,14 +429,14 @@ Pipeline tracks submitted/completed/failed counts and exposes
 
 ## Robustness Rules (Do Not Violate)
 
-1) Pipeline never writes output files.
-2) Scene payload must be packed with alignment = 1.
-3) The adapter must provide a string table that starts with `\0` so offset
+1. Pipeline never writes output files.
+2. Scene payload must be packed with alignment = 1.
+3. The adapter must provide a string table that starts with `\0` so offset
    `0` maps to the empty string; the pipeline will serialize the bytes as
    provided.
-4) Environment block header is always appended (even empty) and system record
+4. Environment block header is always appended (even empty) and system record
    headers must be validated by the pipeline.
-5) `header.content_hash` (when hashing is enabled) must cover the entire
+5. `header.content_hash` (when hashing is enabled) must cover the entire
    descriptor payload including the environment block; the pipeline computes
    the hash on the `ThreadPool` and patches the header only when the hash is
    non-zero.
@@ -462,11 +462,11 @@ conversion is **one-shot** and must be applied by the adapter during its
 
 Rules:
 
-1) The importer/adapter must supply source-space metadata per scene.
-2) The adapter must apply at most one conversion to produce final engine
+1. The importer/adapter must supply source-space metadata per scene.
+2. The adapter must apply at most one conversion to produce final engine
    space (translations, rotations, scales) and re-normalize quaternions.
-3) No pipeline-side "unmapping" or additional remappings are allowed.
-4) If source space already matches engine space the adapter should be a no-op.
+3. No pipeline-side "unmapping" or additional remappings are allowed.
+4. If source space already matches engine space the adapter should be a no-op.
 
 Missing or inconsistent source-space metadata is a **blocking error** (the
 adapter should emit a blocking diagnostic so the pipeline can fail the

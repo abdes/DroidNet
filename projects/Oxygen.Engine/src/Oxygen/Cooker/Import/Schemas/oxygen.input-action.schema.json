@@ -17,11 +17,7 @@
     },
     "type": {
       "type": "string",
-      "enum": [
-        "bool",
-        "axis1d",
-        "axis2d"
-      ],
+      "enum": ["bool", "axis1d", "axis2d"],
       "description": "Action value type."
     },
     "consumes_input": {
@@ -30,8 +26,5 @@
       "description": "When true, consumes matching input so lower-priority mappings do not also trigger."
     }
   },
-  "required": [
-    "name",
-    "type"
-  ]
+  "required": ["name", "type"]
 }

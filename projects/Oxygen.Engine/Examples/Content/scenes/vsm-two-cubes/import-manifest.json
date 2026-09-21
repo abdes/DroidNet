@@ -16,9 +16,7 @@
       "source": "../bottle-on-box/cube.geometry.json",
       "name": "cube",
       "content_hashing": true,
-      "depends_on": [
-        "material.cube_red"
-      ]
+      "depends_on": ["material.cube_red"]
     },
     {
       "id": "scene.VsmTwoCubes",
@@ -26,9 +24,7 @@
       "source": "./VsmTwoCubes.scene.json",
       "name": "VsmTwoCubes",
       "content_hashing": true,
-      "depends_on": [
-        "geometry.cube"
-      ]
+      "depends_on": ["geometry.cube"]
     }
   ]
 }

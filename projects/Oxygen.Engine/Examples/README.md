@@ -93,7 +93,7 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context) -> 
 
 ### 5. Declaring View Intents
 
-Instead of manually rendering, describe *what* you want to see by overriding `UpdateComposition`. The pipeline will then manage the HDR/SDR resources and tonemapping automatically.
+Instead of manually rendering, describe _what_ you want to see by overriding `UpdateComposition`. The pipeline will then manage the HDR/SDR resources and tonemapping automatically.
 
 ```cpp
 auto MainModule::UpdateComposition(observer_ptr<engine::FrameContext> context,
@@ -125,13 +125,13 @@ auto MainModule::UpdateComposition(observer_ptr<engine::FrameContext> context,
 
 ## 🚨 Critical "Make-or-Break" Steps
 
-* **`co_await Base::OnSceneMutation(context)`**: If you forget to call the base implementation in mutation, your `UpdateComposition` will never be called, and nothing will render.
-* **`UpdateComposition` mandates an ImGui Layer**: Without `ForImGui`, the DemoShell panels and engine tools will not be composited, resulting in no UI.
-* **Viewport Construction**: Passing an empty `View {}` to `ForScene` results in a black screen. Always construct a viewport from the current window size.
-* **Settings Sync in `OnFrameStart`**: Apply render modes and debug settings *before* `Base::OnFrameStart`. These settings are used for resource allocation; applying them later (e.g., in `OnPreRender`) causes a visible 1-frame lag.
-* **`context.SetScene(...)`**: The rendering backend retrieves the scene from the `FrameContext`. If you don't call this in `HandleOnFrameStart`, you will get a black screen or an empty world.
-* **Camera lifecycle sync**: The shell derives viewport information from `UpdateComposition` and applies camera sync automatically.
-* **Controlled Shutdown**: Always call `shell_->SetScene(nullptr)` in `OnShutdown` to ensure scene nodes are destroyed while the graphics systems are still alive.
+- **`co_await Base::OnSceneMutation(context)`**: If you forget to call the base implementation in mutation, your `UpdateComposition` will never be called, and nothing will render.
+- **`UpdateComposition` mandates an ImGui Layer**: Without `ForImGui`, the DemoShell panels and engine tools will not be composited, resulting in no UI.
+- **Viewport Construction**: Passing an empty `View {}` to `ForScene` results in a black screen. Always construct a viewport from the current window size.
+- **Settings Sync in `OnFrameStart`**: Apply render modes and debug settings _before_ `Base::OnFrameStart`. These settings are used for resource allocation; applying them later (e.g., in `OnPreRender`) causes a visible 1-frame lag.
+- **`context.SetScene(...)`**: The rendering backend retrieves the scene from the `FrameContext`. If you don't call this in `HandleOnFrameStart`, you will get a black screen or an empty world.
+- **Camera lifecycle sync**: The shell derives viewport information from `UpdateComposition` and applies camera sync automatically.
+- **Controlled Shutdown**: Always call `shell_->SetScene(nullptr)` in `OnShutdown` to ensure scene nodes are destroyed while the graphics systems are still alive.
 
 ---
 

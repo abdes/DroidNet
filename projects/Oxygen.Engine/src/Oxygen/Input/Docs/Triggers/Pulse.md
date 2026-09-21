@@ -98,10 +98,10 @@ sequenceDiagram
 To avoid bursty behavior when a frame is significantly late:
 
 - If elapsed since last tick >= interval + jitter_tolerance → fire a single
- Triggered for this update.
+  Triggered for this update.
 - If a frame is far overdue (>= 2× interval), drop the tick for this update and
- re-quantize phase (with overshoot carry if enabled). The next frame that
- reaches the interval will trigger normally.
+  re-quantize phase (with overshoot carry if enabled). The next frame that
+  reaches the interval will trigger normally.
 
 This keeps the metronome responsive under light jitter, while avoiding pulse
 bursts after long stalls.

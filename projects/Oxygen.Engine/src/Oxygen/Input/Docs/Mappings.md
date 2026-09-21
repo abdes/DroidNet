@@ -71,9 +71,9 @@ flowchart LR
 
 - Keep a reference to a specific `Action` and a bound input slot.
 - On `HandleInput(event)`, translate the event payload into `ActionValue` in a
- slot-aware manner and stage an evaluation for the next `Update`.
+  slot-aware manner and stage an evaluation for the next `Update`.
 - On `Update(dt)`, evaluate triggers and write a single snapshot to the
- `Action` using `Action::UpdateState`.
+  `Action` using `Action::UpdateState`.
 
 ### Trigger aggregation rules
 
@@ -84,12 +84,12 @@ flowchart LR
   may be satisfied by Triggered or Ongoing (armed prerequisite).
 - Any blocker trigger suppresses output (mapping writes an idle snapshot).
 - Evaluation remains active while any trigger is ongoing (implicit or explicit)
- but the action’s `ongoing` bit reflects explicit triggers only.
+  but the action’s `ongoing` bit reflects explicit triggers only.
 
 ### ActionValue translation
 
 - Keys/Mouse buttons → `bool` (pressed state true on kPressed, false on
- kReleased).
+  kReleased).
 - Mouse Motion → `Axis1D` or `Axis2D` depending on bound slot:
   - MouseX → Axis1D{dx}
   - MouseY → Axis1D{dy}
@@ -99,24 +99,24 @@ flowchart LR
   - MouseWheelY/Up/Down → Axis1D{dy}
   - MouseWheelXY → Axis2D{dx,dy}
 - After the `Update` that handled a motion/wheel event, values are cleared to
- zero with a type-correct reset.
+  zero with a type-correct reset.
 
 ### Consumption contract
 
 - `Update` returns true only if all of the following hold:
 
- 1) The mapping triggered this update, and
- 2) This update was handling a fresh input event (followed a `HandleInput`),
- and
- 3) The associated `Action` is configured to consume input
-   (`SetConsumesInput(true)`).
+1.  The mapping triggered this update, and
+2.  This update was handling a fresh input event (followed a `HandleInput`),
+    and
+3.  The associated `Action` is configured to consume input
+    (`SetConsumesInput(true)`).
 
 ### Cancel semantics
 
 - `CancelInput()` reverts the staged value to the pre-event snapshot and marks
- the action as canceled for this evaluation.
+  the action as canceled for this evaluation.
 - If any trigger reports canceled during `Update`, the mapping short-circuits
- to a canceled snapshot without overwriting it later.
+  to a canceled snapshot without overwriting it later.
 
 ### Invariants
 
@@ -131,15 +131,15 @@ flowchart LR
 
 - Implicit-only mappings:
   - They trigger only when all implicits are satisfied. This can occur across
-  multiple `Update` calls with no new events (e.g., Hold reaching threshold).
+    multiple `Update` calls with no new events (e.g., Hold reaching threshold).
 
 - Explicit + Implicit on separate updates:
   - If explicit triggers exist, implicits alone cannot cause the mapping to
-  fire on a later update without a fresh explicit firing.
+    fire on a later update without a fresh explicit firing.
 
 - Motion/Wheel deltas when 0:
   - If dx=0, MouseX mappings won’t receive an update when routed from MouseXY;
-  same for dy=0 and MouseY.
+    same for dy=0 and MouseY.
 
 ## Example: FPS character
 
@@ -188,7 +188,7 @@ Behavior:
 
 - MouseXY events route to both look mappings as appropriate.
 - Pressing Space triggers `Jump` and consumes the Space press, preventing a
- lower-priority Space mapping from also firing.
+  lower-priority Space mapping from also firing.
 - Holding LeftShift arms the chain; pressing W now triggers `Sprint`.
 
 ## Validation checklist

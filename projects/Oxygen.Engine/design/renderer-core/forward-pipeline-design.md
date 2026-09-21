@@ -41,7 +41,7 @@ Understanding how views, scenes, and surfaces flow through the engine is critica
 
 ### 1. View Lifecycle
 
-Views define *what* is being rendered from which perspective.
+Views define _what_ is being rendered from which perspective.
 
 - **Registration & Topology (`OnSceneMutation`) - [STRUCTURAL MUTATION GATE]**:
   - The Application (or `DemoModuleBase`) registers views with the `FrameContext` via `RegisterView(view_ctx)`.
@@ -63,7 +63,7 @@ The `Scene` is the container for all renderable entities and environment data.
   - **Rationale**: High-level modules (e.g., `PostProcessSettingsService`, `CameraLifecycle`) need the scene pointer early to prepare data that will be captured in the `UnifiedSnapshot`.
 - **Freezing (`OnPreRender`)**:
   - The `Renderer` transfers the scene pointer to `RenderContext::scene`.
-  - **Rationale**: Any scene swaps requested *during* a render loop are deferred to the *next* frame. This prevents "half-rendered" scenes where some passes use old scene data and others use new data.
+  - **Rationale**: Any scene swaps requested _during_ a render loop are deferred to the _next_ frame. This prevents "half-rendered" scenes where some passes use old scene data and others use new data.
 
 ### 3. Surface Lifecycle
 
@@ -85,16 +85,16 @@ Surfaces represent the final presentation targets (Swapchains).
 
 To consider this implementation complete and "Engine Ready", the following requirements must be met:
 
-| Done | ID | Requirement | Status |
-| ---- | -- | ----------- | ------ |
-| ✅ | REQ01 | **HDR Resource Management**: The pipeline shall automatically create and manage an intermediate HDR (`Format::kRGBA16Float`) Texture and Framebuffer. These must resize dynamically to match the output surface (window) extent. | Implemented |
-| ✅ | REQ02 | **Render Target Redirection (Interceptor)**: When the HDR path is enabled, the pipeline updates each view's `ViewContext` output to use the intermediate framebuffer during `OnSceneMutation`. | Implemented |
-| ✅ | REQ03 | **Exposure & Tonemapping Persistence**: The pipeline consumes staged exposure and tonemapper settings and applies them to `ToneMapPass` during per-view execution. | Implemented |
-| ✅ | REQ04 | **SDR Composition**: `OnCompositing` blends pre-tonemapped SDR intermediates into the backbuffer via `CompositingTask`s. | Implemented |
-| ✅ | REQ05 | **PBR ImGui Isolation**: ImGui renders in the SDR overlay stage after tonemapping has completed. | Implemented |
-| ⬜ | REQ06 | **Coroutine Contributors**: The pipeline shall support factoring optional contributors (Bloom, Gizmos) out of the main pipeline source while remaining `co_await`able from the main render sequence. | Pending |
-| ✅ | REQ08 | **Resource Cleanup**: All intermediate GPU resources must be correctly released during resize events or shutdown via the `ClearBackbufferReferences()` hook. | Implemented |
-| ✅ | REQ09 | **Multi-View Support**: The compositing logic must support multiple views (e.g., PiP), ensuring each one is correctly blended onto the final backbuffer based on its viewport. | Pending |
+| Done | ID    | Requirement                                                                                                                                                                                                                      | Status      |
+| ---- | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
+| ✅   | REQ01 | **HDR Resource Management**: The pipeline shall automatically create and manage an intermediate HDR (`Format::kRGBA16Float`) Texture and Framebuffer. These must resize dynamically to match the output surface (window) extent. | Implemented |
+| ✅   | REQ02 | **Render Target Redirection (Interceptor)**: When the HDR path is enabled, the pipeline updates each view's `ViewContext` output to use the intermediate framebuffer during `OnSceneMutation`.                                   | Implemented |
+| ✅   | REQ03 | **Exposure & Tonemapping Persistence**: The pipeline consumes staged exposure and tonemapper settings and applies them to `ToneMapPass` during per-view execution.                                                               | Implemented |
+| ✅   | REQ04 | **SDR Composition**: `OnCompositing` blends pre-tonemapped SDR intermediates into the backbuffer via `CompositingTask`s.                                                                                                         | Implemented |
+| ✅   | REQ05 | **PBR ImGui Isolation**: ImGui renders in the SDR overlay stage after tonemapping has completed.                                                                                                                                 | Implemented |
+| ⬜   | REQ06 | **Coroutine Contributors**: The pipeline shall support factoring optional contributors (Bloom, Gizmos) out of the main pipeline source while remaining `co_await`able from the main render sequence.                             | Pending     |
+| ✅   | REQ08 | **Resource Cleanup**: All intermediate GPU resources must be correctly released during resize events or shutdown via the `ClearBackbufferReferences()` hook.                                                                     | Implemented |
+| ✅   | REQ09 | **Multi-View Support**: The compositing logic must support multiple views (e.g., PiP), ensuring each one is correctly blended onto the final backbuffer based on its viewport.                                                   | Pending     |
 
 ---
 
@@ -205,10 +205,10 @@ In a PBR workflow, UI elements must reside in SDR space to avoid being "blown ou
 
 - **Direct Mode**: ImGui remains part of the view's render graph (legacy/simple path).
 - **HDR Mode**:
-    1. Pipeline renders the scene to the HDR intermediate.
-    2. Pipeline tonemaps the intermediate to the per-view SDR texture.
-    3. Pipeline executes the `ImGuiPass` against the SDR framebuffer during the
-       overlay stage, before compositing.
+  1. Pipeline renders the scene to the HDR intermediate.
+  2. Pipeline tonemaps the intermediate to the per-view SDR texture.
+  3. Pipeline executes the `ImGuiPass` against the SDR framebuffer during the
+     overlay stage, before compositing.
 - **Integration**: The pipeline handles state transitions and ensures ImGui is
   drawn in SDR space to avoid exposure/tonemapping artifacts.
 
@@ -318,27 +318,27 @@ This section provides a starting point for implementing this specification. Stud
 
 ### 2. Implementation Checklist (Target Files)
 
-| Task | File | Notes |
-| ---- | ---- | ----- |
+| Task                   | File                                             | Notes                                                                                        |
+| ---------------------- | ------------------------------------------------ | -------------------------------------------------------------------------------------------- |
 | **Resource Lifecycle** | `Examples/DemoShell/Runtime/ForwardPipeline.cpp` | Create/resize HDR + SDR per-view textures and release them in `ClearBackbufferReferences()`. |
-| **The Shader Bridge** | `src/Oxygen/Renderer/Passes/ToneMapPass.cpp` | Maintain the HDR to SDR tonemap pass; keep exposure control per-view. |
-| **Configuration** | `Examples/DemoShell/DemoShell.cpp` | Wire settings to the pipeline and apply at `OnFrameStart`. |
-| **Rendering Redirect** | `Examples/DemoShell/Runtime/ForwardPipeline.cpp` | Register each view with the correct output framebuffer during `OnSceneMutation`. |
+| **The Shader Bridge**  | `src/Oxygen/Renderer/Passes/ToneMapPass.cpp`     | Maintain the HDR to SDR tonemap pass; keep exposure control per-view.                        |
+| **Configuration**      | `Examples/DemoShell/DemoShell.cpp`               | Wire settings to the pipeline and apply at `OnFrameStart`.                                   |
+| **Rendering Redirect** | `Examples/DemoShell/Runtime/ForwardPipeline.cpp` | Register each view with the correct output framebuffer during `OnSceneMutation`.             |
 
 ---
 
 ## Development Tasks
 
-| ID | Task | Notes |
-| -- | ---- | ----- |
-| T01 | Define `RenderPolicy` struct | Add in ForwardPipeline runtime state and document fields. |
-| T02 | Implement RenderMode matrix | Single function mapping `RenderMode` + flags to policy. |
-| T03 | Add color-space routing helper | Map passes to HDR/SDR targets explicitly. |
-| T04 | Centralize pass configuration | `ApplyPolicy()` sets configs once per frame. |
-| T05 | Add invariants and asserts | Enforce wireframe and ImGui placement. |
-| T06 | Update UI behavior | Disable debug modes when pure wireframe is selected. |
-| T07 | Add logging hooks | Optional debug logs for policy decisions. |
-| T08 | Add tests/validation plan | Render-mode matrix unit tests + smoke tests. |
+| ID  | Task                           | Notes                                                     |
+| --- | ------------------------------ | --------------------------------------------------------- |
+| T01 | Define `RenderPolicy` struct   | Add in ForwardPipeline runtime state and document fields. |
+| T02 | Implement RenderMode matrix    | Single function mapping `RenderMode` + flags to policy.   |
+| T03 | Add color-space routing helper | Map passes to HDR/SDR targets explicitly.                 |
+| T04 | Centralize pass configuration  | `ApplyPolicy()` sets configs once per frame.              |
+| T05 | Add invariants and asserts     | Enforce wireframe and ImGui placement.                    |
+| T06 | Update UI behavior             | Disable debug modes when pure wireframe is selected.      |
+| T07 | Add logging hooks              | Optional debug logs for policy decisions.                 |
+| T08 | Add tests/validation plan      | Render-mode matrix unit tests + smoke tests.              |
 
 ### 3. HDR Intermediate Format
 

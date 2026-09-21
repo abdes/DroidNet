@@ -1,10 +1,10 @@
 {
-    "name": "physics_domains_ground",
-    "virtual_path": "/.cooked/Physics/Materials/physics_domains_ground.opmat",
-    "static_friction": 0.9,
-    "dynamic_friction": 0.9,
-    "restitution": 0.05,
-    "density": 1800.0,
-    "combine_mode_friction": "max",
-    "combine_mode_restitution": "average"
+  "name": "physics_domains_ground",
+  "virtual_path": "/.cooked/Physics/Materials/physics_domains_ground.opmat",
+  "static_friction": 0.9,
+  "dynamic_friction": 0.9,
+  "restitution": 0.05,
+  "density": 1800.0,
+  "combine_mode_friction": "max",
+  "combine_mode_restitution": "average"
 }

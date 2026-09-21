@@ -1,485 +1,407 @@
 {
-    "$schema": "http://json-schema.org/draft-07/schema#",
-    "title": "Oxygen Collision Shape Descriptor",
-    "type": "object",
-    "additionalProperties": false,
-    "required": [
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Oxygen Collision Shape Descriptor",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["shape_type", "material_ref"],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "name": {
+      "$ref": "#/definitions/identifier"
+    },
+    "content_hashing": {
+      "type": "boolean"
+    },
+    "virtual_path": {
+      "$ref": "#/definitions/canonical_ocshape_path"
+    },
+    "shape_type": {
+      "$ref": "#/definitions/shape_type"
+    },
+    "material_ref": {
+      "$ref": "#/definitions/canonical_opmat_path"
+    },
+    "local_position": {
+      "$ref": "#/definitions/vec3"
+    },
+    "local_rotation": {
+      "$ref": "#/definitions/quat"
+    },
+    "local_scale": {
+      "$ref": "#/definitions/vec3_positive"
+    },
+    "is_sensor": {
+      "type": "boolean"
+    },
+    "collision_own_layer": {
+      "$ref": "#/definitions/u64"
+    },
+    "collision_target_layers": {
+      "$ref": "#/definitions/u64"
+    },
+    "radius": {
+      "type": "number",
+      "exclusiveMinimum": 0.0
+    },
+    "half_height": {
+      "type": "number",
+      "minimum": 0.0,
+      "description": "Half-length along the local Z axis. Capsule excludes the hemispheres: total height is 2 * (half_height + radius), and zero gives a sphere."
+    },
+    "half_extents": {
+      "$ref": "#/definitions/vec3_positive"
+    },
+    "normal": {
+      "$ref": "#/definitions/vec3"
+    },
+    "distance": {
+      "type": "number"
+    },
+    "boundary_mode": {
+      "$ref": "#/definitions/world_boundary_mode"
+    },
+    "limits_min": {
+      "$ref": "#/definitions/vec3"
+    },
+    "limits_max": {
+      "$ref": "#/definitions/vec3"
+    },
+    "children": {
+      "$ref": "#/definitions/compound_children"
+    }
+  },
+  "definitions": {
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 63,
+      "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,62}$"
+    },
+    "shape_type": {
+      "enum": [
+        "sphere",
+        "capsule",
+        "box",
+        "cylinder",
+        "cone",
+        "convex_hull",
+        "triangle_mesh",
+        "height_field",
+        "plane",
+        "world_boundary",
+        "compound"
+      ]
+    },
+    "compound_child_shape_type": {
+      "enum": [
+        "sphere",
+        "capsule",
+        "box",
+        "cylinder",
+        "cone",
+        "plane",
+        "world_boundary"
+      ]
+    },
+    "world_boundary_mode": {
+      "enum": ["aabb_clamp", "plane_set"]
+    },
+    "u64": {
+      "type": "integer"
+    },
+    "vec3": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      },
+      "minItems": 3,
+      "maxItems": 3
+    },
+    "quat": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      },
+      "minItems": 4,
+      "maxItems": 4
+    },
+    "vec3_positive": {
+      "type": "array",
+      "items": {
+        "type": "number",
+        "exclusiveMinimum": 0.0
+      },
+      "minItems": 3,
+      "maxItems": 3
+    },
+    "canonical_ocshape_path": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^/(?!.*//)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$)).+\\.ocshape$"
+    },
+    "canonical_opmat_path": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^/(?!.*//)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$)).+\\.opmat$"
+    },
+    "compound_children": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/definitions/compound_child"
+      }
+    },
+    "compound_child": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
         "shape_type",
-        "material_ref"
-    ],
-    "properties": {
-        "$schema": {
-            "type": "string"
-        },
-        "name": {
-            "$ref": "#/definitions/identifier"
-        },
-        "content_hashing": {
-            "type": "boolean"
-        },
-        "virtual_path": {
-            "$ref": "#/definitions/canonical_ocshape_path"
-        },
+        "local_position",
+        "local_rotation",
+        "local_scale"
+      ],
+      "properties": {
         "shape_type": {
-            "$ref": "#/definitions/shape_type"
-        },
-        "material_ref": {
-            "$ref": "#/definitions/canonical_opmat_path"
-        },
-        "local_position": {
-            "$ref": "#/definitions/vec3"
-        },
-        "local_rotation": {
-            "$ref": "#/definitions/quat"
-        },
-        "local_scale": {
-            "$ref": "#/definitions/vec3_positive"
-        },
-        "is_sensor": {
-            "type": "boolean"
-        },
-        "collision_own_layer": {
-            "$ref": "#/definitions/u64"
-        },
-        "collision_target_layers": {
-            "$ref": "#/definitions/u64"
+          "$ref": "#/definitions/compound_child_shape_type"
         },
         "radius": {
-            "type": "number",
-            "exclusiveMinimum": 0.0
+          "type": "number",
+          "exclusiveMinimum": 0.0
         },
         "half_height": {
-            "type": "number",
-            "minimum": 0.0,
-            "description": "Half-length along the local Z axis. Capsule excludes the hemispheres: total height is 2 * (half_height + radius), and zero gives a sphere."
+          "type": "number",
+          "minimum": 0.0,
+          "description": "Half-length along the local Z axis. Capsule excludes the hemispheres: total height is 2 * (half_height + radius), and zero gives a sphere."
         },
         "half_extents": {
-            "$ref": "#/definitions/vec3_positive"
+          "$ref": "#/definitions/vec3_positive"
         },
         "normal": {
-            "$ref": "#/definitions/vec3"
+          "$ref": "#/definitions/vec3"
         },
         "distance": {
-            "type": "number"
+          "type": "number"
         },
         "boundary_mode": {
-            "$ref": "#/definitions/world_boundary_mode"
+          "$ref": "#/definitions/world_boundary_mode"
         },
         "limits_min": {
-            "$ref": "#/definitions/vec3"
+          "$ref": "#/definitions/vec3"
         },
         "limits_max": {
-            "$ref": "#/definitions/vec3"
+          "$ref": "#/definitions/vec3"
         },
-        "children": {
-            "$ref": "#/definitions/compound_children"
+        "local_position": {
+          "$ref": "#/definitions/vec3"
+        },
+        "local_rotation": {
+          "$ref": "#/definitions/quat"
+        },
+        "local_scale": {
+          "$ref": "#/definitions/vec3_positive"
         }
-    },
-    "definitions": {
-        "identifier": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 63,
-            "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,62}$"
-        },
-        "shape_type": {
-            "enum": [
-                "sphere",
-                "capsule",
-                "box",
-                "cylinder",
-                "cone",
-                "convex_hull",
-                "triangle_mesh",
-                "height_field",
-                "plane",
-                "world_boundary",
-                "compound"
-            ]
-        },
-        "compound_child_shape_type": {
-            "enum": [
-                "sphere",
-                "capsule",
-                "box",
-                "cylinder",
-                "cone",
-                "plane",
-                "world_boundary"
-            ]
-        },
-        "world_boundary_mode": {
-            "enum": [
-                "aabb_clamp",
-                "plane_set"
-            ]
-        },
-        "u64": {
-            "type": "integer"
-        },
-        "vec3": {
-            "type": "array",
-            "items": {
-                "type": "number"
-            },
-            "minItems": 3,
-            "maxItems": 3
-        },
-        "quat": {
-            "type": "array",
-            "items": {
-                "type": "number"
-            },
-            "minItems": 4,
-            "maxItems": 4
-        },
-        "vec3_positive": {
-            "type": "array",
-            "items": {
-                "type": "number",
-                "exclusiveMinimum": 0.0
-            },
-            "minItems": 3,
-            "maxItems": 3
-        },
-        "canonical_ocshape_path": {
-            "type": "string",
-            "minLength": 1,
-            "pattern": "^/(?!.*//)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$)).+\\.ocshape$"
-        },
-        "canonical_opmat_path": {
-            "type": "string",
-            "minLength": 1,
-            "pattern": "^/(?!.*//)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$)).+\\.opmat$"
-        },
-        "compound_children": {
-            "type": "array",
-            "minItems": 1,
-            "items": {
-                "$ref": "#/definitions/compound_child"
-            }
-        },
-        "compound_child": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-                "shape_type",
-                "local_position",
-                "local_rotation",
-                "local_scale"
-            ],
+      },
+      "allOf": [
+        {
+          "if": {
             "properties": {
-                "shape_type": {
-                    "$ref": "#/definitions/compound_child_shape_type"
-                },
-                "radius": {
-                    "type": "number",
-                    "exclusiveMinimum": 0.0
-                },
-                "half_height": {
-                    "type": "number",
-                    "minimum": 0.0,
-                    "description": "Half-length along the local Z axis. Capsule excludes the hemispheres: total height is 2 * (half_height + radius), and zero gives a sphere."
-                },
-                "half_extents": {
-                    "$ref": "#/definitions/vec3_positive"
-                },
-                "normal": {
-                    "$ref": "#/definitions/vec3"
-                },
-                "distance": {
-                    "type": "number"
-                },
-                "boundary_mode": {
-                    "$ref": "#/definitions/world_boundary_mode"
-                },
-                "limits_min": {
-                    "$ref": "#/definitions/vec3"
-                },
-                "limits_max": {
-                    "$ref": "#/definitions/vec3"
-                },
-                "local_position": {
-                    "$ref": "#/definitions/vec3"
-                },
-                "local_rotation": {
-                    "$ref": "#/definitions/quat"
-                },
-                "local_scale": {
-                    "$ref": "#/definitions/vec3_positive"
-                }
+              "shape_type": {
+                "const": "sphere"
+              }
             },
-            "allOf": [
-                {
-                    "if": {
-                        "properties": {
-                            "shape_type": {
-                                "const": "sphere"
-                            }
-                        },
-                        "required": [
-                            "shape_type"
-                        ]
-                    },
-                    "then": {
-                        "required": [
-                            "radius"
-                        ]
-                    }
-                },
-                {
-                    "if": {
-                        "properties": {
-                            "shape_type": {
-                                "const": "capsule"
-                            }
-                        },
-                        "required": [
-                            "shape_type"
-                        ]
-                    },
-                    "then": {
-                        "required": [
-                            "radius",
-                            "half_height"
-                        ]
-                    }
-                },
-                {
-                    "if": {
-                        "properties": {
-                            "shape_type": {
-                                "const": "box"
-                            }
-                        },
-                        "required": [
-                            "shape_type"
-                        ]
-                    },
-                    "then": {
-                        "required": [
-                            "half_extents"
-                        ]
-                    }
-                },
-                {
-                    "if": {
-                        "properties": {
-                            "shape_type": {
-                                "const": "cylinder"
-                            }
-                        },
-                        "required": [
-                            "shape_type"
-                        ]
-                    },
-                    "then": {
-                        "required": [
-                            "radius",
-                            "half_height"
-                        ]
-                    }
-                },
-                {
-                    "if": {
-                        "properties": {
-                            "shape_type": {
-                                "const": "cone"
-                            }
-                        },
-                        "required": [
-                            "shape_type"
-                        ]
-                    },
-                    "then": {
-                        "required": [
-                            "radius",
-                            "half_height"
-                        ]
-                    }
-                },
-                {
-                    "if": {
-                        "properties": {
-                            "shape_type": {
-                                "const": "plane"
-                            }
-                        },
-                        "required": [
-                            "shape_type"
-                        ]
-                    },
-                    "then": {
-                        "required": [
-                            "normal",
-                            "distance"
-                        ]
-                    }
-                },
-                {
-                    "if": {
-                        "properties": {
-                            "shape_type": {
-                                "const": "world_boundary"
-                            }
-                        },
-                        "required": [
-                            "shape_type"
-                        ]
-                    },
-                    "then": {
-                        "required": [
-                            "boundary_mode",
-                            "limits_min",
-                            "limits_max"
-                        ]
-                    }
-                }
-            ]
+            "required": ["shape_type"]
+          },
+          "then": {
+            "required": ["radius"]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "shape_type": {
+                "const": "capsule"
+              }
+            },
+            "required": ["shape_type"]
+          },
+          "then": {
+            "required": ["radius", "half_height"]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "shape_type": {
+                "const": "box"
+              }
+            },
+            "required": ["shape_type"]
+          },
+          "then": {
+            "required": ["half_extents"]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "shape_type": {
+                "const": "cylinder"
+              }
+            },
+            "required": ["shape_type"]
+          },
+          "then": {
+            "required": ["radius", "half_height"]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "shape_type": {
+                "const": "cone"
+              }
+            },
+            "required": ["shape_type"]
+          },
+          "then": {
+            "required": ["radius", "half_height"]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "shape_type": {
+                "const": "plane"
+              }
+            },
+            "required": ["shape_type"]
+          },
+          "then": {
+            "required": ["normal", "distance"]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "shape_type": {
+                "const": "world_boundary"
+              }
+            },
+            "required": ["shape_type"]
+          },
+          "then": {
+            "required": ["boundary_mode", "limits_min", "limits_max"]
+          }
         }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "shape_type": {
+            "const": "sphere"
+          }
+        },
+        "required": ["shape_type"]
+      },
+      "then": {
+        "required": ["radius"]
+      }
     },
-    "allOf": [
-        {
-            "if": {
-                "properties": {
-                    "shape_type": {
-                        "const": "sphere"
-                    }
-                },
-                "required": [
-                    "shape_type"
-                ]
-            },
-            "then": {
-                "required": [
-                    "radius"
-                ]
-            }
+    {
+      "if": {
+        "properties": {
+          "shape_type": {
+            "const": "capsule"
+          }
         },
-        {
-            "if": {
-                "properties": {
-                    "shape_type": {
-                        "const": "capsule"
-                    }
-                },
-                "required": [
-                    "shape_type"
-                ]
-            },
-            "then": {
-                "required": [
-                    "radius",
-                    "half_height"
-                ]
-            }
+        "required": ["shape_type"]
+      },
+      "then": {
+        "required": ["radius", "half_height"]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "shape_type": {
+            "const": "box"
+          }
         },
-        {
-            "if": {
-                "properties": {
-                    "shape_type": {
-                        "const": "box"
-                    }
-                },
-                "required": [
-                    "shape_type"
-                ]
-            },
-            "then": {
-                "required": [
-                    "half_extents"
-                ]
-            }
+        "required": ["shape_type"]
+      },
+      "then": {
+        "required": ["half_extents"]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "shape_type": {
+            "const": "cylinder"
+          }
         },
-        {
-            "if": {
-                "properties": {
-                    "shape_type": {
-                        "const": "cylinder"
-                    }
-                },
-                "required": [
-                    "shape_type"
-                ]
-            },
-            "then": {
-                "required": [
-                    "radius",
-                    "half_height"
-                ]
-            }
+        "required": ["shape_type"]
+      },
+      "then": {
+        "required": ["radius", "half_height"]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "shape_type": {
+            "const": "cone"
+          }
         },
-        {
-            "if": {
-                "properties": {
-                    "shape_type": {
-                        "const": "cone"
-                    }
-                },
-                "required": [
-                    "shape_type"
-                ]
-            },
-            "then": {
-                "required": [
-                    "radius",
-                    "half_height"
-                ]
-            }
+        "required": ["shape_type"]
+      },
+      "then": {
+        "required": ["radius", "half_height"]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "shape_type": {
+            "const": "plane"
+          }
         },
-        {
-            "if": {
-                "properties": {
-                    "shape_type": {
-                        "const": "plane"
-                    }
-                },
-                "required": [
-                    "shape_type"
-                ]
-            },
-            "then": {
-                "required": [
-                    "normal",
-                    "distance"
-                ]
-            }
+        "required": ["shape_type"]
+      },
+      "then": {
+        "required": ["normal", "distance"]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "shape_type": {
+            "const": "world_boundary"
+          }
         },
-        {
-            "if": {
-                "properties": {
-                    "shape_type": {
-                        "const": "world_boundary"
-                    }
-                },
-                "required": [
-                    "shape_type"
-                ]
-            },
-            "then": {
-                "required": [
-                    "boundary_mode",
-                    "limits_min",
-                    "limits_max"
-                ]
-            }
+        "required": ["shape_type"]
+      },
+      "then": {
+        "required": ["boundary_mode", "limits_min", "limits_max"]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "shape_type": {
+            "const": "compound"
+          }
         },
-        {
-            "if": {
-                "properties": {
-                    "shape_type": {
-                        "const": "compound"
-                    }
-                },
-                "required": [
-                    "shape_type"
-                ]
-            },
-            "then": {
-                "required": [
-                    "children"
-                ]
-            }
-        }
-    ]
+        "required": ["shape_type"]
+      },
+      "then": {
+        "required": ["children"]
+      }
+    }
+  ]
 }

@@ -18,15 +18,15 @@ decode would darken tagged sRGB textures and clamp HDR emissive texels before
 pre-exposure. This rule applies to both base-color and emissive texture samples;
 alpha remains a linear coverage value.
 
-| Quantity | Unit / meaning |
-| --- | --- |
-| Directional light / Sun | Lux, illuminance on a perpendicular receiver |
-| Point / spot light | Lumens, total flux converted to candela |
-| Sky / emissive / calibrated IBL | Scene-referred linear radiance, calibrated to nits |
-| EV100 | Logarithmic camera/meter quantity in stops |
-| Calibration key | Dimensionless bias normalization; 12.5 is not an EV |
-| Global exposure S | Linear displayed gain |
-| Pre-exposure P | Positive numerical storage scale |
+| Quantity                        | Unit / meaning                                      |
+| ------------------------------- | --------------------------------------------------- |
+| Directional light / Sun         | Lux, illuminance on a perpendicular receiver        |
+| Point / spot light              | Lumens, total flux converted to candela             |
+| Sky / emissive / calibrated IBL | Scene-referred linear radiance, calibrated to nits  |
+| EV100                           | Logarithmic camera/meter quantity in stops          |
+| Calibration key                 | Dimensionless bias normalization; 12.5 is not an EV |
+| Global exposure S               | Linear displayed gain                               |
+| Pre-exposure P                  | Positive numerical storage scale                    |
 
 The Sun's lux value also drives atmosphere illumination. Its optional visible
 disk luminance derives from its solid angle; it is not another light. Sky tint
@@ -182,18 +182,18 @@ budget. See the checkpoint for the proposed persistent recovery policy.
 Freeze these fixture tolerances before GPU acceptance. They are targets, not
 claims of validated hardware behavior.
 
-| Comparison | Budget |
-| --- | --- |
-| CPU fixed gain | 2e-6 relative; powers-of-two EV14/15/16 exact |
-| GPU fixed gain / known float probe | 2e-5 relative + 2^-120 absolute; uploaded powers of two exact |
-| Histogram integer mass/counts | Exact |
-| Discretized histogram oracle | 2e-4 EV |
-| Continuous distribution versus histogram | One bin width plus 2e-4 EV |
-| Hybrid schedule equivalence | 5e-4 EV at equal elapsed time; monotone, no overshoot |
-| Single normal FP16 store | 2^-10 relative; subnormal absolute error 2^-25 in stored domain |
-| P invariance / required float products | 0.5% relative + 2e-5 absolute in the compared scene/output domain |
-| Packed material / production BRDF oracle | 2% relative + 2e-5 absolute, interior unoccluded regions |
-| UNorm8 image | One code value after independent dither, gamma and target encoding |
+| Comparison                               | Budget                                                             |
+| ---------------------------------------- | ------------------------------------------------------------------ |
+| CPU fixed gain                           | 2e-6 relative; powers-of-two EV14/15/16 exact                      |
+| GPU fixed gain / known float probe       | 2e-5 relative + 2^-120 absolute; uploaded powers of two exact      |
+| Histogram integer mass/counts            | Exact                                                              |
+| Discretized histogram oracle             | 2e-4 EV                                                            |
+| Continuous distribution versus histogram | One bin width plus 2e-4 EV                                         |
+| Hybrid schedule equivalence              | 5e-4 EV at equal elapsed time; monotone, no overshoot              |
+| Single normal FP16 store                 | 2^-10 relative; subnormal absolute error 2^-25 in stored domain    |
+| P invariance / required float products   | 0.5% relative + 2e-5 absolute in the compared scene/output domain  |
+| Packed material / production BRDF oracle | 2% relative + 2e-5 absolute, interior unoccluded regions           |
+| UNorm8 image                             | One code value after independent dither, gamma and target encoding |
 
 Sampling error is separate: compare small bright features and moving edges both
 against the exact sample positions and a full-image reference. Report the two

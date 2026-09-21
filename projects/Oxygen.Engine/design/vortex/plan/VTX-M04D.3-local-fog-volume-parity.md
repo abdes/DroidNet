@@ -13,16 +13,16 @@ parity or to use local fog as a trusted volumetric-fog input.
 
 Implementation and review must check these UE5.7 source families:
 
-| Area | UE5.7 reference |
-| --- | --- |
-| Component authoring/defaults | `Engine/Source/Runtime/Engine/Classes/Components/LocalFogVolumeComponent.h` |
-| Runtime scene proxy | `Engine/Source/Runtime/Engine/Public/LocalFogVolumeSceneProxy.h`, `Engine/Source/Runtime/Engine/Private/LocalFogVolumeSceneProxy.cpp` |
-| Renderer setup, sorting, capping, CVars | `Engine/Source/Runtime/Renderer/Private/LocalFogVolumeRendering.{h,cpp}` |
-| Tiled culling shader | `Engine/Shaders/Private/LocalFogVolumes/LocalFogVolumeTiledCulling.usf` |
-| Analytical integral and lighting | `Engine/Shaders/Private/LocalFogVolumes/LocalFogVolumeCommon.ush` |
-| Splat/compose pass | `Engine/Shaders/Private/LocalFogVolumes/LocalFogVolumeSplat.usf` |
-| Height-fog integration | `Engine/Shaders/Private/HeightFogPixelShader.usf` |
-| Volumetric-fog media injection | `Engine/Shaders/Private/VolumetricFog.usf` |
+| Area                                    | UE5.7 reference                                                                                                                       |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Component authoring/defaults            | `Engine/Source/Runtime/Engine/Classes/Components/LocalFogVolumeComponent.h`                                                           |
+| Runtime scene proxy                     | `Engine/Source/Runtime/Engine/Public/LocalFogVolumeSceneProxy.h`, `Engine/Source/Runtime/Engine/Private/LocalFogVolumeSceneProxy.cpp` |
+| Renderer setup, sorting, capping, CVars | `Engine/Source/Runtime/Renderer/Private/LocalFogVolumeRendering.{h,cpp}`                                                              |
+| Tiled culling shader                    | `Engine/Shaders/Private/LocalFogVolumes/LocalFogVolumeTiledCulling.usf`                                                               |
+| Analytical integral and lighting        | `Engine/Shaders/Private/LocalFogVolumes/LocalFogVolumeCommon.ush`                                                                     |
+| Splat/compose pass                      | `Engine/Shaders/Private/LocalFogVolumes/LocalFogVolumeSplat.usf`                                                                      |
+| Height-fog integration                  | `Engine/Shaders/Private/HeightFogPixelShader.usf`                                                                                     |
+| Volumetric-fog media injection          | `Engine/Shaders/Private/VolumetricFog.usf`                                                                                            |
 
 ## Oxygen Divergences
 

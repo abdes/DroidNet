@@ -24,7 +24,7 @@
   - Iterates all registered views from FrameContext
   - Resolves each view using registered resolver
   - Calls `BuildFrame()` for scene preparation
--- ✅ Implemented automatic rendering in `Renderer::OnRender()`:
+    -- ✅ Implemented automatic rendering in `Renderer::OnRender()`:
   - Iterates all registered render graphs
   - Acquires command recorder per view
   - Sets up framebuffer resource tracking and barriers
@@ -33,9 +33,9 @@
   - Acquires per-view command recorders and prepares per-view framebuffer tracking
   - Wires per-view scene constants and prepared frames into the `RenderContext`
 - ✅ Exposed `ViewId` in `ViewContext` for cleaner API usage
--- ✅ Extended `ViewMetadata` with:
+  -- ✅ Extended `ViewMetadata` with:
   - `name` and `purpose` fields
-  - Note: a `PresentPolicy` enum is *documented* in design notes but is NOT present in the current FrameContext implementation; presentation decisions remain application-driven.
+  - Note: a `PresentPolicy` enum is _documented_ in design notes but is NOT present in the current FrameContext implementation; presentation decisions remain application-driven.
 - ✅ `ViewContext` now includes complete view configuration:
   - `ViewId id` - unique identifier (assigned by AddView)
   - `View view` - viewport and scissors
@@ -79,13 +79,13 @@
 **Status & Remaining Work (updated to reflect actual implementation):**
 
 - [x] Support multiple views rendering per frame (sequential execution): The Renderer now iterates all registered per-view render graph factories (see `render_graphs_`) and executes them in `OnRender()` using per-view command recorders and a pooled `RenderContext`.
-- [ ] Parallel per-view culling and command recording: *not implemented* — the Renderer performs scene preparation and render graph execution sequentially today.
-- [ ] Add `OnFrameGraphPerView` module hook: *not present* — module-level per-view graph hooks remain a future enhancement.
+- [ ] Parallel per-view culling and command recording: _not implemented_ — the Renderer performs scene preparation and render graph execution sequentially today.
+- [ ] Add `OnFrameGraphPerView` module hook: _not present_ — module-level per-view graph hooks remain a future enhancement.
 - [x] Compositing phase available and used by examples (app-driven): The engine exposes `PhaseId::kCompositing` and the MultiView example performs application-driven compositing in `MainModule::OnCompositing()` (examples composite offscreen views into the swapchain backbuffer).
-- [ ] Multi-surface automatic presentation support: *not implemented* — the Renderer does not automatically present surfaces; examples call `FrameContext::SetSurfacePresentable()` explicitly (composition & presentation remain application responsibilities).
+- [ ] Multi-surface automatic presentation support: _not implemented_ — the Renderer does not automatically present surfaces; examples call `FrameContext::SetSurfacePresentable()` explicitly (composition & presentation remain application responsibilities).
 - [x] Render-context pooling and per-view scene-constant management: partially implemented - A `RenderContextPool` plus `Renderer::render_context_` is used to claim a per-frame render context; `SceneConstantsManager` writes per-view constant buffers for rendering.
-- [ ] Descriptor reuse and comprehensive render-target pooling: *planned* — full render-target pooling / descriptor reuse is still a Phase‑3 goal.
-- [ ] View ordering and complex composition/dependency logic: *planned* — apps/example code currently compose in a simple order (MainView then PiP), but engine-level ordering & composition logic is a future improvement.
+- [ ] Descriptor reuse and comprehensive render-target pooling: _planned_ — full render-target pooling / descriptor reuse is still a Phase‑3 goal.
+- [ ] View ordering and complex composition/dependency logic: _planned_ — apps/example code currently compose in a simple order (MainView then PiP), but engine-level ordering & composition logic is a future improvement.
 
 ---
 
@@ -150,13 +150,13 @@ std::unordered_map<ViewId, ViewContext> views_;
 
 **Future `ViewMetadata` fields (Phase 3+):**
 
-| Field | Description | Status |
-|---|---|---|
-| `std::string name` | Human-readable name | ✅ Implemented |
-| `std::string purpose` | View purpose tag | ✅ Implemented |
-| `PresentPolicy present_policy` | Presentation mode | ❌ Not implemented (apps decide presentation explicitly today) |
-| `std::vector<SurfaceId> surfaces` | Logical target identifiers | ⚠️ Placeholder |
-| `uint32_t flags` | Flags for HDR, MSAA, etc. | 📋 Planned |
+| Field                             | Description                | Status                                                         |
+| --------------------------------- | -------------------------- | -------------------------------------------------------------- |
+| `std::string name`                | Human-readable name        | ✅ Implemented                                                 |
+| `std::string purpose`             | View purpose tag           | ✅ Implemented                                                 |
+| `PresentPolicy present_policy`    | Presentation mode          | ❌ Not implemented (apps decide presentation explicitly today) |
+| `std::vector<SurfaceId> surfaces` | Logical target identifiers | ⚠️ Placeholder                                                 |
+| `uint32_t flags`                  | Flags for HDR, MSAA, etc.  | 📋 Planned                                                     |
 
 ### 3.2. FrameContext Responsibilities
 
@@ -499,7 +499,7 @@ if (!registered) {
 
 1. ✅ Apps no longer call `BuildFrame()` directly — the Renderer runs scene preparation and finalization in `OnPreRender`.
 2. ⚠️ Apps still perform resource creation and may acquire command recorders in mutation phases (e.g. `OnSceneMutation`) for setup; the Renderer acquires command recorders for per-view render-time command recording.
-3. ⚠️ Surface presentation is *not* automatic — modules and apps are still responsible for marking surfaces presentable (for example `FrameContext::SetSurfacePresentable()`), particularly for composed or offscreen workflows.
+3. ⚠️ Surface presentation is _not_ automatic — modules and apps are still responsible for marking surfaces presentable (for example `FrameContext::SetSurfacePresentable()`), particularly for composed or offscreen workflows.
 4. ✅ Register once, execute automatically every frame
 5. ✅ Framebuffer wiring happens in render graph factory via `RenderContext`
 
@@ -564,7 +564,7 @@ if (!registered) {
 
 - [`Oxygen/Core/Types/View.h`](../../Core/Types/View.h) — ViewId definition
 - [`Oxygen/Core/Types/ViewResolver.h`](../../Core/Types/ViewResolver.h) — ViewResolver type
--- [`Oxygen/Core/FrameContext.h`](../../Core/FrameContext.h) — ViewContext, ViewMetadata (name, purpose), view registration/update APIs
+  -- [`Oxygen/Core/FrameContext.h`](../../Core/FrameContext.h) — ViewContext, ViewMetadata (name, purpose), view registration/update APIs
 - [`Oxygen/Core/FrameContext.cpp`](../../Core/FrameContext.cpp) — View management implementation
 
 **Renderer:**

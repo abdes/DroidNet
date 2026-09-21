@@ -34,7 +34,7 @@ We adopt a **Transient Frame Buffer** strategy as the robust MVP.
 
 ### 2.1. Mechanism
 
-Instead of updating a persistent buffer, we allocate a **fresh, transient buffer** every frame that contains *all* active transforms.
+Instead of updating a persistent buffer, we allocate a **fresh, transient buffer** every frame that contains _all_ active transforms.
 
 1. **Allocate**: `TransformUploader` allocates from `RingBufferStaging` for all transforms.
 2. **Write**: CPU writes transforms to mapped memory via direct `memcpy`.
@@ -101,27 +101,27 @@ Both use `TransientStructuredBuffer` for per-frame uploads:
 
 ## 4. Comparison: Atlas vs. Transient
 
-| Feature | Component | Usage Pattern | Why? |
-| :--- | :--- | :--- | :--- |
-| **Static / Persistent Data** (Geometry, Materials) | **`AtlasBuffer`** | Allocate once, Keep `ElementRef`, **Stable SRV**. | Data rarely changes. Manages fragmentation efficiently. |
-| **Dynamic / Per-Frame Data** (Transforms, Draws) | **`TransientStructuredBuffer`** | - Allocate every frame., **Transient SRV**, Auto-recycled. | Data changes every frame. N-buffering and synchronization automatic. |
+| Feature                                            | Component                       | Usage Pattern                                              | Why?                                                                 |
+| :------------------------------------------------- | :------------------------------ | :--------------------------------------------------------- | :------------------------------------------------------------------- |
+| **Static / Persistent Data** (Geometry, Materials) | **`AtlasBuffer`**               | Allocate once, Keep `ElementRef`, **Stable SRV**.          | Data rarely changes. Manages fragmentation efficiently.              |
+| **Dynamic / Per-Frame Data** (Transforms, Draws)   | **`TransientStructuredBuffer`** | - Allocate every frame., **Transient SRV**, Auto-recycled. | Data changes every frame. N-buffering and synchronization automatic. |
 
 ---
 
 ## Implementation Status
 
-| Component/Feature | Status | Location | Notes |
-|-------------------|--------|----------|-------|
-| **TransientStructuredBuffer** | ✅ Complete | `src/Oxygen/Renderer/Upload/TransientStructuredBuffer.{h,cpp}` | Full implementation with per-slot allocation, SRV management, and cleanup |
-| **RingBufferStaging** | ✅ Complete | `src/Oxygen/Renderer/Upload/RingBufferStaging.{h,cpp}` | Partition-based ring allocator with N-buffering, auto-growth, ResourceRegistry integration |
-| **InlineTransfersCoordinator** | ✅ Complete | `src/Oxygen/Renderer/Upload/InlineTransfersCoordinator.{h,cpp}` | Synthetic fence management, provider lifecycle, frame start/retirement broadcast |
-| **TransformUploader using Transient** | ✅ Complete | `src/Oxygen/Renderer/Resources/TransformUploader.cpp` | Uses `TransientStructuredBuffer` for worlds/normals, direct memcpy, SRV caching |
-| **DrawMetadataEmitter using Transient** | ✅ Complete | `src/Oxygen/Renderer/Resources/DrawMetadataEmitter.cpp` | Uses `TransientStructuredBuffer` for draw metadata, sort/partition, per-frame upload |
-| **Frame-Centric Upload Invariants** | ✅ Complete | N/A | OnFrameStart called once per frame, view-agnostic upload confirmed |
-| **Stable Indexing** | ✅ Complete | N/A | Transform/draw indices stable across frames, bindless compatible |
-| **N-Buffering & Synchronization** | ✅ Complete | N/A | Ring buffer partitions + synthetic fences handle multi-frame overlap |
-| **ResourceRegistry Integration** | ✅ Complete | `RingBufferStaging.cpp:131` | Backing buffer registered in `EnsureCapacity()` for view creation |
-| **Direct Write Strategy** | ✅ Complete | N/A | CPU-visible upload heap, zero-copy, PCIe reads confirmed |
+| Component/Feature                       | Status      | Location                                                        | Notes                                                                                      |
+| --------------------------------------- | ----------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| **TransientStructuredBuffer**           | ✅ Complete | `src/Oxygen/Renderer/Upload/TransientStructuredBuffer.{h,cpp}`  | Full implementation with per-slot allocation, SRV management, and cleanup                  |
+| **RingBufferStaging**                   | ✅ Complete | `src/Oxygen/Renderer/Upload/RingBufferStaging.{h,cpp}`          | Partition-based ring allocator with N-buffering, auto-growth, ResourceRegistry integration |
+| **InlineTransfersCoordinator**          | ✅ Complete | `src/Oxygen/Renderer/Upload/InlineTransfersCoordinator.{h,cpp}` | Synthetic fence management, provider lifecycle, frame start/retirement broadcast           |
+| **TransformUploader using Transient**   | ✅ Complete | `src/Oxygen/Renderer/Resources/TransformUploader.cpp`           | Uses `TransientStructuredBuffer` for worlds/normals, direct memcpy, SRV caching            |
+| **DrawMetadataEmitter using Transient** | ✅ Complete | `src/Oxygen/Renderer/Resources/DrawMetadataEmitter.cpp`         | Uses `TransientStructuredBuffer` for draw metadata, sort/partition, per-frame upload       |
+| **Frame-Centric Upload Invariants**     | ✅ Complete | N/A                                                             | OnFrameStart called once per frame, view-agnostic upload confirmed                         |
+| **Stable Indexing**                     | ✅ Complete | N/A                                                             | Transform/draw indices stable across frames, bindless compatible                           |
+| **N-Buffering & Synchronization**       | ✅ Complete | N/A                                                             | Ring buffer partitions + synthetic fences handle multi-frame overlap                       |
+| **ResourceRegistry Integration**        | ✅ Complete | `RingBufferStaging.cpp:131`                                     | Backing buffer registered in `EnsureCapacity()` for view creation                          |
+| **Direct Write Strategy**               | ✅ Complete | N/A                                                             | CPU-visible upload heap, zero-copy, PCIe reads confirmed                                   |
 
 **Summary**: Feature is **100% complete**. All core components implemented and integrated. The design document now accurately reflects the actual implementation including `InlineTransfersCoordinator`, per-slot management, and ResourceRegistry integration.
 

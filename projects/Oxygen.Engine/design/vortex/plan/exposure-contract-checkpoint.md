@@ -54,15 +54,15 @@ ordinary adaptation, stable return and bounded status using the existing modes.
 
 ## Owned contracts
 
-| Contract | Owner |
-| --- | --- |
-| Calibration, hybrid response, numerical domain/error budgets | [PBR specification](../../renderer-core/physically-based-rendering.md) |
-| GPU state/frame/status records, lifecycle and ownership | [PostProcessService](../lld/post-process-service.md) |
-| Versioned packed fields and compatibility | [Environment authoring](../../../../../design/editor/lld/environment-authoring.md) |
-| HDR product inventory and FP16 suitability | [SceneTextures](../lld/scene-textures.md) |
-| View ABI, ordering and reflection | [Shader contracts](../lld/shader-contracts.md) |
-| View-local settings, sharing and isolation | [MultiView](../lld/multi-view-composition.md) |
-| Experiment ownership and measurement semantics | [LightBench](../../renderer-core/lightbench.md) |
+| Contract                                                     | Owner                                                                              |
+| ------------------------------------------------------------ | ---------------------------------------------------------------------------------- |
+| Calibration, hybrid response, numerical domain/error budgets | [PBR specification](../../renderer-core/physically-based-rendering.md)             |
+| GPU state/frame/status records, lifecycle and ownership      | [PostProcessService](../lld/post-process-service.md)                               |
+| Versioned packed fields and compatibility                    | [Environment authoring](../../../../../design/editor/lld/environment-authoring.md) |
+| HDR product inventory and FP16 suitability                   | [SceneTextures](../lld/scene-textures.md)                                          |
+| View ABI, ordering and reflection                            | [Shader contracts](../lld/shader-contracts.md)                                     |
+| View-local settings, sharing and isolation                   | [MultiView](../lld/multi-view-composition.md)                                      |
+| Experiment ownership and measurement semantics               | [LightBench](../../renderer-core/lightbench.md)                                    |
 
 ## Reproduction
 

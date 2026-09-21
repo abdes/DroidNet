@@ -160,7 +160,7 @@ DDC writes must be atomic:
 
 ## Relationship to loose cooked content
 
-Loose cooked containers are *outputs* of cooking.
+Loose cooked containers are _outputs_ of cooking.
 
 The Asset DB + DDC should be able to materialize a loose cooked container by:
 

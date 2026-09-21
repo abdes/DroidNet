@@ -57,17 +57,17 @@ CPU-GPU ABI guidelines
 
 ### Implemented runtime surface
 
-| Slice | Architecture Ref | Status | Key Files |
-| ----- | ---------------- | ------ | --------- |
-| Physical page pool manager | §3.1 | `complete` | `VsmPhysicalPagePoolManager.h/.cpp`, `VsmPhysicalPagePoolTypes.h/.cpp`, `VsmPhysicalPageAddressing.h/.cpp`, `VsmPhysicalPoolCompatibility.h/.cpp` |
-| Virtual address space | §3.2 | `complete` | `VsmVirtualAddressSpace.h/.cpp`, `VsmVirtualAddressSpaceTypes.h/.cpp`, `VsmVirtualClipmapHelpers.h/.cpp`, `VsmVirtualRemapBuilder.h/.cpp` |
-| Cache manager | §3.3 | `complete` | `VsmCacheManager.h/.cpp`, `VsmCacheManagerTypes.h/.cpp`, `VsmCacheManagerSeam.h` |
-| Page allocation planner | §3.4 | `complete` | `VsmPageAllocationPlanner.h/.cpp`, `VsmPageAllocationSnapshotHelpers.h` |
-| Shader ABI contracts | §4.1-§4.5 | `complete` | `VsmShaderTypes.h`, `Shaders/Renderer/Vsm/Vsm*.hlsli` |
-| Scene invalidation slice | §7, §14.2 | `complete` | `VsmSceneInvalidationCollector.h/.cpp`, `VsmSceneInvalidationCoordinator.h/.cpp`, `VsmInvalidationPass.h/.cpp` |
-| Renderer-owned VSM shell | §14.1 | `in_progress` | `VsmShadowRenderer.h/.cpp`, `ForwardPipeline.cpp`, `ShadowManager.cpp`, `Renderer.cpp` |
-| Directional forward-lighting hookup | §13, §14.1 | `in_progress` | `ShadowHelpers.hlsli`, `ForwardDirectLighting.hlsli`, `VsmFrameBindings.h/.hlsli` |
-| Local-light forward-lighting hookup | §13, §14.1 | `not_started` | no renderer-forward consumption yet |
+| Slice                               | Architecture Ref | Status        | Key Files                                                                                                                                         |
+| ----------------------------------- | ---------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Physical page pool manager          | §3.1             | `complete`    | `VsmPhysicalPagePoolManager.h/.cpp`, `VsmPhysicalPagePoolTypes.h/.cpp`, `VsmPhysicalPageAddressing.h/.cpp`, `VsmPhysicalPoolCompatibility.h/.cpp` |
+| Virtual address space               | §3.2             | `complete`    | `VsmVirtualAddressSpace.h/.cpp`, `VsmVirtualAddressSpaceTypes.h/.cpp`, `VsmVirtualClipmapHelpers.h/.cpp`, `VsmVirtualRemapBuilder.h/.cpp`         |
+| Cache manager                       | §3.3             | `complete`    | `VsmCacheManager.h/.cpp`, `VsmCacheManagerTypes.h/.cpp`, `VsmCacheManagerSeam.h`                                                                  |
+| Page allocation planner             | §3.4             | `complete`    | `VsmPageAllocationPlanner.h/.cpp`, `VsmPageAllocationSnapshotHelpers.h`                                                                           |
+| Shader ABI contracts                | §4.1-§4.5        | `complete`    | `VsmShaderTypes.h`, `Shaders/Renderer/Vsm/Vsm*.hlsli`                                                                                             |
+| Scene invalidation slice            | §7, §14.2        | `complete`    | `VsmSceneInvalidationCollector.h/.cpp`, `VsmSceneInvalidationCoordinator.h/.cpp`, `VsmInvalidationPass.h/.cpp`                                    |
+| Renderer-owned VSM shell            | §14.1            | `in_progress` | `VsmShadowRenderer.h/.cpp`, `ForwardPipeline.cpp`, `ShadowManager.cpp`, `Renderer.cpp`                                                            |
+| Directional forward-lighting hookup | §13, §14.1       | `in_progress` | `ShadowHelpers.hlsli`, `ForwardDirectLighting.hlsli`, `VsmFrameBindings.h/.hlsli`                                                                 |
+| Local-light forward-lighting hookup | §13, §14.1       | `not_started` | no renderer-forward consumption yet                                                                                                               |
 
 ### Implemented validation surface
 
@@ -116,27 +116,27 @@ CPU-GPU ABI guidelines
 
 ## 2. Remaining Work - Summary
 
-| Phase | Status | Exit Gap |
-| ----- | ------ | -------- |
-| A | `complete` | historical cache-manager wrap-up already landed |
-| B | `complete` | ABI contracts exist and dedicated parity coverage exists |
-| C | `complete` | Stage 5 request generation exists and dedicated coverage exists |
-| D | `complete` | Stages 6-8 page management exists and dedicated coverage exists |
-| E | `complete` | Stages 9-11 and screen HZB exist and dedicated coverage exists |
-| F | `in_progress` | Stage 12 exists, but the live renderer artifact has not yet been ruled out at the Stage 12 boundary |
-| G | `complete` | Stage 13 exists and dedicated coverage exists |
-| H | `complete` | Stage 14 exists and dedicated coverage exists |
-| I | `complete` | Stage 15 plus extraction and cache-valid continuity coverage exist |
-| J | `complete` | scene-observer -> cache-manager -> GPU invalidation slice exists |
-| K-a | `in_progress` | live shell exists, but late-frame RenderDoc replay is still unstable (`DXGI_ERROR_DEVICE_HUNG`), so the Stage 15 diagnostic is not yet manually signed off |
-| K-b | `in_progress` | directional VSM forward path exists in code, but end-to-end manual validation and full directional support are still incomplete |
-| K-c | `not_started` | no local-light forward consumption yet |
-| K-d | `not_started` | no distant-light refresh budget or point-light face scheduling yet |
-| K-e | `not_started` | renderer hardening and architecture gap closure still outstanding |
-| L-a | `not_started` | no repeatable automation harness yet |
-| L-b | `not_started` | no scene matrix or screenshot-validation flow yet |
-| L-c | `in_progress` | Stage 13 hot-path tuning is now evidence-backed, but no full scene/profile performance matrix exists yet |
-| L-d | `not_started` | no shipping defaults chosen from measured evidence yet |
+| Phase | Status        | Exit Gap                                                                                                                                                   |
+| ----- | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A     | `complete`    | historical cache-manager wrap-up already landed                                                                                                            |
+| B     | `complete`    | ABI contracts exist and dedicated parity coverage exists                                                                                                   |
+| C     | `complete`    | Stage 5 request generation exists and dedicated coverage exists                                                                                            |
+| D     | `complete`    | Stages 6-8 page management exists and dedicated coverage exists                                                                                            |
+| E     | `complete`    | Stages 9-11 and screen HZB exist and dedicated coverage exists                                                                                             |
+| F     | `in_progress` | Stage 12 exists, but the live renderer artifact has not yet been ruled out at the Stage 12 boundary                                                        |
+| G     | `complete`    | Stage 13 exists and dedicated coverage exists                                                                                                              |
+| H     | `complete`    | Stage 14 exists and dedicated coverage exists                                                                                                              |
+| I     | `complete`    | Stage 15 plus extraction and cache-valid continuity coverage exist                                                                                         |
+| J     | `complete`    | scene-observer -> cache-manager -> GPU invalidation slice exists                                                                                           |
+| K-a   | `in_progress` | live shell exists, but late-frame RenderDoc replay is still unstable (`DXGI_ERROR_DEVICE_HUNG`), so the Stage 15 diagnostic is not yet manually signed off |
+| K-b   | `in_progress` | directional VSM forward path exists in code, but end-to-end manual validation and full directional support are still incomplete                            |
+| K-c   | `not_started` | no local-light forward consumption yet                                                                                                                     |
+| K-d   | `not_started` | no distant-light refresh budget or point-light face scheduling yet                                                                                         |
+| K-e   | `not_started` | renderer hardening and architecture gap closure still outstanding                                                                                          |
+| L-a   | `not_started` | no repeatable automation harness yet                                                                                                                       |
+| L-b   | `not_started` | no scene matrix or screenshot-validation flow yet                                                                                                          |
+| L-c   | `in_progress` | Stage 13 hot-path tuning is now evidence-backed, but no full scene/profile performance matrix exists yet                                                   |
+| L-d   | `not_started` | no shipping defaults chosen from measured evidence yet                                                                                                     |
 
 ---
 
@@ -185,7 +185,7 @@ Checklist:
 - [x] Verify CPU <-> GPU struct layout parity
 - [x] Create `VsmProjectionData.hlsli`
 - [x] Define the CPU <-> GPU projection-data contract for current-frame and
-  previous-frame use
+      previous-frame use
 
 Implementation summary:
 
@@ -274,12 +274,12 @@ Checklist:
 - [x] Implement `VsmGenerateHierarchicalFlags.hlsl`
 - [x] Implement `VsmPropagateMappedMips.hlsl`
 - [x] Implement `VsmPageInitializationPass` using explicit clear and copy
-  commands against the physical pool
+      commands against the physical pool
 - [x] Create `VsmPageFlagPropagationPass` and `VsmPageInitializationPass`
 - [x] Create `ScreenHzbBuildPass` and dispatch it from `ForwardPipeline`
-  immediately after `DepthPrePass`
+      immediately after `DepthPrePass`
 - [x] Add correctness coverage for hierarchical flags, mapped-mip propagation,
-  selective initialization, and screen-space HZB
+      selective initialization, and screen-space HZB
 
 Implementation summary:
 
@@ -315,7 +315,7 @@ Review note:
 Checklist:
 
 - [x] Create `VsmShadowRasterizerPass` on top of the shared depth-only raster
-  path
+      path
 - [x] Route shadow views from `VsmProjectionData`
 - [x] Implement `VsmInstanceCulling.hlsl`
 - [x] Reuse the shared depth-only raster path for shadow depth output
@@ -325,10 +325,10 @@ Checklist:
 - [x] Record static primitive-to-page feedback for later invalidation
 - [x] Bind the physical shadow texture array at the correct page coordinates
 - [ ] Add a stage-fed live-scene regression that proves the full static-recache
-  producer chain at the Stage 12 boundary itself, not only through downstream
-  Stage 13/15 behavior
+      producer chain at the Stage 12 boundary itself, not only through downstream
+      Stage 13/15 behavior
 - [ ] Keep Phase F open until the known live directional Stage 5 -> 15 artifact
-  is ruled out at the Stage 12 boundary
+      is ruled out at the Stage 12 boundary
 
 Implementation summary:
 
@@ -443,7 +443,7 @@ Checklist:
 - [x] Publish a per-view screen-space shadow mask
 - [x] Create `VsmShadowHelpers.hlsli`
 - [x] Add focused cache-manager, projection, extraction, and cache-validity
-  coverage
+      coverage
 
 Implementation summary:
 
@@ -478,20 +478,20 @@ Review note:
 Checklist:
 
 - [x] Extend `VsmCacheManager` invalidation state to match the architecture
-  contract
+      contract
 - [x] Track rendered primitive history needed to resolve scene mutations back to
-  cached entries
+      cached entries
 - [x] Track recently removed primitives so stale slot reuse cannot corrupt
-  invalidation targeting
+      invalidation targeting
 - [x] Build a prepared invalidation workload from scene changes plus static
-  raster feedback
+      raster feedback
 - [x] Create `VsmSceneInvalidationCollector` implementing `ISceneObserver`
 - [x] Implement `VsmInvalidation.hlsl`
 - [x] Create `VsmInvalidationPass`
 - [x] Wire the collector directly to the active `Scene` observer lifecycle
 - [x] Feed queued invalidations through cache-manager invalidation workflows
 - [x] Consume raster feedback to refine page-level invalidation for static
-  geometry
+      geometry
 - [x] Add coverage for add, remove, and move invalidation behavior
 
 Implementation summary:
@@ -539,20 +539,20 @@ Task checklist:
 - [x] `K-a.5` End-to-end C-J shell execution
 - [ ] `K-a.6` Stage 15 diagnostic publication and manual validation
 - [ ] Stabilize the live engine run enough to complete the manual
-  `Virtual Shadow Mask` checkpoint without the current D3D12 device-removal
-  failure
+      `Virtual Shadow Mask` checkpoint without the current D3D12 device-removal
+      failure
 - [ ] Produce a replay-safe late-frame RenderDoc capture recipe for the VSM
-  shell path; captures that can emit thumbnails but still fail replay with
-  `DXGI_ERROR_DEVICE_HUNG` do not satisfy the K-a evidence gate
+      shell path; captures that can emit thumbnails but still fail replay with
+      `DXGI_ERROR_DEVICE_HUNG` do not satisfy the K-a evidence gate
 - [x] Validate the repo-owned RenderScene RenderDoc analysis workflow against a
-  replay-safe late-frame capture before using it as K-a baseline evidence
+      replay-safe late-frame capture before using it as K-a baseline evidence
 - [ ] Re-enable or replace the disabled analytic bridge GPU gate in
-  `VsmShadowRendererBridge_test.cpp`; the current source compiles out
-  `ExecutePreparedViewShellMatchesAnalyticFloorShadowClassificationForTwoBoxes`
-  under `#if 0`, so that named exit criterion is not presently runnable
+      `VsmShadowRendererBridge_test.cpp`; the current source compiles out
+      `ExecutePreparedViewShellMatchesAnalyticFloorShadowClassificationForTwoBoxes`
+      under `#if 0`, so that named exit criterion is not presently runnable
 - [ ] Keep the phase open until
-  `VsmShadowRendererBridgeGpuTest.ExecutePreparedViewShellMatchesAnalyticFloorShadowClassificationForTwoBoxes`
-  is green and the manual diagnostic is rerun
+      `VsmShadowRendererBridgeGpuTest.ExecutePreparedViewShellMatchesAnalyticFloorShadowClassificationForTwoBoxes`
+      is green and the manual diagnostic is rerun
 
 Implementation summary:
 
@@ -604,23 +604,23 @@ Blocking note:
 Task checklist:
 
 - [x] Publish a directional-only Stage 15 VSM shadow mask separately from the
-  diagnostic screen shadow mask
+      diagnostic screen shadow mask
 - [x] Extend the per-view VSM bindings ABI so the forward shader can access
-  both masks
+      both masks
 - [ ] Publish directional `ShadowInstanceMetadata` with validated
-  `implementation_kind = kVirtual` semantics for every directional candidate
-  the VSM path intends to support,
+      `implementation_kind = kVirtual` semantics for every directional candidate
+      the VSM path intends to support,
 - [x] Switch `ShadowManager` view publication to the VSM directional shadow
-  product when the VSM policy is selected
+      product when the VSM policy is selected
 - [x] Route forward directional shadow visibility through the VSM directional
-  mask for `implementation_kind = kVirtual`, while preserving the conventional
-  path for `implementation_kind = kConventional`
+      mask for `implementation_kind = kVirtual`, while preserving the conventional
+      path for `implementation_kind = kConventional`
 - [ ] Keep directional debug modes (`DirectLightingFull`, `DirectLightGates`,
-  `DirectBrdfCore`) manually inspectable under both policies
+      `DirectBrdfCore`) manually inspectable under both policies
 - [x] Add focused automated tests for directional publication and split Stage 15
-  output routing
+      output routing
 - [ ] Rerun and record manual checkpoints for both `vsm` and `conventional`
-  directional policies after the live-shell directional regression is fixed
+      directional policies after the live-shell directional regression is fixed
 
 Implementation summary:
 
@@ -663,12 +663,12 @@ Blocking note:
 Task checklist:
 
 - [ ] Wire local-light projection and composite output from `VsmProjectionPass`
-  into the normal forward-lighting path
+      into the normal forward-lighting path
 - [ ] Publish and consume the local-light VSM records needed by the forward
-  shader without inventing a second public cache identity model
+      shader without inventing a second public cache identity model
 - [ ] Preserve the non-VSM path for local lights when VSM is not selected
 - [ ] Implement transmission sampling for translucent receivers per
-  architecture §13.3 without regressing opaque receiver results
+      architecture §13.3 without regressing opaque receiver results
 
 Implementation note:
 
@@ -685,13 +685,13 @@ Implementation note:
 Task checklist:
 
 - [ ] Implement distant-local-light refresh budgeting and scheduling per
-  architecture §9.2, including the cached-skip path for lights not selected
-  this frame
+      architecture §9.2, including the cached-skip path for lights not selected
+      this frame
 - [ ] Implement point-light per-face update scheduling
 - [ ] Implement point-light projection upload flow without introducing a second
-  public cache identity model
+      public cache identity model
 - [ ] Keep renderer and orchestrator naming aligned with the final scheduling,
-  refresh, and projection semantics
+      refresh, and projection semantics
 
 #### Phase K-e - VSM Policy Hardening and Full Renderer Stabilization
 
@@ -700,14 +700,14 @@ Task checklist:
 Task checklist:
 
 - [ ] Finalize config-driven conventional <-> VSM selection behavior for the
-  supported light classes
+      supported light classes
 - [ ] Verify conventional shadows still work when VSM is disabled
 - [ ] Harden coroutine sequencing, extraction, and per-view state transitions
-  for the full integrated path
+      for the full integrated path
 - [ ] Close any remaining renderer-owned integration gaps needed for Phase L
 - [ ] Add a real-input producer for the `detail_geometry` page-flag bit, or
-  explicitly ratify removing that flag from the architecture and shader
-  contract before Phase L starts
+      explicitly ratify removing that flag from the architecture and shader
+      contract before Phase L starts
 
 Implementation note:
 
@@ -727,14 +727,14 @@ Implementation note:
 Checklist:
 
 - [ ] Extend the `RenderScene` example and/or a companion automation harness so
-  a scripted run can:
+      a scripted run can:
   - mount or select a cooked scene deterministically
   - apply a named validation profile before load and capture
   - position the test camera and drive deterministic playback
   - warm up, capture, and shut down without interactive input
   - emit captures, metrics, and logs to a predictable output folder
 - [ ] Add automation helpers for scene orchestration, screenshot capture, demo
-  control, and run metadata capture
+      control, and run metadata capture
 - [ ] Define canonical VSM validation profiles for:
   - conventional baseline
   - default VSM functional validation
@@ -754,12 +754,12 @@ Checklist:
 
 - [ ] Define the validation-scene contract for VSM image-based testing
 - [ ] Build the functional scene matrix around scenario targets first, then
-  bind each target to the best existing or new scene with a large receiver
+      bind each target to the best existing or new scene with a large receiver
 - [ ] Exclude the current `cubes`, `instancing`, `multi-script`, and
-  `proc-cubes` scenes from the primary screenshot set unless they are revised
-  to include a large receiver
+      `proc-cubes` scenes from the primary screenshot set unless they are revised
+      to include a large receiver
 - [ ] Add purpose-built scenes where the repository lacks the right scenario,
-  including:
+      including:
   - `vsm-point-light-face-courtyard`
   - `vsm-transmission-courtyard`
 - [ ] Add visual regression coverage for the selected scene matrix
@@ -780,10 +780,10 @@ Checklist:
 Checklist:
 
 - [ ] Measure per-stage GPU time with the existing timestamp system across the
-  Phase L-b scene matrix
+      Phase L-b scene matrix
 - [ ] Capture utilization and workload metrics per scene and profile
 - [ ] Add at least one explicit stress characterization run anchored on
-  `physics_domains_vsm_benchmark` and a many-local-light scene if needed
+      `physics_domains_vsm_benchmark` and a many-local-light scene if needed
 - [x] Identify hot paths and perform only measurement-backed tuning
 - [x] Record before and after evidence for every tuning change
 
@@ -828,7 +828,7 @@ Evidence summary:
 Checklist:
 
 - [ ] Select default budgets and settings from validated functional and
-  performance evidence, including:
+      performance evidence, including:
   - physical pool size
   - distant-local-light refresh budget
   - unreferenced-entry retention window
@@ -836,7 +836,7 @@ Checklist:
   - any validation profiles introduced in Phase L-a
 - [ ] Define scene classes and target envelopes for those defaults
 - [ ] Verify the selected defaults preserve Phase L-b correctness while meeting
-  Phase L-c performance expectations
+      Phase L-c performance expectations
 - [ ] Document rationale, tradeoffs, and fallback profiles
 
 ---

@@ -25,19 +25,19 @@ oxyrun headall
 
 ## Prioritized TODOs
 
-| Status | Item |
-|--------|------|
-| ✅ | Implement CommandExecutor and centralize execution logic (move lambda content from `CommandQueue::Submit`). |
-| ✅ | Extend `CommandContext` with runtime services (Graphics, queue, resolver, submission id). |
-| ⬜️ | Implement DrawCommand/DispatchCommand and route `SetPipelineState` into recorded PSO usage. |
-| ⬜️ | Add minimal PSO and ShaderStub to enable deterministic fallback draw output. |
-| ⬜️ | Implement Descriptor runtime resolver to map descriptors to `NativeObject` at execute-time. |
-| ✅ | Enforce resource state transitions at execute-time and improve `ExecuteBarriers` to integrate with executor. |
-| ⬜️ | Implement depth/stencil backing and update `ClearDepthStencilCommand` to mutate DSV backing. |
-| ⬜️ | Add headless `QueryPool` with timestamp/occlusion support. |
-| ⬜️ | Implement Present/Acquire semantics for `HeadlessSurface` and expose last-presented image for tests. |
-| ⬜️ | Add ReadbackManager for async/synchronous CPU readback flows and tests. |
-| ⬜️ | Add submission trace serialization using `Command::Serialize()` and a small JSON schema. |
+| Status | Item                                                                                                         |
+| ------ | ------------------------------------------------------------------------------------------------------------ |
+| ✅     | Implement CommandExecutor and centralize execution logic (move lambda content from `CommandQueue::Submit`).  |
+| ✅     | Extend `CommandContext` with runtime services (Graphics, queue, resolver, submission id).                    |
+| ⬜️     | Implement DrawCommand/DispatchCommand and route `SetPipelineState` into recorded PSO usage.                  |
+| ⬜️     | Add minimal PSO and ShaderStub to enable deterministic fallback draw output.                                 |
+| ⬜️     | Implement Descriptor runtime resolver to map descriptors to `NativeObject` at execute-time.                  |
+| ✅     | Enforce resource state transitions at execute-time and improve `ExecuteBarriers` to integrate with executor. |
+| ⬜️     | Implement depth/stencil backing and update `ClearDepthStencilCommand` to mutate DSV backing.                 |
+| ⬜️     | Add headless `QueryPool` with timestamp/occlusion support.                                                   |
+| ⬜️     | Implement Present/Acquire semantics for `HeadlessSurface` and expose last-presented image for tests.         |
+| ⬜️     | Add ReadbackManager for async/synchronous CPU readback flows and tests.                                      |
+| ⬜️     | Add submission trace serialization using `Command::Serialize()` and a small JSON schema.                     |
 
 ## Work planning
 
@@ -153,33 +153,33 @@ Vulkan and are relevant for headless emulation. Each row shows current
 headless status, a short summary and API mappings. The ordering reflects the
 implementation priority for making headless useful for testing and replay.
 
-| Priority | Status | Command | D3D12 / Vulkan mapping | Summary |
-|---:|:---:|---|---|---|
-| 1 | ✅ | CopyBuffer / CopyBufferCommand | CopyBufferRegion / vkCmdCopyBuffer | Buffer-to-buffer raw byte copies. Already implemented. |
-| 1 | ⬜️ | CopyTextureToBuffer / CopyTextureRegion | CopyTextureRegion / vkCmdCopyImageToBuffer | Texture->buffer readback (row/slice pitch, blocks). Important for readback tests. |
-| 1 | ✅ | ResourceBarrierCommand / PipelineBarrier | ResourceBarrier / vkCmdPipelineBarrier | Explicit resource transitions / memory barriers; executor enforces recorded barriers (implemented). |
-| 1 | ⬜️ | PresentCommand / Present emulation | Present (swapchain) / vkQueuePresentKHR | Surface acquire/present semantics; expose last-presented image for tests. |
-| 1 | ✅ | BufferToTextureCommand | CopyBufferRegion+subresource / vkCmdCopyBufferToImage | Buffer->texture uploads (implemented, supports block formats). |
-| 1 | ✅ | Submit-ordered queue actions | Signal/Wait (fences/timeline) / vkCmdSetEvent/wait or timeline semaphores | Submit-ordered wait/signal actions are attached to the common `CommandList` and executed by the queue around each submitted list. |
-| 2 | ⬜️ | CopyTextureToTexture | CopySubresourceRegion / vkCmdCopyImage | Image-to-image copy, mip/array-aware. |
-| 2 | ⬜️ | DispatchCommand | Dispatch / vkCmdDispatch | Compute dispatch path; validate bindings and optionally perform simple emulation. |
-| 2 | ⬜️ | CopyTextureRegion variants (row/align) | vkCmdCopyImage / CopyTextureRegion | Variants for pitched copies and block layouts. |
-| 3 | ⬜️ | DrawCommand / DrawIndexedCommand | DrawInstanced / vkCmdDrawIndexed | Graphics draws; requires PSO, descriptor resolution, and fallback shader behavior. |
-| 3 | ⬜️ | BeginRenderPass / EndRenderPass | OMSetRenderTargets / vkCmdBeginRenderPass / vkCmdEndRenderPass | Render-pass lifecycle to model load/store and subpass semantics. |
-| 3 | ⬜️ | Resolve / Blit | ResolveSubresource / vkCmdResolveImage / vkCmdBlitImage | MSAA resolves and image blits/format conversions. |
-| 4 | ⬜️ | ExecuteIndirect / DrawIndirect / DispatchIndirect | ExecuteIndirect / vkCmdDrawIndirect / vkCmdDispatchIndirect | Indirect execution reading parameters from GPU buffers. |
-| 4 | ⬜️ | Secondary/Bundle execution | ExecuteBundle / vkCmdExecuteCommands | Execute secondary/ bundled command buffers. Useful for multi-threaded recording semantics. |
-| 4 | ⬜️ | CopyBufferToBuffer (parity name) | CopyBufferRegion / vkCmdCopyBuffer | Alias for buffer-to-buffer copies. |
-| 5 | ⬜️ | QueryBegin / QueryEnd / ResolveQuery | BeginQuery/EndQuery / vkCmdBeginQuery/vkCmdEndQuery / vkCmdCopyQueryPoolResults | Timestamps, occlusion and query pool resolves. |
-| 5 | ⬜️ | UpdateBuffer / FillBuffer / UpdateSubresource | UpdateSubresource / vkCmdUpdateBuffer / vkCmdFillBuffer | Small CPU-side updates to buffers (useful for upload helpers). |
-| 5 | ⬜️ | ClearColorImage / ClearDepthStencilImage / ClearAttachments | ClearRenderTargetView / vkCmdClearColorImage / vkCmdClearAttachments | Clear operations targeting images/attachments (beyond the current simple clear). |
-| 6 | ⬜️ | BindDescriptorSets / RootDescriptorTable / SetDescriptorHeaps | IASetVertexBuffers / SetGraphicsRootDescriptorTable / vkCmdBindDescriptorSets | Descriptor binding and updates; runtime resolver needed for execute-time mapping. |
-| 6 | ⬜️ | SetVertexBuffers / SetIndexBuffer / InputAssembler | IASetVertexBuffers / IASetIndexBuffer / vkCmdBindVertexBuffers / vkCmdBindIndexBuffer | Vertex/index buffer binding used by Draw. |
-| 6 | ⬜️ | SetViewport / SetScissor / Dynamic state | RSSetViewports / RSSetScissorRects / vkCmdSetViewport / vkCmdSetScissor | Dynamic rasterizer state changes. |
-| 7 | ⬜️ | PushConstants / SetRootConstants | SetGraphicsRoot32BitConstant / vkCmdPushConstants | Small inline constants per-draw. |
-| 7 | ⬜️ | SetBlendConstants / DepthBias / StencilMasks | OMSetBlendFactor / vkCmdSetBlendConstants etc. | Small dynamic pipeline state changes. |
-| 8 | ⬜️ | Event / SetEvent / WaitEvents | SetEvent/WaitFor (CPU/GPU) / vkCmdSetEvent / vkCmdWaitEvents | Finer-grained GPU events and host signals/waits. |
-| 9 | ⬜️ | Misc advanced: mesh tasks, ray-tracing dispatch | DrawMeshTasks / DispatchRays / VK_ray_tracing commands | Advanced features—defer until core model is stable. |
+| Priority | Status | Command                                                       | D3D12 / Vulkan mapping                                                                | Summary                                                                                                                           |
+| -------: | :----: | ------------------------------------------------------------- | ------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+|        1 |   ✅   | CopyBuffer / CopyBufferCommand                                | CopyBufferRegion / vkCmdCopyBuffer                                                    | Buffer-to-buffer raw byte copies. Already implemented.                                                                            |
+|        1 |   ⬜️   | CopyTextureToBuffer / CopyTextureRegion                       | CopyTextureRegion / vkCmdCopyImageToBuffer                                            | Texture->buffer readback (row/slice pitch, blocks). Important for readback tests.                                                 |
+|        1 |   ✅   | ResourceBarrierCommand / PipelineBarrier                      | ResourceBarrier / vkCmdPipelineBarrier                                                | Explicit resource transitions / memory barriers; executor enforces recorded barriers (implemented).                               |
+|        1 |   ⬜️   | PresentCommand / Present emulation                            | Present (swapchain) / vkQueuePresentKHR                                               | Surface acquire/present semantics; expose last-presented image for tests.                                                         |
+|        1 |   ✅   | BufferToTextureCommand                                        | CopyBufferRegion+subresource / vkCmdCopyBufferToImage                                 | Buffer->texture uploads (implemented, supports block formats).                                                                    |
+|        1 |   ✅   | Submit-ordered queue actions                                  | Signal/Wait (fences/timeline) / vkCmdSetEvent/wait or timeline semaphores             | Submit-ordered wait/signal actions are attached to the common `CommandList` and executed by the queue around each submitted list. |
+|        2 |   ⬜️   | CopyTextureToTexture                                          | CopySubresourceRegion / vkCmdCopyImage                                                | Image-to-image copy, mip/array-aware.                                                                                             |
+|        2 |   ⬜️   | DispatchCommand                                               | Dispatch / vkCmdDispatch                                                              | Compute dispatch path; validate bindings and optionally perform simple emulation.                                                 |
+|        2 |   ⬜️   | CopyTextureRegion variants (row/align)                        | vkCmdCopyImage / CopyTextureRegion                                                    | Variants for pitched copies and block layouts.                                                                                    |
+|        3 |   ⬜️   | DrawCommand / DrawIndexedCommand                              | DrawInstanced / vkCmdDrawIndexed                                                      | Graphics draws; requires PSO, descriptor resolution, and fallback shader behavior.                                                |
+|        3 |   ⬜️   | BeginRenderPass / EndRenderPass                               | OMSetRenderTargets / vkCmdBeginRenderPass / vkCmdEndRenderPass                        | Render-pass lifecycle to model load/store and subpass semantics.                                                                  |
+|        3 |   ⬜️   | Resolve / Blit                                                | ResolveSubresource / vkCmdResolveImage / vkCmdBlitImage                               | MSAA resolves and image blits/format conversions.                                                                                 |
+|        4 |   ⬜️   | ExecuteIndirect / DrawIndirect / DispatchIndirect             | ExecuteIndirect / vkCmdDrawIndirect / vkCmdDispatchIndirect                           | Indirect execution reading parameters from GPU buffers.                                                                           |
+|        4 |   ⬜️   | Secondary/Bundle execution                                    | ExecuteBundle / vkCmdExecuteCommands                                                  | Execute secondary/ bundled command buffers. Useful for multi-threaded recording semantics.                                        |
+|        4 |   ⬜️   | CopyBufferToBuffer (parity name)                              | CopyBufferRegion / vkCmdCopyBuffer                                                    | Alias for buffer-to-buffer copies.                                                                                                |
+|        5 |   ⬜️   | QueryBegin / QueryEnd / ResolveQuery                          | BeginQuery/EndQuery / vkCmdBeginQuery/vkCmdEndQuery / vkCmdCopyQueryPoolResults       | Timestamps, occlusion and query pool resolves.                                                                                    |
+|        5 |   ⬜️   | UpdateBuffer / FillBuffer / UpdateSubresource                 | UpdateSubresource / vkCmdUpdateBuffer / vkCmdFillBuffer                               | Small CPU-side updates to buffers (useful for upload helpers).                                                                    |
+|        5 |   ⬜️   | ClearColorImage / ClearDepthStencilImage / ClearAttachments   | ClearRenderTargetView / vkCmdClearColorImage / vkCmdClearAttachments                  | Clear operations targeting images/attachments (beyond the current simple clear).                                                  |
+|        6 |   ⬜️   | BindDescriptorSets / RootDescriptorTable / SetDescriptorHeaps | IASetVertexBuffers / SetGraphicsRootDescriptorTable / vkCmdBindDescriptorSets         | Descriptor binding and updates; runtime resolver needed for execute-time mapping.                                                 |
+|        6 |   ⬜️   | SetVertexBuffers / SetIndexBuffer / InputAssembler            | IASetVertexBuffers / IASetIndexBuffer / vkCmdBindVertexBuffers / vkCmdBindIndexBuffer | Vertex/index buffer binding used by Draw.                                                                                         |
+|        6 |   ⬜️   | SetViewport / SetScissor / Dynamic state                      | RSSetViewports / RSSetScissorRects / vkCmdSetViewport / vkCmdSetScissor               | Dynamic rasterizer state changes.                                                                                                 |
+|        7 |   ⬜️   | PushConstants / SetRootConstants                              | SetGraphicsRoot32BitConstant / vkCmdPushConstants                                     | Small inline constants per-draw.                                                                                                  |
+|        7 |   ⬜️   | SetBlendConstants / DepthBias / StencilMasks                  | OMSetBlendFactor / vkCmdSetBlendConstants etc.                                        | Small dynamic pipeline state changes.                                                                                             |
+|        8 |   ⬜️   | Event / SetEvent / WaitEvents                                 | SetEvent/WaitFor (CPU/GPU) / vkCmdSetEvent / vkCmdWaitEvents                          | Finer-grained GPU events and host signals/waits.                                                                                  |
+|        9 |   ⬜️   | Misc advanced: mesh tasks, ray-tracing dispatch               | DrawMeshTasks / DispatchRays / VK_ray_tracing commands                                | Advanced features—defer until core model is stable.                                                                               |
 
 Notes
 

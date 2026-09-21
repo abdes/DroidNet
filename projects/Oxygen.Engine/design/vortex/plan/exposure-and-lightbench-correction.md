@@ -44,18 +44,18 @@ the delivery sequence and acceptance criteria.
 
 ### Included features
 
-| Area | Deliverable |
-| --- | --- |
-| Mathematical contract | Preserve Oxygen's EV100 equation; correct documentation and numeric propagation |
-| Exposure state | One per-view GPU state consumed by Manual, ManualCamera, Auto, and disabled modes |
-| Metering | Bounded deterministic sampling, interpolated histogram bins, percentiles, black handling, masks, compensation curves |
-| Adaptation | Predictable EV/s far from the target and smooth exponential convergence near it |
-| Lifecycle | Concrete startup, cut, seed, mode transition, pause, stateless, sharing, and recovery policies |
-| HDR integration | One frame-pinned pre-exposure domain across every active HDR producer and consumer |
-| Authoring | Native components, source schemas, cooker, packed records, loader, scripting, DemoShell and existing editor adapters round-trip active fields |
+| Area                          | Deliverable                                                                                                                                                                 |
+| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Mathematical contract         | Preserve Oxygen's EV100 equation; correct documentation and numeric propagation                                                                                             |
+| Exposure state                | One per-view GPU state consumed by Manual, ManualCamera, Auto, and disabled modes                                                                                           |
+| Metering                      | Bounded deterministic sampling, interpolated histogram bins, percentiles, black handling, masks, compensation curves                                                        |
+| Adaptation                    | Predictable EV/s far from the target and smooth exponential convergence near it                                                                                             |
+| Lifecycle                     | Concrete startup, cut, seed, mode transition, pause, stateless, sharing, and recovery policies                                                                              |
+| HDR integration               | One frame-pinned pre-exposure domain across every active HDR producer and consumer                                                                                          |
+| Authoring                     | Native components, source schemas, cooker, packed records, loader, scripting, DemoShell and existing editor adapters round-trip active fields                               |
 | LightBench exposure benchmark | Properly repaired demo, readable reference scenes, complete exposure experiments, independent numerical expectations, repeatable interaction/reset and visual qualification |
-| MultiView visual correctness | Main/PiP, multi-camera, auxiliary and offscreen layouts render correctly with independent or explicitly shared exposure; exposure and multiview changes preserve each other |
-| Qualification | GPU measurements, native gameplay scenarios, multiview tests, numerical and visual results |
+| MultiView visual correctness  | Main/PiP, multi-camera, auxiliary and offscreen layouts render correctly with independent or explicitly shared exposure; exposure and multiview changes preserve each other |
+| Qualification                 | GPU measurements, native gameplay scenarios, multiview tests, numerical and visual results                                                                                  |
 
 ### Design limits
 
@@ -93,16 +93,16 @@ specified limits from hardware-tested limits. The
 evidence, decisions and the remaining gate.
 The implementation slices then consume those written contracts.
 
-| Work | First patch | Review focus |
-| --- | --- | --- |
-| Settings and math (2) | Independent EV14 regression and removal of fixed gain floor | Numeric bounds and compatibility |
-| Metering/adaptation (3) | CPU oracle and known-distribution GPU fixture | Sampling, conserved weights and time integration |
-| Lifecycle (4) | Owner-only state update and generation tests using controlled float input | Senior review of ownership and GPU lifetime |
-| HDR integration (5) | Frame binding plus opaque/emissive pre-exposure invariant test | Senior review of domains, formats and barriers |
-| Persistence (6) | One old-record/new-record round-trip test | Record layout and resource-reference compatibility |
-| Light units (7) | Point flux conversion and inverse-square test | Physical units and shared forward/deferred behavior |
-| Measurements (8) | One known-float region readback | GPU identity, lifetime and error budget |
-| Bench/runner (9-10) | Neutral Reference recipe and deterministic reset | UI clarity and reproducibility |
+| Work                    | First patch                                                               | Review focus                                        |
+| ----------------------- | ------------------------------------------------------------------------- | --------------------------------------------------- |
+| Settings and math (2)   | Independent EV14 regression and removal of fixed gain floor               | Numeric bounds and compatibility                    |
+| Metering/adaptation (3) | CPU oracle and known-distribution GPU fixture                             | Sampling, conserved weights and time integration    |
+| Lifecycle (4)           | Owner-only state update and generation tests using controlled float input | Senior review of ownership and GPU lifetime         |
+| HDR integration (5)     | Frame binding plus opaque/emissive pre-exposure invariant test            | Senior review of domains, formats and barriers      |
+| Persistence (6)         | One old-record/new-record round-trip test                                 | Record layout and resource-reference compatibility  |
+| Light units (7)         | Point flux conversion and inverse-square test                             | Physical units and shared forward/deferred behavior |
+| Measurements (8)        | One known-float region readback                                           | GPU identity, lifetime and error budget             |
+| Bench/runner (9-10)     | Neutral Reference recipe and deterministic reset                          | UI clarity and reproducibility                      |
 
 For each first patch, add its focused test, implement that behavior, and run
 the named slice gate before expanding to the remaining cases. Use the file map
@@ -298,19 +298,19 @@ policy, seed)` returns a request token; `RetryExposureTransition(token)` reuses
 that identity. Implicit resets share the counter. Submission and GPU application
 remain separate, with settings/mode/ownership validation at the frame boundary.
 
-| Event | Required behavior |
-| --- | --- |
-| New unseeded Auto view | Meter current frame and initialize immediately |
-| Camera cut / replaced world / device recovery | Remeter by default; explicit Preserve or Seed overrides are supported |
-| Walking between illumination levels | Continue adaptation |
-| Streaming, spawning, ordinary light changes | Continue adaptation |
-| Compatible viewport/format/resolution change | Preserve exposure; recreate only size/format-dependent resources |
-| Explicit seed | Publish the seed for the event frame; adapt next frame |
-| Manual/ManualCamera entry | Apply authored exposure immediately |
-| Exposure disabled | Displayed scale one |
+| Event                                            | Required behavior                                                                            |
+| ------------------------------------------------ | -------------------------------------------------------------------------------------------- |
+| New unseeded Auto view                           | Meter current frame and initialize immediately                                               |
+| Camera cut / replaced world / device recovery    | Remeter by default; explicit Preserve or Seed overrides are supported                        |
+| Walking between illumination levels              | Continue adaptation                                                                          |
+| Streaming, spawning, ordinary light changes      | Continue adaptation                                                                          |
+| Compatible viewport/format/resolution change     | Preserve exposure; recreate only size/format-dependent resources                             |
+| Explicit seed                                    | Publish the seed for the event frame; adapt next frame                                       |
+| Manual/ManualCamera entry                        | Apply authored exposure immediately                                                          |
+| Exposure disabled                                | Displayed scale one                                                                          |
 | Temporary diagnostic/wireframe exposure override | Use transient unit-exposure output; preserve authored mode and persistent adaptation history |
-| Stateless Auto view | Meter current frame without temporal adaptation; transient GPU state only |
-| Destroyed view | Retire resources after all GPU readers complete |
+| Stateless Auto view                              | Meter current frame without temporal adaptation; transient GPU state only                    |
+| Destroyed view                                   | Retire resources after all GPU readers complete                                              |
 
 At a frame boundary, resolve the settings revision, mode change, and transition
 request together. The highest request generation wins; an explicit request
@@ -665,15 +665,15 @@ Numerical results and visible behavior are both acceptance requirements.
 
 Ship these experiments through one versioned schema and one execution path:
 
-| Experiment | Controlled variables and expected result |
-| --- | --- |
+| Experiment        | Controlled variables and expected result                                                                      |
+| ----------------- | ------------------------------------------------------------------------------------------------------------- |
 | Neutral Reference | Three framed cards, actual white directional light, fixed camera/exposure, known production material response |
-| Fixed Exposure | Known HDR input; EV/key/compensation sweeps through uploaded and consumed gain |
-| Adaptation | Scripted luminance steps, both directions, controlled dt, mask and curve variants |
-| Lifecycle | Startup, seeds, cuts, mode changes, pause, shared views, stateless views and recovery |
-| Point Falloff | White point on receiver normal, prescribed distances, expected inverse-square response |
-| Spot Distribution | Aimed receiver, cone overlay, angular falloff and integrated flux normalization |
-| HDR Domain | Bright/dark endpoints and mixed opaque/forward/translucent/sky/fog content under varying numerical P |
+| Fixed Exposure    | Known HDR input; EV/key/compensation sweeps through uploaded and consumed gain                                |
+| Adaptation        | Scripted luminance steps, both directions, controlled dt, mask and curve variants                             |
+| Lifecycle         | Startup, seeds, cuts, mode changes, pause, shared views, stateless views and recovery                         |
+| Point Falloff     | White point on receiver normal, prescribed distances, expected inverse-square response                        |
+| Spot Distribution | Aimed receiver, cone overlay, angular falloff and integrated flux normalization                               |
+| HDR Domain        | Bright/dark endpoints and mixed opaque/forward/translucent/sky/fog content under varying numerical P          |
 
 Neutral Reference is the default. Put camera and key on the visible side of the
 cards; keep presentation labels/background separate from physical illumination.
@@ -746,17 +746,17 @@ Use the existing `Examples/MultiView` application and its production renderer
 paths. Extend its test controls for exposure cases rather than creating another
 multiview demo.
 
-| Scenario | Required visible result and exposure behavior |
-| --- | --- |
-| Main + lit PiP (`--pip-wireframe false`) | Both cameras show correctly framed, stable lit images; each view's Auto meter uses its own content rectangle |
-| Different view brightness/modes | A bright view and dark view adapt independently; changing one view's mode, compensation or camera does not change the other's gain or image |
-| Explicit shared exposure | The consumer follows the owner's published prior gain with the specified one-frame latency; its scene content never drives the owner |
-| Submission/layout reordering | Identical view inputs yield the same per-view exposure and image, regardless of submission order or screen placement |
-| Resize and scissor | Correct aspect ratio, viewport/scissor and UI placement; bars and neighboring views do not enter a view's histogram |
-| Hide/reopen/recreate | Retained handles follow the inactivity policy; recreated handles initialize independently and never inherit another view's history |
-| Cut/reset/source destruction | Only the target history changes; source loss follows the documented detach/continuity rule without blank panes or stale bindings |
-| Auxiliary and offscreen products | Producer/consumer images retain the correct HDR/exposure domain; no double exposure, unintended second tonemap or stale product |
-| Wireframe/debug/feature variants | Diagnostic presentation remains correct and does not corrupt neighboring or retained exposure histories |
+| Scenario                                 | Required visible result and exposure behavior                                                                                               |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Main + lit PiP (`--pip-wireframe false`) | Both cameras show correctly framed, stable lit images; each view's Auto meter uses its own content rectangle                                |
+| Different view brightness/modes          | A bright view and dark view adapt independently; changing one view's mode, compensation or camera does not change the other's gain or image |
+| Explicit shared exposure                 | The consumer follows the owner's published prior gain with the specified one-frame latency; its scene content never drives the owner        |
+| Submission/layout reordering             | Identical view inputs yield the same per-view exposure and image, regardless of submission order or screen placement                        |
+| Resize and scissor                       | Correct aspect ratio, viewport/scissor and UI placement; bars and neighboring views do not enter a view's histogram                         |
+| Hide/reopen/recreate                     | Retained handles follow the inactivity policy; recreated handles initialize independently and never inherit another view's history          |
+| Cut/reset/source destruction             | Only the target history changes; source loss follows the documented detach/continuity rule without blank panes or stale bindings            |
+| Auxiliary and offscreen products         | Producer/consumer images retain the correct HDR/exposure domain; no double exposure, unintended second tonemap or stale product             |
+| Wireframe/debug/feature variants         | Diagnostic presentation remains correct and does not corrupt neighboring or retained exposure histories                                     |
 
 Run ordinary main/PiP, the standard proof layout, auxiliary, offscreen, and
 feature-variant layouts. Preserve the existing intentional `BLACK expected`
@@ -794,16 +794,16 @@ The shader root below is
 `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex`. Keep unit/oracle tests next to
 the owning module; use the existing native fixture and capture tools for GPU tests.
 
-| Slice | Start in these files | First observable check |
-| --- | --- | --- |
-| 2 | `Core/Types/PostProcess.h`, `Vortex/PostProcess/Passes/ExposurePass.cpp`, `Vortex/Test/PostProcessService_test.cpp` under `src/Oxygen/` | EV14 reaches the tonemap constant unchanged |
-| 3 | `Vortex/PostProcess/Types/PostProcessConfig.h`, `PostProcess/Passes/ExposurePass.*`; shader `Services/PostProcess/Exposure.hlsl` | Known two-bin distribution and hybrid trajectory |
-| 4 | `Vortex/CompositionView.h`, `Internal/ViewLifecycleService.*`, `PostProcess/PostProcessService.*`, `ExposurePass.*` | One source update and idempotent event generation |
-| 5 | `Vortex/Types/ExposureStateData.h`, `Types/ViewFrameBindings.h`, `SceneRenderer/SceneTextures.*`, `Stages/InitViews/InitViewsModule.cpp`; shader families in section 4.4 | Opaque/emissive output invariant under a change of P |
-| 6 | `Scene/Environment/PostProcessVolume.h`, `Data/PakFormat_world.h`, `Data/PakFormatSerioLoaders.h`, cooker schemas, `Scripting/Bindings/Packs/Scene/SceneEnvironmentBindings.cpp`, DemoShell services | One new record and one old record resolve correctly |
-| 7 | `Vortex/Lighting/Internal/DeferredLightPacketBuilder.cpp`; shader `Services/Lighting/DeferredLightingCommon.hlsli` and `ForwardDirectLighting.hlsli` | Point flux and spot angular integral match independent values |
-| 8 | `Vortex/Diagnostics/DiagnosticsService.*`, `SceneRenderer/SceneTextures.*` and existing extraction/readback owners | Known float region readback has the correct frame/view |
-| 9-10 | `Examples/LightBench/LightScene.*`, `MainModule.*`, `LightBenchPanel.*`, `main_impl.cpp`; `Examples/MultiView/MainModule.*`, `SceneBootstrapper.*`, `main_impl.cpp`; `tools/vortex/` | LightBench reset/batch inputs match; every MultiView lit pane passes image/exposure isolation checks |
+| Slice | Start in these files                                                                                                                                                                                 | First observable check                                                                               |
+| ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| 2     | `Core/Types/PostProcess.h`, `Vortex/PostProcess/Passes/ExposurePass.cpp`, `Vortex/Test/PostProcessService_test.cpp` under `src/Oxygen/`                                                              | EV14 reaches the tonemap constant unchanged                                                          |
+| 3     | `Vortex/PostProcess/Types/PostProcessConfig.h`, `PostProcess/Passes/ExposurePass.*`; shader `Services/PostProcess/Exposure.hlsl`                                                                     | Known two-bin distribution and hybrid trajectory                                                     |
+| 4     | `Vortex/CompositionView.h`, `Internal/ViewLifecycleService.*`, `PostProcess/PostProcessService.*`, `ExposurePass.*`                                                                                  | One source update and idempotent event generation                                                    |
+| 5     | `Vortex/Types/ExposureStateData.h`, `Types/ViewFrameBindings.h`, `SceneRenderer/SceneTextures.*`, `Stages/InitViews/InitViewsModule.cpp`; shader families in section 4.4                             | Opaque/emissive output invariant under a change of P                                                 |
+| 6     | `Scene/Environment/PostProcessVolume.h`, `Data/PakFormat_world.h`, `Data/PakFormatSerioLoaders.h`, cooker schemas, `Scripting/Bindings/Packs/Scene/SceneEnvironmentBindings.cpp`, DemoShell services | One new record and one old record resolve correctly                                                  |
+| 7     | `Vortex/Lighting/Internal/DeferredLightPacketBuilder.cpp`; shader `Services/Lighting/DeferredLightingCommon.hlsli` and `ForwardDirectLighting.hlsli`                                                 | Point flux and spot angular integral match independent values                                        |
+| 8     | `Vortex/Diagnostics/DiagnosticsService.*`, `SceneRenderer/SceneTextures.*` and existing extraction/readback owners                                                                                   | Known float region readback has the correct frame/view                                               |
+| 9-10  | `Examples/LightBench/LightScene.*`, `MainModule.*`, `LightBenchPanel.*`, `main_impl.cpp`; `Examples/MultiView/MainModule.*`, `SceneBootstrapper.*`, `main_impl.cpp`; `tools/vortex/`                 | LightBench reset/batch inputs match; every MultiView lit pane passes image/exposure isolation checks |
 
 Unqualified paths in the table's engine rows are under `src/Oxygen/`; shortened
 paths after a `Vortex/` entry stay within that module. Avoid creating duplicate
@@ -1104,20 +1104,20 @@ required cases block package completion.
 
 ## 9. Acceptance matrix and execution
 
-| Area | Required cases |
-| --- | --- |
-| Fixed exposure | EV14/15/16 and supported limits; keys/compensation; invalid input; disabled; CPU/HLSL propagation |
-| Metering | Known distributions; two-bin weight conservation; percentiles; masks/profiles; partial coverage; mixed/all black; zero mask; nonfinite samples; tiny and 8K outputs |
-| Curves | Empty, single key, endpoints, interpolation, out-of-range clamp, malformed keys, raw-EV input independent of adapted gain |
-| Adaptation | Both directions; linear/exponential crossing; 30/60/120 Hz and irregular dt at equal elapsed time; pause; zero speed; long dt; no overshoot |
-| Lifecycle | First valid frame; seed frame and out-of-meter-range seeds; cuts; changed settings; manual/auto; zero target precedence/restoration; invalid meter; retries; view destruction; device recovery; stateless Auto |
-| Sharing | Both render orders; contrasting views; source startup/inactivity/reset; source destruction and consumer-owned fallback transition; cycle rejection; multiple frames in flight |
-| HDR domains | P invariance; FP32 bootstrap and delayed/stale status acknowledgment; bright/dark endpoints; opaque, emissive, forward, translucency, sky/AP/fog, bloom, capture and reused histories |
-| Authoring | Schema boundaries; old/new packed records; cook/load/save/reload; mask pending/failure; curve round-trip; experiment-owned activation |
-| Calibration | Directional lux; point inverse square; spot flux normalization; near-field finite behavior; range/cone edges; production BRDF |
-| Instruments | Known float signals; actual consumed gain; stale results; invalid regions; zero disabled cost |
-| LightBench visual benchmark | All seven experiments, clean startup, full reset, saved experiments, identical interactive/batch inputs, readable native output and correct interactive exposure behavior |
-| MultiView visual integration | Ordinary lit main/PiP plus standard, auxiliary, offscreen and feature layouts; standalone/family equivalence, per-view isolation, intentional sharing, resize/reorder/lifecycle, stable UI/backgrounds |
+| Area                         | Required cases                                                                                                                                                                                                 |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Fixed exposure               | EV14/15/16 and supported limits; keys/compensation; invalid input; disabled; CPU/HLSL propagation                                                                                                              |
+| Metering                     | Known distributions; two-bin weight conservation; percentiles; masks/profiles; partial coverage; mixed/all black; zero mask; nonfinite samples; tiny and 8K outputs                                            |
+| Curves                       | Empty, single key, endpoints, interpolation, out-of-range clamp, malformed keys, raw-EV input independent of adapted gain                                                                                      |
+| Adaptation                   | Both directions; linear/exponential crossing; 30/60/120 Hz and irregular dt at equal elapsed time; pause; zero speed; long dt; no overshoot                                                                    |
+| Lifecycle                    | First valid frame; seed frame and out-of-meter-range seeds; cuts; changed settings; manual/auto; zero target precedence/restoration; invalid meter; retries; view destruction; device recovery; stateless Auto |
+| Sharing                      | Both render orders; contrasting views; source startup/inactivity/reset; source destruction and consumer-owned fallback transition; cycle rejection; multiple frames in flight                                  |
+| HDR domains                  | P invariance; FP32 bootstrap and delayed/stale status acknowledgment; bright/dark endpoints; opaque, emissive, forward, translucency, sky/AP/fog, bloom, capture and reused histories                          |
+| Authoring                    | Schema boundaries; old/new packed records; cook/load/save/reload; mask pending/failure; curve round-trip; experiment-owned activation                                                                          |
+| Calibration                  | Directional lux; point inverse square; spot flux normalization; near-field finite behavior; range/cone edges; production BRDF                                                                                  |
+| Instruments                  | Known float signals; actual consumed gain; stale results; invalid regions; zero disabled cost                                                                                                                  |
+| LightBench visual benchmark  | All seven experiments, clean startup, full reset, saved experiments, identical interactive/batch inputs, readable native output and correct interactive exposure behavior                                      |
+| MultiView visual integration | Ordinary lit main/PiP plus standard, auxiliary, offscreen and feature layouts; standalone/family equivalence, per-view isolation, intentional sharing, resize/reorder/lifecycle, stable UI/backgrounds         |
 
 ### Numerical comparisons
 
@@ -1212,14 +1212,14 @@ in the PostProcessService LLD, and one experiment specification for LightBench.
 
 UE5.7 source reference root: `F:/Epic Games/UE_5.7/Engine`.
 
-| Reference | Use |
-| --- | --- |
-| `Source/Runtime/Renderer/Private/PostProcess/PostProcessEyeAdaptation.cpp` | Target/current exposure, force-target conditions, normalization and pre-exposure |
-| `Source/Runtime/Renderer/Private/SceneRendering.cpp::ShouldUpdateEyeAdaptationBuffer` | Owner/borrower update boundary |
-| `Shaders/Private/PostProcessHistogramCommon.ush` | Log histogram reduction and hybrid EV response |
-| `Shaders/Private/Histogram.usf` | Interpolated bins and black weighting |
-| `Shaders/Private/PostProcessTonemap.usf` | Pre-exposure removal and final gain application |
-| `Source/Runtime/Engine/Private/Components/LocalLightComponent.cpp` | Explicit distance and lumen/candela conventions |
+| Reference                                                                             | Use                                                                              |
+| ------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `Source/Runtime/Renderer/Private/PostProcess/PostProcessEyeAdaptation.cpp`            | Target/current exposure, force-target conditions, normalization and pre-exposure |
+| `Source/Runtime/Renderer/Private/SceneRendering.cpp::ShouldUpdateEyeAdaptationBuffer` | Owner/borrower update boundary                                                   |
+| `Shaders/Private/PostProcessHistogramCommon.ush`                                      | Log histogram reduction and hybrid EV response                                   |
+| `Shaders/Private/Histogram.usf`                                                       | Interpolated bins and black weighting                                            |
+| `Shaders/Private/PostProcessTonemap.usf`                                              | Pre-exposure removal and final gain application                                  |
+| `Source/Runtime/Engine/Private/Components/LocalLightComponent.cpp`                    | Explicit distance and lumen/candela conventions                                  |
 
 Oxygen retains its calibration key, analytic metering profiles and
 previous-frame sharing. It uses a compact curve-key buffer, deterministic bounded
@@ -1236,8 +1236,8 @@ serve the specified behavior without adopting UE's legacy compatibility paths.
 - [ ] Authored fields round-trip through all active persistence surfaces.
 - [ ] Directional, point and spot reference units and material expectations pass.
 - [ ] LightBench is a properly repaired, visually useful exposure benchmark;
-  all seven experiments pass numerical, interactive and visual acceptance.
+      all seven experiments pass numerical, interactive and visual acceptance.
 - [ ] MultiView succeeds visually in ordinary and proof layouts; multiple views
-  do not break exposure, and exposure changes do not break rendering/composition.
+      do not break exposure, and exposure changes do not break rendering/composition.
 - [ ] Independent measurements and the complete acceptance matrix pass.
 - [ ] Owning documents and operational instructions describe the implemented behavior.

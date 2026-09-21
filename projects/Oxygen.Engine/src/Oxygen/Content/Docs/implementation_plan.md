@@ -27,27 +27,27 @@ Content provides **CPU-side acquisition** of engine assets/resources, including:
 This table is the **work order**. Higher rows unblock lower rows.
 ✅ Complete | 🔄 In progress / partial | ❌ Missing | 🧪 Prototype (code exists; not production-ready) | ⏸ Deferred
 
-| # | Status | Priority | Deliverable | Design doc | Notes |
-| -: | :---: | :------: | ----------- | ---------- | ----- |
-| 1 | ✅ | P0 | Keep `overview.md` authoritative and consistent | `overview.md` | Enforce Content↔Renderer boundary and invariants |
-| 2 | ✅ | P0 | Forward-only deps + unified cache + refcount eviction | `deps_and_cache.md` | Implemented in `AssetLoader` + `AnyCache` |
-| 3 | ✅ | P0 | Safe unload ordering + tests + docs polish | (in plan) | Release cascade evicts/unloads safely; tests assert resource-before-asset ordering |
-| 4 | ✅ | P0 | **Loose cooked content** (filesystem-backed) | `loose_cooked_content.md` | End-to-end mount + descriptor discovery + table/data readers + focused tests + diagnostics are in place. |
-| 5 | ✅ | P0 | Loose cooked **index** (AssetKey→descriptor path, resources) | `loose_cooked_content.md` | `container.index.bin` v1 schema + parser + strict mount-time validation are complete; editor-facing virtual-path resolution is available via `VirtualPathResolver`. |
-| 6 | ❌ | P0 | **Scene/Level asset** (editor maps/levels) | `scenes_and_levels.md` | Biggest current hole; defines composition and references |
-| 7 | ❌ | P0 | Minimal scene serialization toolchain (cooked, loose) | `scenes_and_levels.md` | Separate from runtime loader; produces cooked scene format |
-| 8 | ❌ | P0 | Asset database (project index, GUID ownership, metadata) | `asset_database_and_ddc.md` | Editor-oriented; maps GUIDs to source/cooked artifacts |
-| 9 | ❌ | P0 | Derived data cache (DDC) for cooked artifacts | `asset_database_and_ddc.md` | Keyed by (inputs + import settings + platform) |
-| 10 | ✅ | P1 | Async AssetLoader (CPU acquisition) + in-flight dedup | `truly-async-asset-loader.md` | Coroutine-based load APIs are implemented and the owning-thread publish model is enforced; in-flight dedup is in place |
-| 11 | ❌ | P1 | Cancellation propagation + “no partial insertion” guarantee | (TBD) | The loader supports global cancellation via the nursery, but does not yet expose per-operation cancellation tokens or a documented rollback guarantee |
-| 12 | ❌ | P1 | Content observability counters + scoped tracing hooks | (short design below) | Timing: IO/decode/cache-hit/miss/evictions |
-| 13 | ❌ | P1 | Hot reload for loose cooked content | `hot_reload.md` | File watch → invalidation → reload dependents |
-| 14 | ❌ | P1 | Hot reload safety model (generation IDs, handle policy) | `hot_reload.md` | Defines what remains stable for the editor |
-| 15 | ❌ | P2 | Chunk metadata + partial decode hooks (CPU-side) | (TBD) | Complements `chunking.md` (format-level) |
-| 16 | ❌ | P2 | Dependency analyzer output (JSON) | `tooling_and_diagnostics.md` | Graph extraction + refcounts + fan-out stats |
-| 17 | ❌ | P2 | Perf benchmark suite for Content | `tooling_and_diagnostics.md` | Cold/warm/parallel burst scenarios |
-| 18 | ❌ | P3 | Memory mapping prototype for PAK and/or loose cooked | (TBD) | Optional optimization; not required for editor unblock |
-| 19 | ⏸ | P4 | Stable resource indices across regenerated loose cooked roots | `loose_cooked_content.md` | Future enhancement: keep `ResourceIndexT` values stable across recooks (patchability / determinism); runtime correctness only requires per-root internal consistency |
+|   # | Status | Priority | Deliverable                                                   | Design doc                    | Notes                                                                                                                                                                |
+| --: | :----: | :------: | ------------------------------------------------------------- | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+|   1 |   ✅   |    P0    | Keep `overview.md` authoritative and consistent               | `overview.md`                 | Enforce Content↔Renderer boundary and invariants                                                                                                                     |
+|   2 |   ✅   |    P0    | Forward-only deps + unified cache + refcount eviction         | `deps_and_cache.md`           | Implemented in `AssetLoader` + `AnyCache`                                                                                                                            |
+|   3 |   ✅   |    P0    | Safe unload ordering + tests + docs polish                    | (in plan)                     | Release cascade evicts/unloads safely; tests assert resource-before-asset ordering                                                                                   |
+|   4 |   ✅   |    P0    | **Loose cooked content** (filesystem-backed)                  | `loose_cooked_content.md`     | End-to-end mount + descriptor discovery + table/data readers + focused tests + diagnostics are in place.                                                             |
+|   5 |   ✅   |    P0    | Loose cooked **index** (AssetKey→descriptor path, resources)  | `loose_cooked_content.md`     | `container.index.bin` v1 schema + parser + strict mount-time validation are complete; editor-facing virtual-path resolution is available via `VirtualPathResolver`.  |
+|   6 |   ❌   |    P0    | **Scene/Level asset** (editor maps/levels)                    | `scenes_and_levels.md`        | Biggest current hole; defines composition and references                                                                                                             |
+|   7 |   ❌   |    P0    | Minimal scene serialization toolchain (cooked, loose)         | `scenes_and_levels.md`        | Separate from runtime loader; produces cooked scene format                                                                                                           |
+|   8 |   ❌   |    P0    | Asset database (project index, GUID ownership, metadata)      | `asset_database_and_ddc.md`   | Editor-oriented; maps GUIDs to source/cooked artifacts                                                                                                               |
+|   9 |   ❌   |    P0    | Derived data cache (DDC) for cooked artifacts                 | `asset_database_and_ddc.md`   | Keyed by (inputs + import settings + platform)                                                                                                                       |
+|  10 |   ✅   |    P1    | Async AssetLoader (CPU acquisition) + in-flight dedup         | `truly-async-asset-loader.md` | Coroutine-based load APIs are implemented and the owning-thread publish model is enforced; in-flight dedup is in place                                               |
+|  11 |   ❌   |    P1    | Cancellation propagation + “no partial insertion” guarantee   | (TBD)                         | The loader supports global cancellation via the nursery, but does not yet expose per-operation cancellation tokens or a documented rollback guarantee                |
+|  12 |   ❌   |    P1    | Content observability counters + scoped tracing hooks         | (short design below)          | Timing: IO/decode/cache-hit/miss/evictions                                                                                                                           |
+|  13 |   ❌   |    P1    | Hot reload for loose cooked content                           | `hot_reload.md`               | File watch → invalidation → reload dependents                                                                                                                        |
+|  14 |   ❌   |    P1    | Hot reload safety model (generation IDs, handle policy)       | `hot_reload.md`               | Defines what remains stable for the editor                                                                                                                           |
+|  15 |   ❌   |    P2    | Chunk metadata + partial decode hooks (CPU-side)              | (TBD)                         | Complements `chunking.md` (format-level)                                                                                                                             |
+|  16 |   ❌   |    P2    | Dependency analyzer output (JSON)                             | `tooling_and_diagnostics.md`  | Graph extraction + refcounts + fan-out stats                                                                                                                         |
+|  17 |   ❌   |    P2    | Perf benchmark suite for Content                              | `tooling_and_diagnostics.md`  | Cold/warm/parallel burst scenarios                                                                                                                                   |
+|  18 |   ❌   |    P3    | Memory mapping prototype for PAK and/or loose cooked          | (TBD)                         | Optional optimization; not required for editor unblock                                                                                                               |
+|  19 |   ⏸    |    P4    | Stable resource indices across regenerated loose cooked roots | `loose_cooked_content.md`     | Future enhancement: keep `ResourceIndexT` values stable across recooks (patchability / determinism); runtime correctness only requires per-root internal consistency |
 
 **Policy:** Any “big feature” above must have its own design doc (linked).
 Small enhancements should be specified in short design notes inside this plan.
@@ -169,57 +169,57 @@ This matrix is a convenience view. The ordered task list above is authoritative.
 
 ### Containers / sources
 
-| Feature | Status | Notes |
-| ------- | ------ | ----- |
-| PAK file container (`PakFile`) | ✅ | Stable |
-| Loose cooked container | ✅ | Complete (mount, index validation, descriptor + table/data readers, virtual-path resolver). Future enhancement tracked under #19 (stable indices across recooks). |
-| Container registration + ordering | ✅ | `AssetLoader` registers sources deterministically; PAK and loose cooked sources are both functional |
+| Feature                           | Status | Notes                                                                                                                                                             |
+| --------------------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| PAK file container (`PakFile`)    | ✅     | Stable                                                                                                                                                            |
+| Loose cooked container            | ✅     | Complete (mount, index validation, descriptor + table/data readers, virtual-path resolver). Future enhancement tracked under #19 (stable indices across recooks). |
+| Container registration + ordering | ✅     | `AssetLoader` registers sources deterministically; PAK and loose cooked sources are both functional                                                               |
 
 ### Loading + lifecycle
 
-| Feature | Status | Notes |
-| ------- | ------ | ----- |
-| Synchronous load | ✅ | Current `AssetLoader::LoadAsset/LoadResource` |
-| Dependency registration | ✅ | Forward-only maps + cache Touch |
-| Safe unloading | ✅ | Resource-before-asset unload ordering asserted in tests |
-| Async AssetLoader (CPU acquisition) | ✅ | Coroutine-based load APIs exist (`LoadAssetAsync` and `LoadResourceAsync`) with owning-thread publish and in-flight dedup |
-| Per-operation cancellation + rollback | ❌ | No cancellation token API or “no partial insertion” guarantee yet |
-| Hot reload | ❌ | Requires invalidation + dependent rebuild |
+| Feature                               | Status | Notes                                                                                                                     |
+| ------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------- |
+| Synchronous load                      | ✅     | Current `AssetLoader::LoadAsset/LoadResource`                                                                             |
+| Dependency registration               | ✅     | Forward-only maps + cache Touch                                                                                           |
+| Safe unloading                        | ✅     | Resource-before-asset unload ordering asserted in tests                                                                   |
+| Async AssetLoader (CPU acquisition)   | ✅     | Coroutine-based load APIs exist (`LoadAssetAsync` and `LoadResourceAsync`) with owning-thread publish and in-flight dedup |
+| Per-operation cancellation + rollback | ❌     | No cancellation token API or “no partial insertion” guarantee yet                                                         |
+| Hot reload                            | ❌     | Requires invalidation + dependent rebuild                                                                                 |
 
 ### Asset families
 
-| Feature | Status | Notes |
-| ------- | ------ | ----- |
-| Geometry + Material + Texture/Buffer | ✅ | Cooked formats supported |
-| Scene/Level | ❌ | Immediate editor hole |
-| Animation | ❌ | Future |
-| Audio | ❌ | Future |
+| Feature                              | Status | Notes                    |
+| ------------------------------------ | ------ | ------------------------ |
+| Geometry + Material + Texture/Buffer | ✅     | Cooked formats supported |
+| Scene/Level                          | ❌     | Immediate editor hole    |
+| Animation                            | ❌     | Future                   |
+| Audio                                | ❌     | Future                   |
 
 ## Glossary
 
-| Term | Definition |
-| ---- | ---------- |
-| Asset | A keyed, first-class descriptor (Geometry, Material, Scene/Level, …) |
-| Resource | Typed bulk data referenced by an index in a container’s resource tables |
-| DecodedCPUReady | Content terminal state: decoded CPU objects cached and safe to use |
-| Loose cooked content | Cooked Oxygen formats stored on disk without PAK packaging |
-| UploadCoordinator (Renderer) | Renderer-owned staging→GPU submission + fence tracking |
+| Term                         | Definition                                                              |
+| ---------------------------- | ----------------------------------------------------------------------- |
+| Asset                        | A keyed, first-class descriptor (Geometry, Material, Scene/Level, …)    |
+| Resource                     | Typed bulk data referenced by an index in a container’s resource tables |
+| DecodedCPUReady              | Content terminal state: decoded CPU objects cached and safe to use      |
+| Loose cooked content         | Cooked Oxygen formats stored on disk without PAK packaging              |
+| UploadCoordinator (Renderer) | Renderer-owned staging→GPU submission + fence tracking                  |
 
 ## Cross-reference map
 
-| Topic | File |
-| ----- | ---- |
-| Conceptual model + boundaries | `overview.md` |
-| Dependency + cache mechanics | `deps_and_cache.md` |
-| PAK layout & alignment | `chunking.md` |
-| Loose cooked content design | `loose_cooked_content.md` |
-| Scene/Level (maps) design | `scenes_and_levels.md` |
-| Asset DB + DDC design | `asset_database_and_ddc.md` |
-| Async loader architecture | `truly-async-asset-loader.md` |
-| Hot reload design | `hot_reload.md` |
-| Streaming + chunks (runtime-facing) | (TBD) |
-| Tooling + diagnostics | `tooling_and_diagnostics.md` |
-| GPU uploads (Renderer) | `../../Renderer/Upload/README.md` |
+| Topic                               | File                              |
+| ----------------------------------- | --------------------------------- |
+| Conceptual model + boundaries       | `overview.md`                     |
+| Dependency + cache mechanics        | `deps_and_cache.md`               |
+| PAK layout & alignment              | `chunking.md`                     |
+| Loose cooked content design         | `loose_cooked_content.md`         |
+| Scene/Level (maps) design           | `scenes_and_levels.md`            |
+| Asset DB + DDC design               | `asset_database_and_ddc.md`       |
+| Async loader architecture           | `truly-async-asset-loader.md`     |
+| Hot reload design                   | `hot_reload.md`                   |
+| Streaming + chunks (runtime-facing) | (TBD)                             |
+| Tooling + diagnostics               | `tooling_and_diagnostics.md`      |
+| GPU uploads (Renderer)              | `../../Renderer/Upload/README.md` |
 
 ## Update policy
 

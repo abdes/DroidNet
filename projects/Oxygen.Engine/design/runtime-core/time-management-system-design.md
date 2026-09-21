@@ -30,14 +30,14 @@ seamless migration from the current AsyncEngine implementation.
 
 ## Timing Domains Overview
 
-| Domain | Pausable | Scalable | Deterministic | Primary Use Cases |
-|--------|:--------:|:--------:|:-------------:|-------------------|
-| **Physical** | No | No | No | Frame pacing, profiling, GPU sync, engine infrastructure |
-| **Simulation** | Yes | Yes | Yes | Physics, AI, gameplay logic, state transitions |
-| **Presentation** | Yes | Yes | No | Animation blending, UI effects, visual interpolation |
-| **Network** | No | No | Optional | Multiplayer synchronization, lag compensation |
-| **Timeline** | Yes | Yes | Yes | Cutscenes, editor timeline, sequenced events |
-| **Audit** | No | No | No | Logging, analytics, file timestamps, debugging |
+| Domain           | Pausable | Scalable | Deterministic | Primary Use Cases                                        |
+| ---------------- | :------: | :------: | :-----------: | -------------------------------------------------------- |
+| **Physical**     |    No    |    No    |      No       | Frame pacing, profiling, GPU sync, engine infrastructure |
+| **Simulation**   |   Yes    |   Yes    |      Yes      | Physics, AI, gameplay logic, state transitions           |
+| **Presentation** |   Yes    |   Yes    |      No       | Animation blending, UI effects, visual interpolation     |
+| **Network**      |    No    |    No    |   Optional    | Multiplayer synchronization, lag compensation            |
+| **Timeline**     |   Yes    |   Yes    |      Yes      | Cutscenes, editor timeline, sequenced events             |
+| **Audit**        |    No    |    No    |      No       | Logging, analytics, file timestamps, debugging           |
 
 ## Core Architecture
 
@@ -920,14 +920,14 @@ class TimeManager {
 
 ### Timing Precision
 
-| Domain | Precision | Rationale |
-|--------|-----------|-----------|
-| Physical | Nanoseconds | GPU synchronization, profiling |
-| Simulation | Microseconds (typical) | Balance precision vs. accumulation error |
-| Presentation | Microseconds | Smooth 60Hz+ rendering |
-| Network | Milliseconds (typical) | Network packet timing |
-| Timeline | Microseconds | Precise cutscene timing |
-| Audit | Milliseconds | Human-readable logs |
+| Domain       | Precision              | Rationale                                |
+| ------------ | ---------------------- | ---------------------------------------- |
+| Physical     | Nanoseconds            | GPU synchronization, profiling           |
+| Simulation   | Microseconds (typical) | Balance precision vs. accumulation error |
+| Presentation | Microseconds           | Smooth 60Hz+ rendering                   |
+| Network      | Milliseconds (typical) | Network packet timing                    |
+| Timeline     | Microseconds           | Precise cutscene timing                  |
+| Audit        | Milliseconds           | Human-readable logs                      |
 
 ## Testing Strategy
 
@@ -1079,19 +1079,19 @@ src/Oxygen/Core/Time/
 
 ### Phase 1: Core Infrastructure
 
-- [X] Create `src/Oxygen/Core/Time/Types.h` with domain tags and type aliases in
-  `oxygen::time` namespace
-- [X] Implement `PhysicalClock` with high-precision timing
-- [X] Implement `AuditClock` with wall clock conversions
-- [X] Implement `SimulationClock` with fixed timestep and accumulator pattern
-- [X] Create comprehensive unit tests
+- [x] Create `src/Oxygen/Core/Time/Types.h` with domain tags and type aliases in
+      `oxygen::time` namespace
+- [x] Implement `PhysicalClock` with high-precision timing
+- [x] Implement `AuditClock` with wall clock conversions
+- [x] Implement `SimulationClock` with fixed timestep and accumulator pattern
+- [x] Create comprehensive unit tests
 
 ### Phase 2: Presentation & Network
 
-- [X] Implement `PresentationClock` with smooth interpolation
-- [X] Add animation timing utilities and easing functions
-- [X] Implement `NetworkClock` with offset management and smoothing
-- [X] Create presentation and network timing tests
+- [x] Implement `PresentationClock` with smooth interpolation
+- [x] Add animation timing utilities and easing functions
+- [x] Implement `NetworkClock` with offset management and smoothing
+- [x] Create presentation and network timing tests
 
 ### Phase 3: DeterministicClock, Timeline & Integration
 
@@ -1101,17 +1101,17 @@ src/Oxygen/Core/Time/
 
 ### Phase 4: Integration
 
-- [X] Create `TimeManager` in src/Oxygen/Engine/TimeManager.h and .cpp as a `oxygen::Component`
-- [X] Add domain conversion utilities with safety checks in `oxygen::time::convert` namespace
-- [X] Implement comprehensive integration tests
+- [x] Create `TimeManager` in src/Oxygen/Engine/TimeManager.h and .cpp as a `oxygen::Component`
+- [x] Add domain conversion utilities with safety checks in `oxygen::time::convert` namespace
+- [x] Implement comprehensive integration tests
 
 ### Phase 5: Engine Migration
 
-- [X] Update `AsyncEngine` to integrate `TimeManager` component into its composition
-- [X] Migrate `UpdateFrameTiming()` to use new time system
-- [X] Replace fixed timestep logic in `PhaseFixedSim()` to use `SimulationClock`
-- [X] Update frame pacing to use `PhysicalClock` while keeping logic in `AsyncEngine`
-- [X] Update all engine configuration structures to use `oxygen::time` types
+- [x] Update `AsyncEngine` to integrate `TimeManager` component into its composition
+- [x] Migrate `UpdateFrameTiming()` to use new time system
+- [x] Replace fixed timestep logic in `PhaseFixedSim()` to use `SimulationClock`
+- [x] Update frame pacing to use `PhysicalClock` while keeping logic in `AsyncEngine`
+- [x] Update all engine configuration structures to use `oxygen::time` types
 
 ## Industry Best Practices Compliance
 

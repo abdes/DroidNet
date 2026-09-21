@@ -4,12 +4,7 @@
   "title": "BindlessSpec",
   "description": "JSON Schema for the Oxygen bindless authored model.",
   "type": "object",
-  "required": [
-    "meta",
-    "defaults",
-    "abi",
-    "backends"
-  ],
+  "required": ["meta", "defaults", "abi", "backends"],
   "properties": {
     "meta": {
       "type": "object",
@@ -22,9 +17,7 @@
           "type": "string"
         }
       },
-      "required": [
-        "version"
-      ],
+      "required": ["version"],
       "additionalProperties": false
     },
     "defaults": {
@@ -35,26 +28,19 @@
           "minimum": 0
         }
       },
-      "required": [
-        "invalid_index"
-      ],
+      "required": ["invalid_index"],
       "additionalProperties": false
     },
     "abi": {
       "type": "object",
-      "required": [
-        "index_spaces",
-        "domains"
-      ],
+      "required": ["index_spaces", "domains"],
       "properties": {
         "index_spaces": {
           "type": "array",
           "minItems": 1,
           "items": {
             "type": "object",
-            "required": [
-              "id"
-            ],
+            "required": ["id"],
             "properties": {
               "id": {
                 "type": "string",
@@ -144,10 +130,7 @@
     },
     "backends": {
       "type": "object",
-      "required": [
-        "d3d12",
-        "vulkan"
-      ],
+      "required": ["d3d12", "vulkan"],
       "properties": {
         "d3d12": {
           "$ref": "#/$defs/d3d12_backend"
@@ -249,13 +232,7 @@
         },
         "type": {
           "type": "string",
-          "enum": [
-            "CBV_SRV_UAV",
-            "SAMPLER",
-            "RTV",
-            "DSV",
-            "Other"
-          ]
+          "enum": ["CBV_SRV_UAV", "SAMPLER", "RTV", "DSV", "Other"]
         },
         "shader_visible": {
           "type": "boolean"
@@ -301,12 +278,7 @@
         },
         "descriptor_kind": {
           "type": "string",
-          "enum": [
-            "SRV",
-            "UAV",
-            "CBV",
-            "SAMPLER"
-          ]
+          "enum": ["SRV", "UAV", "CBV", "SAMPLER"]
         },
         "heap": {
           "type": "string"
@@ -337,14 +309,10 @@
                   "const": true
                 }
               },
-              "required": [
-                "unbounded"
-              ]
+              "required": ["unbounded"]
             },
             {
-              "required": [
-                "descriptor_count"
-              ]
+              "required": ["descriptor_count"]
             }
           ]
         }
@@ -352,11 +320,7 @@
     },
     "d3d12_domain_realization": {
       "type": "object",
-      "required": [
-        "domain",
-        "table",
-        "heap_local_base"
-      ],
+      "required": ["domain", "table", "heap_local_base"],
       "properties": {
         "domain": {
           "type": "string"
@@ -373,20 +337,11 @@
     },
     "d3d12_root_param": {
       "type": "object",
-      "required": [
-        "type",
-        "id",
-        "index",
-        "visibility"
-      ],
+      "required": ["type", "id", "index", "visibility"],
       "properties": {
         "type": {
           "type": "string",
-          "enum": [
-            "descriptor_table",
-            "cbv",
-            "root_constants"
-          ]
+          "enum": ["descriptor_table", "cbv", "root_constants"]
         },
         "id": {
           "type": "string",
@@ -424,14 +379,10 @@
                 "const": "descriptor_table"
               }
             },
-            "required": [
-              "type"
-            ]
+            "required": ["type"]
           },
           "then": {
-            "required": [
-              "table"
-            ]
+            "required": ["table"]
           }
         },
         {
@@ -441,15 +392,10 @@
                 "const": "cbv"
               }
             },
-            "required": [
-              "type"
-            ]
+            "required": ["type"]
           },
           "then": {
-            "required": [
-              "shader_register",
-              "register_space"
-            ]
+            "required": ["shader_register", "register_space"]
           }
         },
         {
@@ -459,9 +405,7 @@
                 "const": "root_constants"
               }
             },
-            "required": [
-              "type"
-            ]
+            "required": ["type"]
           },
           "then": {
             "required": [
@@ -475,18 +419,11 @@
     },
     "d3d12_backend": {
       "type": "object",
-      "required": [
-        "strategy",
-        "root_signature"
-      ],
+      "required": ["strategy", "root_signature"],
       "properties": {
         "strategy": {
           "type": "object",
-          "required": [
-            "heaps",
-            "tables",
-            "domain_realizations"
-          ],
+          "required": ["heaps", "tables", "domain_realizations"],
           "properties": {
             "heaps": {
               "type": "array",
@@ -524,10 +461,7 @@
     },
     "vulkan_descriptor_set": {
       "type": "object",
-      "required": [
-        "id",
-        "set"
-      ],
+      "required": ["id", "set"],
       "properties": {
         "id": {
           "type": "string",
@@ -542,12 +476,7 @@
     },
     "vulkan_binding": {
       "type": "object",
-      "required": [
-        "id",
-        "set",
-        "binding",
-        "descriptor_type"
-      ],
+      "required": ["id", "set", "binding", "descriptor_type"],
       "properties": {
         "id": {
           "type": "string",
@@ -588,11 +517,7 @@
     },
     "vulkan_domain_realization": {
       "type": "object",
-      "required": [
-        "domain",
-        "binding",
-        "array_element_base"
-      ],
+      "required": ["domain", "binding", "array_element_base"],
       "properties": {
         "domain": {
           "type": "string"
@@ -609,17 +534,11 @@
     },
     "vulkan_pipeline_entry": {
       "type": "object",
-      "required": [
-        "type",
-        "id"
-      ],
+      "required": ["type", "id"],
       "properties": {
         "type": {
           "type": "string",
-          "enum": [
-            "descriptor_set",
-            "push_constants"
-          ]
+          "enum": ["descriptor_set", "push_constants"]
         },
         "id": {
           "type": "string",
@@ -645,14 +564,10 @@
                 "const": "descriptor_set"
               }
             },
-            "required": [
-              "type"
-            ]
+            "required": ["type"]
           },
           "then": {
-            "required": [
-              "set_ref"
-            ]
+            "required": ["set_ref"]
           }
         },
         {
@@ -662,33 +577,21 @@
                 "const": "push_constants"
               }
             },
-            "required": [
-              "type"
-            ]
+            "required": ["type"]
           },
           "then": {
-            "required": [
-              "size_bytes",
-              "stages"
-            ]
+            "required": ["size_bytes", "stages"]
           }
         }
       ]
     },
     "vulkan_backend": {
       "type": "object",
-      "required": [
-        "strategy",
-        "pipeline_layout"
-      ],
+      "required": ["strategy", "pipeline_layout"],
       "properties": {
         "strategy": {
           "type": "object",
-          "required": [
-            "descriptor_sets",
-            "bindings",
-            "domain_realizations"
-          ],
+          "required": ["descriptor_sets", "bindings", "domain_realizations"],
           "properties": {
             "descriptor_sets": {
               "type": "array",
@@ -751,9 +654,7 @@
             "shader_index_base": 1,
             "capacity": 2048,
             "shader_access_class": "buffer_srv",
-            "view_types": [
-              "StructuredBuffer_SRV"
-            ]
+            "view_types": ["StructuredBuffer_SRV"]
           }
         ]
       },

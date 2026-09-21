@@ -1,8 +1,6 @@
 {
   "version": 6,
-  "include": [
-    "./BasePresets.json"
-  ],
+  "include": ["./BasePresets.json"],
   "configurePresets": [
     {
       "name": "windows-default",

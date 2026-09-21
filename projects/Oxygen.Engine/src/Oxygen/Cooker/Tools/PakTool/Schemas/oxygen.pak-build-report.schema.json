@@ -22,10 +22,7 @@
     },
     "command": {
       "type": "string",
-      "enum": [
-        "build",
-        "patch"
-      ]
+      "enum": ["build", "patch"]
     },
     "command_line": {
       "type": "string",
@@ -86,16 +83,10 @@
       "pattern": "^[0-9a-f]{64}$"
     },
     "path_or_null": {
-      "type": [
-        "string",
-        "null"
-      ]
+      "type": ["string", "null"]
     },
     "duration_ms_or_null": {
-      "type": [
-        "number",
-        "null"
-      ],
+      "type": ["number", "null"],
       "minimum": 0
     },
     "publishable_artifact": {
@@ -113,11 +104,7 @@
           "type": "boolean"
         }
       },
-      "required": [
-        "final_path",
-        "staged_path",
-        "published"
-      ]
+      "required": ["final_path", "staged_path", "published"]
     },
     "request_source": {
       "type": "object",
@@ -125,20 +112,14 @@
       "properties": {
         "kind": {
           "type": "string",
-          "enum": [
-            "loose_cooked",
-            "pak"
-          ]
+          "enum": ["loose_cooked", "pak"]
         },
         "path": {
           "type": "string",
           "minLength": 1
         }
       },
-      "required": [
-        "kind",
-        "path"
-      ]
+      "required": ["kind", "path"]
     },
     "request_options": {
       "type": "object",
@@ -198,10 +179,7 @@
       "properties": {
         "mode": {
           "type": "string",
-          "enum": [
-            "full",
-            "patch"
-          ]
+          "enum": ["full", "patch"]
         },
         "source_key": {
           "$ref": "#/definitions/uuid_v7"
@@ -256,17 +234,11 @@
           "type": "boolean"
         },
         "size_bytes": {
-          "type": [
-            "integer",
-            "null"
-          ],
+          "type": ["integer", "null"],
           "minimum": 0
         },
         "crc32": {
-          "type": [
-            "integer",
-            "null"
-          ],
+          "type": ["integer", "null"],
           "minimum": 0,
           "maximum": 4294967295
         }
@@ -294,19 +266,11 @@
           "type": "boolean"
         },
         "catalog_digest": {
-          "type": [
-            "string",
-            "null"
-          ],
+          "type": ["string", "null"],
           "pattern": "^[0-9a-f]{64}$"
         }
       },
-      "required": [
-        "final_path",
-        "staged_path",
-        "published",
-        "catalog_digest"
-      ]
+      "required": ["final_path", "staged_path", "published", "catalog_digest"]
     },
     "manifest_artifact": {
       "type": "object",
@@ -356,12 +320,7 @@
           "$ref": "#/definitions/report_artifact"
         }
       },
-      "required": [
-        "pak",
-        "catalog",
-        "manifest",
-        "report"
-      ]
+      "required": ["pak", "catalog", "manifest", "report"]
     },
     "summary": {
       "type": "object",
@@ -454,11 +413,7 @@
       "properties": {
         "severity": {
           "type": "string",
-          "enum": [
-            "info",
-            "warning",
-            "error"
-          ]
+          "enum": ["info", "warning", "error"]
         },
         "phase": {
           "type": "string",
@@ -498,12 +453,7 @@
           "minimum": 0
         }
       },
-      "required": [
-        "severity",
-        "phase",
-        "code",
-        "message"
-      ]
+      "required": ["severity", "phase", "code", "message"]
     }
   }
 }

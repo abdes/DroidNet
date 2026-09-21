@@ -10,6 +10,7 @@ JSON-based templates to get your tests up and running quickly.
 ## Why Use TestSceneFactory?
 
 When testing scene graph functionality, you often need:
+
 - **Predictable node hierarchies** for testing parent-child relationships
 - **Consistent naming** that won't break when nodes are reparented
 - **Complex structures** without writing hundreds of lines of setup code
@@ -54,35 +55,45 @@ TEST_F(MySceneTest, SimpleParentChild) {
 ## Common Patterns
 
 ### 1. Single Node
+
 Perfect for testing basic node operations:
+
 ```cpp
 auto scene = TestSceneFactory::Instance()
   .CreateSingleNodeScene("SingleNodeTest");
 ```
 
 ### 2. Parent-Child Pair
+
 Ideal for testing parent-child relationships:
+
 ```cpp
 auto scene = TestSceneFactory::Instance()
   .CreateParentChildScene("ParentChildTest");
 ```
 
 ### 3. Multiple Children
+
 Great for testing sibling relationships and iteration:
+
 ```cpp
 auto scene = TestSceneFactory::Instance()
   .CreateParentWithChildrenScene("MultiChildTest", 3);
 ```
 
 ### 4. Linear Chain
+
 Perfect for testing deep hierarchies and traversal:
+
 ```cpp
 auto scene = TestSceneFactory::Instance()
   .CreateLinearChainScene("ChainTest", 5);  // 5 levels deep
 ```
 
 ### 5. Binary Tree
+
 Excellent for testing complex traversal algorithms:
+
 ```cpp
 auto scene = TestSceneFactory::Instance()
   .CreateBinaryTreeScene("TreeTest", 3);  // Depth of 3
@@ -91,7 +102,9 @@ auto scene = TestSceneFactory::Instance()
 ## Name Generators: Your Testing Superpower
 
 ### Default Generator (Recommended)
+
 Creates meaningful, context-aware names:
+
 ```cpp
 // Automatically creates names like "Root", "Child0", "Child1"
 TestSceneFactory::Instance()
@@ -100,7 +113,9 @@ TestSceneFactory::Instance()
 ```
 
 ### Positional Generator
+
 For predictable, sequential names:
+
 ```cpp
 TestSceneFactory::Instance()
   .SetNameGenerator<PositionalNameGenerator>()
@@ -112,6 +127,7 @@ TestSceneFactory::Instance()
 ## JSON Templates: Complex Scenarios Made Easy
 
 ### Simple JSON Example
+
 ```cpp
 const std::string scene_json = R"({
   "nodes": [
@@ -140,7 +156,9 @@ auto scene = TestSceneFactory::Instance()
 ```
 
 ### Template Registration
+
 For reusable complex scenarios:
+
 ```cpp
 // Register once
 TestSceneFactory::Instance()
@@ -156,6 +174,7 @@ auto scene2 = TestSceneFactory::Instance()
 ## Best Practices for Test Writers
 
 ### 1. Always Reset in SetUp()
+
 ```cpp
 void SetUp() override {
   TestSceneFactory::Instance().Reset();  // Clean slate
@@ -163,6 +182,7 @@ void SetUp() override {
 ```
 
 ### 2. Use Descriptive Scene Names
+
 ```cpp
 // Good - tells you what's being tested
 auto scene = factory.CreateParentChildScene("ReparentingTest");
@@ -172,6 +192,7 @@ auto scene = factory.CreateParentChildScene("Test");
 ```
 
 ### 3. Choose the Right Pattern
+
 - **Single node**: Testing node properties, components
 - **Parent-child**: Testing basic relationships
 - **Multiple children**: Testing sibling operations
@@ -179,6 +200,7 @@ auto scene = factory.CreateParentChildScene("Test");
 - **JSON templates**: Testing complex, realistic scenarios
 
 ### 4. Validate What Matters
+
 ```cpp
 TEST_F(MyTest, TestNodeCreation) {
   auto scene = TestSceneFactory::Instance()
@@ -203,6 +225,7 @@ TEST_F(MyTest, TestNodeCreation) {
 ```
 
 ### 5. Use Fluent Configuration
+
 ```cpp
 // Chain configuration for readable test setup
 auto scene = TestSceneFactory::Instance()
@@ -215,6 +238,7 @@ auto scene = TestSceneFactory::Instance()
 ## Common Testing Scenarios
 
 ### Testing Node Relationships
+
 ```cpp
 TEST_F(SceneGraphTest, ParentChildRelationships) {
   auto scene = TestSceneFactory::Instance()
@@ -231,6 +255,7 @@ TEST_F(SceneGraphTest, ParentChildRelationships) {
 ```
 
 ### Testing Transform Inheritance
+
 ```cpp
 TEST_F(TransformTest, LocalTransforms) {
   const std::string transform_json = R"({
@@ -264,6 +289,7 @@ TEST_F(TransformTest, LocalTransforms) {
 ```
 
 ### Testing Node Operations
+
 ```cpp
 TEST_F(NodeOperationsTest, Reparenting) {
   auto scene = TestSceneFactory::Instance()
@@ -310,6 +336,7 @@ TEST_F(ValidationTest, ValidateBeforeCreating) {
 ## Performance Tips
 
 ### 1. Set Appropriate Capacity
+
 ```cpp
 // For small test scenes
 factory.SetDefaultCapacity(32);
@@ -319,6 +346,7 @@ factory.SetDefaultCapacity(1024);
 ```
 
 ### 2. Reuse Templates
+
 ```cpp
 // Register once per test suite
 static void SetUpTestSuite() {
@@ -333,6 +361,7 @@ TEST_F(MyTest, Scenario1) {
 ```
 
 ### 3. Choose Patterns Over JSON for Simple Cases
+
 ```cpp
 // Faster - direct C++ creation
 auto scene = factory.CreateLinearChainScene("FastTest", 5);

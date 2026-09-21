@@ -24,11 +24,11 @@ the main application thread.
    image processing offload to ThreadPool. File I/O uses an async abstraction.
 
 3. **Callbacks on Import Thread**: Completion and progress callbacks run on the
-  import thread. Callers marshal to UI threads if needed.
+   import thread. Callers marshal to UI threads if needed.
 
 4. **Cooperative Cancellation**: Per-job and per-importer cancellation via
-  explicit job cancellation signals and stop-token propagation to work items.
-  Importer shutdown cancels the AsyncImporter LiveObject nursery.
+   explicit job cancellation signals and stop-token propagation to work items.
+   Importer shutdown cancels the AsyncImporter LiveObject nursery.
 
 5. **Thread-Safe Public API**: All public methods are safe to call from any
    thread. Internal synchronization uses thread-safe channels.
@@ -49,30 +49,30 @@ the main application thread.
    replacement.
 
 10. **Pipelines are Pure Compute**: Resource pipelines (TexturePipeline,
-  AudioPipeline, etc.) perform CPU-bound cooking only. They do NOT perform
-  I/O or commit results. Emitters handle all I/O.
+    AudioPipeline, etc.) perform CPU-bound cooking only. They do NOT perform
+    I/O or commit results. Emitters handle all I/O.
 
 11. **Planner-Driven Readiness**: A job-level planner owns the dependency
-  graph and per-asset readiness tracking. Pipelines only run once required
-  dependencies are ready per the planner’s schedule.
+    graph and per-asset readiness tracking. Pipelines only run once required
+    dependencies are ready per the planner’s schedule.
 
 12. **Geometry Material Patching**: Mesh build captures a table of
-  `{slot, material_key_offset}` for each submesh while serializing the
-  descriptor. Geometry finalization receives only the resolved material keys
-  for the mesh’s `material_slots_used` and patches
-  `SubMeshDesc::material_asset_key` directly by offset. The planner guarantees
-  these materials are ready before geometry finalization runs.
+    `{slot, material_key_offset}` for each submesh while serializing the
+    descriptor. Geometry finalization receives only the resolved material keys
+    for the mesh’s `material_slots_used` and patches
+    `SubMeshDesc::material_asset_key` directly by offset. The planner guarantees
+    these materials are ready before geometry finalization runs.
 
 13. **Direct Adapter Translation**: Format adapters (FBX/glTF) translate
-  native parser structures (ufbx/cgltf) directly into pipeline `WorkItem`
-  storage with no intermediate scene graph. The job owns the storage and
-  registers plan items and dependencies via `ImportPlanner`.
+    native parser structures (ufbx/cgltf) directly into pipeline `WorkItem`
+    storage with no intermediate scene graph. The job owns the storage and
+    registers plan items and dependencies via `ImportPlanner`.
 
 14. **ThreadPool-Only content_hash**: `content_hash` is computed only on the
-  ThreadPool **when enabled**. The invariant is that all dependencies are
-  ready and the full descriptor payload is known before hashing. Hashing is
-  controlled by `ImportOptions::with_content_hashing` and cascades into all
-  pipeline configs. When disabled, pipelines MUST NOT compute any hashes.
+    ThreadPool **when enabled**. The invariant is that all dependencies are
+    ready and the full descriptor payload is known before hashing. Hashing is
+    controlled by `ImportOptions::with_content_hashing` and cascades into all
+    pipeline configs. When disabled, pipelines MUST NOT compute any hashes.
 
 15. **One Lazy Emitter Per Resource Type Per Session**: ImportSession owns
     emitters (TextureEmitter, BufferEmitter, AssetEmitter). Created lazily on
@@ -80,10 +80,10 @@ the main application thread.
     async I/O in the background.
 
 16. **Log-Structured Allocation (Append Semantics)**: Re-importing an asset
-  allocates NEW space with a NEW index (append-like). Old data remains but is
-  stale. Allocation is done by reserving explicit offsets and writing via
-  `WriteAt*` to avoid interleaving. The index file is always accurate. PAK
-  tool compacts later, remapping indices and trimming stale data.
+    allocates NEW space with a NEW index (append-like). Old data remains but is
+    stale. Allocation is done by reserving explicit offsets and writing via
+    `WriteAt*` to avoid interleaving. The index file is always accurate. PAK
+    tool compacts later, remapping indices and trimming stale data.
 
 ---
 
@@ -91,14 +91,14 @@ the main application thread.
 
 These types ALREADY EXIST in `src/Oxygen/Cooker/Import/`. **DO NOT REDEFINE:**
 
-| Type | Header | Description |
-| ---- | ------ | ----------- |
-| `ImportRequest` | `ImportRequest.h` | Source path, cooked layout, options |
-| `ImportReport` | `ImportReport.h` | Result with success flag, diagnostics, counts |
-| `ImportDiagnostic` | `ImportDiagnostics.h` | Warning/error with severity, code, message |
-| `ImportSeverity` | `ImportDiagnostics.h` | `kInfo`, `kWarning`, `kError` |
-| `ImportOptions` | `ImportOptions.h` | Import configuration options |
-| `LooseCookedLayout` | `LooseCookedLayout.h` | Output directory layout |
+| Type                | Header                | Description                                   |
+| ------------------- | --------------------- | --------------------------------------------- |
+| `ImportRequest`     | `ImportRequest.h`     | Source path, cooked layout, options           |
+| `ImportReport`      | `ImportReport.h`      | Result with success flag, diagnostics, counts |
+| `ImportDiagnostic`  | `ImportDiagnostics.h` | Warning/error with severity, code, message    |
+| `ImportSeverity`    | `ImportDiagnostics.h` | `kInfo`, `kWarning`, `kError`                 |
+| `ImportOptions`     | `ImportOptions.h`     | Import configuration options                  |
+| `LooseCookedLayout` | `LooseCookedLayout.h` | Output directory layout                       |
 
 **Only define NEW types that don't exist:**
 
@@ -248,17 +248,17 @@ graph TB
 
 ### Actor Summary
 
-| Actor | Scope | Owns | Role |
-| ----- | ----- | ---- | ---- |
-| **AsyncImportService** | Singleton | Import thread, AsyncImporter | Thread-safe public API |
-| **AsyncImporter** | Shared | Job channel + scheduler | Import-thread job runner |
-| **ImportJob** | Per-job | Child nursery, cancellation signal, ImportSession, pipelines | Single job actor: owns one job’s lifetime + resources |
-| **ImportSession** | Per-job | Async I/O + ThreadPool access, Emitters, LooseCookedWriter, Diagnostics | Per-import output + infra access |
-| **TexturePipeline** | Per-job | Internal queues + worker tasks | Pure compute: decode/transcode → in-memory payload |
-| **TextureEmitter** | Per-job | `textures.data`, `textures.table` | Async I/O: Emit() → index + background write |
-| **BufferEmitter** | Per-job | `buffers.data`, `buffers.table` | Async I/O for geometry/animation buffers |
-| **AssetEmitter** | Per-job | `*.omat`, `*.ogeo`, `*.oscene` | Async I/O for asset descriptors |
-| **LooseCookedWriter** | Per-job | `container.index.bin` | Finalization: write index file LAST |
+| Actor                  | Scope     | Owns                                                                    | Role                                                  |
+| ---------------------- | --------- | ----------------------------------------------------------------------- | ----------------------------------------------------- |
+| **AsyncImportService** | Singleton | Import thread, AsyncImporter                                            | Thread-safe public API                                |
+| **AsyncImporter**      | Shared    | Job channel + scheduler                                                 | Import-thread job runner                              |
+| **ImportJob**          | Per-job   | Child nursery, cancellation signal, ImportSession, pipelines            | Single job actor: owns one job’s lifetime + resources |
+| **ImportSession**      | Per-job   | Async I/O + ThreadPool access, Emitters, LooseCookedWriter, Diagnostics | Per-import output + infra access                      |
+| **TexturePipeline**    | Per-job   | Internal queues + worker tasks                                          | Pure compute: decode/transcode → in-memory payload    |
+| **TextureEmitter**     | Per-job   | `textures.data`, `textures.table`                                       | Async I/O: Emit() → index + background write          |
+| **BufferEmitter**      | Per-job   | `buffers.data`, `buffers.table`                                         | Async I/O for geometry/animation buffers              |
+| **AssetEmitter**       | Per-job   | `*.omat`, `*.ogeo`, `*.oscene`                                          | Async I/O for asset descriptors                       |
+| **LooseCookedWriter**  | Per-job   | `container.index.bin`                                                   | Finalization: write index file LAST                   |
 
 ---
 
@@ -474,11 +474,11 @@ own strongly-typed API because inputs and outputs are fundamentally different.
 
 #### Why No Common Interface
 
-| Pipeline | Input | Processing | Output |
-| -------- | ----- | ---------- | ------ |
-| Texture | bytes + TextureImportDesc | decode, mips, BC7 | CookedTexturePayload (in-memory) |
-| Audio | bytes + AudioImportDesc | decode, resample, compress | CookedAudioPayload (in-memory) |
-| Mesh | scene graph + options | optimize, pack | CookedMeshPayload / CookedBufferPayload (in-memory) |
+| Pipeline | Input                     | Processing                 | Output                                              |
+| -------- | ------------------------- | -------------------------- | --------------------------------------------------- |
+| Texture  | bytes + TextureImportDesc | decode, mips, BC7          | CookedTexturePayload (in-memory)                    |
+| Audio    | bytes + AudioImportDesc   | decode, resample, compress | CookedAudioPayload (in-memory)                      |
+| Mesh     | scene graph + options     | optimize, pack             | CookedMeshPayload / CookedBufferPayload (in-memory) |
 
 A polymorphic `IResourcePipeline<T>` adds complexity without value.
 
@@ -539,13 +539,13 @@ job execution without changing pipeline APIs.
 **Nursery ownership (do not conflate lifetimes):** there are two distinct
 lifetimes.
 
-1) **Import-thread lifetime (long-lived)**
+1. **Import-thread lifetime (long-lived)**
    - Owner: `detail::AsyncImporter` (a `co::LiveObject`).
    - Nursery: the nursery opened by `AsyncImporter::ActivateAsync()`.
    - Purpose: owns long-lived background tasks for the import thread (e.g. job
      loop, service shutdown coordination).
 
-2) **Single-job lifetime (short-lived, cancellable)**
+2. **Single-job lifetime (short-lived, cancellable)**
 
 - Owner: `detail::ImportJob`.
 - Nursery: a child nursery created per job.
@@ -741,10 +741,10 @@ TexturePipeline::WorkItem MakeTextureWorkItem(
 
 **Pipelines do NOT commit to CookedContentWriter.** They return processed data.
 
-| Component | Responsibility |
-| --------- | -------------- |
-| Pipeline | Decode → Transcode → return `CookedTexturePayload` (in-memory) |
-| Job | Receive result → call `session.TextureEmitter().Emit()` → track index |
+| Component | Responsibility                                                        |
+| --------- | --------------------------------------------------------------------- |
+| Pipeline  | Decode → Transcode → return `CookedTexturePayload` (in-memory)        |
+| Job       | Receive result → call `session.TextureEmitter().Emit()` → track index |
 
 This separation:
 
@@ -1041,29 +1041,29 @@ rules to be correct under concurrent async I/O while keeping the caller API
 simple:
 
 1. **Stable index returned immediately**: `Emit()` assigns and returns an index
-  synchronously, before any I/O completes.
+   synchronously, before any I/O completes.
 2. **Dedup by signature** (when applicable): if the resource signature already
-  exists, `Emit()` returns the existing index and queues no additional I/O.
+   exists, `Emit()` returns the existing index and queues no additional I/O.
 3. **Append semantics via allocation**: the emitter maintains an atomic
-  `data_file_size_` and reserves a unique range using a CAS loop.
+   `data_file_size_` and reserves a unique range using a CAS loop.
 4. **Alignment-aware layout**: the reservation computes `aligned_offset` and
-  optional `padding_size`; padding is written as zero bytes at the reserved
-  start.
+   optional `padding_size`; padding is written as zero bytes at the reserved
+   start.
 5. **Table/index stability**: the table entry is recorded before (or alongside)
-  queuing writes, so the returned index and descriptor mapping are stable
-  immediately after `Emit()` returns.
+   queuing writes, so the returned index and descriptor mapping are stable
+   immediately after `Emit()` returns.
 6. **Explicit-offset writes only**: both padding and payload are written using
-  `WriteAtAsync(path, offset, ...)` with `share_write=true`.
+   `WriteAtAsync(path, offset, ...)` with `share_write=true`.
 7. **Emitter owns async buffer lifetimes**: payload/padding buffers are moved
-  into shared ownership captured by completion callbacks.
+   into shared ownership captured by completion callbacks.
 8. **Pending/error accounting**: each queued write increments a pending counter;
-  completion decrements it and increments an error counter on failure.
+   completion decrements it and increments an error counter on failure.
 9. **Finalize defines the durability boundary**: `Finalize()` waits for all
-  pending writes, flushes and writes tables, and only then allows the session
-  to write `container.index.bin` last.
+   pending writes, flushes and writes tables, and only then allows the session
+   to write `container.index.bin` last.
 10. **Single-threaded mutation**: emitter internal tables and maps are mutated
-  on the import thread; async completion handlers are expected to run on the
-  same event loop to safely touch emitter state.
+    on the import thread; async completion handlers are expected to run on the
+    same event loop to safely touch emitter state.
 
 TextureEmitter-specific rule:
 
@@ -1306,29 +1306,29 @@ Scenes/
 
 **Sync Path (Existing - Unchanged):**
 
-| File | Cooked By | Emitted By | Method |
-| ---- | --------- | ---------- | ------ |
-| `textures.data` | FbxImporter (inline) | FbxImporter | `AppendResource()` |
-| `textures.table` | — | FbxImporter | `out.WriteFile()` |
-| `buffers.data` | FbxImporter (inline) | FbxImporter | `AppendResource()` |
-| `buffers.table` | — | FbxImporter | `out.WriteFile()` |
-| `*.omat` | — | FbxImporter | `out.WriteAssetDescriptor()` |
-| `*.ogeo` | — | FbxImporter | `out.WriteAssetDescriptor()` |
-| `*.oscene` | — | FbxImporter | `out.WriteAssetDescriptor()` |
-| `container.index.bin` | — | LooseCookedWriter | `Finish()` |
+| File                  | Cooked By            | Emitted By        | Method                       |
+| --------------------- | -------------------- | ----------------- | ---------------------------- |
+| `textures.data`       | FbxImporter (inline) | FbxImporter       | `AppendResource()`           |
+| `textures.table`      | —                    | FbxImporter       | `out.WriteFile()`            |
+| `buffers.data`        | FbxImporter (inline) | FbxImporter       | `AppendResource()`           |
+| `buffers.table`       | —                    | FbxImporter       | `out.WriteFile()`            |
+| `*.omat`              | —                    | FbxImporter       | `out.WriteAssetDescriptor()` |
+| `*.ogeo`              | —                    | FbxImporter       | `out.WriteAssetDescriptor()` |
+| `*.oscene`            | —                    | FbxImporter       | `out.WriteAssetDescriptor()` |
+| `container.index.bin` | —                    | LooseCookedWriter | `Finish()`                   |
 
 **Async Path (New - Pipelines + Emitters):**
 
-| File | Cooked By | Emitted By | Method | When |
-| ---- | --------- | ---------- | ------ | ---- |
-| `textures.data` | **TexturePipeline** | **TextureEmitter** | `Emit()` async I/O | Streaming |
-| `textures.table` | — | **TextureEmitter** | `Finalize()` | Session end |
-| `buffers.data` | **ThreadPool** | **BufferEmitter** | `Emit()` async I/O | Streaming |
-| `buffers.table` | — | **BufferEmitter** | `Finalize()` | Session end |
-| `*.omat` | — | **AssetEmitter** | `Emit()` async I/O | Per material |
-| `*.ogeo` | — | **AssetEmitter** | `Emit()` async I/O | Per geometry |
-| `*.oscene` | — | **AssetEmitter** | `Emit()` async I/O | Per scene |
-| `container.index.bin` | — | **ImportSession** | `Finalize()` → `Finish()` | **LAST** |
+| File                  | Cooked By           | Emitted By         | Method                    | When         |
+| --------------------- | ------------------- | ------------------ | ------------------------- | ------------ |
+| `textures.data`       | **TexturePipeline** | **TextureEmitter** | `Emit()` async I/O        | Streaming    |
+| `textures.table`      | —                   | **TextureEmitter** | `Finalize()`              | Session end  |
+| `buffers.data`        | **ThreadPool**      | **BufferEmitter**  | `Emit()` async I/O        | Streaming    |
+| `buffers.table`       | —                   | **BufferEmitter**  | `Finalize()`              | Session end  |
+| `*.omat`              | —                   | **AssetEmitter**   | `Emit()` async I/O        | Per material |
+| `*.ogeo`              | —                   | **AssetEmitter**   | `Emit()` async I/O        | Per geometry |
+| `*.oscene`            | —                   | **AssetEmitter**   | `Emit()` async I/O        | Per scene    |
+| `container.index.bin` | —                   | **ImportSession**  | `Finalize()` → `Finish()` | **LAST**     |
 
 **Key Differences:**
 
@@ -1339,11 +1339,11 @@ Scenes/
 
 #### Emitter Responsibilities
 
-| Emitter | Owns | `Emit()` Does | `Finalize()` Does |
-| ------- | ---- | ------------- | ----------------- |
+| Emitter          | Owns                              | `Emit()` Does                        | `Finalize()` Does         |
+| ---------------- | --------------------------------- | ------------------------------------ | ------------------------- |
 | `TextureEmitter` | `textures.data`, `textures.table` | Assign index, queue async data write | Wait for I/O, flush table |
-| `BufferEmitter` | `buffers.data`, `buffers.table` | Assign index, queue async data write | Wait for I/O, flush table |
-| `AssetEmitter` | `*.omat`, `*.ogeo`, `*.oscene` | Queue async descriptor write | Wait for all writes |
+| `BufferEmitter`  | `buffers.data`, `buffers.table`   | Assign index, queue async data write | Wait for I/O, flush table |
+| `AssetEmitter`   | `*.omat`, `*.ogeo`, `*.oscene`    | Queue async descriptor write         | Wait for all writes       |
 
 #### Log-Structured Allocation (Re-import Support)
 
@@ -1464,30 +1464,30 @@ position (or if async writes interleave).
 **Options:**
 
 A) **Single-threaded allocation, concurrent WriteAt** (current design):
-  All coroutines resume on import thread → serialized reservations and table
-  mutation, while file I/O completes concurrently via `WriteAtAsync()`.
+All coroutines resume on import thread → serialized reservations and table
+mutation, while file I/O completes concurrently via `WriteAtAsync()`.
 
 B) **Mutex-protected appends**:
 
-   ```cpp
-   auto Append(std::span<const std::byte> bytes) -> uint64_t {
-     std::scoped_lock lock(mutex_);
-     auto offset = current_offset_;
-     stream_.write(...);
-     current_offset_ += bytes.size();
-     return offset;
-   }
-   ```
+```cpp
+auto Append(std::span<const std::byte> bytes) -> uint64_t {
+  std::scoped_lock lock(mutex_);
+  auto offset = current_offset_;
+  stream_.write(...);
+  current_offset_ += bytes.size();
+  return offset;
+}
+```
 
 C) **Reserve offsets, parallel WriteAt** (same core idea as emitters):
 
-   ```cpp
-  // Phase 1: Reserve offset ranges (fast, serialized)
-  const auto range = ReserveAlignedRange(size, alignment);
+```cpp
+// Phase 1: Reserve offset ranges (fast, serialized)
+const auto range = ReserveAlignedRange(size, alignment);
 
-  // Phase 2: Write at explicit offset (safe concurrency)
-  WriteAtAsync(path, range.aligned_offset, payload_bytes, options, on_complete);
-   ```
+// Phase 2: Write at explicit offset (safe concurrency)
+WriteAtAsync(path, range.aligned_offset, payload_bytes, options, on_complete);
+```
 
 For most cases, **Option A** (single-threaded allocation on import thread) is sufficient
 because:
@@ -1555,13 +1555,13 @@ auto FbxImportJob::ExecuteAsync() -> co::Co<ImportReport> {
 
 #### Memory Usage
 
-| Component | Size | Notes |
-| --------- | ---- | ----- |
-| Texture table (28 entries) | ~2.8 KB | In memory |
-| Buffer table (10 entries) | ~1 KB | In memory |
-| Material descriptors | ~5 KB | In memory |
-| Texture data | 280 MB | **Written to disk immediately** |
-| Buffer data | 50 MB | **Written to disk immediately** |
+| Component                  | Size    | Notes                           |
+| -------------------------- | ------- | ------------------------------- |
+| Texture table (28 entries) | ~2.8 KB | In memory                       |
+| Buffer table (10 entries)  | ~1 KB   | In memory                       |
+| Material descriptors       | ~5 KB   | In memory                       |
+| Texture data               | 280 MB  | **Written to disk immediately** |
+| Buffer data                | 50 MB   | **Written to disk immediately** |
 
 **Total RAM**: ~10 KB for tables, **NOT** 280 MB for data!
 
@@ -1596,7 +1596,7 @@ overlaps with compute, and explicit-offset writes avoid append interleaving.
    on the import thread. They interleave when suspended on co_await.
 
 3. **Reserve + write immediately**: reserve a unique range and queue
-  `WriteAtAsync()` to `.data`. No implicit append; no interleaving.
+   `WriteAtAsync()` to `.data`. No implicit append; no interleaving.
 
 4. **Buffer only table entries**: Table descriptors (~100 bytes each) are
    kept in memory and flushed once at the end.
@@ -1610,8 +1610,8 @@ overlaps with compute, and explicit-offset writes avoid append interleaving.
 7. **Memory usage is minimal**: ~10KB for tables, NOT 280MB for data.
 
 8. **Thread-safe by construction**: All coroutines resume on import thread.
-  Allocation + table mutation is serialized without explicit locks; I/O is
-  concurrent via non-overlapping `WriteAtAsync()`.
+   Allocation + table mutation is serialized without explicit locks; I/O is
+   concurrent via non-overlapping `WriteAtAsync()`.
 
 ### 8. Import Event Loop
 
@@ -1867,21 +1867,21 @@ auto GetOrCreateTextureResourceIndexAsync(
    all in-flight jobs. Used during service shutdown.
 
 2. **Per-Job**: Each job owns a cancellation signal and a job child nursery.
-  Cancelling the job cancels the job nursery, which cascades to all job-scoped
-  tasks including pipeline workers.
+   Cancelling the job cancels the job nursery, which cascades to all job-scoped
+   tasks including pipeline workers.
 
 ### How to Cancel a Job
 
 `AsyncImportService::CancelJob(job_id)` performs a thread-safe request that is
 handled on the import thread:
 
-1) Look up the `ImportJob` state for `job_id`.
-2) Signal cancellation (e.g. trigger `cancel_event` and/or request-stop on a
-  stop source that feeds `WorkItem.stop_token`).
-3) Cancel the job child nursery.
-4) The job finishes and reports completion via `on_complete(job_id, report)`.
-  For cancellation, `report.success=false` and includes diagnostic code
-  `"import.canceled"`.
+1. Look up the `ImportJob` state for `job_id`.
+2. Signal cancellation (e.g. trigger `cancel_event` and/or request-stop on a
+   stop source that feeds `WorkItem.stop_token`).
+3. Cancel the job child nursery.
+4. The job finishes and reports completion via `on_complete(job_id, report)`.
+   For cancellation, `report.success=false` and includes diagnostic code
+   `"import.canceled"`.
 
 This is the definitive mechanism for per-job cancellation.
 
@@ -2073,17 +2073,17 @@ Import Thread Event Loop (single thread):
 
 These existing files are **preserved and wrapped**, not replaced:
 
-| File | Lines | Role in Async |
-| ---- | ----- | ------------- |
-| `Importer.h` | 55 | Base interface; unchanged (sync path) |
-| `AssetImporter.h/cpp` | 200 | Façade; unchanged (sync path) |
-| `ImportRequest.h` | 55 | POD; unchanged |
-| `ImportReport.h` | 40 | POD; unchanged |
-| `CookedContentWriter.h` | 85 | Interface; unchanged |
-| `TextureImporter.h/cpp` | 2800 | Called by TexturePipeline |
-| `TextureCooker.h/cpp` | 1200 | Called by TexturePipeline |
-| `emit/TextureEmitter.h/cpp` | 450 | Sync path preserved |
-| `Async/Jobs/*.h/.cpp` | — | Job-based async orchestration |
+| File                        | Lines | Role in Async                         |
+| --------------------------- | ----- | ------------------------------------- |
+| `Importer.h`                | 55    | Base interface; unchanged (sync path) |
+| `AssetImporter.h/cpp`       | 200   | Façade; unchanged (sync path)         |
+| `ImportRequest.h`           | 55    | POD; unchanged                        |
+| `ImportReport.h`            | 40    | POD; unchanged                        |
+| `CookedContentWriter.h`     | 85    | Interface; unchanged                  |
+| `TextureImporter.h/cpp`     | 2800  | Called by TexturePipeline             |
+| `TextureCooker.h/cpp`       | 1200  | Called by TexturePipeline             |
+| `emit/TextureEmitter.h/cpp` | 450   | Sync path preserved                   |
+| `Async/Jobs/*.h/.cpp`       | —     | Job-based async orchestration         |
 
 ### Preserved Sync Path
 
@@ -2433,20 +2433,20 @@ auto AggregateProgress(Ps&... pipelines) -> PipelineProgress {
 
 ### When to Use Which Pattern
 
-| Scenario | Pattern | Notes |
-| -------- | ------- | ----- |
-| Complex FBX/glTF (many textures) | Nursery + streaming emission | See FbxImportJob example above |
-| Simple asset (few textures) | Sequential collect is fine | Overhead of tracking not worth it |
-| Standalone texture import | Direct pipeline, no nursery | Single item, no dependencies |
-| Batch cooking (no UI) | Either works | Streaming for throughput, sequential for simplicity |
+| Scenario                         | Pattern                      | Notes                                               |
+| -------------------------------- | ---------------------------- | --------------------------------------------------- |
+| Complex FBX/glTF (many textures) | Nursery + streaming emission | See FbxImportJob example above                      |
+| Simple asset (few textures)      | Sequential collect is fine   | Overhead of tracking not worth it                   |
+| Standalone texture import        | Direct pipeline, no nursery  | Single item, no dependencies                        |
+| Batch cooking (no UI)            | Either works                 | Streaming for throughput, sequential for simplicity |
 
 ### Core Utilization
 
-| Item Count | Cores | Efficiency |
-| ---------- | ----- | ---------- |
-| 28 textures + 3 meshes + 4 animations | 32 | ~100% (work-stealing) |
-| 8 textures + 1 mesh | 32 | ~25% (not enough work) |
-| 100 textures | 32 | ~100% (pipeline keeps up) |
+| Item Count                            | Cores | Efficiency                |
+| ------------------------------------- | ----- | ------------------------- |
+| 28 textures + 3 meshes + 4 animations | 32    | ~100% (work-stealing)     |
+| 8 textures + 1 mesh                   | 32    | ~25% (not enough work)    |
+| 100 textures                          | 32    | ~100% (pipeline keeps up) |
 
 For maximum throughput on high-core-count machines:
 

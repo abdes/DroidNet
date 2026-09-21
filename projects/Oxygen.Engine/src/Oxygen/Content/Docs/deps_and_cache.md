@@ -64,7 +64,7 @@ policy):
 
 - **Store(key, value)**
   - Inserts the value and sets refcount to **1** (the store operation assumes
-   the caller is “using” the item).
+    the caller is “using” the item).
 - **CheckOut(key)**
   - Returns a typed `shared_ptr<T>` and increments refcount.
 - **Touch(key)**
@@ -73,7 +73,7 @@ policy):
 - **CheckIn(key)**
   - Decrements refcount.
   - When refcount reaches **0**, the cache evicts the entry and runs the
-   eviction callback.
+    eviction callback.
 
 Eviction callback = “invoke the type’s unloader.”
 
@@ -83,7 +83,7 @@ This is why unloading is deterministic: it happens **only** on eviction.
 
 ## Dependency graph model (what is stored)
 
-`AssetLoader` stores *forward edges only*:
+`AssetLoader` stores _forward edges only_:
 
 - Asset→asset: `asset_dependencies_[dependent] = { dependency, ... }`
 - Asset→resource: `resource_dependencies_[dependent] = { resource_key, ... }`
@@ -112,7 +112,7 @@ forward map (useful for tests/diagnostics, not for runtime behavior).
 #### Resource → (anything)
 
 - Not supported. Resources are leaf nodes from the Content subsystem’s point of
-   view.
+  view.
 
 ---
 
@@ -170,7 +170,7 @@ contract encoded in `AssetLoader.h` is:
 
 - Called only on cache eviction (refcount hits zero).
 - Ordering: resource deps checked in first, asset deps released recursively,
-   then unloader runs.
+  then unloader runs.
 - Unloader should not trigger new loads (avoid re-entrancy).
 - Unloader must not throw.
 
@@ -188,8 +188,8 @@ In the async pipeline, worker-thread decode records dependencies via
 
 - Asset dependencies are recorded as `data::AssetKey`.
 - Resource dependencies are recorded either as `ResourceKey` (already-bound) or
-   as `internal::ResourceRef` (container-relative reference), which is bound to
-   `ResourceKey` on the owning thread.
+  as `internal::ResourceRef` (container-relative reference), which is bound to
+  `ResourceKey` on the owning thread.
 
 Examples (decode code):
 
@@ -225,9 +225,9 @@ back into `AssetLoader` and must not trigger nested `Load*` operations.
 Rationale:
 
 - Nested loads from decode would reintroduce owning-thread mutation from worker
-   threads.
+  threads.
 - The orchestrator coroutine is responsible for loading dependencies, and
-   publish is responsible for applying dependency edges.
+  publish is responsible for applying dependency edges.
 
 ### Do not: retain `LoaderContext` or readers
 
@@ -243,10 +243,10 @@ Current:
 - Assets and resources are cached in a unified refcounted cache.
 - Dependencies are identity-only and forward-only.
 - Async decode records dependency identities into `DependencyCollector`; publish
-   applies edges and Touches cache entries via `Add*Dependency(...)`.
+  applies edges and Touches cache entries via `Add*Dependency(...)`.
 - Cycle detection remains a debug-focused safety check.
 
 Deferred / out of scope:
 
 - GPU residency and GPU-side lifetime management. Content eviction triggers
-   Content unloaders only; Renderer-owned GPU residency is handled separately.
+  Content unloaders only; Renderer-owned GPU residency is handled separately.

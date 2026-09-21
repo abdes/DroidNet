@@ -44,9 +44,7 @@
       "source": "./MatEmissiveMasked.material.json",
       "name": "MatEmissiveMasked",
       "content_hashing": true,
-      "depends_on": [
-        "texture.MatEmissiveMasked_mask"
-      ]
+      "depends_on": ["texture.MatEmissiveMasked_mask"]
     },
     {
       "id": "material.MatReference",
@@ -61,9 +59,7 @@
       "source": "./GeoEmissiveRed.geometry.json",
       "name": "GeoEmissiveRed",
       "content_hashing": true,
-      "depends_on": [
-        "material.MatEmissiveRed"
-      ]
+      "depends_on": ["material.MatEmissiveRed"]
     },
     {
       "id": "geometry.GeoEmissiveGreen",
@@ -71,9 +67,7 @@
       "source": "./GeoEmissiveGreen.geometry.json",
       "name": "GeoEmissiveGreen",
       "content_hashing": true,
-      "depends_on": [
-        "material.MatEmissiveGreen"
-      ]
+      "depends_on": ["material.MatEmissiveGreen"]
     },
     {
       "id": "geometry.GeoEmissiveBlue",
@@ -81,9 +75,7 @@
       "source": "./GeoEmissiveBlue.geometry.json",
       "name": "GeoEmissiveBlue",
       "content_hashing": true,
-      "depends_on": [
-        "material.MatEmissiveBlue"
-      ]
+      "depends_on": ["material.MatEmissiveBlue"]
     },
     {
       "id": "geometry.GeoEmissiveTextured",
@@ -91,9 +83,7 @@
       "source": "./GeoEmissiveTextured.geometry.json",
       "name": "GeoEmissiveTextured",
       "content_hashing": true,
-      "depends_on": [
-        "material.MatEmissiveTextured"
-      ]
+      "depends_on": ["material.MatEmissiveTextured"]
     },
     {
       "id": "geometry.GeoEmissiveMasked",
@@ -101,9 +91,7 @@
       "source": "./GeoEmissiveMasked.geometry.json",
       "name": "GeoEmissiveMasked",
       "content_hashing": true,
-      "depends_on": [
-        "material.MatEmissiveMasked"
-      ]
+      "depends_on": ["material.MatEmissiveMasked"]
     },
     {
       "id": "geometry.GeoReference",
@@ -111,9 +99,7 @@
       "source": "./GeoReference.geometry.json",
       "name": "GeoReference",
       "content_hashing": true,
-      "depends_on": [
-        "material.MatReference"
-      ]
+      "depends_on": ["material.MatReference"]
     },
     {
       "id": "scene.EmissiveScene",

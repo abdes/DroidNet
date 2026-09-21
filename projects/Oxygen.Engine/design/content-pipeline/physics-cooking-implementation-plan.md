@@ -47,20 +47,20 @@ Status values:
 3. `done`
 4. `blocked`
 
-| Phase | Status | Depends On | Scope | Exit Gate |
-| --- | --- | --- | --- | --- |
-| P0 | done | none | Scope correction and plan reset | sidecar-only plan replaced by comprehensive plan/spec |
-| P11 | done | P0 | Contract finalization vs canonical physics headers | design/schema/implementation contracts are aligned and validation evidence is captured |
-| P1 | done | P11 | Physics layout foundation | materials/shapes/resources under `Physics/...`; sidecars co-located with target scenes |
-| P2 | done | P1 | Physics resource descriptor domain | `physics-resource-descriptor` end-to-end with `.opres` |
-| P3 | done | P1 | Physics material descriptor domain | `physics-material-descriptor` end-to-end (`.opmat`) |
-| P4 | done | P2, P3 | Collision shape descriptor domain | `collision-shape-descriptor` end-to-end (`.ocshape`) |
-| P5 | done | P2, P3, P4 | Physics sidecar v2 upgrade | full binding-family support with virtual refs |
-| P6 | done | P2, P3, P4, P5 | Manifest + DAG integration | job types/defaults/key checks/dependency collection |
-| P7 | done | P2, P3, P4, P5, P6 | Schema embed/install integration | all physics schemas generated and installed |
-| P8 | done | P2, P3, P4, P5, P6 | Diagnostics hardening | stable diagnostic set and precedence behavior |
-| P9 | done | P1, P2, P3, P4, P5, P6, P7, P8 | Test matrix closure | domain + integration + pak tests complete |
-| P10 | in_progress | P9 | Parity and docs closeout | PakGen parity evidence and documentation finalization |
+| Phase | Status      | Depends On                     | Scope                                              | Exit Gate                                                                              |
+| ----- | ----------- | ------------------------------ | -------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| P0    | done        | none                           | Scope correction and plan reset                    | sidecar-only plan replaced by comprehensive plan/spec                                  |
+| P11   | done        | P0                             | Contract finalization vs canonical physics headers | design/schema/implementation contracts are aligned and validation evidence is captured |
+| P1    | done        | P11                            | Physics layout foundation                          | materials/shapes/resources under `Physics/...`; sidecars co-located with target scenes |
+| P2    | done        | P1                             | Physics resource descriptor domain                 | `physics-resource-descriptor` end-to-end with `.opres`                                 |
+| P3    | done        | P1                             | Physics material descriptor domain                 | `physics-material-descriptor` end-to-end (`.opmat`)                                    |
+| P4    | done        | P2, P3                         | Collision shape descriptor domain                  | `collision-shape-descriptor` end-to-end (`.ocshape`)                                   |
+| P5    | done        | P2, P3, P4                     | Physics sidecar v2 upgrade                         | full binding-family support with virtual refs                                          |
+| P6    | done        | P2, P3, P4, P5                 | Manifest + DAG integration                         | job types/defaults/key checks/dependency collection                                    |
+| P7    | done        | P2, P3, P4, P5, P6             | Schema embed/install integration                   | all physics schemas generated and installed                                            |
+| P8    | done        | P2, P3, P4, P5, P6             | Diagnostics hardening                              | stable diagnostic set and precedence behavior                                          |
+| P9    | done        | P1, P2, P3, P4, P5, P6, P7, P8 | Test matrix closure                                | domain + integration + pak tests complete                                              |
+| P10   | in_progress | P9                             | Parity and docs closeout                           | PakGen parity evidence and documentation finalization                                  |
 
 ## 3.1 Strict Execution Order
 
@@ -105,7 +105,7 @@ Tasks:
    - `design/content-pipeline/physics-cooking-architecture.md` contracts
    - schema expectations
    - test expectations
-   to match canonical format contracts.
+     to match canonical format contracts.
 3. Record finalization evidence in this log.
 
 Acceptance:
@@ -466,7 +466,7 @@ Acceptance:
        - `oxygen.physics-resource-descriptor.schema.json`
        - `oxygen.physics-material-descriptor.schema.json`
        - `oxygen.collision-shape-descriptor.schema.json`
-       in `src/Oxygen/Cooker/CMakeLists.txt`.
+         in `src/Oxygen/Cooker/CMakeLists.txt`.
      - module-owned install wiring (`install(FILES ... DESTINATION .../schemas)`)
        includes the same four physics schemas in
        `src/Oxygen/Cooker/CMakeLists.txt`.
@@ -494,25 +494,25 @@ Acceptance:
     - closure evidence:
       - user-reported validation: `All Green` for P8 test updates.
 11. P9 `done`:
-     - evidence:
-      - cooker domain test coverage exists for all four physics domains:
-        - schema/request/job/manifest:
-          - `PhysicsResourceDescriptor*`
-          - `PhysicsMaterialDescriptor*`
-          - `CollisionShapeDescriptor*`
-          - `Physics*` (sidecar)
-      - sidecar success-path job coverage added:
-        - `PhysicsImportJobTest.InlineSidecarWithExistingTargetSceneImportsSuccessfullyAndEmitsOpscene`
-      - manifest DAG diagnostics/orchestration coverage:
-        - `BatchCommand_physics_dag_test.cpp`
-      - scene+physics runtime load integration coverage exists:
-        - `src/Oxygen/Content/Test/AssetLoader_scene_test.cpp`
-        - `src/Oxygen/Content/Test/PhysicsSceneLoader_test.cpp`
-      - pak planner/writer physics inclusion coverage exists:
-        - `src/Oxygen/Cooker/Test/Pak/PakPlanBuilder_test.cpp`
-        - `src/Oxygen/Cooker/Test/Pak/PakWriter_test.cpp`
-     - closure evidence:
-      - user-reported validation: `All Green` for full P9 matrix.
+    - evidence:
+    - cooker domain test coverage exists for all four physics domains:
+      - schema/request/job/manifest:
+        - `PhysicsResourceDescriptor*`
+        - `PhysicsMaterialDescriptor*`
+        - `CollisionShapeDescriptor*`
+        - `Physics*` (sidecar)
+    - sidecar success-path job coverage added:
+      - `PhysicsImportJobTest.InlineSidecarWithExistingTargetSceneImportsSuccessfullyAndEmitsOpscene`
+    - manifest DAG diagnostics/orchestration coverage:
+      - `BatchCommand_physics_dag_test.cpp`
+    - scene+physics runtime load integration coverage exists:
+      - `src/Oxygen/Content/Test/AssetLoader_scene_test.cpp`
+      - `src/Oxygen/Content/Test/PhysicsSceneLoader_test.cpp`
+    - pak planner/writer physics inclusion coverage exists:
+      - `src/Oxygen/Cooker/Test/Pak/PakPlanBuilder_test.cpp`
+      - `src/Oxygen/Cooker/Test/Pak/PakWriter_test.cpp`
+    - closure evidence:
+    - user-reported validation: `All Green` for full P9 matrix.
 12. P10 `in_progress`:
     - evidence:
       - P9 closure gate satisfied; parity/docs closeout can start.
@@ -570,8 +570,8 @@ Build/test execution in this pass:
 1. Layout foundation remediation applied:
    - `src/Oxygen/Cooker/Loose/LooseCookedLayout.h`
      introduces dedicated physics root/subdir model (`physics_dir`,
-      `physics_materials_subdir`, `physics_shapes_subdir`,
-      `physics_resources_subdir`), with physics sidecars co-located to target scenes.
+     `physics_materials_subdir`, `physics_shapes_subdir`,
+     `physics_resources_subdir`), with physics sidecars co-located to target scenes.
    - `DescriptorDirFor(AssetType::kPhysicsScene)` now follows
      target-scene co-location (`<scene_dir>/<scene_stem>.opscene`).
    - `DescriptorDirFor(AssetType::kPhysicsMaterial)` now resolves to
@@ -711,9 +711,9 @@ Build/test execution in this pass:
        - `material_ref`
        - `constraint_ref`
    - legacy authoring fields removed from schema:
-       - `shape_virtual_path`
-       - `material_virtual_path`
-       - `constraint_resource_index`
+     - `shape_virtual_path`
+     - `material_virtual_path`
+     - `constraint_resource_index`
 2. Sidecar pipeline ref resolution migration landed:
    - `src/Oxygen/Cooker/Import/Internal/Pipelines/PhysicsSidecarImportPipeline.cpp`
    - rigid/collider/character resolution:
@@ -811,12 +811,12 @@ Build/test execution in this pass:
      - unresolved refs (`physics.manifest.dependency_unresolved`)
      - ambiguous refs (`physics.manifest.dependency_ambiguous`)
      - missing explicit targets (`physics.manifest.dependency_missing_target`)
-     in:
+       in:
      - `src/Oxygen/Cooker/Tools/ImportTool/BatchCommand.cpp`
 2. Diagnostic namespace stabilization refinement:
    - duplicate job-id diagnostic now uses physics namespace for physics batches:
      - `physics.manifest.job_id_duplicate`
-     and retains legacy namespace for non-physics-only batches:
+       and retains legacy namespace for non-physics-only batches:
      - `input.manifest.job_id_duplicate`
 3. Test coverage added/expanded:
    - `src/Oxygen/Cooker/Test/Import/ImportSession_test.cpp`

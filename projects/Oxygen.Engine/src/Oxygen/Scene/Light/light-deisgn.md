@@ -1,4 +1,3 @@
-
 # Oxygen Scene Lighting
 
 This document specifies how Oxygen’s Scene system will represent lights and expose them to the renderer.
@@ -89,7 +88,7 @@ Policy:
 
 Receiver note:
 
-- `kReceivesShadows` affects whether *renderable receivers* apply shadows during shading.
+- `kReceivesShadows` affects whether _renderable receivers_ apply shadows during shading.
   It does not affect whether a light produces shadow maps.
 
 Rationale: `kVisible` is a scene-level on/off switch that should consistently gate all scene contributions (geometry and lights).
@@ -172,7 +171,7 @@ Optional (authoring/debug convenience):
 
 - `float exposure_compensation_ev` (default 0)
   Artistic trim expressed in EV stops. Effective intensity multiplier is
-  $2^{exposure\_compensation\_ev}$. This is *not* camera exposure; it is a
+  $2^{exposure\_compensation\_ev}$. This is _not_ camera exposure; it is a
   per-light adjustment.
 
 - “Affect specular” / “Affect diffuse” toggles.
@@ -238,7 +237,7 @@ Notes:
 
 The “sun” is represented as a **regular SceneNode** with an attached
 `DirectionalLight` component. There is no special-case scene object; the
-renderer *interprets* a directional light with environment contribution enabled
+renderer _interprets_ a directional light with environment contribution enabled
 as the scene’s sun.
 
 **Canonical setup**:
@@ -521,15 +520,15 @@ infrastructure and explicitly reusing existing Oxygen patterns:
 
 This section has been revised: SceneEnvironment is **not** a `Scene` component.
 
-- [X] Implement `SceneEnvironment` as a standalone `Composition` with components that implement a variable set of environment systems.
+- [x] Implement `SceneEnvironment` as a standalone `Composition` with components that implement a variable set of environment systems.
   - Environment systems include: Sky Atmosphere, Volumetric Clouds, Fog, Sky Light, Sky Sphere, Post Process Volume.
   - Each environment system is represented by a component with its own authored parameters.
-- [X] Add `Scene` APIs with optional semantics:
+- [x] Add `Scene` APIs with optional semantics:
   - `HasEnvironment() -> bool`
   - `GetEnvironment() -> observer_ptr<SceneEnvironment>` (returns `nullptr` when absent)
   - `SetEnvironment(std::unique_ptr<SceneEnvironment>) -> void` (transfers ownership)
   - `ClearEnvironment() -> void`
-- [X] Add unit tests for Scene ↔ SceneEnvironment association semantics.
+- [x] Add unit tests for Scene ↔ SceneEnvironment association semantics.
 
 ### 9.3 Persistence: PAK / loose-cooked scene component tables (no new format)
 

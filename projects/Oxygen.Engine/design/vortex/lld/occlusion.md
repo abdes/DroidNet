@@ -48,12 +48,12 @@ validity, not the HZB textures themselves.
 
 ### 1.3 Stage Position
 
-| Position | Stage | Notes |
-| --- | --- | --- |
-| Predecessor | Stage 3 DepthPrepass | Current `SceneDepth` exists when HZB is requested. |
-| Predecessor | Stage 5 ScreenHzbModule | Builds current furthest HZB and exposes previous furthest HZB when available. |
-| **This** | **Stage 5 OcclusionModule** | Tests candidates and publishes conservative visibility. |
-| Successor | Base/depth/shadow draw command builders | May skip occluded prepared draw items once visibility is valid. |
+| Position    | Stage                                   | Notes                                                                         |
+| ----------- | --------------------------------------- | ----------------------------------------------------------------------------- |
+| Predecessor | Stage 3 DepthPrepass                    | Current `SceneDepth` exists when HZB is requested.                            |
+| Predecessor | Stage 5 ScreenHzbModule                 | Builds current furthest HZB and exposes previous furthest HZB when available. |
+| **This**    | **Stage 5 OcclusionModule**             | Tests candidates and publishes conservative visibility.                       |
+| Successor   | Base/depth/shadow draw command builders | May skip occluded prepared draw items once visibility is valid.               |
 
 ### 1.4 UE5.7 Source Mapping
 
@@ -197,20 +197,20 @@ flag helpers when flags are needed.
 
 ### 3.1 Inputs
 
-| Source | Data | Purpose |
-| --- | --- | --- |
-| `PreparedSceneFrame` | draw metadata, render items, world matrices, bounding spheres | Candidate bounds and draw-index mapping. |
-| `RenderContext::ViewSpecific` | current/previous HZB fields | HZB availability and view-local HZB dimensions. |
-| `ScreenHzbFrameBindings` | HZB mapping parameters | UE-shaped HZB coordinate conversion. |
-| `SceneTextures` | current depth product validity | Stage precondition and diagnostics evidence. |
+| Source                        | Data                                                          | Purpose                                         |
+| ----------------------------- | ------------------------------------------------------------- | ----------------------------------------------- |
+| `PreparedSceneFrame`          | draw metadata, render items, world matrices, bounding spheres | Candidate bounds and draw-index mapping.        |
+| `RenderContext::ViewSpecific` | current/previous HZB fields                                   | HZB availability and view-local HZB dimensions. |
+| `ScreenHzbFrameBindings`      | HZB mapping parameters                                        | UE-shaped HZB coordinate conversion.            |
+| `SceneTextures`               | current depth product validity                                | Stage precondition and diagnostics evidence.    |
 
 ### 3.2 Outputs
 
-| Product | Consumer | Delivery |
-| --- | --- | --- |
-| `OcclusionFrameResults` | Base/depth/shadow draw builders | Per-view prepared draw visibility. |
-| `OcclusionStats` | DiagnosticsService and capture manifests | Candidate/tested/occluded/fallback counts. |
-| Current test readback | Next frame | Per-view persistent tester history. |
+| Product                 | Consumer                                 | Delivery                                   |
+| ----------------------- | ---------------------------------------- | ------------------------------------------ |
+| `OcclusionFrameResults` | Base/depth/shadow draw builders          | Per-view prepared draw visibility.         |
+| `OcclusionStats`        | DiagnosticsService and capture manifests | Candidate/tested/occluded/fallback counts. |
+| Current test readback   | Next frame                               | Per-view persistent tester history.        |
 
 ### 3.3 Execution Order
 
@@ -262,14 +262,14 @@ surface for "hidden behind closer depth" decisions.
 
 The fallback policy is part of correctness:
 
-| Condition | Behavior |
-| --- | --- |
-| Stage disabled | Publish invalid results; consumers render all draws. |
-| No prepared frame | Publish invalid results and no GPU test. |
-| No current furthest HZB | Publish all visible, skip current submission. |
-| No previous readback | Publish all visible, submit current test if possible. |
-| Candidate count exceeds capacity | Test first capacity-limited batch; overflow visible and counted. |
-| Readback failure | Publish all visible for that frame and mark previous result invalid. |
+| Condition                        | Behavior                                                             |
+| -------------------------------- | -------------------------------------------------------------------- |
+| Stage disabled                   | Publish invalid results; consumers render all draws.                 |
+| No prepared frame                | Publish invalid results and no GPU test.                             |
+| No current furthest HZB          | Publish all visible, skip current submission.                        |
+| No previous readback             | Publish all visible, submit current test if possible.                |
+| Candidate count exceeds capacity | Test first capacity-limited batch; overflow visible and counted.     |
+| Readback failure                 | Publish all visible for that frame and mark previous result invalid. |
 
 No fallback may cull geometry.
 

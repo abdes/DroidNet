@@ -1,7 +1,7 @@
 # Oxygen Content module overview (source of truth)
 
-This document is the **single source of truth** for the *conceptual model* and
-*module boundaries* of the Oxygen Content subsystem.
+This document is the **single source of truth** for the _conceptual model_ and
+_module boundaries_ of the Oxygen Content subsystem.
 
 - Async loader architecture (design, invariants): `truly-async-asset-loader.md`
 - Loose cooked (filesystem-backed cooked sources, PIE requirements): `loose_cooked_content.md`
@@ -87,7 +87,7 @@ current upload/resource path.
   `data::AssetKey` (e.g., GeometryAsset, MaterialAsset).
 - **Resource**: a typed data blob referenced by index within a PAK resource
   table (e.g., BufferResource, TextureResource).
-- **Embedded descriptors**: structures that exist *inside* an asset descriptor
+- **Embedded descriptors**: structures that exist _inside_ an asset descriptor
   and are not independently loadable (e.g., Mesh/SubMesh/MeshView metadata).
 
 Rule of thumb:
@@ -266,14 +266,14 @@ flowchart TD
 
 ## Relationship Summary Table
 
-| From | To | Cardinality | Notes |
-| ---- | -- | ----------- | ----- |
-| Geometry | Mesh | 1 : N | 🌳 Geometry is the root structure; it maps to multiple Meshes for LODs. |
-| Mesh | SubMesh | 1 : N | 🧩 A Mesh is subdivided into SubMeshes — logical partitions for rendering. |
-| SubMesh | MeshView | 1 : N | 📏 A SubMesh groups one or more contiguous MeshViews (range slices of the Mesh), all rendered with the same material. |
-| SubMesh | Material | 1 : 1 | 🎚️ Each SubMesh is rendered with a single Material instance. |
-| Material | Texture | 0 : N | 🖼️ A Material can have zero or more Textures (e.g., color maps, normal maps). |
-| Material | Shader | 1 : N | 🧠 A Material can reference multiple Shaders, at most one per stage (see ShaderStageFlags). |
+| From     | To       | Cardinality | Notes                                                                                                                 |
+| -------- | -------- | ----------- | --------------------------------------------------------------------------------------------------------------------- |
+| Geometry | Mesh     | 1 : N       | 🌳 Geometry is the root structure; it maps to multiple Meshes for LODs.                                               |
+| Mesh     | SubMesh  | 1 : N       | 🧩 A Mesh is subdivided into SubMeshes — logical partitions for rendering.                                            |
+| SubMesh  | MeshView | 1 : N       | 📏 A SubMesh groups one or more contiguous MeshViews (range slices of the Mesh), all rendered with the same material. |
+| SubMesh  | Material | 1 : 1       | 🎚️ Each SubMesh is rendered with a single Material instance.                                                          |
+| Material | Texture  | 0 : N       | 🖼️ A Material can have zero or more Textures (e.g., color maps, normal maps).                                         |
+| Material | Shader   | 1 : N       | 🧠 A Material can reference multiple Shaders, at most one per stage (see ShaderStageFlags).                           |
 
 ## Entity Dependency Flowchart
 
