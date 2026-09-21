@@ -10,6 +10,7 @@
     "src/Oxygen/Base/Detail/signal.hpp",
     "src/Oxygen/Base/Detail/loguru.cpp",
     "src/Oxygen/Base/Detail/NamedType_*.h",
+    "src/Oxygen/Cooker/Import/Internal/fbx/ufbx.*",
     "src/Oxygen/Cooker/Import/Internal/gltf/cgltf.*",
     "src/Oxygen/Cooker/Import/Internal/stb/**",
     "**/imgui_impl_*"
