@@ -5,6 +5,8 @@ Run oxytidy with the active virtual environment or the default Python on PATH.
 .DESCRIPTION
 uv checks/installs the editable tool into the selected interpreter as needed.
 No environment is created or activated. All CLI arguments go unchanged to Python.
+Analysis requires LLVM 23.x clang-tidy and clang-scan-deps; formatting also
+requires LLVM 23.x clang-format.
 .EXAMPLE
 .\tools\cli\oxytidy.ps1 src/Oxygen/Base --include-tests
 .EXAMPLE

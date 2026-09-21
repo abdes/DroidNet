@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import math
 import os
-import re
 import signal
 import sys
 import tempfile
@@ -24,6 +23,7 @@ from oxytools.common import (
     write_json,
 )
 from oxytools.compilation import HEADERS, parse_clangd, read_database
+from oxytools.llvm import require_version
 from rich_argparse import RichHelpFormatter
 
 from .analysis import Analyzer, Prepared
@@ -100,12 +100,23 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         metavar="PATH",
         help="Explicit clang-tidy configuration, relative to the engine root",
     )
-    build_options.add_argument("--clang-tidy-bin", metavar="EXE", default="clang-tidy")
     build_options.add_argument(
-        "--clang-scan-deps-bin", metavar="EXE", default="clang-scan-deps"
+        "--clang-tidy-bin",
+        metavar="EXE",
+        default="clang-tidy",
+        help="LLVM 23.x clang-tidy executable",
     )
     build_options.add_argument(
-        "--clang-format-bin", metavar="EXE", default="clang-format"
+        "--clang-scan-deps-bin",
+        metavar="EXE",
+        default="clang-scan-deps",
+        help="LLVM 23.x dependency scanner executable",
+    )
+    build_options.add_argument(
+        "--clang-format-bin",
+        metavar="EXE",
+        default="clang-format",
+        help="LLVM 23.x formatter executable (with --format)",
     )
     execution_options.add_argument(
         "--jobs", metavar="N", type=positive_int, default=min(8, os.cpu_count() or 1)
@@ -210,20 +221,13 @@ def resolve_tools(
             runner.run([binary, "--version"], run_dir, run_dir / (name + "-version")),
             f"Reading {name} version",
         ).strip()
+        require_version(name, version)
         versions[name] = {
             "path": binary,
             "version": version,
             "binary_hash": file_hash(binary),
         }
         runner.reporter.tool(name, binary, version)
-    majors = [
-        re.search(r"version\s+(\d+)", item["version"]) for item in versions.values()
-    ]
-    if (
-        any(match is None for match in majors)
-        or len({match[1] for match in majors}) != 1
-    ):
-        raise ToolError("LLVM tools must have matching major versions")
     help_text = checked(
         runner.run([tidy, "--help"], run_dir), "Inspecting clang-tidy options"
     )

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import concurrent.futures
 import os
-import re
 import shutil
 import stat
 import subprocess
@@ -16,6 +15,7 @@ from pathlib import Path
 
 from oxytools.common import ToolError, yaml_documents
 from oxytools.files import atomic_write
+from oxytools.llvm import REQUIRED_LLVM_MAJOR, require_version
 from oxytools.process import WindowsJob
 
 
@@ -84,7 +84,8 @@ def find_formatter(explicit: str | None) -> str:
             found = str(candidate) if candidate.is_file() else None
     if not found:
         raise ToolError(
-            "clang-format 22.x was not found; install LLVM or use --clang-format-bin PATH"
+            f"clang-format {REQUIRED_LLVM_MAJOR}.x was not found; "
+            "install LLVM or use --clang-format-bin PATH"
         )
     return str(Path(found).resolve())
 
@@ -93,9 +94,7 @@ def prepare_style(
     binary: str, root: Path, temporary: Path, processes: Processes
 ) -> tuple[Path, bytes]:
     version = processes.run([binary, "--version"]).decode("utf-8", errors="replace")
-    match = re.search(r"clang-format version (\d+)(?:[.\s]|$)", version)
-    if not match or int(match[1]) != 22:
-        raise ToolError(f"clang-format 22.x is required; found {version.strip()}")
+    require_version("clang-format", version)
     config = root / ".clang-format"
     contents = config.read_bytes()
     if any(

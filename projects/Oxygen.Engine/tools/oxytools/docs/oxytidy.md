@@ -9,9 +9,10 @@ integration. Python owns the only CLI; shell launchers forward its arguments unc
 - Python 3.10+ and [uv](https://docs.astral.sh/uv/getting-started/installation/)
   for editable installation into the active virtual environment or default Python. The PowerShell launcher requires PowerShell
   7.3+ for lossless native argument forwarding. LLVM remains a separate prerequisite.
-- LLVM `clang-tidy` and `clang-scan-deps` with matching major versions.
-  Optional formatting also needs matching `clang-format`. Validated on Windows
-  with LLVM 22.1.8; the POSIX process path requires platform validation.
+- LLVM 23.x `clang-tidy` and `clang-scan-deps`. Optional formatting also needs
+  LLVM 23.x `clang-format`. Other major versions are rejected before analysis;
+  minor/patch versions within 23.x may differ. LLVM is installed separately.
+  The POSIX process path requires platform validation.
 - An existing compilation database, generated headers, and the compiler's normal
   development environment. This tool does not configure or build CMake.
 - A configured Ninja build tree for this checkout. Oxygen's existing CMake

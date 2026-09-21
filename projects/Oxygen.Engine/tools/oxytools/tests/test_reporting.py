@@ -89,7 +89,7 @@ class ReportingTests(unittest.TestCase):
         reporter.start(summary)
         reporter.ownership(self.root / ".oxytools.json", "target checkout policy")
         reporter.tool(
-            "clang-tidy", "C:/LLVM/clang-tidy.exe", "clang-tidy version 22.1.8"
+            "clang-tidy", "C:/LLVM/clang-tidy.exe", "clang-tidy version 23.1.1"
         )
         reporter.configuration(
             self.root / "file.cpp", [self.root / ".clang-tidy"], self.root / "snapshot"

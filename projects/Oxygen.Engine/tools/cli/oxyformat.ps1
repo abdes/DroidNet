@@ -1,7 +1,7 @@
 #requires -Version 7.3
 <#
 .SYNOPSIS
-Check or format owned C++ files with clang-format 22.x.
+Check or format owned C++ files with clang-format 23.x.
 .DESCRIPTION
 Uses the active virtual environment or Python on PATH. Install tools/oxytools
 once in that interpreter. This launcher does not install packages during runs.
