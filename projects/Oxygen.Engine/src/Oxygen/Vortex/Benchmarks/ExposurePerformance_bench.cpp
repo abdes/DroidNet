@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Vortex/Test/Exposure/Benchmarks/ExposureBenchmarkFixture.h>
+#include <Oxygen/Vortex/Benchmarks/ExposureBenchmarkFixture.h>
 
 namespace oxygen::vortex::testing::exposure {
 

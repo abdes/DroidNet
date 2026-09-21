@@ -22,7 +22,7 @@
 #include <winnt.h>
 
 #include <Oxygen/Profiling/ProfileScope.h>
-#include <Oxygen/Vortex/Test/Exposure/Benchmarks/ExposureCpuTiming.h>
+#include <Oxygen/Vortex/Benchmarks/ExposureCpuTiming.h>
 
 namespace oxygen::vortex::testing::exposure {
 namespace {

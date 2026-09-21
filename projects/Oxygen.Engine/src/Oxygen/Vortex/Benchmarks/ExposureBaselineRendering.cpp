@@ -29,13 +29,13 @@
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
 #include <Oxygen/Profiling/CpuScopeObserver.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Vortex/Benchmarks/ExposureBaselineScenario.h>
+#include <Oxygen/Vortex/Benchmarks/ExposureCpuTiming.h>
 #include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
 #include <Oxygen/Vortex/SceneRenderer/ShadingMode.h>
 #include <Oxygen/Vortex/Shadows/ShadowService.h>
-#include <Oxygen/Vortex/Test/Exposure/Benchmarks/ExposureBaselineScenario.h>
-#include <Oxygen/Vortex/Test/Exposure/Benchmarks/ExposureCpuTiming.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestTags.h>
 #include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
 

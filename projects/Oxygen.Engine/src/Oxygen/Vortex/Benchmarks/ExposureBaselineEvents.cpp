@@ -25,9 +25,9 @@
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Vortex/Benchmarks/ExposureBaselineScenario.h>
 #include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/PostProcess/PostProcessService.h>
-#include <Oxygen/Vortex/Test/Exposure/Benchmarks/ExposureBaselineScenario.h>
 #include <Oxygen/Vortex/Types/ExposureStateData.h>
 #include <Oxygen/Vortex/Types/ExposureTransition.h>
 

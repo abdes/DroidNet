@@ -440,8 +440,48 @@ m_gtest_program(
 
 # Production exposure compute against controlled RGBA32 inputs on native D3D12.
 if(WIN32)
+  # Compile native fixture implementations once for correctness and benchmarks.
+  add_library(
+    oxygen-vortex-exposure-test-support
+    STATIC
+    "Exposure/Fixtures/ExposureAuxiliaryHandoff.cpp"
+    "Exposure/Fixtures/ExposureGpuFixture.cpp"
+    "Exposure/Fixtures/ExposureGpuFixture.h"
+    "Exposure/Fixtures/ExposureGpuFixtureLifecycle.cpp"
+    "Exposure/Fixtures/ExposureGpuFixtureService.cpp"
+    "Exposure/Fixtures/ExposureLightingFixture.cpp"
+    "Exposure/Fixtures/ExposureLightingFixture.h"
+    "Exposure/Fixtures/ExposureSharedLifecycle.cpp"
+    "Exposure/Fixtures/ExposureTestEngine.h"
+    "Exposure/Fixtures/ExposureTestGraphics.cpp"
+    "Exposure/Fixtures/ExposureTestGraphics.h"
+    "Exposure/Fixtures/ExposureTestTags.cpp"
+    "Exposure/Fixtures/ExposureTestTags.h"
+  )
+  set_target_properties(
+    oxygen-vortex-exposure-test-support
+    PROPERTIES
+      FOLDER
+        "Testing"
+  )
+  target_link_libraries(
+    oxygen-vortex-exposure-test-support
+    PUBLIC
+      oxygen::cooker
+      oxygen::vortex
+      oxygen::graphics-direct3d12
+      oxygen::testing
+      nlohmann_json::nlohmann_json
+  )
+  if(OXYGEN_WITH_COVERAGE)
+    target_compile_options(
+      oxygen-vortex-exposure-test-support
+      PRIVATE
+        "--coverage"
+    )
+  endif()
   gtest_program(
-    "Oxygen.Vortex.ExposureGpu.Tests"
+    "Oxygen.Vortex.Exposure.Tests"
     SOURCES
       "Exposure/Adaptation_test.cpp"
       "Exposure/CheckedConversion_test.cpp"
@@ -476,52 +516,18 @@ if(WIN32)
       "Exposure/Suitability_test.cpp"
       "Exposure/Tonemap_test.cpp"
       "Exposure/Transitions_test.cpp"
-      "Exposure/Fixtures/ExposureAuxiliaryHandoff.cpp"
-      "Exposure/Fixtures/ExposureGpuFixture.cpp"
-      "Exposure/Fixtures/ExposureGpuFixture.h"
-      "Exposure/Fixtures/ExposureGpuFixtureLifecycle.cpp"
-      "Exposure/Fixtures/ExposureGpuFixtureService.cpp"
-      "Exposure/Fixtures/ExposureLightingFixture.cpp"
-      "Exposure/Fixtures/ExposureLightingFixture.h"
-      "Exposure/Fixtures/ExposureSharedLifecycle.cpp"
-      "Exposure/Fixtures/ExposureTestEngine.h"
-      "Exposure/Fixtures/ExposureTestGraphics.cpp"
-      "Exposure/Fixtures/ExposureTestGraphics.h"
-      "Exposure/Fixtures/ExposureTestTags.cpp"
-      "Exposure/Fixtures/ExposureTestTags.h"
-      "Exposure/Benchmarks/ExposureAllocationLifecycle.cpp"
-      "Exposure/Benchmarks/ExposureAllocationMeasurement.cpp"
-      "Exposure/Benchmarks/ExposureAllocationScenario.h"
-      "Exposure/Benchmarks/ExposureAllocationSetup.cpp"
-      "Exposure/Benchmarks/ExposureAllocation_bench.cpp"
-      "Exposure/Benchmarks/ExposureBaselineRendering.cpp"
-      "Exposure/Benchmarks/ExposureBaselineEvents.cpp"
-      "Exposure/Benchmarks/ExposureBaselineResults.cpp"
-      "Exposure/Benchmarks/ExposureBaselineScenario.h"
-      "Exposure/Benchmarks/ExposureBaselineSetup.cpp"
-      "Exposure/Benchmarks/ExposureCpuTiming.cpp"
-      "Exposure/Benchmarks/ExposureCpuTiming.h"
-      "Exposure/Benchmarks/ExposureBenchmarkFixture.cpp"
-      "Exposure/Benchmarks/ExposureBenchmarkFixture.h"
-      "Exposure/Benchmarks/ExposureKernel_bench.cpp"
-      "Exposure/Benchmarks/ExposureOverhead_bench.cpp"
-      "Exposure/Benchmarks/ExposurePerformance_bench.cpp"
     DEPS
-      oxygen::cooker
-      oxygen::vortex
-      oxygen::graphics-direct3d12
-      oxygen::testing
-      nlohmann_json::nlohmann_json
+      oxygen-vortex-exposure-test-support
   )
   target_compile_definitions(
-    Oxygen.Vortex.ExposureGpu.Tests
-    PRIVATE
+    oxygen-vortex-exposure-test-support
+    PUBLIC
       OXYGEN_EXPOSURE_WORKSPACE="${PROJECT_SOURCE_DIR}"
   )
   # The native GPU fixtures exceed the standard COFF section-count limit.
   target_compile_options(
-    Oxygen.Vortex.ExposureGpu.Tests
-    PRIVATE
+    oxygen-vortex-exposure-test-support
+    PUBLIC
       $<$<CXX_COMPILER_ID:MSVC>:/bigobj>
   )
   # Compile the arithmetic probe separately; it must not enter shaders.bin.
@@ -581,11 +587,11 @@ if(WIN32)
       "${exposure_probe_output}"
   )
   add_dependencies(
-    Oxygen.Vortex.ExposureGpu.Tests
+    oxygen-vortex-exposure-test-support
     oxygen-vortex-tone-bounds-probe
   )
   target_compile_definitions(
-    Oxygen.Vortex.ExposureGpu.Tests
+    oxygen-vortex-exposure-test-support
     PRIVATE
       OXYGEN_EXPOSURE_TONE_PROBE="${exposure_probe_output}"
   )

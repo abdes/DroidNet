@@ -32,7 +32,7 @@
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Graphics/Direct3D12/CommandList.h>
 #include <Oxygen/Testing/GTest.h>
-#include <Oxygen/Vortex/Test/Exposure/Benchmarks/ExposureAllocationScenario.h>
+#include <Oxygen/Vortex/Benchmarks/ExposureAllocationScenario.h>
 #include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
 #include <Oxygen/Vortex/Types/ExposureStateData.h>
 

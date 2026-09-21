@@ -41,7 +41,7 @@
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Testing/GTest.h>
-#include <Oxygen/Vortex/Test/Exposure/Benchmarks/ExposureBenchmarkFixture.h>
+#include <Oxygen/Vortex/Benchmarks/ExposureBenchmarkFixture.h>
 
 namespace oxygen::vortex::testing::exposure {
 
