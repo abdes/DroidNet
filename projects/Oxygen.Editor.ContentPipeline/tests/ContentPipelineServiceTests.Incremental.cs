@@ -237,7 +237,7 @@ public sealed partial class ContentPipelineServiceTests
         geometry.OverrideSlots.Add(new MaterialsSlot { Material = new AssetReference<MaterialAsset>(new Uri("asset:///Content/Materials/Blue.omat.json")) });
         _ = node.AddComponent(geometry);
         workspace.Scene.RootNodes.Add(node);
-        workspace.Scene.SetEnvironment(new SceneEnvironmentData { ExposureMode = ExposureMode.Auto, PostProcess = new PostProcessEnvironmentData { ExposureMode = ExposureMode.Auto } });
+        workspace.Scene.SetEnvironment(new SceneEnvironmentData { PostProcess = new PostProcessEnvironmentData { ExposureMode = ExposureMode.Auto } });
         await workspace.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
     }
 

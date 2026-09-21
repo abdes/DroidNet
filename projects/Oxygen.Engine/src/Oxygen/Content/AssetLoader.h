@@ -6,7 +6,6 @@
 
 #pragma once
 
-#include "Oxygen/Data/PhysicsResource.h"
 #include <atomic>
 #include <functional>
 #include <memory>
@@ -45,6 +44,7 @@
 #include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/PatchManifest.h>
+#include <Oxygen/Data/PhysicsResource.h>
 #include <Oxygen/Data/PhysicsSceneAsset.h>
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Data/ScriptAsset.h>
@@ -914,6 +914,13 @@ public:
   [[nodiscard]] OXGN_CNTT_API auto MakeScriptResourceKeyForAsset(
     const data::AssetKey& context_asset_key,
     data::pak::core::ResourceIndexT resource_index) const noexcept
+    -> std::optional<ResourceKey> override;
+  [[nodiscard]] OXGN_CNTT_API auto MakeTextureResourceKeyForAsset(
+    const data::AssetKey& context_asset_key,
+    data::pak::core::ResourceIndexT resource_index) const noexcept
+    -> std::optional<ResourceKey> override;
+  [[nodiscard]] OXGN_CNTT_API auto ResolveTextureResourceKey(
+    const TextureResourceLocator& locator) const
     -> std::optional<ResourceKey> override;
   [[nodiscard]] OXGN_CNTT_API auto ReadScriptResourceForAsset(
     const data::AssetKey& context_asset_key,

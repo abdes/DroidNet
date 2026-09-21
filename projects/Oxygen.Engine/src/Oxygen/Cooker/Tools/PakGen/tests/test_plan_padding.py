@@ -19,7 +19,7 @@ def _spec_with_padding() -> dict:
     # Intentionally add two textures to force region + table sizing and an aligned material.
     return {
         "source_identity": "01a0a760-499d-7533-8672-321a7ac2c720",
-        "version": 6,
+        "version": 7,
         "content_version": 2,
         "textures": [
             {

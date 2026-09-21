@@ -4,7 +4,7 @@ from pakgen.spec.validator import run_validation_pipeline
 def test_material_numeric_ranges():  # noqa: N802
     spec = {
         "source_identity": "01a0a760-49b5-7049-b07f-a94f4baa0779",
-        "version": 6,
+        "version": 7,
         "assets": [
             {"type": "material", "name": "m0", "normal_scale": -1.0},
             {"type": "material", "name": "m1", "roughness": 11.0},
@@ -24,7 +24,7 @@ def test_material_numeric_ranges():  # noqa: N802
 def test_texture_mip_validation():  # noqa: N802
     spec = {
         "source_identity": "01a0a760-49b5-7049-b07f-a9506702bc81",
-        "version": 6,
+        "version": 7,
         "textures": [
             {"name": "t0", "width": 8, "height": 8, "mip_levels": 10},
             {"name": "t1", "width": 16, "height": 8, "mip_levels": 5},

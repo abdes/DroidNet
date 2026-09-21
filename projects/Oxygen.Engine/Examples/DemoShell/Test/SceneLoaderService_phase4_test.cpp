@@ -17,9 +17,8 @@
 #include <utility>
 #include <vector>
 
-#include <Oxygen/Testing/GTest.h>
-
 #include "DemoShell/Services/SceneLoaderService.h"
+
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Base/Types/Geometry.h>
 #include <Oxygen/Config/PathFinder.h>
@@ -44,6 +43,7 @@
 #include <Oxygen/Scene/Environment/LocalFogVolume.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::examples::testing {
 
@@ -620,6 +620,21 @@ namespace {
     {
       co_return nullptr;
     }
+    [[nodiscard]] auto ResolveTextureResourceKey(
+      const content::TextureResourceLocator&) const
+      -> std::optional<content::ResourceKey> override
+    {
+      return std::nullopt;
+    }
+
+    [[nodiscard]] auto MakeTextureResourceKeyForAsset(
+      const data::AssetKey& /*context_asset_key*/,
+      data::pak::core::ResourceIndexT /*resource_index*/) const noexcept
+      -> std::optional<content::ResourceKey> override
+    {
+      return std::nullopt;
+    }
+
     [[nodiscard]] auto MakeScriptResourceKeyForAsset(
       const data::AssetKey& /*context_asset_key*/,
       data::pak::core::ResourceIndexT /*resource_index*/) const noexcept

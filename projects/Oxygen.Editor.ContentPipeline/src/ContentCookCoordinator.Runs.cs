@@ -168,7 +168,8 @@ public sealed partial class ContentCookCoordinator
             var kind = request.TargetKind == CookTargetKind.CurrentScene || assetUri.AbsolutePath.EndsWith(".oscene.json", StringComparison.OrdinalIgnoreCase)
                 ? ContentCookAssetKind.Scene : assetUri.AbsolutePath.EndsWith(".omat.json", StringComparison.OrdinalIgnoreCase)
                     ? ContentCookAssetKind.Material : assetUri.AbsolutePath.EndsWith(".ogeo.json", StringComparison.OrdinalIgnoreCase)
-                        ? ContentCookAssetKind.Geometry : request.Import is not null || request.IsReimport || IsModelSource(assetUri) ? ContentCookAssetKind.ForeignSource : ContentCookAssetKind.Unknown;
+                        ? ContentCookAssetKind.Geometry : assetUri.AbsolutePath.EndsWith(".otex.json", StringComparison.OrdinalIgnoreCase)
+                            ? ContentCookAssetKind.Texture : request.Import is not null || request.IsReimport || IsModelSource(assetUri) ? ContentCookAssetKind.ForeignSource : ContentCookAssetKind.Unknown;
             snapshot = snapshot with { Assets = snapshot.Assets.Add(assetUri, new(assetUri, kind, CookAssetState.Preparing)) };
         }
 

@@ -7,12 +7,18 @@
 #pragma once
 #pragma managed(push, off)
 
+#include <utility>
+#include <vector>
+#include <optional>
+
 #include <Oxygen/Core/Constants.h>
+#include <Oxygen/Scene/ExposureSettings.h>
 #include <Oxygen/Core/PhaseRegistry.h>
 #include <Oxygen/Core/Types/Atmosphere.h>
 #include <Oxygen/Core/Types/PostProcess.h>
 
 #include <EditorModule/EditorCommand.h>
+#include <EditorModule/SceneAssetRequests.h>
 
 namespace oxygen::interop::module {
 
@@ -53,6 +59,10 @@ namespace oxygen::interop::module {
     float auto_exposure_log_luminance_range = 25.0F;
     float auto_exposure_target_luminance = 0.18F;
     float auto_exposure_spot_meter_radius = 0.2F;
+    float auto_exposure_black_influence = 0.0F;
+    float auto_exposure_transition_distance_ev = engine::kDefaultExposureTransitionDistance;
+    std::vector<scene::ExposureCompensationKey> auto_exposure_compensation_curve;
+    std::optional<content::TextureResourceLocator> auto_exposure_metering_mask;
     float bloom_intensity = 0.0F;
     float bloom_threshold = 1.0F;
     float saturation = 1.0F;
@@ -67,15 +77,23 @@ namespace oxygen::interop::module {
       SkyAtmosphereParams atmosphere, PostProcessParams post_process)
       : EditorCommand(oxygen::core::PhaseId::kSceneMutation)
       , atmosphere_(atmosphere)
-      , post_process_(post_process)
+      , post_process_(std::move(post_process))
     {
     }
 
     void Execute(CommandContext& context) override;
+    void SetFailureCallback(SceneAssetRequests::FailureCallback callback) {
+      failure_callback_ = std::move(callback);
+    }
+    void SetSuccessCallback(SceneAssetRequests::SuccessCallback callback) {
+      success_callback_ = std::move(callback);
+    }
 
   private:
     SkyAtmosphereParams atmosphere_;
     PostProcessParams post_process_;
+    SceneAssetRequests::FailureCallback failure_callback_;
+    SceneAssetRequests::SuccessCallback success_callback_;
   };
 
 } // namespace oxygen::interop::module

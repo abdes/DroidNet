@@ -19,6 +19,7 @@
 #include <vector>
 #include <Oxygen/Data/BuiltinGeometry.h>
 #include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/Data/TextureResource.h>
 
 namespace oxygen::interop::module {
 namespace {
@@ -40,6 +41,20 @@ auto VirtualPath(std::string_view uri, bool material) -> std::string {
 } // namespace
 
 struct SceneAssetRequests::State {
+  struct MaskCompletion {
+    uint64_t generation {};
+    content::ResourceKey key {};
+    Texture texture;
+    std::string error;
+  };
+  struct MaskRequest {
+    uint64_t generation {};
+    std::optional<content::TextureResourceLocator> locator;
+    TextureApply apply;
+    FailureCallback on_failure;
+    SuccessCallback on_success;
+    ExposureMaskStatus status;
+  };
   struct Completion {
     scene::NodeHandle node;
     uint64_t generation;
@@ -73,6 +88,10 @@ struct SceneAssetRequests::State {
   MaterialLoader material_loader;
   Diagnostic diagnostic;
   AssetAvailability available;
+  TextureLoader texture_loader;
+  MaskRequest mask;
+  std::shared_ptr<ThreadSafeQueue<MaskCompletion>> mask_inbox
+    = std::make_shared<ThreadSafeQueue<MaskCompletion>>();
   uint64_t generation = 0;
   std::unordered_map<scene::NodeHandle, Target> targets;
   std::unordered_set<uint64_t> refresh_requests;
@@ -151,17 +170,29 @@ SceneAssetRequests::SceneAssetRequests(content::IAssetLoader &loader,
             const auto path = VirtualPath(uri, material);
             return (material && path == "/Engine/Generated/Materials/Default")
               || resolver.ResolveAssetKey(path).has_value();
+          },
+          [&loader](const content::TextureResourceLocator& locator, TextureCompletion complete) {
+            const auto key = loader.ResolveTextureResourceKey(locator);
+            if (!key) {
+              complete({}, {}, "texture descriptor is unavailable in its mounted cooked source");
+              return;
+            }
+            loader.StartLoadTexture(*key, [key = *key, complete = std::move(complete)](auto texture) {
+              const auto error = texture ? "" : "texture resource could not be loaded";
+              complete(key, std::move(texture), error);
+            });
           }) {}
 
 SceneAssetRequests::SceneAssetRequests(GeometryLoader geometry_loader,
                                        MaterialLoader material_loader,
                                        Diagnostic diagnostic,
-                                       AssetAvailability available)
+                                       AssetAvailability available, TextureLoader texture_loader)
     : state_(std::make_unique<State>()) {
   state_->geometry_loader = std::move(geometry_loader);
   state_->material_loader = std::move(material_loader);
   state_->diagnostic = std::move(diagnostic);
   state_->available = std::move(available);
+  state_->texture_loader = std::move(texture_loader);
 }
 
 SceneAssetRequests::~SceneAssetRequests() = default;
@@ -245,11 +276,58 @@ void SceneAssetRequests::Detach(scene::NodeHandle node) {
   state_->targets.erase(node);
 }
 
+void SceneAssetRequests::SetExposureMask(scene::Scene& scene,
+    std::optional<content::TextureResourceLocator> locator, TextureApply apply,
+    FailureCallback on_failure, SuccessCallback on_success) {
+  auto& request = state_->mask;
+  request.generation = ++state_->generation;
+  request.locator = std::move(locator);
+  request.apply = std::move(apply);
+  request.on_failure = std::move(on_failure);
+  request.on_success = std::move(on_success);
+  request.status.pending = request.locator.has_value();
+  request.status.error.clear();
+  if (!request.locator) {
+    request.apply(scene, {});
+    request.status.accepted = {};
+    if (request.on_success) {
+      request.on_success(request.generation);
+    }
+    return;
+  }
+  if (state_->loads_paused) {
+    return;
+  }
+  auto complete = [inbox = std::weak_ptr(state_->mask_inbox), generation = request.generation]
+      (content::ResourceKey key, Texture texture, std::string error) {
+    if (const auto queue = inbox.lock()) {
+      queue->Enqueue(State::MaskCompletion { .generation = generation,
+        .key = key, .texture = std::move(texture), .error = std::move(error) });
+    }
+  };
+  try {
+    state_->texture_loader(*request.locator, complete);
+  } catch (const std::exception& error) {
+    complete({}, {}, error.what());
+  } catch (...) {
+    complete({}, {}, "unknown failure loading exposure metering mask");
+  }
+}
+
+auto SceneAssetRequests::InspectExposureMask() const -> ExposureMaskStatus {
+  return state_->mask.status;
+}
+
 void SceneAssetRequests::Refresh(scene::Scene &scene) {
   const auto was_paused = state_->loads_paused;
   state_->loads_paused = false;
   state_->refresh_requests.clear();
   state_->refresh_error.clear();
+  if (state_->mask.apply && state_->mask.locator) {
+    const auto previous = state_->mask;
+    SetExposureMask(scene, previous.locator, previous.apply, previous.on_failure, previous.on_success);
+    state_->refresh_requests.insert(state_->mask.generation);
+  }
   for (auto &[handle, target] : state_->targets) {
     const auto node = scene.GetNode(handle);
     if (!node || !node->IsAlive()) {
@@ -283,6 +361,9 @@ void SceneAssetRequests::ResumeLoads(scene::Scene& scene) {
 }
 
 auto SceneAssetRequests::IsRefreshPending() const -> bool {
+  if (state_->mask.status.pending && state_->refresh_requests.contains(state_->mask.generation)) {
+    return true;
+  }
   for (const auto& [handle, target] : state_->targets) {
     if (target.geometry_pending && state_->refresh_requests.contains(target.geometry_generation)) {
       return true;
@@ -301,6 +382,37 @@ auto SceneAssetRequests::RefreshError() const -> std::string {
 }
 
 void SceneAssetRequests::Drain(scene::Scene &scene) {
+  state_->mask_inbox->Drain([this, &scene](State::MaskCompletion& result) {
+    auto& request = state_->mask;
+    if (request.generation != result.generation || !request.status.pending) {
+      return;
+    }
+    request.status.pending = false;
+    if (result.error.empty() && result.texture && result.key.get() != 0U) {
+      try {
+        request.apply(scene, result.key);
+      } catch (const std::exception& error) {
+        result.error = error.what();
+      }
+      if (result.error.empty()) {
+        request.status.accepted = result.key;
+        if (request.on_success) {
+          request.on_success(result.generation);
+        }
+        return;
+      }
+    }
+    request.status.error = result.error.empty() ? "texture load returned no resource" : result.error;
+    const auto message = fmt::format("Exposure mask '{}' rejected: {}; previous settings retained",
+      request.locator->descriptor_relative_path.generic_string(), request.status.error);
+    if (state_->refresh_requests.contains(result.generation)) {
+      state_->refresh_error = message;
+    }
+    state_->diagnostic(message);
+    if (request.on_failure) {
+      request.on_failure(result.generation, request.status.error);
+    }
+  });
   std::erase_if(state_->targets, [&scene](const auto &entry) {
     const auto node = scene.GetNode(entry.first);
     return !node || !node->IsAlive();

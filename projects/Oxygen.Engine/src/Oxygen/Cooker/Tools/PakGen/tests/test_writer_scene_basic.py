@@ -47,7 +47,7 @@ def _extract_scene_component_tables(scene_desc: bytes) -> list[dict[str, int]]:
 def test_build_pak_with_scene_asset(tmp_path: Path):
     spec = {
         "source_identity": "01a0a760-49b9-725c-b553-6b77432490ea",
-        "version": 6,
+        "version": 7,
         "content_version": 7,
         "buffers": [],
         "textures": [],
@@ -138,7 +138,7 @@ def test_build_pak_with_scene_asset(tmp_path: Path):
     assert seen_scene
 
     scene_desc = _extract_scene_descriptor(data)
-    assert scene_desc[65] == 5
+    assert scene_desc[65] == 6
 
     tables = _extract_scene_component_tables(scene_desc)
     assert len(tables) == 1
@@ -154,7 +154,7 @@ def test_build_pak_with_scene_asset(tmp_path: Path):
 def test_build_pak_with_current_environment_and_local_fog_scene_asset(tmp_path: Path):
     spec = {
         "source_identity": "01a0a760-49b9-725c-b553-6b7895442e76",
-        "version": 6,
+        "version": 7,
         "content_version": 7,
         "buffers": [],
         "textures": [],
@@ -164,7 +164,7 @@ def test_build_pak_with_current_environment_and_local_fog_scene_asset(tmp_path: 
                 "type": "scene",
                 "name": "SceneEnvironmentV3",
                 "asset_key": "33" * 16,
-                "version": 5,
+                "version": 6,
                 "nodes": [
                     {"name": "Root", "parent": None},
                     {"name": "FogNode", "parent": 0},
@@ -253,15 +253,15 @@ def test_build_pak_with_current_environment_and_local_fog_scene_asset(tmp_path: 
     build_pak(BuildOptions(input_spec=spec_path, output_path=out_path))
     scene_desc = _extract_scene_descriptor(out_path.read_bytes())
 
-    assert scene_desc[65] == 5
+    assert scene_desc[65] == 6
     assert b"LFOG" in scene_desc
 
 
-@pytest.mark.parametrize("version", [0, 1, 2, 3, 4, 6])
+@pytest.mark.parametrize("version", [0, 1, 2, 3, 4, 5, 7])
 def test_scene_validation_rejects_non_current_scene_asset_version(version):
     spec = {
         "source_identity": "01a0a760-49b9-725c-b553-6b790ce19442",
-        "version": 6,
+        "version": 7,
         "content_version": 7,
         "buffers": [],
         "textures": [],
@@ -269,7 +269,7 @@ def test_scene_validation_rejects_non_current_scene_asset_version(version):
         "assets": [
             {
                 "type": "scene",
-                "name": "LegacyScene",
+                "name": "RejectedScene",
                 "asset_key": "33" * 16,
                 "version": version,
                 "nodes": [{"name": "Root", "parent": None}],

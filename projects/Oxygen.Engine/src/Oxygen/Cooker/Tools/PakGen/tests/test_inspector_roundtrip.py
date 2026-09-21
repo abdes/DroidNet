@@ -25,7 +25,7 @@ def _build(tmp: Path, spec_name: str, spec: dict) -> Path:
 
 EMPTY_SPEC = {
     "source_identity": "01a0a760-498c-7342-9a13-e3303795adb9",
-    "version": 6,
+    "version": 7,
     "content_version": 0,
     "buffers": [],
     "textures": [],
@@ -35,7 +35,7 @@ EMPTY_SPEC = {
 
 SIMPLE_SPEC = {
     "source_identity": "01a0a760-498c-7342-9a13-e331df230a76",
-    "version": 6,
+    "version": 7,
     "content_version": 2,
     "buffers": [
         {"name": "vb0", "stride": 4, "data": "BBBB"},

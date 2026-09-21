@@ -43,6 +43,7 @@ m_gtest_program(
     "BuiltinGeometry_test.cpp"
     "CanonicalPrimitives_test.cpp"
     "Capsule_test.cpp"
+    "CameraExposureSerialization_test.cpp"
     "GeometryAsset_test.cpp"
     "HalfFloat_test.cpp"
     "IndexBufferView_test.cpp"

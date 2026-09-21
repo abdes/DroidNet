@@ -207,9 +207,8 @@ namespace detail {
         throw std::runtime_error("scene environment record out of bounds");
       }
 
-      if (const auto expected_size
-        = oxygen::data::pak::world::ExpectedEnvironmentRecordSize(record_type);
-        expected_size.has_value() && record_size != *expected_size) {
+      if (!data::pak::world::IsValidEnvironmentRecordSize(
+            record_type, record_size)) {
         throw std::runtime_error("scene environment record size mismatch");
       }
 
@@ -490,8 +489,21 @@ inline auto LoadSceneAsset(const LoaderContext& context)
     }
   }
 
-  return std::make_unique<data::SceneAsset>(
+  auto asset = std::make_unique<data::SceneAsset>(
     context.current_asset_key, std::move(bytes));
+  if (const auto post = asset->TryGetPostProcessVolumeEnvironment(); post
+    && post->auto_exposure_metering_mask != data::pak::core::kNoResourceIndex
+    && !context.parse_only) {
+    const auto* table = context.source_content != nullptr
+      ? context.source_content->GetTextureTable()
+      : nullptr;
+    if (table == nullptr
+      || !table->IsValidKey(post->auto_exposure_metering_mask)) {
+      throw std::runtime_error(
+        "scene exposure mask texture index is outside its source table");
+    }
+  }
+  return asset;
 }
 
 } // namespace oxygen::content::loaders

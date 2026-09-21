@@ -6,6 +6,7 @@ using System.Globalization;
 using Microsoft.Extensions.Logging;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World.Components;
+using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.World.Services;
@@ -64,10 +65,11 @@ public sealed partial class SceneEngineSync
         {
             RuntimeSetGeometry geometry => (geometry.NodeId, geometry.AssetPath, SceneOperationKinds.EditGeometry, LiveSyncDiagnosticCodes.GeometryUnresolvedAtRuntime),
             RuntimeSetMaterialOverride material => (material.NodeId, material.MaterialPath, SceneOperationKinds.EditMaterialSlot, LiveSyncDiagnosticCodes.MaterialFailed),
+            RuntimeSetEnvironment environment => (Guid.Empty, environment.AutoExposureMeteringMask?.AssetUri.AbsoluteUri, SceneOperationKinds.EditEnvironment, LiveSyncDiagnosticCodes.EnvironmentFailed),
             _ => (Guid.Empty, null, string.Empty, string.Empty),
         };
         var node = FindNode(scene, nodeId);
-        if (node is null)
+        if (node is null && request.Command is not RuntimeSetEnvironment)
         {
             return;
         }
@@ -105,12 +107,12 @@ public sealed partial class SceneEngineSync
         });
     }
 
-    private AffectedScope? GetAssetFailureScope(Scene scene, SceneNode node, string? assetPath, Guid documentLifetime)
+    private AffectedScope? GetAssetFailureScope(Scene scene, SceneNode? node, string? assetPath, Guid documentLifetime)
     {
         lock (this.documentGate)
         {
             return this.TryGetDocument(scene, out var lifetime) && lifetime.Id == documentLifetime
-                ? Scope(scene, node, componentType: nameof(GeometryComponent), assetVirtualPath: assetPath) with
+                ? Scope(scene, node, componentType: node is null ? nameof(PostProcessEnvironmentData) : nameof(GeometryComponent), assetVirtualPath: assetPath) with
                 {
                     DocumentId = lifetime.Metadata.DocumentId,
                     DocumentLifetime = lifetime.Id,

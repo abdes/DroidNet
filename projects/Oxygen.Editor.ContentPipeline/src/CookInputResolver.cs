@@ -28,6 +28,7 @@ internal static class CookInputResolver
         var extension = Path.GetExtension(path.EndsWith(".json", StringComparison.OrdinalIgnoreCase) ? path[..^5] : path).ToUpperInvariant();
         var kind = extension switch
         {
+            ".OTEX" => ContentCookAssetKind.Texture,
             ".OMAT" => ContentCookAssetKind.Material,
             ".OGEO" => ContentCookAssetKind.Geometry,
             ".OSCENE" => ContentCookAssetKind.Scene,

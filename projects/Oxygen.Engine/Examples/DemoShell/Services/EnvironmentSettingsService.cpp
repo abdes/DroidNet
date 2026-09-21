@@ -10,16 +10,25 @@
 #include <memory>
 #include <numbers>
 #include <optional>
+#include <span>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
+#include "DemoShell/Services/EnvironmentSettingsService.h"
+#include "DemoShell/Services/SettingsService.h"
+#include "DemoShell/Services/SkyboxService.h"
 #include <glm/geometric.hpp>
 #include <glm/gtc/quaternion.hpp>
 
 #include <Oxygen/Base/ScopeGuard.h>
+#include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/PostProcess.h>
+#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/PakFormat_core.h>
+#include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Scene/Environment/Background.h>
 #include <Oxygen/Scene/Environment/Fog.h>
@@ -30,16 +39,13 @@
 #include <Oxygen/Scene/Environment/SkyLight.h>
 #include <Oxygen/Scene/Environment/SkySphere.h>
 #include <Oxygen/Scene/Environment/VolumetricClouds.h>
+#include <Oxygen/Scene/ExposureSettings.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Light/DirectionalLightResolver.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneFlags.h>
 #include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/Renderer.h>
-
-#include "DemoShell/Services/EnvironmentSettingsService.h"
-#include "DemoShell/Services/SettingsService.h"
-#include "DemoShell/Services/SkyboxService.h"
 
 namespace oxygen::examples {
 
@@ -458,31 +464,43 @@ namespace {
     target.SetShadowStrength(source.shadow_strength);
   }
 
-  auto HydratePostProcessVolume(scene::environment::PostProcessVolume& target,
-    const data::pak::world::PostProcessVolumeEnvironmentRecord& source) -> void
+  void HydratePostProcessVolume(scene::environment::PostProcessVolume& target,
+    const data::pak::world::PostProcessVolumeEnvironmentRecord& source,
+    const std::span<const data::pak::world::ExposureCompensationKeyRecord>
+      curve,
+    const content::ResourceKey metering_mask)
   {
+    auto exposure = scene::ExposureSettings {
+      .enabled = source.exposure_enabled != 0U,
+      .mode = source.exposure_mode,
+      .manual_ev = source.manual_exposure_ev,
+      .compensation_ev = source.exposure_compensation_ev,
+      .key = source.exposure_key,
+      .min_ev = source.auto_exposure_min_ev,
+      .max_ev = source.auto_exposure_max_ev,
+      .speed_up = source.auto_exposure_speed_up,
+      .speed_down = source.auto_exposure_speed_down,
+      .metering_mode = source.auto_exposure_metering_mode,
+      .low_percentile = source.auto_exposure_low_percentile,
+      .high_percentile = source.auto_exposure_high_percentile,
+      .min_log_luminance = source.auto_exposure_min_log_luminance,
+      .log_luminance_range = source.auto_exposure_log_luminance_range,
+      .target_luminance = source.auto_exposure_target_luminance,
+      .spot_meter_radius = source.auto_exposure_spot_meter_radius,
+      .black_influence = source.auto_exposure_black_influence,
+      .transition_distance = source.auto_exposure_transition_distance_ev,
+      .metering_mask = metering_mask,
+    };
+    exposure.compensation_curve.reserve(curve.size());
+    for (const auto& key : curve) {
+      exposure.compensation_curve.push_back({
+        .metered_ev = key.metered_ev,
+        .compensation_ev = key.compensation_ev,
+      });
+    }
+    target.SetExposureSettings(exposure);
     target.SetToneMapper(source.tone_mapper);
-    target.SetExposureMode(source.exposure_mode);
-    target.SetExposureEnabled(source.exposure_enabled != 0U);
-    target.SetExposureKey(source.exposure_key);
-    target.SetManualExposureEv(source.manual_exposure_ev);
-    target.SetAutoExposureMeteringMode(source.auto_exposure_metering_mode);
-    target.SetAutoExposureHistogramPercentiles(
-      source.auto_exposure_low_percentile,
-      source.auto_exposure_high_percentile);
-    target.SetAutoExposureHistogramWindow(
-      source.auto_exposure_min_log_luminance,
-      source.auto_exposure_log_luminance_range);
-    target.SetAutoExposureTargetLuminance(
-      source.auto_exposure_target_luminance);
-    target.SetAutoExposureSpotMeterRadius(
-      source.auto_exposure_spot_meter_radius);
     target.SetDisplayGamma(source.display_gamma);
-    target.SetExposureCompensationEv(source.exposure_compensation_ev);
-    target.SetAutoExposureRangeEv(
-      source.auto_exposure_min_ev, source.auto_exposure_max_ev);
-    target.SetAutoExposureAdaptationSpeeds(
-      source.auto_exposure_speed_up, source.auto_exposure_speed_down);
     target.SetBloomIntensity(source.bloom_intensity);
     target.SetBloomThreshold(source.bloom_threshold);
     target.SetSaturation(source.saturation);
@@ -743,25 +761,37 @@ namespace {
 
  @param target Mutable runtime environment to populate.
  @param source_asset Asset containing environment records.
+ @param metering_mask Resolved source-relative texture key; zero only for no
+mask.
 
 ### Performance Characteristics
 
-- Time Complexity: $O(1)$ for fixed system set.
-- Memory: $O(1)$ additional allocations.
+- Time Complexity: $O(n)$ for the bounded compensation curve and fixed system
+set.
+- Memory: $O(n)$ for authored compensation keys.
 - Optimization: Avoids system creation when records are absent.
 
 ### Usage Examples
 
  ```cpp
  auto env = std::make_unique<scene::SceneEnvironment>();
- EnvironmentSettingsService::HydrateEnvironment(*env, asset);
+ EnvironmentSettingsService::HydrateEnvironment(*env, asset, metering_mask);
  ```
 
  @note SkyAtmosphere and SkySphere are treated as mutually exclusive.
 */
-auto EnvironmentSettingsService::HydrateEnvironment(
-  scene::SceneEnvironment& target, const data::SceneAsset& source_asset) -> void
+void EnvironmentSettingsService::HydrateEnvironment(
+  scene::SceneEnvironment& target, const data::SceneAsset& source_asset,
+  const content::ResourceKey metering_mask)
 {
+  const auto post_record = source_asset.TryGetPostProcessVolumeEnvironment();
+  const bool has_authored_mask = post_record
+    && post_record->auto_exposure_metering_mask
+      != data::pak::core::kNoResourceIndex;
+  if (has_authored_mask != (metering_mask.get() != 0U)) {
+    throw std::invalid_argument(
+      "Scene exposure mask requires a resolved source resource key");
+  }
   if (const auto record = source_asset.TryGetBackgroundEnvironment();
     IsEnabled(record)) {
     auto& background = target.AddSystem<scene::environment::Background>();
@@ -814,10 +844,15 @@ auto EnvironmentSettingsService::HydrateEnvironment(
   }
 
   if (const auto pp_record = source_asset.TryGetPostProcessVolumeEnvironment();
-    IsEnabled(pp_record)) {
+    pp_record && pp_record->enabled != 0U) {
     auto& pp = target.AddSystem<scene::environment::PostProcessVolume>();
-    HydratePostProcessVolume(pp, *pp_record);
-    LOG_F(1, "Applied PostProcessVolume environment");
+    HydratePostProcessVolume(pp, *pp_record,
+      source_asset.GetPostProcessCompensationCurve(), metering_mask);
+    LOG_F(INFO,
+      "Scene exposure applied: asset={} mode={} mask={} curve_keys={}",
+      data::to_string(source_asset.GetAssetKey()),
+      engine::to_string(pp_record->exposure_mode),
+      pp_record->auto_exposure_metering_mask.get(), pp_record->curve_key_count);
   }
 }
 

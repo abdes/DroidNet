@@ -7,7 +7,7 @@ from pakgen.packing.planner import build_plan
 def test_rgba8_1x1_payload_padded_to_256(tmp_path: Path):
     spec = {
         "source_identity": "01a0a760-49af-7130-b122-397966b7f737",
-        "version": 6,
+        "version": 7,
         "content_version": 0,
         "buffers": [],
         "textures": [
@@ -61,7 +61,7 @@ def test_rgba8_1x1_payload_padded_to_256(tmp_path: Path):
 def test_rgba8_2x2_payload_padded_to_512(tmp_path: Path):
     spec = {
         "source_identity": "01a0a760-49af-7130-b122-397a04a0ebca",
-        "version": 6,
+        "version": 7,
         "content_version": 0,
         "buffers": [],
         "textures": [

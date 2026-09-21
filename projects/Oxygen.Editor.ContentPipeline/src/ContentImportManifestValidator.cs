@@ -14,6 +14,7 @@ public sealed class ContentImportManifestValidator : IContentImportManifestValid
     private static readonly HashSet<string> SupportedJobTypes =
     [
         with(StringComparer.Ordinal),
+        "texture-descriptor",
         "material-descriptor",
         "geometry-descriptor",
         "scene-descriptor",

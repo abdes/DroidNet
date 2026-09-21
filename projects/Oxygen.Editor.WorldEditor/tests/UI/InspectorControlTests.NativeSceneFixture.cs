@@ -68,7 +68,7 @@ public sealed partial class InspectorControlTests
             {
                 Id = Guid.NewGuid(),
                 Name = "Environment",
-                Environment = new SceneEnvironmentData { ExposureMode = mode, PostProcess = new PostProcessEnvironmentData { ExposureMode = mode } },
+                Environment = new SceneEnvironmentData { PostProcess = new PostProcessEnvironmentData { ExposureMode = mode } },
             });
             seed?.Invoke(this.Source);
             project.Scenes.Add(this.Source);

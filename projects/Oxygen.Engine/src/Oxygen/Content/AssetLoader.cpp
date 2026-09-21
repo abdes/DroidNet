@@ -8,6 +8,8 @@
 #include <array>
 #include <cstring>
 #include <exception>
+#include <filesystem>
+#include <ios>
 #include <limits>
 #include <mutex>
 #include <optional>
@@ -61,15 +63,20 @@
 #include <Oxygen/Content/Loaders/TextureLoader.h>
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Content/SourceToken.h>
+#include <Oxygen/Content/TextureResourceLocator.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/BufferResource.h>
+#include <Oxygen/Data/PakFormatSerioLoaders.h>
+#include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PhysicsResource.h>
 #include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Data/TextureResource.h>
+#include <Oxygen/Data/TextureResourceDescriptor.h>
 #include <Oxygen/Engine/Scripting/ScriptBytecodeBlob.h>
 #include <Oxygen/OxCo/ParkingLot.h>
+#include <Oxygen/Serio/FileStream.h>
 #include <Oxygen/Serio/Reader.h>
 
 using oxygen::content::AssetLoader;
@@ -3945,6 +3952,102 @@ auto AssetLoader::MakePhysicsResourceKey(const data::SourceKey source_key,
   };
   return physics_query_service_->MakePhysicsResourceKey(
     source_key, resource_index, callbacks);
+}
+
+auto AssetLoader::ResolveTextureResourceKey(
+  const TextureResourceLocator& locator) const -> std::optional<ResourceKey>
+{
+  AssertOwningThread();
+  if (!locator.cooked_root.is_absolute()
+    || locator.descriptor_relative_path.empty()
+    || locator.descriptor_relative_path.has_root_path()
+    || std::ranges::any_of(locator.descriptor_relative_path,
+      [](const auto& part) -> bool { return part == ".."; })) {
+    throw std::invalid_argument(
+      "Texture locator requires an absolute cooked root and a contained "
+      "relative descriptor path");
+  }
+  const auto root = std::filesystem::weakly_canonical(locator.cooked_root);
+  const auto& sources = impl_->source_registry.Sources();
+  for (std::size_t i = 0; i < sources.size(); ++i) {
+    const auto& source = sources.at(i);
+    std::error_code error;
+    if (source->GetTypeId() != internal::LooseCookedSource::ClassTypeId()
+      || !std::filesystem::equivalent(source->SourcePath(), root, error)
+      || error) {
+      continue;
+    }
+    const auto path = FindTextureResourceDescriptorPath(
+      root / locator.descriptor_relative_path);
+    if (!path) {
+      return std::nullopt;
+    }
+    const auto relative
+      = std::filesystem::weakly_canonical(*path).lexically_relative(root);
+    if (relative.empty() || relative.has_root_path()
+      || *relative.begin() == "..") {
+      throw std::invalid_argument(
+        "Texture descriptor resolves outside its mounted source");
+    }
+    if (std::filesystem::file_size(*path)
+      != data::kTextureResourceDescriptorSize) {
+      throw std::runtime_error(
+        "Texture descriptor does not use the current OTEX layout");
+    }
+    serio::FileStream<> stream(*path, std::ios::in);
+    serio::Reader reader(stream);
+    const auto bytes = reader.ReadBlob(data::kTextureResourceDescriptorSize);
+    if (!bytes) {
+      throw std::runtime_error("Texture descriptor could not be read");
+    }
+    const auto decoded = data::DecodeTextureResourceDescriptor(*bytes);
+    if (!decoded) {
+      throw std::runtime_error(decoded.error());
+    }
+    const auto* table = source->GetTextureTable();
+    if (decoded->index == data::pak::core::kNoResourceIndex || table == nullptr
+      || !table->IsValidKey(decoded->index)) {
+      throw std::runtime_error(
+        "Texture descriptor index is outside its mounted source table");
+    }
+    auto table_reader = source->CreateTextureTableReader();
+    auto descriptor = data::pak::core::TextureResourceDesc {};
+    const auto offset = table->GetResourceOffset(decoded->index);
+    if (!table_reader || !offset || !table_reader->Seek(*offset)
+      || !serio::Load(*table_reader, descriptor)
+      || std::memcmp(&descriptor, &decoded->descriptor, sizeof(descriptor))
+        != 0) {
+      throw std::runtime_error("Texture descriptor is stale or does not match "
+                               "its mounted source table");
+    }
+    constexpr auto kTextureTypeIndex = static_cast<uint16_t>(
+      IndexOf<data::TextureResource, ResourceTypeList>::value);
+    return PackResourceKey(impl_->source_registry.SourceIds().at(i),
+      kTextureTypeIndex, decoded->index);
+  }
+  return std::nullopt;
+}
+
+auto AssetLoader::MakeTextureResourceKeyForAsset(
+  const data::AssetKey& context_asset_key,
+  const data::pak::core::ResourceIndexT resource_index) const noexcept
+  -> std::optional<ResourceKey>
+{
+  if (resource_index == data::pak::core::kNoResourceIndex) {
+    return std::nullopt;
+  }
+  const auto source_id = ResolveSourceIdForAsset(context_asset_key);
+  if (!source_id) {
+    return std::nullopt;
+  }
+  const auto* source = ResolveSourceForId(*source_id);
+  const auto* table = source != nullptr ? source->GetTextureTable() : nullptr;
+  if (table == nullptr || !table->IsValidKey(resource_index)) {
+    return std::nullopt;
+  }
+  constexpr auto kTextureTypeIndex = static_cast<uint16_t>(
+    IndexOf<data::TextureResource, ResourceTypeList>::value);
+  return PackResourceKey(*source_id, kTextureTypeIndex, resource_index);
 }
 
 auto AssetLoader::MakeScriptResourceKeyForAsset(

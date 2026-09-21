@@ -31,7 +31,7 @@ def _codes(errors):
 def test_validation_duplicate_buffer_name():  # noqa: N802
     spec = {
         "source_identity": "01a0a760-49b4-75bc-a19b-20f41b46c7e9",
-        "version": 6,
+        "version": 7,
         "buffers": [{"name": "bufA"}, {"name": "bufA"}],
         "textures": [],
         "audios": [],
@@ -44,7 +44,7 @@ def test_validation_duplicate_buffer_name():  # noqa: N802
 def test_validation_missing_texture_reference():  # noqa: N802
     spec = {
         "source_identity": "01a0a760-49b4-75bc-a19b-20f53a32bdf8",
-        "version": 6,
+        "version": 7,
         "textures": [],
         "buffers": [],
         "audios": [],
@@ -63,7 +63,7 @@ def test_validation_missing_texture_reference():  # noqa: N802
 def test_validation_missing_geometry_buffer():  # noqa: N802
     spec = {
         "source_identity": "01a0a760-49b4-75bc-a19b-20f6e270cef0",
-        "version": 6,
+        "version": 7,
         "buffers": [],
         "textures": [],
         "audios": [],

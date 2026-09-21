@@ -892,7 +892,7 @@ public sealed partial class SceneDocumentCommandServiceTests
     {
         var fixture = CreateFixture();
         var scene = CreateScene();
-        scene.SetEnvironment(new SceneEnvironmentData { ExposureMode = ExposureMode.Auto, ManualExposureEv = 9.7f });
+        scene.SetEnvironment(new SceneEnvironmentData { PostProcess = new PostProcessEnvironmentData { ExposureMode = ExposureMode.Auto, ManualExposureEv = 9.7f } });
         var context = CreateContext(scene);
         var accepted = new EnvironmentSyncResult(SyncStatus.Accepted, new Dictionary<string, SyncOutcome>(StringComparer.Ordinal));
         SceneEnvironmentData? syncedEnvironment = null;
@@ -914,14 +914,10 @@ public sealed partial class SceneDocumentCommandServiceTests
             EditSessionToken.OneShot).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeTrue();
-        _ = scene.Environment.ExposureMode.Should().Be(ExposureMode.Manual);
-        _ = scene.Environment.ManualExposureEv.Should().Be(3.5f);
         _ = scene.Environment.PostProcess.ExposureMode.Should().Be(ExposureMode.Manual);
         _ = scene.Environment.PostProcess.ManualExposureEv.Should().Be(3.5f);
         _ = syncedEnvironment.Should().NotBeNull();
-        _ = syncedEnvironment!.ExposureMode.Should().Be(ExposureMode.Manual);
-        _ = syncedEnvironment.ManualExposureEv.Should().Be(3.5f);
-        _ = syncedEnvironment.PostProcess.ExposureMode.Should().Be(ExposureMode.Manual);
+        _ = syncedEnvironment!.PostProcess.ExposureMode.Should().Be(ExposureMode.Manual);
         _ = syncedEnvironment.PostProcess.ManualExposureEv.Should().Be(3.5f);
         _ = context.Metadata.IsDirty.Should().BeTrue();
         _ = context.History.UndoStack.Should().ContainSingle();
@@ -982,10 +978,10 @@ public sealed partial class SceneDocumentCommandServiceTests
 
         _ = result.Succeeded.Should().BeTrue();
         _ = scene.Environment.PostProcess.Should().Be(postProcess);
-        _ = scene.Environment.ExposureMode.Should().Be(postProcess.ExposureMode);
-        _ = scene.Environment.ManualExposureEv.Should().Be(postProcess.ManualExposureEv);
-        _ = scene.Environment.ExposureCompensation.Should().Be(postProcess.ExposureCompensationEv);
-        _ = scene.Environment.ToneMapping.Should().Be(postProcess.ToneMapper);
+        _ = scene.Environment.PostProcess.ExposureMode.Should().Be(postProcess.ExposureMode);
+        _ = scene.Environment.PostProcess.ManualExposureEv.Should().Be(postProcess.ManualExposureEv);
+        _ = scene.Environment.PostProcess.ExposureCompensationEv.Should().Be(postProcess.ExposureCompensationEv);
+        _ = scene.Environment.PostProcess.ToneMapper.Should().Be(postProcess.ToneMapper);
         _ = syncedEnvironment.Should().NotBeNull();
         _ = syncedEnvironment!.PostProcess.Should().Be(postProcess);
     }
@@ -1051,7 +1047,7 @@ public sealed partial class SceneDocumentCommandServiceTests
     {
         var fixture = CreateFixture();
         var scene = CreateScene();
-        scene.SetEnvironment(new SceneEnvironmentData { ManualExposureEv = 9.7f });
+        scene.SetEnvironment(new SceneEnvironmentData { PostProcess = new PostProcessEnvironmentData { ManualExposureEv = 9.7f } });
         var before = scene.Environment;
         var context = CreateContext(scene);
 
@@ -1076,6 +1072,46 @@ public sealed partial class SceneDocumentCommandServiceTests
         fixture.Sync.Verify(
             sync => sync.UpdateEnvironmentAsync(scene, It.IsAny<SceneEnvironmentData>(), It.IsAny<SceneSyncRevision>(), It.IsAny<CancellationToken>()),
             Times.Never);
+    }
+
+    [TestMethod]
+    public async Task EditSceneEnvironmentAsync_WhenPostProcessCandidateIsInvalid_RejectsAtomically()
+    {
+        PostProcessEnvironmentData[] candidates =
+        [
+            new() { AutoExposureBlackInfluence = 2f },
+            new() { AutoExposureTransitionDistanceEv = 0f },
+            new() { AutoExposureMinEv = 20f },
+            new() { AutoExposureLowPercentile = 0.95f },
+            new() { AutoExposureCompensationCurve = [new(1f, 0f), new(1f, 2f)] },
+            new() { AutoExposureMeteringMode = (MeteringMode)99 },
+        ];
+        foreach (var candidate in candidates)
+        {
+            var fixture = CreateFixture();
+            var scene = CreateScene();
+            var before = scene.Environment;
+            var context = CreateContext(scene);
+            var result = await fixture.Sut.EditSceneEnvironmentAsync(
+                context,
+                new SceneEnvironmentEdit(
+                    OptionalEditValues.Unspecified<bool>(),
+                    OptionalEditValues.Unspecified<Guid?>(),
+                    OptionalEditValues.Unspecified<ExposureMode>(),
+                    OptionalEditValues.Unspecified<float>(),
+                    OptionalEditValues.Unspecified<float>(),
+                    OptionalEditValues.Unspecified<ToneMappingMode>(),
+                    OptionalEditValues.Unspecified<System.Numerics.Vector3>(),
+                    PostProcess: OptionalEditValues.Supplied(candidate)),
+                EditSessionToken.OneShot).ConfigureAwait(false);
+            _ = result.Succeeded.Should().BeFalse();
+            _ = scene.Environment.Should().Be(before);
+            _ = context.Metadata.IsDirty.Should().BeFalse();
+            _ = context.History.UndoStack.Should().BeEmpty();
+            fixture.Sync.Verify(
+                sync => sync.UpdateEnvironmentAsync(scene, It.IsAny<SceneEnvironmentData>(), It.IsAny<SceneSyncRevision>(), It.IsAny<CancellationToken>()),
+                Times.Never);
+        }
     }
 
     [TestMethod]
@@ -1218,10 +1254,10 @@ public sealed partial class SceneDocumentCommandServiceTests
 
     private static void VerifyPostProcessEnvironment(SceneEnvironmentData environment, PostProcessEnvironmentData value)
     {
-        _ = environment.ExposureMode.Should().Be(value.ExposureMode);
-        _ = environment.ManualExposureEv.Should().Be(value.ManualExposureEv);
-        _ = environment.ExposureCompensation.Should().Be(value.ExposureCompensationEv);
-        _ = environment.ToneMapping.Should().Be(value.ToneMapper);
+        _ = environment.PostProcess.ExposureMode.Should().Be(value.ExposureMode);
+        _ = environment.PostProcess.ManualExposureEv.Should().Be(value.ManualExposureEv);
+        _ = environment.PostProcess.ExposureCompensationEv.Should().Be(value.ExposureCompensationEv);
+        _ = environment.PostProcess.ToneMapper.Should().Be(value.ToneMapper);
         _ = environment.PostProcess.Should().Be(value);
     }
 

@@ -17,10 +17,6 @@ public sealed partial class SceneEngineSync
         {
             [nameof(SceneEnvironmentData.AtmosphereEnabled)] = environment,
             [nameof(SceneEnvironmentData.SunNodeId)] = sun,
-            [nameof(SceneEnvironmentData.ExposureMode)] = environment,
-            [nameof(SceneEnvironmentData.ManualExposureEv)] = environment,
-            [nameof(SceneEnvironmentData.ExposureCompensation)] = environment,
-            [nameof(SceneEnvironmentData.ToneMapping)] = environment,
             [nameof(SceneEnvironmentData.BackgroundColor)] = background,
             [nameof(SceneEnvironmentData.SkyAtmosphere)] = environment,
             [nameof(SceneEnvironmentData.PostProcess)] = environment,

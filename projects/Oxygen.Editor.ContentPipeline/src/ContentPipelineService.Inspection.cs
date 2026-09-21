@@ -119,6 +119,7 @@ public sealed partial class ContentPipelineService
 
         var nativeScope = root.Scope;
         if (nativeScope.EndsWith(".omat.json", StringComparison.OrdinalIgnoreCase)
+            || nativeScope.EndsWith(".otex.json", StringComparison.OrdinalIgnoreCase)
             || nativeScope.EndsWith(".ogeo.json", StringComparison.OrdinalIgnoreCase)
             || nativeScope.EndsWith(".oscene.json", StringComparison.OrdinalIgnoreCase))
         {

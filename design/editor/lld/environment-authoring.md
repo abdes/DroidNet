@@ -11,13 +11,13 @@ assignment belongs to each light, not to a scene Sun pointer. Every editable
 field below has a required runtime effect; storage or queue acceptance alone
 cannot satisfy the contract.
 
-| Owner | Responsibility |
-| --- | --- |
-| World | Canonical SceneEnvironmentData and per-light assignment source, defaults, DTOs and invariants |
-| WorldEditor inspector/commands | Mode-aware controls, finite/cross-field validation, atomic edits/history/dirty state |
-| ContentPipeline/native cooker | Complete source-to-native schema/record mapping and diagnostics |
-| Runtime/Interop/engine | Current-state application, role resolution, lighting/capture invalidation and rendering |
-| SceneEnvironment/PostProcessVolume/SkyLight | Native ordinary scene-system semantics and creation defaults |
+| Owner                                       | Responsibility                                                                                |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| World                                       | Canonical SceneEnvironmentData and per-light assignment source, defaults, DTOs and invariants |
+| WorldEditor inspector/commands              | Mode-aware controls, finite/cross-field validation, atomic edits/history/dirty state          |
+| ContentPipeline/native cooker               | Complete source-to-native schema/record mapping and diagnostics                               |
+| Runtime/Interop/engine                      | Current-state application, role resolution, lighting/capture invalidation and rendering       |
+| SceneEnvironment/PostProcessVolume/SkyLight | Native ordinary scene-system semantics and creation defaults                                  |
 
 Environment is scene scope, never editor startup preferences. Editor-only Hide
 belongs to workspace/view state and does not alter these values. See
@@ -52,21 +52,21 @@ Primary controls expose enable, sun disks and sky luminance. The existing
 physical/aerial fields remain supported under Advanced; an unimplemented path
 must be fixed rather than removing its field silently.
 
-| Source path | Default / unit | Bounds after finite validation | Conditional UI and effect |
-| --- | --- | --- | --- |
-| AtmosphereEnabled | true; bool | Boolean | Primary; enables atmospheric sky/scattering, independent of light direct illumination |
-| SkyAtmosphere.SunDiskEnabled | true; bool | Boolean | Atmosphere On; visible analytic disks for both assigned sources |
-| SkyAtmosphere.PlanetRadiusMeters | 6360000 m | Clamp >=1 | Advanced, Atmosphere On; planetary geometry/scattering; km display divides by1000 |
-| SkyAtmosphere.AtmosphereHeightMeters | 100000 m | Clamp >=1 | Advanced, Atmosphere On; atmosphere extent; km display |
-| SkyAtmosphere.GroundAlbedoRgb | (0.4,0.4,0.4); linear RGB | Clamp each [0,1] | Advanced, Atmosphere On; ground scattering response |
-| SkyAtmosphere.RayleighScaleHeightMeters | 8000 m | Clamp >=1 | Advanced, Atmosphere On; Rayleigh vertical density; km display |
-| SkyAtmosphere.MieScaleHeightMeters | 1200 m | Clamp >=1 | Advanced, Atmosphere On; Mie vertical density; km display |
-| SkyAtmosphere.MieAnisotropy | 0.8; dimensionless | Clamp [-0.999,0.999] | Advanced, Atmosphere On; scattering directionality |
-| SkyAtmosphere.SkyLuminanceFactorRgb | (1,1,1); linear multipliers | Clamp components >=0 | Atmosphere On; sky and aerial luminance scaling through the canonical native mapping |
-| SkyAtmosphere.AerialPerspectiveDistanceScale | 1; multiplier | Clamp >=0 | Advanced, Atmosphere On; aerial optical-distance scaling |
-| SkyAtmosphere.AerialScatteringStrength | 1; multiplier | Clamp >=0 | Advanced, Atmosphere On; aerial scattering contribution |
-| SkyAtmosphere.AerialPerspectiveStartDepthMeters | 100 m | Reject <0 | Advanced, Atmosphere On; aerial start distance; exact native minimum is0m |
-| SkyAtmosphere.HeightFogContribution | 1; multiplier | Clamp >=0 | Advanced, atmosphere and height-fog contribution applicable; controls their coupling |
+| Source path                                     | Default / unit              | Bounds after finite validation | Conditional UI and effect                                                             |
+| ----------------------------------------------- | --------------------------- | ------------------------------ | ------------------------------------------------------------------------------------- |
+| AtmosphereEnabled                               | true; bool                  | Boolean                        | Primary; enables atmospheric sky/scattering, independent of light direct illumination |
+| SkyAtmosphere.SunDiskEnabled                    | true; bool                  | Boolean                        | Atmosphere On; visible analytic disks for both assigned sources                       |
+| SkyAtmosphere.PlanetRadiusMeters                | 6360000 m                   | Clamp >=1                      | Advanced, Atmosphere On; planetary geometry/scattering; km display divides by1000     |
+| SkyAtmosphere.AtmosphereHeightMeters            | 100000 m                    | Clamp >=1                      | Advanced, Atmosphere On; atmosphere extent; km display                                |
+| SkyAtmosphere.GroundAlbedoRgb                   | (0.4,0.4,0.4); linear RGB   | Clamp each [0,1]               | Advanced, Atmosphere On; ground scattering response                                   |
+| SkyAtmosphere.RayleighScaleHeightMeters         | 8000 m                      | Clamp >=1                      | Advanced, Atmosphere On; Rayleigh vertical density; km display                        |
+| SkyAtmosphere.MieScaleHeightMeters              | 1200 m                      | Clamp >=1                      | Advanced, Atmosphere On; Mie vertical density; km display                             |
+| SkyAtmosphere.MieAnisotropy                     | 0.8; dimensionless          | Clamp [-0.999,0.999]           | Advanced, Atmosphere On; scattering directionality                                    |
+| SkyAtmosphere.SkyLuminanceFactorRgb             | (1,1,1); linear multipliers | Clamp components >=0           | Atmosphere On; sky and aerial luminance scaling through the canonical native mapping  |
+| SkyAtmosphere.AerialPerspectiveDistanceScale    | 1; multiplier               | Clamp >=0                      | Advanced, Atmosphere On; aerial optical-distance scaling                              |
+| SkyAtmosphere.AerialScatteringStrength          | 1; multiplier               | Clamp >=0                      | Advanced, Atmosphere On; aerial scattering contribution                               |
+| SkyAtmosphere.AerialPerspectiveStartDepthMeters | 100 m                       | Reject <0                      | Advanced, Atmosphere On; aerial start distance; exact native minimum is0m             |
+| SkyAtmosphere.HeightFogContribution             | 1; multiplier               | Clamp >=0                      | Advanced, atmosphere and height-fog contribution applicable; controls their coupling  |
 
 All metre values remain metres in source/native scene state; presentation in km
 is not a second storage unit. Preserve existing native enum/API names. Fixed
@@ -80,11 +80,11 @@ Aerial Start is 100 m; 80 km and 0 m are not the native creation defaults.
 
 ## 4. Captured SkyLight and background
 
-| Source path | Default / unit | Bounds | Effect |
-| --- | --- | --- | --- |
-| SkyLight.Enabled | true; bool | Boolean | Enables scene-sky diffuse and specular image-based lighting |
-| SkyLight.IntensityMul | 1; dimensionless | Finite, Clamp >=0 | SkyLight On; multiplies both diffuse/specular contribution |
-| BackgroundColor | (0,0,0); linear SDR RGB | Finite, Clamp each [0,1] | Solid display background when atmosphere is off; always retains source intent |
+| Source path           | Default / unit          | Bounds                   | Effect                                                                        |
+| --------------------- | ----------------------- | ------------------------ | ----------------------------------------------------------------------------- |
+| SkyLight.Enabled      | true; bool              | Boolean                  | Enables scene-sky diffuse and specular image-based lighting                   |
+| SkyLight.IntensityMul | 1; dimensionless        | Finite, Clamp >=0        | SkyLight On; multiplies both diffuse/specular contribution                    |
+| BackgroundColor       | (0,0,0); linear SDR RGB | Finite, Clamp each [0,1] | Solid display background when atmosphere is off; always retains source intent |
 
 SkyLight uses the existing native CapturedScene source. V0.1 exposes no cubemap
 picker or alternate HDRI/probe/GI authoring workflow. Native tint, diffuse and
@@ -127,24 +127,24 @@ native enum values 0 and 2; native ManualCamera value 1 remains engine-owned and
 not an editor choice without physical-camera authoring. Preserve existing API
 names; no enum renumbering or cosmetic aliases are introduced.
 
-| PostProcess path | Default / unit | Bounds | Conditional UI and active effect |
-| --- | --- | --- | --- |
-| ExposureEnabled | true; bool | Boolean | Primary; Off uses unit exposure without erasing settings |
-| ExposureMode | Auto | Manual / Auto | Primary; selects fixed EV or metered exposure |
-| ManualExposureEv | 9.7 EV100 | Finite; validate resulting gain with key/compensation | Enabled + Manual; fixed exposure; [-24,24] is a typical control range, not a conversion clamp |
-| ExposureCompensationEv | 0 EV | Finite and representable conversion | Enabled; +1 doubles exposure, -1 halves it; no light-only [-10,10] restriction |
-| ExposureKey | 10; dimensionless calibration scale | Finite >0; validate coupled gain | Advanced, Enabled; same bias scale for Manual and Auto |
-| AutoExposureMinEv | -6 EV100 | Finite, Min <= Max | Auto; minimum metered EV |
-| AutoExposureMaxEv | 16 EV100 | Finite, Max >= Min | Auto; maximum metered EV |
-| AutoExposureSpeedUp | 3 EV/s | Finite >=0 | Auto; adaptation toward brighter luminance |
-| AutoExposureSpeedDown | 1 EV/s | Finite >=0 | Auto; adaptation toward darker luminance |
-| AutoExposureMeteringMode | Average | Average / CenterWeighted / Spot | Auto; image weighting; native ordinals 0/1/2 |
-| AutoExposureLowPercentile | 0.1 | [0,1], Low < High | Advanced Auto; lower histogram percentile |
-| AutoExposureHighPercentile | 0.9 | [0,1], High > Low | Advanced Auto; upper histogram percentile |
-| AutoExposureMinLogLuminance | -12; log2 luminance | Finite, window within [-24,32] | Advanced Auto; histogram lower range |
-| AutoExposureLogLuminanceRange | 25; log2 span | Finite >0, upper window endpoint <=32 | Advanced Auto; histogram span |
-| AutoExposureTargetLuminance | 0.18; linear target | Finite >=0; validate coupled gain | Advanced Auto; exposure target |
-| AutoExposureSpotMeterRadius | 0.2; normalized image radius | Finite >=0 | Advanced Auto + Spot; active metering radius |
+| PostProcess path              | Default / unit                      | Bounds                                                | Conditional UI and active effect                                                              |
+| ----------------------------- | ----------------------------------- | ----------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| ExposureEnabled               | true; bool                          | Boolean                                               | Primary; Off uses unit exposure without erasing settings                                      |
+| ExposureMode                  | Auto                                | Manual / Auto                                         | Primary; selects fixed EV or metered exposure                                                 |
+| ManualExposureEv              | 9.7 EV100                           | Finite; validate resulting gain with key/compensation | Enabled + Manual; fixed exposure; [-24,24] is a typical control range, not a conversion clamp |
+| ExposureCompensationEv        | 0 EV                                | Finite and representable conversion                   | Enabled; +1 doubles exposure, -1 halves it; no light-only [-10,10] restriction                |
+| ExposureKey                   | 10; dimensionless calibration scale | Finite >0; validate coupled gain                      | Advanced, Enabled; same bias scale for Manual and Auto                                        |
+| AutoExposureMinEv             | -6 EV100                            | Finite, Min <= Max                                    | Auto; minimum metered EV                                                                      |
+| AutoExposureMaxEv             | 16 EV100                            | Finite, Max >= Min                                    | Auto; maximum metered EV                                                                      |
+| AutoExposureSpeedUp           | 3 EV/s                              | Finite >=0                                            | Auto; adaptation toward brighter luminance                                                    |
+| AutoExposureSpeedDown         | 1 EV/s                              | Finite >=0                                            | Auto; adaptation toward darker luminance                                                      |
+| AutoExposureMeteringMode      | Average                             | Average / CenterWeighted / Spot                       | Auto; image weighting; native ordinals 0/1/2                                                  |
+| AutoExposureLowPercentile     | 0.1                                 | [0,1], Low < High                                     | Advanced Auto; lower histogram percentile                                                     |
+| AutoExposureHighPercentile    | 0.9                                 | [0,1], High > Low                                     | Advanced Auto; upper histogram percentile                                                     |
+| AutoExposureMinLogLuminance   | -12; log2 luminance                 | Finite, window within [-24,32]                        | Advanced Auto; histogram lower range                                                          |
+| AutoExposureLogLuminanceRange | 25; log2 span                       | Finite >0, upper window endpoint <=32                 | Advanced Auto; histogram span                                                                 |
+| AutoExposureTargetLuminance   | 0.18; linear target                 | Finite >=0; validate coupled gain                     | Advanced Auto; exposure target                                                                |
+| AutoExposureSpotMeterRadius   | 0.2; normalized image radius        | Finite >=0                                            | Advanced Auto + Spot; active metering radius                                                  |
 
 Validate coupled ranges atomically. Exposure Min/Max can be ordered together on
 commit; invalid histogram intervals reject without partial mutation. Numeric
@@ -165,41 +165,52 @@ Manual/Auto presentation remains unchanged. Use one canonical native validator
 for coupled settings and propagate structured failures without partially
 publishing converted fields. Previous valid settings remain active on error.
 
-| Field | Default | Validation / behavior |
-| --- | --- | --- |
-| AutoExposureBlackInfluence | 0 | Finite [0,1]; dark-bin weight |
-| AutoExposureTransitionDistance | 1.5 stops | Finite positive; advanced Auto control |
-| AutoExposureMeteringMask | Absent | Existing resource descriptor reference; linear R, bilinear clamp; multiply selected analytic profile |
-| AutoExposureCompensationCurve | Empty | At most 64 finite EV/compensation pairs with strictly increasing EV |
+| Field                          | Default   | Validation / behavior                                                                                |
+| ------------------------------ | --------- | ---------------------------------------------------------------------------------------------------- |
+| AutoExposureBlackInfluence     | 0         | Finite [0,1]; dark-bin weight                                                                        |
+| AutoExposureTransitionDistance | 1.5 stops | Finite positive; advanced Auto control                                                               |
+| AutoExposureMeteringMask       | Absent    | Existing resource descriptor reference; linear R, bilinear clamp; multiply selected analytic profile |
+| AutoExposureCompensationCurve  | Empty     | At most 64 finite EV/compensation pairs with strictly increasing EV                                  |
 
 All active existing fields and these additions round-trip source, schema,
 cooker, native record, loader hydration, scripting, Interop and editor save.
 Keep enum ordinals: Manual=0, ManualCamera=1, Auto=2 and Average=0,
-CenterWeighted=1, Spot=2. New-scene defaults remain the table above. Legacy
-records receive absent mask, empty curve, black influence 0 and D=1.5.
+CenterWeighted=1, Spot=2. New-scene defaults remain the table above: absent mask, empty curve, black
+influence 0 and D=1.5. The 2026-09-21 user direction requires migration to v6
+throughout the repository, with no backward-compatibility or legacy read paths.
 Pending mask residency retains the complete old settings/resource revision;
 failed authored resource loading reports failure, never substitutes no mask.
 Transient transitions, GPU state and adaptation history are never serialized.
 
-The existing `PostProcessVolumeEnvironmentRecord` is exactly 104 packed bytes,
-including its eight-byte type/record-size header. Preserve this legacy prefix
-byte-for-byte. The new scene asset version is 6; readers accept version 5 with
-the legacy record and version 6 with the extended record below. Do not reinterpret
-old bytes as an extended struct. Update `SceneAsset` exact-size validation,
+Live editor mask requests retain the authored asset URI in the document. The
+editor maps that URI through its existing cooked-mount layout to a source root
+and a relative texture descriptor path. Content resolves that explicit locator
+only within the matching mounted loose source, validates the current sidecar and
+its texture-table entry, and returns a source-qualified ResourceKey. The editor
+does not parse sidecars, invent texture asset UUIDs, or persist ResourceKeys.
+The scene-session async request owner supersedes stale completions, retries after
+cooked-root refresh, and applies a complete exposure revision only when the
+requested mask is available. Failures preserve the previous accepted revision.
+
+The current `PostProcessVolumeEnvironmentRecord` has a 144-byte fixed prefix,
+including its eight-byte type/record-size header. Its first 104 bytes retain
+the established scalar field positions. The scene asset version is 6; readers
+accept only v6 with the complete record below. Reject v5 and 104-byte records;
+do not retain compatibility decoders or synthesize missing fields. Update `SceneAsset` exact-size validation,
 `PakFormatSerioLoaders`, cooker and serializer together.
 
-| Byte offset | Type | Extended record field |
-| --- | --- | --- |
-| 0..103 | Existing packed fields | Legacy prefix; header record_size reflects full new length |
-| 104 | uint32 | exposure_extension_version=1 |
-| 108 | float32 | black_influence |
-| 112 | float32 | transition_distance_ev |
-| 116 | uint32 ResourceIndexT | source-local mask texture index; zero means absent |
-| 120..131 | 3 uint32 | reserved=0 |
-| 132 | uint32 | curve_key_count, 0..64 |
-| 136 | uint32 | reserved=0 |
-| 140 | uint32 | reserved=0 |
-| 144 | count pairs of float32 | EV100, compensation EV, eight bytes per key |
+| Byte offset | Type                   | Extended record field                                                  |
+| ----------- | ---------------------- | ---------------------------------------------------------------------- |
+| 0..103      | Existing packed fields | Established field offsets; header record_size reflects full new length |
+| 104         | uint32                 | exposure_extension_version=1                                           |
+| 108         | float32                | black_influence                                                        |
+| 112         | float32                | transition_distance_ev                                                 |
+| 116         | uint32 ResourceIndexT  | source-local mask texture index; zero means absent                     |
+| 120..131    | 3 uint32               | reserved=0                                                             |
+| 132         | uint32                 | curve_key_count, 0..64                                                 |
+| 136         | uint32                 | reserved=0                                                             |
+| 140         | uint32                 | reserved=0                                                             |
+| 144         | count pairs of float32 | EV100, compensation EV, eight bytes per key                            |
 
 Total record_size is exactly `144+8*curve_key_count`, at most 656 bytes.
 Check count/size/available bytes before reading; reject unsupported extension
@@ -211,14 +222,15 @@ existing texture-resource model. The 2026-09-16 user-approved correction
 replaces the initially proposed descriptor UUID: no runtime UUID lookup exists
 for those cooker-only names. This preserves the 144-byte prefix and curve
 offsets without introducing a new asset type. There are no native pointers or GPU
-descriptor slots in saved records. New readers deliberately distinguish the
-104-byte legacy representation from the explicitly versioned extension.
+descriptor slots in saved records. The single current reader requires the
+complete explicitly versioned record; obsolete representations are rejected.
 
 Native physical camera persistence is included by the 2026-09-16 scope decision.
 Scene-v6 perspective camera records append aperture_f/shutter_rate/iso at
 20/24/28 (32 bytes total); orthographic records append them at 28/32/36
-(40 bytes total). Version-5 20/28-byte records keep projection bytes unchanged
-and hydrate 11/125/100. Source schemas, cooker, loader, scripting and existing
+(40 bytes total). Reject version-5 20/28-byte records. All scene producers and
+consumers migrate together; 11/125/100 are new-authoring defaults, not fallback
+values for old assets. Source schemas, cooker, loader, scripting and existing
 editor adapters preserve these fields. This does not add physical-camera editor
 controls, a new editor exposure mode, depth of field or motion blur.
 
@@ -231,15 +243,15 @@ implement maximum EV/s, not exponential rate constants.
 
 ## 6. Tone mapping, bloom and grading
 
-| PostProcess path | Default / unit | Bounds | Conditional UI and active effect |
-| --- | --- | --- | --- |
-| ToneMapper | AcesFitted | None / AcesFitted / Filmic / Reinhard, native 0/1/2/3 | Selects tone curve; None is SDR clipping without a filmic curve |
-| BloomIntensity | 0; multiplier | Clamp >=0 | Bloom contribution; 0 disables bloom |
-| BloomThreshold | 1; linear HDR units | Clamp >=0 | BloomIntensity >0; extraction threshold |
-| Saturation | 1; multiplier | Clamp >=0 | Foreground colour grading; 0 removes chroma |
-| Contrast | 1; multiplier | Clamp >=0 | Foreground contrast around the defined middle-grey reference |
-| VignetteIntensity | 0 | Clamp [0,1] | Foreground edge attenuation within the camera content rectangle |
-| DisplayGamma | 2.2 | Clamp >=0.001 | Foreground output power 1/gamma after tone mapping; remains active for None |
+| PostProcess path  | Default / unit      | Bounds                                                | Conditional UI and active effect                                            |
+| ----------------- | ------------------- | ----------------------------------------------------- | --------------------------------------------------------------------------- |
+| ToneMapper        | AcesFitted          | None / AcesFitted / Filmic / Reinhard, native 0/1/2/3 | Selects tone curve; None is SDR clipping without a filmic curve             |
+| BloomIntensity    | 0; multiplier       | Clamp >=0                                             | Bloom contribution; 0 disables bloom                                        |
+| BloomThreshold    | 1; linear HDR units | Clamp >=0                                             | BloomIntensity >0; extraction threshold                                     |
+| Saturation        | 1; multiplier       | Clamp >=0                                             | Foreground colour grading; 0 removes chroma                                 |
+| Contrast          | 1; multiplier       | Clamp >=0                                             | Foreground contrast around the defined middle-grey reference                |
+| VignetteIntensity | 0                   | Clamp [0,1]                                           | Foreground edge attenuation within the camera content rectangle             |
+| DisplayGamma      | 2.2                 | Clamp >=0.001                                         | Foreground output power 1/gamma after tone mapping; remains active for None |
 
 Every numeric input is finite. None bypasses the tone curve only; it does not
 turn off exposure, bloom, grading, vignette or output mapping. Do not hide these

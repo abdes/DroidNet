@@ -5,12 +5,20 @@
 //===----------------------------------------------------------------------===//
 
 #include <array>
+#include <charconv>
+#include <cmath>
 #include <cstdint>
+#include <iterator>
+#include <limits>
+#include <string>
 #include <string_view>
+#include <system_error>
+#include <utility>
 
 #include <lua.h>
 #include <lualib.h>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Scene/Environment/Fog.h>
@@ -20,6 +28,7 @@
 #include <Oxygen/Scene/Environment/SkyLight.h>
 #include <Oxygen/Scene/Environment/SkySphere.h>
 #include <Oxygen/Scene/Environment/VolumetricClouds.h>
+#include <Oxygen/Scene/ExposureSettings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Scene/SceneEnvironmentBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Scene/SceneNodeBindings.h>
 
@@ -979,6 +988,203 @@ namespace {
     return 1;
   }
 
+  struct ExposureFloatField {
+    const char* name;
+    float scene::ExposureSettings::* member;
+  };
+
+  constexpr auto kExposureFloatFields = std::array {
+    ExposureFloatField {
+      .name = "exposure_compensation_ev",
+      .member = &scene::ExposureSettings::compensation_ev,
+    },
+    ExposureFloatField {
+      .name = "exposure_key", .member = &scene::ExposureSettings::key },
+    ExposureFloatField {
+      .name = "manual_exposure_ev",
+      .member = &scene::ExposureSettings::manual_ev,
+    },
+    ExposureFloatField {
+      .name = "auto_exposure_min_ev",
+      .member = &scene::ExposureSettings::min_ev,
+    },
+    ExposureFloatField {
+      .name = "auto_exposure_max_ev",
+      .member = &scene::ExposureSettings::max_ev,
+    },
+    ExposureFloatField {
+      .name = "auto_exposure_speed_up",
+      .member = &scene::ExposureSettings::speed_up,
+    },
+    ExposureFloatField {
+      .name = "auto_exposure_speed_down",
+      .member = &scene::ExposureSettings::speed_down,
+    },
+    ExposureFloatField {
+      .name = "auto_exposure_low_percentile",
+      .member = &scene::ExposureSettings::low_percentile,
+    },
+    ExposureFloatField {
+      .name = "auto_exposure_high_percentile",
+      .member = &scene::ExposureSettings::high_percentile,
+    },
+    ExposureFloatField {
+      .name = "auto_exposure_min_log_luminance",
+      .member = &scene::ExposureSettings::min_log_luminance,
+    },
+    ExposureFloatField {
+      .name = "auto_exposure_log_luminance_range",
+      .member = &scene::ExposureSettings::log_luminance_range,
+    },
+    ExposureFloatField {
+      .name = "auto_exposure_target_luminance",
+      .member = &scene::ExposureSettings::target_luminance,
+    },
+    ExposureFloatField {
+      .name = "auto_exposure_spot_meter_radius",
+      .member = &scene::ExposureSettings::spot_meter_radius,
+    },
+    ExposureFloatField {
+      .name = "auto_exposure_black_influence",
+      .member = &scene::ExposureSettings::black_influence,
+    },
+    ExposureFloatField {
+      .name = "auto_exposure_transition_distance_ev",
+      .member = &scene::ExposureSettings::transition_distance,
+    },
+  };
+
+  auto RejectPostProcess(lua_State* state, const std::string_view reason) -> int
+  {
+    LOG_F(WARNING, "Script post-process edit rejected: {}", reason);
+    lua_pushboolean(state, 0);
+    lua_pushlstring(state, reason.data(), reason.size());
+    return 2;
+  }
+
+  auto ReadOptionalPostProcessFloat(
+    lua_State* state, const int table, const char* field, float& value) -> bool
+  {
+    lua_getfield(state, table, field);
+    const auto type = lua_type(state, -1);
+    if (type == LUA_TNIL) {
+      lua_pop(state, 1);
+      return true;
+    }
+    const auto number = type == LUA_TNUMBER
+      ? lua_tonumber(state, -1)
+      : std::numeric_limits<double>::quiet_NaN();
+    lua_pop(state, 1);
+    if (!std::isfinite(number)
+      || std::abs(number) > std::numeric_limits<float>::max()) {
+      return false;
+    }
+    value = static_cast<float>(number);
+    return true;
+  }
+
+  template <typename Enum, size_t Size>
+  auto ReadOptionalPostProcessEnum(lua_State* state, const char* field,
+    Enum& value,
+    const std::array<std::pair<std::string_view, Enum>, Size>& choices) -> bool
+  {
+    lua_getfield(state, 2, field);
+    if (lua_isnil(state, -1)) {
+      lua_pop(state, 1);
+      return true;
+    }
+    size_t length = 0;
+    const auto* text = lua_type(state, -1) == LUA_TSTRING
+      ? lua_tolstring(state, -1, &length)
+      : nullptr;
+    const auto requested
+      = text != nullptr ? std::string_view(text, length) : std::string_view {};
+    for (const auto& [name, candidate] : choices) {
+      if (name == requested) {
+        value = candidate;
+        lua_pop(state, 1);
+        return true;
+      }
+    }
+    lua_pop(state, 1);
+    return false;
+  }
+
+  auto ReadExposureCurve(lua_State* state, scene::ExposureSettings& settings)
+    -> bool
+  {
+    lua_getfield(state, 2, "auto_exposure_compensation_curve");
+    if (lua_isnil(state, -1)) {
+      lua_pop(state, 1);
+      return true;
+    }
+    if (lua_type(state, -1) != LUA_TTABLE
+      || std::cmp_greater(
+        lua_objlen(state, -1), engine::kMaxExposureCompensationCurveKeys)) {
+      lua_pop(state, 1);
+      return false;
+    }
+    const auto count = lua_objlen(state, -1);
+    settings.compensation_curve.clear();
+    settings.compensation_curve.reserve(static_cast<size_t>(count));
+    for (int index = 1; index <= count; ++index) {
+      lua_rawgeti(state, -1, index);
+      if (lua_type(state, -1) != LUA_TTABLE) {
+        lua_pop(state, 2);
+        return false;
+      }
+      auto key = scene::ExposureCompensationKey {};
+      lua_getfield(state, -1, "metered_ev");
+      const bool has_ev = lua_type(state, -1) == LUA_TNUMBER;
+      lua_pop(state, 1);
+      lua_getfield(state, -1, "compensation_ev");
+      const bool has_compensation = lua_type(state, -1) == LUA_TNUMBER;
+      lua_pop(state, 1);
+      const auto table = lua_gettop(state);
+      const bool valid = has_ev && has_compensation
+        && ReadOptionalPostProcessFloat(
+          state, table, "metered_ev", key.metered_ev)
+        && ReadOptionalPostProcessFloat(
+          state, table, "compensation_ev", key.compensation_ev);
+      lua_pop(state, 1);
+      if (!valid) {
+        lua_pop(state, 1);
+        return false;
+      }
+      settings.compensation_curve.push_back(key);
+    }
+    lua_pop(state, 1);
+    return true;
+  }
+
+  auto ReadExposureMask(lua_State* state, content::ResourceKey& key) -> bool
+  {
+    lua_getfield(state, 2, "auto_exposure_metering_mask");
+    if (lua_isnil(state, -1)) {
+      lua_pop(state, 1);
+      return true;
+    }
+    size_t length = 0;
+    const auto* text = lua_type(state, -1) == LUA_TSTRING
+      ? lua_tolstring(state, -1, &length)
+      : nullptr;
+    uint64_t raw = 0;
+    bool valid = false;
+    constexpr auto kMaxResourceKeyDigits
+      = std::numeric_limits<uint64_t>::digits10 + 1;
+    if (text != nullptr && length > 0
+      && std::cmp_less_equal(length, kMaxResourceKeyDigits)) {
+      const auto* end = std::next(text, static_cast<std::ptrdiff_t>(length));
+      const auto parsed = std::from_chars(text, end, raw);
+      valid = parsed.ec == std::errc {} && parsed.ptr == end;
+    }
+    lua_pop(state, 1);
+    if (valid) {
+      key = content::ResourceKey { raw };
+    }
+    return valid;
+  }
+
   auto PostProcessGet(lua_State* state) -> int
   {
     const auto system = ResolveSystem<scene::environment::PostProcessVolume,
@@ -987,7 +1193,7 @@ namespace {
       lua_pushnil(state);
       return 1;
     }
-    lua_createtable(state, 0, 14); // NOLINT(*-magic-numbers)
+    lua_newtable(state);
     switch (system->GetToneMapper()) {
     case engine::ToneMapper::kNone:
       lua_pushliteral(state, "none");
@@ -1021,20 +1227,27 @@ namespace {
     lua_setfield(state, -2, "exposure_mode");
     lua_pushboolean(state, system->GetExposureEnabled() ? 1 : 0);
     lua_setfield(state, -2, "exposure_enabled");
-    lua_pushnumber(state, system->GetExposureCompensationEv());
-    lua_setfield(state, -2, "exposure_compensation_ev");
-    lua_pushnumber(state, system->GetExposureKey());
-    lua_setfield(state, -2, "exposure_key");
-    lua_pushnumber(state, system->GetManualExposureEv());
-    lua_setfield(state, -2, "manual_exposure_ev");
-    lua_pushnumber(state, system->GetAutoExposureMinEv());
-    lua_setfield(state, -2, "auto_exposure_min_ev");
-    lua_pushnumber(state, system->GetAutoExposureMaxEv());
-    lua_setfield(state, -2, "auto_exposure_max_ev");
-    lua_pushnumber(state, system->GetAutoExposureSpeedUp());
-    lua_setfield(state, -2, "auto_exposure_speed_up");
-    lua_pushnumber(state, system->GetAutoExposureSpeedDown());
-    lua_setfield(state, -2, "auto_exposure_speed_down");
+    const auto& settings = system->GetExposureSettings();
+    for (const auto& field : kExposureFloatFields) {
+      lua_pushnumber(state, settings.*field.member);
+      lua_setfield(state, -2, field.name);
+    }
+    // Luau numbers cannot represent all uint64 resource identities exactly.
+    const auto mask = std::to_string(settings.metering_mask.get());
+    lua_pushlstring(state, mask.data(), mask.size());
+    lua_setfield(state, -2, "auto_exposure_metering_mask");
+    lua_createtable(
+      state, static_cast<int>(settings.compensation_curve.size()), 0);
+    int key_index = 1;
+    for (const auto& key : settings.compensation_curve) {
+      lua_createtable(state, 0, 2);
+      lua_pushnumber(state, key.metered_ev);
+      lua_setfield(state, -2, "metered_ev");
+      lua_pushnumber(state, key.compensation_ev);
+      lua_setfield(state, -2, "compensation_ev");
+      lua_rawseti(state, -2, key_index++);
+    }
+    lua_setfield(state, -2, "auto_exposure_compensation_curve");
     switch (system->GetAutoExposureMeteringMode()) {
     case engine::MeteringMode::kAverage:
       lua_pushliteral(state, "average");
@@ -1060,6 +1273,8 @@ namespace {
     lua_setfield(state, -2, "contrast");
     lua_pushnumber(state, system->GetVignetteIntensity());
     lua_setfield(state, -2, "vignette_intensity");
+    lua_pushnumber(state, system->GetDisplayGamma());
+    lua_setfield(state, -2, "display_gamma");
     return 1;
   }
 
@@ -1067,109 +1282,100 @@ namespace {
   {
     const auto system = ResolveSystem<scene::environment::PostProcessVolume,
       PostProcessUserdata, CheckPostProcess>(state);
-    if (system == nullptr) {
-      lua_pushboolean(state, 0);
-      return 1;
+    if (system == nullptr || lua_type(state, 2) != LUA_TTABLE) {
+      return RejectPostProcess(state,
+        "an active post-process system and a settings table are required");
     }
-    if (lua_type(state, 2) != LUA_TTABLE) {
-      lua_pushboolean(state, 0);
-      return 1;
+    auto settings = system->GetExposureSettings();
+    auto tone = system->GetToneMapper();
+    if (!ReadOptionalPostProcessEnum(state, "tone_mapper", tone,
+          std::array {
+            std::pair {
+              std::string_view { "none" }, engine::ToneMapper::kNone },
+            std::pair { std::string_view { "aces_fitted" },
+              engine::ToneMapper::kAcesFitted },
+            std::pair {
+              std::string_view { "filmic" }, engine::ToneMapper::kFilmic },
+            std::pair {
+              std::string_view { "reinhard" }, engine::ToneMapper::kReinhard },
+          })
+      || !ReadOptionalPostProcessEnum(state, "exposure_mode", settings.mode,
+        std::array {
+          std::pair {
+            std::string_view { "manual" }, engine::ExposureMode::kManual },
+          std::pair { std::string_view { "manual_camera" },
+            engine::ExposureMode::kManualCamera },
+          std::pair {
+            std::string_view { "auto" }, engine::ExposureMode::kAuto },
+        })
+      || !ReadOptionalPostProcessEnum(state, "auto_exposure_metering_mode",
+        settings.metering_mode,
+        std::array {
+          std::pair {
+            std::string_view { "average" }, engine::MeteringMode::kAverage },
+          std::pair { std::string_view { "center_weighted" },
+            engine::MeteringMode::kCenterWeighted },
+          std::pair {
+            std::string_view { "spot" }, engine::MeteringMode::kSpot },
+        })) {
+      return RejectPostProcess(
+        state, "unknown tone mapper, exposure mode or metering mode");
     }
-    lua_getfield(state, 2, "tone_mapper");
-    if (lua_isstring(state, -1) != 0) {
-      size_t len = 0;
-      const char* v = lua_tolstring(state, -1, &len);
-      const std::string_view s(v, len);
-      if (s == "none") {
-        system->SetToneMapper(engine::ToneMapper::kNone);
-      } else if (s == "aces_fitted") {
-        system->SetToneMapper(engine::ToneMapper::kAcesFitted);
-      } else if (s == "filmic") {
-        system->SetToneMapper(engine::ToneMapper::kFilmic);
-      } else if (s == "reinhard") {
-        system->SetToneMapper(engine::ToneMapper::kReinhard);
-      }
+    lua_getfield(state, 2, "exposure_enabled");
+    if (!lua_isnil(state, -1) && lua_type(state, -1) != LUA_TBOOLEAN) {
+      lua_pop(state, 1);
+      return RejectPostProcess(state, "exposure_enabled must be a boolean");
     }
-    lua_pop(state, 1);
-    lua_getfield(state, 2, "exposure_mode");
-    if (lua_isstring(state, -1) != 0) {
-      size_t len = 0;
-      const char* v = lua_tolstring(state, -1, &len);
-      const std::string_view s(v, len);
-      if (s == "manual") {
-        system->SetExposureMode(engine::ExposureMode::kManual);
-      } else if (s == "manual_camera") {
-        system->SetExposureMode(engine::ExposureMode::kManualCamera);
-      } else if (s == "auto") {
-        system->SetExposureMode(engine::ExposureMode::kAuto);
-      }
-    }
-    lua_pop(state, 1);
-    lua_getfield(state, 2, "auto_exposure_metering_mode");
-    if (lua_isstring(state, -1) != 0) {
-      size_t len = 0;
-      const char* v = lua_tolstring(state, -1, &len);
-      const std::string_view s(v, len);
-      if (s == "average") {
-        system->SetAutoExposureMeteringMode(engine::MeteringMode::kAverage);
-      } else if (s == "center_weighted") {
-        system->SetAutoExposureMeteringMode(
-          engine::MeteringMode::kCenterWeighted);
-      } else if (s == "spot") {
-        system->SetAutoExposureMeteringMode(engine::MeteringMode::kSpot);
-      }
+    if (!lua_isnil(state, -1)) {
+      settings.enabled = lua_toboolean(state, -1) != 0;
     }
     lua_pop(state, 1);
-    bool bv = false;
-    if (TryGetBoolField(state, 2, "exposure_enabled", bv)) {
-      system->SetExposureEnabled(bv);
+    for (const auto& field : kExposureFloatFields) {
+      if (!ReadOptionalPostProcessFloat(
+            state, 2, field.name, settings.*field.member)) {
+        return RejectPostProcess(state, field.name);
+      }
     }
-    float fv = 0.0F;
-    if (TryGetNumberField(state, 2, "exposure_compensation_ev", fv)) {
-      system->SetExposureCompensationEv(fv);
+    if (!ReadExposureCurve(state, settings)
+      || !ReadExposureMask(state, settings.metering_mask)) {
+      return RejectPostProcess(
+        state, "invalid compensation curve or metering mask resource key");
     }
-    if (TryGetNumberField(state, 2, "exposure_key", fv)) {
-      system->SetExposureKey(fv);
+    const auto resolved = scene::ResolveExposureSettings(settings);
+    if (!resolved
+      && resolved.error() != scene::ExposureSettingsError::kMissingCameraEv) {
+      return RejectPostProcess(state, scene::to_string(resolved.error()));
     }
-    if (TryGetNumberField(state, 2, "manual_exposure_ev", fv)) {
-      system->SetManualExposureEv(fv);
+    auto bloom = system->GetBloomIntensity();
+    auto threshold = system->GetBloomThreshold();
+    auto saturation = system->GetSaturation();
+    auto contrast = system->GetContrast();
+    auto vignette = system->GetVignetteIntensity();
+    auto gamma = system->GetDisplayGamma();
+    if (!ReadOptionalPostProcessFloat(state, 2, "bloom_intensity", bloom)
+      || !ReadOptionalPostProcessFloat(state, 2, "bloom_threshold", threshold)
+      || !ReadOptionalPostProcessFloat(state, 2, "saturation", saturation)
+      || !ReadOptionalPostProcessFloat(state, 2, "contrast", contrast)
+      || !ReadOptionalPostProcessFloat(state, 2, "vignette_intensity", vignette)
+      || !ReadOptionalPostProcessFloat(state, 2, "display_gamma", gamma)
+      || bloom < 0.0F || threshold < 0.0F || saturation < 0.0F
+      || contrast < 0.0F || vignette < 0.0F || vignette > 1.0F
+      || gamma < engine::kMinDisplayGamma) {
+      return RejectPostProcess(
+        state, "post-process values are outside their valid ranges");
     }
-    float min_ev = 0.0F;
-    float max_ev = 0.0F;
-    const bool has_min
-      = TryGetNumberField(state, 2, "auto_exposure_min_ev", min_ev);
-    const bool has_max
-      = TryGetNumberField(state, 2, "auto_exposure_max_ev", max_ev);
-    if (has_min && has_max) {
-      system->SetAutoExposureRangeEv(min_ev, max_ev);
-    }
-    float up = 0.0F;
-    float down = 0.0F;
-    const bool has_up
-      = TryGetNumberField(state, 2, "auto_exposure_speed_up", up);
-    const bool has_down
-      = TryGetNumberField(state, 2, "auto_exposure_speed_down", down);
-    if (has_up && has_down) {
-      system->SetAutoExposureAdaptationSpeeds(up, down);
-    }
-    if (TryGetNumberField(state, 2, "bloom_intensity", fv)) {
-      system->SetBloomIntensity(fv);
-    }
-    if (TryGetNumberField(state, 2, "bloom_threshold", fv)) {
-      system->SetBloomThreshold(fv);
-    }
-    if (TryGetNumberField(state, 2, "saturation", fv)) {
-      system->SetSaturation(fv);
-    }
-    if (TryGetNumberField(state, 2, "contrast", fv)) {
-      system->SetContrast(fv);
-    }
-    if (TryGetNumberField(state, 2, "vignette_intensity", fv)) {
-      system->SetVignetteIntensity(fv);
-    }
+    system->SetExposureSettings(settings);
+    system->SetToneMapper(tone);
+    system->SetBloomIntensity(bloom);
+    system->SetBloomThreshold(threshold);
+    system->SetSaturation(saturation);
+    system->SetContrast(contrast);
+    system->SetVignetteIntensity(vignette);
+    system->SetDisplayGamma(gamma);
     lua_pushboolean(state, 1);
     return 1;
   }
+
 } // namespace
 
 auto RegisterSceneEnvironmentMetatables(lua_State* state) -> void
@@ -1178,13 +1384,16 @@ auto RegisterSceneEnvironmentMetatables(lua_State* state) -> void
   lua_pushvalue(state, -1);
   lua_setfield(state, -2, "__index");
   constexpr std::array<luaL_Reg, 15> env_methods {
-    { { .name = "systems", .func = EnvironmentSystems },
+    {
+      { .name = "systems", .func = EnvironmentSystems },
       { .name = "has_system", .func = EnvironmentHasSystem },
       { .name = "remove_system", .func = EnvironmentRemoveSystem },
       { .name = "ensure_fog", .func = EnvironmentEnsureFog },
       { .name = "fog", .func = EnvironmentGetFog },
-      { .name = "ensure_sky_atmosphere",
-        .func = EnvironmentEnsureSkyAtmosphere },
+      {
+        .name = "ensure_sky_atmosphere",
+        .func = EnvironmentEnsureSkyAtmosphere,
+      },
       { .name = "sky_atmosphere", .func = EnvironmentGetSkyAtmosphere },
       { .name = "ensure_sky_light", .func = EnvironmentEnsureSkyLight },
       { .name = "sky_light", .func = EnvironmentGetSkyLight },
@@ -1193,7 +1402,8 @@ auto RegisterSceneEnvironmentMetatables(lua_State* state) -> void
       { .name = "ensure_clouds", .func = EnvironmentEnsureClouds },
       { .name = "clouds", .func = EnvironmentGetClouds },
       { .name = "ensure_post_process", .func = EnvironmentEnsurePostProcess },
-      { .name = "post_process", .func = EnvironmentGetPostProcess } }
+      { .name = "post_process", .func = EnvironmentGetPostProcess },
+    },
   };
   for (const auto& reg : env_methods) {
     lua_pushcclosure(state, reg.func, reg.name, 0);
@@ -1204,39 +1414,73 @@ auto RegisterSceneEnvironmentMetatables(lua_State* state) -> void
   luaL_newmetatable(state, kFogSystemMetatable);
   lua_pushvalue(state, -1);
   lua_setfield(state, -2, "__index");
-  constexpr std::array<luaL_Reg, 16> fog_methods { { { .name = "get_model",
-                                                       .func = FogGetModel },
-    { .name = "set_model", .func = FogSetModel },
-    { .name = "get_extinction_sigma_t_per_meter",
-      .func
-      = FogGetFloat<&scene::environment::Fog::GetExtinctionSigmaTPerMeter> },
-    { .name = "set_extinction_sigma_t_per_meter",
-      .func
-      = FogSetFloat<&scene::environment::Fog::SetExtinctionSigmaTPerMeter> },
-    { .name = "get_height_falloff_per_meter",
-      .func = FogGetFloat<&scene::environment::Fog::GetHeightFalloffPerMeter> },
-    { .name = "set_height_falloff_per_meter",
-      .func = FogSetFloat<&scene::environment::Fog::SetHeightFalloffPerMeter> },
-    { .name = "get_height_offset_meters",
-      .func = FogGetFloat<&scene::environment::Fog::GetHeightOffsetMeters> },
-    { .name = "set_height_offset_meters",
-      .func = FogSetFloat<&scene::environment::Fog::SetHeightOffsetMeters> },
-    { .name = "get_start_distance_meters",
-      .func = FogGetFloat<&scene::environment::Fog::GetStartDistanceMeters> },
-    { .name = "set_start_distance_meters",
-      .func = FogSetFloat<&scene::environment::Fog::SetStartDistanceMeters> },
-    { .name = "get_max_opacity",
-      .func = FogGetFloat<&scene::environment::Fog::GetMaxOpacity> },
-    { .name = "set_max_opacity",
-      .func = FogSetFloat<&scene::environment::Fog::SetMaxOpacity> },
-    { .name = "get_single_scattering_albedo_rgb",
-      .func = FogGetSingleScatteringAlbedoRgb },
-    { .name = "set_single_scattering_albedo_rgb",
-      .func = FogSetSingleScatteringAlbedoRgb },
-    { .name = "get_anisotropy",
-      .func = FogGetFloat<&scene::environment::Fog::GetAnisotropy> },
-    { .name = "set_anisotropy",
-      .func = FogSetFloat<&scene::environment::Fog::SetAnisotropy> } } };
+  constexpr std::array<luaL_Reg, 16> fog_methods {
+    {
+      {
+        .name = "get_model",
+        .func = FogGetModel,
+      },
+      { .name = "set_model", .func = FogSetModel },
+      {
+        .name = "get_extinction_sigma_t_per_meter",
+        .func
+        = FogGetFloat<&scene::environment::Fog::GetExtinctionSigmaTPerMeter>,
+      },
+      {
+        .name = "set_extinction_sigma_t_per_meter",
+        .func
+        = FogSetFloat<&scene::environment::Fog::SetExtinctionSigmaTPerMeter>,
+      },
+      {
+        .name = "get_height_falloff_per_meter",
+        .func = FogGetFloat<&scene::environment::Fog::GetHeightFalloffPerMeter>,
+      },
+      {
+        .name = "set_height_falloff_per_meter",
+        .func = FogSetFloat<&scene::environment::Fog::SetHeightFalloffPerMeter>,
+      },
+      {
+        .name = "get_height_offset_meters",
+        .func = FogGetFloat<&scene::environment::Fog::GetHeightOffsetMeters>,
+      },
+      {
+        .name = "set_height_offset_meters",
+        .func = FogSetFloat<&scene::environment::Fog::SetHeightOffsetMeters>,
+      },
+      {
+        .name = "get_start_distance_meters",
+        .func = FogGetFloat<&scene::environment::Fog::GetStartDistanceMeters>,
+      },
+      {
+        .name = "set_start_distance_meters",
+        .func = FogSetFloat<&scene::environment::Fog::SetStartDistanceMeters>,
+      },
+      {
+        .name = "get_max_opacity",
+        .func = FogGetFloat<&scene::environment::Fog::GetMaxOpacity>,
+      },
+      {
+        .name = "set_max_opacity",
+        .func = FogSetFloat<&scene::environment::Fog::SetMaxOpacity>,
+      },
+      {
+        .name = "get_single_scattering_albedo_rgb",
+        .func = FogGetSingleScatteringAlbedoRgb,
+      },
+      {
+        .name = "set_single_scattering_albedo_rgb",
+        .func = FogSetSingleScatteringAlbedoRgb,
+      },
+      {
+        .name = "get_anisotropy",
+        .func = FogGetFloat<&scene::environment::Fog::GetAnisotropy>,
+      },
+      {
+        .name = "set_anisotropy",
+        .func = FogSetFloat<&scene::environment::Fog::SetAnisotropy>,
+      },
+    },
+  };
   for (const auto& reg : fog_methods) {
     lua_pushcclosure(state, reg.func, reg.name, 0);
     lua_setfield(state, -2, reg.name);

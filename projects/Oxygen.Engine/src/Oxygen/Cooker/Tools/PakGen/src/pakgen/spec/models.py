@@ -3,7 +3,7 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import List, Dict, Optional, Any
-from ..packing.constants import YAML_SCHEMA_VERSION_CURRENT
+from ..packing.constants import YAML_SCHEMA_VERSION_CURRENT, MATERIAL_ASSET_VERSION_CURRENT
 
 
 @dataclass(slots=True)
@@ -71,7 +71,7 @@ class MaterialAsset:
     ambient_occlusion: float = 1.0
     texture_refs: Dict[str, Optional[str]] = field(default_factory=dict)
     shader_references: List[ShaderReference] = field(default_factory=list)
-    version: int = 1
+    version: int = MATERIAL_ASSET_VERSION_CURRENT
     streaming_priority: int = 0
     # AssetHeader content hash (32-byte SHA-256 digest).
     content_hash: bytes = b""

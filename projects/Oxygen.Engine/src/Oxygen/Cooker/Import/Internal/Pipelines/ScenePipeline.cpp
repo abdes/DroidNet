@@ -4,8 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Cooker/Import/Internal/Pipelines/ScenePipeline.h>
-
 #include <algorithm>
 #include <chrono>
 #include <cstddef>
@@ -19,11 +17,13 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/Internal/Pipelines/ScenePipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/StringUtils.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/PakFormatSerioWriters.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Writer.h>
 
@@ -145,6 +145,20 @@ namespace {
       });
   }
 
+  template <typename Record>
+  [[nodiscard]] auto SerializeComponentRecords(std::span<const Record> records)
+    -> Result<std::vector<std::byte>>
+  {
+    serio::MemoryStream stream;
+    serio::Writer writer(stream);
+    const auto packed = writer.ScopedAlignment(1);
+    for (const auto& record : records) {
+      CHECK_RESULT(writer.Write(record));
+    }
+    const auto bytes = stream.Data();
+    return ::oxygen::Ok(std::vector<std::byte>(bytes.begin(), bytes.end()));
+  }
+
   [[nodiscard]] auto SerializeScene(const std::string_view scene_name,
     const AssetKey scene_key, const SceneBuild& build,
     std::span<const SceneEnvironmentSystem> environment_systems,
@@ -213,12 +227,24 @@ namespace {
     add_component_table(ComponentType::kLocalFogVolume,
       sizeof(LocalFogVolumeRecord),
       std::as_bytes(std::span(build.local_fog_volumes)));
+    const auto perspective_bytes
+      = SerializeComponentRecords<PerspectiveCameraRecord>(
+        build.perspective_cameras);
+    const auto orthographic_bytes
+      = SerializeComponentRecords<OrthographicCameraRecord>(
+        build.orthographic_cameras);
+    if (!perspective_bytes || !orthographic_bytes) {
+      diagnostics.push_back(MakeErrorDiagnostic("scene.camera.serialize_failed",
+        "Camera serialization requires finite positive aperture, shutter rate "
+        "and ISO",
+        source_id,
+        !perspective_bytes ? "cameras.perspective" : "cameras.orthographic"));
+      return outcome;
+    }
     add_component_table(ComponentType::kPerspectiveCamera,
-      sizeof(PerspectiveCameraRecord),
-      std::as_bytes(std::span(build.perspective_cameras)));
+      sizeof(PerspectiveCameraRecord), *perspective_bytes);
     add_component_table(ComponentType::kOrthographicCamera,
-      sizeof(OrthographicCameraRecord),
-      std::as_bytes(std::span(build.orthographic_cameras)));
+      sizeof(OrthographicCameraRecord), *orthographic_bytes);
     add_component_table(ComponentType::kDirectionalLight,
       sizeof(DirectionalLightRecord),
       std::as_bytes(std::span(build.directional_lights)));

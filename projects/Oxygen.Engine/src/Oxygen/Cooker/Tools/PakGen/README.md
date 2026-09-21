@@ -200,7 +200,7 @@ authored spec and identity.
 
 ### Scene node flags
 
-Scene assets use descriptor version **5** and 72-byte node records. Node
+Scene assets use descriptor version **6** and 72-byte node records. Node
 `flags` stores explicit local values; `inherited_flags` stores source modes.
 Both are unsigned integer masks and default to zero, preserving explicit local
 fixture behavior. This low-level tool does not apply editor creation defaults.

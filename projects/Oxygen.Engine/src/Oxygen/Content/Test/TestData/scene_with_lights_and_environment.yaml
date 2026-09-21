@@ -1,4 +1,4 @@
-# Scene asset with lights and a SceneEnvironment block (v3)
+# Scene asset with lights and a SceneEnvironment block (scene v6)
 version: 7
 source_identity: "01a0a763-72e4-74ed-b15a-0879c75bfe75"
 content_version: 1
@@ -72,6 +72,12 @@ assets:
         tone_mapper: 0
         exposure_mode: 1
         exposure_compensation_ev: 0.0
+        auto_exposure_black_influence: 0.25
+        auto_exposure_transition_distance_ev: 2.5
+        auto_exposure_metering_mask: "default_texture"
+        auto_exposure_compensation_curve:
+          - { metered_ev: -4, compensation_ev: 1 }
+          - { metered_ev: 12, compensation_ev: -0.5 }
         bloom_intensity: 0.0
         bloom_threshold: 1.0
         vignette_intensity: 0.0

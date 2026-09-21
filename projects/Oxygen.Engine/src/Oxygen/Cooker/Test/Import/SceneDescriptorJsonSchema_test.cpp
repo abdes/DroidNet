@@ -114,7 +114,7 @@ NOLINT_TEST(SceneDescriptorJsonSchemaTest, NodeFlagSourceModesAreCanonical)
   const auto schema = LoadJsonFile(SchemaFile(FindRepoRoot()));
   ASSERT_TRUE(schema.has_value());
   auto document
-    = json::parse(R"({"version":5,"name":"Flags","nodes":[{"flags":{}}]})");
+    = json::parse(R"({"version":6,"name":"Flags","nodes":[{"flags":{}}]})");
   for (const auto& visibility : { "inherit", "shown", "hidden" }) {
     for (const auto& shadow : { "inherit", "on", "off" }) {
       document["nodes"][0]["flags"]
@@ -147,7 +147,7 @@ NOLINT_TEST(SceneDescriptorJsonSchemaTest, AcceptsCanonicalDocument)
 
   const auto doc = json::parse(R"({
     "$schema": "./src/Oxygen/Cooker/Import/Schemas/oxygen.scene-descriptor.schema.json",
-    "version": 5,
+    "version": 6,
     "name": "DemoScene",
     "nodes": [
       { "name": "Root", "transform": { "translation": [0, 0, 0] } },
@@ -186,7 +186,7 @@ NOLINT_TEST(SceneDescriptorJsonSchemaTest, RejectsUnknownNestedFields)
   ASSERT_TRUE(schema.has_value());
 
   const auto doc = json::parse(R"({
-    "version": 5,
+    "version": 6,
     "name": "BadScene",
     "nodes": [ { "name": "Root", "unknown_field": true } ]
   })");
@@ -203,7 +203,7 @@ NOLINT_TEST(SceneDescriptorJsonSchemaTest, AcceptsDirectionalShadowTuningFields)
   ASSERT_TRUE(schema.has_value());
 
   const auto doc = json::parse(R"({
-    "version": 5,
+    "version": 6,
     "name": "TunedScene",
     "nodes": [
       { "name": "Root" }
@@ -237,7 +237,7 @@ NOLINT_TEST(SceneDescriptorJsonSchemaTest, AcceptsV3EnvironmentAndLocalFogShape)
   ASSERT_TRUE(schema.has_value());
 
   const auto doc = json::parse(R"({
-    "version": 5,
+    "version": 6,
     "name": "FogScene",
     "nodes": [
       { "name": "Root" },
@@ -372,7 +372,7 @@ NOLINT_TEST(
   const auto base = json::parse(
     R"JSON(
 {
-  "version": 5,
+  "version": 6,
   "name": "Environment",
   "nodes": [
     {

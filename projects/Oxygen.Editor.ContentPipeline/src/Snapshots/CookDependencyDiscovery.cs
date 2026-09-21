@@ -174,6 +174,7 @@ public sealed class CookDependencyDiscovery(
                 ContentCookAssetKind.Scene => await this.ReadSceneAsync(bytes, cancellationToken).ConfigureAwait(false),
                 ContentCookAssetKind.Geometry => await this.ReadGeometryAsync(input, bytes, cancellationToken).ConfigureAwait(false),
                 ContentCookAssetKind.Material => ReadMaterial(input, bytes),
+                ContentCookAssetKind.Texture => await this.ReadTextureAsync(input, bytes, cancellationToken).ConfigureAwait(false),
                 _ => throw new InvalidDataException($"Unsupported cook input '{input.AssetUri}'."),
             };
             this.nativeReferences[input.AssetUri] = [.. references.Select(static uri => uri.AbsolutePath.EndsWith(".json", StringComparison.OrdinalIgnoreCase) ? new Uri(uri.AbsoluteUri[..^5]) : uri).Distinct()];
@@ -310,10 +311,39 @@ public sealed class CookDependencyDiscovery(
             cancellationToken.ThrowIfCancellationRequested();
             return
             [
+                .. new[] { scene.Environment.PostProcess.AutoExposureMeteringMask }.OfType<Uri>(),
                 .. scene.AllNodes.SelectMany(static node => node.Components.OfType<GeometryComponent>())
                 .SelectMany(static geometry => geometry.OverrideSlots.OfType<MaterialsSlot>().Select(static slot => slot.Material.Uri).Prepend(geometry.Geometry?.Uri))
                 .OfType<Uri>().Where(static uri => !string.Equals(uri.AbsolutePath, "/__uninitialized__", StringComparison.Ordinal)),
             ];
+        }
+
+        private async Task<Uri[]> ReadTextureAsync(ContentCookInput input, byte[] bytes, CancellationToken cancellationToken)
+        {
+            using var descriptor = JsonDocument.Parse(bytes);
+            var root = descriptor.RootElement;
+            var sources = new HashSet<string>(StringComparer.Ordinal) { root.GetProperty("source").GetString()! };
+            if (root.TryGetProperty("sources", out var mappings))
+            {
+                foreach (var mapping in mappings.EnumerateArray())
+                {
+                    _ = sources.Add(mapping.GetProperty("file").GetString()!);
+                }
+            }
+
+            foreach (var source in sources)
+            {
+                if (string.IsNullOrWhiteSpace(source)
+                    || (!Path.IsPathRooted(source) && Uri.TryCreate(source, UriKind.Absolute, out _)))
+                {
+                    throw new InvalidDataException($"Texture '{input.AssetUri}' source must reference a local image file.");
+                }
+
+                var path = Path.GetFullPath(Path.IsPathRooted(source) ? source : Path.Combine(Path.GetDirectoryName(input.SourceAbsolutePath)!, source));
+                _ = await this.ReadFileAsync(assetUri: null, path, cancellationToken).ConfigureAwait(false);
+            }
+
+            return [];
         }
 
         private async Task<Uri[]> ReadGeometryAsync(ContentCookInput input, byte[] bytes, CancellationToken cancellationToken)

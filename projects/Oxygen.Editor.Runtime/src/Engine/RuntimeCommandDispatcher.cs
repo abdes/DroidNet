@@ -7,6 +7,7 @@ namespace Oxygen.Editor.Runtime.Engine;
 /// <summary>Serializes dispatch with lifetime invalidation; never blocks on native frame progress.</summary>
 internal sealed partial class RuntimeCommandDispatcher : IRuntimeWorldCommands, IRuntimeInputCommands
 {
+    private const int EnvironmentMaskSlot = -2;
     private readonly Lock gate = new();
     private readonly Dictionary<ulong, RuntimeViewTarget> views = [];
     private readonly Dictionary<(Guid nodeId, int slot), RuntimeAssetRequestStatus> assetOperations = [];
@@ -160,6 +161,7 @@ internal sealed partial class RuntimeCommandDispatcher : IRuntimeWorldCommands, 
         {
             RuntimeSetGeometry geometry => (geometry.NodeId, -1),
             RuntimeSetMaterialOverride material when material.SlotIndex >= 0 => (material.NodeId, material.SlotIndex),
+            RuntimeSetEnvironment => (Guid.Empty, EnvironmentMaskSlot),
             _ => null,
         };
 

@@ -6,8 +6,6 @@
 
 #pragma once
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -17,9 +15,12 @@
 #include <fstream>
 #include <span>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
+
+#include <Oxygen/Testing/GTest.h>
 
 #if defined(_WIN32)
 #  include <Windows.h>
@@ -31,7 +32,10 @@
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
+#include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/SourceKey.h>
+#include <Oxygen/Serio/MemoryStream.h>
+#include <Oxygen/Serio/Writer.h>
 
 namespace oxygen::content::pak::test {
 
@@ -47,6 +51,25 @@ struct AssetSpec final {
   std::array<uint8_t, lc::kSha256Size> descriptor_sha {};
   std::vector<std::byte> descriptor_payload;
 };
+
+//! A minimal current-format scene for planner tests that do not need nodes.
+[[nodiscard]] inline auto MakeEmptySceneDescriptor() -> std::vector<std::byte>
+{
+  namespace world = data::pak::world;
+  auto descriptor = world::SceneAssetDesc {};
+  descriptor.header.asset_type = static_cast<uint8_t>(data::AssetType::kScene);
+  descriptor.header.version = world::kSceneAssetVersion;
+  auto environment = world::SceneEnvironmentBlockHeader {};
+  environment.byte_size = sizeof(environment);
+  serio::MemoryStream stream;
+  serio::Writer writer(stream);
+  const auto packed = writer.ScopedAlignment(1);
+  if (!writer.Write(descriptor) || !writer.Write(environment)) {
+    throw std::runtime_error("Could not serialize current scene fixture");
+  }
+  const auto bytes = stream.Data();
+  return { bytes.begin(), bytes.end() };
+}
 
 struct FileSpec final {
   lc::FileKind kind = lc::FileKind::kUnknown;

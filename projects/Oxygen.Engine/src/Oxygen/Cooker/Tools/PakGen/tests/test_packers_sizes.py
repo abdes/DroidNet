@@ -39,27 +39,18 @@ def _header_builder(_):
     return b"\x00" * ASSET_HEADER_SIZE
 
 
-def _shader_refs_builder(_):
-    return b""
-
-
-def _lods_builder(_):
-    return b""
-
-
 def test_material_descriptor_size():
     desc = pack_material_asset_descriptor(
         {},
         {},
         header_builder=_header_builder,
-        shader_refs_builder=_shader_refs_builder,
     )
     assert len(desc) == MATERIAL_DESC_SIZE
 
 
 def test_geometry_descriptor_size():
     desc = pack_geometry_asset_descriptor(
-        {}, header_builder=_header_builder, lods_builder=_lods_builder
+        {}, header_builder=_header_builder
     )
     assert len(desc) == GEOMETRY_DESC_SIZE
 

@@ -238,6 +238,21 @@ public:
     co_return nullptr;
   }
 
+  [[nodiscard]] auto ResolveTextureResourceKey(
+    const content::TextureResourceLocator&) const
+    -> std::optional<content::ResourceKey> override
+  {
+    return std::nullopt;
+  }
+
+  [[nodiscard]] auto MakeTextureResourceKeyForAsset(
+    const data::AssetKey& /*context_asset_key*/,
+    data::pak::core::ResourceIndexT /*resource_index*/) const noexcept
+    -> std::optional<content::ResourceKey> override
+  {
+    return std::nullopt;
+  }
+
   [[nodiscard]] auto MakeScriptResourceKeyForAsset(
     const data::AssetKey& /*context_asset_key*/,
     data::pak::core::ResourceIndexT /*resource_index*/) const noexcept

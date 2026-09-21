@@ -1,4 +1,4 @@
-"""Scene v5 node layout and canonical flag-mask producer contract."""
+"""Scene v6 node layout and canonical flag-mask producer contract."""
 
 import struct
 from pathlib import Path
@@ -57,7 +57,7 @@ def test_existing_numeric_values_remain_local_for_root_and_child(flags):
             node["flags"] = flags
     scene = {"type": "scene", "name": "Flags", "nodes": nodes}
     descriptor, payload, _ = _pack_scene(scene)
-    assert descriptor[65] == 5
+    assert descriptor[65] == 6
     assert struct.unpack_from("<QII", descriptor, ASSET_HEADER_SIZE) == (
         SCENE_DESC_SIZE,
         2,
@@ -118,13 +118,13 @@ def test_inherited_bits_cannot_also_store_local_true(bit):
         _pack_node_record(node, index=0, name_offset=0, node_count=1)
 
 
-@pytest.mark.parametrize("version", [None, 1, 2, 3, 4, 6, "5", 5.0, True])
+@pytest.mark.parametrize("version", [None, 1, 2, 3, 4, 5, 7, "6", 6.0, True])
 def test_only_current_scene_descriptor_version_is_emitted(version):
     spec = _spec({"name": "Root"})
     scene = spec["assets"][0]
     scene["version"] = version
     assert "E_VERSION" in {error.code for error in run_validation_pipeline(spec)}
-    with pytest.raises(PakError, match="Scene asset version 5 is required"):
+    with pytest.raises(PakError, match="Scene asset version 6 is required"):
         _pack_scene(scene)
 
 
@@ -164,7 +164,7 @@ def test_generated_nodes_keep_explicit_local_and_inherited_masks(layout, params)
         "scene_with_physics_sidecar_ref.pak",
     ],
 )
-def test_maintained_scene_fixtures_use_v5_local_masks(name):
+def test_maintained_scene_fixtures_use_v6_local_masks(name):
     path = Path(__file__).parent / "_golden" / name
     data = path.read_bytes()
     entries = [
@@ -175,7 +175,7 @@ def test_maintained_scene_fixtures_use_v5_local_masks(name):
     assert entries
     for entry in entries:
         descriptor = entry["desc_offset"]
-        assert data[descriptor + 65] == 5
+        assert data[descriptor + 65] == 6
         offset, count, stride = struct.unpack_from(
             "<QII", data, descriptor + ASSET_HEADER_SIZE
         )

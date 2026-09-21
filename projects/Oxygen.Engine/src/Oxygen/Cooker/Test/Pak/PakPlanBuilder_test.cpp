@@ -4,8 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <algorithm>
 #include <array>
 #include <cstddef>
@@ -17,13 +15,23 @@
 #include <utility>
 #include <vector>
 
+#include "PakTestSupport.h"
+
+#include <Oxygen/Content/PakFile.h>
 #include <Oxygen/Cooker/Pak/PakPlanBuilder.h>
+#include <Oxygen/Cooker/Pak/PakWriter.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/TextureType.h>
+#include <Oxygen/Data/PakFormatSerioLoaders.h>
+#include <Oxygen/Data/PakFormatSerioWriters.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_physics.h>
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
-
-#include "PakTestSupport.h"
+#include <Oxygen/Data/SceneAsset.h>
+#include <Oxygen/Serio/FileStream.h>
+#include <Oxygen/Serio/Reader.h>
+#include <Oxygen/Testing/GTest.h>
 
 namespace {
 namespace data = oxygen::data;
@@ -246,8 +254,9 @@ NOLINT_TEST_F(PakPlanBuilderTest,
     .asset_type = data::AssetType::kScene,
     .descriptor_relpath = "Z.desc",
     .virtual_path = "/Game/Asset.win",
-    .descriptor_size = kDescriptorSize,
+    .descriptor_size = paktest::MakeEmptySceneDescriptor().size(),
     .descriptor_sha = {},
+    .descriptor_payload = paktest::MakeEmptySceneDescriptor(),
   };
   asset_z.descriptor_sha[0] = kShaZ;
 
@@ -482,8 +491,9 @@ NOLINT_TEST_F(PakPlanBuilderTest, FullModeIncludesInputAssetsFromLooseSource)
     .asset_type = data::AssetType::kScene,
     .descriptor_relpath = "Descriptors/Scenes/Main.oscene",
     .virtual_path = "/Game/Scenes/Main.oscene",
-    .descriptor_size = 32U,
+    .descriptor_size = paktest::MakeEmptySceneDescriptor().size(),
     .descriptor_sha = paktest::MakeDigest(0x53U),
+    .descriptor_payload = paktest::MakeEmptySceneDescriptor(),
   };
   const auto assets
     = std::array<AssetSpec, 3> { action_asset, context_asset, scene_asset };
@@ -567,8 +577,9 @@ NOLINT_TEST_F(
     .asset_type = data::AssetType::kScene,
     .descriptor_relpath = "scene.desc",
     .virtual_path = "/Game/Scene.main",
-    .descriptor_size = kDescriptorSize,
+    .descriptor_size = paktest::MakeEmptySceneDescriptor().size(),
     .descriptor_sha = {},
+    .descriptor_payload = paktest::MakeEmptySceneDescriptor(),
   };
   scene_asset.descriptor_sha[0] = 0x33U;
 
@@ -655,8 +666,9 @@ NOLINT_TEST_F(PakPlanBuilderTest, ScriptSlotOutOfBoundsIsRejected)
     .asset_type = data::AssetType::kScene,
     .descriptor_relpath = "scene.desc",
     .virtual_path = "/Game/Scene.invalid",
-    .descriptor_size = kDescriptorSize,
+    .descriptor_size = paktest::MakeEmptySceneDescriptor().size(),
     .descriptor_sha = {},
+    .descriptor_payload = paktest::MakeEmptySceneDescriptor(),
   };
   scene_asset.descriptor_sha[0] = 0x35U;
 
@@ -870,6 +882,189 @@ NOLINT_TEST_F(
     result.diagnostics, "pak.plan.stage.layout.browse_store_failed"));
   EXPECT_FALSE(HasDiagnosticCode(
     result.diagnostics, "pak.plan.stage.layout.browse_size_mismatch"));
+}
+
+NOLINT_TEST_F(PakPlanBuilderTest, SceneMaskIndicesRemapAcrossCookedSources)
+{
+  namespace world = oxygen::data::pak::world;
+  namespace serio = oxygen::serio;
+  auto post = world::PostProcessVolumeEnvironmentRecord {};
+  post.auto_exposure_metering_mask = core::ResourceIndexT { 1U };
+  auto descriptor = world::SceneAssetDesc {};
+  descriptor.header.asset_type = static_cast<uint8_t>(data::AssetType::kScene);
+  descriptor.header.version = world::kSceneAssetVersion;
+  const auto environment = world::SceneEnvironmentBlockHeader {
+    .byte_size = sizeof(world::SceneEnvironmentBlockHeader) + sizeof(post),
+    .systems_count = 1U,
+  };
+  serio::MemoryStream scene_stream;
+  serio::Writer scene_writer(scene_stream);
+  const auto scene_packed = scene_writer.ScopedAlignment(1);
+  ASSERT_TRUE(scene_writer.Write(descriptor));
+  ASSERT_TRUE(scene_writer.Write(environment));
+  ASSERT_TRUE(serio::Store(scene_writer, post));
+  const auto scene_bytes = scene_stream.Data();
+
+  serio::MemoryStream texture_stream;
+  serio::Writer texture_writer(texture_stream);
+  const auto texture_packed = texture_writer.ScopedAlignment(1);
+  ASSERT_TRUE(texture_writer.Write(core::TextureResourceDesc {}));
+  ASSERT_TRUE(texture_writer.Write(core::TextureResourceDesc {
+    .data_offset = 0U,
+    .size_bytes = 4U,
+    .texture_type = static_cast<uint8_t>(oxygen::TextureType::kTexture2D),
+    .compression_type = 0U,
+    .width = 1U,
+    .height = 1U,
+    .depth = 1U,
+    .array_layers = 1U,
+    .mip_levels = 1U,
+    .format = static_cast<uint8_t>(oxygen::Format::kRGBA8UNorm),
+    .alignment = 256U,
+  }));
+  const auto texture_table = texture_stream.Data();
+  auto sources = std::vector<data::CookedSource> {};
+  for (const auto seed : { uint8_t { 1U }, uint8_t { 2U } }) {
+    const auto root = Root() / std::to_string(seed);
+    const auto asset = AssetSpec {
+      .key = MakeAssetKey(seed),
+      .asset_type = data::AssetType::kScene,
+      .descriptor_relpath = "Scene.oscene",
+      .virtual_path = "/Game/Scene" + std::to_string(seed) + ".oscene",
+      .descriptor_size = scene_bytes.size(),
+      .descriptor_sha = paktest::MakeDigest(seed),
+      .descriptor_payload = { scene_bytes.begin(), scene_bytes.end() },
+    };
+    const auto files = std::array {
+      FileSpec { .kind = lc::FileKind::kTexturesTable,
+        .relpath = "textures.table",
+        .payload = { texture_table.begin(), texture_table.end() } },
+      FileSpec { .kind = lc::FileKind::kTexturesData,
+        .relpath = "textures.data",
+        .payload = std::vector<std::byte>(4U, static_cast<std::byte>(seed)) },
+    };
+    auto material = render::MaterialAssetDesc {};
+    material.header.asset_type
+      = static_cast<uint8_t>(data::AssetType::kMaterial);
+    material.header.version = render::kMaterialAssetVersion;
+    material.base_color_texture = core::ResourceIndexT { 1U };
+    serio::MemoryStream material_stream;
+    serio::Writer material_writer(material_stream);
+    const auto material_packed = material_writer.ScopedAlignment(1);
+    ASSERT_TRUE(
+      material_writer.WriteBlob(std::as_bytes(std::span { &material, 1U })));
+    const auto material_bytes = material_stream.Data();
+    const auto material_asset = AssetSpec {
+      .key = MakeAssetKey(static_cast<uint8_t>(seed + 10U)),
+      .asset_type = data::AssetType::kMaterial,
+      .descriptor_relpath = "Material.omat",
+      .virtual_path = "/Game/Material" + std::to_string(seed) + ".omat",
+      .descriptor_size = material_bytes.size(),
+      .descriptor_sha = paktest::MakeDigest(seed),
+      .descriptor_payload = { material_bytes.begin(), material_bytes.end() },
+    };
+    const auto source_assets = std::array { asset, material_asset };
+    ASSERT_TRUE(paktest::WriteLooseIndex(root, source_assets, files, seed));
+    sources.push_back(
+      { .kind = data::CookedSourceKind::kLooseCooked, .path = root });
+  }
+  const auto request = pak::PakBuildRequest {
+    .mode = pak::BuildMode::kFull,
+    .sources = sources,
+    .output_pak_path = Root() / "masks.pak",
+    .content_version = 1U,
+    .source_key = MakeNonZeroSourceKey(3U),
+  };
+  const auto result = pak::PakPlanBuilder {}.Build(request);
+  ASSERT_FALSE(HasError(result.diagnostics));
+  ASSERT_TRUE(result.plan.has_value());
+  const auto assets = result.plan->Assets();
+  const auto payloads = result.plan->AssetPayloadSources();
+  ASSERT_EQ(assets.size(), 4U);
+  bool found_second_scene = false;
+  for (size_t index = 0; index < assets.size(); ++index) {
+    if (assets[index].asset_key != MakeAssetKey(2U)) {
+      continue;
+    }
+    ASSERT_FALSE(payloads[index].inline_bytes.empty());
+    const auto scene
+      = data::SceneAsset(assets[index].asset_key, payloads[index].inline_bytes);
+    const auto remapped = scene.TryGetPostProcessVolumeEnvironment();
+    ASSERT_TRUE(remapped.has_value());
+    // Each source contributes its null record and its real texture.
+    EXPECT_EQ(remapped->auto_exposure_metering_mask.get(), 3U);
+    found_second_scene = true;
+    break;
+  }
+  ASSERT_TRUE(found_second_scene);
+  const auto written = pak::PakWriter {}.Write(request, *result.plan);
+  ASSERT_FALSE(HasError(written.diagnostics));
+
+  for (const auto mode : { pak::BuildMode::kFull, pak::BuildMode::kPatch }) {
+    auto repack = request;
+    repack.mode = mode;
+    repack.sources = { { .kind = data::CookedSourceKind::kPak,
+      .path = request.output_pak_path } };
+    repack.output_pak_path
+      = Root() / (mode == pak::BuildMode::kFull ? "repacked.pak" : "patch.pak");
+    repack.source_key = MakeNonZeroSourceKey(4U);
+    if (mode == pak::BuildMode::kPatch) {
+      repack.output_manifest_path = Root() / "patch.manifest.json";
+      repack.base_catalogs.push_back(data::PakCatalog {
+        .source_key = MakeNonZeroSourceKey(5U),
+        .content_version = 1U,
+        .catalog_digest = paktest::MakeDigest(5U),
+        .entries = {},
+      });
+    }
+    const auto planned = pak::PakPlanBuilder {}.Build(repack);
+    for (const auto& diagnostic : planned.diagnostics) {
+      EXPECT_NE(diagnostic.severity, pak::PakDiagnosticSeverity::kError)
+        << diagnostic.message;
+    }
+    ASSERT_TRUE(planned.plan.has_value());
+    ASSERT_FALSE(
+      HasError(pak::PakWriter {}.Write(repack, *planned.plan).diagnostics));
+    auto archive = oxygen::content::PakFile(repack.output_pak_path);
+    archive.ValidateCrc32Integrity();
+    for (const auto seed : { uint8_t { 1U }, uint8_t { 2U } }) {
+      const auto entry = archive.FindEntry(MakeAssetKey(seed));
+      ASSERT_TRUE(entry.has_value());
+      auto descriptor_reader = archive.CreateReader(*entry);
+      const auto bytes = descriptor_reader.ReadBlob(entry->desc_size);
+      ASSERT_TRUE(bytes.has_value());
+      const auto scene = data::SceneAsset(entry->asset_key, *bytes);
+      const auto post_process = scene.TryGetPostProcessVolumeEnvironment();
+      ASSERT_TRUE(post_process.has_value());
+      const auto expected_index = seed == 1U ? 1U
+        : mode == pak::BuildMode::kFull      ? 3U
+                                             : 2U;
+      EXPECT_EQ(
+        post_process->auto_exposure_metering_mask.get(), expected_index);
+      const auto texture_offset = archive.TexturesTable().GetResourceOffset(
+        post_process->auto_exposure_metering_mask);
+      ASSERT_TRUE(texture_offset.has_value());
+      serio::FileStream<> stream(repack.output_pak_path, std::ios::in);
+      serio::Reader reader(stream);
+      ASSERT_TRUE(reader.Seek(*texture_offset));
+      auto texture = core::TextureResourceDesc {};
+      ASSERT_TRUE(serio::Load(reader, texture));
+      ASSERT_TRUE(reader.Seek(texture.data_offset));
+      const auto payload = reader.ReadBlob(texture.size_bytes);
+      ASSERT_TRUE(payload.has_value());
+      EXPECT_EQ(
+        *payload, std::vector<std::byte>(4U, static_cast<std::byte>(seed)));
+      const auto material_entry
+        = archive.FindEntry(MakeAssetKey(static_cast<uint8_t>(seed + 10U)));
+      ASSERT_TRUE(material_entry.has_value());
+      auto material_reader = archive.CreateReader(*material_entry);
+      auto material = render::MaterialAssetDesc {};
+      const auto material_payload = material_reader.ReadBlob(sizeof(material));
+      ASSERT_TRUE(material_payload.has_value());
+      std::memcpy(&material, material_payload->data(), sizeof(material));
+      EXPECT_EQ(material.base_color_texture.get(), expected_index);
+    }
+  }
 }
 
 } // namespace

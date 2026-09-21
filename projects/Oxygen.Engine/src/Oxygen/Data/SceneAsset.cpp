@@ -4,13 +4,14 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <string>
+#include <string_view>
+
 #include <Oxygen/Base/NoStd.h>
+#include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
-
-#include <string>
-#include <string_view>
 
 namespace oxygen::data {
 
@@ -33,14 +34,6 @@ namespace {
       throw std::runtime_error(std::string(what) + " decode failed");
     }
     return record;
-  }
-
-  auto IsExpectedEnvironmentRecordSize(
-    const uint32_t record_type, const uint32_t record_size) noexcept -> bool
-  {
-    const auto expected_size
-      = pak::world::ExpectedEnvironmentRecordSize(record_type);
-    return !expected_size.has_value() || record_size == *expected_size;
   }
 
 } // namespace
@@ -146,6 +139,8 @@ auto SceneAsset::ParseAndValidate() -> void
 
   has_environment_block_ = false;
   environment_system_records_.clear();
+  post_process_record_.reset();
+  post_process_curve_.clear();
 
   size_t payload_end = sizeof(pak::world::SceneAssetDesc);
 
@@ -277,6 +272,22 @@ auto SceneAsset::ParseAndValidate() -> void
         throw std::runtime_error("SceneAsset spot light record size mismatch");
       }
 
+      if (type == ComponentType::kPerspectiveCamera
+        || type == ComponentType::kOrthographicCamera) {
+        for (uint32_t index = 0; index < entry.table.count; ++index) {
+          const auto camera_bytes = data_.subspan(entry.table.offset
+              + static_cast<size_t>(index) * entry.table.entry_size,
+            entry.table.entry_size);
+          if (type == ComponentType::kPerspectiveCamera) {
+            ReadPackedRecord<pak::world::PerspectiveCameraRecord>(
+              camera_bytes, "SceneAsset perspective camera");
+          } else {
+            ReadPackedRecord<pak::world::OrthographicCameraRecord>(
+              camera_bytes, "SceneAsset orthographic camera");
+          }
+        }
+      }
+
       component_tables_.push_back({ .type = type,
         .offset = entry.table.offset,
         .count = entry.table.count,
@@ -351,13 +362,42 @@ auto SceneAsset::ParseAndValidate() -> void
         throw std::runtime_error("SceneAsset environment record out of bounds");
       }
 
-      if (!IsExpectedEnvironmentRecordSize(record_type, record_size)) {
+      if (!pak::world::IsValidEnvironmentRecordSize(record_type, record_size)) {
         throw std::runtime_error("SceneAsset environment record size mismatch");
       }
 
       const auto bytes = data_.subspan(cursor, record_size);
+      if (record_type
+        == nostd::to_underlying(
+          pak::world::EnvironmentComponentType::kPostProcessVolume)) {
+        if (post_process_record_) {
+          throw std::runtime_error(
+            "SceneAsset contains duplicate post-process records");
+        }
+        const auto record
+          = ReadPackedRecord<pak::world::PostProcessVolumeEnvironmentRecord>(
+            bytes.first(sizeof(pak::world::PostProcessVolumeEnvironmentRecord)),
+            "SceneAsset post-process record");
+        auto key_bytes = bytes.subspan(sizeof(record));
+        post_process_curve_.reserve(record.curve_key_count);
+        for (uint32_t index = 0; index < record.curve_key_count; ++index) {
+          const auto key
+            = ReadPackedRecord<pak::world::ExposureCompensationKeyRecord>(
+              key_bytes.first(
+                sizeof(pak::world::ExposureCompensationKeyRecord)),
+              "SceneAsset exposure compensation key");
+          if (!post_process_curve_.empty()
+            && key.metered_ev <= post_process_curve_.back().metered_ev) {
+            throw std::runtime_error(
+              "SceneAsset exposure curve EV keys must be strictly increasing");
+          }
+          post_process_curve_.push_back(key);
+          key_bytes = key_bytes.subspan(sizeof(key));
+        }
+        post_process_record_ = record;
+      }
       environment_system_records_.push_back(EnvironmentSystemRecordView {
-        .header = record_header, .bytes = bytes });
+        .header = record_header, .record_offset = cursor, .bytes = bytes });
       cursor = record_end;
     }
 
@@ -465,9 +505,7 @@ auto SceneAsset::TryGetSkySphereEnvironment() const
 auto SceneAsset::TryGetPostProcessVolumeEnvironment() const
   -> std::optional<pak::world::PostProcessVolumeEnvironmentRecord>
 {
-  return TryGetEnvironmentRecordAs<
-    pak::world::PostProcessVolumeEnvironmentRecord>(
-    pak::world::EnvironmentComponentType::kPostProcessVolume);
+  return post_process_record_;
 }
 
 auto SceneAsset::TryGetBackgroundEnvironment() const

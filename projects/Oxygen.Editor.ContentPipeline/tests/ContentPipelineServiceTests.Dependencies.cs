@@ -169,7 +169,6 @@ public sealed partial class ContentPipelineServiceTests
             AddGeometryNode(workspace, new("asset:///Content/Geometry/AuthoredCube.ogeo"), "Native identity");
             workspace.Scene.SetEnvironment(new World.Serialization.SceneEnvironmentData
             {
-                ExposureMode = World.Serialization.ExposureMode.Auto,
                 PostProcess = new World.Serialization.PostProcessEnvironmentData { ExposureMode = World.Serialization.ExposureMode.Auto },
             });
             await workspace.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);

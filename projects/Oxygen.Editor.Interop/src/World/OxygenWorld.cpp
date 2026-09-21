@@ -793,12 +793,17 @@ namespace Oxygen::Interop::World {
     float autoExposureLogLuminanceRange,
     float autoExposureTargetLuminance,
     float autoExposureSpotMeterRadius,
+    float autoExposureBlackInfluence,
+    float autoExposureTransitionDistanceEv,
+    cli::array<ExposureCompensationKeyManaged>^ autoExposureCompensationCurve,
+    String^ exposureMaskCookedRoot, String^ exposureMaskDescriptorPath,
     float bloomIntensity,
     float bloomThreshold,
     float saturation,
     float contrast,
     float vignetteIntensity,
-    float displayGamma) {
+    float displayGamma,
+    Action<System::UInt64, String^>^ onFailure, Action<System::UInt64>^ onSuccess) {
     auto native_ctx = context_->NativePtr();
     if (!native_ctx || !native_ctx->engine) {
       throw gcnew System::InvalidOperationException(
@@ -853,6 +858,27 @@ namespace Oxygen::Interop::World {
       = autoExposureLogLuminanceRange;
     post_process.auto_exposure_target_luminance = autoExposureTargetLuminance;
     post_process.auto_exposure_spot_meter_radius = autoExposureSpotMeterRadius;
+    post_process.auto_exposure_black_influence = autoExposureBlackInfluence;
+    post_process.auto_exposure_transition_distance_ev = autoExposureTransitionDistanceEv;
+    if (autoExposureCompensationCurve == nullptr
+      || autoExposureCompensationCurve->Length > oxygen::engine::kMaxExposureCompensationCurveKeys) {
+      throw gcnew System::ArgumentException("Exposure compensation curve must contain at most 64 keys.", "autoExposureCompensationCurve");
+    }
+    for each (const auto key in autoExposureCompensationCurve) {
+      post_process.auto_exposure_compensation_curve.push_back({
+        .metered_ev = key.MeteredEv, .compensation_ev = key.CompensationEv,
+      });
+    }
+    if (exposureMaskCookedRoot != nullptr || exposureMaskDescriptorPath != nullptr) {
+      if (String::IsNullOrWhiteSpace(exposureMaskCookedRoot)
+        || String::IsNullOrWhiteSpace(exposureMaskDescriptorPath)) {
+        throw gcnew ArgumentException("An exposure mask requires both a cooked source and a relative descriptor path.");
+      }
+      post_process.auto_exposure_metering_mask = oxygen::content::TextureResourceLocator {
+        .cooked_root = std::filesystem::path(msclr::interop::marshal_as<std::wstring>(exposureMaskCookedRoot)),
+        .descriptor_relative_path = std::filesystem::path(msclr::interop::marshal_as<std::wstring>(exposureMaskDescriptorPath)),
+      };
+    }
     post_process.bloom_intensity = bloomIntensity;
     post_process.bloom_threshold = bloomThreshold;
     post_process.saturation = saturation;
@@ -861,7 +887,9 @@ namespace Oxygen::Interop::World {
     post_process.display_gamma = displayGamma;
 
     auto cmd = std::unique_ptr<SetEnvironmentCommand>(
-      commandFactory_->CreateSetEnvironment(atmosphere, post_process));
+      commandFactory_->CreateSetEnvironment(atmosphere, std::move(post_process)));
+    cmd->SetFailureCallback(MakeAssetFailureCallback(onFailure));
+    cmd->SetSuccessCallback(MakeAssetSuccessCallback(onSuccess));
     editor_module->get().Enqueue(std::move(cmd));
   }
 

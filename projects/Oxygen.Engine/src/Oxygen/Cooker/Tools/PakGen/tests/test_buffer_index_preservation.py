@@ -7,7 +7,7 @@ def test_buffer_indices_preserved_for_geometry(tmp_path: Path):
     # Arrange: buffers deliberately out of alphabetical order relative to names
     spec = {
         "source_identity": "01a0a760-497b-72f9-a4b4-c1735897a9fc",
-        "version": 6,
+        "version": 7,
         "content_version": 1,
         "buffers": [
             {"name": "default_empty_buffer", "data": "", "usage": 0, "size": 0},

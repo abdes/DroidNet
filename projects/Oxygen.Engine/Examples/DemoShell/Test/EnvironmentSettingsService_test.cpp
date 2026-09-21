@@ -12,16 +12,20 @@
 #include <memory>
 #include <numbers>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "DemoShell/Services/DefaultSceneLighting.h"
+#include "DemoShell/Services/EnvironmentSettingsService.h"
+#include "DemoShell/Services/SettingsService.h"
+#include "DemoShell/Services/SkyboxService.h"
+#include "DemoShell/UI/EnvironmentVm.h"
 #include <glm/gtc/quaternion.hpp>
 
-#include <Oxygen/Testing/GTest.h>
-#include <Oxygen/Testing/ScopedLogCapture.h>
-
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Data/PakFormatSerioWriters.h>
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Environment/Background.h>
@@ -36,12 +40,10 @@
 #include <Oxygen/Scene/Light/DirectionalLightResolver.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneFlags.h>
-
-#include "DemoShell/Services/DefaultSceneLighting.h"
-#include "DemoShell/Services/EnvironmentSettingsService.h"
-#include "DemoShell/Services/SettingsService.h"
-#include "DemoShell/Services/SkyboxService.h"
-#include "DemoShell/UI/EnvironmentVm.h"
+#include <Oxygen/Serio/MemoryStream.h>
+#include <Oxygen/Serio/Writer.h>
+#include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/ScopedLogCapture.h>
 
 namespace oxygen::examples::testing {
 
@@ -1488,6 +1490,17 @@ NOLINT_TEST_F(
   post.auto_exposure_log_luminance_range = 21.25F;
   post.auto_exposure_target_luminance = 0.27F;
   post.auto_exposure_spot_meter_radius = 0.35F;
+  post.auto_exposure_black_influence = 0.4F;
+  post.auto_exposure_transition_distance_ev = 2.5F;
+  post.auto_exposure_metering_mask = data::pak::core::ResourceIndexT { 4U };
+  const auto keys = std::array {
+    world::ExposureCompensationKeyRecord {
+      .metered_ev = -4.0F, .compensation_ev = 1.0F },
+    world::ExposureCompensationKeyRecord {
+      .metered_ev = 12.0F, .compensation_ev = -0.5F },
+  };
+  post.curve_key_count = static_cast<uint32_t>(keys.size());
+  post.header.record_size = sizeof(post) + sizeof(keys);
   post.bloom_intensity = 0.6F;
   post.bloom_threshold = 2.25F;
   post.saturation = 0.8F;
@@ -1499,23 +1512,32 @@ NOLINT_TEST_F(
   background.color_rgb[1] = 0.25F;
   background.color_rgb[2] = 0.75F;
   const auto block = world::SceneEnvironmentBlockHeader {
-    .byte_size = sizeof(world::SceneEnvironmentBlockHeader) + sizeof(post)
-      + sizeof(background),
+    .byte_size = sizeof(world::SceneEnvironmentBlockHeader)
+      + post.header.record_size + sizeof(background),
     .systems_count = 2,
   };
-  auto bytes = std::vector<std::byte> {};
-  const auto append = [&bytes]<typename T>(const T& value) {
-    const auto offset = bytes.size();
-    bytes.resize(offset + sizeof(value));
-    std::memcpy(bytes.data() + offset, &value, sizeof(value));
-  };
-  append(descriptor);
-  append(block);
-  append(post);
-  append(background);
-  const auto asset = data::SceneAsset(data::AssetKey {}, std::move(bytes));
+  serio::MemoryStream stream;
+  serio::Writer writer(stream);
+  const auto packed = writer.ScopedAlignment(1);
+  ASSERT_TRUE(writer.Write(descriptor));
+  ASSERT_TRUE(writer.Write(block));
+  ASSERT_TRUE(serio::Store(writer, post));
+  for (const auto& key : keys) {
+    ASSERT_TRUE(serio::Store(writer, key));
+  }
+  ASSERT_TRUE(writer.Write(background.header));
+  ASSERT_TRUE(writer.Write(background.enabled));
+  for (const auto channel : background.color_rgb) {
+    ASSERT_TRUE(writer.Write(channel));
+  }
+  const auto asset = data::SceneAsset(data::AssetKey {}, stream.Data());
   auto environment = scene::SceneEnvironment {};
-  EnvironmentSettingsService::HydrateEnvironment(environment, asset);
+  EXPECT_THROW(EnvironmentSettingsService::HydrateEnvironment(
+                 environment, asset, content::ResourceKey {}),
+    std::invalid_argument);
+  EXPECT_FALSE(environment.TryGetSystem<scene::environment::Background>());
+  const auto mask = content::ResourceKey { 0x0001000000000004ULL };
+  EnvironmentSettingsService::HydrateEnvironment(environment, asset, mask);
   const auto volume
     = environment.TryGetSystem<scene::environment::PostProcessVolume>();
   ASSERT_TRUE(volume);
@@ -1536,6 +1558,16 @@ NOLINT_TEST_F(
   EXPECT_FLOAT_EQ(volume->GetAutoExposureLogLuminanceRange(), 21.25F);
   EXPECT_FLOAT_EQ(volume->GetAutoExposureTargetLuminance(), 0.27F);
   EXPECT_FLOAT_EQ(volume->GetAutoExposureSpotMeterRadius(), 0.35F);
+  const auto& exposure = volume->GetExposureSettings();
+  EXPECT_FLOAT_EQ(exposure.black_influence, 0.4F);
+  EXPECT_FLOAT_EQ(exposure.transition_distance, 2.5F);
+  EXPECT_EQ(exposure.metering_mask, mask);
+  ASSERT_EQ(exposure.compensation_curve.size(), keys.size());
+  EXPECT_FLOAT_EQ(exposure.compensation_curve[0].metered_ev, -4.0F);
+  EXPECT_FLOAT_EQ(exposure.compensation_curve[0].compensation_ev, 1.0F);
+  EXPECT_FLOAT_EQ(exposure.compensation_curve[1].metered_ev, 12.0F);
+  EXPECT_FLOAT_EQ(exposure.compensation_curve[1].compensation_ev, -0.5F);
+  EXPECT_TRUE(scene::ResolveExposureSettings(exposure).has_value());
   EXPECT_FLOAT_EQ(volume->GetBloomIntensity(), 0.6F);
   EXPECT_FLOAT_EQ(volume->GetBloomThreshold(), 2.25F);
   EXPECT_FLOAT_EQ(volume->GetSaturation(), 0.8F);

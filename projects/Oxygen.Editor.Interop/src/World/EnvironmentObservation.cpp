@@ -73,6 +73,19 @@ public:
     result.AutoExposureLogLuminanceRange = value.post_process.auto_exposure_log_luminance_range;
     result.AutoExposureTargetLuminance = value.post_process.auto_exposure_target_luminance;
     result.AutoExposureSpotMeterRadius = value.post_process.auto_exposure_spot_meter_radius;
+    result.AutoExposureBlackInfluence = value.post_process.auto_exposure_black_influence;
+    result.AutoExposureMeteringMask = value.metering_mask.get();
+    result.ExposureMaskPending = value.metering_mask_pending;
+    result.ExposureMaskError = gcnew System::String(value.metering_mask_error.c_str());
+    result.AutoExposureTransitionDistanceEv = value.post_process.auto_exposure_transition_distance_ev;
+    const auto& curve = value.post_process.auto_exposure_compensation_curve;
+    result.AutoExposureCompensationCurve = gcnew cli::array<ExposureCompensationKeyManaged>(static_cast<int>(curve.size()));
+    for (size_t index = 0; index < curve.size(); ++index) {
+      ExposureCompensationKeyManaged key;
+      key.MeteredEv = curve[index].metered_ev;
+      key.CompensationEv = curve[index].compensation_ev;
+      result.AutoExposureCompensationCurve[static_cast<int>(index)] = key;
+    }
     result.BloomIntensity = value.post_process.bloom_intensity;
     result.BloomThreshold = value.post_process.bloom_threshold;
     result.Saturation = value.post_process.saturation;

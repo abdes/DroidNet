@@ -151,12 +151,17 @@ namespace Oxygen::Interop::World {
       float autoExposureLogLuminanceRange,
       float autoExposureTargetLuminance,
       float autoExposureSpotMeterRadius,
+    float autoExposureBlackInfluence,
+    float autoExposureTransitionDistanceEv,
+    cli::array<ExposureCompensationKeyManaged>^ autoExposureCompensationCurve,
+    String^ exposureMaskCookedRoot, String^ exposureMaskDescriptorPath,
       float bloomIntensity,
       float bloomThreshold,
       float saturation,
       float contrast,
       float vignetteIntensity,
-      float displayGamma);
+      float displayGamma,
+    Action<System::UInt64, String^>^ onFailure, Action<System::UInt64>^ onSuccess);
     void DetachGeometry(System::Guid nodeId);
     void AttachPerspectiveCamera(System::Guid nodeId,
       float fieldOfViewYRadians, float aspectRatio, float nearPlane,

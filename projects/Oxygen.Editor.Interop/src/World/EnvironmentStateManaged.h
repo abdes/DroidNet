@@ -9,6 +9,12 @@
 
 namespace Oxygen::Interop::World {
 
+//! One compensation key with EV100 input and EV-stop output.
+public value struct ExposureCompensationKeyManaged {
+  float MeteredEv;
+  float CompensationEv;
+};
+
 //! Native environment presence and stored values at one mutation boundary.
 public value struct EnvironmentStateManaged {
   bool Exists;
@@ -44,6 +50,12 @@ public value struct EnvironmentStateManaged {
   float AutoExposureLogLuminanceRange;
   float AutoExposureTargetLuminance;
   float AutoExposureSpotMeterRadius;
+  float AutoExposureBlackInfluence;
+  System::UInt64 AutoExposureMeteringMask;
+  bool ExposureMaskPending;
+  System::String^ ExposureMaskError;
+  float AutoExposureTransitionDistanceEv;
+  cli::array<ExposureCompensationKeyManaged>^ AutoExposureCompensationCurve;
   float BloomIntensity;
   float BloomThreshold;
   float Saturation;

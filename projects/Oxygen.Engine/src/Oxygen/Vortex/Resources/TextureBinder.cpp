@@ -45,6 +45,7 @@
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Nexus/GenerationTracker.h>
 #include <Oxygen/Vortex/Resources/TextureBinder.h>
@@ -389,6 +390,10 @@ namespace {
     desc.mip_levels = tex_res.GetMipCount();
     desc.array_size = tex_res.GetArrayLayers();
     desc.is_shader_resource = true;
+    // UploadCoordinator hands completed texture uploads back in Common.
+    // Declare the same creation state so a consumer on another queue can
+    // establish tracking before its first shader-resource transition.
+    desc.initial_state = graphics::ResourceStates::kCommon;
     desc.debug_name = std::string("Texture(") + content::to_string(key) + ")";
 
     const auto& format_info = graphics::detail::GetFormatInfo(desc.format);

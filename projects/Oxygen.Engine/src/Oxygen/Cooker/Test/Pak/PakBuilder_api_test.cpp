@@ -4,16 +4,15 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <algorithm>
 #include <cstdint>
 #include <string_view>
 
+#include "PakTestSupport.h"
+
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Pak/PakBuilder.h>
-
-#include "PakTestSupport.h"
+#include <Oxygen/Testing/GTest.h>
 
 namespace {
 namespace data = oxygen::data;
@@ -348,7 +347,7 @@ NOLINT_TEST_F(PakBuilderApiContractTestFixture,
 }
 
 NOLINT_TEST_F(PakBuilderApiContractTestFixture,
-  FailOnWarningsEscalatesPlannerWarningToErrorDiagnostic)
+  CurrentPakInputBuildsWithoutWarningsUnderStrictPolicy)
 {
   using data::CookedSource;
   using data::CookedSourceKind;
@@ -397,11 +396,9 @@ NOLINT_TEST_F(PakBuilderApiContractTestFixture,
   ASSERT_TRUE(result_or_error.has_value());
   const auto& result = result_or_error.value();
 
-  EXPECT_GT(result.summary.diagnostics_warning, 0U);
-  EXPECT_GT(result.summary.diagnostics_error, 0U);
-  EXPECT_TRUE(
-    HasDiagnosticCode(result, "pak.plan.pak_source_regions_projected"));
-  EXPECT_TRUE(HasDiagnosticCode(result, "pak.request.fail_on_warnings"));
+  EXPECT_EQ(result.summary.diagnostics_warning, 0U);
+  EXPECT_EQ(result.summary.diagnostics_error, 0U);
+  EXPECT_FALSE(HasDiagnosticCode(result, "pak.request.fail_on_warnings"));
   EXPECT_TRUE(result.telemetry.planning_duration.has_value());
   EXPECT_TRUE(result.telemetry.writing_duration.has_value());
 }

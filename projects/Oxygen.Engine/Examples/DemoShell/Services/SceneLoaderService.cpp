@@ -20,6 +20,8 @@
 #include <utility>
 #include <variant>
 
+#include "DemoShell/Services/EnvironmentSettingsService.h"
+#include "DemoShell/Services/SceneLoaderService.h"
 #include <glm/geometric.hpp>
 #include <glm/gtc/quaternion.hpp>
 
@@ -38,6 +40,7 @@
 #include <Oxygen/Data/InputActionAsset.h>
 #include <Oxygen/Data/InputMappingContextAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PhysicsResource.h>
 #include <Oxygen/Data/PhysicsSceneAsset.h>
 #include <Oxygen/Data/SceneAsset.h>
@@ -70,9 +73,6 @@
 #include <Oxygen/Scripting/Resolver/ScriptSourceResolver.h>
 #include <Oxygen/Serio/FileStream.h>
 #include <Oxygen/Serio/Reader.h>
-
-#include "DemoShell/Services/EnvironmentSettingsService.h"
-#include "DemoShell/Services/SceneLoaderService.h"
 
 namespace oxygen::examples {
 
@@ -2547,8 +2547,21 @@ auto SceneLoaderService::HydratePhysicsSidecar(
 auto SceneLoaderService::BuildEnvironment(const data::SceneAsset& asset)
   -> std::unique_ptr<scene::SceneEnvironment>
 {
+  auto metering_mask = content::ResourceKey {};
+  if (const auto post = asset.TryGetPostProcessVolumeEnvironment(); post
+    && post->auto_exposure_metering_mask != data::pak::core::kNoResourceIndex) {
+    const auto key = loader_.MakeTextureResourceKeyForAsset(
+      asset.GetAssetKey(), post->auto_exposure_metering_mask);
+    if (!key) {
+      throw std::runtime_error("Scene exposure mask binding failed: scene="
+        + data::to_string(asset.GetAssetKey()) + " texture_index="
+        + std::to_string(post->auto_exposure_metering_mask.get()));
+    }
+    metering_mask = *key;
+  }
   auto environment = std::make_unique<scene::SceneEnvironment>();
-  EnvironmentSettingsService::HydrateEnvironment(*environment, asset);
+  EnvironmentSettingsService::HydrateEnvironment(
+    *environment, asset, metering_mask);
   return environment;
 }
 
@@ -3163,6 +3176,9 @@ void SceneLoaderService::SelectActiveCamera(const data::SceneAsset& asset)
         if (far_plane < near_plane) {
           std::swap(far_plane, near_plane);
         }
+        cam.SetExposure({ .aperture_f = rec.aperture_f,
+          .shutter_rate = rec.shutter_rate,
+          .iso = rec.iso });
         cam.SetFieldOfView(rec.fov_y);
         cam.SetNearPlane(near_plane);
         cam.SetFarPlane(far_plane);
@@ -3171,8 +3187,9 @@ void SceneLoaderService::SelectActiveCamera(const data::SceneAsset& asset)
           = rec.fov_y * (180.0F / std::numbers::pi_v<float>);
         LOG_F(INFO,
           "SceneLoader: Applied perspective camera params fov_y_deg={} "
-          "near={} far={} aspect_hint={}",
-          fov_y_deg, near_plane, far_plane, rec.aspect_ratio);
+          "near={} far={} aspect_hint={} aperture_f={} shutter_rate={} ISO={}",
+          fov_y_deg, near_plane, far_plane, rec.aspect_ratio, rec.aperture_f,
+          rec.shutter_rate, rec.iso);
 
         auto tf = active_camera_.GetTransform();
         glm::vec3 cam_pos { 0.0F, 0.0F, 0.0F };
@@ -3220,13 +3237,17 @@ void SceneLoaderService::SelectActiveCamera(const data::SceneAsset& asset)
           if (far_plane < near_plane) {
             std::swap(far_plane, near_plane);
           }
+          cam_ref->get().SetExposure({ .aperture_f = rec.aperture_f,
+            .shutter_rate = rec.shutter_rate,
+            .iso = rec.iso });
           cam_ref->get().SetExtents(
             rec.left, rec.right, rec.bottom, rec.top, near_plane, far_plane);
           LOG_F(INFO,
             "SceneLoader: Applied orthographic camera extents l={} r={} "
             "b={} "
-            "t={} near={} far={}",
-            rec.left, rec.right, rec.bottom, rec.top, near_plane, far_plane);
+            "t={} near={} far={} aperture_f={} shutter_rate={} ISO={}",
+            rec.left, rec.right, rec.bottom, rec.top, near_plane, far_plane,
+            rec.aperture_f, rec.shutter_rate, rec.iso);
         }
       }
     }

@@ -229,6 +229,8 @@ public sealed partial class ContentPipelineService(
         var path = Uri.UnescapeDataString(assetUri.AbsolutePath);
         return path switch
         {
+            _ when path.EndsWith(".otex.json", StringComparison.OrdinalIgnoreCase)
+                || path.EndsWith(".otex", StringComparison.OrdinalIgnoreCase) => ContentCookAssetKind.Texture,
             _ when path.EndsWith(".omat.json", StringComparison.OrdinalIgnoreCase)
                 || path.EndsWith(".omat", StringComparison.OrdinalIgnoreCase) => ContentCookAssetKind.Material,
             _ when path.EndsWith(".ogeo.json", StringComparison.OrdinalIgnoreCase)
@@ -260,6 +262,7 @@ public sealed partial class ContentPipelineService(
     private static string GetExpectedExtension(ContentCookAssetKind kind)
         => kind switch
         {
+            ContentCookAssetKind.Texture => ".otex",
             ContentCookAssetKind.Material => ".omat",
             ContentCookAssetKind.Geometry => ".ogeo",
             ContentCookAssetKind.Scene => ".oscene",
@@ -268,6 +271,7 @@ public sealed partial class ContentPipelineService(
 
     private static bool IsCookableDescriptorFile(string path)
         => path.EndsWith(".omat.json", StringComparison.OrdinalIgnoreCase)
+           || path.EndsWith(".otex.json", StringComparison.OrdinalIgnoreCase)
            || path.EndsWith(".ogeo.json", StringComparison.OrdinalIgnoreCase)
            || path.EndsWith(".oscene.json", StringComparison.OrdinalIgnoreCase)
            || ((path.EndsWith(".gltf", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".glb", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".fbx", StringComparison.OrdinalIgnoreCase))
@@ -432,6 +436,8 @@ public sealed partial class ContentPipelineService(
     private static Task<PreparedInput> PrepareInputAsync(Guid operationId, ContentCookScope scope, ContentCookInput input, CancellationToken cancellationToken)
         => input.Kind == ContentCookAssetKind.Geometry && input.Role != ContentCookInputRole.GeneratedDescriptor
             ? PrepareCapturedGeometryAsync(scope, input, cancellationToken)
+            : input.Kind == ContentCookAssetKind.Texture && scope.Snapshot is not null
+                ? PrepareCapturedTextureAsync(scope, input, cancellationToken)
             : PrepareMaterialInputAsync(operationId, scope, input, cancellationToken);
 
     private static async Task<PreparedInput> PrepareMaterialInputAsync(

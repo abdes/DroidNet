@@ -301,28 +301,24 @@ internal sealed class SceneEnvironmentDescriptors
     private static SceneEnvironmentData WriteExposureMode(SceneEnvironmentData value, ExposureMode next)
         => value with
         {
-            ExposureMode = next,
             PostProcess = value.PostProcess with { ExposureMode = next },
         };
 
     private static SceneEnvironmentData WriteManualExposure(SceneEnvironmentData value, float next)
         => value with
         {
-            ManualExposureEv = next,
             PostProcess = value.PostProcess with { ManualExposureEv = next },
         };
 
     private static SceneEnvironmentData WriteExposureCompensation(SceneEnvironmentData value, float next)
         => value with
         {
-            ExposureCompensation = next,
             PostProcess = value.PostProcess with { ExposureCompensationEv = next },
         };
 
     private static SceneEnvironmentData WriteToneMapping(SceneEnvironmentData value, ToneMappingMode next)
         => value with
         {
-            ToneMapping = next,
             PostProcess = value.PostProcess with { ToneMapper = next },
         };
 

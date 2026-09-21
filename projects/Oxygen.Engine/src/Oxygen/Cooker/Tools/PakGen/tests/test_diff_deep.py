@@ -13,7 +13,7 @@ def test_diff_material_base_color_change(tmp_path: Path):
     # Arrange: build pak with one material
     spec = {
         "source_identity": "01a0a760-4985-74f3-9e93-1f9872cdaabd",
-        "version": 6,
+        "version": 7,
         "content_version": 1,
         "buffers": [],
         "textures": [],
@@ -54,7 +54,7 @@ def test_diff_geometry_removed_submesh(tmp_path: Path, mesh_type):
     # Arrange: geometry with one LOD two submeshes
     spec = {
         "source_identity": "01a0a760-4985-74f3-9e93-1f99c7ae7012",
-        "version": 6,
+        "version": 7,
         "content_version": 1,
         "buffers": [],
         "textures": [],
@@ -151,7 +151,7 @@ def test_diff_geometry_lod_count(tmp_path: Path):
     # Arrange: geometry with one LOD
     spec = {
         "source_identity": "01a0a760-4985-74f3-9e93-1f9a1a677abf",
-        "version": 6,
+        "version": 7,
         "content_version": 1,
         "buffers": [],
         "textures": [],

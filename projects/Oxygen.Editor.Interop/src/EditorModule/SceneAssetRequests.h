@@ -11,7 +11,11 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
+
+#include <Oxygen/Content/ResourceKey.h>
+#include <Oxygen/Content/TextureResourceLocator.h>
 
 #include <Oxygen/Scene/Types/NodeHandle.h>
 
@@ -22,6 +26,7 @@ class VirtualPathResolver;
 namespace oxygen::data {
 class GeometryAsset;
 class MaterialAsset;
+class TextureResource;
 } // namespace oxygen::data
 namespace oxygen::scene {
 class Scene;
@@ -43,6 +48,15 @@ public:
       std::function<void(const std::string &, MaterialCompletion)>;
   using Diagnostic = std::function<void(const std::string &)>;
   using AssetAvailability = std::function<bool(const std::string &, bool)>;
+  using Texture = std::shared_ptr<const data::TextureResource>;
+  using TextureCompletion = std::function<void(content::ResourceKey, Texture, std::string)>;
+  using TextureLoader = std::function<void(const content::TextureResourceLocator&, TextureCompletion)>;
+  using TextureApply = std::function<void(scene::Scene&, content::ResourceKey)>;
+  struct ExposureMaskStatus {
+    content::ResourceKey accepted {};
+    bool pending { false };
+    std::string error;
+  };
   //! Reports a current failure with the native request generation.
   using FailureCallback =
       std::function<void(uint64_t, const std::string &)>;
@@ -53,7 +67,7 @@ public:
                      content::VirtualPathResolver &resolver);
   SceneAssetRequests(GeometryLoader geometry_loader,
                      MaterialLoader material_loader, Diagnostic diagnostic,
-                     AssetAvailability available);
+                     AssetAvailability available, TextureLoader texture_loader);
   ~SceneAssetRequests();
 
   SceneAssetRequests(const SceneAssetRequests &) = delete;
@@ -68,6 +82,12 @@ public:
                    const std::string &uri, FailureCallback on_failure = {},
                    SuccessCallback on_success = {});
   void Detach(scene::NodeHandle node);
+
+  //! Supersede pending mask work and apply the complete revision when ready.
+  void SetExposureMask(scene::Scene& scene,
+    std::optional<content::TextureResourceLocator> locator, TextureApply apply,
+    FailureCallback on_failure = {}, SuccessCallback on_success = {});
+  [[nodiscard]] auto InspectExposureMask() const -> ExposureMaskStatus;
 
   //! Re-request current bindings after mounted sources have been refreshed.
   //! Existing scene objects remain usable until their replacements arrive.

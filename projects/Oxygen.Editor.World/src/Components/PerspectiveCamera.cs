@@ -72,5 +72,5 @@ public partial class PerspectiveCamera : CameraComponent
 
     /// <inheritdoc/>
     public override ComponentData Dehydrate()
-        => new PerspectiveCameraData { Id = this.Id, Name = this.Name, NearPlane = this.NearPlane, FarPlane = this.FarPlane, FieldOfView = this.FieldOfView, AspectRatio = this.AspectRatio };
+        => new PerspectiveCameraData { Id = this.Id, Name = this.Name, NearPlane = this.NearPlane, FarPlane = this.FarPlane, ApertureF = this.ApertureF, ShutterRate = this.ShutterRate, Iso = this.Iso, FieldOfView = this.FieldOfView, AspectRatio = this.AspectRatio };
 }

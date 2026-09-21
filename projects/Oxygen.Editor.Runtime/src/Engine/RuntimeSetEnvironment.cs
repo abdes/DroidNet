@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Collections.Immutable;
 using System.Numerics;
 
 namespace Oxygen.Editor.Runtime.Engine;
@@ -37,6 +38,10 @@ namespace Oxygen.Editor.Runtime.Engine;
 /// <param name="AutoExposureLogLuminanceRange">The AutoExposureLogLuminanceRange command value.</param>
 /// <param name="AutoExposureTargetLuminance">The AutoExposureTargetLuminance command value.</param>
 /// <param name="AutoExposureSpotMeterRadius">The AutoExposureSpotMeterRadius command value.</param>
+/// <param name="AutoExposureBlackInfluence">Dark histogram sample influence.</param>
+/// <param name="AutoExposureMeteringMask">The source-qualified mask reference, or null to clear it.</param>
+/// <param name="AutoExposureTransitionDistanceEv">Hybrid adaptation transition distance in EV.</param>
+/// <param name="AutoExposureCompensationCurve">Ordered compensation curve keys.</param>
 /// <param name="BloomIntensity">The BloomIntensity command value.</param>
 /// <param name="BloomThreshold">The BloomThreshold command value.</param>
 /// <param name="Saturation">The Saturation command value.</param>
@@ -74,6 +79,10 @@ public sealed record RuntimeSetEnvironment(
     float AutoExposureLogLuminanceRange,
     float AutoExposureTargetLuminance,
     float AutoExposureSpotMeterRadius,
+    float AutoExposureBlackInfluence,
+    float AutoExposureTransitionDistanceEv,
+    ImmutableArray<RuntimeExposureCompensationKey> AutoExposureCompensationCurve,
+    RuntimeTextureReference? AutoExposureMeteringMask,
     float BloomIntensity,
     float BloomThreshold,
     float Saturation,

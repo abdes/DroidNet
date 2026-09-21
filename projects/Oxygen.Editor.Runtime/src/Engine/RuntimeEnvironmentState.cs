@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Collections.Immutable;
 using System.Numerics;
 
 namespace Oxygen.Editor.Runtime.Engine;
@@ -107,6 +108,24 @@ public sealed record RuntimeEnvironmentState
 
     /// <summary>Gets the observed AutoExposureSpotMeterRadius value.</summary>
     public float AutoExposureSpotMeterRadius { get; init; }
+
+    /// <summary>Gets the observed dark histogram sample influence.</summary>
+    public float AutoExposureBlackInfluence { get; init; }
+
+    /// <summary>Gets the observed process-local mask resource identity; zero means no mask.</summary>
+    public ulong AutoExposureMeteringMask { get; init; }
+
+    /// <summary>Gets a value indicating whether the current exposure request awaits its mask.</summary>
+    public bool ExposureMaskPending { get; init; }
+
+    /// <summary>Gets the current mask failure, or an empty string when none is reported.</summary>
+    public string ExposureMaskError { get; init; } = string.Empty;
+
+    /// <summary>Gets the observed adaptation transition distance in EV.</summary>
+    public float AutoExposureTransitionDistanceEv { get; init; }
+
+    /// <summary>Gets the observed ordered compensation curve.</summary>
+    public ImmutableArray<RuntimeExposureCompensationKey> AutoExposureCompensationCurve { get; init; } = [];
 
     /// <summary>Gets the observed BloomIntensity value.</summary>
     public float BloomIntensity { get; init; }
