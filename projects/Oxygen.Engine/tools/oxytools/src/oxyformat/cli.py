@@ -55,7 +55,7 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
         help="Resolve input paths from the current directory (for pre-commit filenames)",
     )
     parser.add_argument(
-        "--clang-format-bin", metavar="PATH", help="LLVM 22.x formatter executable"
+        "--clang-format-bin", metavar="PATH", help="LLVM 23.x formatter executable"
     )
     parser.add_argument(
         "--jobs", type=positive_int, default=min(8, os.cpu_count() or 1), metavar="N"

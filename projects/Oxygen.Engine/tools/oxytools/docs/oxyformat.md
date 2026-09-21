@@ -23,7 +23,7 @@ Git's repository-relative filenames. There are no Git operations in oxyformat.
 
 The formatter is discovered on PATH, then in the standard Windows LLVM install
 directory. `--clang-format-bin PATH` selects another executable; its version must
-still be 22.x. `--jobs N` defaults to min(CPU count, 8); `--timeout SECONDS`
+still be 23.x. `--jobs N` defaults to min(CPU count, 8); `--timeout SECONDS`
 defaults to 30 seconds per LLVM invocation.
 
 Eligible extensions are `.c`, `.cc`, `.cpp`, `.cxx`, `.h`, `.hh`, `.hpp`, `.hxx`,
@@ -41,7 +41,7 @@ files beneath a nested style file. Per-directory ignore files do not override
 the shared ownership policy. There are no style overrides, Git selectors, or diff
 mode. Source-level clang-format off/on directives remain effective.
 
-Clang-format 22.x is required. No build tree or compilation database is needed.
+Clang-format 23.x is required. No build tree or compilation database is needed.
 The selected root style is validated once and snapshotted for the run.
 
 ## Results and failures

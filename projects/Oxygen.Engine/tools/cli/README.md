@@ -7,8 +7,8 @@ that working directory to resolve build trees and runtime dependencies.
 | ----------- | ---------------------------------------- | -------------------------------------------------------------------- |
 | `oxybuild`  | Build a CMake target                     | Initialized build tree, CMake 3.29+, configured compiler environment |
 | `oxyrun`    | Build and run an executable target       | Same as `oxybuild`; `-NoBuild` uses an existing executable           |
-| `oxytidy`   | Analyze selected C++ sources and headers | Python 3.10+, uv, compatible LLVM tools, compilation database        |
-| `oxyformat` | Check or format owned C++ files          | Python 3.10+, shared tools installed, clang-format 22.x              |
+| `oxytidy`   | Analyze selected C++ sources and headers | Python 3.10+, uv, LLVM 23.x tools, compilation database              |
+| `oxyformat` | Check or format owned C++ files          | Python 3.10+, shared tools installed, clang-format 23.x              |
 
 The PowerShell launchers for oxytidy and oxyformat require PowerShell 7.3+.
 `oxy-targets.ps1` contains the shared CMake target-discovery and build helpers;

@@ -205,17 +205,21 @@ class WriteTests(Fixture):
 
     def test_wrong_llvm_major_is_rejected_before_style_or_source_access(self):
         processes = Processes(1)
-        with (
-            patch.object(
-                processes, "run", return_value=b"clang-format version 21.1.0\n"
-            ) as run,
-            self.assertRaisesRegex(ToolError, "22.x"),
-        ):
-            prepare_style("unused", self.root, self.root, processes)
-        self.assertEqual(run.call_count, 1)
+        for major in (22, 24):
+            with (
+                self.subTest(major=major),
+                patch.object(
+                    processes,
+                    "run",
+                    return_value=f"clang-format version {major}.1.0\n".encode(),
+                ) as run,
+                self.assertRaisesRegex(ToolError, r"23\.x"),
+            ):
+                prepare_style("unused", self.root, self.root, processes)
+            self.assertEqual(run.call_count, 1)
 
 
-@unittest.skipUnless(LLVM, "clang-format 22 is required")
+@unittest.skipUnless(LLVM, "clang-format 23 is required")
 class LLVMTests(Fixture):
     def test_check_fix_check_and_idempotence(self):
         path = self.write("src/a.cpp", "int  main( ){return  0;}\n")

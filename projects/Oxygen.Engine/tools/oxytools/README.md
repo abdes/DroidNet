@@ -3,6 +3,10 @@
 One Python distribution provides `oxytidy`, `oxyformat`, and optional `codemod`, with shared ownership,
 validation, and file-writing code. Python 3.10+ is required.
 
+Formatting and analysis require LLVM 23.x: `clang-format`, `clang-tidy`, and
+`clang-scan-deps`. Other major versions are rejected; minor/patch releases within
+23.x are supported. LLVM is installed separately from the Python package.
+
 From the Oxygen.Engine directory, install once in your chosen interpreter:
 
 ```powershell
@@ -58,5 +62,5 @@ uvx ruff format --check $toolsRoot
 Real hook tests require the `pre-commit` development dependency. If it is installed
 in another interpreter, set `OXYTOOLS_TEST_PRE_COMMIT_PYTHON` to that interpreter's
 absolute path. Hook tests use an isolated temporary Git repository and never
-alter the developer's index. LLVM integration tests require LLVM 22.x; skipped
+alter the developer's index. LLVM integration tests require LLVM 23.x; skipped
 integration tests are not validation evidence.
