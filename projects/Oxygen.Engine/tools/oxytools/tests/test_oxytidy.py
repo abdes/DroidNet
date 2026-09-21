@@ -16,7 +16,7 @@ import venv
 from pathlib import Path
 from unittest.mock import patch
 
-from oxytidy.execution import Runner, bounded_map
+from oxytidy.execution import ProcessResult, Runner, bounded_map
 from oxytidy.fixes import apply_fixes, plan_fixes, replaced_bytes
 from oxytidy.scope import Scope
 from oxytidy.workflow import main, outcome, parse_args, select_ownership_file
@@ -1345,6 +1345,100 @@ class LLVMTests(Fixture):
         self.assertEqual(report["unreached_headers"], [str(header)])
         self.assertTrue(report["header_discovery_complete"])
         self.assertIn("Analyzed contexts clean", self.last_output)
+
+    def test_incremental_rerun_reuses_post_fix_verification(self):
+        self.source_pair()
+        code, fixed = self.invoke("src/a.h", "--fix", "--incremental")
+        self.assertEqual(code, 0, fixed)
+        verified = fixed["verification"][0]
+        self.assertFalse(verified["reused"])
+        cache = next((self.root / "out/clang-tidy/cache").glob("*.json"))
+        cached = json.loads(cache.read_text())
+        self.assertEqual(cached["result"]["folder"], verified["folder"])
+        inputs = json.loads((Path(verified["folder"]) / "inputs.json").read_text())
+        self.assertEqual(cached["key"], inputs["cache_key"])
+        original_run = Runner.run
+        calls = []
+
+        def record_run(runner, command, *args, **kwargs):
+            calls.append(command)
+            return original_run(runner, command, *args, **kwargs)
+
+        with patch.object(Runner, "run", record_run):
+            code, reused = self.invoke("src/a.h", "--fix", "--incremental")
+        self.assertEqual(code, 0, reused)
+        self.assertEqual(reused["counts"]["reused"], 1)
+        self.assertEqual(reused["counts"]["executed"], 0)
+        self.assertEqual(reused["results"][0]["cached_from"], verified["folder"])
+        self.assertTrue(
+            any(Path(command[0]).stem == "clang-scan-deps" for command in calls)
+        )
+        self.assertFalse(
+            any(
+                argument.startswith("--export-fixes=")
+                for command in calls
+                for argument in command
+            )
+        )
+        self.write("src/a.h", "inline int f() { return 2; }\n")
+        code, changed = self.invoke("src/a.h", "--incremental")
+        self.assertEqual(code, 0, changed)
+        self.assertEqual(changed["counts"]["reused"], 0)
+        self.assertEqual(changed["counts"]["executed"], 1)
+
+    def test_cached_verification_retains_remaining_diagnostics_and_failure_policy(self):
+        self.source_pair()
+        self.write("src/a.h", "inline int f() { int q = 2; return q; }\n")
+        self.write(
+            ".clang-tidy",
+            'Checks: "-*,modernize-use-trailing-return-type,readability-identifier-length"\n',
+        )
+        code, fixed = self.invoke("src/a.h", "--fix", "--incremental")
+        self.assertEqual(code, 0, fixed)
+        self.assertTrue(fixed["fixes"]["applied_files"])
+        self.assertEqual(
+            {d["check"] for d in fixed["diagnostics"]},
+            {"readability-identifier-length"},
+        )
+        code, reused = self.invoke("src/a.h", "--incremental", "--fail-on", "warning")
+        self.assertEqual(code, 1, reused)
+        self.assertEqual(reused["counts"]["reused"], 1)
+        self.assertEqual(reused["diagnostics"], fixed["diagnostics"])
+
+    def test_failed_or_cancelled_verification_is_not_cached(self):
+        original_run = Runner.run
+        for status, returncode in [("failed", 1), ("cancelled", 130)]:
+            with self.subTest(status=status):
+                self.source_pair()
+
+                def fail_verification(runner, command, cwd, artifact=None, **kwargs):
+                    if (
+                        artifact
+                        and artifact.parent.name == "verification"
+                        and artifact.name == "analysis"
+                    ):
+                        if status == "cancelled":
+                            runner.cancelled.set()
+                        return ProcessResult(
+                            command,
+                            returncode,
+                            "",
+                            "injected verification failure",
+                            0.0,
+                            status,
+                        )
+                    return original_run(runner, command, cwd, artifact, **kwargs)
+
+                with patch.object(Runner, "run", fail_verification):
+                    code, report = self.invoke("src/a.h", "--fix", "--incremental")
+                self.assertEqual(code, 130 if status == "cancelled" else 2, report)
+                self.assertTrue(report["fixes"]["applied_files"])
+                self.assertEqual(
+                    list((self.root / "out/clang-tidy/cache").glob("*.json")), []
+                )
+                code, fresh = self.invoke("src/a.h", "--incremental")
+                self.assertEqual(code, 0, fresh)
+                self.assertEqual(fresh["counts"]["reused"], 0)
 
     def test_incremental_reuse_and_dependency_config_argument_invalidation(self):
         self.source_pair()

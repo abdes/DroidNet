@@ -381,7 +381,9 @@ class Analyzer:
                 status="failed", returncode=2, error="Inputs changed during analysis"
             )
         write_json(folder / "result.json", result)
-        if self.incremental and result["status"] == "completed" and not verification:
+        # Verification always executes freshly, but its post-fix input key and
+        # diagnostics are valid for the next unchanged incremental invocation.
+        if self.incremental and result["status"] == "completed":
             self.cache_dir.mkdir(parents=True, exist_ok=True)
             temporary = cache_path.with_suffix(f".{uuid.uuid4().hex}.tmp")
             try:
