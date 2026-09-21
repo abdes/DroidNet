@@ -1,524 +1,321 @@
 # LightingService LLD
 
-**Phase:** 4A - Migration-Critical Services
-**Deliverable:** D.9
-**Status:** `ready`
+Status: **EX07 target contract; implementation and qualification planned.**
+The [EX07 plan](../plan/EX07-lighting-correctness-and-scalability.md) owns execution,
+workloads and gates. This LLD owns data, execution, publication and failure
+semantics. EX07A records concrete byte layouts, capacities and property mappings
+under these contracts before changing their consumers.
 
-## V0.1 Production Extension
+## 1. Scope and responsibility
 
-[Editor V0.1 rendering](../plan/editor-v01-rendering-contract.md#3-independent-directional-array-and-atmosphere-assignments)
-defines the current extension: independent directional arrays, explicit
-None/Primary/Secondary assignment, per-light shadow association and shared
-receiver/contact attenuation. The initial single-directional structs and wire
-layout below are implementation baselines, not the final V0.1 ABI. Update CPU,
-HLSL and publication together; keep no parallel single-light fallback.
-Stage 12 remains direct lighting; captured-sky opaque IBL activates Stage 13
-under its [own contract](../plan/editor-v01-captured-sky-ibl.md#1-ownership-and-scope).
-Prior milestone evidence retains its original scope.
+LightingService owns shared lighting preparation, per-view light access and
+deferred direct-light evaluation. EX07 owns review, repair, optimization and
+validation of this complete path, including pre-existing defects and necessary
+dependencies in scene/editor input, shaders, shadows and resource lifetime.
+Both correctness and performance must pass; an existing limitation is repair work.
 
-## Mandatory Vortex Rule
+| Stage/consumer | Responsibility                                                                                                                                                                                                                                |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Stage 6        | Prepare shared immutable light records and record/publish per-view culling products before their first consumer.                                                                                                                              |
+| Stage 12       | Evaluate deferred direct lighting into SceneColor from the canonical frame-light selection. Start with directional fullscreen draws and bounded point/spot volumes; algorithm improvements retain this stage owner.                           |
+| Forward        | Consume the same physical records, relevant per-view lists and matching shadows, including supported translucent receivers.                                                                                                                   |
+| Stage 13       | Indirect/IBL ownership stays under its [own contract](../plan/editor-v01-captured-sky-ibl.md#1-ownership-and-scope). An existing ambient bridge is an explicitly bounded environment input; never duplicate it when Stage 13 takes ownership. |
 
-- For Vortex planning and implementation, `Oxygen.Renderer` is legacy dead
-  code. It is not production, not a reference implementation, not a fallback,
-  and not a simplification path for any Vortex task.
-- Every Vortex task must be designed and implemented as a new Vortex-native
-  system that targets maximum parity with UE5.7, grounded in
-  `F:\Epic Games\UE_5.7\Engine\Source\Runtime` and
-  `F:\Epic Games\UE_5.7\Engine\Shaders`.
-- No Vortex task may be marked complete until its parity gate is closed with
-  explicit evidence against the relevant UE5.7 source and shader references.
-- If maximum parity cannot yet be achieved, the task remains incomplete until
-  explicit human approval records the accepted gap and the reason the parity
-  gate cannot close.
+Use existing renderer, LightingService, ShadowService, publication, allocator,
+recorder and fence-retirement owners. The service does not own scene light
+objects or elect another sun. No legacy renderer, compatibility payload, hidden
+preview light or separate lighting framework is introduced. Qualification uses
+opt-in tests/benchmarks observing the production paths.
+
+The [architecture](../ARCHITECTURE.md),
+[directional/shadow authoring contract](../plan/editor-v01-rendering-contract.md#3-independent-directional-array-and-atmosphere-assignments)
+and [PBR specification](../../renderer-core/physically-based-rendering.md) remain
+authoritative. Ground UE5.7 parity comparisons in the matching local
+`PrepareForwardLightData`, `ComputeLightGrid` and `RenderLights` source/shader
+families under `F:/Epic Games/UE_5.7/Engine`; record exact references with the
+implementation. Compilation, historical sketches and prior milestone evidence
+do not close EX07. A parity/quality gap remains open unless its changed scope
+is explicitly accepted; routine corrections remain EX07 responsibility.
 
 ## Exposure-package light calibration
 
-The [PBR specification](../../renderer-core/physically-based-rendering.md#physical-light-conversion)
-owns physical equations and regularization. Directional lux supplies
-perpendicular-receiver irradiance. Point flux converts by 4*pi. Spot flux uses
-the integral of the existing squared smooth-cone profile, including the hard-cone
-limit; zero solid angle is invalid. Distance attenuation uses the existing
-quartic range fade divided by max(distance squared, 0.001 squared); zero
-separation returns zero before normalization. Keep source-radius BRDF behavior
-separate from this numerical guard.
-
-Forward and deferred consumers use one unit contract and receiver cosine once.
-Keep source packets in authored physical units until the shared conversion
-boundary; never multiply packets by view exposure. Apply frame-pinned P once
-at radiance write boundaries. Use full production BRDF and actual packed
-material values for LightBench, including dielectric specular. Independent
-spot integration, inverse-square/range-edge and directional-lux tests precede
-benchmark verdicts. The [HDR inventory](scene-textures.md#exposure-hdr-domain-and-format-inventory)
-owns storage formats and pre-store range checks.
-
-## 1. Scope and Context
-
-### 1.1 What This Covers
-
-`LightingService` is the capability-family owner for two distinct Phase 4A
-responsibilities:
-
-- **Stage 6**: frame-scope forward-light preparation plus per-view publication
-  of the forward-light family as shared supporting data
-- **Stage 12**: per-view deferred **direct** lighting using the canonical
-  Vortex contract:
-  directional fullscreen draws plus bounded-volume point/spot local-light
-  draws into `SceneColor`
-
-Phase 4A migrates the live Phase 3 inline Stage-12 implementation into a
-service owner, adds the Stage-6 forward-light family required by later forward
-consumers, and removes the temporary Phase 3 `SV_VertexID` local-light proxy
-generation from the canonical runtime path.
-
-### 1.2 What It Replaces
-
-The Phase 3 inline
-`SceneRenderer::RenderDeferredLighting(ctx, scene_textures)` implementation
-moves into `LightingService::RenderDeferredLighting(...)`.
-
-What does **not** change:
-
-1. Stage 12 remains the canonical deferred **direct**-lighting stage.
-2. Stage 6 remains shared supporting data, not the deferred-lighting root.
-3. Canonical opaque indirect evaluation belongs to Stage 13; V0.1 activates its
-   captured-sky IBL subset without claiming the entire future GI family.
-4. The initial ambient bridge is a migration baseline. Retire its sky-diffuse
-   contribution when Stage 13 owns that IBL, preventing duplicate accumulation.
-
-### 1.3 Architectural Authority
-
-- [ARCHITECTURE.md](../ARCHITECTURE.md) Section 8 - subsystem service contracts
-- [ARCHITECTURE.md](../ARCHITECTURE.md) Section 6.2 - stages 6 and 12
-- [PLAN.md](../PLAN.md) Section 6 - Phase 4A scope and exit criteria
-- UE5.7 reference families:
-  - `PrepareForwardLightData(...)`
-  - `ComputeLightGrid(...)`
-  - `RenderLights(...)`
-
-## 2. Interface Contracts
-
-### 2.1 File Placement
-
-```text
-src/Oxygen/Vortex/
-`-- Services/
-    `-- Lighting/
-        |-- LightingService.h
-        |-- LightingService.cpp
-        |-- Internal/
-        |   |-- LightGridBuilder.h/.cpp
-        |   |-- ForwardLightPublisher.h/.cpp
-        |   |-- DeferredLightPacketBuilder.h/.cpp
-        |   `-- LightSelectionResolver.h/.cpp
-        |-- Passes/
-        |   |-- DeferredLightPass.h/.cpp
-        |   `-- LightGridBuildPass.h/.cpp
-        `-- Types/
-            |-- FrameLightingInputs.h
-            |-- ForwardLightFrameBindings.h
-            |-- ForwardLocalLightRecord.h
-            |-- DirectionalLightForwardData.h
-            `-- LightGridMetadata.h
-```
-
-### 2.2 Public API
-
-The following is the original Phase-4A interface sketch. Its single-light
-representation is superseded by the V0.1 directional-array extension above.
-
-```cpp
-namespace oxygen::vortex {
-
-struct PreparedViewLightingInput {
-  ViewId view_id;
-  observer_ptr<const PreparedSceneFrame> prepared_scene;
-  observer_ptr<const CompositionView> composition_view;
-};
-
-struct FrameLightSelection {
-  observer_ptr<const DirectionalLightProxy> selected_directional_light;
-  std::span<const observer_ptr<const LocalLightProxy>> local_lights;
-  uint64_t selection_epoch{0};
-};
-
-struct FrameLightingInputs {
-  const FrameLightSelection& frame_light_set;
-  std::span<const PreparedViewLightingInput> active_views;
-};
-
-class LightingService : public ISubsystemService {
- public:
-  explicit LightingService(Renderer& renderer);
-  ~LightingService() override;
-
-  void Initialize(graphics::IGraphics& gfx,
-                  const RendererConfig& config) override;
-  void OnFrameStart(const FrameContext& frame) override;
-  void Shutdown() override;
-
-  /// Stage 6: frame-scope forward-light preparation.
-  /// Builds shared local-light storage once for the frame and publishes the
-  /// per-view forward-light package for each active prepared view.
-  void BuildLightGrid(const FrameLightingInputs& inputs);
-
-  /// Stage 12: deferred direct lighting for the current view.
-  /// Consumes the same renderer-owned frame light selection used by Stage 6.
-  void RenderDeferredLighting(
-    RenderContext& ctx, const SceneTextures& scene_textures,
-    const FrameLightSelection& frame_light_set);
-
-  /// CPU inspection hook for tests/diagnostics of the published forward-light
-  /// package for one view.
-  [[nodiscard]] auto InspectForwardLightBindings(ViewId view_id) const
-    -> const ForwardLightFrameBindings*;
-
- private:
-  Renderer& renderer_;
-  std::unique_ptr<LightGridBuilder> light_grid_builder_;
-  std::unique_ptr<ForwardLightPublisher> publisher_;
-  std::unique_ptr<DeferredLightPacketBuilder> deferred_packets_;
-  std::unique_ptr<DeferredLightPass> deferred_pass_;
-};
-
-}  // namespace oxygen::vortex
-```
-
-### 2.3 Frame-Shared Lighting Inputs
-
-`LightingService` does not own authoritative scene light proxies. It consumes a
-renderer-owned `FrameLightSelection` built earlier in frame execution.
-
-The `FrameLightSelection` builder lives outside `LightingService`. It is
-constructed by Renderer Core / scene-renderer frame setup before Stage 6 from
-scene-published light proxies and the current frame's prepared-view context.
-`LightingService` consumes that result; it does not perform the authoritative
-scene-light gather/sort itself.
-
-The frame-light selection is the canonical source for:
-
-- the ordered eligible directional-light collection for the current frame,
-  independent of atmosphere membership
-- the local-light set considered visible/relevant for the frame
-- the stable selection epoch used by tests/diagnostics
-
-Stage 6 and Stage 12 both consume this same frame-light selection. Stage 6 may
-cache derived data from it, but Stage 6 does **not** become the authoritative
-owner of Stage-12 deferred-light dispatch.
-
-### 2.4 ForwardLocalLight Record
-
-The local-light storage record is frame-shared GPU data, not the whole
-consumer-facing publication contract.
-
-```cpp
-struct ForwardLocalLightRecord {
-  glm::vec4 position_and_inv_radius;
-  glm::vec4 color_id_falloff_and_ray_bias;
-  glm::vec4 direction_and_extra_data;
-  glm::vec4 spot_angles_and_source_radius;
-  glm::vec4 tangent_ies_and_specular_scale;
-  glm::vec4 rect_data_and_linkage;
-};
-```
-
-The C++ and HLSL storage ABI is six consecutive float4 values (96 bytes).
-Forward raster consumers use `local_light_buffer_srv`, `local_light_count` and
-the published grid ranges/indices. The legacy `positional_lights_slot` is not
-populated and must not be used as an alternate upload route. `rect_data_and_linkage`
-stores numeric light kind, canonical selection flags and range in xyz; selection
-has already filtered lights that do not affect the world. Its flags are not the
-old positional-light flag layout. Point and spot consumers decode this same
-record; physical-unit calibration remains owned by the exposure plan's slice 7.
-
-### 2.5 Published Forward-Light Package
-
-`ForwardLightFrameBindings` is the stable per-view consumer-facing lighting
-payload. It must be richer than the raw local-light storage buffer because
-future consumers need directional-light data, clustered-access metadata, and
-view-relative lighting routing without reaching into service internals.
-
-```cpp
-struct DirectionalLightForwardData {
-  glm::vec3 direction{0.0f, -1.0f, 0.0f};
-  float source_radius{0.0f};
-
-  glm::vec3 color{1.0f, 1.0f, 1.0f};
-  float volumetric_scattering_intensity{0.0f};
-
-  float specular_scale{1.0f};
-  float diffuse_scale{1.0f};
-  uint32_t shadow_flags{0};
-  uint32_t light_function_atlas_index{kInvalidIndex};
-
-  uint32_t cascade_count{0};
-  uint32_t reserved0{0};
-  uint32_t reserved1{0};
-  uint32_t reserved2{0};
-};
-
-struct ForwardLightFrameBindings {
-  // Shared frame storage
-  uint32_t local_light_buffer_srv{kInvalidIndex};
-  uint32_t light_view_data_srv{kInvalidIndex};
-
-  // Per-view clustered access package
-  uint32_t grid_metadata_buffer_srv{kInvalidIndex};
-  uint32_t grid_indirection_srv{kInvalidIndex};
-  uint32_t directional_light_indices_srv{kInvalidIndex};
-
-  glm::ivec3 grid_size{0};
-  float reserved_grid0{0.0f};
-  glm::vec3 grid_z_params{0.0f};
-  float reserved_grid1{0.0f};
-
-  uint32_t num_grid_cells{0};
-  uint32_t max_culled_lights_per_cell{0};
-  uint32_t directional_light_count{0};
-  uint32_t local_light_count{0};
-
-  uint32_t has_directional_light{0};
-  uint32_t affects_translucent_lighting{0};
-  uint32_t flags{0};
-  uint32_t reserved_flags{0};
-
-  glm::vec4 pre_view_translation_offset{0.0f};
-
-  DirectionalLightForwardData directional{};
-};
-```
-
-### 2.6 Directional-Light Authority
-
-The directional-light collection is part of the published per-view forward-light
-package. LightingService shapes the renderer-owned selection for consumers;
-it does not perform another light election. Explicit atmosphere assignments are
-separate metadata, not a direct-light eligibility filter. Both surface paths
-consume every eligible directional with the matching per-light shadow binding.
-
-### 2.7 Per-View Publication
-
-The service publishes `ForwardLightFrameBindings` through
-`LightingFrameBindings`, which is then routed through `ViewFrameBindings`.
-Consumers access the forward-light family only through the published per-view
-binding stack.
-
-The single-light baseline `LightingFrameBindings` wire layout is 208 bytes. Its directional
-light starts at byte 112, after 12 explicitly reserved alignment bytes, and the
-trailing eight bytes are reserved. C++ and HLSL must declare those bytes explicitly;
-implicit C++ alignment is not reproduced by HLSL structured-buffer packing.
-
-Phase 4 replaces the current Phase 3 interim lighting-binding shape with the
-target contract in Section 2.5. The CPU struct, the HLSL-side counterpart, and
-the `ViewFrameBindings` slot-routing update must land together; this is not an
-optional side-by-side binding family.
-
-Per-view publication is distinct from frame-shared build work:
-
-- Stage 6 builds shared local-light storage once per frame
-- Stage 6 publishes one `ForwardLightFrameBindings` payload per active view
-- Stage 12 consumes the current view plus the same frame-light selection used
-  by Stage 6
-
-## 3. Data Flow and Dependencies
-
-### 3.1 Stage 6 - BuildLightGrid
-
-| Input                                   | Source                                | Purpose                                             |
-| --------------------------------------- | ------------------------------------- | --------------------------------------------------- |
-| Frame light set / sorted visible lights | Renderer Core light-gather result     | Shared light source for Stage 6 and Stage 12        |
-| Active prepared views                   | Renderer Core + InitViews publication | Per-view frusta, Z slicing, and publication targets |
-
-| Output                                 | Consumer                                                                                     | Delivery                                                                                         |
-| -------------------------------------- | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `ForwardLocalLightRecord` buffer       | Published forward-light family                                                               | Shared storage owned by `LightingService`                                                        |
-| `ForwardLightFrameBindings`            | Stage 18 translucency, forward-only materials, diagnostics, later lighting-adjacent families | Published through `LightingFrameBindings` / `ViewFrameBindings`                                  |
-| Frame-light selection cache (optional) | Stage 12                                                                                     | Derived cache of the renderer-owned frame light set, not a Stage-6-owned deferred-light contract |
-
-Stage 6 is frame-scope work. It does not run on one current-view `RenderContext`
-and then pretend the result is global. The build consumes the frame light set
-plus the active prepared-view list and publishes per-view lighting payloads
-from that frame-scope build.
-
-### 3.2 Stage 12 - RenderDeferredLighting
-
-| Input                                             | Source                                                             | Purpose                                                                   |
-| ------------------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------- |
-| GBufferNormal/Material/BaseColor/CustomData (SRV) | SceneTextures (from stage 10)                                      | Material data for BRDF                                                    |
-| SceneDepth (SRV)                                  | SceneTextures                                                      | Position reconstruction                                                   |
-| `ShadowFrameBindings`                             | ShadowService publication                                          | Directional shadow attenuation terms in Phase 4C                          |
-| Frame light set / sorted visible lights           | Renderer Core light-gather result (or a cache of that same result) | Canonical Stage-12 per-light direct-light iteration                       |
-| `EnvironmentAmbientBridgeBindings`                | Environment service publication                                    | Optional ambient-only migration bridge with an explicitly bounded payload |
-
-| Output     | Target        | Blend Mode          |
-| ---------- | ------------- | ------------------- |
-| SceneColor | SceneTextures | Additive (ONE, ONE) |
-
-Stage 12 remains the canonical deferred **direct**-lighting stage. It consumes
-the same renderer-owned frame-light selection used by Stage 6, but the
-clustered forward-light family never becomes the authoritative deferred-light
-dispatch source.
-
-### 3.3 Sequence Diagram
-
-```text
-Renderer Core builds frame light selection
-  `- eligible directional array + visible local lights
-
-SceneRenderer::OnRender(...)
-  |- Stage 6: lighting_->BuildLightGrid(frame_lighting_inputs)
-  |            `- Builds shared local-light storage once
-  |            `- Publishes one ForwardLightFrameBindings payload per view
-  |- ...stages 7-11...
-  `- Stage 12: lighting_->RenderDeferredLighting(
-                 ctx, scene_textures, frame_light_set)
-                 `- Derives per-light draw packets from the same frame light set
-                 `- Records one fullscreen draw per directional plus bounded-volume
-                    point/spot draws
-                 `- Accumulates into SceneColor
-```
-
-## 4. Resource Management
-
-| Resource                                  | Lifetime   | Notes                                                                                    |
-| ----------------------------------------- | ---------- | ---------------------------------------------------------------------------------------- |
-| Forward-local-light structured buffer     | Per frame  | Upload ring or frame allocator                                                           |
-| Light-grid metadata / indirection buffers | Per frame  | Per-view clustered access data                                                           |
-| Derived Stage-12 draw packets             | Per frame  | Transient direct-light draw parameters                                                   |
-| Light volume geometry (sphere, cone)      | Persistent | Canonical permanent owner; replaces the temporary Phase 03 procedural `SV_VertexID` path |
-| Deferred-light PSOs                       | Persistent | Cached by the service                                                                    |
-
-Authoritative light state remains outside `LightingService`. The service owns
-only:
-
-- shared proxy-geometry resources (sphere/cone)
-- PSO caches and service-local GPU resources
-- transient per-frame draw packets derived from the current frame light set
-
-The service does **not** become the persistent owner of scene light proxies.
-Position, radius, cone angles, attenuation, shadow identifiers, and
-view-relative transforms are imported each frame from renderer-owned prepared
-scene / light-proxy data.
-
-## 5. Shader Contracts
-
-### 5.1 Light Grid Compute Shader
-
-```hlsl
-// Services/Lighting/LightGridBuild.hlsl
-// Builds one clustered light grid per published view.
-// Dispatch shape is derived from the per-view grid dimensions carried in
-// ForwardLightFrameBindings.
-```
-
-### 5.2 Deferred Light Shaders
-
-The deferred-light family remains the canonical direct-light path. The
-forward-light buffers published at Stage 6 are for forward consumers and later
-lighting-adjacent families; they do not replace the explicit per-light
-deferred-light constants used by Stage 12.
-
-```hlsl
-// Services/Lighting/DeferredLightingCommon.hlsli
-// Direct-light evaluation helpers for:
-// - directional fullscreen deferred lighting
-// - bounded-volume point deferred lighting
-// - bounded-volume spot deferred lighting
-
-cbuffer DeferredLightConstants : register(b1) {
-  float4 LightPositionAndRadius;
-  float4 LightColorAndIntensity;
-  float4 LightDirectionAndFalloff;
-  float4 SpotAngles;
-}
-
-// Stage-6-owned publication helpers remain family-local:
-//   Services/Lighting/LightGridCommon.hlsli
-//   Services/Lighting/ForwardLightingCommon.hlsli
-//   Services/Lighting/DeferredLightingCommon.hlsli
-//   Services/Lighting/DeferredShadingCommon.hlsli
-```
-
-### 5.3 Catalog Registration
-
-| Entrypoint               | Profile | Notes                         |
-| ------------------------ | ------- | ----------------------------- |
-| `VortexLightGridBuildCS` | cs_6_0  | Compute: clustered grid build |
-
-Phase 3 deferred-light entrypoints remain canonical for Stage 12 in Phase 4A.
-
-### 5.4 Geometry Ownership Cutover
-
-Phase 4A is not truthful until the retained Phase 03 procedural point/spot
-proxy-generation shortcut is removed from the canonical runtime path.
-
-The permanent `LightingService` implementation owns:
-
-- persistent sphere proxy geometry for point lights
-- persistent cone proxy geometry for spot lights
-- upload / lifetime / cache identity for those resources
-
-## 6. Stage Integration
-
-### 6.1 Dispatch Contract
-
-- Stage 6: `lighting_->BuildLightGrid(frame_lighting_inputs)` - frame-scope
-  build followed by per-view publication
-- Stage 12:
-  `lighting_->RenderDeferredLighting(ctx, scene_textures, frame_light_set)` -
-  per-view deferred direct lighting
-
-### 6.2 Null-Safe Behavior
-
-When `lighting_` is null:
-
-- Stage 6 publishes no forward-light package
-- Stage 12 records no deferred direct-light draws
-- `SceneColor` retains only prior stage contributions such as base-pass
-  emissive
-
-When no directional is eligible, publish directional count zero with no usable
-directional-array binding. The local-light portion remains valid when local
-lights are present. An absent Primary assignment must not discard Secondary or
-ordinary role-None directionals.
-
-### 6.3 Capability Gate
-
-Requires `kLightingData` plus `kDeferredShading`.
-
-## 7. Migration from Phase 3 Inline
-
-1. Move the Phase 3 Stage-12 body into
-   `LightingService::RenderDeferredLighting(...)`.
-2. Replace the temporary Phase 03 procedural point/spot proxy generation with
-   persistent `LightingService`-owned sphere/cone geometry.
-3. Add frame-scope `BuildLightGrid(...)` and publish the forward-light family
-   through `LightingFrameBindings` / `ViewFrameBindings`.
-   This replaces the interim Phase 3 lighting-binding shape rather than
-   coexisting beside it.
-4. Preserve Stage 12 as the canonical per-light deferred direct-light owner.
-5. If a Phase 4 ambient bridge is enabled, bind only the explicitly approved
-   `EnvironmentAmbientBridgeBindings` payload.
-6. Keep the future Stage-13 indirect-light owner explicit; Stage 12 does not
-   absorb it.
-
-## 8. Testability Approach
-
-1. **Frame-scope build vs per-view publication:** mock multiple views and one
-   shared frame light set -> verify one shared local-light storage build and
-   one published forward-light package per view.
-2. **Directional payload publication:** inspect the published
-   `ForwardLightFrameBindings` for a view -> verify directional-light fields,
-   counts, and grid metadata are valid.
-3. **Deferred-lighting parity:** render the same scene through Phase 3 inline
-   Stage 12 and Phase 4A `LightingService` -> require pixel-identical direct
-   lighting.
-4. **Geometry ownership cutover:** verify the canonical runtime path no longer
-   relies on `SV_VertexID` procedural point/spot proxy generation.
-5. **RenderDoc:** inspect Stage 6 buffer contents and Stage 12 draw calls.
-
-## 9. Open Questions
-
-None. The remaining deferred boundaries are already named:
-
-- ambient-bridge retirement -> future `IndirectLightingService`
-- local-light conventional shadows -> future `ShadowService` expansion
+The [physical equations](../../renderer-core/physically-based-rendering.md#physical-light-conversion)
+remain directional lux, point flux divided by 4*pi, spot flux divided by the
+integrated squared cone profile, inverse-square attenuation with quartic range
+fade, the 1 mm numerical guard and zero contribution at zero separation. Reject
+zero-solid-angle spots and preserve the equal-angle hard-cone limit.
+
+Keep authored lux/lumens and per-light compensation in the canonical CPU
+selection. Apply validated compensation and physical conversion once at the
+shared evaluation-data boundary. Both shading families use the same resolved
+values, receiver cosine and production BRDF convention. Keep source radius
+separate from the numerical guard. Packed albedo/normal/roughness/specular,
+working color space and tint energy enter the independent reference; roughness
+does not remove dielectric specular. Light records never contain view exposure.
+Apply frame-pinned P once at HDR writes and preserve the
+[HDR contract](scene-textures.md#exposure-hdr-domain-and-format-inventory).
+
+## 2. Canonical data and interfaces
+
+### 2.1 Owners
+
+C++ paths are under `src/Oxygen/Vortex/`; shaders are under
+`src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/`.
+
+| Owner                                                                                      | Responsibility                                                                               |
+| ------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------- |
+| `SceneRenderer/SceneRenderer.*`, `Types/FrameLightSelection.h`                             | Resolve eligibility and capture the immutable frame selection.                               |
+| `Lighting/LightingService.*`, `Lighting/Types/FrameLightingInputs.h`                       | Prepare shared data, schedule per-view GPU work and expose valid publications/results.       |
+| `Lighting/Internal/LightGridBuilder.*`                                                     | Derive grid metadata and conservative assignment inputs; own no scene state.                 |
+| `Lighting/Internal/ForwardLightPublisher.*`, `Types/LightingFrameBindings.h`               | Own light/list allocations and per-view binding publication.                                 |
+| `Lighting/Types/{DirectionalLightForwardData,ForwardLocalLightRecord,LightGridMetadata}.h` | Canonical records/grid semantics and matching CPU/HLSL ABI.                                  |
+| `Lighting/Internal/DeferredLightPacketBuilder.*`, `Lighting/Passes/DeferredLightPass.*`    | Derive deferred work from the selection; own service geometry, PSOs and direct accumulation. |
+| `Shadows/`, `Types/ShadowFrameBindings.h`                                                  | Indexed per-light shadow products, status and lifetime.                                      |
+| `Contracts/Lighting/`, `Services/Lighting/`                                                | Matching decoders, culling, physical evaluation and shader entry points.                     |
+
+Extend these owners in place; add a service-owned grid-recording pass where
+needed for actual GPU work. There is no second public forward-light package
+layered over `LightingFrameBindings`.
+
+### 2.2 Frame selection and identity
+
+`FrameLightSelection` contains ordered directional and local-light collections,
+scene generation and selection revision. Entries retain source node identity
+and generation for CPU mutation, errors and shadow association. GPU indices
+address this immutable snapshot, not persistent scene identities. Use integer
+fields for indices, flags and enums rather than encoding them as floats.
+
+Resolve effective node visibility and `affects_world` before selection. Gather
+once for the whole active-view family, including auxiliary/offscreen views;
+main-view visibility cannot discard another view's lights. Per-view culling
+derives lists without modifying selection. Shadow caster eligibility is separate
+and includes contributing off-screen casters. Resolve geometry cast/receive rules
+independently of light eligibility.
+
+Inputs include each resolved camera/projection, content rectangle, near/far
+conventions and view lifetime. Transform, hierarchy, effective visibility,
+participation, parameter and role edits invalidate the correct products. Scene
+replacement cannot reuse old identities or assume transform edits will repair
+otherwise missing invalidation.
+
+### 2.3 Directional-light authority
+
+Publish all eligible directionals in an explicitly counted array. None/Primary/
+Secondary is optional atmospheric assignment, not a direct-light eligibility
+filter. Two explicit sources support dual suns or sun-and-moon. A lone Secondary
+keeps its slot. Validate assignment conflicts across stored components, including
+inactive ones, before accepting a revision.
+
+Each record carries direction-to-source, resolved physical intensity, linear
+color, flags and explicit atmosphere/transmittance metadata. Shadow association
+references source identity, not atmosphere slot or draw order. Both rendering
+families evaluate every eligible record. Count zero is valid with no usable
+directional-array binding; it does not invalidate local lights.
+
+Only explicitly requested demo actions infer assignments or inject preview scene
+lights. They respect authored assignments and ordinary scene lifetime. Production
+selection and shaders never silently elect or manufacture a sun.
+
+### 2.4 One local-light GPU contract
+
+`ForwardLocalLightRecord` and its HLSL counterpart own one canonical point/spot
+evaluation record. Culling decodes it or an explicitly derived typed bounds
+buffer with a one-to-one index mapping. A compact bounds buffer is derived data,
+not another authored-light authority.
+
+| Semantic group | Required meaning                                                                                       |
+| -------------- | ------------------------------------------------------------------------------------------------------ |
+| Influence      | World position, effective range and derived inverse range where consumed.                              |
+| Direction/cone | Defined emitted-ray direction, inner/outer cone cosines and point/spot kind.                           |
+| Evaluation     | Linear color, resolved physical intensity, supported attenuation parameters and source-radius meaning. |
+| Association    | Typed flags and snapshot index; view-specific shadow lookup is separate from shared physical data.     |
+
+The existing `PositionalLightData` and `ForwardLocalLightRecord` are both 96 bytes
+but encode different fields. Replace incompatible culling reads and obsolete
+routes as one migration. Same-size assertions or pointer casts do not prove ABI
+compatibility; keep no alternate legacy payload/consumer.
+
+EX07A freezes each record/binding's field types, units, offsets, stride,
+alignment, reserved-zero bytes and invalid sentinels. C++ size/offset assertions
+and a GPU sentinel decode test cover both local kinds, directionals and integer
+flags/indices before consumer changes. Update writers/readers, catalog/reflection
+tests and affected SDK consumers together. The frozen table is the wire authority;
+no historical struct sketch or guessed final byte size is normative.
+
+### 2.5 Per-view publication
+
+One `LightingFrameBindings` product routes through `ViewFrameBindings` and identifies:
+
+- Frame/selection and view-lifetime generations plus preparation/publication status.
+- Shared directional/local SRVs and explicit counts.
+- Per-view cluster `(offset, count)` ranges and the complete local-index list.
+- Grid dimensions, viewport-relative origin/extent and depth-slice parameters.
+- Per-view light-to-shadow mapping and corresponding shadow publication.
+- Validity/capacity data required for bounded reads and failure handling.
+
+Use checked integer arithmetic before narrowing sizes/offsets to GPU fields.
+Empty, disabled, pending and failed are distinct. Empty frames clear old bindings.
+Counts and descriptors identify the executed product and its retained generation.
+Directionals bypass local spatial culling. Lists are conservative for every
+declared consumer; opaque-depth/normal rejection cannot silently exclude valid
+translucent, two-sided or normal-mapped receivers.
+
+Stage 12 may reuse validated spatial products as derived data. Canonical selection
+and Stage 12 retain authority; Stage 6 does not become a second deferred renderer.
+Stage 12 consumes the matching published GBuffer material/normal/base-color/custom
+products, scene depth, view reconstruction and shadow bindings. Preserve prior
+SceneColor contributions such as emissive: volume draws use additive ONE/ONE
+accumulation, and a measured alternative must preserve the same radiance sum.
+Missing required inputs fail the view instead of producing successful black output.
+
+### 2.6 Operation and API boundaries
+
+These operations define responsibilities; evolve existing entry points in place:
+
+| Operation                | Contract                                                                                                                                             |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Prepare frame            | Validate/capture selection and resolved views, preflight capacities and allocate immutable records/view products; return structured success/failure. |
+| Record view grid         | Receive the owning recorder and resolved view explicitly; record complete culling/list work and resource dependencies.                               |
+| Publish for consumption  | Route a generation-qualified product with its recorded dependencies; CPU submission is not GPU completion.                                           |
+| Record deferred lighting | Consume current view, selection and matching shadows; accumulate each direct contribution once.                                                      |
+| Inspect status           | Return owned bounded diagnostics with pending/applied/failed generation and reason; expose no internal renderer headers or GPU ownership.            |
+
+Keep editor-facing headers C++20-compatible and preserve native ownership.
+Use established Result, logging and enum `to_string` conventions. Normal
+preparation/evaluation introduces no blocking GPU readback.
+
+## 3. GPU execution and synchronization
+
+Stage 6 has shared CPU preparation and per-view GPU execution. Record culling
+before the first forward/deferred consumer that needs its result, using finalized
+view constants. Uploading CPU vectors alone does not establish spatial culling.
+
+1. Validate selection/views, reserve checked capacities and record source uploads.
+2. Record per-view grid/list work on the existing graphics queue initially. Reset
+   grid/status outputs or publish valid empty zero-count bindings without dispatch
+   when no local lights require a grid. Count/scan/scatter or overflow
+   subpasses have explicit UAV ordering.
+3. Transition outputs to first-consumer states. Establish producer fence/waits
+   for cross-queue uploads. Async compute is a measured optimization with explicit
+   ownership/dependencies, not an assumed free overlap.
+4. ShadowService records shadow production. List construction need not wait for
+   shadow texel writes; lighting sampling does. Keep selection/view generations
+   consistent across light and shadow products.
+5. Forward and Stage 12 consume immutable data; output/composition and diagnostics
+   accept only the corresponding valid view result.
+6. Existing callbacks resolve submission/discard. Retain buffers, constants and
+   descriptors until the final consumer fence completes.
+
+Share source records, not view lists/projections/shadow mappings merely because
+dimensions match. Grid lookup uses content-relative pixels and matching positive
+view depth. Test viewport offsets, partial tiles, reverse-Z, orthographic
+projection and near/far boundaries.
+
+## 4. Capacity, failure and recovery
+
+Declare total-light, directional, per-view index-memory and shadow capacities
+separately. They must accommodate the required qualification envelope. Existing
+32-entry cells and four-point/eight-spot shadow arrays are audit inputs, not
+automatic approval of final limits. EX07A publishes supported limits/reasons to
+callers and freezes them before consumer implementation.
+
+In-envelope inputs require complete lists using conservative sizing, compact
+allocation and/or bounded overflow storage. A per-cell cap cannot authorize
+discarding contributions. The chosen algorithm must satisfy this failure contract:
+
+| Failure point                                                              | Caller-visible behavior                                                                                                                     | Recovery/retained state                                                                                                        |
+| -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Invalid edit/assignment, unsupported value or known hard scene-count limit | Reject the whole candidate through common ingress, identifying the light/field, reason and requested/allowed value.                         | Accepted scene/settings revision remains unchanged; corrected input is a new request.                                          |
+| Cook/load validation                                                       | Reject the asset/candidate; never reinterpret fields or truncate lights silently.                                                           | Preserve the active scene if a replacement fails.                                                                              |
+| CPU frame/view preparation or allocation                                   | Return failure for the affected view generation; publish no valid partial package. Include required/available capacity and failing stage.   | Keep authored data, invalidate stale bindings and retry on scheduled preparation when resources/capacity/input change.         |
+| GPU-discovered overflow/build error                                        | Publish GPU invalid status in the same dependency chain; lighting/output reject incomplete data, with bounded asynchronous CPU diagnostics. | Rebuild within the supported capacity or report continuing failure; no synchronous readback stall or successful partial frame. |
+| Recorder discard/device loss                                               | Discard pending publication and report failure; retire resources through submission/device lifetime.                                        | Rebuild through existing recovery with fresh view/resource generations.                                                        |
+
+A failed view receives explicit failure presentation while application UI and
+independently valid panes remain usable. GPU failure status must reach that
+presentation decision in the same submission; later CPU readback is diagnostic.
+A last-valid image is allowed only as an explicitly stale presentation placeholder,
+never current HDR input, metering evidence or a successful benchmark sample.
+Missing contributions cannot be presented as a normal current image.
+
+Shadow exhaustion never silently clears requested shadows. Reject a known invalid
+candidate or fail view preparation as above. Dynamic camera/culling changes must
+not introduce undocumented brightest-N selection or automatic quality reduction.
+
+Log transitions into failure with view/selection generation and cause at the
+appropriate warning/error level; update when the cause changes and report recovery
+once. Keep structured status/counts available without per-frame log spam. Optional
+disabled lighting is valid absence. Fault tests verify the application-visible
+outcome and recovery, not only the presence of an error string.
+
+## 5. Authored-property coverage
+
+EX07A records every retained field's scene definition, editor/script ingress where
+exposed, source/packed representation, default/domain, selection/GPU member,
+consumer, mutation invalidation and positive/negative/round-trip tests. A missing
+consumer or transport is a defect to repair, not a newly deferred feature.
+
+| Field family                                                         | Required verification                                                                                                                                                  |
+| -------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Lux/lumens, linear color, per-light exposure compensation            | Finite domain, zero light, tint energy and exactly-once `2^EV` compensation; camera exposure does not alter authored light intensity.                                  |
+| Attenuation model/exponent                                           | Valid enums and documented equations for every supported native model; inverse-square calibration plus non-default-model regression.                                   |
+| Range, position/direction                                            | Valid bounds, coordinate/sign convention, normalization, parent transforms, matching culling/evaluation support and immediate invalidation.                            |
+| Inner/outer cone                                                     | Finite domain, ordering, zero-solid-angle rejection and equal-angle limit; validate paired edits atomically.                                                           |
+| Source radius/angular diameter                                       | Preserve supported meanings; source radius is not the numerical distance floor. Directional disk diameter retains its declared atmosphere-only meaning.                |
+| Visibility, affects-world, mobility, atmospheric assignment          | Effective eligibility, stable identity/conflicts, supported runtime models and rejection of unsupported authored choices.                                              |
+| Cast/receive, shadow resolution/bias/normal bias/contact, CSM fields | Separate light/caster/receiver roles, supported shadow consumers and correct per-light association; use existing shadow/contact contracts and eliminate dead settings. |
+
+Declared exclusions remain under the
+[capability contract](../plan/editor-v01-deferred-capabilities.md); this audit
+does not add new baking or finite-source directional shading. Distinguish those
+explicit exclusions from ignored retained settings. No silent removal or legacy
+compatibility route is permitted. Validate complete candidates atomically so
+nonfinite values, invalid enums, overflow and unsupported input do not reach shaders.
+Cover current-format save/cook/load/PAK and live native/editor/script mutations
+as each field is implemented, not only during final package validation.
+
+## 6. Resources, shaders and capabilities
+
+Records and per-view grids/maps/constants use existing upload/frame allocators,
+immutable in-flight generations and fence retirement. Growth cannot overwrite an
+older frame or unregister a live descriptor. Retain service-owned sphere/cone
+proxy geometry and PSO caches. Cache derived data only with complete light/view/
+scene invalidation. Account for live, in-flight, retired and cached memory and
+require stable warmed allocation behavior.
+
+Register actual culling/lighting entry points, profiles and ABI with
+`EngineShaderCatalog`/ShaderBake. Update existing culling, forward and deferred
+owners together. Verify recorded dispatches and decoded outputs, not catalog
+presence alone. Shared helpers own physical conversion/attenuation; each family
+retains material acquisition and stage routing. Debug views describe actual
+lists/status and preserve exposure history.
+
+Lighting-data capability governs preparation and forward consumers; deferred
+shading additionally governs Stage 12 and shadow capability governs shadow work.
+Review existing feature combinations and repair their gating. Intentional absence
+of lighting preserves prior contributions such as emissive. Missing required
+publication in an enabled path is failure, not that null-safe case. No lights
+means valid empty products and zero direct-light draws.
+
+## 7. Implementation and validation gates
+
+The six EX07 steps are contracts, references/instrumentation, correctness repair,
+qualified baseline/budgets, scalable optimization and final validation. Before
+consumer changes, freeze the property inventory, canonical ABI and execution/
+capacity contracts with their tests. CPU/HLSL/SDK changes land together; obsolete
+single-light/positional routes are removed rather than maintained in parallel.
+
+Qualify independent physical references and packed materials; GPU ABI; complete
+lists versus receiver and unculled-image references; both atmosphere assignments;
+supported property mutations; shadow/capacity/failure/recovery; per-view isolation;
+editor-authored input; and queued/discarded resource lifetime. Use production paths
+and owning tests, never a historical renderer as the acceptance reference. Inspect
+native output and required GPU products, with relevant shader catalog, numerical,
+integration and debug-layer checks.
+
+Only correctness-qualified workloads become timing baselines. Freeze numeric
+CPU/GPU/memory budgets, minimum useful improvement, regression allowances and
+noise treatment before optimization candidates. Measure native Release separately
+from captures/debug instrumentation. The plan owns counts/durations and final
+matrix; timing sources live in `Benchmarks` with a separate executable. Both
+final correctness and performance evidence are required for closure.
