@@ -206,6 +206,13 @@ these boundaries; `--all` explicitly selects all owned project roots. Boundaries
 are recorded before discovery and printed with `--verbose`. No downstream or project-wide
 consumer search is performed implicitly.
 
+Scope boundaries are indexed once per invocation. Exact file selection uses set
+membership; directory selection checks the candidate's ancestor directories.
+Lookup cost therefore depends on path depth rather than the number of supplied
+files or directories. Overlapping inputs are traversed only once. Candidate
+paths are still resolved on each lookup, so symlinks cannot bypass ownership or
+scope checks. This index does not cache file contents or compiler dependencies.
+
 Fresh compiler dependency output determines which requested headers these
 contexts reach. Third-party/system dependencies can still be read by the
 compiler. They are not candidate translation units, reported files, or editable
@@ -364,9 +371,21 @@ analyzed edit scope, together with changed ranges. This also runs when clang-tid
 has no automatic replacements, so existing include spelling/order can be fixed.
 The root style groups standard headers, external/platform headers and Oxygen
 headers, alphabetically within each group. Unchanged files are not rewritten
-and do not trigger another analysis. After actual edits, affected caches are
-invalidated and selected contexts are freshly scanned/analyzed. Verification
-determines the final result.
+and do not trigger another analysis. After actual edits, only contexts whose
+original dependency snapshot contains a changed file are freshly scanned and
+analyzed. A source edit affects its compilation contexts; a shared-header edit
+affects every selected consumer, including distinct compilation configurations.
+This selection uses the existing dependency dictionaries and the set of files
+whose bytes actually changed, including formatting-only changes.
+
+Unaffected results and caches are retained. Their dependency contents are checked
+before and after verification, hashing each shared dependency once per check.
+Concurrent changes invalidate those retained caches and make the run incomplete.
+Fresh results for affected contexts and retained results together determine final
+diagnostics, failure policy and header reachability. The console reports affected
+and unchanged context counts. In `summary.json`, `verification` contains only
+fresh executions; `verification_retained` references unchanged entries by ID in
+`results`, without duplicating their payloads.
 
 For order-sensitive headers, use the standard `// clang-format off` / `on`
 markers documented under [order-sensitive include blocks](oxyformat.md#order-sensitive-include-blocks).
@@ -394,8 +413,9 @@ Use `--incremental` on the fixing run as well as its reruns:
 oxytidy src/Oxygen/Base/SomeFile.cpp --fix --format --incremental
 ```
 
-After actual fixes, verification always executes freshly. Its successful result
-is then cached against the post-fix source and freshly discovered dependencies.
+After actual fixes, affected contexts always execute fresh verification. Each
+successful result is then cached against the post-fix source and freshly
+discovered dependencies; unaffected contexts keep their existing cache entries.
 The next unchanged incremental run reuses that verified analysis, including any
 remaining diagnostics; the current `--fail-on` policy still applies. Verification
 failures, cancellation and inputs changing during analysis are not cached.

@@ -12,6 +12,35 @@ from oxytools.compilation import HEADERS, SOURCES
 from oxytools.ownership import Ownership
 
 
+@dataclass(frozen=True)
+class _PathIndex:
+    """Canonical scope roots; lookups depend on path depth, not root count."""
+
+    files: frozenset[Path]
+    directories: frozenset[Path]
+
+    @classmethod
+    def build(cls, roots: list[Path]) -> _PathIndex:
+        paths = {root.resolve() for root in roots}
+        directories = frozenset(path for path in paths if path.is_dir())
+        return cls(frozenset(paths - directories), directories)
+
+    def contains(self, canonical: Path) -> bool:
+        return (
+            canonical in self.files
+            or canonical in self.directories
+            or any(parent in self.directories for parent in canonical.parents)
+        )
+
+    def traversal_roots(self) -> list[Path]:
+        """Visit overlapping directory and file arguments only once."""
+        return sorted(
+            path
+            for path in self.files | self.directories
+            if not any(parent in self.directories for parent in path.parents)
+        )
+
+
 @dataclass
 class Scope(Ownership):
     roots: list[Path]
@@ -59,10 +88,12 @@ class Scope(Ownership):
         )
 
     def contains(self, path: Path) -> bool:
-        return self.eligible(path) and any(
-            path_key(path) == path_key(root) or (root.is_dir() and within(path, root))
-            for root in self.roots
-        )
+        canonical = path.resolve()
+        return self._index.contains(canonical) and self.eligible(canonical)
+
+    @cached_property
+    def _index(self) -> _PathIndex:
+        return _PathIndex.build(self.roots)
 
     @cached_property
     def discovery_roots(self) -> list[Path]:
@@ -74,14 +105,16 @@ class Scope(Ownership):
         return list({path_key(root): root for root in roots}.values())
 
     def discovery_contains(self, path: Path) -> bool:
-        return self.eligible(path) and any(
-            path_key(path) == path_key(root) or (root.is_dir() and within(path, root))
-            for root in self.discovery_roots
-        )
+        canonical = path.resolve()
+        return self._discovery_index.contains(canonical) and self.eligible(canonical)
+
+    @cached_property
+    def _discovery_index(self) -> _PathIndex:
+        return _PathIndex.build(self.discovery_roots)
 
     def inputs(self) -> list[Path]:
         found = {}
-        for root in self.roots:
+        for root in self._index.traversal_roots():
             for path in root.rglob("*") if root.is_dir() else [root]:
                 if (
                     path.is_file()

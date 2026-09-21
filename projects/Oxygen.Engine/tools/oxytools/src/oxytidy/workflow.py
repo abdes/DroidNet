@@ -642,13 +642,49 @@ def run(args, root: Path, runner: Runner, run_dir: Path, summary: dict) -> int:
             if not applied:
                 summary["status"] = status
                 return code
-            analyzer.invalidate(prepared)
+            changed = {path_key(path) for path in applied}
+            affected = []
+            retained = []
+            for item in prepared:
+                # The existing snapshot is a dependency index, including the
+                # source and response files. No reverse graph is needed for
+                # one batch: intersect the smaller set with dictionary keys.
+                (affected if item.snapshot.keys() & changed else retained).append(item)
+            analyzer.invalidate(affected)
+            retained_snapshot = {
+                path: expected
+                for item in retained
+                for path, expected in item.snapshot.items()
+            }
+
+            def check_retained_inputs() -> None:
+                # Hash each shared dependency once, not once per consumer.
+                if not unchanged(retained_snapshot):
+                    analyzer.invalidate(retained)
+                    raise ToolError(
+                        "Unchanged contexts' inputs changed during fixes or verification"
+                    )
+
+            check_retained_inputs()
+            retained_ids = {item.context.identity for item in retained}
+            summary["verification_retained"] = sorted(retained_ids)
+            retained_results = [
+                result for result in summary["results"] if result["id"] in retained_ids
+            ]
+            runner.reporter.rows(
+                [
+                    (
+                        "Post-fix",
+                        f"{len(affected)} contexts affected; {len(retained)} unchanged",
+                    )
+                ]
+            )
             verification = []
-            runner.reporter.start_phase("Verify dependencies", len(prepared))
+            runner.reporter.start_phase("Verify dependencies", len(affected))
             summary["phase"] = "verification"
             for item, value in bounded_map(
                 lambda context: analyzer.prepare(context, verification=True),
-                [item.context for item in prepared],
+                [item.context for item in affected],
                 args.jobs,
                 runner,
             ):
@@ -663,24 +699,29 @@ def run(args, root: Path, runner: Runner, run_dir: Path, summary: dict) -> int:
                 else:
                     verification.append(value)
             runner.reporter.stop_phase()
-            verified_dependencies = {
-                path_key(path) for item in verification for path in item.dependencies
+            verified_paths = {
+                path
+                for item in [*verification, *retained]
+                for path in item.dependencies
             }
+            verified_dependencies = {path_key(path) for path in verified_paths}
             summary["unreached_headers"] = [
                 str(path)
                 for key, path in headers.items()
                 if key not in verified_dependencies
             ]
             summary["header_discovery_complete"] = (
-                len(verification) == len(prepared) and not runner.cancelled.is_set()
+                len(verification) == len(affected) and not runner.cancelled.is_set()
             )
             seen.clear()
             summary["verification"] = collect(verification, verification=True)
+            check_retained_inputs()
+            final_results = [*summary["verification"], *retained_results]
             diagnostics = deduplicate(
                 scoped(
                     [
                         record
-                        for result in summary["verification"]
+                        for result in final_results
                         for record in result["diagnostics"]
                     ],
                     scope,
@@ -688,7 +729,7 @@ def run(args, root: Path, runner: Runner, run_dir: Path, summary: dict) -> int:
             )
             summary["diagnostics"] = diagnostics
             status, code = outcome(
-                summary["verification"],
+                final_results,
                 summary["coverage_gaps"],
                 runner.cancelled.is_set(),
                 args.fail_on,

@@ -1386,6 +1386,177 @@ class LLVMTests(Fixture):
         self.assertEqual(changed["counts"]["reused"], 0)
         self.assertEqual(changed["counts"]["executed"], 1)
 
+    def test_post_fix_verifies_only_changed_source_and_preserves_other_cache(self):
+        changed = self.write("src/a.cpp", "int changed() { return 1; }\n")
+        stable = self.write("src/b.cpp", "auto stable() -> int { return 2; }\n")
+        self.database(["src/a.cpp", "src/b.cpp"])
+        code, report = self.invoke("src", "--fix", "--incremental")
+        self.assertEqual(code, 0, report)
+        self.assertEqual([r["file"] for r in report["verification"]], [str(changed)])
+        retained = next(r for r in report["results"] if r["file"] == str(stable))
+        self.assertEqual(report["verification_retained"], [retained["id"]])
+        self.assertFalse((Path(retained["folder"]) / "verification").exists())
+        cached = json.loads(
+            (self.root / "out/clang-tidy/cache" / f"{retained['id']}.json").read_text()
+        )
+        self.assertEqual(cached["result"]["folder"], retained["folder"])
+        self.assertIn("1 contexts affected; 1 unchanged", self.last_output)
+        code, rerun = self.invoke("src", "--incremental")
+        self.assertEqual(code, 0, rerun)
+        self.assertEqual(rerun["counts"]["reused"], 2)
+        self.assertEqual(rerun["counts"]["executed"], 0)
+
+    def test_shared_header_verifies_all_consumers_and_compilation_contexts(self):
+        header = self.write("src/shared.h", "inline int shared() { return 1; }\n")
+        first = self.write("src/a.cpp", '#include "shared.h"\n')
+        second = self.write("src/b.cpp", '#include "shared.h"\n')
+        stable = self.write("src/c.cpp", "auto stable() -> int { return 2; }\n")
+        entries = self.database(["src/a.cpp", "src/b.cpp", "src/c.cpp"])
+        entries.extend(
+            {
+                **entry,
+                "output": entry["output"].replace("Debug", "Release"),
+                "arguments": [*entry["arguments"], "-DRELEASE_CONTEXT=1"],
+            }
+            for entry in entries[:2]
+        )
+        self.write("compile_commands.json", json.dumps(entries))
+        code, report = self.invoke("src", "--configuration", "all", "--fix")
+        self.assertEqual(code, 0, report)
+        self.assertEqual(report["fixes"]["applied_files"], [path_key(header)])
+        self.assertEqual(len(report["verification"]), 4)
+        self.assertEqual(
+            {r["file"] for r in report["verification"]}, {str(first), str(second)}
+        )
+        self.assertEqual(len(report["verification_retained"]), 1)
+        retained = next(r for r in report["results"] if r["file"] == str(stable))
+        self.assertEqual(report["verification_retained"], [retained["id"]])
+
+    def test_retained_diagnostics_still_determine_post_fix_failure_policy(self):
+        self.write("src/a.cpp", "int changed() { return 1; }\n")
+        stable = self.write(
+            "src/b.cpp", "auto stable() -> int { int q = 2; return q; }\n"
+        )
+        self.write(
+            ".clang-tidy",
+            'Checks: "-*,modernize-use-trailing-return-type,readability-identifier-length"\n',
+        )
+        self.database(["src/a.cpp", "src/b.cpp"])
+        code, report = self.invoke("src", "--fix", "--fail-on", "warning")
+        self.assertEqual(code, 1, report)
+        self.assertEqual(len(report["verification"]), 1)
+        self.assertEqual(len(report["diagnostics"]), 1)
+        self.assertEqual(report["diagnostics"][0]["file"], str(stable))
+        self.assertEqual(
+            report["diagnostics"][0]["check"], "readability-identifier-length"
+        )
+
+    def test_retained_dependencies_contribute_to_post_fix_header_reachability(self):
+        unused = self.write("src/unused.h", "#pragma once\nstruct Unused {};\n")
+        self.write("src/retained.h", "#pragma once\nstruct Retained {};\n")
+        self.write("src/a.cpp", '#include "unused.h"\nint variable;\n')
+        self.write("src/b.cpp", '#include "retained.h"\nRetained retained;\n')
+        self.database(["src/a.cpp", "src/b.cpp"])
+        code, report = self.invoke("src", "--fix", "--checks=-*,misc-include-cleaner")
+        self.assertEqual(code, 0, report)
+        self.assertEqual(len(report["verification"]), 1)
+        self.assertEqual(len(report["verification_retained"]), 1)
+        self.assertEqual(report["unreached_headers"], [str(unused)])
+        self.assertTrue(report["header_discovery_complete"])
+
+    def test_external_change_to_retained_inputs_prevents_success(self):
+        original_run = Runner.run
+        for timing in ("before_verification", "during_verification"):
+            with self.subTest(timing=timing):
+                changed = self.write("src/a.cpp", "int changed() { return 1; }\n")
+                stable = self.write("src/b.cpp", "auto stable() -> int { return 2; }\n")
+                self.database(["src/a.cpp", "src/b.cpp"])
+                original_apply = apply_fixes
+
+                def change_stable():
+                    stable.write_text("auto stable() -> int { return 3; }\n")
+
+                def apply_then_change(*args, **kwargs):
+                    result = original_apply(*args, **kwargs)
+                    if timing == "before_verification":
+                        change_stable()
+                    return result
+
+                def run_then_change(runner, command, cwd, artifact=None, **kwargs):
+                    result = original_run(runner, command, cwd, artifact, **kwargs)
+                    if (
+                        timing == "during_verification"
+                        and artifact
+                        and artifact.parent.name == "verification"
+                        and artifact.name == "analysis"
+                    ):
+                        change_stable()
+                    return result
+
+                with (
+                    patch("oxytidy.workflow.apply_fixes", apply_then_change),
+                    patch.object(Runner, "run", run_then_change),
+                ):
+                    code, report = self.invoke("src", "--fix", "--incremental")
+                self.assertEqual(code, 2, report)
+                self.assertEqual(report["status"], "incomplete")
+                self.assertIn("inputs changed", report["error"])
+                self.assertEqual(report["fixes"]["applied_files"], [path_key(changed)])
+                retained = next(
+                    r for r in report["results"] if r["file"] == str(stable)
+                )
+                self.assertFalse(
+                    (
+                        self.root / "out/clang-tidy/cache" / f"{retained['id']}.json"
+                    ).exists()
+                )
+
+    def test_failed_affected_scan_keeps_retained_result_but_fails_run(self):
+        self.write("src/a.cpp", "int changed() { return 1; }\n")
+        stable = self.write("src/b.cpp", "auto stable() -> int { return 2; }\n")
+        self.database(["src/a.cpp", "src/b.cpp"])
+        original_run = Runner.run
+
+        def fail_scan(runner, command, cwd, artifact=None, **kwargs):
+            if (
+                artifact
+                and artifact.parent.name == "verification"
+                and artifact.name == "dependencies"
+            ):
+                return ProcessResult(
+                    command, 1, "", "injected scan failure", 0.0, "failed"
+                )
+            return original_run(runner, command, cwd, artifact, **kwargs)
+
+        with patch.object(Runner, "run", fail_scan):
+            code, report = self.invoke("src", "--fix", "--incremental")
+        self.assertEqual(code, 2, report)
+        self.assertFalse(report["header_discovery_complete"])
+        self.assertEqual(report["verification"], [])
+        self.assertEqual(len(report["coverage_gaps"]), 1)
+        retained = next(r for r in report["results"] if r["file"] == str(stable))
+        self.assertEqual(report["verification_retained"], [retained["id"]])
+        self.assertTrue(
+            (self.root / "out/clang-tidy/cache" / f"{retained['id']}.json").exists()
+        )
+
+    def test_format_only_change_verifies_only_modified_context(self):
+        self.write("src/a.h", "#pragma once\nstruct A {};\n")
+        self.write("src/b.h", "#pragma once\nstruct B {};\n")
+        changed = self.write(
+            "src/a.cpp",
+            '#include "b.h"\n#include "a.h"\nauto changed(A, B) -> int { return 1; }\n',
+        )
+        self.write("src/b.cpp", "auto stable() -> int { return 2; }\n")
+        self.write(".clang-format", "BasedOnStyle: LLVM\n")
+        self.database(["src/a.cpp", "src/b.cpp"])
+        code, report = self.invoke("src", "--fix", "--format")
+        self.assertEqual(code, 0, report)
+        self.assertTrue(all(not r["diagnostics"] for r in report["results"]))
+        self.assertEqual(report["fixes"]["applied_files"], [path_key(changed)])
+        self.assertEqual(len(report["verification"]), 1)
+        self.assertEqual(len(report["verification_retained"]), 1)
+
     def test_cached_verification_retains_remaining_diagnostics_and_failure_policy(self):
         self.source_pair()
         self.write("src/a.h", "inline int f() { int q = 2; return q; }\n")
