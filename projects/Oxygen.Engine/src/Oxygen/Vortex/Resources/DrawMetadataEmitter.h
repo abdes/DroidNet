@@ -148,8 +148,8 @@ public:
     -> ShaderVisibleIndex;
 
   struct VelocityPublicationSource {
-    scene::NodeHandle node_handle {};
-    data::AssetKey geometry_asset_key {};
+    scene::NodeHandle node_handle;
+    data::AssetKey geometry_asset_key;
     std::uint32_t lod_index { 0U };
     std::uint32_t submesh_index { 0U };
   };
@@ -173,7 +173,7 @@ private:
     std::uint32_t vertex_count { 0 };
     std::uint32_t is_indexed { 0 };
     oxygen::vortex::PassMask flags;
-    scene::NodeHandle node_handle {};
+    scene::NodeHandle node_handle;
 
     [[nodiscard]] constexpr auto operator==(const BatchingKey&) const noexcept
       -> bool = default;
@@ -194,7 +194,7 @@ private:
     std::uint32_t material_index { 0 };
     ShaderVisibleIndex vb_srv {};
     ShaderVisibleIndex ib_srv {};
-    scene::NodeHandle node_handle {};
+    scene::NodeHandle node_handle;
   };
 
   auto Cpu() noexcept -> std::vector<vortex::DrawMetadata>& { return cpu_; }

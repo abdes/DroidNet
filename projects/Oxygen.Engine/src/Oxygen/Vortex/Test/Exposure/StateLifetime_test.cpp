@@ -12,18 +12,30 @@
 #include <span>
 #include <utility>
 
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Content/EvictionEvents.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
+#include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/Scene/ExposureSettings.h>
+#include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
 #include <Oxygen/Vortex/PostProcess/PostProcessService.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererTag.h>
+#include <Oxygen/Vortex/Resources/TextureBinder.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureGpuFixture.h>
-#include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestTags.h>
 #include <Oxygen/Vortex/Test/Fakes/AssetLoader.h>
 #include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
+#include <Oxygen/Vortex/Test/Fixtures/TextureBinderPayloads.h>
 #include <Oxygen/Vortex/Types/ExposureStateData.h>
+#include <Oxygen/Vortex/Types/ExposureTransition.h>
 #include <Oxygen/Vortex/Upload/UploadCoordinator.h>
 
 namespace oxygen::vortex::testing::exposure {
@@ -228,8 +240,8 @@ NOLINT_TEST_F(ExposureGpuTest,
           .frame_sequence = frame::SequenceNumber { 1U, },
           .delta_time_seconds = 0.0F, })
         .SetResolvedView(
-          { .view_id = ViewId { 1000U, }, .value = ResolvedView { params, }, })
-        .SetOutputTarget({ .framebuffer = observer_ptr { framebuffer.get(), }, })
+          { .view_id = ViewId { 1000U, }, .value = ResolvedView { params, } })
+        .SetOutputTarget({ .framebuffer = observer_ptr { framebuffer.get(), } })
         .Finalize();
   if (!session.has_value()) {
     FAIL() << "Expected session to contain a value";

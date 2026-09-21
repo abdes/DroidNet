@@ -5,12 +5,17 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <cstdint>
+#include <span>
+#include <vector>
 
 #include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/Renderer.h>
+#include <Oxygen/Vortex/SceneRenderer/ShadingMode.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/BasePass/BasePassMeshProcessor.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/Types/OcclusionStats.h>
 #include <Oxygen/Vortex/Types/AcceptedDrawView.h>
+#include <Oxygen/Vortex/Types/DrawMetadata.h>
 #include <Oxygen/Vortex/Types/PassMask.h>
 
 namespace oxygen::vortex {

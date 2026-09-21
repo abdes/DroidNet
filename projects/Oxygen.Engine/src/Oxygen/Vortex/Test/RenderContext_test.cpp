@@ -4,11 +4,14 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Testing/GTest.h>
-
+#include <cstddef>
 #include <limits>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Time/SimulationClock.h>
+#include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Core/Types/View.h>
+#include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/Internal/PerViewScope.h>
 #include <Oxygen/Vortex/RenderContext.h>
 

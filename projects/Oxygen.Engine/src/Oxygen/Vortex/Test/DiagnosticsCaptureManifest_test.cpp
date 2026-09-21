@@ -4,17 +4,20 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <ios>
 #include <string>
 
 #include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 
+#include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsCaptureManifest.h>
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsTypes.h>
+#include <Oxygen/Vortex/ShaderDebugMode.h>
 
 namespace {
 
@@ -49,8 +52,8 @@ auto MakeSnapshot() -> DiagnosticsFrameSnapshot
     .name = "Vortex.Stage12.DeferredLighting",
     .kind = DiagnosticsPassKind::kGraphics,
     .executed = true,
-    .inputs = { "Vortex.SceneColor", "Vortex.GBuffer", },
-    .outputs = { "Vortex.SceneColor", },
+    .inputs = { "Vortex.SceneColor", "Vortex.GBuffer" },
+    .outputs = { "Vortex.SceneColor" },
     .missing_inputs = {},
     .gpu_duration_ms = 0.25F,
   });

@@ -4,12 +4,20 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Vortex/Diagnostics/DiagnosticsCaptureManifest.h>
-
+#include <cstddef>
+#include <filesystem>
 #include <fstream>
+#include <ios>
+#include <ostream>
 #include <sstream>
 #include <stdexcept>
+#include <string>
 #include <string_view>
+#include <vector>
+
+#include <Oxygen/Vortex/Diagnostics/DiagnosticsCaptureManifest.h>
+#include <Oxygen/Vortex/Diagnostics/DiagnosticsTypes.h>
+#include <Oxygen/Vortex/ShaderDebugMode.h>
 
 namespace oxygen::vortex {
 

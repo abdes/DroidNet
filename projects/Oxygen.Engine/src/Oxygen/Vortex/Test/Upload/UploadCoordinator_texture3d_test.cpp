@@ -4,25 +4,24 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <cstring>
-#include <map>
+#include <cstddef>
+#include <cstdint>
+#include <functional>
 #include <memory>
+#include <span>
+#include <utility>
 #include <vector>
-
-#include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/Frame.h>
-#include <Oxygen/Graphics/Common/Buffer.h>
-#include <Oxygen/Graphics/Common/CommandList.h>
-#include <Oxygen/Graphics/Common/CommandQueue.h>
-#include <Oxygen/Graphics/Common/CommandRecorder.h>
-#include <Oxygen/Graphics/Common/Detail/Barriers.h>
+#include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/Test/Fakes/Graphics.h>
 #include <Oxygen/Vortex/Test/Fixtures/UploadCoordinatorTest.h>
+#include <Oxygen/Vortex/Upload/Errors.h>
 #include <Oxygen/Vortex/Upload/Types.h>
 #include <Oxygen/Vortex/Upload/UploadCoordinator.h>
 
@@ -77,7 +76,7 @@ NOLINT_TEST_F(
     .subresources = {},
     .data = oxygen::vortex::upload::UploadTextureSourceView {
       .subresources = std::vector<oxygen::vortex::upload::UploadTextureSourceSubresource> {
-        { .bytes=std::span<const std::byte>(data.data(), data.size()), .row_pitch=static_cast<uint32_t>(row_pitch), .slice_pitch=static_cast<uint32_t>(slice_pitch), },
+        { .bytes=std::span<const std::byte>(data.data(), data.size()), .row_pitch=static_cast<uint32_t>(row_pitch), .slice_pitch=static_cast<uint32_t>(slice_pitch) },
       },
     },
   };

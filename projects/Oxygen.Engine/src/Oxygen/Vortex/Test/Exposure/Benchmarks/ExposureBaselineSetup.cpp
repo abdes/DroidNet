@@ -7,17 +7,35 @@
 #include <algorithm>
 #include <charconv>
 #include <cstdlib>
+#include <filesystem>
+#include <memory>
 #include <stdexcept>
+#include <stdlib.h>
+#include <string>
+#include <system_error>
+#include <utility>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Console/Command.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/PostProcess.h>
+#include <Oxygen/Data/MaterialDomain.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Environment/Fog.h>
 #include <Oxygen/Scene/Environment/PostProcessVolume.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
+#include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Vortex/Diagnostics/DiagnosticsService.h>
+#include <Oxygen/Vortex/Diagnostics/DiagnosticsTypes.h>
+#include <Oxygen/Vortex/RenderContext.h>
+#include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
 #include <Oxygen/Vortex/Test/Exposure/Benchmarks/ExposureBaselineScenario.h>
-#include <Oxygen/Vortex/Test/Exposure/Benchmarks/ExposureCpuTiming.h>
+#include <Oxygen/Vortex/Test/Exposure/Benchmarks/ExposureBenchmarkFixture.h>
+// Completes the unique_ptr pointee for the out-of-line constructor/destructor.
+#include <Oxygen/Vortex/Test/Exposure/Benchmarks/ExposureCpuTiming.h> // IWYU pragma: keep
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestTags.h>
 #include <Oxygen/Vortex/Test/Fixtures/ExposureBenchmarkScene.h>
 
@@ -315,11 +333,15 @@ auto ExposureBaselineScenario::Setup() -> void
   fixture_.frame.SetModuleTimingData(
     timing, engine::internal::EngineTagFactory::Get());
   auto& diagnostics = fixture_.renderer_->GetDiagnosticsService();
-  diagnostics.SetHdrPrecisionControl(precision == "production"
-      ? HdrPrecisionControl::kProduction
-      : fp32_only      ? HdrPrecisionControl::kFp32Only
-      : fp32_reference ? HdrPrecisionControl::kFp32Reference
-                       : HdrPrecisionControl::kQualified);
+  const auto certified_precision = fp32_reference
+    ? HdrPrecisionControl::kFp32Reference
+    : HdrPrecisionControl::kQualified;
+  const auto non_production_precision
+    = fp32_only ? HdrPrecisionControl::kFp32Only : certified_precision;
+  const auto precision_control = precision == "production"
+    ? HdrPrecisionControl::kProduction
+    : non_production_precision;
+  diagnostics.SetHdrPrecisionControl(precision_control);
   diagnostics.SetEnabledFeatures(DiagnosticsFeature::kGpuTimeline);
   diagnostics.SetGpuTimelineEnabled(true);
   fixture_.probe->inspect

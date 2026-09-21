@@ -4,32 +4,43 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Vortex/Passes/GroundGridPass.h>
-
 #include <algorithm>
 #include <array>
 #include <cmath>
-#include <cstring>
+#include <cstdint>
 #include <limits>
+#include <memory>
+#include <span>
+#include <utility>
 #include <vector>
 
-#include <glm/glm.hpp>
+#include <glm/ext/matrix_float4x4.hpp>
+#include <glm/ext/vector_double2.hpp>
+#include <glm/ext/vector_float4.hpp>
+#include <glm/geometric.hpp>
+#include <glm/matrix.hpp>
 
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
 #include <Oxygen/Core/Detail/FormatUtils.h>
-#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/ShaderType.h>
+#include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
-#include <Oxygen/Graphics/Common/ResourceRegistry.h>
+#include <Oxygen/Graphics/Common/Shaders.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
+#include <Oxygen/Profiling/ProfileScope.h>
 #include <Oxygen/Vortex/Internal/PerViewStructuredPublisher.h>
 #include <Oxygen/Vortex/Internal/ViewportClamp.h>
+#include <Oxygen/Vortex/Passes/GroundGridPass.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>

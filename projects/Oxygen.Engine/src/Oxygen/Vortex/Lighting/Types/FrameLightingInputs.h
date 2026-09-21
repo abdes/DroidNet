@@ -27,7 +27,7 @@ struct PreparedViewLightingInput {
 
 struct FrameLightingInputs {
   const FrameLightSelection* frame_light_set { nullptr };
-  std::span<const PreparedViewLightingInput> active_views {};
+  std::span<const PreparedViewLightingInput> active_views;
 
   [[nodiscard]] auto HasFrameLightSelection() const noexcept -> bool
   {

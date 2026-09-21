@@ -18,9 +18,8 @@ namespace oxygen::vortex::internal {
 class AuxiliaryDependencyGraph {
 public:
   struct Plan {
-    std::vector<std::size_t> ordered_packet_indices {};
-    std::vector<std::vector<AuxiliaryResolvedInput>>
-      resolved_inputs_by_packet {};
+    std::vector<std::size_t> ordered_packet_indices;
+    std::vector<std::vector<AuxiliaryResolvedInput>> resolved_inputs_by_packet;
   };
 
   [[nodiscard]] OXGN_VRTX_API static auto Build(

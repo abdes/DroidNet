@@ -32,10 +32,10 @@ struct ResolvedAtmosphereLightState {
   std::uint32_t active_light_count { 0U };
   std::uint32_t conflict_count { 0U };
   std::uint32_t first_conflict_slot {
-    environment::kInvalidAtmosphereLightSlot
+    environment::kInvalidAtmosphereLightSlot,
   };
   std::uint32_t shadow_authority_slot {
-    environment::kInvalidAtmosphereLightSlot
+    environment::kInvalidAtmosphereLightSlot,
   };
   bool shadow_authority_slot0_only { true };
   std::uint64_t authored_hash { 0U };

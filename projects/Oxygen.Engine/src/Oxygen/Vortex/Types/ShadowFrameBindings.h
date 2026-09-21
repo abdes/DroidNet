@@ -10,12 +10,13 @@
 #include <cstddef>
 #include <cstdint>
 
+#include <glm/vec4.hpp>
+
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Vortex/Shadows/Types/PointShadowBinding.h>
 #include <Oxygen/Vortex/Shadows/Types/ShadowCascadeBinding.h>
 #include <Oxygen/Vortex/Shadows/Types/SpotShadowBinding.h>
-#include <glm/vec4.hpp>
 
 namespace oxygen::vortex {
 

@@ -12,8 +12,6 @@
 #include <optional>
 #include <unordered_map>
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/GeometryAsset.h>
@@ -21,6 +19,7 @@
 #include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocationHandle.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
+#include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/Resources/IResourceBinder.h>
 #include <Oxygen/Vortex/Resources/MaterialBinder.h>
 #include <Oxygen/Vortex/Test/Fakes/AssetLoader.h>

@@ -12,12 +12,11 @@
 #include <stdexcept>
 #include <unordered_map>
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/EvictionEvents.h>
 #include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
+#include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/Resources/TextureBinder.h>
 #include <Oxygen/Vortex/Test/Fakes/AssetLoader.h>
 #include <Oxygen/Vortex/Test/Fakes/Graphics.h>

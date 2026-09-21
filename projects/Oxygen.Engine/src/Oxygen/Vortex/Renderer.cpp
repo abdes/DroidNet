@@ -8,24 +8,38 @@
 #include <atomic>
 #include <chrono>
 #include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <exception>
+#include <expected>
 #include <limits>
 #include <memory>
+#include <mutex>
 #include <optional>
+#include <shared_mutex>
 #include <sstream>
 #include <string>
+#include <tuple>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
+#include <vector>
 
 #include <fmt/format.h>
-#include <glm/vec2.hpp>
+#include <glm/ext/vector_uint2.hpp>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/Result.h>
 #include <Oxygen/Base/ScopeGuard.h>
+#include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Console/CVar.h>
 #include <Oxygen/Console/Console.h>
+#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Constants.h>
-#include <Oxygen/Core/EngineTag.h>
+#include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Core/Types/ResolvedView.h>
+#include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Engine/IAsyncEngine.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
@@ -36,13 +50,22 @@
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/Color.h>
+#include <Oxygen/Graphics/Common/Types/QueueRole.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/Platform/Types.h>
 #include <Oxygen/Profiling/CpuProfileScope.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
+#include <Oxygen/Profiling/ProfileScope.h>
 #include <Oxygen/Scene/Environment/PostProcessVolume.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
+#include <Oxygen/Scene/ExposureSettings.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/SceneSync/RuntimeMotionProducerModule.h>
+#include <Oxygen/Vortex/CompositionView.h>
+#include <Oxygen/Vortex/Diagnostics/DiagnosticsService.h>
 #include <Oxygen/Vortex/Internal/CompositingPass.h>
 #include <Oxygen/Vortex/Internal/DeformationHistoryCache.h>
 #include <Oxygen/Vortex/Internal/GpuTimelineProfiler.h>
@@ -54,19 +77,32 @@
 #include <Oxygen/Vortex/Internal/RigidTransformHistoryCache.h>
 #include <Oxygen/Vortex/Internal/ViewConstantsManager.h>
 #include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
+#include <Oxygen/Vortex/RenderMode.h>
 #include <Oxygen/Vortex/Renderer.h>
+#include <Oxygen/Vortex/RendererCapability.h>
 #include <Oxygen/Vortex/RendererTag.h>
 #include <Oxygen/Vortex/SceneCameraViewResolver.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneRenderBuilder.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneRenderer.h>
+#include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
+#include <Oxygen/Vortex/SceneRenderer/ShadingMode.h>
+#include <Oxygen/Vortex/ShaderDebugMode.h>
+#include <Oxygen/Vortex/Types/CompositingTask.h>
 #include <Oxygen/Vortex/Types/DrawFrameBindings.h>
 #include <Oxygen/Vortex/Types/ExposureStateData.h>
+#include <Oxygen/Vortex/Types/ExposureTransition.h>
+#include <Oxygen/Vortex/Types/GroundGridConfig.h>
 #include <Oxygen/Vortex/Types/ScreenHzbFrameBindings.h>
 #include <Oxygen/Vortex/Types/ViewFrameBindings.h>
+#include <Oxygen/Vortex/Types/ViewHistoryFrameBindings.h>
 #include <Oxygen/Vortex/Upload/InlineTransfersCoordinator.h>
 #include <Oxygen/Vortex/Upload/RingBufferStaging.h>
 #include <Oxygen/Vortex/Upload/StagingProvider.h>
 #include <Oxygen/Vortex/Upload/UploadCoordinator.h>
+#include <Oxygen/Vortex/Upload/UploadPolicy.h>
+#include <Oxygen/Vortex/Upload/UploaderTag.h>
+#include <Oxygen/Vortex/ViewExtension.h>
+#include <Oxygen/Vortex/ViewFeatureProfile.h>
 
 namespace oxygen::vortex::internal {
 
@@ -487,7 +523,7 @@ namespace {
         const auto& producer = entries[producer_index];
         const auto output_it
           = std::ranges::find_if(producer.produced_aux_outputs,
-            [&input](const CompositionView::AuxOutputDesc& output) {
+            [&input](const CompositionView::AuxOutputDesc& output) -> bool {
               return output.id == input.id;
             });
         CHECK_F(output_it != producer.produced_aux_outputs.end());
@@ -632,8 +668,10 @@ auto Renderer::IssueExposureTransitionLocked(
     .seed_ev = seed_ev,
   };
   const auto applied = entry.status ? entry.status->applied_generation : 0U;
-  entry.status = ExposureTransitionStatus { .request = token,
-    .applied_generation = applied };
+  entry.status = ExposureTransitionStatus {
+    .request = token,
+    .applied_generation = applied,
+  };
   entry.implicit_request = implicit;
   return token;
 }
@@ -642,14 +680,17 @@ auto Renderer::NotifyViewDiscontinuity(
   CompositionView::ViewStateHandle target, const ViewDiscontinuity reason)
   -> std::expected<void, ExposureTransitionError>
 {
-  if (target == CompositionView::kInvalidViewStateHandle)
+  if (target == CompositionView::kInvalidViewStateHandle) {
     return std::unexpected(ExposureTransitionError::kInvalidTarget);
+  }
   if (static_cast<unsigned>(reason)
-    > static_cast<unsigned>(ViewDiscontinuity::kDeviceRecovery))
+    > static_cast<unsigned>(ViewDiscontinuity::kDeviceRecovery)) {
     return std::unexpected(ExposureTransitionError::kInvalidDiscontinuity);
+  }
   std::unique_lock lock(view_state_mutex_);
-  if (shutdown_called_)
+  if (shutdown_called_) {
     return std::unexpected(ExposureTransitionError::kRendererUnavailable);
+  }
   EnsureExposureLifetimeLocked(target);
   exposure_transitions_.at(target).pending_discontinuities |= 1U
     << static_cast<unsigned>(reason);
@@ -659,8 +700,9 @@ auto Renderer::NotifyViewDiscontinuity(
 auto Renderer::ObserveExposureWorld(
   CompositionView::ViewStateHandle target, const scene::Scene* world) -> void
 {
-  if (target == CompositionView::kInvalidViewStateHandle)
+  if (target == CompositionView::kInvalidViewStateHandle) {
     return;
+  }
   const auto identity
     = world ? world->weak_from_this() : std::weak_ptr<const scene::Scene> {};
   std::unique_lock lock(view_state_mutex_);
@@ -668,9 +710,10 @@ auto Renderer::ObserveExposureWorld(
   auto& entry = exposure_transitions_.at(target);
   const bool changed = entry.world_pointer != world
     || entry.world.owner_before(identity) || identity.owner_before(entry.world);
-  if (entry.world_observed && changed)
+  if (entry.world_observed && changed) {
     entry.pending_discontinuities |= 1U
       << static_cast<unsigned>(ViewDiscontinuity::kWorldReplacement);
+  }
   entry.world_observed = true;
   entry.world = identity;
   entry.world_pointer = world;
@@ -692,18 +735,21 @@ auto Renderer::PrepareExposureTransition(
   CompositionView::ViewStateHandle target, ExposureTransitionPolicy policy,
   frame::SequenceNumber frame, const bool suppressed) -> void
 {
-  if (target == CompositionView::kInvalidViewStateHandle)
+  if (target == CompositionView::kInvalidViewStateHandle) {
     return;
+  }
   std::unique_lock lock(view_state_mutex_);
   EnsureExposureLifetimeLocked(target);
   auto& entry = exposure_transitions_.at(target);
-  if (entry.captured_frame == frame)
+  if (entry.captured_frame == frame) {
     return;
+  }
   entry.captured_discontinuities = 0U;
-  if (suppressed)
+  if (suppressed) {
     return;
+  }
   const auto view = std::ranges::find_if(
-    published_runtime_views_by_intent_, [target](const auto& item) {
+    published_runtime_views_by_intent_, [target](const auto& item) -> auto {
       return item.second.view_state_handle == target;
     });
   const bool registered = view != published_runtime_views_by_intent_.end();
@@ -731,8 +777,9 @@ auto Renderer::PrepareExposureTransition(
   entry.pending_discontinuities = 0U;
   entry.captured_discontinuities = discontinuities;
   lock.unlock();
-  if (discontinuities != 0U)
+  if (discontinuities != 0U) {
     previous_view_history_cache_->Invalidate(target);
+  }
 }
 
 auto Renderer::RequestExposureRecovery(CompositionView::ViewStateHandle target,
@@ -743,8 +790,9 @@ auto Renderer::RequestExposureRecovery(CompositionView::ViewStateHandle target,
   if (found == exposure_transitions_.end() || found->second.lifetime != lifetime
     || found->second.generation != generation
     || (found->second.status
-      && found->second.status->phase == ExposureTransitionPhase::kQueued))
+      && found->second.status->phase == ExposureTransitionPhase::kQueued)) {
     return;
+  }
   // A concurrent explicit request or recreated view wins over old GPU status.
   const auto issued = IssueExposureTransitionLocked(
     target, ExposureTransitionPolicy::kRemeter, {}, true);
@@ -755,8 +803,9 @@ auto Renderer::RequestExposureRecovery(CompositionView::ViewStateHandle target,
 auto Renderer::EnsureExposureLifetime(CompositionView::ViewStateHandle target)
   -> std::uint64_t
 {
-  if (target == CompositionView::kInvalidViewStateHandle)
+  if (target == CompositionView::kInvalidViewStateHandle) {
     return 0U;
+  }
   std::unique_lock lock(view_state_mutex_);
   return EnsureExposureLifetimeLocked(target);
 }
@@ -817,8 +866,9 @@ auto Renderer::GetExposureOwners() const
   auto owners = std::vector<CompositionView::ViewStateHandle> {};
   for (const auto& [_, view] : published_runtime_views_by_intent_) {
     if (view.view_state_handle != CompositionView::kInvalidViewStateHandle
-      && view.exposure_source_view_id == kInvalidViewId)
+      && view.exposure_source_view_id == kInvalidViewId) {
       owners.push_back(view.view_state_handle);
+    }
   }
   std::ranges::sort(owners);
   return owners;
@@ -828,8 +878,9 @@ auto Renderer::CaptureExposureTransition(
   CompositionView::ViewStateHandle target, frame::SequenceNumber frame)
   -> std::optional<ExposureTransitionToken>
 {
-  if (target == CompositionView::kInvalidViewStateHandle)
+  if (target == CompositionView::kInvalidViewStateHandle) {
     return std::nullopt;
+  }
   std::unique_lock lock(view_state_mutex_);
   auto [it, inserted] = exposure_transitions_.try_emplace(target);
   auto& entry = it->second;
@@ -875,8 +926,9 @@ auto Renderer::RejectUnsubmittedExposureTransition(
     || found->second.lifetime != token.lifetime
     || found->second.submitted_generation >= token.generation
     || found->second.captured_request != token
-    || found->second.captured_rejection)
+    || found->second.captured_rejection) {
     return;
+  }
   auto& entry = found->second;
   entry.captured_rejection = error;
   if (entry.status && entry.status->request == token
@@ -893,9 +945,10 @@ auto Renderer::MarkExposureTransitionSubmitted(
   const auto found = exposure_transitions_.find(token.target);
   if (found != exposure_transitions_.end()
     && found->second.lifetime == token.lifetime && token.generation != 0U
-    && token.generation <= found->second.generation)
+    && token.generation <= found->second.generation) {
     found->second.submitted_generation
       = std::max(found->second.submitted_generation, token.generation);
+  }
 }
 
 auto Renderer::NeedsExposureAcknowledgement(
@@ -906,8 +959,9 @@ auto Renderer::NeedsExposureAcknowledgement(
   if (found == exposure_transitions_.end()
     || found->second.lifetime != token.lifetime
     || found->second.submitted_generation < token.generation
-    || !found->second.status)
+    || !found->second.status) {
     return false;
+  }
   const auto& status = *found->second.status;
   return status.request.generation >= token.generation
     && status.applied_generation < token.generation
@@ -922,13 +976,15 @@ auto Renderer::CompleteExposureTransition(const ExposureTransitionToken& token,
   std::unique_lock lock(view_state_mutex_);
   const auto found = exposure_transitions_.find(token.target);
   if (found == exposure_transitions_.end()
-    || found->second.lifetime != token.lifetime || !found->second.status)
+    || found->second.lifetime != token.lifetime || !found->second.status) {
     return;
+  }
   auto& status = *found->second.status;
   status.applied_generation
     = std::max(status.applied_generation, applied_generation);
-  if (status.request.generation != token.generation)
+  if (status.request.generation != token.generation) {
     return;
+  }
   if (applied_generation >= token.generation) {
     status.phase = ExposureTransitionPhase::kApplied;
     status.error.reset();
@@ -1751,7 +1807,7 @@ auto Renderer::OnCompositing(observer_ptr<engine::FrameContext> context)
   -> co::Co<>
 {
   const auto finalize_gpu_timestamps
-    = oxygen::ScopeGuard { [this]() noexcept -> void {
+    = oxygen::ScopeGuard { [this] noexcept -> void {
         if (gpu_timeline_profiler_) {
           gpu_timeline_profiler_->OnFrameRecordTailResolve();
         }
@@ -2143,8 +2199,9 @@ auto Renderer::PublishRuntimeCompositionView(
     composition_view.render_settings.exposure,
     composition_view.render_settings.shader_debug_mode);
 
-  if (published_view_id == kInvalidViewId)
+  if (published_view_id == kInvalidViewId) {
     return kInvalidViewId;
+  }
 
   const auto camera_identity = composition_view.camera
     ? std::optional { composition_view.camera->GetHandle() }
@@ -2160,14 +2217,17 @@ auto Renderer::PublishRuntimeCompositionView(
   }
   if (camera_changed
     && composition_view.view_state_handle
-      != CompositionView::kInvalidViewStateHandle)
-    static_cast<void>(NotifyViewDiscontinuity(
-      composition_view.view_state_handle, ViewDiscontinuity::kCameraCut));
+      != CompositionView::kInvalidViewStateHandle) {
+    std::ignore = NotifyViewDiscontinuity(
+      composition_view.view_state_handle, ViewDiscontinuity::kCameraCut);
+  }
 
   if (composition_view.camera.has_value()) {
     auto camera_node = composition_view.camera.value();
     auto resolver = SceneCameraViewResolver {
-      [camera_node](const ViewId& /*view_id*/) { return camera_node; },
+      [camera_node](const ViewId& /*view_id*/) -> oxygen::scene::SceneNode {
+        return camera_node;
+      },
       composition_view.view.viewport,
       composition_view.view.scissor,
     };
@@ -2198,8 +2258,9 @@ auto Renderer::UpsertPublishedRuntimeView(engine::FrameContext& frame_context,
   if (const auto scene = frame_context.GetScene();
     scene && scene->GetEnvironment()) {
     if (const auto post = scene->GetEnvironment()
-          ->TryGetSystem<scene::environment::PostProcessVolume>())
+          ->TryGetSystem<scene::environment::PostProcessVolume>()) {
       inherited_exposure = post->GetExposureSettings();
+    }
   }
   std::unique_lock state_lock(view_state_mutex_);
   const auto existing = published_runtime_views_by_intent_.find(intent_view_id);
@@ -2233,8 +2294,8 @@ auto Renderer::UpsertPublishedRuntimeView(engine::FrameContext& frame_context,
       }
     }
   } else if (existing_id != kInvalidViewId
-    && std::ranges::any_of(
-      published_runtime_views_by_intent_, [existing_id](const auto& item) {
+    && std::ranges::any_of(published_runtime_views_by_intent_,
+      [existing_id](const auto& item) -> auto {
         return item.second.exposure_source_view_id == existing_id;
       })) {
     LOG_F(ERROR,
@@ -2261,8 +2322,9 @@ auto Renderer::UpsertPublishedRuntimeView(engine::FrameContext& frame_context,
     it->second.debug_name = std::move(debug_name);
     it->second.exposure_override = std::move(exposure_override);
     it->second.inherited_exposure = inherited_exposure;
-    if (old_handle != view_state_handle || source != kInvalidViewId)
+    if (old_handle != view_state_handle || source != kInvalidViewId) {
       it->second.pending_source_loss.reset();
+    }
     if (old_handle != view_state_handle) {
       it->second.camera_observed = false;
       it->second.camera_identity.reset();
@@ -2276,10 +2338,11 @@ auto Renderer::UpsertPublishedRuntimeView(engine::FrameContext& frame_context,
     if (old_handle != view_state_handle) {
       // Service retirement re-enters the transition registry. GPU/frame leases
       // remain owned by their readers while the old lifetime is retired.
-      if (scene_renderer_)
+      if (scene_renderer_) {
         scene_renderer_->RemoveViewState(published, old_handle);
-      else
+      } else {
         RetireExposureTransitions(old_handle);
+      }
     }
     return published;
   }
@@ -2326,17 +2389,20 @@ auto Renderer::ResolvePublishedExposureRootLocked(ViewId published_view_id,
 {
   for (std::size_t remaining = published_runtime_views_by_intent_.size();
     remaining > 0U; --remaining) {
-    if (published_view_id == forbidden)
+    if (published_view_id == forbidden) {
       return nullptr;
+    }
     const auto found = std::ranges::find_if(published_runtime_views_by_intent_,
-      [published_view_id](const auto& item) {
+      [published_view_id](const auto& item) -> auto {
         return item.second.published_view_id == published_view_id;
       });
-    if (found == published_runtime_views_by_intent_.end())
+    if (found == published_runtime_views_by_intent_.end()) {
       return nullptr;
+    }
     const auto& state = found->second;
-    if (state.exposure_source_view_id == kInvalidViewId)
+    if (state.exposure_source_view_id == kInvalidViewId) {
       return &state;
+    }
     published_view_id = state.exposure_source_view_id;
   }
   return nullptr;
@@ -2348,26 +2414,31 @@ auto Renderer::ResolveOffscreenExposureSource(const CompositionView& view) const
   std::shared_lock lock(view_state_mutex_);
   if (view.view_state_handle != CompositionView::kInvalidViewStateHandle
     && std::ranges::any_of(
-      published_runtime_views_by_intent_, [&view](const auto& item) {
+      published_runtime_views_by_intent_, [&view](const auto& item) -> auto {
         return item.first != view.id
           && item.second.view_state_handle == view.view_state_handle;
-      }))
+      })) {
     return std::nullopt;
+  }
   if (view.exposure_source_view_id == kInvalidViewId
-    || view.exposure_source_view_id == view.id)
+    || view.exposure_source_view_id == view.id) {
     return std::pair { view.id, view.view_state_handle };
-  if (view.view_state_handle == CompositionView::kInvalidViewStateHandle)
+  }
+  if (view.view_state_handle == CompositionView::kInvalidViewStateHandle) {
     return std::nullopt;
+  }
   const auto source
     = published_runtime_views_by_intent_.find(view.exposure_source_view_id);
-  if (source == published_runtime_views_by_intent_.end())
+  if (source == published_runtime_views_by_intent_.end()) {
     return std::nullopt;
+  }
   const auto* root
     = ResolvePublishedExposureRootLocked(source->second.published_view_id);
   if (!root
     || root->view_state_handle == CompositionView::kInvalidViewStateHandle
-    || root->view_state_handle == view.view_state_handle)
+    || root->view_state_handle == view.view_state_handle) {
     return std::nullopt;
+  }
   return std::pair { root->published_view_id, root->view_state_handle };
 }
 
@@ -2379,10 +2450,12 @@ auto Renderer::GetExposureSourceIntent(const ViewId source_view_id) const
   std::shared_lock registration_lock(view_registration_mutex_);
   std::shared_lock state_lock(view_state_mutex_);
   const auto* root = ResolvePublishedExposureRootLocked(source_view_id);
-  if (!root || root->published_view_id != source_view_id)
+  if (!root || root->published_view_id != source_view_id) {
     return std::nullopt;
+  }
   const auto view = resolved_views_.find(source_view_id);
-  return ExposureSourceIntent { .view_id = root->published_view_id,
+  return ExposureSourceIntent {
+    .view_id = root->published_view_id,
     .handle = root->view_state_handle,
     .owner = root->view_state_handle,
     .settings = root->exposure_override,
@@ -2394,7 +2467,8 @@ auto Renderer::GetExposureSourceIntent(const ViewId source_view_id) const
         == RenderMode::kWireframe
       || root->feature_profile
         == CompositionView::ViewFeatureProfile::kDiagnosticsOnly,
-    .source_loss = root->pending_source_loss };
+    .source_loss = root->pending_source_loss,
+  };
 }
 
 auto Renderer::GetRegisteredExposureIntents() const
@@ -2407,13 +2481,15 @@ auto Renderer::GetRegisteredExposureIntents() const
   auto intents = std::vector<ExposureSourceIntent> {};
   intents.reserve(published_runtime_views_by_intent_.size());
   for (const auto& [_, state] : published_runtime_views_by_intent_) {
-    if (state.view_state_handle == CompositionView::kInvalidViewStateHandle)
+    if (state.view_state_handle == CompositionView::kInvalidViewStateHandle) {
       continue;
+    }
     const auto* root
       = ResolvePublishedExposureRootLocked(state.published_view_id);
     CHECK_NOTNULL_F(root);
     const auto view = resolved_views_.find(state.published_view_id);
-    intents.push_back({ .view_id = state.published_view_id,
+    intents.push_back({
+      .view_id = state.published_view_id,
       .handle = state.view_state_handle,
       .owner = root->view_state_handle,
       .settings = state.exposure_override,
@@ -2426,7 +2502,8 @@ auto Renderer::GetRegisteredExposureIntents() const
           == RenderMode::kWireframe
         || state.feature_profile
           == CompositionView::ViewFeatureProfile::kDiagnosticsOnly,
-      .source_loss = state.pending_source_loss });
+      .source_loss = state.pending_source_loss,
+    });
   }
   return intents;
 }
@@ -2434,16 +2511,19 @@ auto Renderer::GetRegisteredExposureIntents() const
 auto Renderer::DetachPublishedRuntimeViewState(const ViewId intent_view_id)
   -> DetachedPublishedRuntimeViewState
 {
-  if (intent_view_id == kInvalidViewId)
+  if (intent_view_id == kInvalidViewId) {
     return {};
+  }
   std::shared_lock registration_lock(view_registration_mutex_);
   std::unique_lock state_lock(view_state_mutex_);
   const auto found = published_runtime_views_by_intent_.find(intent_view_id);
-  if (found == published_runtime_views_by_intent_.end())
+  if (found == published_runtime_views_by_intent_.end()) {
     return {};
-  auto detached = DetachedPublishedRuntimeViewState { .published_view_id
-    = found->second.published_view_id,
-    .view_state_handle = found->second.view_state_handle };
+  }
+  auto detached = DetachedPublishedRuntimeViewState {
+    .published_view_id = found->second.published_view_id,
+    .view_state_handle = found->second.view_state_handle,
+  };
   const auto* root
     = ResolvePublishedExposureRootLocked(detached.published_view_id);
   CHECK_NOTNULL_F(root);
@@ -2456,8 +2536,9 @@ auto Renderer::DetachPublishedRuntimeViewState(const ViewId intent_view_id)
     : EnsureExposureLifetimeLocked(root->view_state_handle);
   loss->settings = root->exposure_override.value_or(root->inherited_exposure);
   if (const auto camera = resolved_views_.find(root->published_view_id);
-    camera != resolved_views_.end())
+    camera != resolved_views_.end()) {
     loss->camera_ev = camera->second.CameraEv();
+  }
   if (const auto control = exposure_transitions_.find(root->view_state_handle);
     control != exposure_transitions_.end() && control->second.status) {
     const auto& status = *control->second.status;
@@ -2474,8 +2555,10 @@ auto Renderer::DetachPublishedRuntimeViewState(const ViewId intent_view_id)
       && !ResolvePublishedExposureRootLocked(
         state.published_view_id, detached.published_view_id)) {
       consumers.push_back(intent);
-      loss->consumers.push_back({ state.view_state_handle,
-        EnsureExposureLifetimeLocked(state.view_state_handle) });
+      loss->consumers.push_back({
+        state.view_state_handle,
+        EnsureExposureLifetimeLocked(state.view_state_handle),
+      });
     }
   }
   for (const auto consumer : consumers) {
@@ -2488,8 +2571,9 @@ auto Renderer::DetachPublishedRuntimeViewState(const ViewId intent_view_id)
       "continuity",
       consumer);
   }
-  if (!consumers.empty())
+  if (!consumers.empty()) {
     detached.source_loss = std::move(loss);
+  }
   published_runtime_views_by_intent_.erase(found);
   return detached;
 }
@@ -2501,8 +2585,9 @@ auto Renderer::RemovePublishedRuntimeView(const ViewId intent_view_id) -> void
     return;
   }
 
-  if (scene_renderer_ && detached.source_loss)
+  if (scene_renderer_ && detached.source_loss) {
     scene_renderer_->PreserveRemovedExposureSource(detached.source_loss);
+  }
   RetireExposureTransitions(detached.view_state_handle);
   if (scene_renderer_) {
     scene_renderer_->RemoveViewState(
@@ -2524,8 +2609,9 @@ auto Renderer::RemovePublishedRuntimeView(
   }
 
   frame_context.RemoveView(detached.published_view_id);
-  if (scene_renderer_ && detached.source_loss)
+  if (scene_renderer_ && detached.source_loss) {
     scene_renderer_->PreserveRemovedExposureSource(detached.source_loss);
+  }
   RetireExposureTransitions(detached.view_state_handle);
   if (scene_renderer_) {
     scene_renderer_->RemoveViewState(
@@ -2541,12 +2627,13 @@ auto Renderer::ReleaseOffscreenViewState(const ViewId view_id,
   const CompositionView::ViewStateHandle view_state_handle) -> bool
 {
   if (view_id == kInvalidViewId
-    || view_state_handle == CompositionView::kInvalidViewStateHandle)
+    || view_state_handle == CompositionView::kInvalidViewStateHandle) {
     return false;
+  }
   {
     std::shared_lock lock(view_state_mutex_);
     if (std::ranges::any_of(
-          published_runtime_views_by_intent_, [&](const auto& entry) {
+          published_runtime_views_by_intent_, [&](const auto& entry) -> auto {
             return entry.second.published_view_id == view_id
               || entry.second.view_state_handle == view_state_handle;
           })) {
@@ -2556,11 +2643,13 @@ auto Renderer::ReleaseOffscreenViewState(const ViewId view_id,
     }
   }
   RetireExposureTransitions(view_state_handle);
-  if (scene_renderer_)
+  if (scene_renderer_) {
     scene_renderer_->RemoveViewState(view_id, view_state_handle);
+  }
   UnregisterViewRenderGraph(view_id);
-  if (view_const_manager_)
+  if (view_const_manager_) {
     view_const_manager_->RemoveView(view_id);
+  }
   return true;
 }
 
@@ -2577,15 +2666,17 @@ auto Renderer::PruneStalePublishedRuntimeViews(
     auto retained_sources = std::unordered_set<ViewId> {};
     for (const auto& [_, state] : published_runtime_views_by_intent_) {
       if (current_frame - state.last_seen_frame
-        > kPublishedRuntimeViewMaxIdleFrames)
+        > kPublishedRuntimeViewMaxIdleFrames) {
         continue;
+      }
       auto source = state.exposure_source_view_id;
       while (
         source != kInvalidViewId && retained_sources.insert(source).second) {
-        const auto found = std::ranges::find_if(
-          published_runtime_views_by_intent_, [source](const auto& item) {
-            return item.second.published_view_id == source;
-          });
+        const auto found
+          = std::ranges::find_if(published_runtime_views_by_intent_,
+            [source](const auto& item) -> auto {
+              return item.second.published_view_id == source;
+            });
         CHECK_F(found != published_runtime_views_by_intent_.end(),
           "Registered exposure source must remain resolvable");
         source = found->second.exposure_source_view_id;
@@ -3225,7 +3316,7 @@ auto Renderer::BuildViewHistoryFrameBindings(
   const ResolvedView& view, const observer_ptr<const scene::Scene> scene)
   -> ViewHistoryFrameBindings
 {
-  static_cast<void>(scene);
+  std::ignore = scene;
   const auto current = internal::PreviousViewHistoryCache::CurrentState {
     .view_matrix = view.ViewMatrix(),
     .projection_matrix = view.ProjectionMatrix(),
@@ -3390,9 +3481,10 @@ auto Renderer::DispatchViewExtensionsOnPreRenderViewGpu(
   RenderContext& render_context, graphics::CommandRecorder& recorder) -> void
 {
   const auto extensions = SnapshotViewExtensions();
-  const auto hook_context
-    = ViewRenderGpuContext { .render_context = render_context,
-        .recorder = recorder };
+  const auto hook_context = ViewRenderGpuContext {
+    .render_context = render_context,
+    .recorder = recorder,
+  };
   for (const auto& extension : extensions) {
     extension->OnPreRenderViewGpu(hook_context);
   }
@@ -3402,9 +3494,10 @@ auto Renderer::DispatchViewExtensionsOnPostRenderViewGpu(
   RenderContext& render_context, graphics::CommandRecorder& recorder) -> void
 {
   const auto extensions = SnapshotViewExtensions();
-  const auto hook_context
-    = ViewRenderGpuContext { .render_context = render_context,
-        .recorder = recorder };
+  const auto hook_context = ViewRenderGpuContext {
+    .render_context = render_context,
+    .recorder = recorder,
+  };
   for (const auto& extension : extensions) {
     extension->OnPostRenderViewGpu(hook_context);
   }
@@ -3449,7 +3542,7 @@ auto Renderer::DispatchSceneRendererRender(
 
   auto& render_context = render_context_pool_->Acquire(context->GetFrameSlot());
   const auto release_guard = oxygen::ScopeGuard {
-    [this, slot = context->GetFrameSlot()]() noexcept -> void {
+    [this, slot = context->GetFrameSlot()] noexcept -> void {
       ReleasePooledRenderContext(slot);
     }
   };
@@ -3460,7 +3553,7 @@ auto Renderer::DispatchSceneRendererRender(
   DispatchViewExtensionsOnFamilyAssembled(*context, render_context);
 
   const auto has_scene_view = std::ranges::any_of(render_context.frame_views,
-    [](const RenderContext::ViewExecutionEntry& entry) {
+    [](const RenderContext::ViewExecutionEntry& entry) -> bool {
       return entry.is_scene_view;
     });
   if (!has_scene_view) {
@@ -3488,7 +3581,7 @@ auto Renderer::DispatchSceneRendererCompositing(
 
   auto& render_context = render_context_pool_->Acquire(context->GetFrameSlot());
   const auto release_guard = oxygen::ScopeGuard {
-    [this, slot = context->GetFrameSlot()]() noexcept -> void {
+    [this, slot = context->GetFrameSlot()] noexcept -> void {
       ReleasePooledRenderContext(slot);
     }
   };
@@ -3920,15 +4013,19 @@ auto Renderer::ValidatedOffscreenSceneSession::ExecuteNow() -> bool
   auto frame_session = frame_session_;
   frame_session.scene = scene_source_.scene;
   renderer_->BeginStandaloneFrameExecution(frame_session);
-  const auto frame_guard = ScopeGuard(
-    [renderer = renderer_.get()]() noexcept { renderer->EndOffscreenFrame(); });
+  const auto frame_guard
+    = ScopeGuard([renderer = renderer_.get()] noexcept -> void {
+        renderer->EndOffscreenFrame();
+      });
 
   auto& scene = *scene_source_.scene;
   scene.Update();
 
   auto camera_node = view_intent.camera.value();
   auto resolver = SceneCameraViewResolver {
-    [camera_node](const ViewId& /*view_id*/) { return camera_node; },
+    [camera_node](const ViewId& /*view_id*/) -> oxygen::scene::SceneNode {
+      return camera_node;
+    },
     view_intent.view.viewport,
     view_intent.view.scissor,
   };
@@ -3973,8 +4070,9 @@ auto Renderer::ValidatedOffscreenSceneSession::ExecuteNow() -> bool
     .exposure_override = view_intent.render_settings.exposure,
   });
 
-  if (!scene_renderer.OnRender(render_context))
+  if (!scene_renderer.OnRender(render_context)) {
     return false;
+  }
   FinalizeOffscreenOutputProduct(*renderer_, *output_target_.framebuffer);
   return true;
 }
@@ -4013,7 +4111,9 @@ auto Renderer::ValidatedOffscreenSceneSession::ExecuteInsideFrame(
 
   auto camera_node = view_intent.camera.value();
   auto resolver = SceneCameraViewResolver {
-    [camera_node](const ViewId& /*view_id*/) { return camera_node; },
+    [camera_node](const ViewId& /*view_id*/) -> oxygen::scene::SceneNode {
+      return camera_node;
+    },
     view_intent.view.viewport,
     view_intent.view.scissor,
   };
@@ -4059,8 +4159,9 @@ auto Renderer::ValidatedOffscreenSceneSession::ExecuteInsideFrame(
     .exposure_override = view_intent.render_settings.exposure,
   });
 
-  if (!scene_renderer.OnRender(render_context))
+  if (!scene_renderer.OnRender(render_context)) {
     return false;
+  }
   FinalizeOffscreenOutputProduct(*renderer_, *output_target_.framebuffer);
 
   scene_renderer.OnFrameStart(frame_context);

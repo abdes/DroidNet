@@ -4,20 +4,22 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/OcclusionModule.h>
-
 #include <algorithm>
 #include <array>
 #include <cstdint>
 #include <cstring>
 #include <limits>
+#include <memory>
 #include <optional>
+#include <span>
+#include <utility>
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
-#include <Oxygen/Core/Constants.h>
+#include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
@@ -25,15 +27,21 @@
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Graphics/Common/ReadbackManager.h>
+#include <Oxygen/Graphics/Common/ReadbackTypes.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
+#include <Oxygen/Graphics/Common/Shaders.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
+#include <Oxygen/Profiling/ProfileScope.h>
 #include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
+#include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/OcclusionConfig.h>
+#include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/OcclusionModule.h>
+#include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/Types/OcclusionStats.h>
 #include <Oxygen/Vortex/Upload/TransientStructuredBuffer.h>
 
 namespace oxygen::vortex {

@@ -51,7 +51,7 @@ public:
 
 private:
   Renderer& renderer_;
-  std::vector<DrawCommand> draw_commands_ {};
+  std::vector<DrawCommand> draw_commands_;
 };
 
 } // namespace oxygen::vortex

@@ -5,15 +5,24 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <limits>
 #include <ranges>
+#include <span>
 #include <string>
+#include <string_view>
+#include <vector>
 
-#include <Oxygen/Testing/GTest.h>
-
+#include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Graphics/Common/Queues.h>
+#include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/QueueRole.h>
+#include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/RendererTag.h>
+#include <Oxygen/Vortex/Resources/TextureBinder.h>
+#include <Oxygen/Vortex/Test/Fakes/AssetLoader.h>
+#include <Oxygen/Vortex/Test/Fakes/Graphics.h>
 #include <Oxygen/Vortex/Test/Fixtures/TextureBinderPayloads.h>
 #include <Oxygen/Vortex/Test/Fixtures/TextureBinderTest.h>
 

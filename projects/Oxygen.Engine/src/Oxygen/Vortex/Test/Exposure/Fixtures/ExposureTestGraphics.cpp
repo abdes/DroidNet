@@ -4,17 +4,25 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestGraphics.h>
-
+#include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <string_view>
 #include <unordered_set>
 #include <utility>
 
-#include <Oxygen/Base/Logging.h>
+#include <d3d12.h>
+#include <nlohmann/json_fwd.hpp>
+
 #include <Oxygen/Graphics/Common/Buffer.h>
-#include <Oxygen/Graphics/Common/CommandList.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
+#include <Oxygen/Graphics/Common/CommandRecording.h>
+#include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
+#include <Oxygen/Graphics/Common/Shaders.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Direct3D12/Graphics.h>
+#include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestGraphics.h>
 
 namespace oxygen::vortex::testing::exposure {
 

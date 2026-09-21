@@ -4,13 +4,21 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <algorithm>
+#include <cstdint>
 #include <limits>
+#include <memory>
+#include <optional>
+#include <span>
+#include <string>
+#include <string_view>
+#include <tuple>
+#include <utility>
 #include <vector>
 
-#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
 #include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
@@ -18,16 +26,18 @@
 #include <Oxygen/Graphics/Common/Shaders.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
+#include <Oxygen/Profiling/ProfileScope.h>
 #include <Oxygen/Vortex/Internal/MeshRasterState.h>
 #include <Oxygen/Vortex/Internal/ViewportClamp.h>
 #include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
+#include <Oxygen/Vortex/SceneRenderer/DepthPrePassPolicy.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/DepthPrepass/DepthPrepassMeshProcessor.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/DepthPrepass/DepthPrepassModule.h>
-#include <Oxygen/Vortex/Types/PassMask.h>
 
 namespace oxygen::vortex {
 
@@ -185,6 +195,14 @@ namespace {
         scene_textures.GetVelocity()->GetDescriptor().format);
     }
 
+    const auto* const masked_debug_name = writes_velocity
+      ? "Vortex.DepthPrepass.MaskedVelocity"
+      : "Vortex.DepthPrepass.Masked";
+    const auto* const opaque_debug_name = writes_velocity
+      ? "Vortex.DepthPrepass.OpaqueVelocity"
+      : "Vortex.DepthPrepass.Opaque";
+    const auto* const debug_name
+      = raster_state.alpha_test ? masked_debug_name : opaque_debug_name;
     return graphics::GraphicsPipelineDesc::Builder {}
       .SetVertexShader(graphics::ShaderRequest {
         .stage = ShaderType::kVertex,
@@ -219,11 +237,7 @@ namespace {
       })
       .SetRootBindings(std::span<const graphics::RootBindingItem>(
         root_bindings.data(), root_bindings.size()))
-      .SetDebugName(raster_state.alpha_test
-          ? (writes_velocity ? "Vortex.DepthPrepass.MaskedVelocity"
-                             : "Vortex.DepthPrepass.Masked")
-          : (writes_velocity ? "Vortex.DepthPrepass.OpaqueVelocity"
-                             : "Vortex.DepthPrepass.Opaque"))
+      .SetDebugName(debug_name)
       .Build();
   }
 
@@ -314,7 +328,7 @@ DepthPrepassModule::DepthPrepassModule(
   : renderer_(renderer)
   , mesh_processor_(std::make_unique<DepthPrepassMeshProcessor>(renderer))
 {
-  static_cast<void>(scene_textures_config);
+  std::ignore = scene_textures_config;
 }
 
 DepthPrepassModule::~DepthPrepassModule() = default;

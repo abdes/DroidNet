@@ -13,13 +13,22 @@
 #include <utility>
 #include <vector>
 
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/PostProcess.h>
+#include <Oxygen/Core/Types/TextureType.h>
+#include <Oxygen/Data/MaterialDomain.h>
+#include <Oxygen/Data/PakFormat_core.h>
+#include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/TextureResource.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyLight.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Light/PointLight.h>
 #include <Oxygen/Scene/Light/SpotLight.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Vortex/SceneRenderer/DepthPrePassPolicy.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureGpuFixture.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureLightingFixture.h>
 #include <Oxygen/Vortex/Test/Fakes/AssetLoader.h>

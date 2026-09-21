@@ -4,19 +4,18 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <cstdint>
+#include <cstddef>
 #include <memory>
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <Oxygen/Content/ResourceKey.h>
+#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/RendererTag.h>
 #include <Oxygen/Vortex/ScenePrep/MaterialRef.h>
+#include <Oxygen/Vortex/Test/Fixtures/MaterialBinderTest.h>
 #include <Oxygen/Vortex/Types/MaterialShadingConstants.h>
 #include <Oxygen/Vortex/Upload/UploadCoordinator.h>
-
-#include <Oxygen/Vortex/Test/Fixtures/MaterialBinderTest.h>
 
 namespace {
 

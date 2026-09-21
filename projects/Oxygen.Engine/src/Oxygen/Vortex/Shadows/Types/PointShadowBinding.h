@@ -9,9 +9,10 @@
 #include <array>
 #include <cstddef>
 
-#include <Oxygen/Core/Constants.h>
 #include <glm/mat4x4.hpp>
 #include <glm/vec4.hpp>
+
+#include <Oxygen/Core/Constants.h>
 
 namespace oxygen::vortex {
 

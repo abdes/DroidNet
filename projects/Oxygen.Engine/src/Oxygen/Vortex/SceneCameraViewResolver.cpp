@@ -4,15 +4,21 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
+#include <cstdint>
 #include <functional>
+#include <optional>
 
-#include <glm/geometric.hpp>
-#include <glm/gtc/matrix_transform.hpp>
+#include <glm/ext/matrix_transform.hpp>
 
 #include <Oxygen/Core/Constants.h>
+#include <Oxygen/Core/Types/ResolvedView.h>
+#include <Oxygen/Core/Types/Scissors.h>
 #include <Oxygen/Core/Types/ViewHelpers.h>
+#include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Scene/Camera/Orthographic.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
+#include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Vortex/SceneCameraViewResolver.h>
 
 namespace oxygen::vortex {

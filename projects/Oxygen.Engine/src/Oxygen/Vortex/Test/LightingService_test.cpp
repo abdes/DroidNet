@@ -4,19 +4,23 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <array>
 #include <memory>
-#include <ranges>
+#include <span>
 #include <type_traits>
+#include <utility>
 
-#include <glm/vec3.hpp>
-
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Config/RendererConfig.h>
+#include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Types/ResolvedView.h>
+#include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Queues.h>
+#include <Oxygen/Graphics/Common/Types/QueueRole.h>
+#include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/Lighting/LightingService.h>
+#include <Oxygen/Vortex/Lighting/Types/DirectionalLightForwardData.h>
 #include <Oxygen/Vortex/Lighting/Types/FrameLightingInputs.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererCapability.h>

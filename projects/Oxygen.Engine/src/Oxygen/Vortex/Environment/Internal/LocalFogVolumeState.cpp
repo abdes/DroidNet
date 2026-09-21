@@ -4,22 +4,33 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Vortex/Environment/Internal/LocalFogVolumeState.h>
-
 #include <algorithm>
 #include <bit>
-#include <cmath>
 #include <cstdint>
+#include <span>
 #include <tuple>
+#include <vector>
 
-#include <glm/gtc/packing.hpp>
+#include <glm/common.hpp>
+#include <glm/ext/quaternion_common.hpp>
+#include <glm/ext/quaternion_geometric.hpp>
+#include <glm/ext/vector_float3.hpp>
+#include <glm/ext/vector_float4.hpp>
+#include <glm/geometric.hpp>
 #include <glm/gtc/quaternion.hpp>
+#include <glm/packing.hpp>
 
-#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Core/Types/ResolvedView.h>
+#include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Scene/Detail/TransformComponent.h>
 #include <Oxygen/Scene/Environment/LocalFogVolume.h>
 #include <Oxygen/Scene/Scene.h>
-#include <Oxygen/Scene/SceneTraversal.h>
+// Completes the traversal returned by Scene::Traverse().
+#include <Oxygen/Scene/SceneTraversal.h> // IWYU pragma: keep
+#include <Oxygen/Scene/Types/Traversal.h>
+#include <Oxygen/Vortex/Environment/Internal/LocalFogVolumeState.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
 
@@ -154,11 +165,13 @@ namespace {
         phase_g,
       }),
     };
-    instance.extinction_falloff_offset
-      = { radial_fog_extinction, height_fog_extinction,
-          std::max(height_fog_falloff, kLocalFogSafeFalloffThreshold)
-            * kLocalFogFalloffScaleUi,
-          local_fog.GetHeightFogOffset() };
+    instance.extinction_falloff_offset = {
+      radial_fog_extinction,
+      height_fog_extinction,
+      std::max(height_fog_falloff, kLocalFogSafeFalloffThreshold)
+        * kLocalFogFalloffScaleUi,
+      local_fog.GetHeightFogOffset(),
+    };
     instance.emissive = { emissive.x, emissive.y, emissive.z, 0.0F };
     return instance;
   }
@@ -231,7 +244,7 @@ auto LocalFogVolumeState::Prepare(RenderContext& ctx) -> ViewProducts&
   }
 
   const auto scene_ptr = ctx.GetScene();
-  const auto resolved_view = ctx.current_view.resolved_view.get();
+  const auto* const resolved_view = ctx.current_view.resolved_view.get();
   if (ctx.current_view.view_id == kInvalidViewId || scene_ptr == nullptr
     || resolved_view == nullptr) {
     return current_products_;
@@ -243,7 +256,7 @@ auto LocalFogVolumeState::Prepare(RenderContext& ctx) -> ViewProducts&
   current_products_.max_instances_per_tile = max_instances_per_tile;
 
   auto gathered_instances = std::vector<SortedLocalFogVolume> {};
-  static_cast<void>(scene_ptr->Traverse().Traverse(
+  std::ignore = scene_ptr->Traverse().Traverse(
     [&gathered_instances, resolved_view](const scene::ConstVisitedNode& visited,
       const bool dry_run) -> scene::VisitResult {
       if (dry_run || visited.node_impl == nullptr) {
@@ -276,12 +289,11 @@ auto LocalFogVolumeState::Prepare(RenderContext& ctx) -> ViewProducts&
       };
       gathered_instances.push_back(gathered);
       return scene::VisitResult::kContinue;
-    }));
+    });
 
   std::ranges::sort(gathered_instances,
-    [](const SortedLocalFogVolume& lhs, const SortedLocalFogVolume& rhs) {
-      return lhs.sort_key < rhs.sort_key;
-    });
+    [](const SortedLocalFogVolume& lhs, const SortedLocalFogVolume& rhs)
+      -> bool { return lhs.sort_key < rhs.sort_key; });
 
   const auto instance_count_total
     = static_cast<std::uint32_t>(gathered_instances.size());

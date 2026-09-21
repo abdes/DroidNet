@@ -37,8 +37,9 @@ enum class MotionPublicationCapabilityBits : std::uint32_t {
   return (flags & static_cast<std::uint32_t>(bits)) != 0U;
 }
 
-constexpr std::uint32_t kInvalidVelocityPublicationIndex { (
-  std::numeric_limits<std::uint32_t>::max)() };
+constexpr std::uint32_t kInvalidVelocityPublicationIndex {
+  (std::numeric_limits<std::uint32_t>::max)(),
+};
 
 enum class VelocityDrawPublicationFlagBits : std::uint32_t {
   kCurrentSkinnedPoseValid = 1U << 0U,
@@ -96,19 +97,19 @@ static_assert(sizeof(MotionVectorStatusPublication) == 32U);
 struct alignas(packing::kShaderDataFieldAlignment) VelocityDrawMetadata {
   std::uint32_t current_skinned_pose_index { kInvalidVelocityPublicationIndex };
   std::uint32_t previous_skinned_pose_index {
-    kInvalidVelocityPublicationIndex
+    kInvalidVelocityPublicationIndex,
   };
   std::uint32_t current_morph_index { kInvalidVelocityPublicationIndex };
   std::uint32_t previous_morph_index { kInvalidVelocityPublicationIndex };
   std::uint32_t current_material_wpo_index { kInvalidVelocityPublicationIndex };
   std::uint32_t previous_material_wpo_index {
-    kInvalidVelocityPublicationIndex
+    kInvalidVelocityPublicationIndex,
   };
   std::uint32_t current_motion_vector_status_index {
-    kInvalidVelocityPublicationIndex
+    kInvalidVelocityPublicationIndex,
   };
   std::uint32_t previous_motion_vector_status_index {
-    kInvalidVelocityPublicationIndex
+    kInvalidVelocityPublicationIndex,
   };
   std::uint32_t publication_flags { 0U };
   std::array<std::uint32_t, 3U> _pad_to_16 {};

@@ -6,15 +6,28 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
+#include <cstdint>
 #include <cstring>
+#include <limits>
+#include <memory>
+#include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
-#include <glm/vec3.hpp>
-#include <glm/vec4.hpp>
+#include <glm/ext/matrix_float4x4.hpp>
+#include <glm/ext/vector_float3.hpp>
+#include <glm/ext/vector_float4.hpp>
+#include <glm/ext/vector_uint4.hpp>
+#include <glm/geometric.hpp>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
+#include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Constants.h>
+#include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
@@ -24,9 +37,13 @@
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Shaders.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
+#include <Oxygen/Profiling/ProfileScope.h>
 #include <Oxygen/Vortex/Internal/ViewportClamp.h>
+#include <Oxygen/Vortex/Lighting/Internal/DeferredLightPacketBuilder.h>
 #include <Oxygen/Vortex/Lighting/Internal/DeferredLightProxyGeometry.h>
 #include <Oxygen/Vortex/Lighting/Passes/DeferredLightPass.h>
 #include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
@@ -34,6 +51,8 @@
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
 #include <Oxygen/Vortex/ShaderDebugMode.h>
+#include <Oxygen/Vortex/Types/FrameLightSelection.h>
+#include <Oxygen/Vortex/Types/ShadowFrameBindings.h>
 
 namespace oxygen::vortex::lighting {
 
@@ -67,7 +86,7 @@ namespace {
     glm::vec4 atmosphere_transmittance_and_padding { 1.0F, 1.0F, 1.0F, 0.0F };
     std::uint32_t light_type { 0U };
     std::uint32_t light_geometry_vertices_srv {
-      kInvalidShaderVisibleIndex.get()
+      kInvalidShaderVisibleIndex.get(),
     };
     std::uint32_t light_geometry_vertex_count { 0U };
     std::uint32_t _padding0 { 0U };
@@ -77,7 +96,7 @@ namespace {
     internal::DeferredLightPacket packet {};
     DeferredLightKind kind { DeferredLightKind::kDirectional };
     DeferredLocalLightDrawMode draw_mode {
-      DeferredLocalLightDrawMode::kOutsideVolume
+      DeferredLocalLightDrawMode::kOutsideVolume,
     };
     ShaderVisibleIndex geometry_srv { kInvalidShaderVisibleIndex };
     std::uint32_t geometry_vertex_count { 0U };
@@ -481,15 +500,35 @@ namespace {
     auto root_bindings = BuildVortexRootBindings();
     const auto direct_local_light
       = draw_mode != DeferredLocalLightDrawMode::kOutsideVolume;
-    const auto source_path = light_kind == DeferredLightKind::kPoint
+    const auto* const source_path = light_kind == DeferredLightKind::kPoint
       ? "Vortex/Services/Lighting/DeferredLightPoint.hlsl"
       : "Vortex/Services/Lighting/DeferredLightSpot.hlsl";
-    const auto vertex_entry = light_kind == DeferredLightKind::kPoint
+    const auto* const vertex_entry = light_kind == DeferredLightKind::kPoint
       ? "DeferredLightPointVS"
       : "DeferredLightSpotVS";
-    const auto pixel_entry = light_kind == DeferredLightKind::kPoint
+    const auto* const pixel_entry = light_kind == DeferredLightKind::kPoint
       ? "DeferredLightPointPS"
       : "DeferredLightSpotPS";
+    const auto* const outside_volume_name
+      = light_kind == DeferredLightKind::kPoint
+      ? "Vortex.DeferredLight.Point.Lighting"
+      : "Vortex.DeferredLight.Spot.Lighting";
+    const auto* const non_perspective_name
+      = light_kind == DeferredLightKind::kPoint
+      ? "Vortex.DeferredLight.Point.NonPerspectiveLighting"
+      : "Vortex.DeferredLight.Spot.NonPerspectiveLighting";
+    const auto* const inside_volume_name
+      = light_kind == DeferredLightKind::kPoint
+      ? "Vortex.DeferredLight.Point.InsideVolumeLighting"
+      : "Vortex.DeferredLight.Spot.InsideVolumeLighting";
+    const auto* const exterior_lighting_name
+      = draw_mode == DeferredLocalLightDrawMode::kNonPerspective
+      ? non_perspective_name
+      : outside_volume_name;
+    const auto* const debug_name
+      = draw_mode == DeferredLocalLightDrawMode::kCameraInsideVolume
+      ? inside_volume_name
+      : exterior_lighting_name;
 
     auto depth_stencil = graphics::DepthStencilStateDesc {
       .depth_test_enable = true,
@@ -533,17 +572,7 @@ namespace {
     })
     .SetRootBindings(std::span<const graphics::RootBindingItem>(
       root_bindings.data(), root_bindings.size()))
-    .SetDebugName(light_kind == DeferredLightKind::kPoint
-        ? (draw_mode == DeferredLocalLightDrawMode::kCameraInsideVolume
-              ? "Vortex.DeferredLight.Point.InsideVolumeLighting"
-              : (draw_mode == DeferredLocalLightDrawMode::kNonPerspective
-                    ? "Vortex.DeferredLight.Point.NonPerspectiveLighting"
-                    : "Vortex.DeferredLight.Point.Lighting"))
-        : (draw_mode == DeferredLocalLightDrawMode::kCameraInsideVolume
-              ? "Vortex.DeferredLight.Spot.InsideVolumeLighting"
-              : (draw_mode == DeferredLocalLightDrawMode::kNonPerspective
-                    ? "Vortex.DeferredLight.Spot.NonPerspectiveLighting"
-                    : "Vortex.DeferredLight.Spot.Lighting")))
+    .SetDebugName(debug_name)
     .Build();
   }
 
@@ -567,8 +596,11 @@ DeferredLightPass::~DeferredLightPass()
     deferred_light_constants_buffer_->UnMap();
     deferred_light_constants_mapped_ptr_ = nullptr;
   }
-  for (auto* buffer : { deferred_light_constants_buffer_.get(),
-         point_geometry_buffer_.get(), spot_geometry_buffer_.get() }) {
+  for (auto* buffer : {
+         deferred_light_constants_buffer_.get(),
+         point_geometry_buffer_.get(),
+         spot_geometry_buffer_.get(),
+       }) {
     if (buffer != nullptr && registry.Contains(*buffer)) {
       registry.UnRegisterResource(*buffer);
     }
@@ -769,7 +801,7 @@ auto DeferredLightPass::Record(RenderContext& ctx,
             .visibility = graphics::DescriptorVisibility::kShaderVisible,
             .range
             = { static_cast<std::uint64_t>(i) * kDeferredLightConstantsStride,
-              kDeferredLightConstantsStride },
+              kDeferredLightConstantsStride, },
           }));
     }
     deferred_light_constants_slot_count_ = required_slots;
@@ -893,7 +925,8 @@ auto DeferredLightPass::Record(RenderContext& ctx,
   const auto view_constants_param
     = static_cast<std::uint32_t>(bindless_d3d12::RootParam::kViewConstants);
   const auto reverse_z = IsReverseZ(ctx);
-  const auto bind_common_root_parameters = [&](const ShaderVisibleIndex index) {
+  const auto bind_common_root_parameters
+    = [&](const ShaderVisibleIndex index) -> void {
     recorder.SetGraphicsRootConstantBufferView(
       view_constants_param, ctx.view_constants->GetGPUVirtualAddress());
     recorder.SetGraphicsRoot32BitConstant(root_constants_param, 0U, 0U);

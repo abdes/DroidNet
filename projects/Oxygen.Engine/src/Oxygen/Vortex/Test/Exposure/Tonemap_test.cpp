@@ -13,10 +13,18 @@
 #include <cstdlib>
 #include <memory>
 #include <span>
+#include <stdlib.h>
 #include <vector>
 
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/Scene/ExposureSettings.h>
+#include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/PostProcess/PostProcessService.h>
+#include <Oxygen/Vortex/PostProcess/Types/PostProcessConfig.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureGpuFixture.h>
@@ -30,7 +38,7 @@ using graphics::ResourceStates;
 NOLINT_TEST_F(ExposureGpuTest, ExternalBloomUsesFrameDomainAndHonorsDisable)
 {
   auto service = PostProcessService(*renderer_);
-  auto textures = SceneTextures(Backend(), { .extent = { 4U, 4U, }, });
+  auto textures = SceneTextures(Backend(), { .extent = { 4U, 4U } });
   unsigned cases = 0;
   for (const float ev : {
          -16.0F,

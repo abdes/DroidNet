@@ -4,11 +4,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -23,27 +22,39 @@
 
 #include <glm/ext/scalar_constants.hpp>
 #include <glm/geometric.hpp>
-#include <glm/mat4x4.hpp>
-#include <glm/vec2.hpp>
-#include <glm/vec3.hpp>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Config/RendererConfig.h>
+#include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/ResolvedView.h>
+#include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Core/Types/ViewHelpers.h>
+#include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
+#include <Oxygen/Graphics/Common/Types/QueueRole.h>
+#include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererCapability.h>
+#include <Oxygen/Vortex/SceneRenderer/Stages/DepthPrepass/DepthPrepassMeshProcessor.h>
 #include <Oxygen/Vortex/Shadows/Internal/CascadeShadowSetup.h>
 #include <Oxygen/Vortex/Shadows/Internal/ConventionalShadowTargetAllocator.h>
 #include <Oxygen/Vortex/Shadows/Internal/PointShadowSetup.h>
 #include <Oxygen/Vortex/Shadows/Internal/SpotShadowSetup.h>
 #include <Oxygen/Vortex/Shadows/Passes/ShadowDepthPass.h>
 #include <Oxygen/Vortex/Shadows/ShadowService.h>
+#include <Oxygen/Vortex/Shadows/Types/DirectionalShadowFrameData.h>
 #include <Oxygen/Vortex/Shadows/Types/FrameShadowInputs.h>
+#include <Oxygen/Vortex/Shadows/Types/PointShadowBinding.h>
+#include <Oxygen/Vortex/Shadows/Types/ShadowCascadeBinding.h>
+#include <Oxygen/Vortex/Shadows/Types/SpotShadowBinding.h>
 #include <Oxygen/Vortex/Test/Fakes/Graphics.h>
 #include <Oxygen/Vortex/Test/Fixtures/MeshRasterStateTest.h>
 #include <Oxygen/Vortex/Types/FrameLightSelection.h>
+#include <Oxygen/Vortex/Types/PassMask.h>
 #include <Oxygen/Vortex/Types/ShadowFrameBindings.h>
 
 namespace {
@@ -355,7 +366,7 @@ NOLINT_TEST(ShadowServiceSurfaceTest,
     .cascade_count = 4U,
     .cascade_split_mode = FrameDirectionalCsmSplitMode::kManualDistances,
     .max_shadow_distance = 128.0F,
-    .cascade_distances = { 16.0F, 32.0F, 64.0F, 128.0F, },
+    .cascade_distances = { 16.0F, 32.0F, 64.0F, 128.0F },
     .transition_fraction = 0.2F,
     .distance_fadeout_fraction = 0.15F,
     .shadow_bias = 0.001F,
@@ -621,7 +632,7 @@ NOLINT_TEST(ShadowServiceSurfaceTest,
     .cascade_count = 3U,
     .cascade_split_mode = FrameDirectionalCsmSplitMode::kManualDistances,
     .max_shadow_distance = 40.0F,
-    .cascade_distances = { 10.0F, 20.0F, 40.0F, 40.0F, },
+    .cascade_distances = { 10.0F, 20.0F, 40.0F, 40.0F },
     .transition_fraction = 0.25F,
     .distance_fadeout_fraction = 0.1F,
   };

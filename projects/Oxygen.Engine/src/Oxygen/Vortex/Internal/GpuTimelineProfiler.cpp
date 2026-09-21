@@ -7,19 +7,38 @@
 #include <algorithm>
 #include <atomic>
 #include <condition_variable>
+#include <cstdint>
 #include <cstring>
+#include <deque>
+#include <exception>
+#include <filesystem>
 #include <fstream>
+#include <ios>
 #include <limits>
+#include <memory>
+#include <mutex>
+#include <optional>
+#include <ostream>
+#include <span>
+#include <string>
+#include <string_view>
 #include <thread>
+#include <tuple>
+#include <utility>
+#include <vector>
 
 #include <fmt/format.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/TimestampQueryProvider.h>
 #include <Oxygen/Graphics/Common/Types/QueueRole.h>
+#include <Oxygen/Profiling/ProfileScope.h>
 #include <Oxygen/Vortex/Internal/GpuTimelineProfiler.h>
 
 namespace {
@@ -214,7 +233,7 @@ public:
       "\"requested_frames\": {},\n\"serialization\": \"worker\",\n"
       "\"queue_capacity_frames\": {},\n\"frames\": [\n",
       first_frame, frame_count, kMaximumQueuedFrames);
-    worker_ = std::jthread([this]() { WriteFrames(); });
+    worker_ = std::jthread([this] -> void { WriteFrames(); });
   }
 
   ~RecordingExportSink() override
@@ -274,8 +293,8 @@ private:
         auto frame = oxygen::vortex::internal::GpuTimelineFrame {};
         {
           auto lock = std::unique_lock(queue_mutex_);
-          queue_ready_.wait(
-            lock, [this]() { return producer_done_ || !pending_.empty(); });
+          queue_ready_.wait(lock,
+            [this] -> bool { return producer_done_ || !pending_.empty(); });
           if (pending_.empty()) {
             break;
           }
@@ -290,8 +309,8 @@ private:
         timing_valid_ = timing_valid_ && frame.profiling_enabled
           && !frame.overflowed && frame.timestamp_frequency_hz != 0U
           && !frame.scopes.empty() && frame.diagnostics.empty()
-          && std::ranges::all_of(
-            frame.scopes, [](const auto& scope) { return scope.valid; });
+          && std::ranges::all_of(frame.scopes,
+            [](const auto& scope) -> auto { return scope.valid; });
       }
       const auto complete = written_frames_ == seen_.size();
       output_ << fmt::format(
@@ -625,8 +644,9 @@ auto GpuTimelineProfiler::ConsumePreviousFrame() -> void
 {
   auto queue = ResolveGraphicsQueue();
   auto provider = ResolveTimestampProvider();
-  if (queue == nullptr || provider == nullptr)
+  if (queue == nullptr || provider == nullptr) {
     return;
+  }
 
   const auto completed = queue->GetCompletedValue();
   while (!pending_frames_.empty()
@@ -659,13 +679,15 @@ auto GpuTimelineProfiler::ResetForFrame(
   frame_capture_.diagnostics.clear();
   frame_capture_.scopes.clear();
   scope_stack_.clear();
-  if (pending_frames_.empty())
+  if (pending_frames_.empty()) {
     interned_names_.clear();
+  }
 
   auto queue = ResolveGraphicsQueue();
   auto provider = ResolveTimestampProvider();
-  if (!enabled_ || queue == nullptr || provider == nullptr)
+  if (!enabled_ || queue == nullptr || provider == nullptr) {
     return;
+  }
 
   const auto requested_stride = max_scopes_per_frame_ * 2U;
   if (requested_stride > query_stride_) {
@@ -687,10 +709,12 @@ auto GpuTimelineProfiler::ResetForFrame(
   auto slot = uint32_t { 0U };
   for (; slot < kCaptureSlots; ++slot) {
     const auto offset = slot * query_stride_;
-    if (std::ranges::none_of(pending_frames_, [offset](const auto& capture) {
-          return capture.query_offset == offset;
-        }))
+    if (std::ranges::none_of(
+          pending_frames_, [offset](const auto& capture) -> auto {
+            return capture.query_offset == offset;
+          })) {
       break;
+    }
   }
   if (slot == kCaptureSlots) {
     AddDiagnostic("gpu.timestamp.capture_backlog",
@@ -825,7 +849,7 @@ auto GpuTimelineProfiler::InternName(const std::string_view name) -> const char*
 {
   const auto key = std::string(name);
   const auto [it, inserted] = interned_names_.try_emplace(key, HashName(name));
-  static_cast<void>(inserted);
+  std::ignore = inserted;
   return it->first.c_str();
 }
 

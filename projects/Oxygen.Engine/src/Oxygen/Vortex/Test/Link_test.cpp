@@ -7,6 +7,9 @@
 #include <exception>
 #include <iostream>
 #include <memory>
+#include <utility>
+
+#include "Fakes/Graphics.h"
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Config/RendererConfig.h>
@@ -15,11 +18,12 @@
 #include <Oxygen/Core/Time/SimulationClock.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Queues.h>
+#include <Oxygen/Graphics/Common/Types/QueueRole.h>
+#include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
 #include <Oxygen/Vortex/Renderer.h>
-
-#include "Fakes/Graphics.h"
+#include <Oxygen/Vortex/RendererCapability.h>
 
 namespace oxygen::engine::internal {
 struct EngineTagFactory {
@@ -72,7 +76,7 @@ auto RunFrameHooks(Renderer& renderer, FrameContext& frame_context) -> void
   // Synchronous execution finishes while the session-owned closure and its
   // captured test locals are alive.
   // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
-  oxygen::co::Run(loop, [&]() -> oxygen::co::Co<void> {
+  oxygen::co::Run(loop, [&] -> oxygen::co::Co<void> {
     co_await renderer.OnTransformPropagation(frame);
     co_await renderer.OnPreRender(frame);
     co_await renderer.OnRender(frame);

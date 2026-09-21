@@ -4,8 +4,17 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <atomic>
+#include <cstddef>
+#include <memory>
+#include <string_view>
+
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/Types/ByteUnits.h>
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
+#include <Oxygen/Vortex/RendererTag.h>
 #include <Oxygen/Vortex/Upload/InlineTransfersCoordinator.h>
 #include <Oxygen/Vortex/Upload/StagingProvider.h>
 #include <Oxygen/Vortex/Upload/UploaderTag.h>

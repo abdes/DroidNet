@@ -4,15 +4,28 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstdint>
+#include <exception>
+#include <expected>
+#include <memory>
+#include <optional>
+#include <string_view>
 #include <system_error>
+#include <utility>
+
+#include <fmt/format.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
 #include <Oxygen/Graphics/Common/Errors.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
+#include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
+#include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
+#include <Oxygen/Vortex/Upload/Types.h>
 #include <Oxygen/Vortex/Upload/UploadHelpers.h>
 
 using oxygen::graphics::GraphicsError;

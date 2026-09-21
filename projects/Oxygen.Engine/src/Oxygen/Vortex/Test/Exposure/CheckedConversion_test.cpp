@@ -14,17 +14,33 @@
 #include <memory>
 #include <optional>
 #include <span>
+#include <tuple>
 #include <utility>
 #include <vector>
 
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/PostProcess.h>
+#include <Oxygen/Core/Types/TextureType.h>
+#include <Oxygen/Graphics/Common/CommandRecording.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/FrameCaptureController.h>
+#include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
+#include <Oxygen/Graphics/Common/Types/QueueRole.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Scene/Environment/Background.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
+#include <Oxygen/Scene/ExposureSettings.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/Internal/RetainedTexturePool.h>
 #include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
 #include <Oxygen/Vortex/PostProcess/PostProcessService.h>
+#include <Oxygen/Vortex/PostProcess/Types/PostProcessConfig.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureGpuFixture.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestGraphics.h>
@@ -78,7 +94,8 @@ NOLINT_TEST_F(ExposureGpuTest,
     bool zero_meter_mask;
   };
   const std::array cases {
-    Case { .name = "ordinary",
+    Case {
+      .name = "ordinary",
       .pixel = ordinary,
       .ev = 0,
       .fp32 = true,
@@ -86,62 +103,76 @@ NOLINT_TEST_F(ExposureGpuTest,
       .failure = 0U,
       .last_pixel = expected,
       .automatic = false,
-      .zero_meter_mask = false, },
-    Case { .name = "typed half rounding",
-      .pixel = { 1.500732421875F, 1.500244140625F, 1.50048828125F, 1.0F, },
+      .zero_meter_mask = false,
+    },
+    Case {
+      .name = "typed half rounding",
+      .pixel = { 1.500732421875F, 1.500244140625F, 1.50048828125F, 1.0F },
       .ev = 0,
       .fp32 = true,
       .background = false,
       .failure = 0U,
-      .last_pixel = { 0x3e01U, 0x3e00U, 0x3e00U, 0x3c00U, },
+      .last_pixel = { 0x3e01U, 0x3e00U, 0x3e00U, 0x3c00U },
       .automatic = false,
-      .zero_meter_mask = false, },
-    Case { .name = "odd tie and exponent boundary",
-      .pixel = { 1.50146484375F, 8198.0F, 1.99951171875F, 1.0F, },
+      .zero_meter_mask = false,
+    },
+    Case {
+      .name = "odd tie and exponent boundary",
+      .pixel = { 1.50146484375F, 8198.0F, 1.99951171875F, 1.0F },
       .ev = 0,
       .fp32 = true,
       .background = false,
       .failure = 0U,
-      .last_pixel = { 0x3e02U, 0x7001U, 0x4000U, 0x3c00U, },
+      .last_pixel = { 0x3e02U, 0x7001U, 0x4000U, 0x3c00U },
       .automatic = false,
-      .zero_meter_mask = false, },
-    Case { .name = "subnormal nearest even",
-      .pixel = { 1.75F * 0x1p-24F, 2.5F * 0x1p-24F, 3.5F * 0x1p-24F, 0.0F, },
+      .zero_meter_mask = false,
+    },
+    Case {
+      .name = "subnormal nearest even",
+      .pixel = { 1.75F * 0x1p-24F, 2.5F * 0x1p-24F, 3.5F * 0x1p-24F, 0.0F },
       .ev = 0,
       .fp32 = true,
       .background = false,
       .failure = 0U,
-      .last_pixel = { 2U, 2U, 4U, 0U, },
+      .last_pixel = { 2U, 2U, 4U, 0U },
       .automatic = false,
-      .zero_meter_mask = true, },
-    Case { .name = "overflow",
-      .pixel = { 0x1p20F, 0x1p20F, 0x1p20F, 1, },
+      .zero_meter_mask = true,
+    },
+    Case {
+      .name = "overflow",
+      .pixel = { 0x1p20F, 0x1p20F, 0x1p20F, 1 },
       .ev = 0,
       .fp32 = true,
       .background = false,
       .failure = 2U,
       .last_pixel = sentinel,
       .automatic = false,
-      .zero_meter_mask = false, },
-    Case { .name = "nonfinite",
-      .pixel = { std::numeric_limits<float>::quiet_NaN(), 0, 0, 1, },
+      .zero_meter_mask = false,
+    },
+    Case {
+      .name = "nonfinite",
+      .pixel = { std::numeric_limits<float>::quiet_NaN(), 0, 0, 1 },
       .ev = 0,
       .fp32 = true,
       .background = false,
       .failure = 1U,
       .last_pixel = sentinel,
       .automatic = false,
-      .zero_meter_mask = false, },
-    Case { .name = "displayed dark loss",
-      .pixel = { 0x1p-30F, 0x1p-30F, 0x1p-30F, 1, },
+      .zero_meter_mask = false,
+    },
+    Case {
+      .name = "displayed dark loss",
+      .pixel = { 0x1p-30F, 0x1p-30F, 0x1p-30F, 1 },
       .ev = -30,
       .fp32 = true,
       .background = false,
       .failure = 4U,
       .last_pixel = sentinel,
       .automatic = false,
-      .zero_meter_mask = false, },
-    Case { .name = "nonunit P",
+      .zero_meter_mask = false,
+    },
+    Case {
+      .name = "nonunit P",
       .pixel = ordinary,
       .ev = -2,
       .fp32 = false,
@@ -149,43 +180,52 @@ NOLINT_TEST_F(ExposureGpuTest,
       .failure = 0U,
       .last_pixel = expected,
       .automatic = false,
-      .zero_meter_mask = false, },
-    Case { .name = "opaque zero alpha",
-      .pixel = { sensitive, sensitive, sensitive, 0, },
+      .zero_meter_mask = false,
+    },
+    Case {
+      .name = "opaque zero alpha",
+      .pixel = { sensitive, sensitive, sensitive, 0 },
       .ev = 0,
       .fp32 = true,
       .background = false,
       .failure = 8U,
       .last_pixel = sentinel,
       .automatic = true,
-      .zero_meter_mask = false, },
-    Case { .name = "background zero alpha",
-      .pixel = { sensitive, sensitive, sensitive, 0, },
+      .zero_meter_mask = false,
+    },
+    Case {
+      .name = "background zero alpha",
+      .pixel = { sensitive, sensitive, sensitive, 0 },
       .ev = 0,
       .fp32 = true,
       .background = true,
       .failure = 0U,
-      .last_pixel = { 0x0100U, 0x0100U, 0x0100U, 0U, },
+      .last_pixel = { 0x0100U, 0x0100U, 0x0100U, 0U },
       .automatic = true,
-      .zero_meter_mask = false, },
-    Case { .name = "opaque partial alpha",
-      .pixel = { sensitive, sensitive, sensitive, .5F, },
+      .zero_meter_mask = false,
+    },
+    Case {
+      .name = "opaque partial alpha",
+      .pixel = { sensitive, sensitive, sensitive, .5F },
       .ev = 0,
       .fp32 = true,
       .background = false,
       .failure = 8U,
       .last_pixel = sentinel,
       .automatic = true,
-      .zero_meter_mask = false, },
-    Case { .name = "background partial alpha",
-      .pixel = { sensitive, sensitive, sensitive, .5F, },
+      .zero_meter_mask = false,
+    },
+    Case {
+      .name = "background partial alpha",
+      .pixel = { sensitive, sensitive, sensitive, .5F },
       .ev = 0,
       .fp32 = true,
       .background = true,
       .failure = 8U,
       .last_pixel = sentinel,
       .automatic = true,
-      .zero_meter_mask = false, },
+      .zero_meter_mask = false,
+    },
   };
   for (const auto& test_case : cases) {
     SCOPED_TRACE(test_case.name);
@@ -242,10 +282,12 @@ NOLINT_TEST_F(ExposureGpuTest,
       recorder->RequireResourceState(*destination, ResourceStates::kCopyDest);
       recorder->FlushBarriers();
       recorder->CopyBufferToTexture(*upload,
-        { .buffer_offset = 0U,
+        {
+          .buffer_offset = 0U,
           .buffer_row_pitch = 256U,
           .buffer_slice_pitch = static_cast<std::uint64_t>(height) * 256U,
-          .dst_slice = { .width = width, .height = height, .depth = 1U, }, },
+          .dst_slice = { .width = width, .height = height, .depth = 1U },
+        },
         *destination);
       recorder->RequireResourceStateFinal(
         *destination, ResourceStates::kShaderResource);
@@ -474,11 +516,11 @@ NOLINT_TEST_F(ExposureGpuTest,
     config.bloom_intensity = test_case.bloom ? .5F : 0.0F;
     service.SetResolvedConfig(service.BuildPassConfig(
       config, ctx_.current_view.view_id, ctx_.current_view.view_state_handle));
-    static_cast<void>(service.SelectPrecisionCandidate(ctx_,
+    std::ignore = service.SelectPrecisionCandidate(ctx_,
       {
         .product_layout_revision = 1U,
         .expected_products = 1024U,
-      }));
+      });
     const auto frame = SubmitCommands("Vortex Exposure Frame",
       [&](graphics::CommandRecorder& recorder) -> auto {
         return service.PrepareFrameExposure(ctx_, recorder, test_case.fp32);
@@ -562,10 +604,12 @@ NOLINT_TEST_F(ExposureGpuTest,
       recorder->RequireResourceState(*destination, ResourceStates::kCopyDest);
       recorder->FlushBarriers();
       recorder->CopyBufferToTexture(*upload,
-        { .buffer_offset = 0U,
+        {
+          .buffer_offset = 0U,
           .buffer_row_pitch = 256U,
           .buffer_slice_pitch = 1024U,
-          .dst_slice = { .width = 4U, .height = 4U, .depth = 1U, }, },
+          .dst_slice = { .width = 4U, .height = 4U, .depth = 1U },
+        },
         *destination);
       recorder->RequireResourceStateFinal(
         *destination, ResourceStates::kShaderResource);
@@ -751,10 +795,12 @@ NOLINT_TEST_F(
     recorder->RequireResourceState(*destination, ResourceStates::kCopyDest);
     recorder->FlushBarriers();
     recorder->CopyBufferToTexture(*upload,
-      { .buffer_offset = 0U,
+      {
+        .buffer_offset = 0U,
         .buffer_row_pitch = 256U,
         .buffer_slice_pitch = 1024U,
-        .dst_slice = { .width = 4U, .height = 4U, .depth = 1U, }, },
+        .dst_slice = { .width = 4U, .height = 4U, .depth = 1U },
+      },
       *destination);
     recorder->RequireResourceStateFinal(
       *destination, ResourceStates::kCopySource);
@@ -796,11 +842,11 @@ NOLINT_TEST_F(
   config.bloom_intensity = 0.0F;
   service.SetResolvedConfig(service.BuildPassConfig(
     config, ctx_.current_view.view_id, ctx_.current_view.view_state_handle));
-  static_cast<void>(service.SelectPrecisionCandidate(ctx_,
+  std::ignore = service.SelectPrecisionCandidate(ctx_,
     {
       .product_layout_revision = 1U,
       .expected_products = 1024U,
-    }));
+    });
   const auto frame = SubmitCommands(
     "Vortex Exposure Frame", [&](graphics::CommandRecorder& recorder) -> auto {
       return service.PrepareFrameExposure(ctx_, recorder, true);

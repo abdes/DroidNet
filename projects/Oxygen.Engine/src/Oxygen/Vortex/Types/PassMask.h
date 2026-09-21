@@ -150,19 +150,21 @@ inline auto to_string(PassMask mask) -> std::string
     PassMaskBit flag;
     std::string_view name;
   };
-  static constexpr std::array<Entry, 11> kTable = { {
-    { .flag = PassMaskBit::kDoubleSided, .name = "DoubleSided" },
-    { .flag = PassMaskBit::kOpaque, .name = "Opaque" },
-    { .flag = PassMaskBit::kMasked, .name = "Masked" },
-    { .flag = PassMaskBit::kTransparent, .name = "Transparent" },
-    { .flag = PassMaskBit::kAdditive, .name = "Additive" },
-    { .flag = PassMaskBit::kTransmission, .name = "Transmission" },
-    { .flag = PassMaskBit::kDecal, .name = "Decal" },
-    { .flag = PassMaskBit::kUi, .name = "UI" },
-    { .flag = PassMaskBit::kShadowCaster, .name = "ShadowCaster" },
-    { .flag = PassMaskBit::kMainViewVisible, .name = "MainViewVisible" },
-    { .flag = PassMaskBit::kReverseWinding, .name = "ReverseWinding" },
-  } };
+  static constexpr std::array<Entry, 11> kTable = {
+    {
+      { .flag = PassMaskBit::kDoubleSided, .name = "DoubleSided" },
+      { .flag = PassMaskBit::kOpaque, .name = "Opaque" },
+      { .flag = PassMaskBit::kMasked, .name = "Masked" },
+      { .flag = PassMaskBit::kTransparent, .name = "Transparent" },
+      { .flag = PassMaskBit::kAdditive, .name = "Additive" },
+      { .flag = PassMaskBit::kTransmission, .name = "Transmission" },
+      { .flag = PassMaskBit::kDecal, .name = "Decal" },
+      { .flag = PassMaskBit::kUi, .name = "UI" },
+      { .flag = PassMaskBit::kShadowCaster, .name = "ShadowCaster" },
+      { .flag = PassMaskBit::kMainViewVisible, .name = "MainViewVisible" },
+      { .flag = PassMaskBit::kReverseWinding, .name = "ReverseWinding" },
+    },
+  };
   std::string out;
   for (const auto& e : kTable) {
     if (mask.IsSet(e.flag)) {

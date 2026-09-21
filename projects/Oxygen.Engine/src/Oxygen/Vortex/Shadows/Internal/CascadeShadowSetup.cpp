@@ -4,21 +4,26 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Vortex/Shadows/Internal/CascadeShadowSetup.h>
-
 #include <algorithm>
 #include <array>
 #include <cmath>
-#include <limits>
+#include <cstddef>
+#include <cstdint>
 
-#include <glm/ext/matrix_clip_space.hpp>
+#include <glm/ext/matrix_float4x4.hpp>
 #include <glm/ext/matrix_transform.hpp>
+#include <glm/ext/vector_float3.hpp>
 #include <glm/geometric.hpp>
 #include <glm/matrix.hpp>
 
-#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Core/Types/ViewHelpers.h>
 #include <Oxygen/Scene/Light/LightCommon.h>
+#include <Oxygen/Vortex/Shadows/Internal/CascadeShadowSetup.h>
+#include <Oxygen/Vortex/Shadows/Internal/ConventionalShadowTargetAllocator.h>
+#include <Oxygen/Vortex/Shadows/Types/DirectionalShadowFrameData.h>
+#include <Oxygen/Vortex/Shadows/Types/FrameShadowInputs.h>
+#include <Oxygen/Vortex/Types/FrameLightSelection.h>
 #include <Oxygen/Vortex/Types/ShadowFrameBindings.h>
 
 namespace oxygen::vortex::shadows::internal {

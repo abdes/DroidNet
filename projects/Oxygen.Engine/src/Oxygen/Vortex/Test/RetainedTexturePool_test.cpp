@@ -6,10 +6,20 @@
 
 #include <array>
 #include <memory>
+#include <utility>
+#include <vector>
 
-#include <Oxygen/Testing/GTest.h>
-
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/View.h>
+#include <Oxygen/Graphics/Common/CommandQueue.h>
+#include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
+#include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
+#include <Oxygen/Graphics/Common/Types/QueueRole.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
+#include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/Internal/RetainedTexturePool.h>
 #include <Oxygen/Vortex/Test/Fakes/Graphics.h>
 

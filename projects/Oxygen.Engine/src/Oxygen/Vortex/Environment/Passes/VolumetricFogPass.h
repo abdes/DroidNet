@@ -176,7 +176,7 @@ namespace environment {
 
     struct alignas(16) SkyLightControl0 {
       std::uint32_t distant_sky_light_lut_slot {
-        kInvalidShaderVisibleIndex.get()
+        kInvalidShaderVisibleIndex.get(),
       };
       std::uint32_t enabled { 0U };
       float volumetric_scattering_intensity { 0.0F };
@@ -190,7 +190,7 @@ namespace environment {
 
     struct alignas(16) TemporalHistoryControl0 {
       std::uint32_t previous_integrated_light_scattering_srv {
-        kInvalidShaderVisibleIndex.get()
+        kInvalidShaderVisibleIndex.get(),
       };
       std::uint32_t enabled { 0U }; // Enabled=1, sampled history is FP16=2.
       float history_weight { 0.9F };
@@ -221,12 +221,12 @@ namespace environment {
       float light1_direction_enabled[4] { 0.0F, 0.0F, 1.0F, 0.0F };
       float light1_illuminance_rgb[4] { 0.0F, 0.0F, 0.0F, 0.0F };
       std::uint32_t previous_frame_exposure_srv {
-        kInvalidShaderVisibleIndex.get()
+        kInvalidShaderVisibleIndex.get(),
       };
       std::uint32_t exposure_status_uav { kInvalidShaderVisibleIndex.get() };
       std::uint32_t exposure_fp16_store { 0U };
       std::uint32_t previous_error_bounds_srv {
-        kInvalidShaderVisibleIndex.get()
+        kInvalidShaderVisibleIndex.get(),
       };
     };
 
@@ -234,10 +234,10 @@ namespace environment {
     upload::TransientStructuredBuffer pass_constants_buffer_;
     std::unique_ptr<::oxygen::vortex::internal::RetainedTexturePool>
       output_pool_;
-    std::vector<std::shared_ptr<graphics::Texture>> live_textures_ {};
+    std::vector<std::shared_ptr<graphics::Texture>> live_textures_;
 
     struct HistoryEntry {
-      std::shared_ptr<graphics::Texture> texture {};
+      std::shared_ptr<graphics::Texture> texture;
       std::shared_ptr<const postprocess::FrameExposureResources> frame_exposure;
       ShaderVisibleIndex srv { kInvalidShaderVisibleIndex };
       std::uint32_t width { 0U };
@@ -248,7 +248,7 @@ namespace environment {
       float grid_z_params[3] { 0.0F, 1.0F, 1.0F };
       bool valid { false };
     };
-    std::unordered_map<ViewId, HistoryEntry> history_by_view_ {};
+    std::unordered_map<ViewId, HistoryEntry> history_by_view_;
     std::optional<frame::SequenceNumber> exposure_frame_;
     std::array<
       std::vector<std::shared_ptr<const postprocess::FrameExposureResources>>,

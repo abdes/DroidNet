@@ -5,13 +5,19 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
+#include <exception>
 #include <expected>
 #include <memory>
 #include <span>
+#include <string>
+#include <string_view>
+#include <utility>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/Types/ByteUnits.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
@@ -88,7 +94,7 @@ namespace {
     UnregisterResourceIfPresent(gfx, old_buffer);
     auto& reclaimer = gfx->GetDeferredReclaimer();
     reclaimer.RegisterDeferredAction(
-      [old_buffer = std::move(old_buffer)]() mutable -> void {
+      [old_buffer = std::move(old_buffer)] mutable -> void {
         old_buffer.reset();
       });
   }

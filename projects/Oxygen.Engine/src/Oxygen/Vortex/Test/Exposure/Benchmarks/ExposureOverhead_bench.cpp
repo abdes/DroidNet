@@ -4,35 +4,14 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <algorithm>
-#include <array>
-#include <chrono>
-#include <cmath>
-#include <cstdlib>
-#include <filesystem>
-#include <fstream>
-#include <iomanip>
-#include <limits>
-#include <numeric>
-#include <unordered_set>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#ifdef NDEBUG
+#  include <tuple>
+#endif
 
-#include <nlohmann/json.hpp>
-
-#include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
-#include <Oxygen/OxCo/Run.h>
-#include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
-#include <Oxygen/Scene/Camera/Perspective.h>
-#include <Oxygen/Scene/Environment/Fog.h>
-#include <Oxygen/Scene/Environment/PostProcessVolume.h>
-#include <Oxygen/Scene/Environment/SceneEnvironment.h>
-#include <Oxygen/Scene/Environment/SkyAtmosphere.h>
-#include <Oxygen/Vortex/Shadows/ShadowService.h>
+#include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/Test/Exposure/Benchmarks/ExposureBenchmarkFixture.h>
-#include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestGraphics.h>
-#include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestTags.h>
-#include <Oxygen/Vortex/Test/Fixtures/ExposureBenchmarkScene.h>
-#include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
 
 namespace oxygen::vortex::testing::exposure {
 
@@ -230,7 +209,7 @@ NOLINT_TEST_F(ExposureProfilingOverheadTest, DISABLED_ReleaseCollectionOnOff)
       || Clock::now() - warm_start < std::chrono::seconds {
            10,
          }) {
-      static_cast<void>(render(false));
+      std::ignore = render(false);
       ++warm_frames;
     }
     std::vector<Sample> samples;

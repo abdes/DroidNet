@@ -4,15 +4,22 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Vortex/Shadows/ShadowService.h>
-
 #include <algorithm>
 #include <memory>
 #include <span>
 
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Vortex/Internal/PerViewStructuredPublisher.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/Shadows/Passes/CascadeShadowPass.h>
+#include <Oxygen/Vortex/Shadows/ShadowService.h>
+#include <Oxygen/Vortex/Shadows/Types/DirectionalShadowFrameData.h>
+#include <Oxygen/Vortex/Shadows/Types/FrameShadowInputs.h>
+#include <Oxygen/Vortex/Types/FrameLightSelection.h>
+#include <Oxygen/Vortex/Types/ShadowFrameBindings.h>
 
 namespace oxygen::vortex {
 

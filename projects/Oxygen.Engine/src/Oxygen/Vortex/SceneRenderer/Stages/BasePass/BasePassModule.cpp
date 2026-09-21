@@ -7,13 +7,23 @@
 #include <algorithm>
 #include <array>
 #include <bit>
-#include <cstddef>
-#include <cstring>
+#include <cstdint>
+#include <limits>
+#include <memory>
 #include <optional>
+#include <span>
+#include <string>
+#include <string_view>
+#include <tuple>
+#include <utility>
 #include <vector>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
+#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Constants.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
@@ -24,16 +34,21 @@
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Shaders.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
+#include <Oxygen/Profiling/ProfileScope.h>
 #include <Oxygen/Vortex/Internal/MeshRasterState.h>
 #include <Oxygen/Vortex/Internal/PerViewStructuredPublisher.h>
 #include <Oxygen/Vortex/Internal/ViewportClamp.h>
 #include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
 #include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/RenderContext.h>
+#include <Oxygen/Vortex/RenderMode.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
+#include <Oxygen/Vortex/SceneRenderer/ShadingMode.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/BasePass/BasePassMeshProcessor.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/BasePass/BasePassModule.h>
 #include <Oxygen/Vortex/Types/VelocityPublications.h>
@@ -141,7 +156,7 @@ namespace {
 
     auto* registry = &gfx.GetResourceRegistry();
     gfx.GetDeferredReclaimer().RegisterDeferredAction(
-      [registry, texture = std::move(texture)]() mutable {
+      [registry, texture = std::move(texture)] mutable -> void {
         registry->UnRegisterResource(*texture);
         texture.reset();
       });
@@ -183,18 +198,21 @@ namespace {
       desc.is_uav = uav;
       desc.use_clear_value = render_target;
       desc.clear_value = graphics::Color { 0.0F, 0.0F, 0.0F, 0.0F };
+      const auto read_state = shader_resource
+        ? graphics::ResourceStates::kShaderResource
+        : graphics::ResourceStates::kCommon;
+      const auto non_render_target_state
+        = uav ? graphics::ResourceStates::kUnorderedAccess : read_state;
       desc.initial_state = render_target
         ? graphics::ResourceStates::kRenderTarget
-        : (uav ? graphics::ResourceStates::kUnorderedAccess
-               : (shader_resource ? graphics::ResourceStates::kShaderResource
-                                  : graphics::ResourceStates::kCommon));
+        : non_render_target_state;
       texture = gfx.CreateTexture(desc);
     }
 
     CHECK_F(texture != nullptr,
       "BasePassModule failed to create stage texture '{}'", debug_name);
     auto& registry = gfx.GetResourceRegistry();
-    static_cast<void>(registry.AcquireRegistration(texture));
+    std::ignore = registry.AcquireRegistration(texture);
     return *texture;
   }
 
@@ -319,8 +337,9 @@ namespace {
     -> graphics::FramebufferDesc
   {
     auto desc = graphics::FramebufferDesc {};
-    if (!color)
+    if (!color) {
       color = scene_textures.GetSceneColorResource();
+    }
     desc.AddColorAttachment({
       .texture = color,
       .format = color->GetDescriptor().format,
@@ -568,8 +587,9 @@ namespace {
     const bool overlay, const graphics::Texture* color = nullptr)
     -> graphics::GraphicsPipelineDesc
   {
-    if (!color)
+    if (!color) {
       color = &scene_textures.GetSceneColor();
+    }
     auto root_bindings = BuildVortexRootBindings();
     auto defines = std::vector<graphics::ShaderDefine> {};
     AddBooleanDefine(alpha_test, "ALPHA_TEST", defines);
@@ -1008,7 +1028,7 @@ BasePassModule::BasePassModule(
   : renderer_(renderer)
   , mesh_processor_(std::make_unique<BasePassMeshProcessor>(renderer))
 {
-  static_cast<void>(scene_textures_config);
+  std::ignore = scene_textures_config;
 }
 
 BasePassModule::~BasePassModule()
@@ -1036,7 +1056,7 @@ auto BasePassModule::WriteWireframeConstants(Graphics& gfx,
   }
   const auto constants = WireframePassConstants {
     .wire_color = { ctx.wireframe_color.r, ctx.wireframe_color.g,
-      ctx.wireframe_color.b, ctx.wireframe_color.a },
+      ctx.wireframe_color.b, ctx.wireframe_color.a, },
     .write_pre_exposed = write_pre_exposed ? 1.0F : 0.0F,
   };
   const auto slot = wireframe_constants_publisher_->Publish(
@@ -1174,9 +1194,10 @@ auto BasePassModule::Execute(RenderContext& ctx,
       status, graphics::ResourceStates::kUnorderedAccess);
   }
 
-  const auto validate_without_prepass = [&] {
-    if (config_.early_z_pass_done || !ctx.current_view.frame_exposure)
+  const auto validate_without_prepass = [&] -> void {
+    if (config_.early_z_pass_done || !ctx.current_view.frame_exposure) {
       return;
+    }
     // Without a complete prepass, only the finished depth buffer determines
     // visibility independently of draw order. Replay with color/depth writes
     // disabled; the same shader checks only surviving material sources.
@@ -1189,9 +1210,10 @@ auto BasePassModule::Execute(RenderContext& ctx,
     auto& target
       = forward_solid ? forward_range_framebuffer_ : range_framebuffer_;
     if (forward_solid) {
-      if (NeedsForwardFramebufferRebuild(target, scene_textures, true))
+      if (NeedsForwardFramebufferRebuild(target, scene_textures, true)) {
         target = gfx->CreateFramebuffer(
           BuildForwardBasePassFramebuffer(scene_textures, true));
+      }
     } else if (NeedsFramebufferRebuild(
                  target, scene_textures, writes_velocity, true)) {
       target = gfx->CreateFramebuffer(

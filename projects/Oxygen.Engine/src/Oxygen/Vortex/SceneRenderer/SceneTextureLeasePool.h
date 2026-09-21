@@ -41,7 +41,7 @@ struct SceneTextureLeaseKey {
   bool hdr_output { true };
   bool require_debug_attachment { false };
   SceneTextureQueueAffinity queue_affinity {
-    SceneTextureQueueAffinity::kGraphicsOnly
+    SceneTextureQueueAffinity::kGraphicsOnly,
   };
 
   [[nodiscard]] OXGN_VRTX_API static auto FromConfig(

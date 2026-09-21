@@ -58,11 +58,15 @@ struct FrameDirectionalLightSelection {
   std::uint32_t light_flags { 0U };
 
   FrameDirectionalCsmSplitMode cascade_split_mode {
-    FrameDirectionalCsmSplitMode::kGenerated
+    FrameDirectionalCsmSplitMode::kGenerated,
   };
   float max_shadow_distance { 160.0F };
-  std::array<float, kFrameDirectionalLightMaxCascades> cascade_distances { 8.0F,
-    24.0F, 64.0F, 160.0F };
+  std::array<float, kFrameDirectionalLightMaxCascades> cascade_distances {
+    8.0F,
+    24.0F,
+    64.0F,
+    160.0F,
+  };
   float distribution_exponent { 3.0F };
 
   float transition_fraction { 0.1F };
@@ -96,8 +100,8 @@ struct FrameLocalLightSelection {
 };
 
 struct FrameLightSelection {
-  std::optional<FrameDirectionalLightSelection> directional_light {};
-  std::vector<FrameLocalLightSelection> local_lights {};
+  std::optional<FrameDirectionalLightSelection> directional_light;
+  std::vector<FrameLocalLightSelection> local_lights;
   std::uint64_t selection_epoch { 0U };
 
   [[nodiscard]] auto directional_light_count() const noexcept -> std::uint32_t

@@ -5,14 +5,27 @@
 //===----------------------------------------------------------------------===//
 
 #include <memory>
+#include <string_view>
+#include <utility>
 
-#include <Oxygen/Testing/GTest.h>
-
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Config/RendererConfig.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/ResolvedView.h>
+#include <Oxygen/Core/Types/TextureType.h>
+#include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
+#include <Oxygen/Graphics/Common/CommandRecording.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/QueueRole.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
+#include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Vortex/PreparedSceneFrame.h>
+#include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/Test/Fakes/Graphics.h>
 
@@ -244,7 +257,7 @@ NOLINT_TEST_F(RenderGraphHarnessFacadeTest,
     // Synchronous execution finishes while the session-owned closure and its
     // captured test locals are alive.
     // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
-    [&]() -> oxygen::co::Co<void> { co_await result->Execute(*recorder); });
+    [&] -> oxygen::co::Co<void> { co_await result->Execute(*recorder); });
 
   EXPECT_TRUE(executed);
 }
@@ -286,7 +299,7 @@ NOLINT_TEST_F(RenderGraphHarnessFacadeTest, ExecuteAllowsMultipleRuns)
   // Synchronous execution finishes while the session-owned closure and its
   // captured test locals are alive.
   // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
-  oxygen::co::Run(loop, [&]() -> oxygen::co::Co<void> {
+  oxygen::co::Run(loop, [&] -> oxygen::co::Co<void> {
     co_await result->Execute(*recorder);
     co_await result->Execute(*recorder);
   });
@@ -344,8 +357,7 @@ NOLINT_TEST_F(RenderGraphHarnessFacadeTest,
   facade.SetOutputTarget(MakeOutputTarget());
   facade.SetResolvedView(MakeResolvedViewInput());
   facade.SetPreparedFrame(Renderer::PreparedFrameInput {
-    .value = oxygen::vortex::PreparedSceneFrame {},
-  });
+    .value = oxygen::vortex::PreparedSceneFrame {} });
   facade.SetCoreShaderInputs(Renderer::CoreShaderInputsInput {
     .view_id = ViewId { 61U, },
     .value = oxygen::vortex::ViewConstants {},
@@ -390,7 +402,7 @@ NOLINT_TEST_F(RenderGraphHarnessFacadeTest,
     // Synchronous execution finishes while the session-owned closure and its
     // captured test locals are alive.
     // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
-    [&]() -> oxygen::co::Co<void> { co_await result->Execute(*recorder); });
+    [&] -> oxygen::co::Co<void> { co_await result->Execute(*recorder); });
 
   EXPECT_TRUE(executed);
 }

@@ -4,8 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <array>
 #include <cstddef>
 #include <set>
@@ -13,7 +11,10 @@
 #include <string_view>
 
 #include <Oxygen/Graphics/Direct3D12/Shaders/EngineShaderCatalog.h>
+#include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Vortex/Diagnostics/DiagnosticsTypes.h>
 #include <Oxygen/Vortex/Diagnostics/ShaderDebugModeRegistry.h>
+#include <Oxygen/Vortex/ShaderDebugMode.h>
 
 namespace {
 

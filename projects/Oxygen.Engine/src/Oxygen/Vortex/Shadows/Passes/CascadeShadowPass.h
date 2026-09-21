@@ -37,7 +37,7 @@ namespace shadows {
   public:
     struct ViewShadowPassState {
       DirectionalShadowFrameData frame_data {};
-      std::shared_ptr<graphics::Texture> shadow_surface {};
+      std::shared_ptr<graphics::Texture> shadow_surface;
       std::uint32_t shadow_caster_draw_count { 0U };
       std::uint32_t rendered_cascade_count { 0U };
       std::uint32_t rendered_draw_count { 0U };
@@ -45,7 +45,7 @@ namespace shadows {
 
     struct ViewSpotShadowPassState {
       ShadowFrameBindings bindings {};
-      std::shared_ptr<graphics::Texture> shadow_surface {};
+      std::shared_ptr<graphics::Texture> shadow_surface;
       std::uint32_t shadow_caster_draw_count { 0U };
       std::uint32_t rendered_shadow_count { 0U };
       std::uint32_t rendered_draw_count { 0U };
@@ -53,7 +53,7 @@ namespace shadows {
 
     struct ViewPointShadowPassState {
       ShadowFrameBindings bindings {};
-      std::shared_ptr<graphics::Texture> shadow_surface {};
+      std::shared_ptr<graphics::Texture> shadow_surface;
       std::uint32_t shadow_caster_draw_count { 0U };
       std::uint32_t rendered_shadow_count { 0U };
       std::uint32_t rendered_draw_count { 0U };

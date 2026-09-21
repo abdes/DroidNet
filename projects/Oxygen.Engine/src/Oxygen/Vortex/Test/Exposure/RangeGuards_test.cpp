@@ -16,29 +16,44 @@
 #include <memory>
 #include <numbers>
 #include <span>
+#include <tuple>
 #include <utility>
 #include <vector>
 
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Config/RendererConfig.h>
+#include <Oxygen/Console/Command.h>
 #include <Oxygen/Console/Console.h>
+#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/PostProcess.h>
+#include <Oxygen/Graphics/Common/CommandRecording.h>
 #include <Oxygen/Graphics/Common/FrameCaptureController.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
+#include <Oxygen/Graphics/Common/Types/QueueRole.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Environment/Fog.h>
 #include <Oxygen/Scene/Environment/PostProcessVolume.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkySphere.h>
+#include <Oxygen/Scene/ExposureSettings.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/Environment/EnvironmentLightingService.h>
 #include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
 #include <Oxygen/Vortex/PostProcess/PostProcessService.h>
+#include <Oxygen/Vortex/PostProcess/Types/PostProcessConfig.h>
 #include <Oxygen/Vortex/Renderer.h>
+#include <Oxygen/Vortex/RendererCapability.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureGpuFixture.h>
-#include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestGraphics.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestTags.h>
 #include <Oxygen/Vortex/Types/ExposureStateData.h>
+#include <Oxygen/Vortex/Types/ExposureTransition.h>
 #include <Oxygen/Vortex/ViewExtension.h>
 
 namespace oxygen::vortex::testing::exposure {
@@ -708,8 +723,8 @@ NOLINT_TEST_F(
       const auto old_format = ctx.current_view.hdr_color_format;
       ctx.current_view.hdr_color_format = Format::kRGBA16Float;
       half_producer.OnFrameStart(ctx.frame_sequence, ctx.frame_slot);
-      static_cast<void>(
-        half_producer.PublishEnvironmentBindings(ctx, hook.recorder));
+      std::ignore
+        = half_producer.PublishEnvironmentBindings(ctx, hook.recorder);
       const auto* resources
         = half_producer.InspectViewRadianceResources(ctx.current_view.view_id);
       CHECK_NOTNULL_F(resources);
@@ -787,9 +802,13 @@ NOLINT_TEST_F(
     facade.SetFrameSession({ .frame_slot = slot,
       .frame_sequence = frame::SequenceNumber { step, },
       .delta_time_seconds = 1.0F, });
-    facade.SetSceneSource({ .scene = observer_ptr { scene.get(), }, });
+    facade.SetSceneSource({ .scene = observer_ptr {
+                              scene.get(),
+                            } });
     facade.SetViewIntent(input);
-    facade.SetOutputTarget({ .framebuffer = observer_ptr { target.get(), }, });
+    facade.SetOutputTarget({ .framebuffer = observer_ptr {
+                               target.get(),
+                             } });
     auto session = facade.Finalize();
     if (!session.has_value()) {
       FAIL() << "Expected session to contain a value";

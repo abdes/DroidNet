@@ -4,45 +4,51 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Vortex/SceneRenderer/Stages/Hzb/ScreenHzbModule.h>
-
 #include <algorithm>
 #include <array>
 #include <bit>
 #include <cmath>
-#include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <limits>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
+#include <tuple>
 #include <unordered_map>
 #include <utility>
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
+#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Core/Types/TextureType.h>
+#include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
+#include <Oxygen/Graphics/Common/Shaders.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
+#include <Oxygen/Profiling/ProfileScope.h>
 #include <Oxygen/Vortex/Internal/PerViewStructuredPublisher.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
+#include <Oxygen/Vortex/SceneRenderer/Stages/Hzb/ScreenHzbModule.h>
+#include <Oxygen/Vortex/Types/ScreenHzbFrameBindings.h>
 
 namespace oxygen::vortex {
 
@@ -329,7 +335,7 @@ struct ScreenHzbModule::Impl {
     }
 
     for (auto& [view_id, state] : view_states) {
-      static_cast<void>(view_id);
+      std::ignore = view_id;
       ReleaseViewResources(*gfx, state);
     }
   }
@@ -337,17 +343,20 @@ struct ScreenHzbModule::Impl {
   static auto ReleaseViewResources(Graphics& gfx, ViewState& state) -> void
   {
     auto* registry = &gfx.GetResourceRegistry();
-    const auto retire = [&](std::shared_ptr<graphics::Texture>& texture) {
-      if (!texture)
+    const auto retire
+      = [&](std::shared_ptr<graphics::Texture>& texture) -> void {
+      if (!texture) {
         return;
+      }
       gfx.GetDeferredReclaimer().RegisterDeferredAction(
-        [registry, texture = std::move(texture)]() mutable {
-          if (registry->Contains(*texture))
+        [registry, texture = std::move(texture)] mutable -> void {
+          if (registry->Contains(*texture)) {
             registry->UnRegisterResource(*texture);
+          }
           texture.reset();
         });
     };
-    const auto release_pyramid = [&](PyramidResources& pyramid) {
+    const auto release_pyramid = [&](PyramidResources& pyramid) -> void {
       for (auto& texture : pyramid.history_textures) {
         retire(texture);
       }
@@ -479,8 +488,8 @@ struct ScreenHzbModule::Impl {
     const auto base_name
       = "Vortex.Stage5.ScreenHzbBuild.View" + std::to_string(view_id.get());
 
-    const auto create_pyramid = [&](PyramidResources& pyramid,
-                                  const char* semantic_label) {
+    const auto create_pyramid
+      = [&](PyramidResources& pyramid, const char* semantic_label) -> void {
       pyramid.enabled = true;
       for (std::uint32_t slot = 0U; slot < 2U; ++slot) {
         graphics::TextureDesc history_desc {};
@@ -639,17 +648,17 @@ struct ScreenHzbModule::Impl {
   }
 
   Renderer& renderer;
-  std::unordered_map<ViewId, ViewState> view_states {};
+  std::unordered_map<ViewId, ViewState> view_states;
   internal::PerViewStructuredPublisher<ScreenHzbBuildConstants> pass_constants;
   std::optional<frame::SequenceNumber> constants_frame;
-  std::optional<graphics::ComputePipelineDesc> pipeline_desc {};
+  std::optional<graphics::ComputePipelineDesc> pipeline_desc;
 };
 
 ScreenHzbModule::ScreenHzbModule(
   Renderer& renderer, const SceneTexturesConfig& scene_textures_config)
   : impl_(std::make_unique<Impl>(renderer))
 {
-  static_cast<void>(scene_textures_config);
+  std::ignore = scene_textures_config;
 }
 
 ScreenHzbModule::~ScreenHzbModule() = default;
@@ -665,8 +674,9 @@ void ScreenHzbModule::RemoveViewState(const ViewId view_id)
 {
   const auto found = impl_->view_states.find(view_id);
   if (found != impl_->view_states.end()) {
-    if (auto gfx = impl_->renderer.GetGraphics())
+    if (auto gfx = impl_->renderer.GetGraphics()) {
       Impl::ReleaseViewResources(*gfx, found->second);
+    }
     impl_->view_states.erase(found);
   }
   if (output_view_id_ == view_id) {
@@ -696,14 +706,16 @@ void ScreenHzbModule::Execute(RenderContext& ctx,
     RemoveViewState(view_id);
     output_view_id_ = view_id;
   }
-  auto retire_stateless = ScopeGuard([&]() noexcept {
+  auto retire_stateless = ScopeGuard([&] noexcept -> void {
     if (ctx.current_view.view_state_handle
-      != CompositionView::kInvalidViewStateHandle)
+      != CompositionView::kInvalidViewStateHandle) {
       return;
+    }
     const auto found = impl_->view_states.find(view_id);
     if (found != impl_->view_states.end()) {
-      if (auto gfx = impl_->renderer.GetGraphics())
+      if (auto gfx = impl_->renderer.GetGraphics()) {
         Impl::ReleaseViewResources(*gfx, found->second);
+      }
       impl_->view_states.erase(found);
     }
   });
@@ -811,42 +823,42 @@ void ScreenHzbModule::Execute(RenderContext& ctx,
         const std::shared_ptr<graphics::Texture>& write_texture,
         const std::uint32_t scratch_slot, const std::uint32_t mip_level,
         const std::uint32_t destination_width,
-        const std::uint32_t destination_height) {
-        recorder.CopyTexture(*pyramid.scratch_textures.at(scratch_slot),
-          graphics::TextureSlice {
-            .x = 0U,
-            .y = 0U,
-            .z = 0U,
-            .width = destination_width,
-            .height = destination_height,
-            .depth = 1U,
-            .mip_level = 0U,
-            .array_slice = 0U,
-          },
-          graphics::TextureSubResourceSet {
-            .base_mip_level = 0U,
-            .num_mip_levels = 1U,
-            .base_array_slice = 0U,
-            .num_array_slices = 1U,
-          },
-          *write_texture,
-          graphics::TextureSlice {
-            .x = 0U,
-            .y = 0U,
-            .z = 0U,
-            .width = destination_width,
-            .height = destination_height,
-            .depth = 1U,
-            .mip_level = mip_level,
-            .array_slice = 0U,
-          },
-          graphics::TextureSubResourceSet {
-            .base_mip_level = mip_level,
-            .num_mip_levels = 1U,
-            .base_array_slice = 0U,
-            .num_array_slices = 1U,
-          });
-      };
+        const std::uint32_t destination_height) -> void {
+    recorder.CopyTexture(*pyramid.scratch_textures.at(scratch_slot),
+      graphics::TextureSlice {
+        .x = 0U,
+        .y = 0U,
+        .z = 0U,
+        .width = destination_width,
+        .height = destination_height,
+        .depth = 1U,
+        .mip_level = 0U,
+        .array_slice = 0U,
+      },
+      graphics::TextureSubResourceSet {
+        .base_mip_level = 0U,
+        .num_mip_levels = 1U,
+        .base_array_slice = 0U,
+        .num_array_slices = 1U,
+      },
+      *write_texture,
+      graphics::TextureSlice {
+        .x = 0U,
+        .y = 0U,
+        .z = 0U,
+        .width = destination_width,
+        .height = destination_height,
+        .depth = 1U,
+        .mip_level = mip_level,
+        .array_slice = 0U,
+      },
+      graphics::TextureSubResourceSet {
+        .base_mip_level = mip_level,
+        .num_mip_levels = 1U,
+        .base_array_slice = 0U,
+        .num_array_slices = 1U,
+      });
+  };
 
   graphics::GpuEventScope pass_scope(recorder, "Vortex.Stage5.ScreenHzbBuild",
     profiling::ProfileGranularity::kDiagnostic,

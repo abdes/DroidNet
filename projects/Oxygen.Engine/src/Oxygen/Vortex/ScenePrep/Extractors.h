@@ -344,11 +344,11 @@ inline auto EmitPerVisibleSubmesh(const ScenePrepContext& ctx,
     = [&](const uint32_t index, const bool main_view_visible) -> void {
     struct ResolvedMaterial {
       std::shared_ptr<const data::MaterialAsset> resolved;
-      oxygen::data::AssetKey source_key {};
+      oxygen::data::AssetKey source_key;
     };
 
     // Material selection chain as a local lambda
-    auto resolve_material = [&]() -> ResolvedMaterial {
+    auto resolve_material = [&] -> ResolvedMaterial {
       if (auto mat = item.Renderable().ResolveSubmeshMaterial(lod, index)) {
         const auto key = mat->GetAssetKey();
         return {

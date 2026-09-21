@@ -5,17 +5,20 @@
 //===----------------------------------------------------------------------===//
 
 #include <array>
+#include <cstddef>
 #include <memory>
 
-#include <glm/glm.hpp>
+#include <glm/ext/matrix_float3x3.hpp>
+#include <glm/ext/matrix_transform.hpp>
 #include <glm/gtc/matrix_access.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-
-#include <Oxygen/Testing/GTest.h>
+#include <glm/matrix.hpp>
+#include <glm/trigonometric.hpp>
 
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/Queues.h>
+#include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/RendererTag.h>
 #include <Oxygen/Vortex/Resources/TransformUploader.h>
 #include <Oxygen/Vortex/ScenePrep/Handles.h>
@@ -23,6 +26,7 @@
 #include <Oxygen/Vortex/Upload/InlineTransfersCoordinator.h>
 #include <Oxygen/Vortex/Upload/StagingProvider.h>
 #include <Oxygen/Vortex/Upload/UploadCoordinator.h>
+#include <Oxygen/Vortex/Upload/UploadPolicy.h>
 #include <Oxygen/Vortex/Upload/UploaderTag.h>
 
 namespace oxygen::vortex::upload::internal {
@@ -368,7 +372,7 @@ NOLINT_TEST_F(TransformUploaderBasicTest,
   AllocatingAfterPublicationCreatesFreshTransformSnapshots)
 {
   auto& uploader = TransformUploaderRef();
-  const auto snapshot = [&]() -> std::array<oxygen::ShaderVisibleIndex, 3> {
+  const auto snapshot = [&] -> std::array<oxygen::ShaderVisibleIndex, 3> {
     return std::array {
       uploader.GetWorldsSrvIndex(),
       uploader.GetPreviousWorldsSrvIndex(),

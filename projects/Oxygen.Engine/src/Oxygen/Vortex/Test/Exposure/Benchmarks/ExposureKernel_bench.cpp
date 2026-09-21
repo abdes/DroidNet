@@ -4,23 +4,39 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <algorithm>
 #include <array>
-#include <chrono>
+#include <cstddef>
+#include <cstdint>
 #include <cstdlib>
-#include <limits>
+#include <functional>
+#include <memory>
 #include <print>
+#include <stdlib.h>
+#include <utility>
+#include <vector>
 
 #include <Oxygen/Config/RendererConfig.h>
+#include <Oxygen/Core/Types/PostProcess.h>
+#include <Oxygen/Core/Types/View.h>
+#include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/TimestampQueryProvider.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Scene/Environment/Background.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
+#include <Oxygen/Scene/ExposureSettings.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereLutCache.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereState.h>
 #include <Oxygen/Vortex/Environment/Passes/AtmosphereMultiScatteringLutPass.h>
 #include <Oxygen/Vortex/Environment/Passes/AtmosphereTransmittanceLutPass.h>
+#include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
+#include <Oxygen/Vortex/PostProcess/Types/PostProcessConfig.h>
+#include <Oxygen/Vortex/RendererCapability.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureGpuFixture.h>
+#include <Oxygen/Vortex/Types/ExposureStateData.h>
+#include <Oxygen/Vortex/Types/ViewConstants.h>
 
 namespace oxygen::vortex::testing::exposure {
 
@@ -88,7 +104,7 @@ NOLINT_TEST_F(ExposureGpuTest, DISABLED_ProducerRangeAndCanonicalTiming)
       });
     ASSERT_NE(frame, nullptr);
     for (unsigned iteration = 0; iteration < 3; ++iteration) {
-      measure("final_range", width, height, iteration, [&]() -> void {
+      measure("final_range", width, height, iteration, [&] -> void {
         ASSERT_TRUE(SubmitCommands("Vortex Exposure Final Scene Range",
           [&](graphics::CommandRecorder& recorder) -> auto {
             return pass_->CheckSceneColorRange(
@@ -123,7 +139,7 @@ NOLINT_TEST_F(ExposureGpuTest, DISABLED_ProducerRangeAndCanonicalTiming)
     cache.RefreshForState(stable);
     transmittance.OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
     multiple.OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
-    measure("canonical_refresh", 256, 64, iteration, [&]() -> void {
+    measure("canonical_refresh", 256, 64, iteration, [&] -> void {
       ASSERT_TRUE(transmittance.Record(ctx_, stable, cache).executed);
       ASSERT_TRUE(multiple.Record(ctx_, stable, cache).executed);
     });
@@ -280,7 +296,7 @@ NOLINT_TEST_F(ExposureGpuTest, DISABLED_ComposedAdmissionFullResolutionTiming)
         id,
       };
       const std::array<Pixel, 1> pixel { test.neutral
-          ? Pixel { .5F, .5F, .5F, test.alpha, }
+          ? Pixel { .5F, .5F, .5F, test.alpha }
           : Pixel { .18F * test.alpha, .24F * test.alpha, .35F * test.alpha,
               test.alpha, }, };
       auto signal = MakeSignal(view_width, view_height, pixel);

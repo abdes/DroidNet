@@ -104,11 +104,11 @@ public:
     bool sky_light_ibl_unavailable { false };
     bool sky_light_ibl_stale { false };
     environment::StaticSkyLightProductStatus sky_light_ibl_status {
-      environment::StaticSkyLightProductStatus::kDisabled
+      environment::StaticSkyLightProductStatus::kDisabled,
     };
     environment::StaticSkyLightUnavailableReason
       sky_light_ibl_unavailable_reason {
-        environment::StaticSkyLightUnavailableReason::kNone
+        environment::StaticSkyLightUnavailableReason::kNone,
       };
     bool volumetric_fog_authored_enabled { false };
     bool integrated_light_scattering_valid { false };
@@ -173,11 +173,11 @@ public:
     bool sky_light_ibl_valid { false };
     bool sky_light_ibl_unavailable { false };
     environment::StaticSkyLightProductStatus sky_light_ibl_status {
-      environment::StaticSkyLightProductStatus::kDisabled
+      environment::StaticSkyLightProductStatus::kDisabled,
     };
     environment::StaticSkyLightUnavailableReason
       sky_light_ibl_unavailable_reason {
-        environment::StaticSkyLightUnavailableReason::kNone
+        environment::StaticSkyLightUnavailableReason::kNone,
       };
     bool volumetric_fog_authored_enabled { false };
     bool integrated_light_scattering_valid { false };
@@ -379,45 +379,44 @@ private:
   Stage15State last_stage15_state_ {};
   std::unique_ptr<
     internal::PerViewStructuredPublisher<EnvironmentFrameBindings>>
-    bindings_publisher_ {};
+    bindings_publisher_;
   std::unique_ptr<internal::PerViewStructuredPublisher<EnvironmentStaticData>>
-    static_data_publisher_ {};
+    static_data_publisher_;
   std::unique_ptr<internal::PerViewStructuredPublisher<EnvironmentViewData>>
-    view_data_publisher_ {};
+    view_data_publisher_;
   std::unique_ptr<
     internal::PerViewStructuredPublisher<environment::EnvironmentViewProducts>>
-    view_products_publisher_ {};
-  std::unordered_map<ViewId, PublishedView> published_views_ {};
-  std::unique_ptr<environment::SkyRenderer> sky_ {};
-  std::unique_ptr<environment::AtmosphereRenderer> atmosphere_ {};
-  std::unique_ptr<environment::FogRenderer> fog_ {};
+    view_products_publisher_;
+  std::unordered_map<ViewId, PublishedView> published_views_;
+  std::unique_ptr<environment::SkyRenderer> sky_;
+  std::unique_ptr<environment::AtmosphereRenderer> atmosphere_;
+  std::unique_ptr<environment::FogRenderer> fog_;
   std::unique_ptr<environment::internal::AtmosphereLightState>
-    atmosphere_light_state_ {};
-  std::unique_ptr<environment::internal::AtmosphereState> atmosphere_state_ {};
-  std::unique_ptr<environment::internal::LocalFogVolumeState>
-    local_fog_state_ {};
+    atmosphere_light_state_;
+  std::unique_ptr<environment::internal::AtmosphereState> atmosphere_state_;
+  std::unique_ptr<environment::internal::LocalFogVolumeState> local_fog_state_;
   std::unique_ptr<environment::LocalFogVolumeTiledCullingPass>
-    local_fog_tiled_culling_ {};
-  std::unique_ptr<environment::LocalFogVolumeComposePass> local_fog_compose_ {};
+    local_fog_tiled_culling_;
+  std::unique_ptr<environment::LocalFogVolumeComposePass> local_fog_compose_;
   std::unique_ptr<environment::internal::AtmosphereLutCache>
-    atmosphere_lut_cache_ {};
+    atmosphere_lut_cache_;
   std::unique_ptr<environment::AtmosphereTransmittanceLutPass>
-    transmittance_lut_pass_ {};
+    transmittance_lut_pass_;
   std::unique_ptr<environment::AtmosphereMultiScatteringLutPass>
-    multi_scattering_lut_pass_ {};
+    multi_scattering_lut_pass_;
   std::unique_ptr<environment::DistantSkyLightLutPass>
-    distant_sky_light_lut_pass_ {};
-  std::unique_ptr<environment::AtmosphereSkyViewLutPass> sky_view_lut_pass_ {};
+    distant_sky_light_lut_pass_;
+  std::unique_ptr<environment::AtmosphereSkyViewLutPass> sky_view_lut_pass_;
   std::unique_ptr<environment::AtmosphereCameraAerialPerspectivePass>
-    camera_aerial_perspective_pass_ {};
-  std::unique_ptr<environment::VolumetricFogPass> volumetric_fog_pass_ {};
-  std::unique_ptr<resources::TextureBinder> sky_texture_binder_ {};
+    camera_aerial_perspective_pass_;
+  std::unique_ptr<environment::VolumetricFogPass> volumetric_fog_pass_;
+  std::unique_ptr<resources::TextureBinder> sky_texture_binder_;
   environment::VolumetricFogPass::RecordState pending_volumetric_fog_state_ {};
   environment::LocalFogVolumeTiledCullingPass::RecordState
     pending_local_fog_culling_state_ {};
   ViewId pending_local_fog_view_id_ { kInvalidViewId };
   frame::SequenceNumber pending_local_fog_sequence_ { 0U };
-  std::unique_ptr<environment::internal::IblProcessor> ibl_ {};
+  std::unique_ptr<environment::internal::IblProcessor> ibl_;
 };
 
 } // namespace oxygen::vortex

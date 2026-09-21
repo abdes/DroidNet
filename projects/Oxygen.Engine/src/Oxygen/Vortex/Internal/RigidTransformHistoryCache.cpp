@@ -4,6 +4,11 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstdint>
+
+#include <glm/ext/matrix_float4x4.hpp>
+
+#include <Oxygen/Scene/Types/NodeHandle.h>
 #include <Oxygen/Vortex/Internal/RigidTransformHistoryCache.h>
 
 namespace oxygen::vortex::internal {

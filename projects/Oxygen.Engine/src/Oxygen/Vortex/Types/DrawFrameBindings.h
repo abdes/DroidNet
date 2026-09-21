@@ -53,25 +53,23 @@ OXYGEN_DEFINE_DRAW_BINDLESS_SLOT_TYPE(BindlessVelocityDrawMetadataSlot);
 
 //! Bindless draw-system routing payload for a single view.
 struct alignas(packing::kShaderDataFieldAlignment) DrawFrameBindings {
-  BindlessDrawMetadataSlot draw_metadata_slot {};
-  BindlessWorldsSlot current_worlds_slot {};
-  BindlessWorldsSlot previous_worlds_slot {};
-  BindlessNormalsSlot normal_matrices_slot {};
-  BindlessMaterialShadingConstantsSlot material_shading_constants_slot {};
+  BindlessDrawMetadataSlot draw_metadata_slot;
+  BindlessWorldsSlot current_worlds_slot;
+  BindlessWorldsSlot previous_worlds_slot;
+  BindlessNormalsSlot normal_matrices_slot;
+  BindlessMaterialShadingConstantsSlot material_shading_constants_slot;
   BindlessProceduralGridMaterialConstantsSlot
-    procedural_grid_material_constants_slot {};
-  BindlessInstanceDataSlot instance_data_slot {};
-  BindlessSkinnedPosePublicationsSlot current_skinned_pose_slot {};
-  BindlessSkinnedPosePublicationsSlot previous_skinned_pose_slot {};
-  BindlessMorphPublicationsSlot current_morph_slot {};
-  BindlessMorphPublicationsSlot previous_morph_slot {};
-  BindlessMaterialWpoPublicationsSlot current_material_wpo_slot {};
-  BindlessMaterialWpoPublicationsSlot previous_material_wpo_slot {};
-  BindlessMotionVectorStatusPublicationsSlot
-    current_motion_vector_status_slot {};
-  BindlessMotionVectorStatusPublicationsSlot
-    previous_motion_vector_status_slot {};
-  BindlessVelocityDrawMetadataSlot velocity_draw_metadata_slot {};
+    procedural_grid_material_constants_slot;
+  BindlessInstanceDataSlot instance_data_slot;
+  BindlessSkinnedPosePublicationsSlot current_skinned_pose_slot;
+  BindlessSkinnedPosePublicationsSlot previous_skinned_pose_slot;
+  BindlessMorphPublicationsSlot current_morph_slot;
+  BindlessMorphPublicationsSlot previous_morph_slot;
+  BindlessMaterialWpoPublicationsSlot current_material_wpo_slot;
+  BindlessMaterialWpoPublicationsSlot previous_material_wpo_slot;
+  BindlessMotionVectorStatusPublicationsSlot current_motion_vector_status_slot;
+  BindlessMotionVectorStatusPublicationsSlot previous_motion_vector_status_slot;
+  BindlessVelocityDrawMetadataSlot velocity_draw_metadata_slot;
 };
 
 static_assert(sizeof(DrawFrameBindings) == 64);

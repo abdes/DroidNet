@@ -4,19 +4,39 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureGpuFixture.h>
-
+#include <array>
 #include <bit>
-#include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
 #include <limits>
+#include <optional>
 #include <utility>
 
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
+#include <Oxygen/Graphics/Common/FrameCaptureController.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
+#include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/Scene/ExposureSettings.h>
+#include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Vortex/CompositionView.h>
+#include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
+#include <Oxygen/Vortex/PostProcess/PostProcessService.h>
+#include <Oxygen/Vortex/PostProcess/Types/PostProcessConfig.h>
+#include <Oxygen/Vortex/RenderMode.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
-#include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestTags.h>
+#include <Oxygen/Vortex/ShaderDebugMode.h>
+#include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureGpuFixture.h>
 #include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
+#include <Oxygen/Vortex/Types/ExposureStateData.h>
+#include <Oxygen/Vortex/Types/ExposureTransition.h>
 
 namespace oxygen::vortex::testing::exposure {
 
@@ -137,7 +157,7 @@ auto ExposureGpuTest::ServicePixel(PostProcessService& service,
     const auto ticket = readback->EnqueueCopy(*recorder, *output,
       {
         .src_slice
-        = { .x = 1U, .y = 0U, .width = 1U, .height = 1U, .depth = 1U, },
+        = { .x = 1U, .y = 0U, .width = 1U, .height = 1U, .depth = 1U },
       });
     CHECK_F(ticket.has_value());
   }
@@ -402,8 +422,8 @@ auto ExposureGpuTest::OwnedExposureService() -> PostProcessService&
             .frame_sequence = frame::SequenceNumber { 1U, },
             .delta_time_seconds = 0.0F, })
           .SetResolvedView(
-            { .view_id = ViewId { 1000U, }, .value = ResolvedView { params, }, })
-          .SetOutputTarget({ .framebuffer = observer_ptr { target.get(), }, })
+            { .view_id = ViewId { 1000U, }, .value = ResolvedView { params, } })
+          .SetOutputTarget({ .framebuffer = observer_ptr { target.get(), } })
           .Finalize();
     CHECK_F(session.has_value());
   }

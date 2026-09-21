@@ -16,14 +16,24 @@
 #include <span>
 #include <utility>
 
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/PostProcess.h>
+#include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
+#include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Scene/Environment/Background.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
+#include <Oxygen/Scene/ExposureSettings.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
 #include <Oxygen/Vortex/PostProcess/PostProcessService.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureGpuFixture.h>
+#include <Oxygen/Vortex/Types/ExposureStateData.h>
 
 namespace oxygen::vortex::testing::exposure {
 
@@ -513,16 +523,22 @@ NOLINT_TEST_F(ExposureGpuTest,
   // RGB gain must not amplify the tiny transmission error. In the second
   // case gain*S exceeds FP32, while (2^-100 * gain)*S is finite and its loss
   // must still be rejected.
-  const std::array cases { Case { .background = .125F,
-                             .ap = { 0, 0, 0, 1e-8F, },
-                             .gain = 1e6F,
-                             .ev = 0.0F,
-                             .expected_failure = 0U, },
-    Case { .background = 8192.0F,
-      .ap = { 0x1p-100F, 0x1p-100F, 0x1p-100F, 1, },
+  const std::array cases {
+    Case {
+      .background = .125F,
+      .ap = { 0, 0, 0, 1e-8F },
+      .gain = 1e6F,
+      .ev = 0.0F,
+      .expected_failure = 0U,
+    },
+    Case {
+      .background = 8192.0F,
+      .ap = { 0x1p-100F, 0x1p-100F, 0x1p-100F, 1 },
       .gain = 0x1p100F,
       .ev = -32.0F,
-      .expected_failure = 4U, }, };
+      .expected_failure = 4U,
+    },
+  };
   for (const auto& test : cases) {
     SCOPED_TRACE(test.gain);
     const auto scene_signal = Uniform(test.background, 1U, 1U);
@@ -655,10 +671,12 @@ NOLINT_TEST_F(ExposureGpuTest, SuitabilityChecksVolumeRgbAndTransmittance)
     recorder->RequireResourceState(*texture, ResourceStates::kCopyDest);
     recorder->FlushBarriers();
     recorder->CopyBufferToTexture(*upload,
-      { .buffer_offset = 0U,
+      {
+        .buffer_offset = 0U,
         .buffer_row_pitch = 256U,
         .buffer_slice_pitch = 256U,
-        .dst_slice = { .width = 2U, .height = 1U, .depth = 2U, }, },
+        .dst_slice = { .width = 2U, .height = 1U, .depth = 2U },
+      },
       *texture);
     recorder->RequireResourceStateFinal(
       *texture, ResourceStates::kShaderResource);
@@ -734,10 +752,12 @@ NOLINT_TEST_F(ExposureGpuTest, SuitabilityChecksVolumeRgbAndTransmittance)
     recorder->RequireResourceState(*texture, ResourceStates::kCopyDest);
     recorder->FlushBarriers();
     recorder->CopyBufferToTexture(*upload,
-      { .buffer_offset = 0U,
+      {
+        .buffer_offset = 0U,
         .buffer_row_pitch = 256U,
         .buffer_slice_pitch = 256U,
-        .dst_slice = { .width = 2U, .height = 1U, .depth = 2U, }, },
+        .dst_slice = { .width = 2U, .height = 1U, .depth = 2U },
+      },
       *texture);
     recorder->RequireResourceStateFinal(
       *texture, ResourceStates::kShaderResource);

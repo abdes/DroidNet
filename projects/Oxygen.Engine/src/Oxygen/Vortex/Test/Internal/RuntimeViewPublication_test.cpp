@@ -4,28 +4,45 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Testing/GTest.h>
-
+#include <cstddef>
+#include <cstdint>
 #include <limits>
 #include <memory>
 #include <stdexcept>
+#include <string_view>
+#include <tuple>
+#include <utility>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/PhaseRegistry.h>
 #include <Oxygen/Core/Time/SimulationClock.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/PostProcess.h>
+#include <Oxygen/Core/Types/ResolvedView.h>
+#include <Oxygen/Core/Types/TextureType.h>
+#include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/QueueRole.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Scene/Environment/PostProcessVolume.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
+#include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/Internal/PerViewScope.h>
 #include <Oxygen/Vortex/PostProcess/PostProcessService.h>
 #include <Oxygen/Vortex/Renderer.h>
-
+#include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
+#include <Oxygen/Vortex/SceneRenderer/ShadingMode.h>
+#include <Oxygen/Vortex/ShaderDebugMode.h>
 #include <Oxygen/Vortex/Test/Fakes/Graphics.h>
 #include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
+#include <Oxygen/Vortex/Types/ExposureTransition.h>
 
 namespace oxygen::engine::internal {
 struct EngineTagFactory {
@@ -299,8 +316,7 @@ NOLINT_TEST_F(RuntimeViewPublicationTest,
 
   EXPECT_EQ(renderer_->ResolvePublishedRuntimeViewId(intent_view_id),
     oxygen::kInvalidViewId);
-  EXPECT_THROW(
-    static_cast<void>(frame_context.GetViewContext(published_view_id)),
+  EXPECT_THROW(std::ignore = frame_context.GetViewContext(published_view_id),
     std::out_of_range);
 }
 
@@ -328,8 +344,7 @@ NOLINT_TEST_F(
   EXPECT_EQ(pruned.front(), intent_view_id);
   EXPECT_EQ(renderer_->ResolvePublishedRuntimeViewId(intent_view_id),
     oxygen::kInvalidViewId);
-  EXPECT_THROW(
-    static_cast<void>(frame_context.GetViewContext(published_view_id)),
+  EXPECT_THROW(std::ignore = frame_context.GetViewContext(published_view_id),
     std::out_of_range);
 }
 
@@ -434,7 +449,7 @@ NOLINT_TEST_F(RuntimeViewPublicationTest,
   post.SetManualExposureEv(10.0F);
   auto target = MakeFramebuffer();
   auto scene_renderer = SceneRenderer(*renderer_, *graphics_,
-    SceneTexturesConfig { .extent = { 64U, 64U, }, }, ShadingMode::kDeferred);
+    SceneTexturesConfig { .extent = { 64U, 64U } }, ShadingMode::kDeferred);
   auto first = CompositionView {};
   first.id = ViewId {
     31U,
@@ -736,7 +751,7 @@ NOLINT_TEST_F(RuntimeViewPublicationTest,
       22U,
     });
   auto scene_renderer = SceneRenderer(*renderer_, *graphics_,
-    SceneTexturesConfig { .extent = { 64U, 64U, }, }, ShadingMode::kDeferred);
+    SceneTexturesConfig { .extent = { 64U, 64U } }, ShadingMode::kDeferred);
   auto context = RenderContext {};
   context.scene = oxygen::observer_ptr {
     scene.get(),

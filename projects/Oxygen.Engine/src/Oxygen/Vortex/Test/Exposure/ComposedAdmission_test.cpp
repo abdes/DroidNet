@@ -6,16 +6,24 @@
 
 #include <array>
 #include <bit>
+#include <cstddef>
 #include <cstdint>
 #include <limits>
 #include <memory>
 
+#include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Types/PostProcess.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Scene/Environment/Background.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
+#include <Oxygen/Scene/ExposureSettings.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
 #include <Oxygen/Vortex/PostProcess/PostProcessService.h>
+#include <Oxygen/Vortex/PostProcess/Types/PostProcessConfig.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureGpuFixture.h>
+#include <Oxygen/Vortex/Types/ExposureStateData.h>
 
 namespace oxygen::vortex::testing::exposure {
 

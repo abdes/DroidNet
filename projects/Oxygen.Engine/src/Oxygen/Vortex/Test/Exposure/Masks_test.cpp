@@ -8,17 +8,29 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <optional>
 #include <span>
+#include <tuple>
 
-#include <Oxygen/Data/TextureResource.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/PostProcess.h>
+#include <Oxygen/Data/PakFormat_core.h>
+#include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
+#include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/Scene/ExposureSettings.h>
+#include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/PostProcess/PostProcessService.h>
+#include <Oxygen/Vortex/PostProcess/Types/PostProcessConfig.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererTag.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureGpuFixture.h>
-#include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestTags.h>
 #include <Oxygen/Vortex/Test/Fakes/AssetLoader.h>
+#include <Oxygen/Vortex/Test/Fixtures/TextureBinderPayloads.h>
 #include <Oxygen/Vortex/Upload/UploadCoordinator.h>
 
 namespace oxygen::vortex::testing::exposure {
@@ -228,9 +240,8 @@ NOLINT_TEST_F(
   ctx_.frame_sequence = frame::SequenceNumber {
     sequence_,
   };
-  static_cast<void>(
-    service.CaptureViewExposureSettings(ctx_.current_view.view_id,
-      ctx_.current_view.view_state_handle, accepted.Exposure().authored));
+  std::ignore = service.CaptureViewExposureSettings(ctx_.current_view.view_id,
+    ctx_.current_view.view_state_handle, accepted.Exposure().authored);
   auto scene_result_inputs = PostProcessService::Inputs {};
   scene_result_inputs.scene_signal = signal.texture.get();
   scene_result_inputs.scene_signal_srv = signal.srv;
@@ -269,7 +280,7 @@ NOLINT_TEST_F(
   auto framebuffer = Backend().CreateFramebuffer(
     FramebufferDesc {}.AddColorAttachment(output));
   auto textures
-    = SceneTextures(Backend(), SceneTexturesConfig { .extent = { 4U, 4U, }, });
+    = SceneTextures(Backend(), SceneTexturesConfig { .extent = { 4U, 4U } });
   unsigned id = 1U;
   for (bool previous : {
          false,
@@ -290,8 +301,7 @@ NOLINT_TEST_F(
       auto requested = scene::ExposureSettings {};
       requested.key = 12.5F;
       if (previous) {
-        static_cast<void>(
-          service.ResolveViewExposureSettings(handle, requested));
+        std::ignore = service.ResolveViewExposureSettings(handle, requested);
       }
       requested.metering_mask = loader.MintSyntheticTextureKey();
       EXPECT_EQ(
@@ -340,7 +350,7 @@ NOLINT_TEST_F(
         const auto ticket = readback->EnqueueCopy(*recorder, *output,
           {
             .src_slice
-            = { .x = 1U, .y = 0U, .width = 1U, .height = 1U, .depth = 1U, },
+            = { .x = 1U, .y = 0U, .width = 1U, .height = 1U, .depth = 1U },
           });
         if (!ticket.has_value()) {
           FAIL() << "Expected ticket to contain a value";

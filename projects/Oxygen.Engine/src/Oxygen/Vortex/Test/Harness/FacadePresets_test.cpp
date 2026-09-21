@@ -5,15 +5,28 @@
 //===----------------------------------------------------------------------===//
 
 #include <memory>
+#include <string_view>
+#include <utility>
 
-#include <Oxygen/Testing/GTest.h>
-
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Config/RendererConfig.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/ResolvedView.h>
+#include <Oxygen/Core/Types/TextureType.h>
+#include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
+#include <Oxygen/Graphics/Common/CommandRecording.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/QueueRole.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
+#include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/FacadePresets.h>
+#include <Oxygen/Vortex/PreparedSceneFrame.h>
+#include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/Test/Fakes/Graphics.h>
 
@@ -97,9 +110,8 @@ protected:
   [[nodiscard]] static auto MakePreparedFrameInput()
     -> Renderer::PreparedFrameInput
   {
-    return Renderer::PreparedFrameInput {
-      .value = oxygen::vortex::PreparedSceneFrame {},
-    };
+    return Renderer::PreparedFrameInput { .value
+      = oxygen::vortex::PreparedSceneFrame {} };
   }
 
   [[nodiscard]] auto AcquireRecorder(std::string_view name) const
@@ -120,7 +132,7 @@ NOLINT_TEST_F(
   auto facade
     = oxygen::vortex::harness::single_pass::presets::ForFullscreenGraphicsPass(
       *renderer_,
-      Renderer::FrameSessionInput { .frame_slot = oxygen::frame::Slot { 0U, }, },
+      Renderer::FrameSessionInput { .frame_slot = oxygen::frame::Slot { 0U, } },
       oxygen::observer_ptr<Framebuffer> { framebuffer_.get(), }, ViewId { 5U, });
 
   EXPECT_TRUE(facade.CanFinalize());
@@ -139,7 +151,7 @@ NOLINT_TEST_F(FacadePresetsTest,
 {
   auto facade = oxygen::vortex::harness::single_pass::presets::
     ForPreparedSceneGraphicsPass(*renderer_,
-      Renderer::FrameSessionInput { .frame_slot = oxygen::frame::Slot { 0U, }, },
+      Renderer::FrameSessionInput { .frame_slot = oxygen::frame::Slot { 0U, } },
       oxygen::observer_ptr<Framebuffer> { framebuffer_.get(), },
       MakeResolvedViewInput(), MakePreparedFrameInput());
 
@@ -159,7 +171,7 @@ NOLINT_TEST_F(FacadePresetsTest, RenderGraphPresetFinalizesWithCallerGraph)
   auto facade
     = oxygen::vortex::harness::render_graph::presets::ForSingleViewGraph(
       *renderer_,
-      Renderer::FrameSessionInput { .frame_slot = oxygen::frame::Slot { 0U, }, },
+      Renderer::FrameSessionInput { .frame_slot = oxygen::frame::Slot { 0U, } },
       oxygen::observer_ptr<Framebuffer> { framebuffer_.get(), },
       MakeResolvedViewInput(),
       // The caller synchronously runs or awaits this coroutine before its frame
@@ -262,7 +274,7 @@ NOLINT_TEST_F(
     // Synchronous execution finishes while the session-owned closure and its
     // captured test locals are alive.
     // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
-    [&]() -> oxygen::co::Co<void> { co_await result->Execute(*recorder); });
+    [&] -> oxygen::co::Co<void> { co_await result->Execute(*recorder); });
 
   EXPECT_TRUE(executed);
 }
@@ -272,7 +284,7 @@ NOLINT_TEST_F(FacadePresetsTest,
 {
   auto facade = oxygen::vortex::harness::single_pass::presets::
     ForPreparedSceneGraphicsPass(*renderer_,
-      Renderer::FrameSessionInput { .frame_slot = oxygen::frame::Slot { 0U, }, },
+      Renderer::FrameSessionInput { .frame_slot = oxygen::frame::Slot { 0U, } },
       oxygen::observer_ptr<Framebuffer> { framebuffer_.get(), },
       MakeResolvedViewInput(), MakePreparedFrameInput());
 

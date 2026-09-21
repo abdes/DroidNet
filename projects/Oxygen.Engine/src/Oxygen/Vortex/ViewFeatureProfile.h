@@ -16,7 +16,7 @@ namespace oxygen::vortex {
 
 struct ViewFeatureProfileSpec {
   CompositionView::ViewFeatureProfile profile {
-    CompositionView::ViewFeatureProfile::kDefault
+    CompositionView::ViewFeatureProfile::kDefault,
   };
   CompositionView::ViewFeatureMask feature_mask {};
   PipelineCapabilityRequirements capability_requirements {};

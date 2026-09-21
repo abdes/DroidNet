@@ -4,17 +4,23 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Vortex/Shadows/Internal/ConventionalShadowTargetAllocator.h>
-
 #include <algorithm>
+#include <cstdint>
+#include <utility>
 
+#include <Oxygen/Config/RendererConfig.h>
+#include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
+#include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Vortex/Renderer.h>
+#include <Oxygen/Vortex/Shadows/Internal/ConventionalShadowTargetAllocator.h>
 
 namespace oxygen::vortex::shadows::internal {
 

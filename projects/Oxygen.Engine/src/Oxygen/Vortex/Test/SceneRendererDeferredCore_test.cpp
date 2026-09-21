@@ -4,47 +4,73 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstddef>
+#include <cstdint>
 #include <cstring>
+#include <functional>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <ranges>
 #include <set>
 #include <span>
 #include <string>
+#include <string_view>
+#include <tuple>
+#include <utility>
 #include <vector>
 
+#include "Fakes/Graphics.h"
+#include <glm/ext/matrix_clip_space.hpp>
+#include <glm/ext/matrix_transform.hpp>
+#include <glm/ext/quaternion_trigonometric.hpp>
+#include <glm/ext/vector_float4.hpp>
+#include <glm/ext/vector_uint2.hpp>
 #include <glm/geometric.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/mat4x4.hpp>
-#include <glm/vec3.hpp>
+#include <glm/trigonometric.hpp>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Config/RendererConfig.h>
+#include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
+#include <Oxygen/Core/Types/View.h>
+#include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
+#include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
+#include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
+#include <Oxygen/Graphics/Common/Types/QueueRole.h>
+#include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Scene/Environment/Fog.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Scene/Environment/SkyLight.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
+#include <Oxygen/Scene/Light/LightCommon.h>
 #include <Oxygen/Scene/Light/PointLight.h>
 #include <Oxygen/Scene/Light/SpotLight.h>
 #include <Oxygen/Scene/Scene.h>
-#include <Oxygen/Scene/SceneTraversal.h>
+// Completes the traversal returned by Scene::Traverse().
+#include <Oxygen/Scene/SceneTraversal.h> // IWYU pragma: keep
+#include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Vortex/Diagnostics/DiagnosticsTypes.h>
 #include <Oxygen/Vortex/Lighting/Internal/DeferredLightProxyGeometry.h>
 #include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/RenderContext.h>
+#include <Oxygen/Vortex/RenderMode.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererCapability.h>
 #include <Oxygen/Vortex/ScenePrep/RenderItemData.h>
+#include <Oxygen/Vortex/SceneRenderer/DepthPrePassPolicy.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneRenderer.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
 #include <Oxygen/Vortex/SceneRenderer/ShadingMode.h>
@@ -56,13 +82,16 @@
 #include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/Types/OcclusionStats.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/Translucency/TranslucencyMeshProcessor.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/Translucency/TranslucencyModule.h>
+#include <Oxygen/Vortex/ShaderDebugMode.h>
 #include <Oxygen/Vortex/Test/Fixtures/MeshRasterStateTest.h>
 #include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
 #include <Oxygen/Vortex/Types/DrawMetadata.h>
+#include <Oxygen/Vortex/Types/FrameLightSelection.h>
+#include <Oxygen/Vortex/Types/GroundGridConfig.h>
 #include <Oxygen/Vortex/Types/PassMask.h>
+#include <Oxygen/Vortex/Types/VelocityPublications.h>
+#include <Oxygen/Vortex/Types/ViewFrameBindings.h>
 #include <Oxygen/Vortex/ViewFeatureProfile.h>
-
-#include "Fakes/Graphics.h"
 
 namespace {
 
@@ -249,7 +278,7 @@ protected:
     renderer_ = MakeRenderer(graphics_);
 
     auto scene_config = SceneTexturesConfig {
-      .extent = { 64U, 64U, },
+      .extent = { 64U, 64U },
       .enable_velocity = true,
       .enable_custom_depth = true,
       .gbuffer_count = 4U,
@@ -268,10 +297,10 @@ protected:
     frame_context_.SetScene(oxygen::observer_ptr<Scene> {
       scene_.get(),
     });
-    static_cast<void>(
-      frame_context_.RegisterView(MakeSceneView(first_view_id_, 64.0F, 64.0F)));
-    static_cast<void>(frame_context_.RegisterView(
-      MakeSceneView(second_view_id_, 96.0F, 54.0F)));
+    std::ignore = frame_context_.RegisterView(
+      MakeSceneView(first_view_id_, 64.0F, 64.0F));
+    std::ignore = frame_context_.RegisterView(
+      MakeSceneView(second_view_id_, 96.0F, 54.0F));
 
     first_resolved_view_ = MakeResolvedView(64.0F, 64.0F);
     second_resolved_view_ = MakeResolvedView(96.0F, 54.0F);
@@ -279,7 +308,7 @@ protected:
 
   void UpdateSceneTransforms()
   {
-    static_cast<void>(scene_->Traverse().UpdateTransforms());
+    std::ignore = scene_->Traverse().UpdateTransforms();
   }
 
   void RecreateRendererWithCapabilities(const CapabilitySet capabilities)
@@ -287,7 +316,7 @@ protected:
     scene_renderer_.reset();
     renderer_ = MakeRenderer(graphics_, capabilities);
     auto scene_config = SceneTexturesConfig {
-      .extent = { 64U, 64U, },
+      .extent = { 64U, 64U },
       .enable_velocity = true,
       .enable_custom_depth = true,
       .gbuffer_count = 4U,
@@ -355,8 +384,8 @@ protected:
       1U,
     };
     context.active_view_index = active_view_id == first_view_id_
-      ? std::size_t { 0U, }
-      : std::size_t { 1U, };
+      ? std::size_t { 0U }
+      : std::size_t { 1U };
     {
       auto& view_entry = context.frame_views.emplace_back();
       view_entry.view_id = first_view_id_;
@@ -503,7 +532,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   reclaimer.OnBeginFrame(oxygen::frame::Slot {
     1U,
   });
-  static_cast<void>(RenderForView(first_view_id_, first_resolved_view_));
+  std::ignore = RenderForView(first_view_id_, first_resolved_view_);
   auto first = scene_renderer_->GetResolvedSceneColorTexture();
   ASSERT_NE(first, nullptr);
   auto& registry = graphics_->GetResourceRegistry();
@@ -523,7 +552,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
     ASSERT_TRUE(
       registry.RegisterView(*first, std::move(handle), desc)->IsValid());
   }
-  static_cast<void>(RenderForView(second_view_id_, second_resolved_view_));
+  std::ignore = RenderForView(second_view_id_, second_resolved_view_);
   EXPECT_NE(scene_renderer_->GetResolvedSceneColorTexture(), first);
   EXPECT_TRUE(registry.Contains(*first));
   EXPECT_EQ(registry.FindShaderVisibleIndex(*first, desc), slot);
@@ -567,9 +596,9 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   std::array<glm::uvec2, 2> extents {};
   for (unsigned index = 0U; index < resolved.size(); ++index) {
     if (index == 0U) {
-      static_cast<void>(RenderForView(first_view_id_, first_resolved_view_));
+      std::ignore = RenderForView(first_view_id_, first_resolved_view_);
     } else {
-      static_cast<void>(RenderForView(second_view_id_, second_resolved_view_));
+      std::ignore = RenderForView(second_view_id_, second_resolved_view_);
     }
     const auto& extracts = scene_renderer_->GetSceneTextureExtracts();
     resolved.at(index) = extracts.resolved_scene_depth;
@@ -729,7 +758,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
 NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   RenderViewFamilyPublishesShadowDepthsOnlyForShadowedViews)
 {
-  static_cast<void>(AddDirectionalLight("Sun"));
+  std::ignore = AddDirectionalLight("Sun");
   scene_renderer_->OnFrameStart(frame_context_);
   UpdateSceneTransforms();
 
@@ -871,7 +900,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   DepthPrepassRecordsRealDrawWorkFromPreparedMetadata)
 {
   auto scene_config = SceneTexturesConfig {
-    .extent = { 64U, 64U, },
+    .extent = { 64U, 64U },
     .enable_velocity = true,
     .enable_custom_depth = false,
     .gbuffer_count = 4U,
@@ -939,7 +968,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
 {
   auto scene_renderer = SceneRenderer(*renderer_, *graphics_,
     SceneTexturesConfig {
-      .extent = { 64U, 64U, },
+      .extent = { 64U, 64U },
       .enable_velocity = true,
       .enable_custom_depth = true,
       .gbuffer_count = 4U,
@@ -1010,7 +1039,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
 {
   auto scene_renderer = SceneRenderer(*renderer_, *graphics_,
     SceneTexturesConfig {
-      .extent = { 64U, 64U, },
+      .extent = { 64U, 64U },
       .enable_velocity = false,
       .enable_custom_depth = true,
       .gbuffer_count = 4U,
@@ -1109,7 +1138,7 @@ NOLINT_TEST_F(
   SceneRendererDeferredCoreTest, BasePassSolidForwardWritesSceneColor)
 {
   auto scene_config = SceneTexturesConfig {
-    .extent = { 64U, 64U, },
+    .extent = { 64U, 64U },
     .enable_velocity = true,
     .enable_custom_depth = false,
     .gbuffer_count = 4U,
@@ -1183,7 +1212,7 @@ NOLINT_TEST_F(
 NOLINT_TEST_F(SceneRendererDeferredCoreTest, BasePassWireframeRunsInForwardMode)
 {
   auto scene_config = SceneTexturesConfig {
-    .extent = { 64U, 64U, },
+    .extent = { 64U, 64U },
     .enable_velocity = false,
     .enable_custom_depth = false,
     .gbuffer_count = 4U,
@@ -1254,7 +1283,7 @@ NOLINT_TEST_F(
   SceneRendererDeferredCoreTest, BasePassCompletesVelocityForDynamicGeometry)
 {
   auto scene_config = SceneTexturesConfig {
-    .extent = { 64U, 64U, },
+    .extent = { 64U, 64U },
     .enable_velocity = true,
     .enable_custom_depth = false,
     .gbuffer_count = 4U,
@@ -1309,7 +1338,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   BasePassVelocityAuxiliaryChainPreservesDepthAndRetiresIntermediates)
 {
   auto scene_config = SceneTexturesConfig {
-    .extent = { 64U, 64U, },
+    .extent = { 64U, 64U },
     .enable_velocity = true,
     .enable_custom_depth = false,
     .gbuffer_count = 4U,
@@ -1346,7 +1375,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
             MotionPublicationCapabilityBits::kUsesMotionVectorWorldOffset)
         | static_cast<std::uint32_t>(
           oxygen::vortex::MotionPublicationCapabilityBits::kHasRuntimePayload),
-      .parameter_block0 = { 0.1F, 0.0F, 0.0F, 0.0F, },
+      .parameter_block0 = { 0.1F, 0.0F, 0.0F, 0.0F },
     },
   };
   auto previous_status = current_status;
@@ -1476,7 +1505,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   BasePassRequiresPreparedFrameBeforePublishingProducts)
 {
   auto scene_config = SceneTexturesConfig {
-    .extent = { 64U, 64U, },
+    .extent = { 64U, 64U },
     .enable_velocity = true,
     .enable_custom_depth = false,
     .gbuffer_count = 4U,
@@ -1516,7 +1545,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
 NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   DeferredDebugVisualizationRoutesSupportedModesThroughSceneRenderer)
 {
-  static_cast<void>(AddDirectionalLight("DebugKeyLight"));
+  std::ignore = AddDirectionalLight("DebugKeyLight");
 
   struct DebugCase {
     ShaderDebugMode mode {
@@ -1559,8 +1588,8 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
     graphics_->draw_log_.draws.clear();
     graphics_->graphics_pipeline_log_.binds.clear();
 
-    static_cast<void>(
-      RenderForView(first_view_id_, first_resolved_view_, debug_case.mode));
+    std::ignore
+      = RenderForView(first_view_id_, first_resolved_view_, debug_case.mode);
 
     EXPECT_FALSE(scene_renderer_->GetLastDeferredLightingState()
         .consumed_published_scene_textures);
@@ -1579,11 +1608,11 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
 NOLINT_TEST_F(
   SceneRendererDeferredCoreTest, DeferredLightingConsumesPublishedGBuffers)
 {
-  static_cast<void>(AddDirectionalLight("KeyLight"));
+  std::ignore = AddDirectionalLight("KeyLight");
 
   graphics_->draw_log_.draws.clear();
   graphics_->graphics_pipeline_log_.binds.clear();
-  static_cast<void>(RenderForView(first_view_id_, first_resolved_view_));
+  std::ignore = RenderForView(first_view_id_, first_resolved_view_);
 
   const auto& state = scene_renderer_->GetLastDeferredLightingState();
   const auto& bindings = scene_renderer_->GetSceneTextureBindings();
@@ -1608,11 +1637,11 @@ NOLINT_TEST_F(
 NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   DeferredLightingRunsThroughLightingServiceAndPublishesLightingBindings)
 {
-  static_cast<void>(AddDirectionalLight("KeyLight"));
+  std::ignore = AddDirectionalLight("KeyLight");
 
   graphics_->draw_log_.draws.clear();
   graphics_->graphics_pipeline_log_.binds.clear();
-  static_cast<void>(RenderForView(first_view_id_, first_resolved_view_));
+  std::ignore = RenderForView(first_view_id_, first_resolved_view_);
 
   const auto& state = scene_renderer_->GetLastDeferredLightingState();
   EXPECT_TRUE(state.owned_by_lighting_service);
@@ -1648,7 +1677,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
     glm::angleAxis(-oxygen::math::HalfPi, oxygen::space::move::Right));
   UpdateSceneTransforms();
 
-  static_cast<void>(RenderForView(first_view_id_, first_resolved_view_));
+  std::ignore = RenderForView(first_view_id_, first_resolved_view_);
 
   const auto& selection
     = RendererPublicationProbe::GetFrameLightSelection(*scene_renderer_);
@@ -1703,7 +1732,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
     glm::angleAxis(-oxygen::math::HalfPi, oxygen::space::move::Right));
 
   UpdateSceneTransforms();
-  static_cast<void>(RenderForView(first_view_id_, first_resolved_view_));
+  std::ignore = RenderForView(first_view_id_, first_resolved_view_);
 
   const auto& selection
     = RendererPublicationProbe::GetFrameLightSelection(*scene_renderer_);
@@ -1719,11 +1748,11 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
 NOLINT_TEST_F(
   SceneRendererDeferredCoreTest, DeferredLightingAccumulatesIntoSceneColor)
 {
-  static_cast<void>(AddDirectionalLight("Sun"));
+  std::ignore = AddDirectionalLight("Sun");
 
   graphics_->draw_log_.draws.clear();
   graphics_->graphics_pipeline_log_.binds.clear();
-  static_cast<void>(RenderForView(first_view_id_, first_resolved_view_));
+  std::ignore = RenderForView(first_view_id_, first_resolved_view_);
 
   const auto& state = scene_renderer_->GetLastDeferredLightingState();
   const auto& bindings = scene_renderer_->GetSceneTextureBindings();
@@ -1743,7 +1772,7 @@ NOLINT_TEST_F(
 NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   Stage8PublishesDirectionalShadowFrameSlotForDeferredLighting)
 {
-  static_cast<void>(AddDirectionalLight("Sun"));
+  std::ignore = AddDirectionalLight("Sun");
 
   const auto context = RenderForView(first_view_id_, first_resolved_view_);
   const auto& published_bindings
@@ -1782,7 +1811,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
 NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   ShadowOnlyFeatureProfilePublishesShadowBindingsWithoutSceneColorProducts)
 {
-  static_cast<void>(AddDirectionalLight("Sun"));
+  std::ignore = AddDirectionalLight("Sun");
 
   const auto context = RenderForView(first_view_id_, first_resolved_view_,
     ShaderDebugMode::kDisabled,
@@ -1843,7 +1872,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
 NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   NoShadowingFeatureProfileSkipsShadowProductsWhileRenderingSceneLighting)
 {
-  static_cast<void>(AddDirectionalLight("Sun"));
+  std::ignore = AddDirectionalLight("Sun");
 
   const auto context = RenderForView(first_view_id_, first_resolved_view_,
     ShaderDebugMode::kDisabled,
@@ -1877,7 +1906,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
     | RendererCapabilityFamily::kLightingData
     | RendererCapabilityFamily::kEnvironmentLighting);
   InstallAtmosphereEnvironment(true);
-  static_cast<void>(AddDirectionalLight("Sun"));
+  std::ignore = AddDirectionalLight("Sun");
 
   const auto context = RenderForView(first_view_id_, first_resolved_view_,
     ShaderDebugMode::kDisabled,
@@ -1913,7 +1942,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
     | RendererCapabilityFamily::kDeferredShading
     | RendererCapabilityFamily::kLightingData
     | RendererCapabilityFamily::kDiagnosticsAndProfiling);
-  static_cast<void>(AddDirectionalLight("DiagnosticsOnlySun"));
+  std::ignore = AddDirectionalLight("DiagnosticsOnlySun");
   renderer_->GetDiagnosticsService().SetEnabledFeatures(
     oxygen::vortex::DiagnosticsFeature::kFrameLedger);
   renderer_->GetDiagnosticsService().BeginFrame(oxygen::frame::SequenceNumber {
@@ -2004,11 +2033,11 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
 NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   DeferredLightingConsumesDirectionalShadowProductWithoutVsmOrLocalShadowExpansion)
 {
-  static_cast<void>(AddDirectionalLight("Sun"));
-  static_cast<void>(AddPointLight("PointFill"));
-  static_cast<void>(AddSpotLight("SpotRim"));
+  std::ignore = AddDirectionalLight("Sun");
+  std::ignore = AddPointLight("PointFill");
+  std::ignore = AddSpotLight("SpotRim");
 
-  static_cast<void>(RenderForView(first_view_id_, first_resolved_view_));
+  std::ignore = RenderForView(first_view_id_, first_resolved_view_);
 
   const auto& lighting_state = scene_renderer_->GetLastDeferredLightingState();
   EXPECT_TRUE(lighting_state.consumed_directional_shadow_product);
@@ -2030,7 +2059,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   spot_light->get().Common().shadow.bias = 0.5F;
   spot_light->get().Common().shadow.normal_bias = 0.03F;
 
-  static_cast<void>(RenderForView(first_view_id_, first_resolved_view_));
+  std::ignore = RenderForView(first_view_id_, first_resolved_view_);
 
   const auto& selection
     = RendererPublicationProbe::GetFrameLightSelection(*scene_renderer_);
@@ -2058,7 +2087,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   point_light->get().Common().shadow.bias = 0.5F;
   point_light->get().Common().shadow.normal_bias = 0.03F;
 
-  static_cast<void>(RenderForView(first_view_id_, first_resolved_view_));
+  std::ignore = RenderForView(first_view_id_, first_resolved_view_);
 
   const auto& selection
     = RendererPublicationProbe::GetFrameLightSelection(*scene_renderer_);
@@ -2094,7 +2123,7 @@ NOLINT_TEST_F(
 
   graphics_->draw_log_.draws.clear();
   graphics_->graphics_pipeline_log_.binds.clear();
-  static_cast<void>(RenderForView(first_view_id_, outside_view));
+  std::ignore = RenderForView(first_view_id_, outside_view);
 
   const auto& state = scene_renderer_->GetLastDeferredLightingState();
 
@@ -2128,12 +2157,12 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   DeferredLightingUsesInsideVolumePathWhenCameraStartsInsideLocalLights)
 {
   const auto inside_view = MakePerspectiveResolvedView(64.0F, 64.0F);
-  static_cast<void>(AddPointLight("PointFill"));
-  static_cast<void>(AddSpotLight("SpotRim"));
+  std::ignore = AddPointLight("PointFill");
+  std::ignore = AddSpotLight("SpotRim");
 
   graphics_->draw_log_.draws.clear();
   graphics_->graphics_pipeline_log_.binds.clear();
-  static_cast<void>(RenderForView(first_view_id_, inside_view));
+  std::ignore = RenderForView(first_view_id_, inside_view);
 
   const auto& state = scene_renderer_->GetLastDeferredLightingState();
 
@@ -2283,12 +2312,12 @@ NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
 NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   DeferredLightingUsesNonPerspectiveLocalLightModeForNonPerspectiveViews)
 {
-  static_cast<void>(AddPointLight("PointFill"));
-  static_cast<void>(AddSpotLight("SpotRim"));
+  std::ignore = AddPointLight("PointFill");
+  std::ignore = AddSpotLight("SpotRim");
 
   graphics_->draw_log_.draws.clear();
   graphics_->graphics_pipeline_log_.binds.clear();
-  static_cast<void>(RenderForView(first_view_id_, first_resolved_view_));
+  std::ignore = RenderForView(first_view_id_, first_resolved_view_);
 
   const auto& state = scene_renderer_->GetLastDeferredLightingState();
 
@@ -2326,7 +2355,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
 
   graphics_->draw_log_.draws.clear();
   graphics_->graphics_pipeline_log_.binds.clear();
-  static_cast<void>(RenderForView(first_view_id_, first_resolved_view_));
+  std::ignore = RenderForView(first_view_id_, first_resolved_view_);
 
   EXPECT_FALSE(std::ranges::any_of(
     graphics_->graphics_pipeline_log_.binds, [](const auto& bind) -> bool {
@@ -3012,7 +3041,7 @@ NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
   auto module = oxygen::vortex::TranslucencyModule(*renderer);
   auto scene_textures = oxygen::vortex::SceneTextures(*graphics,
     SceneTexturesConfig {
-      .extent = { 64U, 64U, },
+      .extent = { 64U, 64U },
       .enable_velocity = true,
       .enable_custom_depth = false,
       .gbuffer_count = 4U,
@@ -3109,7 +3138,7 @@ NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
 
   auto base_pass = oxygen::vortex::BasePassModule(*renderer,
     SceneTexturesConfig {
-      .extent = { 64U, 64U, },
+      .extent = { 64U, 64U },
       .enable_velocity = true,
       .enable_custom_depth = false,
       .gbuffer_count = 4U,
@@ -3117,7 +3146,7 @@ NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
     });
   auto scene_textures = oxygen::vortex::SceneTextures(*graphics,
     SceneTexturesConfig {
-      .extent = { 64U, 64U, },
+      .extent = { 64U, 64U },
       .enable_velocity = true,
       .enable_custom_depth = false,
       .gbuffer_count = 4U,
@@ -3183,7 +3212,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   BaseAndDepthPassesBindSidednessAndHandednessForEveryDraw)
 {
   const auto config = SceneTexturesConfig {
-    .extent = { 64U, 64U, },
+    .extent = { 64U, 64U },
     .enable_velocity = true,
     .enable_custom_depth = false,
     .gbuffer_count = 4U,
@@ -3267,7 +3296,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   AuxiliaryVelocityBindsSidednessAndHandednessForEveryDraw)
 {
   const auto config = SceneTexturesConfig {
-    .extent = { 64U, 64U, },
+    .extent = { 64U, 64U },
     .enable_velocity = true,
     .enable_custom_depth = false,
     .gbuffer_count = 4U,
@@ -3283,7 +3312,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
             MotionPublicationCapabilityBits::kUsesMotionVectorWorldOffset)
         | static_cast<std::uint32_t>(
           oxygen::vortex::MotionPublicationCapabilityBits::kHasRuntimePayload),
-      .parameter_block0 = { 0.1F, 0.0F, 0.0F, 0.0F, },
+      .parameter_block0 = { 0.1F, 0.0F, 0.0F, 0.0F },
     },
   };
   auto velocity = std::array<oxygen::vortex::VelocityDrawMetadata, 5> {};
@@ -3341,7 +3370,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   TranslucencyBindsSidednessAndHandednessForEveryDraw)
 {
   const auto config = SceneTexturesConfig {
-    .extent = { 64U, 64U, },
+    .extent = { 64U, 64U },
     .enable_velocity = true,
     .enable_custom_depth = false,
     .gbuffer_count = 4U,
@@ -3396,7 +3425,7 @@ NOLINT_TEST(SceneRendererDeferredCoreCapabilityTest,
     = MakeRenderer(graphics, RendererCapabilityFamily::kScenePreparation);
   auto scene_renderer = std::make_unique<SceneRenderer>(*renderer, *graphics,
     SceneTexturesConfig {
-      .extent = { 64U, 64U, },
+      .extent = { 64U, 64U },
       .enable_velocity = true,
       .enable_custom_depth = true,
       .gbuffer_count = 4U,
@@ -3409,11 +3438,11 @@ NOLINT_TEST(SceneRendererDeferredCoreCapabilityTest,
   frame_context.SetScene(oxygen::observer_ptr<Scene> {
     scene.get(),
   });
-  static_cast<void>(frame_context.RegisterView(MakeSceneView(
+  std::ignore = frame_context.RegisterView(MakeSceneView(
     ViewId {
       11U,
     },
-    64.0F, 64.0F)));
+    64.0F, 64.0F));
 
   scene_renderer->OnFrameStart(frame_context);
 
@@ -3469,7 +3498,7 @@ NOLINT_TEST(SceneRendererDeferredCoreCapabilityTest,
 NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   ViewDiscontinuityInvalidatesPreviousHzbForOneFrame)
 {
-  const auto config = SceneTexturesConfig { .extent = { 64U, 64U, }, };
+  const auto config = SceneTexturesConfig { .extent = { 64U, 64U } };
   auto module = oxygen::vortex::ScreenHzbModule(*renderer_, config);
   auto textures = oxygen::vortex::SceneTextures(*graphics_, config);
   auto context = RenderContext {};
@@ -3534,9 +3563,9 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   auto module
     = oxygen::vortex::ScreenHzbModule(*renderer_, SceneTexturesConfig {});
   auto first = oxygen::vortex::SceneTextures(
-    *graphics_, SceneTexturesConfig { .extent = { 64U, 64U, }, });
+    *graphics_, SceneTexturesConfig { .extent = { 64U, 64U } });
   auto second = oxygen::vortex::SceneTextures(
-    *graphics_, SceneTexturesConfig { .extent = { 32U, 16U, }, });
+    *graphics_, SceneTexturesConfig { .extent = { 32U, 16U } });
   struct Snapshot {
     unsigned slot;
     const std::byte* data;
@@ -3612,7 +3641,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
     reclaimer.OnBeginFrame(oxygen::frame::Slot {
       1U,
     });
-    const auto config = SceneTexturesConfig { .extent = { 64U, 64U, }, };
+    const auto config = SceneTexturesConfig { .extent = { 64U, 64U } };
     auto module = oxygen::vortex::ScreenHzbModule(*renderer_, config);
     auto textures = oxygen::vortex::SceneTextures(*graphics_, config);
     auto context = RenderContext {};
@@ -3681,10 +3710,12 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   Fp32SceneFamilyPublishesMatchingPipelineAndResolvedArtifact)
 {
   scene_renderer_ = std::make_unique<SceneRenderer>(*renderer_, *graphics_,
-    SceneTexturesConfig { .extent = { 64U, 64U, },
-      .scene_color_format = oxygen::Format::kRGBA32Float, },
+    SceneTexturesConfig {
+      .extent = { 64U, 64U },
+      .scene_color_format = oxygen::Format::kRGBA32Float,
+    },
     ShadingMode::kDeferred);
-  static_cast<void>(AddDirectionalLight("Fp32Sun"));
+  std::ignore = AddDirectionalLight("Fp32Sun");
   const auto context = RenderForView(first_view_id_, first_resolved_view_);
   EXPECT_EQ(
     context.current_view.hdr_color_format, oxygen::Format::kRGBA32Float);

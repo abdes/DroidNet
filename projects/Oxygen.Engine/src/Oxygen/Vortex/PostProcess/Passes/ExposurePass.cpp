@@ -8,29 +8,46 @@
 #include <array>
 #include <bit>
 #include <cmath>
+#include <cstddef>
+#include <cstdint>
 #include <cstring>
+#include <expected>
+#include <limits>
+#include <memory>
+#include <optional>
 #include <span>
-#include <stdexcept>
+#include <string>
+#include <string_view>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Bindless/Generated.BindlessAbi.h>
 #include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
+#include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Constants.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Core/Types/PostProcess.h>
+#include <Oxygen/Core/Types/Scissors.h>
 #include <Oxygen/Core/Types/ShaderType.h>
+#include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
-#include <Oxygen/Graphics/Common/CommandList.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
+#include <Oxygen/Graphics/Common/Shaders.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Profiling/CpuProfileScope.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
+#include <Oxygen/Profiling/ProfileScope.h>
+#include <Oxygen/Scene/ExposureSettings.h>
 #include <Oxygen/Vortex/Environment/SceneBackground.h>
 #include <Oxygen/Vortex/Internal/PerViewStructuredPublisher.h>
 #include <Oxygen/Vortex/Internal/ViewportClamp.h>
@@ -39,6 +56,7 @@
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/Types/ExposureStateData.h>
 #include <Oxygen/Vortex/Types/ExposureTargetData.h>
+#include <Oxygen/Vortex/Types/ExposureTransition.h>
 
 namespace oxygen::vortex::postprocess {
 
@@ -161,12 +179,16 @@ namespace {
         == ExposureTransitionPolicy::kSeedFromEv100) {
       const auto seed = scene::ResolveExposureSeedLogGain(
         initial, *source.transition->seed_ev);
-      if (seed)
+      if (seed) {
         log_gain = *seed;
+      }
     }
-    return automatic
-      ? (initial.authored.target_luminance == 0.0F ? 0.0F : std::exp2(log_gain))
-      : initial.fixed_scale;
+    if (!automatic) {
+      return initial.fixed_scale;
+    }
+    const auto automatic_scale
+      = initial.authored.target_luminance == 0.0F ? 0.0F : std::exp2(log_gain);
+    return automatic_scale;
   }
 
   struct alignas(packing::kShaderDataFieldAlignment)
@@ -347,18 +369,24 @@ auto ExposurePass::OnFrameStart(
     }
   }
   target_frame_ = sequence;
-  if (target_publisher_)
+  if (target_publisher_) {
     target_publisher_->OnFrameStart(sequence, slot);
-  if (constants_publisher_)
+  }
+  if (constants_publisher_) {
     constants_publisher_->OnFrameStart(sequence, slot);
-  if (average_constants_publisher_)
+  }
+  if (average_constants_publisher_) {
     average_constants_publisher_->OnFrameStart(sequence, slot);
-  if (frame_constants_publisher_)
+  }
+  if (frame_constants_publisher_) {
     frame_constants_publisher_->OnFrameStart(sequence, slot);
-  if (suitability_constants_publisher_)
+  }
+  if (suitability_constants_publisher_) {
     suitability_constants_publisher_->OnFrameStart(sequence, slot);
-  if (conversion_constants_publisher_)
+  }
+  if (conversion_constants_publisher_) {
     conversion_constants_publisher_->OnFrameStart(sequence, slot);
+  }
 }
 
 auto ExposurePass::PreparePublishers(RenderContext& ctx) -> void
@@ -422,16 +450,20 @@ auto ExposurePass::AcquireFrame(const bool fp32_only)
   CHECK_NOTNULL_F(gfx.get());
   auto frame = std::make_shared<FrameResources>();
   frame->fp32_only = fp32_only;
-  frame->buffer = gfx->CreateBuffer({ .size_bytes = sizeof(FrameExposureData),
+  frame->buffer = gfx->CreateBuffer({
+    .size_bytes = sizeof(FrameExposureData),
     .usage = graphics::BufferUsage::kStorage,
     .memory = graphics::BufferMemory::kDeviceLocal,
-    .debug_name = "Vortex.PostProcess.Exposure.Frame" });
+    .debug_name = "Vortex.PostProcess.Exposure.Frame",
+  });
   CHECK_NOTNULL_F(frame->buffer.get());
   RegisterResourceIfNeeded(*gfx, frame->buffer);
   auto& registry = gfx->GetResourceRegistry();
   auto& allocator = gfx->GetDescriptorAllocator();
-  for (const auto type : { graphics::ResourceViewType::kStructuredBuffer_SRV,
-         graphics::ResourceViewType::kStructuredBuffer_UAV }) {
+  for (const auto type : {
+         graphics::ResourceViewType::kStructuredBuffer_SRV,
+         graphics::ResourceViewType::kStructuredBuffer_UAV,
+       }) {
     auto handle = type == graphics::ResourceViewType::kStructuredBuffer_SRV
       ? allocator.AllocateBindless(
           ::oxygen::bindless::generated::kGlobalSrvDomain, type)
@@ -440,43 +472,53 @@ auto ExposurePass::AcquireFrame(const bool fp32_only)
     CHECK_F(handle.IsValid());
     const auto index = allocator.GetShaderVisibleIndex(handle);
     const auto view = registry.RegisterView(*frame->buffer, std::move(handle),
-      graphics::BufferViewDescription { .view_type = type,
+      graphics::BufferViewDescription {
+        .view_type = type,
         .visibility = graphics::DescriptorVisibility::kShaderVisible,
         .range = { 0U, sizeof(FrameExposureData) },
-        .stride = sizeof(FrameExposureData) });
+        .stride = sizeof(FrameExposureData),
+      });
     CHECK_F(view->IsValid());
-    if (type == graphics::ResourceViewType::kStructuredBuffer_SRV)
+    if (type == graphics::ResourceViewType::kStructuredBuffer_SRV) {
       frame->srv_index = index;
-    else
+    } else {
       frame->uav_index = index;
+    }
   }
   const auto create_report
     = [&](std::shared_ptr<graphics::Buffer>& buffer, ShaderVisibleIndex& srv,
-        ShaderVisibleIndex& uav, std::string_view name) {
-        buffer = gfx->CreateBuffer({ .size_bytes = sizeof(HdrSuitabilityData),
-          .usage = graphics::BufferUsage::kStorage,
-          .memory = graphics::BufferMemory::kDeviceLocal,
-          .debug_name = std::string(name) });
-        CHECK_NOTNULL_F(buffer.get());
-        RegisterResourceIfNeeded(*gfx, buffer);
-        for (const auto type : { graphics::ResourceViewType::kRawBuffer_SRV,
-               graphics::ResourceViewType::kRawBuffer_UAV }) {
-          auto handle = allocator.AllocateRaw(
-            type, graphics::DescriptorVisibility::kShaderVisible);
-          CHECK_F(handle.IsValid());
-          const auto index = allocator.GetShaderVisibleIndex(handle);
-          const auto view = registry.RegisterView(*buffer, std::move(handle),
-            graphics::BufferViewDescription { .view_type = type,
-              .visibility = graphics::DescriptorVisibility::kShaderVisible,
-              .range = { 0U, sizeof(HdrSuitabilityData) },
-              .stride = 0U });
-          CHECK_F(view->IsValid());
-          if (type == graphics::ResourceViewType::kRawBuffer_SRV)
-            srv = index;
-          else
-            uav = index;
-        }
-      };
+        ShaderVisibleIndex& uav, std::string_view name) -> void {
+    buffer = gfx->CreateBuffer({
+      .size_bytes = sizeof(HdrSuitabilityData),
+      .usage = graphics::BufferUsage::kStorage,
+      .memory = graphics::BufferMemory::kDeviceLocal,
+      .debug_name = std::string(name),
+    });
+    CHECK_NOTNULL_F(buffer.get());
+    RegisterResourceIfNeeded(*gfx, buffer);
+    for (const auto type : {
+           graphics::ResourceViewType::kRawBuffer_SRV,
+           graphics::ResourceViewType::kRawBuffer_UAV,
+         }) {
+      auto handle = allocator.AllocateRaw(
+        type, graphics::DescriptorVisibility::kShaderVisible);
+      CHECK_F(handle.IsValid());
+      const auto index = allocator.GetShaderVisibleIndex(handle);
+      const auto view = registry.RegisterView(*buffer, std::move(handle),
+        graphics::BufferViewDescription {
+          .view_type = type,
+          .visibility = graphics::DescriptorVisibility::kShaderVisible,
+          .range = { 0U, sizeof(HdrSuitabilityData) },
+          .stride = 0U,
+        });
+      CHECK_F(view->IsValid());
+      if (type == graphics::ResourceViewType::kRawBuffer_SRV) {
+        srv = index;
+      } else {
+        uav = index;
+      }
+    }
+  };
   if (!fp32_only) {
     create_report(frame->suitability_buffer, frame->suitability_srv,
       frame->suitability_uav, "Vortex.Exposure.Suitability");
@@ -514,7 +556,7 @@ auto ExposurePass::ResolveFrame(RenderContext& ctx,
     return found->second;
   }
   const bool sharing
-    = inputs.source && !config.Settings().temporary_unit_exposure;
+    = (inputs.source != nullptr) && !config.Settings().temporary_unit_exposure;
   const auto owner
     = sharing ? inputs.source->handle : ctx.current_view.view_state_handle;
   const auto lifetime = sharing ? inputs.source->lifetime : inputs.lifetime;
@@ -554,10 +596,12 @@ auto ExposurePass::ResolveFrame(RenderContext& ctx,
     } else {
       frame->selected_history
         = RecordState(ctx, recorder, inputs.source->config,
-          Inputs { .metering_available = false,
+          Inputs {
+            .metering_available = false,
             .transition = inputs.source->transition,
             .rejection = inputs.source->rejection,
-            .lifetime = lifetime },
+            .lifetime = lifetime,
+          },
           {}, {}, true);
       if (frame->selected_history) {
         CacheBootstrap(recorder, owner, frame->selected_history);
@@ -578,15 +622,15 @@ auto ExposurePass::ResolveFrame(RenderContext& ctx,
       profiling::ProfileGranularity::kTelemetry,
       profiling::ProfileCategory::kCompute,
       profiling::Vars(profiling::Var("view", ctx.current_view.view_id.get())));
-    const auto track
-      = [&](const graphics::Buffer& buffer, graphics::ResourceStates state) {
-          if (!recorder.IsResourceTracked(buffer)
-            && !recorder.AdoptKnownResourceState(buffer)) {
-            recorder.BeginTrackingResourceState(
-              buffer, graphics::ResourceStates::kCommon, false);
-          }
-          recorder.RequireResourceState(buffer, state);
-        };
+    const auto track = [&](const graphics::Buffer& buffer,
+                         graphics::ResourceStates state) -> void {
+      if (!recorder.IsResourceTracked(buffer)
+        && !recorder.AdoptKnownResourceState(buffer)) {
+        recorder.BeginTrackingResourceState(
+          buffer, graphics::ResourceStates::kCommon, false);
+      }
+      recorder.RequireResourceState(buffer, state);
+    };
     track(*frame->buffer, graphics::ResourceStates::kUnorderedAccess);
     track(*frame->current_state->status_buffer,
       graphics::ResourceStates::kUnorderedAccess);
@@ -699,15 +743,15 @@ auto ExposurePass::RestoreFrameFallback(RenderContext& ctx,
       profiling::ProfileGranularity::kTelemetry,
       profiling::ProfileCategory::kCompute,
       profiling::Vars(profiling::Var("view", ctx.current_view.view_id.get())));
-    const auto track
-      = [&](const graphics::Buffer& buffer, graphics::ResourceStates state) {
-          if (!recorder.IsResourceTracked(buffer)
-            && !recorder.AdoptKnownResourceState(buffer)) {
-            recorder.BeginTrackingResourceState(
-              buffer, graphics::ResourceStates::kCommon, false);
-          }
-          recorder.RequireResourceState(buffer, state);
-        };
+    const auto track = [&](const graphics::Buffer& buffer,
+                         graphics::ResourceStates state) -> void {
+      if (!recorder.IsResourceTracked(buffer)
+        && !recorder.AdoptKnownResourceState(buffer)) {
+        recorder.BeginTrackingResourceState(
+          buffer, graphics::ResourceStates::kCommon, false);
+      }
+      recorder.RequireResourceState(buffer, state);
+    };
     track(*fallback->buffer, graphics::ResourceStates::kShaderResource);
     track(
       *frame.current_state->buffer, graphics::ResourceStates::kUnorderedAccess);
@@ -812,14 +856,31 @@ auto ExposurePass::RecordSceneRangeCommands(RenderContext& ctx,
   recorder.RequireResourceState(
     status, graphics::ResourceStates::kUnorderedAccess);
   const auto constants = std::array<std::uint32_t, 32U> {
-    frame.current_state->status_uav_index.get(), source_srv.get(),
-    frame.srv_index.get(), frame.current_state->srv_index.get(), desc.width,
-    desc.height, 1U,
+    frame.current_state->status_uav_index.get(),
+    source_srv.get(),
+    frame.srv_index.get(),
+    frame.current_state->srv_index.get(),
+    desc.width,
+    desc.height,
+    1U,
     32U | (capture_opaque_input && !frame.fp32_only ? 0U : 2048U)
       | (frame.fp32_only ? 4096U : 0U),
-    11U, 0U, kInvalidShaderVisibleIndex.get(), 0U, 0U, 0U, desc.width,
-    desc.height, 0U, std::bit_cast<std::uint32_t>(1.0F), 0U, 0U,
-    std::bit_cast<std::uint32_t>(1.0F), kInvalidShaderVisibleIndex.get(), 0U, 0U
+    11U,
+    0U,
+    kInvalidShaderVisibleIndex.get(),
+    0U,
+    0U,
+    0U,
+    desc.width,
+    desc.height,
+    0U,
+    std::bit_cast<std::uint32_t>(1.0F),
+    0U,
+    0U,
+    std::bit_cast<std::uint32_t>(1.0F),
+    kInvalidShaderVisibleIndex.get(),
+    0U,
+    0U,
   };
   const auto slot = suitability_constants_publisher_->Publish(
     ctx.current_view.view_id, constants);
@@ -922,7 +983,8 @@ auto ExposurePass::HasFilterGradients(
     return false;
   }
   const auto found = recorded_filter_gradients_.find(frame.get());
-  const auto index = product == 5U ? 0U : product == 6U ? 1U : 2U;
+  const auto volume_gradient_index = product == 6U ? 1U : 2U;
+  const auto index = product == 5U ? 0U : volume_gradient_index;
   return found != recorded_filter_gradients_.end()
     && found->second[index].texture != nullptr;
 }
@@ -943,7 +1005,8 @@ auto ExposurePass::GatherFilterGradients(RenderContext& ctx,
   if (product.id != 5U && product.id != 6U && product.id != 10U) {
     return false;
   }
-  const auto index = product.id == 5U ? 0U : product.id == 6U ? 1U : 2U;
+  const auto volume_gradient_index = product.id == 6U ? 1U : 2U;
+  const auto index = product.id == 5U ? 0U : volume_gradient_index;
   recorded_filter_gradients_.try_emplace(frame.get()).first->second.at(index)
     = {};
   if (!product.texture || !product.srv.IsValid()) {
@@ -1101,15 +1164,15 @@ auto ExposurePass::EvaluateFp16Products(RenderContext& ctx,
       profiling::ProfileGranularity::kTelemetry,
       profiling::ProfileCategory::kCompute,
       profiling::Vars(profiling::Var("view", ctx.current_view.view_id.get())));
-    const auto track
-      = [&](const graphics::Buffer& buffer, graphics::ResourceStates state) {
-          if (!recorder.IsResourceTracked(buffer)
-            && !recorder.AdoptKnownResourceState(buffer)) {
-            recorder.BeginTrackingResourceState(
-              buffer, graphics::ResourceStates::kCommon, false);
-          }
-          recorder.RequireResourceState(buffer, state);
-        };
+    const auto track = [&](const graphics::Buffer& buffer,
+                         graphics::ResourceStates state) -> void {
+      if (!recorder.IsResourceTracked(buffer)
+        && !recorder.AdoptKnownResourceState(buffer)) {
+        recorder.BeginTrackingResourceState(
+          buffer, graphics::ResourceStates::kCommon, false);
+      }
+      recorder.RequireResourceState(buffer, state);
+    };
     track(*frame->buffer, graphics::ResourceStates::kShaderResource);
     track(
       *frame->current_state->buffer, graphics::ResourceStates::kShaderResource);
@@ -1130,14 +1193,14 @@ auto ExposurePass::EvaluateFp16Products(RenderContext& ctx,
     }
     const auto background
       = environment::ResolveSceneBackground(ctx).value_or(Vec3 { 0.0F });
-    const auto dispatch = [&](const unsigned pipeline,
-                            const HdrProduct* product,
-                            const std::uint32_t additional_flags = 0U) {
+    const auto dispatch
+      = [&](const unsigned pipeline, const HdrProduct* product,
+          const std::uint32_t additional_flags = 0U) -> void {
       constexpr std::array<std::string_view, 4> names {
         "Vortex.PostProcess.Exposure.ClearSuitability",
         "Vortex.PostProcess.Exposure.GatherSuitabilityMaximum",
         "Vortex.PostProcess.Exposure.SelectSuitabilityCandidate",
-        "Vortex.PostProcess.Exposure.CheckSuitabilityProduct"
+        "Vortex.PostProcess.Exposure.CheckSuitabilityProduct",
       };
       graphics::GpuEventScope product_scope(recorder, names.at(pipeline),
         profiling::ProfileGranularity::kTelemetry,
@@ -1163,22 +1226,30 @@ auto ExposurePass::EvaluateFp16Products(RenderContext& ctx,
       }
       const auto rectangle = product && product->metering
         ? MeteringRectangle(ctx, desc)
-        : Scissors { .right = static_cast<std::int32_t>(desc.width),
-            .bottom = static_cast<std::int32_t>(desc.height) };
+        : Scissors {
+            .right = static_cast<std::int32_t>(desc.width),
+            .bottom = static_cast<std::int32_t>(desc.height),
+          };
       const auto flags = product ? (product->metering ? 1U : 0U)
           | (product->coverage ? 2U : 0U) | (product->transmittance ? 4U : 0U)
           | (product->composed_error ? 256U : 0U)
           | (desc.texture_type == TextureType::kTexture3D ? 8U : 0U)
                                  : 0U;
-      const auto constants = std::array<std::uint32_t, 32U> { candidate_bounds
-          ? frame->current_state->status_uav_index.get()
-          : report_uav.get(),
+      const auto bounds_report_index
+        = fused_point_check ? report_uav.get() : report_srv.get();
+      const auto constants = std::array<std::uint32_t, 32U> {
+        candidate_bounds ? frame->current_state->status_uav_index.get()
+                         : report_uav.get(),
         product ? product->srv.get() : kInvalidShaderVisibleIndex.get(),
-        frame->srv_index.get(), frame->current_state->srv_index.get(),
-        desc.width, desc.height, desc.depth,
+        frame->srv_index.get(),
+        frame->current_state->srv_index.get(),
+        desc.width,
+        desc.height,
+        desc.depth,
         flags | (scale == SuitabilityScale::kCurrentFrame ? 16U : 0U)
           | additional_flags,
-        product ? product->id : 0U, expected_mask,
+        product ? product->id : 0U,
+        expected_mask,
         metering.metering_mask_srv.get(),
         static_cast<std::uint32_t>(config.Exposure().authored.metering_mode),
         static_cast<std::uint32_t>(rectangle.left),
@@ -1199,9 +1270,7 @@ auto ExposurePass::EvaluateFp16Products(RenderContext& ctx,
           product ? product->consumer_rgb_gain : 1.0F),
         fused_point_check ? kInvalidShaderVisibleIndex.get()
                           : frame->current_state->status_srv_index.get(),
-        candidate_bounds
-          ? (fused_point_check ? report_uav.get() : report_srv.get())
-          : 0U,
+        candidate_bounds ? bounds_report_index : 0U,
         metering.composition_products,
         std::bit_cast<std::uint32_t>(background.x),
         std::bit_cast<std::uint32_t>(background.y),
@@ -1215,7 +1284,8 @@ auto ExposurePass::EvaluateFp16Products(RenderContext& ctx,
         metering.scene_composition && metering.scene_composition->reverse_z
           ? 1U
           : 0U,
-        opaque_depth_usable ? 1U : 0U };
+        opaque_depth_usable ? 1U : 0U,
+      };
       const auto slot = suitability_constants_publisher_->Publish(
         ctx.current_view.view_id, constants);
       CHECK_F(slot.IsValid());
@@ -1308,10 +1378,10 @@ auto ExposurePass::EvaluateFp16Products(RenderContext& ctx,
           const auto& desc = product.texture->GetDescriptor();
           constants[23] = desc.width * desc.height;
         }
-        const auto index = product.id == 5U ? 8U
-          : product.id == 6U                ? 12U
-          : product.id == 10U               ? 16U
-                                            : 0U;
+        const auto fog_constants_index = product.id == 10U ? 16U : 0U;
+        const auto volume_constants_index
+          = product.id == 6U ? 12U : fog_constants_index;
+        const auto index = product.id == 5U ? 8U : volume_constants_index;
         if (index == 0U || !product.texture || !product.srv.IsValid()) {
           continue;
         }
@@ -1392,15 +1462,15 @@ auto ExposurePass::FinalizeFp16Suitability(RenderContext& ctx,
       profiling::ProfileGranularity::kTelemetry,
       profiling::ProfileCategory::kCompute,
       profiling::Vars(profiling::Var("view", ctx.current_view.view_id.get())));
-    const auto track
-      = [&](const graphics::Buffer& buffer, graphics::ResourceStates state) {
-          if (!recorder.IsResourceTracked(buffer)
-            && !recorder.AdoptKnownResourceState(buffer)) {
-            recorder.BeginTrackingResourceState(
-              buffer, graphics::ResourceStates::kCommon, false);
-          }
-          recorder.RequireResourceState(buffer, state);
-        };
+    const auto track = [&](const graphics::Buffer& buffer,
+                         graphics::ResourceStates state) -> void {
+      if (!recorder.IsResourceTracked(buffer)
+        && !recorder.AdoptKnownResourceState(buffer)) {
+        recorder.BeginTrackingResourceState(
+          buffer, graphics::ResourceStates::kCommon, false);
+      }
+      recorder.RequireResourceState(buffer, state);
+    };
     track(*frame->buffer, graphics::ResourceStates::kShaderResource);
     track(
       *frame->suitability_buffer, graphics::ResourceStates::kShaderResource);
@@ -1417,9 +1487,12 @@ auto ExposurePass::FinalizeFp16Suitability(RenderContext& ctx,
       track(*frame->precision_history->buffer,
         graphics::ResourceStates::kShaderResource);
     }
-    const auto words = [](const std::uint64_t value) {
-      return std::array<std::uint32_t, 2> { static_cast<std::uint32_t>(value),
-        static_cast<std::uint32_t>(value >> 32U) };
+    const auto words
+      = [](const std::uint64_t value) -> std::array<std::uint32_t, 2> {
+      return std::array<std::uint32_t, 2> {
+        static_cast<std::uint32_t>(value),
+        static_cast<std::uint32_t>(value >> 32U),
+      };
     };
     const auto layout = words(inputs.product_layout_revision);
     const auto sequence = words(ctx.frame_sequence.get());
@@ -1429,17 +1502,24 @@ auto ExposurePass::FinalizeFp16Suitability(RenderContext& ctx,
       frame->precision_history ? frame->precision_history->srv_index.get()
                                : kInvalidShaderVisibleIndex.get(),
       frame->current_state->status_uav_index.get(),
-      frame->suitability_srv.get(), layout[0], layout[1],
+      frame->suitability_srv.get(),
+      layout[0],
+      layout[1],
       inputs.expected_products,
       (ctx.current_view.view_state_handle
             != CompositionView::kInvalidViewStateHandle
           ? 1U
           : 0U)
         | (inputs.invalidate_previous ? 2U : 0U),
-      frame->srv_index.get(), sequence[0], sequence[1],
+      frame->srv_index.get(),
+      sequence[0],
+      sequence[1],
       converted ? frame->conversion_srv.get()
                 : kInvalidShaderVisibleIndex.get(),
-      lifetime[0], lifetime[1], 0U, 0U
+      lifetime[0],
+      lifetime[1],
+      0U,
+      0U,
     };
     const auto slot
       = constants_publisher_->Publish(ctx.current_view.view_id, constants);
@@ -1489,12 +1569,16 @@ auto ExposurePass::ConvertCheckedSceneColor(RenderContext& ctx,
     && source_desc.depth == 1U && target_desc.depth == 1U
     && source_desc.width == target_desc.width
     && source_desc.height == target_desc.height && target_desc.is_uav);
-  const std::array products { HdrProduct { .texture = inputs.scene_signal,
-    .srv = inputs.scene_signal_srv,
-    .id = 11U,
-    .metering = true,
-    .coverage = environment::ResolveSceneBackground(ctx).has_value(),
-    .composed_error = inputs.composition_products != 0U } };
+  const std::array products {
+    HdrProduct {
+      .texture = inputs.scene_signal,
+      .srv = inputs.scene_signal_srv,
+      .id = 11U,
+      .metering = true,
+      .coverage = environment::ResolveSceneBackground(ctx).has_value(),
+      .composed_error = inputs.composition_products != 0U,
+    },
+  };
   if (!EvaluateFp16Products(ctx, recorder, frame, config, products, inputs,
         SuitabilityScale::kCurrentFrame)) {
     return false;
@@ -1516,9 +1600,14 @@ auto ExposurePass::ConvertCheckedSceneColor(RenderContext& ctx,
     recorder.RequireResourceState(
       destination, graphics::ResourceStates::kUnorderedAccess);
     const std::array<std::uint32_t, 8U> constants {
-      inputs.scene_signal_srv.get(), destination_uav.get(),
-      frame->conversion_srv.get(), source_desc.width, source_desc.height, 0U,
-      0U, 0U
+      inputs.scene_signal_srv.get(),
+      destination_uav.get(),
+      frame->conversion_srv.get(),
+      source_desc.width,
+      source_desc.height,
+      0U,
+      0U,
+      0U,
     };
     const auto slot = conversion_constants_publisher_->Publish(
       ctx.current_view.view_id, constants);
@@ -1600,9 +1689,11 @@ auto ExposurePass::PendingHistory(graphics::CommandRecorder& recorder,
   });
   const auto committed = exposure_states_.find(handle);
   auto [pending, inserted] = pending_view_states_.emplace(handle,
-    PendingViewState { .recorder = &recorder,
+    PendingViewState {
+      .recorder = &recorder,
       .state = committed == exposure_states_.end() ? PerViewExposureState {}
-                                                   : committed->second });
+                                                   : committed->second,
+    });
   CHECK_F(inserted);
   return pending->second.state;
 }
@@ -1613,21 +1704,27 @@ auto ExposurePass::Execute(RenderContext& ctx,
 {
   const auto& resolved = config.Exposure();
   const bool sharing
-    = inputs.source && !config.Settings().temporary_unit_exposure;
+    = (inputs.source != nullptr) && !config.Settings().temporary_unit_exposure;
   const bool automatic = !sharing && !config.Settings().temporary_unit_exposure
     && resolved.authored.enabled
     && resolved.authored.mode == engine::ExposureMode::kAuto;
-  auto result = Result { .requested = true,
+  auto exposure_value
+    = config.Settings().temporary_unit_exposure ? 1.0F : resolved.fixed_scale;
+  if (automatic) {
+    exposure_value = resolved.authored.target_luminance == 0.0F
+      ? 0.0F
+      : std::exp2(resolved.initial_log_gain);
+  }
+  auto result = Result {
+    .requested = true,
     .used_fixed_exposure = !automatic && !sharing,
     .borrowed_exposure = sharing,
-    .exposure_value = config.Settings().temporary_unit_exposure ? 1.0F
-      : automatic ? (resolved.authored.target_luminance == 0.0F
-                        ? 0.0F
-                        : std::exp2(resolved.initial_log_gain))
-                  : resolved.fixed_scale };
+    .exposure_value = exposure_value,
+  };
   auto gfx = renderer_.GetGraphics();
-  if (!gfx)
+  if (!gfx) {
     return result;
+  }
   EnsurePipelines();
   PreparePublishers(ctx);
   const auto handle = ctx.current_view.view_state_handle;
@@ -1648,15 +1745,19 @@ auto ExposurePass::Execute(RenderContext& ctx,
     view->submitted_frame.reset();
   }
   if (view && view->selected_borrow
-    && view->selected_borrow->consumer_lifetime != inputs.lifetime)
+    && view->selected_borrow->consumer_lifetime != inputs.lifetime) {
     view->selected_borrow.reset();
-  const auto publish_result = [&](StateLease state, bool executed) {
+  }
+  const auto publish_result = [&](StateLease state, bool executed) -> void {
     result.state = std::move(state);
     result.executed = executed;
-    if (view && sharing)
-      view->selected_borrow
-        = PerViewExposureState::BorrowSelection { result.state, *inputs.source,
-            inputs.lifetime };
+    if (view && sharing) {
+      view->selected_borrow = PerViewExposureState::BorrowSelection {
+        result.state,
+        *inputs.source,
+        inputs.lifetime,
+      };
+    }
     if (result.state) {
       result.exposure_buffer = result.state->buffer.get();
       result.histogram_buffer
@@ -1684,8 +1785,9 @@ auto ExposurePass::Execute(RenderContext& ctx,
   if (view
     && (sharing
       || (view->source_loss
-        && view->source_loss->consumer_lifetime != inputs.lifetime)))
+        && view->source_loss->consumer_lifetime != inputs.lifetime))) {
     view->source_loss.reset();
+  }
   StateLease borrowed;
   if (sharing) {
     CHECK_F(inputs.source->handle != handle
@@ -1702,20 +1804,27 @@ auto ExposurePass::Execute(RenderContext& ctx,
       borrowed = initial->second;
     } else {
       borrowed = RecordState(ctx, recorder, inputs.source->config,
-        Inputs { .metering_available = false,
+        Inputs {
+          .metering_available = false,
           .transition = inputs.source->transition,
           .rejection = inputs.source->rejection,
-          .lifetime = inputs.source->lifetime },
+          .lifetime = inputs.source->lifetime,
+        },
         {}, {}, true);
-      if (borrowed)
+      if (borrowed) {
         CacheBootstrap(recorder, inputs.source->handle, borrowed);
+      }
     }
     if (!borrowed) {
       // Submission failure cannot substitute the consumer's own history.
       result.exposure_value = SourceFallbackScale(*inputs.source);
-      if (view)
-        view->selected_borrow = PerViewExposureState::BorrowSelection { {},
-          *inputs.source, inputs.lifetime };
+      if (view) {
+        view->selected_borrow = PerViewExposureState::BorrowSelection {
+          {},
+          *inputs.source,
+          inputs.lifetime,
+        };
+      }
       return result;
     }
     frame_states_[ctx.frame_slot.get()].push_back(borrowed);
@@ -1732,10 +1841,12 @@ auto ExposurePass::Execute(RenderContext& ctx,
       continuity = selected->state;
       if (!continuity) {
         continuity = RecordState(ctx, recorder, selected->source.config,
-          Inputs { .metering_available = false,
+          Inputs {
+            .metering_available = false,
             .transition = selected->source.transition,
             .rejection = selected->source.rejection,
-            .lifetime = selected->source.lifetime },
+            .lifetime = selected->source.lifetime,
+          },
           {}, {}, true);
         loss.source = selected->source;
         loss.fallback = continuity;
@@ -1747,10 +1858,12 @@ auto ExposurePass::Execute(RenderContext& ctx,
       continuity = loss.fallback;
     } else {
       continuity = RecordState(ctx, recorder, loss.source.config,
-        Inputs { .metering_available = false,
+        Inputs {
+          .metering_available = false,
           .transition = loss.source.transition,
           .rejection = loss.source.rejection,
-          .lifetime = loss.source.lifetime },
+          .lifetime = loss.source.lifetime,
+        },
         {}, {}, true);
       loss.fallback = continuity;
     }
@@ -1771,9 +1884,8 @@ auto ExposurePass::Execute(RenderContext& ctx,
     reserved);
   if (!state) {
     result.solve_failed = true;
-    const auto fallback = continuity ? continuity
-      : sharing                      ? borrowed
-                                     : previous;
+    const auto& source_fallback = sharing ? borrowed : previous;
+    const auto fallback = continuity ? continuity : source_fallback;
     if (result.frame && !sharing) {
       if (RestoreFrameFallback(
             ctx, recorder, config, *result.frame, fallback)) {
@@ -1788,8 +1900,9 @@ auto ExposurePass::Execute(RenderContext& ctx,
     view->latest = state;
     view->submitted_frame = ctx.frame_sequence;
     view->source_loss.reset();
-    if (!sharing)
+    if (!sharing) {
       view->selected_borrow.reset();
+    }
   }
   publish_result(state, true);
   return result;
@@ -1858,7 +1971,7 @@ auto ExposurePass::RecordState(RenderContext& ctx,
       profiling::ProfileGranularity::kTelemetry,
       profiling::ProfileCategory::kCompute,
       profiling::Vars(profiling::Var("view", ctx.current_view.view_id.get())));
-    const auto track_buffer = [&](const graphics::Buffer& buffer) {
+    const auto track_buffer = [&](const graphics::Buffer& buffer) -> void {
       if (!recorder.IsResourceTracked(buffer)
         && !recorder.AdoptKnownResourceState(buffer)) {
         recorder.BeginTrackingResourceState(
@@ -1899,7 +2012,7 @@ auto ExposurePass::RecordState(RenderContext& ctx,
       recorder.FlushBarriers();
       const auto histogram_constants
         = PublishHistogramConstants(ctx, inputs, config, *state);
-      const auto bind_histogram_constants = [&]() {
+      const auto bind_histogram_constants = [&] -> void {
         recorder.SetComputeRoot32BitConstant(
           static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants),
           0U, 0U);
@@ -1969,17 +2082,24 @@ auto ExposurePass::PreserveRemovedSource(
   StateLease fallback;
   if (const auto root = exposure_states_.find(source.handle);
     root != exposure_states_.end() && root->second.latest
-    && root->second.latest->owner_lifetime == source.lifetime)
+    && root->second.latest->owner_lifetime == source.lifetime) {
     fallback = root->second.latest;
+  }
   for (const auto& consumer : loss->consumers) {
     if (only_consumer != CompositionView::kInvalidViewStateHandle
-      && consumer.handle != only_consumer)
+      && consumer.handle != only_consumer) {
       continue;
+    }
     auto& view = exposure_states_[consumer.handle];
-    if (view.source_loss && view.source_loss->event == loss)
+    if (view.source_loss && view.source_loss->event == loss) {
       continue;
-    view.source_loss = PerViewExposureState::PendingSourceLoss { loss, source,
-      fallback, consumer.lifetime };
+    }
+    view.source_loss = PerViewExposureState::PendingSourceLoss {
+      loss,
+      source,
+      fallback,
+      consumer.lifetime,
+    };
   }
 }
 
@@ -1993,14 +2113,20 @@ auto ExposurePass::RemoveViewState(CompositionView::ViewStateHandle handle)
 
 auto ExposurePass::EnsurePipelines() -> void
 {
-  if (!eligibility_pipeline_)
+  if (!eligibility_pipeline_) {
     eligibility_pipeline_ = BuildExposurePipeline(
       "FinalizeFp16Suitability", "Vortex.Exposure.Fp16Eligibility");
-  if (!convert_pipeline_)
+  }
+  if (!convert_pipeline_) {
     convert_pipeline_ = BuildExposurePipeline(
       "ConvertQualifiedSceneColor", "Vortex.Exposure.CheckedSceneColor");
-  constexpr std::array names { "ClearSuitability", "GatherSuitabilityMaximum",
-    "SelectSuitabilityCandidate", "CheckSuitabilityProduct" };
+  }
+  constexpr std::array names {
+    "ClearSuitability",
+    "GatherSuitabilityMaximum",
+    "SelectSuitabilityCandidate",
+    "CheckSuitabilityProduct",
+  };
   for (std::size_t index = 0; index < names.size(); ++index) {
     if (!suitability_pipelines_.at(index)) {
       suitability_pipelines_.at(index)
@@ -2070,61 +2196,75 @@ auto ExposurePass::EnsureHistogramBuffer(StateResources& state) -> void
 auto ExposurePass::AcquireState() -> std::shared_ptr<StateResources>
 {
   for (const auto& state : state_pool_) {
-    if (state.use_count() == 1)
+    if (state.use_count() == 1) {
       return state;
+    }
   }
   auto gfx = renderer_.GetGraphics();
   CHECK_NOTNULL_F(gfx.get());
   auto state = std::make_shared<StateResources>();
-  state->buffer = gfx->CreateBuffer({ .size_bytes = sizeof(ExposureStateData),
+  state->buffer = gfx->CreateBuffer({
+    .size_bytes = sizeof(ExposureStateData),
     .usage = graphics::BufferUsage::kStorage,
     .memory = graphics::BufferMemory::kDeviceLocal,
-    .debug_name = "Vortex.PostProcess.Exposure.State" });
+    .debug_name = "Vortex.PostProcess.Exposure.State",
+  });
   CHECK_NOTNULL_F(state->buffer.get());
   RegisterResourceIfNeeded(*gfx, state->buffer);
   auto& registry = gfx->GetResourceRegistry();
   auto& allocator = gfx->GetDescriptorAllocator();
-  for (const auto type : { graphics::ResourceViewType::kRawBuffer_SRV,
-         graphics::ResourceViewType::kRawBuffer_UAV }) {
+  for (const auto type : {
+         graphics::ResourceViewType::kRawBuffer_SRV,
+         graphics::ResourceViewType::kRawBuffer_UAV,
+       }) {
     auto handle = allocator.AllocateRaw(
       type, graphics::DescriptorVisibility::kShaderVisible);
     CHECK_F(handle.IsValid());
     const auto index = allocator.GetShaderVisibleIndex(handle);
     const auto view = registry.RegisterView(*state->buffer, std::move(handle),
-      graphics::BufferViewDescription { .view_type = type,
+      graphics::BufferViewDescription {
+        .view_type = type,
         .visibility = graphics::DescriptorVisibility::kShaderVisible,
         .range = { 0U, sizeof(ExposureStateData) },
-        .stride = 0U });
+        .stride = 0U,
+      });
     CHECK_F(view->IsValid());
-    if (type == graphics::ResourceViewType::kRawBuffer_SRV)
+    if (type == graphics::ResourceViewType::kRawBuffer_SRV) {
       state->srv_index = index;
-    else
+    } else {
       state->uav_index = index;
+    }
   }
-  state->status_buffer
-    = gfx->CreateBuffer({ .size_bytes = sizeof(ExposureStatusStorage),
-      .usage = graphics::BufferUsage::kStorage,
-      .memory = graphics::BufferMemory::kDeviceLocal,
-      .debug_name = "Vortex.PostProcess.Exposure.Status" });
+  state->status_buffer = gfx->CreateBuffer({
+    .size_bytes = sizeof(ExposureStatusStorage),
+    .usage = graphics::BufferUsage::kStorage,
+    .memory = graphics::BufferMemory::kDeviceLocal,
+    .debug_name = "Vortex.PostProcess.Exposure.Status",
+  });
   CHECK_NOTNULL_F(state->status_buffer.get());
   RegisterResourceIfNeeded(*gfx, state->status_buffer);
-  for (const auto type : { graphics::ResourceViewType::kRawBuffer_SRV,
-         graphics::ResourceViewType::kRawBuffer_UAV }) {
+  for (const auto type : {
+         graphics::ResourceViewType::kRawBuffer_SRV,
+         graphics::ResourceViewType::kRawBuffer_UAV,
+       }) {
     auto handle = allocator.AllocateRaw(
       type, graphics::DescriptorVisibility::kShaderVisible);
     CHECK_F(handle.IsValid());
     const auto index = allocator.GetShaderVisibleIndex(handle);
     const auto view
       = registry.RegisterView(*state->status_buffer, std::move(handle),
-        graphics::BufferViewDescription { .view_type = type,
+        graphics::BufferViewDescription {
+          .view_type = type,
           .visibility = graphics::DescriptorVisibility::kShaderVisible,
           .range = { 0U, sizeof(ExposureStatusStorage) },
-          .stride = 0U });
+          .stride = 0U,
+        });
     CHECK_F(view->IsValid());
-    if (type == graphics::ResourceViewType::kRawBuffer_SRV)
+    if (type == graphics::ResourceViewType::kRawBuffer_SRV) {
       state->status_srv_index = index;
-    else
+    } else {
       state->status_uav_index = index;
+    }
   }
   state_pool_.push_back(state);
   return state;
@@ -2181,7 +2321,7 @@ auto ExposurePass::UpdateAverageConstants(RenderContext& ctx,
   const bool source_loss) -> void
 {
   DCHECK_NOTNULL_F(average_constants_publisher_.get());
-  const auto log_rate = [](const float value) {
+  const auto log_rate = [](const float value) -> float {
     // -256 is outside log2 of every positive finite binary32 input.
     return std::isfinite(value) && value > 0.0F
       ? static_cast<float>(std::log2(static_cast<double>(value)))
@@ -2213,6 +2353,10 @@ auto ExposurePass::UpdateAverageConstants(RenderContext& ctx,
       CHECK_F(false, "Unexpected captured exposure rejection");
     }
   }
+  auto view_lifetime = inputs.lifetime;
+  if (view_lifetime == 0U && inputs.transition) {
+    view_lifetime = inputs.transition->lifetime;
+  }
   const auto constants = AutoExposureAverageConstants {
     .histogram_buffer_index = metering ? state.histogram_uav_index.get()
                                        : kInvalidShaderVisibleIndex.get(),
@@ -2231,9 +2375,9 @@ auto ExposurePass::UpdateAverageConstants(RenderContext& ctx,
     .log2_delta_time = log_rate(ctx.delta_time),
     .targets_srv = targets_srv.get(),
     .settings_revision = { static_cast<std::uint32_t>(config.Revision()),
-      static_cast<std::uint32_t>(config.Revision() >> 32U) },
+      static_cast<std::uint32_t>(config.Revision() >> 32U), },
     .frame_sequence = { static_cast<std::uint32_t>(ctx.frame_sequence.get()),
-      static_cast<std::uint32_t>(ctx.frame_sequence.get() >> 32U) },
+      static_cast<std::uint32_t>(ctx.frame_sequence.get() >> 32U), },
     .previous_state_srv = previous_srv.get(),
     .fixed_scale
     = config.Settings().temporary_unit_exposure ? 1.0F : resolved.fixed_scale,
@@ -2248,7 +2392,7 @@ auto ExposurePass::UpdateAverageConstants(RenderContext& ctx,
           ? 128U
           : 0U),
     .requested_generation = { static_cast<std::uint32_t>(generation),
-      static_cast<std::uint32_t>(generation >> 32U) },
+      static_cast<std::uint32_t>(generation >> 32U), },
     .transition_policy
     = inputs.transition && !config.Settings().temporary_unit_exposure
       ? static_cast<std::uint32_t>(inputs.transition->policy) + 1U
@@ -2256,15 +2400,8 @@ auto ExposurePass::UpdateAverageConstants(RenderContext& ctx,
     .seed_log_gain = seed.value_or(0.0F),
     .status_uav = state.status_uav_index.get(),
     .borrowed_state_srv = borrowed_srv.get(),
-    .view_lifetime
-    = { static_cast<std::uint32_t>(inputs.lifetime != 0U ? inputs.lifetime
-            : inputs.transition ? inputs.transition->lifetime
-                                : 0U),
-      static_cast<std::uint32_t>(
-        (inputs.lifetime != 0U  ? inputs.lifetime
-            : inputs.transition ? inputs.transition->lifetime
-                                : 0U)
-        >> 32U) },
+    .view_lifetime = { static_cast<std::uint32_t>(view_lifetime),
+      static_cast<std::uint32_t>(view_lifetime >> 32U), },
   };
 
   const auto slot
@@ -2286,10 +2423,12 @@ auto ExposurePass::ReleaseExposureResources() -> void
   exposure_states_.clear();
   prior_states_.clear();
   bootstrap_states_.clear();
-  for (auto& states : frame_states_)
+  for (auto& states : frame_states_) {
     states.clear();
-  for (auto& frames : frame_bindings_)
+  }
+  for (auto& frames : frame_bindings_) {
     frames.clear();
+  }
   for (auto& frame : frame_pool_) {
     frame->current_state.reset();
     frame->selected_history.reset();
@@ -2300,15 +2439,17 @@ auto ExposurePass::ReleaseExposureResources() -> void
     auto& registry = gfx->GetResourceRegistry();
     for (auto& frame : frame_pool_) {
       gfx->ForgetKnownResourceState(*frame->buffer);
-      if (registry.Contains(*frame->buffer))
+      if (registry.Contains(*frame->buffer)) {
         registry.UnRegisterResource(*frame->buffer);
+      }
       gfx->RegisterDeferredRelease(std::move(frame->buffer));
       for (auto* report :
         { &frame->suitability_buffer, &frame->conversion_buffer }) {
         if (*report) {
           gfx->ForgetKnownResourceState(**report);
-          if (registry.Contains(**report))
+          if (registry.Contains(**report)) {
             registry.UnRegisterResource(**report);
+          }
           gfx->RegisterDeferredRelease(std::move(*report));
         }
       }
@@ -2318,8 +2459,9 @@ auto ExposurePass::ReleaseExposureResources() -> void
         { &state->buffer, &state->histogram_buffer, &state->status_buffer }) {
         if (*resource) {
           gfx->ForgetKnownResourceState(**resource);
-          if (registry.Contains(**resource))
+          if (registry.Contains(**resource)) {
             registry.UnRegisterResource(**resource);
+          }
           gfx->RegisterDeferredRelease(std::move(*resource));
         }
       }

@@ -47,11 +47,11 @@ struct RenderableFacade {
   {
   }
 
-  bool UsesDistancePolicy() const noexcept
+  [[nodiscard]] auto UsesDistancePolicy() const noexcept -> bool
   {
     return comp_->UsesDistancePolicy();
   }
-  bool UsesScreenSpaceErrorPolicy() const noexcept
+  [[nodiscard]] auto UsesScreenSpaceErrorPolicy() const noexcept -> bool
   {
     return comp_->UsesScreenSpaceErrorPolicy();
   }
@@ -65,17 +65,19 @@ struct RenderableFacade {
     comp_->SelectActiveMesh(e);
   }
 
-  auto GetActiveLodIndex() const noexcept -> std::optional<std::size_t>
+  [[nodiscard]] auto GetActiveLodIndex() const noexcept
+    -> std::optional<std::size_t>
   {
     return comp_->GetActiveLodIndex();
   }
 
-  bool IsSubmeshVisible(std::size_t lod, std::size_t submesh) const noexcept
+  [[nodiscard]] auto IsSubmeshVisible(
+    std::size_t lod, std::size_t submesh) const noexcept -> bool
   {
     return comp_->IsSubmeshVisible(lod, submesh);
   }
 
-  auto ResolveSubmeshMaterial(
+  [[nodiscard]] auto ResolveSubmeshMaterial(
     std::size_t lod, std::size_t submesh) const noexcept
     -> std::shared_ptr<const oxygen::data::MaterialAsset>
   {
@@ -83,20 +85,21 @@ struct RenderableFacade {
   }
 
   // Geometry access (used by initial filter to populate WorkItem::proto)
-  auto GetGeometry() const noexcept
+  [[nodiscard]] auto GetGeometry() const noexcept
     -> const std::shared_ptr<const oxygen::data::GeometryAsset>&
   {
     return comp_->GetGeometry();
   }
 
-  auto GetWorldBoundingSphere() const noexcept -> glm::vec4
+  [[nodiscard]] auto GetWorldBoundingSphere() const noexcept -> glm::vec4
   {
     return comp_->GetWorldBoundingSphere();
   }
 
   // On-demand world-space AABB for a submesh of the current LOD.
   // Returns nullopt if unavailable (no geometry, unresolved LOD, or OOB).
-  auto GetWorldSubMeshBoundingBox(std::size_t submesh_index) const noexcept
+  [[nodiscard]] auto GetWorldSubMeshBoundingBox(
+    std::size_t submesh_index) const noexcept
     -> std::optional<std::pair<glm::vec3, glm::vec3>>
   {
     return comp_->GetWorldSubMeshBoundingBox(submesh_index);
@@ -122,7 +125,7 @@ struct TransformFacade {
   {
   }
 
-  auto GetWorldMatrix() const -> const glm::mat4&
+  [[nodiscard]] auto GetWorldMatrix() const -> const glm::mat4&
   {
     return comp_->GetWorldMatrix();
   }
@@ -192,14 +195,14 @@ public:
 
   auto Renderable() noexcept -> RenderableFacade& { return renderable_facade_; }
 
-  auto Renderable() const noexcept -> const RenderableFacade&
+  [[nodiscard]] auto Renderable() const noexcept -> const RenderableFacade&
   {
     return renderable_facade_;
   }
 
   auto Transform() noexcept -> TransformFacade& { return transform_facade_; }
 
-  auto Transform() const noexcept -> const TransformFacade&
+  [[nodiscard]] auto Transform() const noexcept -> const TransformFacade&
   {
     return transform_facade_;
   }
@@ -239,7 +242,10 @@ public:
     node_handle_ = node_handle;
   }
 
-  auto& Flags() const noexcept { return node_->GetFlags(); }
+  [[nodiscard]] auto Flags() const noexcept -> auto&
+  {
+    return node_->GetFlags();
+  }
 
   void SetVisibleSubmeshes(std::vector<uint32_t> indices) noexcept
   {
@@ -288,13 +294,13 @@ public:
 
     geometry_ = std::move(g);
   }
-  [[nodiscard]] auto& Geometry() const noexcept { return geometry_; }
+  [[nodiscard]] auto Geometry() const noexcept -> auto& { return geometry_; }
 
   void SetWorldTransform(const glm::mat4& transform) noexcept
   {
     world_transform = transform;
   }
-  [[nodiscard]] auto& GetWorldTransform() const noexcept
+  [[nodiscard]] auto GetWorldTransform() const noexcept -> auto&
   {
     return world_transform;
   }
@@ -310,7 +316,7 @@ public:
     mesh_ = std::move(mesh);
     mesh_lod_ = lod;
   }
-  [[nodiscard]] auto& ResolvedMesh() const noexcept { return mesh_; }
+  [[nodiscard]] auto ResolvedMesh() const noexcept -> auto& { return mesh_; }
   [[nodiscard]] auto ResolvedMeshIndex() const noexcept
   {
     if (!mesh_) {

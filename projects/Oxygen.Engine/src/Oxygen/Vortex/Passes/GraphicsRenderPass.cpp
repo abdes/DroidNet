@@ -4,7 +4,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstdint>
+#include <string_view>
+
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
+#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Vortex/Passes/GraphicsRenderPass.h>
 #include <Oxygen/Vortex/RenderContext.h>

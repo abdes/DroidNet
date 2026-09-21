@@ -174,9 +174,9 @@ private:
   frame::SequenceNumber current_sequence_ { 0U };
   frame::Slot current_slot_ { frame::kInvalidSlot };
   State state_ {};
-  std::shared_ptr<graphics::Texture> transmittance_texture_ {};
-  std::shared_ptr<graphics::Texture> multi_scattering_texture_ {};
-  std::shared_ptr<graphics::Buffer> distant_sky_light_buffer_ {};
+  std::shared_ptr<graphics::Texture> transmittance_texture_;
+  std::shared_ptr<graphics::Texture> multi_scattering_texture_;
+  std::shared_ptr<graphics::Buffer> distant_sky_light_buffer_;
   TextureSlots transmittance_slots_ {};
   TextureSlots multi_scattering_slots_ {};
   BufferSlots distant_sky_light_slots_ {};

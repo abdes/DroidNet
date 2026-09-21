@@ -18,13 +18,35 @@ Checks: >
     -readability-convert-member-functions-to-static,
     -readability-function-cognitive-complexity,
     -readability-container-size-empty,
+    -cppcoreguidelines-avoid-magic-numbers,
     -cppcoreguidelines-pro-type-union-access
 
 CheckOptions:
+  - key: readability-magic-numbers.IgnoredIntegerValues
+    value: '1;2;3;4;8;16;32;64'
+  - key: readability-magic-numbers.IgnoredFloatingPointValues
+    value: '0.25;0.5;1.0;2.0;4.0;100.0'
+  - key: readability-magic-numbers.IgnorePowersOf2IntegerValues
+    value: false
+  - key: readability-magic-numbers.IgnoreAllFloatingPointValues
+    value: false
+  - key: readability-magic-numbers.IgnoreBitFieldsWidths
+    value: true
+  - key: readability-magic-numbers.IgnoreTypeAliases
+    value: true
+  - key: readability-magic-numbers.IgnoreUserDefinedLiterals
+    value: true
+  - key: readability-implicit-bool-conversion.AllowPointerConditions
+    value: true
+  - key: readability-implicit-bool-conversion.AllowIntegerConditions
+    value: false
+  - key: readability-implicit-bool-conversion.UseUpperCaseLiteralSuffix
+    value: true
   - key: cppcoreguidelines-rvalue-reference-param-not-moved.AllowImplicitMove
     value: true
+  # LLVM 23's Remove fix can delete required separators after empty {} values.
   - key: readability-trailing-comma.SingleLineCommaPolicy
-    value: Remove
+    value: Ignore
   - key: readability-trailing-comma.MultiLineCommaPolicy
     value: Append
   - key: cppcoreguidelines-avoid-do-while.IgnoreMacros

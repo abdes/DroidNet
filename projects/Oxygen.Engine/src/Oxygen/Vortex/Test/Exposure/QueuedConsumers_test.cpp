@@ -13,23 +13,40 @@
 #include <cstring>
 #include <limits>
 #include <memory>
+#include <span>
 #include <utility>
 #include <vector>
 
+#include <basetsd.h>
+#include <d3d12.h>
+#include <minwindef.h>
+
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/PostProcess.h>
+#include <Oxygen/Data/MaterialDomain.h>
+#include <Oxygen/Graphics/Common/CommandRecording.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
+#include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
+#include <Oxygen/Graphics/Common/Types/QueueRole.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Graphics/Direct3D12/CommandList.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
-#include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/PostProcess/Passes/TonemapPass.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
-#include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureGpuFixture.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureLightingFixture.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestTags.h>
 #include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
+#include <Oxygen/Vortex/Types/ExposureStateData.h>
 
 namespace oxygen::vortex::testing::exposure {
 
@@ -418,10 +435,12 @@ NOLINT_TEST_F(ExposureLightingGpuTest,
     recorder->RequireResourceState(rejected_half, ResourceStates::kCopyDest);
     recorder->FlushBarriers();
     recorder->CopyBufferToTexture(*upload,
-      { .buffer_offset = 0U,
+      {
+        .buffer_offset = 0U,
         .buffer_row_pitch = 256U,
         .buffer_slice_pitch = 256U,
-        .dst_slice = { .width = 1U, .height = 1U, .depth = 1U, }, },
+        .dst_slice = { .width = 1U, .height = 1U, .depth = 1U },
+      },
       rejected_half);
     recorder->RequireResourceStateFinal(
       rejected_half, ResourceStates::kShaderResource);

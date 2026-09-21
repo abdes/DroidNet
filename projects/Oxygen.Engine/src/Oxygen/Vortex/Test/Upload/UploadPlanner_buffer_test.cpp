@@ -4,12 +4,18 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
+#include <cstdint>
 #include <memory>
+#include <utility>
 #include <vector>
 
-#include <Oxygen/Testing/GTest.h>
-
+#include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
+#include <Oxygen/Graphics/Common/NativeObject.h>
+#include <Oxygen/Graphics/Common/Queues.h>
+#include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Vortex/Upload/Errors.h>
 #include <Oxygen/Vortex/Upload/Types.h>
 #include <Oxygen/Vortex/Upload/UploadPlanner.h>
 #include <Oxygen/Vortex/Upload/UploadPolicy.h>

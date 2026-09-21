@@ -4,15 +4,20 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Vortex/Environment/Internal/AtmosphereState.h>
-
 #include <bit>
+#include <cstdint>
 
 #include <Oxygen/Scene/Environment/Fog.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Scene/Environment/SkyLight.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Vortex/Environment/Internal/AtmosphereLightState.h>
+#include <Oxygen/Vortex/Environment/Internal/AtmosphereState.h>
+#include <Oxygen/Vortex/Environment/Types/AtmosphereModel.h>
+#include <Oxygen/Vortex/Environment/Types/HeightFogModel.h>
+#include <Oxygen/Vortex/Environment/Types/SkyLightEnvironmentModel.h>
+#include <Oxygen/Vortex/Environment/Types/VolumetricFogModel.h>
 
 namespace oxygen::vortex::environment::internal {
 
@@ -378,7 +383,7 @@ namespace {
 auto AtmosphereState::Update(const scene::Scene& scene_ref,
   const ResolvedAtmosphereLightState& light_state) -> bool
 {
-  const auto environment_systems = scene_ref.GetEnvironment().get();
+  const auto* const environment_systems = scene_ref.GetEnvironment().get();
 
   auto next = StableAtmosphereState {};
   next.view_products.atmosphere = BuildAtmosphereModel(environment_systems);

@@ -4,9 +4,17 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstdint>
+
+#include <glm/ext/matrix_float4x4.hpp>
 #include <glm/gtc/epsilon.hpp>
+#include <glm/vector_relational.hpp>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/Types/ViewPort.h>
+#include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/Internal/PreviousViewHistoryCache.h>
 
 namespace {

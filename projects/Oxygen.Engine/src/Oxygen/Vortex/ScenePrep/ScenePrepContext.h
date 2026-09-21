@@ -57,7 +57,7 @@ public:
   {
     return *view_;
   }
-  [[nodiscard]] auto& GetScene() const noexcept { return scene_.get(); }
+  [[nodiscard]] auto GetScene() const noexcept -> auto& { return scene_.get(); }
   // NOTE: RenderContext removed; reintroduce if extractors require GPU ops.
 
 private:

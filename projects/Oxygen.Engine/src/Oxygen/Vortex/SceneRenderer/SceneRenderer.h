@@ -83,10 +83,10 @@ public:
     bool used_non_perspective_local_lights { false };
     bool consumed_static_sky_light_product { false };
     std::uint32_t consumed_scene_depth_srv {
-      SceneTextureBindings::kInvalidIndex
+      SceneTextureBindings::kInvalidIndex,
     };
     std::uint32_t consumed_scene_color_uav {
-      SceneTextureBindings::kInvalidIndex
+      SceneTextureBindings::kInvalidIndex,
     };
     std::array<std::uint32_t, 4> consumed_gbuffer_srvs {
       SceneTextureBindings::kInvalidIndex,
@@ -164,7 +164,7 @@ public:
     bool stage14_volumetric_fog_sky_light_injection_executed { false };
     bool stage14_volumetric_fog_temporal_history_requested { false };
     bool stage14_volumetric_fog_temporal_history_reprojection_executed {
-      false
+      false,
     };
     bool stage14_volumetric_fog_temporal_history_reset { false };
     bool stage14_volumetric_fog_local_fog_injection_requested { false };
@@ -320,7 +320,7 @@ private:
   ExtractArtifact resolved_scene_color_artifact_ {};
   ExtractArtifact resolved_scene_depth_artifact_ {};
   ExtractArtifact prev_velocity_artifact_ {};
-  std::shared_ptr<graphics::Framebuffer> debug_visualization_framebuffer_ {};
+  std::shared_ptr<graphics::Framebuffer> debug_visualization_framebuffer_;
   ViewId published_view_id_ { kInvalidViewId };
   ShaderVisibleIndex published_view_frame_bindings_slot_ {
     kInvalidShaderVisibleIndex
@@ -329,8 +329,8 @@ private:
   DeferredLightingState deferred_lighting_state_ {};
   EnvironmentLightingState environment_lighting_state_ {};
   FrameLightSelection frame_light_selection_ {};
-  std::vector<PreparedViewLightingInput> frame_lighting_views_ {};
-  std::vector<PreparedViewShadowInput> frame_shadow_views_ {};
+  std::vector<PreparedViewLightingInput> frame_lighting_views_;
+  std::vector<PreparedViewShadowInput> frame_shadow_views_;
   frame::SequenceNumber lighting_grid_built_sequence_ { 0U };
   std::unique_ptr<InitViewsModule> init_views_;
   std::unique_ptr<DepthPrepassModule> depth_prepass_;

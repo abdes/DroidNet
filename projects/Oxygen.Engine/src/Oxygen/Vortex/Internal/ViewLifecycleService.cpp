@@ -5,19 +5,33 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <cstddef>
+#include <cstdint>
 #include <map>
-#include <unordered_map>
+#include <memory>
+#include <optional>
+#include <span>
+#include <string>
+#include <utility>
+#include <vector>
 
-#include <glm/geometric.hpp>
-#include <glm/gtc/matrix_transform.hpp>
+#include <glm/ext/matrix_transform.hpp>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Constants.h>
+#include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/Types/ResolvedView.h>
+#include <Oxygen/Core/Types/Scissors.h>
+#include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Core/Types/ViewHelpers.h>
+#include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Scene/Camera/Orthographic.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
+#include <Oxygen/Scene/SceneNode.h>
+#include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/Internal/CompositionViewImpl.h>
 #include <Oxygen/Vortex/Internal/ViewLifecycleService.h>
 
@@ -240,13 +254,15 @@ void ViewLifecycleService::PublishViews(engine::FrameContext& context)
     view_ctx.view = view.GetDescriptor().view;
     const bool has_scene = view.GetDescriptor().view_kind
       != CompositionView::ViewKind::kCompositionOnly;
-    view_ctx.metadata = { .name = std::string(view.GetDescriptor().name),
+    view_ctx.metadata = {
+      .name = std::string(view.GetDescriptor().name),
       .purpose = has_scene ? "scene" : "overlay",
       .is_scene_view = has_scene,
       .with_atmosphere = view.GetDescriptor().with_atmosphere,
       .with_height_fog = view.GetDescriptor().with_height_fog,
       .with_local_fog = view.GetDescriptor().with_local_fog,
-      .exposure_view_id = exposure_view_id };
+      .exposure_view_id = exposure_view_id,
+    };
     view_ctx.render_target = view.GetHdrFramebuffer()
       ? observer_ptr { view.GetHdrFramebuffer().get() }
       : observer_ptr { view.GetSdrFramebuffer().get() };

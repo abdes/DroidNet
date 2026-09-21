@@ -23,7 +23,7 @@ enum class AtmosphereTransformMode : std::uint32_t {
 struct AtmosphereModel {
   bool enabled { false };
   AtmosphereTransformMode transform_mode {
-    AtmosphereTransformMode::kPlanetTopAtAbsoluteWorldOrigin
+    AtmosphereTransformMode::kPlanetTopAtAbsoluteWorldOrigin,
   };
   float planet_radius_m { engine::atmos::kDefaultPlanetRadiusM };
   float atmosphere_height_m { engine::atmos::kDefaultAtmosphereHeightM };
@@ -49,10 +49,10 @@ struct AtmosphereModel {
     1.0F,
   };
   float aerial_perspective_distance_scale {
-    engine::atmos::kDefaultAerialPerspectiveDistanceScale
+    engine::atmos::kDefaultAerialPerspectiveDistanceScale,
   };
   float aerial_scattering_strength {
-    engine::atmos::kDefaultAerialScatteringStrength
+    engine::atmos::kDefaultAerialScatteringStrength,
   };
   float aerial_perspective_start_depth_m { 100.0F };
   float height_fog_contribution { 1.0F };

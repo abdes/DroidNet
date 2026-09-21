@@ -132,10 +132,10 @@ public:
     std::size_t max_upload_bytes_per_frame { kDefaultMaxUploadBytesPerFrame };
     std::size_t max_pending_upload_bytes { kDefaultMaxPendingUploadBytes };
     std::size_t deferred_retry_low_watermark_bytes {
-      kDefaultDeferredRetryLowWatermarkBytes
+      kDefaultDeferredRetryLowWatermarkBytes,
     };
     std::size_t max_deferred_retries_per_frame {
-      kDefaultMaxDeferredRetriesPerFrame
+      kDefaultMaxDeferredRetriesPerFrame,
     };
   };
 

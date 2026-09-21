@@ -6,8 +6,8 @@
 
 #pragma once
 
-#include <gmock/gmock.h>
-#include <gtest/gtest.h>
+#include <gmock/gmock.h> // IWYU pragma: export
+#include <gtest/gtest.h> // IWYU pragma: export
 
 #define NOLINT_TEST(ts, name) TEST(ts, name) // NOLINT
 #define NOLINT_TEST_F(ts, name) TEST_F(ts, name) // NOLINT

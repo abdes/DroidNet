@@ -160,17 +160,17 @@ private:
   struct SlotAlloc {
     std::optional<StagingProvider::Allocation> allocation;
     ShaderVisibleIndex srv_index { kInvalidShaderVisibleIndex };
-    oxygen::graphics::NativeView native_view {};
+    oxygen::graphics::NativeView native_view;
     frame::SequenceNumber sequence { frame::SequenceNumber { 0 } };
   };
 
   struct SlotData {
     // Multi-allocation per frame slot: keep all allocations until slot reset
-    std::vector<SlotAlloc> allocs {};
+    std::vector<SlotAlloc> allocs;
     // Back-compat single active allocation used temporarily during allocation
     std::optional<StagingProvider::Allocation> allocation;
     ShaderVisibleIndex srv_index { kInvalidShaderVisibleIndex };
-    oxygen::graphics::NativeView native_view {};
+    oxygen::graphics::NativeView native_view;
   };
 
   observer_ptr<Graphics> gfx_;

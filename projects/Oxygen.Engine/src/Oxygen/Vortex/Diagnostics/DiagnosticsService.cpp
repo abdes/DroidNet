@@ -4,16 +4,30 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Vortex/Diagnostics/DiagnosticsService.h>
-
+#include <cstdint>
 #include <exception>
+#include <filesystem>
 #include <limits>
+#include <mutex>
+#include <optional>
+#include <span>
 #include <string>
+#include <string_view>
 #include <utility>
 
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/CommandQueue.h>
+#include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/Types/QueueRole.h>
+#include <Oxygen/Vortex/Diagnostics/DiagnosticsCaptureManifest.h>
+#include <Oxygen/Vortex/Diagnostics/DiagnosticsService.h>
+#include <Oxygen/Vortex/Diagnostics/DiagnosticsTypes.h>
+#include <Oxygen/Vortex/Diagnostics/ShaderDebugModeRegistry.h>
 #include <Oxygen/Vortex/Internal/GpuTimelineProfiler.h>
+#include <Oxygen/Vortex/RendererCapability.h>
+#include <Oxygen/Vortex/ShaderDebugMode.h>
 
 namespace oxygen::vortex {
 

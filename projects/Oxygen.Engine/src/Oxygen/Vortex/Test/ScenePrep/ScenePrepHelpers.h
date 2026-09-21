@@ -49,8 +49,8 @@ namespace pak = oxygen::data::pak;
     .name = {},
     .material_asset_key = {},
     .mesh_view_count = mesh_view_count,
-    .bounding_box_min = { bounds_min.x, bounds_min.y, bounds_min.z, },
-    .bounding_box_max = { bounds_max.x, bounds_max.y, bounds_max.z, },
+    .bounding_box_min = { bounds_min.x, bounds_min.y, bounds_min.z },
+    .bounding_box_max = { bounds_max.x, bounds_max.y, bounds_max.z },
   };
   return desc;
 }

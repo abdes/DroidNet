@@ -4,33 +4,50 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Vortex/Environment/Passes/VolumetricFogPass.h>
-
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <limits>
+#include <memory>
+#include <span>
 #include <stdexcept>
+#include <utility>
 #include <vector>
 
+#include <glm/ext/vector_float3.hpp>
+#include <glm/ext/vector_float4.hpp>
+#include <glm/ext/vector_uint3.hpp>
 #include <glm/geometric.hpp>
-#include <glm/vec4.hpp>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/ScopeGuard.h>
+#include <Oxygen/Core/Bindless/Generated.BindlessAbi.h>
 #include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
+#include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
-#include <Oxygen/Graphics/Common/CommandList.h>
+#include <Oxygen/Core/Types/ShaderType.h>
+#include <Oxygen/Core/Types/TextureType.h>
+#include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
+#include <Oxygen/Graphics/Common/Shaders.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
+#include <Oxygen/Graphics/Common/Types/ResourceAccessMode.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
+#include <Oxygen/Profiling/ProfileScope.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereState.h>
+#include <Oxygen/Vortex/Environment/Internal/LocalFogVolumeState.h>
+#include <Oxygen/Vortex/Environment/Passes/VolumetricFogPass.h>
+#include <Oxygen/Vortex/Environment/Types/AtmosphereLightModel.h>
 #include <Oxygen/Vortex/Internal/RetainedTexturePool.h>
 #include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
 #include <Oxygen/Vortex/RenderContext.h>
@@ -387,7 +404,7 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
   }
   auto& registry = gfx->GetResourceRegistry();
   bool texture_committed = false;
-  auto retire_unpublished = ScopeGuard([&]() noexcept {
+  auto retire_unpublished = ScopeGuard([&] noexcept -> void {
     if (!texture_committed) {
       output_pool_->RemoveView(ctx.current_view.view_id);
       texture.reset();

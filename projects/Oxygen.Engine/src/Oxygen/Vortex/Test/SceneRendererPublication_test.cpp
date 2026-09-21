@@ -4,26 +4,43 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Testing/GTest.h>
-
+#include <algorithm>
 #include <array>
+#include <cstddef>
 #include <cstring>
 #include <limits>
 #include <memory>
-#include <ranges>
+#include <string_view>
+#include <tuple>
+#include <utility>
 #include <vector>
 
+#include "Fakes/Graphics.h"
+#include <glm/ext/vector_uint2.hpp>
+
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Config/RendererConfig.h>
+#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/PhaseRegistry.h>
 #include <Oxygen/Core/Time/SimulationClock.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
+#include <Oxygen/Core/Types/TextureType.h>
+#include <Oxygen/Core/Types/View.h>
+#include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
+#include <Oxygen/Graphics/Common/CommandRecording.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
+#include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/QueueRole.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
@@ -33,9 +50,11 @@
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/RendererCapability.h>
+#include <Oxygen/Vortex/SceneRenderer/DepthPrePassPolicy.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneRenderer.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
 #include <Oxygen/Vortex/SceneRenderer/ShadingMode.h>
@@ -45,8 +64,6 @@
 #include <Oxygen/Vortex/Types/ScreenHzbFrameBindings.h>
 #include <Oxygen/Vortex/Types/ViewFrameBindings.h>
 #include <Oxygen/Vortex/ViewExtension.h>
-
-#include "Fakes/Graphics.h"
 
 namespace oxygen::engine::internal {
 struct EngineTagFactory {
@@ -360,11 +377,11 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
   });
 
   auto framebuffer = MakeFramebuffer("SceneRendererPublicationTest.SceneColor");
-  static_cast<void>(frame_context.RegisterView(MakeView(
+  std::ignore = frame_context.RegisterView(MakeView(
     oxygen::observer_ptr {
       framebuffer.get(),
     },
-    64.0F, 64.0F, true)));
+    64.0F, 64.0F, true));
 
   RunRendererFrame(frame_context);
 
@@ -461,11 +478,11 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
     scene.get(),
   });
   auto framebuffer = MakeFramebuffer("PinnedExposure.Color");
-  static_cast<void>(frame.RegisterView(MakeView(
+  std::ignore = frame.RegisterView(MakeView(
     oxygen::observer_ptr {
       framebuffer.get(),
     },
-    64.0F, 64.0F, true)));
+    64.0F, 64.0F, true));
   RunRendererFrame(frame);
   ASSERT_NE(observer->before, oxygen::kInvalidShaderVisibleIndex);
   EXPECT_EQ(observer->after, observer->before);
@@ -492,11 +509,11 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
 
   auto framebuffer
     = MakeFramebuffer("SceneRendererPublicationTest.LightingBindings");
-  static_cast<void>(frame_context.RegisterView(MakeView(
+  std::ignore = frame_context.RegisterView(MakeView(
     oxygen::observer_ptr {
       framebuffer.get(),
     },
-    64.0F, 64.0F, true)));
+    64.0F, 64.0F, true));
 
   RunRendererFrame(frame_context);
 
@@ -726,7 +743,7 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
   ResolveAndCleanupPublishExplicitArtifactsInsteadOfLiveAttachments)
 {
   auto config = SceneTexturesConfig {
-    .extent = { 96U, 54U, },
+    .extent = { 96U, 54U },
     .enable_velocity = false,
     .enable_custom_depth = false,
     .gbuffer_count = 4U,
@@ -852,7 +869,7 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
 NOLINT_TEST_F(SceneRendererPublicationTest, CleanupRejectsUnusableResolvedDepth)
 {
   auto config = SceneTexturesConfig {
-    .extent = { 4U, 4U, },
+    .extent = { 4U, 4U },
     .enable_velocity = false,
     .enable_custom_depth = false,
     .gbuffer_count = 4U,
@@ -877,11 +894,8 @@ NOLINT_TEST_F(SceneRendererPublicationTest, CleanupRejectsUnusableResolvedDepth)
   valid_null.texture = nullptr;
   auto invalid_nonnull = resolved;
   invalid_nonnull.valid = false;
-  const std::array unusable {
-    valid_null,
-    invalid_nonnull,
-    oxygen::vortex::SceneTextureExtractRef {},
-  };
+  const std::array unusable { valid_null, invalid_nonnull,
+    oxygen::vortex::SceneTextureExtractRef {} };
   const auto copies_before = graphics_->texture_copy_log_.copies.size();
   for (std::size_t index = 0U; index < unusable.size(); ++index) {
     SCOPED_TRACE(index);
@@ -920,7 +934,7 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
 
   {
     auto config = SceneTexturesConfig {
-      .extent = { 96U, 54U, },
+      .extent = { 96U, 54U },
       .enable_velocity = true,
       .enable_custom_depth = false,
       .gbuffer_count = 4U,
@@ -1038,7 +1052,7 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
   Stage3PublicationKeepsSceneColorAndGBuffersInvalidUntilStage10)
 {
   auto config = SceneTexturesConfig {
-    .extent = { 96U, 54U, },
+    .extent = { 96U, 54U },
     .enable_velocity = true,
     .enable_custom_depth = true,
     .gbuffer_count = 4U,
@@ -1109,7 +1123,7 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
 {
   auto scene_renderer = SceneRenderer(*renderer_, *graphics_,
     SceneTexturesConfig {
-      .extent = { 64U, 64U, },
+      .extent = { 64U, 64U },
       .enable_velocity = true,
       .enable_custom_depth = false,
       .gbuffer_count = 4U,
@@ -1153,7 +1167,7 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
 {
   auto scene_renderer = SceneRenderer(*renderer_, *graphics_,
     SceneTexturesConfig {
-      .extent = { 64U, 64U, },
+      .extent = { 64U, 64U },
       .enable_velocity = true,
       .enable_custom_depth = false,
       .gbuffer_count = 4U,
@@ -1235,21 +1249,21 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
         72U,
       });
 
-  static_cast<void>(frame_context.RegisterView(MakeView(
+  std::ignore = frame_context.RegisterView(MakeView(
     oxygen::observer_ptr {
       overlay_fb.get(),
     },
-    48.0F, 48.0F, false)));
+    48.0F, 48.0F, false));
   const auto first_scene_id = frame_context.RegisterView(MakeView(
     oxygen::observer_ptr {
       scene_fb_small.get(),
     },
     64.0F, 64.0F, true));
-  static_cast<void>(frame_context.RegisterView(MakeView(
+  std::ignore = frame_context.RegisterView(MakeView(
     oxygen::observer_ptr {
       scene_fb_large.get(),
     },
-    128.0F, 72.0F, true)));
+    128.0F, 72.0F, true));
 
   auto render_context = RenderContext {};
   RendererPublicationProbe::PopulateRenderContextViewState(
@@ -1416,7 +1430,7 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
 {
   auto scene_renderer = SceneRenderer(*renderer_, *graphics_,
     SceneTexturesConfig {
-      .extent = { 96U, 54U, },
+      .extent = { 96U, 54U },
       .enable_velocity = true,
       .enable_custom_depth = false,
       .gbuffer_count = 4U,
@@ -1528,7 +1542,7 @@ NOLINT_TEST_F(
   SceneRendererPublicationTest, Stage5HzbConstantsReserveOneRangePerViewInFrame)
 {
   const auto config = SceneTexturesConfig {
-    .extent = { 128U, 72U, },
+    .extent = { 128U, 72U },
     .enable_velocity = true,
     .enable_custom_depth = false,
     .gbuffer_count = 4U,
@@ -1625,7 +1639,7 @@ NOLINT_TEST_F(
 {
   auto scene_renderer = SceneRenderer(*renderer_, *graphics_,
     SceneTexturesConfig {
-      .extent = { 192U, 108U, },
+      .extent = { 192U, 108U },
       .enable_velocity = true,
       .enable_custom_depth = false,
       .gbuffer_count = 4U,
@@ -1718,7 +1732,7 @@ NOLINT_TEST_F(
 {
   auto scene_renderer = SceneRenderer(*renderer_, *graphics_,
     SceneTexturesConfig {
-      .extent = { 64U, 64U, },
+      .extent = { 64U, 64U },
       .enable_velocity = true,
       .enable_custom_depth = false,
       .gbuffer_count = 4U,
@@ -1773,7 +1787,7 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
 {
   auto scene_renderer = SceneRenderer(*renderer_, *graphics_,
     SceneTexturesConfig {
-      .extent = { 96U, 54U, },
+      .extent = { 96U, 54U },
       .enable_velocity = true,
       .enable_custom_depth = false,
       .gbuffer_count = 4U,
@@ -1872,7 +1886,7 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
 {
   auto scene_renderer = SceneRenderer(*renderer_, *graphics_,
     SceneTexturesConfig {
-      .extent = { 96U, 54U, },
+      .extent = { 96U, 54U },
       .enable_velocity = true,
       .enable_custom_depth = false,
       .gbuffer_count = 4U,
@@ -2007,7 +2021,7 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
 {
   auto scene_renderer = SceneRenderer(*renderer_, *graphics_,
     SceneTexturesConfig {
-      .extent = { 96U, 54U, },
+      .extent = { 96U, 54U },
       .enable_velocity = true,
       .enable_custom_depth = false,
       .gbuffer_count = 4U,

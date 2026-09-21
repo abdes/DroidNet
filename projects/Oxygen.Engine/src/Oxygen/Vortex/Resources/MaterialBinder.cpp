@@ -7,6 +7,8 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstddef>
+#include <cstdint>
 #include <deque>
 #include <memory>
 #include <mutex>
@@ -14,25 +16,38 @@
 #include <span>
 #include <string>
 #include <unordered_map>
+#include <utility>
+#include <variant>
 #include <vector>
 
 #include <Oxygen/Base/Hash.h>
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Content/EvictionEvents.h>
 #include <Oxygen/Content/IAssetLoader.h>
+#include <Oxygen/Content/ResourceKey.h>
+#include <Oxygen/Core/Bindless/Generated.BindlessAbi.h>
+#include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Constants.h>
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/MaterialAsset.h>
-#include <Oxygen/Graphics/Common/Buffer.h>
-#include <Oxygen/Graphics/Common/DescriptorAllocator.h>
+#include <Oxygen/Data/MaterialDomain.h>
+#include <Oxygen/Data/PakFormat_core.h>
+#include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
-#include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Nexus/FrameDrivenIndexReuse.h>
+#include <Oxygen/Vortex/RendererTag.h>
 #include <Oxygen/Vortex/Resources/IResourceBinder.h>
 #include <Oxygen/Vortex/Resources/MaterialBinder.h>
+#include <Oxygen/Vortex/ScenePrep/Handles.h>
 #include <Oxygen/Vortex/ScenePrep/MaterialRef.h>
 #include <Oxygen/Vortex/Types/MaterialShadingConstants.h>
 #include <Oxygen/Vortex/Types/ProceduralGridMaterialConstants.h>
 #include <Oxygen/Vortex/Upload/AtlasBuffer.h>
+#include <Oxygen/Vortex/Upload/Types.h>
 #include <Oxygen/Vortex/Upload/UploadCoordinator.h>
 
 using oxygen::vortex::upload::AtlasBuffer;
@@ -1374,7 +1389,7 @@ auto MaterialBinder::Impl::EnsureFrameResources() -> void
       // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
       std::as_bytes(std::span<vortex::MaterialShadingConstants>(
                       &material_shading_constants_[index], 1))
-        .first(material_shading_stride)
+        .first(material_shading_stride),
     };
     requests.push_back(std::move(req));
 
@@ -1395,7 +1410,7 @@ auto MaterialBinder::Impl::EnsureFrameResources() -> void
       // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
       std::as_bytes(std::span<vortex::ProceduralGridMaterialConstants>(
                       &procedural_grid_material_constants_[index], 1))
-        .first(procedural_grid_stride)
+        .first(procedural_grid_stride),
     };
     requests.push_back(std::move(grid_req));
   }

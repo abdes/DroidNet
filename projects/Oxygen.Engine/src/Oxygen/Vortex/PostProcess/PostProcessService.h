@@ -310,18 +310,18 @@ private:
     std::vector<std::shared_ptr<graphics::GpuBufferReadback>> available;
   };
   struct PendingExposureStatus {
-    std::shared_ptr<Graphics> readback_graphics {};
-    postprocess::ExposurePass::StateLease state {};
-    std::shared_ptr<graphics::GpuBufferReadback> readback {};
-    std::weak_ptr<ExposureReadbackPool> reuse_pool {};
-    std::optional<ExposureTransitionToken> token {};
+    std::shared_ptr<Graphics> readback_graphics;
+    postprocess::ExposurePass::StateLease state;
+    std::shared_ptr<graphics::GpuBufferReadback> readback;
+    std::weak_ptr<ExposureReadbackPool> reuse_pool;
+    std::optional<ExposureTransitionToken> token;
     CompositionView::ViewStateHandle handle {};
     std::uint64_t lifetime { 0U };
     std::uint64_t frame_sequence { 0U };
     std::uint64_t settings_revision { 0U };
     std::uint64_t control_revision { 0U };
-    std::optional<std::uint64_t> precision_epoch {};
-    std::optional<PrecisionTicket> precision {};
+    std::optional<std::uint64_t> precision_epoch;
+    std::optional<PrecisionTicket> precision;
   };
   std::unordered_map<CompositionView::ViewStateHandle,
     std::deque<PendingExposureStatus>>
@@ -367,12 +367,12 @@ private:
   frame::Slot current_slot_ { frame::kInvalidSlot };
   std::unique_ptr<
     internal::PerViewStructuredPublisher<PostProcessFrameBindings>>
-    bindings_publisher_ {};
-  std::unordered_map<ViewId, PublishedView> published_views_ {};
+    bindings_publisher_;
+  std::unordered_map<ViewId, PublishedView> published_views_;
   ExecutionState last_execution_state_ {};
-  std::unique_ptr<postprocess::ExposurePass> exposure_pass_ {};
-  std::unique_ptr<postprocess::BloomPass> bloom_pass_ {};
-  std::unique_ptr<postprocess::TonemapPass> tonemap_pass_ {};
+  std::unique_ptr<postprocess::ExposurePass> exposure_pass_;
+  std::unique_ptr<postprocess::BloomPass> bloom_pass_;
+  std::unique_ptr<postprocess::TonemapPass> tonemap_pass_;
 };
 
 } // namespace oxygen::vortex

@@ -5,12 +5,20 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <cstdint>
+#include <tuple>
 
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Vortex/Lighting/Internal/LightGridBuilder.h>
 #include <Oxygen/Vortex/Lighting/Types/DirectionalLightForwardData.h>
+#include <Oxygen/Vortex/Lighting/Types/ForwardLocalLightRecord.h>
+#include <Oxygen/Vortex/Lighting/Types/FrameLightingInputs.h>
+#include <Oxygen/Vortex/Lighting/Types/LightGridMetadata.h>
 #include <Oxygen/Vortex/Renderer.h>
+#include <Oxygen/Vortex/Types/FrameLightSelection.h>
 #include <Oxygen/Vortex/Types/LightCullingConfig.h>
+#include <Oxygen/Vortex/Types/LightingFrameBindings.h>
 
 namespace oxygen::vortex::lighting::internal {
 
@@ -92,7 +100,7 @@ auto LightGridBuilder::OnFrameStart(
 auto LightGridBuilder::Build(const FrameLightingInputs& inputs)
   -> BuiltLightGridFrame
 {
-  static_cast<void>(renderer_);
+  std::ignore = renderer_;
 
   auto built = BuiltLightGridFrame {};
   if (inputs.frame_light_set == nullptr) {

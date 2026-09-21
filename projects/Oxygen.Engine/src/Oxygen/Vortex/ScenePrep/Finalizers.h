@@ -8,10 +8,11 @@
 
 #include <Oxygen/Base/Logging.h>
 // #include <Oxygen/Vortex/Resources/DrawMetadataEmitter.h>
-#include "Oxygen/Data/GeometryAsset.h"
+#include <numeric>
+
+#include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Vortex/ScenePrep/RenderItemData.h>
 #include <Oxygen/Vortex/ScenePrep/ScenePrepState.h>
-#include <numeric>
 
 namespace oxygen::vortex::sceneprep {
 

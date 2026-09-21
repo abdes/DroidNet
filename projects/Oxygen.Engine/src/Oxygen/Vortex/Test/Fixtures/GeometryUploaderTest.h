@@ -13,14 +13,13 @@
 #include <unordered_map>
 #include <utility>
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/EvictionEvents.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Graphics/Common/Queues.h>
+#include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/RendererTag.h>
 #include <Oxygen/Vortex/Resources/GeometryUploader.h>
 #include <Oxygen/Vortex/Test/Fakes/AssetLoader.h>

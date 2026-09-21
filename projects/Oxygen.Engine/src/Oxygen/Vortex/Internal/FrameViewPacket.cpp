@@ -5,12 +5,18 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <memory>
 
 #include <fmt/format.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/Types/View.h>
+#include <Oxygen/Core/Types/ViewPort.h>
+#include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/Internal/CompositionViewImpl.h>
 #include <Oxygen/Vortex/Internal/FrameViewPacket.h>
+#include <Oxygen/Vortex/SceneRenderer/Internal/ViewRenderPlan.h>
 
 namespace oxygen::vortex::internal {
 
@@ -55,8 +61,8 @@ FrameViewPacket::FrameViewPacket(observer_ptr<const CompositionViewImpl> view,
       && lane != CompositionView::OverlayLane::kWorldForeground) {
       continue;
     }
-    const auto exists = std::ranges::any_of(
-      overlay_batches_, [lane](const CompositionView::OverlayBatch& batch) {
+    const auto exists = std::ranges::any_of(overlay_batches_,
+      [lane](const CompositionView::OverlayBatch& batch) -> bool {
         return batch.lane == lane;
       });
     if (exists) {

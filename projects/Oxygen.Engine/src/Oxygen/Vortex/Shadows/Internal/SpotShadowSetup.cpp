@@ -4,16 +4,23 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Vortex/Shadows/Internal/SpotShadowSetup.h>
-
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
+#include <span>
 
-#include <glm/ext/matrix_clip_space.hpp>
+#include <glm/ext/matrix_float4x4.hpp>
 #include <glm/ext/matrix_transform.hpp>
+#include <glm/ext/vector_float3.hpp>
 #include <glm/geometric.hpp>
 
+#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/ViewHelpers.h>
+#include <Oxygen/Vortex/Shadows/Internal/ConventionalShadowTargetAllocator.h>
+#include <Oxygen/Vortex/Shadows/Internal/SpotShadowSetup.h>
+#include <Oxygen/Vortex/Shadows/Types/FrameShadowInputs.h>
+#include <Oxygen/Vortex/Types/FrameLightSelection.h>
+#include <Oxygen/Vortex/Types/ShadowFrameBindings.h>
 
 namespace oxygen::vortex::shadows::internal {
 namespace {

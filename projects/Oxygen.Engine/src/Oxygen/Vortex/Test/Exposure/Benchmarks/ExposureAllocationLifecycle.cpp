@@ -4,16 +4,35 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <array>
 #include <bit>
 #include <cmath>
+#include <cstddef>
 #include <cstring>
+#include <string>
+#include <tuple>
+#include <utility>
 
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Core/Types/PostProcess.h>
+#include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Graphics/Common/CommandList.h>
+#include <Oxygen/Graphics/Common/CommandRecording.h>
+#include <Oxygen/Graphics/Common/Types/QueueRole.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
+#include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Vortex/CompositionView.h>
+#include <Oxygen/Vortex/PostProcess/Passes/TonemapPass.h>
 #include <Oxygen/Vortex/Test/Exposure/Benchmarks/ExposureAllocationScenario.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestTags.h>
-#include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
+#include <Oxygen/Vortex/Types/ExposureTransition.h>
 
 namespace oxygen::vortex::testing::exposure {
 
@@ -73,7 +92,7 @@ auto ExposureAllocationScenario::RenderFrame(
     auto loop = co::testing::TestEventLoop {};
     // Run completes synchronously before the closure or captures are destroyed.
     // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
-    co::Run(loop, [&]() -> co::Co<void> {
+    co::Run(loop, [&] -> co::Co<void> {
       co_await fixture_.renderer_->OnPreRender(observer_ptr {
         &fixture_.frame,
       });
@@ -108,7 +127,7 @@ auto ExposureAllocationScenario::RemoveViews() -> void
 
 auto ExposureAllocationScenario::RunLifecycle() -> void
 {
-  static_cast<void>(Snapshot("cold_fixture"));
+  std::ignore = Snapshot("cold_fixture");
   ASSERT_NO_FATAL_FAILURE(RenderFrame(
     {
       .view_count = 1U,
@@ -116,7 +135,7 @@ auto ExposureAllocationScenario::RunLifecycle() -> void
       .ev = 0.0F,
     },
     "bootstrap_one"));
-  static_cast<void>(Snapshot("bootstrap_one"));
+  std::ignore = Snapshot("bootstrap_one");
   for (unsigned warm = 1U; warm < 8U; ++warm) {
     ASSERT_NO_FATAL_FAILURE(RenderFrame(
       {
@@ -126,7 +145,7 @@ auto ExposureAllocationScenario::RunLifecycle() -> void
       },
       "qualify_one"));
   }
-  static_cast<void>(Snapshot("steady_one"));
+  std::ignore = Snapshot("steady_one");
   for (unsigned cycle = 0U; cycle < 3U; ++cycle) {
     SCOPED_TRACE(cycle);
     const auto prefix = "cycle" + std::to_string(cycle) + "_";
@@ -225,7 +244,7 @@ auto ExposureAllocationScenario::ResizeAndCapture(
       .ev = 1.0F,
     },
     prefix + "recovery"));
-  static_cast<void>(Snapshot(prefix + "recovery_two_retained"));
+  std::ignore = Snapshot(prefix + "recovery_two_retained");
   for (unsigned warm = 0U; warm < 8U; ++warm) {
     ASSERT_NO_FATAL_FAILURE(RenderFrame(
       {
@@ -346,7 +365,7 @@ auto ExposureAllocationScenario::RemoveAndReadd(
   const std::string& prefix, CycleObservation& observation) -> void
 {
   RemoveViews();
-  static_cast<void>(Snapshot(prefix + "removed_retained_pending"));
+  std::ignore = Snapshot(prefix + "removed_retained_pending");
   ASSERT_NO_FATAL_FAILURE(RenderFrame(
     {
       .view_count = 2U,
@@ -382,7 +401,7 @@ auto ExposureAllocationScenario::RemoveAndReadd(
           observation.saved_domains.at(index))));
     }
   });
-  static_cast<void>(Snapshot(prefix + "readded_retained_pending"));
+  std::ignore = Snapshot(prefix + "readded_retained_pending");
 }
 
 auto ExposureAllocationScenario::ReleaseAndSubmit(
@@ -484,7 +503,7 @@ auto ExposureAllocationScenario::VerifyConsumers(
     }
   }
   observation.depth_recording.reset();
-  WithoutDiagnostics([&]() -> void {
+  WithoutDiagnostics([&] -> void {
     for (unsigned index = 0U; index < 2U; ++index) {
       const auto pixel
         = fixture_.ReadFloatTexture(*consumer_outputs_.at(index));
@@ -564,7 +583,7 @@ auto ExposureAllocationScenario::RetireCycle(const unsigned cycle,
   pending_consumers_.clear();
   pending_tonemap_lists_.clear();
   RemoveViews();
-  static_cast<void>(Snapshot(prefix + "released_before_fence"));
+  std::ignore = Snapshot(prefix + "released_before_fence");
   for (unsigned drain = 0U; drain < 2U * frame::kFramesInFlight.get();
     ++drain) {
     ASSERT_NO_FATAL_FAILURE(RenderFrame(

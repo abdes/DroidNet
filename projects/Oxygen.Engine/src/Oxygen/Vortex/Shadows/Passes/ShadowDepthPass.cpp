@@ -4,15 +4,28 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Vortex/Shadows/Passes/ShadowDepthPass.h>
-
-#include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <limits>
+#include <memory>
 #include <optional>
+#include <span>
+#include <string>
+#include <string_view>
+#include <utility>
 #include <vector>
 
+#include <glm/ext/matrix_float4x4.hpp>
+#include <glm/ext/vector_float4.hpp>
+
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
+#include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Constants.h>
+#include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Core/Types/ShaderType.h>
+#include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
@@ -23,12 +36,18 @@
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/ClearFlags.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
+#include <Oxygen/Graphics/Common/Types/QueueRole.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
+#include <Oxygen/Profiling/ProfileScope.h>
 #include <Oxygen/Vortex/Internal/MeshRasterState.h>
 #include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/Renderer.h>
-#include <Oxygen/Vortex/Types/PassMask.h>
+#include <Oxygen/Vortex/SceneRenderer/Stages/DepthPrepass/DepthPrepassMeshProcessor.h>
+#include <Oxygen/Vortex/Shadows/Passes/ShadowDepthPass.h>
+#include <Oxygen/Vortex/Shadows/Types/DirectionalShadowFrameData.h>
+#include <Oxygen/Vortex/Shadows/Types/FrameShadowInputs.h>
 
 namespace oxygen::vortex::shadows {
 

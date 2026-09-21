@@ -31,7 +31,7 @@ public:
     -> std::span<const DrawCommand>;
 
 private:
-  std::vector<DrawCommand> draw_commands_ {};
+  std::vector<DrawCommand> draw_commands_;
 };
 
 } // namespace oxygen::vortex::shadows::internal

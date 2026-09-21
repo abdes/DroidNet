@@ -4,7 +4,13 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstdint>
+#include <unordered_map>
+
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Vortex/Internal/DeformationHistoryCache.h>
+#include <Oxygen/Vortex/Types/VelocityPublications.h>
 
 namespace oxygen::vortex::internal {
 

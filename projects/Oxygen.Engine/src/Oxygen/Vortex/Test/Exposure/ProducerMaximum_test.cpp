@@ -11,10 +11,17 @@
 #include <limits>
 #include <span>
 
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/PostProcess.h>
+#include <Oxygen/Graphics/Common/CommandRecording.h>
+#include <Oxygen/Graphics/Common/Types/QueueRole.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/Scene/ExposureSettings.h>
+#include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
 #include <Oxygen/Vortex/PostProcess/PostProcessService.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureGpuFixture.h>
-#include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestGraphics.h>
+#include <Oxygen/Vortex/Types/ExposureStateData.h>
 
 namespace oxygen::vortex::testing::exposure {
 
@@ -160,7 +167,7 @@ NOLINT_TEST_F(ExposureGpuTest, ProducerMaximumReuseFallsBackForUnprovenRecords)
     kTransmissionMismatch,
     kNonfiniteAlpha,
     kSignedRgb,
-    kSkyAlpha
+    kSkyAlpha,
   };
   const auto faults = std::array {
     Fault::kMissing,

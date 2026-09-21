@@ -12,10 +12,15 @@
 #include <limits>
 #include <span>
 
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/PostProcess.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/Scene/ExposureSettings.h>
+#include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
 #include <Oxygen/Vortex/PostProcess/PostProcessService.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureGpuFixture.h>
-#include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestGraphics.h>
+#include <Oxygen/Vortex/Types/ExposureStateData.h>
 
 namespace oxygen::vortex::testing::exposure {
 
@@ -332,35 +337,52 @@ NOLINT_TEST_F(ExposureGpuTest, ProducerStoreBoundsMatchSerialUnsignedMax)
   const auto nan = std::numeric_limits<float>::quiet_NaN();
   const std::array samples {
     Sample {
-      .value = { 0, 0, 0, 0, }, .low = { 0, 0, 0, 0, }, .high = { 0, 0, 0, 0, }, },
-    Sample { .value = { -0.0F, 0, -0.0F, 0, },
-      .low = { -0.0F, 0, -0.0F, 0, },
-      .high = { -0.0F, 0, -0.0F, 0, }, },
-    Sample { .value = { tiny, tiny, tiny, .5F, },
-      .low = { tiny, tiny, tiny, .5F, },
-      .high = { tiny, tiny, tiny, .5F, }, },
-    Sample { .value = { 1.0F / 3.0F, .125F, 3.75F, .375F, },
-      .low = { 1.0F / 3.0F, .125F, 3.75F, .375F, },
-      .high = { 1.0F / 3.0F, .125F, 3.75F, .375F, }, },
-    Sample { .value = { 2, 1, .5F, .5F, },
-      .low = { 1.875F, .875F, .25F, .375F, },
-      .high = { 2.125F, 1.25F, .75F, .625F, }, },
-    Sample { .value = { 16, 8, 4, .75F, },
-      .low = { 15, 7, 3, .5F, },
-      .high = { 17, 9, 5, 1, }, },
-    Sample { .value = { 0x1p-24F, 0x1p-14F, .125F, 1, },
-      .low = { 0x1p-24F, 0x1p-14F, .125F, 1, },
-      .high = { 0x1p-24F, 0x1p-14F, .125F, 1, }, },
-    Sample { .value = { 1e-20F, 1e-12F, 1e-4F, .875F, },
-      .low = { 0, 0, 0, .5F, },
-      .high = { 2e-20F, 2e-12F, 2e-4F, 1, }, },
+      .value = { 0, 0, 0, 0 },
+      .low = { 0, 0, 0, 0 },
+      .high = { 0, 0, 0, 0 },
+    },
+    Sample {
+      .value = { -0.0F, 0, -0.0F, 0 },
+      .low = { -0.0F, 0, -0.0F, 0 },
+      .high = { -0.0F, 0, -0.0F, 0 },
+    },
+    Sample {
+      .value = { tiny, tiny, tiny, .5F },
+      .low = { tiny, tiny, tiny, .5F },
+      .high = { tiny, tiny, tiny, .5F },
+    },
+    Sample {
+      .value = { 1.0F / 3.0F, .125F, 3.75F, .375F },
+      .low = { 1.0F / 3.0F, .125F, 3.75F, .375F },
+      .high = { 1.0F / 3.0F, .125F, 3.75F, .375F },
+    },
+    Sample {
+      .value = { 2, 1, .5F, .5F },
+      .low = { 1.875F, .875F, .25F, .375F },
+      .high = { 2.125F, 1.25F, .75F, .625F },
+    },
+    Sample {
+      .value = { 16, 8, 4, .75F },
+      .low = { 15, 7, 3, .5F },
+      .high = { 17, 9, 5, 1 },
+    },
+    Sample {
+      .value = { 0x1p-24F, 0x1p-14F, .125F, 1 },
+      .low = { 0x1p-24F, 0x1p-14F, .125F, 1 },
+      .high = { 0x1p-24F, 0x1p-14F, .125F, 1 },
+    },
+    Sample {
+      .value = { 1e-20F, 1e-12F, 1e-4F, .875F },
+      .low = { 0, 0, 0, .5F },
+      .high = { 2e-20F, 2e-12F, 2e-4F, 1 },
+    },
   };
   enum class Pattern : std::uint8_t {
     kFull,
     kPartial,
     kSparse,
     kInvalidSparse,
-    kZero
+    kZero,
   };
   unsigned cases = 0U;
   unsigned wave_width = 0U;

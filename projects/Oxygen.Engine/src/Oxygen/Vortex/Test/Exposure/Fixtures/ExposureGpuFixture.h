@@ -154,8 +154,9 @@ protected:
     Backend().GetResourceRegistry().RegisterView(*buffer, std::move(handle),
       graphics::BufferViewDescription {
         .view_type = graphics::ResourceViewType::kStructuredBuffer_SRV,
-        .range = { 0U, sizeof(T), },
-        .stride = sizeof(T), });
+        .range = { 0U, sizeof(T) },
+        .stride = sizeof(T),
+      });
     return index;
   }
   auto RunToneProbe(std::span<const std::byte> inputs_data,

@@ -30,8 +30,8 @@ struct DeferredLightPacket {
 };
 
 struct DeferredLightPacketSet {
-  std::optional<DirectionalLightForwardData> directional {};
-  std::vector<DeferredLightPacket> local_lights {};
+  std::optional<DirectionalLightForwardData> directional;
+  std::vector<DeferredLightPacket> local_lights;
   std::uint64_t selection_epoch { 0U };
 };
 

@@ -4,17 +4,24 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <limits>
+#include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <optional>
+#include <span>
 #include <utility>
+#include <vector>
 
-#include <glm/mat4x4.hpp>
+#include <glm/ext/matrix_float4x4.hpp>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Content/IAssetLoader.h>
+#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Scene/Environment/PostProcessVolume.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
+#include <Oxygen/Scene/ExposureSettings.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/SceneSync/RuntimeMotionProducerModule.h>
 #include <Oxygen/Vortex/Internal/DeformationHistoryCache.h>
@@ -28,12 +35,14 @@
 #include <Oxygen/Vortex/Resources/TextureBinder.h>
 #include <Oxygen/Vortex/Resources/TransformUploader.h>
 #include <Oxygen/Vortex/ScenePrep/CollectionConfig.h>
-#include <Oxygen/Vortex/ScenePrep/Extractors.h>
 #include <Oxygen/Vortex/ScenePrep/FinalizationConfig.h>
-#include <Oxygen/Vortex/ScenePrep/Finalizers.h>
+#include <Oxygen/Vortex/ScenePrep/RenderItemData.h>
 #include <Oxygen/Vortex/ScenePrep/ScenePrepPipeline.h>
+#include <Oxygen/Vortex/ScenePrep/ScenePrepState.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/InitViews/InitViewsModule.h>
+#include <Oxygen/Vortex/Types/DrawMetadata.h>
+#include <Oxygen/Vortex/Types/VelocityPublications.h>
 #include <Oxygen/Vortex/Upload/TransientStructuredBuffer.h>
 
 namespace oxygen::vortex {
@@ -304,7 +313,7 @@ namespace {
         continue;
       }
 
-      const auto current_state = snapshot->FindMaterialMotionState(
+      const auto* const current_state = snapshot->FindMaterialMotionState(
         scenesync::RuntimeMaterialMotionKey {
           .node_handle = source.node_handle,
           .geometry_asset_key = source.geometry_asset_key,

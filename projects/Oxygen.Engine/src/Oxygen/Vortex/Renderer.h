@@ -157,17 +157,17 @@ public:
   };
 
   struct RuntimeTextureCompositionLayer {
-    std::shared_ptr<graphics::Texture> source_texture {};
+    std::shared_ptr<graphics::Texture> source_texture;
     ViewPort viewport {};
     float opacity { 1.0F };
-    std::string debug_name {};
+    std::string debug_name;
   };
 
   struct RuntimeCompositionInput {
-    std::vector<RuntimeCompositionLayer> layers {};
-    std::vector<RuntimeTextureCompositionLayer> texture_layers {};
-    std::shared_ptr<graphics::Framebuffer> composite_target {};
-    std::shared_ptr<graphics::Surface> target_surface {};
+    std::vector<RuntimeCompositionLayer> layers;
+    std::vector<RuntimeTextureCompositionLayer> texture_layers;
+    std::shared_ptr<graphics::Framebuffer> composite_target;
+    std::shared_ptr<graphics::Surface> target_surface;
   };
 
   class ValidatedSinglePassHarnessContext {
@@ -207,7 +207,7 @@ public:
 
     observer_ptr<Renderer> renderer_ { nullptr };
     std::unique_ptr<RenderContext> render_context_ {
-      std::make_unique<RenderContext>()
+      std::make_unique<RenderContext>(),
     };
     std::optional<ResolvedView> current_resolved_view_;
     std::optional<PreparedSceneFrame> current_prepared_frame_;
@@ -378,7 +378,7 @@ public:
   struct OffscreenPipelineInput {
     ShadingMode shading_mode { ShadingMode::kDeferred };
     CompositionView::ViewFeatureProfile feature_profile {
-      CompositionView::ViewFeatureProfile::kDefault
+      CompositionView::ViewFeatureProfile::kDefault,
     };
 
     [[nodiscard]] static constexpr auto Deferred() noexcept
@@ -818,12 +818,12 @@ private:
     };
     CompositionView::ViewKind view_kind { CompositionView::ViewKind::kPrimary };
     CompositionView::ViewFeatureProfile feature_profile {
-      CompositionView::ViewFeatureProfile::kDefault
+      CompositionView::ViewFeatureProfile::kDefault,
     };
     CompositionView::ViewFeatureMask feature_mask {};
-    std::vector<CompositionView::AuxOutputDesc> produced_aux_outputs {};
-    std::vector<CompositionView::AuxInputDesc> consumed_aux_outputs {};
-    std::string debug_name {};
+    std::vector<CompositionView::AuxOutputDesc> produced_aux_outputs;
+    std::vector<CompositionView::AuxInputDesc> consumed_aux_outputs;
+    std::string debug_name;
     std::optional<scene::ExposureSettings> exposure_override;
     ViewId exposure_source_view_id { kInvalidViewId };
     bool pending_exposure_detach { false };
@@ -924,7 +924,7 @@ private:
   observer_ptr<IAsyncEngine> engine_ { nullptr };
   RendererConfig config_ {};
   CapabilitySet capability_families_ {
-    kPhase1DefaultRuntimeCapabilityFamilies
+    kPhase1DefaultRuntimeCapabilityFamilies,
   };
 
   ViewConstants view_const_cpu_;
@@ -937,7 +937,7 @@ private:
   std::shared_ptr<internal::CompositingPassConfig> compositing_pass_config_;
   std::unique_ptr<DiagnosticsService> diagnostics_service_;
   std::unique_ptr<internal::GpuTimelineProfiler> gpu_timeline_profiler_;
-  std::unique_ptr<internal::ImGuiRuntime> imgui_runtime_ {};
+  std::unique_ptr<internal::ImGuiRuntime> imgui_runtime_;
   GroundGridConfig ground_grid_config_ {};
   RenderMode render_mode_ { RenderMode::kSolid };
   graphics::Color wireframe_color_ { 1.0F, 1.0F, 1.0F, 1.0F };

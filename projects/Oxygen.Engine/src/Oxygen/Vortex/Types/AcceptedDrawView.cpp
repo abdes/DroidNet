@@ -5,8 +5,15 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <cstddef>
+#include <cstdint>
+#include <span>
 
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/Types/AcceptedDrawView.h>
+#include <Oxygen/Vortex/Types/DrawMetadata.h>
+#include <Oxygen/Vortex/Types/PassMask.h>
 
 namespace oxygen::vortex {
 
@@ -81,8 +88,10 @@ AcceptedDrawView::Iterator::Iterator(
 
 auto AcceptedDrawView::Iterator::operator*() const noexcept -> value_type
 {
-  return { observer_ptr<const DrawMetadata> { &metadata_[current_index_] },
-    current_index_ };
+  return {
+    observer_ptr<const DrawMetadata> { &metadata_[current_index_] },
+    current_index_,
+  };
 }
 
 auto AcceptedDrawView::Iterator::operator++() noexcept -> Iterator&

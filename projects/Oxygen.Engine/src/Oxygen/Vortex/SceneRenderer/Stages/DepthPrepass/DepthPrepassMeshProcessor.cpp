@@ -6,7 +6,10 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <limits>
+#include <span>
+#include <utility>
 #include <vector>
 
 #include <Oxygen/Core/Types/ResolvedView.h>
@@ -14,6 +17,7 @@
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/DepthPrepass/DepthPrepassMeshProcessor.h>
 #include <Oxygen/Vortex/Types/AcceptedDrawView.h>
+#include <Oxygen/Vortex/Types/DrawMetadata.h>
 #include <Oxygen/Vortex/Types/PassMask.h>
 
 namespace oxygen::vortex {

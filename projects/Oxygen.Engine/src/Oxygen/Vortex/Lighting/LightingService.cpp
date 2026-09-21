@@ -4,15 +4,23 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Vortex/Lighting/LightingService.h>
+#include <memory>
 
+#include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Vortex/Lighting/Internal/DeferredLightPacketBuilder.h>
 #include <Oxygen/Vortex/Lighting/Internal/ForwardLightPublisher.h>
 #include <Oxygen/Vortex/Lighting/Internal/LightGridBuilder.h>
+#include <Oxygen/Vortex/Lighting/LightingService.h>
 #include <Oxygen/Vortex/Lighting/Passes/DeferredLightPass.h>
+#include <Oxygen/Vortex/Lighting/Types/FrameLightingInputs.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
+#include <Oxygen/Vortex/Types/FrameLightSelection.h>
+#include <Oxygen/Vortex/Types/LightingFrameBindings.h>
+#include <Oxygen/Vortex/Types/ShadowFrameBindings.h>
 
 namespace oxygen::vortex {
 

@@ -59,7 +59,7 @@ namespace environment {
       std::uint32_t instance_buffer_slot { kInvalidShaderVisibleIndex.get() };
       std::uint32_t tile_data_texture_slot { kInvalidShaderVisibleIndex.get() };
       std::uint32_t occupied_tile_buffer_slot {
-        kInvalidShaderVisibleIndex.get()
+        kInvalidShaderVisibleIndex.get(),
       };
       std::uint32_t tile_resolution_x { 0U };
       std::uint32_t tile_resolution_y { 0U };
@@ -77,7 +77,7 @@ namespace environment {
     auto EnsurePassConstantsBuffer() -> bool;
 
     Renderer& renderer_;
-    std::optional<upload::TransientStructuredBuffer> pass_constants_buffer_ {};
+    std::optional<upload::TransientStructuredBuffer> pass_constants_buffer_;
   };
 
 } // namespace environment

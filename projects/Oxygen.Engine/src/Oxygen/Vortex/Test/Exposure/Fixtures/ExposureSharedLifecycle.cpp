@@ -6,26 +6,34 @@
 
 #include <array>
 #include <chrono>
+#include <memory>
+#include <utility>
+#include <vector>
 
-#include <Oxygen/Config/RendererConfig.h>
-#include <Oxygen/Data/GeometryAsset.h>
-#include <Oxygen/Data/HalfFloat.h>
-#include <Oxygen/Data/MaterialAsset.h>
-#include <Oxygen/Data/TextureResource.h>
-#include <Oxygen/Engine/IAsyncEngine.h>
+#include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/PostProcess.h>
+#include <Oxygen/Core/Types/View.h>
+#include <Oxygen/Data/MaterialDomain.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
+#include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
-#include <Oxygen/Scene/Environment/PostProcessVolume.h>
-#include <Oxygen/Scene/Environment/SceneEnvironment.h>
-#include <Oxygen/Vortex/PreparedSceneFrame.h>
+#include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Vortex/CompositionView.h>
+#include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
+#include <Oxygen/Vortex/RenderContext.h>
+#include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
+#include <Oxygen/Vortex/SceneRenderer/ShadingMode.h>
+#include <Oxygen/Vortex/ShaderDebugMode.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureLightingFixture.h>
-#include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestEngine.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestTags.h>
-#include <Oxygen/Vortex/Test/Fakes/AssetLoader.h>
 #include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
-#include <Oxygen/Vortex/Test/Fixtures/TextureBinderPayloads.h>
+#include <Oxygen/Vortex/Types/ExposureStateData.h>
+#include <Oxygen/Vortex/Types/ExposureTransition.h>
 
 namespace oxygen::vortex::testing::exposure {
 
@@ -233,7 +241,7 @@ auto ExposureLightingGpuTest::QualifySharedSceneLifecycle(bool forward) -> void
     // co::Run completes synchronously before this closure and its captured
     // fixture state leave scope.
     // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
-    co::Run(loop, [&]() -> co::Co<void> {
+    co::Run(loop, [&] -> co::Co<void> {
       co_await renderer_->OnPreRender(observer_ptr {
         &frame,
       });

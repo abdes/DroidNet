@@ -4,16 +4,16 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <span>
 
+#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/Test/Fixtures/RingBufferStagingFixture.h>
 #include <Oxygen/Vortex/Upload/Errors.h>
-#include <Oxygen/Vortex/Upload/StagingProvider.h>
 #include <Oxygen/Vortex/Upload/TransientStructuredBuffer.h>
 
 using oxygen::vortex::upload::TransientStructuredBuffer;

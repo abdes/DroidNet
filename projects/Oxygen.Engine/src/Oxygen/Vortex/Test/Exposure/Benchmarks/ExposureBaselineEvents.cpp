@@ -5,14 +5,31 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <array>
+#include <chrono>
 #include <cmath>
+#include <cstdint>
+#include <filesystem>
 #include <fstream>
+#include <ios>
+#include <tuple>
+#include <utility>
 
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Core/Types/PostProcess.h>
+#include <Oxygen/Core/Types/View.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/PostProcess/PostProcessService.h>
 #include <Oxygen/Vortex/Test/Exposure/Benchmarks/ExposureBaselineScenario.h>
+#include <Oxygen/Vortex/Types/ExposureStateData.h>
+#include <Oxygen/Vortex/Types/ExposureTransition.h>
 
 namespace oxygen::vortex::testing::exposure {
 namespace {
@@ -58,7 +75,7 @@ auto ExposureBaselineScenario::FinalizeRecording(const unsigned path_frame)
   -> void
 {
   fixture_.WaitForQueueIdle();
-  static_cast<void>(RenderFrame(false, path_frame));
+  std::ignore = RenderFrame(false, path_frame);
 }
 
 auto ExposureBaselineScenario::ApplyEvent(const unsigned event_frame) -> void

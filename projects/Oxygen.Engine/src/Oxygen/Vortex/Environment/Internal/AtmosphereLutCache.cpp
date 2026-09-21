@@ -4,17 +4,30 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Vortex/Environment/Internal/AtmosphereLutCache.h>
-
 #include <algorithm>
 #include <bit>
+#include <cstdint>
+#include <memory>
 #include <stdexcept>
+#include <string>
+#include <tuple>
+#include <utility>
 
+#include <Oxygen/Core/Bindless/Generated.BindlessAbi.h>
+#include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Core/Types/TextureType.h>
+#include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
+#include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
+#include <Oxygen/Graphics/Common/Types/ResourceAccessMode.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
+#include <Oxygen/Vortex/Environment/Internal/AtmosphereLutCache.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereState.h>
 #include <Oxygen/Vortex/Environment/Internal/ResourceRetirement.h>
 #include <Oxygen/Vortex/Renderer.h>
@@ -94,7 +107,7 @@ auto AtmosphereLutCache::RefreshForState(
     InvalidateDistantSkyLightLut();
   }
 
-  static_cast<void>(EnsureResources());
+  std::ignore = EnsureResources();
 }
 
 auto AtmosphereLutCache::EnsureResources() -> bool

@@ -4,19 +4,22 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
 #include <memory>
-
-#include <Oxygen/Testing/GTest.h>
+#include <vector>
 
 #include <Oxygen/Content/ResourceKey.h>
+#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/Data/PakFormat_render.h>
+#include <Oxygen/Data/ShaderReference.h>
+#include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/RendererTag.h>
 #include <Oxygen/Vortex/ScenePrep/MaterialRef.h>
+#include <Oxygen/Vortex/Test/Fixtures/MaterialBinderTest.h>
 #include <Oxygen/Vortex/Types/MaterialShadingConstants.h>
 #include <Oxygen/Vortex/Types/ProceduralGridMaterialConstants.h>
 #include <Oxygen/Vortex/Upload/UploadCoordinator.h>
-
-#include <Oxygen/Vortex/Test/Fixtures/MaterialBinderTest.h>
 
 namespace {
 
@@ -141,15 +144,17 @@ NOLINT_TEST_F(
     });
 
   oxygen::vortex::sceneprep::MaterialRef ref;
-  ref.resolved_asset = MakeMaterial({ .base_color_key = base_color_key,
+  ref.resolved_asset = MakeMaterial({
+    .base_color_key = base_color_key,
     .normal_key = normal_key,
     .raw_base_color_index = 1U,
     .raw_normal_index = 2U,
-    .base_color = { 1.0F, 1.0F, 1.0F, 1.0F, },
-    .uv_scale = { 2.0F, 3.0F, },
-    .uv_offset = { 0.25F, -0.5F, },
+    .base_color = { 1.0F, 1.0F, 1.0F, 1.0F },
+    .uv_scale = { 2.0F, 3.0F },
+    .uv_offset = { 0.25F, -0.5F },
     .uv_rotation_radians = 0.75F,
-    .uv_set = 2U, });
+    .uv_set = 2U,
+  });
   ref.source_asset_key = ref.resolved_asset->GetAssetKey();
   ref.resolved_asset_key = ref.resolved_asset->GetAssetKey();
 

@@ -93,7 +93,8 @@ struct PipelineCapabilityValidation {
   auto checked = Family::kNone;
   bool first = true;
 
-  const auto append_family = [&](const Family family, const char* name) {
+  const auto append_family
+    = [&](const Family family, const char* name) -> void {
     if ((capabilities & family) == family) {
       if (!first) {
         result += " | ";

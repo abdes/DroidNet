@@ -4,16 +4,20 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Testing/GTest.h>
+#include <array>
+#include <chrono>
+#include <expected>
+#include <future>
+#include <span>
+#include <thread>
+#include <vector>
 
+#include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Vortex/Upload/Errors.h>
 #include <Oxygen/Vortex/Upload/Types.h>
 #include <Oxygen/Vortex/Upload/UploadTracker.h>
 #include <Oxygen/Vortex/Upload/UploaderTag.h>
-
-#include <array>
-#include <chrono>
-#include <future>
-#include <thread>
 
 namespace oxygen::vortex::upload::internal {
 auto UploaderTagFactory::Get() noexcept -> UploaderTag
@@ -115,7 +119,7 @@ NOLINT_TEST(UploadTrackerTest, AwaitSingle)
     42, "single");
 
   // Act (pre): in another thread, mark completion after a brief delay
-  std::jthread worker([&tracker]() -> void {
+  std::jthread worker([&tracker] -> void {
     std::this_thread::sleep_for(std::chrono::milliseconds(1));
     tracker.MarkFenceCompleted(FenceValue {
       10,
@@ -169,7 +173,7 @@ NOLINT_TEST(UploadTrackerTest, AwaitAllMaxFence)
   }
 
   // In another thread, complete later
-  std::jthread worker([&tracker]() -> void {
+  std::jthread worker([&tracker] -> void {
     std::this_thread::sleep_for(std::chrono::milliseconds(1));
     tracker.MarkFenceCompleted(FenceValue {
       5,
@@ -205,7 +209,7 @@ NOLINT_TEST(UploadTrackerTest, AwaitReturnsNotFoundWhenEntryIsErasedDuringWait)
     42, "await-erased");
 
   auto future = std::async(std::launch::async,
-    [&]() -> std::expected<oxygen::vortex::upload::UploadResult, UploadError> {
+    [&] -> std::expected<oxygen::vortex::upload::UploadResult, UploadError> {
       return tracker.Await(ticket.id);
     });
 
@@ -241,8 +245,8 @@ NOLINT_TEST(
     64, "await-all-erased");
 
   auto future = std::async(std::launch::async,
-    [&]() -> std::expected<std::vector<oxygen::vortex::upload::UploadResult>,
-            UploadError> {
+    [&] -> std::expected<std::vector<oxygen::vortex::upload::UploadResult>,
+          UploadError> {
       const std::array tickets {
         ticket,
       };
@@ -283,8 +287,8 @@ NOLINT_TEST(
     96, "await-all-pending-erased");
 
   auto future = std::async(std::launch::async,
-    [&]() -> std::expected<std::vector<oxygen::vortex::upload::UploadResult>,
-            UploadError> { return tracker.AwaitAllPending(); });
+    [&] -> std::expected<std::vector<oxygen::vortex::upload::UploadResult>,
+          UploadError> { return tracker.AwaitAllPending(); });
 
   EXPECT_EQ(future.wait_for(std::chrono::milliseconds {
               5,

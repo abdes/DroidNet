@@ -4,14 +4,30 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstdint>
 #include <limits>
+#include <memory>
+#include <string_view>
+#include <utility>
+#include <vector>
 
-#include <glm/glm.hpp>
-
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Data/GeometryAsset.h>
+#include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/Data/PakFormat_geometry.h>
+#include <Oxygen/Data/PakFormat_render.h>
+#include <Oxygen/Data/Vertex.h>
 #include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
+#include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Vortex/RendererTag.h>
+#include <Oxygen/Vortex/Resources/GeometryUploader.h>
+#include <Oxygen/Vortex/Test/Fakes/AssetLoader.h>
+#include <Oxygen/Vortex/Test/Fakes/Graphics.h>
 #include <Oxygen/Vortex/Test/Fixtures/GeometryUploaderTest.h>
+#include <Oxygen/Vortex/Upload/StagingProvider.h>
 #include <Oxygen/Vortex/Upload/UploadCoordinator.h>
+#include <Oxygen/Vortex/Upload/UploadPolicy.h>
 #include <Oxygen/Vortex/Upload/UploaderTag.h>
 
 namespace oxygen::vortex::upload::internal {

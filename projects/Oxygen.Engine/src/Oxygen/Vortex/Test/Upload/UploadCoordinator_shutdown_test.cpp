@@ -4,15 +4,22 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <array>
 #include <chrono>
+#include <cstddef>
+#include <span>
 #include <thread>
 
-#include <Oxygen/Testing/GTest.h>
-
+#include <Oxygen/Core/Types/ByteUnits.h>
 #include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Common/Queues.h>
+#include <Oxygen/Graphics/Common/Types/QueueRole.h>
+#include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Vortex/RendererTag.h>
 #include <Oxygen/Vortex/Test/Fixtures/UploadCoordinatorTest.h>
+#include <Oxygen/Vortex/Upload/Errors.h>
 #include <Oxygen/Vortex/Upload/Types.h>
 #include <Oxygen/Vortex/Upload/UploadCoordinator.h>
 
@@ -54,12 +61,14 @@ NOLINT_TEST_F(UploadCoordinatorTest, Shutdown_WaitsForOutstandingUploads)
   auto dst = GfxPtr()->CreateBuffer(dst_desc);
 
   std::array<std::byte, 64> data {};
-  UploadRequest req { .kind = UploadKind::kBuffer,
+  UploadRequest req {
+    .kind = UploadKind::kBuffer,
     .priority = {},
     .debug_name = "shutdown-test",
-    .desc = UploadBufferDesc { .dst = dst, .size_bytes = 64, .dst_offset = 0, },
+    .desc = UploadBufferDesc { .dst = dst, .size_bytes = 64, .dst_offset = 0 },
     .subresources = {},
-    .data = UploadDataView { .bytes = std::span<const std::byte>(data), }, };
+    .data = UploadDataView { .bytes = std::span<const std::byte>(data) },
+  };
 
   auto& uploader = Uploader();
 
@@ -95,7 +104,7 @@ NOLINT_TEST_F(UploadCoordinatorTest, Shutdown_WaitsForOutstandingUploads)
   // After a brief delay, signal the queue completion to allow Shutdown to
   // observe progress and finish.
   const auto fence = ticket.fence.get();
-  std::jthread completion_thread([q, fence]() -> void {
+  std::jthread completion_thread([q, fence] -> void {
     std::this_thread::sleep_for(20ms);
     q->Signal(fence);
   });
@@ -123,12 +132,14 @@ NOLINT_TEST_F(UploadCoordinatorTest, ShutdownSucceedsAfterFrameCleanup)
   auto dst = GfxPtr()->CreateBuffer(dst_desc);
 
   std::array<std::byte, 64> data {};
-  UploadRequest req { .kind = UploadKind::kBuffer,
+  UploadRequest req {
+    .kind = UploadKind::kBuffer,
     .priority = {},
     .debug_name = "timeout-test",
-    .desc = UploadBufferDesc { .dst = dst, .size_bytes = 64, .dst_offset = 0, },
+    .desc = UploadBufferDesc { .dst = dst, .size_bytes = 64, .dst_offset = 0 },
     .subresources = {},
-    .data = UploadDataView { .bytes = std::span<const std::byte>(data), }, };
+    .data = UploadDataView { .bytes = std::span<const std::byte>(data) },
+  };
 
   auto& uploader = Uploader();
 

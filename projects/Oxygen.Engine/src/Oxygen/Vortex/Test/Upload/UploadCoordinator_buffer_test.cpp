@@ -5,21 +5,23 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <array>
+#include <cstddef>
 #include <cstring>
+#include <functional>
 #include <memory>
+#include <span>
+#include <utility>
 #include <vector>
 
-#include <Oxygen/Testing/GTest.h>
-
+#include <Oxygen/Core/Types/ByteUnits.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
-#include <Oxygen/Graphics/Common/CommandList.h>
-#include <Oxygen/Graphics/Common/CommandQueue.h>
-#include <Oxygen/Graphics/Common/CommandRecorder.h>
-#include <Oxygen/Graphics/Common/Detail/Barriers.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Queues.h>
+#include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/Test/Fixtures/UploadCoordinatorTest.h>
+#include <Oxygen/Vortex/Upload/Errors.h>
 #include <Oxygen/Vortex/Upload/Types.h>
 #include <Oxygen/Vortex/Upload/UploadCoordinator.h>
 

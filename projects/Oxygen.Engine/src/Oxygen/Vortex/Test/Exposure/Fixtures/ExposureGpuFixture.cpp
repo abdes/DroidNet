@@ -4,22 +4,55 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureGpuFixture.h>
-
-#include <algorithm>
+#include <array>
 #include <cstddef>
+#include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <fstream>
+#include <ios>
 #include <limits>
+#include <memory>
+#include <span>
 #include <stdexcept>
+#include <stdlib.h>
+#include <string>
+#include <utility>
+#include <vector>
 
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Config/GraphicsConfig.h>
 #include <Oxygen/Config/RendererConfig.h>
+#include <Oxygen/Core/Bindless/Generated.BindlessAbi.h>
+#include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/ShaderType.h>
+#include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Data/HalfFloat.h>
+#include <Oxygen/Graphics/Common/Buffer.h>
+#include <Oxygen/Graphics/Common/FrameCaptureController.h>
+#include <Oxygen/Graphics/Common/PipelineState.h>
+#include <Oxygen/Graphics/Common/ReadbackTypes.h>
 #include <Oxygen/Graphics/Common/ShaderByteCode.h>
+#include <Oxygen/Graphics/Common/Shaders.h>
+#include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
+#include <Oxygen/Graphics/Direct3D12/Graphics.h>
+#include <Oxygen/Graphics/Direct3D12/Test/Fixtures/ReadbackTestFixture.h>
+#include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsService.h>
-#include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestEngine.h>
+#include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
+#include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureGpuFixture.h>
+// Completes the NiceMock pointee for the out-of-line constructor/destructor.
+#include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestEngine.h> // IWYU pragma: keep
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestGraphics.h>
-#include <Oxygen/Vortex/Test/Fakes/AssetLoader.h>
+// Completes the unique_ptr pointee for the out-of-line constructor/destructor.
+#include <Oxygen/Vortex/Test/Fakes/AssetLoader.h> // IWYU pragma: keep
+#include <Oxygen/Vortex/Types/ExposureTransition.h>
 #include <Oxygen/Vortex/Types/ViewConstants.h>
 
 namespace oxygen::vortex::testing::exposure {
@@ -291,7 +324,7 @@ auto ExposureGpuTest::MakeSignal(std::uint32_t width, std::uint32_t height,
         .buffer_offset = 0U,
         .buffer_row_pitch = pitch,
         .buffer_slice_pitch = static_cast<std::uint64_t>(pitch) * height,
-        .dst_slice = { .width = width, .height = height, .depth = depth, },
+        .dst_slice = { .width = width, .height = height, .depth = depth },
       },
       *texture);
     recorder->RequireResourceStateFinal(
@@ -385,16 +418,19 @@ auto ExposureGpuTest::RunToneProbe(std::span<const std::byte> inputs_data,
   Backend().GetResourceRegistry().RegisterView(*inputs, std::move(input_handle),
     BufferViewDescription {
       .view_type = ResourceViewType::kStructuredBuffer_SRV,
-      .range = { 0U, input_size, },
-      .stride = 16U, });
+      .range = { 0U, input_size },
+      .stride = 16U,
+    });
   auto output_handle = allocator.AllocateRaw(
     ResourceViewType::kRawBuffer_UAV, DescriptorVisibility::kShaderVisible);
   const auto output_slot = allocator.GetShaderVisibleIndex(output_handle);
   Backend().GetResourceRegistry().RegisterView(*output,
     std::move(output_handle),
-    BufferViewDescription { .view_type = ResourceViewType::kRawBuffer_UAV,
-      .range = { 0U, static_cast<std::uint64_t>(record_count) * 32U, },
-      .stride = 0U, });
+    BufferViewDescription {
+      .view_type = ResourceViewType::kRawBuffer_UAV,
+      .range = { 0U, static_cast<std::uint64_t>(record_count) * 32U },
+      .stride = 0U,
+    });
   const auto constants = PublishFixtureData(std::array<std::uint32_t, 4> {
     input_slot.get(),
     output_slot.get(),

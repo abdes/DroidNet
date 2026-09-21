@@ -158,8 +158,14 @@ struct SceneTextureBindings {
   static constexpr auto MakeInvalidGBufferSrvs()
     -> std::array<std::uint32_t, static_cast<std::size_t>(GBufferIndex::kCount)>
   {
-    return { kInvalidIndex, kInvalidIndex, kInvalidIndex, kInvalidIndex,
-      kInvalidIndex, kInvalidIndex };
+    return {
+      kInvalidIndex,
+      kInvalidIndex,
+      kInvalidIndex,
+      kInvalidIndex,
+      kInvalidIndex,
+      kInvalidIndex,
+    };
   }
 
   std::uint32_t scene_color_srv { kInvalidIndex };

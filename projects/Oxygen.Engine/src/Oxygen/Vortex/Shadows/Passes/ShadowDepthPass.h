@@ -10,6 +10,9 @@
 #include <span>
 #include <vector>
 
+#include <glm/mat4x4.hpp>
+#include <glm/vec4.hpp>
+
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/Frame.h>
@@ -19,8 +22,6 @@
 #include <Oxygen/Vortex/Shadows/Types/FrameShadowInputs.h>
 #include <Oxygen/Vortex/Upload/TransientStructuredBuffer.h>
 #include <Oxygen/Vortex/api_export.h>
-#include <glm/mat4x4.hpp>
-#include <glm/vec4.hpp>
 
 namespace oxygen::graphics {
 class Buffer;
@@ -81,7 +82,7 @@ namespace shadows {
     frame::Slot current_slot_ { frame::kInvalidSlot };
     RenderState last_render_state_ {};
     upload::TransientStructuredBuffer pass_constants_buffer_;
-    std::vector<graphics::NativeView> cascade_dsvs_ {};
+    std::vector<graphics::NativeView> cascade_dsvs_;
     const graphics::Texture* cascade_dsv_surface_ { nullptr };
   };
 

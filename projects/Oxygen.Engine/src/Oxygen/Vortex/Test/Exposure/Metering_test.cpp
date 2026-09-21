@@ -13,10 +13,13 @@
 #include <numeric>
 #include <vector>
 
+#include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Scene/Environment/Background.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
+#include <Oxygen/Scene/ExposureSettings.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureGpuFixture.h>
 
 namespace oxygen::vortex::testing::exposure {

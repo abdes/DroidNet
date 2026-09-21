@@ -4,10 +4,21 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Vortex/Test/Fixtures/TextureBinderTest.h>
+#include <cstdint>
+#include <memory>
 
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Queues.h>
+#include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
+#include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Vortex/RendererTag.h>
+#include <Oxygen/Vortex/Resources/TextureBinder.h>
+#include <Oxygen/Vortex/Test/Fakes/AssetLoader.h>
+#include <Oxygen/Vortex/Test/Fakes/Graphics.h>
+#include <Oxygen/Vortex/Test/Fixtures/TextureBinderTest.h>
+#include <Oxygen/Vortex/Upload/UploadCoordinator.h>
+#include <Oxygen/Vortex/Upload/UploadPolicy.h>
 #include <Oxygen/Vortex/Upload/UploaderTag.h>
 
 namespace oxygen::vortex::upload::internal {

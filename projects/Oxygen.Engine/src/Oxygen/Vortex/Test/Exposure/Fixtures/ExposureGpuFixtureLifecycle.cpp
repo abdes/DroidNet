@@ -4,32 +4,52 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureGpuFixture.h>
-
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <cstring>
 #include <map>
+#include <memory>
+#include <optional>
+#include <span>
 #include <stdexcept>
 #include <utility>
+#include <vector>
 
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/ScopeGuard.h>
-
 #include <Oxygen/Config/RendererConfig.h>
+#include <Oxygen/Console/Command.h>
 #include <Oxygen/Console/Console.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Core/Types/PostProcess.h>
+#include <Oxygen/Core/Types/View.h>
+#include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
+#include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Environment/Fog.h>
 #include <Oxygen/Scene/Environment/PostProcessVolume.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
+#include <Oxygen/Scene/ExposureSettings.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Vortex/CompositionView.h>
+#include <Oxygen/Vortex/RendererCapability.h>
+#include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureGpuFixture.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestGraphics.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestTags.h>
 #include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
+#include <Oxygen/Vortex/Types/ExposureStateData.h>
+#include <Oxygen/Vortex/Types/ExposureTransition.h>
 #include <Oxygen/Vortex/ViewExtension.h>
 
 namespace oxygen::vortex::testing::exposure {
@@ -112,8 +132,12 @@ auto ExposureGpuTest::CheckOffscreenSharing(const bool inside_frame) -> void
   facade.SetFrameSession({ .frame_slot = frame::Slot { 0U, },
     .frame_sequence = frame::SequenceNumber { 1U, },
     .delta_time_seconds = 0.0F, });
-  facade.SetSceneSource({ .scene = observer_ptr { scene.get(), }, });
-  facade.SetOutputTarget({ .framebuffer = observer_ptr { framebuffer.get(), }, });
+  facade.SetSceneSource({ .scene = observer_ptr {
+                            scene.get(),
+                          } });
+  facade.SetOutputTarget({ .framebuffer = observer_ptr {
+                             framebuffer.get(),
+                           } });
   facade.SetViewIntent(input);
   for (const auto& issue : facade.Validate().issues) {
     ADD_FAILURE() << issue.code << ": " << issue.message;
@@ -287,15 +311,17 @@ auto ExposureGpuTest::CheckSceneExposureRetry(
     recorder->RequireResourceState(*output, ResourceStates::kCopyDest);
     recorder->FlushBarriers();
     recorder->CopyBufferToTexture(*upload,
-      { .buffer_offset = 0U,
+      {
+        .buffer_offset = 0U,
         .buffer_row_pitch = 256U,
         .buffer_slice_pitch = 1024U,
-        .dst_slice = { .width = 4U, .height = 4U, .depth = 1U, }, },
+        .dst_slice = { .width = 4U, .height = 4U, .depth = 1U },
+      },
       *output);
     recorder->RequireResourceStateFinal(
       *output, ResourceStates::kShaderResource);
   }
-  const auto read_pixel = [&]() -> Pixel {
+  const auto read_pixel = [&] -> Pixel {
     auto readback
       = GetReadbackManager()->CreateTextureReadback("Offscreen retry pixel");
     {
@@ -347,7 +373,9 @@ auto ExposureGpuTest::CheckSceneExposureRetry(
     facade.SetFrameSession({ .frame_slot = frame::Slot { sequence - 1U, },
       .frame_sequence = frame::SequenceNumber { sequence, },
       .delta_time_seconds = 0.0F, });
-    facade.SetSceneSource({ .scene = observer_ptr { scene.get(), }, });
+    facade.SetSceneSource({ .scene = observer_ptr {
+                              scene.get(),
+                            } });
     facade.SetViewIntent(sibling ? successful_input : input);
     facade.SetOutputTarget(
       { .framebuffer = observer_ptr {
@@ -370,9 +398,8 @@ auto ExposureGpuTest::CheckSceneExposureRetry(
     renderer_->OnFrameStart(observer_ptr {
       &frame,
     });
-    const auto finish_frame = ScopeGuard([&]() noexcept -> void {
-      renderer_->OnFrameEnd(observer_ptr { &frame });
-    });
+    const auto finish_frame = ScopeGuard(
+      [&] noexcept -> void { renderer_->OnFrameEnd(observer_ptr { &frame }); });
     return session->ExecuteInsideFrame(frame);
   };
   struct AbortRecordedView final : IViewExtension {
@@ -573,7 +600,7 @@ auto ExposureGpuTest::CheckFogViewRetirement(
       // co::Run completes synchronously before this closure and its captured
       // fixture state leave scope.
       // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
-      co::Run(loop, [&]() -> co::Co<void> {
+      co::Run(loop, [&] -> co::Co<void> {
         co_await renderer_->OnPreRender(observer_ptr {
           &frame,
         });
@@ -588,9 +615,13 @@ auto ExposureGpuTest::CheckFogViewRetirement(
       facade.SetFrameSession({ .frame_slot = slot,
         .frame_sequence = frame::SequenceNumber { sequence, },
         .delta_time_seconds = 0.0F, });
-      facade.SetSceneSource({ .scene = observer_ptr { scene.get(), }, });
+      facade.SetSceneSource({ .scene = observer_ptr {
+                                scene.get(),
+                              } });
       facade.SetViewIntent(input);
-      facade.SetOutputTarget({ .framebuffer = observer_ptr { target.get(), }, });
+      facade.SetOutputTarget({ .framebuffer = observer_ptr {
+                                 target.get(),
+                               } });
       auto session = facade.Finalize();
       ASSERT_TRUE(session.has_value());
       ASSERT_TRUE(session->ExecuteInsideFrame(frame));

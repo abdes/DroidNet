@@ -9,21 +9,32 @@
 #include <fstream>
 #include <memory>
 #include <string>
+#include <tuple>
 #include <unordered_set>
 #include <utility>
 
 #include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
+#include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Vortex/Diagnostics/DiagnosticsTypes.h>
 #include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
 #include <Oxygen/Vortex/Renderer.h>
+#include <Oxygen/Vortex/RendererCapability.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureGpuFixture.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestTags.h>
+#include <Oxygen/Vortex/Types/CompositingTask.h>
 
 namespace oxygen::vortex::testing::exposure {
 
@@ -33,7 +44,7 @@ using graphics::Texture;
 
 NOLINT_TEST_F(ExposureGpuTest, CompositionConstantsSurviveLaterSubmission)
 {
-  static_cast<void>(OwnedExposureService());
+  std::ignore = OwnedExposureService();
   const std::array sources {
     Uniform(.25F),
     Uniform(.5F),
@@ -90,7 +101,7 @@ NOLINT_TEST_F(ExposureGpuTest, CompositionConstantsSurviveLaterSubmission)
   // Run waits for completion, so the closure and captured locals outlive the
   // coroutine.
   // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
-  co::Run(loop, [&]() -> co::Co<void> {
+  co::Run(loop, [&] -> co::Co<void> {
     co_await renderer_->OnCompositing(observer_ptr {
       &frame,
     });
@@ -169,7 +180,7 @@ NOLINT_TEST_F(ExposureGpuTest, NativeExposureTimelineRecordsMeteringScopes)
     // Run waits for completion, so the closure and captured locals outlive the
     // coroutine.
     // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
-    co::Run(loop, [&]() -> co::Co<void> {
+    co::Run(loop, [&] -> co::Co<void> {
       co_await renderer_->OnCompositing(observer_ptr {
         &frame_context,
       });

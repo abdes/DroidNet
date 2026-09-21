@@ -129,7 +129,7 @@ struct alignas(packing::kShaderDataFieldAlignment) GpuSkyAtmosphereParams {
 
   std::array<float, 3> rayleigh_scattering_per_km_rgb { 0.0F, 0.0F, 0.0F };
   float rayleigh_scale_height_km {
-    engine::atmos::kDefaultRayleighScaleHeightKm
+    engine::atmos::kDefaultRayleighScaleHeightKm,
   };
 
   std::array<float, 3> mie_scattering_per_km_rgb { 0.0F, 0.0F, 0.0F };

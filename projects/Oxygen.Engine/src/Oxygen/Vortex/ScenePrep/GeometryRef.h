@@ -30,7 +30,7 @@ namespace oxygen::vortex::sceneprep {
    the render item snapshot.
 */
 struct GeometryRef {
-  oxygen::data::AssetKey asset_key {};
+  oxygen::data::AssetKey asset_key;
   std::uint32_t lod_index { 0U };
   std::shared_ptr<const oxygen::data::Mesh> mesh;
 

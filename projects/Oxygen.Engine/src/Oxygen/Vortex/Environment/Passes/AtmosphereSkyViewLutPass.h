@@ -128,12 +128,20 @@ namespace environment {
       SamplingAtmosphere1 sampling_atmosphere1 {};
       PhaseFactors0 phase_factors0 {};
       float ground_albedo_rgb[4] { 0.4F, 0.4F, 0.4F, 0.0F };
-      float rayleigh_scattering_per_km_rgb[4] { 5.8e-3F, 13.5e-3F, 33.1e-3F,
-        0.0F };
+      float rayleigh_scattering_per_km_rgb[4] {
+        5.8e-3F,
+        13.5e-3F,
+        33.1e-3F,
+        0.0F,
+      };
       float mie_scattering_per_km_rgb[4] { 2.0e-2F, 2.0e-2F, 2.0e-2F, 0.0F };
       float mie_absorption_per_km_rgb[4] { 4.4e-3F, 4.4e-3F, 4.4e-3F, 0.0F };
-      float ozone_absorption_per_km_rgb[4] { 0.65e-3F, 1.88e-3F, 0.08e-3F,
-        0.0F };
+      float ozone_absorption_per_km_rgb[4] {
+        0.65e-3F,
+        1.88e-3F,
+        0.08e-3F,
+        0.0F,
+      };
       float ozone_density_layer0[4] { 25.0F, 0.0F, 0.0F, 0.0F };
       float ozone_density_layer1[4] { 0.0F, 0.0F, 0.0F, 0.0F };
       float sky_view_lut_referential_row0[4] { 1.0F, 0.0F, 0.0F, 0.0F };
@@ -151,7 +159,7 @@ namespace environment {
     upload::TransientStructuredBuffer pass_constants_buffer_;
     std::unique_ptr<::oxygen::vortex::internal::RetainedTexturePool>
       output_pool_;
-    std::vector<std::shared_ptr<graphics::Texture>> live_textures_ {};
+    std::vector<std::shared_ptr<graphics::Texture>> live_textures_;
   };
 
 } // namespace environment

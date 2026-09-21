@@ -4,26 +4,43 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Vortex/Environment/Passes/LocalFogVolumeTiledCullingPass.h>
-
+#include <algorithm>
+#include <array>
 #include <cmath>
-#include <cstring>
+#include <cstdint>
 #include <limits>
+#include <memory>
+#include <span>
 #include <stdexcept>
+#include <utility>
 #include <vector>
 
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
+#include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Core/Types/Frustum.h>
+#include <Oxygen/Core/Types/ShaderType.h>
+#include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
+#include <Oxygen/Graphics/Common/Shaders.h>
+#include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
+#include <Oxygen/Graphics/Common/Types/ResourceAccessMode.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
+#include <Oxygen/Profiling/ProfileScope.h>
+#include <Oxygen/Vortex/Environment/Internal/LocalFogVolumeState.h>
 #include <Oxygen/Vortex/Environment/Internal/ResourceRetirement.h>
+#include <Oxygen/Vortex/Environment/Passes/LocalFogVolumeTiledCullingPass.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererCapability.h>
@@ -217,10 +234,12 @@ LocalFogVolumeTiledCullingPass::~LocalFogVolumeTiledCullingPass()
   internal::RetireEnvironmentResource(*gfx, occupied_tile_buffer_);
   internal::RetireEnvironmentResource(*gfx, indirect_args_buffer_);
   internal::RetireEnvironmentResource(*gfx, indirect_count_clear_buffer_);
-  for (auto& retired : retired_textures_)
+  for (auto& retired : retired_textures_) {
     internal::RetireEnvironmentResource(*gfx, retired);
-  for (auto& retired : retired_buffers_)
+  }
+  for (auto& retired : retired_buffers_) {
     internal::RetireEnvironmentResource(*gfx, retired);
+  }
 }
 
 auto LocalFogVolumeTiledCullingPass::OnFrameStart(
@@ -358,19 +377,20 @@ auto LocalFogVolumeTiledCullingPass::EnsureOccupiedTileDrawBuffers(
   auto& registry = gfx->GetResourceRegistry();
 
   auto create_device_buffer
-    = [gfx](std::string_view name, const std::uint64_t size_bytes) {
-        auto buffer = gfx->CreateBuffer({
-          .size_bytes = size_bytes,
-          .usage
-          = graphics::BufferUsage::kStorage | graphics::BufferUsage::kIndirect,
-          .memory = graphics::BufferMemory::kDeviceLocal,
-          .debug_name = std::string(name),
-        });
-        if (buffer != nullptr) {
-          buffer->SetName(name);
-        }
-        return buffer;
-      };
+    = [gfx](std::string_view name,
+        const std::uint64_t size_bytes) -> std::shared_ptr<graphics::Buffer> {
+    auto buffer = gfx->CreateBuffer({
+      .size_bytes = size_bytes,
+      .usage
+      = graphics::BufferUsage::kStorage | graphics::BufferUsage::kIndirect,
+      .memory = graphics::BufferMemory::kDeviceLocal,
+      .debug_name = std::string(name),
+    });
+    if (buffer != nullptr) {
+      buffer->SetName(name);
+    }
+    return buffer;
+  };
 
   auto new_occupied_tiles
     = create_device_buffer("Vortex.Environment.LocalFogOccupiedTiles",

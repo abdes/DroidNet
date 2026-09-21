@@ -72,7 +72,8 @@ public:
 
 // Implement in .cpp to avoid multiple definitions so that we can reliably
 // compare error_code for identity.
-OXGN_VRTX_NDAPI const UploadErrorCategory& GetUploadErrorCategory() noexcept;
+OXGN_VRTX_NDAPI auto GetUploadErrorCategory() noexcept
+  -> const UploadErrorCategory&;
 
 // Helper to create std::error_code from UploadError
 inline auto make_error_code(UploadError e) noexcept -> std::error_code
