@@ -165,12 +165,14 @@ public:
     bool preserve_fp32_candidate_p = false)
     -> postprocess::ExposurePass::FrameLease;
   struct PreparedExposure {
-    const PostProcessService* owner;
+    const PostProcessService* owner { nullptr };
     postprocess::ExposurePass::Result exposure;
     ResolvedPostProcessConfig config;
-    ViewId view_id;
-    CompositionView::ViewStateHandle handle;
-    std::uint64_t lifetime;
+    ViewId view_id { kInvalidViewId };
+    CompositionView::ViewStateHandle handle {
+      CompositionView::kInvalidViewStateHandle
+    };
+    std::uint64_t lifetime { 0U };
     frame::SequenceNumber sequence;
     std::optional<ExposureTransitionToken> status_transition;
     std::optional<std::uint64_t> precision_epoch;
@@ -244,7 +246,9 @@ private:
   auto CaptureConfiguredExposure(ViewId view_id, RenderContext& ctx)
     -> const ExposureSettingsState&;
   struct CapturedExposureSettings {
-    CompositionView::ViewStateHandle handle;
+    CompositionView::ViewStateHandle handle {
+      CompositionView::kInvalidViewStateHandle
+    };
     ExposureSettingsState settings;
   };
   using ExposureCaptureKey
@@ -254,7 +258,7 @@ private:
   std::unordered_map<ViewId, postprocess::ExposurePass::Source>
     captured_exposure_sources_;
   std::optional<frame::SequenceNumber> captured_control_frame_;
-  auto BuildBindings(const Inputs& inputs,
+  [[nodiscard]] auto BuildBindings(const Inputs& inputs,
     const ResolvedPostProcessConfig& config) const -> PostProcessFrameBindings;
   struct PublishedView {
     ShaderVisibleIndex slot { kInvalidShaderVisibleIndex };
@@ -331,14 +335,17 @@ private:
   std::unordered_map<CompositionView::ViewStateHandle,
     std::shared_ptr<ExposureReadbackPool>>
     reusable_exposure_status_;
-  auto IsExposureStatusNeeded(const PendingExposureStatus& job) const -> bool;
-  auto IsPrecisionStatusNeeded(const PendingExposureStatus& job) const -> bool;
+  [[nodiscard]] auto IsExposureStatusNeeded(
+    const PendingExposureStatus& job) const -> bool;
+  [[nodiscard]] auto IsPrecisionStatusNeeded(
+    const PendingExposureStatus& job) const -> bool;
   void PublishExposureStatusOnSubmission(
     graphics::CommandRecorder& recorder, PendingExposureStatus job);
   auto QueueExposureStatus(PendingExposureStatus job) -> void;
   auto InvalidatePrecision(CompositionView::ViewStateHandle handle) -> void;
-  auto CurrentExposureGeneration(CompositionView::ViewStateHandle handle,
-    std::uint64_t lifetime) const -> std::uint64_t;
+  [[nodiscard]] auto CurrentExposureGeneration(
+    CompositionView::ViewStateHandle handle, std::uint64_t lifetime) const
+    -> std::uint64_t;
   auto DeferExposureStatus(PendingExposureStatus job) -> void;
   auto TryEnqueueExposureStatus(PendingExposureStatus job) -> bool;
   auto RecycleExposureStatus(PendingExposureStatus& job) -> void;

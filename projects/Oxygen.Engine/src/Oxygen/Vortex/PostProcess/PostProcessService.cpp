@@ -134,7 +134,7 @@ auto PostProcessService::OnFrameStart(
   current_slot_ = slot;
   exposure_pass_->OnFrameStart(sequence, slot);
   CHECK_LT_F(slot.get(), frame_masks_.size());
-  frame_masks_[slot.get()].clear();
+  frame_masks_.at(slot.get()).clear();
   if (mask_binder_) {
     mask_binder_->OnFrameStart();
   }
@@ -180,8 +180,7 @@ auto PostProcessService::BuildPassConfig(const PostProcessConfig& config,
 {
   const auto& accepted
     = captured_exposure_settings_.at({ view_id, handle }).settings;
-  return ResolvedPostProcessConfig(
-    config, accepted.resolved, accepted.revision, accepted.camera_ev);
+  return { config, accepted.resolved, accepted.revision, accepted.camera_ev };
 }
 
 auto PostProcessService::ResolveViewExposureSettings(
@@ -325,7 +324,11 @@ auto PostProcessService::CaptureViewExposureSettings(const ViewId view_id,
     reusable_exposure_status_.erase(handle);
   }
   return captured_exposure_settings_
-    .emplace(key, CapturedExposureSettings { handle, std::move(settings) })
+    .emplace(key,
+      CapturedExposureSettings {
+        .handle = handle,
+        .settings = std::move(settings),
+      })
     .first->second.settings;
 }
 
@@ -416,8 +419,9 @@ auto PostProcessService::CaptureRegisteredExposureControls(
         || captured.resolved.authored.mode != engine::ExposureMode::kAuto)) {
       error = ExposureTransitionError::kNotAuto;
     } else if (token->policy == ExposureTransitionPolicy::kSeedFromEv100
-      && !scene::ResolveExposureSeedLogGain(
-        captured.resolved, *token->seed_ev)) {
+      && (!token->seed_ev
+        || !scene::ResolveExposureSeedLogGain(
+          captured.resolved, *token->seed_ev))) {
       error = ExposureTransitionError::kUnsupportedSeed;
     }
     if (error) {
@@ -598,7 +602,7 @@ auto PostProcessService::PrepareSceneExposure(const ViewId view_id,
     = effective_config.Exposure().authored.metering_mask.get() != 0U && !mask;
   if (mask) {
     CHECK_LT_F(current_slot_.get(), frame_masks_.size());
-    frame_masks_[current_slot_.get()].push_back(mask);
+    frame_masks_.at(current_slot_.get()).push_back(mask);
   }
   effective_config = effective_config.WithDiagnosticOverride(
     GetConfig().temporary_unit_exposure
@@ -632,6 +636,7 @@ auto PostProcessService::PrepareSceneExposure(const ViewId view_id,
             ctx.current_view.view_state_handle, ctx.frame_sequence)
         : std::nullopt,
       .lifetime = settings->lifetime,
+      .scene_composition = {},
     });
   if (exposure.solve_failed || (exposure.frame && !exposure.state)) {
     InvalidatePrecision(ctx.current_view.view_state_handle);
@@ -658,15 +663,15 @@ auto PostProcessService::PrepareSceneExposure(const ViewId view_id,
     }
   }
   return PreparedExposure {
-    this,
-    exposure,
-    std::move(effective_config),
-    view_id,
-    ctx.current_view.view_state_handle,
-    settings->lifetime,
-    ctx.frame_sequence,
-    status_transition,
-    precision_epoch,
+    .owner = this,
+    .exposure = exposure,
+    .config = std::move(effective_config),
+    .view_id = view_id,
+    .handle = ctx.current_view.view_state_handle,
+    .lifetime = settings->lifetime,
+    .sequence = ctx.frame_sequence,
+    .status_transition = status_transition,
+    .precision_epoch = precision_epoch,
   };
 }
 
@@ -727,7 +732,10 @@ auto PostProcessService::ConvertSceneColor(RenderContext& ctx,
       .scene_signal_srv = inputs.scene_signal_srv,
       .metering_mask = mask ? mask->texture.get() : nullptr,
       .metering_mask_srv = mask ? mask->srv : kInvalidShaderVisibleIndex,
+      .transition = {},
+      .rejection = {},
       .composition_products = composition_products,
+      .scene_composition = {},
     },
     destination, destination_uav);
   if (!submitted) {
@@ -897,13 +905,18 @@ auto PostProcessService::PrepareScenePrecision(RenderContext& ctx,
     return reject();
   }
   for (const auto& product : products) {
-    if (product.id == 5U || product.id == 6U || product.id == 10U) {
+    if (product.id == postprocess::ExposurePass::HdrProduct::kSkyView
+      || product.id
+        == postprocess::ExposurePass::HdrProduct::kCameraAerialPerspective
+      || product.id == postprocess::ExposurePass::HdrProduct::kVolumetricFog) {
       std::ignore = exposure_pass_->GatherFilterGradients(
         ctx, recorder, prepared.exposure.frame, product);
     }
   }
   for (const auto& product : products) {
-    if (product.id == 6U && product.texture != nullptr) {
+    if (product.id
+        == postprocess::ExposurePass::HdrProduct::kCameraAerialPerspective
+      && product.texture != nullptr) {
       // Intermediate retained-error transport only. It cannot authorize
       // admission until the remaining consumer/candidate terms are qualified.
       std::ignore = exposure_pass_->PropagateOpaqueApError(
@@ -916,6 +929,8 @@ auto PostProcessService::PrepareScenePrecision(RenderContext& ctx,
         {
           .metering_mask = mask ? mask->texture.get() : nullptr,
           .metering_mask_srv = mask ? mask->srv : kInvalidShaderVisibleIndex,
+          .transition = {},
+          .rejection = {},
           .scene_composition = composition,
         })) {
     return reject();
@@ -989,16 +1004,20 @@ auto PostProcessService::FinalizeScenePrecision(RenderContext& ctx,
     }
   });
   PublishExposureStatusOnSubmission(recorder,
-    PendingExposureStatus { .state = prepared.exposure.state,
+    PendingExposureStatus { .readback_graphics = {},
+      .state = prepared.exposure.state,
+      .readback = {},
+      .reuse_pool = {},
       .token = prepared.status_transition,
       .handle = prepared.handle,
       .lifetime = prepared.lifetime,
       .frame_sequence = ctx.frame_sequence.get(),
       .settings_revision = prepared.config.Revision(),
-      .precision = PrecisionTicket { precision.layout_revision,
-        precision.transition_generation,
-        ctx.current_view.hdr_color_format == Format::kRGBA16Float,
-        prepared.config.Exposure().authored.enabled
+      .precision_epoch = {},
+      .precision = PrecisionTicket { .layout_revision=precision.layout_revision,
+        .transition_generation=precision.transition_generation,
+        .normal_mode=ctx.current_view.hdr_color_format == Format::kRGBA16Float,
+        .auto_owner=prepared.config.Exposure().authored.enabled
           && prepared.config.Exposure().authored.mode
             == engine::ExposureMode::kAuto
           && precision.source_handle
@@ -1109,6 +1128,7 @@ auto PostProcessService::PreserveRemovedExposureSource(
   CHECK_NOTNULL_F(loss.get());
   auto source = postprocess::ExposurePass::Source {
     .handle = loss->source_handle,
+    .config = {},
     .transition = loss->transition,
     .rejection = loss->rejection,
     .lifetime = loss->source_lifetime,
@@ -1163,12 +1183,17 @@ void PostProcessService::EnqueueExposureStatus(
 {
   PublishExposureStatusOnSubmission(recorder,
     PendingExposureStatus {
+      .readback_graphics = {},
       .state = std::move(state),
+      .readback = {},
+      .reuse_pool = {},
       .token = token,
       .handle = token.target,
       .lifetime = token.lifetime,
       .frame_sequence = sequence.get(),
       .settings_revision = settings_revision,
+      .precision_epoch = {},
+      .precision = {},
     });
 }
 
@@ -1379,7 +1404,8 @@ auto PostProcessService::PollExposureStatus() -> void
     "Vortex.PostProcess.PollExposureStatus", profiling::ProfileCategory::kPass);
   const auto integer
     = [](const std::array<std::uint32_t, 2>& words) -> std::uint64_t {
-    return std::uint64_t { words[0] } | (std::uint64_t { words[1] } << 32U);
+    return std::uint64_t { std::get<0>(words) }
+    | (std::uint64_t { std::get<1>(words) } << 32U);
   };
   for (auto& [handle, pending] : pending_exposure_status_) {
     while (!pending.empty()) {
