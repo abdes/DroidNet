@@ -11,15 +11,6 @@
 #include <string_view>
 #include <vector>
 
-#include <Oxygen/Base/Logging.h>
-#include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Console/Console.h>
-#include <Oxygen/Core/FrameContext.h>
-#include <Oxygen/Engine/AsyncEngine.h>
-#include <Oxygen/Engine/IAsyncEngine.h>
-#include <Oxygen/Input/InputSystem.h>
-#include <Oxygen/Vortex/Renderer.h>
-
 #include "DemoShell/DemoShell.h"
 #include "DemoShell/Internal/DemoShellConsoleDefaults.h"
 #include "DemoShell/Internal/SceneControlBlock.h"
@@ -39,6 +30,15 @@
 #include "DemoShell/UI/DemoShellUi.h"
 #include "DemoShell/UI/EnvironmentVm.h"
 #include "DemoShell/UI/LightCullingVm.h"
+
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Console/Console.h>
+#include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Engine/AsyncEngine.h>
+#include <Oxygen/Engine/IAsyncEngine.h>
+#include <Oxygen/Input/InputSystem.h>
+#include <Oxygen/Vortex/Renderer.h>
 
 namespace oxygen::examples {
 
@@ -118,6 +118,8 @@ DemoShell::~DemoShell() noexcept
   }
 
   try {
+    impl_->post_process_settings_service.BindScene(nullptr);
+    impl_->post_process_settings_service.BindVortexRenderer(nullptr);
     impl_->scene_control.ClearScene();
     impl_->skybox_service.reset();
     impl_->skybox_service_scene = nullptr;
@@ -132,6 +134,27 @@ DemoShell::~DemoShell() noexcept
 auto DemoShell::Initialize(const DemoShellConfig& config) -> bool
 {
   impl_->config = config;
+  if (config.scene_activation_policy
+      != SceneActivationPolicy::kRestorePreferences
+    && config.scene_activation_policy
+      != SceneActivationPolicy::kExperimentOwned) {
+    LOG_F(ERROR, "DemoShell: unknown scene activation policy");
+    return false;
+  }
+  impl_->camera_settings_service.SetSceneActivationPolicy(
+    config.scene_activation_policy);
+  impl_->post_process_settings_service.SetSceneActivationPolicy(
+    config.scene_activation_policy);
+  if (config.scene_activation_policy
+    == SceneActivationPolicy::kExperimentOwned) {
+    impl_->environment_settings_service.SetRuntimeConfig(
+      EnvironmentRuntimeConfig {
+        .force_environment_override = false,
+        .activation_policy = config.scene_activation_policy,
+      });
+  }
+  LOG_F(INFO, "DemoShell scene activation: {}",
+    to_string(config.scene_activation_policy));
   DCHECK_NOTNULL_F(impl_->config.engine,
     "DemoShell::Initialize requires a valid engine pointer");
 
@@ -276,6 +299,7 @@ auto DemoShell::OnFrameStart(const engine::FrameContext& context) -> void
   impl_->rendering_settings_service.OnFrameStart(context);
   impl_->light_culling_settings_service.OnFrameStart(context);
   impl_->environment_settings_service.OnFrameStart(context);
+  impl_->post_process_settings_service.OnFrameStart();
   if (impl_->config.panel_config.ground_grid) {
     impl_->grid_settings_service.OnFrameStart(context);
   }
@@ -295,6 +319,7 @@ auto DemoShell::OnMainViewReady(const engine::FrameContext& context,
   impl_->rendering_settings_service.OnMainViewReady(context, view);
   impl_->light_culling_settings_service.OnMainViewReady(context, view);
   impl_->environment_settings_service.OnMainViewReady(context, view);
+  impl_->post_process_settings_service.BindMainView(view.id);
   if (impl_->config.panel_config.ground_grid) {
     impl_->grid_settings_service.OnMainViewReady(context, view);
   }
@@ -309,6 +334,7 @@ auto DemoShell::OnRuntimeMainViewReady(const ViewId view_id,
 
   impl_->camera_settings_service.OnRuntimeMainViewReady(camera, viewport);
   impl_->environment_settings_service.OnRuntimeMainViewReady(view_id);
+  impl_->post_process_settings_service.BindMainView(view_id);
 }
 
 auto DemoShell::RegisterPanel(std::shared_ptr<DemoPanel> panel) -> bool
@@ -350,6 +376,8 @@ auto DemoShell::SetScene(std::unique_ptr<scene::Scene> scene) -> ActiveScene
   const auto new_scene = impl_->scene_control.TryGetScene();
   if (new_scene && new_scene != previous_scene) {
     OnSceneActivated(*new_scene);
+  } else if (!new_scene) {
+    impl_->post_process_settings_service.BindScene(nullptr);
   }
   return ActiveScene { observer_ptr { &impl_->scene_control } };
 }
@@ -389,6 +417,8 @@ auto DemoShell::PublishStagedScene() -> bool
   const auto new_scene = impl_->scene_control.TryGetScene();
   if (new_scene && new_scene != previous_scene) {
     OnSceneActivated(*new_scene);
+  } else if (!new_scene) {
+    impl_->post_process_settings_service.BindScene(nullptr);
   }
   return true;
 }
@@ -459,7 +489,12 @@ auto DemoShell::ReapplyPostProcessSettingsToScene() -> void
     return;
   }
 
-  impl_->post_process_settings_service.BindScene(scene);
+  if (impl_->config.scene_activation_policy
+    == SceneActivationPolicy::kExperimentOwned) {
+    impl_->post_process_settings_service.OnFrameStart();
+  } else {
+    impl_->post_process_settings_service.BindScene(scene);
+  }
 }
 
 auto DemoShell::SetActivePanel(std::string_view panel_name) -> void
@@ -530,6 +565,7 @@ auto DemoShell::SyncRuntimeState() -> void
   EnvironmentRuntimeConfig runtime_config {};
   runtime_config.scene = TryGetScene();
   runtime_config.skybox_service = impl_->GetSkyboxService(runtime_config.scene);
+  runtime_config.activation_policy = impl_->config.scene_activation_policy;
   runtime_config.force_environment_override
     = impl_->config.force_environment_override;
   runtime_config.restore_environment_profile
@@ -583,9 +619,6 @@ auto DemoShell::OnSceneActivated(scene::Scene& scene) -> void
   impl_->rendering_settings_service.OnSceneActivated(scene);
   impl_->light_culling_settings_service.OnSceneActivated(scene);
   impl_->environment_settings_service.OnSceneActivated(scene);
-  // TODO(exposure/EX06-09): Add experiment-owned activation policy so saved
-  // post-process settings cannot replace an authored benchmark recipe.
-  // Owner: design/vortex/plan/exposure-and-lightbench-correction.md, Slice 6.
   impl_->post_process_settings_service.BindScene(observer_ptr { &scene });
   if (impl_->config.panel_config.ground_grid) {
     impl_->grid_settings_service.OnSceneActivated(scene);

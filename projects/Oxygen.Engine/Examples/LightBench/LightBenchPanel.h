@@ -9,17 +9,19 @@
 #include <string>
 #include <string_view>
 
-#include <Oxygen/Base/ObserverPtr.h>
-
+#include "DemoShell/Runtime/SceneActivationPolicy.h"
 #include "DemoShell/UI/DemoPanel.h"
 #include "LightBench/LightScene.h"
+
+#include <Oxygen/Base/ObserverPtr.h>
 
 namespace oxygen::examples::light_bench {
 
 //! Demo panel for LightBench-specific controls.
 class LightBenchPanel final : public DemoPanel {
 public:
-  explicit LightBenchPanel(observer_ptr<LightScene> light_scene);
+  explicit LightBenchPanel(observer_ptr<LightScene> light_scene,
+    SceneActivationPolicy activation_policy);
 
   [[nodiscard]] auto GetName() const noexcept -> std::string_view override
   {
@@ -57,6 +59,7 @@ private:
   auto LoadSettings() -> void;
   auto SaveSettings() -> void;
   auto MarkChanged() -> void;
+  SceneActivationPolicy activation_policy_;
   observer_ptr<LightScene> light_scene_ { nullptr };
   std::string icon_ {};
   bool settings_loaded_ { false };

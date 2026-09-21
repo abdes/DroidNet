@@ -11,6 +11,13 @@
 #include <memory>
 #include <optional>
 
+#include "DemoShell/ActiveScene.h"
+#include "DemoShell/Runtime/RendererUiTypes.h"
+#include "DemoShell/Runtime/SceneActivationPolicy.h"
+#include "DemoShell/Services/CameraSettingsService.h"
+#include "DemoShell/Services/FileBrowserService.h"
+#include "DemoShell/UI/DemoPanel.h"
+
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Time/Types.h>
@@ -19,12 +26,6 @@
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/Scene/Scene.h>
-
-#include "DemoShell/ActiveScene.h"
-#include "DemoShell/Runtime/RendererUiTypes.h"
-#include "DemoShell/Services/CameraSettingsService.h"
-#include "DemoShell/Services/FileBrowserService.h"
-#include "DemoShell/UI/DemoPanel.h"
 
 namespace oxygen {
 class IAsyncEngine;
@@ -92,6 +93,9 @@ struct DemoShellConfig {
   bool enable_renderer_bound_panels { true };
   bool force_environment_override { true };
   bool restore_environment_profile { false };
+  SceneActivationPolicy scene_activation_policy {
+    SceneActivationPolicy::kRestorePreferences
+  };
   std::optional<int> initial_environment_profile;
   std::string startup_skybox_path;
   std::optional<bool> initial_preview_sun_enabled;

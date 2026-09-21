@@ -12,15 +12,16 @@
 #include <string>
 #include <string_view>
 
+#include "DemoShell/Runtime/SceneActivationPolicy.h"
+#include "DemoShell/Services/DomainService.h"
+#include "DemoShell/UI/CameraControlPanel.h"
+#include "DemoShell/UI/OrbitCameraController.h"
+
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Types/Geometry.h>
 #include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Scene/SceneNode.h>
-
-#include "DemoShell/Services/DomainService.h"
-#include "DemoShell/UI/CameraControlPanel.h"
-#include "DemoShell/UI/OrbitCameraController.h"
 
 namespace oxygen::examples {
 
@@ -48,6 +49,8 @@ class CameraSettingsService : public DomainService {
 public:
   using CameraControlMode = ui::CameraControlMode;
   using OrbitMode = ui::OrbitMode;
+
+  auto SetSceneActivationPolicy(SceneActivationPolicy policy) -> void;
 
   CameraSettingsService() = default;
   virtual ~CameraSettingsService() = default;
@@ -185,6 +188,9 @@ public:
     -> void;
 
 private:
+  SceneActivationPolicy activation_policy_ {
+    SceneActivationPolicy::kRestorePreferences
+  };
   // NOLINTBEGIN(*-magic-numbers)
   struct PersistedCameraState {
     struct TransformState {

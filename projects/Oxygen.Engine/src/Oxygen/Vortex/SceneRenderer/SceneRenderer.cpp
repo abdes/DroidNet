@@ -3186,6 +3186,14 @@ auto SceneRenderer::GetLastDeferredLightingState() const
   return deferred_lighting_state_;
 }
 
+auto SceneRenderer::InspectExposureSettings(
+  const CompositionView::ViewStateHandle handle) const
+  -> std::optional<ExposureSettingsStatus>
+{
+  return post_process_ ? post_process_->InspectExposureSettings(handle)
+                       : std::nullopt;
+}
+
 auto SceneRenderer::GetLastEnvironmentLightingState() const
   -> const EnvironmentLightingState&
 {

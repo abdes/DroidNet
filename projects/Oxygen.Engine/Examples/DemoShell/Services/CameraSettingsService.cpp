@@ -9,8 +9,14 @@
 #include <cmath>
 #include <limits>
 #include <optional>
+#include <stdexcept>
 #include <string>
 
+#include "DemoShell/Services/CameraSettingsService.h"
+#include "DemoShell/Services/SettingsService.h"
+#include "DemoShell/UI/CameraRigController.h"
+#include "DemoShell/UI/FlyCameraController.h"
+#include "DemoShell/UI/OrbitCameraController.h"
 #include <glm/geometric.hpp>
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
@@ -19,12 +25,6 @@
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Scene/Camera/Orthographic.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
-
-#include "DemoShell/Services/CameraSettingsService.h"
-#include "DemoShell/Services/SettingsService.h"
-#include "DemoShell/UI/CameraRigController.h"
-#include "DemoShell/UI/FlyCameraController.h"
-#include "DemoShell/UI/OrbitCameraController.h"
 
 namespace oxygen::examples {
 
@@ -134,6 +134,16 @@ namespace {
   }
 
 } // namespace
+
+auto CameraSettingsService::SetSceneActivationPolicy(
+  const SceneActivationPolicy policy) -> void
+{
+  if (policy != SceneActivationPolicy::kRestorePreferences
+    && policy != SceneActivationPolicy::kExperimentOwned) {
+    throw std::invalid_argument("Unknown scene activation policy");
+  }
+  activation_policy_ = policy;
+}
 
 auto CameraSettingsService::GetCameraControlMode() const -> CameraControlMode
 {
@@ -618,7 +628,8 @@ void CameraSettingsService::SetActiveCamera(scene::SceneNode camera)
   // Reset should always have a safe baseline even when persisted state is bad.
   CaptureInitialPose();
   const bool restored_transform = RestoreActiveCameraSettings();
-  if (!restored_transform) {
+  if (!restored_transform
+    && activation_policy_ == SceneActivationPolicy::kRestorePreferences) {
     EnsureFlyCameraFacingScene();
   }
   RequestSyncFromActive();
@@ -846,6 +857,9 @@ auto CameraSettingsService::PersistedCameraState::IsSameCamera(
 
 auto CameraSettingsService::PersistActiveCameraSettings() -> void
 {
+  if (activation_policy_ == SceneActivationPolicy::kExperimentOwned) {
+    return;
+  }
   const auto settings = SettingsService::ForDemoApp();
   if (!settings) {
     return;
@@ -932,6 +946,9 @@ auto CameraSettingsService::PersistActiveCameraSettings() -> void
 
 auto CameraSettingsService::RestoreActiveCameraSettings() -> bool
 {
+  if (activation_policy_ == SceneActivationPolicy::kExperimentOwned) {
+    return false;
+  }
   if (!active_camera_.IsAlive()) {
     return false;
   }

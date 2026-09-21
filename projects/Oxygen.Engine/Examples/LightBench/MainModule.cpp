@@ -4,31 +4,50 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <atomic>
 #include <cstdint>
+#include <exception>
 #include <memory>
 #include <source_location>
 #include <utility>
+#include <vector>
 
-#include <imgui.h>
+#include "DemoShell/DemoShell.h"
+#include "DemoShell/Runtime/DemoAppContext.h"
+#include "DemoShell/Runtime/SceneActivationPolicy.h"
+#include "LightBench/LightBenchPanel.h"
+#include "LightBench/MainModule.h"
+#include <glm/geometric.hpp>
+#include <glm/gtc/quaternion.hpp>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/FrameContext.h>
-#include <Oxygen/Engine/AsyncEngine.h>
+#include <Oxygen/Core/Types/View.h>
+#include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Platform/Window.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Vortex/CompositionView.h>
-
-#include "DemoShell/Runtime/DemoAppContext.h"
-#include "LightBench/LightBenchPanel.h"
-#include "LightBench/MainModule.h"
+#include <Oxygen/Vortex/Renderer.h>
 
 namespace oxygen::examples::light_bench {
 
 namespace {
   constexpr std::uint32_t kWindowWidth = 2560;
   constexpr std::uint32_t kWindowHeight = 1440;
-}
+
+  auto AllocateMainViewStateHandle() -> vortex::CompositionView::ViewStateHandle
+  {
+    static std::atomic_uint64_t next_handle { 1U };
+    const auto handle = vortex::CompositionView::ViewStateHandle {
+      next_handle.fetch_add(1U, std::memory_order_relaxed)
+    };
+    CHECK_F(handle != vortex::CompositionView::kInvalidViewStateHandle,
+      "LightBench temporal view state identity exhausted");
+    return handle;
+  }
+} // namespace
 
 MainModule::MainModule(const DemoAppContext& app)
   : Base(app)
@@ -42,13 +61,15 @@ auto MainModule::BuildDefaultWindowProperties() const
 {
   platform::window::Properties p("Oxygen LightBench");
   p.extent = { .width = kWindowWidth, .height = kWindowHeight };
-  p.flags = { .hidden = false,
+  p.flags = {
+    .hidden = false,
     .always_on_top = false,
     .full_screen = app_.fullscreen,
     .maximized = false,
     .minimized = false,
     .resizable = true,
-    .borderless = false };
+    .borderless = false,
+  };
   return p;
 }
 
@@ -64,6 +85,15 @@ auto MainModule::StageInitialScene(DemoShell& shell) -> void
   auto camera = std::make_unique<scene::PerspectiveCamera>();
   const bool attached = main_camera_.AttachCamera(std::move(camera));
   CHECK_F(attached, "Failed to attach PerspectiveCamera to MainCamera");
+  constexpr Vec3 kInitialCameraPosition { 0.0F, 6.0F, 2.0F };
+  constexpr Vec3 kReferenceCardCenter { 0.0F, 0.0F, 1.0F };
+  auto transform = main_camera_.GetTransform();
+  CHECK_F(transform.SetLocalPosition(kInitialCameraPosition),
+    "Could not position LightBench camera");
+  CHECK_F(transform.SetLocalRotation(glm::quatLookAtRH(
+            glm::normalize(kReferenceCardCenter - kInitialCameraPosition),
+            space::move::Up)),
+    "Could not orient LightBench camera");
   shell.SetStagedMainCamera(main_camera_);
 
   light_scene_.SetScene(staged_scene);
@@ -71,29 +101,31 @@ auto MainModule::StageInitialScene(DemoShell& shell) -> void
 
 auto MainModule::OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
   -> std::unique_ptr<DemoShell>
-{
+try {
   DCHECK_NOTNULL_F(engine, "expecting a valid engine");
 
   auto shell = std::make_unique<DemoShell>();
   const auto demo_root
     = std::filesystem::path(std::source_location::current().file_name())
         .parent_path();
-  DemoShellConfig shell_config {
-    .engine = observer_ptr { app_.engine.get() },
-    .enable_camera_rig = true,
-    .enable_renderer_bound_panels = false,
-    .content_roots = {
-      .content_root = demo_root.parent_path() / "Content",
-      .cooked_root = demo_root / ".cooked",
-    },
-    .panel_config = {
-      .content_loader = false,
-      .camera_controls = true,
-      .environment = true,
-      .lighting = true,
-      .diagnostics = true,
-      .post_process = true,
-    },
+  auto shell_config = DemoShellConfig {};
+  shell_config.engine = engine;
+  shell_config.enable_camera_rig = true;
+  shell_config.enable_renderer_bound_panels = false;
+  shell_config.force_environment_override = false;
+  shell_config.scene_activation_policy
+    = SceneActivationPolicy::kExperimentOwned;
+  shell_config.content_roots = {
+    .content_root = demo_root.parent_path() / "Content",
+    .cooked_root = demo_root / ".cooked",
+  };
+  shell_config.panel_config = {
+    .content_loader = false,
+    .camera_controls = true,
+    .environment = true,
+    .lighting = true,
+    .diagnostics = true,
+    .post_process = true,
   };
 
   if (!shell->Initialize(shell_config)) {
@@ -101,8 +133,8 @@ auto MainModule::OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
     return nullptr;
   }
 
-  light_bench_panel_
-    = std::make_shared<LightBenchPanel>(observer_ptr { &light_scene_ });
+  light_bench_panel_ = std::make_shared<LightBenchPanel>(
+    observer_ptr { &light_scene_ }, shell_config.scene_activation_policy);
   if (!shell->RegisterPanel(light_bench_panel_)) {
     LOG_F(WARNING, "LightBench: failed to register LightBench panel");
   }
@@ -113,10 +145,17 @@ auto MainModule::OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
   LOG_F(INFO, "LightBench: MainView ID created: {}", main_view_id_.get());
   LOG_F(INFO, "LightBench: Module initialized");
   return shell;
+} catch (const std::exception& error) {
+  LOG_F(ERROR, "LightBench initialization failed: {}", error.what());
+  return nullptr;
+} catch (...) {
+  LOG_F(ERROR, "LightBench initialization failed: unknown exception");
+  return nullptr;
 }
 
 auto MainModule::OnShutdown() noexcept -> void
 {
+  ResetMainViewState();
   auto& shell = GetShell();
   shell.SetScene(nullptr);
   light_scene_.Reset();
@@ -176,7 +215,15 @@ auto MainModule::UpdateComposition(engine::FrameContext& context,
 {
   auto& shell = GetShell();
   if (!main_camera_.IsAlive()) {
+    ResetMainViewState(observer_ptr { &context });
     return;
+  }
+
+  if (!main_view_state_camera_.IsAlive()
+    || main_view_state_camera_.GetHandle() != main_camera_.GetHandle()) {
+    ResetMainViewState(observer_ptr { &context });
+    main_view_state_handle_ = AllocateMainViewStateHandle();
+    main_view_state_camera_ = main_camera_;
   }
 
   View view {};
@@ -194,13 +241,31 @@ auto MainModule::UpdateComposition(engine::FrameContext& context,
 
   auto main_comp
     = vortex::CompositionView::ForScene(main_view_id_, view, main_camera_);
+  main_comp.view_state_handle = main_view_state_handle_;
   main_comp.with_atmosphere = true;
   shell.OnMainViewReady(context, main_comp);
   views.push_back(std::move(main_comp));
 
   const auto imgui_view_id = GetOrCreateViewId("ImGuiView");
   views.push_back(vortex::CompositionView::ForImGui(
-    imgui_view_id, view, [](graphics::CommandRecorder&) { }));
+    imgui_view_id, view, [](graphics::CommandRecorder&) -> void { }));
+}
+
+auto MainModule::ResetMainViewState(
+  const observer_ptr<engine::FrameContext> context) -> void
+{
+  if (main_view_state_handle_
+    != vortex::CompositionView::kInvalidViewStateHandle) {
+    if (auto renderer = ResolveVortexRenderer()) {
+      if (context) {
+        renderer->RemovePublishedRuntimeView(*context, main_view_id_);
+      } else {
+        renderer->RemovePublishedRuntimeView(main_view_id_);
+      }
+    }
+  }
+  main_view_state_handle_ = vortex::CompositionView::kInvalidViewStateHandle;
+  main_view_state_camera_ = {};
 }
 
 auto MainModule::OnGameplay(observer_ptr<engine::FrameContext> context)

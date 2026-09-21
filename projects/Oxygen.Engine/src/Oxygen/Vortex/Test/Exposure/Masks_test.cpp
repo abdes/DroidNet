@@ -96,7 +96,7 @@ NOLINT_TEST_F(
               .ResolveViewExposureSettings(
                 ctx_.current_view.view_state_handle, settings)
               .mask_status,
-    PostProcessService::ExposureMaskStatus::kPending);
+    oxygen::vortex::ExposureMaskStatus::kPending);
   // Each step flushes submitted upload work and observes its completed ticket.
   // This is resource-readiness synchronization, not exposure-settling warmup.
   for (unsigned i = 0U; i < 8U; ++i) {
@@ -114,14 +114,13 @@ NOLINT_TEST_F(
           .ResolveViewExposureSettings(
             ctx_.current_view.view_state_handle, settings)
           .mask_status
-      == PostProcessService::ExposureMaskStatus::kReady) {
+      == oxygen::vortex::ExposureMaskStatus::kReady) {
       break;
     }
   }
   const auto& accepted = service.ResolveViewExposureSettings(
     ctx_.current_view.view_state_handle, settings);
-  ASSERT_EQ(
-    accepted.mask_status, PostProcessService::ExposureMaskStatus::kReady);
+  ASSERT_EQ(accepted.mask_status, oxygen::vortex::ExposureMaskStatus::kReady);
   ASSERT_NE(accepted.mask, nullptr);
   const auto mask = Signal {
     .texture = accepted.mask->texture,
@@ -306,7 +305,7 @@ NOLINT_TEST_F(
       requested.metering_mask = loader.MintSyntheticTextureKey();
       EXPECT_EQ(
         service.ResolveViewExposureSettings(handle, requested).mask_status,
-        PostProcessService::ExposureMaskStatus::kPending);
+        oxygen::vortex::ExposureMaskStatus::kPending);
       if (failure) {
         ctx_.frame_sequence = frame::SequenceNumber {
           ++sequence_,
@@ -314,7 +313,7 @@ NOLINT_TEST_F(
         service.OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
         EXPECT_EQ(
           service.ResolveViewExposureSettings(handle, requested).mask_status,
-          PostProcessService::ExposureMaskStatus::kFailed);
+          oxygen::vortex::ExposureMaskStatus::kFailed);
       }
       requested.min_ev = requested.max_ev = 2.0F;
       const auto& accepted = service.CaptureViewExposureSettings(

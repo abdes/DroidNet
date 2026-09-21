@@ -13,6 +13,10 @@
 #include <string>
 #include <thread>
 
+#include "Common/DemoCli.h"
+#include "Common/FrameCaptureCliOptions.h"
+#include "DemoShell/Runtime/DemoAppContext.h"
+#include "VortexBasic/MainModule.h"
 #include <asio/signal_set.hpp>
 
 #include <Oxygen/Base/Logging.h>
@@ -40,11 +44,6 @@
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererCapability.h>
 #include <Oxygen/Vortex/ShaderDebugMode.h>
-
-#include "Common/DemoCli.h"
-#include "Common/FrameCaptureCliOptions.h"
-#include "DemoShell/Runtime/DemoAppContext.h"
-#include "VortexBasic/MainModule.h"
 
 using namespace oxygen;
 using namespace oxygen::engine;
@@ -557,7 +556,10 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
           .parent_path();
 
     const auto path_finder_config
-      = PathFinderConfig::Create().WithWorkspaceRoot(workspace_root).Build();
+      = PathFinderConfig::Create()
+          .WithWorkspaceRoot(workspace_root)
+          .WithScriptSourceRoots({ workspace_root / "Examples" / "Content" })
+          .Build();
     const auto frame_capture_config
       = oxygen::examples::cli::BuildFrameCaptureConfig(capture_cli, headless);
     const GraphicsConfig gfx_config {

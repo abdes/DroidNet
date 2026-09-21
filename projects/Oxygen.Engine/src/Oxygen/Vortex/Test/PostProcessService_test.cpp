@@ -542,6 +542,37 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
 }
 
 NOLINT_TEST_F(PostProcessServiceBehaviorTest,
+  PublicExposureStatusOwnsAcceptedSettingsAndReportsRejection)
+{
+  auto service = PostProcessService(*renderer_);
+  const auto handle = oxygen::vortex::CompositionView::ViewStateHandle { 1U };
+  EXPECT_FALSE(service.InspectExposureSettings(handle).has_value());
+  auto requested = oxygen::scene::ExposureSettings {};
+  requested.mode = oxygen::engine::ExposureMode::kManual;
+  requested.manual_ev = 14.0F;
+  requested.compensation_curve = {
+    { .metered_ev = -4.0F, .compensation_ev = 1.0F },
+    { .metered_ev = 12.0F, .compensation_ev = -0.5F },
+  };
+  std::ignore = service.ResolveViewExposureSettings(handle, requested);
+  const auto accepted = service.InspectExposureSettings(handle);
+  ASSERT_TRUE(accepted.has_value());
+  ASSERT_TRUE(accepted->active_settings.has_value());
+  EXPECT_EQ(*accepted->active_settings, requested);
+  EXPECT_FALSE(accepted->metering_input_failed.has_value());
+  requested.low_percentile = requested.high_percentile;
+  std::ignore = service.ResolveViewExposureSettings(handle, requested);
+  const auto rejected = service.InspectExposureSettings(handle);
+  ASSERT_TRUE(rejected.has_value());
+  EXPECT_EQ(rejected->active_settings, accepted->active_settings);
+  EXPECT_EQ(rejected->settings_error,
+    oxygen::scene::ExposureSettingsError::kInvalidPercentiles);
+  service.RemoveViewState(ViewId { 1U }, handle);
+  EXPECT_FALSE(service.InspectExposureSettings(handle).has_value());
+  EXPECT_EQ(accepted->active_settings->compensation_curve.size(), 2U);
+}
+
+NOLINT_TEST_F(PostProcessServiceBehaviorTest,
   InvalidExposureRevisionRetainsOnlyItsViewsPriorSettings)
 {
   auto service = PostProcessService(*renderer_);
@@ -659,7 +690,7 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
   PendingAndFailedMaskReplacementRetainsCompleteAcceptedRevision)
 {
   using Handle = oxygen::vortex::CompositionView::ViewStateHandle;
-  using Status = PostProcessService::ExposureMaskStatus;
+  using Status = oxygen::vortex::ExposureMaskStatus;
   auto loader = oxygen::vortex::testing::FakeAssetLoader {};
   auto service = PostProcessService(*renderer_,
     oxygen::observer_ptr {
@@ -807,7 +838,7 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
   InitialMaskFailureIsExplicitAndCannotDelayDisabledOrManualExposure)
 {
   using Handle = oxygen::vortex::CompositionView::ViewStateHandle;
-  using Status = PostProcessService::ExposureMaskStatus;
+  using Status = oxygen::vortex::ExposureMaskStatus;
   auto service = PostProcessService(*renderer_);
   auto requested = oxygen::scene::ExposureSettings {};
   requested.metering_mask = oxygen::content::ResourceKey {
@@ -1047,7 +1078,7 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
   LockedAutoBypassesPendingAndFailedMaskWithOrWithoutAcceptedRevision)
 {
   using Handle = oxygen::vortex::CompositionView::ViewStateHandle;
-  using Status = PostProcessService::ExposureMaskStatus;
+  using Status = oxygen::vortex::ExposureMaskStatus;
   auto loader = oxygen::vortex::testing::FakeAssetLoader {};
   auto service = PostProcessService(*renderer_,
     oxygen::observer_ptr {
@@ -1174,8 +1205,7 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
       1U,
     },
     requested);
-  EXPECT_EQ(
-    rejected.mask_status, PostProcessService::ExposureMaskStatus::kFailed);
+  EXPECT_EQ(rejected.mask_status, oxygen::vortex::ExposureMaskStatus::kFailed);
   EXPECT_EQ(rejected.resolved.authored, initial.resolved.authored);
   EXPECT_EQ(rejected.revision, initial.revision);
   EXPECT_EQ(rejected.mask, nullptr);

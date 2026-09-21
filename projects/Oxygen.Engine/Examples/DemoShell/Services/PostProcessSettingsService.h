@@ -9,11 +9,19 @@
 #include <atomic>
 #include <cstdint>
 #include <optional>
+#include <span>
 #include <string>
+#include <string_view>
+
+#include "DemoShell/Runtime/SceneActivationPolicy.h"
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Types/PostProcess.h>
+#include <Oxygen/Core/Types/View.h>
+#include <Oxygen/Scene/Camera/CameraExposure.h>
+#include <Oxygen/Scene/ExposureSettings.h>
+#include <Oxygen/Vortex/Types/ExposureSettingsStatus.h>
 
 namespace oxygen {
 namespace vortex {
@@ -31,6 +39,12 @@ class SettingsService;
 
 namespace ui {
 
+  //! Named endpoints for atomic exposure range edits; units follow the setter.
+  struct ExposureRange {
+    float minimum;
+    float maximum;
+  };
+
   //! Settings persistence for the PostProcessPanel.
   class PostProcessSettingsService {
   public:
@@ -39,6 +53,35 @@ namespace ui {
 
     OXYGEN_MAKE_NON_COPYABLE(PostProcessSettingsService)
     OXYGEN_MAKE_NON_MOVABLE(PostProcessSettingsService)
+
+    auto SetSceneActivationPolicy(SceneActivationPolicy policy) -> void;
+    [[nodiscard]] auto GetSceneActivationPolicy() const noexcept
+      -> SceneActivationPolicy;
+    auto BindMainView(ViewId view_id) -> void;
+    auto OnFrameStart() -> void;
+    [[nodiscard]] auto GetSceneRevision() const noexcept -> std::uint64_t;
+    [[nodiscard]] auto GetExposureStatus() const
+      -> std::optional<vortex::ExposureSettingsStatus>;
+    [[nodiscard]] auto GetExposureSettings() const -> scene::ExposureSettings;
+    //! Validate and apply one complete authored revision; invalid edits leave
+    //! settings unchanged. The mask must be the scene-authored resource or
+    //! zero.
+    auto TrySetExposureSettings(const scene::ExposureSettings& settings)
+      -> bool;
+    auto SetExposureCompensationCurve(
+      std::span<const scene::ExposureCompensationKey> keys) -> bool;
+    [[nodiscard]] auto GetValidationError() const noexcept -> std::string_view;
+    [[nodiscard]] auto HasActiveCamera() const -> bool;
+    [[nodiscard]] auto HasSceneMeteringMask() const -> bool;
+    [[nodiscard]] auto GetUseSceneMeteringMask() const -> bool;
+    auto SetUseSceneMeteringMask(bool enabled) -> void;
+    [[nodiscard]] auto GetAutoExposureBlackInfluence() const -> float;
+    auto SetAutoExposureBlackInfluence(float influence) -> void;
+    [[nodiscard]] auto GetAutoExposureTransitionDistance() const -> float;
+    auto SetAutoExposureTransitionDistance(float distance) -> void;
+    auto SetAutoExposureRange(ExposureRange ev) -> void;
+    auto SetAutoExposurePercentiles(ExposureRange percentiles) -> void;
+    auto SetAutoExposureHistogramWindow(ExposureRange log_luminance) -> void;
 
     //! Binds the camera settings service used for camera exposure settings.
     virtual auto BindCameraSettings(
@@ -146,7 +189,30 @@ namespace ui {
     [[nodiscard]] virtual auto GetEpoch() const noexcept -> std::uint64_t;
 
   private:
-    auto UpdateAutoExposureTarget() -> void;
+    struct State {
+      scene::ExposureSettings exposure;
+      bool tonemapping_enabled { true };
+      engine::ToneMapper tone_mapper { engine::ToneMapper::kAcesFitted };
+      float gamma { 2.2F }; // NOLINT(*-magic-numbers)
+    };
+    struct ExposureFloatBinding {
+      std::string_view key;
+      float scene::ExposureSettings::* member;
+      bool automatic;
+    };
+    static auto Defaults() -> State;
+    static auto FloatBindings() -> std::span<const ExposureFloatBinding>;
+    auto CaptureSceneDefaults() const -> State;
+    auto EnsureStateLoaded() const -> void;
+    auto ValidateExposure(const scene::ExposureSettings& requested) const
+      -> bool;
+    auto CommitExposure(const scene::ExposureSettings& requested) -> bool;
+    auto SetExposureFloat(float scene::ExposureSettings::* member, float value,
+      std::string_view key) -> void;
+    auto PersistExposure(std::string_view key) const -> void;
+    auto PersistAllExposure() const -> void;
+    auto SetCameraExposureFloat(
+      float scene::CameraExposure::* member, float value) -> void;
     auto SyncScenePostProcessState() -> void;
 
     static constexpr auto kExposureModeKey = "post_process.exposure.mode";
@@ -185,6 +251,25 @@ namespace ui {
     static constexpr auto kAutoExposureMeteringKey
       = "post_process.auto_exposure.metering";
 
+    static constexpr auto kBlackInfluenceKey
+      = "post_process.auto_exposure.black_influence";
+    static constexpr auto kTransitionDistanceKey
+      = "post_process.auto_exposure.transition_distance_ev";
+    static constexpr auto kCurveKey
+      = "post_process.auto_exposure.compensation_curve";
+    static constexpr auto kUseSceneMaskKey
+      = "post_process.auto_exposure.use_scene_mask";
+
+    SceneActivationPolicy activation_policy_ {
+      SceneActivationPolicy::kRestorePreferences
+    };
+    mutable State state_;
+    mutable bool state_initialized_ { false };
+    mutable State scene_defaults_;
+    mutable bool use_scene_mask_ { true };
+    mutable std::string validation_error_;
+    std::optional<ViewId> main_view_id_;
+    std::uint64_t scene_revision_ { 0U };
     observer_ptr<CameraSettingsService> camera_settings_;
     observer_ptr<scene::Scene> scene_;
     observer_ptr<vortex::Renderer> vortex_renderer_;
@@ -192,7 +277,7 @@ namespace ui {
     std::optional<float> transient_manual_exposure_ev_;
     std::optional<bool> transient_exposure_enabled_;
     mutable std::atomic_uint64_t epoch_ { 0 };
-    mutable std::string last_camera_id_;
+    std::optional<scene::CameraExposure> observed_camera_exposure_;
   };
 
 } // namespace ui

@@ -176,6 +176,7 @@ set(
   "Types/SyntheticSunData.h"
   "Types/VelocityPublications.h"
   "Types/ExposureTransition.h"
+  "Types/ExposureSettingsStatus.h"
   "Types/EnvironmentLightingState.h"
   "Types/ExposureTargetData.h"
   "Types/ExposureStateData.h"

@@ -17,6 +17,7 @@
 #include <utility>
 #include <vector>
 
+#include "DemoShell/Runtime/SceneActivationPolicy.h"
 #include "DemoShell/Services/DomainService.h"
 #include "DemoShell/Services/EnvironmentSceneSnapshot.h"
 #include "DemoShell/Services/PreviewSunController.h"
@@ -57,6 +58,9 @@ struct EnvironmentRuntimeConfig {
   observer_ptr<vortex::Renderer> renderer { nullptr };
   bool force_environment_override { true };
   bool restore_environment_profile { false };
+  SceneActivationPolicy activation_policy {
+    SceneActivationPolicy::kRestorePreferences
+  };
   std::optional<int> initial_environment_profile;
   std::string startup_skybox_path;
   std::optional<bool> initial_preview_sun_enabled;

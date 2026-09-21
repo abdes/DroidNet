@@ -627,6 +627,33 @@ namespace {
   }
 } // namespace
 
+auto Renderer::InspectExposureSettings(const ViewId view_id) const
+  -> std::optional<ExposureSettingsStatus>
+{
+  auto handle = CompositionView::kInvalidViewStateHandle;
+  bool uses_view_override = false;
+  bool shared_source = false;
+  {
+    std::shared_lock registration_lock(view_registration_mutex_);
+    std::shared_lock state_lock(view_state_mutex_);
+    const auto* root = ResolvePublishedExposureRootLocked(view_id);
+    if (root == nullptr) {
+      return std::nullopt;
+    }
+    handle = root->view_state_handle;
+    uses_view_override = root->exposure_override.has_value();
+    shared_source = root->published_view_id != view_id;
+  }
+  auto status = scene_renderer_
+    ? scene_renderer_->InspectExposureSettings(handle)
+    : std::nullopt;
+  if (status) {
+    status->uses_view_override = uses_view_override;
+    status->shared_source = shared_source;
+  }
+  return status;
+}
+
 auto Renderer::QueueExposureTransition(
   const CompositionView::ViewStateHandle target,
   const ExposureTransitionPolicy policy, const std::optional<float> seed_ev)

@@ -9,11 +9,10 @@
 #include <mutex>
 #include <shared_mutex>
 
+#include "DemoShell/Services/SettingsService.h"
 #include <nlohmann/json.hpp>
 
 #include <Oxygen/Base/Logging.h>
-
-#include "DemoShell/Services/SettingsService.h"
 
 namespace oxygen::examples {
 
@@ -56,7 +55,7 @@ SettingsService::~SettingsService() noexcept
     bool should_save = false;
     {
       std::shared_lock lock(mutex_);
-      should_save = dirty_;
+      should_save = dirty_ && persistence_enabled_;
     }
     if (should_save) {
       Save();
@@ -105,12 +104,21 @@ auto SettingsService::Load() -> void
   loaded_ = true;
 }
 
+auto SettingsService::SetPersistenceEnabled(const bool enabled) -> void
+{
+  std::unique_lock lock(mutex_);
+  persistence_enabled_ = enabled;
+}
+
 auto SettingsService::Save() const -> void
 {
   nlohmann::json snapshot;
   {
     std::shared_lock lock(mutex_);
     CHECK_F(loaded_, "SettingsService: settings not loaded");
+    if (!persistence_enabled_) {
+      return;
+    }
     snapshot = storage_->data;
   }
 

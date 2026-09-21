@@ -23,6 +23,7 @@
 #include <Oxygen/Vortex/PostProcess/Types/PostProcessConfig.h>
 #include <Oxygen/Vortex/PostProcess/Types/PostProcessFrameBindings.h>
 #include <Oxygen/Vortex/Resources/TextureBinder.h>
+#include <Oxygen/Vortex/Types/ExposureSettingsStatus.h>
 #include <Oxygen/Vortex/api_export.h>
 
 namespace oxygen {
@@ -97,8 +98,6 @@ public:
     float exposure_value { 1.0F };
   };
 
-  enum class ExposureMaskStatus { kAbsent, kPending, kReady, kFailed };
-
   struct ExposureSettingsState {
     scene::ResolvedExposureSettings resolved;
     std::optional<float> camera_ev;
@@ -108,8 +107,17 @@ public:
     ExposureMaskStatus mask_status { ExposureMaskStatus::kAbsent };
     content::ResourceKey requested_mask {};
     std::string mask_error;
+    std::optional<bool> metering_input_failed;
+    std::uint64_t observed_frame { 0U };
+    std::uint64_t observed_control_revision { 0U };
     std::shared_ptr<const resources::TextureBinder::ReadyTexture> mask;
   };
+
+  //! Snapshot accepted authoring and bounded diagnostics on the engine frame
+  //! thread.
+  [[nodiscard]] OXGN_VRTX_API auto InspectExposureSettings(
+    CompositionView::ViewStateHandle handle) const
+    -> std::optional<ExposureSettingsStatus>;
 
   OXGN_VRTX_API explicit PostProcessService(
     Renderer& renderer, observer_ptr<content::IAssetLoader> asset_loader = {});

@@ -15,6 +15,11 @@
 #include <thread>
 #include <vector>
 
+#include "Common/DemoCli.h"
+#include "Common/FrameCaptureCliOptions.h"
+#include "DemoShell/Runtime/DemoAppContext.h"
+#include "DemoShell/Services/SettingsService.h"
+#include "LightBench/MainModule.h"
 #include <SDL3/SDL.h>
 #include <asio/signal_set.hpp>
 
@@ -43,12 +48,6 @@
 #include <Oxygen/Platform/Platform.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererCapability.h>
-
-#include "Common/DemoCli.h"
-#include "Common/FrameCaptureCliOptions.h"
-#include "DemoShell/Runtime/DemoAppContext.h"
-#include "DemoShell/Services/SettingsService.h"
-#include "LightBench/MainModule.h"
 
 using namespace oxygen;
 using namespace oxygen::engine;
@@ -218,6 +217,12 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
       return EXIT_SUCCESS;
     }
 
+    const bool batch_run = frames != 0U || headless;
+    SettingsService::ForDemoApp()->SetPersistenceEnabled(!batch_run);
+    if (batch_run) {
+      LOG_F(INFO, "LightBench batch run: personal settings writes disabled");
+    }
+
     oxygen::examples::cli::ValidateGraphicsToolingOptions(graphics_tooling_cli);
     LOG_F(INFO, "Parsed frames option = {}", frames);
     LOG_F(INFO, "Parsed fps option = {}", target_fps);
@@ -240,7 +245,10 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
           .parent_path();
 
     const auto path_finder_config
-      = PathFinderConfig::Create().WithWorkspaceRoot(workspace_root).Build();
+      = PathFinderConfig::Create()
+          .WithWorkspaceRoot(workspace_root)
+          .WithScriptSourceRoots({ workspace_root / "Examples" / "Content" })
+          .Build();
     const auto frame_capture_config
       = oxygen::examples::cli::BuildFrameCaptureConfig(capture_cli, headless);
     const GraphicsConfig gfx_config {

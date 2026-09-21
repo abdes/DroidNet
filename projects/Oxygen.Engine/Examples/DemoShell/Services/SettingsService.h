@@ -45,7 +45,11 @@ public:
   //! Loads settings from disk (called automatically by constructor).
   auto Load() -> void;
 
-  //! Saves settings to disk.
+  //! Enable or disable disk writes for this session. In-memory edits still
+  //! work.
+  auto SetPersistenceEnabled(bool enabled) -> void;
+
+  //! Saves settings to disk when persistence is enabled.
   auto Save() const -> void;
 
   //! Gets a 2D integer vector stored under the given key.
@@ -92,6 +96,7 @@ private:
 
   mutable std::shared_mutex mutex_;
   std::filesystem::path storage_path_;
+  bool persistence_enabled_ { true };
   bool dirty_ { false };
   bool loaded_ { false };
   struct JsonStorage;

@@ -24,8 +24,8 @@ namespace oxygen::examples::light_bench {
 //! Owns the LightBench scene and its lifecycle.
 /*!
  This class is responsible for creating and retaining the demo scene. Scene
- content will be added over time, but the initial scene is intentionally
- empty to allow DemoShell panels to drive setup.
+ starts with explicit post-process settings and a reference light; demo
+ preferences never supply the experiment's initial state.
 */
 class LightScene final {
 public:
@@ -53,8 +53,8 @@ public:
   };
 
   struct PointLightState {
-    bool enabled { false };
-    Vec3 position { -3.0F, 0.0F, 2.0F };
+    bool enabled { true };
+    Vec3 position { -3.0F, 3.0F, 3.0F };
     Vec3 color_rgb { 1.0F, 1.0F, 1.0F };
     float intensity { 50.0F };
     float range { 15.0F };

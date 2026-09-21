@@ -9,6 +9,13 @@
 #include <memory>
 #include <string_view>
 
+#include "DemoShell/ActiveScene.h"
+#include "DemoShell/DemoShell.h"
+#include "DemoShell/Runtime/DemoAppContext.h"
+#include "DemoShell/Runtime/DemoModuleBase.h"
+#include "LightBench/LightBenchPanel.h"
+#include "LightBench/LightScene.h"
+
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/EngineModule.h>
@@ -17,13 +24,7 @@
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
-
-#include "DemoShell/ActiveScene.h"
-#include "DemoShell/DemoShell.h"
-#include "DemoShell/Runtime/DemoAppContext.h"
-#include "DemoShell/Runtime/DemoModuleBase.h"
-#include "LightBench/LightBenchPanel.h"
-#include "LightBench/LightScene.h"
+#include <Oxygen/Vortex/CompositionView.h>
 
 namespace oxygen::vortex {
 struct CompositionView;
@@ -99,9 +100,11 @@ protected:
 
 private:
   auto StageInitialScene(DemoShell& shell) -> void;
+  auto ResetMainViewState(observer_ptr<engine::FrameContext> context = {})
+    -> void;
 
   ActiveScene active_scene_ {};
-  scene::NodeHandle registered_view_camera_ {};
+  scene::SceneNode main_view_state_camera_ {};
   scene::SceneNode main_camera_ {};
 
   LightScene light_scene_ {};
@@ -110,6 +113,9 @@ private:
 
   // Hosted view
   ViewId main_view_id_ { kInvalidViewId };
+  vortex::CompositionView::ViewStateHandle main_view_state_handle_ {
+    vortex::CompositionView::kInvalidViewStateHandle
+  };
 };
 
 } // namespace oxygen::examples::light_bench

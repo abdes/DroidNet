@@ -8,17 +8,40 @@
 
 #include <cstdint>
 #include <mutex>
+#include <optional>
+#include <span>
+#include <string>
+
+#include "DemoShell/Services/PostProcessSettingsService.h"
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Types/PostProcess.h>
-
-#include "DemoShell/Services/PostProcessSettingsService.h"
 
 namespace oxygen::examples::ui {
 
 class PostProcessVm {
 public:
   explicit PostProcessVm(observer_ptr<PostProcessSettingsService> service);
+
+  [[nodiscard]] auto GetExposureSettings() -> scene::ExposureSettings;
+  auto TrySetExposureSettings(const scene::ExposureSettings& settings) -> bool;
+  auto SetExposureCompensationCurve(
+    std::span<const scene::ExposureCompensationKey> keys) -> bool;
+  auto SetAutoExposureBlackInfluence(float value) -> void;
+  auto SetAutoExposureTransitionDistance(float value) -> void;
+  [[nodiscard]] auto GetExposureStatus()
+    -> std::optional<vortex::ExposureSettingsStatus>;
+  [[nodiscard]] auto GetValidationError() -> std::string;
+  [[nodiscard]] auto GetSceneActivationPolicy() -> SceneActivationPolicy;
+  [[nodiscard]] auto GetEpoch() -> std::uint64_t;
+  [[nodiscard]] auto GetSceneRevision() -> std::uint64_t;
+  [[nodiscard]] auto HasActiveCamera() -> bool;
+  [[nodiscard]] auto HasSceneMeteringMask() -> bool;
+  [[nodiscard]] auto GetUseSceneMeteringMask() -> bool;
+  auto SetUseSceneMeteringMask(bool enabled) -> void;
+  auto SetAutoExposureRange(ExposureRange bounds) -> void;
+  auto SetAutoExposurePercentiles(ExposureRange bounds) -> void;
+  auto SetAutoExposureHistogramWindow(ExposureRange bounds) -> void;
 
   [[nodiscard]] auto GetExposureEnabled() -> bool;
   auto SetExposureEnabled(bool enabled) -> void;

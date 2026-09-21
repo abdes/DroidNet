@@ -31,6 +31,7 @@
 #include <Oxygen/Vortex/ShaderDebugMode.h>
 #include <Oxygen/Vortex/Shadows/Types/FrameShadowInputs.h>
 #include <Oxygen/Vortex/Types/EnvironmentLightingState.h>
+#include <Oxygen/Vortex/Types/ExposureSettingsStatus.h>
 #include <Oxygen/Vortex/Types/FrameLightSelection.h>
 #include <Oxygen/Vortex/Types/ScreenHzbFrameBindings.h>
 #include <Oxygen/Vortex/Types/ViewFrameBindings.h>
@@ -190,6 +191,9 @@ public:
   OXGN_VRTX_NDAPI auto GetPublishedViewId() const -> ViewId;
   OXGN_VRTX_NDAPI auto GetLastDeferredLightingState() const
     -> const DeferredLightingState&;
+  [[nodiscard]] OXGN_VRTX_API auto InspectExposureSettings(
+    CompositionView::ViewStateHandle handle) const
+    -> std::optional<ExposureSettingsStatus>;
   OXGN_VRTX_NDAPI auto GetLastEnvironmentLightingState() const
     -> const EnvironmentLightingState&;
   OXGN_VRTX_NDAPI static auto GetAuthoredStageOrder() -> const StageOrder&;
