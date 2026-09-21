@@ -179,7 +179,7 @@ Inside an `InputMappingContext`, mappings are evaluated in the order they were
 added. This ordering matters for conflict resolution and how `ConsumesInput`
 behaves within a single context:
 
-- If a consuming mapping is placed *after* other mappings using the same
+- If a consuming mapping is placed _after_ other mappings using the same
   `InputSlot`, those earlier mappings will have already been evaluated and may
   trigger in the same update. When the consumer later triggers it will cancel
   any remaining mappings that haven't run yet, and the context will return
@@ -187,7 +187,7 @@ behaves within a single context:
   come after it from running, but does not retroactively undo work already
   processed earlier in the sequence.
 
-- If the consuming mapping is placed *before* other mappings, it will run first
+- If the consuming mapping is placed _before_ other mappings, it will run first
   and when it triggers it will consume input and cancel the later mappings in
   that same context (those later mappings will receive `CancelInput()` and be
   turned into the canceled state for the current evaluation).

@@ -25,11 +25,11 @@ Use the system like this:
 
 Rule of thumb:
 
-| Consumer | What it sees |
-| - | - |
-| Built-in GPU timeline | only `kTelemetry` GPU scopes |
-| Tracy | CPU scopes + `kTelemetry` GPU scopes + `kDiagnostic` GPU scopes |
-| PIX / RenderDoc / Nsight | GPU labels; PIX may also see mirrored CPU scopes |
+| Consumer                 | What it sees                                                    |
+| ------------------------ | --------------------------------------------------------------- |
+| Built-in GPU timeline    | only `kTelemetry` GPU scopes                                    |
+| Tracy                    | CPU scopes + `kTelemetry` GPU scopes + `kDiagnostic` GPU scopes |
+| PIX / RenderDoc / Nsight | GPU labels; PIX may also see mirrored CPU scopes                |
 
 ## 2. Build-Time Rule
 
@@ -112,23 +112,23 @@ Good examples:
 
 ### 4.3 Decision Table
 
-| Question | If yes | If no |
-| - | - | - |
-| Should this scope appear in the built-in GPU viewer/export? | `kTelemetry` | continue |
+| Question                                                                                      | If yes        | If no               |
+| --------------------------------------------------------------------------------------------- | ------------- | ------------------- |
+| Should this scope appear in the built-in GPU viewer/export?                                   | `kTelemetry`  | continue            |
 | Is this scope dense enough to explode the built-in timeline if repeated many times per frame? | `kDiagnostic` | likely `kTelemetry` |
-| Is this mostly for deep optimization work in Tracy/capture tools? | `kDiagnostic` | likely `kTelemetry` |
+| Is this mostly for deep optimization work in Tracy/capture tools?                             | `kDiagnostic` | likely `kTelemetry` |
 
 ### 4.4 Common Scenarios
 
-| Scenario | Canonical instrumentation | Granularity | Naming pattern | Notes |
-| - | - | - | - | - |
-| Render pass boundary | `GpuEventScope` around pass execution, usually using `RenderPass::GetName()` | `kTelemetry` | pass name or stable pass label | This is the standard engine-visible GPU timing scope. |
-| Major renderer phase or per-view render | `GpuEventScope` around the phase or view root | `kTelemetry` | stable phase label plus vars such as `view`, `id`, `name` | Use this when you want the scope in the built-in GPU viewer/export. |
-| Hot shader / draw or dispatch hotspot | `GpuEventScope` around the owning draw/dispatch region | `kDiagnostic` | stable hotspot label plus vars for slice/job/material/view | You cannot instrument inside shader code with this API; bracket the GPU work region that owns the hotspot. |
-| CPU-bound algorithm | `CpuProfileScope` around the algorithm body | n/a | stable algorithm label plus vars for problem size / mode / id | Use for culling, scene prep, sorting, upload planning, and similar CPU-heavy work. |
-| Tracing a CPU-to-GPU flow | paired `CpuProfileScope` + `GpuEventScope` with matching base labels or shared variables | CPU: n/a, GPU: usually `kTelemetry` at the top level | shared labels / vars such as `view`, `frame`, `job`, `task` | This is the canonical way to correlate orchestration on CPU with execution on GPU in Tracy. |
-| Upload or synchronization phase | `CpuProfileScope` for CPU orchestration, `GpuEventScope` for GPU-side execution if recorded | GPU side usually `kDiagnostic`, sometimes `kTelemetry` if it is a stable budget | stable `Upload.*` / `Sync.*` labels | Use `kTelemetry` only when the upload/sync stage is a stable engine budget worth tracking in the built-in timeline. |
-| Temporary investigation / optimization probe | `CpuProfileScope` or `GpuEventScope` as appropriate, usually narrow and short-lived | GPU: usually `kDiagnostic` | stable probe label plus explicit vars | Prefer diagnostic scopes so the built-in GPU timeline stays clean. |
+| Scenario                                     | Canonical instrumentation                                                                   | Granularity                                                                     | Naming pattern                                                | Notes                                                                                                               |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Render pass boundary                         | `GpuEventScope` around pass execution, usually using `RenderPass::GetName()`                | `kTelemetry`                                                                    | pass name or stable pass label                                | This is the standard engine-visible GPU timing scope.                                                               |
+| Major renderer phase or per-view render      | `GpuEventScope` around the phase or view root                                               | `kTelemetry`                                                                    | stable phase label plus vars such as `view`, `id`, `name`     | Use this when you want the scope in the built-in GPU viewer/export.                                                 |
+| Hot shader / draw or dispatch hotspot        | `GpuEventScope` around the owning draw/dispatch region                                      | `kDiagnostic`                                                                   | stable hotspot label plus vars for slice/job/material/view    | You cannot instrument inside shader code with this API; bracket the GPU work region that owns the hotspot.          |
+| CPU-bound algorithm                          | `CpuProfileScope` around the algorithm body                                                 | n/a                                                                             | stable algorithm label plus vars for problem size / mode / id | Use for culling, scene prep, sorting, upload planning, and similar CPU-heavy work.                                  |
+| Tracing a CPU-to-GPU flow                    | paired `CpuProfileScope` + `GpuEventScope` with matching base labels or shared variables    | CPU: n/a, GPU: usually `kTelemetry` at the top level                            | shared labels / vars such as `view`, `frame`, `job`, `task`   | This is the canonical way to correlate orchestration on CPU with execution on GPU in Tracy.                         |
+| Upload or synchronization phase              | `CpuProfileScope` for CPU orchestration, `GpuEventScope` for GPU-side execution if recorded | GPU side usually `kDiagnostic`, sometimes `kTelemetry` if it is a stable budget | stable `Upload.*` / `Sync.*` labels                           | Use `kTelemetry` only when the upload/sync stage is a stable engine budget worth tracking in the built-in timeline. |
+| Temporary investigation / optimization probe | `CpuProfileScope` or `GpuEventScope` as appropriate, usually narrow and short-lived         | GPU: usually `kDiagnostic`                                                      | stable probe label plus explicit vars                         | Prefer diagnostic scopes so the built-in GPU timeline stays clean.                                                  |
 
 ## 5. Naming Rules
 
@@ -198,12 +198,12 @@ The built-in GPU timing system is the engine's curated telemetry surface.
 
 ### 7.1 Runtime Controls
 
-| CVar | Type | Default | Description |
-| - | - | - | - |
-| `rndr.gpu_timestamps` | bool | `false` | Enables or disables built-in GPU timing collection. |
-| `rndr.gpu_timestamps.max_scopes` | uint | `4096` | Maximum telemetry scope slots per frame. Raise if overflow diagnostics appear in the viewer. |
-| `rndr.gpu_timestamps.viewer` | bool | `false` | Shows or hides the ImGui GPU timeline viewer panel. |
-| `rndr.gpu_timestamps.export_next_frame` | string | `""` | Path for a one-shot frame export. File extension determines format: `.csv` produces CSV; any other extension (including `.json`) produces JSON. |
+| CVar                                    | Type   | Default | Description                                                                                                                                     |
+| --------------------------------------- | ------ | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `rndr.gpu_timestamps`                   | bool   | `false` | Enables or disables built-in GPU timing collection.                                                                                             |
+| `rndr.gpu_timestamps.max_scopes`        | uint   | `4096`  | Maximum telemetry scope slots per frame. Raise if overflow diagnostics appear in the viewer.                                                    |
+| `rndr.gpu_timestamps.viewer`            | bool   | `false` | Shows or hides the ImGui GPU timeline viewer panel.                                                                                             |
+| `rndr.gpu_timestamps.export_next_frame` | string | `""`    | Path for a one-shot frame export. File extension determines format: `.csv` produces CSV; any other extension (including `.json`) produces JSON. |
 
 ### 7.2 What the Built-In Viewer Sees
 

@@ -38,7 +38,7 @@ packaging, and runtime loading of material assets in Oxygen.
 In scope:
 
 1. JSON-descriptor-driven imports (`*.material.json` via `type:
-   "material-descriptor"`) — the only import entry point for materials.
+"material-descriptor"`) — the only import entry point for materials.
 2. PBR parameter cooking: scalar normalization, domain/alpha-mode resolution,
    ORM packing policy.
 3. Texture slot binding via virtual path → `.otex` sidecar resolution →
@@ -93,20 +93,20 @@ Out of scope:
 
 The following facts were confirmed during the documentation pass:
 
-| Fact | Evidence |
-| --- | --- |
-| Material import is descriptor-only | No `MaterialCommand.cpp` in `ImportTool`; no `ImportFormat::kMaterial`; routing discriminant is `request.material_descriptor.has_value()` |
-| Route discriminant is request payload presence | `src/Oxygen/Cooker/Import/AsyncImportService.cpp` (`const bool is_material_descriptor_request = request.material_descriptor.has_value()`) |
-| Manifest job type exists | `src/Oxygen/Cooker/Import/ImportManifest.cpp`: `if (job_type == "material-descriptor")` |
-| Schema is embedded | `src/Oxygen/Cooker/Import/Internal/ImportManifest_schema.h` (`kMaterialDescriptorSchema`) |
-| Binary format is locked | `src/Oxygen/Data/PakFormat_render.h` (`MaterialAssetDesc`, `static_assert(sizeof(...))==384)`, `ShaderReferenceDesc`, `static_assert(sizeof(...))==424)`) |
-| Loose cooked layout for materials | `src/Oxygen/Cooker/Loose/LooseCookedLayout.h` (`kMaterialDescriptorExtension = ".omat"`, `MaterialDescriptorRelPath()`, `MaterialVirtualPath()`) |
-| Texture sidecar reader exists | `src/Oxygen/Cooker/Import/Internal/Jobs/MaterialDescriptorImportJob.cpp` (`TextureSidecarFile`, `ResolveTextureIndexFromVirtualPath`) |
-| Runtime loader for materials exists | `src/Oxygen/Content/Loaders/MaterialLoader.h` (`LoadMaterialAsset`) |
-| Runtime material asset container | `src/Oxygen/Data/MaterialAsset.h` (`MaterialAsset`) |
-| Shader defaults are synthesized | `MaterialPipeline.cpp` (`BuildDefaultShaderRequests`) |
-| Example material descriptor | `Examples/TexturedCube/WoodFloor007/woodfloor007.material.json` |
-| JSON schema shipped | `src/Oxygen/Cooker/Import/Schemas/oxygen.material-descriptor.schema.json` |
+| Fact                                           | Evidence                                                                                                                                                  |
+| ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Material import is descriptor-only             | No `MaterialCommand.cpp` in `ImportTool`; no `ImportFormat::kMaterial`; routing discriminant is `request.material_descriptor.has_value()`                 |
+| Route discriminant is request payload presence | `src/Oxygen/Cooker/Import/AsyncImportService.cpp` (`const bool is_material_descriptor_request = request.material_descriptor.has_value()`)                 |
+| Manifest job type exists                       | `src/Oxygen/Cooker/Import/ImportManifest.cpp`: `if (job_type == "material-descriptor")`                                                                   |
+| Schema is embedded                             | `src/Oxygen/Cooker/Import/Internal/ImportManifest_schema.h` (`kMaterialDescriptorSchema`)                                                                 |
+| Binary format is locked                        | `src/Oxygen/Data/PakFormat_render.h` (`MaterialAssetDesc`, `static_assert(sizeof(...))==384)`, `ShaderReferenceDesc`, `static_assert(sizeof(...))==424)`) |
+| Loose cooked layout for materials              | `src/Oxygen/Cooker/Loose/LooseCookedLayout.h` (`kMaterialDescriptorExtension = ".omat"`, `MaterialDescriptorRelPath()`, `MaterialVirtualPath()`)          |
+| Texture sidecar reader exists                  | `src/Oxygen/Cooker/Import/Internal/Jobs/MaterialDescriptorImportJob.cpp` (`TextureSidecarFile`, `ResolveTextureIndexFromVirtualPath`)                     |
+| Runtime loader for materials exists            | `src/Oxygen/Content/Loaders/MaterialLoader.h` (`LoadMaterialAsset`)                                                                                       |
+| Runtime material asset container               | `src/Oxygen/Data/MaterialAsset.h` (`MaterialAsset`)                                                                                                       |
+| Shader defaults are synthesized                | `MaterialPipeline.cpp` (`BuildDefaultShaderRequests`)                                                                                                     |
+| Example material descriptor                    | `Examples/TexturedCube/WoodFloor007/woodfloor007.material.json`                                                                                           |
+| JSON schema shipped                            | `src/Oxygen/Cooker/Import/Schemas/oxygen.material-descriptor.schema.json`                                                                                 |
 
 ## 4. Decision
 
@@ -215,7 +215,7 @@ Architectural split:
      `ImportRequest`. Loads the descriptor JSON file, schema-validates it
      against `kMaterialDescriptorSchema`, resolves `job_name`, resolves
      `with_content_hashing`, and stores `descriptor_doc->dump()` in
-      `request.material_descriptor.normalized_descriptor_json`.
+     `request.material_descriptor.normalized_descriptor_json`.
    - note: The presence of `request.material_descriptor` is the route
      discriminant that bypasses all format detection in `AsyncImportService`.
 
@@ -299,27 +299,27 @@ Architectural split:
    - holds all PBR scalar inputs with engine defaults.
 
 6. `oxygen::content::import::MaterialUvTransform`
-    - file: `src/Oxygen/Cooker/Import/Internal/Pipelines/MaterialPipeline.h`
-    - fields: `scale[2]`, `offset[2]`, `rotation_radians`.
+   - file: `src/Oxygen/Cooker/Import/Internal/Pipelines/MaterialPipeline.h`
+   - fields: `scale[2]`, `offset[2]`, `rotation_radians`.
 
 **Texture Sidecar Resolution (Internal):**
 
 1. `ResolveTextureIndexFromVirtualPath` (free function, anonymous namespace)
-    - file: `src/Oxygen/Cooker/Import/Internal/Jobs/MaterialDescriptorImportJob.cpp`
-    - role: async coroutine. Validates canonical virtual path (no `..`, no
-      `//`), strips mount root to a rel-path, searches `cooked_root` and
-      `cooked_context_roots` in reverse-priority order, falls back to hashed
-      variant lookup (`<name>_<16hexchars>.otex`), reads `TextureSidecarFile`
-      binary (`magic="OTEX"`, version, `resource_index`), returns
-      `ResourceIndexT`.
+   - file: `src/Oxygen/Cooker/Import/Internal/Jobs/MaterialDescriptorImportJob.cpp`
+   - role: async coroutine. Validates canonical virtual path (no `..`, no
+     `//`), strips mount root to a rel-path, searches `cooked_root` and
+     `cooked_context_roots` in reverse-priority order, falls back to hashed
+     variant lookup (`<name>_<16hexchars>.otex`), reads `TextureSidecarFile`
+     binary (`magic="OTEX"`, version, `resource_index`), returns
+     `ResourceIndexT`.
 
 ### 6.2 Runtime Classes
 
 1. `oxygen::content::loaders::LoadMaterialAsset`
-    - file: `src/Oxygen/Content/Loaders/MaterialLoader.h`
+   - file: `src/Oxygen/Content/Loaders/MaterialLoader.h`
 
 2. `oxygen::data::MaterialAsset`
-    - file: `src/Oxygen/Data/MaterialAsset.h`
+   - file: `src/Oxygen/Data/MaterialAsset.h`
 
 ### 6.3 Routing
 
@@ -432,17 +432,17 @@ JSON Schema draft-07, `additionalProperties: false` at all levels.
 
 #### 7.2.1 Top-Level Field Contract
 
-| Field | Required | Type | Description |
-| --- | --- | --- | --- |
-| `$schema` | No | `string` | Points to shipped JSON Schema for editor integration |
-| `name` | No | `string` (minLength 1) | Human-readable asset name |
-| `content_hashing` | No | `bool` | Override global content hashing toggle |
-| `domain` | No | string enum | Material domain (Section 7.2.2) |
-| `alpha_mode` | No | string enum | Alpha blending mode (Section 7.2.3) |
-| `orm_policy` | No | string enum | ORM packing policy (Section 7.2.4) |
-| `inputs` | No | object | PBR scalar inputs (Section 7.2.5) |
-| `textures` | No | object | Texture slot bindings (Section 7.2.6) |
-| `shaders` | No | array | Explicit shader stage references (Section 7.2.7) |
+| Field             | Required | Type                   | Description                                          |
+| ----------------- | -------- | ---------------------- | ---------------------------------------------------- |
+| `$schema`         | No       | `string`               | Points to shipped JSON Schema for editor integration |
+| `name`            | No       | `string` (minLength 1) | Human-readable asset name                            |
+| `content_hashing` | No       | `bool`                 | Override global content hashing toggle               |
+| `domain`          | No       | string enum            | Material domain (Section 7.2.2)                      |
+| `alpha_mode`      | No       | string enum            | Alpha blending mode (Section 7.2.3)                  |
+| `orm_policy`      | No       | string enum            | ORM packing policy (Section 7.2.4)                   |
+| `inputs`          | No       | object                 | PBR scalar inputs (Section 7.2.5)                    |
+| `textures`        | No       | object                 | Texture slot bindings (Section 7.2.6)                |
+| `shaders`         | No       | array                  | Explicit shader stage references (Section 7.2.7)     |
 
 Canonical example (`woodfloor007.material.json`):
 
@@ -489,24 +489,24 @@ Top-level validation rules:
 
 #### 7.2.2 Domain Values
 
-| `domain` value | `MaterialDomain` | Notes |
-| --- | --- | --- |
-| `"opaque"` | `kOpaque` | Fully opaque, default |
-| `"alpha_blended"` | `kAlphaBlended` | Alpha blending enabled |
-| `"masked"` | `kMasked` | Alpha-test cutoff |
-| `"decal"` | `kDecal` | Deferred decal rendering |
-| `"ui"` | `kUI` | 2D UI rendering |
-| `"post_process"` | `kPostProcess` | Full-screen post-process |
+| `domain` value    | `MaterialDomain` | Notes                    |
+| ----------------- | ---------------- | ------------------------ |
+| `"opaque"`        | `kOpaque`        | Fully opaque, default    |
+| `"alpha_blended"` | `kAlphaBlended`  | Alpha blending enabled   |
+| `"masked"`        | `kMasked`        | Alpha-test cutoff        |
+| `"decal"`         | `kDecal`         | Deferred decal rendering |
+| `"ui"`            | `kUI`            | 2D UI rendering          |
+| `"post_process"`  | `kPostProcess`   | Full-screen post-process |
 
 When absent, domain is inferred from `alpha_mode` (see Section 7.2.3).
 
 #### 7.2.3 Alpha Mode Values
 
-| `alpha_mode` value | `MaterialAlphaMode` | Effect |
-| --- | --- | --- |
-| `"opaque"` | `kOpaque` | No alpha blending, no alpha test |
-| `"masked"` | `kMasked` | Alpha cutoff test (`kMaterialFlag_AlphaTest`) |
-| `"blended"` | `kBlended` | Alpha blending, domain set to `kAlphaBlended` |
+| `alpha_mode` value | `MaterialAlphaMode` | Effect                                        |
+| ------------------ | ------------------- | --------------------------------------------- |
+| `"opaque"`         | `kOpaque`           | No alpha blending, no alpha test              |
+| `"masked"`         | `kMasked`           | Alpha cutoff test (`kMaterialFlag_AlphaTest`) |
+| `"blended"`        | `kBlended`          | Alpha blending, domain set to `kAlphaBlended` |
 
 `ResolveMaterialDomain()` merges `alpha_mode` with `domain`. `kMasked` alpha
 mode sets the `kMaterialFlag_AlphaTest` flag and also adds `ALPHA_TEST=1` to
@@ -514,38 +514,38 @@ default shader defines.
 
 #### 7.2.4 ORM Policy Values
 
-| `orm_policy` value | `OrmPolicy` | Behavior |
-| --- | --- | --- |
-| `"auto"` | `kAuto` | Pack if metallic + roughness share `source_id` and UV set |
-| `"force_packed"` | `kForcePacked` | Always pack; error if metallic + roughness are incompatible |
-| `"force_separate"` | `kForceSeparate` | Never pack; always separate texture reads |
+| `orm_policy` value | `OrmPolicy`      | Behavior                                                    |
+| ------------------ | ---------------- | ----------------------------------------------------------- |
+| `"auto"`           | `kAuto`          | Pack if metallic + roughness share `source_id` and UV set   |
+| `"force_packed"`   | `kForcePacked`   | Always pack; error if metallic + roughness are incompatible |
+| `"force_separate"` | `kForceSeparate` | Never pack; always separate texture reads                   |
 
 ORM packing uses glTF convention: R=AO, G=Roughness, B=Metalness (stored in
 `kMaterialFlag_GltfOrmPacked`).
 
 #### 7.2.5 `inputs` Settings
 
-| Field | Type | Range | Maps to | Default |
-| --- | --- | --- | --- | --- |
-| `base_color` | `vec4` | [0,1]×4 | `MaterialAssetDesc::base_color[4]` | `[1,1,1,1]` |
-| `normal_scale` | `number` | ≥0 | `MaterialAssetDesc::normal_scale` | `1.0` |
-| `metalness` | `number` | [0,1] | `MaterialAssetDesc::metalness` (Unorm16) | `0.0` |
-| `roughness` | `number` | [0,1] | `MaterialAssetDesc::roughness` (Unorm16) | `1.0` |
-| `ambient_occlusion` | `number` | [0,1] | `MaterialAssetDesc::ambient_occlusion` (Unorm16) | `1.0` |
-| `emissive_factor` | `vec3` | (HDR, ≥0) | `MaterialAssetDesc::emissive_factor[3]` (HalfFloat) | `[0,0,0]` |
-| `alpha_cutoff` | `number` | [0,1] | `MaterialAssetDesc::alpha_cutoff` (Unorm16) | `0.5` |
-| `ior` | `number` | ≥1.0 | `MaterialAssetDesc::ior` | `1.5` |
-| `specular_factor` | `number` | [0,1] | `MaterialAssetDesc::specular_factor` (Unorm16) | `1.0` |
-| `sheen_color_factor` | `vec3` | [0,1]×3 | `MaterialAssetDesc::sheen_color_factor[3]` (HalfFloat) | `[0,0,0]` |
-| `clearcoat_factor` | `number` | [0,1] | `MaterialAssetDesc::clearcoat_factor` (Unorm16) | `0.0` |
-| `clearcoat_roughness` | `number` | [0,1] | `MaterialAssetDesc::clearcoat_roughness` (Unorm16) | `0.0` |
-| `transmission_factor` | `number` | [0,1] | `MaterialAssetDesc::transmission_factor` (Unorm16) | `0.0` |
-| `thickness_factor` | `number` | [0,1] | `MaterialAssetDesc::thickness_factor` (Unorm16) | `0.0` |
-| `attenuation_color` | `vec3` | [0,1]×3 | `MaterialAssetDesc::attenuation_color[3]` (HalfFloat) | `[1,1,1]` |
-| `attenuation_distance` | `number` | ≥0 | `MaterialAssetDesc::attenuation_distance` | `0.0` |
-| `double_sided` | `bool` | — | `kMaterialFlag_DoubleSided` | `false` |
-| `unlit` | `bool` | — | `kMaterialFlag_Unlit` | `false` |
-| `roughness_as_glossiness` | `bool` | — | inverts roughness: `roughness = 1 - value` | `false` |
+| Field                     | Type     | Range     | Maps to                                                | Default     |
+| ------------------------- | -------- | --------- | ------------------------------------------------------ | ----------- |
+| `base_color`              | `vec4`   | [0,1]×4   | `MaterialAssetDesc::base_color[4]`                     | `[1,1,1,1]` |
+| `normal_scale`            | `number` | ≥0        | `MaterialAssetDesc::normal_scale`                      | `1.0`       |
+| `metalness`               | `number` | [0,1]     | `MaterialAssetDesc::metalness` (Unorm16)               | `0.0`       |
+| `roughness`               | `number` | [0,1]     | `MaterialAssetDesc::roughness` (Unorm16)               | `1.0`       |
+| `ambient_occlusion`       | `number` | [0,1]     | `MaterialAssetDesc::ambient_occlusion` (Unorm16)       | `1.0`       |
+| `emissive_factor`         | `vec3`   | (HDR, ≥0) | `MaterialAssetDesc::emissive_factor[3]` (HalfFloat)    | `[0,0,0]`   |
+| `alpha_cutoff`            | `number` | [0,1]     | `MaterialAssetDesc::alpha_cutoff` (Unorm16)            | `0.5`       |
+| `ior`                     | `number` | ≥1.0      | `MaterialAssetDesc::ior`                               | `1.5`       |
+| `specular_factor`         | `number` | [0,1]     | `MaterialAssetDesc::specular_factor` (Unorm16)         | `1.0`       |
+| `sheen_color_factor`      | `vec3`   | [0,1]×3   | `MaterialAssetDesc::sheen_color_factor[3]` (HalfFloat) | `[0,0,0]`   |
+| `clearcoat_factor`        | `number` | [0,1]     | `MaterialAssetDesc::clearcoat_factor` (Unorm16)        | `0.0`       |
+| `clearcoat_roughness`     | `number` | [0,1]     | `MaterialAssetDesc::clearcoat_roughness` (Unorm16)     | `0.0`       |
+| `transmission_factor`     | `number` | [0,1]     | `MaterialAssetDesc::transmission_factor` (Unorm16)     | `0.0`       |
+| `thickness_factor`        | `number` | [0,1]     | `MaterialAssetDesc::thickness_factor` (Unorm16)        | `0.0`       |
+| `attenuation_color`       | `vec3`   | [0,1]×3   | `MaterialAssetDesc::attenuation_color[3]` (HalfFloat)  | `[1,1,1]`   |
+| `attenuation_distance`    | `number` | ≥0        | `MaterialAssetDesc::attenuation_distance`              | `0.0`       |
+| `double_sided`            | `bool`   | —         | `kMaterialFlag_DoubleSided`                            | `false`     |
+| `unlit`                   | `bool`   | —         | `kMaterialFlag_Unlit`                                  | `false`     |
+| `roughness_as_glossiness` | `bool`   | —         | inverts roughness: `roughness = 1 - value`             | `false`     |
 
 #### 7.2.6 `textures` Settings
 
@@ -565,20 +565,20 @@ Each texture slot is specified as:
 
 Valid slot names:
 
-| Slot | `MaterialAssetDesc` field | Notes |
-| --- | --- | --- |
-| `base_color` | `base_color_texture` | sRGB albedo |
-| `normal` | `normal_texture` | Linear, tangent-space normals |
-| `metallic` | `metallic_texture` | Linear metalness; may be packed (ORM) |
-| `roughness` | `roughness_texture` | Linear roughness; may be packed (ORM) |
-| `ambient_occlusion` | `ambient_occlusion_texture` | Linear AO; may be packed (ORM) |
-| `emissive` | `emissive_texture` | HDR-capable emissive |
-| `specular` | `specular_texture` | Specular color/factor |
-| `sheen_color` | `sheen_color_texture` | Sheen extension |
-| `clearcoat` | `clearcoat_texture` | Clearcoat factor |
-| `clearcoat_normal` | `clearcoat_normal_texture` | Clearcoat normal map |
-| `transmission` | `transmission_texture` | Thin-surface transmission |
-| `thickness` | `thickness_texture` | Volume thickness |
+| Slot                | `MaterialAssetDesc` field   | Notes                                 |
+| ------------------- | --------------------------- | ------------------------------------- |
+| `base_color`        | `base_color_texture`        | sRGB albedo                           |
+| `normal`            | `normal_texture`            | Linear, tangent-space normals         |
+| `metallic`          | `metallic_texture`          | Linear metalness; may be packed (ORM) |
+| `roughness`         | `roughness_texture`         | Linear roughness; may be packed (ORM) |
+| `ambient_occlusion` | `ambient_occlusion_texture` | Linear AO; may be packed (ORM)        |
+| `emissive`          | `emissive_texture`          | HDR-capable emissive                  |
+| `specular`          | `specular_texture`          | Specular color/factor                 |
+| `sheen_color`       | `sheen_color_texture`       | Sheen extension                       |
+| `clearcoat`         | `clearcoat_texture`         | Clearcoat factor                      |
+| `clearcoat_normal`  | `clearcoat_normal_texture`  | Clearcoat normal map                  |
+| `transmission`      | `transmission_texture`      | Thin-surface transmission             |
+| `thickness`         | `thickness_texture`         | Volume thickness                      |
 
 `virtual_path` must be a canonical virtual path: starts with `/`, no `..`
 segments, no `//` sequences. At cook time, `ResolveTextureIndexFromVirtualPath`
@@ -624,10 +624,10 @@ Validation rules:
 
 `BuildDefaultShaderRequests` synthesizes:
 
-| Stage | Source Path | Entry Point | Defines |
-| --- | --- | --- | --- |
-| `vertex` | `Forward/ForwardMesh_VS.hlsl` | `VS` | (none) |
-| `pixel` | `Forward/ForwardMesh_PS.hlsl` | `PS` | `ALPHA_TEST=1` (masked only) |
+| Stage    | Source Path                   | Entry Point | Defines                      |
+| -------- | ----------------------------- | ----------- | ---------------------------- |
+| `vertex` | `Forward/ForwardMesh_VS.hlsl` | `VS`        | (none)                       |
+| `pixel`  | `Forward/ForwardMesh_PS.hlsl` | `PS`        | `ALPHA_TEST=1` (masked only) |
 
 ---
 
@@ -637,20 +637,20 @@ All material cooking stages execute within `BuildMaterialPayload` in the
 `MaterialPipeline` worker coroutine. Stages are not independently named in
 `detail` namespace (unlike `TexturePipeline`). The full sequence per work item:
 
-| Step | Function | Action |
-| --- | --- | --- |
-| 1 | Header init | `asset_type=kMaterial`, `version=kMaterialAssetVersion`, `name=material_name` |
-| 2 | Baseline flags | `flags = kMaterialFlag_NoTextureSampling` |
-| 3 | `ResolveMaterialDomain` | Maps `MaterialAlphaMode` → `MaterialDomain`; sets `kMaterialFlag_AlphaTest` for masked |
-| 4 | `ApplyMaterialInputs` | Normalizes all PBR scalars; encodes Unorm16/HalfFloat; handles `roughness_as_glossiness` |
-| 5 | `ResolveOrmPacked` | Returns packed `ResourceIndexT` when ORM is compatible; errors on `kForcePacked` mismatch |
-| 6 | Flag update | Clears `kMaterialFlag_NoTextureSampling` if `HasAnyAssignedTextures()` |
-| 7 | `AssignTextureIndices` | Fills 12 `*_texture` `ResourceIndexT` fields; handles ORM shared index |
-| 8 | `BuildMaterialUvTransformDesc` | Writes first assigned binding's UV scale/offset/rotation to descriptor |
-| 9 | `BuildShaderReferences` | Validates, deduplicates, sorts, encodes `ShaderReferenceDesc[]`; computes `shader_stages` bitfield |
-| 10 | `SerializeMaterialDescriptor` | Packed write: `MaterialAssetDesc` (384 B) + `ShaderReferenceDesc[N]` (424 B × N) |
-| 11 | `ComputeContentHashOnThreadPool` | Hashes full byte span on thread pool (when enabled) |
-| 12 | `PatchContentHash` | Patches `header.content_hash` field at fixed byte offset in serialized output |
+| Step | Function                         | Action                                                                                             |
+| ---- | -------------------------------- | -------------------------------------------------------------------------------------------------- |
+| 1    | Header init                      | `asset_type=kMaterial`, `version=kMaterialAssetVersion`, `name=material_name`                      |
+| 2    | Baseline flags                   | `flags = kMaterialFlag_NoTextureSampling`                                                          |
+| 3    | `ResolveMaterialDomain`          | Maps `MaterialAlphaMode` → `MaterialDomain`; sets `kMaterialFlag_AlphaTest` for masked             |
+| 4    | `ApplyMaterialInputs`            | Normalizes all PBR scalars; encodes Unorm16/HalfFloat; handles `roughness_as_glossiness`           |
+| 5    | `ResolveOrmPacked`               | Returns packed `ResourceIndexT` when ORM is compatible; errors on `kForcePacked` mismatch          |
+| 6    | Flag update                      | Clears `kMaterialFlag_NoTextureSampling` if `HasAnyAssignedTextures()`                             |
+| 7    | `AssignTextureIndices`           | Fills 12 `*_texture` `ResourceIndexT` fields; handles ORM shared index                             |
+| 8    | `BuildMaterialUvTransformDesc`   | Writes first assigned binding's UV scale/offset/rotation to descriptor                             |
+| 9    | `BuildShaderReferences`          | Validates, deduplicates, sorts, encodes `ShaderReferenceDesc[]`; computes `shader_stages` bitfield |
+| 10   | `SerializeMaterialDescriptor`    | Packed write: `MaterialAssetDesc` (384 B) + `ShaderReferenceDesc[N]` (424 B × N)                   |
+| 11   | `ComputeContentHashOnThreadPool` | Hashes full byte span on thread pool (when enabled)                                                |
+| 12   | `PatchContentHash`               | Patches `header.content_hash` field at fixed byte offset in serialized output                      |
 
 All stages cooperatively support cancellation via `work_item.stop_token`.
 
@@ -777,14 +777,14 @@ order (LSB first = lowest `ShaderType` value first).
 
 ### 9.4 Flags Bitfield (`flags` in `MaterialAssetDesc`)
 
-| Constant | Bit | Meaning |
-| --- | --- | --- |
+| Constant                          | Bit   | Meaning                                         |
+| --------------------------------- | ----- | ----------------------------------------------- |
 | `kMaterialFlag_NoTextureSampling` | bit 0 | No textures assigned; use scalar fallbacks only |
-| `kMaterialFlag_DoubleSided` | bit 1 | Disable backface culling |
-| `kMaterialFlag_AlphaTest` | bit 2 | Alpha cutoff testing against `alpha_cutoff` |
-| `kMaterialFlag_Unlit` | bit 3 | Render base_color + emissive only; no lighting |
-| `kMaterialFlag_GltfOrmPacked` | bit 4 | ORM packed: R=AO, G=Roughness, B=Metalness |
-| `kMaterialFlag_ProceduralGrid` | bit 5 | Procedural grid enabled (editor grid) |
+| `kMaterialFlag_DoubleSided`       | bit 1 | Disable backface culling                        |
+| `kMaterialFlag_AlphaTest`         | bit 2 | Alpha cutoff testing against `alpha_cutoff`     |
+| `kMaterialFlag_Unlit`             | bit 3 | Render base_color + emissive only; no lighting  |
+| `kMaterialFlag_GltfOrmPacked`     | bit 4 | ORM packed: R=AO, G=Roughness, B=Metalness      |
+| `kMaterialFlag_ProceduralGrid`    | bit 5 | Procedural grid enabled (editor grid)           |
 
 ### 9.5 Loose Cooked Layout
 
@@ -796,10 +796,10 @@ order (LSB first = lowest `ShaderType` value first).
 
 Key layout constants:
 
-| Constant | Value | Role |
-| --- | --- | --- |
-| `kMaterialDescriptorExtension` | `".omat"` | File extension for material descriptors |
-| `kMaterialsDirName` | `"Materials"` | Subfolder under cooked root |
+| Constant                       | Value         | Role                                    |
+| ------------------------------ | ------------- | --------------------------------------- |
+| `kMaterialDescriptorExtension` | `".omat"`     | File extension for material descriptors |
+| `kMaterialsDirName`            | `"Materials"` | Subfolder under cooked root             |
 
 Virtual path for runtime mounting:
 `MaterialVirtualPath(name)` = `<virtual_mount_root>/Materials/<name>.omat`
@@ -815,20 +815,20 @@ Material import errors are surfaced as diagnostics in `ImportReport` and as
 log messages written to `error_stream`. Error codes follow the pattern
 `material.<category>.<key>`:
 
-| Category | Code Pattern | Key Causes |
-| --- | --- | --- |
-| Schema | `material.descriptor.schema_validation_failed` | JSON fields violate schema constraints |
-| Schema | `material.descriptor.schema_validator_failure` | JSON Schema validator internal failure |
-| I/O | `material.descriptor.file_not_found` | Descriptor path does not exist |
-| I/O | `material.descriptor.parse_error` | JSON parse failure |
-| Texture | `material.texture.virtual_path_invalid` | Non-canonical virtual path in texture slot |
-| Texture | `material.texture.sidecar_not_found` | `.otex` sidecar not found in cooked roots |
-| Texture | `material.texture.sidecar_read_failed` | Binary sidecar read error |
-| ORM | `material.orm.force_packed_incompatible` | `kForcePacked` but metallic/roughness have different `source_id` or UV |
-| Shader | `material.shader.duplicate_stage` | Multiple entries with same `stage` value |
-| Shader | `material.shader.empty_source` | `source_path` or `entry_point` is empty |
-| Cancellation | `material.cancelled` | `stop_token` signalled during job execution |
-| Predecessor | `material.import.skipped_predecessor_failed` | A `depends_on` texture job failed |
+| Category     | Code Pattern                                   | Key Causes                                                             |
+| ------------ | ---------------------------------------------- | ---------------------------------------------------------------------- |
+| Schema       | `material.descriptor.schema_validation_failed` | JSON fields violate schema constraints                                 |
+| Schema       | `material.descriptor.schema_validator_failure` | JSON Schema validator internal failure                                 |
+| I/O          | `material.descriptor.file_not_found`           | Descriptor path does not exist                                         |
+| I/O          | `material.descriptor.parse_error`              | JSON parse failure                                                     |
+| Texture      | `material.texture.virtual_path_invalid`        | Non-canonical virtual path in texture slot                             |
+| Texture      | `material.texture.sidecar_not_found`           | `.otex` sidecar not found in cooked roots                              |
+| Texture      | `material.texture.sidecar_read_failed`         | Binary sidecar read error                                              |
+| ORM          | `material.orm.force_packed_incompatible`       | `kForcePacked` but metallic/roughness have different `source_id` or UV |
+| Shader       | `material.shader.duplicate_stage`              | Multiple entries with same `stage` value                               |
+| Shader       | `material.shader.empty_source`                 | `source_path` or `entry_point` is empty                                |
+| Cancellation | `material.cancelled`                           | `stop_token` signalled during job execution                            |
+| Predecessor  | `material.import.skipped_predecessor_failed`   | A `depends_on` texture job failed                                      |
 
 ---
 

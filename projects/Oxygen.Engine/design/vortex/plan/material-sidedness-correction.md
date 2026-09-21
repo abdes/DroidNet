@@ -80,7 +80,7 @@ general glTF compliance or complete those workflows.
   agree with accepted caster faces; the forward path does not display those
   shadows (existing forward-lighting limitation).
 - Launch: `Oxygen.Examples.VortexBasic.exe --validation-scene sidedness
-  --shading-path deferred|forward --fps 30 -v=-1`, optionally
+--shading-path deferred|forward --fps 30 -v=-1`, optionally
   `--validation-normal-map true`. Captures were made through native CUA and saved
   without editing. Pixel samples are in `artifacts/sidedness-native-pixel-evidence.json`.
 - The first lit chart was black because the fixture used an ordinary directional
@@ -89,7 +89,7 @@ general glTF compliance or complete those workflows.
   no renderer lighting workaround was introduced. Base-color diagnostic had
   independently confirmed geometry coverage before this fixture correction.
 - A bounded native run with `--validation-motion true --debug-layer true
-  --frames 120` completed with exit 0; log:
+--frames 120` completed with exit 0; log:
   `artifacts/sidedness-native-debug-layer.log`.
 - Depth/base/velocity and shadow state transitions are validated at actual Draw
   calls in the fake graphics recorder. Native screenshots establish final rendered

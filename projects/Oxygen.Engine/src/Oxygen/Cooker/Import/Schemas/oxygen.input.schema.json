@@ -27,9 +27,7 @@
       }
     }
   },
-  "required": [
-    "contexts"
-  ],
+  "required": ["contexts"],
   "$defs": {
     "action": {
       "type": "object",
@@ -42,21 +40,14 @@
         },
         "type": {
           "type": "string",
-          "enum": [
-            "bool",
-            "axis1d",
-            "axis2d"
-          ]
+          "enum": ["bool", "axis1d", "axis2d"]
         },
         "consumes_input": {
           "type": "boolean",
           "default": false
         }
       },
-      "required": [
-        "name",
-        "type"
-      ]
+      "required": ["name", "type"]
     },
     "trigger_aux": {
       "type": "object",
@@ -78,9 +69,7 @@
           "default": 0.0
         }
       },
-      "required": [
-        "action"
-      ]
+      "required": ["action"]
     },
     "trigger": {
       "type": "object",
@@ -103,11 +92,7 @@
         },
         "behavior": {
           "type": "string",
-          "enum": [
-            "explicit",
-            "implicit",
-            "blocker"
-          ],
+          "enum": ["explicit", "implicit", "blocker"],
           "default": "implicit"
         },
         "actuation_threshold": {
@@ -140,9 +125,7 @@
           "default": []
         }
       },
-      "required": [
-        "type"
-      ],
+      "required": ["type"],
       "allOf": [
         {
           "if": {
@@ -153,9 +136,7 @@
             }
           },
           "then": {
-            "required": [
-              "hold_time"
-            ]
+            "required": ["hold_time"]
           }
         },
         {
@@ -167,9 +148,7 @@
             }
           },
           "then": {
-            "required": [
-              "hold_time"
-            ]
+            "required": ["hold_time"]
           }
         },
         {
@@ -181,9 +160,7 @@
             }
           },
           "then": {
-            "required": [
-              "interval"
-            ]
+            "required": ["interval"]
           }
         },
         {
@@ -195,9 +172,7 @@
             }
           },
           "then": {
-            "required": [
-              "chord_action"
-            ]
+            "required": ["chord_action"]
           }
         },
         {
@@ -211,14 +186,10 @@
           "then": {
             "anyOf": [
               {
-                "required": [
-                  "combo_actions"
-                ]
+                "required": ["combo_actions"]
               },
               {
-                "required": [
-                  "aux"
-                ]
+                "required": ["aux"]
               }
             ]
           }
@@ -431,10 +402,7 @@
           "items": {
             "type": "number"
           },
-          "default": [
-            1.0,
-            1.0
-          ]
+          "default": [1.0, 1.0]
         },
         "bias": {
           "type": "array",
@@ -443,23 +411,14 @@
           "items": {
             "type": "number"
           },
-          "default": [
-            0.0,
-            0.0
-          ]
+          "default": [0.0, 0.0]
         }
       },
-      "required": [
-        "action",
-        "slot"
-      ],
+      "required": ["action", "slot"],
       "allOf": [
         {
           "not": {
-            "required": [
-              "trigger",
-              "triggers"
-            ]
+            "required": ["trigger", "triggers"]
           }
         }
       ]
@@ -495,10 +454,7 @@
           "default": []
         }
       },
-      "required": [
-        "name",
-        "mappings"
-      ],
+      "required": ["name", "mappings"],
       "allOf": [
         {
           "if": {

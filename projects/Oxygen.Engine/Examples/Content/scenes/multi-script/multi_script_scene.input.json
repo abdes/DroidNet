@@ -45,14 +45,8 @@
         {
           "action": "RotateSpeedUpAction",
           "slot": "PageUp",
-          "scale": [
-            1.0,
-            0.0
-          ],
-          "bias": [
-            0.0,
-            0.0
-          ],
+          "scale": [1.0, 0.0],
+          "bias": [0.0, 0.0],
           "triggers": [
             {
               "type": "pulse",
@@ -64,14 +58,8 @@
         {
           "action": "RotateSpeedDownAction",
           "slot": "PageDown",
-          "scale": [
-            1.0,
-            0.0
-          ],
-          "bias": [
-            0.0,
-            0.0
-          ],
+          "scale": [1.0, 0.0],
+          "bias": [0.0, 0.0],
           "triggers": [
             {
               "type": "pulse",
@@ -83,14 +71,8 @@
         {
           "action": "RotateStopAction",
           "slot": "End",
-          "scale": [
-            1.0,
-            0.0
-          ],
-          "bias": [
-            0.0,
-            0.0
-          ],
+          "scale": [1.0, 0.0],
+          "bias": [0.0, 0.0],
           "triggers": [
             {
               "type": "pressed",
@@ -101,14 +83,8 @@
         {
           "action": "RotateInvertAction",
           "slot": "Home",
-          "scale": [
-            1.0,
-            0.0
-          ],
-          "bias": [
-            0.0,
-            0.0
-          ],
+          "scale": [1.0, 0.0],
+          "bias": [0.0, 0.0],
           "triggers": [
             {
               "type": "pressed",
@@ -119,14 +95,8 @@
         {
           "action": "CycleShapeAction",
           "slot": "Insert",
-          "scale": [
-            1.0,
-            0.0
-          ],
-          "bias": [
-            0.0,
-            0.0
-          ],
+          "scale": [1.0, 0.0],
+          "bias": [0.0, 0.0],
           "triggers": [
             {
               "type": "pressed",
@@ -137,14 +107,8 @@
         {
           "action": "SpawnOrbAction",
           "slot": "Delete",
-          "scale": [
-            1.0,
-            0.0
-          ],
-          "bias": [
-            0.0,
-            0.0
-          ],
+          "scale": [1.0, 0.0],
+          "bias": [0.0, 0.0],
           "triggers": [
             {
               "type": "pressed",
@@ -155,14 +119,8 @@
         {
           "action": "PulseScaleAction",
           "slot": "Space",
-          "scale": [
-            1.0,
-            0.0
-          ],
-          "bias": [
-            0.0,
-            0.0
-          ],
+          "scale": [1.0, 0.0],
+          "bias": [0.0, 0.0],
           "triggers": [
             {
               "type": "pressed",

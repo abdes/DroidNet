@@ -12,11 +12,11 @@ feature of the schema and the generator's semantic checks.
 
 ## Examples included
 
-  check).
-  range.
-  table.
-  JSON and header.
- heaps_valid.yaml shows a simple two-heap setup using a unified capacity per heap; the runtime JSON also uses a single 'capacity' per heap (visibility is implied by the :cpu/:gpu suffix in the key).
+check).
+range.
+table.
+JSON and header.
+heaps_valid.yaml shows a simple two-heap setup using a unified capacity per heap; the runtime JSON also uses a single 'capacity' per heap (visibility is implied by the :cpu/:gpu suffix in the key).
 
 ## Validation (local)
 

@@ -4,7 +4,6 @@
 **Status:** Outdated / Historical
 **Superseded By:** `design/content-pipeline/input-cooking-architecture.md`
 
->
 > The active implementation contract is `design/content-pipeline/input-cooking-architecture.md`.
 > Scene-attached input context bindings were removed from runtime/tooling:
 >

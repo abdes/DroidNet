@@ -60,16 +60,16 @@ the existing `EnvironmentLightingService` ownership path.
 
 Known current state from source and planning inspection:
 
-| Surface | Current State | Planning Consequence |
-| --- | --- | --- |
-| `EnvironmentLightingService` | Active owner for atmosphere, sky, fog, local fog, environment products, and Stage 14/15 work. | Preserve the service; do not create a replacement path. |
-| Sky/atmosphere | Advanced implementation exists, including LUTs, sky view, aerial perspective, and stable below-horizon design invariants. | Treat as behavior to preserve while tightening publication truth. |
-| SkyLight/IBL | Implementation surface exists, but probe revision can advance without proving usable resource publication. | Must become explicit valid/invalid/unavailable state. |
-| Environment model slots | Some slots can remain invalid even when authored state exists. | Each slot needs a defined truth rule. |
-| Local fog Stage 14 | Real local-fog tiled culling exists inside the environment service. | Expose state through SceneRenderer for validation and diagnostics. |
-| Volumetric fog | Model/publication seams exist, but runtime parity is not present. | Report as unavailable/incomplete; do not imply runtime output. |
-| SceneRenderer state | Environment state is Stage-15-biased. | Add Stage 14 and publication truth visibility. |
-| Tests | Environment and SceneRenderer publication tests exist. | Extend focused tests rather than creating an unrelated harness first. |
+| Surface                      | Current State                                                                                                             | Planning Consequence                                                  |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `EnvironmentLightingService` | Active owner for atmosphere, sky, fog, local fog, environment products, and Stage 14/15 work.                             | Preserve the service; do not create a replacement path.               |
+| Sky/atmosphere               | Advanced implementation exists, including LUTs, sky view, aerial perspective, and stable below-horizon design invariants. | Treat as behavior to preserve while tightening publication truth.     |
+| SkyLight/IBL                 | Implementation surface exists, but probe revision can advance without proving usable resource publication.                | Must become explicit valid/invalid/unavailable state.                 |
+| Environment model slots      | Some slots can remain invalid even when authored state exists.                                                            | Each slot needs a defined truth rule.                                 |
+| Local fog Stage 14           | Real local-fog tiled culling exists inside the environment service.                                                       | Expose state through SceneRenderer for validation and diagnostics.    |
+| Volumetric fog               | Model/publication seams exist, but runtime parity is not present.                                                         | Report as unavailable/incomplete; do not imply runtime output.        |
+| SceneRenderer state          | Environment state is Stage-15-biased.                                                                                     | Add Stage 14 and publication truth visibility.                        |
+| Tests                        | Environment and SceneRenderer publication tests exist.                                                                    | Extend focused tests rather than creating an unrelated harness first. |
 
 ## 5. Existing Behavior To Preserve
 
@@ -89,14 +89,14 @@ Preserve these invariants:
 
 Use these UE5.7 families to ground the contract review:
 
-| Area | UE5.7 Reference Family |
-| --- | --- |
-| Sky atmosphere and LUT state | `SkyAtmosphereRendering`, `SkyAtmosphereCommon` |
-| Sky atmosphere authoring | `SkyAtmosphereComponent` |
-| Height fog authoring and coupling | `ExponentialHeightFogComponent`, `FogRendering`, `HeightFogCommon` |
-| Local fog volumes | `LocalFogVolumeRendering` |
-| Volumetric fog contract surface | `VolumetricFog` |
-| SkyLight / IBL | SkyLight capture, filtered cubemap, irradiance, prefilter, and BRDF LUT paths relevant to the chosen Oxygen implementation |
+| Area                              | UE5.7 Reference Family                                                                                                     |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Sky atmosphere and LUT state      | `SkyAtmosphereRendering`, `SkyAtmosphereCommon`                                                                            |
+| Sky atmosphere authoring          | `SkyAtmosphereComponent`                                                                                                   |
+| Height fog authoring and coupling | `ExponentialHeightFogComponent`, `FogRendering`, `HeightFogCommon`                                                         |
+| Local fog volumes                 | `LocalFogVolumeRendering`                                                                                                  |
+| Volumetric fog contract surface   | `VolumetricFog`                                                                                                            |
+| SkyLight / IBL                    | SkyLight capture, filtered cubemap, irradiance, prefilter, and BRDF LUT paths relevant to the chosen Oxygen implementation |
 
 For this work package, UE5.7 grounding is used to define truthful contracts and
 state transitions. Full fog algorithm parity closes in `VTX-M04D.2` through
@@ -106,15 +106,15 @@ state transitions. Full fog algorithm parity closes in `VTX-M04D.2` through
 
 The implementation plan must audit these publications.
 
-| Publication | Valid State | Invalid / Disabled State | Stale State Rule | Required Inspection Surface |
-| --- | --- | --- | --- | --- |
-| Environment frame bindings | All slots and flags match products produced this frame or stable persistent products. | Invalid shader-visible indices and disabled flags. | Old valid slots must not survive when source becomes unavailable. | Service and SceneRenderer publication state. |
-| Environment static data | SkyLight, atmosphere, fog, and persistent resource metadata match the stable state. | Explicit zero/invalid fields with disabled flags. | Revision changes without resource changes must not imply valid resources. | Tests over CPU payload and GPU publication where possible. |
-| Environment view data | Per-view atmosphere/fog parameters match the selected view and feature flags. | Per-view disabled state is explicit. | View resize/cut/feature toggles must reset dependent state. | Service test plus renderer publication test. |
-| Environment view products | LUTs, aerial perspective, distant sky light, local/volumetric products are valid only when produced. | Invalid SRV/UAV indices and zero counters. | Previous frame products must not masquerade as current products unless explicitly persistent and valid. | Product state counters and capture/resource proof. |
-| SkyLight / IBL resources | Environment map, irradiance, prefiltered map, BRDF LUT, and generation metadata are usable or intentionally unavailable. | Explicit unavailable reason and invalid slots. | Probe revision alone is not a valid publication. | Focused tests for enabled, disabled, unavailable, and source-changed cases. |
-| Stage 14 local fog | Requested/executed/skipped state, HZB availability, tile counts, instance counts, draw/dispatch data are visible. | Not requested or skipped states are explicit. | Stage 14 counters reset every frame/view. | SceneRenderer environment state and service state. |
-| Volumetric fog placeholder | Authored model may exist, but runtime output is invalid until VTX-M04D.4. | Explicit incomplete/unavailable state. | Model revision must not imply integrated scattering exists. | Tests that enabled model does not fake a product before implementation. |
+| Publication                | Valid State                                                                                                              | Invalid / Disabled State                           | Stale State Rule                                                                                        | Required Inspection Surface                                                 |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| Environment frame bindings | All slots and flags match products produced this frame or stable persistent products.                                    | Invalid shader-visible indices and disabled flags. | Old valid slots must not survive when source becomes unavailable.                                       | Service and SceneRenderer publication state.                                |
+| Environment static data    | SkyLight, atmosphere, fog, and persistent resource metadata match the stable state.                                      | Explicit zero/invalid fields with disabled flags.  | Revision changes without resource changes must not imply valid resources.                               | Tests over CPU payload and GPU publication where possible.                  |
+| Environment view data      | Per-view atmosphere/fog parameters match the selected view and feature flags.                                            | Per-view disabled state is explicit.               | View resize/cut/feature toggles must reset dependent state.                                             | Service test plus renderer publication test.                                |
+| Environment view products  | LUTs, aerial perspective, distant sky light, local/volumetric products are valid only when produced.                     | Invalid SRV/UAV indices and zero counters.         | Previous frame products must not masquerade as current products unless explicitly persistent and valid. | Product state counters and capture/resource proof.                          |
+| SkyLight / IBL resources   | Environment map, irradiance, prefiltered map, BRDF LUT, and generation metadata are usable or intentionally unavailable. | Explicit unavailable reason and invalid slots.     | Probe revision alone is not a valid publication.                                                        | Focused tests for enabled, disabled, unavailable, and source-changed cases. |
+| Stage 14 local fog         | Requested/executed/skipped state, HZB availability, tile counts, instance counts, draw/dispatch data are visible.        | Not requested or skipped states are explicit.      | Stage 14 counters reset every frame/view.                                                               | SceneRenderer environment state and service state.                          |
+| Volumetric fog placeholder | Authored model may exist, but runtime output is invalid until VTX-M04D.4.                                                | Explicit incomplete/unavailable state.             | Model revision must not imply integrated scattering exists.                                             | Tests that enabled model does not fake a product before implementation.     |
 
 ## 8. Implementation Slices
 
@@ -135,13 +135,13 @@ Primary code areas:
 
 Likely touch points:
 
-| Area | Paths |
-| --- | --- |
-| service orchestration | `src/Oxygen/Vortex/Environment/EnvironmentLightingService.*` |
-| environment product types | `src/Oxygen/Vortex/Environment/Types/*` |
-| renderer-facing bindings | `src/Oxygen/Vortex/Types/EnvironmentFrameBindings.h`, `src/Oxygen/Vortex/Types/EnvironmentStaticData.h` |
-| HLSL mirrors | `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Contracts/Environment/*` |
-| focused tests | `src/Oxygen/Vortex/Test/EnvironmentLightingService_test.cpp` |
+| Area                      | Paths                                                                                                   |
+| ------------------------- | ------------------------------------------------------------------------------------------------------- |
+| service orchestration     | `src/Oxygen/Vortex/Environment/EnvironmentLightingService.*`                                            |
+| environment product types | `src/Oxygen/Vortex/Environment/Types/*`                                                                 |
+| renderer-facing bindings  | `src/Oxygen/Vortex/Types/EnvironmentFrameBindings.h`, `src/Oxygen/Vortex/Types/EnvironmentStaticData.h` |
+| HLSL mirrors              | `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Contracts/Environment/*`                                 |
+| focused tests             | `src/Oxygen/Vortex/Test/EnvironmentLightingService_test.cpp`                                            |
 
 Tests:
 
@@ -182,14 +182,14 @@ Primary code areas:
 
 Likely touch points:
 
-| Area | Paths |
-| --- | --- |
-| state translation | `src/Oxygen/Vortex/Environment/Internal/AtmosphereState.*` |
-| IBL processing | `src/Oxygen/Vortex/Environment/Internal/IblProcessor.*`, `src/Oxygen/Vortex/Environment/Passes/IblProbePass.*` |
-| SkyLight model/data | `src/Oxygen/Vortex/Environment/Types/SkyLightEnvironmentModel.h`, `src/Oxygen/Vortex/Types/EnvironmentStaticData.h` |
-| frame bindings | `src/Oxygen/Vortex/Environment/EnvironmentLightingService.*`, `src/Oxygen/Vortex/Types/EnvironmentFrameBindings.h` |
+| Area                     | Paths                                                                                                                                           |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| state translation        | `src/Oxygen/Vortex/Environment/Internal/AtmosphereState.*`                                                                                      |
+| IBL processing           | `src/Oxygen/Vortex/Environment/Internal/IblProcessor.*`, `src/Oxygen/Vortex/Environment/Passes/IblProbePass.*`                                  |
+| SkyLight model/data      | `src/Oxygen/Vortex/Environment/Types/SkyLightEnvironmentModel.h`, `src/Oxygen/Vortex/Types/EnvironmentStaticData.h`                             |
+| frame bindings           | `src/Oxygen/Vortex/Environment/EnvironmentLightingService.*`, `src/Oxygen/Vortex/Types/EnvironmentFrameBindings.h`                              |
 | HLSL consumers/contracts | `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Contracts/Environment/*`, `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Services/Environment/*` |
-| focused tests | `src/Oxygen/Vortex/Test/EnvironmentLightingService_test.cpp` |
+| focused tests            | `src/Oxygen/Vortex/Test/EnvironmentLightingService_test.cpp`                                                                                    |
 
 Tests:
 
@@ -233,13 +233,13 @@ Primary code areas:
 
 Likely touch points:
 
-| Area | Paths |
-| --- | --- |
-| renderer state contract | `src/Oxygen/Vortex/SceneRenderer/SceneRenderer.h` |
-| renderer stage dispatch/publication | `src/Oxygen/Vortex/SceneRenderer/SceneRenderer.cpp` |
-| environment service state | `src/Oxygen/Vortex/Environment/EnvironmentLightingService.*` |
-| local fog state sources | `src/Oxygen/Vortex/Environment/Internal/LocalFogVolumeState.*`, `src/Oxygen/Vortex/Environment/Passes/LocalFogVolumeTiledCullingPass.*`, `src/Oxygen/Vortex/Environment/Passes/LocalFogVolumeComposePass.*` |
-| focused tests | `src/Oxygen/Vortex/Test/SceneRendererPublication_test.cpp`, `src/Oxygen/Vortex/Test/EnvironmentLightingService_test.cpp` |
+| Area                                | Paths                                                                                                                                                                                                       |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| renderer state contract             | `src/Oxygen/Vortex/SceneRenderer/SceneRenderer.h`                                                                                                                                                           |
+| renderer stage dispatch/publication | `src/Oxygen/Vortex/SceneRenderer/SceneRenderer.cpp`                                                                                                                                                         |
+| environment service state           | `src/Oxygen/Vortex/Environment/EnvironmentLightingService.*`                                                                                                                                                |
+| local fog state sources             | `src/Oxygen/Vortex/Environment/Internal/LocalFogVolumeState.*`, `src/Oxygen/Vortex/Environment/Passes/LocalFogVolumeTiledCullingPass.*`, `src/Oxygen/Vortex/Environment/Passes/LocalFogVolumeComposePass.*` |
+| focused tests                       | `src/Oxygen/Vortex/Test/SceneRendererPublication_test.cpp`, `src/Oxygen/Vortex/Test/EnvironmentLightingService_test.cpp`                                                                                    |
 
 Tests:
 
@@ -281,13 +281,13 @@ Tests:
 
 Likely touch points:
 
-| Area | Paths |
-| --- | --- |
-| service publication logic | `src/Oxygen/Vortex/Environment/EnvironmentLightingService.*` |
-| view products | `src/Oxygen/Vortex/Environment/Types/EnvironmentViewProducts.h` |
-| volumetric model seam | `src/Oxygen/Vortex/Environment/Types/VolumetricFogModel.h` |
-| fog/local fog tests | `src/Oxygen/Vortex/Test/EnvironmentLightingService_test.cpp` |
-| renderer publication tests | `src/Oxygen/Vortex/Test/SceneRendererPublication_test.cpp` |
+| Area                       | Paths                                                           |
+| -------------------------- | --------------------------------------------------------------- |
+| service publication logic  | `src/Oxygen/Vortex/Environment/EnvironmentLightingService.*`    |
+| view products              | `src/Oxygen/Vortex/Environment/Types/EnvironmentViewProducts.h` |
+| volumetric model seam      | `src/Oxygen/Vortex/Environment/Types/VolumetricFogModel.h`      |
+| fog/local fog tests        | `src/Oxygen/Vortex/Test/EnvironmentLightingService_test.cpp`    |
+| renderer publication tests | `src/Oxygen/Vortex/Test/SceneRendererPublication_test.cpp`      |
 
 Per-slice validation:
 
@@ -320,12 +320,12 @@ Required updates:
 
 Likely touch points:
 
-| Area | Paths |
-| --- | --- |
-| status ledger | `design/vortex/IMPLEMENTATION_STATUS.md` |
-| milestone plan | `design/vortex/PLAN.md` |
-| detailed plan | `design/vortex/plan/VTX-M04D.1-environment-publication-truth.md` |
-| environment LLD | `design/vortex/lld/environment-service.md` |
+| Area            | Paths                                                            |
+| --------------- | ---------------------------------------------------------------- |
+| status ledger   | `design/vortex/IMPLEMENTATION_STATUS.md`                         |
+| milestone plan  | `design/vortex/PLAN.md`                                          |
+| detailed plan   | `design/vortex/plan/VTX-M04D.1-environment-publication-truth.md` |
+| environment LLD | `design/vortex/lld/environment-service.md`                       |
 
 Per-slice validation:
 
@@ -344,11 +344,11 @@ Status update:
 
 Focused tests to extend first:
 
-| Test Area | Expected Coverage |
-| --- | --- |
-| Environment service tests | binding/static/view/product truth, SkyLight/IBL states, Stage 14 state reset, volumetric unavailable state |
+| Test Area                       | Expected Coverage                                                                                            |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Environment service tests       | binding/static/view/product truth, SkyLight/IBL states, Stage 14 state reset, volumetric unavailable state   |
 | SceneRenderer publication tests | Stage 14/15 state visible at renderer boundary, no private service dependency, per-view publication behavior |
-| ABI tests/static asserts | CPU/HLSL lockstep if any environment contract layout changes |
+| ABI tests/static asserts        | CPU/HLSL lockstep if any environment contract layout changes                                                 |
 
 Recommended command:
 

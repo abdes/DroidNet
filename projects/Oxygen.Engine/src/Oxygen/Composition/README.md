@@ -17,23 +17,23 @@
 
 ## Implementation Status
 
-| Done | Description |
-|:----:|-------------|
-| ✅ | Implement template metaprogramming resource type system using TypeList and IndexOf |
-| ✅ | Update Resource.h with compile-time type ID generation system |
-| ✅ | Design centralized ResourceTypeList for consistent type ID allocation |
-| ✅ | Create comprehensive test suite for Resource template metaprogramming system |
-| ✅ | Implement thread-safe ComponentPool template with compile-time type resolution and contiguous storage |
-| ✅ | Implement ComponentPoolRegistry class that manages ComponentPool instances using GetTrulySingleInstance |
-| ✅ | Add ComponentPoolRegistry initialization function to cs_init.cpp for global singleton system |
-| ✅ | Refactor `Composition` for hybrid storage: add dual containers (unique and pooled) |
-| ✅ | Implement compile-time storage selection: Update `AddComponent`, `GetComponent`, `RemoveComponent`, and related APIs to use `if constexpr` and type traits to select the correct storage. |
-| ✅ | Update component declaration macros: Ensure `OXYGEN_COMPONENT` and (if needed) `OXYGEN_RESOURCE_COMPONENT` macros correctly detect and register pooled vs. non-pooled components. |
-| ✅ | Integrate pooled component access: Route pooled component operations through `ComponentPoolRegistry` and ensure handle validation and error handling are robust. |
-| ✅ | Implement and test dependency-aware removal: Prevent removal of components that are required by others, and ensure dependency resolution works for both storage types. |
-| ✅ | Write and run unit tests for hybrid storage: Cover all scenarios—adding, removing, accessing, and dependency management for both pooled and non-pooled components. |
-| ✅ | Benchmark pooled vs. non-pooled performance: Measure and compare access times, memory usage, and cache locality for both storage types. |
-| ✅ | Document usage guidelines and performance recommendations: Provide clear documentation for engine users on when and how to use pooled vs. non-pooled components, and how to declare new components. |
+| Done | Description                                                                                                                                                                                         |
+| :--: | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+|  ✅  | Implement template metaprogramming resource type system using TypeList and IndexOf                                                                                                                  |
+|  ✅  | Update Resource.h with compile-time type ID generation system                                                                                                                                       |
+|  ✅  | Design centralized ResourceTypeList for consistent type ID allocation                                                                                                                               |
+|  ✅  | Create comprehensive test suite for Resource template metaprogramming system                                                                                                                        |
+|  ✅  | Implement thread-safe ComponentPool template with compile-time type resolution and contiguous storage                                                                                               |
+|  ✅  | Implement ComponentPoolRegistry class that manages ComponentPool instances using GetTrulySingleInstance                                                                                             |
+|  ✅  | Add ComponentPoolRegistry initialization function to cs_init.cpp for global singleton system                                                                                                        |
+|  ✅  | Refactor `Composition` for hybrid storage: add dual containers (unique and pooled)                                                                                                                  |
+|  ✅  | Implement compile-time storage selection: Update `AddComponent`, `GetComponent`, `RemoveComponent`, and related APIs to use `if constexpr` and type traits to select the correct storage.           |
+|  ✅  | Update component declaration macros: Ensure `OXYGEN_COMPONENT` and (if needed) `OXYGEN_RESOURCE_COMPONENT` macros correctly detect and register pooled vs. non-pooled components.                   |
+|  ✅  | Integrate pooled component access: Route pooled component operations through `ComponentPoolRegistry` and ensure handle validation and error handling are robust.                                    |
+|  ✅  | Implement and test dependency-aware removal: Prevent removal of components that are required by others, and ensure dependency resolution works for both storage types.                              |
+|  ✅  | Write and run unit tests for hybrid storage: Cover all scenarios—adding, removing, accessing, and dependency management for both pooled and non-pooled components.                                  |
+|  ✅  | Benchmark pooled vs. non-pooled performance: Measure and compare access times, memory usage, and cache locality for both storage types.                                                             |
+|  ✅  | Document usage guidelines and performance recommendations: Provide clear documentation for engine users on when and how to use pooled vs. non-pooled components, and how to declare new components. |
 
 ## Overview
 
@@ -319,11 +319,11 @@ overhead and a unified API.
 - **Dual containers** in `ComponentManager`:
   - `std::unordered_map<TypeId, ResourceHandle> pooled_components_` for pooled.
   - `ComponentsCollection components_` and `std::unordered_map<TypeId, size_t>
-    component_index_` for unique.
+component_index_` for unique.
 - All access is protected by a `mutable std::shared_mutex mutex_` in the
   `Composition` class.
 - All major APIs (`AddComponent`, `GetComponent`, `RemoveComponent`) use `if
-  constexpr (PooledComponent<T>)` to select the correct storage path. Locking is
+constexpr (PooledComponent<T>)` to select the correct storage path. Locking is
   performed in the `Composition` class before any routing or dispatch to
   `ComponentManager`.
 
@@ -432,7 +432,7 @@ and their dependencies.
   - The `Clone()` method returns a `std::unique_ptr` to a new, deep-copied
     composition.
 
-**Thread Safety:** Copy, move, and clone operations are *not* thread-safe. You
+**Thread Safety:** Copy, move, and clone operations are _not_ thread-safe. You
 must ensure exclusive access to the composition during these operations from
 outside.
 
@@ -500,14 +500,14 @@ This avoids unnecessary reallocations if you know the expected number of compone
 
 ## Performance Benchmarks
 
-| Benchmark                          | Time (ns) | Relative to PoolDirect | Relative to Fragmented | Notes                        |
-|-------------------------------------|-----------|-----------------------|------------------------|------------------------------|
-| RandomAccessLocalComponents         | 77,853    | 22.1x slower          | 18.4x slower           | Fastest random access        |
-| RandomAccessPooledComponents        | 227,061   | 64.5x slower          | 53.8x slower           | Slowest random access        |
-| RandomAccessHybridComponents        | 133,704   | 38.0x slower          | 31.7x slower           | Hybrid: in between           |
-| SequentialAccessGetComponents       | 89,790    | 25.5x slower          | 21.3x slower           | Sequential, cache-friendly   |
-| PoolDirectIteration                 | 3,519     | 1x (baseline)         | 0.83x (faster)         | Dense, contiguous pool       |
-| FragmentedPoolDirectIteration       | 4,224     | 1.2x slower           | 1x (baseline)          | Fragmented pool              |
+| Benchmark                     | Time (ns) | Relative to PoolDirect | Relative to Fragmented | Notes                      |
+| ----------------------------- | --------- | ---------------------- | ---------------------- | -------------------------- |
+| RandomAccessLocalComponents   | 77,853    | 22.1x slower           | 18.4x slower           | Fastest random access      |
+| RandomAccessPooledComponents  | 227,061   | 64.5x slower           | 53.8x slower           | Slowest random access      |
+| RandomAccessHybridComponents  | 133,704   | 38.0x slower           | 31.7x slower           | Hybrid: in between         |
+| SequentialAccessGetComponents | 89,790    | 25.5x slower           | 21.3x slower           | Sequential, cache-friendly |
+| PoolDirectIteration           | 3,519     | 1x (baseline)          | 0.83x (faster)         | Dense, contiguous pool     |
+| FragmentedPoolDirectIteration | 4,224     | 1.2x slower            | 1x (baseline)          | Fragmented pool            |
 
 ### Key Takeaways
 

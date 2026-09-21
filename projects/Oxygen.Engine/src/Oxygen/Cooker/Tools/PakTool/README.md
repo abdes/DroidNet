@@ -49,21 +49,21 @@ Commands:
 
 Common options:
 
-| Option | Meaning |
-| --- | --- |
-| `--loose-source <dir>` | Repeatable loose-cooked source root |
-| `--pak-source <path>` | Repeatable existing pak source |
-| `--out <pak-path>` | Final pak output path |
-| `--catalog-out <path>` | Final pak catalog sidecar path |
-| `--content-version <u16>` | Pak content version |
-| `--source-key <uuidv7>` | Canonical lowercase UUIDv7 source identity |
-| `--diagnostics-file <path>` | Optional structured build report |
-| `--non-deterministic` | Disable deterministic build behavior |
-| `--embed-browse-index` | Request browse index embedding |
-| `--no-crc32` | Disable pak CRC output |
-| `--fail-on-warnings` | Escalate warnings to build failure |
-| `--quiet` | Suppress non-error console output |
-| `--no-color` | Disable ANSI color in CLI output |
+| Option                      | Meaning                                    |
+| --------------------------- | ------------------------------------------ |
+| `--loose-source <dir>`      | Repeatable loose-cooked source root        |
+| `--pak-source <path>`       | Repeatable existing pak source             |
+| `--out <pak-path>`          | Final pak output path                      |
+| `--catalog-out <path>`      | Final pak catalog sidecar path             |
+| `--content-version <u16>`   | Pak content version                        |
+| `--source-key <uuidv7>`     | Canonical lowercase UUIDv7 source identity |
+| `--diagnostics-file <path>` | Optional structured build report           |
+| `--non-deterministic`       | Disable deterministic build behavior       |
+| `--embed-browse-index`      | Request browse index embedding             |
+| `--no-crc32`                | Disable pak CRC output                     |
+| `--fail-on-warnings`        | Escalate warnings to build failure         |
+| `--quiet`                   | Suppress non-error console output          |
+| `--no-color`                | Disable ANSI color in CLI output           |
 
 `build`:
 
@@ -167,13 +167,13 @@ out/build-vs/bin/Debug/Oxygen.Cooker.PakTool.exe build `
 
 ## Exit Codes
 
-| Code | Meaning |
-| --- | --- |
-| `0` | Build completed with no errors |
-| `1` | CLI usage or argument error |
-| `2` | External input or filesystem preparation failure |
-| `3` | Build completed but emitted error diagnostics |
-| `4` | Unhandled runtime failure or publish failure |
+| Code | Meaning                                          |
+| ---- | ------------------------------------------------ |
+| `0`  | Build completed with no errors                   |
+| `1`  | CLI usage or argument error                      |
+| `2`  | External input or filesystem preparation failure |
+| `3`  | Build completed but emitted error diagnostics    |
+| `4`  | Unhandled runtime failure or publish failure     |
 
 ## Validation Notes
 

@@ -35,11 +35,11 @@ publish opaque `SceneVelocity`.
 
 ### 1.2 Stage Position
 
-| Position | Stage | Notes |
-| -------- | ----- | ----- |
-| Predecessor | Stage 2 (InitViews) | Current-view prepared-scene payload published |
-| **This** | **Stage 3 — DepthPrepass** | Depth-only |
-| Successor | Stage 5 (Occlusion/HZB — reserved) or Stage 9 (BasePass) | |
+| Position    | Stage                                                    | Notes                                         |
+| ----------- | -------------------------------------------------------- | --------------------------------------------- |
+| Predecessor | Stage 2 (InitViews)                                      | Current-view prepared-scene payload published |
+| **This**    | **Stage 3 — DepthPrepass**                               | Depth-only                                    |
+| Successor   | Stage 5 (Occlusion/HZB — reserved) or Stage 9 (BasePass) |                                               |
 
 ### 1.3 Architectural Authority
 
@@ -106,19 +106,19 @@ desktop deferred opaque-velocity policy.
 
 ### 3.1 Inputs
 
-| Source | Data | Purpose |
-| ------ | ---- | ------- |
-| InitViewsModule (stage 2) | Current-view `PreparedSceneFrame` payload | Determines what to draw without scene re-traversal |
-| SceneTextures | SceneDepth DSV | Depth target |
-| Renderer | depth-only PSO cache | Pipeline state |
-| Geometry / deformation inputs | Current-frame draw inputs only | Geometry/depth evaluation |
+| Source                        | Data                                      | Purpose                                            |
+| ----------------------------- | ----------------------------------------- | -------------------------------------------------- |
+| InitViewsModule (stage 2)     | Current-view `PreparedSceneFrame` payload | Determines what to draw without scene re-traversal |
+| SceneTextures                 | SceneDepth DSV                            | Depth target                                       |
+| Renderer                      | depth-only PSO cache                      | Pipeline state                                     |
+| Geometry / deformation inputs | Current-frame draw inputs only            | Geometry/depth evaluation                          |
 
 ### 3.2 Outputs
 
-| Product | Format | Written To |
-| ------- | ------ | ---------- |
-| SceneDepth | D32_FLOAT_S8X24_UINT | SceneTextures::GetSceneDepth() |
-| PartialDepth | copy of SceneDepth | SceneTextures::GetPartialDepth() |
+| Product      | Format               | Written To                       |
+| ------------ | -------------------- | -------------------------------- |
+| SceneDepth   | D32_FLOAT_S8X24_UINT | SceneTextures::GetSceneDepth()   |
+| PartialDepth | copy of SceneDepth   | SceneTextures::GetPartialDepth() |
 
 ### 3.3 Setup Milestones
 

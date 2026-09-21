@@ -162,29 +162,29 @@ binary serialization and file I/O (`Stream.h`, `Reader.h`, `Writer.h`).
 
 ## Module Map (Quick Reference)
 
-| Module | Responsibility | Key Entry Points |
-| --- | --- | --- |
-| `Base` | Core utilities, logging, resource handles, type lists | `src/Oxygen/Base/Logging.h`, `Resource.h` |
-| `Core` | Shared engine types, frame context | `src/Oxygen/Core/FrameContext.h` |
-| `Composition` | Object/component system with pooled storage | `src/Oxygen/Composition/README.md` |
-| `Engine` | Frame orchestration and module lifecycle | `src/Oxygen/Engine/AsyncEngine.h` |
-| `Vortex` | View planning, render stages, services, composition | `design/vortex/PLAN.md`, `src/Oxygen/Vortex/` |
-| `Graphics` | Device abstraction, resources, command recording | `src/Oxygen/Graphics/README.md` |
-| `Loader` | Graphics backend loader | `src/Oxygen/Loader/README.md` |
-| `Scene` | Scene graph, nodes, queries, environment | `src/Oxygen/Scene/Scene.h` |
-| `Content` | PAK asset pipeline and loaders | `src/Oxygen/Content/README.md` |
-| `Data` | Immutable runtime asset representations | `src/Oxygen/Data/README.md` |
-| `Input` | Actions/triggers/mappings + snapshots | `src/Oxygen/Input/README.md` |
-| `Platform` | Windowing, input capture, OS services | `src/Oxygen/Platform/Platform.h` |
-| `Console` | CVars and command execution | `src/Oxygen/Console/README.md` |
-| `Config` | Engine/graphics/renderer config structs | `src/Oxygen/Config/` |
-| `OxCo` | Structured concurrency | `src/Oxygen/OxCo/README.md` |
-| `Nexus` | Bindless index reuse utilities | `src/Oxygen/Nexus/` |
-| `Serio` | Serialization streams | `src/Oxygen/Serio/` |
-| `ImGui` | ImGui integration and passes | `src/Oxygen/ImGui/` |
-| `EditorInterface` | Editor-facing API and engine runner | `src/Oxygen/EditorInterface/Api.h` |
-| `Clap` | CLI utilities | `src/Oxygen/Clap/README.md` |
-| `TextWrap` | Text layout utilities | `src/Oxygen/TextWrap/README.md` |
+| Module            | Responsibility                                        | Key Entry Points                              |
+| ----------------- | ----------------------------------------------------- | --------------------------------------------- |
+| `Base`            | Core utilities, logging, resource handles, type lists | `src/Oxygen/Base/Logging.h`, `Resource.h`     |
+| `Core`            | Shared engine types, frame context                    | `src/Oxygen/Core/FrameContext.h`              |
+| `Composition`     | Object/component system with pooled storage           | `src/Oxygen/Composition/README.md`            |
+| `Engine`          | Frame orchestration and module lifecycle              | `src/Oxygen/Engine/AsyncEngine.h`             |
+| `Vortex`          | View planning, render stages, services, composition   | `design/vortex/PLAN.md`, `src/Oxygen/Vortex/` |
+| `Graphics`        | Device abstraction, resources, command recording      | `src/Oxygen/Graphics/README.md`               |
+| `Loader`          | Graphics backend loader                               | `src/Oxygen/Loader/README.md`                 |
+| `Scene`           | Scene graph, nodes, queries, environment              | `src/Oxygen/Scene/Scene.h`                    |
+| `Content`         | PAK asset pipeline and loaders                        | `src/Oxygen/Content/README.md`                |
+| `Data`            | Immutable runtime asset representations               | `src/Oxygen/Data/README.md`                   |
+| `Input`           | Actions/triggers/mappings + snapshots                 | `src/Oxygen/Input/README.md`                  |
+| `Platform`        | Windowing, input capture, OS services                 | `src/Oxygen/Platform/Platform.h`              |
+| `Console`         | CVars and command execution                           | `src/Oxygen/Console/README.md`                |
+| `Config`          | Engine/graphics/renderer config structs               | `src/Oxygen/Config/`                          |
+| `OxCo`            | Structured concurrency                                | `src/Oxygen/OxCo/README.md`                   |
+| `Nexus`           | Bindless index reuse utilities                        | `src/Oxygen/Nexus/`                           |
+| `Serio`           | Serialization streams                                 | `src/Oxygen/Serio/`                           |
+| `ImGui`           | ImGui integration and passes                          | `src/Oxygen/ImGui/`                           |
+| `EditorInterface` | Editor-facing API and engine runner                   | `src/Oxygen/EditorInterface/Api.h`            |
+| `Clap`            | CLI utilities                                         | `src/Oxygen/Clap/README.md`                   |
+| `TextWrap`        | Text layout utilities                                 | `src/Oxygen/TextWrap/README.md`               |
 
 ## Integration Contracts (What to Touch for New Features)
 

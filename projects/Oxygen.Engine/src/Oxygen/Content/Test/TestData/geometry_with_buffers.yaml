@@ -6,15 +6,15 @@ content_version: 1
 # Define default empty buffer (index 0) - required in all PAK files
 buffers:
   - name: "default_empty_buffer"
-    data_hex: ""  # Empty buffer
+    data_hex: "" # Empty buffer
     size: 0
     usage: 0
     bind_flags: 0
 
   - name: "vertex_buffer"
-    usage: 1  # Vertex buffer
-    bind_flags: 1  # D3D11_BIND_VERTEX_BUFFER
-    stride: 72  # Full Vertex structure
+    usage: 1 # Vertex buffer
+    bind_flags: 1 # D3D11_BIND_VERTEX_BUFFER
+    stride: 72 # Full Vertex structure
     # 6 vertices. Each vertex: pos(x,0,0) x=1..6, normal(0,1,0), uv(0,0), tangent(0,0,1), bitangent(1,0,0), color(1,1,1,1)
     # Float hex LE: 1.0=0000803f 2.0=00000040 3.0=00004040 4.0=00008040 5.0=0000a040 6.0=0000c040
     # Corrected 6-vertex blob (6 * 72 = 432 bytes = 864 hex chars). Layout per vertex:
@@ -35,21 +35,21 @@ buffers:
     data_hex: "00000000"
 
   - name: "triangle_indices"
-    usage: 2  # Index buffer
-    bind_flags: 2  # D3D11_BIND_INDEX_BUFFER
-    stride: 4   # 4 bytes per index (uint32)
-    data_hex: "000000000100000002000000"  # Triangle indices 0,1,2
+    usage: 2 # Index buffer
+    bind_flags: 2 # D3D11_BIND_INDEX_BUFFER
+    stride: 4 # 4 bytes per index (uint32)
+    data_hex: "000000000100000002000000" # Triangle indices 0,1,2
 
 # Default texture at index 0 (required in all PAK files)
 textures:
   - name: "default_empty_texture"
     width: 1
     height: 1
-    format: 30  # kRGBA8UNorm
-    texture_type: 3     # kTexture2D
+    format: 30 # kRGBA8UNorm
+    texture_type: 3 # kTexture2D
     compression_type: 0
     mip_levels: 1
-    data_hex: "4f545831020001002c0000001c000000280000000000000000000000000000000400000004000000ffffffff"  # v4 OTX1 payload
+    data_hex: "4f545831020001002c0000001c000000280000000000000000000000000000000400000004000000ffffffff" # v4 OTX1 payload
 
 # Assets - unified structure
 assets:
@@ -58,8 +58,8 @@ assets:
     asset_key: "99999999-8888-7777-6666-555555555555"
     material_domain: 0
     flags: 0
-    shader_stages: 0x44  # kVertex (bit 2) + kPixel (bit 6) = 0x04 + 0x40 = 0x44
-    base_color: [0.0, 0.0, 1.0, 1.0]  # Blue material
+    shader_stages: 0x44 # kVertex (bit 2) + kPixel (bit 6) = 0x04 + 0x40 = 0x44
+    base_color: [0.0, 0.0, 1.0, 1.0] # Blue material
     metalness: 0.0
     roughness: 1.0
     normal_scale: 1.0
@@ -89,7 +89,7 @@ assets:
     bounding_box_max: [2.0, 2.0, 2.0]
     lods:
       - name: "high_detail_lod"
-        mesh_type: 1  # kStandard - static mesh with vertex/index buffers
+        mesh_type: 1 # kStandard - static mesh with vertex/index buffers
         vertex_buffer: "vertex_buffer"
         index_buffer: "triangle_indices"
         bounding_box_min: [-2.0, -2.0, -2.0]
@@ -103,4 +103,4 @@ assets:
               - first_index: 0
                 index_count: 3
                 first_vertex: 0
-                vertex_count: 6  # Updated to reflect 6 vertices in buffer
+                vertex_count: 6 # Updated to reflect 6 vertices in buffer

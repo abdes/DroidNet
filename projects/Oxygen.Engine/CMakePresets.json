@@ -1,6 +1,4 @@
 {
   "version": 6,
-  "include": [
-    "./tools/presets/WindowsPresets.json"
-  ]
+  "include": ["./tools/presets/WindowsPresets.json"]
 }

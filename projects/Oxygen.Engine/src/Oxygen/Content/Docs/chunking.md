@@ -27,33 +27,33 @@ capability.
 
 #### First-Class Assets
 
-| Type | Purpose |
-| ---- | ------- |
-| **GeometryAsset** | Multi-LOD mesh hierarchies |
-| **MaterialAsset** | Shader + texture combinations |
-| **SceneAsset** | Scene composition |
-| **PrefabAsset** | Reusable object templates (future) |
-| **AnimationAsset** | Animation sequences (future) |
+| Type                    | Purpose                                |
+| ----------------------- | -------------------------------------- |
+| **GeometryAsset**       | Multi-LOD mesh hierarchies             |
+| **MaterialAsset**       | Shader + texture combinations          |
+| **SceneAsset**          | Scene composition                      |
+| **PrefabAsset**         | Reusable object templates (future)     |
+| **AnimationAsset**      | Animation sequences (future)           |
 | **ParticleSystemAsset** | Particle behavior definitions (future) |
 
 #### Resources
 
-| Type | Purpose |
-| ---- | ------- |
-| **TextureResource** | GPU texture data |
-| **BufferResource** | Vertex/index/constant buffers |
-| **ShaderResource** | Compiled shader bytecode (stored separately, not in PAK) |
-| **AudioResource** | Compressed audio data (future) |
-| **AnimationDataResource** | Bone weights, keyframes (future) |
-| **CollisionMeshResource** | Physics collision data (future) |
+| Type                      | Purpose                                                  |
+| ------------------------- | -------------------------------------------------------- |
+| **TextureResource**       | GPU texture data                                         |
+| **BufferResource**        | Vertex/index/constant buffers                            |
+| **ShaderResource**        | Compiled shader bytecode (stored separately, not in PAK) |
+| **AudioResource**         | Compressed audio data (future)                           |
+| **AnimationDataResource** | Bone weights, keyframes (future)                         |
+| **CollisionMeshResource** | Physics collision data (future)                          |
 
 #### Embedded Descriptors
 
-| Type | Purpose |
-| ---- | ------- |
-| **MeshDesc** | LOD-specific mesh data |
-| **SubMeshDesc** | Material-specific submesh data |
-| **MeshViewDesc** | Draw call specifications |
+| Type             | Purpose                        |
+| ---------------- | ------------------------------ |
+| **MeshDesc**     | LOD-specific mesh data         |
+| **SubMeshDesc**  | Material-specific submesh data |
+| **MeshViewDesc** | Draw call specifications       |
 
 ---
 
@@ -94,13 +94,13 @@ capability.
 
 ## 🧠 3. GPU Alignment Guidelines
 
-| Resource Type | PAK File Alignment | GPU Upload Alignment (D3D12 Example) | Notes |
-| ------------- | ------------------ | ------------------------------------ | ----- |
-| Constant Buffer | 256 bytes | 256 bytes (CBV upload) | Required by D3D12/Vulkan for CBV; PAK file aligns for direct mapping |
-| Vertex Buffer | 16 bytes | 16 bytes (VB upload) | D3D12 requires 16-byte alignment for vertex buffers; PAK file matches for zero-copy |
-| Index Buffer | 4 bytes | 4 bytes (IB upload) | D3D12 requires 4-byte alignment for index buffers |
-| Texture Data | 256 bytes | 256 bytes (copy/upload) | D3D12 optimal copy granularity; PAK file aligns for direct mapping |
-| Audio Data | 16 bytes | 16 bytes | For cache line alignment; not directly uploaded to GPU |
+| Resource Type   | PAK File Alignment | GPU Upload Alignment (D3D12 Example) | Notes                                                                               |
+| --------------- | ------------------ | ------------------------------------ | ----------------------------------------------------------------------------------- |
+| Constant Buffer | 256 bytes          | 256 bytes (CBV upload)               | Required by D3D12/Vulkan for CBV; PAK file aligns for direct mapping                |
+| Vertex Buffer   | 16 bytes           | 16 bytes (VB upload)                 | D3D12 requires 16-byte alignment for vertex buffers; PAK file matches for zero-copy |
+| Index Buffer    | 4 bytes            | 4 bytes (IB upload)                  | D3D12 requires 4-byte alignment for index buffers                                   |
+| Texture Data    | 256 bytes          | 256 bytes (copy/upload)              | D3D12 optimal copy granularity; PAK file aligns for direct mapping                  |
+| Audio Data      | 16 bytes           | 16 bytes                             | For cache line alignment; not directly uploaded to GPU                              |
 
 ### Alignment Clarification: Storage vs GPU Upload
 
@@ -147,7 +147,7 @@ streaming, and efficient resource management.
 streaming. This distinction is critical for high-performance asset loading and
 future-proofing the format.
 
-**Module boundary note:** This document explains the *format* constraints.
+**Module boundary note:** This document explains the _format_ constraints.
 Actual upload planning, staging, command recording, and fence tracking are
 Vortex/Graphics responsibilities (see `src/Oxygen/Vortex/Upload/`,
 `src/Oxygen/Vortex/Resources/`, and `src/Oxygen/Graphics/`).
@@ -219,7 +219,7 @@ The browse index is stored as a contiguous blob anywhere in the file. Its
 location is referenced from the pak footer fields:
 
 - `PakFooter.browse_index_offset` (uint64, absolute)
-- `PakFooter.browse_index_size`   (uint64, size in bytes)
+- `PakFooter.browse_index_size` (uint64, size in bytes)
 
 If either value is `0`, the browse index is considered absent.
 
@@ -232,21 +232,21 @@ All values are little-endian.
 
 #### PakBrowseIndexHeader (24 bytes)
 
-| Field | Type | Notes |
-| --- | --- | --- |
-| `magic` | 8 bytes | ASCII `OXPAKBIX` |
-| `version` | uint32 | `1` |
-| `entry_count` | uint32 | number of entries |
-| `string_table_size` | uint32 | bytes |
-| `reserved` | uint32 | must be 0 |
+| Field               | Type    | Notes             |
+| ------------------- | ------- | ----------------- |
+| `magic`             | 8 bytes | ASCII `OXPAKBIX`  |
+| `version`           | uint32  | `1`               |
+| `entry_count`       | uint32  | number of entries |
+| `string_table_size` | uint32  | bytes             |
+| `reserved`          | uint32  | must be 0         |
 
 #### PakBrowseIndexEntry (24 bytes)
 
-| Field | Type | Notes |
-| --- | --- | --- |
-| `asset_key` | 16 bytes | serialized `AssetKey` |
-| `virtual_path_offset` | uint32 | offset into the string table |
-| `virtual_path_length` | uint32 | length in bytes |
+| Field                 | Type     | Notes                        |
+| --------------------- | -------- | ---------------------------- |
+| `asset_key`           | 16 bytes | serialized `AssetKey`        |
+| `virtual_path_offset` | uint32   | offset into the string table |
+| `virtual_path_length` | uint32   | length in bytes              |
 
 #### String Table
 

@@ -15,11 +15,11 @@ cases.
 Use when the first access is guaranteed to originate from the main executable
 module. Enforcement:
 
-* First call must come from the main executable module (checked via return
+- First call must come from the main executable module (checked via return
   address → module handle).
-* Subsequent optional resets (injecting custom `PlatformServices`) must also
+- Subsequent optional resets (injecting custom `PlatformServices`) must also
   originate from the main module.
-* Loader methods (`LoadBackend`, `UnloadBackend`) enforce the main-module
+- Loader methods (`LoadBackend`, `UnloadBackend`) enforce the main-module
   restriction.
 
 ### Relaxed Mode (`GetInstanceRelaxed`)
@@ -27,12 +27,12 @@ module. Enforcement:
 Use when initialization may legitimately occur from a non-executable module
 (e.g. an editor interop DLL). Behavior:
 
-* First call may come from any module; its module handle becomes the
+- First call may come from any module; its module handle becomes the
   "origin module".
-* All subsequent calls (including resets) must come from the same module; any
+- All subsequent calls (including resets) must come from the same module; any
   mismatch throws `loader::InvalidOperationError`.
-* Main-module enforcement is skipped in this mode.
-* Backend DLL search base prefers the origin module's directory, falling back
+- Main-module enforcement is skipped in this mode.
+- Backend DLL search base prefers the origin module's directory, falling back
   to the executable directory if the origin cannot be resolved.
 
 ### Mutual Exclusivity
@@ -42,12 +42,12 @@ after initialization throws `loader::InvalidOperationError`.
 
 ### Choosing a Mode
 
-| Scenario | Recommended Mode |
-|----------|------------------|
-| Game / shipped runtime | Strict |
-| Unit tests needing controlled injection | Strict (with platform override) |
-| Editor hosting through a plugin / bridge DLL | Relaxed |
-| Dynamic tool loaded into process post-start | Relaxed |
+| Scenario                                     | Recommended Mode                |
+| -------------------------------------------- | ------------------------------- |
+| Game / shipped runtime                       | Strict                          |
+| Unit tests needing controlled injection      | Strict (with platform override) |
+| Editor hosting through a plugin / bridge DLL | Relaxed                         |
+| Dynamic tool loaded into process post-start  | Relaxed                         |
 
 ---
 
@@ -186,13 +186,13 @@ void* CreateBackend(const SerializedBackendConfig& config,
 
 ## Error Handling Summary
 
-| Condition | Exception / Result |
-|-----------|--------------------|
-| Strict mode first call not from main module | `loader::InvalidOperationError` |
-| Calling other mode after initialization | `loader::InvalidOperationError` |
+| Condition                                     | Exception / Result              |
+| --------------------------------------------- | ------------------------------- |
+| Strict mode first call not from main module   | `loader::InvalidOperationError` |
+| Calling other mode after initialization       | `loader::InvalidOperationError` |
 | Relaxed subsequent call from different module | `loader::InvalidOperationError` |
-| Backend DLL load failure | `std::runtime_error` |
-| Symbol resolution failure | `std::runtime_error` |
+| Backend DLL load failure                      | `std::runtime_error`            |
+| Symbol resolution failure                     | `std::runtime_error`            |
 
 ---
 
@@ -214,6 +214,6 @@ loaded backend instance.
 
 ## Future Improvements (Potential)
 
-* Cross-platform implementations of `GetModuleDirectory`.
-* Optional query API to introspect current loader mode.
-* More granular diagnostics / tracing hooks.
+- Cross-platform implementations of `GetModuleDirectory`.
+- Optional query API to introspect current loader mode.
+- More granular diagnostics / tracing hooks.

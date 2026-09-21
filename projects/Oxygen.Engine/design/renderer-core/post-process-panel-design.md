@@ -18,15 +18,15 @@ must not be labeled EV. Mathematical authority is the [PBR specification](physic
 
 ## Controls and progressive disclosure
 
-| Group | Primary controls | Advanced / read-only information |
-| --- | --- | --- |
-| Exposure | Enabled; Manual EV / Manual Camera / Auto; compensation EV | Requested settings revision, active revision and effective linear gain |
-| Manual EV | EV100 | Key; supported-domain validation feedback |
-| Manual Camera | Aperture f-number, shutter rate 1/s, ISO; computed EV100 | Camera-owned persistence path |
-| Auto | Min/max EV, SpeedUp/SpeedDown EV/s, target, metering profile; Reset/Seed | Percentiles, histogram window, spot radius, mask, curve keys, black influence, D=1.5 stops |
-| Tone/output | Tone curve, DisplayGamma | None still applies exposure, grading and output conversion |
-| Bloom/grading | Existing intensity/threshold, saturation/contrast/vignette | Scene-referred threshold, existing production ordering |
-| Diagnostics | Meter validity and effective gain | Raw meter EV/luminance, fallback/range reason, FP32 retention and pending resource status |
+| Group         | Primary controls                                                         | Advanced / read-only information                                                           |
+| ------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
+| Exposure      | Enabled; Manual EV / Manual Camera / Auto; compensation EV               | Requested settings revision, active revision and effective linear gain                     |
+| Manual EV     | EV100                                                                    | Key; supported-domain validation feedback                                                  |
+| Manual Camera | Aperture f-number, shutter rate 1/s, ISO; computed EV100                 | Camera-owned persistence path                                                              |
+| Auto          | Min/max EV, SpeedUp/SpeedDown EV/s, target, metering profile; Reset/Seed | Percentiles, histogram window, spot radius, mask, curve keys, black influence, D=1.5 stops |
+| Tone/output   | Tone curve, DisplayGamma                                                 | None still applies exposure, grading and output conversion                                 |
+| Bloom/grading | Existing intensity/threshold, saturation/contrast/vignette               | Scene-referred threshold, existing production ordering                                     |
+| Diagnostics   | Meter validity and effective gain                                        | Raw meter EV/luminance, fallback/range reason, FP32 retention and pending resource status  |
 
 Compensation remains active in all exposure modes. Do not disable Manual
 compensation or replace engine validation with a restrictive UI slider. Retain

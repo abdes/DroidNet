@@ -115,7 +115,7 @@ C++ request context shape (runtime-only, orchestration-populated):
 
 1. `ImportRequest::cooked_context_roots: std::vector<std::filesystem::path>`
 2. `ImportRequest::inflight_scene_contexts:
-   std::vector<ImportRequest::InflightSceneContext>`
+std::vector<ImportRequest::InflightSceneContext>`
 3. `ImportRequest::InflightSceneContext` fields:
    - `scene_key`
    - `virtual_path`
@@ -456,7 +456,7 @@ Normalization/validation boundary:
 
 1. `BuildScriptAssetRequest(const ScriptAssetImportSettings&, std::ostream&)`
 2. `BuildScriptingSidecarRequest(const ScriptingSidecarImportSettings&,
-   std::ostream&)`
+std::ostream&)`
 
 Canonical shared compile-mode ownership:
 
@@ -504,7 +504,7 @@ Manifest supports scripting jobs under existing `jobs[]` model:
 2. `type: "script-sidecar"` with exactly one of:
    - `source`
    - `bindings` (inline array)
-   and always `target_scene_virtual_path`
+     and always `target_scene_virtual_path`
 
 Top-level output fallback is supported:
 

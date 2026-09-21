@@ -52,13 +52,13 @@ around maps/levels.
 1. **Intra-container references only**: A level references assets/resources only within the same container.
 
 2. **Content loads to DecodedCPUReady**: Scene loading produces a CPU-side representation. Renderer performs GPU
-materialization.
+   materialization.
 
 3. **Deterministic dependency registration**: Loading a scene must register dependencies so that:
 
 - Geometry assets are kept alive while the scene is alive.
 - Geometry/material/texture dependencies continue to be registered by the
-    existing loaders (scene should not duplicate those edges).
+  existing loaders (scene should not duplicate those edges).
 
 ---
 
@@ -83,7 +83,7 @@ instantiate nodes and bind renderable geometry.
 - `Renderable` (optional per node)
   - `data::AssetKey geometry`
 
-Material assignment is intentionally *not* part of the base scene format.
+Material assignment is intentionally _not_ part of the base scene format.
 Geometry assets already encode their default per-submesh materials, and the
 content pipeline can register geometry → material → texture dependencies.
 
@@ -133,7 +133,7 @@ The authoritative layout is defined in `Oxygen/Data/PakFormat.h`.
 
 Design notes:
 
-- Keep the cooked format *just* sufficient to reconstruct the runtime scene
+- Keep the cooked format _just_ sufficient to reconstruct the runtime scene
   graph and register dependencies.
 - Prefer indices over pointers; prefer offsets over in-place variable-length
   fields.

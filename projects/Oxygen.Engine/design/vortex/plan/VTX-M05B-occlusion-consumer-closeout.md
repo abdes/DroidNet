@@ -34,13 +34,13 @@ geometry.
 
 ## 3. Current State
 
-| Area | Current state | M05B action |
-| --- | --- | --- |
-| Screen HZB | Current/previous closest/furthest HZB production and bindings exist. | Reuse as the producer; request furthest HZB for occlusion. |
-| Occlusion stage directory | Placeholder directories only. | Add the Vortex-native module, types, pass wrapper, and shader. |
-| Prepared scene | Draw metadata, render items, matrices, and bounding spheres exist. | Build candidates keyed to prepared draw indices. |
-| Consumers | Base pass filters pass masks and `main_view_visible`; no HZB occlusion mask. | Add visibility-mask consumption without leaking diagnostics/options. |
-| Diagnostics | M05A ledger, manifest, and debug panel exist. | Publish compact occlusion counters and fallback reasons. |
+| Area                      | Current state                                                                | M05B action                                                          |
+| ------------------------- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| Screen HZB                | Current/previous closest/furthest HZB production and bindings exist.         | Reuse as the producer; request furthest HZB for occlusion.           |
+| Occlusion stage directory | Placeholder directories only.                                                | Add the Vortex-native module, types, pass wrapper, and shader.       |
+| Prepared scene            | Draw metadata, render items, matrices, and bounding spheres exist.           | Build candidates keyed to prepared draw indices.                     |
+| Consumers                 | Base pass filters pass masks and `main_view_visible`; no HZB occlusion mask. | Add visibility-mask consumption without leaking diagnostics/options. |
+| Diagnostics               | M05A ledger, manifest, and debug panel exist.                                | Publish compact occlusion counters and fallback reasons.             |
 
 ## 4. UE5.7 References
 
@@ -245,12 +245,12 @@ Tasks:
 Validation:
 
 - `cmake --build out\build-ninja --config Debug --target
-  Oxygen.Vortex.DiagnosticsCaptureManifest
-  Oxygen.Vortex.SceneRendererPublication
-  Oxygen.Vortex.SceneRendererDeferredCore --parallel 4` passed.
+Oxygen.Vortex.DiagnosticsCaptureManifest
+Oxygen.Vortex.SceneRendererPublication
+Oxygen.Vortex.SceneRendererDeferredCore --parallel 4` passed.
 - `ctest --preset test-debug -R
-  "Oxygen\.Vortex\.(DiagnosticsCaptureManifest|SceneRendererPublication|SceneRendererDeferredCore)"
-  --output-on-failure` passed: 52/52.
+"Oxygen\.Vortex\.(DiagnosticsCaptureManifest|SceneRendererPublication|SceneRendererDeferredCore)"
+--output-on-failure` passed: 52/52.
 
 Remaining gap:
 
@@ -278,16 +278,16 @@ Tasks:
 Validation:
 
 - `cmake --build out\build-ninja --config Debug --target
-  Oxygen.Vortex.RendererCapability.Tests Oxygen.Vortex.OcclusionModule
-  Oxygen.Vortex.SceneRendererPublication Oxygen.Vortex.SceneRendererDeferredCore
-  --parallel 4` passed.
+Oxygen.Vortex.RendererCapability.Tests Oxygen.Vortex.OcclusionModule
+Oxygen.Vortex.SceneRendererPublication Oxygen.Vortex.SceneRendererDeferredCore
+--parallel 4` passed.
 - `ctest --preset test-debug -R
-  "Oxygen\.Vortex\.(RendererCapability|OcclusionModule|SceneRendererPublication|SceneRendererDeferredCore)"
-  --output-on-failure` passed: 62/62.
+"Oxygen\.Vortex\.(RendererCapability|OcclusionModule|SceneRendererPublication|SceneRendererDeferredCore)"
+--output-on-failure` passed: 62/62.
 - `cmake --build out\build-ninja --config Debug --target
-  Oxygen.Graphics.Direct3D12.ShaderBake oxygen-examples-vortexbasic
-  Oxygen.Vortex.OcclusionModule Oxygen.Vortex.SceneRendererDeferredCore
-  --parallel 4` passed; ShaderBake repacked 186 modules after the occlusion
+Oxygen.Graphics.Direct3D12.ShaderBake oxygen-examples-vortexbasic
+Oxygen.Vortex.OcclusionModule Oxygen.Vortex.SceneRendererDeferredCore
+--parallel 4` passed; ShaderBake repacked 186 modules after the occlusion
   compute shader fix.
 - CDB/D3D12 debug-layer audit passed:
   `out/build-ninja/analysis/vortex/occlusion/vortex-occlusion.debug-layer.report.txt`

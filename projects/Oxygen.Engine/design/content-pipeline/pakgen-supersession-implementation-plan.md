@@ -36,19 +36,19 @@ Status values:
 3. `done`
 4. `blocked`
 
-| Phase | Status | Weight | Scope | Exit Gate |
-| --- | --- | --- | --- | --- |
-| P0 | done | 4% | Baseline + tracking scaffold | Ledger, evidence rubric, and CI matrix committed |
-| P1 | done | 12% | Shared descriptor infrastructure | Common schema validation + diagnostics helpers integrated for descriptor domains |
-| P2 | done | 10% | Texture descriptor domain | `texture-descriptor` implemented end-to-end with schema/tests |
-| P3 | done | 8% | Geometry buffer subdocument model | container-owned `buffers[]`/`views[]` contract implemented end-to-end under geometry descriptor flow, including deterministic mounted-root `.obuf` resolution and canonical dedupe constraints |
-| P4 | done | 14% | Material descriptor domain | `material-descriptor` implemented end-to-end with schema/tests |
-| P5 | done | 16% | Geometry descriptor domain | `geometry-descriptor` implemented end-to-end with schema/tests and external green build/test confirmation |
-| P6 | in_progress | 16% | Scene descriptor domain | `scene-descriptor` implemented end-to-end with schema/tests; external green validation pending |
-| P7 | pending | 8% | Manifest DAG integration | Descriptor job types + defaults + strict key policies + DAG checks |
-| P8 | pending | 7% | Pak builder toolflow integration | Official C++ pack flow wired and documented |
-| P9 | pending | 3% | PakGen deprecation | PakGen removed from default build/CI path after parity gates |
-| P10 | pending | 2% | Final docs and closeout | Spec/impl/docs aligned; no open mandatory items |
+| Phase | Status      | Weight | Scope                             | Exit Gate                                                                                                                                                                                      |
+| ----- | ----------- | ------ | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P0    | done        | 4%     | Baseline + tracking scaffold      | Ledger, evidence rubric, and CI matrix committed                                                                                                                                               |
+| P1    | done        | 12%    | Shared descriptor infrastructure  | Common schema validation + diagnostics helpers integrated for descriptor domains                                                                                                               |
+| P2    | done        | 10%    | Texture descriptor domain         | `texture-descriptor` implemented end-to-end with schema/tests                                                                                                                                  |
+| P3    | done        | 8%     | Geometry buffer subdocument model | container-owned `buffers[]`/`views[]` contract implemented end-to-end under geometry descriptor flow, including deterministic mounted-root `.obuf` resolution and canonical dedupe constraints |
+| P4    | done        | 14%    | Material descriptor domain        | `material-descriptor` implemented end-to-end with schema/tests                                                                                                                                 |
+| P5    | done        | 16%    | Geometry descriptor domain        | `geometry-descriptor` implemented end-to-end with schema/tests and external green build/test confirmation                                                                                      |
+| P6    | in_progress | 16%    | Scene descriptor domain           | `scene-descriptor` implemented end-to-end with schema/tests; external green validation pending                                                                                                 |
+| P7    | pending     | 8%     | Manifest DAG integration          | Descriptor job types + defaults + strict key policies + DAG checks                                                                                                                             |
+| P8    | pending     | 7%     | Pak builder toolflow integration  | Official C++ pack flow wired and documented                                                                                                                                                    |
+| P9    | pending     | 3%     | PakGen deprecation                | PakGen removed from default build/CI path after parity gates                                                                                                                                   |
+| P10   | pending     | 2%     | Final docs and closeout           | Spec/impl/docs aligned; no open mandatory items                                                                                                                                                |
 
 ## 4. Progress Formula (Reliable 0-100%)
 
@@ -427,6 +427,7 @@ Current status:
 6. P1 is `done`; P6 is `in_progress`; P7-P10 are `pending`.
 7. Computed progress snapshot: `76.0%` (P6 completion factor `0.75` pending external run/CI confirmation).
 8. P3/P5 geometry execution plan remains the baseline reference in Section 6, with both P3 and P5 marked closed.
+
 ## 11. Evidence Log
 
 Use this section as append-only factual evidence.
@@ -451,9 +452,9 @@ Initial entries:
 5. Result: supersession architecture + tracker docs created
 6. Remaining delta to phase exit gate: none
 
-1. Date: 2026-03-01
-2. Phase: P2
-3. Files changed:
+7. Date: 2026-03-01
+8. Phase: P2
+9. Files changed:
    - `src/Oxygen/Cooker/Import/Schemas/oxygen.texture-descriptor.schema.json`
    - `src/Oxygen/Cooker/Import/TextureDescriptorImportSettings.h`
    - `src/Oxygen/Cooker/Import/TextureDescriptorImportRequestBuilder.h`
@@ -467,334 +468,334 @@ Initial entries:
    - `src/Oxygen/Cooker/Test/Import/ImportManifest_texture_descriptor_test.cpp`
    - `src/Oxygen/Cooker/Test/CMakeLists.txt`
    - `src/Oxygen/Cooker/Tools/ImportTool/README.md`
-4. Tests run: none (per current no-build execution policy)
-5. Result: texture-descriptor ingress implemented through existing texture request/job path with schema-first validation and manifest integration
-6. Remaining delta to phase exit gate: none (phase closure approved after external execution validation)
+10. Tests run: none (per current no-build execution policy)
+11. Result: texture-descriptor ingress implemented through existing texture request/job path with schema-first validation and manifest integration
+12. Remaining delta to phase exit gate: none (phase closure approved after external execution validation)
 
-1. Date: 2026-03-01
-2. Phase: P4
-3. Files changed:
-   - `src/Oxygen/Cooker/Import/Schemas/oxygen.material-descriptor.schema.json`
-   - `src/Oxygen/Cooker/Import/MaterialDescriptorImportSettings.h`
-   - `src/Oxygen/Cooker/Import/MaterialDescriptorImportRequestBuilder.h`
-   - `src/Oxygen/Cooker/Import/Internal/MaterialDescriptorImportRequestBuilder.cpp`
-   - `src/Oxygen/Cooker/Import/Internal/Jobs/MaterialDescriptorImportJob.h`
-   - `src/Oxygen/Cooker/Import/Internal/Jobs/MaterialDescriptorImportJob.cpp`
-   - `src/Oxygen/Cooker/Import/ImportOptions.h`
-   - `src/Oxygen/Cooker/Import/ImportManifest.h`
-   - `src/Oxygen/Cooker/Import/ImportManifest.cpp`
-   - `src/Oxygen/Cooker/Import/Schemas/oxygen.import-manifest.schema.json`
-   - `src/Oxygen/Cooker/Import/AsyncImportService.cpp`
-   - `src/Oxygen/Cooker/Tools/ImportTool/BatchCommand.cpp`
-   - `src/Oxygen/Cooker/Tools/ImportTool/README.md`
-   - `src/Oxygen/Cooker/Test/Import/MaterialDescriptorJsonSchema_test.cpp`
-   - `src/Oxygen/Cooker/Test/Import/MaterialDescriptorImportRequestBuilder_test.cpp`
-   - `src/Oxygen/Cooker/Test/Import/ImportManifest_material_descriptor_test.cpp`
-   - `src/Oxygen/Cooker/Test/Import/AsyncImportService_test.cpp`
-   - `src/Oxygen/Cooker/Test/CMakeLists.txt`
-4. Tests run: none (per current no-build execution policy)
-5. Result: material-descriptor domain integrated through schema-first request build, dedicated async job routing, manifest/job-type/tool reporting support, and focused test coverage additions
-6. Remaining delta to phase exit gate:
-   - execute and pass new material-descriptor test suites externally
-   - verify end-to-end manifest run with real texture `.otex` sidecar references
+13. Date: 2026-03-01
+14. Phase: P4
+15. Files changed:
+    - `src/Oxygen/Cooker/Import/Schemas/oxygen.material-descriptor.schema.json`
+    - `src/Oxygen/Cooker/Import/MaterialDescriptorImportSettings.h`
+    - `src/Oxygen/Cooker/Import/MaterialDescriptorImportRequestBuilder.h`
+    - `src/Oxygen/Cooker/Import/Internal/MaterialDescriptorImportRequestBuilder.cpp`
+    - `src/Oxygen/Cooker/Import/Internal/Jobs/MaterialDescriptorImportJob.h`
+    - `src/Oxygen/Cooker/Import/Internal/Jobs/MaterialDescriptorImportJob.cpp`
+    - `src/Oxygen/Cooker/Import/ImportOptions.h`
+    - `src/Oxygen/Cooker/Import/ImportManifest.h`
+    - `src/Oxygen/Cooker/Import/ImportManifest.cpp`
+    - `src/Oxygen/Cooker/Import/Schemas/oxygen.import-manifest.schema.json`
+    - `src/Oxygen/Cooker/Import/AsyncImportService.cpp`
+    - `src/Oxygen/Cooker/Tools/ImportTool/BatchCommand.cpp`
+    - `src/Oxygen/Cooker/Tools/ImportTool/README.md`
+    - `src/Oxygen/Cooker/Test/Import/MaterialDescriptorJsonSchema_test.cpp`
+    - `src/Oxygen/Cooker/Test/Import/MaterialDescriptorImportRequestBuilder_test.cpp`
+    - `src/Oxygen/Cooker/Test/Import/ImportManifest_material_descriptor_test.cpp`
+    - `src/Oxygen/Cooker/Test/Import/AsyncImportService_test.cpp`
+    - `src/Oxygen/Cooker/Test/CMakeLists.txt`
+16. Tests run: none (per current no-build execution policy)
+17. Result: material-descriptor domain integrated through schema-first request build, dedicated async job routing, manifest/job-type/tool reporting support, and focused test coverage additions
+18. Remaining delta to phase exit gate:
+    - execute and pass new material-descriptor test suites externally
+    - verify end-to-end manifest run with real texture `.otex` sidecar references
 
-1. Date: 2026-03-02
-2. Phase: P4
-3. Files changed:
-   - `design/content-pipeline/pakgen-supersession-implementation-plan.md`
-4. Tests run: none (per current no-build execution policy)
-5. Result: task-level completion for material-descriptor phase updated to explicit done/in-progress markers; phase remains `in_progress` (`0.75`) pending final runtime hardening/validation.
-6. Remaining delta to phase exit gate:
-   - execute and pass material-descriptor suites externally
-   - close deterministic texture descriptor reference-resolution + `.omat` emission validation in end-to-end manifest execution
+19. Date: 2026-03-02
+20. Phase: P4
+21. Files changed:
+    - `design/content-pipeline/pakgen-supersession-implementation-plan.md`
+22. Tests run: none (per current no-build execution policy)
+23. Result: task-level completion for material-descriptor phase updated to explicit done/in-progress markers; phase remains `in_progress` (`0.75`) pending final runtime hardening/validation.
+24. Remaining delta to phase exit gate:
+    - execute and pass material-descriptor suites externally
+    - close deterministic texture descriptor reference-resolution + `.omat` emission validation in end-to-end manifest execution
 
-1. Date: 2026-03-02
-2. Phase: P4
-3. Files changed:
-   - `src/Oxygen/Cooker/Test/Import/MaterialDescriptorImportJob_test.cpp`
-   - `src/Oxygen/Cooker/Test/CMakeLists.txt`
-4. Tests run: none (per current no-build execution policy)
-5. Result: added dedicated material-descriptor import fixture/tests that cover hashed `.otex` virtual-path resolution, emitted `.omat` verification, and missing-descriptor diagnostics.
-6. Remaining delta to phase exit gate:
-   - execute and pass material-descriptor suites externally
-   - re-run manifest DAG scenario externally and confirm material job resolves dependent texture sidecars end-to-end
+25. Date: 2026-03-02
+26. Phase: P4
+27. Files changed:
+    - `src/Oxygen/Cooker/Test/Import/MaterialDescriptorImportJob_test.cpp`
+    - `src/Oxygen/Cooker/Test/CMakeLists.txt`
+28. Tests run: none (per current no-build execution policy)
+29. Result: added dedicated material-descriptor import fixture/tests that cover hashed `.otex` virtual-path resolution, emitted `.omat` verification, and missing-descriptor diagnostics.
+30. Remaining delta to phase exit gate:
+    - execute and pass material-descriptor suites externally
+    - re-run manifest DAG scenario externally and confirm material job resolves dependent texture sidecars end-to-end
 
-1. Date: 2026-03-02
-2. Phase: P4
-3. Files changed:
-   - `design/content-pipeline/pakgen-supersession-implementation-plan.md`
-4. Tests run:
-   - external execution (user confirmation): all material-descriptor tests passed
-   - external manifest DAG run (texture-descriptor -> material-descriptor): passed
-5. Result: P4 exit gate satisfied; phase status moved to `done`.
-6. Remaining delta to phase exit gate: none
+31. Date: 2026-03-02
+32. Phase: P4
+33. Files changed:
+    - `design/content-pipeline/pakgen-supersession-implementation-plan.md`
+34. Tests run:
+    - external execution (user confirmation): all material-descriptor tests passed
+    - external manifest DAG run (texture-descriptor -> material-descriptor): passed
+35. Result: P4 exit gate satisfied; phase status moved to `done`.
+36. Remaining delta to phase exit gate: none
 
-1. Date: 2026-03-02
-2. Phase: P3/P5 (spec alignment)
-3. Files changed:
-   - `design/content-pipeline/pakgen-supersession-architecture.md`
-   - `design/content-pipeline/pakgen-supersession-implementation-plan.md`
-4. Tests run: none (documentation/spec update only; no-build policy active)
-5. Result: standardized buffer contract to container-owned geometry subdocuments (`buffers[]` with nested `views[]`), external-only `.buffer.bin` data, and per-container metadata duplication semantics; removed standalone `buffer-descriptor` domain references from supersession scope/plan.
-6. Remaining delta to phase exit gate:
-   - implement P3 code/tests for geometry-owned buffer subdocument validation and deterministic resolution
-   - implement P5 geometry descriptor domain code/tests using the finalized buffer contract
+37. Date: 2026-03-02
+38. Phase: P3/P5 (spec alignment)
+39. Files changed:
+    - `design/content-pipeline/pakgen-supersession-architecture.md`
+    - `design/content-pipeline/pakgen-supersession-implementation-plan.md`
+40. Tests run: none (documentation/spec update only; no-build policy active)
+41. Result: standardized buffer contract to container-owned geometry subdocuments (`buffers[]` with nested `views[]`), external-only `.buffer.bin` data, and per-container metadata duplication semantics; removed standalone `buffer-descriptor` domain references from supersession scope/plan.
+42. Remaining delta to phase exit gate:
+    - implement P3 code/tests for geometry-owned buffer subdocument validation and deterministic resolution
+    - implement P5 geometry descriptor domain code/tests using the finalized buffer contract
 
-1. Date: 2026-03-02
-2. Phase: P3/P5 (spec alignment)
-3. Files changed:
-   - `design/content-pipeline/pakgen-supersession-architecture.md`
-   - `design/content-pipeline/pakgen-supersession-implementation-plan.md`
-4. Tests run: none (documentation/spec update only; no-build policy active)
-5. Result: tightened buffer contract to require virtual-path-based references and explicit `.obuf` metadata as deterministic cross-mount lookup anchor (`virtual_path -> .obuf -> resource_index -> buffers.table/data`).
-6. Remaining delta to phase exit gate:
-   - implement P3 code/tests for `.obuf` emission + lookup and virtual-path-only buffer reference validation
-   - implement P3 dedupe tests proving one cooked buffer resource for equivalent cross-container inputs
-   - implement P5 geometry descriptor domain code/tests using the tightened contract
+43. Date: 2026-03-02
+44. Phase: P3/P5 (spec alignment)
+45. Files changed:
+    - `design/content-pipeline/pakgen-supersession-architecture.md`
+    - `design/content-pipeline/pakgen-supersession-implementation-plan.md`
+46. Tests run: none (documentation/spec update only; no-build policy active)
+47. Result: tightened buffer contract to require virtual-path-based references and explicit `.obuf` metadata as deterministic cross-mount lookup anchor (`virtual_path -> .obuf -> resource_index -> buffers.table/data`).
+48. Remaining delta to phase exit gate:
+    - implement P3 code/tests for `.obuf` emission + lookup and virtual-path-only buffer reference validation
+    - implement P3 dedupe tests proving one cooked buffer resource for equivalent cross-container inputs
+    - implement P5 geometry descriptor domain code/tests using the tightened contract
 
-1. Date: 2026-03-02
-2. Phase: P3/P5 (spec alignment)
-3. Files changed:
-   - `design/content-pipeline/pakgen-supersession-architecture.md`
-   - `design/content-pipeline/pakgen-supersession-implementation-plan.md`
-4. Tests run: none (documentation/spec update only; no-build policy active)
-5. Result: made cross-container buffer dedupe an explicit requirement: equivalent shared buffers must cook once and reuse the same `resource_index` across `.obuf` sidecars.
-6. Remaining delta to phase exit gate:
-   - implement P3 code/tests for dedupe behavior across multi-container geometry descriptor inputs
-   - complete P5 geometry descriptor implementation against dedupe + virtual-path `.obuf` rules
+49. Date: 2026-03-02
+50. Phase: P3/P5 (spec alignment)
+51. Files changed:
+    - `design/content-pipeline/pakgen-supersession-architecture.md`
+    - `design/content-pipeline/pakgen-supersession-implementation-plan.md`
+52. Tests run: none (documentation/spec update only; no-build policy active)
+53. Result: made cross-container buffer dedupe an explicit requirement: equivalent shared buffers must cook once and reuse the same `resource_index` across `.obuf` sidecars.
+54. Remaining delta to phase exit gate:
+    - implement P3 code/tests for dedupe behavior across multi-container geometry descriptor inputs
+    - complete P5 geometry descriptor implementation against dedupe + virtual-path `.obuf` rules
 
-1. Date: 2026-03-02
-2. Phase: P3/P5 (spec alignment)
-3. Files changed:
-   - `design/content-pipeline/pakgen-supersession-architecture.md`
-   - `design/content-pipeline/pakgen-supersession-implementation-plan.md`
-4. Tests run: none (documentation/spec update only; no-build policy active)
-5. Result: corrected dedupe contract wording to match engine semantics: one cooked shared buffer implies one `buffers.table` entry, one payload region, and one canonical `.obuf` (not multiple `.obuf` outputs).
-6. Remaining delta to phase exit gate:
-   - implement P3 code/tests that assert single-canonical-`.obuf` output for equivalent cross-container buffers
-   - complete P5 geometry descriptor implementation against the corrected dedupe contract
+55. Date: 2026-03-02
+56. Phase: P3/P5 (spec alignment)
+57. Files changed:
+    - `design/content-pipeline/pakgen-supersession-architecture.md`
+    - `design/content-pipeline/pakgen-supersession-implementation-plan.md`
+58. Tests run: none (documentation/spec update only; no-build policy active)
+59. Result: corrected dedupe contract wording to match engine semantics: one cooked shared buffer implies one `buffers.table` entry, one payload region, and one canonical `.obuf` (not multiple `.obuf` outputs).
+60. Remaining delta to phase exit gate:
+    - implement P3 code/tests that assert single-canonical-`.obuf` output for equivalent cross-container buffers
+    - complete P5 geometry descriptor implementation against the corrected dedupe contract
 
-1. Date: 2026-03-02
-2. Phase: P3 (interim buffer-container milestone)
-3. Files changed:
-   - `src/Oxygen/Cooker/Import/Schemas/oxygen.buffer-container.schema.json`
-   - `src/Oxygen/Cooker/Import/BufferContainerImportSettings.h`
-   - `src/Oxygen/Cooker/Import/BufferContainerImportRequestBuilder.h`
-   - `src/Oxygen/Cooker/Import/Internal/BufferContainerImportRequestBuilder.cpp`
-   - `src/Oxygen/Cooker/Import/Internal/Jobs/BufferContainerImportJob.h`
-   - `src/Oxygen/Cooker/Import/Internal/Jobs/BufferContainerImportJob.cpp`
-   - `src/Oxygen/Cooker/Import/Internal/Jobs/BufferImportSubmitter.h`
-   - `src/Oxygen/Cooker/Import/Internal/Jobs/BufferImportSubmitter.cpp`
-   - `src/Oxygen/Cooker/Import/ImportManifest.h`
-   - `src/Oxygen/Cooker/Import/ImportManifest.cpp`
-   - `src/Oxygen/Cooker/Import/Schemas/oxygen.import-manifest.schema.json`
-   - `src/Oxygen/Cooker/Import/ImportRequest.h`
-   - `src/Oxygen/Cooker/Import/AsyncImportService.cpp`
-   - `src/Oxygen/Cooker/Test/Import/BufferContainerImportRequestBuilder_test.cpp`
-   - `src/Oxygen/Cooker/Test/Import/ImportManifest_buffer_container_test.cpp`
-   - `src/Oxygen/Cooker/Test/Import/BufferContainerImportJob_test.cpp`
-   - `src/Oxygen/Cooker/Test/CMakeLists.txt`
-   - `design/content-pipeline/pakgen-supersession-implementation-plan.md`
-4. Tests run:
-   - external execution (user confirmation): `BufferContainerImportJobTest.SuccessfulJobEmitsExpectedArtifacts` passed
-   - external execution (user confirmation): `ImportManifestBufferContainerTest.RejectsBufferContainerJobWithDisallowedKeys` passed after schema-first diagnostic-path fix
-5. Result: interim buffer-container path is green and validates core P3 mechanics (schema-first validation, `.obuf` emission, buffer table/data artifact emission, manifest integration, and strict disallowed-key rejection via schema diagnostics).
-6. Remaining delta to phase exit gate:
-   - migrate the P3 contract from interim buffer-container ingress into the `geometry-descriptor` domain (`buffers[]` + nested `views[]`)
-   - add geometry-domain tests for virtual-path `.obuf` resolution and cross-container dedupe invariants
+61. Date: 2026-03-02
+62. Phase: P3 (interim buffer-container milestone)
+63. Files changed:
+    - `src/Oxygen/Cooker/Import/Schemas/oxygen.buffer-container.schema.json`
+    - `src/Oxygen/Cooker/Import/BufferContainerImportSettings.h`
+    - `src/Oxygen/Cooker/Import/BufferContainerImportRequestBuilder.h`
+    - `src/Oxygen/Cooker/Import/Internal/BufferContainerImportRequestBuilder.cpp`
+    - `src/Oxygen/Cooker/Import/Internal/Jobs/BufferContainerImportJob.h`
+    - `src/Oxygen/Cooker/Import/Internal/Jobs/BufferContainerImportJob.cpp`
+    - `src/Oxygen/Cooker/Import/Internal/Jobs/BufferImportSubmitter.h`
+    - `src/Oxygen/Cooker/Import/Internal/Jobs/BufferImportSubmitter.cpp`
+    - `src/Oxygen/Cooker/Import/ImportManifest.h`
+    - `src/Oxygen/Cooker/Import/ImportManifest.cpp`
+    - `src/Oxygen/Cooker/Import/Schemas/oxygen.import-manifest.schema.json`
+    - `src/Oxygen/Cooker/Import/ImportRequest.h`
+    - `src/Oxygen/Cooker/Import/AsyncImportService.cpp`
+    - `src/Oxygen/Cooker/Test/Import/BufferContainerImportRequestBuilder_test.cpp`
+    - `src/Oxygen/Cooker/Test/Import/ImportManifest_buffer_container_test.cpp`
+    - `src/Oxygen/Cooker/Test/Import/BufferContainerImportJob_test.cpp`
+    - `src/Oxygen/Cooker/Test/CMakeLists.txt`
+    - `design/content-pipeline/pakgen-supersession-implementation-plan.md`
+64. Tests run:
+    - external execution (user confirmation): `BufferContainerImportJobTest.SuccessfulJobEmitsExpectedArtifacts` passed
+    - external execution (user confirmation): `ImportManifestBufferContainerTest.RejectsBufferContainerJobWithDisallowedKeys` passed after schema-first diagnostic-path fix
+65. Result: interim buffer-container path is green and validates core P3 mechanics (schema-first validation, `.obuf` emission, buffer table/data artifact emission, manifest integration, and strict disallowed-key rejection via schema diagnostics).
+66. Remaining delta to phase exit gate:
+    - migrate the P3 contract from interim buffer-container ingress into the `geometry-descriptor` domain (`buffers[]` + nested `views[]`)
+    - add geometry-domain tests for virtual-path `.obuf` resolution and cross-container dedupe invariants
 
-1. Date: 2026-03-02
-2. Phase: P3/P5 (geometry planning)
-3. Files changed:
-   - `design/content-pipeline/pakgen-supersession-implementation-plan.md`
-4. Tests run: none (planning/documentation update only; no-build policy active)
-5. Result: added approval-gated, implementation-ready geometry execution plan with explicit workstreams for schema, request/job routing, resolver semantics (pre-cooked + simultaneously cooked dependencies), procedural mesh support, PakFormat/loader alignment, and targeted test matrix.
-6. Remaining delta to phase exit gate:
-   - approve the detailed plan
-   - implement P3/P5 code and tests per the plan
+67. Date: 2026-03-02
+68. Phase: P3/P5 (geometry planning)
+69. Files changed:
+    - `design/content-pipeline/pakgen-supersession-implementation-plan.md`
+70. Tests run: none (planning/documentation update only; no-build policy active)
+71. Result: added approval-gated, implementation-ready geometry execution plan with explicit workstreams for schema, request/job routing, resolver semantics (pre-cooked + simultaneously cooked dependencies), procedural mesh support, PakFormat/loader alignment, and targeted test matrix.
+72. Remaining delta to phase exit gate:
+    - approve the detailed plan
+    - implement P3/P5 code and tests per the plan
 
-1. Date: 2026-03-02
-2. Phase: P3/P5 (geometry schema ergonomics refinement)
-3. Files changed:
-   - `design/content-pipeline/pakgen-supersession-architecture.md`
-   - `design/content-pipeline/pakgen-supersession-implementation-plan.md`
-4. Tests run: none (planning/spec update only; no-build policy active)
-5. Result: geometry descriptor contract refined for concise author-facing keys and paired view resolution (`buffers.vb_ref`, `buffers.ib_ref`, `material_ref`, `view_ref` with implicit `__all__`), with explicit plan tasks for parser/schema/diagnostics coverage.
-6. Remaining delta to phase exit gate:
-   - approve refined concise contract
-   - implement schema + parser + diagnostics + tests per refined contract
+73. Date: 2026-03-02
+74. Phase: P3/P5 (geometry schema ergonomics refinement)
+75. Files changed:
+    - `design/content-pipeline/pakgen-supersession-architecture.md`
+    - `design/content-pipeline/pakgen-supersession-implementation-plan.md`
+76. Tests run: none (planning/spec update only; no-build policy active)
+77. Result: geometry descriptor contract refined for concise author-facing keys and paired view resolution (`buffers.vb_ref`, `buffers.ib_ref`, `material_ref`, `view_ref` with implicit `__all__`), with explicit plan tasks for parser/schema/diagnostics coverage.
+78. Remaining delta to phase exit gate:
+    - approve refined concise contract
+    - implement schema + parser + diagnostics + tests per refined contract
 
-1. Date: 2026-03-02
-2. Phase: P5 (geometry descriptor ingress scaffold)
-3. Files changed:
-   - `src/Oxygen/Cooker/Import/GeometryDescriptorImportSettings.h`
-   - `src/Oxygen/Cooker/Import/GeometryDescriptorImportRequestBuilder.h`
-   - `src/Oxygen/Cooker/Import/Internal/GeometryDescriptorImportRequestBuilder.cpp`
-   - `src/Oxygen/Cooker/Import/ImportOptions.h`
-   - `src/Oxygen/Cooker/Import/ImportManifest.h`
-   - `src/Oxygen/Cooker/Import/ImportManifest.cpp`
-   - `src/Oxygen/Cooker/Import/Schemas/oxygen.import-manifest.schema.json`
-   - `src/Oxygen/Cooker/Import/AsyncImportService.cpp`
-   - `src/Oxygen/Cooker/Import/Internal/Jobs/GeometryDescriptorImportJob.h`
-   - `src/Oxygen/Cooker/Import/Internal/Jobs/GeometryDescriptorImportJob.cpp`
-   - `src/Oxygen/Cooker/Tools/ImportTool/BatchCommand.cpp`
-   - `src/Oxygen/Cooker/CMakeLists.txt`
-   - `src/Oxygen/Cooker/Test/Import/GeometryDescriptorJsonSchema_test.cpp`
-   - `src/Oxygen/Cooker/Test/Import/GeometryDescriptorImportRequestBuilder_test.cpp`
-   - `src/Oxygen/Cooker/Test/Import/ImportManifest_geometry_descriptor_test.cpp`
-   - `src/Oxygen/Cooker/Test/CMakeLists.txt`
-   - `design/content-pipeline/pakgen-supersession-implementation-plan.md`
-4. Tests run: none (per current no-build execution policy)
-5. Result: geometry-descriptor is now first-class at ingress/routing level (schema embedding, manifest defaults/job type, request-builder, ImportRequest payload, async service routing, import-tool job typing) with initial job shell and focused schema/request/manifest tests added.
-6. Remaining delta to phase exit gate:
-   - implement full geometry descriptor job execution path (buffer/material resolution, descriptor assembly/finalization, `.ogeo` emission)
-   - add and pass job-level integration tests for standard/skinned/procedural and mixed dependency scenarios
+79. Date: 2026-03-02
+80. Phase: P5 (geometry descriptor ingress scaffold)
+81. Files changed:
+    - `src/Oxygen/Cooker/Import/GeometryDescriptorImportSettings.h`
+    - `src/Oxygen/Cooker/Import/GeometryDescriptorImportRequestBuilder.h`
+    - `src/Oxygen/Cooker/Import/Internal/GeometryDescriptorImportRequestBuilder.cpp`
+    - `src/Oxygen/Cooker/Import/ImportOptions.h`
+    - `src/Oxygen/Cooker/Import/ImportManifest.h`
+    - `src/Oxygen/Cooker/Import/ImportManifest.cpp`
+    - `src/Oxygen/Cooker/Import/Schemas/oxygen.import-manifest.schema.json`
+    - `src/Oxygen/Cooker/Import/AsyncImportService.cpp`
+    - `src/Oxygen/Cooker/Import/Internal/Jobs/GeometryDescriptorImportJob.h`
+    - `src/Oxygen/Cooker/Import/Internal/Jobs/GeometryDescriptorImportJob.cpp`
+    - `src/Oxygen/Cooker/Tools/ImportTool/BatchCommand.cpp`
+    - `src/Oxygen/Cooker/CMakeLists.txt`
+    - `src/Oxygen/Cooker/Test/Import/GeometryDescriptorJsonSchema_test.cpp`
+    - `src/Oxygen/Cooker/Test/Import/GeometryDescriptorImportRequestBuilder_test.cpp`
+    - `src/Oxygen/Cooker/Test/Import/ImportManifest_geometry_descriptor_test.cpp`
+    - `src/Oxygen/Cooker/Test/CMakeLists.txt`
+    - `design/content-pipeline/pakgen-supersession-implementation-plan.md`
+82. Tests run: none (per current no-build execution policy)
+83. Result: geometry-descriptor is now first-class at ingress/routing level (schema embedding, manifest defaults/job type, request-builder, ImportRequest payload, async service routing, import-tool job typing) with initial job shell and focused schema/request/manifest tests added.
+84. Remaining delta to phase exit gate:
+    - implement full geometry descriptor job execution path (buffer/material resolution, descriptor assembly/finalization, `.ogeo` emission)
+    - add and pass job-level integration tests for standard/skinned/procedural and mixed dependency scenarios
 
-1. Date: 2026-03-02
-2. Phase: P1/P4/P5 (descriptor payload architecture correction)
-3. Files changed:
-   - `src/Oxygen/Cooker/Import/ImportOptions.h`
-   - `src/Oxygen/Cooker/Import/ImportRequest.h`
-   - `src/Oxygen/Cooker/Import/Internal/MaterialDescriptorImportRequestBuilder.cpp`
-   - `src/Oxygen/Cooker/Import/Internal/GeometryDescriptorImportRequestBuilder.cpp`
-   - `src/Oxygen/Cooker/Import/Internal/Jobs/MaterialDescriptorImportJob.cpp`
-   - `src/Oxygen/Cooker/Import/Internal/Jobs/GeometryDescriptorImportJob.cpp`
-   - `src/Oxygen/Cooker/Import/AsyncImportService.cpp`
-   - `src/Oxygen/Cooker/Tools/ImportTool/BatchCommand.cpp`
-   - `src/Oxygen/Cooker/Test/Import/AsyncImportService_test.cpp`
-   - `src/Oxygen/Cooker/Test/Import/MaterialDescriptorImportRequestBuilder_test.cpp`
-   - `src/Oxygen/Cooker/Test/Import/ImportManifest_material_descriptor_test.cpp`
-   - `src/Oxygen/Cooker/Test/Import/MaterialDescriptorImportJob_test.cpp`
-   - `src/Oxygen/Cooker/Test/Import/GeometryDescriptorImportRequestBuilder_test.cpp`
-   - `src/Oxygen/Cooker/Test/Import/ImportManifest_geometry_descriptor_test.cpp`
-   - `design/content-pipeline/material-cooking-architecture.md`
-   - `design/content-pipeline/buffer-cooking-architecture.md`
-   - `design/content-pipeline/pakgen-supersession-implementation-plan.md`
-4. Tests run: none (no-build policy active)
-5. Result: removed material/geometry descriptor payload carriers from `ImportOptions`; routing/builders/jobs now use top-level `ImportRequest` payloads (`material_descriptor`, `geometry_descriptor`). Added explicit governance comment in `ImportOptions` to prevent adding new non-texture domain payload/tuning without owner approval.
-6. Remaining delta to phase exit gate:
-   - run and pass affected descriptor/material/geometry test suites externally
-   - continue P5 geometry job completion and close remaining pending tasks in Section 6
+85. Date: 2026-03-02
+86. Phase: P1/P4/P5 (descriptor payload architecture correction)
+87. Files changed:
+    - `src/Oxygen/Cooker/Import/ImportOptions.h`
+    - `src/Oxygen/Cooker/Import/ImportRequest.h`
+    - `src/Oxygen/Cooker/Import/Internal/MaterialDescriptorImportRequestBuilder.cpp`
+    - `src/Oxygen/Cooker/Import/Internal/GeometryDescriptorImportRequestBuilder.cpp`
+    - `src/Oxygen/Cooker/Import/Internal/Jobs/MaterialDescriptorImportJob.cpp`
+    - `src/Oxygen/Cooker/Import/Internal/Jobs/GeometryDescriptorImportJob.cpp`
+    - `src/Oxygen/Cooker/Import/AsyncImportService.cpp`
+    - `src/Oxygen/Cooker/Tools/ImportTool/BatchCommand.cpp`
+    - `src/Oxygen/Cooker/Test/Import/AsyncImportService_test.cpp`
+    - `src/Oxygen/Cooker/Test/Import/MaterialDescriptorImportRequestBuilder_test.cpp`
+    - `src/Oxygen/Cooker/Test/Import/ImportManifest_material_descriptor_test.cpp`
+    - `src/Oxygen/Cooker/Test/Import/MaterialDescriptorImportJob_test.cpp`
+    - `src/Oxygen/Cooker/Test/Import/GeometryDescriptorImportRequestBuilder_test.cpp`
+    - `src/Oxygen/Cooker/Test/Import/ImportManifest_geometry_descriptor_test.cpp`
+    - `design/content-pipeline/material-cooking-architecture.md`
+    - `design/content-pipeline/buffer-cooking-architecture.md`
+    - `design/content-pipeline/pakgen-supersession-implementation-plan.md`
+88. Tests run: none (no-build policy active)
+89. Result: removed material/geometry descriptor payload carriers from `ImportOptions`; routing/builders/jobs now use top-level `ImportRequest` payloads (`material_descriptor`, `geometry_descriptor`). Added explicit governance comment in `ImportOptions` to prevent adding new non-texture domain payload/tuning without owner approval.
+90. Remaining delta to phase exit gate:
+    - run and pass affected descriptor/material/geometry test suites externally
+    - continue P5 geometry job completion and close remaining pending tasks in Section 6
 
-1. Date: 2026-03-02
-2. Phase: P5 (geometry descriptor execution + coverage closure)
-3. Files changed:
-   - `src/Oxygen/Cooker/Import/Internal/Jobs/GeometryDescriptorImportJob.cpp`
-   - `src/Oxygen/Cooker/Import/Internal/Pipelines/MeshBuildPipeline.cpp`
-   - `src/Oxygen/Cooker/Import/Internal/Pipelines/GeometryPipeline.cpp`
-   - `src/Oxygen/Cooker/Test/Import/GeometryPipeline_test.cpp`
-   - `src/Oxygen/Cooker/Test/Import/GeometryDescriptorImportJob_test.cpp`
-   - `src/Oxygen/Cooker/Test/CMakeLists.txt`
-   - `design/content-pipeline/pakgen-supersession-implementation-plan.md`
-4. Tests run: none (no-build policy active)
-5. Result: completed geometry-descriptor job execution hardening and expanded coverage with dedicated job tests for standard, pre-cooked `.obuf` references, procedural descriptors, skinned descriptors, failure diagnostics, and dedupe conflict invariant; aligned skinned descriptor serialization/finalization to avoid duplicated skinned payload writes and keep descriptor layout loader-compatible.
-6. Remaining delta to phase exit gate:
-   - run and pass updated geometry descriptor and geometry pipeline suites externally
-   - confirm updated P5 tests in CI, then flip phase status to `done`
+91. Date: 2026-03-02
+92. Phase: P5 (geometry descriptor execution + coverage closure)
+93. Files changed:
+    - `src/Oxygen/Cooker/Import/Internal/Jobs/GeometryDescriptorImportJob.cpp`
+    - `src/Oxygen/Cooker/Import/Internal/Pipelines/MeshBuildPipeline.cpp`
+    - `src/Oxygen/Cooker/Import/Internal/Pipelines/GeometryPipeline.cpp`
+    - `src/Oxygen/Cooker/Test/Import/GeometryPipeline_test.cpp`
+    - `src/Oxygen/Cooker/Test/Import/GeometryDescriptorImportJob_test.cpp`
+    - `src/Oxygen/Cooker/Test/CMakeLists.txt`
+    - `design/content-pipeline/pakgen-supersession-implementation-plan.md`
+94. Tests run: none (no-build policy active)
+95. Result: completed geometry-descriptor job execution hardening and expanded coverage with dedicated job tests for standard, pre-cooked `.obuf` references, procedural descriptors, skinned descriptors, failure diagnostics, and dedupe conflict invariant; aligned skinned descriptor serialization/finalization to avoid duplicated skinned payload writes and keep descriptor layout loader-compatible.
+96. Remaining delta to phase exit gate:
+    - run and pass updated geometry descriptor and geometry pipeline suites externally
+    - confirm updated P5 tests in CI, then flip phase status to `done`
 
-1. Date: 2026-03-02
-2. Phase: P5 (geometry descriptor domain closeout)
-3. Files changed:
-   - `design/content-pipeline/pakgen-supersession-implementation-plan.md`
-4. Tests run:
-   - external execution (user confirmation): build/tests pass after geometry descriptor updates
-5. Result: P5 exit gate satisfied; phase status moved to `done` and completion math updated.
-6. Remaining delta to phase exit gate: none
+97. Date: 2026-03-02
+98. Phase: P5 (geometry descriptor domain closeout)
+99. Files changed:
+    - `design/content-pipeline/pakgen-supersession-implementation-plan.md`
+100. Tests run:
+     - external execution (user confirmation): build/tests pass after geometry descriptor updates
+101. Result: P5 exit gate satisfied; phase status moved to `done` and completion math updated.
+102. Remaining delta to phase exit gate: none
 
-1. Date: 2026-03-02
-2. Phase: P3 (geometry buffer subdocument model closeout)
-3. Files changed:
-   - `src/Oxygen/Cooker/Import/Internal/Jobs/BufferImportSubmitter.cpp`
-   - `src/Oxygen/Cooker/Import/Internal/Jobs/GeometryDescriptorImportJob.cpp`
-   - `src/Oxygen/Cooker/Test/Import/GeometryDescriptorImportJob_test.cpp`
-   - `design/content-pipeline/pakgen-supersession-implementation-plan.md`
-4. Tests run: none (no-build policy active)
-5. Result: closed remaining P3 implementation gaps with deterministic mounted-root `.obuf` resolution rules, canonical cross-job dedupe sidecar constraints, and expanded geometry job coverage for mounted-root resolution, ambiguity diagnostics, unmounted virtual paths, and cross-job dedupe conflicts.
-6. Remaining delta to phase exit gate: none
+103. Date: 2026-03-02
+104. Phase: P3 (geometry buffer subdocument model closeout)
+105. Files changed:
+     - `src/Oxygen/Cooker/Import/Internal/Jobs/BufferImportSubmitter.cpp`
+     - `src/Oxygen/Cooker/Import/Internal/Jobs/GeometryDescriptorImportJob.cpp`
+     - `src/Oxygen/Cooker/Test/Import/GeometryDescriptorImportJob_test.cpp`
+     - `design/content-pipeline/pakgen-supersession-implementation-plan.md`
+106. Tests run: none (no-build policy active)
+107. Result: closed remaining P3 implementation gaps with deterministic mounted-root `.obuf` resolution rules, canonical cross-job dedupe sidecar constraints, and expanded geometry job coverage for mounted-root resolution, ambiguity diagnostics, unmounted virtual paths, and cross-job dedupe conflicts.
+108. Remaining delta to phase exit gate: none
 
-1. Date: 2026-03-02
-2. Phase: P1 (shared descriptor infrastructure closeout)
-3. Files changed:
-   - `src/Oxygen/Cooker/Import/Internal/Utils/DescriptorDocument.h`
-   - `src/Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h`
-   - `src/Oxygen/Cooker/Import/Internal/TextureDescriptorImportRequestBuilder.cpp`
-   - `src/Oxygen/Cooker/Import/Internal/MaterialDescriptorImportRequestBuilder.cpp`
-   - `src/Oxygen/Cooker/Import/Internal/GeometryDescriptorImportRequestBuilder.cpp`
-   - `src/Oxygen/Cooker/Import/Internal/BufferContainerImportRequestBuilder.cpp`
-   - `src/Oxygen/Cooker/Import/Internal/Jobs/MaterialDescriptorImportJob.cpp`
-   - `src/Oxygen/Cooker/Import/Internal/Jobs/GeometryDescriptorImportJob.cpp`
-   - `src/Oxygen/Cooker/Import/Internal/Jobs/BufferImportSubmitter.cpp`
-   - `src/Oxygen/Cooker/Import/Internal/ScriptImportRequestBuilder.cpp`
-   - `src/Oxygen/Cooker/Import/Internal/PhysicsImportRequestBuilder.cpp`
-   - `src/Oxygen/Cooker/Import/Internal/Pipelines/PhysicsSidecarImportPipeline.cpp`
-   - `design/content-pipeline/pakgen-supersession-implementation-plan.md`
-4. Tests run: none (no-build policy active)
-5. Result: completed shared descriptor ingress and virtual-path/reference utility consolidation. Descriptor request-builders now use a common JSON document loader/error shaper; canonical virtual path and mounted-root resolution logic is centralized and reused by descriptor jobs and related sidecar request paths.
-6. Remaining delta to phase exit gate: none
+109. Date: 2026-03-02
+110. Phase: P1 (shared descriptor infrastructure closeout)
+111. Files changed:
+     - `src/Oxygen/Cooker/Import/Internal/Utils/DescriptorDocument.h`
+     - `src/Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h`
+     - `src/Oxygen/Cooker/Import/Internal/TextureDescriptorImportRequestBuilder.cpp`
+     - `src/Oxygen/Cooker/Import/Internal/MaterialDescriptorImportRequestBuilder.cpp`
+     - `src/Oxygen/Cooker/Import/Internal/GeometryDescriptorImportRequestBuilder.cpp`
+     - `src/Oxygen/Cooker/Import/Internal/BufferContainerImportRequestBuilder.cpp`
+     - `src/Oxygen/Cooker/Import/Internal/Jobs/MaterialDescriptorImportJob.cpp`
+     - `src/Oxygen/Cooker/Import/Internal/Jobs/GeometryDescriptorImportJob.cpp`
+     - `src/Oxygen/Cooker/Import/Internal/Jobs/BufferImportSubmitter.cpp`
+     - `src/Oxygen/Cooker/Import/Internal/ScriptImportRequestBuilder.cpp`
+     - `src/Oxygen/Cooker/Import/Internal/PhysicsImportRequestBuilder.cpp`
+     - `src/Oxygen/Cooker/Import/Internal/Pipelines/PhysicsSidecarImportPipeline.cpp`
+     - `design/content-pipeline/pakgen-supersession-implementation-plan.md`
+112. Tests run: none (no-build policy active)
+113. Result: completed shared descriptor ingress and virtual-path/reference utility consolidation. Descriptor request-builders now use a common JSON document loader/error shaper; canonical virtual path and mounted-root resolution logic is centralized and reused by descriptor jobs and related sidecar request paths.
+114. Remaining delta to phase exit gate: none
 
-1. Date: 2026-03-02
-2. Phase: P6 (scene descriptor ingress/execution integration)
-3. Files changed:
-   - `src/Oxygen/Cooker/Import/Schemas/oxygen.scene-descriptor.schema.json`
-   - `src/Oxygen/Cooker/Import/SceneDescriptorImportSettings.h`
-   - `src/Oxygen/Cooker/Import/SceneDescriptorImportRequestBuilder.h`
-   - `src/Oxygen/Cooker/Import/Internal/SceneDescriptorImportRequestBuilder.cpp`
-   - `src/Oxygen/Cooker/Import/Internal/Jobs/SceneDescriptorImportJob.h`
-   - `src/Oxygen/Cooker/Import/Internal/Jobs/SceneDescriptorImportJob.cpp`
-   - `src/Oxygen/Cooker/Import/ImportRequest.h`
-   - `src/Oxygen/Cooker/Import/ImportManifest.h`
-   - `src/Oxygen/Cooker/Import/ImportManifest.cpp`
-   - `src/Oxygen/Cooker/Import/Schemas/oxygen.import-manifest.schema.json`
-   - `src/Oxygen/Cooker/Import/AsyncImportService.cpp`
-   - `src/Oxygen/Cooker/Tools/ImportTool/BatchCommand.cpp`
-   - `src/Oxygen/Cooker/Tools/ImportTool/README.md`
-   - `src/Oxygen/Cooker/CMakeLists.txt`
-   - `src/Oxygen/Cooker/Test/Import/SceneDescriptorJsonSchema_test.cpp`
-   - `src/Oxygen/Cooker/Test/Import/SceneDescriptorImportRequestBuilder_test.cpp`
-   - `src/Oxygen/Cooker/Test/Import/ImportManifest_scene_descriptor_test.cpp`
-   - `src/Oxygen/Cooker/Test/Import/SceneDescriptorImportJob_test.cpp`
-   - `src/Oxygen/Cooker/Test/Import/AsyncImportService_test.cpp`
-   - `src/Oxygen/Cooker/Test/CMakeLists.txt`
-   - `design/content-pipeline/pakgen-supersession-implementation-plan.md`
-4. Tests run: none (no-build policy active)
-5. Result: scene-descriptor domain is now first-class across schema generation, request building, manifest defaults/job wiring, async job routing, batch report classification, job execution (`.oscene` emission with deterministic mounted reference resolution), and focused schema/request/manifest/job/routing test coverage.
-6. Remaining delta to phase exit gate:
-   - run and pass new scene-descriptor suites externally/CI
-   - validate end-to-end mixed-domain manifest DAG scenario with scene-descriptor dependencies
+115. Date: 2026-03-02
+116. Phase: P6 (scene descriptor ingress/execution integration)
+117. Files changed:
+     - `src/Oxygen/Cooker/Import/Schemas/oxygen.scene-descriptor.schema.json`
+     - `src/Oxygen/Cooker/Import/SceneDescriptorImportSettings.h`
+     - `src/Oxygen/Cooker/Import/SceneDescriptorImportRequestBuilder.h`
+     - `src/Oxygen/Cooker/Import/Internal/SceneDescriptorImportRequestBuilder.cpp`
+     - `src/Oxygen/Cooker/Import/Internal/Jobs/SceneDescriptorImportJob.h`
+     - `src/Oxygen/Cooker/Import/Internal/Jobs/SceneDescriptorImportJob.cpp`
+     - `src/Oxygen/Cooker/Import/ImportRequest.h`
+     - `src/Oxygen/Cooker/Import/ImportManifest.h`
+     - `src/Oxygen/Cooker/Import/ImportManifest.cpp`
+     - `src/Oxygen/Cooker/Import/Schemas/oxygen.import-manifest.schema.json`
+     - `src/Oxygen/Cooker/Import/AsyncImportService.cpp`
+     - `src/Oxygen/Cooker/Tools/ImportTool/BatchCommand.cpp`
+     - `src/Oxygen/Cooker/Tools/ImportTool/README.md`
+     - `src/Oxygen/Cooker/CMakeLists.txt`
+     - `src/Oxygen/Cooker/Test/Import/SceneDescriptorJsonSchema_test.cpp`
+     - `src/Oxygen/Cooker/Test/Import/SceneDescriptorImportRequestBuilder_test.cpp`
+     - `src/Oxygen/Cooker/Test/Import/ImportManifest_scene_descriptor_test.cpp`
+     - `src/Oxygen/Cooker/Test/Import/SceneDescriptorImportJob_test.cpp`
+     - `src/Oxygen/Cooker/Test/Import/AsyncImportService_test.cpp`
+     - `src/Oxygen/Cooker/Test/CMakeLists.txt`
+     - `design/content-pipeline/pakgen-supersession-implementation-plan.md`
+118. Tests run: none (no-build policy active)
+119. Result: scene-descriptor domain is now first-class across schema generation, request building, manifest defaults/job wiring, async job routing, batch report classification, job execution (`.oscene` emission with deterministic mounted reference resolution), and focused schema/request/manifest/job/routing test coverage.
+120. Remaining delta to phase exit gate:
+     - run and pass new scene-descriptor suites externally/CI
+     - validate end-to-end mixed-domain manifest DAG scenario with scene-descriptor dependencies
 
-1. Date: 2026-03-07
-2. Phase: P8 (examples loose-cooked migration probe)
-3. Files changed:
-   - `Examples/Content/scenes/cubes/import-manifest.json`
-   - `Examples/Content/scenes/cubes/*.material.json`
-   - `Examples/Content/scenes/cubes/*.geometry.json`
-   - `Examples/Content/scenes/cubes/CubeScene.scene.json`
-   - `Examples/Content/scenes/emissive/import-manifest.json`
-   - `Examples/Content/scenes/emissive/*.material.json`
-   - `Examples/Content/scenes/emissive/*.geometry.json`
-   - `Examples/Content/scenes/emissive/EmissiveScene.scene.json`
-   - `Examples/Content/scenes/instancing/import-manifest.json`
-   - `Examples/Content/scenes/instancing/MatInstanced.material.json`
-   - `Examples/Content/scenes/instancing/GeoCube.geometry.json`
-   - `Examples/Content/scenes/instancing/InstancingTestScene.scene.json`
-   - `Examples/Content/scenes/multi-script/import-manifest.json`
-   - `Examples/Content/scenes/multi-script/ShowcaseExternalMat.material.json`
-   - `Examples/Content/scenes/multi-script/ShowcaseOrbMat.material.json`
-   - `Examples/Content/scenes/multi-script/multi_script_scene.input.json`
-   - `Examples/Content/scenes/multi-script/multi_script_scene.scene.json`
-   - `Examples/Content/scenes/proc-cubes/import-manifest.json`
-   - `Examples/Content/scenes/proc-cubes/ProcCubeBaseMat.material.json`
-   - `Examples/Content/scenes/proc-cubes/ProcCubeAccentMat.material.json`
-   - `Examples/Content/scenes/proc-cubes/SceneProcCubes.scene.json`
-   - `design/content-pipeline/pakgen-supersession-implementation-plan.md`
-4. Tests run:
-   - `out/build-vs/bin/Debug/Oxygen.Cooker.ImportTool.exe --no-tui batch --manifest Examples/Content/scenes/cubes/import-manifest.json` (pass, jobs=9/9)
-   - `out/build-vs/bin/Debug/Oxygen.Cooker.ImportTool.exe --no-tui batch --manifest Examples/Content/scenes/emissive/import-manifest.json` (pass, jobs=13/13)
-   - `out/build-vs/bin/Debug/Oxygen.Cooker.ImportTool.exe --no-tui batch --manifest Examples/Content/scenes/instancing/import-manifest.json` (pass, jobs=3/3)
-   - `out/build-vs/bin/Debug/Oxygen.Cooker.ImportTool.exe --no-tui batch --manifest Examples/Content/scenes/multi-script/import-manifest.json` (pass, jobs=7/7)
-   - `out/build-vs/bin/Debug/Oxygen.Cooker.ImportTool.exe --no-tui batch --manifest Examples/Content/scenes/proc-cubes/import-manifest.json` (pass, jobs=5/5)
-   - `out/build-vs/bin/Debug/Oxygen.Cooker.Inspector.exe validate Examples/Content/.cooked` (pass)
-5. Result: migrated all remaining legacy YAML scenes under `Examples/Content/scenes` (`cubes`, `emissive`, `instancing`, `multi-script`, `proc-cubes`) to descriptor/manifest-based loose-cooked imports, including script-sidecar/input conversion and explicit instancing node expansion for the former `generate` directive.
-6. Remaining delta to phase exit gate:
-   - wire these upgraded scene flows into official examples/docs entrypoints (current `Examples/Content/make_pak.py` remains PakGen-only)
-   - complete C++ PakBuilder first-class workflow/documentation closure and phase-level CI proof for P8
+121. Date: 2026-03-07
+122. Phase: P8 (examples loose-cooked migration probe)
+123. Files changed:
+     - `Examples/Content/scenes/cubes/import-manifest.json`
+     - `Examples/Content/scenes/cubes/*.material.json`
+     - `Examples/Content/scenes/cubes/*.geometry.json`
+     - `Examples/Content/scenes/cubes/CubeScene.scene.json`
+     - `Examples/Content/scenes/emissive/import-manifest.json`
+     - `Examples/Content/scenes/emissive/*.material.json`
+     - `Examples/Content/scenes/emissive/*.geometry.json`
+     - `Examples/Content/scenes/emissive/EmissiveScene.scene.json`
+     - `Examples/Content/scenes/instancing/import-manifest.json`
+     - `Examples/Content/scenes/instancing/MatInstanced.material.json`
+     - `Examples/Content/scenes/instancing/GeoCube.geometry.json`
+     - `Examples/Content/scenes/instancing/InstancingTestScene.scene.json`
+     - `Examples/Content/scenes/multi-script/import-manifest.json`
+     - `Examples/Content/scenes/multi-script/ShowcaseExternalMat.material.json`
+     - `Examples/Content/scenes/multi-script/ShowcaseOrbMat.material.json`
+     - `Examples/Content/scenes/multi-script/multi_script_scene.input.json`
+     - `Examples/Content/scenes/multi-script/multi_script_scene.scene.json`
+     - `Examples/Content/scenes/proc-cubes/import-manifest.json`
+     - `Examples/Content/scenes/proc-cubes/ProcCubeBaseMat.material.json`
+     - `Examples/Content/scenes/proc-cubes/ProcCubeAccentMat.material.json`
+     - `Examples/Content/scenes/proc-cubes/SceneProcCubes.scene.json`
+     - `design/content-pipeline/pakgen-supersession-implementation-plan.md`
+124. Tests run:
+     - `out/build-vs/bin/Debug/Oxygen.Cooker.ImportTool.exe --no-tui batch --manifest Examples/Content/scenes/cubes/import-manifest.json` (pass, jobs=9/9)
+     - `out/build-vs/bin/Debug/Oxygen.Cooker.ImportTool.exe --no-tui batch --manifest Examples/Content/scenes/emissive/import-manifest.json` (pass, jobs=13/13)
+     - `out/build-vs/bin/Debug/Oxygen.Cooker.ImportTool.exe --no-tui batch --manifest Examples/Content/scenes/instancing/import-manifest.json` (pass, jobs=3/3)
+     - `out/build-vs/bin/Debug/Oxygen.Cooker.ImportTool.exe --no-tui batch --manifest Examples/Content/scenes/multi-script/import-manifest.json` (pass, jobs=7/7)
+     - `out/build-vs/bin/Debug/Oxygen.Cooker.ImportTool.exe --no-tui batch --manifest Examples/Content/scenes/proc-cubes/import-manifest.json` (pass, jobs=5/5)
+     - `out/build-vs/bin/Debug/Oxygen.Cooker.Inspector.exe validate Examples/Content/.cooked` (pass)
+125. Result: migrated all remaining legacy YAML scenes under `Examples/Content/scenes` (`cubes`, `emissive`, `instancing`, `multi-script`, `proc-cubes`) to descriptor/manifest-based loose-cooked imports, including script-sidecar/input conversion and explicit instancing node expansion for the former `generate` directive.
+126. Remaining delta to phase exit gate:
+     - wire these upgraded scene flows into official examples/docs entrypoints (current `Examples/Content/make_pak.py` remains PakGen-only)
+     - complete C++ PakBuilder first-class workflow/documentation closure and phase-level CI proof for P8

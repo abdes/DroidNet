@@ -1,11 +1,11 @@
 {
-    "name": "bouncy_ball",
-    "content_hashing": true,
-    "virtual_path": "/.cooked/Physics/Materials/bouncy_ball.opmat",
-    "static_friction": 0.6,
-    "dynamic_friction": 0.6,
-    "restitution": 0.6,
-    "density": 500.0,
-    "combine_mode_friction": "average",
-    "combine_mode_restitution": "average"
+  "name": "bouncy_ball",
+  "content_hashing": true,
+  "virtual_path": "/.cooked/Physics/Materials/bouncy_ball.opmat",
+  "static_friction": 0.6,
+  "dynamic_friction": 0.6,
+  "restitution": 0.6,
+  "density": 500.0,
+  "combine_mode_friction": "average",
+  "combine_mode_restitution": "average"
 }

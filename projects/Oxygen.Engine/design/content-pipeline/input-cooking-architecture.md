@@ -47,16 +47,16 @@ Out of scope:
 
 The following facts were captured before implementation started and are retained as baseline context:
 
-| Fact | Evidence |
-| --- | --- |
-| Loose layout already supports input descriptors | `src/Oxygen/Cooker/Loose/LooseCookedLayout.h` (`kInputActionDescriptorExtension`, `kInputMappingContextDescriptorExtension`, input virtual path/subdir methods) |
-| Runtime loaders for input assets already exist | `src/Oxygen/Content/Loaders/InputActionLoader.h`, `src/Oxygen/Content/Loaders/InputMappingContextLoader.h` |
-| Scene loading currently parses input context binding component table | `src/Oxygen/Content/Loaders/SceneLoader.h` (`kInputContextBinding` branch) |
-| Scene asset dependency publication currently uses scene input bindings | `src/Oxygen/Content/AssetLoader.cpp` (`publish_scene_input_mapping_context_dependencies`) |
-| Demo currently hydrates contexts from scene bindings | `Examples/DemoShell/Services/SceneLoaderService.cpp` (`AttachInputMappings`) |
-| PakGen currently accepts and packs `scene.input_context_bindings` | `src/Oxygen/Cooker/Tools/PakGen/src/pakgen/spec/validator.py`, `.../packing/packers.py` |
-| Import stack currently has script/script-sidecar dual path, no input path | `src/Oxygen/Cooker/Import/AsyncImportService.cpp`, `ImportManifest.cpp`, `BatchCommand.cpp`, `ImportRunner.cpp` |
-| Input import job/pipeline/request-builder classes do not exist | no matches for `InputImportJob`, `InputImportPipeline`, `InputImportKind`, `BuildInputImportRequest` under `src/Oxygen/Cooker/Import` |
+| Fact                                                                      | Evidence                                                                                                                                                        |
+| ------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Loose layout already supports input descriptors                           | `src/Oxygen/Cooker/Loose/LooseCookedLayout.h` (`kInputActionDescriptorExtension`, `kInputMappingContextDescriptorExtension`, input virtual path/subdir methods) |
+| Runtime loaders for input assets already exist                            | `src/Oxygen/Content/Loaders/InputActionLoader.h`, `src/Oxygen/Content/Loaders/InputMappingContextLoader.h`                                                      |
+| Scene loading currently parses input context binding component table      | `src/Oxygen/Content/Loaders/SceneLoader.h` (`kInputContextBinding` branch)                                                                                      |
+| Scene asset dependency publication currently uses scene input bindings    | `src/Oxygen/Content/AssetLoader.cpp` (`publish_scene_input_mapping_context_dependencies`)                                                                       |
+| Demo currently hydrates contexts from scene bindings                      | `Examples/DemoShell/Services/SceneLoaderService.cpp` (`AttachInputMappings`)                                                                                    |
+| PakGen currently accepts and packs `scene.input_context_bindings`         | `src/Oxygen/Cooker/Tools/PakGen/src/pakgen/spec/validator.py`, `.../packing/packers.py`                                                                         |
+| Import stack currently has script/script-sidecar dual path, no input path | `src/Oxygen/Cooker/Import/AsyncImportService.cpp`, `ImportManifest.cpp`, `BatchCommand.cpp`, `ImportRunner.cpp`                                                 |
+| Input import job/pipeline/request-builder classes do not exist            | no matches for `InputImportJob`, `InputImportPipeline`, `InputImportKind`, `BuildInputImportRequest` under `src/Oxygen/Cooker/Import`                           |
 
 Conclusion:
 
@@ -408,7 +408,11 @@ Manifest example (typical — single self-contained file):
 ```json
 {
   "jobs": [
-    { "id": "input.all", "type": "input", "source": "Content/Input/PlayerInput.input.json" }
+    {
+      "id": "input.all",
+      "type": "input",
+      "source": "Content/Input/PlayerInput.input.json"
+    }
   ]
 }
 ```
@@ -418,8 +422,17 @@ Manifest example (split files — vehicle references actions from main input fil
 ```json
 {
   "jobs": [
-    { "id": "input.main",    "type": "input", "source": "Content/Input/PlayerInput.input.json" },
-    { "id": "input.vehicle",  "type": "input", "source": "Content/Input/Vehicle.input.json", "depends_on": ["input.main"] }
+    {
+      "id": "input.main",
+      "type": "input",
+      "source": "Content/Input/PlayerInput.input.json"
+    },
+    {
+      "id": "input.vehicle",
+      "type": "input",
+      "source": "Content/Input/Vehicle.input.json",
+      "depends_on": ["input.main"]
+    }
   ]
 }
 ```
@@ -436,8 +449,14 @@ Editor workspace settings (VSCode example):
 ```json
 {
   "json.schemas": [
-    { "fileMatch": ["*.input.json"],        "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.input.schema.json" },
-    { "fileMatch": ["*.input-action.json"], "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.input-action.schema.json" }
+    {
+      "fileMatch": ["*.input.json"],
+      "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.input.schema.json"
+    },
+    {
+      "fileMatch": ["*.input-action.json"],
+      "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.input-action.schema.json"
+    }
   ]
 }
 ```
@@ -485,9 +504,9 @@ Canonical document (`PlayerInput.input.json`):
   "$schema": "./src/Oxygen/Cooker/Import/Schemas/oxygen.input.schema.json",
 
   "actions": [
-    { "name": "Move",   "type": "axis2d" },
-    { "name": "Look",   "type": "axis2d" },
-    { "name": "Jump",   "type": "bool", "consumes_input": true },
+    { "name": "Move", "type": "axis2d" },
+    { "name": "Look", "type": "axis2d" },
+    { "name": "Jump", "type": "bool", "consumes_input": true },
     { "name": "Sprint", "type": "bool" }
   ],
 
@@ -498,13 +517,13 @@ Canonical document (`PlayerInput.input.json`):
       "priority": 100,
 
       "mappings": [
-        { "action": "Move",   "slot": "W",          "trigger": "down" },
-        { "action": "Move",   "slot": "S",          "trigger": "down", "scale": [0, -1] },
-        { "action": "Move",   "slot": "A",          "trigger": "down", "scale": [-1, 0] },
-        { "action": "Move",   "slot": "D",          "trigger": "down", "scale": [1, 0] },
-        { "action": "Look",   "slot": "MouseXY",    "trigger": "down" },
-        { "action": "Jump",   "slot": "Space",      "trigger": "pressed" },
-        { "action": "Sprint", "slot": "LeftShift",   "trigger": "down" }
+        { "action": "Move", "slot": "W", "trigger": "down" },
+        { "action": "Move", "slot": "S", "trigger": "down", "scale": [0, -1] },
+        { "action": "Move", "slot": "A", "trigger": "down", "scale": [-1, 0] },
+        { "action": "Move", "slot": "D", "trigger": "down", "scale": [1, 0] },
+        { "action": "Look", "slot": "MouseXY", "trigger": "down" },
+        { "action": "Jump", "slot": "Space", "trigger": "pressed" },
+        { "action": "Sprint", "slot": "LeftShift", "trigger": "down" }
       ]
     },
     {
@@ -512,11 +531,31 @@ Canonical document (`PlayerInput.input.json`):
       "priority": 50,
 
       "mappings": [
-        { "action": "Move",  "slot": "UpArrow",    "trigger": "down",    "scale": [0, 1] },
-        { "action": "Move",  "slot": "DownArrow",  "trigger": "down",    "scale": [0, -1] },
-        { "action": "Move",  "slot": "LeftArrow",  "trigger": "down",    "scale": [-1, 0] },
-        { "action": "Move",  "slot": "RightArrow", "trigger": "down",    "scale": [1, 0] },
-        { "action": "Jump",  "slot": "Return",     "trigger": "pressed" }
+        {
+          "action": "Move",
+          "slot": "UpArrow",
+          "trigger": "down",
+          "scale": [0, 1]
+        },
+        {
+          "action": "Move",
+          "slot": "DownArrow",
+          "trigger": "down",
+          "scale": [0, -1]
+        },
+        {
+          "action": "Move",
+          "slot": "LeftArrow",
+          "trigger": "down",
+          "scale": [-1, 0]
+        },
+        {
+          "action": "Move",
+          "slot": "RightArrow",
+          "trigger": "down",
+          "scale": [1, 0]
+        },
+        { "action": "Jump", "slot": "Return", "trigger": "pressed" }
       ]
     }
   ]
@@ -562,11 +601,11 @@ Validation rules:
 
 Binary mapping:
 
-| JSON field | Binary field (`InputActionAssetDesc`) | Mapping |
-| --- | --- | --- |
-| `name` | `name[64]` | UTF-8, null-terminated, max 63 bytes |
-| `type` | `value_type` | `"bool"`→0, `"axis1d"`→1, `"axis2d"`→2 |
-| `consumes_input` | `flags` | `true` → `kConsumesInput` bit set |
+| JSON field       | Binary field (`InputActionAssetDesc`) | Mapping                                |
+| ---------------- | ------------------------------------- | -------------------------------------- |
+| `name`           | `name[64]`                            | UTF-8, null-terminated, max 63 bytes   |
+| `type`           | `value_type`                          | `"bool"`→0, `"axis1d"`→1, `"axis2d"`→2 |
+| `consumes_input` | `flags`                               | `true` → `kConsumesInput` bit set      |
 
 ### 7.4.3.2 Context Declaration
 
@@ -591,12 +630,12 @@ Validation rules:
 
 Binary mapping:
 
-| JSON field | Binary field (`InputMappingContextAssetDesc`) | Mapping |
-| --- | --- | --- |
-| `name` | `name[64]` | UTF-8, null-terminated, max 63 bytes |
-| `auto_load` | `flags` | `true` → `kAutoLoad` bit set |
-| `auto_activate` | `flags` | `true` → `kAutoActivate` bit set |
-| `priority` | `default_priority` | direct int32 copy |
+| JSON field      | Binary field (`InputMappingContextAssetDesc`) | Mapping                              |
+| --------------- | --------------------------------------------- | ------------------------------------ |
+| `name`          | `name[64]`                                    | UTF-8, null-terminated, max 63 bytes |
+| `auto_load`     | `flags`                                       | `true` → `kAutoLoad` bit set         |
+| `auto_activate` | `flags`                                       | `true` → `kAutoActivate` bit set     |
+| `priority`      | `default_priority`                            | direct int32 copy                    |
 
 ### 7.4.3.3 Mapping Record Contract
 
@@ -625,12 +664,12 @@ Validation rules:
 
 Binary mapping:
 
-| JSON field | Binary field (`InputActionMappingRecord`) | Mapping |
-| --- | --- | --- |
-| `action` | `action_asset_key` | resolved to `AssetKey` from action name |
-| `slot` | `slot_name_offset` | string table offset |
-| `scale` | `scale[2]` | direct float copy |
-| `bias` | `bias[2]` | direct float copy |
+| JSON field | Binary field (`InputActionMappingRecord`) | Mapping                                 |
+| ---------- | ----------------------------------------- | --------------------------------------- |
+| `action`   | `action_asset_key`                        | resolved to `AssetKey` from action name |
+| `slot`     | `slot_name_offset`                        | string table offset                     |
+| `scale`    | `scale[2]`                                | direct float copy                       |
+| `bias`     | `bias[2]`                                 | direct float copy                       |
 
 ### 7.4.4 Input Slot Names
 
@@ -695,14 +734,14 @@ Validation rules:
 
 Binary mapping:
 
-| JSON field | Binary field (`InputTriggerRecord`) | Mapping |
-| --- | --- | --- |
-| `type` | `type` | enum ordinal |
-| `behavior` | `behavior` | `"explicit"`→0, `"implicit"`→1, `"blocker"`→2 |
-| `actuation_threshold` | `actuation_threshold` | direct float |
-| `hold_time`, `interval` | `fparams[0..4]` | trigger-type-specific packing |
-| `chord_action` | `linked_action_asset_key` | resolved to `AssetKey` |
-| `combo_actions` | `aux_start_index` + `aux_count` | references aux record table |
+| JSON field              | Binary field (`InputTriggerRecord`) | Mapping                                       |
+| ----------------------- | ----------------------------------- | --------------------------------------------- |
+| `type`                  | `type`                              | enum ordinal                                  |
+| `behavior`              | `behavior`                          | `"explicit"`→0, `"implicit"`→1, `"blocker"`→2 |
+| `actuation_threshold`   | `actuation_threshold`               | direct float                                  |
+| `hold_time`, `interval` | `fparams[0..4]`                     | trigger-type-specific packing                 |
+| `chord_action`          | `linked_action_asset_key`           | resolved to `AssetKey`                        |
+| `combo_actions`         | `aux_start_index` + `aux_count`     | references aux record table                   |
 
 ### 7.4.6 Trigger Aux Contract
 
@@ -719,11 +758,11 @@ Validation rules:
 
 Binary mapping:
 
-| JSON field | Binary field (`InputTriggerAuxRecord`) | Mapping |
-| --- | --- | --- |
-| `action` | `action_asset_key` | resolved to `AssetKey` |
-| `completion_states` | `completion_states` | direct uint32 |
-| `time_to_complete` | `time_to_complete_ns` | seconds → nanoseconds conversion |
+| JSON field          | Binary field (`InputTriggerAuxRecord`) | Mapping                          |
+| ------------------- | -------------------------------------- | -------------------------------- |
+| `action`            | `action_asset_key`                     | resolved to `AssetKey`           |
+| `completion_states` | `completion_states`                    | direct uint32                    |
+| `time_to_complete`  | `time_to_complete_ns`                  | seconds → nanoseconds conversion |
 
 ### 7.4.7 Parsing Ownership
 

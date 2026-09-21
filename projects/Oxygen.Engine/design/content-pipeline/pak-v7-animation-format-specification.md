@@ -432,6 +432,7 @@ Mandatory hard-fail diagnostics for Core Animation:
 14. `kCameraNear` / `kCameraFar` domain violations (`near <= 0` or `far <= near`).
 15. unresolved or duplicated retarget chain names inside one profile.
 16. animation resource compression descriptor violations against §2.2 canonical size semantics.
+
 ## 4. Domain: Skeletons, Skinning, & Morphs
 
 ### 4.1 Skeletons
@@ -903,7 +904,7 @@ To preserve fast iteration for artists and technical designers, physics authorin
 
 1. Baseline Cooked Physics (PAK authoritative defaults)
 2. Runtime Tuning Override Layer (hot-iterable)
-Overrides must not mutate topology or identity. Deterministic application order: baseline -> project override -> user/session override.
+   Overrides must not mutate topology or identity. Deterministic application order: baseline -> project override -> user/session override.
 
 ```cpp
 enum class PhysicsTuningTargetType : uint8_t {
@@ -978,6 +979,7 @@ Mandatory hard-fail diagnostics for Modular Physics Integration:
 25. `kAttachmentPinMapU32x2` payload contract is strict: each pin entry is `(vertex_index, attachment_index)`; both lanes must be in-bounds for the referenced mesh/profile attachments.
 26. physics resource compression descriptor violations against §2.2 canonical size semantics.
 27. when `PhysicsTuningOverrideRecord.backend_mask != 0`, it must be a subset of the resolved target backend domain.
+
 ## 6. Domain: Scene Bindings & Render Contacts
 
 ### 6.1 Geometry Bindings

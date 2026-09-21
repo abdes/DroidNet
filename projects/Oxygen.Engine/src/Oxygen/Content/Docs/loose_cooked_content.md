@@ -56,7 +56,7 @@ Related:
 
 1. **Intra-source references only**
 
-   Cooked assets in a source may reference only assets/resources in the *same* source.
+   Cooked assets in a source may reference only assets/resources in the _same_ source.
 
    This is a runtime correctness requirement: the loader does not support cross-source dependency edges.
 

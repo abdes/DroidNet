@@ -76,10 +76,10 @@ and wrapped, not confined to a tooltip:
 
 The public CLI **Environment** help group contains:
 
-| Option | Contract |
-| --- | --- |
+| Option                        | Contract                                                                                                                                                        |
+| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `--environment-profile <key>` | Exact keys: `scene`, `custom`, `outdoor-sunny`, `outdoor-cloudy`, `foggy-daylight`, `outdoor-dawn`, `outdoor-dusk`. Invalid keys fail with the allowed choices. |
-| `--preview-sun=true\|false` | Overrides `render_scene.preview_sun.enabled` for this process, independently of the profile. The persisted default is false. |
+| `--preview-sun=true\|false`   | Overrides `render_scene.preview_sun.enabled` for this process, independently of the profile. The persisted default is false.                                    |
 
 The existing advanced `--startup-skybox <path>` routes through Custom. With no
 explicit profile it selects transient Custom; combining it with an explicit
@@ -116,14 +116,14 @@ The [closeout record](../../../../../artifacts/ed-m08/preview-profiles/closeout.
 identifies logs, captures, settings protection, manual acceptance and open defects.
 Native artifacts are under engine `out/build-ninja/ed-m08/preview-profiles/`.
 
-| Check | Result and boundary |
-| --- | --- |
-| Native builds | Debug succeeds in `build-debug-9.log`; Release is current in `build-release-final.log`. No renderer or exposure-arithmetic change is included. |
-| Focused tests | **97/97** across six suites: DefaultSceneLighting 10, PreviewSunController 18, EnvironmentSceneSnapshot 8, SkyboxService 6, EnvironmentSettingsService 46, EnvironmentVm 9. See `tests-debug-9.log` and XML. |
-| Dedicated fixture | **13/13** native cooking jobs and Inspector validation pass. Five small scenes cover absent, untagged, authored, hidden/off, and isolated sun-only lighting. Camera framing includes the sky; axes and identities are checked in `fixture/camera-sun-only-validation.json`. |
-| Native scenarios | **18/18** runs in `matrix-20260916-085555` exit zero and pass final preview-state, scene-publication and persistence checks. Coverage includes preview off/on, all five premades, Custom, and saved-Custom relaunch. Native embedded capture images are retained. |
-| CLI rejection | Unknown profile and conflicting Scene/skybox options exit nonzero without changing settings; see `cli-rejection-results.json`. |
-| Manual visual/UI acceptance | The user confirmed the requested help readability, Custom edit/reopen persistence, sun-only behavior, and final Sponza sun/profile checks on 2026-09-16. This is user-reported acceptance; no additional assistant-operated Sponza capture is claimed. |
+| Check                       | Result and boundary                                                                                                                                                                                                                                                         |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Native builds               | Debug succeeds in `build-debug-9.log`; Release is current in `build-release-final.log`. No renderer or exposure-arithmetic change is included.                                                                                                                              |
+| Focused tests               | **97/97** across six suites: DefaultSceneLighting 10, PreviewSunController 18, EnvironmentSceneSnapshot 8, SkyboxService 6, EnvironmentSettingsService 46, EnvironmentVm 9. See `tests-debug-9.log` and XML.                                                                |
+| Dedicated fixture           | **13/13** native cooking jobs and Inspector validation pass. Five small scenes cover absent, untagged, authored, hidden/off, and isolated sun-only lighting. Camera framing includes the sky; axes and identities are checked in `fixture/camera-sun-only-validation.json`. |
+| Native scenarios            | **18/18** runs in `matrix-20260916-085555` exit zero and pass final preview-state, scene-publication and persistence checks. Coverage includes preview off/on, all five premades, Custom, and saved-Custom relaunch. Native embedded capture images are retained.           |
+| CLI rejection               | Unknown profile and conflicting Scene/skybox options exit nonzero without changing settings; see `cli-rejection-results.json`.                                                                                                                                              |
+| Manual visual/UI acceptance | The user confirmed the requested help readability, Custom edit/reopen persistence, sun-only behavior, and final Sponza sun/profile checks on 2026-09-16. This is user-reported acceptance; no additional assistant-operated Sponza capture is claimed.                      |
 
 The native scenario matrix predates the final observer/contrast refinement; the
 97-test run and user manual acceptance cover the final implementation. Earlier
@@ -190,12 +190,12 @@ commands, logs, settings, executable/model/capture/image hashes, and test XML.
   failure returned in 1.646 seconds, the child exited, the previous PNG hash
   stayed unchanged, and a partial temporary export was removed.
 
-| Native run | Observed result |
-| --- | --- |
-| `rgb-on-ready` | 1,383 authored nodes, 1,374 renderables, 4 point lights, no directional light. One preview sun added before publication; models visibly lit. |
-| `rgb-off-ready` | Same scene, camera, and EV14 exposure; CLI preview disabled. Models nearly dark under the existing local lights. |
-| `cube-preserve` | Authored directional light retained; preview skipped. Explicit CLItrue overrides persistedfalse. Scene visibly rendered. |
-| `persisted-off` | EmissiveScene, no directional light. Persistedfalse respected with no CLI override; no preview added. |
+| Native run      | Observed result                                                                                                                              |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `rgb-on-ready`  | 1,383 authored nodes, 1,374 renderables, 4 point lights, no directional light. One preview sun added before publication; models visibly lit. |
+| `rgb-off-ready` | Same scene, camera, and EV14 exposure; CLI preview disabled. Models nearly dark under the existing local lights.                             |
+| `cube-preserve` | Authored directional light retained; preview skipped. Explicit CLItrue overrides persistedfalse. Scene visibly rendered.                     |
+| `persisted-off` | EmissiveScene, no directional light. Persistedfalse respected with no CLI override; no preview added.                                        |
 
 Visual evidence uses the capture's original embedded image, extracted with
 RenderDoc's native `renderdoccmd thumb` command (2048×1120 for these captures).

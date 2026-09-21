@@ -3,16 +3,19 @@
 ## Table of Contents
 
 ### [1. Overview](#1-overview)
+
 - [1.1 Purpose and Scope](#11-purpose-and-scope)
 - [1.2 Key Features at a Glance](#12-key-features-at-a-glance)
 - [1.3 Integration with Scene System](#13-integration-with-scene-system)
 
 ### [2. Getting Started](#2-getting-started)
+
 - [2.1 Basic Usage Examples](#21-basic-usage-examples)
 - [2.2 Entry Point: Scene::Query()](#22-entry-point-scenequery)
 - [2.3 Common Query Patterns](#23-common-query-patterns)
 
 ### [3. Core Query Operations](#3-core-query-operations)
+
 - [3.1 FindFirst - Single Node Queries](#31-findfirst---single-node-queries)
 - [3.2 Collect - Multi-Node Queries](#32-collect---multi-node-queries)
 - [3.3 Count - Counting Operations](#33-count---counting-operations)
@@ -20,12 +23,14 @@
 - [3.5 Query Results and Error Handling](#35-query-results-and-error-handling)
 
 ### [4. Path-Based Navigation](#4-path-based-navigation)
+
 - [4.1 Path Syntax and Patterns](#41-path-syntax-and-patterns)
 - [4.2 Absolute vs Relative Paths](#42-absolute-vs-relative-paths)
 - [4.3 Wildcard Support (* and **)](#43-wildcard-support--and-)
 - [4.4 Path Query Performance](#44-path-query-performance)
 
 ### [5. Batch Query System](#5-batch-query-system)
+
 - [5.1 Batch Execution Concept](#51-batch-execution-concept)
 - [5.2 When to Use Batch Queries](#52-when-to-use-batch-queries)
 - [5.3 Batch API Reference](#53-batch-api-reference)
@@ -33,47 +38,55 @@
 - [5.5 Limitations and Constraints](#55-limitations-and-constraints)
 
 ### [6. Query Scope Configuration](#6-query-scope-configuration)
+
 - [6.1 Understanding Traversal Scope](#61-understanding-traversal-scope)
 - [6.2 Scope Management API](#62-scope-management-api)
 - [6.3 Full Scene vs Scoped Queries](#63-full-scene-vs-scoped-queries)
 - [6.4 Scope Impact on All Operations](#64-scope-impact-on-all-operations)
 
 ### [7. Performance Characteristics](#7-performance-characteristics)
+
 - [7.1 Time Complexity Analysis](#71-time-complexity-analysis)
 - [7.2 Memory Usage Patterns](#72-memory-usage-patterns)
 - [7.3 Cache Optimization](#73-cache-optimization)
 - [7.4 Early Termination Strategies](#74-early-termination-strategies)
 
 ### [8. Advanced Topics](#8-advanced-topics)
+
 - [8.1 Custom Predicates](#81-custom-predicates)
 - [8.2 Container Type Requirements](#82-container-type-requirements)
 - [8.3 Const Correctness Guarantees](#83-const-correctness-guarantees)
 - [8.4 Thread Safety Considerations](#84-thread-safety-considerations)
 
 ### [9. Architecture Deep Dive](#9-architecture-deep-dive)
+
 - [9.1 Type Erasure Pattern](#91-type-erasure-pattern)
 - [9.2 Reference-Based Output Design](#92-reference-based-output-design)
 - [9.3 Coroutine-Based Batch Execution](#93-coroutine-based-batch-execution)
 - [9.4 SceneTraversal Integration](#94-scenetraversal-integration)
 
 ### [10. API Reference](#10-api-reference)
+
 - [10.1 SceneQuery Class Interface](#101-scenequery-class-interface)
 - [10.2 Result Types (QueryResult, BatchResult)](#102-result-types-queryresult-batchresult)
 - [10.3 Template Parameters and Concepts](#103-template-parameters-and-concepts)
 - [10.4 Error Codes and Diagnostics](#104-error-codes-and-diagnostics)
 
 ### [11. Best Practices](#11-best-practices)
+
 - [11.1 Performance Guidelines](#111-performance-guidelines)
 - [11.2 Memory Management](#112-memory-management)
 - [11.3 Error Handling Patterns](#113-error-handling-patterns)
 - [11.4 Common Pitfalls](#114-common-pitfalls)
 
 ### [12. Implementation Notes](#12-implementation-notes)
+
 - [12.1 Design Decisions and Rationale](#121-design-decisions-and-rationale)
 - [12.2 Alternative Approaches Considered](#122-alternative-approaches-considered)
 - [12.3 Future Enhancement Opportunities](#123-future-enhancement-opportunities)
 
 ### [13. Testing and Validation](#13-testing-and-validation)
+
 - [13.1 Unit Test Coverage](#131-unit-test-coverage)
 - [13.2 Performance Benchmarks](#132-performance-benchmarks)
 - [13.3 Edge Cases and Error Conditions](#133-edge-cases-and-error-conditions)
@@ -144,6 +157,7 @@ auto Query() const -> SceneQuery;
 ### 2.3 Common Query Patterns
 
 **Immediate Mode Operations:**
+
 ```cpp
 SceneQuery query(scene);
 
@@ -184,6 +198,7 @@ auto FindFirst(std::optional<SceneNode>& output, Predicate&& predicate) const ->
 ```
 
 **Key Characteristics**:
+
 - **Early Termination**: Stops traversal immediately when first match is found
 - **Reference-Based Output**: Populates `std::optional<SceneNode>&` parameter
 - **Performance**: O(1) to O(n) with typical sub-millisecond response times
@@ -198,6 +213,7 @@ auto Collect(Container& container, Predicate&& predicate) const noexcept -> Quer
 ```
 
 **Key Characteristics**:
+
 - **User-Controlled Memory**: Eliminates forced allocations, enables custom allocators
 - **Container Flexibility**: Supports any container with `emplace_back`-compatible interface
 - **Performance**: O(n) with optimal cache locality
@@ -212,6 +228,7 @@ auto Count(std::optional<size_t>& output, Predicate&& predicate) const noexcept 
 ```
 
 **Key Characteristics**:
+
 - **Zero Allocation**: No memory allocation required
 - **Reference Output**: Populates `std::optional<size_t>&` parameter
 - **Performance**: O(n) traversal with counting only
@@ -226,6 +243,7 @@ auto Any(std::optional<bool>& output, Predicate&& predicate) const noexcept -> Q
 ```
 
 **Key Characteristics**:
+
 - **Early Termination**: Stops immediately when first match is found
 - **Boolean Result**: Simple existence check
 - **Performance**: O(1) to O(n) with aggressive optimization
@@ -233,6 +251,7 @@ auto Any(std::optional<bool>& output, Predicate&& predicate) const noexcept -> Q
 ### 3.5 Query Results and Error Handling
 
 **QueryResult Structure**:
+
 ```cpp
 struct QueryResult {
   std::size_t nodes_examined = 0;
@@ -243,6 +262,7 @@ struct QueryResult {
 ```
 
 **Key Features**:
+
 - **Performance Metrics**: Tracks nodes examined and matched for optimization insights
 - **Error Handling**: Optional error message for failure cases
 - **Boolean Conversion**: Easy success/failure checking
@@ -252,6 +272,7 @@ struct QueryResult {
 ### 4.1 Path Syntax and Patterns
 
 **Path Navigation from Current Query Scope**:
+
 ```cpp
 // Configure query scope first
 auto query = scene->Query();
@@ -265,12 +286,14 @@ query.FindFirstByPath(weapon, "Player/Equipment/Weapon");  // Multi-level path f
 ```
 
 **Root-Level Paths** (starting with "/"):
+
 ```cpp
 std::optional<SceneNode> foo_node;
 query.FindFirstByPath(foo_node, "/Foo");  // From any traversal scope root with empty name "", find child "Foo"
 ```
 
 **Full Scene Traversal** (default scope):
+
 ```cpp
 auto query = scene->Query();  // Default: traverses entire scene
 // or explicitly reset scope
@@ -283,17 +306,20 @@ query.FindFirstByPath(any_player, "World/Player");  // Search from all scene roo
 ### 4.2 Path Syntax Details
 
 **Path Separators and Structure**:
+
 - Uses `/` as hierarchical separator
 - Paths are relative to current traversal scope (see Section 5 for scope configuration)
 - Simple paths without wildcards use direct navigation for O(depth) performance
 
 **Root-Level Paths** (starting with "/"):
+
 ```cpp
 std::optional<SceneNode> foo_node;
 query.FindFirstByPath(foo_node, "/Foo");  // From traversal scope roots with empty name "", find child "Foo"
 ```
 
 **Multi-Level Navigation**:
+
 ```cpp
 std::optional<SceneNode> weapon;
 query.FindFirstByPath(weapon, "Player/Equipment/Weapon");  // Navigate through hierarchy
@@ -302,6 +328,7 @@ query.FindFirstByPath(weapon, "Player/Equipment/Weapon");  // Navigate through h
 ### 4.3 Wildcard Support (* and **)
 
 **Single-Level Wildcards (`*`)**:
+
 ```cpp
 std::vector<SceneNode> all_enemies;
 query.CollectByPath(all_enemies, "*/Enemy");        // Direct children named Enemy
@@ -309,6 +336,7 @@ query.CollectByPath(all_enemies, "Level/*/Enemy");  // Enemy under Level's direc
 ```
 
 **Recursive Wildcards (`**`)**:
+
 ```cpp
 std::vector<SceneNode> all_weapons;
 query.CollectByPath(all_weapons, "**/Weapon");       // All weapons at any depth
@@ -318,11 +346,13 @@ query.CollectByPath(all_weapons, "Player/**/Weapon"); // All weapons under Playe
 ### 4.4 Path Query Performance
 
 **Performance Characteristics**:
+
 - **Simple Paths**: O(depth) complexity using direct navigation
 - **Wildcard Patterns**: O(n) complexity using filtered traversal
 - **Direct Navigation Optimization**: Bypasses full traversal for non-wildcard paths
 
 **Path Parsing Architecture** (internal implementation):
+
 ```cpp
 struct ParsedPath {
   std::vector<PathSegment> segments;
@@ -362,12 +392,14 @@ auto result = query.ExecuteBatch([&](auto& q) {
 ### 5.2 When to Use Batch Queries
 
 **Use ExecuteBatch when:**
+
 - Running multiple queries in the same frame (game systems)
 - Performance is critical (60+ FPS requirements)
 - Queries have overlapping search spaces
 - Cache locality is important
 
 **Use individual queries when:**
+
 - Single query needed
 - Conditional logic between queries
 - Early termination based on first query result
@@ -377,12 +409,14 @@ auto result = query.ExecuteBatch([&](auto& q) {
 ### 5.3 Batch API Reference
 
 **Batch Execution Framework**:
+
 ```cpp
 template <typename BatchFunc>
 auto ExecuteBatch(BatchFunc&& batch_func) const noexcept -> BatchResult;
 ```
 
 **Batch-Specific Methods (Return `void`)**:
+
 ```cpp
 template <std::predicate<const ConstVisitedNode&> Predicate>
 auto BatchFindFirst(std::optional<SceneNode>& output, Predicate&& pred) const noexcept; // -> void
@@ -400,6 +434,7 @@ auto BatchAny(std::optional<bool>& output, Predicate&& pred) const noexcept; // 
 ### 5.4 Performance Benefits
 
 **Key Batch Execution Benefits**:
+
 1. **Performance Multiplication**: N queries execute in 1 traversal instead of N traversals
 2. **Coroutine Coordination**: Each operation runs as separate coroutine with BroadcastChannel distribution
 3. **Smart Termination**: Stops when all FindFirst/Any operations complete via coroutine combinators
@@ -409,6 +444,7 @@ auto BatchAny(std::optional<bool>& output, Predicate&& pred) const noexcept; // 
 7. **Memory Control**: User manages all container allocations upfront
 
 **Performance Characteristics**:
+
 - **Time Complexity**: O(n) for n nodes regardless of number of queries in batch
 - **Memory**: User-controlled allocation for all result containers
 - **Cache Performance**: Single traversal maximizes cache hit rates
@@ -419,12 +455,14 @@ auto BatchAny(std::optional<bool>& output, Predicate&& pred) const noexcept; // 
 **Critical Architectural Constraint**: Path-based queries (`FindFirstByPath`, `CollectByPath`) are **intentionally excluded** from batch execution by design.
 
 **Rationale**:
+
 - Path queries use optimized direct navigation (O(depth) complexity)
 - Batch operations require full traversal (O(n) complexity)
 - Mixing navigation patterns would eliminate performance benefits
 - Implementation complexity would significantly increase without proportional benefit
 
 **Impact**:
+
 - Path queries must be executed individually
 - Batch operations limited to predicate-based queries only
 - Clear separation of concerns between navigation and traversal patterns
@@ -436,6 +474,7 @@ auto BatchAny(std::optional<bool>& output, Predicate&& pred) const noexcept; // 
 The SceneQuery system uses a powerful traversal scope mechanism that determines which nodes serve as starting points for **ALL** query operations. This is implemented through the `traversal_scope_` vector of SceneNode objects and affects every type of query - predicate-based, path-based, and batch operations.
 
 **Scope Concept**:
+
 - **Empty Scope (default)**: Queries traverse the entire scene starting from all scene root nodes
 - **Configured Scope**: Queries are limited to specific hierarchies defined by `AddToTraversalScope()`
 - **Scope Persistence**: Once configured, scope affects all subsequent operations until explicitly changed
@@ -444,6 +483,7 @@ The SceneQuery system uses a powerful traversal scope mechanism that determines 
 ### 6.2 Scope Management API
 
 **Available Scope Control Methods**:
+
 ```cpp
 class SceneQuery {
 public:
@@ -459,6 +499,7 @@ public:
 ```
 
 **Method Chaining Support**:
+
 ```cpp
 auto query = scene->Query();
 
@@ -473,6 +514,7 @@ query.ResetTraversalScope()
 ### 6.3 Full Scene vs Scoped Queries
 
 **Default Behavior (Empty Scope)**:
+
 ```cpp
 auto query = scene->Query();  // Default: empty traversal scope
 
@@ -488,6 +530,7 @@ query.FindFirstByPath(any_weapon, "World/Player/Weapon");  // Searches from all 
 ```
 
 **Scoped Queries (Configured Scope)**:
+
 ```cpp
 auto query = scene->Query();
 
@@ -507,6 +550,7 @@ query.FindFirstByPath(scoped_weapon, "Player/Weapon");  // Only from level1_root
 ```
 
 **Dynamic Scope Changes**:
+
 ```cpp
 auto query = scene->Query();
 
@@ -527,6 +571,7 @@ auto all_objects = query.Collect(objects, any_predicate);  // Entire scene again
 ### 6.4 Scope Impact on All Operations
 
 **Predicate-Based Queries with Scope**:
+
 ```cpp
 auto query = scene->Query();
 query.AddToTraversalScope(combat_zone);
@@ -545,6 +590,7 @@ query.Any(has_explosions, explosion_predicate);  // Only checks combat_zone for 
 ```
 
 **Path Queries with Scope**:
+
 ```cpp
 auto query = scene->Query();
 query.AddToTraversalScope(world_node);  // Limit to world hierarchy
@@ -558,6 +604,7 @@ query.CollectByPath(all_weapons, "**/Weapon");  // All weapons under world_node 
 ```
 
 **Batch Operations with Scope**:
+
 ```cpp
 auto query = scene->Query();
 query.AddToTraversalScope(active_level);  // Scope to active level
@@ -575,6 +622,7 @@ auto batch_result = query.ExecuteBatch([&](auto& q) {
 ```
 
 **Implementation Details**:
+
 - **Empty `traversal_scope_`**: Uses `traversal_.Traverse(visitor, order, filter)` for full scene
 - **Non-empty `traversal_scope_`**: Uses `traversal_.TraverseHierarchies(traversal_scope_, visitor, order, filter)` for scoped traversal
 - **Scope Validation**: All nodes in scope must belong to the same scene
@@ -586,12 +634,14 @@ auto batch_result = query.ExecuteBatch([&](auto& q) {
 ### 7.1 Time Complexity Analysis
 
 **Immediate Mode Operations**:
+
 - **FindFirst**: O(1) to O(n) with early termination, typically sub-millisecond
 - **Collect**: O(n) with user-controlled allocation and optimal cache locality
 - **Count/Any**: O(n) worst case, with early termination for Any queries
 - **Path Navigation**: O(depth) for simple paths, O(n) for wildcard patterns
 
 **Batch Mode Operations**:
+
 - **Multi-Query Batches**: Single O(n) traversal regardless of query count
 - **Coroutine Overhead**: Minimal suspension/resumption cost during traversal
 - **Memory Efficiency**: Zero additional allocations beyond user-provided containers
@@ -600,12 +650,14 @@ auto batch_result = query.ExecuteBatch([&](auto& q) {
 ### 7.2 Memory Usage Patterns
 
 **User-Controlled Memory Allocation**:
+
 ```cpp
 template <typename Container, std::predicate<const ConstVisitedNode&> Predicate>
 auto Collect(Container& container, Predicate&& predicate) const noexcept -> QueryResult;
 ```
 
 **Benefits**:
+
 - Users provide containers, eliminating forced allocations
 - Enables custom allocators and object pools
 - Pre-sizing containers for known upper bounds
@@ -614,6 +666,7 @@ auto Collect(Container& container, Predicate&& predicate) const noexcept -> Quer
 ### 7.3 Cache Optimization
 
 **Single Traversal Benefits**:
+
 - Batch operations maximize cache locality through single-pass execution
 - Early termination reduces unnecessary memory access
 - SceneTraversal infrastructure optimized for cache-friendly access patterns
@@ -621,6 +674,7 @@ auto Collect(Container& container, Predicate&& predicate) const noexcept -> Quer
 ### 7.4 Early Termination Strategies
 
 **Optimization Techniques**:
+
 - `VisitResult::kStop` for immediate termination in FindFirst/Any operations
 - Coroutine combinators (`AnyOf`/`AllOf`) for batch early termination
 - Smart pruning and subtree rejection
@@ -630,12 +684,14 @@ auto Collect(Container& container, Predicate&& predicate) const noexcept -> Quer
 ### 8.1 Custom Predicates
 
 **Predicate Requirements**:
+
 ```cpp
 // Type-safe const-correct visitor/filter concepts
 std::predicate<const ConstVisitedNode&> Predicate
 ```
 
 **Implementation**:
+
 - Compile-time const correctness validation via SceneTraversal concepts
 - Automatic visitor type deduction (`ConstVisitedNode` vs `MutableVisitedNode`)
 - Template concepts enforce correct parameter types at compile time
@@ -643,6 +699,7 @@ std::predicate<const ConstVisitedNode&> Predicate
 ### 8.2 Container Type Requirements
 
 **Supported Container Types**:
+
 - Any container with `emplace_back`-compatible interface
 - Custom allocator support through user-provided containers
 - STL containers: `std::vector`, `std::deque`, `std::list`
@@ -650,6 +707,7 @@ std::predicate<const ConstVisitedNode&> Predicate
 ### 8.3 Const Correctness Guarantees
 
 **Complete Compile-Time Immutability**:
+
 - Uses `ConstVisitedNode` for read-only scene graph access
 - `SceneTraversal<const Scene>` enforces compile-time immutability
 - Automatic const deduction based on Scene type via template specialization
@@ -658,6 +716,7 @@ std::predicate<const ConstVisitedNode&> Predicate
 ### 8.4 Thread Safety Considerations
 
 **Scene Lifetime Safety**:
+
 - `weak_ptr` validation prevents dangling references
 - Consistent `weak_ptr` expiry checking with const-safe validation
 - Robust error handling for edge cases like objects being destroyed mid-query
@@ -687,6 +746,7 @@ auto FindFirstImpl(std::optional<SceneNode>& output,
 ```
 
 **Applied Type Erasure Mechanisms**:
+
 1. **Predicate Type Erasure**: `template<Predicate> → QueryPredicate (std::function)`
 2. **Container Type Erasure**: `template<Container> → std::function<void(const SceneNode&)>`
 3. **Batch Function Type Erasure**: `template<BatchFunc> → std::function<void(const SceneQuery&)>`
@@ -696,6 +756,7 @@ auto FindFirstImpl(std::optional<SceneNode>& output,
 **Critical Design Decision**: ALL methods take output by reference, not return values.
 
 **Architecture**:
+
 - **Immediate Mode**: `FindFirst(std::optional<SceneNode>& output, predicate) -> QueryResult`
 - **Batch Mode**: `BatchFindFirst(std::optional<SceneNode>& output, predicate) -> void`
 - **Rationale**: Enables direct population during single traversal, consistent API across modes
@@ -704,6 +765,7 @@ auto FindFirstImpl(std::optional<SceneNode>& output,
 ### 9.3 Coroutine-Based Batch Execution
 
 **Batch Execution Architecture**:
+
 - **BroadcastChannel Architecture**: Uses `oxygen::co::BroadcastChannel<ConstVisitedNode>` for node distribution
 - **Coroutine Coordination**: Each operation runs as separate coroutine via `BatchQueryExecutor`
 - **MinimalEventLoop**: Custom event loop implementation for coroutine execution
@@ -711,6 +773,7 @@ auto FindFirstImpl(std::optional<SceneNode>& output,
 - **Single Traversal**: Streams nodes to all operations simultaneously
 
 **Batch Operation Storage**:
+
 ```cpp
 struct BatchOperation {
   std::function<bool(const ConstVisitedNode&)> predicate;
@@ -727,12 +790,14 @@ struct BatchOperation {
 ### 9.4 SceneTraversal Integration
 
 **Dual Traversal Systems**:
+
 - **Immediate Mode**: `SceneTraversal<const Scene>` for direct, synchronous queries
 - **Batch Mode**: `AsyncSceneTraversal<const Scene>` for coroutine-based execution
 - **Routing**: `batch_active_` flag with `EnsureCanExecute()` validation
 - **Separation**: Clean architectural boundaries between execution modes
 
 **Integration Architecture**:
+
 ```cpp
 class SceneQuery {
 private:
@@ -798,6 +863,7 @@ public:
 ### 10.2 Result Types (QueryResult, BatchResult)
 
 **QueryResult Structure**:
+
 ```cpp
 struct QueryResult {
   std::size_t nodes_examined = 0;
@@ -808,6 +874,7 @@ struct QueryResult {
 ```
 
 **BatchResult Structure**:
+
 ```cpp
 struct BatchResult {
   std::size_t nodes_examined = 0;
@@ -819,6 +886,7 @@ struct BatchResult {
 ```
 
 **Implementation Notes**:
+
 - **Reference-Based Output**: All actual results passed via reference parameters
 - **Metrics in Return Values**: `QueryResult`/`BatchResult` contain only performance data
 - **Immediate Mode**: Returns `QueryResult` with metrics, populates output by reference
@@ -827,11 +895,13 @@ struct BatchResult {
 ### 10.3 Template Parameters and Concepts
 
 **Predicate Concept**:
+
 ```cpp
 std::predicate<const ConstVisitedNode&> Predicate
 ```
 
 **Container Requirements**:
+
 - Must support `emplace_back`-compatible interface
 - Compatible with `std::back_inserter`
 - Custom allocator support through user control
@@ -839,6 +909,7 @@ std::predicate<const ConstVisitedNode&> Predicate
 ### 10.4 Error Codes and Diagnostics
 
 **Error Handling Strategy**:
+
 - `weak_ptr` validation for scene lifetime safety
 - Optional error messages in `QueryResult`
 - `noexcept` design for performance-critical paths
@@ -849,6 +920,7 @@ std::predicate<const ConstVisitedNode&> Predicate
 ### 11.1 Performance Guidelines
 
 **Optimization Strategies**:
+
 1. **Use Batch Queries**: For multiple queries in the same frame
 2. **Pre-allocate Containers**: Use `reserve()` for known upper bounds
 3. **Early Termination**: Prefer `FindFirst` and `Any` when only existence matters
@@ -858,6 +930,7 @@ std::predicate<const ConstVisitedNode&> Predicate
 ### 11.2 Memory Management
 
 **Memory Best Practices**:
+
 - **User-Controlled Allocation**: Always provide containers to eliminate forced allocations
 - **Custom Allocators**: Integrate with object pools and frame-based memory schemes
 - **Container Pre-sizing**: Use `reserve()` for performance-critical scenarios
@@ -866,6 +939,7 @@ std::predicate<const ConstVisitedNode&> Predicate
 ### 11.3 Error Handling Patterns
 
 **Recommended Error Handling**:
+
 ```cpp
 std::optional<SceneNode> result;
 auto query_result = query.FindFirst(result, predicate);
@@ -884,6 +958,7 @@ if (query_result) {
 ### 11.4 Common Pitfalls
 
 **Avoid These Patterns**:
+
 1. **Multiple Individual Queries**: Use batch execution for better performance
 2. **Ignoring Container Pre-allocation**: Can cause performance degradation
 3. **Path Queries in Batches**: Architecturally incompatible, will fail
@@ -910,24 +985,29 @@ if (query_result) {
 ### 12.2 Alternative Approaches Considered
 
 **Option 1: Enhanced Direct API on Scene Class**
+
 - **Pros**: Simple to use, direct access
 - **Cons**: Clutters Scene API, always allocates vectors, not extensible
 
 **Option 2: Builder Pattern Query System**
+
 - **Pros**: Flexible and composable, type-safe
 - **Cons**: Still forces allocation, more complex implementation
 
 **Option 3: True std::ranges Integration**
+
 - **Pros**: C++20 compatibility, composable with standard library
 - **Cons**: Complex iterator infrastructure, performance overhead, allocation issues
 
 **Selected Option 4: Single Entry Point with Performance Focus**
+
 - **Pros**: Zero-copy performance, user-controlled allocation, follows established patterns
 - **Cons**: Domain-specific interface requiring learning
 
 ### 12.3 Future Enhancement Opportunities
 
 **Potential Improvements**:
+
 - Spatial indexing integration for performance optimization
 - Caching layers for frequently accessed queries
 - Specialized data structures for specific query patterns
@@ -938,6 +1018,7 @@ if (query_result) {
 ### 13.1 Unit Test Coverage
 
 **Test Implementation Status**: ✅ Complete
+
 - All core query operations tested with comprehensive scenarios
 - Batch execution framework validated with multi-operation tests
 - Path parsing and wildcard matching verified
@@ -946,6 +1027,7 @@ if (query_result) {
 ### 13.2 Performance Benchmarks
 
 **Performance Validation**:
+
 - Sub-millisecond response times for typical game scenarios
 - Batch execution showing linear performance improvement with query count
 - Memory allocation patterns validated for zero-copy semantics
@@ -954,6 +1036,7 @@ if (query_result) {
 ### 13.3 Edge Cases and Error Conditions
 
 **Validated Scenarios**:
+
 - Scene destruction during query execution
 - Invalid path patterns and malformed predicates
 - Empty scenes and null reference handling

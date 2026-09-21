@@ -48,18 +48,18 @@ current single-scene-view cursor or a PiP-only output model.
 
 The local UE 5.7 source establishes the design shape Vortex should follow.
 
-| UE 5.7 source | Finding | Vortex implication |
-| --- | --- | --- |
-| `Runtime/Engine/Public/SceneView.h:2211,2308,2311` (`FSceneViewFamily`, `Views`, `AllViews`) | A render family carries render target, scene, show flags, view mode, frame counters, and an array of primary views. `AllViews` also includes scene-capture/custom-pass views. | Vortex needs a view-family/render-batch concept above individual `CompositionView`s, with a first-class auxiliary-view path. Family state is not a single view. |
-| `Runtime/Engine/Public/SceneView.h:1429,2099` (`FSceneView::State`, `EyeAdaptationViewState`) | Persistent history is hung off producer-provided view state pointers, not inferred from render order or transient renderer arrays. | `CompositionView` needs an opaque producer-owned `ViewStateHandle`; `ViewId` is not enough for temporal ownership. |
-| `Runtime/Renderer/Private/SceneRendering.cpp:880,893,2645,3034` (`FViewInfo`, `FSceneRenderer`) | UE copies each `FSceneView` into an internal `FViewInfo`, validates unique view state for occlusion, and builds renderer-owned `Views`/`AllViews`. | Vortex should materialize immutable public view intent into renderer-owned per-frame view packets with unique per-view state/history references. |
-| `Runtime/Renderer/Private/SceneRendering.cpp:3005,3034,3040,5026` (`FCustomRenderPassInfo`, `AllViews`) | UE can inject custom-render-pass / scene-capture views into one renderer and include them in `AllViews`. | Vortex must distinguish primary, auxiliary, and composition-only views before implementation starts. |
-| `Runtime/Renderer/Private/DeferredShadingRenderer.cpp` | UE runs a mix of family-wide work and loops over `Views` for view-local work. Examples include shared light-grid preparation, per-view ray tracing setup, per-view TSR inputs, and per-view translucency resource maps. | Vortex stage scheduling must distinguish frame/family work from per-view work. It must not simply call a full renderer once per PiP layer. |
-| `Runtime/Engine/Private/GameViewportClient.cpp` and `Runtime/Engine/Public/SceneViewExtension.h:140,145,160,175,222,227` | Game view rendering builds a `FSceneViewFamilyContext`, gathers view extensions, runs `SetupViewFamily`, then calls `BeginRenderingViewFamily` and render-thread view hooks. | Vortex needs explicit pre-render family assembly and typed extension/overlay hooks before scene rendering starts. |
-| `Editor/UnrealEd/Private/EditorViewportClient.cpp` and `LevelEditorViewport.cpp` | Editor viewport clients own show flags and view modes, call `BeginRenderingViewFamily`, then draw canvas, debug services, widgets, stats, and PDI/editor-mode primitives. | Vortex must make render mode, debug mode, and overlay lanes per view. Global frame settings are insufficient for editor parity. |
-| `Runtime/Renderer/Private/BasePassRendering.cpp:1125,1132,1262,1417` | Wireframe/shader-complexity/editor primitives can change render-pass topology and use editor primitive color/depth targets. | Vortex render/debug modes need an explicit split-vs-permutation classification and editor-primitive target contract. |
-| `Runtime/Engine/Public/SceneTexturesConfig.h:113,161,167,170,201` | Scene texture configuration records extent, sample count, editor primitive sample count, depth aux, and feature requirements. | Vortex scene-texture resources need descriptor-keyed pooling/leases, editor-primitive dimensions, and explicit setup requirements. |
-| `Runtime/Engine/Public/SceneView.h:2163,2170,2417,2498,2573,2608,2612` | Screen percentage, secondary view fraction, and primary spatial upscaler are view-family concerns in UE. | M06A must at least pin a static resolution model even though dynamic resolution/TSR are deferred. |
+| UE 5.7 source                                                                                                            | Finding                                                                                                                                                                                                                 | Vortex implication                                                                                                                                              |
+| ------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Runtime/Engine/Public/SceneView.h:2211,2308,2311` (`FSceneViewFamily`, `Views`, `AllViews`)                             | A render family carries render target, scene, show flags, view mode, frame counters, and an array of primary views. `AllViews` also includes scene-capture/custom-pass views.                                           | Vortex needs a view-family/render-batch concept above individual `CompositionView`s, with a first-class auxiliary-view path. Family state is not a single view. |
+| `Runtime/Engine/Public/SceneView.h:1429,2099` (`FSceneView::State`, `EyeAdaptationViewState`)                            | Persistent history is hung off producer-provided view state pointers, not inferred from render order or transient renderer arrays.                                                                                      | `CompositionView` needs an opaque producer-owned `ViewStateHandle`; `ViewId` is not enough for temporal ownership.                                              |
+| `Runtime/Renderer/Private/SceneRendering.cpp:880,893,2645,3034` (`FViewInfo`, `FSceneRenderer`)                          | UE copies each `FSceneView` into an internal `FViewInfo`, validates unique view state for occlusion, and builds renderer-owned `Views`/`AllViews`.                                                                      | Vortex should materialize immutable public view intent into renderer-owned per-frame view packets with unique per-view state/history references.                |
+| `Runtime/Renderer/Private/SceneRendering.cpp:3005,3034,3040,5026` (`FCustomRenderPassInfo`, `AllViews`)                  | UE can inject custom-render-pass / scene-capture views into one renderer and include them in `AllViews`.                                                                                                                | Vortex must distinguish primary, auxiliary, and composition-only views before implementation starts.                                                            |
+| `Runtime/Renderer/Private/DeferredShadingRenderer.cpp`                                                                   | UE runs a mix of family-wide work and loops over `Views` for view-local work. Examples include shared light-grid preparation, per-view ray tracing setup, per-view TSR inputs, and per-view translucency resource maps. | Vortex stage scheduling must distinguish frame/family work from per-view work. It must not simply call a full renderer once per PiP layer.                      |
+| `Runtime/Engine/Private/GameViewportClient.cpp` and `Runtime/Engine/Public/SceneViewExtension.h:140,145,160,175,222,227` | Game view rendering builds a `FSceneViewFamilyContext`, gathers view extensions, runs `SetupViewFamily`, then calls `BeginRenderingViewFamily` and render-thread view hooks.                                            | Vortex needs explicit pre-render family assembly and typed extension/overlay hooks before scene rendering starts.                                               |
+| `Editor/UnrealEd/Private/EditorViewportClient.cpp` and `LevelEditorViewport.cpp`                                         | Editor viewport clients own show flags and view modes, call `BeginRenderingViewFamily`, then draw canvas, debug services, widgets, stats, and PDI/editor-mode primitives.                                               | Vortex must make render mode, debug mode, and overlay lanes per view. Global frame settings are insufficient for editor parity.                                 |
+| `Runtime/Renderer/Private/BasePassRendering.cpp:1125,1132,1262,1417`                                                     | Wireframe/shader-complexity/editor primitives can change render-pass topology and use editor primitive color/depth targets.                                                                                             | Vortex render/debug modes need an explicit split-vs-permutation classification and editor-primitive target contract.                                            |
+| `Runtime/Engine/Public/SceneTexturesConfig.h:113,161,167,170,201`                                                        | Scene texture configuration records extent, sample count, editor primitive sample count, depth aux, and feature requirements.                                                                                           | Vortex scene-texture resources need descriptor-keyed pooling/leases, editor-primitive dimensions, and explicit setup requirements.                              |
+| `Runtime/Engine/Public/SceneView.h:2163,2170,2417,2498,2573,2608,2612`                                                   | Screen percentage, secondary view fraction, and primary spatial upscaler are view-family concerns in UE.                                                                                                                | M06A must at least pin a static resolution model even though dynamic resolution/TSR are deferred.                                                               |
 
 These findings are source-derived. No internet source is used for this LLD.
 
@@ -184,11 +184,11 @@ This is Vortex's analogue to UE's copy from `FSceneView` into renderer-owned
 
 Every packet declares a kind:
 
-| Kind | Scene stages | Surface routing | Examples |
-| --- | --- | --- | --- |
-| `Primary` | yes | yes | game viewport, editor perspective/top/side/front views |
-| `Auxiliary` | yes | optional/no direct present | scene capture, planar reflection, custom render pass, render-to-texture view consumed by another view |
-| `CompositionOnly` | no | yes | UI layer, surface overlay layer, imported texture layer |
+| Kind              | Scene stages | Surface routing            | Examples                                                                                              |
+| ----------------- | ------------ | -------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `Primary`         | yes          | yes                        | game viewport, editor perspective/top/side/front views                                                |
+| `Auxiliary`       | yes          | optional/no direct present | scene capture, planar reflection, custom render pass, render-to-texture view consumed by another view |
+| `CompositionOnly` | no           | yes                        | UI layer, surface overlay layer, imported texture layer                                               |
 
 `Primary` and `Auxiliary` packets enter view-family batching.
 `CompositionOnly` packets bypass scene batching and feed the composition
@@ -274,13 +274,13 @@ stateless: it may render, but it cannot consume or update temporal products.
 
 Eviction and invalidation:
 
-| Trigger | Required behavior |
-| --- | --- |
-| producer drops/unregisters handle | release all service state keyed by that handle after GPU fences retire |
-| scene-texture descriptor key changes | invalidate histories whose dimensions/formats/sample count no longer match |
-| render/debug mode changes to a history-incompatible mode | reset affected histories before the view renders |
-| producer marks handle transient/stateless | do not allocate temporal state |
-| optional idle trimming for service caches | release only GPU resources, never reinterpret a new producer as the old handle |
+| Trigger                                                  | Required behavior                                                              |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| producer drops/unregisters handle                        | release all service state keyed by that handle after GPU fences retire         |
+| scene-texture descriptor key changes                     | invalidate histories whose dimensions/formats/sample count no longer match     |
+| render/debug mode changes to a history-incompatible mode | reset affected histories before the view renders                               |
+| producer marks handle transient/stateless                | do not allocate temporal state                                                 |
+| optional idle trimming for service caches                | release only GPU resources, never reinterpret a new producer as the old handle |
 
 Persistent offscreen producers end their lifetime with
 `Renderer::ReleaseOffscreenViewState(view_id, handle)`, using the pair they
@@ -433,19 +433,19 @@ inherit the earlier M06 structural closure.
 
 ## 6. Ownership Boundaries
 
-| Responsibility | Owner |
-| --- | --- |
-| View intent API and runtime publication | Renderer Core |
-| View persistent-state handle lifetime | View producer |
-| View lifecycle, sorted active views, exposure-source handle validation | Renderer Core runtime view registry |
-| View-family/render-batch construction | Renderer Core |
-| Per-view view constants and `ViewFrameBindings` publication | Renderer Core |
-| Scene stage ordering and scene-texture usage policy | `SceneRenderer` |
-| Stage-specific rendering logic | Stage modules |
-| Lighting/shadow/environment/post-processing domain products | Subsystem services |
-| Scene-texture concrete resource family and leases | `SceneRenderer` through a Vortex-native scene-texture pool |
-| Composition task planning, queueing, execution, and surface handoff | Renderer Core |
-| Graphics resources, command recorders, barriers, queues, swapchains | Oxygen Graphics |
+| Responsibility                                                         | Owner                                                      |
+| ---------------------------------------------------------------------- | ---------------------------------------------------------- |
+| View intent API and runtime publication                                | Renderer Core                                              |
+| View persistent-state handle lifetime                                  | View producer                                              |
+| View lifecycle, sorted active views, exposure-source handle validation | Renderer Core runtime view registry                        |
+| View-family/render-batch construction                                  | Renderer Core                                              |
+| Per-view view constants and `ViewFrameBindings` publication            | Renderer Core                                              |
+| Scene stage ordering and scene-texture usage policy                    | `SceneRenderer`                                            |
+| Stage-specific rendering logic                                         | Stage modules                                              |
+| Lighting/shadow/environment/post-processing domain products            | Subsystem services                                         |
+| Scene-texture concrete resource family and leases                      | `SceneRenderer` through a Vortex-native scene-texture pool |
+| Composition task planning, queueing, execution, and surface handoff    | Renderer Core                                              |
+| Graphics resources, command recorders, barriers, queues, swapchains    | Oxygen Graphics                                            |
 
 Renderer Core must not own GBuffer/shadow/environment policy. `SceneRenderer`
 must not own surface presentation. Stages/services must not create alternate
@@ -524,13 +524,13 @@ No separate PiP path is allowed.
 Renderer Core invokes typed extension hooks during family render, mirroring the
 shape of UE's `ISceneViewExtension` without copying the API:
 
-| Hook | Timing | Thread/queue |
-| --- | --- | --- |
-| `OnFamilyAssembled` | after batch construction, before GPU work | CPU |
-| `OnViewSetup` | per view, after packet materialization, before scene stages | CPU |
-| `OnPreRenderViewGpu` | after per-view bindings are published, before first scene pass | graphics queue in M06A |
+| Hook                  | Timing                                                                 | Thread/queue           |
+| --------------------- | ---------------------------------------------------------------------- | ---------------------- |
+| `OnFamilyAssembled`   | after batch construction, before GPU work                              | CPU                    |
+| `OnViewSetup`         | per view, after packet materialization, before scene stages            | CPU                    |
+| `OnPreRenderViewGpu`  | after per-view bindings are published, before first scene pass         | graphics queue in M06A |
 | `OnPostRenderViewGpu` | after post-process and view overlays, before lease release/composition | graphics queue in M06A |
-| `OnPostComposition` | after one surface composition completes | graphics queue in M06A |
+| `OnPostComposition`   | after one surface composition completes                                | graphics queue in M06A |
 
 Hooks are typed. They may submit overlay batches, diagnostics, or view-local
 resource requests through declared payloads. Untyped strings, global late
@@ -545,13 +545,13 @@ that produces a `View screen overlay` batch.
 The following work may execute once per render batch or once per scene/frame
 when inputs are compatible:
 
-| Stage / service | Sharing rule |
-| --- | --- |
-| Frame scene traversal | Once per scene/frame, then cached candidate refinement per view. This preserves the `InitViews` traversal contract. |
-| Stage 6 light data | Frame light set is shared. Per-view clustered/tiled products are keyed per view when needed. |
+| Stage / service       | Sharing rule                                                                                                                                                                    |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Frame scene traversal | Once per scene/frame, then cached candidate refinement per view. This preserves the `InitViews` traversal contract.                                                             |
+| Stage 6 light data    | Frame light set is shared. Per-view clustered/tiled products are keyed per view when needed.                                                                                    |
 | Stage 8 shadow depths | Directional, spot, and point shadow maps are light/scene products. They should be reused across views unless a view-specific show flag or quality override requires separation. |
-| Environment LUTs | Sky/atmosphere LUTs that are physically shared by scene/time are shared. Aerial perspective and view-depth dependent products are per view. |
-| Static GPU resources | Geometry, material constants, textures, and transform publications are shared by bindless index. |
+| Environment LUTs      | Sky/atmosphere LUTs that are physically shared by scene/time are shared. Aerial perspective and view-depth dependent products are per view.                                     |
+| Static GPU resources  | Geometry, material constants, textures, and transform publications are shared by bindless index.                                                                                |
 
 ### 8.2 Per-View Work
 
@@ -605,24 +605,24 @@ per-view binding subset.
 
 Affected shared or optionally shared products:
 
-| Product / feature | Shared build rule | Per-view publication when disabled |
-| --- | --- | --- |
-| shadow maps | build for enabled views/lights once per compatible light set | empty shadow frame binding |
-| light grid / clustered data | build union light set; view-local culling data stays per view | empty or reduced lighting binding |
-| environment LUTs | build scene/time-shared LUTs when any view needs them | environment binding with disabled flags |
-| aerial perspective / volumetric fog | per view unless a later design proves a safe packed representation | invalid product slots and disabled flags |
-| custom depth/stencil | allocate/build if any view needs it | invalid custom-depth/stencil bindings |
-| velocity | allocate if any history-capable view needs it | invalid velocity binding or zero validity flag |
-| editor primitives | allocate editor primitive targets if any view requests them | empty overlay/editor-primitive batches |
-| bloom/DOF/distortion/TAA | build per view for M06A; future shared products must add explicit per-view bindings | disabled post-process feature bits |
+| Product / feature                   | Shared build rule                                                                   | Per-view publication when disabled             |
+| ----------------------------------- | ----------------------------------------------------------------------------------- | ---------------------------------------------- |
+| shadow maps                         | build for enabled views/lights once per compatible light set                        | empty shadow frame binding                     |
+| light grid / clustered data         | build union light set; view-local culling data stays per view                       | empty or reduced lighting binding              |
+| environment LUTs                    | build scene/time-shared LUTs when any view needs them                               | environment binding with disabled flags        |
+| aerial perspective / volumetric fog | per view unless a later design proves a safe packed representation                  | invalid product slots and disabled flags       |
+| custom depth/stencil                | allocate/build if any view needs it                                                 | invalid custom-depth/stencil bindings          |
+| velocity                            | allocate if any history-capable view needs it                                       | invalid velocity binding or zero validity flag |
+| editor primitives                   | allocate editor primitive targets if any view requests them                         | empty overlay/editor-primitive batches         |
+| bloom/DOF/distortion/TAA            | build per view for M06A; future shared products must add explicit per-view bindings | disabled post-process feature bits             |
 
 Render/debug mode classification:
 
-| Mode class | Examples | Batch rule |
-| --- | --- | --- |
-| `kSplitsBatch` | `Wireframe`, `ShaderComplexity`, `MeshUVDensity`, MSAA editor primitives, modes requiring different attachment topology | separate batch or sub-batch |
+| Mode class         | Examples                                                                                                                            | Batch rule                                             |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| `kSplitsBatch`     | `Wireframe`, `ShaderComplexity`, `MeshUVDensity`, MSAA editor primitives, modes requiring different attachment topology             | separate batch or sub-batch                            |
 | `kPermutationOnly` | `ForceUnlit`, `BaseColor`, `WorldNormals`, `Roughness`, `Metalness`, `MaterialAO`, `DirectionalShadowMask`, scene-depth visualizers | same batch allowed; stage selects per-view permutation |
-| `kOverlayPass` | `OverlayWireframe`, view/surface screen overlays | same batch allowed if base scene topology is unchanged |
+| `kOverlayPass`     | `OverlayWireframe`, view/surface screen overlays                                                                                    | same batch allowed if base scene topology is unchanged |
 
 Any new debug visualizer must declare one of these classifications before it is
 accepted. Unknown visualizers split the batch by default.
@@ -632,21 +632,21 @@ accepted. Unknown visualizers split the batch by default.
 Stage numbers refer to the Vortex stage ordering defined in
 `design/vortex/ARCHITECTURE.md` and `SceneRenderer::GetAuthoredStageOrder()`.
 
-| Stage | Execution |
-| --- | --- |
-| 2 InitViews | Once per render batch; publishes per-view prepared frames. |
-| 3 DepthPrepass | Per scene view. |
-| 5 HZB/Occlusion | Per scene view. |
-| 6 Forward light data | Shared frame light set; per-view published lighting bindings. |
-| 8 Shadow depths | Shared shadow maps where compatible; per-view shadow bindings. |
-| 9 BasePass | Per scene view. |
-| 10 SceneTextures publish | Per scene view. |
-| 12 Deferred lighting | Per scene view. |
-| 14/15 Environment | Split shared LUT/update work from per-view composition. |
-| 18 Translucency | Per scene view. |
-| 21 Resolve | Per scene view. |
-| 22 PostProcess | Per scene view. |
-| 23 Cleanup/extract | Per scene view for products; frame-level retirement remains one pass. |
+| Stage                    | Execution                                                             |
+| ------------------------ | --------------------------------------------------------------------- |
+| 2 InitViews              | Once per render batch; publishes per-view prepared frames.            |
+| 3 DepthPrepass           | Per scene view.                                                       |
+| 5 HZB/Occlusion          | Per scene view.                                                       |
+| 6 Forward light data     | Shared frame light set; per-view published lighting bindings.         |
+| 8 Shadow depths          | Shared shadow maps where compatible; per-view shadow bindings.        |
+| 9 BasePass               | Per scene view.                                                       |
+| 10 SceneTextures publish | Per scene view.                                                       |
+| 12 Deferred lighting     | Per scene view.                                                       |
+| 14/15 Environment        | Split shared LUT/update work from per-view composition.               |
+| 18 Translucency          | Per scene view.                                                       |
+| 21 Resolve               | Per scene view.                                                       |
+| 22 PostProcess           | Per scene view.                                                       |
+| 23 Cleanup/extract       | Per scene view for products; frame-level retirement remains one pass. |
 
 ## 9. Scene Texture Leases and Resource Lifetime
 
@@ -715,13 +715,13 @@ history owner is `ViewStateHandle`.
 
 History invalidation matrix:
 
-| State | Invalidate when |
-| --- | --- |
-| exposure | handle lifetime changes or an owner transition applies; registered inactive sources retain their published gain, and source removal follows section 11.2 continuity |
-| previous view matrices | handle changes, scene changes, projection/viewport descriptor changes beyond jitter, owner reset |
-| previous HZB / occlusion | handle changes, extent/depth format/sample count changes, occlusion mode changes |
-| TAA/post-process history | handle changes, render resolution scale changes, tone-map/history format changes, debug mode bypasses history |
-| persistent view output | descriptor changes, surface route drops the persistent output, owner releases handle |
+| State                    | Invalidate when                                                                                                                                                     |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| exposure                 | handle lifetime changes or an owner transition applies; registered inactive sources retain their published gain, and source removal follows section 11.2 continuity |
+| previous view matrices   | handle changes, scene changes, projection/viewport descriptor changes beyond jitter, owner reset                                                                    |
+| previous HZB / occlusion | handle changes, extent/depth format/sample count changes, occlusion mode changes                                                                                    |
+| TAA/post-process history | handle changes, render resolution scale changes, tone-map/history format changes, debug mode bypasses history                                                       |
+| persistent view output   | descriptor changes, surface route drops the persistent output, owner releases handle                                                                                |
 
 The existing `PreviousViewHistoryCache` keyed only by `ViewId` is a transition
 artifact. Slice 1 must either route it through `ViewStateHandle` or make it
@@ -747,15 +747,15 @@ All resources must have an explicit producer/consumer state handoff. State names
 below are Oxygen Graphics `ResourceStates`, not raw D3D12 enum names. No stage
 may rely on the last view's final state as an implicit global contract.
 
-| Resource | Producer state | Consumer state | Final handoff |
-| --- | --- | --- | --- |
-| SceneDepth | `DepthWrite` during depth/base stages | `DepthRead` or `ShaderResource` for HZB, lighting, post, overlays | per-view lease returns to pool only after final consumer |
-| GBuffers | `RenderTarget` in base pass | `ShaderResource` for deferred lighting/debug/post | per-view lease scoped |
-| SceneColor | `RenderTarget`/`UnorderedAccess` during lighting/environment/translucency | `ShaderResource` or copy source for resolve/post/debug | per-view resolve/post output |
-| View SDR/HDR output | `RenderTarget` during tone map/overlay | `ShaderResource` or copy source in composition | surface composition read |
-| Surface backbuffer | `Present`/known incoming | `RenderTarget` or copy dest in composition | `Present` after composition |
-| Offscreen surface texture | `RenderTarget` or copy dest during composition | `ShaderResource` for next-frame or same-frame declared consumers | pinned by surface frame slot/fence until consumers retire |
-| Cross-queue handoff | graphics queue only in M06A | not applicable until async compute is added | lease retirement waits on the latest producing queue fence |
+| Resource                  | Producer state                                                            | Consumer state                                                    | Final handoff                                              |
+| ------------------------- | ------------------------------------------------------------------------- | ----------------------------------------------------------------- | ---------------------------------------------------------- |
+| SceneDepth                | `DepthWrite` during depth/base stages                                     | `DepthRead` or `ShaderResource` for HZB, lighting, post, overlays | per-view lease returns to pool only after final consumer   |
+| GBuffers                  | `RenderTarget` in base pass                                               | `ShaderResource` for deferred lighting/debug/post                 | per-view lease scoped                                      |
+| SceneColor                | `RenderTarget`/`UnorderedAccess` during lighting/environment/translucency | `ShaderResource` or copy source for resolve/post/debug            | per-view resolve/post output                               |
+| View SDR/HDR output       | `RenderTarget` during tone map/overlay                                    | `ShaderResource` or copy source in composition                    | surface composition read                                   |
+| Surface backbuffer        | `Present`/known incoming                                                  | `RenderTarget` or copy dest in composition                        | `Present` after composition                                |
+| Offscreen surface texture | `RenderTarget` or copy dest during composition                            | `ShaderResource` for next-frame or same-frame declared consumers  | pinned by surface frame slot/fence until consumers retire  |
+| Cross-queue handoff       | graphics queue only in M06A                                               | not applicable until async compute is added                       | lease retirement waits on the latest producing queue fence |
 
 Renderer Core owns composition resource tracking. `SceneRenderer` owns
 scene-texture state transitions inside the scene stage chain. A stage that
@@ -913,12 +913,12 @@ map to UE's PDI/canvas separation without copying UE APIs directly.
 
 ### 12.1 Overlay Lanes
 
-| Lane | Depth policy | Examples | Target |
-| --- | --- | --- | --- |
-| World depth-aware overlay | depth-tested or depth-biased | gizmos, frustums, debug lines, selection bounds, light icons with occlusion | view scene output before or after tone map according to material/color policy |
-| World foreground overlay | no depth or foreground depth priority | transform widget handles, always-visible axes | view output after opaque/translucent scene |
-| View screen overlay | screen-space | stats, rulers, labels, viewport badges | view SDR output after tone map |
-| Surface overlay | screen-space over final layout | tools UI, ImGui, global stats | surface backbuffer after view composition |
+| Lane                      | Depth policy                          | Examples                                                                    | Target                                                                        |
+| ------------------------- | ------------------------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| World depth-aware overlay | depth-tested or depth-biased          | gizmos, frustums, debug lines, selection bounds, light icons with occlusion | view scene output before or after tone map according to material/color policy |
+| World foreground overlay  | no depth or foreground depth priority | transform widget handles, always-visible axes                               | view output after opaque/translucent scene                                    |
+| View screen overlay       | screen-space                          | stats, rulers, labels, viewport badges                                      | view SDR output after tone map                                                |
+| Surface overlay           | screen-space over final layout        | tools UI, ImGui, global stats                                               | surface backbuffer after view composition                                     |
 
 ### 12.2 Overlay Batches
 
@@ -943,13 +943,13 @@ UE renders editor primitives through a dedicated path with world/foreground
 depth-priority groups and optional MSAA editor-primitive targets. Vortex must
 reserve the same low-level shape:
 
-| Concept | Vortex contract |
-| --- | --- |
-| world editor primitives | depth-tested world overlay lane before view flattening |
-| foreground editor primitives | foreground overlay lane after world depth-aware overlay |
-| editor primitive color/depth | optional attachments in the scene-texture lease key |
-| editor primitive sample count | `editor_primitive_sample_count` in the descriptor key |
-| composite into scene color | explicit per-view overlay composite pass before view output extraction |
+| Concept                       | Vortex contract                                                        |
+| ----------------------------- | ---------------------------------------------------------------------- |
+| world editor primitives       | depth-tested world overlay lane before view flattening                 |
+| foreground editor primitives  | foreground overlay lane after world depth-aware overlay                |
+| editor primitive color/depth  | optional attachments in the scene-texture lease key                    |
+| editor primitive sample count | `editor_primitive_sample_count` in the descriptor key                  |
+| composite into scene color    | explicit per-view overlay composite pass before view output extraction |
 
 M06A must define the attachment, lane, and composite contracts. It does not need
 to implement a full editor primitive mesh processor or every gizmo primitive.
@@ -1273,12 +1273,12 @@ Vortex.Surface[MainWindow].Composite.Layer[MainPerspective]
 
 Debug names are a deterministic function of stable ids:
 
-| Record | Name shape |
-| --- | --- |
-| scene pass | `Vortex.View[{view_name}:{view_id}].{stage}.{pass}` |
-| overlay batch | `Vortex.View[{view_name}:{view_id}].Overlay[{lane}:{batch_index}]` |
+| Record            | Name shape                                                                     |
+| ----------------- | ------------------------------------------------------------------------------ |
+| scene pass        | `Vortex.View[{view_name}:{view_id}].{stage}.{pass}`                            |
+| overlay batch     | `Vortex.View[{view_name}:{view_id}].Overlay[{lane}:{batch_index}]`             |
 | composition layer | `Vortex.Surface[{surface_id}].Composite.Layer[{layer_index}:{source_view_id}]` |
-| auxiliary output | `Vortex.AuxView[{view_name}:{view_id}].Extract[{product}]` |
+| auxiliary output  | `Vortex.AuxView[{view_name}:{view_id}].Extract[{product}]`                     |
 
 If intent provides no non-empty view name, diagnostics use `"Unnamed"` as the
 view-name token. Empty-name labels such as `Vortex.View[:42]` are invalid.
@@ -1327,7 +1327,7 @@ analysis report must be key/value shaped and gated with
     a non-empty binding that reads it, view B receives the typed empty shadow
     product, and disabling B does not change A's atlas content.
 11. `SceneTextureLease` pool rejects active aliasing and reuses only after
-   release/retirement.
+    release/retirement.
 12. Two views with the same scene-texture key receive distinct leases unless
     explicitly serialized by `PerViewScope`.
 13. Pool exhaustion fails with a diagnostic instead of unbounded steady-state
@@ -1335,7 +1335,7 @@ analysis report must be key/value shaped and gated with
 14. `SceneTextureBindings` are published per view and do not get overwritten by
     another view before composition consumes them.
 15. Composition planning routes one view to two surfaces and two views to one
-   surface with deterministic ordering.
+    surface with deterministic ordering.
 16. Overlay batches are lane-sorted and scoped to the correct view/surface.
 17. Auxiliary view packets render before primary consumers and extract their
     products before lease release.
@@ -1367,7 +1367,7 @@ analysis report must be key/value shaped and gated with
 9. Resize during an editor-grid run invalidates histories and reacquires leases
    without bleeding old products into new extents.
 10. Surface present/submission failure retires or preserves transient leases by
-   fence ownership; no leaked active lease remains.
+    fence ownership; no leaked active lease remains.
 
 ### 17.3 Runtime Validation
 

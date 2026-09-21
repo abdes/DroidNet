@@ -16,9 +16,7 @@
       "source": "./GeoInstancedCube.geometry.json",
       "name": "GeoInstancedCube",
       "content_hashing": true,
-      "depends_on": [
-        "material.MatInstanced"
-      ]
+      "depends_on": ["material.MatInstanced"]
     },
     {
       "id": "scene.InstancingTestScene",
@@ -26,9 +24,7 @@
       "source": "./InstancingTestScene.scene.json",
       "name": "InstancingTestScene",
       "content_hashing": true,
-      "depends_on": [
-        "geometry.GeoInstancedCube"
-      ]
+      "depends_on": ["geometry.GeoInstancedCube"]
     }
   ]
 }

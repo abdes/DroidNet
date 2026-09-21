@@ -17,24 +17,24 @@ real-world production code. Users familiar with the
 [Trio](https://github.com/python-trio/trio) library for Python will
 find a lot here that looks familiar. A few of corral's design goals are:
 
-* ***[Structured concurrency](https://vorpus.org/blog/notes-on-structured-concurrency-or-go-statement-considered-harmful/)***
+- _**[Structured concurrency](https://vorpus.org/blog/notes-on-structured-concurrency-or-go-statement-considered-harmful/)**_
   baked in: tasks are organized into a tree of parent-child
   relationships, where the parent is responsible for waiting for its
   children to finish and propagates any exceptions that the children
-  raise.  This allows certain crucial features like resource
+  raise. This allows certain crucial features like resource
   management, task cancellation, and error handling to Just Work™ the
   way people would expect them to.
 
-* ***I/O and event loop agnostic***: like quite a few other
+- _**I/O and event loop agnostic**_: like quite a few other
   companies with decades of history, we have our own homegrown
   implementations of asynchronous I/O and event loops. We wanted
   to be able to use coroutines with them, as well as pretty much
   any other existing solution for asynchronous I/O (such as Asio,
   libuv, or libevent).
 
-* ***Bridging with callbacks***: the majority of existing code uses
+- _**Bridging with callbacks**_: the majority of existing code uses
   callbacks for asynchronous I/O; rewriting all of it from the ground
-  up, while entertaining, tends not to be a realistic option.  We
+  up, while entertaining, tends not to be a realistic option. We
   needed a way to have coroutine "pockets" in the middle of legacy
   code, being able call or be called from older code that's still
   using callbacks — so people could onboard gradually, one small piece
@@ -44,7 +44,7 @@ Corral focuses on **single-threaded** applications because this results in
 a simpler design, less overhead, and easier reasoning about
 concurrency hazards. (In a single-threaded environment with
 cooperative multitasking, you know that you have exclusive access to
-all state in between `co_await` points.)  Multiple threads can each
+all state in between `co_await` points.) Multiple threads can each
 run their own "corral universe", as long as tasks that belong to
 different threads do not interact with each other.
 
@@ -91,6 +91,7 @@ library](https://github.com/hudson-trading/corral). Credits go to its authors
 for the original implementation.
 
 ---
+
 MIT License
 
 Copyright (c) 2024 Hudson River Trading LLC <opensource@hudson-trading.com>

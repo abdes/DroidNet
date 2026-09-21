@@ -1,372 +1,239 @@
 {
-    "version": 5,
-    "name": "VsmTwoCubes",
-    "nodes": [
-        {
-            "name": "Root",
-            "flags": {
-                "visible": "shown",
-                "static": true,
-                "casts_shadows": "on",
-                "receives_shadows": "on"
-            }
-        },
-        {
-            "name": "Floor",
-            "parent": 0,
-            "flags": {
-                "visible": "shown",
-                "static": true,
-                "casts_shadows": "off",
-                "receives_shadows": "on"
-            },
-            "transform": {
-                "translation": [
-                    0.0,
-                    0.0,
-                    -0.6
-                ],
-                "rotation": [
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0
-                ],
-                "scale": [
-                    8.0,
-                    8.0,
-                    0.2
-                ]
-            }
-        },
-        {
-            "name": "CubeShort",
-            "parent": 0,
-            "flags": {
-                "visible": "shown",
-                "static": true,
-                "casts_shadows": "on",
-                "receives_shadows": "on"
-            },
-            "transform": {
-                "translation": [
-                    -0.75,
-                    0.0,
-                    0.5
-                ],
-                "rotation": [
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0
-                ],
-                "scale": [
-                    1.0,
-                    1.0,
-                    1.0
-                ]
-            }
-        },
-        {
-            "name": "CubeTall",
-            "parent": 0,
-            "flags": {
-                "visible": "shown",
-                "static": true,
-                "casts_shadows": "on",
-                "receives_shadows": "on"
-            },
-            "transform": {
-                "translation": [
-                    0.85,
-                    0.25,
-                    1.5
-                ],
-                "rotation": [
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0
-                ],
-                "scale": [
-                    1.0,
-                    1.0,
-                    3.0
-                ]
-            }
-        },
-        {
-            "name": "Sun",
-            "parent": 0,
-            "flags": {
-                "visible": "shown",
-                "casts_shadows": "on",
-                "receives_shadows": "on"
-            },
-            "transform": {
-                "translation": [
-                    0.0,
-                    0.0,
-                    50.0
-                ],
-                "rotation": [
-                    0.38268343,
-                    0.0,
-                    0.0,
-                    0.92387953
-                ],
-                "scale": [
-                    1.0,
-                    1.0,
-                    1.0
-                ]
-            }
-        },
-        {
-            "name": "MainCamera",
-            "parent": 0,
-            "flags": {
-                "visible": "shown",
-                "casts_shadows": "on",
-                "receives_shadows": "on"
-            },
-            "transform": {
-                "translation": [
-                    9.520689010620117,
-                    11.710914611816406,
-                    3.997236490249634
-                ],
-                "rotation": [
-                    0.19920721650123596,
-                    0.6953834891319275,
-                    0.6637771725654602,
-                    0.19015292823314667
-                ],
-                "scale": [
-                    1.0,
-                    1.0,
-                    1.0
-                ]
-            }
-        }
-    ],
-    "renderables": [
-        {
-            "geometry_ref": "/.cooked/Geometry/cube.ogeo",
-            "node": 1,
-            "visible": true
-        },
-        {
-            "geometry_ref": "/.cooked/Geometry/cube.ogeo",
-            "node": 2,
-            "visible": true
-        },
-        {
-            "geometry_ref": "/.cooked/Geometry/cube.ogeo",
-            "node": 3,
-            "visible": true
-        }
-    ],
-    "cameras": {
-        "perspective": [
-            {
-                "node": 5,
-                "fov_y": 1.0,
-                "aspect_ratio": 1.777778,
-                "near_plane": 0.10000000149011612,
-                "far_plane": 200.0
-            }
-        ]
+  "version": 5,
+  "name": "VsmTwoCubes",
+  "nodes": [
+    {
+      "name": "Root",
+      "flags": {
+        "visible": "shown",
+        "static": true,
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
     },
-    "lights": {
-        "directional": [
-            {
-                "node": 4,
-                "common": {
-                    "affects_world": true,
-                    "color_rgb": [
-                        1.0,
-                        0.9300000071525574,
-                        0.8199999928474426
-                    ],
-                    "mobility": 0,
-                    "casts_shadows": true,
-                    "shadow": {
-                        "bias": 0.001,
-                        "normal_bias": 0.03,
-                        "resolution_hint": 3
-                    }
-                },
-                "angular_size_radians": 0.009510723,
-                "environment_contribution": true,
-                "is_sun_light": true,
-                "intensity_lux": 95000.0,
-                "cascade_count": 4,
-                "cascade_distances": [
-                    8.0,
-                    24.0,
-                    64.0,
-                    160.0
-                ],
-                "distribution_exponent": 3.0,
-                "split_mode": 1,
-                "max_shadow_distance": 160.0,
-                "transition_fraction": 0.1,
-                "distance_fadeout_fraction": 0.1
-            }
-        ]
+    {
+      "name": "Floor",
+      "parent": 0,
+      "flags": {
+        "visible": "shown",
+        "static": true,
+        "casts_shadows": "off",
+        "receives_shadows": "on"
+      },
+      "transform": {
+        "translation": [0.0, 0.0, -0.6],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [8.0, 8.0, 0.2]
+      }
     },
-    "environment": {
-        "sky_atmosphere": {
-            "enabled": true,
-            "planet_radius_m": 6360000.0,
-            "atmosphere_height_m": 100000.0,
-            "ground_albedo_rgb": [
-                0.16,
-                0.15,
-                0.14
-            ],
-            "rayleigh_scattering_rgb": [
-                5.802e-06,
-                1.3558e-05,
-                3.31e-05
-            ],
-            "rayleigh_scale_height_m": 8000.0,
-            "mie_scattering_rgb": [
-                3.996e-06,
-                3.996e-06,
-                3.996e-06
-            ],
-            "mie_absorption_rgb": [
-                4.405e-07,
-                4.405e-07,
-                4.405e-07
-            ],
-            "mie_scale_height_m": 1200.0,
-            "mie_anisotropy": 0.8,
-            "ozone_absorption_rgb": [
-                6.5e-07,
-                1.881e-06,
-                8.5e-08
-            ],
-            "ozone_density_profile": [
-                10000.0,
-                25000.0,
-                40000.0
-            ],
-            "multi_scattering_factor": 1.0,
-            "sky_luminance_factor_rgb": [
-                1.0,
-                1.0,
-                1.0
-            ],
-            "sky_and_aerial_perspective_luminance_factor_rgb": [
-                1.0,
-                1.0,
-                1.0
-            ],
-            "aerial_perspective_distance_scale": 1.0,
-            "aerial_scattering_strength": 1.0,
-            "aerial_perspective_start_depth_m": 40.0,
-            "height_fog_contribution": 1.0,
-            "trace_sample_count_scale": 1.0,
-            "transmittance_min_light_elevation_deg": -90.0,
-            "sun_disk_enabled": true,
-            "holdout": false,
-            "render_in_main_pass": true
-        },
-        "fog": {
-            "enabled": true,
-            "model": 1,
-            "extinction_sigma_t_per_m": 0.0002800000074785203,
-            "height_falloff_per_m": 0.019999999552965164,
-            "height_offset_m": -20.0,
-            "start_distance_m": 80.0,
-            "max_opacity": 0.7200000286102295,
-            "single_scattering_albedo_rgb": [
-                0.8199999928474426,
-                0.8799999952316284,
-                0.949999988079071
-            ],
-            "anisotropy_g": 0.18,
-            "enable_height_fog": true,
-            "enable_volumetric_fog": true,
-            "second_fog_density": 7.999999797903001e-05,
-            "second_fog_height_falloff": 0.006000000052154064,
-            "second_fog_height_offset": 180.0,
-            "fog_inscattering_luminance": [
-                0.30000001192092896,
-                0.36000001430511475,
-                0.46000000834465027
-            ],
-            "sky_atmosphere_ambient_contribution_color_scale": [
-                1.0,
-                1.0,
-                1.0
-            ],
-            "inscattering_color_cubemap_angle": 0.0,
-            "inscattering_texture_tint": [
-                1.0,
-                1.0,
-                1.0
-            ],
-            "fully_directional_inscattering_color_distance": 1800.0,
-            "non_directional_inscattering_color_distance": 600.0,
-            "directional_inscattering_luminance": [
-                1.0,
-                0.8199999928474426,
-                0.5799999833106995
-            ],
-            "directional_inscattering_exponent": 6.0,
-            "directional_inscattering_start_distance": 120.0,
-            "end_distance_m": 5600.0,
-            "fog_cutoff_distance_m": 5800.0,
-            "volumetric_fog_scattering_distribution": 0.35,
-            "volumetric_fog_albedo": [
-                0.7,
-                0.8,
-                0.92
-            ],
-            "volumetric_fog_emissive": [
-                0.0,
-                0.0,
-                0.0
-            ],
-            "volumetric_fog_extinction_scale": 1.0,
-            "volumetric_fog_distance": 3800.0,
-            "volumetric_fog_start_distance": 50.0,
-            "volumetric_fog_near_fade_in_distance": 100.0,
-            "volumetric_fog_static_lighting_scattering_intensity": 1.0,
-            "override_light_colors_with_fog_inscattering_colors": false,
-            "holdout": false,
-            "render_in_main_pass": true,
-            "visible_in_reflection_captures": true,
-            "visible_in_real_time_sky_captures": true
-        },
-        "sky_light": {
-            "enabled": true,
-            "source": 0,
-            "intensity": 0.85,
-            "tint_rgb": [
-                0.86,
-                0.92,
-                1.0
-            ],
-            "diffuse_intensity": 0.8,
-            "specular_intensity": 0.45,
-            "real_time_capture_enabled": true,
-            "lower_hemisphere_color": [
-                0.018,
-                0.02,
-                0.024
-            ],
-            "volumetric_scattering_intensity": 1.0,
-            "affect_reflections": true
-        }
+    {
+      "name": "CubeShort",
+      "parent": 0,
+      "flags": {
+        "visible": "shown",
+        "static": true,
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      },
+      "transform": {
+        "translation": [-0.75, 0.0, 0.5],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [1.0, 1.0, 1.0]
+      }
     },
-    "references": {
-        "materials": [
-            "/.cooked/Materials/cube_red.omat"
-        ]
+    {
+      "name": "CubeTall",
+      "parent": 0,
+      "flags": {
+        "visible": "shown",
+        "static": true,
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      },
+      "transform": {
+        "translation": [0.85, 0.25, 1.5],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [1.0, 1.0, 3.0]
+      }
+    },
+    {
+      "name": "Sun",
+      "parent": 0,
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      },
+      "transform": {
+        "translation": [0.0, 0.0, 50.0],
+        "rotation": [0.38268343, 0.0, 0.0, 0.92387953],
+        "scale": [1.0, 1.0, 1.0]
+      }
+    },
+    {
+      "name": "MainCamera",
+      "parent": 0,
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      },
+      "transform": {
+        "translation": [
+          9.520689010620117, 11.710914611816406, 3.997236490249634
+        ],
+        "rotation": [
+          0.19920721650123596, 0.6953834891319275, 0.6637771725654602,
+          0.19015292823314667
+        ],
+        "scale": [1.0, 1.0, 1.0]
+      }
     }
+  ],
+  "renderables": [
+    {
+      "geometry_ref": "/.cooked/Geometry/cube.ogeo",
+      "node": 1,
+      "visible": true
+    },
+    {
+      "geometry_ref": "/.cooked/Geometry/cube.ogeo",
+      "node": 2,
+      "visible": true
+    },
+    {
+      "geometry_ref": "/.cooked/Geometry/cube.ogeo",
+      "node": 3,
+      "visible": true
+    }
+  ],
+  "cameras": {
+    "perspective": [
+      {
+        "node": 5,
+        "fov_y": 1.0,
+        "aspect_ratio": 1.777778,
+        "near_plane": 0.10000000149011612,
+        "far_plane": 200.0
+      }
+    ]
+  },
+  "lights": {
+    "directional": [
+      {
+        "node": 4,
+        "common": {
+          "affects_world": true,
+          "color_rgb": [1.0, 0.9300000071525574, 0.8199999928474426],
+          "mobility": 0,
+          "casts_shadows": true,
+          "shadow": {
+            "bias": 0.001,
+            "normal_bias": 0.03,
+            "resolution_hint": 3
+          }
+        },
+        "angular_size_radians": 0.009510723,
+        "environment_contribution": true,
+        "is_sun_light": true,
+        "intensity_lux": 95000.0,
+        "cascade_count": 4,
+        "cascade_distances": [8.0, 24.0, 64.0, 160.0],
+        "distribution_exponent": 3.0,
+        "split_mode": 1,
+        "max_shadow_distance": 160.0,
+        "transition_fraction": 0.1,
+        "distance_fadeout_fraction": 0.1
+      }
+    ]
+  },
+  "environment": {
+    "sky_atmosphere": {
+      "enabled": true,
+      "planet_radius_m": 6360000.0,
+      "atmosphere_height_m": 100000.0,
+      "ground_albedo_rgb": [0.16, 0.15, 0.14],
+      "rayleigh_scattering_rgb": [5.802e-6, 1.3558e-5, 3.31e-5],
+      "rayleigh_scale_height_m": 8000.0,
+      "mie_scattering_rgb": [3.996e-6, 3.996e-6, 3.996e-6],
+      "mie_absorption_rgb": [4.405e-7, 4.405e-7, 4.405e-7],
+      "mie_scale_height_m": 1200.0,
+      "mie_anisotropy": 0.8,
+      "ozone_absorption_rgb": [6.5e-7, 1.881e-6, 8.5e-8],
+      "ozone_density_profile": [10000.0, 25000.0, 40000.0],
+      "multi_scattering_factor": 1.0,
+      "sky_luminance_factor_rgb": [1.0, 1.0, 1.0],
+      "sky_and_aerial_perspective_luminance_factor_rgb": [1.0, 1.0, 1.0],
+      "aerial_perspective_distance_scale": 1.0,
+      "aerial_scattering_strength": 1.0,
+      "aerial_perspective_start_depth_m": 40.0,
+      "height_fog_contribution": 1.0,
+      "trace_sample_count_scale": 1.0,
+      "transmittance_min_light_elevation_deg": -90.0,
+      "sun_disk_enabled": true,
+      "holdout": false,
+      "render_in_main_pass": true
+    },
+    "fog": {
+      "enabled": true,
+      "model": 1,
+      "extinction_sigma_t_per_m": 0.0002800000074785203,
+      "height_falloff_per_m": 0.019999999552965164,
+      "height_offset_m": -20.0,
+      "start_distance_m": 80.0,
+      "max_opacity": 0.7200000286102295,
+      "single_scattering_albedo_rgb": [
+        0.8199999928474426, 0.8799999952316284, 0.949999988079071
+      ],
+      "anisotropy_g": 0.18,
+      "enable_height_fog": true,
+      "enable_volumetric_fog": true,
+      "second_fog_density": 7.999999797903001e-5,
+      "second_fog_height_falloff": 0.006000000052154064,
+      "second_fog_height_offset": 180.0,
+      "fog_inscattering_luminance": [
+        0.30000001192092896, 0.36000001430511475, 0.46000000834465027
+      ],
+      "sky_atmosphere_ambient_contribution_color_scale": [1.0, 1.0, 1.0],
+      "inscattering_color_cubemap_angle": 0.0,
+      "inscattering_texture_tint": [1.0, 1.0, 1.0],
+      "fully_directional_inscattering_color_distance": 1800.0,
+      "non_directional_inscattering_color_distance": 600.0,
+      "directional_inscattering_luminance": [
+        1.0, 0.8199999928474426, 0.5799999833106995
+      ],
+      "directional_inscattering_exponent": 6.0,
+      "directional_inscattering_start_distance": 120.0,
+      "end_distance_m": 5600.0,
+      "fog_cutoff_distance_m": 5800.0,
+      "volumetric_fog_scattering_distribution": 0.35,
+      "volumetric_fog_albedo": [0.7, 0.8, 0.92],
+      "volumetric_fog_emissive": [0.0, 0.0, 0.0],
+      "volumetric_fog_extinction_scale": 1.0,
+      "volumetric_fog_distance": 3800.0,
+      "volumetric_fog_start_distance": 50.0,
+      "volumetric_fog_near_fade_in_distance": 100.0,
+      "volumetric_fog_static_lighting_scattering_intensity": 1.0,
+      "override_light_colors_with_fog_inscattering_colors": false,
+      "holdout": false,
+      "render_in_main_pass": true,
+      "visible_in_reflection_captures": true,
+      "visible_in_real_time_sky_captures": true
+    },
+    "sky_light": {
+      "enabled": true,
+      "source": 0,
+      "intensity": 0.85,
+      "tint_rgb": [0.86, 0.92, 1.0],
+      "diffuse_intensity": 0.8,
+      "specular_intensity": 0.45,
+      "real_time_capture_enabled": true,
+      "lower_hemisphere_color": [0.018, 0.02, 0.024],
+      "volumetric_scattering_intensity": 1.0,
+      "affect_reflections": true
+    }
+  },
+  "references": {
+    "materials": ["/.cooked/Materials/cube_red.omat"]
+  }
 }

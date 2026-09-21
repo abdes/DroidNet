@@ -1,4 +1,3 @@
-
 # Multithreading
 
 As mentioned in README, corral focuses on single-threaded applications,
@@ -50,7 +49,7 @@ co::Task<void> ReadPacket(tcp::socket& sock) {
 
 > **Note**: `ThreadPool` is meant for handling CPU-intensive work, rather than
 > for doing blocking I/O through libraries, services, or protocols lacking an
-> asynchronous API. *Light* use of the thread pool for blocking I/O should work,
+> asynchronous API. _Light_ use of the thread pool for blocking I/O should work,
 > but if you simultaneously submit more `ThreadPool::Run()` tasks than the
 > number of worker threads you've started, you run the risk of a deadlock if
 > every active thread is waiting for an event that will be performed by a task

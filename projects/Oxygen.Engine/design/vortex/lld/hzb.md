@@ -66,12 +66,12 @@ through the existing frame-retirement contract; no GPU wait is introduced.
 
 ### 1.3 Stage Position
 
-| Position | Stage | Notes |
-| -------- | ----- | ----- |
-| Predecessor | Stage 3 (DepthPrepass) | Current scene depth product is established |
-| Predecessor | Stage 4 (reserved — GeometryVirtualization) | |
-| **This** | **Stage 5 — Occlusion / HZB** | Current-frame HZB pyramids produced |
-| Successor | Later stages | May consume the published HZB products if requested |
+| Position    | Stage                                       | Notes                                               |
+| ----------- | ------------------------------------------- | --------------------------------------------------- |
+| Predecessor | Stage 3 (DepthPrepass)                      | Current scene depth product is established          |
+| Predecessor | Stage 4 (reserved — GeometryVirtualization) |                                                     |
+| **This**    | **Stage 5 — Occlusion / HZB**               | Current-frame HZB pyramids produced                 |
+| Successor   | Later stages                                | May consume the published HZB products if requested |
 
 ### 1.4 Architectural Authority
 
@@ -217,11 +217,11 @@ struct alignas(16) ScreenHzbFrameBindings {
 
 #### Flags
 
-| Constant | Value | Meaning |
-| -------- | ----- | ------- |
-| `kScreenHzbFrameBindingsFlagAvailable` | `1 << 0` | HZB was built this frame |
-| `kScreenHzbFrameBindingsFlagFurthestValid` | `1 << 1` | `furthest_srv` is valid |
-| `kScreenHzbFrameBindingsFlagClosestValid` | `1 << 2` | `closest_srv` is valid |
+| Constant                                   | Value    | Meaning                  |
+| ------------------------------------------ | -------- | ------------------------ |
+| `kScreenHzbFrameBindingsFlagAvailable`     | `1 << 0` | HZB was built this frame |
+| `kScreenHzbFrameBindingsFlagFurthestValid` | `1 << 1` | `furthest_srv` is valid  |
+| `kScreenHzbFrameBindingsFlagClosestValid`  | `1 << 2` | `closest_srv` is valid   |
 
 ### 2.4 `HZBViewRect` Semantics
 
@@ -354,12 +354,12 @@ changes.
 
 ### 5.2 Texture Layout
 
-| Resource | Slots | Format | Mips | Usage |
-| -------- | :---: | ------ | :--: | ----- |
-| `closest.history_textures[0/1]` | 2 | `R32_FLOAT` | full chain | persistent SRV |
-| `furthest.history_textures[0/1]` | 2 | `R32_FLOAT` | full chain | persistent SRV |
-| `closest.scratch_textures[0/1]` | 2 | `R32_FLOAT` | 1 | UAV + copy source |
-| `furthest.scratch_textures[0/1]` | 2 | `R32_FLOAT` | 1 | UAV + copy source |
+| Resource                         | Slots | Format      |    Mips    | Usage             |
+| -------------------------------- | :---: | ----------- | :--------: | ----------------- |
+| `closest.history_textures[0/1]`  |   2   | `R32_FLOAT` | full chain | persistent SRV    |
+| `furthest.history_textures[0/1]` |   2   | `R32_FLOAT` | full chain | persistent SRV    |
+| `closest.scratch_textures[0/1]`  |   2   | `R32_FLOAT` |     1      | UAV + copy source |
+| `furthest.scratch_textures[0/1]` |   2   | `R32_FLOAT` |     1      | UAV + copy source |
 
 ### 5.3 Previous-Frame Handoff
 
@@ -430,16 +430,16 @@ float depth = pyramid.SampleLevel(point_sampler, hzb_uv, desired_mip);
 
 ### 7.3 Provided Mapping Helpers
 
-| Function | Purpose |
-| -------- | ------- |
-| `GetHzbSize()` | root mip extent |
-| `GetHzbViewSize()` | active view size |
-| `GetHzbViewRect()` | UE5-style view-local rect |
-| `GetViewportUvToHzbBufferUv()` | viewport UV → HZB UV scale |
-| `GetHzbUvFactorAndInvFactor()` | scale + inverse scale |
-| `GetHzbUvToScreenUvScaleBias()` | HZB UV → screen UV affine |
-| `GetHzbBaseTexelSize()` | mip-0 texel size |
-| `GetSamplePixelToHzbUv()` | pixel-centre → HZB UV |
+| Function                         | Purpose                         |
+| -------------------------------- | ------------------------------- |
+| `GetHzbSize()`                   | root mip extent                 |
+| `GetHzbViewSize()`               | active view size                |
+| `GetHzbViewRect()`               | UE5-style view-local rect       |
+| `GetViewportUvToHzbBufferUv()`   | viewport UV → HZB UV scale      |
+| `GetHzbUvFactorAndInvFactor()`   | scale + inverse scale           |
+| `GetHzbUvToScreenUvScaleBias()`  | HZB UV → screen UV affine       |
+| `GetHzbBaseTexelSize()`          | mip-0 texel size                |
+| `GetSamplePixelToHzbUv()`        | pixel-centre → HZB UV           |
 | `GetScreenPosToHzbUvScaleBias()` | screen-position → HZB UV affine |
 
 ## 8. Coordinate Space Conventions

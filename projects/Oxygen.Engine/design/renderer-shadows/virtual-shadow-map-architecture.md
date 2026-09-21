@@ -226,9 +226,9 @@ value objects.
 
 **Consumed by:** §3.6 Shadow Rasterizer (Stage 12 instance culling).
 
-**Cross-frame contract:** the Shadow Rasterizer reads the *previous* frame's screen-space HZB, not the current frame's. On frame 0 the HZB is absent and culling falls back to conservative AABB-only testing. From frame 1 onward the previous-frame pyramid is available as a read-only input without stalling the pipeline. The VSM system does not write the screen-space HZB.
+**Cross-frame contract:** the Shadow Rasterizer reads the _previous_ frame's screen-space HZB, not the current frame's. On frame 0 the HZB is absent and culling falls back to conservative AABB-only testing. From frame 1 onward the previous-frame pyramid is available as a read-only input without stalling the pipeline. The VSM system does not write the screen-space HZB.
 
-**Why separate from §3.7:** §3.7 (HZB Updater) owns the *shadow-space* HZB — a per-physical-page depth pyramid built from the shadow-depth texture array and used for shadow-space coarse occlusion and filtering. The screen-space HZB is a camera-view pyramid built from scene depth and used purely for shadow-caster culling. The two resources are independent, live in different coordinate spaces, and are rebuilt at different points in the frame.
+**Why separate from §3.7:** §3.7 (HZB Updater) owns the _shadow-space_ HZB — a per-physical-page depth pyramid built from the shadow-depth texture array and used for shadow-space coarse occlusion and filtering. The screen-space HZB is a camera-view pyramid built from scene depth and used purely for shadow-caster culling. The two resources are independent, live in different coordinate spaces, and are rebuilt at different points in the frame.
 
 ---
 
@@ -462,10 +462,10 @@ stateDiagram-v2
     Available --> Unavailable : Reset
 ```
 
-| State | Meaning |
-|---|---|
-| Unavailable | No previous frame data exists. Cold start or after reset. |
-| Available | Previous frame data is present and eligible for reuse checks. |
+| State       | Meaning                                                             |
+| ----------- | ------------------------------------------------------------------- |
+| Unavailable | No previous frame data exists. Cold start or after reset.           |
+| Available   | Previous frame data is present and eligible for reuse checks.       |
 | Invalidated | Previous data exists for diagnostics but is not eligible for reuse. |
 
 Ordinary current-frame light-count or raw page-table-count changes are not, by
@@ -487,12 +487,12 @@ stateDiagram-v2
     Ready --> Idle : ExtractFrameData
 ```
 
-| State | Meaning |
-|---|---|
-| Idle | No frame is being built. |
-| FrameOpen | Seam captured; page requests may be submitted. |
-| Planned | CPU allocation decisions are finalized. |
-| Ready | Current-frame allocation package is published for rendering. |
+| State     | Meaning                                                      |
+| --------- | ------------------------------------------------------------ |
+| Idle      | No frame is being built.                                     |
+| FrameOpen | Seam captured; page requests may be submitted.               |
+| Planned   | CPU allocation decisions are finalized.                      |
+| Ready     | Current-frame allocation package is published for rendering. |
 
 These two state machines are independent and must transition explicitly.
 
@@ -616,10 +616,10 @@ The clipmap tracks which primitives were rendered in each level. When a primitiv
 
 Local lights (point, spot) are classified based on screen footprint:
 
-| Screen Footprint | Allocation | Rendering |
-|---|---|---|
-| Large (near camera) | Full multi-level virtual map | Rendered every frame when dirty |
-| Small (distant) | Single-page virtual map | Subject to budget-limited refresh |
+| Screen Footprint    | Allocation                   | Rendering                         |
+| ------------------- | ---------------------------- | --------------------------------- |
+| Large (near camera) | Full multi-level virtual map | Rendered every frame when dirty   |
+| Small (distant)     | Single-page virtual map      | Subject to budget-limited refresh |
 
 ### 9.2 Distant Light Budget
 
@@ -791,16 +791,16 @@ Scene mutations (primitive add/remove/update/move) are collected by the scene gr
 
 The following types form the stable seam between modules:
 
-| Type | Owner | Consumer |
-|---|---|---|
-| `VsmPhysicalPoolSnapshot` | Physical Pool Manager | Cache Manager |
-| `VsmHzbPoolSnapshot` | Physical Pool Manager | Cache Manager, HZB Updater |
-| `VsmVirtualAddressSpaceFrame` | Virtual Address Space | Cache Manager, Page Requests, Projection |
-| `VsmVirtualRemapTable` | Remap Builder | Cache Manager, Page Allocation Planner |
-| `VsmCacheManagerSeam` | Aggregate | Cache Manager |
-| `VsmPageAllocationSnapshot` | Cache Manager | Current-frame publication and previous-frame extraction |
-| `VsmPageAllocationFrame` | Cache Manager | Shadow Rasterizer, HZB Updater, Projection |
-| `VsmExtractedCacheFrame` | Cache Manager | Page Allocation Planner (next frame) |
+| Type                          | Owner                 | Consumer                                                |
+| ----------------------------- | --------------------- | ------------------------------------------------------- |
+| `VsmPhysicalPoolSnapshot`     | Physical Pool Manager | Cache Manager                                           |
+| `VsmHzbPoolSnapshot`          | Physical Pool Manager | Cache Manager, HZB Updater                              |
+| `VsmVirtualAddressSpaceFrame` | Virtual Address Space | Cache Manager, Page Requests, Projection                |
+| `VsmVirtualRemapTable`        | Remap Builder         | Cache Manager, Page Allocation Planner                  |
+| `VsmCacheManagerSeam`         | Aggregate             | Cache Manager                                           |
+| `VsmPageAllocationSnapshot`   | Cache Manager         | Current-frame publication and previous-frame extraction |
+| `VsmPageAllocationFrame`      | Cache Manager         | Shadow Rasterizer, HZB Updater, Projection              |
+| `VsmExtractedCacheFrame`      | Cache Manager         | Page Allocation Planner (next frame)                    |
 
 ---
 
@@ -928,36 +928,36 @@ When pool configuration changes between frames, the cache manager must detect in
 
 ## 17. GPU Resource Inventory
 
-| Resource | Type | Lifetime | Owner |
-|---|---|---|---|
-| Shadow depth texture array | Texture2DArray | Persistent | Physical Pool Manager |
-| HZB texture | Texture2D + mip chain | Persistent | Physical Pool Manager |
-| Physical page metadata buffer | Structured buffer | Persistent | Physical Pool Manager |
-| Page table buffer | Structured buffer | Per-frame | Cache Manager |
-| Page flags buffer | Structured buffer | Per-frame | Cache Manager |
-| Page rect bounds buffer | Structured buffer | Per-frame | Cache Manager |
-| Physical page list buffers | Structured buffer | Per-frame | Cache Manager |
-| Dirty page flags buffer | Structured buffer | Per-frame | Cache Manager |
-| Projection data buffer | Structured buffer | Per-frame (current + previous retained) | Cache Manager |
-| Page request flags buffer | Structured buffer | Per-frame | Page Request Generator |
+| Resource                      | Type                  | Lifetime                                | Owner                  |
+| ----------------------------- | --------------------- | --------------------------------------- | ---------------------- |
+| Shadow depth texture array    | Texture2DArray        | Persistent                              | Physical Pool Manager  |
+| HZB texture                   | Texture2D + mip chain | Persistent                              | Physical Pool Manager  |
+| Physical page metadata buffer | Structured buffer     | Persistent                              | Physical Pool Manager  |
+| Page table buffer             | Structured buffer     | Per-frame                               | Cache Manager          |
+| Page flags buffer             | Structured buffer     | Per-frame                               | Cache Manager          |
+| Page rect bounds buffer       | Structured buffer     | Per-frame                               | Cache Manager          |
+| Physical page list buffers    | Structured buffer     | Per-frame                               | Cache Manager          |
+| Dirty page flags buffer       | Structured buffer     | Per-frame                               | Cache Manager          |
+| Projection data buffer        | Structured buffer     | Per-frame (current + previous retained) | Cache Manager          |
+| Page request flags buffer     | Structured buffer     | Per-frame                               | Page Request Generator |
 
 ---
 
 ## 18. Glossary
 
-| Term | Definition |
-|---|---|
-| Virtual shadow map (VSM) | A sparse virtual page table representing one light's shadow. |
-| Physical page | A fixed-size tile in the shadow-depth texture array. |
-| Page table | Mapping from virtual page coordinates to physical page indices. |
-| Clipmap | A stack of virtual shadow maps at increasing world-space extents for directional lights. |
-| Remap key | A stable string identity used to match a light across frames for cache reuse. |
-| Remap table | A mapping from previous-frame virtual IDs to current-frame virtual IDs. |
-| Page request | A flag indicating that a virtual page is needed by the current frame's camera view. |
-| Reuse | Preserving a previous-frame physical page mapping for the current frame. |
-| Eviction | Releasing a physical page mapping when it is no longer valid or needed. |
-| Invalidation | Marking cached pages as needing re-render due to scene changes. |
-| HZB | Hierarchical Z-buffer — a mip chain of depth values used for occlusion culling. |
-| Static cache slice | A second array slice holding static-geometry-only shadow content. |
-| Seam | The stable handoff surface between modules, consisting of snapshot types. |
-| Distant light | A local light with a small screen footprint, eligible for budget-limited refresh. |
+| Term                     | Definition                                                                               |
+| ------------------------ | ---------------------------------------------------------------------------------------- |
+| Virtual shadow map (VSM) | A sparse virtual page table representing one light's shadow.                             |
+| Physical page            | A fixed-size tile in the shadow-depth texture array.                                     |
+| Page table               | Mapping from virtual page coordinates to physical page indices.                          |
+| Clipmap                  | A stack of virtual shadow maps at increasing world-space extents for directional lights. |
+| Remap key                | A stable string identity used to match a light across frames for cache reuse.            |
+| Remap table              | A mapping from previous-frame virtual IDs to current-frame virtual IDs.                  |
+| Page request             | A flag indicating that a virtual page is needed by the current frame's camera view.      |
+| Reuse                    | Preserving a previous-frame physical page mapping for the current frame.                 |
+| Eviction                 | Releasing a physical page mapping when it is no longer valid or needed.                  |
+| Invalidation             | Marking cached pages as needing re-render due to scene changes.                          |
+| HZB                      | Hierarchical Z-buffer — a mip chain of depth values used for occlusion culling.          |
+| Static cache slice       | A second array slice holding static-geometry-only shadow content.                        |
+| Seam                     | The stable handoff surface between modules, consisting of snapshot types.                |
+| Distant light            | A local light with a small screen footprint, eligible for budget-limited refresh.        |

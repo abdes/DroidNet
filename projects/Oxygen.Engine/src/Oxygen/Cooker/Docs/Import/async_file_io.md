@@ -215,7 +215,7 @@ The public helpers are:
   cross-platform `FileError` enum.
 
 - `auto MakeFileError(const std::filesystem::path& path, std::error_code ec)
-  -> FileErrorInfo` — convenience to produce a fully-populated `FileErrorInfo`
+-> FileErrorInfo` — convenience to produce a fully-populated `FileErrorInfo`
   with the mapped `FileError`, the supplied path, and the underlying system
   message.
 

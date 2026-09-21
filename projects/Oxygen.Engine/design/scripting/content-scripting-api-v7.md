@@ -66,10 +66,10 @@ The module is exposed as `oxygen.assets`.
 ## 3.1 Availability and Health
 
 1. `assets.available() -> boolean`
-Returns whether `AsyncEngine` has an active `IAssetLoader`.
+   Returns whether `AsyncEngine` has an active `IAssetLoader`.
 
 2. `assets.enabled() -> boolean`
-Returns whether asset loader feature is enabled by engine config.
+   Returns whether asset loader feature is enabled by engine config.
 
 ## 3.2 Resource Cache Query
 
@@ -168,18 +168,18 @@ These APIs map to loader mount administration and may be gated behind dev build 
 
 Supported geometry `kind` values:
 
-| Kind | Optional named parameters |
-| --- | --- |
-| `cube` | None |
-| `subdivided_cube` | `segments` |
-| `sphere` | `latitude_segments`, `longitude_segments` |
-| `capsule` | `hemisphere_segments`, `radial_segments`, `height`, `radius` |
-| `icosphere` | `subdivision_level` (zero is valid) |
-| `plane` | `x_segments`, `z_segments`, `size` |
-| `cylinder` | `segments`, `height`, `radius` |
-| `cone` | `segments`, `height`, `radius` |
-| `torus` | `major_segments`, `minor_segments`, `major_radius`, `minor_radius` |
-| `quad` | `width`, `height` |
+| Kind              | Optional named parameters                                          |
+| ----------------- | ------------------------------------------------------------------ |
+| `cube`            | None                                                               |
+| `subdivided_cube` | `segments`                                                         |
+| `sphere`          | `latitude_segments`, `longitude_segments`                          |
+| `capsule`         | `hemisphere_segments`, `radial_segments`, `height`, `radius`       |
+| `icosphere`       | `subdivision_level` (zero is valid)                                |
+| `plane`           | `x_segments`, `z_segments`, `size`                                 |
+| `cylinder`        | `segments`, `height`, `radius`                                     |
+| `cone`            | `segments`, `height`, `radius`                                     |
+| `torus`           | `major_segments`, `minor_segments`, `major_radius`, `minor_radius` |
+| `quad`            | `width`, `height`                                                  |
 
 `arrow_gizmo` remains available for native tool/debug scripting. It is internal
 catalog content, not an editor authoring shape.

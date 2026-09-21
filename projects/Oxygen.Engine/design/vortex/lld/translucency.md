@@ -32,14 +32,14 @@ that are lit, sorted, depth-tested, diagnosable, and visually provable.
 
 The implementation must be reviewed against these UE5.7 files before closure:
 
-| UE5.7 area | Files | Oxygen decision |
-| --- | --- | --- |
-| Translucency pass orchestration | `Renderer/Private/TranslucentRendering.cpp`, `.h` | Oxygen implements the standard main translucency pass shape only. |
-| Translucent render state | `Renderer/Private/BasePassRendering.cpp`, `.h` | Oxygen uses standard alpha blending over scene color and read-only scene depth. |
-| Mesh-pass classification | `Renderer/Private/SceneVisibility.cpp`, `BasePassRendering.cpp` | Oxygen consumes prepared draws tagged with `PassMaskBit::kTransparent`. |
-| Translucent sorting | `Renderer/Private/MeshDrawCommands.cpp`, `.h` | Oxygen starts with per-view back-to-front distance sorting; richer priority/axis policies are deferred. |
-| Forward/base pass shader contracts | `Shaders/Private/BasePass*.usf`, `BasePassCommon.ush` | Oxygen uses the existing `Vortex/Stages/Translucency/ForwardMesh_*` shader family. |
-| Separate translucency composition | `Shaders/Private/ComposeSeparateTranslucency.usf` | Deferred; M05C composites directly into `SceneColor`. |
+| UE5.7 area                         | Files                                                           | Oxygen decision                                                                                         |
+| ---------------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| Translucency pass orchestration    | `Renderer/Private/TranslucentRendering.cpp`, `.h`               | Oxygen implements the standard main translucency pass shape only.                                       |
+| Translucent render state           | `Renderer/Private/BasePassRendering.cpp`, `.h`                  | Oxygen uses standard alpha blending over scene color and read-only scene depth.                         |
+| Mesh-pass classification           | `Renderer/Private/SceneVisibility.cpp`, `BasePassRendering.cpp` | Oxygen consumes prepared draws tagged with `PassMaskBit::kTransparent`.                                 |
+| Translucent sorting                | `Renderer/Private/MeshDrawCommands.cpp`, `.h`                   | Oxygen starts with per-view back-to-front distance sorting; richer priority/axis policies are deferred. |
+| Forward/base pass shader contracts | `Shaders/Private/BasePass*.usf`, `BasePassCommon.ush`           | Oxygen uses the existing `Vortex/Stages/Translucency/ForwardMesh_*` shader family.                      |
+| Separate translucency composition  | `Shaders/Private/ComposeSeparateTranslucency.usf`               | Deferred; M05C composites directly into `SceneColor`.                                                   |
 
 Important UE behaviors used as the target:
 
@@ -125,11 +125,11 @@ larger UE translucency family is worth implementing.
 
 ## 4. Stage Position
 
-| Position | Stage | Contract |
-| --- | --- | --- |
-| Predecessor | Stage 15/17 post-opaque environment work | Opaque scene color/depth are available. |
-| This | Stage 18 - Translucency | Draw sorted forward-lit transparent meshes into `SceneColor`. |
-| Successor | Stage 20+ overlays, resolve, post-process | Debug overlays and final output observe the composited scene. |
+| Position    | Stage                                     | Contract                                                      |
+| ----------- | ----------------------------------------- | ------------------------------------------------------------- |
+| Predecessor | Stage 15/17 post-opaque environment work  | Opaque scene color/depth are available.                       |
+| This        | Stage 18 - Translucency                   | Draw sorted forward-lit transparent meshes into `SceneColor`. |
+| Successor   | Stage 20+ overlays, resolve, post-process | Debug overlays and final output observe the composited scene. |
 
 Stage 18 must be skipped in wireframe-only render mode because that mode is a
 diagnostic geometry view, not an exposed/tonemapped scene render.
@@ -176,22 +176,22 @@ derived from the current view.
 
 ### 5.3 Inputs
 
-| Source | Data | Purpose |
-| --- | --- | --- |
-| Stage 2 InitViews | `PreparedSceneFrame` | Transparent draw metadata, materials, bounds, geometry handles. |
-| Renderer/Core | bindless scene buffers and view constants | Same draw contract used by Vortex base/forward shaders. |
-| LightingService | `LightingFrameBindings` | Forward direct and positional light evaluation. |
-| ShadowService | `ShadowFrameBindings` | Directional shadow sampling where the shader supports it. |
-| EnvironmentLightingService | `EnvironmentFrameBindings` | Ambient, aerial-perspective, and environment terms currently exposed to forward shaders. |
-| SceneTextures | `SceneColor` RTV | Alpha-blended destination. |
-| SceneTextures | `SceneDepth` read-only DSV | Opaque depth test, no transparent depth write. |
+| Source                     | Data                                      | Purpose                                                                                  |
+| -------------------------- | ----------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Stage 2 InitViews          | `PreparedSceneFrame`                      | Transparent draw metadata, materials, bounds, geometry handles.                          |
+| Renderer/Core              | bindless scene buffers and view constants | Same draw contract used by Vortex base/forward shaders.                                  |
+| LightingService            | `LightingFrameBindings`                   | Forward direct and positional light evaluation.                                          |
+| ShadowService              | `ShadowFrameBindings`                     | Directional shadow sampling where the shader supports it.                                |
+| EnvironmentLightingService | `EnvironmentFrameBindings`                | Ambient, aerial-perspective, and environment terms currently exposed to forward shaders. |
+| SceneTextures              | `SceneColor` RTV                          | Alpha-blended destination.                                                               |
+| SceneTextures              | `SceneDepth` read-only DSV                | Opaque depth test, no transparent depth write.                                           |
 
 ### 5.4 Outputs
 
-| Product | Producer | Notes |
-| --- | --- | --- |
-| `Vortex.SceneColor` | Stage 18 | Same texture, now containing opaque + standard translucency. |
-| `Vortex.TranslucencyDrawCommands` | Diagnostics fact | Draw count and skip reason, not a new GPU product. |
+| Product                           | Producer         | Notes                                                        |
+| --------------------------------- | ---------------- | ------------------------------------------------------------ |
+| `Vortex.SceneColor`               | Stage 18         | Same texture, now containing opaque + standard translucency. |
+| `Vortex.TranslucencyDrawCommands` | Diagnostics fact | Draw count and skip reason, not a new GPU product.           |
 
 No new scene texture is allocated in M05C.
 
@@ -222,15 +222,15 @@ and distance-offset controls until Oxygen has those authoring fields.
 
 ## 7. Render State
 
-| State | M05C value |
-| --- | --- |
-| Color target | `SceneColor` |
-| Depth target | `SceneDepth`, read-only |
-| Depth test | Enabled |
-| Depth write | Disabled |
-| Blend | Standard straight-alpha: source alpha over destination |
-| Color space | HDR/linear scene color, before final post-process |
-| Rasterizer | Material-sided PSOs: backface culling for single-sided, no culling for double-sided; front-face winding follows world handedness. Follow-up validation is tracked in the material-sidedness correction plan. |
+| State        | M05C value                                                                                                                                                                                                   |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Color target | `SceneColor`                                                                                                                                                                                                 |
+| Depth target | `SceneDepth`, read-only                                                                                                                                                                                      |
+| Depth test   | Enabled                                                                                                                                                                                                      |
+| Depth write  | Disabled                                                                                                                                                                                                     |
+| Blend        | Standard straight-alpha: source alpha over destination                                                                                                                                                       |
+| Color space  | HDR/linear scene color, before final post-process                                                                                                                                                            |
+| Rasterizer   | Material-sided PSOs: backface culling for single-sided, no culling for double-sided; front-face winding follows world handedness. Follow-up validation is tracked in the material-sidedness correction plan. |
 
 The pixel shader must emit straight alpha. It must not tonemap or output LDR
 color when writing to internal `SceneColor`.

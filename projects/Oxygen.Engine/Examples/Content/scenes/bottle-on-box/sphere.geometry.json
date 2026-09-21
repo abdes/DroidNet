@@ -24,9 +24,7 @@
         {
           "name": "sphere_surface",
           "material_ref": "/.cooked/Materials/sphere_blue.omat",
-          "views": [
-            { "view_ref": "__all__" }
-          ]
+          "views": [{ "view_ref": "__all__" }]
         }
       ]
     }

@@ -193,18 +193,18 @@
       "ozone_profile": {
         "layer0": {
           "constant_term": -0.6666666865348816,
-          "linear_term": 6.666666740784422e-05,
+          "linear_term": 6.666666740784422e-5,
           "width_m": 25000.0
         },
         "layer1": {
           "constant_term": 2.6666667461395264,
-          "linear_term": -6.666666740784422e-05
+          "linear_term": -6.666666740784422e-5
         }
       },
       "ozone_rgb": {
-        "x": 6.500000040432496e-07,
-        "y": 1.8810000028679497e-06,
-        "z": 8.500000348021786e-08
+        "x": 6.500000040432496e-7,
+        "y": 1.8810000028679497e-6,
+        "z": 8.500000348021786e-8
       },
       "planet_radius_km": 6360.0009765625,
       "rayleigh_scale_height_km": 8.0,
@@ -255,7 +255,7 @@
       "model": 1.0,
       "non_directional_color_distance": 600.0,
       "render_in_main_pass": true,
-      "second_density": 7.999999797903001e-05,
+      "second_density": 7.999999797903001e-5,
       "second_height_falloff": 0.006000000052154064,
       "second_height_offset": 180.0,
       "single_scattering_albedo_rgb": {
@@ -361,10 +361,7 @@
   "environment_preset_index": -1.0,
   "file_browser": {
     "select_loose_cooked_index": {
-      "window_size": [
-        888,
-        450
-      ]
+      "window_size": [888, 450]
     }
   },
   "ground_grid": {

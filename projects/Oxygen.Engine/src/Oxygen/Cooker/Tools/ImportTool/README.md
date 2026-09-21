@@ -3,6 +3,7 @@
 `Oxygen.Cooker.ImportTool` imports source assets into Oxygen loose-cooked layout.
 
 Supported import kinds:
+
 - `texture`
 - `texture-descriptor` (manifest job type)
 - `buffer-container` (manifest job type)
@@ -35,17 +36,17 @@ Oxygen.Cooker.ImportTool batch --manifest F:/projects/MyGame/import-manifest.jso
 
 Global options are available for all commands.
 
-| Option | Meaning |
-| --- | --- |
-| `-q`, `--quiet` | Suppress non-error output |
-| `--diagnostics-file <path>` | Reserved diagnostics output path (currently parsed but not emitted) |
-| `-o`, `--cooked-root <path>` | Default cooked root fallback |
-| `--fail-fast` | Stop batch processing on first failure |
-| `--no-color` | Disable ANSI color |
-| `--no-tui` | Disable TUI; force text progress |
-| `--theme <plain\|dark\|light>` | Help/output theme |
-| `--thread-pool-size <n>` | Override import service worker count |
-| `--concurrency <spec>` | Override pipeline concurrency (`t,b,m,h,g,s` as `workers/queue`) |
+| Option                         | Meaning                                                             |
+| ------------------------------ | ------------------------------------------------------------------- |
+| `-q`, `--quiet`                | Suppress non-error output                                           |
+| `--diagnostics-file <path>`    | Reserved diagnostics output path (currently parsed but not emitted) |
+| `-o`, `--cooked-root <path>`   | Default cooked root fallback                                        |
+| `--fail-fast`                  | Stop batch processing on first failure                              |
+| `--no-color`                   | Disable ANSI color                                                  |
+| `--no-tui`                     | Disable TUI; force text progress                                    |
+| `--theme <plain\|dark\|light>` | Help/output theme                                                   |
+| `--thread-pool-size <n>`       | Override import service worker count                                |
+| `--concurrency <spec>`         | Override pipeline concurrency (`t,b,m,h,g,s` as `workers/queue`)    |
 
 Example concurrency override:
 
@@ -58,10 +59,12 @@ Oxygen.Cooker.ImportTool --concurrency "t:4/64,b:2/32,g:2/32,s:2/32" batch --man
 Cooked root must resolve to an absolute path.
 
 Single-job commands (`texture`, `fbx`, `gltf`, `input`, `script`, `script-sidecar`, `physics-sidecar`):
+
 1. `-i`, `--output` (command-local)
 2. global `-o`, `--cooked-root`
 
 Batch (`--manifest`):
+
 1. job `output`
 2. `defaults.<type>.output`
 3. top-level manifest `output`
@@ -74,9 +77,11 @@ Batch (`--manifest`):
 Imports one texture.
 
 Required:
+
 - positional `source`
 
 Common options:
+
 - `-i`, `--output <path>`
 - `--name <job-name>`
 - `--report <path>`
@@ -90,15 +95,18 @@ Run `texture --help` for the full list.
 Imports one FBX scene.
 
 Required:
+
 - positional `source`
 
 Common options:
+
 - `-i`, `--output <path>`
 - `--name <job-name>`
 - `--report <path>`
 - `--content-hashing <true|false>`
 
 Scene controls:
+
 - `--no-import-textures`
 - `--no-import-materials`
 - `--no-import-geometry`
@@ -115,6 +123,7 @@ Scene controls:
 Imports one glTF/GLB scene.
 
 Required:
+
 - positional `source`
 
 Options are the same shape as `fbx`.
@@ -124,9 +133,11 @@ Options are the same shape as `fbx`.
 Imports one script asset.
 
 Required:
+
 - positional `source`
 
 Options:
+
 - `-i`, `--output <path>`
 - `--name <job-name>`
 - `--report <path>`
@@ -136,10 +147,12 @@ Options:
 - `--script-storage <embedded|external>`
 
 Rules:
+
 - `compile=true` with `script-storage=external` is rejected.
 - In this tool, script compile is wired through Luau compiler callback.
 
 Script import writes script descriptors (`*.oscript`) and script payload tables:
+
 - `scripts.table`
 - `scripts.data`
 
@@ -148,15 +161,18 @@ Script import writes script descriptors (`*.oscript`) and script payload tables:
 Imports one input authoring document (`*.input.json` or `*.input-action.json`).
 
 Required:
+
 - positional `source`
 
 Optional:
+
 - `-i`, `--output <path>`
 - `--name <job-name>`
 - `--report <path>`
 - `--content-hashing <true|false>`
 
 Shipped JSON schemas:
+
 - source-of-truth: `src/Oxygen/Cooker/Import/Schemas/oxygen.import-manifest.schema.json`
 - source-of-truth: `src/Oxygen/Cooker/Import/Schemas/oxygen.texture-descriptor.schema.json`
 - source-of-truth: `src/Oxygen/Cooker/Import/Schemas/oxygen.material-descriptor.schema.json`
@@ -181,14 +197,38 @@ Repository checkout:
 ```json
 {
   "json.schemas": [
-    { "fileMatch": ["import-manifest*.json"], "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.import-manifest.schema.json" },
-    { "fileMatch": ["*.texture.json"], "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.texture-descriptor.schema.json" },
-    { "fileMatch": ["*.material.json"], "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.material-descriptor.schema.json" },
-    { "fileMatch": ["*.geometry.json"], "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.geometry-descriptor.schema.json" },
-    { "fileMatch": ["*.scene.json"], "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.scene-descriptor.schema.json" },
-    { "fileMatch": ["*.input.json"], "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.input.schema.json" },
-    { "fileMatch": ["*.input-action.json"], "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.input-action.schema.json" },
-    { "fileMatch": ["*.physics-sidecar.json"], "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.physics-sidecar.schema.json" }
+    {
+      "fileMatch": ["import-manifest*.json"],
+      "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.import-manifest.schema.json"
+    },
+    {
+      "fileMatch": ["*.texture.json"],
+      "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.texture-descriptor.schema.json"
+    },
+    {
+      "fileMatch": ["*.material.json"],
+      "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.material-descriptor.schema.json"
+    },
+    {
+      "fileMatch": ["*.geometry.json"],
+      "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.geometry-descriptor.schema.json"
+    },
+    {
+      "fileMatch": ["*.scene.json"],
+      "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.scene-descriptor.schema.json"
+    },
+    {
+      "fileMatch": ["*.input.json"],
+      "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.input.schema.json"
+    },
+    {
+      "fileMatch": ["*.input-action.json"],
+      "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.input-action.schema.json"
+    },
+    {
+      "fileMatch": ["*.physics-sidecar.json"],
+      "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.physics-sidecar.schema.json"
+    }
   ]
 }
 ```
@@ -198,19 +238,44 @@ Installed package layout:
 ```json
 {
   "json.schemas": [
-    { "fileMatch": ["import-manifest*.json"], "url": "./schemas/oxygen.import-manifest.schema.json" },
-    { "fileMatch": ["*.texture.json"], "url": "./schemas/oxygen.texture-descriptor.schema.json" },
-    { "fileMatch": ["*.material.json"], "url": "./schemas/oxygen.material-descriptor.schema.json" },
-    { "fileMatch": ["*.geometry.json"], "url": "./schemas/oxygen.geometry-descriptor.schema.json" },
-    { "fileMatch": ["*.scene.json"], "url": "./schemas/oxygen.scene-descriptor.schema.json" },
-    { "fileMatch": ["*.input.json"], "url": "./schemas/oxygen.input.schema.json" },
-    { "fileMatch": ["*.input-action.json"], "url": "./schemas/oxygen.input-action.schema.json" },
-    { "fileMatch": ["*.physics-sidecar.json"], "url": "./schemas/oxygen.physics-sidecar.schema.json" }
+    {
+      "fileMatch": ["import-manifest*.json"],
+      "url": "./schemas/oxygen.import-manifest.schema.json"
+    },
+    {
+      "fileMatch": ["*.texture.json"],
+      "url": "./schemas/oxygen.texture-descriptor.schema.json"
+    },
+    {
+      "fileMatch": ["*.material.json"],
+      "url": "./schemas/oxygen.material-descriptor.schema.json"
+    },
+    {
+      "fileMatch": ["*.geometry.json"],
+      "url": "./schemas/oxygen.geometry-descriptor.schema.json"
+    },
+    {
+      "fileMatch": ["*.scene.json"],
+      "url": "./schemas/oxygen.scene-descriptor.schema.json"
+    },
+    {
+      "fileMatch": ["*.input.json"],
+      "url": "./schemas/oxygen.input.schema.json"
+    },
+    {
+      "fileMatch": ["*.input-action.json"],
+      "url": "./schemas/oxygen.input-action.schema.json"
+    },
+    {
+      "fileMatch": ["*.physics-sidecar.json"],
+      "url": "./schemas/oxygen.physics-sidecar.schema.json"
+    }
   ]
 }
 ```
 
 Slot names:
+
 - Canonical runtime slot names are accepted (for example: `Up`, `RightCtrl`, `PrintScreen`).
 - Authoring aliases are also accepted and normalized during import (for example: `UpArrow` -> `Up`, `RightControl` -> `RightCtrl`, `Print` -> `PrintScreen`).
 
@@ -219,23 +284,28 @@ Slot names:
 Imports scene scripting bindings.
 
 Input modes (exactly one required):
+
 - positional `source` (JSON sidecar file), or
 - `--bindings-inline '<json>'`
 
 `--bindings-inline` accepts either:
+
 - a JSON array of binding rows (`[ ... ]`)
 - or a JSON object with `bindings` array (`{ "bindings": [ ... ] }`)
 
 Required:
+
 - `--target-scene-virtual-path <canonical-virtual-path>`
 
 Optional:
+
 - `-i`, `--output <path>`
 - `--name <job-name>`
 - `--report <path>`
 - `--content-hashing <true|false>`
 
 Canonical virtual-path requirements:
+
 - starts with `/`
 - no backslashes
 - no `//`
@@ -252,9 +322,7 @@ Sidecar payload shape:
       "slot_id": "main",
       "script_virtual_path": "/Descriptors/Scripts/my_script.oscript",
       "execution_order": 0,
-      "params": [
-        { "key": "speed", "type": "float", "value": 1.0 }
-      ]
+      "params": [{ "key": "speed", "type": "float", "value": 1.0 }]
     }
   ]
 }
@@ -263,6 +331,7 @@ Sidecar payload shape:
 Supported param types: `bool`, `int32`, `float`, `string`, `vec2`, `vec3`, `vec4`.
 
 Sidecar import writes script-binding payload tables:
+
 - `script-bindings.table`
 - `script-bindings.data`
 
@@ -273,6 +342,7 @@ It also patches scene scripting components for the target scene.
 Imports scene physics bindings as a standalone `.opscene` descriptor.
 
 Input modes (exactly one required):
+
 - positional `source` (JSON sidecar file), or
 - `--bindings-inline '<json>'`
 
@@ -280,15 +350,18 @@ Input modes (exactly one required):
 `bindings` object (`{ "bindings": { ... } }`).
 
 Required:
+
 - `--target-scene-virtual-path <canonical-virtual-path>`
 
 Optional:
+
 - `-i`, `--output <path>`
 - `--name <job-name>`
 - `--report <path>`
 - `--content-hashing <true|false>`
 
 Canonical virtual-path requirements:
+
 - starts with `/`
 - no backslashes
 - no `//`
@@ -320,9 +393,11 @@ scene descriptor.
 Runs manifest jobs.
 
 Required:
+
 - `-m`, `--manifest <path>`
 
 Optional:
+
 - `--root <path>` (base for resolving relative `source` values)
 - `--dry-run`
 - `--report <path>`
@@ -352,16 +427,27 @@ Top-level fields:
     },
     "texture": { "output": "..." },
     "scene": { "output": "..." },
-    "script": { "output": "...", "compile": true, "script_storage": "embedded" },
+    "script": {
+      "output": "...",
+      "compile": true,
+      "script_storage": "embedded"
+    },
     "material_descriptor": { "output": "...", "content_hashing": true },
-    "scripting_sidecar": { "output": "...", "target_scene_virtual_path": "/Scenes/MyScene.oscene" },
-    "physics_sidecar": { "output": "...", "target_scene_virtual_path": "/Scenes/MyScene.oscene" }
+    "scripting_sidecar": {
+      "output": "...",
+      "target_scene_virtual_path": "/Scenes/MyScene.oscene"
+    },
+    "physics_sidecar": {
+      "output": "...",
+      "target_scene_virtual_path": "/Scenes/MyScene.oscene"
+    }
   },
   "jobs": []
 }
 ```
 
 Job rules:
+
 - each job requires `type`
 - non-sidecar jobs require `source`
 - `texture-descriptor` jobs:
@@ -427,9 +513,7 @@ Batch example with one output shared at manifest level:
           "slot_id": "main",
           "script_virtual_path": "/Descriptors/Scripts/backpack_rotate.oscript",
           "execution_order": 0,
-          "params": [
-            { "key": "speed", "type": "float", "value": 1.0 }
-          ]
+          "params": [{ "key": "speed", "type": "float", "value": 1.0 }]
         }
       ]
     },
@@ -452,6 +536,7 @@ Batch example with one output shared at manifest level:
 ```
 
 Notes:
+
 - Use the actual `scene` and `script` virtual paths emitted by import/report/index.
 - `script_virtual_path` must resolve to a script asset.
 
@@ -460,6 +545,7 @@ Notes:
 Per-command `--report` and batch `--report` write JSON report output.
 
 Current process exit codes:
+
 - `0` success
 - `1` invalid input/argument/configuration
 - `2` runtime/import failure

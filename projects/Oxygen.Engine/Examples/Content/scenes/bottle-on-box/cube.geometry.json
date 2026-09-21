@@ -20,9 +20,7 @@
         {
           "name": "cube_surface",
           "material_ref": "/.cooked/Materials/cube_red.omat",
-          "views": [
-            { "view_ref": "__all__" }
-          ]
+          "views": [{ "view_ref": "__all__" }]
         }
       ]
     }

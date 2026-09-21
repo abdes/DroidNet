@@ -32,14 +32,14 @@ This plan translates the ImportTool README requirements into executable phases. 
 **Phase 0 Findings (Completed):**
 
 - Clap is a C++ library; global options must be registered via
-   `CliBuilder::WithGlobalOptions` or `WithGlobalOption` and appear before
-   commands in help output.
+  `CliBuilder::WithGlobalOptions` or `WithGlobalOption` and appear before
+  commands in help output.
 - Built-in help/version are enabled through `CliBuilder::WithHelpCommand()`
-   and `CliBuilder::WithVersionCommand()`; help is printed during parsing.
+  and `CliBuilder::WithVersionCommand()`; help is printed during parsing.
 - Theme values supported by Clap are `plain`, `dark`, and `light`.
 - Bool options in Clap are flags with implicit `true` values by default.
 - ImportTool currently has `texture` and `batch` commands only; `fbx` and
-   `gltf` are not implemented yet.
+  `gltf` are not implemented yet.
 
 ---
 

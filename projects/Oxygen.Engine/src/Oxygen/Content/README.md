@@ -101,20 +101,20 @@ This section is normative. "MUST" and "MUST NOT" are strict requirements.
 
 ### Responsibility Map
 
-| Component | Owned state | Primary responsibility |
-| ----- | ----- | ----- |
-| `AssetLoader` | lifecycle glue, API wiring, facade-level coordination | public API, activation/deactivation, cross-service orchestration |
-| `internal::ContentSourceRegistry` | mounted source vectors/maps/tokens | mount/unmount/clear and source-id/token resolution |
-| `internal::AssetIdentityIndex` | asset hash/key/source reverse indexes | deterministic asset identity resolution and preferred-source overrides |
-| `internal::DependencyGraphStore` | asset/resource dependency edges | dependency edge insert/remove/enumeration and symmetry assertions |
-| `internal::DependencyReleaseEngine` | release traversal working state | resources-first dependency release and trim traversal |
-| `internal::InFlightOperationTable` | unified typed/erased in-flight operations | dedup of concurrent loads and lifecycle cleanup |
-| `internal::ResourceLoadPipeline` | resource decode/publish pipeline state | cache-hit/in-flight/decode/store/publish for resources |
-| `internal::ScriptHotReloadService` | script path index + reload subscribers | script reload orchestration and notifications |
-| `internal::ScriptQueryService` | script query helpers | script sidecar/resource query operations |
-| `internal::PhysicsQueryService` | physics query helpers | physics scene/material/collision query operations |
-| `internal::EvictionRegistry` | eviction subscriber registry + reentrancy guard | eviction callback subscription and safe dispatch |
-| `internal::ResourceKeyRegistry` | resource-hash to key mapping | canonical resource-key registration/lookup/invariant checks |
+| Component                           | Owned state                                           | Primary responsibility                                                 |
+| ----------------------------------- | ----------------------------------------------------- | ---------------------------------------------------------------------- |
+| `AssetLoader`                       | lifecycle glue, API wiring, facade-level coordination | public API, activation/deactivation, cross-service orchestration       |
+| `internal::ContentSourceRegistry`   | mounted source vectors/maps/tokens                    | mount/unmount/clear and source-id/token resolution                     |
+| `internal::AssetIdentityIndex`      | asset hash/key/source reverse indexes                 | deterministic asset identity resolution and preferred-source overrides |
+| `internal::DependencyGraphStore`    | asset/resource dependency edges                       | dependency edge insert/remove/enumeration and symmetry assertions      |
+| `internal::DependencyReleaseEngine` | release traversal working state                       | resources-first dependency release and trim traversal                  |
+| `internal::InFlightOperationTable`  | unified typed/erased in-flight operations             | dedup of concurrent loads and lifecycle cleanup                        |
+| `internal::ResourceLoadPipeline`    | resource decode/publish pipeline state                | cache-hit/in-flight/decode/store/publish for resources                 |
+| `internal::ScriptHotReloadService`  | script path index + reload subscribers                | script reload orchestration and notifications                          |
+| `internal::ScriptQueryService`      | script query helpers                                  | script sidecar/resource query operations                               |
+| `internal::PhysicsQueryService`     | physics query helpers                                 | physics scene/material/collision query operations                      |
+| `internal::EvictionRegistry`        | eviction subscriber registry + reentrancy guard       | eviction callback subscription and safe dispatch                       |
+| `internal::ResourceKeyRegistry`     | resource-hash to key mapping                          | canonical resource-key registration/lookup/invariant checks            |
 
 ### Boundary Rules
 
@@ -162,12 +162,12 @@ This checklist is mandatory for Content runtime refactors and is intended to be 
 
 ## Documentation Index
 
-| Topic | File | Focus |
-| ----- | ---- | ----- |
-| Entity relationships & intra-PAK rule | `Docs/overview.md` | Conceptual model & dependency boundaries |
-| PAK format, alignment, classification | `Docs/chunking.md` | File layout, alignment, resource tiers |
-| Loader architecture & async pipeline | `Docs/asset_loader.md` | Facade + extracted subsystems and pipeline behavior |
-| Dependency tracking & caching | `Docs/deps_and_cache.md` | Reference counting, unload design |
+| Topic                                 | File                     | Focus                                               |
+| ------------------------------------- | ------------------------ | --------------------------------------------------- |
+| Entity relationships & intra-PAK rule | `Docs/overview.md`       | Conceptual model & dependency boundaries            |
+| PAK format, alignment, classification | `Docs/chunking.md`       | File layout, alignment, resource tiers              |
+| Loader architecture & async pipeline  | `Docs/asset_loader.md`   | Facade + extracted subsystems and pipeline behavior |
+| Dependency tracking & caching         | `Docs/deps_and_cache.md` | Reference counting, unload design                   |
 
 ---
 
@@ -266,22 +266,22 @@ python generate_pak.py assets.yaml output.pak --force
 ```yaml
 assets:
   - asset_key: "12345678-1234-5678-9abc-123456789012"
-    asset_type: 1  # AssetType enum value
-    buffers: [0]   # Reference to buffer resources
-    textures: [0]  # Reference to texture resources
+    asset_type: 1 # AssetType enum value
+    buffers: [0] # Reference to buffer resources
+    textures: [0] # Reference to texture resources
 
 buffer_resources:
   - data_hex: "deadbeef..."
     element_stride: 4
-    element_format: 5      # Format::kR16UInt
-    usage_flags: 1         # BufferUsageFlags
+    element_format: 5 # Format::kR16UInt
+    usage_flags: 1 # BufferUsageFlags
 
 texture_resources:
   - data_hex: "cafebabe..."
     width: 256
     height: 256
-    format: 30             # Format::kRGBA8UNorm
-    texture_type: 0        # TextureType::k2D
+    format: 30 # Format::kRGBA8UNorm
+    texture_type: 0 # TextureType::k2D
 ```
 
 ### PAK Dumper (`PakFileDumper`)

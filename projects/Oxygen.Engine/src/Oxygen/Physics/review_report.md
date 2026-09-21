@@ -236,7 +236,7 @@ The introduction of the `IJointApi` and `JoltJoints` correctly implements the ne
 - Creation-time topology authoring now maps:
   - edge/shear/bend compliance
   - tether mode and tether distance multiplier
-  into `SoftBodySharedSettings::CreateConstraints(...)`.
+    into `SoftBodySharedSettings::CreateConstraints(...)`.
 - `SoftBodyDesc::anchor_body_id` is currently reported as `kNotImplemented` on Jolt pending skin/tether-based anchor integration (two-body rigid constraints are not valid for soft-body solver path).
 - Expose non-null `IPhysicsSystem::SoftBodies()`.
 
@@ -489,7 +489,7 @@ The introduction of the `IJointApi` and `JoltJoints` correctly implements the ne
 ### 11.7 Product Integration
 
 - [x] Physics C++ demo
-- [X] Luau bindings
+- [x] Luau bindings
 - [ ] RenderScene + Lua physics scene
 - [ ] Pak migration and validation
 

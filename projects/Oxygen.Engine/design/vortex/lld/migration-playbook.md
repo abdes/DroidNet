@@ -7,17 +7,17 @@
 ## Mandatory Vortex Rule
 
 - For Vortex planning and implementation, `Oxygen.Renderer` is legacy dead
-   code. It is not production, not a reference implementation, not a fallback,
-   and not a simplification path for any Vortex task.
+  code. It is not production, not a reference implementation, not a fallback,
+  and not a simplification path for any Vortex task.
 - Every Vortex task must be designed and implemented as a new Vortex-native
-   system that targets maximum parity with UE5.7, grounded in
-   `F:\Epic Games\UE_5.7\Engine\Source\Runtime` and
-   `F:\Epic Games\UE_5.7\Engine\Shaders`.
+  system that targets maximum parity with UE5.7, grounded in
+  `F:\Epic Games\UE_5.7\Engine\Source\Runtime` and
+  `F:\Epic Games\UE_5.7\Engine\Shaders`.
 - No Vortex task may be marked complete until its parity gate is closed with
-   explicit evidence against the relevant UE5.7 source and shader references.
+  explicit evidence against the relevant UE5.7 source and shader references.
 - If maximum parity cannot yet be achieved, the task remains incomplete until
-   explicit human approval records the accepted gap and the reason the parity
-   gate cannot close.
+  explicit human approval records the accepted gap and the reason the parity
+  gate cannot close.
 
 ## 1. Scope and Context
 
@@ -29,7 +29,7 @@ the legacy `Oxygen.Renderer` path to `Oxygen.Vortex`.
 This is the PRD Section 6.1.1 first-success gate. The migrated example must:
 
 - produce correct visual and behavioral output that closes the owning UE5.7
-   parity gate
+  parity gate
 - run through the real Vortex runtime seams
 - avoid long-lived compatibility clutter
 - prove that the Phase 4 service set is sufficient for one real Oxygen runtime
@@ -75,12 +75,12 @@ Before any migration completion claim:
 
 ### 2.2 Evidence Artifacts
 
-| Artifact | Format | Purpose |
-| -------- | ------ | ------- |
-| `baseline_frame10.png` | screenshot | parity evidence image |
-| `baseline_depth.png` | screenshot | depth parity evidence |
+| Artifact                 | Format            | Purpose                                                      |
+| ------------------------ | ----------------- | ------------------------------------------------------------ |
+| `baseline_frame10.png`   | screenshot        | parity evidence image                                        |
+| `baseline_depth.png`     | screenshot        | depth parity evidence                                        |
 | `baseline_renderdoc.rdc` | RenderDoc capture | pass / resource inspection against the owning UE5.7 contract |
-| `baseline_behaviors.md` | notes | observable workflow checklist for the parity gate |
+| `baseline_behaviors.md`  | notes             | observable workflow checklist for the parity gate            |
 
 ### 2.3 Truthful Phase 4 Feature Baseline
 
@@ -88,15 +88,15 @@ The Phase 4 parity target is not "every renderer feature the app can
 eventually grow." It is the smallest truthful baseline required by the live
 example and the Phase 4 scope:
 
-| Feature | Baseline Status | Why |
-| ------- | --------------- | --- |
-| Deferred direct lighting | required | core Phase 3 -> Phase 4 lighting path |
-| Atmosphere-enabled main scene view | required | the live example sets `with_atmosphere = true` on its main composition view |
-| Spotlight presence | required | the live example creates and updates a camera spotlight |
-| Spotlight shadows | not required in baseline | the live example's settings default keeps `casts_shadows = false`; Phase 4C remains directional-first |
-| Post-process visible output | required | the migrated surface must reach real Stage-22 sampled tonemapped output before composition |
-| Directional conventional shadows | required | this is the truthful Phase 4C baseline |
-| Local-light conventional shadows | not required in baseline | later `ShadowService` expansion owns them |
+| Feature                            | Baseline Status          | Why                                                                                                   |
+| ---------------------------------- | ------------------------ | ----------------------------------------------------------------------------------------------------- |
+| Deferred direct lighting           | required                 | core Phase 3 -> Phase 4 lighting path                                                                 |
+| Atmosphere-enabled main scene view | required                 | the live example sets `with_atmosphere = true` on its main composition view                           |
+| Spotlight presence                 | required                 | the live example creates and updates a camera spotlight                                               |
+| Spotlight shadows                  | not required in baseline | the live example's settings default keeps `casts_shadows = false`; Phase 4C remains directional-first |
+| Post-process visible output        | required                 | the migrated surface must reach real Stage-22 sampled tonemapped output before composition            |
+| Directional conventional shadows   | required                 | this is the truthful Phase 4C baseline                                                                |
+| Local-light conventional shadows   | not required in baseline | later `ShadowService` expansion owns them                                                             |
 
 If the migration target is found to rely materially on spotlight shadows or any
 other out-of-scope feature, the design package must be widened explicitly
@@ -122,13 +122,13 @@ The live example currently uses legacy renderer families such as:
 
 The migration must replace those seams with truthful Vortex equivalents:
 
-| Current Seam | Migration Requirement |
-| ------------ | --------------------- |
-| `ForwardPipeline` ownership | replace with the Vortex scene-renderer / composition path; no parallel legacy pipeline kept alive |
-| legacy `CompositionView` routing | move to the Vortex-owned composition/view contract without local shortcut paths |
-| DemoShell `get_active_pipeline` dependency | replace with a Vortex-facing runtime seam that still supports the required UI/runtime behavior |
-| legacy renderer-owned view registration assumptions | route through Vortex Renderer Core publication and composition planning |
-| legacy renderer pass/config hooks | replace with Vortex-owned equivalents or remove them if they are legacy-only scaffolding |
+| Current Seam                                        | Migration Requirement                                                                             |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `ForwardPipeline` ownership                         | replace with the Vortex scene-renderer / composition path; no parallel legacy pipeline kept alive |
+| legacy `CompositionView` routing                    | move to the Vortex-owned composition/view contract without local shortcut paths                   |
+| DemoShell `get_active_pipeline` dependency          | replace with a Vortex-facing runtime seam that still supports the required UI/runtime behavior    |
+| legacy renderer-owned view registration assumptions | route through Vortex Renderer Core publication and composition planning                           |
+| legacy renderer pass/config hooks                   | replace with Vortex-owned equivalents or remove them if they are legacy-only scaffolding          |
 
 ### 3.3 Zero-Shim Rule
 
@@ -146,11 +146,11 @@ The migration must leave **zero** long-lived compatibility clutter:
 Replace legacy renderer includes and namespaces only as part of the broader
 seam migration:
 
-| Legacy | Vortex |
-| ------ | ------ |
+| Legacy                           | Vortex                         |
+| -------------------------------- | ------------------------------ |
 | `#include "Oxygen/Renderer/..."` | `#include "Oxygen/Vortex/..."` |
-| `oxygen::renderer::` | `oxygen::vortex::` |
-| `OXGN_RNDR_API` | `OXGN_VRTX_API` |
+| `oxygen::renderer::`             | `oxygen::vortex::`             |
+| `OXGN_RNDR_API`                  | `OXGN_VRTX_API`                |
 
 This step does **not** by itself prove the migration is viable.
 
@@ -224,13 +224,13 @@ must remain regression-free against that expanded runtime baseline.
 
 ### 5.2 Acceptance Criteria
 
-| Criterion | Metric | Threshold |
-| --------- | ------ | --------- |
-| Phase 4 service set live in migrated run | design/runtime inspection | `LightingService`, `PostProcessService`, `ShadowService`, and `EnvironmentLightingService` all active as the seams under test |
-| Visual match | parity evidence review plus optional image diff | must satisfy the owning UE5.7 parity gate |
-| Depth accuracy | depth comparison | must satisfy the owning UE5.7 parity gate |
-| Async behavior | observable behavior match | all required parity-gate behaviors preserved |
-| No compatibility clutter | code inspection | zero long-lived shims |
+| Criterion                                | Metric                                          | Threshold                                                                                                                     |
+| ---------------------------------------- | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| Phase 4 service set live in migrated run | design/runtime inspection                       | `LightingService`, `PostProcessService`, `ShadowService`, and `EnvironmentLightingService` all active as the seams under test |
+| Visual match                             | parity evidence review plus optional image diff | must satisfy the owning UE5.7 parity gate                                                                                     |
+| Depth accuracy                           | depth comparison                                | must satisfy the owning UE5.7 parity gate                                                                                     |
+| Async behavior                           | observable behavior match                       | all required parity-gate behaviors preserved                                                                                  |
+| No compatibility clutter                 | code inspection                                 | zero long-lived shims                                                                                                         |
 
 ### 5.3 Known Acceptable Differences
 

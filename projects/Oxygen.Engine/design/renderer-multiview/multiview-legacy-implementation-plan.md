@@ -157,31 +157,31 @@ Rationale: Passing the resolver into `RenderFrame` keeps `FrameContext` focused 
 
 The steps below are the prioritized, minimal-surface edits to implement Option 1.
 
-1) Add per-view state to `RenderContext` (low risk)
-    - Files: `src/Oxygen/Renderer/RenderContext.h`
-    - Add `struct ViewSpecific { ViewId view_id; observer_ptr<const ResolvedView> resolved_view; observer_ptr<const PreparedSceneFrame> prepared_frame; };`
-    - Add `ViewSpecific current_view; std::unordered_map<ViewId, std::shared_ptr<graphics::Framebuffer>> view_outputs;`
-    - Rationale: Keep the existing `PreparedSceneFrame` type to avoid a large rename; treat it as view-specific for now. This is a minimal change that allows per-view wiring without repo-wide refactors.
+1. Add per-view state to `RenderContext` (low risk)
+   - Files: `src/Oxygen/Renderer/RenderContext.h`
+   - Add `struct ViewSpecific { ViewId view_id; observer_ptr<const ResolvedView> resolved_view; observer_ptr<const PreparedSceneFrame> prepared_frame; };`
+   - Add `ViewSpecific current_view; std::unordered_map<ViewId, std::shared_ptr<graphics::Framebuffer>> view_outputs;`
+   - Rationale: Keep the existing `PreparedSceneFrame` type to avoid a large rename; treat it as view-specific for now. This is a minimal change that allows per-view wiring without repo-wide refactors.
 
-2) Add `Renderer::RenderFrame(FrameContext&, RenderContext&, const oxygen::ViewResolver&)` (medium risk)
-    - Files: `src/Oxygen/Renderer/Renderer.cpp`, `Renderer.h`
-    - Semantics: `RenderFrame` will:
-      - run Frame-phase ScenePrep once (`scene_prep_->Collect(scene, std::nullopt, ...)` + `Finalize()`)
-      - iterate `FrameContext`'s registered view ids (use existing `views_` map)
-      - for each `view_id`, call `resolver(view_id)` to obtain a `ResolvedView`, run per-view ScenePrep (`Collect` with view + `Finalize()`), bind per-view prepared data into `RenderContext::current_view`, execute render graph for that view, and publish the output via `FrameContext::SetViewOutput(view_id, fb)`.
-    - Note: `BuildFrame` will be retained as an internal view-phase helper and moved to `private` scope in `Renderer` to avoid leaking internals to callers.
+2. Add `Renderer::RenderFrame(FrameContext&, RenderContext&, const oxygen::ViewResolver&)` (medium risk)
+   - Files: `src/Oxygen/Renderer/Renderer.cpp`, `Renderer.h`
+   - Semantics: `RenderFrame` will:
+     - run Frame-phase ScenePrep once (`scene_prep_->Collect(scene, std::nullopt, ...)` + `Finalize()`)
+     - iterate `FrameContext`'s registered view ids (use existing `views_` map)
+     - for each `view_id`, call `resolver(view_id)` to obtain a `ResolvedView`, run per-view ScenePrep (`Collect` with view + `Finalize()`), bind per-view prepared data into `RenderContext::current_view`, execute render graph for that view, and publish the output via `FrameContext::SetViewOutput(view_id, fb)`.
+   - Note: `BuildFrame` will be retained as an internal view-phase helper and moved to `private` scope in `Renderer` to avoid leaking internals to callers.
 
-3) Make `DrawMetadataEmitter` per-view friendly (low-medium risk)
-    - Files: `src/Oxygen/Renderer/Resources/DrawMetadataEmitter.*`
-    - Changes: clear CPU list at the start of each view-phase, ensure `EnsureFrameResources()` is safe to call per-view, and return per-view SRV index used so the renderer can bind the per-view SRV.
+3. Make `DrawMetadataEmitter` per-view friendly (low-medium risk)
+   - Files: `src/Oxygen/Renderer/Resources/DrawMetadataEmitter.*`
+   - Changes: clear CPU list at the start of each view-phase, ensure `EnsureFrameResources()` is safe to call per-view, and return per-view SRV index used so the renderer can bind the per-view SRV.
 
-4) Minimal upload coordination (medium risk)
-    - Files: `ScenePrepPipeline.*`, `Renderer.cpp`, upload/InlineTransfersCoordinator integration points
-    - Changes: For correctness, block on per-view upload completion before executing that view's render graph. Later replace with ticket-based non-blocking waits.
+4. Minimal upload coordination (medium risk)
+   - Files: `ScenePrepPipeline.*`, `Renderer.cpp`, upload/InlineTransfersCoordinator integration points
+   - Changes: For correctness, block on per-view upload completion before executing that view's render graph. Later replace with ticket-based non-blocking waits.
 
-5) Examples & tests (low risk)
-    - Update Async example to set up a `ViewResolver` (lambda) and call `renderer.RenderFrame(frame_ctx, render_ctx, resolver)`.
-    - Add unit tests for Frame-phase-only vs View-phase behavior and for `ResetFrameData()` clearing `filtered_scene_nodes_`.
+5. Examples & tests (low risk)
+   - Update Async example to set up a `ViewResolver` (lambda) and call `renderer.RenderFrame(frame_ctx, render_ctx, resolver)`.
+   - Add unit tests for Frame-phase-only vs View-phase behavior and for `ResetFrameData()` clearing `filtered_scene_nodes_`.
 
 These edits keep the change surface small, avoid modifying `FrameContext`, and make `RenderFrame` the single authoritative entry point for rendering.
 
@@ -350,19 +350,19 @@ Update or create example demonstrating:
 
 ## Summary of Missing Components
 
-| Component | Priority | Complexity | Depends On |
-| --------- | -------- | ---------- | ---------- |
-| Rename View → ResolvedView | P0 | Medium | None |
-| Rename PreparedSceneFrame → PreparedScene | P0 | Low | None |
-| RenderContext multi-view state | P0 | Low | Phase 0 |
-| ScenePrepPipeline optional View | P0 | Medium | Phase 1 |
-| ScenePrepState::ResetViewData() | P1 | Low | Phase 2.1 |
-| Dual-mode collection logic | P0 | High | Phase 2.1-2.2 |
-| DrawMetadataEmitter per-view | P1 | Medium | Phase 2 |
-| Renderer::RenderView() | P0 | Medium | Phase 1-3 |
-| Multi-view frame loop | P0 | Medium | Phase 4.1 |
-| ViewResolver callback | P0 | Low | None |
-| Barrier coordination | P2 | Medium | Phase 4 |
+| Component                                 | Priority | Complexity | Depends On    |
+| ----------------------------------------- | -------- | ---------- | ------------- |
+| Rename View → ResolvedView                | P0       | Medium     | None          |
+| Rename PreparedSceneFrame → PreparedScene | P0       | Low        | None          |
+| RenderContext multi-view state            | P0       | Low        | Phase 0       |
+| ScenePrepPipeline optional View           | P0       | Medium     | Phase 1       |
+| ScenePrepState::ResetViewData()           | P1       | Low        | Phase 2.1     |
+| Dual-mode collection logic                | P0       | High       | Phase 2.1-2.2 |
+| DrawMetadataEmitter per-view              | P1       | Medium     | Phase 2       |
+| Renderer::RenderView()                    | P0       | Medium     | Phase 1-3     |
+| Multi-view frame loop                     | P0       | Medium     | Phase 4.1     |
+| ViewResolver callback                     | P0       | Low        | None          |
+| Barrier coordination                      | P2       | Medium     | Phase 4       |
 
 **Estimated Effort**: 3-5 days for experienced developer familiar with codebase
 

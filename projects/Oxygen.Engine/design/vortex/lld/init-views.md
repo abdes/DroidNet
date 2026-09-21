@@ -62,11 +62,11 @@ their work.
 
 ### 1.2 Stage Position
 
-| Position | Stage | Notes |
-| -------- | ----- | ----- |
-| Predecessor | Stage 1 (OnFrameStart) | Frame constants, camera, SceneTextures allocation |
-| **This** | **Stage 2 — InitViews** | Visibility + prepared-scene publication |
-| Successor | Stage 3 (DepthPrepass) | Depth-only pass consuming the current-view prepared payload |
+| Position    | Stage                   | Notes                                                       |
+| ----------- | ----------------------- | ----------------------------------------------------------- |
+| Predecessor | Stage 1 (OnFrameStart)  | Frame constants, camera, SceneTextures allocation           |
+| **This**    | **Stage 2 — InitViews** | Visibility + prepared-scene publication                     |
+| Successor   | Stage 3 (DepthPrepass)  | Depth-only pass consuming the current-view prepared payload |
 
 ### 1.3 Architectural Authority
 
@@ -147,30 +147,30 @@ class InitViewsModule {
 
 ### 2.3 Ownership and Lifetime
 
-| Owner | Owned By | Lifetime |
-| ----- | -------- | -------- |
-| `InitViewsModule` | `SceneRenderer` (unique_ptr) | Same as SceneRenderer |
-| `ScenePrepPipeline` | `InitViewsModule` (unique_ptr) | Same as InitViewsModule |
-| `ScenePrepState` | `InitViewsModule` | Persistent across frames |
-| per-view prepared-scene storage | `InitViewsModule` | Reused across frames, isolated per view |
+| Owner                           | Owned By                       | Lifetime                                |
+| ------------------------------- | ------------------------------ | --------------------------------------- |
+| `InitViewsModule`               | `SceneRenderer` (unique_ptr)   | Same as SceneRenderer                   |
+| `ScenePrepPipeline`             | `InitViewsModule` (unique_ptr) | Same as InitViewsModule                 |
+| `ScenePrepState`                | `InitViewsModule`              | Persistent across frames                |
+| per-view prepared-scene storage | `InitViewsModule`              | Reused across frames, isolated per view |
 
 ## 3. Data Flow and Dependencies
 
 ### 3.1 Inputs
 
-| Source | Data | Access Pattern |
-| ------ | ---- | -------------- |
+| Source        | Data                         | Access Pattern                                               |
+| ------------- | ---------------------------- | ------------------------------------------------------------ |
 | Renderer Core | `RenderContext::frame_views` | Per-frame view set materialized from published runtime views |
-| Renderer Core | `RenderContext::scene` | Active scene for one frame-shared ScenePrep traversal |
-| SceneTextures | Resolution, format config | Via SceneTexturesConfig |
+| Renderer Core | `RenderContext::scene`       | Active scene for one frame-shared ScenePrep traversal        |
+| SceneTextures | Resolution, format config    | Via SceneTexturesConfig                                      |
 
 ### 3.2 Outputs
 
-| Product | Consumer | Delivery |
-| ------- | -------- | -------- |
-| Per-view `PreparedSceneFrame` payloads | DepthPrepassModule, BasePassModule, later current-view stage execution | Stored in `InitViewsModule` backing storage and rebound into `RenderContext.current_view.prepared_frame` for the current scene-view selected by Renderer Core |
-| Motion-history / velocity auxiliary products | BasePassModule (opaque velocity), later stages | Published alongside the prepared-scene payload, keyed to prepared-frame indices / draw order and referencing explicit current/previous transform or deformation publication slots |
-| Culling statistics | DiagnosticsService (Phase 5) | Optional Tracy counters |
+| Product                                      | Consumer                                                               | Delivery                                                                                                                                                                          |
+| -------------------------------------------- | ---------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Per-view `PreparedSceneFrame` payloads       | DepthPrepassModule, BasePassModule, later current-view stage execution | Stored in `InitViewsModule` backing storage and rebound into `RenderContext.current_view.prepared_frame` for the current scene-view selected by Renderer Core                     |
+| Motion-history / velocity auxiliary products | BasePassModule (opaque velocity), later stages                         | Published alongside the prepared-scene payload, keyed to prepared-frame indices / draw order and referencing explicit current/previous transform or deformation publication slots |
+| Culling statistics                           | DiagnosticsService (Phase 5)                                           | Optional Tracy counters                                                                                                                                                           |
 
 Transform publication is immutable for each prepared view. If later view
 preparation allocates or updates additional transform slots, `TransformUploader`
@@ -213,10 +213,10 @@ and related prepared-scene arrays) through Renderer-Core-owned upload helpers.
 
 ### 4.2 CPU Allocations
 
-| Resource | Lifetime | Strategy |
-| -------- | -------- | -------- |
-| per-view prepared-scene backing storage | Per view per frame | Reuse capacity across frames, isolate storage per view |
-| `ScenePrepState` | Persistent | Owned by `InitViewsModule`, reset once per frame and once per view by phase |
+| Resource                                | Lifetime           | Strategy                                                                    |
+| --------------------------------------- | ------------------ | --------------------------------------------------------------------------- |
+| per-view prepared-scene backing storage | Per view per frame | Reuse capacity across frames, isolate storage per view                      |
+| `ScenePrepState`                        | Persistent         | Owned by `InitViewsModule`, reset once per frame and once per view by phase |
 
 ### 4.3 Future GPU Resources (Phase 5+)
 

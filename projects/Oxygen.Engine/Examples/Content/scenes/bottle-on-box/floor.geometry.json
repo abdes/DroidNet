@@ -25,9 +25,7 @@
         {
           "name": "floor_surface",
           "material_ref": "/.cooked/Materials/floor_default.omat",
-          "views": [
-            { "view_ref": "__all__" }
-          ]
+          "views": [{ "view_ref": "__all__" }]
         }
       ]
     }

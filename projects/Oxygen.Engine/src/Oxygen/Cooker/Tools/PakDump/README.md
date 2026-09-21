@@ -49,16 +49,16 @@ Oxygen.Cooker.PakDump <pakfile> [options]
 
 ### Options
 
-| Option | Effect |
-| ------ | ------ |
-| `--no-header` | Suppress PAK header section. |
-| `--no-footer` | Suppress PAK footer section. |
-| `--no-directory` | Suppress asset directory listing. |
-| `--no-resources` | Suppress resource tables section. |
-| `--show-data` | Include hex dump previews of buffer / texture raw data. |
-| `--hex-dump-assets` | Hex dump full asset descriptor bytes. |
-| `--verbose` | Enable extended detail (GUID raw bytes, resource fields, limited entries). |
-| `--max-data=N` | Limit bytes shown in any data/descriptor dump (default 256). |
+| Option              | Effect                                                                     |
+| ------------------- | -------------------------------------------------------------------------- |
+| `--no-header`       | Suppress PAK header section.                                               |
+| `--no-footer`       | Suppress PAK footer section.                                               |
+| `--no-directory`    | Suppress asset directory listing.                                          |
+| `--no-resources`    | Suppress resource tables section.                                          |
+| `--show-data`       | Include hex dump previews of buffer / texture raw data.                    |
+| `--hex-dump-assets` | Hex dump full asset descriptor bytes.                                      |
+| `--verbose`         | Enable extended detail (GUID raw bytes, resource fields, limited entries). |
+| `--max-data=N`      | Limit bytes shown in any data/descriptor dump (default 256).               |
 
 ### Examples
 
@@ -110,9 +110,9 @@ Material descriptors receive special handling:
 - All header + material-specific fields printed with labels
 - Base color, normal scale, metalness, roughness, AO values
 - Core + Tier 1/2 texture indices (emissive, specular, sheen, clearcoat,
-   transmission, thickness)
+  transmission, thickness)
 - Tier 1/2 scalar parameters (emissive factor, alpha cutoff, IOR, specular
-   factor, sheen factor, clearcoat/transmission/volume parameters)
+  factor, sheen factor, clearcoat/transmission/volume parameters)
 - Shader stage bitmask drives enumeration of appended shader reference blocks
 - Each shader reference shows its Unique ID & hash; optional hex dump
 
@@ -133,11 +133,11 @@ Code registers specialized dumpers for known asset/resource types. To extend:
 
 ## Exit Codes
 
-| Code | Meaning |
-| ---- | ------- |
-| `0` | Success. |
-| `1` | Usage error (missing file) or CLI misuse. |
-| `2` | Unhandled runtime error while opening or parsing the pak. |
+| Code | Meaning                                                   |
+| ---- | --------------------------------------------------------- |
+| `0`  | Success.                                                  |
+| `1`  | Usage error (missing file) or CLI misuse.                 |
+| `2`  | Unhandled runtime error while opening or parsing the pak. |
 
 ## Future Improvements (Ideas)
 

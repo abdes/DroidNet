@@ -42,13 +42,13 @@ pytest -q
 
 PakGen exposes a single executable `pakgen` with subcommands:
 
-| Subcommand | Purpose |
-| ---------- | ------- |
-| `build` | Build a pak from a spec file. |
-| `plan` | Compute & print layout (no write). |
-| `diff` | Deep diff two existing pak files. |
-| `validate` | (Reserved) Validate a spec only. |
-| `inspect` | (Reserved) Inspect a pak file. |
+| Subcommand | Purpose                            |
+| ---------- | ---------------------------------- |
+| `build`    | Build a pak from a spec file.      |
+| `plan`     | Compute & print layout (no write). |
+| `diff`     | Deep diff two existing pak files.  |
+| `validate` | (Reserved) Validate a spec only.   |
+| `inspect`  | (Reserved) Inspect a pak file.     |
 
 Global flags:
 
@@ -125,8 +125,14 @@ Opt‑in JSON artifact summarizing the build:
   "version": 1,
   "file_size": 123456,
   "deterministic": true,
-  "regions": [{"name": "texture_region", "offset": 64, "size": 4096}],
-  "counts": {"regions": 4, "tables": 3, "assets_total": 5, "materials": 2, "geometries": 1},
+  "regions": [{ "name": "texture_region", "offset": 64, "size": 4096 }],
+  "counts": {
+    "regions": 4,
+    "tables": 3,
+    "assets_total": 5,
+    "materials": 2,
+    "geometries": 1
+  },
   "pak_crc32": "0x89abcdef",
   "spec_hash": "f3e1...",
   "sha256": "9a7b..."
@@ -199,14 +205,14 @@ Scene assets use descriptor version **5** and 72-byte node records. Node
 Both are unsigned integer masks and default to zero, preserving explicit local
 fixture behavior. This low-level tool does not apply editor creation defaults.
 
-| Bit | Flag | Inheritance supported |
-| --- | --- | --- |
-| 0 | Visible | Yes |
-| 1 | Static | No |
-| 2 | CastsShadows | Yes |
-| 3 | ReceivesShadows | Yes |
-| 4 | RayCastingSelectable | No |
-| 5 | IgnoreParentTransform | No |
+| Bit | Flag                  | Inheritance supported |
+| --- | --------------------- | --------------------- |
+| 0   | Visible               | Yes                   |
+| 1   | Static                | No                    |
+| 2   | CastsShadows          | Yes                   |
+| 3   | ReceivesShadows       | Yes                   |
+| 4   | RayCastingSelectable  | No                    |
+| 5   | IgnoreParentTransform | No                    |
 
 Unknown bits, inheritance for unsupported flags, and overlapping local/inherited
 bits are rejected. An inherited flag must have its local value bit cleared.
@@ -251,7 +257,7 @@ assets:
         generate:
           layout: grid
           grid:
-            count: [10, 10, 10]  # 1000 cubes
+            count: [10, 10, 10] # 1000 cubes
             spacing: 2.5
             center: true
 ```
@@ -262,12 +268,12 @@ referencing a geometry.
 
 ### Supported Layouts
 
-| Layout | Description | Key Parameters |
-| ------ | ----------- | -------------- |
-| `grid` | 3D grid arrangement | `count`, `spacing`, `center`, `offset` |
-| `linear` | Single line/row | `count`, `direction`, `spacing`, `start` |
-| `circle` | Circular arrangement | `count`, `radius`, `center`, `face_center` |
-| `scatter` | Randomized positions | `count`, `bounds`, `seed` |
+| Layout    | Description          | Key Parameters                             |
+| --------- | -------------------- | ------------------------------------------ |
+| `grid`    | 3D grid arrangement  | `count`, `spacing`, `center`, `offset`     |
+| `linear`  | Single line/row      | `count`, `direction`, `spacing`, `start`   |
+| `circle`  | Circular arrangement | `count`, `radius`, `center`, `face_center` |
+| `scatter` | Randomized positions | `count`, `bounds`, `seed`                  |
 
 ### Layout Parameters
 
@@ -277,10 +283,10 @@ referencing a geometry.
 generate:
   layout: grid
   grid:
-    count: [10, 10, 10]      # [X, Y, Z] node counts (required)
-    spacing: 2.0             # Uniform or [sx, sy, sz] per-axis
-    center: true             # Center grid at origin (default: true)
-    offset: [0, 0, 0]        # Additional translation
+    count: [10, 10, 10] # [X, Y, Z] node counts (required)
+    spacing: 2.0 # Uniform or [sx, sy, sz] per-axis
+    center: true # Center grid at origin (default: true)
+    offset: [0, 0, 0] # Additional translation
 ```
 
 #### Linear
@@ -289,10 +295,10 @@ generate:
 generate:
   layout: linear
   linear:
-    count: 100               # Number of nodes
-    direction: [1, 0, 0]     # Direction vector (normalized)
-    spacing: 1.5             # Distance between nodes
-    start: [0, 0, 0]         # Starting position
+    count: 100 # Number of nodes
+    direction: [1, 0, 0] # Direction vector (normalized)
+    spacing: 1.5 # Distance between nodes
+    start: [0, 0, 0] # Starting position
 ```
 
 #### Circle
@@ -301,10 +307,10 @@ generate:
 generate:
   layout: circle
   circle:
-    count: 12                # Number of nodes
-    radius: 5.0              # Circle radius
-    center: [0, 0, 0]        # Circle center
-    face_center: true        # Rotate nodes to face center
+    count: 12 # Number of nodes
+    radius: 5.0 # Circle radius
+    center: [0, 0, 0] # Circle center
+    face_center: true # Rotate nodes to face center
 ```
 
 #### Scatter
@@ -313,8 +319,8 @@ generate:
 generate:
   layout: scatter
   scatter:
-    count: 200               # Number of nodes
-    seed: 42                 # Random seed for reproducibility
+    count: 200 # Number of nodes
+    seed: 42 # Random seed for reproducibility
     bounds:
       min: [-10, 0, -10]
       max: [10, 5, 10]
@@ -392,14 +398,14 @@ BSD 3‑Clause – see [LICENSE](../../../../../../LICENSE).
 
 ## Quick Reference
 
-| Task | Command |
-| ---- | ------- |
-| Build pak | `pakgen build spec.yaml out.pak` |
+| Task                           | Command                                                                            |
+| ------------------------------ | ---------------------------------------------------------------------------------- |
+| Build pak                      | `pakgen build spec.yaml out.pak`                                                   |
 | Deterministic build + manifest | `pakgen build spec.yaml out.pak --deterministic --emit-manifest out.manifest.json` |
-| Plan only (human) | `pakgen plan spec.yaml` |
-| Plan only (JSON) | `pakgen plan spec.yaml --json` |
-| Diff | `pakgen diff old.pak new.pak` |
-| Tests | `pytest -q` |
+| Plan only (human)              | `pakgen plan spec.yaml`                                                            |
+| Plan only (JSON)               | `pakgen plan spec.yaml --json`                                                     |
+| Diff                           | `pakgen diff old.pak new.pak`                                                      |
+| Tests                          | `pytest -q`                                                                        |
 
 ---
 

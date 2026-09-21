@@ -1,344 +1,344 @@
 {
-    "bindings": {
-        "rigid_bodies": [
-            {
-                "node_index": 1,
-                "shape_ref": "/.cooked/Physics/Shapes/floor.ocshape",
-                "material_ref": "/.cooked/Physics/Materials/physics_domains_ground.opmat",
-                "body_type": "static",
-                "motion_quality": "discrete",
-                "collision_layer": 1,
-                "collision_mask": 65535,
-                "mass": 0.0,
-                "linear_damping": 0.0,
-                "angular_damping": 0.0,
-                "gravity_factor": 0.0,
-                "initial_activation": false
-            },
-            {
-                "node_index": 2,
-                "shape_ref": "/.cooked/Physics/Shapes/ramp.ocshape",
-                "material_ref": "/.cooked/Physics/Materials/physics_domains_ground.opmat",
-                "body_type": "static",
-                "motion_quality": "discrete",
-                "collision_layer": 1,
-                "collision_mask": 65535,
-                "mass": 0.0,
-                "gravity_factor": 0.0,
-                "initial_activation": false
-            },
-            {
-                "node_index": 3,
-                "shape_ref": "/.cooked/Physics/Shapes/sphere_bouncy.ocshape",
-                "material_ref": "/.cooked/Physics/Materials/bouncy.opmat",
-                "body_type": "dynamic",
-                "motion_quality": "discrete",
-                "collision_layer": 2,
-                "collision_mask": 65535,
-                "mass": 3.0,
-                "linear_damping": 0.02,
-                "angular_damping": 0.05,
-                "gravity_factor": 1.0,
-                "initial_activation": true
-            },
-            {
-                "node_index": 5,
-                "shape_ref": "/.cooked/Physics/Shapes/cube_unit_dynamic.ocshape",
-                "material_ref": "/.cooked/Physics/Materials/dynamic.opmat",
-                "body_type": "dynamic",
-                "motion_quality": "discrete",
-                "collision_layer": 2,
-                "collision_mask": 65535,
-                "mass": 5.0,
-                "linear_damping": 0.05,
-                "angular_damping": 0.1,
-                "gravity_factor": 1.0,
-                "initial_activation": true
-            },
-            {
-                "node_index": 6,
-                "shape_ref": "/.cooked/Physics/Shapes/cube_unit_dynamic.ocshape",
-                "material_ref": "/.cooked/Physics/Materials/dynamic.opmat",
-                "body_type": "dynamic",
-                "motion_quality": "discrete",
-                "collision_layer": 2,
-                "collision_mask": 65535,
-                "mass": 5.0,
-                "linear_damping": 0.05,
-                "angular_damping": 0.1,
-                "gravity_factor": 1.0,
-                "initial_activation": true
-            },
-            {
-                "node_index": 7,
-                "shape_ref": "/.cooked/Physics/Shapes/stack_cube.ocshape",
-                "material_ref": "/.cooked/Physics/Materials/dynamic.opmat",
-                "body_type": "dynamic",
-                "motion_quality": "discrete",
-                "collision_layer": 2,
-                "collision_mask": 65535,
-                "mass": 2.0,
-                "linear_damping": 0.05,
-                "angular_damping": 0.1,
-                "gravity_factor": 1.0,
-                "initial_activation": true
-            },
-            {
-                "node_index": 8,
-                "shape_ref": "/.cooked/Physics/Shapes/stack_cube.ocshape",
-                "material_ref": "/.cooked/Physics/Materials/dynamic.opmat",
-                "body_type": "dynamic",
-                "motion_quality": "discrete",
-                "collision_layer": 2,
-                "collision_mask": 65535,
-                "mass": 2.0,
-                "linear_damping": 0.05,
-                "angular_damping": 0.1,
-                "gravity_factor": 1.0,
-                "initial_activation": true
-            },
-            {
-                "node_index": 9,
-                "shape_ref": "/.cooked/Physics/Shapes/stack_cube.ocshape",
-                "material_ref": "/.cooked/Physics/Materials/dynamic.opmat",
-                "body_type": "dynamic",
-                "motion_quality": "discrete",
-                "collision_layer": 2,
-                "collision_mask": 65535,
-                "mass": 2.0,
-                "linear_damping": 0.05,
-                "angular_damping": 0.1,
-                "gravity_factor": 1.0,
-                "initial_activation": true
-            },
-            {
-                "node_index": 10,
-                "shape_ref": "/.cooked/Physics/Shapes/stack_cube.ocshape",
-                "material_ref": "/.cooked/Physics/Materials/dynamic.opmat",
-                "body_type": "dynamic",
-                "motion_quality": "discrete",
-                "collision_layer": 2,
-                "collision_mask": 65535,
-                "mass": 2.0,
-                "linear_damping": 0.05,
-                "angular_damping": 0.1,
-                "gravity_factor": 1.0,
-                "initial_activation": true
-            },
-            {
-                "node_index": 12,
-                "shape_ref": "/.cooked/Physics/Shapes/chassis.ocshape",
-                "material_ref": "/.cooked/Physics/Materials/dynamic.opmat",
-                "body_type": "dynamic",
-                "motion_quality": "discrete",
-                "collision_layer": 2,
-                "collision_mask": 65535,
-                "mass": 20.0,
-                "linear_damping": 0.05,
-                "angular_damping": 0.05,
-                "gravity_factor": 1.0,
-                "initial_activation": true
-            },
-            {
-                "node_index": 14,
-                "shape_ref": "/.cooked/Physics/Shapes/wheel.ocshape",
-                "material_ref": "/.cooked/Physics/Materials/dynamic.opmat",
-                "body_type": "kinematic",
-                "is_sensor": true,
-                "motion_quality": "discrete",
-                "collision_layer": 2,
-                "collision_mask": 0,
-                "mass": 2.0,
-                "linear_damping": 0.05,
-                "angular_damping": 0.05,
-                "gravity_factor": 0.0,
-                "initial_activation": true
-            },
-            {
-                "node_index": 15,
-                "shape_ref": "/.cooked/Physics/Shapes/wheel.ocshape",
-                "material_ref": "/.cooked/Physics/Materials/dynamic.opmat",
-                "body_type": "kinematic",
-                "is_sensor": true,
-                "motion_quality": "discrete",
-                "collision_layer": 2,
-                "collision_mask": 0,
-                "mass": 2.0,
-                "linear_damping": 0.05,
-                "angular_damping": 0.05,
-                "gravity_factor": 0.0,
-                "initial_activation": true
-            },
-            {
-                "node_index": 16,
-                "shape_ref": "/.cooked/Physics/Shapes/wheel.ocshape",
-                "material_ref": "/.cooked/Physics/Materials/dynamic.opmat",
-                "body_type": "kinematic",
-                "is_sensor": true,
-                "motion_quality": "discrete",
-                "collision_layer": 2,
-                "collision_mask": 0,
-                "mass": 2.0,
-                "linear_damping": 0.05,
-                "angular_damping": 0.05,
-                "gravity_factor": 0.0,
-                "initial_activation": true
-            },
-            {
-                "node_index": 17,
-                "shape_ref": "/.cooked/Physics/Shapes/wheel.ocshape",
-                "material_ref": "/.cooked/Physics/Materials/dynamic.opmat",
-                "body_type": "kinematic",
-                "is_sensor": true,
-                "motion_quality": "discrete",
-                "collision_layer": 2,
-                "collision_mask": 0,
-                "mass": 2.0,
-                "linear_damping": 0.05,
-                "angular_damping": 0.05,
-                "gravity_factor": 0.0,
-                "initial_activation": true
+  "bindings": {
+    "rigid_bodies": [
+      {
+        "node_index": 1,
+        "shape_ref": "/.cooked/Physics/Shapes/floor.ocshape",
+        "material_ref": "/.cooked/Physics/Materials/physics_domains_ground.opmat",
+        "body_type": "static",
+        "motion_quality": "discrete",
+        "collision_layer": 1,
+        "collision_mask": 65535,
+        "mass": 0.0,
+        "linear_damping": 0.0,
+        "angular_damping": 0.0,
+        "gravity_factor": 0.0,
+        "initial_activation": false
+      },
+      {
+        "node_index": 2,
+        "shape_ref": "/.cooked/Physics/Shapes/ramp.ocshape",
+        "material_ref": "/.cooked/Physics/Materials/physics_domains_ground.opmat",
+        "body_type": "static",
+        "motion_quality": "discrete",
+        "collision_layer": 1,
+        "collision_mask": 65535,
+        "mass": 0.0,
+        "gravity_factor": 0.0,
+        "initial_activation": false
+      },
+      {
+        "node_index": 3,
+        "shape_ref": "/.cooked/Physics/Shapes/sphere_bouncy.ocshape",
+        "material_ref": "/.cooked/Physics/Materials/bouncy.opmat",
+        "body_type": "dynamic",
+        "motion_quality": "discrete",
+        "collision_layer": 2,
+        "collision_mask": 65535,
+        "mass": 3.0,
+        "linear_damping": 0.02,
+        "angular_damping": 0.05,
+        "gravity_factor": 1.0,
+        "initial_activation": true
+      },
+      {
+        "node_index": 5,
+        "shape_ref": "/.cooked/Physics/Shapes/cube_unit_dynamic.ocshape",
+        "material_ref": "/.cooked/Physics/Materials/dynamic.opmat",
+        "body_type": "dynamic",
+        "motion_quality": "discrete",
+        "collision_layer": 2,
+        "collision_mask": 65535,
+        "mass": 5.0,
+        "linear_damping": 0.05,
+        "angular_damping": 0.1,
+        "gravity_factor": 1.0,
+        "initial_activation": true
+      },
+      {
+        "node_index": 6,
+        "shape_ref": "/.cooked/Physics/Shapes/cube_unit_dynamic.ocshape",
+        "material_ref": "/.cooked/Physics/Materials/dynamic.opmat",
+        "body_type": "dynamic",
+        "motion_quality": "discrete",
+        "collision_layer": 2,
+        "collision_mask": 65535,
+        "mass": 5.0,
+        "linear_damping": 0.05,
+        "angular_damping": 0.1,
+        "gravity_factor": 1.0,
+        "initial_activation": true
+      },
+      {
+        "node_index": 7,
+        "shape_ref": "/.cooked/Physics/Shapes/stack_cube.ocshape",
+        "material_ref": "/.cooked/Physics/Materials/dynamic.opmat",
+        "body_type": "dynamic",
+        "motion_quality": "discrete",
+        "collision_layer": 2,
+        "collision_mask": 65535,
+        "mass": 2.0,
+        "linear_damping": 0.05,
+        "angular_damping": 0.1,
+        "gravity_factor": 1.0,
+        "initial_activation": true
+      },
+      {
+        "node_index": 8,
+        "shape_ref": "/.cooked/Physics/Shapes/stack_cube.ocshape",
+        "material_ref": "/.cooked/Physics/Materials/dynamic.opmat",
+        "body_type": "dynamic",
+        "motion_quality": "discrete",
+        "collision_layer": 2,
+        "collision_mask": 65535,
+        "mass": 2.0,
+        "linear_damping": 0.05,
+        "angular_damping": 0.1,
+        "gravity_factor": 1.0,
+        "initial_activation": true
+      },
+      {
+        "node_index": 9,
+        "shape_ref": "/.cooked/Physics/Shapes/stack_cube.ocshape",
+        "material_ref": "/.cooked/Physics/Materials/dynamic.opmat",
+        "body_type": "dynamic",
+        "motion_quality": "discrete",
+        "collision_layer": 2,
+        "collision_mask": 65535,
+        "mass": 2.0,
+        "linear_damping": 0.05,
+        "angular_damping": 0.1,
+        "gravity_factor": 1.0,
+        "initial_activation": true
+      },
+      {
+        "node_index": 10,
+        "shape_ref": "/.cooked/Physics/Shapes/stack_cube.ocshape",
+        "material_ref": "/.cooked/Physics/Materials/dynamic.opmat",
+        "body_type": "dynamic",
+        "motion_quality": "discrete",
+        "collision_layer": 2,
+        "collision_mask": 65535,
+        "mass": 2.0,
+        "linear_damping": 0.05,
+        "angular_damping": 0.1,
+        "gravity_factor": 1.0,
+        "initial_activation": true
+      },
+      {
+        "node_index": 12,
+        "shape_ref": "/.cooked/Physics/Shapes/chassis.ocshape",
+        "material_ref": "/.cooked/Physics/Materials/dynamic.opmat",
+        "body_type": "dynamic",
+        "motion_quality": "discrete",
+        "collision_layer": 2,
+        "collision_mask": 65535,
+        "mass": 20.0,
+        "linear_damping": 0.05,
+        "angular_damping": 0.05,
+        "gravity_factor": 1.0,
+        "initial_activation": true
+      },
+      {
+        "node_index": 14,
+        "shape_ref": "/.cooked/Physics/Shapes/wheel.ocshape",
+        "material_ref": "/.cooked/Physics/Materials/dynamic.opmat",
+        "body_type": "kinematic",
+        "is_sensor": true,
+        "motion_quality": "discrete",
+        "collision_layer": 2,
+        "collision_mask": 0,
+        "mass": 2.0,
+        "linear_damping": 0.05,
+        "angular_damping": 0.05,
+        "gravity_factor": 0.0,
+        "initial_activation": true
+      },
+      {
+        "node_index": 15,
+        "shape_ref": "/.cooked/Physics/Shapes/wheel.ocshape",
+        "material_ref": "/.cooked/Physics/Materials/dynamic.opmat",
+        "body_type": "kinematic",
+        "is_sensor": true,
+        "motion_quality": "discrete",
+        "collision_layer": 2,
+        "collision_mask": 0,
+        "mass": 2.0,
+        "linear_damping": 0.05,
+        "angular_damping": 0.05,
+        "gravity_factor": 0.0,
+        "initial_activation": true
+      },
+      {
+        "node_index": 16,
+        "shape_ref": "/.cooked/Physics/Shapes/wheel.ocshape",
+        "material_ref": "/.cooked/Physics/Materials/dynamic.opmat",
+        "body_type": "kinematic",
+        "is_sensor": true,
+        "motion_quality": "discrete",
+        "collision_layer": 2,
+        "collision_mask": 0,
+        "mass": 2.0,
+        "linear_damping": 0.05,
+        "angular_damping": 0.05,
+        "gravity_factor": 0.0,
+        "initial_activation": true
+      },
+      {
+        "node_index": 17,
+        "shape_ref": "/.cooked/Physics/Shapes/wheel.ocshape",
+        "material_ref": "/.cooked/Physics/Materials/dynamic.opmat",
+        "body_type": "kinematic",
+        "is_sensor": true,
+        "motion_quality": "discrete",
+        "collision_layer": 2,
+        "collision_mask": 0,
+        "mass": 2.0,
+        "linear_damping": 0.05,
+        "angular_damping": 0.05,
+        "gravity_factor": 0.0,
+        "initial_activation": true
+      }
+    ],
+    "colliders": [
+      {
+        "node_index": 18,
+        "shape_ref": "/.cooked/Physics/Shapes/trigger_zone.ocshape",
+        "material_ref": "/.cooked/Physics/Materials/dynamic.opmat",
+        "collision_layer": 4,
+        "collision_mask": 65535
+      }
+    ],
+    "characters": [
+      {
+        "node_index": 11,
+        "shape_ref": "/.cooked/Physics/Shapes/actor.ocshape",
+        "mass": 90.0,
+        "max_slope_angle": 0.785398,
+        "step_height": 0.35,
+        "max_strength": 120.0,
+        "collision_layer": 5,
+        "collision_mask": 65535
+      }
+    ],
+    "soft_bodies": [
+      {
+        "node_index": 19,
+        "source_mesh_ref": "/.cooked/Geometry/softbody_sphere.ogeo",
+        "collision_layer": 2,
+        "collision_mask": 65535,
+        "global_damping": 0.2,
+        "edge_compliance": 0.000001,
+        "shear_compliance": 0.000001,
+        "bend_compliance": 0.000005,
+        "volume_compliance": 0.000001,
+        "pressure_coefficient": 4.0,
+        "solver_iteration_count": 16,
+        "self_collision": false,
+        "pinned_vertices": [],
+        "kinematic_vertices": [],
+        "tether_mode": "geodesic",
+        "tether_max_distance_multiplier": 1.05,
+        "restitution": 0.2,
+        "friction": 0.6,
+        "vertex_radius": 0.04,
+        "backend": {
+          "target": "jolt",
+          "velocity_iteration_count": 16,
+          "lra_stiffness_fraction": 1.0,
+          "skinned_constraint_enable": false
+        }
+      },
+      {
+        "node_index": 22,
+        "source_mesh_ref": "/.cooked/Geometry/softbody_cube.ogeo",
+        "collision_layer": 2,
+        "collision_mask": 65535,
+        "global_damping": 0.06,
+        "edge_compliance": 0.00025,
+        "shear_compliance": 0.00025,
+        "bend_compliance": 0.0006,
+        "volume_compliance": 0.000001,
+        "pressure_coefficient": 1.4,
+        "solver_iteration_count": 32,
+        "self_collision": false,
+        "pinned_vertices": [],
+        "kinematic_vertices": [],
+        "tether_mode": "geodesic",
+        "tether_max_distance_multiplier": 1.1,
+        "restitution": 0.1,
+        "friction": 0.52,
+        "vertex_radius": 0.11,
+        "backend": {
+          "target": "jolt",
+          "velocity_iteration_count": 32,
+          "lra_stiffness_fraction": 0.35,
+          "skinned_constraint_enable": false
+        }
+      }
+    ],
+    "joints": [
+      {
+        "node_index_a": 5,
+        "node_index_b": 6,
+        "backend": {
+          "target": "jolt",
+          "num_velocity_steps_override": 0,
+          "num_position_steps_override": 0
+        }
+      }
+    ],
+    "vehicles": [
+      {
+        "node_index": 12,
+        "controller_type": "wheeled",
+        "wheels": [
+          {
+            "node_index": 14,
+            "axle_index": 0,
+            "side": "left",
+            "backend": {
+              "target": "jolt",
+              "wheel_castor": 0.0
             }
-        ],
-        "colliders": [
-            {
-                "node_index": 18,
-                "shape_ref": "/.cooked/Physics/Shapes/trigger_zone.ocshape",
-                "material_ref": "/.cooked/Physics/Materials/dynamic.opmat",
-                "collision_layer": 4,
-                "collision_mask": 65535
+          },
+          {
+            "node_index": 15,
+            "axle_index": 0,
+            "side": "right",
+            "backend": {
+              "target": "jolt",
+              "wheel_castor": 0.0
             }
-        ],
-        "characters": [
-            {
-                "node_index": 11,
-                "shape_ref": "/.cooked/Physics/Shapes/actor.ocshape",
-                "mass": 90.0,
-                "max_slope_angle": 0.785398,
-                "step_height": 0.35,
-                "max_strength": 120.0,
-                "collision_layer": 5,
-                "collision_mask": 65535
+          },
+          {
+            "node_index": 16,
+            "axle_index": 1,
+            "side": "left",
+            "backend": {
+              "target": "jolt",
+              "wheel_castor": 0.0
             }
-        ],
-        "soft_bodies": [
-            {
-                "node_index": 19,
-                "source_mesh_ref": "/.cooked/Geometry/softbody_sphere.ogeo",
-                "collision_layer": 2,
-                "collision_mask": 65535,
-                "global_damping": 0.2,
-                "edge_compliance": 0.000001,
-                "shear_compliance": 0.000001,
-                "bend_compliance": 0.000005,
-                "volume_compliance": 0.000001,
-                "pressure_coefficient": 4.0,
-                "solver_iteration_count": 16,
-                "self_collision": false,
-                "pinned_vertices": [],
-                "kinematic_vertices": [],
-                "tether_mode": "geodesic",
-                "tether_max_distance_multiplier": 1.05,
-                "restitution": 0.2,
-                "friction": 0.6,
-                "vertex_radius": 0.04,
-                "backend": {
-                    "target": "jolt",
-                    "velocity_iteration_count": 16,
-                    "lra_stiffness_fraction": 1.0,
-                    "skinned_constraint_enable": false
-                }
-            },
-            {
-                "node_index": 22,
-                "source_mesh_ref": "/.cooked/Geometry/softbody_cube.ogeo",
-                "collision_layer": 2,
-                "collision_mask": 65535,
-                "global_damping": 0.06,
-                "edge_compliance": 0.00025,
-                "shear_compliance": 0.00025,
-                "bend_compliance": 0.0006,
-                "volume_compliance": 0.000001,
-                "pressure_coefficient": 1.4,
-                "solver_iteration_count": 32,
-                "self_collision": false,
-                "pinned_vertices": [],
-                "kinematic_vertices": [],
-                "tether_mode": "geodesic",
-                "tether_max_distance_multiplier": 1.1,
-                "restitution": 0.1,
-                "friction": 0.52,
-                "vertex_radius": 0.11,
-                "backend": {
-                    "target": "jolt",
-                    "velocity_iteration_count": 32,
-                    "lra_stiffness_fraction": 0.35,
-                    "skinned_constraint_enable": false
-                }
+          },
+          {
+            "node_index": 17,
+            "axle_index": 1,
+            "side": "right",
+            "backend": {
+              "target": "jolt",
+              "wheel_castor": 0.0
             }
-        ],
-        "joints": [
-            {
-                "node_index_a": 5,
-                "node_index_b": 6,
-                "backend": {
-                    "target": "jolt",
-                    "num_velocity_steps_override": 0,
-                    "num_position_steps_override": 0
-                }
-            }
-        ],
-        "vehicles": [
-            {
-                "node_index": 12,
-                "controller_type": "wheeled",
-                "wheels": [
-                    {
-                        "node_index": 14,
-                        "axle_index": 0,
-                        "side": "left",
-                        "backend": {
-                            "target": "jolt",
-                            "wheel_castor": 0.0
-                        }
-                    },
-                    {
-                        "node_index": 15,
-                        "axle_index": 0,
-                        "side": "right",
-                        "backend": {
-                            "target": "jolt",
-                            "wheel_castor": 0.0
-                        }
-                    },
-                    {
-                        "node_index": 16,
-                        "axle_index": 1,
-                        "side": "left",
-                        "backend": {
-                            "target": "jolt",
-                            "wheel_castor": 0.0
-                        }
-                    },
-                    {
-                        "node_index": 17,
-                        "axle_index": 1,
-                        "side": "right",
-                        "backend": {
-                            "target": "jolt",
-                            "wheel_castor": 0.0
-                        }
-                    }
-                ]
-            }
-        ],
-        "aggregates": [
-            {
-                "node_index": 4,
-                "max_bodies": 16,
-                "filter_overlap": true,
-                "authority": "simulation"
-            }
+          }
         ]
-    }
+      }
+    ],
+    "aggregates": [
+      {
+        "node_index": 4,
+        "max_bodies": 16,
+        "filter_overlap": true,
+        "authority": "simulation"
+      }
+    ]
+  }
 }

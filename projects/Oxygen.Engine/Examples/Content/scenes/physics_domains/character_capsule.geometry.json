@@ -1,32 +1,16 @@
 {
   "name": "character_capsule",
   "bounds": {
-    "min": [
-      -0.35,
-      -0.35,
-      -1.25
-    ],
-    "max": [
-      0.35,
-      0.35,
-      1.25
-    ]
+    "min": [-0.35, -0.35, -1.25],
+    "max": [0.35, 0.35, 1.25]
   },
   "lods": [
     {
       "name": "character_capsule_lod0",
       "mesh_type": "procedural",
       "bounds": {
-        "min": [
-          -0.35,
-          -0.35,
-          -1.25
-        ],
-        "max": [
-          0.35,
-          0.35,
-          1.25
-        ]
+        "min": [-0.35, -0.35, -1.25],
+        "max": [0.35, 0.35, 1.25]
       },
       "procedural": {
         "generator": "Capsule",

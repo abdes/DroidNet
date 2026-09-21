@@ -8,7 +8,7 @@ how to use command line arguments and vmodule filtering effectively.
 - The system is based on loguru.
 - A **global cutoff** controls the maximum verbosity that can be emitted.
 - vmodule rules **only further restrict** logging and never override the
- global cutoff.
+  global cutoff.
 - Console logging can be disabled when file logging is enabled.
 
 ## Configuration Basics
@@ -81,7 +81,7 @@ Pattern behavior:
 - `?` matches a single character
 - If the pattern contains `/` or `\`, it matches the **full path**
 - Otherwise, it matches the **basename** (file name without extension), with
- `-inl` suffix trimmed
+  `-inl` suffix trimmed
 
 Important: vmodule rules **cannot exceed** the global cutoff.
 
@@ -146,15 +146,15 @@ Matches `TextureBinder.cpp`, `TextureBinder.h`, etc.
 ## Common Pitfalls
 
 - **Forgetting `-v`**: without a global cutoff, vmodule rules may not behave
- as expected.
+  as expected.
 - **Wrong rule order**: `*=OFF` must be last or it will mask everything.
 - **Using file extensions in patterns**: patterns match without extensions.
 
 ## Recommended Recipes
 
 - **Only one module**:
- `-v=2 --vmodule="**/AssetLoader=2,*=OFF"`
+  `-v=2 --vmodule="**/AssetLoader=2,*=OFF"`
 - **Everything off except warnings**:
- `-v=WARNING`
+  `-v=WARNING`
 - **File logging only**:
- `-v=2 -L logs.log`
+  `-v=2 -L logs.log`

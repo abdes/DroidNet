@@ -67,38 +67,38 @@ Material properties are grouped into the following categories:
 
 Current implementation exposes EXACTLY five core texture indices:
 
-| Texture (PAK Field)         | Implemented | Notes |
-|-----------------------------|-------------|-------|
-| base_color_texture          | Yes         | Fallback to `base_color[4]` if `kNoResourceIndex (0)` |
-| normal_texture              | Yes         | Scaled by `normal_scale` |
-| metallic_texture            | Yes         | Metalness channel (no packing with roughness) |
-| roughness_texture           | Yes         | Roughness channel (separate from metallic) |
-| ambient_occlusion_texture   | Yes         | Multiplies lighting; fallback scalar `ambient_occlusion` |
-| reserved_textures[0..7]     | Reserved    | Future extensions (emissive, opacity, etc.) |
+| Texture (PAK Field)       | Implemented | Notes                                                    |
+| ------------------------- | ----------- | -------------------------------------------------------- |
+| base_color_texture        | Yes         | Fallback to `base_color[4]` if `kNoResourceIndex (0)`    |
+| normal_texture            | Yes         | Scaled by `normal_scale`                                 |
+| metallic_texture          | Yes         | Metalness channel (no packing with roughness)            |
+| roughness_texture         | Yes         | Roughness channel (separate from metallic)               |
+| ambient_occlusion_texture | Yes         | Multiplies lighting; fallback scalar `ambient_occlusion` |
+| reserved_textures[0..7]   | Reserved    | Future extensions (emissive, opacity, etc.)              |
 
 Future (not yet in descriptor – treat as roadmap, not available at runtime):
 
-| Potential Texture Slot | Rationale |
-|------------------------|-----------|
-| emissive_texture       | Glow / unlit contribution |
-| opacity_texture        | Cutout / blended alpha control |
-| height_parallax_tex    | Parallax / displacement mapping |
+| Potential Texture Slot | Rationale                           |
+| ---------------------- | ----------------------------------- |
+| emissive_texture       | Glow / unlit contribution           |
+| opacity_texture        | Cutout / blended alpha control      |
+| height_parallax_tex    | Parallax / displacement mapping     |
 | clearcoat_texture      | Layered specular (automotive paint) |
-| sheen_texture          | Cloth / fabric response |
-| transmission_texture   | Thin transparency / glass |
-| subsurface_texture     | SSS mask or color |
+| sheen_texture          | Cloth / fabric response             |
+| transmission_texture   | Thin transparency / glass           |
+| subsurface_texture     | SSS mask or color                   |
 
 #### C. Scalar Factors (PBR)
 
 Implemented scalars (in `MaterialAssetDesc`):
 
-| Field              | Type   | Purpose |
-|--------------------|--------|---------|
-| base_color[4]      | float4 | Fallback RGBA (alpha currently not used for blending in core code) |
-| normal_scale       | float  | Scales sampled normal map (0 = flat) |
-| metalness          | float  | Fallback if metallic_texture == 0 |
-| roughness          | float  | Fallback if roughness_texture == 0 |
-| ambient_occlusion  | float  | Fallback if ambient_occlusion_texture == 0 |
+| Field             | Type   | Purpose                                                            |
+| ----------------- | ------ | ------------------------------------------------------------------ |
+| base_color[4]     | float4 | Fallback RGBA (alpha currently not used for blending in core code) |
+| normal_scale      | float  | Scales sampled normal map (0 = flat)                               |
+| metalness         | float  | Fallback if metallic_texture == 0                                  |
+| roughness         | float  | Fallback if roughness_texture == 0                                 |
+| ambient_occlusion | float  | Fallback if ambient_occlusion_texture == 0                         |
 
 Planned (NOT in current binary layout): emissive_factor, opacity, height_scale,
 subsurface, clearcoat, sheen, transmission. Adding any of these requires a
@@ -109,15 +109,15 @@ format version bump or usage of reserved bytes.
 `flags` (uint32) is a generic bitfield. The current codebase does not define a
 public enum for individual bits yet; proposed semantics (subject to change):
 
-| Bit (Conceptual) | Meaning |
-|------------------|---------|
+| Bit (Conceptual) | Meaning                                 |
+| ---------------- | --------------------------------------- |
 | 0                | Double-sided (disable backface culling) |
-| 1                | Alpha test (cutout) |
-| 2                | Receives shadows |
-| 3                | Casts shadows |
-| 4                | Unlit (skip PBR lighting) |
-| 5                | Wireframe (debug) |
-| 6..31            | Reserved / engine-specific |
+| 1                | Alpha test (cutout)                     |
+| 2                | Receives shadows                        |
+| 3                | Casts shadows                           |
+| 4                | Unlit (skip PBR lighting)               |
+| 5                | Wireframe (debug)                       |
+| 6..31            | Reserved / engine-specific              |
 
 Until codified in a shared header, treat these as advisory only.
 
@@ -127,25 +127,25 @@ Until codified in a shared header, treat these as advisory only.
 
 Current PAK v7 layout (summarized):
 
-| Offset | Size | Field | Notes |
-|--------|------|-------|-------|
-| 0x00   | 96   | header | `AssetHeader` (name, type, version) |
-| 0x60   | 1    | material_domain | Cast to `MaterialDomain` |
-| 0x61   | 4    | flags | Bitfield (see advisory table) |
-| 0x65   | 4    | shader_stages | Bitfield population count → number of `ShaderReferenceDesc` following |
-| 0x69   | 16   | base_color | float[4] RGBA |
-| 0x79   | 4    | normal_scale | float |
-| 0x7D   | 4    | metalness | float |
-| 0x81   | 4    | roughness | float |
-| 0x85   | 4    | ambient_occlusion | float |
-| 0x89   | 4    | base_color_texture | Resource index (0 = none) |
-| 0x8D   | 4    | normal_texture | Resource index |
-| 0x91   | 4    | metallic_texture | Resource index |
-| 0x95   | 4    | roughness_texture | Resource index |
-| 0x99   | 4    | ambient_occlusion_texture | Resource index |
-| 0x9D   | 32   | reserved_textures[8] | Future texture indices |
-| 0xBD   | 68   | reserved | Future scalar/flags expansion |
-| 0x100  | ...  | ShaderReferenceDesc[] | One per set bit in `shader_stages` |
+| Offset | Size | Field                     | Notes                                                                 |
+| ------ | ---- | ------------------------- | --------------------------------------------------------------------- |
+| 0x00   | 96   | header                    | `AssetHeader` (name, type, version)                                   |
+| 0x60   | 1    | material_domain           | Cast to `MaterialDomain`                                              |
+| 0x61   | 4    | flags                     | Bitfield (see advisory table)                                         |
+| 0x65   | 4    | shader_stages             | Bitfield population count → number of `ShaderReferenceDesc` following |
+| 0x69   | 16   | base_color                | float[4] RGBA                                                         |
+| 0x79   | 4    | normal_scale              | float                                                                 |
+| 0x7D   | 4    | metalness                 | float                                                                 |
+| 0x81   | 4    | roughness                 | float                                                                 |
+| 0x85   | 4    | ambient_occlusion         | float                                                                 |
+| 0x89   | 4    | base_color_texture        | Resource index (0 = none)                                             |
+| 0x8D   | 4    | normal_texture            | Resource index                                                        |
+| 0x91   | 4    | metallic_texture          | Resource index                                                        |
+| 0x95   | 4    | roughness_texture         | Resource index                                                        |
+| 0x99   | 4    | ambient_occlusion_texture | Resource index                                                        |
+| 0x9D   | 32   | reserved_textures[8]      | Future texture indices                                                |
+| 0xBD   | 68   | reserved                  | Future scalar/flags expansion                                         |
+| 0x100  | ...  | ShaderReferenceDesc[]     | One per set bit in `shader_stages`                                    |
 
 `static_assert(sizeof(MaterialAssetDesc)==256)` ensures binary stability.
 

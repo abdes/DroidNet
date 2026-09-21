@@ -146,7 +146,6 @@ Practical note (current behavior)
   - Policy is Distance/SSE and no evaluation has yet set the current LOD for the frame. Today, this evaluation happens during renderer scene extraction per-view, which computes normalized distance or SSE and calls `Renderable::SelectActiveMesh(...)` accordingly.
 - For Fixed policy, the requested LOD index is clamped to the available range.
 
-
 ## 7) Submesh Controls
 
 - Per-submesh visibility bitset.
@@ -168,10 +167,10 @@ Stable instance IDs
 
 Submission flow
 
-1) Renderer culls using Renderable::GetBoundsWorld() and camera state to produce candidate node ids.
-2) Renderer constructs a concrete builder and calls Scene::EnumerateRenderablesForSubmission(builder).
-3) For each visible Renderable, Scene resolves logical details (LOD, visibility, materials, draw ranges, bounds) and calls builder Resolve* to get handles, then PushInstance.
-4) Renderer finalizes snapshot/batches and generates draw commands.
+1. Renderer culls using Renderable::GetBoundsWorld() and camera state to produce candidate node ids.
+2. Renderer constructs a concrete builder and calls Scene::EnumerateRenderablesForSubmission(builder).
+3. For each visible Renderable, Scene resolves logical details (LOD, visibility, materials, draw ranges, bounds) and calls builder Resolve* to get handles, then PushInstance.
+4. Renderer finalizes snapshot/batches and generates draw commands.
 
 Why snapshot/finalize
 
@@ -190,7 +189,6 @@ Current state
   r.SetGeometry(geometry);
   auto active = r.GetActiveMesh();
   ```
-
 
 Migration plan
 
@@ -256,8 +254,8 @@ PODs (engine-common)
 
 Extraction algorithm (per node)
 
-1) Evaluate LOD via Renderable policy/hysteresis.
-2) For each submesh s in mesh(lod):
+1. Evaluate LOD via Renderable policy/hysteresis.
+2. For each submesh s in mesh(lod):
    - Skip if not visible per Renderable.
    - Resolve material (override → submesh → default).
    - Acquire bounds: world sphere from node; per-submesh world AABB via Renderable cache when enabled.

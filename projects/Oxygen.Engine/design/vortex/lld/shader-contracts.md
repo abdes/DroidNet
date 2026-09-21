@@ -786,21 +786,21 @@ runtime cache.
 
 ### 7.1 Phase 3 Entrypoints
 
-| Entrypoint | File | Stage | Profile |
-| ---------- | ---- | ----- | ------- |
-| `VortexDepthPrepassVS` | `Stages/DepthPrepass/DepthPrepass.hlsl` | vs_6_0 | Vertex |
-| `VortexDepthPrepassPS` | `Stages/DepthPrepass/DepthPrepass.hlsl` | ps_6_0 | Pixel |
-| `VortexBasePassVS` | `Stages/BasePass/BasePassGBuffer.hlsl` | vs_6_0 | Vertex |
-| `VortexBasePassPS` | `Stages/BasePass/BasePassGBuffer.hlsl` | ps_6_0 | Pixel |
-| `VortexBasePassVelocityAuxVS` | `Stages/BasePass/BasePassVelocityAux.hlsl` | vs_6_0 | Vertex |
-| `VortexBasePassVelocityAuxPS` | `Stages/BasePass/BasePassVelocityAux.hlsl` | ps_6_0 | Pixel |
-| `VortexBasePassVelocityMergeCS` | `Stages/BasePass/BasePassVelocityMerge.hlsl` | cs_6_0 | Compute |
-| `VortexDeferredLightDirectionalVS` | `Services/Lighting/DeferredLightDirectional.hlsl` | vs_6_0 | Fullscreen |
-| `VortexDeferredLightDirectionalPS` | `Services/Lighting/DeferredLightDirectional.hlsl` | ps_6_0 | Pixel |
-| `VortexDeferredLightPointVS` | `Services/Lighting/DeferredLightPoint.hlsl` | vs_6_0 | Stencil sphere |
-| `VortexDeferredLightPointPS` | `Services/Lighting/DeferredLightPoint.hlsl` | ps_6_0 | Pixel |
-| `VortexDeferredLightSpotVS` | `Services/Lighting/DeferredLightSpot.hlsl` | vs_6_0 | Stencil cone |
-| `VortexDeferredLightSpotPS` | `Services/Lighting/DeferredLightSpot.hlsl` | ps_6_0 | Pixel |
+| Entrypoint                         | File                                              | Stage  | Profile        |
+| ---------------------------------- | ------------------------------------------------- | ------ | -------------- |
+| `VortexDepthPrepassVS`             | `Stages/DepthPrepass/DepthPrepass.hlsl`           | vs_6_0 | Vertex         |
+| `VortexDepthPrepassPS`             | `Stages/DepthPrepass/DepthPrepass.hlsl`           | ps_6_0 | Pixel          |
+| `VortexBasePassVS`                 | `Stages/BasePass/BasePassGBuffer.hlsl`            | vs_6_0 | Vertex         |
+| `VortexBasePassPS`                 | `Stages/BasePass/BasePassGBuffer.hlsl`            | ps_6_0 | Pixel          |
+| `VortexBasePassVelocityAuxVS`      | `Stages/BasePass/BasePassVelocityAux.hlsl`        | vs_6_0 | Vertex         |
+| `VortexBasePassVelocityAuxPS`      | `Stages/BasePass/BasePassVelocityAux.hlsl`        | ps_6_0 | Pixel          |
+| `VortexBasePassVelocityMergeCS`    | `Stages/BasePass/BasePassVelocityMerge.hlsl`      | cs_6_0 | Compute        |
+| `VortexDeferredLightDirectionalVS` | `Services/Lighting/DeferredLightDirectional.hlsl` | vs_6_0 | Fullscreen     |
+| `VortexDeferredLightDirectionalPS` | `Services/Lighting/DeferredLightDirectional.hlsl` | ps_6_0 | Pixel          |
+| `VortexDeferredLightPointVS`       | `Services/Lighting/DeferredLightPoint.hlsl`       | vs_6_0 | Stencil sphere |
+| `VortexDeferredLightPointPS`       | `Services/Lighting/DeferredLightPoint.hlsl`       | ps_6_0 | Pixel          |
+| `VortexDeferredLightSpotVS`        | `Services/Lighting/DeferredLightSpot.hlsl`        | vs_6_0 | Stencil cone   |
+| `VortexDeferredLightSpotPS`        | `Services/Lighting/DeferredLightSpot.hlsl`        | ps_6_0 | Pixel          |
 
 Deferred-light shaders live under `Services/Lighting/` even in Phase 3 because
 the shader-family owner is already the Lighting domain; only the CPU-side stage
@@ -826,13 +826,13 @@ catalog.Register({
 
 Phase 3 uses minimal permutations:
 
-| Shader | Permutations | Purpose |
-| ------ | ------------ | ------- |
-| Depth prepass | `ALPHA_TEST` | Catalog-managed permutation family for masked depth participants |
-| Base pass | `ALPHA_TEST` | Catalog-managed permutation family for truthful masked deferred behavior |
-| Base pass | `SHADING_MODE_FORWARD` | Deferred (default) vs forward branch |
+| Shader                       | Permutations                      | Purpose                                                                          |
+| ---------------------------- | --------------------------------- | -------------------------------------------------------------------------------- |
+| Depth prepass                | `ALPHA_TEST`                      | Catalog-managed permutation family for masked depth participants                 |
+| Base pass                    | `ALPHA_TEST`                      | Catalog-managed permutation family for truthful masked deferred behavior         |
+| Base pass                    | `SHADING_MODE_FORWARD`            | Deferred (default) vs forward branch                                             |
 | Base pass velocity auxiliary | `USES_MOTION_VECTOR_WORLD_OFFSET` | Catalog-managed family for the stage-9 auxiliary motion-vector-world-offset path |
-| Deferred lighting | None initially | One variant per light type |
+| Deferred lighting            | None initially                    | One variant per light type                                                       |
 
 Permutations use `#ifdef` with catalog-managed define families. No runtime
 compilation.

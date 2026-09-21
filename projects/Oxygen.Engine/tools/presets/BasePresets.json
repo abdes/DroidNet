@@ -1,8 +1,6 @@
 {
   "version": 6,
-  "include": [
-    "../../ConanPresets-Ninja.json"
-  ],
+  "include": ["../../ConanPresets-Ninja.json"],
   "cmakeMinimumRequired": {
     "major": 3,
     "minor": 29,

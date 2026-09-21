@@ -1,203 +1,161 @@
 {
-    "$schema": "http://json-schema.org/draft-07/schema#",
-    "title": "Oxygen scene source inspection",
-    "type": "object",
-    "properties": {
-        "version": {
-            "const": 1
-        },
-        "parsed": {
-            "type": "boolean"
-        },
-        "supported": {
-            "type": "boolean"
-        },
-        "format": {
-            "enum": [
-                "",
-                "gltf",
-                "fbx"
-            ]
-        },
-        "external_files": {
-            "type": "array",
-            "items": {
-                "type": "string",
-                "minLength": 1
-            },
-            "uniqueItems": true
-        },
-        "source_unit_meters": {
-            "type": [
-                "number",
-                "null"
-            ],
-            "exclusiveMinimum": 0
-        },
-        "source_axes": {
-            "type": "object",
-            "properties": {
-                "right": {
-                    "type": "string"
-                },
-                "up": {
-                    "type": "string"
-                },
-                "front": {
-                    "type": "string"
-                }
-            },
-            "required": [
-                "right",
-                "up",
-                "front"
-            ],
-            "additionalProperties": false
-        },
-        "source_left_handed": {
-            "type": [
-                "boolean",
-                "null"
-            ]
-        },
-        "target_axes": {
-            "const": {
-                "right": "+X",
-                "up": "+Z",
-                "front": "-Y"
-            }
-        },
-        "target_unit_meters": {
-            "const": 1
-        },
-        "reverses_winding": {
-            "type": "boolean"
-        },
-        "mesh_count": {
-            "type": "integer",
-            "minimum": 0
-        },
-        "material_count": {
-            "type": "integer",
-            "minimum": 0
-        },
-        "node_count": {
-            "type": "integer",
-            "minimum": 0
-        },
-        "diagnostics": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "severity": {
-                        "enum": [
-                            "Info",
-                            "Warning",
-                            "Error"
-                        ]
-                    },
-                    "code": {
-                        "type": "string"
-                    },
-                    "message": {
-                        "type": "string"
-                    },
-                    "source_path": {
-                        "type": "string"
-                    },
-                    "object_path": {
-                        "type": "string"
-                    }
-                },
-                "required": [
-                    "severity",
-                    "code",
-                    "message",
-                    "source_path",
-                    "object_path"
-                ],
-                "additionalProperties": false
-            }
-        }
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Oxygen scene source inspection",
+  "type": "object",
+  "properties": {
+    "version": {
+      "const": 1
     },
-    "required": [
-        "version",
-        "parsed",
-        "supported",
-        "format",
-        "external_files",
-        "source_unit_meters",
-        "source_axes",
-        "source_left_handed",
-        "target_axes",
-        "target_unit_meters",
-        "reverses_winding",
-        "mesh_count",
-        "material_count",
-        "node_count",
-        "diagnostics"
-    ],
-    "additionalProperties": false,
-    "if": {
-        "properties": {
-            "supported": {
-                "const": true
-            }
-        }
+    "parsed": {
+      "type": "boolean"
     },
-    "then": {
-        "properties": {
-            "parsed": {
-                "const": true
-            },
-            "format": {
-                "enum": [
-                    "gltf",
-                    "fbx"
-                ]
-            },
-            "source_unit_meters": {
-                "type": "number",
-                "exclusiveMinimum": 0
-            },
-            "source_left_handed": {
-                "type": "boolean"
-            },
-            "source_axes": {
-                "properties": {
-                    "right": {
-                        "enum": [
-                            "+X",
-                            "-X",
-                            "+Y",
-                            "-Y",
-                            "+Z",
-                            "-Z"
-                        ]
-                    },
-                    "up": {
-                        "enum": [
-                            "+X",
-                            "-X",
-                            "+Y",
-                            "-Y",
-                            "+Z",
-                            "-Z"
-                        ]
-                    },
-                    "front": {
-                        "enum": [
-                            "+X",
-                            "-X",
-                            "+Y",
-                            "-Y",
-                            "+Z",
-                            "-Z"
-                        ]
-                    }
-                }
-            }
+    "supported": {
+      "type": "boolean"
+    },
+    "format": {
+      "enum": ["", "gltf", "fbx"]
+    },
+    "external_files": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    },
+    "source_unit_meters": {
+      "type": ["number", "null"],
+      "exclusiveMinimum": 0
+    },
+    "source_axes": {
+      "type": "object",
+      "properties": {
+        "right": {
+          "type": "string"
+        },
+        "up": {
+          "type": "string"
+        },
+        "front": {
+          "type": "string"
         }
+      },
+      "required": ["right", "up", "front"],
+      "additionalProperties": false
+    },
+    "source_left_handed": {
+      "type": ["boolean", "null"]
+    },
+    "target_axes": {
+      "const": {
+        "right": "+X",
+        "up": "+Z",
+        "front": "-Y"
+      }
+    },
+    "target_unit_meters": {
+      "const": 1
+    },
+    "reverses_winding": {
+      "type": "boolean"
+    },
+    "mesh_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "material_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "node_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "diagnostics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "severity": {
+            "enum": ["Info", "Warning", "Error"]
+          },
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "source_path": {
+            "type": "string"
+          },
+          "object_path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "severity",
+          "code",
+          "message",
+          "source_path",
+          "object_path"
+        ],
+        "additionalProperties": false
+      }
     }
+  },
+  "required": [
+    "version",
+    "parsed",
+    "supported",
+    "format",
+    "external_files",
+    "source_unit_meters",
+    "source_axes",
+    "source_left_handed",
+    "target_axes",
+    "target_unit_meters",
+    "reverses_winding",
+    "mesh_count",
+    "material_count",
+    "node_count",
+    "diagnostics"
+  ],
+  "additionalProperties": false,
+  "if": {
+    "properties": {
+      "supported": {
+        "const": true
+      }
+    }
+  },
+  "then": {
+    "properties": {
+      "parsed": {
+        "const": true
+      },
+      "format": {
+        "enum": ["gltf", "fbx"]
+      },
+      "source_unit_meters": {
+        "type": "number",
+        "exclusiveMinimum": 0
+      },
+      "source_left_handed": {
+        "type": "boolean"
+      },
+      "source_axes": {
+        "properties": {
+          "right": {
+            "enum": ["+X", "-X", "+Y", "-Y", "+Z", "-Z"]
+          },
+          "up": {
+            "enum": ["+X", "-X", "+Y", "-Y", "+Z", "-Z"]
+          },
+          "front": {
+            "enum": ["+X", "-X", "+Y", "-Y", "+Z", "-Z"]
+          }
+        }
+      }
+    }
+  }
 }

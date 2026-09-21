@@ -48,16 +48,16 @@ Out of scope:
 
 ## 3. Current State
 
-| Area | Current state | VTX-M06C action |
-| --- | --- | --- |
-| Roadmap/status | `PLAN.md` and `IMPLEMENTATION_STATUS.md` now record VTX-M06C as `validated`; VTX-M07 is the next planned milestone. | Keep the VTX-M06C closure evidence in this plan and the status ledger; future production-readiness work belongs to VTX-M07. |
-| Capability families | `RendererCapabilityFamily` gates construction of major services such as scene preparation, deferred shading, lighting, shadowing, environment lighting, final output composition, and diagnostics. | Preserve capability construction gates and add tests for required/optional variant capability sets. |
-| View feature mask | `CompositionView::ViewFeatureMask` carries scene lighting, shadows, environment, translucency, and diagnostics bits, and composition planning copies the mask. | Promote the mask from carried metadata to the source of stage omission truth for per-view variants. |
-| Runtime render context | `RenderContext::ViewExecutionEntry` carries per-view scene flags, render/shading overrides, and composition view pointer. It does not carry an effective runtime variant contract. | Add a typed effective variant/feature contract that SceneRenderer stages consume without consulting demo-only state. |
-| SceneRenderer services | Service construction is capability-gated, but per-view stage execution still assumes most constructed services are eligible. | Add stage-level feature checks and disabled-state diagnostics before service calls and product publication. |
-| Offscreen facade | `OffscreenPipelineInput` selects deferred or forward shading only. | Extend it with production-clean variant selection or feature profile inputs needed for offscreen proof. |
-| Diagnostics proof | Diagnostics service records pass/product truth and prior tools analyze M06A/B captures. | Extend proof scripts to assert omitted stages, invalid products, and absent downstream consumption. |
-| Demo proof surface | `Examples/MultiView` already hosts visually inspectable proof layouts and offscreen products. | Add a clean feature-variant proof layout without test-only code in production renderer paths. |
+| Area                   | Current state                                                                                                                                                                                      | VTX-M06C action                                                                                                             |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Roadmap/status         | `PLAN.md` and `IMPLEMENTATION_STATUS.md` now record VTX-M06C as `validated`; VTX-M07 is the next planned milestone.                                                                                | Keep the VTX-M06C closure evidence in this plan and the status ledger; future production-readiness work belongs to VTX-M07. |
+| Capability families    | `RendererCapabilityFamily` gates construction of major services such as scene preparation, deferred shading, lighting, shadowing, environment lighting, final output composition, and diagnostics. | Preserve capability construction gates and add tests for required/optional variant capability sets.                         |
+| View feature mask      | `CompositionView::ViewFeatureMask` carries scene lighting, shadows, environment, translucency, and diagnostics bits, and composition planning copies the mask.                                     | Promote the mask from carried metadata to the source of stage omission truth for per-view variants.                         |
+| Runtime render context | `RenderContext::ViewExecutionEntry` carries per-view scene flags, render/shading overrides, and composition view pointer. It does not carry an effective runtime variant contract.                 | Add a typed effective variant/feature contract that SceneRenderer stages consume without consulting demo-only state.        |
+| SceneRenderer services | Service construction is capability-gated, but per-view stage execution still assumes most constructed services are eligible.                                                                       | Add stage-level feature checks and disabled-state diagnostics before service calls and product publication.                 |
+| Offscreen facade       | `OffscreenPipelineInput` selects deferred or forward shading only.                                                                                                                                 | Extend it with production-clean variant selection or feature profile inputs needed for offscreen proof.                     |
+| Diagnostics proof      | Diagnostics service records pass/product truth and prior tools analyze M06A/B captures.                                                                                                            | Extend proof scripts to assert omitted stages, invalid products, and absent downstream consumption.                         |
+| Demo proof surface     | `Examples/MultiView` already hosts visually inspectable proof layouts and offscreen products.                                                                                                      | Add a clean feature-variant proof layout without test-only code in production renderer paths.                               |
 
 ## 4. Existing Behavior To Preserve
 
@@ -102,14 +102,14 @@ exceptions.
 
 ## 6. Contract Truth Table
 
-| Variant | Required products | Disabled products | Consumers that must be safe |
-| --- | --- | --- | --- |
-| Depth-only | Prepared view, SceneDepth, optional depth diagnostics. | SceneColor, GBuffer, lighting, shadows, environment, translucency, post-process color output. | Resolve/post/composition paths must not require SceneColor for the depth-only contract. |
-| Shadow-only | Prepared view, light selection, shadow frame bindings/surfaces for eligible lights. | Main SceneColor/GBuffer/lighting/environment/post products. | Shadow service must not depend on base-pass color products. |
-| No-environment | Prepared view, depth, GBuffer/SceneColor, lighting, optional shadows, post/composition. | Environment frame bindings, sky/atmosphere/fog/IBL, volumetric/local-fog products. | Lighting/translucency must see invalid environment slots and remain stable. |
-| No-shadowing | Prepared view, depth, GBuffer/SceneColor, lighting, environment/post as requested. | Shadow frame bindings and shadow surfaces. | Lighting, environment, and translucency must not sample stale shadow descriptors. |
-| No-volumetrics | Environment bindings may exist for sky/height fog; non-volumetric sky/fog may render. | Integrated light scattering and volumetric fog/local-fog volumetric products. | Stage 15 and translucency must treat volumetric slots as invalid. |
-| Diagnostics-only | Diagnostics pass/product records and overlay/composition output if requested. | Scene lighting, shadows, environment, translucency, post products unless explicitly enabled. | Diagnostics overlay path must not fabricate scene products. |
+| Variant          | Required products                                                                       | Disabled products                                                                             | Consumers that must be safe                                                             |
+| ---------------- | --------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| Depth-only       | Prepared view, SceneDepth, optional depth diagnostics.                                  | SceneColor, GBuffer, lighting, shadows, environment, translucency, post-process color output. | Resolve/post/composition paths must not require SceneColor for the depth-only contract. |
+| Shadow-only      | Prepared view, light selection, shadow frame bindings/surfaces for eligible lights.     | Main SceneColor/GBuffer/lighting/environment/post products.                                   | Shadow service must not depend on base-pass color products.                             |
+| No-environment   | Prepared view, depth, GBuffer/SceneColor, lighting, optional shadows, post/composition. | Environment frame bindings, sky/atmosphere/fog/IBL, volumetric/local-fog products.            | Lighting/translucency must see invalid environment slots and remain stable.             |
+| No-shadowing     | Prepared view, depth, GBuffer/SceneColor, lighting, environment/post as requested.      | Shadow frame bindings and shadow surfaces.                                                    | Lighting, environment, and translucency must not sample stale shadow descriptors.       |
+| No-volumetrics   | Environment bindings may exist for sky/height fog; non-volumetric sky/fog may render.   | Integrated light scattering and volumetric fog/local-fog volumetric products.                 | Stage 15 and translucency must treat volumetric slots as invalid.                       |
+| Diagnostics-only | Diagnostics pass/product records and overlay/composition output if requested.           | Scene lighting, shadows, environment, translucency, post products unless explicitly enabled.  | Diagnostics overlay path must not fabricate scene products.                             |
 
 Every disabled state must be represented by invalid shader-visible indices,
 `valid=false` diagnostics products, omitted RenderDoc pass scopes, or explicit
@@ -303,7 +303,7 @@ Validation:
 Evidence:
 
 - Source implementation adds `Examples/MultiView --feature-variant-proof-layout
-  true`, a visually inspectable 3x2 proof layout for depth-only, shadow-only,
+true`, a visually inspectable 3x2 proof layout for depth-only, shadow-only,
   no-environment, no-shadowing, no-volumetrics, and diagnostics-only runtime
   views. The overlay uses one-line clipped labels and explicitly marks the
   expected black reduced-output views: depth-only, shadow-only, and

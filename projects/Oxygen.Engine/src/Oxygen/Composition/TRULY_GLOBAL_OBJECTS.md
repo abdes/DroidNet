@@ -61,6 +61,7 @@ for (auto& module : modules) {
 ```
 
 **Key Points:**
+
 - `EnumProcessModules` returns the main executable as the first module
 - Searches executable first, then all loaded DLLs
 - Uses `GetModuleFileNameA` to identify which module provides the symbol
@@ -84,6 +85,7 @@ for (int i = 0; i < count; ++i) {
 ```
 
 **Key Points:**
+
 - Image index 0 is always the main executable
 - `RTLD_NOLOAD` prevents loading modules that aren't already loaded
 - Uses `_dyld_get_image_name` to identify the providing module
@@ -105,6 +107,7 @@ if (init_func) {
 ```
 
 **Key Points:**
+
 - `RTLD_DEFAULT` searches the main executable and all loaded libraries
 - `dl_iterate_phdr` provides fallback for explicit module enumeration
 - Uses `info->dlpi_name` to identify the providing module
@@ -164,6 +167,7 @@ auto& registry = GetTrulySingleInstance<TypeRegistry>("TypeRegistry");
 ```
 
 **Behavior:**
+
 - Symbol lookup finds the instance in the main executable
 - No cross-module issues since everything is in one module
 - Standard singleton behavior applies
@@ -183,6 +187,7 @@ auto& registry_b = GetTrulySingleInstance<TypeRegistry>("TypeRegistry");
 ```
 
 **Behavior:**
+
 - First module to call `GetTrulySingleInstance` creates the instance
 - Subsequent modules find and reuse the existing instance
 - True singleton behavior across all modules
@@ -201,6 +206,7 @@ HMODULE dll = LoadLibrary("plugin.dll");
 ```
 
 **Behavior:**
+
 - The first module (executable or DLL) creates the instance
 - All subsequent modules share the same instance
 - Order-independent: works regardless of load order
@@ -214,6 +220,7 @@ The system looks for initialization functions with the pattern:
 ```
 
 Examples:
+
 - `InitializeTypeRegistry` for `TypeRegistry`
 - `InitializeComponentPoolRegistry` for `ComponentPoolRegistry`
 - `InitializeResourceManager` for `ResourceManager`
@@ -279,6 +286,7 @@ Found InitializeComponentPool in module: /usr/lib/libOxygen.so
 ```
 
 This helps verify:
+
 - The correct module is providing the instance
 - The executable is being checked first (when applicable)
 - The cross-module sharing is working as expected
@@ -342,6 +350,7 @@ extern "C" {
 ### Usage in Static Builds
 
 #### Traditional Static Build (Problematic)
+
 ```cpp
 // main.exe (static build)
 auto& registry = GetTrulySingleInstance<TypeRegistry>("TypeRegistry");
@@ -353,6 +362,7 @@ HMODULE plugin = LoadLibrary("plugin.dll");
 ```
 
 #### Static Build with CS-Init (Correct)
+
 ```cpp
 // Link against: Oxygen.Composition.lib + Oxygen.CS-Init.lib
 // Deploy: main.exe + Oxygen.CS-Init.dll
@@ -369,6 +379,7 @@ HMODULE plugin = LoadLibrary("plugin.dll");
 ### Linking Instructions
 
 #### CMake
+
 ```cmake
 # For static builds, always link the CS-Init DLL
 target_link_libraries(your_target
@@ -379,6 +390,7 @@ target_link_libraries(your_target
 ```
 
 #### Manual Linking
+
 ```cpp
 // Force linker to keep the CS-Init dependency
 #pragma comment(lib, "Oxygen.CS-Init.lib")
@@ -411,6 +423,7 @@ extern "C" OXYGEN_CS_INIT_API ComponentPoolRegistry* InitializeComponentPoolRegi
 ```
 
 **Key Features:**
+
 - **Thread-safe**: C++11 guarantees thread-safe static local initialization
 - **Lazy initialization**: Instances created only when first requested
 - **Process-wide**: Same instance shared across all modules in the process
@@ -418,16 +431,17 @@ extern "C" OXYGEN_CS_INIT_API ComponentPoolRegistry* InitializeComponentPoolRegi
 
 ### When to Use CS-Init
 
-| Build Type | CS-Init Needed? | Reason |
-|------------|----------------|---------|
-| Pure Static | **Yes** | Prevents fallback to local instances |
-| Pure Dynamic | Optional | Composition DLL already provides initialization functions |
-| Mixed (Static + Dynamic) | **Yes** | Ensures consistency between static and dynamic code |
-| Plugin Architecture | **Yes** | Runtime-loaded plugins need shared instances |
+| Build Type               | CS-Init Needed? | Reason                                                    |
+| ------------------------ | --------------- | --------------------------------------------------------- |
+| Pure Static              | **Yes**         | Prevents fallback to local instances                      |
+| Pure Dynamic             | Optional        | Composition DLL already provides initialization functions |
+| Mixed (Static + Dynamic) | **Yes**         | Ensures consistency between static and dynamic code       |
+| Plugin Architecture      | **Yes**         | Runtime-loaded plugins need shared instances              |
 
 ### Deployment Considerations
 
 #### Static Build Deployment
+
 ```
 MyApplication/
 ├── main.exe                    # Your static application
@@ -454,6 +468,7 @@ extern "C" __declspec(dllexport) oxygen::TypeRegistry* InitializeTypeRegistry() 
 ```
 
 This allows you to:
+
 - **Customize initialization**: Pre-register types, configure settings
 - **Control dependencies**: Ensure your initialization DLL is always present
 - **Brand consistency**: Use your own DLL naming conventions

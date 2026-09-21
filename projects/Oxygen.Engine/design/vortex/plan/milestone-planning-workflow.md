@@ -24,16 +24,16 @@ implementation starts.
 
 A detailed milestone plan must answer these questions:
 
-| Question | Required Answer |
-| --- | --- |
-| What is the exact milestone ID? | Use the stable ID from `PLAN.md`; do not invent a new phase label. |
-| What is in scope? | Name the runtime behavior, contracts, publications, shaders, tests, and proof surfaces. |
-| What is out of scope? | Explicitly exclude adjacent work that must not leak into the milestone. |
-| What exists already? | Separate implementation-present surfaces from validated surfaces. |
-| What must be preserved? | Name invariants and existing behavior that must not regress. |
-| What will be changed? | Split work into small slices with clear ownership. |
-| What proves closure? | Define build, test, runtime, shader, UE5.7, and capture evidence. |
-| What blocks closure? | List missing dependencies, unresolved design questions, and accepted gaps. |
+| Question                        | Required Answer                                                                         |
+| ------------------------------- | --------------------------------------------------------------------------------------- |
+| What is the exact milestone ID? | Use the stable ID from `PLAN.md`; do not invent a new phase label.                      |
+| What is in scope?               | Name the runtime behavior, contracts, publications, shaders, tests, and proof surfaces. |
+| What is out of scope?           | Explicitly exclude adjacent work that must not leak into the milestone.                 |
+| What exists already?            | Separate implementation-present surfaces from validated surfaces.                       |
+| What must be preserved?         | Name invariants and existing behavior that must not regress.                            |
+| What will be changed?           | Split work into small slices with clear ownership.                                      |
+| What proves closure?            | Define build, test, runtime, shader, UE5.7, and capture evidence.                       |
+| What blocks closure?            | List missing dependencies, unresolved design questions, and accepted gaps.              |
 
 ## 3. Planning Steps
 
@@ -136,17 +136,29 @@ Use this section shape for detailed milestone plans.
 Status: `planned` or `in_progress`
 
 ## 1. Goal
+
 ## 2. Scope
+
 ## 3. Non-Scope
+
 ## 4. Current State
+
 ## 5. Existing Behavior To Preserve
+
 ## 6. UE5.7 Parity References
+
 ## 7. Contract Truth Table
+
 ## 8. Implementation Slices
+
 ## 9. Test Plan
+
 ## 10. Runtime / Capture Proof
+
 ## 11. Exit Gate
+
 ## 12. Replan Triggers
+
 ## 13. Status Update Requirements
 ```
 

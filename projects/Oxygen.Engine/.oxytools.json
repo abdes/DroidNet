@@ -1,8 +1,12 @@
 {
   "project_roots": ["src/Oxygen", "Examples"],
   "exclude": [
-    "**/third_party/**", "**/third-party/**", "**/ThirdParty/**",
-    "**/vendor/**", "**/external/**", "**/_deps/**",
+    "**/third_party/**",
+    "**/third-party/**",
+    "**/ThirdParty/**",
+    "**/vendor/**",
+    "**/external/**",
+    "**/_deps/**",
     "src/Oxygen/Base/Detail/signal.hpp",
     "src/Oxygen/Base/Detail/loguru.cpp",
     "src/Oxygen/Base/Detail/NamedType_*.h",

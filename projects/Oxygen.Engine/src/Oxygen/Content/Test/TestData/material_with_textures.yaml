@@ -6,7 +6,7 @@ content_version: 1
 # Define default empty buffer (index 0) - required in all PAK files
 buffers:
   - name: "default_empty_buffer"
-    data_hex: ""  # Empty buffer
+    data_hex: "" # Empty buffer
     size: 0
     usage: 0
 
@@ -15,34 +15,34 @@ textures:
   - name: "default_texture"
     width: 1
     height: 1
-    format: 30  # kRGBA8UNorm
-    texture_type: 3  # kTexture2D
+    format: 30 # kRGBA8UNorm
+    texture_type: 3 # kTexture2D
     compression_type: 0
-    data_hex: "4f545831020001002c0000001c000000280000000000000000000000000000000400000004000000ffffffff"  # v4 OTX1 payload
+    data_hex: "4f545831020001002c0000001c000000280000000000000000000000000000000400000004000000ffffffff" # v4 OTX1 payload
 
   - name: "diffuse_tex"
     width: 512
     height: 512
-    format: 30  # kRGBA8UNorm
-    texture_type: 3  # kTexture2D
+    format: 30 # kRGBA8UNorm
+    texture_type: 3 # kTexture2D
     compression_type: 0
-    data_hex: "4f545831020001002c0000001c000000280000000000000000000000000000000400000004000000ffffffff"  # v4 OTX1 payload
+    data_hex: "4f545831020001002c0000001c000000280000000000000000000000000000000400000004000000ffffffff" # v4 OTX1 payload
 
   - name: "normal_tex"
     width: 512
     height: 512
-    format: 30  # kRGBA8UNorm
-    texture_type: 3  # kTexture2D
+    format: 30 # kRGBA8UNorm
+    texture_type: 3 # kTexture2D
     compression_type: 0
-    data_hex: "4f545831020001002c0000001c000000280000000000000000000000000000000400000004000000ffffffff"  # v4 OTX1 payload
+    data_hex: "4f545831020001002c0000001c000000280000000000000000000000000000000400000004000000ffffffff" # v4 OTX1 payload
 
   - name: "roughness_tex"
     width: 512
     height: 512
-    format: 30  # kRGBA8UNorm
-    texture_type: 3  # kTexture2D
+    format: 30 # kRGBA8UNorm
+    texture_type: 3 # kTexture2D
     compression_type: 0
-    data_hex: "4f545831020001002c0000001c000000280000000000000000000000000000000400000004000000ffffffff"  # v4 OTX1 payload
+    data_hex: "4f545831020001002c0000001c000000280000000000000000000000000000000400000004000000ffffffff" # v4 OTX1 payload
 
 # Define material with texture dependencies
 assets:
@@ -51,15 +51,15 @@ assets:
     asset_key: "12345678-90ab-cdef-1234-567890abcdef"
     material_domain: 0
     flags: 0
-    shader_stages: 0x44  # kVertex (bit 2) + kPixel (bit 6) = 0x04 + 0x40 = 0x44
+    shader_stages: 0x44 # kVertex (bit 2) + kPixel (bit 6) = 0x04 + 0x40 = 0x44
     base_color: [1.0, 1.0, 1.0, 1.0]
     normal_scale: 1.0
     metalness: 0.2
     roughness: 0.8
     texture_refs:
-      base_color_texture: "diffuse_tex"   # Index 1
-      normal_texture: "normal_tex"        # Index 2
-      roughness_texture: "roughness_tex"  # Index 3
+      base_color_texture: "diffuse_tex" # Index 1
+      normal_texture: "normal_tex" # Index 2
+      roughness_texture: "roughness_tex" # Index 3
 
     # Shader references for vertex and pixel shaders
     shader_references:

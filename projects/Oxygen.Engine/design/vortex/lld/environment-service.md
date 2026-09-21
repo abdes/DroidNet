@@ -472,7 +472,7 @@ Required authored fields:
 
 Authoring file:
 
-- [SkyAtmosphere.h](</F:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Scene/Environment/SkyAtmosphere.h>)
+- [SkyAtmosphere.h](/F:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Scene/Environment/SkyAtmosphere.h)
 
 Naming note:
 
@@ -557,7 +557,7 @@ Required authored fields:
 
 Authoring file:
 
-- [Fog.h](</F:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Scene/Environment/Fog.h>)
+- [Fog.h](/F:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Scene/Environment/Fog.h)
 
 #### 4.2.3 `scene::environment::SkyLight`
 
@@ -580,7 +580,7 @@ Required authored fields:
 
 Authoring file:
 
-- [SkyLight.h](</F:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Scene/Environment/SkyLight.h>)
+- [SkyLight.h](/F:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Scene/Environment/SkyLight.h)
 
 #### 4.2.4 Per-light atmosphere authority
 
@@ -743,8 +743,8 @@ authored parameters.
 
 Relevant files:
 
-- [PakFormat_world.h](</F:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Data/PakFormat_world.h>)
-- [SceneAsset.h](</F:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Data/SceneAsset.h>)
+- [PakFormat_world.h](/F:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Data/PakFormat_world.h)
+- [SceneAsset.h](/F:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Data/SceneAsset.h)
 
 ### 5.1.1 Screen HZB Mandate For Local Fog
 
@@ -875,12 +875,12 @@ authoring/debug runtime surface is specified.
 
 The DemoShell environment authoring stack is:
 
-- [EnvironmentSettingsService.h](</F:/projects/DroidNet/projects/Oxygen.Engine/Examples/DemoShell/Services/EnvironmentSettingsService.h>)
-- [EnvironmentSettingsService.cpp](</F:/projects/DroidNet/projects/Oxygen.Engine/Examples/DemoShell/Services/EnvironmentSettingsService.cpp>)
-- [EnvironmentVm.h](</F:/projects/DroidNet/projects/Oxygen.Engine/Examples/DemoShell/UI/EnvironmentVm.h>)
-- [EnvironmentVm.cpp](</F:/projects/DroidNet/projects/Oxygen.Engine/Examples/DemoShell/UI/EnvironmentVm.cpp>)
-- [EnvironmentDebugPanel.h](</F:/projects/DroidNet/projects/Oxygen.Engine/Examples/DemoShell/UI/EnvironmentDebugPanel.h>)
-- [EnvironmentDebugPanel.cpp](</F:/projects/DroidNet/projects/Oxygen.Engine/Examples/DemoShell/UI/EnvironmentDebugPanel.cpp>)
+- [EnvironmentSettingsService.h](/F:/projects/DroidNet/projects/Oxygen.Engine/Examples/DemoShell/Services/EnvironmentSettingsService.h)
+- [EnvironmentSettingsService.cpp](/F:/projects/DroidNet/projects/Oxygen.Engine/Examples/DemoShell/Services/EnvironmentSettingsService.cpp)
+- [EnvironmentVm.h](/F:/projects/DroidNet/projects/Oxygen.Engine/Examples/DemoShell/UI/EnvironmentVm.h)
+- [EnvironmentVm.cpp](/F:/projects/DroidNet/projects/Oxygen.Engine/Examples/DemoShell/UI/EnvironmentVm.cpp)
+- [EnvironmentDebugPanel.h](/F:/projects/DroidNet/projects/Oxygen.Engine/Examples/DemoShell/UI/EnvironmentDebugPanel.h)
+- [EnvironmentDebugPanel.cpp](/F:/projects/DroidNet/projects/Oxygen.Engine/Examples/DemoShell/UI/EnvironmentDebugPanel.cpp)
 
 ### 6.2 `EnvironmentSettingsService` Responsibilities
 
@@ -1158,22 +1158,22 @@ Per view:
 The implementation must follow this order unless a later approved design
 revision replaces it.
 
-| Order | Stage | Pass / Step | Inputs | Outputs | Required state transition |
-| --- | --- | --- | --- | --- | --- |
-| 1 | pre-stage | atmosphere-state translation | `SkyAtmosphere`, `Fog`, `SkyLight`, atmosphere lights | stable family state | CPU only |
-| 2 | pre-stage | atmosphere LUT invalidation/update | stable atmosphere state | transmittance + multi-scatter + distant skylight LUTs | UAV write -> SRV |
-| 3 | pre-stage | per-view sky-view LUT build | stable atmosphere state, per-view camera | `SkyViewLut` | UAV write -> SRV |
-| 4 | pre-stage | per-view camera aerial perspective build | LUTs, atmosphere lights, per-view camera | `CameraAerialPerspectiveVolume` | UAV write -> SRV |
-| 5 | Stage 14 | local fog volume gather/sort/upload | scene traversal results | GPU instance + tile inputs | upload -> SRV/UAV |
-| 6 | Stage 14 | local fog tiled culling | local fog GPU instance data, SceneDepth, Stage 5 Screen HZB products | tile buffers/textures + draw-indirect buffers | UAV write -> SRV/UAV |
-| 7 | Stage 14 | volumetric fog grid allocate/clear | fog model, view data | empty froxel resources | UAV write |
-| 8 | Stage 14 | volumetric light injection | froxel grid, atmosphere lights, local lights, shadows | scattering/extinction intermediates | UAV write |
-| 9 | Stage 14 | optional local-fog injection into volumetric fog | local fog data, froxel grid | updated volumetric media | UAV write |
-| 10 | Stage 14 | volumetric final integration | intermediates | `IntegratedLightScattering` | UAV write -> SRV |
-| 11 | Stage 15 | sky-atmosphere render | SceneColor, SceneDepth, LUTs, atmosphere lights | updated SceneColor | RTV + depth-read |
-| 12 | Stage 15 | height fog composite | SceneColor, SceneDepth, fog model, LUT/AP products, optional volumetric SRV | updated SceneColor | RTV + depth-read + SRV |
-| 13 | Stage 15 | local fog volume composite when not injection-only | SceneColor, SceneDepth, tile buffers/textures, local fog data | updated SceneColor | RTV + depth-read + SRV |
-| 14 | Stage 15 | final environment-family closeout | stage outputs | stable `SceneColor` for later stages | RTV -> later stage SRV/RTV as needed |
+| Order | Stage     | Pass / Step                                        | Inputs                                                                      | Outputs                                               | Required state transition            |
+| ----- | --------- | -------------------------------------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------- | ------------------------------------ |
+| 1     | pre-stage | atmosphere-state translation                       | `SkyAtmosphere`, `Fog`, `SkyLight`, atmosphere lights                       | stable family state                                   | CPU only                             |
+| 2     | pre-stage | atmosphere LUT invalidation/update                 | stable atmosphere state                                                     | transmittance + multi-scatter + distant skylight LUTs | UAV write -> SRV                     |
+| 3     | pre-stage | per-view sky-view LUT build                        | stable atmosphere state, per-view camera                                    | `SkyViewLut`                                          | UAV write -> SRV                     |
+| 4     | pre-stage | per-view camera aerial perspective build           | LUTs, atmosphere lights, per-view camera                                    | `CameraAerialPerspectiveVolume`                       | UAV write -> SRV                     |
+| 5     | Stage 14  | local fog volume gather/sort/upload                | scene traversal results                                                     | GPU instance + tile inputs                            | upload -> SRV/UAV                    |
+| 6     | Stage 14  | local fog tiled culling                            | local fog GPU instance data, SceneDepth, Stage 5 Screen HZB products        | tile buffers/textures + draw-indirect buffers         | UAV write -> SRV/UAV                 |
+| 7     | Stage 14  | volumetric fog grid allocate/clear                 | fog model, view data                                                        | empty froxel resources                                | UAV write                            |
+| 8     | Stage 14  | volumetric light injection                         | froxel grid, atmosphere lights, local lights, shadows                       | scattering/extinction intermediates                   | UAV write                            |
+| 9     | Stage 14  | optional local-fog injection into volumetric fog   | local fog data, froxel grid                                                 | updated volumetric media                              | UAV write                            |
+| 10    | Stage 14  | volumetric final integration                       | intermediates                                                               | `IntegratedLightScattering`                           | UAV write -> SRV                     |
+| 11    | Stage 15  | sky-atmosphere render                              | SceneColor, SceneDepth, LUTs, atmosphere lights                             | updated SceneColor                                    | RTV + depth-read                     |
+| 12    | Stage 15  | height fog composite                               | SceneColor, SceneDepth, fog model, LUT/AP products, optional volumetric SRV | updated SceneColor                                    | RTV + depth-read + SRV               |
+| 13    | Stage 15  | local fog volume composite when not injection-only | SceneColor, SceneDepth, tile buffers/textures, local fog data               | updated SceneColor                                    | RTV + depth-read + SRV               |
+| 14    | Stage 15  | final environment-family closeout                  | stage outputs                                                               | stable `SceneColor` for later stages                  | RTV -> later stage SRV/RTV as needed |
 
 Junior implementation rule:
 

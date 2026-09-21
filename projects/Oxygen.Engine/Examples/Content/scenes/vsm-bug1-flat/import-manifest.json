@@ -23,9 +23,7 @@
       "source": "./floor.geometry.json",
       "name": "floor",
       "content_hashing": true,
-      "depends_on": [
-        "material.floor_default"
-      ]
+      "depends_on": ["material.floor_default"]
     },
     {
       "id": "geometry.cube",
@@ -33,9 +31,7 @@
       "source": "./cube.geometry.json",
       "name": "cube",
       "content_hashing": true,
-      "depends_on": [
-        "material.cube_red"
-      ]
+      "depends_on": ["material.cube_red"]
     },
     {
       "id": "scene.vsm_bug1_large_plane",
@@ -43,9 +39,7 @@
       "source": "./VsmBug1LargePlane.scene.json",
       "name": "VsmBug1LargePlane",
       "content_hashing": true,
-      "depends_on": [
-        "geometry.floor"
-      ]
+      "depends_on": ["geometry.floor"]
     },
     {
       "id": "scene.vsm_bug1_large_thin_cube",
@@ -53,9 +47,7 @@
       "source": "./VsmBug1LargeThinCube.scene.json",
       "name": "VsmBug1LargeThinCube",
       "content_hashing": true,
-      "depends_on": [
-        "geometry.cube"
-      ]
+      "depends_on": ["geometry.cube"]
     }
   ]
 }

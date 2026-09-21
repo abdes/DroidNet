@@ -4,11 +4,11 @@ This directory contains **three main examples** that demonstrate different appro
 
 ## 🎯 Main Examples (Use These)
 
-| Example | Directory | File | Description |
-|---------|-----------|------|-------------|
-| **YieldAwaiter** | `YieldAwaiter/` | `yield_awaiter_example.cpp` | Sequential batch processing with custom YieldAwaiter and caller result population |
+| Example              | Directory           | File                            | Description                                                                       |
+| -------------------- | ------------------- | ------------------------------- | --------------------------------------------------------------------------------- |
+| **YieldAwaiter**     | `YieldAwaiter/`     | `yield_awaiter_example.cpp`     | Sequential batch processing with custom YieldAwaiter and caller result population |
 | **BroadcastChannel** | `BroadcastChannel/` | `broadcast_channel_example.cpp` | Parallel batch processing with OxCo BroadcastChannel and caller result population |
-| **RepeatableShared** | `RepeatableShared/` | `repeatable_shared_example.cpp` | Per-item sequential processing with RepeatableShared synchronization |
+| **RepeatableShared** | `RepeatableShared/` | `repeatable_shared_example.cpp` | Per-item sequential processing with RepeatableShared synchronization              |
 
 **These three examples provide complete, production-ready patterns** with different synchronization and processing approaches. Choose one based on your specific requirements.
 
@@ -79,6 +79,7 @@ for (size_t i = 0; i < collection_.size(); ++i) {
 ```
 
 **Characteristics:**
+
 - ✅ Simple, predictable execution
 - ✅ Lower memory overhead
 - ✅ Fine control over scheduling
@@ -100,6 +101,7 @@ co_await Yield{}; // Built-in OxCo yielding
 ```
 
 **Characteristics:**
+
 - ✅ True parallel processing
 - ✅ Idiomatic OxCo usage
 - ✅ Natural early termination
@@ -125,6 +127,7 @@ auto lock = co_await source.Lock();
 ```
 
 **Characteristics:**
+
 - ✅ Sequential per-item processing
 - ✅ All operations complete on each item before next
 - ✅ Simpler than BroadcastChannel
@@ -135,26 +138,30 @@ auto lock = co_await source.Lock();
 ## 🎛️ Which Example Should I Use?
 
 ### Choose YieldAwaiter When:
+
 - ✅ Performance is critical and overhead must be minimal
 - ✅ Simple, predictable batch operations
 - ✅ Sequential processing is acceptable
 - ✅ You need fine control over coroutine scheduling
 
 ### Choose BroadcastChannel When:
+
 - ✅ Operations benefit from parallel execution
 - ✅ Complex operations with different completion logic
 - ✅ You want idiomatic OxCo code using built-in primitives
 - ✅ Scalability and extensibility are important
 
 ### Choose RepeatableShared When:
+
 - ✅ You need per-item processing (all operations on item N before item N+1)
 - ✅ You want simpler setup than BroadcastChannel
 - ✅ Operations need to be synchronized per-item
 - ✅ Sequential item ordering is important
 
-##  Key Features Demonstrated
+## Key Features Demonstrated
 
 All three main examples show:
+
 - **Identical ExecuteBatch() API**: Same lambda-based batch operation registration using shared components
 - **Same Three Test Cases**: Multiple result types, prime analysis, and range analysis from `shared_examples.h`
 - **Caller Result Population**: Safe patterns for populating `std::vector`, `std::optional`, `size_t&`, etc.
@@ -163,6 +170,7 @@ All three main examples show:
 - **Modular Architecture**: Clean separation between synchronization approaches and common functionality
 
 **The only difference is the underlying synchronization mechanism**, making it easy to compare:
+
 - **Code complexity and amount**
 - **Performance characteristics**
 - **Scalability trade-offs**

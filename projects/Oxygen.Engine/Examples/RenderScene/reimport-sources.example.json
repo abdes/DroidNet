@@ -3,8 +3,17 @@
   "version": 1,
   "sources": [
     { "name": "rgb_cubes", "source": "C:/Models/rgb_cubes.fbx" },
-    { "name": "BurgerPiz", "source": "C:/Models/BurgerPiz/Models/BurgerPiz.glb" },
-    { "name": "NewSponza_Main_glTF_003", "source": "C:/Models/main_sponza/NewSponza_Main_glTF_003.gltf" },
-    { "name": "town4new", "source": "C:/Models/full-gameready-city-buildings/source/town4new.glb" }
+    {
+      "name": "BurgerPiz",
+      "source": "C:/Models/BurgerPiz/Models/BurgerPiz.glb"
+    },
+    {
+      "name": "NewSponza_Main_glTF_003",
+      "source": "C:/Models/main_sponza/NewSponza_Main_glTF_003.gltf"
+    },
+    {
+      "name": "town4new",
+      "source": "C:/Models/full-gameready-city-buildings/source/town4new.glb"
+    }
   ]
 }

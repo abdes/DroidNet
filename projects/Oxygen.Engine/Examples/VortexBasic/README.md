@@ -32,20 +32,20 @@ The current foundation matrix uses these exact cases. Use the case name as the
 analyzer's `-PassName`, the listed scene as `--validation-scene`, and append the
 listed arguments to the common launch above. Negative numbers use `=`, as shown.
 
-| Case | Scene | Fixture arguments | Expected gain |
-| --- | --- | --- | --- |
-| EV14 | exposure-fixed | `--validation-exposure-ev=14` | 2^-14 |
-| EV15 | exposure-fixed | `--validation-exposure-ev=15` | 2^-15 |
-| EV16 | exposure-fixed | `--validation-exposure-ev=16` | 2^-16 |
-| EV32 | exposure-fixed | `--validation-exposure-ev=32` | 2^-32 |
-| EV-32 | exposure-fixed | `--validation-exposure-ev=-32` | 2^32 |
-| Bias | exposure-fixed | `--validation-exposure-ev=16 --validation-exposure-key=6.25 --validation-exposure-compensation=2` | 2^-15 |
-| Disabled | exposure-fixed | `--validation-exposure-enabled=false` | 1 |
-| Camera | exposure-fixed | `--validation-camera-exposure=true` | 1/15125, from f/11, 125/s, ISO100 |
-| InvalidRetained | exposure-fixed | `--validation-invalid-exposure=true` | 2^-14, retained after an invalid key at frame 8 |
-| Auto160 | exposure-locked | `--validation-exposure-ev=160` | 1 |
-| Auto-160 | exposure-locked | `--validation-exposure-ev=-160` | 1 |
-| AutoCurveLocked | exposure-curve-cancellation | Defaults | 2 |
+| Case            | Scene                       | Fixture arguments                                                                                 | Expected gain                                   |
+| --------------- | --------------------------- | ------------------------------------------------------------------------------------------------- | ----------------------------------------------- |
+| EV14            | exposure-fixed              | `--validation-exposure-ev=14`                                                                     | 2^-14                                           |
+| EV15            | exposure-fixed              | `--validation-exposure-ev=15`                                                                     | 2^-15                                           |
+| EV16            | exposure-fixed              | `--validation-exposure-ev=16`                                                                     | 2^-16                                           |
+| EV32            | exposure-fixed              | `--validation-exposure-ev=32`                                                                     | 2^-32                                           |
+| EV-32           | exposure-fixed              | `--validation-exposure-ev=-32`                                                                    | 2^32                                            |
+| Bias            | exposure-fixed              | `--validation-exposure-ev=16 --validation-exposure-key=6.25 --validation-exposure-compensation=2` | 2^-15                                           |
+| Disabled        | exposure-fixed              | `--validation-exposure-enabled=false`                                                             | 1                                               |
+| Camera          | exposure-fixed              | `--validation-camera-exposure=true`                                                               | 1/15125, from f/11, 125/s, ISO100               |
+| InvalidRetained | exposure-fixed              | `--validation-invalid-exposure=true`                                                              | 2^-14, retained after an invalid key at frame 8 |
+| Auto160         | exposure-locked             | `--validation-exposure-ev=160`                                                                    | 1                                               |
+| Auto-160        | exposure-locked             | `--validation-exposure-ev=-160`                                                                   | 1                                               |
+| AutoCurveLocked | exposure-curve-cancellation | Defaults                                                                                          | 2                                               |
 
 The locked fixtures use exact input 0.25. `exposure-locked` sets compensation
 equal to its locked EV bound. The curve case locks EV0, sets compensation 1e20,
@@ -108,18 +108,18 @@ The masked material has constant alpha 1 and cutoff 0.5, exercising the masked
 pass variants without a texture. The blue material has alpha 0.55. Columns run
 left to right:
 
-| Column | Triangle | Expected |
-| --- | --- | --- |
-| 1 | Single-sided front | Lit |
-| 2 | Single-sided back | Absent; gray receiver visible |
-| 3 | Double-sided front | Lit |
-| 4 | Double-sided back | Lit with the backface normal reversed |
-| 5 | Mirrored single-sided front | Lit; reversed silhouette |
-| 6 | Mirrored single-sided back | Absent; gray receiver visible |
-| 7 | Mirrored double-sided front | Lit; reversed silhouette |
-| 8 | Mirrored double-sided back | Lit with the backface normal reversed |
-| 9 | Single-sided child of a mirrored parent | Lit; reversed silhouette |
-| 10 | Mirrored child of a mirrored parent | Lit; original silhouette |
+| Column | Triangle                                | Expected                              |
+| ------ | --------------------------------------- | ------------------------------------- |
+| 1      | Single-sided front                      | Lit                                   |
+| 2      | Single-sided back                       | Absent; gray receiver visible         |
+| 3      | Double-sided front                      | Lit                                   |
+| 4      | Double-sided back                       | Lit with the backface normal reversed |
+| 5      | Mirrored single-sided front             | Lit; reversed silhouette              |
+| 6      | Mirrored single-sided back              | Absent; gray receiver visible         |
+| 7      | Mirrored double-sided front             | Lit; reversed silhouette              |
+| 8      | Mirrored double-sided back              | Lit with the backface normal reversed |
+| 9      | Single-sided child of a mirrored parent | Lit; reversed silhouette              |
+| 10     | Mirrored child of a mirrored parent     | Lit; original silhouette              |
 
 All single-sided columns in a row share one geometry/material pair; double-sided
 columns share another. The asymmetrical triangle makes mirroring observable.

@@ -59,9 +59,9 @@ correctness.
 The following features are planned or under consideration to improve terminal
 help display and general usability. Status is tracked below:
 
-| Feature                       | Status | Notes |
-|-------------------------------|--------|-------|
-| Unicode Awareness             | ❌     | Width is measured in code units, not display columns. |
+| Feature                       | Status | Notes                                                         |
+| ----------------------------- | ------ | ------------------------------------------------------------- |
+| Unicode Awareness             | ❌     | Width is measured in code units, not display columns.         |
 | Paragraph and List Formatting | ❌     | Paragraphs supported, but no explicit list/bullet formatting. |
 
 Legend: ✅ = Implemented, ❌ = Not implemented
@@ -122,17 +122,17 @@ if (filled_opt) {
 
 All options are set via the builder API:
 
-| Method                | Description                                       | Default     |
-|-----------------------|---------------------------------------------------|-------------|
-| `Width(size_t)`       | Maximum line width                                | 80          |
-| `IndentWith()`        | Start indentation configuration (see below)       |             |
-| `Initially(str)`      | Indent for the first line                         | ""          |
-| `Then(str)`           | Indent for subsequent lines                       | ""          |
-| `ExpandTabs(str)`     | Replace tab characters with this string           | "\t"        |
-| `CollapseWhiteSpace()`| Collapse contiguous whitespace to a single space  | false       |
-| `TrimLines()`         | Trim whitespace at start/end of each line         | false       |
-| `BreakOnHyphens()`    | Allow breaking lines at hyphens                   | false       |
-| `IgnoreAnsiEscapeCodes()` | Ignore ANSI color/formatting codes (CSI/SRG only) in width calculation | false |
+| Method                    | Description                                                            | Default |
+| ------------------------- | ---------------------------------------------------------------------- | ------- |
+| `Width(size_t)`           | Maximum line width                                                     | 80      |
+| `IndentWith()`            | Start indentation configuration (see below)                            |         |
+| `Initially(str)`          | Indent for the first line                                              | ""      |
+| `Then(str)`               | Indent for subsequent lines                                            | ""      |
+| `ExpandTabs(str)`         | Replace tab characters with this string                                | "\t"    |
+| `CollapseWhiteSpace()`    | Collapse contiguous whitespace to a single space                       | false   |
+| `TrimLines()`             | Trim whitespace at start/end of each line                              | false   |
+| `BreakOnHyphens()`        | Allow breaking lines at hyphens                                        | false   |
+| `IgnoreAnsiEscapeCodes()` | Ignore ANSI color/formatting codes (CSI/SRG only) in width calculation | false   |
 
 **Indentation Example:**
 

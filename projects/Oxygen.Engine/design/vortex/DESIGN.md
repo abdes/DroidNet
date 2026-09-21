@@ -12,29 +12,29 @@ It assumes the stable conceptual model defined in
 
 Related documents:
 
-| Document | Purpose |
-| --- | --- |
-| [PRD.md](./PRD.md) | Product requirements |
-| [ARCHITECTURE.md](./ARCHITECTURE.md) | Stable conceptual architecture |
-| [PLAN.md](./PLAN.md) | Phased execution plan |
-| [PROJECT-LAYOUT.md](./PROJECT-LAYOUT.md) | Authoritative file placement |
-| [IMPLEMENTATION_STATUS.md](./IMPLEMENTATION_STATUS.md) | Tracker |
-| [lld/README.md](lld/README.md) | LLD package index and reserved future LLDs |
+| Document                                               | Purpose                                    |
+| ------------------------------------------------------ | ------------------------------------------ |
+| [PRD.md](./PRD.md)                                     | Product requirements                       |
+| [ARCHITECTURE.md](./ARCHITECTURE.md)                   | Stable conceptual architecture             |
+| [PLAN.md](./PLAN.md)                                   | Phased execution plan                      |
+| [PROJECT-LAYOUT.md](./PROJECT-LAYOUT.md)               | Authoritative file placement               |
+| [IMPLEMENTATION_STATUS.md](./IMPLEMENTATION_STATUS.md) | Tracker                                    |
+| [lld/README.md](lld/README.md)                         | LLD package index and reserved future LLDs |
 
 ## Mandatory Vortex Rule
 
 - For Vortex planning and implementation, Vortex requirements are defined by
-   this design set, the Vortex architecture package, and the UE5.7 parity
-   target.
+  this design set, the Vortex architecture package, and the UE5.7 parity
+  target.
 - Every Vortex task must be designed and implemented as a new Vortex-native
-   system that targets maximum parity with UE5.7, grounded in
-   `F:\Epic Games\UE_5.7\Engine\Source\Runtime` and
-   `F:\Epic Games\UE_5.7\Engine\Shaders`.
+  system that targets maximum parity with UE5.7, grounded in
+  `F:\Epic Games\UE_5.7\Engine\Source\Runtime` and
+  `F:\Epic Games\UE_5.7\Engine\Shaders`.
 - No Vortex task may be marked complete until its parity gate is closed with
-   explicit evidence against the relevant UE5.7 source and shader references.
+  explicit evidence against the relevant UE5.7 source and shader references.
 - If maximum parity cannot yet be achieved, the task remains incomplete until
-   explicit human approval records the accepted gap and the reason the parity
-   gate cannot close.
+  explicit human approval records the accepted gap and the reason the parity
+  gate cannot close.
 
 ## 1. Design Summary
 
@@ -46,8 +46,8 @@ Vortex organizes around:
   data across the frame
 - capability-family subsystem services that own domain-specific GPU work
 - a Vortex-owned Renderer Core substrate (frame loop, views, composition,
-   facades, publication, upload) that may retain only architecture-neutral
-   concepts after they are validated against the UE5.7 parity target
+  facades, publication, upload) that may retain only architecture-neutral
+  concepts after they are validated against the UE5.7 parity target
 - a shared forward light data service that lives inside the Lighting subsystem
 
 The design should be read through the scene-renderer mental model:
@@ -62,27 +62,27 @@ The design should be read through the scene-renderer mental model:
 All per-subsystem and per-stage designs live in dedicated LLD documents.
 See [`lld/README.md`](lld/README.md) for the full index. The key mappings:
 
-| Topic | LLD |
-| --- | --- |
-| ScenePrep refactor and publication contract | [`sceneprep-refactor.md`](lld/sceneprep-refactor.md) |
-| SceneTextures four-part contract | [`scene-textures.md`](lld/scene-textures.md) |
-| SceneRenderBuilder + SceneRenderer shell | [`scene-renderer-shell.md`](lld/scene-renderer-shell.md) |
-| Depth prepass (stage 3) | [`depth-prepass.md`](lld/depth-prepass.md) |
-| Base pass (stage 9) | [`base-pass.md`](lld/base-pass.md) |
-| Deferred lighting (stage 12) | [`deferred-lighting.md`](lld/deferred-lighting.md) |
-| Shader contracts & directory layout | [`shader-contracts.md`](lld/shader-contracts.md) |
-| InitViews (stage 2) | [`init-views.md`](lld/init-views.md) |
-| LightingService | [`lighting-service.md`](lld/lighting-service.md) |
-| PostProcessService | [`post-process-service.md`](lld/post-process-service.md) |
-| ShadowService | [`shadow-service.md`](lld/shadow-service.md) |
-| EnvironmentLightingService | [`environment-service.md`](lld/environment-service.md) |
-| Cubemap processing for static SkyLight | [`cubemap-processing.md`](lld/cubemap-processing.md) — VTX-M08 validated reference |
+| Topic                                        | LLD                                                                                        |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| ScenePrep refactor and publication contract  | [`sceneprep-refactor.md`](lld/sceneprep-refactor.md)                                       |
+| SceneTextures four-part contract             | [`scene-textures.md`](lld/scene-textures.md)                                               |
+| SceneRenderBuilder + SceneRenderer shell     | [`scene-renderer-shell.md`](lld/scene-renderer-shell.md)                                   |
+| Depth prepass (stage 3)                      | [`depth-prepass.md`](lld/depth-prepass.md)                                                 |
+| Base pass (stage 9)                          | [`base-pass.md`](lld/base-pass.md)                                                         |
+| Deferred lighting (stage 12)                 | [`deferred-lighting.md`](lld/deferred-lighting.md)                                         |
+| Shader contracts & directory layout          | [`shader-contracts.md`](lld/shader-contracts.md)                                           |
+| InitViews (stage 2)                          | [`init-views.md`](lld/init-views.md)                                                       |
+| LightingService                              | [`lighting-service.md`](lld/lighting-service.md)                                           |
+| PostProcessService                           | [`post-process-service.md`](lld/post-process-service.md)                                   |
+| ShadowService                                | [`shadow-service.md`](lld/shadow-service.md)                                               |
+| EnvironmentLightingService                   | [`environment-service.md`](lld/environment-service.md)                                     |
+| Cubemap processing for static SkyLight       | [`cubemap-processing.md`](lld/cubemap-processing.md) — VTX-M08 validated reference         |
 | Skybox and static specified-cubemap SkyLight | [`skybox-static-skylight.md`](lld/skybox-static-skylight.md) — VTX-M08 validated reference |
-| DiagnosticsService | [`diagnostics-service.md`](lld/diagnostics-service.md) |
-| Translucency (stage 18) | [`translucency.md`](lld/translucency.md) |
-| Occlusion / HZB (stage 5) | [`occlusion.md`](lld/occlusion.md) |
-| Multi-view composition | [`multi-view-composition.md`](lld/multi-view-composition.md) |
-| Offscreen rendering | [`offscreen-rendering.md`](lld/offscreen-rendering.md) |
+| DiagnosticsService                           | [`diagnostics-service.md`](lld/diagnostics-service.md)                                     |
+| Translucency (stage 18)                      | [`translucency.md`](lld/translucency.md)                                                   |
+| Occlusion / HZB (stage 5)                    | [`occlusion.md`](lld/occlusion.md)                                                         |
+| Multi-view composition                       | [`multi-view-composition.md`](lld/multi-view-composition.md)                               |
+| Offscreen rendering                          | [`offscreen-rendering.md`](lld/offscreen-rendering.md)                                     |
 
 ## 3. SceneRenderer Overview
 
@@ -144,12 +144,12 @@ enum class GBufferIndex : std::uint8_t {
 
 ### 4.2 GBuffer Format Baseline
 
-| Buffer | Format | Content |
-| --- | --- | --- |
-| GBufferNormal | `R10G10B10A2_UNORM` | Encoded world normal |
-| GBufferMaterial | `R8G8B8A8_UNORM` | Metallic, specular, roughness, shading model ID |
-| GBufferBaseColor | `R8G8B8A8_SRGB` | Base color, AO |
-| GBufferCustomData | `R8G8B8A8_UNORM` | Custom data (subsurface, cloth, etc.) |
+| Buffer            | Format              | Content                                         |
+| ----------------- | ------------------- | ----------------------------------------------- |
+| GBufferNormal     | `R10G10B10A2_UNORM` | Encoded world normal                            |
+| GBufferMaterial   | `R8G8B8A8_UNORM`    | Metallic, specular, roughness, shading model ID |
+| GBufferBaseColor  | `R8G8B8A8_SRGB`     | Base color, AO                                  |
+| GBufferCustomData | `R8G8B8A8_UNORM`    | Custom data (subsurface, cloth, etc.)           |
 
 GBufferE/F are reserved — deferred to after the initial deferred path works.
 
@@ -174,15 +174,15 @@ for the complete dispatch skeleton.
 
 ### 5.2 Per-View vs Per-Frame Stages
 
-| Per-frame | Per-view |
-| --- | --- |
-| Shadow depth rendering | Depth prepass |
-| Light grid build | Occlusion / HZB |
-| | Base pass |
-| | Deferred lighting |
-| | Environment sky/fog |
-| | Translucency |
-| | Post-processing |
+| Per-frame              | Per-view            |
+| ---------------------- | ------------------- |
+| Shadow depth rendering | Depth prepass       |
+| Light grid build       | Occlusion / HZB     |
+|                        | Base pass           |
+|                        | Deferred lighting   |
+|                        | Environment sky/fog |
+|                        | Translucency        |
+|                        | Post-processing     |
 
 See [`lld/multi-view-composition.md`](lld/multi-view-composition.md) for the
 complete per-view iteration model and mixed-mode frame support.
@@ -207,14 +207,14 @@ methods that match its place in the frame structure.
 
 Per-subsystem detailed designs:
 
-| Service | Stage(s) | LLD |
-| --- | --- | --- |
-| LightingService | 6, 12 | [`lighting-service.md`](lld/lighting-service.md) |
-| ShadowService | 8 | [`shadow-service.md`](lld/shadow-service.md) |
-| EnvironmentLightingService | 14, 15 | [`environment-service.md`](lld/environment-service.md) |
+| Service                          | Stage(s)                      | LLD                                                                                                                                        |
+| -------------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| LightingService                  | 6, 12                         | [`lighting-service.md`](lld/lighting-service.md)                                                                                           |
+| ShadowService                    | 8                             | [`shadow-service.md`](lld/shadow-service.md)                                                                                               |
+| EnvironmentLightingService       | 14, 15                        | [`environment-service.md`](lld/environment-service.md)                                                                                     |
 | Static cubemap SkyLight / Skybox | pre-stage, 12/13 boundary, 15 | VTX-M08 validated LLDs: [`skybox-static-skylight.md`](lld/skybox-static-skylight.md), [`cubemap-processing.md`](lld/cubemap-processing.md) |
-| PostProcessService | 22 | [`post-process-service.md`](lld/post-process-service.md) |
-| DiagnosticsService | overlay | [`diagnostics-service.md`](lld/diagnostics-service.md) |
+| PostProcessService               | 22                            | [`post-process-service.md`](lld/post-process-service.md)                                                                                   |
+| DiagnosticsService               | overlay                       | [`diagnostics-service.md`](lld/diagnostics-service.md)                                                                                     |
 
 ## 7. Base Pass and Deferred Lighting
 
@@ -235,14 +235,14 @@ Vortex Renderer Core owns the following substrate components and applies the
 local changes needed for Vortex-specific namespaces, exports, include paths,
 and parity validation.
 
-| Substrate | Adaptation |
-| --- | --- |
-| Frame loop lifecycle | Unchanged — Renderer owns it |
-| RenderContext | Unchanged — authoritative execution context |
-| Publication | Baseline stays in Renderer Core; subsystems add per-view data |
-| Composition | Queued model unchanged; `CompositionSubmission` is sole handoff |
-| Non-runtime facades | Architecturally unchanged; operate against Vortex types |
-| Upload/staging | Unchanged |
+| Substrate            | Adaptation                                                      |
+| -------------------- | --------------------------------------------------------------- |
+| Frame loop lifecycle | Unchanged — Renderer owns it                                    |
+| RenderContext        | Unchanged — authoritative execution context                     |
+| Publication          | Baseline stays in Renderer Core; subsystems add per-view data   |
+| Composition          | Queued model unchanged; `CompositionSubmission` is sole handoff |
+| Non-runtime facades  | Architecturally unchanged; operate against Vortex types         |
+| Upload/staging       | Unchanged                                                       |
 
 See [`lld/offscreen-rendering.md`](lld/offscreen-rendering.md) for the
 three non-runtime facade shapes used by Vortex.
@@ -301,22 +301,22 @@ EngineShaderCatalog registration table.
     `src/Oxygen/Graphics/Common/Shaders.cpp`.
 12. ShaderBake remains the only compilation path for Vortex shaders.
 13. All shader-file dependencies stay within Vortex-owned shader paths and the
-   shared engine shader substrate.
+    shared engine shader substrate.
 
 ## 11. Cross-Subsystem Data Flow
 
 ### 11.1 Data Product Dependencies
 
-| Consumer | Products Consumed | Producer |
-| --- | --- | --- |
-| Occlusion / HZB | SceneDepth | Depth prepass |
-| Shadow depth | Light list, view data | LightingService, InitViews |
-| Base pass | Shadow maps (optional) | ShadowService |
-| Deferred lighting | GBufferNormal/Material/BaseColor/CustomData, SceneDepth, shadow data, and only an explicitly documented ambient-bridge subset when that Phase 4 exception is enabled | Base pass, ShadowService, EnvironmentLightingService (ambient bridge only), future IndirectLightingService for canonical indirect environment evaluation |
-| SkyLight diffuse/specular lighting | VTX-M08 static diffuse baseline; ED-M08 extension planned | EnvironmentLightingService owns generation/publication. The [V0.1 IBL contract](plan/editor-v01-captured-sky-ibl.md) activates Stage 13 indirect evaluation for captured-sky and specified-cubemap diffuse/specular products and removes the Stage 12 ambient bridge. Forward surfaces share the same evaluation helper; no duplicate diffuse contribution remains. |
-| Translucency | SceneColor, SceneDepth, forward light data | Prior stages, LightingService |
-| Post-process | SceneColor, SceneDepth, Velocity | Prior stages |
-| Diagnostics | Any SceneTextures product | Prior stages |
+| Consumer                           | Products Consumed                                                                                                                                                    | Producer                                                                                                                                                                                                                                                                                                                                                            |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Occlusion / HZB                    | SceneDepth                                                                                                                                                           | Depth prepass                                                                                                                                                                                                                                                                                                                                                       |
+| Shadow depth                       | Light list, view data                                                                                                                                                | LightingService, InitViews                                                                                                                                                                                                                                                                                                                                          |
+| Base pass                          | Shadow maps (optional)                                                                                                                                               | ShadowService                                                                                                                                                                                                                                                                                                                                                       |
+| Deferred lighting                  | GBufferNormal/Material/BaseColor/CustomData, SceneDepth, shadow data, and only an explicitly documented ambient-bridge subset when that Phase 4 exception is enabled | Base pass, ShadowService, EnvironmentLightingService (ambient bridge only), future IndirectLightingService for canonical indirect environment evaluation                                                                                                                                                                                                            |
+| SkyLight diffuse/specular lighting | VTX-M08 static diffuse baseline; ED-M08 extension planned                                                                                                            | EnvironmentLightingService owns generation/publication. The [V0.1 IBL contract](plan/editor-v01-captured-sky-ibl.md) activates Stage 13 indirect evaluation for captured-sky and specified-cubemap diffuse/specular products and removes the Stage 12 ambient bridge. Forward surfaces share the same evaluation helper; no duplicate diffuse contribution remains. |
+| Translucency                       | SceneColor, SceneDepth, forward light data                                                                                                                           | Prior stages, LightingService                                                                                                                                                                                                                                                                                                                                       |
+| Post-process                       | SceneColor, SceneDepth, Velocity                                                                                                                                     | Prior stages                                                                                                                                                                                                                                                                                                                                                        |
+| Diagnostics                        | Any SceneTextures product                                                                                                                                            | Prior stages                                                                                                                                                                                                                                                                                                                                                        |
 
 ### 11.2 Data Flow Rules
 
@@ -393,7 +393,7 @@ The Vortex design is shaped around:
   the initial approach
 - shared forward light data inside LightingService for translucency consumers
 - Renderer Core substrate (facades, composition, publication, upload)
-   retained with bounded Vortex adaptation
+  retained with bounded Vortex adaptation
 - shader modules organized by subsystem, mirroring UE5 ownership boundaries
 
 All per-subsystem and per-stage designs are captured in the 18 LLD documents

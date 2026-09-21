@@ -3,12 +3,7 @@
   "domain": "opaque",
   "alpha_mode": "opaque",
   "parameters": {
-    "base_color": [
-      0.2,
-      0.7,
-      0.9,
-      1.0
-    ],
+    "base_color": [0.2, 0.7, 0.9, 1.0],
     "metalness": 0.0,
     "roughness": 0.25,
     "ambient_occlusion": 1.0

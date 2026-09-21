@@ -21,68 +21,68 @@ heap indices directly.
 
 ## 1. HLSL Shader Declarations
 
-*   **Distinct Register Spaces for Distinct Array Types:**
-    Even if different resource arrays use the same base register (e.g., `t0` for
-    SRVs, `u0` for UAVs), they **must** be declared in different `space`s if
-    they represent different kinds of resources or conceptually separate
-    collections. This allows the HLSL compiler to correctly type-check and
-    manage these arrays.
+- **Distinct Register Spaces for Distinct Array Types:**
+  Even if different resource arrays use the same base register (e.g., `t0` for
+  SRVs, `u0` for UAVs), they **must** be declared in different `space`s if
+  they represent different kinds of resources or conceptually separate
+  collections. This allows the HLSL compiler to correctly type-check and
+  manage these arrays.
 
-    ```hlsl
-    // Constant buffer providing global heap indices
-    cbuffer ResourceIndices : register(b0, space0) { // Or any appropriate b# and space# for CBVs
-        uint g_SomeTextureIndex;    // Global heap index for a Texture2D
-        uint g_SomeBufferIndex;     // Global heap index for a StructuredBuffer
-        uint g_SomeRWBufferIndex;   // Global heap index for an RWStructuredBuffer
-        // ... other indices
-    };
+  ```hlsl
+  // Constant buffer providing global heap indices
+  cbuffer ResourceIndices : register(b0, space0) { // Or any appropriate b# and space# for CBVs
+      uint g_SomeTextureIndex;    // Global heap index for a Texture2D
+      uint g_SomeBufferIndex;     // Global heap index for a StructuredBuffer
+      uint g_SomeRWBufferIndex;   // Global heap index for an RWStructuredBuffer
+      // ... other indices
+  };
 
-    // Bindless SRV Arrays (Example)
-    // SRVs for textures in space 0
-    Texture2D g_AllTextures[] : register(t0, space0);
-    // SRVs for MyData buffers in space 1
-    StructuredBuffer<MyData> g_AllStructuredBuffers[] : register(t0, space1);
-    // SRVs for raw buffers in space 2
-    ByteAddressBuffer g_AllRawBuffers[] : register(t0, space2);
+  // Bindless SRV Arrays (Example)
+  // SRVs for textures in space 0
+  Texture2D g_AllTextures[] : register(t0, space0);
+  // SRVs for MyData buffers in space 1
+  StructuredBuffer<MyData> g_AllStructuredBuffers[] : register(t0, space1);
+  // SRVs for raw buffers in space 2
+  ByteAddressBuffer g_AllRawBuffers[] : register(t0, space2);
 
-    // Bindless UAV Arrays (Example)
-    // UAVs for RWTextures in space 3
-    RWTexture2D<float4> g_AllRWTextures[] : register(u0, space3);
-    // UAVs for RW MyData buffers in space 4
-    RWStructuredBuffer<MyData> g_AllRWStructuredBuffers[] : register(u0, space4);
-    ```
+  // Bindless UAV Arrays (Example)
+  // UAVs for RWTextures in space 3
+  RWTexture2D<float4> g_AllRWTextures[] : register(u0, space3);
+  // UAVs for RW MyData buffers in space 4
+  RWStructuredBuffer<MyData> g_AllRWStructuredBuffers[] : register(u0, space4);
+  ```
 
-*   **Using Indices:**
-    Access resources using the global heap indices directly.
+- **Using Indices:**
+  Access resources using the global heap indices directly.
 
-    ```hlsl
-    Texture2D myTexture = g_AllTextures[g_SomeTextureIndex];
-    MyData data = g_AllStructuredBuffers[g_SomeBufferIndex].data[element]; // Example access
-    g_AllRWStructuredBuffers[g_SomeRWBufferIndex].data[element] = newData; // Example access
-    ```
+  ```hlsl
+  Texture2D myTexture = g_AllTextures[g_SomeTextureIndex];
+  MyData data = g_AllStructuredBuffers[g_SomeBufferIndex].data[element]; // Example access
+  g_AllRWStructuredBuffers[g_SomeRWBufferIndex].data[element] = newData; // Example access
+  ```
 
 ## 2. D3D12 Root Signature Definition (C++)
 
-* **Single Descriptor Table:** Define one `D3D12_ROOT_PARAMETER` of type
+- **Single Descriptor Table:** Define one `D3D12_ROOT_PARAMETER` of type
   `D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE`.
-* **Multiple Descriptor Ranges:** This table will contain multiple
+- **Multiple Descriptor Ranges:** This table will contain multiple
   `D3D12_DESCRIPTOR_RANGE1` entries, one for each unique
   `(D3D12_DESCRIPTOR_RANGE_TYPE, RegisterSpace)` combination used in your
   shaders.
-  * All ranges typically use `BaseShaderRegister = 0` because the HLSL arrays
+  - All ranges typically use `BaseShaderRegister = 0` because the HLSL arrays
     are declared starting at `t0` or `u0` within their respective spaces.
-  * `NumDescriptors` should be large enough to encompass all descriptors of that
+  - `NumDescriptors` should be large enough to encompass all descriptors of that
     type and space you intend to make accessible (often set to `UINT_MAX` or a
     very large number for truly "bindless" access within that space, assuming
     your heap is managed accordingly).
-  * `Flags` can be `D3D12_DESCRIPTOR_RANGE_FLAG_DATA_VOLATILE |
-    D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE` for typical bindless
+  - `Flags` can be `D3D12_DESCRIPTOR_RANGE_FLAG_DATA_VOLATILE |
+D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE` for typical bindless
     scenarios.
-  * `OffsetInDescriptorsFromTableStart` is usually
+  - `OffsetInDescriptorsFromTableStart` is usually
     `D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND` for each subsequent range if they are
     all mapping to the same physical block of descriptors that the table points
-    to. The key is that the *shader indices are global*, so this C++ side setup
-    primarily informs the runtime about the *layout and types* of resources
+    to. The key is that the _shader indices are global_, so this C++ side setup
+    primarily informs the runtime about the _layout and types_ of resources
     expected by the shader at different logical register spaces.
 
     ```cpp
@@ -141,20 +141,20 @@ heap indices directly.
 
 ## 3. Populating the Descriptor Heap and Table
 
-* Place your actual resource descriptors (SRVs, UAVs) into a
+- Place your actual resource descriptors (SRVs, UAVs) into a
   `D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV` heap.
-* When setting the descriptor table for a command list (e.g., via
+- When setting the descriptor table for a command list (e.g., via
   `SetGraphicsRootDescriptorTable`), provide the GPU descriptor handle to the
-  *start* of the heap region that these global indices refer to.
+  _start_ of the heap region that these global indices refer to.
 
 ### Summary of Benefits
 
-* **Simplified Shader Indexing:** Shader code uses global heap indices directly
+- **Simplified Shader Indexing:** Shader code uses global heap indices directly
   without needing complex offset calculations based on register numbers.
-* **Clear Separation:** `register space`s provide a clear distinction in HLSL
+- **Clear Separation:** `register space`s provide a clear distinction in HLSL
   for different categories of bindless resources, aiding compiler type checking
   and reducing ambiguity.
-* **Flexibility:** Allows mixing various resource types within the same logical
+- **Flexibility:** Allows mixing various resource types within the same logical
   heap region pointed to by the single table.
 
 This setup was crucial in resolving the "llvm::cast<X>()" internal compiler

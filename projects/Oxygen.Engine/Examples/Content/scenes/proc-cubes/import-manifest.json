@@ -44,10 +44,7 @@
       "name": "SceneProcCubes_script_sidecar",
       "target_scene_virtual_path": "/.cooked/Scenes/SceneProcCubes.oscene",
       "content_hashing": true,
-      "depends_on": [
-        "scene.SceneProcCubes",
-        "script.SceneProcCubesScript"
-      ],
+      "depends_on": ["scene.SceneProcCubes", "script.SceneProcCubesScript"],
       "bindings": [
         {
           "node_index": 1,

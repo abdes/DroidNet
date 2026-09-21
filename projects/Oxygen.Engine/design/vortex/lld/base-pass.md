@@ -35,12 +35,12 @@ Phase 3 implements deferred mode only. Forward mode remains a future extension.
 
 ### 1.2 Stage Position
 
-| Position | Stage | Notes |
-| -------- | ----- | ----- |
-| Predecessor | Stage 3 (DepthPrepass) — depth-only under the active opaque-velocity policy | |
-| Predecessors (reserved) | Stages 4-8 (occlusion, light grid, shadows — stubs) | |
-| **This** | **Stage 9 — BasePass** | GBuffer MRT + opaque velocity production |
-| Successor | Stage 10 (RebuildSceneTextures) — state transition | |
+| Position                | Stage                                                                       | Notes                                    |
+| ----------------------- | --------------------------------------------------------------------------- | ---------------------------------------- |
+| Predecessor             | Stage 3 (DepthPrepass) — depth-only under the active opaque-velocity policy |                                          |
+| Predecessors (reserved) | Stages 4-8 (occlusion, light grid, shadows — stubs)                         |                                          |
+| **This**                | **Stage 9 — BasePass**                                                      | GBuffer MRT + opaque velocity production |
+| Successor               | Stage 10 (RebuildSceneTextures) — state transition                          |                                          |
 
 ### 1.3 Architectural Authority
 
@@ -57,10 +57,10 @@ Phase 3 implements deferred mode only. Forward mode remains a future extension.
 This LLD is about renderer-owned motion vectors, not simulation-owned physics
 velocity.
 
-| Concern | Owner | Meaning |
-| ------- | ----- | ------- |
-| `SceneVelocity` | Vortex renderer | Screen-space motion-vector texture used by temporal rendering, post processing, and capture validation |
-| linear/angular body velocity | `src/Oxygen/Physics` + `src/Oxygen/PhysicsModule` | Simulation-space rigid/character state and solver inputs/outputs |
+| Concern                      | Owner                                             | Meaning                                                                                                |
+| ---------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `SceneVelocity`              | Vortex renderer                                   | Screen-space motion-vector texture used by temporal rendering, post processing, and capture validation |
+| linear/angular body velocity | `src/Oxygen/Physics` + `src/Oxygen/PhysicsModule` | Simulation-space rigid/character state and solver inputs/outputs                                       |
 
 Rules:
 
@@ -108,14 +108,14 @@ src/Oxygen/Vortex/
 
 ### 2.2 Cross-Frame Owners
 
-| State | Owner | Why |
-| ----- | ----- | --- |
-| previous rigid transform history | renderer-owned motion-history cache keyed by `scene::NodeHandle` | identity-stable across frames; not allocation-order coupled |
-| previous deformation history | renderer-owned deformation-history cache using instance identity for current producer state and LOD-aware render identity for publications/history | authoritative previous skinned/morph/WPO-capable deformation state with explicit invalidation, LOD-aware publication, and stale trimming |
-| previous view / projection / stable projection / jitter | `Renderer` per published runtime view identity | same lifetime as published runtime views |
-| current/previous transform GPU arrays | `TransformUploader`-class publication helpers | upload layer only, not authority owner |
-| current/previous deformation GPU arrays | deformation-history publication helpers fed by the renderer-owned deformation cache | upload layer only; not the lifetime owner |
-| stage-local PSO/framebuffer state | `BasePassModule` | stage-local cached runtime state |
+| State                                                   | Owner                                                                                                                                              | Why                                                                                                                                      |
+| ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| previous rigid transform history                        | renderer-owned motion-history cache keyed by `scene::NodeHandle`                                                                                   | identity-stable across frames; not allocation-order coupled                                                                              |
+| previous deformation history                            | renderer-owned deformation-history cache using instance identity for current producer state and LOD-aware render identity for publications/history | authoritative previous skinned/morph/WPO-capable deformation state with explicit invalidation, LOD-aware publication, and stale trimming |
+| previous view / projection / stable projection / jitter | `Renderer` per published runtime view identity                                                                                                     | same lifetime as published runtime views                                                                                                 |
+| current/previous transform GPU arrays                   | `TransformUploader`-class publication helpers                                                                                                      | upload layer only, not authority owner                                                                                                   |
+| current/previous deformation GPU arrays                 | deformation-history publication helpers fed by the renderer-owned deformation cache                                                                | upload layer only; not the lifetime owner                                                                                                |
+| stage-local PSO/framebuffer state                       | `BasePassModule`                                                                                                                                   | stage-local cached runtime state                                                                                                         |
 
 ### 2.4 History Lifetime Rules
 
@@ -313,15 +313,15 @@ Required lifetime rules:
 
 ### 4.1 Render Target Configuration
 
-| RT Slot | Target | Content | Format |
-| ------- | ------ | ------- | ------ |
-| SV_Target0 | GBufferNormal | Encoded world normal | R10G10B10A2_UNORM |
-| SV_Target1 | GBufferMaterial | Metallic, specular, roughness, shading model ID | R8G8B8A8_UNORM |
-| SV_Target2 | GBufferBaseColor | Base color RGB, AO | R8G8B8A8_SRGB |
-| SV_Target3 | GBufferCustomData | Custom data | R8G8B8A8_UNORM |
-| SV_Target4 | SceneColor | Emissive accumulation | R16G16B16A16_FLOAT |
-| **SV_Target5** | **Velocity** | **Encoded screen-space motion vectors** | **R16G16_FLOAT (or final engine velocity encoding target)** |
-| DS | SceneDepth | Depth/stencil | D32_FLOAT_S8X24_UINT |
+| RT Slot        | Target            | Content                                         | Format                                                      |
+| -------------- | ----------------- | ----------------------------------------------- | ----------------------------------------------------------- |
+| SV_Target0     | GBufferNormal     | Encoded world normal                            | R10G10B10A2_UNORM                                           |
+| SV_Target1     | GBufferMaterial   | Metallic, specular, roughness, shading model ID | R8G8B8A8_UNORM                                              |
+| SV_Target2     | GBufferBaseColor  | Base color RGB, AO                              | R8G8B8A8_SRGB                                               |
+| SV_Target3     | GBufferCustomData | Custom data                                     | R8G8B8A8_UNORM                                              |
+| SV_Target4     | SceneColor        | Emissive accumulation                           | R16G16B16A16_FLOAT                                          |
+| **SV_Target5** | **Velocity**      | **Encoded screen-space motion vectors**         | **R16G16_FLOAT (or final engine velocity encoding target)** |
+| DS             | SceneDepth        | Depth/stencil                                   | D32_FLOAT_S8X24_UINT                                        |
 
 Under `OpaqueVelocityPolicy::kBasePass`, stage 9 binds the velocity target as a
 real MRT. No fake “completion” path is allowed.

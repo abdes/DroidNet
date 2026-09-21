@@ -10,29 +10,29 @@ for future enhancement.
 
 ## Component/Feature Completion Summary
 
-| Component/Feature           | Status              | Notes                                        |
-| --------------------------- | ------------------- | -------------------------------------------- |
-| Node Creation/Destruction   | ✅ Complete         | Full API with batch operations               |
-| Hierarchy Management        | ✅ Complete         | Re-parenting, adoption (cross-scene)         |
-| Transform System            | ✅ Complete         | TRS decomposition, lazy evaluation           |
-| Flag System                 | ✅ Complete         | 6 flags with 5-bit layout, inheritance       |
-| Metadata (Name, Properties) | ✅ Complete         | ObjectMetadata component                     |
-| Handle/View Pattern         | ✅ Complete         | ResourceTable + weak_ptr safety              |
-| Node Cloning                | ✅ Complete         | Single node and hierarchy cloning            |
-| Scene Traversal             | ✅ Complete         | Non-recursive, visitor/filter patterns       |
-| Scene Query System          | ✅ Complete         | Path-based and predicate queries             |
-| ScenePrettyPrinter          | ✅ Complete         | Multi-format visualization                   |
-| Scene Update System         | ✅ Complete         | Two-pass: flags + transforms                 |
-| Component Attachment System | ✅ Complete         | Full Composition system                      |
-| Tagging/Layer System        | ❌ Not Started      | Only basic flag system exists                |
-| Camera Component            | ✅ Complete         | Perspective & Orthographic, runtime attach   |
-| Mesh/Renderable Component   | ✅ Phase 1 Complete | See renderable_component.md |
-| Light Component             | 🚧 In Progress      | **Next priority: implement for rendering**   |
-| Scene Serialization         | ❌ Not Started      | Deferred until after rendering components    |
-| Scene Events/Notifications  | ❌ Not Started      | No observer/callback system                  |
-| Culling/Visibility System   | ❌ Not Started      | No spatial partitioning                      |
-| Multi-threaded Update       | ❌ Not Started      | Single-threaded only (tests exist)           |
-| Physics/Collider Component  | ❌ Not Started      | No physics integration                       |
+| Component/Feature           | Status              | Notes                                      |
+| --------------------------- | ------------------- | ------------------------------------------ |
+| Node Creation/Destruction   | ✅ Complete         | Full API with batch operations             |
+| Hierarchy Management        | ✅ Complete         | Re-parenting, adoption (cross-scene)       |
+| Transform System            | ✅ Complete         | TRS decomposition, lazy evaluation         |
+| Flag System                 | ✅ Complete         | 6 flags with 5-bit layout, inheritance     |
+| Metadata (Name, Properties) | ✅ Complete         | ObjectMetadata component                   |
+| Handle/View Pattern         | ✅ Complete         | ResourceTable + weak_ptr safety            |
+| Node Cloning                | ✅ Complete         | Single node and hierarchy cloning          |
+| Scene Traversal             | ✅ Complete         | Non-recursive, visitor/filter patterns     |
+| Scene Query System          | ✅ Complete         | Path-based and predicate queries           |
+| ScenePrettyPrinter          | ✅ Complete         | Multi-format visualization                 |
+| Scene Update System         | ✅ Complete         | Two-pass: flags + transforms               |
+| Component Attachment System | ✅ Complete         | Full Composition system                    |
+| Tagging/Layer System        | ❌ Not Started      | Only basic flag system exists              |
+| Camera Component            | ✅ Complete         | Perspective & Orthographic, runtime attach |
+| Mesh/Renderable Component   | ✅ Phase 1 Complete | See renderable_component.md                |
+| Light Component             | 🚧 In Progress      | **Next priority: implement for rendering** |
+| Scene Serialization         | ❌ Not Started      | Deferred until after rendering components  |
+| Scene Events/Notifications  | ❌ Not Started      | No observer/callback system                |
+| Culling/Visibility System   | ❌ Not Started      | No spatial partitioning                    |
+| Multi-threaded Update       | ❌ Not Started      | Single-threaded only (tests exist)         |
+| Physics/Collider Component  | ❌ Not Started      | No physics integration                     |
 
 ## Table of Contents
 
@@ -575,32 +575,32 @@ void Scene::Update() {
 #### Critical Missing Infrastructure
 
 1. **Mesh/Renderable and Light Components**
-    - **Missing Capabilities**: No rendering or lighting components implemented yet.
-    - **Impact**: Scene graph cannot be visualized or rendered; blocks integration with renderer and content pipeline.
-    - **Priority**: Highest. These are the next features to implement, as they unlock rendering and engine integration.
+   - **Missing Capabilities**: No rendering or lighting components implemented yet.
+   - **Impact**: Scene graph cannot be visualized or rendered; blocks integration with renderer and content pipeline.
+   - **Priority**: Highest. These are the next features to implement, as they unlock rendering and engine integration.
 
 2. Serialization Infrastructure
-    - **Missing Capabilities**: Scene save/load functionality, node state
-      persistence, hierarchy restoration, cross-session compatibility
-    - **Impact**: Limits content pipeline integration and scene persistence
-    - **Priority**: Deferred. Not urgent due to presence of TestSceneFactory and current focus on rendering.
+   - **Missing Capabilities**: Scene save/load functionality, node state
+     persistence, hierarchy restoration, cross-session compatibility
+   - **Impact**: Limits content pipeline integration and scene persistence
+   - **Priority**: Deferred. Not urgent due to presence of TestSceneFactory and current focus on rendering.
 
 3. Multi-threading Support
-    - **Current Limitations**: Single-threaded update cycle, no parallel
-      transform processing, sequential flag propagation, synchronization
-      primitives absent
-    - **Impact**: Cannot leverage multi-core systems for large scenes
+   - **Current Limitations**: Single-threaded update cycle, no parallel
+     transform processing, sequential flag propagation, synchronization
+     primitives absent
+   - **Impact**: Cannot leverage multi-core systems for large scenes
 
 4. Advanced Culling Integration
-    - **Missing Systems**: Frustum culling integration, occlusion culling
-      support, LOD system integration, spatial partitioning
-    - **Impact**: Performance limitations for complex scenes with many objects
+   - **Missing Systems**: Frustum culling integration, occlusion culling
+     support, LOD system integration, spatial partitioning
+   - **Impact**: Performance limitations for complex scenes with many objects
 
 5. Event System Architecture
-    - **Missing Infrastructure**: Node change notifications, hierarchy
-      modification events, property change callbacks, observer pattern
-      implementation
-    - **Impact**: Difficult to build reactive systems on top of scene graph
+   - **Missing Infrastructure**: Node change notifications, hierarchy
+     modification events, property change callbacks, observer pattern
+     implementation
+   - **Impact**: Difficult to build reactive systems on top of scene graph
 
 ### Design Limitations
 
@@ -608,33 +608,33 @@ void Scene::Update() {
 
 1. Flag System Constraints
 
-    - **Current Limitations**: Maximum 6 flags currently defined, supports up to
-      12 flags with 5-bit layout
-    - **Fixed Flag Definition**: Flags defined at compile-time only (kVisible,
-      kStatic, kCastsShadows, kReceivesShadows, kRayCastingSelectable,
-      kIgnoreParentTransform)
-    - **No Runtime Expansion**: Cannot define new flags without modifying
-      SceneNodeFlags enum
-    - **Limited Atomic Operations**: Basic flag operations but no advanced
-      atomicity guarantees
+   - **Current Limitations**: Maximum 6 flags currently defined, supports up to
+     12 flags with 5-bit layout
+   - **Fixed Flag Definition**: Flags defined at compile-time only (kVisible,
+     kStatic, kCastsShadows, kReceivesShadows, kRayCastingSelectable,
+     kIgnoreParentTransform)
+   - **No Runtime Expansion**: Cannot define new flags without modifying
+     SceneNodeFlags enum
+   - **Limited Atomic Operations**: Basic flag operations but no advanced
+     atomicity guarantees
 
 2. Transform System Restrictions
 
-    - **Missing Features**: Coordinate space conversion utilities, transform
-      constraints and validation, non-uniform scaling edge cases, advanced
-      interpolation methods
+   - **Missing Features**: Coordinate space conversion utilities, transform
+     constraints and validation, non-uniform scaling edge cases, advanced
+     interpolation methods
 
 3. Memory Management
 
-    - **ResourceTable Constraints**: Fixed initial capacity (1024), automatic
-      growth handled internally
-    - **Component Composition**: Full Composition system supports unlimited
-      runtime components
-    - **Handle Overhead**: Stable but requires weak_ptr validation on every
-      access
-    - **Memory Pool Integration**: Not implemented - uses standard allocators
-    - **Component Dependencies**: Dependency validation adds slight overhead but
-      ensures correctness
+   - **ResourceTable Constraints**: Fixed initial capacity (1024), automatic
+     growth handled internally
+   - **Component Composition**: Full Composition system supports unlimited
+     runtime components
+   - **Handle Overhead**: Stable but requires weak_ptr validation on every
+     access
+   - **Memory Pool Integration**: Not implemented - uses standard allocators
+   - **Component Dependencies**: Dependency validation adds slight overhead but
+     ensures correctness
 
 ---
 

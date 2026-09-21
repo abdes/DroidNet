@@ -64,13 +64,13 @@ Dependencies must match the **exact** fields defined in
 [src/Oxygen/Data/PakFormat.h](src/Oxygen/Data/PakFormat.h). The planner must
 not infer additional dependency types.
 
-| Consumer | Depends on | Source field(s) | Notes |
-| --- | --- | --- | --- |
-| Material asset | Texture resources | `MaterialAssetDesc::*_texture` | Only for authored textures. Texture index `0` is the fallback texture. If `kMaterialFlag_NoTextureSampling` is set, no texture dependencies exist. |
-| Geometry asset | Buffer resources | `MeshDesc::info.standard.vertex_buffer`, `index_buffer` | Applies only to **standard** meshes. Procedural meshes have no buffer dependencies. |
-| Geometry asset | Material assets | `SubMeshDesc::material_asset_key` | One dependency per referenced material asset. |
-| Scene asset | Geometry assets | `RenderableRecord::geometry_key` | v2–v4 scenes. |
-| Scene asset (v3+) | Environment assets | `SkyLightEnvironmentRecord::cubemap_asset`, `SkySphereEnvironmentRecord::cubemap_asset` | Only when those records are present. |
+| Consumer          | Depends on         | Source field(s)                                                                         | Notes                                                                                                                                              |
+| ----------------- | ------------------ | --------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Material asset    | Texture resources  | `MaterialAssetDesc::*_texture`                                                          | Only for authored textures. Texture index `0` is the fallback texture. If `kMaterialFlag_NoTextureSampling` is set, no texture dependencies exist. |
+| Geometry asset    | Buffer resources   | `MeshDesc::info.standard.vertex_buffer`, `index_buffer`                                 | Applies only to **standard** meshes. Procedural meshes have no buffer dependencies.                                                                |
+| Geometry asset    | Material assets    | `SubMeshDesc::material_asset_key`                                                       | One dependency per referenced material asset.                                                                                                      |
+| Scene asset       | Geometry assets    | `RenderableRecord::geometry_key`                                                        | v2–v4 scenes.                                                                                                                                      |
+| Scene asset (v3+) | Environment assets | `SkyLightEnvironmentRecord::cubemap_asset`, `SkySphereEnvironmentRecord::cubemap_asset` | Only when those records are present.                                                                                                               |
 
 No other cross‑record dependencies are defined in PakFormat v2–v4.
 
@@ -231,7 +231,7 @@ complete.
 
 ## 5. Planner API (Job‑Scoped)
 
-```cpp
+````cpp
 class ImportPlanner final {
 public:
   //=== High-level plan construction ===//
@@ -290,7 +290,7 @@ auto ImportPlanner::PipelineTypeFor(PlanItemId item) const noexcept
   const auto index = static_cast<size_t>(plan_item.kind);
   return pipeline_registry_.at(index);
 }
-```
+````
 
 ### API Invariants
 
@@ -309,11 +309,11 @@ auto ImportPlanner::PipelineTypeFor(PlanItemId item) const noexcept
 
 `MakePlan()` performs:
 
-1) Build in‑degree for each **item** from dependency edges.
-2) Insert all zero‑in‑degree items into a ready set and process them in deterministic order; `MakePlan()` collects ready items in batches and sorts indices to preserve registration order as the tie‑breaker.
-3) Pop items to build the **step sequence**.
-4) Decrement in‑degree of dependents; when 0, enqueue.
-5) If items remain, report a **cycle** (blocking diagnostic).
+1. Build in‑degree for each **item** from dependency edges.
+2. Insert all zero‑in‑degree items into a ready set and process them in deterministic order; `MakePlan()` collects ready items in batches and sorts indices to preserve registration order as the tie‑breaker.
+3. Pop items to build the **step sequence**.
+4. Decrement in‑degree of dependents; when 0, enqueue.
+5. If items remain, report a **cycle** (blocking diagnostic).
 
 The plan is **linear** (a sequence of steps), while readiness gates each step
 using events.
@@ -398,11 +398,11 @@ producer steps for that dependency complete.
 
 Each `SubmitWork`:
 
-1) Submits to the pipeline (bounded backpressure).
-2) Collects a `WorkResult` and records it in the job-level result cache
-  (keyed by `PlanItemId`).
-3) Emits payloads via emitters (assigning stable indices or asset keys).
-4) Calls `MarkReady(...)` on dependent trackers.
+1. Submits to the pipeline (bounded backpressure).
+2. Collects a `WorkResult` and records it in the job-level result cache
+   (keyed by `PlanItemId`).
+3. Emits payloads via emitters (assigning stable indices or asset keys).
+4. Calls `MarkReady(...)` on dependent trackers.
 
 ---
 
@@ -410,10 +410,10 @@ Each `SubmitWork`:
 
 ### Texture → Material
 
-1) `TexturePipeline` returns `CookedTexturePayload`.
-2) `TextureEmitter.Emit(payload)` returns a texture table index.
-3) Job caches the `TexturePipeline::WorkResult` keyed by `texture_item` and
-  updates readiness:
+1. `TexturePipeline` returns `CookedTexturePayload`.
+2. `TextureEmitter.Emit(payload)` returns a texture table index.
+3. Job caches the `TexturePipeline::WorkResult` keyed by `texture_item` and
+   updates readiness:
 
 ```cpp
 planner.Tracker(material_item)
@@ -422,10 +422,10 @@ planner.Tracker(material_item)
 
 ### Material → Geometry
 
-1) `MaterialPipeline` returns a cooked material descriptor.
-2) `AssetEmitter.Emit(...)` returns the material asset key.
-3) Job caches the `MaterialPipeline::WorkResult` keyed by `material_item` and
-  updates readiness:
+1. `MaterialPipeline` returns a cooked material descriptor.
+2. `AssetEmitter.Emit(...)` returns the material asset key.
+3. Job caches the `MaterialPipeline::WorkResult` keyed by `material_item` and
+   updates readiness:
 
 ```cpp
 planner.Tracker(geometry_item)
@@ -434,9 +434,9 @@ planner.Tracker(geometry_item)
 
 ### Geometry → Scene
 
-1) `GeometryPipeline` emits `.ogeo` and returns the geometry asset key.
-2) Job caches the `GeometryPipeline::WorkResult` keyed by `geometry_item` and
-  updates readiness.
+1. `GeometryPipeline` emits `.ogeo` and returns the geometry asset key.
+2. Job caches the `GeometryPipeline::WorkResult` keyed by `geometry_item` and
+   updates readiness.
 
 ---
 

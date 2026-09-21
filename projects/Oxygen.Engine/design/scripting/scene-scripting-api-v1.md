@@ -77,22 +77,22 @@ The module is exposed as `oxygen.scene`.
 ## 3.1 Context and Parameters
 
 1. `scene.current_node(ctx) -> SceneNode?`
-Returns the node bound to the executing slot context.
+   Returns the node bound to the executing slot context.
 
 2. `scene.param(ctx, key: string) -> any?`
-Returns effective scripting parameter for the current slot, or `nil` when absent.
+   Returns effective scripting parameter for the current slot, or `nil` when absent.
 
 ## 3.2 Node Lifecycle and Hierarchy
 
 1. `scene.create_node(name: string, parent: SceneNode?) -> SceneNode`
-Creates a node. `parent=nil` creates a root node.
+   Creates a node. `parent=nil` creates a root node.
 
 2. `scene.destroy_node(node: SceneNode) -> boolean`
 
 3. `scene.destroy_hierarchy(root: SceneNode) -> boolean`
 
 4. `scene.reparent(node: SceneNode, new_parent: SceneNode?, preserve_world: boolean?) -> boolean`
-Default `preserve_world=true`.
+   Default `preserve_world=true`.
 
 5. `scene.root_nodes() -> {SceneNode}`
 
@@ -103,10 +103,10 @@ Canonical API is `scene.query(...)`.
 Convenience wrappers (defined as equivalent single-call query helpers):
 
 1. `scene.find_one(path: string, scope: SceneNode?) -> SceneNode?`
-Exact path lookup.
+   Exact path lookup.
 
 2. `scene.find_many(path_pattern: string, scope: SceneNode?) -> {SceneNode}`
-Supports wildcard path patterns.
+   Supports wildcard path patterns.
 
 3. `scene.count(path_pattern: string, scope: SceneNode?) -> integer`
 
@@ -141,7 +141,7 @@ Construction (`scene.query(pattern)`):
 1. Captures the path/pattern string.
 2. Captures the bound scene at creation time (scene-bound query object).
 3. Uses non-owning lifetime semantics for scene access so query handles do not
-keep scenes alive.
+   keep scenes alive.
 
 Execution (`q:first`, `q:all`, `q:count`, `q:any`):
 
@@ -157,7 +157,7 @@ Execution (`q:first`, `q:all`, `q:count`, `q:any`):
 Exception mapping:
 
 1. Binding code must catch C++ query exceptions due to expired scene or invalid
-execution context.
+   execution context.
 2. Failures are converted to the same contract-safe results above.
 3. These failures must not surface as unhandled Lua/C++ exceptions.
 
@@ -167,11 +167,11 @@ execution context.
 
 1. `node:is_alive() -> boolean`
 2. `node:runtime_id() -> table`
-Shape: `{ scene_id: integer, node_index: integer }`. Runtime diagnostic identity only.
+   Shape: `{ scene_id: integer, node_index: integer }`. Runtime diagnostic identity only.
 3. `node:get_name() -> string?`
 4. `node:set_name(name: string) -> boolean`
 5. `node:to_string() -> string`
-Equivalent of `__tostring`.
+   Equivalent of `__tostring`.
 
 ## 4.2 Hierarchy
 
@@ -196,9 +196,9 @@ Equivalent of `__tostring`.
 6. `node:set_local_scale(v: vec3) -> boolean`
 7. `node:set_local_transform(pos: vec3, rot: quat, scale: vec3) -> boolean`
 8. `node:translate(offset: vec3, local_space: boolean?) -> boolean`
-Default `local_space=true`.
+   Default `local_space=true`.
 9. `node:rotate(delta: quat, local_space: boolean?) -> boolean`
-Default `local_space=true`.
+   Default `local_space=true`.
 10. `node:scale_by(factor: vec3) -> boolean`
 11. `node:get_world_position() -> vec3?`
 12. `node:get_world_rotation() -> quat?`
@@ -264,13 +264,13 @@ On `SceneNode`:
 ## 5.2 Common
 
 1. `camera:get_viewport() -> table?`
-Shape: `{x, y, width, height}`
+   Shape: `{x, y, width, height}`
 2. `camera:set_viewport(vp: table?) -> boolean`
-`nil` clears override.
+   `nil` clears override.
 3. `camera:get_exposure() -> table`
-Shape: `{aperture_f, shutter_rate, iso, ev}`
+   Shape: `{aperture_f, shutter_rate, iso, ev}`
 4. `camera:set_exposure(exposure: table) -> boolean`
-Accepts `{aperture_f, shutter_rate, iso}`.
+   Accepts `{aperture_f, shutter_rate, iso}`.
 
 ## 5.3 Perspective
 
@@ -286,7 +286,7 @@ Accepts `{aperture_f, shutter_rate, iso}`.
 ## 5.4 Orthographic
 
 1. `camera:get_extents() -> table`
-Shape: `{left, right, bottom, top, near_plane, far_plane}`
+   Shape: `{left, right, bottom, top, near_plane, far_plane}`
 2. `camera:set_extents(extents: table) -> boolean`
 
 ## 6. Light Component API
@@ -389,7 +389,7 @@ userdata. No failed token resolves to a substitute cube.
 
 1. `renderable:get_world_bounding_sphere() -> vec4`
 2. `renderable:get_world_submesh_aabb(submesh: integer) -> table?`
-Shape: `{min=vec3, max=vec3}`
+   Shape: `{min=vec3, max=vec3}`
 
 ## 8. Node Scripting Component API
 
@@ -399,7 +399,7 @@ Shape: `{min=vec3, max=vec3}`
 4. `script:set_param(slot: SlotRef, key: string, value: any) -> boolean`
 5. `script:get_param(slot: SlotRef, key: string) -> any?`
 6. `script:params(slot: SlotRef) -> table`
-Returns effective parameters.
+   Returns effective parameters.
 
 Optional engine-tools APIs (may be gated by build flag):
 
@@ -418,7 +418,7 @@ On `oxygen.scene`:
 `Environment` object:
 
 1. `env:systems() -> {string}`
-Canonical system names.
+   Canonical system names.
 2. `env:has_system(name: string) -> boolean`
 3. `env:remove_system(name: string) -> boolean`
 
@@ -538,34 +538,34 @@ The following names are explicitly removed from v1 and must not be exported:
 6. Camera/light/environment roundtrip tests for stable authored parameters.
 7. Performance sanity tests for repeated `find_many` and scoped query use.
 8. Renderable handle interchange tests:
-`set_geometry` / `set_material_override` must accept both token strings and
-`oxygen.assets` userdata, and reject wrong userdata kinds deterministically.
+   `set_geometry` / `set_material_override` must accept both token strings and
+   `oxygen.assets` userdata, and reject wrong userdata kinds deterministically.
 
 ## 14. Event Integration (Code-Fact Status)
 
 1. The current Scene module does not expose a built-in scene-mutation signal API
-for node/component/environment lifecycle events.
+   for node/component/environment lifecycle events.
 2. Therefore, v1 must not claim guaranteed `scene.node.*` or
-`scene.environment.*` events until C++ emits them at mutation commit points.
+   `scene.environment.*` events until C++ emits them at mutation commit points.
 3. When implemented, scene-domain events must flow through `oxygen.events`
-(core pack) instead of a parallel scene-specific bus.
+   (core pack) instead of a parallel scene-specific bus.
 4. Event payload identity must use runtime handle parts
-(`scene_id`, `node_index`) and document non-persistence across runs.
+   (`scene_id`, `node_index`) and document non-persistence across runs.
 
 ### 14.1 C++ Hook Backlog (Concrete Tasks)
 
 1. Add Scene mutation notifications in `Scene` write paths:
-`CreateNode*`, `DestroyNode*`, `ReparentNode*`, `SetEnvironment`,
-`ClearEnvironment`.
+   `CreateNode*`, `DestroyNode*`, `ReparentNode*`, `SetEnvironment`,
+   `ClearEnvironment`.
 2. Define a compact event payload struct in Scene module for scripting bridge:
-`scene_id`, `node_index`, `parent_index` (optional), and event kind.
+   `scene_id`, `node_index`, `parent_index` (optional), and event kind.
 3. Emit notifications only after mutation commit succeeds (never pre-commit).
 4. Add a scripting-runtime bridge entry point that forwards committed scene
-notifications to `oxygen.events.emit`.
+   notifications to `oxygen.events.emit`.
 5. Reserve canonical names under `scene.node.*` and `scene.environment.*`,
-and reject ad-hoc names to keep contract stable.
+   and reject ad-hoc names to keep contract stable.
 6. Add tests in Scene + Scripting verifying emission ordering, no duplicates,
-and no emission on failed/rolled-back mutations.
+   and no emission on failed/rolled-back mutations.
 
 ## 15. Implementation Readiness Matrix
 
@@ -581,96 +581,96 @@ Legend:
 ## 15.1 Scene Core
 
 1. `scene.current_node`, `scene.param`: `backed-now`
-Via existing binding context helpers in scripting common bindings.
+   Via existing binding context helpers in scripting common bindings.
 2. `scene.create_node`, `scene.destroy_node`, `scene.destroy_hierarchy`,
-`scene.reparent`, `scene.root_nodes`: `backed-now`
-Backed by `Scene` node factory/reparent APIs.
+   `scene.reparent`, `scene.root_nodes`: `backed-now`
+   Backed by `Scene` node factory/reparent APIs.
 3. mutation phase enforcement: `policy-needed`
-Requires a finalized phase contract in scripting runtime.
+   Requires a finalized phase contract in scripting runtime.
 
 ## 15.2 Query
 
 1. `scene.query(...)` and `SceneQuery` (`first/all/count/any`, scope): `backed-now`
-Backed by `SceneQuery` immediate + scoped traversal APIs.
+   Backed by `SceneQuery` immediate + scoped traversal APIs.
 2. persistent Lua query userdata with lazy execution and scene-bound semantics:
-`backed-now`
-Implemented in bindings by storing pattern/scope and invoking C++ query methods
-on demand.
+   `backed-now`
+   Implemented in bindings by storing pattern/scope and invoking C++ query methods
+   on demand.
 3. batch query exposure to Lua object (`q:batch`): `needs-hooks`
-Possible with current C++ batch API, but needs clear Lua callback contract and error model.
+   Possible with current C++ batch API, but needs clear Lua callback contract and error model.
 4. path wrappers (`find_one/find_many/count/exists`): `backed-now`
-Thin wrappers over query object methods.
+   Thin wrappers over query object methods.
 
 ## 15.3 SceneNode Identity and Hierarchy
 
 1. `is_alive`, `runtime_id`, `name`, parent/sibling/children, destroy: `backed-now`
-Backed by `SceneNode` + `Scene` APIs.
+   Backed by `SceneNode` + `Scene` APIs.
 
 ## 15.4 Transform
 
 1. local/world get/set, set_local_transform, translate/rotate/scale_by, look_at:
-`backed-now`
-Backed by `SceneNode::Transform`.
+   `backed-now`
+   Backed by `SceneNode::Transform`.
 
 ## 15.5 Camera
 
 1. attach/detach and perspective/orthographic parameter read-write: `backed-now`
-Backed by `SceneNode` camera attach/replace and camera component APIs.
+   Backed by `SceneNode` camera attach/replace and camera component APIs.
 2. exact Lua-facing camera variant abstraction (`CameraComponent` unification):
-`needs-hooks`
-Binding layer must define and maintain a stable tagged variant surface.
+   `needs-hooks`
+   Binding layer must define and maintain a stable tagged variant surface.
 
 ## 15.6 Light
 
 1. attach/detach directional/point/spot and type-specific authored properties:
-`backed-now`
-Backed by light component headers and node light attach APIs.
+   `backed-now`
+   Backed by light component headers and node light attach APIs.
 2. unified `LightComponent` dynamic dispatch layer: `needs-hooks`
-Binding layer needs a strict variant/metatable strategy.
+   Binding layer needs a strict variant/metatable strategy.
 
 ## 15.7 Renderable
 
 1. geometry, LOD policy, submesh visibility/material override, bounds helpers:
-`backed-now`
-Backed by `SceneNode::Renderable`.
+   `backed-now`
+   Backed by `SceneNode::Renderable`.
 2. script-friendly asset handle interchange (`string|userdata` policy):
-`backed-now`
-Finalized v1 policy:
-`set_geometry` and `set_material_override` accept either string token or
-`oxygen.assets` userdata (`GeometryAsset` / `MaterialAsset`).
-`get_geometry` / `resolve_submesh_material` return string token when the source
-is token-backed synthetic mapping, otherwise they return asset userdata.
+   `backed-now`
+   Finalized v1 policy:
+   `set_geometry` and `set_material_override` accept either string token or
+   `oxygen.assets` userdata (`GeometryAsset` / `MaterialAsset`).
+   `get_geometry` / `resolve_submesh_material` return string token when the source
+   is token-backed synthetic mapping, otherwise they return asset userdata.
 
 ## 15.8 Node Scripting Component
 
 1. slot enumeration/add/remove, parameter get/set/effective params: `backed-now`
-Backed by `SceneNode::Scripting`.
+   Backed by `SceneNode::Scripting`.
 2. compile-state mutation helpers (`mark_slot_ready`, `mark_slot_compile_failed`):
-`policy-needed`
-Should be gated to tools/runtime authority contexts.
+   `policy-needed`
+   Should be gated to tools/runtime authority contexts.
 
 ## 15.9 Scene Environment
 
 1. scene-level presence/get/clear: `backed-now`
-Backed by `Scene::HasEnvironment/GetEnvironment/ClearEnvironment`.
+   Backed by `Scene::HasEnvironment/GetEnvironment/ClearEnvironment`.
 2. typed system ensure/get/remove/list on `SceneEnvironment`: `needs-hooks`
-Current C++ API is template-typed and not runtime-name-driven; Lua needs
-non-template dispatch adapters per system type.
+   Current C++ API is template-typed and not runtime-name-driven; Lua needs
+   non-template dispatch adapters per system type.
 
 ## 15.10 Environment Systems
 
 1. Fog/SkyAtmosphere/SkyLight/SkySphere/Sun/Clouds/PostProcess parameter
-read-write: `backed-now`
-Each system has concrete setter/getter surface in headers.
+   read-write: `backed-now`
+   Each system has concrete setter/getter surface in headers.
 2. runtime-name generic system API (`has_system(name)`, `remove_system(name)`):
-`needs-hooks`
-Requires explicit type-name registry/dispatch map in bindings layer.
+   `needs-hooks`
+   Requires explicit type-name registry/dispatch map in bindings layer.
 
 ## 15.11 Events
 
 1. guaranteed scene mutation events (`scene.node.*`, `scene.environment.*`):
-`needs-hooks`
-No current Scene mutation event stream exists at commit points.
+   `needs-hooks`
+   No current Scene mutation event stream exists at commit points.
 2. transport channel: `backed-now` via `oxygen.events` once hooks exist.
 
 ## 16. Implementation plan
@@ -714,19 +714,19 @@ No current Scene mutation event stream exists at commit points.
 ### 17.1 Missing Features (Not in v1)
 
 1. Scene mutation event emission from C++ commit points
-(`CreateNode*`, `DestroyNode*`, `ReparentNode*`, `SetEnvironment`,
-`ClearEnvironment`) into `oxygen.events`.
+   (`CreateNode*`, `DestroyNode*`, `ReparentNode*`, `SetEnvironment`,
+   `ClearEnvironment`) into `oxygen.events`.
 2. Stable scene event payload contract implementation (`scene_id`,
-`node_index`, optional `parent_index`, event kind) and bridge tests.
+   `node_index`, optional `parent_index`, event kind) and bridge tests.
 3. Query batch Lua API (`q:batch`) with finalized callback/error contract.
 4. Optional tools-authority scripting compile-state APIs
-(`mark_slot_ready`, `mark_slot_compile_failed`) once policy gates are approved.
+   (`mark_slot_ready`, `mark_slot_compile_failed`) once policy gates are approved.
 
 ### 17.2 Future Enhancements
 
 1. Tick-path allocation and VM-overhead profiling plus optimization
-(userdata/metatable caching and hot-path allocation reduction).
+   (userdata/metatable caching and hot-path allocation reduction).
 2. Additional performance regression tests focused on high-frequency query and
-component mutation script workloads.
+   component mutation script workloads.
 3. Extended diagnostics/telemetry for scripting scene hot paths
-(timings, alloc counts, failure counters) for production tuning.
+   (timings, alloc counts, failure counters) for production tuning.

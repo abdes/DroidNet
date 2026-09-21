@@ -323,16 +323,16 @@ Per-view publication is distinct from frame-shared build work:
 
 ### 3.1 Stage 6 - BuildLightGrid
 
-| Input | Source | Purpose |
-| ----- | ------ | ------- |
-| Frame light set / sorted visible lights | Renderer Core light-gather result | Shared light source for Stage 6 and Stage 12 |
-| Active prepared views | Renderer Core + InitViews publication | Per-view frusta, Z slicing, and publication targets |
+| Input                                   | Source                                | Purpose                                             |
+| --------------------------------------- | ------------------------------------- | --------------------------------------------------- |
+| Frame light set / sorted visible lights | Renderer Core light-gather result     | Shared light source for Stage 6 and Stage 12        |
+| Active prepared views                   | Renderer Core + InitViews publication | Per-view frusta, Z slicing, and publication targets |
 
-| Output | Consumer | Delivery |
-| ------ | -------- | -------- |
-| `ForwardLocalLightRecord` buffer | Published forward-light family | Shared storage owned by `LightingService` |
-| `ForwardLightFrameBindings` | Stage 18 translucency, forward-only materials, diagnostics, later lighting-adjacent families | Published through `LightingFrameBindings` / `ViewFrameBindings` |
-| Frame-light selection cache (optional) | Stage 12 | Derived cache of the renderer-owned frame light set, not a Stage-6-owned deferred-light contract |
+| Output                                 | Consumer                                                                                     | Delivery                                                                                         |
+| -------------------------------------- | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `ForwardLocalLightRecord` buffer       | Published forward-light family                                                               | Shared storage owned by `LightingService`                                                        |
+| `ForwardLightFrameBindings`            | Stage 18 translucency, forward-only materials, diagnostics, later lighting-adjacent families | Published through `LightingFrameBindings` / `ViewFrameBindings`                                  |
+| Frame-light selection cache (optional) | Stage 12                                                                                     | Derived cache of the renderer-owned frame light set, not a Stage-6-owned deferred-light contract |
 
 Stage 6 is frame-scope work. It does not run on one current-view `RenderContext`
 and then pretend the result is global. The build consumes the frame light set
@@ -341,16 +341,16 @@ from that frame-scope build.
 
 ### 3.2 Stage 12 - RenderDeferredLighting
 
-| Input | Source | Purpose |
-| ----- | ------ | ------- |
-| GBufferNormal/Material/BaseColor/CustomData (SRV) | SceneTextures (from stage 10) | Material data for BRDF |
-| SceneDepth (SRV) | SceneTextures | Position reconstruction |
-| `ShadowFrameBindings` | ShadowService publication | Directional shadow attenuation terms in Phase 4C |
-| Frame light set / sorted visible lights | Renderer Core light-gather result (or a cache of that same result) | Canonical Stage-12 per-light direct-light iteration |
-| `EnvironmentAmbientBridgeBindings` | Environment service publication | Optional ambient-only migration bridge with an explicitly bounded payload |
+| Input                                             | Source                                                             | Purpose                                                                   |
+| ------------------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------- |
+| GBufferNormal/Material/BaseColor/CustomData (SRV) | SceneTextures (from stage 10)                                      | Material data for BRDF                                                    |
+| SceneDepth (SRV)                                  | SceneTextures                                                      | Position reconstruction                                                   |
+| `ShadowFrameBindings`                             | ShadowService publication                                          | Directional shadow attenuation terms in Phase 4C                          |
+| Frame light set / sorted visible lights           | Renderer Core light-gather result (or a cache of that same result) | Canonical Stage-12 per-light direct-light iteration                       |
+| `EnvironmentAmbientBridgeBindings`                | Environment service publication                                    | Optional ambient-only migration bridge with an explicitly bounded payload |
 
-| Output | Target | Blend Mode |
-| ------ | ------ | ---------- |
+| Output     | Target        | Blend Mode          |
+| ---------- | ------------- | ------------------- |
 | SceneColor | SceneTextures | Additive (ONE, ONE) |
 
 Stage 12 remains the canonical deferred **direct**-lighting stage. It consumes
@@ -379,13 +379,13 @@ SceneRenderer::OnRender(...)
 
 ## 4. Resource Management
 
-| Resource | Lifetime | Notes |
-| -------- | -------- | ----- |
-| Forward-local-light structured buffer | Per frame | Upload ring or frame allocator |
-| Light-grid metadata / indirection buffers | Per frame | Per-view clustered access data |
-| Derived Stage-12 draw packets | Per frame | Transient direct-light draw parameters |
-| Light volume geometry (sphere, cone) | Persistent | Canonical permanent owner; replaces the temporary Phase 03 procedural `SV_VertexID` path |
-| Deferred-light PSOs | Persistent | Cached by the service |
+| Resource                                  | Lifetime   | Notes                                                                                    |
+| ----------------------------------------- | ---------- | ---------------------------------------------------------------------------------------- |
+| Forward-local-light structured buffer     | Per frame  | Upload ring or frame allocator                                                           |
+| Light-grid metadata / indirection buffers | Per frame  | Per-view clustered access data                                                           |
+| Derived Stage-12 draw packets             | Per frame  | Transient direct-light draw parameters                                                   |
+| Light volume geometry (sphere, cone)      | Persistent | Canonical permanent owner; replaces the temporary Phase 03 procedural `SV_VertexID` path |
+| Deferred-light PSOs                       | Persistent | Cached by the service                                                                    |
 
 Authoritative light state remains outside `LightingService`. The service owns
 only:
@@ -440,9 +440,9 @@ cbuffer DeferredLightConstants : register(b1) {
 
 ### 5.3 Catalog Registration
 
-| Entrypoint | Profile | Notes |
-| ---------- | ------- | ----- |
-| `VortexLightGridBuildCS` | cs_6_0 | Compute: clustered grid build |
+| Entrypoint               | Profile | Notes                         |
+| ------------------------ | ------- | ----------------------------- |
+| `VortexLightGridBuildCS` | cs_6_0  | Compute: clustered grid build |
 
 Phase 3 deferred-light entrypoints remain canonical for Stage 12 in Phase 4A.
 

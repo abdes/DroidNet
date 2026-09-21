@@ -6,15 +6,15 @@ in a single, visually interesting scene.
 
 ## What It Shows
 
-| Family | Objects | Highlight |
-|--------|---------|-----------|
+| Family           | Objects                                                                          | Highlight                                                          |
+| ---------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
 | **Rigid bodies** | Floor, ramp, bouncy sphere, hinge pair, 4-cube stack, vehicle chassis + 4 wheels | Mixed static/dynamic, `linear_cast` motion quality for fast sphere |
-| **Colliders** | Trigger zone | Invisible sensor volume in path of sphere |
-| **Characters** | Character capsule | 90 kg character with slope + step limits |
-| **Soft bodies** | Jelly sphere | Drops from height; edge/shear/bend compliance visible |
-| **Joints** | Hinge joint A↔B | Two red cubes linked by a hinge constraint |
-| **Vehicles** | 4-wheel chassis | Green box with 4 dark cylinder wheels |
-| **Aggregates** | Anchor node | 16-body aggregate surrounding the hinge pair |
+| **Colliders**    | Trigger zone                                                                     | Invisible sensor volume in path of sphere                          |
+| **Characters**   | Character capsule                                                                | 90 kg character with slope + step limits                           |
+| **Soft bodies**  | Jelly sphere                                                                     | Drops from height; edge/shear/bend compliance visible              |
+| **Joints**       | Hinge joint A↔B                                                                  | Two red cubes linked by a hinge constraint                         |
+| **Vehicles**     | 4-wheel chassis                                                                  | Green box with 4 dark cylinder wheels                              |
+| **Aggregates**   | Anchor node                                                                      | 16-body aggregate surrounding the hinge pair                       |
 
 ## Scene Layout (top-down, Z-up)
 

@@ -42,27 +42,27 @@ corral::Task<void> func() {
 
 This allows bending the rules a little, but still in an organized way:
 
-* There still _is_ a parent for each task, which is responsible for
+- There still _is_ a parent for each task, which is responsible for
   handling exceptions raised by its children, and can cancel them if
   necessary. In the above example, `func()` is the parent of the
   anonymous task that `delayedPrint()` spawns.
 
-* The lifetime of all tasks in a nursery is still bounded by the lifetime
+- The lifetime of all tasks in a nursery is still bounded by the lifetime
   of the nursery block; execution can't proceed past the semicolon after
   `CORRAL_WITH_NURSERY(n) { ... }` until there are no tasks that remain
   alive in the nursery.
 
-* Passing nursery references explicitly allows us to see the "complexity
+- Passing nursery references explicitly allows us to see the "complexity
   degree" of a function simply by looking at its signature:
 
-    * `void func()` — synchronous function, incapable of spawning async tasks
+  - `void func()` — synchronous function, incapable of spawning async tasks
 
-    * `corral::Task<void> func()` — async function, can spawn
-      child tasks, but is required to join them before returning
+  - `corral::Task<void> func()` — async function, can spawn
+    child tasks, but is required to join them before returning
 
-    * `void func(corral::Nursery&)` (or `corral::Task<> func(corral::Nursery&)`) —
-      can (and likely will) spawn tasks which will continue running
-      after the function returns.
+  - `void func(corral::Nursery&)` (or `corral::Task<> func(corral::Nursery&)`) —
+    can (and likely will) spawn tasks which will continue running
+    after the function returns.
 
 ## Live objects
 
@@ -106,7 +106,7 @@ CORRAL_WITH_NURSERY(n) {
 
 Instead, we recommend an approach akin to two-phase initialization,
 which we refer to as a "live object". The idea is that you define your
-object to contain a nursery *pointer* as a member, and endow it with
+object to contain a nursery _pointer_ as a member, and endow it with
 an async method `run()` which opens the nursery, starts up the support
 tasks, and stashes the pointer for other methods to use:
 

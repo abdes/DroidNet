@@ -55,11 +55,11 @@ The architecture therefore separates:
 
 The architecture exists because different consumers want different outputs:
 
-| Consumer | Primary role | Density |
-| - | - | - |
-| Built-in GPU timing | stable engine telemetry and export | curated |
-| Tracy | dense CPU/GPU tracing and correlation | high |
-| PIX / RenderDoc / Nsight | GPU command-stream labels | medium |
+| Consumer                 | Primary role                          | Density |
+| ------------------------ | ------------------------------------- | ------- |
+| Built-in GPU timing      | stable engine telemetry and export    | curated |
+| Tracy                    | dense CPU/GPU tracing and correlation | high    |
+| PIX / RenderDoc / Nsight | GPU command-stream labels             | medium  |
 
 No single consumer replaces the others. The architecture must support all three roles without creating three public APIs.
 
@@ -91,13 +91,13 @@ Every scope is described by:
 
 ### 5.1 Scope Contract
 
-| Field | Meaning | Contract |
-| - | - | - |
-| `label` | stable base identity | should normally be a stable literal or an existing stable object name |
-| `variables` | dynamic per-instance detail | values are owned; keys are literal identifiers; up to 6 variables per scope |
-| `granularity` | routing intent | required for GPU scopes; shared in the common model |
-| `category` | presentation hint | optional semantic grouping |
-| `color` | presentation hint | optional, never required for correctness |
+| Field         | Meaning                     | Contract                                                                    |
+| ------------- | --------------------------- | --------------------------------------------------------------------------- |
+| `label`       | stable base identity        | should normally be a stable literal or an existing stable object name       |
+| `variables`   | dynamic per-instance detail | values are owned; keys are literal identifiers; up to 6 variables per scope |
+| `granularity` | routing intent              | required for GPU scopes; shared in the common model                         |
+| `category`    | presentation hint           | optional semantic grouping                                                  |
+| `color`       | presentation hint           | optional, never required for correctness                                    |
 
 ### 5.2 Name Formation Contract
 
@@ -137,16 +137,16 @@ Explicit rule:
 ### 6.2 GPU Routing Matrix
 
 | GPU scope granularity | Built-in GPU timing | Tracy GPU | Native GPU labels |
-| - | -: | -: | -: |
-| `kTelemetry` | yes | yes | yes |
-| `kDiagnostic` | no | yes | yes |
+| --------------------- | ------------------: | --------: | ----------------: |
+| `kTelemetry`          |                 yes |       yes |               yes |
+| `kDiagnostic`         |                  no |       yes |               yes |
 
 This routing rule is the central architecture boundary between engine telemetry and dense tracing.
 
 ### 6.3 CPU Routing Matrix
 
-| CPU scope | Tracy CPU | PIX CPU events |
-| - | -: | -: |
+| CPU scope             |                 Tracy CPU |                                          PIX CPU events |
+| --------------------- | ------------------------: | ------------------------------------------------------: |
 | any `CpuProfileScope` | yes when Tracy is enabled | yes where WinPixEventRuntime CPU mirroring is supported |
 
 ## 7. Public API Contract

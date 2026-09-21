@@ -144,7 +144,7 @@ Notes:
   orchestrator must remap geometry UVs to set 0 or bake textures accordingly.
 - `textures.*.uv_transform` comes from source material transforms (glTF or FBX).
   When assigned textures have differing transforms the pipeline currently
-  selects the *first assigned* texture's transform and writes it into the
+  selects the _first assigned_ texture's transform and writes it into the
   descriptor (it logs an informational message when multiple transforms are
   present). Support for per-slot baking or multi-UV-set descriptors is a
   future enhancement (the orchestrator may still choose to bake textures to
@@ -220,39 +220,39 @@ offloaded to the ThreadPool when `use_thread_pool = true`.
 
 For each work item:
 
-1) Check cancellation; if canceled, return `success=false`.
-2) Compute material identity:
+1. Check cancellation; if canceled, return `success=false`.
+2. Compute material identity:
    - `virtual_path = request.loose_cooked_layout.MaterialVirtualPath(
-      storage_material_name)`
+ storage_material_name)`
    - `descriptor_relpath = request.loose_cooked_layout.MaterialDescriptorRelPath(
-      storage_material_name)`
+ storage_material_name)`
    - `material_key = xxHash3-128(canonical virtual_path)`
-3) Normalize scalar inputs:
+3. Normalize scalar inputs:
    - Apply `roughness_as_glossiness` inversion first
    - Clamp base color and scalar factors to [0, 1]
    - Clamp `alpha_cutoff`, `specular_factor`, `clearcoat_factor`,
      `clearcoat_roughness`, `transmission_factor`, and `thickness_factor`
    - Clamp `ior` to `>= 1.0` and `attenuation_distance` to `>= 0`
    - Preserve emissive HDR (no clamp)
-4) Resolve domain + alpha:
+4. Resolve domain + alpha:
    - Start with `material_domain` from the work item
    - If `alpha_mode == kMasked`, set `material_domain = kMasked` unless the
      domain is `kDecal`, `kUserInterface`, or `kPostProcess`, and set
      `kMaterialFlag_AlphaTest`
    - If `alpha_mode == kBlended`, set `material_domain = kAlphaBlended` unless
      the domain is `kDecal`, `kUserInterface`, or `kPostProcess`
-5) Resolve UV transforms:
+5. Resolve UV transforms:
    - If all assigned textures share the same `uv_set` and `uv_transform`, store
      that transform in the descriptor extension (see "UV Transform Extension").
    - If assigned textures have differing transforms the pipeline currently
-     selects the *first assigned* texture's transform (logged at INFO). This
+     selects the _first assigned_ texture's transform (logged at INFO). This
      behavior avoids failing imports; future work may add explicit baking or
      per-slot transform support.
-6) Resolve flags:
+6. Resolve flags:
    - Start with `kMaterialFlag_NoTextureSampling`.
    - Apply `kMaterialFlag_DoubleSided`, `kMaterialFlag_Unlit`.
    - Resolve ORM packing using metallic+roughness compatibility:
-     - `OrmPolicy::kForcePacked` requires *metallic* and *roughness* to be
+     - `OrmPolicy::kForcePacked` requires _metallic_ and _roughness_ to be
        `assigned=true` and to share the same `source_id` and exact `uv_set` +
        `uv_transform`; otherwise the pipeline emits a blocking diagnostic
        (`material.orm_policy`) and the item fails.
@@ -262,27 +262,27 @@ For each work item:
        different source it remains a separate texture). If packing succeeds,
        `kMaterialFlag_GltfOrmPacked` is set and metallic/roughness indices are
        set to the packed index.
-7) Bind textures:
+7. Bind textures:
    - Copy texture indices into `MaterialAssetDesc` for all slots
    - If ORM packed, set metallic/roughness/AO indices to the packed texture
    - Clear `kMaterialFlag_NoTextureSampling` if any `assigned == true`
-8) Resolve shader stages:
+8. Resolve shader stages:
    - If `shader_requests` is empty, synthesize default shader refs for the
      resolved `material_domain` and flags
    - Otherwise, copy requests verbatim and build `shader_stages`
    - Serialize shader references in ascending `shader_type` bit order
-9) Build `MaterialAssetDesc`:
+9. Build `MaterialAssetDesc`:
    - `header.asset_type = AssetType::kMaterial`
    - `header.name = material_name`
    - `header.version = kMaterialAssetVersion`
    - `header.streaming_priority` from `ImportRequest` (0 if unspecified)
    - `header.variant_flags` from import configuration
    - Fill `material_domain`, `flags`, `shader_stages`, and all scalar fields
-10) Serialize descriptor bytes with packed alignment = 1, followed by shader
-  references.
-11) Compute `header.content_hash` on the ThreadPool after the full descriptor
-  bytes are known **only when hashing is enabled**.
-12) Return `CookedMaterialPayload`.
+10. Serialize descriptor bytes with packed alignment = 1, followed by shader
+    references.
+11. Compute `header.content_hash` on the ThreadPool after the full descriptor
+    bytes are known **only when hashing is enabled**.
+12. Return `CookedMaterialPayload`.
 
 ---
 
@@ -359,7 +359,7 @@ Contract:
 - If all assigned textures share identical `uv_set` and `uv_transform`, store
   that transform here.
 - If assigned textures have differing transforms the pipeline currently stores
-  the *first assigned* texture's transform in the extension (it logs an info
+  the _first assigned_ texture's transform in the extension (it logs an info
   message when multiple transforms were present). Loaders must read this
   extension unconditionally.
 
@@ -493,12 +493,12 @@ Pipeline tracks submitted/completed/failed counts and exposes
 
 ## Robustness Rules (Do Not Violate)
 
-1) Pipeline never writes output files.
-2) Descriptor serialization must be packed (alignment = 1).
-3) `kMaterialFlag_NoTextureSampling` must reflect `assigned` texture bindings.
-4) `header.version` must use `kMaterialAssetVersion`.
-5) `header.content_hash` must cover descriptor bytes + shader refs.
-6) No exceptions across async boundaries.
+1. Pipeline never writes output files.
+2. Descriptor serialization must be packed (alignment = 1).
+3. `kMaterialFlag_NoTextureSampling` must reflect `assigned` texture bindings.
+4. `header.version` must use `kMaterialAssetVersion`.
+5. `header.content_hash` must cover descriptor bytes + shader refs.
+6. No exceptions across async boundaries.
 
 ---
 

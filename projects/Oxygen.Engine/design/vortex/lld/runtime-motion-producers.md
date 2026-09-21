@@ -44,11 +44,11 @@ redefine simulation ownership.
 
 `SceneVelocity` is a renderer-owned screen-space history product.
 
-| Domain | Owns |
-| ------ | ---- |
-| `src/Oxygen/Physics` | simulation-space linear/angular velocity, body poses, solver state |
-| `src/Oxygen/PhysicsModule` | scene/physics reconciliation and pose application back to scene nodes |
-| `src/Oxygen/Vortex` | render-history caches, current/previous motion publications, Stage-9 velocity production |
+| Domain                     | Owns                                                                                     |
+| -------------------------- | ---------------------------------------------------------------------------------------- |
+| `src/Oxygen/Physics`       | simulation-space linear/angular velocity, body poses, solver state                       |
+| `src/Oxygen/PhysicsModule` | scene/physics reconciliation and pose application back to scene nodes                    |
+| `src/Oxygen/Vortex`        | render-history caches, current/previous motion publications, Stage-9 velocity production |
 
 Rules:
 
@@ -424,14 +424,14 @@ Rule:
 
 The following fallback rule is mandatory for every producer family:
 
-| Producer family | Missing / invalid previous state behavior |
-| --------------- | ----------------------------------------- |
-| rigid transform | seed previous rigid transform from current rigid transform; zero/fallback object-motion velocity for this frame |
-| skinned pose | seed previous joint palette from current joint palette; zero/fallback skinned object-motion velocity for this frame |
-| morph / deformation | seed previous morph/deformation publication from current publication; zero/fallback deformation object-motion velocity for this frame |
-| material WPO | seed previous material-deformation parameter block from current parameter block; zero/fallback WPO object-motion velocity for this frame |
+| Producer family             | Missing / invalid previous state behavior                                                                                                                |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| rigid transform             | seed previous rigid transform from current rigid transform; zero/fallback object-motion velocity for this frame                                          |
+| skinned pose                | seed previous joint palette from current joint palette; zero/fallback skinned object-motion velocity for this frame                                      |
+| morph / deformation         | seed previous morph/deformation publication from current publication; zero/fallback deformation object-motion velocity for this frame                    |
+| material WPO                | seed previous material-deformation parameter block from current parameter block; zero/fallback WPO object-motion velocity for this frame                 |
 | motion-vector status inputs | seed previous status publication from current status publication; zero/fallback MVWO / temporal-responsiveness object-motion contribution for this frame |
-| previous view state | seed previous view/projection/jitter from current view/projection/jitter; zero/fallback camera-motion velocity for this frame |
+| previous view state         | seed previous view/projection/jitter from current view/projection/jitter; zero/fallback camera-motion velocity for this frame                            |
 
 No producer family may reuse stale previous-frame data after invalidation.
 

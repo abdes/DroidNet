@@ -174,7 +174,7 @@ the headers for full APIs, invariants, and usage examples.
   `src/Oxygen/Nexus/Types/Domain.h`
 - **oxygen::nexus::DomainRange** — Shader-visible range in the generated
   bindless table: `{start: bindless::ShaderVisibleIndex, capacity:
-  bindless::Capacity}`. See
+bindless::Capacity}`. See
   src/Oxygen/Nexus/Types/Domain.h
 - **oxygen::nexus::GenerationTracker** — Thread-safe per-slot generation table
   used to stamp VersionedBindlessHandle and detect stale handles; supports lazy
@@ -291,12 +291,12 @@ When Strategy A is usually better:
 
 - After recording the last GPU use and before ending the recorder, reserve a
   fence on the recorder’s target queue:
-  1) `auto* q = recorder->GetTargetQueue();`
-  2) `const auto fv_raw = q->Signal();`
-  3) `q->QueueSignalCommand(fv_raw);`
-  4) Feed `FenceValue{fv_raw}` to `Release{,Batch}...`. This queues a GPU-side
-  signal in the same command list so the fence reaches the value after work
-  executes.
+  1. `auto* q = recorder->GetTargetQueue();`
+  2. `const auto fv_raw = q->Signal();`
+  3. `q->QueueSignalCommand(fv_raw);`
+  4. Feed `FenceValue{fv_raw}` to `Release{,Batch}...`. This queues a GPU-side
+     signal in the same command list so the fence reaches the value after work
+     executes.
 - Which command list: the one that carries the last GPU use of the resource
   being released. The releasing code pairs the reserved `fenceValue` with that
   same queue in `Release(..., queue, fenceValue)`.
@@ -330,10 +330,10 @@ When Strategy A is usually better:
 
 On Allocate(domain, …) [both strategies]:
 
-1) Call allocate(domain, …) → oxygen::bindless::HeapIndex idx.
-2) Read g = generation_table[idx].load(memory_order_acquire); if zero,
+1. Call allocate(domain, …) → oxygen::bindless::HeapIndex idx.
+2. Read g = generation_table[idx].load(memory_order_acquire); if zero,
    initialize to 1.
-3) Return VersionedBindlessHandle{ index=idx, generation=g }.
+3. Return VersionedBindlessHandle{ index=idx, generation=g }.
 
 On Release(domain, h):
 
@@ -437,7 +437,7 @@ callbacks and fakes (no real GPU submission).
 Where to obtain a recorder and queue:
 
 - `Graphics::AcquireCommandRecorder(queue_key, command_list_name,
-  immediate_submission)` is the canonical recorder entry point. Source of truth:
+immediate_submission)` is the canonical recorder entry point. Source of truth:
   `src/Oxygen/Graphics/Common/Graphics.h`, `src/Oxygen/Graphics/Common/Graphics.cpp`.
 - Renderer integrations delegate to Graphics. Vortex call sites acquire
   recorders through the current `oxygen::Graphics` facade and stage
@@ -538,7 +538,7 @@ Scenario: Upload queue (transfer) batching
 - While recording, it stages N transient descriptors; for each, it collects
   `{domain, handle}` in a `std::vector`.
 - Before finishing, it reserves a fence on the queue (`auto v = q->Signal();
-  recorder->RecordQueueSignal(v);`) and calls
+recorder->RecordQueueSignal(v);`) and calls
   `timelineReuse.ReleaseBatch(queue_shared, oxygen::graphics::FenceValue{v}, items)`.
   All items are enqueued into the
   `(queue, oxygen::graphics::FenceValue)` bucket.

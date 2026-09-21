@@ -77,24 +77,24 @@ four-pane layout at 2560x1400 uses a 256x233 inset.
   least 144 frames. The overlay identifies the phase and material domains;
   `Vortex.MultiView.Interactions` logs the actual game delta used by the renderer.
 
-| Engine frame | Interaction |
-| --- | --- |
-| 32 | Remeter after resources are resident |
-| 40 | Unpause and begin camera motion |
-| 44–51 | PiP compensation +0.5 EV |
-| 52–59 | PiP Manual EV14.5 |
-| 56–95 | PiP uses the forward path |
-| 60 | PiP returns to Auto |
-| 64 / 68 | PiP seed EV15 / camera cut |
-| 72–79 | Reverse submission order |
-| 76–83 | Resize PiP; inset scissor at 80–83 |
-| 88 / 96 | Resize window to 1280x800 / restore |
-| 100–103 | Hide PiP while retaining its state |
-| 104 / 108 | Reopen PiP / create a fresh PiP identity |
-| 112–119 | PiP borrows main exposure; seed the owner at 116 |
-| 120–127 | Remove the owner; PiP continues independently |
-| 128 | Recreate the main view |
-| 136 | Pause the final state |
+| Engine frame | Interaction                                      |
+| ------------ | ------------------------------------------------ |
+| 32           | Remeter after resources are resident             |
+| 40           | Unpause and begin camera motion                  |
+| 44–51        | PiP compensation +0.5 EV                         |
+| 52–59        | PiP Manual EV14.5                                |
+| 56–95        | PiP uses the forward path                        |
+| 60           | PiP returns to Auto                              |
+| 64 / 68      | PiP seed EV15 / camera cut                       |
+| 72–79        | Reverse submission order                         |
+| 76–83        | Resize PiP; inset scissor at 80–83               |
+| 88 / 96      | Resize window to 1280x800 / restore              |
+| 100–103      | Hide PiP while retaining its state               |
+| 104 / 108    | Reopen PiP / create a fresh PiP identity         |
+| 112–119      | PiP borrows main exposure; seed the owner at 116 |
+| 120–127      | Remove the owner; PiP continues independently    |
+| 128          | Recreate the main view                           |
+| 136          | Pause the final state                            |
 
 Capture indices are zero-based: capture index 43 records engine frame 44.
 Capture overhead changes actual dt; response validation must use the captured

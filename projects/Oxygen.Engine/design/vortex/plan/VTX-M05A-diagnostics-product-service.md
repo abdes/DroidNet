@@ -34,14 +34,14 @@ that lets us troubleshoot CPU/GPU pipeline problems without guessing.
 
 ## 3. Current State
 
-| Area | Current state | M05A action |
-| --- | --- | --- |
-| GPU timeline | `Internal/GpuTimelineProfiler` exists with tests, sinks, latest-frame retention, and JSON/CSV export. | Wrap with service facade and correlate with pass ledger. |
-| ImGui overlay | `Internal/ImGuiRuntime` exists. | Add service-owned panel registry; keep rendering backend unchanged. |
-| Debug modes | `ShaderDebugMode.h` exists, but metadata is scattered. | Add authoritative `ShaderDebugModeRegistry`. |
-| Deferred debug views | SceneRenderer has real debug view execution. | Keep execution there; move mode truth to the runtime registry. |
-| GPU debug shaders | ABI and HLSL assets exist. | Keep asset-only unless optional slice is explicitly pulled in. |
-| External tools | RenderDoc/CDB/analyzer wrappers exist. | Add capture manifest/runtime facts they can consume later, and harden M05A-owned or touched wrappers against false proof. |
+| Area                 | Current state                                                                                         | M05A action                                                                                                               |
+| -------------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| GPU timeline         | `Internal/GpuTimelineProfiler` exists with tests, sinks, latest-frame retention, and JSON/CSV export. | Wrap with service facade and correlate with pass ledger.                                                                  |
+| ImGui overlay        | `Internal/ImGuiRuntime` exists.                                                                       | Add service-owned panel registry; keep rendering backend unchanged.                                                       |
+| Debug modes          | `ShaderDebugMode.h` exists, but metadata is scattered.                                                | Add authoritative `ShaderDebugModeRegistry`.                                                                              |
+| Deferred debug views | SceneRenderer has real debug view execution.                                                          | Keep execution there; move mode truth to the runtime registry.                                                            |
+| GPU debug shaders    | ABI and HLSL assets exist.                                                                            | Keep asset-only unless optional slice is explicitly pulled in.                                                            |
+| External tools       | RenderDoc/CDB/analyzer wrappers exist.                                                                | Add capture manifest/runtime facts they can consume later, and harden M05A-owned or touched wrappers against false proof. |
 
 ## 4. UE5.7 References
 
@@ -421,7 +421,7 @@ Validation:
   `ctest --test-dir out\build-ninja -C Debug -R "(Oxygen\.Vortex\.ShaderDebugModeRegistry|Oxygen\.Examples\.DemoShell\.(RenderingSettingsService|DiagnosticsPanel))" --output-on-failure`
   with `ShaderDebugModeRegistry` 9/9, `RenderingSettingsService` 4/4 in the
   focused executable, and `DiagnosticsPanel` 1/1; `cmake --build out\build-ninja
-  --config Debug --target oxygen-examples-renderscene --parallel 4` passed and
+--config Debug --target oxygen-examples-renderscene --parallel 4` passed and
   ShaderBake repacked `shaders.bin` with 185 shader modules.
 - Runtime DemoShell registration smoke passed:
   `cmake --build out\build-ninja --config Debug --target oxygen-examples-texturedcube --parallel 4`;

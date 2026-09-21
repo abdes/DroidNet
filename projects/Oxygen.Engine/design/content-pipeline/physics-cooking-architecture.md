@@ -359,29 +359,29 @@ Repository-backed examples:
    - `Examples/Content/physics/import-manifest.physics.json`
    - `Examples/Content/physics/README.md`
 2. Mixed real-content supersession sample (scene/geo/material/texture/input/script
-   + physics):
-   - `Examples/Content/full-import/import-manifest.json`
+   - physics):
+   * `Examples/Content/full-import/import-manifest.json`
 
 ## 6.6 Authoring Contract Tables
 
 ## 6.6.1 Domain Concept Map
 
-| Human Concept | Descriptor Domain | Output Artifact | Runtime/Pak Target |
-| --- | --- | --- | --- |
-| Surface physical behavior | `physics-material-descriptor` | `Physics/Materials/*.opmat` | `PhysicsMaterialAssetDesc` |
-| Collision primitive/compound/mesh shape | `collision-shape-descriptor` | `Physics/Shapes/*.ocshape` | `CollisionShapeAssetDesc` |
-| Serialized backend payload blob | `physics-resource-descriptor` | `Physics/Resources/*.opres` + `physics.table/data` entries | `PhysicsResourceDesc` |
-| Scene-level binding orchestration | `physics-sidecar` | `<scene_dir>/<scene_stem>.opscene` (beside `.oscene`) | `PhysicsSceneAssetDesc` + binding tables |
+| Human Concept                           | Descriptor Domain             | Output Artifact                                            | Runtime/Pak Target                       |
+| --------------------------------------- | ----------------------------- | ---------------------------------------------------------- | ---------------------------------------- |
+| Surface physical behavior               | `physics-material-descriptor` | `Physics/Materials/*.opmat`                                | `PhysicsMaterialAssetDesc`               |
+| Collision primitive/compound/mesh shape | `collision-shape-descriptor`  | `Physics/Shapes/*.ocshape`                                 | `CollisionShapeAssetDesc`                |
+| Serialized backend payload blob         | `physics-resource-descriptor` | `Physics/Resources/*.opres` + `physics.table/data` entries | `PhysicsResourceDesc`                    |
+| Scene-level binding orchestration       | `physics-sidecar`             | `<scene_dir>/<scene_stem>.opscene` (beside `.oscene`)      | `PhysicsSceneAssetDesc` + binding tables |
 
 ## 6.6.2 `physics-resource-descriptor` Fields
 
-| Field | Type | Required | Default | Constraints | Notes |
-| --- | --- | --- | --- | --- | --- |
-| `$schema` | string | no | none | valid URI/path | Author/editor schema mapping |
-| `name` | string | conditional | source stem | non-empty | Required when `virtual_path` omitted |
-| `virtual_path` | string | no | derived from `name` | canonical virtual path | If set, determines emitted `.opres` path |
-| `source` | string | yes | none | file must exist/readable | Binary payload source |
-| `format` | enum | yes | none | one of schema values | Maps to `PhysicsResourceFormat` |
+| Field          | Type   | Required    | Default             | Constraints              | Notes                                    |
+| -------------- | ------ | ----------- | ------------------- | ------------------------ | ---------------------------------------- |
+| `$schema`      | string | no          | none                | valid URI/path           | Author/editor schema mapping             |
+| `name`         | string | conditional | source stem         | non-empty                | Required when `virtual_path` omitted     |
+| `virtual_path` | string | no          | derived from `name` | canonical virtual path   | If set, determines emitted `.opres` path |
+| `source`       | string | yes         | none                | file must exist/readable | Binary payload source                    |
+| `format`       | enum   | yes         | none                | one of schema values     | Maps to `PhysicsResourceFormat`          |
 
 `format` author values:
 
@@ -393,17 +393,17 @@ Repository-backed examples:
 
 ## 6.6.3 `physics-material-descriptor` Fields
 
-| Field | Type | Required | Default | Constraints | Maps To |
-| --- | --- | --- | --- | --- | --- |
-| `$schema` | string | no | none | valid URI/path | schema self-ref |
-| `name` | string | conditional | source stem | non-empty | Required when `virtual_path` omitted |
-| `virtual_path` | string | no | derived from `name` | canonical virtual path | Optional explicit output path |
-| `static_friction` | number | no | `0.5` | `>= 0` | `PhysicsMaterialAssetDesc::static_friction` |
-| `dynamic_friction` | number | no | `0.5` | `>= 0` | `PhysicsMaterialAssetDesc::dynamic_friction` |
-| `restitution` | number | no | `0.0` | `>= 0` | `PhysicsMaterialAssetDesc::restitution` |
-| `density` | number | no | `1000.0` | `> 0` | `PhysicsMaterialAssetDesc::density` |
-| `combine_mode_friction` | enum | no | `average` | enum value | `combine_mode_friction` |
-| `combine_mode_restitution` | enum | no | `average` | enum value | `combine_mode_restitution` |
+| Field                      | Type   | Required    | Default             | Constraints            | Maps To                                      |
+| -------------------------- | ------ | ----------- | ------------------- | ---------------------- | -------------------------------------------- |
+| `$schema`                  | string | no          | none                | valid URI/path         | schema self-ref                              |
+| `name`                     | string | conditional | source stem         | non-empty              | Required when `virtual_path` omitted         |
+| `virtual_path`             | string | no          | derived from `name` | canonical virtual path | Optional explicit output path                |
+| `static_friction`          | number | no          | `0.5`               | `>= 0`                 | `PhysicsMaterialAssetDesc::static_friction`  |
+| `dynamic_friction`         | number | no          | `0.5`               | `>= 0`                 | `PhysicsMaterialAssetDesc::dynamic_friction` |
+| `restitution`              | number | no          | `0.0`               | `>= 0`                 | `PhysicsMaterialAssetDesc::restitution`      |
+| `density`                  | number | no          | `1000.0`            | `> 0`                  | `PhysicsMaterialAssetDesc::density`          |
+| `combine_mode_friction`    | enum   | no          | `average`           | enum value             | `combine_mode_friction`                      |
+| `combine_mode_restitution` | enum   | no          | `average`           | enum value             | `combine_mode_restitution`                   |
 
 Combine mode values:
 
@@ -414,44 +414,44 @@ Combine mode values:
 
 ## 6.6.4 `collision-shape-descriptor` Common Fields
 
-| Field | Type | Required | Default | Constraints | Maps To |
-| --- | --- | --- | --- | --- | --- |
-| `$schema` | string | no | none | valid URI/path | schema self-ref |
-| `name` | string | conditional | source stem | non-empty | Required when `virtual_path` omitted |
-| `virtual_path` | string | no | derived from `name` | canonical virtual path | Optional explicit output path |
-| `shape_type` | enum | yes | none | enum value | `CollisionShapeAssetDesc::shape_type` |
-| `material_ref` | string | yes | none | resolves to `.opmat` | `material_ref` index |
-| `payload_ref` | string | conditional | none | resolves to `.opres` | Required for payload-backed types |
-| `local_position` | vec3 | no | `[0,0,0]` | numeric array length 3 | `local_position` |
-| `local_rotation` | quat | no | `[0,0,0,1]` | numeric array length 4 | `local_rotation` |
-| `local_scale` | vec3 | no | `[1,1,1]` | numeric array length 3 | `local_scale` |
-| `is_sensor` | bool | no | `false` | boolean | `is_sensor` |
-| `collision_own_layer` | uint64 | no | `1` | `0..2^64-1` | `collision_own_layer` |
-| `collision_target_layers` | uint64 | no | `18446744073709551615` | `0..2^64-1` | `collision_target_layers` |
+| Field                     | Type   | Required    | Default                | Constraints            | Maps To                               |
+| ------------------------- | ------ | ----------- | ---------------------- | ---------------------- | ------------------------------------- |
+| `$schema`                 | string | no          | none                   | valid URI/path         | schema self-ref                       |
+| `name`                    | string | conditional | source stem            | non-empty              | Required when `virtual_path` omitted  |
+| `virtual_path`            | string | no          | derived from `name`    | canonical virtual path | Optional explicit output path         |
+| `shape_type`              | enum   | yes         | none                   | enum value             | `CollisionShapeAssetDesc::shape_type` |
+| `material_ref`            | string | yes         | none                   | resolves to `.opmat`   | `material_ref` index                  |
+| `payload_ref`             | string | conditional | none                   | resolves to `.opres`   | Required for payload-backed types     |
+| `local_position`          | vec3   | no          | `[0,0,0]`              | numeric array length 3 | `local_position`                      |
+| `local_rotation`          | quat   | no          | `[0,0,0,1]`            | numeric array length 4 | `local_rotation`                      |
+| `local_scale`             | vec3   | no          | `[1,1,1]`              | numeric array length 3 | `local_scale`                         |
+| `is_sensor`               | bool   | no          | `false`                | boolean                | `is_sensor`                           |
+| `collision_own_layer`     | uint64 | no          | `1`                    | `0..2^64-1`            | `collision_own_layer`                 |
+| `collision_target_layers` | uint64 | no          | `18446744073709551615` | `0..2^64-1`            | `collision_target_layers`             |
 
 ## 6.6.5 `collision-shape-descriptor` Shape-Type Params
 
-| `shape_type` | Required Params | Payload Requirement |
-| --- | --- | --- |
-| `sphere` | `radius` | no |
-| `capsule` | `radius`, `half_height` | no |
-| `box` | `half_extents` (vec3) | no |
-| `cylinder` | `radius`, `half_height` | no |
-| `cone` | `radius`, `half_height` | no |
-| `plane` | `normal` (vec3), `distance` | no |
-| `world_boundary` | `boundary_mode`, `limits_min` (vec3), `limits_max` (vec3) | no |
-| `compound` | compound children payload structure | optional/depends on schema branch |
-| `convex_hull` | none | yes (`payload_ref`) |
-| `triangle_mesh` | none | yes (`payload_ref`) |
-| `height_field` | none | yes (`payload_ref`) |
+| `shape_type`     | Required Params                                           | Payload Requirement               |
+| ---------------- | --------------------------------------------------------- | --------------------------------- |
+| `sphere`         | `radius`                                                  | no                                |
+| `capsule`        | `radius`, `half_height`                                   | no                                |
+| `box`            | `half_extents` (vec3)                                     | no                                |
+| `cylinder`       | `radius`, `half_height`                                   | no                                |
+| `cone`           | `radius`, `half_height`                                   | no                                |
+| `plane`          | `normal` (vec3), `distance`                               | no                                |
+| `world_boundary` | `boundary_mode`, `limits_min` (vec3), `limits_max` (vec3) | no                                |
+| `compound`       | compound children payload structure                       | optional/depends on schema branch |
+| `convex_hull`    | none                                                      | yes (`payload_ref`)               |
+| `triangle_mesh`  | none                                                      | yes (`payload_ref`)               |
+| `height_field`   | none                                                      | yes (`payload_ref`)               |
 
 ## 6.6.6 `physics-sidecar` Top-Level Fields
 
-| Field | Type | Required | Default | Constraints |
-| --- | --- | --- | --- | --- |
-| `$schema` | string | no | none | valid URI/path |
-| `target_scene_virtual_path` | string | yes | none | canonical virtual path to `.oscene` |
-| `bindings` | object | yes | none | contains binding arrays below |
+| Field                       | Type   | Required | Default | Constraints                         |
+| --------------------------- | ------ | -------- | ------- | ----------------------------------- |
+| `$schema`                   | string | no       | none    | valid URI/path                      |
+| `target_scene_virtual_path` | string | yes      | none    | canonical virtual path to `.oscene` |
+| `bindings`                  | object | yes      | none    | contains binding arrays below       |
 
 Emission rule:
 
@@ -461,64 +461,64 @@ Emission rule:
 
 Rigid body:
 
-| Field | Type | Required | Default | Notes |
-| --- | --- | --- | --- | --- |
-| `node_index` | uint32 | yes | none | target scene node |
-| `shape_ref` | string | yes | none | `.ocshape` ref |
-| `material_ref` | string | yes | none | `.opmat` ref |
-| `body_type` | enum | no | `static` | static/dynamic/kinematic |
-| `motion_quality` | enum | no | `discrete` | discrete/linear_cast |
-| `collision_layer` | uint16 | no | `0` | layer |
-| `collision_mask` | uint32 | no | `4294967295` | mask |
-| `mass` | number | no | `0.0` | 0 means infer |
-| `linear_damping` | number | no | `0.05` |  |
-| `angular_damping` | number | no | `0.05` |  |
-| `gravity_factor` | number | no | `1.0` |  |
-| `initial_activation` | bool | no | `true` |  |
-| `is_sensor` | bool | no | `false` |  |
+| Field                | Type   | Required | Default      | Notes                    |
+| -------------------- | ------ | -------- | ------------ | ------------------------ |
+| `node_index`         | uint32 | yes      | none         | target scene node        |
+| `shape_ref`          | string | yes      | none         | `.ocshape` ref           |
+| `material_ref`       | string | yes      | none         | `.opmat` ref             |
+| `body_type`          | enum   | no       | `static`     | static/dynamic/kinematic |
+| `motion_quality`     | enum   | no       | `discrete`   | discrete/linear_cast     |
+| `collision_layer`    | uint16 | no       | `0`          | layer                    |
+| `collision_mask`     | uint32 | no       | `4294967295` | mask                     |
+| `mass`               | number | no       | `0.0`        | 0 means infer            |
+| `linear_damping`     | number | no       | `0.05`       |                          |
+| `angular_damping`    | number | no       | `0.05`       |                          |
+| `gravity_factor`     | number | no       | `1.0`        |                          |
+| `initial_activation` | bool   | no       | `true`       |                          |
+| `is_sensor`          | bool   | no       | `false`      |                          |
 
 Collider:
 
-| Field | Type | Required | Default |
-| --- | --- | --- | --- |
-| `node_index` | uint32 | yes | none |
-| `shape_ref` | string | yes | none |
-| `material_ref` | string | yes | none |
-| `collision_layer` | uint16 | no | `0` |
-| `collision_mask` | uint32 | no | `4294967295` |
+| Field             | Type   | Required | Default      |
+| ----------------- | ------ | -------- | ------------ |
+| `node_index`      | uint32 | yes      | none         |
+| `shape_ref`       | string | yes      | none         |
+| `material_ref`    | string | yes      | none         |
+| `collision_layer` | uint16 | no       | `0`          |
+| `collision_mask`  | uint32 | no       | `4294967295` |
 
 Character:
 
-| Field | Type | Required | Default |
-| --- | --- | --- | --- |
-| `node_index` | uint32 | yes | none |
-| `shape_ref` | string | yes | none |
-| `mass` | number | no | `80.0` |
-| `max_slope_angle` | number | no | `0.7854` |
-| `step_height` | number | no | `0.3` |
-| `max_strength` | number | no | `100.0` |
-| `collision_layer` | uint16 | no | `0` |
-| `collision_mask` | uint32 | no | `4294967295` |
+| Field             | Type   | Required | Default      |
+| ----------------- | ------ | -------- | ------------ |
+| `node_index`      | uint32 | yes      | none         |
+| `shape_ref`       | string | yes      | none         |
+| `mass`            | number | no       | `80.0`       |
+| `max_slope_angle` | number | no       | `0.7854`     |
+| `step_height`     | number | no       | `0.3`        |
+| `max_strength`    | number | no       | `100.0`      |
+| `collision_layer` | uint16 | no       | `0`          |
+| `collision_mask`  | uint32 | no       | `4294967295` |
 
 Soft body:
 
-| Field | Type | Required | Default |
-| --- | --- | --- | --- |
-| `node_index` | uint32 | yes | none |
-| `jolt_settings_ref` | string | yes | none |
-| `physx_settings_ref` | string | yes | none |
-| `cluster_count` | uint32 | yes | none |
-| `stiffness` | number | yes | none |
-| `damping` | number | yes | none |
-| `edge_compliance` | number | yes | none |
-| `shear_compliance` | number | yes | none |
-| `bend_compliance` | number | yes | none |
-| `tether_mode` | enum | yes | none |
-| `tether_max_distance_multiplier` | number | yes | none |
-| `settings_scale` | vec3 | yes | none |
-| `restitution` | number | yes | none |
-| `friction` | number | yes | none |
-| `vertex_radius` | number | yes | none |
+| Field                            | Type   | Required | Default |
+| -------------------------------- | ------ | -------- | ------- |
+| `node_index`                     | uint32 | yes      | none    |
+| `jolt_settings_ref`              | string | yes      | none    |
+| `physx_settings_ref`             | string | yes      | none    |
+| `cluster_count`                  | uint32 | yes      | none    |
+| `stiffness`                      | number | yes      | none    |
+| `damping`                        | number | yes      | none    |
+| `edge_compliance`                | number | yes      | none    |
+| `shear_compliance`               | number | yes      | none    |
+| `bend_compliance`                | number | yes      | none    |
+| `tether_mode`                    | enum   | yes      | none    |
+| `tether_max_distance_multiplier` | number | yes      | none    |
+| `settings_scale`                 | vec3   | yes      | none    |
+| `restitution`                    | number | yes      | none    |
+| `friction`                       | number | yes      | none    |
+| `vertex_radius`                  | number | yes      | none    |
 
 Soft-body binding validation:
 
@@ -532,19 +532,19 @@ Soft-body binding validation:
 
 Joint:
 
-| Field | Type | Required | Default | Notes |
-| --- | --- | --- | --- | --- |
-| `node_index_a` | uint32 | yes | none | body A |
-| `node_index_b` | uint32/null | yes | none | body B or world sentinel |
-| `constraint_ref` | string | yes | none | `.opres` ref with constraint format |
+| Field            | Type        | Required | Default | Notes                               |
+| ---------------- | ----------- | -------- | ------- | ----------------------------------- |
+| `node_index_a`   | uint32      | yes      | none    | body A                              |
+| `node_index_b`   | uint32/null | yes      | none    | body B or world sentinel            |
+| `constraint_ref` | string      | yes      | none    | `.opres` ref with constraint format |
 
 Vehicle:
 
-| Field | Type | Required | Default |
-| --- | --- | --- | --- |
-| `node_index` | uint32 | yes | none |
-| `constraint_ref` | string | yes | none |
-| `wheels` | array | yes | none |
+| Field            | Type   | Required | Default |
+| ---------------- | ------ | -------- | ------- |
+| `node_index`     | uint32 | yes      | none    |
+| `constraint_ref` | string | yes      | none    |
+| `wheels`         | array  | yes      | none    |
 
 Vehicle hydration contract:
 
@@ -555,12 +555,12 @@ Vehicle hydration contract:
 
 Aggregate:
 
-| Field | Type | Required | Default |
-| --- | --- | --- | --- |
-| `node_index` | uint32 | yes | none |
-| `max_bodies` | uint32 | no | `0` |
-| `filter_overlap` | bool | no | `true` |
-| `authority` | enum | no | `simulation` |
+| Field            | Type   | Required | Default      |
+| ---------------- | ------ | -------- | ------------ |
+| `node_index`     | uint32 | yes      | none         |
+| `max_bodies`     | uint32 | no       | `0`          |
+| `filter_overlap` | bool   | no       | `true`       |
+| `authority`      | enum   | no       | `simulation` |
 
 ## 6.6.8 Cardinality and Invariants
 
@@ -751,10 +751,10 @@ Physics cook design is complete when:
 
 ## 17. Versioning and Migration Matrix
 
-| Container Version | Physics Resources | Physics Sidecar | Expected Behavior |
-| --- | --- | --- | --- |
-| v6 | not present | not present | legacy behavior without physics sidecar resources |
-| v7 | present | present | full physics import/hydration path enabled |
+| Container Version | Physics Resources | Physics Sidecar | Expected Behavior                                 |
+| ----------------- | ----------------- | --------------- | ------------------------------------------------- |
+| v6                | not present       | not present     | legacy behavior without physics sidecar resources |
+| v7                | present           | present         | full physics import/hydration path enabled        |
 
 Rules:
 
@@ -825,18 +825,18 @@ Runtime/load-time diagnostics parity (from `pak_physics` contract):
 
 ## 21. Conformance Matrix to `design/content-pipeline/pak-v7-physics-format-specification.md`
 
-| `pak_physics` Section | Covered in this spec | Notes |
-| --- | --- | --- |
-| Global format evolution (`v7`) | yes | sections 15, 17 |
-| Physics resource/material/shape descriptors | yes | sections 6.1-6.3, 6.6 |
-| Physics sidecar + all binding families | yes | sections 6.4, 6.6.7, 6.6.8 |
-| Tooling and pipeline impact | yes | sections 8, 9, 12 |
-| ABI contracts (packing/enums/endianness) | yes | section 16 |
-| Versioning and migration behavior | yes | section 17 |
-| End-to-end hydration/authority phases | yes | section 18 |
-| Payload versioning/integrity | yes | section 19 |
-| Diagnostics contract | yes | section 20 |
-| Acceptance criteria/non-goals | yes | sections 14, 22 |
+| `pak_physics` Section                       | Covered in this spec | Notes                      |
+| ------------------------------------------- | -------------------- | -------------------------- |
+| Global format evolution (`v7`)              | yes                  | sections 15, 17            |
+| Physics resource/material/shape descriptors | yes                  | sections 6.1-6.3, 6.6      |
+| Physics sidecar + all binding families      | yes                  | sections 6.4, 6.6.7, 6.6.8 |
+| Tooling and pipeline impact                 | yes                  | sections 8, 9, 12          |
+| ABI contracts (packing/enums/endianness)    | yes                  | section 16                 |
+| Versioning and migration behavior           | yes                  | section 17                 |
+| End-to-end hydration/authority phases       | yes                  | section 18                 |
+| Payload versioning/integrity                | yes                  | section 19                 |
+| Diagnostics contract                        | yes                  | section 20                 |
+| Acceptance criteria/non-goals               | yes                  | sections 14, 22            |
 
 ## 22. Explicit Non-Goals
 

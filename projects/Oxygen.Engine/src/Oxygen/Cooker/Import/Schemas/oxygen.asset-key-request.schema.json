@@ -3,10 +3,7 @@
   "title": "Oxygen Virtual Asset Key Request",
   "type": "object",
   "additionalProperties": false,
-  "required": [
-    "schema",
-    "virtual_paths"
-  ],
+  "required": ["schema", "virtual_paths"],
   "properties": {
     "schema": {
       "const": "oxygen.asset-key-request.v1"

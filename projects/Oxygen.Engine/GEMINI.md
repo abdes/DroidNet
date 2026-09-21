@@ -42,11 +42,11 @@ The project uses CMake with Conan for dependency management.
 
 ### Build Commands
 
-   The project uses CMake presets.
+The project uses CMake presets.
 
-   ```powershell
-   cmake --build --preset windows-debug
-   ```
+```powershell
+cmake --build --preset windows-debug
+```
 
 ### Output Locations
 
