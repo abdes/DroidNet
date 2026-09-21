@@ -180,6 +180,8 @@ namespace {
     FileKind kind = FileKind::kUnknown;
     std::string relpath;
     uint64_t size = 0;
+    bool updated = false;
+    bool externally_written = false;
   };
 
   [[nodiscard]] auto IsEquivalent(
@@ -341,7 +343,11 @@ struct LooseCookedWriter::Impl final {
   auto HandleFileCollision_(const FileKind kind, const StoredFile& existing,
     const StoredFile& incoming, std::string_view context) -> bool
   {
-    if (IsEquivalent(existing, incoming)) {
+    if (IsEquivalent(existing, incoming)
+      || (incoming.externally_written
+        && existing.relpath == incoming.relpath)) {
+      // Registering the new extent of the same externally written file is a
+      // metadata refresh. A collision changes which file owns this kind.
       return true;
     }
     ++collision_summary_.file_collisions;
@@ -483,7 +489,9 @@ struct LooseCookedWriter::Impl final {
     StoredFile record {
       .kind = kind,
       .relpath = std::string(relpath),
-      .size = (bytes.size()),
+      .size = bytes.size(),
+      .updated = true,
+      .externally_written = false,
     };
 
     if (const auto existing_it = files_.find(kind); existing_it != files_.end()
@@ -517,6 +525,8 @@ struct LooseCookedWriter::Impl final {
       .kind = kind,
       .relpath = std::string(relpath),
       .size = size,
+      .updated = true,
+      .externally_written = true,
     };
 
     if (const auto existing_it = files_.find(kind); existing_it != files_.end()
@@ -615,7 +625,13 @@ struct LooseCookedWriter::Impl final {
       key_by_virtual_path_.insert_or_assign(asset.virtual_path, key);
     }
 
-    for (const auto& [kind, file] : current_files) {
+    for (auto& [kind, file] : current_files) {
+      if (!file.updated) {
+        continue; // Preserve other writers' published metadata.
+      }
+      if (file.externally_written) {
+        file.size = std::filesystem::file_size(cooked_root_ / file.relpath);
+      }
       if (const auto existing = files_.find(kind); existing != files_.end()
         && !HandleFileCollision_(
           kind, existing->second, file, "Finish.merge_files")) {

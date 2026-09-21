@@ -915,6 +915,10 @@ public:
     const data::AssetKey& context_asset_key,
     data::pak::core::ResourceIndexT resource_index) const noexcept
     -> std::optional<ResourceKey> override;
+  [[nodiscard]] OXGN_CNTT_API auto MakeTextureResourceKey(
+    data::SourceKey source_key,
+    data::pak::core::ResourceIndexT resource_index) const
+    -> std::optional<ResourceKey> override;
   [[nodiscard]] OXGN_CNTT_API auto MakeTextureResourceKeyForAsset(
     const data::AssetKey& context_asset_key,
     data::pak::core::ResourceIndexT resource_index) const noexcept

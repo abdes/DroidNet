@@ -111,4 +111,8 @@ oxygen_module_install(
     ${META_MODULE_TARGET}
 )
 
+if(OXYGEN_BUILD_TESTS)
+  add_subdirectory("Test")
+endif()
+
 asap_pop_module("${META_MODULE_NAME}")

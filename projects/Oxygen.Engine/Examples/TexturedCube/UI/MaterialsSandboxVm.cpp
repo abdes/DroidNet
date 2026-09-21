@@ -9,12 +9,12 @@
 #include <exception>
 #include <filesystem>
 
+#include "DemoShell/Services/FileBrowserService.h"
+#include "TexturedCube/UI/MaterialsSandboxVm.h"
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Data/AssetType.h>
-
-#include "DemoShell/Services/FileBrowserService.h"
-#include "TexturedCube/UI/MaterialsSandboxVm.h"
 
 namespace oxygen::examples::textured_cube::ui {
 
@@ -617,11 +617,14 @@ void MaterialsSandboxVm::UpdateCookedMaterialEntries(
 auto MaterialsSandboxVm::GetMetadataJson(uint32_t entry_index) const
   -> std::string
 {
-  if (!texture_service_ || entry_index >= cooked_entries_.size()) {
-    return "";
+  if (!texture_service_) {
+    return {};
   }
-  return texture_service_->GetTextureMetadataJson(
-    cooked_entries_[entry_index].content_hash);
+  const auto entry = std::ranges::find(
+    cooked_entries_, entry_index, &CookedTextureEntry::index);
+  return entry == cooked_entries_.end()
+    ? std::string {}
+    : texture_service_->GetTextureMetadataJson(entry->content_hash);
 }
 
 std::pair<glm::vec2, glm::vec2>

@@ -627,6 +627,13 @@ namespace {
       return std::nullopt;
     }
 
+    auto MakeTextureResourceKey(
+      oxygen::data::SourceKey, oxygen::data::pak::core::ResourceIndexT) const
+      -> std::optional<oxygen::content::ResourceKey> override
+    {
+      return std::nullopt;
+    }
+
     [[nodiscard]] auto MakeTextureResourceKeyForAsset(
       const data::AssetKey& /*context_asset_key*/,
       data::pak::core::ResourceIndexT /*resource_index*/) const noexcept

@@ -181,7 +181,10 @@ public:
   /*!
    This is used when the data file was written directly (e.g., by
    append-only ResourceAppender) rather than through WriteFile().
-   The file must already exist on disk at the given relpath.
+   The file must already exist on disk at the given relpath. Re-registering
+   the same path refreshes its metadata without a collision warning; changing
+   the path associated with a kind still follows the collision policy.
+   Finish measures external files again before publishing the index.
 
    @param kind The file kind to register.
    @param relpath Container-relative file path.

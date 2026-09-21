@@ -3664,8 +3664,11 @@ auto AssetLoader::LoadResourceAsync(const oxygen::content::ResourceKey key,
   try {
     const auto decoded = co_await resource_load_pipeline_->LoadErased(
       T::ClassTypeId(), key, request);
+    if (!decoded) {
+      co_return nullptr;
+    }
     auto typed = std::static_pointer_cast<T>(decoded);
-    if (!typed || typed->GetTypeId() != T::ClassTypeId()) {
+    if (typed->GetTypeId() != T::ClassTypeId()) {
       if constexpr (std::same_as<T, data::TextureResource>) {
         RecordResourceTelemetry(data::TextureResource::ClassTypeId(),
           LoadTelemetryEvent::kTypeMismatch);
@@ -3952,6 +3955,37 @@ auto AssetLoader::MakePhysicsResourceKey(const data::SourceKey source_key,
   };
   return physics_query_service_->MakePhysicsResourceKey(
     source_key, resource_index, callbacks);
+}
+
+auto AssetLoader::MakeTextureResourceKey(const data::SourceKey source_key,
+  const data::pak::core::ResourceIndexT resource_index) const
+  -> std::optional<ResourceKey>
+{
+  AssertOwningThread();
+  if (source_key.IsNil()
+    || resource_index == data::pak::core::kNoResourceIndex) {
+    return std::nullopt;
+  }
+  auto resolved = std::optional<ResourceKey> {};
+  const auto& sources = impl_->source_registry.Sources();
+  for (size_t index = 0; index < sources.size(); ++index) {
+    const auto& source = sources.at(index);
+    if (!source || source->GetSourceKey() != source_key) {
+      continue;
+    }
+    if (resolved) {
+      return std::nullopt;
+    }
+    const auto* table = source->GetTextureTable();
+    if (!table || !table->IsValidKey(resource_index)) {
+      return std::nullopt;
+    }
+    constexpr auto kTextureTypeIndex = static_cast<uint16_t>(
+      IndexOf<data::TextureResource, ResourceTypeList>::value);
+    resolved = PackResourceKey(impl_->source_registry.SourceIds().at(index),
+      kTextureTypeIndex, resource_index);
+  }
+  return resolved;
 }
 
 auto AssetLoader::ResolveTextureResourceKey(
