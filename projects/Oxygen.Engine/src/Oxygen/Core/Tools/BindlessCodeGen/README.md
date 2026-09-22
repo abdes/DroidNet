@@ -3,6 +3,13 @@
 A Python package for generating C++ and HLSL header files that define bindless
 rendering constants from a single YAML source-of-truth.
 
+Generation requires the repository's LLVM clang-format installation (on PATH,
+or in the standard LLVM installation directory on Windows). C++ output is
+formatted with the engine `.clang-format` before publication. JSON uses two-space
+indentation and compact short scalar arrays; all outputs use UTF-8 and LF.
+Unchanged output preserves its timestamp and file modification time, so builds
+and the repository formatting hooks do not repeatedly rewrite generated files.
+
 ## Purpose
 
 The BindlessCodeGen tool ensures consistency between CPU and GPU code when
