@@ -64,18 +64,59 @@ command use the same target name and test matrix. Logs, results, lint output and
 the source-hash checkpoint live under
 `out/build-ninja/analysis/vortex/exposure-lightbench/ex07b`.
 
+## Independent high-precision endpoint anchors
+
+The versioned [generator](../../../tools/vortex/GenerateGgxEndpointReference.py)
+uses mpmath 1.3.0 tanh-sinh integration at 60 and 90 decimal digits. Its
+[generated data](../../../src/Oxygen/Vortex/Test/Lighting/Reference/GgxEndpointReference.json)
+contains normal-view and grazing-view E/B anchors for roughness
+0.045, 0.1, 0.25, 0.5, 0.75 and 1. It records its source hash, model revision,
+precision disagreement and the quadrature's reported error estimates.
+
+At normal view the reference integrates incoming cosine directly, using
+`(N.h)^2=(1+N.l)/2` and the analytic azimuth factor 2*pi. At grazing view E=1;
+the azimuth integral of the Schlick term is evaluated analytically as a
+polynomial using the integrals of cos(phi)^1 through cos(phi)^6, leaving one
+radial integral. These coordinates and reductions differ from the C++ reference's
+two-dimensional half-vector quadrature.
+
+[mpmath's quadrature documentation](https://mpmath.org/doc/current/calculus/integration.html)
+describes its returned error as an estimate. The generator therefore records
+precision agreement separately and does not label either quantity a rigorous
+whole-domain bound. It refuses output if either exceeds 1e-40 at an anchor.
+
+Debug and Release each pass **eight reference tests**. Across the 12 endpoint
+anchors, the maximum C++ absolute difference is **1.7763568394002505e-15**.
+The generator's maximum precision disagreement is **1.2230165e-59**; maximum
+reported quadrature error is **1.1023e-62**. The added negative control rejects
+applying the 0.045 floor to alpha after squaring roughness. This provides an
+independent check that the earlier minimum-roughness equivalence test alone
+could not establish.
+
+Regenerate the data through its owner, never by hand:
+
+```powershell
+uv run --no-project --with mpmath==1.3.0 python tools/vortex/GenerateGgxEndpointReference.py
+uv run --no-project --with mpmath==1.3.0 python tools/vortex/GenerateGgxEndpointReference.py --check
+```
+
+The check reproduces the file byte-for-byte, and the generated JSON passes the
+repository formatter without modification. The new C++ endpoint test is
+oxytidy-clean. Evidence under `ex07b`: `endpoint-reference-{debug,release}.json`,
+`endpoint-reference-tidy-final/` and `endpoint-reference-checkpoint.json`.
+
 ## Qualification boundary and next work
 
 `estimated_absolute_change` is eight times the difference between successive
 quadrature rules. Two consecutive refinements must satisfy the requested
 `refinement_tolerance`. Power-of-two orders bound work and cached rules. This is
-a convergence estimate, **not a proven absolute-error bound**. Analytic anchors
-and the current matrix do not yet certify the complete roughness/grazing domain.
+a convergence estimate, **not a proven absolute-error bound**. Analytic and high-precision endpoint anchors
+and the current matrix do not yet certify the complete interior domain.
 
-B still requires independent-coordinate/high-precision cross-checks establishing
-moment uncertainty <=1e-5, mean moments, the coupled BRDF and furnace/reciprocity
+B still requires interior-domain independent-coordinate/high-precision checks
+establishing moment uncertainty <=1e-5, mean moments, the coupled BRDF and furnace/reciprocity
 checks, finite sphere/disk and photometric references, material decoding,
 known-input GPU probes, deterministic matched-image fixtures and bounded
 instrumentation. Production tables additionally require their own interpolation
 certificate. No generated LUT or renderer change may claim those gates from
-this six-test foundation alone.
+the current endpoint/foundation tests alone.

@@ -26,8 +26,15 @@ gtest_program(
     "Reference/GgxMoments.cpp"
     "Reference/GgxMoments.h"
     "GgxReference_test.cpp"
+    "GgxEndpointReference_test.cpp"
   DEPS
     oxygen::testing
+    nlohmann_json::nlohmann_json
+)
+target_compile_definitions(
+  Oxygen.Vortex.LightingReference.Tests
+  PRIVATE
+    OXYGEN_GGX_ENDPOINT_REFERENCE_FILE="${CMAKE_CURRENT_SOURCE_DIR}/Reference/GgxEndpointReference.json"
 )
 
 if(CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64")

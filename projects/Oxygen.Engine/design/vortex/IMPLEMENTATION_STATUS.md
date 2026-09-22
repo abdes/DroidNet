@@ -125,8 +125,12 @@ The [B reference foundation](plan/EX07B-reference-validation.md) now has a separ
 CPU-only GGX E/B moment integrator with typed roughness/view inputs, analytic
 hemisphere clipping and bounded quadrature refinement. Six tests pass in each
 configuration, including independent analytic limits and explicit failure when
-work is exhausted; all new C++ files are oxytidy-clean. Its refinement change is
-not yet an absolute-error certificate, and B remains in progress.
+work is exhausted; all new C++ files are oxytidy-clean. The suite now has eight
+cases per configuration, including 12 independent 60/90-digit endpoint anchors
+(maximum C++ difference 1.78e-15) and a wrong-alpha-floor negative control.
+Generated data is reproducible and formatter-stable. These checks do not yet
+certify the interior domain; mean moments, coupled BRDF/finite-source references,
+GPU/image checks and instrumentation remain open in B.
 
 A's closure does not establish the final physical renderer. B must supply an
 independent double-precision oracle, moment uncertainty and known-input probes,
