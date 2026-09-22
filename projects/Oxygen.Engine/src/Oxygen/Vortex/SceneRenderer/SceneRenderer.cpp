@@ -651,7 +651,6 @@ namespace {
       selection.directional_lights.push_back(FrameDirectionalLightSelection {
         .source_node = source.NodeHandle(),
         .direction = atmosphere_light.direction_to_light_ws,
-        .source_radius = atmosphere_light.angular_size_radians,
         .color = source.Light().Common().color_rgb,
         .illuminance_lux = source.Light().GetIntensityLux(),
         .exposure_compensation_ev

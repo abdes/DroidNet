@@ -9,6 +9,8 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <limits>
+#include <optional>
 
 #include <Oxygen/Base/Types/Geometry.h>
 
@@ -23,8 +25,6 @@ struct LightCullingConfig {
     << kLightGridPixelSizeShift;
   static constexpr uint32_t kLightGridSizeZ = 32U;
   static constexpr float kSliceDistributionScale = 4.05F;
-  static constexpr float kNearOffsetMeters = 0.095F;
-  static constexpr float kFarPlanePadMeters = 0.1F;
 
   //! Compute grid dimensions for a given screen resolution.
   struct GridDimensions {
@@ -35,9 +35,9 @@ struct LightCullingConfig {
   };
 
   struct ZParams {
-    float b { 0.0F };
-    float o { 0.0F };
-    float s { 0.0F };
+    float depth_span_m { 0.0F };
+    float curve_scale { 0.0F };
+    float slice_scale { 0.0F };
   };
 
   [[nodiscard]] constexpr auto ComputeGridDimensions(
@@ -56,50 +56,24 @@ struct LightCullingConfig {
     };
   }
 
-  //! Compute UE-style LightGridZParams adapted to Oxygen's meter-scale world.
-  [[nodiscard]] static auto ComputeLightGridZParams(
-    float near_plane, float far_plane) noexcept -> ZParams
+  //! Resolve the clipped near-relative logarithmic mapping without plane
+  //! padding.
+  [[nodiscard]] static auto ComputeLightGridZParams(const float near_plane,
+    const float far_plane) noexcept -> std::optional<ZParams>
   {
-    const float clamped_near = std::max(near_plane, 1.0e-4F);
-    const float clamped_far = std::max(
-      far_plane + kFarPlanePadMeters, clamped_near + kFarPlanePadMeters);
-    const float n = clamped_near + kNearOffsetMeters;
-    const float f = std::max(clamped_far, n + 1.0e-3F);
-    const double s = static_cast<double>(kSliceDistributionScale);
-    const double exponent = static_cast<double>(kLightGridSizeZ - 1U) / s;
-    const double o
-      = (static_cast<double>(f) - static_cast<double>(n) * std::exp2(exponent))
-      / static_cast<double>(f - n);
-    const double b = (1.0 - o) / static_cast<double>(n);
+    const double span = static_cast<double>(far_plane) - near_plane;
+    if (!std::isfinite(near_plane) || !std::isfinite(far_plane)
+      || near_plane <= 0.0F || span < std::numeric_limits<float>::min()
+      || span > std::numeric_limits<float>::max()) {
+      return std::nullopt;
+    }
+    const double exponent = static_cast<double>(kLightGridSizeZ)
+      / static_cast<double>(kSliceDistributionScale);
     return ZParams {
-      .b = static_cast<float>(b),
-      .o = static_cast<float>(o),
-      .s = static_cast<float>(s),
+      .depth_span_m = static_cast<float>(span),
+      .curve_scale = static_cast<float>(std::exp2(exponent) - 1.0),
+      .slice_scale = kSliceDistributionScale,
     };
-  }
-
-  [[nodiscard]] static auto ComputeZSlice(float linear_depth,
-    const ZParams& z_params, uint32_t slice_count = kLightGridSizeZ) noexcept
-    -> uint32_t
-  {
-    if (slice_count == 0U || linear_depth <= 0.0F || z_params.b <= 0.0F
-      || z_params.s <= 0.0F) {
-      return 0U;
-    }
-
-    const float encoded_depth = linear_depth * z_params.b + z_params.o;
-    if (!(encoded_depth > 0.0F) || !std::isfinite(encoded_depth)) {
-      return 0U;
-    }
-
-    const float slice_f = std::log2(encoded_depth) * z_params.s;
-    if (!std::isfinite(slice_f)) {
-      return 0U;
-    }
-
-    const float clamped_slice
-      = std::clamp(slice_f, 0.0F, static_cast<float>(slice_count - 1U));
-    return static_cast<uint32_t>(clamped_slice);
   }
 };
 

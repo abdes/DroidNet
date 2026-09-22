@@ -4,9 +4,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <span>
 #include <vector>
 
@@ -16,6 +19,7 @@
 #include <Oxygen/Vortex/Lighting/Types/ClusterLightRange.h>
 #include <Oxygen/Vortex/Lighting/Types/LightGridMetadata.h>
 #include <Oxygen/Vortex/Test/Lighting/LightingGpuAbiFixture.h>
+#include <Oxygen/Vortex/Types/LightCullingConfig.h>
 #include <Oxygen/Vortex/Types/LightingIndices.h>
 
 namespace oxygen::vortex::testing {
@@ -163,7 +167,7 @@ namespace {
       .grid_size = { 1U, 1U, 4U },
       .pixel_size_shift = 6U,
       .content_extent_px = { 64.0F, 64.0F },
-      .grid_z_params = { 1.0F, 0.0F, 1.0F },
+      .grid_z_params = { 7.0F, 7.0F, 1.0F },
       .far_depth_m = 8.0F,
       .near_depth_m = 1.0F,
       .projection_kind = kLightGridPerspective,
@@ -182,6 +186,105 @@ namespace {
                 .count = 4U,
               }),
       (std::vector<std::uint32_t> { 0U, 1U, 2U, 3U }));
+  }
+
+  NOLINT_TEST_F(
+    LightingGpuAbiTest, CpuProducedPerspectiveParametersCoverNearAndFar)
+  {
+    const auto clips = std::array {
+      glm::vec2 { 0.1F, 100.0F },
+      glm::vec2 { 100.0F, 100.01F },
+      glm::vec2 { 1.0e20F,
+        std::nextafter(1.0e20F, std::numeric_limits<float>::infinity()) },
+    };
+    auto cases = std::vector<GridLookupProbeInput> {};
+    for (const auto clip : clips) {
+      const auto params
+        = LightCullingConfig::ComputeLightGridZParams(clip.x, clip.y);
+      ASSERT_TRUE(params.has_value());
+      const auto grid = LightGridMetadata {
+        .grid_size = { 1U, 1U, LightCullingConfig::kLightGridSizeZ },
+        .pixel_size_shift = LightCullingConfig::kLightGridPixelSizeShift,
+        .content_extent_px = { 64.0F, 64.0F },
+        .grid_z_params
+        = { params->depth_span_m, params->curve_scale, params->slice_scale },
+        .far_depth_m = clip.y,
+        .near_depth_m = clip.x,
+        .projection_kind = kLightGridPerspective,
+      };
+      cases.push_back(
+        GridLookupProbeInput { .grid = grid, .view_depth = clip.x });
+      cases.push_back(
+        GridLookupProbeInput { .grid = grid, .view_depth = clip.y });
+    }
+    EXPECT_EQ(Decode({ .records = std::as_bytes(std::span(cases)),
+                .stride = 80U,
+                .record_kind = 6U,
+                .decoded_words = 1U,
+                .count = static_cast<std::uint32_t>(cases.size()) }),
+      (std::vector<std::uint32_t> { 0U, 31U, 0U, 31U, 0U, 31U }));
+  }
+
+  NOLINT_TEST_F(LightingGpuAbiTest,
+    CpuPerspectiveParametersMatchIndependentInteriorReference)
+  {
+    const auto clips = std::array {
+      glm::vec2 { 0.1F, 100.0F },
+      glm::vec2 { 100.0F, 100.01F },
+      glm::vec2 { 1.0e20F, 1.001e20F },
+      glm::vec2 { 1.0e-20F, 1.0e-18F },
+      glm::vec2 { 0.001F, 1.0e20F },
+    };
+    auto cases = std::vector<GridLookupProbeInput> {};
+    auto expected = std::vector<std::uint32_t> {};
+    // Independent double reference for the documented 32-slice, 4.05 mapping.
+    constexpr auto kSliceScale = static_cast<double>(4.05F);
+    const double curve = std::exp2(32.0 / kSliceScale) - 1.0;
+    for (const auto clip : clips) {
+      const auto params
+        = LightCullingConfig::ComputeLightGridZParams(clip.x, clip.y);
+      ASSERT_TRUE(params.has_value());
+      const auto grid = LightGridMetadata {
+        .grid_size = { 1U, 1U, 32U },
+        .pixel_size_shift = 6U,
+        .content_extent_px = { 64.0F, 64.0F },
+        .grid_z_params
+        = { params->depth_span_m, params->curve_scale, params->slice_scale },
+        .far_depth_m = clip.y,
+        .near_depth_m = clip.x,
+        .projection_kind = kLightGridPerspective,
+      };
+      const double span = static_cast<double>(clip.y) - clip.x;
+      for (unsigned index = 0U; index < 32U; ++index) {
+        const double unit
+          = (std::exp2((static_cast<double>(index) + 0.5) / kSliceScale) - 1.0)
+          / curve;
+        const auto depth = static_cast<float>(clip.x + (span * unit));
+        const double normalized = (static_cast<double>(depth) - clip.x) / span;
+        const double slice
+          = std::log2(1.0 + (curve * normalized)) * kSliceScale;
+        cases.push_back(
+          GridLookupProbeInput { .grid = grid, .view_depth = depth });
+        expected.push_back(
+          static_cast<std::uint32_t>(std::clamp(slice, 0.0, 31.0)));
+      }
+      cases.push_back(GridLookupProbeInput {
+        .grid = grid,
+        .view_depth = -std::numeric_limits<float>::max(),
+      });
+      expected.push_back(0U);
+      cases.push_back(GridLookupProbeInput {
+        .grid = grid,
+        .view_depth = std::numeric_limits<float>::max(),
+      });
+      expected.push_back(31U);
+    }
+    EXPECT_EQ(Decode({ .records = std::as_bytes(std::span(cases)),
+                .stride = 80U,
+                .record_kind = 6U,
+                .decoded_words = 1U,
+                .count = static_cast<std::uint32_t>(cases.size()) }),
+      expected);
   }
 
   NOLINT_TEST_F(LightingGpuAbiTest, CompleteAndEmptyRangesNeedNoIndexDescriptor)

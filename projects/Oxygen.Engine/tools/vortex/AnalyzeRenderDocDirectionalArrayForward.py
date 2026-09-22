@@ -46,6 +46,32 @@ def build_report(controller, report, capture_path, report_path):
                 if reference[0] != 1: raise RuntimeError("Missing directional family reference")
                 families.append(reference[1])
         if sorted(families) != [0,1]: raise RuntimeError("Shadow families were derived from unfiltered source indices")
+        if words[5] != 0:
+            metadata = by_slot.get(words[11])
+            if metadata is None or metadata.elementByteSize != 64 or metadata.byteSize != 64:
+                raise RuntimeError("Missing canonical grid metadata")
+            grid = bytes(controller.GetBufferData(metadata.resource, metadata.byteOffset, 64))
+            dimensions = struct.unpack_from("<3I", grid, 0)
+            parameters = struct.unpack_from("<3f", grid, 32)
+            far_depth, near_depth = struct.unpack_from("<2f", grid, 44)
+            projection = struct.unpack_from("<I", grid, 52)[0]
+            if projection == 0:
+                def f32(value):
+                    return struct.unpack("<f", struct.pack("<f", value))[0]
+                scale = f32(4.05)
+                expected = (f32(far_depth - near_depth), f32(math.pow(2.0, dimensions[2] / scale) - 1), scale)
+                if parameters != expected:
+                    raise RuntimeError(f"Stale perspective grid encoding: {parameters} != {expected}")
+                near_slice = 0
+                far_slice = min(dimensions[2] - 1, int(math.log2(1 + parameters[1]) * parameters[2]))
+                if far_slice != dimensions[2] - 1:
+                    raise RuntimeError("Published far plane is not in the last cell")
+                report.append(f"grid_event={draw.event_id} near={near_depth} far={far_depth} parameters={parameters} endpoint_slices={near_slice},{far_slice}")
+            elif projection == 1:
+                if parameters != (0.0, 0.0, 0.0):
+                    raise RuntimeError("Orthographic grid must not carry perspective parameters")
+            else:
+                raise RuntimeError("Unknown grid projection")
         target = pipeline.GetOutputTargets()[0].resource
         texture = next(t for t in controller.GetTextures() if t.resourceId == target)
         radiance = controller.PickPixel(target,texture.width//2,texture.height//2,rd.Subresource(),rd.CompType.Float).floatValue
@@ -55,7 +81,7 @@ def build_report(controller, report, capture_path, report_path):
     if checked == 0: raise RuntimeError("No forward fragment consumed the directional array")
     report.append(f"forward_draws_checked={checked}")
     report.append("directional_array_forward_verdict=pass")
-    report.append("scope=forward record and shadow-reference consumption; physical BRDF parity remains open")
+    report.append("scope=forward records, shadow references and live grid metadata; physical BRDF parity remains open")
 
 
 if __name__ == "__main__":

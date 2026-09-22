@@ -31,13 +31,18 @@ uint ComputeClusterZSlice(float view_depth, LightGridMetadata grid)
         if (depth_span <= 0.0f) {
             return 0u;
         }
-        slice = (view_depth - grid.near_depth_m) / depth_span * grid.grid_size.z;
+        const float clipped_depth = clamp(view_depth, grid.near_depth_m, grid.far_depth_m);
+        slice = (clipped_depth - grid.near_depth_m) / depth_span * grid.grid_size.z;
     } else {
-        const float encoded_depth = view_depth * grid.grid_z_params.x + grid.grid_z_params.y;
-        if (encoded_depth <= 0.0f || grid.grid_z_params.x <= 0.0f || grid.grid_z_params.z <= 0.0f) {
+        const float depth_span = grid.grid_z_params.x;
+        const float curve_scale = grid.grid_z_params.y;
+        const float slice_scale = grid.grid_z_params.z;
+        if (depth_span <= 0.0f || curve_scale <= 0.0f || slice_scale <= 0.0f) {
             return 0u;
         }
-        slice = log2(encoded_depth) * grid.grid_z_params.z;
+        const float clipped_depth = clamp(view_depth, grid.near_depth_m, grid.far_depth_m);
+        const float normalized_depth = saturate((clipped_depth - grid.near_depth_m) / depth_span);
+        slice = log2(1.0f + curve_scale * normalized_depth) * slice_scale;
     }
     return (uint)clamp(slice, 0.0f, (float)(grid.grid_size.z - 1u));
 }

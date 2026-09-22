@@ -48,7 +48,6 @@ struct FrameDirectionalLightSelection {
   // Vector from the shaded point toward the directional-light source in
   // Oxygen world space (+Z up, -Y forward).
   glm::vec3 direction { 0.0F, -1.0F, 0.0F };
-  float source_radius { 0.0F };
 
   glm::vec3 color { 1.0F, 1.0F, 1.0F };
   float illuminance_lux { 0.0F };
@@ -110,7 +109,6 @@ struct FrameLocalLightSelection {
   scene::ShadowResolutionHint shadow_resolution_hint {
     scene::ShadowResolutionHint::kMedium,
   };
-  std::uint32_t _padding0 { 0U };
 };
 
 struct FrameLightSelection {
