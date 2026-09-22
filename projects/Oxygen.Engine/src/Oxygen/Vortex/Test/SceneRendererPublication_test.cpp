@@ -304,6 +304,17 @@ protected:
       &frame_context,
     });
 
+    // View resolution belongs after OnFrameStart, which clears last frame's
+    // views.
+    for (const auto& view_ref : frame_context.GetViews()) {
+      const auto& view_context = view_ref.get();
+      if (view_context.metadata.is_scene_view) {
+        const auto& viewport = view_context.view.viewport;
+        renderer_->RegisterResolvedView(view_context.id,
+          MakeResolvedView(viewport.width, viewport.height, viewport.top_left_x,
+            viewport.top_left_y));
+      }
+    }
     auto loop = TestEventLoop {};
     oxygen::co::Run(loop, RunRenderAsync(renderer_, &frame_context));
     renderer_->OnFrameEnd(oxygen::observer_ptr<FrameContext> {
@@ -400,26 +411,29 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
     oxygen::kInvalidShaderVisibleIndex);
   EXPECT_NE(published_bindings.scene_texture_frame_slot,
     oxygen::kInvalidShaderVisibleIndex);
-  EXPECT_EQ(
+  // A resolved scene view publishes draw/history tables and attachment views
+  // even when the scene has no meshes. Empty contents do not invalidate the
+  // ABI.
+  EXPECT_NE(
     published_bindings.history_frame_slot, oxygen::kInvalidShaderVisibleIndex);
-  EXPECT_EQ(
+  EXPECT_NE(
     published_bindings.draw_frame_slot, oxygen::kInvalidShaderVisibleIndex);
   EXPECT_NE(
     published_bindings.frame_exposure_slot, oxygen::kInvalidShaderVisibleIndex);
   EXPECT_NE(
     RendererPublicationProbe::GetViewConstantsManager(*renderer_), nullptr);
   EXPECT_NE(scene_renderer->GetPublishedViewId(), oxygen::kInvalidViewId);
-  EXPECT_EQ(scene_texture_bindings.scene_color_srv,
+  EXPECT_NE(scene_texture_bindings.scene_color_srv,
     SceneTextureBindings::kInvalidIndex);
-  EXPECT_EQ(scene_texture_bindings.scene_color_uav,
+  EXPECT_NE(scene_texture_bindings.scene_color_uav,
     SceneTextureBindings::kInvalidIndex);
-  EXPECT_EQ(scene_texture_bindings.scene_depth_srv,
+  EXPECT_NE(scene_texture_bindings.scene_depth_srv,
     SceneTextureBindings::kInvalidIndex);
-  EXPECT_EQ(scene_texture_bindings.partial_depth_srv,
+  EXPECT_NE(scene_texture_bindings.partial_depth_srv,
     SceneTextureBindings::kInvalidIndex);
-  EXPECT_EQ(
+  EXPECT_NE(
     scene_texture_bindings.velocity_srv, SceneTextureBindings::kInvalidIndex);
-  EXPECT_EQ(scene_texture_bindings.gbuffer_srvs.at(0),
+  EXPECT_NE(scene_texture_bindings.gbuffer_srvs.at(0),
     SceneTextureBindings::kInvalidIndex);
   EXPECT_EQ(scene_texture_bindings.gbuffer_srvs.at(4),
     SceneTextureBindings::kInvalidIndex);
@@ -590,6 +604,7 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
     SceneTextureBindings::kInvalidIndex);
   EXPECT_EQ(scene_renderer->GetSceneTextureBindings().valid_flags, 0U);
 
+  renderer_->RegisterResolvedView(view_id, MakeResolvedView(128.0F, 72.0F));
   auto loop = TestEventLoop {};
   oxygen::co::Run(loop, RunRenderAsync(renderer_, &frame_context));
 
