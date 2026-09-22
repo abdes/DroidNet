@@ -22,8 +22,6 @@ inline constexpr std::uint32_t kEnvironmentContractFlagAtmosphereLight0Enabled
   = 1U << 0U;
 inline constexpr std::uint32_t kEnvironmentContractFlagAtmosphereLight1Enabled
   = 1U << 1U;
-inline constexpr std::uint32_t kEnvironmentContractFlagShadowAuthoritySlot0Only
-  = 1U << 2U;
 inline constexpr std::uint32_t kEnvironmentContractFlagSkyLightAuthoredEnabled
   = 1U << 3U;
 inline constexpr std::uint32_t kEnvironmentContractFlagSkyLightIblValid = 1U
@@ -60,6 +58,7 @@ struct alignas(packing::kShaderDataFieldAlignment) EnvironmentFrameBindings {
   EnvironmentAmbientBridgeBindings ambient_bridge {};
 };
 
+// NOLINTBEGIN(*-magic-numbers)
 static_assert(sizeof(EnvironmentFrameBindings) == 112);
 static_assert(
   alignof(EnvironmentFrameBindings) == packing::kShaderDataFieldAlignment);
@@ -83,5 +82,6 @@ static_assert(
 static_assert(offsetof(EnvironmentFrameBindings, probes) == 48);
 static_assert(offsetof(EnvironmentFrameBindings, evaluation) == 72);
 static_assert(offsetof(EnvironmentFrameBindings, ambient_bridge) == 88);
+// NOLINTEND(*-magic-numbers)
 
 } // namespace oxygen::vortex

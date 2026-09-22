@@ -506,9 +506,6 @@ auto EnvironmentLightingService::BuildBindings(
   if (stable_state.view_products.atmosphere_lights[1].enabled) {
     bindings.contract_flags |= kEnvironmentContractFlagAtmosphereLight1Enabled;
   }
-  if (stable_state.conventional_shadow_authority_slot0_only) {
-    bindings.contract_flags |= kEnvironmentContractFlagShadowAuthoritySlot0Only;
-  }
   const auto sky_light_authored_enabled = view_products.sky_light.enabled;
   const auto sky_light_ibl_valid = ProbeStateHasUsableResources(probe_state_);
   if (sky_light_authored_enabled) {

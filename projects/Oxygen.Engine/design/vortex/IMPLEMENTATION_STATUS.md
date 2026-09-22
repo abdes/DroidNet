@@ -176,6 +176,14 @@ warnings/errors after correcting the arena's constant-buffer usage declaration.
 The content-relative lookup also preserves fractional final tiles; a native
 negative control reproduced their loss under the old `extent - 1` clamp.
 The complete native ABI/lookup suite now passes 21 cases in each configuration.
+Atmosphere-source fog shadowing now follows each source's canonical selection;
+the slot-0-only authority/cascade copies and flag are removed. Debug/Release each
+pass 63 environment-service and 12 native fog tests. A Primary-only negative
+control fails the new Secondary occlusion checks, and RenderDoc verifies both
+source surfaces in both views. Changed-file oxytidy has no introduced findings.
+Ordinary-directional fog scattering and unified physical atmosphere resolution
+remain open; the [checkpoint](plan/EX07A-contract-review.md#atmosphere-source-fog-shadow-checkpoint)
+records the precise validation boundary.
 MultiView's local-light far-clipping regression is repaired and visually
 confirmed by the user. The
 [review evidence](plan/EX07A-contract-review.md#verification-obligations-and-current-evidence)

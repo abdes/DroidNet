@@ -693,6 +693,41 @@ is oxytidy-clean. Evidence: `fractional-tile-before.log` and
 `fractional-tile-{debug,release}.json` under `ex07a`. This is coordinate
 qualification, not proof of a spatial culler or a rendered-performance gain.
 
+### Atmosphere-source fog shadow checkpoint
+
+Removed the obsolete slot-0-only shadow flag, atmosphere shadow-authority slot,
+replicated cascade counts and their hash/publication/test readers. These values
+are not replaced by compatibility fields: the canonical lighting selection and
+shadow family records own source/projection identity. Both active atmosphere
+sources now resolve their own selection before volumetric shadow sampling; the
+existing renderer toggle controls both through one uint pass constant.
+
+`FogDirectionalShadows_test.cpp` dispatches the production fog shader with
+Secondary/ordinary/Primary selection order and independently reordered shadow
+families/cascades. It checks isolated and combined sources, independently swapped
+visibility, disabled shadows and an absent request against homogeneous-medium
+Beer-Lambert/isotropic-scattering values. The negative control restores Primary-
+only shadow sampling and fails the isolated/combined Secondary occlusion cases;
+restoring the production fix passes. Debug and Release each pass all **63
+environment-service tests and 12 native fog tests** (150 executions). All 13
+changed C++ files were processed by oxytidy: no new-test or changed-line findings;
+122 existing whole-file warnings remain, with no new warning suppressions except
+the requested structure-layout magic-number guard.
+
+The `consumer-visual --visual-fog volume --directional-array-proof true` capture
+passes `AnalyzeRenderDocFogDirectionalShadows.py`: both views' fog dispatches
+access Secondary selection 0 (three cascades, 1024 resolution) and Primary
+selection 2 (two cascades, 2048 resolution), using matching publication identities
+and distinct surfaces. Native tests prove numerical visibility; the capture
+proves live producer/consumer wiring. No performance or full visual-parity claim.
+Evidence under `ex07a`: `fog-shadow-{environment,regressions}-{debug,release}.json`,
+`fog-shadow-negative.log`, `fog-directional-report.txt`,
+`fog-shadow-tidy-verified/` and `fog-shadow-checkpoint.json`.
+
+Ordinary role-None fog scattering, unified physical atmosphere resolution and
+broader fog qualification remain separate open repairs. This checkpoint removes
+one conflicting shadow contract; EX07A remains in progress.
+
 | Gate                      | Owning suite / required evidence                                                                                                                                                                                                                     | Current result                                                                                                                  |
 | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
 | A ABI                     | CPU size/alignment/every-offset assertions; D3D12 upload/decode/readback of two distinct local records and directional records, integer high-bit patterns, sentinels, reserved zeros and nonzero element indices; matching catalog/reflection checks | Canonical wire records have native Debug/Release proof; remaining source-selection, validity and lifetime interfaces stay open. |
