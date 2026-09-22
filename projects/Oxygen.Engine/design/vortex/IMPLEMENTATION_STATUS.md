@@ -109,7 +109,22 @@ GGX, dynamic resource capacity, hemispherical soft spots, and a configurable
 [property/scene-v7 migration](lld/lighting-properties.md) own the frozen targets.
 D3D12 allocation-requirement queries and CPU model-consistency checks pass;
 production migration, GPU ABI decoding, renderer correctness and performance
-qualification remain open. No source/shader consumer code has changed.
+qualification remain open. Implementation has started with six canonical wire
+record types and Oxygen `NamedType` array indices. The private publisher range
+now uses the canonical type. `Oxygen.Vortex.LightingGpuAbi.Tests` passes eight
+tests in native Debug and Release: Graphics upload/decode/readback, high-bit
+integers, adjacent records, symbolic sentinels and a changed-lane negative control.
+Evaluation records, frame bindings, projection records and production consumer
+migration remain open; no compatibility fields or APIs are accepted in the final
+cutover. Reports:
+[Debug](../../out/build-ninja/analysis/vortex/exposure-lightbench/ex07a/vortex.lightinggpuabi-debug.json),
+[Release](../../out/build-ninja/analysis/vortex/exposure-lightbench/ex07a/vortex.lightinggpuabi-release.json).
+Grid metadata now carries content origin/extent and signed orthographic depth;
+its producer regression exposed and repaired Core `ResolvedView` validation.
+Core view and LightingService suites each pass 5 Debug / 5 Release tests.
+Conventional/BRDF rendering and full orthographic consumer parity remain open.
+The [checkpoint manifest](../../out/build-ninja/analysis/vortex/exposure-lightbench/ex07a/abi-foundation-checkpoint.json)
+records the exact targets, commands, source hashes and evidence scope.
 The [shadow-memory follow-up](plan/EX07-shadow-memory-review.md) records the CSM,
 scene-stencil and inactive-VSM ownership audit, D32 allocation queries and a
 standalone native GPU A/B probe: 12,288 depth/PCF values match, zero CPU-reference

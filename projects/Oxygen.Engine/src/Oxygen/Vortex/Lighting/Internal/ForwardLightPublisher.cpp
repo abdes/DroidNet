@@ -16,22 +16,15 @@
 #include <Oxygen/Vortex/Internal/PerViewStructuredPublisher.h>
 #include <Oxygen/Vortex/Lighting/Internal/ForwardLightPublisher.h>
 #include <Oxygen/Vortex/Lighting/Internal/LightGridBuilder.h>
+#include <Oxygen/Vortex/Lighting/Types/ClusterLightRange.h>
 #include <Oxygen/Vortex/Lighting/Types/ForwardLocalLightRecord.h>
 #include <Oxygen/Vortex/Lighting/Types/LightGridMetadata.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/Types/LightingFrameBindings.h>
+#include <Oxygen/Vortex/Types/LightingIndices.h>
 #include <Oxygen/Vortex/Upload/TransientStructuredBuffer.h>
 
 namespace oxygen::vortex::lighting::internal {
-
-namespace {
-
-  struct ClusterLightRange {
-    std::uint32_t light_list_offset { 0U };
-    std::uint32_t light_count { 0U };
-  };
-
-} // namespace
 
 ForwardLightPublisher::ForwardLightPublisher(Renderer& renderer)
   : renderer_(renderer)
@@ -147,7 +140,7 @@ auto ForwardLightPublisher::Publish(const BuiltLightGridFrame& built_frame)
     const auto light_list_size = (std::max)(bindings.local_light_count, 1U);
     auto light_indices = std::vector<std::uint32_t>(light_list_size, 0U);
     for (std::uint32_t i = 0; i < bindings.local_light_count; ++i) {
-      light_indices[i] = i;
+      light_indices.at(i) = i;
     }
     if (auto light_view_alloc
       = light_view_data_buffer_->Allocate(light_list_size);
@@ -156,11 +149,11 @@ auto ForwardLightPublisher::Publish(const BuiltLightGridFrame& built_frame)
       bindings.light_view_data_srv = light_view_alloc->srv;
     }
 
-    const auto cluster_count = (std::max)(view.metadata.num_grid_cells, 1U);
+    const auto cluster_count = (std::max)(bindings.num_grid_cells, 1U);
     auto cluster_ranges = std::vector<ClusterLightRange>(cluster_count);
     for (auto& entry : cluster_ranges) {
-      entry.light_list_offset = 0U;
-      entry.light_count = bindings.local_light_count;
+      entry.offset = LightListOffset { 0U };
+      entry.count = bindings.local_light_count;
     }
     if (auto cluster_alloc = grid_indirection_buffer_->Allocate(cluster_count);
       cluster_alloc

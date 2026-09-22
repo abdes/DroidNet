@@ -351,14 +351,53 @@ and cannot be metered or reported as a valid timing sample.
 
 ## Verification obligations and current evidence
 
-| Gate                      | Owning suite / required evidence                                                                                                                                                                                                                     | Current result                                                                                                    |
-| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| A ABI                     | CPU size/alignment/every-offset assertions; D3D12 upload/decode/readback of two distinct local records and directional records, integer high-bit patterns, sentinels, reserved zeros and nonzero element indices; matching catalog/reflection checks | Target layout frozen; code and GPU sentinel test pending. Existing size assertions do not qualify the new layout. |
-| A property completeness   | LP01-LP32 retained/removal mapping, whole-candidate ingress and scene-v7 layout                                                                                                                                                                      | Contract frozen; transport/rendered regression implementation remains open.                                       |
-| A capacity/failure freeze | D1/D6 budgets, checked backend requirements, complete-list fallback and caller/output fault cases                                                                                                                                                    | Policy/profile frozen; D3D12 requirements queried. Runtime fault/lifetime qualification pending.                  |
-| B instrument independence | Reuse Graphics offscreen/readback and Vortex exposure lighting fixtures; independent CPU oracle and known GPU signals                                                                                                                                | Not started. Existing HDR tests do not establish photometric correctness.                                         |
-| C ingress/transport       | Scene, Scripting, Cooker, Content, DemoShell and managed/editor owning suites; non-default save/cook/load/PAK plus live edits                                                                                                                        | Required repairs identified; not run for this documentation checkpoint.                                           |
-| C rendering/lifetime      | LightingService, SceneRenderer, Shadows and native GPU fixtures; both paths, invalid presentation/recovery, multiview and delayed/discarded submissions                                                                                              | Not started.                                                                                                      |
+Implementation checkpoint: `ClusterLightRange`, `LightGridMetadata`, `LightGridBuildStatus`,
+`LightGridPassConstants`, `LightShadowReference` and `DirectionalShadowRecord`
+now have canonical CPU/HLSL definitions and layout assertions. Array indices use
+distinct Oxygen `NamedType` wrappers and symbolic sentinels. The new
+`Oxygen.Vortex.LightingGpuAbi.Tests` target passes **8 Debug / 8 Release** tests
+using Graphics-owned upload, compute and readback, including nonzero element
+indices, adjacent records, high-bit words and a deliberately changed upload lane.
+[Debug results](../../../out/build-ninja/analysis/vortex/exposure-lightbench/ex07a/vortex.lightinggpuabi-debug.json)
+and [Release results](../../../out/build-ninja/analysis/vortex/exposure-lightbench/ex07a/vortex.lightinggpuabi-release.json)
+are partial ABI evidence. Evaluation records, full bindings, projection records,
+matrix probes, catalog/capture analysis and complete producer/consumer migration
+remain open. The spatial culler has not been connected to these records.
+The grid-metadata producer test also required repairing Core `ResolvedView`
+validation: finite signed orthographic near planes are accepted; perspective
+near remains positive and every far plane remains finite and above near. Core
+view and LightingService suites each pass 5 tests in both configurations.
+[Checkpoint manifest](../../../out/build-ninja/analysis/vortex/exposure-lightbench/ex07a/abi-foundation-checkpoint.json)
+records source identities, commands and remaining validation. This dependency
+repair does not qualify downstream orthographic shading/culling/shadows.
+
+Consumer-cutover blockers confirmed during implementation review:
+
+- Forward local evaluation still clamps the complete-list marker to an empty
+  compact range and requires a compact-index descriptor in its outer guard.
+  Before fallback can be published, the same evaluator must enumerate all local
+  records with **no index-buffer read or valid index descriptor required**.
+  Native behavior tests must cover zero compact capacity, absent compact SRV,
+  mixed complete/compact/empty cells and all contributing local records.
+- `ComputeClusterIndex` still uses absolute screen position and the old
+  perspective-only depth mapping. Move all callers, including shading/debug and
+  the retained VSM shader interface, to one metadata-based lookup; subtract
+  content origin and preserve linear signed orthographic slicing. Test a
+  nonzero origin, partial tiles, near/far boundaries and matching culler/lookup
+  cell assignment. Retain no old overload or coordinate convention as a bridge.
+
+The current publisher emits complete compact lists at offset zero for every
+cell; that masks these consumer gaps. Record-decoding tests above do not close
+either behavioral gate or authorize connecting spatial culling.
+
+| Gate                      | Owning suite / required evidence                                                                                                                                                                                                                     | Current result                                                                                                                         |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| A ABI                     | CPU size/alignment/every-offset assertions; D3D12 upload/decode/readback of two distinct local records and directional records, integer high-bit patterns, sentinels, reserved zeros and nonzero element indices; matching catalog/reflection checks | Six wire record types have native Debug/Release proof above; evaluation/binding/projection records and consumer migration remain open. |
+| A property completeness   | LP01-LP32 retained/removal mapping, whole-candidate ingress and scene-v7 layout                                                                                                                                                                      | Contract frozen; transport/rendered regression implementation remains open.                                                            |
+| A capacity/failure freeze | D1/D6 budgets, checked backend requirements, complete-list fallback and caller/output fault cases                                                                                                                                                    | Policy/profile frozen; D3D12 requirements queried. Runtime fault/lifetime qualification pending.                                       |
+| B instrument independence | Reuse Graphics offscreen/readback and Vortex exposure lighting fixtures; independent CPU oracle and known GPU signals                                                                                                                                | Not started. Existing HDR tests do not establish photometric correctness.                                                              |
+| C ingress/transport       | Scene, Scripting, Cooker, Content, DemoShell and managed/editor owning suites; non-default save/cook/load/PAK plus live edits                                                                                                                        | Required repairs identified; not run for this documentation checkpoint.                                                                |
+| C rendering/lifetime      | LightingService, SceneRenderer, Shadows and native GPU fixtures; both paths, invalid presentation/recovery, multiview and delayed/discarded submissions                                                                                              | Not started.                                                                                                                           |
 
 Documentation checks at this checkpoint passed: all 32 inventory IDs occur once,
 the new documents' local links/anchors resolve, line endings are LF, the capacity
@@ -366,8 +405,10 @@ arithmetic above agrees with the target layouts, and `git diff --check` is
 clean. The [check report](../../../out/build-ninja/analysis/vortex/exposure-lightbench/ex07a/contract-review-checks.json)
 is documentation evidence only. The [final contract checks](../../../out/build-ninja/analysis/vortex/exposure-lightbench/ex07a/final-contract-checks.json)
 additionally cover changed-document local links, 19 declared layout sizes,
-BOM/LF preservation and all six approvals. No engine/editor build, production
-test, GPU sentinel, native capture or performance measurement was run. A
+BOM/LF preservation and all six approvals. At the documentation checkpoint, no
+engine/editor build, production test, GPU sentinel, native capture or performance
+measurement had been run; the implementation checkpoint above supersedes that
+statement for the new ABI target only. A
 standalone C++20 /W4 /WX allocation-query program and CPU mathematical checks
 were run as described below.
 
