@@ -392,14 +392,18 @@ auto CascadeShadowSetup::BuildDirectionalFrameData(
     const auto fade_begin = cascade_index + 1U == cascade_count
       ? cascade_end - (shadow_far - view_near) * distance_fadeout_fraction
       : shadow_far;
-    cascade.sampling_metadata0
-      = glm::vec4(static_cast<float>(cascade_index), inverse_resolution_x,
-        inverse_resolution_y, cascade_matrix.world_texel_size);
+    cascade.surface_srv = allocation.surface_srv;
+    cascade.array_layer = ShadowArrayLayer { cascade_index };
+    cascade.inverse_resolution = { inverse_resolution_x, inverse_resolution_y };
+    cascade.world_texel_size = cascade_matrix.world_texel_size;
     const auto depth_bias = ComputeDirectionalCsmDepthBias(
       directional_light.shadow_bias, cascade_matrix.cascade_radius,
       cascade_matrix.depth_span, allocation.resolution.x);
-    cascade.sampling_metadata1 = glm::vec4(transition_width, fade_begin,
-      depth_bias, directional_light.shadow_normal_bias);
+    cascade.depth_bias = depth_bias;
+    cascade.normal_bias_m = directional_light.shadow_normal_bias;
+    cascade.transition_width = transition_width;
+    cascade.fade_begin = fade_begin;
+    cascade.fade_end = cascade_end;
     cascade_begin = cascade_end;
   }
 

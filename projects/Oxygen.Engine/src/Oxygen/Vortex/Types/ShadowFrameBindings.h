@@ -74,9 +74,10 @@ struct alignas(packing::kShaderDataFieldAlignment) ShadowFrameBindings {
   }
 };
 
+// NOLINTBEGIN(*-magic-numbers)
 static_assert(
   alignof(ShadowFrameBindings) == packing::kShaderDataFieldAlignment);
-static_assert(sizeof(ShadowFrameBindings) == 3328U);
+static_assert(sizeof(ShadowFrameBindings) == 3392U);
 static_assert(
   offsetof(ShadowFrameBindings, conventional_shadow_surface_handle) == 0U);
 static_assert(offsetof(ShadowFrameBindings, cascade_count) == 4U);
@@ -86,12 +87,14 @@ static_assert(offsetof(ShadowFrameBindings, light_direction_to_source) == 16U);
 static_assert(offsetof(ShadowFrameBindings, spot_shadow_surface_handle) == 32U);
 static_assert(offsetof(ShadowFrameBindings, spot_shadow_count) == 36U);
 static_assert(offsetof(ShadowFrameBindings, cascades) == 48U);
-static_assert(offsetof(ShadowFrameBindings, spot_shadows) == 496U);
+static_assert(offsetof(ShadowFrameBindings, spot_shadows) == 560U);
 static_assert(
-  offsetof(ShadowFrameBindings, point_shadow_surface_handle) == 1520U);
-static_assert(offsetof(ShadowFrameBindings, point_shadow_count) == 1524U);
-static_assert(offsetof(ShadowFrameBindings, point_shadows) == 1536U);
+  offsetof(ShadowFrameBindings, point_shadow_surface_handle) == 1584U);
+static_assert(offsetof(ShadowFrameBindings, point_shadow_count) == 1588U);
+static_assert(offsetof(ShadowFrameBindings, point_shadows) == 1600U);
 static_assert(
   sizeof(ShadowFrameBindings) % packing::kShaderDataFieldAlignment == 0U);
+
+// NOLINTEND(*-magic-numbers)
 
 } // namespace oxygen::vortex

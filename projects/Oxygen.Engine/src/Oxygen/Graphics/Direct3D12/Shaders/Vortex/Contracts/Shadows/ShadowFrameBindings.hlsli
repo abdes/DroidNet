@@ -8,6 +8,7 @@
 #define OXYGEN_VORTEX_CONTRACTS_SHADOWS_SHADOWFRAMEBINDINGS_HLSLI
 
 #include "Core/Bindless/Generated.BindlessAbi.hlsl"
+#include "Vortex/Contracts/Shadows/ShadowCascadeBinding.hlsli"
 
 #include "Vortex/Contracts/View/ViewConstants.hlsli"
 #include "Vortex/Contracts/View/ViewFrameBindings.hlsli"
@@ -15,16 +16,6 @@
 static const uint VORTEX_SHADOW_TECHNIQUE_DIRECTIONAL_CONVENTIONAL = 1u << 0u;
 static const uint VORTEX_SHADOW_TECHNIQUE_SPOT_CONVENTIONAL = 1u << 1u;
 static const uint VORTEX_SHADOW_TECHNIQUE_POINT_CONVENTIONAL = 1u << 2u;
-
-struct VortexShadowCascadeBinding
-{
-    float4x4 light_view_projection;
-    float split_near;
-    float split_far;
-    float4 sampling_metadata0;
-    float4 sampling_metadata1;
-    float2 _padding0;
-};
 
 struct VortexSpotShadowBinding
 {

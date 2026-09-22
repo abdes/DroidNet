@@ -296,17 +296,16 @@ auto ShadowDepthPass::Record(const PreparedViewShadowInput& view_input,
   depth_slices.reserve(frame_data.bindings.cascade_count);
   for (std::uint32_t cascade_index = 0U;
     cascade_index < frame_data.bindings.cascade_count; ++cascade_index) {
+    const auto& cascade = frame_data.bindings.cascades.at(cascade_index);
     depth_slices.push_back(DepthSlice {
-      .light_view_projection
-      = frame_data.bindings.cascades[cascade_index].light_view_projection,
-      .shadow_bias_parameters = glm::vec4(
-        frame_data.bindings.cascades[cascade_index].sampling_metadata1.z,
-        frame_data.bindings.cascades[cascade_index].sampling_metadata1.z
-          * kUeCsmShadowSlopeScaleDepthBias * kUeDefaultUserShadowSlopeBias,
+      .light_view_projection = cascade.light_view_projection,
+      .shadow_bias_parameters = glm::vec4(cascade.depth_bias,
+        cascade.depth_bias * kUeCsmShadowSlopeScaleDepthBias
+          * kUeDefaultUserShadowSlopeBias,
         kUeShadowMaxSlopeScaleDepthBias, 0.0F),
       .light_direction_to_source
       = frame_data.bindings.light_direction_to_source,
-      .target_slice = cascade_index,
+      .target_slice = cascade.array_layer.get(),
     });
   }
 

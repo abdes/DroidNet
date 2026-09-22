@@ -471,6 +471,38 @@ projection/frame migration, multi-directional selection, BRDF moment publication
 and complete same-submission failure/history handling remain open. The new
 record layouts do not claim finite-emitter integration or BRDF parity.
 
+### Cascade-record checkpoint
+
+`ShadowCascadeBinding` now uses the approved 128-byte layout in the active CPU
+writer, depth producer and surface/volumetric shader readers. Surface descriptors
+and array layers are integer fields with distinct C++ types; bias, inverse
+resolution, transitions and fade endpoints have explicit fields. The old
+float-packed cascade metadata is removed. Assertions cover every member offset,
+alignment, size and copy/layout traits.
+
+The native ABI suite passes **18 Debug / 18 Release** cases; ShadowService passes
+**11 Debug / 11 Release** cases. The new probe decodes two adjacent records from
+a nonzero starting index, checks every field, transforms four basis vectors to
+check matrix orientation, and preserves high-bit descriptor/layer values and
+invalid sentinels. Reserved words remain zero. The production shader archive
+also rebuilds successfully.
+
+The `consumer-visual` MultiView RenderDoc capture checks eight cascade records
+across two directional-light draws, including matching descriptors actually read
+by the pixel shader. Reports are `cascade-{abi,service}-{debug,release}.json` and
+`cascade-record-report.txt` beside `cascade-record_capture.rdc` under `ex07a`.
+The capture validates record publication and consumption; it does not certify
+coverage policy, multiview resource lifetime or physical BRDF correctness.
+Oxytidy ran on all six changed C++ sources/headers with tests included and no
+failed contexts or coverage gaps. Edited-line findings were fixed without new
+suppressions; existing whole-file findings remain in the reports.
+
+The enclosing shadow header still contains inline arrays and is temporarily
+3,392 bytes because its cascade elements are now 128 bytes. The required
+112-byte header with separately published arrays, local projection migration,
+multi-directional selection and the remaining EX07A gates remain open. This is
+an in-place migration checkpoint, with no alternate old cascade representation.
+
 | Gate                      | Owning suite / required evidence                                                                                                                                                                                                                     | Current result                                                                                                                         |
 | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
 | A ABI                     | CPU size/alignment/every-offset assertions; D3D12 upload/decode/readback of two distinct local records and directional records, integer high-bit patterns, sentinels, reserved zeros and nonzero element indices; matching catalog/reflection checks | Six wire record types have native Debug/Release proof above; evaluation/binding/projection records and consumer migration remain open. |

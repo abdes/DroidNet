@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <array>
+#include <bit>
 #include <cstdint>
 #include <span>
 #include <type_traits>
@@ -13,6 +14,7 @@
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/Shadows/Types/DirectionalShadowRecord.h>
 #include <Oxygen/Vortex/Shadows/Types/LightShadowReference.h>
+#include <Oxygen/Vortex/Shadows/Types/ShadowCascadeBinding.h>
 #include <Oxygen/Vortex/Test/Lighting/LightingGpuAbiFixture.h>
 #include <Oxygen/Vortex/Types/LightingIndices.h>
 
@@ -115,6 +117,121 @@ namespace {
                 .first_element = 1U,
                 .count = 2U,
               }),
+      expected);
+  }
+
+  NOLINT_TEST_F(
+    LightingGpuAbiTest, CascadesDecodeEveryLaneAndIntegerSurfaceIdentity)
+  {
+    const auto matrix = glm::mat4 {
+      glm::vec4 { 1, 2, 3, 4 },
+      glm::vec4 { 5, 6, 7, 8 },
+      glm::vec4 { 9, 10, 11, 12 },
+      glm::vec4 { 13, 14, 15, 16 },
+    };
+    const auto records = std::array {
+      ShadowCascadeBinding {},
+      ShadowCascadeBinding {
+        .light_view_projection = matrix,
+        .split_near = -17.0F,
+        .split_far = 18.0F,
+        .depth_bias = 0.125F,
+        .normal_bias_m = 0.25F,
+        .surface_srv = ShaderVisibleIndex { 0x80000001U },
+        .array_layer = ShadowArrayLayer { 0x01000003U },
+        .inverse_resolution = { 0.5F, 0.25F },
+        .world_texel_size = 0.75F,
+        .transition_width = 1.25F,
+        .fade_begin = 16.0F,
+        .fade_end = 18.0F,
+      },
+      ShadowCascadeBinding {
+        .light_view_projection = matrix * 2.0F,
+        .split_near = 19.0F,
+        .split_far = 20.0F,
+        .depth_bias = 0.0625F,
+        .normal_bias_m = 0.5F,
+        .inverse_resolution = { 0.125F, 0.0625F },
+        .world_texel_size = 1.5F,
+        .transition_width = 2.5F,
+        .fade_begin = 19.5F,
+        .fade_end = 20.0F,
+      },
+    };
+    const auto word
+      = [](const float value) { return std::bit_cast<std::uint32_t>(value); };
+    const auto expected = std::vector<std::uint32_t> {
+      word(1),
+      word(2),
+      word(3),
+      word(4),
+      word(5),
+      word(6),
+      word(7),
+      word(8),
+      word(9),
+      word(10),
+      word(11),
+      word(12),
+      word(13),
+      word(14),
+      word(15),
+      word(16),
+      word(-17),
+      word(18),
+      word(0.125F),
+      word(0.25F),
+      0x80000001U,
+      0x01000003U,
+      0U,
+      0U,
+      word(0.5F),
+      word(0.25F),
+      word(0.75F),
+      word(1.25F),
+      word(16),
+      word(18),
+      0U,
+      0U,
+      word(2),
+      word(4),
+      word(6),
+      word(8),
+      word(10),
+      word(12),
+      word(14),
+      word(16),
+      word(18),
+      word(20),
+      word(22),
+      word(24),
+      word(26),
+      word(28),
+      word(30),
+      word(32),
+      word(19),
+      word(20),
+      word(0.0625F),
+      word(0.5F),
+      0xFFFFFFFFU,
+      0xFFFFFFFFU,
+      0U,
+      0U,
+      word(0.125F),
+      word(0.0625F),
+      word(1.5F),
+      word(2.5F),
+      word(19.5F),
+      word(20),
+      0U,
+      0U,
+    };
+    EXPECT_EQ(Decode({ .records = std::as_bytes(std::span(records)),
+                .stride = 128U,
+                .record_kind = 13U,
+                .decoded_words = 32U,
+                .first_element = 1U,
+                .count = 2U }),
       expected);
   }
 

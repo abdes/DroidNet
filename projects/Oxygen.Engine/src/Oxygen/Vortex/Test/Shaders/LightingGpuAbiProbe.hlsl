@@ -9,6 +9,7 @@
 #include "Vortex/Contracts/Lighting/DeferredLightConstants.hlsli"
 #include "Vortex/Contracts/View/ViewFrameBindings.hlsli"
 #include "Vortex/Contracts/Shadows/ShadowRecords.hlsli"
+#include "Vortex/Contracts/Shadows/ShadowCascadeBinding.hlsli"
 #include "Vortex/Services/Lighting/ClusterLookup.hlsli"
 
 struct ProbeArguments {
@@ -151,5 +152,19 @@ void CS(uint3 thread : SV_DispatchThreadID) {
             value.debug_frame_slot, value.history_frame_slot));
         output.Store4(address + 48, uint4(value.ray_tracing_frame_slot, value.exposure_status_uav,
             value.lighting_view_generation));
+    } else if (g_RecordKind == 13) {
+        StructuredBuffer<VortexShadowCascadeBinding> inputs = ResourceDescriptorHeap[args.x];
+        VortexShadowCascadeBinding value = inputs[element];
+        // Transform basis vectors to verify every matrix lane and orientation.
+        output.Store4(address, asuint(mul(value.light_view_projection, float4(1, 0, 0, 0))));
+        output.Store4(address + 16, asuint(mul(value.light_view_projection, float4(0, 1, 0, 0))));
+        output.Store4(address + 32, asuint(mul(value.light_view_projection, float4(0, 0, 1, 0))));
+        output.Store4(address + 48, asuint(mul(value.light_view_projection, float4(0, 0, 0, 1))));
+        output.Store4(address + 64, asuint(float4(value.split_near, value.split_far,
+            value.depth_bias, value.normal_bias_m)));
+        output.Store4(address + 80, uint4(value.surface_srv, value.array_layer, value.reserved0));
+        output.Store4(address + 96, asuint(float4(value.inverse_resolution,
+            value.world_texel_size, value.transition_width)));
+        output.Store4(address + 112, uint4(asuint(value.fade_begin), asuint(value.fade_end), value.reserved1));
     }
 }
