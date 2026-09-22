@@ -173,6 +173,9 @@ frame-owned aligned batches and propagates publication failure to view rejection
 Debug/Release each pass 68 SceneRenderer, 18 upload-ring and 20 ABI tests; the
 three-light capture passes and an 180-frame Release/debug-layer run is free of
 warnings/errors after correcting the arena's constant-buffer usage declaration.
+The content-relative lookup also preserves fractional final tiles; a native
+negative control reproduced their loss under the old `extent - 1` clamp.
+The complete native ABI/lookup suite now passes 21 cases in each configuration.
 MultiView's local-light far-clipping regression is repaired and visually
 confirmed by the user. The
 [review evidence](plan/EX07A-contract-review.md#verification-obligations-and-current-evidence)

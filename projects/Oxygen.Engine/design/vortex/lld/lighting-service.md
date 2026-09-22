@@ -141,8 +141,8 @@ selection and shaders never silently elect or manufacture a sun.
 
 The [wire tables](lighting-gpu-abi.md) specify local/directional records,
 bindings, metadata, ranges, status and complete dynamic shadow-family offsets.
-Use those tables for the eventual compile-time and GPU sentinel checks, not the
-current incompatible records. There is no second shipping payload.
+Those tables own the implemented layouts, assertions and GPU sentinel checks;
+the A checkpoint records their validation. There is no second shipping payload.
 
 `ForwardLocalLightRecord` and its HLSL counterpart own one canonical point/spot
 evaluation record. Culling decodes it or an explicitly derived typed bounds
@@ -152,14 +152,14 @@ not another authored-light authority.
 | Semantic group | Required meaning                                                                                       |
 | -------------- | ------------------------------------------------------------------------------------------------------ |
 | Influence      | World position, effective range and derived inverse range where consumed.                              |
-| Direction/cone | Defined emitted-ray direction, inner/outer cone cosines and point/spot kind.                           |
+| Direction/cone | Defined emitted-ray direction, stable `sin²(theta/2)` cone parameters and point/spot kind.             |
 | Evaluation     | Linear color, resolved physical intensity, supported attenuation parameters and source-radius meaning. |
 | Association    | Typed flags and snapshot index; view-specific shadow lookup is separate from shared physical data.     |
 
-The existing `PositionalLightData` and `ForwardLocalLightRecord` are both 96 bytes
-but encode different fields. Replace incompatible culling reads and obsolete
-routes as one migration. Same-size assertions or pointer casts do not prove ABI
-compatibility; keep no alternate legacy payload/consumer.
+The incompatible historical 96-byte payloads and disconnected culler are
+retired. The active local evaluation record is 80 bytes, with integer kind,
+flags and selection index. Same-size assertions or pointer casts do not prove
+ABI compatibility; retain no alternate legacy payload/consumer.
 
 EX07A freezes each record/binding's field types, units, offsets, stride,
 alignment, reserved-zero bytes and invalid sentinels. C++ size/offset assertions

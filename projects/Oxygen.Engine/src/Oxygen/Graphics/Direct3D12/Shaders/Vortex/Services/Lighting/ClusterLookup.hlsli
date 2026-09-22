@@ -47,8 +47,10 @@ uint ComputeClusterIndex(float2 screen_pos, float view_depth, LightGridMetadata 
     if (any(grid.grid_size == 0u)) {
         return 0u;
     }
+    // Preserve fractional final tiles; subtracting a whole pixel can erase one.
+    // The integer grid clamp below also handles the exact upper boundary.
     const float2 local_pixel = clamp(screen_pos - grid.content_origin_px,
-        0.0f.xx, max(grid.content_extent_px - 1.0f.xx, 0.0f.xx));
+        0.0f.xx, max(grid.content_extent_px, 0.0f.xx));
     const uint2 cluster_xy = min(uint2(local_pixel) >> grid.pixel_size_shift,
         grid.grid_size.xy - 1u);
     const uint z_slice = ComputeClusterZSlice(view_depth, grid);

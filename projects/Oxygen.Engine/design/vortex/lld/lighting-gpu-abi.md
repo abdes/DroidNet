@@ -7,7 +7,7 @@ CPU/HLSL wire layouts. The [A checkpoint](../plan/EX07A-contract-review.md) owns
 approved decisions, evidence and remaining gates.
 
 The records below have size/alignment/every-offset assertions and native D3D12
-upload/decode/readback coverage. The native suite passes 20 cases in Debug and
+upload/decode/readback coverage. The native suite passes 21 cases in Debug and
 Release, including integer high-bit values, sentinels, reserved fields,
 nonzero element indices, adjacent records and nonsymmetric matrix transforms.
 Deferred draw constants are additionally decoded through actual aligned CBVs.

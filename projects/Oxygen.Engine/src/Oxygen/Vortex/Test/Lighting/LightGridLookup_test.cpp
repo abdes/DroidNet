@@ -113,6 +113,50 @@ namespace {
       (std::vector<std::uint32_t> { 0U, 0U, 1U, 0U, 1U, 2U, 4U, 6U, 7U }));
   }
 
+  NOLINT_TEST_F(LightingGpuAbiTest, LookupKeepsFractionalFinalTiles)
+  {
+    // A 64.75-pixel extent contains a second tile only 0.75 pixels wide.
+    // Raster sample centers in that tile must not be clamped into tile zero.
+    const auto grid = LightGridMetadata {
+      .grid_size = { 2U, 2U, 1U },
+      .pixel_size_shift = 6U,
+      .content_origin_px = { 13.25F, 7.25F },
+      .content_extent_px = { 64.75F, 64.75F },
+      .far_depth_m = 1.0F,
+      .near_depth_m = 0.0F,
+      .projection_kind = kLightGridOrthographic,
+    };
+    const auto cases = std::array {
+      GridLookupProbeInput {
+        .grid = grid,
+        .screen_position = { 76.5F, 70.5F },
+      },
+      GridLookupProbeInput {
+        .grid = grid,
+        .screen_position = { 77.5F, 70.5F },
+      },
+      GridLookupProbeInput {
+        .grid = grid,
+        .screen_position = { 76.5F, 71.5F },
+      },
+      GridLookupProbeInput {
+        .grid = grid,
+        .screen_position = { 77.5F, 71.5F },
+      },
+      GridLookupProbeInput {
+        .grid = grid,
+        .screen_position = { 78.5F, 72.5F },
+      },
+      GridLookupProbeInput { .grid = grid, .screen_position = { 12.5F, 6.5F } },
+    };
+    EXPECT_EQ(Decode({ .records = std::as_bytes(std::span(cases)),
+                .stride = 80U,
+                .record_kind = 6U,
+                .decoded_words = 1U,
+                .count = static_cast<std::uint32_t>(cases.size()) }),
+      (std::vector<std::uint32_t> { 0U, 1U, 2U, 3U, 3U, 0U }));
+  }
+
   NOLINT_TEST_F(LightingGpuAbiTest, LookupUsesPerspectiveLogSlicesAtBoundaries)
   {
     const auto grid = LightGridMetadata {
