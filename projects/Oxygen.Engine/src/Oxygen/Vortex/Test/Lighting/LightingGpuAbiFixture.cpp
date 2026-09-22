@@ -20,6 +20,8 @@
 #include <Oxygen/Config/GraphicsConfig.h>
 #include <Oxygen/Core/Bindless/Generated.BindlessAbi.h>
 #include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
+#include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
@@ -153,7 +155,7 @@ auto LightingGpuAbiTest::Decode(const DecodeRequest& request)
   -> std::vector<std::uint32_t>
 {
   const auto& [records, stride, record_kind, decoded_words, first_element,
-    count, indices_srv] = request;
+    count, indices_srv, constant_buffer_records] = request;
   CHECK_GT_F(stride, 0U);
   CHECK_EQ_F(records.size_bytes() % stride, 0U);
   CHECK_LE_F(static_cast<std::uint64_t>(first_element) + count,
@@ -161,13 +163,23 @@ auto LightingGpuAbiTest::Decode(const DecodeRequest& request)
   CHECK_GT_F(count, 0U);
   const auto output_bytes
     = static_cast<std::uint64_t>(count) * decoded_words * sizeof(std::uint32_t);
+  const auto record_count = records.size_bytes() / stride;
+  constexpr auto kAlignment = packing::kConstantBufferAlignment;
+  const auto storage_stride = constant_buffer_records
+    ? (static_cast<std::uint64_t>(stride) + kAlignment - 1U) / kAlignment
+      * kAlignment
+    : stride;
   auto input = CreateRegisteredBuffer({
-    .size_bytes = records.size_bytes(),
-    .usage = BufferUsage::kNone,
+    .size_bytes = record_count * storage_stride,
+    .usage
+    = constant_buffer_records ? BufferUsage::kConstant : BufferUsage::kNone,
     .memory = BufferMemory::kUpload,
     .debug_name = "Lighting ABI records",
   });
-  input->Update(records.data(), records.size_bytes(), 0U);
+  for (std::size_t index = 0; index < record_count; ++index) {
+    const auto record = records.subspan(index * stride, stride);
+    input->Update(record.data(), record.size_bytes(), index * storage_stride);
+  }
   auto output = CreateRegisteredBuffer({
     .size_bytes = output_bytes,
     .usage = BufferUsage::kStorage,
@@ -177,15 +189,41 @@ auto LightingGpuAbiTest::Decode(const DecodeRequest& request)
   oxygen::Graphics& graphics_api = Backend();
   auto& allocator = graphics_api.GetDescriptorAllocator();
   auto& registry = Backend().GetResourceRegistry();
+  auto source = input;
+  auto source_size = records.size_bytes();
+  auto source_stride = stride;
+  if (constant_buffer_records) {
+    auto cbv_slots = std::vector<ShaderVisibleIndex> {};
+    cbv_slots.reserve(record_count);
+    for (std::size_t index = 0; index < record_count; ++index) {
+      auto handle = allocator.AllocateRaw(ResourceViewType::kConstantBuffer,
+        DescriptorVisibility::kShaderVisible);
+      cbv_slots.push_back(allocator.GetShaderVisibleIndex(handle));
+      registry.RegisterView(*input, std::move(handle),
+        BufferViewDescription {
+          .view_type = ResourceViewType::kConstantBuffer,
+          .range = { index * storage_stride, storage_stride },
+        });
+    }
+    source_size = cbv_slots.size() * sizeof(ShaderVisibleIndex);
+    source_stride = sizeof(ShaderVisibleIndex);
+    source = CreateRegisteredBuffer({
+      .size_bytes = source_size,
+      .usage = BufferUsage::kNone,
+      .memory = BufferMemory::kUpload,
+      .debug_name = "Lighting ABI CBV indices",
+    });
+    source->Update(cbv_slots.data(), source_size, 0U);
+  }
   auto input_handle
     = allocator.AllocateBindless(bindless::generated::kGlobalSrvDomain,
       ResourceViewType::kStructuredBuffer_SRV);
   const auto input_slot = allocator.GetShaderVisibleIndex(input_handle);
-  registry.RegisterView(*input, std::move(input_handle),
+  registry.RegisterView(*source, std::move(input_handle),
     BufferViewDescription {
       .view_type = ResourceViewType::kStructuredBuffer_SRV,
-      .range = { 0U, records.size_bytes() },
-      .stride = stride,
+      .range = { 0U, source_size },
+      .stride = source_stride,
     });
   auto output_handle = allocator.AllocateRaw(
     ResourceViewType::kRawBuffer_UAV, DescriptorVisibility::kShaderVisible);
@@ -237,6 +275,9 @@ auto LightingGpuAbiTest::Decode(const DecodeRequest& request)
   SubmitCommands("Lighting ABI upload/decode/readback",
     [&](CommandRecorder& recorder) -> void {
       EnsureTracked(recorder, input, ResourceStates::kGenericRead);
+      if (source != input) {
+        EnsureTracked(recorder, source, ResourceStates::kGenericRead);
+      }
       EnsureTracked(recorder, constants, ResourceStates::kGenericRead);
       if (indices_buffer_) {
         EnsureTracked(recorder, indices_buffer_, ResourceStates::kGenericRead);

@@ -13,6 +13,7 @@
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/NamedType.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
@@ -160,6 +161,8 @@ class Scene : public Composition, public std::enable_shared_from_this<Scene> {
 public:
   using NodeTable = ResourceTable<SceneNodeImpl>;
   using SceneId = NodeHandle::SceneId;
+  using LifetimeId = NamedType<std::uint64_t, struct SceneLifetimeIdTag,
+    Comparable, Hashable, Printable>;
 
   using OptionalRefToImpl
     = std::optional<std::reference_wrapper<SceneNodeImpl>>;
@@ -184,6 +187,12 @@ public:
 
   //! Gets the unique ID of this scene (0-255).
   OXGN_SCN_NDAPI auto GetId() const noexcept { return scene_id_; }
+
+  //! Process-unique identity for this scene lifetime; never recycled.
+  [[nodiscard]] auto GetLifetimeId() const noexcept -> LifetimeId
+  {
+    return lifetime_id_;
+  }
 
   //=== Scene-Global Environment (Optional) ===------------------------------//
 
@@ -742,6 +751,7 @@ private:
 
   //! Unique ID for this scene (0-255)
   SceneId scene_id_;
+  LifetimeId lifetime_id_ { 0U };
 
   struct ObserverSubscription final {
     observer_ptr<ISceneObserver> observer;

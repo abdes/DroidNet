@@ -4,19 +4,24 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#ifndef OXYGEN_VORTEX_FORWARD_LOCAL_LIGHT_RECORD_HLSLI
-#define OXYGEN_VORTEX_FORWARD_LOCAL_LIGHT_RECORD_HLSLI
+#ifndef OXYGEN_VORTEX_FORWARDLOCALLIGHTRECORD_HLSLI
+#define OXYGEN_VORTEX_FORWARDLOCALLIGHTRECORD_HLSLI
 
-// Matches Vortex/Lighting/Types/ForwardLocalLightRecord.h: 96 bytes.
-// Selection has already excluded lights that do not affect the world.
+// Canonical 80-byte structured-buffer record; no physical-unit conversion here.
 struct ForwardLocalLightRecord
 {
-    float4 position_and_inv_radius;
-    float4 color_id_falloff_and_ray_bias;
-    float4 direction_and_extra_data;
-    float4 spot_angles_and_source_radius;
-    float4 tangent_ies_and_specular_scale;
-    float4 rect_data_and_linkage; // numeric kind, canonical flags, range, reserved
+    float3 position_ws;
+    float range_m;
+    float3 intensity_rgb_cd;
+    float source_radius_m;
+    float3 emitted_direction_ws;
+    float inverse_range_m;
+    float inner_cone_sin_half_squared;
+    float outer_cone_sin_half_squared;
+    uint kind;
+    uint flags;
+    uint selection_index;
+    uint3 reserved;
 };
 
 static const uint FORWARD_LOCAL_LIGHT_POINT = 0u;

@@ -36,7 +36,9 @@ namespace lighting::internal {
     OXYGEN_MAKE_NON_MOVABLE(ForwardLightPublisher)
 
     auto OnFrameStart(frame::SequenceNumber sequence, frame::Slot slot) -> void;
-    auto Publish(const BuiltLightGridFrame& built_frame) -> void;
+    auto InvalidateViews() -> void { published_views_.clear(); }
+    [[nodiscard]] auto Publish(const BuiltLightGridFrame& built_frame)
+      -> std::expected<void, LightingPreparationFailure>;
     [[nodiscard]] auto InspectBindings(ViewId view_id) const
       -> const LightingFrameBindings*;
     [[nodiscard]] auto ResolveBindingSlot(ViewId view_id) const
@@ -55,7 +57,11 @@ namespace lighting::internal {
     std::unique_ptr<upload::TransientStructuredBuffer> grid_metadata_buffer_;
     std::unique_ptr<upload::TransientStructuredBuffer> grid_indirection_buffer_;
     std::unique_ptr<upload::TransientStructuredBuffer>
-      directional_light_indices_buffer_;
+      directional_light_buffer_;
+    std::unique_ptr<upload::TransientStructuredBuffer> build_status_buffer_;
+    std::unique_ptr<upload::TransientStructuredBuffer> local_shadow_map_buffer_;
+    std::unique_ptr<upload::TransientStructuredBuffer>
+      directional_shadow_map_buffer_;
     std::unordered_map<ViewId, PublishedLightingView> published_views_;
   };
 

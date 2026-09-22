@@ -11,13 +11,12 @@
 #include <optional>
 #include <vector>
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Graphics/Common/Shaders.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/BuildPaths.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/BuildState.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/ModuleArtifact.h>
+#include <Oxygen/Testing/GTest.h>
 
 namespace {
 
@@ -124,7 +123,7 @@ NOLINT_TEST_F(
 
   const std::array artifacts {
     MakeArtifact(ShaderType::kCompute,
-      "Vortex/Services/Lighting/LightCulling.hlsl", "CS", {},
+      "Vortex/Services/PostProcess/Exposure.hlsl", "VortexExposureFrameCS", {},
       0x3333333333333333ULL),
     MakeArtifact(ShaderType::kPixel, "Ui/ImGui.hlsl", "PS",
       { ShaderDefine { .name = "DEBUG_PASS", .value = std::nullopt } },

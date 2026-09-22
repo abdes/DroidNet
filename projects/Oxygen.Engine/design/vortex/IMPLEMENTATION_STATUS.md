@@ -139,7 +139,13 @@ reproducer, allocation stacks, repair and validation scope.
 The next record-migration prerequisite implements checked CPU photometric
 resolution and stable spot-cone parameters. Twelve new cases bring LightingService
 to 17 passing tests in each configuration; three new C++ files are oxytidy-clean.
-The helper is not yet connected to production publication. The
+The evaluation-record checkpoint now connects that helper to publication.
+Local/directional records, lighting headers and deferred draw constants use
+their target 80/64/96/80-byte layouts. Debug/Release validation totals 390 passing
+test cases, and four forward RenderDoc capture cases pass. The review records
+the incomplete final lint rerun and remaining shadow migration.
+MultiView's local-light far-clipping regression is repaired and visually
+confirmed by the user. The
 [review evidence](plan/EX07A-contract-review.md#verification-obligations-and-current-evidence)
 keeps record migration, failure propagation and rendered PBR qualification open.
 The [shadow-memory follow-up](plan/EX07-shadow-memory-review.md) records the CSM,

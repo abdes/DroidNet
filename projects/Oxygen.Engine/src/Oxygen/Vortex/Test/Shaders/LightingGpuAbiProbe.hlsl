@@ -5,6 +5,9 @@
 //===----------------------------------------------------------------------===//
 
 #include "Vortex/Contracts/Lighting/LightGridData.hlsli"
+#include "Vortex/Contracts/Lighting/LightingFrameBindings.hlsli"
+#include "Vortex/Contracts/Lighting/DeferredLightConstants.hlsli"
+#include "Vortex/Contracts/View/ViewFrameBindings.hlsli"
 #include "Vortex/Contracts/Shadows/ShadowRecords.hlsli"
 #include "Vortex/Services/Lighting/ClusterLookup.hlsli"
 
@@ -101,5 +104,52 @@ void CS(uint3 thread : SV_DispatchThreadID) {
         }
         output.Store4(address, uint4(valid, iteration.count, sum, low_mask));
         output.Store(address + 16, high_mask);
+    } else if (g_RecordKind == 8) {
+        StructuredBuffer<ForwardLocalLightRecord> inputs = ResourceDescriptorHeap[args.x];
+        ForwardLocalLightRecord value = inputs[element];
+        output.Store4(address, asuint(float4(value.position_ws, value.range_m)));
+        output.Store4(address + 16, asuint(float4(value.intensity_rgb_cd, value.source_radius_m)));
+        output.Store4(address + 32, asuint(float4(value.emitted_direction_ws, value.inverse_range_m)));
+        output.Store4(address + 48, uint4(asuint(value.inner_cone_sin_half_squared),
+            asuint(value.outer_cone_sin_half_squared), value.kind, value.flags));
+        output.Store4(address + 64, uint4(value.selection_index, value.reserved));
+    } else if (g_RecordKind == 9) {
+        StructuredBuffer<DirectionalLightForwardData> inputs = ResourceDescriptorHeap[args.x];
+        DirectionalLightForwardData value = inputs[element];
+        output.Store4(address, uint4(asuint(value.direction_to_source_ws), value.atmosphere_light_slot));
+        output.Store4(address + 16, uint4(asuint(value.illuminance_rgb_lux), value.flags));
+        output.Store4(address + 32, uint4(asuint(value.ground_transmittance_rgb), value.atmosphere_mode_flags));
+        output.Store4(address + 48, uint4(value.selection_index, value.reserved));
+    } else if (g_RecordKind == 10) {
+        StructuredBuffer<LightingFrameBindings> inputs = ResourceDescriptorHeap[args.x];
+        LightingFrameBindings value = inputs[element];
+        output.Store4(address, uint4(value.directional_records_srv, value.local_records_srv,
+            value.cluster_ranges_srv, value.local_indices_srv));
+        output.Store4(address + 16, uint4(value.directional_count, value.local_count,
+            value.cluster_count, value.index_capacity));
+        output.Store4(address + 32, uint4(value.directional_shadow_map_srv, value.local_shadow_map_srv,
+            value.build_status_srv, value.grid_metadata_srv));
+        output.Store4(address + 48, uint4(value.scene_generation, value.selection_revision));
+        output.Store4(address + 64, uint4(value.frame_sequence, value.view_generation));
+        output.Store4(address + 80, uint4(value.publication_state, value.brdf_moments_srv,
+            value.brdf_mean_moments_srv, value.brdf_model_revision));
+    } else if (g_RecordKind == 11) {
+        StructuredBuffer<uint> cbv_slots = ResourceDescriptorHeap[args.x];
+        ConstantBuffer<DeferredLightConstants> value = ResourceDescriptorHeap[cbv_slots[element]];
+        // Matrix-vector multiplication independently proves upload orientation.
+        output.Store4(address, asuint(mul(value.light_world_matrix, float4(1, 2, 4, 8))));
+        output.Store4(address + 16, uint4(value.light_type, value.selection_index,
+            value.light_geometry_vertices_srv, value.light_geometry_vertex_count));
+    } else if (g_RecordKind == 12) {
+        StructuredBuffer<ViewFrameBindings> inputs = ResourceDescriptorHeap[args.x];
+        ViewFrameBindings value = inputs[element];
+        output.Store4(address, uint4(value.draw_frame_slot, value.lighting_frame_slot,
+            value.environment_frame_slot, value.frame_exposure_slot));
+        output.Store4(address + 16, uint4(value.scene_texture_frame_slot, value.scene_depth_slot,
+            value.screen_hzb_frame_slot, value.shadow_frame_slot));
+        output.Store4(address + 32, uint4(value.virtual_shadow_frame_slot, value.post_process_frame_slot,
+            value.debug_frame_slot, value.history_frame_slot));
+        output.Store4(address + 48, uint4(value.ray_tracing_frame_slot, value.exposure_status_uav,
+            value.lighting_view_generation));
     }
 }

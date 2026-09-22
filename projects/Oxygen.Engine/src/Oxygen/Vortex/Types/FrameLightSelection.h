@@ -13,6 +13,9 @@
 
 #include <glm/vec3.hpp>
 
+#include <Oxygen/Scene/Light/SpotLight.h>
+#include <Oxygen/Vortex/Types/LightingIndices.h>
+
 namespace oxygen::vortex {
 
 inline constexpr std::uint32_t kDirectionalLightAtmosphereModeFlagAuthority = 1U
@@ -25,13 +28,16 @@ inline constexpr std::uint32_t kDirectionalLightShadowFlagCastsShadows = 1U
   << 0U;
 inline constexpr std::uint32_t kFrameDirectionalLightMaxCascades = 4U;
 inline constexpr std::uint32_t kLocalLightFlagCastsShadows = 1U << 0U;
+inline constexpr std::uint32_t kLightFlagContactShadows = 1U << 1U;
+inline constexpr std::uint32_t kLightRequestFlags
+  = kLocalLightFlagCastsShadows | kLightFlagContactShadows;
 
-enum class LocalLightKind : std::uint32_t {
+enum class LocalLightKind : std::uint8_t {
   kPoint = 0U,
   kSpot = 1U,
 };
 
-enum class FrameDirectionalCsmSplitMode : std::uint32_t {
+enum class FrameDirectionalCsmSplitMode : std::uint8_t {
   kGenerated = 0U,
   kManualDistances = 1U,
 };
@@ -44,18 +50,15 @@ struct FrameDirectionalLightSelection {
 
   glm::vec3 color { 1.0F, 1.0F, 1.0F };
   float illuminance_lux { 0.0F };
+  float exposure_compensation_ev { 0.0F };
 
   glm::vec3 transmittance_toward_sun_rgb { 1.0F, 1.0F, 1.0F };
-  float diffuse_scale { 1.0F };
 
-  float specular_scale { 1.0F };
-  std::uint32_t atmosphere_light_slot { 0xFFFFFFFFU };
+  std::uint32_t atmosphere_light_slot { kInvalidAtmosphereLightIndex.get() };
   std::uint32_t atmosphere_mode_flags { 0U };
   std::uint32_t shadow_flags { 0U };
 
-  std::uint32_t light_function_atlas_index { 0xFFFFFFFFU };
   std::uint32_t cascade_count { 0U };
-  std::uint32_t light_flags { 0U };
 
   FrameDirectionalCsmSplitMode cascade_split_mode {
     FrameDirectionalCsmSplitMode::kGenerated,
@@ -83,13 +86,17 @@ struct FrameLocalLightSelection {
   float range { 0.0F };
 
   glm::vec3 color { 1.0F, 1.0F, 1.0F };
-  float intensity { 0.0F };
+  float luminous_flux_lm { 0.0F };
+  float exposure_compensation_ev { 0.0F };
 
   glm::vec3 direction { 0.0F, -1.0F, 0.0F };
-  float decay_exponent { 2.0F };
 
-  float inner_cone_cos { 1.0F };
-  float outer_cone_cos { 0.0F };
+  float inner_cone_half_angle_radians {
+    scene::SpotLight::kDefaultInnerConeAngle
+  };
+  float outer_cone_half_angle_radians {
+    scene::SpotLight::kDefaultOuterConeAngle
+  };
   float source_radius { 0.0F };
   std::uint32_t flags { 0U };
 
@@ -103,6 +110,7 @@ struct FrameLightSelection {
   std::optional<FrameDirectionalLightSelection> directional_light;
   std::vector<FrameLocalLightSelection> local_lights;
   std::uint64_t selection_epoch { 0U };
+  std::uint64_t scene_generation { 0U };
 
   [[nodiscard]] auto directional_light_count() const noexcept -> std::uint32_t
   {

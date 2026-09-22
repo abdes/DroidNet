@@ -18,6 +18,13 @@ namespace oxygen::vortex {
 inline constexpr auto kInvalidLightingArrayIndexValue
   = std::numeric_limits<std::uint32_t>::max();
 
+//! Explicit primary/secondary atmosphere slot, independent of selection order.
+using AtmosphereLightIndex = NamedType<std::uint32_t,
+  struct AtmosphereLightIndexTag, Comparable, Printable, Hashable>;
+inline constexpr AtmosphereLightIndex kInvalidAtmosphereLightIndex {
+  kInvalidLightingArrayIndexValue,
+};
+
 //! Index into the immutable local or directional selection owned by a binding.
 /*!
  The owning array and its selection revision complete this index's identity.
@@ -66,6 +73,10 @@ inline constexpr LightListOffset kCompleteLightListOffset {
 // interchangeable.
 
 // NOLINTBEGIN(*-magic-numbers)
+static_assert(sizeof(AtmosphereLightIndex) == 4U);
+static_assert(alignof(AtmosphereLightIndex) == 4U);
+static_assert(std::is_standard_layout_v<AtmosphereLightIndex>);
+static_assert(std::is_trivially_copyable_v<AtmosphereLightIndex>);
 static_assert(sizeof(LightSelectionIndex) == 4U);
 static_assert(alignof(LightSelectionIndex) == 4U);
 static_assert(std::is_standard_layout_v<LightSelectionIndex>);

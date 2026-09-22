@@ -98,11 +98,13 @@ m_gtest_program(
   SOURCES
     "LightingService_test.cpp"
     "Lighting/LightPhotometry_test.cpp"
+    "Lighting/LightEvaluationRecords_test.cpp"
 )
 target_sources(
   Oxygen.Vortex.LightingService.Tests
   PRIVATE
     "../Lighting/Internal/LightGridBuilder.cpp"
+    "../Lighting/Internal/LightEvaluationRecords.cpp"
     "../Lighting/Internal/LightPhotometry.cpp"
 )
 

@@ -46,6 +46,8 @@
 #include <Oxygen/Vortex/Lighting/Internal/DeferredLightPacketBuilder.h>
 #include <Oxygen/Vortex/Lighting/Internal/DeferredLightProxyGeometry.h>
 #include <Oxygen/Vortex/Lighting/Passes/DeferredLightPass.h>
+#include <Oxygen/Vortex/Lighting/Types/DeferredLightConstants.h>
+#include <Oxygen/Vortex/Lighting/Types/ForwardLocalLightRecord.h>
 #include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
@@ -63,7 +65,7 @@ namespace {
   constexpr std::uint32_t kDeferredLightConstantsStride
     = packing::kConstantBufferAlignment;
 
-  enum class DeferredLightKind : std::uint32_t {
+  enum class DeferredLightKind : std::uint8_t {
     kDirectional = 0U,
     kPoint = 1U,
     kSpot = 2U,
@@ -74,22 +76,6 @@ namespace {
     kOutsideVolume = 0U,
     kCameraInsideVolume = 1U,
     kNonPerspective = 2U,
-  };
-
-  struct alignas(packing::kShaderDataFieldAlignment) DeferredLightConstants {
-    glm::vec4 light_position_and_radius { 0.0F };
-    glm::vec4 light_color_and_intensity { 0.0F };
-    glm::vec4 light_direction_and_falloff { 0.0F };
-    glm::vec4 spot_angles { 0.0F };
-    glm::mat4 light_world_matrix { 1.0F };
-    glm::uvec4 shadow_info { 0U };
-    glm::vec4 atmosphere_transmittance_and_padding { 1.0F, 1.0F, 1.0F, 0.0F };
-    std::uint32_t light_type { 0U };
-    std::uint32_t light_geometry_vertices_srv {
-      kInvalidShaderVisibleIndex.get(),
-    };
-    std::uint32_t light_geometry_vertex_count { 0U };
-    std::uint32_t _padding0 { 0U };
   };
 
   struct DeferredLightDraw {
@@ -246,25 +232,23 @@ namespace {
   }
 
   auto IsCameraInsidePointLightVolume(const glm::vec3 camera,
-    const float near_clip, const DeferredLightConstants& constants) -> bool
+    const float near_clip, const ForwardLocalLightRecord& light) -> bool
   {
-    const auto position = glm::vec3 { constants.light_position_and_radius };
+    const auto position = light.position_ws;
     const auto radius
-      = constants.light_position_and_radius.w * 1.05F + near_clip;
+      = ((light.range_m + light.source_radius_m) * 1.05F) + near_clip;
     const auto delta = camera - position;
     return glm::dot(delta, delta) < radius * radius;
   }
 
   auto IsCameraInsideSpotLightVolume(const glm::vec3 camera,
-    const float near_clip, const DeferredLightConstants& constants) -> bool
+    const float near_clip, const ForwardLocalLightRecord& light) -> bool
   {
-    const auto position = glm::vec3 { constants.light_position_and_radius };
-    const auto direction
-      = glm::normalize(glm::vec3 { constants.light_direction_and_falloff });
-    const auto range
-      = (std::max)(constants.light_position_and_radius.w, 0.001F);
-    const auto outer_cosine
-      = std::clamp(constants.spot_angles.y, 0.001F, 0.999999F);
+    const auto position = light.position_ws;
+    const auto direction = light.emitted_direction_ws;
+    const auto range = light.range_m;
+    const auto outer_cosine = std::clamp(
+      1.0F - (2.0F * light.outer_cone_sin_half_squared), 0.001F, 0.999999F);
     const auto outer_sine
       = std::sqrt((std::max)(0.0F, 1.0F - outer_cosine * outer_cosine));
     const auto outer_tangent = outer_sine / (std::max)(outer_cosine, 1.0e-4F);
@@ -295,34 +279,14 @@ namespace {
       = (std::max)(resolved_view->NearPlane(), 0.001F) * 2.0F;
     const auto camera = resolved_view->CameraPosition();
 
-    switch (draw.kind) {
-    case DeferredLightKind::kPoint:
-      return IsCameraInsidePointLightVolume(camera, near_clip,
-               DeferredLightConstants {
-                 .light_position_and_radius
-                 = draw.packet.light_position_and_radius,
-                 .light_direction_and_falloff
-                 = draw.packet.light_direction_and_falloff,
-                 .spot_angles = draw.packet.spot_angles,
-               })
-        ? DeferredLocalLightDrawMode::kCameraInsideVolume
-        : DeferredLocalLightDrawMode::kOutsideVolume;
-    case DeferredLightKind::kSpot:
-      return IsCameraInsideSpotLightVolume(camera, near_clip,
-               DeferredLightConstants {
-                 .light_position_and_radius
-                 = draw.packet.light_position_and_radius,
-                 .light_direction_and_falloff
-                 = draw.packet.light_direction_and_falloff,
-                 .spot_angles = draw.packet.spot_angles,
-               })
-        ? DeferredLocalLightDrawMode::kCameraInsideVolume
-        : DeferredLocalLightDrawMode::kOutsideVolume;
-    case DeferredLightKind::kDirectional:
-    case DeferredLightKind::kStaticSkyLight:
-      break;
+    if (draw.packet.light == nullptr) {
+      return DeferredLocalLightDrawMode::kOutsideVolume;
     }
-    return DeferredLocalLightDrawMode::kOutsideVolume;
+    const auto inside = draw.packet.spherical_proxy
+      ? IsCameraInsidePointLightVolume(camera, near_clip, *draw.packet.light)
+      : IsCameraInsideSpotLightVolume(camera, near_clip, *draw.packet.light);
+    return inside ? DeferredLocalLightDrawMode::kCameraInsideVolume
+                  : DeferredLocalLightDrawMode::kOutsideVolume;
   }
 
   auto MakeAdditiveBlendTarget() -> graphics::BlendTargetDesc
@@ -544,6 +508,15 @@ namespace {
         : graphics::CompareOp::kLessOrEqual;
     }
 
+    auto rasterizer = direct_local_light
+      ? graphics::RasterizerStateDesc::FrontFaceCulling()
+      : graphics::RasterizerStateDesc::BackFaceCulling();
+    // A proxy can contain visible receivers while its exit surface lies beyond
+    // the camera far plane. Z clipping would remove those lighting fragments.
+    // Keep XY/W clipping, face culling and the selected depth test; the shader
+    // evaluates the actual receiver against the light's finite support.
+    rasterizer.depth_clip_enable = false;
+
     return graphics::GraphicsPipelineDesc::Builder {}
     .SetVertexShader(graphics::ShaderRequest {
       .stage = ShaderType::kVertex,
@@ -556,9 +529,7 @@ namespace {
       .entry_point = pixel_entry,
     })
     .SetPrimitiveTopology(graphics::PrimitiveType::kTriangleList)
-    .SetRasterizerState(direct_local_light
-        ? graphics::RasterizerStateDesc::FrontFaceCulling()
-        : graphics::RasterizerStateDesc::BackFaceCulling())
+    .SetRasterizerState(rasterizer)
     .SetDepthStencilState(depth_stencil)
     .SetBlendState({ MakeAdditiveBlendTarget() })
     .SetFramebufferLayout(graphics::FramebufferLayoutDesc {
@@ -622,7 +593,7 @@ auto DeferredLightPass::Record(RenderContext& ctx,
   }
   const auto wants_static_sky_light = static_sky_light_available
     && ShouldDrawStaticSkyLightDiffuse(ctx.shader_debug_mode);
-  if (!packets.directional.has_value() && packets.local_lights.empty()
+  if (!(packets.directional != nullptr) && packets.local_lights.empty()
     && !wants_static_sky_light) {
     return state;
   }
@@ -701,7 +672,7 @@ auto DeferredLightPass::Record(RenderContext& ctx,
   }
 
   auto draws = std::vector<DeferredLightDraw> {};
-  if (!skip_direct_lighting && packets.directional.has_value()) {
+  if (!skip_direct_lighting && (packets.directional != nullptr)) {
     draws.push_back(DeferredLightDraw {
       .kind = DeferredLightKind::kDirectional,
       .geometry_vertex_count = 3U,
@@ -718,9 +689,9 @@ auto DeferredLightPass::Record(RenderContext& ctx,
       draws.push_back(DeferredLightDraw {
         .packet = packet,
         .kind = kind,
-        .geometry_srv = kind == DeferredLightKind::kPoint ? point_geometry_srv_
-                                                          : spot_geometry_srv_,
-        .geometry_vertex_count = kind == DeferredLightKind::kPoint
+        .geometry_srv
+        = packet.spherical_proxy ? point_geometry_srv_ : spot_geometry_srv_,
+        .geometry_vertex_count = packet.spherical_proxy
           ? point_geometry_vertex_count_
           : spot_geometry_vertex_count_,
       });
@@ -826,36 +797,15 @@ auto DeferredLightPass::Record(RenderContext& ctx,
   for (std::size_t i = 0; i < draws.size(); ++i) {
     auto constants = DeferredLightConstants {};
     const auto& draw = draws[i];
+    constants.light_type = static_cast<std::uint32_t>(draw.kind);
+    constants.light_geometry_vertices_srv = draw.geometry_srv;
+    constants.light_geometry_vertex_count = draw.geometry_vertex_count;
     if (draw.kind == DeferredLightKind::kDirectional
-      && packets.directional.has_value()) {
-      constants.light_color_and_intensity = glm::vec4(
-        packets.directional->color, packets.directional->illuminance_lux);
-      constants.light_direction_and_falloff
-        = glm::vec4(packets.directional->direction, 1.0F);
-      constants.shadow_info.x = directional_shadow_bindings != nullptr
-        ? directional_shadow_bindings->cascade_count
-        : 0U;
-      constants.shadow_info.y = packets.directional->light_flags;
-      constants.shadow_info.z = packets.directional->atmosphere_light_slot;
-      constants.shadow_info.w = packets.directional->atmosphere_mode_flags;
-      constants.atmosphere_transmittance_and_padding
-        = glm::vec4(packets.directional->transmittance_toward_sun_rgb, 0.0F);
-      constants.light_type
-        = static_cast<std::uint32_t>(DeferredLightKind::kDirectional);
-    } else {
-      constants.light_position_and_radius
-        = draw.packet.light_position_and_radius;
-      constants.light_color_and_intensity
-        = draw.packet.light_color_and_intensity;
-      constants.light_direction_and_falloff
-        = draw.packet.light_direction_and_falloff;
-      constants.spot_angles = draw.packet.spot_angles;
+      && packets.directional != nullptr) {
+      constants.selection_index = packets.directional->selection_index;
+    } else if (draw.packet.light != nullptr) {
+      constants.selection_index = draw.packet.light->selection_index;
       constants.light_world_matrix = draw.packet.light_world_matrix;
-      constants.light_type = static_cast<std::uint32_t>(draw.kind);
-      constants.light_geometry_vertices_srv = draw.geometry_srv.get();
-      constants.light_geometry_vertex_count = draw.geometry_vertex_count;
-      constants.shadow_info.x = draw.packet.shadow_index;
-      constants.shadow_info.y = draw.packet.shadow_flags;
     }
     std::memcpy(mapped_bytes + i * kDeferredLightConstantsStride, &constants,
       sizeof(DeferredLightConstants));

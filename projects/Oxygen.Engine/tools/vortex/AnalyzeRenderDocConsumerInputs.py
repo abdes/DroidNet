@@ -35,7 +35,10 @@ def build_report(controller, report, capture_path, report_path):
         wanted_path = 'Vortex.Stage15.Fog' if height else 'Vortex.Stage18.Translucency'
         if wanted_path not in action.path:
             continue
-        reads = [x.descriptor for x in pipeline.GetReadOnlyResources(rd.ShaderStage.Pixel, True)]
+        used = pipeline.GetReadOnlyResources(rd.ShaderStage.Pixel, True)
+        reads = [x.descriptor for x in used]
+        by_slot = {int(x.access.arrayElement): x.descriptor for x in used
+                   if x.access.index == rd.DescriptorAccess.NoShaderBinding}
         writes = [x.descriptor for x in pipeline.GetReadWriteResources(rd.ShaderStage.Pixel, True)]
         statuses = [x for x in writes if names.get(str(x.resource)) == 'Vortex.PostProcess.Exposure.Status']
         environments = [x for x in reads if x.byteSize == x.elementByteSize == 672]
@@ -72,15 +75,21 @@ def build_report(controller, report, capture_path, report_path):
         else:
             # The mixed proof has one translucent, scalar-only emissive card.
             # Its normals face away from the only sun; local lighting/IBL are off.
-            lighting = [x for x in reads if x.byteSize == x.elementByteSize == 208]
+            lighting = [x for x in reads if x.byteSize == x.elementByteSize == 96]
             materials = [x for x in reads if names.get(str(x.resource)) == 'MaterialShadingConstantsAtlas']
             metadata = [x for x in reads if x.elementByteSize == 64 and x.byteSize == 320]
             if any(len(x) != 1 for x in (lighting, materials, metadata)):
                 raise RuntimeError('Missing mixed-card isolation inputs')
             light = lighting[0]
-            light_data = bytes(controller.GetBufferData(light.resource, light.byteOffset, 208))
-            direction = struct.unpack_from('<3f', light_data, 112)
-            if (struct.unpack_from('<2I', light_data, 60) != (1, 0)
+            light_data = bytes(controller.GetBufferData(light.resource, light.byteOffset, 96))
+            directional_slot = struct.unpack_from("<I", light_data, 0)[0]
+            directionals = [by_slot[directional_slot]] if directional_slot in by_slot else []
+            if len(directionals) != 1:
+                raise RuntimeError('Missing canonical directional record')
+            directional = directionals[0]
+            direction = struct.unpack('<3f', bytes(controller.GetBufferData(
+                directional.resource, directional.byteOffset, 12)))
+            if (struct.unpack_from('<2I', light_data, 16) != (1, 0)
                 or direction[1] <= 0 or direction[2] <= 0
                 or struct.unpack_from('<I', environment, 460)[0] != 0):
                 raise RuntimeError('Lighting isolation is not established')

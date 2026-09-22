@@ -29,6 +29,8 @@ class ExposureLightingGpuTest : public ExposureGpuTest {
   friend class ExposureAllocationScenario;
 
 protected:
+  enum class ExpectedViewOutcome : std::uint8_t { kRendered, kRejected };
+
   virtual auto AdditionalCapabilities() const -> CapabilitySet;
 
   struct Probe final : IViewExtension {
@@ -65,7 +67,8 @@ protected:
     double previous, double target, double seconds) const -> double;
   auto SetSurface(data::MaterialDomain domain, float emission = 0,
     bool rejected_mask = false) -> void;
-  auto RenderSurface(bool forward, float ev, unsigned frames = 5) -> void;
+  auto RenderSurface(bool forward, float ev, unsigned frames = 5,
+    ExpectedViewOutcome outcome = ExpectedViewOutcome::kRendered) -> void;
   auto RenderPublishedSurface(bool forward) -> void;
 
   std::shared_ptr<scene::Scene> scene;

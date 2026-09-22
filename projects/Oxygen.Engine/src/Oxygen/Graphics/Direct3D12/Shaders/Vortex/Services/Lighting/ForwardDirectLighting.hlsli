@@ -8,6 +8,7 @@
 #include "Vortex/Services/Shadows/DirectionalShadowCommon.hlsli"
 #include "Vortex/Services/Shadows/ShadowSurfaceNormal.hlsli"
 #include "Vortex/Shared/Lighting.hlsli"
+#include "Vortex/Services/Lighting/LocalLightAttenuation.hlsli"
 #include "Vortex/Shared/Geometry.hlsli"
 #include "Vortex/Services/Lighting/AtmosphereDirectionalLightShared.hlsli"
 
@@ -34,14 +35,6 @@ static inline float ComputePerceptualLuma(float3 rgb)
     return dot(rgb, float3(0.2126, 0.7152, 0.0722));
 }
 
-static inline bool TryGetResolvedDirectionalLight(out DirectionalLightForwardData directional_light)
-{
-    const LightingFrameBindings lighting = LoadResolvedLightingFrameBindings();
-    directional_light = lighting.directional;
-    return lighting.has_directional_light != 0u
-        && (directional_light.light_flags & kDirectionalLightFlagAffectsWorld) != 0u;
-}
-
 static inline DirectionalLightDiagnosticTerms EvaluateDirectionalLightDiagnosticTerms(
     DirectionalLightForwardData dl,
     float3 world_pos,
@@ -57,7 +50,7 @@ static inline DirectionalLightDiagnosticTerms EvaluateDirectionalLightDiagnostic
 {
     DirectionalLightDiagnosticTerms terms = (DirectionalLightDiagnosticTerms)0;
 
-    const float3 L = SafeNormalize(dl.direction);
+    const float3 L = SafeNormalize(dl.direction_to_source_ws);
     if (dot(L, L) < 0.5) {
         return terms;
     }
@@ -70,8 +63,8 @@ static inline DirectionalLightDiagnosticTerms EvaluateDirectionalLightDiagnostic
 
     const float3 transmittance = ResolveDirectionalLightAtmosphereTransmittance(
         world_pos,
-        dl.direction,
-        dl.transmittance_toward_sun_rgb,
+        dl.direction_to_source_ws,
+        dl.ground_transmittance_rgb,
         dl.atmosphere_mode_flags);
     terms.transmittance_luma = ComputePerceptualLuma(transmittance);
 
@@ -97,13 +90,12 @@ static inline DirectionalLightDiagnosticTerms EvaluateDirectionalLightDiagnostic
     const float3 diffuse = kD * base_rgb;
     terms.brdf_core = (diffuse + specular) * NdotL;
 
-    const float irradiance = LuxToIrradiance(dl.illuminance_lux);
-    const float3 raw_radiance = dl.color * (irradiance * (1.0 / kPi));
+    const float3 raw_radiance = dl.illuminance_rgb_lux * (1.0 / kPi);
     terms.full_direct = terms.brdf_core
         * ResolveDirectionalLightAtmosphereRadiance(
             world_pos,
-            dl.direction,
-            dl.transmittance_toward_sun_rgb,
+            dl.direction_to_source_ws,
+            dl.ground_transmittance_rgb,
             dl.atmosphere_mode_flags,
             raw_radiance)
         * terms.shadow_visibility;
@@ -135,7 +127,7 @@ static inline float3 EvaluateDirectionalLightContributionRawLambert(
     float3 N,
     float3 base_rgb)
 {
-    const float3 L = SafeNormalize(dl.direction);
+    const float3 L = SafeNormalize(dl.direction_to_source_ws);
     if (dot(L, L) < 0.5) {
         return 0.0.xxx;
     }
@@ -145,21 +137,21 @@ static inline float3 EvaluateDirectionalLightContributionRawLambert(
         return 0.0.xxx;
     }
 
-    const float radiance = LuxToIrradiance(dl.illuminance_lux) * (1.0 / kPi);
-    return base_rgb * dl.color * radiance * NdotL;
+    return base_rgb * dl.illuminance_rgb_lux * (1.0 / kPi) * NdotL;
 }
 
 float3 AccumulateDirectionalLightsRawLambert(
     float3 N,
     float3 base_rgb)
 {
-    DirectionalLightForwardData directional_light = (DirectionalLightForwardData)0;
-    if (!TryGetResolvedDirectionalLight(directional_light)) {
-        return 0.0.xxx;
+    const LightingFrameBindings lighting = LoadResolvedLightingFrameBindings();
+    float3 result = 0.0.xxx;
+    for (uint index = 0; index < lighting.directional_count; ++index) {
+        DirectionalLightForwardData light;
+        if (TryLoadDirectionalLight(lighting, index, light))
+            result += EvaluateDirectionalLightContributionRawLambert(light, N, base_rgb);
     }
-
-    return EvaluateDirectionalLightContributionRawLambert(
-        directional_light, N, base_rgb);
+    return result;
 }
 
 float3 AccumulateDirectionalLightGatesDebug(
@@ -175,18 +167,18 @@ float3 AccumulateDirectionalLightGatesDebug(
     float  metalness,
     float  roughness)
 {
-    (void)atmo;
-
-    DirectionalLightForwardData directional_light = (DirectionalLightForwardData)0;
-    if (!TryGetResolvedDirectionalLight(directional_light)) {
-        return 0.0.xxx;
+    const LightingFrameBindings lighting = LoadResolvedLightingFrameBindings();
+    float3 result = 0.0.xxx;
+    float count = 0.0;
+    for (uint index = 0; index < lighting.directional_count; ++index) {
+        DirectionalLightForwardData light;
+        if (!TryLoadDirectionalLight(lighting, index, light)) continue;
+        const DirectionalLightDiagnosticTerms terms = EvaluateDirectionalLightDiagnosticTerms(
+            light, world_pos, screen_position_xy, shadow_normal_ws, N, V, NdotV, F0, base_rgb, metalness, roughness);
+        result += float3(terms.shadow_visibility, terms.transmittance_luma, 0.0);
+        count += 1.0;
     }
-
-    const DirectionalLightDiagnosticTerms terms =
-        EvaluateDirectionalLightDiagnosticTerms(
-            directional_light, world_pos, screen_position_xy, shadow_normal_ws, N, V, NdotV,
-            F0, base_rgb, metalness, roughness);
-    return float3(terms.shadow_visibility, terms.transmittance_luma, 0.0);
+    return count > 0.0 ? result / count : result;
 }
 
 float3 AccumulateDirectionalLightsBrdfCore(
@@ -202,18 +194,15 @@ float3 AccumulateDirectionalLightsBrdfCore(
     float  metalness,
     float  roughness)
 {
-    (void)atmo;
-
-    DirectionalLightForwardData directional_light = (DirectionalLightForwardData)0;
-    if (!TryGetResolvedDirectionalLight(directional_light)) {
-        return 0.0.xxx;
+    const LightingFrameBindings lighting = LoadResolvedLightingFrameBindings();
+    float3 result = 0.0.xxx;
+    for (uint index = 0; index < lighting.directional_count; ++index) {
+        DirectionalLightForwardData light;
+        if (!TryLoadDirectionalLight(lighting, index, light)) continue;
+        result += EvaluateDirectionalLightDiagnosticTerms(light, world_pos, screen_position_xy,
+            shadow_normal_ws, N, V, NdotV, F0, base_rgb, metalness, roughness).brdf_core;
     }
-
-    const DirectionalLightDiagnosticTerms terms =
-        EvaluateDirectionalLightDiagnosticTerms(
-            directional_light, world_pos, screen_position_xy, shadow_normal_ws, N, V, NdotV,
-            F0, base_rgb, metalness, roughness);
-    return terms.brdf_core * directional_light.color;
+    return result;
 }
 
 float3 AccumulateDirectionalLights(
@@ -229,16 +218,15 @@ float3 AccumulateDirectionalLights(
     float  metalness,
     float  roughness)
 {
-    (void)atmo;
-
-    DirectionalLightForwardData directional_light = (DirectionalLightForwardData)0;
-    if (!TryGetResolvedDirectionalLight(directional_light)) {
-        return 0.0.xxx;
+    const LightingFrameBindings lighting = LoadResolvedLightingFrameBindings();
+    float3 result = 0.0.xxx;
+    for (uint index = 0; index < lighting.directional_count; ++index) {
+        DirectionalLightForwardData light;
+        if (TryLoadDirectionalLight(lighting, index, light))
+            result += EvaluateDirectionalLightContribution(light, world_pos, screen_position_xy,
+                shadow_normal_ws, N, V, NdotV, F0, base_rgb, metalness, roughness);
     }
-
-    return EvaluateDirectionalLightContribution(
-        directional_light, world_pos, screen_position_xy, shadow_normal_ws, N, V, NdotV,
-        F0, base_rgb, metalness, roughness);
+    return result;
 }
 
 float3 AccumulateLocalLightsClustered(
@@ -257,28 +245,28 @@ float3 AccumulateLocalLightsClustered(
 
     const LightingFrameBindings lighting = LoadResolvedLightingFrameBindings();
 
-    if (BX_IN_GLOBAL_SRV(lighting.local_light_buffer_srv)
-        && BX_IN_GLOBAL_SRV(lighting.grid_indirection_srv)
-        && BX_IN_GLOBAL_SRV(lighting.grid_metadata_buffer_srv)
-        && lighting.local_light_count > 0u) {
+    if (IsLightingPublicationReady(lighting) && BX_IN_GLOBAL_SRV(lighting.local_records_srv)
+        && BX_IN_GLOBAL_SRV(lighting.cluster_ranges_srv)
+        && BX_IN_GLOBAL_SRV(lighting.grid_metadata_srv)
+        && lighting.local_count > 0u) {
         StructuredBuffer<ForwardLocalLightRecord> local_lights =
-            ResourceDescriptorHeap[lighting.local_light_buffer_srv];
+            ResourceDescriptorHeap[lighting.local_records_srv];
 
         uint record_count = 0u, record_stride = 0u;
         local_lights.GetDimensions(record_count, record_stride);
-        if (record_count < lighting.local_light_count) {
+        if (record_count < lighting.local_count) {
             return direct;
         }
-        const uint record_limit = lighting.local_light_count;
-        const LightGridMetadata grid = LoadLightGridMetadata(lighting.grid_metadata_buffer_srv);
+        const uint record_limit = lighting.local_count;
+        const LightGridMetadata grid = LoadLightGridMetadata(lighting.grid_metadata_srv);
         if (any(grid.grid_size == 0u) || any(grid.content_extent_px <= 0.0f)) {
             return direct;
         }
         const uint cluster = ComputeClusterIndex(screen_position_xy, linear_depth, grid);
-        const ClusterLightRange range = GetClusterLightRange(lighting.grid_indirection_srv, cluster);
+        const ClusterLightRange range = GetClusterLightRange(lighting.cluster_ranges_srv, cluster);
         ClusterLightIteration iteration;
         if (!TryResolveClusterLightIteration(range, record_limit,
-                lighting.light_view_data_srv, iteration)) {
+                lighting.local_indices_srv, iteration)) {
             return direct;
         }
         for (uint i = 0; i < iteration.count; ++i) {
@@ -287,14 +275,14 @@ float3 AccumulateLocalLightsClustered(
                 continue;
             }
             const ForwardLocalLightRecord light = local_lights[light_index];
-            const uint kind = (uint)light.rect_data_and_linkage.x;
+            const uint kind = light.kind;
             if (kind != FORWARD_LOCAL_LIGHT_POINT && kind != FORWARD_LOCAL_LIGHT_SPOT) {
                 continue;
             }
 
-            const float3 to_light = light.position_and_inv_radius.xyz - world_pos;
+            const float3 to_light = light.position_ws - world_pos;
             const float dist_sq = dot(to_light, to_light);
-            const float radius = max(light.rect_data_and_linkage.z, 1e-6);
+            const float radius = light.range_m;
             if (dist_sq >= radius * radius) {
                 continue;
             }
@@ -306,15 +294,10 @@ float3 AccumulateLocalLightsClustered(
                 continue;
             }
 
-            float atten = saturate(1.0 - (dist / radius));
-            atten *= atten;
+            float atten = ComputeLocalLightDistanceAttenuation(to_light, radius);
             if (kind == FORWARD_LOCAL_LIGHT_SPOT) {
-                const float inner_cosine = light.spot_angles_and_source_radius.x;
-                const float outer_cosine = light.spot_angles_and_source_radius.y;
-                const float cosine = dot(-L, SafeNormalize(light.direction_and_extra_data.xyz));
-                const float cone = saturate((cosine - outer_cosine)
-                    / max(inner_cosine - outer_cosine, 1e-6));
-                atten *= cone * cone;
+                atten *= ComputeSpotLightAngularAttenuation(L, light.emitted_direction_ws,
+                    light.inner_cone_sin_half_squared, light.outer_cone_sin_half_squared);
             }
 
             const float3 H_unorm = V + L;
@@ -333,8 +316,7 @@ float3 AccumulateLocalLightsClustered(
             const float3 kS = F;
             const float3 kD = (1.0 - kS) * (1.0 - metalness);
             const float3 diffuse = kD * base_rgb;
-            const float3 contribution = (diffuse + specular) * light.color_id_falloff_and_ray_bias.rgb
-                * light.color_id_falloff_and_ray_bias.w * atten * NdotL;
+            const float3 contribution = (diffuse + specular) * light.intensity_rgb_cd * atten * NdotL;
             RecordForwardHdrSource(contribution);
             direct += contribution;
         }

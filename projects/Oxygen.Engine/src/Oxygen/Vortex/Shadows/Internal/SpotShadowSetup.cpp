@@ -70,7 +70,8 @@ namespace {
   [[nodiscard]] auto ResolveOuterConeCos(const FrameLocalLightSelection& light)
     -> float
   {
-    return std::clamp(light.outer_cone_cos, 0.001F, 0.999999F);
+    return std::clamp(
+      std::cos(light.outer_cone_half_angle_radians), 0.001F, 0.999999F);
   }
 
 } // namespace

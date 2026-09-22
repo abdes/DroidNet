@@ -5,6 +5,8 @@
 //===----------------------------------------------------------------------===//
 
 #include <array>
+#include <cmath>
+#include <cstdint>
 #include <memory>
 #include <span>
 #include <type_traits>
@@ -25,11 +27,13 @@
 #include <Oxygen/Vortex/Lighting/Types/DirectionalLightForwardData.h>
 #include <Oxygen/Vortex/Lighting/Types/FrameLightingInputs.h>
 #include <Oxygen/Vortex/Lighting/Types/LightGridMetadata.h>
+#include <Oxygen/Vortex/Lighting/Types/LightingPreparationFailure.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererCapability.h>
 #include <Oxygen/Vortex/Test/Fakes/Graphics.h>
 #include <Oxygen/Vortex/Types/FrameLightSelection.h>
 #include <Oxygen/Vortex/Types/LightingFrameBindings.h>
+#include <Oxygen/Vortex/Types/LightingIndices.h>
 
 namespace {
 
@@ -98,19 +102,21 @@ NOLINT_TEST(LightingServiceSurfaceTest,
 {
   auto bindings = LightingFrameBindings {};
 
-  EXPECT_EQ(bindings.local_light_buffer_srv, kInvalidShaderVisibleIndex);
-  EXPECT_EQ(bindings.light_view_data_srv, kInvalidShaderVisibleIndex);
-  EXPECT_EQ(bindings.grid_metadata_buffer_srv, kInvalidShaderVisibleIndex);
-  EXPECT_EQ(bindings.grid_indirection_srv, kInvalidShaderVisibleIndex);
-  EXPECT_EQ(bindings.directional_light_indices_srv, kInvalidShaderVisibleIndex);
-  EXPECT_EQ(bindings.directional_light_count, 0U);
-  EXPECT_EQ(bindings.local_light_count, 0U);
-  EXPECT_EQ(bindings.has_directional_light, 0U);
-  EXPECT_EQ(bindings.directional.cascade_count, 0U);
-  EXPECT_EQ(bindings.directional.atmosphere_light_slot, 0xFFFFFFFFU);
-  EXPECT_EQ(bindings.directional.atmosphere_mode_flags, 0U);
-  EXPECT_EQ(bindings.directional.transmittance_toward_sun_rgb,
-    glm::vec3(1.0F, 1.0F, 1.0F));
+  EXPECT_EQ(bindings.local_records_srv, kInvalidShaderVisibleIndex);
+  EXPECT_EQ(bindings.local_indices_srv, kInvalidShaderVisibleIndex);
+  EXPECT_EQ(bindings.grid_metadata_srv, kInvalidShaderVisibleIndex);
+  EXPECT_EQ(bindings.cluster_ranges_srv, kInvalidShaderVisibleIndex);
+  EXPECT_EQ(bindings.directional_records_srv, kInvalidShaderVisibleIndex);
+  EXPECT_EQ(bindings.directional_count, 0U);
+  EXPECT_EQ(bindings.local_count, 0U);
+  EXPECT_EQ(
+    bindings.publication_state, oxygen::vortex::kLightingPublicationDisabled);
+  EXPECT_EQ(bindings.build_status_srv, kInvalidShaderVisibleIndex);
+  EXPECT_EQ(bindings.local_shadow_map_srv, kInvalidShaderVisibleIndex);
+  const auto directional = DirectionalLightForwardData {};
+  EXPECT_EQ(directional.atmosphere_light_slot,
+    oxygen::vortex::kInvalidAtmosphereLightIndex);
+  EXPECT_EQ(directional.ground_transmittance_rgb, glm::vec3 { 1.0F });
 }
 
 NOLINT_TEST(LightingServiceSurfaceTest,
@@ -134,7 +140,7 @@ NOLINT_TEST(LightingServiceSurfaceTest,
     .position = glm::vec3 { 1.0F, 2.0F, 3.0F, },
     .range = 6.0F,
     .color = glm::vec3 { 0.4F, 0.6F, 0.9F, },
-    .intensity = 80.0F,
+    .luminous_flux_lm = 80.0F,
   });
 
   if (!selection.directional_light.has_value()) {
@@ -197,14 +203,14 @@ NOLINT_TEST_F(LightingServiceBehaviorTest,
     },
   };
   const auto selection = FrameLightSelection {};
-  auto builder
-    = oxygen::vortex::lighting::internal::LightGridBuilder(*renderer_);
+  auto builder = oxygen::vortex::lighting::internal::LightGridBuilder {};
   const auto result = builder.Build({
     .frame_light_set = &selection,
     .active_views = views,
   });
-  ASSERT_EQ(result.per_view.size(), 1U);
-  const auto& metadata = result.per_view.front().metadata;
+  ASSERT_TRUE(result.has_value());
+  ASSERT_EQ(result->per_view.size(), 1U);
+  const auto& metadata = result->per_view.front().metadata;
   EXPECT_EQ(metadata.grid_size, (glm::uvec3 { 1U, 2U, 32U }));
   EXPECT_EQ(metadata.content_origin_px, (glm::vec2 { 13.0F, 7.0F }));
   EXPECT_EQ(metadata.content_extent_px, (glm::vec2 { 63.0F, 65.0F }));
@@ -245,18 +251,17 @@ NOLINT_TEST_F(LightingServiceBehaviorTest,
     .position = glm::vec3 { 1.0F, 0.0F, 0.0F, },
     .range = 6.0F,
     .color = glm::vec3 { 0.4F, 0.7F, 1.0F, },
-    .intensity = 80.0F,
+    .luminous_flux_lm = 80.0F,
   });
   selection.local_lights.push_back(FrameLocalLightSelection {
     .kind = LocalLightKind::kSpot,
     .position = glm::vec3 { -2.0F, 3.0F, 1.0F, },
     .range = 8.0F,
     .color = glm::vec3 { 1.0F, 0.6F, 0.3F, },
-    .intensity = 120.0F,
+    .luminous_flux_lm = 120.0F,
     .direction = glm::vec3 { 0.0F, -1.0F, 0.0F, },
-    .decay_exponent = 2.0F,
-    .inner_cone_cos = 0.95F,
-    .outer_cone_cos = 0.75F,
+    .inner_cone_half_angle_radians = std::acos(0.95F),
+    .outer_cone_half_angle_radians = std::acos(0.75F),
   });
 
   auto first_view = MakeResolvedView(64.0F, 64.0F);
@@ -277,10 +282,12 @@ NOLINT_TEST_F(LightingServiceBehaviorTest,
     },
   };
 
-  service.BuildLightGrid(FrameLightingInputs {
-    .frame_light_set = &selection,
-    .active_views = std::span(view_inputs),
-  });
+  ASSERT_TRUE(service
+      .BuildLightGrid(FrameLightingInputs {
+        .frame_light_set = &selection,
+        .active_views = std::span(view_inputs),
+      })
+      .has_value());
 
   const auto& state = service.GetLastGridBuildState();
   EXPECT_EQ(state.build_count, 1U);
@@ -299,28 +306,70 @@ NOLINT_TEST_F(LightingServiceBehaviorTest,
     });
   ASSERT_NE(first_bindings, nullptr);
   ASSERT_NE(second_bindings, nullptr);
-  EXPECT_NE(first_bindings->local_light_buffer_srv, kInvalidShaderVisibleIndex);
+  EXPECT_NE(first_bindings->local_records_srv, kInvalidShaderVisibleIndex);
+  EXPECT_NE(first_bindings->grid_metadata_srv, kInvalidShaderVisibleIndex);
+  EXPECT_NE(first_bindings->cluster_ranges_srv, kInvalidShaderVisibleIndex);
+  EXPECT_EQ(first_bindings->local_indices_srv, kInvalidShaderVisibleIndex);
   EXPECT_NE(
-    first_bindings->grid_metadata_buffer_srv, kInvalidShaderVisibleIndex);
-  EXPECT_NE(first_bindings->grid_indirection_srv, kInvalidShaderVisibleIndex);
-  EXPECT_EQ(first_bindings->light_view_data_srv, kInvalidShaderVisibleIndex);
+    first_bindings->directional_records_srv, kInvalidShaderVisibleIndex);
+  EXPECT_NE(second_bindings->local_records_srv, kInvalidShaderVisibleIndex);
+  EXPECT_NE(second_bindings->grid_metadata_srv, kInvalidShaderVisibleIndex);
+  EXPECT_NE(second_bindings->cluster_ranges_srv, kInvalidShaderVisibleIndex);
+  EXPECT_EQ(second_bindings->local_indices_srv, kInvalidShaderVisibleIndex);
   EXPECT_NE(
-    first_bindings->directional_light_indices_srv, kInvalidShaderVisibleIndex);
-  EXPECT_NE(
-    second_bindings->local_light_buffer_srv, kInvalidShaderVisibleIndex);
-  EXPECT_NE(
-    second_bindings->grid_metadata_buffer_srv, kInvalidShaderVisibleIndex);
-  EXPECT_NE(second_bindings->grid_indirection_srv, kInvalidShaderVisibleIndex);
-  EXPECT_EQ(second_bindings->light_view_data_srv, kInvalidShaderVisibleIndex);
-  EXPECT_NE(
-    second_bindings->directional_light_indices_srv, kInvalidShaderVisibleIndex);
-  EXPECT_EQ(first_bindings->directional.transmittance_toward_sun_rgb,
-    glm::vec3(0.25F, 0.5F, 0.75F));
-  EXPECT_EQ(first_bindings->directional.atmosphere_light_slot, 0U);
-  EXPECT_EQ(first_bindings->directional.atmosphere_mode_flags,
-    oxygen::vortex::kDirectionalLightAtmosphereModeFlagAuthority
-      | oxygen::vortex::
-        kDirectionalLightAtmosphereModeFlagHasBakedGroundTransmittance);
+    second_bindings->directional_records_srv, kInvalidShaderVisibleIndex);
+  EXPECT_EQ(first_bindings->directional_records_srv,
+    second_bindings->directional_records_srv);
+  EXPECT_EQ(
+    first_bindings->local_records_srv, second_bindings->local_records_srv);
+  EXPECT_EQ(first_bindings->directional_count, 1U);
+  EXPECT_EQ(first_bindings->local_count, 2U);
+  EXPECT_EQ(first_bindings->publication_state,
+    oxygen::vortex::kLightingPublicationRecorded);
+  EXPECT_NE(first_bindings->build_status_srv, kInvalidShaderVisibleIndex);
+  EXPECT_NE(first_bindings->local_shadow_map_srv, kInvalidShaderVisibleIndex);
+  EXPECT_EQ(first_bindings->index_capacity, 0U);
+  EXPECT_EQ(first_bindings->selection_revision.at(0), 91U);
+  EXPECT_NE(first_bindings->view_generation, second_bindings->view_generation);
+  EXPECT_NE(first_bindings->view_generation, (std::array<std::uint32_t, 2> {}));
+}
+
+NOLINT_TEST_F(
+  LightingServiceBehaviorTest, FailedPreparationInvalidatesPriorPublication)
+{
+  auto service = LightingService(*renderer_);
+  service.OnFrameStart(
+    oxygen::frame::SequenceNumber { 1U }, oxygen::frame::Slot { 0U });
+  const auto view = MakeResolvedView(64.0F, 64.0F);
+  const auto views = std::array {
+    PreparedViewLightingInput {
+      .view_id = oxygen::ViewId { 1U },
+      .prepared_scene = {},
+      .resolved_view = oxygen::observer_ptr { &view },
+      .composition_view = {},
+    },
+  };
+  auto selection = FrameLightSelection {};
+  selection.local_lights.push_back(FrameLocalLightSelection {
+    .range = 4.0F,
+    .luminous_flux_lm = 1000.0F,
+  });
+  const auto inputs = FrameLightingInputs {
+    .frame_light_set = &selection,
+    .active_views = views,
+  };
+  ASSERT_TRUE(service.BuildLightGrid(inputs).has_value());
+  ASSERT_NE(
+    service.InspectForwardLightBindings(oxygen::ViewId { 1U }), nullptr);
+  selection.local_lights.front().luminous_flux_lm = -1.0F;
+  const auto failure = service.BuildLightGrid(inputs);
+  ASSERT_FALSE(failure.has_value());
+  EXPECT_EQ(failure.error().error,
+    oxygen::vortex::LightingPreparationError::kInvalidInput);
+  EXPECT_EQ(
+    service.InspectForwardLightBindings(oxygen::ViewId { 1U }), nullptr);
+  EXPECT_EQ(service.ResolveLightingFrameSlot(oxygen::ViewId { 1U }),
+    kInvalidShaderVisibleIndex);
 }
 
 } // namespace

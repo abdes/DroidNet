@@ -239,11 +239,19 @@ then with each light individually, and finally with both disabled. Use the
 point/spot switches above. Analyze each capture with
 `tools/vortex/AnalyzeRenderDocForwardLocalLights.py`, using the existing runner's
 `-PassName ForwardLocalBoth`, `ForwardLocalPoint`, `ForwardLocalSpot`, or
-`ForwardLocalNone` respectively. The audit checks the six-float4 payload,
+`ForwardLocalNone` respectively. The audit checks the typed 80-byte local record and 96-byte lighting header,
 canonical light count/kinds/flags, consumed grid ranges/indices, and nonzero
 forward SceneColor. The disabled case requires zero scene radiance. These are
 binding/contribution checks; calibrated forward/deferred brightness and shadow
 parity require their own acceptance cases.
+
+For default-layout deferred local-light coverage, capture a normal run with both
+lights enabled and analyze it with
+`tools/vortex/AnalyzeRenderDocMultiViewLocalLights.py` through the same runner.
+The probe compares HDR pixels immediately before and after each local-light draw.
+It rejects the former far-clipping failure (camera far plane 100 m versus light
+ranges 250/300 m), where a draw was recorded but changed no target pixels.
+This check requires the default layout; it is not a brightness calibration.
 
 For the EX05-15 human visual checkpoint, launch from the engine directory:
 

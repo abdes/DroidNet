@@ -9,65 +9,66 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
-
-#include <glm/vec3.hpp>
-#include <glm/vec4.hpp>
+#include <type_traits>
 
 #include <Oxygen/Core/Bindless/Types.h>
-#include <Oxygen/Core/Constants.h>
-#include <Oxygen/Vortex/Lighting/Types/DirectionalLightForwardData.h>
 
 namespace oxygen::vortex {
 
-//! Bindless lighting-system routing payload for a single view.
-struct alignas(packing::kShaderDataFieldAlignment) LightingFrameBindings {
-  ShaderVisibleIndex local_light_buffer_srv { kInvalidShaderVisibleIndex };
-  ShaderVisibleIndex light_view_data_srv { kInvalidShaderVisibleIndex };
-  ShaderVisibleIndex grid_metadata_buffer_srv { kInvalidShaderVisibleIndex };
-  ShaderVisibleIndex grid_indirection_srv { kInvalidShaderVisibleIndex };
-  ShaderVisibleIndex directional_light_indices_srv {
-    kInvalidShaderVisibleIndex
-  };
+inline constexpr std::uint32_t kLightingPublicationDisabled = 0U;
+inline constexpr std::uint32_t kLightingPublicationEmpty = 1U;
+inline constexpr std::uint32_t kLightingPublicationRecorded = 2U;
+inline constexpr std::uint32_t kLightingPublicationFailed = 3U;
 
-  glm::ivec3 grid_size { 0 };
-  float reserved_grid0 { 0.0F };
-
-  glm::vec3 grid_z_params { 0.0F };
-  float reserved_grid1 { 0.0F };
-
-  std::uint32_t num_grid_cells { 0U };
-  std::uint32_t max_culled_lights_per_cell { 0U };
-  std::uint32_t directional_light_count { 0U };
-  std::uint32_t local_light_count { 0U };
-
-  std::uint32_t has_directional_light { 0U };
-  std::uint32_t affects_translucent_lighting { 0U };
-  std::uint32_t flags { 0U };
-  std::uint32_t reserved_flags { 0U };
-
-  glm::vec4 pre_view_translation_offset { 0.0F };
-  std::array<std::uint32_t, 3> reserved_directional_alignment {};
-
-  DirectionalLightForwardData directional {};
-
-  // Compatibility slots retained while later Phase 4 consumers migrate from
-  // the old placeholder binding shape to the richer lighting contract.
-  ShaderVisibleIndex directional_lights_slot { kInvalidShaderVisibleIndex };
-  ShaderVisibleIndex positional_lights_slot { kInvalidShaderVisibleIndex };
-  std::array<std::uint32_t, 2> reserved_tail {};
+struct alignas(16) LightingFrameBindings {
+  ShaderVisibleIndex directional_records_srv { kInvalidShaderVisibleIndex };
+  ShaderVisibleIndex local_records_srv { kInvalidShaderVisibleIndex };
+  ShaderVisibleIndex cluster_ranges_srv { kInvalidShaderVisibleIndex };
+  ShaderVisibleIndex local_indices_srv { kInvalidShaderVisibleIndex };
+  std::uint32_t directional_count { 0U };
+  std::uint32_t local_count { 0U };
+  std::uint32_t cluster_count { 0U };
+  std::uint32_t index_capacity { 0U };
+  ShaderVisibleIndex directional_shadow_map_srv { kInvalidShaderVisibleIndex };
+  ShaderVisibleIndex local_shadow_map_srv { kInvalidShaderVisibleIndex };
+  ShaderVisibleIndex build_status_srv { kInvalidShaderVisibleIndex };
+  ShaderVisibleIndex grid_metadata_srv { kInvalidShaderVisibleIndex };
+  std::array<std::uint32_t, 2> scene_generation {};
+  std::array<std::uint32_t, 2> selection_revision {};
+  std::array<std::uint32_t, 2> frame_sequence {};
+  std::array<std::uint32_t, 2> view_generation {};
+  std::uint32_t publication_state { 0U };
+  ShaderVisibleIndex brdf_moments_srv { kInvalidShaderVisibleIndex };
+  ShaderVisibleIndex brdf_mean_moments_srv { kInvalidShaderVisibleIndex };
+  std::uint32_t brdf_model_revision { 0U };
 };
 
+// NOLINTBEGIN(*-magic-numbers)
+static_assert(sizeof(LightingFrameBindings) == 96U);
+static_assert(alignof(LightingFrameBindings) == 16U);
+static_assert(std::is_standard_layout_v<LightingFrameBindings>);
+static_assert(std::is_trivially_copyable_v<LightingFrameBindings>);
+static_assert(offsetof(LightingFrameBindings, directional_records_srv) == 0U);
+static_assert(offsetof(LightingFrameBindings, local_records_srv) == 4U);
+static_assert(offsetof(LightingFrameBindings, cluster_ranges_srv) == 8U);
+static_assert(offsetof(LightingFrameBindings, local_indices_srv) == 12U);
+static_assert(offsetof(LightingFrameBindings, directional_count) == 16U);
+static_assert(offsetof(LightingFrameBindings, local_count) == 20U);
+static_assert(offsetof(LightingFrameBindings, cluster_count) == 24U);
+static_assert(offsetof(LightingFrameBindings, index_capacity) == 28U);
 static_assert(
-  alignof(LightingFrameBindings) == packing::kShaderDataFieldAlignment);
-static_assert(sizeof(LightingFrameBindings) == 208);
-static_assert(offsetof(LightingFrameBindings, has_directional_light) == 68);
-static_assert(
-  offsetof(LightingFrameBindings, pre_view_translation_offset) == 84);
-static_assert(
-  offsetof(LightingFrameBindings, reserved_directional_alignment) == 100);
-static_assert(offsetof(LightingFrameBindings, directional) == 112);
-static_assert(offsetof(LightingFrameBindings, directional_lights_slot) == 192);
-static_assert(offsetof(LightingFrameBindings, positional_lights_slot) == 196);
-static_assert(offsetof(LightingFrameBindings, reserved_tail) == 200);
+  offsetof(LightingFrameBindings, directional_shadow_map_srv) == 32U);
+static_assert(offsetof(LightingFrameBindings, local_shadow_map_srv) == 36U);
+static_assert(offsetof(LightingFrameBindings, build_status_srv) == 40U);
+static_assert(offsetof(LightingFrameBindings, grid_metadata_srv) == 44U);
+static_assert(offsetof(LightingFrameBindings, scene_generation) == 48U);
+static_assert(offsetof(LightingFrameBindings, selection_revision) == 56U);
+static_assert(offsetof(LightingFrameBindings, frame_sequence) == 64U);
+static_assert(offsetof(LightingFrameBindings, view_generation) == 72U);
+static_assert(offsetof(LightingFrameBindings, publication_state) == 80U);
+static_assert(offsetof(LightingFrameBindings, brdf_moments_srv) == 84U);
+static_assert(offsetof(LightingFrameBindings, brdf_mean_moments_srv) == 88U);
+static_assert(offsetof(LightingFrameBindings, brdf_model_revision) == 92U);
+// NOLINTEND(*-magic-numbers)
 
 } // namespace oxygen::vortex

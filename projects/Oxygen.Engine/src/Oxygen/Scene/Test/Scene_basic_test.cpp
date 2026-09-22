@@ -7,14 +7,14 @@
 #include <memory>
 #include <string>
 
-#include <Oxygen/Testing/GTest.h>
-
 #include "./SceneTest.h"
 #include "Helpers/TestSceneFactory.h"
+
 #include <Oxygen/Composition/ObjectMetadata.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneFlags.h>
 #include <Oxygen/Scene/SceneNode.h>
+#include <Oxygen/Testing/GTest.h>
 
 using oxygen::ObjectMetadata;
 using oxygen::scene::NodeHandle;
@@ -55,6 +55,19 @@ NOLINT_TEST_F(SceneBasicTest, SceneConstruction)
   EXPECT_EQ(scene3->GetName(), "Scene With Spaces");
   EXPECT_FALSE(scene1->IsEmpty()); // Has one node from factory
   EXPECT_EQ(scene1->GetNodeCount(), 1);
+}
+
+NOLINT_TEST(
+  SceneLifetimeIdentityTest, RecycledNodeSceneIdDoesNotReuseLifetimeIdentity)
+{
+  auto first = std::make_unique<Scene>("First lifetime", 1U);
+  const auto node_scene_id = first->GetId();
+  const auto first_lifetime = first->GetLifetimeId();
+  EXPECT_NE(first_lifetime.get(), 0U);
+  first.reset();
+  const auto second = std::make_unique<Scene>("Second lifetime", 1U);
+  EXPECT_EQ(second->GetId(), node_scene_id);
+  EXPECT_NE(second->GetLifetimeId(), first_lifetime);
 }
 
 NOLINT_TEST_F(SceneBasicTest, SceneNameOperations)

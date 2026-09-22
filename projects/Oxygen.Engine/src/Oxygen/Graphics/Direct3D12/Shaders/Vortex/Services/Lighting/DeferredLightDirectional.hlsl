@@ -53,10 +53,15 @@ float4 DeferredLightDirectionalPS(VortexFullscreenTriangleOutput input) : SV_Tar
     return 0.0f.xxxx;
 #endif
 
+    const LightingFrameBindings lighting_bindings = LoadResolvedLightingFrameBindings();
+    DirectionalLightForwardData light;
+    if (!TryLoadDirectionalLight(lighting_bindings, light_constants.selection_index, light)) return 0.0f.xxxx;
+    const LightShadowReference shadow_reference = LoadLightShadowReference(
+        lighting_bindings.directional_shadow_map_srv, light.selection_index);
     const float3 light_dir =
-        VortexSafeNormalize(light_constants.light_direction_and_falloff.xyz);
+        light.direction_to_source_ws;
     float light_attenuation = 1.0f;
-    if (light_constants.shadow_info.x > 0u) {
+    if (shadow_reference.projection_kind == SHADOW_PROJECTION_CASCADED_2D) {
         light_attenuation = ComputeDirectionalShadowVisibility(
             world_position,
             surface.world_normal,
@@ -65,15 +70,15 @@ float4 DeferredLightDirectionalPS(VortexFullscreenTriangleOutput input) : SV_Tar
     const float3 deferred_light_radiance = ResolveDirectionalLightAtmosphereRadiance(
         world_position,
         light_dir,
-        light_constants.atmosphere_transmittance_and_padding.xyz,
-        light_constants.shadow_info.w,
-        LoadDeferredLightColor(light_constants.light_color_and_intensity));
+        light.ground_transmittance_rgb,
+        light.atmosphere_mode_flags,
+        light.illuminance_rgb_lux);
 #if defined(DEBUG_DIRECT_LIGHTING_ONLY)
     const float NoL = saturate(dot(surface.world_normal, light_dir));
     return float4(surface.base_color * deferred_light_radiance * NoL * GetPreExposure(), 0.0f);
 #elif defined(DEBUG_DIRECT_LIGHT_GATES)
     const float transmittance_luma = dot(
-        saturate(light_constants.atmosphere_transmittance_and_padding.xyz),
+        saturate(light.ground_transmittance_rgb),
         float3(0.2126f, 0.7152f, 0.0722f));
     return float4(saturate(light_attenuation), saturate(transmittance_luma), 0.0f, 0.0f);
 #elif defined(DEBUG_DIRECT_BRDF_CORE)

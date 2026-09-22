@@ -161,18 +161,18 @@ static inline bool GetLocalFogDirectionalLight(
     out float3 directional_light_direction)
 {
     const LightingFrameBindings lighting = LoadResolvedLightingFrameBindings();
-    if (lighting.has_directional_light == 0u)
+    DirectionalLightForwardData light;
+    if (!TryLoadDirectionalLight(lighting, 0u, light))
     {
         directional_light_color = 0.0f.xxx;
         directional_light_direction = float3(0.0f, 0.0f, 1.0f);
         return false;
     }
 
-    directional_light_color = lighting.directional.color
-        * lighting.directional.illuminance_lux;
-    directional_light_direction = lighting.directional.direction;
+    directional_light_color = light.illuminance_rgb_lux;
+    directional_light_direction = light.direction_to_source_ws;
 
-    if ((lighting.directional.atmosphere_mode_flags
+    if ((light.atmosphere_mode_flags
             & kLocalFogDirectionalLightAtmosphereAuthority) != 0u)
     {
         // Match UE5.7 local-fog lighting: the local fog path consumes the
@@ -181,7 +181,7 @@ static inline bool GetLocalFogDirectionalLight(
         // still applies the baked transmittance here as an approximation to
         // avoid a transmittance texture sample in the local-fog shader.
         directional_light_color
-            *= lighting.directional.transmittance_toward_sun_rgb;
+            *= light.ground_transmittance_rgb;
     }
 
     return true;

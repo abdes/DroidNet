@@ -7,17 +7,17 @@
 #pragma once
 
 #include <cstdint>
+#include <expected>
 #include <vector>
 
 #include <Oxygen/Core/Types/Frame.h>
-#include <Oxygen/Vortex/Lighting/Types/ForwardLocalLightRecord.h>
+#include <Oxygen/Vortex/Lighting/Internal/LightEvaluationRecords.h>
 #include <Oxygen/Vortex/Lighting/Types/FrameLightingInputs.h>
 #include <Oxygen/Vortex/Lighting/Types/LightGridMetadata.h>
+#include <Oxygen/Vortex/Lighting/Types/LightingPreparationFailure.h>
 #include <Oxygen/Vortex/Types/LightingFrameBindings.h>
 
 namespace oxygen::vortex {
-
-class Renderer;
 
 namespace lighting::internal {
 
@@ -28,8 +28,7 @@ namespace lighting::internal {
   };
 
   struct BuiltLightGridFrame {
-    std::vector<ForwardLocalLightRecord> local_light_records;
-    std::vector<std::uint32_t> directional_light_indices;
+    LightEvaluationRecords evaluation;
     std::vector<BuiltLightGridView> per_view;
     std::uint64_t selection_epoch { 0U };
   };
@@ -46,18 +45,15 @@ namespace lighting::internal {
       std::uint64_t selection_epoch { 0U };
     };
 
-    explicit LightGridBuilder(Renderer& renderer);
-
     auto OnFrameStart(frame::SequenceNumber sequence, frame::Slot slot) -> void;
     [[nodiscard]] auto Build(const FrameLightingInputs& inputs)
-      -> BuiltLightGridFrame;
+      -> std::expected<BuiltLightGridFrame, LightingPreparationFailure>;
     [[nodiscard]] auto GetLastBuildStats() const noexcept -> const BuildStats&
     {
       return last_build_stats_;
     }
 
   private:
-    Renderer& renderer_;
     BuildStats last_build_stats_ {};
   };
 

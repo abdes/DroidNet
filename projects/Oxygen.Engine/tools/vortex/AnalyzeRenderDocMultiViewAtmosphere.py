@@ -65,17 +65,29 @@ def build_report(controller, report, capture_path, report_path):
                     raise RuntimeError("AP volume has no scattering signal")
                 report.append(f"consumer={draw.event_id} path={draw.path} strength={strength} max_ap_rgb={maximum_rgb}")
             if draw in forward:
-                lighting = [x for x in reads if x.elementByteSize == 208]
+                used = controller.GetPipelineState().GetReadOnlyResources(rd.ShaderStage.Pixel, True)
+                by_slot = {int(x.access.arrayElement): x.descriptor for x in used
+                           if x.access.index == rd.DescriptorAccess.NoShaderBinding}
+                lighting = [x for x in reads if x.elementByteSize == x.byteSize == 96]
                 environment = [x for x in reads if x.elementByteSize == 672]
                 materials = [x for x in reads if names.get(str(x.resource)) == "MaterialShadingConstantsAtlas"]
                 if any(len(x) != 1 for x in (lighting, environment, materials)):
                     raise RuntimeError("Missing forward isolation bindings")
                 light = lighting[0]
-                data = bytes(controller.GetBufferData(light.resource, light.byteOffset, 208))
-                local_count = struct.unpack_from("<I", data, 64)[0]
-                directional_count = struct.unpack_from("<I", data, 60)[0]
-                sun_direction = struct.unpack_from("<3f", data, 112)
-                sun_lux = struct.unpack_from("<f", data, 140)[0]
+                data = bytes(controller.GetBufferData(light.resource, light.byteOffset, 96))
+                local_count = struct.unpack_from("<I", data, 20)[0]
+                directional_count = struct.unpack_from("<I", data, 16)[0]
+                directional_slot = struct.unpack_from("<I", data, 0)[0]
+                directionals = [by_slot[directional_slot]] if directional_slot in by_slot else []
+                if len(directionals) != 1:
+                    raise RuntimeError("Missing canonical directional record")
+                directional = directionals[0]
+                record = bytes(controller.GetBufferData(directional.resource, directional.byteOffset, 64))
+                sun_direction = struct.unpack_from("<3f", record, 0)
+                sun_rgb_lux = struct.unpack_from("<3f", record, 16)
+                if sun_rgb_lux != (1000.0, 1000.0, 1000.0):
+                    raise RuntimeError(f"Unexpected resolved directional RGB lux: {sun_rgb_lux}")
+                sun_lux = sun_rgb_lux[0]
                 if local_count != 0 or directional_count != 1 or sun_lux != 1000 or sun_direction[1] <= 0 or sun_direction[2] <= 0:
                     raise RuntimeError(f"Surface lights are not isolated: locals={local_count}, directionals={directional_count}, lux={sun_lux}, sun={sun_direction}")
                 env = environment[0]

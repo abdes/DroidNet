@@ -4,7 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <expected>
 #include <memory>
+#include <utility>
 
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/Frame.h>
@@ -15,6 +17,7 @@
 #include <Oxygen/Vortex/Lighting/LightingService.h>
 #include <Oxygen/Vortex/Lighting/Passes/DeferredLightPass.h>
 #include <Oxygen/Vortex/Lighting/Types/FrameLightingInputs.h>
+#include <Oxygen/Vortex/Lighting/Types/LightingPreparationFailure.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
@@ -25,9 +28,8 @@
 namespace oxygen::vortex {
 
 LightingService::LightingService(Renderer& renderer)
-  : renderer_(renderer)
-  , light_grid_builder_(
-      std::make_unique<lighting::internal::LightGridBuilder>(renderer))
+  : light_grid_builder_(
+      std::make_unique<lighting::internal::LightGridBuilder>())
   , publisher_(
       std::make_unique<lighting::internal::ForwardLightPublisher>(renderer))
   , deferred_packets_(
@@ -48,14 +50,29 @@ auto LightingService::OnFrameStart(
     .frame_slot = slot,
   };
   last_deferred_lighting_state_ = {};
+  prepared_lighting_.reset();
   light_grid_builder_->OnFrameStart(sequence, slot);
   publisher_->OnFrameStart(sequence, slot);
 }
 
-auto LightingService::BuildLightGrid(const FrameLightingInputs& inputs) -> void
+auto LightingService::BuildLightGrid(const FrameLightingInputs& inputs)
+  -> std::expected<void, LightingPreparationFailure>
 {
-  const auto built = light_grid_builder_->Build(inputs);
-  publisher_->Publish(built);
+  prepared_lighting_.reset();
+  publisher_->InvalidateViews();
+  last_grid_build_state_
+    = { .frame_sequence = current_sequence_, .frame_slot = current_slot_ };
+  auto built = light_grid_builder_->Build(inputs);
+  if (!built) {
+    return std::unexpected(built.error());
+  }
+  const auto publication = publisher_->Publish(*built);
+  if (!publication) {
+    return std::unexpected(publication.error());
+  }
+  prepared_lighting_
+    = std::make_unique<lighting::internal::BuiltLightGridFrame>(
+      std::move(*built));
 
   const auto& stats = light_grid_builder_->GetLastBuildStats();
   last_grid_build_state_ = {
@@ -67,6 +84,7 @@ auto LightingService::BuildLightGrid(const FrameLightingInputs& inputs) -> void
     .local_light_count = stats.local_light_count,
     .selection_epoch = stats.selection_epoch,
   };
+  return {};
 }
 
 auto LightingService::RenderDeferredLighting(RenderContext& ctx,
@@ -78,7 +96,13 @@ auto LightingService::RenderDeferredLighting(RenderContext& ctx,
   const graphics::Texture* point_shadow_surface,
   const bool static_sky_light_available) -> void
 {
-  const auto packets = deferred_packets_->Build(frame_light_set);
+  if (!prepared_lighting_
+    || prepared_lighting_->selection_epoch != frame_light_set.selection_epoch) {
+    last_deferred_lighting_state_ = {};
+    return;
+  }
+  const auto packets
+    = deferred_packets_->Build(frame_light_set, prepared_lighting_->evaluation);
   const auto pass_state = deferred_pass_->Record(ctx, recorder, scene_textures,
     packets, directional_shadow_bindings, directional_shadow_surface,
     spot_shadow_surface, point_shadow_surface, static_sky_light_available);
