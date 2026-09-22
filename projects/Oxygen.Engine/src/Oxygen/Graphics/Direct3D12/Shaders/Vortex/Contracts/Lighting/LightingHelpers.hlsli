@@ -4,78 +4,111 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#ifndef OXYGEN_D3D12_SHADERS_RENDERER_LIGHTINGHELPERS_HLSLI
-#define OXYGEN_D3D12_SHADERS_RENDERER_LIGHTINGHELPERS_HLSLI
+#ifndef OXYGEN_VORTEX_LIGHTING_HELPERS_HLSLI
+#define OXYGEN_VORTEX_LIGHTING_HELPERS_HLSLI
 
-#include "Core/Bindless/Generated.BindlessAbi.hlsl"
 #include "Vortex/Contracts/Lighting/LightingFrameBindings.hlsli"
+#include "Vortex/Contracts/Shadows/ShadowRecords.hlsli"
 #include "Vortex/Contracts/View/ViewConstants.hlsli"
 #include "Vortex/Contracts/View/ViewFrameBindings.hlsli"
 #include "Vortex/Services/Lighting/ClusterLookup.hlsli"
 
 static inline LightingFrameBindings LoadResolvedLightingFrameBindings()
 {
-    const ViewFrameBindings view_bindings =
-        LoadViewFrameBindings(bindless_view_frame_bindings_slot);
-    return LoadLightingFrameBindings(view_bindings.lighting_frame_slot);
+    const ViewFrameBindings view = LoadViewFrameBindings(bindless_view_frame_bindings_slot);
+    const LightingFrameBindings lighting = LoadLightingFrameBindings(view.lighting_frame_slot);
+    const uint2 frame_identity = uint2((uint)frame_seq_num, (uint)(frame_seq_num >> 32u));
+    if (any(lighting.frame_sequence != frame_identity)
+        || any(lighting.view_generation != view.lighting_view_generation)
+        || ((lighting.directional_count != 0u || lighting.local_count != 0u)
+            && all(lighting.scene_generation == 0u))) {
+        return LoadLightingFrameBindings(K_INVALID_BINDLESS_INDEX);
+    }
+    return lighting;
 }
 
-static inline float3 GetSunDirectionWS()
+static bool TryLoadDirectionalLight(LightingFrameBindings lighting, uint index,
+    out DirectionalLightForwardData light)
 {
-    return LoadResolvedLightingFrameBindings().directional.direction;
+    light = (DirectionalLightForwardData)0;
+    if (!IsLightingPublicationReady(lighting) || index >= lighting.directional_count
+        || !BX_IN_GLOBAL_SRV(lighting.directional_records_srv)) return false;
+    StructuredBuffer<DirectionalLightForwardData> records = ResourceDescriptorHeap[lighting.directional_records_srv];
+    uint count, stride;
+    records.GetDimensions(count, stride);
+    if (index >= count) return false;
+    light = records[index];
+    return light.selection_index == index;
 }
 
-static inline float GetSunIlluminance()
+static bool TryLoadLocalLight(LightingFrameBindings lighting, uint index,
+    out ForwardLocalLightRecord light)
 {
-    return LoadResolvedLightingFrameBindings().directional.illuminance_lux;
+    light = (ForwardLocalLightRecord)0;
+    if (!IsLightingPublicationReady(lighting) || index >= lighting.local_count
+        || !BX_IN_GLOBAL_SRV(lighting.local_records_srv)) return false;
+    StructuredBuffer<ForwardLocalLightRecord> records = ResourceDescriptorHeap[lighting.local_records_srv];
+    uint count, stride;
+    records.GetDimensions(count, stride);
+    if (index >= count) return false;
+    light = records[index];
+    return light.selection_index == index;
 }
 
-static inline float3 GetSunColorRGB()
-{
-    return LoadResolvedLightingFrameBindings().directional.color;
-}
-
-static inline float GetSunIntensity()
-{
-    return LoadResolvedLightingFrameBindings().directional.illuminance_lux;
-}
-
-static inline float3 GetSunLuminanceRGB()
-{
-    return GetSunColorRGB() * GetSunIlluminance();
-}
-
-static inline bool HasSunLight()
-{
-    return LoadResolvedLightingFrameBindings().has_directional_light != 0u;
-}
-
-static inline uint3 GetClusterDimensions()
-{
-    const LightingFrameBindings lighting = LoadResolvedLightingFrameBindings();
-    return LoadLightGridMetadata(lighting.grid_metadata_buffer_srv).grid_size;
-}
-
-static inline uint GetClusterGridSlot()
-{
-    return LoadResolvedLightingFrameBindings().grid_indirection_srv;
-}
-
-static inline uint GetClusterIndexListSlot()
-{
-    return LoadResolvedLightingFrameBindings().light_view_data_srv;
-}
-
-static inline uint GetClusterMaxLightsPerCell()
-{
-    return LoadResolvedLightingFrameBindings().max_culled_lights_per_cell;
-}
-
-static inline uint GetClusterIndex(float2 screen_pos, float linear_depth)
+static bool TryLoadAtmosphereDirectionalLight(uint atmosphere_slot,
+    out DirectionalLightForwardData light)
 {
     const LightingFrameBindings lighting = LoadResolvedLightingFrameBindings();
+    light = (DirectionalLightForwardData)0;
+    for (uint index = 0u; index < lighting.directional_count; ++index) {
+        if (TryLoadDirectionalLight(lighting, index, light)
+            && light.atmosphere_light_slot == atmosphere_slot) return true;
+    }
+    light = (DirectionalLightForwardData)0;
+    return false;
+}
+
+static float3 GetSunDirectionWS()
+{
+    DirectionalLightForwardData light;
+    return TryLoadAtmosphereDirectionalLight(0u, light) ? light.direction_to_source_ws : 0.0f.xxx;
+}
+
+static bool HasSunLight()
+{
+    DirectionalLightForwardData light;
+    return TryLoadAtmosphereDirectionalLight(0u, light);
+}
+
+static LightShadowReference LoadLightShadowReference(uint descriptor, uint index)
+{
+    LightShadowReference reference = (LightShadowReference)0;
+    reference.record_index = K_INVALID_BINDLESS_INDEX;
+    reference.selection_index = K_INVALID_BINDLESS_INDEX;
+    if (!BX_IN_GLOBAL_SRV(descriptor)) return reference;
+    StructuredBuffer<LightShadowReference> references = ResourceDescriptorHeap[descriptor];
+    uint count, stride;
+    references.GetDimensions(count, stride);
+    if (index < count) reference = references[index];
+    return reference;
+}
+
+static uint3 GetClusterDimensions()
+{
+    return LoadLightGridMetadata(LoadResolvedLightingFrameBindings().grid_metadata_srv).grid_size;
+}
+static uint GetClusterGridSlot()
+{
+    return LoadResolvedLightingFrameBindings().cluster_ranges_srv;
+}
+static uint GetClusterIndexListSlot()
+{
+    return LoadResolvedLightingFrameBindings().local_indices_srv;
+}
+static uint GetClusterIndex(float2 screen_pos, float linear_depth)
+{
     return ComputeClusterIndex(screen_pos, linear_depth,
-        LoadLightGridMetadata(lighting.grid_metadata_buffer_srv));
+        LoadLightGridMetadata(LoadResolvedLightingFrameBindings().grid_metadata_srv));
 }
 
-#endif // OXYGEN_D3D12_SHADERS_RENDERER_LIGHTINGHELPERS_HLSLI
+#endif

@@ -459,7 +459,7 @@ auto ExposureLightingGpuTest::SetSurface(
 auto ExposureLightingGpuTest::RenderSurface(
   // This fixture call consistently orders rendering path, EV, then frame count.
   // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
-  bool forward, float ev, unsigned frames) -> void
+  bool forward, float ev, unsigned frames, ExpectedViewOutcome outcome) -> void
 {
   auto timing = engine::ModuleTimingData {};
   timing.game_delta_time = time::CanonicalDuration {
@@ -522,9 +522,15 @@ auto ExposureLightingGpuTest::RenderSurface(
           : Renderer::OffscreenPipelineInput::Deferred());
       auto session = facade.Finalize();
       ASSERT_TRUE(session.has_value());
-      ASSERT_TRUE(session->ExecuteInsideFrame(frame));
+      ASSERT_EQ(session->ExecuteInsideFrame(frame),
+        outcome == ExpectedViewOutcome::kRendered);
     }
     WaitForQueueIdle();
+  }
+  if (outcome == ExpectedViewOutcome::kRejected) {
+    EXPECT_EQ(probe->draws, 0U);
+    EXPECT_EQ(probe->color, nullptr);
+    return;
   }
   ASSERT_EQ(probe->draws, expected_draws);
   ASSERT_NE(probe->color, nullptr);

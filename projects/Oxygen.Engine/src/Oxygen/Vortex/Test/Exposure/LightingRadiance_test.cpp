@@ -141,12 +141,23 @@ NOLINT_TEST_F(
         if (!directional_light.has_value()) {
           FAIL() << "Expected directional_light to contain a value";
         }
-        double attenuation
-          = forward_shader ? .99 * .99 : std::pow(1 - 1e-8, 2) / 2;
+        // The receiver is one metre from the local source, with 100 m range.
+        // Integrate the authored cosine-domain cone independently of the
+        // production squared-half-angle representation and resolve lm -> cd.
+        double attenuation = std::pow(1 - 1e-8, 2);
+        double solid_angle = 4 * pi;
         if (kind == 0) {
           attenuation = forward_shader ? 1 / pi : 1;
+          solid_angle = 1;
+        } else if (kind == 2) {
+          const double inner_cos = std::cos(
+            static_cast<double>(spot_light->get().GetInnerConeAngleRadians()));
+          const double outer_cos = std::cos(
+            static_cast<double>(spot_light->get().GetOuterConeAngleRadians()));
+          solid_angle
+            = 2 * pi * ((1 - inner_cos) + ((inner_cos - outer_cos) / 3));
         }
-        const double coefficient = brdf * attenuation;
+        const double coefficient = brdf * attenuation / solid_angle;
         for (const double radiance : {
                0.0,
                0x1p-24,
@@ -255,11 +266,29 @@ NOLINT_TEST_F(ExposureLightingGpuTest,
           EXPECT_EQ(status.flags & 16U, 0U);
           EXPECT_EQ(before.flags & 12U, 12U);
           if (invalid_light) {
+            const auto previous_exposure = probe->exposure;
             point_node.GetLightAs<scene::PointLight>()->get().SetLuminousFluxLm(
               -100.0F);
-          } else {
-            SetSurface(domain, -1);
+            ASSERT_NO_FATAL_FAILURE(
+              RenderSurface(forward, 0, 1, ExpectedViewOutcome::kRejected));
+            const auto retained = Read<ExposureStateData>(
+              *previous_exposure->current_state->buffer,
+              ResourceStates::kShaderResource);
+            EXPECT_EQ(retained.displayed_scale, before.displayed_scale);
+            EXPECT_EQ(retained.latent_scale, before.latent_scale);
+            EXPECT_EQ(retained.flags, before.flags);
+            ++cases;
+            if (domain != data::MaterialDomain::kOpaque) {
+              // Scene-light validation is independent of material visibility:
+              // masked-out receivers cannot legitimize an invalid source.
+              SetSurface(domain, 1.0F, true);
+              ASSERT_NO_FATAL_FAILURE(
+                RenderSurface(forward, 0, 1, ExpectedViewOutcome::kRejected));
+              ++cases;
+            }
+            continue;
           }
+          SetSurface(domain, -1);
           ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0));
           const auto pixels = ReadFloatTexture(*probe->color);
           ASSERT_EQ(pixels.size(), 1U);

@@ -509,11 +509,6 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
       EntryPoint { .type=kCompute, .name="ConvertQualifiedSceneColor" },
       EntryPoint { .type=kCompute, .name="FinalizeFp16Suitability" } }
   },
-  // Light culling compute shader (final clustered analytic path)
-  ShaderFileSpec {
-    .path="Vortex/Services/Lighting/LightCulling.hlsl",
-    .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
-  },
   // ImGui UI shaders (no permutations)
   ShaderFileSpec {
     .path="Ui/ImGui.hlsl",

@@ -18,6 +18,12 @@ projection-aware lookup, bringing the target to 12 passing cases per configurati
 The current CPU publisher emits complete ranges without a compact index buffer;
 this is a conservative baseline until spatial culling is implemented.
 
+The evaluation checkpoint now implements the local/directional records,
+lighting header and deferred constants below. All 17 native probes pass in Debug
+and Release, including real aligned CBVs; four production forward capture cases
+also pass. The owning review records lint limitations and shadow/interface work. These
+results do not close the complete ABI gate or qualify the physical BRDF.
+
 ## Encoding rules
 
 All offsets and strides below are bytes. `float` is IEEE binary32; `uint` is
@@ -113,6 +119,14 @@ all shader diagnostics/fog/helper consumers, not just the base pass.
 
 Evolve `LightingFrameBindings`, routed once through `ViewFrameBindings`.
 Target stride **96**, alignment **16**:
+
+The 64-byte `ViewFrameBindings` root retains its fourteen descriptors at offsets
+0 through 52. Its former final two reserved words become
+`uint2 lighting_view_generation` at offset 56, low word first. This is the
+expected lighting-publication identity, not another descriptor. Compare it
+with the lighting header and compare the complete frame sequence with finalized
+view constants before evaluating the publication. Scene lifetime identities
+must not reuse the small scene ID carried by node handles.
 
 | Offset | Type / member                     | Meaning                                                                                            |
 | -----: | --------------------------------- | -------------------------------------------------------------------------------------------------- |

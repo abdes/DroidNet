@@ -413,9 +413,63 @@ passes **17 Debug / 17 Release** tests; all three added C++ files are oxytidy-cl
 with no suppressions or coverage gaps. Results are
 [Debug](../../../out/build-ninja/analysis/vortex/exposure-lightbench/ex07a/photometry-debug.json)
 and [Release](../../../out/build-ninja/analysis/vortex/exposure-lightbench/ex07a/photometry-release.json).
-This helper is not connected to production publication yet: record/producer/
-consumer cutover and preparation-failure propagation must land together. These
-CPU checks do not qualify the EX07B oracle, GPU source integration or BRDF.
+This prerequisite is now connected in the working evaluation-record migration
+below. These CPU checks do not qualify the EX07B oracle, GPU source integration
+or BRDF.
+
+### Evaluation-record checkpoint
+
+This checkpoint replaces the local/directional evaluation records with the
+80/64-byte contracts, the frame header with the 96-byte contract, and deferred
+draw constants with the 80-byte contract. Selection indices and atmosphere-array
+slots have distinct strong types. Physical conversion runs once during
+preparation; deferred packets borrow those resolved records. Invalid preparation
+returns a typed failure and invalidates prior CPU publication. GPU lookup checks
+the full frame identity and expected view-publication generation carried by the
+64-byte view root. Scene lifetimes have non-recycled identities.
+
+The disconnected, truncating culler and `PositionalLightData` decoder are
+retired, including catalog/prewarm entries. `LightCullingConfig` is CPU-only.
+The active complete-list baseline is preserved; replacement spatial recording
+remains open. The obsolete private deferred-packet copy in SceneRenderer is
+also removed. No old/new wire compatibility adapter is introduced.
+
+Validation passes **390 test cases** across Debug and Release: LightingService
+23/23, native ABI/lookup 17/17, SceneBasic 115/115, HDR lighting 2/2,
+plus Debug SceneRendererDeferredCore 64, ShadowService 11 and SceneAsyncTraversal
+
+1. The deferred-matrix probe uses actual 256-byte-aligned CBVs. Four fresh
+   RenderDoc forward captures (both, point, spot and neither local light) decode
+   the 80-byte records and 96-byte header, check integer identities/reserved zeros
+   and matching build status, and verify the expected lighting presence/absence.
+   Evidence is under the existing `ex07a` directory: `final-Oxygen.*.json`,
+   `records-hdr-{debug,release}.json`, `scene-async-debug.json`,
+   `deferred-cbv-debug.json` and `forward-records-*-report.txt`/`*_capture.rdc`.
+   The HDR oracle now accounts for lumen-to-candela conversion and finite-range
+   attenuation. Invalid negative flux rejects the view while retaining the prior
+   exposure history; this does not qualify all GPU failure/history paths.
+
+The default MultiView visual check exposed light-volume far clipping: camera
+far depth 100 m versus point/spot support of 300/250 m. Both draws initially
+left the entire HDR target unchanged. Disabling Z clipping for local-light
+proxies restores their contribution while retaining XY/W clipping, culling and
+the selected depth test. The repeat capture changes 1,540/933 sampled pixels
+for point/spot respectively; the user confirmed the visible spotlight fix.
+`multiview-spot-report2.txt` and `multiview-spot-fixed-report.txt` preserve the
+before/after evidence.
+
+Oxytidy completed 77 contexts across the then-current 35 changed C++ files,
+including headers and tests, with no failed contexts or coverage gaps and 415
+reported warnings. Subsequent targeted fixes removed identified new diagnostics.
+The expanded 38-file run included the HDR fixture changes but was invalidated
+by inputs changing during analysis; it is not a clean final lint certificate.
+No blanket warning suppression was added. The checkpoint retains this lint
+limitation rather than delaying the requested commit for a broader warning audit.
+
+Full shadow
+projection/frame migration, multi-directional selection, BRDF moment publication
+and complete same-submission failure/history handling remain open. The new
+record layouts do not claim finite-emitter integration or BRDF parity.
 
 | Gate                      | Owning suite / required evidence                                                                                                                                                                                                                     | Current result                                                                                                                         |
 | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |

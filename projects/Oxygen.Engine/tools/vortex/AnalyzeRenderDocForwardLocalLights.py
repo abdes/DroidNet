@@ -35,46 +35,50 @@ def build_report(controller, report, capture_path, report_path):
     for draw in draws:
         controller.SetFrameEvent(draw.event_id, True)
         pipeline = controller.GetPipelineState()
-        reads = [x.descriptor for x in pipeline.GetReadOnlyResources(rd.ShaderStage.Pixel, True)]
-        bindings = [x for x in reads if x.elementByteSize == 208]
+        used = pipeline.GetReadOnlyResources(rd.ShaderStage.Pixel, True)
+        reads = [x.descriptor for x in used]
+        by_slot = {int(x.access.arrayElement): x.descriptor for x in used
+                   if x.access.index == rd.DescriptorAccess.NoShaderBinding}
+        bindings = [x for x in reads if x.elementByteSize == x.byteSize == 96]
         if not bindings:
             continue
         if len(bindings) != 1:
             raise RuntimeError("Ambiguous lighting bindings")
         binding = bindings[0]
-        words = struct.unpack("<52I", bytes(controller.GetBufferData(
-            binding.resource, binding.byteOffset, 208)))
-        if words[16] != len(expected) or words[49] != 0xFFFFFFFF:
-            raise RuntimeError(f"Wrong canonical count or revived legacy slot: {words}")
-        lights = [x for x in reads if x.elementByteSize == 96]
+        words = struct.unpack("<24I", bytes(controller.GetBufferData(
+            binding.resource, binding.byteOffset, 96)))
+        if words[5] != len(expected) or words[20] not in (1, 2):
+            raise RuntimeError(f"Wrong canonical count or publication state: {words}")
+        lights = [by_slot[words[1]]] if words[1] in by_slot else []
         if expected:
-            if len(lights) != 1 or words[0] == 0xFFFFFFFF:
+            if len(lights) != 1 or words[1] == 0xFFFFFFFF:
                 raise RuntimeError("Forward pixel shader did not consume the canonical record")
             light = lights[0]
-            if light.byteSize != 96 * len(expected):
-                raise RuntimeError("Incorrect six-float4 upload size")
+            if light.elementByteSize != 80 or light.byteSize != 80 * len(expected):
+                raise RuntimeError("Incorrect canonical 80-byte record upload size")
             data = bytes(controller.GetBufferData(light.resource, light.byteOffset, light.byteSize))
             kinds = []
             for index in range(len(expected)):
-                values = struct.unpack_from("<24f", data, index * 96)
+                values = struct.unpack_from("<14f", data, index * 80)
                 if not all(math.isfinite(v) for v in values):
                     raise RuntimeError("Nonfinite canonical light record")
-                kind, flags, radius = values[20:23]
-                if kind != int(kind) or flags != int(flags) or int(flags) & ~1:
-                    raise RuntimeError("Invalid canonical kind/flag encoding")
-                if values[7] <= 0 or radius <= 0 or abs(values[3] * radius - 1) > 1e-5:
-                    raise RuntimeError("Incorrect color/intensity or radius fields")
-                kinds.append(int(kind))
-                report.append(f"light={index} kind={int(kind)} flags={int(flags)} intensity={values[7]} radius={radius}")
+                kind, flags, selection_index = struct.unpack_from("<3I", data, index * 80 + 56)
+                reserved = struct.unpack_from("<3I", data, index * 80 + 68)
+                radius = values[3]
+                if kind not in (0, 1) or flags & ~3 or selection_index != index or any(reserved):
+                    raise RuntimeError("Invalid integer identity, flags or reserved lanes")
+                if max(values[4:7]) <= 0 or radius <= 0 or abs(values[11] * radius - 1) > 1e-5:
+                    raise RuntimeError("Incorrect resolved intensity or range fields")
+                kinds.append(kind)
+                report.append(f"light={index} kind={kind} flags={flags} intensity_rgb_cd={values[4:7]} range_m={radius}")
             if sorted(kinds) != expected:
                 raise RuntimeError(f"Wrong light kinds: {kinds} vs {expected}")
-            ranges = [x for x in reads if x.elementByteSize == 8
-                      and x.byteSize >= words[13] * 8]
+            ranges = [by_slot[words[2]]] if words[2] in by_slot else []
             if len(ranges) != 1:
                 raise RuntimeError("Missing or ambiguous canonical cluster ranges")
             ranges_data = bytes(controller.GetBufferData(
-                ranges[0].resource, ranges[0].byteOffset, words[13] * 8))
-            if len(ranges_data) != words[13] * 8:
+                ranges[0].resource, ranges[0].byteOffset, words[6] * 8))
+            if len(ranges_data) != words[6] * 8:
                 raise RuntimeError("Incomplete cluster range readback")
             complete_cells = compact_cells = 0
             for offset, count in struct.iter_unpack("<2I", ranges_data):
@@ -88,14 +92,22 @@ def build_report(controller, report, capture_path, report_path):
                     compact_cells += 1
                 elif offset:
                     raise RuntimeError("Empty cluster has a nonzero offset")
-            if compact_cells and words[1] == 0xFFFFFFFF:
+            if compact_cells and words[3] == 0xFFFFFFFF:
                 raise RuntimeError("Compact cells require a valid index descriptor")
-            if not any(x.elementByteSize == 64 for x in reads):
+            if words[11] not in by_slot or by_slot[words[11]].elementByteSize != 64:
                 raise RuntimeError("Forward shader did not consume canonical grid metadata")
-            report.append(f"complete_cells={complete_cells} compact_cells={compact_cells} indices_srv={words[1]}")
+            report.append(f"complete_cells={complete_cells} compact_cells={compact_cells} indices_srv={words[3]}")
         elif lights:
             raise RuntimeError("Unexpected local-light read with both lights disabled")
-        report.append(f"bindings_event={draw.event_id} canonical_count={words[16]} legacy_slot=invalid")
+        report.append(f"bindings_event={draw.event_id} canonical_count={words[5]} publication_state={words[20]}")
+        statuses = [by_slot[words[10]]] if words[10] in by_slot else []
+        if len(statuses) != 1 or words[10] == 0xFFFFFFFF:
+            raise RuntimeError("Missing lighting build-status consumer")
+        status = struct.unpack("<8I", bytes(controller.GetBufferData(
+            statuses[0].resource, statuses[0].byteOffset, 32)))
+        if status[0] != 1 or status[1] != 0 or status[6:8] != words[14:16]:
+            raise RuntimeError("Lighting status is invalid or belongs to another selection")
+        report.append(f"build_status={status} scene_generation={words[12:14]} view_generation={words[18:20]}")
         found = True
         break
     if not found:

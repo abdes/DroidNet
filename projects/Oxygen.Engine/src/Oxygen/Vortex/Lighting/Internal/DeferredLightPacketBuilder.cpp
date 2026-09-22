@@ -6,6 +6,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
+#include <numbers>
 
 #include <glm/ext/matrix_float4x4.hpp>
 #include <glm/ext/matrix_transform.hpp>
@@ -18,6 +20,7 @@
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Vortex/Lighting/Internal/DeferredLightPacketBuilder.h>
+#include <Oxygen/Vortex/Lighting/Internal/LightEvaluationRecords.h>
 #include <Oxygen/Vortex/Lighting/Types/DirectionalLightForwardData.h>
 #include <Oxygen/Vortex/Types/FrameLightSelection.h>
 
@@ -60,17 +63,19 @@ namespace {
     return glm::angleAxis(angle, axis);
   }
 
-  auto BuildLightWorldMatrix(const FrameLocalLightSelection& selection)
-    -> glm::mat4
+  auto BuildLightWorldMatrix(const FrameLocalLightSelection& selection,
+    const bool spherical_proxy) -> glm::mat4
   {
     const auto translation
       = glm::translate(glm::mat4 { 1.0F }, selection.position);
-    if (selection.kind == LocalLightKind::kPoint) {
-      return translation * MakeScaleMatrix(glm::vec3 { selection.range });
+    if (spherical_proxy) {
+      return translation
+        * MakeScaleMatrix(
+          glm::vec3 { selection.range + selection.source_radius });
     }
 
-    const auto outer_cosine
-      = std::clamp(selection.outer_cone_cos, 0.001F, 0.999999F);
+    const auto outer_cosine = std::clamp(
+      std::cos(selection.outer_cone_half_angle_radians), 0.001F, 0.999999F);
     const auto outer_sine
       = std::sqrt((std::max)(1.0F - outer_cosine * outer_cosine, 0.0F));
     const auto outer_tangent = outer_sine / (std::max)(outer_cosine, 1.0e-4F);
@@ -86,47 +91,31 @@ namespace {
 
 } // namespace
 
-auto DeferredLightPacketBuilder::Build(
-  const FrameLightSelection& selection) const -> DeferredLightPacketSet
+auto DeferredLightPacketBuilder::Build(const FrameLightSelection& selection,
+  const LightEvaluationRecords& evaluation) const -> DeferredLightPacketSet
 {
   auto packets
     = DeferredLightPacketSet { .selection_epoch = selection.selection_epoch };
-  if (selection.directional_light.has_value()) {
-    packets.directional = DirectionalLightForwardData::FromSelection(
-      *selection.directional_light);
+  if (!evaluation.directional.empty()) {
+    packets.directional = observer_ptr { &evaluation.directional.front() };
   }
-
-  packets.local_lights.reserve(selection.local_lights.size());
-  auto spot_shadow_index = 0U;
-  auto point_shadow_index = 0U;
-  for (const auto& light : selection.local_lights) {
-    const auto casts_spot_shadow = light.kind == LocalLightKind::kSpot
-      && (light.flags & kLocalLightFlagCastsShadows) != 0U;
-    const auto casts_point_shadow = light.kind == LocalLightKind::kPoint
-      && (light.flags & kLocalLightFlagCastsShadows) != 0U;
-    const auto point_shadow_or_invalid = casts_point_shadow
-      ? point_shadow_index
-      : kInvalidShaderVisibleIndex.get();
-    const auto shadow_index
-      = casts_spot_shadow ? spot_shadow_index : point_shadow_or_invalid;
+  packets.local_lights.reserve(evaluation.local.size());
+  for (std::size_t index = 0; index < evaluation.local.size(); ++index) {
+    const auto& source = selection.local_lights.at(index);
+    const auto& light = evaluation.local.at(index);
+    if (light.range_m == 0.0F) {
+      continue;
+    }
+    const auto spherical = source.kind == LocalLightKind::kPoint
+      || source.source_radius > 0.0F
+      || source.outer_cone_half_angle_radians
+        == std::numbers::pi_v<float> / 2.0F;
     packets.local_lights.push_back(DeferredLightPacket {
-      .kind = light.kind,
-      .light_position_and_radius = glm::vec4(light.position, light.range),
-      .light_color_and_intensity = glm::vec4(light.color, light.intensity),
-      .light_direction_and_falloff
-      = glm::vec4(light.direction, light.decay_exponent),
-      .spot_angles
-      = glm::vec4(light.inner_cone_cos, light.outer_cone_cos, 0.0F, 0.0F),
-      .light_world_matrix = BuildLightWorldMatrix(light),
-      .shadow_index = shadow_index,
-      .shadow_flags = light.flags,
+      .kind = source.kind,
+      .light = observer_ptr { &light },
+      .light_world_matrix = BuildLightWorldMatrix(source, spherical),
+      .spherical_proxy = spherical,
     });
-    if (casts_spot_shadow) {
-      ++spot_shadow_index;
-    }
-    if (casts_point_shadow) {
-      ++point_shadow_index;
-    }
   }
   return packets;
 }

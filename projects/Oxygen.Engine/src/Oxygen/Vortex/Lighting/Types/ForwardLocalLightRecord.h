@@ -6,56 +6,52 @@
 
 #pragma once
 
+#include <array>
 #include <cstddef>
+#include <cstdint>
+#include <type_traits>
 
-#include <glm/vec4.hpp>
+#include <glm/ext/vector_float3.hpp>
 
 #include <Oxygen/Core/Constants.h>
-#include <Oxygen/Vortex/Types/FrameLightSelection.h>
+#include <Oxygen/Vortex/Types/LightingIndices.h>
 
 namespace oxygen::vortex {
 
 struct alignas(packing::kShaderDataFieldAlignment) ForwardLocalLightRecord {
-  glm::vec4 position_and_inv_radius { 0.0F };
-  glm::vec4 color_id_falloff_and_ray_bias { 0.0F };
-  glm::vec4 direction_and_extra_data { 0.0F };
-  glm::vec4 spot_angles_and_source_radius { 0.0F };
-  glm::vec4 tangent_ies_and_specular_scale { 0.0F };
-  glm::vec4 rect_data_and_linkage { 0.0F };
-
-  [[nodiscard]] static auto FromSelection(
-    const FrameLocalLightSelection& selection) noexcept
-    -> ForwardLocalLightRecord
-  {
-    const auto inv_radius
-      = selection.range > 0.0F ? 1.0F / selection.range : 0.0F;
-    return {
-      .position_and_inv_radius = glm::vec4(selection.position, inv_radius),
-      .color_id_falloff_and_ray_bias
-      = glm::vec4(selection.color, selection.intensity),
-      .direction_and_extra_data
-      = glm::vec4(selection.direction, selection.decay_exponent),
-      .spot_angles_and_source_radius = glm::vec4(selection.inner_cone_cos,
-        selection.outer_cone_cos, 0.0F, selection.source_radius),
-      .tangent_ies_and_specular_scale = glm::vec4(0.0F, 0.0F, 0.0F, 1.0F),
-      .rect_data_and_linkage = glm::vec4(static_cast<float>(selection.kind),
-        static_cast<float>(selection.flags), selection.range, 0.0F),
-    };
-  }
+  glm::vec3 position_ws { 0.0F };
+  float range_m { 0.0F };
+  glm::vec3 intensity_rgb_cd { 0.0F };
+  float source_radius_m { 0.0F };
+  glm::vec3 emitted_direction_ws { 0.0F, -1.0F, 0.0F };
+  float inverse_range_m { 0.0F };
+  float inner_cone_sin_half_squared { 0.0F };
+  float outer_cone_sin_half_squared { 0.0F };
+  std::uint32_t kind { 0U };
+  std::uint32_t flags { 0U };
+  LightSelectionIndex selection_index { kInvalidLightSelectionIndex };
+  std::array<std::uint32_t, 3> reserved {};
 };
 
+// NOLINTBEGIN(*-magic-numbers)
+static_assert(sizeof(ForwardLocalLightRecord) == 80U);
+static_assert(alignof(ForwardLocalLightRecord) == 16U);
+static_assert(std::is_standard_layout_v<ForwardLocalLightRecord>);
+static_assert(std::is_trivially_copyable_v<ForwardLocalLightRecord>);
+static_assert(offsetof(ForwardLocalLightRecord, position_ws) == 0U);
+static_assert(offsetof(ForwardLocalLightRecord, range_m) == 12U);
+static_assert(offsetof(ForwardLocalLightRecord, intensity_rgb_cd) == 16U);
+static_assert(offsetof(ForwardLocalLightRecord, source_radius_m) == 28U);
+static_assert(offsetof(ForwardLocalLightRecord, emitted_direction_ws) == 32U);
+static_assert(offsetof(ForwardLocalLightRecord, inverse_range_m) == 44U);
 static_assert(
-  alignof(ForwardLocalLightRecord) == packing::kShaderDataFieldAlignment);
-static_assert(sizeof(ForwardLocalLightRecord) == 96U);
-static_assert(offsetof(ForwardLocalLightRecord, position_and_inv_radius) == 0U);
+  offsetof(ForwardLocalLightRecord, inner_cone_sin_half_squared) == 48U);
 static_assert(
-  offsetof(ForwardLocalLightRecord, color_id_falloff_and_ray_bias) == 16U);
-static_assert(
-  offsetof(ForwardLocalLightRecord, direction_and_extra_data) == 32U);
-static_assert(
-  offsetof(ForwardLocalLightRecord, spot_angles_and_source_radius) == 48U);
-static_assert(
-  offsetof(ForwardLocalLightRecord, tangent_ies_and_specular_scale) == 64U);
-static_assert(offsetof(ForwardLocalLightRecord, rect_data_and_linkage) == 80U);
+  offsetof(ForwardLocalLightRecord, outer_cone_sin_half_squared) == 52U);
+static_assert(offsetof(ForwardLocalLightRecord, kind) == 56U);
+static_assert(offsetof(ForwardLocalLightRecord, flags) == 60U);
+static_assert(offsetof(ForwardLocalLightRecord, selection_index) == 64U);
+static_assert(offsetof(ForwardLocalLightRecord, reserved) == 68U);
+// NOLINTEND(*-magic-numbers)
 
 } // namespace oxygen::vortex

@@ -12,7 +12,9 @@
 #include <glm/mat4x4.hpp>
 #include <glm/vec4.hpp>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Vortex/Lighting/Internal/LightEvaluationRecords.h>
 #include <Oxygen/Vortex/Lighting/Types/DirectionalLightForwardData.h>
 #include <Oxygen/Vortex/Types/FrameLightSelection.h>
 
@@ -20,25 +22,21 @@ namespace oxygen::vortex::lighting::internal {
 
 struct DeferredLightPacket {
   LocalLightKind kind { LocalLightKind::kPoint };
-  glm::vec4 light_position_and_radius { 0.0F };
-  glm::vec4 light_color_and_intensity { 0.0F };
-  glm::vec4 light_direction_and_falloff { 0.0F };
-  glm::vec4 spot_angles { 0.0F };
+  observer_ptr<const ForwardLocalLightRecord> light;
   glm::mat4 light_world_matrix { 1.0F };
-  std::uint32_t shadow_index { kInvalidShaderVisibleIndex.get() };
-  std::uint32_t shadow_flags { 0U };
+  bool spherical_proxy { false };
 };
 
 struct DeferredLightPacketSet {
-  std::optional<DirectionalLightForwardData> directional;
+  observer_ptr<const DirectionalLightForwardData> directional;
   std::vector<DeferredLightPacket> local_lights;
   std::uint64_t selection_epoch { 0U };
 };
 
 class DeferredLightPacketBuilder {
 public:
-  [[nodiscard]] auto Build(const FrameLightSelection& selection) const
-    -> DeferredLightPacketSet;
+  [[nodiscard]] auto Build(const FrameLightSelection& selection,
+    const LightEvaluationRecords& evaluation) const -> DeferredLightPacketSet;
 };
 
 } // namespace oxygen::vortex::lighting::internal

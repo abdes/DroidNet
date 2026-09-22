@@ -4,83 +4,70 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#ifndef OXYGEN_D3D12_SHADERS_VORTEX_CONTRACTS_LIGHTINGFRAMEBINDINGS_HLSLI
-#define OXYGEN_D3D12_SHADERS_VORTEX_CONTRACTS_LIGHTINGFRAMEBINDINGS_HLSLI
+#ifndef OXYGEN_VORTEX_LIGHTING_FRAME_BINDINGS_HLSLI
+#define OXYGEN_VORTEX_LIGHTING_FRAME_BINDINGS_HLSLI
 
 #include "Core/Bindless/Generated.BindlessAbi.hlsl"
+#include "Vortex/Contracts/Lighting/DirectionalLightForwardData.hlsli"
+#include "Vortex/Contracts/Lighting/ForwardLocalLightRecord.hlsli"
+#include "Vortex/Contracts/Lighting/LightGridData.hlsli"
 
-struct DirectionalLightForwardData
-{
-    float3 direction;
-    float source_radius;
-
-    float3 color;
-    float illuminance_lux;
-
-    float3 transmittance_toward_sun_rgb;
-    float diffuse_scale;
-
-    float specular_scale;
-    uint shadow_flags;
-    uint light_function_atlas_index;
-    uint cascade_count;
-
-    uint light_flags;
-    uint atmosphere_light_slot;
-    uint atmosphere_mode_flags;
-    uint reserved0;
-};
+static const uint LIGHTING_PUBLICATION_DISABLED = 0u;
+static const uint LIGHTING_PUBLICATION_EMPTY = 1u;
+static const uint LIGHTING_PUBLICATION_RECORDED = 2u;
+static const uint LIGHTING_PUBLICATION_FAILED = 3u;
 
 struct LightingFrameBindings
 {
-    uint local_light_buffer_srv;
-    uint light_view_data_srv;
-    uint grid_metadata_buffer_srv;
-    uint grid_indirection_srv;
-    uint directional_light_indices_srv;
-
-    int3 grid_size;
-    float reserved_grid0;
-
-    float3 grid_z_params;
-    float reserved_grid1;
-
-    uint num_grid_cells;
-    uint max_culled_lights_per_cell;
-    uint directional_light_count;
-    uint local_light_count;
-
-    uint has_directional_light;
-    uint affects_translucent_lighting;
-    uint flags;
-    uint reserved_flags;
-
-    float4 pre_view_translation_offset;
-    uint3 reserved_directional_alignment;
-    DirectionalLightForwardData directional;
-
-    uint directional_lights_slot;
-    uint positional_lights_slot;
-    uint2 reserved_tail;
+    uint directional_records_srv;
+    uint local_records_srv;
+    uint cluster_ranges_srv;
+    uint local_indices_srv;
+    uint directional_count;
+    uint local_count;
+    uint cluster_count;
+    uint index_capacity;
+    uint directional_shadow_map_srv;
+    uint local_shadow_map_srv;
+    uint build_status_srv;
+    uint grid_metadata_srv;
+    uint2 scene_generation;
+    uint2 selection_revision;
+    uint2 frame_sequence;
+    uint2 view_generation;
+    uint publication_state;
+    uint brdf_moments_srv;
+    uint brdf_mean_moments_srv;
+    uint brdf_model_revision;
 };
 
 static LightingFrameBindings LoadLightingFrameBindings(uint slot)
 {
     LightingFrameBindings invalid_bindings = (LightingFrameBindings)0;
-    invalid_bindings.local_light_buffer_srv = K_INVALID_BINDLESS_INDEX;
-    invalid_bindings.light_view_data_srv = K_INVALID_BINDLESS_INDEX;
-    invalid_bindings.grid_metadata_buffer_srv = K_INVALID_BINDLESS_INDEX;
-    invalid_bindings.grid_indirection_srv = K_INVALID_BINDLESS_INDEX;
-    invalid_bindings.directional_light_indices_srv = K_INVALID_BINDLESS_INDEX;
-    invalid_bindings.directional_lights_slot = K_INVALID_BINDLESS_INDEX;
-    invalid_bindings.positional_lights_slot = K_INVALID_BINDLESS_INDEX;
-
-    if (slot == K_INVALID_BINDLESS_INDEX || !BX_IN_GLOBAL_SRV(slot)) {
-        return invalid_bindings;
-    }
-
-    StructuredBuffer<LightingFrameBindings> bindings_buffer = ResourceDescriptorHeap[slot];
-    return bindings_buffer[0];
+    invalid_bindings.directional_records_srv = K_INVALID_BINDLESS_INDEX;
+    invalid_bindings.local_records_srv = K_INVALID_BINDLESS_INDEX;
+    invalid_bindings.cluster_ranges_srv = K_INVALID_BINDLESS_INDEX;
+    invalid_bindings.local_indices_srv = K_INVALID_BINDLESS_INDEX;
+    invalid_bindings.directional_shadow_map_srv = K_INVALID_BINDLESS_INDEX;
+    invalid_bindings.local_shadow_map_srv = K_INVALID_BINDLESS_INDEX;
+    invalid_bindings.build_status_srv = K_INVALID_BINDLESS_INDEX;
+    invalid_bindings.grid_metadata_srv = K_INVALID_BINDLESS_INDEX;
+    invalid_bindings.brdf_moments_srv = K_INVALID_BINDLESS_INDEX;
+    invalid_bindings.brdf_mean_moments_srv = K_INVALID_BINDLESS_INDEX;
+    if (!BX_IN_GLOBAL_SRV(slot)) return invalid_bindings;
+    StructuredBuffer<LightingFrameBindings> bindings = ResourceDescriptorHeap[slot];
+    return bindings[0];
 }
 
-#endif // OXYGEN_D3D12_SHADERS_VORTEX_CONTRACTS_LIGHTINGFRAMEBINDINGS_HLSLI
+static bool IsLightingPublicationReady(LightingFrameBindings lighting)
+{
+    if ((lighting.publication_state != LIGHTING_PUBLICATION_RECORDED
+        && lighting.publication_state != LIGHTING_PUBLICATION_EMPTY)
+        || !BX_IN_GLOBAL_SRV(lighting.build_status_srv)) return false;
+    StructuredBuffer<LightGridBuildStatus> statuses = ResourceDescriptorHeap[lighting.build_status_srv];
+    LightGridBuildStatus status = statuses[0];
+    return status.state == LIGHT_GRID_BUILD_VALID
+        && all(status.selection_revision == lighting.selection_revision);
+}
+
+#endif

@@ -325,7 +325,7 @@ co::Co<TraversalResult> AsyncSceneTraversal<SceneT>::TraverseImplAsync(
   using Traits = ContainerTraits<Order>;
   typename Traits::template container_type<TraversalEntry> container;
 
-  InitializeTraversal<Order>(roots, container);
+  this->template InitializeTraversal<Order>(roots, container);
 
   while (!Traits::empty(container)) {
     // Peek at the entry without removing it
@@ -359,7 +359,7 @@ co::Co<TraversalResult> AsyncSceneTraversal<SceneT>::TraverseImplAsync(
       Traits::pop(container);
       // Still traverse children for rejected nodes
       CollectChildrenToBuffer(node, current_depth);
-      QueueChildrenForTraversal<Order>(filter_result, container);
+      this->template QueueChildrenForTraversal<Order>(filter_result, container);
       continue;
     }
 
@@ -381,7 +381,8 @@ co::Co<TraversalResult> AsyncSceneTraversal<SceneT>::TraverseImplAsync(
         // Continue with children - mark as processed and add children
         entry_ref.state = TraversalEntry::ProcessingState::kChildrenProcessed;
         CollectChildrenToBuffer(node, current_depth);
-        QueueChildrenForTraversal<Order>(filter_result, container);
+        this->template QueueChildrenForTraversal<Order>(
+          filter_result, container);
         continue;
       }
     }
@@ -407,7 +408,8 @@ co::Co<TraversalResult> AsyncSceneTraversal<SceneT>::TraverseImplAsync(
       if (visit_result != VisitResult::kSkipSubtree) {
         // Use the saved node pointer and current depth
         CollectChildrenToBuffer(node, current_depth);
-        QueueChildrenForTraversal<Order>(filter_result, container);
+        this->template QueueChildrenForTraversal<Order>(
+          filter_result, container);
       }
     }
 

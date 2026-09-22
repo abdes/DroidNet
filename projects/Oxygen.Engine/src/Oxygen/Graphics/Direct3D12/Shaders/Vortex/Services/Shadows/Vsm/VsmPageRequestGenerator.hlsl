@@ -57,10 +57,10 @@ static float3 VsmReconstructWorldPosition(
 static bool VsmClusterContainsLight(LightingFrameBindings lighting,
     uint cluster_index, uint light_index)
 {
-    ClusterLightRange range = GetClusterLightRange(lighting.grid_indirection_srv, cluster_index);
+    ClusterLightRange range = GetClusterLightRange(lighting.cluster_ranges_srv, cluster_index);
     ClusterLightIteration iteration;
-    if (!TryResolveClusterLightIteration(range, lighting.local_light_count,
-            lighting.light_view_data_srv, iteration)) {
+    if (!TryResolveClusterLightIteration(range, lighting.local_count,
+            lighting.local_indices_srv, iteration)) {
         // Pruning is optional; an unavailable list cannot remove a page request.
         return true;
     }
@@ -172,9 +172,9 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
         pass_constants.inverse_view_projection);
 
     const LightingFrameBindings lighting = LoadResolvedLightingFrameBindings();
-    const LightGridMetadata grid = LoadLightGridMetadata(lighting.grid_metadata_buffer_srv);
-    const bool has_light_grid = BX_IsValidSlot(lighting.grid_indirection_srv)
-        && BX_IsValidSlot(lighting.grid_metadata_buffer_srv)
+    const LightGridMetadata grid = LoadLightGridMetadata(lighting.grid_metadata_srv);
+    const bool has_light_grid = BX_IsValidSlot(lighting.cluster_ranges_srv)
+        && BX_IsValidSlot(lighting.grid_metadata_srv)
         && all(grid.grid_size != 0u);
     uint cluster_index = 0u;
     if (has_light_grid) {

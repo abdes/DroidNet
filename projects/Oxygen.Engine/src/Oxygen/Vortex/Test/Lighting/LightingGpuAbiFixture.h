@@ -32,6 +32,7 @@ protected:
     std::uint32_t first_element { 0U };
     std::uint32_t count { 0U };
     ShaderVisibleIndex indices_srv { kInvalidShaderVisibleIndex };
+    bool constant_buffer_records { false };
   };
   auto CreateBackend(const SerializedBackendConfig& config,
     const SerializedPathFinderConfig& paths)

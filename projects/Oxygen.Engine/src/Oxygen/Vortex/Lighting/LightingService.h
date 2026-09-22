@@ -6,11 +6,13 @@
 
 #pragma once
 
+#include <expected>
 #include <memory>
 
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Vortex/Lighting/Types/FrameLightingInputs.h>
+#include <Oxygen/Vortex/Lighting/Types/LightingPreparationFailure.h>
 #include <Oxygen/Vortex/Types/FrameLightSelection.h>
 #include <Oxygen/Vortex/Types/LightingFrameBindings.h>
 #include <Oxygen/Vortex/Types/ShadowFrameBindings.h>
@@ -32,6 +34,7 @@ namespace lighting {
     class DeferredLightPacketBuilder;
     class ForwardLightPublisher;
     class LightGridBuilder;
+    struct BuiltLightGridFrame;
   } // namespace internal
 } // namespace lighting
 
@@ -89,7 +92,9 @@ public:
 
   OXGN_VRTX_API auto OnFrameStart(
     frame::SequenceNumber sequence, frame::Slot slot) -> void;
-  OXGN_VRTX_API auto BuildLightGrid(const FrameLightingInputs& inputs) -> void;
+  [[nodiscard]] OXGN_VRTX_API auto BuildLightGrid(
+    const FrameLightingInputs& inputs)
+    -> std::expected<void, LightingPreparationFailure>;
   OXGN_VRTX_API auto RenderDeferredLighting(RenderContext& ctx,
     graphics::CommandRecorder& recorder, const SceneTextures& scene_textures,
     const FrameLightSelection& frame_light_set,
@@ -115,12 +120,12 @@ public:
   }
 
 private:
-  Renderer& renderer_;
   frame::SequenceNumber current_sequence_ { 0U };
   frame::Slot current_slot_ { frame::kInvalidSlot };
   GridBuildState last_grid_build_state_ {};
   DeferredLightingState last_deferred_lighting_state_ {};
   std::unique_ptr<lighting::internal::LightGridBuilder> light_grid_builder_;
+  std::unique_ptr<lighting::internal::BuiltLightGridFrame> prepared_lighting_;
   std::unique_ptr<lighting::internal::ForwardLightPublisher> publisher_;
   std::unique_ptr<lighting::internal::DeferredLightPacketBuilder>
     deferred_packets_;

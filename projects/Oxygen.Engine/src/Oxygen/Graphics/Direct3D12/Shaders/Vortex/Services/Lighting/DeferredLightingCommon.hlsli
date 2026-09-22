@@ -8,25 +8,14 @@
 #define OXYGEN_D3D12_SHADERS_VORTEX_SERVICES_LIGHTING_DEFERREDLIGHTINGCOMMON_HLSLI
 
 #include "Vortex/Contracts/View/ViewConstants.hlsli"
+#include "Vortex/Contracts/Lighting/LightingHelpers.hlsli"
+#include "Vortex/Services/Lighting/LocalLightAttenuation.hlsli"
 
 #include "Vortex/Contracts/View/ViewFrameBindings.hlsli"
 #include "Vortex/Contracts/View/HdrConsumerInputs.hlsli"
 #include "Vortex/Services/Lighting/DeferredShadingCommon.hlsli"
 
-struct DeferredLightConstants
-{
-    float4 light_position_and_radius;
-    float4 light_color_and_intensity;
-    float4 light_direction_and_falloff;
-    float4 spot_angles;
-    float4x4 light_world_matrix;
-    uint4 shadow_info;
-    float4 atmosphere_transmittance_and_padding;
-    uint light_type;
-    uint light_geometry_vertices_srv;
-    uint light_geometry_vertex_count;
-    uint _padding0;
-};
+#include "Vortex/Contracts/Lighting/DeferredLightConstants.hlsli"
 
 struct DeferredLightVolumeVSOutput
 {
@@ -75,39 +64,4 @@ static inline float2 ResolveDeferredLightScreenUv(float4 screen_position)
     return uv;
 }
 
-static inline float3 LoadDeferredLightColor(float4 light_color_and_intensity)
-{
-    return light_color_and_intensity.xyz * light_color_and_intensity.www;
-}
-
-static inline float ComputeLocalLightDistanceAttenuation(
-    float3 light_vector, float light_radius)
-{
-    const float radius = max(light_radius, EPSILON_SMALL);
-    const float distance = length(light_vector);
-    if (distance >= radius) {
-        return 0.0f;
-    }
-
-    float attenuation = saturate(1.0f - pow(distance / radius, 4.0f));
-    attenuation = attenuation * attenuation / (distance * distance + 1.0f);
-    return attenuation;
-}
-
-static inline float ComputeSpotLightAngularAttenuation(
-    float3 light_direction_to_source,
-    float3 spot_direction_ws,
-    float inner_angle_cosine,
-    float outer_angle_cosine)
-{
-    const float inner_cosine = max(inner_angle_cosine, outer_angle_cosine);
-    const float angle_span = max(inner_cosine - outer_angle_cosine, EPSILON_SMALL);
-    const float cosine_angle = dot(
-        -VortexSafeNormalize(light_direction_to_source),
-        VortexSafeNormalize(spot_direction_ws));
-    const float attenuation = saturate(
-        (cosine_angle - outer_angle_cosine) / angle_span);
-    return attenuation * attenuation;
-}
-
-#endif // OXYGEN_D3D12_SHADERS_VORTEX_SERVICES_LIGHTING_DEFERREDLIGHTINGCOMMON_HLSLI
+#endif

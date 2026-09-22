@@ -292,7 +292,7 @@ static inline float3 MakeDepthMismatchHeatmap(float depth_error)
 #  elif defined(DEBUG_IBL_IRRADIANCE)
     const LightingFrameBindings lighting = LoadResolvedLightingFrameBindings();
     const float screen_w = max(1.0,
-      (float)lighting.grid_size.x * 64.0f);
+      LoadLightGridMetadata(lighting.grid_metadata_srv).content_extent_px.x);
     const bool show_world = (input.position.x < 0.5 * screen_w);
     if (show_world) {
       debug_out = input.world_normal * 0.5 + 0.5;
@@ -347,7 +347,7 @@ static inline float3 MakeDepthMismatchHeatmap(float depth_error)
 
   if (!debug_handled) {
     const LightingFrameBindings lighting = LoadResolvedLightingFrameBindings();
-    const uint grid = lighting.grid_indirection_srv;
+    const uint grid = lighting.cluster_ranges_srv;
     if (grid != K_INVALID_BINDLESS_INDEX) {
       float linear_depth
         = -mul(view_matrix, float4(input.world_pos, 1.0)).z;
@@ -356,7 +356,7 @@ static inline float3 MakeDepthMismatchHeatmap(float depth_error)
 #if defined(DEBUG_LIGHT_HEATMAP)
       debug_out = HeatMapColor(
         saturate((float)GetClusterLightRange(grid, idx).count
-          / (float)max(lighting.max_culled_lights_per_cell, 1u)));
+          / (float)max(lighting.local_count, 1u)));
 #elif defined(DEBUG_DEPTH_SLICE)
       debug_out = DepthSliceColor(idx / (dims.x * dims.y), dims.z);
 #elif defined(DEBUG_CLUSTER_INDEX)

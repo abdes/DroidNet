@@ -50,18 +50,23 @@ float4 DeferredLightPointPS(DeferredLightVolumeVSOutput input) : SV_Target0
     const float scene_depth = SampleSceneDepth(screen_uv, bindings);
     const float3 world_position
         = ReconstructDeferredWorldPosition(screen_uv, scene_depth);
+    const LightingFrameBindings lighting_bindings = LoadResolvedLightingFrameBindings();
+    ForwardLocalLightRecord light;
+    if (!TryLoadLocalLight(lighting_bindings, light_constants.selection_index, light)) return 0.0f.xxxx;
+    const LightShadowReference shadow_reference = LoadLightShadowReference(
+        lighting_bindings.local_shadow_map_srv, light.selection_index);
     const float3 light_vector
-        = light_constants.light_position_and_radius.xyz - world_position;
+        = light.position_ws - world_position;
     const float attenuation = ComputeLocalLightDistanceAttenuation(
-        light_vector, light_constants.light_position_and_radius.w);
+        light_vector, light.range_m);
     float shadow_visibility = 1.0f;
-    if (light_constants.shadow_info.x != INVALID_BINDLESS_INDEX) {
+    if (shadow_reference.record_index != INVALID_BINDLESS_INDEX) {
         const VortexShadowFrameBindings shadow_bindings =
             LoadVortexShadowFrameBindings();
         const GBufferData gbuffer = ReadGBuffer(screen_uv, bindings);
         shadow_visibility = ComputePointShadowVisibility(
             shadow_bindings,
-            light_constants.shadow_info.x,
+            shadow_reference.record_index,
             world_position,
             gbuffer.world_normal,
             VortexSafeNormalize(light_vector));
@@ -71,7 +76,7 @@ float4 DeferredLightPointPS(DeferredLightVolumeVSOutput input) : SV_Target0
         scene_depth,
         world_position,
         VortexSafeNormalize(light_vector),
-        LoadDeferredLightColor(light_constants.light_color_and_intensity),
+        light.intensity_rgb_cd,
         attenuation * shadow_visibility,
         camera_position,
         bindings);

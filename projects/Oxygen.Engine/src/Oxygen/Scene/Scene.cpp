@@ -5,8 +5,12 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <atomic>
 #include <bitset>
+#include <cstdint>
+#include <limits>
 #include <ranges>
+#include <stdexcept>
 
 #include <fmt/format.h>
 
@@ -35,6 +39,21 @@ using oxygen::scene::SceneNodeImpl;
 // =============================================================================
 
 namespace {
+
+auto AllocateSceneLifetimeId() -> Scene::LifetimeId
+{
+  static std::atomic<std::uint64_t> next { 1U };
+  auto candidate = next.load(std::memory_order_relaxed);
+  for (;;) {
+    if (candidate == std::numeric_limits<std::uint64_t>::max()) {
+      throw std::overflow_error("Scene lifetime identity space exhausted");
+    }
+    if (next.compare_exchange_weak(
+          candidate, candidate + 1U, std::memory_order_relaxed)) {
+      return Scene::LifetimeId { candidate };
+    }
+  }
+}
 
 //! Thread-safe scene ID management
 struct SceneIdManager {
@@ -107,6 +126,7 @@ Scene::Scene(const std::string& name, size_t initial_capacity)
   AddComponent<ObjectMetadata>(name);
 
   // Allocate unique scene ID
+  lifetime_id_ = AllocateSceneLifetimeId();
   auto id = SceneIdManager::Instance().AllocateId();
   if (!id.has_value()) {
     // Handle the case where all 256 IDs are exhausted

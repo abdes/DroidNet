@@ -5,17 +5,22 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <array>
+#include <atomic>
+#include <cmath>
 #include <cstdint>
-#include <tuple>
+#include <expected>
+#include <limits>
+#include <optional>
+#include <utility>
 
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
+#include <Oxygen/Vortex/Lighting/Internal/LightEvaluationRecords.h>
 #include <Oxygen/Vortex/Lighting/Internal/LightGridBuilder.h>
-#include <Oxygen/Vortex/Lighting/Types/DirectionalLightForwardData.h>
-#include <Oxygen/Vortex/Lighting/Types/ForwardLocalLightRecord.h>
 #include <Oxygen/Vortex/Lighting/Types/FrameLightingInputs.h>
 #include <Oxygen/Vortex/Lighting/Types/LightGridMetadata.h>
-#include <Oxygen/Vortex/Renderer.h>
+#include <Oxygen/Vortex/Lighting/Types/LightingPreparationFailure.h>
 #include <Oxygen/Vortex/Types/FrameLightSelection.h>
 #include <Oxygen/Vortex/Types/LightCullingConfig.h>
 #include <Oxygen/Vortex/Types/LightingFrameBindings.h>
@@ -24,9 +29,24 @@ namespace oxygen::vortex::lighting::internal {
 
 namespace {
 
+  auto AllocateViewGeneration() -> std::optional<std::uint64_t>
+  {
+    static std::atomic<std::uint64_t> next { 1U };
+    auto candidate = next.load(std::memory_order_relaxed);
+    for (;;) {
+      if (candidate == std::numeric_limits<std::uint64_t>::max()) {
+        return std::nullopt;
+      }
+      if (next.compare_exchange_weak(
+            candidate, candidate + 1U, std::memory_order_relaxed)) {
+        return candidate;
+      }
+    }
+  }
+
   auto ClampViewportDimension(const float value) -> std::uint32_t
   {
-    return std::max(1U, static_cast<std::uint32_t>(value));
+    return std::max(1U, static_cast<std::uint32_t>(std::ceil(value)));
   }
 
   auto BuildGridMetadata(const PreparedViewLightingInput& view_input)
@@ -61,33 +81,17 @@ namespace {
     };
   }
 
-  auto BuildBindings(const LightGridMetadata& metadata,
-    const FrameLightSelection& selection) -> LightingFrameBindings
+  auto SplitGeneration(const std::uint64_t value)
+    -> std::array<std::uint32_t, 2>
   {
-    auto bindings = LightingFrameBindings {};
-    bindings.grid_size = glm::ivec3(metadata.grid_size);
-    bindings.grid_z_params = metadata.grid_z_params;
-    bindings.num_grid_cells
-      = metadata.grid_size.x * metadata.grid_size.y * metadata.grid_size.z;
-    bindings.max_culled_lights_per_cell
-      = LightCullingConfig::kMaxCulledLightsPerCell;
-    bindings.directional_light_count = selection.directional_light_count();
-    bindings.local_light_count = selection.local_light_count();
-    bindings.has_directional_light
-      = selection.directional_light.has_value() ? 1U : 0U;
-    if (selection.directional_light.has_value()) {
-      bindings.directional = DirectionalLightForwardData::FromSelection(
-        *selection.directional_light);
-    }
-    return bindings;
+    return {
+      static_cast<std::uint32_t>(value),
+      static_cast<std::uint32_t>(value
+        >> static_cast<unsigned>(std::numeric_limits<std::uint32_t>::digits)),
+    };
   }
 
 } // namespace
-
-LightGridBuilder::LightGridBuilder(Renderer& renderer)
-  : renderer_(renderer)
-{
-}
 
 auto LightGridBuilder::OnFrameStart(
   const frame::SequenceNumber sequence, const frame::Slot slot) -> void
@@ -102,32 +106,64 @@ auto LightGridBuilder::OnFrameStart(
 }
 
 auto LightGridBuilder::Build(const FrameLightingInputs& inputs)
-  -> BuiltLightGridFrame
+  -> std::expected<BuiltLightGridFrame, LightingPreparationFailure>
 {
-  std::ignore = renderer_;
-
   auto built = BuiltLightGridFrame {};
   if (inputs.frame_light_set == nullptr) {
-    return built;
+    return std::unexpected(LightingPreparationFailure {});
   }
 
   built.selection_epoch = inputs.frame_light_set->selection_epoch;
-  built.local_light_records.reserve(
-    inputs.frame_light_set->local_lights.size());
-  for (const auto& light : inputs.frame_light_set->local_lights) {
-    built.local_light_records.push_back(
-      ForwardLocalLightRecord::FromSelection(light));
+  auto evaluation = ResolveLightEvaluationRecords(*inputs.frame_light_set);
+  if (!evaluation) {
+    return std::unexpected(evaluation.error());
   }
-  if (inputs.frame_light_set->directional_light.has_value()) {
-    built.directional_light_indices.push_back(0U);
-  }
+  built.evaluation = std::move(*evaluation);
 
   built.per_view.reserve(inputs.active_views.size());
   for (const auto& view_input : inputs.active_views) {
+    auto failure = LightingPreparationFailure { .view_id = view_input.view_id };
+    if (!view_input.resolved_view) {
+      return std::unexpected(failure);
+    }
+    const auto viewport = view_input.resolved_view->Viewport();
+    if (!std::isfinite(viewport.width) || !std::isfinite(viewport.height)
+      || !std::isfinite(viewport.top_left_x)
+      || !std::isfinite(viewport.top_left_y) || viewport.width <= 0.0F
+      || viewport.height <= 0.0F
+      || static_cast<double>(viewport.width)
+        > std::numeric_limits<std::uint32_t>::max()
+      || static_cast<double>(viewport.height)
+        > std::numeric_limits<std::uint32_t>::max()) {
+      return std::unexpected(failure);
+    }
     const auto metadata = BuildGridMetadata(view_input);
+    const auto cluster_count = static_cast<std::uint64_t>(metadata.grid_size.x)
+      * metadata.grid_size.y * metadata.grid_size.z;
+    if (cluster_count > std::numeric_limits<std::uint32_t>::max()) {
+      failure.error = LightingPreparationError::kUnrepresentable;
+      return std::unexpected(failure);
+    }
+    auto bindings = LightingFrameBindings {};
+    bindings.directional_count
+      = static_cast<std::uint32_t>(built.evaluation.directional.size());
+    bindings.local_count
+      = static_cast<std::uint32_t>(built.evaluation.local.size());
+    bindings.cluster_count = static_cast<std::uint32_t>(cluster_count);
+    bindings.scene_generation
+      = SplitGeneration(inputs.frame_light_set->scene_generation);
+    bindings.selection_revision = SplitGeneration(built.selection_epoch);
+    bindings.frame_sequence
+      = SplitGeneration(last_build_stats_.frame_sequence.get());
+    const auto generation = AllocateViewGeneration();
+    if (!generation) {
+      failure.error = LightingPreparationError::kUnrepresentable;
+      return std::unexpected(failure);
+    }
+    bindings.view_generation = SplitGeneration(*generation);
     built.per_view.push_back(BuiltLightGridView {
       .view_id = view_input.view_id,
-      .bindings = BuildBindings(metadata, *inputs.frame_light_set),
+      .bindings = bindings,
       .metadata = metadata,
     });
   }
