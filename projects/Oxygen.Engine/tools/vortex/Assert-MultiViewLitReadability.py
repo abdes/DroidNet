@@ -20,7 +20,7 @@ def check_view(view, *, force_white=False):
     assert np.isfinite(hdr).all(), "Nonfinite scene input"
     assert np.max(np.abs(before[geometry, :3])) <= 1e-6, "Unexpected emissive input"
     assert view["first_light_type"] == 0, "Expected the authored directional sun"
-    assert view["first_light_rgb_intensity"] == [1, 1, 1, 110000], "Incorrect authored sun"
+    assert view["first_light_rgb_lux"] == [110000, 110000, 110000], "Incorrect authored sun"
     assert view["metered_luminance"] > 0, "Auto meter did not produce a measurement"
     assert view["solve"]["mode"] == 2, "Expected Auto exposure"
     assert view["gain"] == view["target_gain"], "Adaptation is still pending"

@@ -320,6 +320,10 @@ to the existing Spot profile (radius 0.2) and explicitly remeter; capture frame
 remain identical. Average includes the dark background and is retained as the
 washout diagnostic, not a readability pass. This is the lit-material case;
 the separate emissive-card fixture below does not qualify it.
+The exporter reads the canonical 80-byte deferred constants and follows their
+selection index into the 64-byte directional array. Its `first_light_rgb_lux`
+field stores resolved RGB lux; old tint-plus-intensity exports are not accepted.
+
 Use `AnalyzeRenderDocLitReadability.py` with `-PassName LitReadability`, then,
 with NumPy installed, run
 `Assert-MultiViewLitReadability.py --inputs <spot-report.json> --average

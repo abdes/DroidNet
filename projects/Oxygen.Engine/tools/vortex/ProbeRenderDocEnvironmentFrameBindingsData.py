@@ -83,14 +83,25 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     state = controller.GetPipelineState()
     readonly = state.GetReadOnlyResources(rd.ShaderStage.Pixel, True)
 
-    descriptor = None
-    for binding in readonly:
-        candidate = binding.descriptor
-        if int(safe_getattr(candidate, "byteSize", 0) or 0) == 176:
-            descriptor = candidate
-            break
-    if descriptor is None:
-        raise RuntimeError("Could not locate the 176-byte EnvironmentFrameBindings buffer")
+    by_slot = {int(binding.access.arrayElement): binding.descriptor
+               for binding in readonly
+               if binding.access.index == rd.DescriptorAccess.NoShaderBinding}
+    constants = [block.descriptor for block in state.GetConstantBlocks(rd.ShaderStage.Pixel)
+                 if block.access.index != rd.DescriptorAccess.NoShaderBinding
+                 and block.descriptor.byteSize == 256]
+    if len(constants) != 1:
+        raise RuntimeError("Could not locate the view root CBV")
+    constant = constants[0]
+    constant_bytes = bytes(controller.GetBufferData(constant.resource, constant.byteOffset, 256))
+    root_slot = struct.unpack_from("<I", constant_bytes, 224)[0]
+    root = by_slot.get(root_slot)
+    if root is None or root.elementByteSize != 64:
+        raise RuntimeError("Could not locate the canonical ViewFrameBindings root")
+    root_bytes = bytes(controller.GetBufferData(root.resource, root.byteOffset, 64))
+    environment_slot = struct.unpack_from("<I", root_bytes, 8)[0]
+    descriptor = by_slot.get(environment_slot)
+    if descriptor is None or descriptor.elementByteSize != 112 or descriptor.byteSize != 112:
+        raise RuntimeError("Could not locate the routed 112-byte EnvironmentFrameBindings buffer")
 
     resource = safe_getattr(descriptor, "resource")
     byte_offset = int(safe_getattr(descriptor, "byteOffset", 0) or 0)
