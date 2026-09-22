@@ -13,10 +13,9 @@
 
 #include <nlohmann/json.hpp>
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <Oxygen/Cooker/Import/CollisionShapeDescriptorImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/CollisionShapeDescriptorImportSettings.h>
+#include <Oxygen/Testing/GTest.h>
 
 namespace {
 
@@ -84,8 +83,12 @@ NOLINT_TEST(CollisionShapeDescriptorImportRequestBuilderTest,
   EXPECT_EQ(request->source_path, descriptor_path.lexically_normal());
   EXPECT_EQ(request->job_name,
     std::optional<std::string> { "manifest-collision-shape" });
-  EXPECT_FALSE(oxygen::content::import::EffectiveContentHashingEnabled(
-    request->options.with_content_hashing));
+  // Release must hash authored content even when the descriptor opts out.
+#if defined(NDEBUG)
+  EXPECT_TRUE(request->options.with_content_hashing);
+#else
+  EXPECT_FALSE(request->options.with_content_hashing);
+#endif
   ASSERT_TRUE(request->collision_shape_descriptor.has_value());
 
   const auto normalized = json::parse(

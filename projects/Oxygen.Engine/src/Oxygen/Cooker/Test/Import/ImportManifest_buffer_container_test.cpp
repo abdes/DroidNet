@@ -13,10 +13,9 @@
 
 #include <nlohmann/json.hpp>
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <Oxygen/Cooker/Import/ImportManifest.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
+#include <Oxygen/Testing/GTest.h>
 
 namespace {
 
@@ -102,8 +101,12 @@ NOLINT_TEST(ImportManifestBufferContainerTest,
   ASSERT_TRUE(request->buffer_container.has_value());
 
   // Descriptor-level content_hashing overrides manifest defaults/job settings.
-  EXPECT_FALSE(
-    EffectiveContentHashingEnabled(request->options.with_content_hashing));
+  // Release must hash authored content even when the descriptor opts out.
+#if defined(NDEBUG)
+  EXPECT_TRUE(request->options.with_content_hashing);
+#else
+  EXPECT_FALSE(request->options.with_content_hashing);
+#endif
 
   const auto normalized
     = json::parse(request->buffer_container->normalized_descriptor_json);
