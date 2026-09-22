@@ -12,6 +12,11 @@ records have compiled C++ assertions and native GPU decoding coverage. The
 typed indices and a changed-lane negative control. Local/directional evaluation
 records, full frame bindings, cascade/local projection records and production
 consumer cutover remain open; this partial proof does not close EX07A.
+The later [consumer checkpoint](../plan/EX07A-contract-review.md#verification-obligations-and-current-evidence)
+adds four native behavior tests for complete/compact iteration and content-relative
+projection-aware lookup, bringing the target to 12 passing cases per configuration.
+The current CPU publisher emits complete ranges without a compact index buffer;
+this is a conservative baseline until spatial culling is implemented.
 
 ## Encoding rules
 

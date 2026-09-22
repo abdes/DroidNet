@@ -125,6 +125,14 @@ Core view and LightingService suites each pass 5 Debug / 5 Release tests.
 Conventional/BRDF rendering and full orthographic consumer parity remain open.
 The [checkpoint manifest](../../out/build-ninja/analysis/vortex/exposure-lightbench/ex07a/abi-foundation-checkpoint.json)
 records the exact targets, commands, source hashes and evidence scope.
+The next [consumer checkpoint](../../out/build-ninja/analysis/vortex/exposure-lightbench/ex07a/lookup-consumer-checkpoint.json)
+uses complete lists without identity-index buffers and metadata-based lookup in
+shading/debug/retained VSM shaders. ABI/behavior tests pass 12 Debug / 12 Release;
+LightingService passes 5 / 5; two affected rendered-lighting/HDR-history cases
+pass in both configurations. All six changed C++ files are oxytidy-clean. Spatial
+culling, complete ABI migration, frame-failure routing, PBR qualification and VSM
+activation are not claimed. LightBench shutdown live-object investigation follows
+this stable checkpoint at the user's request.
 The [shadow-memory follow-up](plan/EX07-shadow-memory-review.md) records the CSM,
 scene-stencil and inactive-VSM ownership audit, D32 allocation queries and a
 standalone native GPU A/B probe: 12,288 depth/PCF values match, zero CPU-reference

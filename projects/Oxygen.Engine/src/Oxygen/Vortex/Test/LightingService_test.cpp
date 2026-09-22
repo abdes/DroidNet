@@ -303,6 +303,7 @@ NOLINT_TEST_F(LightingServiceBehaviorTest,
   EXPECT_NE(
     first_bindings->grid_metadata_buffer_srv, kInvalidShaderVisibleIndex);
   EXPECT_NE(first_bindings->grid_indirection_srv, kInvalidShaderVisibleIndex);
+  EXPECT_EQ(first_bindings->light_view_data_srv, kInvalidShaderVisibleIndex);
   EXPECT_NE(
     first_bindings->directional_light_indices_srv, kInvalidShaderVisibleIndex);
   EXPECT_NE(
@@ -310,6 +311,7 @@ NOLINT_TEST_F(LightingServiceBehaviorTest,
   EXPECT_NE(
     second_bindings->grid_metadata_buffer_srv, kInvalidShaderVisibleIndex);
   EXPECT_NE(second_bindings->grid_indirection_srv, kInvalidShaderVisibleIndex);
+  EXPECT_EQ(second_bindings->light_view_data_srv, kInvalidShaderVisibleIndex);
   EXPECT_NE(
     second_bindings->directional_light_indices_srv, kInvalidShaderVisibleIndex);
   EXPECT_EQ(first_bindings->directional.transmittance_toward_sun_rgb,

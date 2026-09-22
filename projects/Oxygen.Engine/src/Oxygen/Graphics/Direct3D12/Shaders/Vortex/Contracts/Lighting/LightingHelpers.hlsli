@@ -53,7 +53,7 @@ static inline bool HasSunLight()
 static inline uint3 GetClusterDimensions()
 {
     const LightingFrameBindings lighting = LoadResolvedLightingFrameBindings();
-    return uint3(lighting.grid_size);
+    return LoadLightGridMetadata(lighting.grid_metadata_buffer_srv).grid_size;
 }
 
 static inline uint GetClusterGridSlot()
@@ -74,14 +74,8 @@ static inline uint GetClusterMaxLightsPerCell()
 static inline uint GetClusterIndex(float2 screen_pos, float linear_depth)
 {
     const LightingFrameBindings lighting = LoadResolvedLightingFrameBindings();
-    const uint3 cluster_dims = uint3(lighting.grid_size);
-
-    return ComputeClusterIndex(
-        screen_pos,
-        linear_depth,
-        cluster_dims,
-        6u,
-        lighting.grid_z_params);
+    return ComputeClusterIndex(screen_pos, linear_depth,
+        LoadLightGridMetadata(lighting.grid_metadata_buffer_srv));
 }
 
 #endif // OXYGEN_D3D12_SHADERS_RENDERER_LIGHTINGHELPERS_HLSLI

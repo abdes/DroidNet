@@ -68,8 +68,31 @@ def build_report(controller, report, capture_path, report_path):
                 report.append(f"light={index} kind={int(kind)} flags={int(flags)} intensity={values[7]} radius={radius}")
             if sorted(kinds) != expected:
                 raise RuntimeError(f"Wrong light kinds: {kinds} vs {expected}")
-            if not any(x.elementByteSize == 8 for x in reads) or not any(x.elementByteSize == 4 for x in reads):
-                raise RuntimeError("Forward shader did not consume grid ranges and indices")
+            ranges = [x for x in reads if x.elementByteSize == 8
+                      and x.byteSize >= words[13] * 8]
+            if len(ranges) != 1:
+                raise RuntimeError("Missing or ambiguous canonical cluster ranges")
+            ranges_data = bytes(controller.GetBufferData(
+                ranges[0].resource, ranges[0].byteOffset, words[13] * 8))
+            if len(ranges_data) != words[13] * 8:
+                raise RuntimeError("Incomplete cluster range readback")
+            complete_cells = compact_cells = 0
+            for offset, count in struct.iter_unpack("<2I", ranges_data):
+                if offset == 0xFFFFFFFF:
+                    if count != len(expected):
+                        raise RuntimeError("Complete-list range lost local records")
+                    complete_cells += 1
+                elif count:
+                    if count > len(expected):
+                        raise RuntimeError("Compact range exceeds selected light count")
+                    compact_cells += 1
+                elif offset:
+                    raise RuntimeError("Empty cluster has a nonzero offset")
+            if compact_cells and words[1] == 0xFFFFFFFF:
+                raise RuntimeError("Compact cells require a valid index descriptor")
+            if not any(x.elementByteSize == 64 for x in reads):
+                raise RuntimeError("Forward shader did not consume canonical grid metadata")
+            report.append(f"complete_cells={complete_cells} compact_cells={compact_cells} indices_srv={words[1]}")
         elif lights:
             raise RuntimeError("Unexpected local-light read with both lights disabled")
         report.append(f"bindings_event={draw.event_id} canonical_count={words[16]} legacy_slot=invalid")

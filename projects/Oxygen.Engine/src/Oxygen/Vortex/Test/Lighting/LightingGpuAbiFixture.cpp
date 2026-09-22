@@ -31,6 +31,7 @@
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
+#include <Oxygen/Graphics/Direct3D12/Test/Fixtures/ReadbackTestFixture.h>
 #include <Oxygen/Vortex/Test/Lighting/LightingGpuAbiFixture.h>
 
 namespace oxygen::vortex::testing {
@@ -152,7 +153,7 @@ auto LightingGpuAbiTest::Decode(const DecodeRequest& request)
   -> std::vector<std::uint32_t>
 {
   const auto& [records, stride, record_kind, decoded_words, first_element,
-    count] = request;
+    count, indices_srv] = request;
   CHECK_GT_F(stride, 0U);
   CHECK_EQ_F(records.size_bytes() % stride, 0U);
   CHECK_LE_F(static_cast<std::uint64_t>(first_element) + count,
@@ -200,6 +201,10 @@ auto LightingGpuAbiTest::Decode(const DecodeRequest& request)
     output_slot.get(),
     decoded_words,
     first_element,
+    indices_srv.get(),
+    0U,
+    0U,
+    0U,
   };
   auto constants = CreateRegisteredBuffer({
     .size_bytes = sizeof(arguments),
@@ -233,6 +238,9 @@ auto LightingGpuAbiTest::Decode(const DecodeRequest& request)
     [&](CommandRecorder& recorder) -> void {
       EnsureTracked(recorder, input, ResourceStates::kGenericRead);
       EnsureTracked(recorder, constants, ResourceStates::kGenericRead);
+      if (indices_buffer_) {
+        EnsureTracked(recorder, indices_buffer_, ResourceStates::kGenericRead);
+      }
       EnsureTracked(recorder, output, ResourceStates::kCommon);
       recorder.RequireResourceState(*output, ResourceStates::kUnorderedAccess);
       recorder.FlushBarriers();
@@ -255,6 +263,39 @@ auto LightingGpuAbiTest::Decode(const DecodeRequest& request)
   std::memcpy(
     result.data(), mapped->Bytes().data(), mapped->Bytes().size_bytes());
   return result;
+}
+
+auto LightingGpuAbiTest::PublishIndices(std::span<const std::uint32_t> indices)
+  -> ShaderVisibleIndex
+{
+  CHECK_F(!indices.empty());
+  indices_buffer_ = CreateRegisteredBuffer({
+    .size_bytes = indices.size_bytes(),
+    .usage = BufferUsage::kNone,
+    .memory = BufferMemory::kUpload,
+    .debug_name = "Lighting probe compact indices",
+  });
+  indices_buffer_->Update(indices.data(), indices.size_bytes(), 0U);
+  oxygen::Graphics& graphics_api = Backend();
+  auto& allocator = graphics_api.GetDescriptorAllocator();
+  auto handle
+    = allocator.AllocateBindless(bindless::generated::kGlobalSrvDomain,
+      ResourceViewType::kStructuredBuffer_SRV);
+  const auto slot = allocator.GetShaderVisibleIndex(handle);
+  Backend().GetResourceRegistry().RegisterView(*indices_buffer_,
+    std::move(handle),
+    BufferViewDescription {
+      .view_type = ResourceViewType::kStructuredBuffer_SRV,
+      .range = { 0U, indices.size_bytes() },
+      .stride = sizeof(std::uint32_t),
+    });
+  return slot;
+}
+
+auto LightingGpuAbiTest::TearDown() -> void
+{
+  indices_buffer_.reset();
+  ReadbackTestFixture::TearDown();
 }
 
 } // namespace oxygen::vortex::testing

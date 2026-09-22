@@ -9,6 +9,7 @@
 #include <memory>
 #include <unordered_map>
 
+#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Vortex/Internal/PerViewStructuredPublisher.h>
 #include <Oxygen/Vortex/Lighting/Internal/LightGridBuilder.h>
@@ -29,6 +30,10 @@ namespace lighting::internal {
   class ForwardLightPublisher {
   public:
     explicit ForwardLightPublisher(Renderer& renderer);
+    ~ForwardLightPublisher() = default;
+
+    OXYGEN_MAKE_NON_COPYABLE(ForwardLightPublisher)
+    OXYGEN_MAKE_NON_MOVABLE(ForwardLightPublisher)
 
     auto OnFrameStart(frame::SequenceNumber sequence, frame::Slot slot) -> void;
     auto Publish(const BuiltLightGridFrame& built_frame) -> void;
@@ -47,7 +52,6 @@ namespace lighting::internal {
       LightingFrameBindings>>
       lighting_bindings_publisher_;
     std::unique_ptr<upload::TransientStructuredBuffer> local_light_buffer_;
-    std::unique_ptr<upload::TransientStructuredBuffer> light_view_data_buffer_;
     std::unique_ptr<upload::TransientStructuredBuffer> grid_metadata_buffer_;
     std::unique_ptr<upload::TransientStructuredBuffer> grid_indirection_buffer_;
     std::unique_ptr<upload::TransientStructuredBuffer>

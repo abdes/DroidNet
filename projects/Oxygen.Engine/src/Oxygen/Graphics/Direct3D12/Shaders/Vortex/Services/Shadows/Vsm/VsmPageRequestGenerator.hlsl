@@ -17,7 +17,7 @@
 #include "Vortex/Contracts/Draw/MaterialShadingConstants.hlsli"
 #include "Vortex/Services/Shadows/Vsm/VsmPageRequestFlags.hlsli"
 #include "Vortex/Services/Shadows/Vsm/VsmPageRequestProjection.hlsli"
-#include "Vortex/Services/Lighting/ClusterLookup.hlsli"
+#include "Vortex/Contracts/Lighting/LightingHelpers.hlsli"
 
 #define BX_VERTEX_TYPE uint4
 #include "Core/Bindless/BindlessHelpers.hlsl"
@@ -34,20 +34,11 @@ struct VsmPageRequestGeneratorPassConstants
     uint depth_texture_index;
     uint projection_buffer_index;
     uint page_request_flags_uav_index;
-    uint cluster_grid_index;
-    uint light_index_list_index;
     uint2 screen_dimensions;
     uint projection_count;
     uint virtual_page_count;
     float4x4 inverse_view_projection;
     float4x4 view_matrix;
-    uint cluster_dim_x;
-    uint cluster_dim_y;
-    uint cluster_dim_z;
-    uint light_grid_pixel_size_shift;
-    float light_grid_z_params_b;
-    float light_grid_z_params_o;
-    float light_grid_z_params_s;
     uint enable_light_grid_pruning;
 };
 
@@ -63,15 +54,21 @@ static float3 VsmReconstructWorldPosition(
     return world.xyz / max(world.w, 1.0e-6f);
 }
 
-static bool VsmClusterContainsLight(const StructuredBuffer<uint2> cluster_grid,
-    const StructuredBuffer<uint> light_index_list, const uint cluster_index,
-    const uint light_index)
+static bool VsmClusterContainsLight(LightingFrameBindings lighting,
+    uint cluster_index, uint light_index)
 {
-    const uint2 cluster = cluster_grid[cluster_index];
-    const uint list_offset = cluster.x;
-    const uint list_count = cluster.y;
-    for (uint i = 0u; i < list_count; ++i) {
-        if (light_index_list[list_offset + i] == light_index) {
+    ClusterLightRange range = GetClusterLightRange(lighting.grid_indirection_srv, cluster_index);
+    ClusterLightIteration iteration;
+    if (!TryResolveClusterLightIteration(range, lighting.local_light_count,
+            lighting.light_view_data_srv, iteration)) {
+        // Pruning is optional; an unavailable list cannot remove a page request.
+        return true;
+    }
+    if (iteration.complete) {
+        return light_index < iteration.count;
+    }
+    for (uint i = 0u; i < iteration.count; ++i) {
+        if (LoadClusterLightIndex(iteration, i) == light_index) {
             return true;
         }
     }
@@ -174,30 +171,16 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
         dispatch_thread_id.xy, depth, screen_dimensions,
         pass_constants.inverse_view_projection);
 
-    const bool has_light_grid
-        = BX_IsValidSlot(pass_constants.cluster_grid_index)
-        && BX_IsValidSlot(pass_constants.light_index_list_index)
-        && pass_constants.cluster_dim_x != 0u
-        && pass_constants.cluster_dim_y != 0u
-        && pass_constants.cluster_dim_z != 0u
-        && pass_constants.light_grid_pixel_size_shift != 0u;
-
+    const LightingFrameBindings lighting = LoadResolvedLightingFrameBindings();
+    const LightGridMetadata grid = LoadLightGridMetadata(lighting.grid_metadata_buffer_srv);
+    const bool has_light_grid = BX_IsValidSlot(lighting.grid_indirection_srv)
+        && BX_IsValidSlot(lighting.grid_metadata_buffer_srv)
+        && all(grid.grid_size != 0u);
     uint cluster_index = 0u;
     if (has_light_grid) {
-        const float linear_depth = max(-mul(
-            pass_constants.view_matrix, float4(world_position_ws, 1.0f)).z, 0.0f);
-        cluster_index = ComputeClusterIndex(
-            float2(dispatch_thread_id.xy),
-            linear_depth,
-            uint3(
-                pass_constants.cluster_dim_x,
-                pass_constants.cluster_dim_y,
-                pass_constants.cluster_dim_z),
-            pass_constants.light_grid_pixel_size_shift,
-            float3(
-                pass_constants.light_grid_z_params_b,
-                pass_constants.light_grid_z_params_o,
-                pass_constants.light_grid_z_params_s));
+        const float view_depth = -mul(
+            pass_constants.view_matrix, float4(world_position_ws, 1.0f)).z;
+        cluster_index = ComputeClusterIndex(float2(dispatch_thread_id.xy) + 0.5f.xx, view_depth, grid);
     }
 
     for (uint i = 0u; i < pass_constants.projection_count; ++i) {
@@ -206,13 +189,7 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
             && projection.light_index != VSM_INVALID_LIGHT_INDEX
             && has_light_grid
             ) {
-            StructuredBuffer<uint2> cluster_grid
-                = ResourceDescriptorHeap[pass_constants.cluster_grid_index];
-            StructuredBuffer<uint> light_index_list
-                = ResourceDescriptorHeap[pass_constants.light_index_list_index];
-            if (!VsmClusterContainsLight(
-                    cluster_grid, light_index_list, cluster_index,
-                    projection.light_index)) {
+            if (!VsmClusterContainsLight(lighting, cluster_index, projection.light_index)) {
                 continue;
             }
         }

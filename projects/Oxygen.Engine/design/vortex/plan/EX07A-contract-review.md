@@ -371,24 +371,31 @@ view and LightingService suites each pass 5 tests in both configurations.
 records source identities, commands and remaining validation. This dependency
 repair does not qualify downstream orthographic shading/culling/shadows.
 
-Consumer-cutover blockers confirmed during implementation review:
+The subsequent consumer checkpoint closes the two reviewed lookup gaps:
 
-- Forward local evaluation still clamps the complete-list marker to an empty
-  compact range and requires a compact-index descriptor in its outer guard.
-  Before fallback can be published, the same evaluator must enumerate all local
-  records with **no index-buffer read or valid index descriptor required**.
-  Native behavior tests must cover zero compact capacity, absent compact SRV,
-  mixed complete/compact/empty cells and all contributing local records.
-- `ComputeClusterIndex` still uses absolute screen position and the old
-  perspective-only depth mapping. Move all callers, including shading/debug and
-  the retained VSM shader interface, to one metadata-based lookup; subtract
-  content origin and preserve linear signed orthographic slicing. Test a
-  nonzero origin, partial tiles, near/far boundaries and matching culler/lookup
-  cell assignment. Retain no old overload or coordinate convention as a bridge.
+- Forward evaluation uses one iterator for compact, complete and empty ranges.
+  Complete ranges enumerate all local records without an index descriptor or
+  index-buffer read. The unculled publisher now uses this encoding directly;
+  its redundant identity-index allocation/upload is removed.
+- Shading/debug lookup consumes canonical grid metadata, subtracts content origin
+  and uses signed linear orthographic or logarithmic perspective slices. Callers
+  retain signed camera-forward depth. The retained VSM shader reads the same
+  metadata/iterator and no longer carries duplicate grid fields; VSM remains
+  inactive and is compile-qualified only.
+- Native behavior cases cover absent index SRVs, empty/compact/complete ranges,
+  31/32/33 and 4,096 lights, rejected malformed ranges, fractional nonzero origins,
+  partial tiles and near/far slice boundaries. The ABI/behavior target passes
+  **12 Debug / 12 Release**, LightingService passes **5 / 5**, and the two affected
+  rendered lighting/HDR-history regression cases pass in both configurations.
+  All six changed C++ files are oxytidy-clean with no coverage gaps. The
+  forward-light RenderDoc analyzer understands complete ranges; no new capture
+  is claimed by this checkpoint.
 
-The current publisher emits complete compact lists at offset zero for every
-cell; that masks these consumer gaps. Record-decoding tests above do not close
-either behavioral gate or authorize connecting spatial culling.
+[Consumer checkpoint evidence](../../../out/build-ninja/analysis/vortex/exposure-lightbench/ex07a/lookup-consumer-checkpoint.json)
+records source hashes and results. This is still a complete-list baseline, not
+spatial culling. Culler/lookup cell equivalence, full binding/evaluation/shadow
+record migration, same-submission failure presentation, physical BRDF parity and
+full orthographic rendering remain open.
 
 | Gate                      | Owning suite / required evidence                                                                                                                                                                                                                     | Current result                                                                                                                         |
 | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
