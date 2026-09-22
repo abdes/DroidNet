@@ -22,15 +22,15 @@
 
 #include <nlohmann/json.hpp>
 
+#include <Oxygen/Base/Finally.h>
 #include <Oxygen/Base/Sha256.h>
-#include <Oxygen/Testing/GTest.h>
-
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Core/Meta/Physics/Backend.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::content::import::test {
 
@@ -256,6 +256,7 @@ namespace {
       });
     }
     const auto descriptor = json {
+      { "version", 6 },
       { "name", scene_name },
       { "nodes", std::move(nodes) },
     };
@@ -664,6 +665,8 @@ NOLINT_TEST(PhysicsPhase3ClosureTest,
   auto service = AsyncImportService(AsyncImportService::Config {
     .thread_pool_size = 2U,
   });
+  [[maybe_unused]] auto stop_service
+    = oxygen::Finally([&service]() { service.Stop(); });
   const auto cooked_root = MakeTempCookedRoot("complex_fixture");
 
   RegisterStubGeometryAsset(
@@ -860,6 +863,8 @@ NOLINT_TEST(PhysicsPhase3ClosureTest,
   auto service = AsyncImportService(AsyncImportService::Config {
     .thread_pool_size = 2U,
   });
+  [[maybe_unused]] auto stop_service
+    = oxygen::Finally([&service]() { service.Stop(); });
   const auto cooked_root = MakeTempCookedRoot("incremental_recook_stability");
 
   RegisterStubGeometryAsset(
@@ -970,6 +975,8 @@ NOLINT_TEST(PhysicsPhase3ClosureTest,
   auto service = AsyncImportService(AsyncImportService::Config {
     .thread_pool_size = 2U,
   });
+  [[maybe_unused]] auto stop_service
+    = oxygen::Finally([&service]() { service.Stop(); });
   const auto cooked_root = MakeTempCookedRoot("repeat_recook_hash_stability");
 
   RegisterStubGeometryAsset(
@@ -1104,6 +1111,8 @@ NOLINT_TEST(PhysicsPhase3ClosureTest,
   auto service = AsyncImportService(AsyncImportService::Config {
     .thread_pool_size = 2U,
   });
+  [[maybe_unused]] auto stop_service
+    = oxygen::Finally([&service]() { service.Stop(); });
   const auto cooked_root = MakeTempCookedRoot("backend_mismatch_hard_fail");
 
   RegisterStubGeometryAsset(
