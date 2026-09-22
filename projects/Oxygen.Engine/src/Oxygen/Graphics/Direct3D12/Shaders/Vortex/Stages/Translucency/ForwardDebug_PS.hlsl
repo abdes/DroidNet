@@ -350,7 +350,7 @@ static inline float3 MakeDepthMismatchHeatmap(float depth_error)
     const uint grid = lighting.grid_indirection_srv;
     if (grid != K_INVALID_BINDLESS_INDEX) {
       float linear_depth
-        = max(-mul(view_matrix, float4(input.world_pos, 1.0)).z, 0.0);
+        = -mul(view_matrix, float4(input.world_pos, 1.0)).z;
       uint idx = GetClusterIndex(input.position.xy, linear_depth);
       uint3 dims = GetClusterDimensions();
 #if defined(DEBUG_LIGHT_HEATMAP)

@@ -164,7 +164,7 @@ static ForwardLightingTerms ComputeForwardLightingTerms(VSOutput input,
       shadow_normal, N, V, NdotV, F0, base_rgb, surf.metalness, surf.roughness);
   terms.positional_direct
     = AccumulateLocalLightsClustered(input.world_pos, input.position.xy,
-      max(-mul(view_matrix, float4(input.world_pos, 1.0)).z, 0.0), N, V, NdotV,
+      -mul(view_matrix, float4(input.world_pos, 1.0)).z, N, V, NdotV,
       F0, base_rgb, surf.metalness, surf.roughness);
   terms.direct_gates = AccumulateDirectionalLightGatesDebug(input.world_pos,
     input.position.xy, env_state.atmosphere, shadow_normal, N, V, NdotV, F0,

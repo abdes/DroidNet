@@ -6,6 +6,26 @@
 
 #include "Vortex/Contracts/Lighting/LightGridData.hlsli"
 #include "Vortex/Contracts/Shadows/ShadowRecords.hlsli"
+#include "Vortex/Services/Lighting/ClusterLookup.hlsli"
+
+struct ProbeArguments {
+    uint4 decode;
+    uint indices_srv;
+    uint3 reserved;
+};
+
+struct GridLookupProbeInput {
+    LightGridMetadata grid;
+    float2 screen_position;
+    float view_depth;
+    uint reserved;
+};
+
+struct LightIterationProbeInput {
+    ClusterLightRange range;
+    uint local_count;
+    uint reserved;
+};
 
 cbuffer ProbeRoot : register(b2, space0) {
     uint g_RecordKind;
@@ -16,8 +36,8 @@ cbuffer ProbeRoot : register(b2, space0) {
 // Decode fields explicitly: copying input bytes would not test HLSL layout.
 [numthreads(1, 1, 1)]
 void CS(uint3 thread : SV_DispatchThreadID) {
-    StructuredBuffer<uint4> arguments = ResourceDescriptorHeap[g_ProbeArguments];
-    uint4 args = arguments[0];
+    StructuredBuffer<ProbeArguments> arguments = ResourceDescriptorHeap[g_ProbeArguments];
+    uint4 args = arguments[0].decode;
     RWByteAddressBuffer output = ResourceDescriptorHeap[args.y];
     uint element = args.w + thread.x;
     uint address = thread.x * args.z * 4;
@@ -60,5 +80,26 @@ void CS(uint3 thread : SV_DispatchThreadID) {
         output.Store4(address + 32, asuint(float4(value.grid_z_params, value.far_depth_m)));
         output.Store4(address + 48, uint4(asuint(value.near_depth_m), value.projection_kind,
             value.reserved));
+    } else if (g_RecordKind == 6) {
+        StructuredBuffer<GridLookupProbeInput> inputs = ResourceDescriptorHeap[args.x];
+        GridLookupProbeInput value = inputs[element];
+        output.Store(address, ComputeClusterIndex(value.screen_position, value.view_depth, value.grid));
+    } else if (g_RecordKind == 7) {
+        StructuredBuffer<LightIterationProbeInput> inputs = ResourceDescriptorHeap[args.x];
+        LightIterationProbeInput value = inputs[element];
+        ClusterLightIteration iteration;
+        bool valid = TryResolveClusterLightIteration(value.range, value.local_count,
+            arguments[0].indices_srv, iteration);
+        uint sum = 0u, low_mask = 0u, high_mask = 0u;
+        if (valid) {
+            for (uint i = 0u; i < iteration.count; ++i) {
+                uint index = LoadClusterLightIndex(iteration, i);
+                sum += index;
+                if (index < 32u) low_mask |= 1u << index;
+                else if (index < 64u) high_mask |= 1u << (index - 32u);
+            }
+        }
+        output.Store4(address, uint4(valid, iteration.count, sum, low_mask));
+        output.Store(address + 16, high_mask);
     }
 }

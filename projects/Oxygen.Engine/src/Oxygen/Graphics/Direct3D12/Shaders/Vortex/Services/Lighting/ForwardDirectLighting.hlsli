@@ -259,27 +259,30 @@ float3 AccumulateLocalLightsClustered(
 
     if (BX_IN_GLOBAL_SRV(lighting.local_light_buffer_srv)
         && BX_IN_GLOBAL_SRV(lighting.grid_indirection_srv)
-        && BX_IN_GLOBAL_SRV(lighting.light_view_data_srv)
-        && lighting.local_light_count > 0u && all(lighting.grid_size > 0)) {
+        && BX_IN_GLOBAL_SRV(lighting.grid_metadata_buffer_srv)
+        && lighting.local_light_count > 0u) {
         StructuredBuffer<ForwardLocalLightRecord> local_lights =
             ResourceDescriptorHeap[lighting.local_light_buffer_srv];
-        StructuredBuffer<uint> indices =
-            ResourceDescriptorHeap[lighting.light_view_data_srv];
 
         uint record_count = 0u, record_stride = 0u;
         local_lights.GetDimensions(record_count, record_stride);
-        uint index_count = 0u, index_stride = 0u;
-        indices.GetDimensions(index_count, index_stride);
-        const uint record_limit = min(record_count, lighting.local_light_count);
-        const uint cluster = ComputeClusterIndex(screen_position_xy, linear_depth,
-            uint3(lighting.grid_size), 6u, lighting.grid_z_params);
-        const ClusterLightRange range = GetClusterLightRange(
-            lighting.grid_indirection_srv, cluster);
-        const uint list_start = min(range.offset, index_count);
-        const uint list_count = min(range.count, index_count - list_start);
-
-        for (uint i = 0; i < list_count; ++i) {
-            const uint light_index = indices[list_start + i];
+        if (record_count < lighting.local_light_count) {
+            return direct;
+        }
+        const uint record_limit = lighting.local_light_count;
+        const LightGridMetadata grid = LoadLightGridMetadata(lighting.grid_metadata_buffer_srv);
+        if (any(grid.grid_size == 0u) || any(grid.content_extent_px <= 0.0f)) {
+            return direct;
+        }
+        const uint cluster = ComputeClusterIndex(screen_position_xy, linear_depth, grid);
+        const ClusterLightRange range = GetClusterLightRange(lighting.grid_indirection_srv, cluster);
+        ClusterLightIteration iteration;
+        if (!TryResolveClusterLightIteration(range, record_limit,
+                lighting.light_view_data_srv, iteration)) {
+            return direct;
+        }
+        for (uint i = 0; i < iteration.count; ++i) {
+            const uint light_index = LoadClusterLightIndex(iteration, i);
             if (light_index >= record_limit) {
                 continue;
             }

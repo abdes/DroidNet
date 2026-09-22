@@ -10,6 +10,7 @@ gtest_program(
     "LightingGpuAbiFixture.cpp"
     "LightingGpuAbiFixture.h"
     "LightGridAbi_test.cpp"
+    "LightGridLookup_test.cpp"
     "ShadowRecordAbi_test.cpp"
   DEPS
     oxygen::vortex

@@ -34,8 +34,7 @@ ForwardLightPublisher::ForwardLightPublisher(Renderer& renderer)
 auto ForwardLightPublisher::EnsurePublishResources() -> bool
 {
   if (lighting_bindings_publisher_ != nullptr && local_light_buffer_ != nullptr
-    && light_view_data_buffer_ != nullptr && grid_metadata_buffer_ != nullptr
-    && grid_indirection_buffer_ != nullptr
+    && grid_metadata_buffer_ != nullptr && grid_indirection_buffer_ != nullptr
     && directional_light_indices_buffer_ != nullptr) {
     return true;
   }
@@ -59,13 +58,6 @@ auto ForwardLightPublisher::EnsurePublishResources() -> bool
       observer_ptr { gfx.get() }, staging,
       static_cast<std::uint32_t>(sizeof(ForwardLocalLightRecord)),
       inline_transfers, "LightingService.LocalLights");
-  }
-  if (light_view_data_buffer_ == nullptr) {
-    light_view_data_buffer_
-      = std::make_unique<upload::TransientStructuredBuffer>(
-        observer_ptr { gfx.get() }, staging,
-        static_cast<std::uint32_t>(sizeof(std::uint32_t)), inline_transfers,
-        "LightingService.LightViewData");
   }
   if (grid_metadata_buffer_ == nullptr) {
     grid_metadata_buffer_ = std::make_unique<upload::TransientStructuredBuffer>(
@@ -102,7 +94,6 @@ auto ForwardLightPublisher::OnFrameStart(
 
   lighting_bindings_publisher_->OnFrameStart(sequence, slot);
   local_light_buffer_->OnFrameStart(sequence, slot);
-  light_view_data_buffer_->OnFrameStart(sequence, slot);
   grid_metadata_buffer_->OnFrameStart(sequence, slot);
   grid_indirection_buffer_->OnFrameStart(sequence, slot);
   directional_light_indices_buffer_->OnFrameStart(sequence, slot);
@@ -137,22 +128,16 @@ auto ForwardLightPublisher::Publish(const BuiltLightGridFrame& built_frame)
       bindings.grid_metadata_buffer_srv = metadata_alloc->srv;
     }
 
-    const auto light_list_size = (std::max)(bindings.local_light_count, 1U);
-    auto light_indices = std::vector<std::uint32_t>(light_list_size, 0U);
-    for (std::uint32_t i = 0; i < bindings.local_light_count; ++i) {
-      light_indices.at(i) = i;
-    }
-    if (auto light_view_alloc
-      = light_view_data_buffer_->Allocate(light_list_size);
-      light_view_alloc
-      && light_view_alloc->TryWriteRange(std::span(light_indices))) {
-      bindings.light_view_data_srv = light_view_alloc->srv;
-    }
+    // No spatial assignment has run yet: encode the full record array directly.
+    // This requires no identity index list or per-view index-buffer upload.
+    bindings.light_view_data_srv = kInvalidShaderVisibleIndex;
 
     const auto cluster_count = (std::max)(bindings.num_grid_cells, 1U);
     auto cluster_ranges = std::vector<ClusterLightRange>(cluster_count);
     for (auto& entry : cluster_ranges) {
-      entry.offset = LightListOffset { 0U };
+      entry.offset = bindings.local_light_count == 0U
+        ? LightListOffset { 0U }
+        : kCompleteLightListOffset;
       entry.count = bindings.local_light_count;
     }
     if (auto cluster_alloc = grid_indirection_buffer_->Allocate(cluster_count);
