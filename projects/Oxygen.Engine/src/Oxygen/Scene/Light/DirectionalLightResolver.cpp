@@ -4,8 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Scene/Light/DirectionalLightResolver.h>
-
 #include <algorithm>
 #include <array>
 #include <string>
@@ -17,6 +15,7 @@
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Scene/Detail/TransformComponent.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
+#include <Oxygen/Scene/Light/DirectionalLightResolver.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNodeImpl.h>
 #include <Oxygen/Scene/SceneTraversal.h>
@@ -359,11 +358,6 @@ auto DirectionalLightResolver::ValidationErrorMessage() const
         ++sun_light_count;
       }
     }
-  }
-
-  if (directional_lights_.size() > 2U && scene_ != nullptr) {
-    LOG_F(WARNING, "scene '{}' has {} directional lights", scene_->GetName(),
-      directional_lights_.size());
   }
 
   if (environment_contribution_count > 2U) {

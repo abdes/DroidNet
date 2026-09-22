@@ -12,6 +12,7 @@
 #include <utility>
 #include <vector>
 
+#include "MultiView/SceneBootstrapper.h"
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 
@@ -28,12 +29,11 @@
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Scene/Environment/SkyLight.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
+#include <Oxygen/Scene/Light/LightCommon.h>
 #include <Oxygen/Scene/Light/PointLight.h>
 #include <Oxygen/Scene/Light/SpotLight.h>
 #include <Oxygen/Scene/SceneFlags.h>
 #include <Oxygen/Scene/Types/Flags.h>
-
-#include "MultiView/SceneBootstrapper.h"
 
 namespace oxygen::examples::multiview {
 namespace {
@@ -174,6 +174,49 @@ auto SceneBootstrapper::ApplyLitAtmosphereProof() -> void
   // The cards isolate emission by backlighting. The lit-material fixture must
   // light the visible faces of the original meshes instead.
   EnsureProofAtmosphere(110000.0F, 1.0F, false);
+}
+
+auto SceneBootstrapper::ApplyDirectionalArrayProof() -> void
+{
+  constexpr float kPrimaryLux = 80000.0F;
+  constexpr float kFillLux = 12000.0F;
+  constexpr float kSecondaryLux = 30000.0F;
+  constexpr auto kFillTint = glm::vec3 { 1.0F, 0.4F, 0.25F };
+  constexpr auto kFillRays = glm::vec3 { -0.7F, 0.3F, -1.0F };
+  constexpr auto kSecondaryTint = glm::vec3 { 0.3F, 0.6F, 1.0F };
+  constexpr auto kSecondaryRays = glm::vec3 { 0.8F, -0.4F, -1.0F };
+  EnsureProofAtmosphere(kPrimaryLux, 1.0F, false);
+  auto primary = proof_sun_node_.GetLightAs<scene::DirectionalLight>();
+  CHECK_F(primary.has_value());
+  primary->get().SetIntensityLux(kPrimaryLux);
+  primary->get().Common().casts_shadows = true;
+  primary->get().CascadedShadows().cascade_count = 2U;
+  primary->get().Common().shadow.resolution_hint
+    = scene::ShadowResolutionHint::kMedium;
+  const auto add
+    = [this](const char* name, const scene::AtmosphereLightSlot slot,
+        const glm::vec3 color, const float lux, const glm::vec3 rays) -> void {
+    auto node = scene_->CreateNode(name);
+    auto light = std::make_unique<scene::DirectionalLight>();
+    light->SetIntensityLux(lux);
+    light->SetIsSunLight(false);
+    light->SetEnvironmentContribution(
+      slot != scene::AtmosphereLightSlot::kNone);
+    light->SetAtmosphereLightSlot(slot);
+    light->Common().color_rgb = color;
+    light->Common().casts_shadows = slot != scene::AtmosphereLightSlot::kNone;
+    light->Common().shadow.resolution_hint = scene::ShadowResolutionHint::kLow;
+    light->CascadedShadows().cascade_count = 3U;
+    CHECK_F(node.AttachLight(std::move(light)));
+    const auto direction = glm::normalize(rays);
+    node.GetTransform().SetLocalRotation(
+      glm::angleAxis(std::acos(glm::dot(space::move::Forward, direction)),
+        glm::normalize(glm::cross(space::move::Forward, direction))));
+  };
+  add("UnassignedDirectionalProof", scene::AtmosphereLightSlot::kNone,
+    kFillTint, kFillLux, kFillRays);
+  add("SecondaryDirectionalProof", scene::AtmosphereLightSlot::kSecondary,
+    kSecondaryTint, kSecondaryLux, kSecondaryRays);
 }
 
 auto SceneBootstrapper::ApplyMixedExposureProof() -> void

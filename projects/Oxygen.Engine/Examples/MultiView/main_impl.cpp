@@ -197,6 +197,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
   bool proof_wireframe_overlay = false;
   bool point_light_enabled = true;
   bool spot_light_enabled = true;
+  bool directional_array_proof = false;
   std::string exposure_proof_value = "none";
   std::string exposure_view_only;
   std::string visual_fog_value = "volume";
@@ -289,6 +290,14 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
               .WithValue<bool>()
               .DefaultValue(false)
               .StoreTo(&proof_wireframe_overlay)
+              .Build())
+          .WithOption(Option::WithKey("directional-array-proof")
+              .About("Validate one unassigned and two atmospheric directional "
+                     "lights")
+              .Long("directional-array-proof")
+              .WithValue<bool>()
+              .DefaultValue(false)
+              .StoreTo(&directional_array_proof)
               .Build())
           .WithOption(Option::WithKey("point-light")
               .About(
@@ -394,6 +403,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
       .proof_wireframe_overlay = proof_wireframe_overlay,
       .point_light_enabled = point_light_enabled,
       .spot_light_enabled = spot_light_enabled,
+      .directional_array_proof = directional_array_proof,
     };
     using ExposureProof = oxygen::examples::multiview::ExposureProofScenario;
     if (proof_wireframe_overlay && !proof_layout && !aux_proof_layout) {

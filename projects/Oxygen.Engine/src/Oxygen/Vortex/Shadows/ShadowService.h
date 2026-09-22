@@ -64,8 +64,9 @@ public:
 
   [[nodiscard]] OXGN_VRTX_API auto InspectShadowData(ViewId view_id) const
     -> const ShadowFrameData*;
-  [[nodiscard]] OXGN_VRTX_API auto InspectShadowSurface(ViewId view_id) const
-    -> const graphics::Texture*;
+  [[nodiscard]] OXGN_VRTX_API auto InspectDirectionalShadowSurfaces(
+    ViewId view_id) const
+    -> std::span<const std::shared_ptr<graphics::Texture>>;
   [[nodiscard]] OXGN_VRTX_API auto InspectSpotShadowSurface(
     ViewId view_id) const -> const graphics::Texture*;
   [[nodiscard]] OXGN_VRTX_API auto InspectPointShadowSurface(
@@ -83,7 +84,7 @@ private:
   struct PublishedView {
     ShaderVisibleIndex slot { kInvalidShaderVisibleIndex };
     ShadowFrameData data {};
-    std::shared_ptr<graphics::Texture> surface;
+    std::vector<std::shared_ptr<graphics::Texture>> directional_surfaces;
     std::shared_ptr<graphics::Texture> spot_surface;
     std::shared_ptr<graphics::Texture> point_surface;
   };

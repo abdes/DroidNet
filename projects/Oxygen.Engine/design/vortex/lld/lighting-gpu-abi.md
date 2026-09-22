@@ -20,8 +20,10 @@ capture verifies all three light kinds in two views. Contact fields remain
 inactive until the contact product is connected.
 
 The current CPU publisher emits complete light lists without a compact-index
-buffer. Spatial culling, multi-directional source selection, complete support
-and failure/lifetime behavior, and BRDF moment publication remain open. These
+buffer. The CPU source selection is now an ordered directional collection, and each
+shadowed source publishes an independently indexed family and surface. Spatial
+culling, complete support and failure/lifetime behavior, and BRDF moment
+publication remain open. These
 ABI and binding proofs do not qualify physical lighting or close EX07A.
 
 ## Encoding rules

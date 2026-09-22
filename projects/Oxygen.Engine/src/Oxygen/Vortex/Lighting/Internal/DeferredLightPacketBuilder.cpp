@@ -96,9 +96,7 @@ auto DeferredLightPacketBuilder::Build(const FrameLightSelection& selection,
 {
   auto packets
     = DeferredLightPacketSet { .selection_epoch = selection.selection_epoch };
-  if (!evaluation.directional.empty()) {
-    packets.directional = observer_ptr { &evaluation.directional.front() };
-  }
+  packets.directional = evaluation.directional;
   packets.local_lights.reserve(evaluation.local.size());
   for (std::size_t index = 0; index < evaluation.local.size(); ++index) {
     const auto& source = selection.local_lights.at(index);

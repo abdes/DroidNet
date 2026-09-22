@@ -69,10 +69,12 @@ namespace shadows {
 
     OXGN_VRTX_API auto OnFrameStart(
       frame::SequenceNumber sequence, frame::Slot slot) -> void;
+    OXGN_VRTX_API auto RetainDirectionalSources(
+      std::span<const FrameDirectionalLightSelection> lights) -> void;
     [[nodiscard]] OXGN_VRTX_API auto RenderDirectionalView(
       const PreparedViewShadowInput& view_input,
-      const FrameDirectionalLightSelection& directional_light)
-      -> ViewShadowPassState;
+      const FrameDirectionalLightSelection& directional_light,
+      LightSelectionIndex selection_index) -> ViewShadowPassState;
     [[nodiscard]] OXGN_VRTX_API auto RenderSpotView(
       const PreparedViewShadowInput& view_input,
       std::span<const FrameLocalLightSelection> local_lights)

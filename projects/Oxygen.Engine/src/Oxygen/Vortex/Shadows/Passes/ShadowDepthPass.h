@@ -63,7 +63,7 @@ namespace shadows {
     [[nodiscard]] OXGN_VRTX_API auto Record(
       const PreparedViewShadowInput& view_input,
       const std::shared_ptr<graphics::Texture>& shadow_surface,
-      const ShadowFrameData& frame_data,
+      const ShadowFrameData& frame_data, const glm::vec3& light_direction,
       std::span<const DrawCommand> draw_commands) -> RenderState;
     [[nodiscard]] OXGN_VRTX_API auto RecordSlices(
       const PreparedViewShadowInput& view_input,

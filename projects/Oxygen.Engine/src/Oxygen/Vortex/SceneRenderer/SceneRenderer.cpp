@@ -75,6 +75,7 @@
 #include <Oxygen/Scene/Light/SpotLight.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNodeImpl.h>
+#include <Oxygen/Vortex/Types/LightingIndices.h>
 // Completes the traversal returned by Scene::Traverse().
 #include <Oxygen/Scene/SceneTraversal.h> // IWYU pragma: keep
 #include <Oxygen/Scene/Types/Flags.h>
@@ -611,46 +612,62 @@ namespace {
       ? environment->TryGetSystem<scene::environment::SkyAtmosphere>().get()
       : nullptr;
     const auto& atmosphere_lights = resolver.ResolveAtmosphereLights();
-    if (atmosphere_lights.slots[0].has_value()) {
-      const auto& primary = *atmosphere_lights.slots[0];
+    for (const auto& source : resolver.ResolveDirectionalLights()) {
+      auto atmosphere_slot = kInvalidAtmosphereLightIndex.get();
+      for (std::uint32_t slot = 0U; slot < atmosphere_lights.slots.size();
+        ++slot) {
+        const auto& assigned = atmosphere_lights.slots.at(slot);
+        if (assigned && assigned->NodeHandle() == source.NodeHandle()) {
+          atmosphere_slot = slot;
+          break;
+        }
+      }
       const auto csm = scene::CanonicalizeCascadedShadowSettings(
-        primary.Light().CascadedShadows());
-      const auto primary_atmosphere_light
-        = environment::internal::BuildAtmosphereLightModel(
-          primary, 0U, atmosphere);
-      auto atmosphere_mode_flags = kDirectionalLightAtmosphereModeFlagAuthority;
-      if ((primary_atmosphere_light.direct_light_authority_flags
-            & environment::kAtmosphereDirectLightFlagPerPixelTransmittance)
-        != 0U) {
+        source.Light().CascadedShadows());
+      const auto atmosphere_light
+        = environment::internal::BuildAtmosphereLightModel(source,
+          atmosphere_slot,
+          atmosphere_slot == kInvalidAtmosphereLightIndex.get() ? nullptr
+                                                                : atmosphere);
+      auto atmosphere_mode_flags
+        = atmosphere_slot == kInvalidAtmosphereLightIndex.get()
+        ? 0U
+        : kDirectionalLightAtmosphereModeFlagAuthority;
+      if (atmosphere_slot != kInvalidAtmosphereLightIndex.get()
+        && (atmosphere_light.direct_light_authority_flags
+             & environment::kAtmosphereDirectLightFlagPerPixelTransmittance)
+          != 0U) {
         atmosphere_mode_flags
           |= kDirectionalLightAtmosphereModeFlagPerPixelTransmittance;
       }
-      if ((primary_atmosphere_light.direct_light_authority_flags
-            & environment::
-              kAtmosphereDirectLightFlagHasBakedGroundTransmittance)
-        != 0U) {
+      if (atmosphere_slot != kInvalidAtmosphereLightIndex.get()
+        && (atmosphere_light.direct_light_authority_flags
+             & environment::
+               kAtmosphereDirectLightFlagHasBakedGroundTransmittance)
+          != 0U) {
         atmosphere_mode_flags
           |= kDirectionalLightAtmosphereModeFlagHasBakedGroundTransmittance;
       }
-      selection.directional_light = FrameDirectionalLightSelection {
-        .direction = primary_atmosphere_light.direction_to_light_ws,
-        .source_radius = primary_atmosphere_light.angular_size_radians,
-        .color = primary.Light().Common().color_rgb,
-        .illuminance_lux = primary.Light().GetIntensityLux(),
+      selection.directional_lights.push_back(FrameDirectionalLightSelection {
+        .source_node = source.NodeHandle(),
+        .direction = atmosphere_light.direction_to_light_ws,
+        .source_radius = atmosphere_light.angular_size_radians,
+        .color = source.Light().Common().color_rgb,
+        .illuminance_lux = source.Light().GetIntensityLux(),
         .exposure_compensation_ev
-        = primary.Light().Common().exposure_compensation_ev,
+        = source.Light().Common().exposure_compensation_ev,
         .transmittance_toward_sun_rgb
-        = primary_atmosphere_light.transmittance_toward_sun_rgb,
-        .atmosphere_light_slot = 0U,
+        = atmosphere_light.transmittance_toward_sun_rgb,
+        .atmosphere_light_slot = atmosphere_slot,
         .atmosphere_mode_flags = atmosphere_mode_flags,
-        .shadow_flags = (primary.Light().Common().casts_shadows
+        .shadow_flags = (source.Light().Common().casts_shadows
                             ? kDirectionalLightShadowFlagCastsShadows
                             : 0U)
-          | (primary.Light().Common().shadow.contact_shadows
+          | (source.Light().Common().shadow.contact_shadows
               ? kLightFlagContactShadows
               : 0U),
         .cascade_count
-        = primary.Light().Common().casts_shadows ? csm.cascade_count : 0U,
+        = source.Light().Common().casts_shadows ? csm.cascade_count : 0U,
         .cascade_split_mode
         = csm.split_mode == scene::DirectionalCsmSplitMode::kManualDistances
           ? FrameDirectionalCsmSplitMode::kManualDistances
@@ -660,11 +677,11 @@ namespace {
         .distribution_exponent = csm.distribution_exponent,
         .transition_fraction = csm.transition_fraction,
         .distance_fadeout_fraction = csm.distance_fadeout_fraction,
-        .shadow_bias = primary.Light().Common().shadow.bias,
-        .shadow_normal_bias = primary.Light().Common().shadow.normal_bias,
-        .shadow_resolution_hint = static_cast<std::uint32_t>(
-          primary.Light().Common().shadow.resolution_hint),
-      };
+        .shadow_bias = source.Light().Common().shadow.bias,
+        .shadow_normal_bias = source.Light().Common().shadow.normal_bias,
+        .shadow_resolution_hint
+        = source.Light().Common().shadow.resolution_hint,
+      });
     }
 
     const auto visitor
@@ -702,8 +719,7 @@ namespace {
                                                      : 0U),
           .shadow_bias = light.Common().shadow.bias,
           .shadow_normal_bias = light.Common().shadow.normal_bias,
-          .shadow_resolution_hint
-          = static_cast<std::uint32_t>(light.Common().shadow.resolution_hint),
+          .shadow_resolution_hint = light.Common().shadow.resolution_hint,
         });
         return scene::VisitResult::kContinue;
       }
@@ -731,8 +747,7 @@ namespace {
                                                      : 0U),
           .shadow_bias = light.Common().shadow.bias,
           .shadow_normal_bias = light.Common().shadow.normal_bias,
-          .shadow_resolution_hint
-          = static_cast<std::uint32_t>(light.Common().shadow.resolution_hint),
+          .shadow_resolution_hint = light.Common().shadow.resolution_hint,
         });
       }
 
@@ -3321,9 +3336,9 @@ void SceneRenderer::RenderDeferredLighting(RenderContext& ctx,
   const auto* shadow_bindings = shadows_ != nullptr
     ? shadows_->InspectShadowData(ctx.current_view.view_id)
     : nullptr;
-  const auto* shadow_surface = shadows_ != nullptr
-    ? shadows_->InspectShadowSurface(ctx.current_view.view_id)
-    : nullptr;
+  const auto directional_shadow_surfaces = shadows_ != nullptr
+    ? shadows_->InspectDirectionalShadowSurfaces(ctx.current_view.view_id)
+    : std::span<const std::shared_ptr<graphics::Texture>> {};
   const auto* spot_shadow_surface = shadows_ != nullptr
     ? shadows_->InspectSpotShadowSurface(ctx.current_view.view_id)
     : nullptr;
@@ -3331,7 +3346,7 @@ void SceneRenderer::RenderDeferredLighting(RenderContext& ctx,
     ? shadows_->InspectPointShadowSurface(ctx.current_view.view_id)
     : nullptr;
   lighting_->RenderDeferredLighting(ctx, recorder, scene_textures,
-    frame_light_selection_, shadow_bindings, shadow_surface,
+    frame_light_selection_, shadow_bindings, directional_shadow_surfaces,
     spot_shadow_surface, point_shadow_surface,
     environment_lighting_state_.ambient_bridge_published);
   const auto& lighting_state = lighting_->GetLastDeferredLightingState();
@@ -3369,8 +3384,8 @@ void SceneRenderer::RenderDeferredLighting(RenderContext& ctx,
     = lighting_state.directional_shadow_vsm_active;
   deferred_lighting_state_.directional_shadow_cascade_count
     = lighting_state.directional_shadow_cascade_count;
-  deferred_lighting_state_.directional_shadow_surface_srv
-    = lighting_state.directional_shadow_surface_srv;
+  deferred_lighting_state_.directional_shadow_surface_srvs
+    = lighting_state.directional_shadow_surface_srvs;
   deferred_lighting_state_.consumed_spot_shadow_product
     = lighting_state.consumed_spot_shadow_product;
   deferred_lighting_state_.spot_shadow_count = lighting_state.spot_shadow_count;

@@ -112,8 +112,9 @@ auto ExposureBaselineScenario::InspectView(const RenderContext& context,
       const auto* shadows
         = vortex::testing::RendererPublicationProbe::GetShadowService(*owner);
       CHECK_NOTNULL_F(shadows);
-      CHECK_NOTNULL_F(
-        shadows->InspectShadowSurface(context.current_view.view_id));
+      CHECK_F(
+        !shadows->InspectDirectionalShadowSurfaces(context.current_view.view_id)
+          .empty());
       CHECK_F(shadows->ResolveShadowFrameSlot(context.current_view.view_id)
         != kInvalidShaderVisibleIndex);
       const auto& shadow_state = shadows->GetLastRenderState();

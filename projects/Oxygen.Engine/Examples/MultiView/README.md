@@ -385,3 +385,23 @@ Run `tools/vortex/AnalyzeRenderDocShadowRecords.py` through
 shadow generations/status, and source identities/descriptors consumed by
 both views' directional, point and spot draws. It does not certify physical
 response, complete source coverage or resource lifetime.
+
+### Three directional sources
+
+`--directional-array-proof true` adds a reproducible three-source scene: one
+Primary source, one unassigned fill, and one Secondary source. The assigned
+sources cast separate two-/three-cascade shadows at 2048/1024 resolution. Default
+launch behavior is unchanged.
+
+For two deferred views, combine it with `--exposure-proof consumer-visual
+--visual-fog clear --pip-wireframe false`. Analyze a capture using
+`AnalyzeRenderDocDirectionalArray.py` through the existing RenderDoc runner;
+it checks per-draw source identity and positive HDR contribution, plus each
+source's shadow family and resolution.
+
+For forward coverage, combine it with `--offscreen-proof-layout true
+--pip-wireframe false` and use `AnalyzeRenderDocDirectionalArrayForward.py`.
+The lower preview is deferred and the lower capture view is forward. Both must
+stay lit across frames; the same-frame descriptor-lifetime regression and live
+Release confirmation are recorded in
+[the EX07A flicker report](../../design/vortex/plan/EX07A-offscreen-flicker-validation.md).

@@ -8,6 +8,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <span>
 #include <vector>
 
 #include <Oxygen/Core/Bindless/Types.h>
@@ -53,9 +54,7 @@ namespace lighting {
       bool consumed_directional_shadow_product { false };
       bool directional_shadow_vsm_active { false };
       std::uint32_t directional_shadow_cascade_count { 0U };
-      ShaderVisibleIndex directional_shadow_surface_srv {
-        kInvalidShaderVisibleIndex
-      };
+      std::vector<ShaderVisibleIndex> directional_shadow_surface_srvs;
       bool consumed_spot_shadow_product { false };
       std::uint32_t spot_shadow_count { 0U };
       ShaderVisibleIndex spot_shadow_surface_srv { kInvalidShaderVisibleIndex };
@@ -73,7 +72,8 @@ namespace lighting {
       graphics::CommandRecorder& recorder, const SceneTextures& scene_textures,
       const internal::DeferredLightPacketSet& packets,
       const ShadowFrameData* shadow_data,
-      const graphics::Texture* directional_shadow_surface,
+      std::span<const std::shared_ptr<graphics::Texture>>
+        directional_shadow_surfaces,
       const graphics::Texture* spot_shadow_surface,
       const graphics::Texture* point_shadow_surface,
       bool static_sky_light_available) -> ExecutionState;

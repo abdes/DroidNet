@@ -13,18 +13,18 @@
 #include <string_view>
 #include <vector>
 
-#include <Oxygen/Base/Macros.h>
-#include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Core/Types/ViewPort.h>
-#include <Oxygen/OxCo/Co.h>
-#include <Oxygen/Platform/Window.h>
-
 #include "DemoShell/ActiveScene.h"
 #include "DemoShell/DemoShell.h"
 #include "DemoShell/Runtime/DemoAppContext.h"
 #include "DemoShell/Runtime/DemoModuleBase.h"
 #include "MultiView/CompositingMode.h"
 #include "MultiView/SceneBootstrapper.h"
+
+#include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/Types/ViewPort.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/Platform/Window.h>
 
 namespace oxygen {
 class IAsyncEngine;
@@ -77,6 +77,7 @@ struct MainModuleConfig {
   bool proof_wireframe_overlay { false };
   bool point_light_enabled { true };
   bool spot_light_enabled { true };
+  bool directional_array_proof { false };
   ExposureProofScenario exposure_proof { ExposureProofScenario::kNone };
   std::string exposure_view_only;
   VisualFogMode visual_fog_mode { VisualFogMode::kVolumetric };

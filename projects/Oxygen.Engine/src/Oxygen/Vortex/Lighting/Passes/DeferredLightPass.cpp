@@ -55,6 +55,7 @@
 #include <Oxygen/Vortex/ShaderDebugMode.h>
 #include <Oxygen/Vortex/Shadows/Types/ShadowFrameData.h>
 #include <Oxygen/Vortex/Types/FrameLightSelection.h>
+#include <Oxygen/Vortex/Types/LightingIndices.h>
 
 namespace oxygen::vortex::lighting {
 
@@ -80,6 +81,9 @@ namespace {
 
   struct DeferredLightDraw {
     internal::DeferredLightPacket packet {};
+    LightSelectionIndex directional_selection_index {
+      kInvalidLightSelectionIndex
+    };
     DeferredLightKind kind { DeferredLightKind::kDirectional };
     DeferredLocalLightDrawMode draw_mode {
       DeferredLocalLightDrawMode::kOutsideVolume,
@@ -582,7 +586,8 @@ auto DeferredLightPass::Record(RenderContext& ctx,
   graphics::CommandRecorder& recorder, const SceneTextures& scene_textures,
   const internal::DeferredLightPacketSet& packets,
   const ShadowFrameData* shadow_data,
-  const graphics::Texture* directional_shadow_surface,
+  std::span<const std::shared_ptr<graphics::Texture>>
+    directional_shadow_surfaces,
   const graphics::Texture* spot_shadow_surface,
   const graphics::Texture* point_shadow_surface,
   const bool static_sky_light_available) -> ExecutionState
@@ -593,7 +598,7 @@ auto DeferredLightPass::Record(RenderContext& ctx,
   }
   const auto wants_static_sky_light = static_sky_light_available
     && ShouldDrawStaticSkyLightDiffuse(ctx.shader_debug_mode);
-  if (!(packets.directional != nullptr) && packets.local_lights.empty()
+  if (packets.directional.empty() && packets.local_lights.empty()
     && !wants_static_sky_light) {
     return state;
   }
@@ -601,8 +606,10 @@ auto DeferredLightPass::Record(RenderContext& ctx,
     state.consumed_directional_shadow_product = true;
     state.directional_shadow_cascade_count
       = static_cast<std::uint32_t>(shadow_data->cascades.size());
-    state.directional_shadow_surface_srv
-      = shadow_data->cascades.front().surface_srv;
+    for (const auto& family : shadow_data->directional_records) {
+      state.directional_shadow_surface_srvs.push_back(
+        shadow_data->cascades.at(family.first_cascade.get()).surface_srv);
+    }
   }
   if (shadow_data != nullptr && !shadow_data->projected_local_records.empty()) {
     state.consumed_spot_shadow_product = true;
@@ -671,12 +678,15 @@ auto DeferredLightPass::Record(RenderContext& ctx,
   }
 
   auto draws = std::vector<DeferredLightDraw> {};
-  if (!skip_direct_lighting && (packets.directional != nullptr)) {
-    draws.push_back(DeferredLightDraw {
-      .kind = DeferredLightKind::kDirectional,
-      .geometry_vertex_count = 3U,
-    });
-    ++state.directional_draw_count;
+  if (!skip_direct_lighting) {
+    for (const auto& light : packets.directional) {
+      draws.push_back(DeferredLightDraw {
+        .directional_selection_index = light.selection_index,
+        .kind = DeferredLightKind::kDirectional,
+        .geometry_vertex_count = 3U,
+      });
+      ++state.directional_draw_count;
+    }
   }
   const auto skip_local_lights = skip_direct_lighting
     || ShouldSkipLocalLightsForDirectionalDebug(ctx.shader_debug_mode);
@@ -799,9 +809,8 @@ auto DeferredLightPass::Record(RenderContext& ctx,
     constants.light_type = static_cast<std::uint32_t>(draw.kind);
     constants.light_geometry_vertices_srv = draw.geometry_srv;
     constants.light_geometry_vertex_count = draw.geometry_vertex_count;
-    if (draw.kind == DeferredLightKind::kDirectional
-      && packets.directional != nullptr) {
-      constants.selection_index = packets.directional->selection_index;
+    if (draw.kind == DeferredLightKind::kDirectional) {
+      constants.selection_index = draw.directional_selection_index;
     } else if (draw.packet.light != nullptr) {
       constants.selection_index = draw.packet.light->selection_index;
       constants.light_world_matrix = draw.packet.light_world_matrix;
@@ -832,17 +841,18 @@ auto DeferredLightPass::Record(RenderContext& ctx,
     recorder.RequireResourceState(
       status, graphics::ResourceStates::kUnorderedAccess);
   }
-  if (directional_shadow_surface != nullptr
-    && state.consumed_directional_shadow_product) {
-    if (!recorder.IsResourceTracked(*directional_shadow_surface)
-      && !recorder.AdoptKnownResourceState(*directional_shadow_surface)) {
-      auto initial = directional_shadow_surface->GetDescriptor().initial_state;
+  for (const auto& surface : directional_shadow_surfaces) {
+    if (!surface) {
+      continue;
+    }
+    if (!recorder.IsResourceTracked(*surface)
+      && !recorder.AdoptKnownResourceState(*surface)) {
+      auto initial = surface->GetDescriptor().initial_state;
       if (initial == graphics::ResourceStates::kUnknown
         || initial == graphics::ResourceStates::kUndefined) {
         initial = graphics::ResourceStates::kShaderResource;
       }
-      recorder.BeginTrackingResourceState(
-        *directional_shadow_surface, initial, false);
+      recorder.BeginTrackingResourceState(*surface, initial, false);
     }
   }
   if (spot_shadow_surface != nullptr && state.consumed_spot_shadow_product) {
@@ -895,11 +905,13 @@ auto DeferredLightPass::Record(RenderContext& ctx,
           : "Vortex.Stage12.StaticSkyLight",
         profiling::ProfileGranularity::kDiagnostic,
         profiling::ProfileCategory::kPass);
-      if (draw.kind == DeferredLightKind::kDirectional
-        && directional_shadow_surface != nullptr
-        && state.consumed_directional_shadow_product) {
-        recorder.RequireResourceState(*directional_shadow_surface,
-          graphics::ResourceStates::kShaderResource);
+      if (draw.kind == DeferredLightKind::kDirectional) {
+        for (const auto& surface : directional_shadow_surfaces) {
+          if (surface) {
+            recorder.RequireResourceState(
+              *surface, graphics::ResourceStates::kShaderResource);
+          }
+        }
       }
       recorder.RequireResourceState(scene_textures.GetSceneColor(),
         graphics::ResourceStates::kRenderTarget);
@@ -970,10 +982,11 @@ auto DeferredLightPass::Record(RenderContext& ctx,
     graphics::ResourceStates::kShaderResource);
   recorder.RequireResourceState(scene_textures.GetGBufferCustomData(),
     graphics::ResourceStates::kShaderResource);
-  if (directional_shadow_surface != nullptr
-    && state.consumed_directional_shadow_product) {
-    recorder.RequireResourceState(
-      *directional_shadow_surface, graphics::ResourceStates::kShaderResource);
+  for (const auto& surface : directional_shadow_surfaces) {
+    if (surface) {
+      recorder.RequireResourceState(
+        *surface, graphics::ResourceStates::kShaderResource);
+    }
   }
   if (spot_shadow_surface != nullptr && state.consumed_spot_shadow_product) {
     recorder.RequireResourceState(

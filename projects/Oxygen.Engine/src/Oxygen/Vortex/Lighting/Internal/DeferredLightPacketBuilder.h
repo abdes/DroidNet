@@ -6,7 +6,7 @@
 
 #pragma once
 
-#include <optional>
+#include <span>
 #include <vector>
 
 #include <glm/mat4x4.hpp>
@@ -28,7 +28,7 @@ struct DeferredLightPacket {
 };
 
 struct DeferredLightPacketSet {
-  observer_ptr<const DirectionalLightForwardData> directional;
+  std::span<const DirectionalLightForwardData> directional;
   std::vector<DeferredLightPacket> local_lights;
   std::uint64_t selection_epoch { 0U };
 };

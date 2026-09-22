@@ -16,6 +16,7 @@
 #include <vector>
 
 #include <glm/ext/matrix_float4x4.hpp>
+#include <glm/ext/vector_float3.hpp>
 #include <glm/ext/vector_float4.hpp>
 
 #include <Oxygen/Base/Logging.h>
@@ -289,7 +290,7 @@ auto ShadowDepthPass::OnFrameStart(
 
 auto ShadowDepthPass::Record(const PreparedViewShadowInput& view_input,
   const std::shared_ptr<graphics::Texture>& shadow_surface,
-  const ShadowFrameData& frame_data,
+  const ShadowFrameData& frame_data, const glm::vec3& light_direction,
   const std::span<const DrawCommand> draw_commands) -> RenderState
 {
   auto depth_slices = std::vector<DepthSlice> {};
@@ -303,7 +304,7 @@ auto ShadowDepthPass::Record(const PreparedViewShadowInput& view_input,
         cascade.depth_bias * kUeCsmShadowSlopeScaleDepthBias
           * kUeDefaultUserShadowSlopeBias,
         kUeShadowMaxSlopeScaleDepthBias, 0.0F),
-      .light_direction_to_source = frame_data.light_direction_to_source,
+      .light_direction_to_source = glm::vec4(light_direction, 0.0F),
       .target_slice = cascade.array_layer.get(),
     });
   }

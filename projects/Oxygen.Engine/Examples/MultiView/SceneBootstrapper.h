@@ -50,6 +50,8 @@ public:
   auto ApplyAtmosphereProof(std::uint64_t frame) -> void;
   //! Sunlit original meshes/materials with ordinary point and spot lights.
   auto ApplyLitAtmosphereProof() -> void;
+  //! Three-source direct-light and two-family shadow validation recipe.
+  auto ApplyDirectionalArrayProof() -> void;
   //! Original lit meshes with a fixed, switchable fog comparison recipe.
   auto ApplyConsumerVisualProof(VisualFogMode fog_mode) -> void;
   //! Opaque, masked, translucent and emissive surfaces under one daylight

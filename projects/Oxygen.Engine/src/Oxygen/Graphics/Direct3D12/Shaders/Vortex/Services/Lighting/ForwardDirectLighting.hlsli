@@ -12,7 +12,6 @@
 #include "Vortex/Shared/Geometry.hlsli"
 #include "Vortex/Services/Lighting/AtmosphereDirectionalLightShared.hlsli"
 
-static const uint kDirectionalLightFlagAffectsWorld = 1u << 0u;
 
 static void RecordForwardHdrSource(float3 scene_rgb)
 {

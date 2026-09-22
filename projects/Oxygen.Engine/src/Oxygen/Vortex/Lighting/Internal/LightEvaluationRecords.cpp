@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -59,11 +60,21 @@ auto ResolveLightEvaluationRecords(const FrameLightSelection& input)
   -> std::expected<LightEvaluationRecords, LightingPreparationFailure>
 {
   auto records = LightEvaluationRecords {};
-  if (input.directional_light) {
-    const auto& source = *input.directional_light;
+  if (input.directional_lights.size() >= kInvalidLightingArrayIndexValue) {
+    return std::unexpected(LightingPreparationFailure {
+      .error = LightingPreparationError::kUnrepresentable,
+      .family = LightingSelectionFamily::kDirectional,
+    });
+  }
+  records.directional.reserve(input.directional_lights.size());
+  auto atmosphere_claimed = std::array<bool, 2> {};
+  for (std::size_t index = 0U; index < input.directional_lights.size();
+    ++index) {
+    const auto& source = input.directional_lights.at(index);
     auto failure = LightingPreparationFailure {
       .family = LightingSelectionFamily::kDirectional,
-      .selection_index = LightSelectionIndex { 0U },
+      .selection_index
+      = LightSelectionIndex { static_cast<std::uint32_t>(index) },
     };
     const auto direction = NormalizeDirection(source.direction);
     const auto transmittance = source.transmittance_toward_sun_rgb;
@@ -78,8 +89,18 @@ auto ResolveLightEvaluationRecords(const FrameLightSelection& input)
       || (source.atmosphere_light_slot != kInvalidAtmosphereLightIndex.get()
         && source.atmosphere_light_slot > 1U)
       || (source.atmosphere_mode_flags & ~kKnownAtmosphereFlags) != 0U
-      || (source.shadow_flags & ~kLightRequestFlags) != 0U) {
+      || (source.shadow_flags & ~kLightRequestFlags) != 0U
+      || ((source.shadow_flags & kDirectionalLightShadowFlagCastsShadows) != 0U
+        && (source.cascade_count == 0U
+          || source.cascade_count > kFrameDirectionalLightMaxCascades))) {
       return std::unexpected(failure);
+    }
+    if (source.atmosphere_light_slot != kInvalidAtmosphereLightIndex.get()) {
+      auto& claimed = atmosphere_claimed.at(source.atmosphere_light_slot);
+      if (claimed) {
+        return std::unexpected(failure);
+      }
+      claimed = true;
     }
     const auto illuminance
       = ResolveDirectionalIlluminanceRgb(source.illuminance_lux,
@@ -99,7 +120,7 @@ auto ResolveLightEvaluationRecords(const FrameLightSelection& input)
       .flags = source.shadow_flags,
       .ground_transmittance_rgb = transmittance,
       .atmosphere_mode_flags = source.atmosphere_mode_flags,
-      .selection_index = LightSelectionIndex { 0U },
+      .selection_index = failure.selection_index,
     });
   }
 

@@ -6,6 +6,7 @@
 
 #include <expected>
 #include <memory>
+#include <span>
 #include <utility>
 
 #include <Oxygen/Core/Bindless/Types.h>
@@ -91,7 +92,8 @@ auto LightingService::RenderDeferredLighting(RenderContext& ctx,
   graphics::CommandRecorder& recorder, const SceneTextures& scene_textures,
   const FrameLightSelection& frame_light_set,
   const ShadowFrameData* shadow_data,
-  const graphics::Texture* directional_shadow_surface,
+  std::span<const std::shared_ptr<graphics::Texture>>
+    directional_shadow_surfaces,
   const graphics::Texture* spot_shadow_surface,
   const graphics::Texture* point_shadow_surface,
   const bool static_sky_light_available) -> void
@@ -104,7 +106,7 @@ auto LightingService::RenderDeferredLighting(RenderContext& ctx,
   const auto packets
     = deferred_packets_->Build(frame_light_set, prepared_lighting_->evaluation);
   const auto pass_state = deferred_pass_->Record(ctx, recorder, scene_textures,
-    packets, shadow_data, directional_shadow_surface, spot_shadow_surface,
+    packets, shadow_data, directional_shadow_surfaces, spot_shadow_surface,
     point_shadow_surface, static_sky_light_available);
   last_deferred_lighting_state_ = {
     .consumed_packets = pass_state.consumed_packets,
@@ -135,7 +137,8 @@ auto LightingService::RenderDeferredLighting(RenderContext& ctx,
     .directional_shadow_vsm_active = pass_state.directional_shadow_vsm_active,
     .directional_shadow_cascade_count
     = pass_state.directional_shadow_cascade_count,
-    .directional_shadow_surface_srv = pass_state.directional_shadow_surface_srv,
+    .directional_shadow_surface_srvs
+    = pass_state.directional_shadow_surface_srvs,
     .consumed_spot_shadow_product = pass_state.consumed_spot_shadow_product,
     .spot_shadow_count = pass_state.spot_shadow_count,
     .spot_shadow_surface_srv = pass_state.spot_shadow_surface_srv,
