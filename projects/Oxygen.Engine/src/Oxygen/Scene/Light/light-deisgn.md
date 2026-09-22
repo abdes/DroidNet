@@ -11,7 +11,7 @@ It is intentionally written to align with existing Scene architecture and philos
 - **Typed facades** (like `SceneNode::Transform` / `SceneNode::Renderable`) to keep the `SceneNode` API surface small and stable.
 - **Camera-style attachments** where appropriate (lights mirror the Camera `Attach/Detach/Replace/GetAs<T>` API for consistency).
 
-Status: Living design/spec document.
+Status: Historical Scene-light development notes, reconciled with the EX07 target. Current authored domains, strict scene-v7 records and mutation rules are owned by [the property contract](../../../../design/vortex/lld/lighting-properties.md); physical evaluation is owned by [the PBR specification](../../../../design/renderer-core/physically-based-rendering.md). Historical checklists below are not proof of current EX07 implementation.
 
 ---
 
@@ -82,9 +82,9 @@ Policy:
 
 - **Visibility gate (hard rule):** if the node’s effective `kVisible` is false, the light does not affect the world, even if `affects_world` is true.
 - **Light contribution gate:** if the node is visible, contribution is controlled by a light property (`affects_world`).
-- **Shadow casting:** a light may cast shadows only if both:
-  - its own `casts_shadows` property is true, and
-  - the node’s effective `kCastsShadows` is true.
+- **Light shadows:** an eligible light requests shadows through its own
+  `casts_shadows` property. Geometry Cast/Receive flags govern occluders and
+  receivers independently; they are not another light-enable gate.
 
 Receiver note:
 
@@ -114,9 +114,7 @@ This section defines the “names and meanings” expected by both Scene and Ren
 - `enum class EnvironmentComponentType { SkyAtmosphere, VolumetricClouds, Fog, SkyLight, SkySphere, PostProcessVolume };`
   Used by the SceneEnvironment persistence layer to tag environment-system records.
 
-- `enum class AttenuationModel { InverseSquare, Linear, CustomExponent };`
-  - `InverseSquare` is the physically-based default.
-  - `CustomExponent` uses an authored `decay_exponent`.
+- Local lights use one physical attenuation model. The selector and custom decay exponent are removed under approved EX07A D2.
 
 **Shared structs (suggested shapes)**:
 
@@ -156,8 +154,7 @@ Common properties are stored on each concrete light component and are authored i
   Determines how the light participates in dynamic lighting and/or baking workflows.
 
 - `bool casts_shadows`
-  Additional authoring gate on shadow casting. Final shadow eligibility also
-  requires node flag `kCastsShadows == true`.
+  The light-side shadow request, independent of geometry casting/receiving.
 
 - `ShadowSettings shadow`
   Shadow tuning knobs. A light only produces shadows if `casts_shadows == true`.
@@ -216,13 +213,13 @@ Must-have fields/behavior:
 - Cascaded shadow settings
   Cascade count, distances, and distribution.
 
-- Environment contribution toggle
-  Whether the directional light contributes to ambient/sky/IBL systems.
+- Explicit atmosphere assignment
+  None/Primary/Secondary, independent of scene-owned direct illumination.
 
 Suggested fields (names not final; semantics are):
 
 - `float angular_size_radians` (full source angle / angular diameter)
-- `bool environment_contribution`
+- `AtmosphereLightSlot atmosphere_light_slot`
 - `CascadedShadowSettings csm` with:
   - `uint32_t cascade_count`
   - `std::array<float, N> cascade_distances` (or equivalent scheme)
@@ -271,43 +268,21 @@ as the scene’s sun.
 
 **Environment / sky coupling**:
 
-- `DirectionalLight.environment_contribution` marks a directional light as
-  eligible for environment/sky consumption.
-- A scene may have at most **two** such lights.
-- `DirectionalLight.is_sun_light == true` additionally marks the unique
-  authored **primary** sun candidate and requires
-  `environment_contribution == true`.
-- The scene-owned `DirectionalLightResolver` is the single authority that:
-  - validates these contracts,
-  - resolves the primary sun,
-  - resolves the optional secondary sun/moon,
-  - exposes the full directional-light set for scene lighting.
-
-**Multi-sun policy**:
-
-- The engine may support multiple directional lights for artistic reasons.
-- Scene lighting may consume any number of directional lights.
-- Environment/sky may consume at most two directional lights:
-  - slot 0 = resolved primary sun
-  - slot 1 = resolved secondary sun / moon
-- Contract violations:
-  - more than two `environment_contribution == true` lights: invalid
-  - more than one `is_sun_light == true && environment_contribution == true`
-    light: invalid
-  - `is_sun_light == true && environment_contribution == false`: invalid
+All eligible scene-owned directionals illuminate independently of atmosphere
+membership. Optional None/Primary/Secondary assignment is the sole atmospheric
+authority. Validate uniqueness across stored inactive and active components;
+Secondary-only stays Secondary. Remove environment/is-sun booleans and authored
+Sun-pointer authority through the strict migration. Only explicitly requested
+demo actions may infer assignments or inject a preview scene light.
 
 **Shadow cascades**:
 
 - Cascaded shadow settings on `DirectionalLight` are the authoritative source
   for CSM configuration.
 - The canonical default split contract is non-zero:
-  `8 / 24 / 64 / 160` world units with `distribution_exponent = 1.0`.
-- Renderer/runtime ingestion must canonicalize legacy or invalid split arrays
-  (for example all-zero distances from older cooked data) back to that default
-  contract before building directional shadow products.
-- Final shadow eligibility still requires:
-  - node flag `kCastsShadows == true`, and
-  - `DirectionalLight.casts_shadows == true`.
+  `8 / 24 / 64 / 160` metres with `distribution_exponent = 3.0`.
+- Validate candidate CSM settings atomically; reject obsolete formats and invalid arrays rather than replacing them with defaults.
+- Light Cast Shadows is independent of geometry Cast/Receive flags. Geometry flags govern caster/receiver eligibility; light participation governs the source.
 
 **Time-of-day integration (recommended approach)**:
 
@@ -328,13 +303,13 @@ Must-have fields/behavior:
 
 - Intensity and Color (common fields)
 
-- Attenuation model / decay exponent
-  Linear/quadratic or physically-based inverse-square falloff; affects shader
-  evaluation and culling/LOD.
+- Physical propagation
+  Inverse-square punctual propagation and flux-normalized finite-source evaluation
+  use the PBR contract. No artistic falloff selector remains.
 
 - Source radius / sphere size
-  Used for soft contact shadows and physically based shading (specular highlight
-  shape and shadow softness).
+  Defines physical sphere extent for diffuse/specular evaluation. Conventional
+  PCF/contact visibility stays fixed; radius-dependent penumbrae are not promised.
 
 - Shadow enable + shadow resolution hint
   Local shadow maps, potential caching policy.
@@ -342,8 +317,6 @@ Must-have fields/behavior:
 Suggested fields:
 
 - `float range`
-- `AttenuationModel attenuation_model`
-- `float decay_exponent` (used only when `attenuation_model == CustomExponent`)
 - `float source_radius`
 
 Notes:
@@ -367,8 +340,9 @@ Must-have fields/behavior:
 - Range and attenuation
   Same role as point lights.
 
-- Source radius / soft edge
-  Controls softness of the spot disk and shadow penumbra.
+- Source radius / disk extent
+  Defines the physical finite disk used by both BRDF lobes, with conserved flux.
+  Existing shadow algorithms do not acquire radius-dependent penumbrae.
 
 - Shadow parameters
   Bias, resolution hint, contact shadow toggle.
@@ -376,8 +350,6 @@ Must-have fields/behavior:
 Suggested fields:
 
 - `float range`
-- `AttenuationModel attenuation_model`
-- `float decay_exponent` (used only when `attenuation_model == CustomExponent`)
 - `float inner_cone_angle_radians`
 - `float outer_cone_angle_radians`
 - `float source_radius`
@@ -479,7 +451,7 @@ passes) are documented in `design/vortex/lld/lighting-service.md`,
 - Intensity: physically-based semantics, HDR pipeline.
 - Visibility: node invisible (`kVisible == false`) ⇒ light does not affect the world even if `affects_world` is true.
 - One light per node: yes.
-- Shadow ownership: both node flag `kCastsShadows` and per-light shadow settings in the light component.
+- Shadow ownership: per-light settings request maps; geometry Cast/Receive flags independently govern occluders and receivers.
 
 ---
 

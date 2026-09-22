@@ -21,6 +21,15 @@
 
 ## Exposure-package integration
 
+EX07's current target is owned by [LightingService](lighting-service.md), the
+[wire contract](lighting-gpu-abi.md#shadow-association-and-deferred-draws) and the
+[PBR equations](../../renderer-core/physically-based-rendering.md#common-surface-brdf).
+Use canonical indexed physical records and 80-byte geometry/index draw constants,
+correlated-GGX compensation and finite sphere/disk source integration. The
+remaining Phase-3/4 descriptions below are historical baseline context, not a
+parallel current interface. Missing required inputs fail the view; valid disabled
+lighting still preserves emissive. Historical passes do not qualify EX07.
+
 Use the [LightingService physical contract](lighting-service.md#exposure-package-light-calibration)
 for directional/point/spot units and regularization. The historical shader
 sketches below are not authorization for the old `1/(d*d+1)` attenuation or
@@ -160,10 +169,10 @@ lights are bounded by volume rasterization and per-pixel scene-depth sampling.
 ### 3.3 Per-Light Data Access
 
 Phase 3 uses a bindless-selected per-light constant-buffer-view model.
-The CPU-side contract is still a `DeferredLightConstants` struct, but shaders do
+The per-draw geometry/index contract is `DeferredLightConstants`; shaders do
 not receive it through a fixed `register(b1)` pass binding. Instead:
 
-1. `SceneRenderer` uploads one packed `DeferredLightConstants` record per light
+1. `LightingService` uploads one geometry/index `DeferredLightConstants` record per draw
    into `Vortex.DeferredLight.Constants`
 2. it creates one shader-visible CBV view per record
 3. it passes the selected CBV index through the root constant
@@ -171,22 +180,11 @@ not receive it through a fixed `register(b1)` pass binding. Instead:
 4. the shader reads
    `ConstantBuffer<DeferredLightConstants> light_constants = ResourceDescriptorHeap[g_PassConstantsIndex];`
 
-```cpp
-struct DeferredLightConstants {
-  glm::vec4 light_position_and_radius;     // xyz=position, w=radius
-  glm::vec4 light_color_and_intensity;     // xyz=color, w=intensity
-  glm::vec4 light_direction_and_falloff;   // xyz=direction, w=falloff
-  glm::vec4 spot_angles;                   // x=inner, y=outer, zw=unused
-  glm::mat4 light_world_matrix;            // Transform for volume geometry
-  uint32_t light_type;                     // LIGHT_TYPE_DIRECTIONAL/POINT/SPOT
-  uint32_t padding[3];
-};
-```
+The obsolete physical-light constant payload is removed from this interface. Use the canonical shared evaluation record plus the [80-byte geometry/index constants](lighting-gpu-abi.md#shadow-association-and-deferred-draws); no second intensity/cone authority.
 
-This matches the approved Vortex bindless contract and the current
-`SceneRenderer` implementation. Phase 4A keeps the same per-light payload
-schema but moves the CPU-side ownership into `LightingService`; it does not
-change stage 12 into a forward-light-grid-driven contract.
+This preserves bindless pass routing while removing duplicated physical values.
+Stage 12 remains owned by LightingService; spatial-evaluation optimization
+must preserve that owner and the same canonical physical source model.
 
 ## 4. Data Flow and Dependencies
 

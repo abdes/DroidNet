@@ -31,14 +31,14 @@ control/edit buffer -> field VM -> shared edit session
   -> correlated field/section result
 ```
 
-| Owner | Responsibility |
-| --- | --- |
-| WorldEditor inspector | Controls, edit buffers, mixed values, conditional presentation and diagnostics |
-| Document commands | Target validation, mutation, history, revision, dirty state and sync request |
-| World | Canonical node/component/source DTOs and invariants |
-| Schemas | Property identities, scalar/range/enum validation and annotations |
-| Runtime/Interop/engine | Current-revision projection and actual rendering |
-| Asset/material owners | Discovery, picker, slot inventory, material create/open and publication |
+| Owner                  | Responsibility                                                                 |
+| ---------------------- | ------------------------------------------------------------------------------ |
+| WorldEditor inspector  | Controls, edit buffers, mixed values, conditional presentation and diagnostics |
+| Document commands      | Target validation, mutation, history, revision, dirty state and sync request   |
+| World                  | Canonical node/component/source DTOs and invariants                            |
+| Schemas                | Property identities, scalar/range/enum validation and annotations              |
+| Runtime/Interop/engine | Current-revision projection and actual rendering                               |
+| Asset/material owners  | Discovery, picker, slot inventory, material create/open and publication        |
 
 VMs do not call Runtime, Interop or SceneEngineSync directly. They do not write
 JSON, mutate catalog state or dehydrate scenes. A valid source edit survives
@@ -67,11 +67,11 @@ replacement; cosmetic renaming creates no feature value.
 
 ## 4. Node settings and editor-only Hide
 
-| Control | Source type/default | Effect and presentation |
-| --- | --- | --- |
-| Scene Visibility | Inherit / Shown / Hidden; new root Shown, child Inherit | Node's resolved rendering eligibility; expose resolved value/origin separately |
-| Geometry Cast Shadows | Inherit / On / Off; root/default On, child Inherit | Off removes geometry as an occluder, retaining visible surface and receiving |
-| Geometry Receive Shadows | Inherit / On / Off; root/default On, child Inherit | Advanced; Off skips direct-light shadow attenuation while retaining direct lighting, ambient occlusion and casting |
+| Control                  | Source type/default                                     | Effect and presentation                                                                                            |
+| ------------------------ | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Scene Visibility         | Inherit / Shown / Hidden; new root Shown, child Inherit | Node's resolved rendering eligibility; expose resolved value/origin separately                                     |
+| Geometry Cast Shadows    | Inherit / On / Off; root/default On, child Inherit      | Off removes geometry as an occluder, retaining visible surface and receiving                                       |
+| Geometry Receive Shadows | Inherit / On / Off; root/default On, child Inherit      | Advanced; Off skips direct-light shadow attenuation while retaining direct lighting, ambient occlusion and casting |
 
 Local overrides replace inheritance. A locally Shown child may render/illuminate
 under a Hidden parent; no extra light-only ancestor gate is permitted. Reparenting
@@ -99,11 +99,11 @@ Derived runtime presence (`IsActive`) is not an authored activation field.
 All axes use common-component multi-selection and per-axis mixed values. Transform
 is required and locked against removal.
 
-| Field | Source/unit | Default | Bounds and commit | Active effect |
-| --- | --- | --- | --- | --- |
-| Local Position X/Y/Z | float32 metres | 0/0/0 | Finite | Local translation; parented world pose follows hierarchy |
+| Field                | Source/unit                                   | Default  | Bounds and commit                                                           | Active effect                                                     |
+| -------------------- | --------------------------------------------- | -------- | --------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| Local Position X/Y/Z | float32 metres                                | 0/0/0    | Finite                                                                      | Local translation; parented world pose follows hierarchy          |
 | Local Rotation X/Y/Z | UI degrees; normalized XYZW quaternion source | Identity | Finite; wrap displayed angles to [-180,180]; reject zero/invalid quaternion | Existing YXZ yaw/pitch/roll convention; no competing Euler source |
-| Local Scale X/Y/Z | float32 multiplier | 1/1/1 | Finite, nonzero; negative allowed | Scale including mirrored winding/normal handling |
+| Local Scale X/Y/Z    | float32 multiplier                            | 1/1/1    | Finite, nonzero; negative allowed                                           | Scale including mirrored winding/normal handling                  |
 
 Preserve the manipulated Euler axis during a gesture; commit its canonical
 quaternion. Inspecting a transform does not normalize/rewrite source. Raw
@@ -111,12 +111,12 @@ quaternion, rotation-order, pivot and generic activation controls are absent.
 
 ## 6. Geometry and primitive recipes
 
-| Field | Source/default | Behavior |
-| --- | --- | --- |
-| Geometry | Geometry asset URI; explicit chosen native recipe/import | Shared catalog picker, loading/error state and correct native geometry |
-| Existing material slots | Instance override by MaterialSlotId; no override initially | Assign/clear each slot independently; Clear restores mesh-assigned material |
-| Geometry Cast/Receive Shadows | Node modes from section 4 | Full independent effects; no material-editing substitute |
-| Resolved LOD/submesh/slot counts, bounds, identity | Read-only | Useful diagnostics, not topology/LOD generation controls |
+| Field                                              | Source/default                                             | Behavior                                                                    |
+| -------------------------------------------------- | ---------------------------------------------------------- | --------------------------------------------------------------------------- |
+| Geometry                                           | Geometry asset URI; explicit chosen native recipe/import   | Shared catalog picker, loading/error state and correct native geometry      |
+| Existing material slots                            | Instance override by MaterialSlotId; no override initially | Assign/clear each slot independently; Clear restores mesh-assigned material |
+| Geometry Cast/Receive Shadows                      | Node modes from section 4                                  | Full independent effects; no material-editing substitute                    |
+| Resolved LOD/submesh/slot counts, bounds, identity | Read-only                                                  | Useful diagnostics, not topology/LOD generation controls                    |
 
 ### Primitive recipes
 
@@ -124,15 +124,15 @@ The native catalog owns generator identity, recipes and defaults. The creation
 palette contains ten canonical choices; SubdividedCube is Advanced. No independent
 managed list or corrective editor rotation/scale is permitted.
 
-| Primitive | Metric default and orientation |
-| --- | --- |
-| Cube / SubdividedCube | 1 m edge lengths |
-| Sphere / IcoSphere | 1 m diameter |
-| Cylinder / Cone | 1 m height and diameter along Z; cone tip +Z |
-| Capsule | 2 m total height, 1 m diameter, axis Z |
-| Torus | XY plane; 1 m outer diameter and 0.2 m tube diameter |
-| Plane | 1 x 1 m XY ground surface, facing +Z |
-| Quad | 1 x 1 m upright XZ card, facing -Y |
+| Primitive             | Metric default and orientation                       |
+| --------------------- | ---------------------------------------------------- |
+| Cube / SubdividedCube | 1 m edge lengths                                     |
+| Sphere / IcoSphere    | 1 m diameter                                         |
+| Cylinder / Cone       | 1 m height and diameter along Z; cone tip +Z         |
+| Capsule               | 2 m total height, 1 m diameter, axis Z               |
+| Torus                 | XY plane; 1 m outer diameter and 0.2 m tube diameter |
+| Plane                 | 1 x 1 m XY ground surface, facing +Z                 |
+| Quad                  | 1 x 1 m upright XZ card, facing -Y                   |
 
 All use centred pivots in Oxygen's metre/Z-up coordinate system. Native buffers,
 bounds, normals, UVs and winding must satisfy these recipes. ArrowGizmo is a tool
@@ -161,13 +161,13 @@ or position. The engine owns continuity/provenance, and the
 
 ## 7. Basic perspective camera
 
-| Field | Source/unit/default | Bounds | UI/effect |
-| --- | --- | --- | --- |
-| Vertical FOV | float32 degrees, 60 | Finite; Clamp [1,179] | Convert once to native radians; controls vertical angle |
-| Near Plane | float32 metres, 0.1 | >0 and <Far | Reject invalid cross-field edit |
-| Far Plane | float32 metres, 1000 | >Near | Reject invalid cross-field edit |
-| Aspect Mode | Auto / Fixed, Auto | Defined values | Auto derives aspect per target, retaining vertical FOV |
-| Fixed Aspect Ratio | float32 width/height, initially 16/9 | Finite >0 | Shown in Fixed mode; retain ratio when toggling modes |
+| Field              | Source/unit/default                  | Bounds                | UI/effect                                               |
+| ------------------ | ------------------------------------ | --------------------- | ------------------------------------------------------- |
+| Vertical FOV       | float32 degrees, 60                  | Finite; Clamp [1,179] | Convert once to native radians; controls vertical angle |
+| Near Plane         | float32 metres, 0.1                  | >0 and <Far           | Reject invalid cross-field edit                         |
+| Far Plane          | float32 metres, 1000                 | >Near                 | Reject invalid cross-field edit                         |
+| Aspect Mode        | Auto / Fixed, Auto                   | Defined values        | Auto derives aspect per target, retaining vertical FOV  |
+| Fixed Aspect Ratio | float32 width/height, initially 16/9 | Finite >0             | Shown in Fixed mode; retain ratio when toggling modes   |
 
 Fixed fits the complete authored frame into a centred content rectangle; no
 stretch/crop. Compose bars after scene exposure/post-processing so they do not
@@ -185,26 +185,26 @@ excluded; existing native physical exposure is not removed or renamed.
 All numeric rows are float32 unless stated otherwise. Light colour is linear RGB;
 colour-picker display conversion occurs at the UI boundary only.
 
-| Field | Default/unit | Bounds | Disclosure/active effect |
-| --- | --- | --- | --- |
-| Affects Scene (`AffectsWorld`) | On; bool | Boolean | Primary; controls all contribution, separately gated by effective node visibility |
-| Color | (1,1,1); linear RGB | Clamp each channel [0,1] | Primary; illumination and atmospheric colour |
-| IntensityLux | 100000 lux | Clamp >=0 | Primary; stored illuminance |
-| Cast Shadows | On; bool | Boolean | Primary; shadowing from this light, independent of geometry flags |
-| AtmosphereLightSlot | None | None / Primary / Secondary | Primary; stable atmosphere assignment, independent of direct light |
-| Atmosphere Disk Diameter (`AngularSizeRadians`) | 0.00935 rad full diameter; optional degree display | Finite, Clamp >=0 | Advanced, role other than None; analytic atmospheric disk size only |
-| ExposureCompensation | 0 EV | Clamp [-10,10] | Advanced; effective light intensity multiplier 2^EV, without rewriting lux |
-| Shadow.Bias | 0; dimensionless user bias | Clamp [0,10] | Advanced, Cast Shadows On; depth-bias effect |
-| Shadow.NormalBias | 0.02 m receiver normal offset | Clamp >=0 | Advanced, Cast Shadows On; normal offset effect |
-| Shadow.ContactShadows | Off; bool | Boolean | Advanced, Cast Shadows On; real contact-shadow contribution required |
-| Shadow.ResolutionHint | Medium | Low / Medium / High / Ultra | Advanced, Cast Shadows On; resolution request bounded by renderer quality/capability |
-| CascadeCount | 4; int | [1,4] | Advanced conventional shadows; active cascade count |
-| SplitMode | Generated | Generated / ManualDistances | Advanced conventional shadows |
-| MaxShadowDistance | 160 m | Finite >0 | Advanced conventional shadows; coverage/fade extent |
-| CascadeDistances[0..3] | [8,24,64,160] m | Active distances positive and strictly increasing | ManualDistances only; inactive stored entries remain valid and retained |
-| DistributionExponent | 3 | >=1 | Generated only; distribution of cascade coverage |
-| TransitionFraction | 0.1 | [0,1] | Advanced conventional shadows; cascade transition |
-| DistanceFadeoutFraction | 0.1 | [0,1] | Advanced conventional shadows; far-distance fade |
+| Field                                           | Default/unit                                       | Bounds                                            | Disclosure/active effect                                                             |
+| ----------------------------------------------- | -------------------------------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| Affects Scene (`AffectsWorld`)                  | On; bool                                           | Boolean                                           | Primary; controls all contribution, separately gated by effective node visibility    |
+| Color                                           | (1,1,1); linear RGB                                | Clamp each channel [0,1]                          | Primary; illumination and atmospheric colour                                         |
+| IntensityLux                                    | 100000 lux                                         | Clamp >=0                                         | Primary; stored illuminance                                                          |
+| Cast Shadows                                    | On; bool                                           | Boolean                                           | Primary; shadowing from this light, independent of geometry flags                    |
+| AtmosphereLightSlot                             | None                                               | None / Primary / Secondary                        | Primary; stable atmosphere assignment, independent of direct light                   |
+| Atmosphere Disk Diameter (`AngularSizeRadians`) | 0.00935 rad full diameter; optional degree display | Finite, Clamp [0,pi] radians; zero disables disk  | Advanced, role other than None; analytic atmospheric disk size only                  |
+| ExposureCompensation                            | 0 EV                                               | Clamp [-10,10]                                    | Advanced; effective light intensity multiplier 2^EV, without rewriting lux           |
+| Shadow.Bias                                     | 0; dimensionless user bias                         | Clamp [0,10]                                      | Advanced, Cast Shadows On; depth-bias effect                                         |
+| Shadow.NormalBias                               | 0.02 m receiver normal offset                      | Clamp >=0                                         | Advanced, Cast Shadows On; normal offset effect                                      |
+| Shadow.ContactShadows                           | Off; bool                                          | Boolean                                           | Advanced, Cast Shadows On; real contact-shadow contribution required                 |
+| Shadow.ResolutionHint                           | Medium                                             | Low / Medium / High / Ultra                       | Advanced, Cast Shadows On; resolution request bounded by renderer quality/capability |
+| CascadeCount                                    | 4; int                                             | [1,4]                                             | Advanced conventional shadows; active cascade count                                  |
+| SplitMode                                       | Generated                                          | Generated / ManualDistances                       | Advanced conventional shadows                                                        |
+| MaxShadowDistance                               | 160 m                                              | Finite >0                                         | Advanced conventional shadows; coverage/fade extent                                  |
+| CascadeDistances[0..3]                          | [8,24,64,160] m                                    | Active distances positive and strictly increasing | ManualDistances only; inactive stored entries remain valid and retained              |
+| DistributionExponent                            | 3                                                  | >=1                                               | Generated only; distribution of cascade coverage                                     |
+| TransitionFraction                              | 0.1                                                | [0,1]                                             | Advanced conventional shadows; cascade transition                                    |
+| DistanceFadeoutFraction                         | 0.1                                                | [0,1]                                             | Advanced conventional shadows; far-distance fade                                     |
 
 Light Cast Shadows On is an explicit creation default. The writer emits it;
 the low-level native CommonLightProperties constructor currently defaults Off.

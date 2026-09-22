@@ -2,9 +2,25 @@
 
 **Phase:** 4C - Migration-Critical Services
 **Deliverable:** D.11
-**Status:** `m05d_directional_csm_reaudit_in_progress`
+**Status:** Historical VTX-M05D baseline; EX07 target frozen, implementation pending.
 
 ## V0.1 Production Extension
+
+EX07 freezes the current [indexed family ABI](lighting-gpu-abi.md#shadow-association-and-deferred-draws)
+and [capacity/failure contract](lighting-service.md#4-capacity-failure-and-recovery).
+Use dynamic directional, projected-local and cube-local records, typed surface/
+layer indices and source identity maps. Finite/hemispherical spots use the
+existing cube technique. The 4-point/8-spot arrays are not product limits.
+Requested maps for enabled, contributing lights cannot silently become absent.
+Both forward/translucent and deferred consumers belong to EX07 qualification.
+
+The [EX07 shadow-memory audit](../plan/EX07-shadow-memory-review.md) selects D32
+for conventional CSM/local targets while preserving FP32 depth, reversed-Z,
+bias and PCF. Migrate views, PSOs and depth-only clears together; scene/custom
+stencil and independently owned VSM products are not changed. Compatible local
+maps may share within a frame; CSM/contact products remain view-specific. Reuse
+resolution buckets through existing lifetime/fence infrastructure. Native format
+validation is recorded; production cutover and timing are still pending.
 
 [Editor V0.1 rendering](../plan/editor-v01-rendering-contract.md#4-conventional-shadows-and-receiver-control)
 extends this baseline with explicitly indexed per-light directional CSMs, GPU
@@ -226,64 +242,25 @@ class ShadowService : public ISubsystemService {
 }  // namespace oxygen::vortex
 ```
 
-### 2.3 Published Directional Shadow Contract
+### 2.3 Published Shadow Contract
 
-`ShadowFrameBindings` is the canonical GPU-facing publication seam for Phase 4C.
-In Phase 4C it describes a **directional conventional shadow product**. The
-published contract is intentionally consumer-neutral: it does not freeze one
-atlas packing layout, one DSV-view scheme, or one later VSM migration ABI.
+The complete current target is the [EX07 wire contract](lighting-gpu-abi.md#shadow-association-and-deferred-draws).
+The old singleton C++/HLSL sketch is removed; no parallel shadow interface is
+normative. Preserve these sampling meanings while migrating their representation:
 
-```cpp
-struct ShadowCascadeBinding {
-  glm::mat4 light_view_projection;
-  float split_near{0.0f};
-  float split_far{0.0f};
-  glm::vec4 sampling_metadata0{0.0f};
-  glm::vec4 sampling_metadata1{0.0f};
-  glm::vec2 _padding0{0.0f};
-};
+| Baseline meaning                        | EX07 destination                                                  |
+| --------------------------------------- | ----------------------------------------------------------------- |
+| Per-light directional authority         | Directional selection index and explicit shadow-reference map     |
+| Matrix and depth interval               | Typed cascade/local record matrix and split/near/far fields       |
+| Float-encoded layer/cube index          | uint array layer or first array layer; checked cube face addition |
+| Inverse resolution and world texel size | Named float fields                                                |
+| Cascade transition/far fade             | Named transition_width, fade_begin and fade_end                   |
+| Authored depth bias                     | Applied once by the existing depth-pass owner                     |
+| Authored receiver normal bias           | normal_bias_m, separate from existing texel offsets               |
 
-struct ShadowFrameBindings {
-  static constexpr uint32_t kMaxCascades = 4;
-
-  uint32_t conventional_shadow_surface_handle{kInvalidIndex};
-  uint32_t cascade_count{0};
-  uint32_t technique_flags{0};
-  uint32_t sampling_contract_flags{0};
-  glm::vec4 light_direction_to_source{0.0f, -1.0f, 0.0f, 0.0f};
-
-  ShadowCascadeBinding cascades[kMaxCascades];
-};
-
-struct DirectionalShadowFrameData {
-  ShadowFrameBindings bindings;
-  glm::uvec2 backing_resolution{0, 0};
-  uint32_t storage_flags{0};
-};
-```
-
-For the conventional directional `Texture2DArray` path, Vortex currently
-defines the metadata as:
-
-| Field                   | Meaning                                                                                            |
-| ----------------------- | -------------------------------------------------------------------------------------------------- |
-| `sampling_metadata0.x`  | array layer / cascade index                                                                        |
-| `sampling_metadata0.yz` | inverse shadow resolution                                                                          |
-| `sampling_metadata0.w`  | cascade world texel size                                                                           |
-| `sampling_metadata1.x`  | cascade-transition width in view-depth units; non-last `split_far` already includes this extension |
-| `sampling_metadata1.y`  | last-cascade fade-begin depth                                                                      |
-| `sampling_metadata1.z`  | UE-style computed clip-depth bias for the shadow-depth pass                                        |
-| `sampling_metadata1.w`  | authored normal receiver bias                                                                      |
-
-These fields follow the UE-shaped contract in which cascade distribution,
-transition, fade, and bias are published by the shadow setup stage and consumed
-by the receiver shader. They are part of the current conventional directional
-CSM ABI, not a local-light or VSM payload.
-
-The `light_direction_to_source` field mirrors the selected directional light
-authority into the shadow binding only for shadow-receiver/debug consumers that
-do not also bind the deferred-light payload. It is not an independent light
-selection path.
+These migrations preserve reversed depth and 3x3 PCF, and extend publication to
+all eligible sources and required view products. Historical baseline evidence
+below does not qualify the new ABI or required local/dual-source consumers.
 
 ### 2.4 Directional-Light Authority
 
@@ -299,8 +276,8 @@ atmosphere slot 0 or promote another assignment when Primary is absent.
 Each directional record is also the source of its authored CSM settings:
 cascade count, manual/generated split mode, maximum shadow distance, manual
 cascade distances, distribution exponent, transition fraction, distance-fade
-fraction, and receiver bias terms. `SceneRenderer` canonicalizes the scene
-settings before publishing them into Vortex frame-light selection so
+fraction, and receiver bias terms. The scene owner validates complete candidate
+settings atomically before publishing them into Vortex frame-light selection so
 `ShadowService` and `LightingService` consume the same directional authority.
 
 ### 2.5 Per-View Publication
@@ -488,11 +465,11 @@ published payload remains per-view and multi-view-safe.
 
 ### 6.2 Null-Safe Behavior
 
-When `shadows_` is null:
-
-- no conventional shadow depths are produced
-- deferred lighting applies no directional shadow attenuation
-- published `ShadowFrameBindings` payloads are empty
+Optional absence is valid only when shadow evaluation is explicitly disabled or
+no map/contact product is required. If enabled lighting requires a shadow product,
+a null service, allocation failure or missing matching publication fails the
+view under EX07; it must not produce successful unshadowed output. Publish
+explicit NoRequest/NoInfluence/OutsideAuthoredCoverage states for valid absence.
 
 ### 6.3 Capability Gate
 

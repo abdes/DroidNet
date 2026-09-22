@@ -1,7 +1,10 @@
 # EX07 — Physical lighting and many-light qualification
 
-Status: **planned**. EX07 owns end-to-end lighting correctness and performance;
-implementation and qualification remain open. The
+Status: **in_progress — EX07A contract review**. The
+[A checkpoint](EX07A-contract-review.md) records source findings and six approved decisions. Mathematical, ABI, property,
+scene-v7 and resource/failure targets are frozen; executable ABI qualification
+and production implementation remain open. EX07 owns end-to-end lighting
+correctness and performance. The
 [exposure delivery plan](exposure-and-lightbench-correction.md#slice-7---complete-the-reference-lighting-unit-chain)
 owns package order and the [tracker](../IMPLEMENTATION_STATUS.md#34-slice-7-work-items)
 owns progress. This document owns the bounded EX07 workload and qualification gate.
@@ -111,9 +114,17 @@ and its [authored-property inventory](../lld/lighting-service.md#5-authored-prop
 For each retained field, identify its source/editor/script/native ingress,
 validation/default, persisted representation, selection/GPU member, consumer,
 invalidation and positive/negative/round-trip tests. Include per-light compensation,
-attenuation model/exponent, source radius, cone pairs and all supported shadow
-settings; defaults alone cannot qualify these fields. Explicit previously declared
-product exclusions stay distinct from defects in supported settings.
+source radius, cone pairs and all supported shadow settings; defaults alone cannot
+qualify these fields. Approved [EX07A D2](EX07A-contract-review.md#d2--physical-lighting-and-artistic-attenuation-scope)
+removes the attenuation selector and custom decay exponent through a strict
+API/source/packed/tooling migration; it supersedes their earlier retention
+requirement. Track rejection of obsolete inputs and migration of every producer.
+Approved D3 retains physical sphere/disk emitter extent with conserved flux and
+common diffuse/specular emission. Approved D4 selects correlated Smith GGX with
+multiple-scattering compensation, retaining Schlick Fresnel and normalized
+diffuse. Specify/qualify these models independently and migrate affected shared
+BRDF integration consumers together. Explicit product exclusions stay distinct
+from defects in supported settings.
 
 Freeze CPU/HLSL field offsets/stride/types and add sentinel decode tests before
 connecting the culling shader. Describe shared preparation versus per-view GPU
@@ -130,15 +141,15 @@ Record light positions, ranges, cones, colors, intensities, shadow settings,
 geometry/materials, view projection and asset hashes. Freeze actual overlap
 histograms and coverage before optimizing; do not change them to improve results.
 
-| Family                            | Required cases                                                                                                                                                                                   | Purpose                                                                                                  |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
-| Calibration and list boundaries   | 0/1 lights; directional None/Primary/Secondary/both; 31/32/33 and 64 lights contributing to one region.                                                                                          | Physical response, complete lists, zero-light clearing and additive contribution.                        |
-| Sparse indoor/city distribution   | 64, 256, 1,024 and 4,096 local lights, mixed point/spot; static and moving.                                                                                                                      | Separate total count from visible count and local overlap; primary target is 1,024.                      |
-| Mostly irrelevant lights          | Fixed visible subset, with the remainder off-frustum or outside all receiver influence; include off-screen lights whose volumes do reach receivers.                                              | Culling removes irrelevant work without rejecting valid off-screen sources.                              |
-| Dense overlap                     | At least 33, 64 and 256 relevant lights in the same region, narrow/wide cones and large ranges.                                                                                                  | Correctness when spatial culling cannot reduce real lighting work; stress, not a blanket 60-fps promise. |
-| Projection and receiving surfaces | Perspective/orthographic; near-plane/camera-inside volumes; viewport offsets, partial tiles, reverse-Z and depth-slice edges; opaque, masked, two-sided/normal-mapped and translucent receivers. | Conservative bounds and valid shader lookups for every supported consumer.                               |
-| Multiple views and lifecycle      | 1080p main plus 960x540 secondary; conflicting visibility, reordered views, resize/hide/recreate, scene replacement, moving/disabled/deleted lights and in-flight frames.                        | Per-view isolation, identity, update invalidation and resource retirement.                               |
-| Shadowed subset                   | In a 1,024-light scene: 0/1/4 point shadows and 0/1/8 spot shadows; 5th/9th requests as capacity tests; isolated and combined directional assignments.                                           | Shadow setup/render/sample cost, stable mapping and explicit unsupported-capacity behavior.              |
+| Family                            | Required cases                                                                                                                                                                                                                     | Purpose                                                                                                                   |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Calibration and list boundaries   | 0/1 lights; directional None/Primary/Secondary/both; 31/32/33 and 64 lights contributing to one region.                                                                                                                            | Physical response, complete lists, zero-light clearing and additive contribution.                                         |
+| Sparse indoor/city distribution   | 64, 256, 1,024 and 4,096 local lights, mixed point/spot; static and moving.                                                                                                                                                        | Separate total count from visible count and local overlap; primary target is 1,024.                                       |
+| Mostly irrelevant lights          | Fixed visible subset, with the remainder off-frustum or outside all receiver influence; include off-screen lights whose volumes do reach receivers.                                                                                | Culling removes irrelevant work without rejecting valid off-screen sources.                                               |
+| Dense overlap                     | At least 33, 64 and 256 relevant lights in the same region, narrow/wide cones and large ranges.                                                                                                                                    | Correctness when spatial culling cannot reduce real lighting work; stress, not a blanket 60-fps promise.                  |
+| Projection and receiving surfaces | Perspective/orthographic; near-plane/camera-inside volumes; viewport offsets, partial tiles, reverse-Z and depth-slice edges; opaque, masked, two-sided/normal-mapped and translucent receivers.                                   | Conservative bounds and valid shader lookups for every supported consumer.                                                |
+| Multiple views and lifecycle      | 1080p main plus 960x540 secondary; conflicting visibility, reordered views, resize/hide/recreate, scene replacement, moving/disabled/deleted lights and in-flight frames.                                                          | Per-view isolation, identity, update invalidation and resource retirement.                                                |
+| Shadowed subset                   | In a 1,024-light scene: 0/1/4 point and 0/1/8 spot shadows; 5th/9th requests must work when budget permits. Include finite and 90-degree soft spots, isolated/combined directionals, and deliberate actual-byte-budget exhaustion. | Shadow cost and stable mapping, removal of inherited 4/8 limits, explicit failure/recovery at the real resource boundary. |
 
 Both active forward and deferred paths require correctness coverage. Use 1920x1080
 as the primary timing resolution and 3840x2160 for scaling. Execute the full light
@@ -244,6 +255,41 @@ unrelated exposure optimization. Required correctness and bottleneck repairs
 remain part of EX07 until both gates pass.
 
 ## Performance acceptance and run discipline
+
+### Bounded shadow memory work
+
+The [2026-09-22 stencil/ownership audit](EX07-shadow-memory-review.md) selects
+three focused changes under EX07-10/11. Source tracing and a native GPU format
+comparison support the design; production correctness/performance remain open.
+
+| Work                            | Scope and implementation owner                                                      | Required result                                                                                                                                                                 |
+| ------------------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Depth-only conventional maps    | `ConventionalShadowTargetAllocator`, `ShadowDepthPass`, views/PSOs and owning tests | D32 depth with unchanged resolution, bias, reversed-Z and PCF; no shadow stencil clears. Scene/custom stencil, receiver/contact products and VSM remain independently owned.    |
+| Compatible local-map sharing    | `ShadowService`, `CascadeShadowPass` and indexed bindings                           | One render/allocation for identical local-light shadow content within the frame; distinct per-view CSM/contact products. Different caster content or generations cannot share.  |
+| Bounded allocation reuse/growth | Existing shadow allocator and frame leases/fences                                   | Correct per-light resolution buckets, no redundant complete-set duplication, only affected buckets grow, fence-safe retirement and bounded spare capacity without steady churn. |
+
+EX07C first repairs ownership, complete caster coverage, identity and requested
+quality. EX07D freezes a correctly rendered baseline and numeric regression/noise
+limits. Introduce each optimization separately in EX07E, and verify the integrated
+result in EX07F. Do not use existing multi-view overwrite or resolution-promotion
+behavior as a valid reference. No new shadow algorithm, cross-frame content cache,
+global aliasing framework or automatic quality reduction is introduced.
+
+The linked audit owns the consumer inventory and targeted regression cases:
+CSM motion/blends, masked casters, local face/seam coverage, forward/deferred/
+translucent consumption, stencil preservation, incompatible view content and
+delayed/discarded submissions. Include whole-frame CPU/GPU timing and lifecycle
+spikes; a memory win cannot waive the existing absolute budgets or predeclared
+regression limits. Avoid queue drains, duplicate raster work or reduced concurrency
+introduced solely to lower allocation counts.
+
+The 4 GiB / 128 MiB ceilings remain upper bounds, not normal allocation targets.
+Report actual unique map bytes, allocator committed bytes/slack, pending/retired/
+cached resources and whole-process DXGI usage/budget separately. Charge other
+engine commitments and explicit headroom at the parent allocator before admission;
+do not present the standalone allocation query as whole-engine capacity proof.
+
+### Timing and acceptance
 
 Use the package reference RTX 3080 / Ryzen 9950X for comparable native optimized
 Release measurements; record actual adapter/LUID, driver, clocks/power conditions,

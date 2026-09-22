@@ -4,6 +4,24 @@
 **Deliverable:** `VTX-M05D`
 **Status:** `m05d_spot_slice_validated`
 
+## EX07 production contract
+
+The baseline evidence below remains historical. EX07 supersedes its bounded
+arrays and Stage-18 deferral with the [indexed shadow-family ABI](lighting-gpu-abi.md#shadow-association-and-deferred-draws),
+[physical finite-source support](../../renderer-core/physically-based-rendering.md#finite-local-emitters)
+and [resource/failure contract](lighting-service.md#4-capacity-failure-and-recovery).
+Every required point/spot shadow is consumed by both surface families. Use
+projected records only for fully covered punctual spot support; finite disks and
+90-degree soft cones use the existing conventional cube/multiple-face technique.
+Preserve FP32 depth, reversed depth and 3x3 PCF, per-light quality and typed identity.
+The [audited EX07 memory work](../plan/EX07-shadow-memory-review.md) selects
+depth-only D32 conventional targets after coordinated view/clear/PSO migration and
+production qualification; D32S8 describes the current baseline. Scene/custom
+stencil and VSM resources are unaffected. Share only same-frame local maps with
+equal light/caster content and use the indexed ABI's resolution buckets.
+Remove the 4/8 cutoffs and float-encoded layers. Allocation pressure is explicit
+failure/recovery, never automatic unshadowing or a resolution reduction.
+
 ## Mandatory Vortex Rule
 
 - For Vortex planning and implementation, `Oxygen.Renderer` is legacy dead

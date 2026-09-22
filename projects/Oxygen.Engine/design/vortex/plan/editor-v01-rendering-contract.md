@@ -108,8 +108,11 @@ own cascade count/splits/distance/bias/resolution and identity association. Both
 surface paths and applicable fog select the matching light's shadow data; no
 slot-0-only shadow authority remains.
 
-Retain established conventional depth format, reversed-Z comparisons, stable
-cascade setup and 3x3 PCF. Apply authored depth bias once in the existing owner;
+Retain FP32 conventional depth precision, reversed-Z comparisons, stable
+cascade setup and 3x3 PCF. The [EX07 shadow-memory audit](EX07-shadow-memory-review.md)
+selects depth-only D32 conventional targets with coordinated view/clear/PSO
+migration and production qualification; scene/custom stencil remains separate.
+Apply authored depth bias once in the existing owner;
 receiver normal/texel offsets remain separate. Existing advanced CSM fields,
 contact shadows and per-light compensation gain complete source/cook/runtime
 behavior; their current missing consumers are implementation work.
