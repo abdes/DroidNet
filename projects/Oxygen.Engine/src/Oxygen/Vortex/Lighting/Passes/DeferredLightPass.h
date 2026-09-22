@@ -12,6 +12,7 @@
 #include <vector>
 
 #include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Vortex/Lighting/Internal/DeferredLightPacketBuilder.h>
 #include <Oxygen/Vortex/Shadows/Types/ShadowFrameData.h>
 
@@ -32,9 +33,14 @@ class Renderer;
 
 namespace lighting {
 
+  namespace internal {
+    class DeferredLightConstantsPublisher;
+  }
+
   class DeferredLightPass {
   public:
     struct ExecutionState {
+      bool recording_succeeded { true };
       bool consumed_packets { false };
       bool accumulated_into_scene_color { false };
       bool used_service_owned_geometry { false };
@@ -67,6 +73,7 @@ namespace lighting {
 
     explicit DeferredLightPass(Renderer& renderer);
     ~DeferredLightPass();
+    auto OnFrameStart(frame::SequenceNumber sequence, frame::Slot slot) -> void;
 
     [[nodiscard]] auto Record(RenderContext& ctx,
       graphics::CommandRecorder& recorder, const SceneTextures& scene_textures,
@@ -80,10 +87,8 @@ namespace lighting {
 
   private:
     Renderer& renderer_;
-    std::shared_ptr<graphics::Buffer> deferred_light_constants_buffer_;
-    void* deferred_light_constants_mapped_ptr_ { nullptr };
-    std::vector<ShaderVisibleIndex> deferred_light_constants_indices_;
-    std::uint32_t deferred_light_constants_slot_count_ { 0U };
+    std::unique_ptr<internal::DeferredLightConstantsPublisher>
+      constants_publisher_;
     std::shared_ptr<graphics::Framebuffer> directional_framebuffer_;
     std::shared_ptr<graphics::Framebuffer> local_framebuffer_;
     std::shared_ptr<graphics::Buffer> point_geometry_buffer_;

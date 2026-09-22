@@ -27,6 +27,7 @@
 #include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Constants.h>
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
@@ -43,6 +44,7 @@
 #include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Profiling/ProfileScope.h>
 #include <Oxygen/Vortex/Internal/ViewportClamp.h>
+#include <Oxygen/Vortex/Lighting/Internal/DeferredLightConstantsPublisher.h>
 #include <Oxygen/Vortex/Lighting/Internal/DeferredLightPacketBuilder.h>
 #include <Oxygen/Vortex/Lighting/Internal/DeferredLightProxyGeometry.h>
 #include <Oxygen/Vortex/Lighting/Passes/DeferredLightPass.h>
@@ -56,15 +58,13 @@
 #include <Oxygen/Vortex/Shadows/Types/ShadowFrameData.h>
 #include <Oxygen/Vortex/Types/FrameLightSelection.h>
 #include <Oxygen/Vortex/Types/LightingIndices.h>
+#include <Oxygen/Vortex/Upload/Errors.h>
 
 namespace oxygen::vortex::lighting {
 
 namespace {
 
   namespace bindless_d3d12 = oxygen::bindless::generated::d3d12;
-
-  constexpr std::uint32_t kDeferredLightConstantsStride
-    = packing::kConstantBufferAlignment;
 
   enum class DeferredLightKind : std::uint8_t {
     kDirectional = 0U,
@@ -566,19 +566,22 @@ DeferredLightPass::~DeferredLightPass()
   }
 
   auto& registry = gfx->GetResourceRegistry();
-  if (deferred_light_constants_buffer_ != nullptr
-    && deferred_light_constants_mapped_ptr_ != nullptr) {
-    deferred_light_constants_buffer_->UnMap();
-    deferred_light_constants_mapped_ptr_ = nullptr;
-  }
+  constants_publisher_.reset();
   for (auto* buffer : {
-         deferred_light_constants_buffer_.get(),
          point_geometry_buffer_.get(),
          spot_geometry_buffer_.get(),
        }) {
     if (buffer != nullptr && registry.Contains(*buffer)) {
       registry.UnRegisterResource(*buffer);
     }
+  }
+}
+
+auto DeferredLightPass::OnFrameStart(
+  const frame::SequenceNumber sequence, const frame::Slot slot) -> void
+{
+  if (constants_publisher_) {
+    constants_publisher_->OnFrameStart(sequence, slot);
   }
 }
 
@@ -734,60 +737,6 @@ auto DeferredLightPass::Record(RenderContext& ctx,
     draw.draw_mode = ResolveLocalLightDrawMode(ctx, draw);
   }
 
-  const auto ensure_pass_constants
-    = [&](const std::uint32_t required_slots) -> void {
-    CHECK_F(required_slots > 0U,
-      "DeferredLightPass: deferred lighting requires at least one constants "
-      "slot");
-    if (deferred_light_constants_buffer_ != nullptr
-      && deferred_light_constants_slot_count_ >= required_slots) {
-      return;
-    }
-
-    auto& registry = gfx->GetResourceRegistry();
-    if (deferred_light_constants_buffer_ != nullptr
-      && deferred_light_constants_mapped_ptr_ != nullptr) {
-      deferred_light_constants_buffer_->UnMap();
-      deferred_light_constants_mapped_ptr_ = nullptr;
-    }
-    if (deferred_light_constants_buffer_ != nullptr
-      && registry.Contains(*deferred_light_constants_buffer_)) {
-      registry.UnRegisterResource(*deferred_light_constants_buffer_);
-    }
-    deferred_light_constants_buffer_.reset();
-    deferred_light_constants_indices_.clear();
-
-    auto desc = graphics::BufferDesc {};
-    desc.size_bytes = static_cast<std::uint64_t>(required_slots)
-      * kDeferredLightConstantsStride;
-    desc.usage = graphics::BufferUsage::kConstant;
-    desc.memory = graphics::BufferMemory::kUpload;
-    desc.debug_name = "LightingService.DeferredLight.Constants";
-    deferred_light_constants_buffer_ = gfx->CreateBuffer(desc);
-    CHECK_NOTNULL_F(deferred_light_constants_buffer_.get(),
-      "DeferredLightPass: failed to create deferred-light constants buffer");
-    registry.Register(deferred_light_constants_buffer_);
-    deferred_light_constants_mapped_ptr_
-      = deferred_light_constants_buffer_->Map(0U, desc.size_bytes);
-    CHECK_NOTNULL_F(deferred_light_constants_mapped_ptr_,
-      "DeferredLightPass: failed to map deferred-light constants buffer");
-
-    deferred_light_constants_indices_.reserve(required_slots);
-    for (std::uint32_t i = 0U; i < required_slots; ++i) {
-      deferred_light_constants_indices_.push_back(
-        RegisterBufferViewIndex(*gfx, *deferred_light_constants_buffer_,
-          graphics::BufferViewDescription {
-            .view_type = graphics::ResourceViewType::kConstantBuffer,
-            .visibility = graphics::DescriptorVisibility::kShaderVisible,
-            .range
-            = { static_cast<std::uint64_t>(i) * kDeferredLightConstantsStride,
-              kDeferredLightConstantsStride, },
-          }));
-    }
-    deferred_light_constants_slot_count_ = required_slots;
-  };
-  ensure_pass_constants(static_cast<std::uint32_t>(draws.size()));
-
   if (NeedsDirectionalFramebufferRebuild(
         directional_framebuffer_, scene_textures)) {
     directional_framebuffer_
@@ -799,13 +748,17 @@ auto DeferredLightPass::Record(RenderContext& ctx,
       = gfx->CreateFramebuffer(BuildLocalFramebuffer(scene_textures));
   }
 
-  auto pass_constants_indices = std::vector<ShaderVisibleIndex> {};
-  pass_constants_indices.reserve(draws.size());
-  auto* mapped_bytes
-    = static_cast<std::byte*>(deferred_light_constants_mapped_ptr_);
-  for (std::size_t i = 0; i < draws.size(); ++i) {
+  if (!constants_publisher_) {
+    constants_publisher_
+      = std::make_unique<internal::DeferredLightConstantsPublisher>(gfx,
+        renderer_.GetStagingProvider(),
+        observer_ptr { &renderer_.GetInlineTransfersCoordinator() });
+  }
+  constants_publisher_->OnFrameStart(ctx.frame_sequence, ctx.frame_slot);
+  auto constants_records = std::vector<DeferredLightConstants> {};
+  constants_records.reserve(draws.size());
+  for (const auto& draw : draws) {
     auto constants = DeferredLightConstants {};
-    const auto& draw = draws[i];
     constants.light_type = static_cast<std::uint32_t>(draw.kind);
     constants.light_geometry_vertices_srv = draw.geometry_srv;
     constants.light_geometry_vertex_count = draw.geometry_vertex_count;
@@ -815,10 +768,16 @@ auto DeferredLightPass::Record(RenderContext& ctx,
       constants.selection_index = draw.packet.light->selection_index;
       constants.light_world_matrix = draw.packet.light_world_matrix;
     }
-    std::memcpy(mapped_bytes + i * kDeferredLightConstantsStride, &constants,
-      sizeof(DeferredLightConstants));
-    pass_constants_indices.push_back(deferred_light_constants_indices_[i]);
+    constants_records.push_back(constants);
   }
+  const auto publication = constants_publisher_->Publish(constants_records);
+  if (!publication) {
+    LOG_F(ERROR, "Deferred draw constants could not be published: {}",
+      upload::make_error_code(publication.error()).message());
+    state.recording_succeeded = false;
+    return state;
+  }
+  const auto& pass_constants_indices = *publication;
 
   graphics::GpuEventScope stage_scope(recorder,
     "Vortex.Stage12.DeferredLighting",

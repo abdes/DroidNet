@@ -11,6 +11,10 @@ upload/decode/readback coverage. The native suite passes 20 cases in Debug and
 Release, including integer high-bit values, sentinels, reserved fields,
 nonzero element indices, adjacent records and nonsymmetric matrix transforms.
 Deferred draw constants are additionally decoded through actual aligned CBVs.
+Production deferred CBVs now occupy immutable 256-byte slices in frame-owned
+upload batches. Repeated recordings cannot overwrite earlier constants; failed
+CBV publication rejects the view recording. The upload arena declares constant
+usage through creation, growth and trim, preserving D3D12 generic-read state.
 
 The production shadow header is now 112 bytes and routes separate directional,
 cascade, projected-local and cube-local arrays. Its full frame/view/scene/selection

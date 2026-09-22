@@ -7,12 +7,11 @@ import struct
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "shadows"))
-from renderdoc_ui_analysis import collect_action_records, renderdoc_module, resource_id_to_name, run_ui_script
+from renderdoc_ui_analysis import collect_action_records, renderdoc_module, run_ui_script
 
 
 def build_report(controller, report, capture_path, report_path):
     rd = renderdoc_module()
-    names = resource_id_to_name(controller)
     textures = {str(t.resourceId): t for t in controller.GetTextures()}
     views = {}
     shadow_surfaces = {}
@@ -34,9 +33,12 @@ def build_report(controller, report, capture_path, report_path):
         slots = [struct.unpack_from("<I", records, i*64+12)[0] for i in range(3)]
         if set(slots) != {0, 1, 0xFFFFFFFF}: raise RuntimeError(f"Incorrect atmosphere assignments: {slots}")
         constants = [x.descriptor for x in pipeline.GetConstantBlocks(rd.ShaderStage.Pixel)
-                     if names.get(str(x.descriptor.resource)) == "LightingService.DeferredLight.Constants"]
+                     if x.access.index == rd.DescriptorAccess.NoShaderBinding
+                     and x.descriptor.byteSize == 256]
         if len(constants) != 1: raise RuntimeError(f"Expected one deferred CBV, got {len(constants)}")
         constant = constants[0]
+        if constant.byteOffset % 256:
+            raise RuntimeError("Deferred constant slice is not CBV-aligned")
         kind, selection = struct.unpack_from("<2I", bytes(controller.GetBufferData(constant.resource,constant.byteOffset,80)),64)
         if kind != 0 or selection >= 3: raise RuntimeError("Incorrect directional draw identity")
         record_selection = struct.unpack_from("<I", records, selection*64+48)[0]

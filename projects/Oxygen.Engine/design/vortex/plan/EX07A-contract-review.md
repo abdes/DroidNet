@@ -637,6 +637,44 @@ multi-source fog/shadow integration, finite-source/wide-spot support, memory
 admission, deferred-CBV lifetime, BRDF model publication or the full EX07 gate.
 The remaining EX07A obligations still require an explicit completion audit.
 
+### Deferred-constant lifetime checkpoint
+
+A queued-view regression demonstrated that the old persistent deferred CBV buffer
+was overwritten by a later recording: the first point light's stored X position
+changed from 11 to 21. `DeferredLightConstantsPublisher` replaces that buffer and
+its mutable descriptor slots. Each recording publishes one aligned batch through
+the existing upload arena, with 256-byte CBV slices containing the canonical
+80-byte records. Batches and their descriptors remain owned by their frame slot;
+repeating a sequence preserves them and slot reuse retires them under the
+existing frame-fence contract. Padding is zeroed. The old buffer fields and
+unmap/recreate path are removed.
+
+CBV publication failure now propagates through LightingService to rejection of
+the view recording. A failure-injection case verifies that no scene binding is
+published and that a later successful recording recovers. The old overwrite
+regression fails before the repair and passes afterward.
+
+The shared upload ring now declares constant-buffer usage on creation, growth
+and trimming. This fixes the warning observed by the user while testing the new
+path. D3D12 upload buffers retain their generic-read state and resource flags;
+no warning filter or suppression was added. An **180-frame native Release** run
+of the user's exact three-light/offscreen layout, with the D3D12 debug layer
+enabled, exits successfully without warning/error messages.
+
+Debug and Release each pass **68 SceneRenderer, 18 upload-ring and 20 native ABI
+tests** (212 test executions). The production capture decodes the new CBVs,
+checks their alignment/source identities and observes all six directional
+contributions across two views. The analyzer identifies bindless CBVs by their
+binding metadata rather than requiring a dedicated backing-buffer name.
+Oxytidy covered all 12 changed C++ files; the new publisher is checked separately
+after fixes. Existing whole-file findings remain recorded without suppressions.
+
+Evidence under `ex07a`: `deferred-cbv-before.log`,
+`deferred-cbv-{SceneRendererDeferredCore,RingBufferStaging,LightingGpuAbi}-{debug,release}.json`,
+`deferred-cbv-release-warning-check.log`, `deferred-cbv_capture.rdc` and
+`deferred-cbv-report.txt`. This qualifies the repaired constant lifetime and
+failure path, not every EX07 capacity/submission/resource-lifetime scenario.
+
 | Gate                      | Owning suite / required evidence                                                                                                                                                                                                                     | Current result                                                                                                                  |
 | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
 | A ABI                     | CPU size/alignment/every-offset assertions; D3D12 upload/decode/readback of two distinct local records and directional records, integer high-bit patterns, sentinels, reserved zeros and nonzero element indices; matching catalog/reflection checks | Canonical wire records have native Debug/Release proof; remaining source-selection, validity and lifetime interfaces stay open. |
