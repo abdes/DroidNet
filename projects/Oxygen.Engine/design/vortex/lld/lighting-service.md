@@ -1,6 +1,6 @@
 # LightingService LLD
 
-Status: **EX07A design contract frozen; implementation/ABI qualification in progress.**
+Status: **EX07A contract/interface/ABI gate validated; EX07B reference work starts next. Physical and full failure/lifetime qualification remains open.**
 The [EX07 plan](../plan/EX07-lighting-correctness-and-scalability.md) owns execution,
 workloads and gates. This LLD owns data, execution, publication and failure
 semantics. The [A review checkpoint](../plan/EX07A-contract-review.md) records

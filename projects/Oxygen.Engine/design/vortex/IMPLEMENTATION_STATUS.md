@@ -84,7 +84,7 @@ and [CPU decision](lld/post-process-service.md#approved-ex051-13ab-joint-cpu-cor
 | 5.1 — Exposure performance         | validated   | Closed 2026-09-21: format/policy, independent SceneColor ownership, CPU corrections, correctness and final GPU acceptance complete. User accepts measured CPU cost; further CPU optimization is deferred to a later milestone. | [Current work](#31-current-work), [final CPU decision](lld/post-process-service.md#approved-ex051-13ab-joint-cpu-correction)                                                                                                                                                                                                                                    |
 | 5.2 — Focused exposure quality     | validated   | Approved residual owner fixes and Release include repair committed; 65 Debug and 65 Release cases pass, scoped changed code is tidy-clean, and one matched I02 preservation run passes.                                        | [Bounded scope and result](#322-slice-52-code-quality-and-test-structure)                                                                                                                                                                                                                                                                                       |
 | 6 — Authoring and persistence      | validated   | Strict source/cook/load/script/editor migration, C++20 editor boundary, PAK repacking, rendered UI acceptance and configuration isolation closed.                                                                              | [Detailed items](#33-slice-6-work-items), [acceptance evidence](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice6/slice6-progress.json)                                                                                                                                                                                                          |
-| 7 — Physical and scalable lighting | in_progress | EX07A target contracts frozen after six decisions; native allocation and CPU math checks recorded. Production ABI/repair and correctness/performance gates remain open.                                                        | [A checkpoint](plan/EX07A-contract-review.md), [EX07 items](#34-slice-7-work-items), [workloads and gates](plan/EX07-lighting-correctness-and-scalability.md)                                                                                                                                                                                                   |
+| 7 — Physical and scalable lighting | in_progress | EX07A contract/interface/native ABI gate validated; EX07B independent reference and instrument work is current. Full correctness/performance gates remain open.                                                                | [A checkpoint](plan/EX07A-contract-review.md), [EX07 items](#34-slice-7-work-items), [workloads and gates](plan/EX07-lighting-correctness-and-scalability.md)                                                                                                                                                                                                   |
 | 8 — Measured Neutral Reference     | planned     | Qualified instruments plus the first usable interactive/batch experiment.                                                                                                                                                      | [EX08 and automation follow-ups](#35-slice-8-work-items)                                                                                                                                                                                                                                                                                                        |
 | 8.1 — Console controls             | planned     | Existing console drives validated post-process settings and transitions.                                                                                                                                                       | [EX08.1](#351-slice-81-post-processing-console-controls)                                                                                                                                                                                                                                                                                                        |
 | 8.2 — ImGui UI automation          | planned     | Actual widget workflows and EX06 regressions run in an opt-in native test configuration.                                                                                                                                       | [EX08.2](#352-slice-82-imgui-interaction-automation)                                                                                                                                                                                                                                                                                                            |
@@ -99,129 +99,40 @@ complete. The TexturedCube panel-refresh regression is covered by automated
 tests and the user's successful rebuilt-app test. See the
 [EX06 result and evidence](#33-slice-6-work-items).
 
-**Current: EX07A — design contract frozen; implementation/ABI proof in_progress.**
-All six decisions are approved in the [review](plan/EX07A-contract-review.md):
-physical-only attenuation, physical sphere/disk extent, compensated correlated
-GGX, dynamic resource capacity, hemispherical soft spots, and a configurable
-4 GiB renderer-wide / 128 MiB aggregate-index profile. The
-[PBR equations](../renderer-core/physically-based-rendering.md#physical-light-conversion),
-[wire layouts](lld/lighting-gpu-abi.md) and
-[property/scene-v7 migration](lld/lighting-properties.md) own the frozen targets.
-D3D12 allocation-requirement queries and CPU model-consistency checks pass;
-production migration, GPU ABI decoding, renderer correctness and performance
-qualification remain open. Implementation has started with six canonical wire
-record types and Oxygen `NamedType` array indices. The private publisher range
-now uses the canonical type. `Oxygen.Vortex.LightingGpuAbi.Tests` passes eight
-tests in native Debug and Release: Graphics upload/decode/readback, high-bit
-integers, adjacent records, symbolic sentinels and a changed-lane negative control.
-Evaluation records, frame bindings, projection records and production consumer
-migration remain open; no compatibility fields or APIs are accepted in the final
-cutover. Reports:
-[Debug](../../out/build-ninja/analysis/vortex/exposure-lightbench/ex07a/vortex.lightinggpuabi-debug.json),
-[Release](../../out/build-ninja/analysis/vortex/exposure-lightbench/ex07a/vortex.lightinggpuabi-release.json).
-Grid metadata now carries content origin/extent and signed orthographic depth;
-its producer regression exposed and repaired Core `ResolvedView` validation.
-Core view and LightingService suites each pass 5 Debug / 5 Release tests.
-Conventional/BRDF rendering and full orthographic consumer parity remain open.
-The [checkpoint manifest](../../out/build-ninja/analysis/vortex/exposure-lightbench/ex07a/abi-foundation-checkpoint.json)
-records the exact targets, commands, source hashes and evidence scope.
-The next [consumer checkpoint](../../out/build-ninja/analysis/vortex/exposure-lightbench/ex07a/lookup-consumer-checkpoint.json)
-uses complete lists without identity-index buffers and metadata-based lookup in
-shading/debug/retained VSM shaders. ABI/behavior tests pass 12 Debug / 12 Release;
-LightingService passes 5 / 5; two affected rendered-lighting/HDR-history cases
-pass in both configurations. All six changed C++ files are oxytidy-clean. Spatial
-culling, complete ABI migration, frame-failure routing, PBR qualification and VSM
-activation are not claimed. The requested shutdown investigation found and fixed
-a frame-scaled CPU heap leak in diagnostics aggregate construction. Both demos
-exit without CRT leaks after 300 frames; 69 owning tests pass. The
-[heap investigation](plan/EX07A-heap-leak-validation.md) records the compiler
-reproducer, allocation stacks, repair and validation scope.
-The next record-migration prerequisite implements checked CPU photometric
-resolution and stable spot-cone parameters. Twelve new cases bring LightingService
-to 17 passing tests in each configuration; three new C++ files are oxytidy-clean.
-The evaluation-record checkpoint now connects that helper to publication.
-Local/directional records, lighting headers and deferred draw constants use
-their target 80/64/96/80-byte layouts. Debug/Release validation totals 390 passing
-test cases, and four forward RenderDoc capture cases pass. The review records
-the incomplete final lint rerun and remaining shadow migration.
-The subsequent cascade checkpoint replaces float-packed metadata with the
-128-byte typed record in all active producers/readers. Native ABI tests pass
-18/18 in Debug/Release, ShadowService passes 11/11, and RenderDoc verifies eight
-cascade records across two views. The 112-byte shadow header and local
-projection migration remain open; the owning review records this boundary.
-The next checkpoint completes the projected/cube record layouts and removes the
-old point/spot binding types. Native ABI tests pass 19/19 and ShadowService 11/11
-in Debug/Release; RenderDoc verifies local source identity, sampled surfaces and
-both lights' contributions. The 112-byte shadow header, separate array
-publication and full finite-source/wide-spot support are still pending.
-The shadow-header checkpoint now implements the 112-byte header and separate
-record-array publication, with matching lighting generations/status and atomic
-publication on allocation success. Debug/Release each pass 20 ABI, 13 shadow,
-23 lighting and 64 SceneRenderer tests. RenderDoc checks all three light kinds
-in two views. Source selection, complete support/capacity handling, contact
-products and failure/lifetime qualification remain open.
-The directional-array checkpoint removes the optional primary-only selection and
-singleton shadow surface. All selected sources reach forward/deferred lighting;
-shadow families retain source identity and individual resolution/counts.
-Debug/Release each pass 25 lighting, 14 shadow, 66 SceneRenderer and 20 ABI tests.
-Deferred/forward captures qualify the three-source recipe. The
-[same-frame descriptor fix](plan/EX07A-offscreen-flicker-validation.md) closes the
-Release offscreen flicker observed and then visually confirmed stable by the
-user. Broader property, fog, BRDF, memory and lifetime qualification remains open.
-The deferred-constant checkpoint replaces the shared mutable CBV buffer with
-frame-owned aligned batches and propagates publication failure to view rejection.
-Debug/Release each pass 68 SceneRenderer, 18 upload-ring and 20 ABI tests; the
-three-light capture passes and an 180-frame Release/debug-layer run is free of
-warnings/errors after correcting the arena's constant-buffer usage declaration.
-The content-relative lookup also preserves fractional final tiles; a native
-negative control reproduced their loss under the old `extent - 1` clamp.
-The complete native ABI/lookup suite now passes 21 cases in each configuration.
-Atmosphere-source fog shadowing now follows each source's canonical selection;
-the slot-0-only authority/cascade copies and flag are removed. Debug/Release each
-pass 63 environment-service and 12 native fog tests. A Primary-only negative
-control fails the new Secondary occlusion checks, and RenderDoc verifies both
-source surfaces in both views. Changed-file oxytidy has no introduced findings.
-Ordinary-directional fog scattering and unified physical atmosphere resolution
-remain open; the [checkpoint](plan/EX07A-contract-review.md#atmosphere-source-fog-shadow-checkpoint)
-records the precise validation boundary.
-ShadowService now owns dense selection-reference maps derived from actual shadow
-records; lighting no longer predicts map indices. Per-view attachment validates
-identities and publishes an immutable header; missing requested maps reject the
-view. Debug/Release each pass 26 lighting, 17 shadow and 68 SceneRenderer tests;
-four RenderDoc analyses pass, as does the 180-frame Release offscreen proof.
-Budgeted shadow growth and full failure/recovery qualification remain open.
-Local selections now retain typed source node handles; the unused single-sun AP
-accessors/argument and translucent synthetic direction are removed. Debug/Release
-each pass 21 ABI, 26 lighting, 17 shadow, 68 SceneRenderer and one native AP matrix
-test. RenderDoc checks 72 AP draws against the transfer equation (maximum error
-5.96e-8); source mutation/ingress and full forward image qualification remain open.
-The transient upload owner no longer retains its deprecated single-allocation
-compatibility fields or release path. Debug/Release each pass 13 transient-buffer
-and 68 SceneRenderer tests, plus the clean 180-frame Release offscreen proof.
-The remaining identified diagnostic decoders now consume canonical layouts;
-the obsolete embedded-CSM probe is retired. Fresh readability captures pass their
-positive/negative checks. A versioned native allocation query reproduces the
-D32S8/D32 matrix in Debug/Release (22 native cases each); the memory review marks
-the unavailable historical rendering-format probe separately. The [completion audit](plan/EX07A-completion-audit.md) now records the repaired
-producer depth mapping and unused CPU selection fields. Debug/Release each pass
-24 native, 29 lighting, 17 shadow and 68 SceneRenderer tests. The old far-plane
-mapping fails the new native control; the corrected live metadata passes capture
-analysis. Final A contract/catalog/document reconciliation remains, followed by
-the planned B–F work under the full EX07 goal.
-The audit also found and repaired zero scene-identity and duplicate/invalid-view
-admission; rejection invalidates prior publications and recovery uses fresh view
-generations.
-MultiView's local-light far-clipping regression is repaired and visually
-confirmed by the user. The
-[review evidence](plan/EX07A-contract-review.md#verification-obligations-and-current-evidence)
-keeps record migration, failure propagation and rendered PBR qualification open.
-The [shadow-memory follow-up](plan/EX07-shadow-memory-review.md) records the CSM,
-scene-stencil and inactive-VSM ownership audit, D32 allocation queries and a
-standalone native GPU A/B probe: 12,288 depth/PCF values match, zero CPU-reference
-mismatches and zero debug warnings/errors. It selects depth-only conventional
-maps, compatible same-frame local-map sharing and bounded reuse/growth under
-EX07-10/11. Full renderer images, lifetime and frame-time qualification are pending;
-the 4 GiB / 128 MiB ceilings and EX07 status are unchanged.
+**Current: EX07B — independent references and instruments. EX07 remains in_progress.**
+
+EX07A is validated on 2026-09-23 against its
+[completion audit](plan/EX07A-completion-audit.md). D1–D6 freeze physical-only
+attenuation, flux-conserving sphere/disk extent, compensated correlated GGX,
+dynamic capacity, hemispherical soft spots and the configurable 4 GiB total /
+128 MiB compact-index ceilings. Their mathematical, wire, persistence and
+failure contracts remain in the [PBR owner](../renderer-core/physically-based-rendering.md#physical-light-conversion),
+[GPU ABI](lld/lighting-gpu-abi.md) and [property inventory](lld/lighting-properties.md).
+
+The A implementation uses 15 canonical wire payloads, typed source/array
+identities, all-directional selection, shadow-owned reference maps, immutable
+deferred constants and same-frame-safe transient descriptors. Actual CPU grid
+parameters now pass native near/far and interior checks. The final production
+checkpoint passes 24 native-suite, 29 lighting, 17 shadow and 68 SceneRenderer
+cases per configuration; catalog closure adds four cases per configuration.
+RenderDoc qualifies the scoped directional/local/fog/AP/readability paths. The
+user confirmed the spotlight repair and stable lower offscreen views; the
+[validation record](plan/EX07A-offscreen-flicker-validation.md) preserves that
+boundary. The [review](plan/EX07A-contract-review.md) retains prior checkpoints,
+including the committed MSVC heap-leak repair.
+
+A's closure does not establish the final physical renderer. B must supply an
+independent double-precision oracle, moment uncertainty and known-input probes,
+matched unculled image reference, deterministic fixtures and bounded instruments.
+C still owns complete BRDF/finite-source/wide-spot behavior, property transport
+and strict scene-v7/editor/script migration, shared atmosphere conversion,
+dynamic memory admission and full failure/recovery/submission lifetime. D–F
+own qualified baselines, measured optimizations and final native/editor delivery.
+The [memory review](plan/EX07-shadow-memory-review.md) contains fresh versioned
+allocation queries and explicitly marks the lost historical format-probe
+artifacts. Reproduce rendering-format qualification before production D32
+adoption. Do not interpret either ceiling as a normal whole-engine working set.
+
 The
 [revised delivery sequence](plan/exposure-and-lightbench-correction.md#remaining-delivery-at-a-glance)
 is EX07 -> EX08 -> EX08.1 -> EX08.2 -> EX09A-E -> EX10. EX08 delivers the first
@@ -810,9 +721,9 @@ workloads enter the baseline, with numeric thresholds frozen before candidates.
 | EX07-01   | Directional physical reference: unassigned, each explicit atmosphere slot and both sources together.                                                           | planned     |
 | EX07-02   | Point flux conversion, inverse-square/range fade and finite near/zero separation.                                                                              | planned     |
 | EX07-03   | Spot flux normalization, hard-cone limit, zero-angle rejection and boundaries.                                                                                 | planned     |
-| EX07-04   | CPU/HLSL/API/math target frozen; compiled ABI/sentinel proof and shared consumer migration remain open.                                                        | in_progress |
+| EX07-04   | Canonical CPU/HLSL interface and native sentinel gate validated in A; final shared physical/BRDF semantics remain C work.                                      | in_progress |
 | EX07-05   | Frozen packed-material and working-color-space oracle.                                                                                                         | planned     |
-| EX07-06   | Independent physical/image references and probes in B; calibration and affected content qualification in C.                                                    | planned     |
+| EX07-06   | Independent physical/image references and probes in B; calibration and affected content qualification in C.                                                    | in_progress |
 | EX07-07   | Deterministic workloads in B; correctness-qualified baselines and numeric budget/gain/regression/noise policy in D.                                            | planned     |
 | EX07-08   | Complete lists and tested input/view failure/recovery in C; conservative spatial culling improvements in E.                                                    | planned     |
 | EX07-09   | Measured shader and deferred draw/submission/overdraw improvements with preserved BRDF/HDR response.                                                           | planned     |

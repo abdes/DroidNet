@@ -1,6 +1,8 @@
 # EX07A contract review
 
-Status: **design/remediation contract frozen on 2026-09-22; EX07A implementation and ABI qualification remain in_progress.**
+Status: **EX07A validated on 2026-09-23; full EX07 implementation/qualification remains in_progress.**
+The [completion audit](EX07A-completion-audit.md) owns the current A disposition;
+implementation sections below record historical checkpoints and their scoped evidence.
 The initial source review used clean `editor` at `09aa65362` on 2026-09-22.
 Its findings predate the implementation checkpoints recorded below. Each
 checkpoint states its validation scope; full physical and performance
@@ -360,8 +362,8 @@ distinct Oxygen `NamedType` wrappers and symbolic sentinels. The new
 `Oxygen.Vortex.LightingGpuAbi.Tests` target passes **8 Debug / 8 Release** tests
 using Graphics-owned upload, compute and readback, including nonzero element
 indices, adjacent records, high-bit words and a deliberately changed upload lane.
-[Debug results](../../../out/build-ninja/analysis/vortex/exposure-lightbench/ex07a/vortex.lightinggpuabi-debug.json)
-and [Release results](../../../out/build-ninja/analysis/vortex/exposure-lightbench/ex07a/vortex.lightinggpuabi-release.json)
+Debug results (historical `vortex.lightinggpuabi-debug.json`; original artifact unavailable)
+and Release results (historical `vortex.lightinggpuabi-release.json`; original artifact unavailable)
 are partial ABI evidence. Evaluation records, full bindings, projection records,
 matrix probes, catalog/capture analysis and complete producer/consumer migration
 remain open. The spatial culler has not been connected to these records.
@@ -369,7 +371,7 @@ The grid-metadata producer test also required repairing Core `ResolvedView`
 validation: finite signed orthographic near planes are accepted; perspective
 near remains positive and every far plane remains finite and above near. Core
 view and LightingService suites each pass 5 tests in both configurations.
-[Checkpoint manifest](../../../out/build-ninja/analysis/vortex/exposure-lightbench/ex07a/abi-foundation-checkpoint.json)
+Checkpoint manifest (historical `abi-foundation-checkpoint.json`; original artifact unavailable)
 records source identities, commands and remaining validation. This dependency
 repair does not qualify downstream orthographic shading/culling/shadows.
 
@@ -393,7 +395,7 @@ The subsequent consumer checkpoint closes the two reviewed lookup gaps:
   forward-light RenderDoc analyzer understands complete ranges; no new capture
   is claimed by this checkpoint.
 
-[Consumer checkpoint evidence](../../../out/build-ninja/analysis/vortex/exposure-lightbench/ex07a/lookup-consumer-checkpoint.json)
+Consumer checkpoint evidence (historical `lookup-consumer-checkpoint.json`; original artifact unavailable)
 records source hashes and results. This is still a complete-list baseline, not
 spatial culling. Culler/lookup cell equivalence, full binding/evaluation/shadow
 record migration, same-submission failure presentation, physical BRDF parity and
@@ -413,8 +415,8 @@ extreme compensation, tinted results whose untinted scalar would overflow,
 normal-float endpoints and narrow cones lost by float cosine. LightingService
 passes **17 Debug / 17 Release** tests; all three added C++ files are oxytidy-clean
 with no suppressions or coverage gaps. Results are
-[Debug](../../../out/build-ninja/analysis/vortex/exposure-lightbench/ex07a/photometry-debug.json)
-and [Release](../../../out/build-ninja/analysis/vortex/exposure-lightbench/ex07a/photometry-release.json).
+Debug (historical `photometry-debug.json`; original artifact unavailable)
+and Release (historical `photometry-release.json`; original artifact unavailable).
 This prerequisite is now connected in the working evaluation-record migration
 below. These CPU checks do not qualify the EX07B oracle, GPU source integration
 or BRDF.
@@ -910,8 +912,8 @@ all EX07 slices and cannot complete at A alone.
 Documentation checks at this checkpoint passed: all 32 inventory IDs occur once,
 the new documents' local links/anchors resolve, line endings are LF, the capacity
 arithmetic above agrees with the target layouts, and `git diff --check` is
-clean. The [check report](../../../out/build-ninja/analysis/vortex/exposure-lightbench/ex07a/contract-review-checks.json)
-is documentation evidence only. The [final contract checks](../../../out/build-ninja/analysis/vortex/exposure-lightbench/ex07a/final-contract-checks.json)
+clean. The check report (historical `contract-review-checks.json`; original artifact unavailable)
+is documentation evidence only. The final contract checks (historical `final-contract-checks.json`; original artifact unavailable)
 additionally cover changed-document local links, 19 declared layout sizes,
 BOM/LF preservation and all six approvals. At the documentation checkpoint, no
 engine/editor build, production test, GPU sentinel, native capture or performance
@@ -920,7 +922,7 @@ statement for the new ABI target only. A
 standalone C++20 /W4 /WX allocation-query program and CPU mathematical checks
 were run as described below.
 
-The additional [CPU mathematical check](../../../out/build-ninja/analysis/vortex/exposure-lightbench/ex07a/mathematical-checks.json)
+The additional CPU mathematical check (historical `mathematical-checks.json`; original artifact unavailable)
 passed 1,440 reciprocal-pair cases (maximum absolute difference 2.78e-17),
 the alpha=1 analytic unit-reflectance furnace check (9.63e-13), reflected-energy
 bounds over the sampled domain and spot solid-angle integration (1.12e-15
@@ -931,7 +933,7 @@ its analytic value by at most 1.11e-4. This is a draft-model consistency check,
 The [allocation query](../../../out/build-ninja/analysis/vortex/exposure-lightbench/ex07a/allocation-requirements-current.json)
 measures resource requirements on the reference adapter without allocating maps.
 Neither artifact qualifies rendered images, GPU ABI, live resource lifetimes or
-performance. Their probe sources are stored beside the reports.
+performance. The allocation-query source is now versioned in the native test target. The older model-check source/results are historical and unavailable; B must supply a new reproducible qualified reference.
 
 Local UE5.7 source inspected as implementation reference, not an Oxygen oracle:
 `F:/Epic Games/UE_5.7/Engine/Source/Runtime/Renderer/Private/LightGridInjection.cpp`
@@ -943,4 +945,10 @@ physical/failure contract.
 
 **Design disposition:** D1-D6 are approved and the target mathematical, wire, persistence, resource and failure contracts are frozen in their owning documents. No product decision remains queued.
 
-**Remaining EX07A implementation gate:** implement the canonical CPU/HLSL records and assertions, migrate the conflicting interfaces together, and pass native GPU sentinel decoding/catalog checks before connecting the culler. EX07B reference qualification, EX07C repairs and EX07D-F correctness/performance delivery remain open. Documentation/model checks do not close EX07-04/08/10/11/12 or EX07-GATE.
+**EX07A gate: passed.** The [completion audit](EX07A-completion-audit.md) records
+canonical CPU/HLSL layouts and every-member assertions, migrated interfaces,
+native GPU decoding and catalog checks, applicable runtime captures, approved
+capacity/failure contracts and current reproducible evidence. The spatial culler
+has not been connected. EX07B reference qualification, EX07C repairs and EX07D–F
+correctness/performance delivery remain required. A's closure does not close
+EX07-04/08/10/11/12 or EX07-GATE.

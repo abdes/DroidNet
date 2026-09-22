@@ -1,14 +1,15 @@
 # Lighting GPU ABI
 
-Status: **EX07A production record migration implemented; remaining interface and
-failure/lifetime qualification in_progress.** This companion to
+Status: **EX07A canonical record/interface migration validated; full physical and
+failure/lifetime qualification remains required in B–F.** This companion to
 [LightingService](lighting-service.md#2-canonical-data-and-interfaces) specifies
 CPU/HLSL wire layouts. The [A checkpoint](../plan/EX07A-contract-review.md) owns
 approved decisions, evidence and remaining gates.
 
 The records below have size/alignment/every-offset assertions and native D3D12
-upload/decode/readback coverage. The native suite passes 23 ABI/lookup cases plus
-one allocation-requirements case in Debug and Release, including integer high-bit values, sentinels, reserved fields,
+upload/decode/readback coverage. In Debug and Release the 24-case suite passes
+22 native decode/lookup cases, one allocation query and one CPU index-contract
+check, including integer high-bit values, sentinels, reserved fields,
 nonzero element indices, adjacent records and nonsymmetric matrix transforms.
 Deferred draw constants are additionally decoded through actual aligned CBVs.
 Production deferred CBVs now occupy immutable 256-byte slices in frame-owned
@@ -28,7 +29,8 @@ buffer. The CPU source selection is now an ordered directional collection, and e
 shadowed source publishes an independently indexed family and surface. Spatial
 culling, complete support and failure/lifetime behavior, and BRDF moment
 publication remain open. These
-ABI and binding proofs do not qualify physical lighting or close EX07A.
+ABI and binding proofs close the scoped A migration gate recorded in the
+completion audit; they do not qualify physical lighting or overall EX07.
 
 ## Encoding rules
 

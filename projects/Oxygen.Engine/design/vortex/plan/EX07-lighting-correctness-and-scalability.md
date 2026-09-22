@@ -1,9 +1,10 @@
 # EX07 — Physical lighting and many-light qualification
 
-Status: **in_progress — EX07A contract review**. The
-[A checkpoint](EX07A-contract-review.md) records source findings and six approved decisions. Mathematical, ABI, property,
-scene-v7 and resource/failure targets are frozen; executable ABI qualification
-and production implementation remain open. EX07 owns end-to-end lighting
+Status: **in_progress — EX07A validated; EX07B references and instruments are current**.
+The [A completion audit](EX07A-completion-audit.md) records the scoped contract,
+interface and native ABI gate. Six approved decisions freeze mathematical,
+property, scene-v7 and resource/failure targets; their complete implementation
+and qualification remain required in B–F. EX07 owns end-to-end lighting
 correctness and performance. The
 [exposure delivery plan](exposure-and-lightbench-correction.md#slice-7---complete-the-reference-lighting-unit-chain)
 owns package order and the [tracker](../IMPLEMENTATION_STATUS.md#34-slice-7-work-items)
