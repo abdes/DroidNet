@@ -8,12 +8,14 @@
 #include <array>
 #include <cstdint>
 #include <memory>
+#include <ranges>
 #include <span>
 #include <vector>
 
 #include <glm/gtc/matrix_access.hpp>
 
 #include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Scene/Light/LightCommon.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/Shadows/Internal/CascadeShadowSetup.h>
 #include <Oxygen/Vortex/Shadows/Internal/ConventionalShadowTargetAllocator.h>
@@ -25,6 +27,7 @@
 #include <Oxygen/Vortex/Shadows/Types/CubeLocalShadowRecord.h>
 #include <Oxygen/Vortex/Shadows/Types/FrameShadowInputs.h>
 #include <Oxygen/Vortex/Types/FrameLightSelection.h>
+#include <Oxygen/Vortex/Types/LightingIndices.h>
 
 namespace oxygen::vortex::shadows {
 
@@ -64,13 +67,26 @@ auto CascadeShadowPass::OnFrameStart(
   depth_pass_->OnFrameStart(sequence, slot);
 }
 
+auto CascadeShadowPass::RetainDirectionalSources(
+  const std::span<const FrameDirectionalLightSelection> lights) -> void
+{
+  auto selected = std::vector<LightSelectionIndex> {};
+  for (const auto& [index, light] : std::views::enumerate(lights)) {
+    if ((light.shadow_flags & kDirectionalLightShadowFlagCastsShadows) != 0U
+      && light.cascade_count != 0U) {
+      selected.emplace_back(static_cast<std::uint32_t>(index));
+    }
+  }
+  allocator_->RetainDirectionalSurfaces(selected);
+}
+
 auto CascadeShadowPass::RenderDirectionalView(
   const PreparedViewShadowInput& view_input,
-  const FrameDirectionalLightSelection& directional_light)
-  -> ViewShadowPassState
+  const FrameDirectionalLightSelection& directional_light,
+  const LightSelectionIndex selection_index) -> ViewShadowPassState
 {
   auto state = ViewShadowPassState {};
-  const auto allocation = allocator_->AcquireDirectionalSurface(
+  const auto allocation = allocator_->AcquireDirectionalSurface(selection_index,
     directional_light.cascade_count, directional_light.shadow_resolution_hint);
   state.frame_data = cascade_setup_->BuildDirectionalFrameData(
     view_input, directional_light, allocation);
@@ -84,7 +100,7 @@ auto CascadeShadowPass::RenderDirectionalView(
 
   const auto render_state = allocation.surface != nullptr
     ? depth_pass_->Record(view_input, allocation.surface, state.frame_data,
-        shadow_caster_culling_->GetDrawCommands())
+        directional_light.direction, shadow_caster_culling_->GetDrawCommands())
     : ShadowDepthPass::RenderState {};
   state.rendered_cascade_count = render_state.rendered_cascade_count;
   state.rendered_draw_count = render_state.rendered_draw_count;
@@ -98,7 +114,7 @@ auto CascadeShadowPass::RenderSpotView(
 {
   auto state = ViewSpotShadowPassState {};
   auto shadowed_spot_count = 0U;
-  auto resolution_hint = 0U;
+  auto resolution_hint = scene::ShadowResolutionHint::kLow;
   for (const auto& light : local_lights) {
     if (light.kind == LocalLightKind::kSpot
       && (light.flags & kLocalLightFlagCastsShadows) != 0U) {
@@ -156,7 +172,7 @@ auto CascadeShadowPass::RenderPointView(
 {
   auto state = ViewPointShadowPassState {};
   auto shadowed_point_count = 0U;
-  auto resolution_hint = 0U;
+  auto resolution_hint = scene::ShadowResolutionHint::kLow;
   for (const auto& light : local_lights) {
     if (light.kind == LocalLightKind::kPoint
       && (light.flags & kLocalLightFlagCastsShadows) != 0U) {

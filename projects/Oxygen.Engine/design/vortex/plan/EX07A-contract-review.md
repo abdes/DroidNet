@@ -583,6 +583,60 @@ contact-product connection and remaining failure/lifetime interfaces still need
 their owning work before the full EX07A gate can be assessed. No EX07B reference
 qualification or EX07C end-to-end correctness closure is claimed.
 
+### Directional-array checkpoint
+
+`FrameLightSelection` now owns the complete ordered directional collection from
+its scene resolver, with each source's native node identity and resolved
+atmosphere-slot identity. The optional primary-only record is removed. Checked
+photometric resolution, forward publication and deferred packets consume the
+same collection. Deferred lighting emits one fullscreen contribution per source;
+its diagnostic surface descriptors are a collection as well. Shadow resolution
+hints retain the existing strongly typed scene enum through preparation and
+allocation.
+
+Shadow families keep source-selection indices after filtering out unshadowed
+lights. Each source has its own conventional surface and requested cascade
+count/resolution, with unused source allocations pruned from the cache. Cascades
+are flattened for GPU publication with explicit family offsets. There is no
+shared singleton directional surface or optional-primary fallback. The existing
+local-fog primary-source lookup now resolves atmosphere slot 0 explicitly rather
+than assuming directional-array element 0. The obsolete scene warning about more
+than two ordinary directional lights is removed; the two atmosphere slots remain
+separate from direct-light capacity.
+
+Debug and Release each pass **25 LightingService, 14 ShadowService, 66
+SceneRendererDeferredCore and 20 native ABI tests** (250 test executions).
+Eight Scene directional-resolver tests also pass in Debug. The exposure benchmark
+target builds against the migrated resource-inspection API; no performance
+result is claimed. Cases cover an unassigned source alone, Secondary alone
+without promotion, mixed unassigned/assigned sources, duplicate atmosphere claims
+in prepared input, filtered shadow identities and unequal per-source cascade
+counts/resolutions. Oxytidy covered all 32 changed C++ sources/headers, including
+tests and the demo, with targeted follow-up checks after repairs. Whole-file
+findings remain recorded; no new suppressions were added.
+
+The opt-in MultiView `--directional-array-proof true` recipe creates three
+sources: Primary, an unshadowed unassigned fill, and Secondary. The deferred
+capture measures a positive HDR contribution from each source in both views and
+verifies distinct 2048/1024 shadow surfaces with 2/3 cascades. The forward capture
+checks all three records and two filtered shadow references at five scene draws.
+The actual selection order is Secondary/None/Primary; atmosphere slots remain
+1/invalid/0, proving they are not array positions. Evidence is
+`directional-array-*-{debug,release}.json`, `directional-resolver-debug.json`,
+`directional-array-report.txt` and `directional-array-forward-report.txt` beside
+the corresponding captures under `ex07a`. The analyzers are checked in under
+`tools/vortex/AnalyzeRenderDocDirectionalArray*.py`.
+
+The user's live Release review exposed a same-frame transient-descriptor reset
+that capture timing had concealed. The
+[separate flicker fix](EX07A-offscreen-flicker-validation.md) records the failing
+regression, repair and the user's confirmation that both lower views are stable.
+
+This checkpoint does not close retained-property ingress migration, general
+multi-source fog/shadow integration, finite-source/wide-spot support, memory
+admission, deferred-CBV lifetime, BRDF model publication or the full EX07 gate.
+The remaining EX07A obligations still require an explicit completion audit.
+
 | Gate                      | Owning suite / required evidence                                                                                                                                                                                                                     | Current result                                                                                                                  |
 | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
 | A ABI                     | CPU size/alignment/every-offset assertions; D3D12 upload/decode/readback of two distinct local records and directional records, integer high-bit patterns, sentinels, reserved zeros and nonzero element indices; matching catalog/reflection checks | Canonical wire records have native Debug/Release proof; remaining source-selection, validity and lifetime interfaces stay open. |

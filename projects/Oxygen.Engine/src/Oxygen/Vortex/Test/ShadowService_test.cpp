@@ -35,6 +35,7 @@
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Types/QueueRole.h>
+#include <Oxygen/Scene/Light/LightCommon.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/Renderer.h>
@@ -411,7 +412,7 @@ NOLINT_TEST(ShadowServiceSurfaceTest,
 {
   auto selection = FrameLightSelection {};
   selection.selection_epoch = 19U;
-  selection.directional_light = FrameDirectionalLightSelection {
+  selection.directional_lights = { FrameDirectionalLightSelection{ .source_node = {},
     .direction = glm::vec3 { 0.0F, -1.0F, 0.0F, },
     .color = glm::vec3 { 1.0F, 0.95F, 0.8F, },
     .illuminance_lux = 1400.0F,
@@ -424,19 +425,20 @@ NOLINT_TEST(ShadowServiceSurfaceTest,
     .distance_fadeout_fraction = 0.15F,
     .shadow_bias = 0.001F,
     .shadow_normal_bias = 0.03F,
-  };
+  }, };
 
-  if (!selection.directional_light.has_value()) {
+  if (selection.directional_lights.empty()) {
 
-    FAIL() << "Expected selection.directional_light to have a value";
+    FAIL() << "Expected a selected directional light";
   }
-  EXPECT_EQ(selection.directional_light->cascade_count, 4U);
-  EXPECT_NE(selection.directional_light->shadow_flags
+  EXPECT_EQ(selection.directional_lights.front().cascade_count, 4U);
+  EXPECT_NE(selection.directional_lights.front().shadow_flags
       & kDirectionalLightShadowFlagCastsShadows,
     0U);
-  EXPECT_EQ(selection.directional_light->cascade_split_mode,
+  EXPECT_EQ(selection.directional_lights.front().cascade_split_mode,
     FrameDirectionalCsmSplitMode::kManualDistances);
-  EXPECT_FLOAT_EQ(selection.directional_light->cascade_distances.at(3), 128.0F);
+  EXPECT_FLOAT_EQ(
+    selection.directional_lights.front().cascade_distances.at(3), 128.0F);
   EXPECT_TRUE(selection.local_lights.empty());
 }
 
@@ -483,10 +485,10 @@ NOLINT_TEST_F(ShadowServiceBehaviorTest,
   auto selection = FrameLightSelection {};
   selection.scene_generation = 0x200000005ULL;
   selection.selection_epoch = 0x300000007ULL;
-  selection.directional_light = FrameDirectionalLightSelection {};
-  selection.directional_light->shadow_flags
+  selection.directional_lights = { FrameDirectionalLightSelection {} };
+  selection.directional_lights.front().shadow_flags
     = kDirectionalLightShadowFlagCastsShadows;
-  selection.directional_light->cascade_count = 2U;
+  selection.directional_lights.front().cascade_count = 2U;
   selection.local_lights = {
     FrameLocalLightSelection {
       .kind = oxygen::vortex::LocalLightKind::kSpot,
@@ -542,6 +544,62 @@ NOLINT_TEST_F(ShadowServiceBehaviorTest,
     oxygen::vortex::ShadowCascadeIndex { 0U });
 }
 
+NOLINT_TEST_F(ShadowServiceBehaviorTest,
+  DirectionalFamiliesKeepDistinctSurfacesAndFilteredSelectionIndices)
+{
+  auto service = ShadowService(*renderer_);
+  service.OnFrameStart(
+    oxygen::frame::SequenceNumber { 1U }, oxygen::frame::Slot { 0U });
+  auto resolved_view = MakePerspectiveResolvedView();
+  auto selection = FrameLightSelection {};
+  selection.directional_lights = {
+    FrameDirectionalLightSelection {},
+    FrameDirectionalLightSelection {
+      .source_node = {},
+      .direction = { 0.0F, -1.0F, -1.0F },
+      .atmosphere_light_slot = 1U,
+      .shadow_flags = kDirectionalLightShadowFlagCastsShadows,
+      .cascade_count = 2U,
+      .shadow_resolution_hint = oxygen::scene::ShadowResolutionHint::kLow,
+    },
+    FrameDirectionalLightSelection {
+      .source_node = {},
+      .direction = { 1.0F, 0.0F, -1.0F },
+      .atmosphere_light_slot = 0U,
+      .shadow_flags = kDirectionalLightShadowFlagCastsShadows,
+      .cascade_count = 3U,
+      .shadow_resolution_hint = oxygen::scene::ShadowResolutionHint::kMedium,
+    },
+  };
+  auto input = oxygen::vortex::PreparedViewShadowInput {};
+  input.view_id = oxygen::ViewId { 17U };
+  input.resolved_view = oxygen::observer_ptr { &resolved_view };
+  const auto views = std::array { input };
+  service.RenderShadowDepths(
+    { .frame_light_set = &selection, .active_views = views });
+  const auto* data = service.InspectShadowData(input.view_id);
+  ASSERT_NE(data, nullptr);
+  ASSERT_EQ(data->directional_records.size(), 2U);
+  EXPECT_EQ(data->directional_records.at(0).selection_index,
+    oxygen::vortex::LightSelectionIndex { 1U });
+  EXPECT_EQ(data->directional_records.at(1).selection_index,
+    oxygen::vortex::LightSelectionIndex { 2U });
+  EXPECT_EQ(data->directional_records.at(0).first_cascade,
+    oxygen::vortex::ShadowCascadeIndex { 0U });
+  EXPECT_EQ(data->directional_records.at(1).first_cascade,
+    oxygen::vortex::ShadowCascadeIndex { 2U });
+  ASSERT_EQ(data->cascades.size(), 5U);
+  EXPECT_NE(data->cascades.at(0).surface_srv, data->cascades.at(2).surface_srv);
+  const auto surfaces = service.InspectDirectionalShadowSurfaces(input.view_id);
+  ASSERT_EQ(surfaces.size(), 2U);
+  EXPECT_NE(surfaces.front(), surfaces.back());
+  EXPECT_EQ(surfaces.front()->GetDescriptor().array_size, 2U);
+  EXPECT_EQ(surfaces.back()->GetDescriptor().array_size, 3U);
+  EXPECT_NE(surfaces.front()->GetDescriptor().width,
+    surfaces.back()->GetDescriptor().width);
+  EXPECT_EQ(service.GetLastRenderState().rendered_cascade_count, 5U);
+}
+
 NOLINT_TEST_F(
   ShadowServiceBehaviorTest, FailedRecordAllocationDoesNotPublishHeader)
 {
@@ -551,10 +609,10 @@ NOLINT_TEST_F(
     oxygen::frame::SequenceNumber { 1U }, oxygen::frame::Slot { 0U });
   auto resolved_view = MakePerspectiveResolvedView();
   auto selection = FrameLightSelection {};
-  selection.directional_light = FrameDirectionalLightSelection {};
-  selection.directional_light->shadow_flags
+  selection.directional_lights = { FrameDirectionalLightSelection {} };
+  selection.directional_lights.front().shadow_flags
     = kDirectionalLightShadowFlagCastsShadows;
-  selection.directional_light->cascade_count = 2U;
+  selection.directional_lights.front().cascade_count = 2U;
   const auto views = std::array {
     oxygen::vortex::PreparedViewShadowInput {
       .view_id = oxygen::ViewId { 17U },
@@ -777,7 +835,7 @@ NOLINT_TEST(ShadowServiceSurfaceTest,
         .resolution = glm::uvec2 { 2048U, 2048U, },
         .cascade_count = 3U,
       };
-  const auto directional_light = FrameDirectionalLightSelection {
+  const auto directional_light = FrameDirectionalLightSelection { .source_node = {},
     .direction = glm::vec3 { 0.0F, -1.0F, -1.0F, },
     .shadow_flags = kDirectionalLightShadowFlagCastsShadows,
     .cascade_count = 3U,

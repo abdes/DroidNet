@@ -12,6 +12,8 @@
 #include <utility>
 #include <vector>
 
+#include "DemoShell/UI/CameraRigController.h"
+#include "MultiView/MainModule.h"
 #include <imgui.h>
 
 #include <Oxygen/Base/Logging.h>
@@ -33,9 +35,6 @@
 #include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/ViewFeatureProfile.h>
-
-#include "DemoShell/UI/CameraRigController.h"
-#include "MultiView/MainModule.h"
 
 namespace oxygen::examples::multiview {
 
@@ -237,7 +236,8 @@ auto MainModule::OnAttachedImpl(
   if (config_.exposure_proof == ExposureProofScenario::kAtmosphere
     || config_.exposure_proof == ExposureProofScenario::kAtmosphereLit
     || config_.exposure_proof == ExposureProofScenario::kConsumerVisual
-    || IsLayoutExposureProof(config_.exposure_proof)) {
+    || IsLayoutExposureProof(config_.exposure_proof)
+    || config_.directional_array_proof) {
     shell_config.force_environment_override = false;
     shell_config.initial_preview_sun_enabled = false;
   }
@@ -298,6 +298,9 @@ auto MainModule::OnAttachedImpl(
       ? engine::MeteringMode::kAverage
       : engine::MeteringMode::kSpot;
     post->SetExposureSettings(exposure);
+  }
+  if (config_.directional_array_proof) {
+    scene_bootstrapper_.ApplyDirectionalArrayProof();
   }
   const auto extent = ResolveRenderExtent();
   if (HasPositiveExtent(extent)) {

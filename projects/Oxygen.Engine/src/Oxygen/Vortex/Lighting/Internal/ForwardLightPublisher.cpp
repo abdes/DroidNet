@@ -192,13 +192,13 @@ auto ForwardLightPublisher::Publish(const BuiltLightGridFrame& built_frame)
     }
     local_shadow_map.push_back(reference);
   }
+  auto directional_shadow_index = 0U;
   for (const auto& light : built_frame.evaluation.directional) {
     auto reference
       = LightShadowReference { .selection_index = light.selection_index };
     if ((light.flags & kDirectionalLightShadowFlagCastsShadows) != 0U) {
       reference.projection_kind = kShadowProjectionCascaded2D;
-      reference.record_index
-        = ShadowRecordIndex { light.selection_index.get() };
+      reference.record_index = ShadowRecordIndex { directional_shadow_index++ };
       reference.coverage_state = kShadowCoverageComplete;
     }
     directional_shadow_map.push_back(reference);

@@ -160,9 +160,8 @@ static inline bool GetLocalFogDirectionalLight(
     out float3 directional_light_color,
     out float3 directional_light_direction)
 {
-    const LightingFrameBindings lighting = LoadResolvedLightingFrameBindings();
     DirectionalLightForwardData light;
-    if (!TryLoadDirectionalLight(lighting, 0u, light))
+    if (!TryLoadAtmosphereDirectionalLight(0u, light))
     {
         directional_light_color = 0.0f.xxx;
         directional_light_direction = float3(0.0f, 0.0f, 1.0f);

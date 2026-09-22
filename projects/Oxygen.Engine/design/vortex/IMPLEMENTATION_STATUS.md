@@ -160,6 +160,14 @@ publication on allocation success. Debug/Release each pass 20 ABI, 13 shadow,
 23 lighting and 64 SceneRenderer tests. RenderDoc checks all three light kinds
 in two views. Source selection, complete support/capacity handling, contact
 products and failure/lifetime qualification remain open.
+The directional-array checkpoint removes the optional primary-only selection and
+singleton shadow surface. All selected sources reach forward/deferred lighting;
+shadow families retain source identity and individual resolution/counts.
+Debug/Release each pass 25 lighting, 14 shadow, 66 SceneRenderer and 20 ABI tests.
+Deferred/forward captures qualify the three-source recipe. The
+[same-frame descriptor fix](plan/EX07A-offscreen-flicker-validation.md) closes the
+Release offscreen flicker observed and then visually confirmed stable by the
+user. Broader property, fog, BRDF, memory and lifetime qualification remains open.
 MultiView's local-light far-clipping regression is repaired and visually
 confirmed by the user. The
 [review evidence](plan/EX07A-contract-review.md#verification-obligations-and-current-evidence)

@@ -5,7 +5,12 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <array>
+#include <cstddef>
 #include <cstdint>
+#include <memory>
+#include <span>
+#include <unordered_set>
 #include <utility>
 
 #include <Oxygen/Config/RendererConfig.h>
@@ -19,62 +24,37 @@
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
+#include <Oxygen/Scene/Light/LightCommon.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/Shadows/Internal/ConventionalShadowTargetAllocator.h>
+#include <Oxygen/Vortex/Types/LightingIndices.h>
 
 namespace oxygen::vortex::shadows::internal {
 
 namespace {
 
-  auto ResolveDirectionalResolutionRequest(const std::uint32_t resolution_hint)
-    -> std::uint32_t
+  constexpr auto kDirectionalRequestedResolutions
+    = std::array { 1024U, 2048U, 3072U, 4096U };
+  constexpr auto kLocalRequestedResolutions
+    = std::array { 512U, 1024U, 2048U, 2048U };
+
+  auto ResolveDirectionalResolutionRequest(
+    const scene::ShadowResolutionHint hint) -> std::uint32_t
   {
-    switch (resolution_hint) {
-    case 0U:
-      return 1024U;
-    case 1U:
-      return 2048U;
-    case 2U:
-      return 3072U;
-    case 3U:
-      return 4096U;
-    default:
-      return 2048U;
-    }
+    const auto index = static_cast<std::size_t>(hint);
+    return index < kDirectionalRequestedResolutions.size()
+      ? kDirectionalRequestedResolutions.at(index)
+      : kDirectionalRequestedResolutions.front();
   }
 
-  auto ResolveSpotResolutionRequest(const std::uint32_t resolution_hint)
+  auto ResolveLocalResolutionRequest(const scene::ShadowResolutionHint hint)
     -> std::uint32_t
   {
-    switch (resolution_hint) {
-    case 0U:
-      return 512U;
-    case 1U:
-      return 1024U;
-    case 2U:
-      return 2048U;
-    case 3U:
-      return 2048U;
-    default:
-      return 1024U;
-    }
-  }
-
-  auto ResolvePointResolutionRequest(const std::uint32_t resolution_hint)
-    -> std::uint32_t
-  {
-    switch (resolution_hint) {
-    case 0U:
-      return 512U;
-    case 1U:
-      return 1024U;
-    case 2U:
-      return 2048U;
-    case 3U:
-      return 2048U;
-    default:
-      return 1024U;
-    }
+    const auto index = static_cast<std::size_t>(hint);
+    return index < kLocalRequestedResolutions.size()
+      ? kLocalRequestedResolutions.at(index)
+      : kLocalRequestedResolutions.at(
+          static_cast<std::size_t>(scene::ShadowResolutionHint::kMedium));
   }
 
   auto ResolveDirectionalResolutionBudget(const ShadowQualityTier quality_tier)
@@ -94,24 +74,25 @@ namespace {
     }
   }
 
-  auto ResolveDirectionalResolution(const std::uint32_t resolution_hint,
+  auto ResolveDirectionalResolution(
+    const scene::ShadowResolutionHint resolution_hint,
     const ShadowQualityTier quality_tier) -> std::uint32_t
   {
     return (std::min)(ResolveDirectionalResolutionRequest(resolution_hint),
       ResolveDirectionalResolutionBudget(quality_tier));
   }
 
-  auto ResolveSpotResolution(const std::uint32_t resolution_hint,
+  auto ResolveSpotResolution(const scene::ShadowResolutionHint resolution_hint,
     const ShadowQualityTier quality_tier) -> std::uint32_t
   {
-    return (std::min)(ResolveSpotResolutionRequest(resolution_hint),
+    return (std::min)(ResolveLocalResolutionRequest(resolution_hint),
       ResolveDirectionalResolutionBudget(quality_tier));
   }
 
-  auto ResolvePointResolution(const std::uint32_t resolution_hint,
+  auto ResolvePointResolution(const scene::ShadowResolutionHint resolution_hint,
     const ShadowQualityTier quality_tier) -> std::uint32_t
   {
-    return (std::min)(ResolvePointResolutionRequest(resolution_hint),
+    return (std::min)(ResolveLocalResolutionRequest(resolution_hint),
       ResolveDirectionalResolutionBudget(quality_tier));
   }
 
@@ -133,22 +114,26 @@ ConventionalShadowTargetAllocator::~ConventionalShadowTargetAllocator()
 
 auto ConventionalShadowTargetAllocator::OnFrameStart() -> void { }
 
-auto ConventionalShadowTargetAllocator::AcquireDirectionalSurface(
-  const std::uint32_t cascade_count, const std::uint32_t resolution_hint)
-  -> DirectionalAllocation
+auto ConventionalShadowTargetAllocator::RetainDirectionalSurfaces(
+  const std::span<const LightSelectionIndex> selections) -> void
 {
-  EnsureDirectionalSurface(cascade_count, resolution_hint);
-  return {
-    .surface = directional_surface_,
-    .surface_srv = directional_surface_srv_,
-    .resolution = directional_resolution_,
-    .cascade_count = directional_array_size_,
-  };
+  const auto active = std::unordered_set<LightSelectionIndex>(
+    selections.begin(), selections.end());
+  std::erase_if(directional_allocations_,
+    [&](const auto& entry) -> auto { return !active.contains(entry.first); });
+}
+
+auto ConventionalShadowTargetAllocator::AcquireDirectionalSurface(
+  const LightSelectionIndex selection_index, const std::uint32_t cascade_count,
+  const scene::ShadowResolutionHint resolution_hint) -> DirectionalAllocation
+{
+  EnsureDirectionalSurface(selection_index, cascade_count, resolution_hint);
+  return directional_allocations_.at(selection_index);
 }
 
 auto ConventionalShadowTargetAllocator::AcquireSpotSurface(
-  const std::uint32_t shadow_count, const std::uint32_t resolution_hint)
-  -> SpotAllocation
+  const std::uint32_t shadow_count,
+  const scene::ShadowResolutionHint resolution_hint) -> SpotAllocation
 {
   EnsureSpotSurface(shadow_count, resolution_hint);
   return {
@@ -160,8 +145,8 @@ auto ConventionalShadowTargetAllocator::AcquireSpotSurface(
 }
 
 auto ConventionalShadowTargetAllocator::AcquirePointSurface(
-  const std::uint32_t shadow_count, const std::uint32_t resolution_hint)
-  -> PointAllocation
+  const std::uint32_t shadow_count,
+  const scene::ShadowResolutionHint resolution_hint) -> PointAllocation
 {
   EnsurePointSurface(shadow_count, resolution_hint);
   return {
@@ -173,30 +158,32 @@ auto ConventionalShadowTargetAllocator::AcquirePointSurface(
 }
 
 auto ConventionalShadowTargetAllocator::EnsureDirectionalSurface(
-  const std::uint32_t cascade_count, const std::uint32_t resolution_hint)
-  -> void
+  const LightSelectionIndex selection_index, const std::uint32_t cascade_count,
+  const scene::ShadowResolutionHint resolution_hint) -> void
 {
+  auto& allocation = directional_allocations_[selection_index];
   const auto array_size = (std::max)(1U, (std::min)(cascade_count, 4U));
   const auto resolved_resolution = ResolveDirectionalResolution(
     resolution_hint, renderer_.GetShadowQualityTier());
   const auto resolution
     = glm::uvec2 { resolved_resolution, resolved_resolution };
-  const auto needs_reallocation = !directional_surface_
-    || directional_resolution_ != resolution
-    || directional_array_size_ != array_size;
+  const auto needs_reallocation = !allocation.surface
+    || allocation.resolution != resolution
+    || allocation.cascade_count != array_size;
   if (!needs_reallocation) {
-    if (!directional_surface_srv_.IsValid()) {
-      directional_surface_srv_ = RegisterDirectionalSurfaceSrv();
+    if (!allocation.surface_srv.IsValid()) {
+      allocation.surface_srv
+        = RegisterDirectionalSurfaceSrv(allocation.surface);
     }
     return;
   }
 
   auto gfx = renderer_.GetGraphics();
   if (gfx == nullptr) {
-    directional_surface_.reset();
-    directional_surface_srv_ = kInvalidShaderVisibleIndex;
-    directional_resolution_ = {};
-    directional_array_size_ = 0U;
+    allocation.surface.reset();
+    allocation.surface_srv = kInvalidShaderVisibleIndex;
+    allocation.resolution = {};
+    allocation.cascade_count = 0U;
     return;
   }
 
@@ -218,16 +205,16 @@ auto ConventionalShadowTargetAllocator::EnsureDirectionalSurface(
   desc.clear_value = graphics::Color { 0.0F, 0.0F, 0.0F, 0.0F };
   desc.initial_state = graphics::ResourceStates::kDepthWrite;
 
-  directional_surface_ = gfx->CreateTexture(desc);
-  directional_resolution_ = resolution;
-  directional_array_size_ = array_size;
-  directional_surface_srv_ = RegisterDirectionalSurfaceSrv();
+  allocation.surface = gfx->CreateTexture(desc);
+  allocation.resolution = resolution;
+  allocation.cascade_count = array_size;
+  allocation.surface_srv = RegisterDirectionalSurfaceSrv(allocation.surface);
 }
 
-auto ConventionalShadowTargetAllocator::RegisterDirectionalSurfaceSrv()
-  -> ShaderVisibleIndex
+auto ConventionalShadowTargetAllocator::RegisterDirectionalSurfaceSrv(
+  const std::shared_ptr<graphics::Texture>& surface) -> ShaderVisibleIndex
 {
-  if (!directional_surface_) {
+  if (!surface) {
     return kInvalidShaderVisibleIndex;
   }
 
@@ -237,21 +224,20 @@ auto ConventionalShadowTargetAllocator::RegisterDirectionalSurfaceSrv()
   }
 
   auto& registry = gfx->GetResourceRegistry();
-  if (!registry.Contains(*directional_surface_)) {
-    registry.Register(directional_surface_);
+  if (!registry.Contains(*surface)) {
+    registry.Register(surface);
   }
 
   const auto view_desc = graphics::TextureViewDescription {
     .view_type = graphics::ResourceViewType::kTexture_SRV,
     .visibility = graphics::DescriptorVisibility::kShaderVisible,
-    .format
-    = ResolveDepthSrvFormat(directional_surface_->GetDescriptor().format),
-    .dimension = directional_surface_->GetDescriptor().texture_type,
+    .format = ResolveDepthSrvFormat(surface->GetDescriptor().format),
+    .dimension = surface->GetDescriptor().texture_type,
     .sub_resources = graphics::TextureSubResourceSet::EntireTexture(),
   };
 
   if (const auto existing
-    = registry.FindShaderVisibleIndex(*directional_surface_, view_desc);
+    = registry.FindShaderVisibleIndex(*surface, view_desc);
     existing.has_value()) {
     return *existing;
   }
@@ -264,8 +250,8 @@ auto ConventionalShadowTargetAllocator::RegisterDirectionalSurfaceSrv()
   }
 
   const auto shader_visible_index = allocator.GetShaderVisibleIndex(handle);
-  const auto view = registry.RegisterView(
-    *directional_surface_, std::move(handle), view_desc);
+  const auto view
+    = registry.RegisterView(*surface, std::move(handle), view_desc);
   if (!view->IsValid()) {
     return kInvalidShaderVisibleIndex;
   }
@@ -274,7 +260,8 @@ auto ConventionalShadowTargetAllocator::RegisterDirectionalSurfaceSrv()
 }
 
 auto ConventionalShadowTargetAllocator::EnsureSpotSurface(
-  const std::uint32_t shadow_count, const std::uint32_t resolution_hint) -> void
+  const std::uint32_t shadow_count,
+  const scene::ShadowResolutionHint resolution_hint) -> void
 {
   const auto array_size = (std::max)(1U, (std::min)(shadow_count, 8U));
   const auto resolved_resolution
@@ -372,7 +359,8 @@ auto ConventionalShadowTargetAllocator::RegisterSpotSurfaceSrv()
 }
 
 auto ConventionalShadowTargetAllocator::EnsurePointSurface(
-  const std::uint32_t shadow_count, const std::uint32_t resolution_hint) -> void
+  const std::uint32_t shadow_count,
+  const scene::ShadowResolutionHint resolution_hint) -> void
 {
   const auto resolved_shadow_count
     = (std::max)(1U, (std::min)(shadow_count, 4U));

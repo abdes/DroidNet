@@ -123,9 +123,7 @@ public:
     ShaderVisibleIndex published_shadow_frame_slot {
       kInvalidShaderVisibleIndex
     };
-    ShaderVisibleIndex directional_shadow_surface_srv {
-      kInvalidShaderVisibleIndex
-    };
+    std::vector<ShaderVisibleIndex> directional_shadow_surface_srvs;
     bool consumed_directional_shadow_product { false };
     bool directional_shadow_vsm_active { false };
     std::uint32_t directional_shadow_cascade_count { 0U };

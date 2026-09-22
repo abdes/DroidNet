@@ -329,9 +329,6 @@ auto CascadeShadowSetup::BuildDirectionalFrameData(
   const -> ShadowFrameData
 {
   auto frame_data = ShadowFrameData {};
-  frame_data.backing_resolution = allocation.resolution;
-  frame_data.storage_flags
-    = allocation.surface ? kDirectionalShadowStorageDedicatedArray : 0U;
 
   if (!allocation.surface_srv.IsValid()
     || view_input.resolved_view == nullptr) {
@@ -353,8 +350,6 @@ auto CascadeShadowSetup::BuildDirectionalFrameData(
     .first_cascade = ShadowCascadeIndex { 0U },
     .cascade_count = cascade_count,
   });
-  frame_data.light_direction_to_source
-    = glm::vec4(ResolveSafeLightDirection(directional_light.direction), 0.0F);
 
   const auto view_near = view_input.resolved_view->NearPlane();
   const auto view_far = view_input.resolved_view->FarPlane();

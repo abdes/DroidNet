@@ -124,7 +124,7 @@ NOLINT_TEST(LightingServiceSurfaceTest,
 {
   auto selection = FrameLightSelection {};
   selection.selection_epoch = 77U;
-  selection.directional_light = FrameDirectionalLightSelection {
+  selection.directional_lights = { FrameDirectionalLightSelection{ .source_node = {},
     .direction = glm::vec3 { 0.0F, -1.0F, 0.0F, },
     .color = glm::vec3 { 1.0F, 0.9F, 0.8F, },
     .illuminance_lux = 1200.0F,
@@ -134,7 +134,7 @@ NOLINT_TEST(LightingServiceSurfaceTest,
     = oxygen::vortex::kDirectionalLightAtmosphereModeFlagAuthority
       | oxygen::vortex::
         kDirectionalLightAtmosphereModeFlagHasBakedGroundTransmittance,
-  };
+  }, };
   selection.local_lights.push_back(FrameLocalLightSelection {
     .kind = LocalLightKind::kPoint,
     .position = glm::vec3 { 1.0F, 2.0F, 3.0F, },
@@ -143,16 +143,16 @@ NOLINT_TEST(LightingServiceSurfaceTest,
     .luminous_flux_lm = 80.0F,
   });
 
-  if (!selection.directional_light.has_value()) {
+  if (selection.directional_lights.empty()) {
 
-    FAIL() << "Expected selection.directional_light to have a value";
+    FAIL() << "Expected a selected directional light";
   }
   EXPECT_EQ(selection.selection_epoch, 77U);
   EXPECT_EQ(selection.local_lights.size(), 1U);
   EXPECT_EQ(selection.local_lights.front().kind, LocalLightKind::kPoint);
-  EXPECT_EQ(selection.directional_light->illuminance_lux, 1200.0F);
-  EXPECT_EQ(selection.directional_light->atmosphere_light_slot, 0U);
-  EXPECT_EQ(selection.directional_light->transmittance_toward_sun_rgb,
+  EXPECT_EQ(selection.directional_lights.front().illuminance_lux, 1200.0F);
+  EXPECT_EQ(selection.directional_lights.front().atmosphere_light_slot, 0U);
+  EXPECT_EQ(selection.directional_lights.front().transmittance_toward_sun_rgb,
     glm::vec3(0.4F, 0.5F, 0.6F));
 }
 
@@ -234,7 +234,7 @@ NOLINT_TEST_F(LightingServiceBehaviorTest,
 
   auto selection = FrameLightSelection {};
   selection.selection_epoch = 91U;
-  selection.directional_light = FrameDirectionalLightSelection {
+  selection.directional_lights = { FrameDirectionalLightSelection{ .source_node = {},
     .direction = glm::vec3 { 0.0F, -1.0F, 0.0F, },
     .source_radius = 0.05F,
     .color = glm::vec3 { 1.0F, 0.95F, 0.8F, },
@@ -245,7 +245,7 @@ NOLINT_TEST_F(LightingServiceBehaviorTest,
     = oxygen::vortex::kDirectionalLightAtmosphereModeFlagAuthority
       | oxygen::vortex::
         kDirectionalLightAtmosphereModeFlagHasBakedGroundTransmittance,
-  };
+  }, };
   selection.local_lights.push_back(FrameLocalLightSelection {
     .kind = LocalLightKind::kPoint,
     .position = glm::vec3 { 1.0F, 0.0F, 0.0F, },

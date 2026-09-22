@@ -15,6 +15,7 @@
 #include <Oxygen/Vortex/Lighting/Internal/LightEvaluationRecords.h>
 #include <Oxygen/Vortex/Lighting/Types/LightingPreparationFailure.h>
 #include <Oxygen/Vortex/Types/FrameLightSelection.h>
+#include <Oxygen/Vortex/Types/LightingIndices.h>
 
 namespace oxygen::vortex::lighting::internal {
 namespace {
@@ -23,11 +24,14 @@ namespace {
     LightEvaluationRecordsTest, ResolvesUnitsModifiersAndStableSelectionIndices)
   {
     auto input = FrameLightSelection {};
-    input.directional_light = FrameDirectionalLightSelection {
-      .direction = { 0.0F, -4.0F, 0.0F },
-      .color = { 0.25F, 0.5F, 1.0F },
-      .illuminance_lux = 32.0F,
-      .exposure_compensation_ev = 1.0F,
+    input.directional_lights = {
+      FrameDirectionalLightSelection {
+        .source_node = {},
+        .direction = { 0.0F, -4.0F, 0.0F },
+        .color = { 0.25F, 0.5F, 1.0F },
+        .illuminance_lux = 32.0F,
+        .exposure_compensation_ev = 1.0F,
+      },
     };
     input.local_lights = {
       FrameLocalLightSelection { .range = 16.0F, .luminous_flux_lm = 1000.0F },
@@ -126,6 +130,59 @@ namespace {
     ASSERT_FALSE(records.has_value());
     EXPECT_EQ(
       records.error().error, LightingPreparationError::kUnrepresentable);
+  }
+
+  NOLINT_TEST(LightEvaluationRecordsTest,
+    DirectionalArrayPreservesOrderAndAtmosphereSlots)
+  {
+    auto input = FrameLightSelection {};
+    input.directional_lights = {
+      FrameDirectionalLightSelection {
+        .source_node = {}, .illuminance_lux = 10.0F },
+      FrameDirectionalLightSelection {
+        .source_node = {},
+        .illuminance_lux = 20.0F,
+        .exposure_compensation_ev = 1.0F,
+        .atmosphere_light_slot = 1U,
+      },
+      FrameDirectionalLightSelection {
+        .source_node = {},
+        .illuminance_lux = 30.0F,
+        .atmosphere_light_slot = 0U,
+      },
+    };
+    const auto records = ResolveLightEvaluationRecords(input);
+    ASSERT_TRUE(records.has_value());
+    ASSERT_EQ(records->directional.size(), 3U);
+    EXPECT_EQ(
+      records->directional.at(0).selection_index, LightSelectionIndex { 0U });
+    EXPECT_EQ(
+      records->directional.at(1).selection_index, LightSelectionIndex { 1U });
+    EXPECT_EQ(
+      records->directional.at(2).selection_index, LightSelectionIndex { 2U });
+    EXPECT_EQ(records->directional.at(0).atmosphere_light_slot,
+      kInvalidAtmosphereLightIndex);
+    EXPECT_EQ(records->directional.at(1).atmosphere_light_slot,
+      AtmosphereLightIndex { 1U });
+    EXPECT_EQ(records->directional.at(2).atmosphere_light_slot,
+      AtmosphereLightIndex { 0U });
+    EXPECT_EQ(records->directional.at(1).illuminance_rgb_lux, glm::vec3(40.0F));
+  }
+
+  NOLINT_TEST(LightEvaluationRecordsTest,
+    DuplicateAtmosphereAssignmentRejectsTheWholeCandidate)
+  {
+    auto input = FrameLightSelection {};
+    input.directional_lights = {
+      FrameDirectionalLightSelection {
+        .source_node = {}, .atmosphere_light_slot = 1U },
+      FrameDirectionalLightSelection {
+        .source_node = {}, .atmosphere_light_slot = 1U },
+    };
+    const auto records = ResolveLightEvaluationRecords(input);
+    ASSERT_FALSE(records.has_value());
+    EXPECT_EQ(records.error().family, LightingSelectionFamily::kDirectional);
+    EXPECT_EQ(records.error().selection_index, LightSelectionIndex { 1U });
   }
 
 } // namespace

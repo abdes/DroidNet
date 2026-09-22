@@ -8,12 +8,13 @@
 
 #include <array>
 #include <cstdint>
-#include <optional>
 #include <vector>
 
 #include <glm/vec3.hpp>
 
+#include <Oxygen/Scene/Light/LightCommon.h>
 #include <Oxygen/Scene/Light/SpotLight.h>
+#include <Oxygen/Scene/Types/NodeHandle.h>
 #include <Oxygen/Vortex/Types/LightingIndices.h>
 
 namespace oxygen::vortex {
@@ -43,6 +44,7 @@ enum class FrameDirectionalCsmSplitMode : std::uint8_t {
 };
 
 struct FrameDirectionalLightSelection {
+  scene::NodeHandle source_node;
   // Vector from the shaded point toward the directional-light source in
   // Oxygen world space (+Z up, -Y forward).
   glm::vec3 direction { 0.0F, -1.0F, 0.0F };
@@ -76,7 +78,9 @@ struct FrameDirectionalLightSelection {
   float distance_fadeout_fraction { 0.1F };
   float shadow_bias { 0.0F };
   float shadow_normal_bias { 0.02F };
-  std::uint32_t shadow_resolution_hint { 1U };
+  scene::ShadowResolutionHint shadow_resolution_hint {
+    scene::ShadowResolutionHint::kMedium,
+  };
 };
 
 struct FrameLocalLightSelection {
@@ -102,19 +106,21 @@ struct FrameLocalLightSelection {
 
   float shadow_bias { 0.0F };
   float shadow_normal_bias { 0.02F };
-  std::uint32_t shadow_resolution_hint { 1U };
+  scene::ShadowResolutionHint shadow_resolution_hint {
+    scene::ShadowResolutionHint::kMedium,
+  };
   std::uint32_t _padding0 { 0U };
 };
 
 struct FrameLightSelection {
-  std::optional<FrameDirectionalLightSelection> directional_light;
+  std::vector<FrameDirectionalLightSelection> directional_lights;
   std::vector<FrameLocalLightSelection> local_lights;
   std::uint64_t selection_epoch { 0U };
   std::uint64_t scene_generation { 0U };
 
   [[nodiscard]] auto directional_light_count() const noexcept -> std::uint32_t
   {
-    return directional_light.has_value() ? 1U : 0U;
+    return static_cast<std::uint32_t>(directional_lights.size());
   }
 
   [[nodiscard]] auto local_light_count() const noexcept -> std::uint32_t
@@ -124,7 +130,7 @@ struct FrameLightSelection {
 
   [[nodiscard]] auto empty() const noexcept -> bool
   {
-    return !directional_light.has_value() && local_lights.empty();
+    return directional_lights.empty() && local_lights.empty();
   }
 };
 

@@ -8,11 +8,15 @@
 
 #include <cstdint>
 #include <memory>
+#include <span>
+#include <unordered_map>
 
 #include <glm/vec2.hpp>
 
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Scene/Light/LightCommon.h>
+#include <Oxygen/Vortex/Types/LightingIndices.h>
 #include <Oxygen/Vortex/api_export.h>
 
 namespace oxygen::vortex {
@@ -58,32 +62,34 @@ namespace shadows::internal {
       -> ConventionalShadowTargetAllocator& = delete;
 
     OXGN_VRTX_API auto OnFrameStart() -> void;
+    OXGN_VRTX_API auto RetainDirectionalSurfaces(
+      std::span<const LightSelectionIndex> selections) -> void;
     [[nodiscard]] OXGN_VRTX_API auto AcquireDirectionalSurface(
-      std::uint32_t cascade_count, std::uint32_t resolution_hint)
-      -> DirectionalAllocation;
+      LightSelectionIndex selection_index, std::uint32_t cascade_count,
+      scene::ShadowResolutionHint resolution_hint) -> DirectionalAllocation;
     [[nodiscard]] OXGN_VRTX_API auto AcquireSpotSurface(
-      std::uint32_t shadow_count, std::uint32_t resolution_hint)
+      std::uint32_t shadow_count, scene::ShadowResolutionHint resolution_hint)
       -> SpotAllocation;
     [[nodiscard]] OXGN_VRTX_API auto AcquirePointSurface(
-      std::uint32_t shadow_count, std::uint32_t resolution_hint)
+      std::uint32_t shadow_count, scene::ShadowResolutionHint resolution_hint)
       -> PointAllocation;
 
   private:
-    auto EnsureDirectionalSurface(
-      std::uint32_t cascade_count, std::uint32_t resolution_hint) -> void;
-    auto RegisterDirectionalSurfaceSrv() -> ShaderVisibleIndex;
-    auto EnsureSpotSurface(
-      std::uint32_t shadow_count, std::uint32_t resolution_hint) -> void;
+    auto EnsureDirectionalSurface(LightSelectionIndex selection_index,
+      std::uint32_t cascade_count, scene::ShadowResolutionHint resolution_hint)
+      -> void;
+    auto RegisterDirectionalSurfaceSrv(
+      const std::shared_ptr<graphics::Texture>& surface) -> ShaderVisibleIndex;
+    auto EnsureSpotSurface(std::uint32_t shadow_count,
+      scene::ShadowResolutionHint resolution_hint) -> void;
     auto RegisterSpotSurfaceSrv() -> ShaderVisibleIndex;
-    auto EnsurePointSurface(
-      std::uint32_t shadow_count, std::uint32_t resolution_hint) -> void;
+    auto EnsurePointSurface(std::uint32_t shadow_count,
+      scene::ShadowResolutionHint resolution_hint) -> void;
     auto RegisterPointSurfaceSrv() -> ShaderVisibleIndex;
 
     Renderer& renderer_;
-    std::shared_ptr<graphics::Texture> directional_surface_;
-    ShaderVisibleIndex directional_surface_srv_ { kInvalidShaderVisibleIndex };
-    glm::uvec2 directional_resolution_ { 0U, 0U };
-    std::uint32_t directional_array_size_ { 0U };
+    std::unordered_map<LightSelectionIndex, DirectionalAllocation>
+      directional_allocations_;
     std::shared_ptr<graphics::Texture> spot_surface_;
     ShaderVisibleIndex spot_surface_srv_ { kInvalidShaderVisibleIndex };
     glm::uvec2 spot_resolution_ { 0U, 0U };

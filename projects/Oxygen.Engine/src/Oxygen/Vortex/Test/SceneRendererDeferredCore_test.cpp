@@ -59,6 +59,7 @@
 #include <Oxygen/Scene/Light/PointLight.h>
 #include <Oxygen/Scene/Light/SpotLight.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Vortex/Types/LightingIndices.h>
 // Completes the traversal returned by Scene::Traverse().
 #include <Oxygen/Scene/SceneTraversal.h> // IWYU pragma: keep
 #include <Oxygen/Testing/GTest.h>
@@ -1652,6 +1653,51 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
 }
 
 NOLINT_TEST_F(SceneRendererDeferredCoreTest,
+  UnassignedDirectionalRendersWithoutAnAtmosphereSource)
+{
+  auto node = AddDirectionalLight("StandaloneSource");
+  auto source = node.GetLightAs<DirectionalLight>();
+  ASSERT_TRUE(source.has_value());
+  source->get().SetIsSunLight(false);
+  source->get().SetEnvironmentContribution(false);
+  source->get().SetAtmosphereLightSlot(
+    oxygen::scene::AtmosphereLightSlot::kNone);
+  UpdateSceneTransforms();
+  std::ignore = RenderForView(first_view_id_, first_resolved_view_);
+  const auto& selection
+    = RendererPublicationProbe::GetFrameLightSelection(*scene_renderer_);
+  ASSERT_EQ(selection.directional_lights.size(), 1U);
+  EXPECT_EQ(selection.directional_lights.front().source_node, node.GetHandle());
+  EXPECT_EQ(selection.directional_lights.front().atmosphere_light_slot,
+    oxygen::vortex::kInvalidAtmosphereLightIndex.get());
+  EXPECT_EQ(
+    scene_renderer_->GetLastDeferredLightingState().directional_light_count,
+    1U);
+}
+
+NOLINT_TEST_F(SceneRendererDeferredCoreTest,
+  SecondaryDirectionalRendersWithoutPromotionToPrimary)
+{
+  auto node = AddDirectionalLight("StandaloneSource");
+  auto source = node.GetLightAs<DirectionalLight>();
+  ASSERT_TRUE(source.has_value());
+  source->get().SetIsSunLight(false);
+  source->get().SetEnvironmentContribution(true);
+  source->get().SetAtmosphereLightSlot(
+    oxygen::scene::AtmosphereLightSlot::kSecondary);
+  UpdateSceneTransforms();
+  std::ignore = RenderForView(first_view_id_, first_resolved_view_);
+  const auto& selection
+    = RendererPublicationProbe::GetFrameLightSelection(*scene_renderer_);
+  ASSERT_EQ(selection.directional_lights.size(), 1U);
+  EXPECT_EQ(selection.directional_lights.front().source_node, node.GetHandle());
+  EXPECT_EQ(selection.directional_lights.front().atmosphere_light_slot, 1U);
+  EXPECT_EQ(
+    scene_renderer_->GetLastDeferredLightingState().directional_light_count,
+    1U);
+}
+
+NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   DirectionalLightBindingsPublishDirectionTowardSourceFromNodeForward)
 {
   auto sun = AddDirectionalLight("Sun");
@@ -1681,33 +1727,37 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
 
   const auto& selection
     = RendererPublicationProbe::GetFrameLightSelection(*scene_renderer_);
-  if (!selection.directional_light.has_value()) {
-    FAIL() << "Expected selection.directional_light to have a value";
+  if (selection.directional_lights.empty()) {
+    FAIL() << "Expected a selected directional light";
   }
-  EXPECT_NEAR(selection.directional_light->direction.x, 0.0F, 1.0e-5F);
-  EXPECT_NEAR(selection.directional_light->direction.y, 0.0F, 1.0e-5F);
-  EXPECT_NEAR(selection.directional_light->direction.z, -1.0F, 1.0e-5F);
-  EXPECT_EQ(selection.directional_light->atmosphere_light_slot, 0U);
-  EXPECT_NE(selection.directional_light->atmosphere_mode_flags
+  EXPECT_NEAR(selection.directional_lights.front().direction.x, 0.0F, 1.0e-5F);
+  EXPECT_NEAR(selection.directional_lights.front().direction.y, 0.0F, 1.0e-5F);
+  EXPECT_NEAR(selection.directional_lights.front().direction.z, -1.0F, 1.0e-5F);
+  EXPECT_EQ(selection.directional_lights.front().atmosphere_light_slot, 0U);
+  EXPECT_NE(selection.directional_lights.front().atmosphere_mode_flags
       & oxygen::vortex::kDirectionalLightAtmosphereModeFlagAuthority,
     0U);
-  EXPECT_NE(selection.directional_light->shadow_flags
+  EXPECT_NE(selection.directional_lights.front().shadow_flags
       & oxygen::vortex::kDirectionalLightShadowFlagCastsShadows,
     0U);
-  EXPECT_EQ(selection.directional_light->cascade_count, 3U);
-  EXPECT_EQ(selection.directional_light->cascade_split_mode,
+  EXPECT_EQ(selection.directional_lights.front().cascade_count, 3U);
+  EXPECT_EQ(selection.directional_lights.front().cascade_split_mode,
     oxygen::vortex::FrameDirectionalCsmSplitMode::kManualDistances);
-  EXPECT_FLOAT_EQ(selection.directional_light->max_shadow_distance, 96.0F);
-  EXPECT_FLOAT_EQ(selection.directional_light->cascade_distances.at(1), 36.0F);
-  EXPECT_FLOAT_EQ(selection.directional_light->transition_fraction, 0.2F);
   EXPECT_FLOAT_EQ(
-    selection.directional_light->distance_fadeout_fraction, 0.25F);
-  EXPECT_FLOAT_EQ(selection.directional_light->shadow_bias, 0.001F);
-  EXPECT_FLOAT_EQ(selection.directional_light->shadow_normal_bias, 0.04F);
+    selection.directional_lights.front().max_shadow_distance, 96.0F);
+  EXPECT_FLOAT_EQ(
+    selection.directional_lights.front().cascade_distances.at(1), 36.0F);
+  EXPECT_FLOAT_EQ(
+    selection.directional_lights.front().transition_fraction, 0.2F);
+  EXPECT_FLOAT_EQ(
+    selection.directional_lights.front().distance_fadeout_fraction, 0.25F);
+  EXPECT_FLOAT_EQ(selection.directional_lights.front().shadow_bias, 0.001F);
+  EXPECT_FLOAT_EQ(
+    selection.directional_lights.front().shadow_normal_bias, 0.04F);
 }
 
 NOLINT_TEST_F(SceneRendererDeferredCoreTest,
-  DirectionalLightSelectionPrefersEnvironmentContributingSunOverEarlierFill)
+  DirectionalLightSelectionRetainsUnassignedFillAndAssignedSun)
 {
   auto fill = AddDirectionalLight("Fill");
   auto fill_light = fill.GetLightAs<DirectionalLight>();
@@ -1736,13 +1786,24 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
 
   const auto& selection
     = RendererPublicationProbe::GetFrameLightSelection(*scene_renderer_);
-  if (!selection.directional_light.has_value()) {
-    FAIL() << "Expected selection.directional_light to have a value";
-  }
-  EXPECT_NEAR(selection.directional_light->direction.x, 0.0F, 1.0e-5F);
-  EXPECT_NEAR(selection.directional_light->direction.y, 0.0F, 1.0e-5F);
-  EXPECT_NEAR(selection.directional_light->direction.z, -1.0F, 1.0e-5F);
-  EXPECT_EQ(selection.directional_light->atmosphere_light_slot, 0U);
+  ASSERT_EQ(selection.directional_lights.size(), 2U);
+  const auto fill_record
+    = std::ranges::find(selection.directional_lights, fill.GetHandle(),
+      &oxygen::vortex::FrameDirectionalLightSelection::source_node);
+  const auto sun_record
+    = std::ranges::find(selection.directional_lights, sun.GetHandle(),
+      &oxygen::vortex::FrameDirectionalLightSelection::source_node);
+  ASSERT_NE(fill_record, selection.directional_lights.end());
+  ASSERT_NE(sun_record, selection.directional_lights.end());
+  EXPECT_NEAR(fill_record->direction.z, 1.0F, 1.0e-5F);
+  EXPECT_EQ(fill_record->atmosphere_light_slot,
+    oxygen::vortex::kInvalidAtmosphereLightIndex.get());
+  EXPECT_EQ(fill_record->atmosphere_mode_flags, 0U);
+  EXPECT_NEAR(sun_record->direction.z, -1.0F, 1.0e-5F);
+  EXPECT_EQ(sun_record->atmosphere_light_slot, 0U);
+  EXPECT_EQ(
+    scene_renderer_->GetLastDeferredLightingState().directional_light_count,
+    2U);
 }
 
 NOLINT_TEST_F(
@@ -1891,8 +1952,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   EXPECT_EQ(lighting_state.published_shadow_frame_slot,
     oxygen::kInvalidShaderVisibleIndex);
   EXPECT_FALSE(lighting_state.consumed_directional_shadow_product);
-  EXPECT_EQ(lighting_state.directional_shadow_surface_srv,
-    oxygen::kInvalidShaderVisibleIndex);
+  EXPECT_TRUE(lighting_state.directional_shadow_surface_srvs.empty());
   EXPECT_NE(bindings.scene_color_srv,
     oxygen::vortex::SceneTextureBindings::kInvalidIndex);
   EXPECT_TRUE(lighting_state.consumed_published_scene_textures);
@@ -2043,8 +2103,8 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   EXPECT_TRUE(lighting_state.consumed_directional_shadow_product);
   EXPECT_FALSE(lighting_state.directional_shadow_vsm_active);
   EXPECT_GT(lighting_state.directional_shadow_cascade_count, 0U);
-  EXPECT_NE(lighting_state.directional_shadow_surface_srv,
-    oxygen::kInvalidShaderVisibleIndex);
+  ASSERT_FALSE(lighting_state.directional_shadow_surface_srvs.empty());
+  EXPECT_TRUE(lighting_state.directional_shadow_surface_srvs.front().IsValid());
 }
 
 NOLINT_TEST_F(SceneRendererDeferredCoreTest,
