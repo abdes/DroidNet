@@ -16,6 +16,7 @@
 #include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
+#include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Core/Types/ViewHelpers.h>
 #include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
@@ -136,7 +137,7 @@ NOLINT_TEST(LightingServiceSurfaceTest,
       | oxygen::vortex::
         kDirectionalLightAtmosphereModeFlagHasBakedGroundTransmittance,
   }, };
-  selection.local_lights.push_back(FrameLocalLightSelection {
+  selection.local_lights.push_back(FrameLocalLightSelection { .source_node = {},
     .kind = LocalLightKind::kPoint,
     .position = glm::vec3 { 1.0F, 2.0F, 3.0F, },
     .range = 6.0F,
@@ -235,6 +236,7 @@ NOLINT_TEST_F(LightingServiceBehaviorTest,
 
   auto selection = FrameLightSelection {};
   selection.selection_epoch = 91U;
+  selection.scene_generation = 1U;
   selection.directional_lights = { FrameDirectionalLightSelection{ .source_node = {},
     .direction = glm::vec3 { 0.0F, -1.0F, 0.0F, },
     .source_radius = 0.05F,
@@ -247,14 +249,14 @@ NOLINT_TEST_F(LightingServiceBehaviorTest,
       | oxygen::vortex::
         kDirectionalLightAtmosphereModeFlagHasBakedGroundTransmittance,
   }, };
-  selection.local_lights.push_back(FrameLocalLightSelection {
+  selection.local_lights.push_back(FrameLocalLightSelection { .source_node = {},
     .kind = LocalLightKind::kPoint,
     .position = glm::vec3 { 1.0F, 0.0F, 0.0F, },
     .range = 6.0F,
     .color = glm::vec3 { 0.4F, 0.7F, 1.0F, },
     .luminous_flux_lm = 80.0F,
   });
-  selection.local_lights.push_back(FrameLocalLightSelection {
+  selection.local_lights.push_back(FrameLocalLightSelection { .source_node = {},
     .kind = LocalLightKind::kSpot,
     .position = glm::vec3 { -2.0F, 3.0F, 1.0F, },
     .range = 8.0F,
@@ -351,7 +353,9 @@ NOLINT_TEST_F(
     },
   };
   auto selection = FrameLightSelection {};
+  selection.scene_generation = 1U;
   selection.local_lights.push_back(FrameLocalLightSelection {
+    .source_node = {},
     .range = 4.0F,
     .luminous_flux_lm = 1000.0F,
   });
@@ -385,6 +389,7 @@ NOLINT_TEST_F(LightingServiceBehaviorTest,
   selection.selection_epoch = 11U;
   selection.local_lights = {
     FrameLocalLightSelection {
+      .source_node = {},
       .range = 10.0F,
       .luminous_flux_lm = 100.0F,
     },
@@ -428,6 +433,110 @@ NOLINT_TEST_F(LightingServiceBehaviorTest,
     service.InspectForwardLightBindings(views.front().view_id), nullptr);
   EXPECT_FALSE(
     service.ResolveLightingFrameSlot(views.front().view_id).IsValid());
+}
+
+NOLINT_TEST_F(LightingServiceBehaviorTest,
+  RejectsMissingSceneIdentityAndRecoversWithFreshPublication)
+{
+  auto service = LightingService(*renderer_);
+  service.OnFrameStart(
+    oxygen::frame::SequenceNumber { 1U }, oxygen::frame::Slot { 0U });
+  const auto resolved = MakeResolvedView(64.0F, 64.0F);
+  const auto views = std::array {
+    PreparedViewLightingInput {
+      .view_id = oxygen::ViewId { 0U },
+      .prepared_scene = {},
+      .resolved_view = oxygen::observer_ptr { &resolved },
+      .composition_view = {},
+    },
+  };
+  auto selection = FrameLightSelection {};
+  const auto input = FrameLightingInputs {
+    .frame_light_set = &selection,
+    .active_views = views,
+  };
+  // A scene-less empty publication is legitimate, and view ID zero is valid.
+  ASSERT_TRUE(service.BuildLightGrid(input));
+  EXPECT_EQ(service.InspectForwardLightBindings(views.front().view_id)
+              ->publication_state,
+    oxygen::vortex::kLightingPublicationEmpty);
+  selection.local_lights.push_back(FrameLocalLightSelection {
+    .source_node = {},
+    .range = 4.0F,
+    .luminous_flux_lm = 1000.0F,
+  });
+  const auto rejected = service.BuildLightGrid(input);
+  ASSERT_FALSE(rejected);
+  EXPECT_EQ(rejected.error().error,
+    oxygen::vortex::LightingPreparationError::kGenerationMismatch);
+  EXPECT_EQ(
+    service.InspectForwardLightBindings(views.front().view_id), nullptr);
+  EXPECT_EQ(service.GetLastGridBuildState().published_view_count, 0U);
+  selection.scene_generation = 0x100000003ULL;
+  ASSERT_TRUE(service.BuildLightGrid(input));
+  const auto first
+    = *service.InspectForwardLightBindings(views.front().view_id);
+  EXPECT_EQ(first.scene_generation, (std::array<std::uint32_t, 2> { 3U, 1U }));
+  selection.scene_generation = 0U;
+  ASSERT_FALSE(service.BuildLightGrid(input));
+  selection.scene_generation = 0x100000004ULL;
+  ASSERT_TRUE(service.BuildLightGrid(input));
+  const auto second
+    = *service.InspectForwardLightBindings(views.front().view_id);
+  EXPECT_NE(first.view_generation, second.view_generation);
+  EXPECT_NE(first.scene_generation, second.scene_generation);
+}
+
+NOLINT_TEST_F(
+  LightingServiceBehaviorTest, RejectsDuplicateAndInvalidViewIdsAtomically)
+{
+  auto service = LightingService(*renderer_);
+  service.OnFrameStart(
+    oxygen::frame::SequenceNumber { 1U }, oxygen::frame::Slot { 0U });
+  const auto resolved = MakeResolvedView(64.0F, 64.0F);
+  auto views = std::array {
+    PreparedViewLightingInput {
+      .view_id = oxygen::ViewId { 7U },
+      .prepared_scene = {},
+      .resolved_view = oxygen::observer_ptr { &resolved },
+      .composition_view = {},
+    },
+    PreparedViewLightingInput {
+      .view_id = oxygen::ViewId { 9U },
+      .prepared_scene = {},
+      .resolved_view = oxygen::observer_ptr { &resolved },
+      .composition_view = {},
+    },
+    PreparedViewLightingInput {
+      .view_id = oxygen::ViewId { 11U },
+      .prepared_scene = {},
+      .resolved_view = oxygen::observer_ptr { &resolved },
+      .composition_view = {},
+    },
+  };
+  const auto selection = FrameLightSelection {};
+  const auto input = FrameLightingInputs {
+    .frame_light_set = &selection,
+    .active_views = views,
+  };
+  ASSERT_TRUE(service.BuildLightGrid(input));
+  for (const auto invalid : { oxygen::ViewId { 7U }, oxygen::kInvalidViewId }) {
+    SCOPED_TRACE(invalid.get());
+    views.back().view_id = invalid;
+    const auto rejected = service.BuildLightGrid(input);
+    ASSERT_FALSE(rejected);
+    EXPECT_EQ(rejected.error().error,
+      oxygen::vortex::LightingPreparationError::kInvalidInput);
+    EXPECT_EQ(rejected.error().view_id, invalid);
+    EXPECT_EQ(
+      service.InspectForwardLightBindings(oxygen::ViewId { 7U }), nullptr);
+    EXPECT_EQ(
+      service.InspectForwardLightBindings(oxygen::ViewId { 9U }), nullptr);
+    EXPECT_EQ(service.GetLastGridBuildState().published_view_count, 0U);
+    views.back().view_id = oxygen::ViewId { 11U };
+    ASSERT_TRUE(service.BuildLightGrid(input));
+    EXPECT_EQ(service.GetLastGridBuildState().published_view_count, 3U);
+  }
 }
 
 } // namespace

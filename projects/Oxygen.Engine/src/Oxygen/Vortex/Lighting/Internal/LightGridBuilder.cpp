@@ -12,10 +12,12 @@
 #include <expected>
 #include <limits>
 #include <optional>
+#include <unordered_set>
 #include <utility>
 
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
+#include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Vortex/Lighting/Internal/LightEvaluationRecords.h>
 #include <Oxygen/Vortex/Lighting/Internal/LightGridBuilder.h>
 #include <Oxygen/Vortex/Lighting/Types/FrameLightingInputs.h>
@@ -111,6 +113,27 @@ auto LightGridBuilder::Build(const FrameLightingInputs& inputs)
   auto built = BuiltLightGridFrame {};
   if (inputs.frame_light_set == nullptr) {
     return std::unexpected(LightingPreparationFailure {});
+  }
+
+  if (inputs.frame_light_set->scene_generation == 0U
+    && !inputs.frame_light_set->empty()) {
+    return std::unexpected(LightingPreparationFailure {
+      .error = LightingPreparationError::kGenerationMismatch,
+    });
+  }
+  if (inputs.active_views.size() > std::numeric_limits<std::uint32_t>::max()) {
+    return std::unexpected(LightingPreparationFailure {
+      .error = LightingPreparationError::kUnrepresentable,
+    });
+  }
+  auto view_ids = std::unordered_set<ViewId> {};
+  view_ids.reserve(inputs.active_views.size());
+  for (const auto& view : inputs.active_views) {
+    if (view.view_id == kInvalidViewId
+      || !view_ids.insert(view.view_id).second) {
+      return std::unexpected(
+        LightingPreparationFailure { .view_id = view.view_id });
+    }
   }
 
   built.selection_epoch = inputs.frame_light_set->selection_epoch;

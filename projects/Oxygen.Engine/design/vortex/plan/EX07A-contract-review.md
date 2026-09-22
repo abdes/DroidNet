@@ -841,6 +841,30 @@ allocation matrices match exactly. The new C++ query is oxytidy-clean. Evidence 
 `allocation-requirements-current.json`, `readability-canonical-*-report.json`,
 `readability-canonical-verdict.json` and `environment-header-migration.txt`.
 
+### Identity-admission checkpoint and completion audit
+
+The [requirement-to-evidence audit](EX07A-completion-audit.md) found that CPU
+preparation accepted nonempty selections with scene generation zero even though
+the production shader rejects them. Duplicate view IDs also overwrote entries
+in the publication map. Preparation now rejects zero scene identity for nonempty
+selections, invalid view IDs and duplicate view IDs before publication, with
+checked view-count narrowing. Scene-less empty publications and view ID zero
+remain valid. Failed preparation clears prior CPU routes; recovery publishes
+fresh view generations.
+
+Both new tests fail under the previous implementation and pass after the repair.
+Debug/Release each pass **28 lighting and 68 SceneRenderer tests** (192
+executions); the 180-frame Release offscreen proof exits zero without warnings or
+errors. Both changed C++ files are oxytidy-clean. Evidence under `ex07a`:
+`identity-admission-negative.log`, `identity-admission-*-{debug,release}.json`,
+`identity-admission-release-180.log`, `identity-admission-tidy-final/` and
+`identity-admission-checkpoint.json`.
+
+The audit keeps EX07A open for actual producer-derived perspective-depth
+qualification, the identified unused CPU selection fields and final coherent
+reconciliation. Later B–F obligations remain explicit and are not waived by the
+ABI or preparation tests.
+
 | Gate                      | Owning suite / required evidence                                                                                                                                                                                                                     | Current result                                                                                                                  |
 | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
 | A ABI                     | CPU size/alignment/every-offset assertions; D3D12 upload/decode/readback of two distinct local records and directional records, integer high-bit patterns, sentinels, reserved zeros and nonzero element indices; matching catalog/reflection checks | Canonical wire records have native Debug/Release proof; remaining source-selection, validity and lifetime interfaces stay open. |

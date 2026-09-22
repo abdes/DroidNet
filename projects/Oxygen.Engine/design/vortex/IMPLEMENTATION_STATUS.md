@@ -202,8 +202,11 @@ The remaining identified diagnostic decoders now consume canonical layouts;
 the obsolete embedded-CSM probe is retired. Fresh readability captures pass their
 positive/negative checks. A versioned native allocation query reproduces the
 D32S8/D32 matrix in Debug/Release (22 native cases each); the memory review marks
-the unavailable historical rendering-format probe separately. Full EX07A closure
-still requires the explicit contract-to-evidence audit.
+the unavailable historical rendering-format probe separately. The [completion audit](plan/EX07A-completion-audit.md) identifies the remaining
+producer-depth-parameter proof, CPU selection cleanup and final reconciliation.
+The audit also found and repaired zero scene-identity and duplicate/invalid-view
+admission; rejection invalidates prior publications and recovery uses fresh view
+generations.
 MultiView's local-light far-clipping regression is repaired and visually
 confirmed by the user. The
 [review evidence](plan/EX07A-contract-review.md#verification-obligations-and-current-evidence)
