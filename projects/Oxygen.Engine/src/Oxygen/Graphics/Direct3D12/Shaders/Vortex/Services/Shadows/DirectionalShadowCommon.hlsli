@@ -32,16 +32,17 @@ static inline float SampleDirectionalShadowSurface(
     float2 shadow_uv,
     float receiver_depth)
 {
-    if (bindings.conventional_shadow_surface_handle == K_INVALID_BINDLESS_INDEX) {
+    const VortexShadowCascadeBinding cascade = bindings.cascades[cascade_index];
+    if (cascade.surface_srv == K_INVALID_BINDLESS_INDEX) {
         return 1.0f;
     }
 
     Texture2DArray<float> shadow_surface =
-        ResourceDescriptorHeap[bindings.conventional_shadow_surface_handle];
+        ResourceDescriptorHeap[cascade.surface_srv];
     const uint layer =
-        (uint)(bindings.cascades[cascade_index].sampling_metadata0.x + 0.5f);
+        cascade.array_layer;
     const float2 inverse_resolution =
-        max(bindings.cascades[cascade_index].sampling_metadata0.yz, float2(0.000001f, 0.000001f));
+        max(cascade.inverse_resolution, float2(0.000001f, 0.000001f));
     const float2 texel_size = inverse_resolution;
     const float2 texture_size = 1.0f / texel_size;
     const int2 max_coord =
@@ -71,9 +72,9 @@ static inline float ComputeDirectionalCascadeVisibility(
     float slope_factor)
 {
     const VortexShadowCascadeBinding cascade = bindings.cascades[cascade_index];
-    const float world_texel_size = max(cascade.sampling_metadata0.w, 0.0f);
+    const float world_texel_size = max(cascade.world_texel_size, 0.0f);
     const float normal_bias =
-        max(cascade.sampling_metadata1.w, 0.0f)
+        max(cascade.normal_bias_m, 0.0f)
         + world_texel_size * lerp(0.55f, 1.5f, slope_factor);
     const float constant_bias =
         world_texel_size * lerp(0.03f, 0.18f, slope_factor);
@@ -364,7 +365,7 @@ static inline float ComputeDirectionalShadowVisibility(
     float visibility = ComputeDirectionalCascadeVisibility(
         bindings, cascade_index, world_position, safe_normal, safe_light_dir, slope_factor);
 
-    const float transition_width = max(cascade.sampling_metadata1.x, 0.0f);
+    const float transition_width = max(cascade.transition_width, 0.0f);
     if (cascade_index + 1u < cascade_count && transition_width > 0.0f) {
         const float transition_begin = cascade.split_far - transition_width;
         const float transition_alpha =
@@ -378,8 +379,8 @@ static inline float ComputeDirectionalShadowVisibility(
     }
 
     if (cascade_index + 1u == cascade_count) {
-        const float fade_begin = cascade.sampling_metadata1.y;
-        const float fade_span = max(cascade.split_far - fade_begin, 0.001f);
+        const float fade_begin = cascade.fade_begin;
+        const float fade_span = max(cascade.fade_end - fade_begin, 0.001f);
         const float fade_alpha = saturate((view_depth - fade_begin) / fade_span);
         visibility = lerp(visibility, 1.0f, fade_alpha);
     }
@@ -408,7 +409,7 @@ static inline float ComputeDirectionalVolumetricShadowVisibility(
     float visibility = ComputeDirectionalCascadeVisibility(
         bindings, cascade_index, world_position, 0.0f.xxx, safe_light_dir, 0.0f);
 
-    const float transition_width = max(cascade.sampling_metadata1.x, 0.0f);
+    const float transition_width = max(cascade.transition_width, 0.0f);
     if (cascade_index + 1u < cascade_count && transition_width > 0.0f) {
         const float transition_begin = cascade.split_far - transition_width;
         const float transition_alpha =
@@ -422,8 +423,8 @@ static inline float ComputeDirectionalVolumetricShadowVisibility(
     }
 
     if (cascade_index + 1u == cascade_count) {
-        const float fade_begin = cascade.sampling_metadata1.y;
-        const float fade_span = max(cascade.split_far - fade_begin, 0.001f);
+        const float fade_begin = cascade.fade_begin;
+        const float fade_span = max(cascade.fade_end - fade_begin, 0.001f);
         const float fade_alpha = saturate((view_depth - fade_begin) / fade_span);
         visibility = lerp(visibility, 1.0f, fade_alpha);
     }

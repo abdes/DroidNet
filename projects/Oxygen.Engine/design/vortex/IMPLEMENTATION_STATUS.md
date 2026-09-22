@@ -144,6 +144,11 @@ Local/directional records, lighting headers and deferred draw constants use
 their target 80/64/96/80-byte layouts. Debug/Release validation totals 390 passing
 test cases, and four forward RenderDoc capture cases pass. The review records
 the incomplete final lint rerun and remaining shadow migration.
+The subsequent cascade checkpoint replaces float-packed metadata with the
+128-byte typed record in all active producers/readers. Native ABI tests pass
+18/18 in Debug/Release, ShadowService passes 11/11, and RenderDoc verifies eight
+cascade records across two views. The 112-byte shadow header and local
+projection migration remain open; the owning review records this boundary.
 MultiView's local-light far-clipping regression is repaired and visually
 confirmed by the user. The
 [review evidence](plan/EX07A-contract-review.md#verification-obligations-and-current-evidence)

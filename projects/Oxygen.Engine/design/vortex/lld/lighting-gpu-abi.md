@@ -24,6 +24,13 @@ and Release, including real aligned CBVs; four production forward capture cases
 also pass. The owning review records lint limitations and shadow/interface work. These
 results do not close the complete ABI gate or qualify the physical BRDF.
 
+The cascade-record checkpoint additionally migrates `ShadowCascadeBinding` to
+128 bytes in its producer and all active readers. The native suite now passes
+18 cases in each configuration, with all cascade lanes and matrix orientation
+covered; a production capture decodes eight cascades across two views. The
+enclosing inline-array header is temporarily 3,392 bytes; its replacement by
+the 112-byte header below and migration of local projections remain open.
+
 ## Encoding rules
 
 All offsets and strides below are bytes. `float` is IEEE binary32; `uint` is

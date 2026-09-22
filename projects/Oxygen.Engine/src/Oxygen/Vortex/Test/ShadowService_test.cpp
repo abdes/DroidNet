@@ -98,15 +98,23 @@ auto ReadShadowShaderLayouts()
     throw std::runtime_error(
       "Cannot read shadow shader contract: " + path.string());
   }
-  const std::string source {
-    std::istreambuf_iterator<char>(stream),
+  auto cascade_stream
+    = std::ifstream(path.parent_path() / "ShadowCascadeBinding.hlsli");
+  if (!cascade_stream) {
+    throw std::runtime_error("Cannot read cascade shader contract");
+  }
+  auto source = std::string {
+    std::istreambuf_iterator<char>(cascade_stream),
     std::istreambuf_iterator<char>(),
   };
+  source.append(
+    std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>());
   auto sizes = std::unordered_map<std::string, std::size_t> {
     {
       "uint",
       4U,
     },
+    { "uint2", 8U },
     {
       "float",
       4U,
@@ -197,10 +205,14 @@ NOLINT_TEST(ShadowServiceSurfaceTest,
   const auto layouts = ReadShadowShaderLayouts();
   const auto& cascade = layouts.at("VortexShadowCascadeBinding");
   EXPECT_EQ(cascade.size, sizeof(ShadowCascadeBinding));
-  EXPECT_EQ(cascade.offsets.at("sampling_metadata0"),
-    offsetof(ShadowCascadeBinding, sampling_metadata0));
-  EXPECT_EQ(cascade.offsets.at("sampling_metadata1"),
-    offsetof(ShadowCascadeBinding, sampling_metadata1));
+  EXPECT_EQ(cascade.offsets.at("surface_srv"),
+    offsetof(ShadowCascadeBinding, surface_srv));
+  EXPECT_EQ(cascade.offsets.at("array_layer"),
+    offsetof(ShadowCascadeBinding, array_layer));
+  EXPECT_EQ(cascade.offsets.at("inverse_resolution"),
+    offsetof(ShadowCascadeBinding, inverse_resolution));
+  EXPECT_EQ(
+    cascade.offsets.at("fade_end"), offsetof(ShadowCascadeBinding, fade_end));
   const auto& spot = layouts.at("VortexSpotShadowBinding");
   EXPECT_EQ(spot.size, sizeof(SpotShadowBinding));
   EXPECT_EQ(spot.offsets.at("sampling_metadata1"),
@@ -648,11 +660,10 @@ NOLINT_TEST(ShadowServiceSurfaceTest,
   EXPECT_FLOAT_EQ(frame_data.bindings.cascades.at(2).split_near, 20.0F);
   EXPECT_FLOAT_EQ(frame_data.bindings.cascades.at(2).split_far, 40.0F);
   EXPECT_NEAR(
-    frame_data.bindings.cascades.at(0).sampling_metadata1.x, 2.475F, 0.0001F);
+    frame_data.bindings.cascades.at(0).transition_width, 2.475F, 0.0001F);
   EXPECT_NEAR(
-    frame_data.bindings.cascades.at(1).sampling_metadata1.x, 2.5F, 0.0001F);
-  EXPECT_FLOAT_EQ(
-    frame_data.bindings.cascades.at(2).sampling_metadata1.x, 0.0F);
+    frame_data.bindings.cascades.at(1).transition_width, 2.5F, 0.0001F);
+  EXPECT_FLOAT_EQ(frame_data.bindings.cascades.at(2).transition_width, 0.0F);
 }
 
 } // namespace
