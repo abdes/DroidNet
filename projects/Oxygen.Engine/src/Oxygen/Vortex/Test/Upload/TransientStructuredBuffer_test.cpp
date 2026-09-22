@@ -11,6 +11,10 @@
 
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Graphics/Common/Buffer.h>
+#include <Oxygen/Graphics/Common/ResourceRegistry.h>
+#include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
+#include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/Test/Fixtures/RingBufferStagingFixture.h>
 #include <Oxygen/Vortex/Upload/Errors.h>
@@ -518,6 +522,42 @@ NOLINT_TEST_F(
   EXPECT_FALSE(a2->IsValid(frame::SequenceNumber {
     2,
   }));
+}
+
+NOLINT_TEST_F(TransientStructuredBufferTest,
+  RepeatedFrameStartKeepsPreviouslyPublishedViewsAlive)
+{
+  constexpr auto kStride = 16U;
+  auto transient = TransientStructuredBuffer(GfxPtr(), Staging(), kStride);
+  const auto sequence = frame::SequenceNumber { 0U };
+  const auto slot = frame::Slot { 0U };
+  transient.OnFrameStart(sequence, slot);
+  const auto first = transient.Allocate(1U);
+  ASSERT_TRUE(first.has_value());
+  const auto* buffer = transient.GetActiveBuffer();
+  ASSERT_NE(buffer, nullptr);
+  auto view = graphics::BufferViewDescription {};
+  view.view_type = graphics::ResourceViewType::kStructuredBuffer_SRV;
+  view.visibility = graphics::DescriptorVisibility::kShaderVisible;
+  view.range = { 0U, kStride };
+  view.stride = kStride;
+  auto& registry = Gfx().GetResourceRegistry();
+  ASSERT_EQ(registry.FindShaderVisibleIndex(*buffer, view), first->srv);
+
+  // Offscreen execution and restoration of the main view start the same frame
+  // again before its queued GPU readers have necessarily executed.
+  transient.OnFrameStart(sequence, slot);
+  EXPECT_EQ(transient.GetActiveBuffer(), buffer);
+  EXPECT_EQ(registry.FindShaderVisibleIndex(*buffer, view), first->srv);
+  const auto second = transient.Allocate(1U);
+  ASSERT_TRUE(second.has_value());
+  EXPECT_NE(second->srv, first->srv);
+  EXPECT_EQ(registry.FindShaderVisibleIndex(*buffer, view), first->srv);
+
+  // Normal frame-slot reuse still retires the previous frame's descriptors.
+  transient.OnFrameStart(frame::SequenceNumber { 1U }, slot);
+  EXPECT_EQ(transient.GetActiveBuffer(), nullptr);
+  EXPECT_FALSE(registry.FindShaderVisibleIndex(*buffer, view).has_value());
 }
 
 } // namespace oxygen::vortex::upload
