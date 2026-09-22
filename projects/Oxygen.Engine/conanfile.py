@@ -115,7 +115,7 @@ class OxygenConan(ConanFile):
         self.requires("pdcurses/3.9")
         self.requires("ftxui/6.1.9")
         self.requires("libspng/0.7.4")
-        self.requires("luau/0.708")
+        self.requires("luau/0.739")
         self.requires("joltphysics/5.5.0")
         self.requires("xxhash/0.8.3")
         self.requires("tracy/0.13.1")
