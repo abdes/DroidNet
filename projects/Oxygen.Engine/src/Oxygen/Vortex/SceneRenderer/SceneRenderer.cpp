@@ -11,6 +11,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <initializer_list>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -2157,6 +2158,12 @@ auto SceneRenderer::RenderCurrentView(
   // scene-view cursor in RenderContext. SceneRenderer owns the stage chain for
   // that selected current view only.
 
+  // Select initializer lists, not temporary vectors, in diagnostic aggregates.
+  // MSVC 19.51 leaks vector proxies for conditional member initializers.
+  // Constructing each member directly from the selected list avoids that
+  // lifetime bug and the extra vector move. See the EX07A heap-leak validation
+  // note.
+
   // Stage 2: InitViews
   if (ctx.current_view.prepared_frame == nullptr) {
     PrimePreparedView(ctx);
@@ -2175,8 +2182,8 @@ auto SceneRenderer::RenderCurrentView(
       .executed = ctx.current_view.prepared_frame != nullptr,
       .outputs = { "Vortex.PreparedSceneFrame" },
       .missing_inputs = ctx.current_view.prepared_frame == nullptr
-        ? std::vector<std::string> { "PreparedSceneFrame" }
-        : std::vector<std::string> {},
+        ? std::initializer_list<std::string> { "PreparedSceneFrame" }
+        : std::initializer_list<std::string> {},
     });
   if (diagnostics_only_variant) {
     RecordDiagnosticsPass(renderer_,
@@ -2263,9 +2270,9 @@ auto SceneRenderer::RenderCurrentView(
         && ctx.current_view.depth_prepass_completeness
           != DepthPrePassCompleteness::kDisabled,
       .outputs = wants_depth_prepass
-        ? std::vector<std::string> { "Vortex.SceneDepth",
+        ? std::initializer_list<std::string> { "Vortex.SceneDepth",
             "Vortex.PartialDepth", }
-        : std::vector<std::string> {},
+        : std::initializer_list<std::string> {},
     });
   if (ctx.current_view.depth_prepass_completeness
     == DepthPrePassCompleteness::kComplete) {
@@ -2347,12 +2354,12 @@ auto SceneRenderer::RenderCurrentView(
       .executed = ctx.current_view.screen_hzb_available,
       .inputs = { "Vortex.SceneDepth" },
       .outputs = ctx.current_view.CanBuildScreenHzb()
-        ? std::vector<std::string> { "Vortex.ScreenHzb" }
-        : std::vector<std::string> {},
+        ? std::initializer_list<std::string> { "Vortex.ScreenHzb" }
+        : std::initializer_list<std::string> {},
       .missing_inputs = ctx.current_view.CanBuildScreenHzb()
           && !ctx.current_view.scene_depth_product_valid
-        ? std::vector<std::string> { "Vortex.SceneDepth" }
-        : std::vector<std::string> {},
+        ? std::initializer_list<std::string> { "Vortex.SceneDepth" }
+        : std::initializer_list<std::string> {},
     });
   RecordDiagnosticsViewProduct(renderer_, "Vortex.ScreenHzb",
     "Vortex.Stage5.ScreenHzbBuild",
@@ -2496,9 +2503,9 @@ auto SceneRenderer::RenderCurrentView(
       .kind = DiagnosticsPassKind::kGraphics,
       .executed = base_pass_wrote_scene_color,
       .inputs = ctx.current_view.occlusion_results.get() != nullptr
-        ? std::vector<std::string> { "Vortex.PreparedSceneFrame",
+        ? std::initializer_list<std::string> { "Vortex.PreparedSceneFrame",
             "Vortex.OcclusionFrameResults", }
-        : std::vector<std::string> { "Vortex.PreparedSceneFrame" },
+        : std::initializer_list<std::string> { "Vortex.PreparedSceneFrame" },
       .outputs = std::move(base_pass_outputs),
     });
   if (base_pass_wrote_scene_color) {
@@ -2559,8 +2566,8 @@ auto SceneRenderer::RenderCurrentView(
       .inputs = { "Vortex.SceneColor", "Vortex.GBuffer",
         "Vortex.LightingFrameBindings", "Vortex.ShadowFrameBindings", },
       .outputs = wants_scene_lighting
-        ? std::vector<std::string> { "Vortex.SceneColor" }
-        : std::vector<std::string> {},
+        ? std::initializer_list<std::string> { "Vortex.SceneColor" }
+        : std::initializer_list<std::string> {},
     });
 
   // Stage 13: reserved - IndirectLightingService
@@ -2716,8 +2723,8 @@ auto SceneRenderer::RenderCurrentView(
         "Vortex.SceneDepth", "Vortex.LightingFrameBindings",
         "Vortex.ShadowFrameBindings", "Vortex.EnvironmentFrameBindings", },
       .outputs = wants_translucency
-        ? std::vector<std::string> { "Vortex.SceneColor" }
-        : std::vector<std::string> {},
+        ? std::initializer_list<std::string> { "Vortex.SceneColor" }
+        : std::initializer_list<std::string> {},
       .missing_inputs = TranslucencyMissingInputs(
         translucency_result, translucency_ != nullptr),
     });
@@ -2864,12 +2871,12 @@ auto SceneRenderer::RenderCurrentView(
       .executed = scene_texture_extracts_.resolved_scene_color.valid,
       .inputs = { "Vortex.SceneColor" },
       .outputs = wants_resolve
-        ? std::vector<std::string> { "Vortex.ResolvedSceneColor" }
-        : std::vector<std::string> {},
+        ? std::initializer_list<std::string> { "Vortex.ResolvedSceneColor" }
+        : std::initializer_list<std::string> {},
       .missing_inputs
       = wants_resolve && !scene_texture_extracts_.resolved_scene_color.valid
-        ? std::vector<std::string> { "Vortex.SceneColor" }
-        : std::vector<std::string> {},
+        ? std::initializer_list<std::string> { "Vortex.SceneColor" }
+        : std::initializer_list<std::string> {},
     });
   if (scene_texture_extracts_.resolved_scene_color.valid
     && scene_texture_extracts_.resolved_scene_color.texture != nullptr) {

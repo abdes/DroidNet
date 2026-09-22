@@ -131,8 +131,11 @@ shading/debug/retained VSM shaders. ABI/behavior tests pass 12 Debug / 12 Releas
 LightingService passes 5 / 5; two affected rendered-lighting/HDR-history cases
 pass in both configurations. All six changed C++ files are oxytidy-clean. Spatial
 culling, complete ABI migration, frame-failure routing, PBR qualification and VSM
-activation are not claimed. LightBench shutdown live-object investigation follows
-this stable checkpoint at the user's request.
+activation are not claimed. The requested shutdown investigation found and fixed
+a frame-scaled CPU heap leak in diagnostics aggregate construction. Both demos
+exit without CRT leaks after 300 frames; 69 owning tests pass. The
+[heap investigation](plan/EX07A-heap-leak-validation.md) records the compiler
+reproducer, allocation stacks, repair and validation scope.
 The [shadow-memory follow-up](plan/EX07-shadow-memory-review.md) records the CSM,
 scene-stencil and inactive-VSM ownership audit, D32 allocation queries and a
 standalone native GPU A/B probe: 12,288 depth/PCF values match, zero CPU-reference
