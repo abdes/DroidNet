@@ -136,6 +136,12 @@ a frame-scaled CPU heap leak in diagnostics aggregate construction. Both demos
 exit without CRT leaks after 300 frames; 69 owning tests pass. The
 [heap investigation](plan/EX07A-heap-leak-validation.md) records the compiler
 reproducer, allocation stacks, repair and validation scope.
+The next record-migration prerequisite implements checked CPU photometric
+resolution and stable spot-cone parameters. Twelve new cases bring LightingService
+to 17 passing tests in each configuration; three new C++ files are oxytidy-clean.
+The helper is not yet connected to production publication. The
+[review evidence](plan/EX07A-contract-review.md#verification-obligations-and-current-evidence)
+keeps record migration, failure propagation and rendered PBR qualification open.
 The [shadow-memory follow-up](plan/EX07-shadow-memory-review.md) records the CSM,
 scene-stencil and inactive-VSM ownership audit, D32 allocation queries and a
 standalone native GPU A/B probe: 12,288 depth/PCF values match, zero CPU-reference
