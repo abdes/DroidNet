@@ -18,8 +18,6 @@
 #include <unordered_map>
 #include <vector>
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <Oxygen/Graphics/Common/ShaderLibraryIO.h>
 #include <Oxygen/Graphics/Common/Shaders.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/ActionKey.h>
@@ -30,6 +28,7 @@
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/FileFingerprint.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/FinalArchivePack.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/Manifest.h>
+#include <Oxygen/Testing/GTest.h>
 
 namespace {
 
@@ -147,6 +146,10 @@ public:
       }
     }
 
+    auto pdb = std::vector<std::byte> {};
+    if (IsExternalShaderDebugInfoEnabled()) {
+      pdb = MakePayload(request.request_key, dependency_seed);
+    }
     return RequestCompileOutcome {
       .artifact
       = oxygen::graphics::d3d12::tools::shader_bake::ModuleArtifact {
@@ -159,7 +162,7 @@ public:
         .dxil = MakePayload(request.request_key, primary.content_hash),
         .reflection = MakePayload(dependency_seed, toolchain_hash_),
       },
-      .pdb = MakePayload(request.request_key, dependency_seed),
+      .pdb = std::move(pdb),
     };
   }
 
@@ -354,12 +357,8 @@ NOLINT_TEST_F(ShaderBakeExecutionTest, UpdateRecompilesOnlyEditedLeafRequest)
 }
 
 NOLINT_TEST_F(
-  ShaderBakeExecutionTest, UpdateRecompilesWhenExpectedPdbWasRemoved)
+  ShaderBakeExecutionTest, UpdateMissingPdbFollowsBuildDebugInfoPolicy)
 {
-  if (!IsExternalShaderDebugInfoEnabled()) {
-    GTEST_SKIP() << "External shader PDBs are only expected in debug builds";
-  }
-
   const auto request
     = MakeExpandedRequest("Debug/Single_PS.hlsl", "PS", ShaderType::kPixel);
   const std::array requests { request };
@@ -374,15 +373,18 @@ NOLINT_TEST_F(
   const auto pdb_path
     = GetRequestPdbPath(out_file_, request.request.source_path,
       request.request.entry_point, request.request_key);
-  ASSERT_TRUE(std::filesystem::exists(pdb_path));
-  std::filesystem::remove(pdb_path);
+  const auto expects_pdb = IsExternalShaderDebugInfoEnabled();
+  ASSERT_EQ(std::filesystem::exists(pdb_path), expects_pdb);
+  if (expects_pdb) {
+    ASSERT_TRUE(std::filesystem::remove(pdb_path));
+  }
 
   const auto second_run = ExecuteUpdate(MakeOptions(requests, compiler));
   ASSERT_TRUE(second_run.has_value());
-  EXPECT_EQ(second_run->compiled_request_count, 1U);
-  EXPECT_EQ(second_run->clean_request_count, 0U);
-  EXPECT_EQ(compiler.CompileCount(request.request_key), 2U);
-  EXPECT_TRUE(std::filesystem::exists(pdb_path));
+  EXPECT_EQ(second_run->compiled_request_count, expects_pdb ? 1U : 0U);
+  EXPECT_EQ(second_run->clean_request_count, expects_pdb ? 0U : 1U);
+  EXPECT_EQ(compiler.CompileCount(request.request_key), expects_pdb ? 2U : 1U);
+  EXPECT_EQ(std::filesystem::exists(pdb_path), expects_pdb);
 }
 
 NOLINT_TEST_F(ShaderBakeExecutionTest,

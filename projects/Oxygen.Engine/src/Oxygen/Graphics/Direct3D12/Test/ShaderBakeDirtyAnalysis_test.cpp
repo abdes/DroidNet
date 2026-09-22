@@ -15,8 +15,6 @@
 #include <string_view>
 #include <vector>
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <Oxygen/Graphics/Common/Shaders.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/ActionKey.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/Bake.h>
@@ -28,6 +26,7 @@
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/FileFingerprint.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/Manifest.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/ModuleArtifact.h>
+#include <Oxygen/Testing/GTest.h>
 
 namespace {
 
@@ -303,12 +302,8 @@ NOLINT_TEST_F(
 }
 
 NOLINT_TEST_F(
-  ShaderBakeDirtyAnalysisTest, MarksRequestDirtyWhenExpectedPdbIsMissing)
+  ShaderBakeDirtyAnalysisTest, MissingPdbFollowsBuildDebugInfoPolicy)
 {
-  if (!IsExternalShaderDebugInfoEnabled()) {
-    GTEST_SKIP() << "External shader PDBs are only expected in debug builds";
-  }
-
   const auto request = MakeExpandedRequest(
     "Vortex/Stages/Translucency/ForwardMesh_PS.hlsl", "PS", ShaderType::kPixel);
   const auto source_file = shader_root_ / request.request.source_path;
@@ -325,7 +320,8 @@ NOLINT_TEST_F(
   const auto analysis = AnalyzeDirtyRequests(workspace_root_, shader_root_,
     layout_, out_file_, std::array { request }, include_dirs);
 
-  EXPECT_TRUE(HasReason(analysis, DirtyReason::kMissingDebugArtifact));
+  EXPECT_EQ(HasReason(analysis, DirtyReason::kMissingDebugArtifact),
+    IsExternalShaderDebugInfoEnabled());
 
   const auto pdb_path
     = GetRequestPdbPath(out_file_, request.request.source_path,
