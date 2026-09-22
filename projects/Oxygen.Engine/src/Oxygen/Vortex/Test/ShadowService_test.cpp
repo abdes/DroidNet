@@ -37,6 +37,7 @@
 #include <Oxygen/Graphics/Common/Types/QueueRole.h>
 #include <Oxygen/Scene/Light/LightCommon.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Vortex/Lighting/Types/LightingPreparationFailure.h>
 #include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererCapability.h>
@@ -44,11 +45,13 @@
 #include <Oxygen/Vortex/Shadows/Internal/CascadeShadowSetup.h>
 #include <Oxygen/Vortex/Shadows/Internal/ConventionalShadowTargetAllocator.h>
 #include <Oxygen/Vortex/Shadows/Internal/PointShadowSetup.h>
+#include <Oxygen/Vortex/Shadows/Internal/ShadowReferenceBuilder.h>
 #include <Oxygen/Vortex/Shadows/Internal/SpotShadowSetup.h>
 #include <Oxygen/Vortex/Shadows/Passes/ShadowDepthPass.h>
 #include <Oxygen/Vortex/Shadows/ShadowService.h>
 #include <Oxygen/Vortex/Shadows/Types/CubeLocalShadowRecord.h>
 #include <Oxygen/Vortex/Shadows/Types/FrameShadowInputs.h>
+#include <Oxygen/Vortex/Shadows/Types/LightShadowReference.h>
 #include <Oxygen/Vortex/Shadows/Types/ProjectedLocalShadowRecord.h>
 #include <Oxygen/Vortex/Shadows/Types/ShadowCascadeBinding.h>
 #include <Oxygen/Vortex/Shadows/Types/ShadowFrameData.h>
@@ -56,6 +59,7 @@
 #include <Oxygen/Vortex/Test/Fixtures/MeshRasterStateTest.h>
 #include <Oxygen/Vortex/Types/FrameLightSelection.h>
 #include <Oxygen/Vortex/Types/LightingFrameBindings.h>
+#include <Oxygen/Vortex/Types/LightingIndices.h>
 #include <Oxygen/Vortex/Types/PassMask.h>
 #include <Oxygen/Vortex/Types/ShadowFrameBindings.h>
 
@@ -64,17 +68,29 @@ namespace {
 using oxygen::Graphics;
 using oxygen::kInvalidShaderVisibleIndex;
 using oxygen::RendererConfig;
+using oxygen::vortex::CubeLocalShadowRecord;
 using oxygen::vortex::FrameDirectionalCsmSplitMode;
 using oxygen::vortex::FrameDirectionalLightSelection;
 using oxygen::vortex::FrameLightSelection;
 using oxygen::vortex::FrameLocalLightSelection;
 using oxygen::vortex::kDirectionalLightShadowFlagCastsShadows;
+using oxygen::vortex::kInvalidShadowRecordIndex;
 using oxygen::vortex::kLocalLightFlagCastsShadows;
+using oxygen::vortex::kShadowCoverageNoInfluence;
+using oxygen::vortex::kShadowCoverageNoRequest;
+using oxygen::vortex::kShadowProjectionLocalCube;
+using oxygen::vortex::kShadowProjectionLocalProjected2D;
+using oxygen::vortex::LightingPreparationError;
+using oxygen::vortex::LightSelectionIndex;
+using oxygen::vortex::LocalLightKind;
+using oxygen::vortex::ProjectedLocalShadowRecord;
 using oxygen::vortex::Renderer;
 using oxygen::vortex::RendererCapabilityFamily;
+using oxygen::vortex::ShadowArrayLayer;
 using oxygen::vortex::ShadowCascadeBinding;
 using oxygen::vortex::ShadowFrameBindings;
 using oxygen::vortex::ShadowFrameData;
+using oxygen::vortex::ShadowRecordIndex;
 using oxygen::vortex::ShadowService;
 using oxygen::vortex::shadows::internal::CascadeShadowSetup;
 using oxygen::vortex::shadows::internal::ConventionalShadowTargetAllocator;
@@ -859,6 +875,140 @@ NOLINT_TEST(ShadowServiceSurfaceTest,
   EXPECT_NEAR(frame_data.cascades.at(0).transition_width, 2.475F, 0.0001F);
   EXPECT_NEAR(frame_data.cascades.at(1).transition_width, 2.5F, 0.0001F);
   EXPECT_FLOAT_EQ(frame_data.cascades.at(2).transition_width, 0.0F);
+}
+
+NOLINT_TEST(
+  ShadowServiceSurfaceTest, ReferencesFollowRecordsRatherThanLightKindCounters)
+{
+  auto selection = FrameLightSelection {};
+  selection.local_lights = {
+    FrameLocalLightSelection {
+      .kind = LocalLightKind::kSpot,
+      .range = 10.0F,
+      .luminous_flux_lm = 100.0F,
+      .flags = kLocalLightFlagCastsShadows,
+    },
+    FrameLocalLightSelection {},
+    FrameLocalLightSelection {
+      .kind = LocalLightKind::kPoint,
+      .range = 10.0F,
+      .luminous_flux_lm = 100.0F,
+      .flags = kLocalLightFlagCastsShadows,
+    },
+    FrameLocalLightSelection {
+      .kind = LocalLightKind::kSpot,
+      .range = 10.0F,
+      .luminous_flux_lm = 100.0F,
+      .flags = kLocalLightFlagCastsShadows,
+    },
+  };
+  auto data = ShadowFrameData {};
+  // A spot uses a cube; cube record order deliberately differs from selection.
+  data.cube_local_records = {
+    CubeLocalShadowRecord {
+      .surface_srv = oxygen::ShaderVisibleIndex { 19U },
+      .first_array_layer = ShadowArrayLayer { 0U },
+      .selection_index = LightSelectionIndex { 2U },
+    },
+    CubeLocalShadowRecord {
+      .surface_srv = oxygen::ShaderVisibleIndex { 23U },
+      .first_array_layer = ShadowArrayLayer { 0U },
+      .selection_index = LightSelectionIndex { 0U },
+    },
+  };
+  data.projected_local_records = {
+    ProjectedLocalShadowRecord {
+      .surface_srv = oxygen::ShaderVisibleIndex { 29U },
+      .array_layer = ShadowArrayLayer { 0U },
+      .selection_index = LightSelectionIndex { 3U },
+    },
+  };
+  ASSERT_TRUE(
+    oxygen::vortex::shadows::internal::BuildShadowReferences(selection, data));
+  ASSERT_EQ(data.local_shadow_references.size(), 4U);
+  EXPECT_EQ(data.local_shadow_references.at(0).projection_kind,
+    kShadowProjectionLocalCube);
+  EXPECT_EQ(
+    data.local_shadow_references.at(0).record_index, ShadowRecordIndex { 1U });
+  EXPECT_EQ(data.local_shadow_references.at(1).coverage_state,
+    kShadowCoverageNoRequest);
+  EXPECT_EQ(data.local_shadow_references.at(1).selection_index,
+    LightSelectionIndex { 1U });
+  EXPECT_EQ(
+    data.local_shadow_references.at(1).record_index, kInvalidShadowRecordIndex);
+  EXPECT_EQ(
+    data.local_shadow_references.at(2).record_index, ShadowRecordIndex { 0U });
+  EXPECT_EQ(data.local_shadow_references.at(3).projection_kind,
+    kShadowProjectionLocalProjected2D);
+  EXPECT_EQ(
+    data.local_shadow_references.at(3).record_index, ShadowRecordIndex { 0U });
+
+  data.local_shadow_references.clear();
+  data.projected_local_records.front().selection_index
+    = LightSelectionIndex { 0U };
+  const auto duplicate
+    = oxygen::vortex::shadows::internal::BuildShadowReferences(selection, data);
+  ASSERT_FALSE(duplicate);
+  EXPECT_EQ(duplicate.error().selection_index, LightSelectionIndex { 0U });
+  EXPECT_TRUE(data.local_shadow_references.empty());
+}
+
+NOLINT_TEST(
+  ShadowServiceSurfaceTest, MissingRequiredShadowFailsButZeroInfluenceDoesNot)
+{
+  auto selection = FrameLightSelection {};
+  selection.local_lights = {
+    FrameLocalLightSelection {
+      .range = 10.0F,
+      .luminous_flux_lm = 100.0F,
+      .flags = kLocalLightFlagCastsShadows,
+    },
+  };
+  auto data = ShadowFrameData {};
+  const auto missing
+    = oxygen::vortex::shadows::internal::BuildShadowReferences(selection, data);
+  ASSERT_FALSE(missing);
+  EXPECT_EQ(missing.error().error, LightingPreparationError::kMissingShadow);
+  EXPECT_EQ(missing.error().selection_index, LightSelectionIndex { 0U });
+  EXPECT_TRUE(data.local_shadow_references.empty());
+  selection.local_lights.front().range = 0.0F;
+  ASSERT_TRUE(
+    oxygen::vortex::shadows::internal::BuildShadowReferences(selection, data));
+  EXPECT_EQ(data.local_shadow_references.front().coverage_state,
+    kShadowCoverageNoInfluence);
+  EXPECT_EQ(data.local_shadow_references.front().record_index,
+    kInvalidShadowRecordIndex);
+  selection.local_lights.front().range = 10.0F;
+  selection.local_lights.front().luminous_flux_lm = 0.0F;
+  ASSERT_TRUE(
+    oxygen::vortex::shadows::internal::BuildShadowReferences(selection, data));
+  EXPECT_EQ(data.local_shadow_references.front().coverage_state,
+    kShadowCoverageNoInfluence);
+}
+
+NOLINT_TEST_F(
+  ShadowServiceBehaviorTest, MissingFifthPointMapCannotPublishPartialSuccess)
+{
+  auto service = ShadowService(*renderer_);
+  service.OnFrameStart(
+    oxygen::frame::SequenceNumber { 1U }, oxygen::frame::Slot { 0U });
+  auto resolved_view = MakePerspectiveResolvedView();
+  auto selection = FrameLightSelection {};
+  selection.local_lights.resize(5U,
+    FrameLocalLightSelection {
+      .range = 10.0F,
+      .luminous_flux_lm = 100.0F,
+      .flags = kLocalLightFlagCastsShadows,
+    });
+  auto input = oxygen::vortex::PreparedViewShadowInput {};
+  input.view_id = oxygen::ViewId { 17U };
+  input.resolved_view = oxygen::observer_ptr { &resolved_view };
+  const auto views = std::array { input };
+  service.RenderShadowDepths(
+    { .frame_light_set = &selection, .active_views = views });
+  EXPECT_EQ(service.InspectShadowData(input.view_id), nullptr);
+  EXPECT_FALSE(service.ResolveShadowFrameSlot(input.view_id).IsValid());
+  EXPECT_EQ(service.GetLastRenderState().published_view_count, 0U);
 }
 
 } // namespace

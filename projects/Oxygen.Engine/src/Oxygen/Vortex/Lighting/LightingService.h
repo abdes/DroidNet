@@ -95,6 +95,9 @@ public:
   [[nodiscard]] OXGN_VRTX_API auto BuildLightGrid(
     const FrameLightingInputs& inputs)
     -> std::expected<void, LightingPreparationFailure>;
+  [[nodiscard]] OXGN_VRTX_API auto PublishShadowReferences(
+    ViewId view_id, const ShadowFrameData& shadows)
+    -> std::expected<void, LightingPreparationFailure>;
   OXGN_VRTX_API auto RenderDeferredLighting(RenderContext& ctx,
     graphics::CommandRecorder& recorder, const SceneTextures& scene_textures,
     const FrameLightSelection& frame_light_set,

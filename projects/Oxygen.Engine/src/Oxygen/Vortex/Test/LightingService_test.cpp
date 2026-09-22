@@ -30,6 +30,7 @@
 #include <Oxygen/Vortex/Lighting/Types/LightingPreparationFailure.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererCapability.h>
+#include <Oxygen/Vortex/Shadows/Types/ShadowFrameData.h>
 #include <Oxygen/Vortex/Test/Fakes/Graphics.h>
 #include <Oxygen/Vortex/Types/FrameLightSelection.h>
 #include <Oxygen/Vortex/Types/LightingFrameBindings.h>
@@ -327,7 +328,7 @@ NOLINT_TEST_F(LightingServiceBehaviorTest,
   EXPECT_EQ(first_bindings->publication_state,
     oxygen::vortex::kLightingPublicationRecorded);
   EXPECT_NE(first_bindings->build_status_srv, kInvalidShaderVisibleIndex);
-  EXPECT_NE(first_bindings->local_shadow_map_srv, kInvalidShaderVisibleIndex);
+  EXPECT_EQ(first_bindings->local_shadow_map_srv, kInvalidShaderVisibleIndex);
   EXPECT_EQ(first_bindings->index_capacity, 0U);
   EXPECT_EQ(first_bindings->selection_revision.at(0), 91U);
   EXPECT_NE(first_bindings->view_generation, second_bindings->view_generation);
@@ -370,6 +371,63 @@ NOLINT_TEST_F(
     service.InspectForwardLightBindings(oxygen::ViewId { 1U }), nullptr);
   EXPECT_EQ(service.ResolveLightingFrameSlot(oxygen::ViewId { 1U }),
     kInvalidShaderVisibleIndex);
+}
+
+NOLINT_TEST_F(LightingServiceBehaviorTest,
+  ShadowReferencesPublishOnlyForMatchingViewGeneration)
+{
+  using oxygen::vortex::ShadowFrameData;
+  auto service = LightingService(*renderer_);
+  service.OnFrameStart(
+    oxygen::frame::SequenceNumber { 3U }, oxygen::frame::Slot { 0U });
+  auto selection = FrameLightSelection {};
+  selection.scene_generation = 7U;
+  selection.selection_epoch = 11U;
+  selection.local_lights = {
+    FrameLocalLightSelection {
+      .range = 10.0F,
+      .luminous_flux_lm = 100.0F,
+    },
+  };
+  const auto resolved_view = MakeResolvedView(64.0F, 64.0F);
+  const auto views = std::array {
+    PreparedViewLightingInput {
+      .view_id = oxygen::ViewId { 17U },
+      .prepared_scene = {},
+      .resolved_view = oxygen::observer_ptr { &resolved_view },
+      .composition_view = {},
+    },
+  };
+  ASSERT_TRUE(service.BuildLightGrid(
+    { .frame_light_set = &selection, .active_views = views }));
+  const auto* initial
+    = service.InspectForwardLightBindings(views.front().view_id);
+  ASSERT_NE(initial, nullptr);
+  const auto old_slot = service.ResolveLightingFrameSlot(views.front().view_id);
+  auto shadow = ShadowFrameData {};
+  shadow.bindings.frame_sequence = initial->frame_sequence;
+  shadow.bindings.scene_generation = initial->scene_generation;
+  shadow.bindings.selection_revision = initial->selection_revision;
+  shadow.bindings.view_generation = initial->view_generation;
+  shadow.bindings.view_status_srv = initial->build_status_srv;
+  shadow.local_shadow_references.resize(1U);
+  shadow.local_shadow_map_srv = oxygen::ShaderVisibleIndex { 101U };
+  ASSERT_TRUE(service.PublishShadowReferences(views.front().view_id, shadow));
+  const auto* complete
+    = service.InspectForwardLightBindings(views.front().view_id);
+  ASSERT_NE(complete, nullptr);
+  EXPECT_EQ(complete->local_shadow_map_srv, shadow.local_shadow_map_srv);
+  EXPECT_NE(service.ResolveLightingFrameSlot(views.front().view_id), old_slot);
+  ++shadow.bindings.view_generation.at(0);
+  const auto stale
+    = service.PublishShadowReferences(views.front().view_id, shadow);
+  ASSERT_FALSE(stale);
+  EXPECT_EQ(stale.error().error,
+    oxygen::vortex::LightingPreparationError::kGenerationMismatch);
+  EXPECT_EQ(
+    service.InspectForwardLightBindings(views.front().view_id), nullptr);
+  EXPECT_FALSE(
+    service.ResolveLightingFrameSlot(views.front().view_id).IsValid());
 }
 
 } // namespace

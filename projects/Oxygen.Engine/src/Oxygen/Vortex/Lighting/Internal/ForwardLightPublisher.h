@@ -19,6 +19,7 @@
 namespace oxygen::vortex {
 
 class Renderer;
+struct ShadowFrameData;
 
 namespace lighting::internal {
 
@@ -38,6 +39,9 @@ namespace lighting::internal {
     auto OnFrameStart(frame::SequenceNumber sequence, frame::Slot slot) -> void;
     auto InvalidateViews() -> void { published_views_.clear(); }
     [[nodiscard]] auto Publish(const BuiltLightGridFrame& built_frame)
+      -> std::expected<void, LightingPreparationFailure>;
+    [[nodiscard]] auto PublishShadowReferences(
+      ViewId view_id, const ShadowFrameData& shadows)
       -> std::expected<void, LightingPreparationFailure>;
     [[nodiscard]] auto InspectBindings(ViewId view_id) const
       -> const LightingFrameBindings*;
@@ -59,9 +63,6 @@ namespace lighting::internal {
     std::unique_ptr<upload::TransientStructuredBuffer>
       directional_light_buffer_;
     std::unique_ptr<upload::TransientStructuredBuffer> build_status_buffer_;
-    std::unique_ptr<upload::TransientStructuredBuffer> local_shadow_map_buffer_;
-    std::unique_ptr<upload::TransientStructuredBuffer>
-      directional_shadow_map_buffer_;
     std::unordered_map<ViewId, PublishedLightingView> published_views_;
   };
 

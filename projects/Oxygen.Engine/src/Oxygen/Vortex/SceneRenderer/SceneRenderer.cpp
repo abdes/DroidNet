@@ -2106,6 +2106,28 @@ auto SceneRenderer::RenderCurrentView(
     if (!published_view_frame_bindings_.shadow_frame_slot.IsValid()) {
       return false;
     }
+    if (lighting_ != nullptr && wants_scene_lighting) {
+      const auto* shadow_data
+        = shadows_->InspectShadowData(ctx.current_view.view_id);
+      if (shadow_data == nullptr) {
+        return false;
+      }
+      const auto publication = lighting_->PublishShadowReferences(
+        ctx.current_view.view_id, *shadow_data);
+      if (!publication) {
+        LOG_F(ERROR, "Lighting shadow publication failed: reason={} view={}",
+          static_cast<unsigned>(publication.error().error),
+          ctx.current_view.view_id.get());
+        return false;
+      }
+      published_view_frame_bindings_.lighting_frame_slot
+        = lighting_->ResolveLightingFrameSlot(ctx.current_view.view_id);
+      deferred_lighting_state_.published_lighting_frame_slot
+        = published_view_frame_bindings_.lighting_frame_slot;
+      RecordDiagnosticsViewProduct(renderer_, "Vortex.LightingFrameBindings",
+        "Vortex.Stage8.ShadowDepth",
+        published_view_frame_bindings_.lighting_frame_slot);
+    }
     deferred_lighting_state_.published_shadow_frame_slot
       = published_view_frame_bindings_.shadow_frame_slot;
     RecordDiagnosticsPass(renderer_,

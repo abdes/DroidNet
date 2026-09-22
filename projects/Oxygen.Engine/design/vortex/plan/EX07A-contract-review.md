@@ -728,6 +728,40 @@ Ordinary role-None fog scattering, unified physical atmosphere resolution and
 broader fog qualification remain separate open repairs. This checkpoint removes
 one conflicting shadow contract; EX07A remains in progress.
 
+### Shadow-reference authority checkpoint
+
+The audit found that `ForwardLightPublisher` still independently predicted shadow
+record indices from light-kind counters. The canonical ABI already assigns this
+authority to ShadowService. Removed those counter loops and upload buffers;
+ShadowService now validates actual projection records and publishes the dense
+selection-reference arrays with the shadow package. Lighting attaches their
+per-view descriptors in an immutable replacement header after generation/status
+checks. Missing projections invalidate the view instead of silently selecting an
+unshadowed path. Zero-energy/range requests retain explicit NoInfluence coverage.
+
+Focused cases cover reordered projections (including a spot associated with a
+cube), absent/duplicate maps, stale attachment and the current fifth point-shadow
+request. Explicit failure closes the silent-loss path; it does not implement
+budgeted growth or claim the inherited 4/8 limits are accepted product limits.
+Debug/Release each pass **26 lighting, 17 shadow and 68 SceneRenderer tests**
+(222 executions). All 13 changed C++ files were processed by oxytidy; the new
+builder and revised publisher are clean, with no changed-line findings or new
+suppressions. Existing whole-file warnings remain outside this checkpoint.
+RenderDoc passes the directional deferred, forward, fog and local-shadow
+analyzers: consumers follow the actual per-view references with matching
+identities, and all three deferred directional contributions remain visible.
+The Release native offscreen proof runs 180 frames with the debug layer, exits
+zero, and has no warnings/errors. No renewed visual confirmation was needed for
+this ownership change; the captured runtime wiring and existing user-confirmed
+stable view layout are distinct evidence.
+
+Evidence under `ex07a`: `shadow-owner-*-{debug,release}.json`,
+`shadow-owner-{deferred,forward,fog,local}-report.txt`,
+`shadow-owner-release-180.log`, `shadow-owner-tidy-final/`,
+`shadow-owner-publisher-tidy/` and `shadow-owner-checkpoint.json`. This closes
+independent map-index prediction, not wide-spot support, resource-budget growth,
+full submission/failure recovery, or EX07A as a whole.
+
 | Gate                      | Owning suite / required evidence                                                                                                                                                                                                                     | Current result                                                                                                                  |
 | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
 | A ABI                     | CPU size/alignment/every-offset assertions; D3D12 upload/decode/readback of two distinct local records and directional records, integer high-bit patterns, sentinels, reserved zeros and nonzero element indices; matching catalog/reflection checks | Canonical wire records have native Debug/Release proof; remaining source-selection, validity and lifetime interfaces stay open. |

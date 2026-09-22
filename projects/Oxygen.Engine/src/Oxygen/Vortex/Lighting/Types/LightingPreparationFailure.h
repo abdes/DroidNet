@@ -18,6 +18,7 @@ enum class LightingPreparationError : std::uint8_t {
   kUnrepresentable,
   kAllocationFailed,
   kGenerationMismatch,
+  kMissingShadow,
 };
 
 enum class LightingSelectionFamily : std::uint8_t {

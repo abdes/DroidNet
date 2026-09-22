@@ -89,6 +89,13 @@ auto LightingService::BuildLightGrid(const FrameLightingInputs& inputs)
   return {};
 }
 
+auto LightingService::PublishShadowReferences(
+  const ViewId view_id, const ShadowFrameData& shadows)
+  -> std::expected<void, LightingPreparationFailure>
+{
+  return publisher_->PublishShadowReferences(view_id, shadows);
+}
+
 auto LightingService::RenderDeferredLighting(RenderContext& ctx,
   graphics::CommandRecorder& recorder, const SceneTextures& scene_textures,
   const FrameLightSelection& frame_light_set,

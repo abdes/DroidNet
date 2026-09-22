@@ -21,11 +21,13 @@
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Vortex/Internal/PerViewStructuredPublisher.h>
 #include <Oxygen/Vortex/Renderer.h>
+#include <Oxygen/Vortex/Shadows/Internal/ShadowReferenceBuilder.h>
 #include <Oxygen/Vortex/Shadows/Passes/CascadeShadowPass.h>
 #include <Oxygen/Vortex/Shadows/ShadowService.h>
 #include <Oxygen/Vortex/Shadows/Types/CubeLocalShadowRecord.h>
 #include <Oxygen/Vortex/Shadows/Types/DirectionalShadowRecord.h>
 #include <Oxygen/Vortex/Shadows/Types/FrameShadowInputs.h>
+#include <Oxygen/Vortex/Shadows/Types/LightShadowReference.h>
 #include <Oxygen/Vortex/Shadows/Types/ProjectedLocalShadowRecord.h>
 #include <Oxygen/Vortex/Shadows/Types/ShadowCascadeBinding.h>
 #include <Oxygen/Vortex/Shadows/Types/ShadowFrameData.h>
@@ -75,6 +77,10 @@ auto ShadowService::EnsurePublishResources() -> bool
     sizeof(ProjectedLocalShadowRecord), "ShadowService.ProjectedRecords");
   cube_record_buffer_
     = make_buffer(sizeof(CubeLocalShadowRecord), "ShadowService.CubeRecords");
+  directional_reference_buffer_ = make_buffer(
+    sizeof(LightShadowReference), "ShadowService.DirectionalReferences");
+  local_reference_buffer_ = make_buffer(
+    sizeof(LightShadowReference), "ShadowService.LocalReferences");
   return true;
 }
 
@@ -95,6 +101,8 @@ auto ShadowService::OnFrameStart(
     cascade_record_buffer_->OnFrameStart(sequence, slot);
     projected_record_buffer_->OnFrameStart(sequence, slot);
     cube_record_buffer_->OnFrameStart(sequence, slot);
+    directional_reference_buffer_->OnFrameStart(sequence, slot);
+    local_reference_buffer_->OnFrameStart(sequence, slot);
   }
 }
 
@@ -125,6 +133,7 @@ auto ShadowService::PublishShadowBindings(
     return true;
   };
   auto& bindings = data.bindings;
+  std::uint32_t reference_count = 0U;
   if (!write(*directional_record_buffer_, data.directional_records,
         bindings.directional_records_srv, bindings.directional_record_count)
     || !write(*cascade_record_buffer_, data.cascades,
@@ -133,7 +142,12 @@ auto ShadowService::PublishShadowBindings(
       bindings.projected_local_records_srv,
       bindings.projected_local_record_count)
     || !write(*cube_record_buffer_, data.cube_local_records,
-      bindings.cube_local_records_srv, bindings.cube_local_record_count)) {
+      bindings.cube_local_records_srv, bindings.cube_local_record_count)
+    || !write(*directional_reference_buffer_,
+      data.directional_shadow_references, data.directional_shadow_map_srv,
+      reference_count)
+    || !write(*local_reference_buffer_, data.local_shadow_references,
+      data.local_shadow_map_srv, reference_count)) {
     LOG_F(ERROR, "Shadow record publication failed for view {}", view_id.get());
     return kInvalidShaderVisibleIndex;
   }
@@ -252,6 +266,19 @@ auto ShadowService::RenderShadowDepths(const FrameShadowInputs& inputs) -> void
         = { viewport.width, viewport.height };
     }
     published_views_.erase(view_input.view_id);
+    if (inputs.frame_light_set != nullptr) {
+      const auto references = shadows::internal::BuildShadowReferences(
+        *inputs.frame_light_set, view_data);
+      if (!references) {
+        LOG_F(ERROR,
+          "Shadow association failed: view={} reason={} family={} index={}",
+          view_input.view_id.get(),
+          static_cast<unsigned>(references.error().error),
+          static_cast<unsigned>(references.error().family),
+          references.error().selection_index.get());
+        continue;
+      }
+    }
     const auto slot = PublishShadowBindings(view_input.view_id, view_data);
     if (!slot.IsValid()) {
       continue;
