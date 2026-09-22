@@ -11,10 +11,9 @@
 #include <optional>
 #include <string_view>
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/FileFingerprint.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/TrackingIncludeHandler.h>
+#include <Oxygen/Testing/GTest.h>
 
 namespace {
 
@@ -79,8 +78,8 @@ NOLINT_TEST_F(ShaderBakeDependenciesTest,
   ComputeFileFingerprintCanonicalizesWorkspaceRelativePath)
 {
   const auto workspace_root = root_ / "workspace";
-  const auto file_path
-    = workspace_root / "src" / "Shaders" / "Common" / "Lighting.hlsli";
+  const auto file_path = workspace_root / "src" / "Shaders" / "Vortex"
+    / "Shared" / "Lighting.hlsli";
   WriteTextFile(file_path, "float4 main() : SV_Target { return 1; }\n");
 
   const auto fingerprint = ComputeFileFingerprint(file_path, workspace_root);
