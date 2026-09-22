@@ -9,6 +9,8 @@
 
 #include "Core/Bindless/Generated.BindlessAbi.hlsl"
 #include "Vortex/Contracts/Shadows/ShadowCascadeBinding.hlsli"
+#include "Vortex/Contracts/Shadows/ProjectedLocalShadowRecord.hlsli"
+#include "Vortex/Contracts/Shadows/CubeLocalShadowRecord.hlsli"
 
 #include "Vortex/Contracts/View/ViewConstants.hlsli"
 #include "Vortex/Contracts/View/ViewFrameBindings.hlsli"
@@ -16,24 +18,6 @@
 static const uint VORTEX_SHADOW_TECHNIQUE_DIRECTIONAL_CONVENTIONAL = 1u << 0u;
 static const uint VORTEX_SHADOW_TECHNIQUE_SPOT_CONVENTIONAL = 1u << 1u;
 static const uint VORTEX_SHADOW_TECHNIQUE_POINT_CONVENTIONAL = 1u << 2u;
-
-struct VortexSpotShadowBinding
-{
-    float4x4 light_view_projection;
-    float4 position_and_inv_range;
-    float4 direction_and_bias;
-    float4 sampling_metadata0;
-    float4 sampling_metadata1;
-};
-
-struct VortexPointShadowBinding
-{
-    float4x4 face_light_view_projection[6];
-    float4 position_and_inv_range;
-    float4 sampling_metadata0;
-    float4 sampling_metadata1;
-    float4 _padding0;
-};
 
 struct VortexShadowFrameBindings
 {
@@ -47,12 +31,12 @@ struct VortexShadowFrameBindings
     uint _padding0;
     uint _padding1;
     VortexShadowCascadeBinding cascades[4];
-    VortexSpotShadowBinding spot_shadows[8];
+    ProjectedLocalShadowRecord spot_shadows[8];
     uint point_shadow_surface_handle;
     uint point_shadow_count;
     uint _padding2;
     uint _padding3;
-    VortexPointShadowBinding point_shadows[4];
+    CubeLocalShadowRecord point_shadows[4];
 };
 
 static inline VortexShadowFrameBindings MakeInvalidVortexShadowFrameBindings()

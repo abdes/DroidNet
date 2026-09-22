@@ -10,6 +10,8 @@
 #include "Vortex/Contracts/View/ViewFrameBindings.hlsli"
 #include "Vortex/Contracts/Shadows/ShadowRecords.hlsli"
 #include "Vortex/Contracts/Shadows/ShadowCascadeBinding.hlsli"
+#include "Vortex/Contracts/Shadows/ProjectedLocalShadowRecord.hlsli"
+#include "Vortex/Contracts/Shadows/CubeLocalShadowRecord.hlsli"
 #include "Vortex/Services/Lighting/ClusterLookup.hlsli"
 
 struct ProbeArguments {
@@ -166,5 +168,36 @@ void CS(uint3 thread : SV_DispatchThreadID) {
         output.Store4(address + 96, asuint(float4(value.inverse_resolution,
             value.world_texel_size, value.transition_width)));
         output.Store4(address + 112, uint4(asuint(value.fade_begin), asuint(value.fade_end), value.reserved1));
+    } else if (g_RecordKind == 14) {
+        StructuredBuffer<ProjectedLocalShadowRecord> inputs = ResourceDescriptorHeap[args.x];
+        ProjectedLocalShadowRecord value = inputs[element];
+        [unroll] for (uint column = 0; column < 4; ++column) {
+            float4 basis = 0;
+            basis[column] = 1;
+            output.Store4(address + column * 16, asuint(mul(value.light_view_projection, basis)));
+        }
+        output.Store4(address + 64, asuint(float4(value.shadow_origin_ws, value.near_plane_m)));
+        output.Store4(address + 80, asuint(float4(value.far_plane_m, value.normal_bias_m,
+            value.depth_bias, value.world_texel_size)));
+        output.Store4(address + 96, uint4(value.surface_srv, value.array_layer,
+            value.selection_index, value.reserved0));
+        output.Store4(address + 112, uint4(asuint(value.inverse_resolution), value.reserved1));
+    } else if (g_RecordKind == 15) {
+        StructuredBuffer<CubeLocalShadowRecord> inputs = ResourceDescriptorHeap[args.x];
+        CubeLocalShadowRecord value = inputs[element];
+        [unroll] for (uint face = 0; face < 6; ++face) {
+            [unroll] for (uint column = 0; column < 4; ++column) {
+                float4 basis = 0;
+                basis[column] = 1;
+                output.Store4(address + face * 64 + column * 16,
+                    asuint(mul(value.face_light_view_projection[face], basis)));
+            }
+        }
+        output.Store4(address + 384, asuint(float4(value.shadow_origin_ws, value.near_plane_m)));
+        output.Store4(address + 400, asuint(float4(value.far_plane_m, value.normal_bias_m,
+            value.depth_bias, value.world_texel_size)));
+        output.Store4(address + 416, uint4(value.surface_srv, value.first_array_layer,
+            value.selection_index, value.reserved0));
+        output.Store4(address + 432, uint4(asuint(value.inverse_resolution), value.reserved1));
     }
 }

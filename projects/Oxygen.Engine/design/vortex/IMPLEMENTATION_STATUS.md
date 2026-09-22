@@ -149,6 +149,11 @@ The subsequent cascade checkpoint replaces float-packed metadata with the
 18/18 in Debug/Release, ShadowService passes 11/11, and RenderDoc verifies eight
 cascade records across two views. The 112-byte shadow header and local
 projection migration remain open; the owning review records this boundary.
+The next checkpoint completes the projected/cube record layouts and removes the
+old point/spot binding types. Native ABI tests pass 19/19 and ShadowService 11/11
+in Debug/Release; RenderDoc verifies local source identity, sampled surfaces and
+both lights' contributions. The 112-byte shadow header, separate array
+publication and full finite-source/wide-spot support are still pending.
 MultiView's local-light far-clipping regression is repaired and visually
 confirmed by the user. The
 [review evidence](plan/EX07A-contract-review.md#verification-obligations-and-current-evidence)

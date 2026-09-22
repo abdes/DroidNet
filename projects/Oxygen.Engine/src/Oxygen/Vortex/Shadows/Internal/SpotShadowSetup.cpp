@@ -6,7 +6,9 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
+#include <ranges>
 #include <span>
 
 #include <glm/ext/matrix_float4x4.hpp>
@@ -28,7 +30,6 @@ namespace {
   constexpr float kMinSpotNearPlane = 0.1F;
   constexpr float kMinSpotRange = 0.1F;
   constexpr float kUeSpotLightShadowDepthBias = 3.0F;
-  constexpr float kUeSpotLightShadowSlopeDepthBias = 3.0F;
   constexpr float kUeMaxUserShadowBias = 10.0F;
 
   [[nodiscard]] auto NormalizeOrFallback(
@@ -100,7 +101,8 @@ auto SpotShadowSetup::BuildSpotFrameBindings(
   bindings.sampling_contract_flags = kShadowSamplingContractTexture2DArray;
 
   auto spot_shadow_index = 0U;
-  for (const auto& light : local_lights) {
+  for (const auto& [selection_index, light] :
+    std::views::enumerate(local_lights)) {
     if (light.kind != LocalLightKind::kSpot
       || (light.flags & kLocalLightFlagCastsShadows) == 0U) {
       continue;
@@ -127,16 +129,19 @@ auto SpotShadowSetup::BuildSpotFrameBindings(
     const auto world_texel_size = (2.0F * range * outer_tangent)
       / static_cast<float>((std::max)(allocation.resolution.x, 1U));
 
-    auto& spot = bindings.spot_shadows[spot_shadow_index];
+    auto& spot = bindings.spot_shadows.at(spot_shadow_index);
     spot.light_view_projection = projection * view;
-    spot.position_and_inv_range
-      = glm::vec4(light.position, range > 0.0F ? 1.0F / range : 0.0F);
-    spot.direction_and_bias = glm::vec4(direction, depth_bias);
-    spot.sampling_metadata0 = glm::vec4(static_cast<float>(spot_shadow_index),
-      inverse_resolution_x, inverse_resolution_y, world_texel_size);
-    spot.sampling_metadata1 = glm::vec4(kMinSpotNearPlane, range,
-      depth_bias * kUeSpotLightShadowSlopeDepthBias,
-      (std::max)(light.shadow_normal_bias, 0.0F));
+    spot.shadow_origin_ws = light.position;
+    spot.near_plane_m = kMinSpotNearPlane;
+    spot.far_plane_m = range;
+    spot.normal_bias_m = (std::max)(light.shadow_normal_bias, 0.0F);
+    spot.depth_bias = depth_bias;
+    spot.world_texel_size = world_texel_size;
+    spot.surface_srv = allocation.surface_srv;
+    spot.selection_index
+      = LightSelectionIndex { static_cast<std::uint32_t>(selection_index) };
+    spot.array_layer = ShadowArrayLayer { spot_shadow_index };
+    spot.inverse_resolution = { inverse_resolution_x, inverse_resolution_y };
     ++spot_shadow_index;
   }
 

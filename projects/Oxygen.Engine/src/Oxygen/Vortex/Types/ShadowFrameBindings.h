@@ -14,9 +14,9 @@
 
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Constants.h>
-#include <Oxygen/Vortex/Shadows/Types/PointShadowBinding.h>
+#include <Oxygen/Vortex/Shadows/Types/CubeLocalShadowRecord.h>
+#include <Oxygen/Vortex/Shadows/Types/ProjectedLocalShadowRecord.h>
 #include <Oxygen/Vortex/Shadows/Types/ShadowCascadeBinding.h>
-#include <Oxygen/Vortex/Shadows/Types/SpotShadowBinding.h>
 
 namespace oxygen::vortex {
 
@@ -48,12 +48,12 @@ struct alignas(packing::kShaderDataFieldAlignment) ShadowFrameBindings {
   std::uint32_t _padding1 { 0U };
 
   std::array<ShadowCascadeBinding, kMaxCascades> cascades {};
-  std::array<SpotShadowBinding, kMaxSpotShadows> spot_shadows {};
+  std::array<ProjectedLocalShadowRecord, kMaxSpotShadows> spot_shadows {};
   ShaderVisibleIndex point_shadow_surface_handle { kInvalidShaderVisibleIndex };
   std::uint32_t point_shadow_count { 0U };
   std::uint32_t _padding2 { 0U };
   std::uint32_t _padding3 { 0U };
-  std::array<PointShadowBinding, kMaxPointShadows> point_shadows {};
+  std::array<CubeLocalShadowRecord, kMaxPointShadows> point_shadows {};
 
   [[nodiscard]] auto HasDirectionalConventionalShadow() const noexcept -> bool
   {
