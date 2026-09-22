@@ -34,3 +34,8 @@ reuse. Logs and test JSON are under
 This closes the reported flicker and same-frame descriptor-reset defect. It is
 not a blanket qualification of all upload, deferred-CBV or shadow-resource
 lifetime paths in EX07.
+
+The separate persistent deferred-CBV overwrite was subsequently repaired with
+immutable frame-owned batches; see the
+[deferred-constant checkpoint](EX07A-contract-review.md#deferred-constant-lifetime-checkpoint).
+That repair has its own failing-before/passing-after regression and capture proof.

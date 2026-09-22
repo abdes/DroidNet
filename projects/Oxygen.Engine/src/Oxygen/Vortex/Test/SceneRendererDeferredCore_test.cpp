@@ -30,6 +30,7 @@
 #include <glm/ext/vector_float4.hpp>
 #include <glm/ext/vector_uint2.hpp>
 #include <glm/geometric.hpp>
+#include <glm/gtc/matrix_access.hpp>
 #include <glm/trigonometric.hpp>
 
 #include <Oxygen/Base/ObserverPtr.h>
@@ -65,6 +66,7 @@
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsTypes.h>
 #include <Oxygen/Vortex/Lighting/Internal/DeferredLightProxyGeometry.h>
+#include <Oxygen/Vortex/Lighting/Types/DeferredLightConstants.h>
 #include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/RenderMode.h>
@@ -1633,6 +1635,59 @@ NOLINT_TEST_F(
     graphics_->graphics_pipeline_log_.binds, [](const auto& bind) -> bool {
       return bind.desc.GetName() == "Vortex.DeferredLight.Directional";
     }));
+}
+
+NOLINT_TEST_F(SceneRendererDeferredCoreTest,
+  DeferredConstantsRemainImmutableAcrossQueuedViews)
+{
+  using oxygen::vortex::DeferredLightConstants;
+  constexpr float kFirstPosition = 11.0F;
+  constexpr float kSecondPosition = 21.0F;
+  auto point = AddPointLight("MovingPoint");
+  point.GetTransform().SetLocalPosition({ kFirstPosition, 0.0F, 0.0F });
+  graphics_->buffer_view_log_.events.clear();
+  std::ignore = RenderForView(first_view_id_, first_resolved_view_);
+  const std::byte* first_constants = nullptr;
+  for (const auto& event : graphics_->buffer_view_log_.events) {
+    if (event.stride != 0U
+      || event.size != oxygen::packing::kConstantBufferAlignment) {
+      continue;
+    }
+    auto value = DeferredLightConstants {};
+    std::memcpy(&value, event.data, sizeof(value));
+    if (value.light_type == 1U
+      && glm::column(value.light_world_matrix, 3).x == kFirstPosition) {
+      first_constants = event.data;
+      break;
+    }
+  }
+  ASSERT_NE(first_constants, nullptr);
+  point.GetTransform().SetLocalPosition({ kSecondPosition, 0.0F, 0.0F });
+  std::ignore = RenderForView(second_view_id_, second_resolved_view_);
+  auto retained = DeferredLightConstants {};
+  std::memcpy(&retained, first_constants, sizeof(retained));
+  EXPECT_EQ(glm::column(retained.light_world_matrix, 3).x, kFirstPosition);
+}
+
+NOLINT_TEST_F(SceneRendererDeferredCoreTest,
+  DeferredConstantViewFailureRejectsAndRecoversPublication)
+{
+  std::ignore = AddDirectionalLight("Sun");
+  graphics_->SetFailConstantBufferViews(true);
+  graphics_->draw_log_.draws.clear();
+  std::ignore = RenderForView(first_view_id_, first_resolved_view_);
+  EXPECT_EQ(scene_renderer_->GetPublishedViewFrameBindingsSlot(),
+    oxygen::kInvalidShaderVisibleIndex);
+  EXPECT_TRUE(graphics_->draw_log_.draws.empty());
+
+  graphics_->SetFailConstantBufferViews(false);
+  std::ignore = RenderForView(second_view_id_, second_resolved_view_);
+  EXPECT_TRUE(scene_renderer_->GetPublishedViewFrameBindingsSlot().IsValid());
+  EXPECT_TRUE(scene_renderer_->GetLastDeferredLightingState()
+      .accumulated_into_scene_color);
+  EXPECT_EQ(
+    scene_renderer_->GetLastDeferredLightingState().directional_light_count,
+    1U);
 }
 
 NOLINT_TEST_F(SceneRendererDeferredCoreTest,

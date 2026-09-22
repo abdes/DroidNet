@@ -54,6 +54,7 @@ auto LightingService::OnFrameStart(
   prepared_lighting_.reset();
   light_grid_builder_->OnFrameStart(sequence, slot);
   publisher_->OnFrameStart(sequence, slot);
+  deferred_pass_->OnFrameStart(sequence, slot);
 }
 
 auto LightingService::BuildLightGrid(const FrameLightingInputs& inputs)
@@ -96,18 +97,22 @@ auto LightingService::RenderDeferredLighting(RenderContext& ctx,
     directional_shadow_surfaces,
   const graphics::Texture* spot_shadow_surface,
   const graphics::Texture* point_shadow_surface,
-  const bool static_sky_light_available) -> void
+  const bool static_sky_light_available) -> bool
 {
   if (!prepared_lighting_
     || prepared_lighting_->selection_epoch != frame_light_set.selection_epoch) {
     last_deferred_lighting_state_ = {};
-    return;
+    return false;
   }
   const auto packets
     = deferred_packets_->Build(frame_light_set, prepared_lighting_->evaluation);
   const auto pass_state = deferred_pass_->Record(ctx, recorder, scene_textures,
     packets, shadow_data, directional_shadow_surfaces, spot_shadow_surface,
     point_shadow_surface, static_sky_light_available);
+  if (!pass_state.recording_succeeded) {
+    last_deferred_lighting_state_ = {};
+    return false;
+  }
   last_deferred_lighting_state_ = {
     .consumed_packets = pass_state.consumed_packets,
     .accumulated_into_scene_color = pass_state.accumulated_into_scene_color,
@@ -147,6 +152,7 @@ auto LightingService::RenderDeferredLighting(RenderContext& ctx,
     .point_shadow_surface_srv = pass_state.point_shadow_surface_srv,
     .selection_epoch = packets.selection_epoch,
   };
+  return true;
 }
 
 auto LightingService::InspectForwardLightBindings(const ViewId view_id) const

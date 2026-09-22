@@ -225,7 +225,8 @@ auto RingBufferStaging::RecreateBuffer(
 
   BufferDesc desc;
   desc.size_bytes = total_capacity;
-  desc.usage = BufferUsage::kNone;
+  // Shared upload allocations also back directly bound constant-buffer views.
+  desc.usage = BufferUsage::kConstant;
   desc.memory = BufferMemory::kUpload;
   desc.debug_name = debug_name_;
 
@@ -333,7 +334,8 @@ auto RingBufferStaging::EnsureCapacity(std::uint64_t required,
 
   BufferDesc desc;
   desc.size_bytes = total_capacity;
-  desc.usage = BufferUsage::kNone;
+  // Shared upload allocations also back directly bound constant-buffer views.
+  desc.usage = BufferUsage::kConstant;
   desc.memory = BufferMemory::kUpload;
   desc.debug_name = debug_name_;
 

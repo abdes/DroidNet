@@ -2254,7 +2254,8 @@ auto SceneRenderer::RenderCurrentView(
     : false;
   if (!rendered_debug_visualization) {
     if (wants_scene_lighting) {
-      RenderDeferredLighting(ctx, recorder, scene_textures);
+      if (!RenderDeferredLighting(ctx, recorder, scene_textures))
+        return false;
     }
   }
   const auto deferred_lighting_executed = rendered_debug_visualization
@@ -3286,8 +3287,9 @@ auto SceneRenderer::RenderDebugVisualization(RenderContext& ctx,
   return true;
 }
 
-void SceneRenderer::RenderDeferredLighting(RenderContext& ctx,
+auto SceneRenderer::RenderDeferredLighting(RenderContext& ctx,
   graphics::CommandRecorder& recorder, const SceneTextures& scene_textures)
+  -> bool
 {
   deferred_lighting_state_ = {};
   deferred_lighting_state_.published_view_id = published_view_id_;
@@ -3302,23 +3304,23 @@ void SceneRenderer::RenderDeferredLighting(RenderContext& ctx,
 
   if (!renderer_.HasCapability(RendererCapabilityFamily::kDeferredShading)
     || !renderer_.HasCapability(RendererCapabilityFamily::kLightingData)) {
-    return;
+    return true;
   }
   if (ResolveShadingModeForCurrentView(ctx) != ShadingMode::kDeferred) {
-    return;
+    return true;
   }
   if (ctx.view_constants == nullptr) {
-    return;
+    return true;
   }
   if (published_view_id_ == kInvalidViewId
     || published_view_id_ != ctx.current_view.view_id) {
-    return;
+    return true;
   }
   if (published_view_frame_bindings_slot_ == kInvalidShaderVisibleIndex) {
-    return;
+    return true;
   }
   if (!HasPublishedDeferredLightingInputs(scene_texture_bindings_)) {
-    return;
+    return true;
   }
 
   deferred_lighting_state_.consumed_published_scene_textures = true;
@@ -3331,7 +3333,7 @@ void SceneRenderer::RenderDeferredLighting(RenderContext& ctx,
     deferred_lighting_state_.consumed_gbuffer_srvs.begin());
 
   if (lighting_ == nullptr) {
-    return;
+    return true;
   }
   const auto* shadow_bindings = shadows_ != nullptr
     ? shadows_->InspectShadowData(ctx.current_view.view_id)
@@ -3345,10 +3347,12 @@ void SceneRenderer::RenderDeferredLighting(RenderContext& ctx,
   const auto* point_shadow_surface = shadows_ != nullptr
     ? shadows_->InspectPointShadowSurface(ctx.current_view.view_id)
     : nullptr;
-  lighting_->RenderDeferredLighting(ctx, recorder, scene_textures,
-    frame_light_selection_, shadow_bindings, directional_shadow_surfaces,
-    spot_shadow_surface, point_shadow_surface,
-    environment_lighting_state_.ambient_bridge_published);
+  if (!lighting_->RenderDeferredLighting(ctx, recorder, scene_textures,
+        frame_light_selection_, shadow_bindings, directional_shadow_surfaces,
+        spot_shadow_surface, point_shadow_surface,
+        environment_lighting_state_.ambient_bridge_published)) {
+    return false;
+  }
   const auto& lighting_state = lighting_->GetLastDeferredLightingState();
   deferred_lighting_state_.owned_by_lighting_service = true;
   deferred_lighting_state_.used_service_owned_local_light_geometry
@@ -3397,6 +3401,7 @@ void SceneRenderer::RenderDeferredLighting(RenderContext& ctx,
     = lighting_state.point_shadow_count;
   deferred_lighting_state_.point_shadow_surface_srv
     = lighting_state.point_shadow_surface_srv;
+  return true;
 }
 
 } // namespace oxygen::vortex

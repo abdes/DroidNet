@@ -10,6 +10,7 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Types/ByteUnits.h>
 #include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/Test/Fixtures/RingBufferStagingFixture.h>
 #include <Oxygen/Vortex/Upload/Errors.h>
@@ -36,6 +37,23 @@ namespace {
 // Small fixture that exposes convenience helpers for RingBufferStaging tests.
 class RingBufferStagingTest
   : public oxygen::vortex::upload::testing::RingBufferStagingFixture { };
+
+NOLINT_TEST_F(
+  RingBufferStagingTest, InitialAndGrownArenasDeclareConstantBufferUsage)
+{
+  auto provider = MakeRingBuffer(SlotCount { 1U }, 16U);
+  auto first = provider->Allocate(SizeBytes { 1U }, "cbv-initial");
+  ASSERT_TRUE(first.has_value());
+  EXPECT_EQ(first->Buffer().GetDescriptor().usage
+      & oxygen::graphics::BufferUsage::kConstant,
+    oxygen::graphics::BufferUsage::kConstant);
+  auto grown = provider->Allocate(
+    SizeBytes { provider->GetStats().current_buffer_size + 1U }, "cbv-grown");
+  ASSERT_TRUE(grown.has_value());
+  EXPECT_EQ(grown->Buffer().GetDescriptor().usage
+      & oxygen::graphics::BufferUsage::kConstant,
+    oxygen::graphics::BufferUsage::kConstant);
+}
 
 /*!
  Zero-size allocation should fail with kInvalidRequest.
@@ -348,6 +366,11 @@ NOLINT_TEST_F(RingBufferStagingTest, ExplicitTrimShrinksGrownBuffer)
   ASSERT_TRUE(trimmed);
   const auto trimmed_stats = provider->GetStats();
   EXPECT_LT(trimmed_stats.current_buffer_size, grown_stats.current_buffer_size);
+  auto after_trim = provider->Allocate(SizeBytes { 1U }, "cbv-after-trim");
+  ASSERT_TRUE(after_trim.has_value());
+  EXPECT_EQ(after_trim->Buffer().GetDescriptor().usage
+      & oxygen::graphics::BufferUsage::kConstant,
+    oxygen::graphics::BufferUsage::kConstant);
 
   GfxPtr()->Flush();
 }

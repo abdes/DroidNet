@@ -906,6 +906,10 @@ public:
   }
   // Test-only failure injection hooks
   void SetFailMap(const bool v) { fail_map_ = v; }
+  void SetFailConstantBufferViews(const bool value)
+  {
+    fail_constant_buffer_views_ = value;
+  }
   void SetFailSubmission(bool value) { fail_submission_ = value; }
   void SetFailRecording(bool value) { fail_recording_ = value; }
   void SetThrowOnCreateBuffer(const bool v) { throw_on_create_buffer_ = v; }
@@ -1072,10 +1076,12 @@ public:
     public:
       FakeBuffer(const std::string_view name, const uint64_t size,
         const BufferUsage usage, const BufferMemory memory,
-        const bool map_should_fail, BufferViewCreationLog* srv_log)
+        const bool map_should_fail, BufferViewCreationLog* srv_log,
+        observer_ptr<const bool> constant_view_failure)
         : Buffer(name)
         , map_should_fail_(map_should_fail)
         , srv_log_(srv_log)
+        , constant_view_failure_(constant_view_failure)
       {
         desc_.size_bytes = size;
         desc_.usage = usage;
@@ -1157,6 +1163,9 @@ public:
         const graphics::BufferRange& range) const
         -> graphics::NativeView override
       {
+        if (constant_view_failure_ && *constant_view_failure_) {
+          return {};
+        }
         if ((srv_log_ != nullptr) && mapped_
           && range.offset_bytes <= storage_.size()
           && range.size_bytes <= storage_.size() - range.offset_bytes) {
@@ -1214,10 +1223,12 @@ public:
       BufferViewCreationLog* srv_log_ {
         nullptr,
       };
+      observer_ptr<const bool> constant_view_failure_;
       std::vector<std::byte> storage_;
     };
     return std::make_shared<FakeBuffer>("Staging", desc.size_bytes, desc.usage,
-      desc.memory, fail_map_, &buffer_view_log_);
+      desc.memory, fail_map_, &buffer_view_log_,
+      make_observer(&fail_constant_buffer_views_));
   }
   auto CreateCommandQueues(const graphics::QueuesStrategy& queue_strategy)
     -> void override
@@ -1306,6 +1317,7 @@ public:
   bool fail_recording_ {
     false,
   };
+  bool fail_constant_buffer_views_ { false };
   mutable bool fail_map_ {
     false,
   };

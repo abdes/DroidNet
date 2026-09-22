@@ -168,6 +168,11 @@ Deferred/forward captures qualify the three-source recipe. The
 [same-frame descriptor fix](plan/EX07A-offscreen-flicker-validation.md) closes the
 Release offscreen flicker observed and then visually confirmed stable by the
 user. Broader property, fog, BRDF, memory and lifetime qualification remains open.
+The deferred-constant checkpoint replaces the shared mutable CBV buffer with
+frame-owned aligned batches and propagates publication failure to view rejection.
+Debug/Release each pass 68 SceneRenderer, 18 upload-ring and 20 ABI tests; the
+three-light capture passes and an 180-frame Release/debug-layer run is free of
+warnings/errors after correcting the arena's constant-buffer usage declaration.
 MultiView's local-light far-clipping regression is repaired and visually
 confirmed by the user. The
 [review evidence](plan/EX07A-contract-review.md#verification-obligations-and-current-evidence)

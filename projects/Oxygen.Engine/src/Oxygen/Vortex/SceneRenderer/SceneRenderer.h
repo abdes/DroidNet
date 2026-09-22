@@ -249,8 +249,9 @@ private:
   OXGN_VRTX_API auto RenderDebugVisualization(RenderContext& ctx,
     graphics::CommandRecorder& recorder, const SceneTextures& scene_textures)
     -> bool;
-  OXGN_VRTX_API void RenderDeferredLighting(RenderContext& ctx,
-    graphics::CommandRecorder& recorder, const SceneTextures& scene_textures);
+  OXGN_VRTX_API auto RenderDeferredLighting(RenderContext& ctx,
+    graphics::CommandRecorder& recorder, const SceneTextures& scene_textures)
+    -> bool;
   OXGN_VRTX_API void ResolveSceneColor(RenderContext& ctx,
     graphics::CommandRecorder& recorder,
     const PostProcessService::PreparedExposure* prepared = nullptr);
