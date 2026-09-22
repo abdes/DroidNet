@@ -792,6 +792,27 @@ whole-file diagnostics remain. Evidence under `ex07a`:
 This checkpoint does not qualify full source-mutation/round-trip behavior or a
 separate forward raster image oracle. EX07A remains in progress.
 
+### Transient-upload compatibility removal checkpoint
+
+Removed `SlotData`'s deprecated single-allocation/SRV/native-view fields and the
+unused `ReleaseSlotView` API. An allocation is now a local RAII value until it is
+moved into the frame slot's retained allocation list. The existing same-frame
+sequence guard and per-allocation view retirement remain the active lifecycle.
+No replacement compatibility storage or API was added.
+
+Debug/Release each pass all **13 transient-buffer and 68 SceneRenderer tests**
+(162 executions), including multiple allocations, slot reset and repeated frame
+start descriptor retention. The 180-frame Release offscreen directional proof
+exits zero with no warnings/errors. Oxytidy covers both changed files: only the
+existing pointer-arithmetic and missing-nodiscard diagnostics remain; no warning
+was suppressed. Evidence under `ex07a`: `transient-cleanup-*-{debug,release}.json`,
+`transient-cleanup-release-180.log`, `transient-cleanup-tidy-final/` and
+`transient-cleanup-checkpoint.json`.
+
+The closure audit still needs to retire/migrate stale diagnostic decoders and
+refresh missing native allocation-query evidence. This cleanup does not qualify
+all delayed/discarded submission paths or close EX07A.
+
 | Gate                      | Owning suite / required evidence                                                                                                                                                                                                                     | Current result                                                                                                                  |
 | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
 | A ABI                     | CPU size/alignment/every-offset assertions; D3D12 upload/decode/readback of two distinct local records and directional records, integer high-bit patterns, sentinels, reserved zeros and nonzero element indices; matching catalog/reflection checks | Canonical wire records have native Debug/Release proof; remaining source-selection, validity and lifetime interfaces stay open. |

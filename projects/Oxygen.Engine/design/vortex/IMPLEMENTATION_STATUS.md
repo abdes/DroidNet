@@ -195,6 +195,11 @@ accessors/argument and translucent synthetic direction are removed. Debug/Releas
 each pass 21 ABI, 26 lighting, 17 shadow, 68 SceneRenderer and one native AP matrix
 test. RenderDoc checks 72 AP draws against the transfer equation (maximum error
 5.96e-8); source mutation/ingress and full forward image qualification remain open.
+The transient upload owner no longer retains its deprecated single-allocation
+compatibility fields or release path. Debug/Release each pass 13 transient-buffer
+and 68 SceneRenderer tests, plus the clean 180-frame Release offscreen proof.
+Stale diagnostic decoders and missing original allocation-query files remain
+explicit closure-audit gaps.
 MultiView's local-light far-clipping regression is repaired and visually
 confirmed by the user. The
 [review evidence](plan/EX07A-contract-review.md#verification-obligations-and-current-evidence)

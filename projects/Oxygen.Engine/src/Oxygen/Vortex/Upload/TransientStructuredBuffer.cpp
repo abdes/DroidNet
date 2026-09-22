@@ -4,7 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <expected>
@@ -155,8 +154,7 @@ auto TransientStructuredBuffer::Allocate(std::uint32_t element_count)
     return std::unexpected(make_error_code(UploadError::kInvalidRequest));
   }
 
-  const auto* aligned_ptr = allocation.Ptr() + u_delta;
-  slot.allocation = std::move(allocation);
+  auto* const aligned_ptr = allocation.Ptr() + u_delta;
 
   if (inline_transfers_) {
     inline_transfers_->NotifyInlineWrite(
@@ -169,23 +167,23 @@ auto TransientStructuredBuffer::Allocate(std::uint32_t element_count)
   view_desc.stride = stride_;
   view_desc.visibility = graphics::DescriptorVisibility::kShaderVisible;
 
-  DCHECK_F(gfx_->GetResourceRegistry().Contains(slot.allocation->Buffer()),
+  DCHECK_F(gfx_->GetResourceRegistry().Contains(allocation.Buffer()),
     "Backing buffer (RingBufferStaging) not registered in ResourceRegistry!");
   try {
     auto& registry = gfx_->GetResourceRegistry();
 
     if (const auto existing_srv
-      = registry.FindShaderVisibleIndex(slot.allocation->Buffer(), view_desc);
+      = registry.FindShaderVisibleIndex(allocation.Buffer(), view_desc);
       existing_srv.has_value()) {
       SlotAlloc alloc_entry {};
-      alloc_entry.allocation = std::move(slot.allocation);
+      alloc_entry.allocation = std::move(allocation);
       alloc_entry.srv_index = *existing_srv;
       alloc_entry.sequence = current_frame_;
       slot.allocs.emplace_back(std::move(alloc_entry));
 
       TransientAllocation out {};
       out.srv = *existing_srv;
-      out.mapped_ptr = const_cast<std::byte*>(aligned_ptr);
+      out.mapped_ptr = aligned_ptr;
       out.size_bytes = size_bytes;
       out.sequence = current_frame_;
       out.slot = current_slot_;
@@ -203,7 +201,6 @@ auto TransientStructuredBuffer::Allocate(std::uint32_t element_count)
 
     if (!handle.IsValid()) {
       LOG_F(ERROR, "Descriptor allocation for transient upload buffer failed!");
-      slot.allocation.reset();
       return std::unexpected(
         make_error_code(UploadError::kResourceAllocFailed));
     }
@@ -214,11 +211,11 @@ auto TransientStructuredBuffer::Allocate(std::uint32_t element_count)
     try {
       const auto srv_index = allocator.GetShaderVisibleIndex(handle);
       auto native_view = registry.RegisterView(
-        slot.allocation->Buffer(), std::move(handle), view_desc);
+        allocation.Buffer(), std::move(handle), view_desc);
 
       // Build allocation entry and append
       SlotAlloc alloc_entry {};
-      alloc_entry.allocation = std::move(slot.allocation);
+      alloc_entry.allocation = std::move(allocation);
       alloc_entry.srv_index = srv_index;
       alloc_entry.native_view = native_view;
       alloc_entry.sequence = current_frame_;
@@ -226,7 +223,7 @@ auto TransientStructuredBuffer::Allocate(std::uint32_t element_count)
 
       TransientAllocation out {};
       out.srv = srv_index;
-      out.mapped_ptr = const_cast<std::byte*>(aligned_ptr);
+      out.mapped_ptr = aligned_ptr;
       out.size_bytes = size_bytes;
       out.sequence = current_frame_;
       out.slot = current_slot_;
@@ -238,15 +235,11 @@ auto TransientStructuredBuffer::Allocate(std::uint32_t element_count)
     } catch (const std::exception& e) {
       LOG_F(ERROR, "TransientStructuredBuffer: Failed to create view: {}",
         e.what());
-      slot.allocation.reset();
       return std::unexpected(make_error_code(UploadError::kStagingAllocFailed));
     }
   } catch (const std::exception& e) {
     LOG_F(
       ERROR, "TransientStructuredBuffer: Failed to create view: {}", e.what());
-    slot.allocation.reset();
-    slot.srv_index = kInvalidShaderVisibleIndex;
-    slot.native_view = {};
     return std::unexpected(make_error_code(UploadError::kStagingAllocFailed));
   }
 
@@ -297,30 +290,6 @@ auto TransientStructuredBuffer::ResetSlot(std::uint32_t slot_index) -> void
     a.allocation.reset();
   }
   slot.allocs.clear();
-}
-
-auto TransientStructuredBuffer::ReleaseSlotView(SlotData& slot) -> void
-{
-  // Deprecated single-view release path left for completeness. New multi-
-  // allocation slot model uses ReleaseAllocView for each allocation entry.
-  if (!slot.native_view->IsValid()) {
-    return;
-  }
-  try {
-    // If we have a stray single view, attempt unregister with the backing
-    // buffer if available.
-    if (slot.allocation.has_value()) {
-      auto& registry = gfx_->GetResourceRegistry();
-      if (registry.Contains(slot.allocation->Buffer())) {
-        registry.UnRegisterView(slot.allocation->Buffer(), slot.native_view);
-      }
-    }
-  } catch (const std::exception& e) {
-    LOG_F(ERROR,
-      "TransientStructuredBuffer::ReleaseSlotView failed to unregister view: "
-      "{}",
-      e.what());
-  }
 }
 
 auto TransientStructuredBuffer::ReleaseAllocView(SlotAlloc& slot) -> void
