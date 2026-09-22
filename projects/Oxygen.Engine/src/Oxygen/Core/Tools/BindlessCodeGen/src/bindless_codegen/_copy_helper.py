@@ -40,9 +40,9 @@ TIMESTAMP_RE = re.compile(r"\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}")
 
 def read_lines(path: Path) -> List[str]:
     try:
-        return path.read_text(encoding="utf-8").splitlines(keepends=True)
+        return path.read_bytes().decode("utf-8").splitlines(keepends=True)
     except Exception:
-        return path.read_text(encoding="latin-1").splitlines(keepends=True)
+        return path.read_bytes().decode("latin-1").splitlines(keepends=True)
 
 
 def vprint(msg: str, verbose: bool) -> None:

@@ -41,6 +41,7 @@ file(GLOB _gentool_py_scripts "${_gentool_dir}/src/bindless_codegen/*.py")
 set(
   _gentool_sensitive_files
   ${_gentool_py_scripts}
+  "${CMAKE_SOURCE_DIR}/.clang-format"
   "${_gentool_dir}/pyproject.toml"
   "${_gentool_dir}/requirements.txt"
 )

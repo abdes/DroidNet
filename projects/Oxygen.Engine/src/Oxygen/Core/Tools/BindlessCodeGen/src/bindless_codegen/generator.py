@@ -13,6 +13,7 @@ import json
 from pathlib import Path
 import importlib
 import shutil
+import subprocess
 
 try:
     # Normal package import when installed or run as package
@@ -110,12 +111,57 @@ def _render_root_sig_cpp(root_sig: list[dict]) -> tuple[str, str, str]:
     )
 
 
+def _format_json(value):
+    """Emit two-space JSON, keeping short scalar arrays on one line."""
+    content = json.dumps(value, indent=2)
+    # Match JSON scalar tokens rather than arbitrary bracketed text: strings
+    # may themselves contain brackets or escaped quotes.
+    scalar = r'(?:"(?:[^"\\]|\\.)*"|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|true|false|null)'
+    pattern = re.compile(
+        r'^(?P<prefix> *(?:"(?:[^"\\]|\\.)*": )?)(?P<array>\[\s*'
+        + scalar + r'(?:\s*,\s*' + scalar + r')*\s*\])(?P<comma>,?)$',
+        re.MULTILINE,
+    )
+
+    def compact(match):
+        candidate = (match["prefix"]
+                     + json.dumps(json.loads(match["array"]), separators=(", ", ": "))
+                     + match["comma"])
+        if len(candidate) <= 80:
+            return candidate
+        return match.group()
+
+    return pattern.sub(compact, content) + "\n"
+
+
+def _format_cpp(content, path):
+    """Use the same engine style as oxyformat before comparing output bytes."""
+    style = next(
+        (parent / ".clang-format" for parent in Path(__file__).resolve().parents
+         if (parent / ".clang-format").is_file()),
+        None,
+    )
+    if style is None:
+        raise RuntimeError("BindlessCodeGen requires the engine .clang-format")
+    formatter = shutil.which("clang-format")
+    if formatter is None and os.name == "nt":
+        candidate = Path(os.environ.get("ProgramFiles", "C:/Program Files")) / "LLVM/bin/clang-format.exe"
+        formatter = str(candidate) if candidate.is_file() else None
+    if formatter is None:
+        raise RuntimeError("BindlessCodeGen requires clang-format on PATH")
+    result = subprocess.run(
+        [formatter, f"--style=file:{style}", f"--assume-filename={path}"],
+        input=content, text=True, encoding="utf-8", capture_output=True, check=True,
+    )
+    return result.stdout
+
+
 def atomic_write(path, content):
     tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
+    with open(tmp, "w", encoding="utf-8", newline="\n") as f:
         f.write(content)
     if os.path.exists(path):
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, "r", encoding="utf-8", newline="") as f:
             old = f.read()
         if old == content:
             os.remove(tmp)
@@ -154,13 +200,13 @@ def transactional_write_files(files: dict[str, str]) -> bool:
             except Exception:
                 # If directory creation fails, let the subsequent open raise
                 pass
-            with open(tmp, "w", encoding="utf-8") as f:
+            with open(tmp, "w", encoding="utf-8", newline="\n") as f:
                 f.write(content)
             wrote_tmps.append((target, tmp))
             # Compare with existing content
             same = False
             if os.path.exists(target):
-                with open(target, "r", encoding="utf-8") as rf:
+                with open(target, "r", encoding="utf-8", newline="") as rf:
                     old = rf.read()
                 same = old == content
             if not same:
@@ -628,7 +674,7 @@ def generate(
         rep.info("Validation successful, templates processed")
         return False
     # Serialize content strings first (no side effects yet)
-    js = json.dumps(runtime_desc, indent=2) + "\n"
+    js = _format_json(runtime_desc)
     files: dict[str, str] = {
         out_json: js,
         out_cpp_path: content_cpp,
@@ -646,7 +692,7 @@ def generate(
     )
     files[out_meta_h] = content_meta_h
     if d3d12_strategy_json:
-        sj = json.dumps(d3d12_strategy_json, indent=2) + "\n"
+        sj = _format_json(d3d12_strategy_json)
         files[out_strategy] = sj
         content_strategy_hpp = TEMPLATE_STRATEGY_D3D12_CPP.format(
             src=src_rel,
@@ -658,7 +704,14 @@ def generate(
         )
         files[out_strategy_hpp] = content_strategy_hpp
     if vulkan_strategy_json:
-        files[out_vk_strategy] = json.dumps(vulkan_strategy_json, indent=2) + "\n"
+        files[out_vk_strategy] = _format_json(vulkan_strategy_json)
+
+    # Format before timestamp comparison and transactional publication. A build
+    # must never undo the formatting applied by the repository commit hooks.
+    files = {
+        path: _format_cpp(content, path) if Path(path).suffix == ".h" else content
+        for path, content in files.items()
+    }
 
     # Transactional write for all outputs
     rep.progress("Writing outputs transactionally")
