@@ -2179,6 +2179,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   const auto& selection
     = RendererPublicationProbe::GetFrameLightSelection(*scene_renderer_);
   ASSERT_EQ(selection.local_lights.size(), 1U);
+  EXPECT_EQ(selection.local_lights.front().source_node, spot.GetHandle());
   EXPECT_NE(selection.local_lights.front().flags
       & oxygen::vortex::kLocalLightFlagCastsShadows,
     0U);
@@ -2207,6 +2208,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   const auto& selection
     = RendererPublicationProbe::GetFrameLightSelection(*scene_renderer_);
   ASSERT_EQ(selection.local_lights.size(), 1U);
+  EXPECT_EQ(selection.local_lights.front().source_node, point.GetHandle());
   EXPECT_NE(selection.local_lights.front().flags
       & oxygen::vortex::kLocalLightFlagCastsShadows,
     0U);

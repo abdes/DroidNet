@@ -8,7 +8,6 @@
 #include "Vortex/Contracts/Environment/EnvironmentHelpers.hlsli"
 #include "Vortex/Contracts/Environment/EnvironmentViewHelpers.hlsli"
 #include "Vortex/Contracts/View/ViewConstants.hlsli"
-#include "Vortex/Contracts/Lighting/LightingHelpers.hlsli"
 
 #include "Vortex/Services/Environment/AerialPerspective.hlsli"
 #include "Vortex/Contracts/Scene/SceneTextures.hlsli"
@@ -70,13 +69,11 @@ float4 VortexAtmosphereComposePS(VortexFullscreenTriangleOutput input) : SV_Targ
         discard;
     }
 
-    const float3 sun_dir = GetSunDirectionWS();
     RecordHdrConsumerUsage(HDR_CONSUMER_OPAQUE_AP);
     const AerialPerspectiveResult aerial = ComputeAerialPerspective(
         env_data,
         world_position,
-        camera_position,
-        sun_dir);
+        camera_position);
 
     const float3 inscatter = aerial.inscatter;
     const float transmittance = saturate(dot(aerial.transmittance, float3(1.0f / 3.0f, 1.0f / 3.0f, 1.0f / 3.0f)));

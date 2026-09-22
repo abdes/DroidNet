@@ -762,6 +762,36 @@ Evidence under `ex07a`: `shadow-owner-*-{debug,release}.json`,
 independent map-index prediction, not wide-spot support, resource-budget growth,
 full submission/failure recovery, or EX07A as a whole.
 
+### Source identity and aerial-perspective interface checkpoint
+
+Local selections now retain the same strongly typed source-node identity as
+directionals. Point/spot scene traversal publishes the visited handle, and the
+existing local-shadow integration tests compare the selection against each
+actual source node. GPU records continue to carry immutable selection indices;
+the native decode suite verifies that adding CPU identity does not change wire
+layouts.
+
+Removed `GetSunDirectionWS`/`HasSunLight` and the unused sun-direction argument
+from both aerial-perspective helpers and their opaque/translucent callers. This
+also removes the translucent path's synthetic Primary direction. The camera-
+volume LUT already owns both atmosphere-source contributions; no second light
+authority replaces these fields. Direct DXC compiles pass; optimized output is
+not byte-identical, so equivalence is not inferred from binary hashes.
+
+Debug and Release each pass **21 native ABI/lookup, 26 lighting, 17 shadow,
+68 SceneRenderer and one native AP matrix test** (266 test executions).
+The native AP fixture and RenderDoc analyzer pass 72 composition draws / 1,152
+pixels across FP16/FP32 inputs, with maximum absolute error 5.96e-8 against the
+independent transfer equation. Both 233-module shader archives rebuild, and the
+180-frame Release native offscreen proof exits zero without warnings/errors.
+Oxytidy covers all three changed C++ files with no changed-line findings; existing
+whole-file diagnostics remain. Evidence under `ex07a`:
+`source-identity-*-{debug,release}.json`, `ap-interface-{debug,release}.json`,
+`ap-interface-report.txt`, `source-identity-tidy/`,
+`source-identity-release-180.log` and `source-identity-checkpoint.json`.
+This checkpoint does not qualify full source-mutation/round-trip behavior or a
+separate forward raster image oracle. EX07A remains in progress.
+
 | Gate                      | Owning suite / required evidence                                                                                                                                                                                                                     | Current result                                                                                                                  |
 | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
 | A ABI                     | CPU size/alignment/every-offset assertions; D3D12 upload/decode/readback of two distinct local records and directional records, integer high-bit patterns, sentinels, reserved zeros and nonzero element indices; matching catalog/reflection checks | Canonical wire records have native Debug/Release proof; remaining source-selection, validity and lifetime interfaces stay open. |

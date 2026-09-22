@@ -288,14 +288,9 @@ float4 PS(VSOutput input)
     && !defined(DEBUG_DIRECT_LIGHT_GATES) && !defined(DEBUG_DIRECT_BRDF_CORE)  \
     && !defined(DEBUG_IBL_ONLY) && !defined(DEBUG_DIRECT_PLUS_IBL)
   if (env_state.has_data != 0u) {
-    float3 s_dir = SafeNormalize(GetSunDirectionWS());
-    if (!HasSunLight() || dot(s_dir, s_dir) < 0.5) {
-      s_dir = float3(0.5, 0.707, 0.5);
-    }
-
     RecordHdrConsumerUsage(HDR_CONSUMER_TRANSLUCENT_AP);
     const AerialPerspectiveResult ap = ComputeAerialPerspective(
-      env_state.data, input.world_pos, camera_position, s_dir);
+      env_state.data, input.world_pos, camera_position);
     final_color = ApplyAerialPerspective(final_color, ap);
   }
 #  endif

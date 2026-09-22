@@ -101,8 +101,9 @@ layered over `LightingFrameBindings`.
 ### 2.2 Frame selection and identity
 
 `FrameLightSelection` contains ordered directional and local-light collections,
-scene generation and selection revision. Entries retain source node identity
-and generation for CPU mutation, errors and shadow association. GPU indices
+scene generation and selection revision. Both directional and local entries retain
+`scene::NodeHandle source_node`, including its node generation, for CPU mutation,
+errors and shadow association. GPU indices
 address this immutable snapshot, not persistent scene identities. Use integer
 fields for indices, flags and enums rather than encoding them as floats.
 

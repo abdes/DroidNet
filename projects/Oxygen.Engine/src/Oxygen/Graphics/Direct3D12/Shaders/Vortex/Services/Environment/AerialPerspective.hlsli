@@ -220,14 +220,12 @@ float4 SampleCameraVolumeLut(
 //! @param atmo Atmosphere parameters from EnvironmentStaticData.
 //! @param world_pos World-space position of the fragment.
 //! @param camera_pos World-space camera position.
-//! @param sun_dir Normalized direction toward the sun.
 //! @param view_distance Distance from camera to fragment in meters.
 //! @return Aerial perspective result with inscatter and transmittance.
 AerialPerspectiveResult ComputeAerialPerspectiveLut(
     GpuSkyAtmosphereParams atmo,
     float3 world_pos,
     float3 camera_pos,
-    float3 sun_dir,
     float view_distance)
 {
     AerialPerspectiveResult result;
@@ -258,13 +256,11 @@ AerialPerspectiveResult ComputeAerialPerspectiveLut(
 //! @param env_data Static environment data.
 //! @param world_pos World-space position of the fragment.
 //! @param camera_pos World-space camera position.
-//! @param sun_dir Normalized direction toward the sun.
 //! @return Aerial perspective result.
 AerialPerspectiveResult ComputeAerialPerspective(
     EnvironmentStaticData env_data,
     float3 world_pos,
-    float3 camera_pos,
-    float3 sun_dir)
+    float3 camera_pos)
 {
     AerialPerspectiveResult result;
     result.inscatter = float3(0.0, 0.0, 0.0);
@@ -288,7 +284,6 @@ AerialPerspectiveResult ComputeAerialPerspective(
         env_data.atmosphere,
         world_pos,
         camera_pos,
-        sun_dir,
         view_distance);
 
     return result;
