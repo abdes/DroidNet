@@ -11,9 +11,9 @@
 #include <string_view>
 #include <vector>
 
-#include <Oxygen/Testing/GTest.h>
-
+#include <Oxygen/Base/Finally.h>
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
+#include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::content::import::test {
 
@@ -67,7 +67,7 @@ namespace {
     request.loose_cooked_layout.virtual_mount_root = "/.cooked";
     request.scene_descriptor = ImportRequest::SceneDescriptorPayload {
       .normalized_descriptor_json
-      = R"({"name":"DemoScene","nodes":[{"name":"Root"}]})",
+      = R"({"version":6,"name":"DemoScene","nodes":[{"name":"Root"}]})",
     };
     return request;
   }
@@ -93,6 +93,8 @@ namespace {
     auto service = AsyncImportService(AsyncImportService::Config {
       .thread_pool_size = 2U,
     });
+    [[maybe_unused]] auto stop_service
+      = oxygen::Finally([&service]() { service.Stop(); });
     const auto cooked_root = MakeTempCookedRoot("inline_sidecar_success");
 
     const auto scene_report
@@ -117,6 +119,8 @@ namespace {
     auto service = AsyncImportService(AsyncImportService::Config {
       .thread_pool_size = 2U,
     });
+    [[maybe_unused]] auto stop_service
+      = oxygen::Finally([&service]() { service.Stop(); });
 
     auto request = ImportRequest {};
     request.source_path = "inline://physics-sidecar";
@@ -140,6 +144,8 @@ namespace {
     auto service = AsyncImportService(AsyncImportService::Config {
       .thread_pool_size = 2U,
     });
+    [[maybe_unused]] auto stop_service
+      = oxygen::Finally([&service]() { service.Stop(); });
 
     auto request = ImportRequest {};
     request.source_path = "inline://physics-sidecar";
