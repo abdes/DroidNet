@@ -17,6 +17,7 @@ public:
   virtual ~IMutationCollector() = default;
   virtual auto SetEnabled(bool enabled) -> void = 0;
   [[nodiscard]] virtual auto IsEnabled() const noexcept -> bool = 0;
+  [[nodiscard]] virtual auto NextSequence() const noexcept -> uint64_t = 0;
   virtual auto ClearMutations() -> void = 0;
 
   virtual auto CollectScriptSlotActivated(

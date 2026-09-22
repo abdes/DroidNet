@@ -756,13 +756,14 @@ private:
   struct ObserverSubscription final {
     observer_ptr<ISceneObserver> observer;
     SceneMutationMask mutation_mask { SceneMutationMask::kAllMutations };
+    uint64_t first_sequence { 0 };
   };
 
   [[nodiscard]] auto AsMutationCollector() const noexcept
     -> observer_ptr<internal::IMutationCollector>;
   auto NotifyObservers(SceneMutationMask mutation_type,
     const NodeHandle& node_handle, ScriptSlotIndex slot_index,
-    const ScriptingComponent::Slot* slot) const -> void;
+    const ScriptingComponent::Slot* slot, uint64_t sequence) const -> void;
   [[nodiscard]] auto ResolveScriptSlot(
     const NodeHandle& node_handle, ScriptSlotIndex slot_index) const noexcept
     -> const ScriptingComponent::Slot*;
@@ -770,6 +771,7 @@ private:
 
   std::vector<ObserverSubscription> observers_;
   bool hydration_mutation_collection_enabled_ { false };
+  std::optional<uint64_t> hydration_first_sequence_;
   std::unique_ptr<internal::IMutationCollector> mutation_collector_;
   std::unique_ptr<internal::IScriptSlotMutationProcessor>
     script_slot_processor_;

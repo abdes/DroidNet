@@ -781,6 +781,8 @@ auto Scene::RegisterObserver(const observer_ptr<ISceneObserver> observer,
   observers_.push_back(ObserverSubscription {
     .observer = observer,
     .mutation_mask = mutation_mask,
+    .first_sequence
+    = hydration_first_sequence_.value_or(mutation_collector_->NextSequence()),
   });
   UpdateMutationCollectionState();
   return true;
@@ -837,10 +839,11 @@ auto Scene::ResolveScriptSlot(const NodeHandle& node_handle,
 
 auto Scene::NotifyObservers(const SceneMutationMask mutation_type,
   const NodeHandle& node_handle, const ScriptSlotIndex slot_index,
-  const ScriptingComponent::Slot* slot) const -> void
+  const ScriptingComponent::Slot* slot, const uint64_t sequence) const -> void
 {
   for (const auto& subscription : observers_) {
-    if (subscription.observer == nullptr) {
+    if (subscription.observer == nullptr
+      || sequence < subscription.first_sequence) {
       continue;
     }
     const auto mask
@@ -900,30 +903,38 @@ auto Scene::SyncObservers() -> void
       .notify_script_observers =
         [this](const SceneMutationMask mutation_type,
           const NodeHandle& node_handle, const ScriptSlotIndex slot_index,
-          const ScriptingComponent::Slot* slot) {
-          NotifyObservers(mutation_type, node_handle, slot_index, slot);
+          const ScriptingComponent::Slot* slot, const uint64_t sequence) {
+          NotifyObservers(
+            mutation_type, node_handle, slot_index, slot, sequence);
         },
       .notify_light_mutation =
-        [this](const internal::LightMutation& mutation) {
+        [this](
+          const internal::LightMutation& mutation, const uint64_t sequence) {
           NotifyObservers(SceneMutationMask::kLightChanged,
-            mutation.node_handle, ScriptSlotIndex {}, nullptr);
+            mutation.node_handle, ScriptSlotIndex {}, nullptr, sequence);
         },
       .notify_camera_mutation =
-        [this](const internal::CameraMutation& mutation) {
+        [this](
+          const internal::CameraMutation& mutation, const uint64_t sequence) {
           NotifyObservers(SceneMutationMask::kCameraChanged,
-            mutation.node_handle, ScriptSlotIndex {}, nullptr);
+            mutation.node_handle, ScriptSlotIndex {}, nullptr, sequence);
         },
       .notify_transform_mutation =
-        [this](const internal::TransformMutation& mutation) {
+        [this](const internal::TransformMutation& mutation,
+          const uint64_t sequence) {
           NotifyObservers(SceneMutationMask::kTransformChanged,
-            mutation.node_handle, ScriptSlotIndex {}, nullptr);
+            mutation.node_handle, ScriptSlotIndex {}, nullptr, sequence);
         },
       .notify_node_destroyed_mutation =
-        [this](const internal::NodeDestroyedMutation& mutation) {
+        [this](const internal::NodeDestroyedMutation& mutation,
+          const uint64_t sequence) {
           NotifyObservers(SceneMutationMask::kNodeDestroyed,
-            mutation.node_handle, ScriptSlotIndex {}, nullptr);
+            mutation.node_handle, ScriptSlotIndex {}, nullptr, sequence);
         },
     });
+  if (!hydration_mutation_collection_enabled_) {
+    hydration_first_sequence_.reset();
+  }
 }
 
 auto Scene::GetMutationDispatchCounters() const noexcept
@@ -951,6 +962,9 @@ auto Scene::GetMutationDispatchCounters() const noexcept
 
 auto Scene::CollectMutationsStart() noexcept -> void
 {
+  if (!hydration_first_sequence_) {
+    hydration_first_sequence_ = mutation_collector_->NextSequence();
+  }
   hydration_mutation_collection_enabled_ = true;
   UpdateMutationCollectionState();
 }

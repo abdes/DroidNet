@@ -38,13 +38,16 @@ public:
 
   using ResolveScriptSlotFn = IScriptSlotMutationProcessor::ResolveScriptSlotFn;
   using NotifyScriptObserversFn
-    = IScriptSlotMutationProcessor::NotifyObserversFn;
-  using NotifyLightMutationFn = std::function<void(const LightMutation&)>;
-  using NotifyCameraMutationFn = std::function<void(const CameraMutation&)>;
+    = std::function<void(SceneMutationMask, const NodeHandle&, ScriptSlotIndex,
+      const ScriptingComponent::Slot*, uint64_t)>;
+  using NotifyLightMutationFn
+    = std::function<void(const LightMutation&, uint64_t)>;
+  using NotifyCameraMutationFn
+    = std::function<void(const CameraMutation&, uint64_t)>;
   using NotifyTransformMutationFn
-    = std::function<void(const TransformMutation&)>;
+    = std::function<void(const TransformMutation&, uint64_t)>;
   using NotifyNodeDestroyedMutationFn
-    = std::function<void(const NodeDestroyedMutation&)>;
+    = std::function<void(const NodeDestroyedMutation&, uint64_t)>;
 
   struct DispatchContext final {
     ResolveScriptSlotFn resolve_script_slot;

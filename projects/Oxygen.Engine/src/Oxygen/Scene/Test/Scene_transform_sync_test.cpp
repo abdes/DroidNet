@@ -7,8 +7,6 @@
 #include <memory>
 #include <vector>
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Internal/IMutationCollector.h>
 #include <Oxygen/Scene/Internal/MutationCollector.h>
@@ -16,6 +14,7 @@
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/Test/Helpers/SceneMutationTestSupport.h>
+#include <Oxygen/Testing/GTest.h>
 
 namespace {
 
@@ -119,6 +118,29 @@ NOLINT_TEST_F(SceneTransformSyncTest, NoBackfillWithoutHydrationCollection)
   EXPECT_TRUE(observer_.transform_changed.empty());
 }
 
+NOLINT_TEST_F(
+  SceneTransformSyncTest, CoalescingAcrossRegistrationKeepsFutureMutation)
+{
+  ASSERT_TRUE(node_.GetTransform().SetLocalPosition({ 1.0F, 2.0F, 3.0F }));
+  RegisterTransformObserver();
+  ASSERT_TRUE(node_.GetTransform().SetLocalPosition({ 4.0F, 5.0F, 6.0F }));
+  scene_->SyncObservers();
+  ASSERT_EQ(observer_.transform_changed.size(), 1U);
+  EXPECT_EQ(observer_.transform_changed.front(), node_.GetHandle());
+}
+
+NOLINT_TEST_F(
+  SceneTransformSyncTest, HydrationEndPreservesQueuedMutationForNewObserver)
+{
+  scene_->CollectMutationsStart();
+  ASSERT_TRUE(node_.GetTransform().SetLocalPosition({ 1.0F, 2.0F, 3.0F }));
+  scene_->CollectMutationsEnd();
+  RegisterTransformObserver();
+  scene_->SyncObservers();
+  ASSERT_EQ(observer_.transform_changed.size(), 1U);
+  EXPECT_EQ(observer_.transform_changed.front(), node_.GetHandle());
+}
+
 NOLINT_TEST_F(SceneTransformSyncTest, EmptyFrameSyncLeavesNewCountersAtZero)
 {
   RegisterTransformObserver();
@@ -164,7 +186,8 @@ NOLINT_TEST_F(
       .notify_light_mutation = {},
       .notify_camera_mutation = {},
       .notify_transform_mutation =
-        [&transform_notifications](const TransformMutation& mutation) {
+        [&transform_notifications](
+          const TransformMutation& mutation, const uint64_t /*sequence*/) {
           transform_notifications.push_back(mutation);
         },
       .notify_node_destroyed_mutation = {},

@@ -23,7 +23,11 @@ namespace {
   template <SceneMutation MutationT> struct CoalescedState final {
     using KeyType = typename MutationTraits<MutationT>::KeyType;
 
-    std::unordered_map<KeyType, MutationT> by_key {};
+    struct Entry {
+      MutationT mutation {};
+      uint64_t sequence { 0 };
+    };
+    std::unordered_map<KeyType, Entry> by_key {};
     std::vector<KeyType> first_seen_order {};
   };
 
@@ -50,19 +54,19 @@ namespace {
 
       for (const auto& record : mutations) {
         std::visit(
-          [this, &context](const auto& mutation) {
+          [this, &context, &record](const auto& mutation) {
             using MutationT = std::decay_t<decltype(mutation)>;
             if constexpr (std::same_as<MutationT, ScriptSlotMutation>) {
-              HandleScriptMutation(mutation, context);
+              HandleScriptMutation(mutation, record.sequence, context);
             } else if constexpr (std::same_as<MutationT, LightMutation>) {
-              HandleLightMutation(mutation);
+              HandleLightMutation(mutation, record.sequence);
             } else if constexpr (std::same_as<MutationT, CameraMutation>) {
-              HandleCameraMutation(mutation);
+              HandleCameraMutation(mutation, record.sequence);
             } else if constexpr (std::same_as<MutationT, TransformMutation>) {
-              HandleTransformMutation(mutation);
+              HandleTransformMutation(mutation, record.sequence);
             } else if constexpr (std::same_as<MutationT,
                                    NodeDestroyedMutation>) {
-              HandleNodeDestroyedMutation(mutation, context);
+              HandleNodeDestroyedMutation(mutation, record.sequence, context);
             } else {
               static_assert(kAlwaysFalse<MutationT>,
                 "Unhandled MutationPayload alternative in dispatcher.");
@@ -81,50 +85,63 @@ namespace {
 
   private:
     auto HandleScriptMutation(const ScriptSlotMutation& mutation,
-      const DispatchContext& context) -> void
+      const uint64_t sequence, const DispatchContext& context) -> void
     {
       DCHECK_NOTNULL_F(script_slot_processor_.get());
       ++counters_.script_records_dispatched;
-      script_slot_processor_->Process(
-        mutation, context.resolve_script_slot, context.notify_script_observers);
+      script_slot_processor_->Process(mutation, context.resolve_script_slot,
+        [&context, sequence](const SceneMutationMask type,
+          const NodeHandle& node, const ScriptSlotIndex slot_index,
+          const ScriptingComponent::Slot* slot) {
+          if (context.notify_script_observers) {
+            context.notify_script_observers(
+              type, node, slot_index, slot, sequence);
+          }
+        });
     }
 
-    auto HandleLightMutation(const LightMutation& mutation) -> void
+    auto HandleLightMutation(
+      const LightMutation& mutation, const uint64_t sequence) -> void
     {
       ++counters_.light_records_coalesced_in;
-      CoalesceMutation(mutation);
+      CoalesceMutation(mutation, sequence);
     }
 
-    auto HandleCameraMutation(const CameraMutation& mutation) -> void
+    auto HandleCameraMutation(
+      const CameraMutation& mutation, const uint64_t sequence) -> void
     {
       ++counters_.camera_records_coalesced_in;
-      CoalesceMutation(mutation);
+      CoalesceMutation(mutation, sequence);
     }
 
-    auto HandleTransformMutation(const TransformMutation& mutation) -> void
+    auto HandleTransformMutation(
+      const TransformMutation& mutation, const uint64_t sequence) -> void
     {
       ++counters_.transform_records_coalesced_in;
-      CoalesceMutation(mutation);
+      CoalesceMutation(mutation, sequence);
     }
 
     auto HandleNodeDestroyedMutation(const NodeDestroyedMutation& mutation,
-      const DispatchContext& context) -> void
+      const uint64_t sequence, const DispatchContext& context) -> void
     {
       ++counters_.node_destroyed_records_dispatched;
       if (context.notify_node_destroyed_mutation) {
-        context.notify_node_destroyed_mutation(mutation);
+        context.notify_node_destroyed_mutation(mutation, sequence);
       }
     }
 
     template <SceneMutation MutationT>
       requires MutationTraits<MutationT>::kCoalescible
-    auto CoalesceMutation(const MutationT& mutation) -> void
+    auto CoalesceMutation(const MutationT& mutation, const uint64_t sequence)
+      -> void
     {
       auto& state = Coalesced<MutationT>();
       const auto key = MutationTraits<MutationT>::Key(mutation);
-      const auto [it, inserted] = state.by_key.try_emplace(key, mutation);
+      const auto [it, inserted]
+        = state.by_key.try_emplace(key, mutation, sequence);
       if (!inserted) {
-        MutationTraits<MutationT>::Merge(it->second, mutation);
+        MutationTraits<MutationT>::Merge(it->second.mutation, mutation);
+        it->second.sequence = sequence;
         return;
       }
       state.first_seen_order.push_back(key);
@@ -151,7 +168,8 @@ namespace {
         DCHECK_F(it != coalesced_transform_.by_key.end());
         ++counters_.transform_records_dispatched;
         if (context.notify_transform_mutation) {
-          context.notify_transform_mutation(it->second);
+          context.notify_transform_mutation(
+            it->second.mutation, it->second.sequence);
         }
       }
       coalesced_transform_.by_key.clear();
@@ -165,7 +183,8 @@ namespace {
         DCHECK_F(it != coalesced_light_.by_key.end());
         ++counters_.light_records_dispatched;
         if (context.notify_light_mutation) {
-          context.notify_light_mutation(it->second);
+          context.notify_light_mutation(
+            it->second.mutation, it->second.sequence);
         }
       }
       coalesced_light_.by_key.clear();
@@ -179,7 +198,8 @@ namespace {
         DCHECK_F(it != coalesced_camera_.by_key.end());
         ++counters_.camera_records_dispatched;
         if (context.notify_camera_mutation) {
-          context.notify_camera_mutation(it->second);
+          context.notify_camera_mutation(
+            it->second.mutation, it->second.sequence);
         }
       }
       coalesced_camera_.by_key.clear();
