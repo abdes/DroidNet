@@ -20,6 +20,16 @@ gtest_program(
     oxygen::testing
 )
 
+gtest_program(
+  "Oxygen.Vortex.LightingReference.Tests"
+  SOURCES
+    "Reference/GgxMoments.cpp"
+    "Reference/GgxMoments.h"
+    "GgxReference_test.cpp"
+  DEPS
+    oxygen::testing
+)
+
 if(CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64")
   set(lighting_probe_arch "x64")
 elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "x86")
