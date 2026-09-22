@@ -184,6 +184,12 @@ source surfaces in both views. Changed-file oxytidy has no introduced findings.
 Ordinary-directional fog scattering and unified physical atmosphere resolution
 remain open; the [checkpoint](plan/EX07A-contract-review.md#atmosphere-source-fog-shadow-checkpoint)
 records the precise validation boundary.
+ShadowService now owns dense selection-reference maps derived from actual shadow
+records; lighting no longer predicts map indices. Per-view attachment validates
+identities and publishes an immutable header; missing requested maps reject the
+view. Debug/Release each pass 26 lighting, 17 shadow and 68 SceneRenderer tests;
+four RenderDoc analyses pass, as does the 180-frame Release offscreen proof.
+Budgeted shadow growth and full failure/recovery qualification remain open.
 MultiView's local-light far-clipping regression is repaired and visually
 confirmed by the user. The
 [review evidence](plan/EX07A-contract-review.md#verification-obligations-and-current-evidence)

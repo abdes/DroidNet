@@ -226,7 +226,15 @@ view constants. Uploading CPU vectors alone does not establish spatial culling.
    ownership/dependencies, not an assumed free overlap.
 4. ShadowService records shadow production. List construction need not wait for
    shadow texel writes; lighting sampling does. Keep selection/view generations
-   consistent across light and shadow products.
+   consistent across light and shadow products. ShadowService builds dense
+   reference arrays from the actual projection records' selection identities;
+   LightingService must not predict indices with per-kind counters. After the
+   shadow header/arrays publish successfully, attach these descriptors through
+   a new immutable lighting header for that view. Validate the scene, selection,
+   frame, view and build-status identities before attachment. Invalidate the CPU
+   route on a failed replacement; previously recorded readers keep their own
+   allocations until their fences retire. Missing required projections reject
+   publication, including requests beyond an allocator's current capacity.
 5. Forward and Stage 12 consume immutable data; output/composition and diagnostics
    accept only the corresponding valid view result.
 6. Existing callbacks resolve submission/discard. Retain buffers, constants and

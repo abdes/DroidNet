@@ -316,6 +316,8 @@ set(
   "Lighting/Internal/LightEvaluationRecords.cpp"
   "Lighting/Internal/LightPhotometry.cpp"
   "Shadows/Internal/CascadeShadowSetup.cpp"
+  "Shadows/Internal/ShadowReferenceBuilder.cpp"
+  "Shadows/Internal/ShadowReferenceBuilder.h"
   "Shadows/Internal/ConventionalShadowTargetAllocator.cpp"
   "Shadows/Internal/PointShadowSetup.cpp"
   "Shadows/Internal/ShadowCasterCulling.cpp"

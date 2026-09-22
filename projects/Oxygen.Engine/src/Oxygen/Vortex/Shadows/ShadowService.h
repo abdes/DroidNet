@@ -103,6 +103,9 @@ private:
   std::unique_ptr<upload::TransientStructuredBuffer> cascade_record_buffer_;
   std::unique_ptr<upload::TransientStructuredBuffer> projected_record_buffer_;
   std::unique_ptr<upload::TransientStructuredBuffer> cube_record_buffer_;
+  std::unique_ptr<upload::TransientStructuredBuffer>
+    directional_reference_buffer_;
+  std::unique_ptr<upload::TransientStructuredBuffer> local_reference_buffer_;
   std::unordered_map<ViewId, PublishedView> published_views_;
   std::unique_ptr<shadows::CascadeShadowPass> cascade_shadow_pass_;
 };
