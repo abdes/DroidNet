@@ -67,6 +67,13 @@ TransientStructuredBuffer::~TransientStructuredBuffer() { Reset(); }
 auto TransientStructuredBuffer::OnFrameStart(
   frame::SequenceNumber sequence, frame::Slot slot) -> void
 {
+  // Offscreen sessions can restart scene preparation within the same physical
+  // frame. Earlier queued GPU readers still reference the published
+  // descriptors.
+  if (slot != frame::kInvalidSlot && current_slot_ == slot
+    && current_frame_ == sequence) {
+    return;
+  }
   current_slot_ = slot;
   current_frame_ = sequence;
   const auto slot_index = slot.get();

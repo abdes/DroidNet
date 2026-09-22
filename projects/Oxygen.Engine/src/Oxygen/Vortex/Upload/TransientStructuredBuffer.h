@@ -67,9 +67,9 @@ class InlineTransfersCoordinator;
 
  Usage:
  1. Call Allocate(count) at start of frame/view.
- 2. Write data to GetMappedPtr().
- 3. Use GetBinding() to bind to shader.
- 4. Call Reset() at end of frame (or let destructor handle it).
+ 2. Write data through TransientAllocation::TryWriteObject or TryWriteRange.
+ 3. Bind the returned allocation's SRV.
+ 4. Advance to a different sequence only after its frame slot is safe to reuse.
 */
 class TransientStructuredBuffer {
 public:
@@ -91,13 +91,14 @@ public:
 
   //! Set the active frame slot for upcoming allocations and the frame
   //! sequence number which uniquely identifies this frame across slots.
+  //! Repeating the same sequence and slot preserves all earlier allocations.
   OXGN_VRTX_API auto OnFrameStart(
     frame::SequenceNumber sequence, frame::Slot slot) -> void;
 
   //! Allocate memory and create a transient SRV. Returns a handle describing
   //! the allocation. The returned TransientAllocation stays valid for the
-  //! duration of the frame (until the next OnFrameStart is called for the
-  //! corresponding slot). Callers should check IsValid(sequence) to assert
+  //! duration of the frame (until OnFrameStart advances the corresponding slot
+  //! to a different sequence). Callers should check IsValid(sequence) to assert
   //! the allocation is for the expected frame sequence.
   struct TransientAllocation {
     ShaderVisibleIndex srv { kInvalidShaderVisibleIndex };
