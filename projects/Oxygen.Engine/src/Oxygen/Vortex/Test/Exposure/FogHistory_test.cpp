@@ -453,7 +453,7 @@ NOLINT_TEST_F(ExposureGpuTest, FogStableCellsPreserveHistoryAndHomogeneousMedia)
             };
             params.grid_z = {
               .grid_z_params = { 1.0F, 0.0F, 1.0F },
-              .shadowed_directional_light0_enabled = 0.0F,
+              .directional_shadows_enabled = 0U,
             };
             params.height_fog0.primary_density = density;
             params.height_fog1.match_height_fog_factor = 1.0F;

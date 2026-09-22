@@ -50,7 +50,7 @@ struct VolumetricFogMediaControl0
 struct VolumetricFogGridZControl
 {
     float3 grid_z_params;
-    float shadowed_directional_light0_enabled;
+    uint directional_shadows_enabled;
 };
 
 struct VolumetricFogMediaControl1
@@ -483,29 +483,25 @@ static float4 EvaluateVolumetricFogSample(
     const float transmittance = exp(-extinction * ray_length);
     const float opacity = saturate(OneMinusExpNegative(extinction * ray_length));
 
-    float light0_shadow_visibility = 1.0f;
-    if (pass.grid_z.shadowed_directional_light0_enabled > 0.0f
-        && pass.light0_direction_enabled.w > 0.0f) {
-        DirectionalLightForwardData shadow_light;
-        if (TryLoadAtmosphereDirectionalLight(0u, shadow_light)) {
-            light0_shadow_visibility = ComputeDirectionalVolumetricShadowVisibility(
-                shadow_light.selection_index, sample_world_position, pass.light0_direction_enabled.xyz);
-        }
-    }
-
     float3 directional_lighting = 0.0f.xxx;
-    directional_lighting += EvaluateDirectionalContribution(
-        pass.light0_direction_enabled,
-        pass.light0_illuminance_rgb,
-        pass.media0.scattering_distribution,
-        view_direction_to_camera,
-        light0_shadow_visibility);
-    directional_lighting += EvaluateDirectionalContribution(
-        pass.light1_direction_enabled,
-        pass.light1_illuminance_rgb,
-        pass.media0.scattering_distribution,
-        view_direction_to_camera,
-        1.0f);
+    for (uint atmosphere_slot = 0u; atmosphere_slot < 2u; ++atmosphere_slot) {
+        const float4 direction_enabled = atmosphere_slot == 0u
+            ? pass.light0_direction_enabled : pass.light1_direction_enabled;
+        if (direction_enabled.w <= 0.0f) continue;
+        const float4 illuminance_rgb = atmosphere_slot == 0u
+            ? pass.light0_illuminance_rgb : pass.light1_illuminance_rgb;
+        float shadow_visibility = 1.0f;
+        if (pass.grid_z.directional_shadows_enabled != 0u) {
+            DirectionalLightForwardData shadow_light;
+            if (TryLoadAtmosphereDirectionalLight(atmosphere_slot, shadow_light)) {
+                shadow_visibility = ComputeDirectionalVolumetricShadowVisibility(
+                    shadow_light.selection_index, sample_world_position, direction_enabled.xyz);
+            }
+        }
+        directional_lighting += EvaluateDirectionalContribution(
+            direction_enabled, illuminance_rgb, pass.media0.scattering_distribution,
+            view_direction_to_camera, shadow_visibility);
+    }
 
     const float3 sky_lighting = EvaluateSkyLightContribution(pass);
     const float3 bounded_lighting =

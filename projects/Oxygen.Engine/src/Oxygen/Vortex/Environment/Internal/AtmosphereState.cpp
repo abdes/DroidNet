@@ -393,15 +393,6 @@ auto AtmosphereState::Update(const scene::Scene& scene_ref,
     = BuildVolumetricFogModel(environment_systems);
   next.view_products.atmosphere_lights = light_state.atmosphere_lights;
   next.view_products.atmosphere_light_count = light_state.active_light_count;
-  next.view_products.conventional_shadow_authority_slot
-    = light_state.shadow_authority_slot;
-  next.conventional_shadow_authority_slot = light_state.shadow_authority_slot;
-  next.conventional_shadow_cascade_count
-    = light_state.shadow_authority_slot == 0U
-    ? light_state.source_cascade_counts[0]
-    : 0U;
-  next.conventional_shadow_authority_slot0_only
-    = light_state.shadow_authority_slot0_only;
   next.light_revision = light_state.revision;
 
   next.authored_hash = HashAtmosphereModel(next.view_products.atmosphere);

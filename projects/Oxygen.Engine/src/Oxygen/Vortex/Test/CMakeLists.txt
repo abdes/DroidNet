@@ -505,6 +505,7 @@ if(WIN32)
       "Exposure/FilterBounds_test.cpp"
       "Exposure/FogComposition_test.cpp"
       "Exposure/FogHistory_test.cpp"
+      "Exposure/FogDirectionalShadows_test.cpp"
       "Exposure/Fp32Only_test.cpp"
       "Exposure/Fp32Reference_test.cpp"
       "Exposure/FrameDomain_test.cpp"

@@ -622,7 +622,12 @@ Resolution is explicit:
    Primary. Ordinary role-None directionals remain eligible for direct lighting.
 4. Feed both atmospheric sources into scattering/disks and the captured-sky IBL
    product. Associate applicable fog shadowing with the correct per-light shadow
-   record; slot-0-only shadow visibility is an old implementation limit.
+   record. Volumetric fog resolves each active atmosphere slot to its canonical
+   directional selection, then follows that source's shadow reference and
+   cascade family. The pass has one uint directional-shadow enable switch;
+   atmosphere state carries no shadow authority or duplicate cascade counts.
+   An absent shadow request is fully visible. Shadow allocation and generation
+   validity remain owned by lighting/shadow publication.
 5. Invalidate resolver and affected products on source/role/participation/effective
    visibility changes. Preserve unclamped physical direction and existing below-
    horizon invariants.

@@ -22,8 +22,6 @@ struct ResolvedAtmosphereLightState {
   environment::AtmosphereLightSlots atmosphere_lights {};
   std::array<scene::NodeHandle, environment::kAtmosphereLightSlotCount>
     source_nodes {};
-  std::array<std::uint32_t, environment::kAtmosphereLightSlotCount>
-    source_cascade_counts {};
   std::array<bool, environment::kAtmosphereLightSlotCount>
     explicit_slot_claims {
       false,
@@ -34,10 +32,6 @@ struct ResolvedAtmosphereLightState {
   std::uint32_t first_conflict_slot {
     environment::kInvalidAtmosphereLightSlot,
   };
-  std::uint32_t shadow_authority_slot {
-    environment::kInvalidAtmosphereLightSlot,
-  };
-  bool shadow_authority_slot0_only { true };
   std::uint64_t authored_hash { 0U };
   std::uint64_t revision { 0U };
 };

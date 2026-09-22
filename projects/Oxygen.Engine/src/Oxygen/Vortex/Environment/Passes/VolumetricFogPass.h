@@ -131,7 +131,7 @@ namespace environment {
 
     struct alignas(16) GridZControl {
       float grid_z_params[3] { 0.0F, 1.0F, 1.0F };
-      float shadowed_directional_light0_enabled { 0.0F };
+      std::uint32_t directional_shadows_enabled { 0U };
     };
 
     struct alignas(16) MediaControl1 {

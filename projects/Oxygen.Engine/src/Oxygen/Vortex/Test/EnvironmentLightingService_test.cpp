@@ -439,8 +439,6 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
   EXPECT_FALSE(view_products.atmosphere_lights.at(0).enabled);
   EXPECT_FALSE(view_products.atmosphere_lights.at(1).enabled);
   EXPECT_EQ(view_products.atmosphere_light_count, 0U);
-  EXPECT_EQ(view_products.conventional_shadow_authority_slot,
-    kInvalidAtmosphereLightSlot);
   EXPECT_EQ(view_products.transmittance_lut_srv, kInvalidShaderVisibleIndex);
   EXPECT_EQ(view_products.multi_scattering_lut_srv, kInvalidShaderVisibleIndex);
   EXPECT_EQ(view_products.sky_view_lut_srv, kInvalidShaderVisibleIndex);
@@ -1656,7 +1654,6 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
     });
 
   const auto& light_state = service.InspectAtmosphereLightState();
-  const auto& atmosphere_state = service.InspectAtmosphereState();
   const auto* view_data = service.InspectEnvironmentViewData(ViewId {
     21U,
   });
@@ -1692,12 +1689,6 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
         kAtmosphereDirectLightFlagHasBakedGroundTransmittance,
     0U);
 
-  EXPECT_EQ(atmosphere_state.conventional_shadow_authority_slot, 0U);
-  EXPECT_EQ(atmosphere_state.conventional_shadow_cascade_count, 2U);
-  EXPECT_TRUE(atmosphere_state.conventional_shadow_authority_slot0_only);
-  EXPECT_EQ(
-    atmosphere_state.view_products.conventional_shadow_authority_slot, 0U);
-
   const auto* bindings = service.InspectBindings(ViewId {
     21U,
   });
@@ -1707,9 +1698,6 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
     0U);
   EXPECT_NE(bindings->contract_flags
       & oxygen::vortex::kEnvironmentContractFlagAtmosphereLight1Enabled,
-    0U);
-  EXPECT_NE(bindings->contract_flags
-      & oxygen::vortex::kEnvironmentContractFlagShadowAuthoritySlot0Only,
     0U);
 
   constexpr auto kPi = std::numbers::pi_v<float>;
@@ -1879,7 +1867,6 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
     light_state.source_nodes.at(1).Index(), secondary.GetHandle().Index());
   EXPECT_FALSE(light_state.explicit_slot_claims.at(0));
   EXPECT_TRUE(light_state.explicit_slot_claims.at(1));
-  EXPECT_EQ(light_state.shadow_authority_slot, 0U);
 }
 
 NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,

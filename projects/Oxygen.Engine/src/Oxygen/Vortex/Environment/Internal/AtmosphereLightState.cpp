@@ -40,8 +40,6 @@ namespace {
     state.atmosphere_lights[slot_index]
       = BuildAtmosphereLightModel(resolved, slot_index, atmosphere);
     state.source_nodes[slot_index] = resolved.NodeHandle();
-    state.source_cascade_counts[slot_index]
-      = resolved.Light().CascadedShadows().cascade_count;
     state.explicit_slot_claims[slot_index] = explicit_slot_claim;
   }
 
@@ -52,9 +50,6 @@ namespace {
     seed = HashCombineU64(seed, state.active_light_count);
     seed = HashCombineU64(seed, state.conflict_count);
     seed = HashCombineU64(seed, state.first_conflict_slot);
-    seed = HashCombineU64(seed, state.shadow_authority_slot);
-    seed = HashCombineU64(
-      seed, static_cast<std::uint64_t>(state.shadow_authority_slot0_only));
 
     for (std::size_t index = 0; index < state.atmosphere_lights.size();
       ++index) {
@@ -87,7 +82,6 @@ namespace {
         seed, static_cast<std::uint64_t>(state.source_nodes[index].Index()));
       seed = HashCombineU64(seed,
         static_cast<std::uint64_t>(state.source_nodes[index].GetSceneId()));
-      seed = HashCombineU64(seed, state.source_cascade_counts[index]);
       seed = HashCombineU64(
         seed, static_cast<std::uint64_t>(state.explicit_slot_claims[index]));
     }
@@ -122,9 +116,6 @@ auto AtmosphereLightState::Update(const scene::Scene& scene_ref) -> bool
   next.active_light_count = 0U;
   for (const auto& light : next.atmosphere_lights) {
     next.active_light_count += light.enabled ? 1U : 0U;
-  }
-  if (next.atmosphere_lights[0].enabled) {
-    next.shadow_authority_slot = 0U;
   }
 
   next.authored_hash = HashResolvedState(next);
