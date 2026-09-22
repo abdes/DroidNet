@@ -397,6 +397,26 @@ spatial culling. Culler/lookup cell equivalence, full binding/evaluation/shadow
 record migration, same-submission failure presentation, physical BRDF parity and
 full orthographic rendering remain open.
 
+The next evaluation-record prerequisite adds
+`Lighting/Internal/LightPhotometry.{h,cpp}`: checked per-component tint/EV
+resolution into directional lux and point/spot candela, double-precision
+normalization, and stable squared-half-angle cone parameters. Zero flux/tint
+avoids exponent evaluation; nonzero overflow or positive underflow outside the
+normal FP32 domain returns a typed error for the whole RGB result. Cone support
+that cannot survive FP32 transport is rejected rather than widened. The approved
+90-degree soft endpoint and hard cones below 90 degrees are supported.
+
+Twelve focused CPU cases include an independent cosine-domain angular integral,
+extreme compensation, tinted results whose untinted scalar would overflow,
+normal-float endpoints and narrow cones lost by float cosine. LightingService
+passes **17 Debug / 17 Release** tests; all three added C++ files are oxytidy-clean
+with no suppressions or coverage gaps. Results are
+[Debug](../../../out/build-ninja/analysis/vortex/exposure-lightbench/ex07a/photometry-debug.json)
+and [Release](../../../out/build-ninja/analysis/vortex/exposure-lightbench/ex07a/photometry-release.json).
+This helper is not connected to production publication yet: record/producer/
+consumer cutover and preparation-failure propagation must land together. These
+CPU checks do not qualify the EX07B oracle, GPU source integration or BRDF.
+
 | Gate                      | Owning suite / required evidence                                                                                                                                                                                                                     | Current result                                                                                                                         |
 | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
 | A ABI                     | CPU size/alignment/every-offset assertions; D3D12 upload/decode/readback of two distinct local records and directional records, integer high-bit patterns, sentinels, reserved zeros and nonzero element indices; matching catalog/reflection checks | Six wire record types have native Debug/Release proof above; evaluation/binding/projection records and consumer migration remain open. |

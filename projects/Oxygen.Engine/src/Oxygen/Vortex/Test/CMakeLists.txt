@@ -93,11 +93,17 @@ m_gtest_program(SceneTextureLeasePool SOURCES "SceneTextureLeasePool_test.cpp")
 
 m_gtest_program(RetainedTexturePool SOURCES "RetainedTexturePool_test.cpp")
 
-m_gtest_program(LightingService SOURCES "LightingService_test.cpp")
+m_gtest_program(
+  LightingService
+  SOURCES
+    "LightingService_test.cpp"
+    "Lighting/LightPhotometry_test.cpp"
+)
 target_sources(
   Oxygen.Vortex.LightingService.Tests
   PRIVATE
     "../Lighting/Internal/LightGridBuilder.cpp"
+    "../Lighting/Internal/LightPhotometry.cpp"
 )
 
 m_gtest_program(PostProcessService SOURCES "PostProcessService_test.cpp")
