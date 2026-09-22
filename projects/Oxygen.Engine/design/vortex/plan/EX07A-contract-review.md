@@ -250,7 +250,7 @@ physical/source/BRDF decisions remain settled.
 RTX 3080 (10 GiB, driver 610.62) now confirms allocation requirements for the
 current typeless D32S8 resource descriptions. No shadow resources were allocated
 and no rendering/performance claim follows from this probe. See
-[allocation requirements](../../../out/build-ninja/analysis/vortex/exposure-lightbench/ex07a/allocation-requirements.json).
+[allocation requirements](../../../out/build-ninja/analysis/vortex/exposure-lightbench/ex07a/allocation-requirements-current.json).
 
 The queried medium narrow-spot set is 512 MiB; using six-face maps for all eight
 spots makes it 832 MiB. Corresponding maximum-resolution sets are 2,048 and
@@ -813,6 +813,34 @@ The closure audit still needs to retire/migrate stale diagnostic decoders and
 refresh missing native allocation-query evidence. This cleanup does not qualify
 all delayed/discarded submission paths or close EX07A.
 
+### Diagnostic-decoder and allocation-evidence checkpoint
+
+`AnalyzeRenderDocLitReadability.py` now follows the 80-byte deferred constants'
+selection index into the 64-byte directional array through the 96-byte lighting
+header. Its paired assertion consumes resolved RGB lux; the retired tint/scalar
+payload is not retained as an alternate input. Fresh frame-42/54 `atmosphere-lit`
+captures pass the original material-color, histogram, remeter, identical-HDR and
+white-negative-control checks in both views.
+
+The environment-header probe now follows the actual view root to the 112-byte
+header. The unreferenced `ProbeRenderDocDirectionalCsm.py` is retired: its embedded
+28-word cascades, descriptor-position assumption and fixed camera no longer
+match the renderer. `AnalyzeRenderDocShadowRecords.py` and the directional-array
+analyzers provide the tested canonical header/family/cascade inspection.
+
+A versioned native test now reproduces the backend shadow-allocation query for
+D32S8/D32: eight large descriptors plus a six-layer 32x32 alignment control per
+format. The RTX 3080 reproduces 512/832 MiB medium and 2,048/3,328 MiB maximum
+D32S8 sets, with half-sized D32 large arrays; both small controls occupy 64 KiB.
+It allocates no shadow textures. The [memory review](EX07-shadow-memory-review.md)
+contains the reproducible command and explicitly distinguishes the missing
+historical GPU format probe from this fresh allocation evidence.
+
+Debug and Release each pass all **22 native cases** (44 executions), and their
+allocation matrices match exactly. The new C++ query is oxytidy-clean. Evidence under `ex07a`: `allocation-refresh-*.json`,
+`allocation-requirements-current.json`, `readability-canonical-*-report.json`,
+`readability-canonical-verdict.json` and `environment-header-migration.txt`.
+
 | Gate                      | Owning suite / required evidence                                                                                                                                                                                                                     | Current result                                                                                                                  |
 | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
 | A ABI                     | CPU size/alignment/every-offset assertions; D3D12 upload/decode/readback of two distinct local records and directional records, integer high-bit patterns, sentinels, reserved zeros and nonzero element indices; matching catalog/reflection checks | Canonical wire records have native Debug/Release proof; remaining source-selection, validity and lifetime interfaces stay open. |
@@ -843,7 +871,7 @@ relative), analytic finite-source irradiance (1.90e-14 relative) and projected
 directional-disk illuminance (1.68e-12 relative). The importance-sampled alpha=1 directional-moment check differs from
 its analytic value by at most 1.11e-4. This is a draft-model consistency check,
 **not** the <=1e-5 production-reference uncertainty certificate required by B.
-The [allocation query](../../../out/build-ninja/analysis/vortex/exposure-lightbench/ex07a/allocation-requirements.json)
+The [allocation query](../../../out/build-ninja/analysis/vortex/exposure-lightbench/ex07a/allocation-requirements-current.json)
 measures resource requirements on the reference adapter without allocating maps.
 Neither artifact qualifies rendered images, GPU ABI, live resource lifetimes or
 performance. Their probe sources are stored beside the reports.

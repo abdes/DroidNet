@@ -13,6 +13,7 @@ gtest_program(
     "LightEvaluationAbi_test.cpp"
     "LightGridLookup_test.cpp"
     "ShadowRecordAbi_test.cpp"
+    "ShadowAllocationRequirements_test.cpp"
   DEPS
     oxygen::vortex
     oxygen::graphics-direct3d12

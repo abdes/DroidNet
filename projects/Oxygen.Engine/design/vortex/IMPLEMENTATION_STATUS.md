@@ -198,8 +198,12 @@ test. RenderDoc checks 72 AP draws against the transfer equation (maximum error
 The transient upload owner no longer retains its deprecated single-allocation
 compatibility fields or release path. Debug/Release each pass 13 transient-buffer
 and 68 SceneRenderer tests, plus the clean 180-frame Release offscreen proof.
-Stale diagnostic decoders and missing original allocation-query files remain
-explicit closure-audit gaps.
+The remaining identified diagnostic decoders now consume canonical layouts;
+the obsolete embedded-CSM probe is retired. Fresh readability captures pass their
+positive/negative checks. A versioned native allocation query reproduces the
+D32S8/D32 matrix in Debug/Release (22 native cases each); the memory review marks
+the unavailable historical rendering-format probe separately. Full EX07A closure
+still requires the explicit contract-to-evidence audit.
 MultiView's local-light far-clipping regression is repaired and visually
 confirmed by the user. The
 [review evidence](plan/EX07A-contract-review.md#verification-obligations-and-current-evidence)

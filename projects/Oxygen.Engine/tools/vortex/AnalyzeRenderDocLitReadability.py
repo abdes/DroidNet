@@ -35,22 +35,44 @@ def build_report(controller, report, capture_path, report_path):
             pipeline = controller.GetPipelineState()
             stage = rd.ShaderStage.Compute if light.flags & rd.ActionFlags.Dispatch else rd.ShaderStage.Pixel
             reads = [x.descriptor for x in pipeline.GetReadOnlyResources(stage, True)]
-            blocks = [x.descriptor for x in pipeline.GetConstantBlocks(stage)]
-            bindings = [x for x in blocks if x.byteSize >= 176
-                        and "DeferredLight" in names.get(str(x.resource), "")]
+            blocks = pipeline.GetConstantBlocks(stage)
+            bindings = [x.descriptor for x in blocks
+                        if x.access.index == rd.DescriptorAccess.NoShaderBinding
+                        and x.descriptor.byteSize == 256]
+            used = pipeline.GetReadOnlyResources(stage, True)
+            by_slot = {int(x.access.arrayElement): x.descriptor for x in used
+                       if x.access.index == rd.DescriptorAccess.NoShaderBinding}
+            headers = [x for x in reads if x.elementByteSize == x.byteSize == 96]
             bases = [x for x in reads if "GBufferBaseColor" in names.get(str(x.resource), "")]
-            if len(bindings) == 1 and len(bases) == 1:
+            if len(bindings) == 1 and len(bases) == 1 and len(headers) == 1:
                 break
         else:
             raise RuntimeError("No deferred lighting draw has both light constants and base color")
         binding = bindings[0]
-        raw = bytes(controller.GetBufferData(binding.resource, binding.byteOffset, 176))
+        if binding.byteOffset % 256:
+            raise RuntimeError("Deferred light constants are not CBV aligned")
+        raw = bytes(controller.GetBufferData(binding.resource, binding.byteOffset, 80))
+        kind, selection = struct.unpack_from("<2I", raw, 64)
+        if kind != 0:
+            raise RuntimeError("The lit-material fixture must begin with a directional draw")
+        header = headers[0]
+        words = struct.unpack("<24I", bytes(controller.GetBufferData(header.resource, header.byteOffset, 96)))
+        if selection >= words[4] or words[0] not in by_slot:
+            raise RuntimeError("Missing selected directional record")
+        descriptor = by_slot[words[0]]
+        if descriptor.elementByteSize != 64 or descriptor.byteSize < (selection + 1) * 64:
+            raise RuntimeError("Invalid directional array layout")
+        record = bytes(controller.GetBufferData(descriptor.resource, descriptor.byteOffset + selection * 64, 64))
+        if struct.unpack_from("<I", record, 48)[0] != selection:
+            raise RuntimeError("Draw and directional source identities differ")
         view = {
             "index": len(views), "lighting_event": light.event_id,
             "lighting_draws": [a.path for a in lighting],
-            "first_light_rgb_intensity": struct.unpack_from("<4f", raw, 16),
-            "first_light_type": struct.unpack_from("<I", raw, 160)[0],
-            "first_light_atmosphere_transmittance": struct.unpack_from("<3f", raw, 144),
+            "first_light_rgb_lux": struct.unpack_from("<3f", record, 16),
+            "first_light_type": kind,
+            "first_light_selection_index": selection,
+            "first_light_atmosphere_slot": struct.unpack_from("<I", record, 12)[0],
+            "first_light_atmosphere_transmittance": struct.unpack_from("<3f", record, 32),
         }
         base_path = Path(report_path).with_name(f"{Path(report_path).stem}-view-{len(views)}-base.rgba8")
         base_path.write_bytes(bytes(controller.GetTextureData(bases[0].resource, rd.Subresource())))
