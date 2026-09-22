@@ -168,10 +168,6 @@ private:
   struct SlotData {
     // Multi-allocation per frame slot: keep all allocations until slot reset
     std::vector<SlotAlloc> allocs;
-    // Back-compat single active allocation used temporarily during allocation
-    std::optional<StagingProvider::Allocation> allocation;
-    ShaderVisibleIndex srv_index { kInvalidShaderVisibleIndex };
-    oxygen::graphics::NativeView native_view;
   };
 
   observer_ptr<Graphics> gfx_;
@@ -187,7 +183,6 @@ private:
   std::array<SlotData, frame::kFramesInFlight.get()> slots_ {};
 
   auto ResetSlot(std::uint32_t slot_index) -> void;
-  auto ReleaseSlotView(SlotData& slot) -> void;
   auto ReleaseAllocView(SlotAlloc& slot) -> void;
   [[nodiscard]] auto ActiveSlot() const noexcept -> SlotData const*;
   [[nodiscard]] auto ActiveSlot() noexcept -> SlotData*;
