@@ -31,6 +31,14 @@ covered; a production capture decodes eight cascades across two views. The
 enclosing inline-array header is temporarily 3,392 bytes; its replacement by
 the 112-byte header below and migration of local projections remain open.
 
+The subsequent local-projection checkpoint migrates the 128-byte projected and
+448-byte cube records in their active producers/readers and removes the old
+spot/point binding types. The native suite passes 19 cases in each configuration,
+including every cube face and integer identity; default MultiView capture checks
+confirm the corresponding source identities and descriptor consumption. The
+112-byte header, capacity/failure handling and complete finite-source/wide-spot
+coverage remain open.
+
 ## Encoding rules
 
 All offsets and strides below are bytes. `float` is IEEE binary32; `uint` is

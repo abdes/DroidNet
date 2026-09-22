@@ -9,6 +9,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <ranges>
 #include <span>
 
 #include <glm/ext/matrix_transform.hpp>
@@ -28,7 +29,6 @@ namespace {
   constexpr float kMinPointNearPlane = 0.1F;
   constexpr float kMinPointRange = 0.1F;
   constexpr float kUePointLightShadowDepthBias = 3.0F;
-  constexpr float kUePointLightShadowSlopeDepthBias = 3.0F;
   constexpr float kUeMaxUserShadowBias = 10.0F;
 
   constexpr auto kPointFaceDirections = std::array {
@@ -90,7 +90,8 @@ auto PointShadowSetup::BuildPointFrameBindings(
   bindings.sampling_contract_flags = kShadowSamplingContractTextureCubeArray;
 
   auto point_shadow_index = 0U;
-  for (const auto& light : local_lights) {
+  for (const auto& [selection_index, light] :
+    std::views::enumerate(local_lights)) {
     if (light.kind != LocalLightKind::kPoint
       || (light.flags & kLocalLightFlagCastsShadows) == 0U) {
       continue;
@@ -109,7 +110,7 @@ auto PointShadowSetup::BuildPointFrameBindings(
     const auto world_texel_size = (2.0F * range)
       / static_cast<float>((std::max)(allocation.resolution.x, 1U));
 
-    auto& point = bindings.point_shadows[point_shadow_index];
+    auto& point = bindings.point_shadows.at(point_shadow_index);
     for (std::size_t face_index = 0U; face_index < kPointFaceDirections.size();
       ++face_index) {
       const auto view = glm::lookAtRH(light.position,
@@ -117,13 +118,18 @@ auto PointShadowSetup::BuildPointFrameBindings(
         kPointFaceUps[face_index]);
       point.face_light_view_projection[face_index] = projection * view;
     }
-    point.position_and_inv_range
-      = glm::vec4(light.position, range > 0.0F ? 1.0F / range : 0.0F);
-    point.sampling_metadata0 = glm::vec4(static_cast<float>(point_shadow_index),
-      inverse_resolution, world_texel_size, depth_bias);
-    point.sampling_metadata1
-      = glm::vec4((std::max)(light.shadow_normal_bias, 0.0F),
-        depth_bias * kUePointLightShadowSlopeDepthBias, 1.0F, 0.0F);
+    point.shadow_origin_ws = light.position;
+    point.near_plane_m = kMinPointNearPlane;
+    point.far_plane_m = range;
+    point.normal_bias_m = (std::max)(light.shadow_normal_bias, 0.0F);
+    point.depth_bias = depth_bias;
+    point.world_texel_size = world_texel_size;
+    point.surface_srv = allocation.surface_srv;
+    point.selection_index
+      = LightSelectionIndex { static_cast<std::uint32_t>(selection_index) };
+    point.first_array_layer = ShadowArrayLayer { point_shadow_index
+      * CubeLocalShadowRecord::kFaceCount };
+    point.inverse_resolution = { inverse_resolution, inverse_resolution };
     ++point_shadow_index;
   }
 

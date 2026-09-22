@@ -131,16 +131,17 @@ static inline float SampleSpotShadowSurface(
     float2 shadow_uv,
     float receiver_depth)
 {
-    if (bindings.spot_shadow_surface_handle == K_INVALID_BINDLESS_INDEX) {
+    const ProjectedLocalShadowRecord spot = bindings.spot_shadows[spot_shadow_index];
+    if (spot.surface_srv == K_INVALID_BINDLESS_INDEX) {
         return 1.0f;
     }
 
     Texture2DArray<float> shadow_surface =
-        ResourceDescriptorHeap[bindings.spot_shadow_surface_handle];
+        ResourceDescriptorHeap[spot.surface_srv];
     const uint layer =
-        (uint)(bindings.spot_shadows[spot_shadow_index].sampling_metadata0.x + 0.5f);
+        spot.array_layer;
     const float2 inverse_resolution =
-        max(bindings.spot_shadows[spot_shadow_index].sampling_metadata0.yz,
+        max(spot.inverse_resolution,
             float2(0.000001f, 0.000001f));
     const float2 texture_size = 1.0f / inverse_resolution;
     const int2 max_coord =
@@ -173,15 +174,15 @@ static inline float ComputeSpotShadowVisibility(
         return 1.0f;
     }
 
-    const VortexSpotShadowBinding spot = bindings.spot_shadows[spot_shadow_index];
+    const ProjectedLocalShadowRecord spot = bindings.spot_shadows[spot_shadow_index];
     const float3 safe_normal = normalize(
         dot(world_normal, world_normal) > 1.0e-8f ? world_normal : float3(0.0f, 1.0f, 0.0f));
     const float3 safe_light_dir = normalize(
         dot(light_direction_to_source, light_direction_to_source) > 1.0e-8f
             ? light_direction_to_source
-            : spot.position_and_inv_range.xyz - world_position);
-    const float world_texel_size = max(spot.sampling_metadata0.w, 0.0f);
-    const float normal_bias = max(spot.sampling_metadata1.w, 0.0f)
+            : spot.shadow_origin_ws - world_position);
+    const float world_texel_size = max(spot.world_texel_size, 0.0f);
+    const float normal_bias = max(spot.normal_bias_m, 0.0f)
         + world_texel_size * 0.75f;
     const float receiver_bias = world_texel_size * 0.5f;
     const float3 biased_world_position =
@@ -203,12 +204,10 @@ static inline float ComputeSpotShadowVisibility(
         return 1.0f;
     }
 
-    const float axial_distance = max(
-        0.0f,
-        dot(biased_world_position - spot.position_and_inv_range.xyz,
-            normalize(spot.direction_and_bias.xyz)));
+    // Perspective clip W is the same axial distance used by the depth writer.
+    const float axial_distance = max(0.0f, shadow_clip.w);
     const float receiver_depth =
-        saturate(1.0f - axial_distance * spot.position_and_inv_range.w);
+        saturate(1.0f - axial_distance / spot.far_plane_m);
 
     return SampleSpotShadowSurface(
         bindings, spot_shadow_index, shadow_uv, receiver_depth);
@@ -241,25 +240,25 @@ static inline float3 PointShadowFaceDirection(uint face_index)
 
 static inline float SamplePointShadowSurface(
     VortexShadowFrameBindings bindings,
-    VortexPointShadowBinding point_shadow,
+    CubeLocalShadowRecord point_shadow,
     uint point_shadow_index,
     uint face_index,
     float2 shadow_uv,
     float receiver_depth)
 {
-    if (bindings.point_shadow_surface_handle == K_INVALID_BINDLESS_INDEX) {
+    if (point_shadow.surface_srv == K_INVALID_BINDLESS_INDEX) {
         return 1.0f;
     }
 
     Texture2DArray<float> shadow_surface =
-        ResourceDescriptorHeap[bindings.point_shadow_surface_handle];
+        ResourceDescriptorHeap[point_shadow.surface_srv];
     const uint base_layer =
-        (uint)(point_shadow.sampling_metadata0.x + 0.5f) * 6u;
+        point_shadow.first_array_layer;
     const uint layer = base_layer + face_index;
-    const float inverse_resolution = max(point_shadow.sampling_metadata0.y, 0.000001f);
-    const float texture_size = 1.0f / inverse_resolution;
+    const float2 inverse_resolution = max(point_shadow.inverse_resolution, float2(0.000001f, 0.000001f));
+    const float2 texture_size = 1.0f / inverse_resolution;
     const int2 max_coord =
-        max(int2(texture_size, texture_size) - int2(1, 1), int2(0, 0));
+        max(int2(texture_size) - int2(1, 1), int2(0, 0));
     const int2 center = int2(shadow_uv * texture_size);
 
     float visibility = 0.0f;
@@ -288,25 +287,25 @@ static inline float ComputePointShadowVisibility(
         return 1.0f;
     }
 
-    const VortexPointShadowBinding point_shadow =
+    const CubeLocalShadowRecord point_shadow =
         bindings.point_shadows[point_shadow_index];
     const float3 safe_normal = normalize(
         dot(world_normal, world_normal) > 1.0e-8f ? world_normal : float3(0.0f, 1.0f, 0.0f));
     const float3 safe_light_dir = normalize(
         dot(light_direction_to_source, light_direction_to_source) > 1.0e-8f
             ? light_direction_to_source
-            : point_shadow.position_and_inv_range.xyz - world_position);
-    const float world_texel_size = max(point_shadow.sampling_metadata0.z, 0.0f);
-    const float normal_bias = max(point_shadow.sampling_metadata1.x, 0.0f)
+            : point_shadow.shadow_origin_ws - world_position);
+    const float world_texel_size = max(point_shadow.world_texel_size, 0.0f);
+    const float normal_bias = max(point_shadow.normal_bias_m, 0.0f)
         + world_texel_size * 0.75f;
     const float receiver_bias = world_texel_size * 0.5f;
     const float3 biased_world_position =
         world_position + safe_normal * normal_bias + safe_light_dir * receiver_bias;
 
     const float3 light_to_receiver =
-        biased_world_position - point_shadow.position_and_inv_range.xyz;
+        biased_world_position - point_shadow.shadow_origin_ws;
     const float distance_to_light = length(light_to_receiver);
-    if (distance_to_light * point_shadow.position_and_inv_range.w >= 1.0f) {
+    if (distance_to_light >= point_shadow.far_plane_m) {
         return 1.0f;
     }
 
@@ -332,7 +331,7 @@ static inline float ComputePointShadowVisibility(
         0.0f,
         dot(light_to_receiver, PointShadowFaceDirection(face_index)));
     const float receiver_depth =
-        saturate(1.0f - axial_distance * point_shadow.position_and_inv_range.w);
+        saturate(1.0f - axial_distance / point_shadow.far_plane_m);
 
     return SamplePointShadowSurface(
         bindings, point_shadow, point_shadow_index, face_index, shadow_uv,

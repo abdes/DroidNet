@@ -503,6 +503,43 @@ The enclosing shadow header still contains inline arrays and is temporarily
 multi-directional selection and the remaining EX07A gates remain open. This is
 an in-place migration checkpoint, with no alternate old cascade representation.
 
+### Local-projection record checkpoint
+
+The old `SpotShadowBinding` and `PointShadowBinding` types are removed and
+replaced in the active setup, depth-pass and shader consumers by
+`ProjectedLocalShadowRecord` (128 bytes) and `CubeLocalShadowRecord` (448 bytes).
+Descriptors, array layers and source-selection indices use their distinct strong
+types. The cube layer identifies the first face directly, without float decoding
+or deriving it from the light index. Assertions cover every field offset and the
+record size/alignment/copy traits.
+
+Both sides retain linear reversed depth. For the projected record, perspective
+clip W supplies axial receiver distance; the depth producer gets the same
+direction from the projection matrix's homogeneous row. The CPU regression
+compares that W against an independent dot product. Slope bias remains in the
+depth-pass owner; it is no longer packed into a sampling vector.
+
+The native suite passes **19 Debug / 19 Release** cases, including all six cube
+matrices and every projected/cube lane across adjacent records with nonzero
+starting indices. ShadowService passes **11 Debug / 11 Release** cases, including
+selection indices with skipped nonmatching lights. Both shader archives build.
+Oxytidy completed all eight changed C++ sources/headers, including tests, with
+no failed contexts or coverage gaps. The final ABI test run is clean; remaining
+whole-file diagnostics are recorded without adding suppressions.
+
+`local-shadow-{abi,service}-{debug,release}.json` records the suite results.
+`local-shadow-binding-report.txt` verifies the production RenderDoc upload's
+surface/layer/selection identity against the corresponding canonical light and
+the pixel shader's actual descriptor reads. `local-shadow-coverage-report.txt`
+records 1,540 positive point-light samples and 933 spot-light samples, matching
+the earlier default-scene contribution check. The capture is
+`local-shadow-record_capture.rdc`, all under the existing `ex07a` directory.
+
+The 112-byte shadow header and separate array publication remain unimplemented.
+Existing local range/near-plane floors, cone clamping, fixed capacities and
+point/spot routing still require the approved support/failure migration; this
+record checkpoint does not qualify finite-source or 90-degree spot shadows.
+
 | Gate                      | Owning suite / required evidence                                                                                                                                                                                                                     | Current result                                                                                                                         |
 | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
 | A ABI                     | CPU size/alignment/every-offset assertions; D3D12 upload/decode/readback of two distinct local records and directional records, integer high-bit patterns, sentinels, reserved zeros and nonzero element indices; matching catalog/reflection checks | Six wire record types have native Debug/Release proof above; evaluation/binding/projection records and consumer migration remain open. |

@@ -46,11 +46,11 @@
 #include <Oxygen/Vortex/Shadows/Internal/SpotShadowSetup.h>
 #include <Oxygen/Vortex/Shadows/Passes/ShadowDepthPass.h>
 #include <Oxygen/Vortex/Shadows/ShadowService.h>
+#include <Oxygen/Vortex/Shadows/Types/CubeLocalShadowRecord.h>
 #include <Oxygen/Vortex/Shadows/Types/DirectionalShadowFrameData.h>
 #include <Oxygen/Vortex/Shadows/Types/FrameShadowInputs.h>
-#include <Oxygen/Vortex/Shadows/Types/PointShadowBinding.h>
+#include <Oxygen/Vortex/Shadows/Types/ProjectedLocalShadowRecord.h>
 #include <Oxygen/Vortex/Shadows/Types/ShadowCascadeBinding.h>
-#include <Oxygen/Vortex/Shadows/Types/SpotShadowBinding.h>
 #include <Oxygen/Vortex/Test/Fakes/Graphics.h>
 #include <Oxygen/Vortex/Test/Fixtures/MeshRasterStateTest.h>
 #include <Oxygen/Vortex/Types/FrameLightSelection.h>
@@ -107,6 +107,15 @@ auto ReadShadowShaderLayouts()
     std::istreambuf_iterator<char>(cascade_stream),
     std::istreambuf_iterator<char>(),
   };
+  for (const auto* filename :
+    { "ProjectedLocalShadowRecord.hlsli", "CubeLocalShadowRecord.hlsli" }) {
+    auto local_stream = std::ifstream(path.parent_path() / filename);
+    if (!local_stream) {
+      throw std::runtime_error("Cannot read local shadow shader contract");
+    }
+    source.append(std::istreambuf_iterator<char>(local_stream),
+      std::istreambuf_iterator<char>());
+  }
   source.append(
     std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>());
   auto sizes = std::unordered_map<std::string, std::size_t> {
@@ -122,6 +131,10 @@ auto ReadShadowShaderLayouts()
     {
       "float2",
       8U,
+    },
+    {
+      "float3",
+      12U,
     },
     {
       "float4",
@@ -200,8 +213,8 @@ auto MakePerspectiveResolvedView() -> oxygen::ResolvedView
 NOLINT_TEST(ShadowServiceSurfaceTest,
   ShaderStructuredBufferLayoutsMatchNativeShadowPublication)
 {
-  using oxygen::vortex::PointShadowBinding;
-  using oxygen::vortex::SpotShadowBinding;
+  using oxygen::vortex::CubeLocalShadowRecord;
+  using oxygen::vortex::ProjectedLocalShadowRecord;
   const auto layouts = ReadShadowShaderLayouts();
   const auto& cascade = layouts.at("VortexShadowCascadeBinding");
   EXPECT_EQ(cascade.size, sizeof(ShadowCascadeBinding));
@@ -213,14 +226,14 @@ NOLINT_TEST(ShadowServiceSurfaceTest,
     offsetof(ShadowCascadeBinding, inverse_resolution));
   EXPECT_EQ(
     cascade.offsets.at("fade_end"), offsetof(ShadowCascadeBinding, fade_end));
-  const auto& spot = layouts.at("VortexSpotShadowBinding");
-  EXPECT_EQ(spot.size, sizeof(SpotShadowBinding));
-  EXPECT_EQ(spot.offsets.at("sampling_metadata1"),
-    offsetof(SpotShadowBinding, sampling_metadata1));
-  const auto& point = layouts.at("VortexPointShadowBinding");
-  EXPECT_EQ(point.size, sizeof(PointShadowBinding));
-  EXPECT_EQ(point.offsets.at("position_and_inv_range"),
-    offsetof(PointShadowBinding, position_and_inv_range));
+  const auto& spot = layouts.at("ProjectedLocalShadowRecord");
+  EXPECT_EQ(spot.size, sizeof(ProjectedLocalShadowRecord));
+  EXPECT_EQ(spot.offsets.at("selection_index"),
+    offsetof(ProjectedLocalShadowRecord, selection_index));
+  const auto& point = layouts.at("CubeLocalShadowRecord");
+  EXPECT_EQ(point.size, sizeof(CubeLocalShadowRecord));
+  EXPECT_EQ(point.offsets.at("shadow_origin_ws"),
+    offsetof(CubeLocalShadowRecord, shadow_origin_ws));
   const auto& frame = layouts.at("VortexShadowFrameBindings");
   EXPECT_EQ(frame.size, sizeof(ShadowFrameBindings));
   const auto expected_offsets = std::array {
@@ -358,11 +371,14 @@ NOLINT_TEST(ShadowServiceSurfaceTest,
       13U,
     }));
   EXPECT_EQ(bindings.point_shadow_count, 1U);
-  EXPECT_FLOAT_EQ(
-    bindings.point_shadows.at(0).position_and_inv_range.w, 1.0F / 10.0F);
-  EXPECT_FLOAT_EQ(bindings.point_shadows.at(0).sampling_metadata0.x, 0.0F);
-  EXPECT_GT(bindings.point_shadows.at(0).sampling_metadata0.w, 0.0F);
-  EXPECT_FLOAT_EQ(bindings.point_shadows.at(0).sampling_metadata1.x, 0.04F);
+  EXPECT_FLOAT_EQ(bindings.point_shadows.at(0).far_plane_m, 10.0F);
+  EXPECT_EQ(bindings.point_shadows.at(0).first_array_layer,
+    oxygen::vortex::ShadowArrayLayer { 0U });
+  EXPECT_EQ(bindings.point_shadows.at(0).selection_index,
+    oxygen::vortex::LightSelectionIndex { 1U });
+  EXPECT_EQ(bindings.point_shadows.at(0).surface_srv, allocation.surface_srv);
+  EXPECT_GT(bindings.point_shadows.at(0).depth_bias, 0.0F);
+  EXPECT_FLOAT_EQ(bindings.point_shadows.at(0).normal_bias_m, 0.04F);
 }
 
 NOLINT_TEST(ShadowServiceSurfaceTest,
@@ -560,10 +576,14 @@ NOLINT_TEST(ShadowServiceSurfaceTest,
       9U,
     }));
   EXPECT_EQ(bindings.spot_shadow_count, 1U);
-  EXPECT_FLOAT_EQ(
-    bindings.spot_shadows.at(0).position_and_inv_range.w, 1.0F / 12.0F);
-  EXPECT_GT(bindings.spot_shadows.at(0).direction_and_bias.w, 0.0F);
-  EXPECT_FLOAT_EQ(bindings.spot_shadows.at(0).sampling_metadata1.w, 0.03F);
+  EXPECT_EQ(bindings.spot_shadows.at(0).selection_index,
+    oxygen::vortex::LightSelectionIndex { 1U });
+  EXPECT_EQ(bindings.spot_shadows.at(0).array_layer,
+    oxygen::vortex::ShadowArrayLayer { 0U });
+  EXPECT_EQ(bindings.spot_shadows.at(0).surface_srv, allocation.surface_srv);
+  EXPECT_FLOAT_EQ(bindings.spot_shadows.at(0).far_plane_m, 12.0F);
+  EXPECT_GT(bindings.spot_shadows.at(0).depth_bias, 0.0F);
+  EXPECT_FLOAT_EQ(bindings.spot_shadows.at(0).normal_bias_m, 0.03F);
 }
 
 NOLINT_TEST(ShadowServiceSurfaceTest,
@@ -610,13 +630,13 @@ NOLINT_TEST(ShadowServiceSurfaceTest,
     0.0F,
     0.5F,
   };
-  const auto axial_distance
-    = glm::dot(caster_center - glm::vec3(spot.position_and_inv_range),
-      glm::normalize(glm::vec3(spot.direction_and_bias)));
-  const auto unbiased_linear_depth
-    = 1.0F - (axial_distance * spot.position_and_inv_range.w);
-  const auto max_depth_bias
-    = spot.direction_and_bias.w + spot.sampling_metadata1.z;
+  const auto axial_distance = glm::dot(caster_center - spot.shadow_origin_ws,
+    glm::normalize(local_lights.at(0).direction));
+  const auto projected
+    = spot.light_view_projection * glm::vec4(caster_center, 1.0F);
+  EXPECT_NEAR(projected.w, axial_distance, 1.0e-5F);
+  const auto unbiased_linear_depth = 1.0F - (axial_distance / spot.far_plane_m);
+  const auto max_depth_bias = spot.depth_bias * 4.0F;
 
   EXPECT_GT(unbiased_linear_depth - max_depth_bias, 0.25F);
 }
