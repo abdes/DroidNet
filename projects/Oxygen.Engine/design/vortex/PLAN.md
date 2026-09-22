@@ -112,7 +112,7 @@ Each delivery step includes its numerical, interaction and relevant native visua
 checks. Automation grows with the experiments; EX10 is integration/closure.
 The [detailed gates](plan/exposure-and-lightbench-correction.md#8-ordered-implementation-slices)
 own scope and measurable criteria. The [tracker](IMPLEMENTATION_STATUS.md#31-current-work)
-owns current status. **Next is EX07; implementation has not started.**
+owns current status. **EX07A contract/interface implementation and native ABI qualification are in progress; the completion audit remains open.**
 
 Retain the accepted FP32/P=1 production policy; varying P/FP16 qualification stays
 explicit diagnostic coverage. Reuse valid EX05 MultiView and EX06 authoring evidence;

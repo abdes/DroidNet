@@ -183,6 +183,10 @@ One `LightingFrameBindings` product routes through `ViewFrameBindings` and ident
 Use checked integer arithmetic before narrowing sizes/offsets to GPU fields.
 Empty, disabled, pending and failed are distinct. Empty frames clear old bindings.
 Counts and descriptors identify the executed product and its retained generation.
+Reject nonempty selections without a scene lifetime identity, invalid view IDs
+and duplicate IDs in the active-view family before publishing any candidate.
+View ID zero is valid; only the typed invalid sentinel is rejected. A scene-less
+empty publication remains valid and clears prior light data.
 Directionals bypass local spatial culling. Lists are conservative for every
 declared consumer; opaque-depth/normal rejection cannot silently exclude valid
 translucent, two-sided or normal-mapped receivers.
