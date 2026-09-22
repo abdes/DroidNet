@@ -705,6 +705,7 @@ namespace {
         }
 
         selection.local_lights.push_back(FrameLocalLightSelection {
+          .source_node = visited.handle,
           .kind = LocalLightKind::kPoint,
           .position = ResolveWorldPosition(scene_ref, node),
           .range = light.GetRange(),
@@ -731,6 +732,7 @@ namespace {
         }
 
         selection.local_lights.push_back(FrameLocalLightSelection {
+          .source_node = visited.handle,
           .kind = LocalLightKind::kSpot,
           .position = ResolveWorldPosition(scene_ref, node),
           .range = light.GetRange(),

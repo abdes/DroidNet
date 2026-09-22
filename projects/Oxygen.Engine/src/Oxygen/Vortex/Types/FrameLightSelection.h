@@ -84,6 +84,7 @@ struct FrameDirectionalLightSelection {
 };
 
 struct FrameLocalLightSelection {
+  scene::NodeHandle source_node;
   LocalLightKind kind { LocalLightKind::kPoint };
 
   glm::vec3 position { 0.0F };

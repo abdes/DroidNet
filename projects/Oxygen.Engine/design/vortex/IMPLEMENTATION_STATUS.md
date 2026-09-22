@@ -190,6 +190,11 @@ identities and publishes an immutable header; missing requested maps reject the
 view. Debug/Release each pass 26 lighting, 17 shadow and 68 SceneRenderer tests;
 four RenderDoc analyses pass, as does the 180-frame Release offscreen proof.
 Budgeted shadow growth and full failure/recovery qualification remain open.
+Local selections now retain typed source node handles; the unused single-sun AP
+accessors/argument and translucent synthetic direction are removed. Debug/Release
+each pass 21 ABI, 26 lighting, 17 shadow, 68 SceneRenderer and one native AP matrix
+test. RenderDoc checks 72 AP draws against the transfer equation (maximum error
+5.96e-8); source mutation/ingress and full forward image qualification remain open.
 MultiView's local-light far-clipping regression is repaired and visually
 confirmed by the user. The
 [review evidence](plan/EX07A-contract-review.md#verification-obligations-and-current-evidence)

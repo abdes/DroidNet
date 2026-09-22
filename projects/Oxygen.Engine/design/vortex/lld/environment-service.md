@@ -632,6 +632,11 @@ Resolution is explicit:
    visibility changes. Preserve unclamped physical direction and existing below-
    horizon invariants.
 
+Aerial-perspective consumers sample the atmosphere-owned camera-volume product;
+they do not accept a separate sun direction. The LUT producer owns both
+atmospheric sources. No synthetic Primary direction or single-sun lookup is
+needed by opaque or translucent AP composition.
+
 `AngularSizeRadians` remains the full analytic disk diameter. V0.1 adds no
 finite-source GGX or PCSS effect through that field. Migrate useful old explicit
 slots/sun intent into this source, diagnose ambiguity and remove implicit fallback

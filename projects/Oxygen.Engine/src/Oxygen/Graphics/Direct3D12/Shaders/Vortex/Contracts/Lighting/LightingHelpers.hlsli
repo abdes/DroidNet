@@ -68,18 +68,6 @@ static bool TryLoadAtmosphereDirectionalLight(uint atmosphere_slot,
     return false;
 }
 
-static float3 GetSunDirectionWS()
-{
-    DirectionalLightForwardData light;
-    return TryLoadAtmosphereDirectionalLight(0u, light) ? light.direction_to_source_ws : 0.0f.xxx;
-}
-
-static bool HasSunLight()
-{
-    DirectionalLightForwardData light;
-    return TryLoadAtmosphereDirectionalLight(0u, light);
-}
-
 static LightShadowReference LoadLightShadowReference(uint descriptor, uint index)
 {
     LightShadowReference reference = (LightShadowReference)0;
