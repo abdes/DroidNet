@@ -202,8 +202,12 @@ The remaining identified diagnostic decoders now consume canonical layouts;
 the obsolete embedded-CSM probe is retired. Fresh readability captures pass their
 positive/negative checks. A versioned native allocation query reproduces the
 D32S8/D32 matrix in Debug/Release (22 native cases each); the memory review marks
-the unavailable historical rendering-format probe separately. The [completion audit](plan/EX07A-completion-audit.md) identifies the remaining
-producer-depth-parameter proof, CPU selection cleanup and final reconciliation.
+the unavailable historical rendering-format probe separately. The [completion audit](plan/EX07A-completion-audit.md) now records the repaired
+producer depth mapping and unused CPU selection fields. Debug/Release each pass
+24 native, 29 lighting, 17 shadow and 68 SceneRenderer tests. The old far-plane
+mapping fails the new native control; the corrected live metadata passes capture
+analysis. Final A contract/catalog/document reconciliation remains, followed by
+the planned B–F work under the full EX07 goal.
 The audit also found and repaired zero scene-identity and duplicate/invalid-view
 admission; rejection invalidates prior publications and recovery uses fresh view
 generations.

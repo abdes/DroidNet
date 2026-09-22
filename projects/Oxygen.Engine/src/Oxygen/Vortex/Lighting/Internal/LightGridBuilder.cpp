@@ -51,8 +51,8 @@ namespace {
     return std::max(1U, static_cast<std::uint32_t>(std::ceil(value)));
   }
 
-  auto BuildGridMetadata(const PreparedViewLightingInput& view_input)
-    -> LightGridMetadata
+  auto BuildGridMetadata(const PreparedViewLightingInput& view_input,
+    const bool needs_local_grid) -> std::optional<LightGridMetadata>
   {
     if (view_input.resolved_view == nullptr) {
       return {};
@@ -64,18 +64,33 @@ namespace {
       .height = ClampViewportDimension(viewport.height),
     });
     const bool perspective = !view_input.resolved_view->IsOrthographic();
-    const auto z_params = perspective
-      ? LightCullingConfig::ComputeLightGridZParams(
+    auto z_params = LightCullingConfig::ZParams {};
+    if (needs_local_grid) {
+      const double span
+        = static_cast<double>(view_input.resolved_view->FarPlane())
+        - view_input.resolved_view->NearPlane();
+      if (span < std::numeric_limits<float>::min()
+        || span > std::numeric_limits<float>::max()) {
+        return std::nullopt;
+      }
+      if (perspective) {
+        const auto resolved = LightCullingConfig::ComputeLightGridZParams(
           view_input.resolved_view->NearPlane(),
-          view_input.resolved_view->FarPlane())
-      : LightCullingConfig::ZParams {};
+          view_input.resolved_view->FarPlane());
+        if (!resolved) {
+          return std::nullopt;
+        }
+        z_params = *resolved;
+      }
+    }
 
-    return {
+    return LightGridMetadata {
       .grid_size = glm::uvec3 { dims.x, dims.y, dims.z },
       .pixel_size_shift = LightCullingConfig::kLightGridPixelSizeShift,
       .content_origin_px = { viewport.top_left_x, viewport.top_left_y },
       .content_extent_px = { viewport.width, viewport.height },
-      .grid_z_params = glm::vec3 { z_params.b, z_params.o, z_params.s },
+      .grid_z_params = glm::vec3 { z_params.depth_span_m, z_params.curve_scale,
+        z_params.slice_scale },
       .far_depth_m = view_input.resolved_view->FarPlane(),
       .near_depth_m = view_input.resolved_view->NearPlane(),
       .projection_kind
@@ -160,7 +175,13 @@ auto LightGridBuilder::Build(const FrameLightingInputs& inputs)
         > std::numeric_limits<std::uint32_t>::max()) {
       return std::unexpected(failure);
     }
-    const auto metadata = BuildGridMetadata(view_input);
+    const auto resolved_metadata
+      = BuildGridMetadata(view_input, !built.evaluation.local.empty());
+    if (!resolved_metadata) {
+      failure.error = LightingPreparationError::kUnrepresentable;
+      return std::unexpected(failure);
+    }
+    const auto& metadata = *resolved_metadata;
     const auto cluster_count = static_cast<std::uint64_t>(metadata.grid_size.x)
       * metadata.grid_size.y * metadata.grid_size.z;
     if (cluster_count > std::numeric_limits<std::uint32_t>::max()) {

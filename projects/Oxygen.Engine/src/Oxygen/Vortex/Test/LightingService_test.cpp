@@ -7,6 +7,7 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <limits>
 #include <memory>
 #include <span>
 #include <type_traits>
@@ -239,7 +240,6 @@ NOLINT_TEST_F(LightingServiceBehaviorTest,
   selection.scene_generation = 1U;
   selection.directional_lights = { FrameDirectionalLightSelection{ .source_node = {},
     .direction = glm::vec3 { 0.0F, -1.0F, 0.0F, },
-    .source_radius = 0.05F,
     .color = glm::vec3 { 1.0F, 0.95F, 0.8F, },
     .illuminance_lux = 1600.0F,
     .transmittance_toward_sun_rgb = glm::vec3 { 0.25F, 0.5F, 0.75F, },
@@ -537,6 +537,56 @@ NOLINT_TEST_F(
     ASSERT_TRUE(service.BuildLightGrid(input));
     EXPECT_EQ(service.GetLastGridBuildState().published_view_count, 3U);
   }
+}
+
+NOLINT_TEST_F(LightingServiceBehaviorTest,
+  RejectsUnrepresentableDepthSpanOnlyWhenLocalGridIsNeeded)
+{
+  auto service = LightingService(*renderer_);
+  service.OnFrameStart(
+    oxygen::frame::SequenceNumber { 1U }, oxygen::frame::Slot { 0U });
+  auto parameters = ResolvedView::Params {};
+  parameters.view_config.viewport
+    = ViewPort { .width = 64.0F, .height = 64.0F };
+  parameters.proj_matrix = glm::mat4 { 1.0F };
+  parameters.near_plane = std::numeric_limits<float>::min();
+  parameters.far_plane = std::nextafter(
+    parameters.near_plane, std::numeric_limits<float>::infinity());
+  const auto resolved = ResolvedView(parameters);
+  const auto views = std::array {
+    PreparedViewLightingInput {
+      .view_id = oxygen::ViewId { 1U },
+      .prepared_scene = {},
+      .resolved_view = oxygen::observer_ptr { &resolved },
+      .composition_view = {},
+    },
+  };
+  auto selection = FrameLightSelection {};
+  selection.scene_generation = 1U;
+  selection.local_lights.push_back(FrameLocalLightSelection {
+    .source_node = {},
+    .range = 10.0F,
+    .luminous_flux_lm = 100.0F,
+  });
+  const auto input = FrameLightingInputs {
+    .frame_light_set = &selection,
+    .active_views = views,
+  };
+  const auto result = service.BuildLightGrid(input);
+  ASSERT_FALSE(result);
+  EXPECT_EQ(result.error().error,
+    oxygen::vortex::LightingPreparationError::kUnrepresentable);
+  EXPECT_EQ(result.error().view_id, views.front().view_id);
+  EXPECT_EQ(
+    service.InspectForwardLightBindings(views.front().view_id), nullptr);
+  selection.local_lights.clear();
+  ASSERT_TRUE(service.BuildLightGrid(input));
+  const auto* bindings
+    = service.InspectForwardLightBindings(views.front().view_id);
+  ASSERT_NE(bindings, nullptr);
+  EXPECT_EQ(
+    bindings->publication_state, oxygen::vortex::kLightingPublicationEmpty);
+  EXPECT_EQ(bindings->grid_metadata_srv, kInvalidShaderVisibleIndex);
 }
 
 } // namespace

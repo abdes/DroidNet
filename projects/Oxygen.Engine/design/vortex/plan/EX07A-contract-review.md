@@ -865,6 +865,39 @@ qualification, the identified unused CPU selection fields and final coherent
 reconciliation. Later B–F obligations remain explicit and are not waived by the
 ABI or preparation tests.
 
+### Producer-derived depth mapping and selection cleanup checkpoint
+
+The new native probe fed the actual CPU helper's parameters into production HLSL.
+Near/far pairs for ordinary, narrow and large close-plane intervals returned
+`[0,30,0,0,0,25]`, rather than `[0,31,0,31,0,31]`, before the repair. Removed the
+legacy near offset, far padding and unused CPU lookup helper. The existing
+64-byte grid metadata now carries explicit `(span, curve, slice scale)` values
+and uses the near-relative logarithmic equation frozen in its owning ABI LLD.
+The normalized form avoids cancellation between large affine coefficients.
+
+Local-grid preparation rejects non-normal/unrepresentable spans explicitly;
+views with no local lights need no grid encoding and still publish valid empty
+results. The native tests cover endpoints and 170 interior/outside values across
+ordinary, narrow, large, small and wide intervals against an independent double
+reference. Removed the unused directional angle copy (`source_radius`) and local
+CPU padding; local emitter radius and the atmosphere disk keep their owners.
+
+Debug/Release each pass **24 native, 29 lighting, 17 shadow and 68 SceneRenderer
+cases** (276 executions). All six changed C++ files were processed by oxytidy,
+with no changed-line findings or added suppressions; existing whole-file
+warnings remain. Both shader archives build. The forward RenderDoc proof checks
+the live view's 0.05–160 m metadata, endpoint slices 0/31 and the canonical light/
+shadow references. The 180-frame Release offscreen proof exits zero without
+warnings/errors. This does not claim a spatial-culling or performance gain.
+Evidence under `ex07a`: `grid-depth-negative.log`,
+`grid-depth-*-{debug,release}.json`, `grid-depth-forward-report.txt`,
+`grid-depth-tidy-final/`, `grid-depth-release-180.log` and
+`grid-depth-checkpoint.json`.
+
+The two concrete follow-ups from the completion audit are repaired. Final A
+contract/catalog/document reconciliation remains; the active goal now covers
+all EX07 slices and cannot complete at A alone.
+
 | Gate                      | Owning suite / required evidence                                                                                                                                                                                                                     | Current result                                                                                                                  |
 | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
 | A ABI                     | CPU size/alignment/every-offset assertions; D3D12 upload/decode/readback of two distinct local records and directional records, integer high-bit patterns, sentinels, reserved zeros and nonzero element indices; matching catalog/reflection checks | Canonical wire records have native Debug/Release proof; remaining source-selection, validity and lifetime interfaces stay open. |

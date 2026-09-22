@@ -7,7 +7,7 @@ CPU/HLSL wire layouts. The [A checkpoint](../plan/EX07A-contract-review.md) owns
 approved decisions, evidence and remaining gates.
 
 The records below have size/alignment/every-offset assertions and native D3D12
-upload/decode/readback coverage. The native suite passes 21 ABI/lookup cases plus
+upload/decode/readback coverage. The native suite passes 23 ABI/lookup cases plus
 one allocation-requirements case in Debug and Release, including integer high-bit values, sentinels, reserved fields,
 nonzero element indices, adjacent records and nonsymmetric matrix transforms.
 Deferred draw constants are additionally decoded through actual aligned CBVs.
@@ -172,7 +172,7 @@ current view product before any enabled consumer reads arrays.
 |     12 | uint `pixel_size_shift`    | 6                                                              |
 |     16 | float2 `content_origin_px` | Resolved content origin in target pixels                       |
 |     24 | float2 `content_extent_px` | Resolved content extent                                        |
-|     32 | float3 `grid_z_params`     | Perspective B/O/S; zero for linear orthographic slices         |
+|     32 | float3 `grid_z_params`     | Perspective span/curve/slice scale; zero for orthographic      |
 |     44 | float `far_depth_m`        | Finite resolved view far depth, strictly above near            |
 |     48 | float `near_depth_m`       | Perspective positive near; orthographic signed near, below far |
 |     52 | uint `projection_kind`     | Perspective=0, Orthographic=1                                  |
@@ -185,8 +185,23 @@ far boundary; the culler and lookup use identical conservative boundaries. The
 inverse projection comes from the finalized view constants. Do not use the old
 shader's arbitrary 2,000,000 m last-slice extent or a negated spot axis.
 
-Perspective requires `0<near<far` and uses the stated logarithmic mapping.
-Orthographic retains its native signed near/far support (`far>near`, both finite):
+Perspective requires `0<near<far`. Its three parameters are
+`(depth_span_m, curve_scale, slice_scale)`, where `depth_span_m = far - near`,
+`slice_scale = 4.05` and `curve_scale = 2^(32/slice_scale) - 1`. Clamp the receiver
+to the actual near/far interval before subtraction, normalize
+`t = (depth - near) / depth_span_m`, then compute
+`slice = clamp(log2(1 + curve_scale*t) * slice_scale, 0, 31)` and truncate to uint.
+This near-relative form avoids cancellation between a large `depth*B` and `O`.
+Near maps to zero; far is inside the last cell, not the beginning of a padded
+cell beyond the view. No artificial near offset or far padding is retained.
+For a future culler, the inverse boundary is
+`near + depth_span_m * (2^(slice/slice_scale) - 1) / curve_scale`, clipped to the
+same view interval, with conservative floating-point bounds.
+
+Reject nonfinite or non-normal binary32 depth spans as unrepresentable when a
+local grid is required; do not silently publish zero/NaN/Inf parameters. A view
+without local lights needs no grid encoding. This is derived-data admission,
+not a change to authored camera planes. Orthographic retains its native signed near/far support (`far>near`, both finite):
 use 32 linear slices over that interval and zero unused logarithmic parameters.
 Its view depth is signed camera-forward distance. Do not reject or omit valid
 receivers merely because orthographic near or receiver depth is nonpositive.
