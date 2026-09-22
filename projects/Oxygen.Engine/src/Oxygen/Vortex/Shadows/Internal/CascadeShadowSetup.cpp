@@ -21,8 +21,9 @@
 #include <Oxygen/Scene/Light/LightCommon.h>
 #include <Oxygen/Vortex/Shadows/Internal/CascadeShadowSetup.h>
 #include <Oxygen/Vortex/Shadows/Internal/ConventionalShadowTargetAllocator.h>
-#include <Oxygen/Vortex/Shadows/Types/DirectionalShadowFrameData.h>
+#include <Oxygen/Vortex/Shadows/Types/DirectionalShadowRecord.h>
 #include <Oxygen/Vortex/Shadows/Types/FrameShadowInputs.h>
+#include <Oxygen/Vortex/Shadows/Types/ShadowFrameData.h>
 #include <Oxygen/Vortex/Types/FrameLightSelection.h>
 #include <Oxygen/Vortex/Types/ShadowFrameBindings.h>
 
@@ -325,9 +326,9 @@ auto CascadeShadowSetup::BuildDirectionalFrameData(
   const PreparedViewShadowInput& view_input,
   const FrameDirectionalLightSelection& directional_light,
   const ConventionalShadowTargetAllocator::DirectionalAllocation& allocation)
-  const -> DirectionalShadowFrameData
+  const -> ShadowFrameData
 {
-  auto frame_data = DirectionalShadowFrameData {};
+  auto frame_data = ShadowFrameData {};
   frame_data.backing_resolution = allocation.resolution;
   frame_data.storage_flags
     = allocation.surface ? kDirectionalShadowStorageDedicatedArray : 0U;
@@ -338,8 +339,7 @@ auto CascadeShadowSetup::BuildDirectionalFrameData(
   }
 
   const auto cascade_count = (std::max)(1U,
-    (std::min)(directional_light.cascade_count,
-      ShadowFrameBindings::kMaxCascades));
+    (std::min)(directional_light.cascade_count, kMaxDirectionalCascades));
   const auto inverse_resolution_x = allocation.resolution.x > 0U
     ? 1.0F / static_cast<float>(allocation.resolution.x)
     : 0.0F;
@@ -347,13 +347,13 @@ auto CascadeShadowSetup::BuildDirectionalFrameData(
     ? 1.0F / static_cast<float>(allocation.resolution.y)
     : 0.0F;
 
-  frame_data.bindings.conventional_shadow_surface_handle
-    = allocation.surface_srv;
-  frame_data.bindings.cascade_count = cascade_count;
-  frame_data.bindings.technique_flags = kShadowTechniqueDirectionalConventional;
-  frame_data.bindings.sampling_contract_flags
-    = kShadowSamplingContractTexture2DArray;
-  frame_data.bindings.light_direction_to_source
+  frame_data.cascades.resize(cascade_count);
+  frame_data.directional_records.push_back(DirectionalShadowRecord {
+    .selection_index = LightSelectionIndex { 0U },
+    .first_cascade = ShadowCascadeIndex { 0U },
+    .cascade_count = cascade_count,
+  });
+  frame_data.light_direction_to_source
     = glm::vec4(ResolveSafeLightDirection(directional_light.direction), 0.0F);
 
   const auto view_near = view_input.resolved_view->NearPlane();
@@ -385,7 +385,7 @@ auto CascadeShadowSetup::BuildDirectionalFrameData(
     const auto cascade_matrix = BuildCascadeMatrix(*view_input.resolved_view,
       directional_light.direction, cascade_begin, projection_end,
       allocation.resolution.x);
-    auto& cascade = frame_data.bindings.cascades[cascade_index];
+    auto& cascade = frame_data.cascades.at(cascade_index);
     cascade.light_view_projection = cascade_matrix.light_view_projection;
     cascade.split_near = cascade_begin;
     cascade.split_far = projection_end;

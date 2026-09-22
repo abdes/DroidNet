@@ -7,11 +7,12 @@
 #pragma once
 
 #include <span>
+#include <vector>
 
 #include <Oxygen/Vortex/Shadows/Internal/ConventionalShadowTargetAllocator.h>
+#include <Oxygen/Vortex/Shadows/Types/CubeLocalShadowRecord.h>
 #include <Oxygen/Vortex/Shadows/Types/FrameShadowInputs.h>
 #include <Oxygen/Vortex/Types/FrameLightSelection.h>
-#include <Oxygen/Vortex/Types/ShadowFrameBindings.h>
 #include <Oxygen/Vortex/api_export.h>
 
 namespace oxygen::vortex::shadows::internal {
@@ -26,11 +27,11 @@ public:
   PointShadowSetup(PointShadowSetup&&) = delete;
   auto operator=(PointShadowSetup&&) -> PointShadowSetup& = delete;
 
-  [[nodiscard]] OXGN_VRTX_API auto BuildPointFrameBindings(
+  [[nodiscard]] OXGN_VRTX_API auto BuildPointRecords(
     const PreparedViewShadowInput& view_input,
     std::span<const FrameLocalLightSelection> local_lights,
     const ConventionalShadowTargetAllocator::PointAllocation& allocation) const
-    -> ShadowFrameBindings;
+    -> std::vector<CubeLocalShadowRecord>;
 };
 
 } // namespace oxygen::vortex::shadows::internal

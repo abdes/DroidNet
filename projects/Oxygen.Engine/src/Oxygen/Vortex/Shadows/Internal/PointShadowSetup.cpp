@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <ranges>
 #include <span>
+#include <vector>
 
 #include <glm/ext/matrix_transform.hpp>
 #include <glm/gtc/constants.hpp>
@@ -19,9 +20,9 @@
 #include <Oxygen/Core/Types/ViewHelpers.h>
 #include <Oxygen/Vortex/Shadows/Internal/ConventionalShadowTargetAllocator.h>
 #include <Oxygen/Vortex/Shadows/Internal/PointShadowSetup.h>
+#include <Oxygen/Vortex/Shadows/Types/CubeLocalShadowRecord.h>
 #include <Oxygen/Vortex/Shadows/Types/FrameShadowInputs.h>
 #include <Oxygen/Vortex/Types/FrameLightSelection.h>
-#include <Oxygen/Vortex/Types/ShadowFrameBindings.h>
 
 namespace oxygen::vortex::shadows::internal {
 namespace {
@@ -69,25 +70,21 @@ namespace {
 
 } // namespace
 
-auto PointShadowSetup::BuildPointFrameBindings(
+auto PointShadowSetup::BuildPointRecords(
   const PreparedViewShadowInput& view_input,
   const std::span<const FrameLocalLightSelection> local_lights,
   const ConventionalShadowTargetAllocator::PointAllocation& allocation) const
-  -> ShadowFrameBindings
+  -> std::vector<CubeLocalShadowRecord>
 {
-  auto bindings = ShadowFrameBindings {};
+  auto records = std::vector<CubeLocalShadowRecord> {};
   if (!allocation.surface_srv.IsValid()
     || view_input.resolved_view == nullptr) {
-    return bindings;
+    return records;
   }
 
   const auto inverse_resolution = allocation.resolution.x > 0U
     ? 1.0F / static_cast<float>(allocation.resolution.x)
     : 0.0F;
-
-  bindings.point_shadow_surface_handle = allocation.surface_srv;
-  bindings.technique_flags = kShadowTechniquePointConventional;
-  bindings.sampling_contract_flags = kShadowSamplingContractTextureCubeArray;
 
   auto point_shadow_index = 0U;
   for (const auto& [selection_index, light] :
@@ -96,8 +93,7 @@ auto PointShadowSetup::BuildPointFrameBindings(
       || (light.flags & kLocalLightFlagCastsShadows) == 0U) {
       continue;
     }
-    if (point_shadow_index >= ShadowFrameBindings::kMaxPointShadows
-      || point_shadow_index >= allocation.shadow_count) {
+    if (point_shadow_index >= allocation.shadow_count) {
       break;
     }
 
@@ -110,7 +106,7 @@ auto PointShadowSetup::BuildPointFrameBindings(
     const auto world_texel_size = (2.0F * range)
       / static_cast<float>((std::max)(allocation.resolution.x, 1U));
 
-    auto& point = bindings.point_shadows.at(point_shadow_index);
+    auto& point = records.emplace_back();
     for (std::size_t face_index = 0U; face_index < kPointFaceDirections.size();
       ++face_index) {
       const auto view = glm::lookAtRH(light.position,
@@ -133,13 +129,7 @@ auto PointShadowSetup::BuildPointFrameBindings(
     ++point_shadow_index;
   }
 
-  bindings.point_shadow_count = point_shadow_index;
-  if (bindings.point_shadow_count == 0U) {
-    bindings.point_shadow_surface_handle = kInvalidShaderVisibleIndex;
-    bindings.technique_flags = 0U;
-    bindings.sampling_contract_flags = 0U;
-  }
-  return bindings;
+  return records;
 }
 
 } // namespace oxygen::vortex::shadows::internal

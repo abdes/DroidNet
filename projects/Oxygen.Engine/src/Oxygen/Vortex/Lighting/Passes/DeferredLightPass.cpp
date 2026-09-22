@@ -53,8 +53,8 @@
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
 #include <Oxygen/Vortex/ShaderDebugMode.h>
+#include <Oxygen/Vortex/Shadows/Types/ShadowFrameData.h>
 #include <Oxygen/Vortex/Types/FrameLightSelection.h>
-#include <Oxygen/Vortex/Types/ShadowFrameBindings.h>
 
 namespace oxygen::vortex::lighting {
 
@@ -581,7 +581,7 @@ DeferredLightPass::~DeferredLightPass()
 auto DeferredLightPass::Record(RenderContext& ctx,
   graphics::CommandRecorder& recorder, const SceneTextures& scene_textures,
   const internal::DeferredLightPacketSet& packets,
-  const ShadowFrameBindings* directional_shadow_bindings,
+  const ShadowFrameData* shadow_data,
   const graphics::Texture* directional_shadow_surface,
   const graphics::Texture* spot_shadow_surface,
   const graphics::Texture* point_shadow_surface,
@@ -597,27 +597,26 @@ auto DeferredLightPass::Record(RenderContext& ctx,
     && !wants_static_sky_light) {
     return state;
   }
-  if (directional_shadow_bindings != nullptr
-    && directional_shadow_bindings->HasDirectionalConventionalShadow()) {
+  if (shadow_data != nullptr && !shadow_data->cascades.empty()) {
     state.consumed_directional_shadow_product = true;
     state.directional_shadow_cascade_count
-      = directional_shadow_bindings->cascade_count;
+      = static_cast<std::uint32_t>(shadow_data->cascades.size());
     state.directional_shadow_surface_srv
-      = directional_shadow_bindings->conventional_shadow_surface_handle;
+      = shadow_data->cascades.front().surface_srv;
   }
-  if (directional_shadow_bindings != nullptr
-    && directional_shadow_bindings->HasSpotConventionalShadow()) {
+  if (shadow_data != nullptr && !shadow_data->projected_local_records.empty()) {
     state.consumed_spot_shadow_product = true;
-    state.spot_shadow_count = directional_shadow_bindings->spot_shadow_count;
+    state.spot_shadow_count
+      = static_cast<std::uint32_t>(shadow_data->projected_local_records.size());
     state.spot_shadow_surface_srv
-      = directional_shadow_bindings->spot_shadow_surface_handle;
+      = shadow_data->projected_local_records.front().surface_srv;
   }
-  if (directional_shadow_bindings != nullptr
-    && directional_shadow_bindings->HasPointConventionalShadow()) {
+  if (shadow_data != nullptr && !shadow_data->cube_local_records.empty()) {
     state.consumed_point_shadow_product = true;
-    state.point_shadow_count = directional_shadow_bindings->point_shadow_count;
+    state.point_shadow_count
+      = static_cast<std::uint32_t>(shadow_data->cube_local_records.size());
     state.point_shadow_surface_srv
-      = directional_shadow_bindings->point_shadow_surface_handle;
+      = shadow_data->cube_local_records.front().surface_srv;
   }
 
   auto gfx = renderer_.GetGraphics();

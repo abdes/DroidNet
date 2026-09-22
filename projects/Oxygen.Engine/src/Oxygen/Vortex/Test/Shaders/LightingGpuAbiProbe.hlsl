@@ -9,6 +9,7 @@
 #include "Vortex/Contracts/Lighting/DeferredLightConstants.hlsli"
 #include "Vortex/Contracts/View/ViewFrameBindings.hlsli"
 #include "Vortex/Contracts/Shadows/ShadowRecords.hlsli"
+#include "Vortex/Contracts/Shadows/ShadowFrameBindings.hlsli"
 #include "Vortex/Contracts/Shadows/ShadowCascadeBinding.hlsli"
 #include "Vortex/Contracts/Shadows/ProjectedLocalShadowRecord.hlsli"
 #include "Vortex/Contracts/Shadows/CubeLocalShadowRecord.hlsli"
@@ -199,5 +200,18 @@ void CS(uint3 thread : SV_DispatchThreadID) {
         output.Store4(address + 416, uint4(value.surface_srv, value.first_array_layer,
             value.selection_index, value.reserved0));
         output.Store4(address + 432, uint4(asuint(value.inverse_resolution), value.reserved1));
+    } else if (g_RecordKind == 16) {
+        StructuredBuffer<VortexShadowFrameBindings> inputs = ResourceDescriptorHeap[args.x];
+        VortexShadowFrameBindings value = inputs[element];
+        output.Store4(address, uint4(value.directional_records_srv, value.directional_record_count,
+            value.projected_local_records_srv, value.projected_local_record_count));
+        output.Store4(address + 16, uint4(value.cube_local_records_srv, value.cube_local_record_count,
+            value.cascade_records_srv, value.cascade_record_count));
+        output.Store4(address + 32, uint4(value.contact_depth_srv, value.view_status_srv,
+            value.contact_enabled, value.sampling_flags));
+        output.Store4(address + 48, asuint(float4(value.contact_content_origin_px, value.contact_content_extent_px)));
+        output.Store4(address + 64, uint4(value.scene_generation, value.selection_revision));
+        output.Store4(address + 80, uint4(value.frame_sequence, value.view_generation));
+        output.Store4(address + 96, uint4(value.contact_texture_extent_px, value.reserved));
     }
 }

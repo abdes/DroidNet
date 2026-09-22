@@ -7,8 +7,8 @@
 #pragma once
 
 #include <Oxygen/Vortex/Shadows/Internal/ConventionalShadowTargetAllocator.h>
-#include <Oxygen/Vortex/Shadows/Types/DirectionalShadowFrameData.h>
 #include <Oxygen/Vortex/Shadows/Types/FrameShadowInputs.h>
+#include <Oxygen/Vortex/Shadows/Types/ShadowFrameData.h>
 #include <Oxygen/Vortex/Types/FrameLightSelection.h>
 #include <Oxygen/Vortex/api_export.h>
 
@@ -28,7 +28,7 @@ public:
     const PreparedViewShadowInput& view_input,
     const FrameDirectionalLightSelection& directional_light,
     const ConventionalShadowTargetAllocator::DirectionalAllocation& allocation)
-    const -> DirectionalShadowFrameData;
+    const -> ShadowFrameData;
 };
 
 } // namespace oxygen::vortex::shadows::internal

@@ -12,7 +12,7 @@
 
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Vortex/Lighting/Internal/DeferredLightPacketBuilder.h>
-#include <Oxygen/Vortex/Types/ShadowFrameBindings.h>
+#include <Oxygen/Vortex/Shadows/Types/ShadowFrameData.h>
 
 namespace oxygen::graphics {
 class Buffer;
@@ -72,7 +72,7 @@ namespace lighting {
     [[nodiscard]] auto Record(RenderContext& ctx,
       graphics::CommandRecorder& recorder, const SceneTextures& scene_textures,
       const internal::DeferredLightPacketSet& packets,
-      const ShadowFrameBindings* directional_shadow_bindings,
+      const ShadowFrameData* shadow_data,
       const graphics::Texture* directional_shadow_surface,
       const graphics::Texture* spot_shadow_surface,
       const graphics::Texture* point_shadow_surface,

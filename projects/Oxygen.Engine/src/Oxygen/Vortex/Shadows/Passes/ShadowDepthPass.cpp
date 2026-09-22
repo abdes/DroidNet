@@ -46,8 +46,8 @@
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/DepthPrepass/DepthPrepassMeshProcessor.h>
 #include <Oxygen/Vortex/Shadows/Passes/ShadowDepthPass.h>
-#include <Oxygen/Vortex/Shadows/Types/DirectionalShadowFrameData.h>
 #include <Oxygen/Vortex/Shadows/Types/FrameShadowInputs.h>
+#include <Oxygen/Vortex/Shadows/Types/ShadowFrameData.h>
 
 namespace oxygen::vortex::shadows {
 
@@ -289,22 +289,21 @@ auto ShadowDepthPass::OnFrameStart(
 
 auto ShadowDepthPass::Record(const PreparedViewShadowInput& view_input,
   const std::shared_ptr<graphics::Texture>& shadow_surface,
-  const DirectionalShadowFrameData& frame_data,
+  const ShadowFrameData& frame_data,
   const std::span<const DrawCommand> draw_commands) -> RenderState
 {
   auto depth_slices = std::vector<DepthSlice> {};
-  depth_slices.reserve(frame_data.bindings.cascade_count);
+  depth_slices.reserve(frame_data.cascades.size());
   for (std::uint32_t cascade_index = 0U;
-    cascade_index < frame_data.bindings.cascade_count; ++cascade_index) {
-    const auto& cascade = frame_data.bindings.cascades.at(cascade_index);
+    cascade_index < frame_data.cascades.size(); ++cascade_index) {
+    const auto& cascade = frame_data.cascades.at(cascade_index);
     depth_slices.push_back(DepthSlice {
       .light_view_projection = cascade.light_view_projection,
       .shadow_bias_parameters = glm::vec4(cascade.depth_bias,
         cascade.depth_bias * kUeCsmShadowSlopeScaleDepthBias
           * kUeDefaultUserShadowSlopeBias,
         kUeShadowMaxSlopeScaleDepthBias, 0.0F),
-      .light_direction_to_source
-      = frame_data.bindings.light_direction_to_source,
+      .light_direction_to_source = frame_data.light_direction_to_source,
       .target_slice = cascade.array_layer.get(),
     });
   }

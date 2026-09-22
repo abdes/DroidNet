@@ -1,43 +1,28 @@
 # Lighting GPU ABI
 
-Status: **EX07A wire migration in_progress; partial native ABI evidence.** This companion to
+Status: **EX07A production record migration implemented; remaining interface and
+failure/lifetime qualification in_progress.** This companion to
 [LightingService](lighting-service.md#2-canonical-data-and-interfaces) specifies
-the replacement wire layout. The [A checkpoint](../plan/EX07A-contract-review.md)
-owns approved decisions and qualification status. Do not connect the existing
-`PositionalLightData` culler to current forward records.
+CPU/HLSL wire layouts. The [A checkpoint](../plan/EX07A-contract-review.md) owns
+approved decisions, evidence and remaining gates.
 
-The range, grid-metadata, build-status, dispatch, shadow-reference and directional-family
-records have compiled C++ assertions and native GPU decoding coverage. The
-`LightingGpuAbi` target passes eight tests in Debug and Release, including
-typed indices and a changed-lane negative control. Local/directional evaluation
-records, full frame bindings, cascade/local projection records and production
-consumer cutover remain open; this partial proof does not close EX07A.
-The later [consumer checkpoint](../plan/EX07A-contract-review.md#verification-obligations-and-current-evidence)
-adds four native behavior tests for complete/compact iteration and content-relative
-projection-aware lookup, bringing the target to 12 passing cases per configuration.
-The current CPU publisher emits complete ranges without a compact index buffer;
-this is a conservative baseline until spatial culling is implemented.
+The records below have size/alignment/every-offset assertions and native D3D12
+upload/decode/readback coverage. The native suite passes 20 cases in Debug and
+Release, including integer high-bit values, sentinels, reserved fields,
+nonzero element indices, adjacent records and nonsymmetric matrix transforms.
+Deferred draw constants are additionally decoded through actual aligned CBVs.
 
-The evaluation checkpoint now implements the local/directional records,
-lighting header and deferred constants below. All 17 native probes pass in Debug
-and Release, including real aligned CBVs; four production forward capture cases
-also pass. The owning review records lint limitations and shadow/interface work. These
-results do not close the complete ABI gate or qualify the physical BRDF.
+The production shadow header is now 112 bytes and routes separate directional,
+cascade, projected-local and cube-local arrays. Its full frame/view/scene/selection
+identities match lighting publication, including the shared build-status
+resource. Record-allocation failure prevents header publication. The production
+capture verifies all three light kinds in two views. Contact fields remain
+inactive until the contact product is connected.
 
-The cascade-record checkpoint additionally migrates `ShadowCascadeBinding` to
-128 bytes in its producer and all active readers. The native suite now passes
-18 cases in each configuration, with all cascade lanes and matrix orientation
-covered; a production capture decodes eight cascades across two views. The
-enclosing inline-array header is temporarily 3,392 bytes; its replacement by
-the 112-byte header below and migration of local projections remain open.
-
-The subsequent local-projection checkpoint migrates the 128-byte projected and
-448-byte cube records in their active producers/readers and removes the old
-spot/point binding types. The native suite passes 19 cases in each configuration,
-including every cube face and integer identity; default MultiView capture checks
-confirm the corresponding source identities and descriptor consumption. The
-112-byte header, capacity/failure handling and complete finite-source/wide-spot
-coverage remain open.
+The current CPU publisher emits complete light lists without a compact-index
+buffer. Spatial culling, multi-directional source selection, complete support
+and failure/lifetime behavior, and BRDF moment publication remain open. These
+ABI and binding proofs do not qualify physical lighting or close EX07A.
 
 ## Encoding rules
 

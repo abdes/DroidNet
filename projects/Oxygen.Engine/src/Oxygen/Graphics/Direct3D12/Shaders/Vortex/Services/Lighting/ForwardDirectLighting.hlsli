@@ -69,7 +69,7 @@ static inline DirectionalLightDiagnosticTerms EvaluateDirectionalLightDiagnostic
     terms.transmittance_luma = ComputePerceptualLuma(transmittance);
 
     terms.shadow_visibility = saturate(ComputeDirectionalShadowVisibility(
-        world_pos, shadow_normal_ws, L));
+        dl.selection_index, world_pos, shadow_normal_ws, L));
 
     const float3 H_unorm = V + L;
     const float H_len_sq = dot(H_unorm, H_unorm);

@@ -5,9 +5,15 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <array>
+#include <cstdint>
+#include <limits>
 #include <memory>
 #include <span>
+#include <utility>
+#include <vector>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/Frame.h>
@@ -16,10 +22,16 @@
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/Shadows/Passes/CascadeShadowPass.h>
 #include <Oxygen/Vortex/Shadows/ShadowService.h>
-#include <Oxygen/Vortex/Shadows/Types/DirectionalShadowFrameData.h>
+#include <Oxygen/Vortex/Shadows/Types/CubeLocalShadowRecord.h>
+#include <Oxygen/Vortex/Shadows/Types/DirectionalShadowRecord.h>
 #include <Oxygen/Vortex/Shadows/Types/FrameShadowInputs.h>
+#include <Oxygen/Vortex/Shadows/Types/ProjectedLocalShadowRecord.h>
+#include <Oxygen/Vortex/Shadows/Types/ShadowCascadeBinding.h>
+#include <Oxygen/Vortex/Shadows/Types/ShadowFrameData.h>
 #include <Oxygen/Vortex/Types/FrameLightSelection.h>
+#include <Oxygen/Vortex/Types/LightingFrameBindings.h>
 #include <Oxygen/Vortex/Types/ShadowFrameBindings.h>
+#include <Oxygen/Vortex/Upload/TransientStructuredBuffer.h>
 
 namespace oxygen::vortex {
 
@@ -47,6 +59,21 @@ auto ShadowService::EnsurePublishResources() -> bool
     observer_ptr { gfx.get() }, renderer_.GetStagingProvider(),
     observer_ptr { &renderer_.GetInlineTransfersCoordinator() },
     "ShadowFrameBindings");
+  const auto make_buffer =
+    [&](const std::uint32_t stride,
+      const char* label) -> std::unique_ptr<upload::TransientStructuredBuffer> {
+    return std::make_unique<upload::TransientStructuredBuffer>(
+      observer_ptr { gfx.get() }, renderer_.GetStagingProvider(), stride,
+      observer_ptr { &renderer_.GetInlineTransfersCoordinator() }, label);
+  };
+  directional_record_buffer_ = make_buffer(
+    sizeof(DirectionalShadowRecord), "ShadowService.DirectionalRecords");
+  cascade_record_buffer_
+    = make_buffer(sizeof(ShadowCascadeBinding), "ShadowService.CascadeRecords");
+  projected_record_buffer_ = make_buffer(
+    sizeof(ProjectedLocalShadowRecord), "ShadowService.ProjectedRecords");
+  cube_record_buffer_
+    = make_buffer(sizeof(CubeLocalShadowRecord), "ShadowService.CubeRecords");
   return true;
 }
 
@@ -63,15 +90,53 @@ auto ShadowService::OnFrameStart(
   cascade_shadow_pass_->OnFrameStart(sequence, slot);
   if (EnsurePublishResources()) {
     bindings_publisher_->OnFrameStart(sequence, slot);
+    directional_record_buffer_->OnFrameStart(sequence, slot);
+    cascade_record_buffer_->OnFrameStart(sequence, slot);
+    projected_record_buffer_->OnFrameStart(sequence, slot);
+    cube_record_buffer_->OnFrameStart(sequence, slot);
   }
 }
 
-auto ShadowService::PublishShadowBindings(const ViewId view_id,
-  const ShadowFrameBindings& bindings) -> ShaderVisibleIndex
+auto ShadowService::PublishShadowBindings(
+  const ViewId view_id, ShadowFrameData& data) -> ShaderVisibleIndex
 {
   if (!EnsurePublishResources()) {
     return kInvalidShaderVisibleIndex;
   }
+  const auto write
+    = []<typename T>(upload::TransientStructuredBuffer& buffer,
+        const std::vector<T>& records, ShaderVisibleIndex& descriptor,
+        std::uint32_t& count) -> bool {
+    if (records.size() > std::numeric_limits<std::uint32_t>::max()) {
+      return false;
+    }
+    count = static_cast<std::uint32_t>(records.size());
+    descriptor = kInvalidShaderVisibleIndex;
+    if (records.empty()) {
+      return true;
+    }
+    auto allocation = buffer.Allocate(count);
+    if (!allocation || !allocation->srv.IsValid()
+      || !allocation->TryWriteRange(std::span(records))) {
+      return false;
+    }
+    descriptor = allocation->srv;
+    return true;
+  };
+  auto& bindings = data.bindings;
+  if (!write(*directional_record_buffer_, data.directional_records,
+        bindings.directional_records_srv, bindings.directional_record_count)
+    || !write(*cascade_record_buffer_, data.cascades,
+      bindings.cascade_records_srv, bindings.cascade_record_count)
+    || !write(*projected_record_buffer_, data.projected_local_records,
+      bindings.projected_local_records_srv,
+      bindings.projected_local_record_count)
+    || !write(*cube_record_buffer_, data.cube_local_records,
+      bindings.cube_local_records_srv, bindings.cube_local_record_count)) {
+    LOG_F(ERROR, "Shadow record publication failed for view {}", view_id.get());
+    return kInvalidShaderVisibleIndex;
+  }
+  bindings.sampling_flags = kShadowSamplingReversedZPcf;
   return bindings_publisher_->Publish(view_id, bindings);
 }
 
@@ -99,7 +164,7 @@ auto ShadowService::RenderShadowDepths(const FrameShadowInputs& inputs) -> void
     ? &*inputs.frame_light_set->directional_light
     : nullptr;
   for (const auto& view_input : inputs.active_views) {
-    auto view_data = DirectionalShadowFrameData {};
+    auto view_data = ShadowFrameData {};
     auto shadow_surface = std::shared_ptr<graphics::Texture> {};
     auto spot_shadow_surface = std::shared_ptr<graphics::Texture> {};
     auto point_shadow_surface = std::shared_ptr<graphics::Texture> {};
@@ -110,9 +175,9 @@ auto ShadowService::RenderShadowDepths(const FrameShadowInputs& inputs) -> void
     auto shadow_caster_draw_count = 0U;
 
     if (directional_light != nullptr) {
-      const auto view_state = cascade_shadow_pass_->RenderDirectionalView(
+      auto view_state = cascade_shadow_pass_->RenderDirectionalView(
         view_input, *directional_light);
-      view_data = view_state.frame_data;
+      view_data = std::move(view_state.frame_data);
       shadow_surface = view_state.shadow_surface;
       rendered_cascade_count = view_state.rendered_cascade_count;
       rendered_draw_count = view_state.rendered_draw_count;
@@ -121,33 +186,18 @@ auto ShadowService::RenderShadowDepths(const FrameShadowInputs& inputs) -> void
 
     if (inputs.frame_light_set != nullptr
       && !inputs.frame_light_set->local_lights.empty()) {
-      const auto spot_state = cascade_shadow_pass_->RenderSpotView(
+      auto spot_state = cascade_shadow_pass_->RenderSpotView(
         view_input, std::span(inputs.frame_light_set->local_lights));
-      view_data.bindings.spot_shadow_surface_handle
-        = spot_state.bindings.spot_shadow_surface_handle;
-      view_data.bindings.spot_shadow_count
-        = spot_state.bindings.spot_shadow_count;
-      view_data.bindings.technique_flags |= spot_state.bindings.technique_flags;
-      view_data.bindings.sampling_contract_flags
-        |= spot_state.bindings.sampling_contract_flags;
-      view_data.bindings.spot_shadows = spot_state.bindings.spot_shadows;
+      view_data.projected_local_records = std::move(spot_state.records);
       spot_shadow_surface = spot_state.shadow_surface;
       rendered_spot_shadow_count = spot_state.rendered_shadow_count;
       rendered_draw_count += spot_state.rendered_draw_count;
       shadow_caster_draw_count = (std::max)(shadow_caster_draw_count,
         spot_state.shadow_caster_draw_count);
 
-      const auto point_state = cascade_shadow_pass_->RenderPointView(
+      auto point_state = cascade_shadow_pass_->RenderPointView(
         view_input, std::span(inputs.frame_light_set->local_lights));
-      view_data.bindings.point_shadow_surface_handle
-        = point_state.bindings.point_shadow_surface_handle;
-      view_data.bindings.point_shadow_count
-        = point_state.bindings.point_shadow_count;
-      view_data.bindings.technique_flags
-        |= point_state.bindings.technique_flags;
-      view_data.bindings.sampling_contract_flags
-        |= point_state.bindings.sampling_contract_flags;
-      view_data.bindings.point_shadows = point_state.bindings.point_shadows;
+      view_data.cube_local_records = std::move(point_state.records);
       point_shadow_surface = point_state.shadow_surface;
       rendered_point_shadow_count += point_state.rendered_shadow_count;
       rendered_draw_count += point_state.rendered_draw_count;
@@ -155,16 +205,39 @@ auto ShadowService::RenderShadowDepths(const FrameShadowInputs& inputs) -> void
         point_state.shadow_caster_draw_count);
     }
 
-    const auto slot
-      = PublishShadowBindings(view_input.view_id, view_data.bindings);
-    published_views_.insert_or_assign(view_input.view_id,
-      PublishedView {
-        .slot = slot,
-        .data = view_data,
-        .surface = shadow_surface,
-        .spot_surface = spot_shadow_surface,
-        .point_surface = point_shadow_surface,
-      });
+    const auto split_identity
+      = [](const std::uint64_t value) -> std::array<std::uint32_t, 2> {
+      constexpr auto kHighWordShift = 32U;
+      return {
+        static_cast<std::uint32_t>(value),
+        static_cast<std::uint32_t>(value >> kHighWordShift),
+      };
+    };
+    view_data.bindings.frame_sequence = split_identity(current_sequence_.get());
+    if (inputs.frame_light_set != nullptr) {
+      view_data.bindings.scene_generation
+        = split_identity(inputs.frame_light_set->scene_generation);
+      view_data.bindings.selection_revision
+        = split_identity(inputs.frame_light_set->selection_epoch);
+    }
+    if (view_input.lighting_bindings != nullptr) {
+      view_data.bindings.view_generation
+        = view_input.lighting_bindings->view_generation;
+      view_data.bindings.view_status_srv
+        = view_input.lighting_bindings->build_status_srv;
+    }
+    if (view_input.resolved_view != nullptr) {
+      const auto viewport = view_input.resolved_view->Viewport();
+      view_data.bindings.contact_content_origin_px
+        = { viewport.top_left_x, viewport.top_left_y };
+      view_data.bindings.contact_content_extent_px
+        = { viewport.width, viewport.height };
+    }
+    published_views_.erase(view_input.view_id);
+    const auto slot = PublishShadowBindings(view_input.view_id, view_data);
+    if (!slot.IsValid()) {
+      continue;
+    }
 
     last_render_state_.published_view_count += 1U;
     last_render_state_.rendered_cascade_count += rendered_cascade_count;
@@ -173,20 +246,28 @@ auto ShadowService::RenderShadowDepths(const FrameShadowInputs& inputs) -> void
       += rendered_point_shadow_count;
     last_render_state_.rendered_draw_count += rendered_draw_count;
     last_render_state_.shadow_caster_draw_count += shadow_caster_draw_count;
-    if (view_data.bindings.cascade_count > 0U) {
+    if (view_data.bindings.directional_record_count > 0U) {
       last_render_state_.directional_view_count += 1U;
     }
-    if (view_data.bindings.spot_shadow_count > 0U) {
+    if (view_data.bindings.projected_local_record_count > 0U) {
       last_render_state_.spot_view_count += 1U;
     }
-    if (view_data.bindings.point_shadow_count > 0U) {
+    if (view_data.bindings.cube_local_record_count > 0U) {
       last_render_state_.point_view_count += 1U;
     }
+    published_views_.insert_or_assign(view_input.view_id,
+      PublishedView {
+        .slot = slot,
+        .data = std::move(view_data),
+        .surface = shadow_surface,
+        .spot_surface = spot_shadow_surface,
+        .point_surface = point_shadow_surface,
+      });
   }
 }
 
 auto ShadowService::InspectShadowData(const ViewId view_id) const
-  -> const DirectionalShadowFrameData*
+  -> const ShadowFrameData*
 {
   const auto it = published_views_.find(view_id);
   return it != published_views_.end() ? &it->second.data : nullptr;
