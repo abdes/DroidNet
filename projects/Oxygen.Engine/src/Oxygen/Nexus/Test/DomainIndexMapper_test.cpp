@@ -5,11 +5,10 @@
 #include <thread>
 #include <vector>
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <Oxygen/Core/Bindless/Generated.BindlessAbi.h>
 #include <Oxygen/Nexus/DomainIndexMapper.h>
 #include <Oxygen/Nexus/Test/NexusMocks.h>
+#include <Oxygen/Testing/GTest.h>
 
 namespace {
 
@@ -93,6 +92,10 @@ NOLINT_TEST(DomainIndexMapperTest, UnknownDomain_IsIgnored)
 NOLINT_TEST(DomainIndexMapperTest, ConcurrentReads_AreDeterministic)
 {
   FakeAllocator alloc;
+  alloc.SetBase(g::kMaterialsDomain,
+    b::ShaderVisibleIndex { g::kMaterialsShaderIndexBase });
+  alloc.SetBase(
+    g::kTexturesDomain, b::ShaderVisibleIndex { g::kTexturesShaderIndexBase });
   const DomainKey materials { .domain = g::kMaterialsDomain };
   const DomainKey textures { .domain = g::kTexturesDomain };
   DomainIndexMapper mapper(alloc, { materials, textures });
