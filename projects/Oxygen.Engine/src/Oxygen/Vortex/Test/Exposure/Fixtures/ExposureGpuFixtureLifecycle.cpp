@@ -145,9 +145,9 @@ auto ExposureGpuTest::CheckOffscreenSharing(const bool inside_frame) -> void
   auto session = facade.Finalize();
   ASSERT_TRUE(session.has_value());
   if (inside_frame) {
-    session->ExecuteInsideFrame(frame);
+    ASSERT_TRUE(session->ExecuteInsideFrame(frame));
   } else {
-    session->ExecuteNow();
+    ASSERT_TRUE(session->ExecuteNow());
   }
   WaitForQueueIdle();
   auto* scene_renderer
@@ -214,8 +214,8 @@ auto ExposureGpuTest::CheckOffscreenSharing(const bool inside_frame) -> void
               },
               settings),
     kInvalidViewId);
-  session->ExecuteNow();
-  session->ExecuteInsideFrame(frame);
+  EXPECT_FALSE(session->ExecuteNow());
+  EXPECT_FALSE(session->ExecuteInsideFrame(frame));
   EXPECT_EQ(
     vortex::testing::RendererPublicationProbe::ExposureStateForView(*service,
       CompositionView::ViewStateHandle {

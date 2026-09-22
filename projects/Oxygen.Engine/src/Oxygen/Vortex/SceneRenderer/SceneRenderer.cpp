@@ -1386,7 +1386,7 @@ void SceneRenderer::BeginFrame(const frame::SequenceNumber sequence,
   frame_light_selection_ = {};
   frame_lighting_views_.clear();
   frame_shadow_views_.clear();
-  lighting_grid_built_sequence_ = frame::SequenceNumber {};
+  lighting_grid_built_sequence_.reset();
   if (lighting_ != nullptr) {
     lighting_->OnFrameStart(sequence, slot);
   }
