@@ -4,12 +4,18 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <unordered_map>
+#include <cstddef>
+#include <memory>
+#include <unordered_set>
 
 #include <Oxygen/Base/Hash.h>
-#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Scene/Internal/IMutationCollector.h>
+#include <Oxygen/Scene/Internal/MutationTypes.h>
 #include <Oxygen/Scene/Internal/ScriptSlotMutationProcessor.h>
+#include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Scene/Scripting/ScriptingComponent.h>
+#include <Oxygen/Scene/Types/NodeHandle.h>
+#include <Oxygen/Scene/Types/ScriptSlotIndex.h>
 
 namespace oxygen::scene::internal {
 
@@ -17,7 +23,7 @@ namespace {
 
   struct ScriptSlotKey final {
     NodeHandle node_handle;
-    ScriptSlotIndex slot_index {};
+    ScriptSlotIndex slot_index;
 
     [[nodiscard]] auto operator==(const ScriptSlotKey&) const noexcept -> bool
       = default;
@@ -33,26 +39,11 @@ namespace {
     }
   };
 
-  struct ScriptSlotSignature final {
-    uint64_t content_hash { 0 };
-
-    [[nodiscard]] auto operator==(const ScriptSlotSignature&) const noexcept
-      -> bool = default;
-  };
-
   [[nodiscard]] auto IsScriptSlotActive(const ScriptingComponent::Slot& slot)
     -> bool
   {
     return slot.State() == ScriptingComponent::Slot::CompileState::kReady
       && !slot.IsDisabled() && slot.Executable() != nullptr;
-  }
-
-  [[nodiscard]] auto BuildScriptSlotSignature(
-    const ScriptingComponent::Slot& slot) -> ScriptSlotSignature
-  {
-    DCHECK_NOTNULL_F(slot.Executable().get());
-    return ScriptSlotSignature { .content_hash
-      = slot.Executable()->ContentHash() };
   }
 
   class ScriptSlotMutationProcessor final
@@ -79,14 +70,14 @@ namespace {
           break;
         }
 
-        const auto signature = BuildScriptSlotSignature(*slot);
-        const auto it = synced_script_slots_.find(key);
-        if (it == synced_script_slots_.end()) {
-          synced_script_slots_.emplace(key, signature);
+        const auto inserted = synced_script_slots_.insert(key).second;
+        if (inserted) {
           notify_observers(SceneMutationMask::kScriptSlotActivated,
             key.node_handle, key.slot_index, slot);
-        } else if (!(it->second == signature)) {
-          it->second = signature;
+        } else if (mutation.type == ScriptSlotMutationType::kChanged) {
+          // MarkSlotReady records only actual executable changes. Comparing
+          // against the live slot here loses a queued change when an earlier
+          // activation observes that same final executable during this drain.
           notify_observers(SceneMutationMask::kScriptSlotChanged,
             key.node_handle, key.slot_index, slot);
         }
@@ -105,15 +96,14 @@ namespace {
     auto QueueTrackedSlotDeactivations(
       IMutationCollector& mutation_collector) const -> void override
     {
-      for (const auto& [key, _] : synced_script_slots_) {
+      for (const auto& key : synced_script_slots_) {
         mutation_collector.CollectScriptSlotDeactivated(
           key.node_handle, key.slot_index);
       }
     }
 
   private:
-    std::unordered_map<ScriptSlotKey, ScriptSlotSignature, ScriptSlotKeyHash>
-      synced_script_slots_;
+    std::unordered_set<ScriptSlotKey, ScriptSlotKeyHash> synced_script_slots_;
   };
 
 } // namespace

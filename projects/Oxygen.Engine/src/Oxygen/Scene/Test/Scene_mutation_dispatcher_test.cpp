@@ -6,12 +6,11 @@
 
 #include <vector>
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <Oxygen/Scene/Internal/IMutationCollector.h>
 #include <Oxygen/Scene/Internal/MutationCollector.h>
 #include <Oxygen/Scene/Internal/MutationDispatcher.h>
 #include <Oxygen/Scene/Internal/ScriptSlotMutationProcessor.h>
+#include <Oxygen/Testing/GTest.h>
 
 namespace {
 
@@ -72,11 +71,13 @@ NOLINT_TEST(SceneMutationDispatcherTest,
       .resolve_script_slot = {},
       .notify_script_observers = {},
       .notify_light_mutation =
-        [&light_notifications](const LightMutation& mutation) {
+        [&light_notifications](
+          const LightMutation& mutation, const uint64_t /*sequence*/) {
           light_notifications.push_back(mutation);
         },
       .notify_camera_mutation =
-        [&camera_notifications](const CameraMutation& mutation) {
+        [&camera_notifications](
+          const CameraMutation& mutation, const uint64_t /*sequence*/) {
           camera_notifications.push_back(mutation);
         },
     });

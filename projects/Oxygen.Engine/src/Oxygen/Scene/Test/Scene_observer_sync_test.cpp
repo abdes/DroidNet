@@ -9,13 +9,12 @@
 #include <utility>
 #include <vector>
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <Oxygen/Core/Scripting/ScriptExecutable.h>
 #include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Testing/GTest.h>
 
 namespace {
 
@@ -201,6 +200,32 @@ NOLINT_TEST(SceneMutationObserverSyncTest, ChangedExecutableEmitsChangedEvent)
   EXPECT_EQ(observer.changed.front().slot_index.get(), 0U);
 }
 
+NOLINT_TEST(SceneMutationObserverSyncTest,
+  QueuedActivationDoesNotHideReplacementAfterRegistration)
+{
+  auto [scene, node] = BuildSceneWithScriptSlot();
+  ASSERT_NE(scene, nullptr);
+  auto scripting = node.GetScripting();
+  const auto slots = scripting.Slots();
+  ASSERT_EQ(slots.size(), 1U);
+  ASSERT_TRUE(scripting.MarkSlotReady(
+    slots.front(), std::make_shared<const HashExecutable>(1001)));
+
+  TestSceneObserver observer;
+  ASSERT_TRUE(scene->RegisterObserver(oxygen::observer_ptr { &observer }));
+  const auto replacement = std::make_shared<const HashExecutable>(2002);
+  ASSERT_TRUE(scripting.MarkSlotReady(slots.front(), replacement));
+  scene->SyncObservers();
+  EXPECT_TRUE(observer.activated.empty());
+  ASSERT_EQ(observer.changed.size(), 1U);
+  EXPECT_EQ(observer.changed.front().node_handle, node.GetHandle());
+
+  // Publishing the same executable again does not create another mutation.
+  ASSERT_TRUE(scripting.MarkSlotReady(slots.front(), replacement));
+  scene->SyncObservers();
+  EXPECT_EQ(observer.changed.size(), 1U);
+}
+
 NOLINT_TEST(SceneMutationObserverSyncTest, RemovedSlotEmitsDeactivatedEvent)
 {
   auto [scene, node] = BuildSceneWithScriptSlot();
@@ -236,8 +261,9 @@ NOLINT_TEST(
   ASSERT_TRUE(node.AttachLight(std::make_unique<DirectionalLight>()));
   scene->SyncObservers();
   const auto counters_without_observer = scene->GetMutationDispatchCounters();
-  EXPECT_EQ(counters_without_observer.sync_calls, 0U);
-  EXPECT_EQ(counters_without_observer.drained_records, 0U);
+  // The scene-owned light resolver is already subscribed.
+  EXPECT_EQ(counters_without_observer.sync_calls, 1U);
+  EXPECT_EQ(counters_without_observer.drained_records, 1U);
 
   TestSceneObserver observer;
   ASSERT_TRUE(scene->RegisterObserver(
@@ -267,8 +293,9 @@ NOLINT_TEST(
   ASSERT_TRUE(node.AttachCamera(std::make_unique<PerspectiveCamera>()));
   scene->SyncObservers();
   const auto counters_without_observer = scene->GetMutationDispatchCounters();
-  EXPECT_EQ(counters_without_observer.sync_calls, 0U);
-  EXPECT_EQ(counters_without_observer.drained_records, 0U);
+  // The scene-owned light resolver is already subscribed.
+  EXPECT_EQ(counters_without_observer.sync_calls, 1U);
+  EXPECT_EQ(counters_without_observer.drained_records, 1U);
 
   TestSceneObserver observer;
   ASSERT_TRUE(scene->RegisterObserver(

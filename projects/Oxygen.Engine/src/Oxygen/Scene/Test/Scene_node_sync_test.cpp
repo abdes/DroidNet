@@ -8,8 +8,6 @@
 #include <utility>
 #include <vector>
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Internal/IMutationCollector.h>
 #include <Oxygen/Scene/Internal/MutationCollector.h>
@@ -17,6 +15,7 @@
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/Test/Helpers/SceneMutationTestSupport.h>
+#include <Oxygen/Testing/GTest.h>
 
 namespace {
 
@@ -218,7 +217,8 @@ NOLINT_TEST_F(SceneNodeDispatcherTest, DispatchesNodeDestroyedAndTracksCounters)
       .notify_camera_mutation = {},
       .notify_transform_mutation = {},
       .notify_node_destroyed_mutation =
-        [&destroyed_notifications](const NodeDestroyedMutation& mutation) {
+        [&destroyed_notifications](
+          const NodeDestroyedMutation& mutation, const uint64_t /*sequence*/) {
           destroyed_notifications.push_back(mutation);
         },
     });
@@ -249,7 +249,8 @@ NOLINT_TEST_F(SceneNodeDispatcherTest, PreservesNodeDestroyedRecordOrder)
       .notify_camera_mutation = {},
       .notify_transform_mutation = {},
       .notify_node_destroyed_mutation =
-        [&destroyed_notifications](const NodeDestroyedMutation& mutation) {
+        [&destroyed_notifications](
+          const NodeDestroyedMutation& mutation, const uint64_t /*sequence*/) {
           destroyed_notifications.push_back(mutation);
         },
     });

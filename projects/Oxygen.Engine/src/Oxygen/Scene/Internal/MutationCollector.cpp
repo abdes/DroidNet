@@ -20,6 +20,11 @@ namespace {
       return enabled_;
     }
 
+    [[nodiscard]] auto NextSequence() const noexcept -> uint64_t override
+    {
+      return next_sequence_;
+    }
+
     auto ClearMutations() -> void override { mutations_.clear(); }
 
     auto CollectScriptSlotActivated(const NodeHandle& node_handle,
