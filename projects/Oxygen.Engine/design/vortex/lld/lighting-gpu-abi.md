@@ -1,10 +1,17 @@
 # Lighting GPU ABI
 
-Status: **EX07A target wire contract frozen; not implemented or GPU-qualified.** This companion to
+Status: **EX07A wire migration in_progress; partial native ABI evidence.** This companion to
 [LightingService](lighting-service.md#2-canonical-data-and-interfaces) specifies
 the replacement wire layout. The [A checkpoint](../plan/EX07A-contract-review.md)
 owns approved decisions and qualification status. Do not connect the existing
 `PositionalLightData` culler to current forward records.
+
+The range, grid-metadata, build-status, dispatch, shadow-reference and directional-family
+records have compiled C++ assertions and native GPU decoding coverage. The
+`LightingGpuAbi` target passes eight tests in Debug and Release, including
+typed indices and a changed-lane negative control. Local/directional evaluation
+records, full frame bindings, cascade/local projection records and production
+consumer cutover remain open; this partial proof does not close EX07A.
 
 ## Encoding rules
 
@@ -15,6 +22,20 @@ native enum storage, float-encoded integer or implicit `glm` aligned-vector mode
 belongs in the wire ABI. Assert standard layout, trivial copyability, alignment,
 size and **every** member offset. HLSL structured-buffer layout must match the
 table, independently of constant-buffer packing rules.
+
+The tables describe wire scalar types, not permission to use interchangeable
+integers in C++ APIs. Array indices use Oxygen `NamedType<uint32_t, Tag, ...>`
+with explicit construction and `.get()` at array/shader boundaries; no implicit
+conversion or compatibility alias. `Types/LightingIndices.h` owns distinct
+`LightSelectionIndex`, `ShadowRecordIndex`, `ShadowCascadeIndex`, `ShadowArrayLayer`
+and `LightListOffset` types and symbolic sentinels. Selection indices are scoped
+to the owning local/directional array and revision; projection kind selects a
+shadow reference's record array. Descriptors remain `ShaderVisibleIndex` and
+must not be substituted for array indices. Prove each wrapper's 4-byte size and
+alignment, standard layout and trivial copyability, and retain all field-offset
+and GPU decoding checks. Enclose structure layout assertions in
+`NOLINTBEGIN(*-magic-numbers)` / `NOLINTEND(*-magic-numbers)` comments: their literal
+offsets and sizes intentionally specify the independent wire contract.
 
 Descriptors and absent indices use `0xffffffff`; count zero never means a valid
 descriptor. Reserved bytes are zero. CPU generations remain uint64; a GPU

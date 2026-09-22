@@ -6,9 +6,11 @@
 
 #pragma once
 
-#include <glm/glm.hpp>
+#include <cstdint>
 #include <limits>
 #include <optional>
+
+#include <glm/glm.hpp>
 
 #include <Oxygen/Core/Types/Frustum.h>
 #include <Oxygen/Core/Types/Scissors.h>
@@ -18,23 +20,28 @@
 
 namespace oxygen {
 
-enum class NdcDepthRange { MinusOneToOne, ZeroToOne };
+enum class NdcDepthRange : std::uint8_t { MinusOneToOne, ZeroToOne };
 
 class ResolvedView {
+  static constexpr float kDefaultNearPlane = 0.1F;
+  static constexpr float kDefaultFarPlane = 1000.0F;
+
 public:
   struct Params {
-    View view_config {};
-    glm::mat4 view_matrix { 1.0f };
-    glm::mat4 proj_matrix { 1.0f };
-    std::optional<glm::mat4> stable_proj_matrix {};
-    std::optional<glm::vec3> camera_position {};
-    std::optional<float> camera_ev {};
+    View view_config;
+    glm::mat4 view_matrix { 1.0F };
+    glm::mat4 proj_matrix { 1.0F };
+    std::optional<glm::mat4> stable_proj_matrix;
+    std::optional<glm::vec3> camera_position;
+    std::optional<float> camera_ev;
     NdcDepthRange depth_range = NdcDepthRange::ZeroToOne; // default D3D
 
     // Camera clip planes in view-space units.
     // These must reflect the camera used to build the projection matrix.
-    float near_plane = 0.1F;
-    float far_plane = 1000.0F;
+    // Perspective near must be positive; orthographic near may be signed.
+    // Both planes must be finite, with far strictly greater than near.
+    float near_plane = kDefaultNearPlane;
+    float far_plane = kDefaultFarPlane;
   };
 
   OXGN_CORE_API explicit ResolvedView(const Params& p);
@@ -94,28 +101,31 @@ public:
   [[nodiscard]] auto NearPlane() const noexcept -> float { return near_plane_; }
   [[nodiscard]] auto FarPlane() const noexcept -> float { return far_plane_; }
 
+  //! Whether clip-space W is a positive constant (an orthographic projection).
+  OXGN_CORE_NDAPI auto IsOrthographic() const noexcept -> bool;
+
 private:
-  View config_ {};
-  glm::mat4 view_ { 1.0f };
-  glm::mat4 proj_ { 1.0f };
-  glm::mat4 stable_proj_ { 1.0f };
-  glm::mat4 inv_view_ { 1.0f };
-  glm::mat4 inv_proj_ { 1.0f };
-  glm::mat4 view_proj_ { 1.0f };
-  glm::mat4 inv_view_proj_ { 1.0f };
+  View config_;
+  glm::mat4 view_ { 1.0F };
+  glm::mat4 proj_ { 1.0F };
+  glm::mat4 stable_proj_ { 1.0F };
+  glm::mat4 inv_view_ { 1.0F };
+  glm::mat4 inv_proj_ { 1.0F };
+  glm::mat4 view_proj_ { 1.0F };
+  glm::mat4 inv_view_proj_ { 1.0F };
 
   ViewPort viewport_ {};
   Scissors scissor_ {};
-  glm::vec2 pixel_jitter_ { 0.0f, 0.0f };
+  glm::vec2 pixel_jitter_ { 0.0F, 0.0F };
   bool reverse_z_ = true;
   bool mirrored_ = false;
-  glm::vec3 camera_position_ { 0.0f, 0.0f, 0.0f };
-  std::optional<float> camera_ev_ {};
+  glm::vec3 camera_position_ { 0.0F, 0.0F, 0.0F };
+  std::optional<float> camera_ev_;
 
-  float near_plane_ { 0.1F };
-  float far_plane_ { 1000.0F };
+  float near_plane_ { kDefaultNearPlane };
+  float far_plane_ { kDefaultFarPlane };
 
-  float focal_length_pixels_ = 0.0f;
+  float focal_length_pixels_ = 0.0F;
   Frustum frustum_ {};
   NdcDepthRange depth_range_ = NdcDepthRange::ZeroToOne;
 };

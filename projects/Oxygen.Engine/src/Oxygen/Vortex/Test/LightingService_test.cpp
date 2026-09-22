@@ -14,14 +14,17 @@
 #include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
+#include <Oxygen/Core/Types/ViewHelpers.h>
 #include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/Types/QueueRole.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Vortex/Lighting/Internal/LightGridBuilder.h>
 #include <Oxygen/Vortex/Lighting/LightingService.h>
 #include <Oxygen/Vortex/Lighting/Types/DirectionalLightForwardData.h>
 #include <Oxygen/Vortex/Lighting/Types/FrameLightingInputs.h>
+#include <Oxygen/Vortex/Lighting/Types/LightGridMetadata.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererCapability.h>
 #include <Oxygen/Vortex/Test/Fakes/Graphics.h>
@@ -167,6 +170,49 @@ protected:
   std::shared_ptr<FakeGraphics> graphics_;
   std::shared_ptr<Renderer> renderer_;
 };
+
+NOLINT_TEST_F(LightingServiceBehaviorTest,
+  GridMetadataPreservesViewRectangleAndOrthographicSignedNear)
+{
+  auto params = ResolvedView::Params {};
+  params.view_config.viewport = ViewPort {
+    .top_left_x = 13.0F,
+    .top_left_y = 7.0F,
+    .width = 63.0F,
+    .height = 65.0F,
+    .min_depth = 0.0F,
+    .max_depth = 1.0F,
+  };
+  params.near_plane = -8.0F;
+  params.far_plane = 24.0F;
+  params.proj_matrix = oxygen::MakeReversedZOrthographicProjectionRH_ZO(
+    -2.0F, 2.0F, -2.0F, 2.0F, params.near_plane, params.far_plane);
+  const auto view = ResolvedView(params);
+  const auto views = std::array {
+    PreparedViewLightingInput {
+      .view_id = oxygen::ViewId { 1U },
+      .prepared_scene = {},
+      .resolved_view = oxygen::observer_ptr { &view },
+      .composition_view = {},
+    },
+  };
+  const auto selection = FrameLightSelection {};
+  auto builder
+    = oxygen::vortex::lighting::internal::LightGridBuilder(*renderer_);
+  const auto result = builder.Build({
+    .frame_light_set = &selection,
+    .active_views = views,
+  });
+  ASSERT_EQ(result.per_view.size(), 1U);
+  const auto& metadata = result.per_view.front().metadata;
+  EXPECT_EQ(metadata.grid_size, (glm::uvec3 { 1U, 2U, 32U }));
+  EXPECT_EQ(metadata.content_origin_px, (glm::vec2 { 13.0F, 7.0F }));
+  EXPECT_EQ(metadata.content_extent_px, (glm::vec2 { 63.0F, 65.0F }));
+  EXPECT_EQ(metadata.projection_kind, oxygen::vortex::kLightGridOrthographic);
+  EXPECT_EQ(metadata.grid_z_params, glm::vec3 { 0.0F });
+  EXPECT_EQ(metadata.near_depth_m, -8.0F);
+  EXPECT_EQ(metadata.far_depth_m, 24.0F);
+}
 
 NOLINT_TEST_F(LightingServiceBehaviorTest,
   BuildLightGridPublishesSharedBuffersForEveryActiveViewOncePerFrame)

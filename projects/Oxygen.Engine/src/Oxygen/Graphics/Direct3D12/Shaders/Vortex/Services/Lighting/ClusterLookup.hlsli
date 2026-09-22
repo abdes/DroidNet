@@ -8,6 +8,7 @@
 #define OXYGEN_D3D12_SHADERS_PASSES_LIGHTING_CLUSTERLOOKUP_HLSLI
 
 #include "Core/Bindless/Generated.BindlessAbi.hlsl"
+#include "Vortex/Contracts/Lighting/LightGridData.hlsli"
 
 // Clustered light-grid lookup utilities shared by shading and debug consumers.
 //
@@ -63,70 +64,14 @@ uint ComputeClusterIndex(
 
 //=== Light List Access ===---------------------------------------------------//
 
-// Cluster grid entry: packed (offset, count)
-struct ClusterLightInfo {
-    uint light_list_offset;  // Offset into the light index list
-    uint light_count;        // Number of lights in this cluster
-};
-
-// Get light info for a cluster from the cluster grid buffer.
-//
-// @param cluster_grid_slot  Bindless slot for the cluster grid buffer
-// @param cluster_index  Linear cluster index
-// @return Cluster light info (offset and count)
-ClusterLightInfo GetClusterLightInfo(uint cluster_grid_slot, uint cluster_index)
+// Read the canonical range produced by the lighting publisher/culler.
+ClusterLightRange GetClusterLightRange(uint cluster_grid_slot, uint cluster_index)
 {
-    ClusterLightInfo info;
-    info.light_list_offset = 0;
-    info.light_count = 0;
-
     if (cluster_grid_slot == K_INVALID_BINDLESS_INDEX) {
-        return info;
+        return (ClusterLightRange)0;
     }
-
-    StructuredBuffer<uint2> cluster_grid = ResourceDescriptorHeap[cluster_grid_slot];
-    uint2 packed = cluster_grid[cluster_index];
-    info.light_list_offset = packed.x;
-    info.light_count = packed.y;
-
-    return info;
+    StructuredBuffer<ClusterLightRange> cluster_grid = ResourceDescriptorHeap[cluster_grid_slot];
+    return cluster_grid[cluster_index];
 }
-
-// Get a light index from the light index list.
-//
-// @param light_list_slot  Bindless slot for the light index list buffer
-// @param offset  Offset from GetClusterLightInfo
-// @param local_index  Index within the cluster's light list [0, light_count)
-// @return Global light index into the positional lights buffer
-uint GetClusterLightIndex(uint light_list_slot, uint offset, uint local_index)
-{
-    if (light_list_slot == K_INVALID_BINDLESS_INDEX) {
-        return 0xFFFFFFFF; // Invalid
-    }
-
-    StructuredBuffer<uint> light_list = ResourceDescriptorHeap[light_list_slot];
-    return light_list[offset + local_index];
-}
-
-//=== Convenience Macros ===--------------------------------------------------//
-
-// Helper macro to iterate over cluster lights.
-// Usage:
-//   CLUSTER_LIGHT_LOOP_BEGIN(cluster_grid_slot, light_list_slot, cluster_index)
-//       PositionalLightData light = positional_lights[light_index];
-//       // ... process light ...
-//   CLUSTER_LIGHT_LOOP_END
-
-#define CLUSTER_LIGHT_LOOP_BEGIN(grid_slot, list_slot, cluster_idx) \
-    { \
-        ClusterLightInfo _cluster_info = GetClusterLightInfo(grid_slot, cluster_idx); \
-        for (uint _light_i = 0; _light_i < _cluster_info.light_count; ++_light_i) { \
-            uint light_index = GetClusterLightIndex(list_slot, \
-                _cluster_info.light_list_offset, _light_i); \
-            if (light_index == 0xFFFFFFFF) continue;
-
-#define CLUSTER_LIGHT_LOOP_END \
-        } \
-    }
 
 #endif // OXYGEN_D3D12_SHADERS_PASSES_LIGHTING_CLUSTERLOOKUP_HLSLI

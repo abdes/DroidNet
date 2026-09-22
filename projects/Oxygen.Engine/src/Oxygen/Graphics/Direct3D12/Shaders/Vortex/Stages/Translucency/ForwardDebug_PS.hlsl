@@ -355,7 +355,7 @@ static inline float3 MakeDepthMismatchHeatmap(float depth_error)
       uint3 dims = GetClusterDimensions();
 #if defined(DEBUG_LIGHT_HEATMAP)
       debug_out = HeatMapColor(
-        saturate((float)GetClusterLightInfo(grid, idx).light_count
+        saturate((float)GetClusterLightRange(grid, idx).count
           / (float)max(lighting.max_culled_lights_per_cell, 1u)));
 #elif defined(DEBUG_DEPTH_SLICE)
       debug_out = DepthSliceColor(idx / (dims.x * dims.y), dims.z);

@@ -273,10 +273,10 @@ float3 AccumulateLocalLightsClustered(
         const uint record_limit = min(record_count, lighting.local_light_count);
         const uint cluster = ComputeClusterIndex(screen_position_xy, linear_depth,
             uint3(lighting.grid_size), 6u, lighting.grid_z_params);
-        const ClusterLightInfo range = GetClusterLightInfo(
+        const ClusterLightRange range = GetClusterLightRange(
             lighting.grid_indirection_srv, cluster);
-        const uint list_start = min(range.light_list_offset, index_count);
-        const uint list_count = min(range.light_count, index_count - list_start);
+        const uint list_start = min(range.offset, index_count);
+        const uint list_count = min(range.count, index_count - list_start);
 
         for (uint i = 0; i < list_count; ++i) {
             const uint light_index = indices[list_start + i];
