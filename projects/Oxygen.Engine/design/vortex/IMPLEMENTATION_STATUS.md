@@ -121,6 +121,13 @@ user confirmed the spotlight repair and stable lower offscreen views; the
 boundary. The [review](plan/EX07A-contract-review.md) retains prior checkpoints,
 including the committed MSVC heap-leak repair.
 
+The [B reference foundation](plan/EX07B-reference-validation.md) now has a separate
+CPU-only GGX E/B moment integrator with typed roughness/view inputs, analytic
+hemisphere clipping and bounded quadrature refinement. Six tests pass in each
+configuration, including independent analytic limits and explicit failure when
+work is exhausted; all new C++ files are oxytidy-clean. Its refinement change is
+not yet an absolute-error certificate, and B remains in progress.
+
 A's closure does not establish the final physical renderer. B must supply an
 independent double-precision oracle, moment uncertainty and known-input probes,
 matched unculled image reference, deterministic fixtures and bounded instruments.
