@@ -21,9 +21,9 @@
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
+#include <Oxygen/Vortex/Shadows/Types/ShadowFrameData.h>
 #include <Oxygen/Vortex/Types/FrameLightSelection.h>
 #include <Oxygen/Vortex/Types/LightingFrameBindings.h>
-#include <Oxygen/Vortex/Types/ShadowFrameBindings.h>
 
 namespace oxygen::vortex {
 
@@ -90,7 +90,7 @@ auto LightingService::BuildLightGrid(const FrameLightingInputs& inputs)
 auto LightingService::RenderDeferredLighting(RenderContext& ctx,
   graphics::CommandRecorder& recorder, const SceneTextures& scene_textures,
   const FrameLightSelection& frame_light_set,
-  const ShadowFrameBindings* directional_shadow_bindings,
+  const ShadowFrameData* shadow_data,
   const graphics::Texture* directional_shadow_surface,
   const graphics::Texture* spot_shadow_surface,
   const graphics::Texture* point_shadow_surface,
@@ -104,8 +104,8 @@ auto LightingService::RenderDeferredLighting(RenderContext& ctx,
   const auto packets
     = deferred_packets_->Build(frame_light_set, prepared_lighting_->evaluation);
   const auto pass_state = deferred_pass_->Record(ctx, recorder, scene_textures,
-    packets, directional_shadow_bindings, directional_shadow_surface,
-    spot_shadow_surface, point_shadow_surface, static_sky_light_available);
+    packets, shadow_data, directional_shadow_surface, spot_shadow_surface,
+    point_shadow_surface, static_sky_light_available);
   last_deferred_lighting_state_ = {
     .consumed_packets = pass_state.consumed_packets,
     .accumulated_into_scene_color = pass_state.accumulated_into_scene_color,

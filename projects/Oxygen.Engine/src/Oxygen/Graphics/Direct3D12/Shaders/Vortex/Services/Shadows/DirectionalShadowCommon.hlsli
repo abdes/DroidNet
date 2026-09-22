@@ -10,20 +10,15 @@
 #include "Vortex/Contracts/Shadows/ShadowFrameBindings.hlsli"
 
 static inline uint SelectDirectionalShadowCascade(
-    VortexShadowFrameBindings bindings,
+    VortexShadowFrameBindings bindings, DirectionalShadowRecord family,
     float view_depth)
 {
-    const uint cascade_count = min(max(bindings.cascade_count, 1u), 4u);
-    [unroll]
-    for (uint i = 0u; i < 4u; ++i) {
-        if (i >= cascade_count) {
-            break;
-        }
-        if (view_depth <= bindings.cascades[i].split_far) {
-            return i;
+    for (uint i = 0u; i < family.cascade_count; ++i) {
+        if (view_depth <= LoadShadowCascade(bindings, family.first_cascade + i).split_far) {
+            return family.first_cascade + i;
         }
     }
-    return cascade_count - 1u;
+    return family.first_cascade + family.cascade_count - 1u;
 }
 
 static inline float SampleDirectionalShadowSurface(
@@ -32,7 +27,7 @@ static inline float SampleDirectionalShadowSurface(
     float2 shadow_uv,
     float receiver_depth)
 {
-    const VortexShadowCascadeBinding cascade = bindings.cascades[cascade_index];
+    const VortexShadowCascadeBinding cascade = LoadShadowCascade(bindings, cascade_index);
     if (cascade.surface_srv == K_INVALID_BINDLESS_INDEX) {
         return 1.0f;
     }
@@ -71,7 +66,7 @@ static inline float ComputeDirectionalCascadeVisibility(
     float3 safe_light_dir,
     float slope_factor)
 {
-    const VortexShadowCascadeBinding cascade = bindings.cascades[cascade_index];
+    const VortexShadowCascadeBinding cascade = LoadShadowCascade(bindings, cascade_index);
     const float world_texel_size = max(cascade.world_texel_size, 0.0f);
     const float normal_bias =
         max(cascade.normal_bias_m, 0.0f)
@@ -101,28 +96,20 @@ static inline float ComputeDirectionalCascadeVisibility(
         bindings, cascade_index, shadow_uv, shadow_ndc.z);
 }
 
-static inline bool HasDirectionalConventionalShadowBindings(
-    VortexShadowFrameBindings bindings)
+static inline bool HasDirectionalConventionalShadowBindings(VortexShadowFrameBindings bindings)
 {
-    return (bindings.technique_flags & VORTEX_SHADOW_TECHNIQUE_DIRECTIONAL_CONVENTIONAL) != 0u
-        && bindings.cascade_count != 0u
-        && bindings.conventional_shadow_surface_handle != K_INVALID_BINDLESS_INDEX;
+    return bindings.directional_record_count != 0u && bindings.cascade_record_count != 0u
+        && BX_IN_GLOBAL_SRV(bindings.directional_records_srv) && BX_IN_GLOBAL_SRV(bindings.cascade_records_srv);
 }
 
-static inline bool HasSpotConventionalShadowBindings(
-    VortexShadowFrameBindings bindings)
+static inline bool HasSpotConventionalShadowBindings(VortexShadowFrameBindings bindings)
 {
-    return (bindings.technique_flags & VORTEX_SHADOW_TECHNIQUE_SPOT_CONVENTIONAL) != 0u
-        && bindings.spot_shadow_count != 0u
-        && bindings.spot_shadow_surface_handle != K_INVALID_BINDLESS_INDEX;
+    return bindings.projected_local_record_count != 0u && BX_IN_GLOBAL_SRV(bindings.projected_local_records_srv);
 }
 
-static inline bool HasPointConventionalShadowBindings(
-    VortexShadowFrameBindings bindings)
+static inline bool HasPointConventionalShadowBindings(VortexShadowFrameBindings bindings)
 {
-    return (bindings.technique_flags & VORTEX_SHADOW_TECHNIQUE_POINT_CONVENTIONAL) != 0u
-        && bindings.point_shadow_count != 0u
-        && bindings.point_shadow_surface_handle != K_INVALID_BINDLESS_INDEX;
+    return bindings.cube_local_record_count != 0u && BX_IN_GLOBAL_SRV(bindings.cube_local_records_srv);
 }
 
 static inline float SampleSpotShadowSurface(
@@ -131,7 +118,7 @@ static inline float SampleSpotShadowSurface(
     float2 shadow_uv,
     float receiver_depth)
 {
-    const ProjectedLocalShadowRecord spot = bindings.spot_shadows[spot_shadow_index];
+    const ProjectedLocalShadowRecord spot = LoadProjectedLocalShadow(bindings, spot_shadow_index);
     if (spot.surface_srv == K_INVALID_BINDLESS_INDEX) {
         return 1.0f;
     }
@@ -170,11 +157,11 @@ static inline float ComputeSpotShadowVisibility(
     float3 light_direction_to_source)
 {
     if (!HasSpotConventionalShadowBindings(bindings)
-        || spot_shadow_index >= min(bindings.spot_shadow_count, 8u)) {
+        || spot_shadow_index >= bindings.projected_local_record_count) {
         return 1.0f;
     }
 
-    const ProjectedLocalShadowRecord spot = bindings.spot_shadows[spot_shadow_index];
+    const ProjectedLocalShadowRecord spot = LoadProjectedLocalShadow(bindings, spot_shadow_index);
     const float3 safe_normal = normalize(
         dot(world_normal, world_normal) > 1.0e-8f ? world_normal : float3(0.0f, 1.0f, 0.0f));
     const float3 safe_light_dir = normalize(
@@ -283,12 +270,12 @@ static inline float ComputePointShadowVisibility(
     float3 light_direction_to_source)
 {
     if (!HasPointConventionalShadowBindings(bindings)
-        || point_shadow_index >= min(bindings.point_shadow_count, 4u)) {
+        || point_shadow_index >= bindings.cube_local_record_count) {
         return 1.0f;
     }
 
     const CubeLocalShadowRecord point_shadow =
-        bindings.point_shadows[point_shadow_index];
+        LoadCubeLocalShadow(bindings, point_shadow_index);
     const float3 safe_normal = normalize(
         dot(world_normal, world_normal) > 1.0e-8f ? world_normal : float3(0.0f, 1.0f, 0.0f));
     const float3 safe_light_dir = normalize(
@@ -339,19 +326,21 @@ static inline float ComputePointShadowVisibility(
 }
 
 static inline float ComputeDirectionalShadowVisibility(
+    uint selection_index,
     float3 world_position,
     float3 world_normal,
     float3 light_direction_to_source)
 {
     const VortexShadowFrameBindings bindings = LoadVortexShadowFrameBindings();
-    if (!HasDirectionalConventionalShadowBindings(bindings)) {
+    DirectionalShadowRecord family;
+    if (!TryLoadDirectionalShadowFamily(bindings, selection_index, family)) {
         return 1.0f;
     }
 
     const float view_depth = max(0.0f, -mul(view_matrix, float4(world_position, 1.0f)).z);
-    const uint cascade_count = min(max(bindings.cascade_count, 1u), 4u);
-    const uint cascade_index = SelectDirectionalShadowCascade(bindings, view_depth);
-    const VortexShadowCascadeBinding cascade = bindings.cascades[cascade_index];
+    const uint cascade_end = family.first_cascade + family.cascade_count;
+    const uint cascade_index = SelectDirectionalShadowCascade(bindings, family, view_depth);
+    const VortexShadowCascadeBinding cascade = LoadShadowCascade(bindings, cascade_index);
 
     const float3 safe_normal = normalize(
         dot(world_normal, world_normal) > 1.0e-8f ? world_normal : float3(0.0f, 1.0f, 0.0f));
@@ -365,7 +354,7 @@ static inline float ComputeDirectionalShadowVisibility(
         bindings, cascade_index, world_position, safe_normal, safe_light_dir, slope_factor);
 
     const float transition_width = max(cascade.transition_width, 0.0f);
-    if (cascade_index + 1u < cascade_count && transition_width > 0.0f) {
+    if (cascade_index + 1u < cascade_end && transition_width > 0.0f) {
         const float transition_begin = cascade.split_far - transition_width;
         const float transition_alpha =
             saturate((view_depth - transition_begin) / transition_width);
@@ -377,7 +366,7 @@ static inline float ComputeDirectionalShadowVisibility(
         }
     }
 
-    if (cascade_index + 1u == cascade_count) {
+    if (cascade_index + 1u == cascade_end) {
         const float fade_begin = cascade.fade_begin;
         const float fade_span = max(cascade.fade_end - fade_begin, 0.001f);
         const float fade_alpha = saturate((view_depth - fade_begin) / fade_span);
@@ -388,18 +377,20 @@ static inline float ComputeDirectionalShadowVisibility(
 }
 
 static inline float ComputeDirectionalVolumetricShadowVisibility(
-    VortexShadowFrameBindings bindings,
+    uint selection_index,
     float3 world_position,
     float3 light_direction_to_source)
 {
-    if (!HasDirectionalConventionalShadowBindings(bindings)) {
+    const VortexShadowFrameBindings bindings = LoadVortexShadowFrameBindings();
+    DirectionalShadowRecord family;
+    if (!TryLoadDirectionalShadowFamily(bindings, selection_index, family)) {
         return 1.0f;
     }
 
     const float view_depth = max(0.0f, -mul(view_matrix, float4(world_position, 1.0f)).z);
-    const uint cascade_count = min(max(bindings.cascade_count, 1u), 4u);
-    const uint cascade_index = SelectDirectionalShadowCascade(bindings, view_depth);
-    const VortexShadowCascadeBinding cascade = bindings.cascades[cascade_index];
+    const uint cascade_end = family.first_cascade + family.cascade_count;
+    const uint cascade_index = SelectDirectionalShadowCascade(bindings, family, view_depth);
+    const VortexShadowCascadeBinding cascade = LoadShadowCascade(bindings, cascade_index);
 
     const float3 safe_light_dir = normalize(
         dot(light_direction_to_source, light_direction_to_source) > 1.0e-8f
@@ -409,7 +400,7 @@ static inline float ComputeDirectionalVolumetricShadowVisibility(
         bindings, cascade_index, world_position, 0.0f.xxx, safe_light_dir, 0.0f);
 
     const float transition_width = max(cascade.transition_width, 0.0f);
-    if (cascade_index + 1u < cascade_count && transition_width > 0.0f) {
+    if (cascade_index + 1u < cascade_end && transition_width > 0.0f) {
         const float transition_begin = cascade.split_far - transition_width;
         const float transition_alpha =
             saturate((view_depth - transition_begin) / transition_width);
@@ -421,7 +412,7 @@ static inline float ComputeDirectionalVolumetricShadowVisibility(
         }
     }
 
-    if (cascade_index + 1u == cascade_count) {
+    if (cascade_index + 1u == cascade_end) {
         const float fade_begin = cascade.fade_begin;
         const float fade_span = max(cascade.fade_end - fade_begin, 0.001f);
         const float fade_alpha = saturate((view_depth - fade_begin) / fade_span);
@@ -431,12 +422,6 @@ static inline float ComputeDirectionalVolumetricShadowVisibility(
     return visibility;
 }
 
-static inline float ComputeDirectionalVolumetricShadowVisibility(
-    float3 world_position,
-    float3 light_direction_to_source)
-{
-    return ComputeDirectionalVolumetricShadowVisibility(
-        LoadVortexShadowFrameBindings(), world_position, light_direction_to_source);
-}
+
 
 #endif // OXYGEN_D3D12_SHADERS_VORTEX_SERVICES_SHADOWS_DIRECTIONALSHADOWCOMMON_HLSLI

@@ -2075,6 +2075,11 @@ auto SceneRenderer::RenderCurrentView(
   // Stage 8: Shadow depth
   if (shadows_ != nullptr && wants_shadow_products) {
     CollectCurrentShadowViewInput(ctx, init_views_.get(), frame_shadow_views_);
+    for (auto& input : frame_shadow_views_) {
+      input.lighting_bindings = lighting_ != nullptr
+        ? lighting_->InspectForwardLightBindings(input.view_id)
+        : nullptr;
+    }
     shadows_->RenderShadowDepths(FrameShadowInputs {
       .frame_light_set = &frame_light_selection_,
       .active_views = std::span(frame_shadow_views_),
@@ -2083,6 +2088,9 @@ auto SceneRenderer::RenderCurrentView(
   if (shadows_ != nullptr && wants_shadow_products) {
     published_view_frame_bindings_.shadow_frame_slot
       = shadows_->ResolveShadowFrameSlot(ctx.current_view.view_id);
+    if (!published_view_frame_bindings_.shadow_frame_slot.IsValid()) {
+      return false;
+    }
     deferred_lighting_state_.published_shadow_frame_slot
       = published_view_frame_bindings_.shadow_frame_slot;
     RecordDiagnosticsPass(renderer_,
@@ -3323,9 +3331,8 @@ void SceneRenderer::RenderDeferredLighting(RenderContext& ctx,
     ? shadows_->InspectPointShadowSurface(ctx.current_view.view_id)
     : nullptr;
   lighting_->RenderDeferredLighting(ctx, recorder, scene_textures,
-    frame_light_selection_,
-    shadow_bindings != nullptr ? &shadow_bindings->bindings : nullptr,
-    shadow_surface, spot_shadow_surface, point_shadow_surface,
+    frame_light_selection_, shadow_bindings, shadow_surface,
+    spot_shadow_surface, point_shadow_surface,
     environment_lighting_state_.ambient_bridge_published);
   const auto& lighting_state = lighting_->GetLastDeferredLightingState();
   deferred_lighting_state_.owned_by_lighting_service = true;

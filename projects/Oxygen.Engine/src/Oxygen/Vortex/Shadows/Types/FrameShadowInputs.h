@@ -18,9 +18,11 @@
 namespace oxygen::vortex {
 
 struct CompositionView;
+struct LightingFrameBindings;
 
 struct PreparedViewShadowInput {
   ViewId view_id { kInvalidViewId };
+  const LightingFrameBindings* lighting_bindings { nullptr };
   observer_ptr<const PreparedSceneFrame> prepared_scene;
   observer_ptr<const ResolvedView> resolved_view;
   observer_ptr<const graphics::Buffer> view_constants;

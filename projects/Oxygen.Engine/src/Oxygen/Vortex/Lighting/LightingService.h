@@ -13,9 +13,9 @@
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Vortex/Lighting/Types/FrameLightingInputs.h>
 #include <Oxygen/Vortex/Lighting/Types/LightingPreparationFailure.h>
+#include <Oxygen/Vortex/Shadows/Types/ShadowFrameData.h>
 #include <Oxygen/Vortex/Types/FrameLightSelection.h>
 #include <Oxygen/Vortex/Types/LightingFrameBindings.h>
-#include <Oxygen/Vortex/Types/ShadowFrameBindings.h>
 #include <Oxygen/Vortex/api_export.h>
 
 namespace oxygen::graphics {
@@ -98,7 +98,7 @@ public:
   OXGN_VRTX_API auto RenderDeferredLighting(RenderContext& ctx,
     graphics::CommandRecorder& recorder, const SceneTextures& scene_textures,
     const FrameLightSelection& frame_light_set,
-    const ShadowFrameBindings* directional_shadow_bindings,
+    const ShadowFrameData* shadow_data,
     const graphics::Texture* directional_shadow_surface,
     const graphics::Texture* spot_shadow_surface,
     const graphics::Texture* point_shadow_surface,

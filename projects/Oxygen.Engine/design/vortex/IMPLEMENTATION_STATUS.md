@@ -154,6 +154,12 @@ old point/spot binding types. Native ABI tests pass 19/19 and ShadowService 11/1
 in Debug/Release; RenderDoc verifies local source identity, sampled surfaces and
 both lights' contributions. The 112-byte shadow header, separate array
 publication and full finite-source/wide-spot support are still pending.
+The shadow-header checkpoint now implements the 112-byte header and separate
+record-array publication, with matching lighting generations/status and atomic
+publication on allocation success. Debug/Release each pass 20 ABI, 13 shadow,
+23 lighting and 64 SceneRenderer tests. RenderDoc checks all three light kinds
+in two views. Source selection, complete support/capacity handling, contact
+products and failure/lifetime qualification remain open.
 MultiView's local-light far-clipping regression is repaired and visually
 confirmed by the user. The
 [review evidence](plan/EX07A-contract-review.md#verification-obligations-and-current-evidence)

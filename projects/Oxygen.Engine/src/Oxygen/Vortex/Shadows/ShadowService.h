@@ -12,8 +12,8 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/Texture.h>
-#include <Oxygen/Vortex/Shadows/Types/DirectionalShadowFrameData.h>
 #include <Oxygen/Vortex/Shadows/Types/FrameShadowInputs.h>
+#include <Oxygen/Vortex/Shadows/Types/ShadowFrameData.h>
 #include <Oxygen/Vortex/api_export.h>
 
 namespace oxygen::vortex {
@@ -23,6 +23,10 @@ class Renderer;
 namespace internal {
   template <typename Payload> class PerViewStructuredPublisher;
 } // namespace internal
+
+namespace upload {
+  class TransientStructuredBuffer;
+}
 
 namespace shadows {
   class CascadeShadowPass;
@@ -59,7 +63,7 @@ public:
     -> void;
 
   [[nodiscard]] OXGN_VRTX_API auto InspectShadowData(ViewId view_id) const
-    -> const DirectionalShadowFrameData*;
+    -> const ShadowFrameData*;
   [[nodiscard]] OXGN_VRTX_API auto InspectShadowSurface(ViewId view_id) const
     -> const graphics::Texture*;
   [[nodiscard]] OXGN_VRTX_API auto InspectSpotShadowSurface(
@@ -78,15 +82,15 @@ public:
 private:
   struct PublishedView {
     ShaderVisibleIndex slot { kInvalidShaderVisibleIndex };
-    DirectionalShadowFrameData data {};
+    ShadowFrameData data {};
     std::shared_ptr<graphics::Texture> surface;
     std::shared_ptr<graphics::Texture> spot_surface;
     std::shared_ptr<graphics::Texture> point_surface;
   };
 
   auto EnsurePublishResources() -> bool;
-  auto PublishShadowBindings(
-    ViewId view_id, const ShadowFrameBindings& bindings) -> ShaderVisibleIndex;
+  auto PublishShadowBindings(ViewId view_id, ShadowFrameData& data)
+    -> ShaderVisibleIndex;
 
   Renderer& renderer_;
   frame::SequenceNumber current_sequence_ { 0U };
@@ -94,6 +98,10 @@ private:
   RenderState last_render_state_ {};
   std::unique_ptr<internal::PerViewStructuredPublisher<ShadowFrameBindings>>
     bindings_publisher_;
+  std::unique_ptr<upload::TransientStructuredBuffer> directional_record_buffer_;
+  std::unique_ptr<upload::TransientStructuredBuffer> cascade_record_buffer_;
+  std::unique_ptr<upload::TransientStructuredBuffer> projected_record_buffer_;
+  std::unique_ptr<upload::TransientStructuredBuffer> cube_record_buffer_;
   std::unordered_map<ViewId, PublishedView> published_views_;
   std::unique_ptr<shadows::CascadeShadowPass> cascade_shadow_pass_;
 };

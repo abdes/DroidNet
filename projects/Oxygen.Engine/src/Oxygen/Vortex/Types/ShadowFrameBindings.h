@@ -9,92 +9,67 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <type_traits>
 
-#include <glm/vec4.hpp>
+#include <glm/vec2.hpp>
 
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Constants.h>
-#include <Oxygen/Vortex/Shadows/Types/CubeLocalShadowRecord.h>
-#include <Oxygen/Vortex/Shadows/Types/ProjectedLocalShadowRecord.h>
-#include <Oxygen/Vortex/Shadows/Types/ShadowCascadeBinding.h>
 
 namespace oxygen::vortex {
 
-inline constexpr std::uint32_t kShadowTechniqueDirectionalConventional = 1U
-  << 0U;
-inline constexpr std::uint32_t kShadowTechniqueSpotConventional = 1U << 1U;
-inline constexpr std::uint32_t kShadowTechniquePointConventional = 1U << 2U;
-inline constexpr std::uint32_t kShadowSamplingContractTexture2DArray = 1U << 0U;
-inline constexpr std::uint32_t kShadowSamplingContractTextureCubeArray = 1U
-  << 1U;
+inline constexpr std::uint32_t kShadowSamplingReversedZPcf = 1U;
 
-//! Bindless directional conventional-shadow routing payload for one view.
+//! Per-view routing header for separately published canonical shadow records.
 struct alignas(packing::kShaderDataFieldAlignment) ShadowFrameBindings {
-  static constexpr std::uint32_t kMaxCascades = 4U;
-  static constexpr std::uint32_t kMaxSpotShadows = 8U;
-  static constexpr std::uint32_t kMaxPointShadows = 4U;
-
-  ShaderVisibleIndex conventional_shadow_surface_handle {
-    kInvalidShaderVisibleIndex
-  };
-  std::uint32_t cascade_count { 0U };
-  std::uint32_t technique_flags { 0U };
-  std::uint32_t sampling_contract_flags { 0U };
-  glm::vec4 light_direction_to_source { 0.0F, -1.0F, 0.0F, 0.0F };
-
-  ShaderVisibleIndex spot_shadow_surface_handle { kInvalidShaderVisibleIndex };
-  std::uint32_t spot_shadow_count { 0U };
-  std::uint32_t _padding0 { 0U };
-  std::uint32_t _padding1 { 0U };
-
-  std::array<ShadowCascadeBinding, kMaxCascades> cascades {};
-  std::array<ProjectedLocalShadowRecord, kMaxSpotShadows> spot_shadows {};
-  ShaderVisibleIndex point_shadow_surface_handle { kInvalidShaderVisibleIndex };
-  std::uint32_t point_shadow_count { 0U };
-  std::uint32_t _padding2 { 0U };
-  std::uint32_t _padding3 { 0U };
-  std::array<CubeLocalShadowRecord, kMaxPointShadows> point_shadows {};
-
-  [[nodiscard]] auto HasDirectionalConventionalShadow() const noexcept -> bool
-  {
-    return conventional_shadow_surface_handle.IsValid() && cascade_count > 0U
-      && (technique_flags & kShadowTechniqueDirectionalConventional) != 0U;
-  }
-
-  [[nodiscard]] auto HasSpotConventionalShadow() const noexcept -> bool
-  {
-    return spot_shadow_surface_handle.IsValid() && spot_shadow_count > 0U
-      && (technique_flags & kShadowTechniqueSpotConventional) != 0U;
-  }
-
-  [[nodiscard]] auto HasPointConventionalShadow() const noexcept -> bool
-  {
-    return point_shadow_surface_handle.IsValid() && point_shadow_count > 0U
-      && (technique_flags & kShadowTechniquePointConventional) != 0U;
-  }
+  ShaderVisibleIndex directional_records_srv { kInvalidShaderVisibleIndex };
+  std::uint32_t directional_record_count { 0U };
+  ShaderVisibleIndex projected_local_records_srv { kInvalidShaderVisibleIndex };
+  std::uint32_t projected_local_record_count { 0U };
+  ShaderVisibleIndex cube_local_records_srv { kInvalidShaderVisibleIndex };
+  std::uint32_t cube_local_record_count { 0U };
+  ShaderVisibleIndex cascade_records_srv { kInvalidShaderVisibleIndex };
+  std::uint32_t cascade_record_count { 0U };
+  ShaderVisibleIndex contact_depth_srv { kInvalidShaderVisibleIndex };
+  ShaderVisibleIndex view_status_srv { kInvalidShaderVisibleIndex };
+  std::uint32_t contact_enabled { 0U };
+  std::uint32_t sampling_flags { 0U };
+  glm::vec2 contact_content_origin_px { 0.0F };
+  glm::vec2 contact_content_extent_px { 0.0F };
+  std::array<std::uint32_t, 2> scene_generation { 0U };
+  std::array<std::uint32_t, 2> selection_revision { 0U };
+  std::array<std::uint32_t, 2> frame_sequence { 0U };
+  std::array<std::uint32_t, 2> view_generation { 0U };
+  glm::uvec2 contact_texture_extent_px { 0U };
+  glm::uvec2 reserved { 0U };
 };
 
 // NOLINTBEGIN(*-magic-numbers)
+static_assert(std::is_standard_layout_v<ShadowFrameBindings>);
+static_assert(std::is_trivially_copyable_v<ShadowFrameBindings>);
+static_assert(sizeof(ShadowFrameBindings) == 112U);
+static_assert(alignof(ShadowFrameBindings) == 16U);
+static_assert(offsetof(ShadowFrameBindings, directional_records_srv) == 0U);
+static_assert(offsetof(ShadowFrameBindings, directional_record_count) == 4U);
+static_assert(offsetof(ShadowFrameBindings, projected_local_records_srv) == 8U);
 static_assert(
-  alignof(ShadowFrameBindings) == packing::kShaderDataFieldAlignment);
-static_assert(sizeof(ShadowFrameBindings) == 3392U);
-static_assert(
-  offsetof(ShadowFrameBindings, conventional_shadow_surface_handle) == 0U);
-static_assert(offsetof(ShadowFrameBindings, cascade_count) == 4U);
-static_assert(offsetof(ShadowFrameBindings, technique_flags) == 8U);
-static_assert(offsetof(ShadowFrameBindings, sampling_contract_flags) == 12U);
-static_assert(offsetof(ShadowFrameBindings, light_direction_to_source) == 16U);
-static_assert(offsetof(ShadowFrameBindings, spot_shadow_surface_handle) == 32U);
-static_assert(offsetof(ShadowFrameBindings, spot_shadow_count) == 36U);
-static_assert(offsetof(ShadowFrameBindings, cascades) == 48U);
-static_assert(offsetof(ShadowFrameBindings, spot_shadows) == 560U);
-static_assert(
-  offsetof(ShadowFrameBindings, point_shadow_surface_handle) == 1584U);
-static_assert(offsetof(ShadowFrameBindings, point_shadow_count) == 1588U);
-static_assert(offsetof(ShadowFrameBindings, point_shadows) == 1600U);
-static_assert(
-  sizeof(ShadowFrameBindings) % packing::kShaderDataFieldAlignment == 0U);
-
+  offsetof(ShadowFrameBindings, projected_local_record_count) == 12U);
+static_assert(offsetof(ShadowFrameBindings, cube_local_records_srv) == 16U);
+static_assert(offsetof(ShadowFrameBindings, cube_local_record_count) == 20U);
+static_assert(offsetof(ShadowFrameBindings, cascade_records_srv) == 24U);
+static_assert(offsetof(ShadowFrameBindings, cascade_record_count) == 28U);
+static_assert(offsetof(ShadowFrameBindings, contact_depth_srv) == 32U);
+static_assert(offsetof(ShadowFrameBindings, view_status_srv) == 36U);
+static_assert(offsetof(ShadowFrameBindings, contact_enabled) == 40U);
+static_assert(offsetof(ShadowFrameBindings, sampling_flags) == 44U);
+static_assert(offsetof(ShadowFrameBindings, contact_content_origin_px) == 48U);
+static_assert(offsetof(ShadowFrameBindings, contact_content_extent_px) == 56U);
+static_assert(offsetof(ShadowFrameBindings, scene_generation) == 64U);
+static_assert(offsetof(ShadowFrameBindings, selection_revision) == 72U);
+static_assert(offsetof(ShadowFrameBindings, frame_sequence) == 80U);
+static_assert(offsetof(ShadowFrameBindings, view_generation) == 88U);
+static_assert(offsetof(ShadowFrameBindings, contact_texture_extent_px) == 96U);
+static_assert(offsetof(ShadowFrameBindings, reserved) == 104U);
 // NOLINTEND(*-magic-numbers)
 
 } // namespace oxygen::vortex

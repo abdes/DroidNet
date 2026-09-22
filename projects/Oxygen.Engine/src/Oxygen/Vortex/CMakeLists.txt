@@ -158,7 +158,7 @@ set(
   "Lighting/Types/LightGridBuildStatus.h"
   "Lighting/Types/LightGridPassConstants.h"
   "Types/LightingIndices.h"
-  "Shadows/Types/DirectionalShadowFrameData.h"
+  "Shadows/Types/ShadowFrameData.h"
   "Shadows/Types/DirectionalShadowRecord.h"
   "Shadows/Types/FrameShadowInputs.h"
   "Shadows/Types/LightShadowReference.h"

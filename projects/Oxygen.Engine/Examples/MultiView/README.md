@@ -374,3 +374,14 @@ float comparison and native image inspection.
 The grid is a diagnostic overlay using opaque depth; it may cross forward cards
 that do not write depth. The raw scene comparison precedes that overlay and does
 not claim identical final grid occlusion between material domains.
+
+### Canonical shadow record capture
+
+For the EX07A shadow-header checkpoint, capture the existing `--exposure-proof
+consumer-visual --visual-fog clear --pip-wireframe false` recipe after startup.
+Run `tools/vortex/AnalyzeRenderDocShadowRecords.py` through
+`tools/shadows/Invoke-RenderDocUiAnalysis.ps1`. The analyzer verifies the
+112-byte shadow header, separate record strides/counts, matching lighting and
+shadow generations/status, and source identities/descriptors consumed by
+both views' directional, point and spot draws. It does not certify physical
+response, complete source coverage or resource lifetime.

@@ -22,6 +22,7 @@
 #include <Oxygen/Vortex/Shadows/Internal/SpotShadowSetup.h>
 #include <Oxygen/Vortex/Shadows/Passes/CascadeShadowPass.h>
 #include <Oxygen/Vortex/Shadows/Passes/ShadowDepthPass.h>
+#include <Oxygen/Vortex/Shadows/Types/CubeLocalShadowRecord.h>
 #include <Oxygen/Vortex/Shadows/Types/FrameShadowInputs.h>
 #include <Oxygen/Vortex/Types/FrameLightSelection.h>
 
@@ -112,8 +113,8 @@ auto CascadeShadowPass::RenderSpotView(
 
   const auto allocation
     = allocator_->AcquireSpotSurface(shadowed_spot_count, resolution_hint);
-  state.bindings
-    = spot_setup_->BuildSpotFrameBindings(view_input, local_lights, allocation);
+  state.records
+    = spot_setup_->BuildSpotRecords(view_input, local_lights, allocation);
   state.shadow_surface = allocation.surface;
 
   if (view_input.prepared_scene != nullptr) {
@@ -123,10 +124,8 @@ auto CascadeShadowPass::RenderSpotView(
   }
 
   auto depth_slices = std::vector<ShadowDepthPass::DepthSlice> {};
-  depth_slices.reserve(state.bindings.spot_shadow_count);
-  for (std::uint32_t spot_index = 0U;
-    spot_index < state.bindings.spot_shadow_count; ++spot_index) {
-    const auto& spot = state.bindings.spot_shadows.at(spot_index);
+  depth_slices.reserve(state.records.size());
+  for (const auto& spot : state.records) {
     // For the conventional perspective projection, clip W is axial distance.
     // Its XYZ coefficients give the normalized light-forward vector.
     const auto direction = glm::vec3(glm::row(spot.light_view_projection, 3));
@@ -172,8 +171,8 @@ auto CascadeShadowPass::RenderPointView(
 
   const auto allocation
     = allocator_->AcquirePointSurface(shadowed_point_count, resolution_hint);
-  state.bindings = point_setup_->BuildPointFrameBindings(
-    view_input, local_lights, allocation);
+  state.records
+    = point_setup_->BuildPointRecords(view_input, local_lights, allocation);
   state.shadow_surface = allocation.surface;
 
   if (view_input.prepared_scene != nullptr) {
@@ -183,17 +182,18 @@ auto CascadeShadowPass::RenderPointView(
   }
 
   auto depth_slices = std::vector<ShadowDepthPass::DepthSlice> {};
-  depth_slices.reserve(state.bindings.point_shadow_count * 6U);
-  for (std::uint32_t point_index = 0U;
-    point_index < state.bindings.point_shadow_count; ++point_index) {
-    const auto& point = state.bindings.point_shadows.at(point_index);
-    for (std::uint32_t face_index = 0U; face_index < 6U; ++face_index) {
+  depth_slices.reserve(
+    state.records.size() * CubeLocalShadowRecord::kFaceCount);
+  for (const auto& point : state.records) {
+    for (std::uint32_t face_index = 0U;
+      face_index < CubeLocalShadowRecord::kFaceCount; ++face_index) {
       depth_slices.push_back(ShadowDepthPass::DepthSlice {
-        .light_view_projection = point.face_light_view_projection[face_index],
+        .light_view_projection
+        = point.face_light_view_projection.at(face_index),
         .shadow_bias_parameters = glm::vec4(point.depth_bias,
           point.depth_bias * kLocalShadowSlopeDepthBiasScale, 1.0F, 0.0F),
         .light_direction_to_source
-        = glm::vec4(kPointShadowFaceDirections[face_index], 0.0F),
+        = glm::vec4(kPointShadowFaceDirections.at(face_index), 0.0F),
         .light_position_and_inv_range
         = glm::vec4(point.shadow_origin_ws, 1.0F / point.far_plane_m),
         .target_slice = point.first_array_layer.get() + face_index,

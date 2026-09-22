@@ -21,6 +21,7 @@
 #include <Oxygen/Vortex/Shadows/Types/ShadowCascadeBinding.h>
 #include <Oxygen/Vortex/Test/Lighting/LightingGpuAbiFixture.h>
 #include <Oxygen/Vortex/Types/LightingIndices.h>
+#include <Oxygen/Vortex/Types/ShadowFrameBindings.h>
 
 namespace oxygen::vortex::testing {
 namespace {
@@ -343,6 +344,104 @@ namespace {
                   .count = 2U }),
         expected);
     }
+  }
+
+  NOLINT_TEST_F(
+    LightingGpuAbiTest, ShadowHeaderDecodesEveryDescriptorAndGenerationWord)
+  {
+    const auto records = std::array {
+      ShadowFrameBindings {},
+      ShadowFrameBindings {
+        .directional_records_srv = ShaderVisibleIndex { 0x80000001U },
+        .directional_record_count = 2U,
+        .projected_local_records_srv = ShaderVisibleIndex { 0x01000003U },
+        .projected_local_record_count = 4U,
+        .cube_local_records_srv = ShaderVisibleIndex { 5U },
+        .cube_local_record_count = 6U,
+        .cascade_records_srv = ShaderVisibleIndex { 7U },
+        .cascade_record_count = 8U,
+        .contact_depth_srv = ShaderVisibleIndex { 9U },
+        .view_status_srv = ShaderVisibleIndex { 10U },
+        .contact_enabled = 1U,
+        .sampling_flags = 1U,
+        .contact_content_origin_px = { 13.25F, 14.5F },
+        .contact_content_extent_px = { 15.75F, 16.0F },
+        .scene_generation = { 0x11111111U, 0xEEEEEEEEU },
+        .selection_revision = { 0x22222222U, 0xDDDDDDDDU },
+        .frame_sequence = { 0x33333333U, 0xCCCCCCCCU },
+        .view_generation = { 0x44444444U, 0xBBBBBBBBU },
+        .contact_texture_extent_px = { 25U, 26U },
+      },
+      ShadowFrameBindings {},
+    };
+    const auto word = [](const float value) -> std::uint32_t {
+      return std::bit_cast<std::uint32_t>(value);
+    };
+    const auto expected = std::vector<std::uint32_t> {
+      0x80000001U,
+      2U,
+      0x01000003U,
+      4U,
+      5U,
+      6U,
+      7U,
+      8U,
+      9U,
+      10U,
+      1U,
+      1U,
+      word(13.25F),
+      word(14.5F),
+      word(15.75F),
+      word(16.0F),
+      0x11111111U,
+      0xEEEEEEEEU,
+      0x22222222U,
+      0xDDDDDDDDU,
+      0x33333333U,
+      0xCCCCCCCCU,
+      0x44444444U,
+      0xBBBBBBBBU,
+      25U,
+      26U,
+      0U,
+      0U,
+      0xFFFFFFFFU,
+      0U,
+      0xFFFFFFFFU,
+      0U,
+      0xFFFFFFFFU,
+      0U,
+      0xFFFFFFFFU,
+      0U,
+      0xFFFFFFFFU,
+      0xFFFFFFFFU,
+      0U,
+      0U,
+      0U,
+      0U,
+      0U,
+      0U,
+      0U,
+      0U,
+      0U,
+      0U,
+      0U,
+      0U,
+      0U,
+      0U,
+      0U,
+      0U,
+      0U,
+      0U,
+    };
+    EXPECT_EQ(Decode({ .records = std::as_bytes(std::span(records)),
+                .stride = 112U,
+                .record_kind = 16U,
+                .decoded_words = 28U,
+                .first_element = 1U,
+                .count = 2U }),
+      expected);
   }
 
 } // namespace

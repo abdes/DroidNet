@@ -63,7 +63,7 @@ float4 DeferredLightDirectionalPS(VortexFullscreenTriangleOutput input) : SV_Tar
     float light_attenuation = 1.0f;
     if (shadow_reference.projection_kind == SHADOW_PROJECTION_CASCADED_2D) {
         light_attenuation = ComputeDirectionalShadowVisibility(
-            world_position,
+            light.selection_index, world_position,
             surface.world_normal,
             light_dir);
     }

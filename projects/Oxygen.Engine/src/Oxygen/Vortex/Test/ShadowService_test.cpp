@@ -47,13 +47,14 @@
 #include <Oxygen/Vortex/Shadows/Passes/ShadowDepthPass.h>
 #include <Oxygen/Vortex/Shadows/ShadowService.h>
 #include <Oxygen/Vortex/Shadows/Types/CubeLocalShadowRecord.h>
-#include <Oxygen/Vortex/Shadows/Types/DirectionalShadowFrameData.h>
 #include <Oxygen/Vortex/Shadows/Types/FrameShadowInputs.h>
 #include <Oxygen/Vortex/Shadows/Types/ProjectedLocalShadowRecord.h>
 #include <Oxygen/Vortex/Shadows/Types/ShadowCascadeBinding.h>
+#include <Oxygen/Vortex/Shadows/Types/ShadowFrameData.h>
 #include <Oxygen/Vortex/Test/Fakes/Graphics.h>
 #include <Oxygen/Vortex/Test/Fixtures/MeshRasterStateTest.h>
 #include <Oxygen/Vortex/Types/FrameLightSelection.h>
+#include <Oxygen/Vortex/Types/LightingFrameBindings.h>
 #include <Oxygen/Vortex/Types/PassMask.h>
 #include <Oxygen/Vortex/Types/ShadowFrameBindings.h>
 
@@ -62,7 +63,6 @@ namespace {
 using oxygen::Graphics;
 using oxygen::kInvalidShaderVisibleIndex;
 using oxygen::RendererConfig;
-using oxygen::vortex::DirectionalShadowFrameData;
 using oxygen::vortex::FrameDirectionalCsmSplitMode;
 using oxygen::vortex::FrameDirectionalLightSelection;
 using oxygen::vortex::FrameLightSelection;
@@ -73,6 +73,7 @@ using oxygen::vortex::Renderer;
 using oxygen::vortex::RendererCapabilityFamily;
 using oxygen::vortex::ShadowCascadeBinding;
 using oxygen::vortex::ShadowFrameBindings;
+using oxygen::vortex::ShadowFrameData;
 using oxygen::vortex::ShadowService;
 using oxygen::vortex::shadows::internal::CascadeShadowSetup;
 using oxygen::vortex::shadows::internal::ConventionalShadowTargetAllocator;
@@ -238,52 +239,84 @@ NOLINT_TEST(ShadowServiceSurfaceTest,
   EXPECT_EQ(frame.size, sizeof(ShadowFrameBindings));
   const auto expected_offsets = std::array {
     std::pair {
-      "conventional_shadow_surface_handle",
-      offsetof(ShadowFrameBindings, conventional_shadow_surface_handle),
+      "directional_records_srv",
+      offsetof(ShadowFrameBindings, directional_records_srv),
     },
     std::pair {
-      "cascade_count",
-      offsetof(ShadowFrameBindings, cascade_count),
+      "directional_record_count",
+      offsetof(ShadowFrameBindings, directional_record_count),
     },
     std::pair {
-      "technique_flags",
-      offsetof(ShadowFrameBindings, technique_flags),
+      "projected_local_records_srv",
+      offsetof(ShadowFrameBindings, projected_local_records_srv),
     },
     std::pair {
-      "sampling_contract_flags",
-      offsetof(ShadowFrameBindings, sampling_contract_flags),
+      "projected_local_record_count",
+      offsetof(ShadowFrameBindings, projected_local_record_count),
     },
     std::pair {
-      "light_direction_to_source",
-      offsetof(ShadowFrameBindings, light_direction_to_source),
+      "cube_local_records_srv",
+      offsetof(ShadowFrameBindings, cube_local_records_srv),
     },
     std::pair {
-      "spot_shadow_surface_handle",
-      offsetof(ShadowFrameBindings, spot_shadow_surface_handle),
+      "cube_local_record_count",
+      offsetof(ShadowFrameBindings, cube_local_record_count),
     },
     std::pair {
-      "spot_shadow_count",
-      offsetof(ShadowFrameBindings, spot_shadow_count),
+      "cascade_records_srv",
+      offsetof(ShadowFrameBindings, cascade_records_srv),
     },
     std::pair {
-      "cascades",
-      offsetof(ShadowFrameBindings, cascades),
+      "cascade_record_count",
+      offsetof(ShadowFrameBindings, cascade_record_count),
     },
     std::pair {
-      "spot_shadows",
-      offsetof(ShadowFrameBindings, spot_shadows),
+      "contact_depth_srv",
+      offsetof(ShadowFrameBindings, contact_depth_srv),
     },
     std::pair {
-      "point_shadow_surface_handle",
-      offsetof(ShadowFrameBindings, point_shadow_surface_handle),
+      "view_status_srv",
+      offsetof(ShadowFrameBindings, view_status_srv),
     },
     std::pair {
-      "point_shadow_count",
-      offsetof(ShadowFrameBindings, point_shadow_count),
+      "contact_enabled",
+      offsetof(ShadowFrameBindings, contact_enabled),
     },
     std::pair {
-      "point_shadows",
-      offsetof(ShadowFrameBindings, point_shadows),
+      "sampling_flags",
+      offsetof(ShadowFrameBindings, sampling_flags),
+    },
+    std::pair {
+      "contact_content_origin_px",
+      offsetof(ShadowFrameBindings, contact_content_origin_px),
+    },
+    std::pair {
+      "contact_content_extent_px",
+      offsetof(ShadowFrameBindings, contact_content_extent_px),
+    },
+    std::pair {
+      "scene_generation",
+      offsetof(ShadowFrameBindings, scene_generation),
+    },
+    std::pair {
+      "selection_revision",
+      offsetof(ShadowFrameBindings, selection_revision),
+    },
+    std::pair {
+      "frame_sequence",
+      offsetof(ShadowFrameBindings, frame_sequence),
+    },
+    std::pair {
+      "view_generation",
+      offsetof(ShadowFrameBindings, view_generation),
+    },
+    std::pair {
+      "contact_texture_extent_px",
+      offsetof(ShadowFrameBindings, contact_texture_extent_px),
+    },
+    std::pair {
+      "reserved",
+      offsetof(ShadowFrameBindings, reserved),
     },
   };
   for (const auto& [name, offset] : expected_offsets) {
@@ -291,38 +324,35 @@ NOLINT_TEST(ShadowServiceSurfaceTest,
   }
 }
 
-NOLINT_TEST(ShadowServiceSurfaceTest,
-  ShadowFrameBindingsExposeDirectionalConventionalShadowContract)
+NOLINT_TEST(
+  ShadowServiceSurfaceTest, ShadowFrameBindingsStartWithNoPublishedArrays)
 {
-  auto bindings = ShadowFrameBindings {};
-
-  EXPECT_EQ(
-    bindings.conventional_shadow_surface_handle, kInvalidShaderVisibleIndex);
-  EXPECT_EQ(bindings.cascade_count, 0U);
-  EXPECT_EQ(bindings.technique_flags, 0U);
-  EXPECT_EQ(bindings.sampling_contract_flags, 0U);
-  EXPECT_EQ(bindings.spot_shadow_surface_handle, kInvalidShaderVisibleIndex);
-  EXPECT_EQ(bindings.spot_shadow_count, 0U);
-  EXPECT_EQ(bindings.point_shadow_surface_handle, kInvalidShaderVisibleIndex);
-  EXPECT_EQ(bindings.point_shadow_count, 0U);
-  EXPECT_EQ(bindings.cascades.size(), ShadowFrameBindings::kMaxCascades);
-  EXPECT_EQ(bindings.spot_shadows.size(), ShadowFrameBindings::kMaxSpotShadows);
-  EXPECT_EQ(
-    bindings.point_shadows.size(), ShadowFrameBindings::kMaxPointShadows);
+  const auto bindings = ShadowFrameBindings {};
+  EXPECT_EQ(bindings.directional_records_srv, kInvalidShaderVisibleIndex);
+  EXPECT_EQ(bindings.projected_local_records_srv, kInvalidShaderVisibleIndex);
+  EXPECT_EQ(bindings.cube_local_records_srv, kInvalidShaderVisibleIndex);
+  EXPECT_EQ(bindings.cascade_records_srv, kInvalidShaderVisibleIndex);
+  EXPECT_EQ(bindings.view_status_srv, kInvalidShaderVisibleIndex);
+  EXPECT_EQ(bindings.contact_depth_srv, kInvalidShaderVisibleIndex);
+  EXPECT_EQ(bindings.directional_record_count, 0U);
+  EXPECT_EQ(bindings.projected_local_record_count, 0U);
+  EXPECT_EQ(bindings.cube_local_record_count, 0U);
+  EXPECT_EQ(bindings.cascade_record_count, 0U);
+  EXPECT_EQ(bindings.contact_enabled, 0U);
+  EXPECT_EQ(bindings.sampling_flags, 0U);
 }
 
-NOLINT_TEST(ShadowServiceSurfaceTest,
-  DirectionalShadowFrameDataStartsWithEmptyLocalLightShadowPayload)
+NOLINT_TEST(
+  ShadowServiceSurfaceTest, ShadowFrameDataOwnsIndependentRecordArrays)
 {
-  auto frame_data = DirectionalShadowFrameData {};
-  frame_data.bindings.cascade_count = 2U;
-
-  EXPECT_EQ(frame_data.backing_resolution.x, 0U);
-  EXPECT_EQ(frame_data.backing_resolution.y, 0U);
-  EXPECT_EQ(frame_data.storage_flags, 0U);
-  EXPECT_EQ(frame_data.bindings.cascade_count, 2U);
-  EXPECT_EQ(frame_data.bindings.spot_shadow_count, 0U);
-  EXPECT_EQ(frame_data.bindings.point_shadow_count, 0U);
+  auto data = ShadowFrameData {};
+  data.cascades.resize(2U);
+  EXPECT_EQ(data.cascades.size(), 2U);
+  EXPECT_TRUE(data.directional_records.empty());
+  EXPECT_TRUE(data.projected_local_records.empty());
+  EXPECT_TRUE(data.cube_local_records.empty());
+  EXPECT_EQ(data.bindings.cascade_records_srv, kInvalidShaderVisibleIndex);
+  EXPECT_EQ(data.bindings.cascade_record_count, 0U);
 }
 
 NOLINT_TEST(ShadowServiceSurfaceTest,
@@ -362,23 +392,18 @@ NOLINT_TEST(ShadowServiceSurfaceTest,
     },
   };
 
-  const auto bindings = PointShadowSetup {}.BuildPointFrameBindings(
+  const auto bindings = PointShadowSetup {}.BuildPointRecords(
     view_input, std::span(local_lights), allocation);
 
-  EXPECT_TRUE(bindings.HasPointConventionalShadow());
-  EXPECT_EQ(bindings.point_shadow_surface_handle,
-    (oxygen::ShaderVisibleIndex {
-      13U,
-    }));
-  EXPECT_EQ(bindings.point_shadow_count, 1U);
-  EXPECT_FLOAT_EQ(bindings.point_shadows.at(0).far_plane_m, 10.0F);
-  EXPECT_EQ(bindings.point_shadows.at(0).first_array_layer,
-    oxygen::vortex::ShadowArrayLayer { 0U });
-  EXPECT_EQ(bindings.point_shadows.at(0).selection_index,
-    oxygen::vortex::LightSelectionIndex { 1U });
-  EXPECT_EQ(bindings.point_shadows.at(0).surface_srv, allocation.surface_srv);
-  EXPECT_GT(bindings.point_shadows.at(0).depth_bias, 0.0F);
-  EXPECT_FLOAT_EQ(bindings.point_shadows.at(0).normal_bias_m, 0.04F);
+  EXPECT_EQ(bindings.size(), 1U);
+  EXPECT_FLOAT_EQ(bindings.at(0).far_plane_m, 10.0F);
+  EXPECT_EQ(
+    bindings.at(0).first_array_layer, oxygen::vortex::ShadowArrayLayer { 0U });
+  EXPECT_EQ(
+    bindings.at(0).selection_index, oxygen::vortex::LightSelectionIndex { 1U });
+  EXPECT_EQ(bindings.at(0).surface_srv, allocation.surface_srv);
+  EXPECT_GT(bindings.at(0).depth_bias, 0.0F);
+  EXPECT_FLOAT_EQ(bindings.at(0).normal_bias_m, 0.04F);
 }
 
 NOLINT_TEST(ShadowServiceSurfaceTest,
@@ -446,6 +471,105 @@ NOLINT_TEST_F(
               11U,
             }),
     nullptr);
+}
+
+NOLINT_TEST_F(ShadowServiceBehaviorTest,
+  PublishesSeparateRecordArraysWithMatchingGenerations)
+{
+  auto service = ShadowService(*renderer_);
+  const auto sequence = oxygen::frame::SequenceNumber { 0x100000003ULL };
+  service.OnFrameStart(sequence, oxygen::frame::Slot { 0U });
+  auto resolved_view = MakePerspectiveResolvedView();
+  auto selection = FrameLightSelection {};
+  selection.scene_generation = 0x200000005ULL;
+  selection.selection_epoch = 0x300000007ULL;
+  selection.directional_light = FrameDirectionalLightSelection {};
+  selection.directional_light->shadow_flags
+    = kDirectionalLightShadowFlagCastsShadows;
+  selection.directional_light->cascade_count = 2U;
+  selection.local_lights = {
+    FrameLocalLightSelection {
+      .kind = oxygen::vortex::LocalLightKind::kSpot,
+      .range = 12.0F,
+      .flags = kLocalLightFlagCastsShadows,
+    },
+    FrameLocalLightSelection {
+      .kind = oxygen::vortex::LocalLightKind::kPoint,
+      .range = 10.0F,
+      .flags = kLocalLightFlagCastsShadows,
+    },
+  };
+  const auto lighting = oxygen::vortex::LightingFrameBindings {
+    .build_status_srv = oxygen::ShaderVisibleIndex { 19U },
+    .view_generation = { 11U, 4U },
+  };
+  const auto views = std::array {
+    oxygen::vortex::PreparedViewShadowInput {
+      .view_id = oxygen::ViewId { 17U },
+      .lighting_bindings = &lighting,
+      .prepared_scene = {},
+      .resolved_view = oxygen::observer_ptr { &resolved_view },
+      .view_constants = {},
+      .composition_view = {},
+    },
+  };
+  service.RenderShadowDepths(
+    { .frame_light_set = &selection, .active_views = views });
+  const auto* data = service.InspectShadowData(views.front().view_id);
+  ASSERT_NE(data, nullptr);
+  EXPECT_TRUE(service.ResolveShadowFrameSlot(views.front().view_id).IsValid());
+  EXPECT_TRUE(data->bindings.directional_records_srv.IsValid());
+  EXPECT_TRUE(data->bindings.cascade_records_srv.IsValid());
+  EXPECT_TRUE(data->bindings.projected_local_records_srv.IsValid());
+  EXPECT_TRUE(data->bindings.cube_local_records_srv.IsValid());
+  EXPECT_EQ(data->bindings.directional_record_count, 1U);
+  EXPECT_EQ(data->bindings.cascade_record_count, 2U);
+  EXPECT_EQ(data->bindings.projected_local_record_count, 1U);
+  EXPECT_EQ(data->bindings.cube_local_record_count, 1U);
+  EXPECT_EQ(
+    data->bindings.scene_generation, (std::array<std::uint32_t, 2> { 5U, 2U }));
+  EXPECT_EQ(data->bindings.selection_revision,
+    (std::array<std::uint32_t, 2> { 7U, 3U }));
+  EXPECT_EQ(
+    data->bindings.frame_sequence, (std::array<std::uint32_t, 2> { 3U, 1U }));
+  EXPECT_EQ(data->bindings.view_generation, lighting.view_generation);
+  EXPECT_EQ(data->bindings.view_status_srv, lighting.build_status_srv);
+  EXPECT_EQ(data->projected_local_records.front().selection_index,
+    oxygen::vortex::LightSelectionIndex { 0U });
+  EXPECT_EQ(data->cube_local_records.front().selection_index,
+    oxygen::vortex::LightSelectionIndex { 1U });
+  EXPECT_EQ(data->directional_records.front().first_cascade,
+    oxygen::vortex::ShadowCascadeIndex { 0U });
+}
+
+NOLINT_TEST_F(
+  ShadowServiceBehaviorTest, FailedRecordAllocationDoesNotPublishHeader)
+{
+  graphics_->SetFailMap(true);
+  auto service = ShadowService(*renderer_);
+  service.OnFrameStart(
+    oxygen::frame::SequenceNumber { 1U }, oxygen::frame::Slot { 0U });
+  auto resolved_view = MakePerspectiveResolvedView();
+  auto selection = FrameLightSelection {};
+  selection.directional_light = FrameDirectionalLightSelection {};
+  selection.directional_light->shadow_flags
+    = kDirectionalLightShadowFlagCastsShadows;
+  selection.directional_light->cascade_count = 2U;
+  const auto views = std::array {
+    oxygen::vortex::PreparedViewShadowInput {
+      .view_id = oxygen::ViewId { 17U },
+      .prepared_scene = {},
+      .resolved_view = oxygen::observer_ptr { &resolved_view },
+      .view_constants = {},
+      .composition_view = {},
+    },
+  };
+  service.RenderShadowDepths(
+    { .frame_light_set = &selection, .active_views = views });
+  EXPECT_EQ(service.InspectShadowData(views.front().view_id), nullptr);
+  EXPECT_EQ(service.ResolveShadowFrameSlot(views.front().view_id),
+    kInvalidShaderVisibleIndex);
+  EXPECT_EQ(service.GetLastRenderState().published_view_count, 0U);
 }
 
 NOLINT_TEST_F(ShadowServiceBehaviorTest,
@@ -567,23 +691,18 @@ NOLINT_TEST(ShadowServiceSurfaceTest,
     },
   };
 
-  const auto bindings = SpotShadowSetup {}.BuildSpotFrameBindings(
+  const auto bindings = SpotShadowSetup {}.BuildSpotRecords(
     view_input, std::span(local_lights), allocation);
 
-  EXPECT_TRUE(bindings.HasSpotConventionalShadow());
-  EXPECT_EQ(bindings.spot_shadow_surface_handle,
-    (oxygen::ShaderVisibleIndex {
-      9U,
-    }));
-  EXPECT_EQ(bindings.spot_shadow_count, 1U);
-  EXPECT_EQ(bindings.spot_shadows.at(0).selection_index,
-    oxygen::vortex::LightSelectionIndex { 1U });
-  EXPECT_EQ(bindings.spot_shadows.at(0).array_layer,
-    oxygen::vortex::ShadowArrayLayer { 0U });
-  EXPECT_EQ(bindings.spot_shadows.at(0).surface_srv, allocation.surface_srv);
-  EXPECT_FLOAT_EQ(bindings.spot_shadows.at(0).far_plane_m, 12.0F);
-  EXPECT_GT(bindings.spot_shadows.at(0).depth_bias, 0.0F);
-  EXPECT_FLOAT_EQ(bindings.spot_shadows.at(0).normal_bias_m, 0.03F);
+  EXPECT_EQ(bindings.size(), 1U);
+  EXPECT_EQ(
+    bindings.at(0).selection_index, oxygen::vortex::LightSelectionIndex { 1U });
+  EXPECT_EQ(
+    bindings.at(0).array_layer, oxygen::vortex::ShadowArrayLayer { 0U });
+  EXPECT_EQ(bindings.at(0).surface_srv, allocation.surface_srv);
+  EXPECT_FLOAT_EQ(bindings.at(0).far_plane_m, 12.0F);
+  EXPECT_GT(bindings.at(0).depth_bias, 0.0F);
+  EXPECT_FLOAT_EQ(bindings.at(0).normal_bias_m, 0.03F);
 }
 
 NOLINT_TEST(ShadowServiceSurfaceTest,
@@ -620,11 +739,11 @@ NOLINT_TEST(ShadowServiceSurfaceTest,
     },
   };
 
-  const auto bindings = SpotShadowSetup {}.BuildSpotFrameBindings(
+  const auto bindings = SpotShadowSetup {}.BuildSpotRecords(
     view_input, std::span(local_lights), allocation);
 
-  ASSERT_EQ(bindings.spot_shadow_count, 1U);
-  const auto& spot = bindings.spot_shadows.at(0);
+  ASSERT_EQ(bindings.size(), 1U);
+  const auto& spot = bindings.at(0);
   const auto caster_center = glm::vec3 {
     0.0F,
     0.0F,
@@ -672,18 +791,16 @@ NOLINT_TEST(ShadowServiceSurfaceTest,
   const auto frame_data = CascadeShadowSetup {}.BuildDirectionalFrameData(
     view_input, directional_light, allocation);
 
-  ASSERT_EQ(frame_data.bindings.cascade_count, 3U);
-  EXPECT_FLOAT_EQ(frame_data.bindings.cascades.at(0).split_near, 0.1F);
-  EXPECT_NEAR(frame_data.bindings.cascades.at(0).split_far, 12.475F, 0.0001F);
-  EXPECT_FLOAT_EQ(frame_data.bindings.cascades.at(1).split_near, 10.0F);
-  EXPECT_NEAR(frame_data.bindings.cascades.at(1).split_far, 22.5F, 0.0001F);
-  EXPECT_FLOAT_EQ(frame_data.bindings.cascades.at(2).split_near, 20.0F);
-  EXPECT_FLOAT_EQ(frame_data.bindings.cascades.at(2).split_far, 40.0F);
-  EXPECT_NEAR(
-    frame_data.bindings.cascades.at(0).transition_width, 2.475F, 0.0001F);
-  EXPECT_NEAR(
-    frame_data.bindings.cascades.at(1).transition_width, 2.5F, 0.0001F);
-  EXPECT_FLOAT_EQ(frame_data.bindings.cascades.at(2).transition_width, 0.0F);
+  ASSERT_EQ(frame_data.cascades.size(), 3U);
+  EXPECT_FLOAT_EQ(frame_data.cascades.at(0).split_near, 0.1F);
+  EXPECT_NEAR(frame_data.cascades.at(0).split_far, 12.475F, 0.0001F);
+  EXPECT_FLOAT_EQ(frame_data.cascades.at(1).split_near, 10.0F);
+  EXPECT_NEAR(frame_data.cascades.at(1).split_far, 22.5F, 0.0001F);
+  EXPECT_FLOAT_EQ(frame_data.cascades.at(2).split_near, 20.0F);
+  EXPECT_FLOAT_EQ(frame_data.cascades.at(2).split_far, 40.0F);
+  EXPECT_NEAR(frame_data.cascades.at(0).transition_width, 2.475F, 0.0001F);
+  EXPECT_NEAR(frame_data.cascades.at(1).transition_width, 2.5F, 0.0001F);
+  EXPECT_FLOAT_EQ(frame_data.cascades.at(2).transition_width, 0.0F);
 }
 
 } // namespace

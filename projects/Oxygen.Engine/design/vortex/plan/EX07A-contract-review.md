@@ -540,14 +540,57 @@ Existing local range/near-plane floors, cone clamping, fixed capacities and
 point/spot routing still require the approved support/failure migration; this
 record checkpoint does not qualify finite-source or 90-degree spot shadows.
 
-| Gate                      | Owning suite / required evidence                                                                                                                                                                                                                     | Current result                                                                                                                         |
-| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| A ABI                     | CPU size/alignment/every-offset assertions; D3D12 upload/decode/readback of two distinct local records and directional records, integer high-bit patterns, sentinels, reserved zeros and nonzero element indices; matching catalog/reflection checks | Six wire record types have native Debug/Release proof above; evaluation/binding/projection records and consumer migration remain open. |
-| A property completeness   | LP01-LP32 retained/removal mapping, whole-candidate ingress and scene-v7 layout                                                                                                                                                                      | Contract frozen; transport/rendered regression implementation remains open.                                                            |
-| A capacity/failure freeze | D1/D6 budgets, checked backend requirements, complete-list fallback and caller/output fault cases                                                                                                                                                    | Policy/profile frozen; D3D12 requirements queried. Runtime fault/lifetime qualification pending.                                       |
-| B instrument independence | Reuse Graphics offscreen/readback and Vortex exposure lighting fixtures; independent CPU oracle and known GPU signals                                                                                                                                | Not started. Existing HDR tests do not establish photometric correctness.                                                              |
-| C ingress/transport       | Scene, Scripting, Cooker, Content, DemoShell and managed/editor owning suites; non-default save/cook/load/PAK plus live edits                                                                                                                        | Required repairs identified; not run for this documentation checkpoint.                                                                |
-| C rendering/lifetime      | LightingService, SceneRenderer, Shadows and native GPU fixtures; both paths, invalid presentation/recovery, multiview and delayed/discarded submissions                                                                                              | Not started.                                                                                                                           |
+### Shadow-header and array-publication checkpoint
+
+The 3,392-byte inline payload is replaced by the approved **112-byte
+`ShadowFrameBindings`**. `ShadowFrameData` owns the CPU preparation/inspection
+vectors; directional families, cascades, projected local records and cube local
+records are uploaded separately through the existing transient-buffer lifetime
+owner. The old `DirectionalShadowFrameData` interface is removed. A header is
+published only after every required record array succeeds; allocation failure
+leaves the view without a published shadow header, and SceneRenderer rejects
+that view's recording.
+
+The header carries the full lighting scene/selection/frame/view generations and
+build-status descriptor. Shader loads verify those identities. Directional
+surface and volumetric lookups resolve their family through selection-indexed
+shadow references. The shadow-mask debug view resolves the family source from
+its record, independently of atmospheric assignment. Contact fields are present
+and disabled; this checkpoint does not create a contact-shadow product.
+
+Debug and Release each pass **20 native ABI, 13 ShadowService, 23 LightingService
+and 64 SceneRendererDeferredCore tests** (240 test executions total). The new
+header probe checks all 28 words across adjacent records; service tests check
+array counts/descriptors, full-width generations, filtered source indices and
+injected staging-map failure without header publication. Shader archives build
+in both configurations. Oxytidy covered all 22 changed C++ files, including
+headers and tests, with no failed contexts or coverage gaps. Diagnostics on
+changed code were repaired; whole-file warning reports remain available without
+new suppressions.
+
+`shadow-header-{LightingGpuAbi,ShadowService,LightingService,SceneRendererDeferredCore}-{debug,release}.json`
+records the suites. `shadow-header_capture.rdc` and `shadow-header-report.txt`
+verify the 112-byte header, exact array strides/counts, source identity, shared
+validity dependency and distinct view generations at six production draws
+across two views. The checked-in analyzer is
+`tools/vortex/AnalyzeRenderDocShadowRecords.py`; use the existing RenderDoc runner
+with the MultiView `consumer-visual` recipe. This proves publication/consumption,
+not all coverage, lifetime or physical-response obligations.
+
+All canonical record layouts have now migrated. Multi-directional CPU selection,
+BRDF moment publication, complete local support/routing, capacity rejection,
+contact-product connection and remaining failure/lifetime interfaces still need
+their owning work before the full EX07A gate can be assessed. No EX07B reference
+qualification or EX07C end-to-end correctness closure is claimed.
+
+| Gate                      | Owning suite / required evidence                                                                                                                                                                                                                     | Current result                                                                                                                  |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| A ABI                     | CPU size/alignment/every-offset assertions; D3D12 upload/decode/readback of two distinct local records and directional records, integer high-bit patterns, sentinels, reserved zeros and nonzero element indices; matching catalog/reflection checks | Canonical wire records have native Debug/Release proof; remaining source-selection, validity and lifetime interfaces stay open. |
+| A property completeness   | LP01-LP32 retained/removal mapping, whole-candidate ingress and scene-v7 layout                                                                                                                                                                      | Contract frozen; transport/rendered regression implementation remains open.                                                     |
+| A capacity/failure freeze | D1/D6 budgets, checked backend requirements, complete-list fallback and caller/output fault cases                                                                                                                                                    | Policy/profile frozen; D3D12 requirements queried. Runtime fault/lifetime qualification pending.                                |
+| B instrument independence | Reuse Graphics offscreen/readback and Vortex exposure lighting fixtures; independent CPU oracle and known GPU signals                                                                                                                                | Not started. Existing HDR tests do not establish photometric correctness.                                                       |
+| C ingress/transport       | Scene, Scripting, Cooker, Content, DemoShell and managed/editor owning suites; non-default save/cook/load/PAK plus live edits                                                                                                                        | Required repairs identified; not run for this documentation checkpoint.                                                         |
+| C rendering/lifetime      | LightingService, SceneRenderer, Shadows and native GPU fixtures; both paths, invalid presentation/recovery, multiview and delayed/discarded submissions                                                                                              | Not started.                                                                                                                    |
 
 Documentation checks at this checkpoint passed: all 32 inventory IDs occur once,
 the new documents' local links/anchors resolve, line endings are LF, the capacity

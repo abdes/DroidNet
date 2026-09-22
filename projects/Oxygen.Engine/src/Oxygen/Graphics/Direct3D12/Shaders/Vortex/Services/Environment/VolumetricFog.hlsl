@@ -486,8 +486,11 @@ static float4 EvaluateVolumetricFogSample(
     float light0_shadow_visibility = 1.0f;
     if (pass.grid_z.shadowed_directional_light0_enabled > 0.0f
         && pass.light0_direction_enabled.w > 0.0f) {
-        light0_shadow_visibility = ComputeDirectionalVolumetricShadowVisibility(
-            sample_world_position, pass.light0_direction_enabled.xyz);
+        DirectionalLightForwardData shadow_light;
+        if (TryLoadAtmosphereDirectionalLight(0u, shadow_light)) {
+            light0_shadow_visibility = ComputeDirectionalVolumetricShadowVisibility(
+                shadow_light.selection_index, sample_world_position, pass.light0_direction_enabled.xyz);
+        }
     }
 
     float3 directional_lighting = 0.0f.xxx;

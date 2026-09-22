@@ -54,9 +54,16 @@ static float3 EvaluateBasePassDebugView(
 
     const VortexShadowFrameBindings shadow_bindings =
         LoadVortexShadowFrameBindings();
-    if ((shadow_bindings.technique_flags & VORTEX_SHADOW_TECHNIQUE_DIRECTIONAL_CONVENTIONAL) == 0u
-        || shadow_bindings.cascade_count == 0u
-        || shadow_bindings.conventional_shadow_surface_handle == K_INVALID_BINDLESS_INDEX) {
+    if (!HasDirectionalConventionalShadowBindings(shadow_bindings)) {
+        return float3(0.0f, 0.0f, 1.0f);
+    }
+    StructuredBuffer<DirectionalShadowRecord> families =
+        ResourceDescriptorHeap[shadow_bindings.directional_records_srv];
+    uint family_count, family_stride;
+    families.GetDimensions(family_count, family_stride);
+    DirectionalLightForwardData shadow_light;
+    if (family_count == 0u || !TryLoadDirectionalLight(
+        LoadResolvedLightingFrameBindings(), families[0].selection_index, shadow_light)) {
         return float3(0.0f, 0.0f, 1.0f);
     }
 
@@ -65,9 +72,9 @@ static float3 EvaluateBasePassDebugView(
         uv, device_depth, inverse_view_projection_matrix);
     const GBufferData data = ReadGBuffer(uv, bindings);
     const float visibility = ComputeDirectionalShadowVisibility(
-        world_position,
+        shadow_light.selection_index, world_position,
         data.world_normal,
-        normalize(shadow_bindings.light_direction_to_source.xyz));
+        normalize(shadow_light.direction_to_source_ws));
     return saturate(visibility).xxx;
 #elif defined(DEBUG_MASKED_ALPHA_COVERAGE)
     const GBufferData data = ReadGBuffer(uv, bindings);
