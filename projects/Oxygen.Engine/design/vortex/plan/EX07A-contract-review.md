@@ -1,8 +1,10 @@
 # EX07A contract review
 
 Status: **design/remediation contract frozen on 2026-09-22; EX07A implementation and ABI qualification remain in_progress.**
-Reviewed against clean `editor` at `09aa65362` on 2026-09-22. No lighting
-implementation, GPU qualification or timing baseline is claimed by this record.
+The initial source review used clean `editor` at `09aa65362` on 2026-09-22.
+Its findings predate the implementation checkpoints recorded below. Each
+checkpoint states its validation scope; full physical and performance
+qualification is not claimed.
 The approved [EX07 plan](EX07-lighting-correctness-and-scalability.md) remains
 the execution authority; this is its A checkpoint, not a replacement plan.
 
@@ -674,6 +676,22 @@ Evidence under `ex07a`: `deferred-cbv-before.log`,
 `deferred-cbv-release-warning-check.log`, `deferred-cbv_capture.rdc` and
 `deferred-cbv-report.txt`. This qualifies the repaired constant lifetime and
 failure path, not every EX07 capacity/submission/resource-lifetime scenario.
+
+### Fractional content-rectangle lookup checkpoint
+
+The native lookup probe exposed a final-tile error: clamping a content-relative
+coordinate to `extent - 1` erased a last cluster narrower than one pixel. For a
+64.75-pixel rectangle beginning at `(13.25, 7.25)`, valid raster sample centers in
+the final row/column incorrectly decoded to cluster zero. The probe returned
+`[0,0,0,0,0,0]` instead of `[0,1,2,3,3,0]` before the repair.
+
+Lookup now clamps to the full floating-point extent, then bounds the integer
+cluster coordinates by the published grid dimensions. This preserves fractional
+edge tiles and retains safe behavior at and beyond the upper boundary. The
+complete native suite passes **21 Debug / 21 Release** cases; the changed test
+is oxytidy-clean. Evidence: `fractional-tile-before.log` and
+`fractional-tile-{debug,release}.json` under `ex07a`. This is coordinate
+qualification, not proof of a spatial culler or a rendered-performance gain.
 
 | Gate                      | Owning suite / required evidence                                                                                                                                                                                                                     | Current result                                                                                                                  |
 | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
