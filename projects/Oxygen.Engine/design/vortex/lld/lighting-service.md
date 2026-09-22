@@ -1,10 +1,13 @@
 # LightingService LLD
 
-Status: **EX07 target contract; implementation and qualification planned.**
+Status: **EX07A design contract frozen; implementation/ABI qualification in progress.**
 The [EX07 plan](../plan/EX07-lighting-correctness-and-scalability.md) owns execution,
 workloads and gates. This LLD owns data, execution, publication and failure
-semantics. EX07A records concrete byte layouts, capacities and property mappings
-under these contracts before changing their consumers.
+semantics. The [A review checkpoint](../plan/EX07A-contract-review.md) records
+source evidence, approved decisions and remaining implementation/validation
+work. Its [GPU ABI contract](lighting-gpu-abi.md) and
+[property inventory](lighting-properties.md) make the migration reviewable before
+changing consumers. Target layouts and admission bounds are not current support.
 
 ## 1. Scope and responsibility
 
@@ -54,6 +57,24 @@ working color space and tint energy enter the independent reference; roughness
 does not remove dielectric specular. Light records never contain view exposure.
 Apply frame-pinned P once at HDR writes and preserve the
 [HDR contract](scene-textures.md#exposure-hdr-domain-and-format-inventory).
+
+Approved EX07A D2 removes the local attenuation-model selector and custom decay
+exponent across all APIs, persistence, tools and consumers. There is one physical
+punctual-light model; do not retain artistic alternatives or an ignored selector.
+D3 retains physical point-sphere/spot-disk extent, conserved flux and a shared
+source model for diffuse/specular, qualified against independent integration.
+Approved D4 selects height-correlated Smith GGX with multiple-scattering
+compensation, retaining Schlick Fresnel, normalized diffuse and existing material
+inputs. The [PBR specification](../../renderer-core/physically-based-rendering.md#physical-light-conversion)
+owns the exact emitter/BRDF equations, domains and numerical budgets.
+Directional CSM's independent distribution exponent remains supported.
+
+Shared family preparation captures source identity/properties before environment
+or per-view work. Resolve compensated physical sources once; atmosphere consumes
+those values and returns derived transmittance metadata for the same identities.
+Publishing that metadata must not create a second intensity/selection authority.
+Do not let the first view's shading/capability variant mark preparation complete
+for a later lit view without publishing its required products.
 
 ## 2. Canonical data and interfaces
 
@@ -117,6 +138,11 @@ lights. They respect authored assignments and ordinary scene lifetime. Productio
 selection and shaders never silently elect or manufacture a sun.
 
 ### 2.4 One local-light GPU contract
+
+The [wire tables](lighting-gpu-abi.md) specify local/directional records,
+bindings, metadata, ranges, status and complete dynamic shadow-family offsets.
+Use those tables for the eventual compile-time and GPU sentinel checks, not the
+current incompatible records. There is no second shipping payload.
 
 `ForwardLocalLightRecord` and its HLSL counterpart own one canonical point/spot
 evaluation record. Culling decodes it or an explicitly derived typed bounds
@@ -207,11 +233,48 @@ view constants. Uploading CPU vectors alone does not establish spatial culling.
    descriptors until the final consumer fence completes.
 
 Share source records, not view lists/projections/shadow mappings merely because
-dimensions match. Grid lookup uses content-relative pixels and matching positive
+dimensions match. Grid lookup uses content-relative pixels and matching projection-specific
 view depth. Test viewport offsets, partial tiles, reverse-Z, orthographic
 projection and near/far boundaries.
 
 ## 4. Capacity, failure and recovery
+
+The [A capacity decision](../plan/EX07A-contract-review.md#d1--admission-capacities)
+records approved D1/D6: a configurable **4 GiB** renderer-wide allocation ceiling
+and **128 MiB** aggregate compact-index sublimit included within it. These are
+uint64 byte ceilings, not preallocations; backend/driver availability is an
+additional admission check. Original per-view/count proposals remain withdrawn.
+The [bounded shadow-memory work](../plan/EX07-shadow-memory-review.md) reduces
+unused storage and duplication without changing these ceilings. Parent allocator
+admission accounts for other engine commitments, pending growth and explicit
+headroom; the lighting ceiling is not a reservation. Record unique resource
+requirements, committed heap/slack and process-local DXGI usage separately.
+Account across all views,
+in-flight allocations and caches; do not retain fixed four-point/eight-spot
+cutoffs. The
+complete-list range sentinel preserves every light when compact indices exhaust
+their budget; invalid input/allocation/build failures retain the failure behavior
+below. Its memory bound cannot be presented as measured performance evidence.
+
+Profile quantities are 4,294,967,296 and 134,217,728 bytes. The index ceiling
+includes live, cached and retired index allocations, not one allowance per view
+or frame. It may be configured to zero to use complete-list encoding; total
+budget must be positive and index budget must not exceed it. Capacity is a ceiling,
+not an instruction to allocate the full amount. Reserve complete required
+records/bindings/status/shadow/contact products before optional compact-list
+growth. Keep existing valid view leases; admit additional requests in a stable
+family order independent of command-recording order, and fail only affected views
+unless a shared product fails. Unused cached allocations are reclaimable only
+after their fences permit it.
+
+All counts/byte products/offsets are checked in uint64 before GPU narrowing.
+The uint32 index sentinel reserves 0xffffffff: valid element indices are at most
+0xfffffffe and a counted array has at most 0xffffffff elements, further limited
+by its actual backend allocation/descriptor capacity. These are representation
+bounds, not a claim that a memory-admitted arbitrary light count meets a timing
+target. The plan's 1,024/4,096/dense/multiview workloads retain their measured
+performance gates. Bound dispatch dimensions and per-workgroup work; do not
+introduce unchecked count-dependent execution or silently truncate it.
 
 Declare total-light, directional, per-view index-memory and shadow capacities
 separately. They must accommodate the required qualification envelope. Existing
@@ -238,6 +301,22 @@ A last-valid image is allowed only as an explicitly stale presentation placehold
 never current HDR input, metering evidence or a successful benchmark sample.
 Missing contributions cannot be presented as a normal current image.
 
+Default failure presentation is an explicit display-space error tile, with a
+brief application-owned status label and details in normal diagnostics. Reuse
+the output/compositor path; failure indication must not require another large
+allocation or enter HDR metering. Offscreen results carry Failed and a reason,
+never a successful capture of placeholder pixels. Stale-image presentation is
+opt-in and visibly labelled; it is not the default recovery behavior.
+
+Validity is sticky within a generation. Commit Valid only after every required
+producer is complete in the dependency chain; grid completion alone is not
+shadow/BRDF readiness. A later failure cannot be reset by another pass. Pending
+history writes remain uncommitted until final validity; failed generations
+cannot replace the last valid history. Submitted cross-queue uploads retain
+their producer fences even if the consuming recorder is discarded. Recovery
+uses the existing exposure/history discontinuity policy with fresh resource
+generations, without fabricated samples or a synchronous diagnostic readback.
+
 Shadow exhaustion never silently clears requested shadows. Reject a known invalid
 candidate or fail view preparation as above. Dynamic camera/culling changes must
 not introduce undocumented brightest-N selection or automatic quality reduction.
@@ -250,6 +329,17 @@ outcome and recovery, not only the presence of an error string.
 
 ## 5. Authored-property coverage
 
+The [LP01-LP32 inventory](lighting-properties.md) maps current native, script,
+source/packed and editor ingress to target consumers, invalidation and owning
+tests. Missing transport/consumers are explicitly identified. D2 approves
+physical-only local attenuation and removal of the selector/custom exponent;
+LP16/LP17 now track that strict migration. D3 approves physical local source
+extent; D4 approves the common correlated-GGX/compensation model. Their detailed
+equations and bounds are in the PBR owner; implementation and independent
+renderer qualification remain open. D5 retains hemispherical soft spots; the
+inventory also freezes strict scene-v7 records and atomic ingress obligations.
+Directional authority is already settled.
+
 EX07A records every retained field's scene definition, editor/script ingress where
 exposed, source/packed representation, default/domain, selection/GPU member,
 consumer, mutation invalidation and positive/negative/round-trip tests. A missing
@@ -258,7 +348,7 @@ consumer or transport is a defect to repair, not a newly deferred feature.
 | Field family                                                         | Required verification                                                                                                                                                  |
 | -------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Lux/lumens, linear color, per-light exposure compensation            | Finite domain, zero light, tint energy and exactly-once `2^EV` compensation; camera exposure does not alter authored light intensity.                                  |
-| Attenuation model/exponent                                           | Valid enums and documented equations for every supported native model; inverse-square calibration plus non-default-model regression.                                   |
+| Removed local attenuation selector/exponent                          | D2-approved strict API/source/packed/tooling removal; reject obsolete fields/layouts and qualify the single physical model.                                            |
 | Range, position/direction                                            | Valid bounds, coordinate/sign convention, normalization, parent transforms, matching culling/evaluation support and immediate invalidation.                            |
 | Inner/outer cone                                                     | Finite domain, ordering, zero-solid-angle rejection and equal-angle limit; validate paired edits atomically.                                                           |
 | Source radius/angular diameter                                       | Preserve supported meanings; source radius is not the numerical distance floor. Directional disk diameter retains its declared atmosphere-only meaning.                |

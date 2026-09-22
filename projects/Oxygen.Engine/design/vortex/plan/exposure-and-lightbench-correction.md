@@ -7,7 +7,7 @@ Status: `in_progress` — current slice state and evidence are maintained in the
 are updated there; this plan owns the requirements and gates.
 
 Date: 2026-09-16
-Updated: 2026-09-22 — remaining delivery refined after EX06; EX07 is next and planned.
+Updated: 2026-09-22 — EX06 remains closed; EX07A design/remediation contract is frozen, with production ABI/implementation qualification still open.
 
 Paths are relative to `projects/Oxygen.Engine` unless identified as
 repository-root paths.
