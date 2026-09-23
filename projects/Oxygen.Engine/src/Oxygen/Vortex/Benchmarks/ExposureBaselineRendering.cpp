@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -30,7 +31,6 @@
 #include <Oxygen/Profiling/CpuScopeObserver.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Vortex/Benchmarks/ExposureBaselineScenario.h>
-#include <Oxygen/Vortex/Benchmarks/ExposureCpuTiming.h>
 #include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
@@ -38,6 +38,7 @@
 #include <Oxygen/Vortex/Shadows/ShadowService.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestTags.h>
 #include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
+#include <Oxygen/Vortex/Test/Support/CpuTimingCapture.h>
 
 namespace oxygen::vortex::testing::exposure {
 
@@ -177,7 +178,7 @@ auto ExposureBaselineScenario::RenderFrame(const bool start_recording,
   };
   std::optional<profiling::ScopedCpuScopeObserver> cpu_observer;
   if (recording_cpu_owners) {
-    cpu_timing->BeginFrame(fixture_.sequence);
+    cpu_timing->BeginFrame(frame::SequenceNumber { fixture_.sequence });
     cpu_observer.emplace(*cpu_timing);
   }
   fixture_.Backend().BeginFrame(frame_sequence, slot);
@@ -335,8 +336,16 @@ auto ExposureBaselineScenario::MeasureFrames() -> void
   samples.reserve(sample_count);
   require_ready = true;
   if (measure_cpu_owners) {
-    cpu_timing
-      = std::make_unique<ExposureCpuTiming>(sample_count, measure_cpu_details);
+    constexpr std::size_t kDetailedRecordsPerFrame = 128U;
+    constexpr std::size_t kCompactRecordsPerFrame = 64U;
+    cpu_timing = std::make_unique<CpuTimingCapture>(CpuTimingOptions {
+      .domain = CpuTimingDomain::kExposure,
+      .record_capacity
+      = CpuTimingRecordCapacity { static_cast<std::size_t>(sample_count)
+        * (measure_cpu_details ? kDetailedRecordsPerFrame
+                               : kCompactRecordsPerFrame) },
+      .detailed = measure_cpu_details,
+    });
     recording_cpu_owners = true;
   }
   const auto sample_start = Clock::now();

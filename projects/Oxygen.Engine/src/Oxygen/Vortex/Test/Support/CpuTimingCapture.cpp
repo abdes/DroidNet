@@ -21,10 +21,11 @@
 #include <profileapi.h>
 #include <winnt.h>
 
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Profiling/ProfileScope.h>
-#include <Oxygen/Vortex/Benchmarks/ExposureCpuTiming.h>
+#include <Oxygen/Vortex/Test/Support/CpuTimingCapture.h>
 
-namespace oxygen::vortex::testing::exposure {
+namespace oxygen::vortex::testing {
 namespace {
   constexpr auto kNoRecord = std::numeric_limits<std::size_t>::max();
   auto Timestamp() noexcept -> std::int64_t
@@ -35,29 +36,43 @@ namespace {
   }
 } // namespace
 
-ExposureCpuTiming::ExposureCpuTiming(const unsigned frames, const bool detailed)
+CpuTimingCapture::CpuTimingCapture(const CpuTimingOptions options)
   : process_(GetCurrentProcessId())
   , thread_(GetCurrentThreadId())
-  , detailed_(detailed)
+  , options_(options)
 {
+  if (options.record_capacity.get() == 0U
+    || (options.domain != CpuTimingDomain::kExposure
+      && options.domain != CpuTimingDomain::kLighting)) {
+    throw std::invalid_argument(
+      "CPU timing requires a valid domain and nonzero capacity");
+  }
   LARGE_INTEGER frequency {};
   QueryPerformanceFrequency(&frequency);
   frequency_ = frequency.QuadPart;
-  records_.reserve(static_cast<std::size_t>(frames) * (detailed ? 128U : 64U));
+  records_.reserve(options.record_capacity.get());
 }
 
-auto ExposureCpuTiming::BeginFrame(const unsigned sequence) -> void
+auto CpuTimingCapture::BeginFrame(const frame::SequenceNumber sequence) -> void
 {
-  if (stack_depth_ != 0U || exposure_depth_ != 0U
-    || thread_ != GetCurrentThreadId()) {
-    throw std::logic_error("Incomplete or cross-thread CPU timing frame");
+  if (stack_depth_ != 0U || root_depth_ != 0U || thread_ != GetCurrentThreadId()
+    || sequence == frame::kInvalidSequenceNumber
+    || (has_frame_ && sequence <= frame_)) {
+    invalid_ = true;
+    throw std::logic_error(
+      "Incomplete, nonmonotonic or cross-thread CPU timing frame");
   }
   frame_ = sequence;
+  has_frame_ = true;
 }
 
-auto ExposureCpuTiming::OnScopeBegin(
+auto CpuTimingCapture::OnScopeBegin(
   const profiling::CpuProfileScopeDesc& desc) noexcept -> bool
-{
+try {
+  if (!has_frame_ || thread_ != GetCurrentThreadId()) {
+    invalid_ = true;
+    return false;
+  }
   const auto label = std::string_view { desc.label };
   // Charge the entire shared view owner to exposure. Moving acquisition and
   // submission outside the pass scopes must not remove them from attribution.
@@ -71,10 +86,14 @@ auto ExposureCpuTiming::OnScopeBegin(
   const bool exposure = (label.starts_with("Vortex.PostProcess.")
                           && label != "Vortex.PostProcess.Execute")
     || label == "Vortex.SceneRenderer.PrepareExposureDomain" || view_recording;
-  const bool wait = exposure_depth_ != 0U && label == "D3D12.FenceWait";
-  const bool detail = detailed_ && exposure_depth_ != 0U
+  const bool root = options_.domain == CpuTimingDomain::kExposure
+    ? exposure
+    : label.starts_with("Vortex.Lighting.")
+      || label.starts_with("Vortex.Shadows.");
+  const bool wait = root_depth_ != 0U && label == "D3D12.FenceWait";
+  const bool detail = options_.detailed && root_depth_ != 0U
     && (label.starts_with("Graphics.") || label.starts_with("D3D12."));
-  if (!exposure && !wait && !detail) {
+  if (!root && !wait && !detail) {
     return false;
   }
   if (stack_depth_ == stack_.size()) {
@@ -82,8 +101,8 @@ auto ExposureCpuTiming::OnScopeBegin(
     return false;
   }
   auto record = kNoRecord;
-  if (detailed_ || wait || exposure_depth_ == 0U) {
-    if (records_.size() == records_.capacity()
+  if (options_.detailed || wait || root_depth_ == 0U) {
+    if (records_.size() == options_.record_capacity.get()
       || label.size() >= Record {}.label.size()
       || label.find_first_of(",\r\n\"") != std::string_view::npos) {
       invalid_ = true;
@@ -91,36 +110,45 @@ auto ExposureCpuTiming::OnScopeBegin(
       record = records_.size();
       auto& value = records_.emplace_back();
       value.frame = frame_;
-      const auto scope_kind
-        = exposure_depth_ == 0U ? Kind::kExposure : Kind::kDetail;
+      const auto scope_kind = root_depth_ == 0U ? Kind::kRoot : Kind::kDetail;
       value.kind = wait ? Kind::kFenceWait : scope_kind;
       std::memcpy(value.label.data(), label.data(), label.size());
       value.begin = Timestamp();
     }
   }
-  stack_[stack_depth_++] = { record, exposure };
-  if (exposure) {
-    ++exposure_depth_;
+  stack_.at(stack_depth_++) = { .record = record, .root = root };
+  if (root) {
+    ++root_depth_;
   }
   return true;
+} catch (...) {
+  // Observer callbacks must not let diagnostic failures escape into rendering.
+  invalid_ = true;
+  return false;
 }
 
-auto ExposureCpuTiming::OnScopeEnd() noexcept -> void
-{
-  const auto scope = stack_[--stack_depth_];
+auto CpuTimingCapture::OnScopeEnd() noexcept -> void
+try {
+  if (stack_depth_ == 0U || thread_ != GetCurrentThreadId()) {
+    invalid_ = true;
+    return;
+  }
+  const auto scope = stack_.at(--stack_depth_);
   if (scope.record != kNoRecord) {
-    records_[scope.record].end = Timestamp();
+    records_.at(scope.record).end = Timestamp();
   }
-  if (scope.exposure) {
-    --exposure_depth_;
+  if (scope.root) {
+    --root_depth_;
   }
+} catch (...) {
+  invalid_ = true;
 }
 
-auto ExposureCpuTiming::Save(const std::filesystem::path& path) const
+auto CpuTimingCapture::Save(const std::filesystem::path& path) const
   -> nlohmann::json
 {
-  if (invalid_ || stack_depth_ != 0U || exposure_depth_ != 0U
-    || records_.empty() || std::filesystem::exists(path)) {
+  if (invalid_ || stack_depth_ != 0U || root_depth_ != 0U || records_.empty()
+    || std::filesystem::exists(path)) {
     throw std::runtime_error("Invalid CPU timing capture or existing evidence");
   }
   std::ofstream output(path, std::ios::binary);
@@ -129,11 +157,13 @@ auto ExposureCpuTiming::Save(const std::filesystem::path& path) const
     if (record.end < record.begin) {
       throw std::runtime_error("Incomplete CPU timing interval");
     }
-    const auto* const non_exposure_kind
+    const auto* const non_root_kind
       = record.kind == Kind::kFenceWait ? "fence_wait" : "detail";
+    const auto* const root_kind
+      = options_.domain == CpuTimingDomain::kExposure ? "exposure" : "lighting";
     const auto* const kind
-      = record.kind == Kind::kExposure ? "exposure" : non_exposure_kind;
-    output << record.frame << ',' << thread_ << ',' << kind << ','
+      = record.kind == Kind::kRoot ? root_kind : non_root_kind;
+    output << record.frame.get() << ',' << thread_ << ',' << kind << ','
            << record.begin << ',' << record.end << ',' << record.label.data()
            << '\n';
   }
@@ -148,8 +178,9 @@ auto ExposureCpuTiming::Save(const std::filesystem::path& path) const
     { "thread_id", thread_ },
     { "records", records_.size() },
     { "complete", true },
-    { "detailed", detailed_ },
+    { "detailed", options_.detailed },
+    { "record_capacity", options_.record_capacity.get() },
   };
 }
 
-} // namespace oxygen::vortex::testing::exposure
+} // namespace oxygen::vortex::testing

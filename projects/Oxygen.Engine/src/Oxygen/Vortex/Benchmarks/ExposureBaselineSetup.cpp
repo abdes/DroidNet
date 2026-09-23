@@ -10,10 +10,12 @@
 #include <filesystem>
 #include <memory>
 #include <stdexcept>
-#include <stdlib.h>
 #include <string>
 #include <system_error>
 #include <utility>
+
+// MSVC's nonstandard _dupenv_s is declared by the platform C header.
+#include <stdlib.h> // NOLINT(modernize-deprecated-headers)
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Console/Command.h>
@@ -35,9 +37,9 @@
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
 // Completes the unique_ptr pointee for the out-of-line constructor/destructor.
-#include <Oxygen/Vortex/Benchmarks/ExposureCpuTiming.h> // IWYU pragma: keep
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestTags.h>
 #include <Oxygen/Vortex/Test/Fixtures/ExposureBenchmarkScene.h>
+#include <Oxygen/Vortex/Test/Support/CpuTimingCapture.h> // IWYU pragma: keep
 
 namespace oxygen::vortex::testing::exposure {
 

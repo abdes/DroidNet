@@ -186,6 +186,13 @@ exits 1 with both failure sets. Seven gate-safety tests pass and the changed
 C++ file is oxytidy-clean. Complete material evaluation, matched-image fixtures
 and bounded instrumentation remain open in B.
 
+The bounded CPU capture foundation is now shared under `Test/Support`, with a
+test-support library consumed by both tests and benchmarks. Exposure callers are
+migrated without a compatibility wrapper. This introduces no production hooks
+or linked collection code. Lighting phase integration, GPU/resource collection
+and measured on/off overhead remain open; the [instrument record](plan/EX07B-reference-validation.md#shared-bounded-cpu-capture-foundation)
+defines the qualification boundary.
+
 A's closure does not establish the final physical renderer. B must supply an
 independent double-precision oracle, moment uncertainty and known-input probes,
 matched unculled image reference, deterministic fixtures and bounded instruments.
@@ -795,7 +802,7 @@ workloads enter the baseline, with numeric thresholds frozen before candidates.
 | EX07-10   | Safe shared records/per-view lists, bounded allocations/uploads and in-flight lifetime under mutation.                                                         | planned     |
 | EX07-11   | Correct shadow identity/consumption, supported capacities and separately measured shadow cost.                                                                 | planned     |
 | EX07-12   | LP01-LP32 retained/removal inventory, atomic ingress and scene-v7 contract frozen; transport/mutation/round-trip/editor/lifecycle implementation remains open. | in_progress |
-| EX07-13   | Opt-in correctness/timing instrumentation starts in B; qualified baseline/candidate and culling diagnostics in D/E.                                            | planned     |
+| EX07-13   | Shared bounded CPU capture in B; lighting integration and GPU/resource instruments remain open. Qualified baselines/culling diagnostics belong to D/E.         | in_progress |
 | EX07-14   | Final correctness/performance gates, supported limits, operating commands and owner documents in F.                                                            | planned     |
 | EX07-GATE | Physical calibration and many-light correctness/performance pass, with measured improvements and no hidden quality reduction.                                  | planned     |
 

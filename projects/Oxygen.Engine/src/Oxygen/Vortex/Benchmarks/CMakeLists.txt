@@ -21,8 +21,6 @@ if(WIN32)
       "ExposureBaselineResults.cpp"
       "ExposureBaselineScenario.h"
       "ExposureBaselineSetup.cpp"
-      "ExposureCpuTiming.cpp"
-      "ExposureCpuTiming.h"
       "ExposureBenchmarkFixture.cpp"
       "ExposureBenchmarkFixture.h"
       "ExposureKernel_bench.cpp"
@@ -30,6 +28,7 @@ if(WIN32)
       "ExposurePerformance_bench.cpp"
     DEPS
       oxygen-vortex-exposure-test-support
+      oxygen-vortex-timing-test-support
   )
   set_target_properties(
     Oxygen.Vortex.Exposure.Benchmarks
