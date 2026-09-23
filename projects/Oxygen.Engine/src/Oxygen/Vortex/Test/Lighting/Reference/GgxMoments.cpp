@@ -10,13 +10,11 @@
 #include <cstdint>
 #include <expected>
 #include <limits>
-#include <map>
 #include <numbers>
 #include <optional>
-#include <utility>
-#include <vector>
 
 #include <Oxygen/Vortex/Test/Lighting/Reference/GgxMoments.h>
+#include <Oxygen/Vortex/Test/Lighting/Reference/ReferenceQuadrature.h>
 
 namespace oxygen::vortex::testing::reference {
 namespace {
@@ -25,65 +23,8 @@ namespace {
   constexpr double kChangeSafetyFactor = 8.0;
   constexpr auto kPi = std::numbers::pi_v<double>;
 
-  struct AngularNode {
-    double angle;
-    double cosine;
-    double weight;
-  };
-
-  // Gauss-Legendre on [0, pi/2]. The rule has no endpoint samples.
-  auto AngularRule(const std::uint32_t order) -> const std::vector<AngularNode>&
-  {
-    thread_local auto rules
-      = std::map<std::uint32_t, std::vector<AngularNode>> {};
-    if (const auto found = rules.find(order); found != rules.end()) {
-      return found->second;
-    }
-    auto nodes = std::vector<AngularNode> {};
-    nodes.reserve(order);
-    for (std::uint32_t index = 0U; index < order; ++index) {
-      double root = std::cos(kPi * (static_cast<double>(index) + 0.75)
-        / (static_cast<double>(order) + 0.5));
-      double derivative = 0.0;
-      for (unsigned iteration = 0U; iteration < 32U; ++iteration) {
-        double polynomial = 1.0;
-        double previous = 0.0;
-        for (std::uint32_t degree = 1U; degree <= order; ++degree) {
-          const double older = previous;
-          previous = polynomial;
-          polynomial = ((((2.0 * degree) - 1.0) * root * previous)
-                         - ((degree - 1.0) * older))
-            / degree;
-        }
-        derivative
-          = order * ((root * polynomial) - previous) / ((root * root) - 1.0);
-        const double step = polynomial / derivative;
-        root -= step;
-        if (std::abs(step) <= 4.0 * std::numeric_limits<double>::epsilon()) {
-          break;
-        }
-      }
-      const double angle = (root + 1.0) * kPi / 4.0;
-      const double weight
-        = (kPi / 2.0) / ((1.0 - (root * root)) * derivative * derivative);
-      nodes.push_back(
-        { .angle = angle, .cosine = std::cos(angle), .weight = weight });
-    }
-    return rules.emplace(order, std::move(nodes)).first->second;
-  }
-
-  // Compensated summation keeps small Fresnel moments independent of order.
-  struct Sum {
-    double value { 0.0 };
-    double correction { 0.0 };
-    auto Add(const double term) -> void
-    {
-      const double adjusted = term - correction;
-      const double next = value + adjusted;
-      correction = (next - value) - adjusted;
-      value = next;
-    }
-  };
+  using detail::AngularRule;
+  using detail::Sum;
 
   struct MomentConfiguration {
     double alpha;
