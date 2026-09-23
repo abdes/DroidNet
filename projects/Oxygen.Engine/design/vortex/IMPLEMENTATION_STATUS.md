@@ -132,8 +132,13 @@ is reproducible and formatter-stable. This certifies those queries, not arbitrar
 interpolation. All 16 C++ tests pass in Debug and Release, including the tested
 reciprocity/furnace matrix (maximum errors 6.56e-16 relative / 6.40e-5 absolute).
 All six changed
-C++ files are oxytidy-clean. General mean uncertainty, broader smooth/grazing
-furnace coverage, finite-source/photometric references, material decoding,
+C++ files are oxytidy-clean. The independent punctual-photometry reference now
+adds typed lux/lumen/candela conversion, both-angle spot normalization, source
+compensation and range/guard checks. Its five new tests pass in Release and the
+owning 21-test Debug suite passes. Maximum spotlight flux error is 8.03e-15
+relative; the three new C++ files are oxytidy-clean.
+General mean uncertainty, broader smooth/grazing furnace coverage, finite-source
+integration, RGB/tint and material decoding,
 GPU/image checks and instrumentation remain open in B.
 
 A's closure does not establish the final physical renderer. B must supply an
