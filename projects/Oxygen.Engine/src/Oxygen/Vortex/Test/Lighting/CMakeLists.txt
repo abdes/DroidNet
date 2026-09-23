@@ -26,6 +26,7 @@ gtest_program(
   SOURCES
     "CpuTimingCapture_test.cpp"
     "MemoryCapture_test.cpp"
+    "ResourceCreationCounter_test.cpp"
   DEPS
     oxygen::testing
     oxygen::vortex-test-support
@@ -36,6 +37,7 @@ gtest_program(
   SOURCES
     "LightingInstrumentationGpu_test.cpp"
     "MemoryAccountingGpu_test.cpp"
+    "ResourceChurnGpu_test.cpp"
   DEPS
     oxygen-vortex-exposure-test-support
     oxygen::vortex-test-support

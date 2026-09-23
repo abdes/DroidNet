@@ -116,7 +116,10 @@ a bounded test-owned recorder. Native known-allocation checks preserve 1.125 MiB
 of device allocations plus 4 MiB of upload allocation through deferred release,
 then distinguish zero live allocation bytes from retained 8 MiB heaps in each
 segment after retirement. Debug/Release pass 11 CPU and two native instrument
-tests. Workload attribution/churn, material-format/filter and native
+tests. A fixed-storage, test-only creation counter now also captures allocation
+churn that live-count deltas miss: 17 buffers and three textures can be created
+and destroyed while live bytes remain unchanged. Debug/Release pass 13 CPU and
+three native instrument tests. Workload attribution, material-format/filter and native
 collection-overhead qualification remain open; these checkpoints do not close
 EX07B or change shading.
 

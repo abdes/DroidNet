@@ -968,6 +968,37 @@ allocation churn and between-sample peaks still require the benchmark integratio
 live-count deltas alone must not be presented as allocation churn. Native
 collection-overhead qualification also remains open.
 
+## Successful factory-call churn
+
+`Test/Support/ResourceCreationCounter` complements the allocator snapshot with
+cumulative successful buffer/texture factory calls and requested buffer bytes.
+It owns only fixed-size atomic counters, with no resource references, event
+list, formatting or I/O. Concurrent writers are supported; exact window totals
+are read at quiescent boundaries. Overflow permanently invalidates snapshots
+instead of wrapping into plausible smaller counts. Buffer bytes describe the
+request, not allocation alignment, heap growth or physical residency.
+
+Only the native **test backend** invokes this counter, behind an opt-in flag;
+no production factory or frame path is modified. The shared implementation lives
+under `Test/Support`, and the exposure fixture library links that test-owned
+support target. Tests do not depend on benchmarks. The detailed resource-shape
+tracker remains a separate untimed instrument.
+
+The native negative control creates and immediately destroys **17 buffers** and
+**three textures**. Live allocation bytes return to the same values observed
+before the calls, but the counter preserves all 20 successful creations and
+**69,632 requested buffer bytes**. Disabling collection excludes a subsequent
+creation. CPU tests additionally verify four concurrent writers and invalidation
+after byte-count overflow. Debug/Release each pass **13 CPU instrument tests**
+and **three native instrument tests**. This counts calls through these factories;
+it does not infer driver-object allocations or allocator-internal heap operations.
+
+Evidence under `ex07b`: `churn-cpu-{debug,release}.json`,
+`churn-{debug,release}.json`, build/run logs and `churn-tidy-final/`.
+The overhead benchmark will combine these event counts with the independently
+qualified allocator snapshots; changes in live allocation counts are not a
+substitute for event counts.
+
 ## Qualification boundary and next work
 
 The [mean certificates](EX07B-mean-moment-certificates.md) now supply
