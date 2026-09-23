@@ -698,6 +698,49 @@ Evidence under `ex07b`: `image-reference-{debug,release}.json` and `.log`,
 and `.rgba32f`, `image-reference-tidy-verified/`,
 `image-reference-final-clean/` and `image-reference-checkpoint.json`.
 
+## Reference-test runtime improvement
+
+The same **45 tests**, cases, tolerances, refinement requirements and independent
+certificates pass before and after the optimization. Serialized Ninja runs on
+the same machine measure:
+
+| Configuration |    Before |     After | Speedup |
+| ------------- | --------: | --------: | ------: |
+| Debug         | 532.604 s | 128.955 s |   4.13x |
+| Release       | 277.866 s |  45.626 s |   6.09x |
+
+The moment integrator retains its half-vector angle coordinates and equations.
+It partitions the same domain around the NDF width `atan(alpha)` and the
+hemisphere-edge visibility scale, instead of resolving both with one very large
+Gaussian rule. At that edge, `abs(d(N.l)/d(theta_h))=2*hypot(projection,mu)`;
+the visibility transition occurs at `N.l≈mu*alpha/view_root`. These determine
+partition sizes, not approximations to the integrand. Broad features stay
+unsplit. Both consecutive-refinement checks and all existing work-limit tests
+remain active. Small, bounded `StaticVector` workspaces replace temporary heap
+storage; monotone cuts avoid sorting each sample row.
+
+At alpha one, the exact constant NDF and Smith roots avoid redundant arithmetic.
+Schlick's fifth power uses multiplication; half-vector normalization uses a
+direct norm only where its squared length is normal, retaining `hypot` for tiny
+values. Independent sphere-surface integration reuses each azimuth's sine/cosine.
+No compiler flags, quadrature-rule generator, generated certificates, test
+matrix or acceptance threshold changed. No computed integral is cached between
+tests. The finite-source tests remain the principal residual cost.
+
+Certificate reports now retain the measured values and evaluation counts.
+Maximum before/after changes over their queried directional and mean values
+are **4.108e-15** and **1.666e-15**, respectively. Release also passes all
+**27 native instrument tests**; their existing 23 photometry and 565 BRDF
+physical-admission failures remain unchanged C obligations. All five changed
+C++ files are oxytidy-clean.
+
+Evidence under `ex07b`: `reference-speed-before-{debug,release}.json`,
+`reference-speed-final-{debug,release}.json`, `reference-speed-native-release.json`,
+`reference-speed-final-tidy/` and `reference-speed-checkpoint.json`. The checkpoint
+records source/binary hashes, matching test names, per-test times and numerical
+deltas. The earlier `reference-speed-static-debug.json` run used an old executable
+during relinking and concurrent compiler load; it is explicitly excluded.
+
 ## Qualification boundary and next work
 
 The [mean certificates](EX07B-mean-moment-certificates.md) now supply

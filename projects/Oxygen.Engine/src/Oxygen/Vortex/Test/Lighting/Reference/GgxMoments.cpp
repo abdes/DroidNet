@@ -7,12 +7,15 @@
 #include <algorithm>
 #include <bit>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <expected>
 #include <limits>
 #include <numbers>
 #include <optional>
+#include <span>
 
+#include <Oxygen/Base/StaticVector.h>
 #include <Oxygen/Vortex/Test/Lighting/Reference/GgxMoments.h>
 #include <Oxygen/Vortex/Test/Lighting/Reference/ReferenceQuadrature.h>
 
@@ -31,64 +34,164 @@ namespace {
     double view_cosine;
   };
 
+  struct AngularFeatures {
+    double extent { 0.0 };
+    double left_scale { 0.0 };
+    double right_scale { 0.0 };
+  };
+  // The roughness floor allows at most five left cuts in [0,pi/2]. Distinct
+  // right cuts are bounded by floating-point precision; include endpoints.
+  using AngleBreaks
+    = StaticVector<double, std::numeric_limits<double>::digits + 8>;
+  struct MomentWorkspace {
+    AngleBreaks angular_breaks;
+    AngleBreaks radial_breaks;
+  };
+
+  // Split the same angular domain into geometric intervals around known
+  // narrow features. No interval is omitted and no integrand is approximated.
+  auto PartitionAngles(const AngularFeatures features, AngleBreaks& breaks)
+    -> void
+  {
+    breaks.clear();
+    breaks.push_back(0.0);
+    const auto midpoint = features.extent * 0.5;
+    // Integer binary exponents cover even subnormal scales without a floating
+    // loop counter. Scaling by 2^2 preserves the exact geometric progression.
+    constexpr int exponent_span = std::numeric_limits<double>::max_exponent
+      - std::numeric_limits<double>::min_exponent
+      + std::numeric_limits<double>::digits;
+    const auto append = [&](const double scale, const bool right) -> void {
+      // Broad features are already resolved by the unsplit Gaussian rule.
+      // Its unchanged refinement test still controls convergence.
+      if (scale <= 0.0 || scale >= features.extent * 0.25) {
+        return;
+      }
+      for (int exponent = 0; exponent < exponent_span; exponent += 2) {
+        const auto offset = std::ldexp(scale, exponent);
+        if (offset >= midpoint) {
+          break;
+        }
+        const auto point = right ? features.extent - offset : offset;
+        if (point < features.extent) {
+          breaks.push_back(point);
+        }
+      }
+    };
+    append(features.left_scale, false);
+    const auto right_start = breaks.size();
+    append(features.right_scale, true);
+    // Each side is already monotone and lies in a separate half of the
+    // interval. Reverse the right side instead of sorting every sample row.
+    if (breaks.size() > right_start + 1U) {
+      std::ranges::reverse(std::span(breaks).subspan(right_start));
+    }
+    breaks.push_back(features.extent);
+  }
+
   auto Evaluate(const MomentConfiguration configuration,
-    const std::uint32_t order) -> GgxMomentEstimate
+    const std::uint32_t order, MomentWorkspace& workspace) -> GgxMomentEstimate
   {
     const auto alpha = configuration.alpha;
     const auto mu = configuration.view_cosine;
     const auto& rule = AngularRule(order);
     const double alpha_squared = alpha * alpha;
+    const bool uniform_ndf = alpha == 1.0;
     const double view_sine = std::sqrt((1.0 - mu) * (1.0 + mu));
     const double view_root
       = std::sqrt((mu * mu) + (alpha_squared * (1.0 - (mu * mu))));
+    const auto peak_width = std::atan(alpha);
+    auto& angular_breaks = workspace.angular_breaks;
+    auto& radial_breaks = workspace.radial_breaks;
+    // Around phi=pi/2 the projected view component crosses the scale mu.
+    PartitionAngles(
+      { .extent = kPi / 2.0, .right_scale = std::atan2(mu, view_sine) },
+      angular_breaks);
     auto energy = Sum {};
     auto fresnel = Sum {};
     std::uint64_t evaluations = 0U;
-    for (const auto& azimuth : rule) {
-      for (const double sign : { -1.0, 1.0 }) {
-        const double tangent_projection = view_sine * azimuth.cosine * sign;
-        double maximum_angle = 0.0;
-        if (mu == 0.0) {
-          maximum_angle = sign > 0.0 ? kPi / 2.0 : 0.0;
-        } else {
-          // N.l>0 becomes a quadratic bound on tan(theta_h). Rationalize
-          // its negative-projection root instead of subtracting close values.
+    for (std::size_t angular_part = 1U; angular_part < angular_breaks.size();
+      ++angular_part) {
+      const auto angular_start = angular_breaks.at(angular_part - 1U);
+      const auto angular_scale
+        = (angular_breaks.at(angular_part) - angular_start) * 2.0 / kPi;
+      for (const auto& azimuth : rule) {
+        const auto phi = angular_start + (angular_scale * azimuth.angle);
+        const auto azimuth_weight = azimuth.weight * angular_scale;
+        const auto cosine_phi = std::cos(phi);
+        for (const double sign : { -1.0, 1.0 }) {
+          const double tangent_projection = view_sine * cosine_phi * sign;
           const double root = std::hypot(tangent_projection, mu);
-          const double maximum_tangent = tangent_projection >= 0.0
-            ? (root + tangent_projection) / mu
-            : mu / (root - tangent_projection);
-          maximum_angle = std::atan(maximum_tangent);
-        }
-        if (maximum_angle == 0.0) {
-          continue;
-        }
-        const double angle_scale = 2.0 * maximum_angle / kPi;
-        for (const auto& radial : rule) {
-          ++evaluations;
-          const double half_angle = radial.angle * angle_scale;
-          const double half_cosine = std::cos(half_angle);
-          const double half_sine = std::sin(half_angle);
-          const double view_half = std::clamp(
-            (mu * half_cosine) + (tangent_projection * half_sine), 0.0, 1.0);
-          const double light_cosine = (2.0 * view_half * half_cosine) - mu;
-          if (light_cosine <= 0.0) {
+          double maximum_angle = 0.0;
+          if (mu == 0.0) {
+            maximum_angle = sign > 0.0 ? kPi / 2.0 : 0.0;
+          } else {
+            const double maximum_tangent = tangent_projection >= 0.0
+              ? (root + tangent_projection) / mu
+              : mu / (root - tangent_projection);
+            maximum_angle = std::atan(maximum_tangent);
+          }
+          if (maximum_angle == 0.0) {
             continue;
           }
-          const double light_root = std::sqrt((light_cosine * light_cosine)
-            + (alpha_squared * (1.0 - (light_cosine * light_cosine))));
-          const double visibility
-            = 0.5 / ((light_cosine * view_root) + (mu * light_root));
-          const double distribution_denominator = (half_sine * half_sine)
-            + (alpha_squared * half_cosine * half_cosine);
-          const double distribution = alpha_squared
-            / (kPi * distribution_denominator * distribution_denominator);
-          // dOmega_l = 4(v.h)dOmega_h; azimuth reflection contributes factor 2.
-          const double weight = 8.0 * view_half * distribution * visibility
-            * light_cosine * half_sine * angle_scale * radial.weight
-            * azimuth.weight;
-          const double schlick = std::pow(1.0 - view_half, 5);
-          energy.Add(weight);
-          fresnel.Add(weight * schlick);
+          // At the hemisphere boundary |d(N.l)/d(theta_h)|=2*root.
+          // Smith visibility changes on N.l ~ mu*alpha/view_root. Form the
+          // resulting angular width as bounded ratios to avoid overflow.
+          const auto horizon_width
+            = mu > 0.0 ? 0.5 * (mu / root) * (alpha / view_root) : 0.0;
+          PartitionAngles(
+            {
+              .extent = maximum_angle,
+              .left_scale = peak_width,
+              .right_scale = horizon_width,
+            },
+            radial_breaks);
+          for (std::size_t radial_part = 1U; radial_part < radial_breaks.size();
+            ++radial_part) {
+            const auto radial_start = radial_breaks.at(radial_part - 1U);
+            const auto angle_scale
+              = (radial_breaks.at(radial_part) - radial_start) * 2.0 / kPi;
+            for (const auto& radial : rule) {
+              ++evaluations;
+              const double half_angle
+                = radial_start + (radial.angle * angle_scale);
+              const double half_cosine = std::cos(half_angle);
+              const double half_sine = std::sin(half_angle);
+              const double view_half = std::clamp(
+                (mu * half_cosine) + (tangent_projection * half_sine), 0.0,
+                1.0);
+              const double light_cosine = (2.0 * view_half * half_cosine) - mu;
+              if (light_cosine <= 0.0) {
+                continue;
+              }
+              const double light_root = uniform_ndf
+                ? 1.0
+                : std::sqrt((light_cosine * light_cosine)
+                    + (alpha_squared * (1.0 - (light_cosine * light_cosine))));
+              const double visibility
+                = 0.5 / ((light_cosine * view_root) + (mu * light_root));
+              // At alpha=1 the NDF is exactly 1/pi and both Smith roots are
+              // exactly one. Integrate the same kernel without redundant
+              // trigonometric normalization and square roots.
+              double distribution = 1.0 / kPi;
+              if (!uniform_ndf) {
+                const double distribution_denominator = (half_sine * half_sine)
+                  + (alpha_squared * half_cosine * half_cosine);
+                distribution = alpha_squared
+                  / (kPi * distribution_denominator * distribution_denominator);
+              }
+              // Reflection gives 4(v.h)dOmega_h; azimuth symmetry gives 2.
+              const double weight = 8.0 * view_half * distribution * visibility
+                * light_cosine * half_sine * angle_scale * radial.weight
+                * azimuth_weight;
+              const auto complement = 1.0 - view_half;
+              const auto complement_squared = complement * complement;
+              const double schlick
+                = complement_squared * complement_squared * complement;
+              energy.Add(weight);
+              fresnel.Add(weight * schlick);
+            }
+          }
         }
       }
     }
@@ -120,14 +223,15 @@ auto IntegrateGgxMoments(const PerceptualRoughness authored_roughness,
   }
   const double roughness = std::max(perceptual_roughness, kMinimumRoughness);
   const double alpha = roughness * roughness;
-  auto previous = Evaluate(
-    { .alpha = alpha, .view_cosine = view_cosine }, settings.initial_order);
+  auto workspace = MomentWorkspace {};
+  auto previous = Evaluate({ .alpha = alpha, .view_cosine = view_cosine },
+    settings.initial_order, workspace);
   auto evaluations = previous.evaluations;
   unsigned converged_refinements = 0U;
   for (auto order = settings.initial_order * 2U;
     order <= settings.maximum_order; order *= 2U) {
-    auto current
-      = Evaluate({ .alpha = alpha, .view_cosine = view_cosine }, order);
+    auto current = Evaluate(
+      { .alpha = alpha, .view_cosine = view_cosine }, order, workspace);
     evaluations += current.evaluations;
     const double change = kChangeSafetyFactor
       * std::max(

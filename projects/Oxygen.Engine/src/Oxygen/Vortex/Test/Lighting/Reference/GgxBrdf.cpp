@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cmath>
 #include <expected>
+#include <limits>
 #include <numbers>
 
 #include <Oxygen/Vortex/Test/Lighting/Reference/GgxBrdf.h>
@@ -46,7 +47,13 @@ namespace {
       = view_sine + (light_sine * std::cos(query.azimuth.get()));
     const auto half_y = light_sine * std::sin(query.azimuth.get());
     const auto half_z = nl + nv;
-    const auto half_length = std::hypot(half_x, half_y, half_z);
+    // Unit input directions bound every half-vector component by two. Use the
+    // direct norm in its normal range, retaining hypot for subnormal squares.
+    const auto half_squared
+      = (half_x * half_x) + (half_y * half_y) + (half_z * half_z);
+    const auto half_length = half_squared >= std::numeric_limits<double>::min()
+      ? std::sqrt(half_squared)
+      : std::hypot(half_x, half_y, half_z);
     const auto hx = half_x / half_length;
     const auto hy = half_y / half_length;
     const auto hz = half_z / half_length;
@@ -61,7 +68,10 @@ namespace {
     const auto visibility = 0.5
       / ((nl * std::sqrt((nv * nv) + (a2 * (1.0 - (nv * nv)))))
         + (nv * std::sqrt((nl * nl) + (a2 * (1.0 - (nl * nl))))));
-    const auto fresnel = f0 + ((1.0 - f0) * std::pow(1.0 - vh, 5));
+    const auto complement = 1.0 - vh;
+    const auto complement_squared = complement * complement;
+    const auto schlick = complement_squared * complement_squared * complement;
+    const auto fresnel = f0 + ((1.0 - f0) * schlick);
 
     return distribution * visibility * fresnel;
   }
