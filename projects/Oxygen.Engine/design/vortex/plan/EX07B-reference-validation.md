@@ -596,11 +596,18 @@ Evidence under `ex07b`: `brdf-native-{debug,release}.json` and `.log`,
 ## Shared bounded CPU capture foundation
 
 `Test/Support/CpuTimingCapture.{h,cpp}` replaces the exposure-only observer.
-`oxygen-vortex-timing-test-support` compiles it once per configuration; the
+`Oxygen.Vortex.Test.Support` (`oxygen::vortex-test-support`) compiles it once per configuration; the
 lighting instrumentation tests and exposure benchmarks both depend on that
 test-owned library. Tests do not compile or include benchmark implementation
 files. No shipping target links the collector, and this checkpoint adds no
 production profiling hooks or collection overhead.
+Its target uses Oxygen's module declaration and hierarchy helpers, standard
+compiler flags/C++23 requirements, header file sets, IDE arrangement and coverage
+configuration. The support module is static and has no install/export rule.
+Debug/Release support consumers build and all eight collector tests pass after
+this CMake correction. `ex07b/support-module-checkpoint.json` records target
+ownership and common compiler flags from all three generated configurations;
+`support-module-{debug,release}.json` records the executed test results.
 
 Record capacity is an explicit strong type. Storage is reserved before capture;
 accepted callbacks copy labels into fixed storage and append only within the
