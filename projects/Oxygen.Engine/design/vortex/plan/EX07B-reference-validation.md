@@ -999,6 +999,50 @@ The overhead benchmark will combine these event counts with the independently
 qualified allocator snapshots; changes in live allocation counts are not a
 substitute for event counts.
 
+## Incremental collection-overhead protocol
+
+Before measurement, the new opt-in `Oxygen.Vortex.Lighting.Benchmarks` protocol
+is fixed as follows. It uses native Release D3D12, no debug layer/capture/VSync,
+one 1920x1080 white rough receiver and the image fixture's static 17-point /
+16-spot recipe. Forward and deferred run separately. GPU timeline queries stay
+enabled in both modes; the candidate additionally collects compact CPU phase
+intervals, one allocator snapshot per frame and successful resource factory
+counts. Test-backend recorder-name accumulation is disabled in both modes.
+
+Each path uses **off / on / on / off** windows. Each window has at least 300
+warmup frames and three seconds of warmup, then at least 3,600 samples and 30
+seconds of collection, bounded by 65,536 samples. Storage is reserved before
+measurement. Complete native frame intervals include ordinary frame-slot waits,
+submission and collection; explicit GPU drains, image readbacks, report formatting
+and file writes happen outside the measurement windows. HDR format must stay
+fixed within each window, and collection modes must produce identical images
+within each rendering path. The eight-frame smoke variant validates execution
+and exports only; it cannot qualify overhead.
+
+Raw per-frame samples are retained. Comparison must use the pooled raw off and
+on populations for each path, never add independent percentiles. Report median,
+p95 and p99, and retain individual-window results so drift is visible. This is
+an incremental instrumentation check, not physical-renderer admission or the
+EX07D many-light baseline. CPU/GPU scopes are already present in both modes.
+No primary workload budget or EX05 accepted operating point is changed.
+
+The numeric acceptance budget is pending the user's choice: proposed A is
+`max(0.05 ms, 1%)` additional median and p95 frame time; B is
+`max(0.10 ms, 2%)`. Measurements may proceed, but acceptance is not claimed before
+that choice and inspection of the raw populations. Workload/implementation
+validation and measured overhead are reported separately.
+
+The Release smoke run passes all eight windows in 2.183 s. It verifies the
+33-light publication, constant RGBA32Float scene-color selection and identical
+images across collection modes. Each enabled eight-frame window exports 56
+compact CPU records in deferred or 40 in forward, plus eight memory snapshots;
+no successful buffer/texture creations occur inside these warmed windows.
+Release and Debug targets build, and Debug explicitly skips the Release-only
+measurement. The new benchmark is oxytidy-clean; the broad consumer run retains
+22 existing public-fixture-member warnings in `ExposureTestGraphics.h` and adds
+no suppression. Evidence is `collection-smoke.json`, its report directory and
+`collection-tidy-final/` under `ex07b`. Full-duration measurement is pending.
+
 ## Qualification boundary and next work
 
 The [mean certificates](EX07B-mean-moment-certificates.md) now supply

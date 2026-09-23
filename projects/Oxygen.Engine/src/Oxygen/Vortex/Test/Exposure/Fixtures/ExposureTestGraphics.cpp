@@ -444,7 +444,9 @@ auto ExposureFailureGraphics::AcquireCommandRecorder(
   const graphics::QueueKey& queue, std::string_view name,
   const graphics::SubmissionPolicy policy) -> graphics::CommandRecording
 {
-  recorder_names.emplace_back(name);
+  if (record_recorder_names_) {
+    recorder_names.emplace_back(name);
+  }
   if (!fail_recorder_name.empty() && name == fail_recorder_name) {
     return {};
   }

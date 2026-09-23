@@ -9,6 +9,20 @@
 if(WIN32)
   include(GTestHelpers)
   gtest_program(
+    "Oxygen.Vortex.Lighting.Benchmarks"
+    SOURCES
+      "LightingCollection_bench.cpp"
+    DEPS
+      oxygen-vortex-exposure-test-support
+      oxygen::vortex-test-support
+  )
+  set_target_properties(
+    Oxygen.Vortex.Lighting.Benchmarks
+    PROPERTIES
+      FOLDER
+        "Benchmarks"
+  )
+  gtest_program(
     "Oxygen.Vortex.Exposure.Benchmarks"
     SOURCES
       "ExposureAllocationLifecycle.cpp"
