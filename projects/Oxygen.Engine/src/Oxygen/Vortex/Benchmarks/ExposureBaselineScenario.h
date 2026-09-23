@@ -16,9 +16,11 @@
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestGraphics.h>
 #include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
-namespace oxygen::vortex::testing::exposure {
+namespace oxygen::vortex::testing {
+class CpuTimingCapture;
+}
 
-class ExposureCpuTiming;
+namespace oxygen::vortex::testing::exposure {
 
 // Owns one benchmark execution; timed rendering is separate from evidence I/O.
 class ExposureBaselineScenario final {
@@ -118,7 +120,7 @@ private:
   bool measure_cpu_owners {};
   bool measure_cpu_details {};
   bool recording_cpu_owners {};
-  std::unique_ptr<ExposureCpuTiming> cpu_timing;
+  std::unique_ptr<CpuTimingCapture> cpu_timing;
   bool event_cycle {};
   bool capture_event {};
   bool temporal {};

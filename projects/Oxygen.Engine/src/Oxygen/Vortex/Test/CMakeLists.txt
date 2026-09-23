@@ -453,6 +453,7 @@ m_gtest_program(
 
 # Production exposure compute against controlled RGBA32 inputs on native D3D12.
 if(WIN32)
+  add_subdirectory(Support)
   add_subdirectory(Lighting)
   # Compile native fixture implementations once for correctness and benchmarks.
   add_library(

@@ -5,6 +5,15 @@
 # ===-----------------------------------------------------------------------===#
 
 gtest_program(
+  "Oxygen.Vortex.LightingInstrumentation.Tests"
+  SOURCES
+    "CpuTimingCapture_test.cpp"
+  DEPS
+    oxygen::testing
+    oxygen-vortex-timing-test-support
+)
+
+gtest_program(
   "Oxygen.Vortex.LightingGpuAbi.Tests"
   SOURCES
     "LightingGpuAbiFixture.cpp"

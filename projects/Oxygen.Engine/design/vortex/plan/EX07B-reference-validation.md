@@ -593,6 +593,53 @@ Evidence under `ex07b`: `brdf-native-{debug,release}.json` and `.log`,
 `brdf-native-final-release.json`, `brdf-native-tidy-verified/`, `brdf-physical-admission.log`,
 `brdf-admission-tests.log` and `brdf-native-checkpoint.json`.
 
+## Shared bounded CPU capture foundation
+
+`Test/Support/CpuTimingCapture.{h,cpp}` replaces the exposure-only observer.
+`oxygen-vortex-timing-test-support` compiles it once per configuration; the
+lighting instrumentation tests and exposure benchmarks both depend on that
+test-owned library. Tests do not compile or include benchmark implementation
+files. No shipping target links the collector, and this checkpoint adds no
+production profiling hooks or collection overhead.
+
+Record capacity is an explicit strong type. Storage is reserved before capture;
+accepted callbacks copy labels into fixed storage and append only within the
+declared limit. The scope stack is fixed at 128 entries. Overflow, invalid labels,
+unbalanced scopes, nonmonotonic frames and wrong-thread use invalidate the
+capture; export refuses partial or empty evidence. Observer failures cannot
+escape into rendering. Formatting and file I/O happen after capture. The existing
+exposure attribution and CSV format are preserved without an API compatibility
+wrapper. Lighting selection recognizes `Vortex.Lighting.*` and `Vortex.Shadows.*`.
+Compact mode records outer owners and explicit fence waits; detailed mode also
+records nested phases and Graphics/D3D12 work. QPC intervals represent elapsed
+scope time; active CPU work still requires scheduler correlation.
+
+`Oxygen.Vortex.LightingInstrumentation.Tests` checks capture boundaries, nested
+attribution, waits, QPC frequency and timestamps bracketed by independent counter
+reads, capacity/depth overflow and invalid-state rejection. Both exposure
+benchmark executables are built and retain their eight opt-in workload names.
+Timing workloads are not rerun merely to qualify the support-library migration.
+
+Debug and Release pass **8/8 collector tests**, and both exposure benchmark
+targets build. The compile database confirms one collector object per
+configuration, owned solely by the support library. Oxytidy covers every changed
+C++ file/header: the collector and tests have no findings; 39 existing
+`readability-magic-numbers` findings remain on unchanged exposure recipe lines.
+The baseline comparison is recorded rather than disabling their diagnostics.
+The only new suppression is scoped to `<stdlib.h>` for MSVC's nonstandard
+`_dupenv_s` declaration; `<cstdlib>` still supplies the standard library API.
+
+This is the shared collection foundation. Lighting phase integration, bounded
+GPU/resource collection and a native on/off overhead measurement remain required
+before B's instrumentation gate closes. The user requires normal profiling/probe
+overhead only; do not add benchmark collection, formatting, allocation or I/O to
+the production frame path.
+
+Evidence under `ex07b`: `cpu-timing-{debug,release}.json`,
+`cpu-timing-{debug,release}-build.log`, exposure workload discovery logs,
+`cpu-timing-support-tidy/`, `cpu-timing-lint-baseline.json` and
+`cpu-timing-checkpoint.json`.
+
 ## Qualification boundary and next work
 
 The [mean certificates](EX07B-mean-moment-certificates.md) now supply
