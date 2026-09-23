@@ -28,7 +28,60 @@ namespace {
       && UnitInterval(moment.schlick_moment)
       && moment.schlick_moment <= moment.directional_albedo;
   }
+  auto ValidQuery(const BrdfQuery& query) -> bool
+  {
+    return UnitInterval(query.roughness.get())
+      && std::isfinite(query.light.get()) && std::isfinite(query.view.get())
+      && std::abs(query.light.get()) <= 1.0 && std::abs(query.view.get()) <= 1.0
+      && std::isfinite(query.azimuth.get());
+  }
+
+  auto SingleScattering(const BrdfQuery& query, const double f0) -> double
+  {
+    const auto nl = query.light.get();
+    const auto nv = query.view.get();
+    const auto view_sine = std::sqrt((1.0 - nv) * (1.0 + nv));
+    const auto light_sine = std::sqrt((1.0 - nl) * (1.0 + nl));
+    const auto half_x
+      = view_sine + (light_sine * std::cos(query.azimuth.get()));
+    const auto half_y = light_sine * std::sin(query.azimuth.get());
+    const auto half_z = nl + nv;
+    const auto half_length = std::hypot(half_x, half_y, half_z);
+    const auto hx = half_x / half_length;
+    const auto hy = half_y / half_length;
+    const auto hz = half_z / half_length;
+    const auto vh = std::clamp((view_sine * hx) + (nv * hz), 0.0, 1.0);
+    const auto roughness = std::max(query.roughness.get(), kMinimumRoughness);
+    const auto alpha = roughness * roughness;
+    const auto a2 = alpha * alpha;
+    const auto distribution_denominator
+      = (hx * hx) + (hy * hy) + (a2 * hz * hz);
+    const auto distribution
+      = a2 / (kPi * distribution_denominator * distribution_denominator);
+    const auto visibility = 0.5
+      / ((nl * std::sqrt((nv * nv) + (a2 * (1.0 - (nv * nv)))))
+        + (nv * std::sqrt((nl * nl) + (a2 * (1.0 - (nl * nl))))));
+    const auto fresnel = f0 + ((1.0 - f0) * std::pow(1.0 - vh, 5));
+
+    return distribution * visibility * fresnel;
+  }
 } // namespace
+
+auto EvaluateGgxSingleScatteringChannel(const BrdfQuery& query, const double f0)
+  -> std::expected<double, BrdfReferenceError>
+{
+  if (!ValidQuery(query) || !UnitInterval(f0)) {
+    return std::unexpected(BrdfReferenceError::kInvalidInput);
+  }
+  if (query.light.get() <= 0.0 || query.view.get() <= 0.0) {
+    return 0.0;
+  }
+  const auto value = SingleScattering(query, f0);
+  if (!std::isfinite(value)) {
+    return std::unexpected(BrdfReferenceError::kUnrepresentable);
+  }
+  return value;
+}
 
 auto EvaluateGgxBrdfChannel(const BrdfQuery& query,
   const BrdfReflectance& material, const BrdfMoments& moments)
@@ -36,9 +89,7 @@ auto EvaluateGgxBrdfChannel(const BrdfQuery& query,
 {
   const auto nl = query.light.get();
   const auto nv = query.view.get();
-  if (!UnitInterval(query.roughness.get()) || !std::isfinite(nl)
-    || !std::isfinite(nv) || std::abs(nl) > 1.0 || std::abs(nv) > 1.0
-    || !std::isfinite(query.azimuth.get()) || !UnitInterval(material.f0)
+  if (!ValidQuery(query) || !UnitInterval(material.f0)
     || !UnitInterval(material.diffuse)) {
     return std::unexpected(BrdfReferenceError::kInvalidInput);
   }
@@ -59,28 +110,6 @@ auto EvaluateGgxBrdfChannel(const BrdfQuery& query,
     return std::unexpected(BrdfReferenceError::kInvalidInput);
   }
 
-  const auto view_sine = std::sqrt((1.0 - nv) * (1.0 + nv));
-  const auto light_sine = std::sqrt((1.0 - nl) * (1.0 + nl));
-  const auto half_x = view_sine + (light_sine * std::cos(query.azimuth.get()));
-  const auto half_y = light_sine * std::sin(query.azimuth.get());
-  const auto half_z = nl + nv;
-  const auto half_length = std::hypot(half_x, half_y, half_z);
-  const auto hx = half_x / half_length;
-  const auto hy = half_y / half_length;
-  const auto hz = half_z / half_length;
-  const auto vh = std::clamp((view_sine * hx) + (nv * hz), 0.0, 1.0);
-  const auto roughness = std::max(query.roughness.get(), kMinimumRoughness);
-  const auto alpha = roughness * roughness;
-  const auto a2 = alpha * alpha;
-  const auto distribution_denominator = (hx * hx) + (hy * hy) + (a2 * hz * hz);
-  const auto distribution
-    = a2 / (kPi * distribution_denominator * distribution_denominator);
-  const auto visibility = 0.5
-    / ((nl * std::sqrt((nv * nv) + (a2 * (1.0 - (nv * nv)))))
-      + (nv * std::sqrt((nl * nl) + (a2 * (1.0 - (nl * nl))))));
-  const auto fresnel
-    = material.f0 + ((1.0 - material.f0) * std::pow(1.0 - vh, 5));
-
   const auto average_fresnel = material.f0 + ((1.0 - material.f0) / 21.0);
   const auto compensation = average_fresnel * average_fresnel * mean_energy
     / ((1.0 - average_fresnel) + (average_fresnel * mean_energy));
@@ -96,7 +125,7 @@ auto EvaluateGgxBrdfChannel(const BrdfQuery& query,
   const auto diffuse_denominator
     = (1.0 - material.diffuse) + (material.diffuse * mean_transmission);
   const auto result = BrdfLobes {
-    .single_scattering = distribution * visibility * fresnel,
+    .single_scattering = SingleScattering(query, material.f0),
     .multiple_scattering = mean_loss > 0.0
       ? compensation * light_loss * view_loss / (kPi * mean_loss)
       : 0.0,

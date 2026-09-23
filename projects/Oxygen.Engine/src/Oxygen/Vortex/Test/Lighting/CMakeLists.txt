@@ -42,6 +42,7 @@ gtest_program(
     "FiniteEmitterReference_test.cpp"
     "PhotometryReference_test.cpp"
     "GgxBrdfReference_test.cpp"
+    "GgxFurnaceReference_test.cpp"
     "GgxReference_test.cpp"
     "GgxEndpointReference_test.cpp"
     "GgxMomentCertificate_test.cpp"

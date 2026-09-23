@@ -340,6 +340,52 @@ Evidence under `ex07b`: `material-native-{debug,release}.json`,
 `material-reference-{debug,release}.json`, `material-reference-tidy-verified/`,
 `material-normal-landmarks-tidy/` and `material-reference-checkpoint.json`.
 
+## Smooth/grazing furnace matrix
+
+`GgxFurnaceReference_test.cpp` expands furnace validation to the 49 positive-view
+queries in the certified directional-moment matrix, across roughness 0.045,
+0.1, 0.25, 0.5, 0.75 and 1. The exact zero-view boundary remains governed by the
+BRDF's zero-response rule; the moment table stores its grazing limit.
+Eight reflectance pairs cover dielectrics, conductors, mixtures, a white base,
+zero diffuse, zero transmission and near-unit F0: **392 furnace combinations**.
+
+The reference exposes the single-scattering lobe independently of E/B inputs,
+sharing its implementation with the complete three-lobe evaluator. Its arithmetic
+and roughness policy are unchanged. A normal-incidence anchor checks
+`f_ss=F0/(4*pi*alpha^2)`, including authored roughness below the 0.045 floor.
+Invalid-input and backface tests cover this entry point as well.
+
+Single-scattering integration uses `tan(theta_h)=alpha*tan(psi)`, resolving the
+NDF peak in coordinates different from the original half-angle integrator and
+the Arb incoming-direction certificates. Clip at the reflected hemisphere
+boundary and apply the full reflection/change-of-variable Jacobian. Refine in
+bounded powers of two through 4096, then compare the actual lobe integral
+against the independent E/B enclosures with outward-rounded distance arithmetic.
+The certificate comparison, not the successive-rule estimate, establishes its
+1e-5 accuracy requirement.
+
+Multiple scattering and diffuse are integrated from their actual evaluator
+outputs using 128 logarithmic-cosine nodes. Their specified azimuth independence
+is checked at three azimuths before applying the analytic 2*pi angular measure.
+The same directional-moment settings and cosine quadrature underlie the separately
+certified C++ means. Mean and view operands come from their certified query data.
+An explicit bound covers the unsampled `mu<1e-4` interval using `0<=E,B,T<=1`.
+The tests check nonnegative lobes, separate integrated responses, the combined
+energy ceiling and unit-reflectance preservation. Omitting compensation loses
+energy; adding uncoupled Lambertian diffuse exceeds the unit-energy ceiling.
+
+The Debug and Release matrices pass: maximum single-scattering certificate distance
+is **1.283e-6**, and maximum combined furnace comparison error including the
+grazing-tail bound is **5.854e-5**, below **2e-3**. The largest tail bound is
+**3.933e-5**. The owning Debug suite passes **40/40 tests**, and the affected
+Release BRDF/furnace/finite-source suites pass **16/16**. All four changed C++
+files are oxytidy-clean without suppressions.
+This qualifies the specified CPU reference matrix, not production shaders or
+every arbitrary material/view query. Production numerical/image comparisons
+must still meet their frozen budgets on the final implementation.
+Evidence under `ex07b`: `furnace-reference-{debug,release}.json`,
+`furnace-reference-tidy-verified-final/` and `furnace-reference-checkpoint.json`.
+
 ## Qualification boundary and next work
 
 The [mean certificates](EX07B-mean-moment-certificates.md) now supply
@@ -356,8 +402,7 @@ and the current matrix do not yet certify the complete interior domain.
 The independent certifier can qualify additional pointwise moment queries;
 the C++ refinement estimator alone cannot. Mean queries likewise require their
 own certificate; the six-query matrix cannot qualify arbitrary interpolation.
-B still requires broader smooth/grazing furnace qualification,
-broader finite-source reference qualification, RGB light tint and complete material evaluation,
+B still requires broader finite-source reference qualification, RGB light tint and complete material evaluation,
 known-input GPU probes, deterministic matched-image fixtures and bounded
 instrumentation. Production tables additionally require their own interpolation
 certificate. No generated LUT or renderer change may claim those gates from
