@@ -40,6 +40,7 @@ gtest_program(
     "Reference/MaterialDecode.h"
     "MaterialDecodeReference_test.cpp"
     "FiniteEmitterReference_test.cpp"
+    "FiniteEmitterOffAxis_test.cpp"
     "PhotometryReference_test.cpp"
     "GgxBrdfReference_test.cpp"
     "GgxFurnaceReference_test.cpp"

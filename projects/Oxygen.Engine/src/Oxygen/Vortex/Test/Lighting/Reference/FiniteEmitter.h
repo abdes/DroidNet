@@ -51,6 +51,9 @@ struct EmitterIntegrationSettings {
   double relative_tolerance { 1.0e-5 };
   std::uint32_t initial_order { 8U };
   std::uint32_t maximum_order { 256U };
+  //! Optional known lobe peak, in the receiver frame. Only partitions
+  //! quadrature.
+  std::optional<UnitDirection> peak_direction;
 };
 
 struct EmitterIntegral {
