@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <exception>
 #include <expected>
+#include <limits>
 #include <memory>
 #include <span>
 #include <string>
@@ -19,6 +20,7 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Types/ByteUnits.h>
 #include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Graphics/Common/AllocationBudget.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
@@ -39,8 +41,6 @@ constexpr auto AlignUp(std::uint64_t v, std::uint64_t a) -> std::uint64_t
 {
   return (v + (a - 1)) & ~(a - 1);
 }
-
-constexpr std::uint64_t kInitialBytesPerPartition = 10ULL * 1024ULL * 1024ULL;
 
 constexpr std::uint32_t kIdleFramesBeforeShrink = 120U;
 
@@ -105,7 +105,8 @@ auto RingBufferStaging::Allocate(SizeBytes size, std::string_view debug_name)
   -> std::expected<Allocation, UploadError>
 {
   const auto bytes = size.get();
-  if (bytes == 0) {
+  if (bytes == 0
+    || bytes > std::numeric_limits<std::uint64_t>::max() - (alignment_ - 1U)) {
     return std::unexpected(UploadError::kInvalidRequest);
   }
 
@@ -208,7 +209,7 @@ auto RingBufferStaging::MaybeShrinkAfterIdle(const std::string_view debug_name)
   if (consecutive_idle_frames_ < kIdleFramesBeforeShrink) {
     return;
   }
-  if (capacity_per_partition_ <= 2ULL * kInitialBytesPerPartition) {
+  if (capacity_per_partition_ <= 2ULL * initial_partition_bytes_.get()) {
     return;
   }
   if (TrimExcessCapacity(debug_name)) {
@@ -220,53 +221,55 @@ auto RingBufferStaging::RecreateBuffer(
   const std::uint64_t aligned_per_partition, const std::string_view debug_name)
   -> std::expected<void, UploadError>
 {
-  const auto total_capacity
-    = aligned_per_partition * static_cast<std::uint64_t>(partitions_count_);
-
+  if (partitions_count_.get() == 0U
+    || aligned_per_partition
+      > std::numeric_limits<std::uint64_t>::max() / partitions_count_.get()) {
+    return std::unexpected(UploadError::kInvalidRequest);
+  }
+  const auto total_capacity = aligned_per_partition * partitions_count_.get();
   BufferDesc desc;
   desc.size_bytes = total_capacity;
-  // Shared upload allocations also back directly bound constant-buffer views.
   desc.usage = BufferUsage::kConstant;
   desc.memory = BufferMemory::kUpload;
   desc.debug_name = debug_name_;
-
-  UnMap();
-  DeferUnregisterAndReleaseBuffer(gfx_, buffer_);
-
-  UploadError error_code { UploadError::kStagingAllocFailed };
+  desc.allocation_budget = budget_;
+  auto candidate = std::shared_ptr<graphics::Buffer> {};
   try {
-    buffer_ = gfx_->CreateBuffer(desc);
-    RegisterResourceIfNeeded(gfx_, buffer_);
-    auto map_result = Map();
-    if (map_result) {
-      capacity_per_partition_ = aligned_per_partition;
-      capacity_ = total_capacity;
-      Stats().current_buffer_size = buffer_->GetSize();
-      Stats().max_buffer_size
-        = (std::max)(Stats().max_buffer_size, Stats().current_buffer_size);
-
-      // Reset partition bookkeeping on buffer recreation.
-      std::ranges::fill(heads_, 0ULL);
-      partition_last_seen_retire_count_.assign(heads_.size(), retire_count_);
-      LOG_F(INFO,
-        "Recreated staging buffer '{}' (trigger='{}') total={} "
-        "per_partition={} partitions={}",
-        debug_name_, debug_name, capacity_, capacity_per_partition_,
-        partitions_count_.get());
-      return {};
+    candidate = gfx_->CreateBuffer(desc);
+    if (!candidate) {
+      return std::unexpected(UploadError::kResourceAllocFailed);
     }
-    error_code = map_result.error();
-  } catch (const std::exception& ex) {
-    LOG_F(ERROR,
-      "RingBufferStaging buffer recreate failed '{}' (trigger='{}' total={}): "
-      "{}",
-      debug_name_, debug_name, total_capacity, ex.what());
-    error_code = UploadError::kStagingAllocFailed;
+    auto* mapped = static_cast<std::byte*>(candidate->Map());
+    if (!mapped) {
+      return std::unexpected(UploadError::kStagingMapFailed);
+    }
+    ++Stats().map_calls;
+    RegisterResourceIfNeeded(gfx_, candidate);
+    UnMap();
+    DeferUnregisterAndReleaseBuffer(gfx_, buffer_);
+    buffer_ = std::move(candidate);
+    mapped_ptr_ = mapped;
+    capacity_per_partition_ = aligned_per_partition;
+    capacity_ = total_capacity;
+    Stats().current_buffer_size = buffer_->GetSize();
+    Stats().max_buffer_size
+      = (std::max)(Stats().max_buffer_size, Stats().current_buffer_size);
+    std::ranges::fill(heads_, 0ULL);
+    partition_last_seen_retire_count_.assign(heads_.size(), retire_count_);
+    LOG_F(1, "Recreated staging buffer '{}' (trigger='{}') bytes={}",
+      debug_name_, debug_name, total_capacity);
+    return {};
+  } catch (const graphics::AllocationBudgetExceeded&) {
+    return std::unexpected(UploadError::kBudgetExceeded);
+  } catch (const std::exception&) {
+    if (candidate) {
+      if (candidate->IsMapped()) {
+        candidate->UnMap();
+      }
+      UnregisterResourceIfPresent(gfx_, candidate);
+    }
+    return std::unexpected(UploadError::kStagingAllocFailed);
   }
-
-  buffer_ = nullptr;
-  mapped_ptr_ = nullptr;
-  return std::unexpected(error_code);
 }
 
 // Select active partition (frame slot) and reset its bump pointer.
@@ -309,6 +312,9 @@ auto RingBufferStaging::EnsureCapacity(std::uint64_t required,
   std::string_view debug_name) -> std::expected<void, UploadError>
 {
   const auto head = heads_.empty() ? 0ULL : heads_[active_partition_];
+  if (required > std::numeric_limits<std::uint64_t>::max() - head) {
+    return std::unexpected(UploadError::kInvalidRequest);
+  }
   if (capacity_per_partition_ >= head + required && buffer_) {
     Stats().current_buffer_size = buffer_->GetSize();
     Stats().max_buffer_size
@@ -317,7 +323,7 @@ auto RingBufferStaging::EnsureCapacity(std::uint64_t required,
   }
 
   const auto current = capacity_per_partition_;
-  const auto baseline = current > 0 ? current : kInitialBytesPerPartition;
+  const auto baseline = current > 0 ? current : initial_partition_bytes_.get();
   const auto grow = current > 0
     ? static_cast<std::uint64_t>(
         static_cast<double>(current) * (1.0 + static_cast<double>(slack_)))
@@ -328,54 +334,16 @@ auto RingBufferStaging::EnsureCapacity(std::uint64_t required,
   // would overflow the active partition.
   const auto needed = head + required;
   const auto new_per_partition = (std::max)(needed, grow);
-  const auto aligned_per_partition = AlignUp(new_per_partition, alignment_);
-  const auto total_capacity
-    = aligned_per_partition * static_cast<std::uint64_t>(partitions_count_);
-
-  BufferDesc desc;
-  desc.size_bytes = total_capacity;
-  // Shared upload allocations also back directly bound constant-buffer views.
-  desc.usage = BufferUsage::kConstant;
-  desc.memory = BufferMemory::kUpload;
-  desc.debug_name = debug_name_;
-
-  // We can UnMap the buffer immediately, but it cannot be released now.
-  // Release must be deferred until frames are no longer using it.
-  UnMap();
-  // Keep the previous buffer alive until it is safe, then unregister it from
-  // the registry before dropping the final reference.
-  DeferUnregisterAndReleaseBuffer(gfx_, buffer_);
-  // Now, safe to re-assign
-  UploadError error_code { UploadError::kStagingAllocFailed };
-  try {
-    buffer_ = gfx_->CreateBuffer(desc);
-    RegisterResourceIfNeeded(gfx_, buffer_);
-    Stats().buffer_growth_count++;
-    auto map_result = Map(); // This may throw for now...
-    if (map_result) {
-      capacity_per_partition_ = aligned_per_partition;
-      capacity_ = total_capacity;
-      Stats().current_buffer_size = buffer_->GetSize();
-      Stats().max_buffer_size
-        = (std::max)(Stats().max_buffer_size, Stats().current_buffer_size);
-
-      LOG_F(INFO,
-        "Grew staging buffer '{}' (trigger='{}') total={} per_partition={} "
-        "partitions={} head={} required={}",
-        debug_name_, debug_name, capacity_, capacity_per_partition_,
-        partitions_count_.get(), head, required);
-      return {};
-    }
-    error_code = map_result.error();
-  } catch (const std::exception& ex) {
-    LOG_F(ERROR, "Allocation failed '{}' (trigger='{}' total={}): {}",
-      debug_name_, debug_name, total_capacity, ex.what());
-    error_code = UploadError::kStagingAllocFailed;
-    // fall through to the cleanup code below
+  if (new_per_partition
+    > std::numeric_limits<std::uint64_t>::max() - (alignment_ - 1U)) {
+    return std::unexpected(UploadError::kInvalidRequest);
   }
-  buffer_ = nullptr;
-  mapped_ptr_ = nullptr;
-  return std::unexpected(error_code);
+  const auto aligned_per_partition = AlignUp(new_per_partition, alignment_);
+  const auto result = RecreateBuffer(aligned_per_partition, debug_name);
+  if (result) {
+    ++Stats().buffer_growth_count;
+  }
+  return result;
 }
 
 RingBufferStaging::~RingBufferStaging()
@@ -412,12 +380,12 @@ auto RingBufferStaging::OnFrameStart(
 auto RingBufferStaging::TrimExcessCapacity(const std::string_view debug_name)
   -> bool
 {
-  if (capacity_per_partition_ <= kInitialBytesPerPartition) {
+  if (capacity_per_partition_ <= initial_partition_bytes_.get()) {
     return false;
   }
 
   const auto aligned_per_partition
-    = AlignUp(kInitialBytesPerPartition, alignment_);
+    = AlignUp(initial_partition_bytes_.get(), alignment_);
   const auto old_total_capacity = capacity_;
   const auto old_per_partition = capacity_per_partition_;
 
@@ -446,20 +414,6 @@ auto RingBufferStaging::FinalizeStats() -> void
     + std::to_string(partitions_count_.get()) + ", "
     + std::to_string(partition_used) + "/"
     + std::to_string(capacity_per_partition_) + " bytes used";
-}
-
-auto RingBufferStaging::Map() -> std::expected<void, UploadError>
-{
-  DCHECK_NOTNULL_F(buffer_);
-  DCHECK_F(!buffer_->IsMapped());
-  DCHECK_F(mapped_ptr_ == nullptr);
-
-  mapped_ptr_ = static_cast<std::byte*>(buffer_->Map());
-  if (mapped_ptr_ == nullptr) {
-    return std::unexpected(UploadError::kStagingMapFailed);
-  }
-  Stats().map_calls++;
-  return {};
 }
 
 auto RingBufferStaging::UnMap() noexcept -> void

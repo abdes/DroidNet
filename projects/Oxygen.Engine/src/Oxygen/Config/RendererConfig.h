@@ -7,6 +7,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <string_view>
 
@@ -74,7 +75,22 @@ struct RendererConfig {
   //! the backend setup, frame lifecycle, and final composition plumbing.
   bool enable_imgui { false };
 
+  //! Renderer-wide lighting/shadow allocation ceilings, including retained
+  //! generations. These are admission limits, not preallocation targets.
+  std::uint64_t lighting_allocation_limit_bytes { kDefaultLightingLimitBytes };
+  std::uint64_t lighting_compact_index_limit_bytes {
+    kDefaultCompactIndexLimitBytes,
+  };
+  //! Additional reserve below the driver's current segment budget.
+  std::uint64_t lighting_driver_headroom_bytes { kDefaultDriverHeadroomBytes };
+
 private:
+  static constexpr std::uint64_t kDefaultLightingLimitBytes
+    = 4ULL * 1024ULL * 1024ULL * 1024ULL;
+  static constexpr std::uint64_t kDefaultCompactIndexLimitBytes
+    = 128ULL * 1024ULL * 1024ULL;
+  static constexpr std::uint64_t kDefaultDriverHeadroomBytes
+    = 256ULL * 1024ULL * 1024ULL;
   static constexpr std::size_t kDefaultMaxActiveViews = 8;
 };
 

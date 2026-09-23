@@ -134,8 +134,10 @@ auto TransientStructuredBuffer::Allocate(std::uint32_t element_count)
     = staging_->Allocate(SizeBytes { request_bytes }, "TransientBuffer");
   if (!result) {
     auto ec = make_error_code(result.error());
-    LOG_F(ERROR, "Allocation from staging buffer failed: {} (code {})",
-      ec.message(), ec.value());
+    if (result.error() != UploadError::kBudgetExceeded) {
+      LOG_F(ERROR, "Allocation from staging buffer failed: {} (code {})",
+        ec.message(), ec.value());
+    }
     return std::unexpected(ec);
   }
 

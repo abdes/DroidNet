@@ -26,6 +26,7 @@
 #include <Oxygen/Core/Time/SimulationClock.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Core/Types/View.h>
+#include <Oxygen/Graphics/Common/AllocationBudget.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Platform/Types.h>
@@ -736,6 +737,13 @@ public:
   [[nodiscard]] OXGN_VRTX_API auto
   GetOcclusionMaxCandidateCount() const noexcept -> std::uint32_t;
   OXGN_VRTX_NDAPI auto GetStagingProvider() -> upload::StagingProvider&;
+  OXGN_VRTX_NDAPI auto GetLightingStagingProvider() -> upload::StagingProvider&;
+  [[nodiscard]] auto GetLightingAllocationBudget() const noexcept
+    -> const std::shared_ptr<graphics::AllocationBudget>&
+  {
+    return lighting_allocation_budget_;
+  }
+
   OXGN_VRTX_NDAPI auto GetInlineTransfersCoordinator()
     -> upload::InlineTransfersCoordinator&;
   OXGN_VRTX_NDAPI auto GetUploadCoordinator() -> upload::UploadCoordinator&;
@@ -929,6 +937,7 @@ private:
   std::weak_ptr<Graphics> gfx_weak_;
   observer_ptr<IAsyncEngine> engine_ { nullptr };
   RendererConfig config_ {};
+  std::shared_ptr<graphics::AllocationBudget> lighting_allocation_budget_;
   CapabilitySet capability_families_ {
     kPhase1DefaultRuntimeCapabilityFamilies,
   };
@@ -939,6 +948,7 @@ private:
   std::shared_ptr<upload::StagingProvider> upload_staging_provider_;
   std::unique_ptr<upload::InlineTransfersCoordinator> inline_transfers_;
   std::shared_ptr<upload::StagingProvider> inline_staging_provider_;
+  std::shared_ptr<upload::StagingProvider> lighting_staging_provider_;
   std::shared_ptr<internal::CompositingPass> compositing_pass_;
   std::shared_ptr<internal::CompositingPassConfig> compositing_pass_config_;
   std::unique_ptr<DiagnosticsService> diagnostics_service_;

@@ -61,7 +61,7 @@ auto ForwardLightPublisher::EnsurePublishResources() -> bool
     return false;
   }
 
-  auto& staging = renderer_.GetStagingProvider();
+  auto& staging = renderer_.GetLightingStagingProvider();
   auto inline_transfers
     = observer_ptr { &renderer_.GetInlineTransfersCoordinator() };
   if (lighting_bindings_publisher_ == nullptr) {

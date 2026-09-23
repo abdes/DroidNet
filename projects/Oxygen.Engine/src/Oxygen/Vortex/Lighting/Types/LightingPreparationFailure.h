@@ -8,6 +8,7 @@
 
 #include <cstdint>
 
+#include <Oxygen/Core/Types/ByteUnits.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Vortex/Types/LightingIndices.h>
 
@@ -20,6 +21,7 @@ enum class LightingPreparationError : std::uint8_t {
   kGenerationMismatch,
   kMissingShadow,
   kMissingBrdfData,
+  kBudgetExceeded,
 };
 
 enum class LightingSelectionFamily : std::uint8_t {
@@ -34,6 +36,8 @@ struct LightingPreparationFailure {
   LightingSelectionFamily family { LightingSelectionFamily::kNone };
   LightSelectionIndex selection_index { kInvalidLightSelectionIndex };
   ViewId view_id { kInvalidViewId };
+  SizeBytes requested_bytes { 0U };
+  SizeBytes available_bytes { 0U };
 };
 
 } // namespace oxygen::vortex
