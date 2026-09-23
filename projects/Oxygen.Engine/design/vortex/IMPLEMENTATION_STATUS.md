@@ -101,6 +101,10 @@ tests and the user's successful rebuilt-app test. See the
 
 **Current: EX07B — independent references and instruments. EX07 remains in_progress.**
 
+**User-directed stopping point:** finish EX07B's reference/instrument validation
+gate and commit its stable checkpoint, then pause. Do not begin EX07C until the
+user instructs resumption. Intermediate B checkpoints do not satisfy this gate.
+
 EX07A is validated on 2026-09-23 against its
 [completion audit](plan/EX07A-completion-audit.md). D1–D6 freeze physical-only
 attenuation, flux-conserving sphere/disk extent, compensated correlated GGX,
