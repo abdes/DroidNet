@@ -131,17 +131,22 @@ refinement fails explicitly when work is exhausted. The separate
 FLINT/Arb enclosures at 55 parameter pairs, with C++ distance bounds below 1.71e-9
 against the 1e-5 budget. High-precision endpoint anchors, generated-data
 reproducibility and generator safety checks remain qualified. These certificates
-do not establish arbitrary interpolation or general mean uncertainty.
+do not establish arbitrary interpolation. Cosine-weighted means now have
+independent certificates at six roughness values: exported radii remain below
+5.13e-9, and C++ distance-to-truth bounds below 5.23e-9. The generated matrix
+reproduces byte-for-byte; thirteen Python safety tests and both new C++ tests in
+Debug/Release pass. Additional reference queries still need their own enclosures.
 
 The current native material probe reads actual 10-bit normal, 8-bit scalar and
 sRGB texture formats through production HLSL decoding and F0 helpers, covering
 all byte codes and normal-fold landmarks. The probe passes with maximum
 normal error 2.006e-7 and sRGB error 0.429605 encoded codes (within the format's
 half-code limit). The end-to-end lighting budget is unchanged. Debug passes all
-36 CPU reference tests; both configurations pass all 25 native tests, and
-Release passes the four new CPU material tests. The changed C++ files are
+38 CPU reference tests across the existing and new-mean runs; both configurations
+pass all 25 native tests. Release also qualifies the new material and mean
+checks. The changed C++ files are
 oxytidy-clean. Earlier BRDF/furnace and finite-source checks remain recorded in
-the reference evidence. General mean uncertainty, broader smooth/grazing furnace
+the reference evidence. Broader smooth/grazing furnace
 and finite-source qualification, RGB light tint, complete material evaluation,
 lighting/image probes and instrumentation remain open in B.
 

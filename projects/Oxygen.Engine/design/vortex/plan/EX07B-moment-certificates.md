@@ -69,6 +69,10 @@ changing the target integral. Normal and grazing endpoints have separate
 one-dimensional reductions and are checked against the independent endpoint
 data; roughness-one E is checked against its analytic expression at every view.
 
+Optional directional/azimuth tolerance parameters support the nested
+[mean certifier](EX07B-mean-moment-certificates.md). The pointwise defaults and
+all 55 numerical enclosures remain unchanged after that API extension.
+
 ## Results and reproduction
 
 The [generated certificates](../../../src/Oxygen/Vortex/Test/Lighting/Reference/GgxMomentCertificates.json)
@@ -106,7 +110,8 @@ Evidence under `out/build-ninja/analysis/vortex/exposure-lightbench/ex07b`:
 These are pointwise certificates. An arbitrary C++ quadrature result is still
 an estimate until checked; additional requested reference nodes must pass the
 certifier's radius gate. Do not interpolate the 55-point validation matrix as
-production data. Mean moments, coupled-BRDF/furnace/reciprocity checks,
-finite-source and photometric references, material decoding, known-input GPU
-probes, deterministic image fixtures and instrumentation remain required in B.
+production data. The [reference validation owner](EX07B-reference-validation.md)
+records the subsequent mean, coupled-BRDF, finite-source, photometric and
+material-decoding implementations and their actual qualification boundaries.
+Broader numerical/image fixtures and instrumentation remain required in B.
 The production table additionally needs its interpolation and final-image gates.

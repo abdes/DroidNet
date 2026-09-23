@@ -342,6 +342,11 @@ Evidence under `ex07b`: `material-native-{debug,release}.json`,
 
 ## Qualification boundary and next work
 
+The [mean certificates](EX07B-mean-moment-certificates.md) now supply
+enclosures at six roughness values, and Debug/Release C++ comparisons bound mean
+error below 5.23e-9. Bound safety checks, formatter stability and full
+byte-for-byte reproduction pass.
+
 `estimated_absolute_change` is eight times the difference between successive
 quadrature rules. Two consecutive refinements must satisfy the requested
 `refinement_tolerance`. Power-of-two orders bound work and cached rules. This is
@@ -349,8 +354,9 @@ a convergence estimate, **not a proven absolute-error bound**. Analytic and high
 and the current matrix do not yet certify the complete interior domain.
 
 The independent certifier can qualify additional pointwise moment queries;
-the C++ refinement estimator alone cannot. B still requires general mean-moment
-uncertainty certification, broader smooth/grazing furnace qualification,
+the C++ refinement estimator alone cannot. Mean queries likewise require their
+own certificate; the six-query matrix cannot qualify arbitrary interpolation.
+B still requires broader smooth/grazing furnace qualification,
 broader finite-source reference qualification, RGB light tint and complete material evaluation,
 known-input GPU probes, deterministic matched-image fixtures and bounded
 instrumentation. Production tables additionally require their own interpolation
