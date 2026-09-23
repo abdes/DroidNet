@@ -4,6 +4,32 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # ===-----------------------------------------------------------------------===#
 
+# Offline candidate generation reuses the qualified test reference. Shipping
+# lighting consumes qualified generated data, never this reference code.
+add_executable(
+  Oxygen.Vortex.GgxMomentTable
+  "Tools/GgxMomentTable.cpp"
+  "Reference/GgxMoments.cpp"
+  "Reference/ReferenceQuadrature.cpp"
+)
+target_compile_options(
+  Oxygen.Vortex.GgxMomentTable
+  PRIVATE
+    ${OXYGEN_COMMON_CXX_FLAGS}
+)
+target_link_libraries(
+  Oxygen.Vortex.GgxMomentTable
+  PRIVATE
+    oxygen::base
+    nlohmann_json::nlohmann_json
+)
+set_target_properties(
+  Oxygen.Vortex.GgxMomentTable
+  PROPERTIES
+    FOLDER
+      "Testing"
+)
+
 gtest_program(
   "Oxygen.Vortex.LightingImageReference.Tests"
   SOURCES
