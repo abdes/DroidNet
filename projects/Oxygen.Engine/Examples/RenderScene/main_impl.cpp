@@ -237,6 +237,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
   std::string startup_scene_name;
   std::string startup_skybox_path;
   std::string cvars_archive_path;
+  std::string resolution;
   oxygen::examples::cli::GraphicsToolingCliState graphics_tooling_cli {};
   oxygen::examples::cli::FrameCaptureCliState capture_cli {};
   oxygen::examples::DemoAppContext app {};
@@ -316,6 +317,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
             .target_fps = &target_fps,
             .fullscreen = &app.fullscreen,
             .vsync = &enable_vsync,
+            .resolution = &resolution,
           }))
           .WithOptions(oxygen::examples::cli::MakeGraphicsToolingOptions(
             graphics_tooling_cli))
@@ -335,6 +337,8 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
     if (oxygen::examples::cli::HandleMetaCommand(context, default_command)) {
       return EXIT_SUCCESS;
     }
+    app.window_resolution = oxygen::examples::cli::ResolveWindowResolution(
+      context, resolution, false);
 
     oxygen::examples::cli::ValidateGraphicsToolingOptions(graphics_tooling_cli);
     LOG_F(INFO, "Parsed frames option = {}", frames);

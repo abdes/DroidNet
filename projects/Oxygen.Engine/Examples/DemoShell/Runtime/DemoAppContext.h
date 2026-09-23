@@ -9,11 +9,13 @@
 #include <atomic>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 
 #include <glm/vec3.hpp>
 
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/Types/Geometry.h>
 #include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 
@@ -43,6 +45,7 @@ class DemoAppContext {
 public:
   bool headless { false };
   bool fullscreen { false };
+  std::optional<Extent<std::uint32_t>> window_resolution;
   bool with_atmosphere { false };
   bool with_height_fog { false };
   bool with_local_fog { false };

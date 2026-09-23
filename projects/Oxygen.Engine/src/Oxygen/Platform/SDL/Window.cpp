@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <memory>
 #include <utility>
 
 #include <Oxygen/Base/Logging.h>
@@ -198,16 +199,29 @@ auto Window::ManagerInterfaceImpl::DestroyNativeWindow() -> void
 
 Window::Window(const window::Properties& props)
 {
+  auto initial_flags = props.flags;
+  if (props.framebuffer_extent && props.flags.full_screen) {
+    // Select the requested mode before entering fullscreen, rather than
+    // briefly entering the desktop mode and resizing after surface creation.
+    initial_flags.full_screen = false;
+  }
   // This will throw if the window creation failed
-  auto* sdl_window = sdl::MakeWindow(props.title.c_str(),
+  auto native = std::unique_ptr<SDL_Window, decltype(&sdl::DestroyWindow)>(
+    sdl::MakeWindow(props.title.c_str(),
     props.position ? props.position->x : SDL_WINDOWPOS_CENTERED,
     props.position ? props.position->y : SDL_WINDOWPOS_CENTERED,
     props.extent ? props.extent->width : SDL_WINDOWPOS_CENTERED,
-    props.extent ? props.extent->height : SDL_WINDOWPOS_CENTERED, props.flags);
-  DCHECK_NOTNULL_F(sdl_window);
+    props.extent ? props.extent->height : SDL_WINDOWPOS_CENTERED, initial_flags),
+    sdl::DestroyWindow);
+
+  if (props.framebuffer_extent) {
+    sdl::SetWindowFramebufferExtent(
+      native.get(), *props.framebuffer_extent, props.flags.full_screen);
+  }
 
   // Compose the window
-  AddComponent<Data>(sdl_window);
+  AddComponent<Data>(native.get());
+  static_cast<void>(native.release());
   AddComponent<ManagerInterfaceImpl>();
 
   LOG_F(INFO, "SDL3 Window[{}] created", Id());
