@@ -239,247 +239,70 @@ dielectric specular and is not Lambertian. Include G-buffer quantization and
 known range fade in independent references. Integrate the spot profile
 independently to verify total emitted flux.
 
-### Finite local emitters
+### Production local lighting and BRDF model 2
 
-Approved EX07A D3 retains `source_radius` as physical size: a sphere for point
-lights and a disk for spots, conserving authored total flux. Diffuse and
-specular must use the same emitter geometry and angular emission. Radius zero
-uses the punctual equations above and is the positive-radius limiting case.
-The source radius is independent of the punctual numerical distance guard.
+The user's 2026-09-24 direction replaces the former numerical production model
+with the best measured quality/performance compromise for a leading real-time
+engine. Timing, memory and image quality are reported together; the user decides
+whether the measured operating point is acceptable. The former per-lobe 1%,
+strict reciprocity and moment-interpolation budgets are historical reference
+criteria, not mandatory production acceptance thresholds for model 2.
 
-For the equations below, Phi is compensated, untinted flux. Multiply all emitted
-RGB by the authored linear tint. Thus actual photometric flux is
-`Phi * dot(tint, luminance_weights)` under the existing tint convention; varying
-radius does not change that flux. Do not normalize tint behind the caller's back.
+Point and spot lights retain authored lumens, tint, range and source radius.
+The squared range window and spot profile are evaluated from the source center.
+Source radius controls the analytic finite-source diffuse horizon and specular
+highlight approximation, following the production sphere/capsule strategy used
+by UE5.7. Radius zero is exactly the punctual branch. There is no emitter sample
+loop, angular partitioning, importance integration or convergence search in the
+production shader. Independent numerical integration remains in Test.
 
-Let c be source center, a>0 source radius, x the receiver, y an emitter point,
-`d=length(x-y)`, and `l=(y-x)/d`. Evaluate the common BRDF `f(l,v)` below. Define
-`W(d)=saturate(1-(d/range)^4)^2` and `A(d)=W(d)/max(d*d,0.001^2)`.
-Range is finite and nonnegative. Zero range has zero influence and returns zero
-before division or shadow preparation; it is never floored to 1 mm.
-Use the same independent 1 mm guard for each differential source contribution;
-it does not set emitter size. This preserves the regularized punctual limit,
-including receiver distances below 1 mm. A zero-length sample contributes zero
-before vector normalization. The range window remains a declared finite-support
-approximation to propagation, not a modification of emitted source power.
+The analytic diffuse response uses a smooth finite-sphere horizon wrap. Specular
+uses the direction maximizing the normal/half-vector cosine over the apparent
+source cap, one fixed refinement, and source-size energy normalization. Both
+consumers use the same authored source size. The retained visibility model is
+one source-center shadow lookup per receiver; this change does not introduce
+area-shadow ray tracing or a new shadow-filter family.
 
-**Point sphere:** use uniform outward radiance
-`Le = Phi/(4*pi*pi*a*a)`. For an emitter point with outward normal n_y,
-the unoccluded contribution is
+Soft spots use the ordinary FP32 squared cosine ramp, with CPU-precomputed outer
+cosine and inverse inner/outer cosine difference. Equal-angle hard spots use a
+step. Unrepresentable soft intervals fail publication instead of invoking
+compensated expansion arithmetic in every pixel. The existing double-precision
+photometric solid-angle calculation and glTF candela-to-lumen conversion remain.
+Ordinary spots use cone proxies and one projected shadow independently of source
+radius. Explicit 90-degree hemispherical spots retain spherical/multi-face support.
 
-```text
-Lo = integral_sphere Le * f(l,v) * max(dot(N,l),0)
-                     * max(dot(n_y,-l),0) * A(d) dA_y
-```
+The material model retains correlated GGX, Schlick Fresnel, metallic/specular
+mapping and the existing perceptual roughness floor 0.045. A single 32x32 RG32F
+texture stores unit-Fresnel directional albedo E and Schlick moment B. It is
+hardware filtered, using explicit texel-center coordinates. The material/view
+terms are prepared once per shading invocation and shared by existing light
+loops. There is no incident-direction moment lookup or separate mean texture.
 
-An interior receiver or one on the sphere surface receives no inward emission.
-Changing variables to the unit sphere cancels a*a analytically: use the factor
-`Phi/(4*pi*pi)` and `y=c+a*n_y`. Avoid separately forming a potentially huge
-radiance and tiny area. For radius zero use the punctual branch; the positive
-radius limit gives `Phi/(4*pi) * f(l,v) * NdotL * A(d)`.
-
-**Spot disk:** the disk is perpendicular to the emitted-ray axis e. Its angular
-intensity distribution remains `I_peak*w(theta)`, with the previously normalized
-Omega and `I_peak=Phi/Omega`. Define directional intensity per unit disk area as
-`I_peak*w(theta)/(pi*a*a)`, with `cos(theta)=dot(e,-l)`. Equivalently, for positive
-cos(theta), its outgoing radiance is that density divided by cos(theta).
-This is an angularly shaped disk, not an unqualified Lambertian emitter. The
-cosine in the area-to-solid-angle conversion cancels analytically:
+For each color channel, use the real-time split-sum compensation:
 
 ```text
-Lo = I_peak/(pi*a*a) * integral_disk
-       f(l,v) * max(dot(N,l),0) * w(theta) * A(d) dA_y
+W = 1 + F0 * (1-E) / E
+R = W * (F0*E + (1-F0)*B)
 ```
 
-Evaluate on the unit disk with factor `I_peak/pi`, avoiding division by a*a or
-cos(theta) in shader arithmetic. The disk emits into its forward half-space;
-receivers on or behind its plane receive zero. Its radius-zero limit is the
-punctual spot. Integrating emission before the distance window gives Phi for
-both shapes. Conventional visibility is the existing center-source shadow/contact
-approximation applied once; no radius-dependent penumbra is claimed.
+W scales the single-scattering specular lobe. Diffuse is normalized Lambertian
+scaled by `1-luminance(R)`, preserving the base color while accounting for the
+specular layer. Constant-environment consumers use the same integrated specular
+R and diffuse transmission. Exact reciprocity is intentionally not a property
+of this view-dependent approximation. All forward/deferred, material and
+indirect consumers migrate together to model revision 2, with no shipping model
+selector or compatibility evaluator.
 
-Range is the support distance from each differential emitter point. Both shapes
-therefore fit inside the conservative center sphere of radius `range+a`.
-For spots, tighter rejection must enclose the disk swept by the finite cone
-support; the old center-apex cone is insufficient. All direct consumers, proxy
-bounds and shadow receiver/caster coverage use this same support. Radius changes
-invalidate those derived products. Never reject a finite source solely because
-its center lies below the receiver's shading-normal horizon.
-
-Approved D5 permits `0 <= inner < outer <= pi/2` and the hard-cone extension
-`0 < inner == outer < pi/2`. The stored float32 half-pi endpoint means exactly
-90 degrees; its derived cosine is zero. Do not silently narrow it for a shadow
-camera. The 90-degree soft-cone profile has a finite zero-radiance grazing limit;
-the equal-angle 90-degree disk profile is excluded. A single projected shadow
-must cover the full supported influence or use the existing conventional cube/
-multiple-face representation; a clamped projection is not valid support.
-
-Use stable squared-half-angle GPU cone parameters:
-
-```text
-ti = sin(inner/2)^2; to = sin(outer/2)^2
-t  = length(emitted_direction_to_receiver - e)^2 / 4
-w  = saturate((to-t)/(to-ti))^2
-Omega = 4*pi*(ti+(to-ti)/3)
-```
-
-Equal angles use `w=(t<=to)` and `Omega=4*pi*to`. These equations are equivalent
-to the cosine profile, while avoiding subtraction of nearly equal values near
-one. Convert/validate in double precision before checked float32 transport;
-reject unrepresentable positive cone support instead of widening it with an
-epsilon. A glTF candela intensity becomes `Phi=I_peak*Omega` using **both** cone
-angles. The importer checks the cone pair and flux before float32 storage;
-invalid or unrepresentable values fail the import instead of being clamped.
-
-Preserve the double-to-float cone rounding residual through the angular-profile
-subtraction. The canonical record carries relative corrections alongside the
-two squared half-angle values. Compensated FP32 evaluation normalizes represented
-directions and scales narrow support before splitting significands, retaining
-small physical edge contributions without relying on subnormal residuals or GPU
-FP64. This is a precision refinement of the same equations and budgets.
-
-Production approximations require independent numerical integration, separate
-diffuse/specular/total-response comparisons and predeclared approximation
-budgets. Validate flux and zero-radius/far-field limits. Source integration is
-qualified separately from the existing fixed-PCF/contact-ray visibility
-approximation; no radius-dependent penumbra is promised by this decision.
-
-### Common surface BRDF
-
-Approved EX07A D4 selects height-correlated Smith GGX with Schlick Fresnel,
-normalized diffuse and multiple-scattering energy compensation. Forward and
-deferred, punctual and finite-source evaluation use this same model. Retain the
-existing metallic-roughness/specular authoring and dielectric F0 mapping; no
-new authored BRDF selector or compatibility model is introduced.
-
-Use the following one-sided reflection model after resolving the existing
-material normal/two-sided rules. N, l and v are unit vectors pointing out of the
-surface; `mu_l=NdotL`, `mu_v=NdotV`, and `h=normalize(l+v)`. Return zero when
-either cosine is nonpositive. Invalid material/normal data is handled by its
-owning input contract, not an arbitrary BRDF fallback direction. Ambient occlusion is
-an indirect-light approximation, not a multiplier on each unoccluded direct
-contribution; conventional/contact shadows own direct visibility.
-
-Perspective uses the direction from receiver to camera position. Orthographic
-uses the constant world-space direction opposite camera forward, derived from
-the resolved inverse view; it must not normalize camera-position minus receiver.
-This applies equally to forward, deferred and diagnostic BRDF evaluation.
-
-Independently integrate the selected model to qualify reciprocity, finite and
-nonnegative response, combined reflected-energy bounds and white-furnace
-preservation for unit-reflectance conductors over roughness/view angle. Check
-dielectrics, metals and mixtures, with separate lobe and combined-response
-measurements. Compensation cannot add energy on top of an unreconciled diffuse
-term. Existing BRDF integration/LUT/IBL consumers must match the revised shared
-model where applicable, without adding a new GI/IBL family.
-
-#### Shared equations and numerical domain
-
-Preserve authored perceptual roughness r in [0,1]; derived evaluation uses
-`r_eff=max(r,0.045)` and `alpha=r_eff*r_eff`. Clamp in this domain once, not
-again by applying 0.045 to alpha. F0 and diffuse reflectance operands are in
-[0,1]. Preserve `F0=lerp(0.08*specular,base_color,metallic)` and
-`rho=base_color*(1-metallic)` for valid standard material inputs. HDR light,
-emissive and unlit values are not reflectance operands and retain their domains.
-
-```text
-D(h) = alpha^2 / (pi * ((1-NdotH^2) + alpha^2*NdotH^2)^2)
-V(l,v) = 0.5 / (mu_l*sqrt(mu_v^2*(1-alpha^2)+alpha^2)
-             + mu_v*sqrt(mu_l^2*(1-alpha^2)+alpha^2))
-F(h,v) = F0 + (1-F0)*(1-VdotH)^5
-f_ss(l,v) = D(h)*V(l,v)*F(h,v)
-```
-
-The visibility expression already includes the specular denominator; do not
-divide by `4*NdotL*NdotV` again. Evaluate the small positive term `1-NdotH^2`
-stably, e.g. from `length(cross(N,h))^2`, without clipping the GGX peak with an
-absolute denominator floor. Schlick's argument is bounded to [0,1] against
-roundoff after valid normalization. Apply incident illumination and NdotL once.
-
-The runtime evaluates the cosine-weighted response directly. For positive
-cosines, factor the visibility as
-`V*mu_l = 0.5/(sqrt(mu_v^2+alpha^2*(1-mu_v^2))
-
-- (mu_v/mu_l)_sqrt(mu_l^2+alpha^2_(1-mu_l^2)))`.
-Preserve the division before multiplication: reassociation can flush a
-significant numerator at the smallest normal cosines. Scale `l+v` by its largest
-  component before normalizing the half vector. These operations retain the same
-  model while avoiding an overflowing unweighted BRDF or underflowed half-vector
-  norm; callers must not apply receiver cosine a second time.
-
-Define directional integrals at fixed r and mu_v:
-
-```text
-E(mu_v) = integral_hemisphere D*V * mu_l dOmega_l
-B(mu_v) = integral_hemisphere D*V * (1-VdotH)^5 * mu_l dOmega_l
-E_avg = 2*integral_0^1 E(mu)*mu dmu
-B_avg = 2*integral_0^1 B(mu)*mu dmu
-F_avg = F0 + (1-F0)/21
-K = F_avg^2 * E_avg / (1-F_avg*(1-E_avg))
-f_ms(l,v) = K*(1-E(mu_l))*(1-E(mu_v)) / (pi*(1-E_avg))
-f_spec = f_ss + f_ms
-```
-
-This is the symmetric energy-compensation lobe described by
-[Kulla and Conty](https://blog.selfshadow.com/publications/s2017-shading-course/imageworks/s2017_pbs_imageworks_slides_v2.pdf),
-also derived in [Filament](https://google.github.io/filament/main/filament.html).
-Do not substitute a view-only scale of f_ss: it would not preserve reciprocity.
-The zero-loss limit has f_ms=0. Store loss `1-E` directly for stable near-smooth
-evaluation, rather than subtracting a rounded near-one table entry.
-
-Couple the normalized Lambertian base to that specular response using its
-directional reflected-energy fraction R and transmission fraction T:
-
-```text
-R(mu) = F0*E(mu) + (1-F0)*B(mu) + K*(1-E(mu))
-R_avg = F0*E_avg + (1-F0)*B_avg + K*(1-E_avg)
-T(mu) = 1-R(mu); T_avg = 1-R_avg
-f_diff(l,v) = (rho/pi) * T(mu_l)*T(mu_v) / (1-rho*R_avg)
-f(l,v) = f_spec(l,v) + f_diff(l,v)
-```
-
-All operations involving RGB are componentwise. The diffuse denominator sums
-repeated base/specular-layer reflections as a geometric series; this is Oxygen's
-explicit coupling of the selected specular model to its existing diffuse base.
-Compute it stably as `(1-rho)+rho*T_avg`; the zero-transmission/zero-denominator
-limit contributes zero diffuse. This changes no authored material parameters.
-
-Both lobes are reciprocal. Integrating the result for direction v gives
-`R(v) + rho*T(v)*T_avg/(1-rho*R_avg) <= 1` for valid reflectance inputs. Unit F0
-has K=1, R(v)=1 and zero diffuse, independently of roughness. This supplies an
-explicit energy proof and furnace oracle; roughness does not remove dielectric
-specular. Constant-environment consumers use the matching integrated response;
-this does not introduce an absent specular-IBL feature under the ambient bridge.
-
-#### Integration data and qualification
-
-LightingService owns one immutable model-versioned moment product shared by
-all views and consuming families: RG32Float `loss(mu,r),B(mu,r)` and RG32Float
-`loss_avg(r),B_avg(r)`. Texture dimensions may be chosen to meet the certified
-error bound, not to change the model. Sample mu through `sqrt(mu)` and r_eff
-linearly over [0.045,1], with endpoint nodes and matching texel-center mapping.
-Mean terms are integrals of the same functions, not separately fitted shading
-knobs. Include the version/hash and numerical certificate in generated data;
-missing/mismatched data invalidates required lighting. No camera exposure is
-baked into these tables. Code and shader model revision is 1 for this contract.
-
-Independent reference uncertainty must be <=1e-5 absolute for moments; table
-and interpolation error <=2e-4 absolute, subject also to the final BRDF/image
-budget. Check `0<=B<=E<=1`; certification includes grazing and smooth endpoints.
-Furnace reflected-energy error is <=2e-3 absolute, with no energy gain beyond
-that numerical allowance. Reciprocity uses 2e-5 relative + 2e-7 absolute.
-Finite-source approximation error must fit 1% relative + 5e-6 absolute per lobe
-and the existing overall 2% + 2e-5 material/physical budget. Do not widen these
-budgets after a failing candidate. Endpoint limits, integer ABI and invalid-input
-behavior retain their exact checks rather than being hidden by image tolerance.
-
-Production finite-source work is bounded. Smooth source support uses a seven-point
-projected-area cubature; clipped support uses fixed four- or eight-point rules per
-dimension. Narrow GGX peaks use importance coordinates instead of progressively
-denser source grids. Adaptive convergence belongs to the independent reference.
-Material/view moments are shared across source samples and light loops. Numerical
-qualification and representative application timing are both required; this does
-not change the emitter equations or the acceptance budgets above.
+The data generator uses the independent GGX integrator under Test; production
+only embeds and uploads the compact, versioned/hash-checked payload. Numerical
+reports include table approximation, energy response and finite-source deviations
+from the reference. Structural contracts (ABI, complete lists, finite results,
+zero contribution outside supported influence, consistent forward/deferred
+images, allocation failure and lifetime behavior) retain pass/fail checks.
+Numerical differences, temporal/image quality, working-set size and representative
+GPU timings are visible measurements rather than grounds for restoring expensive
+reference algorithms to production. Do not hide errors by changing exposure,
+removing lights, disabling shadows or marking stale evidence as current.
 
 The [EX07A CPU check](../vortex/plan/EX07A-contract-review.md#verification-obligations-and-current-evidence)
 checks model identities and a known analytic case; it is not the complete moment
