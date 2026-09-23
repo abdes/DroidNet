@@ -133,6 +133,9 @@ auto ExposureLightingGpuTest::Probe::OnPostRenderViewGpu(
         }
       });
   }
+  if (after_render) {
+    after_render(hook);
+  }
 }
 
 auto ExposureLightingGpuTest::SetUp() -> void

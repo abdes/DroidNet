@@ -11,10 +11,12 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include <nlohmann/json.hpp>
 
+#include <Oxygen/Graphics/Common/Shaders.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
 
 namespace oxygen::vortex::testing::exposure {
@@ -22,7 +24,8 @@ namespace oxygen::vortex::testing::exposure {
 class ExposureFailureGraphics final : public graphics::d3d12::Graphics {
 public:
   using graphics::d3d12::Graphics::Graphics;
-  std::shared_ptr<graphics::IShaderByteCode> tone_probe;
+  auto SetShaderOverride(graphics::ShaderRequest request,
+    std::shared_ptr<graphics::IShaderByteCode> bytecode) -> void;
   auto GetShader(const graphics::ShaderRequest& request) const
     -> std::shared_ptr<graphics::IShaderByteCode> override;
   mutable std::weak_ptr<graphics::Texture> processed_sky;
@@ -79,6 +82,11 @@ public:
   auto AcquireCommandRecorder(const graphics::QueueKey& queue,
     std::string_view name, graphics::SubmissionPolicy policy)
     -> graphics::CommandRecording override;
+
+private:
+  std::vector<std::pair<graphics::ShaderRequest,
+    std::shared_ptr<graphics::IShaderByteCode>>>
+    shader_overrides_;
 };
 
 } // namespace oxygen::vortex::testing::exposure

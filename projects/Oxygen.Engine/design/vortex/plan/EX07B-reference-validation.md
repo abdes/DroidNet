@@ -815,6 +815,40 @@ Evidence under `ex07b`: `material-raster-{debug,release}.json` and `.log`,
 `material-raster-final-release.json`, `material-raster-tidy-verified/` and
 `material-raster-checkpoint.json`.
 
+## Independent full-list GPU image reference
+
+`UnculledLightingFixture` supplies a test-only compute pass with lights built
+directly from the authored recipe and the independent CPU photometry reference.
+It receives no cluster ranges, selection indices or renderer lighting publication;
+the bound view constants explicitly contain invalid lighting routing. The pass
+reconstructs the controlled planar receiver and evaluates every supplied light.
+Deferred comparisons read the actual G-buffer material, while forward comparisons
+use the fixture's known white, rough material. The no-light image supplies common
+color and coverage, including translucent alpha.
+
+The reference deliberately shares production attenuation and BRDF functions.
+It qualifies selection, RGB tint/flux/EV transport and accumulation for this
+fixture; it does not certify those functions against the physical model. The
+independent physical probes and their recorded EX07C residuals remain authoritative.
+
+The existing six forward/deferred and opaque/masked/translucent recipes now compare
+31, 32 and 33 independently supplied lights: **331,776 additional RGB comparisons**
+at the unchanged `0.5% + 2e-5` budget. A negative control physically removes the
+strongest visible light from the renderer while retaining the full reference;
+every recipe must detect the missing contribution. Serial-image, permutation
+and zero-light recovery checks remain intact. The test shader is compiled only
+for the native image-test target; no shipping pass or instrumentation is added.
+
+Debug and Release pass both image tests in **7.638 s / 3.204 s**, respectively,
+and the three affected tone-probe tests in each configuration. Both configurations'
+largest full-list error consumes **0.006329733** of the image budget.
+All eight changed C++/header files are oxytidy-clean across nine compilation
+contexts. Both builds and all native runs use the Ninja build tree.
+
+Evidence under `ex07b`: `unculled-{debug,release}.json`, `unculled-tone-{debug,release}.json`,
+their logs, and `unculled-tidy-final/`. The prior RenderDoc capture documents the
+raster light publication; it does not capture this newly added reference pass.
+
 ## Qualification boundary and next work
 
 The [mean certificates](EX07B-mean-moment-certificates.md) now supply
@@ -831,8 +865,9 @@ and the current matrix do not yet certify the complete interior domain.
 The independent certifier can qualify additional pointwise moment queries;
 the C++ refinement estimator alone cannot. Mean queries likewise require their
 own certificate; the six-query matrix cannot qualify arbitrary interpolation.
-B still requires remaining material-format/filter qualification and RGB light-tint transport,
-an independently forced unculled image reference and bounded
-instrumentation. Production tables additionally require their own interpolation
+B still requires remaining material-format/filter qualification and bounded
+GPU/resource instrumentation with overhead qualification. The full-list image
+reference qualifies the controlled punctual-light matrix above, not arbitrary
+materials, receivers or shadowed/finite emitters. Production tables additionally require their own interpolation
 certificate. No generated LUT or renderer change may claim those gates from
 the current endpoint/foundation tests alone.
