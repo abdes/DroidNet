@@ -1096,6 +1096,14 @@ Vortex/D3D12 DLLs. Source checkpoint: `1f7db706f`. Numeric-budget acceptance is
 still pending the user's choice; physical renderer admission remains an EX07C
 obligation regardless of these instrument results.
 
+The full-duration benchmark now exposes separate
+`DISABLED_ReleaseForwardCollectionOnOff` and
+`DISABLED_ReleaseDeferredCollectionOnOff` tests. The combined smoke still covers
+both paths. This keeps the same scene/window protocol while allowing a focused
+repeat of the unresolved forward tail. The repeat is diagnostic evidence; no
+hardware inspection, clock/power changes or unrelated exposure campaign is
+part of it.
+
 ## Qualification boundary and next work
 
 The [mean certificates](EX07B-mean-moment-certificates.md) now supply

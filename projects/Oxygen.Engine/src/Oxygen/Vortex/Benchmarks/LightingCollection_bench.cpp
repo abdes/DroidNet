@@ -15,6 +15,7 @@
 #include <memory>
 #include <optional>
 #include <ratio>
+#include <span>
 #include <string>
 #include <utility>
 #include <vector>
@@ -96,7 +97,7 @@ namespace {
       ExposureLightingGpuTest::SetUp();
       FailureBackend().SetRecorderNameCollectionEnabled(false);
     }
-    auto RunCollection(bool smoke) -> void;
+    auto RunCollection(bool smoke, std::span<const ShadingMode> paths) -> void;
     auto RenderFrame(bool forward, CpuTimingCapture* cpu,
       D3D12MemoryCapture* memory, MemorySampleId sample) -> FrameSample;
   };
@@ -155,10 +156,12 @@ namespace {
     };
   }
 
-  auto LightingCollectionBenchmark::RunCollection(const bool smoke) -> void
+  auto LightingCollectionBenchmark::RunCollection(
+    const bool smoke, const std::span<const ShadingMode> paths) -> void
   {
 #ifndef NDEBUG
     (void)smoke;
+    (void)paths;
     GTEST_SKIP() << "Collection overhead requires Release.";
 #else
     // Frozen authored recipe, matching the mixed-light image qualification.
@@ -262,7 +265,8 @@ namespace {
       FailureBackend().count_resource_creations = false;
       loguru::g_global_verbosity = prior_verbosity;
     });
-    for (const bool forward : { false, true }) {
+    for (const auto path : paths) {
+      const bool forward = path == ShadingMode::kForward;
       unsigned window = 0U;
       auto reference_image = std::vector<exposure::Pixel> {};
       auto reference_format = std::optional<Format> {};
@@ -379,11 +383,21 @@ namespace {
 
   NOLINT_TEST_F(LightingCollectionBenchmark, DISABLED_CollectionSmoke)
   {
-    RunCollection(true);
+    constexpr auto kPaths
+      = std::array { ShadingMode::kDeferred, ShadingMode::kForward };
+    RunCollection(true, kPaths);
   }
-  NOLINT_TEST_F(LightingCollectionBenchmark, DISABLED_ReleaseCollectionOnOff)
+  NOLINT_TEST_F(
+    LightingCollectionBenchmark, DISABLED_ReleaseDeferredCollectionOnOff)
   {
-    RunCollection(false);
+    constexpr auto kPaths = std::array { ShadingMode::kDeferred };
+    RunCollection(false, kPaths);
+  }
+  NOLINT_TEST_F(
+    LightingCollectionBenchmark, DISABLED_ReleaseForwardCollectionOnOff)
+  {
+    constexpr auto kPaths = std::array { ShadingMode::kForward };
+    RunCollection(false, kPaths);
   }
 } // namespace
 } // namespace oxygen::vortex::testing
