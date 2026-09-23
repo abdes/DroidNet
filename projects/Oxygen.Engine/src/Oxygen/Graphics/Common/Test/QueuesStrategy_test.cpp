@@ -5,14 +5,17 @@
 //===----------------------------------------------------------------------===//
 
 #include <memory>
+#include <vector>
 
 #include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/CommandList.h>
 #include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
+#include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Graphics/Common/Test/Mocks/MockGraphics.h>
@@ -56,30 +59,43 @@ public:
   // ForEachQueue/FlushCommandQueues
   mutable std::atomic<int> flush_count_ { 0 };
 
-  auto Signal(uint64_t) const -> void override { }
-  auto Signal() const -> uint64_t override { return 0; }
+  auto Signal(uint64_t value) const -> void override { current_ = value; }
+  auto Signal() const -> uint64_t override { return ++current_; }
   auto Wait(uint64_t, std::chrono::milliseconds) const -> void override { }
-  auto Wait(uint64_t) const -> void override { }
+  auto Wait(uint64_t value) const -> void override
+  {
+    waited_values.push_back(value);
+    completed_ = value;
+  }
   [[nodiscard]] auto GetCompletedValue() const -> uint64_t override
   {
-    return 0;
+    return completed_;
   }
-  [[nodiscard]] auto GetCurrentValue() const -> uint64_t override { return 0; }
+  [[nodiscard]] auto GetCurrentValue() const -> uint64_t override { return current_; }
   auto Submit(std::shared_ptr<CommandList>) -> void override { }
   auto Submit(std::span<std::shared_ptr<CommandList>>) -> void override { }
   auto Flush() const -> void override
   {
     flush_count_.fetch_add(1, std::memory_order_relaxed);
+    completed_ = current_;
   }
   [[nodiscard]] auto GetQueueRole() const -> QueueRole override
   {
     return role_;
   }
 
+  mutable std::vector<uint64_t> waited_values;
+  mutable std::vector<uint64_t> submitted_values;
+
 private:
-  auto SignalImmediate(uint64_t) const -> void override { }
+  auto SignalImmediate(uint64_t value) const -> void override
+  {
+    submitted_values.push_back(value);
+  }
 
   QueueRole role_;
+  mutable uint64_t current_ {};
+  mutable uint64_t completed_ {};
 };
 
 // -----------------------------------------------------------------------------
@@ -773,6 +789,97 @@ NOLINT_TEST(QueuesStrategy, DuplicateKey_SamePreferences_Throws)
     .WillOnce(Return(std::static_pointer_cast<CommandQueue>(fake)));
 
   EXPECT_THROW(gfx.CreateCommandQueues(strat), std::invalid_argument);
+}
+
+NOLINT_TEST(QueuesStrategy, BootstrapRetirementDrainsPreFrameWorkOnce)
+{
+  TestGraphics gfx("bootstrap");
+  auto queue = std::make_shared<FakeCommandQueue>("graphics", Role::kGraphics);
+  EXPECT_CALL(gfx, CreateCommandQueue(_, _)).WillOnce(Return(queue));
+  gfx.CreateCommandQueues(SingleQueueStrategy {});
+  const auto startup_fence = queue->SignalSubmittedWork();
+  auto retired = false;
+  gfx.GetDeferredReclaimer().RegisterDeferredAction([&] {
+    EXPECT_GE(queue->GetCompletedValue(), startup_fence);
+    retired = true;
+  });
+  gfx.BeginFrame(oxygen::frame::SequenceNumber { 1U }, oxygen::frame::Slot { 0U });
+  EXPECT_TRUE(retired);
+  EXPECT_EQ(queue->flush_count_, 1);
+  gfx.EndFrame(oxygen::frame::SequenceNumber { 1U }, oxygen::frame::Slot { 0U });
+  gfx.BeginFrame(oxygen::frame::SequenceNumber { 2U }, oxygen::frame::Slot { 1U });
+  EXPECT_EQ(queue->flush_count_, 1);
+  EXPECT_TRUE(queue->waited_values.empty());
+}
+
+NOLINT_TEST(QueuesStrategy, FrameReuseWaitsForItsSlotBeforeRetirement)
+{
+  TestGraphics gfx("frame-slots");
+  auto queue = std::make_shared<FakeCommandQueue>("graphics", Role::kGraphics);
+  EXPECT_CALL(gfx, CreateCommandQueue(_, _)).WillOnce(Return(queue));
+  gfx.CreateCommandQueues(SingleQueueStrategy {});
+
+  auto retired = false;
+  for (uint32_t slot = 0; slot < oxygen::frame::kFramesInFlight.get(); ++slot) {
+    gfx.BeginFrame(oxygen::frame::SequenceNumber { slot + 1U },
+      oxygen::frame::Slot { slot });
+    if (slot == 0U) {
+      gfx.GetDeferredReclaimer().RegisterDeferredAction([&] {
+        EXPECT_EQ(queue->GetCompletedValue(), 1U);
+        retired = true;
+      });
+    }
+    gfx.EndFrame(oxygen::frame::SequenceNumber { slot + 1U },
+      oxygen::frame::Slot { slot });
+    EXPECT_TRUE(queue->waited_values.empty());
+    EXPECT_FALSE(retired);
+  }
+  gfx.BeginFrame(
+    oxygen::frame::SequenceNumber { oxygen::frame::kFramesInFlight.get() + 1U },
+    oxygen::frame::Slot { 0U });
+  ASSERT_EQ(queue->waited_values.size(), 1U);
+  EXPECT_EQ(queue->waited_values.front(), 1U);
+  EXPECT_EQ(queue->GetCurrentValue(), oxygen::frame::kFramesInFlight.get());
+  EXPECT_EQ(queue->flush_count_, 1);
+  EXPECT_TRUE(retired);
+}
+
+NOLINT_TEST(QueuesStrategy, FrameRetirementWaitsForEveryQueue)
+{
+  TestGraphics gfx("multiple-queues");
+  const QueueSpecification graphics_spec {
+    .key = QueueKey { "graphics" }, .role = Role::kGraphics,
+    .allocation_preference = Alloc::kDedicated,
+    .sharing_preference = Share::kNamed,
+  };
+  const QueueSpecification copy_spec {
+    .key = QueueKey { "copy" }, .role = Role::kTransfer,
+    .allocation_preference = Alloc::kDedicated,
+    .sharing_preference = Share::kNamed,
+  };
+  auto graphics = std::make_shared<FakeCommandQueue>("graphics", Role::kGraphics);
+  auto copy = std::make_shared<FakeCommandQueue>("copy", Role::kTransfer);
+  EXPECT_CALL(gfx, CreateCommandQueue(graphics_spec.key, _)).WillOnce(Return(graphics));
+  EXPECT_CALL(gfx, CreateCommandQueue(copy_spec.key, _)).WillOnce(Return(copy));
+  gfx.CreateCommandQueues(PairStrategy(graphics_spec, copy_spec));
+  gfx.BeginFrame(oxygen::frame::SequenceNumber { 1U }, oxygen::frame::Slot { 0U });
+  const auto upload_fence = copy->SignalSubmittedWork();
+  auto retired = false;
+  gfx.GetDeferredReclaimer().RegisterDeferredAction([&] {
+    EXPECT_EQ(graphics->GetCompletedValue(), 1U);
+    EXPECT_EQ(copy->GetCompletedValue(), upload_fence + 1U);
+    retired = true;
+  });
+  gfx.EndFrame(oxygen::frame::SequenceNumber { 1U }, oxygen::frame::Slot { 0U });
+  gfx.BeginFrame(oxygen::frame::SequenceNumber { 2U }, oxygen::frame::Slot { 1U });
+  EXPECT_FALSE(retired);
+  EXPECT_TRUE(graphics->waited_values.empty());
+  EXPECT_TRUE(copy->waited_values.empty());
+  gfx.EndFrame(oxygen::frame::SequenceNumber { 2U }, oxygen::frame::Slot { 1U });
+  gfx.BeginFrame(oxygen::frame::SequenceNumber { 3U }, oxygen::frame::Slot { 0U });
+  EXPECT_TRUE(retired);
+  EXPECT_EQ(graphics->waited_values.back(), 1U);
+  EXPECT_EQ(copy->waited_values.back(), upload_fence + 1U);
 }
 
 } // namespace

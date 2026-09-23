@@ -53,6 +53,13 @@ void CommandQueue::Flush() const
     GetCompletedValue());
 }
 
+auto CommandQueue::SignalSubmittedWork() -> uint64_t
+{
+  const auto value = Signal();
+  SignalImmediate(value);
+  return value;
+}
+
 auto CommandQueue::GetName() const noexcept -> std::string_view
 {
   return GetComponent<ObjectMetadata>().GetName();

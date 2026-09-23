@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include <array>
+#include <cstdint>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -16,6 +18,7 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Composition/Component.h>
 #include <Oxygen/Composition/ObjectMetadata.h>
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/Types/QueueRole.h>
@@ -95,6 +98,11 @@ public:
   auto GetQueueByRole(QueueRole role) const
     -> observer_ptr<graphics::CommandQueue>;
 
+  //! Frame lifecycle calls are serialized by the graphics owner. Only the
+  //! completion markers for the reused slot gate resource/allocator retirement.
+  auto WaitForFrameSlot(frame::Slot slot) -> void;
+  auto SignalFrameSlot(frame::Slot slot) -> void;
+
   //! Invoke a callable for every unique CommandQueue.
   template <std::invocable<graphics::CommandQueue&> Fn>
   auto ForEachQueue(Fn&& fn) const -> void
@@ -118,6 +126,13 @@ public:
   }
 
 private:
+  struct FrameFence {
+    std::shared_ptr<graphics::CommandQueue> queue;
+    std::uint64_t value {};
+  };
+  std::array<std::vector<FrameFence>, frame::kFramesInFlight.get()> frame_fences_;
+  bool frames_started_ { false };
+
   //! Mutex protecting `queues_by_key_` and related state. This mutex is mutable
   //! to allow read-only accessor functions to lock it.
   mutable std::mutex queue_cache_mutex_;

@@ -104,6 +104,30 @@ auto CommandQueue::Wait(uint64_t value, std::chrono::milliseconds timeout) const
   }
 }
 
+auto CommandQueue::SignalSubmittedWork() -> uint64_t
+{
+  const auto value = Signal();
+  auto chunks = std::vector<internal::SubmissionChunk>(1U);
+  chunks.front().submit_actions.push_back({
+    .kind = graphics::CommandList::SubmitQueueActionKind::kSignal,
+    .value = value,
+  });
+  {
+    std::lock_guard lock(mutex_);
+    if (!executor_) {
+      executor_ = new internal::CommandExecutor();
+    }
+    ++pending_submissions_;
+  }
+  try {
+    static_cast<void>(executor_->ExecuteAsync(this, std::move(chunks)));
+  } catch (...) {
+    CompleteSubmission();
+    throw;
+  }
+  return value;
+}
+
 auto CommandQueue::Wait(uint64_t value) const -> void
 {
   std::unique_lock lk(mutex_);
