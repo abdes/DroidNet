@@ -636,7 +636,7 @@ The baseline comparison is recorded rather than disabling their diagnostics.
 The only new suppression is scoped to `<stdlib.h>` for MSVC's nonstandard
 `_dupenv_s` declaration; `<cstdlib>` still supplies the standard library API.
 
-This is the shared collection foundation. Lighting phase integration, bounded
+At that foundation checkpoint, lighting phase integration, bounded
 GPU/resource collection and a native on/off overhead measurement remain required
 before B's instrumentation gate closes. The user requires normal profiling/probe
 overhead only; do not add benchmark collection, formatting, allocation or I/O to
@@ -849,6 +849,59 @@ Evidence under `ex07b`: `unculled-{debug,release}.json`, `unculled-tone-{debug,r
 their logs, and `unculled-tidy-final/`. The prior RenderDoc capture documents the
 raster light publication; it does not capture this newly added reference pass.
 
+## Native CPU phase and GPU timeline coverage
+
+The existing `CpuProfileScope` now covers these synchronous lighting owners:
+
+| Scope                                     | Actual work covered                                                                    |
+| ----------------------------------------- | -------------------------------------------------------------------------------------- |
+| `Vortex.Lighting.GatherSelection`         | Scene traversal, selection and current transform resolution.                           |
+| `Vortex.Lighting.BuildGrid`               | Input validation and per-view grid metadata.                                           |
+| `Vortex.Lighting.ResolveEvaluation`       | Physical input validation/conversion and evaluation records; nested in `BuildGrid`.    |
+| `Vortex.Lighting.PublishFrame`            | Complete-list construction, transient allocations, CPU writes and binding publication. |
+| `Vortex.Lighting.BuildDeferredPackets`    | Deferred packet construction.                                                          |
+| `Vortex.Lighting.RecordDeferred`          | Deferred command preparation/recording, including driver calls.                        |
+| `Vortex.Shadows.RecordDepths`             | Shadow preparation, recording and publication.                                         |
+| `Vortex.Lighting.PublishShadowReferences` | Final light-to-shadow binding publication.                                             |
+
+Each owner caches its owning scope description, so steady-state entry does not
+construct an allocating label. Scopes surround phases, not individual light
+iterations. Collection remains in the existing profiling observer; no benchmark
+buffer, file I/O or extra GPU query is added to production rendering. Compact
+capture keeps non-overlapping outer owners; detailed capture also keeps nested
+work, which must not be added to its parent. Gather/transform and
+publication/allocation/write costs are currently combined intervals, not falsely
+reported as separately timed subphases.
+
+`Oxygen.Vortex.LightingInstrumentationGpu.Tests` uses the native published-view
+fixture with a visible point light. The fixture omits final composition, so the
+test explicitly resolves the existing GPU collector after scene submission and
+before the next frame. This correctness fixture deliberately waits for the GPU;
+its durations do **not** qualify complete-frame timing or collection overhead.
+It verifies every expected CPU phase, absence of deferred-only phases in forward,
+the exact GPU frame identity, native queue timestamp frequency, finite ordered
+timestamps, nested interval containment, query capacity and the actual forward
+base/deferred lighting scope. Limits are 256 CPU records and 128 GPU scopes.
+Both configurations produce **8 CPU records / 22 GPU scopes** for deferred and
+**6 CPU records / 21 GPU scopes** for forward, with no overflow or GPU diagnostic.
+
+Debug and Release pass that native test, all **8 CPU collector tests** and both
+image-reference tests. Release also passes the existing **17 timeline tests**
+(including disabled collection, overflow, delayed frames, capacity growth,
+failed resolves and incomplete recordings) and **2 native timestamp tests**
+(independent resolve ranges and capacity rejection). Oxytidy covers all ten
+changed C++/header files. Unchanged code retains 97 findings in the scene renderer,
+deferred packet/pass implementation and publication test probe; no suppression
+was added. The new native test and phase additions have no remaining findings.
+
+Evidence under `ex07b`: `phase-{debug,release}.json`,
+`phase-cpu-{debug,release}.json`, `phase-image-{debug,release}.json`,
+`phase-profiler-release.json`, `phase-timestamps-release.json`,
+`phase-tidy-final/` and `phase-native-tidy-final/`. Resource-accounting
+qualification and native collection on/off overhead remain required before B
+closes. Shared forward shading and shadow sampling still need matched-control
+attribution rather than inventing independent GPU intervals.
+
 ## Qualification boundary and next work
 
 The [mean certificates](EX07B-mean-moment-certificates.md) now supply
@@ -865,8 +918,8 @@ and the current matrix do not yet certify the complete interior domain.
 The independent certifier can qualify additional pointwise moment queries;
 the C++ refinement estimator alone cannot. Mean queries likewise require their
 own certificate; the six-query matrix cannot qualify arbitrary interpolation.
-B still requires remaining material-format/filter qualification and bounded
-GPU/resource instrumentation with overhead qualification. The full-list image
+B still requires remaining material-format/filter qualification, resource
+accounting and native instrumentation-overhead qualification. The full-list image
 reference qualifies the controlled punctual-light matrix above, not arbitrary
 materials, receivers or shadowed/finite emitters. Production tables additionally require their own interpolation
 certificate. No generated LUT or renderer change may claim those gates from

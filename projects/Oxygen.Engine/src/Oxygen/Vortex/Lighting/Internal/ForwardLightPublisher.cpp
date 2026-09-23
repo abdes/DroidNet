@@ -19,6 +19,8 @@
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/View.h>
+#include <Oxygen/Profiling/CpuProfileScope.h>
+#include <Oxygen/Profiling/ProfileScope.h>
 #include <Oxygen/Vortex/Internal/PerViewStructuredPublisher.h>
 #include <Oxygen/Vortex/Lighting/Internal/ForwardLightPublisher.h>
 #include <Oxygen/Vortex/Lighting/Internal/LightGridBuilder.h>
@@ -120,6 +122,12 @@ auto ForwardLightPublisher::OnFrameStart(
 auto ForwardLightPublisher::Publish(const BuiltLightGridFrame& built_frame)
   -> std::expected<void, LightingPreparationFailure>
 {
+  // Cache the owning label; steady-state scope entry needs no label allocation.
+  static const auto kProfile = profiling::CpuProfileScopeDesc {
+    .label = "Vortex.Lighting.PublishFrame",
+    .category = profiling::ProfileCategory::kPass,
+  };
+  const auto profile = profiling::CpuProfileScope(kProfile);
   published_views_.clear();
   if (built_frame.per_view.empty()) {
     return {};
