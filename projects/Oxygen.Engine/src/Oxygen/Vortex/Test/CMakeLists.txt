@@ -482,6 +482,7 @@ if(WIN32)
   target_link_libraries(
     oxygen-vortex-exposure-test-support
     PUBLIC
+      oxygen::vortex-test-support
       oxygen::cooker
       oxygen::vortex
       oxygen::graphics-direct3d12

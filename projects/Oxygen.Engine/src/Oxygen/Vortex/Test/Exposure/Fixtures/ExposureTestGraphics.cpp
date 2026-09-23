@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -408,6 +409,9 @@ auto ExposureFailureGraphics::CreateBuffer(const BufferDesc& desc) const
   -> std::shared_ptr<graphics::Buffer>
 {
   auto buffer = graphics::d3d12::Graphics::CreateBuffer(desc);
+  if (buffer && count_resource_creations.load(std::memory_order_relaxed)) {
+    resource_creations.RecordBuffer(SizeBytes { desc.size_bytes });
+  }
   if (track_resources && buffer) {
     tracked_buffers.push_back(buffer);
   }
@@ -421,6 +425,9 @@ auto ExposureFailureGraphics::CreateTexture(const TextureDesc& desc) const
   -> std::shared_ptr<graphics::Texture>
 {
   auto texture = graphics::d3d12::Graphics::CreateTexture(desc);
+  if (texture && count_resource_creations.load(std::memory_order_relaxed)) {
+    resource_creations.RecordTexture();
+  }
   if (desc.debug_name == "Vortex.StaticSkyLight.ProcessedCubemap") {
     processed_sky = texture;
   }

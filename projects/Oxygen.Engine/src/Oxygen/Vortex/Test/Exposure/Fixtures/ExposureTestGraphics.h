@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -18,6 +19,7 @@
 
 #include <Oxygen/Graphics/Common/Shaders.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
+#include <Oxygen/Vortex/Test/Support/ResourceCreationCounter.h>
 
 namespace oxygen::vortex::testing::exposure {
 
@@ -29,6 +31,8 @@ public:
   auto GetShader(const graphics::ShaderRequest& request) const
     -> std::shared_ptr<graphics::IShaderByteCode> override;
   mutable std::weak_ptr<graphics::Texture> processed_sky;
+  std::atomic<bool> count_resource_creations { false };
+  mutable ResourceCreationCounter resource_creations;
   bool track_resources {
     false,
   };
