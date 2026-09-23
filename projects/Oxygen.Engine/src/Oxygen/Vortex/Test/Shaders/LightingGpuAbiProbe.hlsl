@@ -16,6 +16,7 @@
 #include "Vortex/Services/Lighting/ClusterLookup.hlsli"
 #include "Vortex/Contracts/Scene/GBufferHelpers.hlsli"
 #include "Vortex/Shared/BRDFCommon.hlsli"
+#include "Vortex/Contracts/Draw/MaterialShadingConstants.hlsli"
 #include "Vortex/Services/Lighting/LocalLightAttenuation.hlsli"
 #include "Vortex/Services/Lighting/DeferredShadingCommon.hlsli"
 // Both current paths declare these helper names. Rename only the forward
@@ -76,6 +77,14 @@ struct BrdfProbeInput {
     float metallic;
     float3 incident_rgb;
     float specular;
+};
+
+struct MaterialUvProbeInput {
+    float2 uv;
+    float2 scale;
+    float2 offset;
+    float rotation_radians;
+    uint reserved;
 };
 
 cbuffer ProbeRoot : register(b2, space0) {
@@ -313,5 +322,13 @@ void CS(uint3 thread : SV_DispatchThreadID) {
         output.Store4(address, asuint(float4(deferred, DistributionGGX(saturate(H.z), surface.roughness))));
         output.Store4(address + 16, asuint(float4(forward, ForwardDistributionGGX(saturate(H.z), value.roughness))));
         output.Store4(address + 32, asuint(float4(f0, 0.0)));
+    } else if (g_RecordKind == 20) {
+        StructuredBuffer<MaterialUvProbeInput> inputs = ResourceDescriptorHeap[args.x];
+        MaterialUvProbeInput value = inputs[element];
+        MaterialShadingConstants material = (MaterialShadingConstants)0;
+        material.uv_scale = value.scale;
+        material.uv_offset = value.offset;
+        material.uv_rotation_radians = value.rotation_radians;
+        output.Store2(address, asuint(ApplyMaterialUv(value.uv, material)));
     }
 }

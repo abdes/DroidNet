@@ -741,6 +741,41 @@ records source/binary hashes, matching test names, per-test times and numerical
 deltas. The earlier `reference-speed-static-debug.json` run used an old executable
 during relinking and concurrent compiler load; it is explicitly excluded.
 
+## Default material evaluation reference and native UV probe
+
+`Reference/MaterialEvaluation.{h,cpp}` evaluates the default metallic/roughness
+surface in double precision without renderer or shader helpers. Inputs separate
+authored factors, resolved texture samples and the tangent frame. It covers
+base-color/alpha multiplication, separate scalar maps, packed ORM with dedicated
+AO override, HDR emission, normal scale, Gram-Schmidt tangent reconstruction,
+handedness, degenerate-frame fallback, two-sided normals and alpha-cutoff
+eligibility. Reflectance is bounded; nonfinite inputs and emission overflow fail
+explicitly. Disabled texture sampling ignores samples, including invalid unused
+values. The material roughness floor remains the BRDF evaluator's responsibility.
+
+Samples are already transfer-decoded and format-expanded; a normal sample has
+three encoded XYZ channels. This interface does not substitute for texture
+format reconstruction, filtering, UV-set selection, actual G-buffer writes or
+raster eligibility checks. Extended/procedural materials are outside this
+default-material reference. Their absence does not qualify an unsupported
+material for physical lighting.
+
+The independent UV helper applies scale, counterclockwise rotation about the
+origin and translation in that order. Native probe mode 20 executes production
+`ApplyMaterialUv` for **36 UV0 cases**, including negative coordinates, mirrored
+scale, tiling and rotation. Debug and Release report the same maximum absolute
+error, **2.448e-6**, within the probe's coordinate-relative float tolerance.
+
+Six new CPU checks take under a millisecond. Both configurations pass all
+**10 focused material tests** and **28 native instrument tests**. The other
+45-reference checkpoint remains recorded above; no slow integration rerun is
+needed for these independent additions. All four added C++ files/headers are
+oxytidy-clean. Actual sampled/raster material comparisons remain open in B.
+
+Evidence under `ex07b`: `material-evaluation-{debug,release}.json`,
+`material-evaluation-native-{debug,release}.json` and `.log`,
+`material-evaluation-tidy-fixed/` and `material-evaluation-checkpoint.json`.
+
 ## Qualification boundary and next work
 
 The [mean certificates](EX07B-mean-moment-certificates.md) now supply
@@ -757,7 +792,7 @@ and the current matrix do not yet certify the complete interior domain.
 The independent certifier can qualify additional pointwise moment queries;
 the C++ refinement estimator alone cannot. Mean queries likewise require their
 own certificate; the six-query matrix cannot qualify arbitrary interpolation.
-B still requires complete material evaluation and RGB light-tint transport,
+B still requires sampled/raster material qualification and RGB light-tint transport,
 an independently forced unculled image reference and bounded
 instrumentation. Production tables additionally require their own interpolation
 certificate. No generated LUT or renderer change may claim those gates from
