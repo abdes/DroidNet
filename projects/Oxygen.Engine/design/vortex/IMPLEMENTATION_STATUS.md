@@ -781,6 +781,34 @@ factor/ABI/image-consistency evidence, not full source calibration, finite-emitt
 or shadow qualification, an official-resolution workload baseline, or a
 performance improvement. Those C–F obligations remain open.
 
+C's BRDF moment-data work now has a runnable offline generator under
+`Test/Lighting/Tools/GgxMomentTable.cpp`; production does not depend on the CPU
+test oracle. It stores float32 loss/B pairs, integrates their piecewise-linear
+table for matching means, preserves exact grazing energy and records model and
+payload identities. The 513x513 candidate fails seven of 787,456 cell-center/edge
+checks (maximum difference 2.07628e-4); it is rejected. Increasing roughness
+resolution to 513x1025 passes all 1,574,400 corresponding checks against a
+1025x2049 CPU reference (maximum difference 1.33442e-4, with the separate 1e-5
+reference allowance retained). The 4,214,800-byte candidate also passes the 55
+existing directional and six mean certificates. Reusing B's independent Arb
+oracle at the eight largest stencil residuals bounds the maximum sampled error
+by 1.33443e-4. These are sampled numerical checks, **not a continuous-domain
+certificate or a qualified runtime BRDF**. GPU sampling, shared-model consumers,
+furnace/reciprocity and full physical admission remain open; the production
+BRDF still has 565 residuals.
+
+The generator is oxytidy-clean. One/six-worker smoke outputs are byte-identical;
+11 malformed-data/CLI controls and an underresolved-table control are rejected.
+Build `Oxygen.Vortex.GgxMomentTable` in Release under `out/build-ninja`, then run
+`Oxygen.Vortex.GgxMomentTable.exe <candidate.json> 513 1025 6`.
+`InspectGgxMomentTable.py` checks anchors and optional `--refined-reference` data;
+`CertifyGgxMomentTableSamples.py` reuses `python-flint==0.9.0` / FLINT 3.6.0 for
+the ranked sample enclosures. Evidence in the same `ex07c` directory:
+`moments-513x1025{,-anchors,-stencil,-sample-certificates}.json`,
+`moments-513-stencil.json`, `moments-tool-validation.json` and
+`moments-tidy-verified/`. Candidate data remains explicitly unqualified and is
+not yet part of runtime publication.
+
 ### 3.5 Slice 8 work items
 
 **Planned. Outcome:** a measured Neutral Reference with reset/save/load and an
