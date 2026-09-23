@@ -123,6 +123,13 @@ three native instrument tests. Workload attribution, material-format/filter and 
 collection-overhead qualification remain open; these checkpoints do not close
 EX07B or change shading.
 
+The full incremental collection run is now measured: 57,085 frames across eight
+native windows, with identical images across modes and complete CPU/memory exports.
+Pooled median/p95 frame times fit both proposed budgets, but forward p99 increases
+from 3.768 to 4.463 ms, concentrated in one collection-on window. No overhead
+acceptance is claimed while that tail result and the user's numeric-budget choice
+remain open. See the [measurement](plan/EX07B-reference-validation.md#full-collection-measurement).
+
 **User-directed stopping point:** finish EX07B's reference/instrument validation
 gate and commit its stable checkpoint, then pause. Do not begin EX07C until the
 user instructs resumption. Intermediate B checkpoints do not satisfy this gate.

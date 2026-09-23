@@ -1041,7 +1041,60 @@ Release and Debug targets build, and Debug explicitly skips the Release-only
 measurement. The new benchmark is oxytidy-clean; the broad consumer run retains
 22 existing public-fixture-member warnings in `ExposureTestGraphics.h` and adds
 no suppression. Evidence is `collection-smoke.json`, its report directory and
-`collection-tidy-final/` under `ex07b`. Full-duration measurement is pending.
+`collection-tidy-final/` under `ex07b`.
+
+### Full collection measurement
+
+The full Release run completes in **267.552 s**, with **57,085 frames** across
+eight windows. All windows exceed both 3,600 samples and 30 seconds (or meet the
+sample minimum exactly). Format/publication assertions and image equality pass.
+The four enabled windows contain **157,960 CPU records** and **28,712 allocator
+snapshots**. CPU records cover exactly their measured frames; memory sample IDs
+and frame IDs agree with the timing population, and segment byte invariants hold.
+All enabled windows report **zero successful buffer and texture creations**.
+Disabled windows do not observe creation events; their raw zero counter deltas
+must not be treated as measured absence of churn.
+
+Percentiles below use linear interpolation at `(n-1)*p` over the pooled raw
+population for each path/mode. Times are native frame intervals, including
+ordinary frame-start waits, rather than presented-frame latency.
+
+| Path / statistic | Collection off (ms) | Collection on (ms) | Difference (ms) |
+| ---------------- | ------------------: | -----------------: | --------------: |
+| Deferred median  |            8.473400 |           8.427350 |       -0.046050 |
+| Deferred p95     |            9.234105 |           8.996145 |       -0.237960 |
+| Deferred p99     |            9.876124 |           9.393314 |       -0.482810 |
+| Forward median   |            2.778700 |           2.704000 |       -0.074700 |
+| Forward p95      |            3.388940 |           3.353800 |       -0.035140 |
+| Forward p99      |            3.768004 |           4.463245 |       +0.695241 |
+
+Median and p95 satisfy either proposed budget in this measured population.
+Negative differences are observations, not evidence that instrumentation improves
+performance. The forward tail increase is concentrated in `forward-on-2`: its p99
+is 5.110734 ms, versus 3.622284 ms in `forward-on-1` and 3.777575/3.763700 ms in
+the two controls. Forward recording/submission p95 rises by **0.051940 ms** in
+the pooled populations. This interval includes driver calls and waits; it does
+not establish active CPU cost. The cause of the tail difference is unproven.
+Keep the instrument-overhead gate open; the initial result cannot support an
+unqualified claim of negligible tail overhead. Any follow-up should target the
+forward comparison rather than repeat the complete unrelated exposure campaign
+or investigate the user's machine.
+
+Sampled allocator maxima are 827,723,776 local allocation bytes in deferred and
+863,113,216 in forward, with 31,981,568 non-local allocation bytes and
+134,742,016 non-local block bytes in both. These totals include the entire
+fixture and resource pools retained in the fixed run order. They are not a
+lighting-only allocation budget or a standalone memory comparison of the paths.
+Between-sample peaks and driver-owned objects remain outside these allocator
+samples. The actual scene-color format is RGBA32Float throughout.
+
+Evidence: `ex07b/collection-full.{json,log}` and
+`ex07b/collection-198315482889200/`. The latter contains the manifest, every raw
+CSV, CPU CSV and memory JSON, plus `analysis.json` with window-level/pooled
+statistics, validation results, source commit and hashes of the executable and
+Vortex/D3D12 DLLs. Source checkpoint: `1f7db706f`. Numeric-budget acceptance is
+still pending the user's choice; physical renderer admission remains an EX07C
+obligation regardless of these instrument results.
 
 ## Qualification boundary and next work
 
