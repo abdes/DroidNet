@@ -1,6 +1,6 @@
 # EX07B reference validation
 
-Status: **in_progress — independent GGX/BRDF and punctual photometry implemented; B is not qualified.**
+Status: **in_progress — independent GGX/BRDF, photometry and finite-emitter integration implemented; B is not qualified.**
 
 The [EX07 plan](EX07-lighting-correctness-and-scalability.md) owns the full
 reference/instrument gate. The [PBR specification](../../renderer-core/physically-based-rendering.md#shared-equations-and-numerical-domain)
@@ -207,10 +207,86 @@ the last representable distance below the range boundary.
 The owning Debug suite passes **21/21 tests**; focused Release passes all five
 new photometry tests. Maximum emitted-flux relative error is `8.025e-15` in both.
 The three new C++ files, including the header, are oxytidy-clean without
-suppressions. Finite sphere/disk integration and the remaining decoding/GPU/image
-gates remain open; these tests change no production lighting behavior.
+suppressions. These tests qualify punctual photometry; finite geometry has its
+separate reference below. Decoding/GPU/image gates remain open, and no production
+lighting behavior changes here.
 Evidence under `ex07b`: `photometry-reference-{debug,release}.json`,
 `photometry-reference-tidy-verified/` and `photometry-reference-checkpoint.json`.
+
+## Finite sphere/disk reference
+
+`Reference/FiniteEmitter.{h,cpp}` integrates the approved unoccluded emitter
+equations in a receiver-local orthonormal frame with `N=(0,0,1)`. Position in
+metres and unit directions have separate structures; radius, range and flux
+retain their unit types. An incident-direction callback supplies the BRDF's
+three lobes. The integrator applies source compensation, geometry, angular
+emission, the receiver cosine and range/guard exactly once. Tint, pre-exposure,
+shadow visibility and output transforms remain separate consumers.
+
+For a sphere of radius a at center distance R>a, integrate its apparent cap with
+`sin(theta)^2=(a/R)^2*u`. Its projected geometry changes the unit-sphere area
+integral into
+`I/(2*pi*R^2) * integral f(l,v)*(N.l)/cos(theta)*W(d)*d^2/max(d^2,g^2) du dphi`,
+where `I=Phi/(4*pi)` and `g=0.001 m`. The `a^2` factors cancel analytically.
+The near ray/sphere intersection uses the rationalized expression
+`d=(R-a)*(1+a/R)/(cos(theta)+(a/R)*sqrt(1-u))`.
+Clip radial support at the shading horizon and finite range, then clip each
+azimuth interval against positive `N.l`. Interior/on-surface receivers get zero
+outward emission. Radius zero takes the explicit punctual path.
+
+For the disk, use unit polar area `rho*d(rho)*d(phi)` with factor `I_peak/pi`.
+The finite cone and range restrict source points to a circle in the emitter
+plane. At perpendicular receiver distance h its radius is
+`min(sqrt(range^2-h^2),h*tan(outer))`; the hemispherical endpoint uses only the
+range bound. This avoids `h/cos(outer)` rounding to h for a narrow valid cone.
+Intersect its radial support with the physical disk, and each radial sample's
+azimuth with the receiver horizon and this circle. The circle intersection uses
+`(r-p)^2+4*r*p*sin(delta/2)^2<b^2`, retaining small support without subtracting
+large squared distances. A collapsed numerical interval with known positive
+overlap returns a representability failure, never successful zero light.
+Evaluate the spot angle using `atan2(length(cross(e,l)),-dot(e,l))`, retaining
+narrow angular support. Receivers on/behind the emitted plane get zero. No
+center-ray cone or center-below-horizon rejection substitutes for finite support.
+
+The original Gauss-Legendre rule and compensated sum now live in the shared
+test-only `ReferenceQuadrature` helper, with their arithmetic unchanged.
+Power-of-two refinement is bounded at 512 per dimension. Two successive rules
+must meet the absolute-plus-relative tolerance independently for every lobe.
+Callback failures preserve their cause; exhausted work preserves the last
+estimate. A refinement without any sampled geometric support cannot establish
+convergence to zero. Successive-rule changes remain estimates, not rigorous uncertainty
+certificates for arbitrary BRDF callbacks or every source configuration.
+
+The finite-emitter matrix contains eleven tests:
+
+- A perpendicular Lambertian receiver matches the sphere's analytic projected
+  solid angle across radii from zero through 0.999 of center distance.
+- On-axis hard-cone and hemispherical-soft disks match separate analytic
+  integrals. The latter includes the squared cosine emission profile.
+- Positive-radius sphere/disk responses converge to the punctual branch above
+  and below the independent 1 mm distance guard.
+- Sources whose centers lie below the horizon or beyond range retain valid
+  finite contributions. Off-axis disks with 0.01 and 1e-8-radian outer cones
+  contribute even though their center rays are outside their cones. The latter
+  regression fails under the initial cosine-distance cutoff and passes with
+  direct plane support. Numerically collapsed positive overlap fails explicitly.
+- Interior/on-surface spheres, on/behind-plane disks and zero range skip BRDF
+  evaluation; invalid input, callback errors and work exhaustion fail explicitly.
+- All three coupled-GGX disk lobes match a separate receiver-angle Simpson
+  integral at roughness one. A surface-area Simpson sphere integral separately
+  checks the range window and distance guard against the cap formulation.
+
+Debug and Release each pass all **32 reference tests**. The maximum absolute
+difference against the separate sphere surface integral is `1.134e-7` in the
+tested range/guard cases, within their `1e-10 + 1e-8*reference` comparison limit.
+All six changed C++ files,
+including headers, are oxytidy-clean without new suppressions. These checks
+qualify the listed numerical cases; broader source/BRDF sampling and uncertainty
+qualification remain open before this oracle can qualify production approximations.
+No renderer behavior or shadow technique changes in this checkpoint.
+Evidence under `ex07b`: `finite-reference-{debug,release}.json`,
+`finite-reference-narrow-tidy/`, `finite-narrow-negative.log` and
+`finite-reference-checkpoint.json`.
 
 ## Qualification boundary and next work
 
@@ -223,7 +299,7 @@ and the current matrix do not yet certify the complete interior domain.
 The independent certifier can qualify additional pointwise moment queries;
 the C++ refinement estimator alone cannot. B still requires general mean-moment
 uncertainty certification, broader smooth/grazing furnace qualification,
-finite sphere/disk integration, RGB/tint and material decoding,
+broader finite-source reference qualification, RGB/tint and material decoding,
 known-input GPU probes, deterministic matched-image fixtures and bounded
 instrumentation. Production tables additionally require their own interpolation
 certificate. No generated LUT or renderer change may claim those gates from

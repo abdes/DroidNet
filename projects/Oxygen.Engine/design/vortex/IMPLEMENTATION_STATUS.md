@@ -137,8 +137,14 @@ adds typed lux/lumen/candela conversion, both-angle spot normalization, source
 compensation and range/guard checks. Its five new tests pass in Release and the
 owning 21-test Debug suite passes. Maximum spotlight flux error is 8.03e-15
 relative; the three new C++ files are oxytidy-clean.
-General mean uncertainty, broader smooth/grazing furnace coverage, finite-source
-integration, RGB/tint and material decoding,
+The finite-emitter oracle now integrates spheres through their apparent caps
+and disks through clipped unit-area domains, retaining each BRDF lobe and the
+specified range/guard. The eleven finite-emitter cases cover analytic
+limits, independent area/angle integrals and finite contributions missed by
+center-only rejection, including a regression for rounded-unit-cosine narrow
+support. All 32 reference tests pass in both Debug and Release;
+all six changed C++ files are oxytidy-clean. General mean uncertainty, broader
+smooth/grazing furnace and finite-source qualification, RGB/tint and material decoding,
 GPU/image checks and instrumentation remain open in B.
 
 A's closure does not establish the final physical renderer. B must supply an
