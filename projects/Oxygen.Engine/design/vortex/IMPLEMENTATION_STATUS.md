@@ -208,6 +208,14 @@ from 532.604 to 128.955 seconds in Debug and from 277.866 to 45.626 seconds in
 Release. Certificate-query value changes stay below 4.108e-15; all 27 native
 instrument tests pass with the same known C physical-admission failures.
 
+The default-material CPU reference now evaluates factors, resolved samples,
+packed ORM/AO selection, HDR emission, tangent-frame normals and alpha/two-sided
+eligibility. Six new checks run in under a millisecond; Debug/Release pass ten
+focused material tests and 28 native instrument tests. The native UV0 probe
+covers 36 transformations with maximum absolute error 2.448e-6. The
+[material reference record](plan/EX07B-reference-validation.md#default-material-evaluation-reference-and-native-uv-probe)
+keeps actual texture sampling, format expansion and raster qualification open.
+
 A's closure does not establish the final physical renderer. B must supply an
 independent double-precision oracle, moment uncertainty and known-input probes,
 matched unculled image reference, deterministic fixtures and bounded instruments.

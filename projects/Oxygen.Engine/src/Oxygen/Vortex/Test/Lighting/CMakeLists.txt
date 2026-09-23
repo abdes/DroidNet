@@ -32,6 +32,7 @@ gtest_program(
     "ShadowRecordAbi_test.cpp"
     "ShadowAllocationRequirements_test.cpp"
     "MaterialDecodeGpu_test.cpp"
+    "MaterialUvGpu_test.cpp"
     "PhotometryGpu_test.cpp"
     "BrdfGpu_test.cpp"
     "../../Lighting/Internal/LightPhotometry.cpp"
@@ -39,6 +40,8 @@ gtest_program(
     "Reference/Photometry.h"
     "Reference/MaterialDecode.cpp"
     "Reference/MaterialDecode.h"
+    "Reference/MaterialEvaluation.cpp"
+    "Reference/MaterialEvaluation.h"
     "Reference/GgxBrdf.cpp"
     "Reference/GgxBrdf.h"
     "Reference/GgxMoments.cpp"
@@ -55,6 +58,9 @@ gtest_program(
 gtest_program(
   "Oxygen.Vortex.LightingReference.Tests"
   SOURCES
+    "Reference/MaterialEvaluation.cpp"
+    "Reference/MaterialEvaluation.h"
+    "MaterialEvaluationReference_test.cpp"
     "Reference/GgxMoments.cpp"
     "Reference/GgxMoments.h"
     "Reference/GgxBrdf.cpp"
