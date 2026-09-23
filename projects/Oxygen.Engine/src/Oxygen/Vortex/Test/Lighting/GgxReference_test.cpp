@@ -117,6 +117,49 @@ namespace {
     }
   }
 
+  NOLINT_TEST(GgxReferenceTest, RoughMeanMomentsMatchAnalyticIntegrals)
+  {
+    const auto mean = IntegrateGgxMeanMoments(PerceptualRoughness { 1.0 });
+    ASSERT_TRUE(mean.has_value())
+      << "order=" << mean.error().last_estimate.order << " view="
+      << mean.error().failed_view.value_or(ViewCosine { -1.0 }).get();
+    const auto expected_energy = (4.0 / 3.0) * (1.0 - std::numbers::ln2);
+    const auto expected_bias
+      = (111.0 / 35.0) - ((32.0 / 7.0) * std::numbers::ln2);
+    EXPECT_NEAR(mean->hemispherical_albedo, expected_energy, 1.0e-8);
+    EXPECT_NEAR(mean->schlick_moment, expected_bias, 1.0e-8);
+    // The unweighted mean is 1/2 and is not the model's hemispherical mean.
+    EXPECT_GT(std::abs(mean->hemispherical_albedo - 0.5), 0.05);
+  }
+
+  NOLINT_TEST(GgxReferenceTest, MeanMomentRefinementAgreesAcrossRoughness)
+  {
+    for (const auto roughness : { 0.045, 0.25, 0.6 }) {
+      SCOPED_TRACE(roughness);
+      const auto first
+        = IntegrateGgxMeanMoments(PerceptualRoughness { roughness });
+      ASSERT_TRUE(first.has_value())
+        << "order=" << first.error().last_estimate.order << " view="
+        << first.error().failed_view.value_or(ViewCosine { -1.0 }).get();
+      const auto second
+        = IntegrateGgxMeanMoments(PerceptualRoughness { roughness },
+          {
+            .refinement_tolerance = 1.0e-7,
+            .initial_order = 16U,
+            .maximum_order = 256U,
+          });
+      ASSERT_TRUE(second.has_value())
+        << "order=" << second.error().last_estimate.order << " view="
+        << second.error().failed_view.value_or(ViewCosine { -1.0 }).get();
+      EXPECT_NEAR(
+        first->hemispherical_albedo, second->hemispherical_albedo, 1.0e-6);
+      EXPECT_NEAR(first->schlick_moment, second->schlick_moment, 1.0e-6);
+      EXPECT_GE(second->schlick_moment, 0.0);
+      EXPECT_LE(second->schlick_moment, second->hemispherical_albedo);
+      EXPECT_LT(second->hemispherical_albedo, 1.0);
+    }
+  }
+
   NOLINT_TEST(
     GgxReferenceTest, InvalidInputsAndExhaustedWorkNeverProduceAnEstimate)
   {
@@ -141,6 +184,36 @@ namespace {
     ASSERT_FALSE(exhausted.has_value());
     EXPECT_EQ(
       exhausted.error().reason, MomentIntegrationError::kDidNotConverge);
+  }
+
+  NOLINT_TEST(GgxReferenceTest, MeanMomentFailuresRetainTheirCause)
+  {
+    const auto invalid = IntegrateGgxMeanMoments(PerceptualRoughness { -0.1 });
+    ASSERT_FALSE(invalid.has_value());
+    EXPECT_EQ(invalid.error().reason, MomentIntegrationError::kInvalidInput);
+    EXPECT_FALSE(invalid.error().failed_view.has_value());
+    const auto exhausted = IntegrateGgxMeanMoments(
+      PerceptualRoughness { 0.045 },
+      { .directional = { .refinement_tolerance = 1.0e-14,
+          .initial_order = 4U, .maximum_order = 16U, }, });
+    ASSERT_FALSE(exhausted.has_value());
+    EXPECT_EQ(
+      exhausted.error().reason, MomentIntegrationError::kDidNotConverge);
+    ASSERT_TRUE(exhausted.error().failed_view.has_value());
+    EXPECT_GT(exhausted.error().failed_view->get(), 0.0);
+    EXPECT_LT(exhausted.error().failed_view->get(), 1.0);
+    const auto outer_exhausted
+      = IntegrateGgxMeanMoments(PerceptualRoughness { 1.0 },
+        { .refinement_tolerance = 1.0e-14,
+          .initial_order = 4U,
+          .maximum_order = 16U });
+    ASSERT_FALSE(outer_exhausted.has_value());
+    EXPECT_EQ(
+      outer_exhausted.error().reason, MomentIntegrationError::kDidNotConverge);
+    EXPECT_FALSE(outer_exhausted.error().failed_view.has_value());
+    EXPECT_EQ(outer_exhausted.error().last_estimate.order, 16U);
+    EXPECT_GT(
+      outer_exhausted.error().last_estimate.endpoint_absolute_bound, 0.0);
   }
 
 } // namespace

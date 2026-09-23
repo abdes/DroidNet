@@ -25,6 +25,9 @@ gtest_program(
   SOURCES
     "Reference/GgxMoments.cpp"
     "Reference/GgxMoments.h"
+    "Reference/GgxBrdf.cpp"
+    "Reference/GgxBrdf.h"
+    "GgxBrdfReference_test.cpp"
     "GgxReference_test.cpp"
     "GgxEndpointReference_test.cpp"
     "GgxMomentCertificate_test.cpp"

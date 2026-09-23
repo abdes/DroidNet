@@ -8,6 +8,7 @@
 
 #include <cstdint>
 #include <expected>
+#include <optional>
 
 #include <Oxygen/Base/NamedType.h>
 
@@ -43,10 +44,39 @@ struct MomentIntegrationFailure {
   GgxMomentEstimate last_estimate {};
 };
 
+struct MeanMomentIntegrationSettings {
+  double refinement_tolerance { 1.0e-6 };
+  std::uint32_t initial_order { 8U };
+  std::uint32_t maximum_order { 128U };
+  MomentIntegrationSettings directional { .refinement_tolerance = 1.0e-7 };
+};
+
+struct GgxMeanMomentEstimate {
+  double hemispherical_albedo { 0.0 };
+  double schlick_moment { 0.0 };
+  //! Bound for the explicitly enclosed grazing tail; other errors remain
+  //! estimates.
+  double endpoint_absolute_bound { 0.0 };
+  double estimated_absolute_change { 0.0 };
+  std::uint32_t order { 0U };
+  std::uint64_t evaluations { 0U };
+};
+
+struct MeanMomentIntegrationFailure {
+  MomentIntegrationError reason { MomentIntegrationError::kInvalidInput };
+  std::optional<ViewCosine> failed_view;
+  GgxMeanMomentEstimate last_estimate {};
+};
+
 //! Integrate the specified correlated-GGX E/B moments independently of shaders.
 //! mu=0 evaluates the grazing limit; roughness keeps the model's 0.045 floor.
 [[nodiscard]] auto IntegrateGgxMoments(PerceptualRoughness roughness,
   ViewCosine view, MomentIntegrationSettings settings = {})
   -> std::expected<GgxMomentEstimate, MomentIntegrationFailure>;
+
+//! Integrate 2*mu*E(mu) and 2*mu*B(mu); refinement is not a certificate.
+[[nodiscard]] auto IntegrateGgxMeanMoments(
+  PerceptualRoughness roughness, MeanMomentIntegrationSettings settings = {})
+  -> std::expected<GgxMeanMomentEstimate, MeanMomentIntegrationFailure>;
 
 } // namespace oxygen::vortex::testing::reference
