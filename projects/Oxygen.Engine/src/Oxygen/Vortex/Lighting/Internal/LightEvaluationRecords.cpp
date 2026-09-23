@@ -168,17 +168,17 @@ auto ResolveLightEvaluationRecords(const FrameLightSelection& input)
     auto cone = SpotConeProfile {};
     if (!point) {
       const auto normalized = NormalizeDirection(source.direction);
-      const auto profile
+      const auto cone_profile
         = ResolveSpotConeProfile(source.inner_cone_half_angle_radians,
           source.outer_cone_half_angle_radians);
-      if (!normalized || !profile) {
-        if (!profile) {
-          failure.error = ConvertError(profile.error());
+      if (!normalized || !cone_profile) {
+        if (!cone_profile) {
+          failure.error = ConvertError(cone_profile.error());
         }
         return std::unexpected(failure);
       }
       direction = *normalized;
-      cone = *profile;
+      cone = *cone_profile;
     }
     const auto modifiers = LightPhotometryModifiers {
       .color_rgb = source.color,
@@ -198,13 +198,11 @@ auto ResolveLightEvaluationRecords(const FrameLightSelection& input)
       .source_radius_m = source.source_radius,
       .emitted_direction_ws = direction,
       .inverse_range_m = static_cast<float>(inverse_range),
-      .inner_cone_sin_half_squared = cone.inner_sin_half_squared,
-      .outer_cone_sin_half_squared = cone.outer_sin_half_squared,
+      .outer_cone_cosine = cone.outer_cosine,
+      .inverse_cone_cosine_width = cone.inverse_cosine_width,
       .kind = static_cast<std::uint32_t>(source.kind),
       .flags = source.flags,
       .selection_index = failure.selection_index,
-      .inner_cone_relative_correction = cone.inner_relative_correction,
-      .outer_cone_relative_correction = cone.outer_relative_correction,
     });
   }
   return records;

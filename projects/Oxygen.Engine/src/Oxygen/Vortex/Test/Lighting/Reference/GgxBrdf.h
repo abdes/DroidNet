@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <expected>
 
@@ -58,5 +59,12 @@ enum class BrdfReferenceError : std::uint8_t {
 //! The same single-scattering lobe, usable for integration without E/B inputs.
 [[nodiscard]] auto EvaluateGgxSingleScatteringChannel(const BrdfQuery& query,
   double f0) -> std::expected<double, BrdfReferenceError>;
+
+//! Independent model-2 raster response using directional moments supplied by
+//! the CPU integrator. The reciprocal reference above remains a comparison.
+[[nodiscard]] auto EvaluateRasterGgxBrdf(const BrdfQuery& query,
+  const std::array<BrdfReflectance, 3>& material,
+  const GgxMomentEstimate& view)
+  -> std::expected<std::array<BrdfLobes, 3>, BrdfReferenceError>;
 
 } // namespace oxygen::vortex::testing::reference

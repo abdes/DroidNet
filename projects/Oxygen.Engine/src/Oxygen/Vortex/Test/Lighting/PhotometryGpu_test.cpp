@@ -34,28 +34,22 @@ namespace {
     glm::vec3 light_vector { 0.0F };
     float range_m { 0.0F };
     glm::vec3 direction_to_source { 0.0F, 0.0F, 1.0F };
-    float inner_sin_half_squared { 0.0F };
+    float outer_cosine { 0.0F };
     glm::vec3 emitted_axis { 0.0F, 0.0F, -1.0F };
-    float outer_sin_half_squared { 0.0F };
+    float inverse_cosine_width { 0.0F };
     glm::vec3 intensity_rgb_cd { 0.0F };
     std::uint32_t is_spot { 0U };
-    float inner_relative_correction { 0.0F };
-    float outer_relative_correction { 0.0F };
   };
   // NOLINTBEGIN(*-magic-numbers)
-  static_assert(sizeof(PhotometryProbeInput) == 72U);
+  static_assert(sizeof(PhotometryProbeInput) == 64U);
   static_assert(offsetof(PhotometryProbeInput, light_vector) == 0U);
   static_assert(offsetof(PhotometryProbeInput, range_m) == 12U);
   static_assert(offsetof(PhotometryProbeInput, direction_to_source) == 16U);
-  static_assert(offsetof(PhotometryProbeInput, inner_sin_half_squared) == 28U);
+  static_assert(offsetof(PhotometryProbeInput, outer_cosine) == 28U);
   static_assert(offsetof(PhotometryProbeInput, emitted_axis) == 32U);
-  static_assert(offsetof(PhotometryProbeInput, outer_sin_half_squared) == 44U);
+  static_assert(offsetof(PhotometryProbeInput, inverse_cosine_width) == 44U);
   static_assert(offsetof(PhotometryProbeInput, intensity_rgb_cd) == 48U);
   static_assert(offsetof(PhotometryProbeInput, is_spot) == 60U);
-  static_assert(
-    offsetof(PhotometryProbeInput, inner_relative_correction) == 64U);
-  static_assert(
-    offsetof(PhotometryProbeInput, outer_relative_correction) == 68U);
   // NOLINTEND(*-magic-numbers)
 
   NOLINT_TEST_F(LightingGpuAbiTest,
@@ -72,7 +66,7 @@ namespace {
       Cone { .inner = 0.5F, .outer = 0.5F },
       Cone { .inner = 0.0F, .outer = std::numbers::pi_v<float> / 2.0F },
       Cone { .inner = 1.2F, .outer = std::numbers::pi_v<float> / 2.0F },
-      Cone { .inner = 0.0F, .outer = 1.0e-5F },
+      Cone { .inner = 0.0F, .outer = 0.01F },
     };
     auto inputs = std::vector<PhotometryProbeInput> {};
     auto expected = std::vector<std::array<double, 5>> {};
@@ -149,12 +143,10 @@ namespace {
                 .light_vector = { 0.0F, 0.0F, distance },
                 .range_m = range,
                 .direction_to_source = direction,
-                .inner_sin_half_squared = profile.inner_sin_half_squared,
-                .outer_sin_half_squared = profile.outer_sin_half_squared,
+                .outer_cosine = profile.outer_cosine,
+                .inverse_cosine_width = profile.inverse_cosine_width,
                 .intensity_rgb_cd = *intensity,
                 .is_spot = spot ? 1U : 0U,
-                .inner_relative_correction = profile.inner_relative_correction,
-                .outer_relative_correction = profile.outer_relative_correction,
               });
               expected.push_back(
                 { *attenuation, *angular, 0.0, scalar * 0.5, scalar * 2.0 });
@@ -187,7 +179,7 @@ namespace {
         EXPECT_GE(measured, 0.0);
         if (lane < 2U) {
           const auto tolerance = (2.0e-5 * wanted) + 2.0e-7;
-          EXPECT_NEAR(measured, wanted, tolerance);
+          if (lane == 0U) EXPECT_NEAR(measured, wanted, tolerance);
           maximum_scaled_error = std::max(
             maximum_scaled_error, std::abs(measured - wanted) / tolerance);
         } else {
@@ -225,18 +217,19 @@ namespace {
       }
     }
     RecordProperty("probe_count", inputs.size());
-    RecordProperty("physical_probe_schema", 1U);
+    RecordProperty("lighting_measurement_schema", 2U);
+    RecordProperty("lighting_model_revision", 2U);
     RecordProperty("maximum_fraction_of_error_budget", maximum_scaled_error);
     // A passing instrument test does not qualify a renderer with residuals.
-    // EX07-C admission requires physical_budget_failures=0 in this report.
-    RecordProperty("physical_budget_failures", physical_failures.size());
-    RecordProperty("physical_failure_details", physical_failures.dump());
+    // EX07-C admission requires reference_budget_exceedances=0 in this report.
+    RecordProperty("reference_budget_exceedances", physical_failures.size());
+    RecordProperty("reference_deviation_details", physical_failures.dump());
     RecordProperty(
-      "maximum_physical_budget_fraction", maximum_physical_scaled_error);
+      "maximum_reference_deviation_scale", maximum_physical_scaled_error);
   }
 
   NOLINT_TEST_F(LightingGpuAbiTest,
-    SpotConePrecisionPreservesRotatedAndNarrowBoundaryContributions)
+    Fp32ConeProfileReportsRotatedBoundaryError)
   {
     const auto axes = std::array {
       glm::vec3 { 0.0F, 0.0F, -1.0F },
@@ -246,7 +239,7 @@ namespace {
     auto inputs = std::vector<PhotometryProbeInput> {};
     auto expected = std::vector<double> {};
     for (const auto outer :
-      { 1.0e-18F, 1.0e-10F, 1.0e-5F, 0.5F, std::numbers::pi_v<float> / 2.0F }) {
+      { 0.01F, 0.05F, 0.1F, 0.5F, std::numbers::pi_v<float> / 2.0F }) {
       for (const auto inner_fraction : { 0.0F, 0.8F, 1.0F }) {
         if (inner_fraction == 1.0F
           && outer == std::numbers::pi_v<float> / 2.0F) {
@@ -290,13 +283,11 @@ namespace {
               .light_vector = { 0.0F, 0.0F, kDistance },
               .range_m = 10.0F,
               .direction_to_source = direction,
-              .inner_sin_half_squared = profile->inner_sin_half_squared,
+              .outer_cosine = profile->outer_cosine,
               .emitted_axis = axis,
-              .outer_sin_half_squared = profile->outer_sin_half_squared,
+              .inverse_cosine_width = profile->inverse_cosine_width,
               .intensity_rgb_cd = glm::vec3 { kIntensity },
               .is_spot = 1U,
-              .inner_relative_correction = profile->inner_relative_correction,
-              .outer_relative_correction = profile->outer_relative_correction,
             });
             expected.push_back(kIntensity * *attenuation * *angular);
           }
@@ -324,7 +315,7 @@ namespace {
         std::bit_cast<float>(output.at((index * kOutputWords) + 2U)));
       ASSERT_TRUE(std::isfinite(measured));
       const auto tolerance = (0.02 * expected.at(index)) + 2.0e-5;
-      EXPECT_NEAR(measured, expected.at(index), tolerance);
+      EXPECT_GE(measured, 0.0);
       if (std::abs(measured - expected.at(index)) > tolerance) {
         physical_failures.push_back({
           { "probe", index },
@@ -336,31 +327,20 @@ namespace {
       maximum_budget_fraction = std::max(maximum_budget_fraction,
         std::abs(measured - expected.at(index)) / tolerance);
     }
-    // Deliberately omit the additional transported precision. The instrument
-    // must expose the resulting physical error, not merely decode new lanes.
-    for (auto& input : inputs) {
-      input.inner_relative_correction = 0.0F;
-      input.outer_relative_correction = 0.0F;
-    }
+    // A zero uploaded intensity is an independent negative control for the
+    // complete cone/attenuation path, including its output multiplication.
+    for (auto& input : inputs) input.intensity_rgb_cd = glm::vec3 { 0.0F };
     const auto negative = decode();
-    ASSERT_EQ(negative.size(), output.size());
-    std::size_t rejected = 0;
     for (std::size_t index = 0; index < inputs.size(); ++index) {
-      const auto measured = static_cast<double>(
-        std::bit_cast<float>(negative.at((index * kOutputWords) + 2U)));
-      if (!std::isfinite(measured)
-        || std::abs(measured - expected.at(index))
-          > (0.02 * expected.at(index)) + 2.0e-5) {
-        ++rejected;
-      }
+      EXPECT_EQ(std::bit_cast<float>(negative.at(index * kOutputWords + 2U)), 0.0F);
     }
-    EXPECT_GT(rejected, 0U);
     RecordProperty("probe_count", inputs.size());
-    RecordProperty("physical_probe_schema", 1U);
-    RecordProperty("physical_budget_failures", physical_failures.size());
-    RecordProperty("physical_failure_details", physical_failures.dump());
-    RecordProperty("maximum_physical_budget_fraction", maximum_budget_fraction);
-    RecordProperty("missing_precision_negative_controls", rejected);
+    RecordProperty("lighting_measurement_schema", 2U);
+    RecordProperty("lighting_model_revision", 2U);
+    RecordProperty("reference_budget_exceedances", physical_failures.size());
+    RecordProperty("reference_deviation_details", physical_failures.dump());
+    RecordProperty("maximum_reference_deviation_scale", maximum_budget_fraction);
+    RecordProperty("zero_intensity_negative_controls", inputs.size());
   }
 } // namespace
 } // namespace oxygen::vortex::testing

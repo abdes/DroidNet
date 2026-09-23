@@ -93,6 +93,7 @@ gtest_program(
     "MaterialUvGpu_test.cpp"
     "PhotometryGpu_test.cpp"
     "BrdfGpu_test.cpp"
+    "Reference/GgxEnergyLookup.h"
     "FiniteEmitterGpu_test.cpp"
     "AllocationBudgetGpu_test.cpp"
     "Reference/FiniteEmitter.cpp"

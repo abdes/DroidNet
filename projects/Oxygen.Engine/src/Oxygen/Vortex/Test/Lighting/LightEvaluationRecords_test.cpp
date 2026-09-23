@@ -71,14 +71,14 @@ namespace {
       spot.intensity_rgb_cd.g, 1000.0 / (2.0 * std::numbers::pi / 3.0), 1.0e-4);
     EXPECT_EQ(spot.intensity_rgb_cd.r, spot.intensity_rgb_cd.g * 0.5F);
     EXPECT_EQ(spot.intensity_rgb_cd.b, 0.0F);
-    EXPECT_EQ(spot.outer_cone_sin_half_squared, 0.5F);
+    EXPECT_EQ(spot.inverse_cone_cosine_width, 1.0F);
     EXPECT_EQ(spot.source_radius_m, 0.125F);
     EXPECT_EQ(spot.flags, 3U);
-    EXPECT_EQ(spot.reserved, 0U);
+    EXPECT_EQ(spot.reserved, (std::array<std::uint32_t, 3> {}));
   }
 
   NOLINT_TEST(
-    LightEvaluationRecordsTest, ConePrecisionSurvivesProductionRecordResolution)
+    LightEvaluationRecordsTest, UnrepresentableFp32ConeRejectsTheWholePublication)
   {
     auto input = FrameLightSelection {};
     constexpr float kInner = 4.0e-6F;
@@ -95,30 +95,8 @@ namespace {
       },
     };
     const auto records = ResolveLightEvaluationRecords(input);
-    ASSERT_TRUE(records.has_value());
-    ASSERT_EQ(records->local.size(), 1U);
-    const auto& record = records->local.front();
-    const auto original = std::array { kInner, kOuter };
-    const auto encoded = std::array {
-      std::array {
-        record.inner_cone_sin_half_squared,
-        record.inner_cone_relative_correction,
-      },
-      std::array {
-        record.outer_cone_sin_half_squared,
-        record.outer_cone_relative_correction,
-      },
-    };
-    for (std::size_t index = 0; index < original.size(); ++index) {
-      const auto sine = std::sin(static_cast<double>(original.at(index)) / 2.0);
-      const auto expected = sine * sine;
-      const auto pair = encoded.at(index);
-      EXPECT_NE(pair.at(1), 0.0F);
-      const auto decoded = static_cast<double>(pair.at(0)) * (1.0 + pair.at(1));
-      EXPECT_NEAR(decoded, expected, expected * 1.0e-14);
-      EXPECT_GT(std::abs(pair.at(0) - expected), expected * 1.0e-10);
-    }
-    EXPECT_EQ(record.reserved, 0U);
+    ASSERT_FALSE(records.has_value());
+    EXPECT_EQ(records.error().error, LightingPreparationError::kUnrepresentable);
   }
 
   NOLINT_TEST(

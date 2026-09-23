@@ -180,7 +180,7 @@ namespace {
   using FiniteEmitterImageTest = exposure::ExposureLightingGpuTest;
 
   NOLINT_TEST_F(
-    FiniteEmitterImageTest, ExtendedSupportSurvivesEveryProductionPath)
+    FiniteEmitterImageTest, CenterSupportAndAnalyticHorizonAgreeAcrossProductionPaths)
   {
     auto node = scene->CreateNode("Finite source");
     unsigned cases = 0;
@@ -238,7 +238,7 @@ namespace {
             ASSERT_EQ(pixels.size(), 1U);
             const auto measured = pixels.at(0).at(0);
             ASSERT_TRUE(std::isfinite(measured));
-            if (!finite) {
+            if (!finite || scenario != 1U) {
               EXPECT_EQ(measured, 0.0F);
             } else {
               EXPECT_GT(measured, 1.0e-6F);
@@ -273,7 +273,7 @@ namespace {
   };
 
   NOLINT_TEST_F(FiniteEmitterShadowImageTest,
-    CubeVisibilityReachesForwardAndDeferredReceivers)
+    ProjectedAndCubeVisibilityReachForwardAndDeferredReceivers)
   {
     auto blocker = scene->CreateNode("Off-camera shadow blocker");
     blocker.GetRenderable().SetGeometry(
@@ -288,7 +288,8 @@ namespace {
     node.GetTransform().SetLocalRotation(
       glm::quat { 0.70710678F, 0.70710678F, 0, 0 });
     unsigned cases = 0;
-    for (const bool spot : { false, true }) {
+    for (const unsigned source_kind : { 0U, 1U, 2U }) {
+      const bool spot = source_kind != 0U;
       for (const bool forward : { false, true }) {
         for (const auto domain : {
                data::MaterialDomain::kOpaque,
@@ -306,7 +307,8 @@ namespace {
             if (spot) {
               auto light = std::make_unique<scene::SpotLight>();
               light->SetInnerConeAngleRadians(0.25F);
-              light->SetOuterConeAngleRadians(std::numbers::pi_v<float> / 2.0F);
+              light->SetOuterConeAngleRadians(source_kind == 1U
+                ? std::numbers::pi_v<float> / 2.0F : 1.2F);
               light->SetRange(3.0F);
               light->SetSourceRadius(0.1F);
               light->SetLuminousFluxLm(10.0F);
@@ -399,18 +401,11 @@ namespace {
       record.intensity_rgb_cd = tint * static_cast<float>(intensity->get());
       record.emitted_direction_ws = { 0.0F, 0.0F, -1.0F };
       record.kind = static_cast<std::uint32_t>(index % 2U);
-      const auto inner_sine = std::sin(static_cast<double>(0.2F) * 0.5);
-      const auto outer_sine = std::sin(static_cast<double>(1.2F) * 0.5);
-      record.inner_cone_sin_half_squared
-        = static_cast<float>(inner_sine * inner_sine);
-      record.outer_cone_sin_half_squared
-        = static_cast<float>(outer_sine * outer_sine);
-      record.inner_cone_relative_correction = static_cast<float>(
-        ((inner_sine * inner_sine) - record.inner_cone_sin_half_squared)
-        / record.inner_cone_sin_half_squared);
-      record.outer_cone_relative_correction = static_cast<float>(
-        ((outer_sine * outer_sine) - record.outer_cone_sin_half_squared)
-        / record.outer_cone_sin_half_squared);
+      if (record.kind == 1U) {
+        const auto inner_cosine = static_cast<float>(std::cos(static_cast<double>(0.2F)));
+        record.outer_cone_cosine = static_cast<float>(std::cos(static_cast<double>(1.2F)));
+        record.inverse_cone_cosine_width = 1.0F / (inner_cosine - record.outer_cone_cosine);
+      }
       if (index % 2U == 0U) {
         auto light = std::make_unique<scene::PointLight>();
         initialize(*light);

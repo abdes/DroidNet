@@ -36,9 +36,9 @@ struct LightingFrameBindings
     uint2 frame_sequence;
     uint2 view_generation;
     uint publication_state;
-    uint brdf_moments_srv;
-    uint brdf_mean_moments_srv;
+    uint brdf_energy_srv;
     uint brdf_model_revision;
+    uint reserved;
 };
 
 static LightingFrameBindings LoadLightingFrameBindings(uint slot)
@@ -52,8 +52,7 @@ static LightingFrameBindings LoadLightingFrameBindings(uint slot)
     invalid_bindings.local_shadow_map_srv = K_INVALID_BINDLESS_INDEX;
     invalid_bindings.build_status_srv = K_INVALID_BINDLESS_INDEX;
     invalid_bindings.grid_metadata_srv = K_INVALID_BINDLESS_INDEX;
-    invalid_bindings.brdf_moments_srv = K_INVALID_BINDLESS_INDEX;
-    invalid_bindings.brdf_mean_moments_srv = K_INVALID_BINDLESS_INDEX;
+    invalid_bindings.brdf_energy_srv = K_INVALID_BINDLESS_INDEX;
     if (!BX_IN_GLOBAL_SRV(slot)) return invalid_bindings;
     StructuredBuffer<LightingFrameBindings> bindings = ResourceDescriptorHeap[slot];
     return bindings[0];

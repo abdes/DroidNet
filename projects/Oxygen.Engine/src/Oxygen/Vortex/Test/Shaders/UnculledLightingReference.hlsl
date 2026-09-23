@@ -22,9 +22,8 @@ struct ReferenceArguments {
     uint2 extent;
     float pre_exposure;
     uint brdf_model_revision;
-    uint brdf_moments_srv;
-    uint brdf_mean_moments_srv;
-    uint2 reserved;
+    uint brdf_energy_srv;
+    uint3 reserved;
 };
 
 cbuffer ReferenceRoot : register(b2, space0) {
@@ -78,8 +77,7 @@ void CS(uint3 thread : SV_DispatchThreadID) {
     StructuredBuffer<ForwardLocalLightRecord> lights = ResourceDescriptorHeap[args.lights_srv];
     LightingFrameBindings lighting = (LightingFrameBindings)0;
     lighting.brdf_model_revision = args.brdf_model_revision;
-    lighting.brdf_moments_srv = args.brdf_moments_srv;
-    lighting.brdf_mean_moments_srv = args.brdf_mean_moments_srv;
+    lighting.brdf_energy_srv = args.brdf_energy_srv;
     float3 result = 0.0.xxx;
     for (uint index = 0; index < args.light_count; ++index) {
         ForwardLocalLightRecord light = lights[index];
@@ -89,8 +87,7 @@ void CS(uint3 thread : SV_DispatchThreadID) {
         float attenuation = ComputeLocalLightDistanceAttenuation(to_light, light.range_m);
         if (light.kind == FORWARD_LOCAL_LIGHT_SPOT) {
             attenuation *= ComputeSpotLightAngularAttenuation(L, light.emitted_direction_ws,
-                float2(light.inner_cone_sin_half_squared, light.inner_cone_relative_correction),
-                float2(light.outer_cone_sin_half_squared, light.outer_cone_relative_correction));
+                light.outer_cone_cosine, light.inverse_cone_cosine_width);
         }
         float3 incident = light.intensity_rgb_cd * attenuation;
         if (args.forward_shading != 0) {
@@ -102,7 +99,9 @@ void CS(uint3 thread : SV_DispatchThreadID) {
                     * incident;
             }
         } else {
-            result += EvaluateCookTorranceLighting(surface, L, incident, lighting);
+            result += EvaluateGgxDirectResponse(surface.world_normal, surface.view_direction,
+                L, surface.specular_f0, surface.base_color * (1.0 - surface.metallic),
+                surface.roughness, lighting) * incident;
         }
     }
     output.Store4(thread.x * 16,

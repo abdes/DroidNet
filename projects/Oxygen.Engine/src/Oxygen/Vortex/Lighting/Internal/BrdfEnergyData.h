@@ -16,24 +16,23 @@
 
 namespace oxygen::vortex::lighting::internal {
 
-inline constexpr std::uint32_t kBrdfModelRevision = 1U;
+inline constexpr std::uint32_t kBrdfModelRevision = 2U;
 
-enum class BrdfMomentDataError : std::uint8_t {
+enum class BrdfEnergyDataError : std::uint8_t {
   kModelMismatch,
   kCorruptPayload,
 };
 
-struct BrdfMomentData {
+struct BrdfEnergyData {
   std::uint32_t model_revision;
   std::uint32_t view_nodes;
   std::uint32_t roughness_nodes;
-  std::span<const std::byte> moments;
-  std::span<const std::byte> means;
+  std::span<const std::byte> energy;
   base::Sha256Digest payload_hash;
 };
 
 //! Immutable compiled model data, verified once before GPU publication.
-[[nodiscard]] OXGN_VRTX_API auto GetBrdfMomentData()
-  -> std::expected<BrdfMomentData, BrdfMomentDataError>;
+[[nodiscard]] OXGN_VRTX_API auto GetBrdfEnergyData()
+  -> std::expected<BrdfEnergyData, BrdfEnergyDataError>;
 
 } // namespace oxygen::vortex::lighting::internal

@@ -55,21 +55,23 @@ float4 DeferredLightPointPS(DeferredLightVolumeVSOutput input) : SV_Target0
     const LightingFrameBindings lighting_bindings = LoadResolvedLightingFrameBindings();
     ForwardLocalLightRecord light;
     if (!TryLoadLocalLight(lighting_bindings, light_constants.selection_index, light)) return 0.0f.xxxx;
-    const LightShadowReference shadow_reference = LoadLightShadowReference(
-        lighting_bindings.local_shadow_map_srv, light.selection_index);
-    const float3 light_vector
-        = light.position_ws - world_position;
+    LocalEmitterInput source;
+    if (!PrepareLocalEmitterInput(light, world_position, source)) return 0.0f.xxxx;
     const DeferredLightingSurfaceData surface = LoadDeferredLightingSurface(
         screen_uv, world_position, camera_position, bindings);
-    if (!LocalEmitterCanContribute(light, world_position, surface.world_normal))
-        return 0.0f.xxxx;
+    if (!LocalEmitterFacesSurface(light, source, surface.world_normal)) return 0.0f.xxxx;
+    const LightShadowReference shadow_reference = LoadLightShadowReference(
+        lighting_bindings.local_shadow_map_srv, light.selection_index);
     const float shadow_visibility = ComputeLocalShadowVisibility(shadow_reference,
-        world_position, surface.world_normal, VortexSafeNormalize(light_vector));
+        world_position, surface.world_normal, source.direction_to_center);
     if (shadow_visibility <= 0.0) return 0.0f.xxxx;
-    const float3 lighting = EvaluateLocalEmitterResponse(light, world_position,
-        surface.world_normal, surface.view_direction, surface.specular_f0,
-        surface.base_color * (1.0 - surface.metallic), surface.roughness,
-        lighting_bindings) * shadow_visibility;
+    const GgxDirectContext brdf = PrepareGgxDirect(surface.world_normal,
+        surface.view_direction, surface.specular_f0,
+        surface.base_color * (1.0 - surface.metallic), surface.roughness, lighting_bindings);
+    const GgxDirectLobes lobes = EvaluatePreparedLocalEmitterLobes(light, source,
+        surface.world_normal, surface.view_direction, brdf);
+    const float3 lighting = (lobes.single_scattering + lobes.multiple_scattering + lobes.diffuse)
+        * shadow_visibility;
     RecordHdrSceneSource(lighting, 2u);
     return float4(lighting * GetPreExposure(), 0.0f);
 }

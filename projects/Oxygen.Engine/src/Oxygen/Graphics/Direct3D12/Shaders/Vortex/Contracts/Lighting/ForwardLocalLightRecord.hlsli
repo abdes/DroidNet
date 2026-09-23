@@ -16,14 +16,12 @@ struct ForwardLocalLightRecord
     float source_radius_m;
     float3 emitted_direction_ws;
     float inverse_range_m;
-    float inner_cone_sin_half_squared;
-    float outer_cone_sin_half_squared;
+    float outer_cone_cosine;
+    float inverse_cone_cosine_width;
     uint kind;
     uint flags;
     uint selection_index;
-    float inner_cone_relative_correction;
-    float outer_cone_relative_correction;
-    uint reserved;
+    uint3 reserved;
 };
 
 static const uint FORWARD_LOCAL_LIGHT_POINT = 0u;

@@ -150,16 +150,13 @@ namespace {
     EXPECT_NEAR(intensity->r * integral, 1000.0, 1.0e-4);
   }
 
-  NOLINT_TEST(LightPhotometryTest, NarrowConesRetainSupportLostByFloatCosine)
+  NOLINT_TEST(LightPhotometryTest, ConesWithoutFp32AngularSupportAreRejected)
   {
     constexpr float outer = 1.0e-5F;
     EXPECT_EQ(std::cos(outer), 1.0F);
     const auto cone = ResolveSpotConeProfile(0.0F, outer);
-    ASSERT_TRUE(cone.has_value());
-    EXPECT_EQ(cone->inner_sin_half_squared, 0.0F);
-    EXPECT_GT(cone->outer_sin_half_squared, 0.0F);
-    EXPECT_NEAR(cone->solid_angle_sr,
-      std::numbers::pi * static_cast<double>(outer) * outer / 3.0, 1.0e-20);
+    ASSERT_FALSE(cone.has_value());
+    EXPECT_EQ(cone.error(), LightPhotometryError::kUnrepresentable);
   }
 
   NOLINT_TEST(LightPhotometryTest, HemisphereSoftConeAndHardConeHaveFiniteFlux)
@@ -167,11 +164,12 @@ namespace {
     const auto soft
       = ResolveSpotConeProfile(0.0F, std::numbers::pi_v<float> / 2.0F);
     ASSERT_TRUE(soft.has_value());
-    EXPECT_EQ(soft->outer_sin_half_squared, 0.5F);
+    EXPECT_EQ(soft->inverse_cosine_width, 1.0F);
     EXPECT_DOUBLE_EQ(soft->solid_angle_sr, 2.0 * std::numbers::pi / 3.0);
     const auto hard = ResolveSpotConeProfile(0.5F, 0.5F);
     ASSERT_TRUE(hard.has_value());
-    EXPECT_EQ(hard->inner_sin_half_squared, hard->outer_sin_half_squared);
+    EXPECT_EQ(hard->inverse_cosine_width, 0.0F);
+    EXPECT_FLOAT_EQ(hard->outer_cosine, std::cos(0.5F));
     EXPECT_NEAR(hard->solid_angle_sr,
       2.0 * std::numbers::pi * (1.0 - std::cos(0.5)), 1.0e-15);
   }

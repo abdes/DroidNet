@@ -97,7 +97,7 @@ auto PointShadowSetup::BuildPointRecords(
       break;
     }
 
-    const auto range = light.range + light.source_radius;
+    const auto range = light.range;
     const auto near_plane = (std::min)(kMinPointNearPlane, range * 0.01F);
     const auto projection = MakeReversedZPerspectiveProjectionRH_ZO(
       glm::half_pi<float>(), 1.0F, near_plane, range);

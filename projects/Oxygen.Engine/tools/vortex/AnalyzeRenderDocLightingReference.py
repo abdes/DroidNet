@@ -36,23 +36,23 @@ def build_report(controller, report, capture_path, report_path):
         if len(headers) != 1:
             raise RuntimeError("Expected one canonical 33-local-light publication")
         words = headers[0]
-        manifest_path = Path(__file__).resolve().parents[2] / "src/Oxygen/Vortex/Lighting/Data/GgxModel1.json"
+        manifest_path = Path(__file__).resolve().parents[2] / "src/Oxygen/Vortex/Lighting/Data/GgxEnergy.json"
         model = json.loads(manifest_path.read_text())
-        if words[23] != model["model_revision"]:
+        if words[22] != model["model_revision"]:
             raise RuntimeError("Lighting publication has the wrong BRDF model")
         model_payload = bytearray()
-        for slot, width in ((words[21], model["view_nodes"]), (words[22], 1)):
+        for slot, width in ((words[21], model["view_nodes"]),):
             descriptor = by_slot[slot]
             texture = next(item for item in controller.GetTextures() if item.resourceId == descriptor.resource)
             if (texture.width, texture.height) != (width, model["roughness_nodes"]):
-                raise RuntimeError("BRDF moment texture extent mismatch")
+                raise RuntimeError("BRDF energy texture extent mismatch")
             data = bytes(controller.GetTextureData(descriptor.resource, rd.Subresource()))
             if len(data) != width * model["roughness_nodes"] * 8:
-                raise RuntimeError("BRDF moment texture format mismatch")
+                raise RuntimeError("BRDF energy texture format mismatch")
             model_payload.extend(data)
         if hashlib.sha256(model_payload).hexdigest() != model["payload_sha256"]:
-            raise RuntimeError("Production GPU moment contents differ from the model payload")
-        report.append(f"brdf_model_revision={words[23]} brdf_payload_sha256={model['payload_sha256']} gpu_payload_bytes={len(model_payload)}")
+            raise RuntimeError("Production GPU energy contents differ from the model payload")
+        report.append(f"brdf_model_revision={words[22]} brdf_payload_sha256={model['payload_sha256']} gpu_payload_bytes={len(model_payload)}")
         local = by_slot[words[1]]
         if local.elementByteSize != 80 or local.byteSize != 33 * 80:
             raise RuntimeError("Local-light stride or count mismatch")
@@ -65,19 +65,19 @@ def build_report(controller, report, capture_path, report_path):
         for index in range(33):
             kind = struct.unpack_from("<I", records, index * 80 + 56)[0]
             high = struct.unpack_from("<2f", records, index * 80 + 48)
-            corrections = struct.unpack_from("<2f", records, index * 80 + 68)
-            reserved = struct.unpack_from("<I", records, index * 80 + 76)[0]
-            if reserved or not all(math.isfinite(v) and abs(v) <= 2**-24 for v in corrections):
-                raise RuntimeError("Invalid cone precision or reserved lane")
+            reserved = struct.unpack_from("<3I", records, index * 80 + 68)
+            if any(reserved) or not all(math.isfinite(v) for v in high):
+                raise RuntimeError("Invalid cone parameter or reserved lane")
             if kind == 0:
-                if any(high) or any(corrections):
+                if any(high):
                     raise RuntimeError("Point record contains cone parameters")
                 continue
-            for encoded, correction, angle in zip(high, corrections, (0.2, 1.2)):
-                authored = struct.unpack("<f", struct.pack("<f", angle))[0]
-                expected = math.sin(authored / 2)**2
-                if abs(encoded * (1 + correction) - expected) > expected * 1e-14:
-                    raise RuntimeError("Spot record lost authored cone precision")
+            def f32(value):
+                return struct.unpack("<f", struct.pack("<f", value))[0]
+            inner, outer = (math.cos(f32(angle)) for angle in (0.2, 1.2))
+            expected = (f32(outer), f32(1.0 / (f32(inner) - f32(outer))))
+            if any(abs(a-b) > 2e-6 * max(1.0, abs(b)) for a, b in zip(high, expected)):
+                raise RuntimeError("Spot record has incorrect cosine cone parameters")
             corrected_spots += 1
         ranges = by_slot[words[2]]
         if ranges.elementByteSize != 8 or ranges.byteSize != words[6] * 8:

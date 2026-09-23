@@ -22,7 +22,7 @@
 #include <Oxygen/Profiling/CpuProfileScope.h>
 #include <Oxygen/Profiling/ProfileScope.h>
 #include <Oxygen/Vortex/Internal/PerViewStructuredPublisher.h>
-#include <Oxygen/Vortex/Lighting/Internal/BrdfMomentResources.h>
+#include <Oxygen/Vortex/Lighting/Internal/BrdfEnergyResources.h>
 #include <Oxygen/Vortex/Lighting/Internal/ForwardLightPublisher.h>
 #include <Oxygen/Vortex/Lighting/Internal/LightGridBuilder.h>
 #include <Oxygen/Vortex/Lighting/Types/ClusterLightRange.h>
@@ -41,7 +41,7 @@ namespace oxygen::vortex::lighting::internal {
 
 ForwardLightPublisher::ForwardLightPublisher(Renderer& renderer)
   : renderer_(renderer)
-  , brdf_moments_(std::make_unique<BrdfMomentResources>(renderer))
+  , brdf_energy_(std::make_unique<BrdfEnergyResources>(renderer))
 {
 }
 
@@ -142,7 +142,7 @@ auto ForwardLightPublisher::Publish(const BuiltLightGridFrame& built_frame)
   if (!EnsurePublishResources()) {
     return std::unexpected(failure);
   }
-  const auto moments = brdf_moments_->Prepare();
+  const auto moments = brdf_energy_->Prepare();
   if (!moments) {
     return std::unexpected(moments.error());
   }
@@ -174,7 +174,7 @@ auto ForwardLightPublisher::Publish(const BuiltLightGridFrame& built_frame)
   for (const auto& view : built_frame.per_view) {
     failure.view_id = view.view_id;
     auto bindings = view.bindings;
-    brdf_moments_->Publish(bindings);
+    brdf_energy_->Publish(bindings);
     bindings.local_records_srv = local_srv;
     bindings.directional_records_srv = directional_srv;
     auto status = LightGridBuildStatus {

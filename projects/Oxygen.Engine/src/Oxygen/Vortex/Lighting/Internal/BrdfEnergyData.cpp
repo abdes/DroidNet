@@ -9,37 +9,34 @@
 #include <expected>
 #include <span>
 
-#include "GeneratedGgxMomentData.h"
+#include "GeneratedGgxEnergyData.h"
 
 #include <Oxygen/Base/Sha256.h>
-#include <Oxygen/Vortex/Lighting/Internal/BrdfMomentData.h>
+#include <Oxygen/Vortex/Lighting/Internal/BrdfEnergyData.h>
 
 namespace oxygen::vortex::lighting::internal {
 
-auto GetBrdfMomentData() -> std::expected<BrdfMomentData, BrdfMomentDataError>
+auto GetBrdfEnergyData() -> std::expected<BrdfEnergyData, BrdfEnergyDataError>
 {
   static_assert(std::endian::native == std::endian::little);
   static const auto result
-    = [] -> std::expected<BrdfMomentData, BrdfMomentDataError> {
-    constexpr auto kBytesPerMoment = sizeof(float) * 2U;
-    const auto bytes = std::as_bytes(std::span(generated::kMomentWords));
-    const auto moments_size = static_cast<std::size_t>(generated::kViewNodes)
-      * generated::kRoughnessNodes * kBytesPerMoment;
-    const auto means_size
-      = static_cast<std::size_t>(generated::kRoughnessNodes) * kBytesPerMoment;
+    = [] -> std::expected<BrdfEnergyData, BrdfEnergyDataError> {
+    constexpr auto kBytesPerTexel = sizeof(float) * 2U;
+    const auto bytes = std::as_bytes(std::span(generated::kEnergyWords));
+    const auto energy_size = static_cast<std::size_t>(generated::kViewNodes)
+      * generated::kRoughnessNodes * kBytesPerTexel;
     if (generated::kModelRevision != kBrdfModelRevision) {
-      return std::unexpected(BrdfMomentDataError::kModelMismatch);
+      return std::unexpected(BrdfEnergyDataError::kModelMismatch);
     }
-    if (bytes.size() != moments_size + means_size
+    if (bytes.size() != energy_size
       || base::ComputeSha256(bytes) != generated::kPayloadHash) {
-      return std::unexpected(BrdfMomentDataError::kCorruptPayload);
+      return std::unexpected(BrdfEnergyDataError::kCorruptPayload);
     }
-    return BrdfMomentData {
+    return BrdfEnergyData {
       .model_revision = generated::kModelRevision,
       .view_nodes = generated::kViewNodes,
       .roughness_nodes = generated::kRoughnessNodes,
-      .moments = bytes.first(moments_size),
-      .means = bytes.subspan(moments_size, means_size),
+      .energy = bytes,
       .payload_hash = generated::kPayloadHash,
     };
   }();

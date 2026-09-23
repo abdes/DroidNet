@@ -151,4 +151,40 @@ auto EvaluateGgxBrdfChannel(const BrdfQuery& query,
   return result;
 }
 
+auto EvaluateRasterGgxBrdf(const BrdfQuery& query,
+  const std::array<BrdfReflectance, 3>& material,
+  const GgxMomentEstimate& view)
+  -> std::expected<std::array<BrdfLobes, 3>, BrdfReferenceError>
+{
+  if (!ValidQuery(query) || !ValidMoment(view)
+    || view.directional_albedo <= 0.0) {
+    return std::unexpected(BrdfReferenceError::kInvalidInput);
+  }
+  auto result = std::array<BrdfLobes, 3> {};
+  if (query.light.get() <= 0.0 || query.view.get() <= 0.0) return result;
+  auto weights = std::array<double, 3> {};
+  auto reflected = 0.0;
+  constexpr auto luminance = std::array { 0.2126, 0.7152, 0.0722 };
+  for (std::size_t channel = 0; channel < material.size(); ++channel) {
+    const auto& m = material.at(channel);
+    if (!UnitInterval(m.f0) || !UnitInterval(m.diffuse)) {
+      return std::unexpected(BrdfReferenceError::kInvalidInput);
+    }
+    const auto w = 1.0 + m.f0 * (1.0 / view.directional_albedo - 1.0);
+    weights.at(channel) = w;
+    reflected += luminance.at(channel) * w
+      * (m.f0 * view.directional_albedo + (1.0 - m.f0) * view.schlick_moment);
+  }
+  const auto transmission = std::clamp(1.0 - reflected, 0.0, 1.0);
+  for (std::size_t channel = 0; channel < material.size(); ++channel) {
+    const auto single = SingleScattering(query, material.at(channel).f0);
+    result.at(channel) = {
+      .single_scattering = single,
+      .multiple_scattering = single * (weights.at(channel) - 1.0),
+      .diffuse = material.at(channel).diffuse * transmission / kPi,
+    };
+  }
+  return result;
+}
+
 } // namespace oxygen::vortex::testing::reference

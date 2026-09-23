@@ -38,9 +38,9 @@ struct alignas(16) LightingFrameBindings {
   std::array<std::uint32_t, 2> frame_sequence {};
   std::array<std::uint32_t, 2> view_generation {};
   std::uint32_t publication_state { 0U };
-  ShaderVisibleIndex brdf_moments_srv { kInvalidShaderVisibleIndex };
-  ShaderVisibleIndex brdf_mean_moments_srv { kInvalidShaderVisibleIndex };
+  ShaderVisibleIndex brdf_energy_srv { kInvalidShaderVisibleIndex };
   std::uint32_t brdf_model_revision { 0U };
+  std::uint32_t reserved { 0U };
 };
 
 // NOLINTBEGIN(*-magic-numbers)
@@ -66,9 +66,9 @@ static_assert(offsetof(LightingFrameBindings, selection_revision) == 56U);
 static_assert(offsetof(LightingFrameBindings, frame_sequence) == 64U);
 static_assert(offsetof(LightingFrameBindings, view_generation) == 72U);
 static_assert(offsetof(LightingFrameBindings, publication_state) == 80U);
-static_assert(offsetof(LightingFrameBindings, brdf_moments_srv) == 84U);
-static_assert(offsetof(LightingFrameBindings, brdf_mean_moments_srv) == 88U);
-static_assert(offsetof(LightingFrameBindings, brdf_model_revision) == 92U);
+static_assert(offsetof(LightingFrameBindings, brdf_energy_srv) == 84U);
+static_assert(offsetof(LightingFrameBindings, brdf_model_revision) == 88U);
+static_assert(offsetof(LightingFrameBindings, reserved) == 92U);
 // NOLINTEND(*-magic-numbers)
 
 } // namespace oxygen::vortex
