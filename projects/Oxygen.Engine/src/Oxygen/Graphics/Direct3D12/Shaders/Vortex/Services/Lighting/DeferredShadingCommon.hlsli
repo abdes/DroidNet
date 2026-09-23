@@ -73,17 +73,6 @@ static inline DeferredLightingSurfaceData LoadDeferredLightingSurface(
     return surface;
 }
 
-static inline float3 EvaluateCookTorranceLighting(
-    DeferredLightingSurfaceData surface,
-    float3 light_direction_to_source,
-    float3 light_radiance, LightingFrameBindings lighting)
-{
-    const float3 L = normalize(light_direction_to_source);
-    return EvaluateGgxDirectResponse(surface.world_normal, surface.view_direction, L,
-        surface.specular_f0, surface.base_color * (1.0 - surface.metallic),
-        surface.roughness, lighting) * light_radiance;
-}
-
 static inline float3 EvaluateDeferredStaticSkyLightDiffuse(
     DeferredLightingSurfaceData surface)
 {
