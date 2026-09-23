@@ -10,11 +10,14 @@
 #include <cstring>
 #include <fstream>
 #include <ios>
+#include <limits>
 #include <memory>
 #include <span>
 #include <string>
 #include <utility>
 #include <vector>
+
+#include <d3d12.h>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Config/GraphicsConfig.h>
@@ -22,13 +25,16 @@
 #include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Constants.h>
+#include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/ShaderType.h>
+#include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Graphics/Common/ShaderByteCode.h>
 #include <Oxygen/Graphics/Common/Shaders.h>
+#include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
@@ -331,6 +337,67 @@ auto LightingGpuAbiTest::PublishIndices(std::span<const std::uint32_t> indices)
       .stride = sizeof(std::uint32_t),
     });
   return slot;
+}
+
+auto LightingGpuAbiTest::PublishPackedTexture(const Format format,
+  const std::span<const std::uint32_t> texels) -> ShaderVisibleIndex
+{
+  CHECK_F(!texels.empty());
+  CHECK_LE_F(texels.size(), std::numeric_limits<std::uint32_t>::max());
+  CHECK_F(format == Format::kRGBA8UNorm || format == Format::kRGBA8UNormSRGB
+    || format == Format::kR10G10B10A2UNorm);
+  auto texture = CreateRegisteredTexture({
+    .width = static_cast<std::uint32_t>(texels.size()),
+    .height = 1U,
+    .format = format,
+    .texture_type = TextureType::kTexture2D,
+    .debug_name = "Lighting material decode texture",
+    .is_shader_resource = true,
+  });
+  const auto slice = graphics::TextureSlice {
+    .width = static_cast<std::uint32_t>(texels.size()),
+    .height = 1U,
+    .depth = 1U,
+  };
+  const auto footprint
+    = graphics::ComputeLinearTextureCopyFootprint(texture->GetDescriptor(),
+      slice, SizeBytes { D3D12_TEXTURE_DATA_PITCH_ALIGNMENT });
+  auto upload = CreateRegisteredBuffer({
+    .size_bytes = footprint.total_bytes.get(),
+    .usage = BufferUsage::kNone,
+    .memory = BufferMemory::kUpload,
+    .debug_name = "Lighting material decode upload",
+  });
+  upload->Update(texels.data(), texels.size_bytes(), 0U);
+  SubmitCommands("Lighting material texture upload",
+    [&](graphics::CommandRecorder& recorder) -> void {
+      EnsureTracked(recorder, upload, ResourceStates::kGenericRead);
+      EnsureTracked(recorder, texture, ResourceStates::kCommon);
+      recorder.RequireResourceState(*texture, ResourceStates::kCopyDest);
+      recorder.FlushBarriers();
+      recorder.CopyBufferToTexture(*upload,
+        {
+          .buffer_offset = 0U,
+          .buffer_row_pitch = footprint.row_pitch.get(),
+          .buffer_slice_pitch = footprint.slice_pitch.get(),
+          .dst_slice = slice,
+        },
+        *texture);
+      recorder.RequireResourceState(*texture, ResourceStates::kShaderResource);
+      recorder.FlushBarriers();
+    });
+  oxygen::Graphics& graphics_api = Backend();
+  auto& allocator = graphics_api.GetDescriptorAllocator();
+  auto handle = allocator.AllocateBindless(
+    bindless::generated::kGlobalSrvDomain, ResourceViewType::kTexture_SRV);
+  CHECK_F(handle.IsValid());
+  const auto index = allocator.GetShaderVisibleIndex(handle);
+  Backend().GetResourceRegistry().RegisterView(*texture, std::move(handle),
+    graphics::TextureViewDescription {
+      .format = format,
+      .dimension = TextureType::kTexture2D,
+    });
+  return index;
 }
 
 auto LightingGpuAbiTest::TearDown() -> void

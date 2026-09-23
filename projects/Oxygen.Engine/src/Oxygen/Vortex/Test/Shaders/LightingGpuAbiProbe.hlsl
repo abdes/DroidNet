@@ -14,6 +14,8 @@
 #include "Vortex/Contracts/Shadows/ProjectedLocalShadowRecord.hlsli"
 #include "Vortex/Contracts/Shadows/CubeLocalShadowRecord.hlsli"
 #include "Vortex/Services/Lighting/ClusterLookup.hlsli"
+#include "Vortex/Contracts/Scene/GBufferHelpers.hlsli"
+#include "Vortex/Shared/BRDFCommon.hlsli"
 
 struct ProbeArguments {
     uint4 decode;
@@ -32,6 +34,13 @@ struct LightIterationProbeInput {
     ClusterLightRange range;
     uint local_count;
     uint reserved;
+};
+
+struct MaterialDecodeProbeInput {
+    uint normal_srv;
+    uint material_srv;
+    uint base_color_srv;
+    uint pixel_x;
 };
 
 cbuffer ProbeRoot : register(b2, space0) {
@@ -213,5 +222,25 @@ void CS(uint3 thread : SV_DispatchThreadID) {
         output.Store4(address + 64, uint4(value.scene_generation, value.selection_revision));
         output.Store4(address + 80, uint4(value.frame_sequence, value.view_generation));
         output.Store4(address + 96, uint4(value.contact_texture_extent_px, value.reserved));
+    } else if (g_RecordKind == 17) {
+        StructuredBuffer<MaterialDecodeProbeInput> inputs = ResourceDescriptorHeap[args.x];
+        MaterialDecodeProbeInput value = inputs[element];
+        Texture2D<float4> normals = ResourceDescriptorHeap[value.normal_srv];
+        Texture2D<float4> materials = ResourceDescriptorHeap[value.material_srv];
+        Texture2D<float4> colors = ResourceDescriptorHeap[value.base_color_srv];
+        int3 location = int3(value.pixel_x, 0, 0);
+        float3 normal = DecodeGBufferNormal(normals.Load(location));
+        float metallic, specular, roughness, ao;
+        uint model;
+        DecodeGBufferMaterial(materials.Load(location), metallic, specular, roughness, model);
+        float3 base_color;
+        DecodeGBufferBaseColor(colors.Load(location), base_color, ao);
+        float3 f0 = ComputeMetallicF0(base_color, metallic, specular);
+        float3 diffuse = base_color * (1.0 - metallic);
+        output.Store4(address, asuint(float4(normal, metallic)));
+        output.Store4(address + 16, uint4(asuint(float3(specular, roughness, ao)), model));
+        output.Store4(address + 32, asuint(float4(base_color, 0.0)));
+        output.Store4(address + 48, asuint(float4(f0, 0.0)));
+        output.Store4(address + 64, asuint(float4(diffuse, 0.0)));
     }
 }

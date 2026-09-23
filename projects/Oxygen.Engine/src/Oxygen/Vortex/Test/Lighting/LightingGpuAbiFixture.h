@@ -14,6 +14,7 @@
 #include <vector>
 
 #include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Direct3D12/Test/Fixtures/ReadbackTestFixture.h>
 
@@ -44,6 +45,10 @@ protected:
   auto Decode(const DecodeRequest& request) -> std::vector<std::uint32_t>;
   auto PublishIndices(std::span<const std::uint32_t> indices)
     -> ShaderVisibleIndex;
+  //! Publish a single row of exact packed 32-bit texels for native format
+  //! decoding.
+  auto PublishPackedTexture(
+    Format format, std::span<const std::uint32_t> texels) -> ShaderVisibleIndex;
 
 private:
   std::shared_ptr<graphics::Buffer> indices_buffer_;
