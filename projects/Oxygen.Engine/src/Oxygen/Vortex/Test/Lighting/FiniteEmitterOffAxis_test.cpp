@@ -10,6 +10,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <expected>
+#include <map>
 #include <numbers>
 #include <optional>
 #include <vector>
@@ -18,6 +19,7 @@
 #include <Oxygen/Vortex/Test/Lighting/Reference/FiniteEmitter.h>
 #include <Oxygen/Vortex/Test/Lighting/Reference/GgxBrdf.h>
 #include <Oxygen/Vortex/Test/Lighting/Reference/GgxMoments.h>
+#include <Oxygen/Vortex/Test/Lighting/Reference/MaterialDecode.h>
 #include <Oxygen/Vortex/Test/Lighting/Reference/Photometry.h>
 #include <Oxygen/Vortex/Test/Lighting/Reference/ReferenceQuadrature.h>
 
@@ -96,9 +98,9 @@ namespace {
     return breaks;
   }
 
-  auto SphereSurface(const FiniteEmitter& source,
-    const PerceptualRoughness roughness, const ViewCosine view,
-    const std::uint32_t order) -> std::expected<BrdfLobes, BrdfReferenceError>
+  auto SphereSurface(const FiniteEmitter& source, const IncidentBrdf& brdf,
+    const ViewCosine view, const std::uint32_t order)
+    -> std::expected<BrdfLobes, BrdfReferenceError>
   {
     const auto radius = source.radius.get();
     const auto distance
@@ -153,6 +155,7 @@ namespace {
     cosine_breaks.push_back(1.0);
     phi_breaks.push_back(2.0 * kPi);
     auto single = detail::Sum {};
+    auto multiple = detail::Sum {};
     auto diffuse = detail::Sum {};
     // Integrate actual emitting surface normals. The visible cap satisfies
     // n_y.dot(-center/R)>a/R; the emission cosine remains explicit.
@@ -201,7 +204,7 @@ namespace {
               .y = y / ray_distance,
               .z = z / ray_distance,
             };
-            const auto lobes = ControlledLobes(ray, roughness, view);
+            const auto lobes = brdf(ray);
             if (!lobes) {
               return std::unexpected(lobes.error());
             }
@@ -212,6 +215,7 @@ namespace {
               / std::max(ray_distance * ray_distance, kDistanceGuardSquared)
               * radial_scale * phi_scale * radial_node.weight * phi_node.weight;
             single.Add(lobes->single_scattering * weight);
+            multiple.Add(lobes->multiple_scattering * weight);
             diffuse.Add(lobes->diffuse * weight);
           }
         }
@@ -219,14 +223,14 @@ namespace {
     }
     return BrdfLobes {
       .single_scattering = single.value,
+      .multiple_scattering = multiple.value,
       .diffuse = diffuse.value,
     };
   }
 
   auto CartesianDisk(const FiniteEmitter& source, const UnitDirection& axis,
-    const SpotCone& cone, const PerceptualRoughness roughness,
-    const ViewCosine view, const std::uint32_t order)
-    -> std::expected<BrdfLobes, BrdfReferenceError>
+    const SpotCone& cone, const IncidentBrdf& brdf, const ViewCosine view,
+    const std::uint32_t order) -> std::expected<BrdfLobes, BrdfReferenceError>
   {
     const auto radius = source.radius.get();
     const auto height = -((source.center.x * axis.x)
@@ -298,6 +302,7 @@ namespace {
     }
     const auto theta_breaks = AngleBreaks(peak_u, theta_limits);
     auto single = detail::Sum {};
+    auto multiple = detail::Sum {};
     auto diffuse = detail::Sum {};
     for (std::size_t part = 1U; part < theta_breaks.size(); ++part) {
       const auto theta_start = theta_breaks.at(part - 1U);
@@ -356,9 +361,8 @@ namespace {
                   2);
             const auto window
               = std::pow(1.0 - std::pow(distance / range, 4), 2);
-            const auto lobes = ControlledLobes(
-              { .x = x / distance, .y = y / distance, .z = z / distance },
-              roughness, view);
+            const auto lobes = brdf(
+              { .x = x / distance, .y = y / distance, .z = z / distance });
             if (!lobes) {
               return std::unexpected(lobes.error());
             }
@@ -367,6 +371,7 @@ namespace {
               * cosine_theta * cosine_theta * std::cos(psi) * theta_scale
               * psi_scale * x_node.weight * y_node.weight;
             single.Add(lobes->single_scattering * weight);
+            multiple.Add(lobes->multiple_scattering * weight);
             diffuse.Add(lobes->diffuse * weight);
           }
         }
@@ -374,6 +379,7 @@ namespace {
     }
     return BrdfLobes {
       .single_scattering = single.value,
+      .multiple_scattering = multiple.value,
       .diffuse = diffuse.value,
     };
   }
@@ -418,10 +424,10 @@ namespace {
             << polar.error().last_estimate.radiance.single_scattering;
           const auto first
             = CartesianDisk(source, { .x = 0.0, .y = 0.0, .z = -1.0 }, cone,
-              PerceptualRoughness { roughness }, ViewCosine { view }, 256U);
+              kernel, ViewCosine { view }, 256U);
           const auto second
             = CartesianDisk(source, { .x = 0.0, .y = 0.0, .z = -1.0 }, cone,
-              PerceptualRoughness { roughness }, ViewCosine { view }, 512U);
+              kernel, ViewCosine { view }, 512U);
           ASSERT_TRUE(first.has_value());
           ASSERT_TRUE(second.has_value());
           for (const auto& values : {
@@ -514,12 +520,10 @@ namespace {
                  .last_estimate.estimated_absolute_change.single_scattering;
           const std::uint32_t coarse_order
             = roughness == 0.045 && view == 0.01 ? 1024U : 512U;
-          const auto coarse = CartesianDisk(source, geometry.axis, cone,
-            PerceptualRoughness { roughness }, ViewCosine { view },
-            coarse_order);
-          const auto fine = CartesianDisk(source, geometry.axis, cone,
-            PerceptualRoughness { roughness }, ViewCosine { view },
-            2U * coarse_order);
+          const auto coarse = CartesianDisk(source, geometry.axis, cone, kernel,
+            ViewCosine { view }, coarse_order);
+          const auto fine = CartesianDisk(source, geometry.axis, cone, kernel,
+            ViewCosine { view }, 2U * coarse_order);
           ASSERT_TRUE(coarse.has_value());
           ASSERT_TRUE(fine.has_value());
           for (const auto& values : {
@@ -584,11 +588,9 @@ namespace {
             coarse_order = roughness == 0.045 ? 1024U : 512U;
           }
           const auto first
-            = SphereSurface(source, PerceptualRoughness { roughness },
-              ViewCosine { view }, coarse_order);
-          const auto second
-            = SphereSurface(source, PerceptualRoughness { roughness },
-              ViewCosine { view }, 2U * coarse_order);
+            = SphereSurface(source, kernel, ViewCosine { view }, coarse_order);
+          const auto second = SphereSurface(
+            source, kernel, ViewCosine { view }, 2U * coarse_order);
           ASSERT_TRUE(first.has_value());
           ASSERT_TRUE(second.has_value());
           for (const auto& values : {
@@ -613,6 +615,112 @@ namespace {
       }
     }
     RecordProperty("maximum_relative_error", maximum_relative_error);
+  }
+
+  NOLINT_TEST(
+    FiniteEmitterOffAxisTest, CoupledRgbMatchesIndependentAreaIntegrals)
+  {
+    const auto material = StandardMaterial {
+      .base_color = { .red = 0.8, .green = 0.4, .blue = 0.2 },
+      .metallic = 0.25,
+      .specular = 0.5,
+      .roughness = PerceptualRoughness { 1.0 },
+    };
+    const auto channels = ResolveMaterialBrdf(material);
+    ASSERT_TRUE(channels.has_value());
+    const auto view = ViewCosine { 0.5 };
+    const auto view_moments = IntegrateGgxMoments(material.roughness, view);
+    ASSERT_TRUE(view_moments.has_value());
+    // Exact mean integrals at alpha=1; no interpolated moment table.
+    const auto mean = GgxMeanMomentEstimate {
+      .hemispherical_albedo = (4.0 / 3.0) * (1.0 - std::numbers::ln2),
+      .schlick_moment = (111.0 / 35.0) - ((32.0 / 7.0) * std::numbers::ln2),
+    };
+    const auto source = FiniteEmitter {
+      .center = { .x = -0.4, .y = 0.1, .z = 2.0 },
+      .radius = SourceRadiusMetres { 0.4 },
+      .range = InfluenceRangeMetres { 20.0 },
+      .flux = LuminousFluxLumens { 100.0 },
+      .compensation = SourceExposureEv { 1.0 },
+    };
+    const auto axis = UnitDirection { .x = 0.6, .y = 0.0, .z = -0.8 };
+    const auto cone = SpotCone {
+      .inner = InnerHalfAngleRadians { 0.0 },
+      .outer = OuterHalfAngleRadians { kPi / 2.0 },
+    };
+    struct Channel {
+      BrdfReflectance reflectance;
+      double tint { 1.0 };
+    };
+    // Light tint is radiometric scaling, not bounded material reflectance.
+    const auto colors = std::array {
+      Channel { .reflectance = channels->red, .tint = 0.5 },
+      Channel { .reflectance = channels->green, .tint = 1.25 },
+      Channel { .reflectance = channels->blue, .tint = 2.0 },
+    };
+    // Reuse only identical double-precision queries across color channels.
+    auto incident_moments = std::map<ViewCosine, GgxMomentEstimate> {};
+    double maximum_scaled_error = 0.0;
+    unsigned checked_lobes = 0U;
+    for (const auto& color : colors) {
+      SCOPED_TRACE(color.tint);
+      const auto kernel = [&](const UnitDirection& direction)
+        -> std::expected<BrdfLobes, BrdfReferenceError> {
+        const auto cosine = ViewCosine { direction.z };
+        auto found = incident_moments.find(cosine);
+        if (found == incident_moments.end()) {
+          const auto moments = IntegrateGgxMoments(material.roughness, cosine);
+          if (!moments) {
+            ADD_FAILURE() << "Directional moment integration did not converge";
+            return std::unexpected(BrdfReferenceError::kUnrepresentable);
+          }
+          found = incident_moments.emplace(cosine, *moments).first;
+        }
+        return EvaluateGgxBrdfChannel(
+          {
+            .roughness = material.roughness,
+            .light = LightCosine { direction.z },
+            .view = view,
+            .azimuth = RelativeAzimuth { std::atan2(direction.y, direction.x) },
+          },
+          color.reflectance,
+          { .light = found->second, .view = *view_moments, .mean = mean });
+      };
+      auto tinted = source;
+      tinted.flux = LuminousFluxLumens { source.flux.get() * color.tint };
+      for (const bool disk : { false, true }) {
+        SCOPED_TRACE(disk);
+        const auto actual = disk ? IntegrateSpotDisk(tinted, axis, cone, kernel)
+                                 : IntegratePointSphere(tinted, kernel);
+        ASSERT_TRUE(actual.has_value());
+        const auto coarse = disk
+          ? CartesianDisk(source, axis, cone, kernel, view, 32U)
+          : SphereSurface(source, kernel, view, 32U);
+        const auto fine = disk
+          ? CartesianDisk(source, axis, cone, kernel, view, 64U)
+          : SphereSurface(source, kernel, view, 64U);
+        ASSERT_TRUE(coarse.has_value());
+        ASSERT_TRUE(fine.has_value());
+        for (const auto member : {
+               &BrdfLobes::single_scattering,
+               &BrdfLobes::multiple_scattering,
+               &BrdfLobes::diffuse,
+             }) {
+          const auto expected = ((*fine).*member) * color.tint;
+          const auto tolerance = 1.0e-7 + (1.0e-5 * expected);
+          EXPECT_GT(expected, 0.0);
+          EXPECT_NEAR(((*coarse).*member) * color.tint, expected, tolerance);
+          const auto measured = actual->radiance.*member;
+          EXPECT_NEAR(measured, expected, tolerance);
+          maximum_scaled_error = std::max(
+            maximum_scaled_error, std::abs(measured - expected) / tolerance);
+          ++checked_lobes;
+        }
+      }
+    }
+    EXPECT_EQ(checked_lobes, 18U);
+    RecordProperty("maximum_fraction_of_error_budget", maximum_scaled_error);
+    RecordProperty("distinct_moment_queries", incident_moments.size());
   }
 
   NOLINT_TEST(FiniteEmitterOffAxisTest,

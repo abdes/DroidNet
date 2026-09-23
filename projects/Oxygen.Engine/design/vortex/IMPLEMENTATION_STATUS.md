@@ -162,8 +162,11 @@ are oxytidy-clean. The tilted/grazing extension now covers 36 additional disk
 cases and nine additional sphere cases. Tangent-cap regularization and
 row-specific peak-plane partitions preserve the equations while resolving the
 grazing ridge. Release passes 15 finite-source tests and the owning Debug suite
-passes all 44 cases. Full coupled-RGB finite-source qualification,
-RGB light tint, complete material evaluation,
+passes all 44 cases. Coupled RGB composition now passes 18 sphere/disk/lobe
+comparisons at roughness one, including HDR tint and source exposure; Debug and
+Release pass all 16 affected finite-source tests, and the changed file is
+oxytidy-clean. This does not qualify general material/texture transport or
+production shading. RGB light-tint transport, complete material evaluation,
 lighting/image probes and instrumentation remain open in B.
 
 A's closure does not establish the final physical renderer. B must supply an

@@ -468,6 +468,33 @@ must still meet their frozen budgets on the final implementation.
 Evidence under `ex07b`: `furnace-reference-{debug,release}.json`,
 `furnace-reference-tidy-verified-final/` and `furnace-reference-checkpoint.json`.
 
+## Coupled RGB finite-source composition
+
+The independent Cartesian-disk and emitting-sphere-surface integrals now accept
+the complete incident BRDF and accumulate all three lobes. Existing smooth,
+grazing and horizon cases use the same helpers without compatibility overloads.
+The added RGB case combines base color `(0.8,0.4,0.2)`, metallic `0.25`,
+specular `0.5`, roughness `1`, view cosine `0.5`, source EV `+1` and linear
+light tint `(0.5,1.25,2)`. It checks an off-axis sphere and a tilted disk with
+a soft 90-degree outer half-angle. Material reflectance remains bounded;
+light tint is a radiometric scale and may exceed one.
+
+The apparent-cap/polar integrators receive flux scaled by each tint channel;
+the independent area integrals instead scale their final responses. All
+**18 channel/shape/lobe comparisons** have positive response and pass
+`1e-7 + 1e-5*reference`, with maximum error below **1.75e-10** of that budget.
+Independent area orders 32/64 also agree within the same tolerance. Directional
+moments are integrated at 36,544 distinct cosine queries, with exact-key caching
+across channels and no interpolation; mean moments use the analytic roughness-one
+values. This is a composition and geometric-integration check, not an independent
+certificate for every sampled moment or a production RGB shader qualification.
+
+Debug and Release pass all **16 finite-source tests**. The final Release binary
+also passes the new case after the lint fixes. The changed C++ file is
+oxytidy-clean without suppressions. Evidence under `ex07b`:
+`finite-rgb-{debug,release}.json`, `finite-rgb-final-release.json`,
+`finite-rgb-tidy-verified/` and `finite-rgb-checkpoint.json`.
+
 ## Qualification boundary and next work
 
 The [mean certificates](EX07B-mean-moment-certificates.md) now supply
@@ -484,7 +511,7 @@ and the current matrix do not yet certify the complete interior domain.
 The independent certifier can qualify additional pointwise moment queries;
 the C++ refinement estimator alone cannot. Mean queries likewise require their
 own certificate; the six-query matrix cannot qualify arbitrary interpolation.
-B still requires broader finite-source reference qualification, RGB light tint and complete material evaluation,
+B still requires complete material evaluation and RGB light-tint transport,
 known-input GPU probes, deterministic matched-image fixtures and bounded
 instrumentation. Production tables additionally require their own interpolation
 certificate. No generated LUT or renderer change may claim those gates from
