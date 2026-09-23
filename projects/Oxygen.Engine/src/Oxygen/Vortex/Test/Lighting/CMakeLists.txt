@@ -14,6 +14,9 @@ gtest_program(
     "LightGridLookup_test.cpp"
     "ShadowRecordAbi_test.cpp"
     "ShadowAllocationRequirements_test.cpp"
+    "MaterialDecodeGpu_test.cpp"
+    "Reference/MaterialDecode.cpp"
+    "Reference/MaterialDecode.h"
   DEPS
     oxygen::vortex
     oxygen::graphics-direct3d12
@@ -33,6 +36,9 @@ gtest_program(
     "Reference/ReferenceQuadrature.h"
     "Reference/FiniteEmitter.cpp"
     "Reference/FiniteEmitter.h"
+    "Reference/MaterialDecode.cpp"
+    "Reference/MaterialDecode.h"
+    "MaterialDecodeReference_test.cpp"
     "FiniteEmitterReference_test.cpp"
     "PhotometryReference_test.cpp"
     "GgxBrdfReference_test.cpp"

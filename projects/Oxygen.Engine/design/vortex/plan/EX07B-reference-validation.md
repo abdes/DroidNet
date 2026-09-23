@@ -1,6 +1,6 @@
 # EX07B reference validation
 
-Status: **in_progress — independent GGX/BRDF, photometry and finite-emitter integration implemented; B is not qualified.**
+Status: **in_progress — independent physical references and native material decoding implemented; B is not qualified.**
 
 The [EX07 plan](EX07-lighting-correctness-and-scalability.md) owns the full
 reference/instrument gate. The [PBR specification](../../renderer-core/physically-based-rendering.md#shared-equations-and-numerical-domain)
@@ -288,6 +288,58 @@ Evidence under `ex07b`: `finite-reference-{debug,release}.json`,
 `finite-reference-narrow-tidy/`, `finite-narrow-negative.log` and
 `finite-reference-checkpoint.json`.
 
+## Packed material decoding and native format probe
+
+`Reference/MaterialDecode.{h,cpp}` decodes exact stored texel words independently
+of production C++/HLSL helpers. Distinct packed-word types prevent mixing normal,
+material and color inputs. The formats come from `SceneTextures::GBufferFormat`:
+
+| Product    | Native format     | Interpretation                                                               |
+| ---------- | ----------------- | ---------------------------------------------------------------------------- |
+| Normal     | R10G10B10A2_UNORM | R/G hold the octahedral normal; decode/unfold/normalize in double precision. |
+| Material   | RGBA8_UNORM       | Metallic, specular, roughness, raw shading-model code.                       |
+| Base color | RGBA8_UNORM_SRGB  | Ideal sRGB-to-linear RGB; alpha remains linear ambient occlusion.            |
+
+The decoder consumes stored codes rather than predicting implementation-dependent
+raster rounding. It preserves decoded roughness; the 0.045 floor remains owned
+by BRDF evaluation. Default specular stored as code 128 becomes `128/255`, giving
+dielectric F0 `0.04015686274509804`, not exactly 0.04. Resolve each RGB channel with
+the approved `F0=lerp(0.08*specular,base,metallic)` and `rho=base*(1-metallic)`.
+Invalid reflectance operands fail instead of silently clamping.
+
+Four CPU tests check independent sRGB anchors on both sides of the transfer
+threshold, linear AO, upper/lower octahedral hemispheres, unused normal lanes,
+quantized roughness/specular and dielectric/metal/mixed reflectance channels.
+The native `NativeGBufferFormatsMatchIndependentMaterialDecoder` test uploads
+256 known texels into actual textures in all three formats and reads them through
+D3D12 SRVs. It executes production `DecodeGBufferNormal`, `DecodeGBufferMaterial`,
+`DecodeGBufferBaseColor` and `ComputeMetallicF0`. It covers every 8-bit code,
+normal landmarks around the fold and all shading-code bytes. Preserving a raw
+shading code does not authorize that model for a lighting path.
+
+The [Direct3D functional specification, section 3.2.3.7](https://microsoft.github.io/DirectX-Specs/d3d/archive/D3D11_3_FunctionalSpec.htm)
+permits SRGB-to-FLOAT conversion error of half an encoded integer code, measured
+by ideal inverse conversion; endpoints must be exact. The probe applies that
+format contract and reports actual linear-space error separately. For F0/rho,
+it propagates the measured base-color conversion difference through their linear
+coefficients, then allows 1e-6 for shader arithmetic. Normal components use an
+absolute 2e-6 limit; UNORM scalars use 1e-7. These format/decode checks do not
+widen the frozen end-to-end packed-material/BRDF budget of `2% + 2e-5`.
+
+Debug and Release each pass all **25 native tests**, with no warning/error log
+entries. Both report maximum normal-component difference 2.006e-7, maximum
+sRGB-code error 0.429605 and maximum linear-color difference 0.00374875.
+The owning Debug CPU suite passes **36/36 tests**; focused Release passes all
+four new CPU material tests. All six changed C++ files,
+including fixture headers and tests, are oxytidy-clean without new suppressions.
+This qualifies decoding of supplied texels and reflectance operands. Texture
+sampling/factor composition, normal mapping, surface eligibility, actual base-pass
+writes and complete forward/deferred lighting images require their own fixtures.
+No production material or rendering behavior changes here.
+Evidence under `ex07b`: `material-native-{debug,release}.json`,
+`material-reference-{debug,release}.json`, `material-reference-tidy-verified/`,
+`material-normal-landmarks-tidy/` and `material-reference-checkpoint.json`.
+
 ## Qualification boundary and next work
 
 `estimated_absolute_change` is eight times the difference between successive
@@ -299,7 +351,7 @@ and the current matrix do not yet certify the complete interior domain.
 The independent certifier can qualify additional pointwise moment queries;
 the C++ refinement estimator alone cannot. B still requires general mean-moment
 uncertainty certification, broader smooth/grazing furnace qualification,
-broader finite-source reference qualification, RGB/tint and material decoding,
+broader finite-source reference qualification, RGB light tint and complete material evaluation,
 known-input GPU probes, deterministic matched-image fixtures and bounded
 instrumentation. Production tables additionally require their own interpolation
 certificate. No generated LUT or renderer change may claim those gates from

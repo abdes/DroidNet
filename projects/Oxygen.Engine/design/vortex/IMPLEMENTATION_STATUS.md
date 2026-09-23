@@ -121,31 +121,29 @@ user confirmed the spotlight repair and stable lower offscreen views; the
 boundary. The [review](plan/EX07A-contract-review.md) retains prior checkpoints,
 including the committed MSVC heap-leak repair.
 
-The [B reference foundation](plan/EX07B-reference-validation.md) has independent
-CPU-only GGX directional/mean moments and the approved three-lobe coupled BRDF,
-with typed angular inputs and bounded refinement/failure diagnostics. Analytic
-limits and 12 high-precision endpoint anchors cross-check the quadrature. The
+The [B reference foundation](plan/EX07B-reference-validation.md) now covers
+independent CPU GGX directional/mean moments, the approved three-lobe BRDF,
+punctual photometry, finite sphere/disk integration and packed-material decoding.
+Typed physical/angular/packed inputs prevent accidental interchange. Analytic
+limits and independent area/angle integrals qualify the tested cases; bounded
+refinement fails explicitly when work is exhausted. The separate
 [pointwise certificate](plan/EX07B-moment-certificates.md) supplies rigorous
-FLINT/Arb enclosures at 55 parameter pairs; C++ distance bounds stay below 1.71e-9
-against the frozen 1e-5 budget. Six generator safety checks pass; generated data
-is reproducible and formatter-stable. This certifies those queries, not arbitrary
-interpolation. All 16 C++ tests pass in Debug and Release, including the tested
-reciprocity/furnace matrix (maximum errors 6.56e-16 relative / 6.40e-5 absolute).
-All six changed
-C++ files are oxytidy-clean. The independent punctual-photometry reference now
-adds typed lux/lumen/candela conversion, both-angle spot normalization, source
-compensation and range/guard checks. Its five new tests pass in Release and the
-owning 21-test Debug suite passes. Maximum spotlight flux error is 8.03e-15
-relative; the three new C++ files are oxytidy-clean.
-The finite-emitter oracle now integrates spheres through their apparent caps
-and disks through clipped unit-area domains, retaining each BRDF lobe and the
-specified range/guard. The eleven finite-emitter cases cover analytic
-limits, independent area/angle integrals and finite contributions missed by
-center-only rejection, including a regression for rounded-unit-cosine narrow
-support. All 32 reference tests pass in both Debug and Release;
-all six changed C++ files are oxytidy-clean. General mean uncertainty, broader
-smooth/grazing furnace and finite-source qualification, RGB/tint and material decoding,
-GPU/image checks and instrumentation remain open in B.
+FLINT/Arb enclosures at 55 parameter pairs, with C++ distance bounds below 1.71e-9
+against the 1e-5 budget. High-precision endpoint anchors, generated-data
+reproducibility and generator safety checks remain qualified. These certificates
+do not establish arbitrary interpolation or general mean uncertainty.
+
+The current native material probe reads actual 10-bit normal, 8-bit scalar and
+sRGB texture formats through production HLSL decoding and F0 helpers, covering
+all byte codes and normal-fold landmarks. The probe passes with maximum
+normal error 2.006e-7 and sRGB error 0.429605 encoded codes (within the format's
+half-code limit). The end-to-end lighting budget is unchanged. Debug passes all
+36 CPU reference tests; both configurations pass all 25 native tests, and
+Release passes the four new CPU material tests. The changed C++ files are
+oxytidy-clean. Earlier BRDF/furnace and finite-source checks remain recorded in
+the reference evidence. General mean uncertainty, broader smooth/grazing furnace
+and finite-source qualification, RGB light tint, complete material evaluation,
+lighting/image probes and instrumentation remain open in B.
 
 A's closure does not establish the final physical renderer. B must supply an
 independent double-precision oracle, moment uncertainty and known-input probes,
