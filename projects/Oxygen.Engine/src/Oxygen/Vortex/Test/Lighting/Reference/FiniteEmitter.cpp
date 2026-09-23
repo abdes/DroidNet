@@ -23,6 +23,8 @@ namespace oxygen::vortex::testing::reference {
 namespace {
   constexpr auto kPi = std::numbers::pi_v<double>;
   constexpr auto kCircle = 2.0 * kPi;
+  constexpr double kUnitLengthTolerance = 1.0e-12;
+  constexpr std::uint32_t kMaximumQuadratureOrder = 1024U;
   using LobeResult = std::expected<BrdfLobes, EmitterIntegrationFailure>;
 
   struct Vector {
@@ -84,11 +86,21 @@ namespace {
   {
     return std::isfinite(value) && value >= 0.0;
   }
+  auto ValidPeak(const std::optional<UnitDirection>& peak) -> bool
+  {
+    if (!peak) {
+      return true;
+    }
+    const auto length = std::hypot(peak->x, peak->y, peak->z);
+    return std::isfinite(length)
+      && std::abs(length - 1.0) <= kUnitLengthTolerance;
+  }
   auto Valid(const FiniteEmitter& emitter, const IncidentBrdf& brdf,
     const EmitterIntegrationSettings settings) -> bool
   {
-    return brdf && std::isfinite(emitter.center.x)
-      && std::isfinite(emitter.center.y) && std::isfinite(emitter.center.z)
+    return brdf && ValidPeak(settings.peak_direction)
+      && std::isfinite(emitter.center.x) && std::isfinite(emitter.center.y)
+      && std::isfinite(emitter.center.z)
       && NonnegativeFinite(emitter.radius.get())
       && NonnegativeFinite(emitter.range.get())
       && NonnegativeFinite(emitter.flux.get())
@@ -96,16 +108,45 @@ namespace {
       && std::isfinite(settings.absolute_tolerance)
       && settings.absolute_tolerance > 0.0
       && NonnegativeFinite(settings.relative_tolerance)
-      && settings.initial_order >= 4U && settings.maximum_order <= 512U
+      && settings.initial_order >= 4U
+      && settings.maximum_order <= kMaximumQuadratureOrder
       && std::has_single_bit(settings.initial_order)
       && std::has_single_bit(settings.maximum_order)
       && settings.initial_order <= settings.maximum_order / 4U;
   }
 
-  struct Arc {
+  struct IntegrationInterval {
     double start;
     double end;
   };
+  struct PolarPeak {
+    double radial;
+    double azimuth;
+  };
+  auto SplitIntervals(const std::vector<IntegrationInterval>& intervals,
+    const std::optional<double> split) -> std::vector<IntegrationInterval>
+  {
+    if (!split) {
+      return intervals;
+    }
+    auto result = std::vector<IntegrationInterval> {};
+    for (const auto interval : intervals) {
+      if (*split > interval.start && *split < interval.end) {
+        result.push_back({ .start = interval.start, .end = *split });
+        result.push_back({ .start = *split, .end = interval.end });
+      } else {
+        result.push_back(interval);
+      }
+    }
+    return result;
+  }
+  auto PeakAzimuth(
+    const Vector direction, const Vector first, const Vector second) -> double
+  {
+    const auto angle
+      = std::atan2(Dot(direction, second), Dot(direction, first));
+    return angle < 0.0 ? angle + kCircle : angle;
+  }
   struct AngularHalfSpace {
     double constant;
     double cosine;
@@ -115,20 +156,20 @@ namespace {
     double phase;
     double half_width;
   };
-  auto ClipWindow(const std::vector<Arc>& arcs, const AngularWindow window)
-    -> std::vector<Arc>
+  auto ClipWindow(const std::vector<IntegrationInterval>& arcs,
+    const AngularWindow window) -> std::vector<IntegrationInterval>
   {
     auto phase = window.phase;
     if (phase < 0.0) {
       phase += kCircle;
     }
     const auto half_width = window.half_width;
-    auto result = std::vector<Arc> {};
+    auto result = std::vector<IntegrationInterval> {};
     for (const auto shift : { -kCircle, 0.0, kCircle }) {
       const auto start = phase - half_width + shift;
       const auto end = phase + half_width + shift;
       for (const auto arc : arcs) {
-        const auto clipped = Arc {
+        const auto clipped = IntegrationInterval {
           .start = std::max(arc.start, start),
           .end = std::min(arc.end, end),
         };
@@ -141,15 +182,15 @@ namespace {
   }
 
   //! Intersect azimuth arcs with a + b*cos(phi) + c*sin(phi) > 0.
-  auto Clip(const std::vector<Arc>& arcs, const AngularHalfSpace constraint)
-    -> std::vector<Arc>
+  auto Clip(const std::vector<IntegrationInterval>& arcs,
+    const AngularHalfSpace constraint) -> std::vector<IntegrationInterval>
   {
     const auto a = constraint.constant;
     const auto b = constraint.cosine;
     const auto c = constraint.sine;
     const auto amplitude = std::hypot(b, c);
     if (amplitude == 0.0) {
-      return a > 0.0 ? arcs : std::vector<Arc> {};
+      return a > 0.0 ? arcs : std::vector<IntegrationInterval> {};
     }
     if (a >= amplitude) {
       return arcs;
@@ -170,8 +211,9 @@ namespace {
     double radius;
     double phase;
   };
-  auto ClipCircle(const std::vector<Arc>& arcs, const CircleSupport support,
-    const double ring_radius) -> std::vector<Arc>
+  auto ClipCircle(const std::vector<IntegrationInterval>& arcs,
+    const CircleSupport support, const double ring_radius)
+    -> std::vector<IntegrationInterval>
   {
     const auto p = support.center_distance;
     const auto b = support.radius;
@@ -394,45 +436,71 @@ auto IntegratePointSphere(const FiniteEmitter& emitter,
   if (minimum >= maximum) {
     return EmitterIntegral {};
   }
+  auto peak = std::optional<PolarPeak> {};
+  if (settings.peak_direction && settings.peak_direction->z > 0.0) {
+    const auto candidate = Vector {
+      .x = settings.peak_direction->x,
+      .y = settings.peak_direction->y,
+      .z = settings.peak_direction->z,
+    };
+    const auto ray = Normalize(candidate, Length(candidate));
+    const auto sine = Length(Cross(axis, ray));
+    // An exterior peak still identifies the closest cap edge in azimuth.
+    peak = PolarPeak {
+      .radial = Dot(axis, ray) > 0.0 && sine <= ratio
+        ? (sine / ratio) * (sine / ratio)
+        : 1.0,
+      .azimuth = PeakAzimuth(ray, first, second),
+    };
+  }
+
+  const auto radial_intervals
+    = SplitIntervals({ { .start = minimum, .end = maximum } },
+      peak ? std::optional { peak->radial } : std::nullopt);
   const auto source_scale = intensity->get() / distance / distance / kCircle;
   return Refine(
     [&](const std::uint32_t order, std::uint64_t& evaluations) -> LobeResult {
       auto sum = LobeSum {};
-      for (const auto& radial : detail::AngularRule(order)) {
-        const auto u
-          = minimum + ((maximum - minimum) * radial.angle * 2.0 / kPi);
-        const auto sine = ratio * std::sqrt(u);
-        const auto cosine = std::sqrt(1.0 - (ratio_squared * u));
-        const auto ray_distance = (distance - radius) * (1.0 + ratio)
-          / (cosine + (ratio * std::sqrt(1.0 - u)));
-        const auto factor = PunctualDistanceFactor(
-          DistanceMetres { ray_distance }, emitter.range);
-        if (!factor) {
-          return Failure(factor.error());
-        }
-        const auto illumination
-          = source_scale / cosine * ray_distance * ray_distance * *factor;
-        const auto arcs = Clip({ { .start = 0.0, .end = kCircle } },
-          {
-            .constant = axis.z * cosine,
-            .cosine = first.z * sine,
-            .sine = second.z * sine,
-          });
-        for (const auto arc : arcs) {
-          for (const auto& angular : detail::AngularRule(order)) {
-            const auto phi
-              = arc.start + ((arc.end - arc.start) * angular.angle * 2.0 / kPi);
-            const auto ray = Add(Scale(axis, cosine),
-              Add(Scale(first, sine * std::cos(phi)),
-                Scale(second, sine * std::sin(phi))));
-            ++evaluations;
-            const auto sample = Sample(brdf, ray, illumination);
-            if (!sample) {
-              return std::unexpected(sample.error());
+      for (const auto interval : radial_intervals) {
+        const auto radial_width = interval.end - interval.start;
+        for (const auto& radial : detail::AngularRule(order)) {
+          const auto u
+            = interval.start + (radial_width * radial.angle * 2.0 / kPi);
+          const auto sine = ratio * std::sqrt(u);
+          const auto cosine = std::sqrt(1.0 - (ratio_squared * u));
+          const auto ray_distance = (distance - radius) * (1.0 + ratio)
+            / (cosine + (ratio * std::sqrt(1.0 - u)));
+          const auto factor = PunctualDistanceFactor(
+            DistanceMetres { ray_distance }, emitter.range);
+          if (!factor) {
+            return Failure(factor.error());
+          }
+          const auto illumination
+            = source_scale / cosine * ray_distance * ray_distance * *factor;
+          auto arcs = Clip({ { .start = 0.0, .end = kCircle } },
+            {
+              .constant = axis.z * cosine,
+              .cosine = first.z * sine,
+              .sine = second.z * sine,
+            });
+          arcs = SplitIntervals(
+            arcs, peak ? std::optional { peak->azimuth } : std::nullopt);
+          for (const auto arc : arcs) {
+            for (const auto& angular : detail::AngularRule(order)) {
+              const auto phi = arc.start
+                + ((arc.end - arc.start) * angular.angle * 2.0 / kPi);
+              const auto ray = Add(Scale(axis, cosine),
+                Add(Scale(first, sine * std::cos(phi)),
+                  Scale(second, sine * std::sin(phi))));
+              ++evaluations;
+              const auto sample = Sample(brdf, ray, illumination);
+              if (!sample) {
+                return std::unexpected(sample.error());
+              }
+              const auto weight = radial_width * (arc.end - arc.start)
+                * radial.weight * angular.weight * 4.0 / (kPi * kPi);
+              sum.Add(*sample, weight);
             }
-            const auto weight = (maximum - minimum) * (arc.end - arc.start)
-              * radial.weight * angular.weight * 4.0 / (kPi * kPi);
-            sum.Add(*sample, weight);
           }
         }
       }
@@ -452,7 +520,6 @@ auto IntegrateSpotDisk(const FiniteEmitter& emitter,
   const auto axis_input
     = Vector { .x = emitted_axis.x, .y = emitted_axis.y, .z = emitted_axis.z };
   const auto axis_length = Length(axis_input);
-  constexpr double kUnitLengthTolerance = 1.0e-12;
   if (!std::isfinite(axis_length)
     || std::abs(axis_length - 1.0) > kUnitLengthTolerance) {
     return Failure(EmitterIntegrationError::kInvalidInput);
@@ -545,50 +612,80 @@ auto IntegrateSpotDisk(const FiniteEmitter& emitter,
   if (minimum >= maximum) {
     return EmitterIntegral {};
   }
+  auto peak = std::optional<PolarPeak> {};
+  if (settings.peak_direction && settings.peak_direction->z > 0.0) {
+    const auto candidate = Vector {
+      .x = settings.peak_direction->x,
+      .y = settings.peak_direction->y,
+      .z = settings.peak_direction->z,
+    };
+    const auto ray = Normalize(candidate, Length(candidate));
+    const auto facing = -Dot(axis, ray);
+    if (facing > 0.0) {
+      const auto ray_distance = height / facing;
+      if (std::isfinite(ray_distance) && ray_distance < range) {
+        const auto offset = Add(Scale(ray, ray_distance), Scale(center, -1.0));
+        const auto radial
+          = std::hypot(Dot(offset, first), Dot(offset, second)) / radius;
+        // Beyond the rim, keep the azimuth split to resolve a bright edge.
+        peak = PolarPeak {
+          .radial = radial < 1.0 ? radial : 1.0,
+          .azimuth = PeakAzimuth(offset, first, second),
+        };
+      }
+    }
+  }
+  const auto radial_intervals
+    = SplitIntervals({ { .start = minimum, .end = maximum } },
+      peak ? std::optional { peak->radial } : std::nullopt);
   const auto geometry_scale = std::max(distance, radius);
   const auto scaled_center = Scale(center, 1.0 / geometry_scale);
   return Refine(
     [&](const std::uint32_t order, std::uint64_t& evaluations) -> LobeResult {
       auto sum = LobeSum {};
-      for (const auto& radial : detail::AngularRule(order)) {
-        const auto rho
-          = minimum + ((maximum - minimum) * radial.angle * 2.0 / kPi);
-        const auto scaled_radius = radius * rho / geometry_scale;
-        auto arcs = Clip({ { .start = 0.0, .end = kCircle } },
-          {
-            .constant = scaled_center.z,
-            .cosine = scaled_radius * first.z,
-            .sine = scaled_radius * second.z,
-          });
-        if (clipped_distance) {
-          arcs = ClipCircle(arcs, support, radius * rho);
-        }
-        for (const auto arc : arcs) {
-          for (const auto& angular : detail::AngularRule(order)) {
-            const auto phi
-              = arc.start + ((arc.end - arc.start) * angular.angle * 2.0 / kPi);
-            const auto ray = Add(center,
-              Add(Scale(first, radius * rho * std::cos(phi)),
-                Scale(second, radius * rho * std::sin(phi))));
-            const auto factor = PunctualDistanceFactor(
-              DistanceMetres { Length(ray) }, emitter.range);
-            if (!factor) {
-              return Failure(factor.error());
+      for (const auto interval : radial_intervals) {
+        const auto radial_width = interval.end - interval.start;
+        for (const auto& radial : detail::AngularRule(order)) {
+          const auto rho
+            = interval.start + (radial_width * radial.angle * 2.0 / kPi);
+          const auto scaled_radius = radius * rho / geometry_scale;
+          auto arcs = Clip({ { .start = 0.0, .end = kCircle } },
+            {
+              .constant = scaled_center.z,
+              .cosine = scaled_radius * first.z,
+              .sine = scaled_radius * second.z,
+            });
+          if (clipped_distance) {
+            arcs = ClipCircle(arcs, support, radius * rho);
+          }
+          arcs = SplitIntervals(
+            arcs, peak ? std::optional { peak->azimuth } : std::nullopt);
+          for (const auto arc : arcs) {
+            for (const auto& angular : detail::AngularRule(order)) {
+              const auto phi = arc.start
+                + ((arc.end - arc.start) * angular.angle * 2.0 / kPi);
+              const auto ray = Add(center,
+                Add(Scale(first, radius * rho * std::cos(phi)),
+                  Scale(second, radius * rho * std::sin(phi))));
+              const auto factor = PunctualDistanceFactor(
+                DistanceMetres { Length(ray) }, emitter.range);
+              if (!factor) {
+                return Failure(factor.error());
+              }
+              const auto profile = angular_weight(ray);
+              if (!profile) {
+                return Failure(profile.error());
+              }
+              ++evaluations;
+              const auto sample = Sample(
+                brdf, ray, intensity->get() / kPi * *profile * *factor);
+              if (!sample) {
+                return std::unexpected(sample.error());
+              }
+              const auto weight = rho * radial_width * (arc.end - arc.start)
+                * radial.weight * angular.weight * 4.0 / (kPi * kPi);
+              sum.Add(*sample, weight);
             }
-            const auto profile = angular_weight(ray);
-            if (!profile) {
-              return Failure(profile.error());
-            }
-            ++evaluations;
-            const auto sample
-              = Sample(brdf, ray, intensity->get() / kPi * *profile * *factor);
-            if (!sample) {
-              return std::unexpected(sample.error());
-            }
-            const auto weight = rho * (maximum - minimum)
-              * (arc.end - arc.start) * radial.weight * angular.weight * 4.0
-              / (kPi * kPi);
-            sum.Add(*sample, weight);
           }
         }
       }

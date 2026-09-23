@@ -250,7 +250,8 @@ center-ray cone or center-below-horizon rejection substitutes for finite support
 
 The original Gauss-Legendre rule and compensated sum now live in the shared
 test-only `ReferenceQuadrature` helper, with their arithmetic unchanged.
-Power-of-two refinement is bounded at 512 per dimension. Two successive rules
+Power-of-two refinement is bounded at 1024 per dimension, with the default
+maximum still 256. Two successive rules
 must meet the absolute-plus-relative tolerance independently for every lobe.
 Callback failures preserve their cause; exhausted work preserves the last
 estimate. A refinement without any sampled geometric support cannot establish
@@ -287,6 +288,45 @@ No renderer behavior or shadow technique changes in this checkpoint.
 Evidence under `ex07b`: `finite-reference-{debug,release}.json`,
 `finite-reference-narrow-tidy/`, `finite-narrow-negative.log` and
 `finite-reference-checkpoint.json`.
+
+### Off-axis and source-edge qualification
+
+`FiniteEmitterOffAxis_test.cpp` compares 18 disk and 18 sphere cases using
+roughness 0.045/0.25/1, view cosines 0.5/1 and three source offsets. The last
+offset places the mirror direction just beyond the source rim. These controlled
+kernels carry a GGX single-scattering lobe and a separate Lambertian response;
+they isolate geometry/transport accuracy without pretending that a rough PBR
+material is Lambertian. The cases also exercise source compensation and the
+specified range window.
+
+Uniform polar refinement reached its work ceiling for a narrow off-axis GGX
+highlight. `EmitterIntegrationSettings::peak_direction` now permits a known
+unit lobe direction to partition the radial and azimuth domains. The GGX mirror
+direction supplies it in these fixtures. A peak outside the source can still
+split azimuth to resolve the bright rim; radial splitting is confined to the
+actual integration interval. This only changes quadrature partitions, not
+emission, geometry, BRDF or visibility. It is an offline sampling hint, not an
+authored material/light property. Flat-response checks show partition invariance,
+and invalid directions fail explicitly. The optional work ceiling is 1024;
+the ordinary default remains 256.
+
+The independent disk calculation integrates Cartesian unit-area coordinates
+`x=sin(theta), y=cos(theta)*sin(psi)` with Jacobian
+`cos(theta)^2*cos(psi)`. The independent sphere calculation integrates emitting
+surface normals over the visible cap and retains the emission cosine explicitly.
+Both use 256/512-order comparisons and split at the mirror direction where
+applicable. Their coordinates and Jacobians differ from the oracle's polar disk
+and apparent sphere cap. All comparisons retain `1e-7 + 1e-5*reference` limits.
+
+The Release finite-source suites pass **14/14 tests**, and the owning Debug
+suite passes **43/43**. Maximum relative
+differences are **1.838e-11 for disks** and **2.740e-6 for spheres**. The owning
+Debug comparisons match these results; the three changed C++ files are oxytidy-clean. Tilted-axis,
+grazing/horizon and full coupled-RGB finite-source fixture qualification remains
+open. This checkpoint changes no production shader or runtime rendering cost.
+Evidence under `ex07b`: `finite-offaxis-{debug,release}.json`,
+`finite-offaxis-limit-negative.log`, `finite-offaxis-tidy-verified/` and
+`finite-offaxis-checkpoint.json`.
 
 ## Packed material decoding and native format probe
 
