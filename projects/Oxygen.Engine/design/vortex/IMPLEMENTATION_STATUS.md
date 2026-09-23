@@ -689,13 +689,14 @@ No EX06 delivery item remains open.
 
 **EX07 overall: in progress. A and B are complete. C is active.**
 
-**2026-09-24 active migration: production model 2.** The user authorized adopting
+**2026-09-24 production model 2: implemented and test-validated.** The user authorized adopting
 UE-style analytic finite emitters and view-dependent energy compensation,
 removing runtime quadrature/compensated cone evaluation and reducing BRDF data
 to one compact hardware-filtered texture. Ordinary spots return to cone proxies
 and projected shadows. Prior hard numerical budgets are superseded as production
 acceptance gates; report measured quality, performance and memory for the user's
-decision. Implementation and fresh native/image/1440p evidence are in progress.
+decision. Implementation, native/image tests and 1440p captures are recorded below;
+quality/performance acceptance remains the user's decision.
 The checkpoints below describe their original code and do not validate model 2.
 
 
@@ -1065,6 +1066,51 @@ directory: `reviewed-{LightingGpuAbi,LightingImageReference}-{debug,release}.jso
 SHA256 is `dd42eb5025737639e566ce3695442e53b4c0e058b41eb6685ff98ce61b10bd7c`.
 These individual captures do not constitute D-F's repeated official workload
 qualification; the remaining ownership above is unchanged.
+
+
+**Model-2 implementation and measurement checkpoint.** Contract update
+`0a35e790d` and implementation `0e0741619` replace source quadrature with analytic
+finite-source shading, center-cone attenuation, view-dependent compensation and
+one 32x32 hardware-filtered RG32Float energy texture. The old numerical evaluator
+and dense data are retained under Test. Ordinary spots use cone proxies and one
+projected shadow; hemispheres retain cube coverage. CPU/HLSL records and all
+consumers/tools migrate together, without a shipping legacy path.
+
+Debug and Release each pass 94 owning checks: 36 native lighting/ABI, 10 image,
+30 lighting-service and 18 shadow-service. The 96-case finite-source comparison
+includes an antipodal fully rough source; the zero-half-vector case is finite.
+Release's added-case CPU reference axis was normalized and that case alone was
+rerun; consolidated evidence preserves the initial run and focused rerun. Eight
+measurement-validator tests pass. No linting was run.
+
+At fullscreen 2560x1440 with FPS target zero and tearing, the final 600-frame
+Tracy run (64 warmup frames excluded) records mean/median/p95 frame intervals
+7.804/7.380/10.760 ms, or 128.14 profiled FPS. Previous same-recipe measurements
+were 13.098 ms / 76.35 FPS. Across the three deferred views, spot time falls
+4.394->0.661 ms, point 2.475->0.865 ms and deferred total 8.427->2.901 ms.
+The native BRDF allocation falls from 4,718,592 to 65,536 bytes; payload falls
+from 4,214,800 to 8,192 bytes. These are measured runs, not an uninstrumented FPS
+claim or final EX07-wide acceptance.
+
+Native integrated-material energy/indirect discrepancy is at most 0.703% in the
+recorded matrix. The full offline LUT grid reports worst/p99 unit-conductor
+energy error 2.888%/0.354%; square-root view mapping improves the same-size linear
+grid's 10.839%/4.257%. Per-case finite-source and cone differences are preserved
+in the report rather than rejected against superseded model-1 budgets.
+
+RenderDoc verifies all three deferred views share the hash-matched energy texture
+and each ordinary spot uses a 144-vertex cone plus one projected shadow. The
+frame-120 image was overexposed and is superseded by frame 2000; all four captured
+exposure states are within 0.000162 EV of target. Source transport, shadow counts,
+actual 2560x1440 output and replay shutdown are verified.
+
+Evidence in `out/build-tracy-ninja/analysis/vortex/exposure-lightbench/ex07c`:
+`model2-results.{md,json}`, `model2-LightingGpuAbi-release-validated.json`,
+`model2-finite-release-rerun.json`, `model2-*-debug.json`,
+`model2-{LightingImageReference,LightingService,ShadowService}-release.json`,
+`multiview-1440p-model2-final.tracy`, and `model2-settled-report.{txt,png}`.
+The measured operating point is ready for the user's visual/performance decision.
+Other EX07C-F obligations remain owned by the existing stage table.
 
 ### 3.5 Slice 8 work items
 
