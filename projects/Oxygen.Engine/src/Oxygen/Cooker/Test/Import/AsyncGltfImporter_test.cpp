@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstddef>
 #include <filesystem>
 #include <fstream>
 #include <memory>
@@ -17,10 +18,11 @@
 #include <string_view>
 #include <vector>
 
+#include "AsyncImporterFullTestBase.h"
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
-
-#include <Oxygen/Testing/GTest.h>
+#include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Content/Loaders/SceneLoader.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
@@ -31,8 +33,7 @@
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Data/SceneAsset.h>
-
-#include "AsyncImporterFullTestBase.h"
+#include <Oxygen/Testing/GTest.h>
 
 namespace {
 
@@ -342,7 +343,10 @@ NOLINT_TEST_F(AsyncGltfImporterFullTest,
       EXPECT_FLOAT_EQ(spots[0].inner_cone_angle_radians, 0.2F);
       EXPECT_FLOAT_EQ(spots[0].outer_cone_angle_radians, 0.5F);
       EXPECT_NEAR(spots[0].luminous_flux_lm,
-        200.0F * std::numbers::pi_v<float> * (1.0F - std::cos(0.5F)), 0.0001F);
+        200.0 * std::numbers::pi
+          * ((1.0 - std::cos(0.2F))
+            + ((std::cos(0.2F) - std::cos(0.5F)) / 3.0)),
+        0.0001);
       ExpectCameraVector(
         { spots[0].common.color_rgb[0], spots[0].common.color_rgb[1],
           spots[0].common.color_rgb[2] },
@@ -379,6 +383,173 @@ NOLINT_TEST_F(AsyncGltfImporterFullTest,
       ExpectCameraVector(
         glm::vec3(CameraWorldTransform(*scene, 2)[3]), { 2, -7, 6 });
     }
+  }
+}
+
+NOLINT_TEST_F(AsyncGltfImporterFullTest,
+  SpotPhotometryPreservesPeakCandelaThroughCookAndLoad)
+{
+  struct Cone {
+    float inner;
+    float outer;
+  };
+  const auto cones = std::array {
+    Cone { .inner = 0.0F, .outer = 0.5F },
+    Cone { .inner = 0.2F, .outer = 0.5F },
+    Cone { .inner = 0.5F, .outer = 0.5F },
+    Cone { .inner = 0.0F, .outer = 1.0e-5F },
+    Cone { .inner = 0.0F, .outer = std::numbers::pi_v<float> / 2.0F },
+    Cone { .inner = 1.2F, .outer = std::numbers::pi_v<float> / 2.0F },
+  };
+  auto lights = nlohmann::json::array();
+  auto nodes = nlohmann::json::array();
+  auto roots = nlohmann::json::array();
+  for (std::size_t index = 0; index < cones.size(); ++index) {
+    const auto cone = cones.at(index);
+    lights.push_back({
+      { "type", "spot" },
+      { "intensity", 100.0F },
+      {
+        "spot",
+        {
+          { "innerConeAngle", cone.inner },
+          { "outerConeAngle", cone.outer },
+        },
+      },
+    });
+    nodes.push_back({
+      { "name", "Spot" + std::to_string(index) },
+      { "extensions", { { "KHR_lights_punctual", { { "light", index } } } } },
+    });
+    roots.push_back(index);
+  }
+  const auto document = nlohmann::json {
+    { "asset", { { "version", "2.0" } } },
+    { "extensionsUsed", { "KHR_lights_punctual" } },
+    { "extensions", { { "KHR_lights_punctual", { { "lights", lights } } } } },
+    { "nodes", nodes },
+    { "scenes", { { { "nodes", roots } } } },
+    { "scene", 0 },
+  };
+  const auto root = MakeTempDir("gltf_spot_photometry");
+  const auto source_path = root / "lights.gltf";
+  {
+    std::ofstream source(source_path);
+    source << document.dump();
+    source.close();
+    ASSERT_TRUE(source.good());
+  }
+  ImportRequest request {};
+  request.source_path = source_path;
+  request.cooked_root = root / "cooked";
+  const auto imported = RunImport(std::move(request));
+  ASSERT_TRUE(imported.report.success);
+  const auto scene = LoadCameraScene(imported.report);
+  ASSERT_TRUE(scene);
+  const auto spots = scene->GetComponents<world::SpotLightRecord>();
+  ASSERT_EQ(spots.size(), cones.size());
+  std::size_t cone_index = 0;
+  for (const auto& spot : spots) {
+    SCOPED_TRACE(cone_index);
+    const auto cone = cones.at(cone_index++);
+    EXPECT_EQ(spot.inner_cone_angle_radians, cone.inner);
+    EXPECT_EQ(spot.outer_cone_angle_radians, cone.outer);
+    const auto inner = static_cast<double>(cone.inner);
+    const auto outer = cone.outer == std::numbers::pi_v<float> / 2.0F
+      ? std::numbers::pi / 2.0
+      : static_cast<double>(cone.outer);
+    // Independently integrate intensity over polar solid angle, using the
+    // cosine-difference identity to retain the narrow cone's angular ramp.
+    constexpr auto kSamples = 32768;
+    const auto step = outer / kSamples;
+    auto integral = 0.0;
+    for (auto sample = 0; sample < kSamples; ++sample) {
+      const auto theta = (sample + 0.5) * step;
+      const auto ramp = theta <= inner
+        ? 1.0
+        : std::sin((outer + theta) / 2.0) * std::sin((outer - theta) / 2.0)
+          / (std::sin((outer + inner) / 2.0) * std::sin((outer - inner) / 2.0));
+      integral += ramp * ramp * std::sin(theta) * step;
+    }
+    const auto solid_angle = 2.0 * std::numbers::pi * integral;
+    EXPECT_NEAR(spot.luminous_flux_lm / solid_angle, 100.0, 2.0e-5);
+  }
+}
+
+NOLINT_TEST_F(
+  AsyncGltfImporterFullTest, InvalidLightPhotometryFailsImportWithoutClamping)
+{
+  const auto invalid_lights = std::array {
+    R"({"type":"point","intensity":-1})",
+    R"({"type":"point","intensity":3e38})",
+    R"({"type":"spot","intensity":-1,"spot":{"innerConeAngle":0.2,"outerConeAngle":0.5}})",
+    R"({"type":"spot","intensity":100,"spot":{"innerConeAngle":-0.1,"outerConeAngle":0.5}})",
+    R"({"type":"spot","intensity":100,"spot":{"innerConeAngle":0.6,"outerConeAngle":0.5}})",
+    R"({"type":"spot","intensity":100,"spot":{"innerConeAngle":0,"outerConeAngle":0}})",
+    R"({"type":"spot","intensity":100,"spot":{"innerConeAngle":0,"outerConeAngle":1.6}})",
+    R"({"type":"spot","intensity":100,"spot":{"innerConeAngle":1.5707963267948966,"outerConeAngle":1.5707963267948966}})",
+    R"({"type":"spot","intensity":1e-30,"spot":{"innerConeAngle":0,"outerConeAngle":1e-5}})",
+  };
+  for (std::size_t index = 0; index < invalid_lights.size(); ++index) {
+    SCOPED_TRACE(invalid_lights.at(index));
+    const auto document = nlohmann::json {
+      { "asset", { { "version", "2.0" } } },
+      { "extensionsUsed", { "KHR_lights_punctual" } },
+      {
+        "extensions",
+        {
+          {
+            "KHR_lights_punctual",
+            {
+              {
+                "lights",
+                {
+                  nlohmann::json { { "type", "point" }, { "intensity", 20 } },
+                  nlohmann::json::parse(invalid_lights.at(index)),
+                },
+              },
+            },
+          },
+        },
+      },
+      {
+        "nodes",
+        {
+          {
+            {
+              "extensions",
+              { { "KHR_lights_punctual", { { "light", 0 } } } },
+            },
+          },
+          {
+            {
+              "extensions",
+              { { "KHR_lights_punctual", { { "light", 1 } } } },
+            },
+          },
+        },
+      },
+      { "scenes", { { { "nodes", { 0, 1 } } } } },
+      { "scene", 0 },
+    };
+    const auto root
+      = MakeTempDir("gltf_invalid_photometry_" + std::to_string(index));
+    const auto source_path = root / "invalid.gltf";
+    {
+      std::ofstream source(source_path);
+      source << document.dump();
+      source.close();
+      ASSERT_TRUE(source.good());
+    }
+    ImportRequest request {};
+    request.source_path = source_path;
+    request.cooked_root = root / "cooked";
+    const auto imported = RunImport(std::move(request));
+    EXPECT_FALSE(imported.report.success);
+    EXPECT_TRUE(std::ranges::any_of(
+      imported.report.diagnostics, [](const auto& diagnostic) -> auto {
+        return diagnostic.code == "scene.light.photometry_invalid";
+      }));
   }
 }
 

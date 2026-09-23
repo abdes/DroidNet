@@ -687,7 +687,7 @@ No EX06 delivery item remains open.
 
 ### 3.4 Slice 7 work items
 
-**EX07 overall: in progress. A and B are complete. Work is paused before C.**
+**EX07 overall: in progress. A and B are complete. C is active.**
 
 This section is the single progress tracker for EX07. **A–F are the ordered
 execution stages. EX07-01–14 are stable deliverable IDs that can span several
@@ -700,15 +700,16 @@ production repair, performance work and final qualification have later owners.
 | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ |
 | **A — Contracts**                  | Reviewed model, property inventory, canonical CPU/HLSL interface, capacities and failure contracts.                                      | **Complete** — [audit](plan/EX07A-completion-audit.md) | Contract/interface groundwork, especially 04 and 12; grid, lifetime and shadow contracts for 08/10/11. |
 | **B — References and instruments** | Independent physical/material/image references, native probes, frozen workloads and bounded instruments.                                 | **Complete** — [audit](plan/EX07B-completion-audit.md) | Reference/oracle portions of 01–06; workload portion of 07; instrument portion of 13.                  |
-| **C — Correctness repair**         | Correct production lighting and retained properties; content migration; complete lists, shadow identities/capacities and safe lifetimes. | **Not started — next on user resumption**              | Remaining correctness in 01–04, 06, 08, 10–12.                                                         |
+| **C — Correctness repair**         | Correct production lighting and retained properties; content migration; complete lists, shadow identities/capacities and safe lifetimes. | **In progress**                                        | Remaining correctness in 01–04, 06, 08, 10–12.                                                         |
 | **D — Baselines and budgets**      | Time only correctness-qualified workloads; freeze CPU/GPU/memory budgets and comparison policy.                                          | **Not started**                                        | 07; baseline/shadow-cost portions of 11/13.                                                            |
 | **E — Scalable optimization**      | Conservative culling and measured shader, submission, upload, resource and shadow improvements.                                          | **Not started**                                        | Optimization portions of 08–11; culling/performance diagnostics in 13.                                 |
 | **F — Final delivery**             | Final-code numerical, native/editor, visual and performance gates; operating documentation and supported limits.                         | **Not started**                                        | 14 and EX07-GATE, rechecking the final implementation of all IDs.                                      |
 
-**Immediate next work is C, not another B investigation.** B's measured physical
+**The user resumed C through F after B's closeout.** B's measured physical
 residuals are inputs to C; successful reference tests do not mean the production
 BRDF is already correct. The user accepted B's overhead item and directed a pause
-after the B closeout. No additional long B benchmark run is required.
+after the B closeout; that pause is now lifted. No additional long B benchmark
+run is required.
 
 #### Numbered deliverables — what is complete and what remains
 
@@ -744,6 +745,20 @@ qualified delivery is claimed. These are item states, distinct from stage states
 No production performance baseline is claimed from the B instrument-overhead
 runs. The 1,024-light preview is fixture correctness evidence; official workload
 qualification and timing remain C/D responsibilities.
+
+C's glTF photometry repair uses both cone angles to preserve imported peak
+candela under the squared angular profile. Double-precision conversion preserves
+narrow cones and the exact float32 90-degree endpoint; invalid cone pairs,
+negative intensity and unrepresentable flux fail scene import. Six independently
+integrated cone profiles pass source/cook/load comparison, and nine invalid
+cases fail explicitly. `Oxygen.Cooker.AsyncImportGltf.Tests` passes all 31 cases
+in Debug and Release; the three affected cases also pass after lint fixes.
+Oxytidy covers both changed C++ files with zero changed-line findings and no new
+suppressions (367 findings remain on unchanged code). Evidence:
+`out/build-ninja/analysis/vortex/exposure-lightbench/ex07c/gltf-{debug,release}.json`,
+`gltf-final-{debug,release}.json` and `gltf-tidy-changed-lines.json` in that directory.
+This closes that conversion defect within 03/12; it does not close either item,
+the GPU cone-boundary/BRDF residuals, scene-v7 migration or native/editor transport.
 
 ### 3.5 Slice 8 work items
 
