@@ -54,7 +54,6 @@ struct StaticSkyLightProducts {
   ShaderVisibleIndex processed_cubemap_srv { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex diffuse_irradiance_sh_srv { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex prefiltered_cubemap_srv { kInvalidShaderVisibleIndex };
-  ShaderVisibleIndex brdf_lut_srv { kInvalidShaderVisibleIndex };
   std::uint32_t processed_cubemap_max_mip { 0U };
   std::uint32_t prefiltered_cubemap_max_mip { 0U };
   std::uint32_t product_revision { 0U };

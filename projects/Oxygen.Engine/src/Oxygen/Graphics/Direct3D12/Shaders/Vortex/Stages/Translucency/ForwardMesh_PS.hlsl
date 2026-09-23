@@ -27,16 +27,6 @@
 #include "Vortex/Services/Lighting/ClusterLookup.hlsli"
 #include "Vortex/Services/Lighting/ForwardDirectLighting.hlsli"
 
-float3 EnvBrdfApprox(float3 F0, float roughness, float NoV)
-{
-  const float4 c0 = float4(-1.0, -0.0275, -0.572, 0.022);
-  const float4 c1 = float4(1.0, 0.0425, 1.04, -0.04);
-  float4 r = roughness * c0 + c1;
-  float a004 = min(r.x * r.x, exp2(-9.28 * NoV)) * r.x + r.y;
-  float2 AB = float2(-1.04, 1.04) * a004 + r.zw;
-  return F0 * AB.x + AB.y;
-}
-
 cbuffer RootConstants : register(b2, space0)
 {
   uint g_DrawIndex;
@@ -121,27 +111,11 @@ static float3 ComputeForwardIblTerm(ForwardEnvironmentState env_state,
       * env_state.data.sky_light.specular_intensity;
   }
 
-  float3 ibl_spec_term = 0.0.xxx;
-#if defined(SKIP_BRDF_LUT)
-  ibl_spec_term = ibl_specular;
-#else
-  if (env_state.data.sky_light.brdf_lut_slot != K_INVALID_BINDLESS_INDEX) {
-    Texture2D<float2> brdf_lut
-      = ResourceDescriptorHeap[env_state.data.sky_light.brdf_lut_slot];
-    uint lut_w = 1u;
-    uint lut_h = 1u;
-    brdf_lut.GetDimensions(lut_w, lut_h);
-    const float2 lut_size = float2(max(lut_w, 1u), max(lut_h, 1u));
-    const float2 uv_raw = saturate(float2(NdotV, surf.roughness));
-    const float2 uv = (uv_raw * (lut_size - 1.0) + 0.5) / lut_size;
-    const float2 brdf = brdf_lut.SampleLevel(linear_sampler, uv, 0.0).rg;
-    ibl_spec_term = ibl_specular * (F0 * brdf.x + brdf.y);
-  } else {
-    ibl_spec_term = ibl_specular * EnvBrdfApprox(F0, surf.roughness, NdotV);
-  }
-#endif
-
-  const float3 diffuse = ibl_diffuse * base_rgb * (1.0f - surf.metalness);
+  const GgxIntegratedLobes response = EvaluateGgxIntegratedLobes(NdotV, F0,
+    base_rgb * (1.0 - surf.metalness), surf.roughness,
+    LoadResolvedLightingFrameBindings());
+  const float3 ibl_spec_term = ibl_specular * response.specular;
+  const float3 diffuse = ibl_diffuse * response.diffuse;
   RecordForwardHdrSource(ibl_spec_term);
   RecordForwardHdrSource(diffuse);
   return ibl_spec_term + diffuse;

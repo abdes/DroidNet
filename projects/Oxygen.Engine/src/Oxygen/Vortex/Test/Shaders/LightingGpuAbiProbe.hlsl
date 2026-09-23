@@ -73,6 +73,16 @@ struct BrdfProbeInput {
     uint means_srv;
 };
 
+struct FurnaceProbeInput {
+    float roughness;
+    float view_cosine;
+    float azimuth;
+    float light_cosine;
+    uint order;
+    uint moments_srv;
+    uint means_srv;
+};
+
 struct MomentProbeInput {
     float roughness;
     float view_cosine;
@@ -330,6 +340,81 @@ void CS(uint3 thread : SV_DispatchThreadID) {
         output.Store4(address, asuint(float4(deferred, distribution)));
         output.Store4(address + 16, asuint(float4(forward, distribution)));
         output.Store4(address + 32, asuint(float4(f0, 0.0)));
+    } else if (g_RecordKind == 23) {
+        StructuredBuffer<BrdfProbeInput> inputs = ResourceDescriptorHeap[args.x];
+        BrdfProbeInput value = inputs[element];
+        float3 N = float3(0, 0, 1);
+        float3 V = float3(sqrt(1.0 - value.view_cosine * value.view_cosine), 0, value.view_cosine);
+        float ls = sqrt(1.0 - value.light_cosine * value.light_cosine);
+        float3 L = float3(ls * cos(value.azimuth), ls * sin(value.azimuth), value.light_cosine);
+        LightingFrameBindings lighting = (LightingFrameBindings)0;
+        lighting.brdf_model_revision = 1u;
+        lighting.brdf_moments_srv = value.moments_srv;
+        lighting.brdf_mean_moments_srv = value.means_srv;
+        float3 f0 = ComputeMetallicF0(value.base_color, value.metallic, value.specular);
+        float3 rho = value.base_color * (1.0 - value.metallic);
+        GgxDirectLobes a = EvaluateGgxDirectLobes(N, V, L, f0, rho, value.roughness, lighting);
+        GgxDirectLobes b = EvaluateGgxDirectLobes(N, L, V, f0, rho, value.roughness, lighting);
+        output.Store3(address, asuint(a.single_scattering / value.light_cosine));
+        output.Store3(address + 12, asuint(a.multiple_scattering / value.light_cosine));
+        output.Store3(address + 24, asuint(a.diffuse / value.light_cosine));
+        output.Store3(address + 36, asuint(b.single_scattering / value.view_cosine));
+        output.Store3(address + 48, asuint(b.multiple_scattering / value.view_cosine));
+        output.Store3(address + 60, asuint(b.diffuse / value.view_cosine));
+    } else if (g_RecordKind == 24) {
+        StructuredBuffer<FurnaceProbeInput> inputs = ResourceDescriptorHeap[args.x];
+        FurnaceProbeInput value = inputs[element];
+        LightingFrameBindings lighting = (LightingFrameBindings)0;
+        lighting.brdf_model_revision = 1u;
+        lighting.brdf_moments_srv = value.moments_srv;
+        lighting.brdf_mean_moments_srv = value.means_srv;
+        const float3 F0 = float3(0.04, 0.45, 1.0);
+        const float3 rho = float3(0.8, 0.25, 0.0);
+        const float mu = value.view_cosine;
+        const float vs = sqrt(1.0 - mu * mu);
+        const float3 N = float3(0, 0, 1);
+        const float3 V = float3(vs, 0, mu);
+        const float alpha = value.roughness * value.roughness;
+        const float cp = cos(value.azimuth);
+        const float sp = sin(value.azimuth);
+        const float projection = vs * cp;
+        const float root = sqrt(projection * projection + mu * mu);
+        const float maximum_tangent = projection >= 0.0
+            ? (root + projection) / mu : mu / (root - projection);
+        const float maximum_psi = atan(maximum_tangent / alpha);
+        float3 single = 0.0.xxx;
+        // Independent half-vector quadrature resolves the smooth NDF peak.
+        // Each dispatch thread owns one azimuth; radial work stays bounded.
+        for (uint radial = 0u; radial < value.order; ++radial) {
+            float psi = (float(radial) + 0.5) * maximum_psi / float(value.order);
+            float sn = sin(psi), cs = cos(psi);
+            float denominator_squared = cs * cs + alpha * alpha * sn * sn;
+            float inverse_denominator = rsqrt(denominator_squared);
+            float sh = alpha * sn * inverse_denominator;
+            float ch = cs * inverse_denominator;
+            float3 H = float3(sh * cp, sh * sp, ch);
+            float vh = dot(V, H);
+            float3 L = 2.0 * vh * H - V;
+            if (L.z > 0.0) {
+                GgxDirectLobes lobes = EvaluateGgxDirectLobes(N, V, L,
+                    F0, rho, value.roughness, lighting);
+                float jacobian = 4.0 * vh * sh * alpha / denominator_squared;
+                single += lobes.single_scattering * jacobian;
+            }
+        }
+        single *= maximum_psi * 2.0 * PI / (float(value.order) * float(value.order));
+        // Smooth compensation/diffuse lobes use a separate incoming-cosine rule.
+        float nl = value.light_cosine;
+        float3 L = float3(sqrt(1.0 - nl * nl), 0, nl);
+        GgxDirectLobes smooth = EvaluateGgxDirectLobes(N, V, L,
+            F0, rho, value.roughness, lighting);
+        GgxIntegratedLobes integrated = EvaluateGgxIntegratedLobes(mu,
+            F0, rho, value.roughness, lighting);
+        output.Store3(address, asuint(single));
+        output.Store3(address + 12, asuint(smooth.multiple_scattering * (2.0 * PI / float(value.order))));
+        output.Store3(address + 24, asuint(smooth.diffuse * (2.0 * PI / float(value.order))));
+        output.Store3(address + 36, asuint(integrated.specular));
+        output.Store3(address + 48, asuint(integrated.diffuse));
     } else if (g_RecordKind == 22) {
         StructuredBuffer<MomentProbeInput> inputs = ResourceDescriptorHeap[args.x];
         MomentProbeInput value = inputs[element];

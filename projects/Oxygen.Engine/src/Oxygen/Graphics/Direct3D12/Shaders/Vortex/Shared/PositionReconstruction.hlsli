@@ -7,6 +7,19 @@
 #ifndef OXYGEN_D3D12_SHADERS_VORTEX_SHARED_POSITIONRECONSTRUCTION_HLSLI
 #define OXYGEN_D3D12_SHADERS_VORTEX_SHARED_POSITIONRECONSTRUCTION_HLSLI
 
+// For an orthographic projection, the inverse VP depth axis is the inverse
+// view's Z axis, scaled by the signed depth interval. Translation has w=0.
+static float3 ResolveSurfaceViewDirection(float3 world_position,
+    float3 camera_world_position, float4x4 inverse_view_projection,
+    uint orthographic, uint reversed_depth)
+{
+    const float3 direction = orthographic != 0u
+        ? mul(inverse_view_projection,
+            float4(0.0, 0.0, reversed_depth != 0u ? 1.0 : -1.0, 0.0)).xyz
+        : camera_world_position - world_position;
+    return normalize(direction);
+}
+
 static inline float4 MakeClipPositionFromScreenUv(float2 screen_uv, float device_depth)
 {
     const float2 ndc_xy = float2(

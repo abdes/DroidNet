@@ -11,6 +11,7 @@
 #include "Vortex/Contracts/Draw/DrawMetadata.hlsli"
 #include "Vortex/Contracts/Draw/MaterialShadingConstants.hlsli"
 #include "Vortex/Shared/PristineGrid.hlsli"
+#include "Vortex/Shared/PositionReconstruction.hlsli"
 #include "Vortex/Contracts/Draw/ProceduralGridMaterialConstants.hlsli"
 #include "Vortex/Contracts/Definitions/MaterialFlags.hlsli"
 #include "Vortex/Stages/Translucency/ForwardPbr.hlsli"
@@ -121,7 +122,8 @@ MaterialSurface EvaluateMaterialSurface(
     if (dot(s.N, s.N) < 0.5) {
         s.N = float3(0.0, 0.0, 1.0);
     }
-    s.V = SafeNormalize(camera_position - world_pos);
+    s.V = ResolveSurfaceViewDirection(world_pos, camera_position,
+        inverse_view_projection_matrix, is_orthographic, reverse_z);
 
     const DrawFrameBindings draw_bindings = LoadResolvedDrawFrameBindings();
     if (draw_bindings.draw_metadata_slot != K_INVALID_BINDLESS_INDEX &&

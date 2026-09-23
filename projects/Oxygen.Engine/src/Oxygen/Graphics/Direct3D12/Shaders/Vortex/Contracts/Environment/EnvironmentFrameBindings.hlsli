@@ -19,7 +19,6 @@ struct EnvironmentFrameBindings
         uint diffuse_sh_srv;
         uint irradiance_map_srv;
         uint prefiltered_map_srv;
-        uint brdf_lut_srv;
         uint probe_revision;
     };
 
@@ -75,7 +74,6 @@ static EnvironmentFrameBindings LoadEnvironmentFrameBindings(uint slot)
     invalid_bindings.probes.diffuse_sh_srv = K_INVALID_BINDLESS_INDEX;
     invalid_bindings.probes.irradiance_map_srv = K_INVALID_BINDLESS_INDEX;
     invalid_bindings.probes.prefiltered_map_srv = K_INVALID_BINDLESS_INDEX;
-    invalid_bindings.probes.brdf_lut_srv = K_INVALID_BINDLESS_INDEX;
     invalid_bindings.probes.probe_revision = 0u;
     invalid_bindings.evaluation.ambient_intensity = 1.0f;
     invalid_bindings.evaluation.average_brightness = 1.0f;

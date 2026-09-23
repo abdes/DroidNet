@@ -52,7 +52,8 @@ static inline float3 ComputeSceneDebugUnderlay(VSOutput input)
     g_DrawIndex, input.is_front_face);
 
   const float3 N = SafeNormalize(s.N);
-  const float3 V = SafeNormalize(camera_position - input.world_pos);
+  const float3 V = ResolveSurfaceViewDirection(input.world_pos, camera_position,
+      inverse_view_projection_matrix, is_orthographic, reverse_z);
   const float3 L = SafeNormalize(float3(0.45f, -0.35f, 0.82f));
   const float ndotl = saturate(dot(N, L));
   const float rim = pow(1.0f - saturate(dot(N, V)), 2.0f);
@@ -276,7 +277,8 @@ static inline float3 MakeDepthMismatchHeatmap(float depth_error)
 #elif defined(DEBUG_IBL_SPECULAR) || defined(DEBUG_IBL_RAW_SKY)                \
   || defined(DEBUG_IBL_IRRADIANCE) || defined(DEBUG_IBL_FACE_INDEX)
   const float3 N_v = SafeNormalize(input.world_normal);
-  const float3 V_v = SafeNormalize(camera_position - input.world_pos);
+  const float3 V_v = ResolveSurfaceViewDirection(input.world_pos, camera_position,
+      inverse_view_projection_matrix, is_orthographic, reverse_z);
   const float3 cube_R = CubemapSamplingDirFromOxygenWS(reflect(-V_v, N_v));
   const float3 cube_N = CubemapSamplingDirFromOxygenWS(N_v);
 

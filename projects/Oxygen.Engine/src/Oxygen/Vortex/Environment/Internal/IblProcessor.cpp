@@ -396,7 +396,6 @@ auto IblProcessor::RefreshStaticSkyLightProducts(
       .processed_cubemap_srv = processed_cubemap_srv,
       .diffuse_irradiance_sh_srv = diffuse_sh_srv,
       .prefiltered_cubemap_srv = kInvalidShaderVisibleIndex,
-      .brdf_lut_srv = kInvalidShaderVisibleIndex,
       .processed_cubemap_max_mip = mip_count - 1U,
       .prefiltered_cubemap_max_mip = 0U,
       .product_revision = current_state.static_sky_light.product_revision + 1U,
@@ -430,7 +429,6 @@ auto IblProcessor::RefreshStaticSkyLightProducts(
       = state.static_sky_light.diffuse_irradiance_sh_srv;
     state.probes.irradiance_map_srv = kInvalidShaderVisibleIndex;
     state.probes.prefiltered_map_srv = kInvalidShaderVisibleIndex;
-    state.probes.brdf_lut_srv = kInvalidShaderVisibleIndex;
     state.probes.probe_revision = cache.products.product_revision;
     state.valid = true;
     state.flags = kEnvironmentProbeStateFlagResourcesValid;
@@ -481,7 +479,6 @@ auto IblProcessor::RefreshStaticSkyLightProducts(
     = state.static_sky_light.diffuse_irradiance_sh_srv;
   state.probes.irradiance_map_srv = kInvalidShaderVisibleIndex;
   state.probes.prefiltered_map_srv = kInvalidShaderVisibleIndex;
-  state.probes.brdf_lut_srv = kInvalidShaderVisibleIndex;
   state.valid = true;
   state.flags = kEnvironmentProbeStateFlagResourcesValid;
 

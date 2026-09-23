@@ -108,7 +108,6 @@ gtest_program(
   DEPS
     oxygen::vortex
     oxygen::graphics-direct3d12
-    oxygen::vortex
     oxygen::testing
     nlohmann_json::nlohmann_json
 )

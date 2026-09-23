@@ -174,7 +174,6 @@ struct alignas(packing::kShaderDataFieldAlignment) GpuSkyLightParams {
   std::uint32_t enabled { 0U };
 
   std::uint32_t cubemap_slot { kInvalidBindlessIndex };
-  std::uint32_t brdf_lut_slot { kInvalidBindlessIndex };
   std::uint32_t irradiance_map_slot { kInvalidBindlessIndex };
   std::uint32_t prefilter_map_slot { kInvalidBindlessIndex };
 
@@ -182,6 +181,7 @@ struct alignas(packing::kShaderDataFieldAlignment) GpuSkyLightParams {
   std::uint32_t prefilter_max_mip { 0U };
   std::uint32_t ibl_generation { 0U };
   std::uint32_t diffuse_sh_slot { kInvalidBindlessIndex };
+  std::uint32_t padding { 0U };
 };
 
 struct alignas(packing::kShaderDataFieldAlignment) GpuSkySphereParams {
@@ -247,6 +247,7 @@ struct alignas(packing::kShaderDataFieldAlignment) EnvironmentStaticData {
   GpuPostProcessParams post_process {};
 };
 
+// NOLINTBEGIN(*-magic-numbers)
 static_assert(sizeof(AtmosphereDensityLayerGpu) == 16);
 static_assert(sizeof(AtmosphereDensityProfileGpu) == 32);
 static_assert(sizeof(GpuFogParams) == 128);
@@ -254,10 +255,12 @@ static_assert(sizeof(GpuVolumetricFogParams) == 96);
 static_assert(sizeof(GpuSkyAtmosphereParams) == 208);
 static_assert(sizeof(GpuSkyLightParams) == 64);
 static_assert(offsetof(GpuSkyLightParams, cubemap_slot) == 32);
-static_assert(offsetof(GpuSkyLightParams, diffuse_sh_slot) == 60);
+static_assert(offsetof(GpuSkyLightParams, diffuse_sh_slot) == 56);
 static_assert(sizeof(GpuSkySphereParams) == 48);
 static_assert(sizeof(GpuVolumetricCloudParams) == 64);
 static_assert(sizeof(GpuPostProcessParams) == 64);
 static_assert(sizeof(EnvironmentStaticData) == 672);
+
+// NOLINTEND(*-magic-numbers)
 
 } // namespace oxygen::vortex

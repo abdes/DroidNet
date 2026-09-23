@@ -35,7 +35,6 @@ namespace {
     probes.diffuse_sh_srv = kInvalidShaderVisibleIndex;
     probes.irradiance_map_srv = kInvalidShaderVisibleIndex;
     probes.prefiltered_map_srv = kInvalidShaderVisibleIndex;
-    probes.brdf_lut_srv = kInvalidShaderVisibleIndex;
   }
 
   auto IsHdrLinearCubemapFormat(const Format format) noexcept -> bool
