@@ -202,6 +202,12 @@ The [image reference record](plan/EX07B-reference-validation.md#native-serial-im
 retains the limits: physical BRDF correctness and an independently forced
 unculled path are not established by serial renders through shared selection.
 
+The [reference runtime optimization](plan/EX07B-reference-validation.md#reference-test-runtime-improvement)
+retains all 45 tests and their accuracy requirements. Full Ninja runs improve
+from 532.604 to 128.955 seconds in Debug and from 277.866 to 45.626 seconds in
+Release. Certificate-query value changes stay below 4.108e-15; all 27 native
+instrument tests pass with the same known C physical-admission failures.
+
 A's closure does not establish the final physical renderer. B must supply an
 independent double-precision oracle, moment uncertainty and known-input probes,
 matched unculled image reference, deterministic fixtures and bounded instruments.

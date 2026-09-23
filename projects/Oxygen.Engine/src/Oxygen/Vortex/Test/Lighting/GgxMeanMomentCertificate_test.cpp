@@ -46,6 +46,7 @@ namespace {
     double maximum_energy_bound = 0.0;
     double maximum_bias_bound = 0.0;
     std::size_t query_index = 0U;
+    auto measured_samples = nlohmann::json::array();
     for (const auto& sample : data.at("cases")) {
       const auto roughness = sample.at("roughness").get<double>();
       ASSERT_EQ(roughness, roughnesses.at(query_index++));
@@ -54,6 +55,13 @@ namespace {
         = IntegrateGgxMeanMoments(PerceptualRoughness { roughness });
       ASSERT_TRUE(estimate.has_value())
         << "order=" << estimate.error().last_estimate.order;
+      measured_samples.push_back({
+        { "roughness", roughness },
+        { "E", estimate->hemispherical_albedo },
+        { "B", estimate->schlick_moment },
+        { "order", estimate->order },
+        { "evaluations", estimate->evaluations },
+      });
       const auto e_midpoint = sample.at("E_avg_midpoint").get<double>();
       const auto b_midpoint = sample.at("B_avg_midpoint").get<double>();
       const auto e_radius = sample.at("E_avg_radius").get<double>();
@@ -75,6 +83,7 @@ namespace {
       nlohmann::json(maximum_energy_bound).dump());
     RecordProperty("maximum_mean_bias_distance_bound",
       nlohmann::json(maximum_bias_bound).dump());
+    RecordProperty("measured_samples", measured_samples.dump());
   }
 
   NOLINT_TEST(

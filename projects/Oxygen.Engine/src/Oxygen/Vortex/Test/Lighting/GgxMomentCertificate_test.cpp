@@ -29,6 +29,7 @@ namespace {
     ASSERT_EQ(data.at("radius_limit"), 1.0e-8);
     double maximum_energy_bound = 0.0;
     double maximum_bias_bound = 0.0;
+    auto measured_samples = nlohmann::json::array();
     for (const auto& sample : data.at("cases")) {
       const auto roughness = sample.at("roughness").get<double>();
       const auto mu = sample.at("view_cosine").get<double>();
@@ -40,6 +41,14 @@ namespace {
         ViewCosine { mu }, { .refinement_tolerance = 1.0e-6 });
       ASSERT_TRUE(result.has_value())
         << "order=" << result.error().last_estimate.order;
+      measured_samples.push_back({
+        { "roughness", roughness },
+        { "view_cosine", mu },
+        { "E", result->directional_albedo },
+        { "B", result->schlick_moment },
+        { "order", result->order },
+        { "evaluations", result->evaluations },
+      });
       const auto energy_midpoint = sample.at("E_midpoint").get<double>();
       const auto bias_midpoint = sample.at("B_midpoint").get<double>();
       const auto energy_radius = sample.at("E_radius").get<double>();
@@ -66,6 +75,7 @@ namespace {
       nlohmann::json(maximum_energy_bound).dump());
     RecordProperty(
       "maximum_bias_distance_bound", nlohmann::json(maximum_bias_bound).dump());
+    RecordProperty("measured_samples", measured_samples.dump());
   }
 
   NOLINT_TEST(GgxMomentCertificateTest,

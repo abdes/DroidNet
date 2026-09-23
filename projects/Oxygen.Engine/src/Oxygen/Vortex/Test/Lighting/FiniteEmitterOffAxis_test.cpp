@@ -181,16 +181,15 @@ namespace {
             = (row_breaks.at(angular) - phi_start) * 2.0 / kPi;
           for (const auto& phi_node : detail::AngularRule(order)) {
             const auto phi = phi_start + (phi_scale * phi_node.angle);
+            const auto cosine_phi = std::cos(phi);
+            const auto sine_phi = std::sin(phi);
             const auto normal = UnitDirection {
               .x = (cosine * axis.x)
-                + (sine
-                  * ((std::cos(phi) * first.x) + (std::sin(phi) * second.x))),
+                + (sine * ((cosine_phi * first.x) + (sine_phi * second.x))),
               .y = (cosine * axis.y)
-                + (sine
-                  * ((std::cos(phi) * first.y) + (std::sin(phi) * second.y))),
+                + (sine * ((cosine_phi * first.y) + (sine_phi * second.y))),
               .z = (cosine * axis.z)
-                + (sine
-                  * ((std::cos(phi) * first.z) + (std::sin(phi) * second.z))),
+                + (sine * ((cosine_phi * first.z) + (sine_phi * second.z))),
             };
             const auto x = source.center.x + (radius * normal.x);
             const auto y = source.center.y + (radius * normal.y);
