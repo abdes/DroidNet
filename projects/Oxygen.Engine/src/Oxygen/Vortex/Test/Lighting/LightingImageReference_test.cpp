@@ -141,6 +141,12 @@ namespace {
         = static_cast<float>(inner_sine * inner_sine);
       record.outer_cone_sin_half_squared
         = static_cast<float>(outer_sine * outer_sine);
+      record.inner_cone_relative_correction = static_cast<float>(
+        ((inner_sine * inner_sine) - record.inner_cone_sin_half_squared)
+        / record.inner_cone_sin_half_squared);
+      record.outer_cone_relative_correction = static_cast<float>(
+        ((outer_sine * outer_sine) - record.outer_cone_sin_half_squared)
+        / record.outer_cone_sin_half_squared);
       if (index % 2U == 0U) {
         auto light = std::make_unique<scene::PointLight>();
         initialize(*light);

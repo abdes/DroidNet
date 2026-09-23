@@ -92,7 +92,8 @@ void CS(uint3 thread : SV_DispatchThreadID) {
         float attenuation = ComputeLocalLightDistanceAttenuation(to_light, light.range_m);
         if (light.kind == FORWARD_LOCAL_LIGHT_SPOT) {
             attenuation *= ComputeSpotLightAngularAttenuation(L, light.emitted_direction_ws,
-                light.inner_cone_sin_half_squared, light.outer_cone_sin_half_squared);
+                float2(light.inner_cone_sin_half_squared, light.inner_cone_relative_correction),
+                float2(light.outer_cone_sin_half_squared, light.outer_cone_relative_correction));
         }
         float3 incident = light.intensity_rgb_cd * attenuation;
         if (args.forward_shading != 0) {

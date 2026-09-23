@@ -62,8 +62,8 @@ float4 DeferredLightSpotPS(DeferredLightVolumeVSOutput input) : SV_Target0
     const float spot_attenuation = ComputeSpotLightAngularAttenuation(
         VortexSafeNormalize(light_vector),
         light.emitted_direction_ws,
-        light.inner_cone_sin_half_squared,
-        light.outer_cone_sin_half_squared);
+        float2(light.inner_cone_sin_half_squared, light.inner_cone_relative_correction),
+        float2(light.outer_cone_sin_half_squared, light.outer_cone_relative_correction));
     float shadow_visibility = 1.0f;
     if (shadow_reference.record_index != INVALID_BINDLESS_INDEX) {
         const VortexShadowFrameBindings shadow_bindings =

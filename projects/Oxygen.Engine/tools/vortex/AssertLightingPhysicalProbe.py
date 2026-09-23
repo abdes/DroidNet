@@ -14,6 +14,7 @@ from pathlib import Path
 
 REQUIRED_PROBES = {
     "PunctualPhotometryProbeQualifiesFactorsAndReportsBoundaryResiduals": 2160,
+    "SpotConePrecisionPreservesRotatedAndNarrowBoundaryContributions": 294,
     "DirectBrdfProbeReportsIndependentOracleResiduals": 108,
 }
 

@@ -67,20 +67,39 @@ convention; sentinel tests must use a nonsymmetric matrix.
 Evolve `ForwardLocalLightRecord` in place, using it for both shading families
 and culling. Target stride **80**, alignment **16**:
 
-| Offset | Type / member                       | Meaning                                                               |
-| -----: | ----------------------------------- | --------------------------------------------------------------------- |
-|      0 | float3 `position_ws`                | World metres, matching view reconstruction origin                     |
-|     12 | float `range_m`                     | Authored finite range >=0; zero has no influence                      |
-|     16 | float3 `intensity_rgb_cd`           | Compensated, tinted point/spot candela RGB, resolved once             |
-|     28 | float `source_radius_m`             | Physical sphere/disk radius >=0                                       |
-|     32 | float3 `emitted_direction_ws`       | Unit emitted axis; point stores (0,-1,0), unused                      |
-|     44 | float `inverse_range_m`             | Checked positive reciprocal, or zero for zero range                   |
-|     48 | float `inner_cone_sin_half_squared` | sin(inner/2)^2; point 0                                               |
-|     52 | float `outer_cone_sin_half_squared` | sin(outer/2)^2; point 0                                               |
-|     56 | uint `kind`                         | Point=0, Spot=1; reject unknown values                                |
-|     60 | uint `flags`                        | Bit 0 authored shadow request, bit 1 contact request; other bits zero |
-|     64 | uint `selection_index`              | Index in immutable local selection                                    |
-|     68 | uint3 `reserved`                    | Zero; no attenuation selector/exponent                                |
+| Offset | Type / member                          | Meaning                                                               |
+| -----: | -------------------------------------- | --------------------------------------------------------------------- |
+|      0 | float3 `position_ws`                   | World metres, matching view reconstruction origin                     |
+|     12 | float `range_m`                        | Authored finite range >=0; zero has no influence                      |
+|     16 | float3 `intensity_rgb_cd`              | Compensated, tinted point/spot candela RGB, resolved once             |
+|     28 | float `source_radius_m`                | Physical sphere/disk radius >=0                                       |
+|     32 | float3 `emitted_direction_ws`          | Unit emitted axis; point stores (0,-1,0), unused                      |
+|     44 | float `inverse_range_m`                | Checked positive reciprocal, or zero for zero range                   |
+|     48 | float `inner_cone_sin_half_squared`    | sin(inner/2)^2; point 0                                               |
+|     52 | float `outer_cone_sin_half_squared`    | sin(outer/2)^2; point 0                                               |
+|     56 | uint `kind`                            | Point=0, Spot=1; reject unknown values                                |
+|     60 | uint `flags`                           | Bit 0 authored shadow request, bit 1 contact request; other bits zero |
+|     64 | uint `selection_index`                 | Index in immutable local selection                                    |
+|     68 | float `inner_cone_relative_correction` | Relative residual of the double-precision squared half-angle; point 0 |
+|     72 | float `outer_cone_relative_correction` | Relative residual of the double-precision squared half-angle; point 0 |
+|     76 | uint `reserved`                        | Zero; no attenuation selector/exponent                                |
+
+C's boundary-precision repair retains the 80-byte stride and existing member
+offsets, assigning two previously reserved words to cone precision. Each exact
+squared half-angle is represented by `high * (1 + relative_correction)`, where
+`high` is the original float at offset 48/52 and the correction is computed in
+double precision before upload. Zero inner angle has zero correction; the exact
+hemisphere endpoint is `(0.5,0)`. CPU/HLSL producers, both consuming families,
+native probes and diagnostic readers migrate together; reserved-word zeros from
+the old layout are not a compatibility contract.
+
+This refinement is required by the existing physical budget: the B native probe
+reported 23 narrow-cone boundary channel failures after a small valid ramp was
+rounded to zero. Evaluate the angular coordinate using normalized represented
+directions and compensated float arithmetic; preserve the correction through
+the outer-edge subtraction. Relative corrections and scaled angular coordinates
+avoid depending on subnormal residual storage. This changes neither the physical
+profile nor supported source power, and does not require optional GPU FP64.
 
 Source lux/lumens, compensation, source node handle/generation and shadow tuning
 remain in the CPU selection. The resolved evaluation records are derived once

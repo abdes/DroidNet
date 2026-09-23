@@ -5,6 +5,8 @@
 //===----------------------------------------------------------------------===//
 
 #include <array>
+#include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <limits>
 #include <numbers>
@@ -72,7 +74,51 @@ namespace {
     EXPECT_EQ(spot.outer_cone_sin_half_squared, 0.5F);
     EXPECT_EQ(spot.source_radius_m, 0.125F);
     EXPECT_EQ(spot.flags, 3U);
-    EXPECT_EQ(spot.reserved, (std::array<std::uint32_t, 3> {}));
+    EXPECT_EQ(spot.reserved, 0U);
+  }
+
+  NOLINT_TEST(
+    LightEvaluationRecordsTest, ConePrecisionSurvivesProductionRecordResolution)
+  {
+    auto input = FrameLightSelection {};
+    constexpr float kInner = 4.0e-6F;
+    constexpr float kOuter = 1.0e-5F;
+    input.local_lights = {
+      FrameLocalLightSelection {
+        .source_node = {},
+        .kind = LocalLightKind::kSpot,
+        .range = 10.0F,
+        .luminous_flux_lm = 100.0F,
+        .direction = { 0.0F, 0.0F, -1.0F },
+        .inner_cone_half_angle_radians = kInner,
+        .outer_cone_half_angle_radians = kOuter,
+      },
+    };
+    const auto records = ResolveLightEvaluationRecords(input);
+    ASSERT_TRUE(records.has_value());
+    ASSERT_EQ(records->local.size(), 1U);
+    const auto& record = records->local.front();
+    const auto original = std::array { kInner, kOuter };
+    const auto encoded = std::array {
+      std::array {
+        record.inner_cone_sin_half_squared,
+        record.inner_cone_relative_correction,
+      },
+      std::array {
+        record.outer_cone_sin_half_squared,
+        record.outer_cone_relative_correction,
+      },
+    };
+    for (std::size_t index = 0; index < original.size(); ++index) {
+      const auto sine = std::sin(static_cast<double>(original.at(index)) / 2.0);
+      const auto expected = sine * sine;
+      const auto pair = encoded.at(index);
+      EXPECT_NE(pair.at(1), 0.0F);
+      const auto decoded = static_cast<double>(pair.at(0)) * (1.0 + pair.at(1));
+      EXPECT_NEAR(decoded, expected, expected * 1.0e-14);
+      EXPECT_GT(std::abs(pair.at(0) - expected), expected * 1.0e-10);
+    }
+    EXPECT_EQ(record.reserved, 0U);
   }
 
   NOLINT_TEST(

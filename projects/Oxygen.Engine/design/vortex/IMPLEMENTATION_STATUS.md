@@ -758,7 +758,28 @@ suppressions (367 findings remain on unchanged code). Evidence:
 `out/build-ninja/analysis/vortex/exposure-lightbench/ex07c/gltf-{debug,release}.json`,
 `gltf-final-{debug,release}.json` and `gltf-tidy-changed-lines.json` in that directory.
 This closes that conversion defect within 03/12; it does not close either item,
-the GPU cone-boundary/BRDF residuals, scene-v7 migration or native/editor transport.
+scene-v7 migration or native/editor transport.
+
+C's cone precision repair closes the 23 punctual-photometry residuals: the
+2,160-input probe now reports zero failures, with maximum budget fraction
+0.010959. Two formerly reserved words retain relative cone corrections in the
+unchanged 80-byte record; both direct families use compensated FP32 evaluation.
+An additional 294-case native matrix covers rotated axes, hard/soft/hemispherical
+cones and outer angles down to 1e-18 radians (maximum budget fraction 0.196322);
+omitting the corrections fails 22 negative controls. The admission verifier now
+requires this matrix too. Debug/Release each pass 29 native ABI/instrument,
+30 lighting-service and five image/material/workload tests. Both 233-module
+shader archives rebuild. RenderDoc checks all 16 corrected spot records in the
+33-light forward fixture and finite scene output. Oxytidy covers all eight
+changed C++ files/headers with no changed-line findings or new suppressions;
+seven existing whole-file findings remain. Seven admission-tool tests pass.
+Evidence under `out/build-ninja/analysis/vortex/exposure-lightbench/ex07c`:
+`cone-{native,cpu,images}-{debug,release}.json`, `cone-forward-report.txt`,
+`cone-tidy-changed-lines.json` and `cone-physical-admission.log`.
+**Physical admission still fails on the 565 BRDF residuals.** This is punctual
+factor/ABI/image-consistency evidence, not full source calibration, finite-emitter
+or shadow qualification, an official-resolution workload baseline, or a
+performance improvement. Those C–F obligations remain open.
 
 ### 3.5 Slice 8 work items
 

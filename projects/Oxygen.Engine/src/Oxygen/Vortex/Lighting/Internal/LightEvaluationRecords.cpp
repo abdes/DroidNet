@@ -203,6 +203,8 @@ auto ResolveLightEvaluationRecords(const FrameLightSelection& input)
       .kind = static_cast<std::uint32_t>(source.kind),
       .flags = source.flags,
       .selection_index = failure.selection_index,
+      .inner_cone_relative_correction = cone.inner_relative_correction,
+      .outer_cone_relative_correction = cone.outer_relative_correction,
     });
   }
   return records;
