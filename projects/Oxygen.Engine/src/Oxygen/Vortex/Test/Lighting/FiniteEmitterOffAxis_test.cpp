@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <expected>
 #include <numbers>
+#include <optional>
 #include <vector>
 
 #include <Oxygen/Testing/GTest.h>
@@ -44,19 +45,55 @@ namespace {
     return BrdfLobes { .single_scattering = *single, .diffuse = 1.0 / kPi };
   }
 
-  auto AngleBreaks(const double normalized_peak) -> std::vector<double>
+  struct AngleInterval {
+    double lower { -kPi / 2.0 };
+    double upper { kPi / 2.0 };
+  };
+  auto AngleBreaks(const std::optional<double> normalized_peak,
+    const AngleInterval limits = {}) -> std::vector<double>
   {
-    auto result = std::vector<double> { -kPi / 2.0 };
-    if (std::abs(normalized_peak) < 1.0) {
-      result.push_back(std::asin(normalized_peak));
+    auto result = std::vector<double> { limits.lower };
+    if (normalized_peak && std::abs(*normalized_peak) < 1.0) {
+      const auto angle = std::asin(*normalized_peak);
+      if (angle > limits.lower && angle < limits.upper) {
+        result.push_back(angle);
+      }
     }
-    result.push_back(kPi / 2.0);
+    result.push_back(limits.upper);
     return result;
   }
 
   auto Dot(const UnitDirection& a, const UnitDirection& b) -> double
   {
     return (a.x * b.x) + (a.y * b.y) + (a.z * b.z);
+  }
+  struct AzimuthEquation {
+    double constant;
+    double cosine;
+    double sine;
+  };
+  auto PartitionViewPlane(std::vector<double> breaks,
+    const AzimuthEquation equation) -> std::vector<double>
+  {
+    const auto amplitude = std::hypot(equation.cosine, equation.sine);
+    if (amplitude == 0.0 || std::abs(equation.constant) > amplitude) {
+      return breaks;
+    }
+    const auto phase = std::atan2(equation.sine, equation.cosine);
+    const auto angle
+      = std::acos(std::clamp(-equation.constant / amplitude, -1.0, 1.0));
+    for (const auto sign : { -1.0, 1.0 }) {
+      auto root = phase + (sign * angle);
+      if (root < 0.0) {
+        root += 2.0 * kPi;
+      }
+      if (root > 0.0 && root < 2.0 * kPi) {
+        breaks.push_back(root);
+      }
+    }
+    std::ranges::sort(breaks);
+    breaks.erase(std::ranges::unique(breaks).begin(), breaks.end());
+    return breaks;
   }
 
   auto SphereSurface(const FiniteEmitter& source,
@@ -127,10 +164,18 @@ namespace {
       for (const auto& radial_node : detail::AngularRule(order)) {
         const auto cosine = start + (radial_scale * radial_node.angle);
         const auto sine = std::sqrt((1.0 - cosine) * (1.0 + cosine));
-        for (std::size_t angular = 1U; angular < phi_breaks.size(); ++angular) {
-          const auto phi_start = phi_breaks.at(angular - 1U);
+        // Views lie in the receiver x/z plane. Partition surface-normal rows
+        // at y=0, independently of the apparent-cap parameterization.
+        const auto row_breaks = PartitionViewPlane(phi_breaks,
+          {
+            .constant = source.center.y + (radius * cosine * axis.y),
+            .cosine = radius * sine * first.y,
+            .sine = radius * sine * second.y,
+          });
+        for (std::size_t angular = 1U; angular < row_breaks.size(); ++angular) {
+          const auto phi_start = row_breaks.at(angular - 1U);
           const auto phi_scale
-            = (phi_breaks.at(angular) - phi_start) * 2.0 / kPi;
+            = (row_breaks.at(angular) - phi_start) * 2.0 / kPi;
           for (const auto& phi_node : detail::AngularRule(order)) {
             const auto phi = phi_start + (phi_scale * phi_node.angle);
             const auto normal = UnitDirection {
@@ -178,16 +223,33 @@ namespace {
     };
   }
 
-  auto CartesianDisk(const FiniteEmitter& source, const SpotCone& cone,
-    const PerceptualRoughness roughness, const ViewCosine view,
-    const std::uint32_t order) -> std::expected<BrdfLobes, BrdfReferenceError>
+  auto CartesianDisk(const FiniteEmitter& source, const UnitDirection& axis,
+    const SpotCone& cone, const PerceptualRoughness roughness,
+    const ViewCosine view, const std::uint32_t order)
+    -> std::expected<BrdfLobes, BrdfReferenceError>
   {
     const auto radius = source.radius.get();
-    const auto height = source.center.z;
-    const auto mirror_x = -height
-      * std::sqrt((1.0 - view.get()) * (1.0 + view.get())) / view.get();
-    const auto theta_breaks
-      = AngleBreaks((mirror_x - source.center.x) / radius);
+    const auto height = -((source.center.x * axis.x)
+      + (source.center.y * axis.y) + (source.center.z * axis.z));
+    if (height <= 0.0 || source.range.get() <= height) {
+      return BrdfLobes {};
+    }
+    const auto horizontal = std::hypot(axis.x, axis.y);
+    const auto first = horizontal > 0.0
+      ? UnitDirection { .x = -axis.y / horizontal,
+          .y = axis.x / horizontal,
+          .z = 0.0, }
+      : UnitDirection { .x = 1.0, .y = 0.0, .z = 0.0 };
+    const auto second = UnitDirection {
+      .x = -axis.z * first.y,
+      .y = axis.z * first.x,
+      .z = (axis.x * first.y) - (axis.y * first.x),
+    };
+    // first.z is zero, making the receiver-horizon restriction monotone in psi.
+    const auto center_u
+      = (source.center.x * first.x) + (source.center.y * first.y);
+    const auto center_v = (source.center.x * second.x)
+      + (source.center.y * second.y) + (source.center.z * second.z);
     const auto inner_cosine = std::cos(cone.inner.get());
     const auto outer_cosine
       = cone.outer.get() == kPi / 2.0 ? 0.0 : std::cos(cone.outer.get());
@@ -195,6 +257,46 @@ namespace {
       * ((1.0 - inner_cosine) + ((inner_cosine - outer_cosine) / 3.0));
     const auto peak
       = source.flux.get() * std::exp2(source.compensation.get()) / solid_angle;
+    const auto range = source.range.get();
+    const auto range_radius = std::sqrt((range - height) * (range + height));
+    const auto support = cone.outer.get() == kPi / 2.0
+      ? range_radius
+      : std::min(range_radius, height * std::tan(cone.outer.get()));
+    const auto lower_x = std::max(-1.0, (-support - center_u) / radius);
+    const auto upper_x = std::min(1.0, (support - center_u) / radius);
+    if (lower_x >= upper_x) {
+      return BrdfLobes {};
+    }
+    auto theta_limits = AngleInterval {
+      .lower = std::asin(lower_x),
+      .upper = std::asin(upper_x),
+    };
+    if (source.center.z <= 0.0) {
+      const auto vertical_extent = radius * std::abs(second.z);
+      if (vertical_extent <= -source.center.z) {
+        return BrdfLobes {};
+      }
+      const auto maximum_angle = std::acos(-source.center.z / vertical_extent);
+      theta_limits.lower = std::max(theta_limits.lower, -maximum_angle);
+      theta_limits.upper = std::min(theta_limits.upper, maximum_angle);
+      if (theta_limits.lower >= theta_limits.upper) {
+        return BrdfLobes {};
+      }
+    }
+    auto peak_u = std::optional<double> {};
+    auto peak_v = std::optional<double> {};
+    const auto mirror = UnitDirection {
+      .x = -std::sqrt((1.0 - view.get()) * (1.0 + view.get())),
+      .y = 0.0,
+      .z = view.get(),
+    };
+    const auto facing = -Dot(axis, mirror);
+    if (facing > 0.0) {
+      const auto distance = height / facing;
+      peak_u = ((distance * Dot(mirror, first)) - center_u) / radius;
+      peak_v = ((distance * Dot(mirror, second)) - center_v) / radius;
+    }
+    const auto theta_breaks = AngleBreaks(peak_u, theta_limits);
     auto single = detail::Sum {};
     auto diffuse = detail::Sum {};
     for (std::size_t part = 1U; part < theta_breaks.size(); ++part) {
@@ -204,37 +306,63 @@ namespace {
       for (const auto& x_node : detail::AngularRule(order)) {
         const auto theta = theta_start + (x_node.angle * theta_scale);
         const auto cosine_theta = std::cos(theta);
-        const auto x = source.center.x + (radius * std::sin(theta));
-        const auto psi_breaks
-          = AngleBreaks(-source.center.y / (radius * cosine_theta));
+        const auto plane_u = center_u + (radius * std::sin(theta));
+        if (std::abs(plane_u) >= support) {
+          continue;
+        }
+        const auto limit_v = std::sqrt(
+          (support - std::abs(plane_u)) * (support + std::abs(plane_u)));
+        auto lower_y
+          = std::max(-1.0, (-limit_v - center_v) / (radius * cosine_theta));
+        auto upper_y
+          = std::min(1.0, (limit_v - center_v) / (radius * cosine_theta));
+        if (second.z > 0.0) {
+          lower_y = std::max(
+            lower_y, -source.center.z / (radius * second.z * cosine_theta));
+        } else if (second.z < 0.0) {
+          upper_y = std::min(
+            upper_y, -source.center.z / (radius * second.z * cosine_theta));
+        }
+        if (lower_y >= upper_y) {
+          continue;
+        }
+        const auto psi_breaks = AngleBreaks(
+          peak_v ? std::optional { *peak_v / cosine_theta } : std::nullopt,
+          { .lower = std::asin(lower_y), .upper = std::asin(upper_y) });
         for (std::size_t section = 1U; section < psi_breaks.size(); ++section) {
           const auto psi_start = psi_breaks.at(section - 1U);
           const auto psi_scale
             = (psi_breaks.at(section) - psi_start) * 2.0 / kPi;
           for (const auto& y_node : detail::AngularRule(order)) {
-            // Unit disk: x=sin(theta), y=cos(theta)*sin(psi).
-            // The area Jacobian is cos(theta)^2*cos(psi); a^2 cancels.
             const auto psi = psi_start + (y_node.angle * psi_scale);
+            const auto local_u = radius * std::sin(theta);
+            const auto local_v = radius * cosine_theta * std::sin(psi);
+            const auto x
+              = source.center.x + (local_u * first.x) + (local_v * second.x);
             const auto y
-              = source.center.y + (radius * cosine_theta * std::sin(psi));
-            const auto distance = std::hypot(x, y, height);
-            const auto cosine = height / distance;
-            if (cosine <= outer_cosine || distance >= source.range.get()) {
+              = source.center.y + (local_u * first.y) + (local_v * second.y);
+            const auto z
+              = source.center.z + (local_u * first.z) + (local_v * second.z);
+            const auto distance = std::hypot(x, y, z);
+            const auto emission_cosine = height / distance;
+            if (z <= 0.0 || emission_cosine <= outer_cosine
+              || distance >= range) {
               continue;
             }
-            const auto profile = cosine >= inner_cosine
+            const auto profile = emission_cosine >= inner_cosine
               ? 1.0
-              : std::pow(
-                  (cosine - outer_cosine) / (inner_cosine - outer_cosine), 2);
+              : std::pow((emission_cosine - outer_cosine)
+                    / (inner_cosine - outer_cosine),
+                  2);
             const auto window
-              = std::pow(1.0 - std::pow(distance / source.range.get(), 4), 2);
+              = std::pow(1.0 - std::pow(distance / range, 4), 2);
             const auto lobes = ControlledLobes(
-              { .x = x / distance, .y = y / distance, .z = cosine }, roughness,
-              view);
+              { .x = x / distance, .y = y / distance, .z = z / distance },
+              roughness, view);
             if (!lobes) {
               return std::unexpected(lobes.error());
             }
-            const auto weight = peak / kPi * profile * window * cosine
+            const auto weight = peak / kPi * profile * window * z / distance
               / std::max(distance * distance, kDistanceGuardSquared)
               * cosine_theta * cosine_theta * std::cos(psi) * theta_scale
               * psi_scale * x_node.weight * y_node.weight;
@@ -288,10 +416,12 @@ namespace {
                  .last_estimate.estimated_absolute_change.single_scattering
             << " last single="
             << polar.error().last_estimate.radiance.single_scattering;
-          const auto first = CartesianDisk(source, cone,
-            PerceptualRoughness { roughness }, ViewCosine { view }, 256U);
-          const auto second = CartesianDisk(source, cone,
-            PerceptualRoughness { roughness }, ViewCosine { view }, 512U);
+          const auto first
+            = CartesianDisk(source, { .x = 0.0, .y = 0.0, .z = -1.0 }, cone,
+              PerceptualRoughness { roughness }, ViewCosine { view }, 256U);
+          const auto second
+            = CartesianDisk(source, { .x = 0.0, .y = 0.0, .z = -1.0 }, cone,
+              PerceptualRoughness { roughness }, ViewCosine { view }, 512U);
           ASSERT_TRUE(first.has_value());
           ASSERT_TRUE(second.has_value());
           for (const auto& values : {
@@ -317,11 +447,112 @@ namespace {
     }
     RecordProperty("maximum_relative_error", maximum_relative_error);
   }
+  NOLINT_TEST(
+    FiniteEmitterOffAxisTest, TiltedDisksMatchAtGrazingAndAcrossTheHorizon)
+  {
+    struct Geometry {
+      EmitterOffsetMetres center;
+      UnitDirection axis;
+      SourceRadiusMetres radius { 0.0 };
+    };
+    const auto geometries = std::array {
+      Geometry {
+        .center = { .x = -0.8, .y = 0.19, .z = 1.0 },
+        .axis = { .x = 0.6, .y = 0.0, .z = -0.8 },
+        .radius = SourceRadiusMetres { 1.0 },
+      },
+      Geometry {
+        .center = { .x = -0.8, .y = 0.19, .z = 1.0 },
+        .axis = { .x = -0.6, .y = 0.0, .z = -0.8 },
+        .radius = SourceRadiusMetres { 1.0 },
+      },
+      Geometry {
+        .center = { .x = -1.0, .y = 0.0, .z = -0.2 },
+        .axis = { .x = 1.0, .y = 0.0, .z = 0.0 },
+        .radius = SourceRadiusMetres { 0.5 },
+      },
+      Geometry {
+        .center = { .x = 1.0, .y = 0.0, .z = -0.2 },
+        .axis = { .x = -1.0, .y = 0.0, .z = 0.0 },
+        .radius = SourceRadiusMetres { 0.5 },
+      },
+    };
+    double maximum_scaled_error = 0.0;
+    unsigned checked = 0U;
+    for (const auto& geometry : geometries) {
+      for (const auto roughness : { 0.045, 0.25, 1.0 }) {
+        for (const auto view : { 0.01, 0.5, 1.0 }) {
+          SCOPED_TRACE(geometry.center.x);
+          SCOPED_TRACE(geometry.axis.x);
+          SCOPED_TRACE(roughness);
+          SCOPED_TRACE(view);
+          const auto source = FiniteEmitter {
+            .center = geometry.center,
+            .radius = geometry.radius,
+            .range = InfluenceRangeMetres { 20.0 },
+            .flux = LuminousFluxLumens { 2.0 * kPi / 3.0 },
+          };
+          const auto cone = SpotCone {
+            .inner = InnerHalfAngleRadians { 0.0 },
+            .outer = OuterHalfAngleRadians { kPi / 2.0 },
+          };
+          const auto kernel = [&](const UnitDirection& direction)
+            -> std::expected<BrdfLobes, BrdfReferenceError> {
+            return ControlledLobes(direction, PerceptualRoughness { roughness },
+              ViewCosine { view });
+          };
+          const auto actual
+            = IntegrateSpotDisk(source, geometry.axis, cone, kernel,
+              { .maximum_order = 1024U,
+                .peak_direction
+                = UnitDirection { .x = -std::sqrt((1.0 - view) * (1.0 + view)),
+                  .y = 0.0,
+                  .z = view, }, });
+          ASSERT_TRUE(actual.has_value())
+            << "order=" << actual.error().last_estimate.order << " change="
+            << actual.error()
+                 .last_estimate.estimated_absolute_change.single_scattering;
+          const std::uint32_t coarse_order
+            = roughness == 0.045 && view == 0.01 ? 1024U : 512U;
+          const auto coarse = CartesianDisk(source, geometry.axis, cone,
+            PerceptualRoughness { roughness }, ViewCosine { view },
+            coarse_order);
+          const auto fine = CartesianDisk(source, geometry.axis, cone,
+            PerceptualRoughness { roughness }, ViewCosine { view },
+            2U * coarse_order);
+          ASSERT_TRUE(coarse.has_value());
+          ASSERT_TRUE(fine.has_value());
+          for (const auto& values : {
+                 std::array {
+                   coarse->single_scattering,
+                   fine->single_scattering,
+                   actual->radiance.single_scattering,
+                 },
+                 std::array {
+                   coarse->diffuse,
+                   fine->diffuse,
+                   actual->radiance.diffuse,
+                 },
+               }) {
+            const auto tolerance = 1.0e-7 + (1.0e-5 * values.at(1));
+            EXPECT_NEAR(values.at(0), values.at(1), tolerance);
+            EXPECT_NEAR(values.at(2), values.at(1), tolerance);
+            maximum_scaled_error = std::max(maximum_scaled_error,
+              std::abs(values.at(2) - values.at(1)) / tolerance);
+          }
+          ++checked;
+        }
+      }
+    }
+    EXPECT_EQ(checked, 36U);
+    RecordProperty("maximum_fraction_of_error_budget", maximum_scaled_error);
+  }
+
   NOLINT_TEST(FiniteEmitterOffAxisTest, SphereMatchesIndependentSurfaceIntegral)
   {
     double maximum_relative_error = 0.0;
     for (const auto roughness : { 0.045, 0.25, 1.0 }) {
-      for (const auto view : { 0.5, 1.0 }) {
+      for (const auto view : { 0.01, 0.5, 1.0 }) {
         for (const auto offset : { -0.8, 0.37, 0.99 }) {
           SCOPED_TRACE(roughness);
           SCOPED_TRACE(view);
@@ -339,17 +570,25 @@ namespace {
               ViewCosine { view });
           };
           const auto cap = IntegratePointSphere(source, kernel,
-            { .maximum_order = 1024U,
+            { .maximum_order = 2048U,
               .peak_direction
               = UnitDirection { .x = -std::sqrt((1.0 - view) * (1.0 + view)),
                 .y = 0.0,
                 .z = view, }, });
           ASSERT_TRUE(cap.has_value())
-            << "order=" << cap.error().last_estimate.order;
-          const auto first = SphereSurface(source,
-            PerceptualRoughness { roughness }, ViewCosine { view }, 256U);
-          const auto second = SphereSurface(source,
-            PerceptualRoughness { roughness }, ViewCosine { view }, 512U);
+            << "order=" << cap.error().last_estimate.order << " change="
+            << cap.error()
+                 .last_estimate.estimated_absolute_change.single_scattering;
+          std::uint32_t coarse_order = 256U;
+          if (view == 0.01) {
+            coarse_order = roughness == 0.045 ? 1024U : 512U;
+          }
+          const auto first
+            = SphereSurface(source, PerceptualRoughness { roughness },
+              ViewCosine { view }, coarse_order);
+          const auto second
+            = SphereSurface(source, PerceptualRoughness { roughness },
+              ViewCosine { view }, 2U * coarse_order);
           ASSERT_TRUE(first.has_value());
           ASSERT_TRUE(second.has_value());
           for (const auto& values : {
