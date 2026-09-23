@@ -16,6 +16,7 @@
 #include "Vortex/Services/Lighting/ClusterLookup.hlsli"
 #include "Vortex/Contracts/Scene/GBufferHelpers.hlsli"
 #include "Vortex/Shared/BRDFCommon.hlsli"
+#include "Vortex/Services/Lighting/LocalLightAttenuation.hlsli"
 
 struct ProbeArguments {
     uint4 decode;
@@ -41,6 +42,17 @@ struct MaterialDecodeProbeInput {
     uint material_srv;
     uint base_color_srv;
     uint pixel_x;
+};
+
+struct PhotometryProbeInput {
+    float3 light_vector;
+    float range_m;
+    float3 direction_to_source;
+    float inner_sin_half_squared;
+    float3 emitted_axis;
+    float outer_sin_half_squared;
+    float3 intensity_rgb_cd;
+    uint is_spot;
 };
 
 cbuffer ProbeRoot : register(b2, space0) {
@@ -242,5 +254,16 @@ void CS(uint3 thread : SV_DispatchThreadID) {
         output.Store4(address + 32, asuint(float4(base_color, 0.0)));
         output.Store4(address + 48, asuint(float4(f0, 0.0)));
         output.Store4(address + 64, asuint(float4(diffuse, 0.0)));
+    } else if (g_RecordKind == 18) {
+        StructuredBuffer<PhotometryProbeInput> inputs = ResourceDescriptorHeap[args.x];
+        PhotometryProbeInput value = inputs[element];
+        float distance_factor = ComputeLocalLightDistanceAttenuation(value.light_vector, value.range_m);
+        float angular_factor = value.is_spot != 0
+            ? ComputeSpotLightAngularAttenuation(value.direction_to_source, value.emitted_axis,
+                value.inner_sin_half_squared, value.outer_sin_half_squared)
+            : 1.0;
+        float3 normal_illuminance = value.intensity_rgb_cd * distance_factor * angular_factor;
+        output.Store2(address, asuint(float2(distance_factor, angular_factor)));
+        output.Store3(address + 8, asuint(normal_illuminance));
     }
 }
