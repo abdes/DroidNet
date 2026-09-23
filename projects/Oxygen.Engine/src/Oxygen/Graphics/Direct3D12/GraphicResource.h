@@ -13,6 +13,7 @@
 #include <d3d12.h>
 
 #include <Oxygen/Composition/Component.h>
+#include <Oxygen/Graphics/Common/AllocationBudget.h>
 #include <Oxygen/Graphics/Common/ObjectRelease.h>
 #include <Oxygen/Graphics/Direct3D12/Allocator/D3D12MemAlloc.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/dx12_utils.h>
@@ -30,9 +31,11 @@ class GraphicResource final : public Component {
 
 public:
   explicit GraphicResource(const std::string_view debug_name,
-    ID3D12Resource* resource, D3D12MA::Allocation* allocation = nullptr)
+    ID3D12Resource* resource, D3D12MA::Allocation* allocation = nullptr,
+    AllocationReservation reservation = {})
     : resource_(resource)
     , allocation_(allocation)
+    , reservation_(std::move(reservation))
   {
     assert(resource_);
     SetName(debug_name);
@@ -53,6 +56,7 @@ public:
     : Component(std::move(other))
     , resource_(std::exchange(other.resource_, nullptr))
     , allocation_(std::exchange(other.allocation_, nullptr))
+    , reservation_(std::move(other.reservation_))
   {
   }
 
@@ -82,12 +86,14 @@ private:
     swap(static_cast<Component&>(*this), other);
     swap(resource_, other.resource_);
     swap(allocation_, other.allocation_);
+    swap(reservation_, other.reservation_);
   }
 
   friend auto swap(GraphicResource& lhs, GraphicResource& rhs) noexcept -> void;
 
   ID3D12Resource* resource_;
   D3D12MA::Allocation* allocation_;
+  AllocationReservation reservation_;
 };
 
 // Non-member swap function for ADL

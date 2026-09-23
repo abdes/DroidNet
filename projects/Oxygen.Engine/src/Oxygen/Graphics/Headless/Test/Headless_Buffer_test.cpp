@@ -4,10 +4,16 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Testing/GTest.h>
+#include <memory>
 
+#include <Oxygen/Core/Types/ByteUnits.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Graphics/Common/AllocationBudget.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocationHandle.h>
+#include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Headless/Buffer.h>
+#include <Oxygen/Graphics/Headless/Texture.h>
+#include <Oxygen/Testing/GTest.h>
 
 using namespace oxygen::graphics::headless;
 
@@ -156,6 +162,41 @@ NOLINT_TEST(HeadlessBufferTest, CreateViewsAndNativeObject)
   auto uav = buf.GetNativeView(
     oxygen::graphics::DescriptorAllocationHandle {}, uav_desc);
   EXPECT_TRUE(uav->IsValid());
+}
+
+NOLINT_TEST(HeadlessBufferTest, SharedBufferAndTextureOwnershipUsesOneBudget)
+{
+  using oxygen::SizeBytes;
+  constexpr auto kBudgetBytes = SizeBytes { 20U };
+  auto budget = std::make_shared<oxygen::graphics::AllocationBudget>(
+    oxygen::graphics::AllocationBudgetLimits {
+      .total = kBudgetBytes,
+      .compact_indices = SizeBytes { 0U },
+      .driver_headroom = SizeBytes { 0U },
+    });
+  auto buffer = std::make_shared<Buffer>(oxygen::graphics::BufferDesc {
+    .size_bytes = 4U,
+    .allocation_budget = { .owner = budget },
+  });
+  auto alias = buffer;
+  auto texture = std::make_shared<Texture>(oxygen::graphics::TextureDesc {
+    .width = 2U,
+    .height = 2U,
+    .format = oxygen::Format::kRGBA8UNorm,
+    .allocation_budget = { .owner = budget },
+  });
+  EXPECT_EQ(budget->Snapshot().allocated.get(), 20U);
+  EXPECT_THROW((void)Buffer(oxygen::graphics::BufferDesc {
+                 .size_bytes = 1U,
+                 .allocation_budget = { .owner = budget },
+               }),
+    oxygen::graphics::AllocationBudgetExceeded);
+  buffer.reset();
+  EXPECT_EQ(budget->Snapshot().allocated.get(), 20U);
+  texture.reset();
+  EXPECT_EQ(budget->Snapshot().allocated.get(), 4U);
+  alias.reset();
+  EXPECT_EQ(budget->Snapshot().allocated.get(), 0U);
 }
 
 } // namespace

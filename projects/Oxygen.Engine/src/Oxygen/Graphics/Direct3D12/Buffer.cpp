@@ -8,6 +8,7 @@
 #include <cstring>
 #include <memory>
 #include <stdexcept>
+#include <utility>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Windows/ComError.h>
@@ -108,13 +109,11 @@ Buffer::Buffer(BufferDesc desc, const Graphics* gfx)
   D3D12MA::Allocation* allocation { nullptr };
 
   try {
-    ThrowOnFailed(MemoryAllocator()->CreateResource(&alloc_desc, &resource_desc,
-      initial_state,
-      nullptr, // No optimized clear value for buffers
-      &allocation, IID_PPV_ARGS(&resource)));
-
-    // Use GraphicResource's built-in helper for deferred resource release
-    AddComponent<GraphicResource>(Base::GetName(), resource, allocation);
+    auto reservation
+      = gfx_->AllocateResource(desc_.allocation_budget, alloc_desc,
+        resource_desc, initial_state, nullptr, &allocation, &resource);
+    AddComponent<GraphicResource>(
+      Base::GetName(), resource, allocation, std::move(reservation));
   } catch (const std::exception& e) {
     ObjectRelease(resource);
     ObjectRelease(allocation);

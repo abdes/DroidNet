@@ -4,15 +4,16 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Base/Logging.h>
-#include <Oxygen/Core/Detail/FormatUtils.h>
-#include <Oxygen/Graphics/Headless/Texture.h>
 #include <algorithm>
 #include <compare>
 #include <cstdint>
 #include <cstring>
-#include <fmt/format.h>
 #include <limits>
+#include <utility>
+
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Core/Detail/FormatUtils.h>
+#include <Oxygen/Graphics/Headless/Texture.h>
 
 namespace oxygen::graphics::headless {
 
@@ -87,6 +88,14 @@ Texture::Texture(const TextureDesc& desc)
   const uint32_t per_slice = layout_tmp.ComputeTotalBytesPerArraySlice(desc_);
   const uint32_t layers = std::max<uint32_t>(1u, desc_.array_size);
   const uint64_t bytes = static_cast<uint64_t>(per_slice) * layers;
+  if (desc_.allocation_budget.owner) {
+    auto charge = desc_.allocation_budget.owner->TryReserve(
+      SizeBytes { bytes }, desc_.allocation_budget.category);
+    if (!charge) {
+      throw AllocationBudgetExceeded {};
+    }
+    budget_reservation_ = std::move(*charge);
+  }
   constexpr uint64_t kMaxBacking = 1024ull * 1024ull * 128ull; // 128MB cap
   if (bytes > 0 && bytes <= kMaxBacking) {
     data_.resize(bytes);

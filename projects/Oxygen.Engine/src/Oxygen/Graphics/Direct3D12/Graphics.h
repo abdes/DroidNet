@@ -8,6 +8,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string_view>
 #include <unordered_map>
@@ -17,6 +18,7 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Config/GraphicsConfig.h>
 #include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Graphics/Common/AllocationBudget.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/FrameCaptureController.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
@@ -38,6 +40,9 @@ class PipelineStateCache;
 // ReSharper disable once CppInconsistentNaming
 namespace D3D12MA {
 class Allocator;
+// D3D12MA allocations are destroyed by Release(), not public deletion.
+class Allocation; // NOLINT(cppcoreguidelines-virtual-class-destructor)
+struct ALLOCATION_DESC;
 } // namespace D3D12MA
 
 namespace oxygen::graphics::d3d12 {
@@ -161,6 +166,14 @@ public:
   //! Query cached allocator counters and current budget estimates on demand.
   //! Does not traverse resources or add collection to the render loop.
   OXGN_D3D12_NDAPI auto GetMemoryStatistics() const -> MemoryStatistics;
+  //! Serialize parent-allocator admission with resource creation. The returned
+  //! domain charge follows the native allocation through deferred retirement.
+  OXGN_D3D12_NDAPI auto AllocateResource(const AllocationBudgetTag& budget,
+    const D3D12MA::ALLOCATION_DESC& allocation_desc,
+    const D3D12_RESOURCE_DESC& resource_desc,
+    D3D12_RESOURCE_STATES initial_state, const D3D12_CLEAR_VALUE* clear_value,
+    D3D12MA::Allocation** allocation, ID3D12Resource** resource) const
+    -> AllocationReservation;
   //! @}
 
   //=== D3D12 Helpers ===---------------------------------------------------//
@@ -198,6 +211,7 @@ protected:
 
 private:
   friend class CommandRecorder;
+  mutable std::mutex resource_allocation_mutex_;
 
   OXGN_D3D12_NDAPI auto GetOrCreateIndirectCommandSignature(
     const graphics::CommandRecorder::IndirectCommandDesc& command_desc,

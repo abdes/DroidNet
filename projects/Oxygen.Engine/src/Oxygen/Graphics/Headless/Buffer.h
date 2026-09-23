@@ -12,6 +12,7 @@
 #include <mutex>
 #include <vector>
 
+#include <Oxygen/Graphics/Common/AllocationBudget.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Headless/api_export.h>
 
@@ -137,6 +138,7 @@ protected:
 
 private:
   BufferDesc desc_ {};
+  AllocationReservation budget_reservation_;
   bool mapped_ = false;
 
   // CPU-side backing storage for headless emulation. Lazily allocated in ctor

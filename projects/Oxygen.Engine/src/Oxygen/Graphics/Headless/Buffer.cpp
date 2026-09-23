@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <utility>
 
 #include <Oxygen/Graphics/Headless/Buffer.h>
 
@@ -18,6 +19,14 @@ Buffer::Buffer(const BufferDesc& desc)
   : graphics::Buffer("HeadlessBuffer")
   , desc_(desc)
 {
+  if (desc_.allocation_budget.owner) {
+    auto charge = desc_.allocation_budget.owner->TryReserve(
+      SizeBytes { desc_.size_bytes }, desc_.allocation_budget.category);
+    if (!charge) {
+      throw AllocationBudgetExceeded {};
+    }
+    budget_reservation_ = std::move(*charge);
+  }
   if (desc_.size_bytes > 0) {
     data_.resize(desc_.size_bytes);
   }
