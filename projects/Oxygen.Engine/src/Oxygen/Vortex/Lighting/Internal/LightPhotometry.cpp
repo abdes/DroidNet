@@ -103,23 +103,17 @@ auto ResolveSpotConeProfile(
   }
   const auto inner = SquaredHalfAngleSine(inner_half_angle_radians);
   const auto outer = SquaredHalfAngleSine(outer_half_angle_radians);
-  if (outer < kMinimumNormal || (inner > 0.0 && inner < kMinimumNormal)) {
+  const auto inner_gpu = static_cast<float>(1.0 - 2.0 * inner);
+  const auto outer_gpu = static_cast<float>(1.0 - 2.0 * outer);
+  const auto hard = inner_half_angle_radians == outer_half_angle_radians;
+  if (outer_gpu >= 1.0F || (!hard && inner_gpu <= outer_gpu)) {
     return std::unexpected(LightPhotometryError::kUnrepresentable);
   }
-  const auto inner_gpu = static_cast<float>(inner);
-  const auto outer_gpu = static_cast<float>(outer);
-  if (inner_half_angle_radians < outer_half_angle_radians
-    && (outer_gpu <= inner_gpu || outer_gpu - inner_gpu < kMinimumNormal)) {
-    return std::unexpected(LightPhotometryError::kUnrepresentable);
-  }
+  const auto inverse_width = hard ? 0.0F : 1.0F / (inner_gpu - outer_gpu);
   constexpr double kSquaredRampIntegral = 1.0 / 3.0;
   return SpotConeProfile {
-    .inner_sin_half_squared = inner_gpu,
-    .outer_sin_half_squared = outer_gpu,
-    .inner_relative_correction
-    = inner == 0.0 ? 0.0F : static_cast<float>((inner - inner_gpu) / inner_gpu),
-    .outer_relative_correction
-    = static_cast<float>((outer - outer_gpu) / outer_gpu),
+    .outer_cosine = outer_gpu,
+    .inverse_cosine_width = inverse_width,
     .solid_angle_sr
     = kSphereSolidAngle * (inner + ((outer - inner) * kSquaredRampIntegral)),
   };

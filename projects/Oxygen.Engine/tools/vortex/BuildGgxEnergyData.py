@@ -1,0 +1,125 @@
+"""Resample the qualified offline GGX reference into the production energy LUT.
+
+Generation consumes Test data; the renderer embeds only the compact output.
+The report measures interpolation error without imposing a production budget.
+"""
+
+import argparse
+import hashlib
+import json
+import math
+from pathlib import Path
+import struct
+
+
+def sample(values, width, height, x, y):
+    x = min(max(x, 0.0), width - 1)
+    y = min(max(y, 0.0), height - 1)
+    ix, iy = int(x), int(y)
+    nx, ny = min(ix + 1, width - 1), min(iy + 1, height - 1)
+    fx, fy = x - ix, y - iy
+    return tuple(
+        (1 - fy) * ((1 - fx) * values[2 * (iy * width + ix) + c]
+                    + fx * values[2 * (iy * width + nx) + c])
+        + fy * ((1 - fx) * values[2 * (ny * width + ix) + c]
+                + fx * values[2 * (ny * width + nx) + c])
+        for c in range(2)
+    )
+
+
+def generate(args):
+    metadata = json.loads(args.reference.with_suffix('.json').read_text())
+    payload = args.reference.read_bytes()
+    if hashlib.sha256(payload).hexdigest() != metadata['payload_sha256']:
+        raise ValueError('Reference payload identity mismatch')
+    values = struct.unpack(f'<{len(payload) // 4}f', payload)
+    width, height = metadata['view_nodes'], metadata['roughness_nodes']
+    size = args.size
+    if not 2 <= size <= 256:
+        raise ValueError('Energy LUT size must be between 2 and 256')
+    table = []
+    for row in range(size):
+        for column in range(size):
+            coordinate = column / (size - 1)
+            mu = coordinate * coordinate if args.view_mapping == 'sqrt' else coordinate
+            loss, bias = sample(values, width, height, math.sqrt(mu) * (width - 1),
+                                row * (height - 1) / (size - 1))
+            table.extend((1 - loss, bias))
+    binary = struct.pack(f'<{len(table)}f', *table)
+    table = struct.unpack(f'<{len(table)}f', binary)
+    errors = [[], []]
+    relative_energy = []
+    for row in range(height):
+        for column in range(width):
+            mu = (column / (width - 1)) ** 2
+            coordinate = math.sqrt(mu) if args.view_mapping == 'sqrt' else mu
+            measured = sample(table, size, size, coordinate * (size - 1),
+                              row * (size - 1) / (height - 1))
+            offset = 2 * (row * width + column)
+            reference = (1 - values[offset], values[offset + 1])
+            for channel in range(2):
+                errors[channel].append(abs(measured[channel] - reference[channel]))
+            relative_energy.append(abs(reference[0] / measured[0] - 1))
+    def stats(data):
+        data.sort()
+        return {'maximum': data[-1], 'p99': data[int(.99 * (len(data) - 1))]}
+    manifest = {
+        'schema': 1, 'model_revision': 2, 'view_nodes': size, 'roughness_nodes': size,
+        'view_mapping': args.view_mapping, 'minimum_roughness': .045,
+        'format': 'RG32Float', 'channels': ['directional_albedo', 'schlick_moment'],
+        'payload_bytes': len(binary), 'payload_sha256': hashlib.sha256(binary).hexdigest(),
+        'reference_sha256': metadata['payload_sha256'],
+        'generator_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+        'reference_grid_queries': width * height,
+        'energy_absolute_error': stats(errors[0]), 'bias_absolute_error': stats(errors[1]),
+        'unit_conductor_energy_error': stats(relative_energy),
+        'scope': 'Resampled independent reference; native sampler and image measurements are separate.',
+    }
+    args.output.mkdir(parents=True, exist_ok=True)
+    (args.output / 'GgxEnergy.bin').write_bytes(binary)
+    (args.output / 'GgxEnergy.json').write_text(json.dumps(manifest, indent=2) + '\n',
+                                               encoding='utf-8', newline='\n')
+    print(json.dumps(manifest, indent=2))
+
+
+def embed(args):
+    metadata = json.loads(args.manifest.read_text())
+    payload = args.payload.read_bytes()
+    width, height = metadata['view_nodes'], metadata['roughness_nodes']
+    if (metadata['schema'] != 1 or metadata['model_revision'] != 2
+            or metadata['format'] != 'RG32Float' or width != 32 or height != 32
+            or metadata['view_mapping'] != 'sqrt'):
+        raise ValueError('Unsupported production energy LUT')
+    digest = hashlib.sha256(payload).hexdigest()
+    if len(payload) != width * height * 8 or digest != metadata['payload_sha256']:
+        raise ValueError('Incomplete or corrupt energy LUT')
+    for energy, bias in struct.iter_unpack('<2f', payload):
+        if not math.isfinite(energy) or not math.isfinite(bias) or not 0 <= bias <= energy <= 1 or energy == 0:
+            raise ValueError('Energy LUT contains an invalid directional moment')
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    with args.output.open('w', encoding='utf-8', newline='\n') as stream:
+        stream.write('// Generated by BuildGgxEnergyData.py. Do not edit.\n#pragma once\n')
+        stream.write('#include <array>\n#include <cstdint>\n')
+        stream.write('namespace oxygen::vortex::lighting::internal::generated {\n')
+        stream.write(f'inline constexpr std::uint32_t kModelRevision = 2U;\ninline constexpr std::uint32_t kViewNodes = {width}U;\ninline constexpr std::uint32_t kRoughnessNodes = {height}U;\n')
+        stream.write('inline constexpr std::array<std::uint8_t, 32> kPayloadHash {' + ','.join(f'0x{v:02x}' for v in bytes.fromhex(digest)) + '};\n')
+        stream.write('alignas(16) inline constexpr std::uint32_t kEnergyWords[] = {\n')
+        for index, (word,) in enumerate(struct.iter_unpack('<I', payload)):
+            stream.write(f'0x{word:08x}U,' + ('\n' if index % 4 == 3 else ''))
+        stream.write('\n};\n}\n')
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description=__doc__)
+    commands = parser.add_subparsers(dest='command', required=True)
+    generator = commands.add_parser('generate')
+    generator.add_argument('reference', type=Path)
+    generator.add_argument('--size', type=int, default=32)
+    generator.add_argument('--view-mapping', choices=['linear', 'sqrt'], default='sqrt')
+    generator.add_argument('--output', type=Path, required=True)
+    embedding = commands.add_parser('embed')
+    embedding.add_argument('manifest', type=Path)
+    embedding.add_argument('payload', type=Path)
+    embedding.add_argument('--output', type=Path, required=True)
+    arguments = parser.parse_args()
+    (generate if arguments.command == 'generate' else embed)(arguments)

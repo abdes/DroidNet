@@ -238,7 +238,7 @@ namespace {
   {
     const auto position = light.position_ws;
     const auto radius
-      = ((light.range_m + light.source_radius_m) * 1.05F) + near_clip;
+      = (light.range_m * 1.05F) + near_clip;
     const auto delta = camera - position;
     return glm::dot(delta, delta) < radius * radius;
   }
@@ -250,7 +250,7 @@ namespace {
     const auto direction = light.emitted_direction_ws;
     const auto range = light.range_m;
     const auto outer_cosine = std::clamp(
-      1.0F - (2.0F * light.outer_cone_sin_half_squared), 0.001F, 0.999999F);
+      1.0F - (2.0F * light.inverse_cone_cosine_width), 0.001F, 0.999999F);
     const auto outer_sine
       = std::sqrt((std::max)(0.0F, 1.0F - outer_cosine * outer_cosine));
     const auto outer_tangent = outer_sine / (std::max)(outer_cosine, 1.0e-4F);

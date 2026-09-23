@@ -6,7 +6,6 @@
 
 #pragma once
 
-#include <array>
 #include <expected>
 #include <memory>
 
@@ -25,23 +24,20 @@ struct LightingFrameBindings;
 namespace lighting::internal {
 
   //! One immutable model product for all of a renderer's views.
-  class BrdfMomentResources final {
+  class BrdfEnergyResources final {
   public:
-    explicit BrdfMomentResources(Renderer& renderer);
-    ~BrdfMomentResources();
-    OXYGEN_MAKE_NON_COPYABLE(BrdfMomentResources)
-    OXYGEN_MAKE_NON_MOVABLE(BrdfMomentResources)
+    explicit BrdfEnergyResources(Renderer& renderer);
+    ~BrdfEnergyResources();
+    OXYGEN_MAKE_NON_COPYABLE(BrdfEnergyResources)
+    OXYGEN_MAKE_NON_MOVABLE(BrdfEnergyResources)
 
     auto Prepare() -> std::expected<void, LightingPreparationFailure>;
     auto Publish(LightingFrameBindings& bindings) const -> void;
 
   private:
     Renderer& renderer_;
-    std::array<std::shared_ptr<graphics::Texture>, 2> textures_;
-    std::array<ShaderVisibleIndex, 2> slots_ {
-      kInvalidShaderVisibleIndex,
-      kInvalidShaderVisibleIndex,
-    };
+    std::shared_ptr<graphics::Texture> texture_;
+    ShaderVisibleIndex slot_ { kInvalidShaderVisibleIndex };
     bool initialized_ { false };
   };
 

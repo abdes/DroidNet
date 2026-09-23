@@ -22,7 +22,7 @@ class Renderer;
 struct ShadowFrameData;
 
 namespace lighting::internal {
-  class BrdfMomentResources;
+  class BrdfEnergyResources;
 
   struct PublishedLightingView {
     ShaderVisibleIndex slot { kInvalidShaderVisibleIndex };
@@ -53,7 +53,7 @@ namespace lighting::internal {
     auto EnsurePublishResources() -> bool;
 
     Renderer& renderer_;
-    std::unique_ptr<BrdfMomentResources> brdf_moments_;
+    std::unique_ptr<BrdfEnergyResources> brdf_energy_;
     frame::SequenceNumber current_sequence_ { 0U };
     frame::Slot current_slot_ { frame::kInvalidSlot };
     std::unique_ptr<::oxygen::vortex::internal::PerViewStructuredPublisher<

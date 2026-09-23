@@ -40,7 +40,7 @@
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
 #include <Oxygen/Graphics/Direct3D12/Test/Fixtures/ReadbackTestFixture.h>
-#include <Oxygen/Vortex/Lighting/Internal/BrdfMomentData.h>
+#include <Oxygen/Vortex/Lighting/Internal/BrdfEnergyData.h>
 #include <Oxygen/Vortex/Test/Lighting/LightingGpuAbiFixture.h>
 
 namespace oxygen::vortex::testing {
@@ -401,24 +401,21 @@ auto LightingGpuAbiTest::PublishPackedTexture(const Format format,
   return index;
 }
 
-auto LightingGpuAbiTest::PublishBrdfMomentTextures()
-  -> std::array<ShaderVisibleIndex, 2>
+auto LightingGpuAbiTest::PublishBrdfEnergyTexture() -> ShaderVisibleIndex
 {
-  const auto model = lighting::internal::GetBrdfMomentData();
+  const auto model = lighting::internal::GetBrdfEnergyData();
   CHECK_F(model.has_value());
-  const auto sources = std::array { model->moments, model->means };
-  const auto widths = std::array { model->view_nodes, 1U };
-  auto slots = std::array<ShaderVisibleIndex, 2> {};
-  for (std::size_t index = 0; index < slots.size(); ++index) {
+  ShaderVisibleIndex slot { kInvalidShaderVisibleIndex };
+  {
     auto texture = CreateRegisteredTexture({
-      .width = widths.at(index),
+      .width = model->view_nodes,
       .height = model->roughness_nodes,
       .format = Format::kRG32Float,
-      .debug_name = "BRDF moment probe",
+      .debug_name = "BRDF energy probe",
       .is_shader_resource = true,
     });
     const auto slice = graphics::TextureSlice {
-      .width = widths.at(index),
+      .width = model->view_nodes,
       .height = model->roughness_nodes,
       .depth = 1U,
     };
@@ -428,18 +425,18 @@ auto LightingGpuAbiTest::PublishBrdfMomentTextures()
     auto upload = CreateRegisteredBuffer({
       .size_bytes = footprint.total_bytes.get(),
       .memory = BufferMemory::kUpload,
-      .debug_name = "BRDF moment probe upload",
+      .debug_name = "BRDF energy probe upload",
     });
     constexpr auto kPairBytes = sizeof(float) * 2U;
     const auto source_pitch
-      = static_cast<std::size_t>(widths.at(index)) * kPairBytes;
+      = static_cast<std::size_t>(model->view_nodes) * kPairBytes;
     for (std::uint32_t row = 0; row < model->roughness_nodes; ++row) {
       upload->Update(
-        sources.at(index).subspan(row * source_pitch, source_pitch).data(),
+        model->energy.subspan(row * source_pitch, source_pitch).data(),
         source_pitch,
         static_cast<std::uint64_t>(row) * footprint.row_pitch.get());
     }
-    SubmitCommands("BRDF moment probe upload",
+    SubmitCommands("BRDF energy probe upload",
       [&](graphics::CommandRecorder& recorder) -> void {
         EnsureTracked(recorder, upload, ResourceStates::kGenericRead);
         EnsureTracked(recorder, texture, ResourceStates::kCommon);
@@ -462,14 +459,14 @@ auto LightingGpuAbiTest::PublishBrdfMomentTextures()
     auto handle = allocator.AllocateBindless(
       bindless::generated::kTexturesDomain, ResourceViewType::kTexture_SRV);
     CHECK_F(handle.IsValid());
-    slots.at(index) = allocator.GetShaderVisibleIndex(handle);
+    slot = allocator.GetShaderVisibleIndex(handle);
     Backend().GetResourceRegistry().RegisterView(*texture, std::move(handle),
       graphics::TextureViewDescription {
         .format = Format::kRG32Float,
         .dimension = TextureType::kTexture2D,
       });
   }
-  return slots;
+  return slot;
 }
 
 auto LightingGpuAbiTest::TearDown() -> void

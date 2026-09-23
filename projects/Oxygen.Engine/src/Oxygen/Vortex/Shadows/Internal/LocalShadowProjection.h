@@ -12,12 +12,11 @@
 
 namespace oxygen::vortex::shadows::internal {
 
-//! The disk swept by a finite cone cannot use a center-apex projection.
-//! A hemispherical cone likewise requires the existing six-face coverage.
+//! Ordinary spots use a projected shadow; hemispheres require six-face coverage.
 [[nodiscard]] inline auto UsesCubeLocalShadow(
   const FrameLocalLightSelection& light) -> bool
 {
-  return light.kind == LocalLightKind::kPoint || light.source_radius > 0.0F
+  return light.kind == LocalLightKind::kPoint
     || light.outer_cone_half_angle_radians == std::numbers::pi_v<float> / 2.0F;
 }
 

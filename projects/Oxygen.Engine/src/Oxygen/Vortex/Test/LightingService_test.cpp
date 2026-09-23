@@ -309,13 +309,10 @@ NOLINT_TEST_F(LightingServiceBehaviorTest,
     });
   ASSERT_NE(first_bindings, nullptr);
   ASSERT_NE(second_bindings, nullptr);
-  EXPECT_NE(first_bindings->brdf_moments_srv, kInvalidShaderVisibleIndex);
-  EXPECT_NE(first_bindings->brdf_mean_moments_srv, kInvalidShaderVisibleIndex);
-  EXPECT_EQ(first_bindings->brdf_model_revision, 1U);
+  EXPECT_NE(first_bindings->brdf_energy_srv, kInvalidShaderVisibleIndex);
+  EXPECT_EQ(first_bindings->brdf_model_revision, 2U);
   EXPECT_EQ(
-    first_bindings->brdf_moments_srv, second_bindings->brdf_moments_srv);
-  EXPECT_EQ(first_bindings->brdf_mean_moments_srv,
-    second_bindings->brdf_mean_moments_srv);
+    first_bindings->brdf_energy_srv, second_bindings->brdf_energy_srv);
   EXPECT_EQ(
     first_bindings->brdf_model_revision, second_bindings->brdf_model_revision);
   EXPECT_NE(first_bindings->local_records_srv, kInvalidShaderVisibleIndex);

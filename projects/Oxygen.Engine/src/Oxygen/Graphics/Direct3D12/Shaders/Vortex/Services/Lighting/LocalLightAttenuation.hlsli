@@ -7,7 +7,14 @@
 #ifndef OXYGEN_VORTEX_LOCAL_LIGHT_ATTENUATION_HLSLI
 #define OXYGEN_VORTEX_LOCAL_LIGHT_ATTENUATION_HLSLI
 
-#include "Vortex/Services/Lighting/SpotConePrecision.hlsli"
+static float ComputeSpotLightAngularAttenuation(float3 direction_to_source,
+    float3 emitted_axis, float outer_cosine, float inverse_cosine_width)
+{
+    const float cosine = -dot(direction_to_source, emitted_axis);
+    if (inverse_cosine_width == 0.0) return cosine >= outer_cosine ? 1.0 : 0.0;
+    const float ramp = saturate((cosine - outer_cosine) * inverse_cosine_width);
+    return ramp * ramp;
+}
 
 static float ComputeLocalLightDistanceAttenuation(float3 light_vector, float range_m)
 {

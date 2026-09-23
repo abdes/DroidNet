@@ -50,7 +50,7 @@ protected:
   //! decoding.
   auto PublishPackedTexture(
     Format format, std::span<const std::uint32_t> texels) -> ShaderVisibleIndex;
-  auto PublishBrdfMomentTextures() -> std::array<ShaderVisibleIndex, 2>;
+  auto PublishBrdfEnergyTexture() -> ShaderVisibleIndex;
 
 private:
   std::shared_ptr<graphics::Buffer> indices_buffer_;

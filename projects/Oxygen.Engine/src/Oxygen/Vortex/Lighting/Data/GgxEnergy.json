@@ -1,0 +1,31 @@
+{
+  "schema": 1,
+  "model_revision": 2,
+  "view_nodes": 32,
+  "roughness_nodes": 32,
+  "view_mapping": "sqrt",
+  "minimum_roughness": 0.045,
+  "format": "RG32Float",
+  "channels": [
+    "directional_albedo",
+    "schlick_moment"
+  ],
+  "payload_bytes": 8192,
+  "payload_sha256": "2f0b4f988af82a69bf650a593d764d09f427ac4241f3ce8bfeecf40628aaae2e",
+  "reference_sha256": "b3224a671f44b196302e83d0421d2cad1a5ae14ba457f776e914c656900c45d6",
+  "generator_sha256": "bdc0dc7bef93b5a7eabbe170ba1b814da7ee8fb5274d2e6652777ec8080736a0",
+  "reference_grid_queries": 525825,
+  "energy_absolute_error": {
+    "maximum": 0.026528603326369193,
+    "p99": 0.0033026143439656153
+  },
+  "bias_absolute_error": {
+    "maximum": 0.0220231017488004,
+    "p99": 0.003216191003048152
+  },
+  "unit_conductor_energy_error": {
+    "maximum": 0.028882137360476512,
+    "p99": 0.0035442744878287913
+  },
+  "scope": "Resampled independent reference; native sampler and image measurements are separate."
+}

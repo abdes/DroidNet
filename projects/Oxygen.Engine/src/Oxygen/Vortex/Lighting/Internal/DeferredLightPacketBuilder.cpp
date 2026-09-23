@@ -73,7 +73,7 @@ namespace {
     if (spherical_proxy) {
       return translation
         * MakeScaleMatrix(
-          glm::vec3 { selection.range + selection.source_radius });
+          glm::vec3 { selection.range });
     }
 
     const auto outer_cosine = std::clamp(
@@ -113,7 +113,6 @@ auto DeferredLightPacketBuilder::Build(const FrameLightSelection& selection,
       continue;
     }
     const auto spherical = source.kind == LocalLightKind::kPoint
-      || source.source_radius > 0.0F
       || source.outer_cone_half_angle_radians
         == std::numbers::pi_v<float> / 2.0F;
     packets.local_lights.push_back(DeferredLightPacket {

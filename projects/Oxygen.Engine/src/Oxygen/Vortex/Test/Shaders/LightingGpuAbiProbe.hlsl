@@ -52,13 +52,11 @@ struct PhotometryProbeInput {
     float3 light_vector;
     float range_m;
     float3 direction_to_source;
-    float inner_sin_half_squared;
+    float outer_cosine;
     float3 emitted_axis;
-    float outer_sin_half_squared;
+    float inverse_cosine_width;
     float3 intensity_rgb_cd;
     uint is_spot;
-    float inner_relative_correction;
-    float outer_relative_correction;
 };
 
 struct BrdfProbeInput {
@@ -70,8 +68,8 @@ struct BrdfProbeInput {
     float metallic;
     float3 incident_rgb;
     float specular;
-    uint moments_srv;
-    uint means_srv;
+    uint energy_srv;
+    uint reserved;
 };
 
 struct FurnaceProbeInput {
@@ -80,16 +78,16 @@ struct FurnaceProbeInput {
     float azimuth;
     float light_cosine;
     uint order;
-    uint moments_srv;
-    uint means_srv;
+    uint energy_srv;
+    uint reserved;
 };
 
 struct FiniteEmitterProbeInput {
     ForwardLocalLightRecord light;
     float3 view;
     float roughness;
-    uint moments_srv;
-    uint means_srv;
+    uint energy_srv;
+    uint reserved;
     float f0;
     float rho;
 };
@@ -97,8 +95,8 @@ struct FiniteEmitterProbeInput {
 struct MomentProbeInput {
     float roughness;
     float view_cosine;
-    uint moments_srv;
-    uint means_srv;
+    uint energy_srv;
+    uint reserved;
 };
 
 struct MaterialUvProbeInput {
@@ -189,10 +187,10 @@ void CS(uint3 thread : SV_DispatchThreadID) {
         output.Store4(address, asuint(float4(value.position_ws, value.range_m)));
         output.Store4(address + 16, asuint(float4(value.intensity_rgb_cd, value.source_radius_m)));
         output.Store4(address + 32, asuint(float4(value.emitted_direction_ws, value.inverse_range_m)));
-        output.Store4(address + 48, uint4(asuint(value.inner_cone_sin_half_squared),
-            asuint(value.outer_cone_sin_half_squared), value.kind, value.flags));
+        output.Store4(address + 48, uint4(asuint(value.outer_cone_cosine),
+            asuint(value.inverse_cone_cosine_width), value.kind, value.flags));
         output.Store4(address + 64, uint4(value.selection_index,
-            asuint(value.inner_cone_relative_correction), asuint(value.outer_cone_relative_correction), value.reserved));
+            value.reserved));
     } else if (g_RecordKind == 9) {
         StructuredBuffer<DirectionalLightForwardData> inputs = ResourceDescriptorHeap[args.x];
         DirectionalLightForwardData value = inputs[element];
@@ -211,8 +209,8 @@ void CS(uint3 thread : SV_DispatchThreadID) {
             value.build_status_srv, value.grid_metadata_srv));
         output.Store4(address + 48, uint4(value.scene_generation, value.selection_revision));
         output.Store4(address + 64, uint4(value.frame_sequence, value.view_generation));
-        output.Store4(address + 80, uint4(value.publication_state, value.brdf_moments_srv,
-            value.brdf_mean_moments_srv, value.brdf_model_revision));
+        output.Store4(address + 80, uint4(value.publication_state, value.brdf_energy_srv,
+            value.brdf_model_revision, value.reserved));
     } else if (g_RecordKind == 11) {
         StructuredBuffer<uint> cbv_slots = ResourceDescriptorHeap[args.x];
         ConstantBuffer<DeferredLightConstants> value = ResourceDescriptorHeap[cbv_slots[element]];
@@ -315,8 +313,7 @@ void CS(uint3 thread : SV_DispatchThreadID) {
         float distance_factor = ComputeLocalLightDistanceAttenuation(value.light_vector, value.range_m);
         float angular_factor = value.is_spot != 0
             ? ComputeSpotLightAngularAttenuation(value.direction_to_source, value.emitted_axis,
-                float2(value.inner_sin_half_squared, value.inner_relative_correction),
-                float2(value.outer_sin_half_squared, value.outer_relative_correction))
+                value.outer_cosine, value.inverse_cosine_width)
             : 1.0;
         float3 normal_illuminance = value.intensity_rgb_cd * distance_factor * angular_factor;
         output.Store2(address, asuint(float2(distance_factor, angular_factor)));
@@ -340,10 +337,10 @@ void CS(uint3 thread : SV_DispatchThreadID) {
         surface.roughness = max(value.roughness, kVortexDeferredMinRoughness);
         surface.ambient_occlusion = 1.0;
         LightingFrameBindings lighting = (LightingFrameBindings)0;
-        lighting.brdf_model_revision = 1u;
-        lighting.brdf_moments_srv = value.moments_srv;
-        lighting.brdf_mean_moments_srv = value.means_srv;
-        float3 deferred = EvaluateCookTorranceLighting(surface, L, value.incident_rgb, lighting);
+        lighting.brdf_model_revision = 2u;
+        lighting.brdf_energy_srv = value.energy_srv;
+        float3 deferred = EvaluateGgxDirectResponse(surface.world_normal, V, L, f0, value.base_color * (1.0 - value.metallic),
+            value.roughness, lighting) * value.incident_rgb;
         float3 forward = EvaluateGgxDirectResponse(surface.world_normal, V, L, f0,
             value.base_color * (1.0 - value.metallic), value.roughness, lighting)
             * value.incident_rgb;
@@ -359,9 +356,8 @@ void CS(uint3 thread : SV_DispatchThreadID) {
         float ls = sqrt(1.0 - value.light_cosine * value.light_cosine);
         float3 L = float3(ls * cos(value.azimuth), ls * sin(value.azimuth), value.light_cosine);
         LightingFrameBindings lighting = (LightingFrameBindings)0;
-        lighting.brdf_model_revision = 1u;
-        lighting.brdf_moments_srv = value.moments_srv;
-        lighting.brdf_mean_moments_srv = value.means_srv;
+        lighting.brdf_model_revision = 2u;
+        lighting.brdf_energy_srv = value.energy_srv;
         float3 f0 = ComputeMetallicF0(value.base_color, value.metallic, value.specular);
         float3 rho = value.base_color * (1.0 - value.metallic);
         GgxDirectLobes a = EvaluateGgxDirectLobes(N, V, L, f0, rho, value.roughness, lighting);
@@ -376,9 +372,8 @@ void CS(uint3 thread : SV_DispatchThreadID) {
         StructuredBuffer<FurnaceProbeInput> inputs = ResourceDescriptorHeap[args.x];
         FurnaceProbeInput value = inputs[element];
         LightingFrameBindings lighting = (LightingFrameBindings)0;
-        lighting.brdf_model_revision = 1u;
-        lighting.brdf_moments_srv = value.moments_srv;
-        lighting.brdf_mean_moments_srv = value.means_srv;
+        lighting.brdf_model_revision = 2u;
+        lighting.brdf_energy_srv = value.energy_srv;
         const float3 F0 = float3(0.04, 0.45, 1.0);
         const float3 rho = float3(0.8, 0.25, 0.0);
         const float mu = value.view_cosine;
@@ -410,7 +405,7 @@ void CS(uint3 thread : SV_DispatchThreadID) {
                 GgxDirectLobes lobes = EvaluateGgxDirectLobes(N, V, L,
                     F0, rho, value.roughness, lighting);
                 float jacobian = 4.0 * vh * sh * alpha / denominator_squared;
-                single += lobes.single_scattering * jacobian;
+                single += (lobes.single_scattering + lobes.multiple_scattering) * jacobian;
             }
         }
         single *= maximum_psi * 2.0 * PI / (float(value.order) * float(value.order));
@@ -422,7 +417,7 @@ void CS(uint3 thread : SV_DispatchThreadID) {
         GgxIntegratedLobes integrated = EvaluateGgxIntegratedLobes(mu,
             F0, rho, value.roughness, lighting);
         output.Store3(address, asuint(single));
-        output.Store3(address + 12, asuint(smooth.multiple_scattering * (2.0 * PI / float(value.order))));
+        output.Store3(address + 12, asuint(0.0.xxx));
         output.Store3(address + 24, asuint(smooth.diffuse * (2.0 * PI / float(value.order))));
         output.Store3(address + 36, asuint(integrated.specular));
         output.Store3(address + 48, asuint(integrated.diffuse));
@@ -430,9 +425,8 @@ void CS(uint3 thread : SV_DispatchThreadID) {
         StructuredBuffer<FiniteEmitterProbeInput> inputs = ResourceDescriptorHeap[args.x];
         FiniteEmitterProbeInput value = inputs[element];
         LightingFrameBindings lighting = (LightingFrameBindings)0;
-        lighting.brdf_model_revision = 1u;
-        lighting.brdf_moments_srv = value.moments_srv;
-        lighting.brdf_mean_moments_srv = value.means_srv;
+        lighting.brdf_model_revision = 2u;
+        lighting.brdf_energy_srv = value.energy_srv;
         GgxDirectLobes result = EvaluateLocalEmitterLobes(value.light, 0.0.xxx,
             float3(0,0,1), value.view, value.f0.xxx, value.rho.xxx, value.roughness, lighting);
         output.Store3(address, asuint(float3(result.single_scattering.r,
@@ -441,9 +435,8 @@ void CS(uint3 thread : SV_DispatchThreadID) {
         StructuredBuffer<MomentProbeInput> inputs = ResourceDescriptorHeap[args.x];
         MomentProbeInput value = inputs[element];
         LightingFrameBindings lighting = (LightingFrameBindings)0;
-        lighting.brdf_model_revision = 1u;
-        lighting.brdf_moments_srv = value.moments_srv;
-        lighting.brdf_mean_moments_srv = value.means_srv;
+        lighting.brdf_model_revision = 2u;
+        lighting.brdf_energy_srv = value.energy_srv;
         float3 N = float3(0.0, 0.0, 1.0);
         float3 L = normalize(float3(1.0, 0.0, value.view_cosine));
         float3 V = normalize(float3(-1.0, 0.0, value.view_cosine));
@@ -454,9 +447,8 @@ void CS(uint3 thread : SV_DispatchThreadID) {
     } else if (g_RecordKind == 21) {
         StructuredBuffer<MomentProbeInput> inputs = ResourceDescriptorHeap[args.x];
         MomentProbeInput value = inputs[element];
-        float2 moment = SampleGgxMomentTexture(value.moments_srv, value.view_cosine, value.roughness);
-        float2 mean = SampleGgxMomentTexture(value.means_srv, 0.0, value.roughness);
-        output.Store4(address, asuint(float4(moment, mean)));
+        float2 energy = SampleGgxEnergyTexture(value.energy_srv, value.view_cosine, value.roughness);
+        output.Store4(address, uint4(asuint(energy), 32u, 32u));
     } else if (g_RecordKind == 20) {
         StructuredBuffer<MaterialUvProbeInput> inputs = ResourceDescriptorHeap[args.x];
         MaterialUvProbeInput value = inputs[element];

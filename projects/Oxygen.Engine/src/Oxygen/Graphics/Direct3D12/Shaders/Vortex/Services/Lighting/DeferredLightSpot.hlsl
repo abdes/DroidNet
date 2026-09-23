@@ -15,28 +15,6 @@ cbuffer RootConstants : register(b2, space0)
     uint g_PassConstantsIndex;
 }
 
-// The source disk swept along its cone has radius R + h*tan(theta).
-// Reject outside that support before G-buffer reads and cube-shadow filtering.
-// Slack keeps rejection conservative; source integration still owns radiance.
-static bool SpotEmitterHasSpatialSupport(ForwardLocalLightRecord light, float3 receiver)
-{
-    const float3 ray = light.position_ws - receiver;
-    const float distance_squared = dot(ray, ray);
-    const float extent = light.range_m + light.source_radius_m;
-    if (light.range_m <= 0.0 || all(light.intensity_rgb_cd == 0.0)
-        || distance_squared >= extent * extent) return false;
-    const float3 axis = normalize(light.emitted_direction_ws);
-    const float height = -dot(ray, axis);
-    const float slack = 2.0e-6 * (sqrt(distance_squared) + light.source_radius_m);
-    if (height < -slack) return false;
-    const float s = light.outer_cone_sin_half_squared
-        * (1.0 + light.outer_cone_relative_correction);
-    const float cosine = 1.0 - 2.0 * s;
-    const float sine = 2.0 * sqrt(s * (1.0 - s));
-    const float transverse = max(0.0, length(cross(ray, axis)) - light.source_radius_m);
-    return cosine <= 0.0 || transverse * cosine <= max(0.0, height) * sine + slack;
-}
-
 [shader("vertex")]
 DeferredLightVolumeVSOutput DeferredLightSpotVS(uint vertex_id : SV_VertexID)
 {
@@ -79,22 +57,23 @@ float4 DeferredLightSpotPS(DeferredLightVolumeVSOutput input) : SV_Target0
     if (!TryLoadLocalLight(lighting_bindings, light_constants.selection_index, light)) return 0.0f.xxxx;
     // The pass selects this source family; specialize the shared emitter code.
     light.kind = FORWARD_LOCAL_LIGHT_SPOT;
-    if (!SpotEmitterHasSpatialSupport(light, world_position)) return 0.0f.xxxx;
-    const LightShadowReference shadow_reference = LoadLightShadowReference(
-        lighting_bindings.local_shadow_map_srv, light.selection_index);
-    const float3 light_vector
-        = light.position_ws - world_position;
+    LocalEmitterInput source;
+    if (!PrepareLocalEmitterInput(light, world_position, source)) return 0.0f.xxxx;
     const DeferredLightingSurfaceData surface = LoadDeferredLightingSurface(
         screen_uv, world_position, camera_position, bindings);
-    if (dot(surface.world_normal, light_vector) + light.source_radius_m <= 0.0)
-        return 0.0f.xxxx;
+    if (!LocalEmitterFacesSurface(light, source, surface.world_normal)) return 0.0f.xxxx;
+    const LightShadowReference shadow_reference = LoadLightShadowReference(
+        lighting_bindings.local_shadow_map_srv, light.selection_index);
     const float shadow_visibility = ComputeLocalShadowVisibility(shadow_reference,
-        world_position, surface.world_normal, VortexSafeNormalize(light_vector));
+        world_position, surface.world_normal, source.direction_to_center);
     if (shadow_visibility <= 0.0) return 0.0f.xxxx;
-    const float3 lighting = EvaluateLocalEmitterResponse(light, world_position,
-        surface.world_normal, surface.view_direction, surface.specular_f0,
-        surface.base_color * (1.0 - surface.metallic), surface.roughness,
-        lighting_bindings) * shadow_visibility;
+    const GgxDirectContext brdf = PrepareGgxDirect(surface.world_normal,
+        surface.view_direction, surface.specular_f0,
+        surface.base_color * (1.0 - surface.metallic), surface.roughness, lighting_bindings);
+    const GgxDirectLobes lobes = EvaluatePreparedLocalEmitterLobes(light, source,
+        surface.world_normal, surface.view_direction, brdf);
+    const float3 lighting = (lobes.single_scattering + lobes.multiple_scattering + lobes.diffuse)
+        * shadow_visibility;
     RecordHdrSceneSource(lighting, 2u);
     return float4(lighting * GetPreExposure(), 0.0f);
 }

@@ -24,12 +24,10 @@ struct LightPhotometryModifiers {
   float exposure_compensation_ev { 0.0F };
 };
 
-//! Stable GPU cone parameters and the CPU flux-normalization integral.
+//! Precomputed FP32 cone parameters and the CPU flux-normalization integral.
 struct SpotConeProfile {
-  float inner_sin_half_squared { 0.0F };
-  float outer_sin_half_squared { 0.0F };
-  float inner_relative_correction { 0.0F };
-  float outer_relative_correction { 0.0F };
+  float outer_cosine { 0.0F };
+  float inverse_cosine_width { 0.0F };
   double solid_angle_sr { 0.0 };
 };
 

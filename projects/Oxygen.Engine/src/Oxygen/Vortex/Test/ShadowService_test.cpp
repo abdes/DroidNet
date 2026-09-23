@@ -425,7 +425,7 @@ NOLINT_TEST(ShadowServiceSurfaceTest,
 }
 
 NOLINT_TEST(ShadowServiceSurfaceTest,
-  FiniteAndHemisphericalSpotsUseCubeCoverageWithoutLosingSelectionIdentity)
+  OrdinarySpotsUseProjectedCoverageAndHemispheresRetainCubes)
 {
   auto resolved_view = MakePerspectiveResolvedView();
   auto view_input = oxygen::vortex::PreparedViewShadowInput {};
@@ -473,25 +473,27 @@ NOLINT_TEST(ShadowServiceSurfaceTest,
       .surface = nullptr,
       .surface_srv = oxygen::ShaderVisibleIndex { 13U },
       .resolution = { 1024U, 1024U },
-      .shadow_count = 3U,
+      .shadow_count = 2U,
     });
   const auto projected = SpotShadowSetup {}.BuildSpotRecords(view_input, lights,
     {
       .surface = nullptr,
       .surface_srv = oxygen::ShaderVisibleIndex { 14U },
       .resolution = { 1024U, 1024U },
-      .shadow_count = 1U,
+      .shadow_count = 2U,
     });
-  ASSERT_EQ(cube.size(), 3U);
-  ASSERT_EQ(projected.size(), 1U);
+  ASSERT_EQ(cube.size(), 2U);
+  ASSERT_EQ(projected.size(), 2U);
   EXPECT_EQ(projected.at(0).selection_index,
+    oxygen::vortex::LightSelectionIndex { 0U });
+  EXPECT_EQ(projected.at(1).selection_index,
     oxygen::vortex::LightSelectionIndex { 3U });
   for (std::size_t index = 0; index < cube.size(); ++index) {
     const auto& record = cube.at(index);
-    EXPECT_EQ(record.selection_index.get(), index);
+    EXPECT_EQ(record.selection_index.get(), index + 1U);
     EXPECT_EQ(record.first_array_layer.get(), index * 6U);
     EXPECT_FLOAT_EQ(record.far_plane_m,
-      lights.at(index).range + lights.at(index).source_radius);
+      lights.at(index + 1U).range);
     // Every axial support endpoint is inside the corresponding cube face.
     for (std::size_t face = 0; face < 6U; ++face) {
       const auto directions = std::array {
