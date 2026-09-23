@@ -73,6 +73,10 @@ public:
   auto CreateTexture(const graphics::TextureDesc& desc) const
     -> std::shared_ptr<graphics::Texture> override;
   std::vector<std::string> recorder_names;
+  auto SetRecorderNameCollectionEnabled(const bool enabled) noexcept -> void
+  {
+    record_recorder_names_ = enabled;
+  }
   bool fail_next_exposure_recorder {
     false,
   };
@@ -88,6 +92,7 @@ public:
     -> graphics::CommandRecording override;
 
 private:
+  bool record_recorder_names_ { true };
   std::vector<std::pair<graphics::ShaderRequest,
     std::shared_ptr<graphics::IShaderByteCode>>>
     shader_overrides_;
