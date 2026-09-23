@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -32,12 +33,26 @@ using graphics::CommandRecorder;
 using graphics::Texture;
 using graphics::TextureDesc;
 
+auto ExposureFailureGraphics::SetShaderOverride(graphics::ShaderRequest request,
+  std::shared_ptr<graphics::IShaderByteCode> bytecode) -> void
+{
+  const auto found = std::ranges::find_if(shader_overrides_,
+    [&](const auto& entry) -> auto { return entry.first == request; });
+  if (found != shader_overrides_.end()) {
+    found->second = std::move(bytecode);
+  } else {
+    shader_overrides_.emplace_back(std::move(request), std::move(bytecode));
+  }
+}
+
 auto ExposureFailureGraphics::GetShader(
   const graphics::ShaderRequest& request) const
   -> std::shared_ptr<graphics::IShaderByteCode>
 {
-  if (request.source_path == "Tests/ToneBoundsProbe.hlsl") {
-    return tone_probe;
+  if (const auto found = std::ranges::find_if(shader_overrides_,
+        [&](const auto& entry) -> auto { return entry.first == request; });
+    found != shader_overrides_.end()) {
+    return found->second;
   }
   return graphics::d3d12::Graphics::GetShader(request);
 }

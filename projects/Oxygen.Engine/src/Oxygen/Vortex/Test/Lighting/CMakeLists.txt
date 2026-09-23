@@ -8,6 +8,10 @@ gtest_program(
   "Oxygen.Vortex.LightingImageReference.Tests"
   SOURCES
     "LightingImageReference_test.cpp"
+    "UnculledLightingFixture.cpp"
+    "UnculledLightingFixture.h"
+    "Reference/Photometry.cpp"
+    "Reference/Photometry.h"
     "MaterialRasterReference_test.cpp"
     "Reference/MaterialEvaluation.cpp"
     "Reference/MaterialEvaluation.h"
@@ -158,4 +162,47 @@ target_compile_definitions(
     OXYGEN_LIGHTING_ABI_PROBE="${lighting_probe_output}"
     OXYGEN_LIGHTING_ABI_WORKSPACE="${PROJECT_SOURCE_DIR}"
     OXYGEN_GGX_MEAN_CERTIFICATE_FILE="${CMAKE_CURRENT_SOURCE_DIR}/Reference/GgxMeanMomentCertificates.json"
+)
+
+set(
+  unculled_probe_output
+  "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>/UnculledLightingReference.dxil"
+)
+set(
+  unculled_probe_source
+  "${CMAKE_CURRENT_SOURCE_DIR}/../Shaders/UnculledLightingReference.hlsl"
+)
+add_custom_command(
+  OUTPUT
+    "${unculled_probe_output}"
+  COMMAND
+    ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>"
+  COMMAND
+    "${PROJECT_SOURCE_DIR}/packages/DXC/bin/${lighting_probe_arch}/dxc.exe" -T
+    cs_6_6 -E CS -O3 -HV 2021 -I "${lighting_shader_root}" -I
+    "${PROJECT_SOURCE_DIR}/src/Oxygen" -Fo "${unculled_probe_output}"
+    "${unculled_probe_source}"
+  COMMAND
+    "${PROJECT_SOURCE_DIR}/packages/DXC/bin/${lighting_probe_arch}/dxc.exe" -T
+    cs_6_6 -E CS -O3 -HV 2021 -I "${lighting_shader_root}" -I
+    "${PROJECT_SOURCE_DIR}/src/Oxygen" -MD -MF "${unculled_probe_output}.d" -Fo
+    "${unculled_probe_output}" "${unculled_probe_source}"
+  DEPENDS
+    "${unculled_probe_source}"
+  DEPFILE "${unculled_probe_output}.d"
+  VERBATIM
+)
+add_custom_target(
+  oxygen-vortex-unculled-lighting-probe
+  DEPENDS
+    "${unculled_probe_output}"
+)
+add_dependencies(
+  Oxygen.Vortex.LightingImageReference.Tests
+  oxygen-vortex-unculled-lighting-probe
+)
+target_compile_definitions(
+  Oxygen.Vortex.LightingImageReference.Tests
+  PRIVATE
+    OXYGEN_UNCULLED_LIGHTING_PROBE="${unculled_probe_output}"
 )

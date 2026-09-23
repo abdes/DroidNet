@@ -15,6 +15,8 @@
 #include <memory>
 #include <span>
 #include <stdexcept>
+// MSVC declares the platform-specific _dupenv_s in the C runtime header.
+// NOLINTNEXTLINE(modernize-deprecated-headers)
 #include <stdlib.h>
 #include <string>
 #include <utility>
@@ -374,9 +376,9 @@ auto ExposureGpuTest::RunToneProbe(std::span<const std::byte> inputs_data,
   if (mode == 16384U) {
     CHECK_EQ_F(record_count, 64U);
   }
-  std::ifstream shader(
-    OXYGEN_EXPOSURE_TONE_PROBE, std::ios::binary | std::ios::ate);
+  std::ifstream shader(OXYGEN_EXPOSURE_TONE_PROBE, std::ios::binary);
   CHECK_F(shader.good());
+  shader.seekg(0, std::ios::end);
   const auto file_size = shader.tellg();
   CHECK_GT_F(file_size,
     (std::streampos {
@@ -392,9 +394,14 @@ auto ExposureGpuTest::RunToneProbe(std::span<const std::byte> inputs_data,
     // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
     reinterpret_cast<char*>(code.data()), static_cast<std::streamsize>(bytes));
   CHECK_F(shader.good());
-  FailureBackend().tone_probe
-    = std::make_shared<ShaderByteCode<std::vector<std::uint32_t>>>(
-      std::move(code));
+  FailureBackend().SetShaderOverride(
+    ShaderRequest {
+      .stage = ShaderType::kCompute,
+      .source_path = "Tests/ToneBoundsProbe.hlsl",
+      .entry_point = "CS",
+    },
+    std::make_shared<ShaderByteCode<std::vector<std::uint32_t>>>(
+      std::move(code)));
 
   const auto input_size = inputs_data.size_bytes();
   auto inputs = CreateRegisteredBuffer({

@@ -101,6 +101,14 @@ tests and the user's successful rebuilt-app test. See the
 
 **Current: EX07B — independent references and instruments. EX07 remains in_progress.**
 
+The latest B checkpoint adds a test-only full-list GPU image reference independent
+of renderer light selection, retaining the serial-image checks and adding actual
+missing-light negative controls. Debug and Release each pass 331,776 additional
+RGB comparisons, both image tests and the three affected tone probes. See the
+[reference qualification record](plan/EX07B-reference-validation.md#independent-full-list-gpu-image-reference).
+Material-format/filter and bounded GPU/resource instrument qualification remain
+open; this checkpoint does not close EX07B or change production shading.
+
 **User-directed stopping point:** finish EX07B's reference/instrument validation
 gate and commit its stable checkpoint, then pause. Do not begin EX07C until the
 user instructs resumption. Intermediate B checkpoints do not satisfy this gate.

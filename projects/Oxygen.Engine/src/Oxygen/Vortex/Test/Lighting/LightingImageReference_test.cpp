@@ -32,8 +32,12 @@
 #include <Oxygen/Scene/Light/SpotLight.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Vortex/Lighting/Types/ForwardLocalLightRecord.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureGpuFixture.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureLightingFixture.h>
+#include <Oxygen/Vortex/Test/Lighting/Reference/Photometry.h>
+#include <Oxygen/Vortex/Test/Lighting/UnculledLightingFixture.h>
+#include <Oxygen/Vortex/ViewExtension.h>
 
 namespace oxygen::vortex::testing {
 namespace {
@@ -42,7 +46,7 @@ namespace {
   using Rgb = std::array<double, 3>;
   using Image = std::vector<exposure::Pixel>;
 
-  class LightingImageReferenceTest : public exposure::ExposureLightingGpuTest {
+  class LightingImageReferenceTest : public UnculledLightingGpuTest {
   protected:
     static constexpr std::uint32_t kWidth = 96U;
     static constexpr std::uint32_t kHeight = 64U;
@@ -51,7 +55,7 @@ namespace {
     auto SetUp() -> void override
     {
       initial_scene_capacity = kLightCount + 2U;
-      exposure::ExposureLightingGpuTest::SetUp();
+      UnculledLightingGpuTest::SetUp();
       view.viewport.width = static_cast<float>(kWidth);
       view.viewport.height = static_cast<float>(kHeight);
       auto lens = camera.GetCameraAs<scene::PerspectiveCamera>();
@@ -81,6 +85,7 @@ namespace {
     auto all = std::vector<FixtureLightIndex> {};
     all.reserve(light_count);
     auto active = std::array<bool, light_count> {};
+    auto authored = std::array<ForwardLocalLightRecord, light_count> {};
     const auto position = [](const FixtureLightIndex light) -> glm::vec3 {
       const auto index = light.get();
       const auto row = index / 7U;
@@ -109,6 +114,33 @@ namespace {
         light.SetRange(3.0F + (static_cast<float>(index % 3U) * 0.25F));
         light.SetLuminousFluxLm(1.0F + (static_cast<float>(index) * 0.1F));
       };
+      // Resolve directly from the authored recipe, without renderer gathering,
+      // publication, cluster ranges or selection-index buffers.
+      const auto flux = reference::LuminousFluxLumens { 1.0F
+        + (static_cast<float>(index) * 0.1F) };
+      const auto compensation
+        = reference::SourceExposureEv { static_cast<float>(index % 3U) - 1.0F };
+      const auto intensity = index % 2U == 0U
+        ? reference::ResolvePointIntensity(flux, compensation)
+        : reference::ResolveSpotPeakIntensity(flux,
+            {
+              .inner = reference::InnerHalfAngleRadians { 0.2F },
+              .outer = reference::OuterHalfAngleRadians { 1.2F },
+            },
+            compensation);
+      ASSERT_TRUE(intensity.has_value());
+      auto& record = authored.at(index);
+      record.position_ws = position(FixtureLightIndex { index });
+      record.range_m = 3.0F + (static_cast<float>(index % 3U) * 0.25F);
+      record.intensity_rgb_cd = tint * static_cast<float>(intensity->get());
+      record.emitted_direction_ws = { 0.0F, 0.0F, -1.0F };
+      record.kind = static_cast<std::uint32_t>(index % 2U);
+      const auto inner_sine = std::sin(static_cast<double>(0.2F) * 0.5);
+      const auto outer_sine = std::sin(static_cast<double>(1.2F) * 0.5);
+      record.inner_cone_sin_half_squared
+        = static_cast<float>(inner_sine * inner_sine);
+      record.outer_cone_sin_half_squared
+        = static_cast<float>(outer_sine * outer_sine);
       if (index % 2U == 0U) {
         auto light = std::make_unique<scene::PointLight>();
         initialize(*light);
@@ -161,6 +193,8 @@ namespace {
     double minimum_single_peak = std::numeric_limits<double>::infinity();
     std::uint64_t compared_channels = 0U;
     std::uint64_t permutation_channels = 0U;
+    std::uint64_t unculled_channels = 0U;
+    double maximum_unculled_error = 0.0;
     bool reversed = false;
     for (const bool forward : { false, true }) {
       for (const auto domain : {
@@ -184,6 +218,7 @@ namespace {
         auto sum = std::vector<Rgb>(pixel_count);
         auto strongest = std::vector<Rgb>(pixel_count);
         double strongest_peak = 0.0;
+        auto strongest_index = FixtureLightIndex { 0U };
         auto references = std::array<std::vector<Rgb>, 3> {};
         for (std::size_t index = 0U; index < light_count; ++index) {
           SCOPED_TRACE(index);
@@ -208,6 +243,7 @@ namespace {
           minimum_single_peak = std::min(minimum_single_peak, peak);
           if (peak > strongest_peak) {
             strongest_peak = peak;
+            strongest_index = FixtureLightIndex { index };
             for (std::size_t pixel = 0U; pixel < pixel_count; ++pixel) {
               for (std::size_t channel = 0U; channel < 3U; ++channel) {
                 strongest.at(pixel).at(channel)
@@ -224,8 +260,28 @@ namespace {
           SCOPED_TRACE(count);
           ASSERT_NO_FATAL_FAILURE(select(std::span(all).first(count)));
           auto combined = Image {};
+          auto full_list = std::vector<ForwardLocalLightRecord> {};
+          full_list.reserve(count);
+          for (std::size_t index = 0U; index < count; ++index) {
+            full_list.push_back(
+              authored.at(reversed ? light_count - 1U - index : index));
+          }
+          auto unculled = Image {};
           bool capture_finished = true;
           {
+            probe->after_render
+              = [&](const ViewRenderGpuContext& hook) -> void {
+              RecordUnculledReference(hook.recorder,
+                {
+                  .lights = full_list,
+                  .baseline = baseline,
+                  .extent = { kWidth, kHeight },
+                  .forward_shading
+                  = forward || domain == data::MaterialDomain::kAlphaBlended,
+                });
+            };
+            const auto clear_reference
+              = ScopeGuard([&] noexcept -> void { probe->after_render = {}; });
             // Capture one representative all-lights frame when requested by
             // the native fixture's existing RenderDoc environment control.
             const auto capture = forward
@@ -245,6 +301,8 @@ namespace {
             ASSERT_NO_FATAL_FAILURE(render(combined));
           }
           ASSERT_TRUE(capture_finished);
+          ASSERT_NO_FATAL_FAILURE(ReadUnculledReference(unculled));
+          ASSERT_EQ(unculled.size(), pixel_count);
           const auto& reference = references.at(count - 31U);
           unsigned omitted_rejections = 0U;
           unsigned duplicated_rejections = 0U;
@@ -262,6 +320,17 @@ namespace {
               maximum_scaled_error
                 = std::max(maximum_scaled_error, error / tolerance);
               ++compared_channels;
+              const auto full_expected
+                = static_cast<double>(unculled.at(pixel).at(channel));
+              ASSERT_TRUE(std::isfinite(full_expected));
+              const auto full_tolerance
+                = (0.005 * std::abs(full_expected)) + 2.0e-5;
+              const auto full_error = std::abs(actual - full_expected);
+              EXPECT_LE(full_error, full_tolerance)
+                << "unculled pixel=" << pixel << " channel=" << channel;
+              maximum_unculled_error
+                = std::max(maximum_unculled_error, full_error / full_tolerance);
+              ++unculled_channels;
               if (count == light_count) {
                 const auto control = strongest.at(pixel).at(channel);
                 const auto omitted = expected - control;
@@ -280,6 +349,27 @@ namespace {
           if (count == light_count) {
             EXPECT_GT(omitted_rejections, 0U);
             EXPECT_GT(duplicated_rejections, 0U);
+            // Deliberately omit a visible source from the renderer, keeping
+            // the independent reference unchanged. A shared selection bug
+            // must not make the two paths agree.
+            auto missing_one = all;
+            std::erase(missing_one, strongest_index);
+            ASSERT_NO_FATAL_FAILURE(select(missing_one));
+            auto omitted_image = Image {};
+            ASSERT_NO_FATAL_FAILURE(render(omitted_image));
+            unsigned rejected_channels = 0U;
+            for (std::size_t pixel = 0U; pixel < pixel_count; ++pixel) {
+              for (std::size_t channel = 0U; channel < 3U; ++channel) {
+                const auto expected
+                  = static_cast<double>(unculled.at(pixel).at(channel));
+                const auto error
+                  = std::abs(omitted_image.at(pixel).at(channel) - expected);
+                rejected_channels
+                  += error > (0.005 * std::abs(expected)) + 2.0e-5 ? 1U : 0U;
+              }
+            }
+            EXPECT_GT(rejected_channels, 0U);
+            ASSERT_NO_FATAL_FAILURE(select(all));
           }
         }
         // Reverse physical light assignments while keeping node identities.
@@ -341,6 +431,9 @@ namespace {
     RecordProperty("permutation_channels", permutation_channels);
     RecordProperty("maximum_fraction_of_image_budget", maximum_scaled_error);
     RecordProperty("minimum_single_light_peak", minimum_single_peak);
+    RecordProperty("unculled_channels", unculled_channels);
+    RecordProperty(
+      "maximum_unculled_fraction_of_image_budget", maximum_unculled_error);
   }
 } // namespace
 } // namespace oxygen::vortex::testing

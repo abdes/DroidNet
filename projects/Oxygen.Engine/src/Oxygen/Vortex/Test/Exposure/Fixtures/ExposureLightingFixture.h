@@ -52,6 +52,7 @@ protected:
       const RenderContext&, const SceneTextureExtractRef&, unsigned)>
       inspect;
     std::function<void()> after_submit;
+    std::function<void(const ViewRenderGpuContext&)> after_render;
   };
 
   auto SetUp() -> void override;
