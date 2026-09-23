@@ -17,7 +17,9 @@ namespace oxygen::graphics::d3d12 {
 
 namespace dx {
   using IFactory = IDXGIFactory7;
-  using ISwapChain = IDXGISwapChain1;
+  // DXGI factory methods return this interface; query ISwapChain before storage.
+  using ISwapChainFactoryOutput = IDXGISwapChain1;
+  using ISwapChain = IDXGISwapChain3;
   using IDevice = ID3D12Device9;
   using IGraphicsCommandList = ID3D12GraphicsCommandList7;
   using ICommandQueue = ID3D12CommandQueue;

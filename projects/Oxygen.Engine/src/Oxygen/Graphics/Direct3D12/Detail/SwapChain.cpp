@@ -8,6 +8,7 @@
 
 #include <dxgiformat.h>
 #include <windows.h>
+#include <wrl/client.h>
 
 #include <fmt/format.h>
 
@@ -16,6 +17,7 @@
 #include <Oxygen/Graphics/Common/ObjectRelease.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/SwapChain.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
+#include <Oxygen/Profiling/CpuProfileScope.h>
 
 namespace {
 
@@ -67,9 +69,21 @@ auto SwapChain::Present() const -> void
   DCHECK_NOTNULL_F(swap_chain_);
   // Use sync_interval of 1 for V-Sync enabled, 0 for V-Sync disabled
   const UINT sync_interval = graphics_->IsVSyncEnabled() ? 1U : 0U;
-  ThrowOnFailed(swap_chain_->Present(sync_interval, 0));
-  current_back_buffer_index_
-    = (current_back_buffer_index_ + 1U) % frame::kFramesInFlight.get();
+  // These swap chains stay in DXGI windowed mode, including borderless windows.
+  // Disabling V-Sync must also opt into tearing when the chain supports it.
+  const UINT present_flags = sync_interval == 0U
+      && (swap_chain_flags_ & DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING) != 0U
+    ? DXGI_PRESENT_ALLOW_TEARING
+    : 0U;
+  {
+    const auto* scope_name = sync_interval != 0U ? "D3D12.Present.VSync"
+      : present_flags != 0U ? "D3D12.Present.Tearing"
+                           : "D3D12.Present.Immediate";
+    oxygen::profiling::CpuProfileScope present_scope(
+      scope_name, oxygen::profiling::ProfileCategory::kSynchronization);
+    ThrowOnFailed(swap_chain_->Present(sync_interval, present_flags));
+  }
+  current_back_buffer_index_ = swap_chain_->GetCurrentBackBufferIndex();
 }
 
 auto SwapChain::UpdateDependencies(
@@ -125,7 +139,7 @@ auto SwapChain::CreateSwapChain() -> void
     .Flags = swap_chain_flags_,
   };
 
-  dx::ISwapChain* swap_chain { nullptr };
+  Microsoft::WRL::ComPtr<dx::ISwapChainFactoryOutput> factory_output;
   try {
     // NB: Misleading argument name for CreateSwapChainForHwnd().
     // For Direct3D 11, and earlier versions of Direct3D, the first argument
@@ -135,7 +149,7 @@ auto SwapChain::CreateSwapChain() -> void
     auto create_desc = swap_chain_desc;
     HRESULT hr = graphics_->GetFactory()->CreateSwapChainForHwnd(
       command_queue_, // Yes, the command queue, for D3D12
-      window_handle, &create_desc, nullptr, nullptr, &swap_chain);
+      window_handle, &create_desc, nullptr, nullptr, factory_output.ReleaseAndGetAddressOf());
     if (FAILED(hr) && create_desc.Flags != 0U) {
       LOG_F(WARNING,
         "CreateSwapChainForHwnd failed with flags=0x{:X}; retrying without "
@@ -143,7 +157,7 @@ auto SwapChain::CreateSwapChain() -> void
         create_desc.Flags);
       create_desc.Flags = 0U;
       hr = graphics_->GetFactory()->CreateSwapChainForHwnd(command_queue_,
-        window_handle, &create_desc, nullptr, nullptr, &swap_chain);
+        window_handle, &create_desc, nullptr, nullptr, factory_output.ReleaseAndGetAddressOf());
     }
     if (FAILED(hr)) {
       LOG_F(ERROR,
@@ -165,17 +179,17 @@ auto SwapChain::CreateSwapChain() -> void
     swap_chain_flags_ = create_desc.Flags;
     ThrowOnFailed(graphics_->GetFactory()->MakeWindowAssociation(
       window_handle, DXGI_MWA_NO_ALT_ENTER));
-    swap_chain_ = swap_chain;
-    swap_chain = nullptr;
-    current_back_buffer_index_ = 0U;
+    Microsoft::WRL::ComPtr<dx::ISwapChain> swap_chain;
+    ThrowOnFailed(factory_output.As(&swap_chain),
+      "The engine swap-chain interface is required for native back-buffer tracking");
+    swap_chain_ = swap_chain.Detach();
+    current_back_buffer_index_ = swap_chain_->GetCurrentBackBufferIndex();
   } catch (const std::exception& e) {
     LOG_F(ERROR, "Failed to create swap chain: {}", e.what());
-    ObjectRelease(swap_chain);
     ObjectRelease(swap_chain_);
     swap_chain_flags_ = 0U;
     current_back_buffer_index_ = 0U;
   }
-  ObjectRelease(swap_chain);
 }
 
 auto SwapChain::ReleaseSwapChain() -> void
