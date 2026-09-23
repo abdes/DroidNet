@@ -11,8 +11,8 @@
 #include "Vortex/Services/Lighting/LocalLightAttenuation.hlsli"
 #include "Vortex/Shared/BRDFCommon.hlsli"
 
-// Eight-point Gauss-Legendre rule on [0,1]. Composite panels and explicit
-// geometry/BRDF-peak partitions provide deterministic refinement.
+// Bounded Gauss rule for clipped source support. No per-pixel convergence
+// search: the independent CPU integrator owns numerical refinement.
 static const float kEmitterNodes[8] = {
     0.0198550717512319, 0.101666761293187, 0.237233795041836, 0.408282678752175,
     0.591717321247825, 0.762766204958164, 0.898333238706813, 0.980144928248768
@@ -20,6 +20,13 @@ static const float kEmitterNodes[8] = {
 static const float kEmitterWeights[8] = {
     0.0506142681451881, 0.111190517226687, 0.156853322938944, 0.181341891689181,
     0.181341891689181, 0.156853322938944, 0.111190517226687, 0.0506142681451881
+};
+
+static const float kSmoothEmitterNodes[4] = {
+    0.0694318442029737, 0.330009478207572, 0.669990521792428, 0.930568155797026
+};
+static const float kSmoothEmitterWeights[4] = {
+    0.173927422568727, 0.326072577431273, 0.326072577431273, 0.173927422568727
 };
 
 static void EmitterBasis(float3 axis, out float3 first, out float3 second)
@@ -30,12 +37,15 @@ static void EmitterBasis(float3 axis, out float3 first, out float3 second)
 
 static float EmitterPhase(float3 direction, float3 first, float3 second)
 {
-    float phase = atan2(dot(direction, second), dot(direction, first));
+    const float2 projected = float2(dot(direction, first), dot(direction, second));
+    // Azimuth is arbitrary on the axis; atan2(0,0) is undefined in HLSL.
+    if (all(projected == 0.0)) return 0.0;
+    float phase = atan2(projected.y, projected.x);
     return phase < 0.0 ? phase + 2.0 * PI : phase;
 }
 
 struct EmitterArcs {
-    float boundaries[10];
+    float boundaries[12];
     uint count;
 };
 
@@ -70,30 +80,22 @@ static void AddEmitterLobes(inout GgxDirectLobes sum, GgxDirectLobes value, floa
     sum.diffuse += value.diffuse * weight;
 }
 
-static void AccumulateEmitterTerm(inout float3 sum, inout float3 correction, float3 value)
+// Finite-source integration has a 1% lobe budget. Away from the cone edges,
+// ordinary FP32 arithmetic contributes at most 0.2% of that response. Punctual
+// evaluation and poorly conditioned cones retain the compensated evaluator.
+static float EmitterAngularAttenuation(ForwardLocalLightRecord light,
+    float3 L, float3 axis)
 {
-    precise float3 adjusted = value - correction;
-    precise float3 next = sum + adjusted;
-    correction = (next - sum) - adjusted;
-    sum = next;
-}
-
-static void AccumulateEmitterLobes(inout GgxDirectLobes sum,
-    inout GgxDirectLobes correction, GgxDirectLobes value, float3 weight)
-{
-    AccumulateEmitterTerm(sum.single_scattering, correction.single_scattering, value.single_scattering * weight);
-    AccumulateEmitterTerm(sum.multiple_scattering, correction.multiple_scattering, value.multiple_scattering * weight);
-    AccumulateEmitterTerm(sum.diffuse, correction.diffuse, value.diffuse * weight);
-}
-
-static bool EmitterLobesConverged(GgxDirectLobes a, GgxDirectLobes b)
-{
-    return all(4.0 * abs(a.single_scattering - b.single_scattering)
-            <= 1.25e-6 + 0.0025 * abs(a.single_scattering))
-        && all(4.0 * abs(a.multiple_scattering - b.multiple_scattering)
-            <= 1.25e-6 + 0.0025 * abs(a.multiple_scattering))
-        && all(4.0 * abs(a.diffuse - b.diffuse)
-            <= 1.25e-6 + 0.0025 * abs(a.diffuse));
+    const float coordinate = 0.5 * (1.0 + dot(L, axis));
+    const float width = light.outer_cone_sin_half_squared - light.inner_cone_sin_half_squared;
+    const float edge = light.outer_cone_sin_half_squared - coordinate;
+    if (width > 0.02 && edge > 0.004 && edge < width - 0.004) {
+        const float ramp = edge / width;
+        return ramp * ramp;
+    }
+    return ComputeSpotLightAngularAttenuation(L, axis,
+        float2(light.inner_cone_sin_half_squared, light.inner_cone_relative_correction),
+        float2(light.outer_cone_sin_half_squared, light.outer_cone_relative_correction));
 }
 
 struct EmitterGeometry {
@@ -109,12 +111,14 @@ struct EmitterGeometry {
     float tangent_start;
     float tangent_span;
     float support_radius;
+    float inner_support_radius;
     float projected_distance;
     float support_phase;
     float peak_radial;
     float peak_phase;
     float3 peak_plane;
     bool sphere;
+    bool peak_supported;
 };
 
 static bool PrepareEmitterGeometry(ForwardLocalLightRecord light, float3 receiver,
@@ -152,9 +156,11 @@ static bool PrepareEmitterGeometry(ForwardLocalLightRecord light, float3 receive
         const float peak_sine = length(cross(g.axis, peak));
         const float peak_u = dot(g.axis, peak) > 0.0 && peak_sine < ratio
             ? (peak_sine / ratio) * (peak_sine / ratio) : 1.0;
-        g.peak_radial = peak_u > g.minimum && peak_u < g.maximum
-            ? (g.maximum - peak_u)
-                / (g.tangent_span * (sqrt(1.0 - peak_u) + g.tangent_start)) : 0.0;
+        g.peak_supported = dot(g.axis, peak) > 0.0 && peak_sine < ratio
+            && peak_u >= g.minimum && peak_u <= g.maximum;
+        const float clipped_peak = clamp(peak_u, g.minimum, g.maximum);
+        g.peak_radial = (g.maximum - clipped_peak)
+            / (g.tangent_span * (sqrt(1.0 - clipped_peak) + g.tangent_start));
         g.peak_phase = EmitterPhase(peak, g.first, g.second);
     } else {
         g.axis = normalize(light.emitted_direction_ws);
@@ -171,6 +177,10 @@ static bool PrepareEmitterGeometry(ForwardLocalLightRecord light, float3 receive
             - 2.0 * light.outer_cone_sin_half_squared * light.outer_cone_relative_correction;
         g.support_radius = outer_cos <= 0.0 ? range_radius
             : min(range_radius, height * (2.0 * sqrt(outer_s * (1.0 - outer_s))) / outer_cos);
+        const float inner_cos = 1.0 - 2.0 * light.inner_cone_sin_half_squared;
+        const float inner_sine = 2.0 * sqrt(light.inner_cone_sin_half_squared
+            * (1.0 - light.inner_cone_sin_half_squared));
+        g.inner_support_radius = inner_cos > 0.0 ? height * inner_sine / inner_cos : g.range;
         g.projected_distance = length(g.center + g.axis * height);
         if (g.projected_distance > g.radius
             && g.projected_distance - g.radius >= g.support_radius) return false;
@@ -181,42 +191,126 @@ static bool PrepareEmitterGeometry(ForwardLocalLightRecord light, float3 receive
         if (g.minimum >= g.maximum) return false;
         const float facing = -dot(g.axis, peak);
         const float3 offset = facing > 0.0 ? peak * (height / facing) - g.center : -g.center;
-        g.peak_radial = clamp(length(float2(dot(offset, g.first), dot(offset, g.second))) / g.radius,
-            g.minimum, g.maximum);
+        const float peak_radius = length(float2(dot(offset, g.first), dot(offset, g.second))) / g.radius;
+        g.peak_supported = facing > 0.0 && peak_radius >= g.minimum && peak_radius <= g.maximum;
+        g.peak_radial = clamp(peak_radius, g.minimum, g.maximum);
         g.peak_phase = EmitterPhase(offset, g.first, g.second);
     }
     return true;
 }
 
+static bool EmitterHasSmoothResponse(EmitterGeometry g, float3 N, float3 V,
+    GgxDirectContext brdf)
+{
+    const float ratio = g.radius / g.distance;
+    const float peak_distance = length(g.center / g.distance - reflect(-V, N));
+    const float variation_scale = 2.0 * brdf.roughness * brdf.roughness
+        + max(0.0, peak_distance - ratio);
+    return ratio <= 0.2 && ratio <= 0.5 * variation_scale
+        && g.distance <= 0.25 * g.range && g.distance - g.radius > 0.001;
+}
+
+// Map the known GGX peak to a uniform angular coordinate. Integrating the
+// narrow lobe in its natural width avoids resolving it with a dense source grid.
+// Broad diffuse/compensation lobes keep the ordinary source-area rule.
+static float3 EmitterPeakCoordinate(float node, float width, float span,
+    bool peak_at_start)
+{
+    const float scale = max(width / span, 1.0e-7);
+    const float angle = atan(1.0 / scale);
+    float sine, cosine;
+    sincos(angle * node, sine, cosine);
+    const float offset = scale * sine / cosine;
+    return float3(peak_at_start ? offset : 1.0 - offset,
+        scale * angle / (cosine * cosine), offset);
+}
+
+static float3 EmitterRadialPeakCoordinate(EmitterGeometry g, float3 N,
+    GgxDirectContext brdf, float node, float span, bool peak_at_start)
+{
+    const float alpha = brdf.roughness * brdf.roughness;
+    const float3 radial_axis = g.first * cos(g.peak_phase) + g.second * sin(g.peak_phase);
+    float3 derivative;
+    if (g.sphere) {
+        const float ratio = g.radius / g.distance;
+        const float offset = g.tangent_span * g.peak_radial;
+        const float tangent = g.tangent_start + offset;
+        const float u = max(0.0, g.maximum - offset * (2.0 * g.tangent_start + offset));
+        if (u < 1.0e-8) {
+            // At the cap axis, angular distance is proportional to sqrt(u).
+            // The GGX radial CDF is rational here, not an arctangent.
+            const float width = 2.0 * alpha * alpha * brdf.nv * brdf.nv
+                / (ratio * ratio * g.tangent_span * tangent);
+            const float scale = width / span;
+            const float limit = 1.0 / (1.0 + scale);
+            const float denominator = 1.0 - node * limit;
+            const float distance = scale * node * limit / denominator;
+            return float3(peak_at_start ? distance : 1.0 - distance,
+                scale * limit / (denominator * denominator), distance);
+        }
+        const float cosine = sqrt(1.0 - ratio * ratio * u);
+        derivative = (g.axis * (-ratio * ratio / (2.0 * cosine))
+            + radial_axis * (ratio / (2.0 * sqrt(u)))) * (-2.0 * g.tangent_span * tangent);
+    } else {
+        const float3 ray = g.center + radial_axis * (g.radius * g.peak_radial);
+        const float distance = length(ray);
+        const float3 direction = ray / distance;
+        derivative = (g.radius / distance) * (radial_axis - direction * dot(direction, radial_axis));
+    }
+    const float slope = length(derivative - N * dot(N, derivative)) / (2.0 * brdf.nv);
+    return EmitterPeakCoordinate(node, alpha / max(slope, 1.0e-20), span, peak_at_start);
+}
+
 static GgxDirectLobes IntegrateEmitterRule(EmitterGeometry g,
-    ForwardLocalLightRecord light, float3 N, float3 V, float3 F0, float3 rho,
-    float roughness, LightingFrameBindings lighting, uint panels)
+    ForwardLocalLightRecord light, float3 N, float3 V, GgxDirectContext brdf,
+    bool importance, bool broad_only)
 {
     GgxDirectLobes sum = (GgxDirectLobes)0;
-    GgxDirectLobes correction = (GgxDirectLobes)0;
     const float radial_start = g.sphere ? 0.0 : g.minimum;
     const float radial_end = g.sphere ? 1.0 : g.maximum;
     const float radial_peak = clamp(g.peak_radial, radial_start, radial_end);
+    const bool smooth = !importance && EmitterHasSmoothResponse(g, N, V, brdf);
+    const uint order = smooth ? 4u : 8u;
+    const float peak_extent = g.sphere ? length(cross(g.axis, reflect(-V, N)))
+        : g.radius * g.peak_radial / g.distance;
+    const bool angular_peak = peak_extent > 2.0 * brdf.roughness * brdf.roughness;
     [loop] for (uint segment = 0u; segment < 2u; ++segment) {
         float start = segment == 0u ? radial_start : radial_peak;
         float end = segment == 0u ? radial_peak : radial_end;
         if (start >= end) continue;
-        [loop] for (uint radial_index = 0u; radial_index < panels * 8u; ++radial_index) {
-            const uint node = radial_index % 8u;
+        [loop] for (uint radial_index = 0u; radial_index < order; ++radial_index) {
+            const uint node = radial_index;
             // Cluster nodes quadratically at partition boundaries. The known
             // specular peak is a boundary, so even smooth lobes are resolved
             // without a uniformly enormous source grid.
-            const float radial_t = (float(radial_index / 8u) + kEmitterNodes[node]) / float(panels);
+            const float radial_t = smooth ? kSmoothEmitterNodes[node] : kEmitterNodes[node];
+            const float radial_weight = smooth ? kSmoothEmitterWeights[node] : kEmitterWeights[node];
             const float radial_sine = sin(0.5 * PI * radial_t);
-            const float radial_jacobian = 0.5 * PI * sin(PI * radial_t);
-            const float parameter = start + (end - start) * radial_sine * radial_sine;
+            float radial_jacobian = 0.5 * PI * sin(PI * radial_t);
+            float radial_coordinate = smooth ? radial_t : radial_sine * radial_sine;
+            if (smooth) radial_jacobian = 1.0;
+            float parameter_to_end = (1.0 - start) - (end - start) * radial_coordinate;
+            if (importance) {
+                const float3 mapped = EmitterRadialPeakCoordinate(g, N, brdf,
+                    radial_t, end - start, segment == 1u);
+                radial_coordinate = mapped.x;
+                radial_jacobian = mapped.y;
+                // Preserve the small distance from the cap axis independently
+                // of the rounded [0,1] parameter used for the surface distance.
+                parameter_to_end = segment == 0u
+                    ? (1.0 - end) + (end - start) * mapped.z
+                    : (1.0 - start) - (end - start) * mapped.z;
+            }
+            const float parameter = start + (end - start) * radial_coordinate;
             float3 center, first, second;
             float scale;
             float ring = 0.0;
             if (g.sphere) {
                 const float offset = g.tangent_span * parameter;
                 const float tangent = g.tangent_start + offset;
-                const float u = clamp(g.maximum - offset * (2.0 * g.tangent_start + offset), g.minimum, g.maximum);
+                const float tail = g.tangent_span * parameter_to_end;
+                const float u = clamp(g.minimum + tail * (2.0 * sqrt(1.0 - g.minimum) - tail),
+                    g.minimum, g.maximum);
                 const float ratio = g.radius / g.distance;
                 const float sine = ratio * sqrt(u);
                 const float cosine = sqrt(1.0 - sine * sine);
@@ -245,6 +339,14 @@ static GgxDirectLobes IntegrateEmitterRule(EmitterGeometry g,
             AddEmitterRoots(arcs, horizon);
             AddEmitterBoundary(arcs, g.peak_phase);
             AddEmitterRoots(arcs, float3(dot(g.peak_plane, center), dot(g.peak_plane, first), dot(g.peak_plane, second)));
+            if (!g.sphere) {
+                // Split the inner cone too: its slope changes at the plateau.
+                // This permits a small fixed rule on each smooth interval.
+                const float extent = 2.0 * g.projected_distance * ring;
+                AddEmitterRoots(arcs, float3(g.inner_support_radius * g.inner_support_radius
+                    - g.projected_distance * g.projected_distance - ring * ring,
+                    extent * cos(g.support_phase), extent * sin(g.support_phase)));
+            }
             float support_half_width = PI;
             if (!g.sphere && g.support_radius < g.projected_distance + ring) {
                 const float difference = abs(g.projected_distance - ring);
@@ -261,16 +363,33 @@ static GgxDirectLobes IntegrateEmitterRule(EmitterGeometry g,
             }
             [loop] for (uint arc = 0u; arc + 1u < arcs.count; ++arc) {
                 const float a = arcs.boundaries[arc], b = arcs.boundaries[arc + 1u];
+                if (b <= a) continue;
                 const float midpoint = 0.5 * (a + b);
                 if (horizon.x + horizon.y * cos(midpoint) + horizon.z * sin(midpoint) <= 0.0) continue;
                 const float support_delta = abs(midpoint - g.support_phase);
                 if (!g.sphere && min(support_delta, 2.0 * PI - support_delta) > support_half_width) continue;
-                [loop] for (uint angular_index = 0u; angular_index < panels * 8u; ++angular_index) {
-                    const uint angular_node = angular_index % 8u;
-                    const float angular_t = (float(angular_index / 8u) + kEmitterNodes[angular_node]) / float(panels);
+                [loop] for (uint angular_index = 0u; angular_index < order; ++angular_index) {
+                    const uint angular_node = angular_index;
+                    const float angular_t = smooth ? kSmoothEmitterNodes[angular_node] : kEmitterNodes[angular_node];
+                    const float angular_weight = smooth ? kSmoothEmitterWeights[angular_node] : kEmitterWeights[angular_node];
                     const float angular_sine = sin(0.5 * PI * angular_t);
-                    const float angular_jacobian = 0.5 * PI * sin(PI * angular_t);
-                    const float phi = a + (b - a) * angular_sine * angular_sine;
+                    float angular_jacobian = 0.5 * PI * sin(PI * angular_t);
+                    float angular_coordinate = smooth || importance ? angular_t : angular_sine * angular_sine;
+                    if (smooth || importance) angular_jacobian = 1.0;
+                    const bool peak_at_start = abs(a - g.peak_phase) < 1.0e-6;
+                    const bool peak_at_end = abs(b - g.peak_phase) < 1.0e-6
+                        || abs(b - g.peak_phase - 2.0 * PI) < 1.0e-6;
+                    if (importance && angular_peak && (peak_at_start || peak_at_end)) {
+                        const float peak_distance = length(center
+                            + first * cos(g.peak_phase) + second * sin(g.peak_phase));
+                        const float width = 2.0 * brdf.roughness * brdf.roughness
+                            * brdf.nv * peak_distance / max(length(first), 1.0e-20);
+                        const float3 mapped = EmitterPeakCoordinate(angular_t,
+                            width, b - a, peak_at_start);
+                        angular_coordinate = mapped.x;
+                        angular_jacobian = mapped.y;
+                    }
+                    const float phi = a + (b - a) * angular_coordinate;
                     const float3 ray = center + first * cos(phi) + second * sin(phi);
                     const float distance = length(ray);
                     if (distance <= 0.0) continue;
@@ -278,14 +397,19 @@ static GgxDirectLobes IntegrateEmitterRule(EmitterGeometry g,
                     float illumination = scale;
                     if (!g.sphere) {
                         illumination *= ComputeLocalLightDistanceAttenuation(ray, g.range)
-                            * ComputeSpotLightAngularAttenuation(L, g.axis,
-                                float2(light.inner_cone_sin_half_squared, light.inner_cone_relative_correction),
-                                float2(light.outer_cone_sin_half_squared, light.outer_cone_relative_correction));
+                            * EmitterAngularAttenuation(light, L, g.axis);
                     }
-                    const float weight = (end - start) * (b - a) * kEmitterWeights[node]
-                        * kEmitterWeights[angular_node] * radial_jacobian * angular_jacobian / float(panels * panels);
-                    AccumulateEmitterLobes(sum, correction, EvaluateGgxDirectLobes(N, V, L, F0, rho, roughness, lighting),
-                        light.intensity_rgb_cd * (illumination * weight));
+                    const float weight = (end - start) * (b - a) * radial_weight
+                        * angular_weight * radial_jacobian * angular_jacobian;
+                    GgxDirectLobes lobes = (GgxDirectLobes)0;
+                    if (importance) {
+                        lobes.single_scattering = EvaluatePreparedGgxSingleScattering(N, V, L, brdf);
+                    } else if (broad_only) {
+                        lobes = EvaluatePreparedGgxBroadLobes(N, L, brdf);
+                    } else {
+                        lobes = EvaluatePreparedGgxDirectLobes(N, V, L, brdf);
+                    }
+                    AddEmitterLobes(sum, lobes, light.intensity_rgb_cd * (illumination * weight));
                 }
             }
         }
@@ -293,12 +417,84 @@ static GgxDirectLobes IntegrateEmitterRule(EmitterGeometry g,
     return sum;
 }
 
-static GgxDirectLobes EvaluateLocalEmitterLobes(ForwardLocalLightRecord light,
-    float3 receiver, float3 N, float3 V, float3 F0, float3 rho, float roughness,
-    LightingFrameBindings lighting)
+// The seven-point degree-five disk cubature integrates projected-area moments
+// through quartic order. It is used only when source support and BRDF variation
+// are smooth; clipped support and narrow highlights use the bounded peak rule.
+static bool CanUseEmitterCubature(EmitterGeometry g, ForwardLocalLightRecord light,
+    float3 N, float3 V, GgxDirectContext brdf)
+{
+    if (g.minimum > 0.0 || g.maximum < 1.0
+        || g.distance - g.radius <= 0.001 || g.distance + g.radius >= g.range
+        || dot(N, g.center) <= g.radius) return false;
+    const float radius_ratio = g.radius / g.distance;
+    if (!EmitterHasSmoothResponse(g, N, V, brdf)) return false;
+    const float3 center_direction = g.center / g.distance;
+    if (!g.sphere) {
+        const float cosine = saturate(-dot(center_direction, g.axis));
+        const float extent = sqrt(saturate(1.0 - cosine * cosine)) * radius_ratio;
+        const float center = cosine * sqrt(1.0 - radius_ratio * radius_ratio);
+        const float inner = 1.0 - 2.0 * light.inner_cone_sin_half_squared;
+        const float outer = 1.0 - 2.0 * light.outer_cone_sin_half_squared;
+        // Do not straddle either non-smooth cone boundary.
+        if (center - extent <= outer + 2.0e-6) return false;
+        if (center + extent >= inner - 2.0e-6
+            && center - extent <= inner + 2.0e-6) return false;
+    }
+    return true;
+}
+
+static GgxDirectLobes EvaluateEmitterCubature(EmitterGeometry g,
+    ForwardLocalLightRecord light, float3 N, float3 V, GgxDirectContext brdf)
+{
+    static const float2 nodes[7] = {
+        float2(0.0, 0.0), float2(0.8164965809, 0.0), float2(0.4082482905, 0.7071067812),
+        float2(-0.4082482905, 0.7071067812), float2(-0.8164965809, 0.0),
+        float2(-0.4082482905, -0.7071067812), float2(0.4082482905, -0.7071067812)
+    };
+    GgxDirectLobes sum = (GgxDirectLobes)0;
+    [loop] for (uint sample_index = 0u; sample_index < 7u; ++sample_index) {
+        const float2 node = nodes[sample_index];
+        const float weight = sample_index == 0u ? 0.25 : 0.125;
+        const float3 offset = g.radius * (g.first * node.x + g.second * node.y);
+        float3 L;
+        float illumination;
+        if (g.sphere) {
+            const float ratio = g.radius / g.distance;
+            const float u = dot(node, node);
+            const float cosine = sqrt(1.0 - ratio * ratio * u);
+            const float surface_distance = g.distance * cosine - g.radius * sqrt(1.0 - u);
+            const float q = surface_distance / g.range;
+            const float window = saturate(1.0 - q * q * q * q);
+            L = g.axis * cosine + offset / g.distance;
+            illumination = window * window / (g.distance * g.distance * cosine);
+        } else {
+            const float3 ray = g.center + offset;
+            L = normalize(ray);
+            illumination = ComputeLocalLightDistanceAttenuation(ray, g.range)
+                * EmitterAngularAttenuation(light, L, g.axis);
+        }
+        AddEmitterLobes(sum, EvaluatePreparedGgxDirectLobes(N, V, L, brdf),
+            light.intensity_rgb_cd * (illumination * weight));
+    }
+    return sum;
+}
+
+// Conservative rejection uses the complete source extent, never its center alone.
+static bool LocalEmitterCanContribute(ForwardLocalLightRecord light,
+    float3 receiver, float3 N)
+{
+    const float3 ray = light.position_ws - receiver;
+    const float extent = light.range_m + light.source_radius_m;
+    return light.range_m > 0.0 && any(light.intensity_rgb_cd != 0.0)
+        && dot(ray, ray) < extent * extent
+        && dot(N, ray) + light.source_radius_m > 0.0;
+}
+
+static GgxDirectLobes EvaluatePreparedLocalEmitterLobes(ForwardLocalLightRecord light,
+    float3 receiver, float3 N, float3 V, GgxDirectContext brdf)
 {
     GgxDirectLobes result = (GgxDirectLobes)0;
-    if (dot(N, V) <= 0.0 || light.range_m <= 0.0 || all(light.intensity_rgb_cd == 0.0)) return result;
+    if (brdf.nv <= 0.0 || !LocalEmitterCanContribute(light, receiver, N)) return result;
     if (light.source_radius_m == 0.0) {
         const float3 ray = light.position_ws - receiver;
         const float distance = length(ray);
@@ -310,23 +506,31 @@ static GgxDirectLobes EvaluateLocalEmitterLobes(ForwardLocalLightRecord light,
                 float2(light.inner_cone_sin_half_squared, light.inner_cone_relative_correction),
                 float2(light.outer_cone_sin_half_squared, light.outer_cone_relative_correction));
         }
-        AddEmitterLobes(result, EvaluateGgxDirectLobes(N, V, L, F0, rho, roughness, lighting),
+        if (attenuation <= 0.0) return result;
+        AddEmitterLobes(result, EvaluatePreparedGgxDirectLobes(N, V, L, brdf),
             light.intensity_rgb_cd * attenuation);
         return result;
     }
     EmitterGeometry geometry;
     if (!PrepareEmitterGeometry(light, receiver, N, V, geometry)) return result;
-    uint consecutive = 0u;
-    [loop] for (uint panels = 1u; panels <= 64u; panels *= 2u) {
-        const GgxDirectLobes current = IntegrateEmitterRule(geometry, light, N, V, F0, rho, roughness, lighting, panels);
-        consecutive = panels > 1u && EmitterLobesConverged(current, result) ? consecutive + 1u : 0u;
-        result = current;
-        if (consecutive >= 2u) return result;
+    if (CanUseEmitterCubature(geometry, light, N, V, brdf))
+        return EvaluateEmitterCubature(geometry, light, N, V, brdf);
+    const bool narrow_peak = brdf.roughness < 0.5 && geometry.peak_supported
+        && !EmitterHasSmoothResponse(geometry, N, V, brdf);
+    result = IntegrateEmitterRule(geometry, light, N, V, brdf, false, narrow_peak);
+    if (narrow_peak) {
+        const GgxDirectLobes specular = IntegrateEmitterRule(geometry, light, N, V, brdf, true, false);
+        result.single_scattering = specular.single_scattering;
     }
-    // Exhaustion is a failed physical evaluation, never successful black light
-    // or silently accepted unconverged output. Existing HDR admission owns it.
-    result.single_scattering = asfloat(0x7fc00000u).xxx;
     return result;
+}
+
+static GgxDirectLobes EvaluateLocalEmitterLobes(ForwardLocalLightRecord light,
+    float3 receiver, float3 N, float3 V, float3 F0, float3 rho, float roughness,
+    LightingFrameBindings lighting)
+{
+    return EvaluatePreparedLocalEmitterLobes(light, receiver, N, V,
+        PrepareGgxDirect(N, V, F0, rho, roughness, lighting));
 }
 
 static float3 EvaluateLocalEmitterResponse(ForwardLocalLightRecord light,

@@ -40,35 +40,38 @@ def build_report(controller, report, capture_path, report_path):
         if constant.byteOffset % 256:
             raise RuntimeError("Deferred constant slice is not CBV-aligned")
         kind, selection = struct.unpack_from("<2I", bytes(controller.GetBufferData(constant.resource,constant.byteOffset,80)),64)
-        if kind != 0 or selection >= 3: raise RuntimeError("Incorrect directional draw identity")
-        record_selection = struct.unpack_from("<I", records, selection*64+48)[0]
-        if selection != record_selection: raise RuntimeError("Draw and evaluation indices differ")
-        slot = slots[selection]
-        expected = {0:(80000,80000,80000), 1:(9000,18000,30000), 0xFFFFFFFF:(12000,4800,3000)}[slot]
-        illuminance = struct.unpack_from("<3f",records,selection*64+16)
-        if any(abs(a-b) > 0.02 for a,b in zip(illuminance,expected)):
-            raise RuntimeError(f"Incorrect source transport: {illuminance} vs {expected}")
-        refs = by_slot[words[8]]
-        reference = struct.unpack("<4I",bytes(controller.GetBufferData(refs.resource,refs.byteOffset+selection*16,16)))
-        if reference[2] != selection: raise RuntimeError("Shadow reference belongs to another source")
-        if slot == 0xFFFFFFFF:
-            if reference[0] != 0 or reference[1] != 0xFFFFFFFF: raise RuntimeError("Unshadowed source unexpectedly requests a map")
-        else:
-            if reference[0] != 1: raise RuntimeError("Shadowed source has no directional family")
-            header = next(x.descriptor for x in used if x.descriptor.elementByteSize == x.descriptor.byteSize == 112)
-            header_words = struct.unpack("<28I",bytes(controller.GetBufferData(header.resource,header.byteOffset,112)))
-            if header_words[1] != 2 or header_words[7] != 5: raise RuntimeError("Incomplete two-family cascade publication")
-            families = by_slot[header_words[0]]
-            family = struct.unpack("<4I",bytes(controller.GetBufferData(families.resource,families.byteOffset+reference[1]*16,16)))
-            if family[0] != selection or family[2] != (2 if slot == 0 else 3): raise RuntimeError("Wrong family identity or cascade count")
-            cascades = by_slot[header_words[6]]
-            cascade = bytes(controller.GetBufferData(cascades.resource,cascades.byteOffset+family[1]*128,128))
-            surface = struct.unpack_from("<I",cascade,80)[0]
-            if surface not in by_slot: raise RuntimeError("Draw did not consume its own shadow surface")
-            resource = str(by_slot[surface].resource)
-            shadow_surfaces.setdefault(tuple(words[18:20]),{})[slot] = resource
-            width = textures[resource].width
-            if width != (2048 if slot == 0 else 1024): raise RuntimeError(f"Per-source resolution changed: {width}")
+        if kind != 0 or selection != 0xFFFFFFFF: raise RuntimeError("Expected a complete directional batch")
+        sources = []
+        for selection in range(3):
+            record_selection = struct.unpack_from("<I", records, selection*64+48)[0]
+            if selection != record_selection: raise RuntimeError("Draw and evaluation indices differ")
+            slot = slots[selection]
+            expected = {0:(80000,80000,80000), 1:(9000,18000,30000), 0xFFFFFFFF:(12000,4800,3000)}[slot]
+            illuminance = struct.unpack_from("<3f",records,selection*64+16)
+            if any(abs(a-b) > 0.02 for a,b in zip(illuminance,expected)):
+                raise RuntimeError(f"Incorrect source transport: {illuminance} vs {expected}")
+            refs = by_slot[words[8]]
+            reference = struct.unpack("<4I",bytes(controller.GetBufferData(refs.resource,refs.byteOffset+selection*16,16)))
+            if reference[2] != selection: raise RuntimeError("Shadow reference belongs to another source")
+            if slot == 0xFFFFFFFF:
+                if reference[0] != 0 or reference[1] != 0xFFFFFFFF: raise RuntimeError("Unshadowed source unexpectedly requests a map")
+            else:
+                if reference[0] != 1: raise RuntimeError("Shadowed source has no directional family")
+                header = next(x.descriptor for x in used if x.descriptor.elementByteSize == x.descriptor.byteSize == 112)
+                header_words = struct.unpack("<28I",bytes(controller.GetBufferData(header.resource,header.byteOffset,112)))
+                if header_words[1] != 2 or header_words[7] != 5: raise RuntimeError("Incomplete two-family cascade publication")
+                families = by_slot[header_words[0]]
+                family = struct.unpack("<4I",bytes(controller.GetBufferData(families.resource,families.byteOffset+reference[1]*16,16)))
+                if family[0] != selection or family[2] != (2 if slot == 0 else 3): raise RuntimeError("Wrong family identity or cascade count")
+                cascades = by_slot[header_words[6]]
+                cascade = bytes(controller.GetBufferData(cascades.resource,cascades.byteOffset+family[1]*128,128))
+                surface = struct.unpack_from("<I",cascade,80)[0]
+                if surface not in by_slot: raise RuntimeError("Draw did not consume its own shadow surface")
+                resource = str(by_slot[surface].resource)
+                shadow_surfaces.setdefault(tuple(words[18:20]),{})[slot] = resource
+                width = textures[resource].width
+                if width != (2048 if slot == 0 else 1024): raise RuntimeError(f"Per-source resolution changed: {width}")
+            sources.append({"selection": selection, "atmosphere_slot": slot, "lux": illuminance})
         target = pipeline.GetOutputTargets()[0].resource
         texture = textures[str(target)]
         after = bytes(controller.GetTextureData(target,rd.Subresource()))
@@ -87,16 +90,17 @@ def build_report(controller, report, capture_path, report_path):
                 delta = max(a[c]-b[c] for c in range(3))
                 positive += delta > 0
                 maximum = max(maximum,delta)
-        if not positive: raise RuntimeError(f"Directional source {selection} contributes no sampled radiance")
+        if not positive: raise RuntimeError("Directional batch contributes no sampled radiance")
         view = tuple(words[18:20])
-        views.setdefault(view,set()).add(selection)
-        report.append(json.dumps({"event":draw.event_id,"view":view,"selection":selection,"atmosphere_slot":slot,"lux":illuminance,"positive_samples":positive,"maximum_delta":maximum}))
+        if view in views: raise RuntimeError("A view issued more than one directional batch")
+        views[view] = set(range(3))
+        report.append(json.dumps({"event":draw.event_id,"view":view,"sources":sources,"positive_samples":positive,"maximum_delta":maximum}))
     if len(views) != 2 or any(indices != {0,1,2} for indices in views.values()):
-        raise RuntimeError(f"Expected three contributions in both views: {views}")
+        raise RuntimeError(f"Expected one complete three-source batch in both views: {views}")
     if any(set(surfaces) != {0,1} or len(set(surfaces.values())) != 2 for surfaces in shadow_surfaces.values()):
         raise RuntimeError("The directional families share or lose a shadow surface")
     report.append("directional_array_verdict=pass")
-    report.append("scope=source transport, draw contribution and per-source shadow routing; physical oracle and complete lifetime gates remain open")
+    report.append("scope=per-source transport and shadow routing, aggregate batch contribution; individual RGB contribution is covered by the native projection image matrix; full physical and lifetime gates remain open")
 
 
 if __name__ == "__main__":

@@ -252,6 +252,8 @@ float3 AccumulateLocalLightsClustered(
                 lighting.local_indices_srv, iteration)) {
             return direct;
         }
+        const GgxDirectContext brdf = PrepareGgxDirect(N, V, F0,
+            base_rgb * (1.0 - metalness), roughness, lighting);
         for (uint i = 0; i < iteration.count; ++i) {
             const uint light_index = LoadClusterLightIndex(iteration, i);
             if (light_index >= record_limit) {
@@ -263,13 +265,16 @@ float3 AccumulateLocalLightsClustered(
                 continue;
             }
 
+            if (!LocalEmitterCanContribute(light, world_pos, N)) continue;
             const LightShadowReference shadow = LoadLightShadowReference(
                 lighting.local_shadow_map_srv, light.selection_index);
             const float visibility = ComputeLocalShadowVisibility(shadow,
                 world_pos, N, VortexSafeNormalize(light.position_ws - world_pos));
-            const float3 contribution = EvaluateLocalEmitterResponse(light,
-                world_pos, N, V, F0, base_rgb * (1.0 - metalness), roughness, lighting)
-                * visibility;
+            if (visibility <= 0.0) continue;
+            const GgxDirectLobes lobes = EvaluatePreparedLocalEmitterLobes(
+                light, world_pos, N, V, brdf);
+            const float3 contribution = (lobes.single_scattering
+                + lobes.multiple_scattering + lobes.diffuse) * visibility;
             RecordForwardHdrSource(contribution);
             direct += contribution;
         }

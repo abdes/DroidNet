@@ -473,6 +473,14 @@ and the existing overall 2% + 2e-5 material/physical budget. Do not widen these
 budgets after a failing candidate. Endpoint limits, integer ABI and invalid-input
 behavior retain their exact checks rather than being hidden by image tolerance.
 
+Production finite-source work is bounded. Smooth source support uses a seven-point
+projected-area cubature; clipped support uses fixed four- or eight-point rules per
+dimension. Narrow GGX peaks use importance coordinates instead of progressively
+denser source grids. Adaptive convergence belongs to the independent reference.
+Material/view moments are shared across source samples and light loops. Numerical
+qualification and representative application timing are both required; this does
+not change the emitter equations or the acceptance budgets above.
+
 The [EX07A CPU check](../vortex/plan/EX07A-contract-review.md#verification-obligations-and-current-evidence)
 checks model identities and a known analytic case; it is not the complete moment
 certificate, a production LUT, a GPU test or EX07B reference qualification.

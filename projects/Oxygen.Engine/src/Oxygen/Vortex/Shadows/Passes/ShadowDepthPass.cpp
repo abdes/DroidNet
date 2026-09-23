@@ -169,7 +169,7 @@ namespace {
     const internal::MeshRasterState raster_state)
     -> graphics::GraphicsPipelineDesc
   {
-    auto root_bindings = BuildVortexRootBindings();
+    static const auto root_bindings = BuildVortexRootBindings();
     auto defines = std::vector<graphics::ShaderDefine> {};
     AddBooleanDefine(raster_state.alpha_test, "ALPHA_TEST", defines);
 
@@ -390,6 +390,7 @@ auto ShadowDepthPass::RecordSlices(const PreparedViewShadowInput& view_input,
   const auto view_constants_param
     = static_cast<std::uint32_t>(bindless_d3d12::RootParam::kViewConstants);
 
+  auto current_raster_state = std::optional<internal::MeshRasterState> {};
   for (std::uint32_t slice_index = 0U; slice_index < depth_slices.size();
     ++slice_index) {
     const auto target_slice = depth_slices[slice_index].target_slice;
@@ -415,7 +416,7 @@ auto ShadowDepthPass::RecordSlices(const PreparedViewShadowInput& view_input,
       .bottom = static_cast<std::int32_t>(shadow_desc.height),
     });
 
-    auto current_raster_state = std::optional<internal::MeshRasterState> {};
+    auto pass_constants_bound = false;
     for (const auto& draw_command : draw_commands) {
       const auto raster_state
         = ResolveRasterState(*view_input.prepared_scene, draw_command);
@@ -425,10 +426,13 @@ auto ShadowDepthPass::RecordSlices(const PreparedViewShadowInput& view_input,
           BuildShadowPipelineDesc(*shadow_surface, raster_state));
         recorder->SetGraphicsRootConstantBufferView(view_constants_param,
           view_input.view_constants->GetGPUVirtualAddress());
-        recorder->SetGraphicsRoot32BitConstant(root_constants_param, 0U, 0U);
+        current_raster_state = raster_state;
+        pass_constants_bound = false;
+      }
+      if (!pass_constants_bound) {
         recorder->SetGraphicsRoot32BitConstant(
           root_constants_param, pass_constants_srvs[slice_index].get(), 1U);
-        current_raster_state = raster_state;
+        pass_constants_bound = true;
       }
 
       recorder->SetGraphicsRoot32BitConstant(

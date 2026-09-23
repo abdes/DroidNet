@@ -131,8 +131,32 @@ namespace {
       glm::vec3 axis;
       float inner { 0.25F };
       float outer { std::numbers::pi_v<float> / 2.0F };
+      glm::vec3 view { 0.6F, 0.0F, 0.8F };
     };
     const auto geometries = std::array {
+      // Peaks at the source axis and inside its cap exercise the bounded
+      // importance rule, including the square-root radial endpoint.
+      Geometry {
+        .center = { 0, 0, 2 },
+        .radius = 0.7F,
+        .range = 10.0F,
+        .axis = { 0, 0, -1 },
+        .view = { 0, 0, 1 },
+      },
+      Geometry {
+        .center = { -1.2F, 0, 1.6F },
+        .radius = 0.7F,
+        .range = 10.0F,
+        .axis = { 0, 0, -1 },
+      },
+      Geometry {
+        .center = { 0.7F, 0, 1 },
+        .radius = 0.1F,
+        .range = 10.0F,
+        .axis = { 0, 0, -1 },
+        .inner = 0.61F,
+        .outer = 0.785F,
+      },
       Geometry {
         .center = { 0, 0, 2 },
         .radius = 0.25F,
@@ -232,7 +256,7 @@ namespace {
               = profile->inner_relative_correction,
               .outer_cone_relative_correction
               = profile->outer_relative_correction, },
-            .view = { 0.6F, 0.0F, 0.8F },
+            .view = geometry.view,
             .roughness = roughness,
             .moments_srv = tables.at(0),
             .means_srv = tables.at(1),
@@ -274,7 +298,7 @@ namespace {
             .absolute_tolerance = 5.0e-8,
             .relative_tolerance = 2.5e-4,
             .initial_order = 8U,
-            .maximum_order = 512U,
+            .maximum_order = 2048U,
             .peak_direction = reference::UnitDirection { .x
               = -std::sqrt(1.0 - (view_mu * view_mu)),
               .y = 0.0,
@@ -296,7 +320,9 @@ namespace {
                       : static_cast<double>(geometry.outer) },
                 },
                 brdf, settings);
-          ASSERT_TRUE(oracle.has_value());
+          ASSERT_TRUE(oracle.has_value())
+            << "Emitter reference error: "
+            << (oracle.has_value() ? 0 : static_cast<int>(oracle.error().reason));
           inputs.push_back(input);
           expected.push_back(oracle->radiance);
         }

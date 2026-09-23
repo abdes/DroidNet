@@ -37,6 +37,11 @@ static inline bool HasDeferredLightingInputs(SceneTextureBindingData bindings)
         && IsSceneTextureValid(bindings, SCENE_TEXTURE_FLAG_GBUFFERS);
 }
 
+static bool IsDeferredBackgroundDepth(float depth)
+{
+    return reverse_z != 0u ? depth <= 0.0 : depth >= 1.0;
+}
+
 static inline float3 ReconstructDeferredWorldPosition(
     float2 screen_uv, float device_depth)
 {
@@ -79,31 +84,6 @@ static inline float3 EvaluateCookTorranceLighting(
         surface.roughness, lighting) * light_radiance;
 }
 
-static inline float3 EvaluateDeferredLightAtWorldPosition(
-    float2 uv,
-    float scene_depth,
-    float3 world_position,
-    float3 light_direction_to_source,
-    float3 light_radiance,
-    float light_attenuation,
-    float3 camera_position_ws,
-    SceneTextureBindingData bindings)
-{
-    if (!HasDeferredLightingInputs(bindings) || light_attenuation <= 0.0f) {
-        return 0.0f.xxx;
-    }
-
-    if (scene_depth >= 1.0f) {
-        return 0.0f.xxx;
-    }
-
-    const DeferredLightingSurfaceData surface = LoadDeferredLightingSurface(
-        uv, world_position, camera_position_ws, bindings);
-    return EvaluateCookTorranceLighting(
-               surface, light_direction_to_source, light_radiance, LoadResolvedLightingFrameBindings())
-        * light_attenuation;
-}
-
 static inline float3 EvaluateDeferredStaticSkyLightDiffuse(
     DeferredLightingSurfaceData surface)
 {
@@ -123,25 +103,6 @@ static inline float3 EvaluateDeferredStaticSkyLightDiffuse(
         surface.base_color * (1.0 - surface.metallic), surface.roughness,
         LoadResolvedLightingFrameBindings());
     return sky_diffuse * response.diffuse;
-}
-
-static inline float3 EvaluateDeferredLight(
-    float2 uv,
-    float3 light_direction_to_source,
-    float3 light_radiance,
-    float light_attenuation,
-    float3 camera_position_ws,
-    SceneTextureBindingData bindings)
-{
-    if (!HasDeferredLightingInputs(bindings) || light_attenuation <= 0.0f) {
-        return 0.0f.xxx;
-    }
-
-    const float scene_depth = SampleSceneDepth(uv, bindings);
-    const float3 world_position = ReconstructDeferredWorldPosition(uv, scene_depth);
-    return EvaluateDeferredLightAtWorldPosition(uv, scene_depth, world_position,
-        light_direction_to_source, light_radiance, light_attenuation,
-        camera_position_ws, bindings);
 }
 
 #endif // OXYGEN_D3D12_SHADERS_VORTEX_SERVICES_LIGHTING_DEFERREDSHADINGCOMMON_HLSLI
