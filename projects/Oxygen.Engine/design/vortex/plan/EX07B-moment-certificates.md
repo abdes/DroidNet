@@ -2,9 +2,8 @@
 
 Status: **validated for the recorded 55 parameter pairs; overall EX07B remains in_progress.**
 
-The [reference plan](EX07B-reference-validation.md) and
-[PBR equations](../../renderer-core/physically-based-rendering.md#shared-equations-and-numerical-domain)
-own the model and the <=1e-5 reference uncertainty budget. This checkpoint adds
+The [independent moment implementation](EX07B-reference-validation.md#independent-moment-implementation)
+defines E/B; the reference uncertainty budget here is <=1e-5. This checkpoint adds
 an independent, bounded-error oracle for E/B queries. It does not qualify a
 production LUT's interpolation or the complete BRDF/finite-source renderer.
 

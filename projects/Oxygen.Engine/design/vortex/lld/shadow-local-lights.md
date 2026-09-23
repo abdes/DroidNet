@@ -8,10 +8,10 @@
 
 The baseline evidence below remains historical. EX07 supersedes its bounded
 arrays and Stage-18 deferral with the [indexed shadow-family ABI](lighting-gpu-abi.md#shadow-association-and-deferred-draws),
-[physical finite-source support](../../renderer-core/physically-based-rendering.md#finite-local-emitters)
+[analytic source and center-support model](../../renderer-core/physically-based-rendering.md#production-local-lighting-and-brdf-model-2)
 and [resource/failure contract](lighting-service.md#4-capacity-failure-and-recovery).
 Every required point/spot shadow is consumed by both surface families. Use
-projected records only for fully covered punctual spot support; finite disks and
+projected records for ordinary spots, including nonzero source radius. Only
 90-degree soft cones use the existing conventional cube/multiple-face technique.
 Preserve FP32 depth, reversed depth and 3x3 PCF, per-light quality and typed identity.
 The [audited EX07 memory work](../plan/EX07-shadow-memory-review.md) selects

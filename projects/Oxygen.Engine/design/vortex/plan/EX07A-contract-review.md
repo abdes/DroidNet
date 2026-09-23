@@ -12,7 +12,8 @@ the execution authority; this is its A checkpoint, not a replacement plan.
 
 ## Review result
 
-The current paths cannot be connected unchanged. All D1-D6 product decisions are approved. The
+The initial paths required the repairs below. D1-D6 describe the selected product
+design, including the current model-2 source and BRDF decisions. The
 [GPU contract](../lld/lighting-gpu-abi.md) gives exact layouts and
 replacement obligations. The [property inventory](../lld/lighting-properties.md)
 tracks retained fields, ingress, persistence, consumers and required tests.
@@ -140,111 +141,60 @@ Required strict cutover in EX07-C:
 
 ### D3 — local source radius
 
-**Approved 2026-09-22: A — physical source extent. Implementation pending.**
-Retain local source radius with the native declared shapes: an emission sphere
-for point lights and an emission disk for spots. Conserve authored total flux;
-derive diffuse and specular response from the same emitter model. Radius zero
-uses the punctual contract and is the limit of the positive-radius model.
-See the independent [area-light formulation](https://pbr-book.org/4ed/Light_Sources/Area_Lights).
+Source radius controls the analytic finite-source diffuse horizon and specular
+highlight in [production model 2](../../renderer-core/physically-based-rendering.md#production-local-lighting-and-brdf-model-2).
+Point and spot lights share that evaluator. Radius zero uses the punctual branch;
+positive radius uses a spherical source cap, one specular refinement and
+source-size energy normalization. Range and spot attenuation use the source
+center. Bounds and ordinary projected shadows therefore do not expand with radius.
 
-Required mathematical and implementation closure:
+Authored flux still determines peak intensity through the point or spot
+photometric normalization. The source approximation does not promise exact
+sphere/disk radiometry near the emitter or at cone/range edges. Independent
+numerical integration measures those differences outside production. Runtime
+quadrature was rejected because its GPU cost outweighed the improvement for this
+renderer. The PBR design rationale records measured quality, timing and memory.
 
-- Define emitter orientation, sidedness and angular emission, and normalize
-  emitted flux before applying the declared finite-range approximation. A spot
-  disk's emission profile must recover the agreed punctual cone distribution in
-  the radius-zero limit; do not assume a Lambertian disk automatically does so.
-- Define near-field, emitter-surface/interior, cone and range boundaries. Derive
-  conservative bounds from that same model. The initial center-only range/cone
-  proposal is not frozen: finite extent must not be clipped from valid receivers.
-  Existing shadow projections/caster bounds must cover the corresponding
-  receiver influence; source-radius mutations invalidate those derived products.
-- Use a physically derived production approximation with independent numerical
-  integration and predeclared error bounds for diffuse and specular components,
-  total response, flux and the punctual/far-field limits. A highlight-width
-  adjustment alone does not implement this approved source model.
-  Component approximation budgets must fit the existing physical/material
-  acceptance budget; do not relax the total budget to admit an approximation.
-- Keep source radius separate from the punctual 1 mm numerical guard. Preserve
-  finite output and meaningful limiting behavior without arbitrary near-field
-  floors or changing authored light power.
-- Preserve the existing fixed-PCF/contact-ray visibility approximation. This
-  decision does not add radius-dependent penumbrae or new shadow techniques.
-  Correct the native headers' contact-softness promise. Qualify source-response
-  integration separately from this declared shadow approximation.
-
-The PBR owner now specifies the exact emitter integrals, domains, stable cone encoding and punctual limit. Approximation implementation and qualification remain B/C work; no runtime capability is claimed by this decision.
+Zero separation returns zero; the punctual 1 mm guard remains separate from
+source size. The existing source-center PCF/contact visibility remains unchanged:
+source radius does not introduce radius-dependent shadow penumbrae.
 
 ### D4 — common BRDF quality target
 
-**Approved 2026-09-22: A — correlated Smith GGX with multiple-scattering
-energy compensation. Implementation pending.** Both families currently use GGX distribution,
-Schlick Fresnel and a separable Schlick approximation to Smith masking/shadowing,
-but they do not implement one numerically consistent BRDF. Source audit adds:
+Forward, deferred and existing indirect consumers share correlated Smith GGX,
+Schlick Fresnel, metallic-roughness/specular inputs and perceptual roughness floor
+0.045. View-dependent energy compensation uses one 32x32 RG32F `(E,B)` texture,
+hardware filtered with square-root view-cosine coordinates. There is no separate
+mean texture or incident-direction moment lookup.
 
-| Observation                                                                                                                                                                                    | Source                                                                                                                                                               | Required remediation                                                                                                                                         |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Forward directional applies 1/pi to the combined diffuse/specular response; its diffuse helper omits 1/pi, while deferred normalizes diffuse alone. Forward local omits diffuse normalization. | `ForwardDirectLighting.hlsli::{EvaluateDirectionalLightDiagnosticTerms,AccumulateLocalLightsClustered}`; `DeferredShadingCommon.hlsli::EvaluateCookTorranceLighting` | Put the normalized lobes in one shared BRDF; apply physical incident light and receiver cosine once. Compare lobes independently.                            |
-| Deferred clamps both perceptual roughness and alpha to 0.045, so alpha=r*r cannot fall below 0.045. Its implied minimum perceptual roughness is about 0.212, unlike the forward helper.        | `DeferredShadingCommon.hlsli::{LoadDeferredLightingSurface,DistributionGGX}`; `Stages/Translucency/ForwardPbr.hlsli::DistributionGGX`                                | One named roughness-domain mapping and numerical minimum; stable GGX evaluation and no denominator floor that silently suppresses valid glossy peaks.        |
-| Deferred multiplies direct-light response by material ambient occlusion.                                                                                                                       | `DeferredShadingCommon.hlsli::EvaluateCookTorranceLighting`                                                                                                          | Keep ambient/indirect occlusion separate from per-light direct visibility. Unoccluded direct illumination must not disappear when ambient occlusion is zero. |
+For each channel, `W=1+F0*(1-E)/E` scales single scattering and
+`R=W*(F0*E+(1-F0)*B)` describes integrated specular response. Normalized diffuse
+uses scalar `saturate(1-luminance(R))` to preserve base hue. Ambient occlusion
+remains separate from direct-light visibility. Material authoring and dielectric
+F0 mapping do not change.
 
-Paths are under the same shader root as the review table. Preserve the existing
-metallic-roughness/specular material inputs and default dielectric F0 mapping;
-this decision introduces no new material type or authored control.
-
-Required common model and qualification:
-
-- Use height-correlated Smith GGX, Schlick Fresnel and normalized diffuse with
-  multiple-scattering energy compensation. Replace the old separable Schlick
-  masking approximation; do not keep selectable old/new BRDF paths.
-- Preserve metallic-roughness/specular authoring and the existing dielectric F0
-  mapping. Define diffuse/specular energy allocation together: restoring missing
-  specular scattering must not create energy in the combined response.
-- Derive one numerically stable roughness mapping/minimum and common grazing,
-  degenerate-vector and normal-handling rules. Do not hide unit/normalization or
-  precision defects with exposure, intensity or material adjustments.
-- Qualify the BRDF independently for reciprocal response, nonnegative finite
-  output, reflected-energy bounds and a white furnace with unit-reflectance
-  conductors across roughness and view angle. Include dielectric/metal mixtures
-  and separate diffuse/specular probes; a test calling the production helper is
-  not an independent oracle.
-- Integrate approved D3 finite emitters against this same BRDF. Align existing
-  preintegrated BRDF data and consumers where their shared model changes; check
-  direct/indirect consistency without adding a new GI/IBL product family.
-
-The earlier single-scattering option is not the target. Its omitted-scattering
-energy loss was not an energy-creation/conservation violation; the approved
-upgrade explicitly accounts for that missing response. The PBR owner now fixes the symmetric compensation and reciprocal diffuse coupling, integration-data contract and numerical bounds. Reference/renderer qualification remains open; choosing the model is not a performance result.
-
-The [Filament BRDF derivation](https://google.github.io/filament/main/filament.html)
-provides a primary reference for correlated GGX, energy compensation, roughness
-mapping and the separation of AO from direct lighting. It is not Oxygen's
-independent acceptance oracle. The shared-model cutover includes existing BRDF
-integration/LUT/IBL consumers where their contracts require it; do not retain
-mismatched direct/indirect models.
-Freeze formulas and numerical budgets before shader candidates or captures.
+This compensation gives up exact reciprocity to reduce lookup and arithmetic
+cost. Independent energy and lobe comparisons quantify approximation quality;
+ABI, finite output, light identity, supported influence and forward/deferred
+consistency remain implementation checks. Direct and indirect migrate together,
+with model revision 2 and no shipping compatibility evaluator. See the
+[PBR tradeoffs](../../renderer-core/physically-based-rendering.md#design-tradeoffs-and-rejected-alternatives)
+for the alternatives and measured errors.
 
 ### D5 — hemispherical spot support
 
-**Approved 2026-09-22: A — support the 90-degree soft-cone endpoint.**
-The initial property inventory proposed
-`outer < pi/2` from the current single-perspective shadow implementation. That
-would exclude valid imported content: [KHR_lights_punctual](https://github.com/KhronosGroup/glTF/blob/main/extensions/2.0/Khronos/KHR_lights_punctual/README.md)
-permits `inner < outer <= pi/2`. The current glTF adapter retains these angles,
-while the deferred proxy clamps outer cosine and the spot shadow setup uses one
-perspective projection, which cannot represent a 180-degree full field of view.
+Accept `0 <= inner < outer <= pi/2`, including the 90-degree soft endpoint
+supported by glTF. Equal-angle hard cones remain supported below 90 degrees.
+Ordinary spots use cone proxies and one projected shadow, including when source
+radius is nonzero. Only the hemispherical endpoint uses the existing spherical
+proxy and cube/multiple-face shadow route because a single perspective map cannot
+cover its 180-degree field of view. Budget all six faces and retain explicit
+per-light projection metadata. Do not clamp valid imported wide cones.
 
-Accept the 90-degree outer half-angle with a soft cone. Route conventional spot
-shadows through the existing cube/multiple-face technique whenever a single
-projection cannot conservatively cover supported source influence, including
-finite disk extent. Keep explicit per-light projection metadata and budget all
-required faces. Preserve the equal-angle hard-cone extension below 90 degrees.
-Rejecting valid hemispherical imports was not selected. This adds routing and
-coverage cases, not a new shadow algorithm or an angular clamp.
-
-Do not silently clamp imported cones or keep a truncated proxy/map while the
-lighting evaluator accepts the full source. The finite disk emission domain and
-exact hard-cone boundary must be explicit in the physical equations. All other
-physical/source/BRDF decisions remain settled.
+GPU publication requires representable outer cosine and, for soft cones, a
+positive representable cosine width. CPU photometric normalization uses both
+authored angles in double precision; GPU angular shading uses the FP32 squared
+center-cone ramp. This replaces compensated per-pixel cone arithmetic.
 
 ### D6 — default resource envelope
 

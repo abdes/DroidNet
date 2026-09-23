@@ -4,8 +4,9 @@ Status: **validated for the six queried roughness values; interpolation and full
 
 The [reference validation owner](EX07B-reference-validation.md) separates this
 gate from production interpolation, BRDF/image qualification and the rest of B.
-The [PBR specification](../../renderer-core/physically-based-rendering.md#shared-equations-and-numerical-domain)
-owns the cosine-weighted means and frozen numerical budgets.
+The cosine-weighted means below belong to the independent reciprocal reference.
+[Production model 2](../../renderer-core/physically-based-rendering.md#production-local-lighting-and-brdf-model-2)
+uses directional E/B only and has no runtime mean texture.
 
 ## Independent integration
 

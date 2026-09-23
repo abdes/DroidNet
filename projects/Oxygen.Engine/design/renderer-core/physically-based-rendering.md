@@ -199,13 +199,15 @@ claims of validated hardware behavior.
 | Hybrid schedule equivalence              | 5e-4 EV at equal elapsed time; monotone, no overshoot              |
 | Single normal FP16 store                 | 2^-10 relative; subnormal absolute error 2^-25 in stored domain    |
 | P invariance / required float products   | 0.5% relative + 2e-5 absolute in the compared scene/output domain  |
-| Packed material / production BRDF oracle | 2% relative + 2e-5 absolute, interior unoccluded regions           |
+| Packed decoding / same-model BRDF oracle | 2% relative + 2e-5 absolute, interior unoccluded regions           |
 | UNorm8 image                             | One code value after independent dither, gamma and target encoding |
 
 Sampling error is separate: compare small bright features and moving edges both
 against the exact sample positions and a full-image reference. Report the two
 errors separately; experiment-specific region and coverage criteria belong to
-LightBench. Failed acceptance is not grounds to widen tolerances.
+LightBench. These tolerances check implementation and encoding. Model-2
+shading differences from numerical emitter integration or reciprocal compensation
+are separate quality measurements, described below.
 
 ## Physical-light conversion
 
@@ -214,8 +216,8 @@ attenuation model. Remove the attenuation-model selector and custom decay
 exponent through a strict API/source/packed/tooling migration; no Linear or
 CustomExponent lighting modes remain in the target contract. The equations
 below define punctual lighting, with the declared finite-range window and
-numerical guard. D3 (approved 2026-09-22) retains physical local emitter extent
-as specified below; it is not an artistic attenuation alternative.
+numerical guard. Source radius modifies the analytic finite-source response
+described below; it does not change the center-based attenuation profile.
 
 Directional lux multiplies the production BRDF and receiver cosine once.
 Point candela is `flux_lm/(4*pi)`. For spots with ci=cos(inner), co=cos(outer):
@@ -241,12 +243,10 @@ independently to verify total emitted flux.
 
 ### Production local lighting and BRDF model 2
 
-The user's 2026-09-24 direction replaces the former numerical production model
-with the best measured quality/performance compromise for a leading real-time
-engine. Timing, memory and image quality are reported together; the user decides
-whether the measured operating point is acceptable. The former per-lobe 1%,
-strict reciprocity and moment-interpolation budgets are historical reference
-criteria, not mandatory production acceptance thresholds for model 2.
+Production model 2 uses analytic finite-source lighting and view-dependent
+energy compensation. Its quality/performance tradeoff is measured through
+native images, independent numerical comparisons, GPU time and actual memory
+allocation. Numerical-reference differences are reported alongside those results.
 
 Point and spot lights retain authored lumens, tint, range and source radius.
 The squared range window and spot profile are evaluated from the source center.
@@ -274,7 +274,8 @@ radius. Explicit 90-degree hemispherical spots retain spherical/multi-face suppo
 The material model retains correlated GGX, Schlick Fresnel, metallic/specular
 mapping and the existing perceptual roughness floor 0.045. A single 32x32 RG32F
 texture stores unit-Fresnel directional albedo E and Schlick moment B. It is
-hardware filtered, using explicit texel-center coordinates. The material/view
+hardware filtered. Its coordinates are `sqrt(NdotV)` and
+`(r_eff-0.045)/0.955`, mapped to texel centers as `(coordinate*31+0.5)/32`. The material/view
 terms are prepared once per shading invocation and shared by existing light
 loops. There is no incident-direction moment lookup or separate mean texture.
 
@@ -286,7 +287,7 @@ R = W * (F0*E + (1-F0)*B)
 ```
 
 W scales the single-scattering specular lobe. Diffuse is normalized Lambertian
-scaled by `1-luminance(R)`, preserving the base color while accounting for the
+scaled by `saturate(1-luminance(R))`, preserving the base color while accounting for the
 specular layer. Constant-environment consumers use the same integrated specular
 R and diffuse transmission. Exact reciprocity is intentionally not a property
 of this view-dependent approximation. All forward/deferred, material and
@@ -299,14 +300,38 @@ reports include table approximation, energy response and finite-source deviation
 from the reference. Structural contracts (ABI, complete lists, finite results,
 zero contribution outside supported influence, consistent forward/deferred
 images, allocation failure and lifetime behavior) retain pass/fail checks.
-Numerical differences, temporal/image quality, working-set size and representative
-GPU timings are visible measurements rather than grounds for restoring expensive
-reference algorithms to production. Do not hide errors by changing exposure,
-removing lights, disabling shadows or marking stale evidence as current.
+Report numerical differences, temporal/image quality, working-set size and
+representative GPU timings with fixed scene, light, shadow and output settings.
+Visual captures use settled exposure; record applied and target exposure scales.
 
-The [EX07A CPU check](../vortex/plan/EX07A-contract-review.md#verification-obligations-and-current-evidence)
-checks model identities and a known analytic case; it is not the complete moment
-certificate, a production LUT, a GPU test or EX07B reference qualification.
+### Design tradeoffs and rejected alternatives
+
+| Production choice | Benefit and compromise | Alternative dropped and why |
+| --- | --- | --- |
+| Analytic source cap, horizon wrap and one fixed specular refinement | Bounded work per receiver with a source-size response in both lobes. It approximates an extended emitter; near/inside-source response and cone/range edges can differ substantially from numerical sphere/disk integration. | Runtime quadrature, angular partitions and convergence refinement consumed too much GPU time. Keep the independent integrator in Test to quantify differences. |
+| Center-based range and spot cone; one projected shadow for ordinary spots | Tight influence volumes and one shadow face, independent of source radius. Radius changes shading, not the cone/range boundary or shadow penumbra. | Expanding support by emitter radius required broader proxies and six-face shadows for finite spots. That work is unnecessary for the chosen center-support model. |
+| FP32 cosine ramp with double-precision CPU flux normalization | Cheap angular evaluation with consistent authored photometry. Cosine intervals too narrow to represent on the GPU fail publication. | Compensated cone expansions preserved extreme sub-FP32 intervals at recurring pixel cost. That precision is not retained in the production domain. |
+| View-dependent GGX compensation and scalar diffuse transmission | Reuses material/view terms and preserves diffuse hue with colored specular. Gives up exact reciprocity; reflected energy and direct/indirect agreement remain measured. | Symmetric reciprocal compensation required incident-direction moments and mean data. The extra lookups and arithmetic were a poor trade for this renderer. Omitting compensation altogether loses rough-specular energy. |
+| One hardware-filtered 32x32 RG32F energy table | 8,192-byte payload and 65,536-byte native allocation. Introduces interpolation and hardware-filter precision error. | The dense 513x1025 table plus mean texture required 4,718,592 native bytes and manual filtering. They remain reference data, not runtime resources. |
+| Square-root view-cosine coordinates | Concentrates the same 32 samples near grazing at the cost of one square root. The 525,825-point unit-conductor sweep measures maximum/p99 relative energy error of 2.8882%/0.3544%. | Linear view-cosine coordinates at the same size measured 10.8395%/4.257%. The small arithmetic cost buys substantially better grazing accuracy without more memory. |
+| PCF evaluated in the light draw; cube shadows reserved for points and 90-degree soft spots | Reuses the current nine-tap filter and supports authored hemispherical cones. Wide spots pay for six faces; radius-dependent soft shadows are outside this model. | A separate full-resolution shadow mask adds a pass, writes and reads without reducing taps when visibility has one consumer. Clamping wide cones would alter valid authored/imported lights. These are architectural cost and content reasons, not isolated timing measurements. |
+
+These choices follow the analytic area-light and energy-compensation strategies
+reviewed in UE5.7 (`CapsuleLightIntegrate.ush`, `BRDF.ush`,
+`ShadingEnergyConservation.ush` and `ShadingEnergyConservationTemplate.ush`).
+The source-cap construction follows the published
+[Decima lighting work](https://www.guerrilla-games.com/read/decima-engine-advances-in-lighting-and-aa).
+Oxygen keeps its own material mapping, explicit 90-degree support and the
+measured square-root LUT parameterization.
+
+The combined change, measured in the same uncapped 2560x1440 MultiView scene,
+reduced summed spot GPU time from 4.394 to 0.661 ms and total deferred lighting
+from 8.427 to 2.901 ms; frame time fell from 13.098 to 7.804 ms. These are combined
+results, not isolated savings attributed to individual table rows. The native
+90-material matrix measured maximum energy/indirect discrepancy of 0.7032%; this
+does not bound the separate finite-emitter approximation differences.
+[Measurement and image evidence](../vortex/IMPLEMENTATION_STATUS.md#34-slice-7-work-items)
+records the controlled recipe, reference comparisons and settled-exposure capture.
 
 ## Qualification
 

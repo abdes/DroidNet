@@ -2,16 +2,12 @@
 
 Status: **in_progress**; current stage and deliverable status are maintained only
 in [tracker section 3.4](../IMPLEMENTATION_STATUS.md#34-slice-7-work-items).
-The [B completion audit](EX07B-completion-audit.md) closes the reference/instrument
-gate and records the user-directed pause.
-The [A completion audit](EX07A-completion-audit.md) records the scoped contract,
-interface and native ABI gate. Six approved decisions freeze mathematical,
-property, scene-v7 and resource/failure targets; their complete implementation
-and qualification remain required in B–F. EX07 owns end-to-end lighting
-correctness and performance. The
-[exposure delivery plan](exposure-and-lightbench-correction.md#slice-7---complete-the-reference-lighting-unit-chain)
-owns package order and the [tracker](../IMPLEMENTATION_STATUS.md#34-slice-7-work-items)
-owns progress. This document owns the bounded EX07 workload and qualification gate.
+EX07 owns end-to-end lighting correctness and performance. The
+[current PBR model](../../renderer-core/physically-based-rendering.md#production-local-lighting-and-brdf-model-2),
+[GPU ABI](../lld/lighting-gpu-abi.md) and [property inventory](../lld/lighting-properties.md)
+define production behavior. The [exposure delivery plan](exposure-and-lightbench-correction.md#slice-7---complete-the-reference-lighting-unit-chain)
+owns package order; this document owns workloads and qualification. A/B audits
+retain the contract and independent-reference evidence.
 
 ## Outcome and boundaries
 
@@ -21,7 +17,7 @@ unsafe resource use or uncontrolled CPU/GPU work. Deliver measured improvements
 to the actual production bottlenecks and publish the supported operating envelope.
 
 Preserve the [physical contract](../../renderer-core/physically-based-rendering.md#physical-light-conversion),
-material/precision budgets, scene-owned lights and explicit dual atmospheric
+material mapping and exposure precision, scene-owned lights and explicit dual atmospheric
 assignments. Qualify ordinary unassigned directionals, each atmospheric slot and
 both sources together. Demo sun inference/injection remains explicitly requested.
 Coordinate the directional-array implementation with its
@@ -44,21 +40,13 @@ validating** the complete lighting path covered by this plan. That responsibilit
 includes pre-existing defects and defects discovered during execution, regardless
 of which module or earlier milestone introduced them.
 
-The user's 2026-09-24 authorization supersedes the earlier production model and
-fixed numerical budgets: migrate to analytic finite-source evaluation, ordinary
-center-cone attenuation, view-dependent energy compensation with a compact
-hardware-filtered LUT, and cone/projected-shadow rendering for ordinary spots.
-The detailed current contract is the model-2 section of the PBR owner document.
-Keep independent references as measurement tools, publish observed quality/time/
-memory tradeoffs, and leave final acceptance to the user. Historical A/B and C
-records remain evidence for their recorded implementation, not model-2 closure.
-
-The user's 2026-09-23 performance directive requires production regression repair
-and profiling during C. Numerical accuracy alone does not qualify shipping code.
-Use bounded runtime work, reuse material/view terms, preserve safe frames in flight,
-and measure the complete application with native profiling tools. This authorizes
-necessary optimization while C is active; it does not waive D–F's official workload,
-memory, visual or final integration gates.
+Production model 2 uses analytic source evaluation, center-cone attenuation,
+view-dependent energy compensation and one compact hardware-filtered LUT.
+Ordinary spots use cone proxies and projected shadows. Review quality, GPU/CPU
+time and memory together; numerical-reference error alone does not select the
+production algorithm. The PBR owner explains each compromise and rejected
+alternative. Reuse material/view terms and preserve safe frames in flight while
+profiling the complete application with native tools.
 
 - Trace scene/editor input through selection, publication, culling, shaders,
   shadows, HDR accumulation and output. Review algorithms, physical units, ABI,
@@ -84,18 +72,17 @@ agreed product scope or quality target is a separate decision.
 
 ## Starting evidence and owners
 
-The initial source review identifies the repair and measurement backlog below;
-timings remain unmeasured. These observations are work to resolve and validate,
-not accepted limitations or qualifications on delivery responsibility.
+The initial review established the areas below. Current behavior and remaining
+work are summarized here; measured regression-repair results are in the tracker.
 
-| Owner                                                                            | Current source observation                                                                                       | Consequence for EX07                                                                                         |
+| Owner                                                                            | Implementation and remaining work                                                                                       | Consequence for EX07                                                                                         |
 | -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
 | `Lighting/Internal/ForwardLightPublisher.cpp`                                    | Every cluster references the complete local-light list. CPU vectors/grid entries are rebuilt during publication. | Establish real conservative spatial lists; measure preparation, upload and shader work.                      |
 | `Lighting/Internal/LightGridBuilder.cpp`                                         | Builds records and grid metadata; this service path does not dispatch GPU spatial culling.                       | A baked culling shader alone is not evidence of an operational culler.                                       |
 | Shader `Services/Lighting/LightCulling.hlsl`                                     | Scans all lights for each cell and clamps output count to per-cell capacity.                                     | Review ABI/coordinates before reuse; eliminate silent light loss on overflow.                                |
 | `Types/LightCullingConfig.h`                                                     | 64-pixel XY cells, 32 depth slices and nominal 32 entries per cell.                                              | Exercise 31/32/33 overlap and viewport/depth boundaries; these constants are not a proven scalable envelope. |
 | `Lighting/Passes/DeferredLightPass.cpp`                                          | Produces per-local-light volume/fullscreen draws and per-draw constants.                                         | Measure CPU submission, visibility rejection, camera-inside fallback and overlapping volume cost.            |
-| `Shadows/Internal/{Point,Spot}ShadowSetup.cpp` and `Types/ShadowFrameBindings.h` | Bindings currently hold four point shadows and eight spot shadows.                                               | Test capacity, mapping and overflow explicitly; never equate total light count with shadow count.            |
+| `Shadows/Internal/{Point,Spot}ShadowSetup.cpp` and `Types/ShadowFrameBindings.h` | Indexed dynamic families replace the former four-point/eight-spot arrays.                                               | Test capacity, mapping and overflow explicitly; never equate total light count with shadow count.            |
 | `Diagnostics/ShaderDebugModeRegistry.cpp`                                        | Light-grid debug views are marked unsupported.                                                                   | Publish truthful culling statistics and a useful opt-in visualization for qualification.                     |
 
 Paths above are under `src/Oxygen/Vortex`; shader paths are under
@@ -109,8 +96,8 @@ owners, view publications, upload allocators and profiling remain authoritative.
 | EX07A — Review and freeze contracts       | Canonical LLD/ABI, field-to-consumer inventory, directional authority, GPU scheduling, capacities and failure/recovery behavior.                    | One documented contract; no conflicting historical interface; complete review decisions and test obligations before consumer changes. |
 | EX07B — References and instruments        | Independent physical oracle, known-input GPU probes, unculled image reference, deterministic fixtures and bounded CPU/GPU/resource instrumentation. | Reference/instrument validity is established independently of the renderer being tested.                                              |
 | EX07C — Repair correctness                | Physical response, every retained property, directional/local/shadow identities, complete lists, ingress/round-trip behavior and safe lifetime.     | Each workload admitted to timing passes its applicable numerical/image/mutation/capacity checks.                                      |
-| EX07D — Qualified baselines and budgets   | Correctness-qualified workload baselines, frozen CPU/GPU/memory budgets, useful-improvement thresholds and regression/noise policy.                 | Baseline identity/evidence and numeric comparison thresholds recorded before optimization candidates.                                 |
-| EX07E — Scalable culling and optimization | Real spatial rejection and measured shader/submission/upload/shadow/resource improvements.                                                          | Candidates continuously pass the same correctness references and predeclared performance comparisons.                                 |
+| EX07D — Qualified operating points   | Correctness-qualified workload baselines, CPU/GPU costs, memory use, quality and measurement noise.                 | Controlled baseline and measured tradeoffs support selection of an acceptable operating point.                                 |
+| EX07E — Scalable culling and optimization | Real spatial rejection and measured shader/submission/upload/shadow/resource improvements.                                                          | Candidates preserve implementation checks and report quality, timing and memory against matched baselines.                                 |
 | EX07F — Final validation and delivery     | Final-code Debug/Release correctness, native performance, editor/native operation, inspected images and complete operating docs.                    | All EX07 gates pass together, with supported limits and no unexplained failures or quality reduction.                                 |
 
 Current stage and item status live only in [tracker section 3.4](../IMPLEMENTATION_STATUS.md#34-slice-7-work-items).
@@ -142,12 +129,12 @@ qualify these fields. Approved [EX07A D2](EX07A-contract-review.md#d2--physical-
 removes the attenuation selector and custom decay exponent through a strict
 API/source/packed/tooling migration; it supersedes their earlier retention
 requirement. Track rejection of obsolete inputs and migration of every producer.
-Approved D3 retains physical sphere/disk emitter extent with conserved flux and
-common diffuse/specular emission. Approved D4 selects correlated Smith GGX with
-multiple-scattering compensation, retaining Schlick Fresnel and normalized
-diffuse. Specify/qualify these models independently and migrate affected shared
-BRDF integration consumers together. Explicit product exclusions stay distinct
-from defects in supported settings.
+D3 uses analytic source-size diffuse/specular response with center-based range and
+cone support. D4 uses shared correlated Smith GGX, Schlick Fresnel and
+view-dependent multiple-scattering compensation. Direct and indirect consumers
+share the compact energy texture and material interpretation. Compare the
+approximations with independent references and report image, energy and lobe
+differences alongside timing and memory.
 
 Freeze CPU/HLSL field offsets/stride/types and add sentinel decode tests before
 connecting the culling shader. Describe shared preparation versus per-view GPU
@@ -196,11 +183,10 @@ light workload measures that optimization explicitly.
    That reference may reuse shading to isolate culling errors; it cannot replace
    the independent photometric oracle. Keep it in qualification targets, not a
    second shipping renderer. Match material decoding, P, output transform and time.
-   Native photometry/BRDF admission additionally requires
-   `tools/vortex/AssertLightingPhysicalProbe.py <native-results.json>` to pass;
-   passing the instrument tests alone is insufficient. B's
-   [measured physical residuals](EX07B-reference-validation.md#native-direct-brdf-probe)
-   remain C repair obligations until that gate reports zero physical failures.
+   `tools/vortex/AssertLightingPhysicalProbe.py <native-results.json>` checks
+   report completeness, schema and model revision. Native implementation checks
+   must pass; independent numerical differences quantify model-2 approximation
+   quality rather than enforce the former reciprocal/integrated-source model.
 2. **No false negatives.** Check that every light with a nonzero supported
    contribution at a sampled receiver is present exactly once. Conservative
    false positives are acceptable and measured. Test tangencies, spot-axis/sign
@@ -214,9 +200,9 @@ light workload measures that optimization explicitly.
    atomic input rejection and invalid-view publication contract for overflow or
    allocation failure; verify caller diagnostics, presentation and recovery.
    Partial lighting cannot be reported as success; diagnostics do not spam frames.
-4. **Image and accumulation.** Apply the PBR physical/BRDF budget to independent
-   predictions and the 0.5% relative + 2e-5 absolute float-product budget to matched
-   culled/reference results. Check light-order permutations, HDR accumulation,
+4. **Image and accumulation.** Report model-2 differences from independent
+   predictions. Apply the 0.5% relative + 2e-5 absolute float-product budget to
+   matched culled/unculled results using the same shading model. Check light-order permutations, HDR accumulation,
    finite outputs and exactly-once pre-exposure. No disappearance/pop when crossing
    cells or culling boundaries. Freeze any summation-specific bound before results.
 5. **Visibility and mutation.** Node visibility, affects-world, range/cone,
@@ -297,8 +283,8 @@ comparison support the design; production correctness/performance remain open.
 | Bounded allocation reuse/growth | Existing shadow allocator and frame leases/fences                                   | Correct per-light resolution buckets, no redundant complete-set duplication, only affected buckets grow, fence-safe retirement and bounded spare capacity without steady churn. |
 
 EX07C first repairs ownership, complete caster coverage, identity and requested
-quality. EX07D freezes a correctly rendered baseline and numeric regression/noise
-limits. Introduce each optimization separately in EX07E, and verify the integrated
+quality. EX07D establishes a correctly rendered baseline and measures noise.
+Group coherent production improvements, then verify the integrated
 result in EX07F. Do not use existing multi-view overwrite or resolution-promotion
 behavior as a valid reference. No new shadow algorithm, cross-frame content cache,
 global aliasing framework or automatic quality reduction is introduced.
@@ -307,8 +293,8 @@ The linked audit owns the consumer inventory and targeted regression cases:
 CSM motion/blends, masked casters, local face/seam coverage, forward/deferred/
 translucent consumption, stencil preservation, incompatible view content and
 delayed/discarded submissions. Include whole-frame CPU/GPU timing and lifecycle
-spikes; a memory win cannot waive the existing absolute budgets or predeclared
-regression limits. Avoid queue drains, duplicate raster work or reduced concurrency
+spikes; evaluate memory savings against quality and whole-frame cost. Avoid
+queue drains, duplicate raster work or reduced concurrency
 introduced solely to lower allocation counts.
 
 The 4 GiB / 128 MiB ceilings remain upper bounds, not normal allocation targets.
@@ -319,61 +305,51 @@ do not present the standalone allocation query as whole-engine capacity proof.
 
 ### Timing and acceptance
 
-Use the package reference RTX 3080 / Ryzen 9950X for comparable native optimized
-Release measurements; record actual adapter/LUID, driver, clocks/power conditions,
-compiler/shader identities and memory configuration. Other hardware is reported
-separately. VSync/caps, captures, debug/GBV and deep instrument counters are disabled
-for timing; correctness/debug-layer runs are separate. Keep production precision,
-physical light values, geometry, shadow quality and actual simulation dt fixed.
+Use the reference RTX 3080 / Ryzen 9950X for comparable optimized Release
+measurements. Record adapter/LUID, driver, clocks/power conditions, compiler and
+shader identities, scene and memory configuration. Keep VSync and frame caps
+disabled. Use Tracy captures for CPU/GPU attribution; report uninstrumented
+throughput separately when measured. Debug/GBV, RenderDoc and deep shader counters
+belong to separate diagnostic runs. Keep geometry, light values, shadow quality,
+simulation time and physical output resolution identical within a comparison.
 
-- **Primary objective:** the frozen 1,024-light sparse/mixed 1080p workload, in
-  each rendering family, meets the package's GPU-frame p95 <=14 ms / p99 <=16.67 ms
-  and uncapped complete-frame p99 <=16.67 ms. This is a planning target, not an
-  existing measured capability; EX07B freezes the recipe and EX07D records its
-  correctness-qualified timing baseline.
-- **Stage budgets:** EX07D sets numeric CPU preparation/submission, GPU
-  culling/evaluation and memory budgets from a correctness-qualified breakdown.
-  Record them with baseline identities and correctness evidence before optimizing.
-  Establishing these measured budgets is EX07D work. A missed target requires further
-  investigation and improvement; it does not justify silently narrowing the
-  workload or labelling it complete. Only a proposed change to agreed product
-  scope or quality requires a separate decision with measured alternatives.
-- **Improvement evidence:** fix the observed all-light publication and any failed
-  correctness/capacity gate. Retain performance changes only when matched results
-  demonstrate benefit to the targeted cost without an unexplained whole-frame,
-  small-light, shadow or multi-view regression under the thresholds below.
-  Report before/after absolute times, percentage changes, occupancy and memory;
-  code cleanup alone is not improvement.
-- **Scaling and resources:** report all count endpoints, dense overlap, 4K,
-  two-view and shadowed cases with p50/p95/p99/max and supported capacities.
-  Repeated fixed-envelope lifecycle cycles stabilize memory; warmed fixed-capacity
-  resources have no recurring GPU allocation churn. Resource growth is counted
-  across live, queued, retired and cached allocations.
-- **Bounded runs:** warm once until assets/PSOs/capacities are ready, for at least
-  300 frames and 10 seconds. Per frozen timing condition collect at least 1,800
-  frames and 30 seconds, including complete movement cycles. Select common counts
-  for matched comparisons before recording. Keep slow frames; reject incomplete
-  or overflowed profiler output. Use short targeted experiments during EX07E;
-  collect the final matrix once. Repeat a pair only for diagnosed noise or a
-  changed implementation, not to obtain a more favorable percentile.
+- **Operating points:** measure the 1,024-light sparse/mixed 1080p workload in
+  each rendering family, plus required count, dense-overlap, 4K, multi-view and
+  shadowed cases. Report p50/p95/p99/max frame and stage costs, quality differences
+  and actual memory. Select the quality/time/memory compromise from measured
+  alternatives; the user decides whether the resulting budget is acceptable.
+- **Controlled MultiView profiling:** use fullscreen `--resolution 2560x1440`
+  (the parser also accepts `X`), `--fps 0`, `--vsync false`,
+  `--directional-array-proof true`, `--offscreen-proof-layout true`,
+  `--pip-wireframe false` and `-v=-1`. Verify actual framebuffer dimensions and
+  uncapped presentation in the trace. This regression workload complements the
+  many-light matrix; it does not establish its scaling result.
+- **Resources:** distinguish live, queued, retired and cached allocations,
+  allocator slack and whole-process usage. Repeated lifecycle cycles should
+  stabilize memory; warmed fixed-capacity resources should not allocate each
+  frame. The resource admission ceilings remain separate from performance goals.
+- **Bounded runs:** warm until assets, PSOs and capacities are ready, and record
+  the excluded warmup and sampled frame counts. Include complete movement cycles
+  for dynamic workloads. Use short targeted experiments during optimization and
+  collect the final matrix on integrated code. Retain slow frames and reject
+  incomplete profiler output. Repeat only when code changes or diagnosed noise
+  warrant it.
+- **Visual captures:** let exposure settle and record applied/target values for
+  each view. The qualified model-2 MultiView capture uses frame 2000; verify
+  convergence rather than treating an early fixed frame as correctly exposed.
 
-### Frozen comparison policy
+### Comparison and acceptance
 
-Each timed case's EX07D manifest records the recipe/input hash, build/shader
-identity, correctness-result reference, metric/units, absolute budget, baseline
-value, minimum useful gain (absolute and relative), maximum regression (absolute
-and relative), memory ceiling and measured noise bound. Populate every applicable
-threshold with a numeric value before recording a candidate; no post-result
-threshold changes or explanatory waiver closes a failed comparison.
+Record baseline/candidate recipe hashes, code and shader identities, correctness
+results, absolute times, memory and image/numerical comparisons. Measure noise
+and report changes within it as inconclusive. Include small-light, shadowed and
+multi-view controls so a local optimization does not conceal a whole-frame cost.
+Explain retained compromises and rejected alternatives in the owning design doc.
 
-A targeted improvement must exceed both its declared useful-gain requirement and
-the noise bound. Every designated control (including zero/small-light, shadowed
-and multi-view rows) must satisfy its declared regression allowance and absolute
-budget. Define the absolute/relative combination rule in the manifest; do not pick
-whichever is favorable afterward. A result inside the noise bound is inconclusive,
-not improvement. Resolve diagnosed noise with at most the justified matched repeat
-described above; otherwise retain the last qualified implementation and continue
-with another supported hypothesis. Performance changes cannot waive correctness.
+Implementation defects such as missing lights, invalid lifetimes, ABI mismatches
+or nonfinite results must be fixed. Deliberate shading approximations are assessed
+through their measured quality, timing and memory together. Do not change inputs,
+shadow settings or image coverage to manufacture an apparent improvement.
 
 Create correctness tests under the owning `Test` directories and opt-in timing
 workloads under `Vortex/Benchmarks` in their own lighting benchmark executable.
@@ -385,7 +361,7 @@ Record exact targets/commands as implemented; planned commands are not usable to
 
 - Qualified physical references and per-view culling/image/lifetime/capacity tests.
 - Canonical ABI/property inventory and tested caller-visible failure/recovery contracts.
-- Frozen workload/budget manifest, native baseline/candidate timing and memory
+- Workload/measurement manifest, native baseline/candidate timing and memory
   reports, accepted/rejected optimization decisions and actual supported limits.
 - Inspected native captures of sparse/dense/moving/two-view and shadowed scenes,
   useful culling diagnostics, and the editor-authored input check. State the
