@@ -51,6 +51,8 @@ set(
   OXYGEN_GFX_COMMON_HEADERS
   "api_export.h"
   "BackendModule.h"
+  "AllocationBudget.h"
+  "AllocationBudgetTag.h"
   "Buffer.h"
   "CommandList.h"
   "CommandQueue.h"
@@ -109,6 +111,7 @@ set(
 )
 set(
   OXYGEN_GFX_COMMON_PRIVATE_SOURCES
+  "AllocationBudget.cpp"
   "Buffer.cpp"
   "CommandList.cpp"
   "CommandQueue.cpp"

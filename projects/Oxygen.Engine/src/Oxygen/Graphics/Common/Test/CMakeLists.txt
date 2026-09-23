@@ -50,6 +50,8 @@ m_gtest_program(
     "Fakes/FakeResource_test.cpp"
 )
 
+m_gtest_program(AllocationBudget SOURCES "AllocationBudget_test.cpp")
+
 m_gtest_program(ShaderRequest SOURCES "ShaderRequest_test.cpp")
 m_gtest_program(ShaderByteCode SOURCES "ShaderByteCode_test.cpp")
 m_gtest_program(ShaderManager SOURCES "ShaderManager_test.cpp")

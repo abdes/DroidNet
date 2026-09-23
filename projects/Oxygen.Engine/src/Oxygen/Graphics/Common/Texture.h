@@ -17,6 +17,7 @@
 #include <Oxygen/Core/Types/ByteUnits.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
+#include <Oxygen/Graphics/Common/AllocationBudgetTag.h>
 #include <Oxygen/Graphics/Common/Concepts.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
@@ -64,6 +65,7 @@ struct TextureDesc {
 
   ResourceStates initial_state = ResourceStates::kUndefined;
   ResourceAccessMode cpu_access = ResourceAccessMode::kImmutable;
+  AllocationBudgetTag allocation_budget {};
 };
 
 using MipLevel = uint32_t;

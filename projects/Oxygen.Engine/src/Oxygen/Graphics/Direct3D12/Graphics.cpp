@@ -4,15 +4,26 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
+#include <cstdint>
+#include <limits>
 #include <memory>
+#include <mutex>
 #include <stdexcept>
 #include <string>
+#include <utility>
 
+#include <d3d12.h>
 #include <nlohmann/json.hpp>
+#include <winerror.h>
+#include <winnt.h>
 
+#include <Oxygen/Base/Windows/ComError.h>
 #include <Oxygen/Config/GraphicsConfig.h>
 #include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
 #include <Oxygen/Core/Types/ByteUnits.h>
+#include <Oxygen/Graphics/Common/AllocationBudget.h>
+#include <Oxygen/Graphics/Common/AllocationBudgetTag.h>
 #include <Oxygen/Graphics/Common/BackendModule.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocationHandle.h>
 #include <Oxygen/Graphics/Common/FrameCaptureController.h>
@@ -775,6 +786,91 @@ auto Graphics::GetMemoryStatistics() const -> MemoryStatistics
     };
   };
   return { .local = convert(local), .non_local = convert(non_local) };
+}
+
+auto Graphics::AllocateResource(const AllocationBudgetTag& tag,
+  const D3D12MA::ALLOCATION_DESC& requested_allocation,
+  const D3D12_RESOURCE_DESC& description, D3D12_RESOURCE_STATES initial_state,
+  const D3D12_CLEAR_VALUE* clear_value, D3D12MA::Allocation** allocation,
+  ID3D12Resource** resource) const -> AllocationReservation
+{
+  const auto lock = std::scoped_lock(resource_allocation_mutex_);
+  *allocation = nullptr;
+  *resource = nullptr;
+  const auto requirements
+    = GetCurrentDevice()->GetResourceAllocationInfo(0U, 1U, &description);
+  if (requirements.SizeInBytes == std::numeric_limits<std::uint64_t>::max()
+    || requirements.SizeInBytes == 0U) {
+    throw std::invalid_argument(
+      "Invalid native resource allocation requirements");
+  }
+  auto charge = AllocationReservation {};
+  if (tag.owner) {
+    auto reservation = tag.owner->TryReserve(
+      SizeBytes { requirements.SizeInBytes }, tag.category);
+    if (!reservation) {
+      throw AllocationBudgetExceeded {};
+    }
+    charge = std::move(*reservation);
+  }
+  const auto check_parent = [&](const std::uint64_t growth) -> void {
+    if (!tag.owner) {
+      return;
+    }
+    auto local = D3D12MA::Budget {};
+    auto non_local = D3D12MA::Budget {};
+    GetAllocator()->GetBudget(&local, &non_local);
+    const auto& segment = GetAllocator()->IsUMA()
+        || requested_allocation.HeapType == D3D12_HEAP_TYPE_DEFAULT
+      ? local
+      : non_local;
+    const auto committed
+      = std::max(segment.UsageBytes, segment.Stats.BlockBytes);
+    const auto headroom = tag.owner->Snapshot().limits.driver_headroom.get();
+    const auto remaining
+      = committed < segment.BudgetBytes ? segment.BudgetBytes - committed : 0U;
+    const auto available = headroom < remaining ? remaining - headroom : 0U;
+    if (growth > available || headroom > remaining) {
+      tag.owner->RecordRejection(
+        SizeBytes { requirements.SizeInBytes }, SizeBytes { available });
+      throw AllocationBudgetExceeded {};
+    }
+  };
+  auto request = requested_allocation;
+  request.Flags = static_cast<D3D12MA::ALLOCATION_FLAGS>(
+    static_cast<unsigned>(request.Flags)
+    | static_cast<unsigned>(D3D12MA::ALLOCATION_FLAG_WITHIN_BUDGET));
+  HRESULT result = E_OUTOFMEMORY;
+  if (tag.owner
+    && (static_cast<unsigned>(request.Flags)
+         & static_cast<unsigned>(D3D12MA::ALLOCATION_FLAG_COMMITTED))
+      == 0U) {
+    // Reuse existing heap space first. If no block can satisfy the request,
+    // committed fallback has an exact incremental parent cost; it cannot
+    // create an uncharged default-sized heap behind the headroom check.
+    check_parent(0U);
+    auto reuse = request;
+    reuse.Flags = static_cast<D3D12MA::ALLOCATION_FLAGS>(
+      static_cast<unsigned>(reuse.Flags)
+      | static_cast<unsigned>(D3D12MA::ALLOCATION_FLAG_NEVER_ALLOCATE));
+    result = GetAllocator()->CreateResource(&reuse, &description, initial_state,
+      clear_value, allocation, IID_PPV_ARGS(resource));
+    if (FAILED(result)) {
+      request.Flags = static_cast<D3D12MA::ALLOCATION_FLAGS>(
+        static_cast<unsigned>(request.Flags)
+        | static_cast<unsigned>(D3D12MA::ALLOCATION_FLAG_COMMITTED));
+    }
+  }
+  if (FAILED(result)) {
+    check_parent(requirements.SizeInBytes);
+    result = GetAllocator()->CreateResource(&request, &description,
+      initial_state, clear_value, allocation, IID_PPV_ARGS(resource));
+  }
+  oxygen::windows::ThrowOnFailed(result);
+  if (tag.owner) {
+    charge.ReduceTo(SizeBytes { (*allocation)->GetSize() });
+  }
+  return charge;
 }
 
 auto Graphics::CreateTexture(const TextureDesc& desc) const

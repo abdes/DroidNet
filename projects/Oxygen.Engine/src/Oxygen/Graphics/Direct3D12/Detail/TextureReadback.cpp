@@ -6,6 +6,8 @@
 
 #include <stdexcept>
 
+#include <d3d12.h>
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Graphics/Common/Texture.h>
@@ -79,6 +81,13 @@ auto MakeTextureResourceDesc(const TextureDesc& desc) -> D3D12_RESOURCE_DESC
 {
   using oxygen::TextureType;
 
+  if (desc.array_size == 0U
+    || desc.array_size > D3D12_REQ_TEXTURE2D_ARRAY_AXIS_DIMENSION
+    || desc.depth == 0U || desc.depth > D3D12_REQ_TEXTURE3D_U_V_OR_W_DIMENSION
+    || desc.mip_levels == 0U || desc.mip_levels > D3D12_REQ_MIP_LEVELS) {
+    throw std::invalid_argument(
+      "Texture dimensions exceed native representation limits");
+  }
   const auto& format_mapping = GetDxgiFormatMapping(desc.format);
   const FormatInfo& format_info = GetFormatInfo(desc.format);
 

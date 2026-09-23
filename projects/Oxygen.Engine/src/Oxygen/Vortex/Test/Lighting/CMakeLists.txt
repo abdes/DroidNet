@@ -93,6 +93,7 @@ gtest_program(
     "PhotometryGpu_test.cpp"
     "BrdfGpu_test.cpp"
     "FiniteEmitterGpu_test.cpp"
+    "AllocationBudgetGpu_test.cpp"
     "Reference/FiniteEmitter.cpp"
     "Reference/FiniteEmitter.h"
     "../../Lighting/Internal/LightPhotometry.cpp"

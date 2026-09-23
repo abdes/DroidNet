@@ -13,6 +13,7 @@
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Graphics/Common/AllocationBudget.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Headless/api_export.h>
 
@@ -187,6 +188,7 @@ public:
 
 private:
   TextureDesc desc_ {};
+  AllocationReservation budget_reservation_;
   bool is_readback_surface_ { false };
   bool is_readback_surface_mapped_ { false };
 

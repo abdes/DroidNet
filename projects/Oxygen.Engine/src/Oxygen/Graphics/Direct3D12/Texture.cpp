@@ -5,10 +5,15 @@
 //===----------------------------------------------------------------------===//
 
 #include <utility>
+#include <stdexcept>
+
+#include <d3d12.h>
 
 #include <Oxygen/Base/logging.h>
 #include <Oxygen/Core/Types/TextureType.h>
+#include <Oxygen/Graphics/Common/AllocationBudget.h>
 #include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
+#include <Oxygen/Graphics/Common/ObjectRelease.h>
 #include <Oxygen/Graphics/Direct3D12/Allocator/D3D12MemAlloc.h>
 #include <Oxygen/Graphics/Direct3D12/Bindless/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/Converters.h>
@@ -54,8 +59,14 @@ auto ConvertTextureClearValue(const TextureDesc& d) -> D3D12_CLEAR_VALUE
   return cv;
 }
 
+struct TextureAllocation {
+  ID3D12Resource* resource;
+  D3D12MA::Allocation* allocation;
+  oxygen::graphics::AllocationReservation reservation;
+};
+
 auto CreateTextureResource(const TextureDesc& desc, const Graphics* gfx)
-  -> std::pair<ID3D12Resource*, D3D12MA::Allocation*>
+  -> TextureAllocation
 {
   DCHECK_NOTNULL_F(gfx, "Graphics pointer cannot be null");
 
@@ -70,16 +81,15 @@ auto CreateTextureResource(const TextureDesc& desc, const Graphics* gfx)
 
   D3D12MA::Allocation* d3dma_allocation { nullptr };
   ID3D12Resource* resource { nullptr };
-  const HRESULT hr = gfx->GetAllocator()->CreateResource(&alloc_desc, &rd,
-    ConvertResourceStates(desc.initial_state),
+  auto reservation = gfx->AllocateResource(desc.allocation_budget, alloc_desc,
+    rd, ConvertResourceStates(desc.initial_state),
     desc.use_clear_value ? &clear_value : nullptr, &d3dma_allocation,
-    IID_PPV_ARGS(&resource));
-  if (FAILED(hr)) {
-    LOG_F(ERROR, "Failed to create texture `{}` with error {:#010X}",
-      desc.debug_name, hr);
-    throw std::runtime_error("Failed to create texture resource");
-  }
-  return { resource, d3dma_allocation };
+    &resource);
+  return {
+    .resource = resource,
+    .allocation = d3dma_allocation,
+    .reservation = std::move(reservation),
+  };
 }
 
 auto GetDescriptorAllocator(const DescriptorAllocationHandle& view_handle)
@@ -110,6 +120,7 @@ Texture::Texture(TextureDesc desc, const Graphics* gfx)
 
   ID3D12Resource* resource { nullptr };
   D3D12MA::Allocation* d3dmaAllocation { nullptr };
+  auto reservation = oxygen::graphics::AllocationReservation {};
   if (desc_.cpu_access == ResourceAccessMode::kReadBack) {
     CHECK_F(
       !desc_.is_shader_resource && !desc_.is_render_target && !desc_.is_uav,
@@ -140,22 +151,25 @@ Texture::Texture(TextureDesc desc, const Graphics* gfx)
     readback_desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
     readback_desc.Flags = D3D12_RESOURCE_FLAG_NONE;
 
-    const HRESULT hr = gfx_->GetAllocator()->CreateResource(&alloc_desc,
-      &readback_desc, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, &d3dmaAllocation,
-      IID_PPV_ARGS(&resource));
-    if (FAILED(hr)) {
-      LOG_F(ERROR, "Failed to create readback surface `{}` with error {:#010X}",
-        desc_.debug_name, hr);
-      throw std::runtime_error("Failed to create readback surface resource");
-    }
+    reservation = gfx_->AllocateResource(desc_.allocation_budget, alloc_desc,
+      readback_desc, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, &d3dmaAllocation,
+      &resource);
     is_readback_surface_ = true;
   } else {
     auto allocation = CreateTextureResource(desc_, gfx_);
-    resource = allocation.first;
-    d3dmaAllocation = allocation.second;
+    resource = allocation.resource;
+    d3dmaAllocation = allocation.allocation;
+    reservation = std::move(allocation.reservation);
   }
 
-  AddComponent<GraphicResource>(desc_.debug_name, resource, d3dmaAllocation);
+  try {
+    AddComponent<GraphicResource>(
+      desc_.debug_name, resource, d3dmaAllocation, std::move(reservation));
+  } catch (...) {
+    oxygen::graphics::ObjectRelease(resource);
+    oxygen::graphics::ObjectRelease(d3dmaAllocation);
+    throw;
+  }
 
   resource_desc_ = resource->GetDesc();
 }
@@ -166,6 +180,9 @@ Texture::Texture(
   , gfx_(gfx)
   , desc_(std::move(desc))
 {
+  if (desc_.allocation_budget.owner) {
+    throw std::invalid_argument("Imported resources cannot acquire an allocator-owned budget charge");
+  }
   DCHECK_NOTNULL_F(gfx_, "Graphics pointer cannot be null");
 
   static_assert(std::is_trivially_copyable<D3D12_RESOURCE_DESC>());

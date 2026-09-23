@@ -15,6 +15,7 @@
 #include <Oxygen/Composition/Named.h>
 #include <Oxygen/Composition/ObjectMetadata.h>
 #include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Graphics/Common/AllocationBudgetTag.h>
 #include <Oxygen/Graphics/Common/Concepts.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
@@ -50,6 +51,7 @@ struct BufferDesc {
   BufferMemory memory = BufferMemory::kDeviceLocal;
 
   std::string debug_name = "Buffer";
+  AllocationBudgetTag allocation_budget {};
 };
 
 // --- BufferRange definition ---
