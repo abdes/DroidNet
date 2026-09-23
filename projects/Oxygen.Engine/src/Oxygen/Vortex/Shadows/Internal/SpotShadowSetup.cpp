@@ -20,6 +20,7 @@
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/ViewHelpers.h>
 #include <Oxygen/Vortex/Shadows/Internal/ConventionalShadowTargetAllocator.h>
+#include <Oxygen/Vortex/Shadows/Internal/LocalShadowProjection.h>
 #include <Oxygen/Vortex/Shadows/Internal/SpotShadowSetup.h>
 #include <Oxygen/Vortex/Shadows/Types/FrameShadowInputs.h>
 #include <Oxygen/Vortex/Shadows/Types/ProjectedLocalShadowRecord.h>
@@ -72,8 +73,7 @@ namespace {
   [[nodiscard]] auto ResolveOuterConeCos(const FrameLocalLightSelection& light)
     -> float
   {
-    return std::clamp(
-      std::cos(light.outer_cone_half_angle_radians), 0.001F, 0.999999F);
+    return std::cos(light.outer_cone_half_angle_radians);
   }
 
 } // namespace
@@ -100,35 +100,35 @@ auto SpotShadowSetup::BuildSpotRecords(
   auto spot_shadow_index = 0U;
   for (const auto& [selection_index, light] :
     std::views::enumerate(local_lights)) {
-    if (light.kind != LocalLightKind::kSpot
-      || (light.flags & kLocalLightFlagCastsShadows) == 0U) {
+    if (UsesCubeLocalShadow(light) || !HasLocalShadowInfluence(light)) {
       continue;
     }
     if (spot_shadow_index >= allocation.shadow_count) {
       break;
     }
 
-    const auto range = (std::max)(light.range, kMinSpotRange);
+    const auto range = light.range;
+    const auto near_plane = (std::min)(kMinSpotNearPlane, range * 0.01F);
     const auto outer_cos = ResolveOuterConeCos(light);
-    const auto outer_angle = std::acos(outer_cos);
+    const auto outer_angle = light.outer_cone_half_angle_radians;
     const auto direction
       = NormalizeOrFallback(light.direction, glm::vec3 { 0.0F, -1.0F, 0.0F });
     const auto view = BuildSpotViewMatrix(light.position, direction);
     const auto projection = MakeReversedZPerspectiveProjectionRH_ZO(
-      2.0F * outer_angle, 1.0F, kMinSpotNearPlane, range);
-    const auto depth_span = range - kMinSpotNearPlane;
+      2.0F * outer_angle, 1.0F, near_plane, range);
+    const auto depth_span = range - near_plane;
     const auto depth_bias
       = ComputeSpotDepthBias(light, depth_span, allocation.resolution.x);
     const auto outer_sine
       = std::sqrt((std::max)(0.0F, 1.0F - outer_cos * outer_cos));
-    const auto outer_tangent = outer_sine / (std::max)(outer_cos, 1.0e-4F);
+    const auto outer_tangent = outer_sine / outer_cos;
     const auto world_texel_size = (2.0F * range * outer_tangent)
       / static_cast<float>((std::max)(allocation.resolution.x, 1U));
 
     auto& spot = records.emplace_back();
     spot.light_view_projection = projection * view;
     spot.shadow_origin_ws = light.position;
-    spot.near_plane_m = kMinSpotNearPlane;
+    spot.near_plane_m = near_plane;
     spot.far_plane_m = range;
     spot.normal_bias_m = (std::max)(light.shadow_normal_bias, 0.0F);
     spot.depth_bias = depth_bias;

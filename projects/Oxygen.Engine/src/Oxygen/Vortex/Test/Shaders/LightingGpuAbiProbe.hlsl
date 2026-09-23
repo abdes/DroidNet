@@ -16,6 +16,7 @@
 #include "Vortex/Services/Lighting/ClusterLookup.hlsli"
 #include "Vortex/Contracts/Scene/GBufferHelpers.hlsli"
 #include "Vortex/Shared/BRDFCommon.hlsli"
+#include "Vortex/Services/Lighting/FiniteEmitter.hlsli"
 #include "Vortex/Contracts/Draw/MaterialShadingConstants.hlsli"
 #include "Vortex/Services/Lighting/LocalLightAttenuation.hlsli"
 #include "Vortex/Services/Lighting/DeferredShadingCommon.hlsli"
@@ -81,6 +82,16 @@ struct FurnaceProbeInput {
     uint order;
     uint moments_srv;
     uint means_srv;
+};
+
+struct FiniteEmitterProbeInput {
+    ForwardLocalLightRecord light;
+    float3 view;
+    float roughness;
+    uint moments_srv;
+    uint means_srv;
+    float f0;
+    float rho;
 };
 
 struct MomentProbeInput {
@@ -415,6 +426,17 @@ void CS(uint3 thread : SV_DispatchThreadID) {
         output.Store3(address + 24, asuint(smooth.diffuse * (2.0 * PI / float(value.order))));
         output.Store3(address + 36, asuint(integrated.specular));
         output.Store3(address + 48, asuint(integrated.diffuse));
+    } else if (g_RecordKind == 25) {
+        StructuredBuffer<FiniteEmitterProbeInput> inputs = ResourceDescriptorHeap[args.x];
+        FiniteEmitterProbeInput value = inputs[element];
+        LightingFrameBindings lighting = (LightingFrameBindings)0;
+        lighting.brdf_model_revision = 1u;
+        lighting.brdf_moments_srv = value.moments_srv;
+        lighting.brdf_mean_moments_srv = value.means_srv;
+        GgxDirectLobes result = EvaluateLocalEmitterLobes(value.light, 0.0.xxx,
+            float3(0,0,1), value.view, value.f0.xxx, value.rho.xxx, value.roughness, lighting);
+        output.Store3(address, asuint(float3(result.single_scattering.r,
+            result.multiple_scattering.r, result.diffuse.r)));
     } else if (g_RecordKind == 22) {
         StructuredBuffer<MomentProbeInput> inputs = ResourceDescriptorHeap[args.x];
         MomentProbeInput value = inputs[element];

@@ -12,6 +12,7 @@
 #include <fstream>
 #include <iterator>
 #include <memory>
+#include <numbers>
 #include <regex>
 #include <span>
 #include <stdexcept>
@@ -421,6 +422,97 @@ NOLINT_TEST(ShadowServiceSurfaceTest,
   EXPECT_EQ(bindings.at(0).surface_srv, allocation.surface_srv);
   EXPECT_GT(bindings.at(0).depth_bias, 0.0F);
   EXPECT_FLOAT_EQ(bindings.at(0).normal_bias_m, 0.04F);
+}
+
+NOLINT_TEST(ShadowServiceSurfaceTest,
+  FiniteAndHemisphericalSpotsUseCubeCoverageWithoutLosingSelectionIdentity)
+{
+  auto resolved_view = MakePerspectiveResolvedView();
+  auto view_input = oxygen::vortex::PreparedViewShadowInput {};
+  view_input.resolved_view
+    = oxygen::observer_ptr<const oxygen::ResolvedView> { &resolved_view };
+  const auto lights = std::array {
+    FrameLocalLightSelection {
+      .source_node = {},
+      .kind = oxygen::vortex::LocalLightKind::kSpot,
+      .range = 3.0F,
+      .source_radius = 0.5F,
+      .flags = kLocalLightFlagCastsShadows,
+    },
+    FrameLocalLightSelection {
+      .source_node = {},
+      .kind = oxygen::vortex::LocalLightKind::kSpot,
+      .range = 4.0F,
+      .outer_cone_half_angle_radians = std::numbers::pi_v<float> / 2.0F,
+      .flags = kLocalLightFlagCastsShadows,
+    },
+    FrameLocalLightSelection {
+      .source_node = {},
+      .kind = oxygen::vortex::LocalLightKind::kPoint,
+      .range = 5.0F,
+      .source_radius = 0.25F,
+      .flags = kLocalLightFlagCastsShadows,
+    },
+    FrameLocalLightSelection {
+      .source_node = {},
+      .kind = oxygen::vortex::LocalLightKind::kSpot,
+      .range = 6.0F,
+      .outer_cone_half_angle_radians = 0.4F,
+      .flags = kLocalLightFlagCastsShadows,
+    },
+    FrameLocalLightSelection {
+      .source_node = {},
+      .kind = oxygen::vortex::LocalLightKind::kPoint,
+      .range = 0.0F,
+      .source_radius = 1.0F,
+      .flags = kLocalLightFlagCastsShadows,
+    },
+  };
+  const auto cube = PointShadowSetup {}.BuildPointRecords(view_input, lights,
+    {
+      .surface = nullptr,
+      .surface_srv = oxygen::ShaderVisibleIndex { 13U },
+      .resolution = { 1024U, 1024U },
+      .shadow_count = 3U,
+    });
+  const auto projected = SpotShadowSetup {}.BuildSpotRecords(view_input, lights,
+    {
+      .surface = nullptr,
+      .surface_srv = oxygen::ShaderVisibleIndex { 14U },
+      .resolution = { 1024U, 1024U },
+      .shadow_count = 1U,
+    });
+  ASSERT_EQ(cube.size(), 3U);
+  ASSERT_EQ(projected.size(), 1U);
+  EXPECT_EQ(projected.at(0).selection_index,
+    oxygen::vortex::LightSelectionIndex { 3U });
+  for (std::size_t index = 0; index < cube.size(); ++index) {
+    const auto& record = cube.at(index);
+    EXPECT_EQ(record.selection_index.get(), index);
+    EXPECT_EQ(record.first_array_layer.get(), index * 6U);
+    EXPECT_FLOAT_EQ(record.far_plane_m,
+      lights.at(index).range + lights.at(index).source_radius);
+    // Every axial support endpoint is inside the corresponding cube face.
+    for (std::size_t face = 0; face < 6U; ++face) {
+      const auto directions = std::array {
+        glm::vec3 { 1, 0, 0 },
+        glm::vec3 { -1, 0, 0 },
+        glm::vec3 { 0, 1, 0 },
+        glm::vec3 { 0, -1, 0 },
+        glm::vec3 { 0, 0, 1 },
+        glm::vec3 { 0, 0, -1 },
+      };
+      const auto point
+        = glm::vec4 { directions.at(face) * (0.999F * record.far_plane_m),
+            1.0F };
+      const auto clip = record.face_light_view_projection.at(face) * point;
+      EXPECT_GT(clip.w, 0.0F);
+      EXPECT_LE(std::abs(clip.x), clip.w);
+      EXPECT_LE(std::abs(clip.y), clip.w);
+      EXPECT_GE(clip.z, 0.0F);
+      EXPECT_LE(clip.z, clip.w);
+    }
+  }
 }
 
 NOLINT_TEST(ShadowServiceSurfaceTest,

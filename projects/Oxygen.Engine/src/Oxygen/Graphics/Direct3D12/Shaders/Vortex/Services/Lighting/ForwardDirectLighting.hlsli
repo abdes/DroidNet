@@ -8,7 +8,7 @@
 #include "Vortex/Services/Shadows/DirectionalShadowCommon.hlsli"
 #include "Vortex/Services/Shadows/ShadowSurfaceNormal.hlsli"
 #include "Vortex/Shared/Lighting.hlsli"
-#include "Vortex/Services/Lighting/LocalLightAttenuation.hlsli"
+#include "Vortex/Services/Lighting/FiniteEmitter.hlsli"
 #include "Vortex/Shared/Geometry.hlsli"
 #include "Vortex/Services/Lighting/AtmosphereDirectionalLightShared.hlsli"
 
@@ -263,30 +263,13 @@ float3 AccumulateLocalLightsClustered(
                 continue;
             }
 
-            const float3 to_light = light.position_ws - world_pos;
-            const float dist_sq = dot(to_light, to_light);
-            const float radius = light.range_m;
-            if (dist_sq >= radius * radius) {
-                continue;
-            }
-
-            const float dist = sqrt(dist_sq);
-            const float3 L = to_light / max(dist, 1e-6);
-            const float NdotL = saturate(dot(N, L));
-            if (NdotL <= 0.0) {
-                continue;
-            }
-
-            float atten = ComputeLocalLightDistanceAttenuation(to_light, radius);
-            if (kind == FORWARD_LOCAL_LIGHT_SPOT) {
-                atten *= ComputeSpotLightAngularAttenuation(L, light.emitted_direction_ws,
-                    float2(light.inner_cone_sin_half_squared, light.inner_cone_relative_correction),
-                    float2(light.outer_cone_sin_half_squared, light.outer_cone_relative_correction));
-            }
-
-            const float3 brdf = EvaluateGgxDirectResponse(N, V, L, F0, base_rgb * (1.0 - metalness),
-                roughness, lighting);
-            const float3 contribution = brdf * light.intensity_rgb_cd * atten;
+            const LightShadowReference shadow = LoadLightShadowReference(
+                lighting.local_shadow_map_srv, light.selection_index);
+            const float visibility = ComputeLocalShadowVisibility(shadow,
+                world_pos, N, VortexSafeNormalize(light.position_ws - world_pos));
+            const float3 contribution = EvaluateLocalEmitterResponse(light,
+                world_pos, N, V, F0, base_rgb * (1.0 - metalness), roughness, lighting)
+                * visibility;
             RecordForwardHdrSource(contribution);
             direct += contribution;
         }

@@ -325,6 +325,24 @@ static inline float ComputePointShadowVisibility(
         receiver_depth);
 }
 
+// Apply the retained center-source visibility approximation exactly once,
+// independently of whether a spot is represented by a projection or six faces.
+static float ComputeLocalShadowVisibility(LightShadowReference reference,
+    float3 world_position, float3 world_normal, float3 direction_to_center)
+{
+    if (reference.record_index == K_INVALID_BINDLESS_INDEX) return 1.0;
+    const VortexShadowFrameBindings bindings = LoadVortexShadowFrameBindings();
+    if (reference.projection_kind == SHADOW_PROJECTION_LOCAL_CUBE) {
+        return ComputePointShadowVisibility(bindings, reference.record_index,
+            world_position, world_normal, direction_to_center);
+    }
+    if (reference.projection_kind == SHADOW_PROJECTION_LOCAL_PROJECTED_2D) {
+        return ComputeSpotShadowVisibility(bindings, reference.record_index,
+            world_position, world_normal, direction_to_center);
+    }
+    return asfloat(0x7fc00000u);
+}
+
 static inline float ComputeDirectionalShadowVisibility(
     uint selection_index,
     float3 world_position,
