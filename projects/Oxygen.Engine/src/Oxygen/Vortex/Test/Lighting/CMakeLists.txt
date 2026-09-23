@@ -34,6 +34,7 @@ gtest_program(
   "Oxygen.Vortex.LightingImageReference.Tests"
   SOURCES
     "LightingImageReference_test.cpp"
+    "ShadowAdmissionGpu_test.cpp"
     "UnculledLightingFixture.cpp"
     "UnculledLightingFixture.h"
     "Reference/Photometry.cpp"

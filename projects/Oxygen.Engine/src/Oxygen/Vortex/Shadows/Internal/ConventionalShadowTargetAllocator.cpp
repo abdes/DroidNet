@@ -8,6 +8,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <memory>
 #include <span>
 #include <unordered_set>
@@ -16,7 +17,9 @@
 #include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/TextureType.h>
+#include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
@@ -27,6 +30,8 @@
 #include <Oxygen/Scene/Light/LightCommon.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/Shadows/Internal/ConventionalShadowTargetAllocator.h>
+#include <Oxygen/Vortex/Shadows/Types/CubeLocalShadowRecord.h>
+#include <Oxygen/Vortex/Types/FrameLightSelection.h>
 #include <Oxygen/Vortex/Types/LightingIndices.h>
 
 namespace oxygen::vortex::shadows::internal {
@@ -110,353 +115,220 @@ ConventionalShadowTargetAllocator::ConventionalShadowTargetAllocator(
 }
 
 ConventionalShadowTargetAllocator::~ConventionalShadowTargetAllocator()
-  = default;
+{
+  for (auto& [id, allocations] : views_) {
+    Retire(allocations);
+  }
+}
 
-auto ConventionalShadowTargetAllocator::OnFrameStart() -> void { }
+auto ConventionalShadowTargetAllocator::Retire(SurfaceAllocation& allocation)
+  -> void
+{
+  if (!allocation.surface) {
+    return;
+  }
+  auto gfx = renderer_.GetGraphics();
+  if (!gfx) {
+    allocation = {};
+    return;
+  }
+  gfx->GetDeferredReclaimer().RegisterDeferredAction(
+    [owner = gfx.get(),
+      surface = std::move(allocation.surface)] mutable -> void {
+      owner->ForgetKnownResourceState(*surface);
+      auto& registry = owner->GetResourceRegistry();
+      if (registry.Contains(*surface)) {
+        registry.UnRegisterResource(*surface);
+      }
+      surface.reset();
+    });
+  allocation = {};
+}
+
+auto ConventionalShadowTargetAllocator::Retire(ViewAllocations& allocations)
+  -> void
+{
+  for (auto& [id, surface] : allocations.directional) {
+    Retire(surface);
+  }
+  Retire(allocations.spot);
+  Retire(allocations.point);
+}
+
+auto ConventionalShadowTargetAllocator::OnFrameStart(
+  frame::SequenceNumber sequence) -> void
+{
+  if (sequence == current_sequence_) {
+    return;
+  }
+  for (auto it = views_.begin(); it != views_.end();) {
+    if (it->second.last_used != current_sequence_) {
+      Retire(it->second);
+      it = views_.erase(it);
+    } else {
+      ++it;
+    }
+  }
+  current_sequence_ = sequence;
+}
+
+auto ConventionalShadowTargetAllocator::Touch(ViewId view_id)
+  -> ViewAllocations&
+{
+  auto& view = views_[view_id];
+  view.last_used = current_sequence_;
+  return view;
+}
 
 auto ConventionalShadowTargetAllocator::RetainDirectionalSurfaces(
   const std::span<const LightSelectionIndex> selections) -> void
 {
   const auto active = std::unordered_set<LightSelectionIndex>(
     selections.begin(), selections.end());
-  std::erase_if(directional_allocations_,
-    [&](const auto& entry) -> auto { return !active.contains(entry.first); });
+  for (auto& [view_id, view] : views_) {
+    for (auto it = view.directional.begin(); it != view.directional.end();) {
+      if (!active.contains(it->first)) {
+        Retire(it->second);
+        it = view.directional.erase(it);
+      } else {
+        ++it;
+      }
+    }
+  }
+}
+
+auto ConventionalShadowTargetAllocator::AcquireSurface(
+  SurfaceAllocation& current, std::uint32_t layers, std::uint32_t resolution,
+  bool cube, const char* name) -> bool
+{
+  if (layers == 0U || resolution == 0U) {
+    return false;
+  }
+  if (current.surface && current.srv.IsValid() && current.layers == layers
+    && current.resolution == glm::uvec2 { resolution, resolution }) {
+    return true;
+  }
+  auto gfx = renderer_.GetGraphics();
+  if (!gfx) {
+    return false;
+  }
+  graphics::TextureDesc desc {};
+  desc.width = desc.height = resolution;
+  desc.array_size = layers;
+  desc.format = Format::kDepth32Stencil8;
+  desc.texture_type
+    = cube ? TextureType::kTextureCubeArray : TextureType::kTexture2DArray;
+  desc.debug_name = name;
+  desc.is_shader_resource = desc.is_render_target = desc.is_typeless = true;
+  desc.use_clear_value = true;
+  desc.clear_value = graphics::Color { 0.0F, 0.0F, 0.0F, 0.0F };
+  desc.initial_state = graphics::ResourceStates::kDepthWrite;
+  desc.allocation_budget = { .owner = renderer_.GetLightingAllocationBudget() };
+  auto surface = gfx->CreateTexture(desc);
+  if (!surface) {
+    return false;
+  }
+  auto& registry = gfx->GetResourceRegistry();
+  registry.Register(surface);
+  const auto view_desc = graphics::TextureViewDescription {
+    .view_type = graphics::ResourceViewType::kTexture_SRV,
+    .visibility = graphics::DescriptorVisibility::kShaderVisible,
+    .format = ResolveDepthSrvFormat(desc.format),
+    .dimension = TextureType::kTexture2DArray,
+    .sub_resources = graphics::TextureSubResourceSet::EntireTexture(),
+  };
+  auto& descriptors = gfx->GetDescriptorAllocator();
+  auto handle
+    = descriptors.AllocateRaw(view_desc.view_type, view_desc.visibility);
+  if (!handle.IsValid()) {
+    registry.UnRegisterResource(*surface);
+    return false;
+  }
+  const auto srv = descriptors.GetShaderVisibleIndex(handle);
+  try {
+    const auto view
+      = registry.RegisterView(*surface, std::move(handle), view_desc);
+    if (!view->IsValid()) {
+      registry.UnRegisterResource(*surface);
+      return false;
+    }
+  } catch (...) {
+    registry.UnRegisterResource(*surface);
+    throw;
+  }
+  // Commit only after the replacement and descriptor are complete. The old
+  // backing remains charged until deferred retirement and all leases release.
+  Retire(current);
+  current = {
+    .surface = std::move(surface),
+    .srv = srv,
+    .resolution = { resolution, resolution },
+    .layers = layers,
+  };
+  return true;
 }
 
 auto ConventionalShadowTargetAllocator::AcquireDirectionalSurface(
-  const LightSelectionIndex selection_index, const std::uint32_t cascade_count,
-  const scene::ShadowResolutionHint resolution_hint) -> DirectionalAllocation
+  ViewId view_id, LightSelectionIndex selection_index,
+  std::uint32_t cascade_count, scene::ShadowResolutionHint hint)
+  -> DirectionalAllocation
 {
-  EnsureDirectionalSurface(selection_index, cascade_count, resolution_hint);
-  return directional_allocations_.at(selection_index);
+  if (cascade_count == 0U
+    || cascade_count > kFrameDirectionalLightMaxCascades) {
+    return {};
+  }
+  auto& surface = Touch(view_id).directional[selection_index];
+  if (!AcquireSurface(surface, cascade_count,
+        ResolveDirectionalResolution(hint, renderer_.GetShadowQualityTier()),
+        false, "Vortex.DirectionalShadowSurface")) {
+    return {};
+  }
+  return {
+    .surface = surface.surface,
+    .surface_srv = surface.srv,
+    .resolution = surface.resolution,
+    .cascade_count = surface.layers,
+  };
 }
 
 auto ConventionalShadowTargetAllocator::AcquireSpotSurface(
-  const std::uint32_t shadow_count,
-  const scene::ShadowResolutionHint resolution_hint) -> SpotAllocation
+  ViewId view_id, std::uint32_t shadow_count, scene::ShadowResolutionHint hint)
+  -> SpotAllocation
 {
-  EnsureSpotSurface(shadow_count, resolution_hint);
+  auto& surface = Touch(view_id).spot;
+  if (!AcquireSurface(surface, shadow_count,
+        ResolveSpotResolution(hint, renderer_.GetShadowQualityTier()), false,
+        "Vortex.SpotShadowSurface")) {
+    return {};
+  }
   return {
-    .surface = spot_surface_,
-    .surface_srv = spot_surface_srv_,
-    .resolution = spot_resolution_,
-    .shadow_count = spot_array_size_,
+    .surface = surface.surface,
+    .surface_srv = surface.srv,
+    .resolution = surface.resolution,
+    .shadow_count = surface.layers,
   };
 }
 
 auto ConventionalShadowTargetAllocator::AcquirePointSurface(
-  const std::uint32_t shadow_count,
-  const scene::ShadowResolutionHint resolution_hint) -> PointAllocation
+  ViewId view_id, std::uint32_t shadow_count, scene::ShadowResolutionHint hint)
+  -> PointAllocation
 {
-  EnsurePointSurface(shadow_count, resolution_hint);
+  constexpr auto faces = CubeLocalShadowRecord::kFaceCount;
+  if (shadow_count > std::numeric_limits<std::uint32_t>::max() / faces) {
+    return {};
+  }
+  auto& surface = Touch(view_id).point;
+  if (!AcquireSurface(surface, shadow_count * faces,
+        ResolvePointResolution(hint, renderer_.GetShadowQualityTier()), true,
+        "Vortex.PointShadowCubeSurface")) {
+    return {};
+  }
   return {
-    .surface = point_surface_,
-    .surface_srv = point_surface_srv_,
-    .resolution = point_resolution_,
-    .shadow_count = point_shadow_count_,
+    .surface = surface.surface,
+    .surface_srv = surface.srv,
+    .resolution = surface.resolution,
+    .shadow_count = surface.layers / faces,
   };
-}
-
-auto ConventionalShadowTargetAllocator::EnsureDirectionalSurface(
-  const LightSelectionIndex selection_index, const std::uint32_t cascade_count,
-  const scene::ShadowResolutionHint resolution_hint) -> void
-{
-  auto& allocation = directional_allocations_[selection_index];
-  const auto array_size = (std::max)(1U, (std::min)(cascade_count, 4U));
-  const auto resolved_resolution = ResolveDirectionalResolution(
-    resolution_hint, renderer_.GetShadowQualityTier());
-  const auto resolution
-    = glm::uvec2 { resolved_resolution, resolved_resolution };
-  const auto needs_reallocation = !allocation.surface
-    || allocation.resolution != resolution
-    || allocation.cascade_count != array_size;
-  if (!needs_reallocation) {
-    if (!allocation.surface_srv.IsValid()) {
-      allocation.surface_srv
-        = RegisterDirectionalSurfaceSrv(allocation.surface);
-    }
-    return;
-  }
-
-  auto gfx = renderer_.GetGraphics();
-  if (gfx == nullptr) {
-    allocation.surface.reset();
-    allocation.surface_srv = kInvalidShaderVisibleIndex;
-    allocation.resolution = {};
-    allocation.cascade_count = 0U;
-    return;
-  }
-
-  graphics::TextureDesc desc {};
-  desc.width = resolution.x;
-  desc.height = resolution.y;
-  desc.depth = 1U;
-  desc.array_size = array_size;
-  desc.mip_levels = 1U;
-  desc.sample_count = 1U;
-  desc.sample_quality = 0U;
-  desc.format = Format::kDepth32Stencil8;
-  desc.texture_type = TextureType::kTexture2DArray;
-  desc.debug_name = "Vortex.DirectionalShadowSurface";
-  desc.is_shader_resource = true;
-  desc.is_render_target = true;
-  desc.is_typeless = true;
-  desc.use_clear_value = true;
-  desc.clear_value = graphics::Color { 0.0F, 0.0F, 0.0F, 0.0F };
-  desc.initial_state = graphics::ResourceStates::kDepthWrite;
-
-  allocation.surface = gfx->CreateTexture(desc);
-  allocation.resolution = resolution;
-  allocation.cascade_count = array_size;
-  allocation.surface_srv = RegisterDirectionalSurfaceSrv(allocation.surface);
-}
-
-auto ConventionalShadowTargetAllocator::RegisterDirectionalSurfaceSrv(
-  const std::shared_ptr<graphics::Texture>& surface) -> ShaderVisibleIndex
-{
-  if (!surface) {
-    return kInvalidShaderVisibleIndex;
-  }
-
-  auto gfx = renderer_.GetGraphics();
-  if (gfx == nullptr) {
-    return kInvalidShaderVisibleIndex;
-  }
-
-  auto& registry = gfx->GetResourceRegistry();
-  if (!registry.Contains(*surface)) {
-    registry.Register(surface);
-  }
-
-  const auto view_desc = graphics::TextureViewDescription {
-    .view_type = graphics::ResourceViewType::kTexture_SRV,
-    .visibility = graphics::DescriptorVisibility::kShaderVisible,
-    .format = ResolveDepthSrvFormat(surface->GetDescriptor().format),
-    .dimension = surface->GetDescriptor().texture_type,
-    .sub_resources = graphics::TextureSubResourceSet::EntireTexture(),
-  };
-
-  if (const auto existing
-    = registry.FindShaderVisibleIndex(*surface, view_desc);
-    existing.has_value()) {
-    return *existing;
-  }
-
-  auto& allocator = gfx->GetDescriptorAllocator();
-  auto handle
-    = allocator.AllocateRaw(view_desc.view_type, view_desc.visibility);
-  if (!handle.IsValid()) {
-    return kInvalidShaderVisibleIndex;
-  }
-
-  const auto shader_visible_index = allocator.GetShaderVisibleIndex(handle);
-  const auto view
-    = registry.RegisterView(*surface, std::move(handle), view_desc);
-  if (!view->IsValid()) {
-    return kInvalidShaderVisibleIndex;
-  }
-
-  return shader_visible_index;
-}
-
-auto ConventionalShadowTargetAllocator::EnsureSpotSurface(
-  const std::uint32_t shadow_count,
-  const scene::ShadowResolutionHint resolution_hint) -> void
-{
-  const auto array_size = (std::max)(1U, (std::min)(shadow_count, 8U));
-  const auto resolved_resolution
-    = ResolveSpotResolution(resolution_hint, renderer_.GetShadowQualityTier());
-  const auto resolution
-    = glm::uvec2 { resolved_resolution, resolved_resolution };
-  const auto needs_reallocation = !spot_surface_
-    || spot_resolution_ != resolution || spot_array_size_ != array_size;
-  if (!needs_reallocation) {
-    if (!spot_surface_srv_.IsValid()) {
-      spot_surface_srv_ = RegisterSpotSurfaceSrv();
-    }
-    return;
-  }
-
-  auto gfx = renderer_.GetGraphics();
-  if (gfx == nullptr) {
-    spot_surface_.reset();
-    spot_surface_srv_ = kInvalidShaderVisibleIndex;
-    spot_resolution_ = {};
-    spot_array_size_ = 0U;
-    return;
-  }
-
-  graphics::TextureDesc desc {};
-  desc.width = resolution.x;
-  desc.height = resolution.y;
-  desc.depth = 1U;
-  desc.array_size = array_size;
-  desc.mip_levels = 1U;
-  desc.sample_count = 1U;
-  desc.sample_quality = 0U;
-  desc.format = Format::kDepth32Stencil8;
-  desc.texture_type = TextureType::kTexture2DArray;
-  desc.debug_name = "Vortex.SpotShadowSurface";
-  desc.is_shader_resource = true;
-  desc.is_render_target = true;
-  desc.is_typeless = true;
-  desc.use_clear_value = true;
-  desc.clear_value = graphics::Color { 0.0F, 0.0F, 0.0F, 0.0F };
-  desc.initial_state = graphics::ResourceStates::kDepthWrite;
-
-  spot_surface_ = gfx->CreateTexture(desc);
-  spot_resolution_ = resolution;
-  spot_array_size_ = array_size;
-  spot_surface_srv_ = RegisterSpotSurfaceSrv();
-}
-
-auto ConventionalShadowTargetAllocator::RegisterSpotSurfaceSrv()
-  -> ShaderVisibleIndex
-{
-  if (!spot_surface_) {
-    return kInvalidShaderVisibleIndex;
-  }
-
-  auto gfx = renderer_.GetGraphics();
-  if (gfx == nullptr) {
-    return kInvalidShaderVisibleIndex;
-  }
-
-  auto& registry = gfx->GetResourceRegistry();
-  if (!registry.Contains(*spot_surface_)) {
-    registry.Register(spot_surface_);
-  }
-
-  const auto view_desc = graphics::TextureViewDescription {
-    .view_type = graphics::ResourceViewType::kTexture_SRV,
-    .visibility = graphics::DescriptorVisibility::kShaderVisible,
-    .format = ResolveDepthSrvFormat(spot_surface_->GetDescriptor().format),
-    .dimension = spot_surface_->GetDescriptor().texture_type,
-    .sub_resources = graphics::TextureSubResourceSet::EntireTexture(),
-  };
-
-  if (const auto existing
-    = registry.FindShaderVisibleIndex(*spot_surface_, view_desc);
-    existing.has_value()) {
-    return *existing;
-  }
-
-  auto& allocator = gfx->GetDescriptorAllocator();
-  auto handle
-    = allocator.AllocateRaw(view_desc.view_type, view_desc.visibility);
-  if (!handle.IsValid()) {
-    return kInvalidShaderVisibleIndex;
-  }
-
-  const auto shader_visible_index = allocator.GetShaderVisibleIndex(handle);
-  const auto view
-    = registry.RegisterView(*spot_surface_, std::move(handle), view_desc);
-  if (!view->IsValid()) {
-    return kInvalidShaderVisibleIndex;
-  }
-
-  return shader_visible_index;
-}
-
-auto ConventionalShadowTargetAllocator::EnsurePointSurface(
-  const std::uint32_t shadow_count,
-  const scene::ShadowResolutionHint resolution_hint) -> void
-{
-  const auto resolved_shadow_count
-    = (std::max)(1U, (std::min)(shadow_count, 4U));
-  const auto resolved_resolution
-    = ResolvePointResolution(resolution_hint, renderer_.GetShadowQualityTier());
-  const auto resolution
-    = glm::uvec2 { resolved_resolution, resolved_resolution };
-  const auto needs_reallocation = !point_surface_
-    || point_resolution_ != resolution
-    || point_shadow_count_ != resolved_shadow_count;
-  if (!needs_reallocation) {
-    if (!point_surface_srv_.IsValid()) {
-      point_surface_srv_ = RegisterPointSurfaceSrv();
-    }
-    return;
-  }
-
-  auto gfx = renderer_.GetGraphics();
-  if (gfx == nullptr) {
-    point_surface_.reset();
-    point_surface_srv_ = kInvalidShaderVisibleIndex;
-    point_resolution_ = {};
-    point_shadow_count_ = 0U;
-    return;
-  }
-
-  graphics::TextureDesc desc {};
-  desc.width = resolution.x;
-  desc.height = resolution.y;
-  desc.depth = 1U;
-  desc.array_size = resolved_shadow_count * 6U;
-  desc.mip_levels = 1U;
-  desc.sample_count = 1U;
-  desc.sample_quality = 0U;
-  desc.format = Format::kDepth32Stencil8;
-  desc.texture_type = TextureType::kTextureCubeArray;
-  desc.debug_name = "Vortex.PointShadowCubeSurface";
-  desc.is_shader_resource = true;
-  desc.is_render_target = true;
-  desc.is_typeless = true;
-  desc.use_clear_value = true;
-  desc.clear_value = graphics::Color { 0.0F, 0.0F, 0.0F, 0.0F };
-  desc.initial_state = graphics::ResourceStates::kDepthWrite;
-
-  point_surface_ = gfx->CreateTexture(desc);
-  point_resolution_ = resolution;
-  point_shadow_count_ = resolved_shadow_count;
-  point_surface_srv_ = RegisterPointSurfaceSrv();
-}
-
-auto ConventionalShadowTargetAllocator::RegisterPointSurfaceSrv()
-  -> ShaderVisibleIndex
-{
-  if (!point_surface_) {
-    return kInvalidShaderVisibleIndex;
-  }
-
-  auto gfx = renderer_.GetGraphics();
-  if (gfx == nullptr) {
-    return kInvalidShaderVisibleIndex;
-  }
-
-  auto& registry = gfx->GetResourceRegistry();
-  if (!registry.Contains(*point_surface_)) {
-    registry.Register(point_surface_);
-  }
-
-  const auto view_desc = graphics::TextureViewDescription {
-    .view_type = graphics::ResourceViewType::kTexture_SRV,
-    .visibility = graphics::DescriptorVisibility::kShaderVisible,
-    .format = ResolveDepthSrvFormat(point_surface_->GetDescriptor().format),
-    .dimension = TextureType::kTexture2DArray,
-    .sub_resources = graphics::TextureSubResourceSet::EntireTexture(),
-  };
-
-  if (const auto existing
-    = registry.FindShaderVisibleIndex(*point_surface_, view_desc);
-    existing.has_value()) {
-    return *existing;
-  }
-
-  auto& allocator = gfx->GetDescriptorAllocator();
-  auto handle
-    = allocator.AllocateRaw(view_desc.view_type, view_desc.visibility);
-  if (!handle.IsValid()) {
-    return kInvalidShaderVisibleIndex;
-  }
-
-  const auto shader_visible_index = allocator.GetShaderVisibleIndex(handle);
-  const auto view
-    = registry.RegisterView(*point_surface_, std::move(handle), view_desc);
-  if (!view->IsValid()) {
-    return kInvalidShaderVisibleIndex;
-  }
-
-  return shader_visible_index;
 }
 
 } // namespace oxygen::vortex::shadows::internal

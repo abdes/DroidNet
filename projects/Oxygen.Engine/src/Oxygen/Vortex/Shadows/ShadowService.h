@@ -12,6 +12,7 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Vortex/Lighting/Types/LightingPreparationFailure.h>
 #include <Oxygen/Vortex/Shadows/Types/FrameShadowInputs.h>
 #include <Oxygen/Vortex/Shadows/Types/ShadowFrameData.h>
 #include <Oxygen/Vortex/api_export.h>
@@ -62,6 +63,8 @@ public:
   OXGN_VRTX_API auto RenderShadowDepths(const FrameShadowInputs& inputs)
     -> void;
 
+  [[nodiscard]] OXGN_VRTX_API auto InspectPreparationFailure(
+    ViewId view_id) const -> const LightingPreparationFailure*;
   [[nodiscard]] OXGN_VRTX_API auto InspectShadowData(ViewId view_id) const
     -> const ShadowFrameData*;
   [[nodiscard]] OXGN_VRTX_API auto InspectDirectionalShadowSurfaces(
@@ -107,6 +110,7 @@ private:
     directional_reference_buffer_;
   std::unique_ptr<upload::TransientStructuredBuffer> local_reference_buffer_;
   std::unordered_map<ViewId, PublishedView> published_views_;
+  std::unordered_map<ViewId, LightingPreparationFailure> failed_views_;
   std::unique_ptr<shadows::CascadeShadowPass> cascade_shadow_pass_;
 };
 
