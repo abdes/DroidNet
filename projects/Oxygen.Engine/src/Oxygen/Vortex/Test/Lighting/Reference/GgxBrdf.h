@@ -55,4 +55,8 @@ enum class BrdfReferenceError : std::uint8_t {
   const BrdfReflectance& material, const BrdfMoments& moments)
   -> std::expected<BrdfLobes, BrdfReferenceError>;
 
+//! The same single-scattering lobe, usable for integration without E/B inputs.
+[[nodiscard]] auto EvaluateGgxSingleScatteringChannel(const BrdfQuery& query,
+  double f0) -> std::expected<double, BrdfReferenceError>;
+
 } // namespace oxygen::vortex::testing::reference

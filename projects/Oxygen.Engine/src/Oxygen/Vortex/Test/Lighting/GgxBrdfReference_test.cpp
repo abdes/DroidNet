@@ -200,6 +200,21 @@ namespace {
     ::testing::Test::RecordProperty("maximum_furnace_error", maximum_error);
   }
 
+  NOLINT_TEST(GgxBrdfReferenceTest,
+    NormalSingleScatteringMatchesAnalyticPeakAndRoughnessFloor)
+  {
+    for (const auto roughness : { 0.0, 0.02, 0.045, 0.5, 1.0 }) {
+      const auto value = EvaluateGgxSingleScatteringChannel(
+        { .roughness = PerceptualRoughness { roughness } }, 0.04);
+      ASSERT_TRUE(value.has_value());
+      // N=L=V=H gives D=1/(pi*alpha^2), V=1/4 and Fresnel=F0.
+      const auto effective = std::max(roughness, 0.045);
+      const auto expected
+        = 0.04 / (4.0 * std::numbers::pi * std::pow(effective, 4));
+      EXPECT_NEAR(*value, expected, 1.0e-10);
+    }
+  }
+
   NOLINT_TEST(GgxBrdfReferenceTest, InvalidInputsFailAndBackFacesAreZero)
   {
     const auto directional
@@ -220,6 +235,9 @@ namespace {
       EXPECT_FALSE(EvaluateGgxBrdfChannel({}, { 0.04, invalid }, moments));
       EXPECT_FALSE(EvaluateGgxBrdfChannel(
         { .roughness = PerceptualRoughness { invalid } }, {}, moments));
+      EXPECT_FALSE(EvaluateGgxSingleScatteringChannel({}, invalid));
+      EXPECT_FALSE(EvaluateGgxSingleScatteringChannel(
+        { .roughness = PerceptualRoughness { invalid } }, 0.04));
     }
     EXPECT_FALSE(EvaluateGgxBrdfChannel({}, {}, {}));
     auto invalid_moments = moments;
@@ -229,6 +247,10 @@ namespace {
     invalid_moments.mean.hemispherical_albedo = 1.0;
     EXPECT_FALSE(EvaluateGgxBrdfChannel({}, {}, invalid_moments));
     for (const auto cosine : { -1.0, 0.0 }) {
+      const auto single = EvaluateGgxSingleScatteringChannel(
+        { .light = LightCosine { cosine } }, 0.04);
+      ASSERT_TRUE(single.has_value());
+      EXPECT_EQ(*single, 0.0);
       const auto value
         = EvaluateGgxBrdfChannel({ .light = LightCosine { cosine } }, {}, {});
       ASSERT_TRUE(value.has_value());

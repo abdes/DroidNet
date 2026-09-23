@@ -142,12 +142,16 @@ sRGB texture formats through production HLSL decoding and F0 helpers, covering
 all byte codes and normal-fold landmarks. The probe passes with maximum
 normal error 2.006e-7 and sRGB error 0.429605 encoded codes (within the format's
 half-code limit). The end-to-end lighting budget is unchanged. Debug passes all
-38 CPU reference tests across the existing and new-mean runs; both configurations
+40 CPU reference tests in the owning run; both configurations
 pass all 25 native tests. Release also qualifies the new material and mean
 checks. The changed C++ files are
 oxytidy-clean. Earlier BRDF/furnace and finite-source checks remain recorded in
-the reference evidence. Broader smooth/grazing furnace
-and finite-source qualification, RGB light tint, complete material evaluation,
+the reference evidence. The expanded smooth/grazing furnace matrix covers 392
+combinations using certified directional/mean moments; Debug and Release pass
+with maximum error including the grazing-tail bound of 5.854e-5 against 2e-3.
+The affected Release suites pass all 16 tests, and changed C++ files are
+oxytidy-clean. Broader finite-source qualification,
+RGB light tint, complete material evaluation,
 lighting/image probes and instrumentation remain open in B.
 
 A's closure does not establish the final physical renderer. B must supply an
