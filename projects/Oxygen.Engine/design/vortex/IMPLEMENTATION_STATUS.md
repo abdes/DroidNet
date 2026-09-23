@@ -106,8 +106,13 @@ of renderer light selection, retaining the serial-image checks and adding actual
 missing-light negative controls. Debug and Release each pass 331,776 additional
 RGB comparisons, both image tests and the three affected tone probes. See the
 [reference qualification record](plan/EX07B-reference-validation.md#independent-full-list-gpu-image-reference).
-Material-format/filter and bounded GPU/resource instrument qualification remain
-open; this checkpoint does not close EX07B or change production shading.
+The subsequent instrument checkpoint adds eight cached CPU phase descriptions
+and verifies bounded CPU/GPU records in native forward/deferred frames. Debug and
+Release pass the new native check, eight CPU collector tests and both image tests;
+Release additionally passes 17 timeline and two native timestamp tests. No
+production benchmark collector or per-light CPU instrumentation is added.
+Material-format/filter, resource accounting and native collection-overhead
+qualification remain open; these checkpoints do not close EX07B or change shading.
 
 **User-directed stopping point:** finish EX07B's reference/instrument validation
 gate and commit its stable checkpoint, then pause. Do not begin EX07C until the

@@ -12,6 +12,8 @@
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/View.h>
+#include <Oxygen/Profiling/CpuProfileScope.h>
+#include <Oxygen/Profiling/ProfileScope.h>
 #include <Oxygen/Vortex/Lighting/Internal/DeferredLightPacketBuilder.h>
 #include <Oxygen/Vortex/Lighting/Internal/ForwardLightPublisher.h>
 #include <Oxygen/Vortex/Lighting/Internal/LightGridBuilder.h>
@@ -93,6 +95,12 @@ auto LightingService::PublishShadowReferences(
   const ViewId view_id, const ShadowFrameData& shadows)
   -> std::expected<void, LightingPreparationFailure>
 {
+  // Cache the owning label; steady-state scope entry needs no label allocation.
+  static const auto kProfile = profiling::CpuProfileScopeDesc {
+    .label = "Vortex.Lighting.PublishShadowReferences",
+    .category = profiling::ProfileCategory::kPass,
+  };
+  const auto profile = profiling::CpuProfileScope(kProfile);
   return publisher_->PublishShadowReferences(view_id, shadows);
 }
 

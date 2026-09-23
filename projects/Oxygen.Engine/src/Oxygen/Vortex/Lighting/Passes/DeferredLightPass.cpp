@@ -41,6 +41,7 @@
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
+#include <Oxygen/Profiling/CpuProfileScope.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Profiling/ProfileScope.h>
 #include <Oxygen/Vortex/Internal/ViewportClamp.h>
@@ -595,6 +596,12 @@ auto DeferredLightPass::Record(RenderContext& ctx,
   const graphics::Texture* point_shadow_surface,
   const bool static_sky_light_available) -> ExecutionState
 {
+  // Cache the owning label; steady-state scope entry needs no label allocation.
+  static const auto kProfile = profiling::CpuProfileScopeDesc {
+    .label = "Vortex.Lighting.RecordDeferred",
+    .category = profiling::ProfileCategory::kPass,
+  };
+  const auto profile = profiling::CpuProfileScope(kProfile);
   auto state = ExecutionState {};
   if (ctx.view_constants == nullptr) {
     return state;

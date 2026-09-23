@@ -16,6 +16,8 @@
 #include <glm/ext/vector_float3.hpp>
 #include <glm/geometric.hpp>
 
+#include <Oxygen/Profiling/CpuProfileScope.h>
+#include <Oxygen/Profiling/ProfileScope.h>
 #include <Oxygen/Vortex/Lighting/Internal/LightEvaluationRecords.h>
 #include <Oxygen/Vortex/Lighting/Internal/LightPhotometry.h>
 #include <Oxygen/Vortex/Lighting/Types/DirectionalLightForwardData.h>
@@ -59,6 +61,12 @@ namespace {
 auto ResolveLightEvaluationRecords(const FrameLightSelection& input)
   -> std::expected<LightEvaluationRecords, LightingPreparationFailure>
 {
+  // Cache the owning label; steady-state scope entry needs no label allocation.
+  static const auto kProfile = profiling::CpuProfileScopeDesc {
+    .label = "Vortex.Lighting.ResolveEvaluation",
+    .category = profiling::ProfileCategory::kPass,
+  };
+  const auto profile = profiling::CpuProfileScope(kProfile);
   auto records = LightEvaluationRecords {};
   if (input.directional_lights.size() >= kInvalidLightingArrayIndexValue) {
     return std::unexpected(LightingPreparationFailure {

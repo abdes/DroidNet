@@ -31,6 +31,15 @@ gtest_program(
 )
 
 gtest_program(
+  "Oxygen.Vortex.LightingInstrumentationGpu.Tests"
+  SOURCES
+    "LightingInstrumentationGpu_test.cpp"
+  DEPS
+    oxygen-vortex-exposure-test-support
+    oxygen::vortex-test-support
+)
+
+gtest_program(
   "Oxygen.Vortex.LightingGpuAbi.Tests"
   SOURCES
     "LightingGpuAbiFixture.cpp"

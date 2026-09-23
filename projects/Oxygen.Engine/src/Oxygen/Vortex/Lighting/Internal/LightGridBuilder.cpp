@@ -18,6 +18,8 @@
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Core/Types/View.h>
+#include <Oxygen/Profiling/CpuProfileScope.h>
+#include <Oxygen/Profiling/ProfileScope.h>
 #include <Oxygen/Vortex/Lighting/Internal/LightEvaluationRecords.h>
 #include <Oxygen/Vortex/Lighting/Internal/LightGridBuilder.h>
 #include <Oxygen/Vortex/Lighting/Types/FrameLightingInputs.h>
@@ -125,6 +127,12 @@ auto LightGridBuilder::OnFrameStart(
 auto LightGridBuilder::Build(const FrameLightingInputs& inputs)
   -> std::expected<BuiltLightGridFrame, LightingPreparationFailure>
 {
+  // Cache the owning label; steady-state scope entry needs no label allocation.
+  static const auto kProfile = profiling::CpuProfileScopeDesc {
+    .label = "Vortex.Lighting.BuildGrid",
+    .category = profiling::ProfileCategory::kPass,
+  };
+  const auto profile = profiling::CpuProfileScope(kProfile);
   auto built = BuiltLightGridFrame {};
   if (inputs.frame_light_set == nullptr) {
     return std::unexpected(LightingPreparationFailure {});

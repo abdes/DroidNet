@@ -19,6 +19,8 @@
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/View.h>
+#include <Oxygen/Profiling/CpuProfileScope.h>
+#include <Oxygen/Profiling/ProfileScope.h>
 #include <Oxygen/Vortex/Internal/PerViewStructuredPublisher.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/Shadows/Internal/ShadowReferenceBuilder.h>
@@ -157,6 +159,12 @@ auto ShadowService::PublishShadowBindings(
 
 auto ShadowService::RenderShadowDepths(const FrameShadowInputs& inputs) -> void
 {
+  // Cache the owning label; steady-state scope entry needs no label allocation.
+  static const auto kProfile = profiling::CpuProfileScopeDesc {
+    .label = "Vortex.Shadows.RecordDepths",
+    .category = profiling::ProfileCategory::kPass,
+  };
+  const auto profile = profiling::CpuProfileScope(kProfile);
   last_render_state_.published_view_count = 0U;
   last_render_state_.directional_view_count = 0U;
   last_render_state_.spot_view_count = 0U;

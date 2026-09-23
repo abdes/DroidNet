@@ -604,6 +604,13 @@ namespace {
     const scene::DirectionalLightResolver& resolver,
     const std::uint64_t selection_epoch) -> FrameLightSelection
   {
+    // Cache the owning label; steady-state scope entry needs no label
+    // allocation.
+    static const auto kProfile = profiling::CpuProfileScopeDesc {
+      .label = "Vortex.Lighting.GatherSelection",
+      .category = profiling::ProfileCategory::kPass,
+    };
+    const auto profile = profiling::CpuProfileScope(kProfile);
     auto selection = FrameLightSelection {};
     selection.selection_epoch = selection_epoch;
     selection.scene_generation = scene_ref.GetLifetimeId().get();

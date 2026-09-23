@@ -17,6 +17,7 @@
 #include <Oxygen/Vortex/Environment/EnvironmentLightingService.h>
 #include <Oxygen/Vortex/Environment/Passes/AtmosphereCameraAerialPerspectivePass.h>
 #include <Oxygen/Vortex/Environment/Passes/AtmosphereSkyViewLutPass.h>
+#include <Oxygen/Vortex/Internal/GpuTimelineProfiler.h>
 #include <Oxygen/Vortex/Internal/PreviousViewHistoryCache.h>
 #include <Oxygen/Vortex/Lighting/LightingService.h>
 #include <Oxygen/Vortex/Passes/GroundGridPass.h>
@@ -32,6 +33,12 @@
 namespace oxygen::vortex::testing {
 
 struct RendererPublicationProbe {
+  static auto GetGpuTimelineProfiler(Renderer& renderer)
+    -> internal::GpuTimelineProfiler&
+  {
+    return *renderer.gpu_timeline_profiler_;
+  }
+
   static auto CleanupWithResolvedDepth(
     SceneRenderer& renderer, SceneTextureExtractRef resolved) -> void
   {

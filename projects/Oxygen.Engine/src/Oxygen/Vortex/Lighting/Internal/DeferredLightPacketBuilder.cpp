@@ -19,6 +19,8 @@
 
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Constants.h>
+#include <Oxygen/Profiling/CpuProfileScope.h>
+#include <Oxygen/Profiling/ProfileScope.h>
 #include <Oxygen/Vortex/Lighting/Internal/DeferredLightPacketBuilder.h>
 #include <Oxygen/Vortex/Lighting/Internal/LightEvaluationRecords.h>
 #include <Oxygen/Vortex/Lighting/Types/DirectionalLightForwardData.h>
@@ -94,6 +96,12 @@ namespace {
 auto DeferredLightPacketBuilder::Build(const FrameLightSelection& selection,
   const LightEvaluationRecords& evaluation) const -> DeferredLightPacketSet
 {
+  // Cache the owning label; steady-state scope entry needs no label allocation.
+  static const auto kProfile = profiling::CpuProfileScopeDesc {
+    .label = "Vortex.Lighting.BuildDeferredPackets",
+    .category = profiling::ProfileCategory::kPass,
+  };
+  const auto profile = profiling::CpuProfileScope(kProfile);
   auto packets
     = DeferredLightPacketSet { .selection_epoch = selection.selection_epoch };
   packets.directional = evaluation.directional;
