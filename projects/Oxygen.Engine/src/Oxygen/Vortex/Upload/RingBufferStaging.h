@@ -43,6 +43,8 @@ class RingBufferStaging final : public StagingProvider {
   friend class UploadCoordinator;
 
 public:
+  static constexpr auto kDefaultInitialPartitionBytes
+    = SizeBytes { 10ULL * 1024ULL * 1024ULL };
   explicit RingBufferStaging(UploaderTag tag, observer_ptr<Graphics> gfx,
     frame::SlotCount partitions, std::uint32_t alignment, float slack)
     : StagingProvider(tag)
@@ -60,7 +62,8 @@ public:
 
   explicit RingBufferStaging(UploaderTag tag, observer_ptr<Graphics> gfx,
     frame::SlotCount partitions, std::uint32_t alignment, float slack,
-    std::string_view debug_name)
+    std::string_view debug_name, graphics::AllocationBudgetTag budget = {},
+    SizeBytes initial_partition_bytes = kDefaultInitialPartitionBytes)
     : StagingProvider(tag)
     , gfx_(gfx)
     , partitions_count_(partitions)
@@ -68,6 +71,8 @@ public:
     , slack_(slack)
     , debug_name_(
         debug_name.empty() ? "RingBufferStaging" : std::string(debug_name))
+    , budget_(std::move(budget))
+    , initial_partition_bytes_(initial_partition_bytes)
   {
     DCHECK_F(alignment_ > 0, "RingBufferStaging requires non-zero alignment");
     DCHECK_F((alignment_ & (alignment_ - 1)) == 0,
@@ -112,7 +117,6 @@ private:
 
   auto EnsureCapacity(std::uint64_t required, std::string_view debug_name)
     -> std::expected<void, UploadError>;
-  auto Map() -> std::expected<void, UploadError>;
   auto UnMap() noexcept -> void;
 
   observer_ptr<Graphics> gfx_;
@@ -142,6 +146,8 @@ private:
   // (e.g. for PIX). Per-allocation debug labels are still accepted by
   // Allocate() for logging and telemetry.
   std::string debug_name_;
+  graphics::AllocationBudgetTag budget_;
+  SizeBytes initial_partition_bytes_ { kDefaultInitialPartitionBytes };
 };
 
 } // namespace oxygen::vortex::upload

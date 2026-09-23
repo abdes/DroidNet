@@ -41,6 +41,8 @@
 #include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Engine/IAsyncEngine.h>
+#include <Oxygen/Graphics/Common/AllocationBudget.h>
+#include <Oxygen/Graphics/Common/AllocationBudgetTag.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
@@ -134,6 +136,7 @@ struct RendererPublicationState {
 };
 
 namespace {
+  constexpr auto kLightingStagingPartitionBytes = SizeBytes { 64ULL * 1024ULL };
 
   constexpr auto kCVarVortexLocalFogEnabled = "vtx.local_fog.enable";
   constexpr auto kCVarVortexLocalFogRenderDuringHeightFogPass
@@ -1033,6 +1036,13 @@ Renderer::Renderer(std::weak_ptr<Graphics> graphics, RendererConfig config,
   const CapabilitySet capability_families)
   : gfx_weak_(std::move(graphics))
   , config_(std::move(config))
+  , lighting_allocation_budget_(std::make_shared<graphics::AllocationBudget>(
+      graphics::AllocationBudgetLimits {
+        .total = SizeBytes { config_.lighting_allocation_limit_bytes },
+        .compact_indices
+        = SizeBytes { config_.lighting_compact_index_limit_bytes },
+        .driver_headroom = SizeBytes { config_.lighting_driver_headroom_bytes },
+      }))
   , capability_families_(capability_families)
 {
   CHECK_F(!gfx_weak_.expired(), "Renderer constructed with expired Graphics");
@@ -1056,6 +1066,13 @@ Renderer::Renderer(std::weak_ptr<Graphics> graphics, RendererConfig config,
     frame::kFramesInFlight, kRendererStagingAlignment,
     upload::kDefaultRingBufferStagingSlack, "Vortex.InlineStaging");
   inline_transfers_->RegisterProvider(inline_staging_provider_);
+  lighting_staging_provider_ = std::make_shared<upload::RingBufferStaging>(
+    upload::internal::UploaderTagFactory::Get(), observer_ptr { gfx.get() },
+    frame::kFramesInFlight, kRendererStagingAlignment,
+    upload::kDefaultRingBufferStagingSlack, "Vortex.LightingStaging",
+    graphics::AllocationBudgetTag { .owner = lighting_allocation_budget_ },
+    kLightingStagingPartitionBytes);
+  inline_transfers_->RegisterProvider(lighting_staging_provider_);
 
   diagnostics_service_
     = std::make_unique<DiagnosticsService>(capability_families_);
@@ -1371,6 +1388,7 @@ auto Renderer::OnShutdown() noexcept -> void
   compositing_pass_.reset();
   compositing_pass_config_.reset();
   inline_transfers_.reset();
+  lighting_staging_provider_.reset();
   inline_staging_provider_.reset();
   upload_staging_provider_.reset();
   uploader_.reset();
@@ -3075,6 +3093,12 @@ auto Renderer::GetOcclusionMaxCandidateCount() const noexcept -> std::uint32_t
     }
   }
   return 256U * 256U;
+}
+
+auto Renderer::GetLightingStagingProvider() -> upload::StagingProvider&
+{
+  CHECK_NOTNULL_F(lighting_staging_provider_.get());
+  return *lighting_staging_provider_;
 }
 
 auto Renderer::GetStagingProvider() -> upload::StagingProvider&

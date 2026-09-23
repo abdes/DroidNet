@@ -29,6 +29,7 @@ enum class UploadError : uint8_t {
   kTrackerShutdown,
   // Planner-specific errors
   kUnsupportedFormat,
+  kBudgetExceeded,
 };
 
 //! Category for upload errors.
@@ -42,6 +43,8 @@ public:
   [[nodiscard]] auto message(int ev) const -> std::string override
   {
     switch (static_cast<UploadError>(ev)) {
+    case UploadError::kBudgetExceeded:
+      return "Upload allocation exceeds the resource admission budget";
     case UploadError::kStagingMapFailed:
       return "Failed to map staging buffer memory for upload operation";
     case UploadError::kInvalidRequest:

@@ -22,6 +22,7 @@
 
 namespace oxygen::graphics {
 class CommandRecorder;
+class AllocationBudget;
 }
 
 namespace oxygen::vortex {
@@ -124,6 +125,7 @@ public:
   }
 
 private:
+  std::shared_ptr<graphics::AllocationBudget> allocation_budget_;
   frame::SequenceNumber current_sequence_ { 0U };
   frame::Slot current_slot_ { frame::kInvalidSlot };
   GridBuildState last_grid_build_state_ {};

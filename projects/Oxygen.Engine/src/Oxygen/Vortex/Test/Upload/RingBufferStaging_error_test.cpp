@@ -4,8 +4,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <span>
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Types/ByteUnits.h>
@@ -215,6 +217,36 @@ NOLINT_TEST_F(RingBufferStagingEdgeTest, EnsureCapacity_GrowsBuffer)
   // Drain deferred buffer-release callbacks deterministically to avoid
   // teardown-time lifetime coupling between UploadCoordinator and Graphics.
   Gfx().Flush();
+}
+
+NOLINT_TEST_F(
+  RingBufferStagingErrorTest, FailedGrowthPreservesExistingMappedBacking)
+{
+  auto provider = Uploader().CreateRingBufferStaging(
+    SlotCount { 1U }, kTestAlignment, kTestSlack);
+  SetStagingProvider(provider);
+  auto first = provider->Allocate(kTestAllocationSize, "before-failure");
+  ASSERT_TRUE(first);
+  const auto bytes
+    = std::span(first->Ptr(), static_cast<std::size_t>(first->Size().get()));
+  bytes.front() = std::byte { 0x5A };
+  const auto before = provider->GetStats();
+  Gfx().SetThrowOnCreateBuffer(true);
+  const auto rejected = provider->Allocate(
+    SizeBytes { before.current_buffer_size } + kGrowthPadding,
+    "rejected-growth");
+  ASSERT_FALSE(rejected);
+  EXPECT_EQ(rejected.error(), UploadError::kStagingAllocFailed);
+  EXPECT_TRUE(first->Buffer().IsMapped());
+  EXPECT_EQ(bytes.front(), std::byte { 0x5A });
+  auto recovered
+    = provider->Allocate(kSmallAllocationSize, "within-existing-capacity");
+  ASSERT_TRUE(recovered);
+  EXPECT_EQ(&recovered->Buffer(), &first->Buffer());
+  EXPECT_EQ(
+    provider->GetStats().buffer_growth_count, before.buffer_growth_count);
+  EXPECT_EQ(
+    provider->GetStats().current_buffer_size, before.current_buffer_size);
 }
 
 } // namespace

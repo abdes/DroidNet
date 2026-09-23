@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <exception>
 #include <expected>
 #include <memory>
 #include <span>
@@ -12,6 +13,7 @@
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/View.h>
+#include <Oxygen/Graphics/Common/AllocationBudget.h>
 #include <Oxygen/Profiling/CpuProfileScope.h>
 #include <Oxygen/Profiling/ProfileScope.h>
 #include <Oxygen/Vortex/Lighting/Internal/DeferredLightPacketBuilder.h>
@@ -31,7 +33,8 @@
 namespace oxygen::vortex {
 
 LightingService::LightingService(Renderer& renderer)
-  : light_grid_builder_(
+  : allocation_budget_(renderer.GetLightingAllocationBudget())
+  , light_grid_builder_(
       std::make_unique<lighting::internal::LightGridBuilder>())
   , publisher_(
       std::make_unique<lighting::internal::ForwardLightPublisher>(renderer))
@@ -62,33 +65,55 @@ auto LightingService::OnFrameStart(
 auto LightingService::BuildLightGrid(const FrameLightingInputs& inputs)
   -> std::expected<void, LightingPreparationFailure>
 {
-  prepared_lighting_.reset();
-  publisher_->InvalidateViews();
-  last_grid_build_state_
-    = { .frame_sequence = current_sequence_, .frame_slot = current_slot_ };
-  auto built = light_grid_builder_->Build(inputs);
-  if (!built) {
-    return std::unexpected(built.error());
-  }
-  const auto publication = publisher_->Publish(*built);
-  if (!publication) {
-    return std::unexpected(publication.error());
-  }
-  prepared_lighting_
-    = std::make_unique<lighting::internal::BuiltLightGridFrame>(
-      std::move(*built));
+  try {
+    prepared_lighting_.reset();
+    publisher_->InvalidateViews();
+    last_grid_build_state_
+      = { .frame_sequence = current_sequence_, .frame_slot = current_slot_ };
+    auto built = light_grid_builder_->Build(inputs);
+    if (!built) {
+      return std::unexpected(built.error());
+    }
+    const auto before = allocation_budget_->Snapshot().rejected_requests;
+    const auto publication = publisher_->Publish(*built);
+    if (!publication) {
+      const auto snapshot = allocation_budget_->Snapshot();
+      if (snapshot.rejected_requests != before) {
+        return std::unexpected(LightingPreparationFailure {
+          .error = LightingPreparationError::kBudgetExceeded,
+          .requested_bytes = snapshot.last_requested,
+          .available_bytes = snapshot.last_available,
+        });
+      }
+      return std::unexpected(publication.error());
+    }
+    prepared_lighting_
+      = std::make_unique<lighting::internal::BuiltLightGridFrame>(
+        std::move(*built));
 
-  const auto& stats = light_grid_builder_->GetLastBuildStats();
-  last_grid_build_state_ = {
-    .frame_sequence = stats.frame_sequence,
-    .frame_slot = stats.frame_slot,
-    .build_count = stats.build_count,
-    .published_view_count = stats.published_view_count,
-    .directional_light_count = stats.directional_light_count,
-    .local_light_count = stats.local_light_count,
-    .selection_epoch = stats.selection_epoch,
-  };
-  return {};
+    const auto& stats = light_grid_builder_->GetLastBuildStats();
+    last_grid_build_state_ = {
+      .frame_sequence = stats.frame_sequence,
+      .frame_slot = stats.frame_slot,
+      .build_count = stats.build_count,
+      .published_view_count = stats.published_view_count,
+      .directional_light_count = stats.directional_light_count,
+      .local_light_count = stats.local_light_count,
+      .selection_epoch = stats.selection_epoch,
+    };
+    return {};
+  } catch (const graphics::AllocationBudgetExceeded&) {
+    const auto snapshot = allocation_budget_->Snapshot();
+    return std::unexpected(LightingPreparationFailure {
+      .error = LightingPreparationError::kBudgetExceeded,
+      .requested_bytes = snapshot.last_requested,
+      .available_bytes = snapshot.last_available,
+    });
+  } catch (const std::exception&) {
+    return std::unexpected(LightingPreparationFailure {
+      .error = LightingPreparationError::kAllocationFailed,
+    });
+  }
 }
 
 auto LightingService::PublishShadowReferences(
@@ -121,9 +146,15 @@ auto LightingService::RenderDeferredLighting(RenderContext& ctx,
   }
   const auto packets
     = deferred_packets_->Build(frame_light_set, prepared_lighting_->evaluation);
-  const auto pass_state = deferred_pass_->Record(ctx, recorder, scene_textures,
-    packets, shadow_data, directional_shadow_surfaces, spot_shadow_surface,
-    point_shadow_surface, static_sky_light_available);
+  auto pass_state = lighting::DeferredLightPass::ExecutionState {};
+  try {
+    pass_state = deferred_pass_->Record(ctx, recorder, scene_textures, packets,
+      shadow_data, directional_shadow_surfaces, spot_shadow_surface,
+      point_shadow_surface, static_sky_light_available);
+  } catch (const std::exception&) {
+    last_deferred_lighting_state_ = {};
+    return false;
+  }
   if (!pass_state.recording_succeeded) {
     last_deferred_lighting_state_ = {};
     return false;

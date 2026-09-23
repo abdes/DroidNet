@@ -271,7 +271,7 @@ namespace {
 ShadowDepthPass::ShadowDepthPass(Renderer& renderer)
   : renderer_(renderer)
   , pass_constants_buffer_(observer_ptr { renderer.GetGraphics().get() },
-      renderer.GetStagingProvider(), kShadowPassConstantsStride,
+      renderer.GetLightingStagingProvider(), kShadowPassConstantsStride,
       observer_ptr { &renderer.GetInlineTransfersCoordinator() },
       "ShadowService.ShadowPassConstants")
 {

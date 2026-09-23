@@ -16,6 +16,7 @@
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
+#include <Oxygen/Vortex/Upload/Errors.h>
 #include <Oxygen/Vortex/Upload/InlineTransfersCoordinator.h>
 #include <Oxygen/Vortex/Upload/StagingProvider.h>
 #include <Oxygen/Vortex/Upload/TransientStructuredBuffer.h>
@@ -48,8 +49,11 @@ public:
   {
     auto allocation = buffer_.Allocate(1);
     if (!allocation) {
-      LOG_F(ERROR, "{}: failed to allocate payload for view {}: {}",
-        debug_label_, view_id.get(), allocation.error().message());
+      if (allocation.error()
+        != make_error_code(upload::UploadError::kBudgetExceeded)) {
+        LOG_F(ERROR, "{}: failed to allocate payload for view {}: {}",
+          debug_label_, view_id.get(), allocation.error().message());
+      }
       return kInvalidShaderVisibleIndex;
     }
 

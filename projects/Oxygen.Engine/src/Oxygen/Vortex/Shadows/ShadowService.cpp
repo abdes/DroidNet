@@ -61,14 +61,14 @@ auto ShadowService::EnsurePublishResources() -> bool
 
   bindings_publisher_ = std::make_unique<
     internal::PerViewStructuredPublisher<ShadowFrameBindings>>(
-    observer_ptr { gfx.get() }, renderer_.GetStagingProvider(),
+    observer_ptr { gfx.get() }, renderer_.GetLightingStagingProvider(),
     observer_ptr { &renderer_.GetInlineTransfersCoordinator() },
     "ShadowFrameBindings");
   const auto make_buffer =
     [&](const std::uint32_t stride,
       const char* label) -> std::unique_ptr<upload::TransientStructuredBuffer> {
     return std::make_unique<upload::TransientStructuredBuffer>(
-      observer_ptr { gfx.get() }, renderer_.GetStagingProvider(), stride,
+      observer_ptr { gfx.get() }, renderer_.GetLightingStagingProvider(), stride,
       observer_ptr { &renderer_.GetInlineTransfersCoordinator() }, label);
   };
   directional_record_buffer_ = make_buffer(

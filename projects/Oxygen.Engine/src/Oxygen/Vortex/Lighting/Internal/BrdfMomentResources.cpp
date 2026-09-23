@@ -103,6 +103,8 @@ auto BrdfMomentResources::Prepare()
         .debug_name = names.at(index),
         .is_shader_resource = true,
         .initial_state = graphics::ResourceStates::kCommon,
+        .allocation_budget
+        = { .owner = renderer_.GetLightingAllocationBudget() },
       });
       if (!texture) {
         return std::unexpected(failure);
@@ -138,6 +140,7 @@ auto BrdfMomentResources::Prepare()
       .size_bytes = plan->total_bytes,
       .memory = graphics::BufferMemory::kUpload,
       .debug_name = names.at(index),
+      .allocation_budget = { .owner = renderer_.GetLightingAllocationBudget() },
     });
     if (!buffer) {
       return std::unexpected(failure);

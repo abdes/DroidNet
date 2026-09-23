@@ -652,6 +652,8 @@ auto DeferredLightPass::Record(RenderContext& ctx,
       desc.usage = graphics::BufferUsage::kVertex;
       desc.memory = graphics::BufferMemory::kUpload;
       desc.debug_name = std::string(debug_name);
+      desc.allocation_budget
+        = { .owner = renderer_.GetLightingAllocationBudget() };
       buffer = gfx->CreateBuffer(desc);
       CHECK_NOTNULL_F(buffer.get(),
         "DeferredLightPass: failed to create geometry buffer '{}'", debug_name);
@@ -758,7 +760,7 @@ auto DeferredLightPass::Record(RenderContext& ctx,
   if (!constants_publisher_) {
     constants_publisher_
       = std::make_unique<internal::DeferredLightConstantsPublisher>(gfx,
-        renderer_.GetStagingProvider(),
+        renderer_.GetLightingStagingProvider(),
         observer_ptr { &renderer_.GetInlineTransfersCoordinator() });
   }
   constants_publisher_->OnFrameStart(ctx.frame_sequence, ctx.frame_slot);
