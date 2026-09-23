@@ -44,8 +44,7 @@ auto CompositionSwapChain::Present() const -> void
     DLOG_F(3, "CompositionSwapChain::Present swap_chain={} current_index={}",
       fmt::ptr(swap_chain_), current_back_buffer_index_);
     ThrowOnFailed(swap_chain_->Present(1, 0));
-    current_back_buffer_index_
-      = (current_back_buffer_index_ + 1U) % frame::kFramesInFlight.get();
+    current_back_buffer_index_ = swap_chain_->GetCurrentBackBufferIndex();
   }
 }
 
@@ -69,15 +68,16 @@ auto CompositionSwapChain::CreateSwapChain() -> void
   swap_chain_desc.AlphaMode = DXGI_ALPHA_MODE_PREMULTIPLIED;
   swap_chain_desc.Flags = 0;
 
-  dx::ISwapChain* swap_chain = nullptr;
+  Microsoft::WRL::ComPtr<dx::ISwapChainFactoryOutput> factory_output;
   ThrowOnFailed(graphics_->GetFactory()->CreateSwapChainForComposition(
-    command_queue_, &swap_chain_desc, nullptr, &swap_chain));
+    command_queue_, &swap_chain_desc, nullptr, factory_output.GetAddressOf()));
 
-  swap_chain_ = swap_chain;
-  swap_chain = nullptr;
-  ObjectRelease(swap_chain);
+  Microsoft::WRL::ComPtr<dx::ISwapChain> swap_chain;
+  ThrowOnFailed(factory_output.As(&swap_chain),
+    "The engine swap-chain interface is required for native back-buffer tracking");
+  swap_chain_ = swap_chain.Detach();
 
-  current_back_buffer_index_ = 0U;
+  current_back_buffer_index_ = swap_chain_->GetCurrentBackBufferIndex();
 }
 
 auto CompositionSwapChain::Resize(uint32_t width, uint32_t height) -> void
