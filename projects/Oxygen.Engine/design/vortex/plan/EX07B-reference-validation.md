@@ -1,6 +1,6 @@
 # EX07B reference validation
 
-Status: **in_progress — independent GGX moment foundation implemented; B is not qualified.**
+Status: **in_progress — independent GGX moments and coupled BRDF implemented; B is not qualified.**
 
 The [EX07 plan](EX07-lighting-correctness-and-scalability.md) owns the full
 reference/instrument gate. The [PBR specification](../../renderer-core/physically-based-rendering.md#shared-equations-and-numerical-domain)
@@ -115,6 +115,58 @@ the C++ distance bounds are 2.260e-11 for E and 1.710e-9 for B. Ten C++ tests pa
 in both configurations, six generator safety checks pass, and generated data is
 formatter-stable and reproducible. This is not a production interpolation table.
 
+## Mean moments and coupled BRDF
+
+`IntegrateGgxMeanMoments` integrates the cosine-weighted means
+`2*integral_0^1 mu*E(mu) dmu` and `2*integral_0^1 mu*B(mu) dmu`. Logarithmic
+cosine coordinates resolve the narrow smooth/grazing transition. Below
+`mu=1e-4`, `0<=B<=E<=1` encloses either tail integral in `[0,1e-8]`.
+The implementation carries the midpoint and a separately exposed, outward-rounded
+radius of approximately `5e-9`; it does not silently discard that interval.
+Two consecutive outer refinements must converge, and an inner integration
+failure propagates its cause and the failed view cosine. The tail radius bounds
+only that contribution; the other quadrature errors remain estimates.
+
+At roughness one, independent exact means are
+`E_avg=(4/3)*(1-ln(2))` and `B_avg=111/35-(32/7)*ln(2)`.
+For the latter, integrating the projected pair of directions at fixed
+`c=v.h` gives the scalar density
+`g(c)=2*(c-(1-c*c)*atanh(c))`. Integrating `g(c)` on `[0,1]` gives E_avg;
+integrating `g(c)*(1-c)^5` gives B_avg. These expressions independently check
+the nested half-vector/outer-cosine quadrature and its cosine measure.
+Refinement tests additionally cover roughness 0.045, 0.25 and 0.6.
+
+`Reference/GgxBrdf.{h,cpp}` evaluates the three approved lobes separately:
+correlated-GGX single scattering, symmetric multiple-scattering compensation
+and the coupled Lambertian base. Light cosine, view cosine and relative azimuth
+have distinct types. The evaluator accepts matching reference moments and one
+reflectance channel; RGB follows by componentwise evaluation. Incident power,
+receiver cosine and exposure are deliberately outside this BRDF API.
+
+Transmission uses the nonnegative rearrangement
+`T=(1-K)*(1-E)+(1-F0)*(E-B)`, including its mean counterpart. The diffuse
+denominator is `(1-rho)+rho*T_avg`; zero transmission contributes zero diffuse.
+Invalid reflectances/moments fail explicitly, back-facing directions return
+zero, and nonfinite representability failures cannot become successful results.
+
+The reference tests swap incident/outgoing directions and inspect each lobe for
+roughness 0.045, 0.25 and 1, three cosine pairs (including 0.001 grazing), three
+azimuths and dielectric, conductor and mixed reflectances. A separate incoming
+direction furnace quadrature uses 128 midpoint cosine samples and 256 azimuth
+samples, independently of the moment integrator's half-vector coordinates.
+Its roughness 0.6/1 and view-cosine 0.05/0.5/1 matrix checks seven material
+combinations, individual lobe integrals, combined energy and unit-reflectance
+preservation. Omitting compensation is a failing furnace negative control.
+The roughness-one furnace uses the analytic means directly.
+
+Debug and Release each pass all **16 reference tests**. Maximum combined furnace
+error `6.400e-5` against the `2e-3` budget and maximum relative reciprocity
+difference `6.553e-16` pass the specified limits. These are measured errors at the specified samples,
+not a whole-domain uncertainty certificate or a production shader result.
+All six changed C++ files, including headers and tests, are oxytidy-clean with
+no new suppressions. Evidence under `ex07b`: `coupled-reference-{debug,release}.json`,
+`coupled-reference-tidy-verified/` and `coupled-reference-checkpoint.json`.
+
 ## Qualification boundary and next work
 
 `estimated_absolute_change` is eight times the difference between successive
@@ -124,9 +176,9 @@ a convergence estimate, **not a proven absolute-error bound**. Analytic and high
 and the current matrix do not yet certify the complete interior domain.
 
 The independent certifier can qualify additional pointwise moment queries;
-the C++ refinement estimator alone cannot. B still requires mean moments,
-the coupled BRDF and furnace/reciprocity
-checks, finite sphere/disk and photometric references, material decoding,
+the C++ refinement estimator alone cannot. B still requires general mean-moment
+uncertainty certification, broader smooth/grazing furnace qualification,
+finite sphere/disk and photometric references, material decoding,
 known-input GPU probes, deterministic matched-image fixtures and bounded
 instrumentation. Production tables additionally require their own interpolation
 certificate. No generated LUT or renderer change may claim those gates from

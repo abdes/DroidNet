@@ -121,20 +121,20 @@ user confirmed the spotlight repair and stable lower offscreen views; the
 boundary. The [review](plan/EX07A-contract-review.md) retains prior checkpoints,
 including the committed MSVC heap-leak repair.
 
-The [B reference foundation](plan/EX07B-reference-validation.md) now has a separate
-CPU-only GGX E/B moment integrator with typed roughness/view inputs, analytic
-hemisphere clipping and bounded quadrature refinement. Six tests pass in each
-configuration, including independent analytic limits and explicit failure when
-work is exhausted; all new C++ files are oxytidy-clean. The suite now has eight
-cases per configuration, including 12 independent 60/90-digit endpoint anchors
-(maximum C++ difference 1.78e-15) and a wrong-alpha-floor negative control.
-Generated data is reproducible and formatter-stable. The subsequent
-[pointwise certificate](plan/EX07B-moment-certificates.md) adds rigorous FLINT/Arb
-enclosures at 55 parameter pairs. C++ distance bounds stay below 1.71e-9 against
-the frozen 1e-5 budget; ten C++ tests per configuration and six generator safety
-checks pass. This certifies those queried moments, not arbitrary interpolation.
-Mean moments, coupled BRDF/finite-source references, GPU/image checks and
-instrumentation remain open in B.
+The [B reference foundation](plan/EX07B-reference-validation.md) has independent
+CPU-only GGX directional/mean moments and the approved three-lobe coupled BRDF,
+with typed angular inputs and bounded refinement/failure diagnostics. Analytic
+limits and 12 high-precision endpoint anchors cross-check the quadrature. The
+[pointwise certificate](plan/EX07B-moment-certificates.md) supplies rigorous
+FLINT/Arb enclosures at 55 parameter pairs; C++ distance bounds stay below 1.71e-9
+against the frozen 1e-5 budget. Six generator safety checks pass; generated data
+is reproducible and formatter-stable. This certifies those queries, not arbitrary
+interpolation. All 16 C++ tests pass in Debug and Release, including the tested
+reciprocity/furnace matrix (maximum errors 6.56e-16 relative / 6.40e-5 absolute).
+All six changed
+C++ files are oxytidy-clean. General mean uncertainty, broader smooth/grazing
+furnace coverage, finite-source/photometric references, material decoding,
+GPU/image checks and instrumentation remain open in B.
 
 A's closure does not establish the final physical renderer. B must supply an
 independent double-precision oracle, moment uncertainty and known-input probes,

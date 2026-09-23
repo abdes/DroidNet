@@ -12,6 +12,7 @@
 #include <limits>
 #include <map>
 #include <numbers>
+#include <optional>
 #include <utility>
 #include <vector>
 
@@ -204,6 +205,84 @@ auto IntegrateGgxMoments(const PerceptualRoughness authored_roughness,
   }
   return std::unexpected(MomentIntegrationFailure {
     .reason = MomentIntegrationError::kDidNotConverge,
+    .last_estimate = previous,
+  });
+}
+
+auto IntegrateGgxMeanMoments(const PerceptualRoughness roughness,
+  const MeanMomentIntegrationSettings settings)
+  -> std::expected<GgxMeanMomentEstimate, MeanMomentIntegrationFailure>
+{
+  constexpr auto kMaximumMeanOrder = 256U;
+  constexpr double kGrazingCutoff = 1.0e-4;
+  constexpr double kTailMidpoint = kGrazingCutoff * kGrazingCutoff / 2.0;
+  const auto tail_radius
+    = std::nextafter(kTailMidpoint, std::numeric_limits<double>::infinity());
+  const auto log_span = -std::log(kGrazingCutoff);
+  if (!std::isfinite(roughness.get()) || roughness.get() < 0.0
+    || roughness.get() > 1.0 || !std::isfinite(settings.refinement_tolerance)
+    || settings.refinement_tolerance <= 0.0 || settings.initial_order < 4U
+    || settings.maximum_order > kMaximumMeanOrder
+    || !std::has_single_bit(settings.initial_order)
+    || !std::has_single_bit(settings.maximum_order)
+    || settings.initial_order > settings.maximum_order / 4U) {
+    return std::unexpected(MeanMomentIntegrationFailure {});
+  }
+  auto previous = GgxMeanMomentEstimate {};
+  auto evaluations = std::uint64_t { 0U };
+  unsigned converged_refinements = 0U;
+  for (auto order = settings.initial_order; order <= settings.maximum_order;
+    order *= 2U) {
+    auto energy = Sum {};
+    auto fresnel = Sum {};
+    // 0<=B<=E<=1 encloses each omitted integral in [0, cutoff^2].
+    // Carry its midpoint and explicit radius instead of declaring it zero.
+    energy.Add(kTailMidpoint);
+    fresnel.Add(kTailMidpoint);
+    for (const auto& node : AngularRule(order)) {
+      const auto fraction = 2.0 * node.angle / kPi;
+      const auto mu = std::exp(-log_span * (1.0 - fraction));
+      const auto sample = IntegrateGgxMoments(
+        roughness, ViewCosine { mu }, settings.directional);
+      if (!sample) {
+        return std::unexpected(MeanMomentIntegrationFailure {
+          .reason = sample.error().reason,
+          .failed_view = ViewCosine { mu },
+          .last_estimate = previous,
+        });
+      }
+      // Logarithmic cosine coordinates resolve the smooth/grazing transition.
+      // Include the cosine measure 2*mu and dmu=mu*d(log(mu)).
+      const auto weight = 4.0 * mu * mu * log_span * node.weight / kPi;
+      energy.Add(sample->directional_albedo * weight);
+      fresnel.Add(sample->schlick_moment * weight);
+      evaluations += sample->evaluations;
+    }
+    auto current = GgxMeanMomentEstimate {
+      .hemispherical_albedo = energy.value,
+      .schlick_moment = fresnel.value,
+      .endpoint_absolute_bound = tail_radius,
+      .order = order,
+      .evaluations = evaluations,
+    };
+    if (previous.order != 0U) {
+      current.estimated_absolute_change = kChangeSafetyFactor
+        * std::max(std::abs(current.hemispherical_albedo
+                     - previous.hemispherical_albedo),
+          std::abs(current.schlick_moment - previous.schlick_moment));
+      converged_refinements = std::isfinite(current.estimated_absolute_change)
+          && current.estimated_absolute_change <= settings.refinement_tolerance
+        ? converged_refinements + 1U
+        : 0U;
+      if (converged_refinements == 2U) {
+        return current;
+      }
+    }
+    previous = current;
+  }
+  return std::unexpected(MeanMomentIntegrationFailure {
+    .reason = MomentIntegrationError::kDidNotConverge,
+    .failed_view = std::nullopt,
     .last_estimate = previous,
   });
 }
