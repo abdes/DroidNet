@@ -96,6 +96,7 @@ set(
   "Devices/DeviceManager.h"
   "GraphicResource.h"
   "Graphics.h"
+  "MemoryStatistics.h"
   "PixFrameCaptureController.h"
   "RenderDocFrameCaptureController.h"
   "ReadbackManager.h"

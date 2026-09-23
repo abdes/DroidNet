@@ -11,6 +11,7 @@
 #include <optional>
 #include <string_view>
 #include <unordered_map>
+
 #include <wrl/client.h>
 
 #include <Oxygen/Base/Macros.h>
@@ -42,6 +43,7 @@ class Allocator;
 namespace oxygen::graphics::d3d12 {
 
 class CommandRecorder;
+struct MemoryStatistics;
 
 namespace detail {
   struct InlineRootConstantsDesc {
@@ -156,6 +158,9 @@ public:
   OXGN_D3D12_NDAPI virtual auto GetFactory() const -> dx::IFactory*;
   OXGN_D3D12_NDAPI virtual auto GetCurrentDevice() const -> dx::IDevice*;
   OXGN_D3D12_NDAPI virtual auto GetAllocator() const -> D3D12MA::Allocator*;
+  //! Query cached allocator counters and current budget estimates on demand.
+  //! Does not traverse resources or add collection to the render loop.
+  OXGN_D3D12_NDAPI auto GetMemoryStatistics() const -> MemoryStatistics;
   //! @}
 
   //=== D3D12 Helpers ===---------------------------------------------------//

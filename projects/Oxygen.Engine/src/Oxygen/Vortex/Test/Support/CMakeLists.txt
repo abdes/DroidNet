@@ -34,10 +34,12 @@ target_sources(
   PRIVATE
     "CpuTimingCapture.cpp"
     "CpuTimingCapture.h"
+    "D3D12MemoryCapture.cpp"
+    "D3D12MemoryCapture.h"
   PUBLIC
     FILE_SET HEADERS
     BASE_DIRS "${OXYGEN_SOURCE_DIR}"
-    FILES "CpuTimingCapture.h"
+    FILES "CpuTimingCapture.h" "D3D12MemoryCapture.h"
 )
 arrange_target_files_for_ide(${META_MODULE_TARGET})
 

@@ -111,8 +111,14 @@ and verifies bounded CPU/GPU records in native forward/deferred frames. Debug an
 Release pass the new native check, eight CPU collector tests and both image tests;
 Release additionally passes 17 timeline and two native timestamp tests. No
 production benchmark collector or per-light CPU instrumentation is added.
-Material-format/filter, resource accounting and native collection-overhead
-qualification remain open; these checkpoints do not close EX07B or change shading.
+The resource instrument now exposes on-demand D3D12MA segment snapshots and uses
+a bounded test-owned recorder. Native known-allocation checks preserve 1.125 MiB
+of device allocations plus 4 MiB of upload allocation through deferred release,
+then distinguish zero live allocation bytes from retained 8 MiB heaps in each
+segment after retirement. Debug/Release pass 11 CPU and two native instrument
+tests. Workload attribution/churn, material-format/filter and native
+collection-overhead qualification remain open; these checkpoints do not close
+EX07B or change shading.
 
 **User-directed stopping point:** finish EX07B's reference/instrument validation
 gate and commit its stable checkpoint, then pause. Do not begin EX07C until the
