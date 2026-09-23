@@ -105,6 +105,16 @@ repository formatter without modification. The new C++ endpoint test is
 oxytidy-clean. Evidence under `ex07b`: `endpoint-reference-{debug,release}.json`,
 `endpoint-reference-tidy-final/` and `endpoint-reference-checkpoint.json`.
 
+## Certified interior queries
+
+The [pointwise moment certificate](EX07B-moment-certificates.md) now supplies
+rigorous incoming-direction E/B enclosures using FLINT/Arb, independently of the
+C++ quadrature. Fifty-five parameter pairs include endpoints, interior views and
+roughness-dependent grazing transitions. The maximum exported radius is 1.454e-9;
+the C++ distance bounds are 2.260e-11 for E and 1.710e-9 for B. Ten C++ tests pass
+in both configurations, six generator safety checks pass, and generated data is
+formatter-stable and reproducible. This is not a production interpolation table.
+
 ## Qualification boundary and next work
 
 `estimated_absolute_change` is eight times the difference between successive
@@ -113,8 +123,9 @@ quadrature rules. Two consecutive refinements must satisfy the requested
 a convergence estimate, **not a proven absolute-error bound**. Analytic and high-precision endpoint anchors
 and the current matrix do not yet certify the complete interior domain.
 
-B still requires interior-domain independent-coordinate/high-precision checks
-establishing moment uncertainty <=1e-5, mean moments, the coupled BRDF and furnace/reciprocity
+The independent certifier can qualify additional pointwise moment queries;
+the C++ refinement estimator alone cannot. B still requires mean moments,
+the coupled BRDF and furnace/reciprocity
 checks, finite sphere/disk and photometric references, material decoding,
 known-input GPU probes, deterministic matched-image fixtures and bounded
 instrumentation. Production tables additionally require their own interpolation

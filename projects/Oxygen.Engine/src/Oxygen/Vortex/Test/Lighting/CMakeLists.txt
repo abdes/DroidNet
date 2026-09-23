@@ -27,6 +27,7 @@ gtest_program(
     "Reference/GgxMoments.h"
     "GgxReference_test.cpp"
     "GgxEndpointReference_test.cpp"
+    "GgxMomentCertificate_test.cpp"
   DEPS
     oxygen::testing
     nlohmann_json::nlohmann_json
@@ -35,6 +36,7 @@ target_compile_definitions(
   Oxygen.Vortex.LightingReference.Tests
   PRIVATE
     OXYGEN_GGX_ENDPOINT_REFERENCE_FILE="${CMAKE_CURRENT_SOURCE_DIR}/Reference/GgxEndpointReference.json"
+    OXYGEN_GGX_MOMENT_CERTIFICATE_FILE="${CMAKE_CURRENT_SOURCE_DIR}/Reference/GgxMomentCertificates.json"
 )
 
 if(CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64")

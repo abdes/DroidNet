@@ -128,9 +128,13 @@ configuration, including independent analytic limits and explicit failure when
 work is exhausted; all new C++ files are oxytidy-clean. The suite now has eight
 cases per configuration, including 12 independent 60/90-digit endpoint anchors
 (maximum C++ difference 1.78e-15) and a wrong-alpha-floor negative control.
-Generated data is reproducible and formatter-stable. These checks do not yet
-certify the interior domain; mean moments, coupled BRDF/finite-source references,
-GPU/image checks and instrumentation remain open in B.
+Generated data is reproducible and formatter-stable. The subsequent
+[pointwise certificate](plan/EX07B-moment-certificates.md) adds rigorous FLINT/Arb
+enclosures at 55 parameter pairs. C++ distance bounds stay below 1.71e-9 against
+the frozen 1e-5 budget; ten C++ tests per configuration and six generator safety
+checks pass. This certifies those queried moments, not arbitrary interpolation.
+Mean moments, coupled BRDF/finite-source references, GPU/image checks and
+instrumentation remain open in B.
 
 A's closure does not establish the final physical renderer. B must supply an
 independent double-precision oracle, moment uncertainty and known-input probes,
