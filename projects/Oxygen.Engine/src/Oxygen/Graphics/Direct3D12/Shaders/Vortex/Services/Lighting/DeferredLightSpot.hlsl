@@ -77,6 +77,8 @@ float4 DeferredLightSpotPS(DeferredLightVolumeVSOutput input) : SV_Target0
     const LightingFrameBindings lighting_bindings = LoadResolvedLightingFrameBindings();
     ForwardLocalLightRecord light;
     if (!TryLoadLocalLight(lighting_bindings, light_constants.selection_index, light)) return 0.0f.xxxx;
+    // The pass selects this source family; specialize the shared emitter code.
+    light.kind = FORWARD_LOCAL_LIGHT_SPOT;
     if (!SpotEmitterHasSpatialSupport(light, world_position)) return 0.0f.xxxx;
     const LightShadowReference shadow_reference = LoadLightShadowReference(
         lighting_bindings.local_shadow_map_srv, light.selection_index);

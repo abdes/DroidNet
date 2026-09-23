@@ -44,20 +44,49 @@ static float EmitterPhase(float3 direction, float3 first, float3 second)
     return phase < 0.0 ? phase + 2.0 * PI : phase;
 }
 
+// Two endpoints, two horizon roots, one peak phase, two peak-plane roots,
+// two inner-cone roots and two outer-support roots require at most 11 entries.
+static const uint kEmitterBoundaryCapacity = 12u;
+
 struct EmitterArcs {
-    float boundaries[12];
+    float boundaries[kEmitterBoundaryCapacity];
     uint count;
+    bool scalar_access;
 };
 
 static void AddEmitterBoundary(inout EmitterArcs arcs, float boundary)
 {
     if (boundary <= 0.0 || boundary >= 2.0 * PI) return;
-    uint index = arcs.count++;
-    [loop] while (index > 0u && arcs.boundaries[index - 1u] > boundary) {
-        arcs.boundaries[index] = arcs.boundaries[index - 1u];
-        --index;
+    // Sphere integration uses compact indexed storage to limit register pressure;
+    // disk integration benefits from scalar boundary access. Deferred source-family
+    // specialization eliminates the unused storage strategy at compile time.
+    if (!arcs.scalar_access) {
+        uint index = arcs.count++;
+        [loop] while (index > 0u && arcs.boundaries[index - 1u] > boundary) {
+            arcs.boundaries[index] = arcs.boundaries[index - 1u];
+            --index;
+        }
+        arcs.boundaries[index] = boundary;
+        return;
     }
-    arcs.boundaries[index] = boundary;
+    [unroll] for (uint index = 1u; index < kEmitterBoundaryCapacity; ++index) {
+        if (index <= arcs.count) {
+            const float previous = index == arcs.count ? 2.0 * PI : arcs.boundaries[index];
+            arcs.boundaries[index] = min(previous, boundary);
+            boundary = max(previous, boundary);
+        }
+    }
+    ++arcs.count;
+}
+
+static float GetEmitterBoundary(EmitterArcs arcs, uint selected)
+{
+    if (!arcs.scalar_access) return arcs.boundaries[selected];
+    float boundary = 0.0;
+    [unroll] for (uint index = 0u; index < kEmitterBoundaryCapacity; ++index) {
+        boundary = selected == index ? arcs.boundaries[index] : boundary;
+    }
+    return boundary;
 }
 
 static void AddEmitterRoots(inout EmitterArcs arcs, float3 equation)
@@ -122,7 +151,7 @@ struct EmitterGeometry {
 };
 
 static bool PrepareEmitterGeometry(ForwardLocalLightRecord light, float3 receiver,
-    float3 N, float3 V, out EmitterGeometry g)
+    float3 N, out EmitterGeometry g)
 {
     g = (EmitterGeometry)0;
     g.center = light.position_ws - receiver;
@@ -131,8 +160,6 @@ static bool PrepareEmitterGeometry(ForwardLocalLightRecord light, float3 receive
     g.range = light.range_m;
     g.sphere = light.kind == FORWARD_LOCAL_LIGHT_POINT;
     if (g.range <= 0.0 || g.distance - g.radius >= g.range) return false;
-    const float3 peak = reflect(-V, N);
-    g.peak_plane = cross(N, peak);
     g.minimum = 0.0;
     g.maximum = 1.0;
     if (g.sphere) {
@@ -153,15 +180,6 @@ static bool PrepareEmitterGeometry(ForwardLocalLightRecord light, float3 receive
         g.tangent_start = sqrt(1.0 - g.maximum);
         g.tangent_span = (g.maximum - g.minimum)
             / (g.tangent_start + sqrt(1.0 - g.minimum));
-        const float peak_sine = length(cross(g.axis, peak));
-        const float peak_u = dot(g.axis, peak) > 0.0 && peak_sine < ratio
-            ? (peak_sine / ratio) * (peak_sine / ratio) : 1.0;
-        g.peak_supported = dot(g.axis, peak) > 0.0 && peak_sine < ratio
-            && peak_u >= g.minimum && peak_u <= g.maximum;
-        const float clipped_peak = clamp(peak_u, g.minimum, g.maximum);
-        g.peak_radial = (g.maximum - clipped_peak)
-            / (g.tangent_span * (sqrt(1.0 - clipped_peak) + g.tangent_start));
-        g.peak_phase = EmitterPhase(peak, g.first, g.second);
     } else {
         g.axis = normalize(light.emitted_direction_ws);
         const float height = -dot(g.center, g.axis);
@@ -184,11 +202,37 @@ static bool PrepareEmitterGeometry(ForwardLocalLightRecord light, float3 receive
         g.projected_distance = length(g.center + g.axis * height);
         if (g.projected_distance > g.radius
             && g.projected_distance - g.radius >= g.support_radius) return false;
-        g.support_phase = EmitterPhase(-g.center, g.first, g.second);
         g.minimum = max(0.0, (g.projected_distance - g.support_radius) / g.radius);
         g.maximum = min(1.0, (g.projected_distance + g.support_radius) / g.radius);
         if (nc < 0.0) g.minimum = max(g.minimum, -nc / (g.radius * normal_extent));
         if (g.minimum >= g.maximum) return false;
+    }
+    return true;
+}
+
+// Peak coordinates and support azimuths are only needed by clipped integration.
+// The common cubature path does not construct or sort angular partitions.
+static void PrepareEmitterPeak(inout EmitterGeometry g, float3 N, float3 V)
+{
+    const float3 peak = reflect(-V, N);
+    g.peak_plane = cross(N, peak);
+    if (g.sphere) {
+        const float ratio = g.radius / g.distance;
+        const float peak_sine = length(cross(g.axis, peak));
+        const float peak_u = dot(g.axis, peak) > 0.0 && peak_sine < ratio
+            ? (peak_sine / ratio) * (peak_sine / ratio) : 1.0;
+        g.peak_supported = dot(g.axis, peak) > 0.0 && peak_sine < ratio
+            && peak_u >= g.minimum && peak_u <= g.maximum;
+        const float clipped_peak = clamp(peak_u, g.minimum, g.maximum);
+        // The cap rim maps to the start of the radial interval. Handle it
+        // directly: the rationalized expression is 0/0 at maximum == 1.
+        g.peak_radial = clipped_peak == g.maximum ? 0.0
+            : (g.maximum - clipped_peak)
+                / (g.tangent_span * (sqrt(1.0 - clipped_peak) + g.tangent_start));
+        g.peak_phase = EmitterPhase(peak, g.first, g.second);
+    } else {
+        const float height = -dot(g.center, g.axis);
+        g.support_phase = EmitterPhase(-g.center, g.first, g.second);
         const float facing = -dot(g.axis, peak);
         const float3 offset = facing > 0.0 ? peak * (height / facing) - g.center : -g.center;
         const float peak_radius = length(float2(dot(offset, g.first), dot(offset, g.second))) / g.radius;
@@ -196,7 +240,6 @@ static bool PrepareEmitterGeometry(ForwardLocalLightRecord light, float3 receive
         g.peak_radial = clamp(peak_radius, g.minimum, g.maximum);
         g.peak_phase = EmitterPhase(offset, g.first, g.second);
     }
-    return true;
 }
 
 static bool EmitterHasSmoothResponse(EmitterGeometry g, float3 N, float3 V,
@@ -335,6 +378,7 @@ static GgxDirectLobes IntegrateEmitterRule(EmitterGeometry g,
             arcs.boundaries[0] = 0.0;
             arcs.boundaries[1] = 2.0 * PI;
             arcs.count = 2u;
+            arcs.scalar_access = !g.sphere;
             const float3 horizon = float3(dot(N, center), dot(N, first), dot(N, second));
             AddEmitterRoots(arcs, horizon);
             AddEmitterBoundary(arcs, g.peak_phase);
@@ -362,7 +406,8 @@ static GgxDirectLobes IntegrateEmitterRule(EmitterGeometry g,
                 AddEmitterBoundary(arcs, b);
             }
             [loop] for (uint arc = 0u; arc + 1u < arcs.count; ++arc) {
-                const float a = arcs.boundaries[arc], b = arcs.boundaries[arc + 1u];
+                const float a = GetEmitterBoundary(arcs, arc);
+                const float b = GetEmitterBoundary(arcs, arc + 1u);
                 if (b <= a) continue;
                 const float midpoint = 0.5 * (a + b);
                 if (horizon.x + horizon.y * cos(midpoint) + horizon.z * sin(midpoint) <= 0.0) continue;
@@ -443,6 +488,32 @@ static bool CanUseEmitterCubature(EmitterGeometry g, ForwardLocalLightRecord lig
     return true;
 }
 
+static void AccumulateEmitterCubatureNode(inout GgxDirectLobes sum,
+    EmitterGeometry g, ForwardLocalLightRecord light, float3 N, float3 V,
+    GgxDirectContext brdf, float2 node, float weight)
+{
+    const float3 offset = g.radius * (g.first * node.x + g.second * node.y);
+    float3 L;
+    float illumination;
+    if (g.sphere) {
+        const float ratio = g.radius / g.distance;
+        const float u = dot(node, node);
+        const float cosine = sqrt(1.0 - ratio * ratio * u);
+        const float surface_distance = g.distance * cosine - g.radius * sqrt(1.0 - u);
+        const float q = surface_distance / g.range;
+        const float window = saturate(1.0 - q * q * q * q);
+        L = g.axis * cosine + offset / g.distance;
+        illumination = window * window / (g.distance * g.distance * cosine);
+    } else {
+        const float3 ray = g.center + offset;
+        L = normalize(ray);
+        illumination = ComputeLocalLightDistanceAttenuation(ray, g.range)
+            * EmitterAngularAttenuation(light, L, g.axis);
+    }
+    AddEmitterLobes(sum, EvaluatePreparedGgxDirectLobes(N, V, L, brdf),
+        light.intensity_rgb_cd * (illumination * weight));
+}
+
 static GgxDirectLobes EvaluateEmitterCubature(EmitterGeometry g,
     ForwardLocalLightRecord light, float3 N, float3 V, GgxDirectContext brdf)
 {
@@ -452,29 +523,18 @@ static GgxDirectLobes EvaluateEmitterCubature(EmitterGeometry g,
         float2(-0.4082482905, -0.7071067812), float2(0.4082482905, -0.7071067812)
     };
     GgxDirectLobes sum = (GgxDirectLobes)0;
-    [loop] for (uint sample_index = 0u; sample_index < 7u; ++sample_index) {
-        const float2 node = nodes[sample_index];
-        const float weight = sample_index == 0u ? 0.25 : 0.125;
-        const float3 offset = g.radius * (g.first * node.x + g.second * node.y);
-        float3 L;
-        float illumination;
-        if (g.sphere) {
-            const float ratio = g.radius / g.distance;
-            const float u = dot(node, node);
-            const float cosine = sqrt(1.0 - ratio * ratio * u);
-            const float surface_distance = g.distance * cosine - g.radius * sqrt(1.0 - u);
-            const float q = surface_distance / g.range;
-            const float window = saturate(1.0 - q * q * q * q);
-            L = g.axis * cosine + offset / g.distance;
-            illumination = window * window / (g.distance * g.distance * cosine);
-        } else {
-            const float3 ray = g.center + offset;
-            L = normalize(ray);
-            illumination = ComputeLocalLightDistanceAttenuation(ray, g.range)
-                * EmitterAngularAttenuation(light, L, g.axis);
+    // The sphere's longer node evaluation benefits from a compact loop. Disk
+    // expansion exposes its fixed offsets without expanding the sphere path.
+    if (g.sphere) {
+        [loop] for (uint sample_index = 0u; sample_index < 7u; ++sample_index) {
+            AccumulateEmitterCubatureNode(sum, g, light, N, V, brdf,
+                nodes[sample_index], sample_index == 0u ? 0.25 : 0.125);
         }
-        AddEmitterLobes(sum, EvaluatePreparedGgxDirectLobes(N, V, L, brdf),
-            light.intensity_rgb_cd * (illumination * weight));
+    } else {
+        [unroll] for (uint sample_index = 0u; sample_index < 7u; ++sample_index) {
+            AccumulateEmitterCubatureNode(sum, g, light, N, V, brdf,
+                nodes[sample_index], sample_index == 0u ? 0.25 : 0.125);
+        }
     }
     return sum;
 }
@@ -512,9 +572,10 @@ static GgxDirectLobes EvaluatePreparedLocalEmitterLobes(ForwardLocalLightRecord 
         return result;
     }
     EmitterGeometry geometry;
-    if (!PrepareEmitterGeometry(light, receiver, N, V, geometry)) return result;
+    if (!PrepareEmitterGeometry(light, receiver, N, geometry)) return result;
     if (CanUseEmitterCubature(geometry, light, N, V, brdf))
         return EvaluateEmitterCubature(geometry, light, N, V, brdf);
+    PrepareEmitterPeak(geometry, N, V);
     const bool narrow_peak = brdf.roughness < 0.5 && geometry.peak_supported
         && !EmitterHasSmoothResponse(geometry, N, V, brdf);
     result = IntegrateEmitterRule(geometry, light, N, V, brdf, false, narrow_peak);

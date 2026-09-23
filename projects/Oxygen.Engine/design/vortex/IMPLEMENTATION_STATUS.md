@@ -1023,6 +1023,39 @@ not closure of C or D–F. Retained-property/content and remaining resource/life
 qualification, the official 1,024-light workload, scalable culling, final visual/
 editor integration and final performance acceptance remain open.
 
+
+**Reviewed finite-light optimization, 2026-09-24.** The follow-up specializes the
+deferred spot source family, defers highlight/partition setup until the fast path
+is rejected, and uses scalar disk-boundary access with source-appropriate loop
+expansion. Explicit point-family forcing was rejected after a measured regression;
+the retained point path preserves its runtime record kind. Review centralized the
+boundary-access policy, documented its capacity, removed an unused deferred BRDF
+wrapper and fixed the sphere-rim 0/0 intermediate. Deferred batching and shadow
+slice bindings were reviewed with no further pass change required.
+
+The optimized 1080p capture measured 9.280 ms mean / 9.941 ms p95 (107.75 profiled
+FPS); main spot/point were 1.807/1.066 ms. After review, the requested fullscreen
+2560x1440 capture measured 13.098 ms mean / 13.757 ms p95 (76.35 profiled FPS).
+The uppercase `--resolution 2560X1440` path passed mandatory framebuffer checks;
+all 600 presents used tearing with FPS target zero. Excluding 64 warmup frames,
+535 complete GPU frames have deferred mean/p95 8.427/9.022 ms. Main/PiP/preview
+means are 6.037/1.742/0.648 ms; spot/point/three-directional totals are
+4.394/2.475/1.500 ms. CPU deferred recording is 0.116 ms. Main-view cost scales
+approximately with pixel count while the fixed preview stays stable, supporting
+finite local pixel shading as the dominant measured bottleneck. Per-expression
+ALU/texture/occupancy attribution is not available from these Tracy scopes.
+
+The reviewed final code passes 36 native lighting and 10 image checks in each of
+Debug and Release; physical admission and the unchanged 90-case emitter budget
+pass, with maximum fraction 0.334511. Both 217-module shader archives rebuild.
+No linting or new test suite was introduced. Evidence in the same Tracy `ex07c`
+directory: `reviewed-{LightingGpuAbi,LightingImageReference}-{debug,release}.json`,
+`multiview-1080p-spot-final-{comparison.json,tracy}` and
+`multiview-1440p-reviewed-{comparison.json,analysis.md,tracy}`. The 1440p capture
+SHA256 is `dd42eb5025737639e566ce3695442e53b4c0e058b41eb6685ff98ce61b10bd7c`.
+These individual captures do not constitute D-F's repeated official workload
+qualification; the remaining ownership above is unchanged.
+
 ### 3.5 Slice 8 work items
 
 **Planned. Outcome:** a measured Neutral Reference with reset/save/load and an
