@@ -63,10 +63,15 @@ def build_report(controller, report, capture_path, report_path):
                 if not all(math.isfinite(v) for v in values):
                     raise RuntimeError("Nonfinite canonical light record")
                 kind, flags, selection_index = struct.unpack_from("<3I", data, index * 80 + 56)
-                reserved = struct.unpack_from("<3I", data, index * 80 + 68)
+                cone_corrections = struct.unpack_from("<2f", data, index * 80 + 68)
+                reserved = struct.unpack_from("<I", data, index * 80 + 76)[0]
                 radius = values[3]
-                if kind not in (0, 1) or flags & ~3 or selection_index != index or any(reserved):
+                if kind not in (0, 1) or flags & ~3 or selection_index != index or reserved:
                     raise RuntimeError("Invalid integer identity, flags or reserved lanes")
+                if not all(math.isfinite(v) and abs(v) <= 2**-24 for v in cone_corrections):
+                    raise RuntimeError("Invalid cone precision correction")
+                if kind == 0 and any(cone_corrections):
+                    raise RuntimeError("Point record contains cone corrections")
                 if max(values[4:7]) <= 0 or radius <= 0 or abs(values[11] * radius - 1) > 1e-5:
                     raise RuntimeError("Incorrect resolved intensity or range fields")
                 kinds.append(kind)

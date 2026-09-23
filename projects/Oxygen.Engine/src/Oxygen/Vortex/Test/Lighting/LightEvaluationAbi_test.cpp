@@ -47,6 +47,8 @@ namespace {
         .kind = 0U,
         .flags = 0x80000001U,
         .selection_index = LightSelectionIndex { 0x01000001U },
+        .inner_cone_relative_correction = 0.0000000298023223876953125F,
+        .outer_cone_relative_correction = -0.00000001490116119384765625F,
       },
       ForwardLocalLightRecord {
         .position_ws = { -1.0F, -2.0F, -3.0F },
@@ -60,6 +62,8 @@ namespace {
         .kind = 1U,
         .flags = 0x01000003U,
         .selection_index = kInvalidLightSelectionIndex,
+        .inner_cone_relative_correction = -0.0000000298023223876953125F,
+        .outer_cone_relative_correction = 0.00000001490116119384765625F,
       },
     };
     const auto expected = std::vector<std::uint32_t> {
@@ -80,8 +84,8 @@ namespace {
       0U,
       0x80000001U,
       0x01000001U,
-      0U,
-      0U,
+      Word(0.0000000298023223876953125F),
+      Word(-0.00000001490116119384765625F),
       0U,
       Word(-1),
       Word(-2),
@@ -100,8 +104,8 @@ namespace {
       1U,
       0x01000003U,
       0xFFFFFFFFU,
-      0U,
-      0U,
+      Word(-0.0000000298023223876953125F),
+      Word(0.00000001490116119384765625F),
       0U,
     };
     EXPECT_EQ(Decode({ .records = std::as_bytes(std::span(records)),

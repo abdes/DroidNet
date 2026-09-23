@@ -116,6 +116,10 @@ auto ResolveSpotConeProfile(
   return SpotConeProfile {
     .inner_sin_half_squared = inner_gpu,
     .outer_sin_half_squared = outer_gpu,
+    .inner_relative_correction
+    = inner == 0.0 ? 0.0F : static_cast<float>((inner - inner_gpu) / inner_gpu),
+    .outer_relative_correction
+    = static_cast<float>((outer - outer_gpu) / outer_gpu),
     .solid_angle_sr
     = kSphereSolidAngle * (inner + ((outer - inner) * kSquaredRampIntegral)),
   };

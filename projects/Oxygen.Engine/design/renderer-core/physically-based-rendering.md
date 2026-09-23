@@ -331,6 +331,13 @@ epsilon. A glTF candela intensity becomes `Phi=I_peak*Omega` using **both** cone
 angles. The importer checks the cone pair and flux before float32 storage;
 invalid or unrepresentable values fail the import instead of being clamped.
 
+Preserve the double-to-float cone rounding residual through the angular-profile
+subtraction. The canonical record carries relative corrections alongside the
+two squared half-angle values. Compensated FP32 evaluation normalizes represented
+directions and scales narrow support before splitting significands, retaining
+small physical edge contributions without relying on subnormal residuals or GPU
+FP64. This is a precision refinement of the same equations and budgets.
+
 Production approximations require independent numerical integration, separate
 diffuse/specular/total-response comparisons and predeclared approximation
 budgets. Validate flux and zero-radius/far-field limits. Source integration is

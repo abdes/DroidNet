@@ -6,7 +6,6 @@
 
 #pragma once
 
-#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <type_traits>
@@ -30,7 +29,9 @@ struct alignas(packing::kShaderDataFieldAlignment) ForwardLocalLightRecord {
   std::uint32_t kind { 0U };
   std::uint32_t flags { 0U };
   LightSelectionIndex selection_index { kInvalidLightSelectionIndex };
-  std::array<std::uint32_t, 3> reserved {};
+  float inner_cone_relative_correction { 0.0F };
+  float outer_cone_relative_correction { 0.0F };
+  std::uint32_t reserved { 0U };
 };
 
 // NOLINTBEGIN(*-magic-numbers)
@@ -51,7 +52,11 @@ static_assert(
 static_assert(offsetof(ForwardLocalLightRecord, kind) == 56U);
 static_assert(offsetof(ForwardLocalLightRecord, flags) == 60U);
 static_assert(offsetof(ForwardLocalLightRecord, selection_index) == 64U);
-static_assert(offsetof(ForwardLocalLightRecord, reserved) == 68U);
+static_assert(
+  offsetof(ForwardLocalLightRecord, inner_cone_relative_correction) == 68U);
+static_assert(
+  offsetof(ForwardLocalLightRecord, outer_cone_relative_correction) == 72U);
+static_assert(offsetof(ForwardLocalLightRecord, reserved) == 76U);
 // NOLINTEND(*-magic-numbers)
 
 } // namespace oxygen::vortex

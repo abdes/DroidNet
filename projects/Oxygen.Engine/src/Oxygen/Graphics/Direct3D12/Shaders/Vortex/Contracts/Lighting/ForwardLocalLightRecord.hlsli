@@ -21,7 +21,9 @@ struct ForwardLocalLightRecord
     uint kind;
     uint flags;
     uint selection_index;
-    uint3 reserved;
+    float inner_cone_relative_correction;
+    float outer_cone_relative_correction;
+    uint reserved;
 };
 
 static const uint FORWARD_LOCAL_LIGHT_POINT = 0u;

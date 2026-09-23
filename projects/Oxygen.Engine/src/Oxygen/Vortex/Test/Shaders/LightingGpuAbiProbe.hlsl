@@ -66,6 +66,8 @@ struct PhotometryProbeInput {
     float outer_sin_half_squared;
     float3 intensity_rgb_cd;
     uint is_spot;
+    float inner_relative_correction;
+    float outer_relative_correction;
 };
 
 struct BrdfProbeInput {
@@ -169,7 +171,8 @@ void CS(uint3 thread : SV_DispatchThreadID) {
         output.Store4(address + 32, asuint(float4(value.emitted_direction_ws, value.inverse_range_m)));
         output.Store4(address + 48, uint4(asuint(value.inner_cone_sin_half_squared),
             asuint(value.outer_cone_sin_half_squared), value.kind, value.flags));
-        output.Store4(address + 64, uint4(value.selection_index, value.reserved));
+        output.Store4(address + 64, uint4(value.selection_index,
+            asuint(value.inner_cone_relative_correction), asuint(value.outer_cone_relative_correction), value.reserved));
     } else if (g_RecordKind == 9) {
         StructuredBuffer<DirectionalLightForwardData> inputs = ResourceDescriptorHeap[args.x];
         DirectionalLightForwardData value = inputs[element];
@@ -292,7 +295,8 @@ void CS(uint3 thread : SV_DispatchThreadID) {
         float distance_factor = ComputeLocalLightDistanceAttenuation(value.light_vector, value.range_m);
         float angular_factor = value.is_spot != 0
             ? ComputeSpotLightAngularAttenuation(value.direction_to_source, value.emitted_axis,
-                value.inner_sin_half_squared, value.outer_sin_half_squared)
+                float2(value.inner_sin_half_squared, value.inner_relative_correction),
+                float2(value.outer_sin_half_squared, value.outer_relative_correction))
             : 1.0;
         float3 normal_illuminance = value.intensity_rgb_cd * distance_factor * angular_factor;
         output.Store2(address, asuint(float2(distance_factor, angular_factor)));

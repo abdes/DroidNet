@@ -42,6 +42,24 @@ def build_report(controller, report, capture_path, report_path):
         selections = [struct.unpack_from("<I", records, index * 80 + 64)[0] for index in range(33)]
         if kinds != {0: 17, 1: 16} or sorted(selections) != list(range(33)):
             raise RuntimeError("Missing, duplicated or mistyped light record")
+        corrected_spots = 0
+        for index in range(33):
+            kind = struct.unpack_from("<I", records, index * 80 + 56)[0]
+            high = struct.unpack_from("<2f", records, index * 80 + 48)
+            corrections = struct.unpack_from("<2f", records, index * 80 + 68)
+            reserved = struct.unpack_from("<I", records, index * 80 + 76)[0]
+            if reserved or not all(math.isfinite(v) and abs(v) <= 2**-24 for v in corrections):
+                raise RuntimeError("Invalid cone precision or reserved lane")
+            if kind == 0:
+                if any(high) or any(corrections):
+                    raise RuntimeError("Point record contains cone parameters")
+                continue
+            for encoded, correction, angle in zip(high, corrections, (0.2, 1.2)):
+                authored = struct.unpack("<f", struct.pack("<f", angle))[0]
+                expected = math.sin(authored / 2)**2
+                if abs(encoded * (1 + correction) - expected) > expected * 1e-14:
+                    raise RuntimeError("Spot record lost authored cone precision")
+            corrected_spots += 1
         ranges = by_slot[words[2]]
         if ranges.elementByteSize != 8 or ranges.byteSize != words[6] * 8:
             raise RuntimeError("Cluster range buffer is incomplete")
@@ -63,7 +81,7 @@ def build_report(controller, report, capture_path, report_path):
             raise RuntimeError("Empty lighting image")
         output = Path(report_path).with_suffix(".rgba32f")
         output.write_bytes(pixels)
-        report.append(f"event={draw.event_id} points=17 spots=16 complete_cells={words[6]} peak={peak}")
+        report.append(f"event={draw.event_id} points=17 spots=16 corrected_spots={corrected_spots} complete_cells={words[6]} peak={peak}")
         report.append(f"scene_color_rgba32f={output}")
         checked += 1
     if checked != 1:
