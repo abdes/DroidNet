@@ -8,6 +8,11 @@ gtest_program(
   "Oxygen.Vortex.LightingImageReference.Tests"
   SOURCES
     "LightingImageReference_test.cpp"
+    "MaterialRasterReference_test.cpp"
+    "Reference/MaterialEvaluation.cpp"
+    "Reference/MaterialEvaluation.h"
+    "Reference/MaterialDecode.cpp"
+    "Reference/MaterialDecode.h"
   DEPS
     oxygen-vortex-exposure-test-support
 )

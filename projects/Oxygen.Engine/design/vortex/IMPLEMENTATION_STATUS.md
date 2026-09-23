@@ -216,6 +216,13 @@ covers 36 transformations with maximum absolute error 2.448e-6. The
 [material reference record](plan/EX07B-reference-validation.md#default-material-evaluation-reference-and-native-uv-probe)
 keeps actual texture sampling, format expansion and raster qualification open.
 
+The [native material producer matrix](plan/EX07B-reference-validation.md#native-sampled-material-and-g-buffer-producer-checks)
+now passes 144 constant float-map cases in Debug/Release: 96 stored G-buffer
+results and 48 correct backface/mask rejections. It checks packed/separate maps,
+AO override, normal scaling/folding, disabled sampling and HDR emission; maximum
+stored-code error is 0.501945526. Remaining format/filtering coverage and the
+physical renderer admission gates are still open.
+
 A's closure does not establish the final physical renderer. B must supply an
 independent double-precision oracle, moment uncertainty and known-input probes,
 matched unculled image reference, deterministic fixtures and bounded instruments.

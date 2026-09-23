@@ -776,6 +776,45 @@ Evidence under `ex07b`: `material-evaluation-{debug,release}.json`,
 `material-evaluation-native-{debug,release}.json` and `.log`,
 `material-evaluation-tidy-fixed/` and `material-evaluation-checkpoint.json`.
 
+## Native sampled material and G-buffer producer checks
+
+`MaterialRasterReference_test.cpp` renders real one-texel RGBA32-float maps
+through the shared surface evaluator and deferred base pass, then reads the
+actual R10G10B10A2 normal, RGBA8 scalar and RGBA8-sRGB base-color targets.
+The independent material reference predicts the samples and packing; authored
+UNORM16 factors are decoded independently from their stored integer values.
+Scene-color readback checks HDR emission with fixed manual pre-exposure one.
+
+The **144-case** matrix combines four texture layouts (separate maps, packed
+ORM, packed ORM with separate AO, and sampling disabled), six surface cases
+(front, two-sided back, culled back, accepted mask, discarded mask and tilted),
+and normal scales `0/0.5/1/2/4/10`. Tilted cases exercise the octahedral fold.
+There are **96 stored-material cases** and **48 rejected-surface cases**.
+The renderer's existing normal-scale admission range is `[0,10]`; exploratory
+negative-scale rows selected the material fallback and are not qualified as
+renderable material inputs. This checkpoint changes no admission policy.
+
+Stored codes use the [Direct3D float-to-UNORM and float-to-sRGB conversion rules,
+sections 3.2.3.6 and 3.2.3.8](https://microsoft.github.io/DirectX-Specs/d3d/archive/D3D11_3_FunctionalSpec.htm):
+0.6 stored-code error plus 0.001 for float material arithmetic in this bounded
+fixture. This is a producer-format check and does not widen the final
+`2% + 2e-5` material/BRDF budget. Debug and Release both report maximum stored-code
+error **0.501945526**, and emission meets its absolute `1e-5` check. Both tests
+in the image-reference executable pass in both configurations; the final Release
+binary also passes the material case after a trailing-comma formatting fix.
+The added C++ file is oxytidy-clean. This adds only a few seconds of native test
+work and no production instrumentation.
+
+These results qualify the stated constant, three-channel float-map matrix and
+actual G-buffer writes. They do not qualify compressed normal reconstruction,
+nonconstant filtering/mips, alternate UV sets, extended materials or final
+physical lighting. Those boundaries remain distinct from the already qualified
+UV arithmetic and supplied-texel decoder probes.
+
+Evidence under `ex07b`: `material-raster-{debug,release}.json` and `.log`,
+`material-raster-final-release.json`, `material-raster-tidy-verified/` and
+`material-raster-checkpoint.json`.
+
 ## Qualification boundary and next work
 
 The [mean certificates](EX07B-mean-moment-certificates.md) now supply
@@ -792,7 +831,7 @@ and the current matrix do not yet certify the complete interior domain.
 The independent certifier can qualify additional pointwise moment queries;
 the C++ refinement estimator alone cannot. Mean queries likewise require their
 own certificate; the six-query matrix cannot qualify arbitrary interpolation.
-B still requires sampled/raster material qualification and RGB light-tint transport,
+B still requires remaining material-format/filter qualification and RGB light-tint transport,
 an independently forced unculled image reference and bounded
 instrumentation. Production tables additionally require their own interpolation
 certificate. No generated LUT or renderer change may claim those gates from
