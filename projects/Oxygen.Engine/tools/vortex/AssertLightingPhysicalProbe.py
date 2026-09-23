@@ -22,6 +22,10 @@ REQUIRED_PROBES = {
 
 
 REQUIRED_QUALIFICATIONS = {
+    "FiniteEmitterLobesMatchIndependentGeometry": (
+        "finite_emitter_cases", 72,
+        {"maximum_finite_emitter_budget_fraction": 1.0},
+    ),
     "EveryLobeIsReciprocalAcrossMaterialsAndAngles": (
         "reciprocity_queries", 1800,
         {"maximum_reciprocity_budget_fraction": 1.0},
@@ -110,7 +114,7 @@ def main() -> int:
     except (OSError, ValueError, TypeError, KeyError) as error:
         parser.exit(1, f"{error}\n")
     print(f"Physical probe admission passed: {sum(REQUIRED_PROBES.values())} inputs; "
-          "1800 reciprocity queries; 90 integrated material cases")
+          "1800 reciprocity queries; 90 integrated material cases; 72 finite-emitter cases")
     return 0
 
 

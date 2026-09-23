@@ -19,6 +19,7 @@
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/ViewHelpers.h>
 #include <Oxygen/Vortex/Shadows/Internal/ConventionalShadowTargetAllocator.h>
+#include <Oxygen/Vortex/Shadows/Internal/LocalShadowProjection.h>
 #include <Oxygen/Vortex/Shadows/Internal/PointShadowSetup.h>
 #include <Oxygen/Vortex/Shadows/Types/CubeLocalShadowRecord.h>
 #include <Oxygen/Vortex/Shadows/Types/FrameShadowInputs.h>
@@ -89,18 +90,18 @@ auto PointShadowSetup::BuildPointRecords(
   auto point_shadow_index = 0U;
   for (const auto& [selection_index, light] :
     std::views::enumerate(local_lights)) {
-    if (light.kind != LocalLightKind::kPoint
-      || (light.flags & kLocalLightFlagCastsShadows) == 0U) {
+    if (!UsesCubeLocalShadow(light) || !HasLocalShadowInfluence(light)) {
       continue;
     }
     if (point_shadow_index >= allocation.shadow_count) {
       break;
     }
 
-    const auto range = (std::max)(light.range, kMinPointRange);
+    const auto range = light.range + light.source_radius;
+    const auto near_plane = (std::min)(kMinPointNearPlane, range * 0.01F);
     const auto projection = MakeReversedZPerspectiveProjectionRH_ZO(
-      glm::half_pi<float>(), 1.0F, kMinPointNearPlane, range);
-    const auto depth_span = range - kMinPointNearPlane;
+      glm::half_pi<float>(), 1.0F, near_plane, range);
+    const auto depth_span = range - near_plane;
     const auto depth_bias
       = ComputePointDepthBias(light, depth_span, allocation.resolution.x);
     const auto world_texel_size = (2.0F * range)
@@ -115,7 +116,7 @@ auto PointShadowSetup::BuildPointRecords(
       point.face_light_view_projection[face_index] = projection * view;
     }
     point.shadow_origin_ws = light.position;
-    point.near_plane_m = kMinPointNearPlane;
+    point.near_plane_m = near_plane;
     point.far_plane_m = range;
     point.normal_bias_m = (std::max)(light.shadow_normal_bias, 0.0F);
     point.depth_bias = depth_bias;

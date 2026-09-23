@@ -909,8 +909,7 @@ auto DeferredLightPass::Record(RenderContext& ctx,
       recorder.RequireResourceState(
         *spot_shadow_surface, graphics::ResourceStates::kShaderResource);
     }
-    if (draw.kind == DeferredLightKind::kPoint
-      && point_shadow_surface != nullptr
+    if (point_shadow_surface != nullptr
       && state.consumed_point_shadow_product) {
       recorder.RequireResourceState(
         *point_shadow_surface, graphics::ResourceStates::kShaderResource);

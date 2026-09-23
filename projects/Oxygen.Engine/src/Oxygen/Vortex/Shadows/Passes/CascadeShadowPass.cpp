@@ -19,6 +19,7 @@
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/Shadows/Internal/CascadeShadowSetup.h>
 #include <Oxygen/Vortex/Shadows/Internal/ConventionalShadowTargetAllocator.h>
+#include <Oxygen/Vortex/Shadows/Internal/LocalShadowProjection.h>
 #include <Oxygen/Vortex/Shadows/Internal/PointShadowSetup.h>
 #include <Oxygen/Vortex/Shadows/Internal/ShadowCasterCulling.h>
 #include <Oxygen/Vortex/Shadows/Internal/SpotShadowSetup.h>
@@ -116,8 +117,8 @@ auto CascadeShadowPass::RenderSpotView(
   auto shadowed_spot_count = 0U;
   auto resolution_hint = scene::ShadowResolutionHint::kLow;
   for (const auto& light : local_lights) {
-    if (light.kind == LocalLightKind::kSpot
-      && (light.flags & kLocalLightFlagCastsShadows) != 0U) {
+    if (!internal::UsesCubeLocalShadow(light)
+      && internal::HasLocalShadowInfluence(light)) {
       ++shadowed_spot_count;
       resolution_hint
         = (std::max)(resolution_hint, light.shadow_resolution_hint);
@@ -174,8 +175,8 @@ auto CascadeShadowPass::RenderPointView(
   auto shadowed_point_count = 0U;
   auto resolution_hint = scene::ShadowResolutionHint::kLow;
   for (const auto& light : local_lights) {
-    if (light.kind == LocalLightKind::kPoint
-      && (light.flags & kLocalLightFlagCastsShadows) != 0U) {
+    if (internal::UsesCubeLocalShadow(light)
+      && internal::HasLocalShadowInfluence(light)) {
       ++shadowed_point_count;
       resolution_hint
         = (std::max)(resolution_hint, light.shadow_resolution_hint);

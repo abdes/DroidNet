@@ -6,6 +6,7 @@
 
 #include "Vortex/Contracts/View/FrameExposureHelpers.hlsli"
 #include "Vortex/Services/Lighting/DeferredLightingCommon.hlsli"
+#include "Vortex/Services/Lighting/FiniteEmitter.hlsli"
 #include "Vortex/Services/Shadows/DirectionalShadowCommon.hlsli"
 
 cbuffer RootConstants : register(b2, space0)
@@ -57,34 +58,16 @@ float4 DeferredLightSpotPS(DeferredLightVolumeVSOutput input) : SV_Target0
         lighting_bindings.local_shadow_map_srv, light.selection_index);
     const float3 light_vector
         = light.position_ws - world_position;
-    const float base_attenuation = ComputeLocalLightDistanceAttenuation(
-        light_vector, light.range_m);
-    const float spot_attenuation = ComputeSpotLightAngularAttenuation(
-        VortexSafeNormalize(light_vector),
-        light.emitted_direction_ws,
-        float2(light.inner_cone_sin_half_squared, light.inner_cone_relative_correction),
-        float2(light.outer_cone_sin_half_squared, light.outer_cone_relative_correction));
-    float shadow_visibility = 1.0f;
-    if (shadow_reference.record_index != INVALID_BINDLESS_INDEX) {
-        const VortexShadowFrameBindings shadow_bindings =
-            LoadVortexShadowFrameBindings();
-        const GBufferData gbuffer = ReadGBuffer(screen_uv, bindings);
-        shadow_visibility = ComputeSpotShadowVisibility(
-            shadow_bindings,
-            shadow_reference.record_index,
-            world_position,
-            gbuffer.world_normal,
-            VortexSafeNormalize(light_vector));
-    }
-    const float3 lighting = EvaluateDeferredLightAtWorldPosition(
-        screen_uv,
-        scene_depth,
-        world_position,
-        VortexSafeNormalize(light_vector),
-        light.intensity_rgb_cd,
-        base_attenuation * spot_attenuation * shadow_visibility,
-        camera_position,
-        bindings);
+    const GBufferData gbuffer = ReadGBuffer(screen_uv, bindings);
+    const float shadow_visibility = ComputeLocalShadowVisibility(shadow_reference,
+        world_position, gbuffer.world_normal, VortexSafeNormalize(light_vector));
+    if (scene_depth >= 1.0f) return 0.0f.xxxx;
+    const DeferredLightingSurfaceData surface = LoadDeferredLightingSurface(
+        screen_uv, world_position, camera_position, bindings);
+    const float3 lighting = EvaluateLocalEmitterResponse(light, world_position,
+        surface.world_normal, surface.view_direction, surface.specular_f0,
+        surface.base_color * (1.0 - surface.metallic), surface.roughness,
+        lighting_bindings) * shadow_visibility;
     RecordHdrSceneSource(lighting, 2u);
     return float4(lighting * GetPreExposure(), 0.0f);
 }

@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <limits>
 #include <memory>
+#include <numbers>
 #include <span>
 #include <string>
 #include <utility>
@@ -39,6 +40,7 @@
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/Lighting/Types/ForwardLocalLightRecord.h>
+#include <Oxygen/Vortex/RendererCapability.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureGpuFixture.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureLightingFixture.h>
 #include <Oxygen/Vortex/Test/Lighting/Reference/Photometry.h>
@@ -163,6 +165,168 @@ namespace {
       }
     }
     RecordProperty("projection_images", checked_images);
+  }
+
+  using FiniteEmitterImageTest = exposure::ExposureLightingGpuTest;
+
+  NOLINT_TEST_F(
+    FiniteEmitterImageTest, ExtendedSupportSurvivesEveryProductionPath)
+  {
+    auto node = scene->CreateNode("Finite source");
+    unsigned cases = 0;
+    for (unsigned scenario = 0; scenario < 3U; ++scenario) {
+      const auto positions = std::array {
+        glm::vec3 { 0, 0, 0 },
+        glm::vec3 { 1, 0, -1.1F },
+        glm::vec3 { 0.7F, 0, 0 },
+      };
+      node.GetTransform().SetLocalPosition(positions.at(scenario));
+      node.GetTransform().SetLocalRotation(
+        glm::quat { 0.70710678F, 0.70710678F, 0, 0 });
+      std::array<double, 3> deferred {};
+      for (const bool forward : { false, true }) {
+        for (const auto domain : {
+               data::MaterialDomain::kOpaque,
+               data::MaterialDomain::kMasked,
+               data::MaterialDomain::kAlphaBlended,
+             }) {
+          SetSurface(domain);
+          for (const bool finite : { false, true }) {
+            SCOPED_TRACE(scenario);
+            SCOPED_TRACE(forward);
+            SCOPED_TRACE(static_cast<int>(domain));
+            SCOPED_TRACE(finite);
+            if (scenario == 2U) {
+              auto light = std::make_unique<scene::SpotLight>();
+              light->SetRange(3.0F);
+              light->SetInnerConeAngleRadians(0.2F);
+              light->SetOuterConeAngleRadians(0.3F);
+              light->SetSourceRadius(finite ? 0.6F : 0.0F);
+              light->SetLuminousFluxLm(10.0F);
+              light->Common().casts_shadows = false;
+              if (node.GetLightAs<scene::SpotLight>().has_value()) {
+                ASSERT_TRUE(node.ReplaceLight(std::move(light)));
+              } else {
+                node.DetachLight();
+                ASSERT_TRUE(node.AttachLight(std::move(light)));
+              }
+            } else {
+              auto light = std::make_unique<scene::PointLight>();
+              light->SetRange(scenario == 0U ? 0.8F : 2.0F);
+              light->SetSourceRadius(finite ? 0.5F : 0.0F);
+              light->SetLuminousFluxLm(10.0F);
+              light->Common().casts_shadows = false;
+              if (node.GetLightAs<scene::PointLight>().has_value()) {
+                ASSERT_TRUE(node.ReplaceLight(std::move(light)));
+              } else {
+                ASSERT_TRUE(node.AttachLight(std::move(light)));
+              }
+            }
+            ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0.0F, 3U));
+            ASSERT_NE(probe->color, nullptr);
+            const auto pixels = ReadFloatTexture(*probe->color);
+            ASSERT_EQ(pixels.size(), 1U);
+            const auto measured = pixels.at(0).at(0);
+            ASSERT_TRUE(std::isfinite(measured));
+            if (!finite) {
+              EXPECT_EQ(measured, 0.0F);
+            } else {
+              EXPECT_GT(measured, 1.0e-6F);
+              auto slot = 0U;
+              if (domain == data::MaterialDomain::kMasked) {
+                slot = 1U;
+              } else if (domain == data::MaterialDomain::kAlphaBlended) {
+                slot = 2U;
+              }
+              if (forward) {
+                EXPECT_NEAR(measured, deferred.at(slot),
+                  (0.02 * deferred.at(slot)) + 2.0e-5);
+              } else {
+                deferred.at(slot) = measured;
+              }
+            }
+            ++cases;
+          }
+        }
+      }
+    }
+    RecordProperty("finite_support_images", cases);
+  }
+
+  class FiniteEmitterShadowImageTest
+    : public exposure::ExposureLightingGpuTest {
+  protected:
+    auto AdditionalCapabilities() const -> CapabilitySet override
+    {
+      return RendererCapabilityFamily::kShadowing;
+    }
+  };
+
+  NOLINT_TEST_F(FiniteEmitterShadowImageTest,
+    CubeVisibilityReachesForwardAndDeferredReceivers)
+  {
+    auto blocker = scene->CreateNode("Off-camera shadow blocker");
+    blocker.GetRenderable().SetGeometry(
+      mesh_node.GetRenderable().GetGeometry());
+    blocker.GetRenderable().SetMaterialOverride(
+      0, 0, MakeEmissiveMaterial(0.0F));
+    blocker.GetTransform().SetLocalScale(glm::vec3 { 0.1F });
+    blocker.GetTransform().SetLocalPosition(glm::vec3 { 0.5F, 0.0F, -0.4F });
+    expected_draws = 2U;
+    auto node = scene->CreateNode("Cube shadow source");
+    node.GetTransform().SetLocalPosition(glm::vec3 { 1, 0, 0 });
+    node.GetTransform().SetLocalRotation(
+      glm::quat { 0.70710678F, 0.70710678F, 0, 0 });
+    unsigned cases = 0;
+    for (const bool spot : { false, true }) {
+      for (const bool forward : { false, true }) {
+        for (const auto domain : {
+               data::MaterialDomain::kOpaque,
+               data::MaterialDomain::kMasked,
+               data::MaterialDomain::kAlphaBlended,
+             }) {
+          SetSurface(domain);
+          float baseline = 0.0F;
+          for (const bool shadowed : { false, true }) {
+            SCOPED_TRACE(spot);
+            SCOPED_TRACE(forward);
+            SCOPED_TRACE(static_cast<int>(domain));
+            SCOPED_TRACE(shadowed);
+            node.DetachLight();
+            if (spot) {
+              auto light = std::make_unique<scene::SpotLight>();
+              light->SetInnerConeAngleRadians(0.25F);
+              light->SetOuterConeAngleRadians(std::numbers::pi_v<float> / 2.0F);
+              light->SetRange(3.0F);
+              light->SetSourceRadius(0.1F);
+              light->SetLuminousFluxLm(10.0F);
+              light->Common().casts_shadows = shadowed;
+              ASSERT_TRUE(node.AttachLight(std::move(light)));
+            } else {
+              auto light = std::make_unique<scene::PointLight>();
+              light->SetRange(3.0F);
+              light->SetSourceRadius(0.1F);
+              light->SetLuminousFluxLm(10.0F);
+              light->Common().casts_shadows = shadowed;
+              ASSERT_TRUE(node.AttachLight(std::move(light)));
+            }
+            ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0.0F, 3U));
+            const auto pixels = ReadFloatTexture(*probe->color);
+            ASSERT_EQ(pixels.size(), 1U);
+            const auto measured = pixels.at(0).at(0);
+            ASSERT_TRUE(std::isfinite(measured));
+            if (shadowed) {
+              EXPECT_LT(measured, 0.1F * baseline);
+            } else {
+              ASSERT_GT(measured, 1.0e-6F);
+              baseline = measured;
+            }
+            ++cases;
+          }
+        }
+      }
+    }
+    RecordProperty("finite_shadow_images", cases);
   }
 
   NOLINT_TEST_F(LightingImageReferenceTest, MixedLocalLightsMatchSerialImages)
