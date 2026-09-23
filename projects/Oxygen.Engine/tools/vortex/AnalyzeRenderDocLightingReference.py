@@ -1,6 +1,8 @@
 """Inspect the 33-light forward frame from the native serial-image fixture."""
 
 from collections import Counter
+import hashlib
+import json
 import math
 from pathlib import Path
 import struct
@@ -34,6 +36,23 @@ def build_report(controller, report, capture_path, report_path):
         if len(headers) != 1:
             raise RuntimeError("Expected one canonical 33-local-light publication")
         words = headers[0]
+        manifest_path = Path(__file__).resolve().parents[2] / "src/Oxygen/Vortex/Lighting/Data/GgxModel1.json"
+        model = json.loads(manifest_path.read_text())
+        if words[23] != model["model_revision"]:
+            raise RuntimeError("Lighting publication has the wrong BRDF model")
+        model_payload = bytearray()
+        for slot, width in ((words[21], model["view_nodes"]), (words[22], 1)):
+            descriptor = by_slot[slot]
+            texture = next(item for item in controller.GetTextures() if item.resourceId == descriptor.resource)
+            if (texture.width, texture.height) != (width, model["roughness_nodes"]):
+                raise RuntimeError("BRDF moment texture extent mismatch")
+            data = bytes(controller.GetTextureData(descriptor.resource, rd.Subresource()))
+            if len(data) != width * model["roughness_nodes"] * 8:
+                raise RuntimeError("BRDF moment texture format mismatch")
+            model_payload.extend(data)
+        if hashlib.sha256(model_payload).hexdigest() != model["payload_sha256"]:
+            raise RuntimeError("Production GPU moment contents differ from the model payload")
+        report.append(f"brdf_model_revision={words[23]} brdf_payload_sha256={model['payload_sha256']} gpu_payload_bytes={len(model_payload)}")
         local = by_slot[words[1]]
         if local.elementByteSize != 80 or local.byteSize != 33 * 80:
             raise RuntimeError("Local-light stride or count mismatch")
@@ -87,7 +106,7 @@ def build_report(controller, report, capture_path, report_path):
     if checked != 1:
         raise RuntimeError(f"Expected one forward fixture draw, got {checked}")
     report.append("lighting_reference_capture_verdict=pass")
-    report.append("scope=current complete-list publication and finite lit output; independent culler bypass and physical BRDF admission remain open")
+    report.append("scope=complete-list wiring, exact moment upload and finite lit output; furnace/reciprocity and full lighting qualification remain separate")
 
 
 if __name__ == "__main__":

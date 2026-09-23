@@ -1,7 +1,7 @@
 # Lighting GPU ABI
 
-Status: **EX07A canonical record/interface migration validated; full physical and
-failure/lifetime qualification remains required in B–F.** This companion to
+Current execution and qualification status lives only in
+[tracker section 3.4](../IMPLEMENTATION_STATUS.md#34-slice-7-work-items). This companion to
 [LightingService](lighting-service.md#2-canonical-data-and-interfaces) specifies
 CPU/HLSL wire layouts. The [A checkpoint](../plan/EX07A-contract-review.md) owns
 approved decisions, evidence and remaining gates.
@@ -27,8 +27,8 @@ inactive until the contact product is connected.
 The current CPU publisher emits complete light lists without a compact-index
 buffer. The CPU source selection is now an ordered directional collection, and each
 shadowed source publishes an independently indexed family and surface. Spatial
-culling, complete support and failure/lifetime behavior, and BRDF moment
-publication remain open. These
+culling and complete support/failure/lifetime behavior remain open. BRDF moment
+publication uses the existing fields below and a shared immutable texture pair. These
 ABI and binding proofs close the scoped A migration gate recorded in the
 completion audit; they do not qualify physical lighting or overall EX07.
 
@@ -174,8 +174,8 @@ must not reuse the small scene ID carried by node handles.
 |     64 | uint2 `frame_sequence`            | Current renderer frame sequence                                                                    |
 |     72 | uint2 `view_generation`           | View lifetime/resource generation, not just ViewId                                                 |
 |     80 | uint `publication_state`          | Disabled=0, Empty=1, Recorded=2, Failed=3; this describes the recorded package, not GPU completion |
-|     84 | uint `brdf_moments_srv`           | Shared RG32Float loss/B texture                                                                    |
-|     88 | uint `brdf_mean_moments_srv`      | Shared RG32Float mean-loss/mean-B texture                                                          |
+|     84 | uint `brdf_moments_srv`           | Texture-domain RG32Float loss/B; X=sqrt(mu), Y=effective roughness                                 |
+|     88 | uint `brdf_mean_moments_srv`      | Texture-domain RG32Float mean-loss/mean-B; one X texel, Y=effective roughness                      |
 |     92 | uint `brdf_model_revision`        | 1 for the specified compensated correlated-GGX model                                               |
 
 Remove the embedded directional, `has_directional_light`, directional-index

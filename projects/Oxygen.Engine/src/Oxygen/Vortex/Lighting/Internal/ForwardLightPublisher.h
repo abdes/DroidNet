@@ -22,6 +22,7 @@ class Renderer;
 struct ShadowFrameData;
 
 namespace lighting::internal {
+  class BrdfMomentResources;
 
   struct PublishedLightingView {
     ShaderVisibleIndex slot { kInvalidShaderVisibleIndex };
@@ -31,7 +32,7 @@ namespace lighting::internal {
   class ForwardLightPublisher {
   public:
     explicit ForwardLightPublisher(Renderer& renderer);
-    ~ForwardLightPublisher() = default;
+    ~ForwardLightPublisher();
 
     OXYGEN_MAKE_NON_COPYABLE(ForwardLightPublisher)
     OXYGEN_MAKE_NON_MOVABLE(ForwardLightPublisher)
@@ -52,6 +53,7 @@ namespace lighting::internal {
     auto EnsurePublishResources() -> bool;
 
     Renderer& renderer_;
+    std::unique_ptr<BrdfMomentResources> brdf_moments_;
     frame::SequenceNumber current_sequence_ { 0U };
     frame::Slot current_slot_ { frame::kInvalidSlot };
     std::unique_ptr<::oxygen::vortex::internal::PerViewStructuredPublisher<

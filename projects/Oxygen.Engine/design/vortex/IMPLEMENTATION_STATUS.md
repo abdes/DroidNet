@@ -717,23 +717,23 @@ run is required.
 finished foundations with explicitly named later work. `Not started` means no
 qualified delivery is claimed. These are item states, distinct from stage states.
 
-| ID / deliverable                             | Item state       | Completed portion                                                                                                   | Remaining work / owning stage                                                                                                |
-| -------------------------------------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| **01 — Directional lighting**                | Partial          | A: directional authority/array interface. B: independent lux/EV reference and probes.                               | **C:** production physical calibration for unassigned, primary, secondary and combined sources.                              |
-| **02 — Point lighting**                      | Partial          | B: flux, distance/range and finite-emitter reference calculations and known-input probes.                           | **C:** qualify production point response, including finite-source and near/zero-separation behavior.                         |
-| **03 — Spot lighting**                       | Partial          | B: independent flux/cone/boundary references and native residual reporting.                                         | **C:** repair and qualify production soft/hard/wide cones and boundary behavior.                                             |
-| **04 — Shared interface and BRDF semantics** | Partial          | A: canonical ABI and native sentinel gate. B: independent compensated-GGX oracle and native BRDF probes.            | **C:** implement/qualify the approved shared BRDF and required LUT semantics.                                                |
-| **05 — Material/color oracle**               | **Complete (B)** | Independent packed-material/working-space reference; native format, UV, filtering, mip and producer checks.         | **None for the oracle.** Remaining production property transport belongs to 12.                                              |
-| **06 — References and calibration**          | Partial          | B: independent physical/image references, full-list and serial comparisons, negative controls.                      | **C:** use them to qualify the repaired renderer and affected content.                                                       |
-| **07 — Workloads and baselines**             | Partial          | B: frozen 1,024-light primary and count/distribution/view/shadow/mutation recipe parameters; native preview.        | **D:** correctness-qualified timing baselines and numeric budget/gain/regression/noise policy.                               |
-| **08 — Complete lists and spatial culling**  | Partial          | A: canonical grid/list contract and complete-list publication. B: independent reference/probes.                     | **C:** full failure/recovery correctness. **E:** real conservative spatial rejection and measured scaling.                   |
-| **09 — Shader/draw performance**             | Not started      | B supplies the measuring instruments; no qualified optimization is claimed.                                         | **E:** measured shader, deferred draw/submission and overdraw improvements.                                                  |
-| **10 — Resources, uploads and lifetime**     | Partial          | A: immutable publication and descriptor-lifetime repairs. B: bounded memory/retirement/churn instruments.           | **C:** complete mutation/admission/lifetime behavior. **E:** measured allocation/upload/resource improvements.               |
-| **11 — Shadows**                             | Partial          | A: shadow-owned identities/interfaces and scoped native proofs. B: shadow-demand recipe parameters.                 | **C:** final consumption/capacity/finite/wide-spot correctness. **D/E:** separate cost baseline and qualified optimizations. |
-| **12 — Retained properties and content**     | Partial          | A: LP01–LP32 inventory and strict migration contracts. B: sampled-material qualification and UV/alpha identity fix. | **C:** complete retained-property transport, mutation, scene-v7/editor/script migration and round-trip/lifecycle checks.     |
-| **13 — Measurement and diagnostics**         | Partial          | B: CPU/GPU/memory/churn instruments, native validity checks and user-accepted collection overhead.                  | **D/E:** integration into qualified baselines and scalable-culling diagnostic reports.                                       |
-| **14 — Final validation/docs**               | Not started      | A/B audits preserve prerequisite evidence.                                                                          | **F:** final-code correctness/performance/visual/native/editor checks and complete operating docs.                           |
-| **EX07-GATE — Whole slice**                  | **Open**         | A and B gates passed.                                                                                               | **F:** all production correctness/performance gates pass together, with measured improvements and supported limits.          |
+| ID / deliverable                             | Item state       | Completed portion                                                                                                                 | Remaining work / owning stage                                                                                                |
+| -------------------------------------------- | ---------------- | --------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| **01 — Directional lighting**                | Partial          | A: directional authority/array interface. B: independent lux/EV reference and probes.                                             | **C:** production physical calibration for unassigned, primary, secondary and combined sources.                              |
+| **02 — Point lighting**                      | Partial          | B: flux, distance/range and finite-emitter reference calculations and known-input probes.                                         | **C:** qualify production point response, including finite-source and near/zero-separation behavior.                         |
+| **03 — Spot lighting**                       | Partial          | B: independent flux/cone/boundary references and native residual reporting.                                                       | **C:** repair and qualify production soft/hard/wide cones and boundary behavior.                                             |
+| **04 — Shared interface and BRDF semantics** | Partial          | A: canonical ABI. B: independent oracle. C: shared compensated direct GGX, moment publication and passing native physical probes. | **C:** full furnace/reciprocity, indirect-model integration, view-domain and remaining LUT qualification.                    |
+| **05 — Material/color oracle**               | **Complete (B)** | Independent packed-material/working-space reference; native format, UV, filtering, mip and producer checks.                       | **None for the oracle.** Remaining production property transport belongs to 12.                                              |
+| **06 — References and calibration**          | Partial          | B: independent physical/image references, full-list and serial comparisons, negative controls.                                    | **C:** use them to qualify the repaired renderer and affected content.                                                       |
+| **07 — Workloads and baselines**             | Partial          | B: frozen 1,024-light primary and count/distribution/view/shadow/mutation recipe parameters; native preview.                      | **D:** correctness-qualified timing baselines and numeric budget/gain/regression/noise policy.                               |
+| **08 — Complete lists and spatial culling**  | Partial          | A: canonical grid/list contract and complete-list publication. B: independent reference/probes.                                   | **C:** full failure/recovery correctness. **E:** real conservative spatial rejection and measured scaling.                   |
+| **09 — Shader/draw performance**             | Not started      | B supplies the measuring instruments; no qualified optimization is claimed.                                                       | **E:** measured shader, deferred draw/submission and overdraw improvements.                                                  |
+| **10 — Resources, uploads and lifetime**     | Partial          | A: immutable publication and descriptor-lifetime repairs. B: bounded memory/retirement/churn instruments.                         | **C:** complete mutation/admission/lifetime behavior. **E:** measured allocation/upload/resource improvements.               |
+| **11 — Shadows**                             | Partial          | A: shadow-owned identities/interfaces and scoped native proofs. B: shadow-demand recipe parameters.                               | **C:** final consumption/capacity/finite/wide-spot correctness. **D/E:** separate cost baseline and qualified optimizations. |
+| **12 — Retained properties and content**     | Partial          | A: LP01–LP32 inventory and strict migration contracts. B: sampled-material qualification and UV/alpha identity fix.               | **C:** complete retained-property transport, mutation, scene-v7/editor/script migration and round-trip/lifecycle checks.     |
+| **13 — Measurement and diagnostics**         | Partial          | B: CPU/GPU/memory/churn instruments, native validity checks and user-accepted collection overhead.                                | **D/E:** integration into qualified baselines and scalable-culling diagnostic reports.                                       |
+| **14 — Final validation/docs**               | Not started      | A/B audits preserve prerequisite evidence.                                                                                        | **F:** final-code correctness/performance/visual/native/editor checks and complete operating docs.                           |
+| **EX07-GATE — Whole slice**                  | **Open**         | A and B gates passed.                                                                                                             | **F:** all production correctness/performance gates pass together, with measured improvements and supported limits.          |
 
 #### Evidence and scope
 
@@ -776,8 +776,7 @@ seven existing whole-file findings remain. Seven admission-tool tests pass.
 Evidence under `out/build-ninja/analysis/vortex/exposure-lightbench/ex07c`:
 `cone-{native,cpu,images}-{debug,release}.json`, `cone-forward-report.txt`,
 `cone-tidy-changed-lines.json` and `cone-physical-admission.log`.
-**Physical admission still fails on the 565 BRDF residuals.** This is punctual
-factor/ABI/image-consistency evidence, not full source calibration, finite-emitter
+This is punctual factor/ABI/image-consistency evidence, not full source calibration, finite-emitter
 or shadow qualification, an official-resolution workload baseline, or a
 performance improvement. Those C–F obligations remain open.
 
@@ -793,9 +792,9 @@ reference allowance retained). The 4,214,800-byte candidate also passes the 55
 existing directional and six mean certificates. Reusing B's independent Arb
 oracle at the eight largest stencil residuals bounds the maximum sampled error
 by 1.33443e-4. These are sampled numerical checks, **not a continuous-domain
-certificate or a qualified runtime BRDF**. GPU sampling, shared-model consumers,
-furnace/reciprocity and full physical admission remain open; the production
-BRDF still has 565 residuals.
+certificate or full BRDF qualification**. Runtime direct-model integration and
+native sampling now have the evidence below; full furnace/reciprocity,
+indirect-model and view-domain qualification remain open.
 
 The generator is oxytidy-clean. One/six-worker smoke outputs are byte-identical;
 11 malformed-data/CLI controls and an underresolved-table control are rejected.
@@ -806,8 +805,41 @@ Build `Oxygen.Vortex.GgxMomentTable` in Release under `out/build-ninja`, then ru
 the ranked sample enclosures. Evidence in the same `ex07c` directory:
 `moments-513x1025{,-anchors,-stencil,-sample-certificates}.json`,
 `moments-513-stencil.json`, `moments-tool-validation.json` and
-`moments-tidy-verified/`. Candidate data remains explicitly unqualified and is
-not yet part of runtime publication.
+`moments-tidy-verified/`. `BuildGgxMomentData.py` packages the sampled evidence and
+binary payload, then generates a private build header; the renderer links no
+CPU reference implementation.
+
+C's direct-BRDF cutover now uses one compensated correlated-GGX implementation
+for forward/deferred shading and their direct-BRDF diagnostics. It preserves the
+perceptual roughness floor, stable GGX peak, reciprocal compensation and approved
+diffuse coupling; receiver cosine is evaluated once inside the common response.
+The weighted visibility ratio and scaled half-vector keep valid extreme-grazing
+responses finite, with `precise` preventing a demonstrated underflow-producing
+reassociation. Forward's extra directional normalization and deferred's
+direct-light AO multiplier are removed. Indirect/IBL coupling remains separate
+unfinished work under 04; no new specular-IBL family is claimed.
+
+The LightingService-owned immutable RG32Float pair is shared across views and
+initialized by one graphics-queue submission. Required data/allocation failures
+prevent complete publication. Upload buffers and texture descriptors use deferred
+retirement. RenderDoc matches all 4,214,800 GPU payload bytes to the packaged hash
+`b3224a671f44b196302e83d0421d2cad1a5ae14ba457f776e914c656900c45d6`.
+The 69 native moment queries pass their independent enclosures, and all original
+565 BRDF residuals are eliminated. **Physical-probe admission passes all 2,649
+required inputs in Debug and Release.** This includes the punctual/cone matrices,
+108 direct-BRDF inputs, 69 moment queries and 18 analytic grazing cases down to
+the smallest normal float. These selected-case gates do not close the full BRDF,
+finite-emitter, ingress, shadow, lifetime or performance requirements.
+
+Debug/Release each pass 31 native ABI/instrument, 30 lighting-service and five
+image/material/workload tests; both 233-module shader archives rebuild. All 12
+changed C++ files/headers are covered by a clean oxytidy run. Seven admission-tool
+tests pass, and five damaged-package controls fail before emitting a build header.
+Evidence in `ex07c`: `brdf-{native,cpu,images}-{debug,release}.json`,
+`brdf-weighted-report.txt`, `brdf-tidy-clean/` and `package-controls/results.json`.
+The 1,024-light case remains a 64x36 fixture preview. Official-resolution
+qualification, complete furnace/reciprocity, indirect and orthographic consumers,
+full failure/lifetime tests and all other C–F obligations remain open.
 
 ### 3.5 Slice 8 work items
 

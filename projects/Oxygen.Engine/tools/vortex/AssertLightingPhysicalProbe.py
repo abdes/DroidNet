@@ -13,6 +13,8 @@ from pathlib import Path
 
 
 REQUIRED_PROBES = {
+    "GrazingResponseRemainsFiniteWithoutClippingTheGgxPeak": 18,
+    "MomentTexturesMatchIndependentCertificates": 69,
     "PunctualPhotometryProbeQualifiesFactorsAndReportsBoundaryResiduals": 2160,
     "SpotConePrecisionPreservesRotatedAndNarrowBoundaryContributions": 294,
     "DirectBrdfProbeReportsIndependentOracleResiduals": 108,

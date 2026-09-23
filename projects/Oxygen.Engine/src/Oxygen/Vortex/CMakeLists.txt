@@ -21,6 +21,25 @@ asap_push_module("${META_MODULE_NAME}")
 
 find_package(fmt CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+
+set(ggx_data_dir "${CMAKE_CURRENT_SOURCE_DIR}/Lighting/Data")
+set(ggx_embedded_header "${CMAKE_CURRENT_BINARY_DIR}/GeneratedGgxMomentData.h")
+add_custom_command(
+  OUTPUT
+    "${ggx_embedded_header}"
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${PROJECT_SOURCE_DIR}/tools/vortex/BuildGgxMomentData.py" embed
+    "${ggx_data_dir}/GgxModel1.json" "${ggx_data_dir}/GgxModel1.bin" --output
+    "${ggx_embedded_header}"
+  DEPENDS
+    "${ggx_data_dir}/GgxModel1.json"
+    "${ggx_data_dir}/GgxModel1.bin"
+    "${PROJECT_SOURCE_DIR}/tools/vortex/BuildGgxMomentData.py"
+    "${PROJECT_SOURCE_DIR}/tools/vortex/InspectGgxMomentTable.py"
+  VERBATIM
+)
 
 # ==============================================================================
 # Build instructions
@@ -31,6 +50,12 @@ find_package(glm CONFIG REQUIRED)
 # ------------------------------------------------------------------------------
 
 add_library(${META_MODULE_TARGET})
+target_sources(${META_MODULE_TARGET} PRIVATE "${ggx_embedded_header}")
+target_include_directories(
+  ${META_MODULE_TARGET}
+  PRIVATE
+    "${CMAKE_CURRENT_BINARY_DIR}"
+)
 add_library(${META_MODULE_TARGET_ALIAS} ALIAS ${META_MODULE_TARGET})
 set_target_properties(
   ${META_MODULE_TARGET}
@@ -143,6 +168,8 @@ set(
   "Lighting/Types/LightingPreparationFailure.h"
   "Lighting/Types/DeferredLightConstants.h"
   "Lighting/Internal/LightPhotometry.h"
+  "Lighting/Internal/BrdfMomentData.h"
+  "Lighting/Internal/BrdfMomentResources.h"
   "Shadows/Internal/CascadeShadowSetup.h"
   "Shadows/Internal/ConventionalShadowTargetAllocator.h"
   "Shadows/Internal/PointShadowSetup.h"
@@ -315,6 +342,8 @@ set(
   "Lighting/Internal/LightGridBuilder.cpp"
   "Lighting/Internal/LightEvaluationRecords.cpp"
   "Lighting/Internal/LightPhotometry.cpp"
+  "Lighting/Internal/BrdfMomentData.cpp"
+  "Lighting/Internal/BrdfMomentResources.cpp"
   "Shadows/Internal/CascadeShadowSetup.cpp"
   "Shadows/Internal/ShadowReferenceBuilder.cpp"
   "Shadows/Internal/ShadowReferenceBuilder.h"

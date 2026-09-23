@@ -40,6 +40,7 @@
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
 #include <Oxygen/Graphics/Direct3D12/Test/Fixtures/ReadbackTestFixture.h>
+#include <Oxygen/Vortex/Lighting/Internal/BrdfMomentData.h>
 #include <Oxygen/Vortex/Test/Lighting/LightingGpuAbiFixture.h>
 
 namespace oxygen::vortex::testing {
@@ -398,6 +399,77 @@ auto LightingGpuAbiTest::PublishPackedTexture(const Format format,
       .dimension = TextureType::kTexture2D,
     });
   return index;
+}
+
+auto LightingGpuAbiTest::PublishBrdfMomentTextures()
+  -> std::array<ShaderVisibleIndex, 2>
+{
+  const auto model = lighting::internal::GetBrdfMomentData();
+  CHECK_F(model.has_value());
+  const auto sources = std::array { model->moments, model->means };
+  const auto widths = std::array { model->view_nodes, 1U };
+  auto slots = std::array<ShaderVisibleIndex, 2> {};
+  for (std::size_t index = 0; index < slots.size(); ++index) {
+    auto texture = CreateRegisteredTexture({
+      .width = widths.at(index),
+      .height = model->roughness_nodes,
+      .format = Format::kRG32Float,
+      .debug_name = "BRDF moment probe",
+      .is_shader_resource = true,
+    });
+    const auto slice = graphics::TextureSlice {
+      .width = widths.at(index),
+      .height = model->roughness_nodes,
+      .depth = 1U,
+    };
+    const auto footprint
+      = graphics::ComputeLinearTextureCopyFootprint(texture->GetDescriptor(),
+        slice, SizeBytes { D3D12_TEXTURE_DATA_PITCH_ALIGNMENT });
+    auto upload = CreateRegisteredBuffer({
+      .size_bytes = footprint.total_bytes.get(),
+      .memory = BufferMemory::kUpload,
+      .debug_name = "BRDF moment probe upload",
+    });
+    constexpr auto kPairBytes = sizeof(float) * 2U;
+    const auto source_pitch
+      = static_cast<std::size_t>(widths.at(index)) * kPairBytes;
+    for (std::uint32_t row = 0; row < model->roughness_nodes; ++row) {
+      upload->Update(
+        sources.at(index).subspan(row * source_pitch, source_pitch).data(),
+        source_pitch,
+        static_cast<std::uint64_t>(row) * footprint.row_pitch.get());
+    }
+    SubmitCommands("BRDF moment probe upload",
+      [&](graphics::CommandRecorder& recorder) -> void {
+        EnsureTracked(recorder, upload, ResourceStates::kGenericRead);
+        EnsureTracked(recorder, texture, ResourceStates::kCommon);
+        recorder.RequireResourceState(*texture, ResourceStates::kCopyDest);
+        recorder.FlushBarriers();
+        recorder.CopyBufferToTexture(*upload,
+          {
+            .buffer_offset = 0U,
+            .buffer_row_pitch = footprint.row_pitch.get(),
+            .buffer_slice_pitch = footprint.slice_pitch.get(),
+            .dst_slice = slice,
+          },
+          *texture);
+        recorder.RequireResourceState(
+          *texture, ResourceStates::kShaderResource);
+        recorder.FlushBarriers();
+      });
+    oxygen::Graphics& api = Backend();
+    auto& allocator = api.GetDescriptorAllocator();
+    auto handle = allocator.AllocateBindless(
+      bindless::generated::kTexturesDomain, ResourceViewType::kTexture_SRV);
+    CHECK_F(handle.IsValid());
+    slots.at(index) = allocator.GetShaderVisibleIndex(handle);
+    Backend().GetResourceRegistry().RegisterView(*texture, std::move(handle),
+      graphics::TextureViewDescription {
+        .format = Format::kRG32Float,
+        .dimension = TextureType::kTexture2D,
+      });
+  }
+  return slots;
 }
 
 auto LightingGpuAbiTest::TearDown() -> void
