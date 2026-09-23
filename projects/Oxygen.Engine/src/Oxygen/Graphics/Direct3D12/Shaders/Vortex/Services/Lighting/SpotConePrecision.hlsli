@@ -102,6 +102,14 @@ static float2 SpotPrecisionAngularCoordinate(float3 u, float3 v,
 static float ComputeSpotLightAngularAttenuation(float3 direction_to_source, float3 emitted_axis,
     float2 inner, float2 outer)
 {
+    // Wide interior/exterior samples need no expansion arithmetic. The margin
+    // encloses FP32 normalized-dot error and the uploaded correction terms;
+    // narrow cones and either boundary retain the exact compensated path.
+    const float norm_product_squared = dot(direction_to_source, direction_to_source) * dot(emitted_axis, emitted_axis);
+    const float half_angle = 0.5 * (1.0 + dot(direction_to_source, emitted_axis) * rsqrt(norm_product_squared));
+    const float coordinate_error = 2.0e-6;
+    if (half_angle < inner.x - coordinate_error) return 1.0;
+    if (half_angle > outer.x + coordinate_error) return 0.0;
     precise float3 emitted_direction = -direction_to_source;
     precise float2 cosine_numerator = SpotPrecisionDot(emitted_direction, emitted_axis);
     // Soft hemispherical sources have zero grazing response; a hard hemisphere

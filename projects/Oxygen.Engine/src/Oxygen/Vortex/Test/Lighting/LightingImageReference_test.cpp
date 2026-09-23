@@ -86,13 +86,17 @@ namespace {
   NOLINT_TEST_F(
     LightingImageReferenceTest, OrthographicHighlightsStayUniformAcrossTheImage)
   {
-    auto sun = scene->CreateNode("Orthographic directional");
-    auto light = std::make_unique<scene::DirectionalLight>();
-    light->Common().casts_shadows = false;
-    light->SetIntensityLux(1.0F);
-    ASSERT_TRUE(sun.AttachLight(std::move(light)));
-    sun.GetTransform().SetLocalRotation(
-      glm::quat { 0.70710678F, 0.70710678F, 0, 0 });
+    for (unsigned channel = 0; channel < 3U; ++channel) {
+      auto sun = scene->CreateNode("Directional channel " + std::to_string(channel));
+      auto light = std::make_unique<scene::DirectionalLight>();
+      light->Common().casts_shadows = false;
+      light->Common().color_rgb = glm::vec3 { 0.0F };
+      light->Common().color_rgb[channel] = 1.0F;
+      light->SetIntensityLux(1.0F);
+      ASSERT_TRUE(sun.AttachLight(std::move(light)));
+      sun.GetTransform().SetLocalRotation(
+        glm::quat { 0.70710678F, 0.70710678F, 0, 0 });
+    }
     unsigned checked_images = 0;
     for (const bool forward : { false, true }) {
       for (const auto domain : {
@@ -150,6 +154,12 @@ namespace {
             for (std::uint32_t x = kWidth / 3U; x < 2U * kWidth / 3U; ++x) {
               const auto value = pixels.at((y * kWidth) + x).at(0);
               ASSERT_TRUE(std::isfinite(value));
+              // Independent colored sources must all reach the shared draw.
+              // Equal material channels and directions give equal RGB response.
+              for (std::size_t channel = 1; channel < 3U; ++channel) {
+                EXPECT_NEAR(pixels.at((y * kWidth) + x).at(channel), value,
+                  (0.005F * value) + 2.0e-5F);
+              }
               minimum = std::min(minimum, value);
               maximum = std::max(maximum, value);
             }

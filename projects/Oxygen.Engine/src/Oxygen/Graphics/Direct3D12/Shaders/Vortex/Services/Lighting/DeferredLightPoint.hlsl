@@ -49,6 +49,7 @@ float4 DeferredLightPointPS(DeferredLightVolumeVSOutput input) : SV_Target0
 
     const float2 screen_uv = ResolveDeferredLightScreenUv(input.screen_position);
     const float scene_depth = SampleSceneDepth(screen_uv, bindings);
+    if (IsDeferredBackgroundDepth(scene_depth)) return 0.0f.xxxx;
     const float3 world_position
         = ReconstructDeferredWorldPosition(screen_uv, scene_depth);
     const LightingFrameBindings lighting_bindings = LoadResolvedLightingFrameBindings();
@@ -58,12 +59,13 @@ float4 DeferredLightPointPS(DeferredLightVolumeVSOutput input) : SV_Target0
         lighting_bindings.local_shadow_map_srv, light.selection_index);
     const float3 light_vector
         = light.position_ws - world_position;
-    const GBufferData gbuffer = ReadGBuffer(screen_uv, bindings);
-    const float shadow_visibility = ComputeLocalShadowVisibility(shadow_reference,
-        world_position, gbuffer.world_normal, VortexSafeNormalize(light_vector));
-    if (scene_depth >= 1.0f) return 0.0f.xxxx;
     const DeferredLightingSurfaceData surface = LoadDeferredLightingSurface(
         screen_uv, world_position, camera_position, bindings);
+    if (!LocalEmitterCanContribute(light, world_position, surface.world_normal))
+        return 0.0f.xxxx;
+    const float shadow_visibility = ComputeLocalShadowVisibility(shadow_reference,
+        world_position, surface.world_normal, VortexSafeNormalize(light_vector));
+    if (shadow_visibility <= 0.0) return 0.0f.xxxx;
     const float3 lighting = EvaluateLocalEmitterResponse(light, world_position,
         surface.world_normal, surface.view_direction, surface.specular_f0,
         surface.base_color * (1.0 - surface.metallic), surface.roughness,

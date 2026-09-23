@@ -35,15 +35,14 @@ float4 DeferredLightDirectionalPS(VortexFullscreenTriangleOutput input) : SV_Tar
         = ResourceDescriptorHeap[g_PassConstantsIndex];
 
     const SceneTextureBindingData bindings = LoadBindingsFromCurrentView();
+    if (!HasDeferredLightingInputs(bindings)) return 0.0f.xxxx;
     const float scene_depth = SampleSceneDepth(input.uv, bindings);
+    if (IsDeferredBackgroundDepth(scene_depth)) return 0.0f.xxxx;
     const float3 world_position =
         ReconstructDeferredWorldPosition(input.uv, scene_depth);
     const DeferredLightingSurfaceData surface = LoadDeferredLightingSurface(
         input.uv, world_position, camera_position, bindings);
     if (light_constants.light_type == DEFERRED_LIGHT_TYPE_STATIC_SKY_LIGHT) {
-        if (!HasDeferredLightingInputs(bindings) || scene_depth >= 1.0f) {
-            return 0.0f.xxxx;
-        }
         const float3 diffuse = EvaluateDeferredStaticSkyLightDiffuse(surface);
         RecordHdrSceneSource(diffuse, 3u);
         return float4(diffuse * GetPreExposure(), 0.0f);
@@ -54,45 +53,47 @@ float4 DeferredLightDirectionalPS(VortexFullscreenTriangleOutput input) : SV_Tar
 #endif
 
     const LightingFrameBindings lighting_bindings = LoadResolvedLightingFrameBindings();
-    DirectionalLightForwardData light;
-    if (!TryLoadDirectionalLight(lighting_bindings, light_constants.selection_index, light)) return 0.0f.xxxx;
-    const LightShadowReference shadow_reference = LoadLightShadowReference(
-        lighting_bindings.directional_shadow_map_srv, light.selection_index);
-    const float3 light_dir =
-        light.direction_to_source_ws;
-    float light_attenuation = 1.0f;
-    if (shadow_reference.projection_kind == SHADOW_PROJECTION_CASCADED_2D) {
-        light_attenuation = ComputeDirectionalShadowVisibility(
-            light.selection_index, world_position,
-            surface.world_normal,
-            light_dir);
-    }
-    const float3 deferred_light_radiance = ResolveDirectionalLightAtmosphereRadiance(
-        world_position,
-        light_dir,
-        light.ground_transmittance_rgb,
-        light.atmosphere_mode_flags,
-        light.illuminance_rgb_lux);
+    const GgxDirectContext brdf = PrepareGgxDirect(surface.world_normal,
+        surface.view_direction, surface.specular_f0,
+        surface.base_color * (1.0 - surface.metallic), surface.roughness, lighting_bindings);
+    float3 accumulated = 0.0.xxx;
+    // Directional sources cover the same pixels. Decode the surface and prepare
+    // its view/material terms once; retain each source's visibility and transport.
+    [loop] for (uint index = 0u; index < lighting_bindings.directional_count; ++index) {
+        DirectionalLightForwardData light;
+        if (!TryLoadDirectionalLight(lighting_bindings, index, light)) continue;
+        const float3 light_dir = light.direction_to_source_ws;
+        const LightShadowReference shadow_reference = LoadLightShadowReference(
+            lighting_bindings.directional_shadow_map_srv, light.selection_index);
+        float visibility = 1.0;
+        if (shadow_reference.projection_kind == SHADOW_PROJECTION_CASCADED_2D) {
+            visibility = ComputeDirectionalShadowVisibility(light.selection_index,
+                world_position, surface.world_normal, light_dir);
+        }
+        const float3 radiance = ResolveDirectionalLightAtmosphereRadiance(
+            world_position, light_dir, light.ground_transmittance_rgb,
+            light.atmosphere_mode_flags, light.illuminance_rgb_lux);
 #if defined(DEBUG_DIRECT_LIGHTING_ONLY)
-    const float NoL = saturate(dot(surface.world_normal, light_dir));
-    return float4(surface.base_color * deferred_light_radiance * NoL * GetPreExposure(), 0.0f);
+        accumulated += surface.base_color * radiance * saturate(dot(surface.world_normal, light_dir));
 #elif defined(DEBUG_DIRECT_LIGHT_GATES)
-    const float transmittance_luma = dot(
-        saturate(light.ground_transmittance_rgb),
-        float3(0.2126f, 0.7152f, 0.0722f));
-    return float4(saturate(light_attenuation), saturate(transmittance_luma), 0.0f, 0.0f);
-#elif defined(DEBUG_DIRECT_BRDF_CORE)
-    return float4(EvaluateCookTorranceLighting(surface, light_dir, 1.0f.xxx, lighting_bindings) * GetPreExposure(), 0.0f);
+        accumulated += float3(saturate(visibility), dot(saturate(light.ground_transmittance_rgb),
+            float3(0.2126, 0.7152, 0.0722)), 0.0);
+#else
+        const GgxDirectLobes lobes = EvaluatePreparedGgxDirectLobes(surface.world_normal,
+            surface.view_direction, normalize(light_dir), brdf);
+        const float3 response = lobes.single_scattering + lobes.multiple_scattering + lobes.diffuse;
+#if defined(DEBUG_DIRECT_BRDF_CORE)
+        accumulated += response;
+#else
+        const float3 contribution = response * radiance * visibility;
+        RecordHdrSceneSource(contribution, 2u);
+        accumulated += contribution;
 #endif
-    const float3 lighting = EvaluateDeferredLightAtWorldPosition(
-        input.uv,
-        scene_depth,
-        world_position,
-        light_dir,
-        deferred_light_radiance,
-        light_attenuation,
-        camera_position,
-        bindings);
-    RecordHdrSceneSource(lighting, 2u);
-    return float4(lighting * GetPreExposure(), 0.0f);
+#endif
+    }
+#if defined(DEBUG_DIRECT_LIGHT_GATES)
+    return float4(accumulated, 0.0);
+#else
+    return float4(accumulated * GetPreExposure(), 0.0);
+#endif
 }

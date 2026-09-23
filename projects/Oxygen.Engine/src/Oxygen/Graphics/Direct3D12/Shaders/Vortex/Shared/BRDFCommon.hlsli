@@ -52,68 +52,117 @@ struct GgxDirectLobes
     float3 diffuse;
 };
 
-static GgxDirectLobes EvaluateGgxDirectLobes(float3 N, float3 V, float3 L,
-    float3 F0, float3 rho, float roughness, LightingFrameBindings lighting)
+struct GgxDirectContext
 {
-    GgxDirectLobes lobes = (GgxDirectLobes)0;
-    const float nl = saturate(dot(N, L));
-    const float nv = saturate(dot(N, V));
-    if (nl <= 0.0 || nv <= 0.0) return lobes;
+    float nv;
+    float roughness;
+    float alpha_squared;
+    float view_root;
+    float3 F0;
+    float3 one_minus_compensation;
+    float3 multiple_scale;
+    float3 diffuse_scale;
+    uint moments_srv;
+    uint state;
+};
+
+// Material/view terms are invariant across every sample of a finite emitter.
+static GgxDirectContext PrepareGgxDirect(float3 N, float3 V, float3 F0,
+    float3 rho, float roughness, LightingFrameBindings lighting)
+{
+    GgxDirectContext context = (GgxDirectContext)0;
+    context.nv = saturate(dot(N, V));
+    if (context.nv <= 0.0) return context;
+    context.state = 2u;
     if (lighting.brdf_model_revision != 1u
         || !BX_IN_TEXTURES(lighting.brdf_moments_srv)
-        || !BX_IN_TEXTURES(lighting.brdf_mean_moments_srv)) {
-        // Required-data failure must reach the existing nonfinite HDR gate,
-        // never masquerade as successful black illumination.
-        lobes.single_scattering = asfloat(0x7fc00000u).xxx;
-        return lobes;
-    }
+        || !BX_IN_TEXTURES(lighting.brdf_mean_moments_srv)) return context;
+    context.state = 1u;
+    context.roughness = max(roughness, kVortexMinimumRoughness);
+    const float alpha = context.roughness * context.roughness;
+    context.alpha_squared = alpha * alpha;
+    precise float view_root = sqrt(context.nv * context.nv
+        + context.alpha_squared * (1.0 - context.nv * context.nv));
+    context.view_root = view_root;
+    context.F0 = F0;
+    context.moments_srv = lighting.brdf_moments_srv;
+    const float2 view = SampleGgxMomentTexture(lighting.brdf_moments_srv, context.nv, context.roughness);
+    const float2 mean = SampleGgxMomentTexture(lighting.brdf_mean_moments_srv, 0.0, context.roughness);
+    const float mean_energy = 1.0 - mean.x;
+    const float3 average_fresnel = F0 + (1.0 - F0) / 21.0;
+    const float3 compensation = average_fresnel * average_fresnel * mean_energy
+        / ((1.0 - average_fresnel) + average_fresnel * mean_energy);
+    context.one_minus_compensation = 1.0 - compensation;
+    context.multiple_scale = mean.x > 0.0 ? compensation * view.x / (PI * mean.x) : 0.0.xxx;
+    const float3 tv = (1.0 - compensation) * view.x
+        + (1.0 - F0) * (1.0 - view.x - view.y);
+    const float3 ta = (1.0 - compensation) * mean.x
+        + (1.0 - F0) * (mean_energy - mean.y);
+    const float3 denominator = (1.0 - rho) + rho * ta;
+    context.diffuse_scale = float3(
+        denominator.r > 0.0 ? rho.r * tv.r / (PI * denominator.r) : 0.0,
+        denominator.g > 0.0 ? rho.g * tv.g / (PI * denominator.g) : 0.0,
+        denominator.b > 0.0 ? rho.b * tv.b / (PI * denominator.b) : 0.0);
+    return context;
+}
+
+static float3 EvaluatePreparedGgxSingleScattering(float3 N, float3 V,
+    float3 L, GgxDirectContext context)
+{
+    const float nl = saturate(dot(N, L));
+    const float nv = context.nv;
+    if (nl <= 0.0 || context.state == 0u) return 0.0.xxx;
+    if (context.state != 1u) return asfloat(0x7fc00000u).xxx;
     const float3 half_vector = L + V;
     const float half_scale = max(max(abs(half_vector.x), abs(half_vector.y)), abs(half_vector.z));
     const float3 H = normalize(half_vector / half_scale);
     const float vh_complement = 1.0 - saturate(0.5 * dot(L + V, H));
     const float vh_squared = vh_complement * vh_complement;
     const float fresnel_bias = vh_squared * vh_squared * vh_complement;
-    const float3 fresnel = F0 + (1.0 - F0) * fresnel_bias;
-    const float r = max(roughness, kVortexMinimumRoughness);
-    const float alpha = r * r;
-    const float a2 = alpha * alpha;
-    // Sort and scale the two cosines before evaluating the symmetric Smith
-    // denominator. This preserves reciprocity and avoids overflowing the
-    // unweighted visibility or underflowing a product of grazing cosines.
+    const float3 fresnel = context.F0 + (1.0 - context.F0) * fresnel_bias;
     const float larger_cosine = max(nv, nl);
     const float smaller_cosine = min(nv, nl);
     precise float cosine_ratio = smaller_cosine / larger_cosine;
-    precise float larger_root = sqrt(larger_cosine * larger_cosine
-        + a2 * (1.0 - larger_cosine * larger_cosine));
-    precise float smaller_root = sqrt(smaller_cosine * smaller_cosine
-        + a2 * (1.0 - smaller_cosine * smaller_cosine));
+    precise float light_root = sqrt(nl * nl + context.alpha_squared * (1.0 - nl * nl));
+    precise float larger_root = nv >= nl ? context.view_root : light_root;
+    precise float smaller_root = nv >= nl ? light_root : context.view_root;
     precise float scaled_denominator = smaller_root + cosine_ratio * larger_root;
     precise float receiver_ratio = nl / larger_cosine;
     precise float visibility = (0.5 * receiver_ratio) / scaled_denominator;
-    lobes.single_scattering = GgxDistribution(N, H, r) * visibility * fresnel;
+    return GgxDistribution(N, H, context.roughness) * visibility * fresnel;
+}
 
-    const float2 light = SampleGgxMomentTexture(lighting.brdf_moments_srv, nl, r);
-    const float2 view = SampleGgxMomentTexture(lighting.brdf_moments_srv, nv, r);
-    const float2 mean = SampleGgxMomentTexture(lighting.brdf_mean_moments_srv, 0.0, r);
-    const float mean_energy = 1.0 - mean.x;
-    const float3 average_fresnel = F0 + (1.0 - F0) / 21.0;
-    const float3 compensation = average_fresnel * average_fresnel * mean_energy
-        / ((1.0 - average_fresnel) + average_fresnel * mean_energy);
-    lobes.multiple_scattering = mean.x > 0.0
-        ? compensation * light.x * view.x * nl / (PI * mean.x) : 0.0.xxx;
-    // Positive-term transmission preserves unit-F0 and near-unit limits.
-    const float3 tl = (1.0 - compensation) * light.x
-        + (1.0 - F0) * (1.0 - light.x - light.y);
-    const float3 tv = (1.0 - compensation) * view.x
-        + (1.0 - F0) * (1.0 - view.x - view.y);
-    const float3 ta = (1.0 - compensation) * mean.x
-        + (1.0 - F0) * (mean_energy - mean.y);
-    const float3 denominator = (1.0 - rho) + rho * ta;
-    lobes.diffuse = float3(
-        denominator.r > 0.0 ? rho.r * tl.r * tv.r * nl / (PI * denominator.r) : 0.0,
-        denominator.g > 0.0 ? rho.g * tl.g * tv.g * nl / (PI * denominator.g) : 0.0,
-        denominator.b > 0.0 ? rho.b * tl.b * tv.b * nl / (PI * denominator.b) : 0.0);
+static GgxDirectLobes EvaluatePreparedGgxBroadLobes(float3 N, float3 L,
+    GgxDirectContext context)
+{
+    GgxDirectLobes lobes = (GgxDirectLobes)0;
+    const float nl = saturate(dot(N, L));
+    if (nl <= 0.0 || context.state == 0u) return lobes;
+    if (context.state != 1u) {
+        lobes.diffuse = asfloat(0x7fc00000u).xxx;
+        return lobes;
+    }
+    const float2 light = SampleGgxMomentTexture(context.moments_srv, nl, context.roughness);
+    lobes.multiple_scattering = context.multiple_scale * light.x * nl;
+    const float3 transmission = context.one_minus_compensation * light.x
+        + (1.0 - context.F0) * (1.0 - light.x - light.y);
+    lobes.diffuse = context.diffuse_scale * transmission * nl;
     return lobes;
+}
+
+static GgxDirectLobes EvaluatePreparedGgxDirectLobes(float3 N, float3 V,
+    float3 L, GgxDirectContext context)
+{
+    GgxDirectLobes lobes = EvaluatePreparedGgxBroadLobes(N, L, context);
+    lobes.single_scattering = EvaluatePreparedGgxSingleScattering(N, V, L, context);
+    return lobes;
+}
+
+static GgxDirectLobes EvaluateGgxDirectLobes(float3 N, float3 V, float3 L,
+    float3 F0, float3 rho, float roughness, LightingFrameBindings lighting)
+{
+    return EvaluatePreparedGgxDirectLobes(N, V, L,
+        PrepareGgxDirect(N, V, F0, rho, roughness, lighting));
 }
 
 static float3 EvaluateGgxDirectResponse(float3 N, float3 V, float3 L,

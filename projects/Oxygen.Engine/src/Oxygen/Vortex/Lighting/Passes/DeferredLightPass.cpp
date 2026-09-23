@@ -82,9 +82,6 @@ namespace {
 
   struct DeferredLightDraw {
     internal::DeferredLightPacket packet {};
-    LightSelectionIndex directional_selection_index {
-      kInvalidLightSelectionIndex
-    };
     DeferredLightKind kind { DeferredLightKind::kDirectional };
     DeferredLocalLightDrawMode draw_mode {
       DeferredLocalLightDrawMode::kOutsideVolume,
@@ -427,7 +424,7 @@ namespace {
   auto BuildDeferredDirectionalPipelineDesc(const SceneTextures& scene_textures,
     const ShaderDebugMode debug_mode) -> graphics::GraphicsPipelineDesc
   {
-    auto root_bindings = BuildVortexRootBindings();
+    static const auto root_bindings = BuildVortexRootBindings();
     auto pixel_defines = std::vector<graphics::ShaderDefine> {};
     AddBooleanDefine(IsDirectionalDebugMode(debug_mode),
       GetShaderDebugDefineName(debug_mode), pixel_defines);
@@ -466,7 +463,7 @@ namespace {
     const DeferredLocalLightDrawMode draw_mode)
     -> graphics::GraphicsPipelineDesc
   {
-    auto root_bindings = BuildVortexRootBindings();
+    static const auto root_bindings = BuildVortexRootBindings();
     const auto direct_local_light
       = draw_mode != DeferredLocalLightDrawMode::kOutsideVolume;
     const auto* const source_path = light_kind == DeferredLightKind::kPoint
@@ -690,15 +687,12 @@ auto DeferredLightPass::Record(RenderContext& ctx,
   }
 
   auto draws = std::vector<DeferredLightDraw> {};
-  if (!skip_direct_lighting) {
-    for (const auto& light : packets.directional) {
-      draws.push_back(DeferredLightDraw {
-        .directional_selection_index = light.selection_index,
-        .kind = DeferredLightKind::kDirectional,
-        .geometry_vertex_count = 3U,
-      });
-      ++state.directional_draw_count;
-    }
+  if (!skip_direct_lighting && !packets.directional.empty()) {
+    draws.push_back(DeferredLightDraw {
+      .kind = DeferredLightKind::kDirectional,
+      .geometry_vertex_count = 3U,
+    });
+    state.directional_draw_count = 1U;
   }
   const auto skip_local_lights = skip_direct_lighting
     || ShouldSkipLocalLightsForDirectionalDebug(ctx.shader_debug_mode);
@@ -771,9 +765,7 @@ auto DeferredLightPass::Record(RenderContext& ctx,
     constants.light_type = static_cast<std::uint32_t>(draw.kind);
     constants.light_geometry_vertices_srv = draw.geometry_srv;
     constants.light_geometry_vertex_count = draw.geometry_vertex_count;
-    if (draw.kind == DeferredLightKind::kDirectional) {
-      constants.selection_index = draw.directional_selection_index;
-    } else if (draw.packet.light != nullptr) {
+    if (draw.packet.light != nullptr) {
       constants.selection_index = draw.packet.light->selection_index;
       constants.light_world_matrix = draw.packet.light_world_matrix;
     }

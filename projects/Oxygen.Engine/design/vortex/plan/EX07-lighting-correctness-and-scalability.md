@@ -44,6 +44,13 @@ validating** the complete lighting path covered by this plan. That responsibilit
 includes pre-existing defects and defects discovered during execution, regardless
 of which module or earlier milestone introduced them.
 
+The user's 2026-09-23 performance directive requires production regression repair
+and profiling during C. Numerical accuracy alone does not qualify shipping code.
+Use bounded runtime work, reuse material/view terms, preserve safe frames in flight,
+and measure the complete application with native profiling tools. This authorizes
+necessary optimization while C is active; it does not waive D–F's official workload,
+memory, visual or final integration gates.
+
 - Trace scene/editor input through selection, publication, culling, shaders,
   shadows, HDR accumulation and output. Review algorithms, physical units, ABI,
   validation, resource lifetime and failure behavior; the starting observations

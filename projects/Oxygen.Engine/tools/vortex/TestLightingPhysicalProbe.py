@@ -3,7 +3,7 @@
 import copy
 import unittest
 
-from AssertLightingPhysicalProbe import REQUIRED_PROBES, validate
+from AssertLightingPhysicalProbe import REQUIRED_PROBES, REQUIRED_QUALIFICATIONS, validate
 
 
 class PhysicalProbeGateTest(unittest.TestCase):
@@ -23,6 +23,14 @@ class PhysicalProbeGateTest(unittest.TestCase):
             case = dict(self.case, name=name, probe_count=str(count))
             cases.append(case)
         self.case = cases[0]
+        for name, (count_field, count, limits) in REQUIRED_QUALIFICATIONS.items():
+            cases.append({
+                "name": name,
+                "status": "RUN",
+                "result": "COMPLETED",
+                count_field: str(count),
+                **{metric: str(limit * 0.25) for metric, limit in limits.items()},
+            })
         self.document = {
             "failures": 0,
             "errors": 0,
@@ -98,6 +106,26 @@ class PhysicalProbeGateTest(unittest.TestCase):
                 document[field] = 1
                 with self.assertRaises(ValueError):
                     validate(document)
+
+    def test_each_qualification_requires_complete_passing_evidence(self):
+        for offset, (_, (count_field, _, limits)) in enumerate(
+            REQUIRED_QUALIFICATIONS.items(), start=len(REQUIRED_PROBES)
+        ):
+            for mutation in (
+                {count_field: "1"},
+                {"result": "SKIPPED"},
+                *({metric: str(limit * 1.01)} for metric, limit in limits.items()),
+                *({metric: "nan"} for metric in limits),
+            ):
+                with self.subTest(qualification=offset, mutation=mutation):
+                    document = copy.deepcopy(self.document)
+                    document["testsuites"][0]["testsuite"][offset].update(mutation)
+                    with self.assertRaises(ValueError):
+                        validate(document)
+            document = copy.deepcopy(self.document)
+            document["testsuites"][0]["testsuite"].pop(offset)
+            with self.assertRaisesRegex(ValueError, "exactly one"):
+                validate(document)
 
 
 if __name__ == "__main__":
