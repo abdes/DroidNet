@@ -7,6 +7,42 @@ reference/instrument gate. The [PBR specification](../../renderer-core/physicall
 owns the model and tolerances. This checkpoint changes no production shader or
 renderer behavior.
 
+## Current B exit checklist
+
+This checklist owns the remaining B scope; the sections below retain checkpoint
+history and evidence rather than creating additional open-ended research tasks.
+
+Implemented and tested: independent GGX/BRDF/photometry/finite-emitter references;
+high-precision checks at the declared reference queries; native material,
+photometry and BRDF probes; serial and independent full-list image comparisons;
+constant-texture material/G-buffer producers; bounded CPU/GPU/memory instruments;
+creation-churn counters; and the native collection-overhead harness and two runs.
+
+Remaining before B closes:
+
+1. Qualify supported material texture formats and nonconstant filtering through
+   the actual sampling path. Current raster coverage uses constant float maps;
+   decoder and UV probes do not establish the combined filtered path. Keep this
+   to the engine's supported material contract rather than adding new formats.
+2. Finish and freeze deterministic workload recipes/manifests, especially the
+   required 1,024-light 1080p sparse/mixed primary (512 point / 512 spot, at least
+   256 lights contributing to visible receiver samples), with parameters for the
+   plan's count/overlap/view/shadow/mutation variants. The current 33-light
+   calibration/overhead fixture does not satisfy that requirement. Define the
+   workload-to-counter attribution and shared-stage matched controls here;
+   correctness repair and qualified performance baselines remain C and D work.
+3. Resolve the instrument-overhead acceptance decision. The focused forward run
+   adds 0.06356 ms at p95: above proposed A's 0.05 ms allowance, below proposed B's
+   0.10 ms allowance. Neither option has user approval yet. Do not silently loosen
+   the budget, discard the first run, or start an open-ended profiling campaign.
+4. Run the affected closing checks, reconcile the current status against these
+   requirements, commit the B closeout and pause before C as instructed.
+
+Production photometry/BRDF repairs, LUT implementation/interpolation certificates,
+scalable culling, optimization and final workload performance qualification are
+owned by C–F. The existing physical residuals are recorded repair inputs; B does
+not need to repair the renderer before its references can be qualified.
+
 ## Independent moment implementation
 
 `src/Oxygen/Vortex/Test/Lighting/Reference/GgxMoments.{h,cpp}` evaluates the
