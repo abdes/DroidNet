@@ -2,6 +2,34 @@
 
 This directory contains examples demonstrating the use of the Oxygen Engine. Modern demos in Oxygen are built using the **DemoShell** framework and a **Composition-First** rendering pipeline.
 
+## Shared display and timing options
+
+Async, InputSystem, LightBench, MultiView, Physics, RenderScene, TexturedCube and
+VortexBasic share these runtime controls:
+
+| Option                   | Meaning                                                                                                    |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| `--resolution 1920x1080` | Request an exact framebuffer size in physical pixels, accounting for DPI.                                  |
+| `--fullscreen true`      | Use fullscreen; with `--resolution`, select a matching display mode at its highest available refresh rate. |
+| `--fps 0`                | Disable the engine's frame-rate target.                                                                    |
+| `--vsync false`          | Present without synchronization, using tearing when the DXGI swap chain supports it.                       |
+
+The resolution separator accepts either `x` or `X` (`1920x1080` or `1920X1080`).
+Fullscreen without a resolution retains desktop-mode behavior. An unavailable
+resolution fails explicitly; it is never silently replaced with a different
+size. Resolution selection requires a window and cannot be combined with
+`--headless true`. Startup verifies the actual framebuffer size and mode before
+creating rendering surfaces.
+
+For a controlled, uncapped Full HD run:
+
+```powershell
+Oxygen.Examples.MultiView.exe --resolution 1920x1080 --fullscreen true --fps 0 --vsync false
+```
+
+The shared option builder and parser live in `Common/DemoCli.h`; `AppWindow`
+applies the typed request through the platform window API.
+
 ---
 
 ## 🏗️ Demo Blueprint: The composition-first approach

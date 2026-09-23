@@ -47,6 +47,7 @@ AppWindow::AppWindow(const DemoAppContext& app) noexcept
   : platform_(app.platform.get()) // observe only
   , engine_(app.engine.get()) // observe only
   , gfx_weak_(app.gfx_weak)
+  , requested_resolution_(app.window_resolution)
   , window_lifecycle_token_(0)
 {
   // Sanity checks only; heavyweight initialization is explicit and deferred.
@@ -98,7 +99,16 @@ auto AppWindow::CreateAppWindow(const platform::window::Properties& props)
   DCHECK_F(
     platform_->IsRunning(), "Platform is not running, cannot create a window.");
 
-  window_ = platform_->Windows().MakeWindow(props);
+  auto resolved_props = props;
+  if (requested_resolution_) {
+    resolved_props.framebuffer_extent = requested_resolution_;
+  }
+  try {
+    window_ = platform_->Windows().MakeWindow(resolved_props);
+  } catch (const std::exception& error) {
+    LOG_F(ERROR, "Failed to create application window: {}", error.what());
+    return false;
+  }
   if (window_.expired()) {
     LOG_F(ERROR, "Failed to create a platform window");
     return false;

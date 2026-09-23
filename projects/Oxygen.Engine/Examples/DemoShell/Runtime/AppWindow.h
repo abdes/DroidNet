@@ -8,9 +8,11 @@
 
 #include <array>
 #include <memory>
+#include <optional>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/Types/Geometry.h>
 #include <Oxygen/Composition/Component.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/OxCo/Co.h>
@@ -98,6 +100,7 @@ private:
   // The Graphics instance is held weakly, because the engine does not guarantee
   // its stability due to dynamic loading/unloading.
   std::weak_ptr<Graphics> gfx_weak_;
+  std::optional<Extent<std::uint32_t>> requested_resolution_;
 
   // The platform owns the window, and will expire the shared pointers it when
   // it is closed.

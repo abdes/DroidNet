@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <optional>
 #include <string>
 
 #include <Oxygen/Base/Macros.h>
@@ -79,6 +80,9 @@ namespace window {
   struct Properties {
     std::string title;
     std::optional<ExtentT> extent;
+    //! Requested physical pixel size, independent of window DPI. Fullscreen
+    //! selects an exact display mode; an unavailable size fails creation.
+    std::optional<ExtentT> framebuffer_extent;
     std::optional<ExtentT> min_extent;
     std::optional<ExtentT> max_extent;
     std::optional<PositionT> position;

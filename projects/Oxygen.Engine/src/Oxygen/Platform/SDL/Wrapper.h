@@ -39,6 +39,9 @@ auto MakeWindow(const char* title, uint32_t pos_x, uint32_t pos_y,
   uint32_t width, uint32_t height, const window::InitialFlags& flags)
   -> SDL_Window*;
 
+auto SetWindowFramebufferExtent(SDL_Window* window,
+  const window::ExtentT& extent, bool fullscreen) -> void;
+
 inline auto DestroyWindow(SDL_Window* window) noexcept -> void
 {
   SDL_DestroyWindow(window);

@@ -204,6 +204,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
   bool visual_fog_cycle = false;
   bool visual_fog_hold_local = false;
   bool visual_fog_jitter = true;
+  std::string resolution;
   oxygen::examples::cli::GraphicsToolingCliState graphics_tooling_cli {};
   oxygen::examples::cli::FrameCaptureCliState capture_cli {};
   oxygen::examples::DemoAppContext app {};
@@ -217,6 +218,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
             .headless = &headless,
             .fullscreen = &app.fullscreen,
             .vsync = &enable_vsync,
+            .resolution = &resolution,
           }))
           .WithOptions(oxygen::examples::cli::MakeGraphicsToolingOptions(
             graphics_tooling_cli))
@@ -374,6 +376,8 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
     if (oxygen::examples::cli::HandleMetaCommand(context, default_command)) {
       return EXIT_SUCCESS;
     }
+    app.window_resolution = oxygen::examples::cli::ResolveWindowResolution(
+      context, resolution, headless);
 
     oxygen::examples::cli::ValidateGraphicsToolingOptions(graphics_tooling_cli);
     LOG_F(INFO, "Parsed frames option = {}", frames);
