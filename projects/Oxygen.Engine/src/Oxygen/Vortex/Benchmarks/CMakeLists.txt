@@ -28,7 +28,7 @@ if(WIN32)
       "ExposurePerformance_bench.cpp"
     DEPS
       oxygen-vortex-exposure-test-support
-      oxygen-vortex-timing-test-support
+      oxygen::vortex-test-support
   )
   set_target_properties(
     Oxygen.Vortex.Exposure.Benchmarks

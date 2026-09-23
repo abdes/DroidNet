@@ -10,7 +10,7 @@ gtest_program(
     "CpuTimingCapture_test.cpp"
   DEPS
     oxygen::testing
-    oxygen-vortex-timing-test-support
+    oxygen::vortex-test-support
 )
 
 gtest_program(
