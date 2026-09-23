@@ -24,6 +24,7 @@
 #include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/Environment/Types/EnvironmentAmbientBridgeBindings.h>
 #include <Oxygen/Vortex/Lighting/Types/FrameLightingInputs.h>
+#include <Oxygen/Vortex/Lighting/Types/LightingPreparationFailure.h>
 #include <Oxygen/Vortex/PostProcess/PostProcessService.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextureLeasePool.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
@@ -200,6 +201,9 @@ public:
   OXGN_VRTX_API void InvalidatePublishedViewFrameBindings();
 
 private:
+  auto ReportLightingFailure(
+    LightingPreparationFailure failure, ViewId fallback_view) -> void;
+  std::optional<LightingPreparationFailure> reported_lighting_failure_;
   friend struct testing::RendererPublicationProbe;
 
   struct ExposureProductLayout {

@@ -75,6 +75,7 @@
 #include <Oxygen/Scene/Light/SpotLight.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNodeImpl.h>
+#include <Oxygen/Vortex/Lighting/Types/LightingPreparationFailure.h>
 #include <Oxygen/Vortex/Types/LightingIndices.h>
 // Completes the traversal returned by Scene::Traverse().
 #include <Oxygen/Scene/SceneTraversal.h> // IWYU pragma: keep
@@ -1320,6 +1321,28 @@ SceneRenderer::ExtractArtifact::ExtractArtifact(ExtractArtifact&&) noexcept
 auto SceneRenderer::ExtractArtifact::operator=(ExtractArtifact&&) noexcept
   -> ExtractArtifact& = default;
 
+auto SceneRenderer::ReportLightingFailure(
+  LightingPreparationFailure failure, ViewId fallback_view) -> void
+{
+  if (failure.view_id == kInvalidViewId) {
+    failure.view_id = fallback_view;
+  }
+  if (!reported_lighting_failure_
+    || reported_lighting_failure_->error != failure.error
+    || reported_lighting_failure_->view_id != failure.view_id
+    || reported_lighting_failure_->selection_index != failure.selection_index
+    || reported_lighting_failure_->requested_bytes != failure.requested_bytes) {
+    LOG_F(ERROR,
+      "Lighting preparation failed: reason={} family={} index={} view={} "
+      "required_bytes={} available_bytes={}",
+      static_cast<unsigned>(failure.error),
+      static_cast<unsigned>(failure.family), failure.selection_index.get(),
+      failure.view_id.get(), failure.requested_bytes.get(),
+      failure.available_bytes.get());
+  }
+  reported_lighting_failure_ = failure;
+}
+
 SceneRenderer::SceneRenderer(Renderer& renderer, Graphics& gfx,
   const SceneTexturesConfig config, const ShadingMode default_shading_mode)
   : renderer_(renderer)
@@ -1910,12 +1933,7 @@ auto SceneRenderer::RenderCurrentView(
         .active_views = std::span(frame_lighting_views_),
       });
       if (!preparation) {
-        LOG_F(ERROR,
-          "Lighting preparation failed: reason={} family={} index={} view={}",
-          static_cast<unsigned>(preparation.error().error),
-          static_cast<unsigned>(preparation.error().family),
-          preparation.error().selection_index.get(),
-          preparation.error().view_id.get());
+        ReportLightingFailure(preparation.error(), ctx.current_view.view_id);
         return false;
       }
     }
@@ -2112,6 +2130,10 @@ auto SceneRenderer::RenderCurrentView(
     published_view_frame_bindings_.shadow_frame_slot
       = shadows_->ResolveShadowFrameSlot(ctx.current_view.view_id);
     if (!published_view_frame_bindings_.shadow_frame_slot.IsValid()) {
+      if (const auto* failure
+        = shadows_->InspectPreparationFailure(ctx.current_view.view_id)) {
+        ReportLightingFailure(*failure, ctx.current_view.view_id);
+      }
       return false;
     }
     if (lighting_ != nullptr && wants_scene_lighting) {
@@ -2123,9 +2145,7 @@ auto SceneRenderer::RenderCurrentView(
       const auto publication = lighting_->PublishShadowReferences(
         ctx.current_view.view_id, *shadow_data);
       if (!publication) {
-        LOG_F(ERROR, "Lighting shadow publication failed: reason={} view={}",
-          static_cast<unsigned>(publication.error().error),
-          ctx.current_view.view_id.get());
+        ReportLightingFailure(publication.error(), ctx.current_view.view_id);
         return false;
       }
       published_view_frame_bindings_.lighting_frame_slot
@@ -2150,6 +2170,10 @@ auto SceneRenderer::RenderCurrentView(
     RecordDiagnosticsViewProduct(renderer_, "Vortex.ShadowFrameBindings",
       "Vortex.Stage8.ShadowDepth",
       published_view_frame_bindings_.shadow_frame_slot);
+  }
+  if (reported_lighting_failure_
+    && reported_lighting_failure_->view_id == ctx.current_view.view_id) {
+    reported_lighting_failure_.reset();
   }
   if (environment_ != nullptr && wants_environment) {
     const auto enable_static_sky_light_ambient_bridge

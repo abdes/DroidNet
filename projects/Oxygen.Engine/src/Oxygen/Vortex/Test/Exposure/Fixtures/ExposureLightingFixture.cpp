@@ -145,6 +145,7 @@ auto ExposureLightingGpuTest::SetUp() -> void
   renderer_->OnShutdown();
   auto renderer_config = RendererConfig {};
   renderer_config.upload_queue_key = QueueKeyFor().get();
+  ConfigureRenderer(renderer_config);
   renderer_ = std::make_unique<Renderer>(GetGraphicsShared(), renderer_config,
     kPhase1DefaultRuntimeCapabilityFamilies
       | RendererCapabilityFamily::kDeferredShading

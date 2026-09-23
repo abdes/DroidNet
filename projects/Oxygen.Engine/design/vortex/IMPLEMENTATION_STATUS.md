@@ -881,7 +881,7 @@ C work includes retained-property/content migration, shadow capacities and
 admission/failure/lifetime behavior; D–F retain official resolution, culling,
 performance and final integration ownership.
 
-C's finite-emitter implementation now evaluates flux-conserving point spheres and
+C's finite-emitter implementation evaluates flux-conserving point spheres and
 angularly shaped spot disks through one production helper shared by forward and
 deferred shading. Radius zero uses the same punctual response. Positive-radius
 integration cancels source area analytically, evaluates the independent 1 mm
@@ -891,7 +891,13 @@ The adaptive Gauss rule partitions at the known specular peak, clusters nodes at
 partition boundaries, and uses compensated sums. Two successive per-lobe
 refinements must pass; exhaustion reaches HDR failure admission instead of being
 published as successful black or unqualified radiance. This is a correctness
-implementation; finite-source performance remains a D/E measurement obligation.
+implementation. **The subsequent MultiView run exposed a blocking production
+performance regression**: the exact reported proof configuration took 52.707 s
+for 12 frames including startup. The per-pixel refinement loop is unsuitable for
+shipping. Its replacement is in progress: bounded source quadrature, shared
+material/view preparation and early rejection, with the existing independent
+numerical gates retained. Real application timing is required before accepting
+the replacement; numerical test success alone does not qualify this code.
 
 Center-only distance, cone and normal rejection is removed from forward local
 lighting. Finite spots and exact 90-degree soft spots route through the existing
@@ -928,10 +934,30 @@ skipped, incomplete, excessive-error and nonfinite-evidence controls are rejecte
 Evidence in `ex07c`: `finite-{LightingGpuAbi,LightingImageReference,LightingService,
 ShadowService,radiance}-{debug,release}.json`, `finite-admission-controls.json`,
 `finite-final-tidy/`, `finite-clean-tidy/` and `finite-existing-diagnostics.json`.
-The inherited four-cube/eight-projected allocator limits and renderer-wide actual
-allocation admission remain open; the missing-fifth-shadow negative control
-continues to reject partial publication. This checkpoint does not close C or the
-D–F performance/final-integration gates.
+At that checkpoint, the inherited four-cube/eight-projected allocator limits and
+renderer-wide allocation admission remained open. The subsequent repair removes
+those fixed limits and isolates shadow backing by view. Replacement surfaces are
+published transactionally; old backing remains charged through deferred retirement
+and outstanding owners. Failed growth rejects the affected view and permits a
+smaller request to recover using its retained backing.
+
+Lighting now owns a shared 4 GiB allocation ceiling, the 128 MiB compact-index
+sublimit and the user-confirmed 256 MiB driver headroom. Tagged native allocations
+charge actual backing requirements; uploads, moment textures, deferred geometry
+and shadows share the owner. The ceiling is not preallocation. Dedicated lighting
+staging starts at 64 KiB per partition and grows transactionally. Failure reports
+include requested/available bytes and suppress duplicate reports.
+
+Debug and Release allocation, headless, upload, lighting-service and shadow-service
+checks pass. Native tests validate backing size, budget rejection, deferred release
+and recovery. Two native image tests prove five cube plus nine projected shadows
+across isolated views, and 64 MiB rejection/recovery without partial publication.
+Release evidence is in `ex07c/performance-{Oxygen.Graphics.Common.AllocationBudget,
+Oxygen.Graphics.Headless.All,Oxygen.Vortex.RingBufferStaging,
+Oxygen.Vortex.TransientStructuredBuffer,Oxygen.Vortex.LightingService,
+Oxygen.Vortex.ShadowService}-release.json`, `performance-native-release.json`
+(allocation cases) and `performance-shadow-release.json`. C and D–F remain open;
+the finite-emitter performance repair above is still being measured.
 
 ### 3.5 Slice 8 work items
 

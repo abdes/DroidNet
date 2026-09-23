@@ -64,7 +64,7 @@ CascadeShadowPass::~CascadeShadowPass() = default;
 auto CascadeShadowPass::OnFrameStart(
   const frame::SequenceNumber sequence, const frame::Slot slot) -> void
 {
-  allocator_->OnFrameStart();
+  allocator_->OnFrameStart(sequence);
   depth_pass_->OnFrameStart(sequence, slot);
 }
 
@@ -87,8 +87,9 @@ auto CascadeShadowPass::RenderDirectionalView(
   const LightSelectionIndex selection_index) -> ViewShadowPassState
 {
   auto state = ViewShadowPassState {};
-  const auto allocation = allocator_->AcquireDirectionalSurface(selection_index,
-    directional_light.cascade_count, directional_light.shadow_resolution_hint);
+  const auto allocation = allocator_->AcquireDirectionalSurface(
+    view_input.view_id, selection_index, directional_light.cascade_count,
+    directional_light.shadow_resolution_hint);
   state.frame_data = cascade_setup_->BuildDirectionalFrameData(
     view_input, directional_light, allocation);
   state.shadow_surface = allocation.surface;
@@ -128,8 +129,8 @@ auto CascadeShadowPass::RenderSpotView(
     return state;
   }
 
-  const auto allocation
-    = allocator_->AcquireSpotSurface(shadowed_spot_count, resolution_hint);
+  const auto allocation = allocator_->AcquireSpotSurface(
+    view_input.view_id, shadowed_spot_count, resolution_hint);
   state.records
     = spot_setup_->BuildSpotRecords(view_input, local_lights, allocation);
   state.shadow_surface = allocation.surface;
@@ -186,8 +187,8 @@ auto CascadeShadowPass::RenderPointView(
     return state;
   }
 
-  const auto allocation
-    = allocator_->AcquirePointSurface(shadowed_point_count, resolution_hint);
+  const auto allocation = allocator_->AcquirePointSurface(
+    view_input.view_id, shadowed_point_count, resolution_hint);
   state.records
     = point_setup_->BuildPointRecords(view_input, local_lights, allocation);
   state.shadow_surface = allocation.surface;

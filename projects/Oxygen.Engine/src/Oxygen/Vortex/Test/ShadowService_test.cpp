@@ -1079,7 +1079,7 @@ NOLINT_TEST(
 }
 
 NOLINT_TEST_F(
-  ShadowServiceBehaviorTest, MissingFifthPointMapCannotPublishPartialSuccess)
+  ShadowServiceBehaviorTest, FifthPointMapPublishesCompleteSelection)
 {
   auto service = ShadowService(*renderer_);
   service.OnFrameStart(
@@ -1098,9 +1098,12 @@ NOLINT_TEST_F(
   const auto views = std::array { input };
   service.RenderShadowDepths(
     { .frame_light_set = &selection, .active_views = views });
-  EXPECT_EQ(service.InspectShadowData(input.view_id), nullptr);
-  EXPECT_FALSE(service.ResolveShadowFrameSlot(input.view_id).IsValid());
-  EXPECT_EQ(service.GetLastRenderState().published_view_count, 0U);
+  const auto* data = service.InspectShadowData(input.view_id);
+  ASSERT_NE(data, nullptr);
+  EXPECT_EQ(data->cube_local_records.size(), 5U);
+  EXPECT_EQ(data->local_shadow_references.size(), 5U);
+  EXPECT_TRUE(service.ResolveShadowFrameSlot(input.view_id).IsValid());
+  EXPECT_EQ(service.GetLastRenderState().published_view_count, 1U);
 }
 
 } // namespace

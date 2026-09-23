@@ -12,6 +12,7 @@
 #include <optional>
 #include <vector>
 
+#include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Console/Console.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Data/MaterialAsset.h>
@@ -33,6 +34,7 @@ protected:
   enum class ExpectedViewOutcome : std::uint8_t { kRendered, kRejected };
 
   virtual auto AdditionalCapabilities() const -> CapabilitySet;
+  virtual auto ConfigureRenderer(RendererConfig& /*unused*/) const -> void { }
 
   struct Probe final : IViewExtension {
     explicit Probe(Renderer& value);
