@@ -647,6 +647,57 @@ Evidence under `ex07b`: `cpu-timing-{debug,release}.json`,
 `cpu-timing-support-tidy/`, `cpu-timing-lint-baseline.json` and
 `cpu-timing-checkpoint.json`.
 
+## Native serial-image accumulation fixture
+
+`Oxygen.Vortex.LightingImageReference.Tests` uses the existing native D3D12
+lighting fixture at **96x64**, including a partial 64-pixel grid tile. It creates
+33 deterministic, visibly contributing sources: 17 points and 16 soft spots,
+with varied positions, range, flux, RGB tint and source EV. Shadowing is disabled.
+The camera, geometry, material, simulation time and manual pre-exposure remain
+fixed within each comparison. Scene capacity is explicit in the shared fixture
+so this larger recipe does not trigger resource-table growth.
+
+For forward and deferred pipelines, across opaque, accepted masked and
+alpha-blended surfaces, the test renders a no-light baseline and each light
+separately. Double-precision accumulation sums the individual HDR differences
+above the common baseline. The 31/32/33-light frames must match those serial
+images within **0.5% relative + 2e-5 absolute**. Reversing physical light
+assignments across node identities must preserve the full image, and disabling
+all sources must restore the baseline. Negative controls omit or duplicate the
+strongest individual contribution and must fail the same image tolerance.
+All measurements use scene color before output mapping; alpha is not summed.
+
+Debug and Release pass **331,776 combined-image channel comparisons** plus
+**110,592 permutation channel comparisons**, and the zero-light recovery and
+negative controls. Maximum error is below **0.000106** of the allowed image
+budget. The smallest individual-source peak across all recipes is **0.01200072**,
+so zero-contribution lights cannot satisfy the fixture. Both runs are free of
+warning/error messages after reserving the scene capacity. Every changed C++
+file/header is oxytidy-clean. The public `NamedType` facade now marks its two
+implementation includes as IWYU exports; callers retain the public include
+instead of depending on private headers.
+
+The fixture can capture one opaque forward 33-light frame through its existing
+`OXYGEN_EXPOSURE_CAPTURE` environment control. The final Debug capture's replay
+passes `AnalyzeRenderDocLightingReference.py`: all 33 distinct selection indices,
+17 point/16 spot kinds and all **64 complete-list cells** are present in the
+actual consumed descriptors. The output is finite RGBA32 float scene color,
+with peak channel value **16.789215**. Replay exports the raw HDR image and
+closes its replay handles successfully.
+
+This establishes accumulation, permutation, mutation and current complete-list
+publication for the stated fixture. It **does not** establish physical BRDF
+correctness, shadows, texture/normal-map evaluation, multiview or independent
+spatial-culler rejection. The serial passes still use the renderer's selection
+path. An independently forced unculled reference remains necessary before this
+fixture can qualify a future spatial culler; do not silently reuse a culling
+defect in both compared images.
+
+Evidence under `ex07b`: `image-reference-{debug,release}.json` and `.log`,
+`image-reference-forward-final_capture.rdc`, `image-reference-renderdoc-final.txt`
+and `.rgba32f`, `image-reference-tidy-verified/`,
+`image-reference-final-clean/` and `image-reference-checkpoint.json`.
+
 ## Qualification boundary and next work
 
 The [mean certificates](EX07B-mean-moment-certificates.md) now supply
@@ -664,7 +715,7 @@ The independent certifier can qualify additional pointwise moment queries;
 the C++ refinement estimator alone cannot. Mean queries likewise require their
 own certificate; the six-query matrix cannot qualify arbitrary interpolation.
 B still requires complete material evaluation and RGB light-tint transport,
-complete lighting/image fixtures and bounded
+an independently forced unculled image reference and bounded
 instrumentation. Production tables additionally require their own interpolation
 certificate. No generated LUT or renderer change may claim those gates from
 the current endpoint/foundation tests alone.

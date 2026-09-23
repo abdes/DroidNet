@@ -6,5 +6,5 @@
 
 #pragma once
 
-#include <Oxygen/Base/Detail/NamedType_impl.h>
-#include <Oxygen/Base/Detail/NamedType_skills.h>
+#include <Oxygen/Base/Detail/NamedType_impl.h> // IWYU pragma: export
+#include <Oxygen/Base/Detail/NamedType_skills.h> // IWYU pragma: export

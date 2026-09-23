@@ -193,6 +193,15 @@ or linked collection code. Lighting phase integration, GPU/resource collection
 and measured on/off overhead remain open; the [instrument record](plan/EX07B-reference-validation.md#shared-bounded-cpu-capture-foundation)
 defines the qualification boundary.
 
+The native serial-image fixture now passes 31/32/33 mixed-light accumulation,
+physical light-order permutation and zero-light recovery for both pipelines and
+three material domains. Debug/Release cover 331,776 combined and 110,592
+permutation channel comparisons within the frozen image budget. RenderDoc
+confirms all 33 sources and 64 complete-list cells in the live forward frame.
+The [image reference record](plan/EX07B-reference-validation.md#native-serial-image-accumulation-fixture)
+retains the limits: physical BRDF correctness and an independently forced
+unculled path are not established by serial renders through shared selection.
+
 A's closure does not establish the final physical renderer. B must supply an
 independent double-precision oracle, moment uncertainty and known-input probes,
 matched unculled image reference, deterministic fixtures and bounded instruments.

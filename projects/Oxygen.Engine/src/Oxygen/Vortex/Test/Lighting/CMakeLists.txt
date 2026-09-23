@@ -5,6 +5,14 @@
 # ===-----------------------------------------------------------------------===#
 
 gtest_program(
+  "Oxygen.Vortex.LightingImageReference.Tests"
+  SOURCES
+    "LightingImageReference_test.cpp"
+  DEPS
+    oxygen-vortex-exposure-test-support
+)
+
+gtest_program(
   "Oxygen.Vortex.LightingInstrumentation.Tests"
   SOURCES
     "CpuTimingCapture_test.cpp"
