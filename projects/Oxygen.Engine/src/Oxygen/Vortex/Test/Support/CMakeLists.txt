@@ -38,6 +38,8 @@ target_sources(
     "D3D12MemoryCapture.h"
     "ResourceCreationCounter.cpp"
     "ResourceCreationCounter.h"
+    "LightingWorkload.cpp"
+    "LightingWorkload.h"
   PUBLIC
     FILE_SET HEADERS
     BASE_DIRS "${OXYGEN_SOURCE_DIR}"
@@ -45,6 +47,7 @@ target_sources(
       "CpuTimingCapture.h"
       "D3D12MemoryCapture.h"
       "ResourceCreationCounter.h"
+      "LightingWorkload.h"
 )
 arrange_target_files_for_ide(${META_MODULE_TARGET})
 

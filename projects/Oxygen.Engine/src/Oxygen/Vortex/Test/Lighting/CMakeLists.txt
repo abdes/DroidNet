@@ -13,12 +13,14 @@ gtest_program(
     "Reference/Photometry.cpp"
     "Reference/Photometry.h"
     "MaterialRasterReference_test.cpp"
+    "LightingWorkloadGpu_test.cpp"
     "Reference/MaterialEvaluation.cpp"
     "Reference/MaterialEvaluation.h"
     "Reference/MaterialDecode.cpp"
     "Reference/MaterialDecode.h"
   DEPS
     oxygen-vortex-exposure-test-support
+    oxygen::vortex-test-support
 )
 
 gtest_program(
@@ -27,9 +29,16 @@ gtest_program(
     "CpuTimingCapture_test.cpp"
     "MemoryCapture_test.cpp"
     "ResourceCreationCounter_test.cpp"
+    "LightingWorkload_test.cpp"
   DEPS
     oxygen::testing
     oxygen::vortex-test-support
+)
+
+target_compile_definitions(
+  Oxygen.Vortex.LightingInstrumentation.Tests
+  PRIVATE
+    OXYGEN_LIGHTING_WORKLOAD_MANIFEST="${CMAKE_CURRENT_SOURCE_DIR}/LightingWorkloads.json"
 )
 
 gtest_program(

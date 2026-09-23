@@ -1,0 +1,89 @@
+{
+  "revision": 1,
+  "generator": "Oxygen/Vortex/Test/Support/LightingWorkload.cpp",
+  "primary": {
+    "light_count": 1024,
+    "point_lights": 512,
+    "spot_lights": 512,
+    "resolution": [1920, 1080],
+    "distribution": "sparse",
+    "grid_columns": 32,
+    "grid_spacing_m": 1.5,
+    "source_height_m": 1.5,
+    "flux_lm": 100,
+    "range_m": 3,
+    "source_radius_m": 0,
+    "spot_inner_half_angle_radians": 0.2,
+    "spot_outer_half_angle_radians": 0.6,
+    "spot_emitted_direction_ws": [0, 0, -1],
+    "color_rgb": [1, 1, 1],
+    "source_ev": 0,
+    "shadows": [0, 0],
+    "guaranteed_visible_contributors_static": 576,
+    "required_visible_contributors": 256
+  },
+  "receiver": {
+    "shape": "XY square floor",
+    "z_m": 0,
+    "minimum_half_extent_m": 24,
+    "normal_ws": [0, 0, 1],
+    "linear_base_color": [0.5, 0.5, 0.5],
+    "roughness": 0.5,
+    "metallic": 0,
+    "specular": 0.5,
+    "alpha_mode": "opaque"
+  },
+  "camera": {
+    "eye_ws": [0, 0, 24],
+    "direction_ws": [0, 0, -1],
+    "up_ws": [0, 1, 0],
+    "vertical_fov_degrees": 60,
+    "near_far_m": [0.1, 100],
+    "manual_ev": 0,
+    "sky_fog_bloom": false
+  },
+  "variants": {
+    "count_sweep": [0, 1, 31, 32, 33, 64, 256, 1024, 4096],
+    "dense_counts": [33, 64, 256],
+    "dense_spacing_m": 0.05,
+    "mostly_irrelevant_visible_subset": 64,
+    "irrelevant_source_x_offset_m": 1000,
+    "motion_period_frames": 240,
+    "motion_amplitude_m": 0.25,
+    "frame_dt_seconds": 0.016666666666666666,
+    "resolutions": [
+      [1920, 1080],
+      [3840, 2160]
+    ],
+    "secondary_resolution_scale": 0.5,
+    "secondary_camera_x_offset_m": 16,
+    "projections": ["perspective", "orthographic with matching footprint"],
+    "point_shadow_requests": [0, 1, 4, 5],
+    "spot_shadow_requests": [0, 1, 8, 9],
+    "finite_source_radius_m": 0.25,
+    "wide_spot_outer_half_angle_radians": 1.5707963267948966,
+    "content_origin_px": [17, 9],
+    "lifecycle_actions": [
+      "resize",
+      "hide_secondary",
+      "recreate_secondary",
+      "replace_scene",
+      "reverse_views",
+      "reverse_lights",
+      "disable_quarter",
+      "delete_quarter",
+      "restore"
+    ]
+  },
+  "attribution": {
+    "cpu": "non-overlapping outer lighting/shadow owners; nested details reported separately",
+    "gpu": "existing native stage scopes; shared forward/shadow-sampling work uses matched controls",
+    "memory": "whole-fixture allocator snapshots plus named resource inventory outside timed windows",
+    "churn": "successful factory-event counters, not live-count deltas",
+    "controls": [
+      "same scene with local lights disabled",
+      "same direct lights with shadow requests disabled"
+    ],
+    "later_gates": "C qualifies physical/mutation/capacity correctness; D records baselines and budgets; E optimizes"
+  }
+}
