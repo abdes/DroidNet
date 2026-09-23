@@ -1,6 +1,6 @@
 # EX07B reference validation
 
-Status: **in_progress — independent GGX moments and coupled BRDF implemented; B is not qualified.**
+Status: **in_progress — independent GGX/BRDF and punctual photometry implemented; B is not qualified.**
 
 The [EX07 plan](EX07-lighting-correctness-and-scalability.md) owns the full
 reference/instrument gate. The [PBR specification](../../renderer-core/physically-based-rendering.md#shared-equations-and-numerical-domain)
@@ -167,6 +167,51 @@ All six changed C++ files, including headers and tests, are oxytidy-clean with
 no new suppressions. Evidence under `ex07b`: `coupled-reference-{debug,release}.json`,
 `coupled-reference-tidy-verified/` and `coupled-reference-checkpoint.json`.
 
+## Independent punctual photometry
+
+`Reference/Photometry.{h,cpp}` resolves point lumens to candela, spot lumens to
+peak candela, imported spot candela back to lumens and compensated directional
+lux. Distinct types separate these units, source EV, the two cone half-angles,
+off-axis angle, receiver distance and influence range. Camera exposure, RGB
+tint, material decoding and receiver cosine remain separate operations.
+
+The reference uses the physical cosine-profile definition. It evaluates
+`cos(a)-cos(b)` as `2*sin((a+b)/2)*sin((b-a)/2)` and `1-cos(a)` as
+`2*sin(a/2)^2`, preserving narrow-cone support without copying the packed GPU
+half-angle representation. Hard cones include their boundary; soft cones end at
+zero intensity, including the exact physical 90-degree endpoint. The rejected
+hard 90-degree cone and zero solid angle do not gain an epsilon fallback.
+Interpreting a stored float32 half-pi as the exact physical endpoint belongs to
+the separate wire/authoring decoder, not this double-precision angular API.
+
+Independent Simpson integration of `2*pi*I(theta)*sin(theta)` splits at the
+inner angle and verifies emitted flux for eight cone pairs: hard, broad/narrow
+soft, hemispherical soft and nearly equal angles. A zero-inner soft cone has
+three times the peak intensity of the same-outer-angle hard cone. This negative
+control detects the legacy outer-angle-only conversion error. The candela/flux
+round trip uses both authored angles.
+
+Source compensation scales a decomposed binary quotient. This avoids overflowing
+`2^EV`, or underflowing the uncompensated quotient, when the final double result
+is representable. Nonfinite inputs, true positive-result overflow/underflow and
+unrepresentable cone support return explicit failures. A zero source remains
+zero for any finite EV. This is an independent reference, not validation of
+production float32 transport or a relaxation of its representability contract.
+
+Distance evaluation implements the specified squared quartic range window and
+1 mm inverse-square guard, using a factored window near the range boundary.
+Zero separation, zero range and at/beyond-range receivers return zero. Tests
+include exact rational values, the guarded regime, inverse-square ratios and
+the last representable distance below the range boundary.
+
+The owning Debug suite passes **21/21 tests**; focused Release passes all five
+new photometry tests. Maximum emitted-flux relative error is `8.025e-15` in both.
+The three new C++ files, including the header, are oxytidy-clean without
+suppressions. Finite sphere/disk integration and the remaining decoding/GPU/image
+gates remain open; these tests change no production lighting behavior.
+Evidence under `ex07b`: `photometry-reference-{debug,release}.json`,
+`photometry-reference-tidy-verified/` and `photometry-reference-checkpoint.json`.
+
 ## Qualification boundary and next work
 
 `estimated_absolute_change` is eight times the difference between successive
@@ -178,7 +223,7 @@ and the current matrix do not yet certify the complete interior domain.
 The independent certifier can qualify additional pointwise moment queries;
 the C++ refinement estimator alone cannot. B still requires general mean-moment
 uncertainty certification, broader smooth/grazing furnace qualification,
-finite sphere/disk and photometric references, material decoding,
+finite sphere/disk integration, RGB/tint and material decoding,
 known-input GPU probes, deterministic matched-image fixtures and bounded
 instrumentation. Production tables additionally require their own interpolation
 certificate. No generated LUT or renderer change may claim those gates from
