@@ -15,12 +15,17 @@ gtest_program(
     "ShadowRecordAbi_test.cpp"
     "ShadowAllocationRequirements_test.cpp"
     "MaterialDecodeGpu_test.cpp"
+    "PhotometryGpu_test.cpp"
+    "../../Lighting/Internal/LightPhotometry.cpp"
+    "Reference/Photometry.cpp"
+    "Reference/Photometry.h"
     "Reference/MaterialDecode.cpp"
     "Reference/MaterialDecode.h"
   DEPS
     oxygen::vortex
     oxygen::graphics-direct3d12
     oxygen::testing
+    nlohmann_json::nlohmann_json
 )
 
 gtest_program(

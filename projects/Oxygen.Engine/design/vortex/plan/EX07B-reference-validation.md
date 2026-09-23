@@ -495,6 +495,58 @@ oxytidy-clean without suppressions. Evidence under `ex07b`:
 `finite-rgb-{debug,release}.json`, `finite-rgb-final-release.json`,
 `finite-rgb-tidy-verified/` and `finite-rgb-checkpoint.json`.
 
+## Native punctual photometry probe and physical admission
+
+`PhotometryGpu_test.cpp` uploads production CPU-resolved point/spot intensities
+and cone parameters, then executes the actual shared HLSL distance and angular
+attenuation helpers through probe mode 18. The independent double-precision
+photometry module supplies expectations. The matrix contains **2,160 inputs**:
+point, hard spot, soft spot, hemispherical soft spot and a `1e-5`-radian narrow
+spot; EV `-2/0/+3`; linear tint `(0,0.5,2)`; zero/guard/interior/range-boundary
+distances; and zero, millimetre and ten-metre ranges. Distance and direction are
+controlled separately to isolate the two helper contracts. The hard-cone exact
+edge is excluded because quantized direction can lie on either side; its axis
+and just-outside support are checked. Soft-cone edges remain in the matrix.
+
+The instrument independently checks CPU intensity conversion, GPU attenuation
+factors, finite/nonnegative results, exact zero products and RGB float products.
+It also records every illumination result outside `2% + 2e-5`, with probe/lane,
+expected/measured values and tolerance. Interior rows must satisfy that physical
+budget in the native test. Boundary rows retain their measured residuals for C;
+a passing instrument test does **not** establish physical renderer admission.
+
+`tools/vortex/AssertLightingPhysicalProbe.py` is the separate admission gate:
+it rejects missing, skipped, partial, duplicate or failed native evidence and
+requires **zero** physical-budget failures. Six safety tests cover these rules,
+including a successful instrument run with failing physical measurements.
+Run it after the native suite's GoogleTest JSON export:
+
+```powershell
+python tools/vortex/AssertLightingPhysicalProbe.py out/build-ninja/analysis/vortex/exposure-lightbench/ex07b/photometry-native-release.json
+```
+
+The current renderer **fails this admission gate**: 23 narrow-cone boundary
+channel results exceed the physical budget, with maximum budget fraction
+**49.2744**. The largest missing contribution is **0.06790593 lux**, from a
+100-lumen source with EV +3 and blue tint 2 near its quantized outer edge.
+Near-range cancellation also exceeds the probe's tighter exploratory tolerance
+in high-intensity cases, but remains within the frozen physical budget.
+Do not widen that budget or omit the rows to close C. Resolve the cone parameter /
+direction precision issue and establish the final supported boundary behavior
+before admitting this workload to timing. This checkpoint changes no shipping
+lighting implementation.
+
+Debug and Release each pass **26/26 native instrument tests**, with identical
+23-channel physical-admission failures and no warning/error log entries.
+Maximum attenuation-factor error is **0.007617** of its diagnostic budget.
+The changed C++ file is oxytidy-clean without suppressions. The admission
+command exits **1**, as required for these unqualified physical results;
+all six admission-tool safety tests pass.
+
+Evidence under `ex07b`: `photometry-native-{debug,release}.json` and `.log`,
+`photometry-native-tidy-verified/`, `photometry-physical-admission.log`,
+`photometry-admission-tests.log` and `photometry-native-checkpoint.json`.
+
 ## Qualification boundary and next work
 
 The [mean certificates](EX07B-mean-moment-certificates.md) now supply
@@ -512,7 +564,7 @@ The independent certifier can qualify additional pointwise moment queries;
 the C++ refinement estimator alone cannot. Mean queries likewise require their
 own certificate; the six-query matrix cannot qualify arbitrary interpolation.
 B still requires complete material evaluation and RGB light-tint transport,
-known-input GPU probes, deterministic matched-image fixtures and bounded
+complete-BRDF GPU probes, deterministic matched-image fixtures and bounded
 instrumentation. Production tables additionally require their own interpolation
 certificate. No generated LUT or renderer change may claim those gates from
 the current endpoint/foundation tests alone.

@@ -169,6 +169,13 @@ oxytidy-clean. This does not qualify general material/texture transport or
 production shading. RGB light-tint transport, complete material evaluation,
 lighting/image probes and instrumentation remain open in B.
 
+The punctual GPU photometry instrument now covers 2,160 known inputs through
+production CPU conversion and shared HLSL attenuation. Its separate physical
+admission gate currently rejects 23 narrow-cone boundary channel results;
+the largest missing contribution is 0.06790593 lux. This is an explicit C repair
+obligation, not a qualified renderer result. The [B validation record](plan/EX07B-reference-validation.md#native-punctual-photometry-probe-and-physical-admission)
+documents the matrix, instrument/renderer distinction and enforcing command.
+
 A's closure does not establish the final physical renderer. B must supply an
 independent double-precision oracle, moment uncertainty and known-input probes,
 matched unculled image reference, deterministic fixtures and bounded instruments.
