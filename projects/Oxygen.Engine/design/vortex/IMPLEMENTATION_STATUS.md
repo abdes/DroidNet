@@ -84,7 +84,7 @@ and [CPU decision](lld/post-process-service.md#approved-ex051-13ab-joint-cpu-cor
 | 5.1 — Exposure performance         | validated   | Closed 2026-09-21: format/policy, independent SceneColor ownership, CPU corrections, correctness and final GPU acceptance complete. User accepts measured CPU cost; further CPU optimization is deferred to a later milestone. | [Current work](#31-current-work), [final CPU decision](lld/post-process-service.md#approved-ex051-13ab-joint-cpu-correction)                                                                                                                                                                                                                                    |
 | 5.2 — Focused exposure quality     | validated   | Approved residual owner fixes and Release include repair committed; 65 Debug and 65 Release cases pass, scoped changed code is tidy-clean, and one matched I02 preservation run passes.                                        | [Bounded scope and result](#322-slice-52-code-quality-and-test-structure)                                                                                                                                                                                                                                                                                       |
 | 6 — Authoring and persistence      | validated   | Strict source/cook/load/script/editor migration, C++20 editor boundary, PAK repacking, rendered UI acceptance and configuration isolation closed.                                                                              | [Detailed items](#33-slice-6-work-items), [acceptance evidence](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice6/slice6-progress.json)                                                                                                                                                                                                          |
-| 7 — Physical and scalable lighting | in_progress | EX07A and EX07B validated; paused before C. Full renderer correctness/performance gates remain open.                                                                                                                           | [A checkpoint](plan/EX07A-contract-review.md), [EX07 items](#34-slice-7-work-items), [workloads and gates](plan/EX07-lighting-correctness-and-scalability.md)                                                                                                                                                                                                   |
+| 7 — Physical and scalable lighting | in_progress | EX07A and EX07B validated; C is active, including user-directed performance repair. Full renderer gates remain open.                                                                                                                           | [A checkpoint](plan/EX07A-contract-review.md), [EX07 items](#34-slice-7-work-items), [workloads and gates](plan/EX07-lighting-correctness-and-scalability.md)                                                                                                                                                                                                   |
 | 8 — Measured Neutral Reference     | planned     | Qualified instruments plus the first usable interactive/batch experiment.                                                                                                                                                      | [EX08 and automation follow-ups](#35-slice-8-work-items)                                                                                                                                                                                                                                                                                                        |
 | 8.1 — Console controls             | planned     | Existing console drives validated post-process settings and transitions.                                                                                                                                                       | [EX08.1](#351-slice-81-post-processing-console-controls)                                                                                                                                                                                                                                                                                                        |
 | 8.2 — ImGui UI automation          | planned     | Actual widget workflows and EX06 regressions run in an opt-in native test configuration.                                                                                                                                       | [EX08.2](#352-slice-82-imgui-interaction-automation)                                                                                                                                                                                                                                                                                                            |
@@ -727,7 +727,7 @@ qualified delivery is claimed. These are item states, distinct from stage states
 | **06 — References and calibration**          | Partial          | B: independent physical/image references, full-list and serial comparisons, negative controls.                                                          | **C:** use them to qualify the repaired renderer and affected content.                                                                                   |
 | **07 — Workloads and baselines**             | Partial          | B: frozen 1,024-light primary and count/distribution/view/shadow/mutation recipe parameters; native preview.                                            | **D:** correctness-qualified timing baselines and numeric budget/gain/regression/noise policy.                                                           |
 | **08 — Complete lists and spatial culling**  | Partial          | A: canonical grid/list contract and complete-list publication. B: independent reference/probes.                                                         | **C:** full failure/recovery correctness. **E:** real conservative spatial rejection and measured scaling.                                               |
-| **09 — Shader/draw performance**             | Not started      | B supplies the measuring instruments; no qualified optimization is claimed.                                                                             | **E:** measured shader, deferred draw/submission and overdraw improvements.                                                                              |
+| **09 — Shader/draw performance**             | Partial          | C regression repair: bounded source integration, shared BRDF preparation, directional batching and frame-slot retirement; native tests and MultiView Tracy evidence below.                                                                             | **E:** measured shader, deferred draw/submission and overdraw improvements.                                                                              |
 | **10 — Resources, uploads and lifetime**     | Partial          | A: immutable publication and descriptor-lifetime repairs. B: bounded memory/retirement/churn instruments.                                               | **C:** complete mutation/admission/lifetime behavior. **E:** measured allocation/upload/resource improvements.                                           |
 | **11 — Shadows**                             | Partial          | A: shadow-owned identities/interfaces. B: demand recipes. C: finite/hemisphere cube routing and native forward/deferred occlusion.                      | **C:** dynamic capacities, admission/lifetime and complete receiver/caster-domain coverage. **D/E:** separate cost baseline and qualified optimizations. |
 | **12 — Retained properties and content**     | Partial          | A: LP01–LP32 inventory and strict migration contracts. B: sampled-material qualification and UV/alpha identity fix.                                     | **C:** complete retained-property transport, mutation, scene-v7/editor/script migration and round-trip/lifecycle checks.                                 |
@@ -887,17 +887,12 @@ deferred shading. Radius zero uses the same punctual response. Positive-radius
 integration cancels source area analytically, evaluates the independent 1 mm
 guard/range window per source contribution, clips support at the receiver horizon
 and spot/range boundary, and preserves sphere-interior and disk-backside zeros.
-The adaptive Gauss rule partitions at the known specular peak, clusters nodes at
-partition boundaries, and uses compensated sums. Two successive per-lobe
-refinements must pass; exhaustion reaches HDR failure admission instead of being
-published as successful black or unqualified radiance. This is a correctness
-implementation. **The subsequent MultiView run exposed a blocking production
-performance regression**: the exact reported proof configuration took 52.707 s
-for 12 frames including startup. The per-pixel refinement loop is unsuitable for
-shipping. Its replacement is in progress: bounded source quadrature, shared
-material/view preparation and early rejection, with the existing independent
-numerical gates retained. Real application timing is required before accepting
-the replacement; numerical test success alone does not qualify this code.
+The initial adaptive Gauss implementation partitioned at the specular peak and
+required two successive per-lobe refinements. **It was rejected for production
+performance**: the exact reported MultiView proof configuration took 52.707 s
+for 12 frames including startup. The bounded replacement and its native/runtime
+evidence are recorded below. The following 72-case evidence describes the earlier
+correctness checkpoint, not the current production integration algorithm.
 
 Center-only distance, cone and normal rejection is removed from forward local
 lighting. Finite spots and exact 90-degree soft spots route through the existing
@@ -956,8 +951,77 @@ Release evidence is in `ex07c/performance-{Oxygen.Graphics.Common.AllocationBudg
 Oxygen.Graphics.Headless.All,Oxygen.Vortex.RingBufferStaging,
 Oxygen.Vortex.TransientStructuredBuffer,Oxygen.Vortex.LightingService,
 Oxygen.Vortex.ShadowService}-release.json`, `performance-native-release.json`
-(allocation cases) and `performance-shadow-release.json`. C and D–F remain open;
-the finite-emitter performance repair above is still being measured.
+(allocation cases) and `performance-shadow-release.json`.
+
+**2026-09-24 stable performance-repair checkpoint.** The user directed performance
+work during C and explicitly prohibited further linting. Shipping finite-source
+work now uses seven-point projected-area cubature on smooth support, fixed four-
+or eight-point rules per dimension on clipped pieces, and importance coordinates
+for narrow specular peaks. There is no runtime refinement loop. View/material
+BRDF terms are shared; moment texture filtering retains FP32 interpolation.
+A hardware-filtered candidate was rejected after it failed to improve measured
+GPU time. The physical model and error budgets are unchanged.
+
+Deferred lighting rejects reverse-Z clear depth before material/shadow work,
+loads each local-light surface once, rejects unsupported finite-spot receivers
+early, and batches all directionals into one draw per view. The three-source
+orthographic image matrix checks the complete batch with separate RGB sources.
+Shadow recording reuses immutable root bindings and raster state across slices,
+while still updating each slice's pass constants. Queue retirement now waits only
+for the reused frame slot on each queue, preserving a bootstrap drain and explicit
+resize/shutdown flushes. The native swap-chain index replaces guessed rotation;
+uncapped HWND presentation requests tearing when supported. Factory outputs use
+`dx::ISwapChainFactoryOutput` and COM RAII before querying `dx::ISwapChain`, retaining
+the engine's centralized interface aliases.
+
+The shared `--resolution WIDTHxHEIGHT` option accepts `x` or `X` in all eight demos.
+It resolves to physical pixels through the platform window API, verifies actual
+size and fullscreen state, and rejects unavailable modes rather than silently
+changing the workload. The selected non-4K profiling resolution is 1920x1080.
+
+Release and Debug each pass 93 focused checks: 36 native lighting ABI/physical,
+10 native image, 19 queue, five graphics lifecycle, 17 headless and six shared CLI.
+All eight demos build in both configurations. The finite-source matrix expands
+to 90 cases, including on-axis/reflected highlights and an inner-cone boundary;
+maximum error consumes 0.334511 of the unchanged per-lobe budget. Physical
+admission passes 2,649 inputs, 1,800 reciprocity queries, 90 integrated material
+cases and all 90 emitter cases. Eight Python admission-tool tests pass. No linting
+was run for this repair. The RenderDoc directional analyzer was migrated for
+batching and syntax-checked; no new RenderDoc capture is claimed.
+
+Native Tracy captured 600 Release frames at verified fullscreen 1920x1080 with
+`--directional-array-proof true --offscreen-proof-layout true --pip-wireframe false
+-v=-1 --fps 0 --vsync false --debug-layer false --aftermath false`. All 600 presents
+used the tearing path. After 64 warmup frames, 535 frame intervals have mean
+13.635 ms, median 12.741 ms and p95 15.027 ms (73.34 profiled FPS). The user's
+75 FPS observation without Tracy is accepted and was not rerun. Earlier windowed
+captures have different resolution and are not a matched comparison with this run.
+
+Exact GPU frame ordinals 64–598 contain three deferred views: main 1920x1080,
+PiP 864x486 and offscreen preview 512x288. Their mean deferred totals are
+5.058/1.476/0.952 ms. Across those views, the single spot costs 3.581 ms, the point
+1.762 ms and the three-directional batch 1.116 ms. An additional 1.027 ms lies
+between child scopes; the intervals include native Tracy query resolves and may
+include scheduling stalls, so they are not assigned to shader arithmetic.
+Deferred CPU recording is 0.128 ms/frame. The fourth, 256x256 offscreen forward
+view is outside the deferred totals. The dominant measured target is finite local
+lighting, especially the main-view spot; further optimization is directed there.
+Tracy does not provide per-expression ALU/texture or integration-branch attribution.
+
+Evidence is under `out/build-tracy-ninja/analysis/vortex/exposure-lightbench/ex07c`:
+`final-Oxygen.Vortex.{LightingGpuAbi,LightingImageReference}-{debug,release}.json`,
+`final-Oxygen.{Examples.DemoShell.GraphicsToolingCli,Graphics.Common.Queues,
+Graphics.Common.GraphicsLifecycle,Graphics.Headless.All}-debug.json`,
+`resolution-cli-release.json`, `holistic-Oxygen.Graphics.{Common.Queues,
+Common.GraphicsLifecycle,Headless.All}-release.json`, and
+`multiview-1080p-{fullscreen.tracy,summary.json,detailed.json,analysis.md}`.
+The capture SHA256 is
+`e9944e412c1bb952925faa157fd7e9be961588e1901433164e7f6d84b052d6c1`.
+
+This is a tested regression-repair checkpoint and controlled application profile,
+not closure of C or D–F. Retained-property/content and remaining resource/lifetime
+qualification, the official 1,024-light workload, scalable culling, final visual/
+editor integration and final performance acceptance remain open.
 
 ### 3.5 Slice 8 work items
 
