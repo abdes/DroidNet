@@ -902,6 +902,72 @@ qualification and native collection on/off overhead remain required before B
 closes. Shared forward shading and shadow sampling still need matched-control
 attribution rather than inventing independent GPU intervals.
 
+## Bounded allocator-memory capture
+
+`graphics::d3d12::Graphics::GetMemoryStatistics()` provides an on-demand snapshot
+of D3D12MA's maintained counters and budget estimates. `MemoryStatistics` keeps
+local and non-local segments separate and uses `SizeBytes` for byte quantities.
+Allocation counts/bytes include resources whose owners still retain them for
+deferred release. Block counts/bytes also include allocator-owned heap capacity
+not occupied by an allocation. Their difference is **unallocated block capacity**,
+not the size of cached textures or an exact process-residency measurement.
+Process usage and budget remain explicitly labelled estimates and may include
+objects outside D3D12MA. Usage exceeding budget is a valid pressure observation;
+budget is neither physical adapter capacity nor the EX07 admission ceiling.
+
+The query does not enumerate resources and is not called by production rendering.
+The existing detailed placement probe remains useful for named resource shapes;
+it must not substitute for allocator block totals. No allocator policy, memory
+ceiling, depth/stencil format or resource lifetime changes in this checkpoint.
+
+`Test/Support/D3D12MemoryCapture` reserves an explicitly typed sample capacity
+before collection. Recording copies fixed-size snapshots without formatting,
+allocation or I/O. Strong sample IDs distinguish multiple observations of one
+frame. Overflow, invalid frame IDs, nonmonotonic samples/frames or allocation
+bytes exceeding block bytes invalidate the capture, and report generation
+refuses partial evidence. Reporting happens after collection. The caller
+serializes collection and chooses meaningful sample boundaries; this is not a
+transaction across concurrent allocators or an event log of every allocation.
+
+The native fixture allocates a known device buffer, float texture and upload
+buffer. An independent `ID3D12Device::GetResourceAllocationInfo` query predicts
+their occupied bytes, and a native architecture query determines segment
+placement. Caller references then move to the actual deferred reclaimer; weak
+references and counter snapshots verify retention across other frame slots and
+release when the owning slot cycles. Debug and Release both record:
+
+| Observation                 | Local allocation bytes | Non-local allocation bytes |
+| --------------------------- | ---------------------: | -------------------------: |
+| Initial                     |                      0 |                          0 |
+| Live and pending retirement |              1,179,648 |                  4,194,304 |
+| Owning slot retired         |                      0 |                          0 |
+
+The live local population is two allocations and the upload population one.
+After retirement each segment retains an **8,388,608-byte** block with zero
+occupied allocations. The recorder preserves this distinction instead of
+reporting resource destruction as equivalent to returning all heap memory.
+These exact sizes describe the reference RTX 3080 run; the test derives occupied
+sizes and UMA placement at runtime rather than hardcoding that adapter result.
+The controlled resources need no rendering commands, so this qualifies deferred
+ownership/accounting, not a delayed GPU workload's lifetime correctness.
+
+Debug and Release each pass **11 CPU instrumentation tests** and **2 native
+instrument tests**, including the prior phase/timeline fixture. The new memory
+files are oxytidy-clean. The changed backend implementation has 148 findings on
+unchanged code; its added snapshot implementation has none. The broad header
+consumer sweep also encounters an existing Clang error in
+`PixFrameCaptureController.cpp` (a deduced return used before its definition);
+the backend and new consumer compile contexts were checked separately, and both
+MSVC Ninja configurations build. No warning suppression is added.
+
+Evidence under `ex07b`: `memory-{debug,release}.json`,
+`memory-cpu-{debug,release}.json`, build/run logs, `memory-new-tidy-final/`,
+`memory-backend-tidy/` and the broad `memory-tidy/` attempt. The native JSON
+contains all five raw segment snapshots. Workload-specific attribution,
+allocation churn and between-sample peaks still require the benchmark integration;
+live-count deltas alone must not be presented as allocation churn. Native
+collection-overhead qualification also remains open.
+
 ## Qualification boundary and next work
 
 The [mean certificates](EX07B-mean-moment-certificates.md) now supply
@@ -918,8 +984,8 @@ and the current matrix do not yet certify the complete interior domain.
 The independent certifier can qualify additional pointwise moment queries;
 the C++ refinement estimator alone cannot. Mean queries likewise require their
 own certificate; the six-query matrix cannot qualify arbitrary interpolation.
-B still requires remaining material-format/filter qualification, resource
-accounting and native instrumentation-overhead qualification. The full-list image
+B still requires remaining material-format/filter qualification, workload
+resource attribution/churn and native instrumentation-overhead qualification. The full-list image
 reference qualifies the controlled punctual-light matrix above, not arbitrary
 materials, receivers or shadowed/finite emitters. Production tables additionally require their own interpolation
 certificate. No generated LUT or renderer change may claim those gates from

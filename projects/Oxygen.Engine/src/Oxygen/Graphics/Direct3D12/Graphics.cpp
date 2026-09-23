@@ -12,11 +12,13 @@
 
 #include <Oxygen/Config/GraphicsConfig.h>
 #include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
+#include <Oxygen/Core/Types/ByteUnits.h>
 #include <Oxygen/Graphics/Common/BackendModule.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocationHandle.h>
 #include <Oxygen/Graphics/Common/FrameCaptureController.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
+#include <Oxygen/Graphics/Direct3D12/Allocator/D3D12MemAlloc.h>
 #include <Oxygen/Graphics/Direct3D12/Bindless/D3D12HeapAllocationStrategy.h>
 #include <Oxygen/Graphics/Direct3D12/Bindless/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Direct3D12/Buffer.h>
@@ -28,6 +30,7 @@
 #include <Oxygen/Graphics/Direct3D12/Devices/DeviceManager.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
 #include <Oxygen/Graphics/Direct3D12/ImGui/ImGuiBackend.h>
+#include <Oxygen/Graphics/Direct3D12/MemoryStatistics.h>
 #include <Oxygen/Graphics/Direct3D12/PixFrameCaptureController.h>
 #include <Oxygen/Graphics/Direct3D12/ReadbackManager.h>
 #include <Oxygen/Graphics/Direct3D12/RenderDocFrameCaptureController.h>
@@ -751,6 +754,27 @@ auto Graphics::GetShader(const ShaderRequest& request) const
   -> std::shared_ptr<IShaderByteCode>
 {
   return GetComponent<EngineShaders>().GetShader(request);
+}
+
+auto Graphics::GetMemoryStatistics() const -> MemoryStatistics
+{
+  auto* allocator = GetAllocator();
+  CHECK_NOTNULL_F(allocator);
+  auto local = D3D12MA::Budget {};
+  auto non_local = D3D12MA::Budget {};
+  allocator->GetBudget(&local, &non_local);
+  const auto convert
+    = [](const D3D12MA::Budget& budget) -> MemorySegmentStatistics {
+    return {
+      .allocation_count = budget.Stats.AllocationCount,
+      .block_count = budget.Stats.BlockCount,
+      .allocation_bytes = SizeBytes { budget.Stats.AllocationBytes },
+      .block_bytes = SizeBytes { budget.Stats.BlockBytes },
+      .estimated_usage_bytes = SizeBytes { budget.UsageBytes },
+      .estimated_budget_bytes = SizeBytes { budget.BudgetBytes },
+    };
+  };
+  return { .local = convert(local), .non_local = convert(non_local) };
 }
 
 auto Graphics::CreateTexture(const TextureDesc& desc) const
