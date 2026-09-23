@@ -303,13 +303,10 @@ auto Graphics::BeginFrame(const frame::SequenceNumber frame_number,
 
   {
     auto& qm = GetComponent<QueueManager>();
+    qm.WaitForFrameSlot(frame_slot);
     qm.ForEachQueue(
       [](const graphics::CommandQueue& q) { q.BeginProfilingFrame(); });
   }
-
-  // Flush all command queues to ensure GPU work is submitted before releasing
-  // resources
-  FlushCommandQueues();
 
   if (const auto readback_manager = GetReadbackManager();
     readback_manager != nullptr) {
@@ -328,6 +325,7 @@ auto Graphics::BeginFrame(const frame::SequenceNumber frame_number,
 auto Graphics::EndFrame(const frame::SequenceNumber frame_number,
   const frame::Slot frame_slot) -> void
 {
+  GetComponent<QueueManager>().SignalFrameSlot(frame_slot);
   if (const auto frame_capture = GetFrameCaptureController();
     frame_capture != nullptr) {
     frame_capture->OnEndFrame(frame_number, frame_slot);

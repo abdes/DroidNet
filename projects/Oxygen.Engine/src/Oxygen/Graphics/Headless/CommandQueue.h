@@ -35,6 +35,7 @@ public:
   // CommandQueue interface
   auto Signal(uint64_t value) const -> void override;
   [[nodiscard]] auto Signal() const -> uint64_t override;
+  [[nodiscard]] auto SignalSubmittedWork() -> uint64_t override;
   auto Wait(uint64_t value, std::chrono::milliseconds timeout) const
     -> void override;
   auto Wait(uint64_t value) const -> void override;

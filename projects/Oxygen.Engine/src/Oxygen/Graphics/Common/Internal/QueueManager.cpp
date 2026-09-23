@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <stdexcept>
 
 #include <fmt/format.h>
@@ -59,6 +60,10 @@ auto QueueManager::CreateQueues(const QueuesStrategy& queue_strategy,
   // recreate them. Clear existing caches and recreate from the new
   // strategy. Emit a warning to aid debugging.
   std::lock_guard lk(queue_cache_mutex_);
+  frames_started_ = false;
+  for (auto& fences : frame_fences_) {
+    fences.clear();
+  }
   if (!queues_by_key_.empty()) {
     LOG_F(WARNING, "Recreating all CommandQueues...");
     queues_by_key_.clear();
@@ -155,6 +160,44 @@ auto QueueManager::GetQueueByRole(QueueRole role) const
     }
   }
   return allinone_candidate;
+}
+
+auto QueueManager::WaitForFrameSlot(const frame::Slot slot) -> void
+{
+  if (!frames_started_) {
+    // Initialization can submit work before the first frame owns a slot.
+    // Drain it once before retiring that bootstrap bucket; subsequent frames
+    // wait only on the slot they are about to reuse.
+    ForEachQueue([](CommandQueue& queue) { queue.Flush(); });
+    frames_started_ = true;
+  }
+  auto& fences = frame_fences_.at(slot.get());
+  for (const auto& fence : fences) {
+    if (fence.queue->GetCompletedValue() < fence.value) {
+      fence.queue->Wait(fence.value);
+    }
+  }
+  fences.clear();
+}
+
+auto QueueManager::SignalFrameSlot(const frame::Slot slot) -> void
+{
+  auto& fences = frame_fences_.at(slot.get());
+  fences.clear();
+  {
+    std::lock_guard lock(queue_cache_mutex_);
+    fences.reserve(queues_by_key_.size());
+    for (const auto& [key, entry] : queues_by_key_) {
+      const auto& queue = entry.second;
+      if (queue && std::ranges::none_of(fences,
+                     [&](const auto& fence) { return fence.queue == queue; })) {
+        fences.push_back({ .queue = queue });
+      }
+    }
+  }
+  for (auto& fence : fences) {
+    fence.value = fence.queue->SignalSubmittedWork();
+  }
 }
 
 } // namespace oxygen::graphics::internal

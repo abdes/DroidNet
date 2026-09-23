@@ -340,6 +340,7 @@ auto CommandQueue::BeginProfilingFrame() const -> void
 #if defined(OXYGEN_WITH_TRACY)
   if (tracy_context_ != nullptr) {
     oxygen::tracy::d3d12::AdvanceContextFrame(tracy_context_);
+    oxygen::tracy::d3d12::CollectContext(tracy_context_);
   }
 #endif
 }

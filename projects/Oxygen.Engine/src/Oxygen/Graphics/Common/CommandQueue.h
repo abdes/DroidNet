@@ -56,6 +56,11 @@ public:
   //! \return The reserved value, to be used for submit-ordered signaling.
   [[nodiscard]] virtual auto Signal() const -> uint64_t = 0;
 
+  //! Enqueue a completion marker after all work already submitted to this queue.
+  //! The frame owner serializes this call with submission. Unlike Flush(), this
+  //! does not wait on the CPU; the returned value protects subsequent reuse.
+  [[nodiscard]] OXGN_GFX_API virtual auto SignalSubmittedWork() -> uint64_t;
+
   //! Wait up to a certain number of milliseconds, for the counter to reach or
   //! exceed the specified value, on the CPU side.
   /*!
