@@ -190,6 +190,26 @@ The table is the target format; no producer or loader has been migrated yet.
 Add size/offset/adjacent-record round-trip tests and malformed byte/value cases
 with the code cutover. LP16/LP17 are removed fields, not reserved bytes.
 
+### Imported local-light range
+
+The glTF adapter currently leaves both point and spot ranges at the packed
+record's 10 m default instead of reading the source range. Preserve explicit
+positive ranges. For omitted range, resolve the import policy explicitly:
+[KHR_lights_punctual](https://github.com/KhronosGroup/glTF/blob/main/extensions/2.0/Khronos/KHR_lights_punctual/README.md#range-property)
+defines unbounded inverse-square influence, whereas Oxygen's local-light model
+uses finite support. A bounded production approximation needs a documented
+conversion policy; silently inheriting the default record value is not that policy.
+Cover explicit and omitted ranges in the existing glTF importer tests, then
+recook affected content and report it separately from the original renderer baseline.
+
+The source-to-cooked check on Sponza's `HDRI_SKY` confirms a source point light
+at 200 cd with no range or shadow override. The cooked node remains a point at
+2513.27417 lm (200 cd), with the expected axis conversion; shadowing follows the
+importer's explicit default. Its 10 m cutoff comes from the range defect. There
+is no basis for converting this named node into an environment light. The bounded
+check, source declarations and file hashes are in
+[`hdri-sky-source-cooked-check.json`](../../../out/build-tracy-ninja/analysis/vortex/exposure-lightbench/ex07c/hdri-sky-source-cooked-check.json).
+
 ### Suite ownership
 
 | Suite / owner                                                                                    | Required LP coverage                                                                                                                                                   |
