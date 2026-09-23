@@ -1,6 +1,7 @@
 # EX07 — Physical lighting and many-light qualification
 
-Status: **in_progress — EX07A and EX07B validated; paused before EX07C**.
+Status: **in_progress**; current stage and deliverable status are maintained only
+in [tracker section 3.4](../IMPLEMENTATION_STATUS.md#34-slice-7-work-items).
 The [B completion audit](EX07B-completion-audit.md) closes the reference/instrument
 gate and records the user-directed pause.
 The [A completion audit](EX07A-completion-audit.md) records the scoped contract,

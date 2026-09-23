@@ -13,7 +13,6 @@
 #include <iomanip>
 #include <limits>
 #include <memory>
-#include <nlohmann/json.hpp>
 #include <numbers>
 #include <numeric>
 #include <optional>
@@ -24,6 +23,8 @@
 #include <unordered_set>
 #include <utility>
 #include <vector>
+
+#include <nlohmann/json.hpp>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Cooker/Import/Internal/ImportedLightSemantics.h>
@@ -124,18 +125,47 @@ namespace {
     }
   }
 
-  [[nodiscard]] auto CandelaToLumens(const float intensity_cd) noexcept -> float
+  [[nodiscard]] auto CandelaToLumens(const float intensity_cd,
+    const double solid_angle_sr) noexcept -> std::optional<float>
   {
-    return intensity_cd * 4.0F * std::numbers::pi_v<float>;
+    if (!std::isfinite(intensity_cd) || intensity_cd < 0.0F) {
+      return std::nullopt;
+    }
+    const auto flux = static_cast<double>(intensity_cd) * solid_angle_sr;
+    if (!std::isfinite(flux) || flux > std::numeric_limits<float>::max()
+      || (flux > 0.0 && flux < std::numeric_limits<float>::min())) {
+      return std::nullopt;
+    }
+    return static_cast<float>(flux);
   }
 
-  [[nodiscard]] auto CandelaToSpotLumens(const float intensity_cd,
-    const float outer_cone_angle_rad) noexcept -> float
+  [[nodiscard]] auto CandelaToSpotLumens(const cgltf_light& light) noexcept
+    -> std::optional<float>
   {
-    const float clamped = (std::max)(0.0F, outer_cone_angle_rad);
-    const float solid_angle
-      = 2.0F * std::numbers::pi_v<float> * (1.0F - std::cos(clamped));
-    return intensity_cd * solid_angle;
+    const auto inner_cone_angle_rad = light.spot_inner_cone_angle;
+    const auto outer_cone_angle_rad = light.spot_outer_cone_angle;
+    constexpr auto kHalfPi = std::numbers::pi_v<float> / 2.0F;
+    if (!std::isfinite(inner_cone_angle_rad)
+      || !std::isfinite(outer_cone_angle_rad) || inner_cone_angle_rad < 0.0F
+      || outer_cone_angle_rad <= 0.0F
+      || inner_cone_angle_rad > outer_cone_angle_rad
+      || outer_cone_angle_rad > kHalfPi
+      || (inner_cone_angle_rad == kHalfPi && outer_cone_angle_rad == kHalfPi)) {
+      return std::nullopt;
+    }
+    const auto inner_sine
+      = std::sin(static_cast<double>(inner_cone_angle_rad) / 2.0);
+    const auto outer_sine
+      = std::sin(static_cast<double>(outer_cone_angle_rad) / 2.0);
+    const auto inner = inner_sine * inner_sine;
+    // The stored float half-pi endpoint denotes exactly 90 degrees.
+    const auto outer
+      = outer_cone_angle_rad == kHalfPi ? 0.5 : outer_sine * outer_sine;
+    // Integrate the complete squared angular ramp. Half-angle coordinates
+    // preserve narrow support that 1-cos(angle) would round to zero.
+    const auto solid_angle
+      = 4.0 * std::numbers::pi * (inner + ((outer - inner) / 3.0));
+    return CandelaToLumens(light.intensity, solid_angle);
   }
 
   [[nodiscard]] auto MakeParseDiagnostic(
@@ -2719,8 +2749,17 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
         rec_light.common.color_rgb[0] = (std::max)(0.0F, light.color[0]);
         rec_light.common.color_rgb[1] = (std::max)(0.0F, light.color[1]);
         rec_light.common.color_rgb[2] = (std::max)(0.0F, light.color[2]);
-        const float intensity_cd = (std::max)(0.0F, light.intensity);
-        rec_light.luminous_flux_lm = CandelaToLumens(intensity_cd);
+        const auto flux
+          = CandelaToLumens(light.intensity, 4.0 * std::numbers::pi);
+        if (!flux) {
+          diagnostics.push_back(
+            MakeErrorDiagnostic("scene.light.photometry_invalid",
+              "Point intensity must be nonnegative and produce representable "
+              "lumen flux",
+              input.source_id, name));
+          return result;
+        }
+        rec_light.luminous_flux_lm = *flux;
         build.point_lights.push_back(rec_light);
         break;
       }
@@ -2731,14 +2770,18 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
         rec_light.common.color_rgb[0] = (std::max)(0.0F, light.color[0]);
         rec_light.common.color_rgb[1] = (std::max)(0.0F, light.color[1]);
         rec_light.common.color_rgb[2] = (std::max)(0.0F, light.color[2]);
-        const float intensity_cd = (std::max)(0.0F, light.intensity);
-        rec_light.inner_cone_angle_radians
-          = (std::max)(0.0F, light.spot_inner_cone_angle);
-        rec_light.outer_cone_angle_radians
-          = (std::max)(rec_light.inner_cone_angle_radians,
-            light.spot_outer_cone_angle);
-        rec_light.luminous_flux_lm = CandelaToSpotLumens(
-          intensity_cd, rec_light.outer_cone_angle_radians);
+        const auto flux = CandelaToSpotLumens(light);
+        if (!flux) {
+          diagnostics.push_back(
+            MakeErrorDiagnostic("scene.light.photometry_invalid",
+              "Spot intensity and cone pair must define nonnegative "
+              "representable lumen flux",
+              input.source_id, name));
+          return result;
+        }
+        rec_light.inner_cone_angle_radians = light.spot_inner_cone_angle;
+        rec_light.outer_cone_angle_radians = light.spot_outer_cone_angle;
+        rec_light.luminous_flux_lm = *flux;
         build.spot_lights.push_back(rec_light);
         break;
       }

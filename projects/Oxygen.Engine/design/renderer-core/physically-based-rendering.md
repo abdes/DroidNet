@@ -328,7 +328,8 @@ to the cosine profile, while avoiding subtraction of nearly equal values near
 one. Convert/validate in double precision before checked float32 transport;
 reject unrepresentable positive cone support instead of widening it with an
 epsilon. A glTF candela intensity becomes `Phi=I_peak*Omega` using **both** cone
-angles; the current outer-angle-only conversion must be repaired.
+angles. The importer checks the cone pair and flux before float32 storage;
+invalid or unrepresentable values fail the import instead of being clamped.
 
 Production approximations require independent numerical integration, separate
 diffuse/specular/total-response comparisons and predeclared approximation
