@@ -522,7 +522,7 @@ including a successful instrument run with failing physical measurements.
 Run it after the native suite's GoogleTest JSON export:
 
 ```powershell
-python tools/vortex/AssertLightingPhysicalProbe.py out/build-ninja/analysis/vortex/exposure-lightbench/ex07b/photometry-native-release.json
+python tools/vortex/AssertLightingPhysicalProbe.py out/build-ninja/analysis/vortex/exposure-lightbench/ex07b/brdf-native-release.json
 ```
 
 The current renderer **fails this admission gate**: 23 narrow-cone boundary
@@ -547,6 +547,52 @@ Evidence under `ex07b`: `photometry-native-{debug,release}.json` and `.log`,
 `photometry-native-tidy-verified/`, `photometry-physical-admission.log`,
 `photometry-admission-tests.log` and `photometry-native-checkpoint.json`.
 
+## Native direct-BRDF probe
+
+`BrdfGpu_test.cpp` compares **108 inputs / 648 channel responses** against the
+independent complete compensated-GGX oracle. Authored roughness `0/0.25/1`,
+four normal/grazing incident-view pairs, three azimuths and dielectric/mixed/metal
+materials cover both current forward and deferred paths. Incident RGB is
+`(0.5,1.25,2)`; the output includes receiver cosine exactly once. The oracle
+uses the certified mean midpoints at effective roughness `0.045/0.25/1` and
+numerically integrates directional moments at the uploaded float cosines.
+This does not certify arbitrary moment interpolation or texture/material ingress.
+
+The probe calls the production deferred `EvaluateCookTorranceLighting` with
+unit AO and the production forward direct-BRDF function. Forward's duplicate
+directional/local arithmetic is extracted into `EvaluateForwardDirectBrdf`
+without changing operations or wrapper scaling. DXC `ps_6_6`, `-O3`, HLSL 2021
+produces **byte-identical stripped DXIL** before/after for translucent, opaque
+and opaque-with-complete-depth `ForwardMesh_PS` variants. Artifacts are in
+`ex07b/brdf-extraction/`. The probe's forward input represents the local direct
+response before distance/cone/shadow/exposure multiplication; this does not
+qualify directional wrapper normalization or full images.
+
+The instrument checks RGB F0, finite/nonnegative outputs and the independent
+`D=1/pi` anchor at roughness one. It records every complete-BRDF physical residual
+without requiring preservation of the current incorrect model. The shared
+admission checker now requires **both** photometry and BRDF reports, rejects a
+missing matrix, and prints both sets of failures. Seven safety tests cover its
+complete, incomplete and physically failing result paths.
+
+The current renderer fails **565/648** BRDF channel comparisons: **298 forward**
+and **267 deferred**, with maximum error **310.316** times the frozen
+`2% + 2e-5` budget. These are C repair obligations for the already-approved
+correlated visibility, roughness handling, normalized diffuse and compensated
+three-lobe model. The worst recorded case predicts `0.000368555` and measures
+`0.008862232` in deferred. Do not treat the successful instrument run as a
+renderer correctness pass or relax its physical admission gate.
+
+Debug and Release each pass **27/27 native instrument tests** with identical
+physical failure counts; the final Release binary also passes the new BRDF case
+after lint-only fixes. No warning/error log entries occur. The changed C++ file
+is oxytidy-clean. The admission checker exits **1** and reports both the 23
+photometry and 565 BRDF channel failures. All seven admission-tool tests pass.
+
+Evidence under `ex07b`: `brdf-native-{debug,release}.json` and `.log`,
+`brdf-native-final-release.json`, `brdf-native-tidy-verified/`, `brdf-physical-admission.log`,
+`brdf-admission-tests.log` and `brdf-native-checkpoint.json`.
+
 ## Qualification boundary and next work
 
 The [mean certificates](EX07B-mean-moment-certificates.md) now supply
@@ -564,7 +610,7 @@ The independent certifier can qualify additional pointwise moment queries;
 the C++ refinement estimator alone cannot. Mean queries likewise require their
 own certificate; the six-query matrix cannot qualify arbitrary interpolation.
 B still requires complete material evaluation and RGB light-tint transport,
-complete-BRDF GPU probes, deterministic matched-image fixtures and bounded
+complete lighting/image fixtures and bounded
 instrumentation. Production tables additionally require their own interpolation
 certificate. No generated LUT or renderer change may claim those gates from
 the current endpoint/foundation tests alone.

@@ -3,26 +3,31 @@
 import copy
 import unittest
 
-from AssertLightingPhysicalProbe import PROBE_COUNT, PROBE_NAME, validate
+from AssertLightingPhysicalProbe import REQUIRED_PROBES, validate
 
 
 class PhysicalProbeGateTest(unittest.TestCase):
     def setUp(self):
         self.case = {
-            "name": PROBE_NAME,
+            "name": next(iter(REQUIRED_PROBES)),
             "status": "RUN",
             "result": "COMPLETED",
             "physical_probe_schema": "1",
-            "probe_count": str(PROBE_COUNT),
+            "probe_count": str(next(iter(REQUIRED_PROBES.values()))),
             "physical_budget_failures": "0",
             "physical_failure_details": "[]",
             "maximum_physical_budget_fraction": "0.25",
         }
+        cases = []
+        for name, count in REQUIRED_PROBES.items():
+            case = dict(self.case, name=name, probe_count=str(count))
+            cases.append(case)
+        self.case = cases[0]
         self.document = {
             "failures": 0,
             "errors": 0,
             "disabled": 0,
-            "testsuites": [{"name": "LightingGpuAbiTest", "testsuite": [self.case]}],
+            "testsuites": [{"name": "LightingGpuAbiTest", "testsuite": cases}],
         }
 
     def test_complete_passing_probe_is_admitted(self):
@@ -69,6 +74,22 @@ class PhysicalProbeGateTest(unittest.TestCase):
         self.document["testsuites"][0]["testsuite"].append(self.case)
         with self.assertRaises(ValueError):
             validate(self.document)
+
+    def test_each_required_probe_is_checked(self):
+        for index in range(len(REQUIRED_PROBES)):
+            with self.subTest(index=index):
+                document = copy.deepcopy(self.document)
+                document["testsuites"][0]["testsuite"].pop(index)
+                with self.assertRaisesRegex(ValueError, "exactly one"):
+                    validate(document)
+                document = copy.deepcopy(self.document)
+                document["testsuites"][0]["testsuite"][index].update(
+                    physical_budget_failures="1",
+                    physical_failure_details="[{}]",
+                    maximum_physical_budget_fraction="2",
+                )
+                with self.assertRaisesRegex(ValueError, "physical budget FAILED"):
+                    validate(document)
 
     def test_failed_suite_is_not_admitted(self):
         for field in ("failures", "errors", "disabled"):

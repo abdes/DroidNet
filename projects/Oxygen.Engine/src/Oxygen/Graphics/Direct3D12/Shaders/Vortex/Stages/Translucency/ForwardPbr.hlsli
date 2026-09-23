@@ -58,6 +58,23 @@ float3 FresnelSchlick(float cosTheta, float3 F0)
     return F0 + (1.0 - F0) * pow(1.0 - cosTheta, 5.0);
 }
 
+// Pure direct-light response shared by the directional and local consumers.
+// Incident intensity, receiver cosine, visibility and exposure belong to callers.
+float3 EvaluateForwardDirectBrdf(float NdotV, float NdotL, float NdotH,
+    float VdotH, float3 F0, float3 base_rgb, float metalness, float roughness)
+{
+    const float3 F = FresnelSchlick(VdotH, F0);
+    const float D = DistributionGGX(NdotH, roughness);
+    const float G = GeometrySmith(NdotV, NdotL, roughness);
+    const float3 numerator = D * G * F;
+    const float denom = max(4.0 * NdotV * NdotL, 1.0e-6);
+    const float3 specular = numerator / denom;
+    const float3 kS = F;
+    const float3 kD = (1.0 - kS) * (1.0 - metalness);
+    const float3 diffuse = kD * base_rgb;
+    return diffuse + specular;
+}
+
 float3 DecodeNormalTS(float3 n)
 {
     // Normal maps are typically stored as [0..1]; remap to [-1..1].

@@ -174,10 +174,10 @@ light workload measures that optimization explicitly.
    That reference may reuse shading to isolate culling errors; it cannot replace
    the independent photometric oracle. Keep it in qualification targets, not a
    second shipping renderer. Match material decoding, P, output transform and time.
-   Native punctual-probe admission additionally requires
+   Native photometry/BRDF admission additionally requires
    `tools/vortex/AssertLightingPhysicalProbe.py <native-results.json>` to pass;
    passing the instrument tests alone is insufficient. B's
-   [measured narrow-cone boundary residuals](EX07B-reference-validation.md#native-punctual-photometry-probe-and-physical-admission)
+   [measured physical residuals](EX07B-reference-validation.md#native-direct-brdf-probe)
    remain C repair obligations until that gate reports zero physical failures.
 2. **No false negatives.** Check that every light with a nonzero supported
    contribution at a sampled receiver is present exactly once. Conservative
