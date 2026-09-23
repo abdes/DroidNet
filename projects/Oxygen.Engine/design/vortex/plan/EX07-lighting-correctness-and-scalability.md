@@ -1,6 +1,8 @@
 # EX07 — Physical lighting and many-light qualification
 
-Status: **in_progress — EX07A validated; EX07B references and instruments are current**.
+Status: **in_progress — EX07A and EX07B validated; paused before EX07C**.
+The [B completion audit](EX07B-completion-audit.md) closes the reference/instrument
+gate and records the user-directed pause.
 The [A completion audit](EX07A-completion-audit.md) records the scoped contract,
 interface and native ABI gate. Six approved decisions freeze mathematical,
 property, scene-v7 and resource/failure targets; their complete implementation
@@ -93,6 +95,9 @@ owners, view publications, upload allocators and profiling remain authoritative.
 | EX07D — Qualified baselines and budgets   | Correctness-qualified workload baselines, frozen CPU/GPU/memory budgets, useful-improvement thresholds and regression/noise policy.                 | Baseline identity/evidence and numeric comparison thresholds recorded before optimization candidates.                                 |
 | EX07E — Scalable culling and optimization | Real spatial rejection and measured shader/submission/upload/shadow/resource improvements.                                                          | Candidates continuously pass the same correctness references and predeclared performance comparisons.                                 |
 | EX07F — Final validation and delivery     | Final-code Debug/Release correctness, native performance, editor/native operation, inspected images and complete operating docs.                    | All EX07 gates pass together, with supported limits and no unexplained failures or quality reduction.                                 |
+
+Current stage and item status live only in [tracker section 3.4](../IMPLEMENTATION_STATUS.md#34-slice-7-work-items).
+This plan defines requirements; the audits preserve proof.
 
 EX07-01–14 remain stable tracking IDs. Contracts and property review precede their
 implementation; EX07-06/13 reference and instrument foundations start in EX07B,

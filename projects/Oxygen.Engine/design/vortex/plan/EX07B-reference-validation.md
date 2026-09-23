@@ -1,47 +1,33 @@
 # EX07B reference validation
 
-Status: **in_progress — independent physical references and native material decoding implemented; B is not qualified.**
+Status: **validated — B is closed; pause before EX07C.**
 
 The [EX07 plan](EX07-lighting-correctness-and-scalability.md) owns the full
 reference/instrument gate. The [PBR specification](../../renderer-core/physically-based-rendering.md#shared-equations-and-numerical-domain)
-owns the model and tolerances. This checkpoint changes no production shader or
-renderer behavior.
+owns the model and tolerances. The [completion audit](EX07B-completion-audit.md)
+owns final scope, evidence and remaining C–F obligations. Earlier sections retain
+checkpoint history. The closeout includes a material-cache identity correction;
+production BRDF/photometry repair remains C work.
 
-## Current B exit checklist
+## Closed B exit checklist
 
-This checklist owns the remaining B scope; the sections below retain checkpoint
-history and evidence rather than creating additional open-ended research tasks.
+1. **Closed:** 240 supported-format/filter/wrap/mask cases and 56 mip cases,
+   in addition to the 144 prior producer cases, pass in Debug and Release.
+   UV transforms and alpha cutoff now participate in material identity.
+2. **Closed:** the versioned workload generator/manifest freezes the 1,024-light
+   primary and required variant parameters. CPU checks establish 576 guaranteed
+   visible contributors throughout its motion cycle; a native 64x36 correctness
+   preview publishes all sources and renders both paths. Official full-resolution
+   physical/capacity qualification and timing remain C/D work.
+3. **Closed by explicit user acceptance:** both overhead runs and their limitations
+   remain recorded. No further B benchmark or numeric-budget choice is required.
+4. **Closed:** final affected tests and lint checks are recorded in the
+   [completion audit](EX07B-completion-audit.md). Commit the closeout and pause
+   before C, as instructed.
 
-Implemented and tested: independent GGX/BRDF/photometry/finite-emitter references;
-high-precision checks at the declared reference queries; native material,
-photometry and BRDF probes; serial and independent full-list image comparisons;
-constant-texture material/G-buffer producers; bounded CPU/GPU/memory instruments;
-creation-churn counters; and the native collection-overhead harness and two runs.
-
-Remaining before B closes:
-
-1. Qualify supported material texture formats and nonconstant filtering through
-   the actual sampling path. Current raster coverage uses constant float maps;
-   decoder and UV probes do not establish the combined filtered path. Keep this
-   to the engine's supported material contract rather than adding new formats.
-2. Finish and freeze deterministic workload recipes/manifests, especially the
-   required 1,024-light 1080p sparse/mixed primary (512 point / 512 spot, at least
-   256 lights contributing to visible receiver samples), with parameters for the
-   plan's count/overlap/view/shadow/mutation variants. The current 33-light
-   calibration/overhead fixture does not satisfy that requirement. Define the
-   workload-to-counter attribution and shared-stage matched controls here;
-   correctness repair and qualified performance baselines remain C and D work.
-3. Resolve the instrument-overhead acceptance decision. The focused forward run
-   adds 0.06356 ms at p95: above proposed A's 0.05 ms allowance, below proposed B's
-   0.10 ms allowance. Neither option has user approval yet. Do not silently loosen
-   the budget, discard the first run, or start an open-ended profiling campaign.
-4. Run the affected closing checks, reconcile the current status against these
-   requirements, commit the B closeout and pause before C as instructed.
-
-Production photometry/BRDF repairs, LUT implementation/interpolation certificates,
-scalable culling, optimization and final workload performance qualification are
-owned by C–F. The existing physical residuals are recorded repair inputs; B does
-not need to repair the renderer before its references can be qualified.
+No B exit item remains open. Earlier checkpoint limitations are superseded only
+where the completion audit supplies evidence; production LUT interpolation,
+physical repairs, scalability and final qualification remain C–F obligations.
 
 ## Independent moment implementation
 
@@ -806,7 +792,8 @@ Six new CPU checks take under a millisecond. Both configurations pass all
 **10 focused material tests** and **28 native instrument tests**. The other
 45-reference checkpoint remains recorded above; no slow integration rerun is
 needed for these independent additions. All four added C++ files/headers are
-oxytidy-clean. Actual sampled/raster material comparisons remain open in B.
+oxytidy-clean. Actual sampled/raster comparisons were still open at that
+checkpoint; the completion audit records their subsequent closure.
 
 Evidence under `ex07b`: `material-evaluation-{debug,release}.json`,
 `material-evaluation-native-{debug,release}.json` and `.log`,
@@ -1182,9 +1169,8 @@ and the current matrix do not yet certify the complete interior domain.
 The independent certifier can qualify additional pointwise moment queries;
 the C++ refinement estimator alone cannot. Mean queries likewise require their
 own certificate; the six-query matrix cannot qualify arbitrary interpolation.
-B still requires remaining material-format/filter qualification, workload
-resource attribution/churn and native instrumentation-overhead qualification. The full-list image
-reference qualifies the controlled punctual-light matrix above, not arbitrary
-materials, receivers or shadowed/finite emitters. Production tables additionally require their own interpolation
-certificate. No generated LUT or renderer change may claim those gates from
-the current endpoint/foundation tests alone.
+B is closed for its reference/instrument scope, as recorded in the completion
+audit. The full-list image reference qualifies its controlled punctual-light
+matrix; C must qualify the repaired renderer across the frozen workloads.
+Production LUTs require their own interpolation certificates. B's reference
+results do not establish final renderer correctness or performance.

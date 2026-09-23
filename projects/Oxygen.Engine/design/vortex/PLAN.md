@@ -111,8 +111,8 @@ thresholds are frozen before candidate runs. No performance capability is claime
 Each delivery step includes its numerical, interaction and relevant native visual
 checks. Automation grows with the experiments; EX10 is integration/closure.
 The [detailed gates](plan/exposure-and-lightbench-correction.md#8-ordered-implementation-slices)
-own scope and measurable criteria. The [tracker](IMPLEMENTATION_STATUS.md#31-current-work)
-owns current status. **EX07A is validated; EX07B independent references and instruments are current. Overall EX07 remains in progress.**
+own scope and measurable criteria. The [tracker](IMPLEMENTATION_STATUS.md#34-slice-7-work-items)
+owns current status. **EX07A and EX07B are validated. Work pauses before EX07C at the user's direction. Overall EX07 remains in progress.**
 
 Retain the accepted FP32/P=1 production policy; varying P/FP16 qualification stays
 explicit diagnostic coverage. Reuse valid EX05 MultiView and EX06 authoring evidence;
