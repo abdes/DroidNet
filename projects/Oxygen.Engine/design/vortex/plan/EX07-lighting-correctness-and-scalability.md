@@ -9,6 +9,23 @@ define production behavior. The [exposure delivery plan](exposure-and-lightbench
 owns package order; this document owns workloads and qualification. A/B audits
 retain the contract and independent-reference evidence.
 
+## Delivery order and shared ownership
+
+The user will implement the
+[New Sponza light/shadow report](../../../out/analysis/light-shadow-audit-20260924/REPORT.md)
+before follow-on EX07C work. Its five steps own shadow eligibility/caster culling,
+per-light buckets and D32, local depth caching, spatial light lists, and measured
+resolution/fade policy, including their supporting correctness repairs and tests.
+Use that sequence for the present shadow bottleneck. These changes supply parts
+of C/D/E; do not implement them again to satisfy an older stage assignment.
+
+The [tracker's remaining-C list](../IMPLEMENTATION_STATUS.md#user-owned-prerequisite-and-remaining-c-work)
+defines what follows. Reconcile the delivered code/results once, credit any
+additional overlap resolved there, and reuse the accepted shadow/grid design and
+evidence. The report's static-scene gain and user-led interactive checks do not
+wait for the broader EX07 workload matrix. No new validation framework is needed.
+VSM remains outside this conventional-shadow work.
+
 ## Outcome and boundaries
 
 Directional, point and spot lights must produce independently predicted direct
@@ -239,7 +256,9 @@ draws/dispatches/PSO switches, uploaded bytes, live/in-flight/cached memory and
 steady allocation churn. Deep shader counters are opt-in and outside timed runs.
 Counters/heatmaps must describe the executed product, not nominal configuration.
 
-Address bottlenecks in this order, selecting algorithms from evidence:
+The report's five-step order governs the prerequisite delivery. The areas below
+are covered by that work or assessed afterward from the remaining measured costs;
+they are not a second ordered implementation list:
 
 - Eliminate the all-lights-per-cluster publication. Start with conservative view
   and cell assignment; evaluate light-driven versus cell-driven work and compact
@@ -256,8 +275,9 @@ Address bottlenecks in this order, selecting algorithms from evidence:
   loss, source-range reduction or removing valid contributions for speed.
 - Reuse/grow resources safely, share immutable light records across views, and
   keep visibility/list products view-specific. Remove avoidable steady CPU/GPU
-  allocations and duplicate uploads. Any cache must invalidate on every relevant
-  light, view and scene mutation; caching is not required if measurement rejects it.
+  allocations and duplicate uploads. Any cache must invalidate on relevant
+  content or projection mutation. A camera move alone does not invalidate
+  a complete light-space local-depth cache; directional cascades remain view-dependent.
 - Optimize existing shadow setup/caster culling/update work when it dominates.
   Do not hide that cost inside unshadowed results, drop shadow requests or reduce
   resolution/update frequency silently. Preserve off-screen contributing casters.
@@ -282,12 +302,14 @@ comparison support the design; production correctness/performance remain open.
 | Compatible local-map sharing    | `ShadowService`, `CascadeShadowPass` and indexed bindings                           | One render/allocation for identical local-light shadow content within the frame; distinct per-view CSM/contact products. Different caster content or generations cannot share.  |
 | Bounded allocation reuse/growth | Existing shadow allocator and frame leases/fences                                   | Correct per-light resolution buckets, no redundant complete-set duplication, only affected buckets grow, fence-safe retirement and bounded spare capacity without steady churn. |
 
-EX07C first repairs ownership, complete caster coverage, identity and requested
-quality. EX07D establishes a correctly rendered baseline and measures noise.
-Group coherent production improvements, then verify the integrated
-result in EX07F. Do not use existing multi-view overwrite or resolution-promotion
-behavior as a valid reference. No new shadow algorithm, cross-frame content cache,
-global aliasing framework or automatic quality reduction is introduced.
+The user-owned report incorporates this memory work in steps 2/3 and adds
+cross-frame point/spot depth-content reuse with complete light-space caster
+coverage. Reuse compatible maps across views through the delivered stable
+allocation/content ownership; cascades remain view-dependent. Do not schedule a
+second allocator, D32 conversion or cache implementation under EX07E. Step 5
+separately selects a user-confirmed resolution/fade policy; memory exhaustion
+remains distinct from that intentional quality choice. No VSM or global aliasing
+framework is introduced.
 
 The linked audit owns the consumer inventory and targeted regression cases:
 CSM motion/blends, masked casters, local face/seam coverage, forward/deferred/
