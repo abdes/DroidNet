@@ -250,7 +250,7 @@ center-ray cone or center-below-horizon rejection substitutes for finite support
 
 The original Gauss-Legendre rule and compensated sum now live in the shared
 test-only `ReferenceQuadrature` helper, with their arithmetic unchanged.
-Power-of-two refinement is bounded at 1024 per dimension, with the default
+Power-of-two refinement is bounded at 2048 per dimension, with the default
 maximum still 256. Two successive rules
 must meet the absolute-plus-relative tolerance independently for every lobe.
 Callback failures preserve their cause; exhausted work preserves the last
@@ -307,7 +307,7 @@ split azimuth to resolve the bright rim; radial splitting is confined to the
 actual integration interval. This only changes quadrature partitions, not
 emission, geometry, BRDF or visibility. It is an offline sampling hint, not an
 authored material/light property. Flat-response checks show partition invariance,
-and invalid directions fail explicitly. The optional work ceiling is 1024;
+and invalid directions fail explicitly. The optional work ceiling is 2048;
 the ordinary default remains 256.
 
 The independent disk calculation integrates Cartesian unit-area coordinates
@@ -321,12 +321,54 @@ and apparent sphere cap. All comparisons retain `1e-7 + 1e-5*reference` limits.
 The Release finite-source suites pass **14/14 tests**, and the owning Debug
 suite passes **43/43**. Maximum relative
 differences are **1.838e-11 for disks** and **2.740e-6 for spheres**. The owning
-Debug comparisons match these results; the three changed C++ files are oxytidy-clean. Tilted-axis,
-grazing/horizon and full coupled-RGB finite-source fixture qualification remains
-open. This checkpoint changes no production shader or runtime rendering cost.
+Debug comparisons match these results; the three changed C++ files are oxytidy-clean.
+The subsequent tilted/grazing matrix is below. Full coupled-RGB finite-source
+fixture qualification remains open. This checkpoint changes no production
+shader or runtime rendering cost.
 Evidence under `ex07b`: `finite-offaxis-{debug,release}.json`,
 `finite-offaxis-limit-negative.log`, `finite-offaxis-tidy-verified/` and
 `finite-offaxis-checkpoint.json`.
+
+### Tilted and grazing source geometry
+
+The independent Cartesian disk oracle now accepts a general emitter axis.
+It solves the receiver horizon and cone/range circle in emitter-plane coordinates
+and clips each integration row before sampling. Thirty-six cases combine four
+tilted/horizon-crossing geometries, roughness 0.045/0.25/1 and view cosines
+0.01/0.5/1. The sphere matrix also includes 0.01 views, giving 27 sphere cases
+alongside the 18 aligned disk cases.
+
+The sharpest grazing sphere case exposed poor convergence near the apparent-cap
+boundary. The sphere integral now regularizes `sqrt(1-u)` using a unit parameter
+s and a rationalized interval span:
+
+```text
+t_lo = sqrt(1-u_max); t_hi = sqrt(1-u_min)
+dt = (u_max-u_min)/(t_hi+t_lo)
+t = t_lo+dt*s
+u = u_max-dt*s*(2*t_lo+dt*s)
+abs(du/ds) = 2*dt*t
+```
+
+This retains narrow clipped-cap area and the existing ray-distance equation.
+For a supplied peak direction, both source integrals additionally split each
+azimuth row at `(N cross peak).l=0`. This follows the narrow grazing ridge even
+when the unconstrained mirror direction lies beyond the source. It does not
+alter source emission or visibility. The optional work ceiling is 2048, while
+the default remains 256. The independent sphere surface oracle partitions its
+own rows at the receiver view plane; it retains its separate area Jacobian and
+emission cosine.
+
+The Release finite-source run passes all 15 cases, with independent
+refinement pairs up to 1024/2048 for the hardest grazing inputs. The tilted disk
+matrix uses at most 2.546e-5 of its unchanged `1e-7 + 1e-5*reference` error
+budget; maximum sphere relative difference is 7.852e-8. The owning Debug suite
+passes **44/44 tests** and reproduces these comparison results. Both changed
+C++ files are oxytidy-clean.
+Full coupled-RGB finite-source validation remains separate.
+Evidence under `ex07b`: `finite-tilted-{debug,release}.json`,
+`finite-grazing-limit-negative.log`, `finite-tilted-tidy-verified/` and
+`finite-tilted-checkpoint.json`.
 
 ## Packed material decoding and native format probe
 

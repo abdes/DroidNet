@@ -24,7 +24,7 @@ namespace {
   constexpr auto kPi = std::numbers::pi_v<double>;
   constexpr auto kCircle = 2.0 * kPi;
   constexpr double kUnitLengthTolerance = 1.0e-12;
-  constexpr std::uint32_t kMaximumQuadratureOrder = 1024U;
+  constexpr std::uint32_t kMaximumQuadratureOrder = 2048U;
   using LobeResult = std::expected<BrdfLobes, EmitterIntegrationFailure>;
 
   struct Vector {
@@ -152,6 +152,25 @@ namespace {
     double cosine;
     double sine;
   };
+  auto SplitAtZeros(std::vector<IntegrationInterval> intervals,
+    const AngularHalfSpace equation) -> std::vector<IntegrationInterval>
+  {
+    const auto amplitude = std::hypot(equation.cosine, equation.sine);
+    if (amplitude == 0.0 || std::abs(equation.constant) > amplitude) {
+      return intervals;
+    }
+    const auto phase = std::atan2(equation.sine, equation.cosine);
+    const auto delta
+      = std::acos(std::clamp(-equation.constant / amplitude, -1.0, 1.0));
+    for (const auto sign : { -1.0, 1.0 }) {
+      auto root = phase + (sign * delta);
+      if (root < 0.0) {
+        root += kCircle;
+      }
+      intervals = SplitIntervals(intervals, root);
+    }
+    return intervals;
+  }
   struct AngularWindow {
     double phase;
     double half_width;
@@ -436,6 +455,11 @@ auto IntegratePointSphere(const FiniteEmitter& emitter,
   if (minimum >= maximum) {
     return EmitterIntegral {};
   }
+  // t=sqrt(1-u) removes the tangent-ray square-root endpoint. Parameterize
+  // t over [0,1] with a rationalized span so narrow clipped caps retain area.
+  const auto tangent_start = std::sqrt(1.0 - maximum);
+  const auto tangent_end = std::sqrt(1.0 - minimum);
+  const auto tangent_span = (maximum - minimum) / (tangent_start + tangent_end);
   auto peak = std::optional<PolarPeak> {};
   if (settings.peak_direction && settings.peak_direction->z > 0.0) {
     const auto candidate = Vector {
@@ -445,18 +469,22 @@ auto IntegratePointSphere(const FiniteEmitter& emitter,
     };
     const auto ray = Normalize(candidate, Length(candidate));
     const auto sine = Length(Cross(axis, ray));
+    const auto peak_u = Dot(axis, ray) > 0.0 && sine <= ratio
+      ? (sine / ratio) * (sine / ratio)
+      : 1.0;
     // An exterior peak still identifies the closest cap edge in azimuth.
+    const auto radial = peak_u > minimum && peak_u < maximum
+      ? (maximum - peak_u)
+        / (tangent_span * (std::sqrt(1.0 - peak_u) + tangent_start))
+      : 0.0;
     peak = PolarPeak {
-      .radial = Dot(axis, ray) > 0.0 && sine <= ratio
-        ? (sine / ratio) * (sine / ratio)
-        : 1.0,
+      .radial = radial,
       .azimuth = PeakAzimuth(ray, first, second),
     };
   }
+  const auto radial_intervals = SplitIntervals({ { .start = 0.0, .end = 1.0 } },
+    peak ? std::optional { peak->radial } : std::nullopt);
 
-  const auto radial_intervals
-    = SplitIntervals({ { .start = minimum, .end = maximum } },
-      peak ? std::optional { peak->radial } : std::nullopt);
   const auto source_scale = intensity->get() / distance / distance / kCircle;
   return Refine(
     [&](const std::uint32_t order, std::uint64_t& evaluations) -> LobeResult {
@@ -464,12 +492,17 @@ auto IntegratePointSphere(const FiniteEmitter& emitter,
       for (const auto interval : radial_intervals) {
         const auto radial_width = interval.end - interval.start;
         for (const auto& radial : detail::AngularRule(order)) {
-          const auto u
+          const auto parameter
             = interval.start + (radial_width * radial.angle * 2.0 / kPi);
+          const auto offset = tangent_span * parameter;
+          const auto tangent = tangent_start + offset;
+          const auto u
+            = std::clamp(maximum - (offset * ((2.0 * tangent_start) + offset)),
+              minimum, maximum);
           const auto sine = ratio * std::sqrt(u);
           const auto cosine = std::sqrt(1.0 - (ratio_squared * u));
           const auto ray_distance = (distance - radius) * (1.0 + ratio)
-            / (cosine + (ratio * std::sqrt(1.0 - u)));
+            / (cosine + (ratio * tangent));
           const auto factor = PunctualDistanceFactor(
             DistanceMetres { ray_distance }, emitter.range);
           if (!factor) {
@@ -485,6 +518,19 @@ auto IntegratePointSphere(const FiniteEmitter& emitter,
             });
           arcs = SplitIntervals(
             arcs, peak ? std::optional { peak->azimuth } : std::nullopt);
+          if (settings.peak_direction) {
+            const auto plane = Vector {
+              .x = -settings.peak_direction->y,
+              .y = settings.peak_direction->x,
+              .z = 0.0,
+            };
+            arcs = SplitAtZeros(std::move(arcs),
+              {
+                .constant = Dot(plane, axis) * cosine,
+                .cosine = Dot(plane, first) * sine,
+                .sine = Dot(plane, second) * sine,
+              });
+          }
           for (const auto arc : arcs) {
             for (const auto& angular : detail::AngularRule(order)) {
               const auto phi = arc.start
@@ -497,8 +543,9 @@ auto IntegratePointSphere(const FiniteEmitter& emitter,
               if (!sample) {
                 return std::unexpected(sample.error());
               }
-              const auto weight = radial_width * (arc.end - arc.start)
-                * radial.weight * angular.weight * 4.0 / (kPi * kPi);
+              const auto weight = 2.0 * tangent_span * tangent * radial_width
+                * (arc.end - arc.start) * radial.weight * angular.weight * 4.0
+                / (kPi * kPi);
               sum.Add(*sample, weight);
             }
           }
@@ -660,6 +707,19 @@ auto IntegrateSpotDisk(const FiniteEmitter& emitter,
           }
           arcs = SplitIntervals(
             arcs, peak ? std::optional { peak->azimuth } : std::nullopt);
+          if (settings.peak_direction) {
+            const auto plane = Vector {
+              .x = -settings.peak_direction->y,
+              .y = settings.peak_direction->x,
+              .z = 0.0,
+            };
+            arcs = SplitAtZeros(std::move(arcs),
+              {
+                .constant = Dot(plane, scaled_center),
+                .cosine = Dot(plane, first) * scaled_radius,
+                .sine = Dot(plane, second) * scaled_radius,
+              });
+          }
           for (const auto arc : arcs) {
             for (const auto& angular : detail::AngularRule(order)) {
               const auto phi = arc.start
