@@ -82,7 +82,7 @@ float4 DeferredLightDirectionalPS(VortexFullscreenTriangleOutput input) : SV_Tar
         float3(0.2126f, 0.7152f, 0.0722f));
     return float4(saturate(light_attenuation), saturate(transmittance_luma), 0.0f, 0.0f);
 #elif defined(DEBUG_DIRECT_BRDF_CORE)
-    return float4(EvaluateCookTorranceLighting(surface, light_dir, 1.0f.xxx) * GetPreExposure(), 0.0f);
+    return float4(EvaluateCookTorranceLighting(surface, light_dir, 1.0f.xxx, lighting_bindings) * GetPreExposure(), 0.0f);
 #endif
     const float3 lighting = EvaluateDeferredLightAtWorldPosition(
         input.uv,

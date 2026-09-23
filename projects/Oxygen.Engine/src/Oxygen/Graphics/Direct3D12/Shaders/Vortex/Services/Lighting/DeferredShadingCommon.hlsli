@@ -13,6 +13,7 @@
 #include "Vortex/Contracts/Scene/SceneTextures.hlsli"
 #include "Vortex/Contracts/Environment/EnvironmentHelpers.hlsli"
 #include "Vortex/Shared/BRDFCommon.hlsli"
+#include "Vortex/Contracts/Lighting/LightingHelpers.hlsli"
 #include "Vortex/Shared/PositionReconstruction.hlsli"
 
 static const float kVortexDeferredMinRoughness = 0.045f;
@@ -43,34 +44,6 @@ static inline float3 ReconstructDeferredWorldPosition(
         screen_uv, device_depth, inverse_view_projection_matrix);
 }
 
-static inline float3 FresnelSchlick(float cos_theta, float3 f0)
-{
-    const float one_minus_cos = saturate(1.0f - cos_theta);
-    const float fresnel = pow(one_minus_cos, 5.0f);
-    return f0 + (1.0f.xxx - f0) * fresnel;
-}
-
-static inline float DistributionGGX(float NoH, float roughness)
-{
-    const float alpha = max(roughness * roughness, kVortexDeferredMinRoughness);
-    const float alpha_sq = alpha * alpha;
-    const float denom = NoH * NoH * (alpha_sq - 1.0f) + 1.0f;
-    return alpha_sq / max(PI * denom * denom, EPSILON);
-}
-
-static inline float GeometrySchlickGGX(float NoX, float roughness)
-{
-    const float k = pow(max(roughness + 1.0f, kVortexDeferredMinRoughness), 2.0f)
-        * 0.125f;
-    return NoX / max(NoX * (1.0f - k) + k, EPSILON);
-}
-
-static inline float GeometrySmith(float NoV, float NoL, float roughness)
-{
-    return GeometrySchlickGGX(NoV, roughness)
-        * GeometrySchlickGGX(NoL, roughness);
-}
-
 static inline DeferredLightingSurfaceData LoadDeferredLightingSurface(
     float2 uv,
     float3 world_position,
@@ -97,35 +70,12 @@ static inline DeferredLightingSurfaceData LoadDeferredLightingSurface(
 static inline float3 EvaluateCookTorranceLighting(
     DeferredLightingSurfaceData surface,
     float3 light_direction_to_source,
-    float3 light_radiance)
+    float3 light_radiance, LightingFrameBindings lighting)
 {
-    const float3 light_direction = VortexSafeNormalize(light_direction_to_source);
-    const float3 half_vector = VortexSafeNormalize(
-        surface.view_direction + light_direction);
-
-    const float NoL = saturate(dot(surface.world_normal, light_direction));
-    const float NoV = saturate(dot(surface.world_normal, surface.view_direction));
-    const float NoH = saturate(dot(surface.world_normal, half_vector));
-    const float VoH = saturate(dot(surface.view_direction, half_vector));
-
-    if (NoL <= EPSILON || NoV <= EPSILON) {
-        return 0.0f.xxx;
-    }
-
-    const float3 fresnel = FresnelSchlick(VoH, surface.specular_f0);
-    const float distribution = DistributionGGX(NoH, surface.roughness);
-    const float geometry = GeometrySmith(NoV, NoL, surface.roughness);
-
-    const float3 numerator = distribution * geometry * fresnel;
-    const float denominator = max(4.0f * NoV * NoL, 1.0e-4f);
-    const float3 specular = numerator / denominator;
-
-    const float3 diffuse_color
-        = surface.base_color * (1.0f.xxx - fresnel) * (1.0f - surface.metallic);
-    const float3 diffuse = diffuse_color * INV_PI;
-
-    return (diffuse + specular) * light_radiance * NoL
-        * surface.ambient_occlusion;
+    const float3 L = normalize(light_direction_to_source);
+    return EvaluateGgxDirectResponse(surface.world_normal, surface.view_direction, L,
+        surface.specular_f0, surface.base_color * (1.0 - surface.metallic),
+        surface.roughness, lighting) * light_radiance;
 }
 
 static inline float3 EvaluateDeferredLightAtWorldPosition(
@@ -149,7 +99,7 @@ static inline float3 EvaluateDeferredLightAtWorldPosition(
     const DeferredLightingSurfaceData surface = LoadDeferredLightingSurface(
         uv, world_position, camera_position_ws, bindings);
     return EvaluateCookTorranceLighting(
-               surface, light_direction_to_source, light_radiance)
+               surface, light_direction_to_source, light_radiance, LoadResolvedLightingFrameBindings())
         * light_attenuation;
 }
 

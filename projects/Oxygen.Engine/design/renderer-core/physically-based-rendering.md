@@ -396,6 +396,17 @@ stably, e.g. from `length(cross(N,h))^2`, without clipping the GGX peak with an
 absolute denominator floor. Schlick's argument is bounded to [0,1] against
 roundoff after valid normalization. Apply incident illumination and NdotL once.
 
+The runtime evaluates the cosine-weighted response directly. For positive
+cosines, factor the visibility as
+`V*mu_l = 0.5/(sqrt(mu_v^2+alpha^2*(1-mu_v^2))
+
+- (mu_v/mu_l)_sqrt(mu_l^2+alpha^2_(1-mu_l^2)))`.
+Preserve the division before multiplication: reassociation can flush a
+significant numerator at the smallest normal cosines. Scale `l+v` by its largest
+  component before normalizing the half vector. These operations retain the same
+  model while avoiding an overflowing unweighted BRDF or underflowed half-vector
+  norm; callers must not apply receiver cosine a second time.
+
 Define directional integrals at fixed r and mu_v:
 
 ```text

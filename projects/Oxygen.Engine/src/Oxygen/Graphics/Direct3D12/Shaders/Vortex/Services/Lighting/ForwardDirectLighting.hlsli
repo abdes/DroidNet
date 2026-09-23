@@ -70,16 +70,10 @@ static inline DirectionalLightDiagnosticTerms EvaluateDirectionalLightDiagnostic
     terms.shadow_visibility = saturate(ComputeDirectionalShadowVisibility(
         dl.selection_index, world_pos, shadow_normal_ws, L));
 
-    const float3 H_unorm = V + L;
-    const float H_len_sq = dot(H_unorm, H_unorm);
-    const float3 H = H_len_sq > 1.0e-8 ? H_unorm * rsqrt(H_len_sq) : N;
-    const float NdotH = saturate(dot(N, H));
-    const float VdotH = saturate(dot(V, H));
+    terms.brdf_core = EvaluateGgxDirectResponse(N, V, L, F0, base_rgb * (1.0 - metalness),
+        roughness, LoadResolvedLightingFrameBindings());
 
-    terms.brdf_core = EvaluateForwardDirectBrdf(NdotV, NdotL, NdotH, VdotH,
-        F0, base_rgb, metalness, roughness) * NdotL;
-
-    const float3 raw_radiance = dl.illuminance_rgb_lux * (1.0 / kPi);
+    const float3 raw_radiance = dl.illuminance_rgb_lux;
     terms.full_direct = terms.brdf_core
         * ResolveDirectionalLightAtmosphereRadiance(
             world_pos,
@@ -126,7 +120,7 @@ static inline float3 EvaluateDirectionalLightContributionRawLambert(
         return 0.0.xxx;
     }
 
-    return base_rgb * dl.illuminance_rgb_lux * (1.0 / kPi) * NdotL;
+    return base_rgb * dl.illuminance_rgb_lux * (1.0 / PI) * NdotL;
 }
 
 float3 AccumulateDirectionalLightsRawLambert(
@@ -290,15 +284,9 @@ float3 AccumulateLocalLightsClustered(
                     float2(light.outer_cone_sin_half_squared, light.outer_cone_relative_correction));
             }
 
-            const float3 H_unorm = V + L;
-            const float H_len_sq = dot(H_unorm, H_unorm);
-            const float3 H = H_len_sq > 1.0e-8 ? H_unorm * rsqrt(H_len_sq) : N;
-            const float NdotH = saturate(dot(N, H));
-            const float VdotH = saturate(dot(V, H));
-
-            const float3 brdf = EvaluateForwardDirectBrdf(NdotV, NdotL, NdotH, VdotH,
-                F0, base_rgb, metalness, roughness);
-            const float3 contribution = brdf * light.intensity_rgb_cd * atten * NdotL;
+            const float3 brdf = EvaluateGgxDirectResponse(N, V, L, F0, base_rgb * (1.0 - metalness),
+                roughness, lighting);
+            const float3 contribution = brdf * light.intensity_rgb_cd * atten;
             RecordForwardHdrSource(contribution);
             direct += contribution;
         }

@@ -7,16 +7,6 @@
 #include "Vortex/Contracts/Lighting/ForwardLocalLightRecord.hlsli"
 #include "Vortex/Services/Lighting/LocalLightAttenuation.hlsli"
 #include "Vortex/Services/Lighting/DeferredShadingCommon.hlsli"
-#define DistributionGGX ForwardDistributionGGX
-#define GeometrySchlickGGX ForwardGeometrySchlickGGX
-#define GeometrySmith ForwardGeometrySmith
-#define FresnelSchlick ForwardFresnelSchlick
-#include "Vortex/Stages/Translucency/ForwardPbr.hlsli"
-#undef DistributionGGX
-#undef GeometrySchlickGGX
-#undef GeometrySmith
-#undef FresnelSchlick
-
 struct ReferenceArguments {
     float4x4 inverse_view_projection;
     float3 camera_position;
@@ -31,7 +21,10 @@ struct ReferenceArguments {
     uint forward_shading;
     uint2 extent;
     float pre_exposure;
-    uint reserved;
+    uint brdf_model_revision;
+    uint brdf_moments_srv;
+    uint brdf_mean_moments_srv;
+    uint2 reserved;
 };
 
 cbuffer ReferenceRoot : register(b2, space0) {
@@ -83,6 +76,10 @@ void CS(uint3 thread : SV_DispatchThreadID) {
     }
     surface.specular_f0 = ComputeMetallicF0(surface.base_color, surface.metallic, surface.specular);
     StructuredBuffer<ForwardLocalLightRecord> lights = ResourceDescriptorHeap[args.lights_srv];
+    LightingFrameBindings lighting = (LightingFrameBindings)0;
+    lighting.brdf_model_revision = args.brdf_model_revision;
+    lighting.brdf_moments_srv = args.brdf_moments_srv;
+    lighting.brdf_mean_moments_srv = args.brdf_mean_moments_srv;
     float3 result = 0.0.xxx;
     for (uint index = 0; index < args.light_count; ++index) {
         ForwardLocalLightRecord light = lights[index];
@@ -99,15 +96,13 @@ void CS(uint3 thread : SV_DispatchThreadID) {
         if (args.forward_shading != 0) {
             float NoL = saturate(dot(surface.world_normal, L));
             if (NoL > 0.0) {
-                float3 H = normalize(surface.view_direction + L);
-                result += EvaluateForwardDirectBrdf(
-                    saturate(dot(surface.world_normal, surface.view_direction)), NoL,
-                    saturate(dot(surface.world_normal, H)), saturate(dot(surface.view_direction, H)),
-                    surface.specular_f0, surface.base_color, surface.metallic, surface.roughness)
-                    * incident * NoL;
+                result += EvaluateGgxDirectResponse(surface.world_normal, surface.view_direction,
+                    L, surface.specular_f0, surface.base_color * (1.0 - surface.metallic),
+                    surface.roughness, lighting)
+                    * incident;
             }
         } else {
-            result += EvaluateCookTorranceLighting(surface, L, incident);
+            result += EvaluateCookTorranceLighting(surface, L, incident, lighting);
         }
     }
     output.Store4(thread.x * 16,

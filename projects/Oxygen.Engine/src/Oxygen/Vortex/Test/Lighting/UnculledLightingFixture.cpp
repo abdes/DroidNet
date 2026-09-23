@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -60,10 +61,13 @@ namespace {
     std::uint32_t forward_shading { 0U };
     glm::uvec2 extent { 0U };
     float pre_exposure { 1.0F };
-    std::uint32_t reserved { 0U };
+    std::uint32_t brdf_model_revision { 0U };
+    ShaderVisibleIndex brdf_moments_srv { kInvalidShaderVisibleIndex };
+    ShaderVisibleIndex brdf_mean_moments_srv { kInvalidShaderVisibleIndex };
+    std::array<std::uint32_t, 2> reserved {};
   };
   // NOLINTBEGIN(*-magic-numbers)
-  static_assert(sizeof(ReferenceArguments) == 128U);
+  static_assert(sizeof(ReferenceArguments) == 144U);
   static_assert(offsetof(ReferenceArguments, inverse_view_projection) == 0U);
   static_assert(offsetof(ReferenceArguments, camera_position) == 64U);
   static_assert(offsetof(ReferenceArguments, receiver_plane_z) == 76U);
@@ -77,7 +81,10 @@ namespace {
   static_assert(offsetof(ReferenceArguments, forward_shading) == 108U);
   static_assert(offsetof(ReferenceArguments, extent) == 112U);
   static_assert(offsetof(ReferenceArguments, pre_exposure) == 120U);
-  static_assert(offsetof(ReferenceArguments, reserved) == 124U);
+  static_assert(offsetof(ReferenceArguments, brdf_model_revision) == 124U);
+  static_assert(offsetof(ReferenceArguments, brdf_moments_srv) == 128U);
+  static_assert(offsetof(ReferenceArguments, brdf_mean_moments_srv) == 132U);
+  static_assert(offsetof(ReferenceArguments, reserved) == 136U);
   // NOLINTEND(*-magic-numbers)
 
   auto ReferenceShader() -> graphics::ShaderRequest
@@ -146,6 +153,17 @@ auto UnculledLightingGpuTest::RecordUnculledReference(
     return slot;
   };
   auto args = ReferenceArguments {};
+  const auto* scene_renderer
+    = RendererPublicationProbe::GetSceneRenderer(*renderer_);
+  const auto* lighting
+    = RendererPublicationProbe::GetLightingService(*renderer_)
+        ->InspectForwardLightBindings(scene_renderer->GetPublishedViewId());
+  ASSERT_NE(lighting, nullptr);
+  // Share only the immutable BRDF model. The reference's light list remains
+  // authored independently of renderer selection and spatial publication.
+  args.brdf_model_revision = lighting->brdf_model_revision;
+  args.brdf_moments_srv = lighting->brdf_moments_srv;
+  args.brdf_mean_moments_srv = lighting->brdf_mean_moments_srv;
   const auto& view_data
     = RendererPublicationProbe::GetViewConstants(*renderer_).GetSnapshot();
   args.inverse_view_projection = view_data.inverse_view_projection_matrix;

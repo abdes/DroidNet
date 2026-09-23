@@ -19,17 +19,7 @@
 #include "Vortex/Contracts/Draw/MaterialShadingConstants.hlsli"
 #include "Vortex/Services/Lighting/LocalLightAttenuation.hlsli"
 #include "Vortex/Services/Lighting/DeferredShadingCommon.hlsli"
-// Both current paths declare these helper names. Rename only the forward
-// declarations in this qualification shader; shipping includes are unchanged.
-#define DistributionGGX ForwardDistributionGGX
-#define GeometrySchlickGGX ForwardGeometrySchlickGGX
-#define GeometrySmith ForwardGeometrySmith
-#define FresnelSchlick ForwardFresnelSchlick
 #include "Vortex/Stages/Translucency/ForwardPbr.hlsli"
-#undef DistributionGGX
-#undef GeometrySchlickGGX
-#undef GeometrySmith
-#undef FresnelSchlick
 
 struct ProbeArguments {
     uint4 decode;
@@ -79,6 +69,15 @@ struct BrdfProbeInput {
     float metallic;
     float3 incident_rgb;
     float specular;
+    uint moments_srv;
+    uint means_srv;
+};
+
+struct MomentProbeInput {
+    float roughness;
+    float view_cosine;
+    uint moments_srv;
+    uint means_srv;
 };
 
 struct MaterialUvProbeInput {
@@ -319,13 +318,38 @@ void CS(uint3 thread : SV_DispatchThreadID) {
         surface.specular_f0 = f0;
         surface.roughness = max(value.roughness, kVortexDeferredMinRoughness);
         surface.ambient_occlusion = 1.0;
-        float3 deferred = EvaluateCookTorranceLighting(surface, L, value.incident_rgb);
-        float3 forward = EvaluateForwardDirectBrdf(value.view_cosine, value.light_cosine,
-            saturate(H.z), saturate(dot(V, H)), f0, value.base_color, value.metallic,
-            value.roughness) * value.incident_rgb * value.light_cosine;
-        output.Store4(address, asuint(float4(deferred, DistributionGGX(saturate(H.z), surface.roughness))));
-        output.Store4(address + 16, asuint(float4(forward, ForwardDistributionGGX(saturate(H.z), value.roughness))));
+        LightingFrameBindings lighting = (LightingFrameBindings)0;
+        lighting.brdf_model_revision = 1u;
+        lighting.brdf_moments_srv = value.moments_srv;
+        lighting.brdf_mean_moments_srv = value.means_srv;
+        float3 deferred = EvaluateCookTorranceLighting(surface, L, value.incident_rgb, lighting);
+        float3 forward = EvaluateGgxDirectResponse(surface.world_normal, V, L, f0,
+            value.base_color * (1.0 - value.metallic), value.roughness, lighting)
+            * value.incident_rgb;
+        float distribution = GgxDistribution(surface.world_normal, H, value.roughness);
+        output.Store4(address, asuint(float4(deferred, distribution)));
+        output.Store4(address + 16, asuint(float4(forward, distribution)));
         output.Store4(address + 32, asuint(float4(f0, 0.0)));
+    } else if (g_RecordKind == 22) {
+        StructuredBuffer<MomentProbeInput> inputs = ResourceDescriptorHeap[args.x];
+        MomentProbeInput value = inputs[element];
+        LightingFrameBindings lighting = (LightingFrameBindings)0;
+        lighting.brdf_model_revision = 1u;
+        lighting.brdf_moments_srv = value.moments_srv;
+        lighting.brdf_mean_moments_srv = value.means_srv;
+        float3 N = float3(0.0, 0.0, 1.0);
+        float3 L = normalize(float3(1.0, 0.0, value.view_cosine));
+        float3 V = normalize(float3(-1.0, 0.0, value.view_cosine));
+        GgxDirectLobes response = EvaluateGgxDirectLobes(N, V, L, 1.0.xxx, 0.0.xxx, value.roughness, lighting);
+        float3 total = response.single_scattering + response.multiple_scattering + response.diffuse;
+        float3 swapped = EvaluateGgxDirectResponse(N, L, V, 1.0.xxx, 0.0.xxx, value.roughness, lighting);
+        output.Store4(address, asuint(float4(response.single_scattering.r, total.r, swapped.r, response.diffuse.r)));
+    } else if (g_RecordKind == 21) {
+        StructuredBuffer<MomentProbeInput> inputs = ResourceDescriptorHeap[args.x];
+        MomentProbeInput value = inputs[element];
+        float2 moment = SampleGgxMomentTexture(value.moments_srv, value.view_cosine, value.roughness);
+        float2 mean = SampleGgxMomentTexture(value.means_srv, 0.0, value.roughness);
+        output.Store4(address, asuint(float4(moment, mean)));
     } else if (g_RecordKind == 20) {
         StructuredBuffer<MaterialUvProbeInput> inputs = ResourceDescriptorHeap[args.x];
         MaterialUvProbeInput value = inputs[element];
