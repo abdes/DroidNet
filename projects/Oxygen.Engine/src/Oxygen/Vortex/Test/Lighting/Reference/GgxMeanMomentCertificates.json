@@ -1,0 +1,70 @@
+{
+  "generated_by": "tools/vortex/GenerateGgxMeanMomentCertificates.py",
+  "generator_sha256": "32e726dab187fb0a10400222d3ac87e7f2962df347aaf1418f24ea71fb0a114f",
+  "directional_generator_sha256": "207e1cee997d2288eae4e8efa1659bd13f5a2ccf9ebbab5e1c99f51ec4ccb265",
+  "model_revision": 1,
+  "python_flint_version": "0.9.0",
+  "flint_version": "3.6.0",
+  "input_encoding": "exact binary64 inputs",
+  "roughness_floor": "0.045",
+  "working_precision_bits": 160,
+  "radius_limit": 1e-8,
+  "lower_cosine": "0.0001",
+  "upper_gap": "1e-10",
+  "outer_tolerance": "1e-12",
+  "energy_tolerance": "1e-14",
+  "directional_tolerance": "1e-13",
+  "azimuth_tolerance": "1e-16",
+  "outer_evaluation_limit": 500000,
+  "scope": "Queried cosine-weighted means; not an interpolation or full BRDF certificate",
+  "cases": [
+    {
+      "roughness": 0.045,
+      "E_avg_midpoint": 0.9999725559242401,
+      "E_avg_radius": 5.127377965680392e-9,
+      "B_avg_midpoint": 0.04758338143911201,
+      "B_avg_radius": 5.1287059049706545e-9,
+      "directional_queries": 2552
+    },
+    {
+      "roughness": 0.1,
+      "E_avg_midpoint": 0.9994905405939807,
+      "E_avg_radius": 5.127351530474008e-9,
+      "B_avg_midpoint": 0.04706891229798891,
+      "B_avg_radius": 5.128612209733151e-9,
+      "directional_queries": 2552
+    },
+    {
+      "roughness": 0.25,
+      "E_avg_midpoint": 0.9872502716428685,
+      "E_avg_radius": 5.1273003989395875e-9,
+      "B_avg_midpoint": 0.03958926123060896,
+      "B_avg_radius": 5.128599582029072e-9,
+      "directional_queries": 2552
+    },
+    {
+      "roughness": 0.5,
+      "E_avg_midpoint": 0.8823233775371246,
+      "E_avg_radius": 5.127221102921277e-9,
+      "B_avg_midpoint": 0.018678180871776064,
+      "B_avg_radius": 5.1282053679843555e-9,
+      "directional_queries": 2552
+    },
+    {
+      "roughness": 0.75,
+      "E_avg_midpoint": 0.6562014163026277,
+      "E_avg_radius": 5.127214228440157e-9,
+      "B_avg_midpoint": 0.0070456071292040335,
+      "B_avg_radius": 5.128289779007995e-9,
+      "directional_queries": 2552
+    },
+    {
+      "roughness": 1.0,
+      "E_avg_midpoint": 0.4091370876317315,
+      "E_avg_radius": 5.127237007930315e-9,
+      "B_avg_midpoint": 0.0027557506363920627,
+      "B_avg_radius": 5.128274763305288e-9,
+      "directional_queries": 2552
+    }
+  ]
+}

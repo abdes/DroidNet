@@ -58,7 +58,7 @@ def grazing_bias(alpha):
     return integrate(integrand, arb.pi()/2)
 
 
-def schlick_moment(view, alpha2, uniform_ndf):
+def schlick_moment(view, alpha2, uniform_ndf, *, tolerance="1e-10", angular_tolerance="1e-12"):
     view_sine = (1 - view**2).sqrt()
     view_root = (view**2 + alpha2 * (1 - view**2)).sqrt()
     point_radius = arb(2)**-80
@@ -145,9 +145,10 @@ def schlick_moment(view, alpha2, uniform_ndf):
                 return acb("nan")
             upper = energy.real.abs_upper()
             return acb(arb(upper/2, upper/2))
-        return integrate(lambda phi, check: value((phi/2).cos()**2, check), arb.pi())
+        return integrate(lambda phi, check: value((phi/2).cos()**2, check), arb.pi(),
+                         tolerance=angular_tolerance)
 
-    return integrate(outer, tolerance="1e-10")
+    return integrate(outer, tolerance=tolerance)
 
 
 def certify(roughness, mu):
