@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -82,6 +83,7 @@ protected:
   unsigned sequence = 0;
   unsigned material_sequence = 0;
   unsigned expected_draws = 1;
+  std::size_t initial_scene_capacity { 8U };
   std::uint32_t surface_view_id = 100U;
   ViewId surface_source_id = kInvalidViewId;
   std::optional<scene::ExposureSettings> surface_exposure_override;

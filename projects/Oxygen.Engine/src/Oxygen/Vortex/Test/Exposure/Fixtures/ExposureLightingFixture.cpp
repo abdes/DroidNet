@@ -38,6 +38,7 @@
 #include <Oxygen/Engine/IAsyncEngine.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
+#include <Oxygen/Graphics/Common/SubmissionCallback.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/OxCo/Co.h>
@@ -168,7 +169,8 @@ auto ExposureLightingGpuTest::SetUp() -> void
   });
   ASSERT_EQ(fixture_console.Execute("vtx.occlusion.enable false").status,
     console::ExecutionStatus::kOk);
-  scene = std::make_shared<scene::Scene>("Lighting producer domain", 8U);
+  scene = std::make_shared<scene::Scene>(
+    "Lighting producer domain", initial_scene_capacity);
   scene->SetEnvironment(std::make_unique<scene::SceneEnvironment>());
   auto& post = scene->GetEnvironment()
                  ->AddSystem<scene::environment::PostProcessVolume>();
@@ -506,7 +508,7 @@ auto ExposureLightingGpuTest::RenderSurface(
       .delta_time_seconds = frame_delta_seconds, });
       facade.SetSceneSource({ .scene = observer_ptr {
                                 scene.get(),
-                              } });
+                              }, });
       facade.SetViewIntent(Renderer::OffscreenSceneViewInput::FromCamera(
       "Lighting", ViewId { surface_view_id, }, view, camera)
         .SetViewStateHandle(persistent_surface_state
@@ -516,7 +518,7 @@ auto ExposureLightingGpuTest::RenderSurface(
         .SetExposureOverride(surface_exposure_override));
       facade.SetOutputTarget({ .framebuffer = observer_ptr {
                                  framebuffer.get(),
-                               } });
+                               }, });
       facade.SetPipeline(forward
           ? Renderer::OffscreenPipelineInput::Forward()
           : Renderer::OffscreenPipelineInput::Deferred());
