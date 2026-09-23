@@ -361,7 +361,6 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
   EXPECT_EQ(bindings.probes.diffuse_sh_srv, kInvalidShaderVisibleIndex);
   EXPECT_EQ(bindings.probes.irradiance_map_srv, kInvalidShaderVisibleIndex);
   EXPECT_EQ(bindings.probes.prefiltered_map_srv, kInvalidShaderVisibleIndex);
-  EXPECT_EQ(bindings.probes.brdf_lut_srv, kInvalidShaderVisibleIndex);
   EXPECT_EQ(bindings.probes.probe_revision, 0U);
   EXPECT_FLOAT_EQ(bindings.evaluation.ambient_intensity, 1.0F);
   EXPECT_FLOAT_EQ(bindings.evaluation.average_brightness, 1.0F);
@@ -387,7 +386,6 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
   EXPECT_EQ(state.probes.diffuse_sh_srv, kInvalidShaderVisibleIndex);
   EXPECT_EQ(state.probes.irradiance_map_srv, kInvalidShaderVisibleIndex);
   EXPECT_EQ(state.probes.prefiltered_map_srv, kInvalidShaderVisibleIndex);
-  EXPECT_EQ(state.probes.brdf_lut_srv, kInvalidShaderVisibleIndex);
   EXPECT_EQ(state.probes.probe_revision, 0U);
 
   EXPECT_EQ(bindings.probes.probe_revision, state.probes.probe_revision);
@@ -476,7 +474,6 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
 
   EXPECT_EQ(static_data.sky_light.enabled, 0U);
   EXPECT_EQ(static_data.sky_light.cubemap_slot, oxygen::kInvalidBindlessIndex);
-  EXPECT_EQ(static_data.sky_light.brdf_lut_slot, oxygen::kInvalidBindlessIndex);
   EXPECT_EQ(
     static_data.sky_light.irradiance_map_slot, oxygen::kInvalidBindlessIndex);
   EXPECT_EQ(
@@ -809,7 +806,6 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   EXPECT_EQ(probe_state.probes.diffuse_sh_srv, kInvalidShaderVisibleIndex);
   EXPECT_EQ(probe_state.probes.irradiance_map_srv, kInvalidShaderVisibleIndex);
   EXPECT_EQ(probe_state.probes.prefiltered_map_srv, kInvalidShaderVisibleIndex);
-  EXPECT_EQ(probe_state.probes.brdf_lut_srv, kInvalidShaderVisibleIndex);
   EXPECT_NE(
     probe_state.flags & oxygen::vortex::kEnvironmentProbeStateFlagUnavailable,
     0U);
@@ -836,9 +832,6 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
   current.probes.prefiltered_map_srv = oxygen::ShaderVisibleIndex {
     13U,
   };
-  current.probes.brdf_lut_srv = oxygen::ShaderVisibleIndex {
-    14U,
-  };
   current.probes.probe_revision = 7U;
 
   const auto refreshed = pass.Refresh(current, true);
@@ -855,8 +848,6 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
     kInvalidShaderVisibleIndex);
   EXPECT_EQ(refreshed.probe_state.probes.prefiltered_map_srv,
     kInvalidShaderVisibleIndex);
-  EXPECT_EQ(
-    refreshed.probe_state.probes.brdf_lut_srv, kInvalidShaderVisibleIndex);
   EXPECT_NE(refreshed.probe_state.flags
       & oxygen::vortex::kEnvironmentProbeStateFlagUnavailable,
     0U);
@@ -1188,7 +1179,6 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
     second.probe_state.probes.irradiance_map_srv, kInvalidShaderVisibleIndex);
   EXPECT_EQ(
     second.probe_state.probes.prefiltered_map_srv, kInvalidShaderVisibleIndex);
-  EXPECT_EQ(second.probe_state.probes.brdf_lut_srv, kInvalidShaderVisibleIndex);
 
   renderer->GetUploadCoordinator().OnFrameStart(
     oxygen::vortex::internal::RendererTagFactory::Get(),
@@ -3205,11 +3195,8 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   EXPECT_EQ(bindings->probes.diffuse_sh_srv, kInvalidShaderVisibleIndex);
   EXPECT_EQ(bindings->probes.irradiance_map_srv, kInvalidShaderVisibleIndex);
   EXPECT_EQ(bindings->probes.prefiltered_map_srv, kInvalidShaderVisibleIndex);
-  EXPECT_EQ(bindings->probes.brdf_lut_srv, kInvalidShaderVisibleIndex);
   EXPECT_EQ(static_data->sky_light.enabled, 0U);
   EXPECT_EQ(static_data->sky_light.cubemap_slot, oxygen::kInvalidBindlessIndex);
-  EXPECT_EQ(
-    static_data->sky_light.brdf_lut_slot, oxygen::kInvalidBindlessIndex);
   EXPECT_EQ(
     static_data->sky_light.irradiance_map_slot, oxygen::kInvalidBindlessIndex);
   EXPECT_EQ(

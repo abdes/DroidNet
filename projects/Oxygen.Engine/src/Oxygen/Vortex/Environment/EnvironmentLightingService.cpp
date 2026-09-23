@@ -1020,7 +1020,6 @@ auto EnvironmentLightingService::BuildEnvironmentStaticData(
   data.sky_light.enabled
     = view_products.sky_light.enabled && sky_light_ibl_valid ? 1U : 0U;
   data.sky_light.cubemap_slot = usable_probe_bindings.environment_map_srv.get();
-  data.sky_light.brdf_lut_slot = usable_probe_bindings.brdf_lut_srv.get();
   data.sky_light.irradiance_map_slot
     = usable_probe_bindings.irradiance_map_srv.get();
   data.sky_light.prefilter_map_slot

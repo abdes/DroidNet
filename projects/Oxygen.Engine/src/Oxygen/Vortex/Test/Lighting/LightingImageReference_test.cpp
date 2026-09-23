@@ -22,12 +22,18 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/MaterialDomain.h>
+#include <Oxygen/Data/PakFormat_render.h>
+#include <Oxygen/Data/ShaderReference.h>
 #include <Oxygen/Graphics/Common/FrameCaptureController.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/Scene/Camera/Orthographic.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
+#include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Light/PointLight.h>
 #include <Oxygen/Scene/Light/SpotLight.h>
 #include <Oxygen/Scene/Scene.h>
@@ -74,6 +80,90 @@ namespace {
       ASSERT_NE(framebuffer, nullptr);
     }
   };
+
+  NOLINT_TEST_F(
+    LightingImageReferenceTest, OrthographicHighlightsStayUniformAcrossTheImage)
+  {
+    auto sun = scene->CreateNode("Orthographic directional");
+    auto light = std::make_unique<scene::DirectionalLight>();
+    light->Common().casts_shadows = false;
+    light->SetIntensityLux(1.0F);
+    ASSERT_TRUE(sun.AttachLight(std::move(light)));
+    sun.GetTransform().SetLocalRotation(
+      glm::quat { 0.70710678F, 0.70710678F, 0, 0 });
+    unsigned checked_images = 0;
+    for (const bool forward : { false, true }) {
+      for (const auto domain : {
+             data::MaterialDomain::kOpaque,
+             data::MaterialDomain::kMasked,
+             data::MaterialDomain::kAlphaBlended,
+           }) {
+        data::pak::render::MaterialAssetDesc desc {};
+        desc.material_domain = static_cast<std::uint8_t>(domain);
+        desc.flags = data::pak::render::kMaterialFlag_NoTextureSampling
+          | data::pak::render::kMaterialFlag_DoubleSided;
+        if (domain == data::MaterialDomain::kMasked) {
+          desc.flags |= data::pak::render::kMaterialFlag_AlphaTest;
+        }
+        for (auto& value : desc.base_color) {
+          value = 1.0F;
+        }
+        desc.metalness = data::Unorm16 { 1.0F };
+        desc.roughness = data::Unorm16 { 0.25F };
+        desc.ambient_occlusion = data::Unorm16 { 1.0F };
+        desc.normal_scale = 1.0F;
+        desc.uv_scale[0] = desc.uv_scale[1] = 1.0F;
+        mesh_node.GetRenderable().SetMaterialOverride(0, 0,
+          std::make_shared<data::MaterialAsset>(
+            data::AssetKey::FromVirtualPath("/Test/Lighting/Orthographic-"
+              + std::to_string(++material_sequence) + ".omat"),
+            desc, std::vector<data::ShaderReference> {}));
+        for (unsigned variant = 0; variant < 4U; ++variant) {
+          SCOPED_TRACE(forward);
+          SCOPED_TRACE(static_cast<int>(domain));
+          SCOPED_TRACE(variant);
+          camera.GetTransform().SetLocalPosition(
+            glm::vec3 { variant == 1U ? 0.3F : 0.0F, 0, 0 });
+          camera.GetTransform().SetLocalRotation(variant == 2U
+              ? glm::quat { 0.99500417F, 0, 0.09983342F, 0 }
+              : glm::quat { 1, 0, 0, 0 });
+          if (variant == 3U) {
+            auto lens = std::make_unique<scene::PerspectiveCamera>();
+            lens->SetViewport(view.viewport);
+            lens->SetAspectRatio(static_cast<float>(kWidth) / kHeight);
+            ASSERT_TRUE(camera.ReplaceCamera(std::move(lens)));
+          } else {
+            auto lens = std::make_unique<scene::OrthographicCamera>();
+            lens->SetExtents(-0.5F, 0.5F, -0.4F, 0.4F, 0.1F, 10.0F);
+            lens->SetViewport(view.viewport);
+            ASSERT_TRUE(camera.ReplaceCamera(std::move(lens)));
+          }
+          ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0.0F, 3U));
+          ASSERT_NE(probe->color, nullptr);
+          const auto pixels = ReadFloatTexture(*probe->color);
+          float minimum = std::numeric_limits<float>::max();
+          float maximum = 0.0F;
+          // Interior rectangle is covered by the plane for every camera pose.
+          for (std::uint32_t y = kHeight / 3U; y < 2U * kHeight / 3U; ++y) {
+            for (std::uint32_t x = kWidth / 3U; x < 2U * kWidth / 3U; ++x) {
+              const auto value = pixels.at((y * kWidth) + x).at(0);
+              ASSERT_TRUE(std::isfinite(value));
+              minimum = std::min(minimum, value);
+              maximum = std::max(maximum, value);
+            }
+          }
+          ASSERT_GT(minimum, 0.0F);
+          if (variant == 3U) {
+            EXPECT_GT(maximum - minimum, 0.05F * maximum);
+          } else {
+            EXPECT_LE(maximum - minimum, (0.005F * maximum) + 2.0e-5F);
+          }
+          ++checked_images;
+        }
+      }
+    }
+    RecordProperty("projection_images", checked_images);
+  }
 
   NOLINT_TEST_F(LightingImageReferenceTest, MixedLocalLightsMatchSerialImages)
   {

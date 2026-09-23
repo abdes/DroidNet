@@ -57,7 +57,8 @@ static inline DeferredLightingSurfaceData LoadDeferredLightingSurface(
     surface.world_normal = VortexSafeNormalize(gbuffer.world_normal);
     surface.base_color = max(gbuffer.base_color, 0.0f.xxx);
     surface.view_direction
-        = VortexSafeNormalize(camera_position_ws - surface.world_position);
+        = ResolveSurfaceViewDirection(surface.world_position, camera_position_ws,
+            inverse_view_projection_matrix, is_orthographic, reverse_z);
     surface.metallic = saturate(gbuffer.metallic);
     surface.specular = saturate(gbuffer.specular);
     surface.roughness = max(saturate(gbuffer.roughness), kVortexDeferredMinRoughness);
@@ -117,7 +118,11 @@ static inline float3 EvaluateDeferredStaticSkyLightDiffuse(
         * env_data.sky_light.tint_rgb
         * env_data.sky_light.radiance_scale
         * env_data.sky_light.diffuse_intensity;
-    return sky_diffuse * surface.base_color * (1.0f - surface.metallic);
+    const GgxIntegratedLobes response = EvaluateGgxIntegratedLobes(
+        saturate(dot(surface.world_normal, surface.view_direction)), surface.specular_f0,
+        surface.base_color * (1.0 - surface.metallic), surface.roughness,
+        LoadResolvedLightingFrameBindings());
+    return sky_diffuse * response.diffuse;
 }
 
 static inline float3 EvaluateDeferredLight(

@@ -68,7 +68,7 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
   ShaderFileSpec {
     .path="Vortex/Stages/Translucency/ForwardMesh_PS.hlsl",
     .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
-    .permutations=std::array<std::string_view, 5> { "ALPHA_TEST", "OXYGEN_HDR_OUTPUT", "OXYGEN_OPAQUE_OUTPUT", "SKIP_BRDF_LUT", "OXYGEN_DEPTH_COMPLETE" }
+    .permutations=std::array<std::string_view, 4> { "ALPHA_TEST", "OXYGEN_HDR_OUTPUT", "OXYGEN_OPAQUE_OUTPUT", "OXYGEN_DEPTH_COMPLETE" },
   },
   RequiredDefineShaderFileSpec<1, 3, 1> {
     .path="Vortex/Stages/Translucency/ForwardMesh_PS.hlsl",
@@ -528,7 +528,8 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
 
 // Compile-time verification:
 // - ForwardMesh_VS: 1 entry
-// - ForwardMesh_PS base: 8 (ALPHA_TEST x OXYGEN_HDR_OUTPUT x SKIP_BRDF_LUT)
+// - ForwardMesh_PS base: 16 (ALPHA_TEST x OXYGEN_HDR_OUTPUT x
+// OXYGEN_OPAQUE_OUTPUT x OXYGEN_DEPTH_COMPLETE)
 // - ForwardMesh_PS DEBUG_DIRECT_* / DEBUG_IBL_*: 4 each (required debug define
 //   x ALPHA_TEST x OXYGEN_HDR_OUTPUT)
 // - ForwardWireframe_PS base: 2 (with/without ALPHA_TEST)

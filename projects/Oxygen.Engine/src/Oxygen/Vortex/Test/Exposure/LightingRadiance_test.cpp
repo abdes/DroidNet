@@ -4,11 +4,13 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <limits>
 #include <memory>
+#include <numbers>
 #include <span>
 #include <utility>
 #include <vector>
@@ -38,6 +40,39 @@
 namespace oxygen::vortex::testing::exposure {
 
 using graphics::ResourceStates;
+
+namespace {
+  struct RoughWhiteResponse {
+    double direct;
+    double diffuse_environment;
+  };
+
+  // Independent roughness=1, NoV=NoL=1 moments from the certified reference
+  // JSON. No production lookup or shader helper contributes to this oracle.
+  auto EvaluateRoughWhiteResponse(const double f0) -> RoughWhiteResponse
+  {
+    constexpr double energy = 0.3068528194400547;
+    constexpr double bias = 3.3614294725518486e-5;
+    constexpr double mean_energy = 0.4091370876317315;
+    constexpr double mean_bias = 0.0027557506363920627;
+    const double fresnel = f0 + ((1.0 - f0) / 21.0);
+    const double compensation = fresnel * fresnel * mean_energy
+      / ((1.0 - fresnel) + (fresnel * mean_energy));
+    const double transmission = 1.0
+      - ((f0 * energy) + ((1.0 - f0) * bias) + (compensation * (1.0 - energy)));
+    const double mean_transmission = 1.0
+      - ((f0 * mean_energy) + ((1.0 - f0) * mean_bias)
+        + (compensation * (1.0 - mean_energy)));
+    return {
+      .direct = ((0.25 * f0)
+                  + (compensation * (1.0 - energy) * (1.0 - energy)
+                    / (1.0 - mean_energy))
+                  + (transmission * transmission / mean_transmission))
+        / std::numbers::pi,
+      .diffuse_environment = transmission,
+    };
+  }
+} // namespace
 
 NOLINT_TEST_F(
   ExposureLightingGpuTest, DirectLightRadiancePreservesSupportedRange)
@@ -99,24 +134,17 @@ NOLINT_TEST_F(
         = forward || domain == data::MaterialDomain::kAlphaBlended;
       const double coverage
         = domain == data::MaterialDomain::kAlphaBlended ? .5 : 1;
-      // Independent double-precision on-axis GGX evaluation for a white,
-      // nonmetal surface at roughness 1. This checks the current transport
-      // equations; Slice 7 owns their differing photometric calibrations.
-      const double pi = std::acos(-1.0);
-      const double f0 = .04;
-      const double oct = 1.0 / 1023;
-      const double n = forward_shader ? 1.0
-                                      : (1 - (2 * oct))
-          / std::sqrt((2 * oct * oct) + ((1 - (2 * oct)) * (1 - (2 * oct))));
-      const double g = 2 * n / (n + 1);
-      const double specular = f0 * g * g / (4 * pi * n * n);
-      const double brdf
-        = (((1 - f0) / (forward_shader ? 1 : pi)) + specular) * n;
-      // R8 UNORM stores the .5 specular value at either adjacent code. Carry
-      // its half-code uncertainty through this linear-in-F0 expression.
+      const double pi = std::numbers::pi;
+      const double brdf = EvaluateRoughWhiteResponse(0.04).direct;
+      // The packed specular half-code interval is input uncertainty, separate
+      // from the unchanged floating-point transport tolerance.
       const double brdf_error = forward_shader
-        ? 0
-        : .04 / 255 * std::abs((g * g / (4 * pi * n * n)) - (1 / pi)) * n;
+        ? 0.0
+        : std::max(
+            std::abs(
+              EvaluateRoughWhiteResponse(0.04 - (0.04 / 255.0)).direct - brdf),
+            std::abs(
+              EvaluateRoughWhiteResponse(0.04 + (0.04 / 255.0)).direct - brdf));
       for (unsigned kind = 0; kind < 3; ++kind) {
         auto directional_light = sun.GetLightAs<scene::DirectionalLight>();
         auto point_light = point_node.GetLightAs<scene::PointLight>();
@@ -147,7 +175,7 @@ NOLINT_TEST_F(
         double attenuation = std::pow(1 - 1e-8, 2);
         double solid_angle = 4 * pi;
         if (kind == 0) {
-          attenuation = forward_shader ? 1 / pi : 1;
+          attenuation = 1;
           solid_angle = 1;
         } else if (kind == 2) {
           const double inner_cos = std::cos(
@@ -561,16 +589,27 @@ NOLINT_TEST_F(ExposureLightingGpuTest, StaticSkyDiffusePreservesSupportedRange)
             ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, ev));
             const auto pixels = ReadFloatTexture(*probe->color);
             ASSERT_EQ(pixels.size(), 1U);
-            // Isotropic radiance projects to the constant SH coefficient.
-            // Lambert convolution / pi returns that same radiance,
-            // independently of normal, cubemap orientation or canonical
-            // normalization.
+            const double diffuse_response
+              = EvaluateRoughWhiteResponse(0.04).diffuse_environment;
+            const bool forward_shader
+              = forward || domain == data::MaterialDomain::kAlphaBlended;
+            const double input_error = forward_shader
+              ? 0.0
+              : std::max(
+                  std::abs(EvaluateRoughWhiteResponse(0.04 - (0.04 / 255.0))
+                             .diffuse_environment
+                    - diffuse_response),
+                  std::abs(EvaluateRoughWhiteResponse(0.04 + (0.04 / 255.0))
+                             .diffuse_environment
+                    - diffuse_response));
             for (unsigned channel = 0; channel < 3; ++channel) {
               const double expected
                 = static_cast<double>(source_color.at(channel)) * multiplier
-                * coverage * std::exp2(-static_cast<double>(ev));
+                * coverage * diffuse_response
+                * std::exp2(-static_cast<double>(ev));
               EXPECT_NEAR(pixels.at(0).at(channel), expected,
-                (std::abs(expected) * 2e-5) + 0x1p-120);
+                (std::abs(expected) * (2e-5 + (input_error / diffuse_response)))
+                  + 0x1p-120);
             }
             EXPECT_FLOAT_EQ(pixels.at(0).at(3), static_cast<float>(coverage));
             const auto status = Read<ExposureCompletedStatus>(

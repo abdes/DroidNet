@@ -243,6 +243,184 @@ namespace {
   // NOLINTEND(*-magic-numbers)
 
   NOLINT_TEST_F(
+    LightingGpuAbiTest, EveryLobeIsReciprocalAcrossMaterialsAndAngles)
+  {
+    const auto tables = PublishBrdfMomentTextures();
+    auto inputs = std::vector<BrdfProbeInput> {};
+    for (const auto roughness : { 0.045F, 0.1F, 0.25F, 0.5F, 0.75F, 1.0F }) {
+      for (const auto nv : { 0.001F, 0.01F, 0.1F, 0.5F, 1.0F }) {
+        for (const auto nl : { 0.001F, 0.01F, 0.1F, 0.5F, 1.0F }) {
+          for (const auto phi :
+            { 0.0F, 0.7F, 1.57F, std::numbers::pi_v<float> }) {
+            for (const auto metallic : { 0.0F, 0.5F, 1.0F }) {
+              inputs.push_back({
+                .roughness = roughness,
+                .light_cosine = nl,
+                .view_cosine = nv,
+                .azimuth = phi,
+                .base_color = { 0.0F, 0.5F, 1.0F },
+                .metallic = metallic,
+                .moments_srv = tables.at(0),
+                .means_srv = tables.at(1),
+              });
+            }
+          }
+        }
+      }
+    }
+    constexpr std::uint32_t kWords = 18U;
+    const auto output = Decode({
+      .records = std::as_bytes(std::span(inputs)),
+      .stride = sizeof(BrdfProbeInput),
+      .record_kind = 23U,
+      .decoded_words = kWords,
+      .count = static_cast<std::uint32_t>(inputs.size()),
+    });
+    ASSERT_EQ(output.size(), inputs.size() * kWords);
+    double maximum_fraction = 0.0;
+    for (std::size_t index = 0; index < inputs.size(); ++index) {
+      SCOPED_TRACE(index);
+      for (std::size_t lane = 0; lane < 9U; ++lane) {
+        const auto a = std::bit_cast<float>(output.at((index * kWords) + lane));
+        const auto b
+          = std::bit_cast<float>(output.at((index * kWords) + lane + 9U));
+        ASSERT_TRUE(std::isfinite(a));
+        ASSERT_TRUE(std::isfinite(b));
+        EXPECT_GE(a, 0.0F);
+        EXPECT_GE(b, 0.0F);
+        const auto tolerance = (2.0e-5 * std::max(a, b)) + 2.0e-7;
+        EXPECT_NEAR(a, b, tolerance);
+        maximum_fraction
+          = std::max(maximum_fraction, std::abs(a - b) / tolerance);
+      }
+    }
+    RecordProperty("reciprocity_queries", inputs.size());
+    RecordProperty("maximum_reciprocity_budget_fraction", maximum_fraction);
+  }
+
+  struct FurnaceProbeInput {
+    float roughness;
+    float view_cosine;
+    float azimuth;
+    float light_cosine;
+    std::uint32_t order;
+    ShaderVisibleIndex moments_srv;
+    ShaderVisibleIndex means_srv;
+  };
+  // NOLINTBEGIN(*-magic-numbers)
+  static_assert(sizeof(FurnaceProbeInput) == 28U);
+  static_assert(offsetof(FurnaceProbeInput, order) == 16U);
+  static_assert(offsetof(FurnaceProbeInput, moments_srv) == 20U);
+  static_assert(offsetof(FurnaceProbeInput, means_srv) == 24U);
+  // NOLINTEND(*-magic-numbers)
+
+  NOLINT_TEST_F(
+    LightingGpuAbiTest, IntegratedGpuLobesPreserveEnergyAndMatchIndirect)
+  {
+    const auto tables = PublishBrdfMomentTextures();
+    auto inputs = std::vector<FurnaceProbeInput> {};
+    struct Case {
+      float roughness;
+      float mu;
+      std::uint32_t order;
+      std::size_t first;
+    };
+    auto cases = std::vector<Case> {};
+    for (const auto roughness : { 0.045F, 0.1F, 0.25F, 0.5F, 0.75F, 1.0F }) {
+      for (const auto mu : { 0.001F, 0.01F, 0.1F, 0.5F, 1.0F }) {
+        for (const auto order : { 256U, 512U }) {
+          cases.push_back({
+            .roughness = roughness,
+            .mu = mu,
+            .order = order,
+            .first = inputs.size(),
+          });
+          for (std::uint32_t angular = 0; angular < order; ++angular) {
+            const auto fraction = (static_cast<float>(angular) + 0.5F)
+              / static_cast<float>(order);
+            inputs.push_back({
+              .roughness = roughness,
+              .view_cosine = mu,
+              .azimuth = fraction * std::numbers::pi_v<float>,
+              .light_cosine = fraction,
+              .order = order,
+              .moments_srv = tables.at(0),
+              .means_srv = tables.at(1),
+            });
+          }
+        }
+      }
+    }
+    constexpr std::uint32_t kWords = 15U;
+    const auto output = Decode({
+      .records = std::as_bytes(std::span(inputs)),
+      .stride = sizeof(FurnaceProbeInput),
+      .record_kind = 24U,
+      .decoded_words = kWords,
+      .count = static_cast<std::uint32_t>(inputs.size()),
+    });
+    ASSERT_EQ(output.size(), inputs.size() * kWords);
+    auto previous = std::array<double, 9> {};
+    double maximum_furnace_error = 0.0;
+    double maximum_indirect_error = 0.0;
+    double maximum_refinement_change = 0.0;
+    for (const auto& test : cases) {
+      SCOPED_TRACE(test.roughness);
+      SCOPED_TRACE(test.mu);
+      SCOPED_TRACE(test.order);
+      auto sums = std::array<double, 9> {};
+      for (std::size_t angular = 0; angular < test.order; ++angular) {
+        for (std::size_t lane = 0; lane < sums.size(); ++lane) {
+          const auto sample = std::bit_cast<float>(
+            output.at(((test.first + angular) * kWords) + lane));
+          ASSERT_TRUE(std::isfinite(sample));
+          EXPECT_GE(sample, 0.0F);
+          sums.at(lane) += sample;
+        }
+      }
+      if (test.order == 256U) {
+        previous = sums;
+        continue;
+      }
+      for (std::size_t lane = 0; lane < sums.size(); ++lane) {
+        const auto change = std::abs(sums.at(lane) - previous.at(lane));
+        EXPECT_LE(change, 5.0e-4);
+        maximum_refinement_change = std::max(maximum_refinement_change, change);
+      }
+      const auto moment = reference::IntegrateGgxMoments(
+        reference::PerceptualRoughness { test.roughness },
+        reference::ViewCosine { test.mu });
+      ASSERT_TRUE(moment.has_value());
+      for (std::size_t channel = 0; channel < 3U; ++channel) {
+        const auto f0 = std::array { 0.04, 0.45, 1.0 }.at(channel);
+        const auto expected_single = (f0 * moment->directional_albedo)
+          + ((1.0 - f0) * moment->schlick_moment);
+        EXPECT_NEAR(sums.at(channel), expected_single, 1.0e-3);
+        const auto specular = sums.at(channel) + sums.at(channel + 3U);
+        const auto diffuse = sums.at(channel + 6U);
+        const auto read = [&](const std::size_t lane) -> float {
+          return std::bit_cast<float>(output.at((test.first * kWords) + lane));
+        };
+        const auto specular_error = std::abs(specular - read(9U + channel));
+        const auto diffuse_error = std::abs(diffuse - read(12U + channel));
+        EXPECT_LE(specular_error, 2.0e-3);
+        EXPECT_LE(diffuse_error, 2.0e-3);
+        EXPECT_LE(specular + diffuse, 1.002);
+        maximum_indirect_error
+          = std::max({ maximum_indirect_error, specular_error, diffuse_error });
+      }
+      const auto furnace_error = std::abs(sums.at(2) + sums.at(5) - 1.0);
+      EXPECT_LE(furnace_error, 2.0e-3);
+      EXPECT_EQ(sums.at(8), 0.0);
+      maximum_furnace_error = std::max(maximum_furnace_error, furnace_error);
+    }
+    RecordProperty("integrated_material_cases", cases.size() * 3U / 2U);
+    RecordProperty("maximum_furnace_error", maximum_furnace_error);
+    RecordProperty("maximum_indirect_error", maximum_indirect_error);
+    RecordProperty("maximum_refinement_change", maximum_refinement_change);
+  }
+
+  NOLINT_TEST_F(
     LightingGpuAbiTest, DirectBrdfProbeReportsIndependentOracleResiduals)
   {
     auto mean_stream = std::ifstream(OXYGEN_GGX_MEAN_CERTIFICATE_FILE);

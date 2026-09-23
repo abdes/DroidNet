@@ -178,7 +178,6 @@ struct GpuSkyLightParams
     uint enabled;
 
     uint cubemap_slot;
-    uint brdf_lut_slot;
     uint irradiance_map_slot;
     uint prefilter_map_slot;
 
@@ -186,6 +185,7 @@ struct GpuSkyLightParams
     uint prefilter_max_mip;
     uint ibl_generation;
     uint diffuse_sh_slot;
+    uint padding;
 };
 
 // Mirrors oxygen::engine::GpuSkySphereParams (sizeof = 48)

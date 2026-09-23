@@ -21,6 +21,19 @@ REQUIRED_PROBES = {
 }
 
 
+REQUIRED_QUALIFICATIONS = {
+    "EveryLobeIsReciprocalAcrossMaterialsAndAngles": (
+        "reciprocity_queries", 1800,
+        {"maximum_reciprocity_budget_fraction": 1.0},
+    ),
+    "IntegratedGpuLobesPreserveEnergyAndMatchIndirect": (
+        "integrated_material_cases", 90,
+        {"maximum_furnace_error": 2e-3, "maximum_indirect_error": 2e-3,
+         "maximum_refinement_change": 5e-4},
+    ),
+}
+
+
 def validate(document: dict) -> None:
     for field in ("failures", "errors", "disabled"):
         if document.get(field) != 0:
@@ -38,6 +51,27 @@ def validate(document: dict) -> None:
             if len(cases) != 1:
                 raise ValueError("exactly one completed physical probe is required")
             validate_case(cases[0], count)
+        except (ValueError, TypeError) as error:
+            failures.append(f"{name}: {error}")
+    for name, (count_field, count, limits) in REQUIRED_QUALIFICATIONS.items():
+        cases = [
+            case for suite in document.get("testsuites", [])
+            if suite.get("name") == "LightingGpuAbiTest"
+            for case in suite.get("testsuite", []) if case.get("name") == name
+        ]
+        try:
+            if len(cases) != 1:
+                raise ValueError("exactly one completed qualification is required")
+            case = cases[0]
+            if (case.get("status") != "RUN" or case.get("result") != "COMPLETED"
+                    or case.get("failures")):
+                raise ValueError("qualification did not pass")
+            if int(case.get(count_field, -1)) != count:
+                raise ValueError("incomplete qualification matrix")
+            for metric, limit in limits.items():
+                measured = float(case.get(metric, "nan"))
+                if not math.isfinite(measured) or not 0 <= measured <= limit:
+                    raise ValueError(f"{metric} missing or exceeds {limit}")
         except (ValueError, TypeError) as error:
             failures.append(f"{name}: {error}")
     if failures:
@@ -75,7 +109,8 @@ def main() -> int:
         validate(json.loads(args.results.read_text(encoding="utf-8")))
     except (OSError, ValueError, TypeError, KeyError) as error:
         parser.exit(1, f"{error}\n")
-    print(f"Physical probe admission passed: {sum(REQUIRED_PROBES.values())} inputs")
+    print(f"Physical probe admission passed: {sum(REQUIRED_PROBES.values())} inputs; "
+          "1800 reciprocity queries; 90 integrated material cases")
     return 0
 
 

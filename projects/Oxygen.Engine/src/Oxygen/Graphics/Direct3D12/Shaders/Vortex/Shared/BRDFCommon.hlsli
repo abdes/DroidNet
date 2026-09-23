@@ -70,21 +70,26 @@ static GgxDirectLobes EvaluateGgxDirectLobes(float3 N, float3 V, float3 L,
     const float3 half_vector = L + V;
     const float half_scale = max(max(abs(half_vector.x), abs(half_vector.y)), abs(half_vector.z));
     const float3 H = normalize(half_vector / half_scale);
-    const float vh_complement = 1.0 - saturate(dot(V, H));
+    const float vh_complement = 1.0 - saturate(0.5 * dot(L + V, H));
     const float vh_squared = vh_complement * vh_complement;
     const float fresnel_bias = vh_squared * vh_squared * vh_complement;
     const float3 fresnel = F0 + (1.0 - F0) * fresnel_bias;
     const float r = max(roughness, kVortexMinimumRoughness);
     const float alpha = r * r;
     const float a2 = alpha * alpha;
-    // Evaluate V*NoL as a bounded ratio. Computing V first can overflow at
-    // grazing incidence even though the resulting radiance is representable.
-    // precise prevents reassociation into (nv*light_root)/nl, which can flush
-    // a small but significant numerator to zero before the division.
-    precise float view_light_ratio = nv / nl;
-    precise float view_root = sqrt(nv * nv + a2 * (1.0 - nv * nv));
-    precise float light_root = sqrt(nl * nl + a2 * (1.0 - nl * nl));
-    precise float visibility = 0.5 / (view_root + view_light_ratio * light_root);
+    // Sort and scale the two cosines before evaluating the symmetric Smith
+    // denominator. This preserves reciprocity and avoids overflowing the
+    // unweighted visibility or underflowing a product of grazing cosines.
+    const float larger_cosine = max(nv, nl);
+    const float smaller_cosine = min(nv, nl);
+    precise float cosine_ratio = smaller_cosine / larger_cosine;
+    precise float larger_root = sqrt(larger_cosine * larger_cosine
+        + a2 * (1.0 - larger_cosine * larger_cosine));
+    precise float smaller_root = sqrt(smaller_cosine * smaller_cosine
+        + a2 * (1.0 - smaller_cosine * smaller_cosine));
+    precise float scaled_denominator = smaller_root + cosine_ratio * larger_root;
+    precise float receiver_ratio = nl / larger_cosine;
+    precise float visibility = (0.5 * receiver_ratio) / scaled_denominator;
     lobes.single_scattering = GgxDistribution(N, H, r) * visibility * fresnel;
 
     const float2 light = SampleGgxMomentTexture(lighting.brdf_moments_srv, nl, r);
@@ -116,6 +121,43 @@ static float3 EvaluateGgxDirectResponse(float3 N, float3 V, float3 L,
 {
     const GgxDirectLobes lobes = EvaluateGgxDirectLobes(N, V, L, F0, rho, roughness, lighting);
     return lobes.single_scattering + lobes.multiple_scattering + lobes.diffuse;
+}
+
+struct GgxIntegratedLobes
+{
+    float3 specular;
+    float3 diffuse;
+};
+
+static GgxIntegratedLobes EvaluateGgxIntegratedLobes(float nv, float3 F0,
+    float3 rho, float roughness, LightingFrameBindings lighting)
+{
+    GgxIntegratedLobes result = (GgxIntegratedLobes)0;
+    if (nv <= 0.0) return result;
+    if (lighting.brdf_model_revision != 1u
+        || !BX_IN_TEXTURES(lighting.brdf_moments_srv)
+        || !BX_IN_TEXTURES(lighting.brdf_mean_moments_srv)) {
+        result.specular = result.diffuse = asfloat(0x7fc00000u).xxx;
+        return result;
+    }
+    const float2 view = SampleGgxMomentTexture(lighting.brdf_moments_srv, nv, roughness);
+    const float2 mean = SampleGgxMomentTexture(lighting.brdf_mean_moments_srv, 0.0, roughness);
+    const float mean_energy = 1.0 - mean.x;
+    const float3 average_fresnel = F0 + (1.0 - F0) / 21.0;
+    const float3 compensation = average_fresnel * average_fresnel * mean_energy
+        / ((1.0 - average_fresnel) + average_fresnel * mean_energy);
+    const float3 tv = (1.0 - compensation) * view.x
+        + (1.0 - F0) * (1.0 - view.x - view.y);
+    const float3 ta = (1.0 - compensation) * mean.x
+        + (1.0 - F0) * (mean_energy - mean.y);
+    const float3 denominator = (1.0 - rho) + rho * ta;
+    result.specular = F0 * (1.0 - view.x) + (1.0 - F0) * view.y
+        + compensation * view.x;
+    result.diffuse = float3(
+        denominator.r > 0.0 ? rho.r * tv.r * ta.r / denominator.r : 0.0,
+        denominator.g > 0.0 ? rho.g * tv.g * ta.g / denominator.g : 0.0,
+        denominator.b > 0.0 ? rho.b * tv.b * ta.b / denominator.b : 0.0);
+    return result;
 }
 
 static inline float3 VortexSafeNormalize(float3 value)
